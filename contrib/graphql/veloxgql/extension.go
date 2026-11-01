@@ -278,12 +278,16 @@ func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.Operat
 	if e.schema == nil || rc.Operation == nil {
 		return nil
 	}
-	c := costOf(e.schema, rc.Operation, rc.Variables, e.limits)
+	c, list := costOf(e.schema, rc.Operation, rc.Variables, e.limits)
 	var msg string
 	if meta := c.meta; meta > int64(e.limits.MaxIntrospectionCost) {
 		msg = fmt.Sprintf("%v: its introspection costs %d, and the most is %d", ErrTooCostly, meta, e.limits.MaxIntrospectionCost)
 	} else if data := add(c.rows, c.statements); data > int64(e.limits.MaxCost) {
 		msg = fmt.Sprintf("%v: it costs %d, and the most is %d", ErrTooCostly, data, e.limits.MaxCost)
+		if list != "" {
+			// A client cannot lower what a list charges, as it can a page.
+			msg += fmt.Sprintf("; a list such as %s costs its limit for each parent, however few rows it has: the schema lowers that with graphql.MaxList on the edge, or makes the edge a Connection", list)
+		}
 	} else {
 		return nil
 	}

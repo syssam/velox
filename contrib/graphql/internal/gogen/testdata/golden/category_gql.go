@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion6
+const _ = veloxgql.GeneratedCodeIsVersion7
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -386,7 +386,7 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 		return nil, gqlimpl.InputErrorf("UpdateCategoryInput: parentID and clearParent together")
 	}
 	if input.ParentID == nil && !input.ClearParent {
-		if err = gqlimpl.NullClears(ctx, "UpdateCategoryInput.parentID", "input", "parentID", "clearParent"); err != nil {
+		if err = gqlimpl.NullEdge(ctx, "UpdateCategoryInput.parentID", "input", "parentID", "clearParent"); err != nil {
 			return nil, err
 		}
 	}

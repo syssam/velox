@@ -408,6 +408,12 @@ func (g *graph) fill(o *object) error {
 		f := gqlField{name: name, desc: ed.Comment, where: where}
 		ef := edgeField{edge: i, name: name, target: t}
 		switch {
+		case a.MaxList < 0:
+			return fmt.Errorf("%s: graphql.MaxList(%d): a list reads at least one row", where, a.MaxList)
+		case a.MaxList != 0 && (ed.Unique || a.Connection == nil || *a.Connection):
+			return fmt.Errorf("%s: graphql.MaxList on an edge that is no list, which first and last bound; add graphql.Connection(false) to a to-many edge", where)
+		}
+		switch {
 		case ed.Unique:
 			// Nullable even when Required: a row reads the edge's target in a
 			// statement of its own, which a tenant, a policy, a hook, a replica's
@@ -425,7 +431,13 @@ func (g *graph) fill(o *object) error {
 		if err != nil {
 			return err
 		}
-		f.dirs = append([]directive{bindTo(ed.GoName + "GQL")}, ds...)
+		bind := bindTo(ed.GoName + "GQL")
+		if a.MaxList != 0 {
+			// In @goField, which gqlgen needs no configuration for and reads no further:
+			// a directive of its own would have to be skip_runtime in gqlgen.yml.
+			bind.text = strings.TrimSuffix(bind.text, ")") + ", maxList: " + strconv.Itoa(a.MaxList) + ")"
+		}
+		f.dirs = append([]directive{bind}, ds...)
 		if err := add(f, where); err != nil {
 			return err
 		}
@@ -811,7 +823,7 @@ scalar Uint64
 """An opaque cursor for paging through a connection."""
 scalar Cursor
 
-directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
 
 directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
 

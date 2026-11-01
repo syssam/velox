@@ -327,6 +327,46 @@ func TestCostNodesAndLists(t *testing.T) {
 	}
 }
 
+// costListSDL is a schema of list edges, as velox-graphql writes them: one with
+// graphql.MaxList, one without.
+const costListSDL = `
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+type Query { members: [Member!]! @goField(name: "M", maxList: 2) }
+type Member {
+	id: ID!
+	groups: [Group!]! @goField(name: "GroupsGQL", maxList: 10)
+	all: [Group!]! @goField(name: "AllGQL")
+}
+type Group { id: ID! members: [Member!]! @goField(name: "MembersGQL", maxList: 10) }
+`
+
+// TestCostListMaxList: an edge's graphql.MaxList is what it costs for each parent, so
+// two levels of them pass, where 1000 for each could never; a lower Limits.MaxList holds.
+func TestCostListMaxList(t *testing.T) {
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costListSDL})
+	cost := func(query string, l veloxgql.Limits) int {
+		t.Helper()
+		doc, errs := gqlparser.LoadQueryWithRules(schema, query, nil)
+		if len(errs) > 0 {
+			t.Fatal(errs)
+		}
+		return veloxgql.Cost(schema, doc.Operations[0], nil, l)
+	}
+	l := veloxgql.DefaultLimits()
+	nested := `{ members { id groups { id members { id } } } }`
+	// members: 1 + 2*(id + groups: 1 + 10*(id + members: 1 + 10*id)), and 3 statements.
+	if got, want := cost(nested, l), 3*stmt+1+2*(1+1+10*(1+1+10)); got != want {
+		t.Errorf("nested: cost %d, want %d", got, want)
+	}
+	if got, want := cost(`{ members { all { id } } }`, l), 2*stmt+1+2*(1+1000); got != want {
+		t.Errorf("no MaxList: cost %d, want %d", got, want)
+	}
+	l.MaxList = 3
+	if got, want := cost(`{ members { groups { id } } }`, l), 2*stmt+1+2*(1+3); got != want {
+		t.Errorf("a lower Limits.MaxList: cost %d, want %d", got, want)
+	}
+}
+
 // TestCostStatements: a field that runs a statement costs at least it, whatever
 // first says, so that aliases cannot run statements cheaply.
 func TestCostStatements(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion6
+const _ = veloxgql.GeneratedCodeIsVersion7
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -90,7 +90,7 @@ func (x *Post) LikesGQL(ctx context.Context) ([]*Like, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Like"); ok {
 		q = gqlimpl.Narrow(q, likeColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeList(ctx, q, x, Posts.Likes, "Post.likes")
+	return gqlimpl.EdgeList(ctx, q, x, Posts.Likes, "Post.likes", 0)
 }
 
 // RelatedGQL is the edge related: a connection to the Post nodes it leads to,
@@ -421,10 +421,10 @@ func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	gqlimpl.ID(f, "idGTE", w.IDGTE, "Post", Posts.ID.GTE)
 	gqlimpl.ID(f, "idLT", w.IDLT, "Post", Posts.ID.LT)
 	gqlimpl.ID(f, "idLTE", w.IDLTE, "Post", Posts.ID.LTE)
-	gqlimpl.ID(f, "writerID", w.WriterID, "Account", gqlimpl.FK[User](Posts.AuthorID.EQ, Posts.Author.Has))
-	gqlimpl.ID(f, "writerIDNEQ", w.WriterIDNEQ, "Account", gqlimpl.FK[User](Posts.AuthorID.NEQ, Posts.Author.Has))
-	gqlimpl.IDList(f, "writerIDIn", w.WriterIDIn, "Account", gqlimpl.FKList[User](Posts.AuthorID.In, Posts.Author.Has))
-	gqlimpl.IDList(f, "writerIDNotIn", w.WriterIDNotIn, "Account", gqlimpl.FKList[User](Posts.AuthorID.NotIn, Posts.Author.Has))
+	gqlimpl.ID(f, "writerID", w.WriterID, "Account", gqlimpl.FK[User](true, Posts.AuthorID.EQ, Posts.Author.Has))
+	gqlimpl.ID(f, "writerIDNEQ", w.WriterIDNEQ, "Account", gqlimpl.FK[User](true, Posts.AuthorID.NEQ, Posts.Author.Has))
+	gqlimpl.IDList(f, "writerIDIn", w.WriterIDIn, "Account", gqlimpl.FKList[User](true, Posts.AuthorID.In, Posts.Author.Has))
+	gqlimpl.IDList(f, "writerIDNotIn", w.WriterIDNotIn, "Account", gqlimpl.FKList[User](true, Posts.AuthorID.NotIn, Posts.Author.Has))
 	gqlimpl.Value(f, "title", w.Title, Posts.Title.EQ)
 	gqlimpl.Value(f, "titleNEQ", w.TitleNEQ, Posts.Title.NEQ)
 	gqlimpl.List(f, "titleIn", w.TitleIn, Posts.Title.In)
@@ -741,17 +741,13 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 		return nil, gqlimpl.InputErrorf("UpdatePostInput: publishedAt and clearPublishedAt together")
 	}
 	if input.PublishedAt == nil && !input.ClearPublishedAt {
-		if err = gqlimpl.NullClears(ctx, "UpdatePostInput.publishedAt", "input", "publishedAt", "clearPublishedAt"); err != nil {
-			return nil, err
-		}
+		input.ClearPublishedAt = gqlimpl.NullGiven(ctx, "input", "publishedAt")
 	}
 	if input.Rating != nil && input.ClearRating {
 		return nil, gqlimpl.InputErrorf("UpdatePostInput: rating and clearRating together")
 	}
 	if input.Rating == nil && !input.ClearRating {
-		if err = gqlimpl.NullClears(ctx, "UpdatePostInput.rating", "input", "rating", "clearRating"); err != nil {
-			return nil, err
-		}
+		input.ClearRating = gqlimpl.NullGiven(ctx, "input", "rating")
 	}
 	if err = gqlimpl.Disjoint("UpdatePostInput", "addRelatedIDs", "removeRelatedIDs", k9, k10); err != nil {
 		return nil, err

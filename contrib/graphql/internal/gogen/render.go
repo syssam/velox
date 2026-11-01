@@ -107,6 +107,13 @@ func (r *renderer) reserve() {
 	for _, e := range r.m.Entities {
 		r.names[e.Name] = "velox-gen's type of schema " + e.Name
 		r.names[e.Handles] = "velox-gen's handles of schema " + e.Name
+		// A method of the plugin's on a row may not take a name its struct holds.
+		for _, f := range e.Fields {
+			r.names[e.Name+"."+f.GoName] = "velox-gen's field " + f.Name + " of schema " + e.Name
+		}
+		for _, ed := range e.Edges {
+			r.names[e.Name+"."+ed.GoName] = "velox-gen's edge " + ed.Name + " of schema " + e.Name
+		}
 	}
 	for _, en := range r.m.Enums {
 		r.names[en.Type] = "velox-gen's enum type " + en.Type
@@ -204,7 +211,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion6\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion7\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -275,6 +282,11 @@ func (r *renderer) writeNode(f *file, t *sdl.Type) error {
 		}
 		v = t.Key + "(" + v + ")"
 	}
+	for _, m := range []string{"IsNode", "IDGQL"} {
+		if err := r.declare(e.Name+"."+m, "schema "+e.Name+", the Node's method"); err != nil {
+			return err
+		}
+	}
 	f.doc("", fmt.Sprintf("IsNode marks %s as a GraphQL Node: gqlgen binds the interface Node to veloxgql.Noder.", e.Name))
 	f.p("func (*%s) IsNode() {}", e.Name)
 	f.p("")
@@ -288,6 +300,9 @@ func (r *renderer) writeNode(f *file, t *sdl.Type) error {
 // scalar binds to.
 func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 	e := t.Entity
+	if err := r.declare(e.Name+"."+g.Method, "schema "+e.Name+", the getter of field "+e.Fields[g.Field].Name); err != nil {
+		return err
+	}
 	fd := e.Fields[g.Field]
 	ret, err := r.qualify(f, e, fd, g.Returns, g.Pkg)
 	if err != nil {

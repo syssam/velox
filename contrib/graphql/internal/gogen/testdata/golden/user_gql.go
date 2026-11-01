@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion6
+const _ = veloxgql.GeneratedCodeIsVersion7
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -97,7 +97,7 @@ func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Group"); ok {
 		q = gqlimpl.Narrow(q, groupColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeList(ctx, q, x, Users.Groups, "Account.memberships")
+	return gqlimpl.EdgeList(ctx, q, x, Users.Groups, "Account.memberships", 0)
 }
 
 // LikesGQL is the edge likes: a connection to the Like nodes it leads to,

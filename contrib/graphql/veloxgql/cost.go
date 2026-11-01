@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/vektah/gqlparser/v2/ast"
@@ -30,7 +31,8 @@ const stringUnit = 128
 //     the field has no such arguments, the safer count; its totalCount and
 //     pageInfo are read once;
 //   - the root field nodes multiplies by the number of its ids;
-//   - any other field of a list of objects multiplies by l.MaxList;
+//   - any other field of a list of objects multiplies by l.MaxList, or by the
+//     edge's graphql.MaxList when that is lower;
 //   - every branch of a fragment counts, but a selection that @skip(if: true)
 //     or @include(if: false) leaves out costs nothing, its condition a
 //     literal or a variable's value (a missing variable's default, when it
@@ -70,16 +72,16 @@ const stringUnit = 128
 // statement runs: the introspection part to Limits.MaxIntrospectionCost, and the
 // rest to Limits.MaxCost.
 func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) int {
-	t := costOf(schema, op, vars, l)
+	t, _ := costOf(schema, op, vars, l)
 	// On a platform whose int is 32 bits a cost over math.MaxInt is
 	// math.MaxInt, which is over any limit.
 	return int(min(add(add(t.rows, t.statements), t.meta), math.MaxInt))
 }
 
-// costOf is Cost, by its parts.
-func costOf(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) cost {
+// costOf is Cost, by its parts, and the first list of objects the operation selects.
+func costOf(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) (cost, string) {
 	if schema == nil || op == nil {
-		return cost{}
+		return cost{}, ""
 	}
 	c := &coster{schema: schema, vars: vars, l: l, frags: map[fragKey]cost{}, sizes: map[string]int64{}}
 	var root *ast.Definition
@@ -91,7 +93,7 @@ func costOf(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any
 	default:
 		root = schema.Query
 	}
-	return c.set(op.SelectionSet, root, 0)
+	return c.set(op.SelectionSet, root, 0), c.list
 }
 
 // cost is a selection's cost, by its parts: a multiplier applies to rows alone,
@@ -121,6 +123,8 @@ type coster struct {
 	sizes map[string]int64
 	// meta is the walk of __schema and __type, once one is asked for.
 	meta *metaWalk
+	// list is the first list of objects the operation selects, "Type.field".
+	list string
 }
 
 // set is the cost of the selections of sels on a value of type parent. page
@@ -333,10 +337,27 @@ func (c *coster) multiplier(f *ast.Field, def *ast.FieldDefinition, parent, chil
 	n := int64(1)
 	for t := def.Type; t != nil && isObjectKind(child); t = t.Elem {
 		if t.Elem != nil {
-			n = mul(n, int64(c.l.MaxList))
+			n = mul(n, c.listRows(def))
+			if c.list == "" && parent != nil {
+				c.list = parent.Name + "." + def.Name
+			}
 		}
 	}
 	return n
+}
+
+// listRows is what a list field reads for each parent: l.MaxList, or the edge's
+// graphql.MaxList when that is lower, which the SDL holds in its @goField.
+func (c *coster) listRows(def *ast.FieldDefinition) int64 {
+	most := int64(c.l.MaxList)
+	if d := def.Directives.ForName("goField"); d != nil {
+		if a := d.Arguments.ForName("maxList"); a != nil && a.Value != nil {
+			if n, err := strconv.ParseInt(a.Value.Raw, 10, 64); err == nil && n > 0 {
+				most = min(most, n)
+			}
+		}
+	}
+	return most
 }
 
 // runsStatement reports whether f sends a statement of its own: a root field,

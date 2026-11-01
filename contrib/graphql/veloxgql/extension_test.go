@@ -1204,6 +1204,23 @@ func TestSetup(t *testing.T) {
 	}
 }
 
+// TestListCostNamesTheFix: a client cannot lower what a list costs, as it can a page, so
+// the refusal says what can: the schema's annotation, or a connection.
+func TestListCostNamesTheFix(t *testing.T) {
+	db, _ := handlerDB(t)
+	srv := serveSchema(testSchemaOf(`type Query { items: [Item!]! one: Int } type Item { id: ID! }`, nil), db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 500}))
+	got := post(t, context.Background(), srv, `{ items { id } }`)
+	for _, want := range []string{"COST_LIMIT_EXCEEDED", "Query.items", "graphql.MaxList", "a Connection"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in %s", want, got)
+		}
+	}
+	srv = serveSchema(testSchemaOf(`type Query { one: Int }`, nil), db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 2}))
+	if got := post(t, context.Background(), srv, `{ a: one b: one c: one }`); strings.Contains(got, "MaxList") {
+		t.Errorf("no list in the request: %s", got)
+	}
+}
+
 // TestValidationErrorsBounded: a server Setup made returns MaxErrors of validation's
 // errors, and says there are more.
 func TestValidationErrorsBounded(t *testing.T) {

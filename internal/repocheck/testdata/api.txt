@@ -904,6 +904,7 @@ func CreateInput(on bool) Annotation
 func Directives(ds ...Directive) Annotation
 func EnumValues(m map[string]string) Annotation
 func FieldName(name string) Annotation
+func MaxList(n int) Annotation
 func MultiOrder() Annotation
 func Mutations(kinds ...MutationKind) Annotation
 func OrderField(name string) Annotation
@@ -914,7 +915,7 @@ func Type(name string) Annotation
 func UpdateInput(on bool) Annotation
 func WhereEdge() Annotation
 func WhereOps(ops ...WhereOp) Annotation
-type Annotation struct { Skip SkipMode Type string QueryField string Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool WhereOps WhereOp WhereEdge bool Connection *bool CreateInput *bool UpdateInput *bool EnumValues map[string]string Directives []Directive }
+type Annotation struct { Skip SkipMode Type string QueryField string Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool WhereOps WhereOp WhereEdge bool Connection *bool MaxList int CreateInput *bool UpdateInput *bool EnumValues map[string]string Directives []Directive }
 type Directive struct { Name string Args map[string]any }
 type MutationKind string
 type SkipMode uint16
@@ -927,7 +928,7 @@ const CodeInternal
 const CodeNotFound
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion6
+const GeneratedCodeIsVersion7
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

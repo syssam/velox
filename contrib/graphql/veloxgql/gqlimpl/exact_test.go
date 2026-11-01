@@ -149,10 +149,13 @@ func TestFromJSONExact(t *testing.T) {
 	}
 }
 
-// TestNullClearsOutsideAField: outside a gqlgen field no null can be read. Served,
-// TestUpdateNullRefused (cmd/velox-graphql) has the rest.
-func TestNullClearsOutsideAField(t *testing.T) {
-	if err := gqlimpl.NullClears(context.Background(), "In.n", "input", "n", "clearN"); err != nil {
+// TestNullOutsideAField: outside a gqlgen field no null can be read. Served,
+// TestUpdateNullClears and TestUpdateNullEdgeRefused (cmd/velox-graphql) have the rest.
+func TestNullOutsideAField(t *testing.T) {
+	if gqlimpl.NullGiven(context.Background(), "input", "n") {
+		t.Error("a null given")
+	}
+	if err := gqlimpl.NullEdge(context.Background(), "In.n", "input", "n", "clearN"); err != nil {
 		t.Error(err)
 	}
 }
@@ -167,9 +170,10 @@ func (*guarded) Policy() velox.Policy[guarded] {
 	return velox.Policy[guarded]{Read: func(context.Context) (velox.Pred[guarded], error) { return velox.And[guarded](), nil }}
 }
 
-// TestFKScoped: with no Read policy on the target a foreign key's predicate is the
-// column's alone, and with one it holds the edge's too. TestForeignKeyFilterHidden
-// (cmd/velox-graphql) serves it.
+// TestFKScoped: with no tenant and no Read policy on the target a foreign key's predicate
+// is the column's alone, and with either it holds the edge's too.
+// TestForeignKeyFilterHidden and TestForeignKeyFilterOtherTenant (cmd/velox-graphql)
+// serve it.
 func TestFKScoped(t *testing.T) {
 	calls := 0
 	has := func() velox.Pred[person] { calls++; return velox.And[person]() }
@@ -177,18 +181,26 @@ func TestFKScoped(t *testing.T) {
 	list := func(...int64) velox.Pred[person] { return velox.And[person]() }
 	null := func() velox.Pred[person] { return velox.And[person]() }
 
-	gqlimpl.FK[open](op, has)(1)
-	gqlimpl.FKList[open](list, has)(1)
-	gqlimpl.FKIsNull[open](null, has)()
-	gqlimpl.FKNotNull[open](null, has)()
+	gqlimpl.FK[open](false, op, has)(1)
+	gqlimpl.FKList[open](false, list, has)(1)
+	gqlimpl.FKIsNull[open](false, null, has)()
+	gqlimpl.FKNotNull[open](false, null, has)()
 	if calls != 0 {
 		t.Errorf("no policy, but the edge's Has ran %d times", calls)
 	}
-	gqlimpl.FK[guarded](op, has)(1)
-	gqlimpl.FKList[guarded](list, has)(1)
-	gqlimpl.FKIsNull[guarded](null, has)()
-	gqlimpl.FKNotNull[guarded](null, has)()
+	gqlimpl.FK[guarded](false, op, has)(1)
+	gqlimpl.FKList[guarded](false, list, has)(1)
+	gqlimpl.FKIsNull[guarded](false, null, has)()
+	gqlimpl.FKNotNull[guarded](false, null, has)()
 	if calls != 4 {
 		t.Errorf("a Read policy, and the edge's Has ran %d times, want 4", calls)
+	}
+	calls = 0
+	gqlimpl.FK[open](true, op, has)(1)
+	gqlimpl.FKList[open](true, list, has)(1)
+	gqlimpl.FKIsNull[open](true, null, has)()
+	gqlimpl.FKNotNull[open](true, null, has)()
+	if calls != 4 {
+		t.Errorf("a tenant on the target, and the edge's Has ran %d times, want 4", calls)
 	}
 }

@@ -1096,9 +1096,9 @@ func TestWhereOps(t *testing.T) {
 		ac("displayNameHasSuffix", &gen.AccountWhereInput{DisplayNameHasSuffix: ptr("n")}, 1, 4),
 		// A required foreign key, by the IDs of its edge's node.
 		po("authorID", &gen.PostWhereInput{AuthorID: ptr(userID(1))}, 1, 2),
-		po("authorIDNEQ", &gen.PostWhereInput{AuthorIDNEQ: ptr(userID(1))}, 3, 4),
+		po("authorIDNEQ", &gen.PostWhereInput{AuthorIDNEQ: ptr(userID(1))}, 3), // 4's author is another tenant's: it reads as null, as a policy's hidden row does
 		po("authorIDIn", &gen.PostWhereInput{AuthorIDIn: []string{userID(1), userID(2)}}, 1, 2, 3),
-		po("authorIDNotIn", &gen.PostWhereInput{AuthorIDNotIn: []string{userID(1)}}, 3, 4),
+		po("authorIDNotIn", &gen.PostWhereInput{AuthorIDNotIn: []string{userID(1)}}, 3),
 		po("title", &gen.PostWhereInput{Title: ptr("b")}, 2),
 		po("titleContains", &gen.PostWhereInput{TitleContains: ptr("x")}, 1, 4),
 		// An optional foreign key to the entity itself.

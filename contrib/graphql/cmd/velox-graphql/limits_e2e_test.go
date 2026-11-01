@@ -16,6 +16,7 @@ import (
 const e2eLimitsSchema = `package schema
 
 import (
+	"net"
 	"time"
 
 	"github.com/syssam/velox/contrib/graphql"
@@ -35,7 +36,49 @@ type Member struct{ schema.Schema }
 func (Member) Fields() []schema.Field { return []schema.Field{field.String("name")} }
 
 func (Member) Edges() []schema.Edge {
-	return []schema.Edge{edge.To("posts", Post.Type), edge.To("docs", Doc.Type)}
+	return []schema.Edge{
+		edge.To("posts", Post.Type),
+		edge.To("docs", Doc.Type),
+		edge.To("groups", Group.Type).Annotations(graphql.Connection(false), graphql.MaxList(2)),
+	}
+}
+
+func (Member) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField("members")}
+}
+
+type Group struct{ schema.Schema }
+
+func (Group) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+
+func (Group) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("members", Member.Type).Ref("groups").Annotations(graphql.Connection(false), graphql.MaxList(2))}
+}
+
+type Ticket struct{ schema.Schema }
+
+func (Ticket) Fields() []schema.Field {
+	return []schema.Field{field.Int64("org_id").Tenant(), field.String("title")}
+}
+
+func (Ticket) Edges() []schema.Edge { return []schema.Edge{edge.To("remarks", Remark.Type)} }
+
+type Remark struct{ schema.Schema }
+
+func (Remark) Fields() []schema.Field {
+	return []schema.Field{
+		field.Int64("org_id").Tenant(),
+		field.String("body"),
+		field.Int64("ticket_id").Optional().Nillable().Annotations(graphql.WhereOps(graphql.OpsEquality | graphql.OpsNullable)),
+	}
+}
+
+func (Remark) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("ticket", Ticket.Type).Ref("remarks").Unique().Field("ticket_id").Annotations(graphql.WhereEdge())}
+}
+
+func (Remark) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField("remarks")}
 }
 
 type Doc struct{ schema.Schema }
@@ -70,6 +113,8 @@ func (Item) Fields() []schema.Field {
 		field.Strings("ss").Optional(),
 		field.JSON("j_struct", Shape{}).Optional().Nillable(),
 		field.Uint64("big").Optional(),
+		field.Bytes("ip").GoType(net.IP{}).Optional().Nillable(),
+		field.JSON("trio", [3]int{}).Optional().Nillable(),
 	}
 }
 
@@ -242,6 +287,16 @@ func (r *mutationResolver) UpdateDoc(ctx context.Context, id string, input gen.U
 	return gen.UpdateDoc(ctx, id, input)
 }
 
+// Members is the resolver for the members field.
+func (r *queryResolver) Members(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.MemberConnection, error) {
+	return gen.MembersConnection(ctx, after, first, before, last)
+}
+
+// Remarks is the resolver for the remarks field.
+func (r *queryResolver) Remarks(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.RemarkWhereInput) (*gen.RemarkConnection, error) {
+	return gen.RemarksConnection(ctx, after, first, before, last, where)
+}
+
 // Items is the resolver for the items field.
 func (r *queryResolver) Items(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.ItemConnection, error) {
 	return gen.ItemsConnection(ctx, after, first, before, last)
@@ -312,12 +367,20 @@ func serve(t *testing.T) served {
 		"CREATE TABLE things (id INTEGER PRIMARY KEY, b BLOB NOT NULL, maybe BLOB, j JSON NOT NULL, n INTEGER)",
 		"CREATE TABLE types (id INTEGER PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL)",
 		"CREATE TABLE docs (id INTEGER PRIMARY KEY, title TEXT NOT NULL, member_id INTEGER REFERENCES members (id))",
-		"CREATE TABLE items (id INTEGER PRIMARY KEY, s_nil TEXT, j_map JSON DEFAULT ~{}~, ss JSON DEFAULT ~[]~, j_struct JSON, big INTEGER DEFAULT 0)",
+		"CREATE TABLE items (id INTEGER PRIMARY KEY, s_nil TEXT, j_map JSON DEFAULT ~{}~, ss JSON DEFAULT ~[]~, j_struct JSON, big INTEGER DEFAULT 0, ip BLOB, trio JSON)",
+		"CREATE TABLE groups (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+		"CREATE TABLE member_groups (member_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (member_id, group_id))",
+		"CREATE TABLE tickets (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, title TEXT NOT NULL)",
+		"CREATE TABLE remarks (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, body TEXT NOT NULL, ticket_id INTEGER)",
 		"INSERT INTO orgs (id, name) VALUES (1, ~o1~), (2, ~o2~)",
 		"INSERT INTO members (id, name) VALUES (1, ~seen~), (2, ~hidden~)",
 		"INSERT INTO posts (id, org_id, member_id, title) VALUES (1, 1, 1, ~p1~), (2, 1, 2, ~p2~)",
 		"INSERT INTO types (id, name, kind) VALUES (1, ~t~, ~a~)",
 		"INSERT INTO docs (id, title, member_id) VALUES (1, ~d1~, 1), (4, ~d4~, 2), (5, ~d5~, NULL)",
+		"INSERT INTO groups (id, name) VALUES (1, ~small~), (2, ~large~)",
+		"INSERT INTO member_groups (member_id, group_id) VALUES (1, 1)",
+		"INSERT INTO tickets (id, org_id, title) VALUES (1, 1, ~mine~), (2, 2, ~theirs~)",
+		"INSERT INTO remarks (id, org_id, body, ticket_id) VALUES (1, 1, ~r1~, 1), (2, 1, ~r2~, 2), (3, 1, ~r3~, NULL)",
 	} {
 		if _, err := db.Exec(s); err != nil {
 			t.Fatalf("%s: %v", s, err)
@@ -507,33 +570,112 @@ func TestForeignKeyFilterHidden(t *testing.T) {
 		'{"data":{"docs":{"edges":[{"node":{"title":"d1","member":{"name":"seen"}}},{"node":{"title":"d4","member":null}},{"node":{"title":"d5","member":null}}]}}}')
 }
 
-// TestUpdateNullRefused: an update that gives null to a field or an edge with a
-// clear input is refused, literal or variable, naming that input: it would keep the
-// old value. Left out, it keeps it; clear stores NULL.
-func TestUpdateNullRefused(t *testing.T) {
+// TestUpdateNullClears: an update that gives null to a nullable field clears it, literal
+// or variable, as a client means by it; clear<Field> stays. Left out, it keeps it.
+func TestUpdateNullClears(t *testing.T) {
 	s := serve(t)
-	s.want("create", 'mutation { createItem(input: {sNil: "a"}) { sNil } }', '{"data":{"createItem":{"sNil":"a"}}}')
-	id := veloxgql.EncodeID("Item", 1)
 	const q = 'mutation ($id: ID!, $i: UpdateItemInput!) { updateItem(id: $id, input: $i) { sNil } }'
 	const qn = 'mutation ($id: ID!, $n: String) { updateItem(id: $id, input: {sNil: $n}) { sNil } }'
-	for name, got := range map[string]string{
-		"literal":        s.do(fmt.Sprintf("mutation { updateItem(id: %q, input: {sNil: null}) { sNil } }", id)),
-		"whole variable": s.doVars(q, map[string]any{"id": id, "i": map[string]any{"sNil": nil}}),
-		"one variable":   s.doVars(qn, map[string]any{"id": id, "n": nil}),
-	} {
-		if !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "UpdateItemInput.sNil: invalid value: null") || !strings.Contains(got, "clearSNil") {
-			t.Errorf("%s: %s", name, got)
+	id := veloxgql.EncodeID("Item", 1)
+	set := func() {
+		t.Helper()
+		if got := s.do(fmt.Sprintf('mutation { updateItem(id: %q, input: {sNil: "a"}) { sNil } }', id)); got != '{"data":{"updateItem":{"sNil":"a"}}}' {
+			t.Fatal(got)
 		}
 	}
-	doc := veloxgql.EncodeID("Doc", 1)
-	if got := s.do(fmt.Sprintf("mutation { updateDoc(id: %q, input: {memberID: null}) { title } }", doc)); !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "clearMember") {
-		t.Errorf("an edge: %s", got)
-	}
+	s.want("create", 'mutation { createItem(input: {sNil: "a"}) { sNil } }', '{"data":{"createItem":{"sNil":"a"}}}')
+	const cleared = '{"data":{"updateItem":{"sNil":null}}}'
 	s.want("left out", fmt.Sprintf("mutation { updateItem(id: %q, input: {}) { sNil } }", id), '{"data":{"updateItem":{"sNil":"a"}}}')
 	if got := s.doVars(qn, map[string]any{"id": id}); got != '{"data":{"updateItem":{"sNil":"a"}}}' {
 		t.Errorf("a variable left out: %s", got)
 	}
-	s.want("null with clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {sNil: null, clearSNil: true}) { sNil } }", id), '{"data":{"updateItem":{"sNil":null}}}')
+	s.want("literal", fmt.Sprintf("mutation { updateItem(id: %q, input: {sNil: null}) { sNil } }", id), cleared)
+	set()
+	if got := s.doVars(q, map[string]any{"id": id, "i": map[string]any{"sNil": nil}}); got != cleared {
+		t.Errorf("whole variable: %s", got)
+	}
+	set()
+	if got := s.doVars(qn, map[string]any{"id": id, "n": nil}); got != cleared {
+		t.Errorf("one variable: %s", got)
+	}
+	set()
+	s.want("clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {clearSNil: true}) { sNil } }", id), cleared)
+	set()
+	s.want("null with clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {sNil: null, clearSNil: true}) { sNil } }", id), cleared)
+	set()
+	if got := s.do(fmt.Sprintf('mutation { updateItem(id: %q, input: {sNil: "b", clearSNil: true}) { sNil } }', id)); !strings.Contains(got, "BAD_USER_INPUT") {
+		t.Errorf("a value with clear: %s", got)
+	}
+	// clear<Field> is not a required field's: its null is a field not given.
+	thing := veloxgql.EncodeID("Thing", 1)
+	s.want("the thing", 'mutation { createThing(input: {b: "QQ==", j: []}) { b } }', '{"data":{"createThing":{"b":"QQ=="}}}')
+	s.want("a required field", fmt.Sprintf("mutation { updateThing(id: %q, input: {b: null}) { b } }", thing), '{"data":{"updateThing":{"b":"QQ=="}}}')
+}
+
+// TestUpdateNullEdgeRefused: a null given to an edge's <edge>ID is refused, naming
+// clear<Edge>, literal or variable: clearing an edge unlinks a row, so it is said.
+func TestUpdateNullEdgeRefused(t *testing.T) {
+	s := serve(t)
+	doc := veloxgql.EncodeID("Doc", 1)
+	if got := s.do(fmt.Sprintf("mutation { updateDoc(id: %q, input: {memberID: null}) { title } }", doc)); !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "clearMember") {
+		t.Errorf("an edge: %s", got)
+	}
+}
+
+// TestNullBytesGoType: a Bytes field of a named Go type reads NULL as null, and the page
+// holding the row keeps its data; a value reads as written.
+func TestNullBytesGoType(t *testing.T) {
+	s := serve(t)
+	s.want("null", 'mutation { createItem(input: {sNil: "a"}) { ip } }', '{"data":{"createItem":{"ip":null}}}')
+	s.want("value", 'mutation { createItem(input: {ip: "AQIDBA=="}) { ip } }', '{"data":{"createItem":{"ip":"AQIDBA=="}}}')
+	s.want("the page", "{ items { edges { node { ip } } } }", '{"data":{"items":{"edges":[{"node":{"ip":null}},{"node":{"ip":"AQIDBA=="}}]}}}')
+	s.want("clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {ip: null}) { ip } }", veloxgql.EncodeID("Item", 2)), '{"data":{"updateItem":{"ip":null}}}')
+}
+
+// TestForeignKeyFilterOtherTenant: a foreign key to a row of another tenant reads as
+// null to every predicate on it, as the edge does: the same hides as a policy hides.
+func TestForeignKeyFilterOtherTenant(t *testing.T) {
+	s := serve(t)
+	mine, theirs := veloxgql.EncodeID("Ticket", 1), veloxgql.EncodeID("Ticket", 2)
+	for _, c := range []struct{ where, want string }{
+		{fmt.Sprintf("ticketID: %q", mine), "r1"},
+		{fmt.Sprintf("ticketID: %q", theirs), ""},
+		{fmt.Sprintf("ticketIDNEQ: %q", theirs), "r1"},
+		{fmt.Sprintf("ticketIDIn: [%q, %q]", mine, theirs), "r1"},
+		{fmt.Sprintf("ticketIDNotIn: [%q]", theirs), "r1"},
+		{"ticketIDIsNil: true", "r2,r3"},
+		{"ticketIDNotNil: true", "r1"},
+		{"hasTicket: false", "r2,r3"},
+		{"hasTicket: true", "r1"},
+	} {
+		got := s.do("{ remarks(where: {" + c.where + "}) { edges { node { body } } } }")
+		if strings.Contains(got, "errors") {
+			t.Fatalf("%s: %s", c.where, got)
+		}
+		var out []string
+		for _, part := range strings.Split(got, '"body":"')[1:] {
+			out = append(out, part[:strings.Index(part, '"')])
+		}
+		if joined := strings.Join(out, ","); joined != c.want {
+			t.Errorf("%s: %q, want %q", c.where, joined, c.want)
+		}
+	}
+}
+
+// TestListEdgeMaxList: graphql.MaxList lets two levels of lists through the cost, as a
+// client cannot lower what they charge, and fails the edge past it: no row is dropped.
+func TestListEdgeMaxList(t *testing.T) {
+	s := serve(t)
+	s.want("nested", "{ members(first: 1) { edges { node { name groups { name members { name } } } } } }",
+		'{"data":{"members":{"edges":[{"node":{"name":"seen","groups":[{"name":"small","members":[{"name":"seen"}]}]}}]}}}')
+	for _, q := range []string{"INSERT INTO groups (id, name) VALUES (3, ~g3~), (4, ~g4~)", "INSERT INTO member_groups (member_id, group_id) VALUES (1, 2), (1, 3)"} {
+		if _, err := s.db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := s.do("{ members(first: 1) { edges { node { groups { name } } } } }"); !strings.Contains(got, "INTERNAL_SERVER_ERROR") {
+		t.Errorf("past it: %s", got)
+	}
 }
 
 // TestJSONInputExact: what a JSON field stores is what the client gave, or refused:
@@ -578,6 +720,15 @@ func TestJSONInputExact(t *testing.T) {
 	if got := s.count("items"); got != n {
 		t.Errorf("%d rows after the refusals, was %d", got, n)
 	}
+	for name, q := range map[string]string{
+		"short": 'mutation { createItem(input: {trio: [1, 2]}) { id } }',
+		"long":  'mutation { createItem(input: {trio: [1, 2, 3, 4]}) { id } }',
+	} {
+		if got := s.do(q); !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "CreateItemInput.trio") {
+			t.Errorf("%s: %s", name, got)
+		}
+	}
+	s.want("the length", 'mutation { createItem(input: {trio: [1, 2, 3]}) { trio } }', '{"data":{"createItem":{"trio":[1,2,3]}}}')
 	s.want("a pointer may be null", 'mutation { createItem(input: {jStruct: {A: "x", N: null}}) { jStruct } }', '{"data":{"createItem":{"jStruct":{"A":"x","N":null}}}}')
 }
 
@@ -647,7 +798,7 @@ func TestLimitsServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullRefused", "TestJSONInputExact", "TestUint64HighBit"} {
+	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullClears", "TestUpdateNullEdgeRefused", "TestNullBytesGoType", "TestForeignKeyFilterOtherTenant", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

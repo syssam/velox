@@ -509,10 +509,14 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		f.p("\treturn %s.EdgeOne(ctx, q, x, %s, %s)", impl, rel, field)
 		f.p("}")
 	case sdl.EdgeList:
-		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is read with the edge of every row read with x, in one query, which reads at most the MaxList of veloxgql.LimitsFromContext(ctx) rows for each, whatever the DB's WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error that names the edge.", ed.Method, pe.Name, tt.Name))
+		most := "the MaxList of veloxgql.LimitsFromContext(ctx)"
+		if ed.MaxList != 0 {
+			most = fmt.Sprintf("%d, or the MaxList of veloxgql.LimitsFromContext(ctx) when that is lower,", ed.MaxList)
+		}
+		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is read with the edge of every row read with x, in one query, which reads at most %s rows for each, whatever the DB's WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error that names the edge.", ed.Method, pe.Name, tt.Name, most))
 		f.p("func (x *%s) %s(ctx %s.Context) ([]*%s, error) {", e.Name, ed.Method, ctx, tgt.Name)
 		query()
-		f.p("\treturn %s.EdgeList(ctx, q, x, %s, %s)", impl, rel, field)
+		f.p("\treturn %s.EdgeList(ctx, q, x, %s, %s, %d)", impl, rel, field, ed.MaxList)
 		f.p("}")
 	case sdl.EdgeConnection:
 		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to, paged, ordered and filtered by the arguments. Its queries run when gqlgen asks for the connection's fields, each with those of every row read with x, in one query.", ed.Method, pe.Name, tt.Name))

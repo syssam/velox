@@ -282,27 +282,30 @@ func NotZero[V any](at string, v V) error {
 // field whose argument has another name, it finds no null and refuses nothing. For
 // generated code.
 func NotNull(ctx context.Context, at, arg, name string) error {
-	if !nullGiven(ctx, arg, name) {
+	if !NullGiven(ctx, arg, name) {
 		return nil
 	}
 	return InputErrorf("%s: invalid value: null cannot be stored on create, where it means the field's default; leave the field out, or clear it with an update", at)
 }
 
-// NullClears refuses a null the client gave the input field name, of the argument
-// arg of the running field, on an update: an update's nil pointer leaves the field
-// as it is, and a client that says null means to clear it, which clearField, the input's
-// other field, does. The client gets BAD_USER_INPUT, naming at and clearField. Called
-// outside a gqlgen field, or from a field whose argument has another name, it finds
-// no null and refuses nothing. For generated code.
-func NullClears(ctx context.Context, at, arg, name, clearField string) error {
-	if !nullGiven(ctx, arg, name) {
+// NullEdge refuses a null the client gave the input field name, of the argument arg
+// of the running field, on an update of an edge's <edge>ID: clearing an edge unlinks a
+// row, so it is said by clearField, the input's other field. The client gets
+// BAD_USER_INPUT, naming at and clearField. Called outside a gqlgen field, or from a
+// field whose argument has another name, it finds no null and refuses nothing. For
+// generated code.
+func NullEdge(ctx context.Context, at, arg, name, clearField string) error {
+	if !NullGiven(ctx, arg, name) {
 		return nil
 	}
 	return InputErrorf("%s: invalid value: null would leave it as it is; give %s: true to clear it, or leave the field out", at, clearField)
 }
 
-// nullGiven reports whether the running field's argument arg gives name as null.
-func nullGiven(ctx context.Context, arg, name string) bool {
+// NullGiven reports whether the running field's argument arg gives the input field
+// name as null, which an input's nil pointer cannot tell from a field left out: an
+// update clears a nullable field by it. Outside a gqlgen field, or in a field whose
+// argument has another name, it finds none. For generated code.
+func NullGiven(ctx context.Context, arg, name string) bool {
 	fc := graphql.GetFieldContext(ctx)
 	if fc == nil || fc.Field.Field == nil || !graphql.HasOperationContext(ctx) {
 		return false
