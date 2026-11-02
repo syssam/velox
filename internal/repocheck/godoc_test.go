@@ -82,7 +82,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 // word. A name that lives in veloxtype says it in both packages' documentation.
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce",
-		"BindPolicy", "BindHooks", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion7"}
+		"BindPolicy", "BindHooks", "BindHooksAfter", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion7"}
 	listed := map[string]bool{}
 	for _, n := range names {
 		listed[n] = true

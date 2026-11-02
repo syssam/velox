@@ -52,9 +52,7 @@ func taskDescriptor() velox.Descriptor[Task] {
 		},
 		PrimaryKey: []int{taskColID},
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy(taskScope.Wrap((*Task)(nil).Policy())) },
-		Hooks: func() velox.BoundHooks {
-			return velox.BindHooks(append([]velox.Hook[Task]{taskScope.Fill()}, (*Task)(nil).Hooks()...))
-		},
+		Hooks:      func() velox.BoundHooks { return velox.BindHooksAfter(taskScope.Fill(), (*Task)(nil).Hooks()) },
 		FieldPtr: func(x *Task, i int) any {
 			switch i {
 			case taskColID:

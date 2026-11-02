@@ -320,11 +320,11 @@ func TestRenderScopedBinding(t *testing.T) {
 		{"note_velox.go", "velox.BindPolicy(noteScope.Policy())"},
 		{"note_velox.go", "velox.BindHooks([]velox.Hook[Note]{noteScope.Fill()})"},
 		{"task_velox.go", "velox.BindPolicy(taskScope.Wrap((*Task)(nil).Policy()))"},
-		{"task_velox.go", "velox.BindHooks(append([]velox.Hook[Task]{taskScope.Fill()}, (*Task)(nil).Hooks()...))"},
+		{"task_velox.go", "velox.BindHooksAfter(taskScope.Fill(), (*Task)(nil).Hooks())"},
 		{"memo_velox.go", "velox.BindPolicy(memoScope.Wrap((*Memo)(nil).Policy()))"},
 		{"memo_velox.go", "velox.BindHooks([]velox.Hook[Memo]{memoScope.Fill()})"},
 		{"tag_velox.go", "velox.BindPolicy(tagScope.Policy())"},
-		{"tag_velox.go", "velox.BindHooks(append([]velox.Hook[Tag]{tagScope.Fill()}, (*Tag)(nil).Hooks()...))"},
+		{"tag_velox.go", "velox.BindHooksAfter(tagScope.Fill(), (*Tag)(nil).Hooks())"},
 	} {
 		if got := string(fileNamed(t, files, c.file)); !strings.Contains(got, c.want) {
 			t.Errorf("%s lacks %s", c.file, c.want)

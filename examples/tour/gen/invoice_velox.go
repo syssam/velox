@@ -104,9 +104,7 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 			velox.EdgeTo[Line]("Lines", invoiceColID, lineColInvoiceID),
 		},
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy(invoiceScope.Wrap((*Invoice)(nil).Policy())) },
-		Hooks: func() velox.BoundHooks {
-			return velox.BindHooks(append([]velox.Hook[Invoice]{invoiceScope.Fill()}, (*Invoice)(nil).Hooks()...))
-		},
+		Hooks:  func() velox.BoundHooks { return velox.BindHooksAfter(invoiceScope.Fill(), (*Invoice)(nil).Hooks()) },
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case invoiceColID:

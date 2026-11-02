@@ -224,6 +224,22 @@ func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 	})
 }
 
+// hNilAfter's Hooks lists a nil hook, and the descriptor binds a hook of its own
+// (what velox-gen writes for a scoped entity) before it.
+type hNilAfter struct{ ID int64 }
+
+func (*hNilAfter) Hooks() []velox.Hook[hNilAfter] { return []velox.Hook[hNilAfter]{nil} }
+
+var hNilAfterMeta velox.MetaOnce[hNilAfter]
+
+func (*hNilAfter) VeloxMeta() *velox.Meta[hNilAfter] {
+	return hNilAfterMeta.Load(func() velox.Descriptor[hNilAfter] {
+		first := func(next velox.Mutator[hNilAfter]) velox.Mutator[hNilAfter] { return next }
+		return velox.Descriptor[hNilAfter]{Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(first, (*hNilAfter)(nil).Hooks()) }, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+			FieldPtr: func(x *hNilAfter, i int) any { return &x.ID }}
+	})
+}
+
 // hPanic's Policy reads its receiver, which is nil.
 type hPanic struct{ ID int64 }
 
@@ -246,6 +262,11 @@ func TestHooksAndPolicyRefusals(t *testing.T) {
 	var se *velox.SchemaError
 	err := db.Insert(&hNil{ID: 1}).Exec(ctx)
 	if !errors.As(err, &se) || err.Error() != "velox: apitest.hNil: Hooks()[0] is nil" {
+		t.Fatalf("got %v", err)
+	}
+	// The nil hook is the first of the entity's own Hooks, whatever is bound before it.
+	err = db.Insert(&hNilAfter{ID: 1}).Exec(ctx)
+	if !errors.As(err, &se) || err.Error() != "velox: apitest.hNilAfter: Hooks()[0] is nil" {
 		t.Fatalf("got %v", err)
 	}
 	err = db.Insert(&hPanic{ID: 1}).Exec(ctx)

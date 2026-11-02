@@ -144,12 +144,26 @@ func renderScope(o *Out) string {
 	w.p("package %s", o.Package)
 	w.p("")
 	w.p("import (")
-	imports := []string{"github.com/syssam/velox", "github.com/syssam/velox/scope"}
+	std := []string{}
+	other := []string{"github.com/syssam/velox", "github.com/syssam/velox/scope"}
 	for _, k := range o.ScopeKeys {
-		imports = append(imports, k.Imports...)
+		for _, p := range k.Imports {
+			if first, _, _ := strings.Cut(p, "/"); strings.Contains(first, ".") {
+				other = append(other, p)
+			} else {
+				std = append(std, p)
+			}
+		}
 	}
-	slices.Sort(imports)
-	for _, p := range slices.Compact(imports) {
+	slices.Sort(std)
+	slices.Sort(other)
+	for _, p := range slices.Compact(std) {
+		w.p("%s", strconv.Quote(p))
+	}
+	if len(std) > 0 {
+		w.p("")
+	}
+	for _, p := range slices.Compact(other) {
 		w.p("%s", strconv.Quote(p))
 	}
 	w.p(")")
@@ -405,7 +419,7 @@ func entityDescriptor(w *writer, e *OutEntity) {
 	}
 	switch {
 	case e.Scope != nil && e.Bound.Hooks:
-		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks(append([]velox.Hook[%s]{%s.Fill()}, (*%s)(nil).Hooks()...)) },", e.Name, e.Scope.Var, e.Name)
+		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(%s.Fill(), (*%s)(nil).Hooks()) },", e.Scope.Var, e.Name)
 	case e.Scope != nil:
 		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[%s]{%s.Fill()}) },", e.Name, e.Scope.Var)
 	case e.Bound.Hooks:

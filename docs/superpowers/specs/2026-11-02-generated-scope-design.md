@@ -87,7 +87,7 @@ For a scoped entity it binds the scope around them:
 
 ```go
 Policy: func() velox.BoundPolicy { return velox.BindPolicy(noteScope.Wrap((*Note)(nil).Policy())) }
-Hooks:  func() velox.BoundHooks  { return velox.BindHooks(append([]velox.Hook[Note]{noteScope.Fill()}, (*Note)(nil).Hooks()...)) }
+Hooks:  func() velox.BoundHooks  { return velox.BindHooksAfter(noteScope.Fill(), (*Note)(nil).Hooks()) }
 ```
 
 with the user's method left out when they have none (`velox.Policy[Note]{}` and no

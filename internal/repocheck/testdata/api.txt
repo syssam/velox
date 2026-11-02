@@ -321,6 +321,7 @@ func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c N
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
 func BindHooks[E any](hs []Hook[E]) BoundHooks
 func BindPolicy[E any](p Policy[E]) BoundPolicy
+func BindHooksAfter[E any](first Hook[E], hs []Hook[E]) BoundHooks
 func CheckEntity[E any, PE Entity[E]]() error
 func CheckRelation[E, T any](r Rel[E, T]) error
 func ColumnEQ(column int, v any) Predicate

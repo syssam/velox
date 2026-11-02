@@ -46,9 +46,7 @@ func tagDescriptor() velox.Descriptor[Tag] {
 		},
 		PrimaryKey: []int{tagColID},
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy(tagScope.Policy()) },
-		Hooks: func() velox.BoundHooks {
-			return velox.BindHooks(append([]velox.Hook[Tag]{tagScope.Fill()}, (*Tag)(nil).Hooks()...))
-		},
+		Hooks:      func() velox.BoundHooks { return velox.BindHooksAfter(tagScope.Fill(), (*Tag)(nil).Hooks()) },
 		FieldPtr: func(x *Tag, i int) any {
 			switch i {
 			case tagColID:

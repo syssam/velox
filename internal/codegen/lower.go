@@ -152,7 +152,7 @@ func (l *lowerer) entities() {
 				s.exported(f)
 			}
 			s.out.Fields = append(s.out.Fields, s.field(e, i, f))
-			if key, ok := scoped(f); ok {
+			if key, ok, _ := scoped(f); ok { // build refused a malformed annotation
 				s.scope(e, f, s.out.Fields[i], key)
 			}
 		}

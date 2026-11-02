@@ -125,6 +125,26 @@ func BindHooks[E any](hs []Hook[E]) BoundHooks {
 	return b
 }
 
+// BindHooksAfter is BindHooks of first followed by hs, and a nil hook in hs is
+// reported at its index in hs: first is not counted. For generated code.
+// velox-gen writes
+//
+//	Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(xScope.Fill(), (*E)(nil).Hooks()) },
+//
+// for an entity that has a scope and declares the Hooks method.
+func BindHooksAfter[E any](first Hook[E], hs []Hook[E]) BoundHooks {
+	var b BoundHooks
+	engine.AddBoundHook(&b, erase(first))
+	for i, f := range hs {
+		if f == nil {
+			engine.SetBoundNil(&b, i+1)
+			return b
+		}
+		engine.AddBoundHook(&b, erase(f))
+	}
+	return b
+}
+
 // erase returns h with E erased.
 func erase[E any](h Hook[E]) engine.HookFn {
 	return func(next engine.MutateFn) engine.MutateFn {

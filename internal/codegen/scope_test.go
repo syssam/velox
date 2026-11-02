@@ -4,7 +4,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -147,6 +149,53 @@ func (scBadKey) Fields() []schema.Field {
 	return []schema.Field{orgID().Annotations(schema.Scoped("not a key"))}
 }
 
+// badScoped is named Scoped, but its payload is not Scoped's: key is a number.
+type badScoped struct{ Key int }
+
+func (badScoped) Name() string { return "Scoped" }
+
+type scBadPayload struct{ schema.Schema }
+
+func (scBadPayload) Fields() []schema.Field {
+	return []schema.Field{orgID().Annotations(badScoped{7})}
+}
+
+// The type of a scoped field names its package's path as well as its Ident:
+// two UUID types both called uuid.UUID are two types, and a key has one.
+func TestScopeTypeNamesThePackage(t *testing.T) {
+	a := new(Field)
+	a.GoType = &loadjson.GoType{Ident: "uuid.UUID", PkgPath: "github.com/google/uuid"}
+	b := new(Field)
+	b.GoType = &loadjson.GoType{Ident: "uuid.UUID", PkgPath: "github.com/gofrs/uuid"}
+	if scopeType(a) == scopeType(b) {
+		t.Errorf("scopeType = %q for both packages", scopeType(a))
+	}
+	if !strings.Contains(scopeType(b), "github.com/gofrs/uuid") {
+		t.Errorf("scopeType = %q, want it to show the package path", scopeType(b))
+	}
+	plain := new(Field)
+	plain.Type = "string"
+	if got := scopeType(plain); got != "string" {
+		t.Errorf("scopeType of a plain string = %q", got)
+	}
+}
+
+// ScSpan's scope is a time.Duration: the key's import is standard, velox's are not.
+type ScSpan struct{ schema.Schema }
+
+func (ScSpan) Fields() []schema.Field {
+	return []schema.Field{field.Int64("span").GoType(time.Duration(0)).Immutable().Annotations(schema.Scoped("span"))}
+}
+
+func TestRenderScopeImportGroups(t *testing.T) {
+	got := renderScope(mustLower(t, Config{}, ScSpan{}))
+	// renderScope's output is formatted later, so it is not indented here.
+	want := "import (\n\"time\"\n\n\"github.com/syssam/velox\"\n\"github.com/syssam/velox/scope\"\n)"
+	if !strings.Contains(got, want) {
+		t.Errorf("scope_velox.go's imports are not standard first, then the rest:\n%s", got)
+	}
+}
+
 func TestBuildScopedRefused(t *testing.T) {
 	for _, c := range []struct {
 		ss   []schema.Interface
@@ -159,6 +208,7 @@ func TestBuildScopedRefused(t *testing.T) {
 		{[]schema.Interface{scEnum{}}, `schema scEnum: field "org_id": a Scoped field must be an integer, string or UUID, not enum`},
 		{[]schema.Interface{scTwo{}}, `schema scTwo: field "region": an entity has one Scoped field, and "org_id" is already`},
 		{[]schema.Interface{ScNote{}, scStringOrg{}}, `schema scStringOrg: field "org": key "org" is int64 in ScNote and string here: a key has one type`},
+		{[]schema.Interface{scBadPayload{}}, `schema scBadPayload: field "org_id": the Scoped annotation is malformed`},
 		{[]schema.Interface{scBadKey{}}, `schema scBadKey: field "org_id": the Scoped key "not a key" has no Go name: use letters, digits and underscores`},
 	} {
 		_, err := build(t, c.ss...)

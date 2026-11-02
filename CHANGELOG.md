@@ -34,7 +34,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `scope_velox.go` and binds the scope around the entity's own `Policy` and `Hooks`, so a
   hand-written `scope.go` is no longer needed. The column must be `Immutable`, not
   `Optional` or `Nillable`, and an integer, string or UUID. See
-  `docs/decisions/0030-generated-scope.md`.
+  `docs/decisions/0030-generated-scope.md`. `velox.BindHooksAfter` is for that generated
+  code: it binds the scope's hook before the entity's `Hooks`, and a nil hook is reported
+  at its index in `Hooks()`. A malformed `Scoped` annotation is refused with its own message,
+  and two UUID types of one name from different packages are two types under one key.
 - Package `scope`: `scope.NewKey`, `Key.With` and `Key.From`, and `scope.By`, which gives a
   `Policy`, a `Wrap` of one, and a `Fill` hook. It confines the rows of an entity to a value
   in the context (an organization, a region, an owner), with `scope.ErrNoScope` and

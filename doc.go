@@ -264,7 +264,7 @@
 //
 // velox-gen and its plugins write code that uses part of this package, and
 // nothing else should: Descriptor, ColumnDescriptor, EdgeDescriptor, EdgeTo, EdgeBidi,
-// EdgeThrough, Meta, MetaOnce, BindPolicy, BindHooks, BoundPolicy,
+// EdgeThrough, Meta, MetaOnce, BindPolicy, BindHooks, BindHooksAfter, BoundPolicy,
 // BoundHooks, Lazy, Validate, ValidateSet and
 // GeneratedCodeIsVersion7. Each
 // says "For generated code." in its documentation. They are not part of

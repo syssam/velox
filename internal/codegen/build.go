@@ -818,21 +818,23 @@ var scopeKey = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 // scoped returns the key of f's Scoped annotation, and false when it has none
 // or the annotation is not one. A key that cannot be read is reported by
 // validateScopes through its empty value.
-func scoped(f *Field) (key string, ok bool) {
+func scoped(f *Field) (key string, ok bool, err error) {
 	raw, ok := f.Annotations["Scoped"]
 	if !ok {
-		return "", false
+		return "", false, nil
 	}
 	var a struct {
 		Key string `json:"key"`
 	}
-	_ = json.Unmarshal(raw, &a)
-	return a.Key, true
+	return a.Key, true, json.Unmarshal(raw, &a)
 }
 
 // scopeType is the Go type name an error shows for the scoped field f.
 func scopeType(f *Field) string {
 	if f.GoType != nil {
+		if f.GoType.PkgPath != "" {
+			return f.GoType.Ident + " (" + f.GoType.PkgPath + ")"
+		}
 		return f.GoType.Ident
 	}
 	return f.Type
@@ -849,8 +851,12 @@ func (b *builder) validateScopes() {
 		e := n.ent
 		var prev *Field
 		for _, f := range e.Fields {
-			key, ok := scoped(f)
+			key, ok, err := scoped(f)
 			if !ok {
+				continue
+			}
+			if err != nil {
+				b.fail(58, e.Name, fieldLoc(f), "the Scoped annotation is malformed: %v", err)
 				continue
 			}
 			switch {
