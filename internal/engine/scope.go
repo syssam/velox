@@ -807,7 +807,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	}
 	if cf := st.Conflict; cf != nil && !cf.DoNothing && len(cf.Update) > 0 {
 		if tenant {
-			if err := db.checkTenantUpsert(in, cf); err != nil {
+			if err := db.checkTenantUpsert(in, st); err != nil {
 				return err
 			}
 		}
@@ -834,8 +834,10 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 // checkJoinUpsert refuses an upsert of a join entity that updates and whose conflict
 // could be with a row of another tenant: the checked values reach the existing row
 // only in conflict columns, which must so hold every TenantRef's. MySQL resolves a
-// conflict on any unique key, so the primary key and every unique index must.
-func (db *DB) checkJoinUpsert(in *EntityInfo, cf *ConflictClause) error {
+// conflict on any unique key, so the primary key, unless the database generates it
+// (generatedPK), and every unique index must.
+func (db *DB) checkJoinUpsert(in *EntityInfo, st *Statement) error {
+	cf := st.Conflict
 	holds := func(cols []int) bool {
 		for i := range in.refs {
 			if !slices.Contains(cols, in.refs[i].Column) {
@@ -850,7 +852,7 @@ func (db *DB) checkJoinUpsert(in *EntityInfo, cf *ConflictClause) error {
 		}
 		return fmt.Errorf("velox: %s: %w: the conflict columns (%s) do not hold each foreign key to a tenant-scoped row", in.Name, ErrTenantUpsert, columnNames(in, cf.Columns))
 	}
-	if !holds(in.PrimaryKey) {
+	if !holds(in.PrimaryKey) && !generatedPK(in, st) {
 		return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key, and the primary key does not hold each foreign key to a tenant-scoped row", in.Name, ErrTenantUpsert)
 	}
 	for _, ix := range in.Indexes {
@@ -861,11 +863,22 @@ func (db *DB) checkJoinUpsert(in *EntityInfo, cf *ConflictClause) error {
 	return nil
 }
 
+// generatedPK reports whether the database generates st's rows' primary key:
+// it is one column, and the INSERT does not write it, which velox does when the
+// key is an integer left at zero (AUTO_INCREMENT on MySQL). A key the database
+// generates is new, so no row's key can conflict on it. Any other column a
+// Rewrite hook left out gets its default, which can, so only the key counts.
+func generatedPK(in *EntityInfo, st *Statement) bool {
+	return len(in.PrimaryKey) == 1 && !slices.Contains(st.Columns, in.PrimaryKey[0])
+}
+
 // checkTenantUpsert refuses an upsert that updates and whose conflict could
 // be with another tenant's row. On PostgreSQL and SQLite the conflict columns
 // must hold the tenant column. MySQL resolves a conflict on any unique key,
-// so the primary key and every unique index must hold it.
-func (db *DB) checkTenantUpsert(in *EntityInfo, cf *ConflictClause) error {
+// so the primary key, unless the database generates it (generatedPK), and
+// every unique index must hold it.
+func (db *DB) checkTenantUpsert(in *EntityInfo, st *Statement) error {
+	cf := st.Conflict
 	col := in.Columns[in.Tenant].Name
 	if db.D != MySQL {
 		if slices.Contains(cf.Columns, in.Tenant) {
@@ -874,7 +887,7 @@ func (db *DB) checkTenantUpsert(in *EntityInfo, cf *ConflictClause) error {
 		return fmt.Errorf("velox: %s: %w: the conflict columns (%s) do not hold the tenant column %s; name the tenant column in OnConflict", in.Name, ErrTenantUpsert, columnNames(in, cf.Columns), col)
 	}
 	what, cols := "the primary key", in.PrimaryKey
-	if slices.Contains(cols, in.Tenant) {
+	if slices.Contains(cols, in.Tenant) || generatedPK(in, st) {
 		what, cols = "", nil
 		for _, ix := range in.Indexes {
 			if ix.Unique && !slices.Contains(ix.Columns, in.Tenant) {

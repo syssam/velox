@@ -129,7 +129,7 @@ func (db *DB) scopeRefs(ctx context.Context, st *Statement) error {
 		}
 		st.Tenant = id
 		if cf := st.Conflict; cf != nil && !cf.DoNothing && len(cf.Update) > 0 {
-			if err := db.checkJoinUpsert(in, cf); err != nil {
+			if err := db.checkJoinUpsert(in, st); err != nil {
 				return err
 			}
 		}

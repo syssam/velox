@@ -604,3 +604,28 @@ func TestHookCannotDropUpsertReturning(t *testing.T) {
 		t.Errorf("%d statements sent", e.Calls)
 	}
 }
+
+// TestUpsertOnMySQLGeneratedKey: on MySQL, a tenant-scoped upsert whose primary
+// key is left at zero, so that AUTO_INCREMENT generates it, cannot conflict on
+// that key: only the unique index, which holds the tenant, can conflict, and
+// the upsert is sent. A key the row sets can conflict with another tenant's
+// row, and is refused.
+func TestUpsertOnMySQLGeneratedKey(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1}
+	db := openFake(velox.MySQL, e)
+	ctx := velox.WithTenant(context.Background(), int64(7))
+	inv := testmodel.Invoice{Number: "a"}
+	if err := db.Insert(&inv).OnConflict(I.OrgID, I.Number).Update(I.Paid).Exec(ctx); err != nil {
+		t.Errorf("generated key: %v", err)
+	}
+	invs := []testmodel.Invoice{{Number: "a"}, {Number: "b"}}
+	if err := db.InsertAll(invs).OnConflict(I.OrgID, I.Number).Update(I.Paid).Exec(ctx); err != nil {
+		t.Errorf("InsertAll, generated keys: %v", err)
+	}
+	if e.Calls != 2 {
+		t.Errorf("%d statements sent, want 2", e.Calls)
+	}
+	inv = testmodel.Invoice{ID: 5, Number: "a"}
+	err := db.Insert(&inv).OnConflict(I.OrgID, I.Number).Update(I.Paid).Exec(ctx)
+	want(t, err, velox.ErrTenantUpsert, "velox: testmodel.Invoice: upsert could cross tenants: MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key, and the primary key (id) does not hold the tenant column org_id")
+}

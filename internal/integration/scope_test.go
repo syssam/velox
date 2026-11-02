@@ -418,9 +418,10 @@ func TestScopeUpsert(t *testing.T) {
 		}
 		err := upsert(&a1)
 		if tg.d == velox.MySQL && c.name != "anyone" {
-			// ON DUPLICATE KEY UPDATE also fires on the primary key, which
-			// does not include the tenant.
-			if !errors.Is(err, velox.ErrTenantUpsert) {
+			// ON DUPLICATE KEY UPDATE takes no condition to apply the policy
+			// with. (The primary key, which does not hold the tenant, is left
+			// to AUTO_INCREMENT, so it cannot conflict: TestUpsertGeneratedKey.)
+			if !errors.Is(err, velox.ErrPolicyUpsert) {
 				t.Errorf("MySQL: %v", err)
 			}
 			wantIDs(t, done(), []int64{2, 3, 8})
@@ -456,6 +457,58 @@ func TestScopeUpsert(t *testing.T) {
 		}
 		want = slices.DeleteFunc(want, func(id int64) bool { return id == 3 })
 		wantIDs(t, done(), want)
+	})
+}
+
+// TestUpsertGeneratedKey: a tenant's upsert that leaves the primary key to the
+// database updates its own row on the unique (org_id, number) and inserts a new
+// one, on every dialect, MySQL included: AUTO_INCREMENT's key cannot conflict
+// with another tenant's row. Org 2's INV-1, the same number, is left alone. A
+// key the caller sets could, and MySQL refuses it.
+func TestUpsertGeneratedKey(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		tg.exec(t, "INSERT INTO invoices (created_at, updated_at, id, org_id, number, total, paid, note, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			t0, t0, 9, 2, "INV-1", 90, false, "", []byte("d"))
+		in1 := velox.WithTenant(context.Background(), int64(1))
+		upsert := func(x *testmodel.Invoice) error {
+			return tg.db.Insert(x).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(in1)
+		}
+		if err := upsert(&testmodel.Invoice{Number: "INV-1", Total: 11, Data: []byte("d")}); err != nil {
+			t.Fatal(err)
+		}
+		if err := upsert(&testmodel.Invoice{Number: "INV-6", Total: 66, Data: []byte("d")}); err != nil {
+			t.Fatal(err)
+		}
+		rs, err := tg.direct.QueryContext(ctx, "SELECT id, org_id, number, total FROM invoices WHERE number IN ('INV-1', 'INV-6') ORDER BY org_id, number")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = rs.Close() }()
+		var got []string
+		for rs.Next() {
+			var id, org int64
+			var number string
+			var total float64
+			if err := rs.Scan(&id, &org, &number, &total); err != nil {
+				t.Fatal(err)
+			}
+			if number == "INV-6" {
+				id = 0 // generated
+			}
+			got = append(got, fmt.Sprintf("%d/%d/%s/%g", id, org, number, total))
+		}
+		if err := rs.Err(); err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"1/1/INV-1/11", "0/1/INV-6/66", "9/2/INV-1/90"}; !slices.Equal(got, want) {
+			t.Errorf("rows %q, want %q", got, want)
+		}
+		if tg.d == velox.MySQL {
+			err = upsert(&testmodel.Invoice{ID: 9, Number: "INV-1", Total: 12, Data: []byte("d")})
+			if !errors.Is(err, velox.ErrTenantUpsert) {
+				t.Errorf("MySQL, a set key: %v", err)
+			}
+		}
 	})
 }
 
