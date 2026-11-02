@@ -52,6 +52,7 @@ github.com/syssam/velox/internal/testmodel/schema 10.7
 github.com/syssam/velox/internal/testrepo 99.0
 github.com/syssam/velox/migrate 81.2
 github.com/syssam/velox/plugin 95.5
+github.com/syssam/velox/scope 96.0
 github.com/syssam/velox/schema 99.0
 github.com/syssam/velox/schema/edge 90.4
 github.com/syssam/velox/schema/field 86.4

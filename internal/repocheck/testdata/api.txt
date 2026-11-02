@@ -877,6 +877,19 @@ type Request struct { Protocol int Generator string OutPackage string OutPath st
 type Response struct { Protocol int Files []File Warnings []string Error string }
 type Supports struct { Protocol, Model int }
 
+package scope
+func (k *Key[V]) From(ctx context.Context) (V, bool)
+func (k *Key[V]) With(ctx context.Context, v V) context.Context
+func (s Scope[E, V]) Fill() velox.Hook[E]
+func (s Scope[E, V]) Policy() velox.Policy[E]
+func (s Scope[E, V]) Wrap(p velox.Policy[E]) velox.Policy[E]
+func By[E any, V comparable](key *Key[V], eq func(V) velox.Pred[E], field func(*E) *V) Scope[E, V]
+func NewKey[V comparable](name string) *Key[V]
+type Key[V comparable] struct { }
+type Scope[E any, V comparable] struct { }
+var ErrMismatch
+var ErrNoScope
+
 package contrib/graphql
 const MutationCreate MutationKind
 const MutationDelete MutationKind

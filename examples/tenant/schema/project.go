@@ -12,12 +12,12 @@ import (
 // the organization, not across organizations.
 type Project struct{ schema.Schema }
 
-// Fields returns the columns after the ID. Tenant makes OrgID the tenant
-// column: every statement on Project is scoped to the context's tenant, and
-// fails without one.
+// Fields returns the columns after the ID. OrgID is Immutable, so that an
+// update cannot move a row to another organization. gen/scope.go confines every
+// statement on Project to the organization the context names.
 func (Project) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable(),
 		field.String("name"),
 		field.String("status"),
 	}

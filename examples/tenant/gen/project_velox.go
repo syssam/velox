@@ -41,15 +41,17 @@ func projectDescriptor() velox.Descriptor[Project] {
 		Table: "projects",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Name", Name: "name"},
 			{Field: "Status", Name: "status"},
 		},
 		PrimaryKey: []int{0},
-		Tenant:     1,
+		Tenant:     -1,
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{1, 2}, Unique: true}, // org_id, name
 		},
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Project)(nil).Policy()) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Project)(nil).Hooks()) },
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
 			case 0:

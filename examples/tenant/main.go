@@ -1,5 +1,8 @@
-// Command tenant shows tenant scoping: the context names the tenant, and
-// every read, write and insert on a tenant-scoped entity is confined to it.
+// Command tenant shows tenant scoping with the scope package: the context
+// names the organization, and every read, write and insert on a scoped entity
+// is confined to it. The scope is a Policy and a hook (gen/scope.go), not
+// something the engine knows about, so a rule of another shape is written the
+// same way.
 package main
 
 import (
@@ -17,6 +20,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tenant/gen"
 	"github.com/syssam/velox/migrate"
+	"github.com/syssam/velox/scope"
 )
 
 func main() {
@@ -36,12 +40,14 @@ func main() {
 //go:embed migrations
 var migrations embed.FS
 
-// The tenants, of the tenant column's Go type: int64. An untyped 1 is an int,
-// which WithTenant converts to it; an id of another named type it refuses.
+// The organizations, of the scope's Go type: int64.
 const (
 	acme   int64 = 1
 	globex int64 = 2
 )
+
+// fsSub is the migrations directory's files.
+func fsSub() (fs.FS, error) { return fs.Sub(migrations, "migrations") }
 
 func run(ctx context.Context, w io.Writer) error {
 	dir, err := os.MkdirTemp("", "velox-tenant-")
@@ -54,7 +60,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	defer func() { _ = db.Close() }()
-	sub, err := fs.Sub(migrations, "migrations")
+	sub, err := fsSub()
 	if err != nil {
 		return err
 	}
@@ -64,9 +70,9 @@ func run(ctx context.Context, w io.Writer) error {
 	P := gen.Projects
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 
-	// Middleware would set the tenant once per request.
-	acmeCtx := velox.WithTenant(ctx, acme)
-	globexCtx := velox.WithTenant(ctx, globex)
+	// Middleware would set the organization once per request.
+	acmeCtx := gen.Org.With(ctx, acme)
+	globexCtx := gen.Org.With(ctx, globex)
 
 	// Inserts fill OrgID from the context, into the caller's structs too.
 	rocket := gen.Project{Name: "Rocket", Status: "active"}
@@ -78,13 +84,13 @@ func run(ctx context.Context, w io.Writer) error {
 	if err := db.InsertAll(more).Exec(acmeCtx); err != nil {
 		return err
 	}
-	// The same name in another tenant: the unique key includes OrgID.
+	// The same name in another organization: the unique key includes OrgID.
 	if err := db.InsertAll([]gen.Project{{Name: "Rocket", Status: "active"}}).Exec(globexCtx); err != nil {
 		return err
 	}
 	say("InsertAll: org 1 has Rocket, Anvil, Magnet; org 2 has Rocket")
 
-	// Reads see only the context's tenant.
+	// Reads see only the context's organization.
 	for _, c := range []struct {
 		name string
 		ctx  context.Context
@@ -110,26 +116,17 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("org 2 pauses Anvil: %d rows changed (Anvil is org 1's)", n)
 
-	// Fail closed: no tenant, a named type other than the column's, a row
-	// naming another tenant, and moving a row to another tenant are all
-	// refused.
+	// Fail closed: no organization, a row naming another one, and moving a row
+	// to another one are all refused.
 	_, err = db.Query[gen.Project]().Count(ctx)
-	say("no tenant: ErrNoTenant=%t", errors.Is(err, velox.ErrNoTenant))
-	n, err = db.Query[gen.Project]().Count(velox.WithTenant(ctx, 1)) // an int, converted to the column's int64
-	say("tenant 1 as an int: %d projects, err=%v", n, err)
-	type userID int64
-	_, err = db.Query[gen.Project]().Count(velox.WithTenant(ctx, userID(1)))
-	say("tenant of another named type: ErrTenantMismatch=%t", errors.Is(err, velox.ErrTenantMismatch))
+	say("no organization: ErrNoScope=%t", errors.Is(err, scope.ErrNoScope))
 	err = db.Insert(&gen.Project{OrgID: globex, Name: "Spy", Status: "active"}).Exec(acmeCtx)
-	say("insert for org 2 as org 1: ErrTenantMismatch=%t", errors.Is(err, velox.ErrTenantMismatch))
+	say("insert for org 2 as org 1: ErrMismatch=%t", errors.Is(err, scope.ErrMismatch))
 	_, err = db.Update[gen.Project]().Set(P.OrgID.Set(globex)).Where(P.Name.EQ("Rocket")).Exec(acmeCtx)
-	say("move a row to org 2: ErrTenantImmutable=%t", errors.Is(err, velox.ErrTenantImmutable))
+	say("move a row to org 2: ErrImmutable=%t", errors.Is(err, velox.ErrImmutable))
 
-	// An upsert that updates must name the tenant column in OnConflict, so a
-	// conflict on another tenant's key fails instead of changing its row.
-	err = db.Insert(&gen.Project{Name: "Rocket", Status: "done"}).
-		OnConflict(P.Name).Update(P.Status).Exec(acmeCtx)
-	say("upsert on (name): ErrTenantUpsert=%t", errors.Is(err, velox.ErrTenantUpsert))
+	// An upsert names the unique key, which includes OrgID. The scope is ANDed
+	// into the update branch, so it can change only this organization's row.
 	upsert := db.Insert(&gen.Project{Name: "Rocket", Status: "done"}).OnConflict(P.OrgID, P.Name).Update(P.Status)
 	text, _, err = upsert.SQL(acmeCtx)
 	if err != nil {
@@ -140,16 +137,17 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
-	// WithAllTenants lifts the scope for one context and needs a reason, which
-	// hooks see as Statement.TenantBypass. An empty reason is ignored.
-	report := velox.WithAllTenants(ctx, "weekly status report")
+	// velox.WithoutPolicy lifts the scope, as it lifts every policy, and needs
+	// a reason, which hooks see as Statement.PolicyBypass. An empty reason is
+	// ignored.
+	report := velox.WithoutPolicy(ctx, "weekly status report")
 	for p, err := range db.Query[gen.Project]().OrderBy(P.OrgID.Asc(), P.Name.Asc()).Unbounded().Iter(report) {
 		if err != nil {
 			return err
 		}
-		say("WithAllTenants: org %d %s %s", p.OrgID, p.Name, p.Status)
+		say("WithoutPolicy: org %d %s %s", p.OrgID, p.Name, p.Status)
 	}
-	_, err = db.Query[gen.Project]().Count(velox.WithAllTenants(ctx, ""))
-	say("WithAllTenants with no reason: ErrNoTenant=%t", errors.Is(err, velox.ErrNoTenant))
+	_, err = db.Query[gen.Project]().Count(velox.WithoutPolicy(ctx, ""))
+	say("WithoutPolicy with no reason: ErrNoScope=%t", errors.Is(err, scope.ErrNoScope))
 	return nil
 }
