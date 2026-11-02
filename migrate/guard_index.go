@@ -895,7 +895,13 @@ func (w *recreates) breaks(st *tableState, ref TableRef, col string) error {
 		if col != "" {
 			what = colTarget(ref, col)
 		}
-		w.lost(ref, nil, u.name, fmt.Sprintf("the %s %s names %s, and fails once the statement has renamed or dropped it; remake the view in the file, or drop it first", u.kind, u.name, what))
+		// A file can remake a view, but cannot hold a CREATE TRIGGER (ParseFile refuses
+		// one on MySQL): a trigger is dropped and made again by hand around the run.
+		way := "remake the view in the file, or drop it first"
+		if u.kind == "trigger" {
+			way = "drop the trigger by hand before migrate apply and create it again after; a file cannot hold CREATE TRIGGER"
+		}
+		w.lost(ref, nil, u.name, fmt.Sprintf("the %s %s names %s, and fails once the statement has renamed or dropped it; %s", u.kind, u.name, what, way))
 	}
 	return nil
 }

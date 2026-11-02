@@ -495,7 +495,12 @@ func TestMySQLRefusesWhatARenameBreaks(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			db, fsys := mysqlFile(t, c.file, c.hand...)
-			refused(t, db, fsys, c.says, "velox:allow unmodeled-loss "+c.says)
+			// A file holds a view but no CREATE TRIGGER: a trigger is remade by hand.
+			advice := "remake the view in the file, or drop it first"
+			if strings.HasSuffix(c.name, "trigger") {
+				advice = "drop the trigger by hand before migrate apply and create it again after; a file cannot hold CREATE TRIGGER"
+			}
+			refused(t, db, fsys, c.says, "velox:allow unmodeled-loss "+c.says, advice)
 			db, fsys = mysqlFile(t, "-- velox:allow unmodeled-loss "+c.says+"\n"+c.file, c.hand...)
 			mustUp(t, db, fsys)
 		})

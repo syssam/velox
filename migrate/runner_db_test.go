@@ -174,7 +174,7 @@ func TestUpPostgresLockWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = other.Close() }()
-	if _, err := other.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, migrate.LockKey("velox_migrations")); err != nil {
+	if _, err := other.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, migrate.LockKey("public", "velox_migrations")); err != nil {
 		t.Fatal(err)
 	}
 	fsys := dirOf(t, velox.Postgres)
@@ -188,12 +188,67 @@ func TestUpPostgresLockWait(t *testing.T) {
 	if _, err := migrate.Up(ctx, db, fsys, migrate.WithLockWait(0)); !errors.Is(err, migrate.ErrLockWait) {
 		t.Fatalf("no wait: %#v; want ErrLockWait", err)
 	}
-	if _, err := other.ExecContext(ctx, `SELECT pg_advisory_unlock($1)`, migrate.LockKey("velox_migrations")); err != nil {
+	if _, err := other.ExecContext(ctx, `SELECT pg_advisory_unlock($1)`, migrate.LockKey("public", "velox_migrations")); err != nil {
 		t.Fatal(err)
 	}
 	mustUp(t, db, fsys, migrate.WithLockWait(300*time.Millisecond))
 	mustUp(t, db, fsys, migrate.WithLockWait(0))
 	mustUp(t, db, fsys, migrate.WithLockWait(math.MaxInt64)) // past lock_timeout's range, clamped
+}
+
+// TestUpPostgresLockPerSchema: two schemas of one database, each with its own
+// history table, migrate at once. The lock's key held the table's name alone, so the
+// second run waited for the first, and with no lock wait was refused.
+func TestUpPostgresLockPerSchema(t *testing.T) {
+	ctx := context.Background()
+	admin, dsn := freshDB(t, velox.Postgres)
+	mustExec(t, admin, "CREATE SCHEMA a")
+	mustExec(t, admin, "CREATE SCHEMA b")
+	in := func(schema string) *sql.DB {
+		sep := "?"
+		if strings.Contains(dsn, "?") {
+			sep = "&"
+		}
+		return openDB(t, "pgx", dsn+sep+"search_path="+schema)
+	}
+	blocker, err := admin.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = blocker.Close() }()
+	if _, err := blocker.ExecContext(ctx, "SELECT pg_advisory_lock(4242)"); err != nil {
+		t.Fatal(err)
+	}
+	// a's run holds the migration lock while its file waits for the test's lock.
+	done := make(chan error, 1)
+	go func() {
+		_, err := migrate.Up(ctx, in("a"), dirOf(t, velox.Postgres, files("0001_wait.sql", "SELECT pg_advisory_xact_lock(4242);\nCREATE TABLE x (id integer);\n")))
+		done <- err
+	}()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var n int
+		if err := admin.QueryRow(`SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND query LIKE 'SELECT pg_advisory_xact_lock(4242)%' AND wait_event_type = 'Lock'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a's run never reached its file")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	_, err = migrate.Up(ctx, in("b"), dirOf(t, velox.Postgres, files("0001_y.sql", "CREATE TABLE y (id integer);\n")), migrate.WithLockWait(0))
+	if _, uerr := blocker.ExecContext(ctx, "SELECT pg_advisory_unlock(4242)"); uerr != nil {
+		t.Fatal(uerr)
+	}
+	if err != nil {
+		t.Errorf("b, while a's run holds its lock: %v; want b's own lock", err)
+	}
+	if err := <-done; err != nil {
+		t.Errorf("a: %v", err)
+	}
 }
 
 func TestUpPostgresStandardConformingStrings(t *testing.T) {

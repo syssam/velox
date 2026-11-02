@@ -226,6 +226,27 @@ Beside this, in the same spirit, each found by running it:
   a snapshot, which the running file's `CREATE INDEX CONCURRENTLY` waits for at its end.
   Two instances migrating at start deadlocked, and PostgreSQL cancelled the build. The
   wait is `pg_try_advisory_lock` tried again, in no transaction.
+- PostgreSQL's migration lock was keyed by the history table's name alone, so two
+  schemas of one database, each with its own history, waited for each other, and with
+  no lock wait one was refused. The key is the schema and the name, as MySQL's lock
+  names the database. A run of a velox from before takes the old key, and does not
+  wait for a run of this one: upgrade every instance that migrates together.
+- A run killed during a statement of a file run statement by statement left it on the
+  server, which finished it after the history's count: a backfill `UPDATE` in a
+  PostgreSQL no-transaction file, or any MySQL statement. The refusal's way out began
+  with `apply -resume`, which ran the `UPDATE` again. On PostgreSQL a unit of one
+  statement now runs in a transaction with its count (`BEGIN`, the statement, the
+  count, `COMMIT`), so the server rolls back both with the session, and `-resume` is
+  right. It is not done for `CONCURRENTLY`, for a statement PostgreSQL refuses in a
+  transaction block or that may end one (`CALL`, `DO`), for `SET` and `LOCK`, in a file
+  that begins or ends a transaction, or for a unit of more statements, whose locks it
+  would hold to the unit's end (an online check's `NOT VALID` add would block the table
+  through its `VALIDATE`). A statement it misses fails with 25001 before it runs, and
+  runs again alone. Where the count cannot commit with the statement, a dirty version
+  whose run stopped with a statement under way (no error written, a lost connection, a
+  cancel) leads its way out, in `apply` and `status`, with waiting for the statement in
+  the process list or `pg_stat_activity` and checking what it did, then
+  `resolve -statements`, then `-resume`.
 - A plan refuses what can never run or would cut a value whatever it says: a `USING`
   cast to a limited type becomes the assignment cast, a truncating target under
   `alter-type` is a finding, an enum reorder over an array column and a `CONVERT TO`
@@ -297,7 +318,10 @@ Beside this, in the same spirit, each found by running it:
   DDL, and a statement killed. A multi-table DDL on an engine that is not atomic, as
   `DROP TABLE` of two MyISAM tables, can stop part-way though the server refused it, and
   no row is left to say so. The count is written after each unit, so a run killed with a
-  statement on the server leaves a human to say which ran, by `-statements`.
+  statement on the server leaves a human to say which ran, by `-statements`. So does a
+  PostgreSQL unit that does not commit with its count. MySQL's DML could commit with
+  its count on InnoDB, but MySQL commits every DDL statement on its own, and one rule
+  for every MySQL statement is kept.
 - The `INPLACE` refusal is for MyISAM alone; another engine fails on the server with the
   file under way.
 - A SQLite orphan is matched by table, rowid and parent. A file that renames the table,

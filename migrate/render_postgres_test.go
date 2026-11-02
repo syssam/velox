@@ -353,8 +353,9 @@ func TestRenderPostgresDetails(t *testing.T) {
 	if got := sqls(render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{})); !slices.Equal(got, []string{`COMMENT ON COLUMN "users"."name" IS NULL`}) {
 		t.Errorf("a removed comment: %q", got)
 	}
-	// A change's review line goes on its first statement, in the main
-	// script before its online unit.
+	// A change's review line goes on its first statement, in the main script
+	// before its online unit, but for set-not-null, which goes on the unit that
+	// sets NOT NULL.
 	to = mustTables(velox.Postgres, func(m *loadjson.Model) {
 		f := fieldOf(m, "User", "bio")
 		f.Optional, f.Nillable, f.Size = false, false, 50
@@ -362,8 +363,8 @@ func TestRenderPostgresDetails(t *testing.T) {
 	})
 	ss = render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{})
 	if main, on := scriptOf(ss, migrate.ScriptMain), scriptOf(ss, migrate.ScriptOnline); main == nil || on == nil ||
-		!strings.Contains(main.Statements[0].Review, "alter-type: ") || !strings.Contains(main.Statements[0].Review, "set-not-null: ") ||
-		on.Statements[0].Review != "" || on.Statements[3].SQL != `ALTER TABLE "users" ALTER COLUMN "bio" SET NOT NULL` {
+		!strings.Contains(main.Statements[0].Review, "alter-type: ") || strings.Contains(main.Statements[0].Review, "set-not-null: ") ||
+		!strings.HasPrefix(on.Statements[0].Review, "set-not-null: ") || on.Statements[3].SQL != `ALTER TABLE "users" ALTER COLUMN "bio" SET NOT NULL` {
 		t.Errorf("type and NOT NULL:\n%s", scriptsText(ss))
 	}
 
