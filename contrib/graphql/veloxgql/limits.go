@@ -52,7 +52,7 @@ type Limits struct {
 	// request that the other limits, each of one argument, do not give. More
 	// is ErrTooCostly, before any statement runs. It cannot see a value's size,
 	// which is MaxResponseBytes, or how long a statement takes, which is Timeout. It bounds the statements too,
-	// at 100 each, so 1500 by default. Two levels of full pages with 12 fields in
+	// at 100 each, so 1500 statements by default. Two levels of full pages with 12 fields in
 	// each row cost about 144000, and pass. A list edge costs MaxList for each
 	// parent, so under the defaults one full page with two list edges, posts(first:
 	// 100) { edges { node { likes { id } tags { id } } } }, costs 200602 and is

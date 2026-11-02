@@ -113,7 +113,8 @@ func metaCost(t testing.TB, schema *ast.Schema, query string, l veloxgql.Limits)
 }
 
 // TestGraphiQLOnARichSchema: the default MaxIntrospectionCost admits GraphiQL's
-// query on 500 rich entities, and the walk stays bounded past it.
+// query on 150 rich entities (decision 0027: 500 cost 688046, which is why a
+// larger schema raises the limit).
 func TestGraphiQLOnARichSchema(t *testing.T) {
 	if testing.Short() {
 		t.Skip("renders 150 entities")
