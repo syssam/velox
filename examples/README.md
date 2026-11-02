@@ -8,7 +8,7 @@ responses of their servers instead).
 | Example | What it shows | Run |
 |---|---|---|
 | [start](start) | Full CRUD on one entity: `Insert`, `InsertAll`, `Where`/`OrderBy`/`Limit`/`All`, `One` and `ErrNotFound`, `Count`, `Iter`, `Update`…`Set`…`Where`, `Save`, `Delete`…`Where`, and the `ErrUnbounded`/`ErrNoWhere` guards. **Start here.** | `go run ./start` |
-| [relations](relations) | One-to-many and belongs-to, declared with `edge.To` and `edge.From`; `With` eager loading, nested and filtered; `Has`/`HasWhere`; keyset pagination with `After` | `go run ./relations` |
+| [relations](relations) | One-to-many, belongs-to and many-to-many, declared with `edge.To` and `edge.From`; linking through the join entity; `With` eager loading, nested and filtered; `Has`/`HasWhere`; keyset pagination with `After` | `go run ./relations` |
 | [tenant](tenant) | `WithTenant` scoping of reads, writes and inserts; `ErrNoTenant`, `ErrTenantMismatch`, `ErrTenantImmutable`; `WithAllTenants` with a reason; a tenant-safe upsert | `go run ./tenant` |
 | [policy](policy) | `Policy[E]` Read/Write/Insert by the user in the context; `ErrDenied` and `*PolicyError`; a child visible when its parent is, through `Has`; `WithoutPolicy`; `SQL(ctx)` | `go run ./policy` |
 | [hooks](hooks) | The typed `Hooks()` of an entity: an insert hook deriving a field, an update hook that reads and sets values through a `Mutation` and writes an audit row on the write's DB (`m.DB()`; inside `db.Tx` it commits or rolls back with the write), a delete hook narrowing with `Where`, `On`, a generic hook any entity can list, `Save` writing back, a dry run that refuses the hook's audit write | `go run ./hooks` |

@@ -63,6 +63,59 @@
       ]
     },
     {
+      "name": "post_tags",
+      "columns": [
+        {
+          "name": "post_id",
+          "type": "integer"
+        },
+        {
+          "name": "tag_id",
+          "type": "integer"
+        }
+      ],
+      "primary_key": [
+        "post_id",
+        "tag_id"
+      ],
+      "indexes": [
+        {
+          "name": "post_tags_tag_id",
+          "columns": [
+            "tag_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "post_tags_post_id",
+          "columns": [
+            "post_id"
+          ],
+          "ref_table": {
+            "name": "posts"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "name": "post_tags_tag_id",
+          "columns": [
+            "tag_id"
+          ],
+          "ref_table": {
+            "name": "tags"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
       "name": "posts",
       "columns": [
         {
@@ -107,6 +160,32 @@
             "id"
           ],
           "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "tags",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "name",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "tags_name_key",
+          "columns": [
+            "name"
+          ],
+          "unique": true
         }
       ]
     }
