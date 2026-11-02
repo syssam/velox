@@ -192,6 +192,21 @@ func (Flag) Annotations() []schema.Annotation {
 	return []schema.Annotation{graphql.QueryField("flags"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
+// Page has a required slug the create input leaves out, as entgql users write
+// it, for the resolver to set.
+type Page struct{ schema.Schema }
+
+func (Page) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("title"),
+		field.String("slug").NotEmpty().Annotations(graphql.Skip(graphql.SkipMutationCreateInput)),
+	}
+}
+
+func (Page) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+}
+
 type Type struct{ schema.Schema }
 
 func (Type) Fields() []schema.Field {
@@ -243,6 +258,7 @@ const e2eLimitsResolvers = `package graph
 
 import (
 	"context"
+	"strings"
 
 	"example.com/app/gen"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -348,6 +364,17 @@ func (r *mutationResolver) UpdateFlag(ctx context.Context, id string, input gen.
 	return gen.UpdateFlag(ctx, id, input)
 }
 
+// CreatePage is the resolver for the createPage field: it sets the slug the
+// input leaves out.
+func (r *mutationResolver) CreatePage(ctx context.Context, input gen.CreatePageInput) (*gen.Page, error) {
+	return gen.CreatePage(ctx, input, func(p *gen.Page) { p.Slug = strings.ToLower(input.Title) })
+}
+
+// UpdatePage is the resolver for the updatePage field.
+func (r *mutationResolver) UpdatePage(ctx context.Context, id string, input gen.UpdatePageInput) (*gen.Page, error) {
+	return gen.UpdatePage(ctx, id, input)
+}
+
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
@@ -401,6 +428,7 @@ func serve(t *testing.T) served {
 		"CREATE TABLE posts (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL REFERENCES orgs (id), member_id INTEGER NOT NULL REFERENCES members (id), title TEXT NOT NULL)",
 		"CREATE TABLE accts (id INTEGER PRIMARY KEY, handle TEXT NOT NULL, joined DATETIME NOT NULL)",
 		"CREATE TABLE things (id INTEGER PRIMARY KEY, b BLOB NOT NULL, maybe BLOB, j JSON NOT NULL, n INTEGER)",
+		"CREATE TABLE pages (id INTEGER PRIMARY KEY, title TEXT NOT NULL, slug TEXT NOT NULL)",
 		"CREATE TABLE types (id INTEGER PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL)",
 		"CREATE TABLE docs (id INTEGER PRIMARY KEY, title TEXT NOT NULL, member_id INTEGER REFERENCES members (id))",
 		"CREATE TABLE items (id INTEGER PRIMARY KEY, s_nil TEXT, j_map JSON DEFAULT ~{}~, ss JSON DEFAULT ~[]~, j_struct JSON, big INTEGER DEFAULT 0, ip BLOB, trio JSON)",
@@ -509,6 +537,25 @@ func TestExplicitZeroRefused(t *testing.T) {
 	s.want("given", 'mutation { createAcct(input: {handle: "x"}) { handle } }', '{"data":{"createAcct":{"handle":"x"}}}')
 	id := veloxgql.EncodeID("Acct", 2)
 	s.want("update", fmt.Sprintf("mutation { updateAcct(id: %q, input: {handle: %q}) { handle } }", id, ""), '{"data":{"updateAcct":{"handle":""}}}')
+}
+
+// TestSkippedFieldSetByResolver: a required field the create input leaves out
+// stored "" silently, and its validator's error named CreatePageInput.slug,
+// which the SDL has not. The resolver sets it through CreatePage's set; its
+// validator's error names no create input field; an update names its own.
+func TestSkippedFieldSetByResolver(t *testing.T) {
+	s := serve(t)
+	s.want("create", 'mutation { createPage(input: {title: "Hello"}) { title slug } }', '{"data":{"createPage":{"title":"Hello","slug":"hello"}}}')
+	if got := s.do('mutation { createPage(input: {title: ""}) { slug } }'); !strings.Contains(got, "BAD_USER_INPUT") || strings.Contains(got, "CreatePageInput.slug") {
+		t.Errorf("an empty slug on create: %s", got)
+	}
+	if n := s.count("pages"); n != 1 {
+		t.Errorf("%d pages, want 1", n)
+	}
+	id := veloxgql.EncodeID("Page", 1)
+	if got := s.do(fmt.Sprintf('mutation { updatePage(id: %q, input: {slug: ""}) { slug } }', id)); !strings.Contains(got, "UpdatePageInput.slug") {
+		t.Errorf("an empty slug on update: %s", got)
+	}
 }
 
 // TestEmptyBytes: an empty blob reads back "" in Bytes!, where SQLite's driver
@@ -952,7 +999,7 @@ func TestLimitsServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullClears", "TestUpdateNullEdgeRefused", "TestNullBytesGoType", "TestForeignKeyFilterOtherTenant", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit", "TestCreateDefaultServed", "TestJSONListsServed", "TestNullableOrderServed"} {
+	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullClears", "TestUpdateNullEdgeRefused", "TestNullBytesGoType", "TestForeignKeyFilterOtherTenant", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit", "TestCreateDefaultServed", "TestJSONListsServed", "TestNullableOrderServed", "TestSkippedFieldSetByResolver"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

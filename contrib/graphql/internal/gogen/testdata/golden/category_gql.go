@@ -226,10 +226,10 @@ func (w *CategoryWhereInput) Pred(ctx context.Context) (velox.Pred[Category], er
 	return f.Pred()
 }
 
-// categoryFieldGQL is the GraphQL name of the mutation-input field that sets
-// the Category field whose Go name is goField, for the errors of its
-// validators: "" for a field no input sets.
-func categoryFieldGQL(goField string) string {
+// categoryCreateFieldGQL is the GraphQL name of the CreateCategoryInput field
+// that sets the Category field whose Go name is goField, for the errors of its
+// validators: "" for a field it does not set.
+func categoryCreateFieldGQL(goField string) string {
 	switch goField {
 	case "Title":
 		return "title"
@@ -286,7 +286,7 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 	cols := []velox.Column[Category]{Categories.Title}
 	x.Title = input.Title
 	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreateCategoryInput", "gen.Category", categoryFieldGQL)
+		return nil, gqlimpl.WriteError(err, "CreateCategoryInput", "gen.Category", categoryCreateFieldGQL)
 	}
 	var out *Category
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
@@ -297,7 +297,7 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 			x.CategoryChildren = &k2
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreateCategoryInput", "gen.Category", categoryFieldGQL)
+			return gqlimpl.WriteError(err, "CreateCategoryInput", "gen.Category", categoryCreateFieldGQL)
 		}
 		if len(k1) > 0 {
 			if n, err := db.Update[Category]().Set(Categories.CategoryChildren.Set(x.ID)).Where(Categories.ID.In(k1...), Categories.CategoryChildren.IsNull()).Exec(ctx); err != nil {
@@ -313,6 +313,19 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 		return nil, err
 	}
 	return out, nil
+}
+
+// categoryUpdateFieldGQL is the GraphQL name of the UpdateCategoryInput field
+// that sets the Category field whose Go name is goField, for the errors of its
+// validators: "" for a field it does not set.
+func categoryUpdateFieldGQL(goField string) string {
+	switch goField {
+	case "Title":
+		return "title"
+	case "CategoryChildren":
+		return "parentID"
+	}
+	return ""
 }
 
 // UpdateCategoryInput is the GraphQL input UpdateCategoryInput, the input of
@@ -395,7 +408,7 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 		set = append(set, Categories.Title.Set(*input.Title))
 	}
 	if err = velox.ValidateSet(set...); err != nil {
-		return nil, gqlimpl.WriteError(err, "UpdateCategoryInput", "gen.Category", categoryFieldGQL)
+		return nil, gqlimpl.WriteError(err, "UpdateCategoryInput", "gen.Category", categoryUpdateFieldGQL)
 	}
 	var out *Category
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
@@ -411,7 +424,7 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 		if len(set) > 0 {
 			n, err := db.Update[Category]().Set(set...).Where(Categories.ID.EQ(key)).Exec(ctx)
 			if err != nil {
-				return gqlimpl.WriteError(err, "UpdateCategoryInput", "gen.Category", categoryFieldGQL)
+				return gqlimpl.WriteError(err, "UpdateCategoryInput", "gen.Category", categoryUpdateFieldGQL)
 			}
 			if n == 0 {
 				return gqlimpl.NotFound("updateCategory", "Category")

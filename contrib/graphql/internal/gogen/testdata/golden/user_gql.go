@@ -332,10 +332,10 @@ func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) 
 	return f.Pred()
 }
 
-// userFieldGQL is the GraphQL name of the mutation-input field that sets the
-// User field whose Go name is goField, for the errors of its validators: "" for
-// a field no input sets.
-func userFieldGQL(goField string) string {
+// userCreateFieldGQL is the GraphQL name of the CreateAccountInput field that
+// sets the User field whose Go name is goField, for the errors of its
+// validators: "" for a field it does not set.
+func userCreateFieldGQL(goField string) string {
 	switch goField {
 	case "CreatedAt":
 		return "createdAt"
@@ -461,7 +461,10 @@ func (in CreateAccountInput) GoString() string { return in.String() }
 // policies. See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
-func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error) {
+//
+// set sets CreatedBy, which CreateAccountInput leaves out and an insert
+// requires; nil leaves it to a velox.Hook.
+func CreateAccount(ctx context.Context, input CreateAccountInput, set func(*User)) (*User, error) {
 	var (
 		j14 map[string]any
 		k15 []int64
@@ -540,8 +543,11 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 		x.Settings = j14
 		cols = append(cols, Users.Settings)
 	}
+	if set != nil {
+		set(&x)
+	}
 	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userFieldGQL)
+		return nil, gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userCreateFieldGQL)
 	}
 	var out *User
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
@@ -557,7 +563,7 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 			x.UserBestFriend = &k16
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userFieldGQL)
+			return gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userCreateFieldGQL)
 		}
 		if len(k15) > 0 {
 			rows := make([]UserGroup, len(k15))

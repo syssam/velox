@@ -365,10 +365,10 @@ func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	return f.Pred()
 }
 
-// userFieldGQL is the GraphQL name of the mutation-input field that sets the
-// User field whose Go name is goField, for the errors of its validators: "" for
-// a field no input sets.
-func userFieldGQL(goField string) string {
+// userCreateFieldGQL is the GraphQL name of the CreateUserInput field that sets
+// the User field whose Go name is goField, for the errors of its validators: ""
+// for a field it does not set.
+func userCreateFieldGQL(goField string) string {
 	switch goField {
 	case "Name":
 		return "name"
@@ -425,12 +425,12 @@ func CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
 	x.JoinedAt = input.JoinedAt
 	x.PasswordHash = input.PasswordHash
 	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreateUserInput", "gen.User", userFieldGQL)
+		return nil, gqlimpl.WriteError(err, "CreateUserInput", "gen.User", userCreateFieldGQL)
 	}
 	var out *User
 	err := gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreateUserInput", "gen.User", userFieldGQL)
+			return gqlimpl.WriteError(err, "CreateUserInput", "gen.User", userCreateFieldGQL)
 		}
 		out = &x
 		return nil
@@ -439,6 +439,25 @@ func CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// userUpdateFieldGQL is the GraphQL name of the UpdateUserInput field that sets
+// the User field whose Go name is goField, for the errors of its validators: ""
+// for a field it does not set.
+func userUpdateFieldGQL(goField string) string {
+	switch goField {
+	case "Name":
+		return "name"
+	case "Email":
+		return "email"
+	case "Role":
+		return "role"
+	case "JoinedAt":
+		return "joinedAt"
+	case "PasswordHash":
+		return "passwordHash"
+	}
+	return ""
 }
 
 // UpdateUserInput is the GraphQL input UpdateUserInput, the input of
@@ -507,14 +526,14 @@ func UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, e
 		set = append(set, Users.PasswordHash.Set(*input.PasswordHash))
 	}
 	if err = velox.ValidateSet(set...); err != nil {
-		return nil, gqlimpl.WriteError(err, "UpdateUserInput", "gen.User", userFieldGQL)
+		return nil, gqlimpl.WriteError(err, "UpdateUserInput", "gen.User", userUpdateFieldGQL)
 	}
 	var out *User
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if len(set) > 0 {
 			n, err := db.Update[User]().Set(set...).Where(Users.ID.EQ(key)).Exec(ctx)
 			if err != nil {
-				return gqlimpl.WriteError(err, "UpdateUserInput", "gen.User", userFieldGQL)
+				return gqlimpl.WriteError(err, "UpdateUserInput", "gen.User", userUpdateFieldGQL)
 			}
 			if n == 0 {
 				return gqlimpl.NotFound("updateUser", "User")

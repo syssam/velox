@@ -44,6 +44,27 @@ the decisions below keeps that rule and removes the refusals it does not need.
   change. Other JSON stays the `JSON` scalar.
 - **A Uint64 over 2^63-1** is still refused, since database/sql cannot send a
   uint64 with the high bit set. The message now says so.
+- **A required field the create input leaves out is the resolver's to set.**
+  entgql users skip a field with `Skip(SkipMutationCreateInput)` and set it in
+  the resolver. `Create<T>` inserted its zero value silently, "" in a NOT NULL
+  column, and a validator's error on it named `Create<T>Input.<field>`, a field
+  the SDL has not. Now, when the create input leaves out a field that is not
+  Optional, not nullable and has no Default (the key and the tenant aside),
+  `Create<T>` takes `set func(*T)`, which it calls after the input's values and
+  before the validators. Three designs were weighed. A variadic option on every
+  `Create<T>` keeps resolvers compiling, which is what let the zero through. A
+  generation-time refusal cannot see a `velox.Hook` that fills the field, and
+  needs an annotation to lift it. The parameter only where the schema needs it
+  makes the resolver gqlgen stubbed fail to compile at the call, which is the
+  refusal with its way out, and leaves every other `Create<T>` as it was; nil
+  says a Hook fills it. Each input names its own fields in errors
+  (`<entity>CreateFieldGQL`, `<entity>UpdateFieldGQL`), so a field set by the
+  resolver names none. An update has nothing to mirror: a field its input leaves
+  out keeps its value.
+- **An explicit null on an update's nullable field clears it.** entgql treats
+  it as not given. This stays (0027): a client writing `{field: null}` means
+  NULL, and `clear<Field>` stays for clients that think otherwise. It is listed
+  first under "Differences from entgql" in contrib/graphql's documentation.
 
 ## Consequences
 
@@ -56,6 +77,9 @@ the decisions below keeps that rule and removes the refusals it does not need.
   `IS NULL` term. Grouped NULL keys move the same way.
 - A non-zero Default on a non-Nillable bool or number is still refused outside
   GraphQL. Ordering by bytes or JSON is still refused.
+- `Create<T>` of an entity whose create input leaves out a required field takes
+  a third argument: its resolver must be changed when the code is regenerated.
+  The runtime is unchanged, so `GeneratedCodeIsVersion8` stays.
 
 ## Evidence
 
@@ -64,4 +88,5 @@ the decisions below keeps that rule and removes the refusals it does not need.
 `TestAfterNullable`, `TestAfterNullableUniqueIndex`, `TestAfterNullsExact`
 (SQLite, PostgreSQL through pgx and database/sql, MySQL), `TestPaginateNullable`,
 `TestNullableOrderTerm`, `TestNullableOrderServed`; `TestJSONLists`,
-`TestJSONListsServed`, `TestJSONInputExact`; `TestUint64OverSaysWhy`.
+`TestJSONListsServed`, `TestJSONInputExact`; `TestUint64OverSaysWhy`;
+`TestCreateSetsSkipped`, `TestSkippedFieldSetByResolver`; `TestUpdateNullClears`.
