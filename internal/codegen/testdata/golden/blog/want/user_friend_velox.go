@@ -8,21 +8,27 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // UserFriend is the join entity of table user_friends.
 type UserFriend struct {
-	UserID   int64 `json:"user_id,omitempty"`
-	FriendID int64 `json:"friend_id,omitempty"`
+	UserID   int64 `json:"user_id"`
+	FriendID int64 `json:"friend_id"`
 }
+
+// The positions of UserFriend's columns, in the order of its table.
+const (
+	userFriendColUserID = iota
+	userFriendColFriendID
+)
 
 // UserFriends holds the typed handles of UserFriend's columns and relations.
 var UserFriends = struct {
-	UserID   velox.NumberCol[UserFriend, int64]
+	// UserID is the column user_id.
+	UserID velox.NumberCol[UserFriend, int64]
+	// FriendID is the column friend_id.
 	FriendID velox.NumberCol[UserFriend, int64]
 }{
-	UserID:   velox.NumberCol[UserFriend, int64]{I: 0},
-	FriendID: velox.NumberCol[UserFriend, int64]{I: 1},
+	UserID:   velox.NumberCol[UserFriend, int64]{I: userFriendColUserID},
+	FriendID: velox.NumberCol[UserFriend, int64]{I: userFriendColFriendID},
 }
 
 var userFriendMeta velox.MetaOnce[UserFriend]
@@ -32,6 +38,7 @@ func (*UserFriend) VeloxMeta() *velox.Meta[UserFriend] {
 	return userFriendMeta.Load(userFriendDescriptor)
 }
 
+// userFriendDescriptor describes UserFriend to velox: its table, columns, edges and hooks.
 func userFriendDescriptor() velox.Descriptor[UserFriend] {
 	return velox.Descriptor[UserFriend]{
 		Table: "user_friends",
@@ -39,18 +46,13 @@ func userFriendDescriptor() velox.Descriptor[UserFriend] {
 			{Field: "UserID", Name: "user_id"},
 			{Field: "FriendID", Name: "friend_id"},
 		},
-		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
+		PrimaryKey: []int{userFriendColUserID, userFriendColFriendID},
 		Bidi:       true,
-		TenantRefs: []velox.TenantRef{
-			{Column: 0, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-			{Column: 1, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-		},
 		FieldPtr: func(x *UserFriend, i int) any {
 			switch i {
-			case 0:
+			case userFriendColUserID:
 				return &x.UserID
-			case 1:
+			case userFriendColFriendID:
 				return &x.FriendID
 			}
 			return nil
@@ -58,10 +60,10 @@ func userFriendDescriptor() velox.Descriptor[UserFriend] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x UserFriend) String() string {
 	return fmt.Sprintf("UserFriend(UserID=%v, FriendID=%v)", x.UserID, x.FriendID)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x UserFriend) GoString() string { return x.String() }

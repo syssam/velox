@@ -35,7 +35,7 @@ func TestDryRunSplitInsertAllSQL(t *testing.T) {
 	db := openFake(velox.Postgres, e)
 	defer setMaxParams(velox.Postgres, 18)()
 	rows := []testmodel.Invoice{{OrgID: 1, Number: "A"}, {OrgID: 1, Number: "B"}, {OrgID: 1, Number: "C"}}
-	sql, args, err := db.InsertAll(rows).SQL(tenant(int64(1)))
+	sql, args, err := db.InsertAll(rows).SQL(testmodel.Org.With(context.Background(), 1))
 	if err != nil {
 		t.Fatal(err)
 	}

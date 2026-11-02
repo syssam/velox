@@ -8,33 +8,51 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Post is the entity of schema Post.
 type Post struct {
-	ID       int64               `json:"id,omitempty"`
-	AuthorID int64               `json:"author_id,omitempty"`
-	Title    string              `json:"title,omitempty"`
-	Votes    int64               `json:"votes,omitempty"`
+	ID       int64               `json:"id"`
+	AuthorID int64               `json:"author_id"`
+	Title    string              `json:"title"`
+	Votes    int64               `json:"votes"`
 	Author   velox.One[Author]   `json:"author,omitzero"`
 	Comments velox.Many[Comment] `json:"comments,omitzero"`
 }
 
+// The positions of Post's columns, in the order of its table.
+const (
+	postColID = iota
+	postColAuthorID
+	postColTitle
+	postColVotes
+)
+
+// The positions of Post's edges.
+const (
+	postEdgeAuthor = iota
+	postEdgeComments
+)
+
 // Posts holds the typed handles of Post's columns and relations.
 var Posts = struct {
-	ID       velox.NumberCol[Post, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Post, int64]
+	// AuthorID is the column author_id.
 	AuthorID velox.NumberCol[Post, int64]
-	Title    velox.StringCol[Post, string]
-	Votes    velox.NumberCol[Post, int64]
-	Author   velox.Rel[Post, Author]
+	// Title is the column title.
+	Title velox.StringCol[Post, string]
+	// Votes is the column votes.
+	Votes velox.NumberCol[Post, int64]
+	// Author is the edge author, to Author.
+	Author velox.Rel[Post, Author]
+	// Comments is the edge comments, to Comment.
 	Comments velox.Rel[Post, Comment]
 }{
-	ID:       velox.NumberCol[Post, int64]{I: 0},
-	AuthorID: velox.NumberCol[Post, int64]{I: 1},
-	Title:    velox.StringCol[Post, string]{I: 2},
-	Votes:    velox.NumberCol[Post, int64]{I: 3},
-	Author:   velox.Rel[Post, Author]{I: 0},
-	Comments: velox.Rel[Post, Comment]{I: 1},
+	ID:       velox.NumberCol[Post, int64]{I: postColID},
+	AuthorID: velox.NumberCol[Post, int64]{I: postColAuthorID},
+	Title:    velox.StringCol[Post, string]{I: postColTitle},
+	Votes:    velox.NumberCol[Post, int64]{I: postColVotes},
+	Author:   velox.Rel[Post, Author]{I: postEdgeAuthor},
+	Comments: velox.Rel[Post, Comment]{I: postEdgeComments},
 }
 
 var postMeta velox.MetaOnce[Post]
@@ -42,6 +60,7 @@ var postMeta velox.MetaOnce[Post]
 // VeloxMeta is called by velox, not by applications.
 func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor) }
 
+// postDescriptor describes Post to velox: its table, columns, edges and hooks.
 func postDescriptor() velox.Descriptor[Post] {
 	return velox.Descriptor[Post]{
 		Table: "posts",
@@ -51,30 +70,29 @@ func postDescriptor() velox.Descriptor[Post] {
 			{Field: "Title", Name: "title"},
 			{Field: "Votes", Name: "votes"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{postColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Author]("Author", 1, 0),
-			velox.EdgeTo[Comment]("Comments", 0, 1),
+			velox.EdgeTo[Author]("Author", postColAuthorID, authorColID),
+			velox.EdgeTo[Comment]("Comments", postColID, commentColPostID),
 		},
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
-			case 0:
+			case postColID:
 				return &x.ID
-			case 1:
+			case postColAuthorID:
 				return &x.AuthorID
-			case 2:
+			case postColTitle:
 				return &x.Title
-			case 3:
+			case postColVotes:
 				return &x.Votes
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Post, i int) any {
 			switch i {
-			case 0:
+			case postEdgeAuthor:
 				return &x.Author
-			case 1:
+			case postEdgeComments:
 				return &x.Comments
 			}
 			return nil
@@ -82,10 +100,10 @@ func postDescriptor() velox.Descriptor[Post] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Post) String() string {
 	return fmt.Sprintf("Post(ID=%v, AuthorID=%v, Title=%v, Votes=%v)", x.ID, x.AuthorID, x.Title, x.Votes)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Post) GoString() string { return x.String() }

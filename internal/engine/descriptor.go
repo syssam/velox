@@ -14,11 +14,9 @@ type DescriptorFields struct {
 	Schema     string
 	Columns    []ColumnDescriptor
 	PrimaryKey []int
-	Tenant     int
 	Bidi       bool
 	Indexes    []IndexInfo
 	Relations  []EdgeDescriptor
-	TenantRefs []TenantRef
 	Check      func(col int, v any) error
 	Policy     bool // Descriptor.Policy is set
 	Hooks      bool // Descriptor.Hooks is set
@@ -112,9 +110,6 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 			}
 		}
 	}
-	if d.Tenant != -1 && !inRange(d.Tenant) {
-		return fail("", "the tenant names column %d, of %d", d.Tenant, len(cols))
-	}
 	if d.Bidi {
 		if err := checkBidi(name, d, cols); err != nil {
 			return nil, err
@@ -149,12 +144,8 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 		}
 		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
-	refs, err := buildTenantRefs(name, d, cols)
-	if err != nil {
-		return nil, err
-	}
-	info = &EntityInfo{Name: name, Table: d.Table, Schema: d.Schema, Columns: cols, PrimaryKey: d.PrimaryKey, Tenant: d.Tenant,
-		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys, refs: refs}
+	info = &EntityInfo{Name: name, Table: d.Table, Schema: d.Schema, Columns: cols, PrimaryKey: d.PrimaryKey,
+		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
 	if err := validate(info); err != nil {
 		return nil, err
 	}
@@ -162,7 +153,7 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 }
 
 // checkBidi refuses the Descriptor of a bidirectional edge's join entity unless its
-// two columns, of one Go type, are its primary key, and it has no tenant: the
+// two columns, of one Go type, are its primary key: the
 // mirror of a row swaps them. The type is a byte slice or one that == compares
 // without panicking (linkKey), as a self-link is told by comparing the two
 // (selfLink).
@@ -179,8 +170,6 @@ func checkBidi(name string, d *DescriptorFields, cols []ColumnInfo) error {
 		return fail("has columns of two types, %v and %v", cols[0].Type, cols[1].Type)
 	case !linkKey(rtype(cols[0].Type)):
 		return fail("has columns of type %v, which cannot be compared; use a comparable type or a byte slice", cols[0].Type)
-	case d.Tenant != -1:
-		return fail("cannot have a tenant column")
 	}
 	return nil
 }

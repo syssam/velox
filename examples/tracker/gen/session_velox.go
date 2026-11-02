@@ -9,30 +9,42 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Session is the entity of schema Session.
 type Session struct {
-	ID        int64     `json:"id,omitempty"`
-	TokenHash string    `json:"token_hash,omitempty"`
-	OrgID     int64     `json:"org_id,omitempty"`
-	UserID    int64     `json:"user_id,omitempty"`
+	ID        int64     `json:"id"`
+	TokenHash string    `json:"token_hash"`
+	OrgID     int64     `json:"org_id"`
+	UserID    int64     `json:"user_id"`
 	ExpiresAt time.Time `json:"expires_at,omitzero"`
 }
 
+// The positions of Session's columns, in the order of its table.
+const (
+	sessionColID = iota
+	sessionColTokenHash
+	sessionColOrgID
+	sessionColUserID
+	sessionColExpiresAt
+)
+
 // Sessions holds the typed handles of Session's columns and relations.
 var Sessions = struct {
-	ID        velox.NumberCol[Session, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Session, int64]
+	// TokenHash is the column token_hash.
 	TokenHash velox.StringCol[Session, string]
-	OrgID     velox.NumberCol[Session, int64]
-	UserID    velox.NumberCol[Session, int64]
+	// OrgID is the column org_id.
+	OrgID velox.NumberCol[Session, int64]
+	// UserID is the column user_id.
+	UserID velox.NumberCol[Session, int64]
+	// ExpiresAt is the column expires_at.
 	ExpiresAt velox.OrderedCol[Session, time.Time]
 }{
-	ID:        velox.NumberCol[Session, int64]{I: 0},
-	TokenHash: velox.StringCol[Session, string]{I: 1},
-	OrgID:     velox.NumberCol[Session, int64]{I: 2},
-	UserID:    velox.NumberCol[Session, int64]{I: 3},
-	ExpiresAt: velox.OrderedCol[Session, time.Time]{I: 4},
+	ID:        velox.NumberCol[Session, int64]{I: sessionColID},
+	TokenHash: velox.StringCol[Session, string]{I: sessionColTokenHash},
+	OrgID:     velox.NumberCol[Session, int64]{I: sessionColOrgID},
+	UserID:    velox.NumberCol[Session, int64]{I: sessionColUserID},
+	ExpiresAt: velox.OrderedCol[Session, time.Time]{I: sessionColExpiresAt},
 }
 
 var sessionMeta velox.MetaOnce[Session]
@@ -40,6 +52,7 @@ var sessionMeta velox.MetaOnce[Session]
 // VeloxMeta is called by velox, not by applications.
 func (*Session) VeloxMeta() *velox.Meta[Session] { return sessionMeta.Load(sessionDescriptor) }
 
+// sessionDescriptor describes Session to velox: its table, columns, edges and hooks.
 func sessionDescriptor() velox.Descriptor[Session] {
 	return velox.Descriptor[Session]{
 		Table: "sessions",
@@ -50,22 +63,21 @@ func sessionDescriptor() velox.Descriptor[Session] {
 			{Field: "UserID", Name: "user_id"},
 			{Field: "ExpiresAt", Name: "expires_at"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{sessionColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1}, Unique: true}, // token_hash
+			{Columns: []int{sessionColTokenHash}, Unique: true}, // token_hash
 		},
 		FieldPtr: func(x *Session, i int) any {
 			switch i {
-			case 0:
+			case sessionColID:
 				return &x.ID
-			case 1:
+			case sessionColTokenHash:
 				return &x.TokenHash
-			case 2:
+			case sessionColOrgID:
 				return &x.OrgID
-			case 3:
+			case sessionColUserID:
 				return &x.UserID
-			case 4:
+			case sessionColExpiresAt:
 				return &x.ExpiresAt
 			}
 			return nil
@@ -73,10 +85,10 @@ func sessionDescriptor() velox.Descriptor[Session] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Session) String() string {
 	return fmt.Sprintf("Session(ID=%v, TokenHash=%v, OrgID=%v, UserID=%v, ExpiresAt=%v)", x.ID, x.TokenHash, x.OrgID, x.UserID, x.ExpiresAt)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Session) GoString() string { return x.String() }

@@ -117,7 +117,7 @@ func TestGuardRunsBeforeHooks(t *testing.T) {
 	ran := 0
 	db := openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		ran++
-		st.Where = append(st.Where, velox.ColumnEQ(st.Entity.Tenant, int64(1)))
+		st.Where = append(st.Where, velox.Predicate(I.OrgID.EQ(1)))
 		return nil
 	}))
 	if _, err := db.Delete[testmodel.Invoice]().Exec(ctx); !errors.Is(err, velox.ErrNoWhere) || ran != 0 {

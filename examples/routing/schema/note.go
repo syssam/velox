@@ -7,15 +7,16 @@ import (
 	"github.com/syssam/velox/schema/field"
 )
 
-// Note belongs to one organization, the tenant, and so to one shard: the
+// Note belongs to one organization, and so to one shard: the
 // organization's rows are all in the same database.
 type Note struct{ schema.Schema }
 
-// Fields returns the columns after the ID. Tenant makes OrgID the tenant
-// column; WithShardFor maps the context's tenant to a shard.
+// Fields returns the columns after the ID. OrgID is Immutable and Scoped: the
+// generated gen.OrgKey and Note's policy confine every statement on Note to the
+// context's organization; WithShardFor maps that organization to a shard.
 func (Note) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.String("body"),
 	}
 }

@@ -19,6 +19,18 @@ func (*Category) IsNode() {}
 // Category and the key id, encoded.
 func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
 
+// categoryNodeGQL is the Node type Category for Node and Nodes.
+func categoryNodeGQL() gqlimpl.NodeKind {
+	return gqlimpl.NewNode[Category, *Category](
+		"Category",
+		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "Category") },
+		func(db *velox.DB) velox.Query[Category] { return db.Query[Category]() },
+		categoryColumnsGQL,
+		Categories.ID.EQ, Categories.ID.In,
+		func(x *Category) int64 { return x.ID },
+	)
+}
+
 // ChildrenGQL is the edge children: a connection to the Category nodes it leads
 // to, paged, ordered and filtered by the arguments. Its queries run when gqlgen
 // asks for the connection's fields, each with those of every row read with x,
@@ -68,9 +80,11 @@ func (c *CategoryConnection) Edges(ctx context.Context) ([]*CategoryEdge, error)
 	if err != nil {
 		return nil, err
 	}
+	slab := make([]CategoryEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*CategoryEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		edges[i] = &CategoryEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = CategoryEdge{Node: x, Cursor: p.Cursors[i]}
+		edges[i] = &slab[i]
 	}
 	return edges, nil
 }
@@ -120,9 +134,9 @@ func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *in
 // cursors hold: a q whose Columns or Omit drops one is refused with an internal
 // error. In a gqlgen field, the page reads only the columns the selection needs
 // (categoryColumnsGQL), of those q selects; a column the selection does not
-// need is left zero in the nodes, except the key, the foreign keys, the order
-// columns and the tenant, so an application's resolver must not read one it did
-// not ask for. It runs no query.
+// need is left zero in the nodes, except the key, the foreign keys and the
+// order columns, so an application's resolver must not read one it did not ask
+// for. It runs no query.
 func CategoriesConnectionOf(ctx context.Context, q velox.Query[Category], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
 	if !q.Selects(Categories.ID) {
 		return nil, fmt.Errorf("veloxgql: CategoriesConnectionOf: the base query does not select the key, which the cursors hold")
@@ -155,9 +169,9 @@ func categoryKeyGQL() []gqlimpl.OrderTerm[Category] {
 }
 
 // categoryColumnsGQL is the columns a selection of the Category fields fields
-// reads: the key, every foreign key on the row, every order field's column, the
-// tenant column, and the column of each field. It is nil, every column, when a
-// field is not one velox-graphql wrote, such as an application's own.
+// reads: the key, every foreign key on the row, every order field's column, and
+// the column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
 func categoryColumnsGQL(fields []string) []velox.Column[Category] {
 	cols := []velox.Column[Category]{Categories.ID, Categories.CategoryChildren}
 	for _, f := range fields {
@@ -198,13 +212,9 @@ type CategoryWhereInput struct {
 
 // Pred is the condition w stands for, on Category nodes: every predicate w sets
 // holds, and a w that sets none, or a nil w, holds for every node. It fails,
-// before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or
-// a malformed one (veloxgql.ErrBadID), on a nesting deeper than the
-// MaxFilterDepth of veloxgql.LimitsFromContext(ctx)
-// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
-// of more than its MaxFilterWidth entries (veloxgql.ErrFilterTooWide), and on a
-// where argument of more than its MaxFilterNodes inputs, predicates and values
-// in all (veloxgql.ErrFilterTooLarge).
+// before any query runs, on an ID of another type or a malformed one, and on a
+// filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
+// gqlimpl.NewFilter's.
 func (w *CategoryWhereInput) Pred(ctx context.Context) (velox.Pred[Category], error) {
 	f := gqlimpl.NewFilter[Category](ctx, "CategoryWhereInput")
 	if w == nil {
@@ -252,11 +262,7 @@ type CreateCategoryInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in CreateCategoryInput) String() string {
-	var p2 any
-	if in.ParentID != nil {
-		p2 = *in.ParentID
-	}
-	return fmt.Sprintf("CreateCategoryInput(Title=%v, ChildIDs=%v, ParentID=%v)", in.Title, in.ChildIDs, p2)
+	return fmt.Sprintf("CreateCategoryInput(Title=%v, ChildIDs=%v, ParentID=%v)", in.Title, in.ChildIDs, gqlimpl.Show(in.ParentID))
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -264,21 +270,21 @@ func (in CreateCategoryInput) GoString() string { return in.String() }
 
 // CreateCategory creates a Category from input, with its edges, as the mutation
 // createCategory does, and returns the row as written. It runs atomically on
-// the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the
-// policies. See "Mutations" in the documentation of package
+// the DB veloxgql.DBFromContext reads from ctx, under the policies. See
+// "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, error) {
 	var (
-		k1  []int64
-		k2  int64
-		err error
+		childIDsKeys []int64
+		parentIDKey  int64
+		err          error
 	)
-	if k1, err = gqlimpl.DecodeIDs[int64](ctx, "CreateCategoryInput.childIDs", input.ChildIDs, "Category"); err != nil {
+	if childIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "CreateCategoryInput.childIDs", input.ChildIDs, "Category"); err != nil {
 		return nil, err
 	}
 	if input.ParentID != nil {
-		if k2, err = gqlimpl.DecodeID[int64]("CreateCategoryInput.parentID", *input.ParentID, "Category"); err != nil {
+		if parentIDKey, err = gqlimpl.DecodeID[int64]("CreateCategoryInput.parentID", *input.ParentID, "Category"); err != nil {
 			return nil, err
 		}
 	}
@@ -291,18 +297,18 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 	var out *Category
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if input.ParentID != nil {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Category]().Where(Categories.ID.EQ(k2)), 1, "CreateCategoryInput.parentID", "Category"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Category]().Where(Categories.ID.EQ(parentIDKey)), 1, "CreateCategoryInput.parentID", "Category"); err != nil {
 				return err
 			}
-			x.CategoryChildren = &k2
+			x.CategoryChildren = &parentIDKey
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreateCategoryInput", "gen.Category", categoryFieldGQL)
 		}
-		if len(k1) > 0 {
-			if n, err := db.Update[Category]().Set(Categories.CategoryChildren.Set(x.ID)).Where(Categories.ID.In(k1...), Categories.CategoryChildren.IsNull()).Exec(ctx); err != nil {
+		if len(childIDsKeys) > 0 {
+			if n, err := db.Update[Category]().Set(Categories.CategoryChildren.Set(x.ID)).Where(Categories.ID.In(childIDsKeys...), Categories.CategoryChildren.IsNull()).Exec(ctx); err != nil {
 				return err
-			} else if err := gqlimpl.Repointed(ctx, n, len(k1), db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.NotNull(), Categories.CategoryChildren.NEQ(x.ID)), "CreateCategoryInput.childIDs", "Category", "Category"); err != nil {
+			} else if err := gqlimpl.Repointed(ctx, n, len(childIDsKeys), db.Query[Category]().Where(Categories.ID.In(childIDsKeys...), Categories.CategoryChildren.NotNull(), Categories.CategoryChildren.NEQ(x.ID)), "CreateCategoryInput.childIDs", "Category", "Category"); err != nil {
 				return err
 			}
 		}
@@ -337,15 +343,7 @@ type UpdateCategoryInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in UpdateCategoryInput) String() string {
-	var p0 any
-	if in.Title != nil {
-		p0 = *in.Title
-	}
-	var p4 any
-	if in.ParentID != nil {
-		p4 = *in.ParentID
-	}
-	return fmt.Sprintf("UpdateCategoryInput(Title=%v, AddChildIDs=%v, RemoveChildIDs=%v, ClearChildren=%v, ParentID=%v, ClearParent=%v)", p0, in.AddChildIDs, in.RemoveChildIDs, in.ClearChildren, p4, in.ClearParent)
+	return fmt.Sprintf("UpdateCategoryInput(Title=%v, AddChildIDs=%v, RemoveChildIDs=%v, ClearChildren=%v, ParentID=%v, ClearParent=%v)", gqlimpl.Show(in.Title), in.AddChildIDs, in.RemoveChildIDs, in.ClearChildren, gqlimpl.Show(in.ParentID), in.ClearParent)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -353,33 +351,33 @@ func (in UpdateCategoryInput) GoString() string { return in.String() }
 
 // UpdateCategory updates the Category with the ID id from input, as the
 // mutation updateCategory does, and returns the row as written. It runs
-// atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant
-// scope and the policies. See "Mutations" in the documentation of package
+// atomically on the DB veloxgql.DBFromContext reads from ctx, under the
+// policies. See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (*Category, error) {
 	var (
-		key int64
-		k1  []int64
-		k2  []int64
-		k4  int64
-		err error
+		key                int64
+		addChildIDsKeys    []int64
+		removeChildIDsKeys []int64
+		parentIDKey        int64
+		err                error
 	)
 	if key, err = gqlimpl.DecodeID[int64]("updateCategory.id", id, "Category"); err != nil {
 		return nil, err
 	}
-	if k1, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateCategoryInput.addChildIDs", input.AddChildIDs, "Category"); err != nil {
+	if addChildIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateCategoryInput.addChildIDs", input.AddChildIDs, "Category"); err != nil {
 		return nil, err
 	}
-	if k2, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateCategoryInput.removeChildIDs", input.RemoveChildIDs, "Category"); err != nil {
+	if removeChildIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateCategoryInput.removeChildIDs", input.RemoveChildIDs, "Category"); err != nil {
 		return nil, err
 	}
 	if input.ParentID != nil {
-		if k4, err = gqlimpl.DecodeID[int64]("UpdateCategoryInput.parentID", *input.ParentID, "Category"); err != nil {
+		if parentIDKey, err = gqlimpl.DecodeID[int64]("UpdateCategoryInput.parentID", *input.ParentID, "Category"); err != nil {
 			return nil, err
 		}
 	}
-	if err = gqlimpl.Disjoint("UpdateCategoryInput", "addChildIDs", "removeChildIDs", k1, k2); err != nil {
+	if err = gqlimpl.Disjoint("UpdateCategoryInput", "addChildIDs", "removeChildIDs", addChildIDsKeys, removeChildIDsKeys); err != nil {
 		return nil, err
 	}
 	if input.ParentID != nil && input.ClearParent {
@@ -400,14 +398,15 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 	var out *Category
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if input.ParentID != nil {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Category]().Where(Categories.ID.EQ(k4)), 1, "UpdateCategoryInput.parentID", "Category"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Category]().Where(Categories.ID.EQ(parentIDKey)), 1, "UpdateCategoryInput.parentID", "Category"); err != nil {
 				return err
 			}
-			set = append(set, Categories.CategoryChildren.Set(k4))
+			set = append(set, Categories.CategoryChildren.Set(parentIDKey))
 		}
 		if input.ClearParent {
 			set = append(set, Categories.CategoryChildren.SetNull())
 		}
+		counted := false
 		if len(set) > 0 {
 			n, err := db.Update[Category]().Set(set...).Where(Categories.ID.EQ(key)).Exec(ctx)
 			if err != nil {
@@ -416,26 +415,11 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 			if n == 0 {
 				return gqlimpl.NotFound("updateCategory", "Category")
 			}
-			if n < 0 {
-				chk := db.Query[Category]().Where(Categories.ID.EQ(key)).Writable()
-				if db.Dialect() != velox.SQLite {
-					chk = chk.ForUpdate()
-				}
-				if ok, err := chk.Exists(ctx); err != nil {
-					return err
-				} else if !ok {
-					return gqlimpl.NotFound("updateCategory", "Category")
-				}
-			}
-		} else {
-			chk := db.Query[Category]().Where(Categories.ID.EQ(key)).Writable()
-			if db.Dialect() != velox.SQLite {
-				chk = chk.ForUpdate()
-			}
-			if ok, err := chk.Exists(ctx); err != nil {
+			counted = n > 0
+		}
+		if !counted {
+			if err := gqlimpl.LockRow(ctx, db, db.Query[Category]().Where(Categories.ID.EQ(key)), "updateCategory", "Category"); err != nil {
 				return err
-			} else if !ok {
-				return gqlimpl.NotFound("updateCategory", "Category")
 			}
 		}
 		if input.ClearChildren {
@@ -443,18 +427,18 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 				return err
 			}
 		}
-		if len(k2) > 0 {
-			if _, err := db.Update[Category]().Set(Categories.CategoryChildren.SetNull()).Where(Categories.ID.In(k2...), Categories.CategoryChildren.EQ(key)).Exec(ctx); err != nil {
+		if len(removeChildIDsKeys) > 0 {
+			if _, err := db.Update[Category]().Set(Categories.CategoryChildren.SetNull()).Where(Categories.ID.In(removeChildIDsKeys...), Categories.CategoryChildren.EQ(key)).Exec(ctx); err != nil {
 				return err
 			}
 		}
-		if len(k1) > 0 {
-			if _, err := db.Update[Category]().Set(Categories.CategoryChildren.Set(key)).Where(Categories.ID.In(k1...), Categories.CategoryChildren.IsNull()).Exec(ctx); err != nil {
+		if len(addChildIDsKeys) > 0 {
+			if _, err := db.Update[Category]().Set(Categories.CategoryChildren.Set(key)).Where(Categories.ID.In(addChildIDsKeys...), Categories.CategoryChildren.IsNull()).Exec(ctx); err != nil {
 				return err
 			}
-			if n, err := db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.EQ(key)).Count(ctx); err != nil {
+			if n, err := db.Query[Category]().Where(Categories.ID.In(addChildIDsKeys...), Categories.CategoryChildren.EQ(key)).Count(ctx); err != nil {
 				return err
-			} else if err := gqlimpl.Repointed(ctx, n, len(k1), db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.NotNull(), Categories.CategoryChildren.NEQ(key)), "UpdateCategoryInput.addChildIDs", "Category", "Category"); err != nil {
+			} else if err := gqlimpl.Repointed(ctx, n, len(addChildIDsKeys), db.Query[Category]().Where(Categories.ID.In(addChildIDsKeys...), Categories.CategoryChildren.NotNull(), Categories.CategoryChildren.NEQ(key)), "UpdateCategoryInput.addChildIDs", "Category", "Category"); err != nil {
 				return err
 			}
 		}

@@ -34,7 +34,6 @@ func eDescriptor() velox.Descriptor[E] {
 		Table:      "e",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr:       func(x *E, i int) any { return &x.ID },
 	}
 }
@@ -73,7 +72,6 @@ func eDescriptor() velox.Descriptor[E] {
 			{Field: "ParentID", Name: "parent_id"},
 		},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[E]("Parent", 2, 0), velox.EdgeTo[E]("Kids", 0, 2)},
 		FieldPtr: func(x *E, i int) any {
 			switch i {
@@ -166,8 +164,8 @@ var (
 
 // entityDescHooksBound is entityDescHooksSrc with its Descriptor binding the
 // methods.
-var entityDescHooksBound = strings.Replace(entityDescHooksSrc, `		Tenant:     -1,
-		Edges:`, `		Tenant:     -1,
+var entityDescHooksBound = strings.Replace(entityDescHooksSrc, `		PrimaryKey: []int{0},
+		Edges:`, `		PrimaryKey: []int{0},
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*E)(nil).Hooks()) },
 		Edges:`, 1)

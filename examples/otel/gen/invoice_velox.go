@@ -9,30 +9,42 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Invoice is the entity of schema Invoice.
 type Invoice struct {
-	ID         int64         `json:"id,omitempty"`
-	Number     string        `json:"number,omitempty"`
-	Customer   string        `json:"customer,omitempty"`
-	Status     InvoiceStatus `json:"status,omitempty"`
-	TotalCents int64         `json:"total_cents,omitempty"`
+	ID         int64         `json:"id"`
+	Number     string        `json:"number"`
+	Customer   string        `json:"customer"`
+	Status     InvoiceStatus `json:"status"`
+	TotalCents int64         `json:"total_cents"`
 }
+
+// The positions of Invoice's columns, in the order of its table.
+const (
+	invoiceColID = iota
+	invoiceColNumber
+	invoiceColCustomer
+	invoiceColStatus
+	invoiceColTotalCents
+)
 
 // Invoices holds the typed handles of Invoice's columns and relations.
 var Invoices = struct {
-	ID         velox.NumberCol[Invoice, int64]
-	Number     velox.StringCol[Invoice, string]
-	Customer   velox.StringCol[Invoice, string]
-	Status     velox.StringCol[Invoice, InvoiceStatus]
+	// ID is the column id.
+	ID velox.NumberCol[Invoice, int64]
+	// Number is the column number.
+	Number velox.StringCol[Invoice, string]
+	// Customer is the column customer.
+	Customer velox.StringCol[Invoice, string]
+	// Status is the column status.
+	Status velox.StringCol[Invoice, InvoiceStatus]
+	// TotalCents is the column total_cents.
 	TotalCents velox.NumberCol[Invoice, int64]
 }{
-	ID:         velox.NumberCol[Invoice, int64]{I: 0},
-	Number:     velox.StringCol[Invoice, string]{I: 1},
-	Customer:   velox.StringCol[Invoice, string]{I: 2},
-	Status:     velox.StringCol[Invoice, InvoiceStatus]{I: 3},
-	TotalCents: velox.NumberCol[Invoice, int64]{I: 4},
+	ID:         velox.NumberCol[Invoice, int64]{I: invoiceColID},
+	Number:     velox.StringCol[Invoice, string]{I: invoiceColNumber},
+	Customer:   velox.StringCol[Invoice, string]{I: invoiceColCustomer},
+	Status:     velox.StringCol[Invoice, InvoiceStatus]{I: invoiceColStatus},
+	TotalCents: velox.NumberCol[Invoice, int64]{I: invoiceColTotalCents},
 }
 
 var invoiceMeta velox.MetaOnce[Invoice]
@@ -40,6 +52,7 @@ var invoiceMeta velox.MetaOnce[Invoice]
 // VeloxMeta is called by velox, not by applications.
 func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoiceDescriptor) }
 
+// invoiceDescriptor describes Invoice to velox: its table, columns, edges and hooks.
 func invoiceDescriptor() velox.Descriptor[Invoice] {
 	return velox.Descriptor[Invoice]{
 		Table: "invoices",
@@ -50,34 +63,31 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 			{Field: "Status", Name: "status"},
 			{Field: "TotalCents", Name: "total_cents"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{invoiceColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1}, Unique: true}, // number
+			{Columns: []int{invoiceColNumber}, Unique: true}, // number
 		},
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
-			case 0:
+			case invoiceColID:
 				return &x.ID
-			case 1:
+			case invoiceColNumber:
 				return &x.Number
-			case 2:
+			case invoiceColCustomer:
 				return &x.Customer
-			case 3:
+			case invoiceColStatus:
 				return &x.Status
-			case 4:
+			case invoiceColTotalCents:
 				return &x.TotalCents
 			}
 			return nil
 		},
 		Check: func(col int, v any) error {
 			switch col {
-			case 3:
+			case invoiceColStatus:
 				x := v.(InvoiceStatus)
-				switch x {
-				case "sent", "paid":
-				default:
-					return errors.New("is not one of the values")
+				if !x.IsValid() {
+					return errors.New("is not one of sent, paid")
 				}
 			}
 			return nil
@@ -85,10 +95,10 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Invoice) String() string {
 	return fmt.Sprintf("Invoice(ID=%v, Number=%v, Customer=%v, Status=%v, TotalCents=%v)", x.ID, x.Number, x.Customer, x.Status, x.TotalCents)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Invoice) GoString() string { return x.String() }

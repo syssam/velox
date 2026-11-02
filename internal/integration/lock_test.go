@@ -127,7 +127,7 @@ func TestLocksOnRealDatabases(t *testing.T) {
 	})
 }
 
-// A locking read on an entity with a tenant, a Read policy and an EXISTS
+// A locking read on an entity with a org, a Read policy and an EXISTS
 // condition locks the rows it returns, and only those: not the rows the
 // EXISTS reads.
 func TestLockWithScopeOnRealDatabases(t *testing.T) {
@@ -135,7 +135,7 @@ func TestLockWithScopeOnRealDatabases(t *testing.T) {
 		if tg.d == velox.SQLite {
 			return // TestLocksOnRealDatabases pins SQLite's refusal
 		}
-		// Not the package's ctx, which lifts the tenant scope.
+		// Not the package's ctx, which lifts the scope.
 		lctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		Tk := testmodel.Tickets
@@ -144,10 +144,10 @@ func TestLockWithScopeOnRealDatabases(t *testing.T) {
 			return tx.Query[testmodel.Ticket]().Where(Tk.Invoice.HasWhere(I.Paid.EQ(true))).OrderBy(Tk.ID.Asc()).Limit(10)
 		}
 		asAnn := func(ctx context.Context) context.Context {
-			return testmodel.WithUser(velox.WithTenant(ctx, int64(1)), "ann")
+			return testmodel.WithUser(testmodel.Org.With(context.Background(), int64(1)), "ann")
 		}
 		org1 := func(ctx context.Context) context.Context {
-			return velox.WithoutPolicy(velox.WithTenant(ctx, int64(1)), "velox tests")
+			return velox.WithoutPolicy(testmodel.Org.With(context.Background(), int64(1)), "velox tests")
 		}
 		var text string
 		a := hold(t, lctx, tg, func(ctx context.Context, tx *velox.DB) error {

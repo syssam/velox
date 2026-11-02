@@ -23,7 +23,7 @@ func TestNodeKeyTypes(t *testing.T) {
 		if typ == "enum" {
 			id.EnumValues = []string{"a"}
 		}
-		e := &plugin.Entity{Name: "Thing", Tenant: -1, PrimaryKey: []int{0}, Fields: []*plugin.Field{id, field("x", "string")}}
+		e := &plugin.Entity{Name: "Thing", PrimaryKey: []int{0}, Fields: []*plugin.Field{id, field("x", "string")}}
 		s, err := Build(model(e))
 		if err != nil {
 			t.Fatalf("%s: %v", typ, err)
@@ -33,7 +33,7 @@ func TestNodeKeyTypes(t *testing.T) {
 		}
 	}
 	id := &plugin.Field{Name: "id", GoName: "ID", Type: "float64"}
-	clock := &plugin.Entity{Name: "Clock", Tenant: -1, PrimaryKey: []int{0}, Fields: []*plugin.Field{id, field("x", "string")}}
+	clock := &plugin.Entity{Name: "Clock", PrimaryKey: []int{0}, Fields: []*plugin.Field{id, field("x", "string")}}
 	sch, sdl := load(t, model(clock))
 	if def := sch.Types["Clock"]; len(def.Interfaces) != 0 || typeOf(sch, "Clock", "id") != "Float!" || goField(sch, "Clock", "id") != "" {
 		t.Errorf("a float key:\n%s", sdl)

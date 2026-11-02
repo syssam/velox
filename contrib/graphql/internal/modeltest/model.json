@@ -19,7 +19,6 @@
           "annotations": {"graphql": {"where_edge": true}}}
       ],
       "primary_key": [0],
-      "tenant": -1,
       "annotations": {"graphql": {"query_field": "categories", "mutations": ["create", "update"]}}
     },
     {
@@ -40,7 +39,6 @@
           "annotations": {"graphql": {"where_edge": true}}}
       ],
       "primary_key": [0],
-      "tenant": -1,
       "annotations": {"graphql": {"query_field": "groups", "skip": 8}}
     },
     {
@@ -60,7 +58,6 @@
         {"name": "post", "go_name": "Post", "target": "Post", "ref": "likes", "kind": "M2O", "unique": true, "required": true, "inverse": true, "immutable": true, "field": "post_id", "field_on": "Like", "owns_key": true}
       ],
       "primary_key": [0, 1],
-      "tenant": -1,
       "annotations": {"graphql": {"mutations": ["create"]}}
     },
     {
@@ -98,7 +95,6 @@
         {"name": "related_by", "go_name": "RelatedBy", "target": "Post", "ref": "related", "kind": "M2M", "inverse": true, "join": "PostRelated"}
       ],
       "primary_key": [0],
-      "tenant": -1,
       "annotations": {"graphql": {"query_field": "posts", "multi_order": true, "mutations": ["create", "update", "delete"]}}
     },
     {
@@ -113,7 +109,6 @@
       ],
       "edges": [],
       "primary_key": [0],
-      "tenant": -1,
       "annotations": {"graphql": {"skip": 63}}
     },
     {
@@ -129,7 +124,8 @@
         {"name": "updated_at", "go_name": "UpdatedAt", "column": "updated_at", "type": "time", "go_type": "time.Time", "elem_type": "time.Time", "imports": ["time"], "has_default": true, "update_default": true},
         {"name": "created_by", "go_name": "CreatedBy", "column": "created_by", "type": "string", "go_type": "string", "elem_type": "string",
           "annotations": {"graphql": {"skip": 63}}},
-        {"name": "org_id", "go_name": "OrgID", "column": "org_id", "type": "int64", "go_type": "int64", "elem_type": "int64"},
+        {"name": "org_id", "go_name": "OrgID", "column": "org_id", "type": "int64", "go_type": "int64", "elem_type": "int64",
+          "annotations": {"graphql": {"skip": 63}}},
         {"name": "name", "go_name": "Name", "column": "name", "type": "string", "go_type": "string", "elem_type": "string", "comment": "The display name.",
           "annotations": {"graphql": {"field_name": "displayName", "where_ops": 1807}}},
         {"name": "email", "go_name": "Email", "column": "email", "type": "string", "go_type": "string", "elem_type": "string", "unique": true,
@@ -160,7 +156,6 @@
           "annotations": {"graphql": {"skip": 1}}}
       ],
       "primary_key": [0],
-      "tenant": 4,
       "annotations": {"graphql": {"type": "Account", "query_field": "accounts", "mutations": ["create"], "skip": 4}}
     },
     {
@@ -174,8 +169,7 @@
         {"name": "related_id", "go_name": "RelatedID", "column": "related_id", "type": "int64", "go_type": "int64", "elem_type": "int64"}
       ],
       "edges": [],
-      "primary_key": [0, 1],
-      "tenant": -1
+      "primary_key": [0, 1]
     },
     {
       "name": "UserGroup",
@@ -188,8 +182,7 @@
         {"name": "group_id", "go_name": "GroupID", "column": "group_id", "type": "int64", "go_type": "int64", "elem_type": "int64"}
       ],
       "edges": [],
-      "primary_key": [0, 1],
-      "tenant": -1
+      "primary_key": [0, 1]
     }
   ],
   "enums": [

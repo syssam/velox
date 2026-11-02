@@ -21,7 +21,7 @@ import (
 // method called by gqlgen for it, not from an application's other field) and
 // with the arguments of the batch's first call; any other call reads alone. The
 // batch is read under its first caller's context: velox's row scope
-// (velox.RowScopeFromContext: the tenant, the bypasses, the shard), the DB and
+// (velox.RowScopeFromContext: the scope values, the bypass, the shard), the DB and
 // the limits are in its key, so callers that differ in them never share a read.
 // Any other context value a Read policy or a Rewrite or Around hook reads (the
 // viewer, a role) must be the same for every row of a field, or be returned by

@@ -1,6 +1,6 @@
 # routing
 
-Routing on `gen.Note`: two shards chosen by tenant, one read replica for the
+Routing on `gen.Note`: two shards chosen by organization, one read replica for the
 `eu` shard, and a request that reads its own write.
 
 ```sh
@@ -13,7 +13,7 @@ db := velox.OpenShards(velox.SQLite, map[string]velox.Shard{
 	"eu": {Primary: velox.SQLConn(eu), Replicas: []velox.Conn{velox.SQLConn(euReplica)}},
 	"us": {Primary: velox.SQLConn(us)},
 },
-	velox.WithShardFor(shardFor),                   // tenant -> shard name
+	velox.WithShardFor(shardFor),                   // context -> shard name
 	velox.WithPinWindow(250*time.Millisecond),      // default 2 s
 )
 
@@ -21,16 +21,17 @@ ctx = velox.WithSession(ctx)                           // per request, in middle
 db.Update[gen.Note]()…Exec(ctx)                        // a write: pins this session
 db.Query[gen.Note]()…One(ctx)                          // in the window: the primary; after: a replica
 db.Query[gen.Note]()…One(velox.WithPrimaryReads(ctx))  // always the primary
-velox.WithShard(ctx, "us")                             // name a shard without a tenant
+velox.WithShard(ctx, "us")                             // name a shard without an organization
 ```
 
-- `WithShardFor` gets the context's tenant (`WithTenant`) and returns a shard
-  name. A statement is sent to that shard's primary, or for a read, to one of
+- `WithShardFor` gets the context (here it reads the organization that
+  `gen.OrgKey.With` put there) and returns a shard name. A statement is sent to that shard's primary, or for a read, to one of
   its replicas in turn. Nothing runs on two shards.
 - A statement whose shard cannot be found fails with `ErrNoShard` and is not
-  sent. On a tenant-scoped entity such as `Note`, a context with no tenant
-  fails earlier, with `ErrNoTenant`; `WithAllTenants` lifts that check and shows
-  `ErrNoShard`. `WithShard` names the shard for work that has no tenant.
+  sent. `WithShardFor` returns "" for a context that names none. On a scoped
+  entity such as `Note`, a context with no organization would fail with
+  `scope.ErrNoScope`; `velox.WithoutPolicy` lifts that check and shows
+  `ErrNoShard`. `WithShard` names the shard for work that has no organization.
 - A write pins its session's reads to the primary for the pin window, so the
   request reads what it wrote. `velox.PinnedUntil(ctx)` gives the time to keep
   across requests, and `velox.PinUntil(ctx, t)` restores it on the next one.

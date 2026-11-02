@@ -13,7 +13,7 @@ import (
 
 func TestDescriptorMetadata(t *testing.T) {
 	info := infoOf[fixture.DAuthor]() // helpers_test.go: the entity's EntityInfo, or the test fails on its error
-	if info.Name != "fixture.DAuthor" || info.Table != "authors" || info.Tenant != 1 || len(info.PrimaryKey) != 1 {
+	if info.Name != "fixture.DAuthor" || info.Table != "authors" || len(info.PrimaryKey) != 1 {
 		t.Fatalf("%+v", info)
 	}
 	email, created := info.Columns[3], info.Columns[4]
@@ -43,7 +43,6 @@ func rowDescriptor() velox.Descriptor[dRow] {
 		Schema:     "app",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Flag", Name: "flag"}, {Field: "Opt", Name: "opt", Default: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Indexes:    []velox.IndexInfo{{Columns: []int{3}, Unique: true}},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.DAuthor]("Author", 0, 0)},
 		FieldPtr: func(x *dRow, i int) any {
@@ -58,7 +57,7 @@ func TestDescriptorAcceptsAndConverts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Schema != "app" || info.Tenant != -1 || len(info.Indexes) != 1 {
+	if info.Schema != "app" || len(info.Indexes) != 1 {
 		t.Fatalf("%+v", info)
 	}
 	// A pointer field's Default is given as a value of its element type and
@@ -111,11 +110,6 @@ func TestDescriptorRefusals(t *testing.T) {
 		{"no primary key", func(d *velox.Descriptor[dRow]) { d.PrimaryKey = nil }, "the primary key names no fields"},
 		{"primary key out of range", func(d *velox.Descriptor[dRow]) { d.PrimaryKey = []int{4} }, "the primary key names column 4, of 4"},
 		{"index out of range", func(d *velox.Descriptor[dRow]) { d.Indexes = []velox.IndexInfo{{Columns: []int{-1}}} }, "an index names column -1, of 4"},
-		{"tenant out of range", func(d *velox.Descriptor[dRow]) { d.Tenant = 4 }, "the tenant names column 4, of 4"},
-		{"tenant with a default", func(d *velox.Descriptor[dRow]) {
-			d.Columns[3].DefaultFunc = func() any { return "x" }
-			d.Tenant = 3
-		}, "the tenant column cannot have Default"},
 		{"Default on a bool", func(d *velox.Descriptor[dRow]) { d.Columns[1].Default = true }, "dRow.Flag: Default on bool/numeric field Flag would overwrite an explicit false or 0 on insert"},
 		{"Default on a number", func(d *velox.Descriptor[dRow]) { d.Columns[0].Default = int64(3) }, "dRow.ID: Default on bool/numeric field ID would overwrite an explicit false or 0 on insert"},
 		{"unique index naming no column", func(d *velox.Descriptor[dRow]) { d.Indexes = []velox.IndexInfo{{Unique: true}} }, "a unique index names no fields"},
@@ -205,7 +199,6 @@ func bidiDescriptor() velox.Descriptor[dBidi] {
 		Table:      "links",
 		Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
 		Bidi:       true,
 		FieldPtr: func(x *dBidi, i int) any {
 			return [...]any{&x.A, &x.B, &x.C}[i]
@@ -231,7 +224,6 @@ func TestBidiDescriptorRefused(t *testing.T) {
 		Table:      "links",
 		Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
 		Bidi:       true,
 		FieldPtr:   func(x *dBidiSlice, i int) any { return [...]any{&x.A, &x.B}[i] },
 	})
@@ -242,7 +234,6 @@ func TestBidiDescriptorRefused(t *testing.T) {
 		Table:      "links",
 		Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
 		Bidi:       true,
 		FieldPtr:   func(x *dBidiIface, i int) any { return [...]any{&x.A, &x.B}[i] },
 	})
@@ -253,7 +244,6 @@ func TestBidiDescriptorRefused(t *testing.T) {
 		Table:      "links",
 		Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
 		Bidi:       true,
 		FieldPtr:   func(x *dBidiArray, i int) any { return [...]any{&x.A, &x.B}[i] },
 	})
@@ -284,7 +274,6 @@ func TestBidiDescriptorRefused(t *testing.T) {
 			d.Columns[1] = velox.ColumnDescriptor{Field: "C", Name: "c"}
 			d.FieldPtr = func(x *dBidi, i int) any { return [...]any{&x.A, &x.C}[i] }
 		}, "the join entity of a bidirectional edge has columns of two types, int64 and string"},
-		{"tenant", func(d *velox.Descriptor[dBidi]) { d.Tenant = 0 }, "the join entity of a bidirectional edge cannot have a tenant column"},
 		{"read policy", func(d *velox.Descriptor[dBidi]) {
 			d.Policy = func() velox.BoundPolicy { return velox.BindPolicy(velox.Policy[dBidi]{Read: allow}) }
 		}, "the join entity of a bidirectional edge cannot have a Read or Write policy: its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"},
@@ -328,7 +317,6 @@ func spouseDescriptor() velox.Descriptor[dSpouse] {
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "SpouseID", Name: "spouse_id"},
 			{Field: "Number", Name: "number"}, {Field: "Small", Name: "small"}, {Field: "Blob", Name: "blob", Nullable: true}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Indexes:    []velox.IndexInfo{{Columns: []int{1}, Unique: true}, {Columns: []int{2}, Unique: true}, {Columns: []int{3}, Unique: true}},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[dSpouse]("Spouse", 1, 0)},
 		FieldPtr: func(x *dSpouse, i int) any {
@@ -367,7 +355,7 @@ func TestBidiOneDescriptorRefused(t *testing.T) {
 			"Spouse: EdgeBidi's key column spouse_id has no unique index of its own, which refuses a partner that already has one"},
 		{"the primary key", func(d *velox.Descriptor[dSpouse]) {
 			d.Edges = []velox.EdgeDescriptor{velox.EdgeBidi[dSpouse]("Spouse", 0, 0)}
-		}, "Spouse: EdgeBidi's key column id is a primary-key or tenant column"},
+		}, "Spouse: EdgeBidi's key column id is a primary-key column"},
 		{"the id is not the key", func(d *velox.Descriptor[dSpouse]) {
 			d.Edges = []velox.EdgeDescriptor{velox.EdgeBidi[dSpouse]("Spouse", 1, 2)}
 		}, "Spouse: EdgeBidi's id column number is not the entity's one-column primary key"},

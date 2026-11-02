@@ -12,27 +12,25 @@ import (
 	"github.com/syssam/velox/internal/testbind/bindtype"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Bind is the entity of schema Bind.
 type Bind struct {
-	ID        int64          `json:"id,omitempty"`
-	Flag      bool           `json:"flag,omitempty"`
-	I8        int8           `json:"i8,omitempty"`
-	I16       int16          `json:"i16,omitempty"`
-	I32       int32          `json:"i32,omitempty"`
-	I64       int64          `json:"i64,omitempty"`
-	U8        uint8          `json:"u8,omitempty"`
-	U16       uint16         `json:"u16,omitempty"`
-	U32       uint32         `json:"u32,omitempty"`
-	U64       uint64         `json:"u64,omitempty"`
-	F32       float32        `json:"f32,omitempty"`
-	F64       float64        `json:"f64,omitempty"`
-	Str       string         `json:"str,omitempty"`
-	Short     string         `json:"short,omitempty"`
-	Body      string         `json:"body,omitempty"`
-	Kind      BindKind       `json:"kind,omitempty"`
-	Level     bindtype.Level `json:"level,omitempty"`
+	ID        int64          `json:"id"`
+	Flag      bool           `json:"flag"`
+	I8        int8           `json:"i8"`
+	I16       int16          `json:"i16"`
+	I32       int32          `json:"i32"`
+	I64       int64          `json:"i64"`
+	U8        uint8          `json:"u8"`
+	U16       uint16         `json:"u16"`
+	U32       uint32         `json:"u32"`
+	U64       uint64         `json:"u64"`
+	F32       float32        `json:"f32"`
+	F64       float64        `json:"f64"`
+	Str       string         `json:"str"`
+	Short     string         `json:"short"`
+	Body      string         `json:"body"`
+	Kind      BindKind       `json:"kind"`
+	Level     bindtype.Level `json:"level"`
 	Data      []byte         `json:"data,omitempty"`
 	ShortData []byte         `json:"short_data,omitempty"`
 	At        time.Time      `json:"at,omitzero"`
@@ -42,57 +40,109 @@ type Bind struct {
 	Note      *string        `json:"note,omitempty"`
 }
 
+// The positions of Bind's columns, in the order of its table.
+const (
+	bindColID = iota
+	bindColFlag
+	bindColI8
+	bindColI16
+	bindColI32
+	bindColI64
+	bindColU8
+	bindColU16
+	bindColU32
+	bindColU64
+	bindColF32
+	bindColF64
+	bindColStr
+	bindColShort
+	bindColBody
+	bindColKind
+	bindColLevel
+	bindColData
+	bindColShortData
+	bindColAt
+	bindColUID
+	bindColTags
+	bindColDoc
+	bindColNote
+)
+
 // Binds holds the typed handles of Bind's columns and relations.
 var Binds = struct {
-	ID        velox.NumberCol[Bind, int64]
-	Flag      velox.Col[Bind, bool]
-	I8        velox.NumberCol[Bind, int8]
-	I16       velox.NumberCol[Bind, int16]
-	I32       velox.NumberCol[Bind, int32]
-	I64       velox.NumberCol[Bind, int64]
-	U8        velox.NumberCol[Bind, uint8]
-	U16       velox.NumberCol[Bind, uint16]
-	U32       velox.NumberCol[Bind, uint32]
-	U64       velox.NumberCol[Bind, uint64]
-	F32       velox.NumberCol[Bind, float32]
-	F64       velox.NumberCol[Bind, float64]
-	Str       velox.StringCol[Bind, string]
-	Short     velox.StringCol[Bind, string]
-	Body      velox.StringCol[Bind, string]
-	Kind      velox.StringCol[Bind, BindKind]
-	Level     velox.StringCol[Bind, bindtype.Level]
-	Data      velox.Col[Bind, []byte]
+	// ID is the column id.
+	ID velox.NumberCol[Bind, int64]
+	// Flag is the column flag.
+	Flag velox.Col[Bind, bool]
+	// I8 is the column i8.
+	I8 velox.NumberCol[Bind, int8]
+	// I16 is the column i16.
+	I16 velox.NumberCol[Bind, int16]
+	// I32 is the column i32.
+	I32 velox.NumberCol[Bind, int32]
+	// I64 is the column i64.
+	I64 velox.NumberCol[Bind, int64]
+	// U8 is the column u8.
+	U8 velox.NumberCol[Bind, uint8]
+	// U16 is the column u16.
+	U16 velox.NumberCol[Bind, uint16]
+	// U32 is the column u32.
+	U32 velox.NumberCol[Bind, uint32]
+	// U64 is the column u64.
+	U64 velox.NumberCol[Bind, uint64]
+	// F32 is the column f32.
+	F32 velox.NumberCol[Bind, float32]
+	// F64 is the column f64.
+	F64 velox.NumberCol[Bind, float64]
+	// Str is the column str.
+	Str velox.StringCol[Bind, string]
+	// Short is the column short.
+	Short velox.StringCol[Bind, string]
+	// Body is the column body.
+	Body velox.StringCol[Bind, string]
+	// Kind is the column kind.
+	Kind velox.StringCol[Bind, BindKind]
+	// Level is the column level.
+	Level velox.StringCol[Bind, bindtype.Level]
+	// Data is the column data.
+	Data velox.Col[Bind, []byte]
+	// ShortData is the column short_data.
 	ShortData velox.Col[Bind, []byte]
-	At        velox.OrderedCol[Bind, time.Time]
-	UID       velox.Col[Bind, bindtype.UUID]
-	Tags      velox.JSONCol[Bind, []string]
-	Doc       velox.JSONCol[Bind, bindtype.Doc]
-	Note      velox.NullStringCol[Bind, string]
+	// At is the column at.
+	At velox.OrderedCol[Bind, time.Time]
+	// UID is the column uid.
+	UID velox.Col[Bind, bindtype.UUID]
+	// Tags is the column tags.
+	Tags velox.JSONCol[Bind, []string]
+	// Doc is the column doc.
+	Doc velox.JSONCol[Bind, bindtype.Doc]
+	// Note is the column note.
+	Note velox.NullStringCol[Bind, string]
 }{
-	ID:        velox.NumberCol[Bind, int64]{I: 0},
-	Flag:      velox.Col[Bind, bool]{I: 1},
-	I8:        velox.NumberCol[Bind, int8]{I: 2},
-	I16:       velox.NumberCol[Bind, int16]{I: 3},
-	I32:       velox.NumberCol[Bind, int32]{I: 4},
-	I64:       velox.NumberCol[Bind, int64]{I: 5},
-	U8:        velox.NumberCol[Bind, uint8]{I: 6},
-	U16:       velox.NumberCol[Bind, uint16]{I: 7},
-	U32:       velox.NumberCol[Bind, uint32]{I: 8},
-	U64:       velox.NumberCol[Bind, uint64]{I: 9},
-	F32:       velox.NumberCol[Bind, float32]{I: 10},
-	F64:       velox.NumberCol[Bind, float64]{I: 11},
-	Str:       velox.StringCol[Bind, string]{I: 12},
-	Short:     velox.StringCol[Bind, string]{I: 13},
-	Body:      velox.StringCol[Bind, string]{I: 14},
-	Kind:      velox.StringCol[Bind, BindKind]{I: 15},
-	Level:     velox.StringCol[Bind, bindtype.Level]{I: 16},
-	Data:      velox.Col[Bind, []byte]{I: 17},
-	ShortData: velox.Col[Bind, []byte]{I: 18},
-	At:        velox.OrderedCol[Bind, time.Time]{I: 19},
-	UID:       velox.Col[Bind, bindtype.UUID]{I: 20},
-	Tags:      velox.JSONCol[Bind, []string]{I: 21},
-	Doc:       velox.JSONCol[Bind, bindtype.Doc]{I: 22},
-	Note:      velox.NullStringCol[Bind, string]{I: 23},
+	ID:        velox.NumberCol[Bind, int64]{I: bindColID},
+	Flag:      velox.Col[Bind, bool]{I: bindColFlag},
+	I8:        velox.NumberCol[Bind, int8]{I: bindColI8},
+	I16:       velox.NumberCol[Bind, int16]{I: bindColI16},
+	I32:       velox.NumberCol[Bind, int32]{I: bindColI32},
+	I64:       velox.NumberCol[Bind, int64]{I: bindColI64},
+	U8:        velox.NumberCol[Bind, uint8]{I: bindColU8},
+	U16:       velox.NumberCol[Bind, uint16]{I: bindColU16},
+	U32:       velox.NumberCol[Bind, uint32]{I: bindColU32},
+	U64:       velox.NumberCol[Bind, uint64]{I: bindColU64},
+	F32:       velox.NumberCol[Bind, float32]{I: bindColF32},
+	F64:       velox.NumberCol[Bind, float64]{I: bindColF64},
+	Str:       velox.StringCol[Bind, string]{I: bindColStr},
+	Short:     velox.StringCol[Bind, string]{I: bindColShort},
+	Body:      velox.StringCol[Bind, string]{I: bindColBody},
+	Kind:      velox.StringCol[Bind, BindKind]{I: bindColKind},
+	Level:     velox.StringCol[Bind, bindtype.Level]{I: bindColLevel},
+	Data:      velox.Col[Bind, []byte]{I: bindColData},
+	ShortData: velox.Col[Bind, []byte]{I: bindColShortData},
+	At:        velox.OrderedCol[Bind, time.Time]{I: bindColAt},
+	UID:       velox.Col[Bind, bindtype.UUID]{I: bindColUID},
+	Tags:      velox.JSONCol[Bind, []string]{I: bindColTags},
+	Doc:       velox.JSONCol[Bind, bindtype.Doc]{I: bindColDoc},
+	Note:      velox.NullStringCol[Bind, string]{I: bindColNote},
 }
 
 var bindMeta velox.MetaOnce[Bind]
@@ -100,6 +150,7 @@ var bindMeta velox.MetaOnce[Bind]
 // VeloxMeta is called by velox, not by applications.
 func (*Bind) VeloxMeta() *velox.Meta[Bind] { return bindMeta.Load(bindDescriptor) }
 
+// bindDescriptor describes Bind to velox: its table, columns, edges and hooks.
 func bindDescriptor() velox.Descriptor[Bind] {
 	return velox.Descriptor[Bind]{
 		Table: "binds",
@@ -129,83 +180,80 @@ func bindDescriptor() velox.Descriptor[Bind] {
 			{Field: "Doc", Name: "doc", Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Note", Name: "note"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{bindColID},
 		FieldPtr: func(x *Bind, i int) any {
 			switch i {
-			case 0:
+			case bindColID:
 				return &x.ID
-			case 1:
+			case bindColFlag:
 				return &x.Flag
-			case 2:
+			case bindColI8:
 				return &x.I8
-			case 3:
+			case bindColI16:
 				return &x.I16
-			case 4:
+			case bindColI32:
 				return &x.I32
-			case 5:
+			case bindColI64:
 				return &x.I64
-			case 6:
+			case bindColU8:
 				return &x.U8
-			case 7:
+			case bindColU16:
 				return &x.U16
-			case 8:
+			case bindColU32:
 				return &x.U32
-			case 9:
+			case bindColU64:
 				return &x.U64
-			case 10:
+			case bindColF32:
 				return &x.F32
-			case 11:
+			case bindColF64:
 				return &x.F64
-			case 12:
+			case bindColStr:
 				return &x.Str
-			case 13:
+			case bindColShort:
 				return &x.Short
-			case 14:
+			case bindColBody:
 				return &x.Body
-			case 15:
+			case bindColKind:
 				return &x.Kind
-			case 16:
+			case bindColLevel:
 				return &x.Level
-			case 17:
+			case bindColData:
 				return &x.Data
-			case 18:
+			case bindColShortData:
 				return &x.ShortData
-			case 19:
+			case bindColAt:
 				return &x.At
-			case 20:
+			case bindColUID:
 				return &x.UID
-			case 21:
+			case bindColTags:
 				return &x.Tags
-			case 22:
+			case bindColDoc:
 				return &x.Doc
-			case 23:
+			case bindColNote:
 				return &x.Note
 			}
 			return nil
 		},
 		Check: func(col int, v any) error {
 			switch col {
-			case 13:
+			case bindColShort:
 				x := v.(string)
 				if len(x) > 20 {
 					return errors.New("length is more than 20")
 				}
-			case 15:
+			case bindColKind:
 				x := v.(BindKind)
-				switch x {
-				case "a", "b":
-				default:
-					return errors.New("is not one of the values")
+				if !x.IsValid() {
+					return errors.New("is not one of a, b")
 				}
-			case 16:
+			case bindColLevel:
 				x := v.(bindtype.Level)
 				switch x {
 				case "low", "high":
 				default:
-					return errors.New("is not one of the values")
+					return errors.New("is not one of low, high")
 				}
-			case 18:
+			case bindColShortData:
 				x := v.([]byte)
 				if len(x) > 16 {
 					return errors.New("length is more than 16")
@@ -216,14 +264,14 @@ func bindDescriptor() velox.Descriptor[Bind] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Bind) String() string {
-	var p23 any
+	var noteVal any
 	if x.Note != nil {
-		p23 = *x.Note
+		noteVal = *x.Note
 	}
-	return fmt.Sprintf("Bind(ID=%v, Flag=%v, I8=%v, I16=%v, I32=%v, I64=%v, U8=%v, U16=%v, U32=%v, U64=%v, F32=%v, F64=%v, Str=%v, Short=%v, Body=%v, Kind=%v, Level=%v, Data=<%d bytes>, ShortData=<%d bytes>, At=%v, UID=%v, Tags=%v, Doc=%v, Note=%v)", x.ID, x.Flag, x.I8, x.I16, x.I32, x.I64, x.U8, x.U16, x.U32, x.U64, x.F32, x.F64, x.Str, x.Short, x.Body, x.Kind, x.Level, len(x.Data), len(x.ShortData), x.At, x.UID, x.Tags, x.Doc, p23)
+	return fmt.Sprintf("Bind(ID=%v, Flag=%v, I8=%v, I16=%v, I32=%v, I64=%v, U8=%v, U16=%v, U32=%v, U64=%v, F32=%v, F64=%v, Str=%v, Short=%v, Body=%v, Kind=%v, Level=%v, Data=<%d bytes>, ShortData=<%d bytes>, At=%v, UID=%v, Tags=%v, Doc=%v, Note=%v)", x.ID, x.Flag, x.I8, x.I16, x.I32, x.I64, x.U8, x.U16, x.U32, x.U64, x.F32, x.F64, x.Str, x.Short, x.Body, x.Kind, x.Level, len(x.Data), len(x.ShortData), x.At, x.UID, x.Tags, x.Doc, noteVal)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Bind) GoString() string { return x.String() }

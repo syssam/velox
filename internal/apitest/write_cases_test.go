@@ -27,7 +27,6 @@ func (*wgBig) VeloxMeta() *velox.Meta[wgBig] {
 			Table:      "bigs",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *wgBig, i int) any {
 				if i == 0 {
 					return &x.ID
@@ -61,7 +60,6 @@ func (*wgPair) VeloxMeta() *velox.Meta[wgPair] {
 			Table:      "pairs",
 			Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}, {Field: "Price", Name: "price", Default: wgCents(250)}},
 			PrimaryKey: []int{0, 1},
-			Tenant:     -1,
 			FieldPtr: func(x *wgPair, i int) any {
 				switch i {
 				case 0:
@@ -90,7 +88,6 @@ func (*wgPairV) VeloxMeta() *velox.Meta[wgPairV] {
 			Table:      "pairs",
 			Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}, {Field: "Price", Name: "price", Default: wgCents(250)}},
 			PrimaryKey: []int{0, 1},
-			Tenant:     -1,
 			FieldPtr: func(x *wgPairV, i int) any {
 				switch i {
 				case 0:

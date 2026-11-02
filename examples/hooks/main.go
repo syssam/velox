@@ -19,6 +19,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/examples/hooks/auth"
 	"github.com/syssam/velox/examples/hooks/gen"
 	"github.com/syssam/velox/migrate"
 )
@@ -72,9 +73,9 @@ func run(ctx context.Context, w io.Writer) error {
 		return rows, nil
 	}
 
-	ada := gen.WithUser(ctx, "ada")
+	ada := auth.WithUser(ctx, "ada")
 
-	// The insert hooks: createdBy, a generic hook, fills CreatedBy from the
+	// The insert hooks: auth.CreatedBy, a generic hook, fills CreatedBy from the
 	// context's user; deriveSlug checks the title and derives the slug, in
 	// the caller's struct.
 	err = db.Insert(&gen.Task{}).Exec(ada)

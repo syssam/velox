@@ -1,0 +1,106 @@
+package app_test
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
+	_ "modernc.org/sqlite"
+
+	"example.com/app/graph"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+)
+
+// rows is the number of rows of each table.
+const rows = 500
+
+// benchServe is the schema on a seeded in-memory database, through gqlgen's handler
+// and the extension, and a function that sends a query to it.
+func benchServe(b *testing.B) func(q string, vars map[string]any) string {
+	b.Helper()
+	db, err := sql.Open("sqlite", "file::memory:?_pragma=foreign_keys(0)")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = db.Close() })
+	db.SetMaxOpenConns(1)
+	tx, _ := db.Begin()
+	for _, s := range ddl {
+		if _, err := tx.Exec(s); err != nil {
+			b.Fatal(err)
+		}
+	}
+	for i := 0; i < n; i++ {
+		for k := 4; k <= rows; k++ {
+			if i%10 != 0 {
+				if _, err := tx.Exec(fmt.Sprintf("INSERT INTO e%ds (id, name, amount, created_at, prev_id) VALUES (%d, 'e%d-r%d', %d.5, '2026-01-01T00:00:00Z', %d)", i, k, i, k, k, k)); err != nil {
+					b.Fatal(err)
+				}
+			} else if _, err := tx.Exec(fmt.Sprintf("INSERT INTO e%ds (id, name, amount, created_at) VALUES (%d, 'e%d-r%d', %d.5, '2026-01-01T00:00:00Z')", i, k, i, k, k)); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		b.Fatal(err)
+	}
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.AddTransport(transport.POST{})
+	return func(q string, vars map[string]any) string {
+		body, _ := json.Marshal(map[string]any{"query": q, "variables": vars})
+		req := httptest.NewRequest("POST", "/", strings.NewReader(string(body)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		return w.Body.String()
+	}
+}
+
+// run times query q, which must succeed.
+func run(b *testing.B, q string, vars map[string]any) {
+	do := benchServe(b)
+	if out := do(q, vars); strings.Contains(out, `"errors"`) {
+		b.Fatalf("%s", out)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		do(q, vars)
+	}
+}
+
+func BenchmarkList50(b *testing.B) {
+	run(b, `{ e1s(first: 50) { edges { cursor node { id name amount createdAt } } pageInfo { hasNextPage endCursor } } }`, nil)
+}
+
+func BenchmarkList50Count(b *testing.B) {
+	run(b, `{ e1s(first: 50, orderBy: {field: NAME, direction: DESC}) { totalCount edges { node { id name } } } }`, nil)
+}
+
+func BenchmarkNested(b *testing.B) {
+	run(b, `{ e2s(first: 50) { edges { node { id name prev { id name } next(first: 5) { edges { node { id name } } } } } } }`, nil)
+}
+
+func BenchmarkWhere(b *testing.B) {
+	run(b, `{ e3s(first: 20, where: {or: [{nameContains: "r1"}, {nameHasPrefix: "e3-r2"}], not: {nameIn: ["e3-r1","e3-r2"]}}) { edges { node { id name } } } }`, nil)
+}
+
+func BenchmarkNode(b *testing.B) {
+	run(b, `query($id: ID!) { node(id: $id) { ... on E4 { id name amount } } }`, map[string]any{"id": veloxgql.EncodeID("E4", int64(7))})
+}
+
+func BenchmarkNodes20(b *testing.B) {
+	ids := make([]string, 20)
+	for i := range ids {
+		ids[i] = veloxgql.EncodeID("E4", int64(i+1))
+	}
+	run(b, `query($ids: [ID!]!) { nodes(ids: $ids) { ... on E4 { id name amount } } }`, map[string]any{"ids": ids})
+}
+

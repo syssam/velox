@@ -46,7 +46,7 @@ func TxRetrySerializable(n int) TxOption { return engine.TxRetrySerializable(n) 
 func TxRetries(opts ...TxOption) int { return engine.TxRetries(opts...) }
 
 // WithoutTx returns ctx without the mark that Tx puts on fn's ctx, keeping
-// everything else: its values (the tenant, tags, spans), its deadline and its
+// everything else: its values (the scope values, tags, spans), its deadline and its
 // cancellation. It is for work inside fn that must not join the transaction,
 // such as an audit row that must survive a rollback: under it, a statement on
 // db runs outside the transaction, on its own connection, and a Tx on db

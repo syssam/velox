@@ -15,9 +15,9 @@ import (
 	"github.com/syssam/velox/internal/testmodel"
 )
 
-// asUser returns a context scoped to tenant 1, acting as user ("" for none).
+// asUser returns a context scoped to org 1, acting as user ("" for none).
 func asUser(user string) context.Context {
-	ctx := velox.WithTenant(context.Background(), int64(1))
+	ctx := testmodel.Org.With(context.Background(), int64(1))
 	if user == "" {
 		return ctx
 	}
@@ -232,25 +232,25 @@ func TestPolicyCalledOncePerStatement(t *testing.T) {
 }
 
 // TestPolicyConditionIsScopedAndChecked: an EXISTS in a policy's condition
-// gets the tenant (and the Read policy, see TestPolicyIsInherited); a
+// gets the org (and the Read policy, see TestPolicyIsInherited); a
 // condition holding the zero Pred is refused.
 func TestPolicyConditionIsScopedAndChecked(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	q := db.Query[fixture.Pnote]().Limit(1)
 	ctx := pnoteReading(fixture.Pn.Invoice.HasWhere(testmodel.Invoices.Paid.EQ(true)), nil)
-	if _, err := q.All(velox.WithTenant(ctx, int64(7))); err != nil {
+	if _, err := q.All(testmodel.Org.With(ctx, int64(7))); err != nil {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "pnotes"."invoice_id" AND "paid" = $1 AND "org_id" = $2) LIMIT $3`,
 		true, int64(7), 1)
 	_, err := q.All(ctx)
-	want(t, err, velox.ErrNoTenant, "velox: fixture.Pnote: in the EXISTS on testmodel.Invoice: no tenant in the context")
+	wantNoScope(t, err, "velox: fixture.Pnote: in the EXISTS on testmodel.Invoice: ")
 	// The same condition as an EXISTS target's Read: the error names the
 	// path, from the outermost target in.
 	_, err = db.Query[pbox]().Where(pboxNote.Has()).Limit(1).All(ctx)
-	want(t, err, velox.ErrNoTenant, "velox: apitest.pbox: in the EXISTS on fixture.Pnote, then on testmodel.Invoice: no tenant in the context")
-	if _, err := db.Query[pbox]().Where(pboxNote.Has()).Limit(1).All(velox.WithTenant(ctx, int64(7))); err != nil {
+	wantNoScope(t, err, "velox: apitest.pbox: in the EXISTS on fixture.Pnote, then on testmodel.Invoice: ")
+	if _, err := db.Query[pbox]().Where(pboxNote.Has()).Limit(1).All(testmodel.Org.With(ctx, int64(7))); err != nil {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `SELECT "id", "note_id" FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND EXISTS (SELECT 1 FROM "invoices" AS "vx2" WHERE "vx2"."id" = "vx1"."invoice_id" AND "paid" = $1 AND "org_id" = $2)) LIMIT $3`,
@@ -294,12 +294,12 @@ func TestSkipPolicy(t *testing.T) {
 	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Limit(5).All(support); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE "done" = $1 AND "org_id" = $2 LIMIT $3`, false, int64(1), 5)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE "done" = $1 LIMIT $2`, false, 5)
 	if _, err := db.Query[testmodel.Ticket]().Limit(5).All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
 	// An entity with no policy skips none.
-	if _, err := db.Query[testmodel.Invoice]().Limit(5).All(velox.WithoutPolicy(tenant(int64(1)), "support")); err != nil {
+	if _, err := db.Query[testmodel.Item]().Limit(5).All(velox.WithoutPolicy(scoped(1), "support")); err != nil {
 		t.Fatal(err)
 	}
 	if len(seen) != 3 {
@@ -621,7 +621,7 @@ func TestAllowComposes(t *testing.T) {
 }
 
 // TestPolicyWritable: a Writable query gets the Write condition after the
-// tenant and Read ones, as an UPDATE does, so a Count checks what an Update
+// org and Read ones, as an UPDATE does, so a Count checks what an Update
 // may change; it is a read still: Write's denial is a select's.
 func TestPolicyWritable(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}}
@@ -711,7 +711,7 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 func TestExistsErrorNamesThePath(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	_, err := db.Query[pbox]().Where(pboxNote.HasWhere(fixture.Pn.Invoice.Has())).Limit(1).All(context.Background())
-	want(t, err, velox.ErrNoTenant, "velox: apitest.pbox: in the EXISTS on fixture.Pnote, then on testmodel.Invoice: no tenant in the context")
+	wantNoScope(t, err, "velox: apitest.pbox: in the EXISTS on fixture.Pnote, then on testmodel.Invoice: ")
 }
 
 // policyDDL is velox-gen migrate sql -dialect sqlite's invoices and tickets
@@ -774,7 +774,7 @@ func policyDB(t *testing.T) *velox.DB {
 // statement that matched only such rows affects 0 rows, without an error.
 func TestWritePolicyFiltersToZeroRows(t *testing.T) {
 	db := policyDB(t)
-	seed := velox.WithoutPolicy(velox.WithAllTenants(context.Background(), "test"), "seed")
+	seed := velox.WithoutPolicy(context.Background(), "seed")
 	inv := testmodel.Invoice{OrgID: 1, Number: "N1", Data: []byte("d")}
 	if err := db.Insert(&inv).Exec(seed); err != nil {
 		t.Fatal(err)
@@ -783,7 +783,7 @@ func TestWritePolicyFiltersToZeroRows(t *testing.T) {
 	if err := db.Insert(&tk).Exec(seed); err != nil {
 		t.Fatal(err)
 	}
-	ann := testmodel.WithUser(velox.WithAllTenants(context.Background(), "test"), "ann")
+	ann := asUser("ann")
 
 	n, err := db.Update[testmodel.Ticket]().Set(Tk.Title.Set("x")).Where(Tk.ID.EQ(tk.ID)).Exec(ann)
 	if n != 0 || err != nil {
@@ -799,7 +799,7 @@ func TestWritePolicyFiltersToZeroRows(t *testing.T) {
 	}
 
 	// The row is changeable by its owner: the zero rows were the policy's.
-	bob := testmodel.WithUser(velox.WithAllTenants(context.Background(), "test"), "bob")
+	bob := asUser("bob")
 	n, err = db.Delete[testmodel.Ticket]().Where(Tk.ID.EQ(tk.ID)).Exec(bob)
 	if n != 1 || err != nil {
 		t.Errorf("delete as bob: %d, %v", n, err)
@@ -839,7 +839,7 @@ func TestWritePolicyFiltersToZeroRows(t *testing.T) {
 // EqualFold ignores the case of those alone.
 func TestEqualFoldIsASCIIOnSQLite(t *testing.T) {
 	db := policyDB(t)
-	ctx := velox.WithoutPolicy(velox.WithAllTenants(context.Background(), "test"), "seed")
+	ctx := velox.WithoutPolicy(velox.WithoutPolicy(context.Background(), "test"), "seed")
 	if err := db.Insert(&testmodel.Invoice{OrgID: 1, Number: "ÉCOLE", Data: []byte("d")}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}

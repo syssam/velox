@@ -13,6 +13,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 	"github.com/syssam/velox/veloxpgx"
 )
 
@@ -29,7 +30,7 @@ type seedTicket struct {
 
 func ptr(v int64) *int64 { return new(v) }
 
-// seedTickets are two tenants' tickets, each owned by ann or bob. Ticket 5
+// seedTickets are two orgs' tickets, each owned by ann or bob. Ticket 5
 // names org 2's invoice 5 and bob's ticket 3 as its parent; invoice 0 does not
 // exist. Done: 2, 3 and 8.
 var seedTickets = []seedTicket{
@@ -51,7 +52,7 @@ type who struct {
 
 // asIn1 acts as user in org 1.
 func asIn1(user string) context.Context {
-	return testmodel.WithUser(velox.WithTenant(context.Background(), int64(1)), user)
+	return testmodel.WithUser(testmodel.Org.With(context.Background(), int64(1)), user)
 }
 
 var (
@@ -176,15 +177,15 @@ func TestScopeReads(t *testing.T) {
 	})
 }
 
-// TestScopeNeedsTenantAndUser: no tenant is an error, not every row; no user
+// TestScopeNeedsOrgAndUser: no org is an error, not every row; no user
 // is the policy's denial.
-func TestScopeNeedsTenantAndUser(t *testing.T) {
+func TestScopeNeedsOrgAndUser(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		_, err := tg.db.Query[testmodel.Ticket]().Unbounded().All(testmodel.WithUser(context.Background(), "ann"))
-		if !errors.Is(err, velox.ErrNoTenant) {
-			t.Errorf("no tenant: %v", err)
+		if !errors.Is(err, scope.ErrNoScope) {
+			t.Errorf("no org: %v", err)
 		}
-		_, err = tg.db.Query[testmodel.Ticket]().Unbounded().All(velox.WithTenant(context.Background(), int64(1)))
+		_, err = tg.db.Query[testmodel.Ticket]().Unbounded().All(testmodel.Org.With(context.Background(), int64(1)))
 		var pe *velox.PolicyError
 		if !errors.As(err, &pe) || pe.Op != velox.OpSelect {
 			t.Errorf("no user: %v", err)
@@ -329,10 +330,10 @@ func TestScopeSave(t *testing.T) {
 		}
 		saved := rowIDs(ticketRows(t, tg), func(r ticketRow) bool { return r.title == fmt.Sprintf("S%d", r.id) })
 		wantIDs(t, saved, visible[c.name])
-		// Saving the tenant column with another org is refused.
+		// Saving the scope column with another org is refused.
 		if c.name != "anyone" {
 			x := testmodel.Ticket{ID: 1, OrgID: 2, Owner: "ann", Title: "S1"}
-			if err := tg.db.Save(&x, Tk.OrgID).Exec(c.ctx); !errors.Is(err, velox.ErrTenantImmutable) {
+			if err := tg.db.Save(&x, Tk.OrgID).Exec(c.ctx); !errors.Is(err, velox.ErrImmutable) {
 				t.Errorf("moving ticket 1 to org 2: %v", err)
 			}
 			if rows := ticketRows(t, tg); rows[0].org != 1 {
@@ -344,8 +345,8 @@ func TestScopeSave(t *testing.T) {
 
 func TestScopeInsert(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
-		// Ann's tickets: the tenant is filled from the context, and CreatedBy
-		// from its user (anyone has none); under WithAllTenants the row names
+		// Ann's tickets: the org is filled from the context, and CreatedBy
+		// from its user (anyone has none); under WithoutPolicy the row names
 		// its org.
 		one := testmodel.Ticket{InvoiceID: 1, Owner: "ann", Title: "N1"}
 		two := []testmodel.Ticket{{InvoiceID: 1, Owner: "ann", Title: "N2"}, {InvoiceID: 1, Owner: "ann", Title: "N3"}}
@@ -386,7 +387,7 @@ func TestScopeInsert(t *testing.T) {
 			news = news[:3]
 			// Another org's ticket.
 			other := testmodel.Ticket{InvoiceID: 1, OrgID: 2, Owner: "ann", Title: "N7"}
-			if err := tg.db.Insert(&other).Exec(c.ctx); !errors.Is(err, velox.ErrTenantMismatch) {
+			if err := tg.db.Insert(&other).Exec(c.ctx); !errors.Is(err, scope.ErrMismatch) {
 				t.Errorf("org 2's ticket: %v", err)
 			}
 		} else if errOne != nil || errAll != nil {
@@ -418,9 +419,9 @@ func TestScopeUpsert(t *testing.T) {
 		}
 		err := upsert(&a1)
 		if tg.d == velox.MySQL && c.name != "anyone" {
-			// ON DUPLICATE KEY UPDATE also fires on the primary key, which
-			// does not include the tenant.
-			if !errors.Is(err, velox.ErrTenantUpsert) {
+			// ON DUPLICATE KEY UPDATE takes no condition, so it cannot carry
+			// the scope's Read.
+			if !errors.Is(err, velox.ErrPolicyUpsert) {
 				t.Errorf("MySQL: %v", err)
 			}
 			wantIDs(t, done(), []int64{2, 3, 8})

@@ -14,7 +14,6 @@ type Descriptor[E any] struct {
 	Schema     string // the schema (PostgreSQL) or database holding Table; "" for the default
 	Columns    []ColumnDescriptor
 	PrimaryKey []int // indexes into Columns
-	Tenant     int   // index into Columns; -1 when the entity has none (so velox-gen always writes it: 0 is column 0)
 	// Bidi marks the join entity of a self-referencing many-to-many edge that has
 	// no inverse, which is bidirectional, as in ent: each link is the two rows
 	// (a, b) and (b, a). Insert and InsertAll write both, Delete removes both, and
@@ -34,12 +33,8 @@ type Descriptor[E any] struct {
 	// extra fields (an edge schema's rows get no such clause); velox's
 	// GraphQL mutations add DoNothing, so they behave as ent's do. For
 	// generated code.
-	Bidi    bool
-	Indexes []IndexInfo
-	// TenantRefs are the columns a write under a tenant checks against it: see
-	// TenantRef. They hold the target's names as strings, never its metadata, so
-	// that the entity does not link its target. For generated code.
-	TenantRefs   []TenantRef
+	Bidi         bool
+	Indexes      []IndexInfo
 	Edges        []EdgeDescriptor      // in the order of the generated relation handles
 	FieldPtr     func(x *E, i int) any // &x.<field of column i>
 	EdgeFieldPtr func(x *E, i int) any // &x.<field of edge i>: a *One[T] or *Many[T]
@@ -76,22 +71,6 @@ type Descriptor[E any] struct {
 	Hooks  func() BoundHooks
 }
 
-// TenantRef says that Column, a foreign key, refers to Key of Schema.Table, which
-// is tenant-scoped by its column Tenant, whose Go type is of reflect kind TenantKind,
-// to which the context's tenant converts. For generated code.
-//
-// velox-gen writes one for a column of a tenant-scoped entity whose edge's target
-// is tenant-scoped, and for each side of a many-to-many edge's join entity whose
-// target is. On an insert, upsert, update or Save under WithTenant that sets the
-// column to a non-NULL value, velox first sends one SELECT Key FROM Table WHERE Key
-// IN (…) AND Tenant = ?, for the distinct values, after the hooks and on the
-// statement's transaction or connection, and fails with ErrTenantRef unless each
-// is the tenant's. WithAllTenants skips it. Around hooks do not see it.
-//
-// On a join entity, reads, updates and deletes under a tenant also hold, for each
-// TenantRef, Column IN (SELECT Key FROM Table WHERE Tenant = ?). See WithTenant.
-type TenantRef = engine.TenantRef
-
 // Load returns the entity's Meta, building it from descriptor the first time. A
 // panic in desc, or in the Descriptor's Policy or Hooks, becomes the Meta's
 // *SchemaError.
@@ -108,7 +87,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 		info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
 			d = descriptor()
 			v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
-				Tenant: d.Tenant, Bidi: d.Bidi, Indexes: d.Indexes, TenantRefs: d.TenantRefs, Relations: d.Edges, Check: d.Check,
+				Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
 				Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
 			if a := d.FieldPtr; a != nil {
 				v.FieldPtr = func(i int) any { return a(x, i) }
@@ -166,8 +145,9 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescr
 // key too. An Update or Save that sets it clears the key of the row that
 // pointed here and sets the new partner's; one that sets it to nil clears
 // the partner's. They run in a transaction velox opens, a savepoint when the
-// caller is in one. The clearing of the old partner is not scoped by tenant
-// or policy (WithAllTenants, WithoutPolicy, with a reason the hooks see): it
+// caller is in one. The clearing of the old partner is not scoped by a
+// policy, a scope included (it runs under WithoutPolicy, with a reason the
+// hooks see): it
 // is the edge's integrity, as ent's is. The link of the new partner is
 // scoped as the caller's write, so a partner it may not change cannot be
 // linked.
@@ -205,12 +185,10 @@ func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescripto
 // are written like any entity's, with Insert and Delete.
 //
 // Loading it reads J's rows for the owners' keys, then T's rows for the keys
-// they hold, and Has is an EXISTS on J holding an EXISTS on T. T's tenant and
-// Read policy apply, as they do to any relation's target. J can have neither
-// a tenant column nor a Read policy: the relation is refused when it
-// resolves. A J with Descriptor.TenantRefs, as velox-gen writes one for each
-// tenant-scoped side, is scoped through them: see WithTenant. A J without them
-// is not scoped at all. velox does not check that an endpoint is a row the
+// they hold, and Has is an EXISTS on J holding an EXISTS on T. T's Read
+// policy, a scope included, applies, as it does to any relation's target. J
+// cannot have a Read policy of its own: it is read through its two sides,
+// whose Read policies apply, and the relation is refused when it resolves. velox does not check that an endpoint is a row the
 // caller's policies let it see or change: an application that writes links, or
 // deletes them, checks both endpoints itself, in J's Policy (Insert, and Write for
 // updates and deletes) or in a hook on J. When J is the join entity of a bidirectional edge (Descriptor.Bidi), its Policy cannot

@@ -10,63 +10,101 @@ import (
 	"github.com/syssam/velox/internal/testmodel/kind"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Sample is the entity of schema Sample.
 type Sample struct {
-	ID        int64              `json:"id,omitempty"`
-	Name      string             `json:"name,omitempty"`
-	Status    kind.Status        `json:"status,omitempty"`
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	Status    kind.Status        `json:"status"`
 	Prev      *kind.Status       `json:"prev,omitempty"`
-	Price     kind.Cents         `json:"price,omitempty"`
+	Price     kind.Cents         `json:"price"`
 	Ratio     *float64           `json:"ratio,omitempty"`
-	Flag      bool               `json:"flag,omitempty"`
+	Flag      bool               `json:"flag"`
 	MaybeFlag *bool              `json:"maybe_flag,omitempty"`
 	When      time.Time          `json:"when,omitzero"`
 	MaybeWhen *time.Time         `json:"maybe_when,omitempty"`
 	Blob      []byte             `json:"blob,omitempty"`
 	ParentID  *int64             `json:"parent_id,omitempty"`
-	Score     kind.Score         `json:"score,omitempty"`
+	Score     kind.Score         `json:"score"`
 	Lines     velox.Many[Line]   `json:"lines,omitzero"`
 	Children  velox.Many[Sample] `json:"children,omitzero"`
 	Parent    velox.One[Sample]  `json:"parent,omitzero"`
 }
 
+// The positions of Sample's columns, in the order of its table.
+const (
+	sampleColID = iota
+	sampleColName
+	sampleColStatus
+	sampleColPrev
+	sampleColPrice
+	sampleColRatio
+	sampleColFlag
+	sampleColMaybeFlag
+	sampleColWhen
+	sampleColMaybeWhen
+	sampleColBlob
+	sampleColParentID
+	sampleColScore
+)
+
+// The positions of Sample's edges.
+const (
+	sampleEdgeLines = iota
+	sampleEdgeChildren
+	sampleEdgeParent
+)
+
 // Samples holds the typed handles of Sample's columns and relations.
 var Samples = struct {
-	ID        velox.NumberCol[Sample, int64]
-	Name      velox.StringCol[Sample, string]
-	Status    velox.StringCol[Sample, kind.Status]
-	Prev      velox.NullStringCol[Sample, kind.Status]
-	Price     velox.NumberCol[Sample, kind.Cents]
-	Ratio     velox.NullNumberCol[Sample, float64]
-	Flag      velox.Col[Sample, bool]
+	// ID is the column id.
+	ID velox.NumberCol[Sample, int64]
+	// Name is the column name.
+	Name velox.StringCol[Sample, string]
+	// Status is the column status.
+	Status velox.StringCol[Sample, kind.Status]
+	// Prev is the column prev.
+	Prev velox.NullStringCol[Sample, kind.Status]
+	// Price is the column price.
+	Price velox.NumberCol[Sample, kind.Cents]
+	// Ratio is the column ratio.
+	Ratio velox.NullNumberCol[Sample, float64]
+	// Flag is the column flag.
+	Flag velox.Col[Sample, bool]
+	// MaybeFlag is the column maybe_flag.
 	MaybeFlag velox.NullCol[Sample, bool]
-	When      velox.OrderedCol[Sample, time.Time]
+	// When is the column when.
+	When velox.OrderedCol[Sample, time.Time]
+	// MaybeWhen is the column maybe_when.
 	MaybeWhen velox.NullOrderedCol[Sample, time.Time]
-	Blob      velox.Col[Sample, []byte]
-	ParentID  velox.NullNumberCol[Sample, int64]
-	Score     velox.NumberCol[Sample, kind.Score]
-	Lines     velox.Rel[Sample, Line]
-	Children  velox.Rel[Sample, Sample]
-	Parent    velox.Rel[Sample, Sample]
+	// Blob is the column blob.
+	Blob velox.Col[Sample, []byte]
+	// ParentID is the column parent_id.
+	ParentID velox.NullNumberCol[Sample, int64]
+	// Score is the column score.
+	Score velox.NumberCol[Sample, kind.Score]
+	// Lines is the edge lines, to Line.
+	Lines velox.Rel[Sample, Line]
+	// Children is the edge children, to Sample.
+	Children velox.Rel[Sample, Sample]
+	// Parent is the edge parent, to Sample.
+	Parent velox.Rel[Sample, Sample]
 }{
-	ID:        velox.NumberCol[Sample, int64]{I: 0},
-	Name:      velox.StringCol[Sample, string]{I: 1},
-	Status:    velox.StringCol[Sample, kind.Status]{I: 2},
-	Prev:      velox.NullStringCol[Sample, kind.Status]{I: 3},
-	Price:     velox.NumberCol[Sample, kind.Cents]{I: 4},
-	Ratio:     velox.NullNumberCol[Sample, float64]{I: 5},
-	Flag:      velox.Col[Sample, bool]{I: 6},
-	MaybeFlag: velox.NullCol[Sample, bool]{I: 7},
-	When:      velox.OrderedCol[Sample, time.Time]{I: 8},
-	MaybeWhen: velox.NullOrderedCol[Sample, time.Time]{I: 9},
-	Blob:      velox.Col[Sample, []byte]{I: 10},
-	ParentID:  velox.NullNumberCol[Sample, int64]{I: 11},
-	Score:     velox.NumberCol[Sample, kind.Score]{I: 12},
-	Lines:     velox.Rel[Sample, Line]{I: 0},
-	Children:  velox.Rel[Sample, Sample]{I: 1},
-	Parent:    velox.Rel[Sample, Sample]{I: 2},
+	ID:        velox.NumberCol[Sample, int64]{I: sampleColID},
+	Name:      velox.StringCol[Sample, string]{I: sampleColName},
+	Status:    velox.StringCol[Sample, kind.Status]{I: sampleColStatus},
+	Prev:      velox.NullStringCol[Sample, kind.Status]{I: sampleColPrev},
+	Price:     velox.NumberCol[Sample, kind.Cents]{I: sampleColPrice},
+	Ratio:     velox.NullNumberCol[Sample, float64]{I: sampleColRatio},
+	Flag:      velox.Col[Sample, bool]{I: sampleColFlag},
+	MaybeFlag: velox.NullCol[Sample, bool]{I: sampleColMaybeFlag},
+	When:      velox.OrderedCol[Sample, time.Time]{I: sampleColWhen},
+	MaybeWhen: velox.NullOrderedCol[Sample, time.Time]{I: sampleColMaybeWhen},
+	Blob:      velox.Col[Sample, []byte]{I: sampleColBlob},
+	ParentID:  velox.NullNumberCol[Sample, int64]{I: sampleColParentID},
+	Score:     velox.NumberCol[Sample, kind.Score]{I: sampleColScore},
+	Lines:     velox.Rel[Sample, Line]{I: sampleEdgeLines},
+	Children:  velox.Rel[Sample, Sample]{I: sampleEdgeChildren},
+	Parent:    velox.Rel[Sample, Sample]{I: sampleEdgeParent},
 }
 
 var sampleMeta velox.MetaOnce[Sample]
@@ -74,6 +112,7 @@ var sampleMeta velox.MetaOnce[Sample]
 // VeloxMeta is called by velox, not by applications.
 func (*Sample) VeloxMeta() *velox.Meta[Sample] { return sampleMeta.Load(sampleDescriptor) }
 
+// sampleDescriptor describes Sample to velox: its table, columns, edges and hooks.
 func sampleDescriptor() velox.Descriptor[Sample] {
 	return velox.Descriptor[Sample]{
 		Table: "samples",
@@ -92,51 +131,50 @@ func sampleDescriptor() velox.Descriptor[Sample] {
 			{Field: "ParentID", Name: "parent_id"},
 			{Field: "Score", Name: "score"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{sampleColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Line]("Lines", 0, 1),
-			velox.EdgeTo[Sample]("Children", 0, 11),
-			velox.EdgeTo[Sample]("Parent", 11, 0),
+			velox.EdgeTo[Line]("Lines", sampleColID, lineColSampleID),
+			velox.EdgeTo[Sample]("Children", sampleColID, sampleColParentID),
+			velox.EdgeTo[Sample]("Parent", sampleColParentID, sampleColID),
 		},
 		FieldPtr: func(x *Sample, i int) any {
 			switch i {
-			case 0:
+			case sampleColID:
 				return &x.ID
-			case 1:
+			case sampleColName:
 				return &x.Name
-			case 2:
+			case sampleColStatus:
 				return &x.Status
-			case 3:
+			case sampleColPrev:
 				return &x.Prev
-			case 4:
+			case sampleColPrice:
 				return &x.Price
-			case 5:
+			case sampleColRatio:
 				return &x.Ratio
-			case 6:
+			case sampleColFlag:
 				return &x.Flag
-			case 7:
+			case sampleColMaybeFlag:
 				return &x.MaybeFlag
-			case 8:
+			case sampleColWhen:
 				return &x.When
-			case 9:
+			case sampleColMaybeWhen:
 				return &x.MaybeWhen
-			case 10:
+			case sampleColBlob:
 				return &x.Blob
-			case 11:
+			case sampleColParentID:
 				return &x.ParentID
-			case 12:
+			case sampleColScore:
 				return &x.Score
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Sample, i int) any {
 			switch i {
-			case 0:
+			case sampleEdgeLines:
 				return &x.Lines
-			case 1:
+			case sampleEdgeChildren:
 				return &x.Children
-			case 2:
+			case sampleEdgeParent:
 				return &x.Parent
 			}
 			return nil
@@ -144,30 +182,30 @@ func sampleDescriptor() velox.Descriptor[Sample] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Sample) String() string {
-	var p3 any
+	var prevVal any
 	if x.Prev != nil {
-		p3 = *x.Prev
+		prevVal = *x.Prev
 	}
-	var p5 any
+	var ratioVal any
 	if x.Ratio != nil {
-		p5 = *x.Ratio
+		ratioVal = *x.Ratio
 	}
-	var p7 any
+	var maybeFlagVal any
 	if x.MaybeFlag != nil {
-		p7 = *x.MaybeFlag
+		maybeFlagVal = *x.MaybeFlag
 	}
-	var p9 any
+	var maybeWhenVal any
 	if x.MaybeWhen != nil {
-		p9 = *x.MaybeWhen
+		maybeWhenVal = *x.MaybeWhen
 	}
-	var p11 any
+	var parentIDVal any
 	if x.ParentID != nil {
-		p11 = *x.ParentID
+		parentIDVal = *x.ParentID
 	}
-	return fmt.Sprintf("Sample(ID=%v, Name=%v, Status=%v, Prev=%v, Price=%v, Ratio=%v, Flag=%v, MaybeFlag=%v, When=%v, MaybeWhen=%v, Blob=<%d bytes>, ParentID=%v, Score=%v)", x.ID, x.Name, x.Status, p3, x.Price, p5, x.Flag, p7, x.When, p9, len(x.Blob), p11, x.Score)
+	return fmt.Sprintf("Sample(ID=%v, Name=%v, Status=%v, Prev=%v, Price=%v, Ratio=%v, Flag=%v, MaybeFlag=%v, When=%v, MaybeWhen=%v, Blob=<%d bytes>, ParentID=%v, Score=%v)", x.ID, x.Name, x.Status, prevVal, x.Price, ratioVal, x.Flag, maybeFlagVal, x.When, maybeWhenVal, len(x.Blob), parentIDVal, x.Score)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Sample) GoString() string { return x.String() }

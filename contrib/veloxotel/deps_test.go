@@ -32,6 +32,7 @@ func TestNoSDKDependency(t *testing.T) {
 	}
 	allowed := []string{
 		"github.com/syssam/velox",
+		"github.com/syssam/velox/scope",
 		"go.opentelemetry.io/otel",
 		"go.opentelemetry.io/otel/attribute",
 		"go.opentelemetry.io/otel/codes",

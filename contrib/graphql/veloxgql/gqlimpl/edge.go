@@ -28,8 +28,8 @@ import (
 // A batch is keyed by its group, the edge's field (Field.Field, so two aliases
 // are two batches) and its selections, the edge (its name, the relation and the
 // target type), the DB veloxgql.DBFromContext reads, EdgeList's MaxList, the
-// callers' row scope (velox.RowScopeFromContext: the tenant, the WithAllTenants
-// and WithoutPolicy reasons and the WithShard shard, of the context each passes
+// callers' row scope (velox.RowScopeFromContext: the scope values, the WithoutPolicy
+// reason and the WithShard shard, of the context each passes
 // to the edge function) and the value of veloxgql.WithBatchScope's function, if
 // the extension has one. A row whose resolver's context a field middleware or a
 // directive scopes otherwise is in a batch of its own scope; a key that cannot
@@ -200,9 +200,8 @@ func batchOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field strin
 	}
 	db, _ := veloxgql.DBFromContext(ctx)
 	key := batchKey{field: field, rel: r.I, target: reflect.TypeFor[T](), db: db, most: most, scope: velox.RowScopeFromContext(ctx), app: t.Scope(ctx)}
-	if !canCompare(key.scope.Tenant) || !canCompare(key.app) {
-		// A tenant id or a batch scope == would panic on (a tenant of
-		// that type a statement refuses): a read of its own.
+	if !canCompare(key.app) {
+		// A batch scope == would panic on: a read of its own.
 		return nil, nil, 0
 	}
 	b := g.Batch(fc.Field.Field, fc.Field.Selections, key, args)

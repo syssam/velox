@@ -71,7 +71,7 @@
 // from the edge's own field and with its first caller's arguments, and
 // reads alone otherwise. It is read under its first caller's context, and
 // keyed by the callers' velox.RowScope, DB and limits, so callers with
-// different tenants, bypasses or shards never share a read; any other
+// different scope values, bypasses or shards never share a read; any other
 // context value a policy or a hook reads must be the same for every row of a
 // field, or be returned by WithBatchScope. Nothing waits for other
 // resolvers, which a mutation could not allow. Outside a gqlgen field Batch
@@ -143,13 +143,13 @@
 // ErrorPresenter is the presenter to give the server
 // (srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))). It shows a client a
 // coded error's message and code; a fixed message for velox's errors without
-// a tenant (CodeUnauthenticated), denied by a policy (CodeForbidden), of a
+// a scope value (CodeUnauthenticated), denied by a policy (CodeForbidden), of a
 // validator or a violated constraint (CodeBadUserInput); gqlgen's text for an
 // integer that an Int8…Uint32 argument cannot hold (CodeBadUserInput); and
 // "internal error" (CodeInternal) for anything else, which it logs: a
 // driver's error, a deadline of the application's, a list edge over MaxList, ErrNoDB. An error
 // that is only the cancellation of the request, the client gone, is not
-// logged as an internal error. So no driver text, SQL, tenant, entity or constraint name reaches a
+// logged as an internal error. So no driver text, SQL, scope, entity or constraint name reaches a
 // client. gqlgen's default presenter shows every error's text, and no code.
 //
 // # Limits

@@ -49,7 +49,6 @@ func noteDescriptor() velox.Descriptor[note] {
 			{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Title", Name: "title"},
 		},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *note, i int) any {
 			switch i {
 			case 0:
@@ -109,7 +108,6 @@ func wrappedDescriptor() velox.Descriptor[wrapped] {
 			{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Title", Name: "title"},
 		},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *wrapped, i int) any {
 			switch i {
 			case 0:

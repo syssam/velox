@@ -17,7 +17,7 @@ func WithUser(ctx context.Context, user string) context.Context {
 
 func userFromContext(ctx context.Context) string { u, _ := ctx.Value(userKey{}).(string); return u }
 
-// Policy lets a user see and change only their own tickets, and create only
+// Policy confines tickets to the context's Org, and lets a user see and change only their own tickets, and create only
 // tickets they own; "admin" sees, changes and creates every ticket. velox
 // calls it once, on a nil *Ticket.
 func (*Ticket) Policy() velox.Policy[Ticket] {
@@ -31,7 +31,7 @@ func (*Ticket) Policy() velox.Policy[Ticket] {
 			return Tickets.Owner.EQ(u), nil
 		}
 	}
-	return velox.Policy[Ticket]{
+	return ticketScope.Wrap(velox.Policy[Ticket]{
 		Read:  own,
 		Write: own,
 		Insert: func(ctx context.Context, x *Ticket) error {
@@ -40,7 +40,7 @@ func (*Ticket) Policy() velox.Policy[Ticket] {
 			}
 			return nil
 		},
-	}
+	})
 }
 
 // Hooks fills CreatedBy on insert, refuses an empty title on insert and
@@ -48,6 +48,7 @@ func (*Ticket) Policy() velox.Policy[Ticket] {
 // *Ticket.
 func (*Ticket) Hooks() []velox.Hook[Ticket] {
 	return []velox.Hook[Ticket]{
+		ticketScope.Fill(),
 		velox.On(stamp, velox.OpInsert),
 		velox.On(needsTitle, velox.OpInsert, velox.OpUpdate),
 		velox.On(onlyDone, velox.OpDelete),

@@ -11,6 +11,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/internal/testmodel/kind"
+	"github.com/syssam/velox/scope"
 )
 
 // sampleDDL is the table of testmodel.Sample, with score NULL-able so that an
@@ -180,15 +181,15 @@ func TestAggregatesOnRealDatabases(t *testing.T) {
 	})
 }
 
-// An aggregate takes the tenant scope as Count does.
-func TestAggregateIsTenantScoped(t *testing.T) {
+// An aggregate takes the scope as Count does.
+func TestAggregateIsScoped(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		I := testmodel.Invoices
 		q := tg.db.Query[testmodel.Invoice]()
-		if v, err := velox.Sum(velox.WithTenant(velox.WithoutPolicy(ctx, "test"), int64(1)), q, I.Total); err != nil || v != 100 {
+		if v, err := velox.Sum(testmodel.WithUser(testmodel.Org.With(context.Background(), int64(1)), "admin"), q, I.Total); err != nil || v != 100 {
 			t.Errorf("org 1: %v, %v", v, err)
 		}
-		if v, err := velox.Sum(velox.WithTenant(velox.WithoutPolicy(ctx, "test"), int64(2)), q, I.Total); err != nil || v != 50 {
+		if v, err := velox.Sum(testmodel.WithUser(testmodel.Org.With(context.Background(), int64(2)), "admin"), q, I.Total); err != nil || v != 50 {
 			t.Errorf("org 2: %v, %v", v, err)
 		}
 	})
@@ -307,24 +308,26 @@ func TestGroupedOnRealDatabases(t *testing.T) {
 	})
 }
 
-// A grouped aggregate takes the tenant scope and the Read policy, and its
+// A grouped aggregate takes the scope and the Read policy, and its
 // groups count against the row cap, all in the database's own answer.
 func TestGroupedIsScopedAndCapped(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		I := testmodel.Invoices
 		q := tg.db.Query[testmodel.Invoice]().Unbounded()
-		org := func(id int64) context.Context { return velox.WithTenant(velox.WithoutPolicy(ctx, "test"), id) }
+		org := func(id int64) context.Context {
+			return testmodel.WithUser(testmodel.Org.With(context.Background(), id), "admin")
+		}
 		got, err := velox.SumBy(org(2), q, I.OrgID.Key(), I.Total)
 		if want := []velox.Group[int64, float64]{{Key: 2, Value: 50}}; err != nil || !slices.Equal(got, want) {
 			t.Errorf("org 2: %v, %v", got, err)
 		}
-		// A tenant's rows only: by paid, org 1 has 2 and 2, org 2 has one.
+		// A org's rows only: by paid, org 1 has 2 and 2, org 2 has one.
 		paid, err := velox.CountBy(org(1), q, I.Paid.Key())
 		if want := []velox.Group[bool, int64]{{Key: false, Value: 2}, {Key: true, Value: 2}}; err != nil || !slices.Equal(paid, want) {
 			t.Errorf("org 1: %v, %v", paid, err)
 		}
-		if _, err := velox.CountBy(context.Background(), q, I.OrgID.Key()); !errors.Is(err, velox.ErrNoTenant) {
-			t.Errorf("no tenant: %v", err)
+		if _, err := velox.CountBy(context.Background(), q, I.OrgID.Key()); !errors.Is(err, scope.ErrNoScope) {
+			t.Errorf("no org: %v", err)
 		}
 		// The row cap: five numbers, four allowed by the query.
 		if _, err := velox.CountBy(ctx, q.MaxRows(4), I.Number.Key()); !errors.Is(err, velox.ErrTooManyRows) {
@@ -348,12 +351,12 @@ func TestGroupedIsScopedAndCapped(t *testing.T) {
 			tg.exec(t, "INSERT INTO tickets (created_by, id, org_id, owner, title, done, invoice_id, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 				"seed", int64(i+1), r.org, r.owner, strconv.Itoa(i), false, r.invoice, nil)
 		}
-		ann := testmodel.WithUser(velox.WithTenant(context.Background(), int64(1)), "ann")
+		ann := testmodel.WithUser(testmodel.Org.With(context.Background(), int64(1)), "ann")
 		tickets, err := velox.SumBy(ann, tq, T.Owner.Key(), T.InvoiceID)
 		if want := []velox.Group[string, int64]{{Key: "ann", Value: 3}}; err != nil || !slices.Equal(tickets, want) {
 			t.Errorf("ann: %v, %v", tickets, err)
 		}
-		admin := testmodel.WithUser(velox.WithTenant(context.Background(), int64(1)), "admin")
+		admin := testmodel.WithUser(testmodel.Org.With(context.Background(), int64(1)), "admin")
 		tickets, err = velox.SumBy(admin, tq, T.Owner.Key(), T.InvoiceID)
 		if want := []velox.Group[string, int64]{{Key: "ann", Value: 3}, {Key: "bob", Value: 4}}; err != nil || !slices.Equal(tickets, want) {
 			t.Errorf("admin: %v, %v", tickets, err)

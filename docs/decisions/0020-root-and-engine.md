@@ -18,7 +18,7 @@ The rest did not have to. Measured with the type checker: `Statement`, `Predicat
 - `internal/engine` holds what is not generic: statements, conditions, metadata,
   rendering and its cache, scoping, loading, routing, transactions, errors, caller
   capture, and `engine.DB`, the pipeline.
-- The root keeps `DB`, the generic API, and the files `types.go`, `options.go`, `errors.go`, `routing.go`, `tx.go` and `tenant.go`: an alias, constant, variable or
+- The root keeps `DB`, the generic API, and the files `types.go`, `options.go`, `errors.go`, `routing.go`, `tx.go` and `context.go`: an alias, constant, variable or
   thin function for each public name the engine holds. `velox.Statement` is the same
   type as it was; generated code and applications do not change.
 - The root's `DB` holds an `engine.DB` by value, in its one unexported field: not

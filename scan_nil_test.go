@@ -51,7 +51,6 @@ func (*nilRow) VeloxMeta() *velox.Meta[nilRow] {
 				{Field: "Plain", Name: "plain", Nullable: true},
 			},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *nilRow, i int) any {
 				switch i {
 				case 0:

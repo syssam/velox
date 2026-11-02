@@ -41,7 +41,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 		pe := &plugin.Entity{
 			Name: oe.Name, Label: oe.Label, Handles: oe.Handles, Table: oe.Table, TableSchema: oe.TableSchema, Join: oe.Join,
 			Comment: oe.Comment, Fields: make([]*plugin.Field, 0, len(oe.Fields)), Edges: []*plugin.Edge{}, Indexes: []*plugin.Index{},
-			PrimaryKey: append([]int{}, oe.PrimaryKey...), Tenant: oe.Tenant,
+			PrimaryKey: append([]int{}, oe.PrimaryKey...),
 		}
 		if oe.Join {
 			pe.Fields = joinFields(g, oe)

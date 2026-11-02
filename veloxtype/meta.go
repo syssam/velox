@@ -42,7 +42,7 @@ type ColumnDescriptor struct {
 	// the driver returned, read in place, so a Decode that writes to them
 	// writes to memory that may be read-only. Encode's result is kept in
 	// velox.Statement.Args until the statement has run, so Encode must return a
-	// new slice on every call, never a buffer it reuses. A primary-key, tenant
+	// new slice on every call, never a buffer it reuses. A primary-key
 	// or relation-key column cannot have a codec: conditions on it are refused,
 	// so the metadata is. velox never guesses a codec from the Go type, as a
 	// []byte field holds bytes, not JSON.

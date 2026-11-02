@@ -29,7 +29,10 @@ EntityInfo.Name string
 EntityInfo.PrimaryKey []int
 EntityInfo.Schema string
 EntityInfo.Table string
-EntityInfo.Tenant int
+JoinClause.Left bool
+JoinClause.Link Link
+JoinClause.On []Predicate
+JoinClause.Ref RelRef
 Shard.Primary Conn
 Shard.Replicas []Conn
 Statement.Aggregate Aggregate
@@ -47,6 +50,7 @@ Statement.Exists bool
 Statement.Fingerprint string
 Statement.GroupBy int
 Statement.InTx bool
+Statement.Joins []JoinClause
 Statement.Limit int
 Statement.Lock Lock
 Statement.LockWait LockWait
@@ -62,18 +66,10 @@ Statement.Rows [][]any
 Statement.SQL string
 Statement.Set []Assignment
 Statement.Tags []Tag
-Statement.Tenant any
-Statement.TenantBypass string
 Statement.Tx *TxInfo
 Statement.Unbounded bool
 Statement.Where []Predicate
 Statement.Writable bool
-TenantRef.Column int
-TenantRef.Key string
-TenantRef.Schema string
-TenantRef.Table string
-TenantRef.Tenant string
-TenantRef.TenantKind string
 const AggregateAvg
 const AggregateMax
 const AggregateMin
@@ -280,6 +276,8 @@ func (q Query[E]) First[_ Lazy[E]](ctx context.Context) (*E, error)
 func (q Query[E]) ForShare[_ Lazy[E]]() Query[E]
 func (q Query[E]) ForUpdate[_ Lazy[E]]() Query[E]
 func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error]
+func (q Query[E]) Join[T any](r Rel[E, T]) Query[E]
+func (q Query[E]) LeftJoin[T any](r Rel[E, T]) Query[E]
 func (q Query[E]) Limit[_ Lazy[E]](n int) Query[E]
 func (q Query[E]) MaxRows[_ Lazy[E]](n int) Query[E]
 func (q Query[E]) NoWait[_ Lazy[E]]() Query[E]
@@ -299,8 +297,10 @@ func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
 func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error]
 func (q RawQuery[E]) MaxRows[_ Lazy[E]](n int) RawQuery[E]
 func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
+func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E]
 func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E]
 func (r Rel[E, T]) Has[_ Lazy[T]]() Pred[E]
+func (r Rel[E, T]) Is[_ Lazy[T]](ps ...Pred[T]) Pred[E]
 func (r Rel[E, T]) LimitEach[_ Lazy[T]](n int) Rel[E, T]
 func (r Rel[E, T]) MaxRows[_ Lazy[T]](n int) Rel[E, T]
 func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T]
@@ -360,7 +360,6 @@ func TxRetrySerializable(n int) TxOption
 func TxTimeout(d time.Duration) TxOption
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error
 func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error
-func WithAllTenants(ctx context.Context, reason string) context.Context
 func WithAround(a Around) Option
 func WithCallerSkip(pkgPath ...string) Option
 func WithCallers() Option
@@ -373,11 +372,11 @@ func WithReplicaBackoff(d time.Duration) Option
 func WithReplicas(conns ...Conn) Option
 func WithRewrite(r Rewrite) Option
 func WithSQLComment(app string, tags ...string) Option
+func WithScopeValue(ctx context.Context, name string, value any) context.Context
 func WithSession(ctx context.Context) context.Context
 func WithShard(ctx context.Context, name string) context.Context
-func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Option
+func WithShardFor(f func(ctx context.Context) (string, error)) Option
 func WithTags(ctx context.Context, kv ...string) context.Context
-func WithTenant(ctx context.Context, id any) context.Context
 func WithTxAround(h TxAround) Option
 func WithoutPolicy(ctx context.Context, reason string) context.Context
 func WithoutTx(ctx context.Context) context.Context
@@ -399,7 +398,7 @@ type ConstraintKind = veloxtype.ConstraintKind
 type DB struct { }
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Tenant int Bidi bool Indexes []IndexInfo TenantRefs []TenantRef Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Policy func() BoundPolicy Hooks func() BoundHooks }
+type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Policy func() BoundPolicy Hooks func() BoundHooks }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type EdgeDescriptor = engine.EdgeDescriptor
@@ -411,6 +410,7 @@ type Hook[E any] func(next Mutator[E]) Mutator[E]
 type IndexInfo = veloxtype.IndexInfo
 type InsertQuery[E any] struct { }
 type JSONCol[E, V any] struct { I int32 }
+type JoinClause = engine.JoinClause
 type Lazy[T any] interface{ *T }
 type Lock = veloxtype.Lock
 type LockWait = veloxtype.LockWait
@@ -450,7 +450,6 @@ type Shard = engine.Shard
 type Statement = engine.Statement
 type StringCol[E any, V ~string] struct { I int32 }
 type Tag = veloxtype.Tag
-type TenantRef = engine.TenantRef
 type TxAround = veloxtype.TxAround
 type TxInfo = veloxtype.TxInfo
 type TxOption = engine.TxOption
@@ -464,16 +463,11 @@ var ErrImmutable
 var ErrLimitTooLarge
 var ErrLocked
 var ErrNoShard
-var ErrNoTenant
 var ErrNoWhere
 var ErrNotFound
 var ErrNotSingular
 var ErrOutsideTx
 var ErrPolicyUpsert
-var ErrTenantImmutable
-var ErrTenantMismatch
-var ErrTenantRef
-var ErrTenantUpsert
 var ErrTimeout
 var ErrTooManyRows
 var ErrTxControl
@@ -534,11 +528,11 @@ type IndexInfo struct { Columns []int Unique bool }
 type Lock uint8
 type LockWait uint8
 type Op uint8
-type OrderTerm struct { Column int Desc bool }
+type OrderTerm struct { Column int Desc bool Rel int32 }
 type PolicyError struct { Entity string Op Op Err error }
 type Result struct { Rows int64 Affected int64 LoopBody time.Duration }
 type Route struct { Shard string Replica int Fallback bool }
-type RowScope struct { Tenant any TenantBypass string PolicyBypass string Shard string HasShard bool }
+type RowScope struct { Values string PolicyBypass string Shard string HasShard bool }
 type SchemaError struct { Entity string Field string Reason string }
 type Tag struct { Key, Value string }
 type TxAround func(ctx context.Context, tx *TxInfo, next func(context.Context) error) error
@@ -557,6 +551,7 @@ Annotation is interface{ Name() string }
 func (*CheckAnnotation) Name() string
 func (*CollationAnnotation) Name() string
 func (*CommentAnnotation) Name() string
+func (*ScopedAnnotation) Name() string
 func (*TableAnnotation) Name() string
 func (Schema) Annotations() []Annotation
 func (Schema) Edges() []Edge
@@ -568,6 +563,7 @@ func (a *CheckAnnotation) Merge(other Annotation) Annotation
 func Check(name, expr string) *CheckAnnotation
 func Collation(name string) *CollationAnnotation
 func Comment(text string) *CommentAnnotation
+func Scoped(key string) *ScopedAnnotation
 func Table(name string) *TableAnnotation
 func TableIn(schema, table string) *TableAnnotation
 type Annotation = desc.Annotation
@@ -582,6 +578,7 @@ type Interface interface { Type() Fields() []Field Edges() []Edge Indexes() []In
 type Merger interface{ Merge(Annotation) Annotation }
 type Mixin interface { Fields() []Field Edges() []Edge Indexes() []Index Annotations() []Annotation }
 type Schema struct { }
+type ScopedAnnotation struct { Key string }
 type TableAnnotation struct { Schema string Table string }
 
 package schema/edge
@@ -707,7 +704,6 @@ promoted func (c common[B]) SchemaType(m map[string]string) B
 promoted func (c common[B]) Sensitive() B
 promoted func (c common[B]) StorageKey(s string) B
 promoted func (c common[B]) StructTag(s string) B
-promoted func (c common[B]) Tenant() B
 promoted func (c common[B]) Unique() B
 promoted func (t typed[B, V]) Default(v V) B
 promoted func (t typed[B, V]) DefaultFunc(fn any) B
@@ -866,7 +862,7 @@ func Snake(s string) string
 type Check struct { Kind string Args []json.RawMessage }
 type Edge struct { Name string GoName string Target string Ref string Kind EdgeKind Unique bool Required bool Inverse bool Immutable bool Field string FieldOn string OwnsKey bool Comment string Join string Annotations map[string]json.RawMessage }
 type EdgeKind string
-type Entity struct { Name string Label string Handles string Table string TableSchema string Join bool Comment string Fields []*Field Edges []*Edge Indexes []*Index PrimaryKey []int Tenant int Annotations map[string]json.RawMessage }
+type Entity struct { Name string Label string Handles string Table string TableSchema string Join bool Comment string Fields []*Field Edges []*Edge Indexes []*Index PrimaryKey []int Annotations map[string]json.RawMessage }
 type Enum struct { Type string Values []string }
 type Field struct { Name string GoName string Column string Type string GoType string ElemType string PkgPath string Imports []string Kind string Pointer bool Nullable bool Optional bool Immutable bool Sensitive bool Unique bool AutoID bool Size int HasDefault bool Default json.RawMessage UpdateDefault bool Implicit string Enum string EnumValues []string Checks []Check SchemaType map[string]string Comment string Annotations map[string]json.RawMessage }
 type File struct { Path string Content string }
@@ -1042,6 +1038,6 @@ var ErrWrongIDType
 
 package contrib/veloxotel
 func Options(cfg Config) []velox.Option
-type Config struct { TracerProvider trace.TracerProvider MeterProvider metric.MeterProvider App string CommentTags []string OmitCallers bool OmitQueryText bool RecordTenant bool RecordMetricFingerprint bool RecordReturnedRows bool Target Target TargetFor func(r velox.Route) Target }
+type Config struct { TracerProvider trace.TracerProvider MeterProvider metric.MeterProvider App string CommentTags []string OmitCallers bool OmitQueryText bool RecordScope bool RecordMetricFingerprint bool RecordReturnedRows bool Target Target TargetFor func(r velox.Route) Target }
 type Target struct { Namespace string Address string Port int }
 

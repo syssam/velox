@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/scope"
 )
 
 // TestErrorType maps errors to error.type without running a statement.
@@ -31,7 +32,7 @@ func TestErrorType(t *testing.T) {
 		{bg, errors.Join((*pgconn.ConnectError)(nil), wrap(velox.ErrDenied)), "velox.denied"},
 		{bg, errors.Join((*pgconn.ConnectError)(nil), constraint(velox.ConstraintUnique)), "constraint.unique"},
 		{bg, &velox.PolicyError{Entity: "X", Op: velox.OpSelect}, "velox.denied"},
-		{bg, wrap(velox.ErrNoTenant), "velox.no_tenant"},
+		{bg, wrap(scope.ErrNoScope), "velox.no_scope"},
 		{bg, wrap(velox.ErrUnbounded), "velox.unbounded"},
 		{bg, wrap(velox.ErrNoWhere), "velox.unbounded"},
 		{bg, wrap(velox.ErrLimitTooLarge), "velox.unbounded"},
@@ -44,7 +45,7 @@ func TestErrorType(t *testing.T) {
 		{bg, constraint(velox.ConstraintForeignKey), "constraint.foreign_key"},
 		{bg, constraint(velox.ConstraintNotNull), "constraint.not_null"},
 		{bg, constraint(velox.ConstraintCheck), "constraint.check"},
-		{bg, wrap(velox.ErrTenantMismatch), "_OTHER"},
+		{bg, wrap(scope.ErrMismatch), "_OTHER"},
 		{bg, wrap(velox.ErrNotFound), "_OTHER"},
 		{bg, errors.New("boom"), "_OTHER"},
 		// Where it would be _OTHER, the driver's code, as the conventions

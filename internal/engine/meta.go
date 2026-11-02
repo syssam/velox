@@ -23,7 +23,6 @@ type EntityInfo struct {
 	Schema     string // the schema holding Table; empty for the default
 	Columns    []ColumnInfo
 	PrimaryKey []int // indexes into Columns
-	Tenant     int   // index into Columns; -1 when the entity has none
 	Indexes    []IndexInfo
 	rels       []*relation                // in the order of the generated shape
 	kit        *Kit                       // set by MetaOnce.Load
@@ -33,7 +32,6 @@ type EntityInfo struct {
 	bidi       bool                       // Descriptor.Bidi: a link is two rows, (a, b) and (b, a)
 	bidiKeys   []bidiKey                  // the keys of the EdgeBidi relations, which both partners' rows hold
 	hooks      []HookFn                   // the Hooks method's, outermost first
-	refs       []tenantRef                // Descriptor.TenantRefs: the foreign keys a write under a tenant checks
 
 	// The entity's policy, bound once from its Policy method.
 	policy *EntityPolicy // nil when none
@@ -117,9 +115,8 @@ func IsRelation(t reflect.Type) bool {
 }
 
 // validate refuses metadata that would render wrong SQL: two columns of one
-// name, a key or index that names no field or one field twice, a tenant
-// column that cannot be compared or filled safely, and a primary-key, tenant
-// or relation-key column with a codec.
+// name, a key or index that names no field or one field twice, and a
+// primary-key or relation-key column with a codec.
 func validate(info *EntityInfo) error {
 	var errs []error
 	fail := func(field, format string, args ...any) {
@@ -146,16 +143,6 @@ func validate(info *EntityInfo) error {
 			named[c] = true
 		}
 	}
-	if info.Tenant >= 0 {
-		if c := info.Columns[info.Tenant]; rtype(c.Type).Kind() == reflect.Pointer || !rtype(c.Type).Comparable() {
-			fail(c.Field, "the tenant column must be NOT NULL and comparable")
-		}
-		// Filled by a default, a row would land in a tenant the context
-		// never named; and UpdateDefault would move rows between tenants.
-		if c := info.Columns[info.Tenant]; c.HasDefault || c.DefaultFunc != nil || c.UpdateDefault != nil {
-			fail(c.Field, "the tenant column cannot have Default, DefaultFunc or UpdateDefault: the context's tenant fills it")
-		}
-	}
 	set("the primary key", info.PrimaryKey)
 	// A key is compared by every Save, scope and load, and a condition on an
 	// encoded column is refused when the statement runs: every use would fail.
@@ -166,9 +153,6 @@ func validate(info *EntityInfo) error {
 	}
 	for _, k := range info.PrimaryKey {
 		encodedKey("the primary key's", k)
-	}
-	if info.Tenant >= 0 {
-		encodedKey("the tenant", info.Tenant)
 	}
 	for _, r := range info.rels {
 		encodedKey("relation "+r.Name+"'s key", r.ownerCol)

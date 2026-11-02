@@ -1,0 +1,44 @@
+package velox
+
+import (
+	"context"
+
+	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/veloxtype"
+)
+
+// WithScopeValue returns ctx recording that the policies read value under
+// name, so that RowScopeFromContext shows it and a batcher keeps callers with
+// different values apart. A later call with the same name replaces it. The
+// scope package calls it; a policy that reads a context value of its own, and
+// is used with the GraphQL batcher or another that reads for several callers in
+// one statement, should call it too, or those callers would share a read
+// that only one of them may see.
+func WithScopeValue(ctx context.Context, name string, value any) context.Context {
+	return engine.WithScopeValue(ctx, name, value)
+}
+
+// WithoutPolicy returns ctx with every entity's policy switched off. The reason
+// is required and is shown to hooks as Statement.PolicyBypass; with a reason
+// that is empty or only white space WithoutPolicy returns ctx unchanged.
+func WithoutPolicy(ctx context.Context, reason string) context.Context {
+	return engine.WithoutPolicy(ctx, reason)
+}
+
+// RowScope is what a context scopes statements by.
+type RowScope = veloxtype.RowScope
+
+// RowScopeFromContext returns ctx's row scope.
+func RowScopeFromContext(ctx context.Context) RowScope { return engine.RowScopeFromContext(ctx) }
+
+// IsDryRun reports whether ctx is that of a SQL(ctx) method: the statement
+// being built will not be sent. The SQL(ctx) methods mark the context before
+// anything runs, so everything handed that context sees it: the entity's
+// hooks (Hooks), the Policy functions and the Rewrite hooks. A Rewrite hook
+// can also read it from Statement.DryRun.
+//
+// A write made under such a context is refused: Exec of an Insert, InsertAll,
+// Update or Delete, Save, an upsert, DB.Exec (raw SQL) and Tx fail with
+// ErrDryRun before anything is sent, on any *DB, so a hook's audit write through
+// Mutation.DB does not happen and needs no check. Reads run as normal.
+func IsDryRun(ctx context.Context) bool { return engine.IsDryRun(ctx) }

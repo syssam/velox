@@ -67,7 +67,7 @@ func itemRow(id, invoice int64, sku string, qty int64) []any {
 }
 
 var (
-	ctx = velox.WithAllTenants(context.Background(), "velox tests")
+	ctx = velox.WithoutPolicy(context.Background(), "velox tests")
 	t0  = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	I   = testmodel.Invoices
 	It  = testmodel.Items
@@ -155,8 +155,8 @@ func readOne(t *testing.T, ctx context.Context, db *velox.DB) {
 }
 
 // shardSet is a DB on two shards: eu, a primary and a replica, and us, a
-// primary alone. Its WithShardFor maps tenant 1 to eu, 2 to us and 3 to
-// "mars", which is no shard, and fails for any other tenant.
+// primary alone. Its WithShardFor maps org 1 to eu, 2 to us and 3 to
+// "mars", which is no shard, and fails for any other org.
 type shardSet struct {
 	euP, euR, usP *fakeconn.Exec
 	db            *velox.DB
@@ -165,7 +165,7 @@ type shardSet struct {
 	routes        []velox.Route
 }
 
-var errShardLookup = errors.New("the tenant is being moved")
+var errShardLookup = errors.New("the org is being moved")
 
 // openShards opens a shardSet; hooked adds an Around hook that records each
 // statement's Route once it ran, a fallback included, so the statements take
@@ -189,15 +189,18 @@ func openShards(hooked bool, extra ...velox.Option) *shardSet {
 	return s
 }
 
-func (s *shardSet) shardFor(_ context.Context, tenant any) (string, error) {
+func (s *shardSet) shardFor(ctx context.Context) (string, error) {
 	s.lookups.Add(1)
-	switch tenant {
-	case int64(1):
+	org, _ := testmodel.Org.From(ctx)
+	switch org {
+	case 1:
 		return "eu", nil
-	case int64(2):
+	case 2:
 		return "us", nil
-	case int64(3):
+	case 3:
 		return "mars", nil
+	case 0:
+		return "", nil // the context has no org: it names no shard
 	}
 	return "", errShardLookup
 }
@@ -224,12 +227,6 @@ var (
 )
 
 var Tk = testmodel.Tickets
-
-// tenant returns a context scoped to tenant id, with the policy skipped: the
-// tenant tests check the scope alone.
-func tenant(id any) context.Context {
-	return velox.WithTenant(velox.WithoutPolicy(context.Background(), "tenant tests"), id)
-}
 
 func tagNames(t *testing.T, m velox.Many[fixture.DTag]) []string {
 	t.Helper()
@@ -322,7 +319,7 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 	x := new(E)
 	info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
 		v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
-			Tenant: d.Tenant, Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
+			Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
 			Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
 		if a := d.FieldPtr; a != nil {
 			v.FieldPtr = func(i int) any { return a(x, i) }

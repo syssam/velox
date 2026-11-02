@@ -30,7 +30,7 @@ func (unreachable) Driver() driver.Driver { return nil }
 // Entity, an *EntityInfo only velox builds, and a dry run makes the
 // statement without a database to send it to.
 func TestRecordSkipsDisabledInstruments(t *testing.T) {
-	ctx := velox.WithAllTenants(context.Background(), "record tests")
+	ctx := velox.WithoutPolicy(context.Background(), "record tests")
 	var st *velox.Statement
 	db := velox.Open(velox.Postgres, sql.OpenDB(unreachable{}), velox.WithRewrite(func(_ context.Context, s *velox.Statement) error {
 		st = s
@@ -62,7 +62,7 @@ func TestRecordSkipsDisabledInstruments(t *testing.T) {
 // record of a write and txRecord still build no attribute set: each checks
 // the instruments it would record to.
 func TestRecordSkipsInstrumentsAMeterDisables(t *testing.T) {
-	ctx := velox.WithAllTenants(context.Background(), "record tests")
+	ctx := velox.WithoutPolicy(context.Background(), "record tests")
 	var st *velox.Statement
 	db := velox.Open(velox.Postgres, sql.OpenDB(unreachable{}), velox.WithRewrite(func(_ context.Context, s *velox.Statement) error {
 		st = s

@@ -50,11 +50,13 @@ func WithReplicas(conns ...Conn) Option { return engine.WithReplicas(conns...) }
 type Shard = engine.Shard
 
 // WithShardFor sets the function that gives the name of a statement's shard,
-// on a DB opened with OpenShards, from its context's tenant: the id given to
-// WithTenant. It is called, with the statement's context, for each statement
-// and Tx whose context has a tenant and no WithShard, so it should be fast; a
-// SQL(ctx) dry run calls it too. Its error refuses the statement, which then
-// matches both ErrNoShard and the error.
+// on a DB opened with OpenShards, from its context: it reads the value the
+// application keyed its shards by (an organization, a region), as a policy
+// does. It is called, with the statement's context, for each statement and Tx
+// whose context has no WithShard, so it should be fast; a SQL(ctx) dry run
+// calls it too. It returns "" for a context that names no shard, which refuses
+// the statement with ErrNoShard. Its error refuses the statement too, which
+// then matches both ErrNoShard and the error.
 //
 // One write can call it more than once: an InsertAll split into two
 // statements calls it three times, for its transaction and for each
@@ -65,15 +67,15 @@ type Shard = engine.Shard
 //
 // It is required with OpenShards; given to Connect, Open or OpenConn, it panics there.
 // A nil f panics. WithShard names a statement's shard from its context instead.
-func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Option {
+func WithShardFor(f func(ctx context.Context) (string, error)) Option {
 	return engine.WithShardFor(f)
 }
 
 // WithShard returns a context whose statements, on a DB opened with
-// OpenShards, run on the shard named name, whatever the context's tenant:
-// for admin jobs and for data that belongs to no tenant. A later WithShard
+// OpenShards, run on the shard named name, whatever the context says:
+// for admin jobs and for data that belongs to no shard key. A later WithShard
 // replaces it. On a DB opened otherwise it is ignored. Without it, the shard
-// is the one WithShardFor gives for the context's tenant.
+// is the one WithShardFor gives for the context.
 func WithShard(ctx context.Context, name string) context.Context { return engine.WithShard(ctx, name) }
 
 // WithPrimaryReads returns a context whose reads go to the primary, on a DB

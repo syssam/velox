@@ -2,7 +2,6 @@ package veloxotel
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -27,7 +26,7 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	// samplers. TargetFor's depends on the route, which is final only once
 	// next has returned: it is set then (see below).
 	sctx, span := a.tracer.Start(ctx, name,
-		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(st, coll, sum, a.target)...))
+		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(ctx, st, coll, sum, a.target)...))
 	// A panic in next, such as Iter's loop body's, ends the span and goes on:
 	// the adapter never recovers one. runtime.Goexit in an Iter loop body is
 	// reported the same way, with the description "panic". error.type is
@@ -114,7 +113,7 @@ func (a *adapter) queryText(st *velox.Statement) bool {
 
 // attributes are a statement's span attributes known before it runs; sum is
 // its collection and summary (see collection and summary), and tkv Config.Target's (nil with TargetFor).
-func (a *adapter) attributes(st *velox.Statement, coll, sum string, tkv []attribute.KeyValue) []attribute.KeyValue {
+func (a *adapter) attributes(ctx context.Context, st *velox.Statement, coll, sum string, tkv []attribute.KeyValue) []attribute.KeyValue {
 	kv := make([]attribute.KeyValue, 0, 15+len(st.Tags)+len(tkv))
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
 	kv = target(kv, st, coll, sum)
@@ -142,14 +141,13 @@ func (a *adapter) attributes(st *velox.Statement, coll, sum string, tkv []attrib
 	if st.Route.Shard != "" {
 		kv = append(kv, attribute.String(attrRouteShard, st.Route.Shard))
 	}
-	if st.TenantBypass != "" {
-		kv = append(kv, attribute.String(attrTenantBypass, st.TenantBypass))
-	}
 	if st.PolicyBypass != "" {
 		kv = append(kv, attribute.String(attrPolicyBypass, st.PolicyBypass))
 	}
-	if a.cfg.RecordTenant && st.Tenant != nil {
-		kv = append(kv, attribute.String(attrTenant, fmt.Sprint(st.Tenant)))
+	if a.cfg.RecordScope {
+		if v := velox.RowScopeFromContext(ctx).Values; v != "" {
+			kv = append(kv, attribute.String(attrScope, v))
+		}
 	}
 	return kv
 }

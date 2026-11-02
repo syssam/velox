@@ -12,25 +12,6 @@ import (
 	"github.com/syssam/velox/internal/fakeconn"
 )
 
-func schemaErr(t *testing.T, err error, parts ...string) {
-	t.Helper()
-	if _, ok := errors.AsType[*velox.SchemaError](err); !ok {
-		t.Fatalf("got %v, want a *SchemaError", err)
-	}
-	for _, p := range parts {
-		if !strings.Contains(err.Error(), p) {
-			t.Errorf("%q does not mention %q", err, p)
-		}
-	}
-}
-
-func TestSchemaPolicyTenantColumn(t *testing.T) {
-	_, err := loadDescriptor(nullTenantDescriptor())
-	schemaErr(t, err, "velox: engine_test.nullTenant.OrgID: the tenant column must be NOT NULL and comparable")
-	_, err = loadDescriptor(sliceTenantDescriptor())
-	schemaErr(t, err, "velox: engine_test.sliceTenant.Org: the tenant column must be NOT NULL and comparable")
-}
-
 // TestSchemaPolicyHooks: an entity's hooks and policy, bound from its Hooks and
 // Policy methods, act on its writes.
 func TestSchemaPolicyHooks(t *testing.T) {
@@ -84,13 +65,4 @@ func TestSchemaPolicyHooks(t *testing.T) {
 	if _, err := db.Delete[hooked]().Where(hookedTitle.EQ("u")).Exec(ctx); err == nil || e.Calls != calls {
 		t.Errorf("Set on a delete: %v, %d statements sent", err, e.Calls-calls)
 	}
-}
-
-func TestSchemaPolicyTenantColumnIsNotFilled(t *testing.T) {
-	_, err := loadDescriptor(defaultTenantDescriptor())
-	schemaErr(t, err, "velox: engine_test.defaultTenant.Org: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
-	_, err = loadDescriptor(defaultFuncTenantDescriptor())
-	schemaErr(t, err, "velox: engine_test.defaultFuncTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
-	_, err = loadDescriptor(updateDefaultTenantDescriptor())
-	schemaErr(t, err, "velox: engine_test.updateDefaultTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
 }

@@ -98,7 +98,7 @@ func DecodeIDsAs[K comparable, V any](ctx context.Context, at string, ids []stri
 }
 
 // CheckExists fails with NOT_FOUND, naming at and typ, unless q counts n rows:
-// q selects the rows the IDs of at name, under the caller's tenant and Read
+// q selects the rows the IDs of at name, under the caller's Read
 // policy. For generated code. Its text is "veloxgql: <at>: <missing> of the <n>
 // IDs name no <typ>", or NotFound's for n 1, and echoes no ID. n is the number
 // of distinct IDs; for n 0, CheckExists runs no query. The query's own error is
@@ -158,7 +158,7 @@ func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[
 	return matched(got, n, at, typ)
 }
 
-// StillLinked fails when q, run without the tenant scope or the Read policy,
+// StillLinked fails when q, run without the Read policy,
 // finds a row: a child of the GraphQL type typ that the owner of the type owner
 // still holds after the caller's scoped unlink, which the caller may not
 // change. For generated code. Its error is BAD_USER_INPUT "veloxgql: <at>: the
@@ -167,7 +167,7 @@ func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[
 // returned as it is.
 func StillLinked[E any](ctx context.Context, q velox.Query[E], at, typ, owner string) error {
 	const reason = "graphql: a hidden child of a one-to-one re-point"
-	ok, err := q.Exists(velox.WithAllTenants(velox.WithoutPolicy(ctx, reason), reason))
+	ok, err := q.Exists(velox.WithoutPolicy(ctx, reason))
 	switch {
 	case err != nil:
 		return err
@@ -178,7 +178,7 @@ func StillLinked[E any](ctx context.Context, q velox.Query[E], at, typ, owner st
 }
 
 // Readable returns the keys, which key reads from a row, of the rows q selects:
-// q names at most n distinct keys, under the caller's tenant and Read policy,
+// q names at most n distinct keys, under the caller's Read policy,
 // so its rows are those of the keys the caller may read. For generated code.
 // For n 0, Readable runs no query. The query's own error is returned as it is.
 // remove<Edge>IDs and clear<Edge> of a many-to-many edge delete only the join
@@ -253,6 +253,45 @@ func Disjoint[K comparable](input, add, remove string, a, b []K) error {
 // code.
 func NotFound(at, typ string) error {
 	return gqlcore.NotFoundf("%s: no %s has this ID", at, typ)
+}
+
+// LockRow checks that q, a query of the one row a mutation changes, finds a
+// row the caller may change: a Writable Exists, under the scope of the write,
+// which finds no row the caller may not change. Where the dialect has locking
+// reads (everywhere but SQLite) it locks the row with ForUpdate, so the row
+// stays the caller's until the transaction ends; SQLite has none, and its
+// transactions lock the database. A missing row is NotFound(at, typ). For
+// generated code, inside Atomic's transaction, with db the DB it passes.
+func LockRow[E any](ctx context.Context, db *velox.DB, q velox.Query[E], at, typ string) error {
+	q = q.Writable()
+	if db.Dialect() != velox.SQLite {
+		q = q.ForUpdate()
+	}
+	ok, err := q.Exists(ctx)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return NotFound(at, typ)
+	}
+	return nil
+}
+
+// Show is what a mutation input's String prints for p, a field that is a
+// pointer: the value it points to, or nil. For generated code.
+func Show[T any](p *T) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+// ShowJSON is Show of a JSON field, as its text. For generated code.
+func ShowJSON(p *veloxgql.JSON) any {
+	if p == nil {
+		return nil
+	}
+	return string(*p)
 }
 
 // CountUnknown is the internal error of a write at whose driver did not report

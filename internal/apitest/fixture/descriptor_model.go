@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox"
 )
 
-// DAuthor is tenant-scoped, has an immutable creation time, a validated name
+// DAuthor is confined to the context's org, has an immutable creation time, a validated name
 // and a sensitive email.
 type DAuthor struct {
 	ID        int64
@@ -47,13 +47,12 @@ func DAuthorDescriptor() velox.Descriptor[DAuthor] {
 		Table:  "authors",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Name", Name: "name"},
 			{Field: "Email", Name: "email", Sensitive: true},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return time.Now() }, Immutable: true},
 		},
 		PrimaryKey: []int{0},
-		Tenant:     1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[DBook]("Books", 0, 1)},
 		FieldPtr: func(x *DAuthor, i int) any {
 			switch i {
@@ -130,7 +129,6 @@ func DBookDescriptor() velox.Descriptor[DBook] {
 		Table:      "books",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[DAuthor]("Author", 1, 0),
 			velox.EdgeThrough[DBookTag, DTag]("Tags", 0, 0, 1, 0),
@@ -161,7 +159,7 @@ func DBookDescriptor() velox.Descriptor[DBook] {
 	}
 }
 
-// DTag is tenant-scoped, and has books through dBookTag.
+// DTag is confined to the context's org, and has books through dBookTag.
 type DTag struct {
 	ID    int64
 	OrgID int64
@@ -182,10 +180,11 @@ func (*DTag) VeloxMeta() *velox.Meta[DTag] { return DTagMeta.Load(DTagDescriptor
 
 func DTagDescriptor() velox.Descriptor[DTag] {
 	return velox.Descriptor[DTag]{
+		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*DTag)(nil).Policy()) },
+		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*DTag)(nil).Hooks()) },
 		Table:      "tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
-		Tenant:     1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[DBookTag, DBook]("Books", 0, 1, 0, 0)},
 		FieldPtr: func(x *DTag, i int) any {
 			switch i {
@@ -222,7 +221,6 @@ func DBookTagDescriptor() velox.Descriptor[DBookTag] {
 		Table:      "book_tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
 		FieldPtr: func(x *DBookTag, i int) any {
 			switch i {
 			case 0:
@@ -251,7 +249,6 @@ func DPickDescriptor() velox.Descriptor[DPick] {
 		Table:      "picks",
 		Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
 		FieldPtr: func(x *DPick, i int) any {
 			switch i {
 			case 0:

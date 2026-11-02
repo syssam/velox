@@ -14,7 +14,7 @@ import (
 // TestRaw: Raw and Exec on every driver. Raw scans by column name, whatever
 // the order, into the entity's fields, and leaves the fields of the columns
 // it does not return zero; a column the entity has no field for is an error.
-// Neither is tenant-scoped, so a context with no tenant runs them.
+// Neither is org-scoped, so a context with no org runs them.
 func TestRaw(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		q := func(s string) string { return rebind(tg.d, s) }

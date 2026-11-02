@@ -6,7 +6,8 @@ import (
 )
 
 // e2eLimitsSchema is the schema of TestLimitsServed. Its tables are its own.
-//   - Post is tenant-scoped by org_id, the key of a Required edge to Org, and
+//   - Post, Ticket and Remark are scoped by org_id (gen/scope.go); for Post it is
+//     the key of a Required edge to Org that the scope fills, and Post
 //     has a Required edge to Member, whose policy, in gen/member_policy.go, hides
 //     the member named "hidden".
 //   - Acct has a string and a time with a Default.
@@ -58,7 +59,7 @@ func (Group) Edges() []schema.Edge {
 type Ticket struct{ schema.Schema }
 
 func (Ticket) Fields() []schema.Field {
-	return []schema.Field{field.Int64("org_id").Tenant(), field.String("title")}
+	return []schema.Field{field.Int64("org_id").Immutable().Annotations(graphql.Skip()), field.String("title")}
 }
 
 func (Ticket) Edges() []schema.Edge { return []schema.Edge{edge.To("remarks", Remark.Type)} }
@@ -67,7 +68,7 @@ type Remark struct{ schema.Schema }
 
 func (Remark) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(graphql.Skip()),
 		field.String("body"),
 		field.Int64("ticket_id").Optional().Nillable().Annotations(graphql.WhereOps(graphql.OpsEquality | graphql.OpsNullable)),
 	}
@@ -126,7 +127,7 @@ type Post struct{ schema.Schema }
 
 func (Post) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable(),
 		field.Int64("member_id"),
 		field.String("title").Annotations(graphql.WhereOps(graphql.OpEQ)),
 	}
@@ -134,7 +135,7 @@ func (Post) Fields() []schema.Field {
 
 func (Post) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.From("org", Org.Type).Ref("posts").Unique().Required().Field("org_id"),
+		edge.From("org", Org.Type).Ref("posts").Unique().Required().Immutable().Field("org_id").Annotations(graphql.Skip(graphql.SkipMutationCreateInput)),
 		edge.From("member", Member.Type).Ref("posts").Unique().Required().Field("member_id"),
 	}
 }
@@ -214,6 +215,31 @@ func (*Member) Policy() velox.Policy[Member] {
 		return Members.Name.NEQ("hidden"), nil
 	}}
 }
+`
+
+// e2eLimitsScope scopes Post, Ticket and Remark to the org the context names,
+// by hand in the generated package.
+const e2eLimitsScope = `package gen
+
+import (
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/scope"
+)
+
+var OrgKey = scope.NewKey[int64]("org")
+
+var (
+	postScope   = scope.By(OrgKey, Posts.OrgID.EQ, func(x *Post) *int64 { return &x.OrgID })
+	ticketScope = scope.By(OrgKey, Tickets.OrgID.EQ, func(x *Ticket) *int64 { return &x.OrgID })
+	remarkScope = scope.By(OrgKey, Remarks.OrgID.EQ, func(x *Remark) *int64 { return &x.OrgID })
+)
+
+func (*Post) Policy() velox.Policy[Post]       { return postScope.Policy() }
+func (*Post) Hooks() []velox.Hook[Post]        { return []velox.Hook[Post]{postScope.Fill()} }
+func (*Ticket) Policy() velox.Policy[Ticket]   { return ticketScope.Policy() }
+func (*Ticket) Hooks() []velox.Hook[Ticket]    { return []velox.Hook[Ticket]{ticketScope.Fill()} }
+func (*Remark) Policy() velox.Policy[Remark]   { return remarkScope.Policy() }
+func (*Remark) Hooks() []velox.Hook[Remark]    { return []velox.Hook[Remark]{remarkScope.Fill()} }
 `
 
 // e2eLimitsResolvers are the resolvers TestLimitsServed uses, one line each;
@@ -338,6 +364,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	_ "modernc.org/sqlite"
 
+	"example.com/app/gen"
 	"example.com/app/graph"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -399,7 +426,7 @@ func serve(t *testing.T) served {
 		}
 		req := httptest.NewRequest("POST", "/", strings.NewReader(string(b)))
 		req.Header.Set("Content-Type", "application/json")
-		req = req.WithContext(velox.WithTenant(req.Context(), int64(1)))
+		req = req.WithContext(gen.OrgKey.With(req.Context(), int64(1)))
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		return w.Body.String()
@@ -443,9 +470,9 @@ func TestRequiredEdgeHidden(t *testing.T) {
 	}
 }
 
-// TestTenantKeyFilled: the tenant column that an edge holds is no input, and
-// the context's tenant fills it.
-func TestTenantKeyFilled(t *testing.T) {
+// TestScopeKeyFilled: the scope column that an edge holds is no input, and
+// the context's value fills it.
+func TestScopeKeyFilled(t *testing.T) {
 	s := serve(t)
 	seen := veloxgql.EncodeID("Member", 1)
 	s.want("create", fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q}) { title org { name } } }", "n", seen),
@@ -632,9 +659,9 @@ func TestNullBytesGoType(t *testing.T) {
 	s.want("clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {ip: null}) { ip } }", veloxgql.EncodeID("Item", 2)), '{"data":{"updateItem":{"ip":null}}}')
 }
 
-// TestForeignKeyFilterOtherTenant: a foreign key to a row of another tenant reads as
+// TestForeignKeyFilterOtherScope: a foreign key to a row of another org reads as
 // null to every predicate on it, as the edge does: the same hides as a policy hides.
-func TestForeignKeyFilterOtherTenant(t *testing.T) {
+func TestForeignKeyFilterOtherScope(t *testing.T) {
 	s := serve(t)
 	mine, theirs := veloxgql.EncodeID("Ticket", 1), veloxgql.EncodeID("Ticket", 2)
 	for _, c := range []struct{ where, want string }{
@@ -769,7 +796,7 @@ func TestIntrospectionTypeNames(t *testing.T) {
 
 // TestLimitsServed generates its schema's application with velox-gen and the
 // plugin, then gqlgen over it, and runs its test through gqlgen's handler, on
-// SQLite: what a Required edge reads when its target is hidden, a tenant key,
+// SQLite: what a Required edge reads when its target is hidden, a scope key,
 // an explicit zero value, or: [] and entities named as introspection types.
 func TestLimitsServed(t *testing.T) {
 	if testing.Short() {
@@ -778,6 +805,7 @@ func TestLimitsServed(t *testing.T) {
 	_, run := app(t, map[string]string{
 		"schema/schema.go":          e2eLimitsSchema,
 		"gen/member_policy.go":      e2eLimitsPolicy,
+		"gen/scope.go":              e2eLimitsScope,
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/schema.resolvers.go": e2eLimitsResolvers,
 		"limits_test.go":            strings.NewReplacer("'", "`", "~", "'", "_ context,", "_ context.Context,", `"database/sql"`, "\"context\"\n\t\"database/sql\"").Replace(e2eLimitsRun),
@@ -798,7 +826,7 @@ func TestLimitsServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullClears", "TestUpdateNullEdgeRefused", "TestNullBytesGoType", "TestForeignKeyFilterOtherTenant", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit"} {
+	for _, name := range []string{"TestRequiredEdgeHidden", "TestScopeKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullClears", "TestUpdateNullEdgeRefused", "TestNullBytesGoType", "TestForeignKeyFilterOtherScope", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

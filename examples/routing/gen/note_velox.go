@@ -8,24 +8,32 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Note is the entity of schema Note.
 type Note struct {
-	ID    int64  `json:"id,omitempty"`
-	OrgID int64  `json:"org_id,omitempty"`
-	Body  string `json:"body,omitempty"`
+	ID    int64  `json:"id"`
+	OrgID int64  `json:"org_id"`
+	Body  string `json:"body"`
 }
+
+// The positions of Note's columns, in the order of its table.
+const (
+	noteColID = iota
+	noteColOrgID
+	noteColBody
+)
 
 // Notes holds the typed handles of Note's columns and relations.
 var Notes = struct {
-	ID    velox.NumberCol[Note, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Note, int64]
+	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Note, int64]
-	Body  velox.StringCol[Note, string]
+	// Body is the column body.
+	Body velox.StringCol[Note, string]
 }{
-	ID:    velox.NumberCol[Note, int64]{I: 0},
-	OrgID: velox.NumberCol[Note, int64]{I: 1},
-	Body:  velox.StringCol[Note, string]{I: 2},
+	ID:    velox.NumberCol[Note, int64]{I: noteColID},
+	OrgID: velox.NumberCol[Note, int64]{I: noteColOrgID},
+	Body:  velox.StringCol[Note, string]{I: noteColBody},
 }
 
 var noteMeta velox.MetaOnce[Note]
@@ -33,23 +41,25 @@ var noteMeta velox.MetaOnce[Note]
 // VeloxMeta is called by velox, not by applications.
 func (*Note) VeloxMeta() *velox.Meta[Note] { return noteMeta.Load(noteDescriptor) }
 
+// noteDescriptor describes Note to velox: its table, columns, edges and hooks.
 func noteDescriptor() velox.Descriptor[Note] {
 	return velox.Descriptor[Note]{
 		Table: "notes",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Body", Name: "body"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     1,
+		PrimaryKey: []int{noteColID},
+		Policy:     func() velox.BoundPolicy { return velox.BindPolicy(noteScope.Policy()) },
+		Hooks:      func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Note]{noteScope.Fill()}) },
 		FieldPtr: func(x *Note, i int) any {
 			switch i {
-			case 0:
+			case noteColID:
 				return &x.ID
-			case 1:
+			case noteColOrgID:
 				return &x.OrgID
-			case 2:
+			case noteColBody:
 				return &x.Body
 			}
 			return nil
@@ -57,10 +67,10 @@ func noteDescriptor() velox.Descriptor[Note] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Note) String() string {
 	return fmt.Sprintf("Note(ID=%v, OrgID=%v, Body=%v)", x.ID, x.OrgID, x.Body)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Note) GoString() string { return x.String() }

@@ -23,7 +23,7 @@ func (Invoice) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
 // Fields returns the columns after the ID and the mixin's.
 func (Invoice) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable(),
 		field.String("number"),
 		field.Float("total"),
 		field.Bool("paid"),

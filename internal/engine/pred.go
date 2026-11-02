@@ -31,9 +31,7 @@ const (
 	OpExists  // col is the relation index, v its RelRef, or its link once resolved, kids the target's conditions
 	OpInvalid // v is the error
 	OpThrough // col is the target's column, v the join *EntityInfo, w the join's column equal to it, kids the join's conditions
-	// OpTenantRef is the scope's, on an entity's rows: col is an index into its
-	// TenantRefs, whose column holds a key of a row of tenant v. No hook can make it.
-	OpTenantRef
+	OpJoined  // col is the relation index, kids the conditions on the target of the join Query.Join made for it
 )
 
 // Node is a condition, typed by nothing: the generic API wraps it.
@@ -43,6 +41,14 @@ type Node struct {
 	Col  int32
 	V, W any
 	Kids []Node
+}
+
+// JoinedNode is the conjunction of kids, conditions on the target of relation
+// rel, which the statement must join: all must hold on the joined row.
+func JoinedNode(rel int32, kids []Node) Node {
+	n := Group(OpJoined, kids)
+	n.Col = rel
+	return n
 }
 
 // Group is the And, Or or Not (o) of kids. It marks the node deep when an
@@ -74,7 +80,7 @@ func ColumnEQ(column int, v any) Predicate {
 // no EXISTS: a condition that a rewrite hook may build with the public API.
 func Sound(n Node) bool {
 	switch n.Op {
-	case opZero, OpInvalid, OpExists:
+	case opZero, OpInvalid, OpExists, OpJoined:
 		return false
 	}
 	for _, k := range n.Kids {
@@ -120,7 +126,7 @@ func existsLink(n Node) (Link, error) {
 // which may be in a Pred other goroutines hold (scoper.node's rule).
 func ResolveNode(n Node) (Node, bool, error) {
 	switch n.Op {
-	case OpAnd, OpOr, OpNot:
+	case OpAnd, OpOr, OpNot, OpJoined:
 		if !n.Deep {
 			return n, false, nil // no EXISTS in it
 		}
@@ -196,6 +202,9 @@ func resolvePreds(ps []Predicate) ([]Predicate, error) {
 // reads them: the guard, the Rewrite hooks, the scope and rendering see only
 // links. A relation that cannot be resolved fails the statement.
 func ResolveStatement(st *Statement) error {
+	if err := resolveJoins(st); err != nil {
+		return err
+	}
 	where, err := resolvePreds(st.Where)
 	if err != nil {
 		return err

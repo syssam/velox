@@ -19,10 +19,11 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/scope"
 )
 
 // keeper and pet are hand-written entities, as velox-gen would write them,
-// for batching's tests: a keeper has pets, which are tenant-scoped.
+// for batching's tests: a keeper has pets, which are scoped by org.
 type keeper struct {
 	ID   int64
 	Name string
@@ -44,7 +45,6 @@ func keeperDescriptor() velox.Descriptor[keeper] {
 		Table:      "keepers",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pet]("Pets", 0, 1)},
 		FieldPtr:   func(x *keeper, i int) any { return [...]any{&x.ID, &x.Name}[i] },
 		EdgeFieldPtr: func(x *keeper, i int) any {
@@ -64,8 +64,14 @@ type pet struct {
 }
 
 var pets = struct {
-	ID velox.NumberCol[pet, int64]
-}{velox.NumberCol[pet, int64]{I: 0}}
+	ID    velox.NumberCol[pet, int64]
+	OrgID velox.NumberCol[pet, int64]
+}{velox.NumberCol[pet, int64]{I: 0}, velox.NumberCol[pet, int64]{I: 2}}
+
+// petOrg is the scope of pets: a pet is in the org the context names.
+var petOrg = scope.NewKey[int64]("org")
+
+var petScope = scope.By(petOrg, pets.OrgID.EQ, func(x *pet) *int64 { return &x.OrgID })
 
 // viewerKey is the context key of a viewer: an int64, the highest pet id it
 // may see, which pet's Read policy reads. Without one every pet is seen.
@@ -80,16 +86,16 @@ func petDescriptor() velox.Descriptor[pet] {
 		Table:      "pets",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeeperID", Name: "keeper_id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
-		Tenant:     2,
 		FieldPtr:   func(x *pet, i int) any { return [...]any{&x.ID, &x.KeeperID, &x.OrgID, &x.Name}[i] },
 		Policy: func() velox.BoundPolicy {
-			return velox.BindPolicy(velox.Policy[pet]{Read: func(ctx context.Context) (velox.Pred[pet], error) {
+			return velox.BindPolicy(petScope.Wrap(velox.Policy[pet]{Read: func(ctx context.Context) (velox.Pred[pet], error) {
 				if v, ok := ctx.Value(viewerKey{}).(int64); ok {
 					return pets.ID.LTE(v), nil
 				}
 				return velox.Allow[pet](), nil
-			}})
+			}}))
 		},
+		Hooks: func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[pet]{petScope.Fill()}) },
 	}
 }
 
@@ -152,7 +158,7 @@ func batchDB(t *testing.T) (*velox.DB, *txLog) {
 // batchServer serves batchSDL on db. keepers passes its rows to
 // veloxgql.Batch, and loose does not; a keeper's pets is
 // gqlimpl.EdgeConnection, as the generated code's edges are, and orgPets
-// too under a tenant of its own, as a directive could set, and viewerPets
+// too under an org of its own, as a directive could set, and viewerPets
 // under a viewer of its own. The keepers subscription's events each read
 // the keepers, and call seen, if set, with the event's context and its rows.
 func batchServer(db *velox.DB, seen ...func(ctx context.Context, rows []*keeper)) http.Handler {
@@ -219,7 +225,7 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 		"Keeper.name": func(ctx context.Context, _ map[string]any) (any, error) { return parent(ctx).(*keeper).Name, nil },
 		"Keeper.pets": petConn("Keeper.pets"),
 		"Keeper.orgPets": func(ctx context.Context, args map[string]any) (any, error) {
-			return petConn("Keeper.orgPets")(velox.WithTenant(ctx, 2-parent(ctx).(*keeper).ID%2), args)
+			return petConn("Keeper.orgPets")(petOrg.With(ctx, 2-parent(ctx).(*keeper).ID%2), args)
 		},
 		"Keeper.viewerPets": func(ctx context.Context, args map[string]any) (any, error) {
 			return petConn("Keeper.viewerPets")(context.WithValue(ctx, viewerKey{}, 3-2*(parent(ctx).(*keeper).ID%2)), args)
@@ -264,7 +270,7 @@ func petsOf(field string, keepers ...string) string {
 func TestBatchPublic(t *testing.T) {
 	db, log := batchDB(t)
 	srv := batchServer(db)
-	ctx := velox.WithTenant(context.Background(), int64(1))
+	ctx := petOrg.With(context.Background(), int64(1))
 	for _, c := range []struct {
 		field string
 		stmts int
@@ -286,7 +292,7 @@ func TestBatchPublic(t *testing.T) {
 func TestBatchInMutation(t *testing.T) {
 	db, log := batchDB(t)
 	srv := batchServer(db)
-	ctx, cancel := context.WithTimeout(velox.WithTenant(context.Background(), int64(1)), 10*time.Second)
+	ctx, cancel := context.WithTimeout(petOrg.With(context.Background(), int64(1)), 10*time.Second)
 	defer cancel()
 	got := post(t, ctx, srv, `mutation { addPet(id: 9, keeper: 1) { name pets { totalCount nodes { name } } } }`)
 	if want := petsOf("addPet", "ann:rex,new", "bob:fifi", "cy:"); got != want {
@@ -298,8 +304,8 @@ func TestBatchInMutation(t *testing.T) {
 	}
 }
 
-// TestRequestsIsolated: concurrent requests of different tenants batch in
-// tables of their own: each reads its tenant's pets only, in its own
+// TestRequestsIsolated: concurrent requests of different orgs batch in
+// tables of their own: each reads its org's pets only, in its own
 // statements.
 func TestRequestsIsolated(t *testing.T) {
 	db, log := batchDB(t)
@@ -314,7 +320,7 @@ func TestRequestsIsolated(t *testing.T) {
 	for org := range int64(2) {
 		org++
 		wg.Go(func() {
-			ctx := velox.WithTenant(context.Background(), org)
+			ctx := petOrg.With(context.Background(), org)
 			for range rounds {
 				if got := post(t, ctx, srv, query); got != want[org] {
 					t.Errorf("org %d:\n got %s\nwant %s", org, got, want[org])
@@ -329,17 +335,17 @@ func TestRequestsIsolated(t *testing.T) {
 }
 
 // TestBatchScopes: in one request, keepers whose edge resolvers scope their
-// contexts to different tenants read in batches of their own, each its
-// tenant's pets: never one load for both.
+// contexts to different orgs read in batches of their own, each its
+// org's pets: never one load for both.
 func TestBatchScopes(t *testing.T) {
 	db, log := batchDB(t)
 	srv := batchServer(db)
-	got := post(t, velox.WithTenant(context.Background(), int64(1)), srv, `{ keepers { name orgPets { totalCount nodes { name } } } }`)
+	got := post(t, petOrg.With(context.Background(), int64(1)), srv, `{ keepers { name orgPets { totalCount nodes { name } } } }`)
 	want := strings.ReplaceAll(petsOf("keepers", "ann:rex", "bob:kit", "cy:"), `"pets"`, `"orgPets"`)
 	if got != want {
 		t.Errorf("\n got %s\nwant %s", got, want)
 	}
-	// The keepers, then a load and a count for each of the two tenants.
+	// The keepers, then a load and a count for each of the two orgs.
 	if stmts, _ := log.take(); len(stmts) != 5 {
 		t.Errorf("%d statements, want 5: %q", len(stmts), stmts)
 	}
@@ -354,7 +360,7 @@ func TestBatchScopes(t *testing.T) {
 func TestBatchScopeOption(t *testing.T) {
 	db, log := batchDB(t)
 	const query = `{ keepers { name viewerPets { totalCount nodes { name } } } }`
-	ctx := velox.WithTenant(context.Background(), int64(1))
+	ctx := petOrg.With(context.Background(), int64(1))
 	post(t, ctx, batchServer(db), query)
 	// The keepers, then one load and one count for all.
 	if stmts, _ := log.take(); len(stmts) != 3 {
@@ -398,7 +404,7 @@ func TestSubscriptionEventsLetGo(t *testing.T) {
 		events = append(events, rows)
 	})
 	body, _ := json.Marshal(map[string]string{"query": `subscription { keepers { name pets { totalCount nodes { name } } } }`})
-	r := httptest.NewRequestWithContext(velox.WithTenant(context.Background(), int64(1)), http.MethodPost, "/", strings.NewReader(string(body)))
+	r := httptest.NewRequestWithContext(petOrg.With(context.Background(), int64(1)), http.MethodPost, "/", strings.NewReader(string(body)))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Accept", "text/event-stream")
 	w := httptest.NewRecorder()

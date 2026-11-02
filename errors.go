@@ -54,25 +54,6 @@ var (
 	// velox set (WithDeadlines, TxTimeout) passes. The error also matches
 	// context.DeadlineExceeded; a deadline the caller set matches that alone.
 	ErrTimeout = engine.ErrTimeout
-	// ErrNoTenant is returned by a statement on a tenant-scoped entity when its
-	// context has neither WithTenant nor WithAllTenants.
-	ErrNoTenant = engine.ErrNoTenant
-	// ErrTenantMismatch is returned by a statement when the context's tenant
-	// cannot be converted to the tenant column's type, or an inserted row names
-	// another tenant.
-	ErrTenantMismatch = engine.ErrTenantMismatch
-	// ErrTenantImmutable is returned by an update when it assigns another
-	// tenant to the tenant column.
-	ErrTenantImmutable = engine.ErrTenantImmutable
-	// ErrTenantRef is returned by an insert or update under a tenant that sets a
-	// foreign key to a row that is not the tenant's: it does not exist, or it is
-	// another tenant's, which the error does not tell apart. It is the Err of a
-	// *ConstraintError of kind ConstraintForeignKey, and nothing was written. An
-	// update that does arithmetic on such a key fails with it too.
-	ErrTenantRef = engine.ErrTenantRef
-	// ErrTenantUpsert is returned by an upsert that updates, when the update
-	// could change another tenant's row.
-	ErrTenantUpsert = engine.ErrTenantUpsert
 	// ErrDenied is returned by a statement when a policy refuses it. Every
 	// *PolicyError matches it.
 	ErrDenied = veloxtype.ErrDenied
@@ -85,8 +66,8 @@ var (
 	// error names the Go field. An insert may set one.
 	ErrImmutable = engine.ErrImmutable
 	// ErrNoShard is returned, on a DB opened with OpenShards, by a statement or
-	// Tx when its context names no shard (neither WithShard nor a tenant;
-	// WithAllTenants names none), names one the DB does not have, or when the
+	// Tx when its context names no shard (no WithShard, and
+	// WithShardFor names none), names one the DB does not have, or when the
 	// WithShardFor function failed. Nothing was sent.
 	ErrNoShard = engine.ErrNoShard
 	// ErrOutsideTx is returned by a statement, or a Tx, under the context a

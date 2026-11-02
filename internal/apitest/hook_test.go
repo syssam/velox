@@ -11,6 +11,7 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 )
 
 func TestHookOrderAndRows(t *testing.T) {
@@ -85,7 +86,7 @@ func TestInsertAllRunsTheHooksOnce(t *testing.T) {
 
 func TestHookSetIsValidated(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 1})
-	tctx := velox.WithTenant(ctx, int64(7))
+	tctx := testmodel.Org.With(context.Background(), int64(7))
 	_, err := db.Update[fixture.DAuthor]().Set(fixture.DAuthors.Name.Set("ok")).Where(fixture.DAuthors.ID.EQ(1)).Exec(context.WithValue(tctx, fixture.BlankName{}, true))
 	if _, ok := errors.AsType[*velox.ValidationError](err); !ok {
 		t.Fatalf("got %v", err)
@@ -98,7 +99,7 @@ func TestHookSetIsValidated(t *testing.T) {
 
 func TestPolicyMethod(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	err := db.Insert(&fixture.DAuthor{Name: "mallory"}).Exec(velox.WithTenant(ctx, int64(7)))
+	err := db.Insert(&fixture.DAuthor{Name: "mallory"}).Exec(testmodel.Org.With(context.Background(), int64(7)))
 	if !errors.Is(err, velox.ErrDenied) {
 		t.Fatalf("got %v", err)
 	}
@@ -110,7 +111,7 @@ func TestSaveRunsTheHooks(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
 	a := fixture.DAuthor{ID: 1, OrgID: 7, Name: "ada"}
-	if err := db.Save(&a, fixture.DAuthors.Name).Exec(context.WithValue(velox.WithTenant(ctx, int64(7)), fixture.RenameTo{}, "grace")); err != nil {
+	if err := db.Save(&a, fixture.DAuthors.Name).Exec(context.WithValue(testmodel.Org.With(context.Background(), int64(7)), fixture.RenameTo{}, "grace")); err != nil {
 		t.Fatal(err)
 	}
 	if a.Name != "grace" || e.Args[0] != "grace" {
@@ -147,7 +148,6 @@ func hFlexDescriptor() velox.Descriptor[hFlex] {
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"},
 			{Field: "Stamp", Name: "stamp", UpdateDefault: func() any { return int64(9) }}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *hFlex, i int) any {
 			switch i {
 			case 0:
@@ -219,7 +219,7 @@ var hNilMeta velox.MetaOnce[hNil]
 
 func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 	return hNilMeta.Load(func() velox.Descriptor[hNil] {
-		return velox.Descriptor[hNil]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNil)(nil).Hooks()) }, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Descriptor[hNil]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNil)(nil).Hooks()) }, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNil, i int) any { return &x.ID }}
 	})
 }
@@ -236,7 +236,7 @@ var hPanicMeta velox.MetaOnce[hPanic]
 
 func (*hPanic) VeloxMeta() *velox.Meta[hPanic] {
 	return hPanicMeta.Load(func() velox.Descriptor[hPanic] {
-		return velox.Descriptor[hPanic]{Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hPanic)(nil).Policy()) }, Table: "p", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Descriptor[hPanic]{Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hPanic)(nil).Policy()) }, Table: "p", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hPanic, i int) any { return &x.ID }}
 	})
 }
@@ -269,7 +269,6 @@ func (*dPlain) VeloxMeta() *velox.Meta[dPlain] {
 			Table:      "books",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title"}},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *dPlain, i int) any {
 				switch i {
 				case 0:
@@ -316,7 +315,6 @@ func (*dPlainDef) VeloxMeta() *velox.Meta[dPlainDef] {
 			Table:      "books",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title", Default: "dune"}},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *dPlainDef, i int) any {
 				switch i {
 				case 0:
@@ -382,7 +380,7 @@ func TestNextTwiceSendsOnce(t *testing.T) {
 func TestValidatorsRunBeforeTheInsertPolicy(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
-	tctx := velox.WithTenant(ctx, int64(7))
+	tctx := testmodel.Org.With(context.Background(), int64(7))
 	var ve *velox.ValidationError
 	bad := "no at sign"
 	err := db.Insert(&fixture.DAuthor{Name: "mallory", Email: &bad}).Exec(tctx)
@@ -440,7 +438,7 @@ var hNilMutMeta velox.MetaOnce[hNilMut]
 
 func (*hNilMut) VeloxMeta() *velox.Meta[hNilMut] {
 	return hNilMutMeta.Load(func() velox.Descriptor[hNilMut] {
-		return velox.Descriptor[hNilMut]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNilMut)(nil).Hooks()) }, Table: "m", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Descriptor[hNilMut]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNilMut)(nil).Hooks()) }, Table: "m", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNilMut, i int) any { return &x.ID }}
 	})
 }
@@ -457,7 +455,7 @@ var hPanicHooksMeta velox.MetaOnce[hPanicHooks]
 
 func (*hPanicHooks) VeloxMeta() *velox.Meta[hPanicHooks] {
 	return hPanicHooksMeta.Load(func() velox.Descriptor[hPanicHooks] {
-		return velox.Descriptor[hPanicHooks]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hPanicHooks)(nil).Hooks()) }, Table: "ph", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Descriptor[hPanicHooks]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hPanicHooks)(nil).Hooks()) }, Table: "ph", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hPanicHooks, i int) any { return &x.ID }}
 	})
 }
@@ -488,7 +486,7 @@ var uPolicyMeta velox.MetaOnce[uPolicy]
 
 func (*uPolicy) VeloxMeta() *velox.Meta[uPolicy] {
 	return uPolicyMeta.Load(func() velox.Descriptor[uPolicy] {
-		return velox.Descriptor[uPolicy]{Table: "up", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Descriptor[uPolicy]{Table: "up", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *uPolicy, i int) any { return &x.ID }}
 	})
 }
@@ -501,7 +499,7 @@ var uHooksMeta velox.MetaOnce[uHooks]
 
 func (*uHooks) VeloxMeta() *velox.Meta[uHooks] {
 	return uHooksMeta.Load(func() velox.Descriptor[uHooks] {
-		return velox.Descriptor[uHooks]{Table: "uh", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Descriptor[uHooks]{Table: "uh", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *uHooks, i int) any { return &x.ID }}
 	})
 }
@@ -513,7 +511,7 @@ var uPlainMeta velox.MetaOnce[uPlain]
 
 func (*uPlain) VeloxMeta() *velox.Meta[uPlain] {
 	return uPlainMeta.Load(func() velox.Descriptor[uPlain] {
-		return velox.Descriptor[uPlain]{Table: "pl", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Descriptor[uPlain]{Table: "pl", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *uPlain, i int) any { return &x.ID }}
 	})
 }
@@ -586,7 +584,7 @@ func (*hUp) VeloxMeta() *velox.Meta[hUp] {
 	return hUpMeta.Load(func() velox.Descriptor[hUp] {
 		return velox.Descriptor[hUp]{
 			Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hUp)(nil).Policy()) }, Hooks: func() velox.BoundHooks { return velox.BindHooks((*hUp)(nil).Hooks()) },
-			Table: "ups", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "N", Name: "n"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Table: "ups", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "N", Name: "n"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hUp, i int) any { return [...]any{&x.ID, &x.N}[i] },
 		}
 	})
@@ -621,14 +619,14 @@ func TestMutationAffected(t *testing.T) {
 		hUpAffected = -1
 		e := &fakeconn.Exec{Affected: affected}
 		db := openFake(velox.Postgres, e)
-		err := db.InsertAll([]hUp{{ID: 1, N: 1}, {ID: 2, N: 1}}).OnConflict(hUps.ID).Update(hUps.N).Exec(ctx)
+		err := db.InsertAll([]hUp{{ID: 1, N: 1}, {ID: 2, N: 1}}).OnConflict(hUps.ID).Update(hUps.N).Exec(context.Background())
 		if !errors.Is(err, velox.ErrDenied) || hUpAffected != 0 {
 			t.Errorf("affected %d: %v, Affected %d", affected, err, hUpAffected)
 		}
 	}
 	e := &fakeconn.Exec{Affected: 1}
 	db = openFake(velox.Postgres, e)
-	if err := db.Insert(&hUp{ID: 1, N: 1}).OnConflict(hUps.ID).Update(hUps.N).Exec(ctx); err != nil || hUpAffected != 1 {
+	if err := db.Insert(&hUp{ID: 1, N: 1}).OnConflict(hUps.ID).Update(hUps.N).Exec(context.Background()); err != nil || hUpAffected != 1 {
 		t.Errorf("%v, Affected %d", err, hUpAffected)
 	}
 }
@@ -670,8 +668,8 @@ func (*hCond) VeloxMeta() *velox.Meta[hCond] {
 		return velox.Descriptor[hCond]{
 			Hooks: func() velox.BoundHooks { return velox.BindHooks((*hCond)(nil).Hooks()) },
 			Table: "conds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Stamp", Name: "stamp"}},
-			PrimaryKey: []int{0}, Tenant: -1,
-			FieldPtr: func(x *hCond, i int) any { return [...]any{&x.ID, &x.Stamp}[i] },
+			PrimaryKey: []int{0},
+			FieldPtr:   func(x *hCond, i int) any { return [...]any{&x.ID, &x.Stamp}[i] },
 		}
 	})
 }
@@ -715,7 +713,7 @@ func TestConds(t *testing.T) {
 	}
 }
 
-// hSoft is tenant-scoped, with a Read policy. Its delete hook updates Deleted
+// hSoft is confined to the context's org, with a Read policy. Its delete hook updates Deleted
 // instead of deleting: it does not call next, and reports the update's count
 // with SetAffected unless the context holds noCount. Its update hook records
 // Conds once next has returned in softConds.
@@ -729,8 +727,10 @@ var hSofts = struct {
 	Deleted   velox.Col[hSoft, bool]
 }{velox.NumberCol[hSoft, int64]{I: 0}, velox.NumberCol[hSoft, int64]{I: 1}, velox.Col[hSoft, bool]{I: 2}}
 
+var hSoftScope = scope.By(testmodel.Org, hSofts.OrgID.EQ, func(x *hSoft) *int64 { return &x.OrgID })
+
 func (*hSoft) Policy() velox.Policy[hSoft] {
-	return velox.Policy[hSoft]{Read: func(context.Context) (velox.Pred[hSoft], error) { return hSofts.ID.GT(0), nil }}
+	return hSoftScope.Wrap(velox.Policy[hSoft]{Read: func(context.Context) (velox.Pred[hSoft], error) { return hSofts.ID.GT(0), nil }})
 }
 
 type noCount struct{}
@@ -774,21 +774,21 @@ func (*hSoft) VeloxMeta() *velox.Meta[hSoft] {
 			Table:  "softs",
 			Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"},
 				{Field: "Deleted", Name: "deleted"}},
-			PrimaryKey: []int{0}, Tenant: 1,
-			FieldPtr: func(x *hSoft, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Deleted}[i] },
+			PrimaryKey: []int{0},
+			FieldPtr:   func(x *hSoft, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Deleted}[i] },
 		}
 	})
 }
 
 // TestSoftDeleteThroughConds: a delete hook rewrites the delete into an
-// update through Conds. The update adds the tenant and the policy once, as
+// update through Conds. The update adds the org and the policy once, as
 // they are not in Conds, and the delete sends nothing itself. It reports the
 // update's count, which the hook gave SetAffected, and 0 without it. A
 // delete of All gives no Conds, and the update says All.
 func TestSoftDeleteThroughConds(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 4}
 	db := openFake(velox.Postgres, e)
-	tctx := velox.WithTenant(ctx, int64(7))
+	tctx := testmodel.Org.With(context.Background(), int64(7))
 	n, err := db.Delete[hSoft]().Where(hSofts.ID.EQ(1)).Exec(tctx)
 	if err != nil || n != 4 || e.Calls != 1 {
 		t.Fatalf("%v, %d rows, %d statements", err, n, e.Calls)
@@ -823,7 +823,7 @@ func TestSoftDeleteThroughConds(t *testing.T) {
 }
 
 // TestCondsAfterNext: once next has returned, Conds is still the conditions
-// as given, without the tenant's, the policy's or a Rewrite hook's, which
+// as given, without the org's, the policy's or a Rewrite hook's, which
 // the statement sent.
 func TestCondsAfterNext(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
@@ -833,7 +833,7 @@ func TestCondsAfterNext(t *testing.T) {
 	})
 	db := openFake(velox.Postgres, e, rw)
 	softConds = nil
-	if _, err := db.Update[hSoft]().Set(hSofts.Deleted.Set(true)).Where(hSofts.ID.EQ(1), hSofts.ID.LT(9)).Exec(velox.WithTenant(ctx, int64(7))); err != nil {
+	if _, err := db.Update[hSoft]().Set(hSofts.Deleted.Set(true)).Where(hSofts.ID.EQ(1), hSofts.ID.LT(9)).Exec(testmodel.Org.With(context.Background(), int64(7))); err != nil {
 		t.Fatal(err)
 	}
 	if want := []velox.Pred[hSoft]{hSofts.ID.EQ(1), hSofts.ID.LT(9)}; !reflect.DeepEqual(softConds, want) {

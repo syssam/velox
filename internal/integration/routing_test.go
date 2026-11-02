@@ -336,7 +336,7 @@ func insertInvoice(t *testing.T, c context.Context, db *velox.DB, org int64, num
 
 // TestRoutingSendsWhereItSays: a write reaches the primary database only; a
 // read reaches the replica database, except within a session's pin window or
-// under Primary; and a sharded DB puts each tenant's rows in its own
+// under Primary; and a sharded DB puts each org's rows in its own
 // database. Each claim is checked by reading the databases themselves.
 func TestRoutingSendsWhereItSays(t *testing.T) {
 	eachRouting(t, func(t *testing.T, r routingDriver) {
@@ -386,50 +386,51 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 	})
 }
 
-// TestRoutingShardsByTenant: a sharded DB writes tenant 1 to the CI database
-// and tenant 2 to velox_shard2, reads each tenant from its own, and refuses a
+// TestRoutingShardsByOrg: a sharded DB writes org 1 to the CI database
+// and org 2 to velox_shard2, reads each org from its own, and refuses a
 // statement whose context names no shard, sending nothing.
-func TestRoutingShardsByTenant(t *testing.T) {
+func TestRoutingShardsByOrg(t *testing.T) {
 	eachRouting(t, func(t *testing.T, r routingDriver) {
 		one, two := r.direct(t, r.primary), r.direct(t, shard2DB)
 		var log routeLog
 		db := velox.OpenShards(r.d, map[string]velox.Shard{
 			"one": {Primary: r.handle(t, r.primary, "").conn},
 			"two": {Primary: r.handle(t, shard2DB, "").conn},
-		}, velox.WithShardFor(func(_ context.Context, tenant any) (string, error) {
-			switch tenant {
-			case int64(1):
+		}, velox.WithShardFor(func(ctx context.Context) (string, error) {
+			org, _ := testmodel.Org.From(ctx)
+			switch org {
+			case 1:
 				return "one", nil
-			case int64(2):
+			case 2:
 				return "two", nil
 			}
-			return "", fmt.Errorf("tenant %v has no shard", tenant)
+			return "", fmt.Errorf("org %v has no shard", org)
 		}), log.option())
 		bg := context.Background()
-		t1, t2 := velox.WithTenant(bg, int64(1)), velox.WithTenant(bg, int64(2))
+		t1, t2 := testmodel.Org.With(bg, int64(1)), testmodel.Org.With(bg, int64(2))
 
-		insertInvoice(t, t1, db, 1, "TENANT-1")
-		wantRoute(t, "tenant 1's write", log.last(t), velox.Route{Shard: "one", Replica: -1})
-		insertInvoice(t, t2, db, 2, "TENANT-2")
-		wantRoute(t, "tenant 2's write", log.last(t), velox.Route{Shard: "two", Replica: -1})
-		wantNumbers(t, "shard one", invoiceNumbers(t, one), []string{"TENANT-1"})
-		wantNumbers(t, "shard two", invoiceNumbers(t, two), []string{"TENANT-2"})
+		insertInvoice(t, t1, db, 1, "ORG-1")
+		wantRoute(t, "org 1's write", log.last(t), velox.Route{Shard: "one", Replica: -1})
+		insertInvoice(t, t2, db, 2, "ORG-2")
+		wantRoute(t, "org 2's write", log.last(t), velox.Route{Shard: "two", Replica: -1})
+		wantNumbers(t, "shard one", invoiceNumbers(t, one), []string{"ORG-1"})
+		wantNumbers(t, "shard two", invoiceNumbers(t, two), []string{"ORG-2"})
 
-		wantNumbers(t, "tenant 1's read", readNumbers(t, t1, db), []string{"TENANT-1"})
-		wantNumbers(t, "tenant 2's read", readNumbers(t, t2, db), []string{"TENANT-2"})
-		wantRoute(t, "tenant 2's read", log.last(t), velox.Route{Shard: "two", Replica: -1})
-		wantNumbers(t, "WithShard", readNumbers(t, velox.WithShard(ctx, "two"), db), []string{"TENANT-2"})
+		wantNumbers(t, "org 1's read", readNumbers(t, t1, db), []string{"ORG-1"})
+		wantNumbers(t, "org 2's read", readNumbers(t, t2, db), []string{"ORG-2"})
+		wantRoute(t, "org 2's read", log.last(t), velox.Route{Shard: "two", Replica: -1})
+		wantNumbers(t, "WithShard", readNumbers(t, velox.WithShard(ctx, "two"), db), []string{"ORG-2"})
 
 		_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
 		if !errors.Is(err, velox.ErrNoShard) {
-			t.Errorf("a read under WithAllTenants without WithShard: %v, want ErrNoShard", err)
+			t.Errorf("a read under WithoutPolicy without WithShard: %v, want ErrNoShard", err)
 		}
 		refused := newInvoice(1, "REFUSED")
 		if err := db.Insert(&refused).Exec(ctx); !errors.Is(err, velox.ErrNoShard) {
-			t.Errorf("a write under WithAllTenants without WithShard: %v, want ErrNoShard", err)
+			t.Errorf("a write under WithoutPolicy without WithShard: %v, want ErrNoShard", err)
 		}
-		wantNumbers(t, "shard one after the refusal", invoiceNumbers(t, one), []string{"TENANT-1"})
-		wantNumbers(t, "shard two after the refusal", invoiceNumbers(t, two), []string{"TENANT-2"})
+		wantNumbers(t, "shard one after the refusal", invoiceNumbers(t, one), []string{"ORG-1"})
+		wantNumbers(t, "shard two after the refusal", invoiceNumbers(t, two), []string{"ORG-2"})
 	})
 }
 

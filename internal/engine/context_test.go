@@ -13,30 +13,24 @@ import (
 	"github.com/syssam/velox/internal/testmodel"
 )
 
-func TestTenantContextLaterWins(t *testing.T) {
+func TestScopeValuesAreTheContexts(t *testing.T) {
 	bg := context.Background()
-	ctx := velox.WithAllTenants(velox.WithTenant(bg, int64(7)), "nightly billing")
-	if id, all := engine.TenantFrom(ctx); id != nil || all != "nightly billing" {
-		t.Errorf("WithTenant then WithAllTenants: id %v, all %q", id, all)
+	if got := velox.RowScopeFromContext(bg).Values; got != "" {
+		t.Errorf("no value: %q", got)
 	}
-	ctx = velox.WithTenant(velox.WithAllTenants(bg, "nightly billing"), int64(7))
-	if id, all := engine.TenantFrom(ctx); id != int64(7) || all != "" {
-		t.Errorf("WithAllTenants then WithTenant: id %v, all %q", id, all)
+	a := velox.WithScopeValue(bg, "org", int64(7))
+	b := velox.WithScopeValue(a, "region", "eu")
+	if got := velox.RowScopeFromContext(b).Values; got == "" || got == velox.RowScopeFromContext(a).Values {
+		t.Errorf("a second value: %q, first %q", got, velox.RowScopeFromContext(a).Values)
 	}
-	if id, all := engine.TenantFrom(bg); id != nil || all != "" {
-		t.Errorf("no tenant: id %v, all %q", id, all)
+	// The same names and values in either order are one scope; another value is not.
+	c := velox.WithScopeValue(velox.WithScopeValue(bg, "region", "eu"), "org", int64(7))
+	if velox.RowScopeFromContext(b).Values != velox.RowScopeFromContext(c).Values {
+		t.Errorf("order matters: %q vs %q", velox.RowScopeFromContext(b).Values, velox.RowScopeFromContext(c).Values)
 	}
-}
-
-func TestTenantBypassNeedsAReason(t *testing.T) {
-	ctx := velox.WithTenant(context.Background(), int64(7))
-	for _, reason := range []string{"", " \t\n"} {
-		if velox.WithAllTenants(ctx, reason) != ctx {
-			t.Errorf("WithAllTenants with the reason %q changed the context", reason)
-		}
-	}
-	if id, all := engine.TenantFrom(velox.WithAllTenants(ctx, "")); id != int64(7) || all != "" {
-		t.Errorf("WithAllTenants with no reason: id %v, all %q", id, all)
+	d := velox.WithScopeValue(a, "org", int64(8))
+	if velox.RowScopeFromContext(d).Values == velox.RowScopeFromContext(a).Values {
+		t.Errorf("a later value did not replace the first: %q", velox.RowScopeFromContext(d).Values)
 	}
 }
 
@@ -111,8 +105,8 @@ func TestWithoutTx(t *testing.T) {
 		if got, want := engine.TagsFrom(free), engine.TagsFrom(ctx); !reflect.DeepEqual(got, want) || len(got) == 0 {
 			t.Errorf("tags %v, want %v", got, want)
 		}
-		if id, all := engine.TenantFrom(free); id != nil || all == "" {
-			t.Errorf("tenant %v, %q: the WithAllTenants of the caller's ctx is lost", id, all)
+		if got, want := velox.RowScopeFromContext(free), velox.RowScopeFromContext(ctx); got != want || got.PolicyBypass == "" {
+			t.Errorf("row scope %+v, want %+v: the WithoutPolicy of the caller's ctx is lost", got, want)
 		}
 		if a, _ := free.Deadline(); !a.Equal(func() time.Time { d, _ := ctx.Deadline(); return d }()) {
 			t.Errorf("deadline %v", a)

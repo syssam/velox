@@ -1,11 +1,15 @@
 package integration
 
-import "github.com/syssam/velox"
+import (
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
+)
 
 // The many-to-many model: books and tags through bookTag, written by hand as
 // velox-gen writes a Descriptor, like the root package's test model. Tags are
-// tenant-scoped, so that a relation's target scope is tested on a real
-// database.
+// confined to the context's org by a scope, so that a relation's target
+// policy is tested on a real database.
 
 type book struct {
 	ID    int64
@@ -28,7 +32,6 @@ func bookDescriptor() velox.Descriptor[book] {
 		Table:      "books",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[bookTag, tag]("Tags", 0, 0, 1, 0)},
 		FieldPtr: func(x *book, i int) any {
 			switch i {
@@ -66,12 +69,19 @@ var tagMeta velox.MetaOnce[tag]
 
 func (*tag) VeloxMeta() *velox.Meta[tag] { return tagMeta.Load(tagDescriptor) }
 
+var tagScope = scope.By(testmodel.Org, Tags.OrgID.EQ, func(x *tag) *int64 { return &x.OrgID })
+
+func (*tag) Policy() velox.Policy[tag] { return tagScope.Policy() }
+
+func (*tag) Hooks() []velox.Hook[tag] { return []velox.Hook[tag]{tagScope.Fill()} }
+
 func tagDescriptor() velox.Descriptor[tag] {
 	return velox.Descriptor[tag]{
+		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*tag)(nil).Policy()) },
+		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*tag)(nil).Hooks()) },
 		Table:      "tags",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
-		Tenant:     1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[bookTag, book]("Books", 0, 1, 0, 0)},
 		FieldPtr: func(x *tag, i int) any {
 			switch i {
@@ -113,7 +123,6 @@ func bookTagDescriptor() velox.Descriptor[bookTag] {
 		Table:      "book_tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
 		FieldPtr: func(x *bookTag, i int) any {
 			switch i {
 			case 0:
@@ -157,7 +166,6 @@ func personDescriptor() velox.Descriptor[person] {
 		Table:      "persons",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "SpouseID", Name: "person_spouse"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[personFriend, person]("Friends", 0, 0, 1, 0), velox.EdgeBidi[person]("Spouse", 2, 0)},
 		FieldPtr: func(x *person, i int) any {
@@ -205,7 +213,6 @@ func personFriendDescriptor() velox.Descriptor[personFriend] {
 		Table:      "person_friends",
 		Columns:    []velox.ColumnDescriptor{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
 		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
 		Bidi:       true,
 		FieldPtr: func(x *personFriend, i int) any {
 			switch i {

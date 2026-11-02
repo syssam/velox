@@ -110,12 +110,6 @@ func TestPluginModelGolden(t *testing.T) {
 	if id := pluginField(t, user, "id"); !id.AutoID || id.Type != "int64" || id.GoType != "int64" || id.Pointer {
 		t.Fatalf("id %+v", id)
 	}
-	if user.Tenant < 0 || user.Fields[user.Tenant].Name != "org_id" {
-		t.Fatalf("user tenant %d", user.Tenant)
-	}
-	if post.Tenant != -1 || join.Tenant != -1 {
-		t.Fatalf("post tenant %d, join tenant %d: want -1", post.Tenant, join.Tenant)
-	}
 	if role := pluginField(t, user, "role"); role.Enum != "UserRole" || role.Type != "enum" || !role.HasDefault {
 		t.Fatalf("role %+v", role)
 	}
@@ -184,15 +178,15 @@ func TestPluginModelGolden(t *testing.T) {
 	}
 }
 
-// TestPluginModel2 pins what model 2 adds to the blog's model and what it
+// TestPluginModel2 pins what model 2 added to the blog's model and what it
 // drops: the table's schema, the indexes with their names, a field's imports,
 // size, literal default, checks and schema types; Nillable and the entity's
 // imports are gone.
 func TestPluginModel2(t *testing.T) {
 	g, o := blogModel(t)
 	m := PluginModel(g, o)
-	if m.Version != 2 {
-		t.Fatalf("model version %d, want 2", m.Version)
+	if m.Version != 3 {
+		t.Fatalf("model version %d, want 3", m.Version)
 	}
 	user, post, cat, group := pluginEntity(t, m, "User"), pluginEntity(t, m, "Post"), pluginEntity(t, m, "Category"), pluginEntity(t, m, "Group")
 	if cat.TableSchema != "blog" || cat.Table != "categories" || user.TableSchema != "" {

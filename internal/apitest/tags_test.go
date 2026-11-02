@@ -19,7 +19,7 @@ func TestWithTagsOddCountTakesAnEmptyValue(t *testing.T) {
 		return nil
 	}))
 	// Three strings, built at run time: staticcheck refuses an odd literal.
-	ctx := velox.WithTags(tenant(1), strings.Fields("route a user")...)
+	ctx := velox.WithTags(scoped(1), strings.Fields("route a user")...)
 	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
 		t.Fatal(err)
 	}

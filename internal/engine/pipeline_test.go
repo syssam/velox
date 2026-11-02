@@ -115,7 +115,7 @@ func TestHooksAndConditionsOfRelations(t *testing.T) {
 			engine.SetInfoPolicy(&info, &engine.EntityPolicy{})
 			st.Entity = &info
 			return nil
-		}, "a copy whose tenant column or policy differs"},
+		}, "a copy whose policy differs"},
 		"invalid predicate": {func(_ context.Context, st *velox.Statement) error {
 			st.Where = append(st.Where, engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: broken}))
 			return nil

@@ -12,8 +12,8 @@ import (
 func ExampleOptions() {
 	var pool *sql.DB // opened by the application
 	db := velox.Open(velox.Postgres, pool, veloxotel.Options(veloxotel.Config{
-		App:          "shop",
-		RecordTenant: true,
+		App:         "shop",
+		RecordScope: true,
 	})...)
 	_ = db
 }

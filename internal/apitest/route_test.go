@@ -288,7 +288,7 @@ func TestRoutingMisconfigurationPanics(t *testing.T) {
 	}
 	defer func() { _ = sqlDB.Close() }()
 	fake := func() velox.Conn { return fakeConn(&fakeconn.Exec{}) }
-	shardFor := velox.WithShardFor(func(context.Context, any) (string, error) { return "eu", nil })
+	shardFor := velox.WithShardFor(func(context.Context) (string, error) { return "eu", nil })
 	for name, c := range map[string]struct {
 		open func()
 		want string // in the panic's message

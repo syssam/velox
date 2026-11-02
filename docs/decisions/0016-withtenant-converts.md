@@ -1,6 +1,6 @@
 # 0016. WithTenant converts the tenant id
 
-- Status: accepted, 2026-10-29
+- Status: superseded by [0029](0029-scope-replaces-tenant.md), 2026-11-02; accepted 2026-10-29
 
 ## Context
 

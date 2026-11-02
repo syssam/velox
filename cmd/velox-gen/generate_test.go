@@ -679,12 +679,12 @@ func TestVerifyGeneratedChecksRelations(t *testing.T) {
 		}
 	}
 	// A key column that does not exist: both entities build, the relation does not.
-	edit("user_velox.go", `velox.EdgeTo[Post]("Posts", 0, 2)`, `velox.EdgeTo[Post]("Posts", 0, 9)`)
+	edit("user_velox.go", `velox.EdgeTo[Post]("Posts", userColID, postColAuthorID)`, `velox.EdgeTo[Post]("Posts", userColID, 9)`)
 	code, out, errs = runCLI(t, dir, "verify", "-out", "gen", "./schema")
 	if code != 1 || out != "velox-gen verify: 2 entities, 1 with errors\n" || !strings.Contains(errs, "User.Posts: its key names column 9") {
 		t.Errorf("a bad key: %d %q %q", code, out, errs)
 	}
-	edit("user_velox.go", `velox.EdgeTo[Post]("Posts", 0, 9)`, `velox.EdgeTo[Post]("Posts", 0, 2)`)
+	edit("user_velox.go", `velox.EdgeTo[Post]("Posts", userColID, 9)`, `velox.EdgeTo[Post]("Posts", userColID, postColAuthorID)`)
 	// A handle that names another entity than the field holds: the target comes
 	// from the handle, so verify must compare it with the field.
 	edit("user_velox.go", "velox.Rel[User, Post]", "velox.Rel[User, User]")
@@ -694,9 +694,9 @@ func TestVerifyGeneratedChecksRelations(t *testing.T) {
 	}
 	edit("user_velox.go", "velox.Rel[User, User]", "velox.Rel[User, Post]")
 	// A target whose metadata is broken: the relation names it, and says so.
-	edit("post_velox.go", "Tenant:     -1,", "Tenant:     9,")
+	edit("post_velox.go", "PrimaryKey: []int{postColID},", "PrimaryKey: []int{9},")
 	code, out, errs = runCLI(t, dir, "verify", "-out", "gen", "./schema")
-	if code != 1 || !strings.Contains(errs, "User.Posts: its target") || !strings.Contains(errs, "the tenant names column 9") || !strings.Contains(out, "with errors") {
+	if code != 1 || !strings.Contains(errs, "User.Posts: its target") || !strings.Contains(errs, "the primary key names column 9") || !strings.Contains(out, "with errors") {
 		t.Errorf("a broken target: %d %q %q", code, out, errs)
 	}
 	noVerifyDirs(t, dir)
@@ -796,7 +796,7 @@ func TestVerifyGeneratedChecksThroughRelations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	re := regexp.MustCompile(`(velox\.EdgeThrough\[UserGroup, Group\]\("Groups", \d+, \d+, )\d+(, \d+\))`)
+	re := regexp.MustCompile(`(velox\.EdgeThrough\[UserGroup, Group\]\("Groups", \w+, \w+, )\w+(, \w+\))`)
 	if !re.Match(b) {
 		t.Fatalf("no EdgeThrough for Groups in\n%s", b)
 	}
@@ -1099,5 +1099,85 @@ type Order struct{ Base }
 		if strings.Contains(out, name) {
 			t.Errorf("%s is listed: %q", name, out)
 		}
+	}
+}
+
+const genScopedUserSchema = `package schema
+
+import (
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+)
+
+type User struct{ schema.Schema }
+
+func (User) Fields() []schema.Field {
+	return []schema.Field{
+		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
+		field.String("name"),
+	}
+}
+`
+
+const genUserPolicy = "package gen\n\nimport \"github.com/syssam/velox\"\n\n" +
+	"func (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n"
+
+// A scoped entity's descriptor wraps the user's Policy in the scope, which the
+// user's file does not call; scope_velox.go holds the key and the scope; and
+// -check and verify, which builds the generated package, agree.
+func TestGenerateScoped(t *testing.T) {
+	dir := genModule(t, map[string]string{"schema/user.go": genScopedUserSchema, "gen/user_policy.go": genUserPolicy})
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		t.Fatalf("%d %q", code, errs)
+	}
+	scope, err := os.ReadFile(filepath.Join(dir, "gen", "scope_velox.go"))
+	if err != nil || !strings.Contains(string(scope), `var OrgKey = scope.NewKey[int64]("org")`) {
+		t.Fatalf("scope_velox.go: %v\n%s", err, scope)
+	}
+	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
+	if !strings.Contains(string(user), "velox.BindPolicy(userScope.Wrap((*User)(nil).Policy()))") ||
+		!strings.Contains(string(user), "velox.BindHooks([]velox.Hook[User]{userScope.Fill()})") {
+		t.Errorf("user_velox.go does not bind the scope around the policy:\n%s", user)
+	}
+	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
+		t.Errorf("-check: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema"); code != 0 {
+		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+}
+
+// Dropping Scoped from the last scoped entity removes scope_velox.go and the
+// wrapping, and the package still builds.
+func TestGenerateScopedRemoved(t *testing.T) {
+	dir := genModule(t, map[string]string{"schema/user.go": genScopedUserSchema, "gen/user_policy.go": genUserPolicy})
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		t.Fatalf("%d %q", code, errs)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "schema", "user.go"), []byte(genUserSchema), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		t.Fatalf("second run: %d %q", code, errs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gen", "scope_velox.go")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("scope_velox.go is still there: %v", err)
+	}
+	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
+	if strings.Contains(string(user), "Scope") || !strings.Contains(string(user), "velox.BindPolicy((*User)(nil).Policy())") {
+		t.Errorf("user_velox.go still wraps the scope:\n%s", user)
+	}
+	if code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema"); code != 0 {
+		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+}
+
+// A file of the user's that declares a name velox-gen writes for a scope is
+// refused, naming the file.
+func TestGenerateRefusesAScopeName(t *testing.T) {
+	dir := genModule(t, map[string]string{"schema/user.go": genScopedUserSchema, "gen/mine.go": "package gen\n\nvar OrgKey = 1\n"})
+	code, _, errs := runCLI(t, dir, "./schema")
+	if code == 0 || !strings.Contains(errs, "mine.go") || !strings.Contains(errs, "OrgKey, a name velox-gen generates") {
+		t.Errorf("%d %q", code, errs)
 	}
 }

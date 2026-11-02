@@ -12,42 +12,66 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Post is the entity of schema Post.
 type Post struct {
-	ID          int64           `json:"id,omitempty"`
-	AuthorID    int64           `json:"author_id,omitempty"`
-	Title       string          `json:"title,omitempty"`
-	Slug        string          `json:"slug,omitempty"`
-	Status      PostStatus      `json:"status,omitempty"`
+	ID          int64           `json:"id"`
+	AuthorID    int64           `json:"author_id"`
+	Title       string          `json:"title"`
+	Slug        string          `json:"slug"`
+	Status      PostStatus      `json:"status"`
 	PublishedAt *time.Time      `json:"published_at,omitempty"`
 	Tags        []string        `json:"tags,omitempty"`
-	Views       int             `json:"views,omitempty"`
+	Views       int             `json:"views"`
 	Author      velox.One[User] `json:"author,omitzero"`
 }
 
+// The positions of Post's columns, in the order of its table.
+const (
+	postColID = iota
+	postColAuthorID
+	postColTitle
+	postColSlug
+	postColStatus
+	postColPublishedAt
+	postColTags
+	postColViews
+)
+
+// The positions of Post's edges.
+const (
+	postEdgeAuthor = iota
+)
+
 // Posts holds the typed handles of Post's columns and relations.
 var Posts = struct {
-	ID          velox.NumberCol[Post, int64]
-	AuthorID    velox.NumberCol[Post, int64]
-	Title       velox.StringCol[Post, string]
-	Slug        velox.StringCol[Post, string]
-	Status      velox.StringCol[Post, PostStatus]
+	// ID is the column id.
+	ID velox.NumberCol[Post, int64]
+	// AuthorID is the column author_id.
+	AuthorID velox.NumberCol[Post, int64]
+	// Title is the column title.
+	Title velox.StringCol[Post, string]
+	// Slug is the column slug.
+	Slug velox.StringCol[Post, string]
+	// Status is the column status.
+	Status velox.StringCol[Post, PostStatus]
+	// PublishedAt is the column published_at.
 	PublishedAt velox.NullOrderedCol[Post, time.Time]
-	Tags        velox.JSONCol[Post, []string]
-	Views       velox.NumberCol[Post, int]
-	Author      velox.Rel[Post, User]
+	// Tags is the column tags.
+	Tags velox.JSONCol[Post, []string]
+	// Views is the column views.
+	Views velox.NumberCol[Post, int]
+	// Author is the edge author, to User.
+	Author velox.Rel[Post, User]
 }{
-	ID:          velox.NumberCol[Post, int64]{I: 0},
-	AuthorID:    velox.NumberCol[Post, int64]{I: 1},
-	Title:       velox.StringCol[Post, string]{I: 2},
-	Slug:        velox.StringCol[Post, string]{I: 3},
-	Status:      velox.StringCol[Post, PostStatus]{I: 4},
-	PublishedAt: velox.NullOrderedCol[Post, time.Time]{I: 5},
-	Tags:        velox.JSONCol[Post, []string]{I: 6},
-	Views:       velox.NumberCol[Post, int]{I: 7},
-	Author:      velox.Rel[Post, User]{I: 0},
+	ID:          velox.NumberCol[Post, int64]{I: postColID},
+	AuthorID:    velox.NumberCol[Post, int64]{I: postColAuthorID},
+	Title:       velox.StringCol[Post, string]{I: postColTitle},
+	Slug:        velox.StringCol[Post, string]{I: postColSlug},
+	Status:      velox.StringCol[Post, PostStatus]{I: postColStatus},
+	PublishedAt: velox.NullOrderedCol[Post, time.Time]{I: postColPublishedAt},
+	Tags:        velox.JSONCol[Post, []string]{I: postColTags},
+	Views:       velox.NumberCol[Post, int]{I: postColViews},
+	Author:      velox.Rel[Post, User]{I: postEdgeAuthor},
 }
 
 var postMeta velox.MetaOnce[Post]
@@ -55,6 +79,7 @@ var postMeta velox.MetaOnce[Post]
 // VeloxMeta is called by velox, not by applications.
 func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor) }
 
+// postDescriptor describes Post to velox: its table, columns, edges and hooks.
 func postDescriptor() velox.Descriptor[Post] {
 	v0 := (&sch.Post{}).Fields()[2].Descriptor().Validators[0].(func(string) error)
 	return velox.Descriptor[Post]{
@@ -66,63 +91,60 @@ func postDescriptor() velox.Descriptor[Post] {
 			{Field: "Slug", Name: "slug"},
 			{Field: "Status", Name: "status", Default: PostStatusDraft},
 			{Field: "PublishedAt", Name: "published_at"},
-			{Field: "Tags", Name: "tags", DefaultFunc: func() any { var v []string; _ = json.Unmarshal([]byte("[\"new\"]"), &v); return v }, Encode: json.Marshal, Decode: json.Unmarshal},
+			{Field: "Tags", Name: "tags", DefaultFunc: func() any { return []string{"new"} }, Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Views", Name: "views"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{postColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[User]("Author", 1, 0),
+			velox.EdgeTo[User]("Author", postColAuthorID, userColID),
 		},
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Post)(nil).Policy()) },
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
-			case 0:
+			case postColID:
 				return &x.ID
-			case 1:
+			case postColAuthorID:
 				return &x.AuthorID
-			case 2:
+			case postColTitle:
 				return &x.Title
-			case 3:
+			case postColSlug:
 				return &x.Slug
-			case 4:
+			case postColStatus:
 				return &x.Status
-			case 5:
+			case postColPublishedAt:
 				return &x.PublishedAt
-			case 6:
+			case postColTags:
 				return &x.Tags
-			case 7:
+			case postColViews:
 				return &x.Views
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Post, i int) any {
 			switch i {
-			case 0:
+			case postEdgeAuthor:
 				return &x.Author
 			}
 			return nil
 		},
 		Check: func(col int, v any) error {
 			switch col {
-			case 2:
+			case postColTitle:
 				x := v.(string)
 				if x == "" {
 					return errors.New("must not be empty")
 				}
-			case 3:
+			case postColSlug:
 				x := v.(string)
 				if err := v0(x); err != nil {
 					return err
 				}
-			case 4:
+			case postColStatus:
 				x := v.(PostStatus)
-				switch x {
-				case "draft", "published":
-				default:
-					return errors.New("is not one of the values")
+				if !x.IsValid() {
+					return errors.New("is not one of draft, published")
 				}
-			case 7:
+			case postColViews:
 				x := v.(int)
 				if x < 0 {
 					return errors.New("is less than 0")
@@ -133,14 +155,14 @@ func postDescriptor() velox.Descriptor[Post] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Post) String() string {
-	var p5 any
+	var publishedAtVal any
 	if x.PublishedAt != nil {
-		p5 = *x.PublishedAt
+		publishedAtVal = *x.PublishedAt
 	}
-	return fmt.Sprintf("Post(ID=%v, AuthorID=%v, Title=%v, Slug=%v, Status=%v, PublishedAt=%v, Tags=%v, Views=%v)", x.ID, x.AuthorID, x.Title, x.Slug, x.Status, p5, x.Tags, x.Views)
+	return fmt.Sprintf("Post(ID=%v, AuthorID=%v, Title=%v, Slug=%v, Status=%v, PublishedAt=%v, Tags=%v, Views=%v)", x.ID, x.AuthorID, x.Title, x.Slug, x.Status, publishedAtVal, x.Tags, x.Views)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Post) GoString() string { return x.String() }

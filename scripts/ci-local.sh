@@ -32,7 +32,8 @@ export VELOX_TEST_MYSQL_ADMIN='root:velox@tcp(127.0.0.1:53306)/?parseTime=true&c
 # As in CI: the itests fail, rather than skip, when a database variable is unset.
 export VELOX_ITEST_REQUIRE=1
 
-unformatted=$(gofmt -l .)
+# .claude/ holds agent worktrees, which CI does not have and go ignores (a dot directory).
+unformatted=$(gofmt -l . | grep -v '^\.claude/' || true)
 if [ -n "$unformatted" ]; then
   echo "gofmt needed:"; echo "$unformatted"; exit 1
 fi

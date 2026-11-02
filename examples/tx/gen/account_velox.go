@@ -8,24 +8,32 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Account is the entity of schema Account.
 type Account struct {
-	ID      int64  `json:"id,omitempty"`
-	Name    string `json:"name,omitempty"`
-	Balance int64  `json:"balance,omitempty"`
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	Balance int64  `json:"balance"`
 }
+
+// The positions of Account's columns, in the order of its table.
+const (
+	accountColID = iota
+	accountColName
+	accountColBalance
+)
 
 // Accounts holds the typed handles of Account's columns and relations.
 var Accounts = struct {
-	ID      velox.NumberCol[Account, int64]
-	Name    velox.StringCol[Account, string]
+	// ID is the column id.
+	ID velox.NumberCol[Account, int64]
+	// Name is the column name.
+	Name velox.StringCol[Account, string]
+	// Balance is the column balance.
 	Balance velox.NumberCol[Account, int64]
 }{
-	ID:      velox.NumberCol[Account, int64]{I: 0},
-	Name:    velox.StringCol[Account, string]{I: 1},
-	Balance: velox.NumberCol[Account, int64]{I: 2},
+	ID:      velox.NumberCol[Account, int64]{I: accountColID},
+	Name:    velox.StringCol[Account, string]{I: accountColName},
+	Balance: velox.NumberCol[Account, int64]{I: accountColBalance},
 }
 
 var accountMeta velox.MetaOnce[Account]
@@ -33,6 +41,7 @@ var accountMeta velox.MetaOnce[Account]
 // VeloxMeta is called by velox, not by applications.
 func (*Account) VeloxMeta() *velox.Meta[Account] { return accountMeta.Load(accountDescriptor) }
 
+// accountDescriptor describes Account to velox: its table, columns, edges and hooks.
 func accountDescriptor() velox.Descriptor[Account] {
 	return velox.Descriptor[Account]{
 		Table: "accounts",
@@ -41,18 +50,17 @@ func accountDescriptor() velox.Descriptor[Account] {
 			{Field: "Name", Name: "name"},
 			{Field: "Balance", Name: "balance"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{accountColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1}, Unique: true}, // name
+			{Columns: []int{accountColName}, Unique: true}, // name
 		},
 		FieldPtr: func(x *Account, i int) any {
 			switch i {
-			case 0:
+			case accountColID:
 				return &x.ID
-			case 1:
+			case accountColName:
 				return &x.Name
-			case 2:
+			case accountColBalance:
 				return &x.Balance
 			}
 			return nil
@@ -60,10 +68,10 @@ func accountDescriptor() velox.Descriptor[Account] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Account) String() string {
 	return fmt.Sprintf("Account(ID=%v, Name=%v, Balance=%v)", x.ID, x.Name, x.Balance)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Account) GoString() string { return x.String() }

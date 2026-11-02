@@ -56,9 +56,11 @@ func (c *LikeConnection) Edges(ctx context.Context) ([]*LikeEdge, error) {
 	if err != nil {
 		return nil, err
 	}
+	slab := make([]LikeEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*LikeEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		edges[i] = &LikeEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = LikeEdge{Node: x, Cursor: p.Cursors[i]}
+		edges[i] = &slab[i]
 	}
 	return edges, nil
 }
@@ -108,8 +110,8 @@ func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // Columns or Omit drops one is refused with an internal error. In a gqlgen
 // field, the page reads only the columns the selection needs (likeColumnsGQL),
 // of those q selects; a column the selection does not need is left zero in the
-// nodes, except the key, the foreign keys, the order columns and the tenant, so
-// an application's resolver must not read one it did not ask for. It runs no
+// nodes, except the key, the foreign keys and the order columns, so an
+// application's resolver must not read one it did not ask for. It runs no
 // query.
 func LikesConnectionOf(ctx context.Context, q velox.Query[Like], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
 	if !q.Selects(Likes.UserID, Likes.PostID) {
@@ -139,9 +141,9 @@ func likeKeyGQL() []gqlimpl.OrderTerm[Like] {
 }
 
 // likeColumnsGQL is the columns a selection of the Like fields fields reads:
-// the key, every foreign key on the row, every order field's column, the tenant
-// column, and the column of each field. It is nil, every column, when a field
-// is not one velox-graphql wrote, such as an application's own.
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
 func likeColumnsGQL(fields []string) []velox.Column[Like] {
 	cols := []velox.Column[Like]{Likes.UserID, Likes.PostID}
 	for _, f := range fields {
@@ -189,15 +191,7 @@ type CreateLikeInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in CreateLikeInput) String() string {
-	var p0 any
-	if in.Weight != nil {
-		p0 = *in.Weight
-	}
-	var p1 any
-	if in.CreatedAt != nil {
-		p1 = *in.CreatedAt
-	}
-	return fmt.Sprintf("CreateLikeInput(Weight=%v, CreatedAt=%v, UserID=%v, PostID=%v)", p0, p1, in.UserID, in.PostID)
+	return fmt.Sprintf("CreateLikeInput(Weight=%v, CreatedAt=%v, UserID=%v, PostID=%v)", gqlimpl.Show(in.Weight), gqlimpl.Show(in.CreatedAt), in.UserID, in.PostID)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -205,20 +199,19 @@ func (in CreateLikeInput) GoString() string { return in.String() }
 
 // CreateLike creates a Like from input, with its edges, as the mutation
 // createLike does, and returns the row as written. It runs atomically on the DB
-// veloxgql.DBFromContext reads from ctx, under the tenant scope and the
-// policies. See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
+// veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql for what
+// each input field does, what the caller may link and change, and the errors.
 func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 	var (
-		k2  int64
-		k3  int64
-		err error
+		userIDKey int64
+		postIDKey int64
+		err       error
 	)
-	if k2, err = gqlimpl.DecodeID[int64]("CreateLikeInput.userID", input.UserID, "Account"); err != nil {
+	if userIDKey, err = gqlimpl.DecodeID[int64]("CreateLikeInput.userID", input.UserID, "Account"); err != nil {
 		return nil, err
 	}
-	if k3, err = gqlimpl.DecodeID[int64]("CreateLikeInput.postID", input.PostID, "Post"); err != nil {
+	if postIDKey, err = gqlimpl.DecodeID[int64]("CreateLikeInput.postID", input.PostID, "Post"); err != nil {
 		return nil, err
 	}
 	var x Like
@@ -239,14 +232,14 @@ func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 	}
 	var out *Like
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(k2)), 1, "CreateLikeInput.userID", "Account"); err != nil {
+		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(userIDKey)), 1, "CreateLikeInput.userID", "Account"); err != nil {
 			return err
 		}
-		x.UserID = k2
-		if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.EQ(k3)), 1, "CreateLikeInput.postID", "Post"); err != nil {
+		x.UserID = userIDKey
+		if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.EQ(postIDKey)), 1, "CreateLikeInput.postID", "Post"); err != nil {
 			return err
 		}
-		x.PostID = k3
+		x.PostID = postIDKey
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreateLikeInput", "gen.Like", likeFieldGQL)
 		}

@@ -11,6 +11,7 @@ import (
 	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 )
 
 // scopeGen builds Ticket conditions from fuzz input: each byte read picks the
@@ -121,16 +122,16 @@ func scopeCase(ops []byte, s string) (*velox.Statement, []velox.Option) {
 }
 
 // FuzzScope (Review Focus 1): whatever the conditions and the Rewrite hooks,
-// a Ticket statement as ann under tenant n gets the tenant condition and the
+// a Ticket statement as ann under org n gets the org condition and the
 // owner condition as conditions of its own, every EXISTS on Ticket gets both
 // among its conditions, at every depth, and every EXISTS on Invoice its
-// tenant condition; and the caller's conditions are left as they were.
+// org condition; and the caller's conditions are left as they were.
 func FuzzScope(f *testing.F) {
 	f.Add(int64(7), []byte{}, "")
 	f.Add(int64(7), []byte{0, 3, 2, 3, 0}, "a")                  // select: Has(Parent), Has(Invoice), Title
 	f.Add(int64(-1), []byte{1, 1, 7, 2, 7, 1, 2, 3}, "b")        // count: HasWhere(Parent, HasWhere(Parent, Has(Parent)), Has(Invoice))
 	f.Add(int64(3), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "") // update: And(Not(HasWhere(Parent, Has(Parent))), Or(Has(Invoice))), Title
-	f.Add(int64(0), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "") // the same under the zero tenant, which is refused
+	f.Add(int64(0), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "") // the same under the zero org, which is refused
 	f.Add(int64(9), []byte{3 | 15<<2, 2, 7, 1, 7, 1, 2, 1}, "c") // delete with every hook: three EXISTS deep
 	f.Fuzz(func(t *testing.T, n int64, ops []byte, s string) {
 		if len(ops) > 64 {
@@ -140,12 +141,12 @@ func FuzzScope(f *testing.F) {
 		want, _ := scopeCase(ops, s) // the same conditions, built again: a copy no run touches
 		in := st.Where
 		db := openFake(velox.Postgres, &fakeconn.Exec{}, opts...)
-		ctx := testmodel.WithUser(velox.WithTenant(context.Background(), n), "ann")
+		ctx := testmodel.WithUser(testmodel.Org.With(context.Background(), n), "ann")
 		err := prepare(ctx, db, st)
 		if n == 0 {
-			// The zero tenant scopes nothing: the statement fails closed.
-			if !errors.Is(err, velox.ErrNoTenant) {
-				t.Fatalf("tenant 0: %v", err)
+			// The zero org scopes nothing: the statement fails closed.
+			if !errors.Is(err, scope.ErrNoScope) {
+				t.Fatalf("org 0: %v", err)
 			}
 			return
 		}
@@ -155,25 +156,25 @@ func FuzzScope(f *testing.F) {
 
 		ticket, invoice := st.Entity, infoOf[testmodel.Invoice]()
 		owner := velox.Predicate(Tk.Owner.EQ("ann"))
-		ticketTenant := velox.ColumnEQ(int(Tk.OrgID.I), n)
-		invoiceTenant := velox.ColumnEQ(int(testmodel.Invoices.OrgID.I), n)
+		ticketOrg := velox.ColumnEQ(int(Tk.OrgID.I), n)
+		invoiceOrg := velox.ColumnEQ(int(testmodel.Invoices.OrgID.I), n)
 		has := func(ps []velox.Predicate, p velox.Predicate) bool {
 			return slices.ContainsFunc(ps, func(q velox.Predicate) bool { return reflect.DeepEqual(q, p) })
 		}
-		if !has(st.Where, ticketTenant) || !has(st.Where, owner) {
-			t.Fatalf("the statement's own conditions lack the tenant or the owner condition: %#v", st.Where)
+		if !has(st.Where, ticketOrg) || !has(st.Where, owner) {
+			t.Fatalf("the statement's own conditions lack the org or the owner condition: %#v", st.Where)
 		}
 		var walk func(p velox.Predicate, depth int)
 		walk = func(p velox.Predicate, depth int) {
 			kids := kids(p)
 			switch existsOn(p) {
 			case ticket:
-				if !has(kids, ticketTenant) || !has(kids, owner) {
-					t.Fatalf("an EXISTS on Ticket at depth %d lacks the tenant or the owner condition: %#v", depth, kids)
+				if !has(kids, ticketOrg) || !has(kids, owner) {
+					t.Fatalf("an EXISTS on Ticket at depth %d lacks the org or the owner condition: %#v", depth, kids)
 				}
 			case invoice:
-				if !has(kids, invoiceTenant) {
-					t.Fatalf("an EXISTS on Invoice at depth %d lacks the tenant condition: %#v", depth, kids)
+				if !has(kids, invoiceOrg) {
+					t.Fatalf("an EXISTS on Invoice at depth %d lacks the org condition: %#v", depth, kids)
 				}
 			}
 			for _, k := range kids {

@@ -11,9 +11,9 @@ against the target's policies, and which ones depends on what the link writes
 
 ## Decision
 
-- A mutation returns the row as written. `Update<T>` reads it back under the
-  tenant scope without the Read policy: its UPDATE is scoped by the Read
-  policy too, so the caller could read the row before it wrote it. This is a
+- A mutation returns the row as written. `Update<T>` reads it back by key
+  with `WithoutPolicy`, which lifts the Read policy and any scope: its UPDATE is
+  scoped by the Read policy too, so the caller could read the row before it wrote it. This is a
   contract, and will not change.
 - A many-to-many link inserts a join row and changes no target row, so the
   target needs Read. A one-to-many or one-to-one link from the owner sets the

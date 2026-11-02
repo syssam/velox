@@ -3,18 +3,25 @@
 // in the engine, so a rule of another shape (a soft delete, published rows
 // only) is written the same way.
 //
-// An entity declares the scope in its schema methods:
+// The usual way to declare a scope is in the schema, on its column:
+//
+//	field.Int64("org_id").Immutable().Annotations(schema.Scoped("org"))
+//
+// velox-gen then writes the key, gen.OrgKey, and each entity's scope, and binds
+// the scope around the Policy and Hooks the entity declares itself. By hand, for a
+// rule the annotation does not cover, an entity declares the scope in its own
+// Policy and Hooks methods:
 //
 //	var Org = scope.NewKey[int64]("org")
 //
-//	func (Issue) Policy() velox.Policy[gen.Issue] { return issueScope.Policy() }
-//	func (Issue) Hooks() []velox.Hook[gen.Issue]  { return []velox.Hook[gen.Issue]{issueScope.Fill()} }
+//	func (*Issue) Policy() velox.Policy[Issue] { return issueScope.Policy() }
+//	func (*Issue) Hooks() []velox.Hook[Issue]  { return []velox.Hook[Issue]{issueScope.Fill()} }
 //
-//	var issueScope = scope.By(Org, gen.Issues.OrgID.EQ, func(x *gen.Issue) *int64 { return &x.OrgID })
+//	var issueScope = scope.By(Org, Issues.OrgID.EQ, func(x *Issue) *int64 { return &x.OrgID })
 //
 // and a request carries the value:
 //
-//	ctx = Org.With(ctx, 7)
+//	ctx = gen.OrgKey.With(ctx, 7) // or Org.With(ctx, 7) for a key made by hand
 //
 // Reads, updates and deletes then see only rows whose column is 7; an insert
 // that leaves the column unset gets 7, and one that names another value is
@@ -60,7 +67,9 @@ func NewKey[V comparable](name string) *Key[V] { return &Key[V]{name: name} }
 // With returns ctx carrying v for the key. A later With replaces it. The zero
 // value is no value: statements under it fail with [ErrNoScope].
 func (k *Key[V]) With(ctx context.Context, v V) context.Context {
-	return context.WithValue(ctx, ctxKey[V]{k}, v)
+	// The batcher keeps callers of different values apart by RowScope, which
+	// shows the value because it was recorded here.
+	return velox.WithScopeValue(context.WithValue(ctx, ctxKey[V]{k}, v), k.name, v)
 }
 
 // From returns the key's value in ctx, and false when there is none or it is

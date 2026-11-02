@@ -8,21 +8,27 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // UserGroup is the join entity of table user_groups.
 type UserGroup struct {
-	UserID  int64 `json:"user_id,omitempty"`
-	GroupID int64 `json:"group_id,omitempty"`
+	UserID  int64 `json:"user_id"`
+	GroupID int64 `json:"group_id"`
 }
+
+// The positions of UserGroup's columns, in the order of its table.
+const (
+	userGroupColUserID = iota
+	userGroupColGroupID
+)
 
 // UserGroups holds the typed handles of UserGroup's columns and relations.
 var UserGroups = struct {
-	UserID  velox.NumberCol[UserGroup, int64]
+	// UserID is the column user_id.
+	UserID velox.NumberCol[UserGroup, int64]
+	// GroupID is the column group_id.
 	GroupID velox.NumberCol[UserGroup, int64]
 }{
-	UserID:  velox.NumberCol[UserGroup, int64]{I: 0},
-	GroupID: velox.NumberCol[UserGroup, int64]{I: 1},
+	UserID:  velox.NumberCol[UserGroup, int64]{I: userGroupColUserID},
+	GroupID: velox.NumberCol[UserGroup, int64]{I: userGroupColGroupID},
 }
 
 var userGroupMeta velox.MetaOnce[UserGroup]
@@ -30,6 +36,7 @@ var userGroupMeta velox.MetaOnce[UserGroup]
 // VeloxMeta is called by velox, not by applications.
 func (*UserGroup) VeloxMeta() *velox.Meta[UserGroup] { return userGroupMeta.Load(userGroupDescriptor) }
 
+// userGroupDescriptor describes UserGroup to velox: its table, columns, edges and hooks.
 func userGroupDescriptor() velox.Descriptor[UserGroup] {
 	return velox.Descriptor[UserGroup]{
 		Table: "user_groups",
@@ -37,16 +44,12 @@ func userGroupDescriptor() velox.Descriptor[UserGroup] {
 			{Field: "UserID", Name: "user_id"},
 			{Field: "GroupID", Name: "group_id"},
 		},
-		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
-		TenantRefs: []velox.TenantRef{
-			{Column: 0, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-		},
+		PrimaryKey: []int{userGroupColUserID, userGroupColGroupID},
 		FieldPtr: func(x *UserGroup, i int) any {
 			switch i {
-			case 0:
+			case userGroupColUserID:
 				return &x.UserID
-			case 1:
+			case userGroupColGroupID:
 				return &x.GroupID
 			}
 			return nil
@@ -54,10 +57,10 @@ func userGroupDescriptor() velox.Descriptor[UserGroup] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x UserGroup) String() string {
 	return fmt.Sprintf("UserGroup(UserID=%v, GroupID=%v)", x.UserID, x.GroupID)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x UserGroup) GoString() string { return x.String() }

@@ -8,27 +8,37 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Project is the entity of schema Project.
 type Project struct {
-	ID     int64  `json:"id,omitempty"`
-	OrgID  int64  `json:"org_id,omitempty"`
-	Name   string `json:"name,omitempty"`
-	Status string `json:"status,omitempty"`
+	ID     int64  `json:"id"`
+	OrgID  int64  `json:"org_id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }
+
+// The positions of Project's columns, in the order of its table.
+const (
+	projectColID = iota
+	projectColOrgID
+	projectColName
+	projectColStatus
+)
 
 // Projects holds the typed handles of Project's columns and relations.
 var Projects = struct {
-	ID     velox.NumberCol[Project, int64]
-	OrgID  velox.NumberCol[Project, int64]
-	Name   velox.StringCol[Project, string]
+	// ID is the column id.
+	ID velox.NumberCol[Project, int64]
+	// OrgID is the column org_id.
+	OrgID velox.NumberCol[Project, int64]
+	// Name is the column name.
+	Name velox.StringCol[Project, string]
+	// Status is the column status.
 	Status velox.StringCol[Project, string]
 }{
-	ID:     velox.NumberCol[Project, int64]{I: 0},
-	OrgID:  velox.NumberCol[Project, int64]{I: 1},
-	Name:   velox.StringCol[Project, string]{I: 2},
-	Status: velox.StringCol[Project, string]{I: 3},
+	ID:     velox.NumberCol[Project, int64]{I: projectColID},
+	OrgID:  velox.NumberCol[Project, int64]{I: projectColOrgID},
+	Name:   velox.StringCol[Project, string]{I: projectColName},
+	Status: velox.StringCol[Project, string]{I: projectColStatus},
 }
 
 var projectMeta velox.MetaOnce[Project]
@@ -36,6 +46,7 @@ var projectMeta velox.MetaOnce[Project]
 // VeloxMeta is called by velox, not by applications.
 func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(projectDescriptor) }
 
+// projectDescriptor describes Project to velox: its table, columns, edges and hooks.
 func projectDescriptor() velox.Descriptor[Project] {
 	return velox.Descriptor[Project]{
 		Table: "projects",
@@ -45,22 +56,21 @@ func projectDescriptor() velox.Descriptor[Project] {
 			{Field: "Name", Name: "name"},
 			{Field: "Status", Name: "status"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{projectColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1, 2}, Unique: true}, // org_id, name
+			{Columns: []int{projectColOrgID, projectColName}, Unique: true}, // org_id, name
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Project)(nil).Policy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Project)(nil).Hooks()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(projectScope.Policy()) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Project]{projectScope.Fill()}) },
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
-			case 0:
+			case projectColID:
 				return &x.ID
-			case 1:
+			case projectColOrgID:
 				return &x.OrgID
-			case 2:
+			case projectColName:
 				return &x.Name
-			case 3:
+			case projectColStatus:
 				return &x.Status
 			}
 			return nil
@@ -68,10 +78,10 @@ func projectDescriptor() velox.Descriptor[Project] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Project) String() string {
 	return fmt.Sprintf("Project(ID=%v, OrgID=%v, Name=%v, Status=%v)", x.ID, x.OrgID, x.Name, x.Status)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Project) GoString() string { return x.String() }

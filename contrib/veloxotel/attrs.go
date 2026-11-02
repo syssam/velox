@@ -7,6 +7,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/scope"
 )
 
 // schemaURL is the semantic-conventions release whose names this file holds.
@@ -42,8 +43,7 @@ const (
 	attrFingerprint  = "velox.fingerprint"
 	attrCount        = "velox.count"
 	attrTagPrefix    = "velox.tag." // + the tag's key
-	attrTenant       = "velox.tenant"
-	attrTenantBypass = "velox.tenant_bypass"
+	attrScope        = "velox.scope"
 	attrPolicyBypass = "velox.policy_bypass"
 
 	attrRouteShard    = "velox.route.shard"    // only on a sharded DB
@@ -185,8 +185,8 @@ func errorTypeOf(ctx context.Context, err error, code string) string {
 	switch {
 	case errIs(err, velox.ErrDenied):
 		return "velox.denied"
-	case errIs(err, velox.ErrNoTenant):
-		return "velox.no_tenant"
+	case errIs(err, scope.ErrNoScope):
+		return "velox.no_scope"
 	case errIs(err, velox.ErrUnbounded), errIs(err, velox.ErrNoWhere), errIs(err, velox.ErrLimitTooLarge):
 		return "velox.unbounded"
 	case errIs(err, velox.ErrTooManyRows):

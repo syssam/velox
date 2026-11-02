@@ -8,7 +8,8 @@ import (
 	"github.com/syssam/velox"
 )
 
-// Policy says who may see and change invoices. velox-gen binds it into
+// Policy says who may see and change invoices, within the context's organization
+// (the scope that Scoped generates is bound around it). velox-gen binds it into
 // Invoice's metadata, and velox calls it once, on a nil *Invoice.
 func (*Invoice) Policy() velox.Policy[Invoice] {
 	return velox.Policy[Invoice]{
@@ -34,7 +35,8 @@ func (*Invoice) Policy() velox.Policy[Invoice] {
 }
 
 // Hooks says what a valid new invoice is: a number that starts with INV-.
-// velox-gen binds it into Invoice's metadata too.
+// velox-gen binds it into Invoice's metadata too, after the scope's fill of the
+// organization.
 func (*Invoice) Hooks() []velox.Hook[Invoice] {
 	return []velox.Hook[Invoice]{velox.On(validNumber, velox.OpInsert)}
 }

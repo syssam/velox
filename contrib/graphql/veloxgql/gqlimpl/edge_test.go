@@ -51,7 +51,6 @@ func ownerDescriptor() velox.Descriptor[owner] {
 		Table:      "owners",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "Age", Name: "age"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[child]("Children", 0, 1), velox.EdgeThrough[ownerTag, tag]("Tags", 0, 0, 1, 0)},
 		FieldPtr:   func(x *owner, i int) any { return [...]any{&x.ID, &x.Name, &x.Age}[i] },
 		EdgeFieldPtr: func(x *owner, i int) any {
@@ -96,7 +95,6 @@ func childDescriptor() velox.Descriptor[child] {
 		Table:      "children",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Title", Name: "title"}, {Field: "EditorID", Name: "editor_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[owner]("Owner", 1, 0), velox.EdgeTo[owner]("Editor", 3, 0)},
 		FieldPtr:   func(x *child, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Title, &x.EditorID}[i] },
 		EdgeFieldPtr: func(x *child, i int) any {
@@ -125,7 +123,6 @@ func tagDescriptor() velox.Descriptor[tag] {
 		Table:      "tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr:   func(x *tag, i int) any { return [...]any{&x.ID, &x.Name}[i] },
 	}
 }
@@ -144,7 +141,6 @@ func ownerTagDescriptor() velox.Descriptor[ownerTag] {
 		Table:      "owner_tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "OwnerID", Name: "owner_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
 		FieldPtr:   func(x *ownerTag, i int) any { return [...]any{&x.OwnerID, &x.TagID}[i] },
 	}
 }
@@ -585,12 +581,8 @@ func TestEdgeScopes(t *testing.T) {
 	}{
 		{"WithoutPolicy", func(ctx context.Context, s string) context.Context { return velox.WithoutPolicy(ctx, s) }, 2},
 		{"WithShard", velox.WithShard, 2},
-		// A tenant id == cannot compare: no panic, and a read of its own.
-		{"incomparable tenant", func(ctx context.Context, s string) context.Context { return velox.WithTenant(ctx, []byte(s)) }, 3},
-		// A comparable type whose value is not (the review's M2): the same.
-		{"struct tenant holding a slice", func(ctx context.Context, s string) context.Context {
-			return velox.WithTenant(ctx, struct{ ID any }{[]byte(s)})
-		}, 3},
+		// A scope value: callers of different values batch apart.
+		{"WithScopeValue", func(ctx context.Context, s string) context.Context { return velox.WithScopeValue(ctx, "org", s) }, 2},
 	} {
 		t.Run(c.name, func(t *testing.T) { testEdgeScopes(t, c.scope, c.loads) })
 	}

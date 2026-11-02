@@ -12,6 +12,7 @@ import (
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/internal/testmodel/kind"
+	"github.com/syssam/velox/scope"
 )
 
 func TestGroupedSQL(t *testing.T) {
@@ -139,7 +140,7 @@ func TestGroupsAreRowCapped(t *testing.T) {
 	}
 }
 
-// A grouped aggregate takes the tenant scope and the Read policy as Count does.
+// A grouped aggregate takes the scope and the Read policy as Count does.
 func TestGroupedIsScoped(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{"ann", int64(3)}}}
 	db := openFake(velox.Postgres, e)
@@ -154,10 +155,10 @@ func TestGroupedIsScoped(t *testing.T) {
 	}
 	wantSent(t, e, `SELECT "owner", COUNT(*) FROM "tickets" WHERE "done" = $1 AND "org_id" = $2 AND "owner" = $3 GROUP BY "owner" ORDER BY "owner"`, false, int64(1), "ann")
 
-	// No tenant, no statement; a Read policy that refuses, no statement.
+	// No org, no statement; a Read policy that refuses, no statement.
 	calls := e.Calls
-	if _, err := velox.CountBy(context.Background(), q, Tk.Owner.Key()); !errors.Is(err, velox.ErrNoTenant) {
-		t.Errorf("no tenant: %v", err)
+	if _, err := velox.CountBy(context.Background(), q, Tk.Owner.Key()); !errors.Is(err, scope.ErrNoScope) {
+		t.Errorf("no org: %v", err)
 	}
 	if _, err := velox.CountBy(asUser(""), q, Tk.Owner.Key()); !errors.Is(err, velox.ErrDenied) {
 		t.Errorf("no user: %v", err)

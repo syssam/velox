@@ -5,227 +5,49 @@ package gen
 import (
 	"context"
 
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
 const _ = veloxgql.GeneratedCodeIsVersion7
 
-// Node returns the node with the global ID id, or nil when no row has its
-// key. It reads the ID's type, decodes the key as that type's, and looks
-// the row up with one query on that entity, through the DB veloxgql.DBFromContext
-// reads from ctx, reading only the columns the field's selection needs; its
-// edges batch (veloxgql.Batch). A column the selection does not need is
-// zero in the node, except the key, the foreign keys and the tenant: an
-// application's resolver must not read one it did not select. An ID of no
-// Node type fails with veloxgql.ErrWrongIDType and a malformed one with
-// veloxgql.ErrBadID; neither runs a query.
+// Node returns the node with the global ID id, or nil when no row has its key.
+// It reads the ID's type, decodes the key as that type's, and looks the row up
+// with one query on that entity, through the DB veloxgql.DBFromContext reads
+// from ctx, reading only the columns the field's selection needs; its edges
+// batch (veloxgql.Batch). A column the selection does not need is zero in the
+// node, except the key and the foreign keys: an application's resolver must not
+// read one it did not select. An ID of no Node type fails with
+// veloxgql.ErrWrongIDType and a malformed one with veloxgql.ErrBadID; neither
+// runs a query.
 func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
-	typ, err := veloxgql.IDType(id)
-	if err != nil {
-		return nil, err
-	}
-	switch typ {
-	case "Post":
-		k, err := veloxgql.DecodeID[int64](id, "Post")
-		if err != nil {
-			return nil, err
-		}
-		db, err := veloxgql.DBFromContext(ctx)
-		if err != nil {
-			return nil, err
-		}
-		q := db.Query[Post]()
-		if fields, ok := gqlimpl.Selected(ctx, "Post"); ok {
-			q = gqlimpl.Narrow(q, postColumnsGQL(fields))
-		}
-		x, err := q.Where(Posts.ID.EQ(k)).One(ctx)
-		switch {
-		case velox.IsNotFound(err):
-			return nil, nil
-		case err != nil:
-			return nil, err
-		}
-		veloxgql.Batch(ctx, []*Post{x})
-		return x, nil
-	case "Label":
-		k, err := veloxgql.DecodeID[int64](id, "Label")
-		if err != nil {
-			return nil, err
-		}
-		db, err := veloxgql.DBFromContext(ctx)
-		if err != nil {
-			return nil, err
-		}
-		q := db.Query[Tag]()
-		if fields, ok := gqlimpl.Selected(ctx, "Label"); ok {
-			q = gqlimpl.Narrow(q, tagColumnsGQL(fields))
-		}
-		x, err := q.Where(Tags.ID.EQ(k)).One(ctx)
-		switch {
-		case velox.IsNotFound(err):
-			return nil, nil
-		case err != nil:
-			return nil, err
-		}
-		veloxgql.Batch(ctx, []*Tag{x})
-		return x, nil
-	case "User":
-		k, err := veloxgql.DecodeID[int64](id, "User")
-		if err != nil {
-			return nil, err
-		}
-		db, err := veloxgql.DBFromContext(ctx)
-		if err != nil {
-			return nil, err
-		}
-		q := db.Query[User]()
-		if fields, ok := gqlimpl.Selected(ctx, "User"); ok {
-			q = gqlimpl.Narrow(q, userColumnsGQL(fields))
-		}
-		x, err := q.Where(Users.ID.EQ(k)).One(ctx)
-		switch {
-		case velox.IsNotFound(err):
-			return nil, nil
-		case err != nil:
-			return nil, err
-		}
-		veloxgql.Batch(ctx, []*User{x})
-		return x, nil
-	}
-	return nil, gqlimpl.InputErrorf("Node: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
+	return gqlimpl.NodeByID(ctx, id, nodeKindGQL)
 }
 
-// Nodes returns the nodes with the global IDs ids, in their order, with nil
-// for an ID no row has. It decodes every ID first, and then looks up each
-// type's nodes with one query, through the DB veloxgql.DBFromContext reads from
-// ctx; the query reads at most one row for each of its IDs, whatever the
-// DB's WithMaxRows, and only the columns the field's selection needs. The
-// nodes of a type are one batch for their edges (veloxgql.Batch). A column
-// the selection does not need is zero in a node, except the key, the foreign
-// keys and the tenant: an application's resolver must not read one it did
-// not select.
-// It fails as Node does on an ID, before any query runs,
-// and with veloxgql.ErrPageTooLarge on more IDs than the MaxPage of
-// veloxgql.LimitsFromContext(ctx).
+// Nodes returns the nodes with the global IDs ids, in their order, with nil for
+// an ID no row has. It decodes every ID first, and then looks up each type's
+// nodes with one query, through the DB veloxgql.DBFromContext reads from ctx;
+// the query reads at most one row for each of its IDs, whatever the DB's
+// WithMaxRows, and only the columns the field's selection needs. The nodes of a
+// type are one batch for their edges (veloxgql.Batch). A column the selection
+// does not need is zero in a node, except the key and the foreign keys: an
+// application's resolver must not read one it did not select. It fails as Node
+// does on an ID, before any query runs, and with veloxgql.ErrPageTooLarge on
+// more IDs than the MaxPage of veloxgql.LimitsFromContext(ctx).
 func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
-	if most := veloxgql.LimitsFromContext(ctx).MaxPage; len(ids) > most {
-		return nil, gqlimpl.InputErrorf("Nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), most)
+	return gqlimpl.NodesByID(ctx, ids, nodeKindGQL)
+}
+
+// nodeKindGQL is the Node type the ID type typ names, or nil when it names
+// none.
+func nodeKindGQL(typ string) gqlimpl.NodeKind {
+	switch typ {
+	case "Post":
+		return postNodeGQL()
+	case "Label":
+		return tagNodeGQL()
+	case "User":
+		return userNodeGQL()
 	}
-	// The keys of each type, and the indexes in ids of their IDs.
-	var (
-		keysPost  []int64
-		atPost    []int
-		keysLabel []int64
-		atLabel   []int
-		keysUser  []int64
-		atUser    []int
-	)
-	for i, id := range ids {
-		typ, err := veloxgql.IDType(id)
-		if err != nil {
-			return nil, err
-		}
-		switch typ {
-		case "Post":
-			k, err := veloxgql.DecodeID[int64](id, "Post")
-			if err != nil {
-				return nil, err
-			}
-			keysPost = append(keysPost, k)
-			atPost = append(atPost, i)
-		case "Label":
-			k, err := veloxgql.DecodeID[int64](id, "Label")
-			if err != nil {
-				return nil, err
-			}
-			keysLabel = append(keysLabel, k)
-			atLabel = append(atLabel, i)
-		case "User":
-			k, err := veloxgql.DecodeID[int64](id, "User")
-			if err != nil {
-				return nil, err
-			}
-			keysUser = append(keysUser, k)
-			atUser = append(atUser, i)
-		default:
-			return nil, gqlimpl.InputErrorf("Nodes: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
-		}
-	}
-	out := make([]veloxgql.Noder, len(ids))
-	if len(ids) == 0 {
-		return out, nil
-	}
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(keysPost) > 0 {
-		q := db.Query[Post]()
-		if fields, ok := gqlimpl.Selected(ctx, "Post"); ok {
-			q = gqlimpl.Narrow(q, postColumnsGQL(fields))
-		}
-		rows, err := q.Where(Posts.ID.In(keysPost...)).Unbounded().MaxRows(len(keysPost)).All(ctx)
-		if err != nil {
-			return nil, err
-		}
-		by := make(map[int64]*Post, len(rows))
-		batch := make([]*Post, len(rows))
-		for i := range rows {
-			by[rows[i].ID] = &rows[i]
-			batch[i] = &rows[i]
-		}
-		veloxgql.Batch(ctx, batch)
-		for j, k := range keysPost {
-			if x := by[k]; x != nil {
-				out[atPost[j]] = x
-			}
-		}
-	}
-	if len(keysLabel) > 0 {
-		q := db.Query[Tag]()
-		if fields, ok := gqlimpl.Selected(ctx, "Label"); ok {
-			q = gqlimpl.Narrow(q, tagColumnsGQL(fields))
-		}
-		rows, err := q.Where(Tags.ID.In(keysLabel...)).Unbounded().MaxRows(len(keysLabel)).All(ctx)
-		if err != nil {
-			return nil, err
-		}
-		by := make(map[int64]*Tag, len(rows))
-		batch := make([]*Tag, len(rows))
-		for i := range rows {
-			by[rows[i].ID] = &rows[i]
-			batch[i] = &rows[i]
-		}
-		veloxgql.Batch(ctx, batch)
-		for j, k := range keysLabel {
-			if x := by[k]; x != nil {
-				out[atLabel[j]] = x
-			}
-		}
-	}
-	if len(keysUser) > 0 {
-		q := db.Query[User]()
-		if fields, ok := gqlimpl.Selected(ctx, "User"); ok {
-			q = gqlimpl.Narrow(q, userColumnsGQL(fields))
-		}
-		rows, err := q.Where(Users.ID.In(keysUser...)).Unbounded().MaxRows(len(keysUser)).All(ctx)
-		if err != nil {
-			return nil, err
-		}
-		by := make(map[int64]*User, len(rows))
-		batch := make([]*User, len(rows))
-		for i := range rows {
-			by[rows[i].ID] = &rows[i]
-			batch[i] = &rows[i]
-		}
-		veloxgql.Batch(ctx, batch)
-		for j, k := range keysUser {
-			if x := by[k]; x != nil {
-				out[atUser[j]] = x
-			}
-		}
-	}
-	return out, nil
+	return nil
 }

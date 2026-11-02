@@ -8,33 +8,51 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Line is the entity of schema Line.
 type Line struct {
-	ID          int64              `json:"id,omitempty"`
-	OrgID       int64              `json:"org_id,omitempty"`
-	InvoiceID   int64              `json:"invoice_id,omitempty"`
-	Description string             `json:"description,omitempty"`
-	AmountCents int64              `json:"amount_cents,omitempty"`
+	ID          int64              `json:"id"`
+	OrgID       int64              `json:"org_id"`
+	InvoiceID   int64              `json:"invoice_id"`
+	Description string             `json:"description"`
+	AmountCents int64              `json:"amount_cents"`
 	Invoice     velox.One[Invoice] `json:"invoice,omitzero"`
 }
 
+// The positions of Line's columns, in the order of its table.
+const (
+	lineColID = iota
+	lineColOrgID
+	lineColInvoiceID
+	lineColDescription
+	lineColAmountCents
+)
+
+// The positions of Line's edges.
+const (
+	lineEdgeInvoice = iota
+)
+
 // Lines holds the typed handles of Line's columns and relations.
 var Lines = struct {
-	ID          velox.NumberCol[Line, int64]
-	OrgID       velox.NumberCol[Line, int64]
-	InvoiceID   velox.NumberCol[Line, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Line, int64]
+	// OrgID is the column org_id.
+	OrgID velox.NumberCol[Line, int64]
+	// InvoiceID is the column invoice_id.
+	InvoiceID velox.NumberCol[Line, int64]
+	// Description is the column description.
 	Description velox.StringCol[Line, string]
+	// AmountCents is the column amount_cents.
 	AmountCents velox.NumberCol[Line, int64]
-	Invoice     velox.Rel[Line, Invoice]
+	// Invoice is the edge invoice, to Invoice.
+	Invoice velox.Rel[Line, Invoice]
 }{
-	ID:          velox.NumberCol[Line, int64]{I: 0},
-	OrgID:       velox.NumberCol[Line, int64]{I: 1},
-	InvoiceID:   velox.NumberCol[Line, int64]{I: 2},
-	Description: velox.StringCol[Line, string]{I: 3},
-	AmountCents: velox.NumberCol[Line, int64]{I: 4},
-	Invoice:     velox.Rel[Line, Invoice]{I: 0},
+	ID:          velox.NumberCol[Line, int64]{I: lineColID},
+	OrgID:       velox.NumberCol[Line, int64]{I: lineColOrgID},
+	InvoiceID:   velox.NumberCol[Line, int64]{I: lineColInvoiceID},
+	Description: velox.StringCol[Line, string]{I: lineColDescription},
+	AmountCents: velox.NumberCol[Line, int64]{I: lineColAmountCents},
+	Invoice:     velox.Rel[Line, Invoice]{I: lineEdgeInvoice},
 }
 
 var lineMeta velox.MetaOnce[Line]
@@ -42,43 +60,41 @@ var lineMeta velox.MetaOnce[Line]
 // VeloxMeta is called by velox, not by applications.
 func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDescriptor) }
 
+// lineDescriptor describes Line to velox: its table, columns, edges and hooks.
 func lineDescriptor() velox.Descriptor[Line] {
 	return velox.Descriptor[Line]{
 		Table: "lines",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "InvoiceID", Name: "invoice_id"},
 			{Field: "Description", Name: "description"},
 			{Field: "AmountCents", Name: "amount_cents"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     1,
-		TenantRefs: []velox.TenantRef{
-			{Column: 2, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-		},
+		PrimaryKey: []int{lineColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Invoice]("Invoice", 2, 0),
+			velox.EdgeTo[Invoice]("Invoice", lineColInvoiceID, invoiceColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Line)(nil).Policy()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(lineScope.Wrap((*Line)(nil).Policy())) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Line]{lineScope.Fill()}) },
 		FieldPtr: func(x *Line, i int) any {
 			switch i {
-			case 0:
+			case lineColID:
 				return &x.ID
-			case 1:
+			case lineColOrgID:
 				return &x.OrgID
-			case 2:
+			case lineColInvoiceID:
 				return &x.InvoiceID
-			case 3:
+			case lineColDescription:
 				return &x.Description
-			case 4:
+			case lineColAmountCents:
 				return &x.AmountCents
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Line, i int) any {
 			switch i {
-			case 0:
+			case lineEdgeInvoice:
 				return &x.Invoice
 			}
 			return nil
@@ -86,10 +102,10 @@ func lineDescriptor() velox.Descriptor[Line] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Line) String() string {
 	return fmt.Sprintf("Line(ID=%v, OrgID=%v, InvoiceID=%v, Description=%v, AmountCents=%v)", x.ID, x.OrgID, x.InvoiceID, x.Description, x.AmountCents)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Line) GoString() string { return x.String() }

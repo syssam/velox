@@ -112,12 +112,13 @@ func TestTxOutcomes(t *testing.T) {
 		{"commit fails", &fakeDB{commitErr: boom}, func(context.Context, *velox.DB) error { return nil }, "error", "_OTHER"},
 		{"begin fails", &fakeDB{errs: []error{boom}}, func(context.Context, *velox.DB) error { return nil }, "error", "_OTHER"},
 		{
-			// Ticket's policy denies a context that names no user: the
-			// refusal comes before execution, so it makes no statement span
-			// and is seen only on the transaction it ends.
+			// Ticket's policy denies a context that names no user (this one
+			// has an org, and no policy bypass): the refusal comes before
+			// execution, so it makes no statement span and is seen only on
+			// the transaction it ends.
 			"denied", &fakeDB{},
-			func(ctx context.Context, tx *velox.DB) error {
-				_, err := tx.Query[testmodel.Ticket]().Limit(1).All(ctx)
+			func(_ context.Context, tx *velox.DB) error {
+				_, err := tx.Query[testmodel.Ticket]().Limit(1).All(testmodel.Org.With(context.Background(), 1))
 				return err
 			},
 			"rollback", "velox.denied",

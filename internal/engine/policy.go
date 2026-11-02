@@ -10,51 +10,12 @@ import (
 	"strings"
 )
 
-// tenantKey is the context key of a tenantScope: WithTenant and WithAllTenants
-// share it, so that the later of the two on a context wins.
-type tenantKey struct{}
-
-// tenantScope is the tenant state a context carries: an ID, or the reason
-// for reading every tenant.
-type tenantScope struct {
-	id  any
-	all string
-}
-
 // policyKey is the context key of a WithoutPolicy reason.
 type policyKey struct{}
 
-// WithTenant returns ctx scoped to tenant id: statements on a tenant-scoped
-// entity read and change only that tenant's rows, and inserts fill or check
-// the tenant column. id is converted to the tenant column's Go type when it
-// is of a predeclared integer type (an untyped constant is an int) and the
-// column's type, predeclared or named such as an OrgID int64, is an integer
-// type whose range holds it; or when it is a string and the column's kind is
-// string. An id of a named type is never converted: it must be the column's
-// type, so a UserID never serves an OrgID column. Any other id fails the
-// statement with ErrTenantMismatch. A nil id, or the type's zero value (what
-// parsing a missing claim gives), scopes nothing: such statements fail with
-// ErrNoTenant. It replaces an earlier WithTenant or WithAllTenants on ctx.
-func WithTenant(ctx context.Context, id any) context.Context {
-	return context.WithValue(ctx, tenantKey{}, tenantScope{id: id})
-}
-
-// WithAllTenants returns ctx unscoped: statements on a tenant-scoped entity
-// reach every tenant's rows. The reason is required and is shown to hooks as
-// Statement.TenantBypass; with a reason that is empty or only white space
-// WithAllTenants returns ctx unchanged, so a statement without a tenant still
-// fails. It replaces an earlier WithTenant or WithAllTenants on ctx.
-func WithAllTenants(ctx context.Context, reason string) context.Context {
-	if NoReason(reason) {
-		return ctx
-	}
-	return context.WithValue(ctx, tenantKey{}, tenantScope{all: reason})
-}
-
 // WithoutPolicy returns ctx with every entity's policy switched off. The reason
 // is required and is shown to hooks as Statement.PolicyBypass; with a reason
-// that is empty or only white space WithoutPolicy returns ctx unchanged. It
-// does not lift tenant scoping: see WithAllTenants.
+// that is empty or only white space WithoutPolicy returns ctx unchanged.
 func WithoutPolicy(ctx context.Context, reason string) context.Context {
 	if NoReason(reason) {
 		return ctx
@@ -62,15 +23,65 @@ func WithoutPolicy(ctx context.Context, reason string) context.Context {
 	return context.WithValue(ctx, policyKey{}, reason)
 }
 
-// RowScopeFromContext returns ctx's row scope.
-func RowScopeFromContext(ctx context.Context) RowScope {
-	id, all := TenantFrom(ctx)
-	rc, _ := ctx.Value(routeKey{}).(routeCtx)
-	return RowScope{Tenant: id, TenantBypass: all, PolicyBypass: PolicyBypassReason(ctx), Shard: rc.shard, HasShard: rc.onShard}
+// scopeKey is the context key of the scope values a context carries.
+type scopeKey struct{}
+
+// scopeValues are the values policies read from a context, by name: kept as
+// the text RowScope.Values shows, "name=%T:%v" joined with ";" in the order of
+// the names, so that it compares with ==.
+type scopeValues []scopeValue
+
+type scopeValue struct{ name, text string }
+
+// WithScopeValue returns ctx recording that the policies read value under name,
+// so that RowScopeFromContext shows it and a batcher keeps callers with
+// different values apart. A later call with the same name replaces it. The
+// scope package calls it; a policy that reads a context value of its own and
+// is used with a batcher should too.
+func WithScopeValue(ctx context.Context, name string, value any) context.Context {
+	old, _ := ctx.Value(scopeKey{}).(scopeValues)
+	text := fmt.Sprintf("%T:%v", value, value)
+	vs := make(scopeValues, 0, len(old)+1)
+	inserted := false
+	for _, o := range old {
+		switch {
+		case o.name == name:
+			vs, inserted = append(vs, scopeValue{name, text}), true
+		case !inserted && o.name > name:
+			vs, inserted = append(vs, scopeValue{name, text}, o), true
+		default:
+			vs = append(vs, o)
+		}
+	}
+	if !inserted {
+		vs = append(vs, scopeValue{name, text})
+	}
+	return context.WithValue(ctx, scopeKey{}, vs)
 }
 
-// NoReason reports whether reason, a bypass's (WithAllTenants, WithoutPolicy,
-// Raw, Exec), says nothing: it is empty or only white space.
+// ScopeValuesText is the values WithScopeValue recorded in ctx, as RowScope.Values
+// shows them; "" when none.
+func ScopeValuesText(ctx context.Context) string {
+	vs, _ := ctx.Value(scopeKey{}).(scopeValues)
+	var b strings.Builder
+	for i, v := range vs {
+		if i > 0 {
+			b.WriteByte(';')
+		}
+		b.WriteString(v.name)
+		b.WriteByte('=')
+		b.WriteString(v.text)
+	}
+	return b.String()
+}
+
+// RowScopeFromContext returns ctx's row scope.
+func RowScopeFromContext(ctx context.Context) RowScope {
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
+	return RowScope{Values: ScopeValuesText(ctx), PolicyBypass: PolicyBypassReason(ctx), Shard: rc.shard, HasShard: rc.onShard}
+}
+
+// NoReason reports whether reason, a bypass's (WithoutPolicy, Raw, Exec), says nothing: it is empty or only white space.
 func NoReason(reason string) bool { return strings.TrimSpace(reason) == "" }
 
 // dryRunKey is the context key the SQL(ctx) methods mark their context with.
@@ -94,13 +105,6 @@ func IsDryRun(ctx context.Context) bool {
 // DryRunContext returns ctx marked for IsDryRun.
 func DryRunContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, dryRunKey{}, true)
-}
-
-// TenantFrom returns the context's tenant state: the tenant's id (nil when
-// none), and the WithAllTenants reason ("" when none). At most one is set.
-func TenantFrom(ctx context.Context) (id any, all string) {
-	s, _ := ctx.Value(tenantKey{}).(tenantScope)
-	return s.id, s.all
 }
 
 // PolicyBypassReason returns the context's WithoutPolicy reason; "" when none.

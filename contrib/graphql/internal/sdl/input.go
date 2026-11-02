@@ -103,7 +103,7 @@ func (g *graph) mutationsOf(o *object) error {
 }
 
 // inputFields are the fields of o's create input, or its update input:
-//   - neither has the primary key, the tenant or a foreign key; the edges
+//   - neither has the primary key or a foreign key; the edges
 //     stand for the foreign keys;
 //   - neither has a field whose Skip leaves out the input, or that
 //     CreateInput(false) or UpdateInput(false) leaves out;
@@ -138,7 +138,7 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []I
 	for i, f := range e.Fields {
 		a := o.fanns[i]
 		switch {
-		case o.node && i == e.PrimaryKey[0], i == e.Tenant, f.Implicit != "", o.fks[f.Name], a.Skip&skip != 0, !create && f.Immutable:
+		case o.node && i == e.PrimaryKey[0], f.Implicit != "", o.fks[f.Name], a.Skip&skip != 0, !create && f.Immutable:
 			continue
 		}
 		// An UpdateDefault fills the field on update only: on create it is
@@ -230,8 +230,6 @@ type edgeInput struct {
 //     O2O nothing; create keeps its inputs, which only link;
 //   - an immutable key on o's row is set on create only;
 //   - an M2M edge writes join rows: <edge>IDs, add/remove/clear;
-//   - a key on o's row that is the tenant has no input: the tenant scope fills
-//     it, as it does a tenant with no edge;
 //   - an edge to a type that is not a Node has no ID and no input. When that
 //     edge is required and holds its key on o's row, createX could never
 //     succeed: an error.
@@ -259,9 +257,6 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 		return nil, err
 	}
 	fk := g.keyField(ed)
-	if ed.OwnsKey && ed.FieldOn == o.ent.Name && o.ent.Tenant >= 0 && fk == o.ent.Fields[o.ent.Tenant] {
-		return nil, nil // the tenant scope fills the key
-	}
 	immutable := ed.Immutable || fk != nil && fk.Immutable
 	nullable := fk == nil || fk.Nullable
 	dirs, err := directives(o.eanns[i].Directives, where)

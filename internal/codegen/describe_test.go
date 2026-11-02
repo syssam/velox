@@ -15,7 +15,7 @@ func TestDescribeText(t *testing.T) {
 	if err := Describe(&b, mustBuild(t, User{}, Post{}, Group{}), false); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"User (users)", "org_id", "tenant", "O2M → Post", "M2M → Group", "user_groups(user_id, group_id)", "pointer"} {
+	for _, want := range []string{"User (users)", "org_id", "immutable", "O2M → Post", "M2M → Group", "user_groups(user_id, group_id)", "pointer"} {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("missing %q in\n%s", want, b.String())
 		}

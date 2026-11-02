@@ -1,8 +1,9 @@
 # tenant
 
 `gen.Project` belongs to an organization. velox has no tenant concept: the
-scope is a `Policy` and a hook, written in `gen/scope.go` with the `scope`
-package, so that a soft delete or an owner rule is written the same way.
+scope is a `Policy` and a hook of the `scope` package, which velox-gen writes for a
+column marked `schema.Scoped("org")`, so that a soft delete or an owner rule is
+written the same way, by hand.
 
 ```sh
 cd examples
@@ -10,15 +11,19 @@ go run ./tenant
 ```
 
 ```go
-var Org = scope.NewKey[int64]("org")
-var projectScope = scope.By(Org, Projects.OrgID.EQ, func(x *Project) *int64 { return &x.OrgID })
+// schema/project.go
+field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 
-func (*Project) Policy() velox.Policy[Project] { return projectScope.Policy() }
-func (*Project) Hooks() []velox.Hook[Project]  { return []velox.Hook[Project]{projectScope.Fill()} }
+// gen/scope_velox.go, written by velox-gen
+var OrgKey = scope.NewKey[int64]("org")
+var projectScope = scope.By(OrgKey, Projects.OrgID.EQ, func(x *Project) *int64 { return &x.OrgID })
 ```
 
+The descriptor binds `projectScope`'s policy and fill hook, and wraps the `Policy` and
+`Hooks` a `Project` declares itself, if any, in them.
+
 ```go
-ctx = gen.Org.With(ctx, acme)          // acme is an int64, the column's type
+ctx = gen.OrgKey.With(ctx, acme)          // acme is an int64, the column's type
 
 db.Insert(&p).Exec(ctx)                // fills p.OrgID
 db.Query[gen.Project]().Count(ctx)     // ... WHERE "org_id" = ?
@@ -33,7 +38,7 @@ It fails closed:
 
 | What | Error |
 |---|---|
-| no `Org.With` (or the zero value) | `scope.ErrNoScope` |
+| no `OrgKey.With` (or the zero value) | `scope.ErrNoScope` |
 | inserting a row whose `OrgID` names another organization | `scope.ErrMismatch` |
 | `Set` of `OrgID` (it is `Immutable`) | `velox.ErrImmutable` |
 

@@ -10,24 +10,32 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Org is the entity of schema Org.
 type Org struct {
-	ID   int64  `json:"id,omitempty"`
-	Slug string `json:"slug,omitempty"`
-	Name string `json:"name,omitempty"`
+	ID   int64  `json:"id"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
 }
+
+// The positions of Org's columns, in the order of its table.
+const (
+	orgColID = iota
+	orgColSlug
+	orgColName
+)
 
 // Orgs holds the typed handles of Org's columns and relations.
 var Orgs = struct {
-	ID   velox.NumberCol[Org, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Org, int64]
+	// Slug is the column slug.
 	Slug velox.StringCol[Org, string]
+	// Name is the column name.
 	Name velox.StringCol[Org, string]
 }{
-	ID:   velox.NumberCol[Org, int64]{I: 0},
-	Slug: velox.StringCol[Org, string]{I: 1},
-	Name: velox.StringCol[Org, string]{I: 2},
+	ID:   velox.NumberCol[Org, int64]{I: orgColID},
+	Slug: velox.StringCol[Org, string]{I: orgColSlug},
+	Name: velox.StringCol[Org, string]{I: orgColName},
 }
 
 var orgMeta velox.MetaOnce[Org]
@@ -35,6 +43,7 @@ var orgMeta velox.MetaOnce[Org]
 // VeloxMeta is called by velox, not by applications.
 func (*Org) VeloxMeta() *velox.Meta[Org] { return orgMeta.Load(orgDescriptor) }
 
+// orgDescriptor describes Org to velox: its table, columns, edges and hooks.
 func orgDescriptor() velox.Descriptor[Org] {
 	return velox.Descriptor[Org]{
 		Table: "orgs",
@@ -43,25 +52,24 @@ func orgDescriptor() velox.Descriptor[Org] {
 			{Field: "Slug", Name: "slug"},
 			{Field: "Name", Name: "name"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{orgColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1}, Unique: true}, // slug
+			{Columns: []int{orgColSlug}, Unique: true}, // slug
 		},
 		FieldPtr: func(x *Org, i int) any {
 			switch i {
-			case 0:
+			case orgColID:
 				return &x.ID
-			case 1:
+			case orgColSlug:
 				return &x.Slug
-			case 2:
+			case orgColName:
 				return &x.Name
 			}
 			return nil
 		},
 		Check: func(col int, v any) error {
 			switch col {
-			case 1:
+			case orgColSlug:
 				x := v.(string)
 				if x == "" {
 					return errors.New("must not be empty")
@@ -69,7 +77,7 @@ func orgDescriptor() velox.Descriptor[Org] {
 				if len(x) > 40 {
 					return errors.New("length is more than 40")
 				}
-			case 2:
+			case orgColName:
 				x := v.(string)
 				if x == "" {
 					return errors.New("must not be empty")
@@ -83,10 +91,10 @@ func orgDescriptor() velox.Descriptor[Org] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Org) String() string {
 	return fmt.Sprintf("Org(ID=%v, Slug=%v, Name=%v)", x.ID, x.Slug, x.Name)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Org) GoString() string { return x.String() }

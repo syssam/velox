@@ -1,5 +1,5 @@
-// Command tracker is an issue tracker's JSON API on velox: organizations as
-// tenants, logins, roles enforced by policy, relations, transactions, keyset
+// Command tracker is an issue tracker's JSON API on velox: organizations
+// that scope their rows, logins, roles enforced by policy, relations, transactions, keyset
 // pages and migrations, on SQLite or PostgreSQL. See README.md.
 package main
 

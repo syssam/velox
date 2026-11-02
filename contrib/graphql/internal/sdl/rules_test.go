@@ -18,7 +18,7 @@ import (
 // element, fails generation with the schema and the element named.
 func TestAnnotationMisuse(t *testing.T) {
 	// build is a User with a name, an optional nickname, a sensitive secret,
-	// a status enum, an immutable handle, the tenant and a posts edge, each
+	// a status enum, an immutable handle, an org id and a posts edge, each
 	// with the annotations given.
 	type anns struct{ user, name, nickname, secret, status, handle, org, posts graphql.Annotation }
 	build := func(a anns) *plugin.Model {
@@ -35,7 +35,6 @@ func TestAnnotationMisuse(t *testing.T) {
 		org := field("org_id", "int64")
 		org.Annotations = ann(t, a.org)
 		user := entity("User", name, nickname, secret, status, handle, org)
-		user.Tenant = 6
 		user.Annotations = ann(t, a.user)
 		posts := edge("posts", plugin.O2M, "User")
 		posts.Annotations = ann(t, a.posts)
@@ -69,8 +68,6 @@ func TestAnnotationMisuse(t *testing.T) {
 		{"EnumValues on a string", anns{name: graphql.EnumValues(map[string]string{"a": "A"})}, []string{"schema User, field name", "graphql.EnumValues"}},
 		{"an unknown EnumValues key", anns{status: graphql.EnumValues(map[string]string{"gone": "GONE"})}, []string{"schema User, field status", `"gone"`}},
 		{"WhereOps on a sensitive field", anns{secret: graphql.WhereOps()}, []string{"schema User, field secret", "graphql.WhereOps", "sensitive"}},
-		{"WhereOps on the tenant", anns{org: graphql.WhereOps()}, []string{"schema User, field org_id", "graphql.WhereOps", "tenant"}},
-		{"CreateInput(true) on the tenant", anns{org: graphql.CreateInput(true)}, []string{"schema User, field org_id", "graphql.CreateInput", "tenant"}},
 		{"UpdateInput(true) on an immutable field", anns{handle: graphql.UpdateInput(true)}, []string{"schema User, field handle", "graphql.UpdateInput", "immutable"}},
 		{"an unknown mutation", anns{user: graphql.Mutations("upsert")}, []string{"schema User", `"upsert"`}},
 		{"create with its input skipped", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create"}, Skip: graphql.SkipMutationCreateInput}}, []string{"schema User", "create", "SkipMutationCreateInput"}},
@@ -78,9 +75,6 @@ func TestAnnotationMisuse(t *testing.T) {
 		{"Mutations on a skipped type", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create"}, Skip: graphql.SkipType}}, []string{"schema User", "graphql.Mutations", "Skip"}},
 		{"OrderField on a field out of the type", anns{name: graphql.Annotation{OrderField: "NAME", Skip: graphql.SkipType}}, []string{"schema User, field name", "graphql.OrderField", "cursors"}},
 		{"WhereOps on a field out of the type", anns{name: graphql.Annotation{WhereOps: graphql.OpsEquality, Skip: graphql.SkipType}}, []string{"schema User, field name", "graphql.WhereOps", "reveal"}},
-		{"CreateInput(false) on the tenant", anns{org: graphql.CreateInput(false)}, []string{"schema User, field org_id", "graphql.CreateInput", "tenant"}},
-		{"UpdateInput(false) on the tenant", anns{org: graphql.UpdateInput(false)}, []string{"schema User, field org_id", "graphql.UpdateInput", "tenant"}},
-		{"UpdateInput(true) on the tenant", anns{org: graphql.UpdateInput(true)}, []string{"schema User, field org_id", "graphql.UpdateInput", "tenant"}},
 		{"update with its input skipped", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"update"}, Skip: graphql.SkipMutationUpdateInput}}, []string{"schema User", "update", "SkipMutationUpdateInput"}},
 	} {
 		t.Run(c.name, func(t *testing.T) { renderErr(t, build(c.a), c.wants...) })
@@ -115,7 +109,7 @@ func TestAnnotationMisuse(t *testing.T) {
 		// give the key.
 		for _, target := range []*plugin.Entity{
 			func() *plugin.Entity { u := entity("User"); u.Annotations = ann(t, graphql.Skip()); return u }(),
-			{Name: "User", Tenant: -1, PrimaryKey: []int{0, 1}, Fields: []*plugin.Field{field("a", "string"), field("b", "string")}},
+			{Name: "User", PrimaryKey: []int{0, 1}, Fields: []*plugin.Field{field("a", "string"), field("b", "string")}},
 		} {
 			post := entity("Post", field("title", "string"))
 			author := edge("author", plugin.M2O, "User")
@@ -160,7 +154,7 @@ func TestAnnotationMisuse(t *testing.T) {
 	})
 
 	t.Run("QueryField on a join entity", func(t *testing.T) {
-		join := &plugin.Entity{Name: "UserGroup", Join: true, Tenant: -1, PrimaryKey: []int{0, 1},
+		join := &plugin.Entity{Name: "UserGroup", Join: true, PrimaryKey: []int{0, 1},
 			Fields: []*plugin.Field{field("user_id", "int64"), field("group_id", "int64")}}
 		join.Annotations = ann(t, graphql.QueryField("userGroups"))
 		renderErr(t, model(entity("User"), join), "schema UserGroup", "graphql.QueryField", "join")
@@ -170,7 +164,7 @@ func TestAnnotationMisuse(t *testing.T) {
 
 	t.Run("update or delete without an ID", func(t *testing.T) {
 		for _, k := range []graphql.MutationKind{graphql.MutationUpdate, graphql.MutationDelete} {
-			like := &plugin.Entity{Name: "Like", Tenant: -1, PrimaryKey: []int{0, 1},
+			like := &plugin.Entity{Name: "Like", PrimaryKey: []int{0, 1},
 				Fields: []*plugin.Field{field("a", "string"), field("b", "string")}}
 			like.Annotations = ann(t, graphql.Mutations(k))
 			renderErr(t, model(like), "schema Like", string(k), "key")

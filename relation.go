@@ -93,7 +93,7 @@ func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T] {
 // The load is one statement for every owner (per chunk of owners, under the
 // dialect's parameter limit), which ranks each owner's rows with
 // ROW_NUMBER() on every dialect; ties in the order are broken by the target's
-// primary key. The tenant scope and the Read policy apply before the ranking,
+// primary key. The Read policy, a scope included, applies before the ranking,
 // so a row they hide takes no place in a page. A to-one relation read by the
 // target's one-column primary key has at most one entity per owner, and
 // needs no ranking.

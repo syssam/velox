@@ -11,8 +11,8 @@ import (
 	"github.com/syssam/velox/schema/mixin"
 )
 
-// Org is an organization: the tenant. It is not itself scoped to a tenant, as
-// signing up and logging in find it before there is one.
+// Org is an organization, the scope of the rest. It is not itself scoped, as
+// signing up and logging in find it before the context names one.
 type Org struct{ schema.Schema }
 
 // Fields returns the columns after the ID.
@@ -31,12 +31,12 @@ func (Org) Annotations() []schema.Annotation {
 // User is a member of one Org. An email is unique within the Org.
 type User struct{ schema.Schema }
 
-// Fields returns the columns after the ID. Tenant makes OrgID the tenant column:
-// every statement on User is scoped to the context's tenant, and fails without
-// one.
+// Fields returns the columns after the ID. OrgID is Immutable, so that an update
+// cannot move a row to another Org; Scoped confines every statement on
+// User to the context's Org, and fails without one.
 func (User) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.String("email").NotEmpty().MaxLen(200),
 		field.String("name").NotEmpty().MaxLen(100),
 		field.String("password_hash").Sensitive(),
@@ -50,7 +50,7 @@ func (User) Indexes() []schema.Index {
 }
 
 // Session is a login. Only a hash of its token is stored, so a copy of the table
-// cannot be used to log in. It names its Org because a request has no tenant
+// cannot be used to log in. It names its Org because a request names no Org
 // until its Session is found.
 type Session struct{ schema.Schema }
 
@@ -73,7 +73,7 @@ func (Project) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
 // Fields returns the columns after the ID and the mixin's.
 func (Project) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.String("name").NotEmpty().MaxLen(100),
 	}
 }
@@ -96,7 +96,7 @@ func (Issue) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
 // Fields returns the columns after the ID and the mixin's.
 func (Issue) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.Int64("project_id"),
 		field.Int64("author_id"),
 		field.Int64("assignee_id").Optional().Nillable(),
@@ -132,7 +132,7 @@ func (Comment) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
 // Fields returns the columns after the ID and the mixin's.
 func (Comment) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.Int64("issue_id"),
 		field.Int64("author_id"),
 		field.Text("body").NotEmpty(),
@@ -154,7 +154,7 @@ type Label struct{ schema.Schema }
 // Fields returns the columns after the ID.
 func (Label) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.String("name").NotEmpty().MaxLen(50),
 	}
 }

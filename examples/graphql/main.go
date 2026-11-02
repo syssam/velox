@@ -113,12 +113,12 @@ func server(db *velox.DB, opts ...veloxgql.Option) http.Handler {
 	return h
 }
 
-// orgFromHeader puts the tenant, the organization the X-Org-ID header names,
-// in the request's context. Every statement on Post is scoped to it, and
-// fails with velox.ErrNoTenant without it. This example lets the client
-// choose, to be tried with curl, which is for this demo only: a client that
-// names its own tenant can read every tenant's rows. A real server takes the
-// tenant from what authenticates the request.
+// orgFromHeader puts the organization the X-Org-ID header names in the
+// request's context. Every statement on Post is scoped to it, and fails with
+// scope.ErrNoScope without it. This example lets the client choose, to be
+// tried with curl, which is for this demo only: a client that names its own
+// organization can read every organization's rows. A real server takes the
+// organization from what authenticates the request.
 func orgFromHeader(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if h := r.Header.Get("X-Org-ID"); h != "" {
@@ -127,7 +127,7 @@ func orgFromHeader(next http.Handler) http.Handler {
 				http.Error(w, "X-Org-ID is not a number", http.StatusBadRequest)
 				return
 			}
-			r = r.WithContext(velox.WithTenant(r.Context(), org)) // an int64: the tenant column's Go type
+			r = r.WithContext(gen.OrgKey.With(r.Context(), org))
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -190,7 +190,7 @@ func open(ctx context.Context, sqlDB *sql.DB, opts ...velox.Option) (*velox.DB, 
 	return velox.Open(velox.SQLite, sqlDB, opts...), nil
 }
 
-// The organizations, the tenants: int64, the tenant column's Go type.
+// The organizations: int64, the scope key's Go type.
 const (
 	acme   int64 = 1
 	globex int64 = 2
@@ -221,7 +221,7 @@ func seed(ctx context.Context, db *velox.DB) error {
 		},
 	}
 	for _, org := range []int64{acme, globex} {
-		if err := db.InsertAll(posts[org]).Exec(velox.WithTenant(ctx, org)); err != nil {
+		if err := db.InsertAll(posts[org]).Exec(gen.OrgKey.With(ctx, org)); err != nil {
 			return err
 		}
 	}
@@ -230,9 +230,6 @@ func seed(ctx context.Context, db *velox.DB) error {
 		return err
 	}
 	links := []gen.PostTag{{PostID: 1, TagID: 1}, {PostID: 1, TagID: 3}, {PostID: 3, TagID: 2}, {PostID: 5, TagID: 1}}
-	// A join row's foreign keys are checked against a tenant; these span the orgs.
-	if err := db.InsertAll(links).Exec(velox.WithAllTenants(ctx, "the seed links every org's posts")); err != nil {
-		return err
-	}
-	return nil
+	// The join table has no scope; these links span the orgs.
+	return db.InsertAll(links).Exec(ctx)
 }

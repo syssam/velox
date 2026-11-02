@@ -50,7 +50,7 @@
 //
 //	paid, err := velox.Sum(ctx, db.Query[gen.Invoice]().Where(gen.Invoices.Status.EQ(gen.InvoiceStatusPaid)), gen.Invoices.TotalCents)
 //
-// The tenant scope and the policy apply to them as to Count. Sum is 0 when
+// The policy, a scope included, applies to them as to Count. Sum is 0 when
 // no row matches; Avg, Min and Max also return false then, as there is no
 // value to give.
 //
@@ -82,7 +82,7 @@
 //
 // The statement ranks each owner's rows with ROW_NUMBER() OVER (PARTITION BY
 // …), on PostgreSQL, MySQL 8 and SQLite 3.25 or later; ties break by the
-// target's primary key. The tenant scope and the Read policy apply inside the
+// target's primary key. The Read policy, a scope included, applies inside the
 // ranking, so a row they hide takes no place in a page. A many-to-many page
 // joins the join table in the same statement. Such a load is bounded by its
 // limit, so neither the owner query's MaxRows nor the DB's cap applies to it;
@@ -103,7 +103,7 @@
 // # Writes
 //
 // DB.Insert and DB.InsertAll insert entities: Exec fills their defaults and
-// the tenant. Insert reads the generated key back; InsertAll reads nothing
+// runs their hooks and policy. Insert reads the generated key back; InsertAll reads nothing
 // back, so give its entities their keys when later writes need them. OnConflict, followed by
 // Update or DoNothing, makes an insert an upsert. DB.Update and DB.Delete
 // change the rows their conditions match, and Exec returns how many; one
@@ -121,11 +121,9 @@
 // join row fails when either row is there already;
 // OnConflict(...).DoNothing() is the idempotent insert.
 //
-// The tenant scope and the entity's policy apply to writes as to reads. A
-// write under a tenant that sets a foreign key to a tenant-scoped row first
-// checks that the row is the tenant's, and fails with ErrTenantRef, at the cost of
-// one SELECT per such column, which Around hooks do not see. A join entity's rows are
-// scoped through their foreign keys. See WithTenant.
+// The entity's policy applies to writes as to reads. Confining rows to a
+// value the context carries, such as an organization, is a policy and a hook
+// of the entity: see package scope.
 //
 // # JSON fields
 //
@@ -148,8 +146,8 @@
 // A condition other than IsNull and NotNull on an encoded column, and
 // ordering by it, are refused when the statement runs, as equality and order
 // of encoded values differ by dialect; JSONCol and NullJSONCol have no such
-// methods, so generated code refuses them at compile time. A primary-key,
-// tenant or relation-key column cannot be encoded: the metadata is refused.
+// methods, so generated code refuses them at compile time. A primary-key
+// or relation-key column cannot be encoded: the metadata is refused.
 // Codec says nothing of the database type, which the migration planner takes
 // from the schema's field type.
 //
@@ -157,7 +155,7 @@
 //
 // A Hook wraps an entity's writes and receives each as a Mutation. For an
 // update or a delete, Conds returns the conditions the caller and the
-// earlier hooks gave, and not the tenant's or the policy's; it is empty when
+// earlier hooks gave, and not the policy's; it is empty when
 // the statement said All. ValueIn, a method of each column handle, returns
 // the value an update assigns to the column, and whether it assigns one.
 // Affected returns the rows the write changed once next has returned. A hook
@@ -170,15 +168,15 @@
 // WithSession keeps a request reading its own writes from the primary for a
 // short window after a write; a replica that fails a read falls over to the
 // primary. OpenShards runs each statement on one shard, chosen from the
-// context's tenant (WithShardFor) or WithShard. See examples/routing.
+// context (WithShardFor) or WithShard. See examples/routing.
 //
 // # Raw SQL
 //
 // Raw SQL is the escape hatch for CTEs, a GROUP BY of several keys and anything else the
 // builder cannot express: DB.Exec runs a statement, and DB.Raw scans a
-// query's rows into an entity by column name. velox applies neither the
-// tenant scope nor any policy to raw SQL, so tenant scoping is the caller's,
-// and both require a reason, which hooks see as Statement.TenantBypass.
+// query's rows into an entity by column name. velox applies no
+// policy to raw SQL, a scope included, so the caller confines the rows, and
+// both require a reason, which hooks see as Statement.PolicyBypass.
 //
 // # SQLite
 //
@@ -201,7 +199,7 @@
 //
 // Open's options are WithX, as WithMaxRows; a transaction's are TxIsolation,
 // TxReadOnly, TxTimeout and TxRetrySerializable; a context is changed by WithX
-// or WithoutX, as WithTenant and WithoutPolicy, and read by XFromContext, as
+// or WithoutX, as WithShard and WithoutPolicy, and read by XFromContext, as
 // RowScopeFromContext.
 //
 // An Option configures a DB, once, when it is opened (Connect, Open, OpenConn, veloxpgx.Open, OpenShards).
@@ -219,16 +217,16 @@
 // Where its statements go:
 //
 //   - WithReplicas, WithPinWindow and WithReplicaBackoff set the replicas.
-//   - WithShardFor chooses a shard from the tenant.
+//   - WithShardFor chooses a shard from the context.
 //
 // # Context decorators
 //
 // A context decorator returns a context that changes what the statements
 // run under it do. None of them changes the DB:
 //
-//   - WithTenant and WithAllTenants name the tenant a statement is scoped to,
-//     or lift the scope.
-//   - WithoutPolicy lifts the entities' policies.
+//   - WithScopeValue names a value a statement is scoped by, as a scope key's
+//     With does (package scope).
+//   - WithoutPolicy lifts the entities' policies, a scope's among them.
 //   - WithShard, WithPrimaryReads and WithSession route a statement.
 //   - PinUntil restarts a session's pin from a time stored earlier, as
 //     PinnedUntil gives it; it changes the session, not the context.
@@ -236,9 +234,8 @@
 //   - WithoutTx removes a transaction's mark from a context.
 //
 // RowScopeFromContext reads back what a context scopes statements by (the
-// tenant, the reasons of WithAllTenants and WithoutPolicy, the shard) as a
-// RowScope, which compares with == (see its documentation for a tenant that
-// cannot be compared): code that reads for several callers in one statement
+// scope values, the reason of WithoutPolicy, the shard) as a RowScope, which
+// compares with ==: code that reads for several callers in one statement
 // keeps callers of different scopes apart by it.
 //
 // # Transaction options
@@ -268,7 +265,7 @@
 // velox-gen and its plugins write code that uses part of this package, and
 // nothing else should: Descriptor, ColumnDescriptor, EdgeDescriptor, EdgeTo, EdgeBidi,
 // EdgeThrough, Meta, MetaOnce, BindPolicy, BindHooks, BoundPolicy,
-// BoundHooks, TenantRef, Lazy, Validate, ValidateSet and
+// BoundHooks, Lazy, Validate, ValidateSet and
 // GeneratedCodeIsVersion7. Each
 // says "For generated code." in its documentation. They are not part of
 // velox's API: they change only when GeneratedCodeIsVersion7 is replaced by

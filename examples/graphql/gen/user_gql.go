@@ -24,6 +24,18 @@ func (*User) IsNode() {}
 // the key id, encoded.
 func (x *User) IDGQL() string { return veloxgql.EncodeID("User", x.ID) }
 
+// userNodeGQL is the Node type User for Node and Nodes.
+func userNodeGQL() gqlimpl.NodeKind {
+	return gqlimpl.NewNode[User, *User](
+		"User",
+		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "User") },
+		func(db *velox.DB) velox.Query[User] { return db.Query[User]() },
+		userColumnsGQL,
+		Users.ID.EQ, Users.ID.In,
+		func(x *User) int64 { return x.ID },
+	)
+}
+
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
 	var s string
@@ -85,9 +97,11 @@ func (c *UserConnection) Edges(ctx context.Context) ([]*UserEdge, error) {
 	if err != nil {
 		return nil, err
 	}
+	slab := make([]UserEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*UserEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		edges[i] = &UserEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = UserEdge{Node: x, Cursor: p.Cursors[i]}
+		edges[i] = &slab[i]
 	}
 	return edges, nil
 }
@@ -137,9 +151,9 @@ func UsersConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // which the cursors hold: a q whose Columns or Omit drops one is refused with
 // an internal error. In a gqlgen field, the page reads only the columns the
 // selection needs (userColumnsGQL), of those q selects; a column the selection
-// does not need is left zero in the nodes, except the key, the foreign keys,
-// the order columns and the tenant, so an application's resolver must not read
-// one it did not ask for. It runs no query.
+// does not need is left zero in the nodes, except the key, the foreign keys and
+// the order columns, so an application's resolver must not read one it did not
+// ask for. It runs no query.
 func UsersConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *UserOrder, where *UserWhereInput) (*UserConnection, error) {
 	if !q.Selects(Users.ID) {
 		return nil, fmt.Errorf("veloxgql: UsersConnectionOf: the base query does not select the key, which the cursors hold")
@@ -187,9 +201,9 @@ func userKeyGQL() []gqlimpl.OrderTerm[User] {
 }
 
 // userColumnsGQL is the columns a selection of the User fields fields reads:
-// the key, every foreign key on the row, every order field's column, the tenant
-// column, and the column of each field. It is nil, every column, when a field
-// is not one velox-graphql wrote, such as an application's own.
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
 func userColumnsGQL(fields []string) []velox.Column[User] {
 	cols := []velox.Column[User]{Users.ID, Users.Name, Users.JoinedAt}
 	for _, f := range fields {
@@ -319,13 +333,9 @@ type UserWhereInput struct {
 
 // Pred is the condition w stands for, on User nodes: every predicate w sets
 // holds, and a w that sets none, or a nil w, holds for every node. It fails,
-// before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or
-// a malformed one (veloxgql.ErrBadID), on a nesting deeper than the
-// MaxFilterDepth of veloxgql.LimitsFromContext(ctx)
-// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
-// of more than its MaxFilterWidth entries (veloxgql.ErrFilterTooWide), and on a
-// where argument of more than its MaxFilterNodes inputs, predicates and values
-// in all (veloxgql.ErrFilterTooLarge).
+// before any query runs, on an ID of another type or a malformed one, and on a
+// filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
+// gqlimpl.NewFilter's.
 func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	f := gqlimpl.NewFilter[User](ctx, "UserWhereInput")
 	if w == nil {
@@ -397,11 +407,7 @@ type CreateUserInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in CreateUserInput) String() string {
-	var p2 any
-	if in.Role != nil {
-		p2 = *in.Role
-	}
-	return fmt.Sprintf("CreateUserInput(Name=%v, Email=%v, Role=%v, JoinedAt=%v)", in.Name, in.Email, p2, in.JoinedAt)
+	return fmt.Sprintf("CreateUserInput(Name=%v, Email=%v, Role=%v, JoinedAt=%v)", in.Name, in.Email, gqlimpl.Show(in.Role), in.JoinedAt)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -409,10 +415,9 @@ func (in CreateUserInput) GoString() string { return in.String() }
 
 // CreateUser creates a User from input, with its edges, as the mutation
 // createUser does, and returns the row as written. It runs atomically on the DB
-// veloxgql.DBFromContext reads from ctx, under the tenant scope and the
-// policies. See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
+// veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql for what
+// each input field does, what the caller may link and change, and the errors.
 func CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
 	var x User
 	cols := []velox.Column[User]{Users.Name, Users.Email, Users.JoinedAt, Users.PasswordHash}
@@ -454,23 +459,7 @@ type UpdateUserInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in UpdateUserInput) String() string {
-	var p0 any
-	if in.Name != nil {
-		p0 = *in.Name
-	}
-	var p1 any
-	if in.Email != nil {
-		p1 = *in.Email
-	}
-	var p2 any
-	if in.Role != nil {
-		p2 = *in.Role
-	}
-	var p3 any
-	if in.JoinedAt != nil {
-		p3 = *in.JoinedAt
-	}
-	return fmt.Sprintf("UpdateUserInput(Name=%v, Email=%v, Role=%v, JoinedAt=%v)", p0, p1, p2, p3)
+	return fmt.Sprintf("UpdateUserInput(Name=%v, Email=%v, Role=%v, JoinedAt=%v)", gqlimpl.Show(in.Name), gqlimpl.Show(in.Email), gqlimpl.Show(in.Role), gqlimpl.Show(in.JoinedAt))
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -478,10 +467,9 @@ func (in UpdateUserInput) GoString() string { return in.String() }
 
 // UpdateUser updates the User with the ID id from input, as the mutation
 // updateUser does, and returns the row as written. It runs atomically on the DB
-// veloxgql.DBFromContext reads from ctx, under the tenant scope and the
-// policies. See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
+// veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql for what
+// each input field does, what the caller may link and change, and the errors.
 func UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
 	var (
 		key int64
@@ -511,6 +499,7 @@ func UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, e
 	}
 	var out *User
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		counted := false
 		if len(set) > 0 {
 			n, err := db.Update[User]().Set(set...).Where(Users.ID.EQ(key)).Exec(ctx)
 			if err != nil {
@@ -519,26 +508,11 @@ func UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, e
 			if n == 0 {
 				return gqlimpl.NotFound("updateUser", "User")
 			}
-			if n < 0 {
-				chk := db.Query[User]().Where(Users.ID.EQ(key)).Writable()
-				if db.Dialect() != velox.SQLite {
-					chk = chk.ForUpdate()
-				}
-				if ok, err := chk.Exists(ctx); err != nil {
-					return err
-				} else if !ok {
-					return gqlimpl.NotFound("updateUser", "User")
-				}
-			}
-		} else {
-			chk := db.Query[User]().Where(Users.ID.EQ(key)).Writable()
-			if db.Dialect() != velox.SQLite {
-				chk = chk.ForUpdate()
-			}
-			if ok, err := chk.Exists(ctx); err != nil {
+			counted = n > 0
+		}
+		if !counted {
+			if err := gqlimpl.LockRow(ctx, db, db.Query[User]().Where(Users.ID.EQ(key)), "updateUser", "User"); err != nil {
 				return err
-			} else if !ok {
-				return gqlimpl.NotFound("updateUser", "User")
 			}
 		}
 		x, err := db.Query[User]().Where(Users.ID.EQ(key)).One(velox.WithoutPolicy(ctx, "graphql: the row this update wrote"))

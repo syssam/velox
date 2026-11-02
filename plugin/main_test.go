@@ -38,15 +38,15 @@ func request(t *testing.T, r plugin.Request) string {
 	return string(b)
 }
 
-var current = plugin.Supports{Protocol: 2, Model: 2}
+var current = plugin.Supports{Protocol: 2, Model: 3}
 
 func good(t *testing.T) string {
-	return request(t, plugin.Request{Protocol: 2, Generator: "velox-gen (devel)", OutPackage: "gen", Model: &plugin.Model{Version: 2}})
+	return request(t, plugin.Request{Protocol: 2, Generator: "velox-gen (devel)", OutPackage: "gen", Model: &plugin.Model{Version: 3}})
 }
 
 func TestVersions(t *testing.T) {
-	if plugin.ProtocolVersion != 2 || plugin.ModelVersion != 2 {
-		t.Errorf("ProtocolVersion %d, ModelVersion %d; want 2 and 2", plugin.ProtocolVersion, plugin.ModelVersion)
+	if plugin.ProtocolVersion != 2 || plugin.ModelVersion != 3 {
+		t.Errorf("ProtocolVersion %d, ModelVersion %d; want 2 and 3", plugin.ProtocolVersion, plugin.ModelVersion)
 	}
 }
 
@@ -59,19 +59,19 @@ func TestRunChecksLiterals(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"plugin written for protocol 1", plugin.Supports{Protocol: 1, Model: 2}, good(t),
+		{"plugin written for protocol 1", plugin.Supports{Protocol: 1, Model: 3}, good(t),
 			"this plugin was written for plugin protocol 1; the velox it is built with speaks 2: update the plugin"},
 		{"plugin written for model 1", plugin.Supports{Protocol: 2, Model: 1}, good(t),
-			"this plugin was written for model 1; the velox it is built with has model 2: update the plugin"},
-		{"plugin written for protocol 3", plugin.Supports{Protocol: 3, Model: 2}, good(t),
+			"this plugin was written for model 1; the velox it is built with has model 3: update the plugin"},
+		{"plugin written for protocol 3", plugin.Supports{Protocol: 3, Model: 3}, good(t),
 			"this plugin was written for plugin protocol 3; the velox it is built with speaks 2: build it with a newer velox"},
-		{"plugin written for model 3", plugin.Supports{Protocol: 2, Model: 3}, good(t),
-			"this plugin was written for model 3; the velox it is built with has model 2: build it with a newer velox"},
-		{"request of protocol 1", current, request(t, plugin.Request{Protocol: 1, Model: &plugin.Model{Version: 2}}),
+		{"plugin written for model 4", plugin.Supports{Protocol: 2, Model: 4}, good(t),
+			"this plugin was written for model 4; the velox it is built with has model 3: build it with a newer velox"},
+		{"request of protocol 1", current, request(t, plugin.Request{Protocol: 1, Model: &plugin.Model{Version: 3}}),
 			"the request is plugin protocol 1; this plugin speaks 2"},
 		{"no model", current, request(t, plugin.Request{Protocol: 2}), "the request has no model"},
 		{"model 1", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}),
-			"the model is version 1; this plugin reads 2"},
+			"the model is version 1; this plugin reads 3"},
 		{"malformed", current, "{", "reading the request"},
 	}
 	for _, c := range cases {
@@ -139,7 +139,7 @@ func TestRunPassesWarnings(t *testing.T) {
 }
 
 func TestRunOptions(t *testing.T) {
-	in := request(t, plugin.Request{Protocol: 2, Options: map[string]string{"go_package": "x/pb"}, Model: &plugin.Model{Version: 2}})
+	in := request(t, plugin.Request{Protocol: 2, Options: map[string]string{"go_package": "x/pb"}, Model: &plugin.Model{Version: 3}})
 	var opts map[string]string
 	run(t, current, in, func(req *plugin.Request) ([]plugin.File, []string, error) {
 		opts = req.Options

@@ -169,13 +169,13 @@ func TestStatementMetrics(t *testing.T) {
 }
 
 // TestMetricsAttributesAreBounded pins that whatever the spans carry, a metric
-// point carries only the bounded keys. Tenants, tags, the SQL comment and call
+// point carries only the bounded keys. Scope values, tags, the SQL comment and call
 // sites make no new points.
 func TestMetricsAttributesAreBounded(t *testing.T) {
-	db, r := metered(t, &fakeDB{}, veloxotel.Config{RecordTenant: true, App: "billing", CommentTags: []string{"route"}})
-	for _, tenant := range []int64{1, 2} {
+	db, r := metered(t, &fakeDB{}, veloxotel.Config{RecordScope: true, App: "billing", CommentTags: []string{"route"}})
+	for _, org := range []int64{1, 2} {
 		for _, route := range []string{"GET /a", "GET /b"} {
-			c := velox.WithTags(velox.WithTenant(context.Background(), tenant), "route", route, "team", "billing")
+			c := velox.WithTags(testmodel.Org.With(context.Background(), org), "route", route, "team", "billing")
 			if _, err := db.Query[testmodel.Invoice]().Limit(1).All(c); err != nil {
 				t.Fatal(err)
 			}
@@ -385,7 +385,7 @@ func TestShardedMetrics(t *testing.T) {
 	a1, b1 := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
 	db, _, r := shardedTraced(t, map[string]*fakeDB{"a": a1, "b": b1})
 	for _, n := range []int64{1, 2, 2} {
-		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(tenant(n)); err != nil {
+		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(inOrg(n)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -459,7 +459,7 @@ func TestFallbackCounterShard(t *testing.T) {
 	}, append(veloxotel.Options(veloxotel.Config{MeterProvider: mp}),
 		velox.WithShardFor(shardOf))...)
 	for _, n := range []int64{1, 2} {
-		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(tenant(n)); err != nil {
+		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(inOrg(n)); err != nil {
 			t.Fatal(err)
 		}
 	}

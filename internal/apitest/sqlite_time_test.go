@@ -36,7 +36,7 @@ func TestSQLiteComparesTimesByTheInstant(t *testing.T) {
 	// made apart from Open's, so it writes a row too.
 	db := velox.Open(velox.SQLite, raw)
 	shards := velox.OpenShards(velox.SQLite, map[string]velox.Shard{"a": {Primary: velox.SQLConn(raw)}},
-		velox.WithShardFor(func(context.Context, any) (string, error) { return "a", nil }))
+		velox.WithShardFor(func(context.Context) (string, error) { return "a", nil }))
 	for i, write := range []func() error{
 		func() error { _, err := db.Exec(ctx, "test", insert, 1, expired); return err },
 		func() error { _, err := db.Exec(ctx, "test", insert, 2, &expired); return err },

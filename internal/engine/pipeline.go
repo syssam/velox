@@ -181,7 +181,7 @@ func OpenShards(d Dialect, shards map[string]Shard, opts []Option) DB {
 	}
 	cfg := newConfig(opts)
 	if cfg.ShardFor == nil {
-		panic("velox: OpenShards: WithShardFor is required, to find a statement's shard from its tenant")
+		panic("velox: OpenShards: WithShardFor is required, to find a statement's shard from its context")
 	}
 	if len(cfg.Replicas) > 0 {
 		panic("velox: OpenShards: WithReplicas is for Connect, Open and OpenConn; give each Shard its Replicas")
@@ -380,6 +380,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	// The query's own Columns: the hooks get a copy of them.
 	cols := st.Columns
 	was := st.Each
+	joins := st.Joins
 	if db.Hooked() {
 		// Hooks may edit the statement in place; give them copies so that
 		// the query the statement came from stays as it was. With no hooks
@@ -389,6 +390,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		st.Columns = slices.Clone(st.Columns)
 		st.Set = slices.Clone(st.Set)
 		st.Returning = slices.Clone(st.Returning)
+		st.Joins = slices.Clone(st.Joins)
 		st.Tags = slices.Clone(st.Tags)
 		if st.Rows != nil {
 			rows := make([][]any, len(st.Rows))
@@ -465,6 +467,10 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		// The load reads the rows by it: each owner's, in its order.
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Each", entity.Name)
 	}
+	if !sameJoins(st.Joins, joins) {
+		// The scan reads the joined columns after the entity's own, by them.
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Joins", entity.Name)
+	}
 	switch {
 	case st.Entity == nil:
 		return fmt.Errorf("velox: %s: a Rewrite hook set the statement's Entity to nil", entity.Name)
@@ -472,10 +478,10 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		// A copy (info := *st.Entity) keeps the scan plan; anything else
 		// would scan rows into the wrong fields.
 		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with %s, which is not a copy of it", entity.Name, st.Entity.Name)
-	case st.Entity.Tenant != entity.Tenant || InfoPolicy(st.Entity) != InfoPolicy(entity):
-		// The scope reads both from the statement's Entity: a copy without
-		// them would unscope the statement.
-		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with a copy whose tenant column or policy differs", entity.Name)
+	case InfoPolicy(st.Entity) != InfoPolicy(entity):
+		// The scope reads the policy from the statement's Entity: a copy without
+		// it would unscope the statement.
+		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with a copy whose policy differs", entity.Name)
 	}
 	if len(db.Cfg.Rewrites) > 0 {
 		if err := CheckColumns(st); err != nil {
@@ -623,14 +629,9 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 	if err := waitsForConn(ctx, db); err != nil {
 		return stmtErr(st, err)
 	}
-	err := db.checkRefs(ctx, st, t)
-	if err == nil {
-		err = db.send(ctx, st, t, read, res)
-	}
+	err := db.send(ctx, st, t, read, res)
 	if db.txRoot != nil {
 		switch {
-		case is(err, ErrTenantRef):
-			// velox's refusal: no failed statement to ask about.
 		case err != nil:
 			db.noteServerRollback(ctx, err)
 		case db.D == SQLite && st.Op.Raw():

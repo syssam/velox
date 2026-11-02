@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -807,6 +808,75 @@ func (b *builder) validate() {
 		b.validateEdges(n)
 		b.validateNames(n.ent)
 	}
+	b.validateScopes()
+}
+
+// scopeKey matches the key of a Scoped annotation: it makes the Go name of the
+// key's variable, <Key>Key.
+var scopeKey = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+// scoped returns the key of f's Scoped annotation, and false when it has none
+// or the annotation is not one. A key that cannot be read is reported by
+// validateScopes through its empty value.
+func scoped(f *Field) (key string, ok bool) {
+	raw, ok := f.Annotations["Scoped"]
+	if !ok {
+		return "", false
+	}
+	var a struct {
+		Key string `json:"key"`
+	}
+	_ = json.Unmarshal(raw, &a)
+	return a.Key, true
+}
+
+// scopeType is the Go type name an error shows for the scoped field f.
+func scopeType(f *Field) string {
+	if f.GoType != nil {
+		return f.GoType.Ident
+	}
+	return f.Type
+}
+
+// validateScopes checks the Scoped fields (rules 57 to 59): each is Immutable,
+// neither Optional nor Nillable, of a type that has an equality condition and a
+// zero value for "unset"; an entity has at most one; a key has one type; and a
+// key makes a Go name.
+func (b *builder) validateScopes() {
+	type first struct{ entity, typ string }
+	types := map[string]first{}
+	for _, n := range b.nodes {
+		e := n.ent
+		var prev *Field
+		for _, f := range e.Fields {
+			key, ok := scoped(f)
+			if !ok {
+				continue
+			}
+			switch {
+			case !f.Immutable:
+				b.fail(57, e.Name, fieldLoc(f), "a Scoped field must be Immutable, so that an update cannot move a row to another scope")
+			case f.Optional || f.Nillable:
+				b.fail(57, e.Name, fieldLoc(f), "a Scoped field cannot be Optional or Nillable: a missing value would mean every scope")
+			case !integer(f.Type) && f.Type != "string" && f.Type != "uuid":
+				b.fail(57, e.Name, fieldLoc(f), "a Scoped field must be an integer, string or UUID, not %s", f.Type)
+			}
+			if !scopeKey.MatchString(key) {
+				b.fail(58, e.Name, fieldLoc(f), "the Scoped key %q has no Go name: use letters, digits and underscores, starting with a lower-case letter", key)
+				continue
+			}
+			if prev != nil {
+				b.fail(58, e.Name, fieldLoc(f), "an entity has one Scoped field, and %q is already", prev.Name)
+				continue
+			}
+			prev = f
+			if old, ok := types[key]; ok && old.typ != scopeType(f) {
+				b.fail(59, e.Name, fieldLoc(f), "key %q is %s in %s and %s here: a key has one type", key, old.typ, old.entity, scopeType(f))
+			} else if !ok {
+				types[key] = first{e.Name, scopeType(f)}
+			}
+		}
+	}
 }
 
 // shown is a Go name as an error shows it: "" when it is empty.
@@ -939,29 +1009,9 @@ func (b *builder) validateFields(e *Entity) {
 		b.fail(2, e.Name, fieldLoc(f), "%s", reason)
 	}
 	for _, f := range e.Fields {
-		if !f.Tenant {
-			continue
-		}
-		if e.Tenant == "" {
-			e.Tenant = f.Name
-		} else {
-			b.fail(14, e.Name, fieldLoc(f), "a second tenant field; %q is the tenant", e.Tenant)
-		}
-		if f.Optional || f.Nillable {
-			b.fail(15, e.Name, fieldLoc(f), "the tenant field must be required and not Nillable")
-		}
-		if len(f.Default) > 0 || f.DefaultFunc || f.UpdateDefault || len(f.SchemaDefault) > 0 {
-			b.fail(16, e.Name, fieldLoc(f), "the tenant field cannot have a default: the context's tenant fills it")
-		}
-		if f.Type == "json" || f.Type == "bytes" {
-			b.fail(17, e.Name, fieldLoc(f), "the tenant field must be of a comparable type")
-		}
-	}
-	for _, f := range e.Fields {
 		// An insert fills a Default or DefaultFunc into a zero field, so on a
 		// bool or number that is not a pointer it could never store false or
-		// 0. The tenant's default is rule 16's.
-		if (len(f.Default) > 0 || f.DefaultFunc) && !f.Nillable && !f.Tenant && (f.Type == "bool" || numeric[f.Type]) {
+		if (len(f.Default) > 0 || f.DefaultFunc) && !f.Nillable && (f.Type == "bool" || numeric[f.Type]) {
 			b.fail(36, e.Name, fieldLoc(f), "a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default")
 		}
 		if b.keyEdges[f] == nil && uniqueUnset(e, f) { // a bound key is rule 38's

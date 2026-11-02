@@ -11,6 +11,8 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 )
 
 // The bidirectional many-to-many model: bnode's friends through bnodeFriend,
@@ -31,7 +33,6 @@ func (*bnode) VeloxMeta() *velox.Meta[bnode] {
 			Table:        "bnodes",
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey:   []int{0},
-			Tenant:       -1,
 			Edges:        []velox.EdgeDescriptor{velox.EdgeThrough[bnodeFriend, bnode]("Friends", 0, 0, 1, 0)},
 			FieldPtr:     func(x *bnode, i int) any { return &x.ID },
 			EdgeFieldPtr: func(x *bnode, i int) any { return &x.Friends },
@@ -57,7 +58,6 @@ func (*bnodeFriend) VeloxMeta() *velox.Meta[bnodeFriend] {
 			Table:      "bnode_friends",
 			Columns:    []velox.ColumnDescriptor{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
 			PrimaryKey: []int{0, 1},
-			Tenant:     -1,
 			Bidi:       true,
 			FieldPtr: func(x *bnodeFriend, i int) any {
 				if i == 0 {
@@ -111,7 +111,6 @@ func (*bnodeFriendP) VeloxMeta() *velox.Meta[bnodeFriendP] {
 			Table:      "bnode_friends",
 			Columns:    []velox.ColumnDescriptor{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
 			PrimaryKey: []int{0, 1},
-			Tenant:     -1,
 			Bidi:       true,
 			FieldPtr: func(x *bnodeFriendP, i int) any {
 				if i == 0 {
@@ -136,7 +135,6 @@ func (*bnodeKeyed) VeloxMeta() *velox.Meta[bnodeKeyed] {
 			Table:      "keyed_links",
 			Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 			PrimaryKey: []int{0, 1},
-			Tenant:     -1,
 			Bidi:       true,
 			FieldPtr: func(x *bnodeKeyed, i int) any {
 				if i == 0 {
@@ -262,7 +260,7 @@ func TestBidiLinks(t *testing.T) {
 	t.Run("policy and hooks see the caller's rows", func(t *testing.T) {
 		bidiSeen.inserted, bidiSeen.hookRows, bidiSeen.affected = nil, 0, 0
 		e := &fakeconn.Exec{Affected: 2}
-		if err := openFake(velox.Postgres, e).Insert(&bnodeFriendP{1, 2}).Exec(ctx); err != nil {
+		if err := openFake(velox.Postgres, e).Insert(&bnodeFriendP{1, 2}).Exec(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 		if want := []bnodeFriendP{{1, 2}}; !reflect.DeepEqual(bidiSeen.inserted, want) {
@@ -317,7 +315,6 @@ func (*bspouse) VeloxMeta() *velox.Meta[bspouse] {
 			Table:      "bspouses",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			Indexes:    []velox.IndexInfo{{Columns: []int{1}, Unique: true}},
 			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[bspouse]("Spouse", 1, 0)},
 			FieldPtr: func(x *bspouse, i int) any {
@@ -800,8 +797,8 @@ func sameStarts(got, want []string) bool {
 	return true
 }
 
-// btspouse is bspouse with a tenant column: the bidirectional one-to-one
-// model of TestBidiOneTenant.
+// btspouse is bspouse with a scope column: the bidirectional one-to-one
+// model of TestBidiOneScope.
 type btspouse struct {
 	ID       int64
 	OrgID    int64
@@ -809,10 +806,12 @@ type btspouse struct {
 	Spouse   velox.One[btspouse]
 }
 
-// Policy lets every write: the clearing of the old partner bypasses it, and
-// says so.
+var btspouseScope = scope.By(testmodel.Org, velox.NumberCol[btspouse, int64]{I: 1}.EQ, func(x *btspouse) *int64 { return &x.OrgID })
+
+// Policy confines the model to the context's org and lets every write: the
+// clearing of the old partner bypasses it, and says so.
 func (*btspouse) Policy() velox.Policy[btspouse] {
-	return velox.Policy[btspouse]{Write: func(context.Context) (velox.Pred[btspouse], error) { return velox.Allow[btspouse](), nil }}
+	return btspouseScope.Wrap(velox.Policy[btspouse]{Write: func(context.Context) (velox.Pred[btspouse], error) { return velox.Allow[btspouse](), nil }})
 }
 
 var btspouseMeta velox.MetaOnce[btspouse]
@@ -824,7 +823,6 @@ func (*btspouse) VeloxMeta() *velox.Meta[btspouse] {
 			Table:      "btspouses",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},
-			Tenant:     1,
 			Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
 			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[btspouse]("Spouse", 2, 0)},
 			FieldPtr: func(x *btspouse, i int) any {
@@ -835,12 +833,12 @@ func (*btspouse) VeloxMeta() *velox.Meta[btspouse] {
 	})
 }
 
-// TestBidiOneTenant: under WithTenant, the caller's UPDATE, the link and the
-// probe are the tenant's, and the clearing of the old partner is not: it is
-// the edge's integrity, which hooks see by its bypass reasons. A partner the
-// tenant cannot see, one of another tenant, cannot be linked, and the write
+// TestBidiOneScope: under a scope, the caller's UPDATE, the link and the
+// probe are the scope's, and the clearing of the old partner is not: it is
+// the edge's integrity, which hooks see by its bypass reason. A partner the
+// scope cannot see, one of another scope, cannot be linked, and the write
 // is rolled back.
-func TestBidiOneTenant(t *testing.T) {
+func TestBidiOneScope(t *testing.T) {
 	const (
 		upd    = `UPDATE "btspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "org_id" = $3`
 		unlink = `UPDATE "btspouses" SET "spouse_id" = $1 WHERE "spouse_id" = $2`
@@ -848,24 +846,24 @@ func TestBidiOneTenant(t *testing.T) {
 		probe  = `SELECT 1 FROM "btspouses" WHERE "id" = $1 AND "org_id" = $2 LIMIT $3`
 		reason = "velox: clearing the old partner of a bidirectional one-to-one edge"
 	)
-	type seen struct{ sql, tenantBypass, policyBypass string }
+	type seen struct{ sql, policyBypass string }
 	var got []seen
 	e := &fakeconn.Exec{AffectedBy: func(sql string) int64 {
 		if sql == link {
-			return 0 // row 3 is another tenant's
+			return 0 // row 3 is in another scope
 		}
 		return 1
 	}}
 	db := openFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-		got = append(got, seen{st.SQL, st.TenantBypass, st.PolicyBypass})
+		got = append(got, seen{st.SQL, st.PolicyBypass})
 		return next(ctx)
 	}))
-	err := db.Save(&btspouse{ID: 1, SpouseID: new(int64(3))}, velox.NullNumberCol[btspouse, int64]{I: 2}).Exec(velox.WithTenant(ctx, int64(7)))
+	err := db.Save(&btspouse{ID: 1, SpouseID: new(int64(3))}, velox.NullNumberCol[btspouse, int64]{I: 2}).Exec(testmodel.Org.With(context.Background(), int64(7)))
 	var ce *velox.ConstraintError
 	if want := "velox: apitest.btspouse: unique constraint spouse_id violated: row 3 cannot be linked"; !errors.As(err, &ce) || err.Error() != want {
 		t.Fatalf("err = %v, want %s", err, want)
 	}
-	want := []seen{{upd, "", ""}, {unlink, reason, reason}, {link, "", ""}, {probe, "", ""}}
+	want := []seen{{upd, ""}, {unlink, reason}, {link, ""}, {probe, ""}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("the hooks saw\n%q,\nwant\n%q", got, want)
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/scope"
 )
 
 // The codes ErrorPresenter writes as extensions.code: Apollo's, NOT_FOUND
@@ -22,10 +23,9 @@ const (
 	// refused, or a violated constraint.
 	CodeBadUserInput = gqlcore.CodeBadUserInput
 	// CodeForbidden: a policy denied the statement (velox.ErrDenied), or it
-	// wrote another tenant's key (velox.ErrTenantMismatch,
-	// velox.ErrTenantImmutable).
+	// wrote a row outside the caller's scope (scope.ErrMismatch).
 	CodeForbidden = "FORBIDDEN"
-	// CodeUnauthenticated: the request has no tenant (velox.ErrNoTenant).
+	// CodeUnauthenticated: the request has no scope value (scope.ErrNoScope).
 	CodeUnauthenticated = "UNAUTHENTICATED"
 	// CodeNotFound: the generated mutations return it for an ID that names
 	// no row the caller may see or change.
@@ -67,10 +67,10 @@ const (
 //     Message and Extensions are not shown, so an application's gqlerror
 //     with Err set to an error of its own becomes "internal error". Leave
 //     Err nil to show the client a message of the application's.
-//   - velox.ErrNoTenant: UNAUTHENTICATED, "unauthenticated".
+//   - scope.ErrNoScope: UNAUTHENTICATED, "unauthenticated".
 //   - velox.ErrDenied, or a *velox.PolicyError: FORBIDDEN, "forbidden".
-//   - velox.ErrTenantMismatch or velox.ErrTenantImmutable, a write of another
-//     tenant's key: FORBIDDEN, "forbidden". It names no tenant or column.
+//   - scope.ErrMismatch, a write of a row in another scope: FORBIDDEN,
+//     "forbidden". It names no scope or column.
 //   - A *velox.ValidationError: BAD_USER_INPUT, "invalid value: " and the
 //     validator's text.
 //   - A *velox.ConstraintError: BAD_USER_INPUT, "<kind> constraint
@@ -91,7 +91,7 @@ const (
 // whole. What veloxgql's own coded errors and velox's policy, validation and
 // constraint errors wrap is not searched: it is never shown.
 //
-// So no entity, constraint, tenant or driver text reaches a client. A
+// So no entity, constraint, scope or driver text reaches a client. A
 // *gqlerror.Error that wraps an error is presented as its error is, with its
 // path and locations kept; every other error gets the field's path,
 // graphql.GetPath(ctx), as gqlgen's default presenter gives it. The error
@@ -292,9 +292,9 @@ func present(err error) (code, msg string) {
 	// Through shared's Is and As: a driver's typed nil in err's tree
 	// cannot panic.
 	switch {
-	case gqlcore.Is(err, velox.ErrNoTenant):
+	case gqlcore.Is(err, scope.ErrNoScope):
 		return CodeUnauthenticated, "unauthenticated"
-	case gqlcore.Is(err, velox.ErrDenied), gqlcore.Is(err, velox.ErrTenantMismatch), gqlcore.Is(err, velox.ErrTenantImmutable):
+	case gqlcore.Is(err, velox.ErrDenied), gqlcore.Is(err, scope.ErrMismatch):
 		return CodeForbidden, "forbidden"
 	}
 	if validation, ok := gqlcore.As[*velox.ValidationError](err); ok {

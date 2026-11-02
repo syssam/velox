@@ -1,6 +1,9 @@
 # 0027. What the GraphQL layer limits, and what the generator refuses
 
-- Status: accepted, 2026-11-01
+- Status: accepted, 2026-11-01. The tenant parts (the `FK` helpers' tenant flag, the
+  tenant column with an edge, `ErrTenantMismatch`) were removed by
+  [0029](0029-scope-replaces-tenant.md): a scope is the target's Read policy now, and
+  `scope.ErrNoScope` presents as UNAUTHENTICATED, `scope.ErrMismatch` as FORBIDDEN.
 
 ## Context
 

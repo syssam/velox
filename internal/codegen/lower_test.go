@@ -130,7 +130,7 @@ func TestLowerTypes(t *testing.T) {
 			t.Errorf("%s: %+v, want %s %s", c.name, f, c.goType, c.handle)
 		}
 	}
-	if f := u.field("nick"); f.Pointer || f.Unset != "x == *new(string)" || f.ElemType != "string" || f.GoName != "Nick" || f.Column != "nick" {
+	if f := u.field("nick"); f.Pointer || f.Unset != `x == ""` || f.ElemType != "string" || f.GoName != "Nick" || f.Column != "nick" {
 		t.Errorf("nick %+v", f)
 	}
 	if f := u.field("tags"); f.Pointer || f.ElemType != "[]string" || f.Tag != "`json:\"tags,omitempty\"`" {
@@ -148,8 +148,8 @@ func TestLowerTypes(t *testing.T) {
 	if o.Package != "gen" || o.SchemaPath != lowerSchemaPath || o.NeedsSch {
 		t.Errorf("out %q %q %v", o.Package, o.SchemaPath, o.NeedsSch)
 	}
-	if !reflect.DeepEqual(u.PrimaryKey, []int{0}) || u.Tenant != -1 {
-		t.Errorf("pk %v tenant %d", u.PrimaryKey, u.Tenant)
+	if !reflect.DeepEqual(u.PrimaryKey, []int{0}) {
+		t.Errorf("pk %v", u.PrimaryKey)
 	}
 }
 
@@ -235,22 +235,22 @@ func TestLowerJSONFlag(t *testing.T) {
 func TestLowerRelationsAndJoin(t *testing.T) {
 	o := mustLower(t, Config{Package: "gen"}, LwUser{}, LwPost{}, LwGroup{})
 	u, p, j := o.entity("LwUser"), o.entity("LwPost"), o.entity("LwUserGroup")
-	if r := u.rel("posts"); r == nil || !r.Many || r.Target != "LwPost" || r.GoName != "Posts" || r.Desc != `velox.EdgeTo[LwPost]("Posts", 0, 1)` {
+	if r := u.rel("posts"); r == nil || !r.Many || r.Target != "LwPost" || r.GoName != "Posts" || r.Desc != `velox.EdgeTo[LwPost]("Posts", lwUserColID, lwPostColAuthorID)` {
 		t.Fatalf("posts %+v", r)
 	}
-	if r := p.rel("author"); r == nil || r.Many || r.Desc != `velox.EdgeTo[LwUser]("Author", 1, 0)` {
+	if r := p.rel("author"); r == nil || r.Many || r.Desc != `velox.EdgeTo[LwUser]("Author", lwPostColAuthorID, lwUserColID)` {
 		t.Fatalf("author %+v", r)
 	}
 	if j == nil || !j.Join || len(j.Fields) != 2 || j.Fields[0].GoName != "LwUserID" || j.Fields[1].GoName != "LwGroupID" ||
-		len(j.PrimaryKey) != 2 || j.Tenant != -1 || j.Table != "lw_user_groups" || len(j.Rels) != 0 ||
+		len(j.PrimaryKey) != 2 || j.Table != "lw_user_groups" || len(j.Rels) != 0 ||
 		j.Fields[0].Handle != "velox.NumberCol[LwUserGroup, int64]" || j.Handles != "LwUserGroups" {
 		t.Fatalf("join %+v", j)
 	}
-	if r := u.rel("groups"); r.Desc != `velox.EdgeThrough[LwUserGroup, LwGroup]("Groups", 0, 0, 1, 0)` || !r.Many {
+	if r := u.rel("groups"); r.Desc != `velox.EdgeThrough[LwUserGroup, LwGroup]("Groups", lwUserColID, lwUserGroupColLwUserID, lwUserGroupColLwGroupID, lwGroupColID)` || !r.Many {
 		t.Fatalf("groups %s", r.Desc)
 	}
 	// The inverse sees the same join entity with its columns the other way round.
-	if r := o.entity("LwGroup").rel("users"); r.Desc != `velox.EdgeThrough[LwUserGroup, LwUser]("Users", 0, 1, 0, 0)` {
+	if r := o.entity("LwGroup").rel("users"); r.Desc != `velox.EdgeThrough[LwUserGroup, LwUser]("Users", lwGroupColID, lwUserGroupColLwGroupID, lwUserGroupColLwUserID, lwUserColID)` {
 		t.Fatalf("users %s", r.Desc)
 	}
 	names := make([]string, len(o.Entities))
@@ -272,13 +272,13 @@ func (LwNode) Edges() []schema.Edge {
 func TestLowerSelfReference(t *testing.T) {
 	n := mustLower(t, Config{}, LwNode{}).entity("LwNode")
 	// Fields: id, then the implicit lw_node_children.
-	if r := n.rel("children"); r.Desc != `velox.EdgeTo[LwNode]("Children", 0, 1)` || !r.Many {
+	if r := n.rel("children"); r.Desc != `velox.EdgeTo[LwNode]("Children", lwNodeColID, lwNodeColLwNodeChildren)` || !r.Many {
 		t.Fatalf("children %+v", r)
 	}
-	if r := n.rel("parent"); r.Desc != `velox.EdgeTo[LwNode]("Parent", 1, 0)` || r.Many {
+	if r := n.rel("parent"); r.Desc != `velox.EdgeTo[LwNode]("Parent", lwNodeColLwNodeChildren, lwNodeColID)` || r.Many {
 		t.Fatalf("parent %+v", r)
 	}
-	if r := n.rel("friends"); r.Desc != `velox.EdgeThrough[LwNodeFriend, LwNode]("Friends", 0, 0, 1, 0)` {
+	if r := n.rel("friends"); r.Desc != `velox.EdgeThrough[LwNodeFriend, LwNode]("Friends", lwNodeColID, lwNodeFriendColLwNodeID, lwNodeFriendColFriendID, lwNodeColID)` {
 		t.Fatalf("friends %+v", r)
 	}
 	if f := n.field("lw_node_children"); f == nil || f.GoType != "*int64" || f.Handle != "velox.NullNumberCol[LwNode, int64]" {
@@ -319,26 +319,26 @@ func TestLowerChecks(t *testing.T) {
 	}
 	// The ID is column 0; code is column 1.
 	code := []string{
-		"case 1:",
+		"case lwCheckedColCode:",
 		"x := v.(string)",
 		`if x == "" {`, `errors.New("must not be empty")`,
 		"if len(x) > 5 {", `errors.New("length is more than 5")`,
 		"if !re0.MatchString(x) {", `errors.New("does not match ^[a-z]+$")`,
 		"if err := v0(x); err != nil {",
-		"case 2:",
+		"case lwCheckedColAge:",
 		"x := v.(int)",
-		"if x == *new(int) {", "return nil", // Optional: zero is unset, and valid
+		"if x == 0 {", "return nil", // Optional: zero is unset, and valid
 		"if x < 1 {", `errors.New("is less than 1")`,
 		"if x > 120 {", `errors.New("is more than 120")`,
 		"if err := v1(x); err != nil {",
-		"case 3:",
+		"case lwCheckedColState:",
 		"x := v.(LwCheckedState)",
-		`case "on", "off":`, "default:", `errors.New("is not one of the values")`,
-		"case 4:",
+		"if !x.IsValid() {", `errors.New("is not one of on, off")`,
+		"case lwCheckedColN:",
 		"x := v.(int64)",
 		"if x <= 0 {", `errors.New("is not positive")`,
 		// An Optional bytes field: nil, or empty, is unset, and valid.
-		"case 6:",
+		"case lwCheckedColRaw:",
 		"x := v.([]byte)",
 		"if len(x) == 0 {", "return nil",
 		"if len(x) > 3 {",
@@ -351,7 +351,7 @@ func TestLowerChecks(t *testing.T) {
 		}
 		at += i + len(w)
 	}
-	if strings.Contains(e.CheckCode, "case 5:") || strings.Contains(e.CheckCode, "case 0:") {
+	if strings.Contains(e.CheckCode, "case lwCheckedColPlain:") || strings.Contains(e.CheckCode, "case lwCheckedColID:") {
 		t.Errorf("a column without checks has a case:\n%s", e.CheckCode)
 	}
 	if !reflect.DeepEqual(e.Imports, []string{"errors", "regexp"}) {
@@ -452,7 +452,9 @@ func TestLowerMixinPosition(t *testing.T) {
 	const mix = "(&sch.LwMixed{}).Mixin()[1].Fields()"
 	for _, want := range []string{
 		`v0 := ` + mix + `[0].Descriptor().Validators[0].(func(string) error)`,
-		`v1 := (&sch.LwMixed{}).Fields()[0].Descriptor().Validators[0].(func(string) error)`,
+		// The descriptor of the field read twice is read once.
+		`f0 := (&sch.LwMixed{}).Fields()[0].Descriptor()`,
+		`v1 := f0.Validators[0].(func(string) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
@@ -463,7 +465,7 @@ func TestLowerMixinPosition(t *testing.T) {
 	for _, want := range []string{
 		`d0 := ` + mix + `[1].Descriptor().Default.(func() time.Time)`,
 		`d1 := ` + mix + `[2].Descriptor().DefaultFunc.(func() int64)`,
-		`d2 := (&sch.LwMixed{}).Fields()[0].Descriptor().DefaultFunc.(func() string)`,
+		`d2 := f0.DefaultFunc.(func() string)`,
 		`d3 := (&sch.LwMixed{}).Fields()[1].Descriptor().UpdateDefault.(func() time.Time)`,
 		`d4 := (&sch.LwMixed{}).Fields()[7].Descriptor().Default` + "\n",
 	} {
@@ -477,7 +479,7 @@ func TestLowerMixinPosition(t *testing.T) {
 		{"own", "", `func() any { return d2() }`, ""},
 		{"touched", "", "", `func() any { return d3() }`},
 		{"blob", "", `func() any { var v []byte; _ = json.Unmarshal([]byte("\"Yg==\""), &v); return v }`, ""},
-		{"labels", "", `func() any { var v []string; _ = json.Unmarshal([]byte("[\"a\",\"b\"]"), &v); return v }`, ""},
+		{"labels", "", `func() any { return []string{"a", "b"} }`, ""},
 		{"pt", "", `func() any { return d4 }`, ""},
 		{"tier", "LwMixedTierPaid", "", ""},
 		{"lit", `"hi"`, "", ""},
@@ -607,13 +609,13 @@ func TestLowerDeterministic(t *testing.T) {
 	}
 }
 
-// A tenant, an index, a string ID, a uuid ID and a foreign key that is a
+// An index, a string ID, a uuid ID and a foreign key that is a
 // pointer to a uuid, from build_test.go's schemas.
-func TestLowerTenantIndexGoTypes(t *testing.T) {
+func TestLowerIndexGoTypes(t *testing.T) {
 	o := mustLower(t, Config{}, User{}, Post{}, Group{})
 	u := o.entity("User")
-	if u.Tenant != 1 || len(u.Indexes) != 1 || !u.Indexes[0].Unique || !reflect.DeepEqual(u.Indexes[0].Columns, []int{1, 2}) {
-		t.Errorf("tenant %d indexes %+v", u.Tenant, u.Indexes)
+	if len(u.Indexes) != 1 || !u.Indexes[0].Unique || !reflect.DeepEqual(u.Indexes[0].Columns, []int{1, 2}) {
+		t.Errorf("indexes %+v", u.Indexes)
 	}
 
 	o = mustLower(t, Config{}, Account{}, Profile{}, Role{}, Home{})
@@ -639,10 +641,10 @@ func TestLowerTenantIndexGoTypes(t *testing.T) {
 	if j == nil || j.Fields[0].Column != "acct" || j.Fields[1].Column != "role" || j.Fields[0].ElemType != "string" {
 		t.Fatalf("join %+v", j)
 	}
-	if r := a.rel("roles"); r.Desc != `velox.EdgeThrough[AccountRoleLink, Role]("Roles", 0, 0, 1, 0)` {
+	if r := a.rel("roles"); r.Desc != `velox.EdgeThrough[AccountRoleLink, Role]("Roles", accountColID, accountRoleLinkColAcct, accountRoleLinkColRole, roleColID)` {
 		t.Errorf("roles %s", r.Desc)
 	}
-	if r := a.rel("profile"); r.Desc != `velox.EdgeTo[Profile]("Profile", 0, 1)` {
+	if r := a.rel("profile"); r.Desc != `velox.EdgeTo[Profile]("Profile", accountColID, profileColAccountProfile)` {
 		t.Errorf("profile %s", r.Desc)
 	}
 }
@@ -718,8 +720,9 @@ func (LwTagged) Fields() []schema.Field {
 }
 
 // TestJSONTags: a struct or an array that is not a pointer is omitzero, as
-// omitempty never omits it; every other field is omitempty, and a Sensitive
-// field is never in JSON.
+// omitempty never omits it; a required bool, number, string or enum has no
+// omitempty, as its zero is a value; every other field is omitempty, and a
+// Sensitive field is never in JSON.
 func TestJSONTags(t *testing.T) {
 	e := mustLower(t, Config{}, LwTagged{}).entity("LwTagged")
 	for name, want := range map[string]string{
@@ -732,7 +735,7 @@ func TestJSONTags(t *testing.T) {
 		"attrs": "`json:\"attrs,omitempty\"`",
 		"pp":    "`json:\"pp,omitempty\"`",
 		"arr":   "`json:\"arr,omitzero\"`",
-		"s":     "`json:\"s,omitempty\"`",
+		"s":     "`json:\"s\"`",
 		"pw":    "`json:\"-\"`",
 	} {
 		if f := e.field(name); f == nil || f.Tag != want {
@@ -930,10 +933,10 @@ func TestLowerEnumDefault(t *testing.T) {
 
 func TestLowerOneToOneDescriptor(t *testing.T) {
 	o := mustLower(t, Config{}, Account{}, Profile{}, Role{}, Home{}, Person{})
-	if r := o.entity("Profile").rel("account"); r.Many || r.Desc != `velox.EdgeTo[Account]("Account", 1, 0)` {
+	if r := o.entity("Profile").rel("account"); r.Many || r.Desc != `velox.EdgeTo[Account]("Account", profileColAccountProfile, accountColID)` {
 		t.Errorf("inverse %+v", r) // the key is in Profile, the inverse's owner
 	}
-	if r := o.entity("Person").rel("spouse"); r.Many || r.Desc != `velox.EdgeBidi[Person]("Spouse", 1, 0)` {
+	if r := o.entity("Person").rel("spouse"); r.Many || r.Desc != `velox.EdgeBidi[Person]("Spouse", personColPersonSpouse, personColID)` {
 		t.Errorf("bidi %+v", r)
 	}
 }
@@ -1100,7 +1103,7 @@ func TestLowerTypedConstructors(t *testing.T) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
 		}
 	}
-	for _, want := range []string{"case 1:", "x := v.(codegen.LwCents)", "if x < codegen.LwCents(1) {", "if err := v0(int64(x)); err != nil {"} {
+	for _, want := range []string{"case lwPricedColPrice:", "x := v.(codegen.LwCents)", "if x < codegen.LwCents(1) {", "if err := v0(int64(x)); err != nil {"} {
 		if !strings.Contains(e.CheckCode, want) {
 			t.Errorf("CheckCode lacks %s:\n%s", want, e.CheckCode)
 		}
@@ -1127,8 +1130,9 @@ func (LwStamped) Fields() []schema.Field {
 func TestLowerTimeDefaultConverts(t *testing.T) {
 	e := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwStamped{}).entity("LwStamped")
 	for _, want := range []string{
-		`d0 := (&sch.LwStamped{}).Fields()[0].Descriptor().Default.(func() time.Time)`,
-		`d1 := (&sch.LwStamped{}).Fields()[0].Descriptor().UpdateDefault.(func() time.Time)`,
+		`f0 := (&sch.LwStamped{}).Fields()[0].Descriptor()`,
+		`d0 := f0.Default.(func() time.Time)`,
+		`d1 := f0.UpdateDefault.(func() time.Time)`,
 		`d2 := (&sch.LwStamped{}).Fields()[1].Descriptor().Default.(func() time.Time)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
@@ -1298,15 +1302,15 @@ func (LwOptionalChecks) Fields() []schema.Field {
 func TestLowerOptionalChecksThatCannotFail(t *testing.T) {
 	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwOptionalChecks{})
 	code := o.entity("LwOptionalChecks").CheckCode
-	for _, col := range []string{"case 1:", "case 3:", "case 6:"} {
+	for _, col := range []string{"case lwOptionalChecksColOnlyEmpty:", "case lwOptionalChecksColMinOne:", "case lwOptionalChecksColBlob:"} {
 		if strings.Contains(code, col) {
 			t.Errorf("%s has no check that can fail, and is written:\n%s", col, code)
 		}
 	}
 	for _, want := range []string{
-		"case 2:", "if len(x) > 5 {",
-		"case 4:", "if len(x) < 2 {",
-		"case 5:", `if x == "" {`,
+		"case lwOptionalChecksColShort:", "if len(x) > 5 {",
+		"case lwOptionalChecksColMinTwo:", "if len(x) < 2 {",
+		"case lwOptionalChecksColRequired:", `if x == "" {`,
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("Check lacks %s:\n%s", want, code)
@@ -1314,5 +1318,28 @@ func TestLowerOptionalChecksThatCannotFail(t *testing.T) {
 	}
 	if strings.Count(code, `"must not be empty"`) != 1 {
 		t.Errorf("only the required field's NotEmpty can fail:\n%s", code)
+	}
+}
+
+// A default that is a slice of strings, numbers or bools is a Go literal in
+// the generated code, not JSON decoded on each insert; any other default is
+// still decoded, so that no two rows share a slice or a map.
+func TestSliceLiteral(t *testing.T) {
+	for _, c := range []struct{ raw, elem, want string }{
+		{`["new","a\"b"]`, "[]string", `[]string{"new", "a\"b"}`},
+		{`[1,2]`, "[]int", `[]int{1, 2}`},
+		{`[1.5]`, "[]float64", `[]float64{1.5}`},
+		{`[true]`, "[]bool", `[]bool{true}`},
+		{`[]`, "[]string", `[]string{}`},
+		{`null`, "[]string", ``},
+		{`[300]`, "[]int8", ``},
+		{`[-1]`, "[]uint", ``},
+		{`[["a"]]`, "[][]string", ``},
+		{`["a"]`, "Tags", ``},
+		{`[{"a":1}]`, "[]Box", ``},
+	} {
+		if got := sliceLiteral([]byte(c.raw), c.elem); got != c.want {
+			t.Errorf("sliceLiteral(%s, %s) = %q, want %q", c.raw, c.elem, got, c.want)
+		}
 	}
 }

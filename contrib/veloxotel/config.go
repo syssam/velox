@@ -27,7 +27,7 @@ type Config struct {
 
 	OmitCallers             bool // leave call sites out: no code.* attributes, one SQL comment per shape
 	OmitQueryText           bool // leave db.query.text off spans
-	RecordTenant            bool // add velox.tenant to spans
+	RecordScope             bool // add velox.scope, the scope values of the context, to spans
 	RecordMetricFingerprint bool // add velox.fingerprint to the statement metrics
 	RecordReturnedRows      bool // add db.response.returned_rows to spans
 

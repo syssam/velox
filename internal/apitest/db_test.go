@@ -34,7 +34,7 @@ func TestOpenRefusesAnUnknownDialect(t *testing.T) {
 		t.Errorf("Open(4) panicked with %q, want it to name Dialect(4)", got)
 	}
 	shards := map[string]velox.Shard{"a": {Primary: fakeConn(&fakeconn.Exec{})}}
-	shardFor := velox.WithShardFor(func(context.Context, any) (string, error) { return "a", nil })
+	shardFor := velox.WithShardFor(func(context.Context) (string, error) { return "a", nil })
 	const wantShards = "velox: OpenShards: unknown Dialect(0); use velox.Postgres, velox.MySQL or velox.SQLite"
 	if got := panicText(func() { velox.OpenShards(0, shards, shardFor) }); got != wantShards {
 		t.Errorf("OpenShards(0) panicked with %q, want %q", got, wantShards)

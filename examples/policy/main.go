@@ -135,8 +135,8 @@ func run(ctx context.Context, w io.Writer) error {
 	say("bob inserts a doc as alice: %v", err)
 
 	// WithoutPolicy switches every policy off for one context, with a reason
-	// that hooks see as Statement.PolicyBypass. It does not lift tenant
-	// scoping (see WithAllTenants).
+	// that hooks see as Statement.PolicyBypass. It lifts a scope (the scope package) too,
+	// as that is a policy.
 	n, err := db.Query[gen.Doc]().Count(velox.WithoutPolicy(ctx, "nightly backup"))
 	if err != nil {
 		return err

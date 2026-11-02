@@ -190,7 +190,6 @@ func TestCodecNeedsBoth(t *testing.T) {
 			Table:      "j_lists",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, c},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *fixture.JList, i int) any {
 				if i == 0 {
 					return &x.ID
@@ -241,13 +240,13 @@ type jKey struct {
 }
 
 // jKeyDescriptor is jKey's Descriptor, with a codec on the columns codec names.
-func jKeyDescriptor(tenant int, codec ...int) velox.Descriptor[jKey] {
+func jKeyDescriptor(codec ...int) velox.Descriptor[jKey] {
 	cols := []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org"}, {Field: "Parent", Name: "parent"}}
 	for _, c := range codec {
 		cols[c].Encode, cols[c].Decode = json.Marshal, json.Unmarshal
 	}
 	return velox.Descriptor[jKey]{
-		Table: "j_keys", Columns: cols, PrimaryKey: []int{0}, Tenant: tenant,
+		Table: "j_keys", Columns: cols, PrimaryKey: []int{0},
 		Edges: []velox.EdgeDescriptor{velox.EdgeTo[jKid]("Kids", 2, 1)},
 		FieldPtr: func(x *jKey, i int) any {
 			return [...]any{&x.ID, &x.Org, &x.Parent}[i]
@@ -270,7 +269,6 @@ func (*jKid) VeloxMeta() *velox.Meta[jKid] {
 			Table:      "j_kids",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Ref", Name: "ref", Encode: json.Marshal, Decode: json.Unmarshal}},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *jKid, i int) any {
 				if i == 0 {
 					return &x.ID
@@ -281,30 +279,29 @@ func (*jKid) VeloxMeta() *velox.Meta[jKid] {
 	})
 }
 
-// TestEncodedKeyRefused: a primary-key, tenant or relation-key column with a
+// TestEncodedKeyRefused: a primary-key or relation-key column with a
 // codec is refused when the metadata is built, naming the column, as every
 // Save, scope and load compares it; so is a relation keyed by its target's
 // encoded column, when the relation is resolved.
 func TestEncodedKeyRefused(t *testing.T) {
-	if _, err := loadDescriptor(jKeyDescriptor(1)); err != nil {
+	if _, err := loadDescriptor(jKeyDescriptor()); err != nil {
 		t.Fatalf("without a codec: %v", err)
 	}
 	for _, c := range []struct {
 		name          string
-		tenant, col   int
+		col           int
 		field, reason string
 	}{
-		{"primary key", -1, 0, "ID", "primary key"},
-		{"tenant", 1, 1, "Org", "tenant"},
-		{"relation key", -1, 2, "Parent", "relation Kids"},
+		{"primary key", 0, "ID", "primary key"},
+		{"relation key", 2, "Parent", "relation Kids"},
 	} {
-		_, err := loadDescriptor(jKeyDescriptor(c.tenant, c.col))
+		_, err := loadDescriptor(jKeyDescriptor(c.col))
 		var se *velox.SchemaError
 		if !errors.As(err, &se) || se.Field != c.field || !strings.Contains(err.Error(), c.reason) || !strings.Contains(err.Error(), "codec") {
 			t.Errorf("%s: got %v, want a *SchemaError naming %s", c.name, err, c.field)
 		}
 	}
-	_, err := loadDescriptor(jKeyDescriptor(-1), targetOf[jKid]())
+	_, err := loadDescriptor(jKeyDescriptor(), targetOf[jKid]())
 	if err == nil || !strings.Contains(err.Error(), "jKid.Ref") || !strings.Contains(err.Error(), "encoded column") {
 		t.Errorf("a target's encoded key: got %v", err)
 	}
@@ -345,7 +342,6 @@ func jOptDescriptor() velox.Descriptor[jOpt] {
 			{Field: "Blob", Name: "blob", Nullable: true},
 		},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *jOpt, i int) any {
 			switch i {
 			case 0:
@@ -410,7 +406,6 @@ func TestNullableNeedsNil(t *testing.T) {
 		Table:      "j_lists",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id", Nullable: true}, {Field: "Words", Name: "words"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *fixture.JList, i int) any {
 			if i == 0 {
 				return &x.ID

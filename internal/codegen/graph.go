@@ -27,7 +27,6 @@ type Entity struct {
 	Fields      []*Field                   `json:"fields"` // Fields[0] is the ID; then the model's order; then implicit foreign keys
 	Edges       []*Edge                    `json:"edges"`
 	Indexes     []*Index                   `json:"indexes,omitempty"`
-	Tenant      string                     `json:"tenant,omitempty"` // the tenant field's Name
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 }
 

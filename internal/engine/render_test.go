@@ -15,7 +15,7 @@ import (
 type inv struct{}
 
 var (
-	invInfo = &velox.EntityInfo{Name: "velox.inv", Table: "invoices", Tenant: -1, Columns: []velox.ColumnInfo{
+	invInfo = &velox.EntityInfo{Name: "velox.inv", Table: "invoices", Columns: []velox.ColumnInfo{
 		{Name: "id"}, {Name: "org_id"}, {Name: "number"}, {Name: "total"}, {Name: "paid_at"},
 	}}
 	hID     = velox.NumberCol[inv, int64]{I: 0}
@@ -41,17 +41,17 @@ func stmt(where ...velox.Pred[inv]) *velox.Statement {
 // The entities of the per-owner goldens: items keyed to invoices, and tags
 // keyed to books through book_tags, a tag having notes.
 var (
-	itemInfo = &velox.EntityInfo{Name: "velox.item", Table: "items", Tenant: -1, PrimaryKey: []int{0},
+	itemInfo = &velox.EntityInfo{Name: "velox.item", Table: "items", PrimaryKey: []int{0},
 		Columns: []velox.ColumnInfo{{Name: "id"}, {Name: "invoice_id"}, {Name: "sku"}}}
-	tagInfo = &velox.EntityInfo{Name: "velox.tag", Table: "tags", Tenant: -1, PrimaryKey: []int{0},
+	tagInfo = &velox.EntityInfo{Name: "velox.tag", Table: "tags", PrimaryKey: []int{0},
 		Columns: []velox.ColumnInfo{{Name: "id"}, {Name: "org_id"}, {Name: "name"}}}
-	bookTagInfo = &velox.EntityInfo{Name: "velox.bookTag", Table: "book_tags", Tenant: -1, PrimaryKey: []int{0, 1},
+	bookTagInfo = &velox.EntityInfo{Name: "velox.bookTag", Table: "book_tags", PrimaryKey: []int{0, 1},
 		Columns: []velox.ColumnInfo{{Name: "book_id"}, {Name: "tag_id"}}}
-	noteInfo = &velox.EntityInfo{Name: "velox.note", Table: "notes", Tenant: -1, PrimaryKey: []int{0},
+	noteInfo = &velox.EntityInfo{Name: "velox.note", Table: "notes", PrimaryKey: []int{0},
 		Columns: []velox.ColumnInfo{{Name: "id"}, {Name: "tag_id"}, {Name: "body"}}}
 	// linkInfo is a join entity keyed by an id of its own, so that a link
 	// between a book and a tag can repeat.
-	linkInfo = &velox.EntityInfo{Name: "velox.link", Table: "links", Tenant: -1, PrimaryKey: []int{0},
+	linkInfo = &velox.EntityInfo{Name: "velox.link", Table: "links", PrimaryKey: []int{0},
 		Columns: []velox.ColumnInfo{{Name: "id"}, {Name: "book_id"}, {Name: "tag_id"}}}
 )
 
@@ -97,7 +97,7 @@ func ins(cols []int, rows [][]any) *velox.Statement {
 }
 
 func TestRenderSchemaQualifiedTable(t *testing.T) {
-	info := &velox.EntityInfo{Name: "velox.inv", Schema: "billing", Table: "invoices", Tenant: -1, Columns: []velox.ColumnInfo{{Name: "id"}}}
+	info := &velox.EntityInfo{Name: "velox.inv", Schema: "billing", Table: "invoices", Columns: []velox.ColumnInfo{{Name: "id"}}}
 	for d, want := range map[velox.Dialect]string{
 		velox.Postgres: `SELECT "id" FROM "billing"."invoices"`,
 		velox.MySQL:    "SELECT `id` FROM `billing`.`invoices`",
@@ -117,7 +117,7 @@ func TestRenderSchemaQualifiedTable(t *testing.T) {
 // table with its schema, and the upsert's update-branch condition qualifies
 // it again.
 func TestRenderSchemaQualifiedWrites(t *testing.T) {
-	info := &velox.EntityInfo{Name: "velox.inv", Schema: "billing", Table: "invoices", Tenant: -1, Columns: []velox.ColumnInfo{{Name: "id"}, {Name: "org_id"}, {Name: "total"}}}
+	info := &velox.EntityInfo{Name: "velox.inv", Schema: "billing", Table: "invoices", Columns: []velox.ColumnInfo{{Name: "id"}, {Name: "org_id"}, {Name: "total"}}}
 	where := []velox.Predicate{engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)})}
 	insert := func() *velox.Statement {
 		return &velox.Statement{Op: velox.OpInsert, Entity: info, Columns: []int{1, 2}, Rows: [][]any{{int64(7), 1.5}}, Returning: []int{0}}
@@ -149,7 +149,7 @@ func TestRenderSchemaQualifiedWrites(t *testing.T) {
 // TestRenderMySQLDoNothingQualifiesTheSchema: the no-op assignment's right side
 // carries the whole qualified table name.
 func TestRenderMySQLDoNothingQualifiesTheSchema(t *testing.T) {
-	info := &velox.EntityInfo{Name: "velox.inv", Schema: "billing", Table: "invoices", Tenant: -1,
+	info := &velox.EntityInfo{Name: "velox.inv", Schema: "billing", Table: "invoices",
 		Columns: []velox.ColumnInfo{{Name: "id"}, {Name: "org_id"}}}
 	st := &velox.Statement{Op: velox.OpInsert, Entity: info, Columns: []int{1}, Rows: [][]any{{int64(7)}},
 		Conflict: &velox.ConflictClause{Columns: []int{1}, DoNothing: true}}
@@ -463,7 +463,7 @@ func TestRender(t *testing.T) {
 }
 
 func TestRenderQuotesIdentifiers(t *testing.T) {
-	info := &velox.EntityInfo{Name: "velox.weird", Table: "user", Tenant: -1, Columns: []velox.ColumnInfo{{Name: "order"}, {Name: "a`b\"c"}}}
+	info := &velox.EntityInfo{Name: "velox.weird", Table: "user", Columns: []velox.ColumnInfo{{Name: "order"}, {Name: "a`b\"c"}}}
 	st := &velox.Statement{Op: velox.OpSelect, Entity: info}
 	for d, want := range map[velox.Dialect]string{
 		velox.Postgres: `SELECT "order", "a` + "`" + `b""c" FROM "user"`,
@@ -529,7 +529,7 @@ func TestLockRenders(t *testing.T) {
 // locking read with SKIP LOCKED, side by side on each dialect. SQLite has no
 // locking reads, and the guard refuses one there.
 func TestNewClausesOnEveryDialect(t *testing.T) {
-	join := &velox.EntityInfo{Name: "velox.join", Table: "joins", Tenant: -1, Columns: []velox.ColumnInfo{{Name: "inv_id"}, {Name: "tag_id"}}}
+	join := &velox.EntityInfo{Name: "velox.join", Table: "joins", Columns: []velox.ColumnInfo{{Name: "inv_id"}, {Name: "tag_id"}}}
 	cases := []struct {
 		name string
 		st   func() *velox.Statement

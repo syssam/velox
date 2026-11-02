@@ -65,7 +65,7 @@ func TestEntityHooksRunBeforeRewriteAndScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The Rewrite hook sees the caller's condition and the delete hook's,
-	// and not yet the tenant's, which the scope adds after it.
+	// and not yet the org's, which the scope adds after it.
 	if len(seen) != 1 || seen[0] != 2 {
 		t.Errorf("the Rewrite hook saw %v conditions, want [2]", seen)
 	}

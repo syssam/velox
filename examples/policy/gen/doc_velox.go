@@ -8,30 +8,46 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Doc is the entity of schema Doc.
 type Doc struct {
-	ID       int64               `json:"id,omitempty"`
-	Owner    string              `json:"owner,omitempty"`
-	Title    string              `json:"title,omitempty"`
-	Shared   bool                `json:"shared,omitempty"`
+	ID       int64               `json:"id"`
+	Owner    string              `json:"owner"`
+	Title    string              `json:"title"`
+	Shared   bool                `json:"shared"`
 	Comments velox.Many[Comment] `json:"comments,omitzero"`
 }
 
+// The positions of Doc's columns, in the order of its table.
+const (
+	docColID = iota
+	docColOwner
+	docColTitle
+	docColShared
+)
+
+// The positions of Doc's edges.
+const (
+	docEdgeComments = iota
+)
+
 // Docs holds the typed handles of Doc's columns and relations.
 var Docs = struct {
-	ID       velox.NumberCol[Doc, int64]
-	Owner    velox.StringCol[Doc, string]
-	Title    velox.StringCol[Doc, string]
-	Shared   velox.Col[Doc, bool]
+	// ID is the column id.
+	ID velox.NumberCol[Doc, int64]
+	// Owner is the column owner.
+	Owner velox.StringCol[Doc, string]
+	// Title is the column title.
+	Title velox.StringCol[Doc, string]
+	// Shared is the column shared.
+	Shared velox.Col[Doc, bool]
+	// Comments is the edge comments, to Comment.
 	Comments velox.Rel[Doc, Comment]
 }{
-	ID:       velox.NumberCol[Doc, int64]{I: 0},
-	Owner:    velox.StringCol[Doc, string]{I: 1},
-	Title:    velox.StringCol[Doc, string]{I: 2},
-	Shared:   velox.Col[Doc, bool]{I: 3},
-	Comments: velox.Rel[Doc, Comment]{I: 0},
+	ID:       velox.NumberCol[Doc, int64]{I: docColID},
+	Owner:    velox.StringCol[Doc, string]{I: docColOwner},
+	Title:    velox.StringCol[Doc, string]{I: docColTitle},
+	Shared:   velox.Col[Doc, bool]{I: docColShared},
+	Comments: velox.Rel[Doc, Comment]{I: docEdgeComments},
 }
 
 var docMeta velox.MetaOnce[Doc]
@@ -39,6 +55,7 @@ var docMeta velox.MetaOnce[Doc]
 // VeloxMeta is called by velox, not by applications.
 func (*Doc) VeloxMeta() *velox.Meta[Doc] { return docMeta.Load(docDescriptor) }
 
+// docDescriptor describes Doc to velox: its table, columns, edges and hooks.
 func docDescriptor() velox.Descriptor[Doc] {
 	return velox.Descriptor[Doc]{
 		Table: "docs",
@@ -48,28 +65,27 @@ func docDescriptor() velox.Descriptor[Doc] {
 			{Field: "Title", Name: "title"},
 			{Field: "Shared", Name: "shared"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{docColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Comment]("Comments", 0, 1),
+			velox.EdgeTo[Comment]("Comments", docColID, commentColDocID),
 		},
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Doc)(nil).Policy()) },
 		FieldPtr: func(x *Doc, i int) any {
 			switch i {
-			case 0:
+			case docColID:
 				return &x.ID
-			case 1:
+			case docColOwner:
 				return &x.Owner
-			case 2:
+			case docColTitle:
 				return &x.Title
-			case 3:
+			case docColShared:
 				return &x.Shared
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Doc, i int) any {
 			switch i {
-			case 0:
+			case docEdgeComments:
 				return &x.Comments
 			}
 			return nil
@@ -77,10 +93,10 @@ func docDescriptor() velox.Descriptor[Doc] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Doc) String() string {
 	return fmt.Sprintf("Doc(ID=%v, Owner=%v, Title=%v, Shared=%v)", x.ID, x.Owner, x.Title, x.Shared)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Doc) GoString() string { return x.String() }

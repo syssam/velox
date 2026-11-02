@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 )
 
 // TestReturnedErrorsNameTheEntityOnce pins the error convention: one
@@ -38,6 +40,16 @@ func want(t *testing.T, err, sentinel error, text string) {
 	t.Helper()
 	if !errors.Is(err, sentinel) || err.Error() != text {
 		t.Errorf("got %v, want %q wrapping %v", err, text, sentinel)
+	}
+}
+
+// wantNoScope checks that err is a refusal for want of a scope value, that it
+// begins with prefix (the statement's path), and that it names the scope.
+func wantNoScope(t *testing.T, err error, prefix string) {
+	t.Helper()
+	const tail = "velox/scope: the context has no scope value: org"
+	if !errors.Is(err, scope.ErrNoScope) || !strings.HasPrefix(err.Error(), prefix) || !strings.HasSuffix(err.Error(), tail) {
+		t.Errorf("got %v, want it to begin %q, wrap scope.ErrNoScope and end %q", err, prefix, tail)
 	}
 }
 

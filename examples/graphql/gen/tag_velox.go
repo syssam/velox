@@ -8,27 +8,41 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Tag is the entity of schema Tag.
 type Tag struct {
-	ID    int64            `json:"id,omitempty"`
-	Name  string           `json:"name,omitempty"`
-	Rank  int8             `json:"rank,omitempty"`
+	ID    int64            `json:"id"`
+	Name  string           `json:"name"`
+	Rank  int8             `json:"rank"`
 	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 
+// The positions of Tag's columns, in the order of its table.
+const (
+	tagColID = iota
+	tagColName
+	tagColRank
+)
+
+// The positions of Tag's edges.
+const (
+	tagEdgePosts = iota
+)
+
 // Tags holds the typed handles of Tag's columns and relations.
 var Tags = struct {
-	ID    velox.NumberCol[Tag, int64]
-	Name  velox.StringCol[Tag, string]
-	Rank  velox.NumberCol[Tag, int8]
+	// ID is the column id.
+	ID velox.NumberCol[Tag, int64]
+	// Name is the column name.
+	Name velox.StringCol[Tag, string]
+	// Rank is the column rank.
+	Rank velox.NumberCol[Tag, int8]
+	// Posts is the edge posts, to Post.
 	Posts velox.Rel[Tag, Post]
 }{
-	ID:    velox.NumberCol[Tag, int64]{I: 0},
-	Name:  velox.StringCol[Tag, string]{I: 1},
-	Rank:  velox.NumberCol[Tag, int8]{I: 2},
-	Posts: velox.Rel[Tag, Post]{I: 0},
+	ID:    velox.NumberCol[Tag, int64]{I: tagColID},
+	Name:  velox.StringCol[Tag, string]{I: tagColName},
+	Rank:  velox.NumberCol[Tag, int8]{I: tagColRank},
+	Posts: velox.Rel[Tag, Post]{I: tagEdgePosts},
 }
 
 var tagMeta velox.MetaOnce[Tag]
@@ -36,6 +50,7 @@ var tagMeta velox.MetaOnce[Tag]
 // VeloxMeta is called by velox, not by applications.
 func (*Tag) VeloxMeta() *velox.Meta[Tag] { return tagMeta.Load(tagDescriptor) }
 
+// tagDescriptor describes Tag to velox: its table, columns, edges and hooks.
 func tagDescriptor() velox.Descriptor[Tag] {
 	return velox.Descriptor[Tag]{
 		Table: "tags",
@@ -44,28 +59,27 @@ func tagDescriptor() velox.Descriptor[Tag] {
 			{Field: "Name", Name: "name"},
 			{Field: "Rank", Name: "rank"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{tagColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1}, Unique: true}, // name
+			{Columns: []int{tagColName}, Unique: true}, // name
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeThrough[PostTag, Post]("Posts", 0, 1, 0, 0),
+			velox.EdgeThrough[PostTag, Post]("Posts", tagColID, postTagColTagID, postTagColPostID, postColID),
 		},
 		FieldPtr: func(x *Tag, i int) any {
 			switch i {
-			case 0:
+			case tagColID:
 				return &x.ID
-			case 1:
+			case tagColName:
 				return &x.Name
-			case 2:
+			case tagColRank:
 				return &x.Rank
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Tag, i int) any {
 			switch i {
-			case 0:
+			case tagEdgePosts:
 				return &x.Posts
 			}
 			return nil
@@ -73,10 +87,10 @@ func tagDescriptor() velox.Descriptor[Tag] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Tag) String() string {
 	return fmt.Sprintf("Tag(ID=%v, Name=%v, Rank=%v)", x.ID, x.Name, x.Rank)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Tag) GoString() string { return x.String() }

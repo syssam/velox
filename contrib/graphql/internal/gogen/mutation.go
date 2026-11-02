@@ -246,17 +246,10 @@ func (r *renderer) writeInput(f *file, t *sdl.Type, in, mutation string, fs []sd
 		v := "in." + fi.GoName
 		json := fi.Kind == sdl.InputValue && fi.GoType == "veloxgql.JSON"
 		switch {
+		case strings.HasPrefix(types[i], "*") && json:
+			v = f.gqlimpl() + ".ShowJSON(" + v + ")"
 		case strings.HasPrefix(types[i], "*"):
-			p := "p" + strconv.Itoa(i)
-			f.p("\tvar %s any", p)
-			f.p("\tif %s != nil {", v)
-			if json {
-				f.p("\t\t%s = string(*%s)", p, v)
-			} else {
-				f.p("\t\t%s = *%s", p, v)
-			}
-			f.p("\t}")
-			v = p
+			v = f.gqlimpl() + ".Show(" + v + ")"
 		case json:
 			v = "string(" + v + ")"
 		}
@@ -451,7 +444,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 	}
 
 	f.p("")
-	f.doc("", fmt.Sprintf("%s creates %s %s from input, with its edges, as the mutation %s does, and returns the row as written. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each input field does, what the caller may link and change, and the errors.", fn, english.Article(n), n, "create"+n))
+	f.doc("", fmt.Sprintf("%s creates %s %s from input, with its edges, as the mutation %s does, and returns the row as written. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each input field does, what the caller may link and change, and the errors.", fn, english.Article(n), n, "create"+n))
 	f.p("func %s(ctx %s.Context, input %s) (*%s, error) {", fn, ctx, in, e.Name)
 	writeDecodes(f, t.Create, dec, order, nil)
 
@@ -485,7 +478,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 			continue
 		}
 		fd := e.Fields[fi.Field]
-		dst, tmp := "x."+fd.GoName, "v"+strconv.Itoa(i)
+		dst, tmp := "x."+fd.GoName, local(fi.GoName, "Val")
 		// An insert fills the Default into NULL as well, and the input's nil
 		// pointer cannot say the client gave null.
 		if fd.Nullable && fd.HasDefault && !fi.Required {
@@ -566,7 +559,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 			}
 			indent, end := given("\t\t", i)
 			ret(indent, checkExists(impl, tgt.Name, pk, d.v, false, at(fi), fi.Target))
-			setKey(f, indent, "x."+fk.GoName, d.v, conv, "v"+strconv.Itoa(i), fk.Pointer)
+			setKey(f, indent, "x."+fk.GoName, d.v, conv, local(fi.GoName, "Val"), fk.Pointer)
 			end()
 		case fi.Kind == sdl.InputEdgeIDs && ed.Kind == plugin.M2M:
 			indent, end := given("\t\t", i)
@@ -624,7 +617,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 		}
 		// Only a child no owner holds is re-pointed, as in ent: one another
 		// owner holds is not taken from it. The UPDATE's count checks the
-		// IDs, as the tenant scope and the target's Read and Write policies
+		// IDs, as the target's Read and Write policies
 		// leave out a row the caller may not change; Repointed tells a child
 		// the caller may read that another owner holds from one it may not
 		// change: it counts, after the UPDATE, the rows of the IDs whose key
@@ -680,9 +673,10 @@ func (r *renderer) decodes(f *file, t *sdl.Type, in string, fs []sdl.InputField)
 			if err != nil {
 				return nil, nil, err
 			}
-			d := decoded{v: "k" + strconv.Itoa(i), typ: k.typ, key: k}
+			d := decoded{v: local(fi.GoName, "Key"), typ: k.typ, key: k}
 			src := "input." + fi.GoName
 			if isList(fi.Kind) {
+				d.v = local(fi.GoName, "Keys")
 				d.typ = "[]" + k.typ
 				d.call = fmt.Sprintf("%s.DecodeIDs%s(ctx, %s, %s, %q%s)", impl, k.args, at(fi), src, fi.Target, k.conv)
 			} else {
@@ -710,7 +704,7 @@ func (r *renderer) decodes(f *file, t *sdl.Type, in string, fs []sdl.InputField)
 			if !fi.Required {
 				src = "*" + src
 			}
-			dec[i] = decoded{v: "j" + strconv.Itoa(i), typ: typ, call: fmt.Sprintf("%s.FromJSON[%s](%s, %s)", impl, typ, at(fi), src)}
+			dec[i] = decoded{v: local(fi.GoName, "JSON"), typ: typ, call: fmt.Sprintf("%s.FromJSON[%s](%s, %s)", impl, typ, at(fi), src)}
 			order = append(order, i)
 		}
 	}
@@ -802,7 +796,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	}
 
 	f.p("")
-	f.doc("", fmt.Sprintf("%s updates the %s with the ID id from input, as the mutation %s does, and returns the row as written. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each input field does, what the caller may link and change, and the errors.", fn, n, mutation))
+	f.doc("", fmt.Sprintf("%s updates the %s with the ID id from input, as the mutation %s does, and returns the row as written. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each input field does, what the caller may link and change, and the errors.", fn, n, mutation))
 	f.p("func %s(ctx %s.Context, id string, input %s) (*%s, error) {", fn, ctx, in, e.Name)
 	writeDecodes(f, fs, dec, order, selfDec)
 
@@ -939,6 +933,9 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	// existence check under the same scope, the Write policy's too
 	// (Writable): no edge of a row the caller may read but not change is
 	// written.
+	// -1: the driver did not report the count, and the row is checked as when
+	// there is nothing to set.
+	f.p("\t\tcounted := false")
 	f.p("\t\tif len(set) > 0 {")
 	f.p("\t\t\tn, err := db.Update[%s]().Set(set...).Where(%s.EQ(key)).Exec(ctx)", e.Name, pk)
 	f.p("\t\t\tif err != nil {")
@@ -947,13 +944,10 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	f.p("\t\t\tif n == 0 {")
 	f.p("\t\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)
 	f.p("\t\t\t}")
-	// -1: the driver did not report the count, and the row is checked
-	// as when there is nothing to set.
-	f.p("\t\t\tif n < 0 {")
-	r.lockedCheck(f, e, pk, mutation, n, impl, velox, "\t\t\t\t")
-	f.p("\t\t\t}")
-	f.p("\t\t} else {")
-	r.lockedCheck(f, e, pk, mutation, n, impl, velox, "\t\t\t")
+	f.p("\t\t\tcounted = n > 0")
+	f.p("\t\t}")
+	f.p("\t\tif !counted {")
+	r.lockedCheck(f, e, pk, mutation, n, impl, "\t\t\t")
 	f.p("\t\t}")
 
 	// The edges whose key is on the targets' rows, and the join rows: each
@@ -997,15 +991,15 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			}
 			jo, jt := j.Handles+"."+own.GoName, j.Handles+"."+other.GoName
 			if clr >= 0 || rm >= 0 {
-				// Join rows are scoped by their sides' tenants, by no policy:
-				// only those to a target the caller may read, under the tenant scope and the
-				// target's Read policy, as add's CheckExists checks, are
+				// Join rows are scoped by no policy of their own: only
+				// those to a target the caller may read, under the target's
+				// Read policy, as add's CheckExists checks, are
 				// deleted. A link to a target hidden from the caller stays.
 				k, err := r.idKeyOf(f, e, tt)
 				if err != nil {
 					return err
 				}
-				un := "unlink" + strconv.Itoa(ei)
+				un := "unlink" + ed.GoName
 				f.p("\t\t%s := func(ks []%s) error {", un, k.typ)
 				f.p("\t\t\tvs, err := %s.Readable(ctx, db.Query[%s]().Where(%s.In(ks...)).Columns(%s), len(ks), func(x *%s) %s { return x.%s })", impl, tgt.Name, tpk, tpk, tgt.Name, k.typ, tkey.GoName)
 				f.p("\t\t\tif err != nil || len(vs) == 0 {")
@@ -1078,7 +1072,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			f.p("\t\t}")
 		}
 		// Each link (writeRepointed) counts the IDs linked to this row after
-		// the UPDATE under the tenant and the Read policy, not the Write
+		// the UPDATE under the Read policy, not the Write
 		// policy: a child already linked here that the Write policy hides is
 		// a link that exists, and adding it again changes nothing. A child
 		// with a NULL key the Write policy hides is not linked by the
@@ -1097,7 +1091,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			// child this row holds now, unless it is the new one, is let go
 			// next: the key is unique. That UPDATE is under the caller's
 			// scope, so a child it leaves holding the key is one the caller
-			// may not change, hidden by the tenant or a policy: StillLinked
+			// may not change, hidden by a policy: StillLinked
 			// refuses the re-point before the link would fail on the unique
 			// key, and the child stays linked. It looks whatever the
 			// UPDATE's row count, which may be unknown (-1).
@@ -1112,7 +1106,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	}
 
 	// The row as it is afterwards: the row this update wrote, which the
-	// caller could read before it, so read back under the tenant scope
+	// caller could read before it, so read back
 	// without the Read policy, as CreateX returns the row it inserted. An
 	// update that moves the row out of the caller's Read view succeeds.
 	f.p("\t\tx, err := db.Query[%s]().Where(%s.EQ(key)).One(%s.WithoutPolicy(ctx, %q))", e.Name, pk, velox, "graphql: the row this update wrote")
@@ -1198,7 +1192,7 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 	if len(joins) > 0 {
 		joinRows = ", and the join rows that hold its key"
 	}
-	doc := fmt.Sprintf("%s deletes the %s with the ID id%s, as the mutation %s does, and returns id encoded again from the key. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what it deletes and the errors.", fn, n, joinRows, mutation)
+	doc := fmt.Sprintf("%s deletes the %s with the ID id%s, as the mutation %s does, and returns id encoded again from the key. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what it deletes and the errors.", fn, n, joinRows, mutation)
 	f.doc("", doc)
 	f.p("func %s(ctx %s.Context, id string) (string, error) {", fn, ctx)
 	f.p("\tkey, err := %s.DecodeID%s(%q, id, %q%s)", impl, self.args, mutation+".id", n, self.conv)
@@ -1210,7 +1204,7 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 		// The row is checked under the DELETE's scope before its join rows,
 		// which no policy scopes, are touched: those of a row the
 		// caller may not delete are never deleted.
-		r.lockedCheck(f, e, pk, mutation, n, impl, velox, "\t\t")
+		r.lockedCheck(f, e, pk, mutation, n, impl, "\t\t")
 		for _, j := range joins {
 			var ps []string
 			for _, c := range j.cols {
@@ -1273,21 +1267,12 @@ func setNull(e *plugin.Entity, fd *plugin.Field) (string, error) {
 	return "", fmt.Errorf("schema %s, field %s: the model says its column holds NULL, and its Go type %s holds no nil; make the field Nillable", e.Name, fd.Name, cmp.Or(fd.ElemType, fd.GoType))
 }
 
-// lockedCheck writes the check of an update's or a delete's row: a Writable
-// Exists, under the scope of the write, which finds no row the caller may not
-// change. Where the dialect has locking reads (everywhere but SQLite) it
-// locks the row with ForUpdate, which Atomic's transaction lets it do, so the
-// row stays the caller's until the edges are written. SQLite has none, and
-// its transactions lock the database. The dialect is read at run time, from
-// the DB the operation runs on.
-func (r *renderer) lockedCheck(f *file, e *plugin.Entity, pk, mutation, n, impl, velox, ind string) {
-	f.p("%schk := db.Query[%s]().Where(%s.EQ(key)).Writable()", ind, e.Name, pk)
-	f.p("%sif db.Dialect() != %s.SQLite {", ind, velox)
-	f.p("%s\tchk = chk.ForUpdate()", ind)
-	f.p("%s}", ind)
-	f.p("%sif ok, err := chk.Exists(ctx); err != nil {", ind)
+// lockedCheck writes the check of an update's or a delete's row, which
+// gqlimpl.LockRow does: a Writable Exists, under the scope of the write, which
+// finds no row the caller may not change, and where the dialect has locking
+// reads locks the row, so it stays the caller's until the edges are written.
+func (r *renderer) lockedCheck(f *file, e *plugin.Entity, pk, mutation, n, impl, ind string) {
+	f.p("%sif err := %s.LockRow(ctx, db, db.Query[%s]().Where(%s.EQ(key)), %q, %q); err != nil {", ind, impl, e.Name, pk, mutation, n)
 	f.p("%s\treturn err", ind)
-	f.p("%s} else if !ok {", ind)
-	f.p("%s\treturn %s.NotFound(%q, %q)", ind, impl, mutation, n)
 	f.p("%s}", ind)
 }

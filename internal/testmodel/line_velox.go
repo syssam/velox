@@ -8,24 +8,36 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Line is the entity of schema Line.
 type Line struct {
-	ID       int64             `json:"id,omitempty"`
-	SampleID int64             `json:"sample_id,omitempty"`
+	ID       int64             `json:"id"`
+	SampleID int64             `json:"sample_id"`
 	Sample   velox.One[Sample] `json:"sample,omitzero"`
 }
 
+// The positions of Line's columns, in the order of its table.
+const (
+	lineColID = iota
+	lineColSampleID
+)
+
+// The positions of Line's edges.
+const (
+	lineEdgeSample = iota
+)
+
 // Lines holds the typed handles of Line's columns and relations.
 var Lines = struct {
-	ID       velox.NumberCol[Line, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Line, int64]
+	// SampleID is the column sample_id.
 	SampleID velox.NumberCol[Line, int64]
-	Sample   velox.Rel[Line, Sample]
+	// Sample is the edge sample, to Sample.
+	Sample velox.Rel[Line, Sample]
 }{
-	ID:       velox.NumberCol[Line, int64]{I: 0},
-	SampleID: velox.NumberCol[Line, int64]{I: 1},
-	Sample:   velox.Rel[Line, Sample]{I: 0},
+	ID:       velox.NumberCol[Line, int64]{I: lineColID},
+	SampleID: velox.NumberCol[Line, int64]{I: lineColSampleID},
+	Sample:   velox.Rel[Line, Sample]{I: lineEdgeSample},
 }
 
 var lineMeta velox.MetaOnce[Line]
@@ -33,6 +45,7 @@ var lineMeta velox.MetaOnce[Line]
 // VeloxMeta is called by velox, not by applications.
 func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDescriptor) }
 
+// lineDescriptor describes Line to velox: its table, columns, edges and hooks.
 func lineDescriptor() velox.Descriptor[Line] {
 	return velox.Descriptor[Line]{
 		Table: "line",
@@ -40,23 +53,22 @@ func lineDescriptor() velox.Descriptor[Line] {
 			{Field: "ID", Name: "id"},
 			{Field: "SampleID", Name: "sample_id"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{lineColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Sample]("Sample", 1, 0),
+			velox.EdgeTo[Sample]("Sample", lineColSampleID, sampleColID),
 		},
 		FieldPtr: func(x *Line, i int) any {
 			switch i {
-			case 0:
+			case lineColID:
 				return &x.ID
-			case 1:
+			case lineColSampleID:
 				return &x.SampleID
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Line, i int) any {
 			switch i {
-			case 0:
+			case lineEdgeSample:
 				return &x.Sample
 			}
 			return nil
@@ -64,10 +76,10 @@ func lineDescriptor() velox.Descriptor[Line] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Line) String() string {
 	return fmt.Sprintf("Line(ID=%v, SampleID=%v)", x.ID, x.SampleID)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Line) GoString() string { return x.String() }

@@ -79,7 +79,7 @@ func mustBuild(t *testing.T, ss ...schema.Interface) *Graph {
 type User struct{ schema.Schema }
 
 func (User) Fields() []schema.Field {
-	return []schema.Field{field.Int64("org_id").Tenant(), field.String("name"), field.Bool("active").Nillable().Default(true)}
+	return []schema.Field{field.Int64("org_id").Immutable(), field.String("name"), field.Bool("active").Nillable().Default(true)}
 }
 func (User) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("posts", Post.Type), edge.To("groups", Group.Type)}
@@ -102,7 +102,7 @@ func (Group) Edges() []schema.Edge { return []schema.Edge{edge.From("users", Use
 func TestBuildBlog(t *testing.T) {
 	g := mustBuild(t, User{}, Post{}, Group{})
 	u, p := g.Entity("User"), g.Entity("Post")
-	if u.Table != "users" || u.Fields[0].Name != "id" || !u.Fields[0].AutoID || u.Fields[0].Type != "int64" || u.Tenant != "org_id" {
+	if u.Table != "users" || u.Fields[0].Name != "id" || !u.Fields[0].AutoID || u.Fields[0].Type != "int64" {
 		t.Fatalf("user %+v", u)
 	}
 	posts, author := u.Edge("posts"), p.Edge("author")
@@ -577,18 +577,6 @@ func (fieldOptional) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("children", fieldOptional.Type).From("parent").Unique().Required().Field("parent_id")}
 }
 
-type twoTenants struct{ schema.Schema }
-
-func (twoTenants) Fields() []schema.Field {
-	return []schema.Field{field.Int64("a").Tenant(), field.Int64("b").Tenant()}
-}
-
-type optionalTenant struct{ schema.Schema }
-
-func (optionalTenant) Fields() []schema.Field {
-	return []schema.Field{field.Int64("org").Tenant().Optional()}
-}
-
 type defaultBool struct{ schema.Schema }
 
 func (defaultBool) Fields() []schema.Field { return []schema.Field{field.Bool("active").Default(true)} }
@@ -760,18 +748,6 @@ func (optionalFK) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", optionalFK.Type).Unique().Field("parent_id")}
 }
 
-type defaultTenant struct{ schema.Schema }
-
-func (defaultTenant) Fields() []schema.Field {
-	return []schema.Field{field.Int64("org").Tenant().Default(1)}
-}
-
-type sdTenant struct{ schema.Schema }
-
-func (sdTenant) Fields() []schema.Field {
-	return []schema.Field{field.Int64("org").Tenant().SchemaDefault(map[string]string{field.Postgres: "1"})}
-}
-
 type sdIntID struct{ schema.Schema }
 
 func (sdIntID) Fields() []schema.Field {
@@ -783,10 +759,6 @@ type sdStringID struct{ schema.Schema }
 func (sdStringID) Fields() []schema.Field {
 	return []schema.Field{field.String("id").SchemaDefault(map[string]string{field.Postgres: "gen_random_uuid()::text"})}
 }
-
-type bytesTenant struct{ schema.Schema }
-
-func (bytesTenant) Fields() []schema.Field { return []schema.Field{field.Bytes("org").Tenant()} }
 
 type emptyEnum struct{ schema.Schema }
 
@@ -1222,11 +1194,6 @@ func TestBuildRules(t *testing.T) {
 		{"12 field of a named type", []schema.Interface{fkNamedType{}}, `schema fkNamedType: edge "parent": field "parent_id" is codegen.Cents; fkNamedType's ID is int64`},
 		{"12 field of a custom int", []schema.Interface{fkCustomInt{}}, `schema fkCustomInt: edge "parent": field "parent_id" is codegen.MyInt; fkCustomInt's ID is int64`},
 		{"13 field optional", []schema.Interface{fieldOptional{}}, `schema fieldOptional: edge "parent": field "parent_id" must be Optional exactly when the edge is not Required`},
-		{"14 two tenants", []schema.Interface{twoTenants{}}, `schema twoTenants: field "b": a second tenant field; "a" is the tenant`},
-		{"15 optional tenant", []schema.Interface{optionalTenant{}}, `schema optionalTenant: field "org": the tenant field must be required and not Nillable`},
-		{"16 default tenant", []schema.Interface{defaultTenant{}}, `schema defaultTenant: field "org": the tenant field cannot have a default: the context's tenant fills it`},
-		{"16 schema default on the tenant", []schema.Interface{sdTenant{}}, `schema sdTenant: field "org": the tenant field cannot have a default: the context's tenant fills it`},
-		{"17 bytes tenant", []schema.Interface{bytesTenant{}}, `schema bytesTenant: field "org": the tenant field must be of a comparable type`},
 		{"18 empty enum", []schema.Interface{emptyEnum{}}, `schema emptyEnum: field "s": an enum needs Values`},
 		{"19 duplicate enum value", []schema.Interface{dupEnum{}}, `schema dupEnum: field "s": value "a" is given twice`},
 		{"19 value from Values and GoType", []schema.Interface{enumGoTypeDup{}}, `schema enumGoTypeDup: field "s": value "a" is given twice`},
@@ -1364,8 +1331,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 	for _, ss := range [][]schema.Interface{
 		{dupField{}}, {dupColumn{}}, {dupEdge{}}, {edgeGoName{}}, {unknownTarget{}}, {otherPkgTarget{}}, {notSchemaTarget{}},
 		{noRef{}}, {badRef{}}, {badRefNear{}}, {wrongRef{}, refHolder{}, Pet{}}, {reqA{}, reqB{}}, {fieldMissing{}},
-		{fieldWrongSide{}, Pet{}}, {fieldMany{}}, {fieldWrongType{}}, {fieldOptional{}}, {twoTenants{}}, {optionalTenant{}},
-		{defaultTenant{}}, {sdTenant{}}, {sdIntID{}}, {bytesTenant{}}, {emptyEnum{}}, {dupEnum{}}, {badEnum{}}, {optionalID{}}, {floatID{}},
+		{fieldWrongSide{}, Pet{}}, {fieldMany{}}, {fieldWrongType{}}, {fieldOptional{}}, {sdIntID{}}, {emptyEnum{}}, {dupEnum{}}, {badEnum{}}, {optionalID{}}, {floatID{}},
 		{unknownIndexField{}}, {nearIndexField{}}, {unknownIndexEdge{}}, {indexForeignEdge{}, Pet{}}, {emptyIndex{}}, {otherNoType{}},
 		{joinClash{}, clashTable{}}, {inlineOther{}, Pet{}}, {inlineNotSchema{}},
 		{tableOnO2M{}, Pet{}}, {badFieldName{}}, {emptyFieldName{}}, {badEdgeName{}}, {fieldGoNames{}}, {edgeGoNames{}},
@@ -1398,8 +1364,8 @@ func TestBuildOptionalBytesWithDefaultOrNillable(t *testing.T) { mustBuild(t, op
 func TestBuildOptionalTimeWithDefaultOrNillable(t *testing.T) { mustBuild(t, optionalTimeOK{}) }
 
 func TestBuildErrorsAreSortedAndJoined(t *testing.T) {
-	_, err := build(t, twoTenants{}, dupField{})
-	if err == nil || strings.Index(err.Error(), "dupField") > strings.Index(err.Error(), "twoTenants") {
+	_, err := build(t, optionalID{}, dupField{})
+	if err == nil || strings.Index(err.Error(), "dupField") > strings.Index(err.Error(), "optionalID") {
 		t.Fatalf("errors must be ordered by schema name: %v", err)
 	}
 }

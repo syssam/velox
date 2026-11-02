@@ -8,10 +8,10 @@ import (
 // TestRowCapAppliesToSelectsOnly: an insert's RETURNING and a COUNT are not
 // capped, whatever the DB's cap.
 func TestRowCapAppliesToSelectsOnly(t *testing.T) {
-	invInfo := &EntityInfo{Name: "velox.inv", Tenant: -1}
-	itemInfo := &EntityInfo{Name: "velox.item", Tenant: -1, PrimaryKey: []int{0}}
-	tagInfo := &EntityInfo{Name: "velox.tag", Tenant: -1, PrimaryKey: []int{0}}
-	bookTagInfo := &EntityInfo{Name: "velox.bookTag", Tenant: -1, PrimaryKey: []int{0, 1}}
+	invInfo := &EntityInfo{Name: "velox.inv"}
+	itemInfo := &EntityInfo{Name: "velox.item", PrimaryKey: []int{0}}
+	tagInfo := &EntityInfo{Name: "velox.tag", PrimaryKey: []int{0}}
+	bookTagInfo := &EntityInfo{Name: "velox.bookTag", PrimaryKey: []int{0, 1}}
 	db := &DB{D: Postgres, Cfg: &config{MaxRows: 2}}
 	for _, c := range []struct {
 		name string

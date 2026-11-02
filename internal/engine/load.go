@@ -19,7 +19,10 @@ type LoadSpec struct {
 	With    []LoadSpec
 	Each    int // Rel.LimitEach's n: the most rows per owner; 0: no limit
 	MaxRows int // Rel.MaxRows's n: the load's own cap; 0: the owner's
-	Err     error
+	// Joined says Query.Join read the relation already, into the owners' fields: the
+	// load then only loads With on the joined entities.
+	Joined bool
+	Err    error
 }
 
 // SpecErr is the first error a load carries or one of its nested loads does.
@@ -66,7 +69,7 @@ func CheckLoads(owner *EntityInfo, cols []int, specs []LoadSpec) error {
 		if err != nil {
 			return err
 		}
-		if cols != nil && !slices.Contains(cols, l.OwnerCol) {
+		if cols != nil && !sp.Joined && !slices.Contains(cols, l.OwnerCol) {
 			return fmt.Errorf("velox: %s: With(%s) needs the column %s selected", owner.Name, r.Name, owner.Columns[l.OwnerCol].Name)
 		}
 		if err := CheckLoads(l.Target, nil, sp.With); err != nil {
@@ -162,7 +165,7 @@ func tieBreak(t *EntityInfo, order []OrderTerm) []OrderTerm {
 
 // keysPer is how many keys one statement on t holds beside the conditions
 // ps: 64 parameters are left for conditions that rewrite hooks add, such as a
-// tenant's. A statement that still overflows, because a policy's or a hook's
+// scope's. A statement that still overflows, because a policy's or a hook's
 // conditions take more, is split again (byChunks).
 func keysPer(d Dialect, t *EntityInfo, ps []Predicate) int {
 	// The relations in ps resolve with the statement; one that does not
@@ -428,6 +431,9 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 	t := l.Target
 	if sp.MaxRows > 0 {
 		maxRows = sp.MaxRows // for its nested loads too
+	}
+	if sp.Joined {
+		return loadJoined(ctx, db, pin, t, r, ptrs, sp, maxRows)
 	}
 	if infoKit(owner) == nil || infoKit(t) == nil || (l.Join != nil && infoKit(l.Join) == nil) {
 		return fmt.Errorf("velox: %s: relation %s: the entities have no scan plan; run go tool velox-gen", owner.Name, r.Name)
@@ -750,4 +756,22 @@ func readPart(ctx context.Context, db *DB, pin Target, st *Statement, t *EntityI
 		err = db.Plain(ctx, st, read, nil)
 	}
 	return part, owners, err
+}
+
+// loadJoined loads sp's With on the entities that Query.Join stored in relation r of
+// the owners at ptrs: every owner has its own joined row, so each is loaded, and
+// the relations they load are shared by key as With shares them.
+func loadJoined(ctx context.Context, db *DB, pin Target, target *EntityInfo, r *relation, ptrs []unsafe.Pointer, sp LoadSpec, maxRows int) error {
+	joined := make([]unsafe.Pointer, 0, len(ptrs))
+	for _, p := range ptrs {
+		h := (*Holder)(unsafe.Add(p, r.Off))
+		// V holds a *T, which an interface keeps in its data word.
+		if h.V != nil {
+			joined = append(joined, (*[2]unsafe.Pointer)(unsafe.Pointer(&h.V))[1])
+		}
+	}
+	if len(joined) == 0 {
+		return nil
+	}
+	return LoadRelations(ctx, db, pin, target, joined, sp.With, maxRows)
 }

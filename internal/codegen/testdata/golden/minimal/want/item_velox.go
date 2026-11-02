@@ -8,24 +8,32 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Item is the entity of schema Item.
 type Item struct {
-	ID       int64  `json:"id,omitempty"`
-	Name     string `json:"name,omitempty"`
-	Quantity int    `json:"quantity,omitempty"`
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Quantity int    `json:"quantity"`
 }
+
+// The positions of Item's columns, in the order of its table.
+const (
+	itemColID = iota
+	itemColName
+	itemColQuantity
+)
 
 // Items holds the typed handles of Item's columns and relations.
 var Items = struct {
-	ID       velox.NumberCol[Item, int64]
-	Name     velox.StringCol[Item, string]
+	// ID is the column id.
+	ID velox.NumberCol[Item, int64]
+	// Name is the column name.
+	Name velox.StringCol[Item, string]
+	// Quantity is the column quantity.
 	Quantity velox.NumberCol[Item, int]
 }{
-	ID:       velox.NumberCol[Item, int64]{I: 0},
-	Name:     velox.StringCol[Item, string]{I: 1},
-	Quantity: velox.NumberCol[Item, int]{I: 2},
+	ID:       velox.NumberCol[Item, int64]{I: itemColID},
+	Name:     velox.StringCol[Item, string]{I: itemColName},
+	Quantity: velox.NumberCol[Item, int]{I: itemColQuantity},
 }
 
 var itemMeta velox.MetaOnce[Item]
@@ -33,6 +41,7 @@ var itemMeta velox.MetaOnce[Item]
 // VeloxMeta is called by velox, not by applications.
 func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Load(itemDescriptor) }
 
+// itemDescriptor describes Item to velox: its table, columns, edges and hooks.
 func itemDescriptor() velox.Descriptor[Item] {
 	return velox.Descriptor[Item]{
 		Table: "items",
@@ -41,15 +50,14 @@ func itemDescriptor() velox.Descriptor[Item] {
 			{Field: "Name", Name: "name"},
 			{Field: "Quantity", Name: "quantity"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{itemColID},
 		FieldPtr: func(x *Item, i int) any {
 			switch i {
-			case 0:
+			case itemColID:
 				return &x.ID
-			case 1:
+			case itemColName:
 				return &x.Name
-			case 2:
+			case itemColQuantity:
 				return &x.Quantity
 			}
 			return nil
@@ -57,10 +65,10 @@ func itemDescriptor() velox.Descriptor[Item] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Item) String() string {
 	return fmt.Sprintf("Item(ID=%v, Name=%v, Quantity=%v)", x.ID, x.Name, x.Quantity)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Item) GoString() string { return x.String() }

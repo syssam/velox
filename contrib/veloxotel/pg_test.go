@@ -70,7 +70,7 @@ func TestPgxPreparesACommentedStatementOnce(t *testing.T) {
 		return n
 	}
 
-	route := velox.WithTags(velox.WithTenant(bg, int64(1)), "route", "GET /invoices/{id}")
+	route := velox.WithTags(testmodel.Org.With(bg, int64(1)), "route", "GET /invoices/{id}")
 	for i := range 3 { // one call site, three times, each with another unlisted tag
 		c := velox.WithTags(route, "user", string(rune('a'+i)))
 		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(c); err != nil {
@@ -124,7 +124,7 @@ func TestPgxOmitCallersPreparesOnce(t *testing.T) {
 		App:            "otel-test",
 		OmitCallers:    true,
 	})...)
-	c := velox.WithTenant(bg, int64(1))
+	c := testmodel.Org.With(bg, int64(1))
 	if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(c); err != nil { // call site one
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestPgStatusCode(t *testing.T) {
 	db := veloxpgx.Open(pool, veloxotel.Options(veloxotel.Config{
 		TracerProvider: sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp)),
 	})...)
-	c := velox.WithTenant(bg, int64(1))
+	c := testmodel.Org.With(bg, int64(1))
 	first := testmodel.Invoice{OrgID: 1, Number: "INV-1", Data: []byte("d")}
 	if err := db.Insert(&first).Exec(c); err != nil {
 		t.Fatal(err)

@@ -12,7 +12,7 @@ import (
 
 // CreatedBy is a mixin: it adds a created_by column to each entity that lists
 // it. A mixin carries fields, edges, indexes and annotations, never
-// behaviour; what fills the column is a hook, gen.createdBy, that each entity
+// behaviour; what fills the column is a hook, auth.CreatedBy, that each entity
 // lists in its own Hooks.
 type CreatedBy struct{ mixin.Schema }
 

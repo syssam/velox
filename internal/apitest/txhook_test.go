@@ -158,7 +158,7 @@ func TestTxInfoRoute(t *testing.T) {
 		{"sharded", velox.OpenShards(velox.Postgres, map[string]velox.Shard{
 			"a": {Primary: fakeConn(&fakeconn.Exec{})},
 			"b": {Primary: fakeConn(&fakeconn.Exec{})},
-		}, keep, velox.WithShardFor(func(context.Context, any) (string, error) { return "b", nil })),
+		}, keep, velox.WithShardFor(func(context.Context) (string, error) { return "b", nil })),
 			velox.WithShard(ctx, "a"), velox.Route{Shard: "a", Replica: -1}},
 	}
 	for _, tc := range cases {

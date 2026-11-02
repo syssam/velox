@@ -18,23 +18,42 @@ func sliceOrMap(t any) bool {
 
 // AddAfter adds to st, a statement on entity in, After's condition for the
 // row at after: its rows past that row in st's OrderBy. It is not generic, so
-// that it is compiled once; the row's values are read through in's kit.
+// that it is compiled once; the row's values are read through in's kit. A term
+// of OrderBy on a joined relation reads its value from the joined entity stored
+// in the row's relation field, so the row must have been read with that join.
 func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 	if len(st.OrderBy) == 0 {
 		return fmt.Errorf("velox: %s: After needs an OrderBy", in.Name)
 	}
+	// Each term's entity and the row to read its value from: the statement's
+	// own, or a joined one.
+	srcs := make([]afterSource, len(st.OrderBy))
 	ordered := make(map[int]bool, len(st.OrderBy))
-	for _, o := range st.OrderBy {
-		col := in.Columns[o.Column]
+	for i, o := range st.OrderBy {
+		src := afterSource{in, after}
+		if o.Rel != 0 {
+			var err error
+			if src, err = joinedSource(st, in, after, o); err != nil {
+				return err
+			}
+		}
+		srcs[i] = src
+		if o.Column < 0 || o.Column >= len(src.info.Columns) {
+			return fmt.Errorf("velox: %s: an ordering names column %d of %s, which has %d", in.Name, o.Column, src.info.Name, len(src.info.Columns))
+		}
+		col := src.info.Columns[o.Column]
 		if col.Codec {
-			return errCodecOrder(in, o.Column)
+			return errCodecOrder(src.info, o.Column)
 		}
 		if col.Nullable {
-			return fmt.Errorf("velox: %s: After cannot page over the nullable column %s", in.Name, col.Name)
+			return fmt.Errorf("velox: %s: After cannot page over the nullable column %s", src.info.Name, col.Name)
 		}
 		// A nil slice or map is stored as NULL, which no comparison matches.
 		if sliceOrMap(col.Type) {
-			return fmt.Errorf("velox: %s: After cannot page over the column %s, which can be NULL", in.Name, col.Name)
+			return fmt.Errorf("velox: %s: After cannot page over the column %s, which can be NULL", src.info.Name, col.Name)
+		}
+		if o.Rel != 0 {
+			continue // a joined row is read whole
 		}
 		// A row this query returns holds the zero value of a column it did not
 		// select, which the comparison would page from.
@@ -43,6 +62,8 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 		}
 		ordered[o.Column] = true
 	}
+	// Ties are broken by the statement's own key: a joined column is not unique
+	// for the rows that share its row.
 	covers := func(cols []int) bool {
 		for _, c := range cols {
 			if !ordered[c] {
@@ -58,18 +79,27 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 	if !unique {
 		return fmt.Errorf("velox: %s: After needs an OrderBy that includes the primary key or a unique index", in.Name)
 	}
+	// term is the condition on o's column against v, on the joined row when o is.
+	term := func(o OrderTerm, op op, v any) Node {
+		n := Node{Op: op, Col: int32(o.Column), V: v}
+		if o.Rel != 0 {
+			return JoinedNode(o.Rel-1, []Node{n})
+		}
+		return n
+	}
+	value := func(i int) any { return srcs[i].info.kit.Value(srcs[i].row, st.OrderBy[i].Column) }
 	// (o1 > v1) OR (o1 = v1 AND o2 > v2) OR …, with < for descending columns.
 	var or []Node
 	for i, o := range st.OrderBy {
 		var and []Node
-		for _, prev := range st.OrderBy[:i] {
-			and = append(and, Node{Op: OpEQ, Col: int32(prev.Column), V: in.kit.Value(after, prev.Column)})
+		for k, prev := range st.OrderBy[:i] {
+			and = append(and, term(prev, OpEQ, value(k)))
 		}
 		cmp := OpGT
 		if o.Desc {
 			cmp = OpLT
 		}
-		and = append(and, Node{Op: cmp, Col: int32(o.Column), V: in.kit.Value(after, o.Column)})
+		and = append(and, term(o, cmp, value(i)))
 		if len(and) == 1 {
 			or = append(or, and[0])
 		} else {
@@ -78,6 +108,39 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 	}
 	st.Where = append(st.Where, NewPredicate(Group(OpOr, or)))
 	return nil
+}
+
+// afterSource is the row After reads one ordered column from, and the entity it is
+// a row of.
+type afterSource struct {
+	info *EntityInfo
+	row  unsafe.Pointer
+}
+
+// joinedSource is the joined entity that o, an ordering by a joined relation, reads
+// from the row at after: the one stored in the row's relation field. It fails when
+// the statement does not join the relation, or the row has no joined entity: it was
+// not read with the join, or a left join found nothing, and has no value to page from.
+func joinedSource(st *Statement, in *EntityInfo, after unsafe.Pointer, o OrderTerm) (afterSource, error) {
+	rel := o.Rel - 1
+	i, ok := joinOf(st.Joins, rel)
+	if !ok {
+		return afterSource{}, fmt.Errorf("velox: %s: an ordering by a joined relation needs Join or LeftJoin of it in the same query", in.Name)
+	}
+	l, err := st.Joins[i].Ref.Link()
+	if err != nil {
+		return afterSource{}, err
+	}
+	off, err := RelOffset(in, rel)
+	if err != nil {
+		return afterSource{}, err
+	}
+	h := (*Holder)(unsafe.Add(after, off))
+	if h.V == nil {
+		return afterSource{}, fmt.Errorf("velox: %s: After cannot page over a column of %s: the row has none joined; read it with the same Join, and a row with no %s has no value to page from", in.Name, l.Name, l.Name)
+	}
+	// V holds a *T, which an interface keeps in its data word.
+	return afterSource{l.Target, (*[2]unsafe.Pointer)(unsafe.Pointer(&h.V))[1]}, nil
 }
 
 // CloneStatement copies a query's statement for one run, with its slices

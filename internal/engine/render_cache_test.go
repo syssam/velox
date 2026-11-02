@@ -381,8 +381,8 @@ func TestExistsHasItsOwnShape(t *testing.T) {
 // their shape when the join entity or its column differs, though their
 // target column and owners agree.
 func TestCacheKeysTheJoin(t *testing.T) {
-	join := &velox.EntityInfo{Name: "velox.join", Table: "joins", Tenant: -1, Columns: []velox.ColumnInfo{{Name: "a"}, {Name: "b"}}}
-	other := &velox.EntityInfo{Name: "velox.other", Table: "others", Tenant: -1, Columns: join.Columns}
+	join := &velox.EntityInfo{Name: "velox.join", Table: "joins", Columns: []velox.ColumnInfo{{Name: "a"}, {Name: "b"}}}
+	other := &velox.EntityInfo{Name: "velox.other", Table: "others", Columns: join.Columns}
 	through := func(j *velox.EntityInfo, col int) *velox.Statement {
 		return &velox.Statement{Op: velox.OpSelect, Entity: invInfo, Where: []velox.Predicate{engine.NewPredicate(engine.Node{Op: engine.OpThrough, Col: 0, V: j, W: col,
 			Kids: []engine.Node{{Op: engine.OpIn, Col: 1, V: []any{int64(1)}}}})}}

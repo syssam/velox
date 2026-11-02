@@ -23,7 +23,7 @@ contributor needs to know.
 | [0013](0013-version-floors.md) | migrate needs PostgreSQL 14, MySQL 8.4 or SQLite 3.35. |
 | [0014](0014-with-stays-a-method.md) | Query.With and Rel.With stay methods: as functions they would save 1638 bytes, under 1%. |
 | [0015](0015-contrib-graphql-path.md) | The module path stays contrib/graphql, imported as `vgraphql` beside gqlgen's graphql. |
-| [0016](0016-withtenant-converts.md) | WithTenant converts a predeclared integer or a string to the tenant column's type; a named id never converts. |
+| [0016](0016-withtenant-converts.md) | Superseded by 0029: `WithTenant` converted a predeclared integer or a string to the tenant column's type. |
 | [0017](0017-upsert-skips-updatedefault.md) | An upsert's update branch does not fire UpdateDefault, as in veloxe and ent. |
 | [0018](0018-pgx-stdlib-scan-wrapper.md) | On pgx's stdlib driver, scans go through a sql.Scanner, so pgx's per-column type check passes at its first step: 81% less time for a 100-row query with time columns (the before and after runs had different loads). |
 | [0019](0019-veloxpgx.md) | pgx's native path is the package veloxpgx in this module; the core reads pgx's errors by type name, so it links no driver. |
@@ -36,3 +36,6 @@ contributor needs to know.
 | [0026](0026-migration-safety.md) | `Up` refuses to destroy what the model cannot hold: a SQLite rebuild and a MySQL `MODIFY COLUMN` are checked against the database at apply time, and `-- velox:allow unmodeled-loss` accepts the loss. |
 | [0027](0027-graphql-limits.md) | The cost charges statements and introspection's response; a Required edge is nullable; the generator refuses what could only fail later; an explicit zero value on a Default is refused in GraphQL and stays unset in the core |
 | [0028](0028-runtime-edges.md) | The runtime's edges fail or say so: After needs its order columns selected, a nested Tx's error means its work is undone, SQLite enforces TxReadOnly and writes velox's time form, a statement inside Iter on a pool of one fails rather than hang, a MySQL deadlock breaks its transaction |
+| [0029](0029-scope-replaces-tenant.md) | The core has no tenant: a scope is a `Policy` plus a hook from `velox/scope`, `WithoutPolicy` lifts it, the scope column is `Immutable`, and `WithShardFor` reads the context. |
+| [0030](0030-generated-scope.md) | A scoped column is marked `schema.Scoped(key)` in the schema; velox-gen writes the key (`OrgKey`) and each entity's scope into `scope_velox.go` and binds it around the entity's own `Policy` and `Hooks`, so it cannot be dropped. |
+| [0031](0031-to-one-joins.md) | A query joins a to-one relation (`Join`, `LeftJoin`): the related entity is filled from the same row, `rel.Is` and `rel.By` filter and order by its columns, and the target's Read policy is in the ON clause. A to-many relation is refused. |

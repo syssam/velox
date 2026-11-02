@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	ctx = velox.WithAllTenants(context.Background(), "velox tests")
+	ctx = velox.WithoutPolicy(context.Background(), "velox tests")
 	t0  = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	I   = testmodel.Invoices
 	It  = testmodel.Items
@@ -158,11 +158,11 @@ func TestSQLNeedsNoDatabase(t *testing.T) {
 // TestQueryCanRunAgain is Review Focus 4.
 func TestQueryCanRunAgain(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
-	tenant := func(_ context.Context, st *velox.Statement) error {
-		st.Where = append(st.Where, velox.ColumnEQ(st.Entity.Tenant, int64(7)))
+	scopeTo7 := func(_ context.Context, st *velox.Statement) error {
+		st.Where = append(st.Where, velox.Predicate(I.OrgID.EQ(7)))
 		return nil
 	}
-	db := openFake(velox.Postgres, e, velox.WithRewrite(tenant))
+	db := openFake(velox.Postgres, e, velox.WithRewrite(scopeTo7))
 	q := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5)
 	want := `SELECT ` + allCols + ` FROM "invoices" WHERE "paid" = $1 AND "org_id" = $2 LIMIT $3`
 	for run := range 3 {

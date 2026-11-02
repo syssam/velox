@@ -21,6 +21,18 @@ func (*Group) IsNode() {}
 // the key id, encoded.
 func (x *Group) IDGQL() string { return veloxgql.EncodeID("Group", x.ID) }
 
+// groupNodeGQL is the Node type Group for Node and Nodes.
+func groupNodeGQL() gqlimpl.NodeKind {
+	return gqlimpl.NewNode[Group, *Group](
+		"Group",
+		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "Group") },
+		func(db *velox.DB) velox.Query[Group] { return db.Query[Group]() },
+		groupColumnsGQL,
+		Groups.ID.EQ, Groups.ID.In,
+		func(x *Group) int64 { return x.ID },
+	)
+}
+
 // MarshalGQL writes e as a GraphQL String, its stored value: the field
 // visibility of Group is a String, as graphql.Skip(graphql.SkipEnumField) asks.
 func (e GroupVisibility) MarshalGQL(w io.Writer) {
@@ -71,9 +83,11 @@ func (c *GroupConnection) Edges(ctx context.Context) ([]*GroupEdge, error) {
 	if err != nil {
 		return nil, err
 	}
+	slab := make([]GroupEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*GroupEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		edges[i] = &GroupEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = GroupEdge{Node: x, Cursor: p.Cursors[i]}
+		edges[i] = &slab[i]
 	}
 	return edges, nil
 }
@@ -123,9 +137,9 @@ func GroupsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 // hold: a q whose Columns or Omit drops one is refused with an internal error.
 // In a gqlgen field, the page reads only the columns the selection needs
 // (groupColumnsGQL), of those q selects; a column the selection does not need
-// is left zero in the nodes, except the key, the foreign keys, the order
-// columns and the tenant, so an application's resolver must not read one it did
-// not ask for. It runs no query.
+// is left zero in the nodes, except the key, the foreign keys and the order
+// columns, so an application's resolver must not read one it did not ask for.
+// It runs no query.
 func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
 	if !q.Selects(Groups.ID) {
 		return nil, fmt.Errorf("veloxgql: GroupsConnectionOf: the base query does not select the key, which the cursors hold")
@@ -165,9 +179,9 @@ func groupKeyGQL() []gqlimpl.OrderTerm[Group] {
 }
 
 // groupColumnsGQL is the columns a selection of the Group fields fields reads:
-// the key, every foreign key on the row, every order field's column, the tenant
-// column, and the column of each field. It is nil, every column, when a field
-// is not one velox-graphql wrote, such as an application's own.
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
 func groupColumnsGQL(fields []string) []velox.Column[Group] {
 	cols := []velox.Column[Group]{Groups.ID, Groups.Name}
 	for _, f := range fields {

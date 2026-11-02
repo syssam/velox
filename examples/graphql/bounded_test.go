@@ -32,7 +32,7 @@ func (s *testServer) postVars(t *testing.T, query string, vars map[string]any) s
 	return got
 }
 
-// seedRows adds n users, each the author of n posts in the tenant the requests name.
+// seedRows adds n users, each the author of n posts in the org the requests name.
 func (s *testServer) seedRows(t *testing.T, n int) {
 	t.Helper()
 	tx, err := s.sql.BeginTx(t.Context(), nil)
@@ -178,7 +178,7 @@ func TestRequestBounded(t *testing.T) {
 	}
 }
 
-// seedLargeTitle gives one post a title of n bytes, in the tenant the requests name.
+// seedLargeTitle gives one post a title of n bytes, in the org the requests name.
 func (s *testServer) seedLargeTitle(t *testing.T, n int) {
 	t.Helper()
 	if _, err := s.sql.ExecContext(t.Context(), `INSERT INTO posts (id, org_id, author_id, title, status, views) VALUES (900001, 1, 1, ?, 'draft', 1)`, strings.Repeat("x", n)); err != nil {

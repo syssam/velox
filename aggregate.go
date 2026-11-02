@@ -52,8 +52,8 @@ func aggregate[E, T any](ctx context.Context, q Query[E], fn Aggregate, c int32)
 }
 
 // Sum returns the sum of column c over the rows matching q's conditions,
-// After's among them, as Count counts them: the tenant scope and the policy
-// apply, and the ordering, limit, offset, columns and relations are
+// After's among them, as Count counts them: the policy (a scope
+// included) applies, and the ordering, limit, offset, columns and relations are
 // ignored. With no row, or only NULLs, it is 0.
 //
 // A sum that does not fit V is an error, not a wrapped value.
@@ -175,8 +175,8 @@ func grouped[E, K, V any](ctx context.Context, q Query[E], fn Aggregate, key Gro
 
 // CountBy returns the number of rows matching q's conditions per value of the
 // key column, one Group per value, ordered by the key: SELECT key, COUNT(*)
-// ... GROUP BY key ORDER BY key. It reads q as Count does: the tenant scope,
-// the policy and After's condition apply, and the ordering, limit, offset,
+// ... GROUP BY key ORDER BY key. It reads q as Count does: the policy, a scope
+// included, and After's condition apply, and the ordering, limit, offset,
 // columns and relations are ignored.
 //
 // The groups can be as many as the rows, so q must say Unbounded, and a Limit

@@ -8,30 +8,42 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Task is the entity of schema Task.
 type Task struct {
-	ID        int64  `json:"id,omitempty"`
-	CreatedBy string `json:"created_by,omitempty"`
-	Title     string `json:"title,omitempty"`
-	Slug      string `json:"slug,omitempty"`
-	Done      bool   `json:"done,omitempty"`
+	ID        int64  `json:"id"`
+	CreatedBy string `json:"created_by"`
+	Title     string `json:"title"`
+	Slug      string `json:"slug"`
+	Done      bool   `json:"done"`
 }
+
+// The positions of Task's columns, in the order of its table.
+const (
+	taskColID = iota
+	taskColCreatedBy
+	taskColTitle
+	taskColSlug
+	taskColDone
+)
 
 // Tasks holds the typed handles of Task's columns and relations.
 var Tasks = struct {
-	ID        velox.NumberCol[Task, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Task, int64]
+	// CreatedBy is the column created_by.
 	CreatedBy velox.StringCol[Task, string]
-	Title     velox.StringCol[Task, string]
-	Slug      velox.StringCol[Task, string]
-	Done      velox.Col[Task, bool]
+	// Title is the column title.
+	Title velox.StringCol[Task, string]
+	// Slug is the column slug.
+	Slug velox.StringCol[Task, string]
+	// Done is the column done.
+	Done velox.Col[Task, bool]
 }{
-	ID:        velox.NumberCol[Task, int64]{I: 0},
-	CreatedBy: velox.StringCol[Task, string]{I: 1},
-	Title:     velox.StringCol[Task, string]{I: 2},
-	Slug:      velox.StringCol[Task, string]{I: 3},
-	Done:      velox.Col[Task, bool]{I: 4},
+	ID:        velox.NumberCol[Task, int64]{I: taskColID},
+	CreatedBy: velox.StringCol[Task, string]{I: taskColCreatedBy},
+	Title:     velox.StringCol[Task, string]{I: taskColTitle},
+	Slug:      velox.StringCol[Task, string]{I: taskColSlug},
+	Done:      velox.Col[Task, bool]{I: taskColDone},
 }
 
 var taskMeta velox.MetaOnce[Task]
@@ -39,6 +51,7 @@ var taskMeta velox.MetaOnce[Task]
 // VeloxMeta is called by velox, not by applications.
 func (*Task) VeloxMeta() *velox.Meta[Task] { return taskMeta.Load(taskDescriptor) }
 
+// taskDescriptor describes Task to velox: its table, columns, edges and hooks.
 func taskDescriptor() velox.Descriptor[Task] {
 	return velox.Descriptor[Task]{
 		Table: "tasks",
@@ -49,20 +62,19 @@ func taskDescriptor() velox.Descriptor[Task] {
 			{Field: "Slug", Name: "slug"},
 			{Field: "Done", Name: "done"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{taskColID},
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*Task)(nil).Hooks()) },
 		FieldPtr: func(x *Task, i int) any {
 			switch i {
-			case 0:
+			case taskColID:
 				return &x.ID
-			case 1:
+			case taskColCreatedBy:
 				return &x.CreatedBy
-			case 2:
+			case taskColTitle:
 				return &x.Title
-			case 3:
+			case taskColSlug:
 				return &x.Slug
-			case 4:
+			case taskColDone:
 				return &x.Done
 			}
 			return nil
@@ -70,10 +82,10 @@ func taskDescriptor() velox.Descriptor[Task] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Task) String() string {
 	return fmt.Sprintf("Task(ID=%v, CreatedBy=%v, Title=%v, Slug=%v, Done=%v)", x.ID, x.CreatedBy, x.Title, x.Slug, x.Done)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Task) GoString() string { return x.String() }

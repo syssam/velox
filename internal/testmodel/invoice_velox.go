@@ -10,48 +10,76 @@ import (
 	sch "github.com/syssam/velox/internal/testmodel/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Invoice is the entity of schema Invoice.
 type Invoice struct {
-	ID        int64            `json:"id,omitempty"`
+	ID        int64            `json:"id"`
 	CreatedAt time.Time        `json:"created_at,omitzero"`
 	UpdatedAt time.Time        `json:"updated_at,omitzero"`
-	OrgID     int64            `json:"org_id,omitempty"`
-	Number    string           `json:"number,omitempty"`
-	Total     float64          `json:"total,omitempty"`
-	Paid      bool             `json:"paid,omitempty"`
+	OrgID     int64            `json:"org_id"`
+	Number    string           `json:"number"`
+	Total     float64          `json:"total"`
+	Paid      bool             `json:"paid"`
 	PaidAt    *time.Time       `json:"paid_at,omitempty"`
 	Note      string           `json:"note,omitempty"`
 	Data      []byte           `json:"data,omitempty"`
 	Items     velox.Many[Item] `json:"items,omitzero"`
 }
 
+// The positions of Invoice's columns, in the order of its table.
+const (
+	invoiceColID = iota
+	invoiceColCreatedAt
+	invoiceColUpdatedAt
+	invoiceColOrgID
+	invoiceColNumber
+	invoiceColTotal
+	invoiceColPaid
+	invoiceColPaidAt
+	invoiceColNote
+	invoiceColData
+)
+
+// The positions of Invoice's edges.
+const (
+	invoiceEdgeItems = iota
+)
+
 // Invoices holds the typed handles of Invoice's columns and relations.
 var Invoices = struct {
-	ID        velox.NumberCol[Invoice, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Invoice, int64]
+	// CreatedAt is the column created_at.
 	CreatedAt velox.OrderedCol[Invoice, time.Time]
+	// UpdatedAt is the column updated_at.
 	UpdatedAt velox.OrderedCol[Invoice, time.Time]
-	OrgID     velox.NumberCol[Invoice, int64]
-	Number    velox.StringCol[Invoice, string]
-	Total     velox.NumberCol[Invoice, float64]
-	Paid      velox.Col[Invoice, bool]
-	PaidAt    velox.NullOrderedCol[Invoice, time.Time]
-	Note      velox.StringCol[Invoice, string]
-	Data      velox.Col[Invoice, []byte]
-	Items     velox.Rel[Invoice, Item]
+	// OrgID is the column org_id.
+	OrgID velox.NumberCol[Invoice, int64]
+	// Number is the column number.
+	Number velox.StringCol[Invoice, string]
+	// Total is the column total.
+	Total velox.NumberCol[Invoice, float64]
+	// Paid is the column paid.
+	Paid velox.Col[Invoice, bool]
+	// PaidAt is the column paid_at.
+	PaidAt velox.NullOrderedCol[Invoice, time.Time]
+	// Note is the column note.
+	Note velox.StringCol[Invoice, string]
+	// Data is the column data.
+	Data velox.Col[Invoice, []byte]
+	// Items is the edge items, to Item.
+	Items velox.Rel[Invoice, Item]
 }{
-	ID:        velox.NumberCol[Invoice, int64]{I: 0},
-	CreatedAt: velox.OrderedCol[Invoice, time.Time]{I: 1},
-	UpdatedAt: velox.OrderedCol[Invoice, time.Time]{I: 2},
-	OrgID:     velox.NumberCol[Invoice, int64]{I: 3},
-	Number:    velox.StringCol[Invoice, string]{I: 4},
-	Total:     velox.NumberCol[Invoice, float64]{I: 5},
-	Paid:      velox.Col[Invoice, bool]{I: 6},
-	PaidAt:    velox.NullOrderedCol[Invoice, time.Time]{I: 7},
-	Note:      velox.StringCol[Invoice, string]{I: 8},
-	Data:      velox.Col[Invoice, []byte]{I: 9},
-	Items:     velox.Rel[Invoice, Item]{I: 0},
+	ID:        velox.NumberCol[Invoice, int64]{I: invoiceColID},
+	CreatedAt: velox.OrderedCol[Invoice, time.Time]{I: invoiceColCreatedAt},
+	UpdatedAt: velox.OrderedCol[Invoice, time.Time]{I: invoiceColUpdatedAt},
+	OrgID:     velox.NumberCol[Invoice, int64]{I: invoiceColOrgID},
+	Number:    velox.StringCol[Invoice, string]{I: invoiceColNumber},
+	Total:     velox.NumberCol[Invoice, float64]{I: invoiceColTotal},
+	Paid:      velox.Col[Invoice, bool]{I: invoiceColPaid},
+	PaidAt:    velox.NullOrderedCol[Invoice, time.Time]{I: invoiceColPaidAt},
+	Note:      velox.StringCol[Invoice, string]{I: invoiceColNote},
+	Data:      velox.Col[Invoice, []byte]{I: invoiceColData},
+	Items:     velox.Rel[Invoice, Item]{I: invoiceEdgeItems},
 }
 
 var invoiceMeta velox.MetaOnce[Invoice]
@@ -59,17 +87,19 @@ var invoiceMeta velox.MetaOnce[Invoice]
 // VeloxMeta is called by velox, not by applications.
 func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoiceDescriptor) }
 
+// invoiceDescriptor describes Invoice to velox: its table, columns, edges and hooks.
 func invoiceDescriptor() velox.Descriptor[Invoice] {
 	d0 := (&sch.Invoice{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	d1 := (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
-	d2 := (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
+	f0 := (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor()
+	d1 := f0.Default.(func() time.Time)
+	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Invoice]{
 		Table: "invoices",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Number", Name: "number"},
 			{Field: "Total", Name: "total"},
 			{Field: "Paid", Name: "paid"},
@@ -77,42 +107,43 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 			{Field: "Note", Name: "note"},
 			{Field: "Data", Name: "data"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     3,
+		PrimaryKey: []int{invoiceColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{3, 4}, Unique: true}, // org_id, number
+			{Columns: []int{invoiceColOrgID, invoiceColNumber}, Unique: true}, // org_id, number
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Item]("Items", 0, 1),
+			velox.EdgeTo[Item]("Items", invoiceColID, itemColInvoiceID),
 		},
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Invoice)(nil).Policy()) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Invoice)(nil).Hooks()) },
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
-			case 0:
+			case invoiceColID:
 				return &x.ID
-			case 1:
+			case invoiceColCreatedAt:
 				return &x.CreatedAt
-			case 2:
+			case invoiceColUpdatedAt:
 				return &x.UpdatedAt
-			case 3:
+			case invoiceColOrgID:
 				return &x.OrgID
-			case 4:
+			case invoiceColNumber:
 				return &x.Number
-			case 5:
+			case invoiceColTotal:
 				return &x.Total
-			case 6:
+			case invoiceColPaid:
 				return &x.Paid
-			case 7:
+			case invoiceColPaidAt:
 				return &x.PaidAt
-			case 8:
+			case invoiceColNote:
 				return &x.Note
-			case 9:
+			case invoiceColData:
 				return &x.Data
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Invoice, i int) any {
 			switch i {
-			case 0:
+			case invoiceEdgeItems:
 				return &x.Items
 			}
 			return nil
@@ -120,14 +151,14 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Invoice) String() string {
-	var p7 any
+	var paidAtVal any
 	if x.PaidAt != nil {
-		p7 = *x.PaidAt
+		paidAtVal = *x.PaidAt
 	}
-	return fmt.Sprintf("Invoice(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Number=%v, Total=%v, Paid=%v, PaidAt=%v, Note=%v, Data=<%d bytes>)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Number, x.Total, x.Paid, p7, x.Note, len(x.Data))
+	return fmt.Sprintf("Invoice(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Number=%v, Total=%v, Paid=%v, PaidAt=%v, Note=%v, Data=<%d bytes>)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Number, x.Total, x.Paid, paidAtVal, x.Note, len(x.Data))
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Invoice) GoString() string { return x.String() }

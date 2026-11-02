@@ -49,7 +49,7 @@ func handle(err error) {
 // after it ran (not on a panic); coll and sum are its collection and
 // summary (see collection and summary), tkv its server's (Config.Target's
 // or TargetFor's) and f its failure. fellOver counts a failover. Its
-// attributes are bounded: never the tags, tenant, SQL or call site, and the
+// attributes are bounded: never the tags, scope, SQL or call site, and the
 // fingerprint only with Config.RecordMetricFingerprint. An instrument that is
 // not enabled records nothing, and when none is, record returns before it
 // builds an attribute set.

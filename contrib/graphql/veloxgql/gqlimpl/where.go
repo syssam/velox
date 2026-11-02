@@ -60,6 +60,14 @@ type Filter[E any] struct {
 // ErrFilterTooLarge. So the whole argument is bounded, even when it holds one
 // input many times over, as a GraphQL variable used at many places does. One
 // where argument's Pred calls run on one goroutine.
+//
+// The filter fails, before any query runs, on an ID of another type
+// (veloxgql.ErrWrongIDType) or a malformed one (veloxgql.ErrBadID); on a
+// nesting deeper than MaxFilterDepth (veloxgql.ErrFilterTooDeep); on an and, an
+// or, a has…With, an In or a NotIn of more than MaxFilterWidth entries
+// (veloxgql.ErrFilterTooWide); and on a where argument of more than
+// MaxFilterNodes inputs, predicates and values in all
+// (veloxgql.ErrFilterTooLarge).
 func NewFilter[E any](ctx context.Context, input string) *Filter[E] {
 	st, ok := ctx.Value(stateKey{}).(*state)
 	if !ok {
@@ -413,53 +421,49 @@ func AsBool[V, W ~bool](w W) V { return V(w) }
 func AsUUID[V, W ~[16]byte](w W) V { return V(w) }
 
 // The FK helpers scope a predicate on a foreign key to what the edge lets the reader
-// see, the target's tenant and its Read policy: a row they hide reads as null, to the
-// edge and so to every predicate of its key, or a filter would say which hidden row
-// another row links to. has is the edge's Has, which holds both. tenant says the target
-// T has a tenant column. With neither it and a Read policy, the predicate is the
-// column's alone, and there is no EXISTS. For generated code.
+// see, the target's Read policy: a row it hides reads as null, to the edge and so to
+// every predicate of its key, or a filter would say which hidden row another row links
+// to. has is the edge's Has. With no Read policy on T, the predicate is the column's
+// alone, and there is no EXISTS. For generated code.
 //
 // A WithRewrite in the application's own query is not known here, nor is it to the
 // edge's has.
 
 // FK scopes a predicate of one key.
-func FK[T, E, V any](tenant bool, op func(V) velox.Pred[E], has func() velox.Pred[E]) func(V) velox.Pred[E] {
-	if !hides[T](tenant) {
+func FK[T, E, V any](op func(V) velox.Pred[E], has func() velox.Pred[E]) func(V) velox.Pred[E] {
+	if !hides[T]() {
 		return op
 	}
 	return func(v V) velox.Pred[E] { return velox.And(op(v), has()) }
 }
 
 // FKList scopes a predicate of a list of keys.
-func FKList[T, E, V any](tenant bool, op func(...V) velox.Pred[E], has func() velox.Pred[E]) func(...V) velox.Pred[E] {
-	if !hides[T](tenant) {
+func FKList[T, E, V any](op func(...V) velox.Pred[E], has func() velox.Pred[E]) func(...V) velox.Pred[E] {
+	if !hides[T]() {
 		return op
 	}
 	return func(vs ...V) velox.Pred[E] { return velox.And(op(vs...), has()) }
 }
 
 // FKIsNull is the key's IsNull: a hidden target counts as none.
-func FKIsNull[T, E any](tenant bool, op, has func() velox.Pred[E]) func() velox.Pred[E] {
-	if !hides[T](tenant) {
+func FKIsNull[T, E any](op, has func() velox.Pred[E]) func() velox.Pred[E] {
+	if !hides[T]() {
 		return op
 	}
 	return func() velox.Pred[E] { return velox.Not(has()) }
 }
 
 // FKNotNull is the key's NotNull: a hidden target counts as none.
-func FKNotNull[T, E any](tenant bool, op, has func() velox.Pred[E]) func() velox.Pred[E] {
-	if !hides[T](tenant) {
+func FKNotNull[T, E any](op, has func() velox.Pred[E]) func() velox.Pred[E] {
+	if !hides[T]() {
 		return op
 	}
 	return has
 }
 
-// hides reports whether the edge to T may hide a row its key names: T has a tenant
-// column, or a Read policy.
-func hides[T any](tenant bool) bool {
-	if tenant {
-		return true
-	}
+// hides reports whether the edge to T may hide a row its key names: T has a Read
+// policy.
+func hides[T any]() bool {
 	p, ok := any((*T)(nil)).(interface{ Policy() velox.Policy[T] })
 	return ok && p.Policy().Read != nil
 }

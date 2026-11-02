@@ -8,27 +8,37 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // User is the entity of schema User.
 type User struct {
-	ID    int64  `json:"id,omitempty"`
-	Name  string `json:"name,omitempty"`
-	Email string `json:"email,omitempty"`
-	Age   int64  `json:"age,omitempty"`
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Age   int64  `json:"age"`
 }
+
+// The positions of User's columns, in the order of its table.
+const (
+	userColID = iota
+	userColName
+	userColEmail
+	userColAge
+)
 
 // Users holds the typed handles of User's columns and relations.
 var Users = struct {
-	ID    velox.NumberCol[User, int64]
-	Name  velox.StringCol[User, string]
+	// ID is the column id.
+	ID velox.NumberCol[User, int64]
+	// Name is the column name.
+	Name velox.StringCol[User, string]
+	// Email is the column email.
 	Email velox.StringCol[User, string]
-	Age   velox.NumberCol[User, int64]
+	// Age is the column age.
+	Age velox.NumberCol[User, int64]
 }{
-	ID:    velox.NumberCol[User, int64]{I: 0},
-	Name:  velox.StringCol[User, string]{I: 1},
-	Email: velox.StringCol[User, string]{I: 2},
-	Age:   velox.NumberCol[User, int64]{I: 3},
+	ID:    velox.NumberCol[User, int64]{I: userColID},
+	Name:  velox.StringCol[User, string]{I: userColName},
+	Email: velox.StringCol[User, string]{I: userColEmail},
+	Age:   velox.NumberCol[User, int64]{I: userColAge},
 }
 
 var userMeta velox.MetaOnce[User]
@@ -36,6 +46,7 @@ var userMeta velox.MetaOnce[User]
 // VeloxMeta is called by velox, not by applications.
 func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
+// userDescriptor describes User to velox: its table, columns, edges and hooks.
 func userDescriptor() velox.Descriptor[User] {
 	return velox.Descriptor[User]{
 		Table: "users",
@@ -45,20 +56,19 @@ func userDescriptor() velox.Descriptor[User] {
 			{Field: "Email", Name: "email"},
 			{Field: "Age", Name: "age"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{userColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{2}, Unique: true}, // email
+			{Columns: []int{userColEmail}, Unique: true}, // email
 		},
 		FieldPtr: func(x *User, i int) any {
 			switch i {
-			case 0:
+			case userColID:
 				return &x.ID
-			case 1:
+			case userColName:
 				return &x.Name
-			case 2:
+			case userColEmail:
 				return &x.Email
-			case 3:
+			case userColAge:
 				return &x.Age
 			}
 			return nil
@@ -66,10 +76,10 @@ func userDescriptor() velox.Descriptor[User] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x User) String() string {
 	return fmt.Sprintf("User(ID=%v, Name=%v, Email=%v, Age=%v)", x.ID, x.Name, x.Email, x.Age)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x User) GoString() string { return x.String() }

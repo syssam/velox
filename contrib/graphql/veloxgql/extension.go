@@ -142,7 +142,7 @@ type Option struct{ apply func(*Extension) }
 // Set ErrorPresenter on the server too
 // (srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))): without it, gqlgen's
 // default presenter shows a client every error's text, velox's and the
-// driver's, which name entities, tables, constraints and tenants.
+// driver's, which name entities, tables, constraints and scope values.
 func NewExtension(db *velox.DB, opts ...Option) *Extension {
 	e := &Extension{db: db, limits: DefaultLimits()}
 	for _, o := range opts {
@@ -190,8 +190,8 @@ func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool)
 // the last wins.
 //
 // A batch reads every row's edge under its first caller's context. velox's row
-// scope (velox.RowScopeFromContext: the tenant, the WithAllTenants and
-// WithoutPolicy bypasses, the shard) is always in the key, and so are the DB
+// scope (velox.RowScopeFromContext: the scope values, the
+// WithoutPolicy bypass, the shard) is always in the key, and so are the DB
 // and a list edge's MaxList. Any other context value that a Read policy or a
 // Rewrite or Around hook reads, such as the viewer or a role, must be the same
 // for every row of a field, or be in f's value: a directive or a field

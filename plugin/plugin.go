@@ -11,7 +11,7 @@ const ProtocolVersion = 2
 // ModelVersion is the version of the model's JSON, Model.Version. It changes
 // only when a field is removed or changes meaning; added fields do not change
 // it. A plugin refuses a model whose Version it does not know.
-const ModelVersion = 2
+const ModelVersion = 3
 
 // Request is what velox-gen writes to a plugin's standard input.
 type Request struct {
@@ -71,7 +71,6 @@ type Entity struct {
 	// PrimaryKey is what makes its rows unique.
 	Indexes     []*Index                   `json:"indexes"`
 	PrimaryKey  []int                      `json:"primary_key"`           // indexes into Fields
-	Tenant      int                        `json:"tenant"`                // the index in Fields of the tenant field, -1 for none
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"` // the schema's annotations by name, each the JSON of its value; absent on a join entity
 }
 

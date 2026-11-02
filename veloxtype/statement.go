@@ -99,6 +99,10 @@ type Assignment struct {
 type OrderTerm struct {
 	Column int  // index into velox.EntityInfo.Columns
 	Desc   bool // descending; ascending when false
+	// Rel, when not 0, is the index of a joined relation plus one: Column is
+	// then a column of that relation's target, and the statement must join it
+	// (Statement.Joins). 0 orders by the statement's own entity.
+	Rel int32
 }
 
 // Result is what executing a statement did: a velox.Statement's, which an Around
@@ -134,22 +138,16 @@ type Route struct {
 	Fallback bool
 }
 
-// RowScope is what a context scopes statements by: velox.WithTenant's id,
-// the reasons of velox.WithAllTenants and velox.WithoutPolicy, and
-// velox.WithShard's shard, which holds other rows than another shard. A batcher
-// that reads for several callers in one statement compares their scopes, so
-// that callers of different scopes never share a read.
-//
-// RowScopes are compared with ==, which panics when Tenant holds a value
-// that cannot be compared. A tenant column's type is comparable (its
-// metadata is refused otherwise), but velox.WithTenant takes any id, and an id
-// of another type, which a statement refuses, may not be: a caller that
-// compares guards against it with reflect.ValueOf(Tenant).Comparable(),
-// which checks the value, since a struct or an array of a comparable type
-// may hold an interface whose value is a slice or a map.
+// RowScope is what a context scopes statements by: the values its policies
+// read (velox.WithScopeValue, which the scope package calls), the reason of
+// velox.WithoutPolicy, and velox.WithShard's shard, which holds other rows than
+// another shard. A batcher that reads for several callers in one statement
+// compares their scopes, so that callers of different scopes never share a read.
+// Every field is a string or a bool, so RowScopes compare with ==.
 type RowScope struct {
-	Tenant       any    // velox.WithTenant's id; nil when none
-	TenantBypass string // velox.WithAllTenants's reason; "" when none
+	// Values are the scope values the context carries, as "name=type:value"
+	// joined with ";" in the order of the names; "" when none.
+	Values       string
 	PolicyBypass string // velox.WithoutPolicy's reason; "" when none
 	// Shard is velox.WithShard's name, and HasShard whether velox.WithShard
 	// was called: a shard named "" is told from none.

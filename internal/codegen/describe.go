@@ -80,7 +80,6 @@ func fieldFlags(f *Field) []string {
 		name string
 	}{
 		{f.AutoID, "auto"},
-		{f.Tenant, "tenant"},
 		{f.Optional, "optional"},
 		{f.Nillable, "nillable"},
 		{f.Pointer, "pointer"},

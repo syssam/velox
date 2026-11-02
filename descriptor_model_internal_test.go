@@ -57,7 +57,6 @@ func hnoteDescriptor() Descriptor[hnote] {
 		Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *hnote, i int) any {
 			switch i {
 			case 0:
@@ -111,7 +110,6 @@ func orderedDescriptor() Descriptor[ordered] {
 			{Field: "ShipAt", Name: "ship_at"},
 		},
 		PrimaryKey: []int{2},
-		Tenant:     3,
 		Indexes:    []IndexInfo{{Columns: []int{3, 4}, Unique: true}},
 		FieldPtr: func(x *ordered, i int) any {
 			return [...]any{&x.CreatedAt, &x.UpdatedAt, &x.ID, &x.TenantID, &x.Code, &x.Total, &x.ShipAt}[i]
@@ -182,7 +180,6 @@ func hookedDescriptor() Descriptor[hooked] {
 		Table:      "hooked",
 		Columns:    []ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *hooked, i int) any {
 			switch i {
 			case 0:

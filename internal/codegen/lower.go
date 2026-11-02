@@ -10,6 +10,7 @@ import (
 	"go/parser"
 	"path"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -75,9 +76,10 @@ type lowerer struct {
 	cfg   Config
 	out   *Out
 	errs  []*Error
-	state map[string]*entState // by entity name
-	joins map[string]*join     // by join table
-	owned map[string]string    // the package names the generated code uses, with their paths
+	state map[string]*entState    // by entity name
+	keys  map[string]*OutScopeKey // the scope keys, by name
+	joins map[string]*join        // by join table
+	owned map[string]string       // the package names the generated code uses, with their paths
 	enums []*enumDecl
 }
 
@@ -134,7 +136,7 @@ func (l *lowerer) entities() {
 		s := &entState{l: l, name: e.Name, paths: map[string]string{}}
 		s.out = &OutEntity{
 			Name: e.Name, Label: e.Label, Handles: plugin.GoPlural(e.Name), Table: e.Table, TableSchema: e.TableSchema,
-			Tenant: -1, Bound: l.cfg.Bound[e.Name],
+			Bound: l.cfg.Bound[e.Name],
 		}
 		if raw, ok := e.Annotations["Comment"]; ok {
 			var c struct {
@@ -150,8 +152,8 @@ func (l *lowerer) entities() {
 				s.exported(f)
 			}
 			s.out.Fields = append(s.out.Fields, s.field(e, i, f))
-			if f.Name == e.Tenant && e.Tenant != "" {
-				s.out.Tenant = i
+			if key, ok := scoped(f); ok {
+				s.scope(e, f, s.out.Fields[i], key)
 			}
 		}
 		s.out.PrimaryKey = []int{0}
@@ -182,6 +184,34 @@ func (l *lowerer) entities() {
 		l.state[e.Name] = s
 		l.out.Entities = append(l.out.Entities, s.out)
 	}
+	for _, k := range l.keys {
+		l.out.ScopeKeys = append(l.out.ScopeKeys, k)
+	}
+	slices.SortFunc(l.out.ScopeKeys, func(a, b *OutScopeKey) int {
+		return cmp.Or(strings.Compare(a.Var, b.Var), strings.Compare(a.Name, b.Name))
+	})
+}
+
+// scope records f, the Scoped field of e that lowered to of, as e's scope and
+// as a use of its key. build has checked the field, so it only resolves names.
+func (s *entState) scope(e *Entity, f *Field, of *OutField, key string) {
+	l := s.l
+	keyVar := plugin.GoName(key) + "Key"
+	s.out.Scope = &OutScope{
+		Key: key, KeyVar: keyVar, Var: camel(e.Label) + "Scope", Field: f.GoName,
+		Handle: s.out.Handles + "." + f.GoName + ".EQ",
+	}
+	if l.keys == nil {
+		l.keys = map[string]*OutScopeKey{}
+	}
+	if _, ok := l.keys[key]; ok {
+		return
+	}
+	k := &OutScopeKey{Name: key, Var: keyVar, GoType: of.ElemType}
+	if f.GoType != nil {
+		k.Imports = slices.Sorted(slices.Values(f.GoType.Imports))
+	}
+	l.keys[key] = k
 }
 
 // exported refuses a GoType of f that names an unexported type, such as
@@ -223,6 +253,20 @@ func columnIndex(e *Entity, column string) int {
 	return slices.IndexFunc(e.Fields, func(f *Field) bool { return f.Column == column })
 }
 
+// colConst is the name of the constant for column i of o, which renderEntity
+// declares: the position the handles, the descriptor and Check share.
+func colConst(o *OutEntity, i int) string {
+	if i < 0 || i >= len(o.Fields) {
+		return strconv.Itoa(i) // reported as an error elsewhere; the code is not written
+	}
+	return camel(o.Label) + "Col" + o.Fields[i].GoName
+}
+
+// edgeConst is the name of the constant for edge i of o.
+func edgeConst(o *OutEntity, i int) string {
+	return camel(o.Label) + "Edge" + o.Rels[i].GoName
+}
+
 func fieldIndex(e *Entity, name string) int {
 	return slices.IndexFunc(e.Fields, func(f *Field) bool { return f.Name == name })
 }
@@ -238,7 +282,7 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	where := fieldAt(f.Name)
 	o := &OutField{
 		GoName: f.GoName, Column: f.Column, Name: f.Name, Comment: f.Comment,
-		Sensitive: f.Sensitive, Immutable: f.Immutable, JSON: f.Type == "json",
+		Sensitive: f.Sensitive, Immutable: f.Immutable, JSON: f.Type == "json", Implicit: f.Implicit != "",
 	}
 	if reserved[f.GoName] {
 		s.fail(where, "its Go name %s is reserved: it is a method of the entity", f.GoName)
@@ -309,18 +353,35 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	switch {
 	case f.StructTag != "":
 		o.Tag = quoteTag(f.StructTag)
-	case f.Sensitive:
+	case f.Sensitive, f.Implicit != "":
+		// An implicit key is ent's unexported field: the edge is how JSON
+		// and String show it.
 		o.Tag = quoteTag(`json:"-"`)
 	case !o.Pointer && (kind == "struct" || kind == "array"):
 		// omitempty never omits a struct or an array; omitzero omits its zero
 		// value, such as a zero time.Time or UUID.
 		o.Tag = quoteTag(fmt.Sprintf(`json:"%s,omitzero"`, f.Name))
+	case !o.Pointer && !f.Optional && scalar(f, kind):
+		// A required value is always there: omitempty would drop a stored 0,
+		// false or "", and a client could not tell it from a missing field.
+		o.Tag = quoteTag(fmt.Sprintf(`json:"%s"`, f.Name))
 	default:
 		o.Tag = quoteTag(fmt.Sprintf(`json:"%s,omitempty"`, f.Name))
 	}
 	s.defaults(e, f, o, where)
 	s.checks(e, i, f, o, where)
 	return o
+}
+
+// scalar reports whether f holds a bool, a number, a string or an enum: a
+// value that has a zero that is a real value, unlike a slice or a map, whose
+// nil means NULL.
+func scalar(f *Field, kind string) bool {
+	switch f.Type {
+	case "bool", "string", "enum":
+		return true
+	}
+	return numeric[f.Type] && kind != "slice" && kind != "map"
 }
 
 func quoteTag(tag string) string {
@@ -464,6 +525,9 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 			o.DefaultCode = lit
 		case !ok:
 			// An error is recorded.
+		case f.Type == "json" && sliceLiteral(f.Default, elem) != "":
+			lit := sliceLiteral(f.Default, elem)
+			o.DefaultFuncCode = fmt.Sprintf("func() any { return %s }", lit)
 		case f.Type == "bytes" || f.Type == "json":
 			// Decoded on each call, so that no two rows share a slice or a map.
 			s.use("encoding/json", "json", where)
@@ -534,6 +598,49 @@ func (s *entState) literal(f *Field, elem, where string) (lit string, ok bool) {
 	return "", true
 }
 
+// sliceLiteral is the Go literal of the JSON array raw as a value of elem,
+// when elem is a slice of bool, number or string ([]string{"new"}), and "" for
+// any other default, which is decoded from JSON. A call makes a new slice, so
+// no two rows share one.
+func sliceLiteral(raw []byte, elem string) string {
+	t, ok := strings.CutPrefix(elem, "[]")
+	if !ok {
+		return ""
+	}
+	switch {
+	case t == "bool", t == "string", numeric[t]:
+	default:
+		return ""
+	}
+	var items []json.RawMessage
+	if json.Unmarshal(raw, &items) != nil || items == nil {
+		return ""
+	}
+	lits := make([]string, len(items))
+	for i, it := range items {
+		switch t {
+		case "bool":
+			var v bool
+			if json.Unmarshal(it, &v) != nil {
+				return ""
+			}
+			lits[i] = strconv.FormatBool(v)
+		case "string":
+			var v string
+			if json.Unmarshal(it, &v) != nil {
+				return ""
+			}
+			lits[i] = strconv.Quote(v)
+		default:
+			if !fits(t, string(it)) {
+				return ""
+			}
+			lits[i] = string(it)
+		}
+	}
+	return elem + "{" + strings.Join(lits, ", ") + "}"
+}
+
 // compact is the JSON raw without insignificant white space.
 func compact(raw []byte) string {
 	var b bytes.Buffer
@@ -584,7 +691,13 @@ func unset(f *Field, elem string) string {
 		return "len(x) == 0"
 	case f.Type == "time":
 		return "x.IsZero()"
-	case f.Type == "bool", numeric[f.Type], f.Type == "string", f.Type == "enum", f.Type == "uuid":
+	case f.Type == "bool":
+		return "!x"
+	case numeric[f.Type]:
+		return "x == 0"
+	case f.Type == "string", f.Type == "enum":
+		return `x == ""`
+	case f.Type == "uuid":
 		return "x == *new(" + elem + ")"
 	}
 	return ""
@@ -606,7 +719,7 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 		s.useStd("errors", where)
 		line(2, "return errors.New(%s)", strconv.Quote(msg))
 	}
-	line(0, "case %d:", col)
+	line(0, "case %sCol%s:", camel(s.out.Label), o.GoName)
 	line(1, "x := v.(%s)", o.ElemType)
 	if o.Unset != "" {
 		// Optional: the zero value means unset, and unset is valid.
@@ -617,14 +730,24 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 	header := b.Len() // what is written past here is a check that can fail
 	if f.Type == "enum" {
 		vals := make([]string, len(f.Enums))
+		plain := make([]string, len(f.Enums))
 		for i, en := range f.Enums {
 			vals[i] = strconv.Quote(en.Value)
+			plain[i] = en.Value
 		}
-		line(1, "switch x {")
-		line(1, "case %s:", strings.Join(vals, ", "))
-		line(1, "default:")
-		line(1, "\treturn errors.New(%s)", strconv.Quote("is not one of the values"))
-		line(1, "}")
+		msg := strconv.Quote("is not one of " + strings.Join(plain, ", "))
+		if f.GoType == nil {
+			// The enum type is generated, and has IsValid.
+			line(1, "if !x.IsValid() {")
+			line(2, "return errors.New(%s)", msg)
+			line(1, "}")
+		} else {
+			line(1, "switch x {")
+			line(1, "case %s:", strings.Join(vals, ", "))
+			line(1, "default:")
+			line(1, "\treturn errors.New(%s)", msg)
+			line(1, "}")
+		}
 		s.useStd("errors", where)
 	}
 	// conv is x as the type t, when its type is another.
@@ -827,39 +950,16 @@ func (l *lowerer) relations() {
 					s.fail(where, "the foreign key field %q is not a field", ed.Field)
 					continue
 				}
-				if ownFK(ed) {
-					l.tenantRef(s.out, ownerCol, t)
-				} else {
-					l.tenantRef(l.state[t.Name].out, targetCol, e)
-				}
-				r.Desc = fmt.Sprintf("velox.EdgeTo[%s](%q, %d, %d)", t.Name, ed.GoName, ownerCol, targetCol)
+				owner, target := colConst(s.out, ownerCol), colConst(l.state[t.Name].out, targetCol)
+				r.Desc = fmt.Sprintf("velox.EdgeTo[%s](%q, %s, %s)", t.Name, ed.GoName, owner, target)
 				if ed.Rel.Kind == "O2O" && ed.Bidi {
 					// Both rows hold the key: the core writes the partner's.
-					r.Desc = fmt.Sprintf("velox.EdgeBidi[%s](%q, %d, %d)", t.Name, ed.GoName, ownerCol, targetCol)
+					r.Desc = fmt.Sprintf("velox.EdgeBidi[%s](%q, %s, %s)", t.Name, ed.GoName, owner, target)
 				}
 			}
 			s.out.Rels = append(s.out.Rels, r)
 		}
 	}
-}
-
-// tenantRef records that column col of out, a tenant-scoped entity or a join entity,
-// is a foreign key to the first field of to, when to is tenant-scoped. The two sides
-// of an edge record one column once.
-func (l *lowerer) tenantRef(out *OutEntity, col int, to *Entity) {
-	if to.Tenant == "" || out.Tenant < 0 && !out.Join {
-		return
-	}
-	i := slices.IndexFunc(out.TenantRefs, func(r OutTenantRef) bool { return r.Column >= col })
-	if i >= 0 && out.TenantRefs[i].Column == col {
-		return
-	}
-	r := OutTenantRef{Column: col, Schema: to.TableSchema, Table: to.Table, Key: to.Fields[0].Column, Tenant: to.Fields[fieldIndex(to, to.Tenant)].Column}
-	if i < 0 {
-		out.TenantRefs = append(out.TenantRefs, r)
-		return
-	}
-	out.TenantRefs = slices.Insert(out.TenantRefs, i, r)
 }
 
 // through writes the expression of the many-to-many edge ed of e, making its
@@ -894,7 +994,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 		}
 		js.out = &OutEntity{
 			TableSchema: owner.TableSchema, Name: name, Label: plugin.Snake(name), Handles: handles, Table: ed.Rel.Table,
-			PrimaryKey: []int{0, 1}, Tenant: -1, Join: true, Bidi: ed.Bidi, Bound: l.cfg.Bound[name],
+			PrimaryKey: []int{0, 1}, Join: true, Bidi: ed.Bidi, Bound: l.cfg.Bound[name],
 		}
 		for i, ent := range []*Entity{owner, target} {
 			id := ent.Fields[0]
@@ -921,9 +1021,8 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 	if jo < 0 || jt < 0 {
 		jo, jt = 0, 1 // reported above
 	}
-	l.tenantRef(j.ent, jo, e)
-	l.tenantRef(j.ent, jt, t)
-	return fmt.Sprintf("velox.EdgeThrough[%s, %s](%q, 0, %d, %d, 0)", j.ent.Name, t.Name, ed.GoName, jo, jt)
+	return fmt.Sprintf("velox.EdgeThrough[%s, %s](%q, %s, %s, %s, %s)", j.ent.Name, t.Name, ed.GoName,
+		colConst(s.out, 0), colConst(j.ent, jo), colConst(j.ent, jt), colConst(l.state[t.Name].out, 0))
 }
 
 // finish completes the entities' files, adds the join entities, and checks
@@ -983,6 +1082,18 @@ func (l *lowerer) finish() {
 			add(j.ent.Handles, "handles variable", j.owner, j.where)
 		}
 	}
+	// The variables of scope_velox.go: a key's, once, and each scoped entity's.
+	keyed := map[string]bool{}
+	for _, e := range l.out.Entities {
+		if e.Scope == nil {
+			continue
+		}
+		if !keyed[e.Scope.Key] {
+			keyed[e.Scope.Key] = true
+			add(e.Scope.KeyVar, fmt.Sprintf("scope key %q variable", e.Scope.Key), e.Name, "")
+		}
+		add(e.Scope.Var, "scope variable", e.Name, "")
+	}
 
 	// A join table is not an entity's table, and the generated functions of an
 	// entity are named by its label, so no two entities share one.
@@ -1018,11 +1129,48 @@ func kindOf(o *OutEntity) string {
 func (l *lowerer) complete(s *entState) {
 	o := s.out
 	o.CheckCode = strings.TrimRight(strings.Join(s.cases, ""), "\n")
-	o.CheckSetup = strings.Join(s.setup, "\n")
+	o.CheckSetup = strings.Join(shareReads(s.setup), "\n")
 	for _, p := range s.paths {
 		o.Imports = append(o.Imports, p)
 	}
 	slices.Sort(o.Imports)
 	o.NeedsSch = s.sch
 	l.out.NeedsSch = l.out.NeedsSch || s.sch
+}
+
+// descRead matches the read of a field's descriptor in the schema package.
+var descRead = regexp.MustCompile(`\(&sch\.\w+\{\}\)(?:\.Mixin\(\)\[\d+\])?\.Fields\(\)\[\d+\]\.Descriptor\(\)`)
+
+// shareReads makes each descriptor that more than one statement of setup reads
+// a variable of its own, set before the first statement that reads it, so that
+// the schema's Fields is called once for it.
+func shareReads(setup []string) []string {
+	count := map[string]int{}
+	for _, st := range setup {
+		seen := map[string]bool{}
+		for _, r := range descRead.FindAllString(st, -1) {
+			if !seen[r] {
+				seen[r] = true
+				count[r]++
+			}
+		}
+	}
+	vars := map[string]string{}
+	var out []string
+	for _, st := range setup {
+		for _, r := range descRead.FindAllString(st, -1) {
+			if count[r] < 2 || vars[r] != "" {
+				continue
+			}
+			vars[r] = "f" + strconv.Itoa(len(vars))
+			out = append(out, vars[r]+" := "+r)
+		}
+		out = append(out, descRead.ReplaceAllStringFunc(st, func(r string) string {
+			if v := vars[r]; v != "" {
+				return v
+			}
+			return r
+		}))
+	}
+	return out
 }

@@ -40,22 +40,37 @@ func (e *FileError) Error() string {
 // file no build includes is not read, and one only some builds include is a
 // *FileError (see userFiles). A missing dir is no files.
 //
+// reserved are package-level names velox-gen writes, such as a scope key's
+// variable: a file that declares one is a *FileError, as one that declares an
+// entity's type is.
+//
 // The result holds only the entities that have at least one of the methods.
-func Methods(dir string, entities []string) (map[string]Bound, error) {
+func Methods(dir string, entities, reserved []string) (map[string]Bound, error) {
 	out := map[string]Bound{}
 	err := userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.GenDecl:
-				if d.Tok != token.TYPE {
-					continue
-				}
 				for _, sp := range d.Specs {
-					if n := sp.(*ast.TypeSpec).Name.Name; slices.Contains(entities, n) {
-						return &FileError{Path: path, Reason: "declares type " + n + ", which velox-gen generates"}
+					switch sp := sp.(type) {
+					case *ast.TypeSpec:
+						if n := sp.Name.Name; slices.Contains(entities, n) {
+							return &FileError{Path: path, Reason: "declares type " + n + ", which velox-gen generates"}
+						} else if slices.Contains(reserved, n) {
+							return &FileError{Path: path, Reason: "declares " + n + ", a name velox-gen generates"}
+						}
+					case *ast.ValueSpec:
+						for _, id := range sp.Names {
+							if slices.Contains(reserved, id.Name) {
+								return &FileError{Path: path, Reason: "declares " + id.Name + ", a name velox-gen generates"}
+							}
+						}
 					}
 				}
 			case *ast.FuncDecl:
+				if d.Recv == nil && slices.Contains(reserved, d.Name.Name) {
+					return &FileError{Path: path, Reason: "declares " + d.Name.Name + ", a name velox-gen generates"}
+				}
 				e, ptr := receiver(d)
 				if e == "" || !slices.Contains(entities, e) {
 					continue

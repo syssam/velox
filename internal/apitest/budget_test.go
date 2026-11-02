@@ -60,13 +60,13 @@ func BenchmarkOneRow(b *testing.B) {
 	}
 }
 
-// TestTenantScopedOneRowBudget pins the tenant budget: a tenant-scoped
+// TestScopedOneRowBudget pins the scope budget: a scoped
 // one-row read makes at most one allocation more than Core's budget, the
-// append of the tenant condition.
-func TestTenantScopedOneRowBudget(t *testing.T) {
+// scope's Read condition and the policy call.
+func TestScopedOneRowBudget(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
 	db := openFake(velox.Postgres, e)
-	t1 := velox.WithTenant(context.Background(), int64(1))
+	t1 := testmodel.Org.With(context.Background(), int64(1))
 	run := func() {
 		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(t1); err != nil {
 			t.Fatal(err)
@@ -95,39 +95,13 @@ func TestTenantScopedOneRowBudget(t *testing.T) {
 	})
 	t.Logf("velox %.0f allocations, hand-written %.0f", vx, raw)
 	if vx > raw+9 {
-		t.Errorf("velox makes %.0f allocations for a tenant-scoped one-row query and hand-written code %.0f: over the budget of +9", vx, raw)
+		t.Errorf("velox makes %.0f allocations for a scope-scoped one-row query and hand-written code %.0f: over the budget of +9", vx, raw)
 	}
 }
 
-// TestTenantConvertedOneRowBudget: a tenant given as an int, which the scope
-// converts to the column's int64, costs at most one allocation more than the
-// exact type's TestTenantScopedOneRowBudget.
-func TestTenantConvertedOneRowBudget(t *testing.T) {
-	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
-	db := openFake(velox.Postgres, e)
-	allocs := func(id any) float64 {
-		ctx := velox.WithTenant(context.Background(), id)
-		run := func() {
-			if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}
-		run() // fill the render cache
-		return testing.AllocsPerRun(200, run)
-	}
-	exact, converted := allocs(int64(1)), allocs(1)
-	if e.Args[1] != int64(1) {
-		t.Fatalf("the tenant sent is %#v, want int64(1)", e.Args[1])
-	}
-	t.Logf("int64 %.0f allocations, int %.0f", exact, converted)
-	if converted > exact+1 {
-		t.Errorf("a converted tenant makes %.0f allocations, the exact type %.0f: over the budget of +1", converted, exact)
-	}
-}
-
-func BenchmarkTenantScopedOneRow(b *testing.B) {
+func BenchmarkScopedOneRow(b *testing.B) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}})
-	t1 := velox.WithTenant(context.Background(), int64(1))
+	t1 := testmodel.Org.With(context.Background(), int64(1))
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(t1); err != nil {

@@ -8,21 +8,27 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // IssueLabel is the join entity of table issue_labels.
 type IssueLabel struct {
-	IssueID int64 `json:"issue_id,omitempty"`
-	LabelID int64 `json:"label_id,omitempty"`
+	IssueID int64 `json:"issue_id"`
+	LabelID int64 `json:"label_id"`
 }
+
+// The positions of IssueLabel's columns, in the order of its table.
+const (
+	issueLabelColIssueID = iota
+	issueLabelColLabelID
+)
 
 // IssueLabels holds the typed handles of IssueLabel's columns and relations.
 var IssueLabels = struct {
+	// IssueID is the column issue_id.
 	IssueID velox.NumberCol[IssueLabel, int64]
+	// LabelID is the column label_id.
 	LabelID velox.NumberCol[IssueLabel, int64]
 }{
-	IssueID: velox.NumberCol[IssueLabel, int64]{I: 0},
-	LabelID: velox.NumberCol[IssueLabel, int64]{I: 1},
+	IssueID: velox.NumberCol[IssueLabel, int64]{I: issueLabelColIssueID},
+	LabelID: velox.NumberCol[IssueLabel, int64]{I: issueLabelColLabelID},
 }
 
 var issueLabelMeta velox.MetaOnce[IssueLabel]
@@ -32,6 +38,7 @@ func (*IssueLabel) VeloxMeta() *velox.Meta[IssueLabel] {
 	return issueLabelMeta.Load(issueLabelDescriptor)
 }
 
+// issueLabelDescriptor describes IssueLabel to velox: its table, columns, edges and hooks.
 func issueLabelDescriptor() velox.Descriptor[IssueLabel] {
 	return velox.Descriptor[IssueLabel]{
 		Table: "issue_labels",
@@ -39,17 +46,12 @@ func issueLabelDescriptor() velox.Descriptor[IssueLabel] {
 			{Field: "IssueID", Name: "issue_id"},
 			{Field: "LabelID", Name: "label_id"},
 		},
-		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
-		TenantRefs: []velox.TenantRef{
-			{Column: 0, Table: "issues", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-			{Column: 1, Table: "labels", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-		},
+		PrimaryKey: []int{issueLabelColIssueID, issueLabelColLabelID},
 		FieldPtr: func(x *IssueLabel, i int) any {
 			switch i {
-			case 0:
+			case issueLabelColIssueID:
 				return &x.IssueID
-			case 1:
+			case issueLabelColLabelID:
 				return &x.LabelID
 			}
 			return nil
@@ -57,10 +59,10 @@ func issueLabelDescriptor() velox.Descriptor[IssueLabel] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x IssueLabel) String() string {
 	return fmt.Sprintf("IssueLabel(IssueID=%v, LabelID=%v)", x.IssueID, x.LabelID)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x IssueLabel) GoString() string { return x.String() }

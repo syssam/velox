@@ -74,7 +74,7 @@ func main() {
 		_ = w.Close()
 	}()
 	os.Stdin = r
-	plugin.Main(plugin.Supports{Protocol: 2, Model: 2}, generate)
+	plugin.Main(plugin.Supports{Protocol: 2, Model: 3}, generate)
 }
 
 func generate(req *plugin.Request) ([]plugin.File, []string, error) {

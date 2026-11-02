@@ -24,6 +24,18 @@ func (*Post) IsNode() {}
 // the key id, encoded.
 func (x *Post) IDGQL() string { return veloxgql.EncodeID("Post", x.ID) }
 
+// postNodeGQL is the Node type Post for Node and Nodes.
+func postNodeGQL() gqlimpl.NodeKind {
+	return gqlimpl.NewNode[Post, *Post](
+		"Post",
+		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "Post") },
+		func(db *velox.DB) velox.Query[Post] { return db.Query[Post]() },
+		postColumnsGQL,
+		Posts.ID.EQ, Posts.ID.In,
+		func(x *Post) int64 { return x.ID },
+	)
+}
+
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
 	var s string
@@ -99,9 +111,11 @@ func (c *PostConnection) Edges(ctx context.Context) ([]*PostEdge, error) {
 	if err != nil {
 		return nil, err
 	}
+	slab := make([]PostEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*PostEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		edges[i] = &PostEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = PostEdge{Node: x, Cursor: p.Cursors[i]}
+		edges[i] = &slab[i]
 	}
 	return edges, nil
 }
@@ -151,9 +165,9 @@ func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // which the cursors hold: a q whose Columns or Omit drops one is refused with
 // an internal error. In a gqlgen field, the page reads only the columns the
 // selection needs (postColumnsGQL), of those q selects; a column the selection
-// does not need is left zero in the nodes, except the key, the foreign keys,
-// the order columns and the tenant, so an application's resolver must not read
-// one it did not ask for. It runs no query.
+// does not need is left zero in the nodes, except the key, the foreign keys and
+// the order columns, so an application's resolver must not read one it did not
+// ask for. It runs no query.
 func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	if !q.Selects(Posts.ID) {
 		return nil, fmt.Errorf("veloxgql: PostsConnectionOf: the base query does not select the key, which the cursors hold")
@@ -201,11 +215,11 @@ func postKeyGQL() []gqlimpl.OrderTerm[Post] {
 }
 
 // postColumnsGQL is the columns a selection of the Post fields fields reads:
-// the key, every foreign key on the row, every order field's column, the tenant
-// column, and the column of each field. It is nil, every column, when a field
-// is not one velox-graphql wrote, such as an application's own.
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
 func postColumnsGQL(fields []string) []velox.Column[Post] {
-	cols := []velox.Column[Post]{Posts.ID, Posts.AuthorID, Posts.Title, Posts.Views, Posts.OrgID}
+	cols := []velox.Column[Post]{Posts.ID, Posts.AuthorID, Posts.Title, Posts.Views}
 	for _, f := range fields {
 		switch f {
 		case "id", "title", "views", "author", "tags":
@@ -342,13 +356,9 @@ type PostWhereInput struct {
 
 // Pred is the condition w stands for, on Post nodes: every predicate w sets
 // holds, and a w that sets none, or a nil w, holds for every node. It fails,
-// before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or
-// a malformed one (veloxgql.ErrBadID), on a nesting deeper than the
-// MaxFilterDepth of veloxgql.LimitsFromContext(ctx)
-// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
-// of more than its MaxFilterWidth entries (veloxgql.ErrFilterTooWide), and on a
-// where argument of more than its MaxFilterNodes inputs, predicates and values
-// in all (veloxgql.ErrFilterTooLarge).
+// before any query runs, on an ID of another type or a malformed one, and on a
+// filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
+// gqlimpl.NewFilter's.
 func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	f := gqlimpl.NewFilter[Post](ctx, "PostWhereInput")
 	if w == nil {
@@ -365,10 +375,10 @@ func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	gqlimpl.ID(f, "idGTE", w.IDGTE, "Post", Posts.ID.GTE)
 	gqlimpl.ID(f, "idLT", w.IDLT, "Post", Posts.ID.LT)
 	gqlimpl.ID(f, "idLTE", w.IDLTE, "Post", Posts.ID.LTE)
-	gqlimpl.ID(f, "authorID", w.AuthorID, "User", gqlimpl.FK[User](false, Posts.AuthorID.EQ, Posts.Author.Has))
-	gqlimpl.ID(f, "authorIDNEQ", w.AuthorIDNEQ, "User", gqlimpl.FK[User](false, Posts.AuthorID.NEQ, Posts.Author.Has))
-	gqlimpl.IDList(f, "authorIDIn", w.AuthorIDIn, "User", gqlimpl.FKList[User](false, Posts.AuthorID.In, Posts.Author.Has))
-	gqlimpl.IDList(f, "authorIDNotIn", w.AuthorIDNotIn, "User", gqlimpl.FKList[User](false, Posts.AuthorID.NotIn, Posts.Author.Has))
+	gqlimpl.ID(f, "authorID", w.AuthorID, "User", gqlimpl.FK[User](Posts.AuthorID.EQ, Posts.Author.Has))
+	gqlimpl.ID(f, "authorIDNEQ", w.AuthorIDNEQ, "User", gqlimpl.FK[User](Posts.AuthorID.NEQ, Posts.Author.Has))
+	gqlimpl.IDList(f, "authorIDIn", w.AuthorIDIn, "User", gqlimpl.FKList[User](Posts.AuthorID.In, Posts.Author.Has))
+	gqlimpl.IDList(f, "authorIDNotIn", w.AuthorIDNotIn, "User", gqlimpl.FKList[User](Posts.AuthorID.NotIn, Posts.Author.Has))
 	gqlimpl.Value(f, "title", w.Title, Posts.Title.EQ)
 	gqlimpl.Value(f, "titleNEQ", w.TitleNEQ, Posts.Title.NEQ)
 	gqlimpl.List(f, "titleIn", w.TitleIn, Posts.Title.In)
@@ -430,19 +440,7 @@ type CreatePostInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in CreatePostInput) String() string {
-	var p1 any
-	if in.Status != nil {
-		p1 = *in.Status
-	}
-	var p2 any
-	if in.Views != nil {
-		p2 = *in.Views
-	}
-	var p3 any
-	if in.PublishedAt != nil {
-		p3 = *in.PublishedAt
-	}
-	return fmt.Sprintf("CreatePostInput(Title=%v, Status=%v, Views=%v, PublishedAt=%v, AuthorID=%v, TagIDs=%v)", in.Title, p1, p2, p3, in.AuthorID, in.TagIDs)
+	return fmt.Sprintf("CreatePostInput(Title=%v, Status=%v, Views=%v, PublishedAt=%v, AuthorID=%v, TagIDs=%v)", in.Title, gqlimpl.Show(in.Status), gqlimpl.Show(in.Views), gqlimpl.Show(in.PublishedAt), in.AuthorID, in.TagIDs)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -450,20 +448,19 @@ func (in CreatePostInput) GoString() string { return in.String() }
 
 // CreatePost creates a Post from input, with its edges, as the mutation
 // createPost does, and returns the row as written. It runs atomically on the DB
-// veloxgql.DBFromContext reads from ctx, under the tenant scope and the
-// policies. See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
+// veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql for what
+// each input field does, what the caller may link and change, and the errors.
 func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	var (
-		k4  int64
-		k5  []int64
-		err error
+		authorIDKey int64
+		tagIDsKeys  []int64
+		err         error
 	)
-	if k4, err = gqlimpl.DecodeID[int64]("CreatePostInput.authorID", input.AuthorID, "User"); err != nil {
+	if authorIDKey, err = gqlimpl.DecodeID[int64]("CreatePostInput.authorID", input.AuthorID, "User"); err != nil {
 		return nil, err
 	}
-	if k5, err = gqlimpl.DecodeIDs[int64](ctx, "CreatePostInput.tagIDs", input.TagIDs, "Label"); err != nil {
+	if tagIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "CreatePostInput.tagIDs", input.TagIDs, "Label"); err != nil {
 		return nil, err
 	}
 	var x Post
@@ -486,21 +483,21 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(k4)), 1, "CreatePostInput.authorID", "User"); err != nil {
+		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(authorIDKey)), 1, "CreatePostInput.authorID", "User"); err != nil {
 			return err
 		}
-		x.AuthorID = k4
-		if len(k5) > 0 {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Tag]().Where(Tags.ID.In(k5...)), len(k5), "CreatePostInput.tagIDs", "Label"); err != nil {
+		x.AuthorID = authorIDKey
+		if len(tagIDsKeys) > 0 {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Tag]().Where(Tags.ID.In(tagIDsKeys...)), len(tagIDsKeys), "CreatePostInput.tagIDs", "Label"); err != nil {
 				return err
 			}
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postFieldGQL)
 		}
-		if len(k5) > 0 {
-			rows := make([]PostTag, len(k5))
-			for i, k := range k5 {
+		if len(tagIDsKeys) > 0 {
+			rows := make([]PostTag, len(tagIDsKeys))
+			for i, k := range tagIDsKeys {
 				rows[i] = PostTag{PostID: x.ID, TagID: k}
 			}
 			if err := db.InsertAll(rows).OnConflict(PostTags.PostID, PostTags.TagID).DoNothing().Exec(ctx); err != nil {
@@ -541,27 +538,7 @@ type UpdatePostInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in UpdatePostInput) String() string {
-	var p0 any
-	if in.Title != nil {
-		p0 = *in.Title
-	}
-	var p1 any
-	if in.Status != nil {
-		p1 = *in.Status
-	}
-	var p2 any
-	if in.Views != nil {
-		p2 = *in.Views
-	}
-	var p3 any
-	if in.PublishedAt != nil {
-		p3 = *in.PublishedAt
-	}
-	var p5 any
-	if in.AuthorID != nil {
-		p5 = *in.AuthorID
-	}
-	return fmt.Sprintf("UpdatePostInput(Title=%v, Status=%v, Views=%v, PublishedAt=%v, ClearPublishedAt=%v, AuthorID=%v, AddTagIDs=%v, RemoveTagIDs=%v, ClearTags=%v)", p0, p1, p2, p3, in.ClearPublishedAt, p5, in.AddTagIDs, in.RemoveTagIDs, in.ClearTags)
+	return fmt.Sprintf("UpdatePostInput(Title=%v, Status=%v, Views=%v, PublishedAt=%v, ClearPublishedAt=%v, AuthorID=%v, AddTagIDs=%v, RemoveTagIDs=%v, ClearTags=%v)", gqlimpl.Show(in.Title), gqlimpl.Show(in.Status), gqlimpl.Show(in.Views), gqlimpl.Show(in.PublishedAt), in.ClearPublishedAt, gqlimpl.Show(in.AuthorID), in.AddTagIDs, in.RemoveTagIDs, in.ClearTags)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -569,30 +546,29 @@ func (in UpdatePostInput) GoString() string { return in.String() }
 
 // UpdatePost updates the Post with the ID id from input, as the mutation
 // updatePost does, and returns the row as written. It runs atomically on the DB
-// veloxgql.DBFromContext reads from ctx, under the tenant scope and the
-// policies. See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
+// veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql for what
+// each input field does, what the caller may link and change, and the errors.
 func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, error) {
 	var (
-		key int64
-		k5  int64
-		k6  []int64
-		k7  []int64
-		err error
+		key              int64
+		authorIDKey      int64
+		addTagIDsKeys    []int64
+		removeTagIDsKeys []int64
+		err              error
 	)
 	if key, err = gqlimpl.DecodeID[int64]("updatePost.id", id, "Post"); err != nil {
 		return nil, err
 	}
 	if input.AuthorID != nil {
-		if k5, err = gqlimpl.DecodeID[int64]("UpdatePostInput.authorID", *input.AuthorID, "User"); err != nil {
+		if authorIDKey, err = gqlimpl.DecodeID[int64]("UpdatePostInput.authorID", *input.AuthorID, "User"); err != nil {
 			return nil, err
 		}
 	}
-	if k6, err = gqlimpl.DecodeIDs[int64](ctx, "UpdatePostInput.addTagIDs", input.AddTagIDs, "Label"); err != nil {
+	if addTagIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "UpdatePostInput.addTagIDs", input.AddTagIDs, "Label"); err != nil {
 		return nil, err
 	}
-	if k7, err = gqlimpl.DecodeIDs[int64](ctx, "UpdatePostInput.removeTagIDs", input.RemoveTagIDs, "Label"); err != nil {
+	if removeTagIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "UpdatePostInput.removeTagIDs", input.RemoveTagIDs, "Label"); err != nil {
 		return nil, err
 	}
 	if input.PublishedAt != nil && input.ClearPublishedAt {
@@ -601,7 +577,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	if input.PublishedAt == nil && !input.ClearPublishedAt {
 		input.ClearPublishedAt = gqlimpl.NullGiven(ctx, "input", "publishedAt")
 	}
-	if err = gqlimpl.Disjoint("UpdatePostInput", "addTagIDs", "removeTagIDs", k6, k7); err != nil {
+	if err = gqlimpl.Disjoint("UpdatePostInput", "addTagIDs", "removeTagIDs", addTagIDsKeys, removeTagIDsKeys); err != nil {
 		return nil, err
 	}
 	var set []velox.Setter[Post]
@@ -626,11 +602,12 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if input.AuthorID != nil {
-			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(k5)), 1, "UpdatePostInput.authorID", "User"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(authorIDKey)), 1, "UpdatePostInput.authorID", "User"); err != nil {
 				return err
 			}
-			set = append(set, Posts.AuthorID.Set(k5))
+			set = append(set, Posts.AuthorID.Set(authorIDKey))
 		}
+		counted := false
 		if len(set) > 0 {
 			n, err := db.Update[Post]().Set(set...).Where(Posts.ID.EQ(key)).Exec(ctx)
 			if err != nil {
@@ -639,29 +616,14 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 			if n == 0 {
 				return gqlimpl.NotFound("updatePost", "Post")
 			}
-			if n < 0 {
-				chk := db.Query[Post]().Where(Posts.ID.EQ(key)).Writable()
-				if db.Dialect() != velox.SQLite {
-					chk = chk.ForUpdate()
-				}
-				if ok, err := chk.Exists(ctx); err != nil {
-					return err
-				} else if !ok {
-					return gqlimpl.NotFound("updatePost", "Post")
-				}
-			}
-		} else {
-			chk := db.Query[Post]().Where(Posts.ID.EQ(key)).Writable()
-			if db.Dialect() != velox.SQLite {
-				chk = chk.ForUpdate()
-			}
-			if ok, err := chk.Exists(ctx); err != nil {
+			counted = n > 0
+		}
+		if !counted {
+			if err := gqlimpl.LockRow(ctx, db, db.Query[Post]().Where(Posts.ID.EQ(key)), "updatePost", "Post"); err != nil {
 				return err
-			} else if !ok {
-				return gqlimpl.NotFound("updatePost", "Post")
 			}
 		}
-		unlink1 := func(ks []int64) error {
+		unlinkTags := func(ks []int64) error {
 			vs, err := gqlimpl.Readable(ctx, db.Query[Tag]().Where(Tags.ID.In(ks...)).Columns(Tags.ID), len(ks), func(x *Tag) int64 { return x.ID })
 			if err != nil || len(vs) == 0 {
 				return err
@@ -670,21 +632,21 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 			return err
 		}
 		if input.ClearTags {
-			if err := gqlimpl.UnlinkAll(ctx, db.Query[PostTag]().Where(PostTags.PostID.EQ(key)).OrderBy(PostTags.PostID.Asc(), PostTags.TagID.Asc()), func(j *PostTag) int64 { return j.TagID }, unlink1); err != nil {
+			if err := gqlimpl.UnlinkAll(ctx, db.Query[PostTag]().Where(PostTags.PostID.EQ(key)).OrderBy(PostTags.PostID.Asc(), PostTags.TagID.Asc()), func(j *PostTag) int64 { return j.TagID }, unlinkTags); err != nil {
 				return err
 			}
 		}
-		if len(k7) > 0 {
-			if err := unlink1(k7); err != nil {
+		if len(removeTagIDsKeys) > 0 {
+			if err := unlinkTags(removeTagIDsKeys); err != nil {
 				return err
 			}
 		}
-		if len(k6) > 0 {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Tag]().Where(Tags.ID.In(k6...)), len(k6), "UpdatePostInput.addTagIDs", "Label"); err != nil {
+		if len(addTagIDsKeys) > 0 {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Tag]().Where(Tags.ID.In(addTagIDsKeys...)), len(addTagIDsKeys), "UpdatePostInput.addTagIDs", "Label"); err != nil {
 				return err
 			}
-			rows := make([]PostTag, len(k6))
-			for i, c := range k6 {
+			rows := make([]PostTag, len(addTagIDsKeys))
+			for i, c := range addTagIDsKeys {
 				rows[i] = PostTag{PostID: key, TagID: c}
 			}
 			if err := db.InsertAll(rows).OnConflict(PostTags.PostID, PostTags.TagID).DoNothing().Exec(ctx); err != nil {
@@ -710,23 +672,16 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 // DeletePost deletes the Post with the ID id, and the join rows that hold its
 // key, as the mutation deletePost does, and returns id encoded again from the
 // key. It runs atomically on the DB veloxgql.DBFromContext reads from ctx,
-// under the tenant scope and the policies. See "Mutations" in the documentation
-// of package github.com/syssam/velox/contrib/graphql for what it deletes and
-// the errors.
+// under the policies. See "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what it deletes and the errors.
 func DeletePost(ctx context.Context, id string) (string, error) {
 	key, err := gqlimpl.DecodeID[int64]("deletePost.id", id, "Post")
 	if err != nil {
 		return "", err
 	}
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		chk := db.Query[Post]().Where(Posts.ID.EQ(key)).Writable()
-		if db.Dialect() != velox.SQLite {
-			chk = chk.ForUpdate()
-		}
-		if ok, err := chk.Exists(ctx); err != nil {
+		if err := gqlimpl.LockRow(ctx, db, db.Query[Post]().Where(Posts.ID.EQ(key)), "deletePost", "Post"); err != nil {
 			return err
-		} else if !ok {
-			return gqlimpl.NotFound("deletePost", "Post")
 		}
 		if _, err := db.Delete[PostTag]().Where(PostTags.PostID.EQ(key)).Exec(ctx); err != nil {
 			return err

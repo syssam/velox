@@ -293,6 +293,48 @@ func (r *renderer) writeNode(f *file, t *sdl.Type) error {
 	f.doc("", fmt.Sprintf("IDGQL is the global ID of the %s, the GraphQL field id: the type %s and the key %s, encoded.", e.Name, t.Name, k.Name))
 	f.p("func (x *%s) IDGQL() string { return %s.EncodeID(%q, %s) }", e.Name, f.veloxgql(), t.Name, v)
 	f.p("")
+	return r.writeNodeKind(f, t, k)
+}
+
+// nodeKindFunc is the function of node_gql.go that returns the Node type an
+// ID's type names.
+const nodeKindFunc = "nodeKindGQL"
+
+func nodeFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "NodeGQL" }
+
+// writeNodeKind writes nodeFunc(t): what Node and Nodes need of t to look its
+// nodes up, which gqlimpl.NodeOf does.
+func (r *renderer) writeNodeKind(f *file, t *sdl.Type, k *plugin.Field) error {
+	e := t.Entity
+	if err := r.declare(nodeFunc(t), "schema "+e.Name); err != nil {
+		return err
+	}
+	elem := cmp.Or(k.ElemType, t.Key)
+	key, err := r.qualify(f, e, k, elem, k.PkgPath)
+	if err != nil {
+		return err
+	}
+	vgql, impl, velox := f.veloxgql(), f.gqlimpl(), f.velox()
+	decode := fmt.Sprintf("%s.DecodeID[%s](id, %q)", vgql, t.Key, t.Name)
+	f.doc("", fmt.Sprintf("%s is the Node type %s for Node and Nodes.", nodeFunc(t), t.Name))
+	f.p("func %s() %s.NodeKind {", nodeFunc(t), impl)
+	f.p("\treturn %s.NewNode[%s, *%[2]s](", impl, e.Name)
+	f.p("\t\t%q,", t.Name)
+	if elem == t.Key {
+		f.p("\t\tfunc(id string) (%s, error) { return %s },", key, decode)
+	} else {
+		f.p("\t\tfunc(id string) (%s, error) {", key)
+		f.p("\t\t\tk, err := %s", decode)
+		f.p("\t\t\treturn %s(k), err", key)
+		f.p("\t\t},")
+	}
+	f.p("\t\tfunc(db *%s.DB) %[1]s.Query[%s] { return db.Query[%[2]s]() },", velox, e.Name)
+	f.p("\t\t%s,", colsFunc(t))
+	f.p("\t\t%s.%s.EQ, %[1]s.%[2]s.In,", e.Handles, k.GoName)
+	f.p("\t\tfunc(x *%s) %s { return x.%s },", e.Name, key, k.GoName)
+	f.p("\t)")
+	f.p("}")
+	f.p("")
 	return nil
 }
 
@@ -364,14 +406,46 @@ var locals = map[string]bool{
 	"nil": true, "error": true, "true": true, "false": true,
 }
 
-// indexedLocal reports whether name is one of the locals the generated code
-// numbers by an input field's index: k3, j3, p3, v3.
-func indexedLocal(name string) bool {
-	if len(name) < 2 || !strings.ContainsRune("kjpv", rune(name[0])) {
-		return false
+// localSuffixes end the locals the generated code names after an input field:
+// <field>Key, the decoded key of an ID the field gives (<field>Keys for a list
+// of IDs); <field>JSON, the
+// decoded JSON value; and <field>Val, the field's value converted for the row.
+var localSuffixes = []string{"Key", "Keys", "JSON", "Val"}
+
+// local is the name of a local of the generated code that holds a value of
+// the input field whose Go name is goName, ending in suffix, one of
+// localSuffixes: writerIDKey, tagsJSON. The Go names of an input's fields are
+// distinct, and the suffix keeps a local from every name in locals.
+func local(goName, suffix string) string { return camel(goName) + suffix }
+
+// camel is the Go name name with its leading capitals lower case, as Go
+// writes an unexported name: WriterID is writerID, and URLPath is urlPath.
+func camel(name string) string {
+	n := 0
+	for n < len(name) && name[n] >= 'A' && name[n] <= 'Z' {
+		n++
 	}
-	_, err := strconv.Atoi(name[1:])
-	return err == nil
+	switch {
+	case n == 0:
+		return name
+	case n == len(name) || n == 1:
+		return strings.ToLower(name[:n]) + name[n:]
+	}
+	return strings.ToLower(name[:n-1]) + name[n-1:]
+}
+
+// indexedLocal reports whether name is one of the locals the generated code
+// names after an input field (local), or an unlink<Edge> function.
+func indexedLocal(name string) bool {
+	if rest, ok := strings.CutPrefix(name, "unlink"); ok && rest != "" {
+		return true
+	}
+	for _, suffix := range localSuffixes {
+		if len(name) > len(suffix) && strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // qualify is the Go type typ of the package at pkg, as the generated file
@@ -630,196 +704,46 @@ func (r *renderer) whereType(f *file, t *sdl.Type, w sdl.WhereField) (string, er
 }
 
 // nodeFile is node_gql.go: Node and Nodes, which look up the nodes of the
-// Node types by their IDs.
+// Node types by their IDs. The lookups are gqlimpl's; each Node type's
+// <label>_gql.go writes what they need of it (nodeFunc), and this file only
+// names the type an ID's type leads to.
 func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
-	for _, name := range []string{"Node", "Nodes"} {
+	for _, name := range []string{"Node", "Nodes", nodeKindFunc} {
 		if err := r.declare(name, "velox-graphql's "+name); err != nil {
 			return plugin.File{}, err
 		}
 	}
 	f := newFile()
-	ctx, vgql := f.use("context", "context"), f.veloxgql()
-	type node struct {
-		t         *sdl.Type
-		key, base string // the key's Go type, and veloxgql's
-		conv      string // the expression of the key from k, the decoded base
-	}
-	var nodes []node
+	ctx, vgql, impl := f.use("context", "context"), f.veloxgql(), f.gqlimpl()
+
+	f.doc("", "Node returns the node with the global ID id, or nil when no row has its key. It reads the ID's type, decodes the key as that type's, and looks the row up with one query on that entity, through the DB veloxgql.DBFromContext reads from ctx, reading only the columns the field's selection needs; its edges batch (veloxgql.Batch). A column the selection does not need is zero in the node, except the key and the foreign keys: an application's resolver must not read one it did not select. An ID of no Node type fails with veloxgql.ErrWrongIDType and a malformed one with veloxgql.ErrBadID; neither runs a query.")
+	f.p("func Node(ctx %s.Context, id string) (%s.Noder, error) {", ctx, vgql)
+	f.p("\treturn %s.NodeByID(ctx, id, %s)", impl, nodeKindFunc)
+	f.p("}")
+	f.p("")
+	f.doc("", "Nodes returns the nodes with the global IDs ids, in their order, with nil for an ID no row has. It decodes every ID first, and then looks up each type's nodes with one query, through the DB veloxgql.DBFromContext reads from ctx; the query reads at most one row for each of its IDs, whatever the DB's WithMaxRows, and only the columns the field's selection needs. The nodes of a type are one batch for their edges (veloxgql.Batch). A column the selection does not need is zero in a node, except the key and the foreign keys: an application's resolver must not read one it did not select. It fails as Node does on an ID, before any query runs, and with veloxgql.ErrPageTooLarge on more IDs than the MaxPage of veloxgql.LimitsFromContext(ctx).")
+	f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
+	f.p("\treturn %s.NodesByID(ctx, ids, %s)", impl, nodeKindFunc)
+	f.p("}")
+	f.p("")
+	f.doc("", nodeKindFunc+" is the Node type the ID type typ names, or nil when it names none.")
+	f.p("func %s(typ string) %s.NodeKind {", nodeKindFunc, impl)
+	var cases bool
 	for _, t := range s.Types {
 		if !t.Node {
 			continue
 		}
-		k := t.Entity.Fields[t.Entity.PrimaryKey[0]]
-		elem := cmp.Or(k.ElemType, t.Key)
-		nd := node{t: t, base: t.Key, conv: "k"}
-		var err error
-		if nd.key, err = r.qualify(f, t.Entity, k, elem, k.PkgPath); err != nil {
-			return plugin.File{}, err
+		if !cases {
+			f.p("\tswitch typ {")
+			cases = true
 		}
-		if elem != t.Key {
-			nd.conv = nd.key + "(k)"
-		}
-		nodes = append(nodes, nd)
+		f.p("\tcase %q:", t.Name)
+		f.p("\t\treturn %s()", nodeFunc(t))
 	}
-	// narrow writes q, the query of t's entity, reading only the columns the
-	// field's selection needs.
-	narrow := func(t *sdl.Type, indent string) {
-		f.p("%sq := db.Query[%s]()", indent, t.Entity.Name)
-		f.p("%sif fields, ok := %s.Selected(ctx, %q); ok {", indent, f.gqlimpl(), t.Name)
-		f.p("%s\tq = %s.Narrow(q, %s(fields))", indent, f.gqlimpl(), colsFunc(t))
-		f.p("%s}", indent)
-	}
-	noType := func(fn, indent string) {
-		f.p("%sreturn nil, %s.InputErrorf(\"%s: %%w: the ID is of no Node type\", %s.ErrWrongIDType)", indent, f.gqlimpl(), fn, vgql)
-	}
-
-	if len(nodes) == 0 {
-		f.p("// Node is the root field node. No type of the schema is a Node, so every")
-		f.p("// ID fails: with veloxgql.ErrWrongIDType, or with veloxgql.ErrBadID when")
-		f.p("// it is malformed.")
-		f.p("func Node(_ %s.Context, id string) (%s.Noder, error) {", ctx, vgql)
-		f.p("\tif _, err := %s.IDType(id); err != nil {", vgql)
-		f.p("\t\treturn nil, err")
-		f.p("\t}")
-		noType("Node", "\t")
-		f.p("}")
-	} else {
-		f.p("// Node returns the node with the global ID id, or nil when no row has its")
-		f.p("// key. It reads the ID's type, decodes the key as that type's, and looks")
-		f.p("// the row up with one query on that entity, through the DB veloxgql.DBFromContext")
-		f.p("// reads from ctx, reading only the columns the field's selection needs; its")
-		f.p("// edges batch (veloxgql.Batch). A column the selection does not need is")
-		f.p("// zero in the node, except the key, the foreign keys and the tenant: an")
-		f.p("// application's resolver must not read one it did not select. An ID of no")
-		f.p("// Node type fails with veloxgql.ErrWrongIDType and a malformed one with")
-		f.p("// veloxgql.ErrBadID; neither runs a query.")
-		f.p("func Node(ctx %s.Context, id string) (%s.Noder, error) {", ctx, vgql)
-		f.p("\ttyp, err := %s.IDType(id)", vgql)
-		f.p("\tif err != nil {")
-		f.p("\t\treturn nil, err")
-		f.p("\t}")
-		f.p("\tswitch typ {")
-		for _, nd := range nodes {
-			e := nd.t.Entity
-			f.p("\tcase %q:", nd.t.Name)
-			f.p("\t\tk, err := %s.DecodeID[%s](id, %q)", vgql, nd.base, nd.t.Name)
-			f.p("\t\tif err != nil {")
-			f.p("\t\t\treturn nil, err")
-			f.p("\t\t}")
-			f.p("\t\tdb, err := %s.DBFromContext(ctx)", vgql)
-			f.p("\t\tif err != nil {")
-			f.p("\t\t\treturn nil, err")
-			f.p("\t\t}")
-			narrow(nd.t, "\t\t")
-			f.p("\t\tx, err := q.Where(%s.%s.EQ(%s)).One(ctx)", e.Handles, e.Fields[e.PrimaryKey[0]].GoName, nd.conv)
-			f.p("\t\tswitch {")
-			f.p("\t\tcase %s.IsNotFound(err):", f.velox())
-			f.p("\t\t\treturn nil, nil")
-			f.p("\t\tcase err != nil:")
-			f.p("\t\t\treturn nil, err")
-			f.p("\t\t}")
-			f.p("\t\t%s.Batch(ctx, []*%s{x})", vgql, e.Name)
-			f.p("\t\treturn x, nil")
-		}
-		f.p("\t}")
-		noType("Node", "\t")
-		f.p("}")
-	}
-
-	f.p("")
-	tooMany := func() {
-		f.p("\tif most := %s.LimitsFromContext(ctx).MaxPage; len(ids) > most {", vgql)
-		f.p("\t\treturn nil, %s.InputErrorf(\"Nodes: %%w: %%d IDs, and the most is %%d\", %s.ErrPageTooLarge, len(ids), most)", f.gqlimpl(), vgql)
+	if cases {
 		f.p("\t}")
 	}
-	if len(nodes) == 0 {
-		f.p("// Nodes is the root field nodes. No type of the schema is a Node, so an")
-		f.p("// ID fails as in Node, and so do more IDs than the MaxPage of")
-		f.p("// veloxgql.LimitsFromContext(ctx), with veloxgql.ErrPageTooLarge.")
-		f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
-		tooMany()
-		f.p("\tfor _, id := range ids {")
-		f.p("\t\tif _, err := %s.IDType(id); err != nil {", vgql)
-		f.p("\t\t\treturn nil, err")
-		f.p("\t\t}")
-		noType("Nodes", "\t\t")
-		f.p("\t}")
-		f.p("\treturn []%s.Noder{}, nil", vgql)
-		f.p("}")
-		return f.finish("node_gql.go", r.outPkg)
-	}
-	f.p("// Nodes returns the nodes with the global IDs ids, in their order, with nil")
-	f.p("// for an ID no row has. It decodes every ID first, and then looks up each")
-	f.p("// type's nodes with one query, through the DB veloxgql.DBFromContext reads from")
-	f.p("// ctx; the query reads at most one row for each of its IDs, whatever the")
-	f.p("// DB's WithMaxRows, and only the columns the field's selection needs. The")
-	f.p("// nodes of a type are one batch for their edges (veloxgql.Batch). A column")
-	f.p("// the selection does not need is zero in a node, except the key, the foreign")
-	f.p("// keys and the tenant: an application's resolver must not read one it did")
-	f.p("// not select.")
-	f.p("// It fails as Node does on an ID, before any query runs,")
-	f.p("// and with veloxgql.ErrPageTooLarge on more IDs than the MaxPage of")
-	f.p("// veloxgql.LimitsFromContext(ctx).")
-	f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
-	tooMany()
-	f.p("\t// The keys of each type, and the indexes in ids of their IDs.")
-	f.p("\tvar (")
-	for _, nd := range nodes {
-		f.p("\t\tkeys%s []%s", nd.t.Name, nd.key)
-		f.p("\t\tat%s   []int", nd.t.Name)
-	}
-	f.p("\t)")
-	f.p("\tfor i, id := range ids {")
-	f.p("\t\ttyp, err := %s.IDType(id)", vgql)
-	f.p("\t\tif err != nil {")
-	f.p("\t\t\treturn nil, err")
-	f.p("\t\t}")
-	f.p("\t\tswitch typ {")
-	for _, nd := range nodes {
-		f.p("\t\tcase %q:", nd.t.Name)
-		f.p("\t\t\tk, err := %s.DecodeID[%s](id, %q)", vgql, nd.base, nd.t.Name)
-		f.p("\t\t\tif err != nil {")
-		f.p("\t\t\t\treturn nil, err")
-		f.p("\t\t\t}")
-		f.p("\t\t\tkeys%s = append(keys%[1]s, %s)", nd.t.Name, nd.conv)
-		f.p("\t\t\tat%s = append(at%[1]s, i)", nd.t.Name)
-	}
-	f.p("\t\tdefault:")
-	noType("Nodes", "\t\t\t")
-	f.p("\t\t}")
-	f.p("\t}")
-	f.p("\tout := make([]%s.Noder, len(ids))", vgql)
-	f.p("\tif len(ids) == 0 {")
-	f.p("\t\treturn out, nil")
-	f.p("\t}")
-	f.p("\tdb, err := %s.DBFromContext(ctx)", vgql)
-	f.p("\tif err != nil {")
-	f.p("\t\treturn nil, err")
-	f.p("\t}")
-	for _, nd := range nodes {
-		e := nd.t.Entity
-		pk := e.Fields[e.PrimaryKey[0]].GoName
-		f.p("\tif len(keys%s) > 0 {", nd.t.Name)
-		narrow(nd.t, "\t\t")
-		f.p("\t\trows, err := q.Where(%s.%s.In(keys%s...)).Unbounded().MaxRows(len(keys%[3]s)).All(ctx)", e.Handles, pk, nd.t.Name)
-		f.p("\t\tif err != nil {")
-		f.p("\t\t\treturn nil, err")
-		f.p("\t\t}")
-		f.p("\t\tby := make(map[%s]*%s, len(rows))", nd.key, e.Name)
-		f.p("\t\tbatch := make([]*%s, len(rows))", e.Name)
-		f.p("\t\tfor i := range rows {")
-		f.p("\t\t\tby[rows[i].%s] = &rows[i]", pk)
-		f.p("\t\t\tbatch[i] = &rows[i]")
-		f.p("\t\t}")
-		f.p("\t\t%s.Batch(ctx, batch)", vgql)
-		f.p("\t\tfor j, k := range keys%s {", nd.t.Name)
-		f.p("\t\t\tif x := by[k]; x != nil {")
-		f.p("\t\t\t\tout[at%s[j]] = x", nd.t.Name)
-		f.p("\t\t\t}")
-		f.p("\t\t}")
-		f.p("\t}")
-	}
-	f.p("\treturn out, nil")
+	f.p("\treturn nil")
 	f.p("}")
 	return f.finish("node_gql.go", r.outPkg)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 func tagNames(t *testing.T, m velox.Many[fixture.DTag]) []string {
@@ -178,11 +179,11 @@ func TestThroughHasRenders(t *testing.T) {
 	}
 }
 
-// TestThroughHasScopesTarget is Review Focus 5: the target's tenant condition
+// TestThroughHasScopesTarget is Review Focus 5: the target's org condition
 // lands inside the inner EXISTS, on the target, not on the join or the owner.
 func TestThroughHasScopesTarget(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	got, args, err := db.Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWhere(fixture.DTags.Name.EQ("go"))).Limit(1).SQL(velox.WithTenant(ctx, int64(7)))
+	got, args, err := db.Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWhere(fixture.DTags.Name.EQ("go"))).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(7)))
 	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND "name" = $1 AND "org_id" = $2)) LIMIT $3`
 	if err != nil || got != want {
 		t.Fatalf("got  %s, %v\nwant %s", got, err, want)
@@ -229,17 +230,17 @@ func TestOfThroughRenders(t *testing.T) {
 			t.Errorf("%v: args %v, want %v", c.d, args, want)
 		}
 	}
-	// The other way, with the target's tenant at the top, outside the EXISTS.
+	// The other way, with the target's org at the top, outside the EXISTS.
 	g := fixture.DTag{ID: 7}
-	got, args, err := openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DTags.Books.Of(&g)).Limit(1).SQL(velox.WithTenant(ctx, int64(3)))
+	got, args, err := openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DTags.Books.Of(&g)).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(3)))
 	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND "tag_id" IN ($1)) LIMIT $2`
 	if err != nil || got != want || !reflect.DeepEqual(args, []any{int64(7), 1}) {
 		t.Errorf("tag to books:\n got %s %v, %v\nwant %s", got, args, err, want)
 	}
-	got, args, err = openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DTag]().Where(fixture.DTags.Name.EQ("go"), fixture.DBooks.Tags.Of(&b1)).Limit(1).SQL(velox.WithTenant(ctx, int64(3)))
+	got, args, err = openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DTag]().Where(fixture.DTags.Name.EQ("go"), fixture.DBooks.Tags.Of(&b1)).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(3)))
 	want = `SELECT "id", "org_id", "name" FROM "tags" WHERE "name" = $1 AND EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($2)) AND "org_id" = $3 LIMIT $4`
 	if err != nil || got != want || !reflect.DeepEqual(args, []any{"go", int64(1), int64(3), 1}) {
-		t.Errorf("tenant:\n got %s %v, %v\nwant %s", got, args, err, want)
+		t.Errorf("org:\n got %s %v, %v\nwant %s", got, args, err, want)
 	}
 	got, _, err = openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWhere(fixture.DBooks.Picks.Of(&b2))).Limit(1).SQL(ctx)
 	want = `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "picks" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND "book_id" IN ($1)))) LIMIT $2`
@@ -322,7 +323,6 @@ type dBadThrough struct {
 	Target   velox.Many[fixture.DAuthor]
 	Single   velox.One[fixture.DTag]
 	BadJoin  velox.Many[fixture.DTag]
-	TenantJ  velox.Many[fixture.DTag]
 	PolicyJ  velox.Many[fixture.DTag]
 }
 
@@ -330,10 +330,9 @@ var dBadThroughs = struct {
 	Mismatch, JoinCol velox.Rel[dBadThrough, fixture.DTag]
 	Target            velox.Rel[dBadThrough, fixture.DAuthor]
 	Single, BadJoin   velox.Rel[dBadThrough, fixture.DTag]
-	TenantJ, PolicyJ  velox.Rel[dBadThrough, fixture.DTag]
+	PolicyJ           velox.Rel[dBadThrough, fixture.DTag]
 }{velox.Rel[dBadThrough, fixture.DTag]{I: 0}, velox.Rel[dBadThrough, fixture.DTag]{I: 1}, velox.Rel[dBadThrough, fixture.DAuthor]{I: 2},
-	velox.Rel[dBadThrough, fixture.DTag]{I: 3}, velox.Rel[dBadThrough, fixture.DTag]{I: 4}, velox.Rel[dBadThrough, fixture.DTag]{I: 5},
-	velox.Rel[dBadThrough, fixture.DTag]{I: 6}}
+	velox.Rel[dBadThrough, fixture.DTag]{I: 3}, velox.Rel[dBadThrough, fixture.DTag]{I: 4}, velox.Rel[dBadThrough, fixture.DTag]{I: 5}}
 
 var dBadThroughMeta velox.MetaOnce[dBadThrough]
 
@@ -343,19 +342,17 @@ func (*dBadThrough) VeloxMeta() *velox.Meta[dBadThrough] {
 			Table:      "bad",
 			Columns:    []velox.ColumnDescriptor{{Field: "Key", Name: "key"}, {Field: "ID", Name: "id"}},
 			PrimaryKey: []int{1},
-			Tenant:     -1,
 			Edges: []velox.EdgeDescriptor{
 				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("Mismatch", 0, 0, 1, 0),  // a string owner key, an int64 join key
 				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("JoinCol", 1, 2, 1, 0),   // the join has two columns
 				velox.EdgeThrough[fixture.DBookTag, fixture.DAuthor]("Target", 1, 0, 1, 2), // an int64 join key, a string target key
 				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("Single", 1, 0, 1, 0),    // a One
 				velox.EdgeThrough[badDescriptor, fixture.DTag]("BadJoin", 1, 0, 0, 0),      // the join entity is invalid
-				velox.EdgeThrough[fixture.DAuthor, fixture.DTag]("TenantJ", 1, 0, 0, 0),    // the join entity has a tenant
 				velox.EdgeThrough[dPolicyJoin, fixture.DTag]("PolicyJ", 1, 0, 1, 0),        // the join entity has a Read policy
 			},
 			FieldPtr: func(x *dBadThrough, i int) any { return [...]any{&x.Key, &x.ID}[i] },
 			EdgeFieldPtr: func(x *dBadThrough, i int) any {
-				return [...]any{&x.Mismatch, &x.JoinCol, &x.Target, &x.Single, &x.BadJoin, &x.TenantJ, &x.PolicyJ}[i]
+				return [...]any{&x.Mismatch, &x.JoinCol, &x.Target, &x.Single, &x.BadJoin, &x.PolicyJ}[i]
 			},
 		}
 	})
@@ -371,9 +368,8 @@ func TestThroughRefusals(t *testing.T) {
 		{dBadThroughs.JoinCol.Has(), "velox: apitest.dBadThrough.JoinCol: its key names column 2 of fixture.DBookTag, which has 2"},
 		{dBadThroughs.Target.Has(), "velox: apitest.dBadThrough.Target: the key types differ: fixture.DBookTag.TagID is int64 and fixture.DAuthor.Name is string"},
 		{dBadThroughs.Single.Has(), "velox: apitest.dBadThrough.Single: a many-to-many relation needs a Many field"},
-		{dBadThroughs.BadJoin.Has(), "velox: apitest.dBadThrough.BadJoin: its join entity is invalid: apitest.badDescriptor: the tenant names column 3, of 1"},
-		{dBadThroughs.TenantJ.Has(), "velox: apitest.dBadThrough.TenantJ: its join entity fixture.DAuthor has a tenant column; a join entity is scoped through its TenantRefs, and can have neither a tenant column nor a Read policy"},
-		{dBadThroughs.PolicyJ.Has(), "velox: apitest.dBadThrough.PolicyJ: its join entity apitest.dPolicyJoin has a Read policy; a join entity is scoped through its TenantRefs, and can have neither a tenant column nor a Read policy"},
+		{dBadThroughs.BadJoin.Has(), "velox: apitest.dBadThrough.BadJoin: its join entity is invalid: apitest.badDescriptor: the primary key names column 3, of 1"},
+		{dBadThroughs.PolicyJ.Has(), "velox: apitest.dBadThrough.PolicyJ: its join entity apitest.dPolicyJoin has a Read policy; a join entity is read through its two sides, whose Read policies apply, and cannot have one of its own"},
 	} {
 		_, _, err := db.Query[dBadThrough]().Where(c.p).Limit(1).SQL(ctx)
 		var se *velox.SchemaError
@@ -396,7 +392,6 @@ func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 			Table:      "policy_joins",
 			Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
-			Tenant:     -1,
 			FieldPtr: func(x *dPolicyJoin, i int) any {
 				switch i {
 				case 0:
@@ -434,7 +429,6 @@ func (*dLinker) VeloxMeta() *velox.Meta[dLinker] {
 			Table:        "linkers",
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey:   []int{0},
-			Tenant:       -1,
 			Edges:        []velox.EdgeDescriptor{velox.EdgeThrough[dLink, fixture.DTag]("Tags", 0, 0, 1, 0)},
 			FieldPtr:     func(x *dLinker, i int) any { return &x.ID },
 			EdgeFieldPtr: func(x *dLinker, i int) any { return &x.Tags },
@@ -453,7 +447,6 @@ func (*dLink) VeloxMeta() *velox.Meta[dLink] {
 			Table:      "links",
 			Columns:    []velox.ColumnDescriptor{{Field: "LinkerID", Name: "linker_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
-			Tenant:     -1,
 			FieldPtr: func(x *dLink, i int) any {
 				switch i {
 				case 0:
@@ -504,10 +497,10 @@ func TestThroughJoinEntityWithInsertPolicy(t *testing.T) {
 	}
 	e2 := &fakeconn.Exec{Affected: 1}
 	db = openFake(velox.Postgres, e2)
-	if err := db.Insert(&dLink{LinkerID: 1, TagID: 2}).Exec(ctx); err != nil || e2.Calls != 1 {
+	if err := db.Insert(&dLink{LinkerID: 1, TagID: 2}).Exec(context.Background()); err != nil || e2.Calls != 1 {
 		t.Fatalf("an allowed link: %v, %d calls", err, e2.Calls)
 	}
-	err = db.Insert(&dLink{LinkerID: 1, TagID: 13}).Exec(ctx)
+	err = db.Insert(&dLink{LinkerID: 1, TagID: 13}).Exec(context.Background())
 	if !errors.Is(err, velox.ErrDenied) || e2.Calls != 1 {
 		t.Fatalf("a refused link: %v, %d calls", err, e2.Calls)
 	}
@@ -575,7 +568,6 @@ func (*dNote) VeloxMeta() *velox.Meta[dNote] {
 			Table:      "notes",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BookID", Name: "book_id"}},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[fixture.DBookTag, dNote]("SameBook", 1, 0, 0, 1)},
 			FieldPtr: func(x *dNote, i int) any {
 				switch i {
@@ -650,7 +642,6 @@ func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 			Table:      "peers",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			Edges: []velox.EdgeDescriptor{
 				velox.EdgeThrough[dFriend, dPeer]("Friends", 0, 0, 1, 0),
 				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("Tags", 0, 0, 1, 0),
@@ -694,7 +685,6 @@ func (*dFriend) VeloxMeta() *velox.Meta[dFriend] {
 			Table:      "friends",
 			Columns:    []velox.ColumnDescriptor{{Field: "PeerID", Name: "peer_id"}, {Field: "FriendID", Name: "friend_id"}},
 			PrimaryKey: []int{0, 1},
-			Tenant:     -1,
 			FieldPtr: func(x *dFriend, i int) any {
 				switch i {
 				case 0:
@@ -713,13 +703,14 @@ func (*dFriend) VeloxMeta() *velox.Meta[dFriend] {
 // Read back through a join is refused as a cycle.
 func TestThroughTargetPolicy(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	got, _, err := db.Query[dPeer]().Where(dPeers.Friends.Has()).Limit(1).SQL(ctx)
+	live := testmodel.Org.With(context.Background(), int64(7)) // ctx lifts every policy, the scope with it
+	got, _, err := db.Query[dPeer]().Where(dPeers.Friends.Has()).Limit(1).SQL(live)
 	inner := `EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND ` +
 		`EXISTS (SELECT 1 FROM "book_tags" AS "vx3" WHERE "vx3"."book_id" = "vx2"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx4" WHERE "vx4"."id" = "vx3"."tag_id" AND "name" = $`
 	if err != nil || !strings.Contains(got, inner) {
 		t.Errorf("got  %s, %v\nwant it to hold %s", got, err, inner)
 	}
-	cyc := context.WithValue(ctx, peerCycle{}, true)
+	cyc := context.WithValue(live, peerCycle{}, true)
 	const want = "velox: apitest.dPeer: the Read policy of apitest.dPeer reaches its own Read through an EXISTS; such a policy cannot be applied"
 	for name, q := range map[string]velox.Query[dPeer]{
 		"direct":         db.Query[dPeer]().Limit(1),

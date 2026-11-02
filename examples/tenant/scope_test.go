@@ -33,8 +33,8 @@ func openScoped(t *testing.T) *velox.DB {
 }
 
 func TestScopeKeyZeroIsNoValue(t *testing.T) {
-	ctx := gen.Org.With(t.Context(), 0)
-	if v, ok := gen.Org.From(ctx); ok {
+	ctx := gen.OrgKey.With(t.Context(), 0)
+	if v, ok := gen.OrgKey.From(ctx); ok {
 		t.Errorf("the zero value is a scope value: %v", v)
 	}
 	if _, err := openScoped(t).Query[gen.Project]().Count(ctx); !errors.Is(err, scope.ErrNoScope) {
@@ -53,7 +53,7 @@ func TestScopeKeysAreDistinct(t *testing.T) {
 
 func TestScopeIsolatesEveryStatement(t *testing.T) {
 	db := openScoped(t)
-	a, b := gen.Org.With(t.Context(), 1), gen.Org.With(t.Context(), 2)
+	a, b := gen.OrgKey.With(t.Context(), 1), gen.OrgKey.With(t.Context(), 2)
 	p := gen.Project{Name: "x", Status: "open"}
 	if err := db.Insert(&p).Exec(a); err != nil {
 		t.Fatal(err)
@@ -79,7 +79,7 @@ func TestScopeIsolatesEveryStatement(t *testing.T) {
 func TestScopeWithoutPolicyReadsAll(t *testing.T) {
 	db := openScoped(t)
 	for org := int64(1); org <= 2; org++ {
-		if err := db.Insert(&gen.Project{Name: "n", Status: "s"}).Exec(gen.Org.With(t.Context(), org)); err != nil {
+		if err := db.Insert(&gen.Project{Name: "n", Status: "s"}).Exec(gen.OrgKey.With(t.Context(), org)); err != nil {
 			t.Fatal(err)
 		}
 	}

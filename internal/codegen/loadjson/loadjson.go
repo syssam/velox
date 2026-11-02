@@ -7,7 +7,7 @@ package loadjson
 import "encoding/json"
 
 // Version is the version of the Model's JSON format.
-const Version = 3
+const Version = 4
 
 // SchemaPath is the import path of the schema DSL package. velox-gen uses it
 // to find the schemas of a package by their embedding of schema.Schema.
@@ -80,7 +80,6 @@ type Field struct {
 	Immutable     bool                       `json:"immutable,omitempty"`
 	Unique        bool                       `json:"unique,omitempty"`
 	Sensitive     bool                       `json:"sensitive,omitempty"`
-	Tenant        bool                       `json:"tenant,omitempty"`
 	Default       json.RawMessage            `json:"default,omitempty"`      // a literal Default
 	DefaultFunc   bool                       `json:"default_func,omitempty"` // DefaultFunc, or a func Default on time/uuid
 	UpdateDefault bool                       `json:"update_default,omitempty"`

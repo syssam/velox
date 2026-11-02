@@ -209,7 +209,7 @@ func TestColumnScanAllocsPerQuery(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ctx := velox.WithAllTenants(context.Background(), "test")
+	ctx := velox.WithoutPolicy(context.Background(), "test")
 	allocs := func(wrap bool, limit int) float64 {
 		db := openColumnScan(velox.SQLite, raw, wrap)
 		return testing.AllocsPerRun(50, func() {

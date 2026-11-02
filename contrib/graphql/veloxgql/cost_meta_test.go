@@ -75,7 +75,7 @@ func richSchemaOf(t testing.TB, n int, field ...graphql.Annotation) *ast.Schema 
 		nullable.Annotations = nil
 		nullable.Nullable, nullable.Pointer = true, true
 		m.Entities = append(m.Entities, &plugin.Entity{
-			Name: name, PrimaryKey: []int{0}, Tenant: -1,
+			Name: name, PrimaryKey: []int{0},
 			Fields: []*plugin.Field{
 				{Name: "id", GoName: "ID", Column: "id", Type: "int64", AutoID: true},
 				f("title", "string"), f("slug", "string"), f("summary", "string"), nullable,

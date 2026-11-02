@@ -27,6 +27,18 @@ func (*User) IsNode() {}
 // and the key id, encoded.
 func (x *User) IDGQL() string { return veloxgql.EncodeID("Account", x.ID) }
 
+// userNodeGQL is the Node type Account for Node and Nodes.
+func userNodeGQL() gqlimpl.NodeKind {
+	return gqlimpl.NewNode[User, *User](
+		"Account",
+		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "Account") },
+		func(db *velox.DB) velox.Query[User] { return db.Query[User]() },
+		userColumnsGQL,
+		Users.ID.EQ, Users.ID.In,
+		func(x *User) int64 { return x.ID },
+	)
+}
+
 // SettingsGQL is the field settings as JSON, the GraphQL scalar it is: gqlgen
 // binds the field to it.
 func (x *User) SettingsGQL() (veloxgql.JSON, error) {
@@ -132,9 +144,11 @@ func (c *AccountConnection) Edges(ctx context.Context) ([]*AccountEdge, error) {
 	if err != nil {
 		return nil, err
 	}
+	slab := make([]AccountEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*AccountEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		edges[i] = &AccountEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = AccountEdge{Node: x, Cursor: p.Cursors[i]}
+		edges[i] = &slab[i]
 	}
 	return edges, nil
 }
@@ -184,9 +198,9 @@ func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int,
 // cursors hold: a q whose Columns or Omit drops one is refused with an internal
 // error. In a gqlgen field, the page reads only the columns the selection needs
 // (userColumnsGQL), of those q selects; a column the selection does not need is
-// left zero in the nodes, except the key, the foreign keys, the order columns
-// and the tenant, so an application's resolver must not read one it did not ask
-// for. It runs no query.
+// left zero in the nodes, except the key, the foreign keys and the order
+// columns, so an application's resolver must not read one it did not ask for.
+// It runs no query.
 func AccountsConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
 	if !q.Selects(Users.ID) {
 		return nil, fmt.Errorf("veloxgql: AccountsConnectionOf: the base query does not select the key, which the cursors hold")
@@ -219,11 +233,11 @@ func userKeyGQL() []gqlimpl.OrderTerm[User] {
 }
 
 // userColumnsGQL is the columns a selection of the Account fields fields reads:
-// the key, every foreign key on the row, every order field's column, the tenant
-// column, and the column of each field. It is nil, every column, when a field
-// is not one velox-graphql wrote, such as an application's own.
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
 func userColumnsGQL(fields []string) []velox.Column[User] {
-	cols := []velox.Column[User]{Users.ID, Users.UserBestFriend, Users.OrgID}
+	cols := []velox.Column[User]{Users.ID, Users.UserBestFriend}
 	for _, f := range fields {
 		switch f {
 		case "id", "posts", "memberships", "likes":
@@ -297,13 +311,9 @@ type AccountWhereInput struct {
 
 // Pred is the condition w stands for, on Account nodes: every predicate w sets
 // holds, and a w that sets none, or a nil w, holds for every node. It fails,
-// before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or
-// a malformed one (veloxgql.ErrBadID), on a nesting deeper than the
-// MaxFilterDepth of veloxgql.LimitsFromContext(ctx)
-// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
-// of more than its MaxFilterWidth entries (veloxgql.ErrFilterTooWide), and on a
-// where argument of more than its MaxFilterNodes inputs, predicates and values
-// in all (veloxgql.ErrFilterTooLarge).
+// before any query runs, on an ID of another type or a malformed one, and on a
+// filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
+// gqlimpl.NewFilter's.
 func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	f := gqlimpl.NewFilter[User](ctx, "AccountWhereInput")
 	if w == nil {
@@ -401,55 +411,7 @@ type CreateAccountInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in CreateAccountInput) String() string {
-	var p0 any
-	if in.CreatedAt != nil {
-		p0 = *in.CreatedAt
-	}
-	var p1 any
-	if in.UpdatedAt != nil {
-		p1 = *in.UpdatedAt
-	}
-	var p4 any
-	if in.Role != nil {
-		p4 = *in.Role
-	}
-	var p5 any
-	if in.Nickname != nil {
-		p5 = *in.Nickname
-	}
-	var p6 any
-	if in.Bio != nil {
-		p6 = *in.Bio
-	}
-	var p7 any
-	if in.Age != nil {
-		p7 = *in.Age
-	}
-	var p9 any
-	if in.Score != nil {
-		p9 = *in.Score
-	}
-	var p10 any
-	if in.ExternalID != nil {
-		p10 = *in.ExternalID
-	}
-	var p11 any
-	if in.Avatar != nil {
-		p11 = *in.Avatar
-	}
-	var p13 any
-	if in.Active != nil {
-		p13 = *in.Active
-	}
-	var p14 any
-	if in.Settings != nil {
-		p14 = string(*in.Settings)
-	}
-	var p16 any
-	if in.BestFriendID != nil {
-		p16 = *in.BestFriendID
-	}
-	return fmt.Sprintf("CreateAccountInput(CreatedAt=%v, UpdatedAt=%v, DisplayName=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v, ExternalID=%v, Avatar=%v, Quota=%v, Active=%v, Settings=%v, MembershipIDs=%v, BestFriendID=%v)", p0, p1, in.DisplayName, in.Email, p4, p5, p6, p7, p9, p10, p11, in.Quota, p13, p14, in.MembershipIDs, p16)
+	return fmt.Sprintf("CreateAccountInput(CreatedAt=%v, UpdatedAt=%v, DisplayName=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v, ExternalID=%v, Avatar=%v, Quota=%v, Active=%v, Settings=%v, MembershipIDs=%v, BestFriendID=%v)", gqlimpl.Show(in.CreatedAt), gqlimpl.Show(in.UpdatedAt), in.DisplayName, in.Email, gqlimpl.Show(in.Role), gqlimpl.Show(in.Nickname), gqlimpl.Show(in.Bio), gqlimpl.Show(in.Age), gqlimpl.Show(in.Score), gqlimpl.Show(in.ExternalID), gqlimpl.Show(in.Avatar), in.Quota, gqlimpl.Show(in.Active), gqlimpl.ShowJSON(in.Settings), in.MembershipIDs, gqlimpl.Show(in.BestFriendID))
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -457,27 +419,27 @@ func (in CreateAccountInput) GoString() string { return in.String() }
 
 // CreateAccount creates an Account from input, with its edges, as the mutation
 // createAccount does, and returns the row as written. It runs atomically on the
-// DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the
-// policies. See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
+// DB veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations"
+// in the documentation of package github.com/syssam/velox/contrib/graphql for
+// what each input field does, what the caller may link and change, and the
+// errors.
 func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error) {
 	var (
-		j14 map[string]any
-		k15 []int64
-		k16 int64
-		err error
+		settingsJSON      map[string]any
+		membershipIDsKeys []int64
+		bestFriendIDKey   int64
+		err               error
 	)
 	if input.Settings != nil {
-		if j14, err = gqlimpl.FromJSON[map[string]any]("CreateAccountInput.settings", *input.Settings); err != nil {
+		if settingsJSON, err = gqlimpl.FromJSON[map[string]any]("CreateAccountInput.settings", *input.Settings); err != nil {
 			return nil, err
 		}
 	}
-	if k15, err = gqlimpl.DecodeIDs[int64](ctx, "CreateAccountInput.membershipIDs", input.MembershipIDs, "Group"); err != nil {
+	if membershipIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "CreateAccountInput.membershipIDs", input.MembershipIDs, "Group"); err != nil {
 		return nil, err
 	}
 	if input.BestFriendID != nil {
-		if k16, err = gqlimpl.DecodeID[int64]("CreateAccountInput.bestFriendID", *input.BestFriendID, "Account"); err != nil {
+		if bestFriendIDKey, err = gqlimpl.DecodeID[int64]("CreateAccountInput.bestFriendID", *input.BestFriendID, "Account"); err != nil {
 			return nil, err
 		}
 	}
@@ -537,7 +499,7 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 		cols = append(cols, Users.Active)
 	}
 	if input.Settings != nil {
-		x.Settings = j14
+		x.Settings = settingsJSON
 		cols = append(cols, Users.Settings)
 	}
 	if err := velox.Validate(&x, cols...); err != nil {
@@ -545,23 +507,23 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 	}
 	var out *User
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if len(k15) > 0 {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Group]().Where(Groups.ID.In(k15...)), len(k15), "CreateAccountInput.membershipIDs", "Group"); err != nil {
+		if len(membershipIDsKeys) > 0 {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Group]().Where(Groups.ID.In(membershipIDsKeys...)), len(membershipIDsKeys), "CreateAccountInput.membershipIDs", "Group"); err != nil {
 				return err
 			}
 		}
 		if input.BestFriendID != nil {
-			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(k16)), 1, "CreateAccountInput.bestFriendID", "Account"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(bestFriendIDKey)), 1, "CreateAccountInput.bestFriendID", "Account"); err != nil {
 				return err
 			}
-			x.UserBestFriend = &k16
+			x.UserBestFriend = &bestFriendIDKey
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userFieldGQL)
 		}
-		if len(k15) > 0 {
-			rows := make([]UserGroup, len(k15))
-			for i, k := range k15 {
+		if len(membershipIDsKeys) > 0 {
+			rows := make([]UserGroup, len(membershipIDsKeys))
+			for i, k := range membershipIDsKeys {
 				rows[i] = UserGroup{UserID: x.ID, GroupID: k}
 			}
 			if err := db.InsertAll(rows).OnConflict(UserGroups.UserID, UserGroups.GroupID).DoNothing().Exec(ctx); err != nil {

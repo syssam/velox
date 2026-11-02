@@ -1,6 +1,8 @@
 # 28. The runtime's edges fail, or say so
 
-Status: accepted, 2026-11-01.
+Status: accepted, 2026-11-01. The foreign-key check and the join-row scoping below
+(`TenantRefs`, `ErrTenantRef`) were removed by [0029](0029-scope-replaces-tenant.md); the
+rest stands.
 
 ## Context
 

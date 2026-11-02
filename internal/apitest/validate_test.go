@@ -1,6 +1,7 @@
 package apitest
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -8,12 +9,13 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 func TestInsertValidates(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
-	tctx := velox.WithTenant(ctx, int64(7))
+	tctx := testmodel.Org.With(context.Background(), int64(7))
 	err := db.Insert(&fixture.DAuthor{Name: ""}).Exec(tctx)
 	var ve *velox.ValidationError
 	if !errors.As(err, &ve) || ve.Field != "Name" || !errors.Is(err, fixture.ErrEmptyName) || err.Error() != "velox: fixture.DAuthor: Name: must not be empty" {
@@ -32,7 +34,7 @@ func TestInsertValidates(t *testing.T) {
 
 func TestUpdateValidatesAndRefusesImmutable(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 1})
-	tctx := velox.WithTenant(ctx, int64(7))
+	tctx := testmodel.Org.With(context.Background(), int64(7))
 	_, err := db.Update[fixture.DAuthor]().Set(fixture.DAuthors.Name.Set("")).Where(fixture.DAuthors.ID.EQ(1)).Exec(tctx)
 	var ve *velox.ValidationError
 	if !errors.As(err, &ve) {
@@ -59,27 +61,27 @@ func TestInsertValidatesAPointerColumnByItsElement(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	bad := "ada"
-	err := db.Insert(&fixture.DAuthor{Name: "ada", Email: &bad}).Exec(velox.WithTenant(ctx, int64(7)))
+	err := db.Insert(&fixture.DAuthor{Name: "ada", Email: &bad}).Exec(testmodel.Org.With(context.Background(), int64(7)))
 	var ve *velox.ValidationError
 	if !errors.As(err, &ve) || ve.Field != "Email" || err.Error() != "velox: fixture.DAuthor: Email: not an email" || e.Calls != 0 {
 		t.Fatalf("got %v", err)
 	}
 	ok := "ada@example.com"
-	if err := db.Insert(&fixture.DAuthor{Name: "ada", Email: &ok}).Exec(velox.WithTenant(ctx, int64(7))); err != nil {
+	if err := db.Insert(&fixture.DAuthor{Name: "ada", Email: &ok}).Exec(testmodel.Org.With(context.Background(), int64(7))); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestNilPointerIsNotValidated(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	if err := db.Insert(&fixture.DAuthor{Name: "ada"}).Exec(velox.WithTenant(ctx, int64(7))); err != nil {
+	if err := db.Insert(&fixture.DAuthor{Name: "ada"}).Exec(testmodel.Org.With(context.Background(), int64(7))); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestUpdateSetNullIsNotValidated(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 1})
-	tctx := velox.WithTenant(ctx, int64(7))
+	tctx := testmodel.Org.With(context.Background(), int64(7))
 	// SetNull of a pointer column assigns nil: not checked.
 	if _, err := db.Update[fixture.DAuthor]().Set(fixture.DAuthors.Email.SetNull()).Where(fixture.DAuthors.ID.EQ(1)).Exec(tctx); err != nil {
 		t.Fatal(err)

@@ -96,9 +96,9 @@ func seedBench(t testing.TB, db *velox.DB, users, posts, tags int) {
 		do   func() error
 	}{
 		{"users", func() error { return db.InsertAll(us).Exec(ctx) }},
-		{"posts", func() error { return db.InsertAll(ps).Exec(velox.WithTenant(ctx, acme)) }},
+		{"posts", func() error { return db.InsertAll(ps).Exec(gen.OrgKey.With(ctx, acme)) }},
 		{"tags", func() error { return db.InsertAll(ts).Exec(ctx) }},
-		{"links", func() error { return db.InsertAll(links).Exec(velox.WithTenant(ctx, acme)) }},
+		{"links", func() error { return db.InsertAll(links).Exec(gen.OrgKey.With(ctx, acme)) }},
 	} {
 		if err := step.do(); err != nil {
 			t.Fatalf("seeding %s: %v", step.name, err)

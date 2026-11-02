@@ -13,11 +13,11 @@ import (
 type Project struct{ schema.Schema }
 
 // Fields returns the columns after the ID. OrgID is Immutable, so that an
-// update cannot move a row to another organization. gen/scope.go confines every
-// statement on Project to the organization the context names.
+// update cannot move a row to another organization, and Scoped: velox-gen
+// confines every statement on Project to the organization the context names.
 func (Project) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable(),
+		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.String("name"),
 		field.String("status"),
 	}

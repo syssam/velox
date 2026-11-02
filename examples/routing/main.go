@@ -1,4 +1,4 @@
-// Command routing shows routing: two shards chosen by tenant, a read replica
+// Command routing shows routing: two shards chosen by organization, a read replica
 // for one of them, and a session that reads its own write from the primary
 // while the replica is behind.
 package main
@@ -40,24 +40,28 @@ func main() {
 //go:embed migrations
 var migrations embed.FS
 
-// The tenants, of the tenant column's Go type: int64. WithTenant would convert
-// an untyped 1, but shardFor sees its id as given, and an int 1 would not
-// match acme: so these stay typed constants.
+// The organizations, of the scope key's Go type: int64.
 const (
 	acme   int64 = 1 // its data is on the eu shard
 	globex int64 = 2 // its data is on the us shard
 )
 
-// shardFor maps a statement's tenant to its shard. An application would look
-// the tenant up in its own directory; an error refuses the statement.
-func shardFor(_ context.Context, tenant any) (string, error) {
-	switch tenant {
+// shardFor maps a statement's organization to its shard. An application would
+// look the organization up in its own directory. A context with no organization
+// names no shard, which refuses the statement with ErrNoShard; an error refuses
+// it too.
+func shardFor(ctx context.Context) (string, error) {
+	org, ok := gen.OrgKey.From(ctx)
+	if !ok {
+		return "", nil
+	}
+	switch org {
 	case acme:
 		return "eu", nil
 	case globex:
 		return "us", nil
 	}
-	return "", fmt.Errorf("tenant %v has no shard", tenant)
+	return "", fmt.Errorf("org %d has no shard", org)
 }
 
 // A handler serves one request, with its context.
@@ -197,16 +201,16 @@ func run(ctx context.Context, w io.Writer) error {
 		// current.
 		return read(velox.WithPrimaryReads(ctx), "read, Primary")
 	})
-	if err := edit(velox.WithTenant(ctx, acme)); err != nil {
+	if err := edit(gen.OrgKey.With(ctx, acme)); err != nil {
 		return err
 	}
 
 	// A write for globex reaches only the us shard.
 	note := gen.Note{Body: "us note"}
-	if err := db.Insert(&note).Exec(velox.WithTenant(ctx, globex)); err != nil {
+	if err := db.Insert(&note).Exec(gen.OrgKey.With(ctx, globex)); err != nil {
 		return err
 	}
-	say("%-18s %q for tenant %d on %s", "insert:", note.Body, note.OrgID, where(ran))
+	say("%-18s %q for org %d on %s", "insert:", note.Body, note.OrgID, where(ran))
 	for _, name := range []string{"eu", "eu-replica", "us"} {
 		b, err := bodies(ctx, pools[name])
 		if err != nil {
@@ -216,10 +220,10 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 
 	// A statement that names no shard is refused, and nothing is sent to any of
-	// them. Without a tenant, a tenant-scoped entity fails earlier, with
-	// ErrNoTenant; WithAllTenants lifts that check, and then no shard is left
-	// to pick.
-	all := velox.WithAllTenants(ctx, "example admin count")
+	// them. Without an organization, a scoped entity would fail with
+	// scope.ErrNoScope; WithoutPolicy lifts that check, and then no shard is
+	// left to pick.
+	all := velox.WithoutPolicy(ctx, "example admin count")
 	_, err = db.Query[gen.Note]().Count(all)
 	say("%-18s ErrNoShard=%t", "no shard:", errors.Is(err, velox.ErrNoShard))
 	say("  %v", err)

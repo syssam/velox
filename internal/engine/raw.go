@@ -11,11 +11,11 @@ import (
 
 // execInfo is the EntityInfo of Exec's statements: the name their errors and
 // the Around hooks see. Exec scans nothing, so it has no table or columns.
-var execInfo = EntityInfo{Name: "Exec", Tenant: -1}
+var execInfo = EntityInfo{Name: "Exec"}
 
 // ErrNoReason is the error of raw SQL run without a reason.
 func ErrNoReason(name string) error {
-	return fmt.Errorf("velox: %s: raw SQL needs a reason, as it applies neither the tenant scope nor the policy", name)
+	return fmt.Errorf("velox: %s: raw SQL needs a reason, as it applies no policy", name)
 }
 
 // RawColumns maps the columns r returns, by name, to in's columns. It refuses
@@ -196,7 +196,7 @@ func (db *DB) RawExec(ctx context.Context, reason, query string, args []any) (in
 	if NoReason(reason) {
 		return 0, ErrNoReason(execInfo.Name)
 	}
-	st := &Statement{Op: OpRawExec, Entity: &execInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.InTx}
+	st := &Statement{Op: OpRawExec, Entity: &execInfo, SQL: query, Args: args, PolicyBypass: reason, InTx: db.InTx}
 	var res execResult
 	if err := db.Run(ctx, st, nil, &res); err != nil {
 		return 0, err

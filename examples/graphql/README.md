@@ -1,13 +1,13 @@
 # graphql
 
 A GraphQL server with gqlgen over velox entities: a `User` writes `Post`s,
-each post belongs to an organization (the tenant) and carries `Tag`s, a
+each post belongs to an organization and carries `Tag`s, a
 many-to-many edge, which the GraphQL schema calls `Label`.
 
 ```sh
 cd examples
 go run ./graphql            # serves http://localhost:8080/graphql
-# X-Org-ID picks the tenant, for this demo only (see below)
+# X-Org-ID picks the organization, for this demo only (see below)
 curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
   -d '{"query":"{ posts(first: 2) { totalCount edges { node { title author { name } } } } }"}' \
   localhost:8080/graphql
@@ -23,8 +23,8 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    `Mutations` the root mutations (`createPost`, `updatePost`, `deletePost`,
    `createLabel`, `updateLabel`, `createUser`, `updateUser`). A `Sensitive`
    field (`password_hash`) is in no type, where input or order: it is an
-   input only, `passwordHash` on `createUser` and `updateUser`. The tenant
-   column is in no type or input. `title` is `NotEmpty()`, a validator the
+   input only, `passwordHash` on `createUser` and `updateUser`. The `org_id`
+   column is `graphql.Skip()`ped: it is in no type or input. `title` is `NotEmpty()`, a validator the
    mutations run before any statement, and the tag's `name` is `Unique()`.
    `views` is `Optional()`: `createPost` may leave it out, and it is then 0,
    its zero value. `published_at` is `Optional().Nillable()`: `Optional`
@@ -100,7 +100,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
 6. `main.go`: gqlgen's server with `veloxgql.NewExtension(db)` first, which
    puts the DB and the limits in each operation's context (and runs a
    mutation in one transaction), `veloxgql.ErrorPresenter`, a limit on the
-   cost of a request, middlewares that put the tenant and the role in the
+   cost of a request, middlewares that put the organization and the role in the
    context, and the directive `@admin`.
 
 ### Mutations
@@ -114,15 +114,16 @@ row's join rows, then the row, and returns its ID. Repeated IDs count once,
 and adding a link that exists changes nothing.
 
 Every ID to set or add is checked against what the caller may read: the
-tenant scope and the entity's Read policy. An ID of another tenant's row, or
+organization scope and the entity's Read policy (the scope that
+`Scoped` generates and `Post`'s Policy). An ID of another organization's row, or
 of one a policy hides, is `NOT_FOUND`, as a missing one is, so a client
 cannot tell that a row exists. An ID to remove is not checked, and neither
 it nor `clearTags` or `clearPosts` touches a link to a row the caller may
 not read: `updateLabel(id:, input: {clearPosts: true})` unlinks the
 caller's organization's posts from the label, and another organization's
-stay linked. `deletePost` of another tenant's post is `NOT_FOUND`, and its
-join rows, which are not tenant-scoped, are left alone. A row's own delete
-removes all its join rows, whatever the tenant at their other end: the row
+stay linked. `deletePost` of another organization's post is `NOT_FOUND`, and its
+join rows are left alone. A row's own delete
+removes all its join rows, whatever the organization at their other end: the row
 is gone, and a shared row, as a label is, is unlinked from every
 organization's posts.
 
@@ -143,13 +144,14 @@ server, or in an operation `WithTxFilter` leaves out, runs in a transaction
 of its own, so it is never half-written either.
 
 **The row returned.** `createX` returns the row as written. `updateX`
-reads its row back under the tenant scope but without the Read policy: the
+reads its row back by its key without the policies, the organization scope
+among them: the
 caller just wrote it, so an update that moves the row out of the caller's
 Read view still returns it.
 
 **Write permission.** An update that changes only edges (`addTagIDs` and
 nothing else) still needs permission to write the row: it is checked under
-the same scope as an `UPDATE` of it, the tenant and the Read and Write
+the same scope as an `UPDATE` of it, the organization and the Read and Write
 policies, so no edge changes on a row the caller cannot write.
 
 **MySQL** needs `clientFoundRows=true` in its DSN
@@ -158,12 +160,12 @@ checks the `UPDATE`'s row count, and without it MySQL counts only the rows
 whose values changed, so an update that sets a field to its current value
 would read as `NOT_FOUND`.
 
-### The tenant comes from a header only in this demo
+### The organization comes from a header only in this demo
 
-`orgFromHeader` takes the tenant from the client's `X-Org-ID` header, so
-that you can try tenants with `curl`. That is for this demo only: a client
-that chooses its own tenant can read every tenant's rows. A real server
-derives the tenant from what authenticates the request (a verified session
+`orgFromHeader` takes the organization from the client's `X-Org-ID` header, so
+that you can try organizations with `curl`. That is for this demo only: a client
+that chooses its own organization can read every organization's rows. A real server
+derives the organization from what authenticates the request (a verified session
 or token), and ignores any header the client sets for it.
 
 ### A field for admins only
@@ -207,7 +209,7 @@ release, because those filters were unguarded before.
 The server sets `srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))`.
 gqlgen's default presenter shows the client every error's text, and velox's
 and the driver's name entities, tables, constraints and columns: without a
-tenant, a client would read `velox: gen.Post: no tenant in the context`.
+organization, a client would read `velox: gen.Post: select denied by policy: velox/scope: the context has no scope value: org`.
 `ErrorPresenter` shows only what is safe, with a code in
 `extensions.code`:
 
@@ -216,7 +218,7 @@ tenant, a client would read `velox: gen.Post: no tenant in the context`.
 | a bad ID, cursor, paging argument, filter or scalar | `BAD_USER_INPUT` | what was expected, as `ID: malformed ID: not canonical base64url without padding` |
 | an ID in a mutation that names no row the caller may see or change | `NOT_FOUND` | `deletePost: no Post has this ID` |
 | a conflicting update input (`publishedAt` with `clearPublishedAt`), too many IDs | `BAD_USER_INPUT` | naming the input field |
-| no tenant (`velox.ErrNoTenant`) | `UNAUTHENTICATED` | `unauthenticated` |
+| no organization (`scope.ErrNoScope`) | `UNAUTHENTICATED` | `unauthenticated` |
 | a policy's denial | `FORBIDDEN` | `forbidden` |
 | a validator's refusal | `BAD_USER_INPUT` | naming the input field: `UpdatePostInput.title: invalid value: must not be empty` |
 | a violated constraint | `BAD_USER_INPUT` | `unique constraint violated` |
@@ -317,7 +319,7 @@ SELECT "id", "name", "vx_owner" FROM (
 ```
 
 (The listing is laid out for reading; the statements are one line each.) The
-tenant condition is inside the window, so a post of another organization
+organization condition is inside the window, so a post of another organization
 takes no rank. `BenchmarkNestedRequest` runs a request of this shape over 50
 users: 5 statements at 10 users and at 50, where the edges resolved one parent
 at a time sent 221 and 1101. `TestNestedRequestBudget` pins the statements and
@@ -328,7 +330,7 @@ gqlgen only).
 
 | Request | Result |
 |---|---|
-| `node(id:)`, `nodes(ids:)` | one query per type, of the columns selected; `null` for an ID with no row, or a row of another tenant |
+| `node(id:)`, `nodes(ids:)` | one query per type, of the columns selected; `null` for an ID with no row, or a row of another organization |
 | an ID of another type (a `Post` ID in `authorID`) | a `BAD_USER_INPUT` error naming the expected type, and no query |
 | `first`/`after`, `last`/`before` | keyset pages, `n+1` rows read for `hasNextPage`/`hasPreviousPage` |
 | `orderBy`, `where` (`and`/`or`/`not`, `hasPostsWith`) | `ORDER BY … "id"`, `WHERE …`, `EXISTS (…)` |
@@ -340,9 +342,9 @@ gqlgen only).
 | a query or variables over a document limit (`MaxTokens`, `MaxFields`, `MaxFragments`, `MaxDepth`, `MaxNameBytes`, `MaxLiteralBytes`, `MaxVariableNodes`), or a body over `MaxBodyBytes` | `GRAPHQL_PARSE_FAILED` over the tokens, otherwise `BAD_USER_INPUT` naming the limit, and nothing validated or run |
 | an `orderBy` list of more than `MaxOrderTerms` terms | an error naming the limit, and no statement |
 | `email`, or a `where` on it, without `X-Role: admin` | a `FORBIDDEN` error; the filter runs no statement |
-| `Post` with tenant 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
+| `Post` with organization 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
 | `createPost`, `updatePost`, `deletePost` | a `COUNT` per edge's IDs, then the writes; the row as written |
-| `deletePost` of another tenant's post | `NOT_FOUND`, one `COUNT`, nothing deleted |
+| `deletePost` of another organization's post | `NOT_FOUND`, one `COUNT`, nothing deleted |
 | two mutations, the second failing | both rolled back, `data` `null` |
 | `createUser` setting `email` without `X-Role: admin` | `FORBIDDEN`, nothing written |
 
@@ -362,7 +364,7 @@ func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Curs
 }
 ```
 
-The query keeps its filters, its `With` loads and the tenant scope. Its
+The query keeps its filters, its `With` loads and the organization scope. Its
 `Offset` is cleared and its `Limit` replaced: the page is the
 connection's. It must have no `OrderBy`, which `ConnectionOf` refuses with
 an internal error (`velox.Query.Ordered`), since the connection orders it.

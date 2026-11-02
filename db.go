@@ -97,10 +97,9 @@ func OpenConn(d Dialect, c Conn, opts ...Option) *DB { return &DB{e: engine.Open
 // shards, chosen from the statement's context:
 //
 //  1. the shard WithShard names;
-//  2. otherwise, the one WithShardFor's function returns for the context's
-//     tenant (WithTenant); its error refuses the statement;
-//  3. otherwise none: the statement fails with ErrNoShard, as it does under
-//     WithAllTenants without WithShard.
+//  2. otherwise, the one WithShardFor's function returns for the context; its
+//     error refuses the statement;
+//  3. otherwise none: the statement fails with ErrNoShard.
 //
 // A name that is not one of shards fails with ErrNoShard too, naming it.
 // Within its shard a statement is routed as on a DB with replicas: writes to
@@ -176,10 +175,6 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 // that bound covers a savepoint's ROLLBACK TO only.
 //
 // WithTxAround's hooks wrap the whole call: every attempt and the commit.
-//
-// A write under a tenant that sets a foreign key to a tenant-scoped row first sends
-// one SELECT per such column in the transaction, a round trip each that Around hooks
-// do not see: see WithTenant.
 //
 // On a DB with replicas the transaction runs on the primary. On a DB opened
 // with OpenShards it runs on the primary of the shard ctx names, as a

@@ -101,7 +101,7 @@ func TestITestDSNNamesADatabase(t *testing.T) {
 }
 
 var (
-	ctx = velox.WithAllTenants(context.Background(), "velox tests")
+	ctx = velox.WithoutPolicy(context.Background(), "velox tests")
 	t0  = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	I   = testmodel.Invoices
 )

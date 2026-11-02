@@ -279,7 +279,6 @@ func (*dshared) VeloxMeta() *velox.Meta[dshared] {
 				{Field: "A", Name: "a", Default: map[string]any{"k": []int{1}}, Encode: enc, Decode: dec},
 			},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *dshared, i int) any {
 				switch i {
 				case 0:

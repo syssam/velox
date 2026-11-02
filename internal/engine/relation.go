@@ -67,6 +67,8 @@ type relation struct {
 // target.Columns[targetCol] or, for a many-to-many relation, the owner's and
 // the target's columns each equal a column of a row of the join entity.
 type Link struct {
+	Name       string // the relation's field in the owner
+	Many       bool   // a Many field: the relation can hold several rows, and cannot be joined
 	Target     *EntityInfo
 	OwnerCol   int
 	TargetCol  int
@@ -120,7 +122,7 @@ func (r *relation) build(owner *EntityInfo, use RelTarget) (Link, error) {
 	if err != nil {
 		return fail("its target %s is invalid: %s", targetName(rtype(r.typ)), strings.TrimPrefix(err.Error(), "velox: "))
 	}
-	l := Link{Target: t}
+	l := Link{Target: t, Name: r.Name, Many: r.Many}
 	// The indexes are literals in generated code: an index out of range
 	// is stale or hand-edited code, and would panic on first use.
 	if r.ownerCol < 0 || r.ownerCol >= len(owner.Columns) {
@@ -151,14 +153,10 @@ func (r *relation) buildThrough(owner *EntityInfo, l Link, fail func(string, ...
 	}
 	// Has reads the join rows inside its EXISTS, bound to the owner and the target,
 	// which are scoped, while a query of their own would need a condition: the two
-	// could disagree. So a join entity can have neither a tenant column nor a Read
-	// policy, and is scoped through its TenantRefs alone (Scoper.joinWhere). Its Insert
+	// could disagree. So a join entity cannot have a Read policy. Its Insert
 	// and Write policies apply only to writes of its rows, which they may check.
-	if j.Tenant != -1 {
-		return fail("its join entity %s has a tenant column; a join entity is scoped through its TenantRefs, and can have neither a tenant column nor a Read policy", j.Name)
-	}
 	if p := j.policy; p != nil && p.Read != nil {
-		return fail("its join entity %s has a Read policy; a join entity is scoped through its TenantRefs, and can have neither a tenant column nor a Read policy", j.Name)
+		return fail("its join entity %s has a Read policy; a join entity is read through its two sides, whose Read policies apply, and cannot have one of its own", j.Name)
 	}
 	for _, c := range [...]int{r.through.OwnerCol, r.through.TargetCol} {
 		if c < 0 || c >= len(j.Columns) {
@@ -262,7 +260,7 @@ func OfNode(ref RelRef, where []Predicate, err error, ps []unsafe.Pointer) Node 
 	n := Node{Op: OpIn, Col: int32(l.TargetCol), V: keys}
 	if l.Join != nil {
 		// The target's own scope applies to the statement that holds the
-		// condition, and the join's TenantRefs to its rows (Scoper.through).
+		// condition.
 		n = Node{Op: OpThrough, Col: int32(l.TargetCol), V: l.Join, W: l.JoinTarget,
 			Kids: []Node{{Op: OpIn, Col: int32(l.JoinOwner), V: keys}}}
 	}
@@ -275,4 +273,13 @@ func OfNode(ref RelRef, where []Predicate, err error, ps []unsafe.Pointer) Node 
 		kids = append(kids, p.n)
 	}
 	return Group(OpAnd, kids)
+}
+
+// RelOffset is the offset of relation i's field in the owner's struct, where a
+// joined row is stored, or why the relation is not a field of the entity.
+func RelOffset(in *EntityInfo, i int32) (uintptr, error) {
+	if i < 0 || int(i) >= len(in.rels) {
+		return 0, fmt.Errorf("velox: %s: has no relation %d; run go tool velox-gen", in.Name, i)
+	}
+	return in.rels[i].Off, nil
 }

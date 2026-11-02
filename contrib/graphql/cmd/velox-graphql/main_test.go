@@ -10,7 +10,7 @@ import (
 )
 
 // supports is what main passes plugin.Main.
-var supports = plugin.Supports{Protocol: 2, Model: 2}
+var supports = plugin.Supports{Protocol: 2, Model: 3}
 
 func respond(t *testing.T, in string) plugin.Response {
 	t.Helper()
@@ -45,7 +45,7 @@ func TestSupportsThisVelox(t *testing.T) {
 
 func TestRun(t *testing.T) {
 	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
-		Name: "User", Label: "user", Handles: "Users", Tenant: -1, PrimaryKey: []int{0},
+		Name: "User", Label: "user", Handles: "Users", PrimaryKey: []int{0},
 		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", ElemType: "int64"}, {Name: "name", GoName: "Name", Type: "string", ElemType: "string"}},
 	}}}
 	resp := respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, Generator: "velox-gen (devel)", OutPackage: "gen", OutPath: "example.com/app/gen", Model: m}))
@@ -69,11 +69,11 @@ func TestRun(t *testing.T) {
 		"malformed": {"{", "request"},
 		"options":   {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes no options; it is given a, x"},
 		"render": {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
-			Name: "User", Tenant: -1, PrimaryKey: []int{0},
+			Name: "User", PrimaryKey: []int{0},
 			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "other"}},
 		}}}}), "User"},
 		"go": {request(t, plugin.Request{Protocol: 2, OutPackage: "gen", Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
-			Name: "Node", Label: "node", Handles: "Nodes", Tenant: -1, PrimaryKey: []int{0},
+			Name: "Node", Label: "node", Handles: "Nodes", PrimaryKey: []int{0},
 			Fields:      []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "string"}},
 			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"type":"Vertex"}`)},
 		}}}}), "node_gql.go"},

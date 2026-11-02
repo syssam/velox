@@ -129,7 +129,17 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 	k = binary.AppendUvarint(k, uint64(len(st.OrderBy)))
 	for _, o := range st.OrderBy {
 		k = binary.AppendUvarint(k, uint64(o.Column))
+		k = binary.AppendUvarint(k, uint64(o.Rel))
 		k = append(k, bit(o.Desc))
+	}
+	k = binary.AppendUvarint(k, uint64(len(st.Joins)))
+	for _, j := range st.Joins {
+		k = binary.AppendUvarint(k, uint64(j.Ref.I))
+		k = append(k, bit(j.Left))
+		k = binary.AppendUvarint(k, uint64(len(j.On)))
+		for _, p := range j.On {
+			k = nodeKey(k, p.n)
+		}
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Set)))
 	for _, a := range st.Set {
@@ -160,7 +170,7 @@ func eachKey(k []byte, c *EachClause) []byte {
 	if c == nil {
 		return append(k, 0)
 	}
-	k = append(k, 1, bit(c.Limit > 0), bit(c.ownerRef != nil))
+	k = append(k, 1, bit(c.Limit > 0))
 	k = binary.AppendUvarint(k, uint64(c.Column))
 	k = binary.AppendUvarint(k, uint64(len(c.Keys)))
 	if j := c.Join; j != nil {

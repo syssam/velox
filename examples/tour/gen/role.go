@@ -1,7 +1,8 @@
 // Package gen holds the tour's entities. The *_velox.go files are written by
 // go tool velox-gen; the other files are written by hand: this one carries the
-// billing role of a request, and invoice.go and line.go the policies and the
-// hook, which velox-gen binds into the entities' metadata.
+// billing role of a request, and invoice.go and line.go the policies, and
+// invoice.go a hook, which velox-gen binds into the entities' metadata. The
+// organization scope is generated, from the schema, into scope_velox.go.
 package gen
 
 import (
@@ -22,7 +23,7 @@ const (
 type roleKey struct{}
 
 // WithRole returns ctx acting with role. In a service, authentication
-// middleware sets it, next to velox.WithTenant.
+// middleware sets it, next to the scope key's With.
 func WithRole(ctx context.Context, role Role) context.Context {
 	return context.WithValue(ctx, roleKey{}, role)
 }

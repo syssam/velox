@@ -21,7 +21,7 @@ import (
 // slices share the arrays the rows were read into, and one array of the rows
 // copied out of them, each capped at its length, so a row kept from one keeps
 // the others' rows alive too: copy it to keep it alone. The
-// statements are q's entity's, so its tenant scope, Read policy and hooks see
+// statements are q's entity's, so its Read policy, a scope included, and hooks see
 // them, and a row they hide takes no place in a page. Their cap is r's
 // MaxRows, else q's, else LimitEach's bound (LimitEach rows per owner), else
 // the DB's. A many-to-many relation is read in the same one statement, joined

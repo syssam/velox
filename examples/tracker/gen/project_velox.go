@@ -11,33 +11,51 @@ import (
 	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Project is the entity of schema Project.
 type Project struct {
-	ID        int64             `json:"id,omitempty"`
+	ID        int64             `json:"id"`
 	CreatedAt time.Time         `json:"created_at,omitzero"`
 	UpdatedAt time.Time         `json:"updated_at,omitzero"`
-	OrgID     int64             `json:"org_id,omitempty"`
-	Name      string            `json:"name,omitempty"`
+	OrgID     int64             `json:"org_id"`
+	Name      string            `json:"name"`
 	Issues    velox.Many[Issue] `json:"issues,omitzero"`
 }
 
+// The positions of Project's columns, in the order of its table.
+const (
+	projectColID = iota
+	projectColCreatedAt
+	projectColUpdatedAt
+	projectColOrgID
+	projectColName
+)
+
+// The positions of Project's edges.
+const (
+	projectEdgeIssues = iota
+)
+
 // Projects holds the typed handles of Project's columns and relations.
 var Projects = struct {
-	ID        velox.NumberCol[Project, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Project, int64]
+	// CreatedAt is the column created_at.
 	CreatedAt velox.OrderedCol[Project, time.Time]
+	// UpdatedAt is the column updated_at.
 	UpdatedAt velox.OrderedCol[Project, time.Time]
-	OrgID     velox.NumberCol[Project, int64]
-	Name      velox.StringCol[Project, string]
-	Issues    velox.Rel[Project, Issue]
+	// OrgID is the column org_id.
+	OrgID velox.NumberCol[Project, int64]
+	// Name is the column name.
+	Name velox.StringCol[Project, string]
+	// Issues is the edge issues, to Issue.
+	Issues velox.Rel[Project, Issue]
 }{
-	ID:        velox.NumberCol[Project, int64]{I: 0},
-	CreatedAt: velox.OrderedCol[Project, time.Time]{I: 1},
-	UpdatedAt: velox.OrderedCol[Project, time.Time]{I: 2},
-	OrgID:     velox.NumberCol[Project, int64]{I: 3},
-	Name:      velox.StringCol[Project, string]{I: 4},
-	Issues:    velox.Rel[Project, Issue]{I: 0},
+	ID:        velox.NumberCol[Project, int64]{I: projectColID},
+	CreatedAt: velox.OrderedCol[Project, time.Time]{I: projectColCreatedAt},
+	UpdatedAt: velox.OrderedCol[Project, time.Time]{I: projectColUpdatedAt},
+	OrgID:     velox.NumberCol[Project, int64]{I: projectColOrgID},
+	Name:      velox.StringCol[Project, string]{I: projectColName},
+	Issues:    velox.Rel[Project, Issue]{I: projectEdgeIssues},
 }
 
 var projectMeta velox.MetaOnce[Project]
@@ -45,53 +63,55 @@ var projectMeta velox.MetaOnce[Project]
 // VeloxMeta is called by velox, not by applications.
 func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(projectDescriptor) }
 
+// projectDescriptor describes Project to velox: its table, columns, edges and hooks.
 func projectDescriptor() velox.Descriptor[Project] {
 	d0 := (&sch.Project{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	d1 := (&sch.Project{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
-	d2 := (&sch.Project{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
+	f0 := (&sch.Project{}).Mixin()[0].Fields()[1].Descriptor()
+	d1 := f0.Default.(func() time.Time)
+	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Project]{
 		Table: "projects",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Name", Name: "name"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     3,
+		PrimaryKey: []int{projectColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{3, 4}, Unique: true}, // org_id, name
+			{Columns: []int{projectColOrgID, projectColName}, Unique: true}, // org_id, name
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Issue]("Issues", 0, 4),
+			velox.EdgeTo[Issue]("Issues", projectColID, issueColProjectID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Project)(nil).Policy()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(projectScope.Wrap((*Project)(nil).Policy())) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Project]{projectScope.Fill()}) },
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
-			case 0:
+			case projectColID:
 				return &x.ID
-			case 1:
+			case projectColCreatedAt:
 				return &x.CreatedAt
-			case 2:
+			case projectColUpdatedAt:
 				return &x.UpdatedAt
-			case 3:
+			case projectColOrgID:
 				return &x.OrgID
-			case 4:
+			case projectColName:
 				return &x.Name
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Project, i int) any {
 			switch i {
-			case 0:
+			case projectEdgeIssues:
 				return &x.Issues
 			}
 			return nil
 		},
 		Check: func(col int, v any) error {
 			switch col {
-			case 4:
+			case projectColName:
 				x := v.(string)
 				if x == "" {
 					return errors.New("must not be empty")
@@ -105,10 +125,10 @@ func projectDescriptor() velox.Descriptor[Project] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Project) String() string {
 	return fmt.Sprintf("Project(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Name=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Name)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Project) GoString() string { return x.String() }

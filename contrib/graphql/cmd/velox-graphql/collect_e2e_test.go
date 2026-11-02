@@ -9,7 +9,7 @@ import (
 // e2eCollectSchema is the schema of the collection integration test: nested connections
 // and edges served through real gqlgen. Its tables share no name with the
 // other e2e apps'.
-//   - Author and Book are tenant-scoped.
+//   - Author and Book are scoped by org_id, in gen/scope.go.
 //   - Genre is the M2M's other side, and Review a list edge (not a
 //     connection) of Book; Review's policy, in gen/review_policy.go, hides
 //     the reviews of 0 stars.
@@ -26,7 +26,7 @@ type Author struct{ schema.Schema }
 
 func (Author) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(graphql.Skip()),
 		field.String("name").Annotations(graphql.OrderField("NAME")),
 	}
 }
@@ -43,7 +43,7 @@ type Book struct{ schema.Schema }
 
 func (Book) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(graphql.Skip()),
 		field.Int64("author_id"),
 		field.String("title").Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
 	}
@@ -94,6 +94,28 @@ func (*Review) Policy() velox.Policy[Review] {
 		Read: func(context.Context) (velox.Pred[Review], error) { return Reviews.Stars.NEQ(0), nil },
 	}
 }
+`
+
+// e2eCollectScope scopes Author and Book to the org the context names, by
+// hand in the generated package.
+const e2eCollectScope = `package gen
+
+import (
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/scope"
+)
+
+var Org = scope.NewKey[int64]("org")
+
+var (
+	authorScope = scope.By(Org, Authors.OrgID.EQ, func(x *Author) *int64 { return &x.OrgID })
+	bookScope   = scope.By(Org, Books.OrgID.EQ, func(x *Book) *int64 { return &x.OrgID })
+)
+
+func (*Author) Policy() velox.Policy[Author] { return authorScope.Policy() }
+func (*Author) Hooks() []velox.Hook[Author]  { return []velox.Hook[Author]{authorScope.Fill()} }
+func (*Book) Policy() velox.Policy[Book]     { return bookScope.Policy() }
+func (*Book) Hooks() []velox.Hook[Book]      { return []velox.Hook[Book]{bookScope.Fill()} }
 `
 
 // e2eCollectGqlgen is the application's gqlgen.yml.
@@ -212,6 +234,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
+	"example.com/app/gen"
 	"example.com/app/graph"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -462,14 +485,14 @@ func newEnv(t *testing.T, tg target, opts ...veloxgql.Option) *env {
 		e.mu.Unlock()
 	}))
 	srv.AddTransport(transport.POST{})
-	// The tenant is the organization X-Org-ID names.
+	// The org is the organization X-Org-ID names.
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		org, err := strconv.ParseInt(r.Header.Get("X-Org-ID"), 10, 64)
 		if err != nil {
 			http.Error(w, "X-Org-ID is not a number", http.StatusBadRequest)
 			return
 		}
-		srv.ServeHTTP(w, r.WithContext(velox.WithTenant(r.Context(), org)))
+		srv.ServeHTTP(w, r.WithContext(gen.Org.With(r.Context(), org)))
 	}))
 	t.Cleanup(ts.Close)
 	e.url = ts.URL
@@ -793,10 +816,10 @@ func TestAliasesNested(t *testing.T) {
 	})
 }
 
-// TestTenantInsideWindow: a book another organization owns takes no rank in
+// TestOrgInsideWindow: a book another organization owns takes no rank in
 // a window, and is not counted: ann's first book by title overall is
 // globex's "Aardvark", and her page under acme starts at "Alpha".
-func TestTenantInsideWindow(t *testing.T) {
+func TestOrgInsideWindow(t *testing.T) {
 	type summary struct {
 		Name  string
 		Books bookPage
@@ -914,6 +937,7 @@ func TestCollectRun(t *testing.T) {
 	_, run := app(t, map[string]string{
 		"schema/schema.go":          e2eCollectSchema,
 		"gen/review_policy.go":      e2eCollectPolicy,
+		"gen/scope.go":              e2eCollectScope,
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/schema.resolvers.go": e2eCollectResolvers,
 		"collect_test.go":           e2eCollectRun,
@@ -942,7 +966,7 @@ func TestCollectRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestNestedPerLevel", "TestBackwardAndCursorNested", "TestAliasesNested", "TestTenantInsideWindow", "TestPolicyHidden", "TestCostRefused", "TestListEdgeCap"} {
+	for _, name := range []string{"TestNestedPerLevel", "TestBackwardAndCursorNested", "TestAliasesNested", "TestOrgInsideWindow", "TestPolicyHidden", "TestCostRefused", "TestListEdgeCap"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

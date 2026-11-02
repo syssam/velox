@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "schema_path": "example.com/tmp/schema",
   "entities": [
     {
@@ -77,7 +77,6 @@
       "primary_key": [
         0
       ],
-      "tenant": -1,
       "annotations": {
         "Table": {
           "schema": "blog",
@@ -132,8 +131,7 @@
       "indexes": [],
       "primary_key": [
         0
-      ],
-      "tenant": -1
+      ]
     },
     {
       "name": "Post",
@@ -254,8 +252,7 @@
       "indexes": [],
       "primary_key": [
         0
-      ],
-      "tenant": -1
+      ]
     },
     {
       "name": "User",
@@ -323,7 +320,8 @@
           "column": "org_id",
           "type": "int64",
           "go_type": "int64",
-          "elem_type": "int64"
+          "elem_type": "int64",
+          "immutable": true
         },
         {
           "name": "name",
@@ -501,7 +499,6 @@
       "primary_key": [
         0
       ],
-      "tenant": 4,
       "annotations": {
         "Comment": {
           "text": "User is a person who writes posts."
@@ -537,8 +534,7 @@
       "primary_key": [
         0,
         1
-      ],
-      "tenant": -1
+      ]
     },
     {
       "name": "UserGroup",
@@ -569,8 +565,7 @@
       "primary_key": [
         0,
         1
-      ],
-      "tenant": -1
+      ]
     }
   ],
   "enums": [

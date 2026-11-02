@@ -38,10 +38,22 @@ type EachClause struct {
 	// Limit is the most rows per owner, in the statement's OrderBy; 0 is no
 	// limit, and is always 0 on a Count.
 	Limit int
-	// ownerRef is set by the scope on a read for owners the caller gave: the Join's
-	// TenantRef of its owner column, whose rows must be ownerTenant's.
-	ownerRef    *tenantRef
-	ownerTenant any
+}
+
+// JoinClause is a to-one relation joined into a SELECT: the target's columns
+// follow the statement's own in every row, and its conditions and orderings
+// (a Node of OpJoined, an OrderTerm with Rel) name it by the relation's index.
+// velox sets Joins for Query.Join and LeftJoin; a Rewrite hook may not change
+// them.
+type JoinClause struct {
+	Ref  RelRef // the relation, as the query named it
+	Left bool   // LEFT JOIN: the row stays, with no target, when there is none
+	// Link is Ref resolved, set before anything else reads the statement.
+	Link Link
+	// On holds the target's Read conditions, added by the scope to the join's ON
+	// clause: a target the policy hides is no match, so an inner join drops the
+	// row and a left join keeps it without a target.
+	On []Predicate
 }
 
 // keyed reports whether, on entity in, c reads rows by in's one-column
@@ -61,9 +73,8 @@ func (c *EachClause) windowed(in *EntityInfo) bool { return c.Limit > 0 && !c.ke
 // Raw SQL (OpRawQuery and OpRawExec) is not rendered: Rewrite hooks do not see
 // it, and its SQL, Args and Fingerprint are set when it is made. Its Entity is
 // the entity Raw scans into, or for Exec an EntityInfo named "Exec" with no
-// table or columns. Its TenantBypass and PolicyBypass both hold the caller's
-// reason, as given, untrimmed (so does a WithAllTenants or WithoutPolicy
-// reason).
+// table or columns. Its PolicyBypass holds the caller's reason, as given,
+// untrimmed (so does a WithoutPolicy reason).
 //
 // The EntityInfo that Entity points to is shared by every query on the
 // entity, in every goroutine: treat it as read-only. A rewrite hook may point
@@ -72,16 +83,17 @@ func (c *EachClause) windowed(in *EntityInfo) bool { return c.Limit > 0 && !c.ke
 // change the tables inside an EXISTS (see Rewrite).
 type Statement struct {
 	Op           Op
-	Entity       *EntityInfo // shared and read-only: replace it, never edit it
-	Count        bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook may not change it, or set Columns, and one that sets the others gets them rendered
-	Exists       bool        // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it, or set Columns
-	Aggregate    Aggregate   // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it, or Columns
-	GroupBy      int         // SELECT with Count or Aggregate: the key column's index plus one, 0 for none: one row per key, the key first; velox orders by the key, and a Rewrite hook may not change it
-	Each         *EachClause // SELECT: a relation read or counted per owner; a Rewrite hook may not change it
-	Lock         Lock        // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
-	LockWait     LockWait    // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it
-	Columns      []int       // SELECT: the selected columns, nil selects all; INSERT: the columns written
-	Where        []Predicate // all must hold
+	Entity       *EntityInfo  // shared and read-only: replace it, never edit it
+	Count        bool         // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook may not change it, or set Columns, and one that sets the others gets them rendered
+	Exists       bool         // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it, or set Columns
+	Aggregate    Aggregate    // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it, or Columns
+	GroupBy      int          // SELECT with Count or Aggregate: the key column's index plus one, 0 for none: one row per key, the key first; velox orders by the key, and a Rewrite hook may not change it
+	Joins        []JoinClause // SELECT: to-one relations joined in, each by Join or LeftJoin; a Rewrite hook may not change them
+	Each         *EachClause  // SELECT: a relation read or counted per owner; a Rewrite hook may not change it
+	Lock         Lock         // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
+	LockWait     LockWait     // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it
+	Columns      []int        // SELECT: the selected columns, nil selects all; INSERT: the columns written
+	Where        []Predicate  // all must hold
 	OrderBy      []OrderTerm
 	Limit        int // 0: no limit; after the Rewrite hooks, velox lowers it to the row cap + 1
 	Offset       int
@@ -93,8 +105,6 @@ type Statement struct {
 	Conflict     *ConflictClause // INSERT: the upsert clause, if any
 	Returning    []int           // INSERT: columns read back (PostgreSQL and SQLite)
 	AllRows      bool            // UPDATE and DELETE: the statement said All
-	Tenant       any             // the tenant scope applied, as the type of the entity's tenant column; nil when unscoped; when the entity is unscoped but the statement reads a scoped entity, the id as WithTenant was given it
-	TenantBypass string          // the WithAllTenants reason, when it applied; raw SQL's reason
 	PolicyBypass string          // the WithoutPolicy reason, when it applied; raw SQL's reason
 	DryRun       bool            // built for SQL(ctx), not sent
 	InTx         bool            // set by velox: the statement runs in a transaction, inside db.Tx or one velox opens for it (a split InsertAll, a policy-conditioned upsert, an EdgeBidi write); a Rewrite hook may not change it
@@ -134,7 +144,7 @@ type Statement struct {
 	// loop body runs.
 	iter bool
 	// loaded says a With load runs it, for owners read under this statement's scope:
-	// its join rows need no condition of their own, though they need a tenant.
+	// its join rows need no condition of their own.
 	loaded bool
 	// upsertPolicy is set by the scope when it added the policy's conditions to
 	// the upsert's update branch: an upsert that then affected fewer rows than it
@@ -158,9 +168,9 @@ type Statement struct {
 //
 // A hook that points st.Entity at another table changes the statement's own
 // table only: the tables in an EXISTS that Has or HasWhere adds keep their
-// names. The target's own tenant column and Read policy apply inside the
+// names. The target's own Read policy, a scope included, applies inside the
 // EXISTS, but a hook that moves tables cannot reach it. With a table per
-// tenant, avoid Has and HasWhere, or load the relation with With, which goes
+// scope value, avoid Has and HasWhere, or load the relation with With, which goes
 // through the hooks.
 type Rewrite func(ctx context.Context, st *Statement) error
 

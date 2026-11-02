@@ -26,7 +26,7 @@
 
 # root module
 github.com/syssam/velox/internal/engine 95.5
-github.com/syssam/velox/internal/fakeconn 89.9
+github.com/syssam/velox/internal/fakeconn 88.5
 github.com/syssam/velox/internal/apitest/fixture 88.0
 github.com/syssam/velox 88.0
 github.com/syssam/velox/bench/scale 70.6

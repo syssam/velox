@@ -439,7 +439,7 @@ func typesModel(t *testing.T) *plugin.Model {
 	where := func(ops graphql.WhereOp) map[string]json.RawMessage { return ann(graphql.Annotation{WhereOps: ops}) }
 	return &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{
 		{
-			Name: "Event", Label: "event", Handles: "Events", Tenant: -1, PrimaryKey: []int{0},
+			Name: "Event", Label: "event", Handles: "Events", PrimaryKey: []int{0},
 			Edges: []*plugin.Edge{{Name: "owner", GoName: "Owner", Target: "Owner", Kind: plugin.M2O, Unique: true, Field: "owner_id", FieldOn: "Event", OwnsKey: true, Annotations: ann(graphql.Annotation{WhereEdge: true})}},
 			Fields: []*plugin.Field{
 				{Name: "id", GoName: "ID", Type: "uuid", GoType: "uuid.UUID", ElemType: "uuid.UUID", PkgPath: "github.com/google/uuid", Kind: "array", Annotations: where(graphql.OpsDefault)},
@@ -454,7 +454,7 @@ func typesModel(t *testing.T) *plugin.Model {
 			},
 		},
 		{
-			Name: "Owner", Label: "owner", Handles: "Owners", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+			Name: "Owner", Label: "owner", Handles: "Owners", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
 			Fields: []*plugin.Field{
 				{Name: "id", GoName: "ID", Type: "int64", GoType: "ids.UserID", ElemType: "ids.UserID", PkgPath: "example.com/app/ids", Kind: "int64", Annotations: where(graphql.OpEQ)},
 				{Name: "email", GoName: "Email", Type: "string", GoType: "*ids.Email", ElemType: "ids.Email", PkgPath: "example.com/app/ids", Kind: "string", Pointer: true, Nullable: true, Annotations: where(graphql.OpEQ)},
@@ -502,8 +502,8 @@ func TestGoTypes(t *testing.T) {
 		` gqlimpl.Value(f, "atLT", w.AtLT, Events.At.LT) `,
 		` gqlimpl.Is(f, "atIsNil", w.AtIsNil, Events.At.IsNull) `,
 		` gqlimpl.Value(f, "refNEQ", w.RefNEQ, Events.Ref.NEQ) `,
-		` gqlimpl.IDAs(f, "ownerID", w.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FK[Owner](false, Events.OwnerID.EQ, Events.Owner.Has)) `,
-		` gqlimpl.IDListAs(f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FKList[Owner](false, Events.OwnerID.NotIn, Events.Owner.Has)) `,
+		` gqlimpl.IDAs(f, "ownerID", w.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FK[Owner](Events.OwnerID.EQ, Events.Owner.Has)) `,
+		` gqlimpl.IDListAs(f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FKList[Owner](Events.OwnerID.NotIn, Events.Owner.Has)) `,
 		` gqlimpl.Is(f, "hasOwner", w.HasOwner, Events.Owner.Has) `,
 		` gqlimpl.HasWith(f, "hasOwnerWith", w.HasOwnerWith, Events.Owner.HasWhere) `,
 	} {
@@ -539,20 +539,34 @@ func TestGoTypes(t *testing.T) {
 			t.Errorf("no %q in\n%s", want, owner)
 		}
 	}
-	for _, want := range []string{
-		"k, err := veloxgql.DecodeID[[16]byte](id, \"Event\")",
-		"Events.ID.EQ(uuid.UUID(k))",
-		"keysEvent = append(keysEvent, uuid.UUID(k))",
-		"by := make(map[uuid.UUID]*Event, len(rows))",
-		` "github.com/google/uuid" `,
-		` idspkg "example.com/app/ids" `,
-		"k, err := veloxgql.DecodeID[int64](id, \"Owner\")",
-		"Owners.ID.EQ(idspkg.UserID(k))",
-		"keysOwner []idspkg.UserID",
-		"by := make(map[idspkg.UserID]*Owner, len(rows))",
+	// A Node type's lookup converts its key between the base type an ID
+	// decodes to and the Go type of the column.
+	for file, wants := range map[string][]string{
+		ev: {
+			"func eventNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode[Event, *Event](",
+			"func(id string) (uuid.UUID, error) { k, err := veloxgql.DecodeID[[16]byte](id, \"Event\") return uuid.UUID(k), err },",
+			"Events.ID.EQ, Events.ID.In,",
+			"func(x *Event) uuid.UUID { return x.ID },",
+			` "github.com/google/uuid" `,
+			` idspkg "example.com/app/ids" `,
+		},
+		owner: {
+			"func ownerNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode[Owner, *Owner](",
+			"func(id string) (idspkg.UserID, error) { k, err := veloxgql.DecodeID[int64](id, \"Owner\") return idspkg.UserID(k), err },",
+			"Owners.ID.EQ, Owners.ID.In,",
+			"func(x *Owner) idspkg.UserID { return x.ID },",
+		},
+		node: {
+			`case "Event": return eventNodeGQL()`,
+			`case "Owner": return ownerNodeGQL()`,
+			"return gqlimpl.NodeByID(ctx, id, nodeKindGQL)",
+			"return gqlimpl.NodesByID(ctx, ids, nodeKindGQL)",
+		},
 	} {
-		if !strings.Contains(node, want) {
-			t.Errorf("no %q in\n%s", want, node)
+		for _, want := range wants {
+			if !strings.Contains(file, want) {
+				t.Errorf("no %q in\n%s", want, file)
+			}
 		}
 	}
 }
@@ -561,14 +575,14 @@ func TestGoTypes(t *testing.T) {
 // still exist, for the root query, and refuse every ID.
 func TestNoNodes(t *testing.T) {
 	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
-		Name: "Pair", Label: "pair", Handles: "Pairs", Tenant: -1, PrimaryKey: []int{0, 1}, Edges: []*plugin.Edge{},
+		Name: "Pair", Label: "pair", Handles: "Pairs", PrimaryKey: []int{0, 1}, Edges: []*plugin.Edge{},
 		Fields: []*plugin.Field{
 			{Name: "a", GoName: "A", Type: "int64", GoType: "int64", ElemType: "int64"},
 			{Name: "b", GoName: "B", Type: "int64", GoType: "int64", ElemType: "int64"},
 		},
 	}}}
 	node := render(t, m)["node_gql.go"]
-	if !strings.Contains(node, "func Node(_ context.Context, id string) (veloxgql.Noder, error) {") || strings.Contains(node, "DBFromContext(ctx)") {
+	if !strings.Contains(node, "func nodeKindGQL(typ string) gqlimpl.NodeKind {") || strings.Contains(node, "switch") {
 		t.Errorf("node_gql.go:\n%s", node)
 	}
 }
@@ -576,7 +590,7 @@ func TestNoNodes(t *testing.T) {
 func TestRenderErrors(t *testing.T) {
 	entity := func(name, keyType string) *plugin.Entity {
 		return &plugin.Entity{
-			Name: name, Label: strings.ToLower(name), Handles: name + "s", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+			Name: name, Label: strings.ToLower(name), Handles: name + "s", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
 			Fields: []*plugin.Field{
 				{Name: "id", GoName: "ID", Type: keyType, GoType: keyType, ElemType: keyType},
 				{Name: "x", GoName: "X", Type: "string", GoType: "string", ElemType: "string"},
@@ -623,6 +637,27 @@ func TestRenderErrors(t *testing.T) {
 		"a struct for a time": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Kind: "struct"})}},
 			"schema Thing, field at: velox-graphql converts a time field only from time.Time, and its Go type is types.Stamp"},
+		// A Node type writes thingNodeGQL, beside the names velox-gen declares.
+		"a handles variable named as a Node type's function": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
+			e := entity("Thing", "int64")
+			e.Handles = "thingNodeGQL"
+			return e
+		}()}}, "schema Thing: its Go name thingNodeGQL is also velox-gen's handles of schema Thing"},
+		"a handles variable named as node_gql.go's lookup": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
+			e := entity("Thing", "int64")
+			e.Handles = "nodeKindGQL"
+			return e
+		}()}}, "velox-graphql's nodeKindGQL: its Go name nodeKindGQL is also velox-gen's handles of schema Thing"},
+		"a key of a Go type it cannot name": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
+			e := entity("Thing", "int64")
+			e.Fields[0].ElemType, e.Fields[0].PkgPath, e.Fields[0].Kind = "[]types.ID", "example.com/types", "int64"
+			return e
+		}()}}, "schema Thing, field id: velox-graphql cannot name the Go type []types.ID"},
+		"a key of a Go type with no package": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
+			e := entity("Thing", "int64")
+			e.Fields[0].ElemType, e.Fields[0].Kind = "types.ID", "int64"
+			return e
+		}()}}, "schema Thing, field id: the model gives no package for the Go type types.ID"},
 		"a struct for a UUID key": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Thing", "uuid")
 			e.Fields[0].ElemType, e.Fields[0].PkgPath, e.Fields[0].Kind = "types.ID", "example.com/types", "struct"
@@ -996,7 +1031,7 @@ func TestCreateConversions(t *testing.T) {
 		` Tags veloxgql.JSON `,
 		`gqlimpl.DecodeIDAs[int64, idspkg.UserID]("CreateEventInput.ownerID", *input.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
 		`gqlimpl.FromJSON[[]string]("CreateEventInput.tags", input.Tags)`,
-		`gqlimpl.CheckExists(ctx, db.Query[Owner]().Where(Owners.ID.EQ(k`,
+		`gqlimpl.CheckExists(ctx, db.Query[Owner]().Where(Owners.ID.EQ(`,
 		`), 1, "CreateEventInput.ownerID", "Owner")`,
 		`return gqlimpl.WriteError(err, "CreateEventInput", "gen.Event", eventFieldGQL)`,
 		`case "Tags": return "tags"`,
@@ -1008,7 +1043,7 @@ func TestCreateConversions(t *testing.T) {
 	for _, want := range []string{
 		` Email *string `, ` Code string `, ` Rank int32 `,
 		`x.Code = idspkg.Code(input.Code)`,
-		`v0 := idspkg.Email(*input.Email) x.Email = &v0`,
+		`emailVal := idspkg.Email(*input.Email) x.Email = &emailVal`,
 		`x.Rank = idspkg.Rank(input.Rank)`,
 		`x.Ref = idspkg.Ref(input.Ref)`,
 	} {
@@ -1112,7 +1147,7 @@ func TestDeleteJoinRows(t *testing.T) {
 	setMutations(t, group, "delete")
 	// Follow joins User to itself: follows and its inverse, followers.
 	m.Entities = append(m.Entities, &plugin.Entity{
-		Name: "Follow", Label: "follow", Handles: "Follows", Table: "follows", Join: true, Tenant: -1, PrimaryKey: []int{0, 1},
+		Name: "Follow", Label: "follow", Handles: "Follows", Table: "follows", Join: true, PrimaryKey: []int{0, 1},
 		Fields: []*plugin.Field{
 			{Name: "follower_id", GoName: "FollowerID", Column: "follower_id", Type: "int64", GoType: "int64", ElemType: "int64"},
 			{Name: "followee_id", GoName: "FolloweeID", Column: "followee_id", Type: "int64", GoType: "int64", ElemType: "int64"},
@@ -1127,15 +1162,14 @@ func TestDeleteJoinRows(t *testing.T) {
 	for file, wants := range map[string][]string{
 		"user_gql.go": {
 			`func DeleteAccount(ctx context.Context, id string) (string, error) {`,
-			`chk := db.Query[User]().Where(Users.ID.EQ(key)).Writable() if db.Dialect() != velox.SQLite { chk = chk.ForUpdate() } if ok, err := chk.Exists(ctx);`,
-			`return gqlimpl.NotFound("deleteAccount", "Account")`,
+			`gqlimpl.LockRow(ctx, db, db.Query[User]().Where(Users.ID.EQ(key)), "deleteAccount", "Account")`,
 			`db.Delete[UserGroup]().Where(UserGroups.UserID.EQ(key)).Exec(ctx)`,
 			`db.Delete[Follow]().Where(velox.Or(Follows.FollowerID.EQ(key), Follows.FolloweeID.EQ(key))).Exec(ctx)`,
 			`db.Delete[User]().Where(Users.ID.EQ(key)).Exec(ctx)`,
 			`return veloxgql.EncodeID("Account", key), nil`,
 		},
 		"group_gql.go": {
-			`chk := db.Query[Group]().Where(Groups.ID.EQ(key)).Writable() if db.Dialect() != velox.SQLite { chk = chk.ForUpdate() } if ok, err := chk.Exists(ctx);`,
+			`gqlimpl.LockRow(ctx, db, db.Query[Group]().Where(Groups.ID.EQ(key)), "deleteGroup", "Group")`,
 			`db.Delete[UserGroup]().Where(UserGroups.GroupID.EQ(key)).Exec(ctx)`,
 			`db.Delete[Group]().Where(Groups.ID.EQ(key)).Exec(ctx)`,
 		},
@@ -1210,14 +1244,14 @@ func TestUpdateLocksTheRow(t *testing.T) {
 		}
 	}
 	files := render(t, m)
-	const lock = `if db.Dialect() != velox.SQLite { chk = chk.ForUpdate() } if ok, err := chk.Exists(ctx); err != nil {`
+	const lock = `gqlimpl.LockRow(ctx, db, db.Query[`
 	for _, fn := range []string{"UpdateGroup", "DeleteGroup", "DeleteAccount"} {
 		src := funcSrc(t, files, fn)
 		if src == "" {
 			t.Errorf("no %s", fn)
 			continue
 		}
-		if !strings.Contains(src, lock) || !strings.Contains(src, ".Writable() ") {
+		if !strings.Contains(src, lock) {
 			t.Errorf("%s does not lock its row before its edges:\n%s", fn, src)
 		}
 		if strings.Contains(src, "Writable().Count") {
@@ -1419,9 +1453,6 @@ func TestColumnsGQL(t *testing.T) {
 					t.Errorf("%s: %s: cols %v lack the key %s", label, name, cols, e.Fields[k].Name)
 				}
 			}
-			if e.Tenant >= 0 && !slices.Contains(cols, e.Handles+"."+e.Fields[e.Tenant].GoName) {
-				t.Errorf("%s: %s: cols %v lack the tenant column %s", label, name, cols, e.Fields[e.Tenant].Name)
-			}
 			for _, fd := range e.Fields {
 				if fd.Sensitive {
 					sensitive++
@@ -1436,8 +1467,7 @@ func TestColumnsGQL(t *testing.T) {
 		}
 	}
 	// The key, the foreign keys on the row and the order columns, always, in
-	// this order; a tenant column too, so that a row handed to an
-	// application's resolver never has a zero tenant.
+	// this order.
 	cols := colsLiteral(t, render(t, modeltest.Model(t)), "postColumnsGQL")
 	if len(cols) < 2 || cols[0] != "Posts.ID" || cols[1] != "Posts.AuthorID" {
 		t.Errorf("postColumnsGQL's cols %v, want the key and then the foreign keys", cols)
@@ -1475,7 +1505,7 @@ func TestConnectionOfChecksSelects(t *testing.T) {
 func TestM2MWithoutInverse(t *testing.T) {
 	entity := func(name string) *plugin.Entity {
 		return &plugin.Entity{
-			Name: name, Label: strings.ToLower(name), Handles: name + "s", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+			Name: name, Label: strings.ToLower(name), Handles: name + "s", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
 			Fields: []*plugin.Field{
 				{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64"},
 				{Name: "x", GoName: "X", Type: "string", GoType: "string", ElemType: "string"},
@@ -1599,13 +1629,13 @@ func TestMutationsHeading(t *testing.T) {
 // a list of keys is In.
 func TestSingleOwnerKeyEQ(t *testing.T) {
 	files := render(t, modeltest.Model(t))
-	in := regexp.MustCompile(`\.In\(k\d+\)\), 1,`)
+	in := regexp.MustCompile(`\.In\(\w+Keys?\)\), 1,`)
 	for name, src := range files {
 		if in.MatchString(src) {
 			t.Errorf("%s checks one owner key with In", name)
 		}
 	}
-	const want = `Users.ID.EQ(k7)), 1, "CreatePostInput.writerID"`
+	const want = `Users.ID.EQ(writerIDKey)), 1, "CreatePostInput.writerID"`
 	if !strings.Contains(files["post_gql.go"], want) {
 		t.Errorf("post_gql.go lacks %s", want)
 	}
@@ -1621,13 +1651,13 @@ func TestRepointO2OOrder(t *testing.T) {
 		return &plugin.Field{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64", AutoID: true}
 	}
 	owner := &plugin.Entity{
-		Name: "Owner", Label: "owner", Handles: "Owners", Tenant: -1, PrimaryKey: []int{0},
+		Name: "Owner", Label: "owner", Handles: "Owners", PrimaryKey: []int{0},
 		Fields:      []*plugin.Field{idField()},
 		Edges:       []*plugin.Edge{{Name: "pet", GoName: "Pet", Target: "Pet", Ref: "owner", Kind: plugin.O2O, Unique: true, Field: "owner_pet", FieldOn: "Pet"}},
 		Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"mutations":["update"]}`)},
 	}
 	pet := &plugin.Entity{
-		Name: "Pet", Label: "pet", Handles: "Pets", Tenant: -1, PrimaryKey: []int{0},
+		Name: "Pet", Label: "pet", Handles: "Pets", PrimaryKey: []int{0},
 		Fields: []*plugin.Field{idField(),
 			{Name: "owner_pet", GoName: "OwnerPet", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Nullable: true, Optional: true, Implicit: "pet"}},
 		Edges: []*plugin.Edge{{Name: "owner", GoName: "Owner", Target: "Owner", Ref: "pet", Kind: plugin.O2O, Unique: true, Inverse: true, Field: "owner_pet", FieldOn: "Pet", OwnsKey: true}},
@@ -1657,7 +1687,7 @@ func TestRepointO2OOrder(t *testing.T) {
 func TestMethodNameTaken(t *testing.T) {
 	for _, name := range []struct{ name, goName string }{{"is_node", "IsNode"}, {"id_gql", "IDGQL"}, {"title_gql", "TitleGQL"}} {
 		m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
-			Name: "Thing", Label: "thing", Handles: "Things", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+			Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
 			Fields: []*plugin.Field{
 				{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64"},
 				{Name: "title", GoName: "Title", Type: "string", GoType: "MyTitle", ElemType: "MyTitle", Kind: "string"},
@@ -1679,7 +1709,7 @@ func TestBytesGetter(t *testing.T) {
 		return &plugin.Field{Name: name, GoName: goName, Type: "bytes", GoType: "[]byte", ElemType: "[]byte", Kind: "slice", Nullable: nullable, Pointer: nullable}
 	}
 	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
-		Name: "Thing", Label: "thing", Handles: "Things", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+		Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
 		Fields: []*plugin.Field{
 			{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64"},
 			blob("data", "Data", false),
@@ -1694,5 +1724,22 @@ func TestBytesGetter(t *testing.T) {
 	}
 	if strings.Contains(got, "if x.Opt == nil { return veloxgql.Bytes{}") {
 		t.Errorf("a Nillable field lost its null:\n%s", got)
+	}
+}
+
+// TestPackageNamedAsALocal: the import of an application's package named as a
+// local the generated code declares, such as a key named after an input field
+// (writerKey), ctx or an unlink function, is named <name>pkg, so that the local
+// does not shadow it.
+func TestPackageNamedAsALocal(t *testing.T) {
+	for _, pkg := range []string{"writerKey", "ctx", "tagsJSON", "emailVal", "unlinkRelated", "idsKeys"} {
+		m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
+			Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", GoType: pkg + ".ID", ElemType: pkg + ".ID", PkgPath: "example.com/" + pkg, Kind: "int64"}},
+		}}}
+		src := render(t, m)["thing_gql.go"]
+		if want := pkg + `pkg "example.com/` + pkg + `"`; !strings.Contains(src, want) {
+			t.Errorf("package %s: no import %q in\n%s", pkg, want, src)
+		}
 	}
 }

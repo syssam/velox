@@ -345,7 +345,7 @@ func (s *server) addComment(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &in) {
 		return
 	}
-	// The issue is read in the caller's tenant: the foreign key alone would accept
+	// The issue is read in the caller's Org: the foreign key alone would accept
 	// an issue of another organization.
 	exists, err := s.db.Query[gen.Issue]().Where(gen.Issues.ID.EQ(id)).Exists(ctx)
 	if err == nil && !exists {

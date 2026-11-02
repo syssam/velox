@@ -171,7 +171,6 @@ type Field struct {
 	Immutable     bool    // refused in updates
 	Unique        bool    // a single-column unique index
 	Sensitive     bool    // left out of String(), JSON, logs and spans
-	Tenant        bool    // the tenant column
 	Default       any     // a value (or, on time and uuid, a func() T); nil when none
 	DefaultFunc   any     // a func() T; nil when none
 	UpdateDefault any     // a func() T; nil when none

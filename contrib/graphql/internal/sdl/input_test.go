@@ -21,6 +21,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	editedBy := &plugin.Field{Name: "edited_by", GoName: "EditedBy", Type: "string", UpdateDefault: true}
 	touched := &plugin.Field{Name: "touched", GoName: "Touched", Type: "time", Nullable: true, Optional: true, UpdateDefault: true}
 	org := field("org_id", "int64")
+	org.Annotations = ann(t, graphql.Skip()) // out of everything
 	secret := &plugin.Field{Name: "secret", GoName: "Secret", Type: "string", Sensitive: true}
 	handle := &plugin.Field{Name: "handle", GoName: "Handle", Type: "string", Immutable: true}
 	views := field("views", "int") // a hook fills it on create
@@ -35,7 +36,6 @@ func blogInputs(t *testing.T) *plugin.Model {
 	skipped.Annotations = ann(t, graphql.Skip())
 	bestFriend := &plugin.Field{Name: "user_best_friend", GoName: "UserBestFriend", Type: "int64", Nullable: true, Optional: true, Implicit: "best_friend"}
 	user := entity("User", name, nickname, role, created, updated, editedBy, touched, org, secret, handle, views, notes, hidden, createOnly, skipped, bestFriend)
-	user.Tenant = 8 // org_id
 	user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete))
 	posts := edge("posts", plugin.O2M, "Post")
 	posts.Field, posts.FieldOn = "author_id", "Post"
@@ -59,7 +59,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	post.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 
 	like := &plugin.Entity{
-		Name: "Like", Tenant: -1, PrimaryKey: []int{0, 1},
+		Name: "Like", PrimaryKey: []int{0, 1},
 		Fields: []*plugin.Field{field("user_id", "int64"), field("day", "string")},
 	}
 	lu := edge("user", plugin.M2O, "User")
@@ -158,8 +158,9 @@ func TestInputs(t *testing.T) {
 
 	t.Run("no create fields", func(t *testing.T) {
 		// An input type cannot be empty, and createX takes its input.
-		u := entity("User", field("org_id", "int64"))
-		u.Tenant = 1
+		only := field("only", "int64")
+		only.Annotations = ann(t, graphql.Skip(graphql.SkipMutationCreateInput))
+		u := entity("User", only)
 		u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate))
 		renderErr(t, model(u), "schema User", "create input", "no fields")
 	})
@@ -529,38 +530,4 @@ func folder(t *testing.T) *plugin.Entity {
 	f.Edges = []*plugin.Edge{ch, parent, nx, prev}
 	f.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 	return f
-}
-
-// TestTenantKeyIsNoInput: a tenant column that an edge holds is the tenant,
-// never an input, on either input; the edge stays in the type.
-func TestTenantKeyIsNoInput(t *testing.T) {
-	org := entity("Org", field("name", "string"))
-	posts := edge("posts", plugin.O2M, "Post")
-	posts.Field, posts.FieldOn, posts.Ref = "org_id", "Post", "org"
-	org.Edges = []*plugin.Edge{posts}
-	org.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
-	post := entity("Post", field("org_id", "int64"), field("title", "string"))
-	post.Tenant = 1
-	o := edge("org", plugin.M2O, "Org")
-	o.Required, o.Inverse, o.Field, o.FieldOn, o.Ref = true, true, "org_id", "Post", "posts"
-	post.Edges = []*plugin.Edge{o}
-	post.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
-	s, _ := load(t, model(org, post))
-	for _, in := range []string{"CreatePostInput", "UpdatePostInput"} {
-		if got, want := fieldsOf(s, in), []string{"title: String"}; in == "UpdatePostInput" && !slices.Equal(got, want) {
-			t.Errorf("%s: %v, want %v", in, got, want)
-		}
-		if slices.ContainsFunc(fieldsOf(s, in), func(f string) bool { return strings.Contains(f, "orgID") }) {
-			t.Errorf("%s has the tenant: %v", in, fieldsOf(s, in))
-		}
-	}
-	if got := typeOf(s, "Post", "org"); got != "Org" {
-		t.Errorf("Post.org: %q", got)
-	}
-	// The owner cannot re-point a tenant key either: it is never NULL.
-	for _, in := range []string{"CreateOrgInput", "UpdateOrgInput"} {
-		if slices.ContainsFunc(fieldsOf(s, in), func(f string) bool { return strings.Contains(strings.ToLower(f), "post") }) {
-			t.Errorf("%s re-points the tenant: %v", in, fieldsOf(s, in))
-		}
-	}
 }

@@ -24,7 +24,7 @@ func (Ticket) Mixin() []schema.Mixin { return []schema.Mixin{Stamp{}} }
 // Fields returns the columns after the ID and the mixin's.
 func (Ticket) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable(),
 		field.String("owner"),
 		field.String("title"),
 		field.Bool("done"),

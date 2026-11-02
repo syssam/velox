@@ -170,51 +170,6 @@ func InsertColumns(in *EntityInfo, skip int) []int {
 	return cols
 }
 
-// rowTenant is what an insert fills or checks its rows' tenant with: the
-// context's tenant converted to the tenant column's type (tenantFor), and the
-// WithAllTenants reason.
-type rowTenant struct {
-	id  any
-	all string
-}
-
-// InsertTenant returns the rowTenant of an insert of entity in, converted
-// once for all its rows.
-func InsertTenant(ctx context.Context, in *EntityInfo) (rowTenant, error) {
-	if in.Tenant < 0 {
-		return rowTenant{}, nil
-	}
-	id, all := TenantFrom(ctx)
-	if id != nil {
-		var err error
-		if id, err = tenantFor(in, id); err != nil {
-			return rowTenant{}, err
-		}
-	}
-	return rowTenant{id, all}, nil
-}
-
-// PrepareOne readies the one row at p, of entity in, as PrepareRow does.
-func PrepareOne(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
-	tn, err := InsertTenant(ctx, in)
-	if err != nil {
-		return err
-	}
-	return PrepareRow(in, p, tn)
-}
-
-// PrepareRow readies the row at p, of entity in, to be inserted, once its
-// defaults are filled: it fills or checks the tenant column with tn, from
-// InsertTenant. The validators, then the policy's Insert (InsertAllowed), run
-// after it. It changes the caller's entity, and the changes stay when the
-// insert then fails.
-func PrepareRow(in *EntityInfo, p unsafe.Pointer, tn rowTenant) error {
-	if in.Tenant >= 0 {
-		return fillTenant(in, p, tn.id, tn.all)
-	}
-	return nil
-}
-
 // InsertAllowed asks the policy's Insert about the row of in at p, prepared
 // and validated, unless WithoutPolicy.
 func InsertAllowed(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
@@ -222,46 +177,6 @@ func InsertAllowed(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error 
 		if err := pol.Insert(ctx, p); err != nil {
 			return &PolicyError{Entity: in.Name, Op: OpInsert, Err: err}
 		}
-	}
-	return nil
-}
-
-// tenantField returns the tenant field of the row of in at p.
-func tenantField(in *EntityInfo, p unsafe.Pointer) reflect.Value {
-	c := &in.Columns[in.Tenant]
-	return reflect.NewAt(GoType(*c), unsafe.Add(p, c.off)).Elem()
-}
-
-// fillTenant sets the row's zero tenant field to the context's tenant id,
-// which InsertTenant converted to the field's type, and checks one already
-// set. Under WithAllTenants (all) the row must name its tenant.
-func fillTenant(in *EntityInfo, p unsafe.Pointer, id any, all string) error {
-	if id != nil {
-		if v := tenantField(in, p); v.IsZero() {
-			v.Set(reflect.ValueOf(id))
-			return nil
-		}
-	}
-	return checkRowTenant(in, p, id, all, "the row has")
-}
-
-// checkRowTenant checks the row's tenant field against the context's tenant id,
-// converted to the field's type: under WithTenant the field must hold id, under
-// WithAllTenants (all) it must not be zero, and with neither the row has no
-// tenant. who says what put the value in the field.
-func checkRowTenant(in *EntityInfo, p unsafe.Pointer, id any, all, who string) error {
-	col := in.Columns[in.Tenant].Name
-	v := tenantField(in, p)
-	switch {
-	case all != "":
-		if v.IsZero() {
-			return fmt.Errorf("velox: %s: %w: under WithAllTenants the row names its tenant, and its %s is zero", in.Name, ErrNoTenant, col)
-		}
-		return nil
-	case id == nil:
-		return fmt.Errorf("velox: %s: %w", in.Name, ErrNoTenant)
-	case !v.Equal(reflect.ValueOf(id)):
-		return fmt.Errorf("velox: %s: %w: %s %s %v, the tenant is %v", in.Name, ErrTenantMismatch, who, col, v, id)
 	}
 	return nil
 }

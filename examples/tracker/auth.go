@@ -117,7 +117,7 @@ func (s *server) signup(w http.ResponseWriter, r *http.Request) {
 		if err := tx.Insert(&org).Exec(ctx); err != nil {
 			return err
 		}
-		ctx = velox.WithTenant(ctx, org.ID)
+		ctx = gen.OrgKey.With(ctx, org.ID)
 		u := gen.User{Email: in.Email, Name: in.Name, PasswordHash: hash, Role: gen.UserRoleAdmin}
 		if err := tx.Insert(&u).Exec(ctx); err != nil {
 			return err
@@ -179,7 +179,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, errorBody{errBadLogin.Error()})
 		return
 	}
-	token, err := newSession(velox.WithTenant(r.Context(), u.OrgID), s.db, u)
+	token, err := newSession(gen.OrgKey.With(r.Context(), u.OrgID), s.db, u)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -188,13 +188,13 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 // findLogin finds a user by organization and email. The Org is found first, which
-// gives the tenant the User statement is scoped to.
+// gives the Org the User statement is scoped to.
 func (s *server) findLogin(ctx context.Context, slug, email string) (*gen.User, error) {
 	org, err := s.db.Query[gen.Org]().Where(gen.Orgs.Slug.EQ(slug)).One(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return s.db.Query[gen.User]().Where(gen.Users.Email.EQ(email)).One(velox.WithTenant(ctx, org.ID))
+	return s.db.Query[gen.User]().Where(gen.Users.Email.EQ(email)).One(gen.OrgKey.With(ctx, org.ID))
 }
 
 // logout ends the session of the request's token.
@@ -228,8 +228,8 @@ func bearer(r *http.Request) string {
 	return token
 }
 
-// authed serves next with the request's context naming the caller's tenant and
-// the caller, which every tenant-scoped statement and policy then reads. A request
+// authed serves next with the request's context naming the caller's Org and
+// the caller, which every Org-scoped statement and policy then reads. A request
 // without a live session gets a 401.
 func (s *server) authed(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +245,7 @@ func (s *server) authed(next http.HandlerFunc) http.HandlerFunc {
 			s.fail(w, r, err)
 			return
 		}
-		ctx = velox.WithTenant(ctx, sess.OrgID)
+		ctx = gen.OrgKey.With(ctx, sess.OrgID)
 		u, err := s.db.Query[gen.User]().Where(gen.Users.ID.EQ(sess.UserID)).One(ctx)
 		if velox.IsNotFound(err) {
 			writeJSON(w, http.StatusUnauthorized, errorBody{"log in first"})

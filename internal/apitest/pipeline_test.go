@@ -58,7 +58,7 @@ func TestAroundMustCallNext(t *testing.T) {
 func TestHooksCannotChangeTheQuery(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1), "INV-1"}}}
 	scribble := func(_ context.Context, st *velox.Statement) error {
-		st.Where[0] = velox.ColumnEQ(st.Entity.Tenant, int64(9))
+		st.Where[0] = velox.Predicate(I.OrgID.EQ(9))
 		st.Columns[0], st.Columns[1] = st.Columns[1], st.Columns[0]
 		st.OrderBy[0] = velox.OrderTerm{Column: int(I.Total.I), Desc: true}
 		return nil

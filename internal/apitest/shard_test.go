@@ -19,8 +19,8 @@ import (
 )
 
 // shardSet is a DB on two shards: eu, a primary and a replica, and us, a
-// primary alone. Its WithShardFor maps tenant 1 to eu, 2 to us and 3 to
-// "mars", which is no shard, and fails for any other tenant.
+// primary alone. Its WithShardFor maps org 1 to eu, 2 to us and 3 to
+// "mars", which is no shard, and fails for any other org.
 type shardSet struct {
 	euP, euR, usP *fakeconn.Exec
 	db            *velox.DB
@@ -29,7 +29,7 @@ type shardSet struct {
 	routes        []velox.Route
 }
 
-var errShardLookup = errors.New("the tenant is being moved")
+var errShardLookup = errors.New("the org is being moved")
 
 // openShards opens a shardSet; hooked adds an Around hook that records each
 // statement's Route once it ran, a fallback included, so the statements take
@@ -53,15 +53,18 @@ func openShards(hooked bool, extra ...velox.Option) *shardSet {
 	return s
 }
 
-func (s *shardSet) shardFor(_ context.Context, tenant any) (string, error) {
+func (s *shardSet) shardFor(ctx context.Context) (string, error) {
 	s.lookups.Add(1)
-	switch tenant {
-	case int64(1):
+	org, _ := testmodel.Org.From(ctx)
+	switch org {
+	case 1:
 		return "eu", nil
-	case int64(2):
+	case 2:
 		return "us", nil
-	case int64(3):
+	case 3:
 		return "mars", nil
+	case 0:
+		return "", nil // the context has no org: it names no shard
 	}
 	return "", errShardLookup
 }
@@ -90,7 +93,7 @@ var (
 )
 
 // shardWork runs, under sctx, a read of invoices and one of items, an
-// update of items and an insert of an invoice: Item has no tenant column.
+// update of items and an insert of an invoice: Item has no org column.
 func shardWork(t *testing.T, sctx context.Context, db *velox.DB) {
 	t.Helper()
 	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(sctx); err != nil {
@@ -107,19 +110,19 @@ func shardWork(t *testing.T, sctx context.Context, db *velox.DB) {
 	}
 }
 
-// TestShardFromTenant: a statement runs on the shard WithShardFor gives for
-// the context's tenant, and on no other.
-func TestShardFromTenant(t *testing.T) {
+// TestShardFromOrg: a statement runs on the shard WithShardFor gives for
+// the context's org, and on no other.
+func TestShardFromOrg(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := openShards(hooked)
 		s.euR.Results = [][][]any{{invoiceRow(1)}, {itemRow(1, 1, "A", 1)}}
 		s.euP.Rows = [][]any{{int64(42)}} // the key the insert reads back
-		shardWork(t, velox.WithTenant(bg, int64(1)), s.db)
+		shardWork(t, testmodel.Org.With(bg, int64(1)), s.db)
 		s.check(t, hooked, [3]int{2, 2, 0}, euR0, euR0, euPrimary, euPrimary)
 
 		s = openShards(hooked)
 		s.usP.Results = [][][]any{{invoiceRow(1)}, {itemRow(1, 1, "A", 1)}, {{int64(42)}}}
-		shardWork(t, velox.WithTenant(bg, int64(2)), s.db)
+		shardWork(t, testmodel.Org.With(bg, int64(2)), s.db)
 		s.check(t, hooked, [3]int{0, 0, 4}, usPrimary, usPrimary, usPrimary, usPrimary)
 	})
 }
@@ -130,7 +133,7 @@ func TestShardWithLoads(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := openShards(hooked)
 		s.euR.Results = [][][]any{{invoiceRow(1)}, {itemRow(10, 1, "A", 1)}}
-		invs, err := s.db.Query[testmodel.Invoice]().With(I.Items).Limit(10).All(velox.WithTenant(bg, int64(1)))
+		invs, err := s.db.Query[testmodel.Invoice]().With(I.Items).Limit(10).All(testmodel.Org.With(bg, int64(1)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -144,14 +147,14 @@ func TestShardWithLoads(t *testing.T) {
 	})
 }
 
-// TestShardIterCountExists: Iter, Count and Exists run on the tenant's shard,
+// TestShardIterCountExists: Iter, Count and Exists run on the org's shard,
 // a read on its replica when it has one, and ask WithShardFor once each; a
-// tenant on no shard is refused.
+// org on no shard is refused.
 func TestShardIterCountExists(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := openShards(hooked)
 		s.usP.Results = [][][]any{{invoiceRow(1), invoiceRow(2)}, {{int64(2)}}, {{int64(1)}}}
-		uctx := velox.WithTenant(bg, int64(2))
+		uctx := testmodel.Org.With(bg, int64(2))
 		rows := 0
 		for _, err := range s.db.Query[testmodel.Invoice]().Limit(5).Iter(uctx) {
 			if err != nil {
@@ -175,7 +178,7 @@ func TestShardIterCountExists(t *testing.T) {
 
 		s = openShards(hooked)
 		s.euR.Results = [][][]any{{invoiceRow(1)}, {{int64(3)}}, {{int64(1)}}}
-		ectx := velox.WithTenant(bg, int64(1))
+		ectx := testmodel.Org.With(bg, int64(1))
 		for _, err := range s.db.Query[testmodel.Invoice]().Limit(5).Iter(ectx) {
 			if err != nil {
 				t.Fatal(err)
@@ -190,10 +193,10 @@ func TestShardIterCountExists(t *testing.T) {
 		s.check(t, hooked, [3]int{0, 3, 0}, euR0, euR0, euR0)
 
 		s = openShards(hooked)
-		_, err := s.db.Query[testmodel.Invoice]().Count(velox.WithTenant(bg, int64(3)))
+		_, err := s.db.Query[testmodel.Invoice]().Count(testmodel.Org.With(bg, int64(3)))
 		const want = `velox: testmodel.Invoice: no shard for the statement: WithShardFor gave "mars", which is not a shard of the DB`
 		if !errors.Is(err, velox.ErrNoShard) || err.Error() != want {
-			t.Errorf("Count on tenant 3: %v, want ErrNoShard %q", err, want)
+			t.Errorf("Count on org 3: %v, want ErrNoShard %q", err, want)
 		}
 		s.check(t, hooked, [3]int{0, 0, 0})
 	})
@@ -206,25 +209,25 @@ func TestShardFailoverStaysInShard(t *testing.T) {
 		s := openShards(hooked)
 		s.euR.Err = driver.ErrBadConn
 		s.euP.Rows = [][]any{invoiceRow(1)}
-		if _, err := s.db.Query[testmodel.Invoice]().Limit(1).All(velox.WithTenant(bg, int64(1))); err != nil {
+		if _, err := s.db.Query[testmodel.Invoice]().Limit(1).All(testmodel.Org.With(bg, int64(1))); err != nil {
 			t.Fatal(err)
 		}
 		s.check(t, hooked, [3]int{1, 1, 0}, velox.Route{Shard: "eu", Replica: -1, Fallback: true})
 	})
 }
 
-// TestWithShardWins: WithShard names the shard whatever the tenant, and is how
-// a statement on an entity with no tenant column finds its shard.
+// TestWithShardWins: WithShard names the shard whatever the org, and is how
+// a statement on an entity with no org column finds its shard.
 func TestWithShardWins(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := openShards(hooked)
 		s.usP.Rows = [][]any{invoiceRow(1)}
-		if _, err := s.db.Query[testmodel.Invoice]().Limit(1).All(velox.WithShard(velox.WithTenant(bg, int64(1)), "us")); err != nil {
+		if _, err := s.db.Query[testmodel.Invoice]().Limit(1).All(velox.WithShard(testmodel.Org.With(bg, int64(1)), "us")); err != nil {
 			t.Fatal(err)
 		}
-		// WithShard on the outer context, under a later WithTenant, still
-		// wins: the marks and the tenant are separate.
-		if _, err := s.db.Query[testmodel.Invoice]().Limit(1).All(velox.WithTenant(velox.WithShard(bg, "us"), int64(1))); err != nil {
+		// WithShard on the outer context, under a later Org.With, still
+		// wins: the marks and the org are separate.
+		if _, err := s.db.Query[testmodel.Invoice]().Limit(1).All(testmodel.Org.With(velox.WithShard(bg, "us"), int64(1))); err != nil {
 			t.Fatal(err)
 		}
 		s.euR.Rows = [][]any{itemRow(1, 1, "A", 1)}
@@ -255,12 +258,12 @@ func TestNoShard(t *testing.T) {
 		want []string // in the error's text, after the prefix
 		is   error    // matched besides ErrNoShard
 	}{
-		{"no tenant and no WithShard", bg, nil, nil},
-		{"WithAllTenants without WithShard", velox.WithAllTenants(bg, "report"), []string{"WithAllTenants"}, nil},
-		{"an unknown shard from WithShardFor", velox.WithTenant(bg, int64(3)), []string{`"mars"`}, nil},
-		{"an unknown shard from WithShard", velox.WithShard(velox.WithTenant(bg, int64(1)), "nope"), []string{`"nope"`}, nil},
-		{"WithShard with no name", velox.WithShard(velox.WithTenant(bg, int64(1)), ""), []string{`""`}, nil},
-		{"WithShardFor's error", velox.WithTenant(bg, int64(4)), []string{errShardLookup.Error()}, errShardLookup},
+		{"no scope value and no WithShard", bg, nil, nil},
+		{"WithoutPolicy without WithShard", velox.WithoutPolicy(bg, "report"), nil, nil},
+		{"an unknown shard from WithShardFor", testmodel.Org.With(bg, int64(3)), []string{`"mars"`}, nil},
+		{"an unknown shard from WithShard", velox.WithShard(testmodel.Org.With(bg, int64(1)), "nope"), []string{`"nope"`}, nil},
+		{"WithShard with no name", velox.WithShard(testmodel.Org.With(bg, int64(1)), ""), []string{`""`}, nil},
+		{"WithShardFor's error", testmodel.Org.With(bg, int64(4)), []string{errShardLookup.Error()}, errShardLookup},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -306,10 +309,10 @@ func TestTxPinsItsShard(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := openShards(hooked)
 		s.euP.Rows = [][]any{itemRow(1, 1, "A", 1)}
-		tctx := velox.WithTenant(bg, int64(1))
+		tctx := testmodel.Org.With(bg, int64(1))
 		var mismatch, lookup error
 		err := s.db.Tx(tctx, func(ctx context.Context, tx *velox.DB) error {
-			for _, sctx := range []context.Context{tctx, bg, velox.WithAllTenants(bg, "report"), velox.WithShard(bg, "eu")} {
+			for _, sctx := range []context.Context{tctx, bg, velox.WithoutPolicy(bg, "report"), velox.WithShard(bg, "eu")} {
 				if _, err := tx.Query[testmodel.Item]().Limit(1).All(sctx); err != nil {
 					return err
 				}
@@ -318,7 +321,7 @@ func TestTxPinsItsShard(t *testing.T) {
 				return err
 			}
 			_, mismatch = tx.Query[testmodel.Item]().Limit(1).All(velox.WithShard(tctx, "us"))
-			_, lookup = tx.Query[testmodel.Item]().Limit(1).All(velox.WithTenant(bg, int64(4)))
+			_, lookup = tx.Query[testmodel.Item]().Limit(1).All(testmodel.Org.With(bg, int64(4)))
 			return tx.Tx(bg, func(ctx context.Context, tx *velox.DB) error { // a savepoint, on eu too
 				_, err := tx.Query[testmodel.Item]().Limit(1).All(bg)
 				return err
@@ -363,11 +366,11 @@ func TestTxWithNoShard(t *testing.T) {
 		want string
 		is   error
 	}{
-		"no tenant":                        {bg, "", nil},
-		"unknown shard":                    {velox.WithTenant(bg, int64(3)), `"mars"`, nil},
-		"an unknown WithShard":             {velox.WithShard(bg, "nope"), `"nope"`, nil},
-		"WithAllTenants without WithShard": {velox.WithAllTenants(bg, "report"), "", nil},
-		"a failed lookup":                  {velox.WithTenant(bg, int64(4)), "", errShardLookup},
+		"no org":                          {bg, "", nil},
+		"unknown shard":                   {testmodel.Org.With(bg, int64(3)), `"mars"`, nil},
+		"an unknown WithShard":            {velox.WithShard(bg, "nope"), `"nope"`, nil},
+		"WithoutPolicy without WithShard": {velox.WithoutPolicy(bg, "report"), "", nil},
+		"a failed lookup":                 {testmodel.Org.With(bg, int64(4)), "", errShardLookup},
 	} {
 		t.Run(name, func(t *testing.T) {
 			hooks := 0
@@ -397,7 +400,7 @@ func TestTxWithNoShard(t *testing.T) {
 	}
 }
 
-// TestSQLiteFilePerShard: two SQLite files as two shards; each tenant's rows
+// TestSQLiteFilePerShard: two SQLite files as two shards; each org's rows
 // are in its own file only.
 func TestSQLiteFilePerShard(t *testing.T) {
 	dir := t.TempDir()
@@ -419,17 +422,18 @@ func TestSQLiteFilePerShard(t *testing.T) {
 	db := velox.OpenShards(velox.SQLite, map[string]velox.Shard{
 		"eu": {Primary: velox.SQLConn(eu)},
 		"us": {Primary: velox.SQLConn(us)},
-	}, velox.WithShardFor(func(_ context.Context, tenant any) (string, error) {
-		switch tenant {
-		case int64(1):
+	}, velox.WithShardFor(func(ctx context.Context) (string, error) {
+		org, _ := testmodel.Org.From(ctx)
+		switch org {
+		case 1:
 			return "eu", nil
-		case int64(2):
+		case 2:
 			return "us", nil
 		}
 		return "", errShardLookup
 	}))
 	for org, numbers := range map[int64][]string{1: {"E1", "E2"}, 2: {"U1"}} {
-		tctx := velox.WithTenant(bg, org)
+		tctx := testmodel.Org.With(bg, org)
 		for _, n := range numbers {
 			if err := db.Insert(&testmodel.Invoice{Number: n, Data: []byte("d")}).Exec(tctx); err != nil {
 				t.Fatal(err)
@@ -440,7 +444,7 @@ func TestSQLiteFilePerShard(t *testing.T) {
 			t.Fatal(err)
 		}
 		if len(got) != len(numbers) {
-			t.Errorf("tenant %d read %d invoices, want %d", org, len(got), len(numbers))
+			t.Errorf("org %d read %d invoices, want %d", org, len(got), len(numbers))
 		}
 	}
 	for name, c := range map[string]struct {
@@ -506,7 +510,7 @@ func TestSavepointChecksItsShard(t *testing.T) {
 // begins and for each statement in it.
 func TestShardForCallsPerWrite(t *testing.T) {
 	s := openShards(false)
-	tctx := velox.WithTenant(bg, int64(1))
+	tctx := testmodel.Org.With(bg, int64(1))
 	s.euP.Rows = [][]any{{int64(1)}}
 
 	reset := func() {

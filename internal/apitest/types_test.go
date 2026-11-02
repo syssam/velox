@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 func TestPolicyError(t *testing.T) {
@@ -53,14 +54,14 @@ func TestRowScopeOf(t *testing.T) {
 	if got := velox.RowScopeFromContext(ctx); got != (velox.RowScope{}) {
 		t.Errorf("no scope: %+v", got)
 	}
-	ctx = velox.WithoutPolicy(velox.WithTenant(ctx, int64(7)), "audit")
-	if got, want := velox.RowScopeFromContext(ctx), (velox.RowScope{Tenant: int64(7), PolicyBypass: "audit"}); got != want {
+	ctx = velox.WithoutPolicy(testmodel.Org.With(context.Background(), int64(7)), "audit")
+	if got, want := velox.RowScopeFromContext(ctx), (velox.RowScope{Values: velox.RowScopeFromContext(testmodel.Org.With(context.Background(), int64(7))).Values, PolicyBypass: "audit"}); got != want {
 		t.Errorf("%+v, want %+v", got, want)
 	}
-	if got := velox.RowScopeFromContext(velox.WithAllTenants(ctx, "nightly")); got.Tenant != nil || got.TenantBypass != "nightly" || got.PolicyBypass != "audit" {
-		t.Errorf("all tenants: %+v", got)
+	if got := velox.RowScopeFromContext(velox.WithoutPolicy(ctx, "nightly")); got.PolicyBypass != "nightly" {
+		t.Errorf("a later WithoutPolicy did not replace the reason: %+v", got)
 	}
-	if got, want := velox.RowScopeFromContext(velox.WithShard(ctx, "eu")), (velox.RowScope{Tenant: int64(7), PolicyBypass: "audit", Shard: "eu", HasShard: true}); got != want {
+	if got, want := velox.RowScopeFromContext(velox.WithShard(ctx, "eu")), (velox.RowScope{Values: velox.RowScopeFromContext(ctx).Values, PolicyBypass: "audit", Shard: "eu", HasShard: true}); got != want {
 		t.Errorf("on a shard: %+v, want %+v", got, want)
 	}
 	if got := velox.RowScopeFromContext(velox.WithShard(ctx, "")); !got.HasShard || got == velox.RowScopeFromContext(ctx) {

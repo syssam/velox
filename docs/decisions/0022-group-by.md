@@ -4,8 +4,8 @@ Date: 2026-10-31
 
 ## Context
 
-`Sum`, `Avg`, `Min` and `Max` left `GROUP BY` to `Raw`, which skips the tenant scope and
-the policy. A typed form must infer the key's Go type from a column handle, refuse a
+`Sum`, `Avg`, `Min` and `Max` left `GROUP BY` to `Raw`, which skips the policy,
+a scope included,. A typed form must infer the key's Go type from a column handle, refuse a
 JSON column and another entity's column at compile time, and cost an entity's package
 nothing it does not use (`TestGenericTypesCompileSmall`).
 
@@ -47,7 +47,7 @@ One key:
 - **Order.** `ORDER BY` the key, ascending, always. Text keys follow the database's
   collation. velox sets it in `Statement.OrderBy`, so a Rewrite hook can see it and,
   as on a Count, one that changes it gets it rendered.
-- **What is read of q.** As `Sum`: Where, the tenant scope, the Read policy and After's
+- **What is read of q.** As `Sum`: Where, the Read policy (a scope included) and After's
   condition apply; ordering, limit, offset, columns and relations are ignored; a lock is
   refused.
 - **The limit guard applies.** A key may be unique, so the groups can be as many as the

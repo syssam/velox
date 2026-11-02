@@ -130,6 +130,22 @@ type genModel struct {
 	rels       []string // every relation's handle, e.g. "Users.Posts", join entities included
 }
 
+// scopeNames are the package-level names velox-gen writes for scopes: each
+// key's variable and each scoped entity's scope variable. A file of the user's
+// may not declare them.
+func (gm *genModel) scopeNames() []string {
+	var names []string
+	for _, k := range gm.out.ScopeKeys {
+		names = append(names, k.Var)
+	}
+	for _, e := range gm.out.Entities {
+		if e.Scope != nil {
+			names = append(names, e.Scope.Var)
+		}
+	}
+	return names
+}
+
 // loadModel loads and builds the schema package at pattern and lowers it to
 // the names of its generated entities.
 func loadModel(dir, pattern, pkg string, env []string) (*genModel, error) {
@@ -184,7 +200,7 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		}
 		return fail(err)
 	}
-	bound, err := codegen.Methods(out, gm.names)
+	bound, err := codegen.Methods(out, gm.names, gm.scopeNames())
 	if err != nil {
 		return failFile(err)
 	}

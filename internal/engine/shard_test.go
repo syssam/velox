@@ -11,14 +11,14 @@ import (
 )
 
 // TestDryRunIsRouted pins that SQL(ctx) refuses a
-// statement with no shard as a run would, calling WithShardFor once.
+// statement with no shard as a run would, calling WithShardFor once per statement.
 func TestDryRunIsRouted(t *testing.T) {
 	s := openShards(true)
 	q := s.db.Query[testmodel.Item]().Limit(1)
 	for _, c := range []struct {
 		ctx     context.Context
 		lookups int32
-	}{{bg, 0}, {velox.WithTenant(bg, int64(3)), 1}, {velox.WithTenant(bg, int64(4)), 1}} {
+	}{{bg, 1}, {testmodel.Org.With(bg, int64(3)), 1}, {testmodel.Org.With(bg, int64(4)), 1}} {
 		s.lookups.Store(0)
 		if _, _, err := q.SQL(c.ctx); !errors.Is(err, velox.ErrNoShard) {
 			t.Errorf("Query.SQL: %v, want ErrNoShard", err)
@@ -34,10 +34,10 @@ func TestDryRunIsRouted(t *testing.T) {
 		}
 	}
 
-	tctx := velox.WithTenant(bg, int64(1))
+	tctx := testmodel.Org.With(bg, int64(1))
 	text, _, err := q.SQL(tctx)
 	if err != nil || !strings.Contains(text, `FROM "items"`) {
-		t.Fatalf("SQL with a tenant: %q, %v", text, err)
+		t.Fatalf("SQL with a scope value: %q, %v", text, err)
 	}
 	st := velox.Statement{Op: velox.OpSelect, Entity: infoOf[testmodel.Item](), Limit: 1}
 	if _, _, err := dryRun(tctx, s.db, &st); err != nil {

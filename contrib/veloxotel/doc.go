@@ -35,8 +35,8 @@
 // db.collection.name or db.query.summary, and is named as the conventions
 // name a span without a summary: for Config.Target's (or TargetFor's)
 // Namespace, else its Address and Port ("db.internal:5432"), else the
-// database system ("postgresql"). Its span carries velox.tenant_bypass and
-// velox.policy_bypass, the reasons for a bypass. Its text is recorded only
+// database system ("postgresql"). Its span carries velox.policy_bypass, the
+// reason for a bypass. Its text is recorded only
 // when it has arguments: the conventions say text that is not parameterized
 // should not be collected by default, and velox cannot tell whether raw text
 // without arguments holds literals. A read's span
@@ -131,12 +131,12 @@
 // names, error type and status code and, on a sharded DB, shard for a
 // statement; the outcome, read-only flag, whether it retried, the server and,
 // on a sharded DB, shard for a transaction; and the shard alone for the
-// fallback counter. Tags, the tenant,
+// fallback counter. Tags, the scope values,
 // the SQL text and the call site are on spans only; the fingerprint is added to
 // the statement metrics only with Config.RecordMetricFingerprint.
 //
-// A statement that velox refuses before it is sent (a guard, the tenant
-// scope, a policy or a hook) reaches no Around hook, so it makes no
+// A statement that velox refuses before it is sent (a guard, a policy or a hook,
+// as a scope is) reaches no Around hook, so it makes no
 // statement span: the refusal is the error of the call, and of the
 // transaction it ends.
 //

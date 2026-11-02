@@ -11,6 +11,7 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 )
 
 // sqlOK returns SQL(ctx)'s text and args, failing t on its error:
@@ -25,10 +26,10 @@ func sqlOK(t *testing.T) func(string, []any, error) (string, []any) {
 	}
 }
 
-// annIn7 acts as ann under tenant 7: Ticket's tenant scope, policy and hooks
+// annIn7 acts as ann under org 7: Ticket's scope, policy and hooks
 // all apply.
 func annIn7() context.Context {
-	return testmodel.WithUser(velox.WithTenant(context.Background(), int64(7)), "ann")
+	return testmodel.WithUser(testmodel.Org.With(context.Background(), int64(7)), "ann")
 }
 
 // sameAsSent fails t unless SQL(ctx)'s text and args are what e was sent.
@@ -148,8 +149,8 @@ func TestSQLReportsTheRefusal(t *testing.T) {
 		t.Errorf("unbounded: %q %v %v", text, args, err)
 	}
 	text, _, err = db.Query[testmodel.Ticket]().Limit(1).SQL(testmodel.WithUser(context.Background(), "ann"))
-	if !errors.Is(err, velox.ErrNoTenant) || text != "" {
-		t.Errorf("no tenant: %q %v", text, err)
+	if !errors.Is(err, scope.ErrNoScope) || text != "" {
+		t.Errorf("no org: %q %v", text, err)
 	}
 	if _, _, err = db.Update[testmodel.Ticket]().Set(Tk.Title.Set("")).Where(Tk.ID.EQ(1)).SQL(annIn7()); err == nil || err.Error() != "velox: testmodel.Ticket: hook: a ticket needs a title" {
 		t.Errorf("update hook: %v", err)
@@ -193,7 +194,7 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 		inTx = append(inTx, st.InTx)
 		return nil
 	}
-	e := &fakeconn.Exec{Answer: passRefs, Affected: 1}
+	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.SQLite, e, velox.WithRewrite(see))
 	const per = 32766 / 7 // SQLite's parameters, over the columns but the generated key
 	tks := make([]testmodel.Ticket, per+1)
@@ -210,7 +211,7 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 	if err := db.InsertAll(tks).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.Log) < 3 || e.Log[0] != "BEGIN" || e.Log[2] != text {
+	if len(e.Log) < 3 || e.Log[0] != "BEGIN" || e.Log[1] != text {
 		t.Errorf("the first statement sent is not SQL(ctx)'s")
 	}
 	if len(inTx) == 0 || !inTx[0] {
@@ -223,8 +224,8 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 	}
 }
 
-// TestScopedSQLGolden pins the SQL of Ticket's statements as ann under tenant
-// 7: the tenant and owner conditions follow the caller's, and an EXISTS on
+// TestScopedSQLGolden pins the SQL of Ticket's statements as ann under org
+// 7: the org and owner conditions follow the caller's, and an EXISTS on
 // Ticket gets both among its own; an UPDATE or DELETE gets the Read and the
 // Write condition (both the owner's), a DELETE the delete hook's
 // condition, and an upsert's update branch the Read and Write conditions on
@@ -252,8 +253,8 @@ func TestScopedSQLGolden(t *testing.T) {
 				[]any{"new", int64(1), int64(7), "ann", "ann"}},
 			del: golden{`DELETE FROM "tickets" WHERE "id" = $1 AND "done" = $2 AND "org_id" = $3 AND "owner" = $4 AND "owner" = $5`,
 				[]any{int64(1), true, int64(7), "ann", "ann"}},
-			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."owner" = $9 AND "tickets"."owner" = $10`,
-				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), (*int64)(nil), "ann", "ann"}},
+			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = $9 AND "tickets"."owner" = $10 AND "tickets"."owner" = $11`,
+				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), (*int64)(nil), int64(7), "ann", "ann"}},
 		},
 		{d: velox.MySQL,
 			selectHas: golden{"SELECT " + mysqlCols + " FROM `tickets` WHERE EXISTS (SELECT 1 FROM `tickets` AS `vx1` WHERE `vx1`.`id` = `tickets`.`parent_id` AND `org_id` = ? AND `owner` = ?) AND `org_id` = ? AND `owner` = ? LIMIT ?",
@@ -275,8 +276,8 @@ func TestScopedSQLGolden(t *testing.T) {
 				[]any{"new", int64(1), int64(7), "ann", "ann"}},
 			del: golden{`DELETE FROM "tickets" WHERE "id" = ? AND "done" = ? AND "org_id" = ? AND "owner" = ? AND "owner" = ?`,
 				[]any{int64(1), true, int64(7), "ann", "ann"}},
-			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."owner" = ? AND "tickets"."owner" = ?`,
-				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), (*int64)(nil), "ann", "ann"}},
+			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = ? AND "tickets"."owner" = ? AND "tickets"."owner" = ?`,
+				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), (*int64)(nil), int64(7), "ann", "ann"}},
 		},
 	} {
 		t.Run(c.d.String(), func(t *testing.T) {

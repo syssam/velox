@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
@@ -72,6 +73,9 @@ func EncodeCursor(c Cursor) (string, error) {
 	case c.Key == nil:
 		return "", errors.New("veloxgql: EncodeCursor: the cursor has no key")
 	}
+	if s, ok := encodeCursorPlain(c); ok {
+		return s, nil
+	}
 	v := cursorVersion
 	o := make([]cursorTermDoc, len(c.Terms))
 	for i, t := range c.Terms {
@@ -85,6 +89,102 @@ func EncodeCursor(c Cursor) (string, error) {
 		return "", fmt.Errorf("veloxgql: EncodeCursor: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// encodeCursorPlain is EncodeCursor's text for a cursor of the common shape,
+// written without reflection: a type and fields of plain text, and a key and
+// values that are integers, plain strings, booleans or nil. It is byte for
+// byte what json.Marshal of the document gives, which TestEncodeCursorPlain
+// holds it to. For any other cursor, and for one EncodeCursor refuses, it
+// reports false and EncodeCursor takes the general path.
+func encodeCursorPlain(c Cursor) (string, bool) {
+	var arr [160]byte
+	b := append(arr[:0], `{"v":1,"t":"`...)
+	if !plainText(c.Type) {
+		return "", false
+	}
+	b = append(b, c.Type...)
+	b = append(b, `","o":[`...)
+	for i, t := range c.Terms {
+		if !plainText(t.Field) || !t.Direction.IsValid() {
+			return "", false
+		}
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = append(b, `{"f":"`...)
+		b = append(b, t.Field...)
+		b = append(b, `","d":"`...)
+		b = append(b, t.Direction...)
+		b = append(b, `","v":`...)
+		var ok bool
+		if b, ok = appendPlainValue(b, t.Value); !ok {
+			return "", false
+		}
+		b = append(b, '}')
+	}
+	b = append(b, `],"k":`...)
+	var ok bool
+	if b, ok = appendPlainValue(b, c.Key); !ok {
+		return "", false
+	}
+	b = append(b, '}')
+	var enc [216]byte
+	return string(base64.RawURLEncoding.AppendEncode(enc[:0], b)), true
+}
+
+// appendPlainValue appends v as JSON when v is nil, a boolean, an integer or a
+// plain string.
+func appendPlainValue(b []byte, v any) ([]byte, bool) {
+	switch x := base(v).(type) {
+	case nil:
+		return append(b, "null"...), true
+	case bool:
+		return strconv.AppendBool(b, x), true
+	case int:
+		return strconv.AppendInt(b, int64(x), 10), true
+	case int8:
+		return strconv.AppendInt(b, int64(x), 10), true
+	case int16:
+		return strconv.AppendInt(b, int64(x), 10), true
+	case int32:
+		return strconv.AppendInt(b, int64(x), 10), true
+	case int64:
+		return strconv.AppendInt(b, x, 10), true
+	case uint:
+		return strconv.AppendUint(b, uint64(x), 10), true
+	case uint8:
+		return strconv.AppendUint(b, uint64(x), 10), true
+	case uint16:
+		return strconv.AppendUint(b, uint64(x), 10), true
+	case uint32:
+		return strconv.AppendUint(b, uint64(x), 10), true
+	case uint64:
+		return strconv.AppendUint(b, x, 10), true
+	case string:
+		if !plainText(x) {
+			return b, false
+		}
+		b = append(b, '"')
+		b = append(b, x...)
+		return append(b, '"'), true
+	}
+	return b, false
+}
+
+// plainText reports whether s is non-empty printable ASCII that json.Marshal
+// writes as it is: none of the characters it escapes (quote, backslash, <, > and &).
+func plainText(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		switch ch := s[i]; {
+		case ch < 0x20 || ch > 0x7e, ch == '"', ch == '\\', ch == '<', ch == '>', ch == '&':
+			return false
+		}
+	}
+	return true
 }
 
 // DecodeCursor decodes s, a cursor EncodeCursor wrote. Its terms' Values and

@@ -1,6 +1,6 @@
 # Remove Tenant: row scoping through Policy and hooks
 
-- Status: proposed, 2026-11-02
+- Status: implemented, 2026-11-02 (recorded in `docs/decisions/0029-scope-replaces-tenant.md`)
 - Breaking: yes (pre-1.0, so allowed; see CHANGELOG "Unreleased")
 
 ## Why
@@ -84,7 +84,7 @@ of ADR 0016 (`WithTenant` converts).
 | Today | After | Cost |
 |---|---|---|
 | `TenantRefs`: a write that sets an FK to a scoped row first checks the row is the tenant's, one SELECT per column | removed. Use a composite FK `(org_id, project_id) -> (org_id, id)`, which the doc already calls "the stronger guarantee", or a hook using `Mutation.DB` | one fewer round trip per write; the guarantee moves to the database |
-| Join rows of a many-to-many edge scoped through the sides' `TenantRefs` | removed. An edge schema (a join entity with its own `Policy`) scopes its rows | a bare many-to-many join table is unscoped; docs say so |
+| Join rows of a many-to-many edge scoped through the sides' `TenantRefs` | removed. A join entity may have Insert and Write policies, but not a Read policy: it is read through its two sides, whose Read policies apply | a bare many-to-many join table is unscoped; docs say so |
 | `ErrNoTenant`, `ErrTenantMismatch`, `ErrTenantRef`, `Statement.Tenant`, `Statement.TenantBypass`, GraphQL "unauthenticated" mapping | `scope.ErrNoScope`; GraphQL maps it to the same code; hooks read `Statement.PolicyBypass` | renames |
 | `WithTenant` / `WithAllTenants` | context key and `scope.With(ctx, v)` for the helper; `WithoutPolicy` for bypass | none |
 | `field.Tenant()` | removed; use `Immutable()` plus `scope.By` | none |

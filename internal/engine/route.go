@@ -75,11 +75,13 @@ type Shard struct {
 }
 
 // WithShardFor sets the function that gives the name of a statement's shard,
-// on a DB opened with OpenShards, from its context's tenant: the id given to
-// WithTenant. It is called, with the statement's context, for each statement
-// and Tx whose context has a tenant and no WithShard, so it should be fast; a
-// SQL(ctx) dry run calls it too. Its error refuses the statement, which then
-// matches both ErrNoShard and the error.
+// on a DB opened with OpenShards, from its context: it reads the value the
+// application keyed its shards by (an organization, a region), as a policy
+// does. It is called, with the statement's context, for each statement and Tx
+// whose context has no WithShard, so it should be fast; a SQL(ctx) dry run
+// calls it too. It returns "" for a context that names no shard, which refuses
+// the statement with ErrNoShard. Its error refuses the statement too, which
+// then matches both ErrNoShard and the error.
 //
 // One write can call it more than once: an InsertAll split into two
 // statements calls it three times, for its transaction and for each
@@ -90,7 +92,7 @@ type Shard struct {
 //
 // It is required with OpenShards; given to Connect, Open or OpenConn, it panics there.
 // A nil f panics. WithShard names a statement's shard from its context instead.
-func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Option {
+func WithShardFor(f func(ctx context.Context) (string, error)) Option {
 	if f == nil {
 		panic("velox: WithShardFor(nil)")
 	}
@@ -98,10 +100,10 @@ func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Optio
 }
 
 // WithShard returns a context whose statements, on a DB opened with
-// OpenShards, run on the shard named name, whatever the context's tenant:
-// for admin jobs and for data that belongs to no tenant. A later WithShard
+// OpenShards, run on the shard named name, whatever the context says: for
+// admin jobs and for data that belongs to no shard key. A later WithShard
 // replaces it. On a DB opened otherwise it is ignored. Without it, the shard
-// is the one WithShardFor gives for the context's tenant.
+// is the one WithShardFor gives for the context.
 func WithShard(ctx context.Context, name string) context.Context {
 	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	rc.shard, rc.onShard = name, true
@@ -233,7 +235,7 @@ type router struct {
 	// shards are OpenShards's, by name, and shardFor its WithShardFor; nil
 	// on a DB that is not sharded.
 	Shards   map[string]*shardConn
-	ShardFor func(ctx context.Context, tenant any) (string, error)
+	ShardFor func(ctx context.Context) (string, error)
 }
 
 // shardConn is a primary and its replicas.
@@ -281,10 +283,10 @@ func newShard(d Dialect, primary executor, replicas []Conn, what string) *shardC
 }
 
 // ShardOf returns the shard ctx names on a sharded DB, whose route marks are
-// rc: WithShard's, else the one WithShardFor gives for ctx's tenant. It returns
+// rc: WithShard's, else the one WithShardFor gives for ctx. It returns
 // nil and no error when ctx names none, and an error wrapping ErrNoShard for a
-// name that is not a shard and for WithShardFor's error. Only without an
-// WithShard does it look the tenant up.
+// name that is not a shard and for WithShardFor's error. Only without a
+// WithShard does it call WithShardFor.
 func (rt *router) ShardOf(ctx context.Context, rc routeCtx) (*shardConn, error) {
 	if rc.onShard {
 		if sh := rt.Shards[rc.shard]; sh != nil {
@@ -292,13 +294,12 @@ func (rt *router) ShardOf(ctx context.Context, rc routeCtx) (*shardConn, error) 
 		}
 		return nil, fmt.Errorf("%w: WithShard names %q, which is not a shard of the DB", ErrNoShard, rc.shard)
 	}
-	id, _ := TenantFrom(ctx)
-	if id == nil {
-		return nil, nil
-	}
-	name, err := rt.ShardFor(ctx, id)
+	name, err := rt.ShardFor(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w: WithShardFor: %w", ErrNoShard, err)
+	}
+	if name == "" {
+		return nil, nil
 	}
 	if sh := rt.Shards[name]; sh != nil {
 		return sh, nil
@@ -309,10 +310,7 @@ func (rt *router) ShardOf(ctx context.Context, rc routeCtx) (*shardConn, error) 
 // noShard is the error, wrapping ErrNoShard, of a statement or Tx whose
 // context ctx names no shard, outside a transaction.
 func noShard(ctx context.Context) error {
-	if _, all := TenantFrom(ctx); all != "" {
-		return fmt.Errorf("%w: WithAllTenants names no shard; name one with WithShard", ErrNoShard)
-	}
-	return fmt.Errorf("%w: the context has neither WithShard nor a tenant (WithTenant)", ErrNoShard)
+	return fmt.Errorf("%w: the context has no WithShard, and WithShardFor named none", ErrNoShard)
 }
 
 // stmtErr names st's entity in err, which the route stage found.

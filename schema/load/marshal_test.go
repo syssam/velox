@@ -26,7 +26,7 @@ type User struct{ schema.Schema }
 
 func (User) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable(),
 		field.String("name").NotEmpty().MaxLen(100),
 		field.Enum("role").Values("viewer", "admin").Default("viewer"),
 	}
@@ -114,7 +114,7 @@ func TestMarshal(t *testing.T) {
 	if p := u.Fields[3].Position; p.MixedIn || p.Index != 1 {
 		t.Fatalf("name position %+v", p)
 	}
-	if !u.Fields[0].DefaultFunc || !u.Fields[1].UpdateDefault || !u.Fields[2].Tenant {
+	if !u.Fields[0].DefaultFunc || !u.Fields[1].UpdateDefault {
 		t.Fatalf("flags %+v %+v %+v", u.Fields[0], u.Fields[1], u.Fields[2])
 	}
 	if string(u.Fields[4].Default) != `"viewer"` || len(u.Fields[4].Enums) != 2 {

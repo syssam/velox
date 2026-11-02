@@ -1,3 +1,7 @@
+// Package gen holds the hooks example's entities. The *_velox.go files are
+// written by go tool velox-gen; task_hooks.go is written by hand, as Task's
+// Hooks method must be in Task's package. What entities share, the request's
+// user and the createdBy hook, is in ../auth.
 package gen
 
 import (
@@ -6,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/examples/hooks/auth"
 )
 
 // Hooks declares Task's hooks. velox-gen binds it into Task's metadata, and
@@ -13,7 +18,7 @@ import (
 // On limits a hook to the kinds of write it names; the others skip it.
 func (*Task) Hooks() []velox.Hook[Task] {
 	return []velox.Hook[Task]{
-		velox.On(createdBy(func(t *Task) *string { return &t.CreatedBy }), velox.OpInsert),
+		velox.On(auth.CreatedBy(func(t *Task) *string { return &t.CreatedBy }), velox.OpInsert),
 		velox.On(deriveSlug, velox.OpInsert),
 		velox.On(renamed, velox.OpUpdate),
 		velox.On(onlyDone, velox.OpDelete),
@@ -57,7 +62,7 @@ func renamed(next velox.Mutator[Task]) velox.Mutator[Task] {
 		// caller is in db.Tx, so the audit row commits or rolls back with the
 		// update. Outside a transaction it is the database, and the two are
 		// separate statements.
-		audit := Audit{Actor: userFromContext(ctx), Message: "renamed a task to " + title}
+		audit := Audit{Actor: auth.UserFromContext(ctx), Message: "renamed a task to " + title}
 		return m.DB().Insert(&audit).Exec(ctx)
 	})
 }

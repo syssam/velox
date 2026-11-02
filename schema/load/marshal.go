@@ -293,7 +293,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 	out := &loadjson.Field{
 		Name: d.Name, Type: d.Type, Size: d.Size,
 		Optional: d.Optional, Nillable: d.Nillable, Immutable: d.Immutable, Unique: d.Unique,
-		Sensitive: d.Sensitive, Tenant: d.Tenant,
+		Sensitive:     d.Sensitive,
 		DefaultFunc:   d.DefaultFunc != nil,
 		UpdateDefault: d.UpdateDefault != nil,
 		Validators:    len(d.Validators),

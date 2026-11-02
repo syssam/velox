@@ -11,42 +11,66 @@ import (
 	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Comment is the entity of schema Comment.
 type Comment struct {
-	ID        int64            `json:"id,omitempty"`
+	ID        int64            `json:"id"`
 	CreatedAt time.Time        `json:"created_at,omitzero"`
 	UpdatedAt time.Time        `json:"updated_at,omitzero"`
-	OrgID     int64            `json:"org_id,omitempty"`
-	IssueID   int64            `json:"issue_id,omitempty"`
-	AuthorID  int64            `json:"author_id,omitempty"`
-	Body      string           `json:"body,omitempty"`
+	OrgID     int64            `json:"org_id"`
+	IssueID   int64            `json:"issue_id"`
+	AuthorID  int64            `json:"author_id"`
+	Body      string           `json:"body"`
 	Issue     velox.One[Issue] `json:"issue,omitzero"`
 	Author    velox.One[User]  `json:"author,omitzero"`
 }
 
+// The positions of Comment's columns, in the order of its table.
+const (
+	commentColID = iota
+	commentColCreatedAt
+	commentColUpdatedAt
+	commentColOrgID
+	commentColIssueID
+	commentColAuthorID
+	commentColBody
+)
+
+// The positions of Comment's edges.
+const (
+	commentEdgeIssue = iota
+	commentEdgeAuthor
+)
+
 // Comments holds the typed handles of Comment's columns and relations.
 var Comments = struct {
-	ID        velox.NumberCol[Comment, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Comment, int64]
+	// CreatedAt is the column created_at.
 	CreatedAt velox.OrderedCol[Comment, time.Time]
+	// UpdatedAt is the column updated_at.
 	UpdatedAt velox.OrderedCol[Comment, time.Time]
-	OrgID     velox.NumberCol[Comment, int64]
-	IssueID   velox.NumberCol[Comment, int64]
-	AuthorID  velox.NumberCol[Comment, int64]
-	Body      velox.StringCol[Comment, string]
-	Issue     velox.Rel[Comment, Issue]
-	Author    velox.Rel[Comment, User]
+	// OrgID is the column org_id.
+	OrgID velox.NumberCol[Comment, int64]
+	// IssueID is the column issue_id.
+	IssueID velox.NumberCol[Comment, int64]
+	// AuthorID is the column author_id.
+	AuthorID velox.NumberCol[Comment, int64]
+	// Body is the column body.
+	Body velox.StringCol[Comment, string]
+	// Issue is the edge issue, to Issue.
+	Issue velox.Rel[Comment, Issue]
+	// Author is the edge author, to User.
+	Author velox.Rel[Comment, User]
 }{
-	ID:        velox.NumberCol[Comment, int64]{I: 0},
-	CreatedAt: velox.OrderedCol[Comment, time.Time]{I: 1},
-	UpdatedAt: velox.OrderedCol[Comment, time.Time]{I: 2},
-	OrgID:     velox.NumberCol[Comment, int64]{I: 3},
-	IssueID:   velox.NumberCol[Comment, int64]{I: 4},
-	AuthorID:  velox.NumberCol[Comment, int64]{I: 5},
-	Body:      velox.StringCol[Comment, string]{I: 6},
-	Issue:     velox.Rel[Comment, Issue]{I: 0},
-	Author:    velox.Rel[Comment, User]{I: 1},
+	ID:        velox.NumberCol[Comment, int64]{I: commentColID},
+	CreatedAt: velox.OrderedCol[Comment, time.Time]{I: commentColCreatedAt},
+	UpdatedAt: velox.OrderedCol[Comment, time.Time]{I: commentColUpdatedAt},
+	OrgID:     velox.NumberCol[Comment, int64]{I: commentColOrgID},
+	IssueID:   velox.NumberCol[Comment, int64]{I: commentColIssueID},
+	AuthorID:  velox.NumberCol[Comment, int64]{I: commentColAuthorID},
+	Body:      velox.StringCol[Comment, string]{I: commentColBody},
+	Issue:     velox.Rel[Comment, Issue]{I: commentEdgeIssue},
+	Author:    velox.Rel[Comment, User]{I: commentEdgeAuthor},
 }
 
 var commentMeta velox.MetaOnce[Comment]
@@ -54,63 +78,61 @@ var commentMeta velox.MetaOnce[Comment]
 // VeloxMeta is called by velox, not by applications.
 func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDescriptor) }
 
+// commentDescriptor describes Comment to velox: its table, columns, edges and hooks.
 func commentDescriptor() velox.Descriptor[Comment] {
 	d0 := (&sch.Comment{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	d1 := (&sch.Comment{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
-	d2 := (&sch.Comment{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
+	f0 := (&sch.Comment{}).Mixin()[0].Fields()[1].Descriptor()
+	d1 := f0.Default.(func() time.Time)
+	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Comment]{
 		Table: "comments",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "IssueID", Name: "issue_id"},
 			{Field: "AuthorID", Name: "author_id"},
 			{Field: "Body", Name: "body"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     3,
-		TenantRefs: []velox.TenantRef{
-			{Column: 4, Table: "issues", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-			{Column: 5, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-		},
+		PrimaryKey: []int{commentColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Issue]("Issue", 4, 0),
-			velox.EdgeTo[User]("Author", 5, 0),
+			velox.EdgeTo[Issue]("Issue", commentColIssueID, issueColID),
+			velox.EdgeTo[User]("Author", commentColAuthorID, userColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Comment)(nil).Policy()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(commentScope.Wrap((*Comment)(nil).Policy())) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Comment]{commentScope.Fill()}) },
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {
-			case 0:
+			case commentColID:
 				return &x.ID
-			case 1:
+			case commentColCreatedAt:
 				return &x.CreatedAt
-			case 2:
+			case commentColUpdatedAt:
 				return &x.UpdatedAt
-			case 3:
+			case commentColOrgID:
 				return &x.OrgID
-			case 4:
+			case commentColIssueID:
 				return &x.IssueID
-			case 5:
+			case commentColAuthorID:
 				return &x.AuthorID
-			case 6:
+			case commentColBody:
 				return &x.Body
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Comment, i int) any {
 			switch i {
-			case 0:
+			case commentEdgeIssue:
 				return &x.Issue
-			case 1:
+			case commentEdgeAuthor:
 				return &x.Author
 			}
 			return nil
 		},
 		Check: func(col int, v any) error {
 			switch col {
-			case 6:
+			case commentColBody:
 				x := v.(string)
 				if x == "" {
 					return errors.New("must not be empty")
@@ -121,10 +143,10 @@ func commentDescriptor() velox.Descriptor[Comment] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Comment) String() string {
 	return fmt.Sprintf("Comment(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, IssueID=%v, AuthorID=%v, Body=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.IssueID, x.AuthorID, x.Body)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Comment) GoString() string { return x.String() }

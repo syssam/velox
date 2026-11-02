@@ -17,7 +17,7 @@
 //
 //	func (User) Fields() []schema.Field {
 //		return []schema.Field{
-//			field.Int64("org_id").Tenant(),
+//			field.Int64("org_id").Immutable(),
 //			field.String("name").NotEmpty().MaxLen(100),
 //			field.String("email").Unique(),
 //			field.Enum("role").Values("viewer", "admin").Default("viewer"),

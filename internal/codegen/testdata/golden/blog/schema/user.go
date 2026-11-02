@@ -18,7 +18,7 @@ func (User) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}, Audited
 
 func (User) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable(),
 		field.String("name").NotEmpty().MaxLen(50).Comment("The display name."),
 		field.String("email").Unique().Match(regexp.MustCompile(`^[^@]+@[^@]+$`)),
 		field.Enum("role").Values("admin", "editor", "viewer").Default("viewer"),

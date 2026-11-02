@@ -8,24 +8,36 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Author is the entity of schema Author.
 type Author struct {
-	ID    int64            `json:"id,omitempty"`
-	Name  string           `json:"name,omitempty"`
+	ID    int64            `json:"id"`
+	Name  string           `json:"name"`
 	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 
+// The positions of Author's columns, in the order of its table.
+const (
+	authorColID = iota
+	authorColName
+)
+
+// The positions of Author's edges.
+const (
+	authorEdgePosts = iota
+)
+
 // Authors holds the typed handles of Author's columns and relations.
 var Authors = struct {
-	ID    velox.NumberCol[Author, int64]
-	Name  velox.StringCol[Author, string]
+	// ID is the column id.
+	ID velox.NumberCol[Author, int64]
+	// Name is the column name.
+	Name velox.StringCol[Author, string]
+	// Posts is the edge posts, to Post.
 	Posts velox.Rel[Author, Post]
 }{
-	ID:    velox.NumberCol[Author, int64]{I: 0},
-	Name:  velox.StringCol[Author, string]{I: 1},
-	Posts: velox.Rel[Author, Post]{I: 0},
+	ID:    velox.NumberCol[Author, int64]{I: authorColID},
+	Name:  velox.StringCol[Author, string]{I: authorColName},
+	Posts: velox.Rel[Author, Post]{I: authorEdgePosts},
 }
 
 var authorMeta velox.MetaOnce[Author]
@@ -33,6 +45,7 @@ var authorMeta velox.MetaOnce[Author]
 // VeloxMeta is called by velox, not by applications.
 func (*Author) VeloxMeta() *velox.Meta[Author] { return authorMeta.Load(authorDescriptor) }
 
+// authorDescriptor describes Author to velox: its table, columns, edges and hooks.
 func authorDescriptor() velox.Descriptor[Author] {
 	return velox.Descriptor[Author]{
 		Table: "authors",
@@ -40,23 +53,22 @@ func authorDescriptor() velox.Descriptor[Author] {
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{authorColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Post]("Posts", 0, 1),
+			velox.EdgeTo[Post]("Posts", authorColID, postColAuthorID),
 		},
 		FieldPtr: func(x *Author, i int) any {
 			switch i {
-			case 0:
+			case authorColID:
 				return &x.ID
-			case 1:
+			case authorColName:
 				return &x.Name
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Author, i int) any {
 			switch i {
-			case 0:
+			case authorEdgePosts:
 				return &x.Posts
 			}
 			return nil
@@ -64,10 +76,10 @@ func authorDescriptor() velox.Descriptor[Author] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Author) String() string {
 	return fmt.Sprintf("Author(ID=%v, Name=%v)", x.ID, x.Name)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Author) GoString() string { return x.String() }

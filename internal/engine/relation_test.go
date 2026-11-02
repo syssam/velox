@@ -115,7 +115,7 @@ func TestEdgeThroughKeepsItsJoin(t *testing.T) {
 // TestCheckColumnsChecksTheJoin: an OpThrough's join column and its kids'
 // columns index the join entity's columns, not the statement's.
 func TestCheckColumnsChecksTheJoin(t *testing.T) {
-	join := &velox.EntityInfo{Name: "velox.join", Table: "joins", Tenant: -1, Columns: []velox.ColumnInfo{{Name: "a"}, {Name: "b"}}}
+	join := &velox.EntityInfo{Name: "velox.join", Table: "joins", Columns: []velox.ColumnInfo{{Name: "a"}, {Name: "b"}}}
 	st := func(w int, kid int32) *velox.Statement {
 		return &velox.Statement{Op: velox.OpSelect, Entity: invInfo, Where: []velox.Predicate{engine.NewPredicate(engine.Node{Op: engine.OpThrough, Col: 4, V: join, W: w,
 			Kids: []engine.Node{{Op: engine.OpIn, Col: kid, V: []any{int64(1)}}}})}}

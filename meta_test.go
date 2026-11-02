@@ -13,7 +13,7 @@ func TestMetaOnceBuildsOnce(t *testing.T) {
 	calls := 0
 	desc := func() Descriptor[other] {
 		calls++
-		return Descriptor[other]{Table: "other", Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return Descriptor[other]{Table: "other", Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *other, i int) any { return &x.ID }}
 	}
 	a, b := o.Load(desc), o.Load(desc)
@@ -79,8 +79,8 @@ func TestDescriptorEntityInfo(t *testing.T) {
 	if info.Columns[1].UpdateDefault == nil {
 		t.Error("the UpdateDefault of updated_at was not applied")
 	}
-	if !reflect.DeepEqual(info.PrimaryKey, []int{2}) || info.Tenant != 3 {
-		t.Errorf("primary key %v tenant %d", info.PrimaryKey, info.Tenant)
+	if !reflect.DeepEqual(info.PrimaryKey, []int{2}) {
+		t.Errorf("primary key %v", info.PrimaryKey)
 	}
 	if want := []IndexInfo{{Columns: []int{3, 4}, Unique: true}}; !reflect.DeepEqual(info.Indexes, want) {
 		t.Errorf("indexes %+v", info.Indexes)

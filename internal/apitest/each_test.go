@@ -12,9 +12,10 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 )
 
-// eUser has posts; ePost is tenant-scoped and has a Read policy that hides
+// eUser has posts; ePost is confined to the context's org and has a Read policy that hides
 // secret posts: the per-owner page of an O2M relation whose target is scoped.
 // eUser has tags too, through eLink, whose links may repeat.
 type eUser struct {
@@ -40,7 +41,6 @@ func eUserDescriptor() velox.Descriptor[eUser] {
 		Table:      "e_users",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[ePost]("Posts", 0, 1), velox.EdgeThrough[eLink, fixture.DTag]("Tags", 0, 1, 2, 0)},
 		FieldPtr:   func(x *eUser, i int) any { return [...]any{&x.ID, &x.Name}[i] },
 		EdgeFieldPtr: func(x *eUser, i int) any {
@@ -72,7 +72,6 @@ func eLinkDescriptor() velox.Descriptor[eLink] {
 		Table:      "e_links",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr:   func(x *eLink, i int) any { return [...]any{&x.ID, &x.UserID, &x.TagID}[i] },
 	}
 }
@@ -98,8 +97,10 @@ var ePostMeta velox.MetaOnce[ePost]
 
 func (*ePost) VeloxMeta() *velox.Meta[ePost] { return ePostMeta.Load(ePostDescriptor) }
 
+var ePostScope = scope.By(testmodel.Org, ePosts.OrgID.EQ, func(x *ePost) *int64 { return &x.OrgID })
+
 func (*ePost) Policy() velox.Policy[ePost] {
-	return velox.Policy[ePost]{Read: func(context.Context) (velox.Pred[ePost], error) { return ePosts.Secret.EQ(false), nil }}
+	return ePostScope.Wrap(velox.Policy[ePost]{Read: func(context.Context) (velox.Pred[ePost], error) { return ePosts.Secret.EQ(false), nil }})
 }
 
 func ePostDescriptor() velox.Descriptor[ePost] {
@@ -109,7 +110,6 @@ func ePostDescriptor() velox.Descriptor[ePost] {
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "OrgID", Name: "org_id"},
 			{Field: "Title", Name: "title"}, {Field: "Secret", Name: "secret"}},
 		PrimaryKey: []int{0},
-		Tenant:     2,
 		FieldPtr:   func(x *ePost, i int) any { return [...]any{&x.ID, &x.UserID, &x.OrgID, &x.Title, &x.Secret}[i] },
 	}
 }
@@ -313,12 +313,12 @@ func TestLimitEachCap(t *testing.T) {
 	}
 }
 
-// TestLimitEachScoped is Review Focus 1: a row the tenant scope or the Read
+// TestLimitEachScoped is Review Focus 1: a row the scope or the Read
 // policy hides takes no rank inside the window, so every owner still gets n
 // rows when it has them.
 func TestLimitEachScoped(t *testing.T) {
 	db, _ := eachDB(t)
-	acme := velox.WithTenant(context.Background(), int64(1))
+	acme := testmodel.Org.With(context.Background(), int64(1))
 	posts := func(n int) map[int64][]string {
 		t.Helper()
 		us, err := db.Query[eUser]().OrderBy(eUsers.ID.Asc()).With(eUsers.Posts.LimitEach(n).OrderBy(ePosts.Title.Asc())).Limit(10).All(acme)
@@ -743,19 +743,19 @@ func TestCountEach(t *testing.T) {
 	}
 }
 
-// TestCountEachScoped is Review Focus 1 for counts: a row the tenant scope or
+// TestCountEachScoped is Review Focus 1 for counts: a row the scope or
 // the Read policy hides is not counted.
 func TestCountEachScoped(t *testing.T) {
 	db, _ := eachDB(t)
-	acme := velox.WithTenant(context.Background(), int64(1))
+	acme := testmodel.Org.With(context.Background(), int64(1))
 	users := []*eUser{{ID: 1}, {ID: 2}, {ID: 3}}
 	for name, c := range map[string]struct {
 		ctx  context.Context
 		want []int64
 	}{
 		// User 1's "a" is globex's, and "c" is secret.
-		"acme":        {acme, []int64{3, 2, 0}},
-		"all tenants": {ctx, []int64{4, 2, 0}},
+		"acme":           {acme, []int64{3, 2, 0}},
+		"without policy": {ctx, []int64{5, 2, 0}},
 	} {
 		n, err := velox.CountEach(c.ctx, db.Query[ePost](), eUsers.Posts, users)
 		if err != nil {

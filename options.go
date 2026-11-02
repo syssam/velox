@@ -107,9 +107,9 @@ func WithDeadlines(d Deadlines) Option { return engine.WithDeadlines(d) }
 //
 // A hook that points st.Entity at another table changes the statement's own
 // table only: the tables in an EXISTS that Has or HasWhere adds keep their
-// names. The target's own tenant column and Read policy apply inside the
+// names. The target's own Read policy, a scope included, applies inside the
 // EXISTS, but a hook that moves tables cannot reach it. With a table per
-// tenant, avoid Has and HasWhere, or load the relation with With, which goes
+// scope value, avoid Has and HasWhere, or load the relation with With, which goes
 // through the hooks.
 type Rewrite func(ctx context.Context, st *Statement) error
 

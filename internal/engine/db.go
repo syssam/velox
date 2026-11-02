@@ -32,7 +32,7 @@ type config struct {
 	// backoff is WithReplicaBackoff's: how long a failed replica is skipped.
 	Backoff time.Duration
 	// shardFor is WithShardFor's; nil: none.
-	ShardFor func(ctx context.Context, tenant any) (string, error)
+	ShardFor func(ctx context.Context) (string, error)
 }
 
 // Option configures a DB's pipeline. The With functions make them; the zero
@@ -118,6 +118,9 @@ func CheckColumns(st *Statement) error {
 		}
 	}
 	for _, o := range st.OrderBy {
+		if o.Rel != 0 {
+			continue // a column of the joined target: render checks it
+		}
 		if err := bad(o.Column); err != nil {
 			return err
 		}

@@ -59,7 +59,6 @@ func JDocDescriptor() velox.Descriptor[JDoc] {
 			{Field: "Nums", Name: "nums", Encode: json.Marshal, Decode: json.Unmarshal},
 		},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *JDoc, i int) any {
 			switch i {
 			case 0:
@@ -139,7 +138,6 @@ func (*JList) VeloxMeta() *velox.Meta[JList] {
 				{Field: "Words", Name: "words", Encode: WrapWords, Decode: UnwrapWords},
 			},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *JList, i int) any {
 				if i == 0 {
 					return &x.ID

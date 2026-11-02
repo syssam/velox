@@ -25,7 +25,7 @@ type User struct{ schema.Schema }
 
 func (User) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(graphql.Skip()),
 		field.String("name").Comment("The display name.").Annotations(graphql.FieldName("displayName"), graphql.OrderField("NAME"), graphql.WhereOps()),
 		field.Enum("role").Values("admin", "in_review").Default("admin").Annotations(graphql.EnumValues(map[string]string{"in_review": "REVIEWING"})),
 		field.String("password_hash").Sensitive(),
@@ -116,6 +116,24 @@ type Secret struct{ schema.Schema }
 func (Secret) Fields() []schema.Field { return []schema.Field{field.String("value")} }
 
 func (Secret) Annotations() []schema.Annotation { return []schema.Annotation{graphql.Skip()} }
+`
+
+// e2eScope is the hand-written file of the gen package that confines the
+// users to the org the context names, as examples/tenant does.
+const e2eScope = `package gen
+
+import (
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/scope"
+)
+
+var Org = scope.NewKey[int64]("org")
+
+var userScope = scope.By(Org, Users.OrgID.EQ, func(x *User) *int64 { return &x.OrgID })
+
+func (*User) Policy() velox.Policy[User] { return userScope.Policy() }
+
+func (*User) Hooks() []velox.Hook[User] { return []velox.Hook[User]{userScope.Fill()} }
 `
 
 // app writes a module with velox-gen and velox-graphql as tools, and the
@@ -513,11 +531,11 @@ func TestConnections(t *testing.T) {
 		ran.Add(1)
 		return next(ctx)
 	}))
-	ctx := velox.WithTenant(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	user := func(e *gen.AccountEdge) int64 { return e.Node.ID }
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
-	// The root connection, in the tenant: ann and bob, not cid.
+	// The root connection, in the org: ann and bob, not cid.
 	byName := &gen.AccountOrder{Direction: veloxgql.OrderDirectionDesc, Field: gen.AccountOrderFieldName}
 	us, err := gen.AccountsConnection(ctx, nil, intp(1), nil, nil, byName, nil)
 	if err != nil {
@@ -707,7 +725,7 @@ func TestConnectionOf(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := velox.WithTenant(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
 	c, err := gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Where(gen.Posts.Title.EQ("a")), nil, nil, nil, nil, nil, nil)
@@ -736,7 +754,7 @@ func TestConnectionOfLimitOffset(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := velox.WithTenant(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
 	var all []int64
@@ -832,7 +850,7 @@ func open(t *testing.T, opts ...velox.Option) (context.Context, *velox.DB) {
 		return next(ctx)
 	}))
 	db := velox.Open(velox.SQLite, sqlDB, opts...)
-	ctx := velox.WithTenant(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	return ctx, db
 }
 
@@ -1085,9 +1103,9 @@ func TestWhereOps(t *testing.T) {
 		ow("rankGTE", &gen.OwnerWhereInput{RankGTE: ptr[int32](2)}, 2, 3),
 		ow("rankLT", &gen.OwnerWhereInput{RankLT: ptr[int32](2)}, 1),
 		ow("rankLTE", &gen.OwnerWhereInput{RankLTE: ptr[int32](2)}, 1, 2),
-		// A string, in the tenant: cid, of tenant 8, is never there.
+		// A string, in the org: cid, of org 8, is never there.
 		ac("displayName", &gen.AccountWhereInput{DisplayName: ptr("ann")}, 1),
-		ac("displayName of another tenant", &gen.AccountWhereInput{DisplayName: ptr("cid")}),
+		ac("displayName of another org", &gen.AccountWhereInput{DisplayName: ptr("cid")}),
 		ac("displayNameNEQ", &gen.AccountWhereInput{DisplayNameNEQ: ptr("ann")}, 2, 4),
 		ac("displayNameIn", &gen.AccountWhereInput{DisplayNameIn: []string{"ann", "cid"}}, 1),
 		ac("displayNameNotIn", &gen.AccountWhereInput{DisplayNameNotIn: []string{"ann"}}, 2, 4),
@@ -1096,7 +1114,7 @@ func TestWhereOps(t *testing.T) {
 		ac("displayNameHasSuffix", &gen.AccountWhereInput{DisplayNameHasSuffix: ptr("n")}, 1, 4),
 		// A required foreign key, by the IDs of its edge's node.
 		po("authorID", &gen.PostWhereInput{AuthorID: ptr(userID(1))}, 1, 2),
-		po("authorIDNEQ", &gen.PostWhereInput{AuthorIDNEQ: ptr(userID(1))}, 3), // 4's author is another tenant's: it reads as null, as a policy's hidden row does
+		po("authorIDNEQ", &gen.PostWhereInput{AuthorIDNEQ: ptr(userID(1))}, 3), // 4's author is in another org: it reads as null, as a policy's hidden row does
 		po("authorIDIn", &gen.PostWhereInput{AuthorIDIn: []string{userID(1), userID(2)}}, 1, 2, 3),
 		po("authorIDNotIn", &gen.PostWhereInput{AuthorIDNotIn: []string{userID(1)}}, 3),
 		po("title", &gen.PostWhereInput{Title: ptr("b")}, 2),
@@ -1426,7 +1444,7 @@ func TestWhereRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "schema/event.go": e2eEvent, "levels/levels.go": e2eLevels, "ids/ids.go": e2eIDs, "where_test.go": e2eWhere})
+	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "schema/event.go": e2eEvent, "levels/levels.go": e2eLevels, "ids/ids.go": e2eIDs, "gen/scope.go": e2eScope, "where_test.go": e2eWhere})
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
@@ -1447,12 +1465,12 @@ func TestWhereRun(t *testing.T) {
 // TestConnectionsRun runs the generated connections and edge methods on
 // SQLite: paging and ordering through cursors off the wire, totalCount, each
 // way a relation holds its key (the owner's row, the target's, a join
-// table), the tenant scope, and that a relation a With loaded is not read.
+// table), the org scope, and that a relation a With loaded is not read.
 func TestConnectionsRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "app_test.go": e2eRun})
+	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "gen/scope.go": e2eScope, "app_test.go": e2eRun})
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}

@@ -6,8 +6,8 @@ together in a real service. The others show one topic each.
 | Piece | Where |
 |---|---|
 | Entities, relations, a many-to-many, a cascading foreign key | `schema/schema.go` |
-| Tenants: each organization sees only its own rows | `field.Int64("org_id").Tenant()`; `authed` in `auth.go` names the tenant once per request |
-| Who may change what, enforced in the statements themselves for projects, issues and comments | `gen/policy.go`, `gen/principal.go`; `User` has no policy, as signing up inserts one before anyone is logged in, so `invite` checks the role itself |
+| Each organization sees only its own rows | `schema.Scoped("org")` on each `org_id`, which velox-gen turns into `scope.By` and binds as a Policy and a Hook of the entity; `authed` in `auth.go` names the Org once per request |
+| Who may change what, enforced in the statements themselves for projects, issues and comments | `gen/policy.go`, `gen/principal.go`; `User` has only the Org scope, as signing up inserts one before anyone is logged in, so `invite` checks the role itself |
 | Logins: salted password hashes, tokens stored only as hashes | `auth.go` |
 | Transactions | `signup` in `auth.go`, `createIssue` in `server.go` |
 | A label upsert that is safe under concurrency, its names sorted so that transactions cannot deadlock | `setLabels` in `server.go` |
@@ -66,11 +66,12 @@ until it is null.
 ## What to notice
 
 - **Isolation is not the handlers' job.** No handler filters by organization.
-  `authed` puts the tenant in the context, and every statement on a tenant-scoped
-  entity is scoped by it, or fails without one. Another organization's issue is a
+  `authed` puts the Org in the context, and every statement on an entity whose
+  descriptor has the scope (`Scoped` on its `org_id`) is confined to it, or fails with
+  `scope.ErrNoScope` without one. Another organization's issue is a
   404, not a 403: it does not exist for the caller.
-- **A foreign key does not know about tenants.** `updateIssue` and `addComment`
-  read the row they are about to refer to, in the caller's tenant, first; so does
+- **A foreign key does not know about the Org.** `updateIssue` and `addComment`
+  read the row they are about to refer to, in the caller's Org, first; so does
   `createIssue` for its project. Without that, a request could point at another
   organization's row by guessing its id.
 - **The policy is part of the statement.** `PATCH` by someone who may not change the

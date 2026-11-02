@@ -139,7 +139,7 @@ func TestAColumnAssignedTwiceIsRefused(t *testing.T) {
 		t.Errorf("SQL(ctx): %q %v", text, err)
 	}
 	// Set called twice is the same thing.
-	u = db.Update[testmodel.Invoice]().Set(I.Total.Add(1)).Set(I.Total.Set(2))
+	u = db.Update[testmodel.Invoice]().Set(I.Total.Add(1)).Set(I.Total.Set(2)).Where(I.ID.EQ(1))
 	if _, err := u.Exec(ctx); err == nil || err.Error() != want {
 		t.Errorf("two Set calls: %v", err)
 	}

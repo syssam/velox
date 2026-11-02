@@ -27,7 +27,7 @@ func TestMethodsFindsPointerReceivers(t *testing.T) {
 		"both.go":        "package gen\n\nfunc (t *Tag) Policy() {}\nfunc (t *Tag) Hooks() {}\n",
 		"other.go":       "package gen\n\nfunc (*Comment) Policies() {}\nfunc Policy() {}\nfunc (*Stranger) Policy() {}\nfunc (Stranger) Hooks() {}\n",
 	})
-	got, err := Methods(dir, []string{"User", "Post", "Tag", "Comment"})
+	got, err := Methods(dir, []string{"User", "Post", "Tag", "Comment"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestMethodsRefusesValueReceivers(t *testing.T) {
 		{"hooks", "package gen\n\nfunc (u User) Hooks() int { return 0 }\n", "User.Hooks must have a pointer receiver (func (*User) Hooks())"},
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": c.src})
-		_, err := Methods(dir, []string{"User"})
+		_, err := Methods(dir, []string{"User"}, nil)
 		var fe *FileError
 		if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "mine.go") || fe.Reason != c.want {
 			t.Errorf("%s: err = %v; want a FileError for mine.go: %s", c.name, err, c.want)
@@ -65,7 +65,7 @@ func TestMethodsIgnoresTestAndGeneratedFiles(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "dir.go"), 0o755); err != nil { // a directory is not a file
 		t.Fatal(err)
 	}
-	got, err := Methods(dir, []string{"User", "Post"})
+	got, err := Methods(dir, []string{"User", "Post"}, nil)
 	if err != nil || len(got) != 0 {
 		t.Errorf("got %v, %v; want none", got, err)
 	}
@@ -78,7 +78,7 @@ func TestMethodsRefusesARedeclaredType(t *testing.T) {
 		"alias":   "package gen\n\ntype User = int\n",
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": src})
-		_, err := Methods(dir, []string{"User"})
+		_, err := Methods(dir, []string{"User"}, nil)
 		if err == nil || !strings.Contains(err.Error(), "mine.go") || !strings.Contains(err.Error(), "type User") {
 			t.Errorf("%s: err = %v; want one naming mine.go and type User", name, err)
 		}
@@ -86,7 +86,7 @@ func TestMethodsRefusesARedeclaredType(t *testing.T) {
 }
 
 func TestMethodsMissingDirIsNoFiles(t *testing.T) {
-	got, err := Methods(filepath.Join(t.TempDir(), "absent"), []string{"User"})
+	got, err := Methods(filepath.Join(t.TempDir(), "absent"), []string{"User"}, nil)
 	if err != nil || len(got) != 0 {
 		t.Errorf("got %v, %v", got, err)
 	}
@@ -94,7 +94,7 @@ func TestMethodsMissingDirIsNoFiles(t *testing.T) {
 
 func TestMethodsReportsASyntaxError(t *testing.T) {
 	dir := methodsDir(t, map[string]string{"bad.go": "package gen\n\nfunc (\n"})
-	if _, err := Methods(dir, []string{"User"}); err == nil || !strings.Contains(err.Error(), "bad.go") {
+	if _, err := Methods(dir, []string{"User"}, nil); err == nil || !strings.Contains(err.Error(), "bad.go") {
 		t.Errorf("err = %v", err)
 	}
 }
@@ -143,7 +143,7 @@ func TestMethodsSkipsIgnoredFiles(t *testing.T) {
 		"type":              {"types.go": "//go:build ignore\n\npackage gen\n\ntype User struct{}\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, err := Methods(methodsDir(t, files), []string{"User"})
+			got, err := Methods(methodsDir(t, files), []string{"User"}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -177,7 +177,7 @@ func TestMethodsRefusesSystemFiles(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dir := methodsDir(t, map[string]string{c.file: c.src})
-			_, err := Methods(dir, []string{"User"})
+			_, err := Methods(dir, []string{"User"}, nil)
 			var fe *FileError
 			if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, c.file) || fe.Line != c.line ||
 				!strings.Contains(fe.Reason, "velox-gen reads hooks and policies only from files that every build includes") {
@@ -187,7 +187,7 @@ func TestMethodsRefusesSystemFiles(t *testing.T) {
 	}
 	// An ordinary file, and one whose constraint every system meets, bind.
 	dir := methodsDir(t, map[string]string{"go.mod": "module m\n\ngo 1.27.0\n", "policy.go": policy, "hooks.go": "//go:build go1.27 && (prod || !prod)\n\npackage gen\n\nfunc (*User) Hooks() int { return 0 }\n"})
-	got, err := Methods(dir, []string{"User"})
+	got, err := Methods(dir, []string{"User"}, nil)
 	if err != nil || !reflect.DeepEqual(got, map[string]Bound{"User": {Policy: true, Hooks: true}}) {
 		t.Fatalf("got %v, %v", got, err)
 	}
@@ -300,7 +300,7 @@ func TestMethodsFindsPolicyConds(t *testing.T) {
 		// A positional literal is left to the runtime's check.
 		"pair.go": "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*UserPair) Policy() velox.Policy[UserPair] {\n\treturn velox.Policy[UserPair]{r, w, nil}\n}\n",
 	})
-	got, err := Methods(dir, []string{"UserFriend", "UserGroup", "UserPair"})
+	got, err := Methods(dir, []string{"UserFriend", "UserGroup", "UserPair"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestGenerateRefusesABidiPolicy(t *testing.T) {
 	dir := methodsDir(t, map[string]string{
 		"friend.go": "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*UserFriend) Policy() velox.Policy[UserFriend] {\n\treturn velox.Policy[UserFriend]{Write: w}\n}\n",
 	})
-	bound, err := Methods(dir, []string{"UserFriend"})
+	bound, err := Methods(dir, []string{"UserFriend"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,5 +329,30 @@ func TestGenerateRefusesABidiPolicy(t *testing.T) {
 	if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "friend.go") || fe.Line != 6 ||
 		fe.Reason != "UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link" {
 		t.Fatalf("err = %v; want a FileError at friend.go:6", err)
+	}
+}
+
+// A name velox-gen generates for a scope, a key or an entity's scope, may not
+// be declared by a file of the user's: the generated file would not compile.
+func TestMethodsReservedName(t *testing.T) {
+	reserved := []string{"OrgKey", "noteScope"}
+	for name, src := range map[string]string{
+		"var":    "package gen\n\nvar OrgKey = 1\n",
+		"const":  "package gen\n\nconst (\n\tx = 1\n\tnoteScope = 2\n)\n",
+		"type":   "package gen\n\ntype noteScope int\n",
+		"func":   "package gen\n\nfunc OrgKey() {}\n",
+		"method": "package gen\n\ntype T int\n\nfunc (T) OrgKey() {}\n", // not a package-level name: allowed
+	} {
+		_, err := Methods(methodsDir(t, map[string]string{"mine.go": src}), []string{"User"}, reserved)
+		var fe *FileError
+		switch {
+		case name == "method":
+			if err != nil {
+				t.Errorf("%s: %v", name, err)
+			}
+		case !errors.As(err, &fe) || !strings.Contains(fe.Reason, "a name velox-gen generates") ||
+			!strings.Contains(fe.Reason, "OrgKey") && !strings.Contains(fe.Reason, "noteScope"):
+			t.Errorf("%s: got %v, want a *FileError naming the identifier", name, err)
+		}
 	}
 }

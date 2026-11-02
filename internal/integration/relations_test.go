@@ -7,6 +7,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 )
 
 var It = testmodel.Items
@@ -135,12 +136,12 @@ func TestOfOnRealDatabases(t *testing.T) {
 		wantIDs(t, itemIDs(I.Items.Of()), nil)
 		wantIDs(t, itemIDs(I.Items.Where(It.Qty.GT(0)).Of(&inv1)), []int64{1})
 
-		// The inverse; the target's tenant applies to it.
+		// The inverse; the target's org applies to it.
 		item3 := testmodel.Item{ID: 3, InvoiceID: 2}
 		for _, c := range []struct {
 			ctx  context.Context
 			want []int64
-		}{{ctx, []int64{2}}, {velox.WithTenant(ctx, int64(1)), []int64{2}}, {velox.WithTenant(ctx, int64(2)), nil}} {
+		}{{ctx, []int64{2}}, {testmodel.Org.With(context.Background(), int64(1)), []int64{2}}, {testmodel.Org.With(context.Background(), int64(2)), nil}} {
 			got, err := tg.db.Query[testmodel.Invoice]().Where(It.Invoice.Of(&item3)).Limit(10).All(c.ctx)
 			if err != nil {
 				t.Fatal(err)
@@ -171,7 +172,7 @@ func TestOfOnRealDatabases(t *testing.T) {
 	})
 }
 
-// The per-owner model: shelves have notes, which are tenant-scoped and have a
+// The per-owner model: shelves have notes, which are org-scoped and have a
 // Read policy that hides secret ones. Written by hand as velox-gen writes a
 // Descriptor.
 
@@ -196,7 +197,6 @@ func shelfDescriptor() velox.Descriptor[shelf] {
 		Table:      "shelves",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[note]("Notes", 0, 1), velox.EdgeThrough[shelfTag, tag]("Tags", 0, 1, 2, 0)},
 		FieldPtr:   func(x *shelf, i int) any { return &x.ID },
 		EdgeFieldPtr: func(x *shelf, i int) any {
@@ -225,7 +225,6 @@ func shelfTagDescriptor() velox.Descriptor[shelfTag] {
 		Table:      "shelf_tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr:   func(x *shelfTag, i int) any { return [...]any{&x.ID, &x.ShelfID, &x.TagID}[i] },
 	}
 }
@@ -239,28 +238,34 @@ type note struct {
 }
 
 var Notes = struct {
-	ID  velox.NumberCol[note, int64]
-	Pos velox.NumberCol[note, int64]
-}{velox.NumberCol[note, int64]{I: 0}, velox.NumberCol[note, int64]{I: 3}}
+	ID    velox.NumberCol[note, int64]
+	OrgID velox.NumberCol[note, int64]
+	Pos   velox.NumberCol[note, int64]
+}{velox.NumberCol[note, int64]{I: 0}, velox.NumberCol[note, int64]{I: 2}, velox.NumberCol[note, int64]{I: 3}}
+
+var noteScope = scope.By(testmodel.Org, Notes.OrgID.EQ, func(x *note) *int64 { return &x.OrgID })
 
 var noteMeta velox.MetaOnce[note]
 
 func (*note) VeloxMeta() *velox.Meta[note] { return noteMeta.Load(noteDescriptor) }
 
+// Policy hides secret notes, and confines notes to the context's org.
 func (*note) Policy() velox.Policy[note] {
-	return velox.Policy[note]{Read: func(context.Context) (velox.Pred[note], error) {
+	return noteScope.Wrap(velox.Policy[note]{Read: func(context.Context) (velox.Pred[note], error) {
 		return velox.Col[note, bool]{I: 4}.EQ(false), nil
-	}}
+	}})
 }
+
+func (*note) Hooks() []velox.Hook[note] { return []velox.Hook[note]{noteScope.Fill()} }
 
 func noteDescriptor() velox.Descriptor[note] {
 	return velox.Descriptor[note]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*note)(nil).Policy()) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*note)(nil).Hooks()) },
 		Table:  "notes",
-		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "OrgID", Name: "org_id"},
+		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Pos", Name: "pos"}, {Field: "Secret", Name: "secret"}},
 		PrimaryKey: []int{0},
-		Tenant:     2,
 		FieldPtr:   func(x *note, i int) any { return [...]any{&x.ID, &x.ShelfID, &x.OrgID, &x.Pos, &x.Secret}[i] },
 	}
 }
@@ -310,14 +315,14 @@ func shelfSetup(t *testing.T, tg target) {
 // TestLimitEachOnRealDatabases pages a one-to-many relation per owner. The
 // notes are (id: shelf, org, pos, secret) 1: 1, 2, 0; 2: 1, 1, 1; 3: 1, 1, 1;
 // 4: 1, 1, 0, secret; 5: 1, 1, 2; 6: 2, 1, 5; 7: 2, 1, 5; 8: 4, 1, 3, secret.
-// Under org 1, note 1 is another tenant's and note 4 secret: both sort first
+// Under org 1, note 1 is another org's and note 4 secret: both sort first
 // and take no rank. Notes 2 and 3, and 6 and 7, tie, and break by id. Shelf 3
 // has no notes, and shelf 4 only a hidden one.
 func TestLimitEachOnRealDatabases(t *testing.T) {
 	log := &stmtLog{n: map[string]int{}}
 	each(t, func(t *testing.T, tg target) {
 		shelfSetup(t, tg)
-		acme := velox.WithTenant(ctx, int64(1))
+		acme := testmodel.Org.With(context.Background(), int64(1))
 		notes := func(qctx context.Context, rel velox.Rel[shelf, note], ps ...velox.Pred[shelf]) map[int64][]int64 {
 			t.Helper()
 			log.take()
@@ -359,8 +364,9 @@ func TestLimitEachOnRealDatabases(t *testing.T) {
 		check(notes(acme, Shelves.Notes.OrderBy(Notes.Pos.Desc()).LimitEach(2)), map[int64][]int64{1: {5, 2}, 2: {6, 7}, 3: {}, 4: {}})
 		// One owner.
 		check(notes(acme, byPos.LimitEach(2), Shelves.ID.EQ(1)), map[int64][]int64{1: {2, 3}})
-		// Every tenant: note 1 sorts first; the policy still hides note 4.
-		check(notes(ctx, byPos.LimitEach(2)), map[int64][]int64{1: {1, 2}, 2: {6, 7}, 3: {}, 4: {}})
+		// WithoutPolicy: every org, and the secret notes too. Notes 1 and 4 tie
+		// at position 0, and the id breaks the tie.
+		check(notes(ctx, byPos.LimitEach(2)), map[int64][]int64{1: {1, 4}, 2: {6, 7}, 3: {}, 4: {8}})
 
 		// The generated model: each invoice's item with the most quantity.
 		invs, err := tg.db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).With(I.Items.LimitEach(1).OrderBy(It.Qty.Desc()).With(It.Invoice)).Limit(10).All(ctx)
@@ -431,15 +437,15 @@ func wantIDLists(t *testing.T, got, want [][]int64) {
 }
 
 // TestLoadEachOnRealDatabases reads each owner's page with LoadEach: the notes
-// of shelfSetup (one-to-many, with the tenant and a Read policy) and the tags
-// of throughSetup (many-to-many, with the tenant), aligned with the owners,
+// of shelfSetup (one-to-many, with the org and a Read policy) and the tags
+// of throughSetup (many-to-many, with the org), aligned with the owners,
 // zero-child owners included, in one statement each.
 func TestLoadEachOnRealDatabases(t *testing.T) {
 	log := &stmtLog{n: map[string]int{}}
 	each(t, func(t *testing.T, tg target) {
 		shelfSetup(t, tg)
 		throughSetup(t, tg)
-		acme := velox.WithTenant(ctx, int64(1))
+		acme := testmodel.Org.With(context.Background(), int64(1))
 		notes := func(qctx context.Context, q velox.Query[note], r velox.Rel[shelf, note], owners ...int64) [][]int64 {
 			t.Helper()
 			log.take()
@@ -453,11 +459,11 @@ func TestLoadEachOnRealDatabases(t *testing.T) {
 			return noteIDs(got)
 		}
 		byPos := tg.db.Query[note]().OrderBy(Notes.Pos.Asc())
-		// Under org 1, note 1 is another tenant's and note 4 secret; shelf 3
+		// Under org 1, note 1 is another org's and note 4 secret; shelf 3
 		// has no notes, and shelf 4 only a secret one.
 		wantIDLists(t, notes(acme, byPos, Shelves.Notes.LimitEach(2), 1, 2, 3, 4), [][]int64{{2, 3}, {6, 7}, {}, {}})
 		wantIDLists(t, notes(acme, byPos, Shelves.Notes.LimitEach(3), 4, 1, 1), [][]int64{{}, {2, 3, 5}, {2, 3, 5}})
-		wantIDLists(t, notes(ctx, byPos, Shelves.Notes.LimitEach(2), 1, 2, 3, 4), [][]int64{{1, 2}, {6, 7}, {}, {}})
+		wantIDLists(t, notes(ctx, byPos, Shelves.Notes.LimitEach(2), 1, 2, 3, 4), [][]int64{{1, 4}, {6, 7}, {}, {8}})
 		wantIDLists(t, notes(acme, byPos, Shelves.Notes, 1, 3), [][]int64{{2, 3, 5}, {}})
 		// After a row, inside the window: shelf 1's page after note 2.
 		x, err := tg.db.Query[note]().Where(Notes.ID.EQ(2)).One(acme)
@@ -508,7 +514,7 @@ func TestCountEachOnRealDatabases(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		shelfSetup(t, tg)
 		throughSetup(t, tg)
-		acme := velox.WithTenant(ctx, int64(1))
+		acme := testmodel.Org.With(context.Background(), int64(1))
 		count := func(got []int64, err error) []int64 {
 			t.Helper()
 			if err != nil {
@@ -526,7 +532,7 @@ func TestCountEachOnRealDatabases(t *testing.T) {
 		log.take()
 		q := tg.db.Query[note]()
 		wantIDs(t, count(velox.CountEach(acme, q, Shelves.Notes, shelves(1, 2, 3, 4))), []int64{3, 2, 0, 0})
-		wantIDs(t, count(velox.CountEach(ctx, q, Shelves.Notes, shelves(4, 1, 3, 1))), []int64{0, 4, 0, 4})
+		wantIDs(t, count(velox.CountEach(ctx, q, Shelves.Notes, shelves(4, 1, 3, 1))), []int64{1, 5, 0, 5})
 		wantIDs(t, count(velox.CountEach(acme, q.Where(Notes.Pos.GT(1)), Shelves.Notes, shelves(1, 2))), []int64{1, 2})
 		books := []*book{{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}}
 		wantIDs(t, count(velox.CountEach(acme, tg.db.Query[tag](), Books.Tags, books)), []int64{2, 1, 0, 0})

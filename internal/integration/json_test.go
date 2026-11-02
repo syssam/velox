@@ -56,7 +56,6 @@ func jrecDescriptor() velox.Descriptor[jrec] {
 			{Field: "Nums", Name: "nums", Encode: json.Marshal, Decode: json.Unmarshal},
 		},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *jrec, i int) any {
 			switch i {
 			case 0:
@@ -508,7 +507,6 @@ func (*jopt) VeloxMeta() *velox.Meta[jopt] {
 				{Field: "Fixed", Name: "fixed", Encode: json.Marshal, Decode: json.Unmarshal},
 			},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *jopt, i int) any {
 				switch i {
 				case 0:

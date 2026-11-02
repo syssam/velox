@@ -8,21 +8,27 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // PostTag is the join entity of table post_tags.
 type PostTag struct {
-	PostID int64 `json:"post_id,omitempty"`
-	TagID  int64 `json:"tag_id,omitempty"`
+	PostID int64 `json:"post_id"`
+	TagID  int64 `json:"tag_id"`
 }
+
+// The positions of PostTag's columns, in the order of its table.
+const (
+	postTagColPostID = iota
+	postTagColTagID
+)
 
 // PostTags holds the typed handles of PostTag's columns and relations.
 var PostTags = struct {
+	// PostID is the column post_id.
 	PostID velox.NumberCol[PostTag, int64]
-	TagID  velox.NumberCol[PostTag, int64]
+	// TagID is the column tag_id.
+	TagID velox.NumberCol[PostTag, int64]
 }{
-	PostID: velox.NumberCol[PostTag, int64]{I: 0},
-	TagID:  velox.NumberCol[PostTag, int64]{I: 1},
+	PostID: velox.NumberCol[PostTag, int64]{I: postTagColPostID},
+	TagID:  velox.NumberCol[PostTag, int64]{I: postTagColTagID},
 }
 
 var postTagMeta velox.MetaOnce[PostTag]
@@ -30,6 +36,7 @@ var postTagMeta velox.MetaOnce[PostTag]
 // VeloxMeta is called by velox, not by applications.
 func (*PostTag) VeloxMeta() *velox.Meta[PostTag] { return postTagMeta.Load(postTagDescriptor) }
 
+// postTagDescriptor describes PostTag to velox: its table, columns, edges and hooks.
 func postTagDescriptor() velox.Descriptor[PostTag] {
 	return velox.Descriptor[PostTag]{
 		Table: "post_tags",
@@ -37,16 +44,12 @@ func postTagDescriptor() velox.Descriptor[PostTag] {
 			{Field: "PostID", Name: "post_id"},
 			{Field: "TagID", Name: "tag_id"},
 		},
-		PrimaryKey: []int{0, 1},
-		Tenant:     -1,
-		TenantRefs: []velox.TenantRef{
-			{Column: 0, Table: "posts", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-		},
+		PrimaryKey: []int{postTagColPostID, postTagColTagID},
 		FieldPtr: func(x *PostTag, i int) any {
 			switch i {
-			case 0:
+			case postTagColPostID:
 				return &x.PostID
-			case 1:
+			case postTagColTagID:
 				return &x.TagID
 			}
 			return nil
@@ -54,10 +57,10 @@ func postTagDescriptor() velox.Descriptor[PostTag] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x PostTag) String() string {
 	return fmt.Sprintf("PostTag(PostID=%v, TagID=%v)", x.PostID, x.TagID)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x PostTag) GoString() string { return x.String() }

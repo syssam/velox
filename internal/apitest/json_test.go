@@ -41,7 +41,6 @@ func (*jOwner) VeloxMeta() *velox.Meta[jOwner] {
 			Table:        "j_owners",
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey:   []int{0},
-			Tenant:       -1,
 			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[fixture.JDoc]("Docs", 0, 1)},
 			FieldPtr:     func(x *jOwner, i int) any { return &x.ID },
 			EdgeFieldPtr: func(x *jOwner, i int) any { return &x.Docs },
@@ -309,7 +308,6 @@ func (*jStamp) VeloxMeta() *velox.Meta[jStamp] {
 				{Field: "Hist", Name: "hist", Encode: json.Marshal, Decode: json.Unmarshal, UpdateDefault: func() any { return []string{"u"} }},
 			},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *jStamp, i int) any {
 				if i == 0 {
 					return &x.ID
@@ -425,7 +423,6 @@ func (*jBin) VeloxMeta() *velox.Meta[jBin] {
 					Decode: func(data []byte, v any) error { *v.(*[]byte) = append([]byte(nil), data[1:]...); return nil }},
 			},
 			PrimaryKey: []int{0},
-			Tenant:     -1,
 			FieldPtr: func(x *jBin, i int) any {
 				if i == 0 {
 					return &x.ID

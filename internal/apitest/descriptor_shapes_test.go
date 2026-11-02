@@ -30,7 +30,6 @@ func pboxDescriptor() velox.Descriptor[pbox] {
 		Table:      "pboxes",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.Pnote]("Note", 1, 0)},
 		FieldPtr: func(x *pbox, i int) any {
 			if i == 0 {
@@ -67,7 +66,6 @@ func pcommentDescriptor() velox.Descriptor[pcomment] {
 		Table:      "pcomments",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.Pnote]("Note", 1, 0)},
 		FieldPtr: func(x *pcomment, i int) any {
 			if i == 0 {
@@ -123,7 +121,6 @@ func pcycADescriptor() velox.Descriptor[pcycA] {
 		Table:      "pcyc_as",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BID", Name: "b_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pcycB]("B", 1, 0)},
 		FieldPtr: func(x *pcycA, i int) any {
 			if i == 0 {
@@ -141,7 +138,6 @@ func pcycBDescriptor() velox.Descriptor[pcycB] {
 		Table:      "pcyc_bs",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AID", Name: "a_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pcycA]("A", 1, 0)},
 		FieldPtr: func(x *pcycB, i int) any {
 			if i == 0 {
@@ -163,7 +159,7 @@ func (*keyOnly) VeloxMeta() *velox.Meta[keyOnly] { return keyOnlyMeta.Load(keyOn
 
 func keyOnlyDescriptor() velox.Descriptor[keyOnly] {
 	return velox.Descriptor[keyOnly]{
-		Table: "key_only", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		Table: "key_only", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 		FieldPtr: func(x *keyOnly, i int) any { return &x.ID },
 	}
 }
@@ -180,7 +176,7 @@ func (*wideKey) VeloxMeta() *velox.Meta[wideKey] { return wideKeyMeta.Load(wideK
 func wideKeyDescriptor() velox.Descriptor[wideKey] {
 	return velox.Descriptor[wideKey]{
 		Table: "wide_key", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Opt", Name: "opt", Default: true}},
-		PrimaryKey: []int{0}, Tenant: -1,
+		PrimaryKey: []int{0},
 		FieldPtr: func(x *wideKey, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -202,7 +198,7 @@ func (*tinyKey) VeloxMeta() *velox.Meta[tinyKey] { return tinyKeyMeta.Load(tinyK
 func tinyKeyDescriptor() velox.Descriptor[tinyKey] {
 	return velox.Descriptor[tinyKey]{
 		Table: "tiny_key", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
-		PrimaryKey: []int{0}, Tenant: -1,
+		PrimaryKey: []int{0},
 		FieldPtr: func(x *tinyKey, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -211,43 +207,6 @@ func tinyKeyDescriptor() velox.Descriptor[tinyKey] {
 		},
 	}
 }
-
-// tunique's primary key holds its tenant, but its unique code does not: on
-// MySQL a conflict on the code could reach another tenant's row.
-type tunique struct {
-	OrgID int64
-	ID    int64
-	Code  string
-}
-
-var tuniqueMeta velox.MetaOnce[tunique]
-
-func (*tunique) VeloxMeta() *velox.Meta[tunique] { return tuniqueMeta.Load(tuniqueDescriptor) }
-
-func tuniqueDescriptor() velox.Descriptor[tunique] {
-	return velox.Descriptor[tunique]{
-		Table:      "tuniques",
-		Columns:    []velox.ColumnDescriptor{{Field: "OrgID", Name: "org_id"}, {Field: "ID", Name: "id"}, {Field: "Code", Name: "code"}},
-		PrimaryKey: []int{0, 1},
-		Tenant:     0,
-		Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
-		FieldPtr: func(x *tunique, i int) any {
-			switch i {
-			case 0:
-				return &x.OrgID
-			case 1:
-				return &x.ID
-			}
-			return &x.Code
-		},
-	}
-}
-
-var tu = struct {
-	OrgID velox.NumberCol[tunique, int64]
-	ID    velox.NumberCol[tunique, int64]
-	Code  velox.StringCol[tunique, string]
-}{velox.NumberCol[tunique, int64]{I: 0}, velox.NumberCol[tunique, int64]{I: 1}, velox.StringCol[tunique, string]{I: 2}}
 
 var dnoteID = velox.NumberCol[fixture.Dnote, int64]{I: 0}
 
@@ -266,6 +225,6 @@ var addrlessMeta velox.MetaOnce[addrlessEntity]
 
 func (*addrlessEntity) VeloxMeta() *velox.Meta[addrlessEntity] {
 	return addrlessMeta.Load(func() velox.Descriptor[addrlessEntity] {
-		return velox.Descriptor[addrlessEntity]{Table: "addrless", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1}
+		return velox.Descriptor[addrlessEntity]{Table: "addrless", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}}
 	})
 }

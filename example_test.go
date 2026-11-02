@@ -7,6 +7,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 	_ "modernc.org/sqlite"
 )
 
@@ -63,7 +64,7 @@ func ExampleConnect() {
 // with All, One, Count or Iter.
 func Example() {
 	db := exampleDB()
-	ctx := velox.WithTenant(context.Background(), 1)
+	ctx := testmodel.Org.With(context.Background(), 1)
 	for _, n := range []string{"A-2", "A-1", "A-3"} {
 		inv := testmodel.Invoice{Number: n, Total: 10, Data: []byte{}}
 		if err := db.Insert(&inv).Exec(ctx); err != nil {
@@ -98,7 +99,7 @@ func Example() {
 // needs no database.
 func ExampleQuery_SQL() {
 	db := velox.Open(velox.Postgres, nil)
-	ctx := velox.WithTenant(context.Background(), 7)
+	ctx := testmodel.Org.With(context.Background(), 7)
 	text, args, err := db.Query[testmodel.Invoice]().
 		Columns(testmodel.Invoices.ID, testmodel.Invoices.Number).
 		Where(testmodel.Invoices.Total.GT(100), testmodel.Invoices.Paid.EQ(false)).
@@ -115,7 +116,7 @@ func ExampleQuery_SQL() {
 // With loads a relation for every row the query returns, in one more query.
 func ExampleQuery_With() {
 	db := exampleDB()
-	ctx := velox.WithTenant(context.Background(), 1)
+	ctx := testmodel.Org.With(context.Background(), 1)
 	inv := testmodel.Invoice{Number: "A-1", Data: []byte{}}
 	if err := db.Insert(&inv).Exec(ctx); err != nil {
 		fmt.Println(err)
@@ -149,7 +150,7 @@ func ExampleQuery_With() {
 // returns an error, which Tx returns.
 func ExampleDB_Tx() {
 	db := exampleDB()
-	ctx := velox.WithTenant(context.Background(), 1)
+	ctx := testmodel.Org.With(context.Background(), 1)
 	inv := testmodel.Invoice{Number: "A-1", Data: []byte{}}
 	if err := db.Insert(&inv).Exec(ctx); err != nil {
 		fmt.Println(err)
@@ -170,12 +171,12 @@ func ExampleDB_Tx() {
 	// false <nil>
 }
 
-// WithTenant scopes every statement to one tenant. An untyped constant
-// converts to the tenant column's integer type.
-func ExampleWithTenant() {
+// A scope confines an entity's rows to a value the context carries (see the
+// scope package); WithoutPolicy lifts it, with a reason the hooks see.
+func ExampleWithoutPolicy() {
 	db := exampleDB()
-	org1 := velox.WithTenant(context.Background(), 1)
-	org2 := velox.WithTenant(context.Background(), 2)
+	org1 := testmodel.Org.With(context.Background(), 1)
+	org2 := testmodel.Org.With(context.Background(), 2)
 	for _, w := range []struct {
 		ctx    context.Context
 		number string
@@ -188,30 +189,31 @@ func ExampleWithTenant() {
 	}
 	n1, _ := db.Query[testmodel.Invoice]().Count(org1)
 	n2, _ := db.Query[testmodel.Invoice]().Count(org2)
-	fmt.Println(n1, n2)
+	all, _ := db.Query[testmodel.Invoice]().Count(velox.WithoutPolicy(context.Background(), "the example's report"))
+	fmt.Println(n1, n2, all)
 	_, err := db.Query[testmodel.Invoice]().Count(context.Background())
-	fmt.Println(err)
+	fmt.Println(errors.Is(err, scope.ErrNoScope))
 	// Output:
-	// 2 1
-	// velox: testmodel.Invoice: no tenant in the context
+	// 2 1 3
+	// true
 }
 
-// SumBy adds up a column per value of a key column. The tenant scope applies:
-// with WithAllTenants, the key's values are the tenants.
+// SumBy adds up a column per value of a key column. The scope applies:
+// with WithoutPolicy, the key's values are the orgs.
 func ExampleSumBy() {
 	db := exampleDB()
 	for _, w := range []struct {
 		org   int64
 		total float64
 	}{{1, 10}, {1, 20}, {2, 5}} {
-		c := velox.WithTenant(context.Background(), w.org)
+		c := testmodel.Org.With(context.Background(), w.org)
 		inv := testmodel.Invoice{Number: fmt.Sprint(w.total), Total: w.total, Data: []byte{}}
 		if err := db.Insert(&inv).Exec(c); err != nil {
 			fmt.Println(err)
 			return
 		}
 	}
-	all := velox.WithAllTenants(context.Background(), "the example's report")
+	all := velox.WithoutPolicy(context.Background(), "the example's report")
 	groups, err := velox.SumBy(all, db.Query[testmodel.Invoice]().Unbounded(), testmodel.Invoices.OrgID.Key(), testmodel.Invoices.Total)
 	if err != nil {
 		fmt.Println(err)
@@ -229,7 +231,7 @@ func ExampleSumBy() {
 // UpdateDefault, such as mixin.Time's updated_at, does not fire.
 func ExampleInsertQuery_OnConflict() {
 	db := exampleDB()
-	ctx := velox.WithTenant(context.Background(), 1)
+	ctx := testmodel.Org.With(context.Background(), 1)
 	first := testmodel.Invoice{Number: "A-1", Total: 10, Data: []byte{}}
 	if err := db.Insert(&first).Exec(ctx); err != nil {
 		fmt.Println(err)

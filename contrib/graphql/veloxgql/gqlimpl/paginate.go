@@ -235,8 +235,11 @@ func (c *Connection[E]) run[_ velox.Lazy[E]](ctx context.Context) (*Page[E], err
 		// The pointers, not the rows: a batch's rows are shared.
 		slices.Reverse(p.Rows)
 	}
+	// The cursors' terms are one slab, not a slice for each row.
+	last := len(c.terms) - 1
+	slab := make([]veloxgql.CursorTerm, last*len(p.Rows))
 	for i, x := range p.Rows {
-		p.Cursors[i] = c.cursor(x)
+		p.Cursors[i] = c.cursor(x, slab[i*last:(i+1)*last:(i+1)*last])
 	}
 	if c.edge == nil {
 		// A batch made its rows a group already.
@@ -255,13 +258,13 @@ func (c *Connection[E]) run[_ velox.Lazy[E]](ctx context.Context) (*Page[E], err
 
 // cursor is x's cursor: the order's terms with x's values, the key's columns
 // but the last as terms named "key:<column>", and the last column as the key.
-func (c *Connection[E]) cursor[_ velox.Lazy[E]](x *E) veloxgql.Cursor {
+// terms is its room for the terms, of the length of the order's but the last.
+func (c *Connection[E]) cursor[_ velox.Lazy[E]](x *E, terms []veloxgql.CursorTerm) veloxgql.Cursor {
 	last := len(c.terms) - 1
-	cur := veloxgql.Cursor{Type: c.typ, Terms: make([]veloxgql.CursorTerm, last), Key: c.terms[last].get(x)}
 	for i, t := range c.terms[:last] {
-		cur.Terms[i] = veloxgql.CursorTerm{Field: c.field(i), Direction: t.Direction, Value: t.get(x)}
+		terms[i] = veloxgql.CursorTerm{Field: c.field(i), Direction: t.Direction, Value: t.get(x)}
 	}
-	return cur
+	return veloxgql.Cursor{Type: c.typ, Terms: terms, Key: c.terms[last].get(x)}
 }
 
 // field is the field of term i in a cursor.

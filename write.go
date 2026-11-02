@@ -92,7 +92,7 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // error Exec would fail with before sending it; it sends nothing. It runs
 // every stage Exec runs before execution: the guard, the entity's hooks, the
 // UpdateDefault assignments and the checks, the guard again, the
-// Rewrite hooks, the tenant and policy scope and
+// Rewrite hooks, the policy scope and
 // rendering. So the hooks and the policy run, and can tell from
 // IsDryRun(ctx), or a Rewrite hook from Statement.DryRun, that the statement
 // will not be sent. Around hooks, which wrap execution, do not run. A write a
@@ -164,7 +164,7 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // SQL returns the statement and arguments Exec would send for ctx, or the
 // error Exec would fail with before sending it; it sends nothing. It runs
 // every stage Exec runs before execution: the guard, the entity's hooks, the
-// guard again, the Rewrite hooks, the tenant and
+// guard again, the Rewrite hooks, the
 // policy scope and rendering. So the hooks and the policy run, and can tell
 // from IsDryRun(ctx), or a Rewrite hook from Statement.DryRun, that the
 // statement will not be sent. Around hooks, which wrap execution, do not run.
@@ -288,7 +288,7 @@ func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // error Exec would fail with before sending it; it sends nothing, and *x is
 // not changed. It runs every stage Exec runs before execution, as
 // UpdateQuery.SQL does: the guard, the entity's hooks, the UpdateDefault
-// assignments and the checks, the Rewrite hooks, the tenant and policy scope
+// assignments and the checks, the Rewrite hooks, the policy scope
 // and rendering. The hooks and the policy can tell from IsDryRun(ctx) that
 // the statement will not be sent. Around hooks do not run. A write a hook
 // makes under ctx is refused with ErrDryRun, as in UpdateQuery.SQL. A Save

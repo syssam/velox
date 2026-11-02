@@ -8,27 +8,41 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Comment is the entity of schema Comment.
 type Comment struct {
-	ID     int64           `json:"id,omitempty"`
-	PostID int64           `json:"post_id,omitempty"`
-	Body   string          `json:"body,omitempty"`
+	ID     int64           `json:"id"`
+	PostID int64           `json:"post_id"`
+	Body   string          `json:"body"`
 	Post   velox.One[Post] `json:"post,omitzero"`
 }
 
+// The positions of Comment's columns, in the order of its table.
+const (
+	commentColID = iota
+	commentColPostID
+	commentColBody
+)
+
+// The positions of Comment's edges.
+const (
+	commentEdgePost = iota
+)
+
 // Comments holds the typed handles of Comment's columns and relations.
 var Comments = struct {
-	ID     velox.NumberCol[Comment, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Comment, int64]
+	// PostID is the column post_id.
 	PostID velox.NumberCol[Comment, int64]
-	Body   velox.StringCol[Comment, string]
-	Post   velox.Rel[Comment, Post]
+	// Body is the column body.
+	Body velox.StringCol[Comment, string]
+	// Post is the edge post, to Post.
+	Post velox.Rel[Comment, Post]
 }{
-	ID:     velox.NumberCol[Comment, int64]{I: 0},
-	PostID: velox.NumberCol[Comment, int64]{I: 1},
-	Body:   velox.StringCol[Comment, string]{I: 2},
-	Post:   velox.Rel[Comment, Post]{I: 0},
+	ID:     velox.NumberCol[Comment, int64]{I: commentColID},
+	PostID: velox.NumberCol[Comment, int64]{I: commentColPostID},
+	Body:   velox.StringCol[Comment, string]{I: commentColBody},
+	Post:   velox.Rel[Comment, Post]{I: commentEdgePost},
 }
 
 var commentMeta velox.MetaOnce[Comment]
@@ -36,6 +50,7 @@ var commentMeta velox.MetaOnce[Comment]
 // VeloxMeta is called by velox, not by applications.
 func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDescriptor) }
 
+// commentDescriptor describes Comment to velox: its table, columns, edges and hooks.
 func commentDescriptor() velox.Descriptor[Comment] {
 	return velox.Descriptor[Comment]{
 		Table: "comments",
@@ -44,25 +59,24 @@ func commentDescriptor() velox.Descriptor[Comment] {
 			{Field: "PostID", Name: "post_id"},
 			{Field: "Body", Name: "body"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{commentColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Post]("Post", 1, 0),
+			velox.EdgeTo[Post]("Post", commentColPostID, postColID),
 		},
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {
-			case 0:
+			case commentColID:
 				return &x.ID
-			case 1:
+			case commentColPostID:
 				return &x.PostID
-			case 2:
+			case commentColBody:
 				return &x.Body
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Comment, i int) any {
 			switch i {
-			case 0:
+			case commentEdgePost:
 				return &x.Post
 			}
 			return nil
@@ -70,10 +84,10 @@ func commentDescriptor() velox.Descriptor[Comment] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Comment) String() string {
 	return fmt.Sprintf("Comment(ID=%v, PostID=%v, Body=%v)", x.ID, x.PostID, x.Body)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Comment) GoString() string { return x.String() }

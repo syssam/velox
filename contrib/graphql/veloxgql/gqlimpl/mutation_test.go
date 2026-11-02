@@ -24,10 +24,11 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/scope"
 )
 
-// post is a hand-written tenant-scoped entity, as velox-gen would write it,
-// for CheckExists: a key, a tenant and a title. Its Read policy hides the posts
+// post is a hand-written entity scoped by its tenant column, as velox-gen
+// would write it, for CheckExists: a key, a tenant and a title. Its Read policy hides the posts
 // titled "hidden".
 type post struct {
 	ID     int64
@@ -36,18 +37,27 @@ type post struct {
 }
 
 var posts = struct {
-	ID    velox.NumberCol[post, int64]
-	Title velox.StringCol[post, string]
+	ID     velox.NumberCol[post, int64]
+	Tenant velox.StringCol[post, string]
+	Title  velox.StringCol[post, string]
 }{
-	ID:    velox.NumberCol[post, int64]{I: 0},
-	Title: velox.StringCol[post, string]{I: 2},
+	ID:     velox.NumberCol[post, int64]{I: 0},
+	Tenant: velox.StringCol[post, string]{I: 1},
+	Title:  velox.StringCol[post, string]{I: 2},
 }
 
+// tenantKey is the scope of posts: the tenant the context names.
+var tenantKey = scope.NewKey[string]("tenant")
+
+var postScope = scope.By(tenantKey, posts.Tenant.EQ, func(x *post) *string { return &x.Tenant })
+
 func (*post) Policy() velox.Policy[post] {
-	return velox.Policy[post]{
+	return postScope.Wrap(velox.Policy[post]{
 		Read: func(context.Context) (velox.Pred[post], error) { return posts.Title.NEQ("hidden"), nil },
-	}
+	})
 }
+
+func (*post) Hooks() []velox.Hook[post] { return []velox.Hook[post]{postScope.Fill()} }
 
 var postMeta velox.MetaOnce[post]
 
@@ -58,8 +68,8 @@ func postDescriptor() velox.Descriptor[post] {
 		Table:      "posts",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tenant", Name: "tenant"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
-		Tenant:     1,
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*post)(nil).Policy()) },
+		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*post)(nil).Hooks()) },
 		FieldPtr: func(x *post, i int) any {
 			switch i {
 			case 0:
@@ -687,7 +697,7 @@ func TestDecodeIDsRepeats(t *testing.T) {
 func TestExist(t *testing.T) {
 	db, _ := mutationDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	ann, bob := velox.WithTenant(ctx, "ann"), velox.WithTenant(ctx, "bob")
+	ann, bob := tenantKey.With(ctx, "ann"), tenantKey.With(ctx, "bob")
 	for _, p := range []struct {
 		ctx context.Context
 		p   post
@@ -705,7 +715,7 @@ func TestExist(t *testing.T) {
 		ids []int64
 	}{
 		"missing":          {ann, []int64{1, 3}},
-		"another tenant's": {ann, []int64{1, 2}},
+		"another scope's":  {ann, []int64{1, 2}},
 		"hidden by policy": {ann, []int64{1, 4}},
 	} {
 		err := gqlimpl.CheckExists(c.ctx, db.Query[post]().Where(posts.ID.In(c.ids...)), len(c.ids), at, "Post")
@@ -717,7 +727,7 @@ func TestExist(t *testing.T) {
 		}
 	}
 	// One ID that names no row reads as NotFound does.
-	for name, id := range map[string]int64{"missing": 3, "another tenant's": 2, "hidden by policy": 4} {
+	for name, id := range map[string]int64{"missing": 3, "another scope's": 2, "hidden by policy": 4} {
 		err := gqlimpl.CheckExists(ann, db.Query[post]().Where(posts.ID.In(id)), 1, at, "Post")
 		if codeOf(err) != veloxgql.CodeNotFound {
 			t.Errorf("one ID, %s: %v, want NOT_FOUND", name, err)
@@ -727,8 +737,8 @@ func TestExist(t *testing.T) {
 		}
 	}
 	// The query's own error is returned as it is.
-	if err := gqlimpl.CheckExists(ctx, db.Query[post]().Where(posts.ID.In(1)), 1, at, "Post"); !errors.Is(err, velox.ErrNoTenant) {
-		t.Errorf("no tenant: %v, want ErrNoTenant", err)
+	if err := gqlimpl.CheckExists(ctx, db.Query[post]().Where(posts.ID.In(1)), 1, at, "Post"); !errors.Is(err, scope.ErrNoScope) {
+		t.Errorf("no scope: %v, want ErrNoScope", err)
 	}
 }
 
@@ -740,11 +750,11 @@ func TestNotFound(t *testing.T) {
 }
 
 // TestReadable: Readable returns the keys of the rows its query selects
-// under the tenant and the Read policy, and runs no query for no keys.
+// under the scope and the Read policy, and runs no query for no keys.
 func TestReadable(t *testing.T) {
 	db, r := mutationDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	ann, bob := velox.WithTenant(ctx, "ann"), velox.WithTenant(ctx, "bob")
+	ann, bob := tenantKey.With(ctx, "ann"), tenantKey.With(ctx, "bob")
 	for _, p := range []struct {
 		ctx context.Context
 		p   post
@@ -766,8 +776,8 @@ func TestReadable(t *testing.T) {
 	if _, stmts := r.take(); len(stmts) != 0 {
 		t.Errorf("Readable of no keys sent %v", stmts)
 	}
-	if _, err := gqlimpl.Readable(ctx, db.Query[post]().Where(posts.ID.In(1)), 1, id); !errors.Is(err, velox.ErrNoTenant) {
-		t.Errorf("no tenant: %v, want ErrNoTenant", err)
+	if _, err := gqlimpl.Readable(ctx, db.Query[post]().Where(posts.ID.In(1)), 1, id); !errors.Is(err, scope.ErrNoScope) {
+		t.Errorf("no scope: %v, want ErrNoScope", err)
 	}
 }
 
@@ -824,13 +834,13 @@ func TestUnlinkAll(t *testing.T) {
 func TestRepointed(t *testing.T) {
 	db, _ := mutationDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	ann := velox.WithTenant(ctx, "ann")
+	ann := tenantKey.With(ctx, "ann")
 	if err := db.Insert(&post{ID: 1, Title: "linked"}).Exec(ann); err != nil {
 		t.Fatal(err)
 	}
 	const at = "CreateAccountInput.postIDs"
 	linked, none := db.Query[post]().Where(posts.ID.In(1)), db.Query[post]().Where(posts.ID.In(2))
-	// No tenant: the query would fail, so none runs.
+	// No scope value: the query would fail, so none runs.
 	if err := gqlimpl.Repointed(ctx, 2, 2, linked, at, "Post", "Account"); err != nil {
 		t.Errorf("all re-pointed: %v", err)
 	}
@@ -857,20 +867,20 @@ func TestRepointed(t *testing.T) {
 			t.Errorf("Repointed(%d, %d) = %v (code %q), want %q, %s", c.got, c.n, err, codeOf(err), c.want, c.code)
 		}
 	}
-	if err := gqlimpl.Repointed(ctx, 0, 1, linked, at, "Post", "Account"); !errors.Is(err, velox.ErrNoTenant) {
-		t.Errorf("the count's error: %v, want ErrNoTenant", err)
+	if err := gqlimpl.Repointed(ctx, 0, 1, linked, at, "Post", "Account"); !errors.Is(err, scope.ErrNoScope) {
+		t.Errorf("the count's error: %v, want ErrNoScope", err)
 	}
 }
 
-// TestStillLinked: a row q finds, though the caller's tenant scope hides it,
+// TestStillLinked: a row q finds, though the caller's scope hides it,
 // fails with BAD_USER_INPUT naming only the two types; no row is not an error.
 func TestStillLinked(t *testing.T) {
 	db, _ := mutationDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	if err := db.Insert(&post{ID: 1, Title: "held"}).Exec(velox.WithTenant(ctx, "b")); err != nil {
+	if err := db.Insert(&post{ID: 1, Title: "held"}).Exec(tenantKey.With(ctx, "b")); err != nil {
 		t.Fatal(err)
 	}
-	a := velox.WithTenant(ctx, "a")
+	a := tenantKey.With(ctx, "a")
 	const at = "UpdateXInput.yID"
 	held, none := db.Query[post]().Where(posts.ID.EQ(1)), db.Query[post]().Where(posts.ID.EQ(2))
 	for _, c := range []struct{ typ, want string }{

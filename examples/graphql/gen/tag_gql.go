@@ -27,6 +27,18 @@ func (*Tag) IsNode() {}
 // the key id, encoded.
 func (x *Tag) IDGQL() string { return veloxgql.EncodeID("Label", x.ID) }
 
+// tagNodeGQL is the Node type Label for Node and Nodes.
+func tagNodeGQL() gqlimpl.NodeKind {
+	return gqlimpl.NewNode[Tag, *Tag](
+		"Label",
+		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "Label") },
+		func(db *velox.DB) velox.Query[Tag] { return db.Query[Tag]() },
+		tagColumnsGQL,
+		Tags.ID.EQ, Tags.ID.In,
+		func(x *Tag) int64 { return x.ID },
+	)
+}
+
 // PostsGQL is the edge posts: a connection to the Post nodes it leads to,
 // paged, ordered and filtered by the arguments. Its queries run when gqlgen
 // asks for the connection's fields, each with those of every row read with x,
@@ -59,9 +71,11 @@ func (c *LabelConnection) Edges(ctx context.Context) ([]*LabelEdge, error) {
 	if err != nil {
 		return nil, err
 	}
+	slab := make([]LabelEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*LabelEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		edges[i] = &LabelEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = LabelEdge{Node: x, Cursor: p.Cursors[i]}
+		edges[i] = &slab[i]
 	}
 	return edges, nil
 }
@@ -111,9 +125,9 @@ func LabelsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 // which the cursors hold: a q whose Columns or Omit drops one is refused with
 // an internal error. In a gqlgen field, the page reads only the columns the
 // selection needs (tagColumnsGQL), of those q selects; a column the selection
-// does not need is left zero in the nodes, except the key, the foreign keys,
-// the order columns and the tenant, so an application's resolver must not read
-// one it did not ask for. It runs no query.
+// does not need is left zero in the nodes, except the key, the foreign keys and
+// the order columns, so an application's resolver must not read one it did not
+// ask for. It runs no query.
 func LabelsConnectionOf(ctx context.Context, q velox.Query[Tag], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	if !q.Selects(Tags.ID) {
 		return nil, fmt.Errorf("veloxgql: LabelsConnectionOf: the base query does not select the key, which the cursors hold")
@@ -160,9 +174,9 @@ func tagKeyGQL() []gqlimpl.OrderTerm[Tag] {
 }
 
 // tagColumnsGQL is the columns a selection of the Label fields fields reads:
-// the key, every foreign key on the row, every order field's column, the tenant
-// column, and the column of each field. It is nil, every column, when a field
-// is not one velox-graphql wrote, such as an application's own.
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
 func tagColumnsGQL(fields []string) []velox.Column[Tag] {
 	cols := []velox.Column[Tag]{Tags.ID, Tags.Name}
 	for _, f := range fields {
@@ -275,13 +289,9 @@ type LabelWhereInput struct {
 
 // Pred is the condition w stands for, on Label nodes: every predicate w sets
 // holds, and a w that sets none, or a nil w, holds for every node. It fails,
-// before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or
-// a malformed one (veloxgql.ErrBadID), on a nesting deeper than the
-// MaxFilterDepth of veloxgql.LimitsFromContext(ctx)
-// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
-// of more than its MaxFilterWidth entries (veloxgql.ErrFilterTooWide), and on a
-// where argument of more than its MaxFilterNodes inputs, predicates and values
-// in all (veloxgql.ErrFilterTooLarge).
+// before any query runs, on an ID of another type or a malformed one, and on a
+// filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
+// gqlimpl.NewFilter's.
 func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
 	f := gqlimpl.NewFilter[Tag](ctx, "LabelWhereInput")
 	if w == nil {
@@ -349,16 +359,16 @@ func (in CreateLabelInput) GoString() string { return in.String() }
 
 // CreateLabel creates a Label from input, with its edges, as the mutation
 // createLabel does, and returns the row as written. It runs atomically on the
-// DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the
-// policies. See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
+// DB veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations"
+// in the documentation of package github.com/syssam/velox/contrib/graphql for
+// what each input field does, what the caller may link and change, and the
+// errors.
 func CreateLabel(ctx context.Context, input CreateLabelInput) (*Tag, error) {
 	var (
-		k2  []int64
-		err error
+		postIDsKeys []int64
+		err         error
 	)
-	if k2, err = gqlimpl.DecodeIDs[int64](ctx, "CreateLabelInput.postIDs", input.PostIDs, "Post"); err != nil {
+	if postIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "CreateLabelInput.postIDs", input.PostIDs, "Post"); err != nil {
 		return nil, err
 	}
 	var x Tag
@@ -370,17 +380,17 @@ func CreateLabel(ctx context.Context, input CreateLabelInput) (*Tag, error) {
 	}
 	var out *Tag
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if len(k2) > 0 {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(k2...)), len(k2), "CreateLabelInput.postIDs", "Post"); err != nil {
+		if len(postIDsKeys) > 0 {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(postIDsKeys...)), len(postIDsKeys), "CreateLabelInput.postIDs", "Post"); err != nil {
 				return err
 			}
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreateLabelInput", "gen.Tag", tagFieldGQL)
 		}
-		if len(k2) > 0 {
-			rows := make([]PostTag, len(k2))
-			for i, k := range k2 {
+		if len(postIDsKeys) > 0 {
+			rows := make([]PostTag, len(postIDsKeys))
+			for i, k := range postIDsKeys {
 				rows[i] = PostTag{TagID: x.ID, PostID: k}
 			}
 			if err := db.InsertAll(rows).OnConflict(PostTags.TagID, PostTags.PostID).DoNothing().Exec(ctx); err != nil {
@@ -415,15 +425,7 @@ type UpdateLabelInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in UpdateLabelInput) String() string {
-	var p0 any
-	if in.Name != nil {
-		p0 = *in.Name
-	}
-	var p1 any
-	if in.Rank != nil {
-		p1 = *in.Rank
-	}
-	return fmt.Sprintf("UpdateLabelInput(Name=%v, Rank=%v, AddPostIDs=%v, RemovePostIDs=%v, ClearPosts=%v)", p0, p1, in.AddPostIDs, in.RemovePostIDs, in.ClearPosts)
+	return fmt.Sprintf("UpdateLabelInput(Name=%v, Rank=%v, AddPostIDs=%v, RemovePostIDs=%v, ClearPosts=%v)", gqlimpl.Show(in.Name), gqlimpl.Show(in.Rank), in.AddPostIDs, in.RemovePostIDs, in.ClearPosts)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -431,27 +433,27 @@ func (in UpdateLabelInput) GoString() string { return in.String() }
 
 // UpdateLabel updates the Label with the ID id from input, as the mutation
 // updateLabel does, and returns the row as written. It runs atomically on the
-// DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the
-// policies. See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
+// DB veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations"
+// in the documentation of package github.com/syssam/velox/contrib/graphql for
+// what each input field does, what the caller may link and change, and the
+// errors.
 func UpdateLabel(ctx context.Context, id string, input UpdateLabelInput) (*Tag, error) {
 	var (
-		key int64
-		k2  []int64
-		k3  []int64
-		err error
+		key               int64
+		addPostIDsKeys    []int64
+		removePostIDsKeys []int64
+		err               error
 	)
 	if key, err = gqlimpl.DecodeID[int64]("updateLabel.id", id, "Label"); err != nil {
 		return nil, err
 	}
-	if k2, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateLabelInput.addPostIDs", input.AddPostIDs, "Post"); err != nil {
+	if addPostIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateLabelInput.addPostIDs", input.AddPostIDs, "Post"); err != nil {
 		return nil, err
 	}
-	if k3, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateLabelInput.removePostIDs", input.RemovePostIDs, "Post"); err != nil {
+	if removePostIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateLabelInput.removePostIDs", input.RemovePostIDs, "Post"); err != nil {
 		return nil, err
 	}
-	if err = gqlimpl.Disjoint("UpdateLabelInput", "addPostIDs", "removePostIDs", k2, k3); err != nil {
+	if err = gqlimpl.Disjoint("UpdateLabelInput", "addPostIDs", "removePostIDs", addPostIDsKeys, removePostIDsKeys); err != nil {
 		return nil, err
 	}
 	var set []velox.Setter[Tag]
@@ -466,6 +468,7 @@ func UpdateLabel(ctx context.Context, id string, input UpdateLabelInput) (*Tag, 
 	}
 	var out *Tag
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		counted := false
 		if len(set) > 0 {
 			n, err := db.Update[Tag]().Set(set...).Where(Tags.ID.EQ(key)).Exec(ctx)
 			if err != nil {
@@ -474,29 +477,14 @@ func UpdateLabel(ctx context.Context, id string, input UpdateLabelInput) (*Tag, 
 			if n == 0 {
 				return gqlimpl.NotFound("updateLabel", "Label")
 			}
-			if n < 0 {
-				chk := db.Query[Tag]().Where(Tags.ID.EQ(key)).Writable()
-				if db.Dialect() != velox.SQLite {
-					chk = chk.ForUpdate()
-				}
-				if ok, err := chk.Exists(ctx); err != nil {
-					return err
-				} else if !ok {
-					return gqlimpl.NotFound("updateLabel", "Label")
-				}
-			}
-		} else {
-			chk := db.Query[Tag]().Where(Tags.ID.EQ(key)).Writable()
-			if db.Dialect() != velox.SQLite {
-				chk = chk.ForUpdate()
-			}
-			if ok, err := chk.Exists(ctx); err != nil {
+			counted = n > 0
+		}
+		if !counted {
+			if err := gqlimpl.LockRow(ctx, db, db.Query[Tag]().Where(Tags.ID.EQ(key)), "updateLabel", "Label"); err != nil {
 				return err
-			} else if !ok {
-				return gqlimpl.NotFound("updateLabel", "Label")
 			}
 		}
-		unlink0 := func(ks []int64) error {
+		unlinkPosts := func(ks []int64) error {
 			vs, err := gqlimpl.Readable(ctx, db.Query[Post]().Where(Posts.ID.In(ks...)).Columns(Posts.ID), len(ks), func(x *Post) int64 { return x.ID })
 			if err != nil || len(vs) == 0 {
 				return err
@@ -505,21 +493,21 @@ func UpdateLabel(ctx context.Context, id string, input UpdateLabelInput) (*Tag, 
 			return err
 		}
 		if input.ClearPosts {
-			if err := gqlimpl.UnlinkAll(ctx, db.Query[PostTag]().Where(PostTags.TagID.EQ(key)).OrderBy(PostTags.TagID.Asc(), PostTags.PostID.Asc()), func(j *PostTag) int64 { return j.PostID }, unlink0); err != nil {
+			if err := gqlimpl.UnlinkAll(ctx, db.Query[PostTag]().Where(PostTags.TagID.EQ(key)).OrderBy(PostTags.TagID.Asc(), PostTags.PostID.Asc()), func(j *PostTag) int64 { return j.PostID }, unlinkPosts); err != nil {
 				return err
 			}
 		}
-		if len(k3) > 0 {
-			if err := unlink0(k3); err != nil {
+		if len(removePostIDsKeys) > 0 {
+			if err := unlinkPosts(removePostIDsKeys); err != nil {
 				return err
 			}
 		}
-		if len(k2) > 0 {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(k2...)), len(k2), "UpdateLabelInput.addPostIDs", "Post"); err != nil {
+		if len(addPostIDsKeys) > 0 {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(addPostIDsKeys...)), len(addPostIDsKeys), "UpdateLabelInput.addPostIDs", "Post"); err != nil {
 				return err
 			}
-			rows := make([]PostTag, len(k2))
-			for i, c := range k2 {
+			rows := make([]PostTag, len(addPostIDsKeys))
+			for i, c := range addPostIDsKeys {
 				rows[i] = PostTag{TagID: key, PostID: c}
 			}
 			if err := db.InsertAll(rows).OnConflict(PostTags.TagID, PostTags.PostID).DoNothing().Exec(ctx); err != nil {

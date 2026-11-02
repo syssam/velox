@@ -19,7 +19,7 @@ type bidiKey struct {
 	Edge string // the relation's name, for errors
 }
 
-// bidiReason is the WithoutPolicy and WithAllTenants reason of the statement
+// bidiReason is the WithoutPolicy reason of the statement
 // that clears the old partner's key: integrity maintenance, as ent's
 // clearFKEdges is, which no row scope may leave half done.
 const bidiReason = "velox: clearing the old partner of a bidirectional one-to-one edge"
@@ -28,7 +28,7 @@ const bidiReason = "velox: clearing the old partner of a bidirectional one-to-on
 // type t, unless it relates t to itself through a One field (rt), its id
 // column is the one-column primary key, and its key column is a nullable,
 // unencoded pointer field of the primary key's Go type, with no
-// RequiredEdge, neither the primary key nor the tenant, with a unique index
+// RequiredEdge, not the primary key, with a unique index
 // of its own: that index is what refuses a
 // partner that already has one before anything is cleared.
 func checkEdgeBidi(name string, t reflect.Type, d *DescriptorFields, cols []ColumnInfo, r *EdgeDescriptor, rt reflect.Type) (bidiKey, error) {
@@ -54,8 +54,8 @@ func checkEdgeBidi(name string, t reflect.Type, d *DescriptorFields, cols []Colu
 	}
 	k, id := cols[r.ownerCol], cols[r.targetCol]
 	switch {
-	case r.ownerCol == r.targetCol || r.ownerCol == d.Tenant:
-		return fail("EdgeBidi's key column %s is a primary-key or tenant column", k.Name)
+	case r.ownerCol == r.targetCol:
+		return fail("EdgeBidi's key column %s is a primary-key column", k.Name)
 	case rtype(k.Type).Kind() != reflect.Pointer:
 		// A Nullable slice or map would read a NULL key back as an empty
 		// value, which a write would take for a partner.
@@ -364,7 +364,7 @@ func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Con
 //     not change the row it names (checkBidiRewrite). When it writes no row
 //     nothing else is sent; when it writes more than one, the write fails.
 //  2. For each key, UPDATE … SET key = NULL WHERE key = k, scope-free
-//     (WithoutPolicy and WithAllTenants): it clears the old partner, which the
+//     (WithoutPolicy): it clears the old partner, which the
 //     caller may not see, so that no row is left pointing at k.
 //  3. For each key set to a partner v, bidiLink.
 //
@@ -390,7 +390,7 @@ func bidiUpdate(ctx context.Context, db *DB, mu *MutationState, keys []bidiKey, 
 		case n > 1:
 			return fmt.Errorf("velox: %s: the update that sets the bidirectional key %s wrote %d rows", in.Name, in.Columns[keys[0].Col].Field, n)
 		}
-		free := WithAllTenants(WithoutPolicy(ctx, bidiReason), bidiReason)
+		free := WithoutPolicy(ctx, bidiReason)
 		for _, bk := range keys {
 			unlink := Statement{Op: OpUpdate, Entity: in, InTx: true,
 				Set: []Assignment{{Column: bk.Col, Op: AssignSet}}, Where: []Predicate{ColumnEQ(bk.Col, k)}}

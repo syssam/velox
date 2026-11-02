@@ -42,15 +42,15 @@ type Policy[E any] struct {
 	// Write is ANDed into every UPDATE, DELETE and Save, and into an upsert's
 	// update branch, with Read. It decides which existing rows may change; it
 	// does not check the new values (there is no WITH CHECK), so a writer may
-	// set a column the policy reads, such as an owner. Only the tenant column
-	// cannot be changed.
+	// set a column the policy reads, such as an owner. Only an Immutable
+	// column cannot be changed (ErrImmutable).
 	//
 	// A row Write hides is left alone, and that is not an error: an Update or
 	// Delete that matches only such rows affects 0 rows, as with SQL row-level
 	// security.
 	Write func(ctx context.Context) (Pred[E], error)
 	// Insert checks every inserted or upserted row, after the entity's
-	// hooks, the defaults, the tenant fill and the
+	// hooks, the defaults and the
 	// validators.
 	Insert func(ctx context.Context, x *E) error
 }
@@ -78,7 +78,7 @@ type Policy[E any] struct {
 //	m.SetAffected(n)
 //	return err
 //
-// The update adds the tenant's and the policy's conditions itself. Under
+// The update adds the policy's conditions itself. Under
 // SQL(ctx) such a delete fails with ErrDryRun: the hook's update is a write,
 // and there is no DELETE to render.
 type Mutation[E any] struct{ mu engine.MutationState }
@@ -126,7 +126,7 @@ func (m *Mutation[E]) DB[_ Lazy[E]]() *DB {
 // added, in order, as copies (changing the slice changes nothing). Once the
 // innermost hook has called next, it returns them as they were then, so an
 // outer hook whose next has returned also sees the conditions the hooks
-// inside it added. It never holds the tenant's, the policy's or a Rewrite
+// inside it added. It never holds the policy's or a Rewrite
 // hook's conditions, which next adds. It is empty only when the statement
 // said All, and nil for an insert. Mutation shows a soft delete built on it.
 func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E] {

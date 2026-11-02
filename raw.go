@@ -11,7 +11,7 @@ import (
 // Exec runs query, raw SQL that returns no rows, with args, and returns the
 // number of rows it affected, as the driver counts them, or -1 when the
 // driver could not report its count. reason says why the statement may skip
-// the tenant scope and the policy; if it is empty or only white space, Exec
+// the policies, a scope included; if it is empty or only white space, Exec
 // fails before anything runs. The hooks see reason as given, untrimmed. See
 // Raw for what raw SQL goes through, and what it skips.
 //
@@ -39,7 +39,7 @@ type RawQuery[E any] struct {
 }
 
 // Raw returns query, raw SQL with args, as a query whose rows scan into
-// entity E. reason says why it may skip the tenant scope and the policy; if
+// entity E. reason says why it may skip the policies, a scope included; if
 // it is empty or only white space, running the query fails before anything
 // is sent. The hooks see reason as given, untrimmed.
 //
@@ -56,9 +56,9 @@ type RawQuery[E any] struct {
 //		"SELECT org_id, SUM(total_cents) AS total_cents FROM invoices GROUP BY org_id").All(ctx)
 //
 // Raw SQL is the escape hatch for row locks, CTEs and anything else the
-// builder cannot express. velox applies neither the tenant scope nor any
-// policy to it: tenant scoping is the caller's, written into the SQL, and the
-// Around hooks see reason as Statement.TenantBypass and PolicyBypass. It goes
+// builder cannot express. velox applies no policy to it: scoping is the
+// caller's, written into the SQL, and the Around hooks see reason as
+// Statement.PolicyBypass. It goes
 // through the transaction check, the Around hooks (as OpRawQuery),
 // WithDeadlines, routing (as a read), the SQL comment and the row cap;
 // Rewrite hooks and the entity's Hooks do not run, and it loads no relations.
@@ -79,8 +79,7 @@ type RawQuery[E any] struct {
 //
 // On a DB opened with OpenShards, Raw and Exec run on the shard the context
 // names, as every statement does: WithShard's, else the one WithShardFor gives
-// for the context's tenant (WithTenant), though the tenant scopes nothing.
-// With neither they fail with ErrNoShard, before anything is sent.
+// for the context. With neither they fail with ErrNoShard, before anything is sent.
 func (db *DB) Raw[E any, PE Entity[E]](reason, query string, args ...any) RawQuery[E] {
 	return RawQuery[E]{db: db, meta: PE(nil).VeloxMeta(), reason: reason, query: query, args: args}
 }
@@ -103,7 +102,7 @@ func (q RawQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 		return Statement{}, engine.ErrNoReason(q.meta.info.Name)
 	}
 	return Statement{Op: OpRawQuery, Entity: q.meta.info, SQL: q.query, Args: q.args, MaxRows: q.maxRows,
-		TenantBypass: q.reason, PolicyBypass: q.reason, InTx: q.db.e.InTx}, nil
+		PolicyBypass: q.reason, InTx: q.db.e.InTx}, nil
 }
 
 // rawRun is the state of one run of a RawQuery: All's and One's rows go to

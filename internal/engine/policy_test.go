@@ -12,7 +12,7 @@ func TestTicketMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	info := infoOf[testmodel.Ticket]()
-	if i, ok := info.Column("org_id"); !ok || info.Tenant != i || info.Columns[i].Field != "OrgID" {
-		t.Errorf("tenant %d, org_id is %d (%v)", info.Tenant, i, ok)
+	if i, ok := info.Column("org_id"); !ok || info.Columns[i].Field != "OrgID" || !info.Columns[i].Immutable {
+		t.Errorf("org_id is %d (%v): %+v", i, ok, info.Columns[i])
 	}
 }

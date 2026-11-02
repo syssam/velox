@@ -24,6 +24,10 @@ type writer struct {
 	// subquery: an upsert's condition is on the existing row, and on
 	// PostgreSQL a bare column there may also be EXCLUDED's.
 	qualify bool
+	// joins are the statement's joins; joinAlias is the alias of the one whose
+	// target's conditions are being written, "" outside it.
+	joins     []JoinClause
+	joinAlias string
 	// err is the first error writing found: a JSON value that does not
 	// encode, or a condition comparing a JSON column. The text and
 	// arguments are then not used.
@@ -52,7 +56,11 @@ func (w *writer) col(i int32) { w.ident(w.in.Columns[i].Name) }
 
 // predCol writes a condition's column, qualified when w.qualify says so.
 func (w *writer) predCol(i int32) {
-	if w.qualify && w.depth == 0 {
+	switch {
+	case w.joinAlias != "" && w.depth == 0:
+		w.ident(w.joinAlias)
+		w.str(".")
+	case w.qualify && w.depth == 0:
 		w.table()
 		w.str(".")
 	}
@@ -109,6 +117,8 @@ func (w *writer) selectStmt(st *Statement) {
 		w.eachSelect(st)
 		return
 	}
+	joined := len(st.Joins) > 0
+	w.joins, w.qualify = st.Joins, joined
 	w.str("SELECT ")
 	if st.GroupBy != 0 {
 		w.groupKey(st.GroupBy - 1)
@@ -129,17 +139,94 @@ func (w *writer) selectStmt(st *Statement) {
 		}
 		w.str(")")
 	default:
-		w.selectColumns(st.Columns, false)
+		w.selectColumns(st.Columns, joined)
+		w.joinColumns()
 	}
 	w.str(" FROM ")
 	w.table()
+	w.joinClauses()
 	w.where(st.Where)
 	if st.GroupBy != 0 {
 		w.str(" GROUP BY ")
 		w.groupKey(st.GroupBy - 1)
 	}
-	w.orderBy(st.OrderBy, false)
+	w.orderBy(st.OrderBy, joined)
+	w.qualify = false
 	w.selectTail(st)
+}
+
+// joinColumns writes the columns of every joined target, each under the join's
+// alias, after the statement's own.
+func (w *writer) joinColumns() {
+	for i := range w.joins {
+		t := w.joins[i].Link.Target
+		for c := range t.Columns {
+			w.str(", ")
+			w.ident(joinAlias(i + 1))
+			w.str(".")
+			w.ident(t.Columns[c].Name)
+		}
+	}
+}
+
+// joinClauses writes the joins after the FROM: each target under its alias,
+// on the owner's key equal to the target's, and the target's Read conditions.
+// A condition of a left join belongs here and not in the WHERE: a row without
+// a visible target stays.
+func (w *writer) joinClauses() {
+	for i := range w.joins {
+		j := &w.joins[i]
+		alias := joinAlias(i + 1)
+		if j.Left {
+			w.str(" LEFT JOIN ")
+		} else {
+			w.str(" JOIN ")
+		}
+		owner := w.in
+		w.in = j.Link.Target
+		w.table()
+		w.str(" AS ")
+		w.ident(alias)
+		w.str(" ON ")
+		w.ident(alias)
+		w.str(".")
+		w.col(int32(j.Link.TargetCol))
+		w.str(" = ")
+		w.in = owner
+		w.table()
+		w.str(".")
+		w.col(int32(j.Link.OwnerCol))
+		w.in, w.joinAlias, w.alias = j.Link.Target, alias, alias
+		for _, p := range j.On {
+			w.str(" AND ")
+			w.pred(p.n)
+		}
+		w.in, w.joinAlias, w.alias = owner, "", ""
+	}
+}
+
+// joined writes the conditions of an OpJoined node, on the target of the join
+// the node names. They are written under the join's alias, and are the
+// statement's own conditions: on a left join they keep only rows that have
+// a target.
+func (w *writer) joined(n Node) {
+	i, ok := joinOf(w.joins, n.Col)
+	if !ok || w.depth != 0 || w.joinAlias != "" {
+		w.fail(fmt.Errorf("velox: %s: a condition on a joined relation needs Join or LeftJoin of it in the same query, and cannot be inside Has or another joined condition", w.in.Name))
+		return
+	}
+	in, alias := w.in, w.alias
+	w.in, w.joinAlias, w.alias = w.joins[i].Link.Target, joinAlias(i+1), joinAlias(i+1)
+	if len(n.Kids) == 0 {
+		w.str("1 = 1")
+	}
+	for k, c := range n.Kids {
+		if k > 0 {
+			w.str(" AND ")
+		}
+		w.pred(c)
+	}
+	w.in, w.joinAlias, w.alias = in, "", alias
 }
 
 // groupKey writes a grouped aggregate's key column.
@@ -182,6 +269,10 @@ func (w *writer) orderBy(os []OrderTerm, qualified bool) {
 		} else {
 			w.str(", ")
 		}
+		if o.Rel != 0 {
+			w.joinedOrder(o)
+			continue
+		}
 		if w.in.Columns[o.Column].Codec {
 			w.fail(errCodecOrderBy(w.in, o.Column))
 		}
@@ -193,6 +284,29 @@ func (w *writer) orderBy(os []OrderTerm, qualified bool) {
 		if o.Desc {
 			w.str(" DESC")
 		}
+	}
+}
+
+// joinedOrder writes an ordering by a column of a joined target.
+func (w *writer) joinedOrder(o OrderTerm) {
+	i, ok := joinOf(w.joins, o.Rel-1)
+	if !ok {
+		w.fail(fmt.Errorf("velox: %s: an ordering by a joined relation needs Join or LeftJoin of it in the same query", w.in.Name))
+		return
+	}
+	t := w.joins[i].Link.Target
+	if o.Column < 0 || o.Column >= len(t.Columns) {
+		w.fail(fmt.Errorf("velox: %s: an ordering names column %d of %s, which has %d", w.in.Name, o.Column, t.Name, len(t.Columns)))
+		return
+	}
+	if t.Columns[o.Column].Codec {
+		w.fail(errCodecOrderBy(t, o.Column))
+	}
+	w.ident(joinAlias(i + 1))
+	w.str(".")
+	w.ident(t.Columns[o.Column].Name)
+	if o.Desc {
+		w.str(" DESC")
 	}
 }
 
@@ -396,11 +510,6 @@ func (w *writer) eachKeys(c *EachClause, key func()) {
 		w.arg(k)
 	}
 	w.str(")")
-	if c.ownerRef != nil {
-		w.str(" AND ")
-		key()
-		w.refIn(c.Join, c.ownerRef, c.ownerTenant)
-	}
 }
 
 // pairUnique reports whether no two of j's rows can hold one pair of values
@@ -551,10 +660,8 @@ func (w *writer) pred(n Node) {
 		w.exists(n)
 	case OpThrough:
 		w.through(n)
-	case OpTenantRef:
-		r := &w.in.refs[n.Col]
-		w.predCol(int32(r.Column))
-		w.refIn(w.in, r, n.V)
+	case OpJoined:
+		w.joined(n)
 	default:
 		w.fail(fmt.Errorf("velox: %s: a condition of unknown kind %d", w.in.Name, n.Op))
 	}
@@ -582,7 +689,7 @@ func (w *writer) through(n Node) {
 // innermost table. A many-to-many relation is an EXISTS on the join entity
 // holding one on the target, which holds the conditions; the inner EXISTS is
 // written even with none: it asserts that the target row exists, and the
-// scope adds the target's tenant and Read conditions to it.
+// scope adds the target's Read conditions to it.
 func (w *writer) exists(n Node) {
 	l := n.V.(Link)
 	owner, outer, depth := w.in, w.alias, w.depth

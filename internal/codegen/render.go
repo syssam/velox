@@ -26,46 +26,15 @@ func Generate(g *Graph, cfg Config) ([]File, error) {
 	if err != nil {
 		return nil, err
 	}
-	tenantKinds(o, g)
 	return Render(o)
 }
 
-// tenantKinds states, in each TenantRef of o, the reflect kind of the Go type of its
-// target's tenant column: a plain string, so that the entity's file imports nothing
-// for it and its metadata names no target's.
-func tenantKinds(o *Out, g *Graph) {
-	for _, e := range o.Entities {
-		for i := range e.TenantRefs {
-			r := &e.TenantRefs[i]
-			for _, to := range g.Entities {
-				if to.Table == r.Table && to.TableSchema == r.Schema && to.Tenant != "" {
-					r.Kind = tenantKind(to.Fields[fieldIndex(to, to.Tenant)])
-					break
-				}
-			}
-		}
-	}
-}
-
-// tenantKind is the reflect kind of tenant field f's Go type.
-func tenantKind(f *Field) string {
-	if k := goKindOf(f); k != "" {
-		return k
-	}
-	switch f.Type {
-	case "enum":
-		return "string"
-	case "time":
-		return "struct"
-	}
-	return f.Type // velox's standard types are named for their Go types
-}
-
 // Render writes one file per entity, <label>_velox.go (the join entities too),
-// and velox.go: the package comment and the enums.
+// velox.go: the package comment and the enums, and, when some entity is scoped,
+// scope_velox.go: the scope keys and each scoped entity's scope.
 //
-// The files are in the order of o.Entities, then velox.go. Render does not
-// change o, and the same o gives the same bytes.
+// The files are in the order of o.Entities, then velox.go, then scope_velox.go.
+// Render does not change o, and the same o gives the same bytes.
 func Render(o *Out) ([]File, error) {
 	files := make([]File, 0, len(o.Entities)+1)
 	for _, e := range o.Entities {
@@ -80,7 +49,15 @@ func Render(o *Out) ([]File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(files, File{Name: "velox.go", Data: data}), nil
+	files = append(files, File{Name: "velox.go", Data: data})
+	if len(o.ScopeKeys) == 0 {
+		return files, nil
+	}
+	data, err = formatted("scope_velox.go", renderScope(o))
+	if err != nil {
+		return nil, err
+	}
+	return append(files, File{Name: "scope_velox.go", Data: data}), nil
 }
 
 func formatted(name, src string) ([]byte, error) {
@@ -159,6 +136,53 @@ func renderPackage(o *Out) string {
 	return w.String()
 }
 
+// renderScope writes scope_velox.go: a variable for each scope key, and for
+// each scoped entity the scope.By of its column. The descriptors bind them.
+func renderScope(o *Out) string {
+	var w writer
+	w.WriteString(header)
+	w.p("package %s", o.Package)
+	w.p("")
+	w.p("import (")
+	imports := []string{"github.com/syssam/velox", "github.com/syssam/velox/scope"}
+	for _, k := range o.ScopeKeys {
+		imports = append(imports, k.Imports...)
+	}
+	slices.Sort(imports)
+	for _, p := range slices.Compact(imports) {
+		w.p("%s", strconv.Quote(p))
+	}
+	w.p(")")
+	w.p("")
+	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
+	for _, k := range o.ScopeKeys {
+		w.p("")
+		w.p("// %s is the %q scope: a request carries its value with %s.With(ctx, v),", k.Var, k.Name, k.Var)
+		w.p("// and a statement on an entity scoped by it, without one, fails with scope.ErrNoScope.")
+		w.p("var %s = scope.NewKey[%s](%s)", k.Var, k.GoType, strconv.Quote(k.Name))
+	}
+	for _, e := range o.Entities {
+		if e.Scope == nil {
+			continue
+		}
+		w.p("")
+		w.p("// %s confines %s to the context's %s: it is bound around %s's Policy and Hooks.", e.Scope.Var, e.Name, e.Scope.Key, e.Name)
+		w.p("var %s = scope.By(%s, %s, func(x *%s) *%s { return &x.%s })", e.Scope.Var, e.Scope.KeyVar, e.Scope.Handle, e.Name,
+			scopeGoType(o, e.Scope.KeyVar), e.Scope.Field)
+	}
+	return w.String()
+}
+
+// scopeGoType is the Go type of the key whose variable is keyVar.
+func scopeGoType(o *Out, keyVar string) string {
+	for _, k := range o.ScopeKeys {
+		if k.Var == keyVar {
+			return k.GoType
+		}
+	}
+	return "any"
+}
+
 func quoteAll(ss []string) string {
 	q := make([]string, len(ss))
 	for i, s := range ss {
@@ -174,10 +198,9 @@ func renderEntity(o *Out, e *OutEntity) string {
 	w.p("package %s", o.Package)
 	w.p("")
 	entityImports(&w, o, e)
-	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
-	w.p("")
 	entityStruct(&w, e)
 	w.p("")
+	entityPositions(&w, e)
 	entityHandles(&w, e)
 	w.p("")
 	id := camel(e.Label)
@@ -248,29 +271,63 @@ func entityStruct(w *writer, e *OutEntity) {
 	w.p("}")
 }
 
+// entityPositions writes the constants of e's columns' and edges' positions,
+// which the handles, the descriptor and Check share, so that none of them
+// holds a bare number.
+func entityPositions(w *writer, e *OutEntity) {
+	w.p("// The positions of %s's columns, in the order of its table.", e.Name)
+	w.p("const (")
+	for i := range e.Fields {
+		if i == 0 {
+			w.p("%s = iota", colConst(e, i))
+		} else {
+			w.p("%s", colConst(e, i))
+		}
+	}
+	w.p(")")
+	w.p("")
+	if len(e.Rels) == 0 {
+		return
+	}
+	w.p("// The positions of %s's edges.", e.Name)
+	w.p("const (")
+	for i := range e.Rels {
+		if i == 0 {
+			w.p("%s = iota", edgeConst(e, i))
+		} else {
+			w.p("%s", edgeConst(e, i))
+		}
+	}
+	w.p(")")
+	w.p("")
+}
+
 // entityHandles writes the variable of the typed handles of e's columns and
 // relations, in the layout of internal/testmodel/ticket_velox.go.
 func entityHandles(w *writer, e *OutEntity) {
 	w.p("// %s holds the typed handles of %s's columns and relations.", e.Handles, e.Name)
 	w.p("var %s = struct {", e.Handles)
 	for _, f := range e.Fields {
+		w.p("// %s is the column %s.", f.GoName, f.Column)
 		w.p("%s %s", f.GoName, f.Handle)
 	}
 	for _, r := range e.Rels {
+		w.p("// %s is the edge %s, to %s.", r.GoName, r.Name, r.Target)
 		w.p("%s velox.Rel[%s, %s]", r.GoName, e.Name, r.Target)
 	}
 	w.p("}{")
 	for i, f := range e.Fields {
-		w.p("%s: %s{I: %d},", f.GoName, f.Handle, i)
+		w.p("%s: %s{I: %s},", f.GoName, f.Handle, colConst(e, i))
 	}
 	for i, r := range e.Rels {
-		w.p("%s: velox.Rel[%s, %s]{I: %d},", r.GoName, e.Name, r.Target, i)
+		w.p("%s: velox.Rel[%s, %s]{I: %s},", r.GoName, e.Name, r.Target, edgeConst(e, i))
 	}
 	w.p("}")
 }
 
 // entityDescriptor writes the function that returns e's Descriptor.
 func entityDescriptor(w *writer, e *OutEntity) {
+	w.p("// %sDescriptor describes %s to velox: its table, columns, edges and hooks.", camel(e.Label), e.Name)
 	w.p("func %sDescriptor() velox.Descriptor[%s] {", camel(e.Label), e.Name)
 	if e.CheckSetup != "" {
 		w.p("%s", e.CheckSetup)
@@ -310,8 +367,7 @@ func entityDescriptor(w *writer, e *OutEntity) {
 		w.p("{%s},", strings.Join(parts, ", "))
 	}
 	w.p("},")
-	w.p("PrimaryKey: %s,", ints(e.PrimaryKey))
-	w.p("Tenant: %d,", e.Tenant)
+	w.p("PrimaryKey: %s,", cols(e, e.PrimaryKey))
 	if e.Bidi {
 		w.p("Bidi: true,")
 	}
@@ -323,21 +379,10 @@ func entityDescriptor(w *writer, e *OutEntity) {
 				names[i] = e.Fields[c].Column
 			}
 			if ix.Unique {
-				w.p("{Columns: %s, Unique: true}, // %s", ints(ix.Columns), strings.Join(names, ", "))
+				w.p("{Columns: %s, Unique: true}, // %s", cols(e, ix.Columns), strings.Join(names, ", "))
 			} else {
-				w.p("{Columns: %s}, // %s", ints(ix.Columns), strings.Join(names, ", "))
+				w.p("{Columns: %s}, // %s", cols(e, ix.Columns), strings.Join(names, ", "))
 			}
-		}
-		w.p("},")
-	}
-	if len(e.TenantRefs) > 0 {
-		w.p("TenantRefs: []velox.TenantRef{")
-		for _, r := range e.TenantRefs {
-			schema := ""
-			if r.Schema != "" {
-				schema = "Schema: " + strconv.Quote(r.Schema) + ", "
-			}
-			w.p("{Column: %d, %sTable: %q, Key: %q, Tenant: %q, TenantKind: %q},", r.Column, schema, r.Table, r.Key, r.Tenant, r.Kind)
 		}
 		w.p("},")
 	}
@@ -348,16 +393,28 @@ func entityDescriptor(w *writer, e *OutEntity) {
 		}
 		w.p("},")
 	}
-	if e.Bound.Policy {
+	// A scoped entity's scope is outermost, whether or not the user declares
+	// the methods: the policy is wrapped in it, and its Fill runs first.
+	switch {
+	case e.Scope != nil && e.Bound.Policy:
+		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(%s.Wrap((*%s)(nil).Policy())) },", e.Scope.Var, e.Name)
+	case e.Scope != nil:
+		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(%s.Policy()) },", e.Scope.Var)
+	case e.Bound.Policy:
 		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy((*%s)(nil).Policy()) },", e.Name)
 	}
-	if e.Bound.Hooks {
+	switch {
+	case e.Scope != nil && e.Bound.Hooks:
+		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks(append([]velox.Hook[%s]{%s.Fill()}, (*%s)(nil).Hooks()...)) },", e.Name, e.Scope.Var, e.Name)
+	case e.Scope != nil:
+		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[%s]{%s.Fill()}) },", e.Name, e.Scope.Var)
+	case e.Bound.Hooks:
 		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks((*%s)(nil).Hooks()) },", e.Name)
 	}
 	w.p("FieldPtr: func(x *%s, i int) any {", e.Name)
 	w.p("switch i {")
 	for i, f := range e.Fields {
-		w.p("case %d:", i)
+		w.p("case %s:", colConst(e, i))
 		w.p("return &x.%s", f.GoName)
 	}
 	w.p("}")
@@ -367,7 +424,7 @@ func entityDescriptor(w *writer, e *OutEntity) {
 		w.p("EdgeFieldPtr: func(x *%s, i int) any {", e.Name)
 		w.p("switch i {")
 		for i, r := range e.Rels {
-			w.p("case %d:", i)
+			w.p("case %s:", edgeConst(e, i))
 			w.p("return &x.%s", r.GoName)
 		}
 		w.p("}")
@@ -386,10 +443,11 @@ func entityDescriptor(w *writer, e *OutEntity) {
 	w.p("}")
 }
 
-func ints(is []int) string {
+// cols is the []int literal of the positions of e's columns is.
+func cols(e *OutEntity, is []int) string {
 	s := make([]string, len(is))
 	for i, n := range is {
-		s[i] = strconv.Itoa(n)
+		s[i] = colConst(e, n)
 	}
 	return "[]int{" + strings.Join(s, ", ") + "}"
 }
@@ -401,10 +459,15 @@ func ints(is []int) string {
 // its sensitive fields under %v, %+v and %#v as well as a pointer.
 func entityString(w *writer, e *OutEntity) {
 	var verbs, args []string
-	w.p("// String returns the entity's fields except its sensitive ones.")
+	hidden := slices.ContainsFunc(e.Fields, func(f *OutField) bool { return f.Sensitive || f.Implicit })
+	if hidden {
+		w.p("// String returns the entity's fields except the sensitive ones and the foreign keys velox added.")
+	} else {
+		w.p("// String returns the entity's fields.")
+	}
 	w.p("func (x %s) String() string {", e.Name)
-	for i, f := range e.Fields {
-		if f.Sensitive {
+	for _, f := range e.Fields {
+		if f.Sensitive || f.Implicit {
 			continue
 		}
 		if f.ElemType == "[]byte" && !f.Pointer {
@@ -418,7 +481,7 @@ func entityString(w *writer, e *OutEntity) {
 			args = append(args, "x."+f.GoName)
 			continue
 		}
-		v := "p" + strconv.Itoa(i)
+		v := camel(plugin.Snake(f.GoName)) + "Val"
 		w.p("var %s any", v)
 		w.p("if x.%s != nil {", f.GoName)
 		w.p("%s = *x.%s", v, f.GoName)
@@ -432,6 +495,10 @@ func entityString(w *writer, e *OutEntity) {
 	w.p("return fmt.Sprintf(%s)", call)
 	w.p("}")
 	w.p("")
-	w.p("// GoString is String, so that %%#v does not print the sensitive fields either.")
+	if hidden {
+		w.p("// GoString is String, so that %%#v does not print them either.")
+	} else {
+		w.p("// GoString is String, so that %%#v prints the same text.")
+	}
 	w.p("func (x %s) GoString() string { return x.String() }", e.Name)
 }

@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	ctx = velox.WithAllTenants(context.Background(), "otel tests")
+	ctx = velox.WithoutPolicy(context.Background(), "otel tests")
 	I   = testmodel.Invoices
 )
 
@@ -77,7 +77,7 @@ func TestSelectSpan(t *testing.T) {
 		"db.collection.name":  attribute.StringValue("invoices"),
 		"db.query.summary":    attribute.StringValue("SELECT invoices"),
 		"velox.entity":        attribute.StringValue("testmodel.Invoice"),
-		"velox.tenant_bypass": attribute.StringValue("otel tests"),
+		"velox.policy_bypass": attribute.StringValue("otel tests"),
 		"velox.tag.route":     attribute.StringValue("GET /invoices"),
 		"velox.tag.team":      attribute.StringValue("billing"),
 		"code.file.path":      attribute.StringValue("statement_test.go"),
@@ -95,7 +95,7 @@ func TestSelectSpan(t *testing.T) {
 		t.Errorf("db.query.text %q, sent %q", q, f.log[0])
 	}
 	// db.response.returned_rows is Opt-In on spans in v1.43.0.
-	for _, k := range []attribute.Key{"db.response.returned_rows", "velox.affected_rows", "velox.count", "velox.tenant", "velox.policy_bypass", "error.type"} {
+	for _, k := range []attribute.Key{"db.response.returned_rows", "velox.affected_rows", "velox.count", "velox.scope", "error.type"} {
 		if _, ok := a[k]; ok {
 			t.Errorf("unexpected %s", k)
 		}
@@ -266,29 +266,29 @@ func TestOmitQueryText(t *testing.T) {
 	}
 }
 
-func TestRecordTenant(t *testing.T) {
-	db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{RecordTenant: true})
-	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(velox.WithTenant(context.Background(), int64(7))); err != nil {
+func TestRecordScope(t *testing.T) {
+	db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{RecordScope: true})
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(testmodel.Org.With(context.Background(), int64(7))); err != nil {
 		t.Fatal(err)
 	}
 	a := attrs(only(t, exp))
-	if got := a["velox.tenant"]; got != attribute.StringValue("7") {
-		t.Errorf("velox.tenant = %v", got.String())
+	if got := a["velox.scope"]; got != attribute.StringValue("org=int64:7") {
+		t.Errorf("velox.scope = %v", got.String())
 	}
-	if _, ok := a["velox.tenant_bypass"]; ok {
-		t.Error("unexpected velox.tenant_bypass")
+	if _, ok := a["velox.policy_bypass"]; ok {
+		t.Error("unexpected velox.policy_bypass")
 	}
 }
 
-// TestTenantNotRecordedByDefault: without RecordTenant, a tenant-scoped
-// statement's span has no velox.tenant.
-func TestTenantNotRecordedByDefault(t *testing.T) {
+// TestScopeNotRecordedByDefault: without RecordScope, a scoped statement's span
+// has no velox.scope.
+func TestScopeNotRecordedByDefault(t *testing.T) {
 	db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{})
-	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(velox.WithTenant(context.Background(), int64(7))); err != nil {
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(testmodel.Org.With(context.Background(), int64(7))); err != nil {
 		t.Fatal(err)
 	}
-	if v, ok := attrs(only(t, exp))["velox.tenant"]; ok {
-		t.Errorf("velox.tenant = %v", v.String())
+	if v, ok := attrs(only(t, exp))["velox.scope"]; ok {
+		t.Errorf("velox.scope = %v", v.String())
 	}
 }
 
@@ -498,16 +498,16 @@ func TestIterPanicEndsTheSpan(t *testing.T) {
 	}
 }
 
-// shardOf maps the tenants 1 and 2 to the shards "a" and "b".
-func shardOf(_ context.Context, tenant any) (string, error) {
-	if tenant == int64(1) {
+// shardOf maps the orgs 1 and 2 to the shards "a" and "b".
+func shardOf(ctx context.Context) (string, error) {
+	if org, _ := testmodel.Org.From(ctx); org == 1 {
 		return "a", nil
 	}
 	return "b", nil
 }
 
-// tenant returns a context for the org with id n, which shardOf maps to a shard.
-func tenant(n int64) context.Context { return velox.WithTenant(context.Background(), n) }
+// inOrg returns a context for the org with id n, which shardOf maps to a shard.
+func inOrg(n int64) context.Context { return testmodel.Org.With(context.Background(), n) }
 
 // shardedTraced returns a DB over shards "a" and "b" traced and measured.
 func shardedTraced(t *testing.T, shards map[string]*fakeDB) (*velox.DB, *tracetest.InMemoryExporter, *sdkmetric.ManualReader) {
@@ -601,8 +601,8 @@ func TestRouteAttributes(t *testing.T) {
 	t.Run("shard", func(t *testing.T) {
 		a1, b1 := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
 		db, exp, _ := shardedTraced(t, map[string]*fakeDB{"a": a1, "b": b1})
-		read(tenant(2), db)
-		read(velox.WithShard(velox.WithAllTenants(context.Background(), "otel tests"), "a"), db)
+		read(inOrg(2), db)
+		read(velox.WithShard(velox.WithoutPolicy(context.Background(), "otel tests"), "a"), db)
 		var got []string
 		for _, s := range exp.GetSpans() {
 			a := attrs(s)
@@ -649,7 +649,7 @@ func TestRouteShardAtStart(t *testing.T) {
 		"b": {Primary: velox.SQLConn(b1.open())},
 	}, append(veloxotel.Options(veloxotel.Config{TracerProvider: tp}), velox.WithShardFor(shardOf))...)
 	for _, n := range []int64{2, 1} {
-		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(tenant(n)); err != nil {
+		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(inOrg(n)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -662,7 +662,7 @@ func TestRouteShardAtStart(t *testing.T) {
 // semantic conventions name a span with neither an operation nor a table, and
 // carries neither db.operation.name, db.collection.name nor db.query.summary:
 // velox does not parse them out of the SQL. It carries the reason as
-// velox.tenant_bypass and velox.policy_bypass, and Raw's returned rows or
+// velox.policy_bypass, and Raw's returned rows or
 // Exec's affected rows. It carries the SQL as sent only when the statement
 // has arguments: v1.43.0 says non-parameterized text SHOULD NOT be collected
 // by default, and velox cannot tell whether raw text holds literals.
@@ -697,7 +697,6 @@ func TestRawSpans(t *testing.T) {
 		want := map[attribute.Key]attribute.Value{
 			"db.system.name":      attribute.StringValue("postgresql"),
 			"velox.entity":        attribute.StringValue(c.entity),
-			"velox.tenant_bypass": attribute.StringValue(c.reason),
 			"velox.policy_bypass": attribute.StringValue(c.reason),
 			c.want[0]:             attribute.Int64Value(c.n),
 		}

@@ -68,7 +68,6 @@ func PnoteDescriptor() velox.Descriptor[Pnote] {
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}, {Field: "Locked", Name: "locked"},
 			{Field: "ParentID", Name: "parent_id"}, {Field: "InvoiceID", Name: "invoice_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[Pnote]("Parent", 3, 0), velox.EdgeTo[testmodel.Invoice]("Invoice", 4, 0)},
 		FieldPtr: func(x *Pnote, i int) any {
 			switch i {
@@ -174,7 +173,6 @@ func DnoteDescriptor() velox.Descriptor[Dnote] {
 		Table:      "dnotes",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *Dnote, i int) any {
 			if i == 0 {
 				return &x.ID

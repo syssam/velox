@@ -27,7 +27,7 @@ func TestPluginPackageImportsNothing(t *testing.T) {
 	}
 }
 
-// TestEdgeKindConstants pins the edge kinds' JSON values, which are model 2's.
+// TestEdgeKindConstants pins the edge kinds' JSON values, which are model 3's.
 func TestEdgeKindConstants(t *testing.T) {
 	for k, want := range map[plugin.EdgeKind]string{plugin.O2O: "O2O", plugin.O2M: "O2M", plugin.M2O: "M2O", plugin.M2M: "M2M"} {
 		if string(k) != want {
@@ -38,7 +38,7 @@ func TestEdgeKindConstants(t *testing.T) {
 			t.Errorf("edge of kind %s marshals to %s (%v)", want, b, err)
 		}
 	}
-	if plugin.ModelVersion != 2 {
-		t.Errorf("ModelVersion %d, want 2", plugin.ModelVersion)
+	if plugin.ModelVersion != 3 {
+		t.Errorf("ModelVersion %d, want 3", plugin.ModelVersion)
 	}
 }

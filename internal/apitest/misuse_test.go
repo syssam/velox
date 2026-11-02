@@ -36,11 +36,6 @@ func TestRewriteCannotNilOrForeignEntity(t *testing.T) {
 			info := velox.EntityInfo{Name: "other.Thing", Table: "things", Columns: st.Entity.Columns}
 			st.Entity = &info
 		}, "not a copy of it"},
-		"unscoped copy": {func(st *velox.Statement) {
-			info := *st.Entity
-			info.Tenant = -1
-			st.Entity = &info
-		}, "a copy whose tenant column or policy differs"},
 	}
 	for name, c := range cases {
 		e := &fakeconn.Exec{}

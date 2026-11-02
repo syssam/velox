@@ -85,6 +85,7 @@ func TestGeneratedRunsOnSQLite(t *testing.T) {
 	dir := e2eModule(t, Config{Package: "gen", Bound: map[string]Bound{
 		"Post": {Policy: true},
 		"User": {Hooks: true},
+		"Note": {Policy: true, Hooks: true},
 	}}, []string{"user"}, "main_test.go")
 	if out, err := tempmod.Go(dir, "vet", "./..."); err != nil {
 		t.Fatalf("go vet:\n%v", out)

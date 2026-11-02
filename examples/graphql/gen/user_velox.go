@@ -10,36 +10,56 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // User is the entity of schema User.
 type User struct {
-	ID           int64            `json:"id,omitempty"`
-	Name         string           `json:"name,omitempty"`
-	Email        string           `json:"email,omitempty"`
-	Role         UserRole         `json:"role,omitempty"`
+	ID           int64            `json:"id"`
+	Name         string           `json:"name"`
+	Email        string           `json:"email"`
+	Role         UserRole         `json:"role"`
 	JoinedAt     time.Time        `json:"joined_at,omitzero"`
 	PasswordHash string           `json:"-"`
 	Posts        velox.Many[Post] `json:"posts,omitzero"`
 }
 
+// The positions of User's columns, in the order of its table.
+const (
+	userColID = iota
+	userColName
+	userColEmail
+	userColRole
+	userColJoinedAt
+	userColPasswordHash
+)
+
+// The positions of User's edges.
+const (
+	userEdgePosts = iota
+)
+
 // Users holds the typed handles of User's columns and relations.
 var Users = struct {
-	ID           velox.NumberCol[User, int64]
-	Name         velox.StringCol[User, string]
-	Email        velox.StringCol[User, string]
-	Role         velox.StringCol[User, UserRole]
-	JoinedAt     velox.OrderedCol[User, time.Time]
+	// ID is the column id.
+	ID velox.NumberCol[User, int64]
+	// Name is the column name.
+	Name velox.StringCol[User, string]
+	// Email is the column email.
+	Email velox.StringCol[User, string]
+	// Role is the column role.
+	Role velox.StringCol[User, UserRole]
+	// JoinedAt is the column joined_at.
+	JoinedAt velox.OrderedCol[User, time.Time]
+	// PasswordHash is the column password_hash.
 	PasswordHash velox.StringCol[User, string]
-	Posts        velox.Rel[User, Post]
+	// Posts is the edge posts, to Post.
+	Posts velox.Rel[User, Post]
 }{
-	ID:           velox.NumberCol[User, int64]{I: 0},
-	Name:         velox.StringCol[User, string]{I: 1},
-	Email:        velox.StringCol[User, string]{I: 2},
-	Role:         velox.StringCol[User, UserRole]{I: 3},
-	JoinedAt:     velox.OrderedCol[User, time.Time]{I: 4},
-	PasswordHash: velox.StringCol[User, string]{I: 5},
-	Posts:        velox.Rel[User, Post]{I: 0},
+	ID:           velox.NumberCol[User, int64]{I: userColID},
+	Name:         velox.StringCol[User, string]{I: userColName},
+	Email:        velox.StringCol[User, string]{I: userColEmail},
+	Role:         velox.StringCol[User, UserRole]{I: userColRole},
+	JoinedAt:     velox.OrderedCol[User, time.Time]{I: userColJoinedAt},
+	PasswordHash: velox.StringCol[User, string]{I: userColPasswordHash},
+	Posts:        velox.Rel[User, Post]{I: userEdgePosts},
 }
 
 var userMeta velox.MetaOnce[User]
@@ -47,6 +67,7 @@ var userMeta velox.MetaOnce[User]
 // VeloxMeta is called by velox, not by applications.
 func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
+// userDescriptor describes User to velox: its table, columns, edges and hooks.
 func userDescriptor() velox.Descriptor[User] {
 	return velox.Descriptor[User]{
 		Table: "users",
@@ -58,43 +79,40 @@ func userDescriptor() velox.Descriptor[User] {
 			{Field: "JoinedAt", Name: "joined_at"},
 			{Field: "PasswordHash", Name: "password_hash", Sensitive: true},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
+		PrimaryKey: []int{userColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Post]("Posts", 0, 2),
+			velox.EdgeTo[Post]("Posts", userColID, postColAuthorID),
 		},
 		FieldPtr: func(x *User, i int) any {
 			switch i {
-			case 0:
+			case userColID:
 				return &x.ID
-			case 1:
+			case userColName:
 				return &x.Name
-			case 2:
+			case userColEmail:
 				return &x.Email
-			case 3:
+			case userColRole:
 				return &x.Role
-			case 4:
+			case userColJoinedAt:
 				return &x.JoinedAt
-			case 5:
+			case userColPasswordHash:
 				return &x.PasswordHash
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *User, i int) any {
 			switch i {
-			case 0:
+			case userEdgePosts:
 				return &x.Posts
 			}
 			return nil
 		},
 		Check: func(col int, v any) error {
 			switch col {
-			case 3:
+			case userColRole:
 				x := v.(UserRole)
-				switch x {
-				case "admin", "member":
-				default:
-					return errors.New("is not one of the values")
+				if !x.IsValid() {
+					return errors.New("is not one of admin, member")
 				}
 			}
 			return nil
@@ -102,10 +120,10 @@ func userDescriptor() velox.Descriptor[User] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields except the sensitive ones and the foreign keys velox added.
 func (x User) String() string {
 	return fmt.Sprintf("User(ID=%v, Name=%v, Email=%v, Role=%v, JoinedAt=%v)", x.ID, x.Name, x.Email, x.Role, x.JoinedAt)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v does not print them either.
 func (x User) GoString() string { return x.String() }

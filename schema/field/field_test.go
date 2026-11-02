@@ -45,12 +45,12 @@ var _ schema.Field = field.String("x") // every builder is a schema.Field
 func TestStringOptions(t *testing.T) {
 	d := field.String("name").NotEmpty().MaxLen(100).Match(regexp.MustCompile(`^[a-z]+$`)).
 		Optional().Nillable().Immutable().Unique().Sensitive().Comment("c").StorageKey("nm").
-		SchemaType(map[string]string{"postgres": "citext"}).StructTag(`json:"-"`).Tenant().Default("x").Descriptor()
+		SchemaType(map[string]string{"postgres": "citext"}).StructTag(`json:"-"`).Default("x").Descriptor()
 	if len(d.Errs) != 0 {
 		t.Fatal(d.Errs)
 	}
 	if d.Name != "name" || d.Type != "string" || d.Size != 100 || !d.Optional || !d.Nillable || !d.Immutable ||
-		!d.Unique || !d.Sensitive || !d.Tenant || d.Comment != "c" || d.StorageKey != "nm" ||
+		!d.Unique || !d.Sensitive || d.Comment != "c" || d.StorageKey != "nm" ||
 		d.SchemaType["postgres"] != "citext" || d.StructTag != `json:"-"` || d.Default != "x" {
 		t.Fatalf("descriptor %+v", d)
 	}

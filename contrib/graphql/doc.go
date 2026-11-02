@@ -206,16 +206,16 @@
 // BAD_USER_INPUT; an ID to remove that the edge does not lead to is ignored,
 // and one to add that it already leads to is kept. An update with no field to
 // set sends no UPDATE, and checks its row with an Exists under the same scope
-// as one with fields (Writable): the tenant, and the Read and Write policies.
-// Clearing or removing children unlinks only those the caller may change; one
-// the tenant scope or the child's Write policy hides stays linked. Clearing a
-// many-to-many edge, or removing from it, deletes only the join rows to
-// targets the caller may read, under the tenant scope and the target's Read
-// policy; a link to one they hide stays.
+// as one with fields (Writable): the Read and Write policies. Clearing or
+// removing children unlinks only those the caller may change; one the
+// child's Read or Write policy hides stays linked. Clearing a many-to-many
+// edge, or removing from it, deletes only the join rows to targets the caller
+// may read, under the target's Read policy; a link to one it hides stays.
 //
-// An edge's inputs follow its foreign key. A key that is the tenant column has
-// none: the tenant scope fills it, and an edge to the tenants' entity reads it.
-// A key on the entity's own row is set by <edge>ID. A key on the target's rows is re-pointed from the owner
+// An edge's inputs follow its foreign key. A required key that a hook fills,
+// such as a scope column (package scope: Fill), has its create input left out
+// with graphql.Skip(graphql.SkipMutationCreateInput) on the edge; the edge
+// stays in the type. A key on the entity's own row is set by <edge>ID. A key on the target's rows is re-pointed from the owner
 // by <edge>ID, <edge>IDs or add<Edge>IDs, but only a key that is nullable
 // and mutable: one that is never NULL always holds an owner, and one that is
 // immutable cannot move, so the owner's inputs have no such field, and the
@@ -227,7 +227,7 @@
 // A Required one-to-one or many-to-one edge is nullable in the SDL, author: T,
 // where entgql gives T!. Required says a row is written with its key; it does
 // not say the caller can read the target. A row reads the target in a statement
-// of its own, under the target's tenant scope and Read policy, the DB's Rewrite
+// of its own, under the target's Read policy, the DB's Rewrite
 // hooks and a replica that may lag, and any of them can leave it empty. A
 // non-null field that read null would null the page around the row, with an
 // error for each such row, which tells the client that a hidden row exists. The
@@ -248,10 +248,9 @@
 //
 // A link to a target needs what the write changes. A many-to-many link inserts
 // a join row and changes no target row, so the target must be one the caller
-// may read: the tenant scope and the target's Read policy. A one-to-many or
+// may read: the target's Read policy. A one-to-many or
 // one-to-one link from the owner sets the target's foreign key, so the target
-// must be one the caller may change: the tenant scope and its Read and Write
-// policies. A link by a key on the entity's own row, <edge>ID, changes no
+// must be one the caller may change: its Read and Write policies. A link by a key on the entity's own row, <edge>ID, changes no
 // target row, so the target must be one the caller may read; a bidirectional
 // one-to-one key is the exception, since its link writes the partner's row
 // too (see the limits below). Unlinking follows the same rule, but for the
@@ -259,18 +258,17 @@
 //
 // Re-pointing a one-to-one edge from the owner checks the new child first: one
 // the caller may not read is NOT_FOUND, as an ID that names no row is. Then,
-// when the current child is one the caller may not change, hidden by the
-// tenant scope or a policy, the re-point fails with BAD_USER_INPUT "already
+// when the current child is one the caller may not change, hidden by a
+// policy, the re-point fails with BAD_USER_INPUT "already
 // linked", and the child stays linked. The error names only the two types, no
-// ID, tenant or column, and the hidden child's own ID is NOT_FOUND like any
+// ID or column, and the hidden child's own ID is NOT_FOUND like any
 // other the caller may not read, so the error does not confirm a guess of it.
 // Clearing such an edge, when its current child is one the caller may not
 // change, is a silent no-op, not an error: an error would tell the caller that
 // a child it may not change is linked there.
 //
 // A mutation returns the row as written. Create<T> returns the row it
-// inserted. Update<T> reads it back under the tenant scope without the Read
-// policy: its UPDATE is scoped by the Read policy too, so the caller could read
+// inserted. Update<T> reads it back without the Read policy: its UPDATE is scoped by the Read policy too, so the caller could read
 // the row before it wrote it. A mutation that takes the row out of what the
 // caller may read still returns it. This is a contract, and will not change.
 //
@@ -279,13 +277,13 @@
 // ID encoded again from the key; deleteX's resolver returns it. velox-gen's own
 // migrations give a join table's foreign keys ON DELETE CASCADE, as ent's do,
 // so the database would remove them anyway; the delete matters for a schema
-// written by hand. The join delete has no tenant scope (a join entity has no
-// tenant column), and it goes only after an Exists under the DELETE's own
-// scope (Writable: the tenant, and the Read and Write policies; locking the
+// written by hand. The join delete has no scope of its own (a join entity has no
+// Read policy), and it goes only after an Exists under the DELETE's own
+// scope (Writable: the Read and Write policies; locking the
 // row with FOR UPDATE wherever the dialect can) has found the row, so a row the
 // caller may not delete keeps them. It removes every join row of the row,
-// whatever the tenant of the row at the other end, so a shared row is unlinked
-// from every tenant's rows, unless a Write policy or a Delete hook that the
+// whatever the scope of the row at the other end, so a shared row is unlinked
+// from every scope's rows, unless a Write policy or a Delete hook that the
 // application binds on a join entity that is not bidirectional narrows or
 // refuses it. Rows of other entities that hold the row's key are left to the
 // database's foreign keys: one that refuses the DELETE gives a
@@ -322,7 +320,7 @@
 // value: ..."; the validators of the fields an input sets run before any
 // statement, so an invalid field is refused even when an ID with it names no
 // row. An ID that names no row the caller may read, or change, is NOT_FOUND
-// (veloxgql.CodeNotFound), whether the row is missing, another tenant's or
+// (veloxgql.CodeNotFound), whether the row is missing, in another scope or
 // hidden by a policy, so that a client cannot tell; the mutation keeps nothing,
 // and a delete deletes nothing (see above). Other errors of velox are returned
 // as they are, and ErrorPresenter maps them as it does elsewhere. gqlgen's own
@@ -346,7 +344,7 @@
 //     one's link writes the new partner's row under the caller's Write scope,
 //     so a partner the caller may read but not change fails the link, with
 //     BAD_USER_INPUT "unique constraint violated". Its re-point, and its
-//     clear, set the old partner's key NULL without the tenant scope or the
+//     clear, set the old partner's key NULL without the
 //     policies, as the core's bidirectional update does, for the symmetric
 //     edge's integrity: no row is left pointing at one that does not point
 //     back. That is unlike a key on the target's rows, whose hidden child
@@ -381,7 +379,7 @@
 // caller's (a forceResolver that computes them per row).
 //
 // A batch is read under its first caller's context. Its key holds the callers'
-// row scope (velox.RowScopeFromContext: the tenant, a bypass, the shard), the
+// row scope (velox.RowScopeFromContext: the scope values, a bypass, the shard), the
 // DB and a list edge's MaxList, so callers that differ in them never share a
 // read. Any other context value a Read policy or a Rewrite or Around hook
 // reads, such as the viewer or a role, must be the same for every row of a
@@ -405,8 +403,8 @@
 // edge. A With is not needed for batching, and the edge methods ignore it.
 //
 // A page, a node and an edge's nodes read only the columns their selection
-// needs: the selected fields', the key, every foreign key on the row, the
-// tenant column and the columns of the order fields. The foreign keys let an
+// needs: the selected fields', the key, every foreign key on the row and
+// the columns of the order fields. The foreign keys let an
 // edge or an application's With work; the order columns keep every cursor
 // valid. The columns of the other fields are left unread, so a row handed to
 // an application's resolver or directive has them zero: a resolver or a

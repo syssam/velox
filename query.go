@@ -23,6 +23,7 @@ type Query[E any] struct {
 	err   error             // a condition's error, returned by every way of running the query
 	loads []engine.LoadSpec // the relations All loads
 	after *E                // After's row, copied
+	joins *joinSet          // how to read the joined relations, in the order of st.Joins; nil without Join
 }
 
 // Query starts a query on entity E:
@@ -103,7 +104,7 @@ func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E] {
 }
 
 // Writable returns the query limited to the rows an Update or a Delete of E
-// may change: after the tenant and the Read policy, the scope adds the
+// may change: after the Read policy, the scope adds the
 // entity's Write policy, as it does to an UPDATE. A Count or Exists of it
 // checks a row before writes that do not go through E's own UPDATE, such as
 // another entity's rows that point at it. The query stays a read: a Write
@@ -283,14 +284,16 @@ const (
 
 // allRun is the state of one All.
 type allRun[E any] struct {
-	st  Statement
-	m   *Meta[E]
-	out []E
+	st    Statement
+	m     *Meta[E]
+	joins *joinSet
+	out   []E
 }
 
 // readAll reads every row into a.out, anew should an around hook retry.
 func readAll[E any](a *allRun[E], r engine.Rows) error {
-	dst := make([]any, engine.ColumnCount(&a.st))
+	rootN := engine.ColumnCount(&a.st)
+	dst := make([]any, rootN+a.joins.width())
 	// Limit is mandatory, so it is a bound and not a likely size: at most firstRows
 	// are allocated ahead for it, then rowGrowth times as many as they fill. The
 	// Limit of an Unbounded read is the row cap's (cap+1): nothing is allocated
@@ -305,6 +308,12 @@ func readAll[E any](a *allRun[E], r engine.Rows) error {
 			a.out = slices.Grow(a.out, max(min(a.st.Limit, l*rowGrowth)-l, 1))
 		}
 		a.out = append(a.out, *new(E))
+		if a.joins != nil {
+			if err := a.joins.scan(r, a.st.Columns, rootN, dst, unsafe.Pointer(&a.out[len(a.out)-1])); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := scanRow(r, a.m, a.st.Columns, dst, &a.out[len(a.out)-1]); err != nil {
 			return err
 		}
@@ -335,11 +344,11 @@ func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at e
 		return nil, nil, at, err
 	}
 	if q.db.e.Hooked() {
-		a := &allRun[E]{st: st, m: q.meta}
+		a := &allRun[E]{st: st, m: q.meta, joins: q.joins}
 		err = q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readAll(a, r) }, nil)
 		out, ran, at = a.out, a.st.Columns, engine.StmtRan(&a.st)
 	} else {
-		a := allRun[E]{st: st, m: q.meta}
+		a := allRun[E]{st: st, m: q.meta, joins: q.joins}
 		err = q.db.e.Plain(ctx, &a.st, func(r engine.Rows) error { return readAll(&a, r) }, nil)
 		out, ran, at = a.out, a.st.Columns, engine.StmtRan(&a.st)
 	}
@@ -432,6 +441,7 @@ func (q Query[E]) First[_ Lazy[E]](ctx context.Context) (*E, error) {
 type iterRun[E any] struct {
 	st      Statement
 	m       *Meta[E]
+	joins   *joinSet
 	yield   func(E, error) bool
 	timed   bool // the DB has an Around hook: time the loop body
 	yielded bool // a row was yielded
@@ -443,10 +453,18 @@ func readIter[E any](it *iterRun[E], r engine.Rows) error {
 	if it.yielded || it.stopped {
 		return engine.ErrIterAgain
 	}
-	dst := make([]any, engine.ColumnCount(&it.st))
+	rootN := engine.ColumnCount(&it.st)
+	dst := make([]any, rootN+it.joins.width())
 	for r.Next() {
 		var e E
-		if err := scanRow(r, it.m, it.st.Columns, dst, &e); err != nil {
+		if it.joins != nil {
+			// Its own allocation: &e would escape for every Iter, joined or not.
+			p := new(E)
+			if err := it.joins.scan(r, it.st.Columns, rootN, dst, unsafe.Pointer(p)); err != nil {
+				return err
+			}
+			e = *p
+		} else if err := scanRow(r, it.m, it.st.Columns, dst, &e); err != nil {
 			return err
 		}
 		it.yielded = true
@@ -510,11 +528,11 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 		engine.SetStmtIter(&st)
 		var stopped bool
 		if q.db.e.Hooked() {
-			it := &iterRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
+			it := &iterRun[E]{st: st, m: q.meta, joins: q.joins, yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
 			err = q.db.e.Run(ctx, &it.st, func(r engine.Rows) error { return readIter(it, r) }, nil)
 			stopped = it.stopped
 		} else {
-			it := iterRun[E]{st: st, m: q.meta, yield: yield}
+			it := iterRun[E]{st: st, m: q.meta, joins: q.joins, yield: yield}
 			err = q.db.e.Plain(ctx, &it.st, func(r engine.Rows) error { return readIter(&it, r) }, nil)
 			stopped = it.stopped
 		}
@@ -591,7 +609,7 @@ func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error) {
 // SQL returns the statement and arguments All would send for ctx, or the
 // error All would fail with before sending it; it sends nothing. It runs
 // every stage All runs before execution: the guard, the Rewrite hooks, the
-// tenant and policy scope, the row cap and rendering. So the hooks and the
+// policy scope, the row cap and rendering. So the hooks and the
 // policy run, and can tell from IsDryRun(ctx), or a Rewrite hook from
 // Statement.DryRun, that the statement will not be sent. Around hooks, which
 // wrap execution, do not run.

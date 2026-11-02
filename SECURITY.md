@@ -32,7 +32,7 @@ the latest minor release.
 
 A vulnerability is a flaw in velox that lets one party read or change what
 another may not, or run what it may not. Examples are SQL injection through
-a generated query or `migrate`'s rendered SQL, a tenant scope or a policy that
+a generated query or `migrate`'s rendered SQL, a policy, a scope included, that
 a query, a write or a load does not apply, and a secret in an error message or
 a log line.
 

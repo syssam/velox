@@ -14,6 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/scope"
 
 	"example.com/tmp/gen"
 )
@@ -482,10 +483,10 @@ func TestCheckEntity(t *testing.T) {
 	}
 }
 
-func TestTenant(t *testing.T) {
+func TestScope(t *testing.T) {
 	db := open(t)
-	org := func(id int64) context.Context { return velox.WithTenant(ctx, id) }
-	// An insert under WithTenant stamps org_id.
+	org := func(id int64) context.Context { return gen.Org.With(ctx, id) }
+	// An insert under the scope stamps org_id.
 	for _, n := range []struct {
 		org  int64
 		text string
@@ -498,7 +499,7 @@ func TestTenant(t *testing.T) {
 			t.Errorf("%s: OrgID %d, want %d", n.text, x.OrgID, n.org)
 		}
 	}
-	// Reads see only the tenant's rows.
+	// Reads see only the scope's rows.
 	texts := func(c context.Context) []string {
 		t.Helper()
 		ns, err := db.Query[gen.Note]().OrderBy(gen.Notes.ID.Asc()).Limit(10).All(c)
@@ -514,16 +515,16 @@ func TestTenant(t *testing.T) {
 	wantStrings(t, "org 1", texts(org(1)), []string{"one", "uno"})
 	wantStrings(t, "org 2", texts(org(2)), []string{"two"})
 	wantStrings(t, "org 3", texts(org(3)), nil)
-	wantStrings(t, "all tenants", texts(velox.WithAllTenants(ctx, "e2e test")), []string{"one", "uno", "two"})
-	// No tenant: refused.
-	if err := db.Insert(&gen.Note{Text: "x"}).Exec(ctx); !errors.Is(err, velox.ErrNoTenant) {
-		t.Errorf("insert without a tenant: %v", err)
+	wantStrings(t, "without policy", texts(velox.WithoutPolicy(ctx, "e2e test")), []string{"one", "uno", "two"})
+	// No scope value: refused.
+	if err := db.Insert(&gen.Note{Text: "x"}).Exec(ctx); !errors.Is(err, scope.ErrNoScope) {
+		t.Errorf("insert without a scope value: %v", err)
 	}
-	if _, err := db.Query[gen.Note]().Limit(10).All(ctx); !errors.Is(err, velox.ErrNoTenant) {
-		t.Errorf("query without a tenant: %v", err)
+	if _, err := db.Query[gen.Note]().Limit(10).All(ctx); !errors.Is(err, scope.ErrNoScope) {
+		t.Errorf("query without a scope value: %v", err)
 	}
-	// Another tenant's id on the row is refused.
-	if err := db.Insert(&gen.Note{OrgID: 2, Text: "x"}).Exec(org(1)); !errors.Is(err, velox.ErrTenantMismatch) {
-		t.Errorf("insert for another tenant: %v", err)
+	// Another scope's value on the row is refused.
+	if err := db.Insert(&gen.Note{OrgID: 2, Text: "x"}).Exec(org(1)); !errors.Is(err, scope.ErrMismatch) {
+		t.Errorf("insert for another scope: %v", err)
 	}
 }

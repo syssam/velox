@@ -14,6 +14,7 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 )
 
 // rawRecorder is an Around hook that keeps a copy of each statement it sees.
@@ -208,9 +209,9 @@ func TestRawRoutes(t *testing.T) {
 	})
 }
 
-// TestRawShowsReason pins Review Focus 4: Raw and Exec skip the tenant scope
-// and the policy, so a context with no tenant runs them, unchanged; the
-// Around hooks see the reason as Statement.TenantBypass (and PolicyBypass),
+// TestRawShowsReason pins Review Focus 4: Raw and Exec skip the scope
+// and the policy, so a context with no org runs them, unchanged; the
+// Around hooks see the reason as Statement.PolicyBypass (and PolicyBypass),
 // and Raw's statement as OpRawQuery, Exec's as OpRawExec, before next runs
 // them. Rewrite hooks, which rewrite what the builder made, do not see them.
 func TestRawShowsReason(t *testing.T) {
@@ -224,9 +225,9 @@ func TestRawShowsReason(t *testing.T) {
 			return next(ctx)
 		}),
 		velox.WithRewrite(func(context.Context, *velox.Statement) error { rewrites++; return nil }))
-	bare := context.Background() // neither a tenant nor a user
-	if _, err := db.Query[testmodel.Ticket]().Limit(1).All(bare); !errors.Is(err, velox.ErrNoTenant) {
-		t.Fatalf("the builder's read without a tenant: %v", err)
+	bare := context.Background() // neither an org nor a user
+	if _, err := db.Query[testmodel.Ticket]().Limit(1).All(bare); !errors.Is(err, scope.ErrNoScope) {
+		t.Fatalf("the builder's read without an org: %v", err)
 	}
 	rewrites, before = 0, nil
 	const q = "SELECT id, title FROM tickets WHERE id = $1"
@@ -251,12 +252,12 @@ func TestRawShowsReason(t *testing.T) {
 	if !slices.Equal(before, []velox.Op{velox.OpRawQuery, velox.OpRawExec}) {
 		t.Errorf("Ops before next: %v", before)
 	}
-	if r.Op != velox.OpRawQuery || r.TenantBypass != "support looks up a ticket" || r.PolicyBypass != r.TenantBypass ||
+	if r.Op != velox.OpRawQuery || r.PolicyBypass != "support looks up a ticket" ||
 		r.Entity == nil || r.Entity.Name != "testmodel.Ticket" || r.SQL != q || !reflect.DeepEqual(r.Args, []any{int64(1)}) ||
-		r.Fingerprint == "" || r.Result.Rows != 1 || r.Result.Affected != -1 || r.Tenant != nil {
+		r.Fingerprint == "" || r.Result.Rows != 1 || r.Result.Affected != -1 {
 		t.Errorf("Raw's statement: %+v", r)
 	}
-	if x.Op != velox.OpRawExec || x.TenantBypass != "nightly cleanup" || x.PolicyBypass != x.TenantBypass ||
+	if x.Op != velox.OpRawExec || x.PolicyBypass != "nightly cleanup" ||
 		x.Entity == nil || x.Entity.Name == "" || x.SQL != "DELETE FROM tickets WHERE done" || x.Result.Affected != 2 {
 		t.Errorf("Exec's statement: %+v", x)
 	}
@@ -371,7 +372,7 @@ func TestRawPipeline(t *testing.T) {
 }
 
 // TestRawOnShards: on a sharded DB, Raw and Exec run on the shard the context
-// names, by WithShard or by its tenant through WithShardFor, though the tenant
+// names, by WithShard or by its org through WithShardFor, though the org
 // scopes nothing; with neither they fail with ErrNoShard and send nothing.
 func TestRawOnShards(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
@@ -380,7 +381,7 @@ func TestRawOnShards(t *testing.T) {
 			e.Rows, e.Cols, e.Affected = [][]any{{int64(1)}}, []string{"id"}, 1
 		}
 		raw := s.db.Raw[testmodel.Invoice]("r", "SELECT id FROM invoices")
-		eu := velox.WithTenant(bg, int64(1))
+		eu := testmodel.Org.With(bg, int64(1))
 		if _, err := raw.All(eu); err != nil {
 			t.Fatal(err)
 		}
@@ -397,7 +398,7 @@ func TestRawOnShards(t *testing.T) {
 		if e := s.euP.Log[0]; e != "DELETE FROM invoices WHERE paid" {
 			t.Errorf("eu's primary ran %q, want it unscoped", e)
 		}
-		for _, c := range []context.Context{bg, velox.WithAllTenants(bg, "every tenant")} {
+		for _, c := range []context.Context{bg, velox.WithoutPolicy(bg, "every org")} {
 			if _, err := raw.All(c); !errors.Is(err, velox.ErrNoShard) {
 				t.Errorf("Raw with no shard: %v", err)
 			}

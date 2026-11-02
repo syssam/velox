@@ -24,7 +24,7 @@ type InsertQuery[E any] struct {
 //	db.Insert(&inv).Exec(ctx)
 //
 // Exec changes *x: the entity's hooks (Hooks) may change it, Exec fills
-// defaults and the tenant and reads the generated key back, and it leaves those changes in place even when the
+// defaults and reads the generated key back, and it leaves those changes in place even when the
 // insert then fails.
 func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E] {
 	return InsertQuery[E]{db: db, meta: x.VeloxMeta(), one: (*E)(x), single: true}
@@ -32,7 +32,7 @@ func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E] {
 
 // InsertAll starts an INSERT of every entity in xs, in as few statements as
 // the dialect's parameter limit allows. The entity's hooks (Hooks) run once,
-// over all of xs. Exec fills defaults and the tenant into xs[i], the caller's
+// over all of xs. Exec fills defaults into xs[i], the caller's
 // own slice elements, and leaves those changes in place even when the insert then fails.
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E] {
 	return InsertQuery[E]{db: db, meta: PE(nil).VeloxMeta(), many: xs}
@@ -93,16 +93,12 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // does the rest. An InsertAll of nothing runs nothing.
 //
 // Exec then fills, in each entity, every zero field whose column has Default or
-// DefaultFunc (an UpdateDefault fills on update only). On a tenant-scoped
-// entity it then sets a zero tenant field to the context's tenant, and refuses
-// a field set to another one (ErrTenantMismatch) or, under WithAllTenants, left
-// at zero (ErrNoTenant). Then the validators run and the policy's Insert is
-// asked; every entity is prepared before anything is sent.
+// DefaultFunc (an UpdateDefault fills on update only). Then the
+// validators run and the policy's Insert is asked, which is where a scope
+// refuses a row of another scope (scope.ErrMismatch); every entity is
+// prepared before anything is sent.
 //
-// Under WithTenant, an upsert that updates must name the tenant column in
-// OnConflict (ErrTenantUpsert); on MySQL, where any unique key can conflict,
-// every unique key must hold it. Under WithAllTenants, which reaches every
-// tenant's rows anyway, neither is required. Its update branch gets the
+// An upsert's update branch gets the
 // policy's Read and Write conditions, on the existing row; an upsert that
 // changed fewer rows than it sent, because the conditions hid a conflicting
 // row, fails with a *PolicyError. MySQL cannot apply them, so there such an upsert of an entity
@@ -140,8 +136,8 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // SQL returns the first statement and arguments Exec would send for ctx, or
 // the error Exec would fail with before sending it; it sends nothing, and
 // returns "" for an InsertAll of nothing. It runs every stage Exec runs
-// before execution: like Exec, it runs the entity's hooks, fills defaults and
-// the tenant into the caller's structs (the *E or the []E you passed, which
+// before execution: like Exec, it runs the entity's hooks, fills defaults
+// into the caller's structs (the *E or the []E you passed, which
 // it changes although it sends nothing; the generated key is the one field it
 // leaves), then runs the validators, asks the policy's Insert and runs the
 // Rewrite hooks, the scope and rendering. So the
@@ -191,7 +187,7 @@ func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *engine.MutationState {
 }
 
 // send is Exec's work inside the hooks, their next: it prepares every row
-// (defaults, tenant, the validators and the
+// (defaults, the validators and the
 // policy's Insert) and sends the statements. It sets mu.affected only when
 // they all succeeded, so that Mutation.Affected is 0 after an error whatever
 // order insertOne sets Affected and checks an upsert in.
@@ -287,9 +283,6 @@ func rowValues[E any](m *Meta[E], p *E, cols []int) []any {
 // PostgreSQL and SQLite the statement reads that key back with RETURNING.
 func oneStatement[E any](ctx context.Context, db *engine.DB, m *Meta[E], p *E, cf *ConflictClause) (Statement, int, error) {
 	fillDefaults(m, p)
-	if err := engine.PrepareOne(ctx, m.info, unsafe.Pointer(p)); err != nil {
-		return Statement{}, -1, err
-	}
 	gen := generatedKey(m, p)
 	cols := engine.InsertColumns(m.info, gen)
 	if len(cols) == 0 {
@@ -324,15 +317,8 @@ func insertOne[E any](ctx context.Context, db *engine.DB, m *Meta[E], p *E, cf *
 // prepareMany prepares every entity in xs, as InsertAll's Exec does, and
 // returns the columns to insert and the most rows one statement holds.
 func prepareMany[E any](ctx context.Context, db *engine.DB, m *Meta[E], xs []E) (cols []int, per int, err error) {
-	tn, err := engine.InsertTenant(ctx, m.info)
-	if err != nil {
-		return nil, 0, err
-	}
 	for i := range xs {
 		fillDefaults(m, &xs[i])
-		if err := engine.PrepareRow(m.info, unsafe.Pointer(&xs[i]), tn); err != nil {
-			return nil, 0, err
-		}
 	}
 	if err := engine.RefuseBidiRows(m.info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs)); err != nil {
 		return nil, 0, err

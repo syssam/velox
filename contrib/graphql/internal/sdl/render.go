@@ -357,7 +357,7 @@ func (g *graph) fill(o *object) error {
 	for i, f := range e.Fields {
 		a := o.fanns[i]
 		switch {
-		case o.node && i == e.PrimaryKey[0], i == e.Tenant, f.Sensitive, f.Implicit != "", o.fks[f.Name], a.Skip&graphql.SkipType != 0:
+		case o.node && i == e.PrimaryKey[0], f.Sensitive, f.Implicit != "", o.fks[f.Name], a.Skip&graphql.SkipType != 0:
 			continue
 		}
 		where := "schema " + e.Name + ", field " + f.Name
@@ -416,7 +416,7 @@ func (g *graph) fill(o *object) error {
 		switch {
 		case ed.Unique:
 			// Nullable even when Required: a row reads the edge's target in a
-			// statement of its own, which a tenant, a policy, a hook, a replica's
+			// statement of its own, which a policy, a hook, a replica's
 			// lag or a delete may leave empty, and a non-null field that read
 			// null would null the page around it.
 			f.typ, ef.kind = t.name, EdgeUnique
@@ -444,7 +444,7 @@ func (g *graph) fill(o *object) error {
 		o.edges = append(o.edges, ef)
 	}
 	if len(o.fields) == 0 {
-		return fmt.Errorf("schema %s: its type would have no fields: each field is skipped, sensitive, the tenant or a foreign key, and each edge is skipped or leads to a skipped schema; skip the schema with graphql.Skip()", e.Name)
+		return fmt.Errorf("schema %s: its type would have no fields: each field is skipped, sensitive or a foreign key, and each edge is skipped or leads to a skipped schema; skip the schema with graphql.Skip()", e.Name)
 	}
 	return nil
 }

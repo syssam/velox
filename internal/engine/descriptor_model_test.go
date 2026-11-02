@@ -2,7 +2,9 @@ package engine_test
 
 import (
 	"context"
+
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/scope"
 )
 
 // The Descriptor entities of the engine's tests. Each is described as velox-gen
@@ -49,7 +51,6 @@ func hnoteDescriptor() velox.Descriptor[hnote] {
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *hnote, i int) any {
 			switch i {
 			case 0:
@@ -74,11 +75,18 @@ var hn = struct {
 	Due   velox.NullNumberCol[hnote, int64]
 }{velox.NumberCol[hnote, int64]{I: 0}, velox.StringCol[hnote, string]{I: 1}, velox.StringCol[hnote, string]{I: 2}, velox.NumberCol[hnote, int64]{I: 3}, velox.NullNumberCol[hnote, int64]{I: 4}}
 
-// moveOrg is tenant-scoped, and its insert hook moves every row to tenant 9.
+// moveOrg is confined to the context's org, and its insert hook moves every row
+// to org 9.
 type moveOrg struct {
 	ID    int64
 	OrgID int64
 }
+
+var moveOrgScope = scope.By(moveOrgKey, velox.NumberCol[moveOrg, int64]{I: 1}.EQ, func(x *moveOrg) *int64 { return &x.OrgID })
+
+var moveOrgKey = scope.NewKey[int64]("org")
+
+func (*moveOrg) Policy() velox.Policy[moveOrg] { return moveOrgScope.Policy() }
 
 func (*moveOrg) Hooks() []velox.Hook[moveOrg] {
 	return []velox.Hook[moveOrg]{func(next velox.Mutator[moveOrg]) velox.Mutator[moveOrg] {
@@ -97,11 +105,11 @@ func (*moveOrg) VeloxMeta() *velox.Meta[moveOrg] { return moveOrgMeta.Load(moveO
 
 func moveOrgDescriptor() velox.Descriptor[moveOrg] {
 	return velox.Descriptor[moveOrg]{
+		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*moveOrg)(nil).Policy()) },
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*moveOrg)(nil).Hooks()) },
 		Table:      "move_org",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     1,
 		FieldPtr: func(x *moveOrg, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -126,7 +134,6 @@ func companyDescriptor() velox.Descriptor[company] {
 		Table:        "company",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey:   []int{0},
-		Tenant:       -1,
 		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[employee]("Staff", 0, 1)}, // employee.CompanyID
 		FieldPtr:     func(x *company, i int) any { return &x.ID },
 		EdgeFieldPtr: func(x *company, i int) any { return &x.Staff },
@@ -150,7 +157,6 @@ func employeeDescriptor() velox.Descriptor[employee] {
 		Table:      "employee",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "CompanyID", Name: "company_id"}, {Field: "BossID", Name: "boss_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[employee]("Boss", 2, 0), velox.EdgeTo[company]("Company", 1, 0)},
 		FieldPtr: func(x *employee, i int) any {
 			switch i {
@@ -185,7 +191,6 @@ func keyedDescriptor() velox.Descriptor[keyed] {
 		Table:        "keyed",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey:   []int{0},
-		Tenant:       -1,
 		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[keyedLine]("Lines", 0, 1)},
 		FieldPtr:     func(x *keyed, i int) any { return &x.ID },
 		EdgeFieldPtr: func(x *keyed, i int) any { return &x.Lines },
@@ -206,7 +211,6 @@ func keyedLineDescriptor() velox.Descriptor[keyedLine] {
 		Table:      "keyed_line",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeyedID", Name: "keyed_id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *keyedLine, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -231,7 +235,6 @@ func blobOwnerDescriptor() velox.Descriptor[blobOwner] {
 		Table:        "blob_owner",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey:   []int{0},
-		Tenant:       -1,
 		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[blobLine]("Lines", 0, 1)},
 		FieldPtr:     func(x *blobOwner, i int) any { return &x.ID },
 		EdgeFieldPtr: func(x *blobOwner, i int) any { return &x.Lines },
@@ -252,7 +255,6 @@ func blobLineDescriptor() velox.Descriptor[blobLine] {
 		Table:      "blob_line",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *blobLine, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -280,7 +282,6 @@ func invalidHolderDescriptor() velox.Descriptor[invalidHolder] {
 		Table:        "invalid_holder",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey:   []int{0},
-		Tenant:       -1,
 		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[brokenTarget]("T", 0, 0)},
 		FieldPtr:     func(x *invalidHolder, i int) any { return &x.ID },
 		EdgeFieldPtr: func(x *invalidHolder, i int) any { return &x.T },
@@ -300,75 +301,6 @@ func brokenTargetDescriptor() velox.Descriptor[brokenTarget] {
 		Table:      "broken_target",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
-	}
-}
-
-// The tenant column's refusals (validate), each on an entity of its own.
-type nullTenant struct {
-	ID    int64
-	OrgID *int64
-}
-
-func nullTenantDescriptor() velox.Descriptor[nullTenant] {
-	return velox.Descriptor[nullTenant]{
-		Table: "null_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
-		PrimaryKey: []int{0}, Tenant: 1,
-		FieldPtr: func(x *nullTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
-	}
-}
-
-type sliceTenant struct {
-	ID  int64
-	Org []byte
-}
-
-func sliceTenantDescriptor() velox.Descriptor[sliceTenant] {
-	return velox.Descriptor[sliceTenant]{
-		Table: "slice_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org"}},
-		PrimaryKey: []int{0}, Tenant: 1,
-		FieldPtr: func(x *sliceTenant, i int) any { return [...]any{&x.ID, &x.Org}[i] },
-	}
-}
-
-// A tenant column that a default or an update default would fill could put a
-// row in a tenant the context never named.
-type defaultTenant struct {
-	ID  int64
-	Org string
-}
-
-func defaultTenantDescriptor() velox.Descriptor[defaultTenant] {
-	return velox.Descriptor[defaultTenant]{
-		Table: "default_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org", Default: "acme"}},
-		PrimaryKey: []int{0}, Tenant: 1,
-		FieldPtr: func(x *defaultTenant, i int) any { return [...]any{&x.ID, &x.Org}[i] },
-	}
-}
-
-type defaultFuncTenant struct {
-	ID    int64
-	OrgID int64
-}
-
-func defaultFuncTenantDescriptor() velox.Descriptor[defaultFuncTenant] {
-	return velox.Descriptor[defaultFuncTenant]{
-		Table: "default_func_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", DefaultFunc: func() any { return int64(1) }}},
-		PrimaryKey: []int{0}, Tenant: 1,
-		FieldPtr: func(x *defaultFuncTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
-	}
-}
-
-type updateDefaultTenant struct {
-	ID    int64
-	OrgID int64
-}
-
-func updateDefaultTenantDescriptor() velox.Descriptor[updateDefaultTenant] {
-	return velox.Descriptor[updateDefaultTenant]{
-		Table: "update_default_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", UpdateDefault: func() any { return int64(1) }}},
-		PrimaryKey: []int{0}, Tenant: 1,
-		FieldPtr: func(x *updateDefaultTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
 	}
 }
 
@@ -435,7 +367,6 @@ func hookedDescriptor() velox.Descriptor[hooked] {
 		Table:      "hooked",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
-		Tenant:     -1,
 		FieldPtr: func(x *hooked, i int) any {
 			switch i {
 			case 0:

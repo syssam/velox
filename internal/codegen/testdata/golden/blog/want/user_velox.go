@@ -12,70 +12,112 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // User is a person who writes posts.
 type User struct {
-	ID        int64     `json:"id,omitempty"`
+	ID        int64     `json:"id"`
 	CreatedAt time.Time `json:"created_at,omitzero"`
 	UpdatedAt time.Time `json:"updated_at,omitzero"`
-	CreatedBy string    `json:"created_by,omitempty"`
-	OrgID     int64     `json:"org_id,omitempty"`
+	CreatedBy string    `json:"created_by"`
+	OrgID     int64     `json:"org_id"`
 	// The display name.
-	Name         string            `json:"name,omitempty"`
-	Email        string            `json:"email,omitempty"`
-	Role         UserRole          `json:"role,omitempty"`
+	Name         string            `json:"name"`
+	Email        string            `json:"email"`
+	Role         UserRole          `json:"role"`
 	Nickname     string            `json:"nickname,omitempty"`
 	Bio          *string           `json:"bio,omitempty"`
 	Age          int               `json:"age,omitempty"`
 	PasswordHash string            `json:"-"`
 	Score        *float64          `json:"score,omitempty"`
-	UserSpouse   *int64            `json:"user_spouse,omitempty"`
+	UserSpouse   *int64            `json:"-"`
 	Posts        velox.Many[Post]  `json:"posts,omitzero"`
 	Groups       velox.Many[Group] `json:"groups,omitzero"`
 	Friends      velox.Many[User]  `json:"friends,omitzero"`
 	Spouse       velox.One[User]   `json:"spouse,omitzero"`
 }
 
+// The positions of User's columns, in the order of its table.
+const (
+	userColID = iota
+	userColCreatedAt
+	userColUpdatedAt
+	userColCreatedBy
+	userColOrgID
+	userColName
+	userColEmail
+	userColRole
+	userColNickname
+	userColBio
+	userColAge
+	userColPasswordHash
+	userColScore
+	userColUserSpouse
+)
+
+// The positions of User's edges.
+const (
+	userEdgePosts = iota
+	userEdgeGroups
+	userEdgeFriends
+	userEdgeSpouse
+)
+
 // Users holds the typed handles of User's columns and relations.
 var Users = struct {
-	ID           velox.NumberCol[User, int64]
-	CreatedAt    velox.OrderedCol[User, time.Time]
-	UpdatedAt    velox.OrderedCol[User, time.Time]
-	CreatedBy    velox.StringCol[User, string]
-	OrgID        velox.NumberCol[User, int64]
-	Name         velox.StringCol[User, string]
-	Email        velox.StringCol[User, string]
-	Role         velox.StringCol[User, UserRole]
-	Nickname     velox.StringCol[User, string]
-	Bio          velox.NullStringCol[User, string]
-	Age          velox.NumberCol[User, int]
+	// ID is the column id.
+	ID velox.NumberCol[User, int64]
+	// CreatedAt is the column created_at.
+	CreatedAt velox.OrderedCol[User, time.Time]
+	// UpdatedAt is the column updated_at.
+	UpdatedAt velox.OrderedCol[User, time.Time]
+	// CreatedBy is the column created_by.
+	CreatedBy velox.StringCol[User, string]
+	// OrgID is the column org_id.
+	OrgID velox.NumberCol[User, int64]
+	// Name is the column name.
+	Name velox.StringCol[User, string]
+	// Email is the column email.
+	Email velox.StringCol[User, string]
+	// Role is the column role.
+	Role velox.StringCol[User, UserRole]
+	// Nickname is the column nickname.
+	Nickname velox.StringCol[User, string]
+	// Bio is the column bio.
+	Bio velox.NullStringCol[User, string]
+	// Age is the column age.
+	Age velox.NumberCol[User, int]
+	// PasswordHash is the column password_hash.
 	PasswordHash velox.StringCol[User, string]
-	Score        velox.NullNumberCol[User, float64]
-	UserSpouse   velox.NullNumberCol[User, int64]
-	Posts        velox.Rel[User, Post]
-	Groups       velox.Rel[User, Group]
-	Friends      velox.Rel[User, User]
-	Spouse       velox.Rel[User, User]
+	// Score is the column score.
+	Score velox.NullNumberCol[User, float64]
+	// UserSpouse is the column user_spouse.
+	UserSpouse velox.NullNumberCol[User, int64]
+	// Posts is the edge posts, to Post.
+	Posts velox.Rel[User, Post]
+	// Groups is the edge groups, to Group.
+	Groups velox.Rel[User, Group]
+	// Friends is the edge friends, to User.
+	Friends velox.Rel[User, User]
+	// Spouse is the edge spouse, to User.
+	Spouse velox.Rel[User, User]
 }{
-	ID:           velox.NumberCol[User, int64]{I: 0},
-	CreatedAt:    velox.OrderedCol[User, time.Time]{I: 1},
-	UpdatedAt:    velox.OrderedCol[User, time.Time]{I: 2},
-	CreatedBy:    velox.StringCol[User, string]{I: 3},
-	OrgID:        velox.NumberCol[User, int64]{I: 4},
-	Name:         velox.StringCol[User, string]{I: 5},
-	Email:        velox.StringCol[User, string]{I: 6},
-	Role:         velox.StringCol[User, UserRole]{I: 7},
-	Nickname:     velox.StringCol[User, string]{I: 8},
-	Bio:          velox.NullStringCol[User, string]{I: 9},
-	Age:          velox.NumberCol[User, int]{I: 10},
-	PasswordHash: velox.StringCol[User, string]{I: 11},
-	Score:        velox.NullNumberCol[User, float64]{I: 12},
-	UserSpouse:   velox.NullNumberCol[User, int64]{I: 13},
-	Posts:        velox.Rel[User, Post]{I: 0},
-	Groups:       velox.Rel[User, Group]{I: 1},
-	Friends:      velox.Rel[User, User]{I: 2},
-	Spouse:       velox.Rel[User, User]{I: 3},
+	ID:           velox.NumberCol[User, int64]{I: userColID},
+	CreatedAt:    velox.OrderedCol[User, time.Time]{I: userColCreatedAt},
+	UpdatedAt:    velox.OrderedCol[User, time.Time]{I: userColUpdatedAt},
+	CreatedBy:    velox.StringCol[User, string]{I: userColCreatedBy},
+	OrgID:        velox.NumberCol[User, int64]{I: userColOrgID},
+	Name:         velox.StringCol[User, string]{I: userColName},
+	Email:        velox.StringCol[User, string]{I: userColEmail},
+	Role:         velox.StringCol[User, UserRole]{I: userColRole},
+	Nickname:     velox.StringCol[User, string]{I: userColNickname},
+	Bio:          velox.NullStringCol[User, string]{I: userColBio},
+	Age:          velox.NumberCol[User, int]{I: userColAge},
+	PasswordHash: velox.StringCol[User, string]{I: userColPasswordHash},
+	Score:        velox.NullNumberCol[User, float64]{I: userColScore},
+	UserSpouse:   velox.NullNumberCol[User, int64]{I: userColUserSpouse},
+	Posts:        velox.Rel[User, Post]{I: userEdgePosts},
+	Groups:       velox.Rel[User, Group]{I: userEdgeGroups},
+	Friends:      velox.Rel[User, User]{I: userEdgeFriends},
+	Spouse:       velox.Rel[User, User]{I: userEdgeSpouse},
 }
 
 var userMeta velox.MetaOnce[User]
@@ -83,10 +125,12 @@ var userMeta velox.MetaOnce[User]
 // VeloxMeta is called by velox, not by applications.
 func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
+// userDescriptor describes User to velox: its table, columns, edges and hooks.
 func userDescriptor() velox.Descriptor[User] {
 	d0 := (&sch.User{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	d1 := (&sch.User{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
-	d2 := (&sch.User{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
+	f0 := (&sch.User{}).Mixin()[0].Fields()[1].Descriptor()
+	d1 := f0.Default.(func() time.Time)
+	d2 := f0.UpdateDefault.(func() time.Time)
 	v0 := (&sch.User{}).Mixin()[1].Fields()[0].Descriptor().Validators[0].(func(string) error)
 	re0 := regexp.MustCompile("^[^@]+@[^@]+$")
 	return velox.Descriptor[User]{
@@ -96,7 +140,7 @@ func userDescriptor() velox.Descriptor[User] {
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
 			{Field: "CreatedBy", Name: "created_by"},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Name", Name: "name"},
 			{Field: "Email", Name: "email"},
 			{Field: "Role", Name: "role", Default: UserRoleViewer},
@@ -107,71 +151,67 @@ func userDescriptor() velox.Descriptor[User] {
 			{Field: "Score", Name: "score", Default: float64(1.5)},
 			{Field: "UserSpouse", Name: "user_spouse"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     4,
+		PrimaryKey: []int{userColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{4, 5}, Unique: true}, // org_id, name
-			{Columns: []int{6}, Unique: true},    // email
-			{Columns: []int{13}, Unique: true},   // user_spouse
-		},
-		TenantRefs: []velox.TenantRef{
-			{Column: 13, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+			{Columns: []int{userColOrgID, userColName}, Unique: true}, // org_id, name
+			{Columns: []int{userColEmail}, Unique: true},              // email
+			{Columns: []int{userColUserSpouse}, Unique: true},         // user_spouse
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Post]("Posts", 0, 1),
-			velox.EdgeThrough[UserGroup, Group]("Groups", 0, 0, 1, 0),
-			velox.EdgeThrough[UserFriend, User]("Friends", 0, 0, 1, 0),
-			velox.EdgeBidi[User]("Spouse", 13, 0),
+			velox.EdgeTo[Post]("Posts", userColID, postColAuthorID),
+			velox.EdgeThrough[UserGroup, Group]("Groups", userColID, userGroupColUserID, userGroupColGroupID, groupColID),
+			velox.EdgeThrough[UserFriend, User]("Friends", userColID, userFriendColUserID, userFriendColFriendID, userColID),
+			velox.EdgeBidi[User]("Spouse", userColUserSpouse, userColID),
 		},
 		FieldPtr: func(x *User, i int) any {
 			switch i {
-			case 0:
+			case userColID:
 				return &x.ID
-			case 1:
+			case userColCreatedAt:
 				return &x.CreatedAt
-			case 2:
+			case userColUpdatedAt:
 				return &x.UpdatedAt
-			case 3:
+			case userColCreatedBy:
 				return &x.CreatedBy
-			case 4:
+			case userColOrgID:
 				return &x.OrgID
-			case 5:
+			case userColName:
 				return &x.Name
-			case 6:
+			case userColEmail:
 				return &x.Email
-			case 7:
+			case userColRole:
 				return &x.Role
-			case 8:
+			case userColNickname:
 				return &x.Nickname
-			case 9:
+			case userColBio:
 				return &x.Bio
-			case 10:
+			case userColAge:
 				return &x.Age
-			case 11:
+			case userColPasswordHash:
 				return &x.PasswordHash
-			case 12:
+			case userColScore:
 				return &x.Score
-			case 13:
+			case userColUserSpouse:
 				return &x.UserSpouse
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *User, i int) any {
 			switch i {
-			case 0:
+			case userEdgePosts:
 				return &x.Posts
-			case 1:
+			case userEdgeGroups:
 				return &x.Groups
-			case 2:
+			case userEdgeFriends:
 				return &x.Friends
-			case 3:
+			case userEdgeSpouse:
 				return &x.Spouse
 			}
 			return nil
 		},
 		Check: func(col int, v any) error {
 			switch col {
-			case 3:
+			case userColCreatedBy:
 				x := v.(string)
 				if len(x) < 2 {
 					return errors.New("length is less than 2")
@@ -179,7 +219,7 @@ func userDescriptor() velox.Descriptor[User] {
 				if err := v0(x); err != nil {
 					return err
 				}
-			case 5:
+			case userColName:
 				x := v.(string)
 				if x == "" {
 					return errors.New("must not be empty")
@@ -187,21 +227,19 @@ func userDescriptor() velox.Descriptor[User] {
 				if len(x) > 50 {
 					return errors.New("length is more than 50")
 				}
-			case 6:
+			case userColEmail:
 				x := v.(string)
 				if !re0.MatchString(x) {
 					return errors.New("does not match ^[^@]+@[^@]+$")
 				}
-			case 7:
+			case userColRole:
 				x := v.(UserRole)
-				switch x {
-				case "admin", "editor", "viewer":
-				default:
-					return errors.New("is not one of the values")
+				if !x.IsValid() {
+					return errors.New("is not one of admin, editor, viewer")
 				}
-			case 10:
+			case userColAge:
 				x := v.(int)
-				if x == *new(int) {
+				if x == 0 {
 					return nil
 				}
 				if x < 0 {
@@ -216,22 +254,18 @@ func userDescriptor() velox.Descriptor[User] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields except the sensitive ones and the foreign keys velox added.
 func (x User) String() string {
-	var p9 any
+	var bioVal any
 	if x.Bio != nil {
-		p9 = *x.Bio
+		bioVal = *x.Bio
 	}
-	var p12 any
+	var scoreVal any
 	if x.Score != nil {
-		p12 = *x.Score
+		scoreVal = *x.Score
 	}
-	var p13 any
-	if x.UserSpouse != nil {
-		p13 = *x.UserSpouse
-	}
-	return fmt.Sprintf("User(ID=%v, CreatedAt=%v, UpdatedAt=%v, CreatedBy=%v, OrgID=%v, Name=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v, UserSpouse=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.CreatedBy, x.OrgID, x.Name, x.Email, x.Role, x.Nickname, p9, x.Age, p12, p13)
+	return fmt.Sprintf("User(ID=%v, CreatedAt=%v, UpdatedAt=%v, CreatedBy=%v, OrgID=%v, Name=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.CreatedBy, x.OrgID, x.Name, x.Email, x.Role, x.Nickname, bioVal, x.Age, scoreVal)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v does not print them either.
 func (x User) GoString() string { return x.String() }

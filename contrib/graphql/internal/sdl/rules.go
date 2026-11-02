@@ -107,14 +107,11 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return err
 	}
 	f := e.Fields[i]
-	// The tenant and a foreign key are never inputs, so CreateInput and
-	// UpdateInput say nothing on them, whatever their value; the primary key
-	// is never one either, and CreateInput(true) on it asks for it.
+	// A foreign key is never an input, so CreateInput and UpdateInput say
+	// nothing on it, whatever their value; the primary key is never one
+	// either, and CreateInput(true) on it asks for it.
 	var never string
-	switch {
-	case i == e.Tenant:
-		never = "the tenant is never an input: the tenant scope fills it"
-	case fk || f.Implicit != "":
+	if fk || f.Implicit != "" {
 		never = "a foreign key is never an input: its edge stands for it"
 	}
 	pk := len(e.PrimaryKey) == 1 && i == e.PrimaryKey[0]
@@ -144,8 +141,6 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.WhereOps on a sensitive field: a filter would reveal its values", where)
 	case a.WhereOps != 0 && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipWhereInput == 0:
 		return fmt.Errorf("%s: graphql.WhereOps on a field graphql.Skip leaves out of the type: a filter would reveal its values", where)
-	case a.WhereOps != 0 && i == e.Tenant:
-		return fmt.Errorf("%s: graphql.WhereOps on the tenant: the tenant scope filters on it", where)
 	case a.CreateInput != nil && never != "":
 		return fmt.Errorf("%s: graphql.CreateInput: %s", where, never)
 	case a.UpdateInput != nil && never != "":

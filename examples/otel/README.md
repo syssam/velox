@@ -42,7 +42,7 @@ ctx = velox.WithTags(ctx, "route", "POST /invoices/{number}/pay") // in middlewa
   not, is a `velox.tag.<key>` span attribute.
 - **Metrics.** `db.client.operation.duration`, `db.client.response.returned_rows`
   (reads only) and `velox.tx.duration`. Their attributes are bounded: no SQL,
-  tag, tenant or, by default, fingerprint. With `Iter`, the duration is the
+  tag, scope or, by default, fingerprint. With `Iter`, the duration is the
   database's time: it leaves out the loop body (`velox.Result.LoopBody`),
   which the span still covers.
 - **Server and errors.** The adapter sees no connection string, so

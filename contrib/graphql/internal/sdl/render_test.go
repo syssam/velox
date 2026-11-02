@@ -145,7 +145,7 @@ func entity(name string, fields ...*plugin.Field) *plugin.Entity {
 	id := &plugin.Field{Name: "id", GoName: "ID", Column: "id", Type: "int64", AutoID: true}
 	return &plugin.Entity{
 		Name: name, Fields: append([]*plugin.Field{id}, fields...), Edges: []*plugin.Edge{},
-		PrimaryKey: []int{0}, Tenant: -1,
+		PrimaryKey: []int{0},
 	}
 }
 
@@ -361,7 +361,6 @@ func TestTypeMapping(t *testing.T) {
 		{&plugin.Field{Name: "nil_time", GoName: "NilTime", Type: "time", Pointer: true, Nullable: true, Optional: true}, "Time"},
 		{&plugin.Field{Name: "opt_doc", GoName: "OptDoc", Type: "json", Nullable: true, Optional: true}, "JSON"}, // Optional JSON: a NULL-able column, though no pointer
 		{&plugin.Field{Name: "secret", GoName: "Secret", Type: "string", Sensitive: true}, ""},
-		{field("org_id", "int64"), ""}, // the tenant column
 		{&plugin.Field{Name: "level", GoName: "Level", Type: "enum", EnumValues: []string{"low", "high"}}, "UserLevel!"},
 		{&plugin.Field{Name: "mood", GoName: "Mood", Type: "enum", EnumValues: []string{"ok"}, Nullable: true}, "UserMood"},
 	}
@@ -369,7 +368,6 @@ func TestTypeMapping(t *testing.T) {
 	for _, c := range cases {
 		u.Fields = append(u.Fields, c.f)
 	}
-	u.Tenant = slices.IndexFunc(u.Fields, func(f *plugin.Field) bool { return f.Name == "org_id" })
 	s, _ := load(t, model(u))
 	if got := typeOf(s, "User", "id"); got != "ID!" {
 		t.Errorf("id: %s", got)
@@ -388,7 +386,7 @@ func TestTypeMapping(t *testing.T) {
 			t.Errorf("%s (%s): got %q, want %q", c.f.Name, c.f.Type, got, c.want)
 		}
 	}
-	for _, name := range []string{"secret", "orgID", "orgId"} {
+	for _, name := range []string{"secret"} {
 		if typeOf(s, "User", name) != "" {
 			t.Errorf("%s is exposed", name)
 		}
@@ -658,7 +656,7 @@ func TestEdges(t *testing.T) {
 	short := edge("friends", plugin.M2M, "Group")
 	short.Annotations = ann(t, graphql.Connection(false), graphql.MaxList(5))
 	user.Edges = append(user.Edges, plain, short)
-	// A Required edge is nullable whatever its key: T. A policy or a tenant may
+	// A Required edge is nullable whatever its key: T. A policy may
 	// hide its target, and T! would null the page around the row.
 	post := entity("Post", field("author_id", "int64"))
 	author := edge("author", plugin.M2O, "User")
@@ -732,7 +730,7 @@ func TestEdges(t *testing.T) {
 // paged on them. A join entity is no type at all.
 func TestCompositeKey(t *testing.T) {
 	like := &plugin.Entity{
-		Name: "Like", Tenant: -1, PrimaryKey: []int{0, 1},
+		Name: "Like", PrimaryKey: []int{0, 1},
 		Fields: []*plugin.Field{field("user_id", "int64"), field("day", "string"), field("weight", "int")},
 	}
 	user := edge("user", plugin.M2O, "User")
@@ -744,7 +742,7 @@ func TestCompositeKey(t *testing.T) {
 	u.Edges = []*plugin.Edge{likes}
 	u.Annotations = ann(t, graphql.QueryField("users"))
 	like.Annotations = ann(t, graphql.QueryField("likes"))
-	join := &plugin.Entity{Name: "UserGroup", Join: true, Tenant: -1, PrimaryKey: []int{0, 1},
+	join := &plugin.Entity{Name: "UserGroup", Join: true, PrimaryKey: []int{0, 1},
 		Fields: []*plugin.Field{field("user_id", "int64"), field("group_id", "int64")}}
 	s, sdl := load(t, model(like, u, join))
 	def := s.Types["Like"]

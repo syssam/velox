@@ -49,7 +49,7 @@ func cursorOf(typ string, key int64) string {
 }
 
 // testServer is the example's GraphQL endpoint on a seeded database, behind
-// the example's tenant middleware, which sets the tenant from X-Org-ID, and
+// the example's org middleware, which sets the org from X-Org-ID, and
 // the statements each request sends, which an Around hook records.
 type testServer struct {
 	url   string
@@ -188,23 +188,23 @@ const (
 	selPosts = `SELECT "id", "org_id", "author_id", "title", "status", "views", "published_at" FROM "posts"`
 	selTags  = `SELECT "id", "name", "rank" FROM "tags"`
 	users    = `SELECT "id", "name", "joined_at" FROM "users"`
-	posts    = `SELECT "id", "author_id", "title", "views", "org_id" FROM "posts"`
+	posts    = `SELECT "id", "author_id", "title", "views" FROM "posts"`
 	tags     = `SELECT "id", "name" FROM "tags"`
 )
 
 // postsOf is the windowed load of the posts of users, ordered by order (its
 // SQL), at most n of each; in is the users' placeholders. Its arguments
-// are the users' keys, the tenant and n.
+// are the users' keys, the org and n.
 func postsOf(in, order string) string {
-	return `SELECT "id", "author_id", "title", "views", "org_id" FROM (SELECT "id", "author_id", "title", "views", "org_id", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY ` + order + `) AS "vx_rn" FROM "posts" WHERE "author_id" IN (` + in + `) AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
+	return `SELECT "id", "author_id", "title", "views" FROM (SELECT "id", "author_id", "title", "views", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY ` + order + `) AS "vx_rn" FROM "posts" WHERE "author_id" IN (` + in + `) AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
 }
 
 // tagsOf is the windowed load of the name of the tags of posts, through the
 // join table, in key order; in is the posts' placeholders. Its arguments
-// are the posts' keys, the tenant, which keeps a target with no tenant from
+// are the posts' keys, the org, which keeps a target with no org from
 // showing another's links, and the most of each, MaxPage + 1.
 func tagsOf(in string) string {
-	return `SELECT "id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."name", "vx_j"."post_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."post_id" ORDER BY "tags"."id") AS "vx_rn" FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (` + in + `) AND "vx_j"."post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?)) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
+	return `SELECT "id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."name", "vx_j"."post_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."post_id" ORDER BY "tags"."id") AS "vx_rn" FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (` + in + `)) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
 }
 
 // TestNode looks up one node of each type by its global ID: one query on its
@@ -227,7 +227,7 @@ func TestNode(t *testing.T) {
 		}}`,
 		stmts: []string{
 			`SELECT "id", "name", "joined_at", "email", "role" FROM "users" WHERE "id" = ? LIMIT ? [1 2]`,
-			`SELECT "id", "author_id", "title", "views", "org_id", "status", "published_at" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
+			`SELECT "id", "author_id", "title", "views", "status", "published_at" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
 			users + ` WHERE "id" IN (?) ORDER BY "id" [1]`, // the author
 			tags + ` WHERE "id" = ? LIMIT ? [1 2]`,
 		},
@@ -375,7 +375,7 @@ func nestedStmts(n int, userKeys, postKeys string) []string {
 		fmt.Sprintf(`%s ORDER BY "name", "id" LIMIT ? [%d]`, users, n+1),
 		fmt.Sprintf(`%s [%s 1 2]`, postsOf(marks(userKeys), `"title", "id"`), userKeys),
 		fmt.Sprintf(`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (%s) AND "org_id" = ? GROUP BY "author_id" [%s 1]`, marks(userKeys), userKeys),
-		fmt.Sprintf(`%s [%s 1 101]`, tagsOf(marks(postKeys)), postKeys),
+		fmt.Sprintf(`%s [%s 101]`, tagsOf(marks(postKeys)), postKeys),
 	}
 }
 
@@ -460,7 +460,7 @@ func TestAliasesBatch(t *testing.T) {
 			users + ` ORDER BY "id" LIMIT ? [101]`,
 			// a, its first post each; b, the posts titled Beta.
 			postsOf("?, ?, ?", `"id"`) + ` [1 2 3 1 2]`,
-			`SELECT "id", "author_id", "title", "views", "org_id" FROM (SELECT "id", "author_id", "title", "views", "org_id", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY "id") AS "vx_rn" FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "title" = ? AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 2 3 Beta 1 101]`,
+			`SELECT "id", "author_id", "title", "views" FROM (SELECT "id", "author_id", "title", "views", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY "id") AS "vx_rn" FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "title" = ? AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 2 3 Beta 1 101]`,
 		},
 	})
 }
@@ -503,7 +503,7 @@ func TestBatchInMutation(t *testing.T) {
 			users + ` WHERE "id" IN (?) LIMIT ? [1 1]`,
 			postsOf("?", `"id"`) + ` [1 1 101]`,
 			`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (?) AND "org_id" = ? GROUP BY "author_id" [1 1]`,
-			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?) AND "vx_j"."post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) GROUP BY "vx_j"."post_id" [1 2 6 1]`,
+			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 6]`,
 		},
 	})
 }
@@ -534,11 +534,11 @@ func TestTotalCountOnly(t *testing.T) {
 	})
 }
 
-// TestTenantIsolation reads the tenant-scoped Post through node, a root
+// TestOrgIsolation reads the org-scoped Post through node, a root
 // connection, a where input and the edges of User and Label: with acme's
-// tenant, globex's post is never returned, and with globex's it is the only
-// one. Without a tenant each fails with velox.ErrNoTenant.
-func TestTenantIsolation(t *testing.T) {
+// org, globex's post is never returned, and with globex's it is the only
+// one. Without a org each fails with scope.ErrNoScope.
+func TestOrgIsolation(t *testing.T) {
 	s := newServer(t)
 	const q = `{
 		node(id: "` + post5 + `") { id }
@@ -555,9 +555,9 @@ func TestTenantIsolation(t *testing.T) {
 			users + ` WHERE "name" = ? ORDER BY "id" LIMIT ? [Ada 101]`,
 			fmt.Sprintf(postsOf("?", `"id"`)+` [1 %d 101]`, org),
 			tags + ` WHERE "name" = ? ORDER BY "id" LIMIT ? [go 101]`,
-			// The label's posts, through the join table: the tenant's
+			// The label's posts, through the join table: the org's
 			// condition is inside the window.
-			fmt.Sprintf(`SELECT "id", "author_id", "title", "views", "org_id", "vx_owner" FROM (SELECT "posts"."id", "posts"."author_id", "posts"."title", "posts"."views", "posts"."org_id", "vx_j"."tag_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."tag_id" ORDER BY "posts"."id") AS "vx_rn" FROM "posts" JOIN "post_tags" AS "vx_j" ON "vx_j"."post_id" = "posts"."id" WHERE "vx_j"."tag_id" IN (?) AND "posts"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 %d 101]`, org),
+			fmt.Sprintf(`SELECT "id", "author_id", "title", "views", "vx_owner" FROM (SELECT "posts"."id", "posts"."author_id", "posts"."title", "posts"."views", "vx_j"."tag_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."tag_id" ORDER BY "posts"."id") AS "vx_rn" FROM "posts" JOIN "post_tags" AS "vx_j" ON "vx_j"."post_id" = "posts"."id" WHERE "vx_j"."tag_id" IN (?) AND "posts"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 %d 101]`, org),
 		}
 	}
 	s.do(t, request{
@@ -584,15 +584,15 @@ func TestTenantIsolation(t *testing.T) {
 		}}`,
 		stmts: stmts(globex),
 	})
-	// Without a tenant, every statement on Post fails before it is sent. A
+	// Without a org, every statement on Post fails before it is sent. A
 	// failed non-null field nulls its parent, up to data. The client is told
-	// unauthenticated, with no entity named (velox.ErrNoTenant's text holds
+	// unauthenticated, with no entity named (scope.ErrNoScope's text holds
 	// gen.Post).
-	const noTenant = `"message": "unauthenticated", "path": %s, "extensions": {"code": "UNAUTHENTICATED"}`
+	const noOrg = `"message": "unauthenticated", "path": %s, "extensions": {"code": "UNAUTHENTICATED"}`
 	for _, c := range []struct{ query, want string }{
-		{`{ node(id: "` + post1 + `") { id } }`, `{"errors": [{` + fmt.Sprintf(noTenant, `["node"]`) + `}], "data": {"node": null}}`},
-		{`{ posts { edges { node { title } } } }`, `{"errors": [{` + fmt.Sprintf(noTenant, `["posts", "edges"]`) + `}], "data": null}`},
-		{`{ labels(where: {name: "go"}) { edges { node { posts { totalCount } } } } }`, `{"errors": [{` + fmt.Sprintf(noTenant, `["labels", "edges", 0, "node", "posts", "totalCount"]`) + `}], "data": null}`},
+		{`{ node(id: "` + post1 + `") { id } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["node"]`) + `}], "data": {"node": null}}`},
+		{`{ posts { edges { node { title } } } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["posts", "edges"]`) + `}], "data": null}`},
+		{`{ labels(where: {name: "go"}) { edges { node { posts { totalCount } } } } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["labels", "edges", 0, "node", "posts", "totalCount"]`) + `}], "data": null}`},
 	} {
 		var stmts []string
 		if strings.HasPrefix(c.query, "{ labels") {
@@ -606,7 +606,7 @@ func TestTenantIsolation(t *testing.T) {
 
 // TestSensitiveFieldAbsent introspects the schema: User's password_hash,
 // Sensitive in the schema, is in no type, where input or order, and Post's
-// tenant column and foreign key are not fields (the author edge stands for
+// org column and foreign key are not fields (the author edge stands for
 // the key). Tag is renamed: its type is Label, and there is no type Tag.
 func TestSensitiveFieldAbsent(t *testing.T) {
 	s := newServer(t)
@@ -683,7 +683,7 @@ func TestRequestCost(t *testing.T) {
 		stmts: []string{
 			users + ` ORDER BY "id" LIMIT ? [6]`,
 			postsOf("?, ?, ?", `"id"`) + ` [1 2 3 1 6]`,
-			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?, ?) AND "vx_j"."post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) GROUP BY "vx_j"."post_id" [1 2 3 4 1]`,
+			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 3 4]`,
 		},
 	})
 	post := func(query string) string {
@@ -764,9 +764,9 @@ func TestOrderTermsLimit(t *testing.T) {
 }
 
 // TestPublishedPosts is the application's own connection, composed from a
-// query it wrote (app.graphqls): under tenant 1 the published posts are
+// query it wrote (app.graphqls): under org 1 the published posts are
 // Alpha, Gamma and Delta, and the connection keeps the base query's filter
-// and the tenant scope.
+// and the scope.
 func TestPublishedPosts(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
@@ -895,7 +895,7 @@ func TestCreatePost(t *testing.T) {
 			// The selection, of the returned row alone: the author, and the
 			// tags' count, through the join table.
 			users + ` WHERE "id" IN (?) LIMIT ? [2 1]`,
-			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?) AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?)) [6 1]`,
+			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?)) [6]`,
 		},
 	})
 }
@@ -913,10 +913,10 @@ func TestUpdatePost(t *testing.T) {
 			`UPDATE "posts" SET "published_at" = ? WHERE "id" = ? AND "org_id" = ? [<nil> 1 1]`,
 			// The tags to remove the caller may read, then their join rows.
 			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT ? [1 1]`,
-			`DELETE FROM "post_tags" WHERE "post_id" = ? AND "tag_id" IN (?) AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) [1 1 1]`,
+			`DELETE FROM "post_tags" WHERE "post_id" = ? AND "tag_id" IN (?) [1 1]`,
 			// The row read back, as written, and the selection's tags.
-			selPosts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
-			tags + ` WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?) AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?)) ORDER BY "id" LIMIT ? [1 1 101]`,
+			selPosts + ` WHERE "id" = ? LIMIT ? [1 2]`,
+			tags + ` WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?)) ORDER BY "id" LIMIT ? [1 101]`,
 		},
 	})
 	s.do(t, request{
@@ -927,11 +927,11 @@ func TestUpdatePost(t *testing.T) {
 	})
 }
 
-// TestUnlinkOtherTenant: the label go is linked to acme's post 1 and to
+// TestUnlinkOtherOrg: the label go is linked to acme's post 1 and to
 // globex's post 5. Acme's removePostIDs and clearPosts unlink only the posts
 // acme may read: the join rows are scoped through their posts, and globex's
 // link stays.
-func TestUnlinkOtherTenant(t *testing.T) {
+func TestUnlinkOtherOrg(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
 		org:   "1",
@@ -951,10 +951,11 @@ func TestUnlinkOtherTenant(t *testing.T) {
 		stmts: []string{
 			`SELECT 1 FROM "tags" WHERE "id" = ? LIMIT ? [1 1]`,
 			// The label's join rows a page at a time, the posts of them
-			// acme may read, and only their join rows.
-			`SELECT "post_id", "tag_id" FROM "post_tags" WHERE "tag_id" = ? AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) ORDER BY "tag_id", "post_id" LIMIT ? [1 1 100]`,
-			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT ? [1 1 1]`,
-			`DELETE FROM "post_tags" WHERE "tag_id" = ? AND "post_id" IN (?) AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) [1 1 1]`,
+			// acme may read (the join table has no scope of its own, so
+			// post 5's row is among them), and only their join rows.
+			`SELECT "post_id", "tag_id" FROM "post_tags" WHERE "tag_id" = ? ORDER BY "tag_id", "post_id" LIMIT ? [1 100]`,
+			`SELECT "id" FROM "posts" WHERE "id" IN (?, ?) AND "org_id" = ? LIMIT ? [1 5 1 2]`,
+			`DELETE FROM "post_tags" WHERE "tag_id" = ? AND "post_id" IN (?) [1 1]`,
 			selTags + ` WHERE "id" = ? LIMIT ? [1 2]`,
 		},
 	})
@@ -964,7 +965,7 @@ func TestUnlinkOtherTenant(t *testing.T) {
 		want:  `{"data": {"node": {"tags": {"edges": [{"node": {"name": "go"}}]}}}}`,
 		stmts: []string{
 			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [5 2 2]`,
-			tagsOf("?") + ` [5 2 101]`,
+			tagsOf("?") + ` [5 101]`,
 		},
 	})
 	s.do(t, request{
@@ -973,15 +974,15 @@ func TestUnlinkOtherTenant(t *testing.T) {
 		want:  `{"data": {"node": {"tags": {"edges": [{"node": {"name": "graphql"}}]}}}}`,
 		stmts: []string{
 			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
-			tagsOf("?") + ` [1 1 101]`,
+			tagsOf("?") + ` [1 101]`,
 		},
 	})
 }
 
-// TestDeleteOtherTenant: acme cannot delete globex's post 5, which it cannot
+// TestDeleteOtherOrg: acme cannot delete globex's post 5, which it cannot
 // see: NOT_FOUND, as for a post that does not exist, and the post keeps its
 // join row.
-func TestDeleteOtherTenant(t *testing.T) {
+func TestDeleteOtherOrg(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
 		org:   "1",
@@ -996,7 +997,7 @@ func TestDeleteOtherTenant(t *testing.T) {
 		want:  `{"data": {"node": {"title": "Globex plans", "tags": {"edges": [{"node": {"name": "go"}}]}}}}`,
 		stmts: []string{
 			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [5 2 2]`,
-			tagsOf("?") + ` [5 2 101]`,
+			tagsOf("?") + ` [5 101]`,
 		},
 	})
 }
@@ -1011,7 +1012,7 @@ func TestDeletePost(t *testing.T) {
 		want:  `{"data": {"deletePost": "` + post1 + `"}}`,
 		stmts: []string{
 			`SELECT 1 FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 1]`,
-			`DELETE FROM "post_tags" WHERE "post_id" = ? AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) [1 1]`,
+			`DELETE FROM "post_tags" WHERE "post_id" = ? [1]`,
 			`DELETE FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`,
 		},
 	})
@@ -1153,7 +1154,7 @@ func TestServeShutsDownGracefully(t *testing.T) {
 	}
 }
 
-// TestOrgHeaderNotANumber: a tenant header that is no number is the client's error,
+// TestOrgHeaderNotANumber: a org header that is no number is the client's error,
 // and nothing runs.
 func TestOrgHeaderNotANumber(t *testing.T) {
 	h := orgFromHeader(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

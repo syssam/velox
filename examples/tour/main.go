@@ -20,6 +20,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tour/gen"
 	"github.com/syssam/velox/migrate"
+	"github.com/syssam/velox/scope"
 )
 
 func main() {
@@ -39,8 +40,7 @@ func main() {
 //go:embed migrations
 var migrations embed.FS
 
-// The two organizations, the tenants, of the tenant column's Go type: int64.
-// An untyped 1, an int, would be converted to it.
+// The two organizations, of the scope key's Go type: int64.
 const (
 	acme   int64 = 1
 	globex int64 = 2
@@ -75,12 +75,12 @@ func run(ctx context.Context, w io.Writer) error {
 	I, L := gen.Invoices, gen.Lines
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 
-	// 1. The context says who is asking: the tenant for velox, the role for
-	// the policy. Middleware would set both.
+	// 1. The context says who is asking: the organization and the role,
+	// which the policies read. Middleware would set both.
 	say("\n== 1. Contexts and inserts")
-	acct := gen.WithRole(velox.WithTenant(ctx, acme), gen.RoleAccountant)
-	viewer := gen.WithRole(velox.WithTenant(ctx, acme), gen.RoleViewer)
-	globexAcct := gen.WithRole(velox.WithTenant(ctx, globex), gen.RoleAccountant)
+	acct := gen.WithRole(gen.OrgKey.With(ctx, acme), gen.RoleAccountant)
+	viewer := gen.WithRole(gen.OrgKey.With(ctx, acme), gen.RoleViewer)
+	globexAcct := gen.WithRole(gen.OrgKey.With(ctx, globex), gen.RoleAccountant)
 
 	// Insert fills OrgID from the context and reads the generated ID back.
 	inv := gen.Invoice{Number: "INV-001", Customer: "Initech", Status: gen.InvoiceStatusSent, TotalCents: 150000}
@@ -178,7 +178,7 @@ func run(ctx context.Context, w io.Writer) error {
 	say("Has: %d invoice with lines, %s", len(withLines), withLines[0].Number)
 
 	// 3. SQL(ctx) prints the statement a query would send for that context,
-	// with the tenant and policy conditions, without sending it.
+	// with the organization and policy conditions, without sending it.
 	say("\n== 3. SQL(ctx)")
 	q := db.Query[gen.Invoice]().Where(I.Customer.EQ("Initech")).Limit(10)
 	for _, c := range []struct {
@@ -230,8 +230,8 @@ func run(ctx context.Context, w io.Writer) error {
 	_, err = db.Delete[gen.Line]().Exec(acct)
 	say("no Where: ErrNoWhere=%t: %v", errors.Is(err, velox.ErrNoWhere), err)
 
-	// 6. Policy and tenant isolation.
-	say("\n== 6. Policy and tenants")
+	// 6. Policy and organization isolation.
+	say("\n== 6. Policy and organizations")
 	_, err = db.Update[gen.Invoice]().
 		Set(I.Status.Set(gen.InvoiceStatusSent)).
 		Where(I.Number.EQ("INV-002")).
@@ -252,7 +252,7 @@ func run(ctx context.Context, w io.Writer) error {
 	_, err = db.Query[gen.Invoice]().Where(I.Number.EQ("INV-003")).One(globexAcct)
 	say("org 2 asks for org 1's INV-003: ErrNotFound=%t", velox.IsNotFound(err))
 	_, err = db.Query[gen.Invoice]().Count(ctx)
-	say("no tenant in the context: ErrNoTenant=%t: %v", errors.Is(err, velox.ErrNoTenant), err)
+	say("no organization in the context: ErrNoScope=%t: %v", errors.Is(err, scope.ErrNoScope), err)
 
 	// 7. A transaction: fn's error rolls it back, nil commits. tx is a
 	// *velox.DB like db, and ctx is the transaction's: a statement on db
@@ -285,23 +285,24 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("committed: org 1 has %d invoices", n)
 
-	// 8. WithAllTenants lifts the tenant scope for one context, and requires a
-	// reason. The policy still applies, so the report runs as an accountant.
-	say("\n== 8. WithAllTenants")
-	report := gen.WithRole(velox.WithAllTenants(ctx, "monthly revenue report"), gen.RoleAccountant)
+	// 8. WithoutPolicy lifts every policy, the organization's scope among
+	// them, for one context, and requires a reason. A report across
+	// organizations needs it, and so does its caller's care.
+	say("\n== 8. WithoutPolicy")
+	report := velox.WithoutPolicy(ctx, "monthly revenue report")
 	text, _, err := db.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded().SQL(report)
 	if err != nil {
 		return err
 	}
 	say("%s", text)
 	// Sum adds up one column in the database, under the same scope as any
-	// query: here all tenants, and the accountant's policy.
+	// query: here all organizations, and no policy.
 	paidTotal, err := velox.Sum(report, db.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)), I.TotalCents)
 	if err != nil {
 		return err
 	}
 	say("paid in all: %s", money(paidTotal))
-	// SumBy does so per value of a key column, here per tenant: no drafts.
+	// SumBy does so per value of a key column, here per organization: no drafts.
 	// Unbounded says that the groups may be as many as the rows; the row cap,
 	// if any, still applies.
 	totals, err := velox.SumBy(report, db.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded(), I.OrgID.Key(), I.TotalCents)

@@ -11,20 +11,18 @@ import (
 	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Issue is the entity of schema Issue.
 type Issue struct {
-	ID         int64               `json:"id,omitempty"`
+	ID         int64               `json:"id"`
 	CreatedAt  time.Time           `json:"created_at,omitzero"`
 	UpdatedAt  time.Time           `json:"updated_at,omitzero"`
-	OrgID      int64               `json:"org_id,omitempty"`
-	ProjectID  int64               `json:"project_id,omitempty"`
-	AuthorID   int64               `json:"author_id,omitempty"`
+	OrgID      int64               `json:"org_id"`
+	ProjectID  int64               `json:"project_id"`
+	AuthorID   int64               `json:"author_id"`
 	AssigneeID *int64              `json:"assignee_id,omitempty"`
-	Title      string              `json:"title,omitempty"`
-	Body       string              `json:"body,omitempty"`
-	Status     IssueStatus         `json:"status,omitempty"`
+	Title      string              `json:"title"`
+	Body       string              `json:"body"`
+	Status     IssueStatus         `json:"status"`
 	Project    velox.One[Project]  `json:"project,omitzero"`
 	Author     velox.One[User]     `json:"author,omitzero"`
 	Assignee   velox.One[User]     `json:"assignee,omitzero"`
@@ -32,39 +30,77 @@ type Issue struct {
 	Labels     velox.Many[Label]   `json:"labels,omitzero"`
 }
 
+// The positions of Issue's columns, in the order of its table.
+const (
+	issueColID = iota
+	issueColCreatedAt
+	issueColUpdatedAt
+	issueColOrgID
+	issueColProjectID
+	issueColAuthorID
+	issueColAssigneeID
+	issueColTitle
+	issueColBody
+	issueColStatus
+)
+
+// The positions of Issue's edges.
+const (
+	issueEdgeProject = iota
+	issueEdgeAuthor
+	issueEdgeAssignee
+	issueEdgeComments
+	issueEdgeLabels
+)
+
 // Issues holds the typed handles of Issue's columns and relations.
 var Issues = struct {
-	ID         velox.NumberCol[Issue, int64]
-	CreatedAt  velox.OrderedCol[Issue, time.Time]
-	UpdatedAt  velox.OrderedCol[Issue, time.Time]
-	OrgID      velox.NumberCol[Issue, int64]
-	ProjectID  velox.NumberCol[Issue, int64]
-	AuthorID   velox.NumberCol[Issue, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Issue, int64]
+	// CreatedAt is the column created_at.
+	CreatedAt velox.OrderedCol[Issue, time.Time]
+	// UpdatedAt is the column updated_at.
+	UpdatedAt velox.OrderedCol[Issue, time.Time]
+	// OrgID is the column org_id.
+	OrgID velox.NumberCol[Issue, int64]
+	// ProjectID is the column project_id.
+	ProjectID velox.NumberCol[Issue, int64]
+	// AuthorID is the column author_id.
+	AuthorID velox.NumberCol[Issue, int64]
+	// AssigneeID is the column assignee_id.
 	AssigneeID velox.NullNumberCol[Issue, int64]
-	Title      velox.StringCol[Issue, string]
-	Body       velox.StringCol[Issue, string]
-	Status     velox.StringCol[Issue, IssueStatus]
-	Project    velox.Rel[Issue, Project]
-	Author     velox.Rel[Issue, User]
-	Assignee   velox.Rel[Issue, User]
-	Comments   velox.Rel[Issue, Comment]
-	Labels     velox.Rel[Issue, Label]
+	// Title is the column title.
+	Title velox.StringCol[Issue, string]
+	// Body is the column body.
+	Body velox.StringCol[Issue, string]
+	// Status is the column status.
+	Status velox.StringCol[Issue, IssueStatus]
+	// Project is the edge project, to Project.
+	Project velox.Rel[Issue, Project]
+	// Author is the edge author, to User.
+	Author velox.Rel[Issue, User]
+	// Assignee is the edge assignee, to User.
+	Assignee velox.Rel[Issue, User]
+	// Comments is the edge comments, to Comment.
+	Comments velox.Rel[Issue, Comment]
+	// Labels is the edge labels, to Label.
+	Labels velox.Rel[Issue, Label]
 }{
-	ID:         velox.NumberCol[Issue, int64]{I: 0},
-	CreatedAt:  velox.OrderedCol[Issue, time.Time]{I: 1},
-	UpdatedAt:  velox.OrderedCol[Issue, time.Time]{I: 2},
-	OrgID:      velox.NumberCol[Issue, int64]{I: 3},
-	ProjectID:  velox.NumberCol[Issue, int64]{I: 4},
-	AuthorID:   velox.NumberCol[Issue, int64]{I: 5},
-	AssigneeID: velox.NullNumberCol[Issue, int64]{I: 6},
-	Title:      velox.StringCol[Issue, string]{I: 7},
-	Body:       velox.StringCol[Issue, string]{I: 8},
-	Status:     velox.StringCol[Issue, IssueStatus]{I: 9},
-	Project:    velox.Rel[Issue, Project]{I: 0},
-	Author:     velox.Rel[Issue, User]{I: 1},
-	Assignee:   velox.Rel[Issue, User]{I: 2},
-	Comments:   velox.Rel[Issue, Comment]{I: 3},
-	Labels:     velox.Rel[Issue, Label]{I: 4},
+	ID:         velox.NumberCol[Issue, int64]{I: issueColID},
+	CreatedAt:  velox.OrderedCol[Issue, time.Time]{I: issueColCreatedAt},
+	UpdatedAt:  velox.OrderedCol[Issue, time.Time]{I: issueColUpdatedAt},
+	OrgID:      velox.NumberCol[Issue, int64]{I: issueColOrgID},
+	ProjectID:  velox.NumberCol[Issue, int64]{I: issueColProjectID},
+	AuthorID:   velox.NumberCol[Issue, int64]{I: issueColAuthorID},
+	AssigneeID: velox.NullNumberCol[Issue, int64]{I: issueColAssigneeID},
+	Title:      velox.StringCol[Issue, string]{I: issueColTitle},
+	Body:       velox.StringCol[Issue, string]{I: issueColBody},
+	Status:     velox.StringCol[Issue, IssueStatus]{I: issueColStatus},
+	Project:    velox.Rel[Issue, Project]{I: issueEdgeProject},
+	Author:     velox.Rel[Issue, User]{I: issueEdgeAuthor},
+	Assignee:   velox.Rel[Issue, User]{I: issueEdgeAssignee},
+	Comments:   velox.Rel[Issue, Comment]{I: issueEdgeComments},
+	Labels:     velox.Rel[Issue, Label]{I: issueEdgeLabels},
 }
 
 var issueMeta velox.MetaOnce[Issue]
@@ -72,17 +108,19 @@ var issueMeta velox.MetaOnce[Issue]
 // VeloxMeta is called by velox, not by applications.
 func (*Issue) VeloxMeta() *velox.Meta[Issue] { return issueMeta.Load(issueDescriptor) }
 
+// issueDescriptor describes Issue to velox: its table, columns, edges and hooks.
 func issueDescriptor() velox.Descriptor[Issue] {
 	d0 := (&sch.Issue{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	d1 := (&sch.Issue{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
-	d2 := (&sch.Issue{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
+	f0 := (&sch.Issue{}).Mixin()[0].Fields()[1].Descriptor()
+	d1 := f0.Default.(func() time.Time)
+	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Issue]{
 		Table: "issues",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "ProjectID", Name: "project_id"},
 			{Field: "AuthorID", Name: "author_id"},
 			{Field: "AssigneeID", Name: "assignee_id"},
@@ -90,67 +128,62 @@ func issueDescriptor() velox.Descriptor[Issue] {
 			{Field: "Body", Name: "body"},
 			{Field: "Status", Name: "status", Default: IssueStatusOpen},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     3,
+		PrimaryKey: []int{issueColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{4, 9, 0}}, // project_id, status, id
-		},
-		TenantRefs: []velox.TenantRef{
-			{Column: 4, Table: "projects", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-			{Column: 5, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-			{Column: 6, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+			{Columns: []int{issueColProjectID, issueColStatus, issueColID}}, // project_id, status, id
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Project]("Project", 4, 0),
-			velox.EdgeTo[User]("Author", 5, 0),
-			velox.EdgeTo[User]("Assignee", 6, 0),
-			velox.EdgeTo[Comment]("Comments", 0, 4),
-			velox.EdgeThrough[IssueLabel, Label]("Labels", 0, 0, 1, 0),
+			velox.EdgeTo[Project]("Project", issueColProjectID, projectColID),
+			velox.EdgeTo[User]("Author", issueColAuthorID, userColID),
+			velox.EdgeTo[User]("Assignee", issueColAssigneeID, userColID),
+			velox.EdgeTo[Comment]("Comments", issueColID, commentColIssueID),
+			velox.EdgeThrough[IssueLabel, Label]("Labels", issueColID, issueLabelColIssueID, issueLabelColLabelID, labelColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Issue)(nil).Policy()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(issueScope.Wrap((*Issue)(nil).Policy())) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Issue]{issueScope.Fill()}) },
 		FieldPtr: func(x *Issue, i int) any {
 			switch i {
-			case 0:
+			case issueColID:
 				return &x.ID
-			case 1:
+			case issueColCreatedAt:
 				return &x.CreatedAt
-			case 2:
+			case issueColUpdatedAt:
 				return &x.UpdatedAt
-			case 3:
+			case issueColOrgID:
 				return &x.OrgID
-			case 4:
+			case issueColProjectID:
 				return &x.ProjectID
-			case 5:
+			case issueColAuthorID:
 				return &x.AuthorID
-			case 6:
+			case issueColAssigneeID:
 				return &x.AssigneeID
-			case 7:
+			case issueColTitle:
 				return &x.Title
-			case 8:
+			case issueColBody:
 				return &x.Body
-			case 9:
+			case issueColStatus:
 				return &x.Status
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Issue, i int) any {
 			switch i {
-			case 0:
+			case issueEdgeProject:
 				return &x.Project
-			case 1:
+			case issueEdgeAuthor:
 				return &x.Author
-			case 2:
+			case issueEdgeAssignee:
 				return &x.Assignee
-			case 3:
+			case issueEdgeComments:
 				return &x.Comments
-			case 4:
+			case issueEdgeLabels:
 				return &x.Labels
 			}
 			return nil
 		},
 		Check: func(col int, v any) error {
 			switch col {
-			case 7:
+			case issueColTitle:
 				x := v.(string)
 				if x == "" {
 					return errors.New("must not be empty")
@@ -158,12 +191,10 @@ func issueDescriptor() velox.Descriptor[Issue] {
 				if len(x) > 200 {
 					return errors.New("length is more than 200")
 				}
-			case 9:
+			case issueColStatus:
 				x := v.(IssueStatus)
-				switch x {
-				case "open", "closed":
-				default:
-					return errors.New("is not one of the values")
+				if !x.IsValid() {
+					return errors.New("is not one of open, closed")
 				}
 			}
 			return nil
@@ -171,14 +202,14 @@ func issueDescriptor() velox.Descriptor[Issue] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Issue) String() string {
-	var p6 any
+	var assigneeIDVal any
 	if x.AssigneeID != nil {
-		p6 = *x.AssigneeID
+		assigneeIDVal = *x.AssigneeID
 	}
-	return fmt.Sprintf("Issue(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, ProjectID=%v, AuthorID=%v, AssigneeID=%v, Title=%v, Body=%v, Status=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.ProjectID, x.AuthorID, p6, x.Title, x.Body, x.Status)
+	return fmt.Sprintf("Issue(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, ProjectID=%v, AuthorID=%v, AssigneeID=%v, Title=%v, Body=%v, Status=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.ProjectID, x.AuthorID, assigneeIDVal, x.Title, x.Body, x.Status)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Issue) GoString() string { return x.String() }

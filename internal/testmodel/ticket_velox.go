@@ -8,48 +8,76 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Ticket is the entity of schema Ticket.
 type Ticket struct {
-	ID        int64              `json:"id,omitempty"`
-	CreatedBy string             `json:"created_by,omitempty"`
-	OrgID     int64              `json:"org_id,omitempty"`
-	Owner     string             `json:"owner,omitempty"`
-	Title     string             `json:"title,omitempty"`
-	Done      bool               `json:"done,omitempty"`
-	InvoiceID int64              `json:"invoice_id,omitempty"`
+	ID        int64              `json:"id"`
+	CreatedBy string             `json:"created_by"`
+	OrgID     int64              `json:"org_id"`
+	Owner     string             `json:"owner"`
+	Title     string             `json:"title"`
+	Done      bool               `json:"done"`
+	InvoiceID int64              `json:"invoice_id"`
 	ParentID  *int64             `json:"parent_id,omitempty"`
 	Invoice   velox.One[Invoice] `json:"invoice,omitzero"`
 	Children  velox.Many[Ticket] `json:"children,omitzero"`
 	Parent    velox.One[Ticket]  `json:"parent,omitzero"`
 }
 
+// The positions of Ticket's columns, in the order of its table.
+const (
+	ticketColID = iota
+	ticketColCreatedBy
+	ticketColOrgID
+	ticketColOwner
+	ticketColTitle
+	ticketColDone
+	ticketColInvoiceID
+	ticketColParentID
+)
+
+// The positions of Ticket's edges.
+const (
+	ticketEdgeInvoice = iota
+	ticketEdgeChildren
+	ticketEdgeParent
+)
+
 // Tickets holds the typed handles of Ticket's columns and relations.
 var Tickets = struct {
-	ID        velox.NumberCol[Ticket, int64]
+	// ID is the column id.
+	ID velox.NumberCol[Ticket, int64]
+	// CreatedBy is the column created_by.
 	CreatedBy velox.StringCol[Ticket, string]
-	OrgID     velox.NumberCol[Ticket, int64]
-	Owner     velox.StringCol[Ticket, string]
-	Title     velox.StringCol[Ticket, string]
-	Done      velox.Col[Ticket, bool]
+	// OrgID is the column org_id.
+	OrgID velox.NumberCol[Ticket, int64]
+	// Owner is the column owner.
+	Owner velox.StringCol[Ticket, string]
+	// Title is the column title.
+	Title velox.StringCol[Ticket, string]
+	// Done is the column done.
+	Done velox.Col[Ticket, bool]
+	// InvoiceID is the column invoice_id.
 	InvoiceID velox.NumberCol[Ticket, int64]
-	ParentID  velox.NullNumberCol[Ticket, int64]
-	Invoice   velox.Rel[Ticket, Invoice]
-	Children  velox.Rel[Ticket, Ticket]
-	Parent    velox.Rel[Ticket, Ticket]
+	// ParentID is the column parent_id.
+	ParentID velox.NullNumberCol[Ticket, int64]
+	// Invoice is the edge invoice, to Invoice.
+	Invoice velox.Rel[Ticket, Invoice]
+	// Children is the edge children, to Ticket.
+	Children velox.Rel[Ticket, Ticket]
+	// Parent is the edge parent, to Ticket.
+	Parent velox.Rel[Ticket, Ticket]
 }{
-	ID:        velox.NumberCol[Ticket, int64]{I: 0},
-	CreatedBy: velox.StringCol[Ticket, string]{I: 1},
-	OrgID:     velox.NumberCol[Ticket, int64]{I: 2},
-	Owner:     velox.StringCol[Ticket, string]{I: 3},
-	Title:     velox.StringCol[Ticket, string]{I: 4},
-	Done:      velox.Col[Ticket, bool]{I: 5},
-	InvoiceID: velox.NumberCol[Ticket, int64]{I: 6},
-	ParentID:  velox.NullNumberCol[Ticket, int64]{I: 7},
-	Invoice:   velox.Rel[Ticket, Invoice]{I: 0},
-	Children:  velox.Rel[Ticket, Ticket]{I: 1},
-	Parent:    velox.Rel[Ticket, Ticket]{I: 2},
+	ID:        velox.NumberCol[Ticket, int64]{I: ticketColID},
+	CreatedBy: velox.StringCol[Ticket, string]{I: ticketColCreatedBy},
+	OrgID:     velox.NumberCol[Ticket, int64]{I: ticketColOrgID},
+	Owner:     velox.StringCol[Ticket, string]{I: ticketColOwner},
+	Title:     velox.StringCol[Ticket, string]{I: ticketColTitle},
+	Done:      velox.Col[Ticket, bool]{I: ticketColDone},
+	InvoiceID: velox.NumberCol[Ticket, int64]{I: ticketColInvoiceID},
+	ParentID:  velox.NullNumberCol[Ticket, int64]{I: ticketColParentID},
+	Invoice:   velox.Rel[Ticket, Invoice]{I: ticketEdgeInvoice},
+	Children:  velox.Rel[Ticket, Ticket]{I: ticketEdgeChildren},
+	Parent:    velox.Rel[Ticket, Ticket]{I: ticketEdgeParent},
 }
 
 var ticketMeta velox.MetaOnce[Ticket]
@@ -57,63 +85,59 @@ var ticketMeta velox.MetaOnce[Ticket]
 // VeloxMeta is called by velox, not by applications.
 func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDescriptor) }
 
+// ticketDescriptor describes Ticket to velox: its table, columns, edges and hooks.
 func ticketDescriptor() velox.Descriptor[Ticket] {
 	return velox.Descriptor[Ticket]{
 		Table: "tickets",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedBy", Name: "created_by"},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Owner", Name: "owner"},
 			{Field: "Title", Name: "title"},
 			{Field: "Done", Name: "done"},
 			{Field: "InvoiceID", Name: "invoice_id"},
 			{Field: "ParentID", Name: "parent_id"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     2,
+		PrimaryKey: []int{ticketColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{2, 4}, Unique: true}, // org_id, title
-		},
-		TenantRefs: []velox.TenantRef{
-			{Column: 6, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
-			{Column: 7, Table: "tickets", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+			{Columns: []int{ticketColOrgID, ticketColTitle}, Unique: true}, // org_id, title
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Invoice]("Invoice", 6, 0),
-			velox.EdgeTo[Ticket]("Children", 0, 7),
-			velox.EdgeTo[Ticket]("Parent", 7, 0),
+			velox.EdgeTo[Invoice]("Invoice", ticketColInvoiceID, invoiceColID),
+			velox.EdgeTo[Ticket]("Children", ticketColID, ticketColParentID),
+			velox.EdgeTo[Ticket]("Parent", ticketColParentID, ticketColID),
 		},
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Ticket)(nil).Policy()) },
 		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Ticket)(nil).Hooks()) },
 		FieldPtr: func(x *Ticket, i int) any {
 			switch i {
-			case 0:
+			case ticketColID:
 				return &x.ID
-			case 1:
+			case ticketColCreatedBy:
 				return &x.CreatedBy
-			case 2:
+			case ticketColOrgID:
 				return &x.OrgID
-			case 3:
+			case ticketColOwner:
 				return &x.Owner
-			case 4:
+			case ticketColTitle:
 				return &x.Title
-			case 5:
+			case ticketColDone:
 				return &x.Done
-			case 6:
+			case ticketColInvoiceID:
 				return &x.InvoiceID
-			case 7:
+			case ticketColParentID:
 				return &x.ParentID
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Ticket, i int) any {
 			switch i {
-			case 0:
+			case ticketEdgeInvoice:
 				return &x.Invoice
-			case 1:
+			case ticketEdgeChildren:
 				return &x.Children
-			case 2:
+			case ticketEdgeParent:
 				return &x.Parent
 			}
 			return nil
@@ -121,14 +145,14 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Ticket) String() string {
-	var p7 any
+	var parentIDVal any
 	if x.ParentID != nil {
-		p7 = *x.ParentID
+		parentIDVal = *x.ParentID
 	}
-	return fmt.Sprintf("Ticket(ID=%v, CreatedBy=%v, OrgID=%v, Owner=%v, Title=%v, Done=%v, InvoiceID=%v, ParentID=%v)", x.ID, x.CreatedBy, x.OrgID, x.Owner, x.Title, x.Done, x.InvoiceID, p7)
+	return fmt.Sprintf("Ticket(ID=%v, CreatedBy=%v, OrgID=%v, Owner=%v, Title=%v, Done=%v, InvoiceID=%v, ParentID=%v)", x.ID, x.CreatedBy, x.OrgID, x.Owner, x.Title, x.Done, x.InvoiceID, parentIDVal)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Ticket) GoString() string { return x.String() }

@@ -57,7 +57,6 @@ type BoundHooks = engine.BoundHooks
 //	Schema string // the schema holding Table; empty for the default
 //	Columns []ColumnInfo
 //	PrimaryKey []int // indexes into Columns
-//	Tenant int // index into Columns; -1 when the entity has none
 //	Indexes []IndexInfo
 //
 // Its methods:
@@ -201,6 +200,23 @@ type ConflictClause = engine.ConflictClause
 //	Limit int
 type EachClause = engine.EachClause
 
+// JoinClause is a to-one relation joined into a SELECT, by Query.Join or LeftJoin: the
+// target's columns follow the statement's own in every row, and the relation's
+// conditions and orderings (Rel.Is and Rel.By) are on them. A Rewrite hook may not
+// change it.
+//
+// Its fields:
+//
+//	Ref RelRef // the relation, as the query named it
+//	Left bool // LEFT JOIN: the row stays, with no target, when there is none
+//	// Link is Ref resolved, set before anything else reads the statement.
+//	Link Link
+//	// On holds the target's Read conditions, added by the scope to the join's ON
+//	// clause: a target the policy hides is no match, so an inner join drops the
+//	// row and a left join keeps it without a target.
+//	On []Predicate
+type JoinClause = engine.JoinClause
+
 // Statement is one operation on its way to the database. Every query becomes
 // one, and the pipeline's hooks see and may change it: rewrite hooks before it
 // is rendered, around hooks while it runs.
@@ -208,9 +224,8 @@ type EachClause = engine.EachClause
 // Raw SQL (OpRawQuery and OpRawExec) is not rendered: Rewrite hooks do not see
 // it, and its SQL, Args and Fingerprint are set when it is made. Its Entity is
 // the entity Raw scans into, or for Exec an EntityInfo named "Exec" with no
-// table or columns. Its TenantBypass and PolicyBypass both hold the caller's
-// reason, as given, untrimmed (so does a WithAllTenants or WithoutPolicy
-// reason).
+// table or columns. Its PolicyBypass holds the caller's reason, as given,
+// untrimmed (so does a WithoutPolicy reason).
 //
 // The EntityInfo that Entity points to is shared by every query on the
 // entity, in every goroutine: treat it as read-only. A rewrite hook may point
@@ -226,6 +241,7 @@ type EachClause = engine.EachClause
 //	Exists bool // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it, or set Columns
 //	Aggregate Aggregate // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it, or Columns
 //	GroupBy int // SELECT with Count or Aggregate: the key column's index plus one, 0 for none: one row per key, the key first; velox orders by the key, and a Rewrite hook may not change it
+//	Joins []JoinClause // SELECT: to-one relations joined in, each by Join or LeftJoin; a Rewrite hook may not change them
 //	Each *EachClause // SELECT: a relation read or counted per owner; a Rewrite hook may not change it
 //	Lock Lock // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
 //	LockWait LockWait // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it
@@ -242,9 +258,7 @@ type EachClause = engine.EachClause
 //	Conflict *ConflictClause // INSERT: the upsert clause, if any
 //	Returning []int // INSERT: columns read back (PostgreSQL and SQLite)
 //	AllRows bool // UPDATE and DELETE: the statement said All
-//	Tenant any // the tenant scope applied, as the type of the entity's tenant column; nil when unscoped; when the entity is unscoped but the statement reads a scoped entity, the id as WithTenant was given it
-//	TenantBypass string // the WithAllTenants reason, when it applied; raw SQL's reason
-//	PolicyBypass string // the WithoutPolicy reason, when it applied; raw SQL's reason
+//	PolicyBypass string // the WithoutPolicy reason, which lifts every policy, a scope's included; raw SQL's reason
 //	DryRun bool // built for SQL(ctx), not sent
 //	InTx bool // set by velox: the statement runs in a transaction, inside db.Tx or one velox opens for it (a split InsertAll, a policy-conditioned upsert, an EdgeBidi write); a Rewrite hook may not change it
 //	Tx *TxInfo // the transaction the statement runs in, when the DB has hooks; nil otherwise

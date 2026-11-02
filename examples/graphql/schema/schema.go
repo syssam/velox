@@ -1,5 +1,5 @@
 // Package schema declares the graphql example's entities: a User writes
-// Posts, each Post belongs to an organization (the tenant) and carries Tags,
+// Posts, each Post belongs to an organization and carries Tags,
 // the GraphQL type Label.
 // The graphql.* annotations shape the GraphQL schema velox-graphql writes
 // beside the entities. go tool velox-gen -plugin velox-graphql reads it and
@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/schema/field"
 )
 
-// User writes posts. It is not tenant-scoped: users are shared, their posts
+// User writes posts. It is not scoped to an organization: users are shared, their posts
 // are not.
 type User struct{ schema.Schema }
 
@@ -46,17 +46,17 @@ func (User) Annotations() []schema.Annotation {
 	return []schema.Annotation{graphql.QueryField("users"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
-// Post belongs to an organization, the tenant, and to its author.
+// Post belongs to an organization, and to its author.
 type Post struct{ schema.Schema }
 
-// Fields returns the columns after the ID. OrgID is the tenant column: it is
-// in no GraphQL type or input, and every statement on Post is scoped to the
-// context's tenant. AuthorID is the key of the Author edge, which stands for
-// it in GraphQL. Views is Optional: createPost may leave it out, and it is
+// Fields returns the columns after the ID. OrgID is Immutable and graphql.Skip
+// leaves it out of every GraphQL type and input; Scoped confines every
+// statement on Post to the context's organization and fills it on insert.
+// AuthorID is the key of the Author edge, which stands for it in GraphQL. Views is Optional: createPost may leave it out, and it is
 // then 0.
 func (Post) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org"), graphql.Skip()),
 		field.Int64("author_id").Annotations(graphql.WhereOps(graphql.OpsEquality)),
 		field.String("title").NotEmpty().Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
 		field.Enum("status").Values("draft", "published").Default("draft").Annotations(graphql.WhereOps()),

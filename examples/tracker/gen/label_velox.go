@@ -9,27 +9,41 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion7
-
 // Label is the entity of schema Label.
 type Label struct {
-	ID     int64             `json:"id,omitempty"`
-	OrgID  int64             `json:"org_id,omitempty"`
-	Name   string            `json:"name,omitempty"`
+	ID     int64             `json:"id"`
+	OrgID  int64             `json:"org_id"`
+	Name   string            `json:"name"`
 	Issues velox.Many[Issue] `json:"issues,omitzero"`
 }
 
+// The positions of Label's columns, in the order of its table.
+const (
+	labelColID = iota
+	labelColOrgID
+	labelColName
+)
+
+// The positions of Label's edges.
+const (
+	labelEdgeIssues = iota
+)
+
 // Labels holds the typed handles of Label's columns and relations.
 var Labels = struct {
-	ID     velox.NumberCol[Label, int64]
-	OrgID  velox.NumberCol[Label, int64]
-	Name   velox.StringCol[Label, string]
+	// ID is the column id.
+	ID velox.NumberCol[Label, int64]
+	// OrgID is the column org_id.
+	OrgID velox.NumberCol[Label, int64]
+	// Name is the column name.
+	Name velox.StringCol[Label, string]
+	// Issues is the edge issues, to Issue.
 	Issues velox.Rel[Label, Issue]
 }{
-	ID:     velox.NumberCol[Label, int64]{I: 0},
-	OrgID:  velox.NumberCol[Label, int64]{I: 1},
-	Name:   velox.StringCol[Label, string]{I: 2},
-	Issues: velox.Rel[Label, Issue]{I: 0},
+	ID:     velox.NumberCol[Label, int64]{I: labelColID},
+	OrgID:  velox.NumberCol[Label, int64]{I: labelColOrgID},
+	Name:   velox.StringCol[Label, string]{I: labelColName},
+	Issues: velox.Rel[Label, Issue]{I: labelEdgeIssues},
 }
 
 var labelMeta velox.MetaOnce[Label]
@@ -37,43 +51,45 @@ var labelMeta velox.MetaOnce[Label]
 // VeloxMeta is called by velox, not by applications.
 func (*Label) VeloxMeta() *velox.Meta[Label] { return labelMeta.Load(labelDescriptor) }
 
+// labelDescriptor describes Label to velox: its table, columns, edges and hooks.
 func labelDescriptor() velox.Descriptor[Label] {
 	return velox.Descriptor[Label]{
 		Table: "labels",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "OrgID", Name: "org_id"},
+			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Name", Name: "name"},
 		},
-		PrimaryKey: []int{0},
-		Tenant:     1,
+		PrimaryKey: []int{labelColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1, 2}, Unique: true}, // org_id, name
+			{Columns: []int{labelColOrgID, labelColName}, Unique: true}, // org_id, name
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeThrough[IssueLabel, Issue]("Issues", 0, 1, 0, 0),
+			velox.EdgeThrough[IssueLabel, Issue]("Issues", labelColID, issueLabelColLabelID, issueLabelColIssueID, issueColID),
 		},
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(labelScope.Policy()) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Label]{labelScope.Fill()}) },
 		FieldPtr: func(x *Label, i int) any {
 			switch i {
-			case 0:
+			case labelColID:
 				return &x.ID
-			case 1:
+			case labelColOrgID:
 				return &x.OrgID
-			case 2:
+			case labelColName:
 				return &x.Name
 			}
 			return nil
 		},
 		EdgeFieldPtr: func(x *Label, i int) any {
 			switch i {
-			case 0:
+			case labelEdgeIssues:
 				return &x.Issues
 			}
 			return nil
 		},
 		Check: func(col int, v any) error {
 			switch col {
-			case 2:
+			case labelColName:
 				x := v.(string)
 				if x == "" {
 					return errors.New("must not be empty")
@@ -87,10 +103,10 @@ func labelDescriptor() velox.Descriptor[Label] {
 	}
 }
 
-// String returns the entity's fields except its sensitive ones.
+// String returns the entity's fields.
 func (x Label) String() string {
 	return fmt.Sprintf("Label(ID=%v, OrgID=%v, Name=%v)", x.ID, x.OrgID, x.Name)
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
+// GoString is String, so that %#v prints the same text.
 func (x Label) GoString() string { return x.String() }

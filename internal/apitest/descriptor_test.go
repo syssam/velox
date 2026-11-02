@@ -1,6 +1,7 @@
 package apitest
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 func TestDescriptorQueriesAndLoads(t *testing.T) {
@@ -16,7 +18,7 @@ func TestDescriptorQueriesAndLoads(t *testing.T) {
 		{{int64(10), int64(1), "notes"}, {int64(11), int64(1), "more"}},
 	}}
 	db := openFake(velox.Postgres, e)
-	as, err := db.Query[fixture.DAuthor]().Where(fixture.DAuthors.Name.EQ("ada")).With(fixture.DAuthors.Books).Limit(1).All(velox.WithTenant(ctx, int64(7)))
+	as, err := db.Query[fixture.DAuthor]().Where(fixture.DAuthors.Name.EQ("ada")).With(fixture.DAuthors.Books).Limit(1).All(testmodel.Org.With(context.Background(), int64(7)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +58,7 @@ var badDescriptorMeta velox.MetaOnce[badDescriptor]
 
 func (*badDescriptor) VeloxMeta() *velox.Meta[badDescriptor] {
 	return badDescriptorMeta.Load(func() velox.Descriptor[badDescriptor] {
-		return velox.Descriptor[badDescriptor]{Table: "b", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: 3,
+		return velox.Descriptor[badDescriptor]{Table: "b", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{3},
 			FieldPtr: func(x *badDescriptor, i int) any { return &x.ID }}
 	})
 }
@@ -73,7 +75,7 @@ func TestDescriptorErrors(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	_, err := db.Query[badDescriptor]().Limit(1).All(ctx)
 	var se *velox.SchemaError
-	if !errors.As(err, &se) || !strings.Contains(err.Error(), "tenant") {
+	if !errors.As(err, &se) || !strings.Contains(err.Error(), "primary key") {
 		t.Fatalf("got %v", err)
 	}
 	_, err = db.Query[panicDescriptor]().Limit(1).All(ctx)

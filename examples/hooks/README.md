@@ -20,7 +20,7 @@ wrong signature does not compile. The first hook listed is the outermost:
 ```go
 func (*Task) Hooks() []velox.Hook[Task] {
 	return []velox.Hook[Task]{
-		velox.On(createdBy(func(t *Task) *string { return &t.CreatedBy }), velox.OpInsert),
+		velox.On(auth.CreatedBy(func(t *Task) *string { return &t.CreatedBy }), velox.OpInsert),
 		velox.On(deriveSlug, velox.OpInsert),
 		velox.On(renamed, velox.OpUpdate),
 		velox.On(onlyDone, velox.OpDelete),
@@ -36,8 +36,8 @@ and works on a `*velox.Mutation[Task]`.
 - **Insert hook.** `deriveSlug` refuses a task with no title and sets `Slug`
   in each row of `m.Rows()`. `Insert` and `InsertAll` run it once over all
   their rows, and it changes the caller's structs.
-- **A reusable hook is a generic function.** `createdBy` in
-  `gen/created_by.go` fills a column from the context's user, for any entity
+- **A reusable hook is a generic function.** `auth.CreatedBy` in
+  `auth/auth.go` fills a column from the context's user, for any entity
   that passes it a way to reach the column. A mixin carries fields, never
   behaviour, so the `CreatedBy` mixin only adds the `created_by` column, and
   each entity lists the hook in its own `Hooks`.
@@ -54,8 +54,7 @@ and works on a `*velox.Mutation[Task]`.
 - **Delete hook.** `onlyDone` narrows with `m.Where(Tasks.Done.EQ(true))`: even
   `Delete().All()` removes only finished tasks.
 - **Conditions and counts.** `m.Conds()` returns the conditions the caller and
-  the earlier hooks gave an update or a delete, as given: never the tenant's
-  or the policy's, and empty after `All()`. A hook that makes the write
+  the earlier hooks gave an update or a delete, as given: never the policy's, and empty after `All()`. A hook that makes the write
   itself, as a soft delete does, passes them to an update instead of calling
   `next`, and reports that update's count with `m.SetAffected(n)`; the
   delete's `Exec` returns it. `m.Affected()` is the count once `next` has

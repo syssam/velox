@@ -8,22 +8,23 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/scope"
 )
 
-// TestInsertHookCannotMoveTheTenant is Review Focus 4: the tenant is
-// checked again after the insert hooks.
-func TestInsertHookCannotMoveTheTenant(t *testing.T) {
+// TestInsertHookCannotMoveTheScope is Review Focus 4: the scope policy
+// checks the row again after the insert hooks.
+func TestInsertHookCannotMoveTheScope(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}}
 	db := openFake(velox.Postgres, e)
 	x := moveOrg{}
-	err := db.Insert(&x).Exec(velox.WithTenant(context.Background(), int64(7)))
-	if !errors.Is(err, velox.ErrTenantMismatch) {
+	err := db.Insert(&x).Exec(moveOrgKey.With(context.Background(), int64(7)))
+	if !errors.Is(err, scope.ErrMismatch) {
 		t.Fatalf("got %v", err)
 	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
 	}
-	if err := db.InsertAll([]moveOrg{{ID: 1}}).Exec(velox.WithTenant(context.Background(), int64(7))); !errors.Is(err, velox.ErrTenantMismatch) {
+	if err := db.InsertAll([]moveOrg{{ID: 1}}).Exec(moveOrgKey.With(context.Background(), int64(7))); !errors.Is(err, scope.ErrMismatch) {
 		t.Errorf("InsertAll: %v", err)
 	}
 }

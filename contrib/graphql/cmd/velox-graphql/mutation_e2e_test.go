@@ -9,11 +9,11 @@ import (
 // e2eMutSchema is the schema of the mutation tests: every kind of edge a
 // create input sets, and a field of each kind the input treats apart. Its
 // tables share no name with internal/integration's.
-//   - Writer is tenant-scoped, with a validator (name), a Nillable field
+//   - Writer is scoped by org_id (gen/writer_policy.go), with a validator (name), a Nillable field
 //     (bio), an Optional one with a Default (nick), an Optional number
 //     without one (score), a sensitive field (password) and an Optional JSON
 //     field (meta); its edges are an O2M (articles), an M2M (circles), an
-//     O2O whose key Profile holds (profile), a tenant-scoped O2M to itself
+//     O2O whose key Profile holds (profile), a scoped O2M to itself
 //     (mentees, whose inverse is mentor) and an M2M to itself (friends,
 //     whose inverse is friended_by: a join row holds the writer in either
 //     column) and two bidirectional self edges, which have no inverse: an
@@ -44,7 +44,7 @@ type Writer struct{ schema.Schema }
 
 func (Writer) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Tenant(),
+		field.Int64("org_id").Immutable().Annotations(graphql.Skip()),
 		field.String("name").NotEmpty(),
 		field.String("bio").Optional().Nillable(),
 		field.String("nick").Optional().Default("anon"),
@@ -160,22 +160,32 @@ func (*Article) Policy() velox.Policy[Article] {
 }
 `
 
-// e2eMutWriterPolicy is Writer's policy: its Write lets no "frozen" writer
-// change, though every writer may be read.
+// e2eMutWriterPolicy is Writer's policy: the org scope, and a Write that lets
+// no "frozen" writer change, though every writer of the org may be read.
 const e2eMutWriterPolicy = `package gen
 
 import (
 	"context"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/scope"
 )
 
-// Policy lets no "frozen" writer change.
+// Org is the organization a request acts for.
+var Org = scope.NewKey[int64]("org")
+
+var writerScope = scope.By(Org, Writers.OrgID.EQ, func(x *Writer) *int64 { return &x.OrgID })
+
+// Policy confines the writers to the context's org, and lets no "frozen"
+// writer change.
 func (*Writer) Policy() velox.Policy[Writer] {
-	return velox.Policy[Writer]{
+	return writerScope.Wrap(velox.Policy[Writer]{
 		Write: func(context.Context) (velox.Pred[Writer], error) { return Writers.Name.NEQ("frozen"), nil },
-	}
+	})
 }
+
+// Hooks fills org_id from the context.
+func (*Writer) Hooks() []velox.Hook[Writer] { return []velox.Hook[Writer]{writerScope.Fill()} }
 `
 
 // e2eMutCirclePolicy is Circle's policy: its Read hides the circle named
@@ -295,7 +305,7 @@ func TestUnknownRowCount(t *testing.T) {
 		}
 	}
 	db := velox.Open(velox.SQLite, raw)
-	ctx := velox.WithTenant(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	w := &gen.Writer{Name: "w", Password: "x"}
 	insert(t, ctx, db, w)
 	a := &gen.Article{Title: "a"}
@@ -535,8 +545,7 @@ var dropDDL = []string{
 	"DROP TABLE IF EXISTS writers",
 }
 
-// env is a test's database: ctx is under tenant 7, given as an untyped int,
-// which velox converts to the int64 of Writer's org_id, with the DB put there
+// env is a test's database: ctx is under org 7, with the DB put there
 // by the extension's Context, as for a job outside a server; stmts are the
 // statements sent since the last reset.
 type env struct {
@@ -586,7 +595,7 @@ func run(t *testing.T, fk bool, fn func(t *testing.T, e *env)) {
 				}
 			}
 			e.raw, e.db = raw, db
-			e.ctx = velox.WithTenant(veloxgql.NewExtension(e.db).NewContext(context.Background()), 7)
+			e.ctx = gen.Org.With(veloxgql.NewExtension(e.db).NewContext(context.Background()), int64(7))
 			fn(t, e)
 		})
 	}
@@ -758,14 +767,14 @@ func TestRepeatedIDs(t *testing.T) {
 func TestEdgeScope(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
 		other := &gen.Writer{Name: "other", Password: "x"}
-		insert(t, velox.WithTenant(e.ctx, int64(8)), e.db, other)
+		insert(t, gen.Org.With(e.ctx, int64(8)), e.db, other)
 		locked := &gen.Article{Title: "locked"}
 		insert(t, e.ctx, e.db, locked)
 
 		e.reset()
 		_, err := gen.CreateArticle(e.ctx, gen.CreateArticleInput{Title: "t", WriterID: ptr(writerID(other.ID))})
 		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: CreateArticleInput.writerID: no Writer has this ID" {
-			t.Errorf("tenant 8's writer: %v (code %q), want NOT_FOUND", err, code(err))
+			t.Errorf("org 8's writer: %v (code %q), want NOT_FOUND", err, code(err))
 		}
 		for _, s := range e.stmts() {
 			if strings.HasPrefix(s, "INSERT") {
@@ -778,7 +787,7 @@ func TestEdgeScope(t *testing.T) {
 
 		_, err = gen.CreateCircle(e.ctx, gen.CreateCircleInput{Name: "c", WriterIDs: []string{writerID(other.ID)}})
 		if code(err) != veloxgql.CodeNotFound {
-			t.Errorf("a circle of tenant 8's writer: %v (code %q), want NOT_FOUND", err, code(err))
+			t.Errorf("a circle of org 8's writer: %v (code %q), want NOT_FOUND", err, code(err))
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.Circle]()); n != 0 {
 			t.Errorf("%d circles, want 0", n)
@@ -794,7 +803,7 @@ func TestEdgeScope(t *testing.T) {
 			t.Errorf("the locked article: %v (code %q), want NOT_FOUND", err, code(err))
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 0 {
-			t.Errorf("%d writers of tenant 7, want 0", n)
+			t.Errorf("%d writers of org 7, want 0", n)
 		}
 
 		// The Read policy hides a circle from the COUNT that checks the
@@ -806,16 +815,16 @@ func TestEdgeScope(t *testing.T) {
 			t.Errorf("the hidden circle: %v (code %q), want NOT_FOUND", err, code(err))
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 0 {
-			t.Errorf("%d writers of tenant 7, want 0", n)
+			t.Errorf("%d writers of org 7, want 0", n)
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]()); n != 0 {
 			t.Errorf("%d join rows, want 0", n)
 		}
 
-		// The tenant scope hides tenant 8's writer from the UPDATE that
+		// The org scope hides org 8's writer from the UPDATE that
 		// re-points a mentee, and from the count of linked mentees: it has
 		// a mentor, and still reads as missing.
-		ctx8 := velox.WithTenant(e.ctx, int64(8))
+		ctx8 := gen.Org.With(e.ctx, int64(8))
 		mentor8 := &gen.Writer{Name: "mentor8", Password: "x"}
 		insert(t, ctx8, e.db, mentor8)
 		mentee8 := &gen.Writer{Name: "mentee8", Password: "x", MentorID: ptr(mentor8.ID)}
@@ -823,34 +832,34 @@ func TestEdgeScope(t *testing.T) {
 		for _, id := range []int64{other.ID, mentee8.ID} {
 			_, err = gen.CreateWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", MenteeIDs: []string{writerID(id)}})
 			if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: CreateWriterInput.menteeIDs: no Writer has this ID" {
-				t.Errorf("tenant 8's writer %d as a mentee: %v (code %q), want NOT_FOUND", id, err, code(err))
+				t.Errorf("org 8's writer %d as a mentee: %v (code %q), want NOT_FOUND", id, err, code(err))
 			}
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 0 {
-			t.Errorf("%d writers of tenant 7, want 0", n)
+			t.Errorf("%d writers of org 7, want 0", n)
 		}
 		got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(mentee8.ID)).One(ctx8)
 		if err != nil || got.MentorID == nil || *got.MentorID != mentor8.ID {
-			t.Errorf("tenant 8's mentee: %v, %v: want its mentor kept", got, err)
+			t.Errorf("org 8's mentee: %v, %v: want its mentor kept", got, err)
 		}
 		if n := count(t, ctx8, e.db.Query[gen.Writer]().Where(gen.Writers.MentorID.IsNull())); n != 2 {
-			t.Errorf("%d writers of tenant 8 without a mentor, want 2", n)
+			t.Errorf("%d writers of org 8 without a mentor, want 2", n)
 		}
 
-		// On update: tenant 8's writer is NOT_FOUND, whether the input sets
+		// On update: org 8's writer is NOT_FOUND, whether the input sets
 		// a field or none, and no join row of it is written; and so is a
-		// mentee of tenant 8, or the locked article, which the Write policy
+		// mentee of org 8, or the locked article, which the Write policy
 		// hides from the UPDATE that adds it. Nothing moves.
 		visible := &gen.Circle{Name: "visible"}
 		insert(t, e.ctx, e.db, visible)
 		for _, in := range []gen.UpdateWriterInput{{Name: ptr("x")}, {}, {AddCircleIDs: []string{circleID(visible.ID)}}} {
 			_, err = gen.UpdateWriter(e.ctx, writerID(other.ID), in)
 			if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: updateWriter: no Writer has this ID" {
-				t.Errorf("updating tenant 8's writer with %v: %v (code %q), want NOT_FOUND", in, err, code(err))
+				t.Errorf("updating org 8's writer with %v: %v (code %q), want NOT_FOUND", in, err, code(err))
 			}
 		}
 		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(other.ID)).One(ctx8); err != nil || got.Name != "other" {
-			t.Errorf("tenant 8's writer: %v, %v: want it unchanged", got, err)
+			t.Errorf("org 8's writer: %v, %v: want it unchanged", got, err)
 		}
 		w7 := &gen.Writer{Name: "w7", Password: "x"}
 		insert(t, e.ctx, e.db, w7)
@@ -870,7 +879,7 @@ func TestEdgeScope(t *testing.T) {
 			}
 		}
 		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(mentee8.ID)).One(ctx8); err != nil || got.MentorID == nil || *got.MentorID != mentor8.ID {
-			t.Errorf("tenant 8's mentee: %v, %v: want its mentor kept", got, err)
+			t.Errorf("org 8's mentee: %v, %v: want its mentor kept", got, err)
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.Article]().Where(gen.Articles.WriterID.NotNull())); n != 0 {
 			t.Errorf("%d articles with a writer, want 0", n)
@@ -882,15 +891,15 @@ func TestEdgeScope(t *testing.T) {
 			t.Errorf("w7: %v, %v: want no mentor", got, err)
 		}
 
-		// On delete: tenant 8's writer is NOT_FOUND, and its join rows, which only
-		// tenant 8 sees, are all still there.
-		// other is tenant 8's, whom a join row's foreign key is checked against.
-		insert(t, velox.WithTenant(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: visible.ID})
-		insert(t, velox.WithTenant(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: hidden.ID})
+		// On delete: org 8's writer is NOT_FOUND, and its join rows, which only
+		// org 8 sees, are all still there.
+		// other is org 8's, whom a join row's foreign key is checked against.
+		insert(t, gen.Org.With(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: visible.ID})
+		insert(t, gen.Org.With(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: hidden.ID})
 		e.reset()
 		_, err = gen.DeleteWriter(e.ctx, writerID(other.ID))
 		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: deleteWriter: no Writer has this ID" {
-			t.Errorf("deleting tenant 8's writer: %v (code %q), want NOT_FOUND", err, code(err))
+			t.Errorf("deleting org 8's writer: %v (code %q), want NOT_FOUND", err, code(err))
 		}
 		for _, s := range e.stmts() {
 			if strings.HasPrefix(s, "DELETE") {
@@ -898,10 +907,10 @@ func TestEdgeScope(t *testing.T) {
 			}
 		}
 		if n := count(t, ctx8, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(other.ID))); n != 2 {
-			t.Errorf("%d join rows of tenant 8's writer, want 2", n)
+			t.Errorf("%d join rows of org 8's writer, want 2", n)
 		}
 		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(other.ID)).One(ctx8); err != nil || got.Name != "other" {
-			t.Errorf("tenant 8's writer: %v, %v: want it kept", got, err)
+			t.Errorf("org 8's writer: %v, %v: want it kept", got, err)
 		}
 	})
 }
@@ -1867,23 +1876,23 @@ func TestSelfM2M(t *testing.T) {
 }
 
 // TestUnlinkScope: removeXIDs and clearX of an M2M edge delete only the
-// join rows to rows the caller may read, under the tenant scope and the
-// target's Read policy, which no join row has: a link to tenant 8's writer,
+// join rows to rows the caller may read, under the
+// target's Read policy, which no join row has: a link to org 8's writer,
 // or to the circle the Read policy hides, stays. clearX reads the join rows
 // a page at a time, and the links it leaves do not stop it.
 func TestUnlinkScope(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
-		ctx8 := velox.WithTenant(e.ctx, int64(8))
-		all := velox.WithAllTenants(e.ctx, "the test's view")
+		ctx8 := gen.Org.With(e.ctx, int64(8))
+		all := velox.WithoutPolicy(e.ctx, "the test's view")
 		linked := func(w, c int64) bool {
 			t.Helper()
 			return count(t, all, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(w), gen.WriterCircles.CircleID.EQ(c))) == 1
 		}
-		// As the tenant of the writer, whom a join row's foreign key is checked against.
+		// As the org of the writer.
 		linkIn := func(ctx context.Context, w, c int64) { t.Helper(); insert(t, ctx, e.db, &gen.WriterCircle{WriterID: w, CircleID: c}) }
 		link := func(w, c int64) { t.Helper(); linkIn(e.ctx, w, c) }
 
-		// From the shared circle: tenant 8's writer keeps its link.
+		// From the shared circle: org 8's writer keeps its link.
 		c := &gen.Circle{Name: "c"}
 		insert(t, e.ctx, e.db, c)
 		mine, other := &gen.Writer{Name: "mine", Password: "x"}, &gen.Writer{Name: "other", Password: "x"}
@@ -1895,14 +1904,14 @@ func TestUnlinkScope(t *testing.T) {
 			t.Fatal(err)
 		}
 		if linked(mine.ID, c.ID) || !linked(other.ID, c.ID) {
-			t.Errorf("after removeWriterIDs: mine linked %v, tenant 8's %v; want false, true", linked(mine.ID, c.ID), linked(other.ID, c.ID))
+			t.Errorf("after removeWriterIDs: mine linked %v, org 8's %v; want false, true", linked(mine.ID, c.ID), linked(other.ID, c.ID))
 		}
 		link(mine.ID, c.ID)
 		if _, err := gen.UpdateCircle(e.ctx, circleID(c.ID), gen.UpdateCircleInput{ClearWriters: true}); err != nil {
 			t.Fatal(err)
 		}
 		if linked(mine.ID, c.ID) || !linked(other.ID, c.ID) {
-			t.Errorf("after clearWriters: mine linked %v, tenant 8's %v; want false, true", linked(mine.ID, c.ID), linked(other.ID, c.ID))
+			t.Errorf("after clearWriters: mine linked %v, org 8's %v; want false, true", linked(mine.ID, c.ID), linked(other.ID, c.ID))
 		}
 
 		// From the writer: the hidden circle keeps its link.
@@ -1925,9 +1934,9 @@ func TestUnlinkScope(t *testing.T) {
 			t.Errorf("after clearCircles: hidden linked %v, visible %v; want true, false", linked(mine.ID, hidden.ID), linked(mine.ID, visible.ID))
 		}
 
-		// Pages of 2: five writers, of tenants 7 and 8 in turn, in one
-		// circle; clearWriters unlinks tenant 7's three.
-		paged := velox.WithTenant(veloxgql.NewExtension(e.db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background()), int64(7))
+		// Pages of 2: five writers, of orgs 7 and 8 in turn, in one
+		// circle; clearWriters unlinks org 7's three.
+		paged := gen.Org.With(veloxgql.NewExtension(e.db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background()), int64(7))
 		big := &gen.Circle{Name: "big"}
 		insert(t, e.ctx, e.db, big)
 		for i := range 5 {
@@ -1942,10 +1951,10 @@ func TestUnlinkScope(t *testing.T) {
 			t.Fatal(err)
 		}
 		if n := count(t, all, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.CircleID.EQ(big.ID))); n != 2 {
-			t.Errorf("%d join rows of the big circle after clearWriters, want tenant 8's 2", n)
+			t.Errorf("%d join rows of the big circle after clearWriters, want org 8's 2", n)
 		}
 		if n := count(t, ctx8, e.db.Query[gen.Writer]().Where(gen.Writers.Circles.Has())); n != 3 {
-			t.Errorf("%d of tenant 8's writers in a circle, want 3", n)
+			t.Errorf("%d of org 8's writers in a circle, want 3", n)
 		}
 	})
 }
@@ -2385,16 +2394,16 @@ func TestBidiPartner(t *testing.T) {
 		}
 		wantPartners(t, e, "c fails to take a", a.ID, d.ID, d.ID, a.ID, c.ID, 0)
 
-		// A partner of another tenant is not the caller's to name: the
-		// mutation's existence check, under the tenant, finds no such writer.
+		// A partner of another org is not the caller's to name: the
+		// mutation's existence check, under the org, finds no such writer.
 		h := &gen.Writer{Name: "h", Password: "x"}
-		insert(t, velox.WithTenant(e.ctx, int64(8)), e.db, h)
+		insert(t, gen.Org.With(e.ctx, int64(8)), e.db, h)
 		_, err = gen.UpdateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(h.ID))})
 		if code(err) != veloxgql.CodeNotFound || err == nil || err.Error() != "veloxgql: UpdateWriterInput.partnerID: no Writer has this ID" {
-			t.Errorf("c takes h, of tenant 8: %v (code %q), want NOT_FOUND", err, code(err))
+			t.Errorf("c takes h, of org 8: %v (code %q), want NOT_FOUND", err, code(err))
 		}
 		wantPartners(t, e, "c fails to take h", c.ID, 0, a.ID, d.ID, d.ID, a.ID)
-		if hw, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(h.ID)).One(velox.WithTenant(e.ctx, int64(8))); err != nil {
+		if hw, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(h.ID)).One(gen.Org.With(e.ctx, int64(8))); err != nil {
 			t.Fatal(err)
 		} else if hw.WriterPartner != nil {
 			t.Errorf("c fails to take h: h's writer_partner = %d, want NULL", *hw.WriterPartner)
@@ -2436,7 +2445,7 @@ func TestBidiPartner(t *testing.T) {
 
 // TestMutationsRun generates e2eMutSchema's Go and runs e2eMutRun on it:
 // createX, updateX and deleteX with each kind of edge (a bidirectional self
-// edge too), the tenant and policy scope of the IDs they name, atomicity, and
+// edge too), the policy scope of the IDs they name, atomicity, and
 // their errors. Each test passes
 // on SQLite, and on PostgreSQL (through pgx and database/sql) and MySQL when
 // VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL name them; with

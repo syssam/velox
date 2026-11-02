@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 )
 
 // Trace records the order hooks and the core ran in, per test.
@@ -44,8 +46,19 @@ var (
 	HookRefuses bool
 )
 
+var (
+	authorScope = scope.By(testmodel.Org, DAuthors.OrgID.EQ, func(x *DAuthor) *int64 { return &x.OrgID })
+	tagScope    = scope.By(testmodel.Org, DTags.OrgID.EQ, func(x *DTag) *int64 { return &x.OrgID })
+)
+
+// Policy confines DTag to the context's org.
+func (*DTag) Policy() velox.Policy[DTag] { return tagScope.Policy() }
+
+// Hooks fills DTag's OrgID on insert.
+func (*DTag) Hooks() []velox.Hook[DTag] { return []velox.Hook[DTag]{tagScope.Fill()} }
+
 func (*DAuthor) Hooks() []velox.Hook[DAuthor] {
-	return []velox.Hook[DAuthor]{func(next velox.Mutator[DAuthor]) velox.Mutator[DAuthor] {
+	return []velox.Hook[DAuthor]{authorScope.Fill(), func(next velox.Mutator[DAuthor]) velox.Mutator[DAuthor] {
 		return velox.MutateFunc[DAuthor](func(ctx context.Context, m *velox.Mutation[DAuthor]) error {
 			if v, _ := ctx.Value(BlankName{}).(bool); v && m.Op() == velox.OpUpdate {
 				m.Set(DAuthors.Name.Set("")) // validated after the hook
@@ -70,10 +83,10 @@ type RenameTo struct{}
 var SomeTime = time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
 
 func (*DAuthor) Policy() velox.Policy[DAuthor] {
-	return velox.Policy[DAuthor]{Insert: func(ctx context.Context, a *DAuthor) error {
+	return authorScope.Wrap(velox.Policy[DAuthor]{Insert: func(ctx context.Context, a *DAuthor) error {
 		if a.Name == "mallory" {
 			return velox.Deny("not mallory")
 		}
 		return nil
-	}}
+	}})
 }

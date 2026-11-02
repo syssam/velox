@@ -26,7 +26,7 @@ import (
 )
 
 func main() {
-	plugin.Main(plugin.Supports{Protocol: 2, Model: 2}, generate)
+	plugin.Main(plugin.Supports{Protocol: 2, Model: 3}, generate)
 }
 
 // generate answers a request: the schema, velox.graphqls, and the Go files

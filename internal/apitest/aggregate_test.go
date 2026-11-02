@@ -11,6 +11,7 @@ import (
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/internal/testmodel/kind"
+	"github.com/syssam/velox/scope"
 )
 
 func TestAggregateSQL(t *testing.T) {
@@ -84,22 +85,22 @@ func TestAggregateRefusals(t *testing.T) {
 	}
 	for _, opts := range [][]velox.Option{nil, {velox.WithAround(func(c context.Context, _ *velox.Statement, next func(context.Context) error) error { return next(c) })}} {
 		db := openFake(velox.Postgres, e, opts...)
-		if _, err := velox.Sum(context.Background(), db.Query[testmodel.Invoice](), I.Total); !errors.Is(err, velox.ErrNoTenant) {
-			t.Errorf("no tenant (hooks %d): %v", len(opts), err)
+		if _, err := velox.Sum(context.Background(), db.Query[testmodel.Invoice](), I.Total); !errors.Is(err, scope.ErrNoScope) {
+			t.Errorf("no org (hooks %d): %v", len(opts), err)
 		}
-		if _, _, err := velox.Max(context.Background(), db.Query[testmodel.Invoice](), I.Total); !errors.Is(err, velox.ErrNoTenant) {
-			t.Errorf("no tenant, Max (hooks %d): %v", len(opts), err)
+		if _, _, err := velox.Max(context.Background(), db.Query[testmodel.Invoice](), I.Total); !errors.Is(err, scope.ErrNoScope) {
+			t.Errorf("no org, Max (hooks %d): %v", len(opts), err)
 		}
 	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
 	}
-	// The tenant scope applies.
-	if _, err := velox.Sum(tenant(int64(7)), openFake(velox.Postgres, e).Query[testmodel.Invoice](), I.Total); err != nil {
+	// The scope applies.
+	if _, err := velox.Sum(scoped(7), openFake(velox.Postgres, e).Query[testmodel.Invoice](), I.Total); err != nil {
 		t.Fatal(err)
 	}
 	if want := `SELECT SUM("total") FROM "invoices" WHERE "org_id" = $1`; e.SQL != want || !reflect.DeepEqual(e.Args, []any{int64(7)}) {
-		t.Errorf("tenant: %s %v", e.SQL, e.Args)
+		t.Errorf("org: %s %v", e.SQL, e.Args)
 	}
 	// A Rewrite hook may not change the aggregate, and may not leave it
 	// without its one column.
@@ -181,7 +182,7 @@ func TestAggregateIsNotRowCapped(t *testing.T) {
 	}
 }
 
-// An aggregate takes the tenant scope and the Read policy as Count does.
+// An aggregate takes the scope and the Read policy as Count does.
 func TestAggregateIsPolicyScoped(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(3)}}}
 	db := openFake(velox.Postgres, e)

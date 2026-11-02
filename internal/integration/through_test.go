@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // throughSetup creates books 1–4, tags 1 "go" and 2 "db" of org 1 and 3 "x"
@@ -72,8 +73,8 @@ func TestThroughWith(t *testing.T) {
 		wantTags(t, bookTags(t, ctx, tg, Books.Tags), map[int64][]string{1: {"go", "db"}, 2: {"db"}, 3: {}, 4: {"x"}})
 		wantTags(t, bookTags(t, ctx, tg, Books.Tags.OrderBy(Tags.Name.Asc())), map[int64][]string{1: {"db", "go"}, 2: {"db"}, 3: {}, 4: {"x"}})
 		wantTags(t, bookTags(t, ctx, tg, Books.Tags.Where(Tags.Name.NEQ("go"))), map[int64][]string{1: {"db"}, 2: {"db"}, 3: {}, 4: {"x"}})
-		// Org 1 sees none of book 4's tags: the target's tenant applies.
-		wantTags(t, bookTags(t, velox.WithTenant(ctx, int64(1)), tg, Books.Tags), map[int64][]string{1: {"go", "db"}, 2: {"db"}, 3: {}, 4: {}})
+		// Org 1 sees none of book 4's tags: the target's org applies.
+		wantTags(t, bookTags(t, testmodel.Org.With(context.Background(), int64(1)), tg, Books.Tags), map[int64][]string{1: {"go", "db"}, 2: {"db"}, 3: {}, 4: {}})
 
 		// Nested: each tag's books, through the join the other way.
 		bs, err := tg.db.Query[book]().Where(Books.ID.EQ(1)).With(Books.Tags.With(Tags.Books.OrderBy(Books.ID.Desc()))).Limit(1).All(ctx)
@@ -106,11 +107,11 @@ func TestThroughWith(t *testing.T) {
 func TestThroughHas(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		throughSetup(t, tg)
-		count := func(c velox.Pred[book], tenant ...int64) int64 {
+		count := func(c velox.Pred[book], org ...int64) int64 {
 			t.Helper()
 			qctx := ctx
-			if len(tenant) > 0 {
-				qctx = velox.WithTenant(ctx, tenant[0])
+			if len(org) > 0 {
+				qctx = testmodel.Org.With(context.Background(), org[0])
 			}
 			n, err := tg.db.Query[book]().Where(c).Count(qctx)
 			if err != nil {
@@ -119,10 +120,10 @@ func TestThroughHas(t *testing.T) {
 			return n
 		}
 		for _, c := range []struct {
-			name   string
-			p      velox.Pred[book]
-			tenant []int64
-			want   int64
+			name string
+			p    velox.Pred[book]
+			org  []int64
+			want int64
 		}{
 			{"has", Books.Tags.Has(), nil, 3},
 			{"has, org 1", Books.Tags.Has(), []int64{1}, 2},
@@ -130,7 +131,7 @@ func TestThroughHas(t *testing.T) {
 			{"has none", velox.Not(Books.Tags.Has()), nil, 1},
 			{"has a tag of book 2's", Books.Tags.HasWhere(Tags.Books.HasWhere(Books.ID.EQ(2))), nil, 2},
 		} {
-			if got := count(c.p, c.tenant...); got != c.want {
+			if got := count(c.p, c.org...); got != c.want {
 				t.Errorf("%s: %d, want %d", c.name, got, c.want)
 			}
 		}
@@ -138,7 +139,7 @@ func TestThroughHas(t *testing.T) {
 }
 
 // TestOfThroughOnRealDatabases: the tags of books, and the books of tags,
-// through Of are what With loads for the same owners, the target's tenant
+// through Of are what With loads for the same owners, the target's org
 // included.
 func TestOfThroughOnRealDatabases(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
@@ -155,7 +156,7 @@ func TestOfThroughOnRealDatabases(t *testing.T) {
 			}
 			return names
 		}
-		for _, qctx := range []context.Context{ctx, velox.WithTenant(ctx, int64(1))} {
+		for _, qctx := range []context.Context{ctx, testmodel.Org.With(context.Background(), int64(1))} {
 			loaded := bookTags(t, qctx, tg, Books.Tags)
 			for id := int64(1); id <= 4; id++ {
 				wantStrings(t, tagNames(qctx, &book{ID: id}), loaded[id])
@@ -200,7 +201,7 @@ func TestOfThroughOnRealDatabases(t *testing.T) {
 // TestLimitEachThroughOnRealDatabases pages a many-to-many relation per
 // owner, in one statement that joins the join table. To throughSetup's tags
 // it adds 4 "aa" of org 2 and 5 "go" of org 1, both on book 1: "aa" sorts
-// first and is another tenant's, and the two "go" tie, and break by id.
+// first and is another org's, and the two "go" tie, and break by id.
 func TestLimitEachThroughOnRealDatabases(t *testing.T) {
 	log := &stmtLog{n: map[string]int{}}
 	each(t, func(t *testing.T, tg target) {
@@ -241,7 +242,7 @@ func TestLimitEachThroughOnRealDatabases(t *testing.T) {
 				t.Errorf("owners %v, want %v", got, want)
 			}
 		}
-		acme := velox.WithTenant(ctx, int64(1))
+		acme := testmodel.Org.With(context.Background(), int64(1))
 		byName := Books.Tags.OrderBy(Tags.Name.Asc())
 		// Tag 2 is books 1's and 2's, and the first of both.
 		check(tagIDs(acme, byName.LimitEach(1)), map[int64][]int64{1: {2}, 2: {2}, 3: {}, 4: {}})
@@ -249,7 +250,7 @@ func TestLimitEachThroughOnRealDatabases(t *testing.T) {
 		check(tagIDs(acme, byName.LimitEach(4)), map[int64][]int64{1: {2, 1, 5}, 2: {2}, 3: {}, 4: {}})
 		check(tagIDs(acme, Books.Tags.OrderBy(Tags.Name.Desc()).LimitEach(2)), map[int64][]int64{1: {1, 5}, 2: {2}, 3: {}, 4: {}})
 		check(tagIDs(acme, byName.LimitEach(2), Books.ID.EQ(1)), map[int64][]int64{1: {2, 1}})
-		// Every tenant: "aa" ranks first on book 1, and "x" is book 4's.
+		// Every org: "aa" ranks first on book 1, and "x" is book 4's.
 		check(tagIDs(ctx, byName.LimitEach(1)), map[int64][]int64{1: {4}, 2: {2}, 3: {}, 4: {3}})
 		// The relation's condition is inside the window too.
 		check(tagIDs(ctx, byName.Where(Tags.Name.NEQ("aa")).LimitEach(1)), map[int64][]int64{1: {2}, 2: {2}, 3: {}, 4: {3}})
@@ -270,7 +271,7 @@ func TestEachThroughRepeatedLinksOnRealDatabases(t *testing.T) {
 		for i, r := range [][2]int64{{1, 1}, {1, 1}, {1, 2}, {1, 3}, {2, 2}, {2, 2}} {
 			tg.exec(t, "INSERT INTO shelf_tags (id, shelf_id, tag_id) VALUES (?, ?, ?)", int64(i+1), r[0], r[1])
 		}
-		acme := velox.WithTenant(ctx, int64(1))
+		acme := testmodel.Org.With(context.Background(), int64(1))
 		owners := shelves(1, 2, 3)
 		byName := Shelves.Tags.OrderBy(Tags.Name.Asc())
 		for _, c := range []struct {

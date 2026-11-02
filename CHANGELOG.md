@@ -21,12 +21,31 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `Query.Join` and `Query.LeftJoin` read a to-one relation in the query's own statement and
+  fill its `One` field from the same row. `Rel.Is` and `Rel.By` are a condition and an
+  ordering on the joined row's columns; the target's Read policy is in the join's ON
+  clause, so a join shows nothing a query on the target would not. A to-many relation is
+  refused (use `With` or `HasWhere`), as are an aggregate, a group, a per-owner read and a
+  locking read. `After` pages over a joined column. `Join(rel.With(…))` loads relations of the
+  joined entity. `Statement.Joins` lists the joins; a
+  Rewrite hook may not change them. See `docs/decisions/0031-to-one-joins.md`.
+- `schema.Scoped(key)`, a field annotation that marks the column an entity is scoped by.
+  velox-gen writes the key (`OrgKey` for `"org"`) and each entity's scope into
+  `scope_velox.go` and binds the scope around the entity's own `Policy` and `Hooks`, so a
+  hand-written `scope.go` is no longer needed. The column must be `Immutable`, not
+  `Optional` or `Nillable`, and an integer, string or UUID. See
+  `docs/decisions/0030-generated-scope.md`.
+- Package `scope`: `scope.NewKey`, `Key.With` and `Key.From`, and `scope.By`, which gives a
+  `Policy`, a `Wrap` of one, and a `Fill` hook. It confines the rows of an entity to a value
+  in the context (an organization, a region, an owner), with `scope.ErrNoScope` and
+  `scope.ErrMismatch`. `velox.WithScopeValue` records such a value for `RowScope`. See
+  `examples/tenant` and `docs/decisions/0029-scope-replaces-tenant.md`.
 - `graphql.MaxList(n)`, a per-edge bound on rows and on what they are charged.
 - `veloxgql.Limits`: `MaxResponseBytes` (32 MiB) and `Timeout` (30 s), with `CodeTimeout`.
   `Setup` also caps resolver errors and websocket messages.
 - `migrate resolve -statements`, `-adopt` and `-forget`; `-applied` works on a pending file;
   `diff -db`; `schema.Collation`. `docs/migrations-operations.md` covers merges and recovery.
-- `ErrTenantRef`, `TenantRef` and `Descriptor.TenantRefs`; `ErrTxControl`.
+- `ErrTxControl`.
 - `veloxgql.Limits`: `MaxFragments`, `MaxDepth`, `MaxNameBytes`, `MaxLiteralBytes`,
   `MaxVariableNodes` and `MaxErrors`. The `Server` interface `Setup` takes gains
   `SetValidationRulesFn`.
@@ -47,7 +66,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - A schema DSL in the style of ent, and `velox-gen`, which generates the code.
   Bidirectional self edges work as ent's do.
 - `With` eager loading, keyset pages with `After`, `Has` and `HasWhere`.
-- Tenant scoping (`WithTenant`), policies, typed hooks, sharding and read replicas.
+- Policies, typed hooks, row scoping (package `scope`), sharding and read replicas.
   `Iter`, `Count` and `Exists` work across shards.
 - One-key grouped aggregates: `CountBy`, `SumBy`, `AvgBy`, `MinBy` and `MaxBy`.
 - Validation: `MinRuneLen` and `MaxRuneLen` on a string field count characters, and
@@ -64,8 +83,55 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
-- Join entities with `TenantRefs` are tenant-scoped on every read and write, and fail with
-  `ErrNoTenant` without a tenant. `TenantRef.TenantKind` is new: regenerate.
+- velox-gen: the generated entity code names what it used to number. A column's and an edge's
+  position is a constant (`postColTitle`, `postEdgeAuthor`) that the handles, the descriptor's
+  `PrimaryKey`, `Indexes`, `Edges`, `FieldPtr` and `Check` cases share, including the columns of
+  another entity that `EdgeTo` and `EdgeThrough` name, where there were bare `0`, `1` and `7`.
+  Each handle and the descriptor function has a doc comment, and `String` names the local of a
+  pointer field after it (`noteVal`), not `p5`. The runtime is unchanged and the new names are
+  unexported, so no application code changes; regenerate to get them.
+- velox-graphql: the generated Go is smaller, about 12% per entity and no longer growing in one
+  function. `Node` and `Nodes` are two calls into `gqlimpl.NodeByID` and `NodesByID`, and each
+  Node type writes only its own `<entity>NodeGQL`, so `node_gql.go` is a few lines per entity
+  (26,000 lines for 500 entities before, 1,000 now). `UpdateX` and `DeleteX` check their row with
+  `gqlimpl.LockRow`, an input's `String` uses `gqlimpl.Show`, and `Pred`'s comment points to
+  `gqlimpl.NewFilter` for its errors. Locals are named after their input field (`writerIDKey`,
+  `tagsJSON`, `unlinkRelated`), not by index (`k7`, `j4`). A page makes its edges and its cursors'
+  terms in one slab each, and `EncodeCursor` writes the usual cursor (integer, string, boolean or nil
+  values) without reflection, byte for byte as before: a list of 50 rows with cursors allocates 9%
+  fewer objects and 15% fewer bytes. Behaviour and the SDL are as they were; regenerate.
+  `VELOX_GQL_BENCH=1 go test -run TestGeneratedBench ./cmd/velox-graphql` (in `contrib/graphql`)
+  measures a generated application's queries.
+- Generated code: a required bool, number, string or enum field has no `omitempty` in its JSON
+  tag, so a stored `0`, `false` or `""` is no longer dropped from the JSON of an entity (an
+  Optional or Nillable field keeps it). A slice-of-scalars default (`field.Strings("tags").Default(...)`)
+  is a Go literal, not JSON decoded on each insert. `Check` calls `IsValid` for an enum, names its
+  values in the error, and compares an Optional value with `0`, `false` or `""`; a schema's
+  `Fields` is called once per field that has several defaults and validators. The
+  `GeneratedCodeIsVersion7` guard is in `velox.go` only, and `String` of an entity with no
+  sensitive field says so. The foreign key velox adds for an edge (`UserSpouse`, `CategoryChildren`)
+  is `json:"-"` and not in `String`, as ent keeps it unexported; its column name is ent's, and the
+  Go field stays exported for the typed handle. The runtime is unchanged: regenerate to get them.
+- **Breaking.** Tenant scoping is gone from the core; a `Policy` and a hook through
+  `velox/scope` do it. Removed: `WithTenant`, `WithAllTenants`, `field.Tenant()`,
+  `Descriptor.Tenant` and `TenantRefs`, `TenantRef`, `EntityInfo.Tenant`,
+  `Statement.Tenant` and `TenantBypass`, `ErrNoTenant`, `ErrTenantMismatch`,
+  `ErrTenantImmutable`, `ErrTenantRef` and `ErrTenantUpsert`. Mark the scope column
+  `Immutable()`: the engine refuses to change it (`ErrImmutable`).
+- **Breaking.** `WithoutPolicy(ctx, reason)` lifts every policy, a scope included, and a
+  later call replaces the reason. `WithShardFor` takes `func(ctx) (string, error)`, reads
+  the context itself, and returns "" for a context that names no shard. `RowScope` is
+  `{Values, PolicyBypass, Shard, HasShard}`. `veloxotel.Config.RecordTenant` is
+  `RecordScope`.
+- **Breaking.** `plugin.ModelVersion` is 3 and the model JSON is version 4: rebuild
+  plugins, and regenerate with `velox-gen`. `velox-graphql` declares `Model: 3`.
+- On MySQL, an upsert that updates an entity with a Read or Write policy, a scope
+  included, fails with `ErrPolicyUpsert`: any unique key can conflict there, and the
+  update branch cannot be confined to the caller's rows.
+- A Rewrite hook that edits a row after the policy's `Insert` check is no longer checked
+  against the scope again; the policy's `Insert` and the scope's `Fill` run before it.
+- A join entity of a many-to-many edge may not have a Read policy of its own: it is read
+  through its two sides, whose Read policies apply. A bare join table is unscoped.
 - GraphQL: an explicit `null` on a Nillable field in an update clears it. `null` on an
   `<edge>ID` stays refused and names `clear<Edge>`. A JSON input number is `float64` when
   that is exact, and `json.Number` only when it would not be. `MaxFields` is 5000 and
@@ -75,10 +141,6 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - MySQL: a DDL statement refused with nothing changed leaves no dirty version; the new
   `Error` code `retry` replaces `*DirtyError` there.
 - A plain index narrowed by a MySQL `DROP COLUMN` is a note, not a refusal.
-- A write under a tenant checks each foreign key to a tenant-scoped row, with one more
-  statement per column set, and fails with `ErrTenantRef` for another tenant's row or a
-  missing one alike. `WithAllTenants` skips it. A join row needs a tenant or
-  `WithAllTenants`.
 - In a transaction, `Raw` and `Exec` refuse what would end it, `COMMIT`, `ROLLBACK` and the
   like (`ErrTxControl`), and MySQL DDL, which commits implicitly.
 - `Up`'s history checksum ignores `velox:allow` and `velox:drops` lines, so accepting a loss
@@ -96,9 +158,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   GraphiQL has its own budget, enough for 150 rich entities: raise
   `MaxIntrospectionCost` for a larger schema.
 - MySQL `Up` runs in strict mode, in its own session only.
-- GraphQL: a Required unique edge is `T`, not `T!`, since a policy or tenant can hide its
-  target. `or: []` matches nothing. A tenant key is never an input. `Create<T>` refuses an
-  explicit zero on a field with a `Default`. Tenant errors present as `FORBIDDEN`.
+- GraphQL: a Required unique edge is `T`, not `T!`, since a policy can hide its
+  target. `or: []` matches nothing. `Create<T>` refuses an explicit zero on a field with a
+  `Default`. `scope.ErrNoScope` presents as `UNAUTHENTICATED` and `scope.ErrMismatch` as
+  `FORBIDDEN`.
 - GraphQL: `Cost` charges each statement, the size of inputs and what introspection
   returns, so costs change. A very large schema may need a higher `MaxCost` for GraphiQL.
 - `mixin.Time`'s SQLite default now writes velox's time format: run
@@ -117,20 +180,18 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   old text: rewrite them, or they still compare as that text.
 - A row kept from a to-many `With` or `LoadEach` keeps alive the rows it was loaded
   with, which share its arrays. Copy it to keep it alone.
-- `WithTenant` converts predeclared integers and strings to the tenant column's type.
 - `Open` and `OpenShards` panic on an unknown dialect. `Connect` returns an error.
 
 ### Fixed
 
 - A `NULL` scans into a nil-able Go type, such as `GoType(net.IP{})`, instead of failing
   every page that selects it.
-- GraphQL: a foreign key predicate holds the target's tenant as well as its policy, and a
+- GraphQL: a foreign key predicate holds the target's policy, and a
   JSON array of the wrong length is refused. The documented worst case is now measured:
   844 MB allocated and a 59 MB response under the defaults with introspection on, as its
   budget adds to `MaxCost`'s, and 583 MB and 47 MB with it off.
 - GraphQL: a query or mutation stopped by a limit over websocket or SSE ends its stream,
   where it sent error frames without end and held the handler.
-- An upsert's own key no longer excuses a tenant foreign key.
 - SQLite: only foreign key orphans a file made fail its migration. Drift reads `timestamp`,
   `time` and similar types in one form.
 - Refused before running: `CONCURRENTLY` on a PostgreSQL partitioned table, `INPLACE` on
