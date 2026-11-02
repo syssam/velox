@@ -1,0 +1,261 @@
+package app_test
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http/httptest"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
+	"github.com/vektah/gqlparser/v2"
+	_ "modernc.org/sqlite"
+
+	"example.com/app/graph"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+)
+
+// n is the number of entities: scale_e2e_test.go writes it.
+const n = __N__
+
+// graphiQL is the query GraphiQL and most clients send for the schema.
+const graphiQL = `query IntrospectionQuery {
+	__schema {
+		queryType { name }
+		mutationType { name }
+		subscriptionType { name }
+		types { ...FullType }
+		directives { name description locations args { ...InputValue } }
+	}
+}
+fragment FullType on __Type {
+	kind name description
+	fields(includeDeprecated: true) { name description args { ...InputValue } type { ...TypeRef } isDeprecated deprecationReason }
+	inputFields { ...InputValue }
+	interfaces { ...TypeRef }
+	enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason }
+	possibleTypes { ...TypeRef }
+}
+fragment InputValue on __InputValue { name description type { ...TypeRef } defaultValue }
+fragment TypeRef on __Type {
+	kind name
+	ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } }
+}`
+
+type served struct {
+	t   *testing.T
+	do  func(query string, vars map[string]any) string
+	sql *sql.DB
+}
+
+// serve is the schema on a seeded in-memory database, through gqlgen's handler
+// and the extension under these options.
+func serve(t *testing.T, opts ...veloxgql.Option) served {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file::memory:?_pragma=foreign_keys(0)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	db.SetMaxOpenConns(1)
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range ddl {
+		if _, err := tx.Exec(s); err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db), opts...))
+	srv.AddTransport(transport.POST{})
+	srv.Use(extension.Introspection{})
+	do := func(query string, vars map[string]any) string {
+		t.Helper()
+		b, err := json.Marshal(map[string]any{"query": query, "variables": vars})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest("POST", "/", strings.NewReader(string(b)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		return w.Body.String()
+	}
+	return served{t, do, db}
+}
+
+func (s served) want(name, query, want string) {
+	s.t.Helper()
+	if got := s.do(query, nil); got != want {
+		s.t.Errorf("%s:\ngot  %s\nwant %s", name, got, want)
+	}
+}
+
+// schema is the executable schema's, for Cost.
+func schema() graphql.ExecutableSchema {
+	return graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}})
+}
+
+func TestLargeSchemaTypes(t *testing.T) {
+	start := time.Now()
+	s := serve(t)
+	t.Logf("%d entities: schema, tables and handler in %v", n, time.Since(start).Round(time.Millisecond))
+	start = time.Now()
+	if got := s.do("{ __typename }", nil); got != `{"data":{"__typename":"Query"}}` {
+		t.Fatal(got)
+	}
+	t.Logf("first request %v", time.Since(start).Round(time.Microsecond))
+
+	var all struct {
+		Data struct {
+			Query struct{ Fields []struct{ Name string } }
+			Schema struct{ Types []struct{ Name string } }
+		}
+	}
+	got := s.do(`{ Query: __type(name: "Query") { fields { name } } Schema: __schema { types { name } } }`, nil)
+	if err := json.Unmarshal([]byte(got), &all); err != nil || strings.Contains(got, "errors") {
+		t.Fatalf("%v: %.300s", err, got)
+	}
+	fields := map[string]bool{}
+	for _, f := range all.Data.Query.Fields {
+		fields[f.Name] = true
+	}
+	types := map[string]bool{}
+	for _, ty := range all.Data.Schema.Types {
+		types[ty.Name] = true
+	}
+	for i := range n {
+		if f := fmt.Sprintf("e%ds", i); !fields[f] {
+			t.Errorf("Query has no %s", f)
+		}
+		for _, suffix := range []string{"", "Connection", "Edge", "Order", "OrderField", "WhereInput"} {
+			if name := fmt.Sprintf("E%d%s", i, suffix); !types[name] {
+				t.Errorf("no type %s", name)
+			}
+		}
+	}
+	t.Logf("%d types, %d root fields", len(types), len(fields))
+}
+
+// TestLargeSchemaIntrospection: GraphiQL's query is admitted under
+// MaxIntrospectionCost exactly when Cost says it fits, and with the limit
+// raised to its cost the schema answers it whole, in bounded time and memory.
+func TestLargeSchemaIntrospection(t *testing.T) {
+	es := schema()
+	doc, errs := gqlparser.LoadQueryWithRules(es.Schema(), graphiQL, nil)
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	def := veloxgql.DefaultLimits()
+	cost := veloxgql.Cost(es.Schema(), doc.Operations[0], nil, veloxgql.Limits{MaxIntrospectionCost: 1 << 40})
+	fits := cost <= def.MaxIntrospectionCost
+	t.Logf("%d entities: GraphiQL's query costs %d, the default limit is %d (fits: %v)", n, cost, def.MaxIntrospectionCost, fits)
+
+	got := serve(t).do(graphiQL, nil)
+	switch refused := strings.Contains(got, "COST_LIMIT_EXCEEDED"); {
+	case fits && refused, !fits && !refused:
+		t.Errorf("fits %v under the default limit, but the response is %.300s", fits, got)
+	case fits && strings.Contains(got, `"errors"`):
+		t.Errorf("errors: %.300s", got)
+	}
+
+	// The limit is exact: one under the cost refuses the query, and no data comes back.
+	tight := serve(t, veloxgql.WithLimits(veloxgql.Limits{MaxIntrospectionCost: cost - 1})).do(graphiQL, nil)
+	if !strings.Contains(tight, "COST_LIMIT_EXCEEDED") || strings.Contains(tight, `"types"`) {
+		t.Errorf("a limit of %d under a cost of %d: %.300s", cost-1, cost, tight)
+	}
+
+	s := serve(t, veloxgql.WithLimits(veloxgql.Limits{MaxIntrospectionCost: cost}))
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	start := time.Now()
+	got = s.do(graphiQL, nil)
+	elapsed := time.Since(start)
+	runtime.ReadMemStats(&after)
+	if strings.Contains(got, `"errors"`) {
+		t.Fatalf("with the limit at its cost: %.300s", got)
+	}
+	for _, want := range []string{fmt.Sprintf(`"name":"E%dWhereInput"`, n-1), `"name":"E0Connection"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %s in the answer", want)
+		}
+	}
+	alloc := after.TotalAlloc - before.TotalAlloc
+	t.Logf("introspection: %v, %d KB answer, %d MB allocated, %d bytes a unit", elapsed.Round(time.Millisecond), len(got)/1024, alloc>>20, alloc/uint64(cost))
+	// Measured 830 to 950 bytes a unit from 10 to 500 entities, falling as the
+	// schema grows. decision 0027's 640 is the worst case, a flood of aliases of
+	// this query. The bound allows twice the measure and fails a walk that grows
+	// with the schema's size.
+	if per := alloc / uint64(cost); per > 2048 {
+		t.Errorf("%d bytes allocated for each unit of cost, measured about 900", per)
+	}
+	if elapsed > time.Minute {
+		t.Errorf("introspection took %v", elapsed)
+	}
+}
+
+func TestLargeSchemaQueries(t *testing.T) {
+	s := serve(t)
+	last := n - 1
+	s.want("first entity", `{ e0s(first: 2) { totalCount edges { node { name amount } } } }`,
+		`{"data":{"e0s":{"totalCount":3,"edges":[{"node":{"name":"e0-r1","amount":1.5}},{"node":{"name":"e0-r2","amount":2.5}}]}}}`)
+	s.want("last entity, ordered", fmt.Sprintf(`{ e%ds(first: 1, orderBy: {field: NAME, direction: DESC}) { edges { node { name } } } }`, last),
+		fmt.Sprintf(`{"data":{"e%ds":{"edges":[{"node":{"name":"e%d-r3"}}]}}}`, last, last))
+	mid := n / 2
+	s.want("where", fmt.Sprintf(`{ e%ds(where: {name: "e%d-r2"}) { edges { node { name } } } }`, mid, mid),
+		fmt.Sprintf(`{"data":{"e%ds":{"edges":[{"node":{"name":"e%d-r2"}}]}}}`, mid, mid))
+	s.want("down a chain", `{ e0s(first: 1) { edges { node { name next { edges { node { name next { edges { node { name } } } } } } } } } }`,
+		`{"data":{"e0s":{"edges":[{"node":{"name":"e0-r1","next":{"edges":[{"node":{"name":"e1-r1","next":{"edges":[{"node":{"name":"e2-r1"}}]}}}]}}}]}}}`)
+	s.want("up a chain", `{ e9s(first: 1) { edges { node { name prev { name prev { name } } } } } }`,
+		`{"data":{"e9s":{"edges":[{"node":{"name":"e9-r1","prev":{"name":"e8-r1","prev":{"name":"e7-r1"}}}}]}}}`)
+	s.want("node", fmt.Sprintf(`{ node(id: %q) { ... on E%d { name } } }`, veloxgql.EncodeID(fmt.Sprintf("E%d", mid), 2), mid),
+		fmt.Sprintf(`{"data":{"node":{"name":"e%d-r2"}}}`, mid))
+	s.want("nodes", fmt.Sprintf(`{ nodes(ids: [%q, %q]) { ... on E0 { name } ... on E%d { name } } }`, veloxgql.EncodeID("E0", 1), veloxgql.EncodeID(fmt.Sprintf("E%d", last), 3), last),
+		fmt.Sprintf(`{"data":{"nodes":[{"name":"e0-r1"},{"name":"e%d-r3"}]}}`, last))
+}
+
+// TestLargeSchemaCostLimits: the limits that do not depend on the schema's size
+// hold on a large one: a request that spreads over many root fields is refused
+// before any statement runs, and a deep one that stays within its pages is not.
+func TestLargeSchemaCostLimits(t *testing.T) {
+	s := serve(t)
+	// 400 root connections of a full page, over the entities in turn: a request of
+	// that width costs the same on any schema, and is past the default MaxCost.
+	var flood strings.Builder
+	flood.WriteString("{")
+	for i := range 400 {
+		fmt.Fprintf(&flood, " a%d: e%ds(first: 100) { edges { node { name amount createdAt } } }", i, i%n)
+	}
+	flood.WriteString(" }")
+	if doc, errs := gqlparser.LoadQueryWithRules(schema().Schema(), flood.String(), nil); len(errs) > 0 {
+		t.Fatal(errs)
+	} else if cost, limit := veloxgql.Cost(schema().Schema(), doc.Operations[0], nil, veloxgql.Limits{MaxCost: 1 << 40}), veloxgql.DefaultLimits().MaxCost; cost <= limit {
+		t.Fatalf("the flood costs %d, within the default MaxCost %d: make it wider", cost, limit)
+	}
+	if got := s.do(flood.String(), nil); !strings.Contains(got, "COST_LIMIT_EXCEEDED") {
+		t.Errorf("400 root connections of 100 rows: %.300s", got)
+	}
+	// Each page is one row, so the nine levels cost nine statements and a row each.
+	deep := "{ e0s(first: 1) { edges { node { name"
+	for range 9 {
+		deep += " next(first: 1) { edges { node { name"
+	}
+	deep += strings.Repeat(" } } }", 9) + " } } } }"
+	got := s.do(deep, nil)
+	if strings.Contains(got, `"errors"`) || !strings.Contains(got, `"name":"e9-r1"`) {
+		t.Errorf("nine levels of one row: %.300s", got)
+	}
+}
