@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"reflect"
@@ -29,9 +30,6 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 		if col.Codec {
 			return errCodecOrder(in, o.Column)
 		}
-		if col.Nullable {
-			return fmt.Errorf("velox: %s: After cannot page over the nullable column %s", in.Name, col.Name)
-		}
 		// A nil slice or map is stored as NULL, which no comparison matches.
 		if sliceOrMap(col.Type) {
 			return fmt.Errorf("velox: %s: After cannot page over the column %s, which can be NULL", in.Name, col.Name)
@@ -53,31 +51,67 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 	}
 	unique := covers(in.PrimaryKey)
 	for _, ix := range in.Indexes {
-		unique = unique || (ix.Unique && covers(ix.Columns))
+		// NULLs do not collide, so a unique index of a nullable column does
+		// not make the order total.
+		unique = unique || (ix.Unique && covers(ix.Columns) && !slices.ContainsFunc(ix.Columns, func(c int) bool { return in.Columns[c].Nullable }))
 	}
 	if !unique {
 		return fmt.Errorf("velox: %s: After needs an OrderBy that includes the primary key or a unique index", in.Name)
 	}
 	// (o1 > v1) OR (o1 = v1 AND o2 > v2) OR …, with < for descending columns.
+	// NULL sorts after every value (the order puts it there, orderBy), so
+	// past a value ascending is > v OR IS NULL, past NULL ascending is
+	// nothing, and past NULL descending is IS NOT NULL; NULL equals NULL.
 	var or []Node
 	for i, o := range st.OrderBy {
 		var and []Node
 		for _, prev := range st.OrderBy[:i] {
-			and = append(and, Node{Op: OpEQ, Col: int32(prev.Column), V: in.kit.Value(after, prev.Column)})
+			v := in.kit.Value(after, prev.Column)
+			if in.Columns[prev.Column].Nullable && nullValue(v) {
+				and = append(and, Node{Op: OpIsNull, Col: int32(prev.Column)})
+			} else {
+				and = append(and, Node{Op: OpEQ, Col: int32(prev.Column), V: v})
+			}
 		}
-		cmp := OpGT
+		v, col := in.kit.Value(after, o.Column), int32(o.Column)
+		past := Node{Op: OpGT, Col: col, V: v}
 		if o.Desc {
-			cmp = OpLT
+			past.Op = OpLT
 		}
-		and = append(and, Node{Op: cmp, Col: int32(o.Column), V: in.kit.Value(after, o.Column)})
-		if len(and) == 1 {
-			or = append(or, and[0])
-		} else {
-			or = append(or, Group(OpAnd, and))
+		if in.Columns[o.Column].Nullable {
+			switch null := nullValue(v); {
+			case null && !o.Desc:
+				continue // no row is past NULL
+			case null:
+				past = Node{Op: OpNotNull, Col: col}
+			case !o.Desc:
+				past = Group(OpOr, []Node{past, {Op: OpIsNull, Col: col}})
+			}
+		}
+		switch {
+		case len(and) > 0:
+			or = append(or, Group(OpAnd, append(and, past)))
+		case past.Op == OpOr: // flattened: the outer group is an OR too
+			or = append(or, past.Kids...)
+		default:
+			or = append(or, past)
 		}
 	}
 	st.Where = append(st.Where, NewPredicate(Group(OpOr, or)))
 	return nil
+}
+
+// nullValue reports whether v, a nullable column's value, is stored as NULL:
+// a nil pointer, or a driver.Valuer whose value is nil.
+func nullValue(v any) bool {
+	if isNil(v) {
+		return true
+	}
+	if dv, ok := v.(driver.Valuer); ok {
+		x, err := dv.Value()
+		return err == nil && x == nil
+	}
+	return false
 }
 
 // CloneStatement copies a query's statement for one run, with its slices

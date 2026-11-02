@@ -239,10 +239,7 @@ func TestGroupedOnRealDatabases(t *testing.T) {
 		if err != nil || len(byPaidAt) != 2 {
 			t.Fatalf("by paid_at: %v, %v", byPaidAt, err)
 		}
-		nullAt, valueAt := 0, 1
-		if tg.d == velox.Postgres { // NULLs last there, first elsewhere
-			nullAt, valueAt = 1, 0
-		}
+		nullAt, valueAt := 1, 0 // NULL last on every dialect
 		if g := byPaidAt[nullAt]; g.Key != nil || g.Value != 2 {
 			t.Errorf("NULL key: %+v", g)
 		}
@@ -293,10 +290,6 @@ func TestGroupedOnRealDatabases(t *testing.T) {
 		byPrev, err := velox.SumBy(ctx, samples, S.Prev.Key(), S.Price)
 		if err != nil || len(byPrev) != 2 {
 			t.Fatalf("by prev: %v, %v", byPrev, err)
-		}
-		nullAt, valueAt = 0, 1
-		if tg.d == velox.Postgres {
-			nullAt, valueAt = 1, 0
 		}
 		if g := byPrev[nullAt]; g.Key != nil || g.Value != 101 {
 			t.Errorf("NULL key: %+v", g)

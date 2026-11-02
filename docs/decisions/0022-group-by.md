@@ -40,7 +40,8 @@ One key:
   `*st = Statement{...}` leaves.
 - **NULL keys.** A nullable handle's `Key` makes K a pointer, and NULL one group with a
   nil Key. It sorts where the database puts NULLs: first on SQLite and MySQL, last on
-  PostgreSQL. velox does not normalize this, as `OrderBy` does not.
+  PostgreSQL. velox does not normalize this, as `OrderBy` does not. *(Superseded by
+  0029: `OrderBy` sorts NULL last ascending on every dialect, and so does the key.)*
 - **NULL values.** A group with only NULLs sums to 0, as `Sum` is 0. `AvgBy`, `MinBy` and
   `MaxBy` give it no entry, as `Avg`, `Min` and `Max` return false: a pointer would make
   every caller check for a case that a `NumberCol`, NOT NULL by its schema, rarely has.
