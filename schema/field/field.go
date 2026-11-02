@@ -153,8 +153,9 @@ func newTyped[B, V any](c *common[B]) typed[B, V] { return typed[B, V]{c: c} }
 // Default sets the value a new row gets when the field is not set. It never
 // changes the Go type. A field that is not a pointer is unset when it holds its
 // zero value, so velox-gen refuses a Default on a bool or number that is not
-// Nillable, which could then never store false or 0: make the field Nillable
-// or drop the Default. On a string that is not Nillable, "" is unset and takes
+// Nillable, which could then never store false or 0, unless the Default is the
+// zero value itself, as Default(false) or Default(0): make the field Nillable,
+// or give it a zero Default, or drop it. On a string that is not Nillable, "" is unset and takes
 // the Default: Insert cannot store it, though Update can. A Default that the
 // field's own built-in checks refuse is an error: every row that left the field
 // unset would fail to insert. A custom validator is not called on it.

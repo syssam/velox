@@ -960,9 +960,10 @@ func (b *builder) validateFields(e *Entity) {
 	for _, f := range e.Fields {
 		// An insert fills a Default or DefaultFunc into a zero field, so on a
 		// bool or number that is not a pointer it could never store false or
-		// 0. The tenant's default is rule 16's.
-		if (len(f.Default) > 0 || f.DefaultFunc) && !f.Nillable && !f.Tenant && (f.Type == "bool" || numeric[f.Type]) {
-			b.fail(36, e.Name, fieldLoc(f), "a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default")
+		// 0. A Default that is the zero value stores what unset does. The
+		// tenant's default is rule 16's.
+		if (len(f.Default) > 0 && !zeroDefault(f) || f.DefaultFunc) && !f.Nillable && !f.Tenant && (f.Type == "bool" || numeric[f.Type]) {
+			b.fail(36, e.Name, fieldLoc(f), "a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset when a Go struct is inserted, so false or 0 could never be stored; make the field Nillable, give it its zero value as the Default (name it so that false or 0 is the default), or drop the Default; a GraphQL create input can apply one with graphql.CreateDefault")
 		}
 		if b.keyEdges[f] == nil && uniqueUnset(e, f) { // a bound key is rule 38's
 			b.fail(54, e.Name, fieldLoc(f), "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide, or give it a DefaultFunc that a value a hook fills can stand in for, as velox-gen cannot see a hook")
@@ -1018,6 +1019,25 @@ func (b *builder) validateFields(e *Entity) {
 			b.fail(22, e.Name, fieldLoc(id), "the ID cannot be of type %s", id.Type)
 		}
 	}
+}
+
+// zeroDefault reports whether f's literal Default is the zero value of a
+// bool or number: false, or a number equal to 0.
+func zeroDefault(f *Field) bool {
+	var v any
+	d := json.NewDecoder(strings.NewReader(string(f.Default)))
+	d.UseNumber()
+	if d.Decode(&v) != nil {
+		return false
+	}
+	switch x := v.(type) {
+	case bool:
+		return !x
+	case json.Number:
+		n, err := x.Float64()
+		return err == nil && n == 0
+	}
+	return false
 }
 
 // uniqueUnset reports whether every unset row of e holds one value of f, and a

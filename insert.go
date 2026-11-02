@@ -254,7 +254,7 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 // nil, so any value can be stored. On any other field, such as an Optional
 // one, it is the zero value itself: a string with a Default can never store
 // "", which is why velox-gen refuses a Default or DefaultFunc on a bool or
-// number that is not Nillable.
+// number that is not Nillable, unless the Default is the zero value.
 func fillDefaults[E any](m *Meta[E], p *E) {
 	for i := range m.info.Columns {
 		engine.FillDefault(&m.info.Columns[i], m.addr(p, i))

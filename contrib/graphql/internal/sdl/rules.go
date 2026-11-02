@@ -1,7 +1,9 @@
 package sdl
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/syssam/velox/contrib/graphql"
@@ -154,10 +156,11 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.CreateInput(true) or UpdateInput(true): the primary key is never an input", where)
 	case isTrue(a.UpdateInput) && f.Immutable:
 		return fmt.Errorf("%s: graphql.UpdateInput(true) on an immutable field, which no update may set", where)
-	case f.HasDefault && !f.Nullable && zeroIsUnset(f.Type):
+	case f.HasDefault && !f.Nullable && zeroIsUnset(f.Type) && !zeroLiteral(f.Default):
 		// An insert fills the Default into a zero value, so the field could
-		// never store false or 0, and a create input could not set it.
-		return fmt.Errorf("%s: a Default on a bool or number that is not Nillable cannot be told from unset; velox-gen refuses it too", where)
+		// never store false or 0, and a create input could not set it. A
+		// zero Default stores what unset does.
+		return fmt.Errorf("%s: a Default on a bool or number that is not Nillable cannot be told from unset, unless it is the zero value; velox-gen refuses it too", where)
 	}
 	return nil
 }
@@ -170,6 +173,20 @@ func zeroIsUnset(typ string) bool {
 		return true
 	}
 	return false
+}
+
+// zeroLiteral reports whether d, a field's literal Default, is false or a
+// number equal to 0; a func Default, which the model gives none of, is not.
+func zeroLiteral(d json.RawMessage) bool {
+	switch s := strings.TrimSpace(string(d)); s {
+	case "":
+		return false
+	case "false":
+		return true
+	default:
+		n, err := strconv.ParseFloat(s, 64)
+		return err == nil && n == 0
+	}
 }
 
 // appDirective is the name of a's first application directive, one other
