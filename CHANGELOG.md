@@ -62,6 +62,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `contrib/veloxotel`: OpenTelemetry tracing and metrics.
 - Runnable examples in `examples/`, up to a whole service in `examples/tracker`.
 - `graphql.CreateDefault(v)`: a default for a field in the GraphQL create input.
+- `SumNull`, `AvgNull`, `MinNull`, `MaxNull` and their `...ByNull` grouped forms, for
+  nullable number columns.
+- `docs/coming-from-ent.md`; `examples/relations` links a many-to-many edge.
 - `OrderField` on a nullable field, and `After` over nullable columns, with
   `gqlimpl.NullTerm` carrying NULL in the cursor (decision 0029).
 
@@ -103,6 +106,22 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - GraphQL: `field.Strings`, `Ints`, `Floats` and `Bools` are lists (`[String!]` and so
   on), not `JSON`, in output and input. Filters are unchanged.
 - A `Uint64` input over 2^63-1 says database/sql cannot send it.
+- velox-graphql: `Create<T>` takes `set func(*T)` when its create input leaves out a
+  required field with no Default, so the resolver sets it (before, its zero was stored).
+  Errors name only the input's own fields. Update such resolvers when you regenerate.
+- veloxgql: each `Contains`, `HasPrefix` or `HasSuffix` predicate and each `has<Edge>With`
+  costs 2000, so floods of table scans are refused by the default `MaxCost`.
+- `velox.Connect` turns SQLite foreign keys on for every connection unless the DSN sets them.
+- On MySQL, a tenant-scoped upsert that leaves a generated integer key at zero is no longer
+  refused with `ErrTenantUpsert` when every unique index holds the tenant column.
+- migrate: `add-required-column` suggests a Default or Optional.
+- migrate: a dirty version left with a statement under way (MySQL, CONCURRENTLY,
+  multi-statement units) leads its refusal and `status` with checking whether the statement
+  took effect, then `resolve -statements`, then `-resume`.
+- migrate: PostgreSQL's migration lock is keyed by the history table's schema and name.
+  Upgrade together all instances that migrate one database.
+- migrate: a MySQL rename blocked by a trigger says to drop and recreate it by hand; a
+  set-not-null review comment sits over the online unit that sets NOT NULL.
 - migrate: a PostgreSQL online file's statements other than `CONCURRENTLY` and
   `VALIDATE CONSTRAINT` wait for the configured `lock_timeout`; a lock timeout or deadlock
   at a unit's head is retried by the next `apply` without `-resume`.
@@ -139,6 +158,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- migrate: on PostgreSQL, a no-transaction unit of one statement commits with its history
+  count, so `apply -resume` after a killed run never applies it twice.
 - A PostgreSQL `Up` waiting for the migration lock polls outside a transaction, so it no
   longer deadlocks a running `CREATE INDEX CONCURRENTLY` (two replicas migrating at start).
 - `docs/migrations-operations.md` covers recovering from a dirty PostgreSQL online file.
