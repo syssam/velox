@@ -1,7 +1,9 @@
 package sdl
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/syssam/velox/contrib/graphql"
@@ -37,6 +39,7 @@ func misplaced(a graphql.Annotation, on, where string) error {
 		{"graphql.MaxList", a.MaxList != 0, onEdge},
 		{"graphql.CreateInput", a.CreateInput != nil, onField},
 		{"graphql.UpdateInput", a.UpdateInput != nil, onField},
+		{"graphql.CreateDefault", a.CreateDefault != nil, onField},
 		{"graphql.EnumValues", len(a.EnumValues) > 0, onField},
 	} {
 		if p.set && !strings.Contains(p.on, on) {
@@ -122,8 +125,6 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 	switch {
 	case len(a.EnumValues) > 0 && f.Type != "enum":
 		return fmt.Errorf("%s: graphql.EnumValues on a field of type %s, which is not an enum", where, f.Type)
-	case a.OrderField != "" && f.Nullable:
-		return fmt.Errorf("%s: graphql.OrderField on a nullable field: keyset paging needs an order column without NULLs", where)
 	case a.OrderField != "" && f.Sensitive:
 		return fmt.Errorf("%s: graphql.OrderField on a sensitive field: its values would be in the cursors", where)
 	case a.OrderField != "" && f.Type == "json":
@@ -150,14 +151,19 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.CreateInput: %s", where, never)
 	case a.UpdateInput != nil && never != "":
 		return fmt.Errorf("%s: graphql.UpdateInput: %s", where, never)
+	case a.CreateDefault != nil && never != "":
+		return fmt.Errorf("%s: graphql.CreateDefault: %s", where, never)
+	case a.CreateDefault != nil && pk:
+		return fmt.Errorf("%s: graphql.CreateDefault: the primary key is never an input", where)
 	case (isTrue(a.CreateInput) || isTrue(a.UpdateInput)) && pk:
 		return fmt.Errorf("%s: graphql.CreateInput(true) or UpdateInput(true): the primary key is never an input", where)
 	case isTrue(a.UpdateInput) && f.Immutable:
 		return fmt.Errorf("%s: graphql.UpdateInput(true) on an immutable field, which no update may set", where)
-	case f.HasDefault && !f.Nullable && zeroIsUnset(f.Type):
+	case f.HasDefault && !f.Nullable && zeroIsUnset(f.Type) && !zeroLiteral(f.Default):
 		// An insert fills the Default into a zero value, so the field could
-		// never store false or 0, and a create input could not set it.
-		return fmt.Errorf("%s: a Default on a bool or number that is not Nillable cannot be told from unset; velox-gen refuses it too", where)
+		// never store false or 0, and a create input could not set it. A
+		// zero Default stores what unset does.
+		return fmt.Errorf("%s: a Default on a bool or number that is not Nillable cannot be told from unset, unless it is the zero value; velox-gen refuses it too", where)
 	}
 	return nil
 }
@@ -170,6 +176,20 @@ func zeroIsUnset(typ string) bool {
 		return true
 	}
 	return false
+}
+
+// zeroLiteral reports whether d, a field's literal Default, is false or a
+// number equal to 0; a func Default, which the model gives none of, is not.
+func zeroLiteral(d json.RawMessage) bool {
+	switch s := strings.TrimSpace(string(d)); s {
+	case "":
+		return false
+	case "false":
+		return true
+	default:
+		n, err := strconv.ParseFloat(s, 64)
+		return err == nil && n == 0
+	}
 }
 
 // appDirective is the name of a's first application directive, one other

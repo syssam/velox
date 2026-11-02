@@ -61,6 +61,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   and `@include`.
 - `contrib/veloxotel`: OpenTelemetry tracing and metrics.
 - Runnable examples in `examples/`, up to a whole service in `examples/tracker`.
+- `graphql.CreateDefault(v)`: a default for a field in the GraphQL create input.
+- `OrderField` on a nullable field, and `After` over nullable columns, with
+  `gqlimpl.NullTerm` carrying NULL in the cursor (decision 0029).
 
 ### Changed
 
@@ -90,7 +93,21 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   at most 100 errors. Null on a Nillable update field is refused, naming `clear<Field>`.
   `FromJSON` is strict, and a hook sees `json.Number`. `Uint64` input stops at 2^63-1.
 - `All` allocates at most 16 rows ahead of `Limit`, then eightfold as they fill.
-- `GeneratedCodeIsVersion7` and `veloxgql.GeneratedCodeIsVersion7`: regenerate.
+- `GeneratedCodeIsVersion7` and `veloxgql.GeneratedCodeIsVersion8`: regenerate.
+- `velox.Desc`, `ColumnDesc` and `EdgeDesc` are `Descriptor`, `ColumnDescriptor` and
+  `EdgeDescriptor`; velox-gen writes `<entity>Descriptor()`.
+- A zero `Default` (`false`, `0`) on a non-Nillable bool or number is allowed. A non-zero
+  one stays refused, and the message names the ways out.
+- NULL sorts as the largest value on every dialect: last ascending, first descending.
+  On MySQL and SQLite this changes the order of NULL keys in `Order` and `GroupBy`.
+- GraphQL: `field.Strings`, `Ints`, `Floats` and `Bools` are lists (`[String!]` and so
+  on), not `JSON`, in output and input. Filters are unchanged.
+- A `Uint64` input over 2^63-1 says database/sql cannot send it.
+- migrate: a PostgreSQL online file's statements other than `CONCURRENTLY` and
+  `VALIDATE CONSTRAINT` wait for the configured `lock_timeout`; a lock timeout or deadlock
+  at a unit's head is retried by the next `apply` without `-resume`.
+- migrate: a foreign key or check a plan replaces is added back `NOT VALID` in the main
+  file; only `VALIDATE` runs online.
 - GraphQL: explicit `null` on a Nillable field with a `Default` is refused on create.
   `@skip` no longer lowers the rows charged, and a mutation's cost counts its statements.
   GraphiQL has its own budget, enough for 150 rich entities: raise
@@ -122,6 +139,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- A PostgreSQL `Up` waiting for the migration lock polls outside a transaction, so it no
+  longer deadlocks a running `CREATE INDEX CONCURRENTLY` (two replicas migrating at start).
+- `docs/migrations-operations.md` covers recovering from a dirty PostgreSQL online file.
 - A `NULL` scans into a nil-able Go type, such as `GoType(net.IP{})`, instead of failing
   every page that selects it.
 - GraphQL: a foreign key predicate holds the target's tenant as well as its policy, and a

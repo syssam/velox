@@ -36,7 +36,6 @@ func TestAfterRefusesUnsafeOrderings(t *testing.T) {
 	}{
 		"no order":   {db.Query[testmodel.Invoice]().After(last), "After needs an OrderBy"},
 		"not unique": {db.Query[testmodel.Invoice]().OrderBy(I.Total.Asc()).After(last), "After needs an OrderBy that includes the primary key or a unique index"},
-		"nullable":   {db.Query[testmodel.Invoice]().OrderBy(I.PaidAt.Asc(), I.ID.Asc()).After(last), "After cannot page over the nullable column paid_at"},
 	} {
 		_, err := c.q.Limit(10).All(ctx)
 		if err == nil || !strings.Contains(err.Error(), c.want) {
@@ -46,6 +45,55 @@ func TestAfterRefusesUnsafeOrderings(t *testing.T) {
 	// A unique index other than the primary key will do.
 	if _, err := db.Query[testmodel.Invoice]().OrderBy(I.OrgID.Asc(), I.Number.Asc()).After(last).Limit(10).All(ctx); err != nil {
 		t.Errorf("unique index: %v", err)
+	}
+}
+
+// TestAfterNullable: an order by a nullable column puts NULL after every
+// value, ascending, and before them, descending, on every dialect, and After
+// pages over it: from a value, the rows after it include the NULLs ascending;
+// from a NULL, only the NULLs ascending, and every value descending.
+func TestAfterNullable(t *testing.T) {
+	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	at := t0
+	for name, c := range map[string]struct {
+		q    velox.Query[testmodel.Invoice]
+		want string
+	}{
+		"asc from a value": {db.Query[testmodel.Invoice]().OrderBy(I.PaidAt.Asc(), I.ID.Asc()).After(&testmodel.Invoice{ID: 7, PaidAt: &at}),
+			` WHERE ("paid_at" > $1 OR "paid_at" IS NULL OR ("paid_at" = $2 AND "id" > $3)) ORDER BY "paid_at", "id" LIMIT $4`},
+		"asc from NULL": {db.Query[testmodel.Invoice]().OrderBy(I.PaidAt.Asc(), I.ID.Asc()).After(&testmodel.Invoice{ID: 7}),
+			` WHERE (("paid_at" IS NULL AND "id" > $1)) ORDER BY "paid_at", "id" LIMIT $2`},
+		"desc from a value": {db.Query[testmodel.Invoice]().OrderBy(I.PaidAt.Desc(), I.ID.Desc()).After(&testmodel.Invoice{ID: 7, PaidAt: &at}),
+			` WHERE ("paid_at" < $1 OR ("paid_at" = $2 AND "id" < $3)) ORDER BY "paid_at" DESC, "id" DESC LIMIT $4`},
+		"desc from NULL": {db.Query[testmodel.Invoice]().OrderBy(I.PaidAt.Desc(), I.ID.Asc()).After(&testmodel.Invoice{ID: 7}),
+			` WHERE ("paid_at" IS NOT NULL OR ("paid_at" IS NULL AND "id" > $1)) ORDER BY "paid_at" DESC, "id" LIMIT $2`},
+		"second term": {db.Query[testmodel.Invoice]().OrderBy(I.OrgID.Asc(), I.PaidAt.Asc(), I.ID.Asc()).After(&testmodel.Invoice{ID: 7, OrgID: 2, PaidAt: &at}),
+			` WHERE ("org_id" > $1 OR ("org_id" = $2 AND ("paid_at" > $3 OR "paid_at" IS NULL)) OR ("org_id" = $4 AND "paid_at" = $5 AND "id" > $6)) ORDER BY "org_id", "paid_at", "id" LIMIT $7`},
+	} {
+		text, _ := sqlOK(t)(c.q.Limit(10).SQL(ctx))
+		if !strings.HasSuffix(text, c.want) {
+			t.Errorf("%s:\n got %s\nwant …%s", name, text, c.want)
+		}
+	}
+	// MySQL and SQLite put NULL first, ascending: an IS NULL term puts it last.
+	for _, c := range []struct {
+		d          velox.Dialect
+		desc       bool
+		want, asPG string
+	}{
+		{velox.MySQL, false, " ORDER BY `paid_at` IS NULL, `paid_at`, `id`", ` ORDER BY "paid_at", "id"`},
+		{velox.SQLite, true, ` ORDER BY "paid_at" IS NULL DESC, "paid_at" DESC, "id"`, ` ORDER BY "paid_at" DESC, "id"`},
+	} {
+		for d, want := range map[velox.Dialect]string{c.d: c.want, velox.Postgres: c.asPG} {
+			o := I.PaidAt.Asc()
+			if c.desc {
+				o = I.PaidAt.Desc()
+			}
+			text, _ := sqlOK(t)(openFake(d, &fakeconn.Exec{}).Query[testmodel.Invoice]().OrderBy(o, I.ID.Asc()).Limit(10).SQL(ctx))
+			if !strings.Contains(text, want+" LIMIT ") {
+				t.Errorf("%v:\n got %s\nwant …%s", d, text, want)
+			}
+		}
 	}
 }
 

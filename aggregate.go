@@ -184,7 +184,7 @@ func grouped[E, K, V any](ctx context.Context, q Query[E], fn Aggregate, key Gro
 // against WithMaxRows and q's MaxRows: more fails with ErrTooManyRows.
 //
 // A nullable column's Key makes K a pointer, and NULL one group with a nil
-// Key: first on SQLite and MySQL, last on PostgreSQL. Text keys order by the
+// Key, last on every dialect, as OrderBy sorts NULL. Text keys order by the
 // database's collation.
 func CountBy[E, K any](ctx context.Context, q Query[E], key GroupKey[E, K]) ([]Group[K, int64], error) {
 	return grouped[E, K, int64](ctx, q, 0, key, 0)

@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox"
 )
 
-// The JSON fields' model, written by hand as velox-gen writes a Desc: a
+// The JSON fields' model, written by hand as velox-gen writes a Descriptor: a
 // record with a column of each kind of JSON value, a slice, a map, a struct
 // and a nullable pointer to a slice. The table holds jsonb on PostgreSQL,
 // JSON on MySQL and TEXT on SQLite (jsonDDL).

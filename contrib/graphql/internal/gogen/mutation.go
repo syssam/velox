@@ -16,6 +16,20 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
+// zeroDefault reports whether fd's literal Default is its type's zero value:
+// false, a number equal to 0 or "".
+func zeroDefault(fd *plugin.Field) bool {
+	switch s := strings.TrimSpace(string(fd.Default)); {
+	case s == "false", s == `""`:
+		return true
+	case s == "", s == "true", s[0] == '"':
+		return false
+	default:
+		n, err := strconv.ParseFloat(s, 64)
+		return err == nil && n == 0
+	}
+}
+
 // fieldGQLFunc is the unexported function of t's entity that names, for a
 // validation error, the input field of an entity field.
 func fieldGQLFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "FieldGQL" }
@@ -523,8 +537,9 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 			setKey(f, indent, dst, "*"+src, conv, tmp, fd.Pointer)
 		}
 		// An insert fills the Default into a zero value, so the client's "" or
-		// zero time would not be what it stores. An enum's input is never "".
-		if fd.HasDefault && !fd.Pointer && fd.Type != "enum" {
+		// zero time would not be what it stores. An enum's input is never "",
+		// a zero Default stores the zero, and a list given is never nil.
+		if fd.HasDefault && !fd.Pointer && fd.Type != "enum" && fd.Type != "json" && !zeroDefault(fd) {
 			f.p("%sif err := %s.NotZero(%s, %s); err != nil {", indent, impl, at(fi), dst)
 			f.p("%s\treturn nil, err", indent)
 			f.p("%s}", indent)
@@ -695,7 +710,7 @@ func (r *renderer) decodes(f *file, t *sdl.Type, in string, fs []sdl.InputField)
 			order = append(order, i)
 		case sdl.InputValue:
 			fd := e.Fields[fi.Field]
-			if fd.Type != "json" {
+			if fd.Type != "json" || fi.GoType != "veloxgql.JSON" { // a list binds its Go slice
 				continue
 			}
 			elem := cmp.Or(fd.ElemType, strings.TrimPrefix(fd.GoType, "*"))

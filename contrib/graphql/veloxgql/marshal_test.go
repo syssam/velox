@@ -2,6 +2,7 @@ package veloxgql_test
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,3 +74,17 @@ func TestFunctionMarshalers(t *testing.T) {
 }
 
 func second[T any](_ T, err error) error { return err }
+
+// TestUint64OverSaysWhy: a Uint64 over 2^63-1 is refused, and the message says
+// why: database/sql cannot send it, so a client knows the limit is not its own.
+func TestUint64OverSaysWhy(t *testing.T) {
+	_, err := veloxgql.UnmarshalUint64("18446744073709551615")
+	if err == nil {
+		t.Fatal("no error")
+	}
+	for _, want := range []string{"9223372036854775807", "database/sql", "high bit"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("%q does not say %q", err, want)
+		}
+	}
+}
