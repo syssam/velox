@@ -210,6 +210,22 @@ Beside this, in the same spirit, each found by running it:
   returned nil and left no table, as `:memory:`, `file::memory:`, `mode=memory` and an
   empty name. It writes a probe table and looks for it from a second connection of the
   pool, so a shared-cache database that another connection keeps passes.
+- A PostgreSQL `_online` file without a `lock-timeout` line ran every statement with
+  `lock_timeout` 0, so its `DROP CONSTRAINT`, `ADD CONSTRAINT … NOT VALID` and `SET NOT
+  NULL` queued behind a long transaction, and every query of the table behind them: a
+  plain `SELECT` waited 19s behind a reader in a run against PostgreSQL 18. Now only
+  `CONCURRENTLY` and `VALIDATE CONSTRAINT`, which block no query while they wait for
+  older transactions, run with none; the rest wait for the Config's. A lock timeout or
+  deadlock at a unit's head changed nothing, and `Up` goes on from it unasked.
+- A plan that changed a PostgreSQL foreign key, its `ON DELETE` or its columns' type,
+  dropped it in the main file and added it in the online file, so the table had no key
+  in between, and none at all while the online file waited or after it failed. A key
+  or check that replaces one the plan drops is added in the main file, `NOT VALID`,
+  under the locks the drop takes; only `VALIDATE` is online.
+- An `Up` waiting for PostgreSQL's migration lock waited in `pg_advisory_lock`, holding
+  a snapshot, which the running file's `CREATE INDEX CONCURRENTLY` waits for at its end.
+  Two instances migrating at start deadlocked, and PostgreSQL cancelled the build. The
+  wait is `pg_try_advisory_lock` tried again, in no transaction.
 - A plan refuses what can never run or would cut a value whatever it says: a `USING`
   cast to a limited type becomes the assignment cast, a truncating target under
   `alter-type` is a finding, an enum reorder over an array column and a `CONVERT TO`
