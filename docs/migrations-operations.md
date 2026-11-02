@@ -9,7 +9,7 @@ writes the history table.
 | --- | --- | --- |
 | `resolve -version N -applied` | a dirty version you finished by hand, or a pending file the database already holds | records the file as applied, running nothing |
 | `resolve -version N -undone` | a dirty version you reverted by hand | deletes the row, so the file runs again |
-| `resolve -version N -statements K` | a dirty MySQL version whose count is wrong | records that the first K statements ran; `apply -resume` runs K+1 on |
+| `resolve -version N -statements K` | a dirty version whose count is behind what ran: MySQL, or a PostgreSQL no-transaction file | records that the first K statements ran; `apply -resume` runs K+1 on |
 | `resolve -version N -adopt` | an applied version whose file changed, and the database holds what the file does | records the file's checksum and name, running nothing |
 | `resolve -version N -forget` | an applied version whose file is gone, differs, or never ran | deletes the row and undoes nothing; prints what the database keeps |
 
@@ -100,18 +100,52 @@ stays behind, and `migrate drift` is how to see that.
 
 MySQL undoes nothing, so a failure part-way leaves the statements before it in place.
 `apply` lists the file's statements and what the history counts. The count is written
-after each unit. A run killed with a statement on the server may leave it running, and
-finishing, after the count: check `SHOW FULL PROCESSLIST`, then `SHOW CREATE TABLE`
-against the list. If the first K ran:
+after each unit. If the first K ran and the history counts otherwise:
 
     migrate resolve -version 2 -statements K
     migrate apply -resume
+
+A run that died with a statement on the server is the next section.
 
 A statement that fails with nothing changed needs none of this. A lock wait timeout or
 deadlock (1205, 1213), or the server's refusal of a file's first DDL statement, leaves no
 dirty row: run `apply` again. A lock at the head of a later unit leaves a dirty row that
 `apply` goes on from without `-resume`. A failing statement inside a unit, after earlier
 statements of it ran, or a first statement that is not DDL, stays dirty for you to judge.
+
+## A run that died with a statement under way
+
+A run that is killed, loses its connection or is cancelled while a statement runs
+leaves the statement on the server, which goes on and may finish it after the history's
+count. MySQL commits each statement, and so does PostgreSQL in a no-transaction file's
+`CONCURRENTLY` or a unit of more than one statement. A backfill like
+`UPDATE a SET n = n + 1` may then have run once, though the history counts none of it.
+`apply` and `status` lead with checking:
+
+    version 2 is dirty, and the run stopped with statement 1 under way: it may have run on the server after the history's count of 0, or be running still. ...
+
+1. Wait for it to end: `SHOW FULL PROCESSLIST` on MySQL, `pg_stat_activity` on
+   PostgreSQL, shows it until then. The next `apply` waits for its lock up to
+   `-lock-wait`.
+2. See whether it took effect: `SHOW CREATE TABLE` or `\d` for a schema change; its
+   rows for an `INSERT`, `UPDATE` or `DELETE`, as whether `n` moved above.
+3. If the first J statements ran:
+
+       migrate resolve -version 2 -statements J
+       migrate apply -resume
+
+   If none past the count did, `migrate apply -resume`.
+
+Do not run `apply -resume` first: it runs the statement again, and the `UPDATE` above
+would add 2.
+
+On PostgreSQL a unit of one statement in a no-transaction file, which is every
+statement when the file has no `unit` line, runs in a transaction with its count, unless
+it is `CONCURRENTLY` or a statement PostgreSQL refuses in a transaction (`VACUUM`,
+`CREATE DATABASE` and the like) or one that may end a transaction (`CALL`, `DO`), or
+the file begins or ends one. The server rolls the statement back with the session, the
+count is exact, and the refusal says `fix the cause and run migrate apply -resume`:
+that is all it needs.
 
 ## A dirty PostgreSQL online file
 
@@ -142,9 +176,11 @@ query while they wait for older transactions, wait for as long as those take. A 
 timeout at a unit's first statement changed nothing: run `apply` again, with no
 `-resume`.
 
-A run killed during a statement may leave the statement running on the server, as
-`pg_stat_activity` shows, with the run's lock: the next `apply` waits for it up to
-`-lock-wait`. Once it has ended, `apply -resume` as above.
+A run killed during a unit's statement may leave the statement running on the server,
+as `pg_stat_activity` shows, with the run's lock: the next `apply` waits for it up to
+`-lock-wait`. Check what it did as in the section above. A unit `migrate diff` wrote
+starts by dropping what it makes, so `apply -resume` is right whatever ran, though a
+finished build is built again; `resolve -statements` spares it.
 
 ## Notes
 

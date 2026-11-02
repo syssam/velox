@@ -112,7 +112,10 @@ type DirtyError struct {
 	applied *int   // the statements still applied, when the runner rolled back the file's own transaction
 	missing bool   // found dirty, and the directory has no file for it
 	retry   bool   // a lock kept the next statement from running: Up goes on unasked
-	guide   string // MySQL: what ran, and how to tell the history
+	guide   string // MySQL: what ran, and how to tell the history; with unsure, the file's statements
+	unsure  bool   // the run stopped with a statement under way, which may have run after the count
+	counted int    // with unsure, the statements the history counts
+	pg      bool   // with unsure, the database is PostgreSQL, else MySQL
 }
 
 // undoHint is the way out of dirty version v by undoing it.
@@ -135,6 +138,12 @@ func undoHint(v uint64) string {
 // to resume with the directory that has it, or undo and resolve. On MySQL
 // lines follow with the file's statements, and how to say which ran; when a
 // lock kept the next statement from running, a line says apply retries it.
+//
+// When the run stopped with a statement under way, which the server may have
+// finished after the history's count (the run was killed, lost its connection
+// or was cancelled, and the statement does not commit with its count), the way
+// out leads instead with checking whether it took effect, then says how to tell
+// the history what ran (resolve -statements), and on MySQL lists the statements.
 func (e *DirtyError) Error() string {
 	var b strings.Builder
 	cause := ""
@@ -144,6 +153,27 @@ func (e *DirtyError) Error() string {
 	if e.Statement == 0 && e.missing {
 		fmt.Fprintf(&b, "migrate: version %d is dirty%s\n  the directory has no file for it; resume it with the directory that has its file, or %s",
 			e.Version, cause, undoHint(e.Version))
+		return b.String()
+	}
+	if e.unsure {
+		under := e.Statement
+		if under == 0 {
+			fmt.Fprintf(&b, "migrate: %s: version %d is dirty%s", e.Path, e.Version, cause)
+			under = e.counted + 1
+		} else {
+			fmt.Fprintf(&b, "migrate: %s: statement %d of %d%s", e.Path, e.Statement, e.Statements, cause)
+		}
+		tool, schema := "SHOW FULL PROCESSLIST", "SHOW CREATE TABLE"
+		if e.pg {
+			tool, schema = "pg_stat_activity", `\d of the table`
+		}
+		fmt.Fprintf(&b, "\n  version %d is dirty, and the run stopped with statement %d under way: it may have run on the server after the history's count of %d, or be running still. "+
+			"Wait until %s no longer shows it, then check whether it took effect: %s for a schema change, its rows for an INSERT, UPDATE or DELETE",
+			e.Version, under, e.counted, tool, schema)
+		fmt.Fprintf(&b, "\n  if the first J statements ran, J above %d, run migrate resolve -version %d -statements J, then migrate apply -resume; "+
+			"if none past %d did, fix the cause and run migrate apply -resume; or undo the statements that ran and run migrate resolve -version %d -undone",
+			e.counted, e.Version, e.counted, e.Version)
+		b.WriteString(e.guide)
 		return b.String()
 	}
 	if e.Statement == 0 {

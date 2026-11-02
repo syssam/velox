@@ -72,7 +72,9 @@ func WithTarget(version uint64) Option {
 // beside versions above the directory's last file is not resumed, an *Error
 // of Code "history". A run killed while a statement ran may have applied
 // it, and on MySQL a cancelled statement may still have finished on the
-// server: check the failed statement before resuming or undoing.
+// server: check the failed statement before resuming or undoing, as the
+// *DirtyError says. A PostgreSQL unit of one statement that runs in a
+// transaction block commits with its count, which is then exact.
 func WithResume() Option {
 	return Option{func(o *options) { o.resume = true }}
 }
@@ -541,8 +543,13 @@ func reading(dir *Dir, rows []Applied) (*State, error) {
 			e.Err = errors.New(r.Error)
 			e.retry = strings.HasPrefix(r.Error, retryMark)
 		}
-		if i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version }); i >= 0 && dir.Config.Dialect == velox.MySQL && !e.retry {
-			e.guide = mysqlGuide(dir.Files[i], r.Statements)
+		if i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version }); i >= 0 {
+			if dir.Config.Dialect == velox.MySQL && !e.retry {
+				e.guide = mysqlGuide(dir.Files[i], r.Statements)
+			}
+			if foundUnsure(dir.Config.Dialect, dir.Files[i], r.Statements, r.Error) {
+				markUnsure(e, dir.Config.Dialect, dir.Files[i], r.Statements)
+			}
 		}
 		return st, e
 	}
