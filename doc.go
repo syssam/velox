@@ -2,7 +2,9 @@
 // schema package, in the DSL of the schema packages (schema, schema/field,
 // schema/edge, ...). velox-gen generates from it, into a single gen package,
 // the entity structs, their typed column handles and their metadata (Descriptor),
-// which velox reads on an entity's first use.
+// which velox reads on an entity's first use. The DSL follows ent's; the
+// repository's docs/coming-from-ent.md lists where velox differs, Optional
+// staying NOT NULL among them.
 //
 // Add velox-gen to your module once, and run it after every change to the
 // schema. It writes ./gen; with -check it writes nothing and fails when ./gen
