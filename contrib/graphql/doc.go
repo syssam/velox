@@ -46,8 +46,8 @@
 //
 // The annotations of an entity are Skip, Type, QueryField, Mutations,
 // MultiOrder and Directives; of a field, FieldName, Skip, OrderField,
-// OrderUnguarded, WhereOps, CreateInput, UpdateInput, EnumValues and
-// Directives; of an edge, Skip, FieldName, WhereEdge, Connection, MaxList and
+// OrderUnguarded, WhereOps, CreateInput, UpdateInput, CreateDefault,
+// EnumValues and Directives; of an edge, Skip, FieldName, WhereEdge, Connection, MaxList and
 // Directives. One on an element it does not apply to makes the generator
 // fail, naming the schema and the element.
 //
@@ -191,7 +191,13 @@
 // For an entity with graphql.MutationCreate, its file also has Create<T>Input
 // and Create<T>(ctx, input), which createX's resolver returns; with
 // graphql.MutationUpdate, Update<T>Input and Update<T>(ctx, id, input), which
-// updateX's resolver returns. A create input that gives a field with a Default
+// updateX's resolver returns. A field with a Default, or a bool or number with
+// graphql.CreateDefault, is optional in the create input and stays non-null in
+// the type: velox-gen refuses a Default other than false or 0 on a bool or
+// number that is not Nillable, as a Go struct's false could not be told from
+// unset, so CreateDefault(true) gives the create input active: Boolean! = true,
+// which gqlgen fills when the client leaves it out, and the column no Default.
+// A create input that gives a field with a Default
 // its zero value ("" or the zero time) is refused with BAD_USER_INPUT, since an
 // insert would store the Default in its place; an update stores it. So is a null
 // given to a Nillable field with a Default, literal or variable, on the create<T>

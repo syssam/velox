@@ -39,6 +39,7 @@ func misplaced(a graphql.Annotation, on, where string) error {
 		{"graphql.MaxList", a.MaxList != 0, onEdge},
 		{"graphql.CreateInput", a.CreateInput != nil, onField},
 		{"graphql.UpdateInput", a.UpdateInput != nil, onField},
+		{"graphql.CreateDefault", a.CreateDefault != nil, onField},
 		{"graphql.EnumValues", len(a.EnumValues) > 0, onField},
 	} {
 		if p.set && !strings.Contains(p.on, on) {
@@ -152,6 +153,10 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.CreateInput: %s", where, never)
 	case a.UpdateInput != nil && never != "":
 		return fmt.Errorf("%s: graphql.UpdateInput: %s", where, never)
+	case a.CreateDefault != nil && never != "":
+		return fmt.Errorf("%s: graphql.CreateDefault: %s", where, never)
+	case a.CreateDefault != nil && pk:
+		return fmt.Errorf("%s: graphql.CreateDefault: the primary key is never an input", where)
 	case (isTrue(a.CreateInput) || isTrue(a.UpdateInput)) && pk:
 		return fmt.Errorf("%s: graphql.CreateInput(true) or UpdateInput(true): the primary key is never an input", where)
 	case isTrue(a.UpdateInput) && f.Immutable:

@@ -1,8 +1,11 @@
 package sdl
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/syssam/velox/contrib/graphql"
@@ -50,6 +53,13 @@ func (g *graph) mutationsOf(o *object) error {
 		}
 	}
 
+	if !create {
+		for i, f := range e.Fields {
+			if o.fanns[i].CreateDefault != nil {
+				return fmt.Errorf("%s, field %s: graphql.CreateDefault, and graphql.Mutations does not list create", where, f.Name)
+			}
+		}
+	}
 	if create && o.node {
 		pk := e.Fields[e.PrimaryKey[0]]
 		if !pk.AutoID && !pk.HasDefault {
@@ -137,6 +147,9 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []I
 	var gos []InputField
 	for i, f := range e.Fields {
 		a := o.fanns[i]
+		if create && a.CreateDefault != nil && a.Skip&skip != 0 {
+			return nil, nil, fmt.Errorf("schema %s, field %s: graphql.CreateDefault on a field the create input leaves out", e.Name, f.Name)
+		}
 		switch {
 		case o.node && i == e.PrimaryKey[0], i == e.Tenant, f.Implicit != "", o.fks[f.Name], a.Skip&skip != 0, !create && f.Immutable:
 			continue
@@ -149,10 +162,13 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []I
 		if p := explicit(a); p != nil {
 			in = *p
 		}
+		where := "schema " + e.Name + ", field " + f.Name
 		if !in {
+			if create && a.CreateDefault != nil {
+				return nil, nil, fmt.Errorf("%s: graphql.CreateDefault on a field the create input leaves out", where)
+			}
 			continue
 		}
-		where := "schema " + e.Name + ", field " + f.Name
 		name, err := o.fieldName(i)
 		if err != nil {
 			return nil, nil, err
@@ -161,14 +177,21 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []I
 		if err != nil {
 			return nil, nil, err
 		}
-		if create && required && !f.HasDefault {
+		var def string
+		if create && a.CreateDefault != nil {
+			if def, err = createDefault(f, a.CreateDefault, where); err != nil {
+				return nil, nil, err
+			}
+			t += "!" // a value in Go: the default fills it
+		}
+		if create && required && !f.HasDefault && def == "" {
 			t += "!"
 		}
 		dirs, err := directives(a.Directives, where)
 		if err != nil {
 			return nil, nil, err
 		}
-		if err := fs.add(gqlField{name: name, typ: t, desc: f.Comment, dirs: inputDirs(dirs, t), where: where}); err != nil {
+		if err := fs.add(gqlField{name: name, typ: t, def: def, desc: f.Comment, dirs: inputDirs(dirs, t), where: where}); err != nil {
 			return nil, nil, err
 		}
 		v := g.goValue(f, a)
@@ -393,6 +416,54 @@ func (g *graph) keyField(ed *plugin.Edge) *plugin.Field {
 		}
 	}
 	return nil
+}
+
+// createDefault is the SDL of f's graphql.CreateDefault d, as " = true": a
+// bool, or a number of f's type, a decimal string for a Uint64. It is for a
+// bool or number with no Default that is not nullable, whose Default velox-gen
+// refuses.
+func createDefault(f *plugin.Field, d json.RawMessage, where string) (string, error) {
+	switch {
+	case !zeroIsUnset(f.Type):
+		return "", fmt.Errorf("%s: graphql.CreateDefault on a field of type %s; it is for a bool or number, whose non-zero Default velox-gen refuses unless it is Nillable: give this field a Default", where, f.Type)
+	case f.Nullable:
+		return "", fmt.Errorf("%s: graphql.CreateDefault on a nullable field, which may have a Default of its own", where)
+	case f.HasDefault:
+		return "", fmt.Errorf("%s: graphql.CreateDefault on a field with a Default, which the create input applies already", where)
+	}
+	s := string(d)
+	if f.Type == "bool" {
+		if s != "true" && s != "false" {
+			return "", fmt.Errorf("%s: graphql.CreateDefault(%s) on a bool field", where, s)
+		}
+		return " = " + s, nil
+	}
+	bits := 64
+	if n := strings.TrimLeft(f.Type, "uinfloat"); n != "" {
+		bits, _ = strconv.Atoi(n)
+	}
+	var err error
+	switch {
+	case strings.HasPrefix(f.Type, "float"):
+		var v float64
+		if v, err = strconv.ParseFloat(s, bits); err == nil && (math.IsInf(v, 0) || math.IsNaN(v)) {
+			err = strconv.ErrRange
+		}
+	case strings.HasPrefix(f.Type, "uint"):
+		var v uint64
+		if v, err = strconv.ParseUint(s, 10, bits); err == nil && v > math.MaxInt64 {
+			return "", fmt.Errorf("%s: graphql.CreateDefault(%s) is over 9223372036854775807: database/sql cannot send a uint64 with the high bit set", where, s)
+		}
+	default:
+		_, err = strconv.ParseInt(s, 10, bits)
+	}
+	if err != nil {
+		return "", fmt.Errorf("%s: graphql.CreateDefault(%s) is not a value of the %s field", where, s, f.Type)
+	}
+	if f.Type == "uint" || f.Type == "uint64" {
+		return ` = "` + s + `"`, nil // the Uint64 scalar is a string
+	}
+	return " = " + s, nil
 }
 
 // inputDirs are the directives ds of an input field of the type typ: all of

@@ -106,6 +106,7 @@ type edgeField struct {
 
 type gqlField struct {
 	name, args, typ, desc string
+	def                   string // an input field's default, as " = true"; "" for none
 	dirs                  []directive
 	where                 string  // the element, for errors
 	conn                  *object // for a connection, its nodes' type: args are set from it
@@ -797,7 +798,7 @@ func (w *writer) field(f gqlField) {
 	at := w.at
 	w.at = f.where
 	w.desc("  ", f.desc)
-	w.line("  ", f.name, f.args, ": ", f.typ, w.dirs(f.dirs))
+	w.line("  ", f.name, f.args, ": ", f.typ, f.def, w.dirs(f.dirs))
 	w.at = at
 }
 
