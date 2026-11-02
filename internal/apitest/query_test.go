@@ -258,7 +258,7 @@ func TestBaseQueryIsSafeToExtendConcurrently(t *testing.T) {
 	wg.Wait()
 }
 
-// TestBrokenMetadataIsAnErrorOnEveryUse: a Desc that panics, or
+// TestBrokenMetadataIsAnErrorOnEveryUse: a Descriptor that panics, or
 // generated code with no scan plan, makes every query on the entity return a
 // *SchemaError naming it, not just the first, and none panics.
 func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
@@ -287,7 +287,7 @@ func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
 			}
 		}
 	}
-	check("Desc panics", "apitest.panickyEntity", "the generated metadata panicked: no schema today", func() error {
+	check("Descriptor panics", "apitest.panickyEntity", "the generated metadata panicked: no schema today", func() error {
 		_, err := db.Query[panickyEntity]().All(ctx)
 		return err
 	})

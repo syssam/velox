@@ -25,16 +25,16 @@ func schemaErr(t *testing.T, err error, parts ...string) {
 }
 
 func TestSchemaPolicyTenantColumn(t *testing.T) {
-	_, err := loadDesc(nullTenantDesc())
+	_, err := loadDescriptor(nullTenantDescriptor())
 	schemaErr(t, err, "velox: engine_test.nullTenant.OrgID: the tenant column must be NOT NULL and comparable")
-	_, err = loadDesc(sliceTenantDesc())
+	_, err = loadDescriptor(sliceTenantDescriptor())
 	schemaErr(t, err, "velox: engine_test.sliceTenant.Org: the tenant column must be NOT NULL and comparable")
 }
 
 // TestSchemaPolicyHooks: an entity's hooks and policy, bound from its Hooks and
 // Policy methods, act on its writes.
 func TestSchemaPolicyHooks(t *testing.T) {
-	info, err := loadDesc(hookedDesc())
+	info, err := loadDescriptor(hookedDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,10 +87,10 @@ func TestSchemaPolicyHooks(t *testing.T) {
 }
 
 func TestSchemaPolicyTenantColumnIsNotFilled(t *testing.T) {
-	_, err := loadDesc(defaultTenantDesc())
+	_, err := loadDescriptor(defaultTenantDescriptor())
 	schemaErr(t, err, "velox: engine_test.defaultTenant.Org: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
-	_, err = loadDesc(defaultFuncTenantDesc())
+	_, err = loadDescriptor(defaultFuncTenantDescriptor())
 	schemaErr(t, err, "velox: engine_test.defaultFuncTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
-	_, err = loadDesc(updateDefaultTenantDesc())
+	_, err = loadDescriptor(updateDefaultTenantDescriptor())
 	schemaErr(t, err, "velox: engine_test.updateDefaultTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
 }

@@ -1,8 +1,8 @@
 package veloxtype
 
-// ColumnDesc describes one column of a velox.Desc. For generated code.
+// ColumnDescriptor describes one column of a velox.Descriptor. For generated code.
 // velox.ColumnInfo is its runtime view.
-type ColumnDesc struct {
+type ColumnDescriptor struct {
 	Field         string     // the Go field name
 	Name          string     // the column name
 	Default       any        // a value of the field's type (or of its element type, for a pointer field), not cyclic; nil when none
@@ -36,7 +36,7 @@ type ColumnDesc struct {
 	// what it reads with Decode, into a pointer to the field. velox-gen sets
 	// them to json.Marshal and json.Unmarshal for every json field, so the
 	// generated file, not the core, imports encoding/json, and a program
-	// whose entities hold no JSON does not link it. A hand-written Desc may
+	// whose entities hold no JSON does not link it. A hand-written Descriptor may
 	// plug in another codec. Decode's data is valid only during the call: it
 	// must neither change nor keep it. velox may hand it the bytes of a string
 	// the driver returned, read in place, so a Decode that writes to them

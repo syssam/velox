@@ -36,16 +36,16 @@ var DAuthors = struct {
 
 var DAuthorMeta velox.MetaOnce[DAuthor]
 
-func (*DAuthor) VeloxMeta() *velox.Meta[DAuthor] { return DAuthorMeta.Load(DAuthorDesc) }
+func (*DAuthor) VeloxMeta() *velox.Meta[DAuthor] { return DAuthorMeta.Load(DAuthorDescriptor) }
 
 var ErrEmptyName = errors.New("must not be empty")
 
-func DAuthorDesc() velox.Desc[DAuthor] {
-	return velox.Desc[DAuthor]{
+func DAuthorDescriptor() velox.Descriptor[DAuthor] {
+	return velox.Descriptor[DAuthor]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*DAuthor)(nil).Policy()) },
 		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*DAuthor)(nil).Hooks()) },
 		Table:  "authors",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "OrgID", Name: "org_id"},
 			{Field: "Name", Name: "name"},
@@ -54,7 +54,7 @@ func DAuthorDesc() velox.Desc[DAuthor] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[DBook]("Books", 0, 1)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[DBook]("Books", 0, 1)},
 		Addr: func(x *DAuthor, i int) any {
 			switch i {
 			case 0:
@@ -122,16 +122,16 @@ var DBooks = struct {
 
 var DBookMeta velox.MetaOnce[DBook]
 
-func (*DBook) VeloxMeta() *velox.Meta[DBook] { return DBookMeta.Load(DBookDesc) }
+func (*DBook) VeloxMeta() *velox.Meta[DBook] { return DBookMeta.Load(DBookDescriptor) }
 
-func DBookDesc() velox.Desc[DBook] {
-	return velox.Desc[DBook]{
+func DBookDescriptor() velox.Descriptor[DBook] {
+	return velox.Descriptor[DBook]{
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*DBook)(nil).Hooks()) },
 		Table:      "books",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[DAuthor]("Author", 1, 0),
 			velox.EdgeThrough[DBookTag, DTag]("Tags", 0, 0, 1, 0),
 			velox.EdgeThrough[DPick, DTag]("Picks", 0, 0, 1, 0),
@@ -178,15 +178,15 @@ var DTags = struct {
 
 var DTagMeta velox.MetaOnce[DTag]
 
-func (*DTag) VeloxMeta() *velox.Meta[DTag] { return DTagMeta.Load(DTagDesc) }
+func (*DTag) VeloxMeta() *velox.Meta[DTag] { return DTagMeta.Load(DTagDescriptor) }
 
-func DTagDesc() velox.Desc[DTag] {
-	return velox.Desc[DTag]{
+func DTagDescriptor() velox.Descriptor[DTag] {
+	return velox.Descriptor[DTag]{
 		Table:      "tags",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     1,
-		Edges:      []velox.EdgeDesc{velox.EdgeThrough[DBookTag, DBook]("Books", 0, 1, 0, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[DBookTag, DBook]("Books", 0, 1, 0, 0)},
 		Addr: func(x *DTag, i int) any {
 			switch i {
 			case 0:
@@ -215,12 +215,12 @@ type DBookTag struct {
 
 var DBookTagMeta velox.MetaOnce[DBookTag]
 
-func (*DBookTag) VeloxMeta() *velox.Meta[DBookTag] { return DBookTagMeta.Load(DBookTagDesc) }
+func (*DBookTag) VeloxMeta() *velox.Meta[DBookTag] { return DBookTagMeta.Load(DBookTagDescriptor) }
 
-func DBookTagDesc() velox.Desc[DBookTag] {
-	return velox.Desc[DBookTag]{
+func DBookTagDescriptor() velox.Descriptor[DBookTag] {
+	return velox.Descriptor[DBookTag]{
 		Table:      "book_tags",
-		Columns:    []velox.ColumnDesc{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Addr: func(x *DBookTag, i int) any {
@@ -244,12 +244,12 @@ type DPick struct {
 
 var DPickMeta velox.MetaOnce[DPick]
 
-func (*DPick) VeloxMeta() *velox.Meta[DPick] { return DPickMeta.Load(DPickDesc) }
+func (*DPick) VeloxMeta() *velox.Meta[DPick] { return DPickMeta.Load(DPickDescriptor) }
 
-func DPickDesc() velox.Desc[DPick] {
-	return velox.Desc[DPick]{
+func DPickDescriptor() velox.Descriptor[DPick] {
+	return velox.Descriptor[DPick]{
 		Table:      "picks",
-		Columns:    []velox.ColumnDesc{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Addr: func(x *DPick, i int) any {

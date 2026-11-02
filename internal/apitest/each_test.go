@@ -33,15 +33,15 @@ var eUsers = struct {
 
 var eUserMeta velox.MetaOnce[eUser]
 
-func (*eUser) VeloxMeta() *velox.Meta[eUser] { return eUserMeta.Load(eUserDesc) }
+func (*eUser) VeloxMeta() *velox.Meta[eUser] { return eUserMeta.Load(eUserDescriptor) }
 
-func eUserDesc() velox.Desc[eUser] {
-	return velox.Desc[eUser]{
+func eUserDescriptor() velox.Descriptor[eUser] {
+	return velox.Descriptor[eUser]{
 		Table:      "e_users",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[ePost]("Posts", 0, 1), velox.EdgeThrough[eLink, fixture.DTag]("Tags", 0, 1, 2, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[ePost]("Posts", 0, 1), velox.EdgeThrough[eLink, fixture.DTag]("Tags", 0, 1, 2, 0)},
 		Addr:       func(x *eUser, i int) any { return [...]any{&x.ID, &x.Name}[i] },
 		EdgeAddr: func(x *eUser, i int) any {
 			switch i {
@@ -65,12 +65,12 @@ type eLink struct {
 
 var eLinkMeta velox.MetaOnce[eLink]
 
-func (*eLink) VeloxMeta() *velox.Meta[eLink] { return eLinkMeta.Load(eLinkDesc) }
+func (*eLink) VeloxMeta() *velox.Meta[eLink] { return eLinkMeta.Load(eLinkDescriptor) }
 
-func eLinkDesc() velox.Desc[eLink] {
-	return velox.Desc[eLink]{
+func eLinkDescriptor() velox.Descriptor[eLink] {
+	return velox.Descriptor[eLink]{
 		Table:      "e_links",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "TagID", Name: "tag_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr:       func(x *eLink, i int) any { return [...]any{&x.ID, &x.UserID, &x.TagID}[i] },
@@ -96,17 +96,17 @@ var ePosts = struct {
 
 var ePostMeta velox.MetaOnce[ePost]
 
-func (*ePost) VeloxMeta() *velox.Meta[ePost] { return ePostMeta.Load(ePostDesc) }
+func (*ePost) VeloxMeta() *velox.Meta[ePost] { return ePostMeta.Load(ePostDescriptor) }
 
 func (*ePost) Policy() velox.Policy[ePost] {
 	return velox.Policy[ePost]{Read: func(context.Context) (velox.Pred[ePost], error) { return ePosts.Secret.EQ(false), nil }}
 }
 
-func ePostDesc() velox.Desc[ePost] {
-	return velox.Desc[ePost]{
+func ePostDescriptor() velox.Descriptor[ePost] {
+	return velox.Descriptor[ePost]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*ePost)(nil).Policy()) },
 		Table:  "e_posts",
-		Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "OrgID", Name: "org_id"},
+		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "OrgID", Name: "org_id"},
 			{Field: "Title", Name: "title"}, {Field: "Secret", Name: "secret"}},
 		PrimaryKey: []int{0},
 		Tenant:     2,

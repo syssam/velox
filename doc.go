@@ -1,7 +1,7 @@
 // Package velox is an ORM for Go 1.27 and later. Entities are described in a
 // schema package, in the DSL of the schema packages (schema, schema/field,
 // schema/edge, ...). velox-gen generates from it, into a single gen package,
-// the entity structs, their typed column handles and their metadata (Desc),
+// the entity structs, their typed column handles and their metadata (Descriptor),
 // which velox reads on an entity's first use.
 //
 // Add velox-gen to your module once, and run it after every change to the
@@ -129,7 +129,7 @@
 //
 // # JSON fields
 //
-// velox-gen gives every json field's ColumnDesc a codec, encoding/json's
+// velox-gen gives every json field's ColumnDescriptor a codec, encoding/json's
 // Encode and Decode, and its ColumnInfo says Codec. The value is bound as the
 // bytes Encode returns, and only there: hooks and policies see the Go value,
 // and only Statement.Args holds the bytes. On SQLite and MySQL bytes that
@@ -139,7 +139,7 @@
 // UTF-8, which only a binary codec returns, stay []byte.
 //
 // In a nullable column (a pointer field, or a slice or map field whose
-// ColumnDesc says Nullable), a nil pointer, or a nil slice or map, binds
+// ColumnDescriptor says Nullable), a nil pointer, or a nil slice or map, binds
 // NULL; in any other column a nil slice or map is encoded (the JSON null,
 // which reads back as nil). An untyped nil, which only a hook-built value can
 // be, binds NULL in either. What is read, as []byte or string, is decoded
@@ -266,7 +266,7 @@
 // # Generated code
 //
 // velox-gen and its plugins write code that uses part of this package, and
-// nothing else should: Desc, ColumnDesc, EdgeDesc, EdgeTo, EdgeBidi,
+// nothing else should: Descriptor, ColumnDescriptor, EdgeDescriptor, EdgeTo, EdgeBidi,
 // EdgeThrough, Meta, MetaOnce, BindPolicy, BindHooks, BoundPolicy,
 // BoundHooks, TenantRef, Lazy, Validate, ValidateSet and
 // GeneratedCodeIsVersion7. Each

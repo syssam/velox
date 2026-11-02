@@ -34,20 +34,20 @@ var Comments = struct {
 var commentMeta velox.MetaOnce[Comment]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDesc) }
+func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDescriptor) }
 
-func commentDesc() velox.Desc[Comment] {
-	return velox.Desc[Comment]{
+func commentDescriptor() velox.Descriptor[Comment] {
+	return velox.Descriptor[Comment]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Comment)(nil).Policy()) },
 		Table:  "comments",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "DocID", Name: "doc_id"},
 			{Field: "Body", Name: "body"},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Doc]("Doc", 1, 0),
 		},
 		Addr: func(x *Comment, i int) any {

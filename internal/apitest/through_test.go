@@ -338,18 +338,18 @@ var dBadThroughs = struct {
 var dBadThroughMeta velox.MetaOnce[dBadThrough]
 
 func (*dBadThrough) VeloxMeta() *velox.Meta[dBadThrough] {
-	return dBadThroughMeta.Load(func() velox.Desc[dBadThrough] {
-		return velox.Desc[dBadThrough]{
+	return dBadThroughMeta.Load(func() velox.Descriptor[dBadThrough] {
+		return velox.Descriptor[dBadThrough]{
 			Table:      "bad",
-			Columns:    []velox.ColumnDesc{{Field: "Key", Name: "key"}, {Field: "ID", Name: "id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "Key", Name: "key"}, {Field: "ID", Name: "id"}},
 			PrimaryKey: []int{1},
 			Tenant:     -1,
-			Edges: []velox.EdgeDesc{
+			Edges: []velox.EdgeDescriptor{
 				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("Mismatch", 0, 0, 1, 0),  // a string owner key, an int64 join key
 				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("JoinCol", 1, 2, 1, 0),   // the join has two columns
 				velox.EdgeThrough[fixture.DBookTag, fixture.DAuthor]("Target", 1, 0, 1, 2), // an int64 join key, a string target key
 				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("Single", 1, 0, 1, 0),    // a One
-				velox.EdgeThrough[badDesc, fixture.DTag]("BadJoin", 1, 0, 0, 0),            // the join entity is invalid
+				velox.EdgeThrough[badDescriptor, fixture.DTag]("BadJoin", 1, 0, 0, 0),      // the join entity is invalid
 				velox.EdgeThrough[fixture.DAuthor, fixture.DTag]("TenantJ", 1, 0, 0, 0),    // the join entity has a tenant
 				velox.EdgeThrough[dPolicyJoin, fixture.DTag]("PolicyJ", 1, 0, 1, 0),        // the join entity has a Read policy
 			},
@@ -371,7 +371,7 @@ func TestThroughRefusals(t *testing.T) {
 		{dBadThroughs.JoinCol.Has(), "velox: apitest.dBadThrough.JoinCol: its key names column 2 of fixture.DBookTag, which has 2"},
 		{dBadThroughs.Target.Has(), "velox: apitest.dBadThrough.Target: the key types differ: fixture.DBookTag.TagID is int64 and fixture.DAuthor.Name is string"},
 		{dBadThroughs.Single.Has(), "velox: apitest.dBadThrough.Single: a many-to-many relation needs a Many field"},
-		{dBadThroughs.BadJoin.Has(), "velox: apitest.dBadThrough.BadJoin: its join entity is invalid: apitest.badDesc: the tenant names column 3, of 1"},
+		{dBadThroughs.BadJoin.Has(), "velox: apitest.dBadThrough.BadJoin: its join entity is invalid: apitest.badDescriptor: the tenant names column 3, of 1"},
 		{dBadThroughs.TenantJ.Has(), "velox: apitest.dBadThrough.TenantJ: its join entity fixture.DAuthor has a tenant column; a join entity is scoped through its TenantRefs, and can have neither a tenant column nor a Read policy"},
 		{dBadThroughs.PolicyJ.Has(), "velox: apitest.dBadThrough.PolicyJ: its join entity apitest.dPolicyJoin has a Read policy; a join entity is scoped through its TenantRefs, and can have neither a tenant column nor a Read policy"},
 	} {
@@ -390,11 +390,11 @@ type dPolicyJoin struct{ BookID, TagID int64 }
 var dPolicyJoinMeta velox.MetaOnce[dPolicyJoin]
 
 func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
-	return dPolicyJoinMeta.Load(func() velox.Desc[dPolicyJoin] {
-		return velox.Desc[dPolicyJoin]{
+	return dPolicyJoinMeta.Load(func() velox.Descriptor[dPolicyJoin] {
+		return velox.Descriptor[dPolicyJoin]{
 			Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*dPolicyJoin)(nil).Policy()) },
 			Table:      "policy_joins",
-			Columns:    []velox.ColumnDesc{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Addr: func(x *dPolicyJoin, i int) any {
@@ -429,13 +429,13 @@ var dLinkers = struct {
 var dLinkerMeta velox.MetaOnce[dLinker]
 
 func (*dLinker) VeloxMeta() *velox.Meta[dLinker] {
-	return dLinkerMeta.Load(func() velox.Desc[dLinker] {
-		return velox.Desc[dLinker]{
+	return dLinkerMeta.Load(func() velox.Descriptor[dLinker] {
+		return velox.Descriptor[dLinker]{
 			Table:      "linkers",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Edges:      []velox.EdgeDesc{velox.EdgeThrough[dLink, fixture.DTag]("Tags", 0, 0, 1, 0)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[dLink, fixture.DTag]("Tags", 0, 0, 1, 0)},
 			Addr:       func(x *dLinker, i int) any { return &x.ID },
 			EdgeAddr:   func(x *dLinker, i int) any { return &x.Tags },
 		}
@@ -447,11 +447,11 @@ type dLink struct{ LinkerID, TagID int64 }
 var dLinkMeta velox.MetaOnce[dLink]
 
 func (*dLink) VeloxMeta() *velox.Meta[dLink] {
-	return dLinkMeta.Load(func() velox.Desc[dLink] {
-		return velox.Desc[dLink]{
+	return dLinkMeta.Load(func() velox.Descriptor[dLink] {
+		return velox.Descriptor[dLink]{
 			Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*dLink)(nil).Policy()) },
 			Table:      "links",
-			Columns:    []velox.ColumnDesc{{Field: "LinkerID", Name: "linker_id"}, {Field: "TagID", Name: "tag_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "LinkerID", Name: "linker_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Addr: func(x *dLink, i int) any {
@@ -570,13 +570,13 @@ var dNoteSameBook = velox.Rel[dNote, dNote]{I: 0}
 var dNoteMeta velox.MetaOnce[dNote]
 
 func (*dNote) VeloxMeta() *velox.Meta[dNote] {
-	return dNoteMeta.Load(func() velox.Desc[dNote] {
-		return velox.Desc[dNote]{
+	return dNoteMeta.Load(func() velox.Descriptor[dNote] {
+		return velox.Descriptor[dNote]{
 			Table:      "notes",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "BookID", Name: "book_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BookID", Name: "book_id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Edges:      []velox.EdgeDesc{velox.EdgeThrough[fixture.DBookTag, dNote]("SameBook", 1, 0, 0, 1)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[fixture.DBookTag, dNote]("SameBook", 1, 0, 0, 1)},
 			Addr: func(x *dNote, i int) any {
 				switch i {
 				case 0:
@@ -644,14 +644,14 @@ type peerCycle struct{}
 var dPeerMeta velox.MetaOnce[dPeer]
 
 func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
-	return dPeerMeta.Load(func() velox.Desc[dPeer] {
-		return velox.Desc[dPeer]{
+	return dPeerMeta.Load(func() velox.Descriptor[dPeer] {
+		return velox.Descriptor[dPeer]{
 			Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*dPeer)(nil).Policy()) },
 			Table:      "peers",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Edges: []velox.EdgeDesc{
+			Edges: []velox.EdgeDescriptor{
 				velox.EdgeThrough[dFriend, dPeer]("Friends", 0, 0, 1, 0),
 				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("Tags", 0, 0, 1, 0),
 			},
@@ -689,10 +689,10 @@ type dFriend struct{ PeerID, FriendID int64 }
 var dFriendMeta velox.MetaOnce[dFriend]
 
 func (*dFriend) VeloxMeta() *velox.Meta[dFriend] {
-	return dFriendMeta.Load(func() velox.Desc[dFriend] {
-		return velox.Desc[dFriend]{
+	return dFriendMeta.Load(func() velox.Descriptor[dFriend] {
+		return velox.Descriptor[dFriend]{
 			Table:      "friends",
-			Columns:    []velox.ColumnDesc{{Field: "PeerID", Name: "peer_id"}, {Field: "FriendID", Name: "friend_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "PeerID", Name: "peer_id"}, {Field: "FriendID", Name: "friend_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Addr: func(x *dFriend, i int) any {

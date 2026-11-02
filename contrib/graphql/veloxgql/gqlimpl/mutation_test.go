@@ -51,12 +51,12 @@ func (*post) Policy() velox.Policy[post] {
 
 var postMeta velox.MetaOnce[post]
 
-func (*post) VeloxMeta() *velox.Meta[post] { return postMeta.Load(postDesc) }
+func (*post) VeloxMeta() *velox.Meta[post] { return postMeta.Load(postDescriptor) }
 
-func postDesc() velox.Desc[post] {
-	return velox.Desc[post]{
+func postDescriptor() velox.Descriptor[post] {
+	return velox.Descriptor[post]{
 		Table:      "posts",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Tenant", Name: "tenant"}, {Field: "Title", Name: "title"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tenant", Name: "tenant"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Tenant:     1,
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*post)(nil).Policy()) },

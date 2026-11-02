@@ -31,12 +31,12 @@ var lzProjects = struct {
 
 var lzProjectMeta velox.MetaOnce[lzProject]
 
-func (*lzProject) VeloxMeta() *velox.Meta[lzProject] { return lzProjectMeta.Load(lzProjectDesc) }
+func (*lzProject) VeloxMeta() *velox.Meta[lzProject] { return lzProjectMeta.Load(lzProjectDescriptor) }
 
-func lzProjectDesc() velox.Desc[lzProject] {
-	return velox.Desc[lzProject]{
+func lzProjectDescriptor() velox.Descriptor[lzProject] {
+	return velox.Descriptor[lzProject]{
 		Table:      "lz_projects",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Done", Name: "done"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Done", Name: "done"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr:       func(x *lzProject, i int) any { return [...]any{&x.ID, &x.Done}[i] },
@@ -56,7 +56,7 @@ var lzTasks = struct {
 
 var lzTaskMeta velox.MetaOnce[lzTask]
 
-func (*lzTask) VeloxMeta() *velox.Meta[lzTask] { return lzTaskMeta.Load(lzTaskDesc) }
+func (*lzTask) VeloxMeta() *velox.Meta[lzTask] { return lzTaskMeta.Load(lzTaskDescriptor) }
 
 func (*lzTask) Policy() velox.Policy[lzTask] {
 	open := lzTasks.Project.HasWhere(lzProjects.Done.EQ(false)) // built in the body
@@ -73,15 +73,15 @@ func (*lzTask) Hooks() []velox.Hook[lzTask] {
 	}, velox.OpDelete)}
 }
 
-func lzTaskDesc() velox.Desc[lzTask] {
-	return velox.Desc[lzTask]{
+func lzTaskDescriptor() velox.Descriptor[lzTask] {
+	return velox.Descriptor[lzTask]{
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*lzTask)(nil).Policy()) },
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*lzTask)(nil).Hooks()) },
 		Table:      "lz_tasks",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[lzProject]("Project", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[lzProject]("Project", 1, 0)},
 		Addr:       func(x *lzTask, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
 		EdgeAddr:   func(x *lzTask, i int) any { return &x.Project },
 	}
@@ -140,7 +140,7 @@ var lzRaces = struct {
 
 var lzRaceMeta velox.MetaOnce[lzRace]
 
-func (*lzRace) VeloxMeta() *velox.Meta[lzRace] { return lzRaceMeta.Load(lzRaceDesc) }
+func (*lzRace) VeloxMeta() *velox.Meta[lzRace] { return lzRaceMeta.Load(lzRaceDescriptor) }
 
 func (*lzRace) Policy() velox.Policy[lzRace] {
 	shared := lzRaces.Project.HasWhere(lzProjects.Done.EQ(false))
@@ -150,14 +150,14 @@ func (*lzRace) Policy() velox.Policy[lzRace] {
 	}
 }
 
-func lzRaceDesc() velox.Desc[lzRace] {
-	return velox.Desc[lzRace]{
+func lzRaceDescriptor() velox.Descriptor[lzRace] {
+	return velox.Descriptor[lzRace]{
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*lzRace)(nil).Policy()) },
 		Table:      "lz_races",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[lzProject]("Project", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[lzProject]("Project", 1, 0)},
 		Addr:       func(x *lzRace, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
 		EdgeAddr:   func(x *lzRace, i int) any { return &x.Project },
 	}
@@ -216,24 +216,26 @@ func TestSharedHasWherePreds(t *testing.T) {
 // is built.
 type lzLate struct {
 	ID  int64
-	Bad velox.One[badDesc]
+	Bad velox.One[badDescriptor]
 }
 
 var (
-	lzLates     = struct{ Bad velox.Rel[lzLate, badDesc] }{velox.Rel[lzLate, badDesc]{I: 0}}
+	lzLates = struct {
+		Bad velox.Rel[lzLate, badDescriptor]
+	}{velox.Rel[lzLate, badDescriptor]{I: 0}}
 	lzLateMeta  velox.MetaOnce[lzLate]
 	lzLateLoads int
 )
 
 func (*lzLate) VeloxMeta() *velox.Meta[lzLate] {
-	return lzLateMeta.Load(func() velox.Desc[lzLate] {
+	return lzLateMeta.Load(func() velox.Descriptor[lzLate] {
 		lzLateLoads++
-		return velox.Desc[lzLate]{
+		return velox.Descriptor[lzLate]{
 			Table:      "lz_lates",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Edges:      []velox.EdgeDesc{velox.EdgeTo[badDesc]("Bad", 0, 0)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeTo[badDescriptor]("Bad", 0, 0)},
 			Addr:       func(x *lzLate, i int) any { return &x.ID },
 			EdgeAddr:   func(x *lzLate, i int) any { return &x.Bad },
 		}
@@ -253,7 +255,7 @@ func TestHasWhereErrorAtStatement(t *testing.T) {
 	if lzLateLoads != before {
 		t.Fatalf("HasWhere built the owner's metadata (%d loads, were %d)", lzLateLoads, before)
 	}
-	const lwant = "velox: apitest.lzLate.Bad: its target github.com/syssam/velox/internal/apitest.badDesc is invalid: apitest.badDesc: the tenant names column 3, of 1"
+	const lwant = "velox: apitest.lzLate.Bad: its target github.com/syssam/velox/internal/apitest.badDescriptor is invalid: apitest.badDescriptor: the tenant names column 3, of 1"
 	if _, err := ldb.Query[lzLate]().Where(lp).Limit(1).All(ctx); err == nil || err.Error() != lwant {
 		t.Errorf("All: %v, want %s", err, lwant)
 	}
@@ -266,7 +268,7 @@ func TestHasWhereErrorAtStatement(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	p := dBadThroughs.BadJoin.HasWhere(fixture.DTags.Name.EQ("x"))
-	const want = "velox: apitest.dBadThrough.BadJoin: its join entity is invalid: apitest.badDesc: the tenant names column 3, of 1"
+	const want = "velox: apitest.dBadThrough.BadJoin: its join entity is invalid: apitest.badDescriptor: the tenant names column 3, of 1"
 	q := db.Query[dBadThrough]().Where(p).Limit(1)
 	if _, err := q.All(ctx); err == nil || err.Error() != want {
 		t.Errorf("All: %v, want %s", err, want)
@@ -296,7 +298,7 @@ type lzAudit struct {
 
 var lzNoteMeta velox.MetaOnce[lzNote]
 
-func (*lzNote) VeloxMeta() *velox.Meta[lzNote] { return lzNoteMeta.Load(lzNoteDesc) }
+func (*lzNote) VeloxMeta() *velox.Meta[lzNote] { return lzNoteMeta.Load(lzNoteDescriptor) }
 
 var lzSawDB []bool
 
@@ -324,11 +326,11 @@ func (*lzNote) Hooks() []velox.Hook[lzNote] {
 	}}
 }
 
-func lzNoteDesc() velox.Desc[lzNote] {
-	return velox.Desc[lzNote]{
+func lzNoteDescriptor() velox.Descriptor[lzNote] {
+	return velox.Descriptor[lzNote]{
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*lzNote)(nil).Hooks()) },
 		Table:      "lz_notes",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr:       func(x *lzNote, i int) any { return [...]any{&x.ID, &x.Title}[i] },
@@ -337,12 +339,12 @@ func lzNoteDesc() velox.Desc[lzNote] {
 
 var lzAuditMeta velox.MetaOnce[lzAudit]
 
-func (*lzAudit) VeloxMeta() *velox.Meta[lzAudit] { return lzAuditMeta.Load(lzAuditDesc) }
+func (*lzAudit) VeloxMeta() *velox.Meta[lzAudit] { return lzAuditMeta.Load(lzAuditDescriptor) }
 
-func lzAuditDesc() velox.Desc[lzAudit] {
-	return velox.Desc[lzAudit]{
+func lzAuditDescriptor() velox.Descriptor[lzAudit] {
+	return velox.Descriptor[lzAudit]{
 		Table:      "lz_audits",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Note", Name: "note"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Note", Name: "note"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr:       func(x *lzAudit, i int) any { return [...]any{&x.ID, &x.Note}[i] },
@@ -402,14 +404,14 @@ func TestMutationDBIsTheTransaction(t *testing.T) {
 	}
 }
 
-// TestCheckRelation: a Desc relation names no target, so CheckEntity does not
+// TestCheckRelation: a Descriptor relation names no target, so CheckEntity does not
 // resolve it and CheckRelation does, with the target the handle names. The
 // error is the one the first use reports.
 func TestCheckRelation(t *testing.T) {
 	if err := velox.CheckRelation(lzTasks.Project); err != nil {
 		t.Errorf("a valid relation: %v", err)
 	}
-	const want = "velox: apitest.lzLate.Bad: its target github.com/syssam/velox/internal/apitest.badDesc is invalid: apitest.badDesc: the tenant names column 3, of 1"
+	const want = "velox: apitest.lzLate.Bad: its target github.com/syssam/velox/internal/apitest.badDescriptor is invalid: apitest.badDescriptor: the tenant names column 3, of 1"
 	if err := velox.CheckRelation(lzLates.Bad); err == nil || err.Error() != want {
 		t.Errorf("an invalid target: %v, want %s", err, want)
 	}
@@ -455,20 +457,20 @@ var (
 	mmBs = struct{ Items velox.Rel[mmB, mmItem] }{velox.Rel[mmB, mmItem]{I: 0}}
 )
 
-func mmItemDesc() velox.Desc[mmItem] {
-	return velox.Desc[mmItem]{
-		Table: "mm_items", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}},
+func mmItemDescriptor() velox.Descriptor[mmItem] {
+	return velox.Descriptor[mmItem]{
+		Table: "mm_items", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}},
 		PrimaryKey: []int{0}, Tenant: -1,
 		Addr: func(x *mmItem, i int) any { return [...]any{&x.ID, &x.OwnerID}[i] },
 	}
 }
 
-func (*mmItem) VeloxMeta() *velox.Meta[mmItem] { return mmItemMeta.Load(mmItemDesc) }
+func (*mmItem) VeloxMeta() *velox.Meta[mmItem] { return mmItemMeta.Load(mmItemDescriptor) }
 
 func (*mmOther) VeloxMeta() *velox.Meta[mmOther] {
-	return mmOtherMeta.Load(func() velox.Desc[mmOther] {
-		return velox.Desc[mmOther]{
-			Table: "mm_others", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}},
+	return mmOtherMeta.Load(func() velox.Descriptor[mmOther] {
+		return velox.Descriptor[mmOther]{
+			Table: "mm_others", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}},
 			PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *mmOther, i int) any { return [...]any{&x.ID, &x.OwnerID}[i] },
 		}
@@ -476,10 +478,10 @@ func (*mmOther) VeloxMeta() *velox.Meta[mmOther] {
 }
 
 func (*mmA) VeloxMeta() *velox.Meta[mmA] {
-	return mmAMeta.Load(func() velox.Desc[mmA] {
-		return velox.Desc[mmA]{
-			Table: "mm_as", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Edges:    []velox.EdgeDesc{velox.EdgeTo[mmItem]("Items", 0, 1)},
+	return mmAMeta.Load(func() velox.Descriptor[mmA] {
+		return velox.Descriptor[mmA]{
+			Table: "mm_as", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1)},
 			Addr:     func(x *mmA, i int) any { return &x.ID },
 			EdgeAddr: func(x *mmA, i int) any { return &x.Items },
 		}
@@ -487,10 +489,10 @@ func (*mmA) VeloxMeta() *velox.Meta[mmA] {
 }
 
 func (*mmB) VeloxMeta() *velox.Meta[mmB] {
-	return mmBMeta.Load(func() velox.Desc[mmB] {
-		return velox.Desc[mmB]{
-			Table: "mm_bs", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Edges:    []velox.EdgeDesc{velox.EdgeTo[mmItem]("Items", 0, 1)},
+	return mmBMeta.Load(func() velox.Descriptor[mmB] {
+		return velox.Descriptor[mmB]{
+			Table: "mm_bs", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1)},
 			Addr:     func(x *mmB, i int) any { return &x.ID },
 			EdgeAddr: func(x *mmB, i int) any { return &x.Items },
 		}
@@ -534,10 +536,10 @@ type mmE struct {
 var mmEMeta velox.MetaOnce[mmE]
 
 func (*mmE) VeloxMeta() *velox.Meta[mmE] {
-	return mmEMeta.Load(func() velox.Desc[mmE] {
-		return velox.Desc[mmE]{
-			Table: "mm_es", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Edges: []velox.EdgeDesc{velox.EdgeTo[mmItem]("Items", 0, 1), velox.EdgeTo[mmItem]("More", 0, 1)},
+	return mmEMeta.Load(func() velox.Descriptor[mmE] {
+		return velox.Descriptor[mmE]{
+			Table: "mm_es", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Edges: []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1), velox.EdgeTo[mmItem]("More", 0, 1)},
 			Addr:  func(x *mmE, i int) any { return &x.ID },
 			EdgeAddr: func(x *mmE, i int) any {
 				if i == 0 {

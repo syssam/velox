@@ -51,7 +51,7 @@ func measured(t *testing.T, r report) {
 // TestServiceLinksOnlyItsEntities guards the link graph: a service that uses
 // five entities links those and the targets of their relations, one hop, and
 // no other entity of the schema. A relation that named its target's metadata
-// in the owner's Desc would link the whole connected model (the service's
+// in the owner's Descriptor would link the whole connected model (the service's
 // binary grew with n until the use site named the target). The threshold in
 // thresholds.json catches the size; this names the entities.
 func TestServiceLinksOnlyItsEntities(t *testing.T) {
@@ -100,11 +100,11 @@ func linksOnlyItsEntities(t *testing.T, graphql bool) {
 		t.Fatal(err)
 	}
 	// The symbols the gen package itself defines for entity k: its methods,
-	// handles, metadata and Desc function, E<k>.*, (*E<k>).*, E<k>s, e<k>Meta
-	// and e<k>Desc. The type descriptors and generic instantiations that
+	// handles, metadata and Descriptor function, E<k>.*, (*E<k>).*, E<k>s, e<k>Meta
+	// and e<k>Descriptor. The type descriptors and generic instantiations that
 	// mention E<k> (the field Many[E<k>] of a neighbour's struct) are data
 	// about a type and do not link its code, so they are not counted.
-	sym := regexp.MustCompile(`(?m)^\s*\S+ [A-Za-z] example\.com/tmp/gen\.\(?\*?[Ee](\d+)(?:s|Meta|Desc)?(?:\.|$)`)
+	sym := regexp.MustCompile(`(?m)^\s*\S+ [A-Za-z] example\.com/tmp/gen\.\(?\*?[Ee](\d+)(?:s|Meta|Descriptor)?(?:\.|$)`)
 	if graphql {
 		// Also the GraphQL code: E<k>sConnection, (*E<k>).NextGQL,
 		// (*E<k>WhereInput).Pred, e<k>TermGQL and the like.

@@ -11,7 +11,7 @@ import (
 
 // MutationState is a write in flight, without E: what Mutation[E] holds. Its DB is an
 // any, a *DB that Mutation.DB converts: EntityInfo reaches mutation, and a *DB field
-// made every Desc entity's package 14 KiB larger (compilecost_test.go).
+// made every Descriptor entity's package 14 KiB larger (compilecost_test.go).
 type MutationState struct {
 	DB       any              // the *DB the write runs on; set only when in has hooks
 	Op       Op               // set before the hooks run: Mutation.Op reads it, since an insert has no st
@@ -56,20 +56,20 @@ var (
 )
 
 // BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
-// Desc.Policy. For generated code. Its fields are not exported: only BindPolicy
+// Descriptor.Policy. For generated code. Its fields are not exported: only BindPolicy
 // makes one.
 type BoundPolicy struct{ p *EntityPolicy }
 
 // BoundHooks is an entity's hooks with E erased, made by BindHooks for
-// Desc.Hooks. For generated code. Its fields are not exported: only BindHooks
+// Descriptor.Hooks. For generated code. Its fields are not exported: only BindHooks
 // makes one.
 type BoundHooks struct {
 	hs     []HookFn
 	nilAt1 int // 1 + the index of the first nil hook; 0 when none
 }
 
-// ErasePolicy calls f, the Desc's Policy, and keeps its result in info. On the
-// join entity of a bidirectional edge (Desc.Bidi) it refuses a Read or Write.
+// ErasePolicy calls f, the Descriptor's Policy, and keeps its result in info. On the
+// join entity of a bidirectional edge (Descriptor.Bidi) it refuses a Read or Write.
 func ErasePolicy(info *EntityInfo, f func() BoundPolicy) error {
 	var b BoundPolicy
 	if err := recovered(info.Name, "Policy()", func() { b = f() }); err != nil {
@@ -83,7 +83,7 @@ func ErasePolicy(info *EntityInfo, f func() BoundPolicy) error {
 	return nil
 }
 
-// EraseHooks calls f, the Desc's Hooks, and keeps its hooks in info. A nil
+// EraseHooks calls f, the Descriptor's Hooks, and keeps its hooks in info. A nil
 // hook is refused.
 func EraseHooks(info *EntityInfo, f func() BoundHooks) error {
 	var b BoundHooks

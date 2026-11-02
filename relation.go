@@ -51,7 +51,7 @@ func targetOf[T any]() engine.RelTarget {
 }
 
 // Rel is the handle of a relation of entity E to entity T, written by
-// velox-gen: I is the index of its edge in E's Desc Edges. Passed to Query.With
+// velox-gen: I is the index of its edge in E's Descriptor Edges. Passed to Query.With
 // it loads the relation; its Where, OrderBy and With say what to load. Like a
 // Query it is a value: each method returns a new Rel.
 type Rel[E, T any] struct {

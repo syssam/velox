@@ -235,7 +235,7 @@
 // Rewrite hook is the DB's), so the field reads null, with no error, and a
 // mutation that returns the edge commits. A NULL-able key can read null too: on
 // the side that owns the key, as a Required self edge's parent does, velox
-// refuses the key nil on every write (velox.ColumnDesc.RequiredEdge), but the
+// refuses the key nil on every write (velox.ColumnDescriptor.RequiredEdge), but the
 // database's ON DELETE SET NULL clears it when the target is deleted. On the
 // other side velox does not refuse it: no child need hold the row. Create<T>Input
 // still requires a Required edge's <edge>ID, which must name a row the caller may

@@ -28,12 +28,12 @@ var UserGroups = struct {
 var userGroupMeta velox.MetaOnce[UserGroup]
 
 // VeloxMeta is called by velox, not by applications.
-func (*UserGroup) VeloxMeta() *velox.Meta[UserGroup] { return userGroupMeta.Load(userGroupDesc) }
+func (*UserGroup) VeloxMeta() *velox.Meta[UserGroup] { return userGroupMeta.Load(userGroupDescriptor) }
 
-func userGroupDesc() velox.Desc[UserGroup] {
-	return velox.Desc[UserGroup]{
+func userGroupDescriptor() velox.Descriptor[UserGroup] {
+	return velox.Descriptor[UserGroup]{
 		Table: "user_groups",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "UserID", Name: "user_id"},
 			{Field: "GroupID", Name: "group_id"},
 		},

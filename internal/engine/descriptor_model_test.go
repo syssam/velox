@@ -5,8 +5,8 @@ import (
 	"github.com/syssam/velox"
 )
 
-// The Desc entities of the engine's tests. Each is described as velox-gen
-// would write it: a struct, a MetaOnce, a VeloxMeta and a Desc.
+// The Descriptor entities of the engine's tests. Each is described as velox-gen
+// would write it: a struct, a MetaOnce, a VeloxMeta and a Descriptor.
 
 // hnote's hooks, for every write, run the function in the context
 // under hnoteKey, if any, before the write.
@@ -40,13 +40,13 @@ func (*hnote) Hooks() []velox.Hook[hnote] {
 
 var hnoteMeta velox.MetaOnce[hnote]
 
-func (*hnote) VeloxMeta() *velox.Meta[hnote] { return hnoteMeta.Load(hnoteDesc) }
+func (*hnote) VeloxMeta() *velox.Meta[hnote] { return hnoteMeta.Load(hnoteDescriptor) }
 
-func hnoteDesc() velox.Desc[hnote] {
-	return velox.Desc[hnote]{
+func hnoteDescriptor() velox.Descriptor[hnote] {
+	return velox.Descriptor[hnote]{
 		Hooks: func() velox.BoundHooks { return velox.BindHooks((*hnote)(nil).Hooks()) },
 		Table: "hnotes",
-		Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
+		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
@@ -93,13 +93,13 @@ func (*moveOrg) Hooks() []velox.Hook[moveOrg] {
 
 var moveOrgMeta velox.MetaOnce[moveOrg]
 
-func (*moveOrg) VeloxMeta() *velox.Meta[moveOrg] { return moveOrgMeta.Load(moveOrgDesc) }
+func (*moveOrg) VeloxMeta() *velox.Meta[moveOrg] { return moveOrgMeta.Load(moveOrgDescriptor) }
 
-func moveOrgDesc() velox.Desc[moveOrg] {
-	return velox.Desc[moveOrg]{
+func moveOrgDescriptor() velox.Descriptor[moveOrg] {
+	return velox.Descriptor[moveOrg]{
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*moveOrg)(nil).Hooks()) },
 		Table:      "move_org",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     1,
 		Addr: func(x *moveOrg, i int) any {
@@ -119,15 +119,15 @@ type company struct {
 
 var companyMeta velox.MetaOnce[company]
 
-func (*company) VeloxMeta() *velox.Meta[company] { return companyMeta.Load(companyDesc) }
+func (*company) VeloxMeta() *velox.Meta[company] { return companyMeta.Load(companyDescriptor) }
 
-func companyDesc() velox.Desc[company] {
-	return velox.Desc[company]{
+func companyDescriptor() velox.Descriptor[company] {
+	return velox.Descriptor[company]{
 		Table:      "company",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[employee]("Staff", 0, 1)}, // employee.CompanyID
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[employee]("Staff", 0, 1)}, // employee.CompanyID
 		Addr:       func(x *company, i int) any { return &x.ID },
 		EdgeAddr:   func(x *company, i int) any { return &x.Staff },
 	}
@@ -143,15 +143,15 @@ type employee struct {
 
 var employeeMeta velox.MetaOnce[employee]
 
-func (*employee) VeloxMeta() *velox.Meta[employee] { return employeeMeta.Load(employeeDesc) }
+func (*employee) VeloxMeta() *velox.Meta[employee] { return employeeMeta.Load(employeeDescriptor) }
 
-func employeeDesc() velox.Desc[employee] {
-	return velox.Desc[employee]{
+func employeeDescriptor() velox.Descriptor[employee] {
+	return velox.Descriptor[employee]{
 		Table:      "employee",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "CompanyID", Name: "company_id"}, {Field: "BossID", Name: "boss_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "CompanyID", Name: "company_id"}, {Field: "BossID", Name: "boss_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[employee]("Boss", 2, 0), velox.EdgeTo[company]("Company", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[employee]("Boss", 2, 0), velox.EdgeTo[company]("Company", 1, 0)},
 		Addr: func(x *employee, i int) any {
 			switch i {
 			case 0:
@@ -178,15 +178,15 @@ type keyed struct {
 
 var keyedMeta velox.MetaOnce[keyed]
 
-func (*keyed) VeloxMeta() *velox.Meta[keyed] { return keyedMeta.Load(keyedDesc) }
+func (*keyed) VeloxMeta() *velox.Meta[keyed] { return keyedMeta.Load(keyedDescriptor) }
 
-func keyedDesc() velox.Desc[keyed] {
-	return velox.Desc[keyed]{
+func keyedDescriptor() velox.Descriptor[keyed] {
+	return velox.Descriptor[keyed]{
 		Table:      "keyed",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[keyedLine]("Lines", 0, 1)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[keyedLine]("Lines", 0, 1)},
 		Addr:       func(x *keyed, i int) any { return &x.ID },
 		EdgeAddr:   func(x *keyed, i int) any { return &x.Lines },
 	}
@@ -199,12 +199,12 @@ type keyedLine struct {
 
 var keyedLineMeta velox.MetaOnce[keyedLine]
 
-func (*keyedLine) VeloxMeta() *velox.Meta[keyedLine] { return keyedLineMeta.Load(keyedLineDesc) }
+func (*keyedLine) VeloxMeta() *velox.Meta[keyedLine] { return keyedLineMeta.Load(keyedLineDescriptor) }
 
-func keyedLineDesc() velox.Desc[keyedLine] {
-	return velox.Desc[keyedLine]{
+func keyedLineDescriptor() velox.Descriptor[keyedLine] {
+	return velox.Descriptor[keyedLine]{
 		Table:      "keyed_line",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "KeyedID", Name: "keyed_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeyedID", Name: "keyed_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr: func(x *keyedLine, i int) any {
@@ -224,15 +224,15 @@ type blobOwner struct {
 
 var blobOwnerMeta velox.MetaOnce[blobOwner]
 
-func (*blobOwner) VeloxMeta() *velox.Meta[blobOwner] { return blobOwnerMeta.Load(blobOwnerDesc) }
+func (*blobOwner) VeloxMeta() *velox.Meta[blobOwner] { return blobOwnerMeta.Load(blobOwnerDescriptor) }
 
-func blobOwnerDesc() velox.Desc[blobOwner] {
-	return velox.Desc[blobOwner]{
+func blobOwnerDescriptor() velox.Descriptor[blobOwner] {
+	return velox.Descriptor[blobOwner]{
 		Table:      "blob_owner",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[blobLine]("Lines", 0, 1)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[blobLine]("Lines", 0, 1)},
 		Addr:       func(x *blobOwner, i int) any { return &x.ID },
 		EdgeAddr:   func(x *blobOwner, i int) any { return &x.Lines },
 	}
@@ -245,12 +245,12 @@ type blobLine struct {
 
 var blobLineMeta velox.MetaOnce[blobLine]
 
-func (*blobLine) VeloxMeta() *velox.Meta[blobLine] { return blobLineMeta.Load(blobLineDesc) }
+func (*blobLine) VeloxMeta() *velox.Meta[blobLine] { return blobLineMeta.Load(blobLineDescriptor) }
 
-func blobLineDesc() velox.Desc[blobLine] {
-	return velox.Desc[blobLine]{
+func blobLineDescriptor() velox.Descriptor[blobLine] {
+	return velox.Descriptor[blobLine]{
 		Table:      "blob_line",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr: func(x *blobLine, i int) any {
@@ -262,7 +262,7 @@ func blobLineDesc() velox.Desc[blobLine] {
 	}
 }
 
-// invalidHolder's relation T has a target that cannot be built: its Desc has
+// invalidHolder's relation T has a target that cannot be built: its Descriptor has
 // no Addr.
 type invalidHolder struct {
 	ID int64
@@ -272,16 +272,16 @@ type invalidHolder struct {
 var invalidHolderMeta velox.MetaOnce[invalidHolder]
 
 func (*invalidHolder) VeloxMeta() *velox.Meta[invalidHolder] {
-	return invalidHolderMeta.Load(invalidHolderDesc)
+	return invalidHolderMeta.Load(invalidHolderDescriptor)
 }
 
-func invalidHolderDesc() velox.Desc[invalidHolder] {
-	return velox.Desc[invalidHolder]{
+func invalidHolderDescriptor() velox.Descriptor[invalidHolder] {
+	return velox.Descriptor[invalidHolder]{
 		Table:      "invalid_holder",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[brokenTarget]("T", 0, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[brokenTarget]("T", 0, 0)},
 		Addr:       func(x *invalidHolder, i int) any { return &x.ID },
 		EdgeAddr:   func(x *invalidHolder, i int) any { return &x.T },
 	}
@@ -292,13 +292,13 @@ type brokenTarget struct{ ID int64 }
 var brokenTargetMeta velox.MetaOnce[brokenTarget]
 
 func (*brokenTarget) VeloxMeta() *velox.Meta[brokenTarget] {
-	return brokenTargetMeta.Load(brokenTargetDesc)
+	return brokenTargetMeta.Load(brokenTargetDescriptor)
 }
 
-func brokenTargetDesc() velox.Desc[brokenTarget] {
-	return velox.Desc[brokenTarget]{
+func brokenTargetDescriptor() velox.Descriptor[brokenTarget] {
+	return velox.Descriptor[brokenTarget]{
 		Table:      "broken_target",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 	}
@@ -310,9 +310,9 @@ type nullTenant struct {
 	OrgID *int64
 }
 
-func nullTenantDesc() velox.Desc[nullTenant] {
-	return velox.Desc[nullTenant]{
-		Table: "null_tenant", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
+func nullTenantDescriptor() velox.Descriptor[nullTenant] {
+	return velox.Descriptor[nullTenant]{
+		Table: "null_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
 		PrimaryKey: []int{0}, Tenant: 1,
 		Addr: func(x *nullTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
 	}
@@ -323,9 +323,9 @@ type sliceTenant struct {
 	Org []byte
 }
 
-func sliceTenantDesc() velox.Desc[sliceTenant] {
-	return velox.Desc[sliceTenant]{
-		Table: "slice_tenant", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org"}},
+func sliceTenantDescriptor() velox.Descriptor[sliceTenant] {
+	return velox.Descriptor[sliceTenant]{
+		Table: "slice_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org"}},
 		PrimaryKey: []int{0}, Tenant: 1,
 		Addr: func(x *sliceTenant, i int) any { return [...]any{&x.ID, &x.Org}[i] },
 	}
@@ -338,9 +338,9 @@ type defaultTenant struct {
 	Org string
 }
 
-func defaultTenantDesc() velox.Desc[defaultTenant] {
-	return velox.Desc[defaultTenant]{
-		Table: "default_tenant", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org", Default: "acme"}},
+func defaultTenantDescriptor() velox.Descriptor[defaultTenant] {
+	return velox.Descriptor[defaultTenant]{
+		Table: "default_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org", Default: "acme"}},
 		PrimaryKey: []int{0}, Tenant: 1,
 		Addr: func(x *defaultTenant, i int) any { return [...]any{&x.ID, &x.Org}[i] },
 	}
@@ -351,9 +351,9 @@ type defaultFuncTenant struct {
 	OrgID int64
 }
 
-func defaultFuncTenantDesc() velox.Desc[defaultFuncTenant] {
-	return velox.Desc[defaultFuncTenant]{
-		Table: "default_func_tenant", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", DefaultFunc: func() any { return int64(1) }}},
+func defaultFuncTenantDescriptor() velox.Descriptor[defaultFuncTenant] {
+	return velox.Descriptor[defaultFuncTenant]{
+		Table: "default_func_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", DefaultFunc: func() any { return int64(1) }}},
 		PrimaryKey: []int{0}, Tenant: 1,
 		Addr: func(x *defaultFuncTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
 	}
@@ -364,9 +364,9 @@ type updateDefaultTenant struct {
 	OrgID int64
 }
 
-func updateDefaultTenantDesc() velox.Desc[updateDefaultTenant] {
-	return velox.Desc[updateDefaultTenant]{
-		Table: "update_default_tenant", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", UpdateDefault: func() any { return int64(1) }}},
+func updateDefaultTenantDescriptor() velox.Descriptor[updateDefaultTenant] {
+	return velox.Descriptor[updateDefaultTenant]{
+		Table: "update_default_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", UpdateDefault: func() any { return int64(1) }}},
 		PrimaryKey: []int{0}, Tenant: 1,
 		Addr: func(x *updateDefaultTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
 	}
@@ -426,14 +426,14 @@ func (*hooked) Policy() velox.Policy[hooked] {
 
 var hookedMeta velox.MetaOnce[hooked]
 
-func (*hooked) VeloxMeta() *velox.Meta[hooked] { return hookedMeta.Load(hookedDesc) }
+func (*hooked) VeloxMeta() *velox.Meta[hooked] { return hookedMeta.Load(hookedDescriptor) }
 
-func hookedDesc() velox.Desc[hooked] {
-	return velox.Desc[hooked]{
+func hookedDescriptor() velox.Descriptor[hooked] {
+	return velox.Descriptor[hooked]{
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*hooked)(nil).Policy()) },
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*hooked)(nil).Hooks()) },
 		Table:      "hooked",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr: func(x *hooked, i int) any {

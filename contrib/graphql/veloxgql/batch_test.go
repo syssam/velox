@@ -37,15 +37,15 @@ var keepers = struct {
 
 var keeperMeta velox.MetaOnce[keeper]
 
-func (*keeper) VeloxMeta() *velox.Meta[keeper] { return keeperMeta.Load(keeperDesc) }
+func (*keeper) VeloxMeta() *velox.Meta[keeper] { return keeperMeta.Load(keeperDescriptor) }
 
-func keeperDesc() velox.Desc[keeper] {
-	return velox.Desc[keeper]{
+func keeperDescriptor() velox.Descriptor[keeper] {
+	return velox.Descriptor[keeper]{
 		Table:      "keepers",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[pet]("Pets", 0, 1)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pet]("Pets", 0, 1)},
 		Addr:       func(x *keeper, i int) any { return [...]any{&x.ID, &x.Name}[i] },
 		EdgeAddr: func(x *keeper, i int) any {
 			if i == 0 {
@@ -73,12 +73,12 @@ type viewerKey struct{}
 
 var petMeta velox.MetaOnce[pet]
 
-func (*pet) VeloxMeta() *velox.Meta[pet] { return petMeta.Load(petDesc) }
+func (*pet) VeloxMeta() *velox.Meta[pet] { return petMeta.Load(petDescriptor) }
 
-func petDesc() velox.Desc[pet] {
-	return velox.Desc[pet]{
+func petDescriptor() velox.Descriptor[pet] {
+	return velox.Descriptor[pet]{
 		Table:      "pets",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "KeeperID", Name: "keeper_id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeeperID", Name: "keeper_id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     2,
 		Addr:       func(x *pet, i int) any { return [...]any{&x.ID, &x.KeeperID, &x.OrgID, &x.Name}[i] },

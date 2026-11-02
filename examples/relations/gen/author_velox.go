@@ -31,18 +31,18 @@ var Authors = struct {
 var authorMeta velox.MetaOnce[Author]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Author) VeloxMeta() *velox.Meta[Author] { return authorMeta.Load(authorDesc) }
+func (*Author) VeloxMeta() *velox.Meta[Author] { return authorMeta.Load(authorDescriptor) }
 
-func authorDesc() velox.Desc[Author] {
-	return velox.Desc[Author]{
+func authorDescriptor() velox.Descriptor[Author] {
+	return velox.Descriptor[Author]{
 		Table: "authors",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Post]("Posts", 0, 1),
 		},
 		Addr: func(x *Author, i int) any {

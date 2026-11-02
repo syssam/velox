@@ -37,13 +37,13 @@ var Docs = struct {
 var docMeta velox.MetaOnce[Doc]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Doc) VeloxMeta() *velox.Meta[Doc] { return docMeta.Load(docDesc) }
+func (*Doc) VeloxMeta() *velox.Meta[Doc] { return docMeta.Load(docDescriptor) }
 
-func docDesc() velox.Desc[Doc] {
-	return velox.Desc[Doc]{
+func docDescriptor() velox.Descriptor[Doc] {
+	return velox.Descriptor[Doc]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Doc)(nil).Policy()) },
 		Table:  "docs",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Owner", Name: "owner"},
 			{Field: "Title", Name: "title"},
@@ -51,7 +51,7 @@ func docDesc() velox.Desc[Doc] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Comment]("Comments", 0, 1),
 		},
 		Addr: func(x *Doc, i int) any {

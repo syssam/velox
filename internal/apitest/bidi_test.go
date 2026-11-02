@@ -15,7 +15,7 @@ import (
 
 // The bidirectional many-to-many model: bnode's friends through bnodeFriend,
 // a self-referencing edge with no inverse, written by hand as velox-gen
-// writes a Desc. bnodeFriendP is the same join entity with an Insert policy
+// writes a Descriptor. bnodeFriendP is the same join entity with an Insert policy
 // and a hook.
 
 type bnode struct {
@@ -26,13 +26,13 @@ type bnode struct {
 var bnodeMeta velox.MetaOnce[bnode]
 
 func (*bnode) VeloxMeta() *velox.Meta[bnode] {
-	return bnodeMeta.Load(func() velox.Desc[bnode] {
-		return velox.Desc[bnode]{
+	return bnodeMeta.Load(func() velox.Descriptor[bnode] {
+		return velox.Descriptor[bnode]{
 			Table:      "bnodes",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Edges:      []velox.EdgeDesc{velox.EdgeThrough[bnodeFriend, bnode]("Friends", 0, 0, 1, 0)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[bnodeFriend, bnode]("Friends", 0, 0, 1, 0)},
 			Addr:       func(x *bnode, i int) any { return &x.ID },
 			EdgeAddr:   func(x *bnode, i int) any { return &x.Friends },
 		}
@@ -52,10 +52,10 @@ var bnodeFriends = struct {
 var bnodeFriendMeta velox.MetaOnce[bnodeFriend]
 
 func (*bnodeFriend) VeloxMeta() *velox.Meta[bnodeFriend] {
-	return bnodeFriendMeta.Load(func() velox.Desc[bnodeFriend] {
-		return velox.Desc[bnodeFriend]{
+	return bnodeFriendMeta.Load(func() velox.Descriptor[bnodeFriend] {
+		return velox.Descriptor[bnodeFriend]{
 			Table:      "bnode_friends",
-			Columns:    []velox.ColumnDesc{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Bidi:       true,
@@ -104,12 +104,12 @@ func (*bnodeFriendP) Hooks() []velox.Hook[bnodeFriendP] {
 var bnodeFriendPMeta velox.MetaOnce[bnodeFriendP]
 
 func (*bnodeFriendP) VeloxMeta() *velox.Meta[bnodeFriendP] {
-	return bnodeFriendPMeta.Load(func() velox.Desc[bnodeFriendP] {
-		return velox.Desc[bnodeFriendP]{
+	return bnodeFriendPMeta.Load(func() velox.Descriptor[bnodeFriendP] {
+		return velox.Descriptor[bnodeFriendP]{
 			Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*bnodeFriendP)(nil).Policy()) },
 			Hooks:      func() velox.BoundHooks { return velox.BindHooks((*bnodeFriendP)(nil).Hooks()) },
 			Table:      "bnode_friends",
-			Columns:    []velox.ColumnDesc{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Bidi:       true,
@@ -131,10 +131,10 @@ type bnodeKeyed struct{ A, B bkey }
 var bnodeKeyedMeta velox.MetaOnce[bnodeKeyed]
 
 func (*bnodeKeyed) VeloxMeta() *velox.Meta[bnodeKeyed] {
-	return bnodeKeyedMeta.Load(func() velox.Desc[bnodeKeyed] {
-		return velox.Desc[bnodeKeyed]{
+	return bnodeKeyedMeta.Load(func() velox.Descriptor[bnodeKeyed] {
+		return velox.Descriptor[bnodeKeyed]{
 			Table:      "keyed_links",
-			Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Bidi:       true,
@@ -282,7 +282,7 @@ func TestBidiLinks(t *testing.T) {
 
 // The bidirectional one-to-one model: bspouse's Spouse, a self-referencing
 // unique edge with no inverse, keyed by its own SpouseID, written by hand as
-// velox-gen writes a Desc. Its hook records Mutation.Affected.
+// velox-gen writes a Descriptor. Its hook records Mutation.Affected.
 
 type bspouse struct {
 	ID       int64
@@ -311,15 +311,15 @@ func (*bspouse) Hooks() []velox.Hook[bspouse] {
 var bspouseMeta velox.MetaOnce[bspouse]
 
 func (*bspouse) VeloxMeta() *velox.Meta[bspouse] {
-	return bspouseMeta.Load(func() velox.Desc[bspouse] {
-		return velox.Desc[bspouse]{
+	return bspouseMeta.Load(func() velox.Descriptor[bspouse] {
+		return velox.Descriptor[bspouse]{
 			Hooks:      func() velox.BoundHooks { return velox.BindHooks((*bspouse)(nil).Hooks()) },
 			Table:      "bspouses",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "SpouseID", Name: "spouse_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Indexes:    []velox.IndexInfo{{Columns: []int{1}, Unique: true}},
-			Edges:      []velox.EdgeDesc{velox.EdgeBidi[bspouse]("Spouse", 1, 0)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[bspouse]("Spouse", 1, 0)},
 			Addr: func(x *bspouse, i int) any {
 				if i == 0 {
 					return &x.ID
@@ -818,15 +818,15 @@ func (*btspouse) Policy() velox.Policy[btspouse] {
 var btspouseMeta velox.MetaOnce[btspouse]
 
 func (*btspouse) VeloxMeta() *velox.Meta[btspouse] {
-	return btspouseMeta.Load(func() velox.Desc[btspouse] {
-		return velox.Desc[btspouse]{
+	return btspouseMeta.Load(func() velox.Descriptor[btspouse] {
+		return velox.Descriptor[btspouse]{
 			Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*btspouse)(nil).Policy()) },
 			Table:      "btspouses",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "SpouseID", Name: "spouse_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},
 			Tenant:     1,
 			Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
-			Edges:      []velox.EdgeDesc{velox.EdgeBidi[btspouse]("Spouse", 2, 0)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[btspouse]("Spouse", 2, 0)},
 			Addr: func(x *btspouse, i int) any {
 				return [...]any{&x.ID, &x.OrgID, &x.SpouseID}[i]
 			},

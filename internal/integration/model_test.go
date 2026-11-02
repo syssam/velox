@@ -3,7 +3,7 @@ package integration
 import "github.com/syssam/velox"
 
 // The many-to-many model: books and tags through bookTag, written by hand as
-// velox-gen writes a Desc, like the root package's test model. Tags are
+// velox-gen writes a Descriptor, like the root package's test model. Tags are
 // tenant-scoped, so that a relation's target scope is tested on a real
 // database.
 
@@ -21,15 +21,15 @@ var Books = struct {
 
 var bookMeta velox.MetaOnce[book]
 
-func (*book) VeloxMeta() *velox.Meta[book] { return bookMeta.Load(bookDesc) }
+func (*book) VeloxMeta() *velox.Meta[book] { return bookMeta.Load(bookDescriptor) }
 
-func bookDesc() velox.Desc[book] {
-	return velox.Desc[book]{
+func bookDescriptor() velox.Descriptor[book] {
+	return velox.Descriptor[book]{
 		Table:      "books",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeThrough[bookTag, tag]("Tags", 0, 0, 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[bookTag, tag]("Tags", 0, 0, 1, 0)},
 		Addr: func(x *book, i int) any {
 			switch i {
 			case 0:
@@ -64,15 +64,15 @@ var Tags = struct {
 
 var tagMeta velox.MetaOnce[tag]
 
-func (*tag) VeloxMeta() *velox.Meta[tag] { return tagMeta.Load(tagDesc) }
+func (*tag) VeloxMeta() *velox.Meta[tag] { return tagMeta.Load(tagDescriptor) }
 
-func tagDesc() velox.Desc[tag] {
-	return velox.Desc[tag]{
+func tagDescriptor() velox.Descriptor[tag] {
+	return velox.Descriptor[tag]{
 		Table:      "tags",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     1,
-		Edges:      []velox.EdgeDesc{velox.EdgeThrough[bookTag, book]("Books", 0, 1, 0, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[bookTag, book]("Books", 0, 1, 0, 0)},
 		Addr: func(x *tag, i int) any {
 			switch i {
 			case 0:
@@ -106,12 +106,12 @@ var BookTags = struct {
 
 var bookTagMeta velox.MetaOnce[bookTag]
 
-func (*bookTag) VeloxMeta() *velox.Meta[bookTag] { return bookTagMeta.Load(bookTagDesc) }
+func (*bookTag) VeloxMeta() *velox.Meta[bookTag] { return bookTagMeta.Load(bookTagDescriptor) }
 
-func bookTagDesc() velox.Desc[bookTag] {
-	return velox.Desc[bookTag]{
+func bookTagDescriptor() velox.Descriptor[bookTag] {
+	return velox.Descriptor[bookTag]{
 		Table:      "book_tags",
-		Columns:    []velox.ColumnDesc{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Addr: func(x *bookTag, i int) any {
@@ -150,16 +150,16 @@ var Persons = struct {
 
 var personMeta velox.MetaOnce[person]
 
-func (*person) VeloxMeta() *velox.Meta[person] { return personMeta.Load(personDesc) }
+func (*person) VeloxMeta() *velox.Meta[person] { return personMeta.Load(personDescriptor) }
 
-func personDesc() velox.Desc[person] {
-	return velox.Desc[person]{
+func personDescriptor() velox.Descriptor[person] {
+	return velox.Descriptor[person]{
 		Table:      "persons",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "SpouseID", Name: "person_spouse"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "SpouseID", Name: "person_spouse"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
-		Edges:      []velox.EdgeDesc{velox.EdgeThrough[personFriend, person]("Friends", 0, 0, 1, 0), velox.EdgeBidi[person]("Spouse", 2, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[personFriend, person]("Friends", 0, 0, 1, 0), velox.EdgeBidi[person]("Spouse", 2, 0)},
 		Addr: func(x *person, i int) any {
 			switch i {
 			case 0:
@@ -197,13 +197,13 @@ var PersonFriends = struct {
 var personFriendMeta velox.MetaOnce[personFriend]
 
 func (*personFriend) VeloxMeta() *velox.Meta[personFriend] {
-	return personFriendMeta.Load(personFriendDesc)
+	return personFriendMeta.Load(personFriendDescriptor)
 }
 
-func personFriendDesc() velox.Desc[personFriend] {
-	return velox.Desc[personFriend]{
+func personFriendDescriptor() velox.Descriptor[personFriend] {
+	return velox.Descriptor[personFriend]{
 		Table:      "person_friends",
-		Columns:    []velox.ColumnDesc{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Bidi:       true,

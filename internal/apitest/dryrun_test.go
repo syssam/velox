@@ -51,13 +51,13 @@ func (*daudited) Hooks() []velox.Hook[daudited] { return []velox.Hook[daudited]{
 
 var dauditedMeta velox.MetaOnce[daudited]
 
-func (*daudited) VeloxMeta() *velox.Meta[daudited] { return dauditedMeta.Load(dauditedDesc) }
+func (*daudited) VeloxMeta() *velox.Meta[daudited] { return dauditedMeta.Load(dauditedDescriptor) }
 
-func dauditedDesc() velox.Desc[daudited] {
-	return velox.Desc[daudited]{
+func dauditedDescriptor() velox.Descriptor[daudited] {
+	return velox.Descriptor[daudited]{
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*daudited)(nil).Hooks()) },
 		Table:      "daudited",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr: func(x *daudited, i int) any {
@@ -328,13 +328,13 @@ func (*dhooked) Hooks() []velox.Hook[dhooked] {
 
 var dhookedMeta velox.MetaOnce[dhooked]
 
-func (*dhooked) VeloxMeta() *velox.Meta[dhooked] { return dhookedMeta.Load(dhookedDesc) }
+func (*dhooked) VeloxMeta() *velox.Meta[dhooked] { return dhookedMeta.Load(dhookedDescriptor) }
 
-func dhookedDesc() velox.Desc[dhooked] {
-	return velox.Desc[dhooked]{
+func dhookedDescriptor() velox.Descriptor[dhooked] {
+	return velox.Descriptor[dhooked]{
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*dhooked)(nil).Hooks()) },
 		Table:      "dhooked",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr: func(x *dhooked, i int) any {

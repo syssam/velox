@@ -31,12 +31,12 @@ var Accounts = struct {
 var accountMeta velox.MetaOnce[Account]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Account) VeloxMeta() *velox.Meta[Account] { return accountMeta.Load(accountDesc) }
+func (*Account) VeloxMeta() *velox.Meta[Account] { return accountMeta.Load(accountDescriptor) }
 
-func accountDesc() velox.Desc[Account] {
-	return velox.Desc[Account]{
+func accountDescriptor() velox.Descriptor[Account] {
+	return velox.Descriptor[Account]{
 		Table: "accounts",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
 			{Field: "Balance", Name: "balance"},

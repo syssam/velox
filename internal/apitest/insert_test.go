@@ -265,12 +265,12 @@ type dshared struct {
 var dsharedMeta velox.MetaOnce[dshared]
 
 func (*dshared) VeloxMeta() *velox.Meta[dshared] {
-	return dsharedMeta.Load(func() velox.Desc[dshared] {
+	return dsharedMeta.Load(func() velox.Descriptor[dshared] {
 		enc := func(v any) ([]byte, error) { return json.Marshal(v) }
 		dec := func(data []byte, v any) error { return json.Unmarshal(data, v) }
-		return velox.Desc[dshared]{
+		return velox.Descriptor[dshared]{
 			Table: "dshared",
-			Columns: []velox.ColumnDesc{
+			Columns: []velox.ColumnDescriptor{
 				{Field: "ID", Name: "id"},
 				{Field: "B", Name: "b", Default: []byte{1, 2}},
 				{Field: "S", Name: "s", Default: []string{"a"}, Encode: enc, Decode: dec},

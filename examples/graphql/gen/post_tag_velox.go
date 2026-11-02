@@ -28,12 +28,12 @@ var PostTags = struct {
 var postTagMeta velox.MetaOnce[PostTag]
 
 // VeloxMeta is called by velox, not by applications.
-func (*PostTag) VeloxMeta() *velox.Meta[PostTag] { return postTagMeta.Load(postTagDesc) }
+func (*PostTag) VeloxMeta() *velox.Meta[PostTag] { return postTagMeta.Load(postTagDescriptor) }
 
-func postTagDesc() velox.Desc[PostTag] {
-	return velox.Desc[PostTag]{
+func postTagDescriptor() velox.Descriptor[PostTag] {
+	return velox.Descriptor[PostTag]{
 		Table: "post_tags",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "PostID", Name: "post_id"},
 			{Field: "TagID", Name: "tag_id"},
 		},

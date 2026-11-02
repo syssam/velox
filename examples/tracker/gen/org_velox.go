@@ -33,12 +33,12 @@ var Orgs = struct {
 var orgMeta velox.MetaOnce[Org]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Org) VeloxMeta() *velox.Meta[Org] { return orgMeta.Load(orgDesc) }
+func (*Org) VeloxMeta() *velox.Meta[Org] { return orgMeta.Load(orgDescriptor) }
 
-func orgDesc() velox.Desc[Org] {
-	return velox.Desc[Org]{
+func orgDescriptor() velox.Descriptor[Org] {
+	return velox.Descriptor[Org]{
 		Table: "orgs",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Slug", Name: "slug"},
 			{Field: "Name", Name: "name"},

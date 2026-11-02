@@ -12,7 +12,7 @@ import (
 )
 
 // lowerFirst is name with its first letter in lower case, as velox-gen names
-// an entity's unexported functions (userDesc).
+// an entity's unexported functions (userDescriptor).
 func lowerFirst(name string) string {
 	return strings.ToLower(name[:1]) + name[1:]
 }

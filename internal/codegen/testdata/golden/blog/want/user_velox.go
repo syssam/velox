@@ -81,17 +81,17 @@ var Users = struct {
 var userMeta velox.MetaOnce[User]
 
 // VeloxMeta is called by velox, not by applications.
-func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDesc) }
+func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
-func userDesc() velox.Desc[User] {
+func userDescriptor() velox.Descriptor[User] {
 	d0 := (&sch.User{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
 	d1 := (&sch.User{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
 	d2 := (&sch.User{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
 	v0 := (&sch.User{}).Mixin()[1].Fields()[0].Descriptor().Validators[0].(func(string) error)
 	re0 := regexp.MustCompile("^[^@]+@[^@]+$")
-	return velox.Desc[User]{
+	return velox.Descriptor[User]{
 		Table: "users",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
@@ -117,7 +117,7 @@ func userDesc() velox.Desc[User] {
 		TenantRefs: []velox.TenantRef{
 			{Column: 13, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Post]("Posts", 0, 1),
 			velox.EdgeThrough[UserGroup, Group]("Groups", 0, 0, 1, 0),
 			velox.EdgeThrough[UserFriend, User]("Friends", 0, 0, 1, 0),

@@ -26,7 +26,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `Setup` also caps resolver errors and websocket messages.
 - `migrate resolve -statements`, `-adopt` and `-forget`; `-applied` works on a pending file;
   `diff -db`; `schema.Collation`. `docs/migrations-operations.md` covers merges and recovery.
-- `ErrTenantRef`, `TenantRef` and `Desc.TenantRefs`; `ErrTxControl`.
+- `ErrTenantRef`, `TenantRef` and `Descriptor.TenantRefs`; `ErrTxControl`.
 - `veloxgql.Limits`: `MaxFragments`, `MaxDepth`, `MaxNameBytes`, `MaxLiteralBytes`,
   `MaxVariableNodes` and `MaxErrors`. The `Server` interface `Setup` takes gains
   `SetValidationRulesFn`.

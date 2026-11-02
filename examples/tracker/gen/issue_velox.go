@@ -70,16 +70,16 @@ var Issues = struct {
 var issueMeta velox.MetaOnce[Issue]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Issue) VeloxMeta() *velox.Meta[Issue] { return issueMeta.Load(issueDesc) }
+func (*Issue) VeloxMeta() *velox.Meta[Issue] { return issueMeta.Load(issueDescriptor) }
 
-func issueDesc() velox.Desc[Issue] {
+func issueDescriptor() velox.Descriptor[Issue] {
 	d0 := (&sch.Issue{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
 	d1 := (&sch.Issue{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
 	d2 := (&sch.Issue{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
-	return velox.Desc[Issue]{
+	return velox.Descriptor[Issue]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Issue)(nil).Policy()) },
 		Table:  "issues",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
@@ -101,7 +101,7 @@ func issueDesc() velox.Desc[Issue] {
 			{Column: 5, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 			{Column: 6, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Project]("Project", 4, 0),
 			velox.EdgeTo[User]("Author", 5, 0),
 			velox.EdgeTo[User]("Assignee", 6, 0),

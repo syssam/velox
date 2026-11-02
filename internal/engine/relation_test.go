@@ -48,7 +48,7 @@ func TestRelationsResolveWithoutDeadlock(t *testing.T) {
 
 // TestResolveRefusesMismatchedKeys is half of Review Focus 2.
 func TestResolveRefusesMismatchedKeys(t *testing.T) {
-	info, err := loadDesc(keyedDesc())
+	info, err := loadDescriptor(keyedDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func wantErr(t *testing.T, err error, want string) {
 // site's target (a hand-written call that does not go through a Rel handle) is
 // refused, not guessed at.
 func TestResolveWithoutATargetIsAnError(t *testing.T) {
-	info, err := loadDesc(keyedDesc())
+	info, err := loadDescriptor(keyedDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestResolveWithoutATargetIsAnError(t *testing.T) {
 }
 
 func TestNonComparableKeyIsRefused(t *testing.T) {
-	info, err := loadDesc(blobOwnerDesc())
+	info, err := loadDescriptor(blobOwnerDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,8 +92,8 @@ func TestNonComparableKeyIsRefused(t *testing.T) {
 }
 
 func TestInvalidTargetIsNamed(t *testing.T) {
-	// brokenTarget's Desc has no Addr, so it cannot build.
-	info, err := loadDesc(invalidHolderDesc())
+	// brokenTarget's Descriptor has no Addr, so it cannot build.
+	info, err := loadDescriptor(invalidHolderDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestInvalidTargetIsNamed(t *testing.T) {
 }
 
 // TestEdgeThroughKeepsItsJoin: EdgeThrough names its join entity, which has
-// no relations of its own. EdgeTo and EdgeThrough name no target: an EdgeDesc
+// no relations of its own. EdgeTo and EdgeThrough name no target: an EdgeDescriptor
 // has no field for one, so linking an entity does not link the entities it
 // relates to and, through them, the whole connected model (the use site names
 // the target: Rel; see TestServiceLinksOnlyItsEntities in bench/scale).

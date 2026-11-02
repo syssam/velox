@@ -433,12 +433,12 @@ func TestSensitiveNeverPrints(t *testing.T) {
 }
 
 // A column default does no descriptor read per call: the read happens once, in
-// Desc. Boxing a time.Time is the one allocation a call may make;
+// Descriptor. Boxing a time.Time is the one allocation a call may make;
 // the read of mixin.Time's descriptor used to cost about sixteen more.
 func TestColumnDefaultsDoNotReadTheDescriptorPerCall(t *testing.T) {
 	var sink any
 	n := 0
-	for _, c := range gen.UserDesc().Columns {
+	for _, c := range gen.UserDescriptor().Columns {
 		for kind, f := range map[string]func() any{"DefaultFunc": c.DefaultFunc, "UpdateDefault": c.UpdateDefault} {
 			if f == nil {
 				continue

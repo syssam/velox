@@ -40,12 +40,12 @@ var Posts = struct {
 var postMeta velox.MetaOnce[Post]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDesc) }
+func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor) }
 
-func postDesc() velox.Desc[Post] {
-	return velox.Desc[Post]{
+func postDescriptor() velox.Descriptor[Post] {
+	return velox.Descriptor[Post]{
 		Table: "posts",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "AuthorID", Name: "author_id"},
 			{Field: "Title", Name: "title"},
@@ -53,7 +53,7 @@ func postDesc() velox.Desc[Post] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Author]("Author", 1, 0),
 			velox.EdgeTo[Comment]("Comments", 0, 1),
 		},

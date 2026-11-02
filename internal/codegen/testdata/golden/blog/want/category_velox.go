@@ -37,13 +37,13 @@ var Categories = struct {
 var categoryMeta velox.MetaOnce[Category]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Category) VeloxMeta() *velox.Meta[Category] { return categoryMeta.Load(categoryDesc) }
+func (*Category) VeloxMeta() *velox.Meta[Category] { return categoryMeta.Load(categoryDescriptor) }
 
-func categoryDesc() velox.Desc[Category] {
-	return velox.Desc[Category]{
+func categoryDescriptor() velox.Descriptor[Category] {
+	return velox.Descriptor[Category]{
 		Table:  "categories",
 		Schema: "blog",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Title", Name: "title"},
 			{Field: "CategoryChildren", Name: "category_children"},
@@ -53,7 +53,7 @@ func categoryDesc() velox.Desc[Category] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{1, 2}},
 		},
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Category]("Children", 0, 2),
 			velox.EdgeTo[Category]("Parent", 2, 0),
 		},

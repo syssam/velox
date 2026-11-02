@@ -313,15 +313,15 @@ func setMaxParams(d velox.Dialect, n int) (restore func()) {
 // puts in a load or a condition.
 func targetOf[T any]() engine.RelTarget { return relRef[T, T]().Target }
 
-// loadDesc builds entity E's metadata from d as MetaOnce.Load does on the
+// loadDescriptor builds entity E's metadata from d as MetaOnce.Load does on the
 // entity's first use, without the scan plan the root keeps in its Meta, which
 // these tests do not scan with. It then resolves its relations, as
 // CheckRelation does: relation i of an EdgeTo takes the target targets[i], which
 // a use site would name. A relation with no target there is left unresolved.
-func loadDesc[E any](d velox.Desc[E], targets ...engine.RelTarget) (*velox.EntityInfo, error) {
+func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (*velox.EntityInfo, error) {
 	x := new(E)
-	info, err := engine.BuildDesc(x, unsafe.Pointer(x), func() engine.DescView {
-		v := engine.DescView{D: &engine.DescFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
+	info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
+		v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
 			Tenant: d.Tenant, Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
 			Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
 		if a := d.Addr; a != nil {

@@ -108,7 +108,7 @@ at the call to a silent outcome.
   tenant's rows, but a foreign key names a row by its key alone. Under tenant A, an
   insert naming B's project succeeded: B could then not delete its own project, for a
   row it cannot see, and success against a foreign key failure told A which of B's IDs
-  exist. `velox-gen` now writes `Desc.TenantRefs`, plain strings so that a relation's
+  exist. `velox-gen` now writes `Descriptor.TenantRefs`, plain strings so that a relation's
   metadata still names no other entity's, for each foreign key of a tenant-scoped
   entity whose target is tenant-scoped and each such side of a join entity. A write
   under a tenant that sets one, non-NULL, sends

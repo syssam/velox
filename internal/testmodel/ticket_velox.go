@@ -55,14 +55,14 @@ var Tickets = struct {
 var ticketMeta velox.MetaOnce[Ticket]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDesc) }
+func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDescriptor) }
 
-func ticketDesc() velox.Desc[Ticket] {
-	return velox.Desc[Ticket]{
+func ticketDescriptor() velox.Descriptor[Ticket] {
+	return velox.Descriptor[Ticket]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Ticket)(nil).Policy()) },
 		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Ticket)(nil).Hooks()) },
 		Table:  "tickets",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedBy", Name: "created_by"},
 			{Field: "OrgID", Name: "org_id"},
@@ -81,7 +81,7 @@ func ticketDesc() velox.Desc[Ticket] {
 			{Column: 6, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 			{Column: 7, Table: "tickets", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Invoice]("Invoice", 6, 0),
 			velox.EdgeTo[Ticket]("Children", 0, 7),
 			velox.EdgeTo[Ticket]("Parent", 7, 0),

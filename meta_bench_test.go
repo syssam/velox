@@ -4,10 +4,10 @@ import (
 	"testing"
 )
 
-// buildOrder builds the metadata of a Desc entity from its literals, as the
+// buildOrder builds the metadata of a Descriptor entity from its literals, as the
 // first use of a generated entity does.
 func buildOrder() {
-	if _, err := loadDesc(orderedDesc()); err != nil {
+	if _, err := loadDescriptor(orderedDescriptor()); err != nil {
 		panic(err)
 	}
 }

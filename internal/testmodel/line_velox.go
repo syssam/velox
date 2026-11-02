@@ -31,18 +31,18 @@ var Lines = struct {
 var lineMeta velox.MetaOnce[Line]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDesc) }
+func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDescriptor) }
 
-func lineDesc() velox.Desc[Line] {
-	return velox.Desc[Line]{
+func lineDescriptor() velox.Descriptor[Line] {
+	return velox.Descriptor[Line]{
 		Table: "line",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "SampleID", Name: "sample_id"},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Sample]("Sample", 1, 0),
 		},
 		Addr: func(x *Line, i int) any {

@@ -27,12 +27,12 @@ type E struct{ ID int64 }
 
 var eMeta velox.MetaOnce[E]
 
-func (*E) VeloxMeta() *velox.Meta[E] { return eMeta.Load(eDesc) }
+func (*E) VeloxMeta() *velox.Meta[E] { return eMeta.Load(eDescriptor) }
 
-func eDesc() velox.Desc[E] {
-	return velox.Desc[E]{
+func eDescriptor() velox.Descriptor[E] {
+	return velox.Descriptor[E]{
 		Table:      "e",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr:       func(x *E, i int) any { return &x.ID },
@@ -40,7 +40,7 @@ func eDesc() velox.Desc[E] {
 }
 `
 
-// entityDescUseSrc is an entity with a default and two relations, from a Desc
+// entityDescUseSrc is an entity with a default and two relations, from a Descriptor
 // literal, used by a function that queries with relations, inserts, saves,
 // updates and deletes it: the generic bodies velox compiles into such a
 // package must not reach reflect either.
@@ -62,19 +62,19 @@ type E struct {
 
 var eMeta velox.MetaOnce[E]
 
-func (*E) VeloxMeta() *velox.Meta[E] { return eMeta.Load(eDesc) }
+func (*E) VeloxMeta() *velox.Meta[E] { return eMeta.Load(eDescriptor) }
 
-func eDesc() velox.Desc[E] {
-	return velox.Desc[E]{
+func eDescriptor() velox.Descriptor[E] {
+	return velox.Descriptor[E]{
 		Table: "e",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name", Default: "none"},
 			{Field: "ParentID", Name: "parent_id"},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[E]("Parent", 2, 0), velox.EdgeTo[E]("Kids", 0, 2)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[E]("Parent", 2, 0), velox.EdgeTo[E]("Kids", 0, 2)},
 		Addr: func(x *E, i int) any {
 			switch i {
 			case 0:
@@ -124,7 +124,7 @@ func Use(ctx context.Context, db *velox.DB, e *E) error {
 `
 
 // entityDescHooksSrc is entityDescUseSrc with a Policy and three hooks,
-// declared as methods and bound through the Desc's Policy and Hooks fields as
+// declared as methods and bound through the Descriptor's Policy and Hooks fields as
 // velox-gen binds them.
 var entityDescHooksSrc = strings.Replace(entityDescUseSrc, `var (
 	eID `, `func (*E) Policy() velox.Policy[E] {
@@ -164,7 +164,7 @@ func (*E) Hooks() []velox.Hook[E] {
 var (
 	eID `, 1)
 
-// entityDescHooksBound is entityDescHooksSrc with its Desc binding the
+// entityDescHooksBound is entityDescHooksSrc with its Descriptor binding the
 // methods.
 var entityDescHooksBound = strings.Replace(entityDescHooksSrc, `		Tenant:     -1,
 		Edges:`, `		Tenant:     -1,
@@ -213,15 +213,15 @@ var genericObjects = []struct {
 	{"Statement", "velox.Statement", "", 5120},                      // measured 1124
 	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 1140
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
-	// The entity packages. entityDesc is the minimal entity velox-gen writes: Load
-	// takes no Policy or Hook generic, and the Desc's Policy and Hooks fields hold
+	// The entity packages. entityDescriptor is the minimal entity velox-gen writes: Load
+	// takes no Policy or Hook generic, and the Descriptor's Policy and Hooks fields hold
 	// E-erased BoundPolicy and BoundHooks that BindPolicy and BindHooks make in the
 	// entity's own generated code, so that only an entity that declares the methods
 	// instantiates those generics. entityDescUse adds a default, two relations and a
 	// Use function that queries, inserts, saves, updates and deletes. entityDescHooks
 	// is that with a Policy and three hooks bound through the fields; the generics it
 	// instantiates are the cost of having a policy and hooks (policyGrowthMax).
-	{"entityDesc", "", entityDescSrc, 153600}, // measured 132904
+	{"entityDescriptor", "", entityDescSrc, 153600}, // measured 132904
 	// entityDescUse and entityDescHooks are held tighter than the rule above, which
 	// would let them grow by 64 KiB unseen: each bound is the measurement plus about
 	// 1.2%, rounded up to the next KiB.

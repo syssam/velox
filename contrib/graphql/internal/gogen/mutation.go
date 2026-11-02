@@ -1258,7 +1258,7 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 // setNull is the setter that sets the nullable field fd of e to NULL: its
 // handle's SetNull when the Go field is a pointer, and else Set(nil), for a
 // field whose Go type holds nil (a slice, a map, a pointer or an interface),
-// whose handle has no SetNull: its ColumnDesc says Nullable, or its Go type
+// whose handle has no SetNull: its ColumnDescriptor says Nullable, or its Go type
 // is a pointer, so the core binds that nil as SQL NULL. A field of another
 // Go type cannot be cleared: an error, which velox-gen's rule 48 keeps from
 // its models.

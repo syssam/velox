@@ -10,7 +10,7 @@ import (
 )
 
 // TestGeneratedEntities runs the library on the test model's entities, on
-// the Desc path in the shape velox-gen will generate.
+// the Descriptor path in the shape velox-gen will generate.
 func TestGeneratedEntities(t *testing.T) {
 	for _, err := range []error{
 		velox.CheckEntity[testmodel.Invoice](),

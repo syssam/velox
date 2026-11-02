@@ -82,11 +82,11 @@ func TestBuildTenantRefsRefuses(t *testing.T) {
 		"no tenant":    {Column: 1, Table: "t", Key: "id", TenantKind: "int64"},
 		"no kind":      {Column: 1, Table: "t", Key: "id", Tenant: "org"},
 	} {
-		if _, err := buildTenantRefs("x", &DescFields{Table: "x", TenantRefs: []TenantRef{r}}, cols); err == nil {
+		if _, err := buildTenantRefs("x", &DescriptorFields{Table: "x", TenantRefs: []TenantRef{r}}, cols); err == nil {
 			t.Errorf("%s: no error", name)
 		}
 	}
-	refs, err := buildTenantRefs("x", &DescFields{Table: "x", TenantRefs: []TenantRef{
+	refs, err := buildTenantRefs("x", &DescriptorFields{Table: "x", TenantRefs: []TenantRef{
 		{Column: 1, Table: "x", Key: "id", Tenant: "org", TenantKind: "int64"}, {Column: 1, Schema: "other", Table: "x", Key: "id", Tenant: "org", TenantKind: "int64"}, {Column: 1, Table: "y", Key: "id", Tenant: "org", TenantKind: "int64"},
 	}}, cols)
 	if err != nil || refs[0].self != 0 || refs[1].self != -1 || refs[2].self != -1 {

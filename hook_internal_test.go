@@ -12,7 +12,7 @@ import (
 // records an error naming the column and both types; the first one recorded
 // wins, as for every misuse.
 func TestValueInRecordsAnotherType(t *testing.T) {
-	info, err := loadDesc(hnoteDesc())
+	info, err := loadDescriptor(hnoteDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}

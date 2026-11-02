@@ -44,15 +44,15 @@ var owners = struct {
 
 var ownerMeta velox.MetaOnce[owner]
 
-func (*owner) VeloxMeta() *velox.Meta[owner] { return ownerMeta.Load(ownerDesc) }
+func (*owner) VeloxMeta() *velox.Meta[owner] { return ownerMeta.Load(ownerDescriptor) }
 
-func ownerDesc() velox.Desc[owner] {
-	return velox.Desc[owner]{
+func ownerDescriptor() velox.Descriptor[owner] {
+	return velox.Descriptor[owner]{
 		Table:      "owners",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "Age", Name: "age"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "Age", Name: "age"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[child]("Children", 0, 1), velox.EdgeThrough[ownerTag, tag]("Tags", 0, 0, 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[child]("Children", 0, 1), velox.EdgeThrough[ownerTag, tag]("Tags", 0, 0, 1, 0)},
 		Addr:       func(x *owner, i int) any { return [...]any{&x.ID, &x.Name, &x.Age}[i] },
 		EdgeAddr: func(x *owner, i int) any {
 			switch i {
@@ -89,15 +89,15 @@ var children = struct {
 
 var childMeta velox.MetaOnce[child]
 
-func (*child) VeloxMeta() *velox.Meta[child] { return childMeta.Load(childDesc) }
+func (*child) VeloxMeta() *velox.Meta[child] { return childMeta.Load(childDescriptor) }
 
-func childDesc() velox.Desc[child] {
-	return velox.Desc[child]{
+func childDescriptor() velox.Descriptor[child] {
+	return velox.Descriptor[child]{
 		Table:      "children",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Title", Name: "title"}, {Field: "EditorID", Name: "editor_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Title", Name: "title"}, {Field: "EditorID", Name: "editor_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[owner]("Owner", 1, 0), velox.EdgeTo[owner]("Editor", 3, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[owner]("Owner", 1, 0), velox.EdgeTo[owner]("Editor", 3, 0)},
 		Addr:       func(x *child, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Title, &x.EditorID}[i] },
 		EdgeAddr: func(x *child, i int) any {
 			switch i {
@@ -118,12 +118,12 @@ type tag struct {
 
 var tagMeta velox.MetaOnce[tag]
 
-func (*tag) VeloxMeta() *velox.Meta[tag] { return tagMeta.Load(tagDesc) }
+func (*tag) VeloxMeta() *velox.Meta[tag] { return tagMeta.Load(tagDescriptor) }
 
-func tagDesc() velox.Desc[tag] {
-	return velox.Desc[tag]{
+func tagDescriptor() velox.Descriptor[tag] {
+	return velox.Descriptor[tag]{
 		Table:      "tags",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr:       func(x *tag, i int) any { return [...]any{&x.ID, &x.Name}[i] },
@@ -137,12 +137,12 @@ type ownerTag struct {
 
 var ownerTagMeta velox.MetaOnce[ownerTag]
 
-func (*ownerTag) VeloxMeta() *velox.Meta[ownerTag] { return ownerTagMeta.Load(ownerTagDesc) }
+func (*ownerTag) VeloxMeta() *velox.Meta[ownerTag] { return ownerTagMeta.Load(ownerTagDescriptor) }
 
-func ownerTagDesc() velox.Desc[ownerTag] {
-	return velox.Desc[ownerTag]{
+func ownerTagDescriptor() velox.Descriptor[ownerTag] {
+	return velox.Descriptor[ownerTag]{
 		Table:      "owner_tags",
-		Columns:    []velox.ColumnDesc{{Field: "OwnerID", Name: "owner_id"}, {Field: "TagID", Name: "tag_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "OwnerID", Name: "owner_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Addr:       func(x *ownerTag, i int) any { return [...]any{&x.OwnerID, &x.TagID}[i] },

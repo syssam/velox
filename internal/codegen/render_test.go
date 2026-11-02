@@ -118,14 +118,14 @@ func TestGoldenBidi(t *testing.T) {
 		return string(b)
 	}
 	if !regexp.MustCompile(`\n\t\tBidi: +true,\n`).MatchString(read("user_friend_velox.go")) {
-		t.Error("user_friend_velox.go's Desc has no Bidi: true")
+		t.Error("user_friend_velox.go's Descriptor has no Bidi: true")
 	}
 	if strings.Contains(read("user_group_velox.go"), "Bidi:") {
-		t.Error("user_group_velox.go's Desc says Bidi")
+		t.Error("user_group_velox.go's Descriptor says Bidi")
 	}
 	// The users' spouse edge is a bidirectional one-to-one relation.
 	if u := read("user_velox.go"); !strings.Contains(u, `velox.EdgeBidi[User]("Spouse", `) || strings.Contains(u, `EdgeTo[User]("Spouse"`) {
-		t.Error(`user_velox.go's Desc does not relate Spouse with velox.EdgeBidi[User]`)
+		t.Error(`user_velox.go's Descriptor does not relate Spouse with velox.EdgeBidi[User]`)
 	}
 }
 

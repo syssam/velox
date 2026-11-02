@@ -5,14 +5,14 @@ import (
 	"time"
 )
 
-// The Desc entities of the root's tests (package velox cannot import
+// The Descriptor entities of the root's tests (package velox cannot import
 // internal/testmodel, which imports velox). Each is described as velox-gen
-// would write it: a struct, a MetaOnce, a VeloxMeta and a Desc.
+// would write it: a struct, a MetaOnce, a VeloxMeta and a Descriptor.
 
-// loadDesc builds d's EntityInfo as the entity's first use does.
-func loadDesc[E any](d Desc[E]) (*EntityInfo, error) {
+// loadDescriptor builds d's EntityInfo as the entity's first use does.
+func loadDescriptor[E any](d Descriptor[E]) (*EntityInfo, error) {
 	var o MetaOnce[E]
-	m := o.Load(func() Desc[E] { return d })
+	m := o.Load(func() Descriptor[E] { return d })
 	return m.info, m.err
 }
 
@@ -48,13 +48,13 @@ func (*hnote) Hooks() []Hook[hnote] {
 
 var hnoteMeta MetaOnce[hnote]
 
-func (*hnote) VeloxMeta() *Meta[hnote] { return hnoteMeta.Load(hnoteDesc) }
+func (*hnote) VeloxMeta() *Meta[hnote] { return hnoteMeta.Load(hnoteDescriptor) }
 
-func hnoteDesc() Desc[hnote] {
-	return Desc[hnote]{
+func hnoteDescriptor() Descriptor[hnote] {
+	return Descriptor[hnote]{
 		Hooks: func() BoundHooks { return BindHooks((*hnote)(nil).Hooks()) },
 		Table: "hnotes",
-		Columns: []ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
+		Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
@@ -98,10 +98,10 @@ type ordered struct {
 	ShipAt   *time.Time
 }
 
-func orderedDesc() Desc[ordered] {
-	return Desc[ordered]{
+func orderedDescriptor() Descriptor[ordered] {
+	return Descriptor[ordered]{
 		Table: "orders",
-		Columns: []ColumnDesc{
+		Columns: []ColumnDescriptor{
 			{Field: "CreatedAt", Name: "created_at"},
 			{Field: "UpdatedAt", Name: "updated_at", UpdateDefault: func() any { return time.Now() }},
 			{Field: "ID", Name: "id"},
@@ -173,14 +173,14 @@ func (*hooked) Policy() Policy[hooked] {
 
 var hookedMeta MetaOnce[hooked]
 
-func (*hooked) VeloxMeta() *Meta[hooked] { return hookedMeta.Load(hookedDesc) }
+func (*hooked) VeloxMeta() *Meta[hooked] { return hookedMeta.Load(hookedDescriptor) }
 
-func hookedDesc() Desc[hooked] {
-	return Desc[hooked]{
+func hookedDescriptor() Descriptor[hooked] {
+	return Descriptor[hooked]{
 		Policy:     func() BoundPolicy { return BindPolicy((*hooked)(nil).Policy()) },
 		Hooks:      func() BoundHooks { return BindHooks((*hooked)(nil).Hooks()) },
 		Table:      "hooked",
-		Columns:    []ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
+		Columns:    []ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr: func(x *hooked, i int) any {

@@ -18,8 +18,8 @@ const (
 	AggregateMax = veloxtype.AggregateMax // MAX
 )
 
-// ColumnDesc describes one column of a Desc. For generated code.
-type ColumnDesc = veloxtype.ColumnDesc
+// ColumnDescriptor describes one column of a Descriptor. For generated code.
+type ColumnDescriptor = veloxtype.ColumnDescriptor
 
 // Dialect is a SQL dialect.
 type Dialect = veloxtype.Dialect
@@ -32,18 +32,18 @@ const (
 )
 
 // BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
-// Desc.Policy. For generated code. Its fields are not exported: only BindPolicy
+// Descriptor.Policy. For generated code. Its fields are not exported: only BindPolicy
 // makes one.
 type BoundPolicy = engine.BoundPolicy
 
 // BoundHooks is an entity's hooks with E erased, made by BindHooks for
-// Desc.Hooks. For generated code. Its fields are not exported: only BindHooks
+// Descriptor.Hooks. For generated code. Its fields are not exported: only BindHooks
 // makes one.
 type BoundHooks = engine.BoundHooks
 
 // EntityInfo is what velox knows about an entity, built once on its first use.
 // It is the non-generic view that hooks see in a Statement, and the runtime
-// view of the generated Desc it is built from.
+// view of the generated Descriptor it is built from.
 //
 // One EntityInfo is shared by every query on the entity, in every goroutine,
 // so it must be treated as read-only, slices included. A hook that needs
@@ -66,14 +66,14 @@ type BoundHooks = engine.BoundHooks
 type EntityInfo = engine.EntityInfo
 
 // ColumnInfo describes one column. It is the runtime view of the generated
-// ColumnDesc it is built from.
+// ColumnDescriptor it is built from.
 //
 // Its fields:
 //
 //	Field string // the Go field name
 //	Name string // the column name
 //	Type any // the field's Go type, a reflect.Type: read it with GoType
-//	Nullable bool // the column holds NULL: the field is a pointer, or its ColumnDesc says Nullable
+//	Nullable bool // the column holds NULL: the field is a pointer, or its ColumnDescriptor says Nullable
 //	Default any
 //	HasDefault bool
 //	DefaultFunc func() any // nil when none
@@ -83,11 +83,11 @@ type EntityInfo = engine.EntityInfo
 //	UpdateDefault func() any
 //	Immutable bool // an update may not assign the column
 //	Sensitive bool // the column holds a secret (velox logs no values)
-//	// RequiredEdge is ColumnDesc.RequiredEdge: the Required edge whose
+//	// RequiredEdge is ColumnDescriptor.RequiredEdge: the Required edge whose
 //	// NULL-able key the column holds, which a write may not leave nil; "" when
 //	// none.
 //	RequiredEdge string
-//	// Codec says the column's value is encoded: its ColumnDesc gave Encode
+//	// Codec says the column's value is encoded: its ColumnDescriptor gave Encode
 //	// and Decode, as velox-gen does for every json field. The package
 //	// documentation's JSON fields section says how such a column binds and reads.
 //	Codec bool
@@ -113,10 +113,10 @@ type OrderTerm = veloxtype.OrderTerm
 // column is an index into the statement's EntityInfo.Columns.
 func ColumnEQ(column int, v any) Predicate { return engine.ColumnEQ(column, v) }
 
-// EdgeDesc is one relation field of a generated Desc: its name and the columns
+// EdgeDescriptor is one relation field of a generated Desc: its name and the columns
 // that key it. For generated code. EdgeTo, EdgeBidi and EdgeThrough make it. It carries
 // no target entity: the use site supplies that (see EdgeTo).
-type EdgeDesc = engine.EdgeDesc
+type EdgeDescriptor = engine.EdgeDescriptor
 
 // Op is the kind of a Statement.
 type Op = veloxtype.Op

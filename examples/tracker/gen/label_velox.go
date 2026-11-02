@@ -35,12 +35,12 @@ var Labels = struct {
 var labelMeta velox.MetaOnce[Label]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Label) VeloxMeta() *velox.Meta[Label] { return labelMeta.Load(labelDesc) }
+func (*Label) VeloxMeta() *velox.Meta[Label] { return labelMeta.Load(labelDescriptor) }
 
-func labelDesc() velox.Desc[Label] {
-	return velox.Desc[Label]{
+func labelDescriptor() velox.Descriptor[Label] {
+	return velox.Descriptor[Label]{
 		Table: "labels",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "OrgID", Name: "org_id"},
 			{Field: "Name", Name: "name"},
@@ -50,7 +50,7 @@ func labelDesc() velox.Desc[Label] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{1, 2}, Unique: true},
 		},
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[IssueLabel, Issue]("Issues", 0, 1, 0, 0),
 		},
 		Addr: func(x *Label, i int) any {

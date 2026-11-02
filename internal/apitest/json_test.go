@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/internal/fakeconn"
 )
 
-// jDocCols are Col handles of jDoc's encoded columns, as a hand-written Desc
+// jDocCols are Col handles of jDoc's encoded columns, as a hand-written Descriptor
 // might declare them: their conditions and orders compile, and the statement
 // refuses them, the backstop behind JSONCol, which has none.
 var jDocCols = struct {
@@ -36,13 +36,13 @@ var jOwners = struct {
 var jOwnerMeta velox.MetaOnce[jOwner]
 
 func (*jOwner) VeloxMeta() *velox.Meta[jOwner] {
-	return jOwnerMeta.Load(func() velox.Desc[jOwner] {
-		return velox.Desc[jOwner]{
+	return jOwnerMeta.Load(func() velox.Descriptor[jOwner] {
+		return velox.Descriptor[jOwner]{
 			Table:      "j_owners",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Edges:      []velox.EdgeDesc{velox.EdgeTo[fixture.JDoc]("Docs", 0, 1)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.JDoc]("Docs", 0, 1)},
 			Addr:       func(x *jOwner, i int) any { return &x.ID },
 			EdgeAddr:   func(x *jOwner, i int) any { return &x.Docs },
 		}
@@ -256,7 +256,7 @@ var jLists = struct {
 	Words velox.Col[fixture.JList, []string]
 }{velox.NumberCol[fixture.JList, int64]{I: 0}, velox.Col[fixture.JList, []string]{I: 1}}
 
-// TestCustomCodec: a hand-written Desc may give a column a codec other than
+// TestCustomCodec: a hand-written Descriptor may give a column a codec other than
 // JSON's; velox binds what it encodes and decodes what it reads with it.
 func TestCustomCodec(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
@@ -301,10 +301,10 @@ var jStamps = struct {
 var jStampMeta velox.MetaOnce[jStamp]
 
 func (*jStamp) VeloxMeta() *velox.Meta[jStamp] {
-	return jStampMeta.Load(func() velox.Desc[jStamp] {
-		return velox.Desc[jStamp]{
+	return jStampMeta.Load(func() velox.Descriptor[jStamp] {
+		return velox.Descriptor[jStamp]{
 			Table: "j_stamps",
-			Columns: []velox.ColumnDesc{
+			Columns: []velox.ColumnDescriptor{
 				{Field: "ID", Name: "id"},
 				{Field: "Hist", Name: "hist", Encode: json.Marshal, Decode: json.Unmarshal, UpdateDefault: func() any { return []string{"u"} }},
 			},
@@ -414,10 +414,10 @@ var jBins = struct {
 var jBinMeta velox.MetaOnce[jBin]
 
 func (*jBin) VeloxMeta() *velox.Meta[jBin] {
-	return jBinMeta.Load(func() velox.Desc[jBin] {
-		return velox.Desc[jBin]{
+	return jBinMeta.Load(func() velox.Descriptor[jBin] {
+		return velox.Descriptor[jBin]{
 			Table: "j_bins",
-			Columns: []velox.ColumnDesc{
+			Columns: []velox.ColumnDescriptor{
 				{Field: "ID", Name: "id"},
 				{Field: "Raw", Name: "raw",
 					// Encode prefixes 0xff, never valid UTF-8.
@@ -513,7 +513,7 @@ func TestOrderByAnEncodedColumn(t *testing.T) {
 	_, _, err := db.Query[fixture.JDoc]().OrderBy(jDocCols.Tags.Asc()).Limit(1).SQL(ctx)
 	refused("Asc", "tags", err)
 	_, err = db.Query[fixture.JDoc]().OrderBy(fixture.JDocs.ID.Asc(), jDocCols.Shape.Desc()).Limit(1).All(ctx)
-	refused("Desc after the key", "shape", err)
+	refused("Descriptor after the key", "shape", err)
 	_, err = db.Query[fixture.JDoc]().OrderBy(jDocCols.Nums.Asc()).Limit(1).All(ctx)
 	refused("a nullable column", "nums", err)
 	e.Rows = [][]any{{int64(1)}}

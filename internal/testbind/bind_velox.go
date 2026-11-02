@@ -98,12 +98,12 @@ var Binds = struct {
 var bindMeta velox.MetaOnce[Bind]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Bind) VeloxMeta() *velox.Meta[Bind] { return bindMeta.Load(bindDesc) }
+func (*Bind) VeloxMeta() *velox.Meta[Bind] { return bindMeta.Load(bindDescriptor) }
 
-func bindDesc() velox.Desc[Bind] {
-	return velox.Desc[Bind]{
+func bindDescriptor() velox.Descriptor[Bind] {
+	return velox.Descriptor[Bind]{
 		Table: "binds",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Flag", Name: "flag"},
 			{Field: "I8", Name: "i8"},

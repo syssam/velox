@@ -31,7 +31,7 @@ const bidiReason = "velox: clearing the old partner of a bidirectional one-to-on
 // RequiredEdge, neither the primary key nor the tenant, with a unique index
 // of its own: that index is what refuses a
 // partner that already has one before anything is cleared.
-func checkEdgeBidi(name string, t reflect.Type, d *DescFields, cols []ColumnInfo, r *EdgeDesc, rt reflect.Type) (bidiKey, error) {
+func checkEdgeBidi(name string, t reflect.Type, d *DescriptorFields, cols []ColumnInfo, r *EdgeDescriptor, rt reflect.Type) (bidiKey, error) {
 	fail := func(format string, args ...any) (bidiKey, error) {
 		return bidiKey{}, &SchemaError{Entity: name, Field: r.name, Reason: fmt.Sprintf(format, args...)}
 	}

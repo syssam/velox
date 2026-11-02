@@ -28,12 +28,14 @@ var UserFriends = struct {
 var userFriendMeta velox.MetaOnce[UserFriend]
 
 // VeloxMeta is called by velox, not by applications.
-func (*UserFriend) VeloxMeta() *velox.Meta[UserFriend] { return userFriendMeta.Load(userFriendDesc) }
+func (*UserFriend) VeloxMeta() *velox.Meta[UserFriend] {
+	return userFriendMeta.Load(userFriendDescriptor)
+}
 
-func userFriendDesc() velox.Desc[UserFriend] {
-	return velox.Desc[UserFriend]{
+func userFriendDescriptor() velox.Descriptor[UserFriend] {
+	return velox.Descriptor[UserFriend]{
 		Table: "user_friends",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "UserID", Name: "user_id"},
 			{Field: "FriendID", Name: "friend_id"},
 		},

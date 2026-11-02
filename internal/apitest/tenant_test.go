@@ -581,13 +581,13 @@ var (
 	tconvRMeta  velox.MetaOnce[tconvR]
 )
 
-// tconvDesc is the Desc of a tconv entity: the columns id and org_id, the
+// tconvDescriptor is the Descriptor of a tconv entity: the columns id and org_id, the
 // tenant, then more.
-func tconvDesc[E any](table string, addr func(*E, int) any, more ...velox.ColumnDesc) func() velox.Desc[E] {
-	return func() velox.Desc[E] {
-		return velox.Desc[E]{
+func tconvDescriptor[E any](table string, addr func(*E, int) any, more ...velox.ColumnDescriptor) func() velox.Descriptor[E] {
+	return func() velox.Descriptor[E] {
+		return velox.Descriptor[E]{
 			Table:      table,
-			Columns:    append([]velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}}, more...),
+			Columns:    append([]velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}}, more...),
 			PrimaryKey: []int{0},
 			Tenant:     1,
 			Addr:       addr,
@@ -596,14 +596,14 @@ func tconvDesc[E any](table string, addr func(*E, int) any, more ...velox.Column
 }
 
 func (*tconvA) VeloxMeta() *velox.Meta[tconvA] {
-	return tconvAMeta.Load(func() velox.Desc[tconvA] {
-		d := tconvDesc("tconv_a", func(x *tconvA, i int) any {
+	return tconvAMeta.Load(func() velox.Descriptor[tconvA] {
+		d := tconvDescriptor("tconv_a", func(x *tconvA, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
 			return &x.OrgID
 		})()
-		d.Edges = []velox.EdgeDesc{velox.EdgeTo[tconvB]("Bs", 0, 2), velox.EdgeTo[tconvW]("Ws", 0, 2)}
+		d.Edges = []velox.EdgeDescriptor{velox.EdgeTo[tconvB]("Bs", 0, 2), velox.EdgeTo[tconvW]("Ws", 0, 2)}
 		d.EdgeAddr = func(x *tconvA, i int) any {
 			if i == 0 {
 				return &x.Bs
@@ -615,7 +615,7 @@ func (*tconvA) VeloxMeta() *velox.Meta[tconvA] {
 }
 
 func (*tconvW) VeloxMeta() *velox.Meta[tconvW] {
-	return tconvWMeta.Load(tconvDesc("tconv_w", func(x *tconvW, i int) any {
+	return tconvWMeta.Load(tconvDescriptor("tconv_w", func(x *tconvW, i int) any {
 		switch i {
 		case 0:
 			return &x.ID
@@ -623,17 +623,17 @@ func (*tconvW) VeloxMeta() *velox.Meta[tconvW] {
 			return &x.OrgID
 		}
 		return &x.AID
-	}, velox.ColumnDesc{Field: "AID", Name: "a_id"}))
+	}, velox.ColumnDescriptor{Field: "AID", Name: "a_id"}))
 }
 
 func (*tconvR) VeloxMeta() *velox.Meta[tconvR] {
-	return tconvRMeta.Load(func() velox.Desc[tconvR] {
-		return velox.Desc[tconvR]{
+	return tconvRMeta.Load(func() velox.Descriptor[tconvR] {
+		return velox.Descriptor[tconvR]{
 			Table:      "tconv_r",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Edges:      []velox.EdgeDesc{velox.EdgeTo[tconvB]("Bs", 0, 2), velox.EdgeTo[tconvW]("Ws", 0, 2)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeTo[tconvB]("Bs", 0, 2), velox.EdgeTo[tconvW]("Ws", 0, 2)},
 			Addr:       func(x *tconvR, _ int) any { return &x.ID },
 			EdgeAddr: func(x *tconvR, i int) any {
 				if i == 0 {
@@ -646,7 +646,7 @@ func (*tconvR) VeloxMeta() *velox.Meta[tconvR] {
 }
 
 func (*tconvB) VeloxMeta() *velox.Meta[tconvB] {
-	return tconvBMeta.Load(tconvDesc("tconv_b", func(x *tconvB, i int) any {
+	return tconvBMeta.Load(tconvDescriptor("tconv_b", func(x *tconvB, i int) any {
 		switch i {
 		case 0:
 			return &x.ID
@@ -654,11 +654,11 @@ func (*tconvB) VeloxMeta() *velox.Meta[tconvB] {
 			return &x.OrgID
 		}
 		return &x.AID
-	}, velox.ColumnDesc{Field: "AID", Name: "a_id"}))
+	}, velox.ColumnDescriptor{Field: "AID", Name: "a_id"}))
 }
 
 func (*tconvU) VeloxMeta() *velox.Meta[tconvU] {
-	return tconvUMeta.Load(tconvDesc("tconv_u", func(x *tconvU, i int) any {
+	return tconvUMeta.Load(tconvDescriptor("tconv_u", func(x *tconvU, i int) any {
 		if i == 0 {
 			return &x.ID
 		}
@@ -667,7 +667,7 @@ func (*tconvU) VeloxMeta() *velox.Meta[tconvU] {
 }
 
 func (*tconvS) VeloxMeta() *velox.Meta[tconvS] {
-	return tconvSMeta.Load(tconvDesc("tconv_s", func(x *tconvS, i int) any {
+	return tconvSMeta.Load(tconvDescriptor("tconv_s", func(x *tconvS, i int) any {
 		if i == 0 {
 			return &x.ID
 		}
@@ -676,7 +676,7 @@ func (*tconvS) VeloxMeta() *velox.Meta[tconvS] {
 }
 
 func (*tconvN) VeloxMeta() *velox.Meta[tconvN] {
-	return tconvNMeta.Load(tconvDesc("tconv_n", func(x *tconvN, i int) any {
+	return tconvNMeta.Load(tconvDescriptor("tconv_n", func(x *tconvN, i int) any {
 		if i == 0 {
 			return &x.ID
 		}
@@ -685,7 +685,7 @@ func (*tconvN) VeloxMeta() *velox.Meta[tconvN] {
 }
 
 func (*tconvNU) VeloxMeta() *velox.Meta[tconvNU] {
-	return tconvNUMeta.Load(tconvDesc("tconv_nu", func(x *tconvNU, i int) any {
+	return tconvNUMeta.Load(tconvDescriptor("tconv_nu", func(x *tconvNU, i int) any {
 		if i == 0 {
 			return &x.ID
 		}

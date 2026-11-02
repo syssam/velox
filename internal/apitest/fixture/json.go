@@ -45,12 +45,12 @@ var JDocs = struct {
 
 var JDocMeta velox.MetaOnce[JDoc]
 
-func (*JDoc) VeloxMeta() *velox.Meta[JDoc] { return JDocMeta.Load(JDocDesc) }
+func (*JDoc) VeloxMeta() *velox.Meta[JDoc] { return JDocMeta.Load(JDocDescriptor) }
 
-func JDocDesc() velox.Desc[JDoc] {
-	return velox.Desc[JDoc]{
+func JDocDescriptor() velox.Descriptor[JDoc] {
+	return velox.Descriptor[JDoc]{
 		Table: "j_docs",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "OwnerID", Name: "owner_id"},
 			{Field: "Tags", Name: "tags", Encode: json.Marshal, Decode: json.Unmarshal},
@@ -131,10 +131,10 @@ type JList struct {
 var JListMeta velox.MetaOnce[JList]
 
 func (*JList) VeloxMeta() *velox.Meta[JList] {
-	return JListMeta.Load(func() velox.Desc[JList] {
-		return velox.Desc[JList]{
+	return JListMeta.Load(func() velox.Descriptor[JList] {
+		return velox.Descriptor[JList]{
 			Table: "j_lists",
-			Columns: []velox.ColumnDesc{
+			Columns: []velox.ColumnDescriptor{
 				{Field: "ID", Name: "id"},
 				{Field: "Words", Name: "words", Encode: WrapWords, Decode: UnwrapWords},
 			},

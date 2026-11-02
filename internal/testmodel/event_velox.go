@@ -34,14 +34,14 @@ var Events = struct {
 var eventMeta velox.MetaOnce[Event]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Event) VeloxMeta() *velox.Meta[Event] { return eventMeta.Load(eventDesc) }
+func (*Event) VeloxMeta() *velox.Meta[Event] { return eventMeta.Load(eventDescriptor) }
 
-func eventDesc() velox.Desc[Event] {
+func eventDescriptor() velox.Descriptor[Event] {
 	d0 := (&sch.Event{}).Fields()[0].Descriptor().Default.(func() time.Time)
 	d1 := (&sch.Event{}).Fields()[1].Descriptor().Default.(func() time.Time)
-	return velox.Desc[Event]{
+	return velox.Descriptor[Event]{
 		Table: "events",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "At", Name: "at", DefaultFunc: func() any { return kind.Moment(d0()) }},
 			{Field: "MaybeAt", Name: "maybe_at", DefaultFunc: func() any { return kind.Moment(d1()) }},

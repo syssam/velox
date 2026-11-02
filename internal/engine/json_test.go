@@ -182,13 +182,13 @@ func TestJSONWrites(t *testing.T) {
 // TestCodecNeedsBoth: a column with one of Encode and Decode is refused when
 // the metadata is built, naming the column.
 func TestCodecNeedsBoth(t *testing.T) {
-	for _, c := range []velox.ColumnDesc{
+	for _, c := range []velox.ColumnDescriptor{
 		{Field: "Words", Name: "words", Encode: fixture.WrapWords},
 		{Field: "Words", Name: "words", Decode: fixture.UnwrapWords},
 	} {
-		_, err := loadDesc(velox.Desc[fixture.JList]{
+		_, err := loadDescriptor(velox.Descriptor[fixture.JList]{
 			Table:      "j_lists",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, c},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, c},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Addr: func(x *fixture.JList, i int) any {
@@ -240,15 +240,15 @@ type jKey struct {
 	Kids   velox.Many[jKid]
 }
 
-// jKeyDesc is jKey's Desc, with a codec on the columns codec names.
-func jKeyDesc(tenant int, codec ...int) velox.Desc[jKey] {
-	cols := []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org"}, {Field: "Parent", Name: "parent"}}
+// jKeyDescriptor is jKey's Descriptor, with a codec on the columns codec names.
+func jKeyDescriptor(tenant int, codec ...int) velox.Descriptor[jKey] {
+	cols := []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org"}, {Field: "Parent", Name: "parent"}}
 	for _, c := range codec {
 		cols[c].Encode, cols[c].Decode = json.Marshal, json.Unmarshal
 	}
-	return velox.Desc[jKey]{
+	return velox.Descriptor[jKey]{
 		Table: "j_keys", Columns: cols, PrimaryKey: []int{0}, Tenant: tenant,
-		Edges: []velox.EdgeDesc{velox.EdgeTo[jKid]("Kids", 2, 1)},
+		Edges: []velox.EdgeDescriptor{velox.EdgeTo[jKid]("Kids", 2, 1)},
 		Addr: func(x *jKey, i int) any {
 			return [...]any{&x.ID, &x.Org, &x.Parent}[i]
 		},
@@ -265,10 +265,10 @@ type jKid struct {
 var jKidMeta velox.MetaOnce[jKid]
 
 func (*jKid) VeloxMeta() *velox.Meta[jKid] {
-	return jKidMeta.Load(func() velox.Desc[jKid] {
-		return velox.Desc[jKid]{
+	return jKidMeta.Load(func() velox.Descriptor[jKid] {
+		return velox.Descriptor[jKid]{
 			Table:      "j_kids",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Ref", Name: "ref", Encode: json.Marshal, Decode: json.Unmarshal}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Ref", Name: "ref", Encode: json.Marshal, Decode: json.Unmarshal}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Addr: func(x *jKid, i int) any {
@@ -286,7 +286,7 @@ func (*jKid) VeloxMeta() *velox.Meta[jKid] {
 // Save, scope and load compares it; so is a relation keyed by its target's
 // encoded column, when the relation is resolved.
 func TestEncodedKeyRefused(t *testing.T) {
-	if _, err := loadDesc(jKeyDesc(1)); err != nil {
+	if _, err := loadDescriptor(jKeyDescriptor(1)); err != nil {
 		t.Fatalf("without a codec: %v", err)
 	}
 	for _, c := range []struct {
@@ -298,20 +298,20 @@ func TestEncodedKeyRefused(t *testing.T) {
 		{"tenant", 1, 1, "Org", "tenant"},
 		{"relation key", -1, 2, "Parent", "relation Kids"},
 	} {
-		_, err := loadDesc(jKeyDesc(c.tenant, c.col))
+		_, err := loadDescriptor(jKeyDescriptor(c.tenant, c.col))
 		var se *velox.SchemaError
 		if !errors.As(err, &se) || se.Field != c.field || !strings.Contains(err.Error(), c.reason) || !strings.Contains(err.Error(), "codec") {
 			t.Errorf("%s: got %v, want a *SchemaError naming %s", c.name, err, c.field)
 		}
 	}
-	_, err := loadDesc(jKeyDesc(-1), targetOf[jKid]())
+	_, err := loadDescriptor(jKeyDescriptor(-1), targetOf[jKid]())
 	if err == nil || !strings.Contains(err.Error(), "jKid.Ref") || !strings.Contains(err.Error(), "encoded column") {
 		t.Errorf("a target's encoded key: got %v", err)
 	}
 }
 
 // jOpt has the JSON columns of Optional fields, as velox-gen writes them: a
-// slice and a map whose ColumnDesc says Nullable, as their columns can hold
+// slice and a map whose ColumnDescriptor says Nullable, as their columns can hold
 // NULL though the fields are no pointers; and a slice that is not. Blob is a
 // Nillable bytes field: no codec, and Nullable.
 type jOpt struct {
@@ -332,12 +332,12 @@ var jOpts = struct {
 
 var jOptMeta velox.MetaOnce[jOpt]
 
-func (*jOpt) VeloxMeta() *velox.Meta[jOpt] { return jOptMeta.Load(jOptDesc) }
+func (*jOpt) VeloxMeta() *velox.Meta[jOpt] { return jOptMeta.Load(jOptDescriptor) }
 
-func jOptDesc() velox.Desc[jOpt] {
-	return velox.Desc[jOpt]{
+func jOptDescriptor() velox.Descriptor[jOpt] {
+	return velox.Descriptor[jOpt]{
 		Table: "j_opts",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Tags", Name: "tags", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Attrs", Name: "attrs", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},
@@ -362,7 +362,7 @@ func jOptDesc() velox.Desc[jOpt] {
 	}
 }
 
-// TestJSONNullableNoPointer: in a column whose ColumnDesc says Nullable, a nil
+// TestJSONNullableNoPointer: in a column whose ColumnDescriptor says Nullable, a nil
 // slice or map binds NULL, on insert and on update, and NULL reads back as
 // nil; in one that does not, nil binds the JSON null, as before. A nil
 // []byte in a Nullable column without a codec binds an untyped nil: NULL,
@@ -406,9 +406,9 @@ func TestJSONNullableNoPointer(t *testing.T) {
 // TestNullableNeedsNil: Nullable on a column whose field cannot be nil, nor
 // is a pointer, is refused when the metadata is built, naming the column.
 func TestNullableNeedsNil(t *testing.T) {
-	_, err := loadDesc(velox.Desc[fixture.JList]{
+	_, err := loadDescriptor(velox.Descriptor[fixture.JList]{
 		Table:      "j_lists",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id", Nullable: true}, {Field: "Words", Name: "words"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id", Nullable: true}, {Field: "Words", Name: "words"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr: func(x *fixture.JList, i int) any {

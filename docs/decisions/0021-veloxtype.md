@@ -16,7 +16,7 @@ and an alias of a public type links to them.
 ## Decision
 
 - The public package `veloxtype` holds 25 types: `Aggregate`, `AssignOp`, `Assignment`,
-  `Caller`, `ColumnDesc`, `ConstraintError`, `ConstraintKind`, `Deadlines`, `Dialect`,
+  `Caller`, `ColumnDescriptor`, `ConstraintError`, `ConstraintKind`, `Deadlines`, `Dialect`,
   `IndexInfo`, `Lock`, `LockWait`, `Op`, `OrderTerm`, `PolicyError`, `Result`, `Route`,
   `RowScope`, `SchemaError`, `Tag`, `TxAround`, `TxInfo`, `TxOutcome`, `TxRetry` and
   `ValidationError`, with their constants and exported methods.
@@ -45,7 +45,7 @@ private field, so the engine could not run on them from `veloxtype`. Making the 
 public, or moving what they reach, would make the engine public, which is what 0020
 decided against.
 
-`ColumnInfo`, `BoundPolicy`, `BoundHooks`, `EdgeDesc`, `TxOption` and `Pred` hold private
+`ColumnInfo`, `BoundPolicy`, `BoundHooks`, `EdgeDescriptor`, `TxOption` and `Pred` hold private
 fields too. `ConflictClause`, `EachClause`, `Shard`, `Rewrite` and `Around` have none of
 their own, but reach `Predicate`, `EntityInfo`, `Conn` or `Statement`.
 

@@ -26,13 +26,13 @@ type Holder struct {
 	Loaded bool
 }
 
-// EdgeDesc is one relation field of a generated Desc: its name and the columns
+// EdgeDescriptor is one relation field of a generated Desc: its name and the columns
 // that key it. For generated code. EdgeTo, EdgeBidi and EdgeThrough make it. It carries
 // no target entity: the use site supplies that (see EdgeTo).
-type EdgeDesc struct {
+type EdgeDescriptor struct {
 	name string
 
-	explicit  bool     // EdgeTo or EdgeThrough made it; a literal EdgeDesc is refused
+	explicit  bool     // EdgeTo or EdgeThrough made it; a literal EdgeDescriptor is refused
 	ownerCol  int      // an index into the owner's Columns
 	targetCol int      // an index into the target's Columns
 	through   *Through // EdgeThrough's join entity; nil for any other relation

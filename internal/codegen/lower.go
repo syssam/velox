@@ -258,7 +258,7 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	o.Pointer = f.Nillable && i != 0 && !nilKinds[kind]
 	// A column holds NULL when the plugin model's Nullable says so: a
 	// Nillable field, or an Optional JSON one. A pointer says so itself; a
-	// slice or a map, whose nil is NULL there, says it in its ColumnDesc: a
+	// slice or a map, whose nil is NULL there, says it in its ColumnDescriptor: a
 	// JSON one, and a Nillable bytes field.
 	o.NilIsNull = i != 0 && !o.Pointer && (kind == "slice" || kind == "map") &&
 		(o.JSON && (f.Optional || f.Nillable) || f.Type == "bytes" && f.Nillable)

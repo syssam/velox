@@ -40,13 +40,13 @@ var Lines = struct {
 var lineMeta velox.MetaOnce[Line]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDesc) }
+func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDescriptor) }
 
-func lineDesc() velox.Desc[Line] {
-	return velox.Desc[Line]{
+func lineDescriptor() velox.Descriptor[Line] {
+	return velox.Descriptor[Line]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Line)(nil).Policy()) },
 		Table:  "lines",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "OrgID", Name: "org_id"},
 			{Field: "InvoiceID", Name: "invoice_id"},
@@ -58,7 +58,7 @@ func lineDesc() velox.Desc[Line] {
 		TenantRefs: []velox.TenantRef{
 			{Column: 2, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Invoice]("Invoice", 2, 0),
 		},
 		Addr: func(x *Line, i int) any {

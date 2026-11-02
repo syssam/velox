@@ -22,10 +22,10 @@ type wgBig struct {
 var wgBigMeta velox.MetaOnce[wgBig]
 
 func (*wgBig) VeloxMeta() *velox.Meta[wgBig] {
-	return wgBigMeta.Load(func() velox.Desc[wgBig] {
-		return velox.Desc[wgBig]{
+	return wgBigMeta.Load(func() velox.Descriptor[wgBig] {
+		return velox.Descriptor[wgBig]{
 			Table:      "bigs",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Addr: func(x *wgBig, i int) any {
@@ -56,10 +56,10 @@ var wgPairs = struct {
 var wgPairMeta velox.MetaOnce[wgPair]
 
 func (*wgPair) VeloxMeta() *velox.Meta[wgPair] {
-	return wgPairMeta.Load(func() velox.Desc[wgPair] {
-		return velox.Desc[wgPair]{
+	return wgPairMeta.Load(func() velox.Descriptor[wgPair] {
+		return velox.Descriptor[wgPair]{
 			Table:      "pairs",
-			Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}, {Field: "Price", Name: "price", Default: wgCents(250)}},
+			Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}, {Field: "Price", Name: "price", Default: wgCents(250)}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Addr: func(x *wgPair, i int) any {
@@ -85,10 +85,10 @@ type wgPairV struct {
 var wgPairVMeta velox.MetaOnce[wgPairV]
 
 func (*wgPairV) VeloxMeta() *velox.Meta[wgPairV] {
-	return wgPairVMeta.Load(func() velox.Desc[wgPairV] {
-		return velox.Desc[wgPairV]{
+	return wgPairVMeta.Load(func() velox.Descriptor[wgPairV] {
+		return velox.Descriptor[wgPairV]{
 			Table:      "pairs",
-			Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}, {Field: "Price", Name: "price", Default: wgCents(250)}},
+			Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}, {Field: "Price", Name: "price", Default: wgCents(250)}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Addr: func(x *wgPairV, i int) any {

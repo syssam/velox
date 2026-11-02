@@ -28,13 +28,13 @@ var ovOwners = struct {
 var ovOwnerMeta velox.MetaOnce[ovOwner]
 
 func (*ovOwner) VeloxMeta() *velox.Meta[ovOwner] {
-	return ovOwnerMeta.Load(func() velox.Desc[ovOwner] {
-		return velox.Desc[ovOwner]{
+	return ovOwnerMeta.Load(func() velox.Descriptor[ovOwner] {
+		return velox.Descriptor[ovOwner]{
 			Table:      "ov_owners",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Edges:      []velox.EdgeDesc{velox.EdgeTo[ovNote]("Notes", 0, 1), velox.EdgeThrough[ovPick, ovNote]("Picks", 0, 0, 1, 0)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeTo[ovNote]("Notes", 0, 1), velox.EdgeThrough[ovPick, ovNote]("Picks", 0, 0, 1, 0)},
 			Addr:       func(x *ovOwner, i int) any { return &x.ID },
 			EdgeAddr: func(x *ovOwner, i int) any {
 				if i == 0 {
@@ -83,11 +83,11 @@ func (*ovNote) Policy() velox.Policy[ovNote] {
 var ovNoteMeta velox.MetaOnce[ovNote]
 
 func (*ovNote) VeloxMeta() *velox.Meta[ovNote] {
-	return ovNoteMeta.Load(func() velox.Desc[ovNote] {
-		return velox.Desc[ovNote]{
+	return ovNoteMeta.Load(func() velox.Descriptor[ovNote] {
+		return velox.Descriptor[ovNote]{
 			Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*ovNote)(nil).Policy()) },
 			Table:      "ov_notes",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Rank", Name: "rank"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Rank", Name: "rank"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Addr:       func(x *ovNote, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Rank}[i] },
@@ -101,10 +101,10 @@ type ovPick struct{ OwnerID, NoteID int64 }
 var ovPickMeta velox.MetaOnce[ovPick]
 
 func (*ovPick) VeloxMeta() *velox.Meta[ovPick] {
-	return ovPickMeta.Load(func() velox.Desc[ovPick] {
-		return velox.Desc[ovPick]{
+	return ovPickMeta.Load(func() velox.Descriptor[ovPick] {
+		return velox.Descriptor[ovPick]{
 			Table:      "ov_picks",
-			Columns:    []velox.ColumnDesc{{Field: "OwnerID", Name: "owner_id"}, {Field: "NoteID", Name: "note_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "OwnerID", Name: "owner_id"}, {Field: "NoteID", Name: "note_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Addr:       func(x *ovPick, i int) any { return [...]any{&x.OwnerID, &x.NoteID}[i] },

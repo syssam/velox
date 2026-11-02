@@ -36,12 +36,12 @@ var people = struct {
 
 var personMeta velox.MetaOnce[person]
 
-func (*person) VeloxMeta() *velox.Meta[person] { return personMeta.Load(personDesc) }
+func (*person) VeloxMeta() *velox.Meta[person] { return personMeta.Load(personDescriptor) }
 
-func personDesc() velox.Desc[person] {
-	return velox.Desc[person]{
+func personDescriptor() velox.Descriptor[person] {
+	return velox.Descriptor[person]{
 		Table:      "people",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "Age", Name: "age"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "Age", Name: "age"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr: func(x *person, i int) any {

@@ -10,7 +10,7 @@ import (
 )
 
 func TestMutation(t *testing.T) {
-	info, err := loadDesc(hookedDesc())
+	info, err := loadDescriptor(hookedDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}

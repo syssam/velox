@@ -81,7 +81,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 // after their first sentence, and the section names each of them as a whole
 // word. A name that lives in veloxtype says it in both packages' documentation.
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
-	names := []string{"Desc", "ColumnDesc", "EdgeDesc", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce",
+	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce",
 		"BindPolicy", "BindHooks", "BoundPolicy", "BoundHooks", "TenantRef", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion7"}
 	listed := map[string]bool{}
 	for _, n := range names {
@@ -89,8 +89,8 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	}
 	docs, pkgDoc := packageDocs(t, repoRoot(), "velox")
 	veloxtypeDocs, _ := packageDocs(t, filepath.Join(repoRoot(), "veloxtype"), "veloxtype")
-	if _, ok := veloxtypeDocs["ColumnDesc"]; !ok {
-		t.Fatal("veloxtype declares no ColumnDesc: the check reads nothing there")
+	if _, ok := veloxtypeDocs["ColumnDescriptor"]; !ok {
+		t.Fatal("veloxtype declares no ColumnDescriptor: the check reads nothing there")
 	}
 	for pkg, docs := range map[string]map[string]string{"velox": docs, "veloxtype": veloxtypeDocs} {
 		for name, doc := range docs {

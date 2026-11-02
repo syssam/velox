@@ -31,12 +31,12 @@ var Notes = struct {
 var noteMeta velox.MetaOnce[Note]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Note) VeloxMeta() *velox.Meta[Note] { return noteMeta.Load(noteDesc) }
+func (*Note) VeloxMeta() *velox.Meta[Note] { return noteMeta.Load(noteDescriptor) }
 
-func noteDesc() velox.Desc[Note] {
-	return velox.Desc[Note]{
+func noteDescriptor() velox.Descriptor[Note] {
+	return velox.Descriptor[Note]{
 		Table: "notes",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "OrgID", Name: "org_id"},
 			{Field: "Body", Name: "body"},

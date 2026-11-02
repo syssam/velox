@@ -89,7 +89,7 @@ func TestTenantKind(t *testing.T) {
 // TestLowerTenantRefs: a tenant-scoped entity's foreign key to a tenant-scoped target,
 // from either side of the edge, and each tenant-scoped side of a join entity. Nothing
 // for a target without a tenant, or an entity without one that is no join entity. The
-// Desc holds them as strings, naming no other entity.
+// Descriptor holds them as strings, naming no other entity.
 func TestLowerTenantRefs(t *testing.T) {
 	o := mustLower(t, Config{Package: "gen", SchemaPath: lowerSchemaPath}, TrProject{}, TrTask{}, TrNote{}, TrLog{}, TrLabel{}, TrGlobal{})
 	project := OutTenantRef{Table: "tr_projects", Key: "id", Tenant: "project_org"}
@@ -123,7 +123,7 @@ func TestLowerTenantRefs(t *testing.T) {
 		if strings.HasSuffix(f.Name, "tr_task_velox.go") {
 			s := string(f.Data)
 			if !strings.Contains(s, `{Column: 2, Table: "tr_projects", Key: "id", Tenant: "project_org", TenantKind: "int64"},`) {
-				t.Errorf("the Desc does not hold the reference:\n%s", s)
+				t.Errorf("the Descriptor does not hold the reference:\n%s", s)
 			}
 			return
 		}

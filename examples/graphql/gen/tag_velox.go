@@ -34,12 +34,12 @@ var Tags = struct {
 var tagMeta velox.MetaOnce[Tag]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Tag) VeloxMeta() *velox.Meta[Tag] { return tagMeta.Load(tagDesc) }
+func (*Tag) VeloxMeta() *velox.Meta[Tag] { return tagMeta.Load(tagDescriptor) }
 
-func tagDesc() velox.Desc[Tag] {
-	return velox.Desc[Tag]{
+func tagDescriptor() velox.Descriptor[Tag] {
+	return velox.Descriptor[Tag]{
 		Table: "tags",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
 			{Field: "Rank", Name: "rank"},
@@ -49,7 +49,7 @@ func tagDesc() velox.Desc[Tag] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{1}, Unique: true},
 		},
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[PostTag, Post]("Posts", 0, 1, 0, 0),
 		},
 		Addr: func(x *Tag, i int) any {

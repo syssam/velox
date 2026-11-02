@@ -53,14 +53,14 @@ var Posts = struct {
 var postMeta velox.MetaOnce[Post]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDesc) }
+func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor) }
 
-func postDesc() velox.Desc[Post] {
+func postDescriptor() velox.Descriptor[Post] {
 	v0 := (&sch.Post{}).Fields()[2].Descriptor().Validators[0].(func(string) error)
-	return velox.Desc[Post]{
+	return velox.Descriptor[Post]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Post)(nil).Policy()) },
 		Table:  "posts",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "AuthorID", Name: "author_id"},
 			{Field: "Title", Name: "title"},
@@ -72,7 +72,7 @@ func postDesc() velox.Desc[Post] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[User]("Author", 1, 0),
 		},
 		Addr: func(x *Post, i int) any {

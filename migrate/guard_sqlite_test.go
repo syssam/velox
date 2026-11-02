@@ -69,10 +69,10 @@ func TestRebuildDropsNameTheAttribute(t *testing.T) {
 	}
 }
 
-// TestRebuildRefusesPrimaryKeyDesc: INTEGER PRIMARY KEY DESC is no rowid alias, so
+// TestRebuildRefusesPrimaryKeyDescriptor: INTEGER PRIMARY KEY DESC is no rowid alias, so
 // the plan's copy renumbers the rowids, and PRIMARY KEY (id DESC) loses DESC. Inspect
 // notes both, so the guard refuses both, and either form can be accepted.
-func TestRebuildRefusesPrimaryKeyDesc(t *testing.T) {
+func TestRebuildRefusesPrimaryKeyDescriptor(t *testing.T) {
 	for _, create := range []string{
 		"CREATE TABLE t (id INTEGER PRIMARY KEY DESC, n integer NOT NULL, s text, o integer)",
 		"CREATE TABLE t (id integer NOT NULL, n integer NOT NULL, s text, o integer, PRIMARY KEY (id DESC))",

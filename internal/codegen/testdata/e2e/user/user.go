@@ -27,6 +27,6 @@ func nickname(next velox.Mutator[User]) velox.Mutator[User] {
 	})
 }
 
-// UserDesc is User's metadata as the generated code builds it, for the
+// UserDescriptor is User's metadata as the generated code builds it, for the
 // external test to read the column defaults.
-func UserDesc() velox.Desc[User] { return userDesc() }
+func UserDescriptor() velox.Descriptor[User] { return userDescriptor() }

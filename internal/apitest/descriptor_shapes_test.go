@@ -23,15 +23,15 @@ type pbox struct {
 
 var pboxMeta velox.MetaOnce[pbox]
 
-func (*pbox) VeloxMeta() *velox.Meta[pbox] { return pboxMeta.Load(pboxDesc) }
+func (*pbox) VeloxMeta() *velox.Meta[pbox] { return pboxMeta.Load(pboxDescriptor) }
 
-func pboxDesc() velox.Desc[pbox] {
-	return velox.Desc[pbox]{
+func pboxDescriptor() velox.Descriptor[pbox] {
+	return velox.Descriptor[pbox]{
 		Table:      "pboxes",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[fixture.Pnote]("Note", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.Pnote]("Note", 1, 0)},
 		Addr: func(x *pbox, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -59,16 +59,16 @@ func (*pcomment) Policy() velox.Policy[pcomment] {
 
 var pcommentMeta velox.MetaOnce[pcomment]
 
-func (*pcomment) VeloxMeta() *velox.Meta[pcomment] { return pcommentMeta.Load(pcommentDesc) }
+func (*pcomment) VeloxMeta() *velox.Meta[pcomment] { return pcommentMeta.Load(pcommentDescriptor) }
 
-func pcommentDesc() velox.Desc[pcomment] {
-	return velox.Desc[pcomment]{
+func pcommentDescriptor() velox.Descriptor[pcomment] {
+	return velox.Descriptor[pcomment]{
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*pcomment)(nil).Policy()) },
 		Table:      "pcomments",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[fixture.Pnote]("Note", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.Pnote]("Note", 1, 0)},
 		Addr: func(x *pcomment, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -113,18 +113,18 @@ var (
 	pcycBMeta velox.MetaOnce[pcycB]
 )
 
-func (*pcycA) VeloxMeta() *velox.Meta[pcycA] { return pcycAMeta.Load(pcycADesc) }
+func (*pcycA) VeloxMeta() *velox.Meta[pcycA] { return pcycAMeta.Load(pcycADescriptor) }
 
-func (*pcycB) VeloxMeta() *velox.Meta[pcycB] { return pcycBMeta.Load(pcycBDesc) }
+func (*pcycB) VeloxMeta() *velox.Meta[pcycB] { return pcycBMeta.Load(pcycBDescriptor) }
 
-func pcycADesc() velox.Desc[pcycA] {
-	return velox.Desc[pcycA]{
+func pcycADescriptor() velox.Descriptor[pcycA] {
+	return velox.Descriptor[pcycA]{
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*pcycA)(nil).Policy()) },
 		Table:      "pcyc_as",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "BID", Name: "b_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BID", Name: "b_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[pcycB]("B", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pcycB]("B", 1, 0)},
 		Addr: func(x *pcycA, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -135,14 +135,14 @@ func pcycADesc() velox.Desc[pcycA] {
 	}
 }
 
-func pcycBDesc() velox.Desc[pcycB] {
-	return velox.Desc[pcycB]{
+func pcycBDescriptor() velox.Descriptor[pcycB] {
+	return velox.Descriptor[pcycB]{
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*pcycB)(nil).Policy()) },
 		Table:      "pcyc_bs",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "AID", Name: "a_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AID", Name: "a_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[pcycA]("A", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pcycA]("A", 1, 0)},
 		Addr: func(x *pcycB, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -159,11 +159,11 @@ type keyOnly struct{ ID int64 }
 
 var keyOnlyMeta velox.MetaOnce[keyOnly]
 
-func (*keyOnly) VeloxMeta() *velox.Meta[keyOnly] { return keyOnlyMeta.Load(keyOnlyDesc) }
+func (*keyOnly) VeloxMeta() *velox.Meta[keyOnly] { return keyOnlyMeta.Load(keyOnlyDescriptor) }
 
-func keyOnlyDesc() velox.Desc[keyOnly] {
-	return velox.Desc[keyOnly]{
-		Table: "key_only", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+func keyOnlyDescriptor() velox.Descriptor[keyOnly] {
+	return velox.Descriptor[keyOnly]{
+		Table: "key_only", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
 		Addr: func(x *keyOnly, i int) any { return &x.ID },
 	}
 }
@@ -175,11 +175,11 @@ type wideKey struct {
 
 var wideKeyMeta velox.MetaOnce[wideKey]
 
-func (*wideKey) VeloxMeta() *velox.Meta[wideKey] { return wideKeyMeta.Load(wideKeyDesc) }
+func (*wideKey) VeloxMeta() *velox.Meta[wideKey] { return wideKeyMeta.Load(wideKeyDescriptor) }
 
-func wideKeyDesc() velox.Desc[wideKey] {
-	return velox.Desc[wideKey]{
-		Table: "wide_key", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Opt", Name: "opt", Default: true}},
+func wideKeyDescriptor() velox.Descriptor[wideKey] {
+	return velox.Descriptor[wideKey]{
+		Table: "wide_key", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Opt", Name: "opt", Default: true}},
 		PrimaryKey: []int{0}, Tenant: -1,
 		Addr: func(x *wideKey, i int) any {
 			if i == 0 {
@@ -197,11 +197,11 @@ type tinyKey struct {
 
 var tinyKeyMeta velox.MetaOnce[tinyKey]
 
-func (*tinyKey) VeloxMeta() *velox.Meta[tinyKey] { return tinyKeyMeta.Load(tinyKeyDesc) }
+func (*tinyKey) VeloxMeta() *velox.Meta[tinyKey] { return tinyKeyMeta.Load(tinyKeyDescriptor) }
 
-func tinyKeyDesc() velox.Desc[tinyKey] {
-	return velox.Desc[tinyKey]{
-		Table: "tiny_key", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
+func tinyKeyDescriptor() velox.Descriptor[tinyKey] {
+	return velox.Descriptor[tinyKey]{
+		Table: "tiny_key", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0}, Tenant: -1,
 		Addr: func(x *tinyKey, i int) any {
 			if i == 0 {
@@ -222,12 +222,12 @@ type tunique struct {
 
 var tuniqueMeta velox.MetaOnce[tunique]
 
-func (*tunique) VeloxMeta() *velox.Meta[tunique] { return tuniqueMeta.Load(tuniqueDesc) }
+func (*tunique) VeloxMeta() *velox.Meta[tunique] { return tuniqueMeta.Load(tuniqueDescriptor) }
 
-func tuniqueDesc() velox.Desc[tunique] {
-	return velox.Desc[tunique]{
+func tuniqueDescriptor() velox.Descriptor[tunique] {
+	return velox.Descriptor[tunique]{
 		Table:      "tuniques",
-		Columns:    []velox.ColumnDesc{{Field: "OrgID", Name: "org_id"}, {Field: "ID", Name: "id"}, {Field: "Code", Name: "code"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "OrgID", Name: "org_id"}, {Field: "ID", Name: "id"}, {Field: "Code", Name: "code"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     0,
 		Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
@@ -251,13 +251,13 @@ var tu = struct {
 
 var dnoteID = velox.NumberCol[fixture.Dnote, int64]{I: 0}
 
-// panickyEntity's Desc panics; addrlessEntity's has no Addr.
+// panickyEntity's Descriptor panics; addrlessEntity's has no Addr.
 type panickyEntity struct{ ID int64 }
 
 var panickyMeta velox.MetaOnce[panickyEntity]
 
 func (*panickyEntity) VeloxMeta() *velox.Meta[panickyEntity] {
-	return panickyMeta.Load(func() velox.Desc[panickyEntity] { panic("no schema today") })
+	return panickyMeta.Load(func() velox.Descriptor[panickyEntity] { panic("no schema today") })
 }
 
 type addrlessEntity struct{ ID int64 }
@@ -265,7 +265,7 @@ type addrlessEntity struct{ ID int64 }
 var addrlessMeta velox.MetaOnce[addrlessEntity]
 
 func (*addrlessEntity) VeloxMeta() *velox.Meta[addrlessEntity] {
-	return addrlessMeta.Load(func() velox.Desc[addrlessEntity] {
-		return velox.Desc[addrlessEntity]{Table: "addrless", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1}
+	return addrlessMeta.Load(func() velox.Descriptor[addrlessEntity] {
+		return velox.Descriptor[addrlessEntity]{Table: "addrless", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1}
 	})
 }

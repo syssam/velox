@@ -27,10 +27,10 @@ var refLinks = struct {
 var refLinkMeta velox.MetaOnce[refLink]
 
 func (*refLink) VeloxMeta() *velox.Meta[refLink] {
-	return refLinkMeta.Load(func() velox.Desc[refLink] {
-		return velox.Desc[refLink]{
+	return refLinkMeta.Load(func() velox.Descriptor[refLink] {
+		return velox.Descriptor[refLink]{
 			Table:      "ref_links",
-			Columns:    []velox.ColumnDesc{{Field: "TicketID", Name: "ticket_id"}, {Field: "InvoiceID", Name: "invoice_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "TicketID", Name: "ticket_id"}, {Field: "InvoiceID", Name: "invoice_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			TenantRefs: []velox.TenantRef{
@@ -225,10 +225,10 @@ var (
 	refWideM velox.MetaOnce[refWide]
 )
 
-func refPairDesc[E any](pk []int, indexes []velox.IndexInfo, addr func(*E, int) any) velox.Desc[E] {
-	return velox.Desc[E]{
+func refPairDescriptor[E any](pk []int, indexes []velox.IndexInfo, addr func(*E, int) any) velox.Descriptor[E] {
+	return velox.Descriptor[E]{
 		Table:      "ref_pairs",
-		Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 		PrimaryKey: pk,
 		Indexes:    indexes,
 		Tenant:     -1,
@@ -241,8 +241,8 @@ func refPairDesc[E any](pk []int, indexes []velox.IndexInfo, addr func(*E, int) 
 }
 
 func (*refHalf) VeloxMeta() *velox.Meta[refHalf] {
-	return refHalfM.Load(func() velox.Desc[refHalf] {
-		return refPairDesc([]int{0, 1}, []velox.IndexInfo{{Columns: []int{0}, Unique: true}}, func(x *refHalf, i int) any {
+	return refHalfM.Load(func() velox.Descriptor[refHalf] {
+		return refPairDescriptor([]int{0, 1}, []velox.IndexInfo{{Columns: []int{0}, Unique: true}}, func(x *refHalf, i int) any {
 			if i == 0 {
 				return &x.A
 			}
@@ -252,8 +252,8 @@ func (*refHalf) VeloxMeta() *velox.Meta[refHalf] {
 }
 
 func (*refWide) VeloxMeta() *velox.Meta[refWide] {
-	return refWideM.Load(func() velox.Desc[refWide] {
-		return refPairDesc([]int{0}, nil, func(x *refWide, i int) any {
+	return refWideM.Load(func() velox.Descriptor[refWide] {
+		return refPairDescriptor([]int{0}, nil, func(x *refWide, i int) any {
 			if i == 0 {
 				return &x.A
 			}

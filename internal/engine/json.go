@@ -40,8 +40,8 @@ func encodeCol(in *EntityInfo, col int, v any) (any, error) {
 }
 
 // errNoCodec is the error for a column flagged as encoded (ColumnInfo.Codec)
-// without its codec: an EntityInfo a hook built or edited, as BuildDesc
-// refuses a Desc that gives only one of Encode and Decode.
+// without its codec: an EntityInfo a hook built or edited, as BuildDescriptor
+// refuses a Descriptor that gives only one of Encode and Decode.
 func errNoCodec(in *EntityInfo, col int) error {
 	return fmt.Errorf("velox: %s: column %s is an encoded column (Codec) but has no Encode and Decode", in.Name, in.Columns[col].Name)
 }
@@ -86,7 +86,7 @@ func (s *codecScanner) Scan(src any) error {
 	case []byte:
 		b = v
 	case string:
-		// Decode neither changes nor keeps its input (ColumnDesc.Decode), so
+		// Decode neither changes nor keeps its input (ColumnDescriptor.Decode), so
 		// the string's bytes are read in place rather than copied.
 		b = unsafe.Slice(unsafe.StringData(v), len(v))
 	default:

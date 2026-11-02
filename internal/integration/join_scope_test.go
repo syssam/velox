@@ -32,13 +32,13 @@ var JsProjects = struct {
 var jsProjectMeta velox.MetaOnce[jsProject]
 
 func (*jsProject) VeloxMeta() *velox.Meta[jsProject] {
-	return jsProjectMeta.Load(func() velox.Desc[jsProject] {
-		return velox.Desc[jsProject]{
+	return jsProjectMeta.Load(func() velox.Descriptor[jsProject] {
+		return velox.Descriptor[jsProject]{
 			Table:      "js_projects",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
 			PrimaryKey: []int{0},
 			Tenant:     1,
-			Edges: []velox.EdgeDesc{
+			Edges: []velox.EdgeDescriptor{
 				velox.EdgeThrough[jsProjectLabel, jsLabel]("Labels", 0, 0, 1, 0),
 				velox.EdgeThrough[jsProjectKind, jsKind]("Kinds", 0, 0, 1, 0),
 			},
@@ -66,10 +66,10 @@ type jsLabel struct {
 var jsLabelMeta velox.MetaOnce[jsLabel]
 
 func (*jsLabel) VeloxMeta() *velox.Meta[jsLabel] {
-	return jsLabelMeta.Load(func() velox.Desc[jsLabel] {
-		return velox.Desc[jsLabel]{
+	return jsLabelMeta.Load(func() velox.Descriptor[jsLabel] {
+		return velox.Descriptor[jsLabel]{
 			Table:      "js_labels",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
 			PrimaryKey: []int{0},
 			Tenant:     1,
 			Addr: func(x *jsLabel, i int) any {
@@ -95,10 +95,10 @@ var JsKinds = struct {
 var jsKindMeta velox.MetaOnce[jsKind]
 
 func (*jsKind) VeloxMeta() *velox.Meta[jsKind] {
-	return jsKindMeta.Load(func() velox.Desc[jsKind] {
-		return velox.Desc[jsKind]{
+	return jsKindMeta.Load(func() velox.Descriptor[jsKind] {
+		return velox.Descriptor[jsKind]{
 			Table:      "js_kinds",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Addr: func(x *jsKind, i int) any {
@@ -124,10 +124,10 @@ var JsLinks = struct {
 var jsProjectLabelMeta velox.MetaOnce[jsProjectLabel]
 
 func (*jsProjectLabel) VeloxMeta() *velox.Meta[jsProjectLabel] {
-	return jsProjectLabelMeta.Load(func() velox.Desc[jsProjectLabel] {
-		return velox.Desc[jsProjectLabel]{
+	return jsProjectLabelMeta.Load(func() velox.Descriptor[jsProjectLabel] {
+		return velox.Descriptor[jsProjectLabel]{
 			Table:      "js_project_labels",
-			Columns:    []velox.ColumnDesc{{Field: "ProjectID", Name: "project_id"}, {Field: "LabelID", Name: "label_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ProjectID", Name: "project_id"}, {Field: "LabelID", Name: "label_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			TenantRefs: []velox.TenantRef{
@@ -157,10 +157,10 @@ var jsPK = struct {
 var jsProjectKindMeta velox.MetaOnce[jsProjectKind]
 
 func (*jsProjectKind) VeloxMeta() *velox.Meta[jsProjectKind] {
-	return jsProjectKindMeta.Load(func() velox.Desc[jsProjectKind] {
-		return velox.Desc[jsProjectKind]{
+	return jsProjectKindMeta.Load(func() velox.Descriptor[jsProjectKind] {
+		return velox.Descriptor[jsProjectKind]{
 			Table:      "js_project_kinds",
-			Columns:    []velox.ColumnDesc{{Field: "ProjectID", Name: "project_id"}, {Field: "KindID", Name: "kind_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ProjectID", Name: "project_id"}, {Field: "KindID", Name: "kind_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			TenantRefs: []velox.TenantRef{{Column: 0, Table: "js_projects", Key: "id", Tenant: "org_id", TenantKind: "int64"}},
@@ -186,10 +186,10 @@ var JsFriends = struct {
 var jsFriendMeta velox.MetaOnce[jsFriend]
 
 func (*jsFriend) VeloxMeta() *velox.Meta[jsFriend] {
-	return jsFriendMeta.Load(func() velox.Desc[jsFriend] {
-		return velox.Desc[jsFriend]{
+	return jsFriendMeta.Load(func() velox.Descriptor[jsFriend] {
+		return velox.Descriptor[jsFriend]{
 			Table:      "js_friends",
-			Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Bidi:       true,

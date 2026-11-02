@@ -43,16 +43,16 @@ var Projects = struct {
 var projectMeta velox.MetaOnce[Project]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(projectDesc) }
+func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(projectDescriptor) }
 
-func projectDesc() velox.Desc[Project] {
+func projectDescriptor() velox.Descriptor[Project] {
 	d0 := (&sch.Project{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
 	d1 := (&sch.Project{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
 	d2 := (&sch.Project{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
-	return velox.Desc[Project]{
+	return velox.Descriptor[Project]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Project)(nil).Policy()) },
 		Table:  "projects",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
@@ -64,7 +64,7 @@ func projectDesc() velox.Desc[Project] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{3, 4}, Unique: true},
 		},
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Issue]("Issues", 0, 4),
 		},
 		Addr: func(x *Project, i int) any {

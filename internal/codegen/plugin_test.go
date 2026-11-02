@@ -651,7 +651,7 @@ func (nullMix) Fields() []schema.Field {
 }
 
 // For an Optional or Nillable JSON field, the plugin's Nullable is what the
-// core reads of the generated code: a pointer field, a ColumnDesc.Nullable
+// core reads of the generated code: a pointer field, a ColumnDescriptor.Nullable
 // (NilIsNull), or a Go type that is a pointer. A required field of a pointer
 // type is the exception: the core's flag reports the Go type's nil, and its
 // column is NOT NULL.

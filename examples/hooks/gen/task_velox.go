@@ -37,13 +37,13 @@ var Tasks = struct {
 var taskMeta velox.MetaOnce[Task]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Task) VeloxMeta() *velox.Meta[Task] { return taskMeta.Load(taskDesc) }
+func (*Task) VeloxMeta() *velox.Meta[Task] { return taskMeta.Load(taskDescriptor) }
 
-func taskDesc() velox.Desc[Task] {
-	return velox.Desc[Task]{
+func taskDescriptor() velox.Descriptor[Task] {
+	return velox.Descriptor[Task]{
 		Hooks: func() velox.BoundHooks { return velox.BindHooks((*Task)(nil).Hooks()) },
 		Table: "tasks",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedBy", Name: "created_by"},
 			{Field: "Title", Name: "title"},

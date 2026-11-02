@@ -28,12 +28,14 @@ var IssueLabels = struct {
 var issueLabelMeta velox.MetaOnce[IssueLabel]
 
 // VeloxMeta is called by velox, not by applications.
-func (*IssueLabel) VeloxMeta() *velox.Meta[IssueLabel] { return issueLabelMeta.Load(issueLabelDesc) }
+func (*IssueLabel) VeloxMeta() *velox.Meta[IssueLabel] {
+	return issueLabelMeta.Load(issueLabelDescriptor)
+}
 
-func issueLabelDesc() velox.Desc[IssueLabel] {
-	return velox.Desc[IssueLabel]{
+func issueLabelDescriptor() velox.Descriptor[IssueLabel] {
+	return velox.Descriptor[IssueLabel]{
 		Table: "issue_labels",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "IssueID", Name: "issue_id"},
 			{Field: "LabelID", Name: "label_id"},
 		},

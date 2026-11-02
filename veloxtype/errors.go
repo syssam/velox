@@ -11,7 +11,7 @@ import (
 var ErrDenied = errors.New("denied by policy")
 
 // SchemaError reports a mistake in an entity's generated metadata (its
-// velox.Desc, or the Policy and Hooks methods it binds).
+// velox.Descriptor, or the Policy and Hooks methods it binds).
 type SchemaError struct {
 	Entity string // the Go type, e.g. "billing.Invoice"
 	Field  string // the Go field name; empty when the error is about the entity
@@ -116,7 +116,7 @@ func (e *PolicyError) Is(target error) bool { return target == ErrDenied }
 //   - A nil pointer, or a nil value, is never checked, because it is the
 //     absence of a value; a non-nil pointer is checked as its element.
 //
-// It is also a nil key of a column with a RequiredEdge (see ColumnDesc), in an
+// It is also a nil key of a column with a RequiredEdge (see ColumnDescriptor), in an
 // insert or a Set assignment: its Err says missing required edge
 // "<Type>.<edge>", as ent's does.
 type ValidationError struct {

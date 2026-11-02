@@ -58,15 +58,15 @@ var Invoices = struct {
 var invoiceMeta velox.MetaOnce[Invoice]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoiceDesc) }
+func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoiceDescriptor) }
 
-func invoiceDesc() velox.Desc[Invoice] {
+func invoiceDescriptor() velox.Descriptor[Invoice] {
 	d0 := (&sch.Invoice{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
 	d1 := (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
 	d2 := (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
-	return velox.Desc[Invoice]{
+	return velox.Descriptor[Invoice]{
 		Table: "invoices",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
@@ -83,7 +83,7 @@ func invoiceDesc() velox.Desc[Invoice] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{3, 4}, Unique: true},
 		},
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Item]("Items", 0, 1),
 		},
 		Addr: func(x *Invoice, i int) any {

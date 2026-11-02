@@ -7,37 +7,37 @@ import (
 	"unsafe"
 )
 
-// DescFields are the fields of a Desc that do not depend on E, so that
-// BuildDesc, which uses reflect, need not be generic.
-type DescFields struct {
+// DescriptorFields are the fields of a Descriptor that do not depend on E, so that
+// BuildDescriptor, which uses reflect, need not be generic.
+type DescriptorFields struct {
 	Table      string
 	Schema     string
-	Columns    []ColumnDesc
+	Columns    []ColumnDescriptor
 	PrimaryKey []int
 	Tenant     int
 	Bidi       bool
 	Indexes    []IndexInfo
-	Relations  []EdgeDesc
+	Relations  []EdgeDescriptor
 	TenantRefs []TenantRef
 	Check      func(col int, v any) error
-	Policy     bool // Desc.Policy is set
-	Hooks      bool // Desc.Hooks is set
+	Policy     bool // Descriptor.Policy is set
+	Hooks      bool // Descriptor.Hooks is set
 }
 
-// DescView is a Desc with E erased: its fields, and its Addr and EdgeAddr
+// DescriptorView is a Descriptor with E erased: its fields, and its Addr and EdgeAddr
 // bound to one new entity. addr and relAddr are nil when Addr and EdgeAddr
 // are.
-type DescView struct {
-	D       *DescFields
+type DescriptorView struct {
+	D       *DescriptorFields
 	Addr    func(i int) any // d.Addr(x, i)
 	RelAddr func(i int) any // d.EdgeAddr(x, i)
 }
 
-// BuildDesc builds the metadata of the entity x, a new *E at base, from the
-// Desc that load returns with E erased. A panic in load, or in the Desc's
+// BuildDescriptor builds the metadata of the entity x, a new *E at base, from the
+// Descriptor that load returns with E erased. A panic in load, or in the Descriptor's
 // functions, is recovered as a *SchemaError, so that it is the entity's error
 // on every use rather than a crash on the first.
-func BuildDesc(x any, base unsafe.Pointer, load func() DescView) (info *EntityInfo, err error) {
+func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (info *EntityInfo, err error) {
 	t := reflect.TypeOf(x).Elem()
 	name := t.String()
 	defer func() {
@@ -162,12 +162,12 @@ func BuildDesc(x any, base unsafe.Pointer, load func() DescView) (info *EntityIn
 	return info, nil
 }
 
-// checkBidi refuses the Desc of a bidirectional edge's join entity unless its
+// checkBidi refuses the Descriptor of a bidirectional edge's join entity unless its
 // two columns, of one Go type, are its primary key, and it has no tenant: the
 // mirror of a row swaps them. The type is a byte slice or one that == compares
 // without panicking (linkKey), as a self-link is told by comparing the two
 // (selfLink).
-func checkBidi(name string, d *DescFields, cols []ColumnInfo) error {
+func checkBidi(name string, d *DescriptorFields, cols []ColumnInfo) error {
 	fail := func(format string, args ...any) error {
 		return &SchemaError{Entity: name, Reason: "the join entity of a bidirectional edge " + fmt.Sprintf(format, args...)}
 	}
@@ -217,9 +217,9 @@ func holdsInterface(t reflect.Type) bool {
 }
 
 // unboundMethods refuses an entity whose pointer type has a Policy or Hooks
-// method that the Desc does not bind: velox would never call it. The names
+// method that the Descriptor does not bind: velox would never call it. The names
 // are constants, so that the linker can still drop the methods nobody calls.
-func unboundMethods(t reflect.Type, d *DescFields) error {
+func unboundMethods(t reflect.Type, d *DescriptorFields) error {
 	pt := reflect.PointerTo(t)
 	if _, ok := pt.MethodByName("Policy"); ok && !d.Policy {
 		return &SchemaError{Entity: t.String(), Reason: "has a Policy method, but the generated metadata does not bind it; run go tool velox-gen"}
@@ -250,7 +250,7 @@ func boolOrNumber(t any) bool {
 	return k == reflect.Bool || k >= reflect.Int && k <= reflect.Float64
 }
 
-// defaultOf is a Desc's Default d as ColumnInfo holds it for a field of type
+// defaultOf is a Descriptor's Default d as ColumnInfo holds it for a field of type
 // ft: d itself when it is of type ft, and a pointer to a copy of d when ft is
 // a pointer to d's type, which FillDefault copies again for every row. It
 // reports false for a value of any other type.
@@ -275,17 +275,17 @@ type Through struct {
 	TargetCol int
 }
 
-// NewEdgeDesc returns the description of an edge named name, with the columns that
+// NewEdgeDescriptor returns the description of an edge named name, with the columns that
 // hold its owner and target keys and the two holders of the relation.
-func NewEdgeDesc(name string, ownerCol, targetCol int, holders [2]any) EdgeDesc {
-	return EdgeDesc{name: name, explicit: true, ownerCol: ownerCol, targetCol: targetCol, holders: holders}
+func NewEdgeDescriptor(name string, ownerCol, targetCol int, holders [2]any) EdgeDescriptor {
+	return EdgeDescriptor{name: name, explicit: true, ownerCol: ownerCol, targetCol: targetCol, holders: holders}
 }
 
 // SetEdgeBidi marks e as bidirectional, with t its edge's type.
-func SetEdgeBidi(e *EdgeDesc, t any) { e.bidi = t }
+func SetEdgeBidi(e *EdgeDescriptor, t any) { e.bidi = t }
 
 // SetEdgeThrough makes e an edge through the join entity t.
-func SetEdgeThrough(e *EdgeDesc, t *Through) { e.through = t }
+func SetEdgeThrough(e *EdgeDescriptor, t *Through) { e.through = t }
 
 // EdgeThroughOf is the join entity of e; nil when e has none.
-func EdgeThroughOf(e EdgeDesc) *Through { return e.through }
+func EdgeThroughOf(e EdgeDescriptor) *Through { return e.through }

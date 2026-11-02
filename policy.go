@@ -12,7 +12,7 @@ import (
 //
 //	func (*E) Policy() velox.Policy[E]
 //
-// velox-gen binds the method in the generated metadata (Desc.Policy calls
+// velox-gen binds the method in the generated metadata (Descriptor.Policy calls
 // BindPolicy on it): a method with another signature does not compile, and
 // one the metadata does not bind is refused at the entity's first use. velox calls it once, when it
 // builds the metadata, on a nil *E, so the method must not read its receiver.

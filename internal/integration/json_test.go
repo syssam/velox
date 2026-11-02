@@ -43,12 +43,12 @@ var JR = struct {
 
 var jrecMeta velox.MetaOnce[jrec]
 
-func (*jrec) VeloxMeta() *velox.Meta[jrec] { return jrecMeta.Load(jrecDesc) }
+func (*jrec) VeloxMeta() *velox.Meta[jrec] { return jrecMeta.Load(jrecDescriptor) }
 
-func jrecDesc() velox.Desc[jrec] {
-	return velox.Desc[jrec]{
+func jrecDescriptor() velox.Descriptor[jrec] {
+	return velox.Descriptor[jrec]{
 		Table: "json_recs",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Tags", Name: "tags", Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Attrs", Name: "attrs", Encode: json.Marshal, Decode: json.Unmarshal},
@@ -442,7 +442,7 @@ func TestJSONConditions(t *testing.T) {
 		if err := tg.db.Insert(&x).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		// JR's JSONCol has no EQ: Col handles, as a hand-written Desc might
+		// JR's JSONCol has no EQ: Col handles, as a hand-written Descriptor might
 		// declare, reach the statement's refusal.
 		tags, shape := velox.Col[jrec, []string]{I: 1}, velox.Col[jrec, jShape]{I: 3}
 		_, err := tg.db.Query[jrec]().Where(tags.EQ([]string{"a"})).Unbounded().All(ctx)
@@ -498,10 +498,10 @@ var JO = struct {
 var joptMeta velox.MetaOnce[jopt]
 
 func (*jopt) VeloxMeta() *velox.Meta[jopt] {
-	return joptMeta.Load(func() velox.Desc[jopt] {
-		return velox.Desc[jopt]{
+	return joptMeta.Load(func() velox.Descriptor[jopt] {
+		return velox.Descriptor[jopt]{
 			Table: "json_opts",
-			Columns: []velox.ColumnDesc{
+			Columns: []velox.ColumnDescriptor{
 				{Field: "ID", Name: "id"},
 				{Field: "Tags", Name: "tags", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},
 				{Field: "Attrs", Name: "attrs", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},

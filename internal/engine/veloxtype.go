@@ -4,31 +4,31 @@ import "github.com/syssam/velox/veloxtype"
 
 // The plain data types, which package veloxtype documents.
 type (
-	Aggregate       = veloxtype.Aggregate
-	AssignOp        = veloxtype.AssignOp
-	Assignment      = veloxtype.Assignment
-	Caller          = veloxtype.Caller
-	ColumnDesc      = veloxtype.ColumnDesc
-	ConstraintError = veloxtype.ConstraintError
-	ConstraintKind  = veloxtype.ConstraintKind
-	Deadlines       = veloxtype.Deadlines
-	Dialect         = veloxtype.Dialect
-	IndexInfo       = veloxtype.IndexInfo
-	Lock            = veloxtype.Lock
-	LockWait        = veloxtype.LockWait
-	Op              = veloxtype.Op
-	OrderTerm       = veloxtype.OrderTerm
-	PolicyError     = veloxtype.PolicyError
-	Result          = veloxtype.Result
-	Route           = veloxtype.Route
-	RowScope        = veloxtype.RowScope
-	SchemaError     = veloxtype.SchemaError
-	Tag             = veloxtype.Tag
-	TxAround        = veloxtype.TxAround
-	TxInfo          = veloxtype.TxInfo
-	TxOutcome       = veloxtype.TxOutcome
-	TxRetry         = veloxtype.TxRetry
-	ValidationError = veloxtype.ValidationError
+	Aggregate        = veloxtype.Aggregate
+	AssignOp         = veloxtype.AssignOp
+	Assignment       = veloxtype.Assignment
+	Caller           = veloxtype.Caller
+	ColumnDescriptor = veloxtype.ColumnDescriptor
+	ConstraintError  = veloxtype.ConstraintError
+	ConstraintKind   = veloxtype.ConstraintKind
+	Deadlines        = veloxtype.Deadlines
+	Dialect          = veloxtype.Dialect
+	IndexInfo        = veloxtype.IndexInfo
+	Lock             = veloxtype.Lock
+	LockWait         = veloxtype.LockWait
+	Op               = veloxtype.Op
+	OrderTerm        = veloxtype.OrderTerm
+	PolicyError      = veloxtype.PolicyError
+	Result           = veloxtype.Result
+	Route            = veloxtype.Route
+	RowScope         = veloxtype.RowScope
+	SchemaError      = veloxtype.SchemaError
+	Tag              = veloxtype.Tag
+	TxAround         = veloxtype.TxAround
+	TxInfo           = veloxtype.TxInfo
+	TxOutcome        = veloxtype.TxOutcome
+	TxRetry          = veloxtype.TxRetry
+	ValidationError  = veloxtype.ValidationError
 )
 
 // Their constants.

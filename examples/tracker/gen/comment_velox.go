@@ -52,16 +52,16 @@ var Comments = struct {
 var commentMeta velox.MetaOnce[Comment]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDesc) }
+func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDescriptor) }
 
-func commentDesc() velox.Desc[Comment] {
+func commentDescriptor() velox.Descriptor[Comment] {
 	d0 := (&sch.Comment{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
 	d1 := (&sch.Comment{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
 	d2 := (&sch.Comment{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
-	return velox.Desc[Comment]{
+	return velox.Descriptor[Comment]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Comment)(nil).Policy()) },
 		Table:  "comments",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
@@ -76,7 +76,7 @@ func commentDesc() velox.Desc[Comment] {
 			{Column: 4, Table: "issues", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 			{Column: 5, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Issue]("Issue", 4, 0),
 			velox.EdgeTo[User]("Author", 5, 0),
 		},

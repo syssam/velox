@@ -11,9 +11,9 @@ type other struct{ ID int64 }
 func TestMetaOnceBuildsOnce(t *testing.T) {
 	var o MetaOnce[other]
 	calls := 0
-	desc := func() Desc[other] {
+	desc := func() Descriptor[other] {
 		calls++
-		return Desc[other]{Table: "other", Columns: []ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return Descriptor[other]{Table: "other", Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *other, i int) any { return &x.ID }}
 	}
 	a, b := o.Load(desc), o.Load(desc)
@@ -23,7 +23,7 @@ func TestMetaOnceBuildsOnce(t *testing.T) {
 }
 
 func TestColumnTypeIsTheFieldsType(t *testing.T) {
-	info, err := loadDesc(orderedDesc())
+	info, err := loadDescriptor(orderedDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,10 +41,10 @@ func TestColumnTypeIsTheFieldsType(t *testing.T) {
 	}
 }
 
-// TestDescEntityInfo checks what a Desc's literals become in the EntityInfo. The names, the table and the keys
-// are the Desc's own; velox derives none of them.
-func TestDescEntityInfo(t *testing.T) {
-	info, err := loadDesc(orderedDesc())
+// TestDescriptorEntityInfo checks what a Descriptor's literals become in the EntityInfo. The names, the table and the keys
+// are the Descriptor's own; velox derives none of them.
+func TestDescriptorEntityInfo(t *testing.T) {
+	info, err := loadDescriptor(orderedDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}

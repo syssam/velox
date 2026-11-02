@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/internal/testmodel"
 )
 
-// More Desc entities for the tests that need a shape internal/testmodel does
+// More Descriptor entities for the tests that need a shape internal/testmodel does
 // not have: policies that count their calls, cycles, keys of other types.
 
 // The policy fixtures: a pnote has a read and a write policy that count
@@ -59,17 +59,17 @@ func (*Pnote) Policy() velox.Policy[Pnote] {
 
 var PnoteMeta velox.MetaOnce[Pnote]
 
-func (*Pnote) VeloxMeta() *velox.Meta[Pnote] { return PnoteMeta.Load(PnoteDesc) }
+func (*Pnote) VeloxMeta() *velox.Meta[Pnote] { return PnoteMeta.Load(PnoteDescriptor) }
 
-func PnoteDesc() velox.Desc[Pnote] {
-	return velox.Desc[Pnote]{
+func PnoteDescriptor() velox.Descriptor[Pnote] {
+	return velox.Descriptor[Pnote]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Pnote)(nil).Policy()) },
 		Table:  "pnotes",
-		Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}, {Field: "Locked", Name: "locked"},
+		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}, {Field: "Locked", Name: "locked"},
 			{Field: "ParentID", Name: "parent_id"}, {Field: "InvoiceID", Name: "invoice_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[Pnote]("Parent", 3, 0), velox.EdgeTo[testmodel.Invoice]("Invoice", 4, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[Pnote]("Parent", 3, 0), velox.EdgeTo[testmodel.Invoice]("Invoice", 4, 0)},
 		Addr: func(x *Pnote, i int) any {
 			switch i {
 			case 0:
@@ -165,14 +165,14 @@ func (*Dnote) Hooks() []velox.Hook[Dnote] {
 
 var DnoteMeta velox.MetaOnce[Dnote]
 
-func (*Dnote) VeloxMeta() *velox.Meta[Dnote] { return DnoteMeta.Load(DnoteDesc) }
+func (*Dnote) VeloxMeta() *velox.Meta[Dnote] { return DnoteMeta.Load(DnoteDescriptor) }
 
-func DnoteDesc() velox.Desc[Dnote] {
-	return velox.Desc[Dnote]{
+func DnoteDescriptor() velox.Descriptor[Dnote] {
+	return velox.Descriptor[Dnote]{
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*Dnote)(nil).Policy()) },
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*Dnote)(nil).Hooks()) },
 		Table:      "dnotes",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr: func(x *Dnote, i int) any {

@@ -6,13 +6,13 @@ import (
 	"github.com/syssam/velox/internal/engine"
 )
 
-// Desc is an entity's metadata as velox-gen writes it: literals, read on the
+// Descriptor is an entity's metadata as velox-gen writes it: literals, read on the
 // entity's first use. For generated code. Its column order is the scan order.
 // EntityInfo is its runtime view.
-type Desc[E any] struct {
+type Descriptor[E any] struct {
 	Table      string
 	Schema     string // the schema (PostgreSQL) or database holding Table; "" for the default
-	Columns    []ColumnDesc
+	Columns    []ColumnDescriptor
 	PrimaryKey []int // indexes into Columns
 	Tenant     int   // index into Columns; -1 when the entity has none (so velox-gen always writes it: 0 is column 0)
 	// Bidi marks the join entity of a self-referencing many-to-many edge that has
@@ -40,7 +40,7 @@ type Desc[E any] struct {
 	// TenantRef. They hold the target's names as strings, never its metadata, so
 	// that the entity does not link its target. For generated code.
 	TenantRefs []TenantRef
-	Edges      []EdgeDesc            // in the order of the generated relation handles
+	Edges      []EdgeDescriptor      // in the order of the generated relation handles
 	Addr       func(x *E, i int) any // &x.<field of column i>
 	EdgeAddr   func(x *E, i int) any // &x.<field of edge i>: a *One[T] or *Many[T]
 
@@ -61,7 +61,7 @@ type Desc[E any] struct {
 	// A method with another signature does not compile (BindPolicy takes a
 	// Policy[E], BindHooks a []Hook[E]), which is why no test checks it at
 	// run time; and an entity whose pointer type has a Policy or Hooks method
-	// that its Desc does not bind is refused at first use with a
+	// that its Descriptor does not bind is refused at first use with a
 	// *SchemaError, so a policy or a hook is never silently left out.
 	//
 	// Load calls each function once, when it builds the metadata: the
@@ -92,22 +92,22 @@ type Desc[E any] struct {
 // TenantRef, Column IN (SELECT Key FROM Table WHERE Tenant = ?). See WithTenant.
 type TenantRef = engine.TenantRef
 
-// Load returns the entity's Meta, building it from desc the first time. A
-// panic in desc, or in the Desc's Policy or Hooks, becomes the Meta's
+// Load returns the entity's Meta, building it from descriptor the first time. A
+// panic in desc, or in the Descriptor's Policy or Hooks, becomes the Meta's
 // *SchemaError.
 //
-// It does no more than call desc and bind its functions to a new entity: the
-// build, which uses reflect, is BuildDesc's, and the binding of Policy and
+// It does no more than call descriptor and bind its functions to a new entity: the
+// build, which uses reflect, is BuildDescriptor's, and the binding of Policy and
 // Hooks is not generic, so that Load, compiled in every entity's package, holds
 // no reflect.Type and instantiates nothing for an entity that has no policy or
 // hook.
-func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
+func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] {
 	o.once.Do(func() {
 		x := new(E)
-		var d Desc[E]
-		info, err := engine.BuildDesc(x, unsafe.Pointer(x), func() engine.DescView {
-			d = desc()
-			v := engine.DescView{D: &engine.DescFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
+		var d Descriptor[E]
+		info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
+			d = descriptor()
+			v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
 				Tenant: d.Tenant, Bidi: d.Bidi, Indexes: d.Indexes, TenantRefs: d.TenantRefs, Relations: d.Edges, Check: d.Check,
 				Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
 			if a := d.Addr; a != nil {
@@ -119,7 +119,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 			return v
 		})
 		addr := d.Addr
-		// Desc.Policy and Desc.Hooks have E erased (BoundPolicy, BoundHooks):
+		// Descriptor.Policy and Descriptor.Hooks have E erased (BoundPolicy, BoundHooks):
 		// the generated code instantiates BindPolicy and BindHooks, so that
 		// an entity that has neither compiles no Policy or Hook generic.
 		if err == nil && d.Policy != nil {
@@ -151,8 +151,8 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 // the owner would link T, and through T's own relations every entity of the
 // connected model. Where the relation is used, the handle Rel[E, T] says T, and
 // CheckRelation checks the target.
-func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc {
-	return engine.NewEdgeDesc(name, ownerCol, targetCol, [2]any{engine.ElemType((*One[T])(nil)), engine.ElemType((*Many[T])(nil))})
+func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescriptor {
+	return engine.NewEdgeDescriptor(name, ownerCol, targetCol, [2]any{engine.ElemType((*One[T])(nil)), engine.ElemType((*Many[T])(nil))})
 }
 
 // EdgeBidi is the one-to-one relation of a self-referencing edge that has no
@@ -193,7 +193,7 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc 
 // row that holds the key is the caller's. Insert the rows, then Save each
 // key. A Rewrite hook may not change the row such an update names, the
 // key's value, nor make such an insert an upsert.
-func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDesc {
+func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescriptor {
 	r := EdgeTo[T, PT](name, keyCol, idCol)
 	engine.SetEdgeBidi(&r, engine.ElemType((*T)(nil)))
 	return r
@@ -208,15 +208,15 @@ func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDesc {
 // they hold, and Has is an EXISTS on J holding an EXISTS on T. T's tenant and
 // Read policy apply, as they do to any relation's target. J can have neither
 // a tenant column nor a Read policy: the relation is refused when it
-// resolves. A J with Desc.TenantRefs, as velox-gen writes one for each
+// resolves. A J with Descriptor.TenantRefs, as velox-gen writes one for each
 // tenant-scoped side, is scoped through them: see WithTenant. A J without them
 // is not scoped at all. velox does not check that an endpoint is a row the
 // caller's policies let it see or change: an application that writes links, or
 // deletes them, checks both endpoints itself, in J's Policy (Insert, and Write for
-// updates and deletes) or in a hook on J. When J is the join entity of a bidirectional edge (Desc.Bidi), its Policy cannot
+// updates and deletes) or in a hook on J. When J is the join entity of a bidirectional edge (Descriptor.Bidi), its Policy cannot
 // have Write either, since a condition would delete one row of a link: check
 // deletes in a hook on J.
-func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDesc {
+func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDescriptor {
 	r := EdgeTo[T, PT](name, ownerCol, targetCol)
 	engine.SetEdgeThrough(&r, &engine.Through{
 		Join: func() (*EntityInfo, error) {

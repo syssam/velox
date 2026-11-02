@@ -38,12 +38,12 @@ var Sessions = struct {
 var sessionMeta velox.MetaOnce[Session]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Session) VeloxMeta() *velox.Meta[Session] { return sessionMeta.Load(sessionDesc) }
+func (*Session) VeloxMeta() *velox.Meta[Session] { return sessionMeta.Load(sessionDescriptor) }
 
-func sessionDesc() velox.Desc[Session] {
-	return velox.Desc[Session]{
+func sessionDescriptor() velox.Descriptor[Session] {
+	return velox.Descriptor[Session]{
 		Table: "sessions",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "TokenHash", Name: "token_hash"},
 			{Field: "OrgID", Name: "org_id"},

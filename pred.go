@@ -5,7 +5,7 @@ import (
 )
 
 // Order is an ordering by one column of entity E, made by a handle's Asc or
-// Desc. It is the typed form of OrderTerm, as Pred is of Predicate.
+// Descriptor. It is the typed form of OrderTerm, as Pred is of Predicate.
 type Order[E any] struct{ t OrderTerm }
 
 // Column is any column handle of entity E, for Columns and Omit.

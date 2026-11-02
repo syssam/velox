@@ -173,7 +173,7 @@ func TestOfOnRealDatabases(t *testing.T) {
 
 // The per-owner model: shelves have notes, which are tenant-scoped and have a
 // Read policy that hides secret ones. Written by hand as velox-gen writes a
-// Desc.
+// Descriptor.
 
 type shelf struct {
 	ID    int64
@@ -189,15 +189,15 @@ var Shelves = struct {
 
 var shelfMeta velox.MetaOnce[shelf]
 
-func (*shelf) VeloxMeta() *velox.Meta[shelf] { return shelfMeta.Load(shelfDesc) }
+func (*shelf) VeloxMeta() *velox.Meta[shelf] { return shelfMeta.Load(shelfDescriptor) }
 
-func shelfDesc() velox.Desc[shelf] {
-	return velox.Desc[shelf]{
+func shelfDescriptor() velox.Descriptor[shelf] {
+	return velox.Descriptor[shelf]{
 		Table:      "shelves",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeTo[note]("Notes", 0, 1), velox.EdgeThrough[shelfTag, tag]("Tags", 0, 1, 2, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[note]("Notes", 0, 1), velox.EdgeThrough[shelfTag, tag]("Tags", 0, 1, 2, 0)},
 		Addr:       func(x *shelf, i int) any { return &x.ID },
 		EdgeAddr: func(x *shelf, i int) any {
 			if i == 0 {
@@ -218,12 +218,12 @@ type shelfTag struct {
 
 var shelfTagMeta velox.MetaOnce[shelfTag]
 
-func (*shelfTag) VeloxMeta() *velox.Meta[shelfTag] { return shelfTagMeta.Load(shelfTagDesc) }
+func (*shelfTag) VeloxMeta() *velox.Meta[shelfTag] { return shelfTagMeta.Load(shelfTagDescriptor) }
 
-func shelfTagDesc() velox.Desc[shelfTag] {
-	return velox.Desc[shelfTag]{
+func shelfTagDescriptor() velox.Descriptor[shelfTag] {
+	return velox.Descriptor[shelfTag]{
 		Table:      "shelf_tags",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "TagID", Name: "tag_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr:       func(x *shelfTag, i int) any { return [...]any{&x.ID, &x.ShelfID, &x.TagID}[i] },
@@ -245,7 +245,7 @@ var Notes = struct {
 
 var noteMeta velox.MetaOnce[note]
 
-func (*note) VeloxMeta() *velox.Meta[note] { return noteMeta.Load(noteDesc) }
+func (*note) VeloxMeta() *velox.Meta[note] { return noteMeta.Load(noteDescriptor) }
 
 func (*note) Policy() velox.Policy[note] {
 	return velox.Policy[note]{Read: func(context.Context) (velox.Pred[note], error) {
@@ -253,11 +253,11 @@ func (*note) Policy() velox.Policy[note] {
 	}}
 }
 
-func noteDesc() velox.Desc[note] {
-	return velox.Desc[note]{
+func noteDescriptor() velox.Descriptor[note] {
+	return velox.Descriptor[note]{
 		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*note)(nil).Policy()) },
 		Table:  "notes",
-		Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "OrgID", Name: "org_id"},
+		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "OrgID", Name: "org_id"},
 			{Field: "Pos", Name: "pos"}, {Field: "Secret", Name: "secret"}},
 		PrimaryKey: []int{0},
 		Tenant:     2,

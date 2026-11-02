@@ -42,7 +42,7 @@ type tenantRef struct {
 
 // buildTenantRefs is d's TenantRefs for the metadata, refusing what names no
 // column of its own.
-func buildTenantRefs(name string, d *DescFields, cols []ColumnInfo) ([]tenantRef, error) {
+func buildTenantRefs(name string, d *DescriptorFields, cols []ColumnInfo) ([]tenantRef, error) {
 	if len(d.TenantRefs) == 0 {
 		return nil, nil
 	}

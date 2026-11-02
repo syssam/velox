@@ -37,12 +37,12 @@ var Items = struct {
 var itemMeta velox.MetaOnce[Item]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Load(itemDesc) }
+func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Load(itemDescriptor) }
 
-func itemDesc() velox.Desc[Item] {
-	return velox.Desc[Item]{
+func itemDescriptor() velox.Descriptor[Item] {
+	return velox.Descriptor[Item]{
 		Table: "items",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "InvoiceID", Name: "invoice_id"},
 			{Field: "SKU", Name: "sku"},
@@ -50,7 +50,7 @@ func itemDesc() velox.Desc[Item] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Invoice]("Invoice", 1, 0),
 		},
 		Addr: func(x *Item, i int) any {

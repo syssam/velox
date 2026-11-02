@@ -35,20 +35,20 @@ var Groups = struct {
 var groupMeta velox.MetaOnce[Group]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDesc) }
+func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDescriptor) }
 
-func groupDesc() velox.Desc[Group] {
+func groupDescriptor() velox.Descriptor[Group] {
 	d0 := (&sch.Group{}).Fields()[1].Descriptor().DefaultFunc.(func() string)
-	return velox.Desc[Group]{
+	return velox.Descriptor[Group]{
 		Table: "groups",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
 			{Field: "Token", Name: "token", DefaultFunc: func() any { return d0() }},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[UserGroup, User]("Users", 0, 1, 0, 0),
 		},
 		Addr: func(x *Group, i int) any {

@@ -31,12 +31,12 @@ var Audits = struct {
 var auditMeta velox.MetaOnce[Audit]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Audit) VeloxMeta() *velox.Meta[Audit] { return auditMeta.Load(auditDesc) }
+func (*Audit) VeloxMeta() *velox.Meta[Audit] { return auditMeta.Load(auditDescriptor) }
 
-func auditDesc() velox.Desc[Audit] {
-	return velox.Desc[Audit]{
+func auditDescriptor() velox.Descriptor[Audit] {
+	return velox.Descriptor[Audit]{
 		Table: "audits",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Actor", Name: "actor"},
 			{Field: "Message", Name: "message"},

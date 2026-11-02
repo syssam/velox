@@ -28,7 +28,7 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 //
 //	func (*E) Hooks() []velox.Hook[E]
 //
-// which velox-gen binds in the generated metadata (Desc.Hooks calls
+// which velox-gen binds in the generated metadata (Descriptor.Hooks calls
 // BindHooks on it): a method with another signature does not compile, and one
 // the metadata does not bind is refused at the entity's first use. velox
 // calls it once, when it builds the entity's metadata, on a nil *E: the
@@ -78,7 +78,7 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 	}
 }
 
-// BindPolicy erases p's entity type, for Desc.Policy. For generated code.
+// BindPolicy erases p's entity type, for Descriptor.Policy. For generated code.
 // velox-gen writes
 //
 //	Policy: func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
@@ -106,7 +106,7 @@ func policyOf[E any](p Policy[E]) *engine.EntityPolicy {
 	return pol
 }
 
-// BindHooks erases hs's entity type, for Desc.Hooks. For generated code.
+// BindHooks erases hs's entity type, for Descriptor.Hooks. For generated code.
 // velox-gen writes
 //
 //	Hooks: func() velox.BoundHooks { return velox.BindHooks((*E)(nil).Hooks()) },

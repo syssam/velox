@@ -9,7 +9,7 @@ type Config struct {
 }
 
 // Bound says which of an entity's methods the user's files declare, so that
-// its Desc binds them.
+// its Descriptor binds them.
 type Bound struct {
 	Policy, Hooks bool
 	// PolicyConds is "path:line" of the first Read or Write key of a
@@ -39,7 +39,7 @@ type OutEntity struct {
 	Indexes                                  []OutIndex
 	TenantRefs                               []OutTenantRef // the foreign keys a write under a tenant checks, by column
 	Join                                     bool           // a many-to-many join entity
-	Bidi                                     bool           // the join entity of a bidirectional self edge: its Desc says Bidi
+	Bidi                                     bool           // the join entity of a bidirectional self edge: its Descriptor says Bidi
 	Comment                                  string         // the Comment annotation's text, "" when none
 	Bound                                    Bound
 
@@ -53,7 +53,7 @@ type OutEntity struct {
 	NeedsSch bool
 
 	CheckCode  string // the cases of Check's switch on the column, "" when none
-	CheckSetup string // statements run once inside Desc before the literal (regexps, validator funcs, descriptor reads), "" when none
+	CheckSetup string // statements run once inside Descriptor before the literal (regexps, validator funcs, descriptor reads), "" when none
 }
 
 // OutTenantRef is velox.TenantRef: a foreign key to a tenant-scoped entity.
@@ -74,10 +74,10 @@ type OutField struct {
 	Tag                  string // the struct tag, including backquotes
 	Comment              string
 	Sensitive, Immutable bool
-	JSON                 bool   // a json field: its ColumnDesc's codec is encoding/json's, which the file imports
-	RequiredEdge         string // the Required edge whose NULL-able key the field holds, an edge to its own schema: its ColumnDesc says RequiredEdge; "" when none
-	NilIsNull            bool   // a slice or map field whose column holds NULL (an Optional or Nillable json field, a Nillable bytes field), which nil binds: its ColumnDesc says Nullable
-	DefaultCode          string // "" or a Go expression for ColumnDesc.Default
+	JSON                 bool   // a json field: its ColumnDescriptor's codec is encoding/json's, which the file imports
+	RequiredEdge         string // the Required edge whose NULL-able key the field holds, an edge to its own schema: its ColumnDescriptor says RequiredEdge; "" when none
+	NilIsNull            bool   // a slice or map field whose column holds NULL (an Optional or Nillable json field, a Nillable bytes field), which nil binds: its ColumnDescriptor says Nullable
+	DefaultCode          string // "" or a Go expression for ColumnDescriptor.Default
 	DefaultFuncCode      string // "" or "func() any { … }"
 	UpdateDefaultCode    string // "" or "func() any { … }"
 }

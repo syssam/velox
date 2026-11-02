@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/internal/fakeconn"
 )
 
-func TestDescQueriesAndLoads(t *testing.T) {
+func TestDescriptorQueriesAndLoads(t *testing.T) {
 	e := &fakeconn.Exec{Results: [][][]any{
 		{{int64(1), int64(7), "ada", nil, t0}},
 		{{int64(10), int64(1), "notes"}, {int64(11), int64(1), "more"}},
@@ -29,9 +29,9 @@ func TestDescQueriesAndLoads(t *testing.T) {
 	}
 }
 
-// TestDescLoadsOne loads the to-one direction of an EdgeTo: the book's
+// TestDescriptorLoadsOne loads the to-one direction of an EdgeTo: the book's
 // AuthorID is the author's ID.
-func TestDescLoadsOne(t *testing.T) {
+func TestDescriptorLoadsOne(t *testing.T) {
 	e := &fakeconn.Exec{Results: [][][]any{
 		{{int64(10), int64(1), "notes"}},
 		{{int64(1), int64(7), "ada", nil, t0}},
@@ -50,33 +50,33 @@ func TestDescLoadsOne(t *testing.T) {
 	}
 }
 
-type badDesc struct{ ID int64 }
+type badDescriptor struct{ ID int64 }
 
-var badDescMeta velox.MetaOnce[badDesc]
+var badDescriptorMeta velox.MetaOnce[badDescriptor]
 
-func (*badDesc) VeloxMeta() *velox.Meta[badDesc] {
-	return badDescMeta.Load(func() velox.Desc[badDesc] {
-		return velox.Desc[badDesc]{Table: "b", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: 3,
-			Addr: func(x *badDesc, i int) any { return &x.ID }}
+func (*badDescriptor) VeloxMeta() *velox.Meta[badDescriptor] {
+	return badDescriptorMeta.Load(func() velox.Descriptor[badDescriptor] {
+		return velox.Descriptor[badDescriptor]{Table: "b", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: 3,
+			Addr: func(x *badDescriptor, i int) any { return &x.ID }}
 	})
 }
 
-type panicDesc struct{ ID int64 }
+type panicDescriptor struct{ ID int64 }
 
-var panicDescMeta velox.MetaOnce[panicDesc]
+var panicDescriptorMeta velox.MetaOnce[panicDescriptor]
 
-func (*panicDesc) VeloxMeta() *velox.Meta[panicDesc] {
-	return panicDescMeta.Load(func() velox.Desc[panicDesc] { panic("boom") })
+func (*panicDescriptor) VeloxMeta() *velox.Meta[panicDescriptor] {
+	return panicDescriptorMeta.Load(func() velox.Descriptor[panicDescriptor] { panic("boom") })
 }
 
-func TestDescErrors(t *testing.T) {
+func TestDescriptorErrors(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	_, err := db.Query[badDesc]().Limit(1).All(ctx)
+	_, err := db.Query[badDescriptor]().Limit(1).All(ctx)
 	var se *velox.SchemaError
 	if !errors.As(err, &se) || !strings.Contains(err.Error(), "tenant") {
 		t.Fatalf("got %v", err)
 	}
-	_, err = db.Query[panicDesc]().Limit(1).All(ctx)
+	_, err = db.Query[panicDescriptor]().Limit(1).All(ctx)
 	if !errors.As(err, &se) || !strings.Contains(err.Error(), "panicked: boom") {
 		t.Fatalf("got %v", err)
 	}
@@ -84,7 +84,7 @@ func TestDescErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	// CheckEntity reports the same errors, as *SchemaError.
-	for name, err := range map[string]error{"bad Desc": velox.CheckEntity[badDesc](), "panicking Desc": velox.CheckEntity[panicDesc]()} {
+	for name, err := range map[string]error{"bad Descriptor": velox.CheckEntity[badDescriptor](), "panicking Descriptor": velox.CheckEntity[panicDescriptor]()} {
 		if !errors.As(err, &se) || err == nil {
 			t.Errorf("CheckEntity of a %s: got %v, want a *SchemaError", name, err)
 		}

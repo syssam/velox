@@ -9,7 +9,7 @@ import (
 )
 
 // rtree is a tree whose parent edge is Required, its key NULL-able, as
-// velox-gen writes a Desc for an edge to the entity's own schema; rlink's
+// velox-gen writes a Descriptor for an edge to the entity's own schema; rlink's
 // Required edge has a NOT NULL key, which the database enforces.
 type rtree struct {
 	ID       int64
@@ -24,10 +24,10 @@ var rtrees = struct {
 var rtreeMeta velox.MetaOnce[rtree]
 
 func (*rtree) VeloxMeta() *velox.Meta[rtree] {
-	return rtreeMeta.Load(func() velox.Desc[rtree] {
-		return velox.Desc[rtree]{
+	return rtreeMeta.Load(func() velox.Descriptor[rtree] {
+		return velox.Descriptor[rtree]{
 			Table:      "rtrees",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "ParentID", Name: "parent_id", RequiredEdge: "parent"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ParentID", Name: "parent_id", RequiredEdge: "parent"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Addr: func(x *rtree, i int) any {
@@ -49,10 +49,10 @@ type rbad struct {
 var rbadMeta velox.MetaOnce[rbad]
 
 func (*rbad) VeloxMeta() *velox.Meta[rbad] {
-	return rbadMeta.Load(func() velox.Desc[rbad] {
-		return velox.Desc[rbad]{
+	return rbadMeta.Load(func() velox.Descriptor[rbad] {
+		return velox.Descriptor[rbad]{
 			Table:      "rbads",
-			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "ParentID", Name: "parent_id", RequiredEdge: "parent"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ParentID", Name: "parent_id", RequiredEdge: "parent"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Addr: func(x *rbad, i int) any {

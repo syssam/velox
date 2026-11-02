@@ -155,7 +155,7 @@ func TestLowerTypes(t *testing.T) {
 
 // TestLowerJSONFlag: a json field, and only a json field, is lowered with
 // JSON set, for which render writes encoding/json's codec into its
-// ColumnDesc and the file imports encoding/json
+// ColumnDescriptor and the file imports encoding/json
 // (as the JSON fields plan amended it). A bytes field holds bytes, not JSON.
 func TestLowerJSONFlag(t *testing.T) {
 	o := mustLower(t, Config{Package: "gen", SchemaPath: lowerSchemaPath}, LwUser{}, LwPost{}, LwGroup{})
@@ -928,7 +928,7 @@ func TestLowerEnumDefault(t *testing.T) {
 	// An enum with no Go type has its constant: see LwMixed.tier.
 }
 
-func TestLowerOneToOneDesc(t *testing.T) {
+func TestLowerOneToOneDescriptor(t *testing.T) {
 	o := mustLower(t, Config{}, Account{}, Profile{}, Role{}, Home{}, Person{})
 	if r := o.entity("Profile").rel("account"); r.Many || r.Desc != `velox.EdgeTo[Account]("Account", 1, 0)` {
 		t.Errorf("inverse %+v", r) // the key is in Profile, the inverse's owner
@@ -1162,7 +1162,7 @@ func (LwNull) Fields() []schema.Field {
 }
 
 // TestLowerNullable: the plugin model's Nullable is a column that holds
-// NULL: Nillable, or an Optional JSON slice or map; and the ColumnDesc of a
+// NULL: Nillable, or an Optional JSON slice or map; and the ColumnDescriptor of a
 // NULL-able field that is a slice or a map, no pointer, says Nullable.
 func TestLowerNullable(t *testing.T) {
 	g := mustBuild(t, LwNull{})

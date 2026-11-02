@@ -161,7 +161,7 @@ type Edge struct {
 	Ref       string   `json:"ref,omitempty"`       // the Name of the paired edge on Target, set on both edges of a pair; "" for an edge without an inverse
 	Kind      EdgeKind `json:"kind"`                // the relation, seen from this edge's entity
 	Unique    bool     `json:"unique,omitempty"`    // the edge points to at most one row (O2O, M2O)
-	Required  bool     `json:"required,omitempty"`  // such a row is created with its foreign key (Field, on FieldOn's table) set: the key is NOT NULL, or, on an edge to its own entity, NULL-able as in ent, and velox refuses it nil on insert and update (velox.ColumnDesc.RequiredEdge)
+	Required  bool     `json:"required,omitempty"`  // such a row is created with its foreign key (Field, on FieldOn's table) set: the key is NOT NULL, or, on an edge to its own entity, NULL-able as in ent, and velox refuses it nil on insert and update (velox.ColumnDescriptor.RequiredEdge)
 	Inverse   bool     `json:"inverse,omitempty"`   // the edge is the inverse of a pair, declared with edge.From
 	Immutable bool     `json:"immutable,omitempty"` // the edge is set on create and refused in updates
 	Field     string   `json:"field,omitempty"`     // the foreign-key field's Name, on whichever entity holds it; "" for M2M

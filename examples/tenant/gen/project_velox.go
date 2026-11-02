@@ -34,12 +34,12 @@ var Projects = struct {
 var projectMeta velox.MetaOnce[Project]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(projectDesc) }
+func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(projectDescriptor) }
 
-func projectDesc() velox.Desc[Project] {
-	return velox.Desc[Project]{
+func projectDescriptor() velox.Descriptor[Project] {
+	return velox.Descriptor[Project]{
 		Table: "projects",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "OrgID", Name: "org_id"},
 			{Field: "Name", Name: "name"},

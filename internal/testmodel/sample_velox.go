@@ -72,12 +72,12 @@ var Samples = struct {
 var sampleMeta velox.MetaOnce[Sample]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Sample) VeloxMeta() *velox.Meta[Sample] { return sampleMeta.Load(sampleDesc) }
+func (*Sample) VeloxMeta() *velox.Meta[Sample] { return sampleMeta.Load(sampleDescriptor) }
 
-func sampleDesc() velox.Desc[Sample] {
-	return velox.Desc[Sample]{
+func sampleDescriptor() velox.Descriptor[Sample] {
+	return velox.Descriptor[Sample]{
 		Table: "samples",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
 			{Field: "Status", Name: "status"},
@@ -94,7 +94,7 @@ func sampleDesc() velox.Desc[Sample] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges: []velox.EdgeDesc{
+		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Line]("Lines", 0, 1),
 			velox.EdgeTo[Sample]("Children", 0, 11),
 			velox.EdgeTo[Sample]("Parent", 11, 0),

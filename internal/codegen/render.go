@@ -184,9 +184,9 @@ func renderEntity(o *Out, e *OutEntity) string {
 	w.p("var %sMeta velox.MetaOnce[%s]", id, e.Name)
 	w.p("")
 	w.p("// VeloxMeta is called by velox, not by applications.")
-	w.p("func (*%s) VeloxMeta() *velox.Meta[%[1]s] { return %sMeta.Load(%[2]sDesc) }", e.Name, id)
+	w.p("func (*%s) VeloxMeta() *velox.Meta[%[1]s] { return %sMeta.Load(%[2]sDescriptor) }", e.Name, id)
 	w.p("")
-	entityDesc(&w, e)
+	entityDescriptor(&w, e)
 	w.p("")
 	entityString(&w, e)
 	return w.String()
@@ -249,7 +249,7 @@ func entityStruct(w *writer, e *OutEntity) {
 }
 
 // entityHandles writes the variable of the typed handles of e's columns and
-// relations, in the layout of internal/testmodel/ticket_desc.go.
+// relations, in the layout of internal/testmodel/ticket_velox.go.
 func entityHandles(w *writer, e *OutEntity) {
 	w.p("// %s holds the typed handles of %s's columns and relations.", e.Handles, e.Name)
 	w.p("var %s = struct {", e.Handles)
@@ -269,13 +269,13 @@ func entityHandles(w *writer, e *OutEntity) {
 	w.p("}")
 }
 
-// entityDesc writes the function that returns e's Desc.
-func entityDesc(w *writer, e *OutEntity) {
-	w.p("func %sDesc() velox.Desc[%s] {", camel(e.Label), e.Name)
+// entityDescriptor writes the function that returns e's Descriptor.
+func entityDescriptor(w *writer, e *OutEntity) {
+	w.p("func %sDescriptor() velox.Descriptor[%s] {", camel(e.Label), e.Name)
 	if e.CheckSetup != "" {
 		w.p("%s", e.CheckSetup)
 	}
-	w.p("return velox.Desc[%s]{", e.Name)
+	w.p("return velox.Descriptor[%s]{", e.Name)
 	if e.Bound.Policy {
 		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy((*%s)(nil).Policy()) },", e.Name)
 	}
@@ -286,7 +286,7 @@ func entityDesc(w *writer, e *OutEntity) {
 	if e.TableSchema != "" {
 		w.p("Schema: %s,", strconv.Quote(e.TableSchema))
 	}
-	w.p("Columns: []velox.ColumnDesc{")
+	w.p("Columns: []velox.ColumnDescriptor{")
 	for _, f := range e.Fields {
 		parts := []string{"Field: " + strconv.Quote(f.GoName), "Name: " + strconv.Quote(f.Column)}
 		if f.DefaultCode != "" {
@@ -344,7 +344,7 @@ func entityDesc(w *writer, e *OutEntity) {
 		w.p("},")
 	}
 	if len(e.Rels) > 0 {
-		w.p("Edges: []velox.EdgeDesc{")
+		w.p("Edges: []velox.EdgeDescriptor{")
 		for _, r := range e.Rels {
 			w.p("%s,", r.Desc)
 		}

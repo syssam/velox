@@ -38,12 +38,12 @@ var Invoices = struct {
 var invoiceMeta velox.MetaOnce[Invoice]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoiceDesc) }
+func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoiceDescriptor) }
 
-func invoiceDesc() velox.Desc[Invoice] {
-	return velox.Desc[Invoice]{
+func invoiceDescriptor() velox.Descriptor[Invoice] {
+	return velox.Descriptor[Invoice]{
 		Table: "invoices",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Number", Name: "number"},
 			{Field: "Customer", Name: "customer"},

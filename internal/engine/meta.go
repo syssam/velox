@@ -11,7 +11,7 @@ import (
 
 // EntityInfo is what velox knows about an entity, built once on its first use.
 // It is the non-generic view that hooks see in a Statement, and the runtime
-// view of the generated Desc it is built from.
+// view of the generated Descriptor it is built from.
 //
 // One EntityInfo is shared by every query on the entity, in every goroutine,
 // so it must be treated as read-only, slices included. A hook that needs
@@ -27,13 +27,13 @@ type EntityInfo struct {
 	Indexes    []IndexInfo
 	rels       []*relation                // in the order of the generated shape
 	kit        *Kit                       // set by MetaOnce.Load
-	check      func(col int, v any) error // Desc.Check; nil when the entity has no validators
+	check      func(col int, v any) error // Descriptor.Check; nil when the entity has no validators
 	immutable  bool                       // some column is Immutable
 	required   bool                       // some column has a RequiredEdge
-	bidi       bool                       // Desc.Bidi: a link is two rows, (a, b) and (b, a)
+	bidi       bool                       // Descriptor.Bidi: a link is two rows, (a, b) and (b, a)
 	bidiKeys   []bidiKey                  // the keys of the EdgeBidi relations, which both partners' rows hold
 	hooks      []HookFn                   // the Hooks method's, outermost first
-	refs       []tenantRef                // Desc.TenantRefs: the foreign keys a write under a tenant checks
+	refs       []tenantRef                // Descriptor.TenantRefs: the foreign keys a write under a tenant checks
 
 	// The entity's policy, bound once from its Policy method.
 	policy *EntityPolicy // nil when none
@@ -56,12 +56,12 @@ func (in *EntityInfo) Column(name string) (int, bool) {
 }
 
 // ColumnInfo describes one column. It is the runtime view of the generated
-// ColumnDesc it is built from.
+// ColumnDescriptor it is built from.
 type ColumnInfo struct {
 	Field       string // the Go field name
 	Name        string // the column name
 	Type        any    // the field's Go type, a reflect.Type: read it with GoType
-	Nullable    bool   // the column holds NULL: the field is a pointer, or its ColumnDesc says Nullable
+	Nullable    bool   // the column holds NULL: the field is a pointer, or its ColumnDescriptor says Nullable
 	Default     any
 	HasDefault  bool
 	DefaultFunc func() any // nil when none
@@ -71,16 +71,16 @@ type ColumnInfo struct {
 	UpdateDefault func() any
 	Immutable     bool // an update may not assign the column
 	Sensitive     bool // the column holds a secret (velox logs no values)
-	// RequiredEdge is ColumnDesc.RequiredEdge: the Required edge whose
+	// RequiredEdge is ColumnDescriptor.RequiredEdge: the Required edge whose
 	// NULL-able key the column holds, which a write may not leave nil; "" when
 	// none.
 	RequiredEdge string
-	// Codec says the column's value is encoded: its ColumnDesc gave Encode
+	// Codec says the column's value is encoded: its ColumnDescriptor gave Encode
 	// and Decode, as velox-gen does for every json field. The package
 	// documentation's JSON fields section says how such a column binds and reads.
 	Codec  bool
-	encode func(v any) ([]byte, error)    // ColumnDesc.Encode
-	decode func(data []byte, v any) error // ColumnDesc.Decode
+	encode func(v any) ([]byte, error)    // ColumnDescriptor.Encode
+	decode func(data []byte, v any) error // ColumnDescriptor.Decode
 	off    uintptr                        // the field's offset in the entity
 	// copyDefault says Default holds memory a row would share: FillDefault
 	// gives each row a deep copy of it.
@@ -194,7 +194,7 @@ func infoKit(in *EntityInfo) *Kit { return in.kit }
 // SetInfoKit sets in's kit.
 func SetInfoKit(in *EntityInfo, k *Kit) { in.kit = k }
 
-// SetInfoCheck sets the function that checks a column's value, Desc.Check.
+// SetInfoCheck sets the function that checks a column's value, Descriptor.Check.
 func SetInfoCheck(in *EntityInfo, f func(col int, v any) error) { in.check = f }
 
 // InfoHooks is in's hooks, outermost first.

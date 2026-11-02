@@ -39,10 +39,10 @@ type nilRow struct {
 var nilRowMeta velox.MetaOnce[nilRow]
 
 func (*nilRow) VeloxMeta() *velox.Meta[nilRow] {
-	return nilRowMeta.Load(func() velox.Desc[nilRow] {
-		return velox.Desc[nilRow]{
+	return nilRowMeta.Load(func() velox.Descriptor[nilRow] {
+		return velox.Descriptor[nilRow]{
 			Table: "nil_rows",
-			Columns: []velox.ColumnDesc{
+			Columns: []velox.ColumnDescriptor{
 				{Field: "ID", Name: "id"},
 				{Field: "IP", Name: "ip", Nullable: true},
 				{Field: "Slice", Name: "slice", Nullable: true},

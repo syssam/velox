@@ -34,12 +34,12 @@ var Users = struct {
 var userMeta velox.MetaOnce[User]
 
 // VeloxMeta is called by velox, not by applications.
-func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDesc) }
+func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
-func userDesc() velox.Desc[User] {
-	return velox.Desc[User]{
+func userDescriptor() velox.Descriptor[User] {
+	return velox.Descriptor[User]{
 		Table: "users",
-		Columns: []velox.ColumnDesc{
+		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
 			{Field: "Email", Name: "email"},
