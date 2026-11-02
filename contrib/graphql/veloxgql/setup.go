@@ -218,7 +218,7 @@ func (c *wsLimitConn) Read(p []byte) (int, error) {
 		// 1009, message too big: a client told 1006, an abnormal close, retries the
 		// same message.
 		c.mu.Lock()
-		_, _ = c.Conn.Write(wsTooBig)
+		_, _ = c.Conn.Write([]byte(wsTooBig))
 		c.mu.Unlock()
 		_ = c.Close()
 		return 0, errWebsocketTooLarge
@@ -226,10 +226,9 @@ func (c *wsLimitConn) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// wsTooBig is a server's close frame, unmasked, of code 1009.
-var wsTooBig = append([]byte{0x88, 2 + byte(len(wsTooBigReason)), 0x03, 0xf1}, wsTooBigReason...)
-
-const wsTooBigReason = "message over MaxBodyBytes"
+// wsTooBig is a server's close frame, unmasked, of code 1009 (0x03f1), whose reason
+// is the 25 bytes after them; 0x1b is their length and the code's 2.
+const wsTooBig = "\x88\x1b\x03\xf1message over MaxBodyBytes"
 
 // Write implements net.Conn.
 func (c *wsLimitConn) Write(b []byte) (int, error) {
