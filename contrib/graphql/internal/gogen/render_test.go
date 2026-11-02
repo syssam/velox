@@ -1696,3 +1696,43 @@ func TestBytesGetter(t *testing.T) {
 		t.Errorf("a Nillable field lost its null:\n%s", got)
 	}
 }
+
+// TestZeroDefaultNotRefused: a create input that gives a field with a zero
+// Default (false, 0, "") its zero value stores what the Default would, so
+// Create<T> does not refuse it; a non-zero Default's zero is still refused.
+// A field with graphql.CreateDefault is a value, always set.
+func TestZeroDefaultNotRefused(t *testing.T) {
+	def := func(name, typ, d string) *plugin.Field {
+		return &plugin.Field{Name: name, GoName: plugin.GoName(name), Type: typ, GoType: typ, ElemType: typ, Optional: true, HasDefault: true, Default: json.RawMessage(d)}
+	}
+	active := &plugin.Field{Name: "active", GoName: "Active", Type: "bool", GoType: "bool", ElemType: "bool"}
+	b, err := json.Marshal(graphql.CreateDefault(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	active.Annotations = map[string]json.RawMessage{"graphql": b}
+	mut, err := json.Marshal(graphql.Mutations(graphql.MutationCreate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
+		Name: "Thing", Label: "thing", Handles: "Things", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+		Annotations: map[string]json.RawMessage{"graphql": mut},
+		Fields: []*plugin.Field{
+			{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64", AutoID: true},
+			def("off", "bool", "false"), def("views", "int64", "0"), def("score", "float64", "0.0"), def("s", "string", `""`),
+			def("handle", "string", `"anon"`), active,
+		},
+	}}}
+	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
+	for _, f := range []string{"Off", "Views", "Score", "S"} {
+		if strings.Contains(got, "gqlimpl.NotZero(\"CreateThingInput."+strings.ToLower(f[:1])+f[1:]+"\"") {
+			t.Errorf("%s: a zero Default's zero refused:\n%s", f, got)
+		}
+	}
+	for _, want := range []string{`gqlimpl.NotZero("CreateThingInput.handle"`, "Active bool", "x.Active = input.Active", "Things.Active}"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in:\n%s", want, got)
+		}
+	}
+}

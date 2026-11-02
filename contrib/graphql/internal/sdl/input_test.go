@@ -431,20 +431,26 @@ func TestCreateDefault(t *testing.T) {
 		m    *plugin.Model
 		want string
 	}{
-		"a string":        {model(build(with(field("n", "string"), graphql.CreateDefault(1)))), "graphql.CreateDefault on a field of type string"},
-		"nullable":        {model(build(with(nullable, graphql.CreateDefault(1)))), "graphql.CreateDefault on a nullable field"},
-		"with a Default":  {model(build(with(defaulted, graphql.CreateDefault(1)))), "graphql.CreateDefault on a field with a Default"},
-		"not a bool":      {model(build(with(field("n", "bool"), graphql.CreateDefault(1)))), "graphql.CreateDefault(1) on a bool field"},
-		"not an integer":  {model(build(with(field("n", "int8"), graphql.CreateDefault(1.5)))), "graphql.CreateDefault(1.5) is not a value of the int8 field"},
-		"out of range":    {model(build(with(field("n", "int8"), graphql.CreateDefault(300)))), "graphql.CreateDefault(300) is not a value of the int8 field"},
-		"negative uint":   {model(build(with(field("n", "uint16"), graphql.CreateDefault(-1)))), "graphql.CreateDefault(-1) is not a value of the uint16 field"},
-		"NaN":             {model(build(with(field("n", "float64"), graphql.CreateDefault(math.NaN())))), `graphql.CreateDefault("NaN") is not a value of the float64 field`},
-		"high bit":        {model(build(with(field("n", "uint64"), graphql.CreateDefault(uint64(math.MaxUint64))))), "database/sql cannot send a uint64 with the high bit set"},
-		"left out":        {model(build(with(field("n", "int"), graphql.Annotation{CreateInput: new(bool), CreateDefault: []byte("1")}))), "graphql.CreateDefault on a field the create input leaves out"},
-		"skipped":         {model(build(with(field("n", "int"), graphql.Annotation{Skip: graphql.SkipMutationCreateInput, CreateDefault: []byte("1")}))), "graphql.CreateDefault on a field the create input leaves out"},
-		"the tenant":      {model(tenant), "graphql.CreateDefault: the tenant is never an input"},
-		"no create":       {model(noCreate), "schema User, field n: graphql.CreateDefault, and graphql.Mutations does not list create"},
-		"on an edge":      {model(func() *plugin.Entity { u := build(); e := edge("e", plugin.M2M, "User"); e.Annotations = ann(t, graphql.CreateDefault(1)); u.Edges = []*plugin.Edge{e}; return u }()), "graphql.CreateDefault does not apply to an edge"},
+		"a string":       {model(build(with(field("n", "string"), graphql.CreateDefault(1)))), "graphql.CreateDefault on a field of type string"},
+		"nullable":       {model(build(with(nullable, graphql.CreateDefault(1)))), "graphql.CreateDefault on a nullable field"},
+		"with a Default": {model(build(with(defaulted, graphql.CreateDefault(1)))), "graphql.CreateDefault on a field with a Default"},
+		"not a bool":     {model(build(with(field("n", "bool"), graphql.CreateDefault(1)))), "graphql.CreateDefault(1) on a bool field"},
+		"not an integer": {model(build(with(field("n", "int8"), graphql.CreateDefault(1.5)))), "graphql.CreateDefault(1.5) is not a value of the int8 field"},
+		"out of range":   {model(build(with(field("n", "int8"), graphql.CreateDefault(300)))), "graphql.CreateDefault(300) is not a value of the int8 field"},
+		"negative uint":  {model(build(with(field("n", "uint16"), graphql.CreateDefault(-1)))), "graphql.CreateDefault(-1) is not a value of the uint16 field"},
+		"NaN":            {model(build(with(field("n", "float64"), graphql.CreateDefault(math.NaN())))), `graphql.CreateDefault("NaN") is not a value of the float64 field`},
+		"high bit":       {model(build(with(field("n", "uint64"), graphql.CreateDefault(uint64(math.MaxUint64))))), "database/sql cannot send a uint64 with the high bit set"},
+		"left out":       {model(build(with(field("n", "int"), graphql.Annotation{CreateInput: new(bool), CreateDefault: []byte("1")}))), "graphql.CreateDefault on a field the create input leaves out"},
+		"skipped":        {model(build(with(field("n", "int"), graphql.Annotation{Skip: graphql.SkipMutationCreateInput, CreateDefault: []byte("1")}))), "graphql.CreateDefault on a field the create input leaves out"},
+		"the tenant":     {model(tenant), "graphql.CreateDefault: the tenant is never an input"},
+		"no create":      {model(noCreate), "schema User, field n: graphql.CreateDefault, and graphql.Mutations does not list create"},
+		"on an edge": {model(func() *plugin.Entity {
+			u := build()
+			e := edge("e", plugin.M2M, "User")
+			e.Annotations = ann(t, graphql.CreateDefault(1))
+			u.Edges = []*plugin.Edge{e}
+			return u
+		}()), "graphql.CreateDefault does not apply to an edge"},
 	} {
 		t.Run(name, func(t *testing.T) { renderErr(t, c.m, c.want) })
 	}

@@ -198,7 +198,8 @@
 // unset, so CreateDefault(true) gives the create input active: Boolean! = true,
 // which gqlgen fills when the client leaves it out, and the column no Default.
 // A create input that gives a field with a Default
-// its zero value ("" or the zero time) is refused with BAD_USER_INPUT, since an
+// its zero value ("" or the zero time) is refused with BAD_USER_INPUT, unless the
+// Default is that zero value, since an
 // insert would store the Default in its place; an update stores it. So is a null
 // given to a Nillable field with a Default, literal or variable, on the create<T>
 // field: leave it out for the Default, or clear it with an update, as an insert
