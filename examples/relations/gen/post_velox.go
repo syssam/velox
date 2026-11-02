@@ -18,6 +18,7 @@ type Post struct {
 	Votes    int64               `json:"votes,omitempty"`
 	Author   velox.One[Author]   `json:"author,omitzero"`
 	Comments velox.Many[Comment] `json:"comments,omitzero"`
+	Tags     velox.Many[Tag]     `json:"tags,omitzero"`
 }
 
 // Posts holds the typed handles of Post's columns and relations.
@@ -28,6 +29,7 @@ var Posts = struct {
 	Votes    velox.NumberCol[Post, int64]
 	Author   velox.Rel[Post, Author]
 	Comments velox.Rel[Post, Comment]
+	Tags     velox.Rel[Post, Tag]
 }{
 	ID:       velox.NumberCol[Post, int64]{I: 0},
 	AuthorID: velox.NumberCol[Post, int64]{I: 1},
@@ -35,6 +37,7 @@ var Posts = struct {
 	Votes:    velox.NumberCol[Post, int64]{I: 3},
 	Author:   velox.Rel[Post, Author]{I: 0},
 	Comments: velox.Rel[Post, Comment]{I: 1},
+	Tags:     velox.Rel[Post, Tag]{I: 2},
 }
 
 var postMeta velox.MetaOnce[Post]
@@ -56,6 +59,7 @@ func postDescriptor() velox.Descriptor[Post] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Author]("Author", 1, 0),
 			velox.EdgeTo[Comment]("Comments", 0, 1),
+			velox.EdgeThrough[PostTag, Tag]("Tags", 0, 0, 1, 0),
 		},
 		Addr: func(x *Post, i int) any {
 			switch i {
@@ -76,6 +80,8 @@ func postDescriptor() velox.Descriptor[Post] {
 				return &x.Author
 			case 1:
 				return &x.Comments
+			case 2:
+				return &x.Tags
 			}
 			return nil
 		},

@@ -101,7 +101,8 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 //
 // Under WithTenant, an upsert that updates must name the tenant column in
 // OnConflict (ErrTenantUpsert); on MySQL, where any unique key can conflict,
-// every unique key must hold it. Under WithAllTenants, which reaches every
+// every unique key must hold it, but for an integer primary key left at zero,
+// which AUTO_INCREMENT assigns and so cannot conflict. Under WithAllTenants, which reaches every
 // tenant's rows anyway, neither is required. Its update branch gets the
 // policy's Read and Write conditions, on the existing row; an upsert that
 // changed fewer rows than it sent, because the conditions hid a conflicting

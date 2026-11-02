@@ -73,7 +73,11 @@ func Connect(driver, dsn string, opts []Option) (DB, error) {
 			return DB{}, err
 		}
 	}
-	db, err := sql.Open(driver, dsn)
+	open := sql.Open
+	if d == SQLite {
+		open = openSQLite
+	}
+	db, err := open(driver, dsn)
 	if err != nil {
 		return DB{}, fmt.Errorf("velox: Connect: %w", err)
 	}

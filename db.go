@@ -26,7 +26,7 @@ var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 // Connect opens a database and returns a DB on it. Close it when done. The
 // usual way to start:
 //
-//	db, err := velox.Connect("sqlite", "app.db?_pragma=foreign_keys(1)")
+//	db, err := velox.Connect("sqlite", "app.db")
 //	if err != nil {
 //		return err
 //	}
@@ -45,8 +45,11 @@ var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 // turns, and a statement on the DB in the body of a loop over Iter or in a Tx's fn,
 // which hold the connection, fails (see Query.Iter and DB.Tx). Raise it with
 // velox.Pool(db).SetMaxOpenConns on a file that takes concurrent reads, with a
-// busy_timeout in the dsn. Foreign keys are enforced only when the dsn asks, as
-// Open says. For PostgreSQL, veloxpgx.Open is faster.
+// busy_timeout in the dsn. SQLite enforces foreign keys only on a connection
+// that turns them on, so Connect runs PRAGMA foreign_keys = ON on each new
+// connection, unless the dsn sets foreign_keys itself (_pragma=foreign_keys(0)
+// for modernc.org/sqlite, _foreign_keys or _fk for mattn/go-sqlite3), which it
+// obeys. For PostgreSQL, veloxpgx.Open is faster.
 func Connect(driver, dsn string, opts ...Option) (*DB, error) {
 	e, err := engine.Connect(driver, dsn, opts)
 	if err != nil {
@@ -83,7 +86,9 @@ func (db *DB) Close() error { return db.e.Close() }
 // an UPDATE count every row it matched as affected, even one whose values did
 // not change, which Save relies on. For SQLite, foreign keys are enforced
 // only when the DSN asks for it (modernc.org/sqlite:
-// _pragma=foreign_keys(1)). Open panics on a d that is not Postgres, MySQL or
+// _pragma=foreign_keys(1); mattn/go-sqlite3: _foreign_keys=1): Open uses db
+// as it is, and without the pragma a reference to a missing row is stored
+// without an error. Connect turns them on. Open panics on a d that is not Postgres, MySQL or
 // SQLite. Connect does the opening too, for an application that does not need a
 // *sql.DB of its own.
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB { return &DB{e: engine.Open(d, db, opts)} }
