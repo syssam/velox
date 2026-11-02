@@ -195,7 +195,7 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []I
 			return nil, nil, err
 		}
 		v := g.goValue(f, a)
-		if f.Type == "json" {
+		if f.Type == "json" && !v.own {
 			v.typ, v.pkg = v.getter, v.getterPkg
 		}
 		goName := goOf(name, f.GoName)

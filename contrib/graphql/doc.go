@@ -536,7 +536,10 @@
 // hold: veloxgql's function marshalers (MarshalTime for time.Time, and so on)
 // and gqlgen's own for the narrow integers. A field of another Go type of the
 // application's, and a JSON field, binds to a generated <Field>GQL getter
-// that returns a type of the list. With autobind to the generated package:
+// that returns a type of the list. A JSON field of []string, []int, []int64,
+// []float64 or []bool is a list of String!, Int!, Float! or Boolean!, as entgql
+// gives field.Strings, in the type and the inputs, and binds the Go slice; its
+// filters stay JSON's, none. With autobind to the generated package:
 //
 //	autobind:
 //	  - <module>/gen

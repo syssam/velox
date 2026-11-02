@@ -448,7 +448,7 @@ func typesModel(t *testing.T) *plugin.Model {
 				{Name: "rank", GoName: "Rank", Type: "int8", GoType: "int8", ElemType: "int8", Annotations: where(graphql.OpIn)},
 				{Name: "at", GoName: "At", Type: "time", GoType: "*time.Time", ElemType: "time.Time", PkgPath: "time", Nullable: true, Pointer: true, Annotations: where(graphql.OpLT | graphql.OpIsNil)},
 				{Name: "ref", GoName: "Ref", Type: "uuid", GoType: "uuid.UUID", ElemType: "uuid.UUID", PkgPath: "github.com/google/uuid", Kind: "array", Annotations: where(graphql.OpNEQ)},
-				{Name: "tags", GoName: "Tags", Type: "json", GoType: "[]string", ElemType: "[]string", Kind: "slice"},
+				{Name: "tags", GoName: "Tags", Type: "json", GoType: "[]int32", ElemType: "[]int32", Kind: "slice"},
 				// A foreign key of the application's own type, to Owner.
 				{Name: "owner_id", GoName: "OwnerID", Type: "int64", GoType: "*ids.UserID", ElemType: "ids.UserID", PkgPath: "example.com/app/ids", Kind: "int64", Pointer: true, Nullable: true, Annotations: where(graphql.OpsDefault)},
 			},
@@ -995,7 +995,7 @@ func TestCreateConversions(t *testing.T) {
 		` OwnerID *string `,
 		` Tags veloxgql.JSON `,
 		`gqlimpl.DecodeIDAs[int64, idspkg.UserID]("CreateEventInput.ownerID", *input.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
-		`gqlimpl.FromJSON[[]string]("CreateEventInput.tags", input.Tags)`,
+		`gqlimpl.FromJSON[[]int32]("CreateEventInput.tags", input.Tags)`,
 		`gqlimpl.CheckExists(ctx, db.Query[Owner]().Where(Owners.ID.EQ(k`,
 		`), 1, "CreateEventInput.ownerID", "Owner")`,
 		`return gqlimpl.WriteError(err, "CreateEventInput", "gen.Event", eventFieldGQL)`,

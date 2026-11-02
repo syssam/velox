@@ -456,6 +456,48 @@ func TestCreateDefault(t *testing.T) {
 	}
 }
 
+// A JSON field of []string, []int, []int64, []float64 or []bool is a list of
+// the element's non-null scalar, in the type and in the inputs, as entgql
+// gives field.Strings; one of any other Go type stays JSON.
+func TestJSONLists(t *testing.T) {
+	list := func(name, elem string, nullable bool) *plugin.Field {
+		return &plugin.Field{Name: name, GoName: goName(name), Column: name, Type: "json", GoType: elem, ElemType: elem, Kind: "slice", Nullable: nullable, Optional: nullable}
+	}
+	named := list("named", "schema.Tags", false)
+	named.PkgPath = "example.com/app/schema"
+	m := list("m", "map[string]any", true)
+	m.Kind = "map"
+	u := entity("User", list("ss", "[]string", false), list("is", "[]int", true), list("ls", "[]int64", false),
+		list("fs", "[]float64", false), list("bs", "[]bool", false), list("i8", "[]int8", false), named, m)
+	u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
+	s, sdl := load(t, model(u))
+	for typ, want := range map[string][]string{
+		"User":            {"id: ID!", "ss: [String!]!", "is: [Int!]", "ls: [Int!]!", "fs: [Float!]!", "bs: [Boolean!]!", "i8: JSON!", "named: JSON!", "m: JSON"},
+		"CreateUserInput": {"ss: [String!]!", "is: [Int!]", "ls: [Int!]!", "fs: [Float!]!", "bs: [Boolean!]!", "i8: JSON!", "named: JSON!", "m: JSON"},
+		"UpdateUserInput": {"ss: [String!]", "is: [Int!]", "clearIs: Boolean", "ls: [Int!]", "fs: [Float!]", "bs: [Boolean!]", "i8: JSON", "named: JSON", "m: JSON", "clearM: Boolean"},
+	} {
+		if got := fieldsOf(s, typ); !slices.Equal(got, want) {
+			t.Errorf("%s:\n got %v\nwant %v\n%s", typ, got, want, sdl)
+		}
+	}
+	// A list binds to the Go field, as gqlgen binds []string to [String!];
+	// JSON to its getter.
+	if strings.Contains(sdl, "SsGQL") || !strings.Contains(sdl, "NamedGQL") {
+		t.Errorf("getters:\n%s", sdl)
+	}
+	surf, err := Build(model(u))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ty := range surf.Types {
+		for _, fi := range ty.Create {
+			if fi.Name == "ss" && fi.GoType != "[]string" || fi.Name == "named" && fi.GoType != "veloxgql.JSON" {
+				t.Errorf("CreateUserInput.%s: Go type %s", fi.Name, fi.GoType)
+			}
+		}
+	}
+}
+
 // A mutation input's fields carry the directives of the field or edge they
 // set, as the where input's do: a directive that guards a field's value
 // guards its writes too.

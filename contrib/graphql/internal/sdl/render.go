@@ -498,6 +498,9 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 	case "bytes":
 		return "Bytes", nil
 	case "json":
+		if s := jsonList[f.ElemType]; s != "" {
+			return "[" + s + "!]", nil
+		}
 		return "JSON", nil
 	case "enum":
 		if a.Skip&graphql.SkipEnumField != 0 {
@@ -542,6 +545,11 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 		return "", fmt.Errorf("%s: a field of type %s has no GraphQL type; leave it out with graphql.Skip()", where, f.Type)
 	}
 }
+
+// jsonList is the scalar of the elements of a JSON field of these Go types,
+// which is a list of them, as entgql gives field.Strings: gqlgen binds the Go
+// slice. A JSON field of any other Go type is JSON.
+var jsonList = map[string]string{"[]string": "String", "[]int": "Int", "[]int64": "Int", "[]float64": "Float", "[]bool": "Boolean"}
 
 // enumValues are the GraphQL values of an enum field: its stored values, upper
 // cased, or as graphql.EnumValues names them.

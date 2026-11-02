@@ -327,6 +327,9 @@ func (g *graph) goValue(f *plugin.Field, a graphql.Annotation) goValue {
 		v.getter, v.getterPkg = "veloxgql.Bytes", veloxgqlPath
 	case "json":
 		v = goValue{getter: "veloxgql.JSON", getterPkg: veloxgqlPath}
+		if jsonList[f.ElemType] != "" {
+			v = goValue{typ: f.ElemType, own: true}
+		}
 	case "enum":
 		switch {
 		case g.goEnums[f.Enum]:

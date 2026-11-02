@@ -538,8 +538,8 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 		}
 		// An insert fills the Default into a zero value, so the client's "" or
 		// zero time would not be what it stores. An enum's input is never "",
-		// and a zero Default stores the zero.
-		if fd.HasDefault && !fd.Pointer && fd.Type != "enum" && !zeroDefault(fd) {
+		// a zero Default stores the zero, and a list given is never nil.
+		if fd.HasDefault && !fd.Pointer && fd.Type != "enum" && fd.Type != "json" && !zeroDefault(fd) {
 			f.p("%sif err := %s.NotZero(%s, %s); err != nil {", indent, impl, at(fi), dst)
 			f.p("%s\treturn nil, err", indent)
 			f.p("%s}", indent)
@@ -710,7 +710,7 @@ func (r *renderer) decodes(f *file, t *sdl.Type, in string, fs []sdl.InputField)
 			order = append(order, i)
 		case sdl.InputValue:
 			fd := e.Fields[fi.Field]
-			if fd.Type != "json" {
+			if fd.Type != "json" || fi.GoType != "veloxgql.JSON" { // a list binds its Go slice
 				continue
 			}
 			elem := cmp.Or(fd.ElemType, strings.TrimPrefix(fd.GoType, "*"))

@@ -22,13 +22,6 @@ func (*Post) IsNode() {}
 // the key id, encoded.
 func (x *Post) IDGQL() string { return veloxgql.EncodeID("Post", x.ID) }
 
-// TagsGQL is the field tags as JSON, the GraphQL scalar it is: gqlgen binds the
-// field to it.
-func (x *Post) TagsGQL() (veloxgql.JSON, error) {
-	b, err := json.Marshal(x.Tags)
-	return veloxgql.JSON(b), err
-}
-
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
 	var s string
@@ -490,7 +483,7 @@ type CreatePostInput struct {
 	Slug        string
 	Status      *PostStatus
 	PublishedAt *time.Time
-	Tags        *veloxgql.JSON
+	Tags        *[]string
 	Rating      *float64
 	// Who last edited the post; the update default fills it.
 	EditedBy string
@@ -514,7 +507,7 @@ func (in CreatePostInput) String() string {
 	}
 	var p4 any
 	if in.Tags != nil {
-		p4 = string(*in.Tags)
+		p4 = *in.Tags
 	}
 	var p5 any
 	if in.Rating != nil {
@@ -534,17 +527,11 @@ func (in CreatePostInput) GoString() string { return in.String() }
 // the caller may link and change, and the errors.
 func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	var (
-		j4  []string
 		k7  int64
 		k8  []int64
 		k9  []int64
 		err error
 	)
-	if input.Tags != nil {
-		if j4, err = gqlimpl.FromJSON[[]string]("CreatePostInput.tags", *input.Tags); err != nil {
-			return nil, err
-		}
-	}
 	if k7, err = gqlimpl.DecodeID[int64]("CreatePostInput.writerID", input.WriterID, "Account"); err != nil {
 		return nil, err
 	}
@@ -567,7 +554,7 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 		cols = append(cols, Posts.PublishedAt)
 	}
 	if input.Tags != nil {
-		x.Tags = j4
+		x.Tags = *input.Tags
 		cols = append(cols, Posts.Tags)
 	}
 	if input.Rating != nil {
@@ -634,7 +621,7 @@ type UpdatePostInput struct {
 	PublishedAt *time.Time
 	// ClearPublishedAt sets the field published_at to NULL.
 	ClearPublishedAt bool
-	Tags             *veloxgql.JSON
+	Tags             *[]string
 	Views            *int
 	Rating           *float64
 	// ClearRating sets the field rating to NULL.
@@ -675,7 +662,7 @@ func (in UpdatePostInput) String() string {
 	}
 	var p4 any
 	if in.Tags != nil {
-		p4 = string(*in.Tags)
+		p4 = *in.Tags
 	}
 	var p5 any
 	if in.Views != nil {
@@ -704,7 +691,6 @@ func (in UpdatePostInput) GoString() string { return in.String() }
 func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, error) {
 	var (
 		key int64
-		j4  []string
 		k8  int64
 		k9  []int64
 		k10 []int64
@@ -714,11 +700,6 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	)
 	if key, err = gqlimpl.DecodeID[int64]("updatePost.id", id, "Post"); err != nil {
 		return nil, err
-	}
-	if input.Tags != nil {
-		if j4, err = gqlimpl.FromJSON[[]string]("UpdatePostInput.tags", *input.Tags); err != nil {
-			return nil, err
-		}
 	}
 	if input.WriterID != nil {
 		if k8, err = gqlimpl.DecodeID[int64]("UpdatePostInput.writerID", *input.WriterID, "Account"); err != nil {
@@ -769,7 +750,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 		set = append(set, Posts.PublishedAt.SetNull())
 	}
 	if input.Tags != nil {
-		set = append(set, Posts.Tags.Set(j4))
+		set = append(set, Posts.Tags.Set(*input.Tags))
 	}
 	if input.Views != nil {
 		set = append(set, Posts.Views.Set(*input.Views))
