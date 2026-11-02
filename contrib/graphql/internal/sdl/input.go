@@ -273,7 +273,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 			if t != nil {
 				why = "is not a Node"
 			}
-			return nil, fmt.Errorf("%s: a required edge whose target %s %s: create%s could never set it; skip the edge's create input with graphql.Skip(graphql.SkipMutationCreateInput) if a hook sets it", where, ed.Target, why, o.name)
+			return nil, fmt.Errorf("%s: a required edge whose target %s %s: create%s could never set it; skip the edge's create input with graphql.Skip(graphql.SkipMutationCreateInput), and set its key in the resolver through Create%s's set, or in a hook", where, ed.Target, why, o.name, o.name)
 		}
 		return nil, nil
 	}

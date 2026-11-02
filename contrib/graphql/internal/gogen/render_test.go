@@ -826,7 +826,11 @@ func TestCreateInputs(t *testing.T) {
 					continue
 				}
 				sig := expr(fn.Type)
-				if want := "func(ctx context.Context, input " + in + ") (*" + ty.Entity.Name + ", error)"; sig != want {
+				set := ""
+				if len(leftOut(ty)) > 0 {
+					set = ", set func(*" + ty.Entity.Name + ")"
+				}
+				if want := "func(ctx context.Context, input " + in + set + ") (*" + ty.Entity.Name + ", error)"; sig != want {
 					t.Errorf("Create%s: %s, want %s", ty.Name, sig, want)
 				}
 			}
@@ -894,7 +898,7 @@ func updateOnlyModel(t *testing.T) *plugin.Model {
 // field for each of the Surface's InputFields, in order: a pointer for a
 // value or a unique edge's ID, a []string for an ID list and a bool for a
 // clear; and Update<T>, which takes the ID and the input and returns the
-// entity. A type with updateX and no createX still has <entity>FieldGQL,
+// entity, and <entity>UpdateFieldGQL, which names its fields alone and
 // which its UpdateX names.
 func TestUpdateInputs(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "update-only": updateOnlyModel(t)} {
@@ -955,7 +959,7 @@ func TestUpdateInputs(t *testing.T) {
 				if sig, want := expr(d.Type), "func(ctx context.Context, id string, input "+in+") (*"+ty.Entity.Name+", error)"; sig != want {
 					t.Errorf("%s: %s, want %s", fn, sig, want)
 				}
-				gql := strings.ToLower(ty.Entity.Name[:1]) + ty.Entity.Name[1:] + "FieldGQL"
+				gql := strings.ToLower(ty.Entity.Name[:1]) + ty.Entity.Name[1:] + "UpdateFieldGQL"
 				if funcs[gql] == nil {
 					t.Errorf("no func %s, which %s names", gql, fn)
 				}
@@ -993,7 +997,7 @@ func TestCreateConversions(t *testing.T) {
 		`gqlimpl.FromJSON[[]int32]("CreateEventInput.tags", input.Tags)`,
 		`gqlimpl.CheckExists(ctx, db.Query[Owner]().Where(Owners.ID.EQ(k`,
 		`), 1, "CreateEventInput.ownerID", "Owner")`,
-		`return gqlimpl.WriteError(err, "CreateEventInput", "gen.Event", eventFieldGQL)`,
+		`return gqlimpl.WriteError(err, "CreateEventInput", "gen.Event", eventCreateFieldGQL)`,
 		`case "Tags": return "tags"`,
 	} {
 		if !strings.Contains(ev, want) {

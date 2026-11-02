@@ -173,7 +173,9 @@
 // connection's edges, the number of ids for nodes and MaxList for another list
 // of objects. On top of that, with no multiplier, a field that runs a statement
 // adds 100, so first: 0 and aliases count, and an input object adds its size at
-// each use. Every alias and every branch of a fragment counts, except a
+// each use. A where predicate no index serves adds 2000 at each use: a
+// <field>Contains, <field>HasPrefix or <field>HasSuffix, which reads the whole
+// table, and a has<Edge>With, whose subquery runs for each row. Every alias and every branch of a fragment counts, except a
 // selection that @skip(if: true) or @include(if: false) leaves out, which
 // costs nothing, its condition a literal or a variable's value (a missing
 // variable's default, when it has one; a condition that is not a boolean

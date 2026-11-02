@@ -193,7 +193,26 @@
 // For an entity with graphql.MutationCreate, its file also has Create<T>Input
 // and Create<T>(ctx, input), which createX's resolver returns; with
 // graphql.MutationUpdate, Update<T>Input and Update<T>(ctx, id, input), which
-// updateX's resolver returns. A field with a Default, or a bool or number with
+// updateX's resolver returns.
+//
+// A field the create input leaves out (Skip(SkipMutationCreateInput) or
+// CreateInput(false)) that the schema requires, not Optional, not Nillable and
+// with no Default, would be inserted as its zero value, "" in a NOT NULL column.
+// For such an entity Create<T> takes a third argument, set func(*T), which it
+// calls on the entity after the input's values are on it and before the
+// validators and any statement, so the resolver, which is where entgql users set
+// it, writes it:
+//
+//	return gen.CreatePost(ctx, input, func(p *gen.Post) { p.Slug = slugify(input.Title) })
+//
+// The resolver that gqlgen stubbed with two arguments does not compile, which
+// names the field to set. A nil set leaves the field to a velox.Hook, which runs
+// before the insert's validators; with neither, the zero value is stored. A
+// validator's error on such a field is the resolver's, not the client's: it names
+// no input field. An update input has no such field to set, as a field it leaves
+// out keeps its value, and Update<T> is unchanged.
+//
+// A field with a Default, or a bool or number with
 // graphql.CreateDefault, is optional in the create input and stays non-null in
 // the type: velox-gen refuses a Default other than false or 0 on a bool or
 // number that is not Nillable, as a Go struct's false could not be told from
@@ -206,7 +225,10 @@
 // given to a Nillable field with a Default, literal or variable, on the create<T>
 // field: leave it out for the Default, or clear it with an update, as an insert
 // does not store NULL there. In an update input a field not given is left as
-// it is, and clear<Field> or a null given sets a nullable one to NULL. A null given to an
+// it is, and clear<Field> or a null given sets a nullable one to NULL:
+// updatePost(input: {publishedAt: null}) clears publishedAt, where entgql
+// ignores the null. A client that sends every field of a form, null for those
+// the user did not touch, clears them; it leaves them out instead. A null given to an
 // edge's <edge>ID is refused with BAD_USER_INPUT, naming clear<Edge>; a Required field
 // has no clear input, and its null is a field not given.
 // An edge is cleared, then
@@ -366,6 +388,21 @@
 //     "<Input>.<edge>ID: invalid value: a row cannot be its own <edge>".
 //   - Not written: a key the caller supplies in a create input and JSON append.
 //
+// # Differences from entgql
+//
+// What an entgql client or resolver relies on that velox-graphql does otherwise,
+// each described above:
+//   - An explicit null on a nullable field of an update input clears it, as
+//     clear<Field>: true does. entgql treats null as not given. A client that
+//     sends null for fields it means to keep must leave them out.
+//   - A field the create input leaves out that the schema requires, with no
+//     Default, is set by the resolver through Create<T>'s set func(*T), which
+//     entgql's resolver does with the builder's SetX.
+//   - A Required one-to-one or many-to-one edge is T, not T!, in the type.
+//   - A null on an update's <edge>ID is refused, naming clear<Edge>.
+//   - A field.Strings and the other JSON lists of scalars are [String!], as in
+//     entgql; any other JSON is the JSON scalar.
+//
 // # Loading
 //
 // The rows one statement reads are a batch: a page's rows, the nodes of node
@@ -448,7 +485,15 @@
 // or a list of objects, so first: 0 and an alias still count, and the default
 // allows at most 1500 statements. An input object argument, as a where, adds its
 // size at each use: one for each object and value in it, read from the variables,
-// so one variable reused counts each time. On a mutation, an input object adds a
+// so one variable reused counts each time. In a where, a predicate no index serves
+// adds 2000, 20 statements, at each use: <field>Contains, <field>HasPrefix and
+// <field>HasSuffix, a LIKE that reads the whole table, and a non-empty
+// has<Edge>With, a subquery for each row read. So 700 aliases of
+// items(first: 1, where: {nameContains: "x"}), which took 12.5 s over 90000 rows,
+// are refused, and the default allows about 70 such filters, while a page that
+// filters on two or three costs about 10000. Cost cannot see which columns
+// are indexed: a predicate on a column with no index scans the table too, and
+// a server with large tables lowers MaxCost. On a mutation, an input object adds a
 // statement for the row it reads back, two for a non-empty <edge>IDs, add<Edge>IDs
 // or remove<Edge>IDs, one for an <edge>ID and three for a clear<Edge>: true, a page
 // of links, which a longer edge repeats.
