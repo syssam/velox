@@ -231,10 +231,13 @@ func (r *renderer) term(f *file, e *plugin.Entity, fd *plugin.Field, field, dir,
 	}
 	handle := e.Handles + "." + fd.GoName
 	if fd.Pointer {
-		// Only a Nillable field is a pointer, and its column is nullable, on
-		// which sdl refuses OrderField; a key is never Nillable. A model that
-		// says otherwise is not velox-gen's.
-		return "", fmt.Errorf("schema %s, field %s: a connection orders by it, and its Go field is a pointer, which only a Nillable field is", e.Name, fd.Name)
+		// A Nillable field: nil is NULL, which the cursor carries as null. A
+		// key is never Nillable.
+		get := fmt.Sprintf("func(x *%s) (%s, bool) {\n%s\t\tif x.%s == nil {\n%s\t\t\tvar z %s\n%s\t\t\treturn z, false\n%s\t\t}\n%s\t\treturn %s, true\n%s\t}",
+			e.Name, base, indent, fd.GoName, indent, base, indent, indent, indent, to(base, "*x."+fd.GoName), indent)
+		set := fmt.Sprintf("func(x *%s, v %s, ok bool) {\n%s\t\tx.%s = nil\n%s\t\tif ok {\n%s\t\t\tw := %s\n%s\t\t\tx.%s = &w\n%s\t\t}\n%s\t}",
+			e.Name, base, indent, fd.GoName, indent, indent, to(elem, "v"), indent, fd.GoName, indent, indent)
+		return fmt.Sprintf("%s.NullTerm(%s, %s, %s.Asc(), %s.Desc(),\n%s\t%s,\n%s\t%s)", f.gqlimpl(), field, dir, handle, handle, indent, get, indent, set), nil
 	}
 	get := fmt.Sprintf("func(x *%s) %s { return %s }", e.Name, base, to(base, "x."+fd.GoName))
 	set := fmt.Sprintf("func(x *%s, v %s) { x.%s = %s }", e.Name, base, fd.GoName, to(elem, "v"))

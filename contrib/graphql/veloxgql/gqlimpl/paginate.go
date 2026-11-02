@@ -66,6 +66,39 @@ func Term[E, V any](field string, dir veloxgql.OrderDirection, asc, desc velox.O
 	}
 }
 
+// NullTerm is Term for a nullable column, whose field is a pointer: get
+// returns a row's value and false for NULL, and set sets it, or NULL for false.
+// A cursor holds NULL as null. velox's OrderBy sorts NULL after every value
+// ascending and before them descending, on every dialect, and its After pages
+// past NULL, so the connection's order and its cursors agree.
+func NullTerm[E, V any](field string, dir veloxgql.OrderDirection, asc, desc velox.Order[E], get func(*E) (V, bool), set func(*E, V, bool)) OrderTerm[E] {
+	return OrderTerm[E]{
+		Field: field, Direction: dir, asc: asc, desc: desc,
+		get: func(x *E) any {
+			if v, ok := get(x); ok {
+				return v
+			}
+			return nil
+		},
+		set: func(x *E, v any) error {
+			if v == nil {
+				var zero V
+				set(x, zero, false)
+				return nil
+			}
+			t, ok := v.(V)
+			if !ok {
+				var err error
+				if t, err = cursorValue[V](v); err != nil {
+					return err
+				}
+			}
+			set(x, t, true)
+			return nil
+		},
+	}
+}
+
 // Page is a page of a connection: its rows in the connection's order, each
 // row's cursor, and the page info.
 type Page[E any] struct {

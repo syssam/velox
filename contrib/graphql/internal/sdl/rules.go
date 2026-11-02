@@ -125,8 +125,6 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 	switch {
 	case len(a.EnumValues) > 0 && f.Type != "enum":
 		return fmt.Errorf("%s: graphql.EnumValues on a field of type %s, which is not an enum", where, f.Type)
-	case a.OrderField != "" && f.Nullable:
-		return fmt.Errorf("%s: graphql.OrderField on a nullable field: keyset paging needs an order column without NULLs", where)
 	case a.OrderField != "" && f.Sensitive:
 		return fmt.Errorf("%s: graphql.OrderField on a sensitive field: its values would be in the cursors", where)
 	case a.OrderField != "" && f.Type == "json":

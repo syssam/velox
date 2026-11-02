@@ -641,11 +641,6 @@ func TestRenderErrors(t *testing.T) {
 		"a where on a time of another Go type": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
 			"schema Thing, field at: velox-graphql converts a time field only from time.Time, and its Go type is types.Stamp"},
-		// Only a Nillable field is a pointer, and keyset paging needs an
-		// order column without NULLs.
-		"a pointer order field": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
-			&plugin.Field{Name: "n", GoName: "N", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"order_field":"N"}`)}})}},
-			"schema Thing, field n: a connection orders by it, and its Go field is a pointer, which only a Nillable field is"},
 		"a create-input field named String": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{creatable(withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "text", GoName: "Text", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"field_name":"string"}`)}}))}},
 			"schema Thing: the field string of CreateThingInput is the Go field String, which is the input's method"},
@@ -689,7 +684,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion7\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion8\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1694,6 +1689,21 @@ func TestBytesGetter(t *testing.T) {
 	}
 	if strings.Contains(got, "if x.Opt == nil { return veloxgql.Bytes{}") {
 		t.Errorf("a Nillable field lost its null:\n%s", got)
+	}
+}
+
+// TestNullableOrderTerm: a Nillable order field is a gqlimpl.NullTerm, whose get
+// says NULL and whose set writes nil, converting a field of another Go type.
+func TestNullableOrderTerm(t *testing.T) {
+	thing := &plugin.Entity{Name: "Thing", Label: "thing", Handles: "Things", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64"}}}
+	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(thing,
+		&plugin.Field{Name: "n", GoName: "N", Type: "int64", GoType: "*types.N", ElemType: "types.N", PkgPath: "example.com/types", Kind: "int64", Pointer: true, Nullable: true, Optional: true,
+			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"order_field":"N"}`)}})}}
+	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
+	want := `gqlimpl.NullTerm(string(o.Field), o.Direction, Things.N.Asc(), Things.N.Desc(), func(x *Thing) (int64, bool) { if x.N == nil { var z int64 return z, false } return int64(*x.N), true }, func(x *Thing, v int64, ok bool) { x.N = nil if ok { w := types.N(v) x.N = &w } }), nil`
+	if !strings.Contains(got, want) {
+		t.Errorf("no %q in:\n%s", want, got)
 	}
 }
 
