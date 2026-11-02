@@ -100,7 +100,9 @@ func WithBaseline(version uint64) Option {
 // which another runner holds while it applies, and how long Status waits on
 // SQLite for a writer to finish; 5 minutes by default. A wait of 0 or less
 // does not wait: the lock is tried once. A wait past what the database
-// takes (about 24 days) is cut to it.
+// takes (about 24 days) is cut to it on MySQL and SQLite. On PostgreSQL the lock is tried again
+// with pauses between, in no transaction, so that a waiting run holds no
+// snapshot for the running one's CREATE INDEX CONCURRENTLY to wait for.
 func WithLockWait(d time.Duration) Option {
 	return Option{func(o *options) { o.lockWait = d }}
 }
@@ -204,8 +206,12 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // until WithResume continues it or Resolve ends it. On MySQL a failure with nothing
 // changed is less. A lock wait timeout or deadlock, or the server's refusal of a DDL
 // statement, as a file's first statement, leaves no row, an *Error of Code "retry"; a
-// lock's at the head of a later unit leaves a row Up goes on from without WithResume.
-// Either way the Report holds the files applied before it.
+// lock's at the head of a later unit leaves a row Up goes on from without WithResume,
+// as a PostgreSQL lock timeout or deadlock at the head of a unit does. A PostgreSQL
+// no-transaction file without a lock-timeout directive runs CONCURRENTLY and VALIDATE
+// CONSTRAINT with no lock timeout, as they wait for older transactions by design, and
+// every other statement with the Config's. Either way the Report holds the files
+// applied before it.
 //
 // Up uses one connection of db for its run and closes it after, so nothing
 // a file sets on its session reaches db's other connections. A SQLite database
