@@ -200,6 +200,9 @@ var (
 type wsLimitConn struct {
 	net.Conn
 	most int64
+	// mu holds each Write whole, so that the close frame sent when a message is too
+	// large comes between the library's frames, never inside one.
+	mu sync.Mutex
 	// header is the frame's header so far; skip the payload of it left to pass; message
 	// the payload of the message so far, of its data frames.
 	header  [14]byte
@@ -212,10 +215,27 @@ type wsLimitConn struct {
 func (c *wsLimitConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
 	if !c.read(p[:n]) {
+		// 1009, message too big: a client told 1006, an abnormal close, retries the
+		// same message.
+		c.mu.Lock()
+		_, _ = c.Conn.Write(wsTooBig)
+		c.mu.Unlock()
 		_ = c.Close()
 		return 0, errWebsocketTooLarge
 	}
 	return n, err
+}
+
+// wsTooBig is a server's close frame, unmasked, of code 1009.
+var wsTooBig = append([]byte{0x88, 2 + byte(len(wsTooBigReason)), 0x03, 0xf1}, wsTooBigReason...)
+
+const wsTooBigReason = "message over MaxBodyBytes"
+
+// Write implements net.Conn.
+func (c *wsLimitConn) Write(b []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.Conn.Write(b)
 }
 
 // read passes b, and reports whether its messages are within the limit.

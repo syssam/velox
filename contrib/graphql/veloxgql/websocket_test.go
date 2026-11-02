@@ -140,10 +140,21 @@ func TestWebsocketMessageBounded(t *testing.T) {
 		for _, f := range frames {
 			_, _ = c.Write(f)
 		}
+		var last []byte
 		for {
-			if _, alive := wsAck(c); !alive {
+			h := make([]byte, 2)
+			if _, err := io.ReadFull(c, h); err != nil {
 				break
 			}
+			p := make([]byte, h[1]&0x7f)
+			if _, err := io.ReadFull(c, p); err != nil {
+				break
+			}
+			last = append(h, p...)
+		}
+		// It says why: 1009, message too big, which a client does not retry as it does 1006.
+		if len(last) < 4 || last[0] != 0x88 || binary.BigEndian.Uint16(last[2:]) != 1009 {
+			t.Errorf("%s: the last frame %q, want a close of 1009", name, last)
 		}
 		// The read returned because the connection closed, and not at its deadline.
 		if err := c.SetDeadline(time.Time{}); err != nil {
