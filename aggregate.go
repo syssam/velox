@@ -54,7 +54,8 @@ func aggregate[E, T any](ctx context.Context, q Query[E], fn Aggregate, c int32)
 // Sum returns the sum of column c over the rows matching q's conditions,
 // After's among them, as Count counts them: the tenant scope and the policy
 // apply, and the ordering, limit, offset, columns and relations are
-// ignored. With no row, or only NULLs, it is 0.
+// ignored. With no row, or only NULLs, it is 0. For a nullable column's
+// NullNumberCol, SumNull, AvgNull, MinNull and MaxNull are the same.
 //
 // A sum that does not fit V is an error, not a wrapped value.
 func Sum[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, error) {
@@ -96,6 +97,31 @@ func extreme[E, V any](ctx context.Context, q Query[E], fn Aggregate, c NumberCo
 		return zero, false, err
 	}
 	return *v, true, nil
+}
+
+// SumNull is Sum over a nullable numeric column: a NULL adds nothing, and with
+// no row, or only NULLs, it is 0. The aggregates of a NullNumberCol are
+// functions of their own, not Sum's, so that a numeric handle has no method
+// beyond its predicates and setters, which every entity's package would compile.
+func SumNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, error) {
+	return Sum(ctx, q, NumberCol[E, V](c))
+}
+
+// AvgNull is Avg over a nullable numeric column, whose NULLs it skips: false
+// when there is no row, or only NULLs.
+func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error) {
+	return Avg(ctx, q, NumberCol[E, V](c))
+}
+
+// MinNull is Min over a nullable numeric column, whose NULLs it skips: false
+// when there is no row, or only NULLs.
+func MinNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error) {
+	return extreme(ctx, q, AggregateMin, NumberCol[E, V](c))
+}
+
+// MaxNull is Max over a nullable numeric column, as MinNull is Min.
+func MaxNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error) {
+	return extreme(ctx, q, AggregateMax, NumberCol[E, V](c))
 }
 
 // Group is one group of a grouped aggregate: the rows whose key column holds
@@ -213,5 +239,28 @@ func MinBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c N
 // MaxBy returns the greatest value of column c per value of the key column,
 // as MinBy does.
 func MaxBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error) {
+	return grouped[E, K, V](ctx, q, AggregateMax, key, c.I)
+}
+
+// SumByNull is SumBy over a nullable numeric column: a group with only NULLs
+// sums to 0, as for SumNull.
+func SumByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error) {
+	return grouped[E, K, V](ctx, q, AggregateSum, key, c.I)
+}
+
+// AvgByNull is AvgBy over a nullable numeric column: a group with only NULLs
+// has no average, and no entry.
+func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, float64], error) {
+	return grouped[E, K, float64](ctx, q, AggregateAvg, key, c.I)
+}
+
+// MinByNull is MinBy over a nullable numeric column: a group with only NULLs
+// has no least value, and no entry.
+func MinByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error) {
+	return grouped[E, K, V](ctx, q, AggregateMin, key, c.I)
+}
+
+// MaxByNull is MaxBy over a nullable numeric column, as MinByNull is MinBy.
+func MaxByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error) {
 	return grouped[E, K, V](ctx, q, AggregateMax, key, c.I)
 }

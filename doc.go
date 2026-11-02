@@ -52,14 +52,17 @@
 //
 // The tenant scope and the policy apply to them as to Count. Sum is 0 when
 // no row matches; Avg, Min and Max also return false then, as there is no
-// value to give.
+// value to give. A nullable number column (a NullNumberCol, for a Nillable
+// field) takes SumNull, AvgNull, MinNull and MaxNull, which skip NULLs and
+// return the same.
 //
 // CountBy, SumBy, AvgBy, MinBy and MaxBy do the same per value of a key column,
 // made by the column handle's Key method, in the order of the key:
 //
 //	totals, err := velox.SumBy(ctx, db.Query[gen.Invoice]().Unbounded(), gen.Invoices.OrgID.Key(), gen.Invoices.TotalCents)
 //
-// Each returns a []Group[K, V]. The groups can be as many as the rows, so the
+// Each returns a []Group[K, V]; SumByNull, AvgByNull, MinByNull and MaxByNull
+// take a NullNumberCol. The groups can be as many as the rows, so the
 // query says Unbounded, and WithMaxRows caps them as it caps a read's rows.
 //
 // Rel.Of is a condition on the rows related to given owners, which loading
