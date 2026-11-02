@@ -448,7 +448,15 @@
 // or a list of objects, so first: 0 and an alias still count, and the default
 // allows at most 1500 statements. An input object argument, as a where, adds its
 // size at each use: one for each object and value in it, read from the variables,
-// so one variable reused counts each time. On a mutation, an input object adds a
+// so one variable reused counts each time. In a where, a predicate no index serves
+// adds 2000, 20 statements, at each use: <field>Contains, <field>HasPrefix and
+// <field>HasSuffix, a LIKE that reads the whole table, and a non-empty
+// has<Edge>With, a subquery for each row read. So 700 aliases of
+// items(first: 1, where: {nameContains: "x"}), which took 12.5 s over 90000 rows,
+// are refused, and the default allows about 70 such filters, while a page that
+// filters on two or three costs about 10000. Cost cannot see which columns
+// are indexed: a predicate on a column with no index scans the table too, and
+// a server with large tables lowers MaxCost. On a mutation, an input object adds a
 // statement for the row it reads back, two for a non-empty <edge>IDs, add<Edge>IDs
 // or remove<Edge>IDs, one for an <edge>ID and three for a clear<Edge>: true, a page
 // of links, which a longer edge repeats.
