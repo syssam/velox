@@ -179,9 +179,11 @@ func (e *Extension) operationResponse(ctx context.Context) (context.Context, *re
 
 // finish is resp, the response r made, or what replaces it when r stopped. ctx is the
 // response's context as gqlgen gave it, which presents an error.
+// No response is the end of a stream, and stays so: gqlgen's streaming transports ask
+// until they get none, and an error made for it would be sent without end.
 func (e *Extension) finish(ctx context.Context, r *response, resp *graphql.Response) *graphql.Response {
 	why := r.why.Load()
-	if why == 0 {
+	if why == 0 || resp == nil {
 		return resp
 	}
 	out := &graphql.Response{}

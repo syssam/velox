@@ -509,9 +509,11 @@
 // at MaxErrors of the errors its fields make, where 97000 of them took 516 MB; and it
 // stops a query or a mutation at Limits.Timeout, 30 s, cancelling the statements' context.
 // Each answers one clean error and data null, COST_LIMIT_EXCEEDED or TIMEOUT, and a
-// mutation rolls back. What remains, plainly: 583 MB is the most a request was measured
-// to allocate at the defaults, 33 MB of strings under aliases at MaxCost, so that the
-// response is 47 MB, as aliases and numbers are not counted; rows being read when the limit
+// mutation rolls back. What remains, plainly: 844 MB is the most a request was measured
+// to allocate at the defaults, with introspection on, as MaxCost and MaxIntrospectionCost
+// are separate budgets and one request spends both: long aliases of titles at MaxCost and
+// aliased introspection at its own limit, a 59 MB response, as aliases and numbers are not
+// counted. Without extension.Introspection it was 583 MB and 47 MB; rows being read when the limit
 // is passed are read before they are counted, one per connection a client aliased; a
 // custom scalar's value that is not a string, bytes or JSON kind is not counted; a resolver
 // that ignores its context holds the response until it returns; a presenter of the

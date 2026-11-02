@@ -283,3 +283,42 @@ func TestLimitsNegativeNewOnes(t *testing.T) {
 		}
 	}
 }
+
+// TestStoppedStreamEnds: over a streaming transport gqlgen asks for responses until it
+// gets none. A query or mutation stopped by a limit sends its one error and ends: the
+// replacement is not made again for the end of the stream, which over SSE and websocket
+// sent error frames without end and held the handler.
+func TestStoppedStreamEnds(t *testing.T) {
+	db, _ := handlerDB(t)
+	resolvers := handlerResolvers(db, nil)
+	wait := func(ctx context.Context, _ map[string]any) (any, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	resolvers["slow"], resolvers["add"] = wait, wait
+	srv := handler.New(testSchemaOf(budgetSDL, resolvers))
+	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: 50 * time.Millisecond}))
+	srv.AddTransport(transport.SSE{})
+	for _, q := range []string{`{ slow }`, `mutation { add(id: 1) }`} {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		body := strings.NewReader(`{"query":` + strconvQuote(q) + `}`)
+		req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/", body)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "text/event-stream")
+		w := httptest.NewRecorder()
+		done := make(chan struct{})
+		go func() { defer close(done); h.ServeHTTP(w, req) }()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			cancel()
+			t.Fatalf("%s: the stream did not end", q) // its handler never returns, so no wait
+		}
+		cancel()
+		if n := strings.Count(w.Body.String(), "event: next"); n != 1 {
+			t.Errorf("%s: %d events, want 1:\n%.500s", q, n, w.Body.String())
+		}
+	}
+}
+
+func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }

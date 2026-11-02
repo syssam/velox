@@ -126,7 +126,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   every page that selects it.
 - GraphQL: a foreign key predicate holds the target's tenant as well as its policy, and a
   JSON array of the wrong length is refused. The documented worst case is now measured:
-  583 MB allocated and a 47 MB response under the defaults.
+  844 MB allocated and a 59 MB response under the defaults with introspection on, as its
+  budget adds to `MaxCost`'s, and 583 MB and 47 MB with it off.
+- GraphQL: a query or mutation stopped by a limit over websocket or SSE ends its stream,
+  where it sent error frames without end and held the handler.
 - An upsert's own key no longer excuses a tenant foreign key.
 - SQLite: only foreign key orphans a file made fail its migration. Drift reads `timestamp`,
   `time` and similar types in one form.

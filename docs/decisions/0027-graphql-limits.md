@@ -135,10 +135,14 @@ schema and SQLite; an attack on the left went to at most 1.6 GB before.
 | long aliases at `MaxCost`, on rows | 199705 | 286.3 MB | 107 ms | data, 20 MB |
 | 36 aliases of one title of 900 KB | | 428.6 MB | 119 ms | data, 33 MB |
 | long aliases at `MaxCost` on titles, just under `MaxResponseBytes` | | 583.1 MB | 181 ms | data, 47 MB |
+| both, with introspection: 1400 long aliases of titles and 800 of `inputFields` | | 844 MB | | data, 59 MB |
 | 300 aliases of one title of 900 KB (was 3.7 GB) | 25094 | 38.8 MB | 55 ms | `ErrResponseTooLarge` |
 | 100 `@admin` fields on 100 rows | 1135 | 0.7 MB | 3 ms | 100 errors and `ErrTooManyErrors` |
 
-Those last but two are the worst a default server was measured to allow one request, and what a
+A review found the row "both": `MaxCost` and `MaxIntrospectionCost` are separate budgets,
+so one request spends both, and 844 MB, not 583 MB, is the worst measured with
+introspection on. A server open to strangers turns introspection off, which leaves 583 MB.
+The rows above it are the worst a default server was measured to allow one request, and what a
 server open to strangers sizes itself for: real work, under the cost and the bytes. They
 are `TestResponseAtItsLimit`, whose budgets of 800 MB and 1000 MB leave room for `-race`. The earlier claim, that
 286 MB was the most, was false, as it was only what cost sees. Rows being read when the limit
