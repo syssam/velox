@@ -146,7 +146,9 @@ at the call to a silent outcome.
   in the schema a Rewrite moved it to, added after the hooks, in Count, Exists, the
   aggregates and Iter too. With no tenant they fail with `ErrNoTenant`; `WithAllTenants`
   adds nothing. A link that crosses tenants, written before the check or under
-  `WithAllTenants`, is hidden from both sides. With's read of the join rows, and its
+  `WithAllTenants`, is hidden from both sides by With and Has; Of, LoadEach and
+  CountEach on a scoped target take the caller's owners as given, so an owner of another
+  tenant that the caller holds still reads its links. With's read of the join rows, and its
   LimitEach, pays nothing, as its owners were read under the scope and its targets get
   it; it still needs a tenant. Has is bound to rows that are scoped. Of, LoadEach and
   CountEach take the caller's owners: on a target with no tenant, where nothing else
@@ -178,9 +180,10 @@ A write under a tenant costs one SELECT per foreign key it sets to a tenant-scop
 row, and generated code is version 7: rerun `velox-gen`, as a TenantRef without a
 `TenantKind` fails when the entity loads. Reading, updating or deleting a join row with no
 tenant, as writing one, now fails with `ErrNoTenant`: an application that crosses tenants
-says `WithAllTenants`. Deleting a shared row with no tenant of its own, under a tenant,
-removes that tenant's links only: another's stay, and the database's foreign key fails
-the delete where there is one.
+says `WithAllTenants`. Deleting a shared row with no tenant of its own deletes it for
+every tenant, and the `ON DELETE CASCADE` that velox-gen writes on join rows removes
+every tenant's links to it, as a review showed: an earlier version of this record said
+the opposite. Guard such a delete with a Policy.
 
 ## Evidence
 

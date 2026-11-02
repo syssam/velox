@@ -103,7 +103,8 @@
 // # Writes
 //
 // DB.Insert and DB.InsertAll insert entities: Exec fills their defaults and
-// the tenant, and reads the generated keys back. OnConflict, followed by
+// the tenant. Insert reads the generated key back; InsertAll reads nothing
+// back, so give its entities their keys when later writes need them. OnConflict, followed by
 // Update or DoNothing, makes an insert an upsert. DB.Update and DB.Delete
 // change the rows their conditions match, and Exec returns how many; one
 // with no Where fails with ErrNoWhere, unless it says All. DB.Save writes

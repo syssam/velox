@@ -36,14 +36,17 @@ import (
 // through the TenantRefs velox-gen writes for each tenant-scoped side. Under a tenant,
 // a read of one (Count, Exists, the aggregates and Iter too), its update and its delete
 // hold, per side, fk IN (SELECT key FROM target WHERE tenant = ?), so a link that
-// crosses tenants is hidden from both; with neither a tenant nor WithAllTenants they
+// crosses tenants is hidden from both in With and Has; with neither a tenant nor WithAllTenants they
 // fail with ErrNoTenant, as its writes do. With and Has pay nothing for it: what they
 // read is scoped already. Of, LoadEach and CountEach pay on a target with no tenant, as
 // the owners are the caller's. The tenant converts to the kind each TenantRef states,
 // so "2" does not serve an integer column; a named id of that kind passes, as the
 // column's own type is not known there: on a join row a UserID serves an OrgID column
-// of the same kind. Deleting a shared row with no tenant removes only the tenant's links
-// to it: another tenant's stay, and the database's foreign key fails the delete.
+// of the same kind. Of, LoadEach and CountEach on a scoped target take the caller's
+// owners as given: an owner of another tenant that the caller holds still reads its
+// links. Deleting a shared row, one with no tenant, deletes it for every tenant, and
+// the ON DELETE CASCADE velox-gen writes on join rows removes every tenant's links to
+// it: guard such a delete with a Policy.
 //
 // An entity with no tenant column that is no join entity is not scoped by any of this,
 // though its rows may name, or be reachable only through, tenant rows: every tenant
