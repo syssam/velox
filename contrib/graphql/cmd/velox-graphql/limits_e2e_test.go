@@ -171,6 +171,27 @@ func (Acct) Annotations() []schema.Annotation {
 	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
+// Flag has what ent users write: a bool with a default true, through
+// graphql.CreateDefault, zero Defaults, JSON lists and a nullable order.
+type Flag struct{ schema.Schema }
+
+func (Flag) Fields() []schema.Field {
+	return []schema.Field{
+		field.Bool("active").Annotations(graphql.CreateDefault(true)),
+		field.Int64("views").Default(0),
+		field.Bool("off").Default(false),
+		field.Strings("tags").Optional(),
+		field.Ints("nums"),
+		field.Floats("fs").Optional(),
+		field.JSON("bs", []bool{}).Optional(),
+		field.Int("rank").Optional().Nillable().Annotations(graphql.OrderField("RANK")),
+	}
+}
+
+func (Flag) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField("flags"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+}
+
 type Type struct{ schema.Schema }
 
 func (Type) Fields() []schema.Field {
@@ -312,6 +333,21 @@ func (r *mutationResolver) UpdateItem(ctx context.Context, id string, input gen.
 	return gen.UpdateItem(ctx, id, input)
 }
 
+// Flags is the resolver for the flags field.
+func (r *queryResolver) Flags(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.FlagOrder) (*gen.FlagConnection, error) {
+	return gen.FlagsConnection(ctx, after, first, before, last, orderBy)
+}
+
+// CreateFlag is the resolver for the createFlag field.
+func (r *mutationResolver) CreateFlag(ctx context.Context, input gen.CreateFlagInput) (*gen.Flag, error) {
+	return gen.CreateFlag(ctx, input)
+}
+
+// UpdateFlag is the resolver for the updateFlag field.
+func (r *mutationResolver) UpdateFlag(ctx context.Context, id string, input gen.UpdateFlagInput) (*gen.Flag, error) {
+	return gen.UpdateFlag(ctx, id, input)
+}
+
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
@@ -372,6 +408,7 @@ func serve(t *testing.T) served {
 		"CREATE TABLE member_groups (member_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (member_id, group_id))",
 		"CREATE TABLE tickets (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, title TEXT NOT NULL)",
 		"CREATE TABLE remarks (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, body TEXT NOT NULL, ticket_id INTEGER)",
+		"CREATE TABLE flags (id INTEGER PRIMARY KEY, active BOOLEAN NOT NULL, views INTEGER NOT NULL DEFAULT 0, off BOOLEAN NOT NULL DEFAULT false, tags JSON, nums JSON NOT NULL, fs JSON, bs JSON, rank INTEGER)",
 		"INSERT INTO orgs (id, name) VALUES (1, ~o1~), (2, ~o2~)",
 		"INSERT INTO members (id, name) VALUES (1, ~seen~), (2, ~hidden~)",
 		"INSERT INTO posts (id, org_id, member_id, title) VALUES (1, 1, 1, ~p1~), (2, 1, 2, ~p2~)",
@@ -709,13 +746,17 @@ func TestJSONInputExact(t *testing.T) {
 	s.want("read back", "{ items(last: 1) { edges { node { jMap } } } }", '{"data":{"items":{"edges":[{"node":{"jMap":{"n":9007199254740992}}}]}}}')
 	n := s.count("items")
 	for name, q := range map[string]string{
-		"null in a list":  'mutation { createItem(input: {ss: ["a", null]}) { id } }',
+		"null in a list":  'mutation { createItem(input: {trio: [1, null, 3]}) { id } }',
 		"null in a struct": 'mutation { createItem(input: {jStruct: {A: null}}) { id } }',
 		"an unknown key":   'mutation { createItem(input: {jStruct: {b: 1}}) { id } }',
 	} {
 		if got := s.do(q); !strings.Contains(got, "BAD_USER_INPUT") {
 			t.Errorf("%s: %s", name, got)
 		}
+	}
+	// ss is [String!] now, so GraphQL refuses its null.
+	if got := s.do('mutation { createItem(input: {ss: ["a", null]}) { id } }'); !strings.Contains(got, "GRAPHQL_VALIDATION_FAILED") {
+		t.Errorf("null in a list of strings: %s", got)
 	}
 	if got := s.count("items"); got != n {
 		t.Errorf("%d rows after the refusals, was %d", got, n)
@@ -765,6 +806,119 @@ func TestIntrospectionTypeNames(t *testing.T) {
 		t.Errorf("errors: %s", got)
 	}
 }
+
+// TestCreateDefaultServed: a bool with graphql.CreateDefault(true) is optional
+// in the create input, true when left out and false when given false, and stays
+// Boolean! in the type; a zero Default stores the zero given.
+func TestCreateDefaultServed(t *testing.T) {
+	s := serve(t)
+	s.want("left out", "mutation { createFlag(input: {nums: []}) { active views off } }", '{"data":{"createFlag":{"active":true,"views":0,"off":false}}}')
+	s.want("given", "mutation { createFlag(input: {active: false, views: 0, off: false, nums: []}) { active views off } }", '{"data":{"createFlag":{"active":false,"views":0,"off":false}}}')
+	s.want("given, not zero", "mutation { createFlag(input: {active: true, views: 3, off: true, nums: []}) { active views off } }", '{"data":{"createFlag":{"active":true,"views":3,"off":true}}}')
+	got := s.do('{ __type(name: "CreateFlagInput") { inputFields { name defaultValue type { kind } } } t: __type(name: "Flag") { fields { name type { kind } } } }')
+	for _, want := range []string{'{"name":"active","defaultValue":"true","type":{"kind":"NON_NULL"}}', '{"name":"active","type":{"kind":"NON_NULL"}}'} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %s in %s", want, got)
+		}
+	}
+	if got := s.do("mutation { createFlag(input: {active: null, nums: []}) { active } }"); !strings.Contains(got, "errors") {
+		t.Errorf("null: %s", got)
+	}
+}
+
+// TestJSONListsServed: a JSON field of []string, []int, []float64 or []bool is
+// a list of the scalar, both ways; an empty list stores empty, and a clear NULL.
+func TestJSONListsServed(t *testing.T) {
+	s := serve(t)
+	s.want("create", 'mutation { createFlag(input: {tags: ["a", "b"], nums: [1, 2], fs: [1.5], bs: [true, false]}) { tags nums fs bs } }',
+		'{"data":{"createFlag":{"tags":["a","b"],"nums":[1,2],"fs":[1.5],"bs":[true,false]}}}')
+	s.want("left out", "mutation { createFlag(input: {nums: []}) { tags nums fs bs } }", '{"data":{"createFlag":{"tags":null,"nums":[],"fs":null,"bs":null}}}')
+	id := veloxgql.EncodeID("Flag", 1)
+	s.want("update to empty", fmt.Sprintf('mutation { updateFlag(id: %q, input: {tags: [], nums: [3]}) { tags nums } }', id), '{"data":{"updateFlag":{"tags":[],"nums":[3]}}}')
+	s.want("clear", fmt.Sprintf('mutation { updateFlag(id: %q, input: {clearTags: true}) { tags } }', id), '{"data":{"updateFlag":{"tags":null}}}')
+	s.want("null clears", fmt.Sprintf('mutation { updateFlag(id: %q, input: {fs: null}) { fs } }', id), '{"data":{"updateFlag":{"fs":null}}}')
+	got := s.do('{ __type(name: "Flag") { fields { name type { kind ofType { kind ofType { kind ofType { name } } } } } } }')
+	for _, want := range []string{'{"name":"tags","type":{"kind":"LIST","ofType":{"kind":"NON_NULL","ofType":{"kind":"SCALAR","ofType":null}}}}', '{"name":"nums","type":{"kind":"NON_NULL","ofType":{"kind":"LIST","ofType":{"kind":"NON_NULL","ofType":{"name":"Int"}}}}}'} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %s in %s", want, got)
+		}
+	}
+	if got := s.do('mutation { createFlag(input: {tags: ["a", null], nums: []}) { tags } }'); !strings.Contains(got, "errors") {
+		t.Errorf("a null element: %s", got)
+	}
+}
+
+// TestNullableOrderServed: a connection ordered by a nullable field, with NULLs
+// and ties, pages forward and backward exactly, two rows at a time, NULL last
+// ascending and first descending.
+func TestNullableOrderServed(t *testing.T) {
+	s := serve(t)
+	for _, r := range []string{"null", "2", "null", "1", "2", "null", "1"} {
+		if got := s.do("mutation { createFlag(input: {nums: [], rank: " + r + "}) { id } }"); strings.Contains(got, "errors") {
+			t.Fatal(got)
+		}
+	}
+	type page struct {
+		Data struct {
+			Flags struct {
+				Edges    []struct{ Node struct{ Rank *int } }
+				PageInfo struct {
+					HasNextPage, HasPreviousPage bool
+					StartCursor, EndCursor       string
+				}
+			}
+		}
+	}
+	read := func(q string) page {
+		t.Helper()
+		var p page
+		got := s.do(q)
+		if err := json.Unmarshal([]byte(got), &p); err != nil || strings.Contains(got, "errors") {
+			t.Fatalf("%s: %v", got, err)
+		}
+		return p
+	}
+	ranks := func(p page) string {
+		var out []string
+		for _, e := range p.Data.Flags.Edges {
+			if e.Node.Rank == nil {
+				out = append(out, "-")
+			} else {
+				out = append(out, fmt.Sprint(*e.Node.Rank))
+			}
+		}
+		return strings.Join(out, " ")
+	}
+	for dir, want := range map[string]string{"ASC": "1 1 2 2 - - -", "DESC": "- - - 2 2 1 1"} {
+		order := "orderBy: {field: RANK, direction: " + dir + "}"
+		var fwd []string
+		after := ""
+		for {
+			p := read("{ flags(first: 2" + after + ", " + order + ") { edges { node { rank } } pageInfo { hasNextPage hasPreviousPage startCursor endCursor } } }")
+			fwd = append(fwd, ranks(p))
+			if !p.Data.Flags.PageInfo.HasNextPage {
+				break
+			}
+			after = fmt.Sprintf(", after: %q", p.Data.Flags.PageInfo.EndCursor)
+		}
+		if got := strings.Join(fwd, " "); got != want {
+			t.Errorf("%s forward: %s, want %s", dir, got, want)
+		}
+		var back []string
+		before := ""
+		for {
+			p := read("{ flags(last: 2" + before + ", " + order + ") { edges { node { rank } } pageInfo { hasNextPage hasPreviousPage startCursor endCursor } } }")
+			back = append([]string{ranks(p)}, back...)
+			if !p.Data.Flags.PageInfo.HasPreviousPage {
+				break
+			}
+			before = fmt.Sprintf(", before: %q", p.Data.Flags.PageInfo.StartCursor)
+		}
+		if got := strings.Join(back, " "); got != want {
+			t.Errorf("%s backward: %s, want %s", dir, got, want)
+		}
+	}
+}
 `
 
 // TestLimitsServed generates its schema's application with velox-gen and the
@@ -798,7 +952,7 @@ func TestLimitsServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullClears", "TestUpdateNullEdgeRefused", "TestNullBytesGoType", "TestForeignKeyFilterOtherTenant", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit"} {
+	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullClears", "TestUpdateNullEdgeRefused", "TestNullBytesGoType", "TestForeignKeyFilterOtherTenant", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit", "TestCreateDefaultServed", "TestJSONListsServed", "TestNullableOrderServed"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

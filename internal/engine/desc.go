@@ -84,15 +84,16 @@ func BuildDesc(x any, base unsafe.Pointer, load func() DescView) (info *EntityIn
 			return fail(c.Field, "Immutable column %s has an UpdateDefault; every update would be refused", c.Field)
 		}
 		if c.Default != nil {
-			if boolOrNumber(ft) {
-				// A bool or numeric field cannot have a Default: its zero value is also a
-				// real value, and the insert would overwrite an explicit false or 0.
-				return fail(c.Field, "Default on bool/numeric field %s would overwrite an explicit false or 0 on insert; make the field a pointer (nil uses the default)", c.Field)
-			}
 			if ci.Default, ok = defaultOf(c.Default, ft); !ok {
 				// FillDefault sets the field to it: a value of another type
 				// would panic on the first insert instead of failing here.
 				return fail(c.Field, "Default is a %T, not a %v", c.Default, ft)
+			}
+			if boolOrNumber(ft) && !zeroNumber(reflect.ValueOf(ci.Default)) {
+				// A bool or numeric field cannot have a Default: its zero value is also a
+				// real value, and the insert would overwrite an explicit false or 0.
+				// The zero value itself stores what unset does.
+				return fail(c.Field, "Default on bool/numeric field %s would overwrite an explicit false or 0 on insert; make the field a pointer (nil uses the default)", c.Field)
 			}
 			ci.copyDefault = holdsRefs(reflect.TypeOf(ci.Default))
 		}
@@ -248,6 +249,21 @@ func fieldOf(p any, base unsafe.Pointer, size uintptr) (uintptr, reflect.Type, b
 func boolOrNumber(t any) bool {
 	k := rtype(t).Kind()
 	return k == reflect.Bool || k >= reflect.Int && k <= reflect.Float64
+}
+
+// zeroNumber reports whether v, a bool or a number, is false or equal to 0.
+func zeroNumber(v reflect.Value) bool {
+	switch {
+	case v.Kind() == reflect.Bool:
+		return !v.Bool()
+	case v.CanInt():
+		return v.Int() == 0
+	case v.CanUint():
+		return v.Uint() == 0
+	case v.CanFloat():
+		return v.Float() == 0
+	}
+	return false
 }
 
 // defaultOf is a Desc's Default d as ColumnInfo holds it for a field of type

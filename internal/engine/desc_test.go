@@ -86,6 +86,14 @@ func TestDescDefaultRules(t *testing.T) {
 	if info, err = loadDesc(rowDesc()); err != nil || !info.Columns[2].HasDefault {
 		t.Errorf("Default on a pointer field: %v", err)
 	}
+	// A Default that is the zero value stores what an unset field stores, as
+	// velox-gen allows Default(false) and Default(0).
+	d = rowDesc()
+	d.Columns[1].Default = false
+	d.Columns[0].Default = int64(0)
+	if info, err = loadDesc(d); err != nil || !info.Columns[1].HasDefault || !info.Columns[0].HasDefault {
+		t.Errorf("a zero Default: %v", err)
+	}
 }
 
 func TestDescRefusals(t *testing.T) {
