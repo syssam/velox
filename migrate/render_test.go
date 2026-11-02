@@ -384,9 +384,14 @@ func TestRenderReviewLines(t *testing.T) {
 }
 
 // TestRenderUnits: a MySQL statement and an ADD VALUE are each a unit; an
-// online unit is a run of statements that starts with an IF EXISTS drop;
-// a statement of a script in a transaction is unit 0.
+// online unit is a run of statements that starts with an IF EXISTS drop, or
+// a VALIDATE alone of a key or check the main script added NOT VALID; a
+// statement of a script in a transaction is unit 0.
 func TestRenderUnits(t *testing.T) {
+	validatesAlone := func(ss []migrate.Statement, i int) bool {
+		alone := (i == 0 || ss[i-1].Unit != ss[i].Unit) && (i+1 == len(ss) || ss[i+1].Unit != ss[i].Unit)
+		return alone && strings.Contains(ss[i].SQL, " VALIDATE CONSTRAINT ")
+	}
 	for _, d := range rendered {
 		for _, c := range cases {
 			if !slices.Contains(c.on(), d) {
@@ -405,7 +410,7 @@ func TestRenderUnits(t *testing.T) {
 								t.Errorf("%s: online statement %d has unit %d, want %d", c.name, i, st.Unit, want)
 							}
 						}
-						if first != strings.Contains(st.SQL, " IF EXISTS ") {
+						if first != (strings.Contains(st.SQL, " IF EXISTS ") || validatesAlone(s.Statements, i)) {
 							t.Errorf("%s: online statement %d, first of its unit %v: %s", c.name, i, first, st.SQL)
 						}
 						continue

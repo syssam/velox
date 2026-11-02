@@ -17,10 +17,9 @@ ALTER TYPE "users_role" RENAME TO "accounts_role";
 ALTER TABLE "accounts" ALTER COLUMN "org_id" TYPE bigint USING "org_id"::bigint;
 -- review: widen-type: widens column orgs.id from integer to bigint; the table is rewritten under an exclusive lock
 ALTER TABLE "orgs" ALTER COLUMN "id" TYPE bigint USING "id"::bigint;
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id") NOT VALID;
 -- script: online
 -- velox:no-transaction
 
 -- velox:unit
-ALTER TABLE "accounts" DROP CONSTRAINT IF EXISTS "accounts_orgs_users";
-ALTER TABLE "accounts" ADD CONSTRAINT "accounts_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id") NOT VALID;
 ALTER TABLE "accounts" VALIDATE CONSTRAINT "accounts_orgs_users";

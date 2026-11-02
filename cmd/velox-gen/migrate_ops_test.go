@@ -252,3 +252,66 @@ func TestOperationsDocMySQL(t *testing.T) {
 		t.Errorf("status: %d\n%s\n%s", code, out, errs)
 	}
 }
+
+// TestOperationsDocPostgres: the recoveries of a dirty PostgreSQL online file and
+// of a hand hotfix, as the doc writes them, on a real server.
+func TestOperationsDocPostgres(t *testing.T) {
+	const a = "CREATE TABLE a (id integer, x integer);\nINSERT INTO a VALUES (1, 1), (2, 1);\n"
+	const online = "-- velox:no-transaction\n\n-- velox:unit\nDROP INDEX CONCURRENTLY IF EXISTS a_x_key;\nCREATE UNIQUE INDEX CONCURRENTLY a_x_key ON a (x);\n"
+	newPG := func(t *testing.T) *opsDB {
+		t.Helper()
+		dsn := testDSN(t, velox.Postgres)
+		dir := t.TempDir()
+		handDir(t, dir, velox.Postgres, map[string]string{"0001_a.sql": a, "0002_a_online.sql": online})
+		db, err := sql.Open("pgx", dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		return &opsDB{t: t, dir: dir, dsn: dsn, db: db}
+	}
+	valid := func(o *opsDB) string {
+		o.t.Helper()
+		var v string
+		if err := o.db.QueryRow(`SELECT coalesce((SELECT indisvalid::text FROM pg_index WHERE indexrelid = to_regclass('a_x_key')), 'none')`).Scan(&v); err != nil {
+			o.t.Fatal(err)
+		}
+		return v
+	}
+
+	t.Run("fix the cause and resume", func(t *testing.T) {
+		o := newPG(t)
+		o.refused([]string{"apply"}, "could not create unique index", "version 2 is dirty", "apply -resume")
+		if v := valid(o); v != "false" {
+			t.Errorf("the failed build left the index %s; want it invalid", v)
+		}
+		o.refused([]string{"apply"}, "version 2 is dirty")
+		o.exec("UPDATE a SET x = 2 WHERE id = 2")
+		o.ok("apply", "-resume")
+		if v := valid(o); v != "true" {
+			t.Errorf("after -resume the index is %s", v)
+		}
+	})
+
+	t.Run("give up the file", func(t *testing.T) {
+		o := newPG(t)
+		o.refused([]string{"apply"}, "version 2 is dirty")
+		o.exec("DROP INDEX CONCURRENTLY a_x_key")
+		o.ok("resolve", "-version", "2", "-undone")
+		if code, out, errs := o.run("status"); code != 3 || !strings.Contains(out, "pending 2") {
+			t.Errorf("status: %d\n%s%s", code, out, errs)
+		}
+	})
+
+	t.Run("a hotfix the next file repeats", func(t *testing.T) {
+		o := newPG(t)
+		o.ok("apply", "-to", "1")
+		o.exec("UPDATE a SET x = 2 WHERE id = 2")
+		o.ok("apply")
+		o.exec("ALTER TABLE a ADD COLUMN note text")
+		o.files(nil, map[string]string{"0003_note.sql": "ALTER TABLE a ADD COLUMN note text;\n", "0004_b.sql": "CREATE TABLE b (id integer);\n"})
+		o.refused([]string{"apply"}, `column "note" of relation "a" already exists`, "rolled back")
+		o.ok("resolve", "-version", "3", "-applied")
+		o.ok("apply")
+	})
+}

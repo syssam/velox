@@ -113,6 +113,39 @@ dirty row: run `apply` again. A lock at the head of a later unit leaves a dirty 
 `apply` goes on from without `-resume`. A failing statement inside a unit, after earlier
 statements of it ran, or a first statement that is not DDL, stays dirty for you to judge.
 
+## A dirty PostgreSQL online file
+
+A PostgreSQL file in a transaction leaves nothing to clear: a failure says `the file
+was rolled back`, and `apply` runs it again once the cause is fixed. A hand hotfix
+that the next file repeats fails so, with `already exists`: that is
+`resolve -version N -applied`, above.
+
+An `_online` file runs outside a transaction a unit at a time, and the history counts
+the units done. A statement that fails leaves the version dirty at its unit, and what
+the unit had done stays: a failed `CREATE INDEX CONCURRENTLY` leaves the index
+`INVALID` (`\d` shows it), which serves no query but may still be kept up by writes;
+a failed `VALIDATE CONSTRAINT` leaves the constraint `NOT VALID`, which checks new
+rows. Fix the cause the error names (duplicates for a unique index, rows with no
+match for a foreign key, a NULL for `NOT NULL`), then:
+
+    migrate apply -resume
+
+That runs the unit again from its first statement, which drops what the failed run
+left (`DROP INDEX CONCURRENTLY IF EXISTS`, `DROP CONSTRAINT IF EXISTS`). To give the
+file up instead, drop what its units made, as `DROP INDEX CONCURRENTLY a_x_key`, then:
+
+    migrate resolve -version N -undone
+
+A statement that waits for a table's lock waits for `lock_timeout` from `velox.json`,
+in an online file too; only `CONCURRENTLY` and `VALIDATE CONSTRAINT`, which block no
+query while they wait for older transactions, wait for as long as those take. A lock
+timeout at a unit's first statement changed nothing: run `apply` again, with no
+`-resume`.
+
+A run killed during a statement may leave the statement running on the server, as
+`pg_stat_activity` shows, with the run's lock: the next `apply` waits for it up to
+`-lock-wait`. Once it has ended, `apply -resume` as above.
+
 ## Notes
 
 `apply` and `resolve` print `velox-gen: note:` lines for what stops nothing: a SQLite
