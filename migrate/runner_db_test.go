@@ -85,6 +85,74 @@ func TestUpPostgres(t *testing.T) {
 	}
 }
 
+// TestUpPostgresConcurrentIndexBuild: a second Up, as a second instance of an
+// app that migrates at start runs, waits for the migration lock while the
+// first builds an index CONCURRENTLY. The build waits at its end for every
+// transaction older than it, and the second Up waited in one, in
+// pg_advisory_lock, for the first's lock: a deadlock, which PostgreSQL broke
+// by cancelling the build, leaving the version dirty and the index invalid.
+// The second Up now waits between tries, in no transaction.
+func TestUpPostgresConcurrentIndexBuild(t *testing.T) {
+	ctx := context.Background()
+	db, dsn := freshDB(t, velox.Postgres)
+	fsys := dirOf(t, velox.Postgres,
+		files("0001_t.sql", "CREATE TABLE t (x int);\nINSERT INTO t SELECT g FROM generate_series(1, 1000) g;\n"),
+		files("0002_t_online.sql", "-- velox:no-transaction\n\n-- velox:unit\nDROP INDEX CONCURRENTLY IF EXISTS t_x;\nCREATE INDEX CONCURRENTLY t_x ON t (x);\n"))
+	mustUp(t, db, fsys, migrate.WithTarget(1))
+	// A writer holds the build at its start, until the second Up waits for the lock.
+	writer, err := openDB(t, "pgx", dsn).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = writer.Close() }()
+	if _, err := writer.ExecContext(ctx, `BEGIN`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.ExecContext(ctx, `UPDATE t SET x = x WHERE x = 1`); err != nil {
+		t.Fatal(err)
+	}
+	first := make(chan error, 1)
+	go func() {
+		_, err := migrate.Up(ctx, openDB(t, "pgx", dsn), fsys)
+		first <- err
+	}()
+	waitFor(t, db, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND query LIKE 'CREATE INDEX CONCURRENTLY%' AND wait_event_type = 'Lock'`)
+	second := make(chan error, 1)
+	go func() {
+		_, err := migrate.Up(ctx, openDB(t, "pgx", dsn), fsys, migrate.WithLockWait(time.Minute))
+		second <- err
+	}()
+	time.Sleep(2 * time.Second) // past deadlock_timeout, 1s: the second Up's check finds no cycle
+	if _, err := writer.ExecContext(ctx, `COMMIT`); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-first; err != nil {
+		t.Errorf("the Up that builds the index: %v", err)
+	}
+	if err := <-second; err != nil {
+		t.Errorf("the Up that waits: %v", err)
+	}
+	if !pgIndexValid(t, db, "t_x") {
+		t.Error("t_x is invalid")
+	}
+}
+
+// waitFor waits, up to 10s, until the count q reads is above 0.
+func waitFor(t *testing.T, db *sql.DB, q string) {
+	t.Helper()
+	for range 200 {
+		var n int
+		if err := db.QueryRow(q).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n > 0 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("never true: %s", q)
+}
+
 func TestUpPostgresConcurrent(t *testing.T) {
 	db, dsn := freshDB(t, velox.Postgres)
 	fsys := dirOf(t, velox.Postgres, files(concurrentFiles...))
