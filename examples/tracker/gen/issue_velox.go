@@ -77,8 +77,7 @@ func issueDescriptor() velox.Descriptor[Issue] {
 	d1 := (&sch.Issue{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
 	d2 := (&sch.Issue{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Issue]{
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Issue)(nil).Policy()) },
-		Table:  "issues",
+		Table: "issues",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
@@ -94,7 +93,7 @@ func issueDescriptor() velox.Descriptor[Issue] {
 		PrimaryKey: []int{0},
 		Tenant:     3,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{4, 9, 0}},
+			{Columns: []int{4, 9, 0}}, // project_id, status, id
 		},
 		TenantRefs: []velox.TenantRef{
 			{Column: 4, Table: "projects", Key: "id", Tenant: "org_id", TenantKind: "int64"},
@@ -108,7 +107,8 @@ func issueDescriptor() velox.Descriptor[Issue] {
 			velox.EdgeTo[Comment]("Comments", 0, 4),
 			velox.EdgeThrough[IssueLabel, Label]("Labels", 0, 0, 1, 0),
 		},
-		Addr: func(x *Issue, i int) any {
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Issue)(nil).Policy()) },
+		FieldPtr: func(x *Issue, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -133,7 +133,7 @@ func issueDescriptor() velox.Descriptor[Issue] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Issue, i int) any {
+		EdgeFieldPtr: func(x *Issue, i int) any {
 			switch i {
 			case 0:
 				return &x.Project

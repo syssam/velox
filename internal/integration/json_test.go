@@ -57,7 +57,7 @@ func jrecDescriptor() velox.Descriptor[jrec] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *jrec, i int) any {
+		FieldPtr: func(x *jrec, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -509,7 +509,7 @@ func (*jopt) VeloxMeta() *velox.Meta[jopt] {
 			},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *jopt, i int) any {
+			FieldPtr: func(x *jopt, i int) any {
 				switch i {
 				case 0:
 					return &x.ID

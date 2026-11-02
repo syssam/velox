@@ -45,7 +45,7 @@ func issueLabelDescriptor() velox.Descriptor[IssueLabel] {
 			{Column: 0, Table: "issues", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 			{Column: 1, Table: "labels", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
-		Addr: func(x *IssueLabel, i int) any {
+		FieldPtr: func(x *IssueLabel, i int) any {
 			switch i {
 			case 0:
 				return &x.IssueID

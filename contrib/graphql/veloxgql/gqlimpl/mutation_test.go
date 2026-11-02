@@ -60,7 +60,7 @@ func postDescriptor() velox.Descriptor[post] {
 		PrimaryKey: []int{0},
 		Tenant:     1,
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*post)(nil).Policy()) },
-		Addr: func(x *post, i int) any {
+		FieldPtr: func(x *post, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

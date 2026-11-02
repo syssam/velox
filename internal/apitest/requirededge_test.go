@@ -30,7 +30,7 @@ func (*rtree) VeloxMeta() *velox.Meta[rtree] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ParentID", Name: "parent_id", RequiredEdge: "parent"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *rtree, i int) any {
+			FieldPtr: func(x *rtree, i int) any {
 				if i == 0 {
 					return &x.ID
 				}
@@ -55,7 +55,7 @@ func (*rbad) VeloxMeta() *velox.Meta[rbad] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ParentID", Name: "parent_id", RequiredEdge: "parent"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *rbad, i int) any {
+			FieldPtr: func(x *rbad, i int) any {
 				if i == 0 {
 					return &x.ID
 				}

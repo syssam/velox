@@ -46,7 +46,7 @@ func userFriendDescriptor() velox.Descriptor[UserFriend] {
 			{Column: 0, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 			{Column: 1, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
-		Addr: func(x *UserFriend, i int) any {
+		FieldPtr: func(x *UserFriend, i int) any {
 			switch i {
 			case 0:
 				return &x.UserID

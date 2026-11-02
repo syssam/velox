@@ -28,13 +28,13 @@ var bnodeMeta velox.MetaOnce[bnode]
 func (*bnode) VeloxMeta() *velox.Meta[bnode] {
 	return bnodeMeta.Load(func() velox.Descriptor[bnode] {
 		return velox.Descriptor[bnode]{
-			Table:      "bnodes",
-			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
-			PrimaryKey: []int{0},
-			Tenant:     -1,
-			Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[bnodeFriend, bnode]("Friends", 0, 0, 1, 0)},
-			Addr:       func(x *bnode, i int) any { return &x.ID },
-			EdgeAddr:   func(x *bnode, i int) any { return &x.Friends },
+			Table:        "bnodes",
+			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
+			PrimaryKey:   []int{0},
+			Tenant:       -1,
+			Edges:        []velox.EdgeDescriptor{velox.EdgeThrough[bnodeFriend, bnode]("Friends", 0, 0, 1, 0)},
+			FieldPtr:     func(x *bnode, i int) any { return &x.ID },
+			EdgeFieldPtr: func(x *bnode, i int) any { return &x.Friends },
 		}
 	})
 }
@@ -59,7 +59,7 @@ func (*bnodeFriend) VeloxMeta() *velox.Meta[bnodeFriend] {
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Bidi:       true,
-			Addr: func(x *bnodeFriend, i int) any {
+			FieldPtr: func(x *bnodeFriend, i int) any {
 				if i == 0 {
 					return &x.NodeID
 				}
@@ -113,7 +113,7 @@ func (*bnodeFriendP) VeloxMeta() *velox.Meta[bnodeFriendP] {
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Bidi:       true,
-			Addr: func(x *bnodeFriendP, i int) any {
+			FieldPtr: func(x *bnodeFriendP, i int) any {
 				if i == 0 {
 					return &x.NodeID
 				}
@@ -138,7 +138,7 @@ func (*bnodeKeyed) VeloxMeta() *velox.Meta[bnodeKeyed] {
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			Bidi:       true,
-			Addr: func(x *bnodeKeyed, i int) any {
+			FieldPtr: func(x *bnodeKeyed, i int) any {
 				if i == 0 {
 					return &x.A
 				}
@@ -320,13 +320,13 @@ func (*bspouse) VeloxMeta() *velox.Meta[bspouse] {
 			Tenant:     -1,
 			Indexes:    []velox.IndexInfo{{Columns: []int{1}, Unique: true}},
 			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[bspouse]("Spouse", 1, 0)},
-			Addr: func(x *bspouse, i int) any {
+			FieldPtr: func(x *bspouse, i int) any {
 				if i == 0 {
 					return &x.ID
 				}
 				return &x.SpouseID
 			},
-			EdgeAddr: func(x *bspouse, i int) any { return &x.Spouse },
+			EdgeFieldPtr: func(x *bspouse, i int) any { return &x.Spouse },
 		}
 	})
 }
@@ -827,10 +827,10 @@ func (*btspouse) VeloxMeta() *velox.Meta[btspouse] {
 			Tenant:     1,
 			Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
 			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[btspouse]("Spouse", 2, 0)},
-			Addr: func(x *btspouse, i int) any {
+			FieldPtr: func(x *btspouse, i int) any {
 				return [...]any{&x.ID, &x.OrgID, &x.SpouseID}[i]
 			},
-			EdgeAddr: func(x *btspouse, i int) any { return &x.Spouse },
+			EdgeFieldPtr: func(x *btspouse, i int) any { return &x.Spouse },
 		}
 	})
 }

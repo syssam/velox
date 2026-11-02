@@ -59,9 +59,7 @@ func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDe
 
 func ticketDescriptor() velox.Descriptor[Ticket] {
 	return velox.Descriptor[Ticket]{
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Ticket)(nil).Policy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Ticket)(nil).Hooks()) },
-		Table:  "tickets",
+		Table: "tickets",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedBy", Name: "created_by"},
@@ -75,7 +73,7 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 		PrimaryKey: []int{0},
 		Tenant:     2,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{2, 4}, Unique: true},
+			{Columns: []int{2, 4}, Unique: true}, // org_id, title
 		},
 		TenantRefs: []velox.TenantRef{
 			{Column: 6, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
@@ -86,7 +84,9 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 			velox.EdgeTo[Ticket]("Children", 0, 7),
 			velox.EdgeTo[Ticket]("Parent", 7, 0),
 		},
-		Addr: func(x *Ticket, i int) any {
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Ticket)(nil).Policy()) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Ticket)(nil).Hooks()) },
+		FieldPtr: func(x *Ticket, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -107,7 +107,7 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Ticket, i int) any {
+		EdgeFieldPtr: func(x *Ticket, i int) any {
 			switch i {
 			case 0:
 				return &x.Invoice

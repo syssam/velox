@@ -53,9 +53,9 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1}, Unique: true},
+			{Columns: []int{1}, Unique: true}, // number
 		},
-		Addr: func(x *Invoice, i int) any {
+		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

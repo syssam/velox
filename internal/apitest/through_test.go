@@ -353,8 +353,8 @@ func (*dBadThrough) VeloxMeta() *velox.Meta[dBadThrough] {
 				velox.EdgeThrough[fixture.DAuthor, fixture.DTag]("TenantJ", 1, 0, 0, 0),    // the join entity has a tenant
 				velox.EdgeThrough[dPolicyJoin, fixture.DTag]("PolicyJ", 1, 0, 1, 0),        // the join entity has a Read policy
 			},
-			Addr: func(x *dBadThrough, i int) any { return [...]any{&x.Key, &x.ID}[i] },
-			EdgeAddr: func(x *dBadThrough, i int) any {
+			FieldPtr: func(x *dBadThrough, i int) any { return [...]any{&x.Key, &x.ID}[i] },
+			EdgeFieldPtr: func(x *dBadThrough, i int) any {
 				return [...]any{&x.Mismatch, &x.JoinCol, &x.Target, &x.Single, &x.BadJoin, &x.TenantJ, &x.PolicyJ}[i]
 			},
 		}
@@ -397,7 +397,7 @@ func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 			Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
-			Addr: func(x *dPolicyJoin, i int) any {
+			FieldPtr: func(x *dPolicyJoin, i int) any {
 				switch i {
 				case 0:
 					return &x.BookID
@@ -431,13 +431,13 @@ var dLinkerMeta velox.MetaOnce[dLinker]
 func (*dLinker) VeloxMeta() *velox.Meta[dLinker] {
 	return dLinkerMeta.Load(func() velox.Descriptor[dLinker] {
 		return velox.Descriptor[dLinker]{
-			Table:      "linkers",
-			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
-			PrimaryKey: []int{0},
-			Tenant:     -1,
-			Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[dLink, fixture.DTag]("Tags", 0, 0, 1, 0)},
-			Addr:       func(x *dLinker, i int) any { return &x.ID },
-			EdgeAddr:   func(x *dLinker, i int) any { return &x.Tags },
+			Table:        "linkers",
+			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
+			PrimaryKey:   []int{0},
+			Tenant:       -1,
+			Edges:        []velox.EdgeDescriptor{velox.EdgeThrough[dLink, fixture.DTag]("Tags", 0, 0, 1, 0)},
+			FieldPtr:     func(x *dLinker, i int) any { return &x.ID },
+			EdgeFieldPtr: func(x *dLinker, i int) any { return &x.Tags },
 		}
 	})
 }
@@ -454,7 +454,7 @@ func (*dLink) VeloxMeta() *velox.Meta[dLink] {
 			Columns:    []velox.ColumnDescriptor{{Field: "LinkerID", Name: "linker_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
-			Addr: func(x *dLink, i int) any {
+			FieldPtr: func(x *dLink, i int) any {
 				switch i {
 				case 0:
 					return &x.LinkerID
@@ -577,7 +577,7 @@ func (*dNote) VeloxMeta() *velox.Meta[dNote] {
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[fixture.DBookTag, dNote]("SameBook", 1, 0, 0, 1)},
-			Addr: func(x *dNote, i int) any {
+			FieldPtr: func(x *dNote, i int) any {
 				switch i {
 				case 0:
 					return &x.ID
@@ -586,7 +586,7 @@ func (*dNote) VeloxMeta() *velox.Meta[dNote] {
 				}
 				return nil
 			},
-			EdgeAddr: func(x *dNote, i int) any {
+			EdgeFieldPtr: func(x *dNote, i int) any {
 				if i == 0 {
 					return &x.SameBook
 				}
@@ -655,13 +655,13 @@ func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 				velox.EdgeThrough[dFriend, dPeer]("Friends", 0, 0, 1, 0),
 				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("Tags", 0, 0, 1, 0),
 			},
-			Addr: func(x *dPeer, i int) any {
+			FieldPtr: func(x *dPeer, i int) any {
 				if i == 0 {
 					return &x.ID
 				}
 				return nil
 			},
-			EdgeAddr: func(x *dPeer, i int) any {
+			EdgeFieldPtr: func(x *dPeer, i int) any {
 				switch i {
 				case 0:
 					return &x.Friends
@@ -695,7 +695,7 @@ func (*dFriend) VeloxMeta() *velox.Meta[dFriend] {
 			Columns:    []velox.ColumnDescriptor{{Field: "PeerID", Name: "peer_id"}, {Field: "FriendID", Name: "friend_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
-			Addr: func(x *dFriend, i int) any {
+			FieldPtr: func(x *dFriend, i int) any {
 				switch i {
 				case 0:
 					return &x.PeerID

@@ -46,8 +46,8 @@ func keeperDescriptor() velox.Descriptor[keeper] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pet]("Pets", 0, 1)},
-		Addr:       func(x *keeper, i int) any { return [...]any{&x.ID, &x.Name}[i] },
-		EdgeAddr: func(x *keeper, i int) any {
+		FieldPtr:   func(x *keeper, i int) any { return [...]any{&x.ID, &x.Name}[i] },
+		EdgeFieldPtr: func(x *keeper, i int) any {
 			if i == 0 {
 				return &x.Pets
 			}
@@ -81,7 +81,7 @@ func petDescriptor() velox.Descriptor[pet] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeeperID", Name: "keeper_id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     2,
-		Addr:       func(x *pet, i int) any { return [...]any{&x.ID, &x.KeeperID, &x.OrgID, &x.Name}[i] },
+		FieldPtr:   func(x *pet, i int) any { return [...]any{&x.ID, &x.KeeperID, &x.OrgID, &x.Name}[i] },
 		Policy: func() velox.BoundPolicy {
 			return velox.BindPolicy(velox.Policy[pet]{Read: func(ctx context.Context) (velox.Pred[pet], error) {
 				if v, ok := ctx.Value(viewerKey{}).(int64); ok {

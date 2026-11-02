@@ -50,7 +50,7 @@ func hnoteDescriptor() velox.Descriptor[hnote] {
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *hnote, i int) any {
+		FieldPtr: func(x *hnote, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -102,7 +102,7 @@ func moveOrgDescriptor() velox.Descriptor[moveOrg] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     1,
-		Addr: func(x *moveOrg, i int) any {
+		FieldPtr: func(x *moveOrg, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
@@ -123,13 +123,13 @@ func (*company) VeloxMeta() *velox.Meta[company] { return companyMeta.Load(compa
 
 func companyDescriptor() velox.Descriptor[company] {
 	return velox.Descriptor[company]{
-		Table:      "company",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[employee]("Staff", 0, 1)}, // employee.CompanyID
-		Addr:       func(x *company, i int) any { return &x.ID },
-		EdgeAddr:   func(x *company, i int) any { return &x.Staff },
+		Table:        "company",
+		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
+		PrimaryKey:   []int{0},
+		Tenant:       -1,
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[employee]("Staff", 0, 1)}, // employee.CompanyID
+		FieldPtr:     func(x *company, i int) any { return &x.ID },
+		EdgeFieldPtr: func(x *company, i int) any { return &x.Staff },
 	}
 }
 
@@ -152,7 +152,7 @@ func employeeDescriptor() velox.Descriptor[employee] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[employee]("Boss", 2, 0), velox.EdgeTo[company]("Company", 1, 0)},
-		Addr: func(x *employee, i int) any {
+		FieldPtr: func(x *employee, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -161,7 +161,7 @@ func employeeDescriptor() velox.Descriptor[employee] {
 			}
 			return &x.BossID
 		},
-		EdgeAddr: func(x *employee, i int) any {
+		EdgeFieldPtr: func(x *employee, i int) any {
 			if i == 0 {
 				return &x.Boss
 			}
@@ -182,13 +182,13 @@ func (*keyed) VeloxMeta() *velox.Meta[keyed] { return keyedMeta.Load(keyedDescri
 
 func keyedDescriptor() velox.Descriptor[keyed] {
 	return velox.Descriptor[keyed]{
-		Table:      "keyed",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[keyedLine]("Lines", 0, 1)},
-		Addr:       func(x *keyed, i int) any { return &x.ID },
-		EdgeAddr:   func(x *keyed, i int) any { return &x.Lines },
+		Table:        "keyed",
+		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
+		PrimaryKey:   []int{0},
+		Tenant:       -1,
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[keyedLine]("Lines", 0, 1)},
+		FieldPtr:     func(x *keyed, i int) any { return &x.ID },
+		EdgeFieldPtr: func(x *keyed, i int) any { return &x.Lines },
 	}
 }
 
@@ -207,7 +207,7 @@ func keyedLineDescriptor() velox.Descriptor[keyedLine] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeyedID", Name: "keyed_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *keyedLine, i int) any {
+		FieldPtr: func(x *keyedLine, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
@@ -228,13 +228,13 @@ func (*blobOwner) VeloxMeta() *velox.Meta[blobOwner] { return blobOwnerMeta.Load
 
 func blobOwnerDescriptor() velox.Descriptor[blobOwner] {
 	return velox.Descriptor[blobOwner]{
-		Table:      "blob_owner",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[blobLine]("Lines", 0, 1)},
-		Addr:       func(x *blobOwner, i int) any { return &x.ID },
-		EdgeAddr:   func(x *blobOwner, i int) any { return &x.Lines },
+		Table:        "blob_owner",
+		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
+		PrimaryKey:   []int{0},
+		Tenant:       -1,
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[blobLine]("Lines", 0, 1)},
+		FieldPtr:     func(x *blobOwner, i int) any { return &x.ID },
+		EdgeFieldPtr: func(x *blobOwner, i int) any { return &x.Lines },
 	}
 }
 
@@ -253,7 +253,7 @@ func blobLineDescriptor() velox.Descriptor[blobLine] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *blobLine, i int) any {
+		FieldPtr: func(x *blobLine, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
@@ -263,7 +263,7 @@ func blobLineDescriptor() velox.Descriptor[blobLine] {
 }
 
 // invalidHolder's relation T has a target that cannot be built: its Descriptor has
-// no Addr.
+// no FieldPtr.
 type invalidHolder struct {
 	ID int64
 	T  velox.One[brokenTarget]
@@ -277,13 +277,13 @@ func (*invalidHolder) VeloxMeta() *velox.Meta[invalidHolder] {
 
 func invalidHolderDescriptor() velox.Descriptor[invalidHolder] {
 	return velox.Descriptor[invalidHolder]{
-		Table:      "invalid_holder",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[brokenTarget]("T", 0, 0)},
-		Addr:       func(x *invalidHolder, i int) any { return &x.ID },
-		EdgeAddr:   func(x *invalidHolder, i int) any { return &x.T },
+		Table:        "invalid_holder",
+		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
+		PrimaryKey:   []int{0},
+		Tenant:       -1,
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[brokenTarget]("T", 0, 0)},
+		FieldPtr:     func(x *invalidHolder, i int) any { return &x.ID },
+		EdgeFieldPtr: func(x *invalidHolder, i int) any { return &x.T },
 	}
 }
 
@@ -314,7 +314,7 @@ func nullTenantDescriptor() velox.Descriptor[nullTenant] {
 	return velox.Descriptor[nullTenant]{
 		Table: "null_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
 		PrimaryKey: []int{0}, Tenant: 1,
-		Addr: func(x *nullTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
+		FieldPtr: func(x *nullTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
 	}
 }
 
@@ -327,7 +327,7 @@ func sliceTenantDescriptor() velox.Descriptor[sliceTenant] {
 	return velox.Descriptor[sliceTenant]{
 		Table: "slice_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org"}},
 		PrimaryKey: []int{0}, Tenant: 1,
-		Addr: func(x *sliceTenant, i int) any { return [...]any{&x.ID, &x.Org}[i] },
+		FieldPtr: func(x *sliceTenant, i int) any { return [...]any{&x.ID, &x.Org}[i] },
 	}
 }
 
@@ -342,7 +342,7 @@ func defaultTenantDescriptor() velox.Descriptor[defaultTenant] {
 	return velox.Descriptor[defaultTenant]{
 		Table: "default_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org", Default: "acme"}},
 		PrimaryKey: []int{0}, Tenant: 1,
-		Addr: func(x *defaultTenant, i int) any { return [...]any{&x.ID, &x.Org}[i] },
+		FieldPtr: func(x *defaultTenant, i int) any { return [...]any{&x.ID, &x.Org}[i] },
 	}
 }
 
@@ -355,7 +355,7 @@ func defaultFuncTenantDescriptor() velox.Descriptor[defaultFuncTenant] {
 	return velox.Descriptor[defaultFuncTenant]{
 		Table: "default_func_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", DefaultFunc: func() any { return int64(1) }}},
 		PrimaryKey: []int{0}, Tenant: 1,
-		Addr: func(x *defaultFuncTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
+		FieldPtr: func(x *defaultFuncTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
 	}
 }
 
@@ -368,7 +368,7 @@ func updateDefaultTenantDescriptor() velox.Descriptor[updateDefaultTenant] {
 	return velox.Descriptor[updateDefaultTenant]{
 		Table: "update_default_tenant", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", UpdateDefault: func() any { return int64(1) }}},
 		PrimaryKey: []int{0}, Tenant: 1,
-		Addr: func(x *updateDefaultTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
+		FieldPtr: func(x *updateDefaultTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
 	}
 }
 
@@ -436,7 +436,7 @@ func hookedDescriptor() velox.Descriptor[hooked] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *hooked, i int) any {
+		FieldPtr: func(x *hooked, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

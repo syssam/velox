@@ -70,7 +70,7 @@ func PnoteDescriptor() velox.Descriptor[Pnote] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[Pnote]("Parent", 3, 0), velox.EdgeTo[testmodel.Invoice]("Invoice", 4, 0)},
-		Addr: func(x *Pnote, i int) any {
+		FieldPtr: func(x *Pnote, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -85,7 +85,7 @@ func PnoteDescriptor() velox.Descriptor[Pnote] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Pnote, i int) any {
+		EdgeFieldPtr: func(x *Pnote, i int) any {
 			if i == 0 {
 				return &x.Parent
 			}
@@ -175,7 +175,7 @@ func DnoteDescriptor() velox.Descriptor[Dnote] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *Dnote, i int) any {
+		FieldPtr: func(x *Dnote, i int) any {
 			if i == 0 {
 				return &x.ID
 			}

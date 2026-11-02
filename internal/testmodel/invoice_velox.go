@@ -3,7 +3,6 @@
 package testmodel
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -81,12 +80,12 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 		PrimaryKey: []int{0},
 		Tenant:     3,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{3, 4}, Unique: true},
+			{Columns: []int{3, 4}, Unique: true}, // org_id, number
 		},
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Item]("Items", 0, 1),
 		},
-		Addr: func(x *Invoice, i int) any {
+		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -111,23 +110,10 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Invoice, i int) any {
+		EdgeFieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case 0:
 				return &x.Items
-			}
-			return nil
-		},
-		Check: func(col int, v any) error {
-			switch col {
-			case 8:
-				x := v.(string)
-				if x == *new(string) {
-					return nil
-				}
-				if x == "" {
-					return errors.New("must not be empty")
-				}
 			}
 			return nil
 		},
@@ -140,7 +126,7 @@ func (x Invoice) String() string {
 	if x.PaidAt != nil {
 		p7 = *x.PaidAt
 	}
-	return fmt.Sprintf("Invoice(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Number=%v, Total=%v, Paid=%v, PaidAt=%v, Note=%v, Data=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Number, x.Total, x.Paid, p7, x.Note, x.Data)
+	return fmt.Sprintf("Invoice(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Number=%v, Total=%v, Paid=%v, PaidAt=%v, Note=%v, Data=<%d bytes>)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Number, x.Total, x.Paid, p7, x.Note, len(x.Data))
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.

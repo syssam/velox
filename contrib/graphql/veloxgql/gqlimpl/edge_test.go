@@ -53,8 +53,8 @@ func ownerDescriptor() velox.Descriptor[owner] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[child]("Children", 0, 1), velox.EdgeThrough[ownerTag, tag]("Tags", 0, 0, 1, 0)},
-		Addr:       func(x *owner, i int) any { return [...]any{&x.ID, &x.Name, &x.Age}[i] },
-		EdgeAddr: func(x *owner, i int) any {
+		FieldPtr:   func(x *owner, i int) any { return [...]any{&x.ID, &x.Name, &x.Age}[i] },
+		EdgeFieldPtr: func(x *owner, i int) any {
 			switch i {
 			case 0:
 				return &x.Children
@@ -98,8 +98,8 @@ func childDescriptor() velox.Descriptor[child] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[owner]("Owner", 1, 0), velox.EdgeTo[owner]("Editor", 3, 0)},
-		Addr:       func(x *child, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Title, &x.EditorID}[i] },
-		EdgeAddr: func(x *child, i int) any {
+		FieldPtr:   func(x *child, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Title, &x.EditorID}[i] },
+		EdgeFieldPtr: func(x *child, i int) any {
 			switch i {
 			case 0:
 				return &x.Owner
@@ -126,7 +126,7 @@ func tagDescriptor() velox.Descriptor[tag] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr:       func(x *tag, i int) any { return [...]any{&x.ID, &x.Name}[i] },
+		FieldPtr:   func(x *tag, i int) any { return [...]any{&x.ID, &x.Name}[i] },
 	}
 }
 
@@ -145,7 +145,7 @@ func ownerTagDescriptor() velox.Descriptor[ownerTag] {
 		Columns:    []velox.ColumnDescriptor{{Field: "OwnerID", Name: "owner_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
-		Addr:       func(x *ownerTag, i int) any { return [...]any{&x.OwnerID, &x.TagID}[i] },
+		FieldPtr:   func(x *ownerTag, i int) any { return [...]any{&x.OwnerID, &x.TagID}[i] },
 	}
 }
 

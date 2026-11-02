@@ -131,7 +131,7 @@ func bindDescriptor() velox.Descriptor[Bind] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *Bind, i int) any {
+		FieldPtr: func(x *Bind, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -222,7 +222,7 @@ func (x Bind) String() string {
 	if x.Note != nil {
 		p23 = *x.Note
 	}
-	return fmt.Sprintf("Bind(ID=%v, Flag=%v, I8=%v, I16=%v, I32=%v, I64=%v, U8=%v, U16=%v, U32=%v, U64=%v, F32=%v, F64=%v, Str=%v, Short=%v, Body=%v, Kind=%v, Level=%v, Data=%v, ShortData=%v, At=%v, UID=%v, Tags=%v, Doc=%v, Note=%v)", x.ID, x.Flag, x.I8, x.I16, x.I32, x.I64, x.U8, x.U16, x.U32, x.U64, x.F32, x.F64, x.Str, x.Short, x.Body, x.Kind, x.Level, x.Data, x.ShortData, x.At, x.UID, x.Tags, x.Doc, p23)
+	return fmt.Sprintf("Bind(ID=%v, Flag=%v, I8=%v, I16=%v, I32=%v, I64=%v, U8=%v, U16=%v, U32=%v, U64=%v, F32=%v, F64=%v, Str=%v, Short=%v, Body=%v, Kind=%v, Level=%v, Data=<%d bytes>, ShortData=<%d bytes>, At=%v, UID=%v, Tags=%v, Doc=%v, Note=%v)", x.ID, x.Flag, x.I8, x.I16, x.I32, x.I64, x.U8, x.U16, x.U32, x.U64, x.F32, x.F64, x.Str, x.Short, x.Body, x.Kind, x.Level, len(x.Data), len(x.ShortData), x.At, x.UID, x.Tags, x.Doc, p23)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.

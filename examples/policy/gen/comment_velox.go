@@ -38,8 +38,7 @@ func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(comme
 
 func commentDescriptor() velox.Descriptor[Comment] {
 	return velox.Descriptor[Comment]{
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Comment)(nil).Policy()) },
-		Table:  "comments",
+		Table: "comments",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "DocID", Name: "doc_id"},
@@ -50,7 +49,8 @@ func commentDescriptor() velox.Descriptor[Comment] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Doc]("Doc", 1, 0),
 		},
-		Addr: func(x *Comment, i int) any {
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Comment)(nil).Policy()) },
+		FieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -61,7 +61,7 @@ func commentDescriptor() velox.Descriptor[Comment] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Comment, i int) any {
+		EdgeFieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case 0:
 				return &x.Doc

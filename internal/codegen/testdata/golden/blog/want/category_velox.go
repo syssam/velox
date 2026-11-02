@@ -51,13 +51,13 @@ func categoryDescriptor() velox.Descriptor[Category] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1, 2}},
+			{Columns: []int{1, 2}}, // title, category_children
 		},
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Category]("Children", 0, 2),
 			velox.EdgeTo[Category]("Parent", 2, 0),
 		},
-		Addr: func(x *Category, i int) any {
+		FieldPtr: func(x *Category, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -68,7 +68,7 @@ func categoryDescriptor() velox.Descriptor[Category] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Category, i int) any {
+		EdgeFieldPtr: func(x *Category, i int) any {
 			switch i {
 			case 0:
 				return &x.Children

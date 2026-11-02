@@ -42,8 +42,8 @@ func eUserDescriptor() velox.Descriptor[eUser] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[ePost]("Posts", 0, 1), velox.EdgeThrough[eLink, fixture.DTag]("Tags", 0, 1, 2, 0)},
-		Addr:       func(x *eUser, i int) any { return [...]any{&x.ID, &x.Name}[i] },
-		EdgeAddr: func(x *eUser, i int) any {
+		FieldPtr:   func(x *eUser, i int) any { return [...]any{&x.ID, &x.Name}[i] },
+		EdgeFieldPtr: func(x *eUser, i int) any {
 			switch i {
 			case 0:
 				return &x.Posts
@@ -73,7 +73,7 @@ func eLinkDescriptor() velox.Descriptor[eLink] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr:       func(x *eLink, i int) any { return [...]any{&x.ID, &x.UserID, &x.TagID}[i] },
+		FieldPtr:   func(x *eLink, i int) any { return [...]any{&x.ID, &x.UserID, &x.TagID}[i] },
 	}
 }
 
@@ -110,7 +110,7 @@ func ePostDescriptor() velox.Descriptor[ePost] {
 			{Field: "Title", Name: "title"}, {Field: "Secret", Name: "secret"}},
 		PrimaryKey: []int{0},
 		Tenant:     2,
-		Addr:       func(x *ePost, i int) any { return [...]any{&x.ID, &x.UserID, &x.OrgID, &x.Title, &x.Secret}[i] },
+		FieldPtr:   func(x *ePost, i int) any { return [...]any{&x.ID, &x.UserID, &x.OrgID, &x.Title, &x.Secret}[i] },
 	}
 }
 

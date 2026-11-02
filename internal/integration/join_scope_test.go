@@ -42,13 +42,13 @@ func (*jsProject) VeloxMeta() *velox.Meta[jsProject] {
 				velox.EdgeThrough[jsProjectLabel, jsLabel]("Labels", 0, 0, 1, 0),
 				velox.EdgeThrough[jsProjectKind, jsKind]("Kinds", 0, 0, 1, 0),
 			},
-			Addr: func(x *jsProject, i int) any {
+			FieldPtr: func(x *jsProject, i int) any {
 				if i == 0 {
 					return &x.ID
 				}
 				return &x.OrgID
 			},
-			EdgeAddr: func(x *jsProject, i int) any {
+			EdgeFieldPtr: func(x *jsProject, i int) any {
 				if i == 0 {
 					return &x.Labels
 				}
@@ -72,7 +72,7 @@ func (*jsLabel) VeloxMeta() *velox.Meta[jsLabel] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
 			PrimaryKey: []int{0},
 			Tenant:     1,
-			Addr: func(x *jsLabel, i int) any {
+			FieldPtr: func(x *jsLabel, i int) any {
 				if i == 0 {
 					return &x.ID
 				}
@@ -101,7 +101,7 @@ func (*jsKind) VeloxMeta() *velox.Meta[jsKind] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *jsKind, i int) any {
+			FieldPtr: func(x *jsKind, i int) any {
 				if i == 0 {
 					return &x.ID
 				}
@@ -134,7 +134,7 @@ func (*jsProjectLabel) VeloxMeta() *velox.Meta[jsProjectLabel] {
 				{Column: 0, Table: "js_projects", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 				{Column: 1, Table: "js_labels", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 			},
-			Addr: func(x *jsProjectLabel, i int) any {
+			FieldPtr: func(x *jsProjectLabel, i int) any {
 				if i == 0 {
 					return &x.ProjectID
 				}
@@ -164,7 +164,7 @@ func (*jsProjectKind) VeloxMeta() *velox.Meta[jsProjectKind] {
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			TenantRefs: []velox.TenantRef{{Column: 0, Table: "js_projects", Key: "id", Tenant: "org_id", TenantKind: "int64"}},
-			Addr: func(x *jsProjectKind, i int) any {
+			FieldPtr: func(x *jsProjectKind, i int) any {
 				if i == 0 {
 					return &x.ProjectID
 				}
@@ -197,7 +197,7 @@ func (*jsFriend) VeloxMeta() *velox.Meta[jsFriend] {
 				{Column: 0, Table: "js_projects", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 				{Column: 1, Table: "js_projects", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 			},
-			Addr: func(x *jsFriend, i int) any {
+			FieldPtr: func(x *jsFriend, i int) any {
 				if i == 0 {
 					return &x.A
 				}

@@ -110,9 +110,9 @@ func userDescriptor() velox.Descriptor[User] {
 		PrimaryKey: []int{0},
 		Tenant:     4,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{4, 5}, Unique: true},
-			{Columns: []int{6}, Unique: true},
-			{Columns: []int{13}, Unique: true},
+			{Columns: []int{4, 5}, Unique: true}, // org_id, name
+			{Columns: []int{6}, Unique: true},    // email
+			{Columns: []int{13}, Unique: true},   // user_spouse
 		},
 		TenantRefs: []velox.TenantRef{
 			{Column: 13, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
@@ -123,7 +123,7 @@ func userDescriptor() velox.Descriptor[User] {
 			velox.EdgeThrough[UserFriend, User]("Friends", 0, 0, 1, 0),
 			velox.EdgeBidi[User]("Spouse", 13, 0),
 		},
-		Addr: func(x *User, i int) any {
+		FieldPtr: func(x *User, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -156,7 +156,7 @@ func userDescriptor() velox.Descriptor[User] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *User, i int) any {
+		EdgeFieldPtr: func(x *User, i int) any {
 			switch i {
 			case 0:
 				return &x.Posts

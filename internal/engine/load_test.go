@@ -35,8 +35,8 @@ func (*ovOwner) VeloxMeta() *velox.Meta[ovOwner] {
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Edges:      []velox.EdgeDescriptor{velox.EdgeTo[ovNote]("Notes", 0, 1), velox.EdgeThrough[ovPick, ovNote]("Picks", 0, 0, 1, 0)},
-			Addr:       func(x *ovOwner, i int) any { return &x.ID },
-			EdgeAddr: func(x *ovOwner, i int) any {
+			FieldPtr:   func(x *ovOwner, i int) any { return &x.ID },
+			EdgeFieldPtr: func(x *ovOwner, i int) any {
 				if i == 0 {
 					return &x.Notes
 				}
@@ -90,7 +90,7 @@ func (*ovNote) VeloxMeta() *velox.Meta[ovNote] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Rank", Name: "rank"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr:       func(x *ovNote, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Rank}[i] },
+			FieldPtr:   func(x *ovNote, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Rank}[i] },
 		}
 	})
 }
@@ -107,7 +107,7 @@ func (*ovPick) VeloxMeta() *velox.Meta[ovPick] {
 			Columns:    []velox.ColumnDescriptor{{Field: "OwnerID", Name: "owner_id"}, {Field: "NoteID", Name: "note_id"}},
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
-			Addr:       func(x *ovPick, i int) any { return [...]any{&x.OwnerID, &x.NoteID}[i] },
+			FieldPtr:   func(x *ovPick, i int) any { return [...]any{&x.OwnerID, &x.NoteID}[i] },
 		}
 	})
 }

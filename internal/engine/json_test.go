@@ -191,7 +191,7 @@ func TestCodecNeedsBoth(t *testing.T) {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, c},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *fixture.JList, i int) any {
+			FieldPtr: func(x *fixture.JList, i int) any {
 				if i == 0 {
 					return &x.ID
 				}
@@ -249,10 +249,10 @@ func jKeyDescriptor(tenant int, codec ...int) velox.Descriptor[jKey] {
 	return velox.Descriptor[jKey]{
 		Table: "j_keys", Columns: cols, PrimaryKey: []int{0}, Tenant: tenant,
 		Edges: []velox.EdgeDescriptor{velox.EdgeTo[jKid]("Kids", 2, 1)},
-		Addr: func(x *jKey, i int) any {
+		FieldPtr: func(x *jKey, i int) any {
 			return [...]any{&x.ID, &x.Org, &x.Parent}[i]
 		},
-		EdgeAddr: func(x *jKey, i int) any { return &x.Kids },
+		EdgeFieldPtr: func(x *jKey, i int) any { return &x.Kids },
 	}
 }
 
@@ -271,7 +271,7 @@ func (*jKid) VeloxMeta() *velox.Meta[jKid] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Ref", Name: "ref", Encode: json.Marshal, Decode: json.Unmarshal}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *jKid, i int) any {
+			FieldPtr: func(x *jKid, i int) any {
 				if i == 0 {
 					return &x.ID
 				}
@@ -346,7 +346,7 @@ func jOptDescriptor() velox.Descriptor[jOpt] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *jOpt, i int) any {
+		FieldPtr: func(x *jOpt, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -411,7 +411,7 @@ func TestNullableNeedsNil(t *testing.T) {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id", Nullable: true}, {Field: "Words", Name: "words"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *fixture.JList, i int) any {
+		FieldPtr: func(x *fixture.JList, i int) any {
 			if i == 0 {
 				return &x.ID
 			}

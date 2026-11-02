@@ -297,7 +297,7 @@ func ErrNothingToInsert(in *EntityInfo) error {
 }
 
 // fieldAddr is a pointer to the field of column col of the row of in at p,
-// as Meta's Addr returns it.
+// as Meta's addr returns it.
 func fieldAddr(in *EntityInfo, p unsafe.Pointer, col int) any {
 	c := &in.Columns[col]
 	return reflect.NewAt(GoType(*c), unsafe.Add(p, c.off)).Interface()

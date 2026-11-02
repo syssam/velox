@@ -43,7 +43,7 @@ func itemDescriptor() velox.Descriptor[Item] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *Item, i int) any {
+		FieldPtr: func(x *Item, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

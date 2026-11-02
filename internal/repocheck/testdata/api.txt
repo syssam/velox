@@ -399,7 +399,7 @@ type ConstraintKind = veloxtype.ConstraintKind
 type DB struct { }
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Tenant int Bidi bool Indexes []IndexInfo TenantRefs []TenantRef Edges []EdgeDescriptor Addr func(x *E, i int) any EdgeAddr func(x *E, i int) any Check func(col int, v any) error Policy func() BoundPolicy Hooks func() BoundHooks }
+type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Tenant int Bidi bool Indexes []IndexInfo TenantRefs []TenantRef Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Policy func() BoundPolicy Hooks func() BoundHooks }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type EdgeDescriptor = engine.EdgeDescriptor

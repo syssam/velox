@@ -55,7 +55,7 @@ func DAuthorDescriptor() velox.Descriptor[DAuthor] {
 		PrimaryKey: []int{0},
 		Tenant:     1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[DBook]("Books", 0, 1)},
-		Addr: func(x *DAuthor, i int) any {
+		FieldPtr: func(x *DAuthor, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -70,7 +70,7 @@ func DAuthorDescriptor() velox.Descriptor[DAuthor] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *DAuthor, i int) any {
+		EdgeFieldPtr: func(x *DAuthor, i int) any {
 			if i == 0 {
 				return &x.Books
 			}
@@ -136,7 +136,7 @@ func DBookDescriptor() velox.Descriptor[DBook] {
 			velox.EdgeThrough[DBookTag, DTag]("Tags", 0, 0, 1, 0),
 			velox.EdgeThrough[DPick, DTag]("Picks", 0, 0, 1, 0),
 		},
-		Addr: func(x *DBook, i int) any {
+		FieldPtr: func(x *DBook, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -147,7 +147,7 @@ func DBookDescriptor() velox.Descriptor[DBook] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *DBook, i int) any {
+		EdgeFieldPtr: func(x *DBook, i int) any {
 			switch i {
 			case 0:
 				return &x.Author
@@ -187,7 +187,7 @@ func DTagDescriptor() velox.Descriptor[DTag] {
 		PrimaryKey: []int{0},
 		Tenant:     1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[DBookTag, DBook]("Books", 0, 1, 0, 0)},
-		Addr: func(x *DTag, i int) any {
+		FieldPtr: func(x *DTag, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -198,7 +198,7 @@ func DTagDescriptor() velox.Descriptor[DTag] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *DTag, i int) any {
+		EdgeFieldPtr: func(x *DTag, i int) any {
 			if i == 0 {
 				return &x.Books
 			}
@@ -223,7 +223,7 @@ func DBookTagDescriptor() velox.Descriptor[DBookTag] {
 		Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
-		Addr: func(x *DBookTag, i int) any {
+		FieldPtr: func(x *DBookTag, i int) any {
 			switch i {
 			case 0:
 				return &x.BookID
@@ -252,7 +252,7 @@ func DPickDescriptor() velox.Descriptor[DPick] {
 		Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
-		Addr: func(x *DPick, i int) any {
+		FieldPtr: func(x *DPick, i int) any {
 			switch i {
 			case 0:
 				return &x.BookID

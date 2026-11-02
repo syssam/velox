@@ -35,7 +35,7 @@ func eDescriptor() velox.Descriptor[E] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr:       func(x *E, i int) any { return &x.ID },
+		FieldPtr:       func(x *E, i int) any { return &x.ID },
 	}
 }
 `
@@ -75,7 +75,7 @@ func eDescriptor() velox.Descriptor[E] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[E]("Parent", 2, 0), velox.EdgeTo[E]("Kids", 0, 2)},
-		Addr: func(x *E, i int) any {
+		FieldPtr: func(x *E, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -86,7 +86,7 @@ func eDescriptor() velox.Descriptor[E] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *E, i int) any {
+		EdgeFieldPtr: func(x *E, i int) any {
 			switch i {
 			case 0:
 				return &x.Parent

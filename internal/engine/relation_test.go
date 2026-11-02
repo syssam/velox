@@ -92,13 +92,13 @@ func TestNonComparableKeyIsRefused(t *testing.T) {
 }
 
 func TestInvalidTargetIsNamed(t *testing.T) {
-	// brokenTarget's Descriptor has no Addr, so it cannot build.
+	// brokenTarget's Descriptor has no FieldPtr, so it cannot build.
 	info, err := loadDescriptor(invalidHolderDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = engine.InfoRels(info)[0].Resolve(info, targetOf[brokenTarget]())
-	wantErr(t, err, "T: its target github.com/syssam/velox/internal/engine_test.brokenTarget is invalid: engine_test.brokenTarget: the generated metadata has no Addr; run go tool velox-gen")
+	wantErr(t, err, "T: its target github.com/syssam/velox/internal/engine_test.brokenTarget is invalid: engine_test.brokenTarget: the generated metadata has no FieldPtr; run go tool velox-gen")
 }
 
 // TestEdgeThroughKeepsItsJoin: EdgeThrough names its join entity, which has

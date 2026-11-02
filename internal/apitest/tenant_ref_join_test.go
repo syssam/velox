@@ -37,7 +37,7 @@ func (*refLink) VeloxMeta() *velox.Meta[refLink] {
 				{Column: 0, Table: "tickets", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 				{Column: 1, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 			},
-			Addr: func(x *refLink, i int) any {
+			FieldPtr: func(x *refLink, i int) any {
 				if i == 0 {
 					return &x.TicketID
 				}
@@ -236,7 +236,7 @@ func refPairDescriptor[E any](pk []int, indexes []velox.IndexInfo, addr func(*E,
 			{Column: 0, Table: "tickets", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 			{Column: 1, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
-		Addr: addr,
+		FieldPtr: addr,
 	}
 }
 

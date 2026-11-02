@@ -44,7 +44,7 @@ func personDescriptor() velox.Descriptor[person] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "Age", Name: "age"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *person, i int) any {
+		FieldPtr: func(x *person, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

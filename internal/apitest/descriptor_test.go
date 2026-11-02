@@ -57,7 +57,7 @@ var badDescriptorMeta velox.MetaOnce[badDescriptor]
 func (*badDescriptor) VeloxMeta() *velox.Meta[badDescriptor] {
 	return badDescriptorMeta.Load(func() velox.Descriptor[badDescriptor] {
 		return velox.Descriptor[badDescriptor]{Table: "b", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: 3,
-			Addr: func(x *badDescriptor, i int) any { return &x.ID }}
+			FieldPtr: func(x *badDescriptor, i int) any { return &x.ID }}
 	})
 }
 

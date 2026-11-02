@@ -46,9 +46,9 @@ func orgDescriptor() velox.Descriptor[Org] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1}, Unique: true},
+			{Columns: []int{1}, Unique: true}, // slug
 		},
-		Addr: func(x *Org, i int) any {
+		FieldPtr: func(x *Org, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

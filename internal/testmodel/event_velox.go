@@ -48,7 +48,7 @@ func eventDescriptor() velox.Descriptor[Event] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *Event, i int) any {
+		FieldPtr: func(x *Event, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

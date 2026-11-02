@@ -42,7 +42,7 @@ func userGroupDescriptor() velox.Descriptor[UserGroup] {
 		TenantRefs: []velox.TenantRef{
 			{Column: 0, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
-		Addr: func(x *UserGroup, i int) any {
+		FieldPtr: func(x *UserGroup, i int) any {
 			switch i {
 			case 0:
 				return &x.UserID

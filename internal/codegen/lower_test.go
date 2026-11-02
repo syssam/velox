@@ -1279,3 +1279,40 @@ func TestLowerRequiredEdge(t *testing.T) {
 		t.Errorf("RequiredEdge written %d times, %d of them for parent; want once, for parent", all, parent)
 	}
 }
+
+type LwOptionalChecks struct{ schema.Schema }
+
+func (LwOptionalChecks) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("only_empty").Optional().NotEmpty(),               // col 1: no check can fail
+		field.String("short").Optional().NotEmpty().MaxLen(5),          // col 2: MaxLen only
+		field.String("min_one").Optional().MinLen(1).MinRuneLen(1),     // col 3: no check can fail
+		field.String("min_two").Optional().MinLen(2),                   // col 4: "a" is shorter, and set
+		field.String("required").NotEmpty(),                            // col 5: not Optional, so NotEmpty can fail
+		field.Bytes("blob").Optional().Default([]byte("x")).NotEmpty(), // col 6: no check can fail
+	}
+}
+
+// An Optional value field passes at its zero value, so a check that only the
+// zero value fails is not written: it could never fire.
+func TestLowerOptionalChecksThatCannotFail(t *testing.T) {
+	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwOptionalChecks{})
+	code := o.entity("LwOptionalChecks").CheckCode
+	for _, col := range []string{"case 1:", "case 3:", "case 6:"} {
+		if strings.Contains(code, col) {
+			t.Errorf("%s has no check that can fail, and is written:\n%s", col, code)
+		}
+	}
+	for _, want := range []string{
+		"case 2:", "if len(x) > 5 {",
+		"case 4:", "if len(x) < 2 {",
+		"case 5:", `if x == "" {`,
+	} {
+		if !strings.Contains(code, want) {
+			t.Errorf("Check lacks %s:\n%s", want, code)
+		}
+	}
+	if strings.Count(code, `"must not be empty"`) != 1 {
+		t.Errorf("only the required field's NotEmpty can fail:\n%s", code)
+	}
+}

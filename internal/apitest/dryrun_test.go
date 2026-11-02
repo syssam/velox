@@ -60,7 +60,7 @@ func dauditedDescriptor() velox.Descriptor[daudited] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *daudited, i int) any {
+		FieldPtr: func(x *daudited, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
@@ -337,7 +337,7 @@ func dhookedDescriptor() velox.Descriptor[dhooked] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *dhooked, i int) any {
+		FieldPtr: func(x *dhooked, i int) any {
 			if i == 0 {
 				return &x.ID
 			}

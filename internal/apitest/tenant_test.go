@@ -590,7 +590,7 @@ func tconvDescriptor[E any](table string, addr func(*E, int) any, more ...velox.
 			Columns:    append([]velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}}, more...),
 			PrimaryKey: []int{0},
 			Tenant:     1,
-			Addr:       addr,
+			FieldPtr:   addr,
 		}
 	}
 }
@@ -604,7 +604,7 @@ func (*tconvA) VeloxMeta() *velox.Meta[tconvA] {
 			return &x.OrgID
 		})()
 		d.Edges = []velox.EdgeDescriptor{velox.EdgeTo[tconvB]("Bs", 0, 2), velox.EdgeTo[tconvW]("Ws", 0, 2)}
-		d.EdgeAddr = func(x *tconvA, i int) any {
+		d.EdgeFieldPtr = func(x *tconvA, i int) any {
 			if i == 0 {
 				return &x.Bs
 			}
@@ -634,8 +634,8 @@ func (*tconvR) VeloxMeta() *velox.Meta[tconvR] {
 			PrimaryKey: []int{0},
 			Tenant:     -1,
 			Edges:      []velox.EdgeDescriptor{velox.EdgeTo[tconvB]("Bs", 0, 2), velox.EdgeTo[tconvW]("Ws", 0, 2)},
-			Addr:       func(x *tconvR, _ int) any { return &x.ID },
-			EdgeAddr: func(x *tconvR, i int) any {
+			FieldPtr:   func(x *tconvR, _ int) any { return &x.ID },
+			EdgeFieldPtr: func(x *tconvR, i int) any {
 				if i == 0 {
 					return &x.Bs
 				}

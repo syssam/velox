@@ -53,7 +53,7 @@ func itemDescriptor() velox.Descriptor[Item] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Invoice]("Invoice", 1, 0),
 		},
-		Addr: func(x *Item, i int) any {
+		FieldPtr: func(x *Item, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -66,7 +66,7 @@ func itemDescriptor() velox.Descriptor[Item] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Item, i int) any {
+		EdgeFieldPtr: func(x *Item, i int) any {
 			switch i {
 			case 0:
 				return &x.Invoice

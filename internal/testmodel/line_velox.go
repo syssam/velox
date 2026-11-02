@@ -45,7 +45,7 @@ func lineDescriptor() velox.Descriptor[Line] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Sample]("Sample", 1, 0),
 		},
-		Addr: func(x *Line, i int) any {
+		FieldPtr: func(x *Line, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -54,7 +54,7 @@ func lineDescriptor() velox.Descriptor[Line] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Line, i int) any {
+		EdgeFieldPtr: func(x *Line, i int) any {
 			switch i {
 			case 0:
 				return &x.Sample

@@ -39,7 +39,7 @@ func lzProjectDescriptor() velox.Descriptor[lzProject] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Done", Name: "done"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr:       func(x *lzProject, i int) any { return [...]any{&x.ID, &x.Done}[i] },
+		FieldPtr:   func(x *lzProject, i int) any { return [...]any{&x.ID, &x.Done}[i] },
 	}
 }
 
@@ -75,15 +75,15 @@ func (*lzTask) Hooks() []velox.Hook[lzTask] {
 
 func lzTaskDescriptor() velox.Descriptor[lzTask] {
 	return velox.Descriptor[lzTask]{
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*lzTask)(nil).Policy()) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*lzTask)(nil).Hooks()) },
-		Table:      "lz_tasks",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[lzProject]("Project", 1, 0)},
-		Addr:       func(x *lzTask, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
-		EdgeAddr:   func(x *lzTask, i int) any { return &x.Project },
+		Policy:       func() velox.BoundPolicy { return velox.BindPolicy((*lzTask)(nil).Policy()) },
+		Hooks:        func() velox.BoundHooks { return velox.BindHooks((*lzTask)(nil).Hooks()) },
+		Table:        "lz_tasks",
+		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
+		PrimaryKey:   []int{0},
+		Tenant:       -1,
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[lzProject]("Project", 1, 0)},
+		FieldPtr:     func(x *lzTask, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
+		EdgeFieldPtr: func(x *lzTask, i int) any { return &x.Project },
 	}
 }
 
@@ -152,14 +152,14 @@ func (*lzRace) Policy() velox.Policy[lzRace] {
 
 func lzRaceDescriptor() velox.Descriptor[lzRace] {
 	return velox.Descriptor[lzRace]{
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*lzRace)(nil).Policy()) },
-		Table:      "lz_races",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
-		PrimaryKey: []int{0},
-		Tenant:     -1,
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[lzProject]("Project", 1, 0)},
-		Addr:       func(x *lzRace, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
-		EdgeAddr:   func(x *lzRace, i int) any { return &x.Project },
+		Policy:       func() velox.BoundPolicy { return velox.BindPolicy((*lzRace)(nil).Policy()) },
+		Table:        "lz_races",
+		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
+		PrimaryKey:   []int{0},
+		Tenant:       -1,
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[lzProject]("Project", 1, 0)},
+		FieldPtr:     func(x *lzRace, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
+		EdgeFieldPtr: func(x *lzRace, i int) any { return &x.Project },
 	}
 }
 
@@ -231,13 +231,13 @@ func (*lzLate) VeloxMeta() *velox.Meta[lzLate] {
 	return lzLateMeta.Load(func() velox.Descriptor[lzLate] {
 		lzLateLoads++
 		return velox.Descriptor[lzLate]{
-			Table:      "lz_lates",
-			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
-			PrimaryKey: []int{0},
-			Tenant:     -1,
-			Edges:      []velox.EdgeDescriptor{velox.EdgeTo[badDescriptor]("Bad", 0, 0)},
-			Addr:       func(x *lzLate, i int) any { return &x.ID },
-			EdgeAddr:   func(x *lzLate, i int) any { return &x.Bad },
+			Table:        "lz_lates",
+			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
+			PrimaryKey:   []int{0},
+			Tenant:       -1,
+			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[badDescriptor]("Bad", 0, 0)},
+			FieldPtr:     func(x *lzLate, i int) any { return &x.ID },
+			EdgeFieldPtr: func(x *lzLate, i int) any { return &x.Bad },
 		}
 	})
 }
@@ -333,7 +333,7 @@ func lzNoteDescriptor() velox.Descriptor[lzNote] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr:       func(x *lzNote, i int) any { return [...]any{&x.ID, &x.Title}[i] },
+		FieldPtr:   func(x *lzNote, i int) any { return [...]any{&x.ID, &x.Title}[i] },
 	}
 }
 
@@ -347,7 +347,7 @@ func lzAuditDescriptor() velox.Descriptor[lzAudit] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Note", Name: "note"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr:       func(x *lzAudit, i int) any { return [...]any{&x.ID, &x.Note}[i] },
+		FieldPtr:   func(x *lzAudit, i int) any { return [...]any{&x.ID, &x.Note}[i] },
 	}
 }
 
@@ -461,7 +461,7 @@ func mmItemDescriptor() velox.Descriptor[mmItem] {
 	return velox.Descriptor[mmItem]{
 		Table: "mm_items", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}},
 		PrimaryKey: []int{0}, Tenant: -1,
-		Addr: func(x *mmItem, i int) any { return [...]any{&x.ID, &x.OwnerID}[i] },
+		FieldPtr: func(x *mmItem, i int) any { return [...]any{&x.ID, &x.OwnerID}[i] },
 	}
 }
 
@@ -472,7 +472,7 @@ func (*mmOther) VeloxMeta() *velox.Meta[mmOther] {
 		return velox.Descriptor[mmOther]{
 			Table: "mm_others", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}},
 			PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *mmOther, i int) any { return [...]any{&x.ID, &x.OwnerID}[i] },
+			FieldPtr: func(x *mmOther, i int) any { return [...]any{&x.ID, &x.OwnerID}[i] },
 		}
 	})
 }
@@ -481,9 +481,9 @@ func (*mmA) VeloxMeta() *velox.Meta[mmA] {
 	return mmAMeta.Load(func() velox.Descriptor[mmA] {
 		return velox.Descriptor[mmA]{
 			Table: "mm_as", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1)},
-			Addr:     func(x *mmA, i int) any { return &x.ID },
-			EdgeAddr: func(x *mmA, i int) any { return &x.Items },
+			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1)},
+			FieldPtr:     func(x *mmA, i int) any { return &x.ID },
+			EdgeFieldPtr: func(x *mmA, i int) any { return &x.Items },
 		}
 	})
 }
@@ -492,9 +492,9 @@ func (*mmB) VeloxMeta() *velox.Meta[mmB] {
 	return mmBMeta.Load(func() velox.Descriptor[mmB] {
 		return velox.Descriptor[mmB]{
 			Table: "mm_bs", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1)},
-			Addr:     func(x *mmB, i int) any { return &x.ID },
-			EdgeAddr: func(x *mmB, i int) any { return &x.Items },
+			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1)},
+			FieldPtr:     func(x *mmB, i int) any { return &x.ID },
+			EdgeFieldPtr: func(x *mmB, i int) any { return &x.Items },
 		}
 	})
 }
@@ -539,9 +539,9 @@ func (*mmE) VeloxMeta() *velox.Meta[mmE] {
 	return mmEMeta.Load(func() velox.Descriptor[mmE] {
 		return velox.Descriptor[mmE]{
 			Table: "mm_es", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Edges: []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1), velox.EdgeTo[mmItem]("More", 0, 1)},
-			Addr:  func(x *mmE, i int) any { return &x.ID },
-			EdgeAddr: func(x *mmE, i int) any {
+			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1), velox.EdgeTo[mmItem]("More", 0, 1)},
+			FieldPtr: func(x *mmE, i int) any { return &x.ID },
+			EdgeFieldPtr: func(x *mmE, i int) any {
 				if i == 0 {
 					return &x.Items
 				}

@@ -49,7 +49,7 @@ func commentDescriptor() velox.Descriptor[Comment] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Post]("Post", 1, 0),
 		},
-		Addr: func(x *Comment, i int) any {
+		FieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -60,7 +60,7 @@ func commentDescriptor() velox.Descriptor[Comment] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Comment, i int) any {
+		EdgeFieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case 0:
 				return &x.Post

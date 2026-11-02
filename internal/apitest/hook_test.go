@@ -148,7 +148,7 @@ func hFlexDescriptor() velox.Descriptor[hFlex] {
 			{Field: "Stamp", Name: "stamp", UpdateDefault: func() any { return int64(9) }}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *hFlex, i int) any {
+		FieldPtr: func(x *hFlex, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -220,7 +220,7 @@ var hNilMeta velox.MetaOnce[hNil]
 func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 	return hNilMeta.Load(func() velox.Descriptor[hNil] {
 		return velox.Descriptor[hNil]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNil)(nil).Hooks()) }, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *hNil, i int) any { return &x.ID }}
+			FieldPtr: func(x *hNil, i int) any { return &x.ID }}
 	})
 }
 
@@ -237,7 +237,7 @@ var hPanicMeta velox.MetaOnce[hPanic]
 func (*hPanic) VeloxMeta() *velox.Meta[hPanic] {
 	return hPanicMeta.Load(func() velox.Descriptor[hPanic] {
 		return velox.Descriptor[hPanic]{Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hPanic)(nil).Policy()) }, Table: "p", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *hPanic, i int) any { return &x.ID }}
+			FieldPtr: func(x *hPanic, i int) any { return &x.ID }}
 	})
 }
 
@@ -270,7 +270,7 @@ func (*dPlain) VeloxMeta() *velox.Meta[dPlain] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *dPlain, i int) any {
+			FieldPtr: func(x *dPlain, i int) any {
 				switch i {
 				case 0:
 					return &x.ID
@@ -317,7 +317,7 @@ func (*dPlainDef) VeloxMeta() *velox.Meta[dPlainDef] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title", Default: "dune"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *dPlainDef, i int) any {
+			FieldPtr: func(x *dPlainDef, i int) any {
 				switch i {
 				case 0:
 					return &x.ID
@@ -441,7 +441,7 @@ var hNilMutMeta velox.MetaOnce[hNilMut]
 func (*hNilMut) VeloxMeta() *velox.Meta[hNilMut] {
 	return hNilMutMeta.Load(func() velox.Descriptor[hNilMut] {
 		return velox.Descriptor[hNilMut]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNilMut)(nil).Hooks()) }, Table: "m", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *hNilMut, i int) any { return &x.ID }}
+			FieldPtr: func(x *hNilMut, i int) any { return &x.ID }}
 	})
 }
 
@@ -458,7 +458,7 @@ var hPanicHooksMeta velox.MetaOnce[hPanicHooks]
 func (*hPanicHooks) VeloxMeta() *velox.Meta[hPanicHooks] {
 	return hPanicHooksMeta.Load(func() velox.Descriptor[hPanicHooks] {
 		return velox.Descriptor[hPanicHooks]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hPanicHooks)(nil).Hooks()) }, Table: "ph", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *hPanicHooks, i int) any { return &x.ID }}
+			FieldPtr: func(x *hPanicHooks, i int) any { return &x.ID }}
 	})
 }
 
@@ -489,7 +489,7 @@ var uPolicyMeta velox.MetaOnce[uPolicy]
 func (*uPolicy) VeloxMeta() *velox.Meta[uPolicy] {
 	return uPolicyMeta.Load(func() velox.Descriptor[uPolicy] {
 		return velox.Descriptor[uPolicy]{Table: "up", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *uPolicy, i int) any { return &x.ID }}
+			FieldPtr: func(x *uPolicy, i int) any { return &x.ID }}
 	})
 }
 
@@ -502,7 +502,7 @@ var uHooksMeta velox.MetaOnce[uHooks]
 func (*uHooks) VeloxMeta() *velox.Meta[uHooks] {
 	return uHooksMeta.Load(func() velox.Descriptor[uHooks] {
 		return velox.Descriptor[uHooks]{Table: "uh", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *uHooks, i int) any { return &x.ID }}
+			FieldPtr: func(x *uHooks, i int) any { return &x.ID }}
 	})
 }
 
@@ -514,7 +514,7 @@ var uPlainMeta velox.MetaOnce[uPlain]
 func (*uPlain) VeloxMeta() *velox.Meta[uPlain] {
 	return uPlainMeta.Load(func() velox.Descriptor[uPlain] {
 		return velox.Descriptor[uPlain]{Table: "pl", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *uPlain, i int) any { return &x.ID }}
+			FieldPtr: func(x *uPlain, i int) any { return &x.ID }}
 	})
 }
 
@@ -587,7 +587,7 @@ func (*hUp) VeloxMeta() *velox.Meta[hUp] {
 		return velox.Descriptor[hUp]{
 			Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hUp)(nil).Policy()) }, Hooks: func() velox.BoundHooks { return velox.BindHooks((*hUp)(nil).Hooks()) },
 			Table: "ups", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "N", Name: "n"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *hUp, i int) any { return [...]any{&x.ID, &x.N}[i] },
+			FieldPtr: func(x *hUp, i int) any { return [...]any{&x.ID, &x.N}[i] },
 		}
 	})
 }
@@ -671,7 +671,7 @@ func (*hCond) VeloxMeta() *velox.Meta[hCond] {
 			Hooks: func() velox.BoundHooks { return velox.BindHooks((*hCond)(nil).Hooks()) },
 			Table: "conds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Stamp", Name: "stamp"}},
 			PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *hCond, i int) any { return [...]any{&x.ID, &x.Stamp}[i] },
+			FieldPtr: func(x *hCond, i int) any { return [...]any{&x.ID, &x.Stamp}[i] },
 		}
 	})
 }
@@ -775,7 +775,7 @@ func (*hSoft) VeloxMeta() *velox.Meta[hSoft] {
 			Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"},
 				{Field: "Deleted", Name: "deleted"}},
 			PrimaryKey: []int{0}, Tenant: 1,
-			Addr: func(x *hSoft, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Deleted}[i] },
+			FieldPtr: func(x *hSoft, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Deleted}[i] },
 		}
 	})
 }

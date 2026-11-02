@@ -24,13 +24,12 @@ type DescriptorFields struct {
 	Hooks      bool // Descriptor.Hooks is set
 }
 
-// DescriptorView is a Descriptor with E erased: its fields, and its Addr and EdgeAddr
-// bound to one new entity. addr and relAddr are nil when Addr and EdgeAddr
-// are.
+// DescriptorView is a Descriptor with E erased: its fields, and its FieldPtr and EdgeFieldPtr
+// bound to one new entity. Each is nil when the descriptor's is.
 type DescriptorView struct {
-	D       *DescriptorFields
-	Addr    func(i int) any // d.Addr(x, i)
-	RelAddr func(i int) any // d.EdgeAddr(x, i)
+	D            *DescriptorFields
+	FieldPtr     func(i int) any // d.FieldPtr(x, i)
+	EdgeFieldPtr func(i int) any // d.EdgeFieldPtr(x, i)
 }
 
 // BuildDescriptor builds the metadata of the entity x, a new *E at base, from the
@@ -50,8 +49,8 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 	fail := func(field, format string, args ...any) (*EntityInfo, error) {
 		return nil, &SchemaError{Entity: name, Field: field, Reason: fmt.Sprintf(format, args...)}
 	}
-	if v.Addr == nil {
-		return fail("", "the generated metadata has no Addr; run go tool velox-gen")
+	if v.FieldPtr == nil {
+		return fail("", "the generated metadata has no FieldPtr; run go tool velox-gen")
 	}
 	if d.Table == "" {
 		return fail("", "the generated metadata has no Table; run go tool velox-gen")
@@ -62,11 +61,11 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 	cols := make([]ColumnInfo, len(d.Columns))
 	anyImmutable, anyRequired := false, false
 	for i, c := range d.Columns {
-		off, ft, ok := fieldOf(v.Addr(i), base, t.Size())
+		off, ft, ok := fieldOf(v.FieldPtr(i), base, t.Size())
 		if !ok {
 			// The column's offset and type are read from this pointer, and
 			// every scan writes through it: anything else is no column.
-			return fail(c.Field, "Addr does not return a pointer into the entity for column %d", i)
+			return fail(c.Field, "FieldPtr does not return a pointer into the entity for column %d", i)
 		}
 		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable,
 			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
@@ -123,8 +122,8 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 	}
 	rels := make([]*relation, len(d.Relations))
 	var bidiKeys []bidiKey
-	if len(rels) > 0 && v.RelAddr == nil {
-		return fail("", "the generated metadata has relations but no EdgeAddr; run go tool velox-gen")
+	if len(rels) > 0 && v.EdgeFieldPtr == nil {
+		return fail("", "the generated metadata has relations but no EdgeFieldPtr; run go tool velox-gen")
 	}
 	for i, r := range d.Relations {
 		if !r.explicit {
@@ -132,9 +131,9 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 			// relation; the key must be explicit.
 			return fail(r.name, "relation %d was not made by EdgeTo or EdgeThrough; run go tool velox-gen", i)
 		}
-		off, rt, ok := fieldOf(v.RelAddr(i), base, t.Size())
+		off, rt, ok := fieldOf(v.EdgeFieldPtr(i), base, t.Size())
 		if !ok || !IsRelation(rt) {
-			return fail(r.name, "EdgeAddr does not return a *One[T] or *Many[T] in the entity for relation %d", i)
+			return fail(r.name, "EdgeFieldPtr does not return a *One[T] or *Many[T] in the entity for relation %d", i)
 		}
 		if rt != r.holders[0] && rt != r.holders[1] {
 			// The field holds another entity's relation: loading would fill

@@ -2,6 +2,7 @@ package apitest
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
@@ -44,5 +45,14 @@ func TestGeneratedEntities(t *testing.T) {
 		`FROM "samples" WHERE "status" LIKE $1 ESCAPE '!' AND "ratio" IS NULL AND "price" > $2 AND "maybe_when" IS NOT NULL`
 	if text != want || !reflect.DeepEqual(args, []any{"a%", testmodel.Cents(100)}) {
 		t.Errorf("\n got %s %#v\nwant %s", text, args, want)
+	}
+}
+
+// A bytes field prints as its length, so that logging an entity with a blob
+// does not write the blob.
+func TestGeneratedStringPrintsBlobLength(t *testing.T) {
+	s := testmodel.Invoice{ID: 7, Data: make([]byte, 1<<20)}.String()
+	if !strings.Contains(s, "Data=<1048576 bytes>") || len(s) > 300 {
+		t.Errorf("String = %.200q (%d bytes)", s, len(s))
 	}
 }

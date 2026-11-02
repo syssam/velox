@@ -53,9 +53,9 @@ func sessionDescriptor() velox.Descriptor[Session] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1}, Unique: true},
+			{Columns: []int{1}, Unique: true}, // token_hash
 		},
-		Addr: func(x *Session, i int) any {
+		FieldPtr: func(x *Session, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

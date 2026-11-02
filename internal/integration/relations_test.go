@@ -198,8 +198,8 @@ func shelfDescriptor() velox.Descriptor[shelf] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[note]("Notes", 0, 1), velox.EdgeThrough[shelfTag, tag]("Tags", 0, 1, 2, 0)},
-		Addr:       func(x *shelf, i int) any { return &x.ID },
-		EdgeAddr: func(x *shelf, i int) any {
+		FieldPtr:   func(x *shelf, i int) any { return &x.ID },
+		EdgeFieldPtr: func(x *shelf, i int) any {
 			if i == 0 {
 				return &x.Notes
 			}
@@ -226,7 +226,7 @@ func shelfTagDescriptor() velox.Descriptor[shelfTag] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr:       func(x *shelfTag, i int) any { return [...]any{&x.ID, &x.ShelfID, &x.TagID}[i] },
+		FieldPtr:   func(x *shelfTag, i int) any { return [...]any{&x.ID, &x.ShelfID, &x.TagID}[i] },
 	}
 }
 
@@ -261,7 +261,7 @@ func noteDescriptor() velox.Descriptor[note] {
 			{Field: "Pos", Name: "pos"}, {Field: "Secret", Name: "secret"}},
 		PrimaryKey: []int{0},
 		Tenant:     2,
-		Addr:       func(x *note, i int) any { return [...]any{&x.ID, &x.ShelfID, &x.OrgID, &x.Pos, &x.Secret}[i] },
+		FieldPtr:   func(x *note, i int) any { return [...]any{&x.ID, &x.ShelfID, &x.OrgID, &x.Pos, &x.Secret}[i] },
 	}
 }
 

@@ -47,12 +47,12 @@ func tagDescriptor() velox.Descriptor[Tag] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1}, Unique: true},
+			{Columns: []int{1}, Unique: true}, // name
 		},
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[PostTag, Post]("Posts", 0, 1, 0, 0),
 		},
-		Addr: func(x *Tag, i int) any {
+		FieldPtr: func(x *Tag, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -63,7 +63,7 @@ func tagDescriptor() velox.Descriptor[Tag] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Tag, i int) any {
+		EdgeFieldPtr: func(x *Tag, i int) any {
 			switch i {
 			case 0:
 				return &x.Posts

@@ -60,7 +60,7 @@ func JDocDescriptor() velox.Descriptor[JDoc] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *JDoc, i int) any {
+		FieldPtr: func(x *JDoc, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -140,7 +140,7 @@ func (*JList) VeloxMeta() *velox.Meta[JList] {
 			},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *JList, i int) any {
+			FieldPtr: func(x *JList, i int) any {
 				if i == 0 {
 					return &x.ID
 				}

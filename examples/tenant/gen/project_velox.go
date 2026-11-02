@@ -48,9 +48,9 @@ func projectDescriptor() velox.Descriptor[Project] {
 		PrimaryKey: []int{0},
 		Tenant:     1,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1, 2}, Unique: true},
+			{Columns: []int{1, 2}, Unique: true}, // org_id, name
 		},
-		Addr: func(x *Project, i int) any {
+		FieldPtr: func(x *Project, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

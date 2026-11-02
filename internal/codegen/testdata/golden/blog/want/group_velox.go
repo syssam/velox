@@ -51,7 +51,7 @@ func groupDescriptor() velox.Descriptor[Group] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[UserGroup, User]("Users", 0, 1, 0, 0),
 		},
-		Addr: func(x *Group, i int) any {
+		FieldPtr: func(x *Group, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -62,7 +62,7 @@ func groupDescriptor() velox.Descriptor[Group] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Group, i int) any {
+		EdgeFieldPtr: func(x *Group, i int) any {
 			switch i {
 			case 0:
 				return &x.Users

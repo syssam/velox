@@ -99,7 +99,7 @@ func sampleDescriptor() velox.Descriptor[Sample] {
 			velox.EdgeTo[Sample]("Children", 0, 11),
 			velox.EdgeTo[Sample]("Parent", 11, 0),
 		},
-		Addr: func(x *Sample, i int) any {
+		FieldPtr: func(x *Sample, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -130,7 +130,7 @@ func sampleDescriptor() velox.Descriptor[Sample] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Sample, i int) any {
+		EdgeFieldPtr: func(x *Sample, i int) any {
 			switch i {
 			case 0:
 				return &x.Lines
@@ -166,7 +166,7 @@ func (x Sample) String() string {
 	if x.ParentID != nil {
 		p11 = *x.ParentID
 	}
-	return fmt.Sprintf("Sample(ID=%v, Name=%v, Status=%v, Prev=%v, Price=%v, Ratio=%v, Flag=%v, MaybeFlag=%v, When=%v, MaybeWhen=%v, Blob=%v, ParentID=%v, Score=%v)", x.ID, x.Name, x.Status, p3, x.Price, p5, x.Flag, p7, x.When, p9, x.Blob, p11, x.Score)
+	return fmt.Sprintf("Sample(ID=%v, Name=%v, Status=%v, Prev=%v, Price=%v, Ratio=%v, Flag=%v, MaybeFlag=%v, When=%v, MaybeWhen=%v, Blob=<%d bytes>, ParentID=%v, Score=%v)", x.ID, x.Name, x.Status, p3, x.Price, p5, x.Flag, p7, x.When, p9, len(x.Blob), p11, x.Score)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.

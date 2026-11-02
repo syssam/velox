@@ -59,9 +59,7 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 	d1 := (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
 	d2 := (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Invoice]{
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Invoice)(nil).Policy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Invoice)(nil).Hooks()) },
-		Table:  "invoices",
+		Table: "invoices",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
@@ -75,12 +73,14 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 		PrimaryKey: []int{0},
 		Tenant:     3,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{3, 4}, Unique: true},
+			{Columns: []int{3, 4}, Unique: true}, // org_id, number
 		},
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Line]("Lines", 0, 2),
 		},
-		Addr: func(x *Invoice, i int) any {
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Invoice)(nil).Policy()) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Invoice)(nil).Hooks()) },
+		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -101,7 +101,7 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Invoice, i int) any {
+		EdgeFieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case 0:
 				return &x.Lines

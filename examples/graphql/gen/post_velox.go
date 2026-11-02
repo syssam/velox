@@ -71,7 +71,7 @@ func postDescriptor() velox.Descriptor[Post] {
 			velox.EdgeTo[User]("Author", 2, 0),
 			velox.EdgeThrough[PostTag, Tag]("Tags", 0, 0, 1, 0),
 		},
-		Addr: func(x *Post, i int) any {
+		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -90,7 +90,7 @@ func postDescriptor() velox.Descriptor[Post] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Post, i int) any {
+		EdgeFieldPtr: func(x *Post, i int) any {
 			switch i {
 			case 0:
 				return &x.Author

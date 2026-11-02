@@ -614,6 +614,7 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 		line(2, "return nil")
 		line(1, "}")
 	}
+	header := b.Len() // what is written past here is a check that can fail
 	if f.Type == "enum" {
 		vals := make([]string, len(f.Enums))
 		for i, en := range f.Enums {
@@ -655,6 +656,9 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 		}
 		switch c.Kind {
 		case "NotEmpty":
+			if o.Unset != "" {
+				continue // "" is unset and passes: the check could never fail
+			}
 			switch f.Type {
 			case "string":
 				line(1, `if x == "" {`)
@@ -675,9 +679,13 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 				s.fail(where, "check %s needs one argument", c.Kind)
 				continue
 			}
-			if _, err := strconv.Atoi(args[0]); err != nil {
+			n, err := strconv.Atoi(args[0])
+			if err != nil {
 				s.fail(where, "check %s: %s is not a length", c.Kind, args[0])
 				continue
+			}
+			if c.Kind == "MinLen" && n <= 1 && o.Unset != "" {
+				continue // only "" is shorter, and "" is unset
 			}
 			if c.Kind == "MinLen" {
 				line(1, "if len(x) < %s {", args[0])
@@ -696,9 +704,13 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 				s.fail(where, "check %s needs one argument", c.Kind)
 				continue
 			}
-			if _, err := strconv.Atoi(args[0]); err != nil {
+			n, err := strconv.Atoi(args[0])
+			if err != nil {
 				s.fail(where, "check %s: %s is not a length", c.Kind, args[0])
 				continue
+			}
+			if c.Kind == "MinRuneLen" && n <= 1 && o.Unset != "" {
+				continue // only "" has fewer characters, and "" is unset
 			}
 			s.useStd("unicode/utf8", where)
 			if c.Kind == "MinRuneLen" {
@@ -742,6 +754,9 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 		line(2, "return err")
 		line(1, "}")
 		s.valids++
+	}
+	if b.Len() == header {
+		return // every check was one that cannot fail on a value that is set
 	}
 	s.cases = append(s.cases, b.String())
 }

@@ -58,8 +58,7 @@ func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor
 func postDescriptor() velox.Descriptor[Post] {
 	v0 := (&sch.Post{}).Fields()[2].Descriptor().Validators[0].(func(string) error)
 	return velox.Descriptor[Post]{
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Post)(nil).Policy()) },
-		Table:  "posts",
+		Table: "posts",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "AuthorID", Name: "author_id"},
@@ -75,7 +74,8 @@ func postDescriptor() velox.Descriptor[Post] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[User]("Author", 1, 0),
 		},
-		Addr: func(x *Post, i int) any {
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Post)(nil).Policy()) },
+		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -96,7 +96,7 @@ func postDescriptor() velox.Descriptor[Post] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Post, i int) any {
+		EdgeFieldPtr: func(x *Post, i int) any {
 			switch i {
 			case 0:
 				return &x.Author

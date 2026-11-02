@@ -48,12 +48,12 @@ func labelDescriptor() velox.Descriptor[Label] {
 		PrimaryKey: []int{0},
 		Tenant:     1,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1, 2}, Unique: true},
+			{Columns: []int{1, 2}, Unique: true}, // org_id, name
 		},
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[IssueLabel, Issue]("Issues", 0, 1, 0, 0),
 		},
-		Addr: func(x *Label, i int) any {
+		FieldPtr: func(x *Label, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -64,7 +64,7 @@ func labelDescriptor() velox.Descriptor[Label] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *Label, i int) any {
+		EdgeFieldPtr: func(x *Label, i int) any {
 			switch i {
 			case 0:
 				return &x.Issues

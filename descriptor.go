@@ -39,10 +39,10 @@ type Descriptor[E any] struct {
 	// TenantRefs are the columns a write under a tenant checks against it: see
 	// TenantRef. They hold the target's names as strings, never its metadata, so
 	// that the entity does not link its target. For generated code.
-	TenantRefs []TenantRef
-	Edges      []EdgeDescriptor      // in the order of the generated relation handles
-	Addr       func(x *E, i int) any // &x.<field of column i>
-	EdgeAddr   func(x *E, i int) any // &x.<field of edge i>: a *One[T] or *Many[T]
+	TenantRefs   []TenantRef
+	Edges        []EdgeDescriptor      // in the order of the generated relation handles
+	FieldPtr     func(x *E, i int) any // &x.<field of column i>
+	EdgeFieldPtr func(x *E, i int) any // &x.<field of edge i>: a *One[T] or *Many[T]
 
 	// Check runs the validators of column col on its value v, and is nil
 	// when no column has any. For a pointer field, v is the value the
@@ -110,15 +110,15 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 			v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
 				Tenant: d.Tenant, Bidi: d.Bidi, Indexes: d.Indexes, TenantRefs: d.TenantRefs, Relations: d.Edges, Check: d.Check,
 				Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
-			if a := d.Addr; a != nil {
-				v.Addr = func(i int) any { return a(x, i) }
+			if a := d.FieldPtr; a != nil {
+				v.FieldPtr = func(i int) any { return a(x, i) }
 			}
-			if a := d.EdgeAddr; a != nil {
-				v.RelAddr = func(i int) any { return a(x, i) }
+			if a := d.EdgeFieldPtr; a != nil {
+				v.EdgeFieldPtr = func(i int) any { return a(x, i) }
 			}
 			return v
 		})
-		addr := d.Addr
+		addr := d.FieldPtr
 		// Descriptor.Policy and Descriptor.Hooks have E erased (BoundPolicy, BoundHooks):
 		// the generated code instantiates BindPolicy and BindHooks, so that
 		// an entity that has neither compiles no Policy or Hook generic.
@@ -143,7 +143,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 
 // EdgeTo is a relation to entity T keyed owner.Columns[ownerCol] =
 // T.Columns[targetCol]. For generated code. Its field must be a One[T] or a
-// Many[T]: the metadata is refused at first use when EdgeAddr returns another
+// Many[T]: the metadata is refused at first use when EdgeFieldPtr returns another
 // type, such as the holder of another entity, as stale or hand-edited code
 // would.
 //

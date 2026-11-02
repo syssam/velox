@@ -63,7 +63,7 @@ func userDescriptor() velox.Descriptor[User] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Post]("Posts", 0, 2),
 		},
-		Addr: func(x *User, i int) any {
+		FieldPtr: func(x *User, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -80,7 +80,7 @@ func userDescriptor() velox.Descriptor[User] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *User, i int) any {
+		EdgeFieldPtr: func(x *User, i int) any {
 			switch i {
 			case 0:
 				return &x.Posts

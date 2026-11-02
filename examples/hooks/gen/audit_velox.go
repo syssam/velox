@@ -43,7 +43,7 @@ func auditDescriptor() velox.Descriptor[Audit] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Addr: func(x *Audit, i int) any {
+		FieldPtr: func(x *Audit, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

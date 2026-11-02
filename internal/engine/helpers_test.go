@@ -324,11 +324,11 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 		v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
 			Tenant: d.Tenant, Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
 			Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
-		if a := d.Addr; a != nil {
-			v.Addr = func(i int) any { return a(x, i) }
+		if a := d.FieldPtr; a != nil {
+			v.FieldPtr = func(i int) any { return a(x, i) }
 		}
-		if a := d.EdgeAddr; a != nil {
-			v.RelAddr = func(i int) any { return a(x, i) }
+		if a := d.EdgeFieldPtr; a != nil {
+			v.EdgeFieldPtr = func(i int) any { return a(x, i) }
 		}
 		return v
 	})

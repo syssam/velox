@@ -43,7 +43,7 @@ func noteDescriptor() velox.Descriptor[Note] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     1,
-		Addr: func(x *Note, i int) any {
+		FieldPtr: func(x *Note, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

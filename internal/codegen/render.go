@@ -276,12 +276,6 @@ func entityDescriptor(w *writer, e *OutEntity) {
 		w.p("%s", e.CheckSetup)
 	}
 	w.p("return velox.Descriptor[%s]{", e.Name)
-	if e.Bound.Policy {
-		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy((*%s)(nil).Policy()) },", e.Name)
-	}
-	if e.Bound.Hooks {
-		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks((*%s)(nil).Hooks()) },", e.Name)
-	}
 	w.p("Table: %s,", strconv.Quote(e.Table))
 	if e.TableSchema != "" {
 		w.p("Schema: %s,", strconv.Quote(e.TableSchema))
@@ -324,10 +318,14 @@ func entityDescriptor(w *writer, e *OutEntity) {
 	if len(e.Indexes) > 0 {
 		w.p("Indexes: []velox.IndexInfo{")
 		for _, ix := range e.Indexes {
+			names := make([]string, len(ix.Columns))
+			for i, c := range ix.Columns {
+				names[i] = e.Fields[c].Column
+			}
 			if ix.Unique {
-				w.p("{Columns: %s, Unique: true},", ints(ix.Columns))
+				w.p("{Columns: %s, Unique: true}, // %s", ints(ix.Columns), strings.Join(names, ", "))
 			} else {
-				w.p("{Columns: %s},", ints(ix.Columns))
+				w.p("{Columns: %s}, // %s", ints(ix.Columns), strings.Join(names, ", "))
 			}
 		}
 		w.p("},")
@@ -350,7 +348,13 @@ func entityDescriptor(w *writer, e *OutEntity) {
 		}
 		w.p("},")
 	}
-	w.p("Addr: func(x *%s, i int) any {", e.Name)
+	if e.Bound.Policy {
+		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy((*%s)(nil).Policy()) },", e.Name)
+	}
+	if e.Bound.Hooks {
+		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks((*%s)(nil).Hooks()) },", e.Name)
+	}
+	w.p("FieldPtr: func(x *%s, i int) any {", e.Name)
 	w.p("switch i {")
 	for i, f := range e.Fields {
 		w.p("case %d:", i)
@@ -360,7 +364,7 @@ func entityDescriptor(w *writer, e *OutEntity) {
 	w.p("return nil")
 	w.p("},")
 	if len(e.Rels) > 0 {
-		w.p("EdgeAddr: func(x *%s, i int) any {", e.Name)
+		w.p("EdgeFieldPtr: func(x *%s, i int) any {", e.Name)
 		w.p("switch i {")
 		for i, r := range e.Rels {
 			w.p("case %d:", i)
@@ -391,8 +395,8 @@ func ints(is []int) string {
 }
 
 // entityString writes e's String and GoString methods: String prints its
-// fields except the sensitive ones, with a pointer field's value, or nil, and
-// GoString (for %#v) is the same text. Both have a value receiver, so that an
+// fields except the sensitive ones, a pointer field as its value, or nil, and
+// a bytes field as its length, and GoString (for %#v) is the same text. Both have a value receiver, so that an
 // entity value, such as an element of the []E that All returns, prints without
 // its sensitive fields under %v, %+v and %#v as well as a pointer.
 func entityString(w *writer, e *OutEntity) {
@@ -401,6 +405,12 @@ func entityString(w *writer, e *OutEntity) {
 	w.p("func (x %s) String() string {", e.Name)
 	for i, f := range e.Fields {
 		if f.Sensitive {
+			continue
+		}
+		if f.ElemType == "[]byte" && !f.Pointer {
+			// A blob can be megabytes: String says how long it is.
+			verbs = append(verbs, f.GoName+"=<%d bytes>")
+			args = append(args, "len(x."+f.GoName+")")
 			continue
 		}
 		verbs = append(verbs, f.GoName+"=%v")

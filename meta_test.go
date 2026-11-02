@@ -14,7 +14,7 @@ func TestMetaOnceBuildsOnce(t *testing.T) {
 	desc := func() Descriptor[other] {
 		calls++
 		return Descriptor[other]{Table: "other", Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Addr: func(x *other, i int) any { return &x.ID }}
+			FieldPtr: func(x *other, i int) any { return &x.ID }}
 	}
 	a, b := o.Load(desc), o.Load(desc)
 	if calls != 1 || a != b || a.err != nil || a.info.Table != "other" {

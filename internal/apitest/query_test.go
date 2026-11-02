@@ -291,7 +291,7 @@ func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
 		_, err := db.Query[panickyEntity]().All(ctx)
 		return err
 	})
-	check("no Addr", "apitest.addrlessEntity", "Addr", func() error {
+	check("no FieldPtr", "apitest.addrlessEntity", "FieldPtr", func() error {
 		_, err := db.Query[addrlessEntity]().All(ctx)
 		return err
 	})

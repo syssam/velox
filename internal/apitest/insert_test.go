@@ -280,7 +280,7 @@ func (*dshared) VeloxMeta() *velox.Meta[dshared] {
 			},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *dshared, i int) any {
+			FieldPtr: func(x *dshared, i int) any {
 				switch i {
 				case 0:
 					return &x.ID

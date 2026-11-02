@@ -46,10 +46,10 @@ func rowDescriptor() velox.Descriptor[dRow] {
 		Tenant:     -1,
 		Indexes:    []velox.IndexInfo{{Columns: []int{3}, Unique: true}},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.DAuthor]("Author", 0, 0)},
-		Addr: func(x *dRow, i int) any {
+		FieldPtr: func(x *dRow, i int) any {
 			return [...]any{&x.ID, &x.Flag, &x.Opt, &x.Name}[i]
 		},
-		EdgeAddr: func(x *dRow, i int) any { return &x.Author },
+		EdgeFieldPtr: func(x *dRow, i int) any { return &x.Author },
 	}
 }
 
@@ -95,19 +95,19 @@ func TestDescriptorRefusals(t *testing.T) {
 		want string
 	}{
 		{"no Table", func(d *velox.Descriptor[dRow]) { d.Table = "" }, "dRow: the generated metadata has no Table"},
-		{"no Addr", func(d *velox.Descriptor[dRow]) { d.Addr = nil }, "dRow: the generated metadata has no Addr"},
-		{"Addr gives nil", func(d *velox.Descriptor[dRow]) {
-			d.Addr = func(x *dRow, i int) any { return nil }
-		}, "dRow.ID: Addr does not return a pointer into the entity for column 0"},
-		{"Addr gives a value", func(d *velox.Descriptor[dRow]) {
-			d.Addr = func(x *dRow, i int) any { return x.ID }
-		}, "Addr does not return a pointer"},
-		{"Addr gives a nil pointer", func(d *velox.Descriptor[dRow]) {
-			d.Addr = func(x *dRow, i int) any { return (*int64)(nil) }
-		}, "Addr does not return a pointer"},
-		{"Addr points outside", func(d *velox.Descriptor[dRow]) {
-			d.Addr = func(x *dRow, i int) any { return &outside }
-		}, "Addr does not return a pointer into the entity"},
+		{"no FieldPtr", func(d *velox.Descriptor[dRow]) { d.FieldPtr = nil }, "dRow: the generated metadata has no FieldPtr"},
+		{"FieldPtr gives nil", func(d *velox.Descriptor[dRow]) {
+			d.FieldPtr = func(x *dRow, i int) any { return nil }
+		}, "dRow.ID: FieldPtr does not return a pointer into the entity for column 0"},
+		{"FieldPtr gives a value", func(d *velox.Descriptor[dRow]) {
+			d.FieldPtr = func(x *dRow, i int) any { return x.ID }
+		}, "FieldPtr does not return a pointer"},
+		{"FieldPtr gives a nil pointer", func(d *velox.Descriptor[dRow]) {
+			d.FieldPtr = func(x *dRow, i int) any { return (*int64)(nil) }
+		}, "FieldPtr does not return a pointer"},
+		{"FieldPtr points outside", func(d *velox.Descriptor[dRow]) {
+			d.FieldPtr = func(x *dRow, i int) any { return &outside }
+		}, "FieldPtr does not return a pointer into the entity"},
 		{"no primary key", func(d *velox.Descriptor[dRow]) { d.PrimaryKey = nil }, "the primary key names no fields"},
 		{"primary key out of range", func(d *velox.Descriptor[dRow]) { d.PrimaryKey = []int{4} }, "the primary key names column 4, of 4"},
 		{"index out of range", func(d *velox.Descriptor[dRow]) { d.Indexes = []velox.IndexInfo{{Columns: []int{-1}}} }, "an index names column -1, of 4"},
@@ -126,13 +126,13 @@ func TestDescriptorRefusals(t *testing.T) {
 			d.Columns[3].UpdateDefault = func() any { return "x" }
 		}, "dRow.Name: Immutable column Name has an UpdateDefault; every update would be refused"},
 		{"duplicate column name", func(d *velox.Descriptor[dRow]) { d.Columns[3].Name = "flag" }, `column name "flag" is also the name of Flag`},
-		{"panic in Addr", func(d *velox.Descriptor[dRow]) {
-			d.Addr = func(x *dRow, i int) any { panic("addr") }
+		{"panic in FieldPtr", func(d *velox.Descriptor[dRow]) {
+			d.FieldPtr = func(x *dRow, i int) any { panic("addr") }
 		}, "the generated metadata panicked: addr"},
-		{"no EdgeAddr", func(d *velox.Descriptor[dRow]) { d.EdgeAddr = nil }, "has relations but no EdgeAddr"},
-		{"EdgeAddr gives a column", func(d *velox.Descriptor[dRow]) {
-			d.EdgeAddr = func(x *dRow, i int) any { return &x.ID }
-		}, "dRow.Author: EdgeAddr does not return a *One[T] or *Many[T]"},
+		{"no EdgeFieldPtr", func(d *velox.Descriptor[dRow]) { d.EdgeFieldPtr = nil }, "has relations but no EdgeFieldPtr"},
+		{"EdgeFieldPtr gives a column", func(d *velox.Descriptor[dRow]) {
+			d.EdgeFieldPtr = func(x *dRow, i int) any { return &x.ID }
+		}, "dRow.Author: EdgeFieldPtr does not return a *One[T] or *Many[T]"},
 		{"relation not from EdgeTo", func(d *velox.Descriptor[dRow]) {
 			d.Edges = []velox.EdgeDescriptor{{}} // a literal, not made by EdgeTo
 		}, "relation 0 was not made by EdgeTo or EdgeThrough"},
@@ -207,7 +207,7 @@ func bidiDescriptor() velox.Descriptor[dBidi] {
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Bidi:       true,
-		Addr: func(x *dBidi, i int) any {
+		FieldPtr: func(x *dBidi, i int) any {
 			return [...]any{&x.A, &x.B, &x.C}[i]
 		},
 	}
@@ -233,7 +233,7 @@ func TestBidiDescriptorRefused(t *testing.T) {
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Bidi:       true,
-		Addr:       func(x *dBidiSlice, i int) any { return [...]any{&x.A, &x.B}[i] },
+		FieldPtr:   func(x *dBidiSlice, i int) any { return [...]any{&x.A, &x.B}[i] },
 	})
 	if want := "velox: engine_test.dBidiSlice: the join entity of a bidirectional edge has columns of type []int, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
 		t.Errorf("a slice key: %v, want %s", err, want)
@@ -244,7 +244,7 @@ func TestBidiDescriptorRefused(t *testing.T) {
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Bidi:       true,
-		Addr:       func(x *dBidiIface, i int) any { return [...]any{&x.A, &x.B}[i] },
+		FieldPtr:   func(x *dBidiIface, i int) any { return [...]any{&x.A, &x.B}[i] },
 	})
 	if want := "velox: engine_test.dBidiIface: the join entity of a bidirectional edge has columns of type engine_test.ifaceKey, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
 		t.Errorf("a struct key holding an interface: %v, want %s", err, want)
@@ -255,7 +255,7 @@ func TestBidiDescriptorRefused(t *testing.T) {
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Bidi:       true,
-		Addr:       func(x *dBidiArray, i int) any { return [...]any{&x.A, &x.B}[i] },
+		FieldPtr:   func(x *dBidiArray, i int) any { return [...]any{&x.A, &x.B}[i] },
 	})
 	if want := "velox: engine_test.dBidiArray: the join entity of a bidirectional edge has columns of type [2]interface {}, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
 		t.Errorf("an array key of interfaces: %v, want %s", err, want)
@@ -282,7 +282,7 @@ func TestBidiDescriptorRefused(t *testing.T) {
 		{"primary key", func(d *velox.Descriptor[dBidi]) { d.PrimaryKey = []int{1, 0} }, "the join entity of a bidirectional edge has the primary key [1 0]; its two columns are its primary key, [0 1]"},
 		{"two types", func(d *velox.Descriptor[dBidi]) {
 			d.Columns[1] = velox.ColumnDescriptor{Field: "C", Name: "c"}
-			d.Addr = func(x *dBidi, i int) any { return [...]any{&x.A, &x.C}[i] }
+			d.FieldPtr = func(x *dBidi, i int) any { return [...]any{&x.A, &x.C}[i] }
 		}, "the join entity of a bidirectional edge has columns of two types, int64 and string"},
 		{"tenant", func(d *velox.Descriptor[dBidi]) { d.Tenant = 0 }, "the join entity of a bidirectional edge cannot have a tenant column"},
 		{"read policy", func(d *velox.Descriptor[dBidi]) {
@@ -331,10 +331,10 @@ func spouseDescriptor() velox.Descriptor[dSpouse] {
 		Tenant:     -1,
 		Indexes:    []velox.IndexInfo{{Columns: []int{1}, Unique: true}, {Columns: []int{2}, Unique: true}, {Columns: []int{3}, Unique: true}},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[dSpouse]("Spouse", 1, 0)},
-		Addr: func(x *dSpouse, i int) any {
+		FieldPtr: func(x *dSpouse, i int) any {
 			return [...]any{&x.ID, &x.SpouseID, &x.Number, &x.Small, &x.Blob}[i]
 		},
-		EdgeAddr: func(x *dSpouse, i int) any { return [...]any{&x.Spouse, &x.Author}[i] },
+		EdgeFieldPtr: func(x *dSpouse, i int) any { return [...]any{&x.Spouse, &x.Author}[i] },
 	}
 }
 

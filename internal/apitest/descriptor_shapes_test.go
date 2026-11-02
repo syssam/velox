@@ -32,13 +32,13 @@ func pboxDescriptor() velox.Descriptor[pbox] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.Pnote]("Note", 1, 0)},
-		Addr: func(x *pbox, i int) any {
+		FieldPtr: func(x *pbox, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
 			return &x.NoteID
 		},
-		EdgeAddr: func(x *pbox, i int) any { return &x.Note },
+		EdgeFieldPtr: func(x *pbox, i int) any { return &x.Note },
 	}
 }
 
@@ -69,13 +69,13 @@ func pcommentDescriptor() velox.Descriptor[pcomment] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.Pnote]("Note", 1, 0)},
-		Addr: func(x *pcomment, i int) any {
+		FieldPtr: func(x *pcomment, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
 			return &x.NoteID
 		},
-		EdgeAddr: func(x *pcomment, i int) any { return &x.Note },
+		EdgeFieldPtr: func(x *pcomment, i int) any { return &x.Note },
 	}
 }
 
@@ -125,13 +125,13 @@ func pcycADescriptor() velox.Descriptor[pcycA] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pcycB]("B", 1, 0)},
-		Addr: func(x *pcycA, i int) any {
+		FieldPtr: func(x *pcycA, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
 			return &x.BID
 		},
-		EdgeAddr: func(x *pcycA, i int) any { return &x.B },
+		EdgeFieldPtr: func(x *pcycA, i int) any { return &x.B },
 	}
 }
 
@@ -143,13 +143,13 @@ func pcycBDescriptor() velox.Descriptor[pcycB] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pcycA]("A", 1, 0)},
-		Addr: func(x *pcycB, i int) any {
+		FieldPtr: func(x *pcycB, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
 			return &x.AID
 		},
-		EdgeAddr: func(x *pcycB, i int) any { return &x.A },
+		EdgeFieldPtr: func(x *pcycB, i int) any { return &x.A },
 	}
 }
 
@@ -164,7 +164,7 @@ func (*keyOnly) VeloxMeta() *velox.Meta[keyOnly] { return keyOnlyMeta.Load(keyOn
 func keyOnlyDescriptor() velox.Descriptor[keyOnly] {
 	return velox.Descriptor[keyOnly]{
 		Table: "key_only", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-		Addr: func(x *keyOnly, i int) any { return &x.ID },
+		FieldPtr: func(x *keyOnly, i int) any { return &x.ID },
 	}
 }
 
@@ -181,7 +181,7 @@ func wideKeyDescriptor() velox.Descriptor[wideKey] {
 	return velox.Descriptor[wideKey]{
 		Table: "wide_key", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Opt", Name: "opt", Default: true}},
 		PrimaryKey: []int{0}, Tenant: -1,
-		Addr: func(x *wideKey, i int) any {
+		FieldPtr: func(x *wideKey, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
@@ -203,7 +203,7 @@ func tinyKeyDescriptor() velox.Descriptor[tinyKey] {
 	return velox.Descriptor[tinyKey]{
 		Table: "tiny_key", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0}, Tenant: -1,
-		Addr: func(x *tinyKey, i int) any {
+		FieldPtr: func(x *tinyKey, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
@@ -231,7 +231,7 @@ func tuniqueDescriptor() velox.Descriptor[tunique] {
 		PrimaryKey: []int{0, 1},
 		Tenant:     0,
 		Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
-		Addr: func(x *tunique, i int) any {
+		FieldPtr: func(x *tunique, i int) any {
 			switch i {
 			case 0:
 				return &x.OrgID
@@ -251,7 +251,7 @@ var tu = struct {
 
 var dnoteID = velox.NumberCol[fixture.Dnote, int64]{I: 0}
 
-// panickyEntity's Descriptor panics; addrlessEntity's has no Addr.
+// panickyEntity's Descriptor panics; addrlessEntity's has no FieldPtr.
 type panickyEntity struct{ ID int64 }
 
 var panickyMeta velox.MetaOnce[panickyEntity]

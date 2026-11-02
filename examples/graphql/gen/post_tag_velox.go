@@ -42,7 +42,7 @@ func postTagDescriptor() velox.Descriptor[PostTag] {
 		TenantRefs: []velox.TenantRef{
 			{Column: 0, Table: "posts", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
-		Addr: func(x *PostTag, i int) any {
+		FieldPtr: func(x *PostTag, i int) any {
 			switch i {
 			case 0:
 				return &x.PostID

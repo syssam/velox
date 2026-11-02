@@ -30,7 +30,7 @@ func bookDescriptor() velox.Descriptor[book] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[bookTag, tag]("Tags", 0, 0, 1, 0)},
-		Addr: func(x *book, i int) any {
+		FieldPtr: func(x *book, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -39,7 +39,7 @@ func bookDescriptor() velox.Descriptor[book] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *book, i int) any {
+		EdgeFieldPtr: func(x *book, i int) any {
 			if i == 0 {
 				return &x.Tags
 			}
@@ -73,7 +73,7 @@ func tagDescriptor() velox.Descriptor[tag] {
 		PrimaryKey: []int{0},
 		Tenant:     1,
 		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[bookTag, book]("Books", 0, 1, 0, 0)},
-		Addr: func(x *tag, i int) any {
+		FieldPtr: func(x *tag, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -84,7 +84,7 @@ func tagDescriptor() velox.Descriptor[tag] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *tag, i int) any {
+		EdgeFieldPtr: func(x *tag, i int) any {
 			if i == 0 {
 				return &x.Books
 			}
@@ -114,7 +114,7 @@ func bookTagDescriptor() velox.Descriptor[bookTag] {
 		Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
-		Addr: func(x *bookTag, i int) any {
+		FieldPtr: func(x *bookTag, i int) any {
 			switch i {
 			case 0:
 				return &x.BookID
@@ -160,7 +160,7 @@ func personDescriptor() velox.Descriptor[person] {
 		Tenant:     -1,
 		Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[personFriend, person]("Friends", 0, 0, 1, 0), velox.EdgeBidi[person]("Spouse", 2, 0)},
-		Addr: func(x *person, i int) any {
+		FieldPtr: func(x *person, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
@@ -171,7 +171,7 @@ func personDescriptor() velox.Descriptor[person] {
 			}
 			return nil
 		},
-		EdgeAddr: func(x *person, i int) any {
+		EdgeFieldPtr: func(x *person, i int) any {
 			switch i {
 			case 0:
 				return &x.Friends
@@ -207,7 +207,7 @@ func personFriendDescriptor() velox.Descriptor[personFriend] {
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Bidi:       true,
-		Addr: func(x *personFriend, i int) any {
+		FieldPtr: func(x *personFriend, i int) any {
 			switch i {
 			case 0:
 				return &x.NodeID

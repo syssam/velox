@@ -44,9 +44,9 @@ func accountDescriptor() velox.Descriptor[Account] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{1}, Unique: true},
+			{Columns: []int{1}, Unique: true}, // name
 		},
-		Addr: func(x *Account, i int) any {
+		FieldPtr: func(x *Account, i int) any {
 			switch i {
 			case 0:
 				return &x.ID

@@ -38,13 +38,13 @@ var jOwnerMeta velox.MetaOnce[jOwner]
 func (*jOwner) VeloxMeta() *velox.Meta[jOwner] {
 	return jOwnerMeta.Load(func() velox.Descriptor[jOwner] {
 		return velox.Descriptor[jOwner]{
-			Table:      "j_owners",
-			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
-			PrimaryKey: []int{0},
-			Tenant:     -1,
-			Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.JDoc]("Docs", 0, 1)},
-			Addr:       func(x *jOwner, i int) any { return &x.ID },
-			EdgeAddr:   func(x *jOwner, i int) any { return &x.Docs },
+			Table:        "j_owners",
+			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
+			PrimaryKey:   []int{0},
+			Tenant:       -1,
+			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[fixture.JDoc]("Docs", 0, 1)},
+			FieldPtr:     func(x *jOwner, i int) any { return &x.ID },
+			EdgeFieldPtr: func(x *jOwner, i int) any { return &x.Docs },
 		}
 	})
 }
@@ -310,7 +310,7 @@ func (*jStamp) VeloxMeta() *velox.Meta[jStamp] {
 			},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *jStamp, i int) any {
+			FieldPtr: func(x *jStamp, i int) any {
 				if i == 0 {
 					return &x.ID
 				}
@@ -426,7 +426,7 @@ func (*jBin) VeloxMeta() *velox.Meta[jBin] {
 			},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Addr: func(x *jBin, i int) any {
+			FieldPtr: func(x *jBin, i int) any {
 				if i == 0 {
 					return &x.ID
 				}
