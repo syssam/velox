@@ -210,7 +210,8 @@ func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resol
 
 // markPending is ResolveApplied of a version not in the history: its file is recorded
 // as applied with no statements, as none ran. A pending file below it is refused:
-// the history is linear.
+// the history is linear. So is any while a version is dirty: -applied there meant
+// that version, and would otherwise skip a whole file in silence.
 func (s *session) markPending(ctx context.Context, dir *Dir, rows []Applied, version uint64) error {
 	j := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == version })
 	if j < 0 {
@@ -220,6 +221,9 @@ func (s *session) markPending(ctx context.Context, dir *Dir, rows []Applied, ver
 		if !slices.ContainsFunc(rows, func(a Applied) bool { return a.Version == f.Version }) {
 			return &Error{Code: "history", Reason: fmt.Sprintf("%s is pending below version %d; apply or mark it first", f.Path, version)}
 		}
+	}
+	if k := slices.IndexFunc(rows, func(a Applied) bool { return a.Dirty }); k >= 0 {
+		return &Error{Code: "history", Reason: fmt.Sprintf("version %d is dirty; end that first, with -resume, -undone or -applied on version %d, before marking version %d applied", rows[k].Version, rows[k].Version, version)}
 	}
 	f := dir.Files[j]
 	s.say(fmt.Sprintf("%s is recorded as applied, and none of it ran", f.Path))

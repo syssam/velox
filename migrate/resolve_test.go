@@ -184,3 +184,24 @@ func TestLostMessage(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+// TestResolveAppliedPendingRefusedWhileDirty: marking a pending file applied while
+// another version is dirty is refused. An operator who meant the dirty version and
+// typed the next one would skip the whole file and see every command succeed.
+func TestResolveAppliedPendingRefusedWhileDirty(t *testing.T) {
+	ctx := context.Background()
+	db, _ := freshDB(t, velox.SQLite)
+	one := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);"))
+	mustUp(t, db, one)
+	if _, err := db.Exec(`UPDATE velox_migrations SET dirty = true, statements = 0, error = 'boom' WHERE version = 1`); err != nil {
+		t.Fatal(err)
+	}
+	two := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);", "0002_b.sql", "CREATE TABLE b (x integer);"))
+	err := migrate.Resolve(ctx, db, two, 2, migrate.ResolveApplied)
+	if err == nil || !strings.Contains(asError(t, err, "history").Reason, "version 1 is dirty") {
+		t.Errorf("pending 2 while 1 is dirty: %v", err)
+	}
+	if rows := historyOf(t, db); len(rows) != 1 {
+		t.Errorf("recorded: %+v", rows)
+	}
+}
