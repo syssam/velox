@@ -53,6 +53,7 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 		return Applied{}, s.failed(ctx, f, from, fmt.Errorf("setting the lock timeout: %w", err), o)
 	}
 	defer restore()
+	timeouts := s.statementTimeouts(f)
 	table := s.historyTable()
 	last := from // the first statement of the last unit run
 	for u, first := range units {
@@ -68,7 +69,17 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 			return Applied{}, s.failed(ctx, f, first, err, o)
 		}
 		for i := first; i < end; i++ {
+			if err := timeouts.before(ctx, f.Statements[i]); err != nil {
+				return Applied{}, s.failed(ctx, f, i, fmt.Errorf("setting the lock timeout: %w", err), o)
+			}
 			if _, err := s.conn.ExecContext(ctx, f.Statements[i]); err != nil {
+				if s.d == velox.Postgres && ctx.Err() == nil && i == first && pgLockFailure(err) {
+					// A statement that failed on a lock changed nothing; at a unit's
+					// head the whole unit is still to run.
+					if open, oerr := s.inTransaction(ctx); !open && oerr == nil {
+						err = &retryError{err}
+					}
+				}
 				if s.d == velox.MySQL && ctx.Err() == nil {
 					if row == nil && i == 0 && nothingChanged(f.Statements[0], err) {
 						if refused := s.notRecorded(ctx, f, err); refused != nil {
@@ -273,10 +284,66 @@ func (s *session) completed(ctx context.Context, v uint64, from int) int {
 	return from
 }
 
+// pgLockFailure reports whether err is PostgreSQL's lock timeout or deadlock:
+// the statement failed waiting, and changed nothing.
+func pgLockFailure(err error) bool {
+	code, _ := velox.DriverCode(err)
+	return code == "55P03" || code == "40P01"
+}
+
+// stmtTimeouts sets PostgreSQL's lock timeout before each statement of a file
+// run statement by statement with no lock-timeout directive: none for a
+// statement that waits for older transactions by design, which blocks no
+// query of the table while it waits, and the Config's for every other, as a
+// statement waiting for a table's lock queues each query of the table behind
+// it. cur is the value set, stepTimeout's 0 at first.
+type stmtTimeouts struct {
+	s       *session
+	on      bool
+	timeout string
+	cur     string
+}
+
+// statementTimeouts is the stmtTimeouts of f, which sets nothing unless f is
+// a PostgreSQL file without a lock-timeout directive.
+func (s *session) statementTimeouts(f File) *stmtTimeouts {
+	return &stmtTimeouts{s: s, on: s.d == velox.Postgres && !f.Directives.LockTimeoutSet, timeout: pgLockTimeout(s.cfg.LockTimeout), cur: "0"}
+}
+
+func (t *stmtTimeouts) before(ctx context.Context, q string) error {
+	if !t.on {
+		return nil
+	}
+	want := t.timeout
+	if waitsForOthers(q) {
+		want = "0"
+	}
+	if want == t.cur {
+		return nil
+	}
+	if _, err := t.s.conn.ExecContext(ctx, "SET lock_timeout = "+want); err != nil {
+		return err
+	}
+	t.cur = want
+	return nil
+}
+
+// waitsForOthers reports whether the PostgreSQL statement q waits for older
+// transactions by design, under a lock that blocks no read or write of the
+// table: CONCURRENTLY, and ALTER TABLE … VALIDATE CONSTRAINT. A short lock
+// timeout would make it fail routinely.
+func waitsForOthers(q string) bool {
+	l := &fileLinter{d: velox.Postgres, ws: lex(velox.Postgres, q)}
+	if l.concurrently() {
+		return true
+	}
+	return l.upper(0) == "ALTER" && l.upper(1) == "TABLE" && (l.has("VALIDATE", "CONSTRAINT") || l.has("DETACH", "PARTITION") && l.has("CONCURRENTLY"))
+}
+
 // stepTimeout sets the lock timeout for a file run statement by statement:
-// the file's directive, else on MySQL the Config's, else on PostgreSQL none.
-// On MySQL it is whole seconds, rounded up, and 0 sets back the session's
-// own. restore resets it.
+// the file's directive, else on MySQL the Config's, else on PostgreSQL none,
+// which statementTimeouts then sets per statement. On MySQL it is whole
+// seconds, rounded up, and 0 sets back the session's own. restore resets it.
 func (s *session) stepTimeout(ctx context.Context, f File) (restore func(), err error) {
 	switch s.d {
 	case velox.Postgres:

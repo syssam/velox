@@ -302,12 +302,13 @@ func lockTimeoutIs(want string) string {
 }
 
 // TestUpPostgresNoTransactionLockTimeout: a no-transaction file runs with
-// no lock timeout unless its directive gives one, as the enum file Add
-// wrote does.
+// its directive's lock timeout, as the enum file Add wrote does; without one,
+// a statement that waits for older transactions by design runs with none
+// (TestUpPostgresOnlineConcurrentlyWaits) and any other with the Config's.
 func TestUpPostgresNoTransactionLockTimeout(t *testing.T) {
 	db, _ := freshDB(t, velox.Postgres)
 	mustUp(t, db, dirOf(t, velox.Postgres, files(
-		"0001_off.sql", "-- velox:no-transaction\n"+lockTimeoutIs("0"),
+		"0001_off.sql", "-- velox:no-transaction\n"+lockTimeoutIs("5s"),
 		"0002_three.sql", "-- velox:no-transaction\n-- velox:lock-timeout 3s\n"+lockTimeoutIs("3s"))))
 
 	db, _ = freshDB(t, velox.Postgres)
@@ -341,6 +342,93 @@ func TestUpPostgresNoTransactionLockTimeout(t *testing.T) {
 	var values string
 	if err := db.QueryRow(`SELECT string_agg(enumlabel, ',' ORDER BY enumsortorder) FROM pg_enum WHERE enumtypid = 'users_role'::regtype`).Scan(&values); err != nil || values != "admin,editor,viewer" {
 		t.Errorf("users_role: %s, %v", values, err)
+	}
+}
+
+// onlineCheckFile is an online file as Render writes one for a check on an
+// existing table t, then an index built CONCURRENTLY, with no lock-timeout
+// directive.
+const onlineCheckFile = `-- velox:no-transaction
+
+-- velox:unit
+ALTER TABLE t DROP CONSTRAINT IF EXISTS t_x_positive;
+ALTER TABLE t ADD CONSTRAINT t_x_positive CHECK (x > 0) NOT VALID;
+ALTER TABLE t VALIDATE CONSTRAINT t_x_positive;
+
+-- velox:unit
+DROP INDEX CONCURRENTLY IF EXISTS t_x;
+CREATE INDEX CONCURRENTLY t_x ON t (x);
+`
+
+// TestUpPostgresOnlineLockTimeout: an online file's ALTER TABLE that waits for
+// the table's lock queues every query of the table behind it, so it waits no
+// longer than the Config's lock timeout, as in a file in a transaction; it
+// waited for as long as a transaction held the table, and a plain SELECT
+// waited behind it. The lock failed at a unit's head and changed nothing, so
+// the next Up goes on from it unasked.
+func TestUpPostgresOnlineLockTimeout(t *testing.T) {
+	ctx := context.Background()
+	db, dsn := freshDB(t, velox.Postgres)
+	fsys := dirOf(t, velox.Postgres, files("0001_t.sql", "CREATE TABLE t (x int);\nINSERT INTO t VALUES (1);\n"), files("0002_t_online.sql", onlineCheckFile))
+	fsys["velox.json"] = &fstest.MapFile{Data: []byte(`{"version": 1, "dialect": "postgres", "lock_timeout": "200ms"}`)}
+	resum(t, fsys)
+	mustUp(t, db, fsys, migrate.WithTarget(1))
+	reader, err := openDB(t, "pgx", dsn).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+	mustExec(t, db, "SELECT 1") // the pool's connection, before the reader holds t
+	if _, err := reader.ExecContext(ctx, `BEGIN`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.ExecContext(ctx, `SELECT count(*) FROM t`); err != nil {
+		t.Fatal(err)
+	}
+	bounded, cancel := context.WithTimeout(ctx, 10*time.Second)
+	start := time.Now()
+	_, err = migrate.Up(bounded, db, fsys)
+	cancel()
+	if code, _ := velox.DriverCode(err); code != "55P03" {
+		t.Fatalf("after %s: %v; want a lock timeout, 55P03", time.Since(start), err)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("Up waited %s for the lock; want about 200ms", d)
+	}
+	if _, err := reader.ExecContext(ctx, `COMMIT`); err != nil {
+		t.Fatal(err)
+	}
+	mustUp(t, db, fsys) // no -resume: the lock kept the unit's first statement from running
+	if !pgIndexValid(t, db, "t_x") {
+		t.Error("t_x is invalid")
+	}
+}
+
+// TestUpPostgresOnlineConcurrentlyWaits: what waits for older transactions by
+// design, CREATE INDEX CONCURRENTLY and VALIDATE CONSTRAINT, blocks no query
+// while it waits, and runs with no lock timeout though the Config has one.
+func TestUpPostgresOnlineConcurrentlyWaits(t *testing.T) {
+	ctx := context.Background()
+	db, dsn := freshDB(t, velox.Postgres)
+	fsys := dirOf(t, velox.Postgres, files("0001_t.sql", "CREATE TABLE t (x int);\nINSERT INTO t VALUES (1);\nCREATE TABLE other (y int);\n"), files("0002_t_online.sql", onlineCheckFile))
+	fsys["velox.json"] = &fstest.MapFile{Data: []byte(`{"version": 1, "dialect": "postgres", "lock_timeout": "200ms"}`)}
+	resum(t, fsys)
+	mustUp(t, db, fsys, migrate.WithTarget(1))
+	reader, err := openDB(t, "pgx", dsn).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+	if _, err := reader.ExecContext(ctx, `BEGIN ISOLATION LEVEL REPEATABLE READ`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.ExecContext(ctx, `SELECT count(*) FROM other`); err != nil { // a snapshot, and no lock on t
+		t.Fatal(err)
+	}
+	time.AfterFunc(time.Second, func() { _, _ = reader.ExecContext(ctx, `COMMIT`) })
+	mustUp(t, db, fsys)
+	if !pgIndexValid(t, db, "t_x") {
+		t.Error("t_x is invalid")
 	}
 }
 
