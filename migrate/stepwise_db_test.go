@@ -432,6 +432,68 @@ func TestUpPostgresOnlineConcurrentlyWaits(t *testing.T) {
 	}
 }
 
+// TestUpPostgresForeignKeyReplacedInPlace: a plan that changes a foreign key
+// drops it and adds it NOT VALID in one transaction, the main file's, and only
+// validates it online. It added it online, so the table had no key from the
+// main file's commit until the online file ran: rows written then went
+// unchecked, and a lock timeout or a stop there left the table without one.
+func TestUpPostgresForeignKeyReplacedInPlace(t *testing.T) {
+	for _, name := range []string{"on-delete-change", "key-type-change", "rename-table-key-type"} {
+		t.Run(name, func(t *testing.T) {
+			db, _ := freshDB(t, velox.Postgres)
+			fsys := caseDir(t, caseNamed(name), velox.Postgres)
+			var online uint64
+			dir, err := migrate.ReadDir(fsys)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range dir.Files {
+				if f.Directives.NoTransaction {
+					online = f.Version
+				}
+			}
+			if online == 0 {
+				t.Fatalf("no online file:\n%s", sqlFiles(fsys))
+			}
+			mustUp(t, db, fsys, migrate.WithTarget(online-1))
+			var keys []string
+			rows, err := db.Query(`SELECT conname || ' ' || convalidated FROM pg_constraint WHERE contype = 'f' ORDER BY 1`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for rows.Next() {
+				var k string
+				if err := rows.Scan(&k); err != nil {
+					t.Fatal(err)
+				}
+				keys = append(keys, k)
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			if c := caseNamed(name); len(keys) != countKeys(t, c) {
+				t.Errorf("before the online file the foreign keys are %v; want every one of the model's, NOT VALID or valid\n%s", keys, sqlFiles(fsys))
+			}
+			mustUp(t, db, fsys)
+			var invalid int
+			if err := db.QueryRow(`SELECT count(*) FROM pg_constraint WHERE contype = 'f' AND NOT convalidated`).Scan(&invalid); err != nil || invalid != 0 {
+				t.Errorf("after the online file %d keys are NOT VALID, %v", invalid, err)
+			}
+		})
+	}
+}
+
+// countKeys is the number of foreign keys of case c's target model on PostgreSQL.
+func countKeys(t *testing.T, c testCase) int {
+	t.Helper()
+	_, to := models(t, c, velox.Postgres)
+	n := 0
+	for _, tb := range to.Tables {
+		n += len(tb.ForeignKeys)
+	}
+	return n
+}
+
 // TestUpMySQLLockWaitTimeout: a file runs with its directive's
 // lock_wait_timeout in whole seconds, rounded up, else the Config's; 0 is
 // the session's own, which is set back after each file.

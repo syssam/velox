@@ -221,6 +221,12 @@ func schemaName(s string) string {
 // and in the main script on a table the plan creates.
 func (r *renderer) pgConstraint(i int, table TableRef, name, def string) pgParts {
 	t := r.table(table)
+	if r.l.existing(table) && r.replaces(i) {
+		return pgParts{
+			table: t, phase: phaseAdd, actions: []string{"ADD CONSTRAINT " + r.ident(name) + " " + def + " NOT VALID"},
+			units: [][]string{{"ALTER TABLE " + t + " VALIDATE CONSTRAINT " + r.ident(name)}},
+		}
+	}
 	if r.l.existing(table) {
 		r.unit(i,
 			"ALTER TABLE "+t+" DROP CONSTRAINT IF EXISTS "+r.ident(name),
@@ -229,6 +235,28 @@ func (r *renderer) pgConstraint(i int, table TableRef, name, def string) pgParts
 		return pgParts{}
 	}
 	return pgParts{table: t, phase: phaseAdd, actions: []string{"ADD CONSTRAINT " + r.ident(name) + " " + def}}
+}
+
+// replaces reports whether change i, a foreign key or check added to a table
+// that exists, takes the place of one an earlier change drops from the table:
+// of its name, or a key of its columns. The main script then adds it NOT
+// VALID, in the drop's transaction, which already locks what the add does, so
+// the table is never without it; only VALIDATE goes online.
+func (r *renderer) replaces(i int) bool {
+	for _, c := range r.cs[:i] {
+		switch a := r.cs[i].(type) {
+		case addForeignKey:
+			if d, ok := c.(dropForeignKey); ok && r.l.canon(d.Table) == r.l.canon(a.Table) &&
+				(d.ForeignKey.Name == a.ForeignKey.Name || slices.Equal(d.ForeignKey.Columns, a.ForeignKey.Columns)) {
+				return true
+			}
+		case addCheck:
+			if d, ok := c.(dropCheck); ok && r.l.canon(d.Table) == r.l.canon(a.Table) && d.Check.Name == a.Check.Name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // dropOnline reports whether the drop of an index goes to the online
