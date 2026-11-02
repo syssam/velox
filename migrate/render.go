@@ -226,7 +226,8 @@ type renderer struct {
 	fkOff    bool     // SQLite: the script needs foreign keys off
 	drops    []string // SQLite: what its rebuilds take away
 
-	enum, online []Statement // PostgreSQL: the enum and online scripts'
+	enum, online []Statement       // PostgreSQL: the enum and online scripts'
+	unitFindings map[int][]Finding // PostgreSQL: a change's findings for its online unit, not its first statement
 }
 
 // emit adds a statement that renders the changes of the indexes in changes

@@ -2,6 +2,7 @@ package migrate_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -380,6 +381,29 @@ func TestRenderReviewLines(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("reviews %q, want %q", got, want)
+	}
+}
+
+// TestRenderReviewOverItsStatement: a PostgreSQL column that takes a default and
+// NOT NULL at once has its SET DEFAULT in the main script's ALTER, beside other
+// columns' actions, and SET NOT NULL in an online unit. The set-not-null review sat
+// over the ALTER, which cannot fail on a NULL, and the unit that can had none.
+func TestRenderReviewOverItsStatement(t *testing.T) {
+	from := mustTables(velox.Postgres, nil)
+	to := mustTables(velox.Postgres, func(m *loadjson.Model) {
+		f := fieldOf(m, "User", "bio")
+		f.Optional, f.Nillable, f.Default = false, false, json.RawMessage(`"none"`)
+		fieldOf(m, "User", "logins").Type = "int64"
+	})
+	ss := render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{Allow: []migrate.Allow{{Code: "set-not-null"}}})
+	text := scriptsText(ss)
+	for _, s := range ss {
+		for _, st := range s.Statements {
+			says := strings.Contains(st.Review, "set-not-null: ")
+			if want := s.Kind == migrate.ScriptOnline && strings.Contains(st.SQL, "DROP CONSTRAINT IF EXISTS"); says != want {
+				t.Errorf("%s: %q has review %q; want the set-not-null review on the online unit alone\n%s", s.Kind, st.SQL, st.Review, text)
+			}
+		}
 	}
 }
 

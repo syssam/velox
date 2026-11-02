@@ -105,6 +105,11 @@ func (r *renderer) unit(i int, stmts ...string) {
 	if n := len(r.online); n > 0 {
 		u = r.online[n-1].Unit + 1
 	}
+	if later, ok := r.unitFindings[i]; ok {
+		// The main script's statement of the change had the rest.
+		delete(r.unitFindings, i)
+		r.findings[i], r.taken[i] = later, false
+	}
 	for j, s := range stmts {
 		st := Statement{SQL: s, Change: i, Unit: u}
 		if j == 0 {
@@ -144,7 +149,28 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 	case renameColumn:
 		return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " RENAME COLUMN " + r.ident(c.From) + " TO " + r.ident(c.To)}}, nil
 	case alterColumn:
-		return r.pgAlterColumn(c)
+		pc, err := r.pgAlterColumn(c)
+		if len(pc.units) > 0 && (len(pc.actions) > 0 || len(pc.stmts) > 0) {
+			// SET NOT NULL is the online unit, and the main script's statement of
+			// the change does not make the column NOT NULL: the review that says
+			// so goes on the unit.
+			var keep, later []Finding
+			for _, f := range r.findings[i] {
+				if f.Code == "set-not-null" {
+					later = append(later, f)
+				} else {
+					keep = append(keep, f)
+				}
+			}
+			if len(later) > 0 {
+				r.findings[i] = keep
+				if r.unitFindings == nil {
+					r.unitFindings = map[int][]Finding{}
+				}
+				r.unitFindings[i] = later
+			}
+		}
+		return pc, err
 	case renameSequence:
 		return pgParts{stmts: []string{"ALTER SEQUENCE " + r.indexName(c.Table, c.From) + " RENAME TO " + r.ident(c.To)}}, nil
 	case addIndex:
