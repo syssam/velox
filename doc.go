@@ -15,7 +15,7 @@
 // Connect opens a database, through a database/sql driver the application
 // imports. Queries and writes use the generated entities and handles:
 //
-//	db, err := velox.Connect("sqlite", "app.db?_pragma=foreign_keys(1)")
+//	db, err := velox.Connect("sqlite", "app.db")
 //	if err != nil {
 //		return err
 //	}

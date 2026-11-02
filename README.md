@@ -87,7 +87,7 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    func main() {
    	ctx := context.Background()
 
-   	db, err := velox.Connect("sqlite", "app.db?_pragma=foreign_keys(1)")
+   	db, err := velox.Connect("sqlite", "app.db")
    	if err != nil {
    		log.Fatal(err)
    	}
