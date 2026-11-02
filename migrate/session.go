@@ -516,9 +516,11 @@ func lockName(database, table string) string {
 }
 
 // lockKey is PostgreSQL's advisory lock: the first 8 bytes of the SHA-256 of
-// the history table's name, big-endian. Advisory locks are per database.
-func lockKey(table string) int64 {
-	h := sha256.Sum256([]byte(table))
+// "<schema>.<table>", the history table's schema and name, big-endian.
+// Advisory locks are per database, and two schemas of one, each with its own
+// history, migrate apart.
+func lockKey(schema, table string) int64 {
+	h := sha256.Sum256([]byte(schema + "." + table))
 	return int64(binary.BigEndian.Uint64(h[:8]))
 }
 
@@ -537,7 +539,7 @@ func (s *session) lock(ctx context.Context, wait time.Duration) (unlock func(), 
 	wait = max(wait, 0)
 	switch s.d {
 	case velox.Postgres:
-		key := lockKey(s.cfg.Table)
+		key := lockKey(s.schema, s.cfg.Table)
 		var ok bool
 		if wait == 0 {
 			err = s.conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&ok)

@@ -77,7 +77,7 @@ func TestLockName(t *testing.T) {
 }
 
 func TestLockKey(t *testing.T) {
-	if got, want := migrate.LockKey("velox_migrations"), int64(-6634131438283035561); got != want {
+	if got, want := migrate.LockKey("public", "velox_migrations"), int64(-4521918464851113452); got != want {
 		t.Errorf("LockKey = %d; want %d", got, want)
 	}
 }

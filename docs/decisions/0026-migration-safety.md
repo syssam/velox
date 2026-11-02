@@ -226,6 +226,11 @@ Beside this, in the same spirit, each found by running it:
   a snapshot, which the running file's `CREATE INDEX CONCURRENTLY` waits for at its end.
   Two instances migrating at start deadlocked, and PostgreSQL cancelled the build. The
   wait is `pg_try_advisory_lock` tried again, in no transaction.
+- PostgreSQL's migration lock was keyed by the history table's name alone, so two
+  schemas of one database, each with its own history, waited for each other, and with
+  no lock wait one was refused. The key is the schema and the name, as MySQL's lock
+  names the database. A run of a velox from before takes the old key, and does not
+  wait for a run of this one: upgrade every instance that migrates together.
 - A plan refuses what can never run or would cut a value whatever it says: a `USING`
   cast to a limited type becomes the assignment cast, a truncating target under
   `alter-type` is a finding, an enum reorder over an array column and a `CONVERT TO`
