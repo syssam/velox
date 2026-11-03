@@ -107,7 +107,7 @@ func (r *renderer) writeInputEdges(f *file, t *sdl.Type) error {
 			if err != nil {
 				return err
 			}
-			f.doc("", fmt.Sprintf("%s is the many-to-many edge %s of %s, through %s, as its inputs write it.", name, ed.Name, e.Name, j.Name))
+			f.doc("", fmt.Sprintf("%s is the many-to-many edge %s of %s, through %s.", name, ed.Name, e.Name, j.Name))
 			f.p("func %s() %s.M2M {", name, impl)
 			f.p("\treturn %s.M2M{Owner: %s.TableOf[%s](), Target: %s.TableOf[%s](), Join: %s.TableOf[%s](),", impl, vx, e.Name, vx, tgt.Name, vx, j.Name)
 			f.p("\t\tOwnerKey: %s, TargetKey: %s, JoinOwner: %s, JoinTarget: %s}", colConst(e, ok), colConst(tgt, tk.fd), colConst(j, own), colConst(j, other))
@@ -126,7 +126,7 @@ func (r *renderer) writeInputEdges(f *file, t *sdl.Type) error {
 		if _, err := r.keyConv(f, tgt, tfk, ok, cmp.Or(t.Key, tfk.Type)); err != nil {
 			return err
 		}
-		f.doc("", fmt.Sprintf("%s is the edge %s of %s, whose key %s's rows hold, as its inputs write it.", name, ed.Name, e.Name, tgt.Name))
+		f.doc("", fmt.Sprintf("%s is the edge %s of %s, whose key %s's rows hold.", name, ed.Name, e.Name, tgt.Name))
 		f.p("func %s() %s.Owned {", name, impl)
 		f.p("\treturn %s.Owned{Owner: %s.TableOf[%s](), Target: %s.TableOf[%s](), OwnerKey: %s, TargetKey: %s, FK: %s}", impl, vx, e.Name, vx, tgt.Name, colConst(e, ok), colConst(tgt, tk.fd), colConst(tgt, tfk))
 		f.p("}")
@@ -204,7 +204,7 @@ func (r *renderer) writeNameFunc(f *file, t *sdl.Type, name, in string, names []
 		return err
 	}
 	f.p("")
-	f.doc("", fmt.Sprintf("%s is the GraphQL name of the %s field that sets the %s field whose Go name is goField, for the errors of its validators: \"\" for a field it does not set.", name, in, e.Name))
+	f.doc("", fmt.Sprintf("%s is the %s field that sets the %s field goField, or \"\". A validator's error names it.", name, in, e.Name))
 	f.p("func %s(goField string) string {", name)
 	if len(names) > 0 {
 		f.p("\tswitch goField {")
@@ -250,9 +250,9 @@ func (r *renderer) writeInput(f *file, t *sdl.Type, in string, fs []sdl.InputFie
 		types[i] = typ
 	}
 	f.p("")
-	doc := fmt.Sprintf("%s is the GraphQL input %[1]s; its method %s writes it. A field that is a pointer, or a list, is optional: nil means not given.", in, method)
+	doc := fmt.Sprintf("%s is the GraphQL input %[1]s, which %s writes. A nil pointer or list is a field not given.", in, method)
 	if slices.ContainsFunc(fs, func(fi sdl.InputField) bool { return fi.Kind == sdl.InputClear || fi.Kind == sdl.InputClearEdge }) {
-		doc += " A clear field that is true clears a field or an edge, and is refused with the field or the edge's ID given too."
+		doc += " A true clear field clears its field or edge."
 	}
 	f.doc("", doc)
 	f.p("type %s struct {", in)
@@ -346,7 +346,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in, name string) error {
 	fs := t.Create
 
 	f.p("")
-	doc := fmt.Sprintf("Create inserts x, %s %s, with the input's fields and edges set; a nil x is a new one. The input's fields overwrite x's: to own a field, leave it out with graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook. x's other fields, foreign keys included, are trusted, not checked. It runs atomically on the DB in ctx, under the policies, and changes x even when it fails.", english.Article(t.Name), t.Name)
+	doc := fmt.Sprintf("Create inserts x, %s %s, with the input's fields and edges set; a nil x is a new one. It runs atomically on the DB in ctx, under the policies.", english.Article(t.Name), t.Name)
 	var names []string
 	for _, fd := range leftOut(t) {
 		names = append(names, fd.GoName)
@@ -515,7 +515,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in, name string) error {
 	tbl := fmt.Sprintf("%s.TableOf[%s](), %s", velox, e.Name, colConst(e, self.fd))
 
 	f.p("")
-	f.doc("", fmt.Sprintf("Update updates the %s with the ID id from the input and from set, the application's own setters, and returns the row as written. A setter of set wins over the input's field or edge that sets the same column, which is left as set says. The input's fields are validated as the client's, and set apart from them: a setter of set that its validator refuses is the application's error, returned as velox's. It runs atomically on the DB in ctx, under the policies.", n))
+	f.doc("", fmt.Sprintf("Update updates the %s with the ID id from the input and from set, and returns the row as written. A setter of set wins over the input's for the same column.", n))
 	f.p("//")
 	f.doc("", "See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each input field does, what the caller may link and change, and the errors.")
 	f.p("func (in *%s) Update(ctx %s.Context, id string, set ...%s.Setter[%s]) (*%[4]s, error) {", in, ctx, velox, e.Name)

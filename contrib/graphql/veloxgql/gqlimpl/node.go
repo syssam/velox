@@ -126,6 +126,14 @@ func (s *nodeSet) load(ctx context.Context, out []veloxgql.Noder) error {
 // NodeByID returns the node with the global ID id, or nil when no row has its
 // key: the root field node. kind returns the Node type an ID's type names,
 // and false for none. For generated code; see the Node function it writes.
+//
+// It looks the row up with one query on the ID's entity, on the DB
+// veloxgql.DBFromContext reads from ctx, reading only the columns the
+// field's selection needs; its edges batch (veloxgql.Batch). A column the
+// selection does not need is zero in the node, except the key and the
+// foreign keys: an application's resolver must not read one it did not
+// select. An ID of no Node type fails with veloxgql.ErrWrongIDType and a
+// malformed one with veloxgql.ErrBadID; neither runs a query.
 func NodeByID(ctx context.Context, id string, kind func(typ string) (NodeKind, bool)) (veloxgql.Noder, error) {
 	typ, err := veloxgql.IDType(id)
 	if err != nil {
@@ -141,10 +149,13 @@ func NodeByID(ctx context.Context, id string, kind func(typ string) (NodeKind, b
 // NodesByID returns the nodes with the global IDs ids, in their order, with
 // nil for an ID no row has: the root field nodes. It decodes every ID first,
 // and then reads each type's nodes with one query, in the order of the types'
-// first IDs. It fails as NodeByID does on an ID, before any query runs, and
-// with veloxgql.ErrPageTooLarge on more IDs than the MaxPage of
-// veloxgql.LimitsFromContext(ctx). For generated code; see the Nodes function
-// it writes.
+// first IDs. Each query reads at most one row for each of its IDs, whatever
+// the DB's WithMaxRows, and only the columns the field's selection needs; a
+// type's nodes are one batch for their edges, and their unselected columns
+// are zero as NodeByID's are. It fails as NodeByID does on an ID, before any
+// query runs, and with veloxgql.ErrPageTooLarge on more IDs than the MaxPage
+// of veloxgql.LimitsFromContext(ctx). For generated code; see the Nodes
+// function it writes.
 func NodesByID(ctx context.Context, ids []string, kind func(typ string) (NodeKind, bool)) ([]veloxgql.Noder, error) {
 	if most := veloxgql.LimitsFromContext(ctx).MaxPage; len(ids) > most {
 		return nil, InputErrorf("Nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), most)

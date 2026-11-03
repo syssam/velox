@@ -43,7 +43,9 @@ type Conn struct {
 	// Order is the order fields: Field is the GraphQL enum value, "TITLE".
 	Order []Col
 	// Columns is the columns a selection of the type's fields reads (see
-	// Narrow); nil, every column, for a field it does not know.
+	// Narrow): the key, every foreign key on the row, every order field's
+	// column, and the column of each field. It is nil, every column, for a
+	// field it does not know, such as an application's own.
 	Columns func(fields []string) []int
 }
 
@@ -288,6 +290,11 @@ type Connection struct {
 // columns of order's own fields, which the cursors hold: one that does not
 // is refused with an internal error. An order field c does not know is left
 // to NewConnection.
+//
+// q keeps its filters, its With loads and the scope the application gave
+// it. A column the selection does not need is left zero in the nodes, except
+// the key, the foreign keys and the order columns: an application's resolver
+// must not read one it did not ask for.
 func ConnectionBase(ctx context.Context, q velox.TableQuery, c *Conn, order []Order) (velox.TableQuery, error) {
 	fn := plugin.GoPlural(c.Type) + "ConnectionOf"
 	for _, k := range c.Key {

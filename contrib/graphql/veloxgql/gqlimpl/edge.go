@@ -125,9 +125,9 @@ func EdgeOne(ctx context.Context, q velox.TableQuery, owner velox.Table, x unsaf
 
 // EdgeList returns the nodes of the list edge of x, a row of owner, through
 // owner's relation edge, whose GraphQL field is field ("Post.reviews"), in
-// key order, batched as EdgeOne is, with at most MaxList + 1 per owner: an
-// owner with more than MaxList fails with velox.ErrTooManyRows, in an error
-// naming field, and the others do not.
+// key order, batched as EdgeOne is, with at most MaxList + 1 per owner,
+// whatever the DB's WithMaxRows: an owner with more than MaxList fails with
+// velox.ErrTooManyRows, in an error naming field, and the others do not.
 //
 // MaxList is that of veloxgql.LimitsFromContext(ctx), or maxList, the edge's
 // graphql.MaxList, when that is lower and not 0. Read alone, x's nodes are one

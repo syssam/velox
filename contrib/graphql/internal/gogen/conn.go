@@ -91,12 +91,12 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	}
 	ctx, vgql, impl, velox := f.use("context", "context"), f.veloxgql(), f.gqlimpl(), f.velox()
 
-	f.doc("", fmt.Sprintf("%sConnection is the GraphQL type %[1]sConnection, a connection to a list of %[1]s. It holds the query of the whole list and the page asked for; gqlgen calls its methods for the fields a query selects, and each runs its query only then: edges and pageInfo share one page query, and totalCount runs a COUNT.", n))
+	f.doc("", fmt.Sprintf("%sConnection is the GraphQL type %[1]sConnection, a connection to a list of %[1]s. Its fields run their queries when gqlgen asks; see gqlimpl.Connection.", n))
 	f.p("type %sConnection struct {", n)
 	f.p("\tc *%s.Connection", impl)
 	f.p("}")
 	f.p("")
-	f.doc("", "Edges are the edges of the page, in the connection's order. The first call of Edges or PageInfo runs the page query, and the other reads its page.")
+	f.doc("", "Edges are the edges of the page, in the connection's order.")
 	f.p("func (c *%sConnection) Edges(ctx %s.Context) ([]*%[1]sEdge, error) {", n, ctx)
 	f.p("\tp, err := c.c.Page(ctx)")
 	f.p("\tif err != nil {")
@@ -111,7 +111,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("\treturn edges, nil")
 	f.p("}")
 	f.p("")
-	f.p("// PageInfo is the page info of the page; see Edges.")
+	f.p("// PageInfo is the page info of the page.")
 	f.p("func (c *%sConnection) PageInfo(ctx %s.Context) (*%s.PageInfo, error) {", n, ctx, vgql)
 	f.p("\tp, err := c.c.Page(ctx)")
 	f.p("\tif err != nil {")
@@ -120,7 +120,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("\treturn &p.Info, nil")
 	f.p("}")
 	f.p("")
-	f.doc("", fmt.Sprintf("TotalCount is the number of %s nodes in the whole connection, not only on this page. It counts the rows when gqlgen asks for it, which is only when the field totalCount is selected.", n))
+	f.doc("", fmt.Sprintf("TotalCount is the number of %s nodes in the whole connection, not only on this page.", n))
 	f.p("func (c *%sConnection) TotalCount(ctx %s.Context) (int, error) { return c.c.TotalCount(ctx) }", n, ctx)
 	f.p("")
 	f.doc("", fmt.Sprintf("%sEdge is the GraphQL type %[1]sEdge, an edge in a connection to a list of %[1]s.", n))
@@ -132,7 +132,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("}")
 	f.p("")
 
-	f.doc("", fmt.Sprintf("%s is the connection to every %s node, through the DB veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of a connection to %[2]s: a Query field's resolver returns it. It fails before any query runs on arguments gqlimpl.NewConnection refuses.", root, n))
+	f.doc("", fmt.Sprintf("%s is the connection to every %s node, on the DB in ctx, for a Query field's resolver. It is %s of the whole table.", root, n, connFunc(t)))
 	f.p("func %s(ctx %s.Context, %s) (*%sConnection, error) {", root, ctx, connParams(f, t), n)
 	f.p("\tdb, err := %s.DBFromContext(ctx)", vgql)
 	f.p("\tif err != nil {")
@@ -151,7 +151,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	} else {
 		how = append(how, "ordered by the key")
 	}
-	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q keeps its filters and With loads, and the scope the application gave it; its Offset is cleared and its Limit replaced, since the page is the connection's. q must have no OrderBy: the connection orders it, and a q with one is refused with an internal error, since its order would come first and break the cursors. q must also select the key and the columns orderBy names, which the cursors hold: a q whose Columns or Omit drops one is refused with an internal error. In a gqlgen field, the page reads only the columns the selection needs (%s), of those q selects; a column the selection does not need is left zero in the nodes, except the key, the foreign keys and the order columns, so an application's resolver must not read one it did not ask for. It runs no query.", connFunc(t), n, strings.Join(how, ", "), colsFunc(t)))
+	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q must not be ordered and must select the key and the order columns; see gqlimpl.ConnectionBase and gqlimpl.NewConnection.", connFunc(t), n, strings.Join(how, ", ")))
 	f.p("func %s(ctx %s.Context, q %s.Query[%s], %s) (*%sConnection, error) {", connFunc(t), ctx, velox, e.Name, connParams(f, t), n)
 	order := "nil"
 	if t.Order != nil {
@@ -190,7 +190,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("}")
 	f.p("")
 
-	f.doc("", fmt.Sprintf("%s is what the connections to %s are made of: the key, which ends every order, and the order fields' columns.", connVar(t), n))
+	f.doc("", fmt.Sprintf("%s is the key and the order columns of the connections to %s.", connVar(t), n))
 	f.p("var %s = %s.Conn{", connVar(t), impl)
 	f.p("\tType: %q,", n)
 	f.p("\tKey: []%s.Col{", impl)
@@ -353,7 +353,7 @@ func (r *renderer) writeColumns(f *file, t *sdl.Type) {
 		none = append(none, ed.Name)
 	}
 	f.p("")
-	f.doc("", fmt.Sprintf("%s is the columns a selection of the %s fields fields reads: the key, every foreign key on the row, every order field's column, and the column of each field. It is nil, every column, when a field is not one velox-graphql wrote, such as an application's own.", colsFunc(t), t.Name))
+	f.doc("", fmt.Sprintf("%s returns the columns a selection of the given %s fields reads. It returns nil, every column, for a field that is not velox-graphql's; see gqlimpl.Conn.", colsFunc(t), t.Name))
 	f.p("func %s(fields []string) []int {", colsFunc(t))
 	f.p("\tcols := []int{%s}", strings.Join(cols, ", "))
 	f.p("\tfor _, f := range fields {")
@@ -461,7 +461,7 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 	}
 	switch ed.Kind {
 	case sdl.EdgeUnique:
-		f.doc("", fmt.Sprintf("%s is the edge %s: the %s it leads to, or nil when there is none. It is read with the edge of every row read with x, in one query.", ed.Method, pe.Name, tt.Name))
+		f.doc("", fmt.Sprintf("%s is the edge %s: the %s it leads to, or nil. It is read in one query with the edge of every row read with x.", ed.Method, pe.Name, tt.Name))
 		f.p("func (x *%s) %s(ctx %s.Context) (*%s, error) {", e.Name, ed.Method, ctx, tgt.Name)
 		if nilKey != "" {
 			f.p("\tif %s {", nilKey)
@@ -473,18 +473,14 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		f.p("\treturn (*%s)(p), err", tgt.Name)
 		f.p("}")
 	case sdl.EdgeList:
-		most := "the MaxList of veloxgql.LimitsFromContext(ctx)"
-		if ed.MaxList != 0 {
-			most = fmt.Sprintf("%d, or the MaxList of veloxgql.LimitsFromContext(ctx) when that is lower,", ed.MaxList)
-		}
-		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is read with the edge of every row read with x, in one query, which reads at most %s rows for each, whatever the DB's WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error that names the edge.", ed.Method, pe.Name, tt.Name, most))
+		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is read in one query with the edge of every row read with x, up to MaxList; see gqlimpl.EdgeList.", ed.Method, pe.Name, tt.Name))
 		f.p("func (x *%s) %s(ctx %s.Context) ([]*%s, error) {", e.Name, ed.Method, ctx, tgt.Name)
 		query()
 		f.p("\tps, err := %s.EdgeList(ctx, q, %s, %s, %d)", impl, rel, field, ed.MaxList)
 		f.p("\treturn %[1]s.Slice((**%[2]s)(%[1]s.Pointer(%[1]s.SliceData(ps))), len(ps)), err", f.use("unsafe", "unsafe"), tgt.Name)
 		f.p("}")
 	case sdl.EdgeConnection:
-		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to, paged, ordered and filtered by the arguments. Its queries run when gqlgen asks for the connection's fields, each with those of every row read with x, in one query.", ed.Method, pe.Name, tt.Name))
+		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to. Its queries batch with the edge of every row read with x; see gqlimpl.EdgeConnection.", ed.Method, pe.Name, tt.Name))
 		f.p("func (x *%s) %s(ctx %s.Context, %s) (*%sConnection, error) {", e.Name, ed.Method, ctx, connParams(f, tt), tt.Name)
 		dbFrom()
 		f.p("\tc, err := %s(ctx, db.Query[%s](), %s)", connFunc(tt), tgt.Name, connArgs(tt))

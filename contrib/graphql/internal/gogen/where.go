@@ -48,7 +48,7 @@ func (r *renderer) writePred(f *file, t *sdl.Type) error {
 	in := n + "WhereInput"
 	ctx, velox, impl := f.use("context", "context"), f.velox(), f.gqlimpl()
 	f.p("")
-	f.doc("", fmt.Sprintf("Pred is the condition w stands for, on %s nodes: every predicate w sets holds, and a w that sets none, or a nil w, holds for every node. It fails, before any query runs, on an ID of another type or a malformed one, and on a filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are gqlimpl.NewFilter's.", n))
+	f.doc("", fmt.Sprintf("Pred is the condition w stands for on %s nodes, true for a nil or empty w. Its errors are gqlimpl.NewFilter's.", n))
 	f.p("func (w *%s) Pred(ctx %s.Context) (%s.Pred[%s], error) {", in, ctx, velox, e.Name)
 	f.p("	p, err := w.PredicateGQL(ctx)")
 	f.p("	return %s.Pred[%s](p), err", velox, e.Name)
