@@ -62,6 +62,7 @@ func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDescriptor
 
 // lineDescriptor describes Line to velox: its table, columns, edges and hooks.
 func lineDescriptor() velox.Descriptor[Line] {
+	rt := veloxRuntime()
 	return velox.Descriptor[Line]{
 		Table: "lines",
 		Columns: []velox.ColumnDescriptor{
@@ -75,7 +76,7 @@ func lineDescriptor() velox.Descriptor[Line] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Invoice]("Invoice", lineColInvoiceID, invoiceColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(lineScope.Wrap((*Line)(nil).Policy())) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(lineScope.Wrap(rt.LinePolicy())) },
 		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Line]{lineScope.Fill()}) },
 		FieldPtr: func(x *Line, i int) any {
 			switch i {

@@ -24,6 +24,7 @@ import (
 	"github.com/syssam/velox/internal/testbind/bindtype"
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/internal/testmodel/kind"
+	_ "github.com/syssam/velox/internal/testmodel/runtime" // binds the schema's policies and hooks
 	_ "modernc.org/sqlite"
 )
 

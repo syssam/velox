@@ -24,15 +24,18 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 // its work and calls next.Mutate exactly once, or not at all, to refuse or to
 // make the write itself (see Mutation.SetAffected).
 //
-// An entity declares its hooks with a method on its pointer type,
+// A generated entity's hooks are declared in the schema package, on the
+// entity's schema (see package schema), and bound into the generated
+// metadata by the generated package runtime. An entity written by hand
+// declares them with a method on its pointer type,
 //
 //	func (*E) Hooks() []velox.Hook[E]
 //
-// which velox-gen binds in the generated metadata (Descriptor.Hooks calls
-// BindHooks on it): a method with another signature does not compile, and one
-// the metadata does not bind is refused at the entity's first use. velox
-// calls it once, when it builds the entity's metadata, on a nil *E: the
-// method must not read its receiver. Nor may its body, outside the hooks it returns, read the entity's
+// which its Descriptor binds (Descriptor.Hooks calls BindHooks on it); a
+// method the metadata does not bind is refused at the entity's first use.
+// velox calls the method once, when it builds the entity's metadata: a hand
+// written one on a nil *E, so it must not read its receiver. Nor may its
+// body, outside the hooks it returns, read the entity's
 // own metadata (a query on it, say): that waits on the build in progress and
 // deadlocks. A Has or HasWhere reads none, so the body may build them: a
 // relation resolves when a statement holding the condition runs.
@@ -81,14 +84,14 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 // BindPolicy erases p's entity type, for Descriptor.Policy. For generated code.
 // velox-gen writes
 //
-//	Policy: func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
+//	Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.EPolicy()) },
 //
-// only for an entity that declares the Policy method, so that a method of
+// only for an entity whose schema declares the Policy method, so that a method of
 // another signature does not compile, and an entity without one instantiates
 // nothing here. Load calls the function once, when it builds the metadata;
-// the method runs on a nil *E and must not read its receiver, nor, in its
-// body outside the functions it returns, the entity's own metadata (see
-// Policy).
+// a hand-written method runs on a nil *E and must not read its receiver, and
+// no method may read, in its body outside the functions it returns, the
+// entity's own metadata (see Policy).
 func BindPolicy[E any](p Policy[E]) BoundPolicy { return engine.NewBoundPolicy(policyOf(p)) }
 
 // policyOf is p with E erased.
@@ -109,9 +112,9 @@ func policyOf[E any](p Policy[E]) *engine.EntityPolicy {
 // BindHooks erases hs's entity type, for Descriptor.Hooks. For generated code.
 // velox-gen writes
 //
-//	Hooks: func() velox.BoundHooks { return velox.BindHooks((*E)(nil).Hooks()) },
+//	Hooks: func() velox.BoundHooks { return velox.BindHooks(rt.EHooks()) },
 //
-// only for an entity that declares the Hooks method (see Hook). A nil hook is
+// only for an entity whose schema declares the Hooks method (see Hook). A nil hook is
 // refused when the metadata is built.
 func BindHooks[E any](hs []Hook[E]) BoundHooks {
 	var b BoundHooks
@@ -129,9 +132,9 @@ func BindHooks[E any](hs []Hook[E]) BoundHooks {
 // reported at its index in hs: first is not counted. For generated code.
 // velox-gen writes
 //
-//	Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(xScope.Fill(), (*E)(nil).Hooks()) },
+//	Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(xScope.Fill(), rt.EHooks()) },
 //
-// for an entity that has a scope and declares the Hooks method.
+// for an entity that has a scope and whose schema declares the Hooks method.
 func BindHooksAfter[E any](first Hook[E], hs []Hook[E]) BoundHooks {
 	var b BoundHooks
 	engine.AddBoundHook(&b, erase(first))

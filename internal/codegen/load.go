@@ -26,6 +26,7 @@ type listed struct {
 	Name       string
 	Dir        string
 	GoFiles    []string
+	Imports    []string
 	Module     *struct{ Dir string }
 	Error      *struct{ Err string }
 }
@@ -41,31 +42,32 @@ type listed struct {
 // go mod tidy, or a directory that holds two packages. A package that has no
 // schemas is not an error: schemas is empty.
 func Inspect(dir, pattern string, env []string) (importPath string, schemas []string, err error) {
-	pkg, names, err := inspect(dir, pattern, env)
+	pkg, names, _, err := inspect(dir, pattern, env)
 	if err != nil {
 		return "", nil, err
 	}
 	return pkg.ImportPath, names, nil
 }
 
-func inspect(dir, pattern string, env []string) (*listed, []string, error) {
+// inspect is Inspect's work, which also returns the package's files by name.
+func inspect(dir, pattern string, env []string) (*listed, []string, map[string][]byte, error) {
 	pkg, err := list(dir, pattern, env)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	files := make(map[string][]byte, len(pkg.GoFiles))
 	for _, name := range pkg.GoFiles {
 		src, err := os.ReadFile(filepath.Join(pkg.Dir, name))
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		files[name] = src
 	}
 	names, err := discover(files)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return pkg, names, nil
+	return pkg, names, files, nil
 }
 
 // Load loads the schema package that pattern names, from the module that
@@ -76,7 +78,7 @@ func inspect(dir, pattern string, env []string) (*listed, []string, error) {
 // as *Error values joined with errors.Join, each with the position of the
 // element when it has one.
 func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
-	pkg, names, err := inspect(dir, pattern, env)
+	pkg, names, files, err := inspect(dir, pattern, env)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +93,15 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	if err := os.WriteFile(filepath.Join(tmp, "main.go"), program(pkg.ImportPath, names), 0o644); err != nil {
 		return nil, err
 	}
-	out, stderr, err := run(pkg.Module.Dir, env, "run", "./"+filepath.Base(tmp))
+	args := []string{"run"}
+	overlay, err := writeOverlay(tmp, pkg, names, files, env)
+	if err != nil {
+		return nil, err
+	}
+	if overlay != "" {
+		args = append(args, "-overlay="+overlay)
+	}
+	out, stderr, err := run(pkg.Module.Dir, env, append(args, "./"+filepath.Base(tmp))...)
 	if err != nil {
 		msg := strings.ReplaceAll(stderr, tmp, "velox-gen")
 		msg = strings.ReplaceAll(msg, filepath.Base(tmp), "velox-gen")
@@ -117,6 +127,60 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	return m, nil
 }
 
+// writeOverlay writes, in tmp, the schema package's files without the
+// entities' behaviour (see prune) and the go command's overlay file that puts
+// them in place of the package's, and returns the overlay file's path; ""
+// when the package declares no behaviour, which needs no overlay.
+func writeOverlay(tmp string, pkg *listed, schemas []string, files map[string][]byte, env []string) (string, error) {
+	var names map[string]string
+	if len(pkg.Imports) > 0 {
+		names = listNames(pkg.Module.Dir, pkg.Imports, env)
+	}
+	pruned, err := prune(files, schemas, names)
+	if err != nil || len(pruned) == 0 {
+		return "", err
+	}
+	// The files go below tmp, with a name go does not read as Go: tmp holds
+	// the program's package, which must have only its own files.
+	dir := filepath.Join(tmp, "overlay")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		return "", err
+	}
+	replace := map[string]string{}
+	for name, src := range pruned {
+		p := filepath.Join(dir, name+".txt")
+		if err := os.WriteFile(p, src, 0o644); err != nil {
+			return "", err
+		}
+		replace[filepath.Join(pkg.Dir, name)] = p
+	}
+	b, err := json.Marshal(struct{ Replace map[string]string }{replace})
+	if err != nil {
+		return "", err
+	}
+	p := filepath.Join(tmp, "overlay.json")
+	return p, os.WriteFile(p, b, 0o644)
+}
+
+// listNames returns the package names of the import paths, as go list
+// reports them. A path go list cannot name, such as a generated package that
+// does not exist yet, is left out. It is best effort: on an error, the result
+// is empty, and prune guesses every name.
+func listNames(dir string, imports []string, env []string) map[string]string {
+	out, _, _ := run(dir, env, append([]string{"list", "-e", "-json=ImportPath,Name"}, imports...)...)
+	names := map[string]string{}
+	dec := json.NewDecoder(strings.NewReader(out))
+	for {
+		var p struct{ ImportPath, Name string }
+		if dec.Decode(&p) != nil {
+			return names
+		}
+		if p.Name != "" {
+			names[p.ImportPath] = p.Name
+		}
+	}
+}
+
 // exitStatus matches the line go run writes last when the program fails.
 var exitStatus = regexp.MustCompile(`(^|\n)exit status \d+$`)
 
@@ -140,8 +204,11 @@ func decodeModel(b []byte) (*loadjson.Model, error) {
 
 // list runs go list for pattern and returns the one package it names.
 func list(dir, pattern string, env []string) (*listed, error) {
-	out, stderr, err := run(dir, env, "list", "-json=ImportPath,Name,Dir,GoFiles,Module,Error", pattern)
+	out, stderr, err := run(dir, env, "list", "-json=ImportPath,Name,Dir,GoFiles,Imports,Module,Error", pattern)
 	if err != nil {
+		if pkg := listCycle(dir, pattern, env); pkg != nil {
+			return pkg, nil
+		}
 		msg := strings.TrimSpace(stderr)
 		switch {
 		case !inModule(dir, env):
@@ -172,6 +239,40 @@ func list(dir, pattern string, env []string) (*listed, error) {
 		return nil, errors.New("the schema package must be in a module")
 	}
 	return &pkg, nil
+}
+
+// listCycle is list's way past an import cycle through the schema package:
+// one that declares Hooks or Policy imports the generated package, which,
+// generated before the schema declared them, imports the schema package.
+// go list refuses the cycle, but the loader compiles the package without what
+// imports the generated one (see prune), and the generation that follows
+// breaks the cycle. It returns the package go list -e reports when the
+// package's own error is in an import, its import stack longer than the
+// package; nil otherwise, and list reports go list's error.
+func listCycle(dir, pattern string, env []string) *listed {
+	out, _, err := run(dir, env, "list", "-e", "-json=ImportPath,Name,Dir,GoFiles,Imports,Module,Error", pattern)
+	if err != nil {
+		return nil
+	}
+	var pkg struct {
+		listed
+		Error *struct {
+			ImportStack []string
+			Err         string
+		}
+	}
+	dec := json.NewDecoder(strings.NewReader(out))
+	if dec.Decode(&pkg) != nil || dec.More() {
+		return nil
+	}
+	if pkg.Error == nil || len(pkg.Error.ImportStack) < 2 || !strings.Contains(pkg.Error.Err, "import cycle") {
+		return nil
+	}
+	if pkg.Name == "" || len(pkg.GoFiles) == 0 || pkg.Module == nil || pkg.Module.Dir == "" {
+		return nil
+	}
+	pkg.listed.Error = nil
+	return &pkg.listed
 }
 
 // inModule reports whether the go command in dir runs in a module.

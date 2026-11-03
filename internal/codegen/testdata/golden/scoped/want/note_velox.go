@@ -43,6 +43,7 @@ func (*Note) VeloxMeta() *velox.Meta[Note] { return noteMeta.Load(noteDescriptor
 
 // noteDescriptor describes Note to velox: its table, columns, edges and hooks.
 func noteDescriptor() velox.Descriptor[Note] {
+	veloxRuntime()
 	return velox.Descriptor[Note]{
 		Table: "notes",
 		Columns: []velox.ColumnDescriptor{

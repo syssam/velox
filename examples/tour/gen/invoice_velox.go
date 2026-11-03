@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/tour/schema"
 )
 
 // Invoice is the entity of schema Invoice.
@@ -80,8 +79,9 @@ func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoi
 
 // invoiceDescriptor describes Invoice to velox: its table, columns, edges and hooks.
 func invoiceDescriptor() velox.Descriptor[Invoice] {
-	d0 := (&sch.Invoice{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	f0 := (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor()
+	rt := veloxRuntime()
+	d0 := rt.Invoice.Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
+	f0 := rt.Invoice.Mixin()[0].Fields()[1].Descriptor()
 	d1 := f0.Default.(func() time.Time)
 	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Invoice]{
@@ -103,8 +103,8 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Line]("Lines", invoiceColID, lineColInvoiceID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(invoiceScope.Wrap((*Invoice)(nil).Policy())) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooksAfter(invoiceScope.Fill(), (*Invoice)(nil).Hooks()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(invoiceScope.Wrap(rt.InvoicePolicy())) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooksAfter(invoiceScope.Fill(), rt.InvoiceHooks()) },
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case invoiceColID:

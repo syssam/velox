@@ -21,6 +21,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tracker/gen"
+	"github.com/syssam/velox/examples/tracker/principal"
 )
 
 func TestMain(m *testing.M) {
@@ -399,7 +400,7 @@ func TestPolicy(t *testing.T) {
 		bob.do("POST", path+"/comments", 201, obj{"body": "on it"}, nil)
 		ann.do("DELETE", path, 204, nil, nil)
 		ann.do("GET", path, 404, nil, nil)
-		n, err := c.db.Query[gen.Comment]().Where(gen.Comments.IssueID.EQ(issue)).Count(velox.WithoutPolicy(gen.WithPrincipal(t.Context(), gen.Principal{Admin: true}), "test"))
+		n, err := c.db.Query[gen.Comment]().Where(gen.Comments.IssueID.EQ(issue)).Count(velox.WithoutPolicy(principal.With(t.Context(), principal.Principal{Admin: true}), "test"))
 		if err != nil || n != 0 {
 			t.Errorf("comments after the delete: %d, %v", n, err)
 		}
@@ -660,7 +661,7 @@ func TestSQLiteDSNWithQuery(t *testing.T) {
 	path := fmt.Sprintf("/issues/%d", issue)
 	admin.do("POST", path+"/comments", 201, obj{"body": "first"}, nil)
 	admin.do("DELETE", path, 204, nil, nil)
-	ctx := velox.WithoutPolicy(gen.WithPrincipal(t.Context(), gen.Principal{Admin: true}), "test")
+	ctx := velox.WithoutPolicy(principal.With(t.Context(), principal.Principal{Admin: true}), "test")
 	if n, err := db.Query[gen.Comment]().Where(gen.Comments.IssueID.EQ(issue)).Count(ctx); err != nil || n != 0 {
 		t.Errorf("comments after the delete: %d, %v; foreign keys are off", n, err)
 	}

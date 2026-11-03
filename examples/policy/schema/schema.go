@@ -1,7 +1,8 @@
 // Package schema declares the policy example's entities: a Doc, which its
 // owner may change and anyone may read once shared, and its Comments, which
-// are visible exactly when their Doc is. The policies are not here: a schema
-// holds structure only, and the policies are methods in the gen package.
+// are visible exactly when their Doc is. The policies, in doc_policy.go and
+// comment_policy.go, are typed with the generated gen.Doc and gen.Comment;
+// velox-gen binds them through gen/runtime.
 package schema
 
 import (

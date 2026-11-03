@@ -1,4 +1,4 @@
-// Command hooks shows entity hooks, the Hooks method of gen.Task: an insert
+// Command hooks shows entity hooks, the Hooks method of schema.Task: an insert
 // hook that validates and derives a field, a generic hook that any entity
 // lists, an update hook that works through a Mutation and writes an audit row
 // on the write's DB (inside db.Tx, it commits or rolls back with the write), a
@@ -21,6 +21,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/hooks/auth"
 	"github.com/syssam/velox/examples/hooks/gen"
+	_ "github.com/syssam/velox/examples/hooks/gen/runtime" // binds the schema's hooks into gen
 	"github.com/syssam/velox/migrate"
 )
 

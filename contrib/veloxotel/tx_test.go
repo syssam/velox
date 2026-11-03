@@ -20,6 +20,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/veloxotel"
 	"github.com/syssam/velox/internal/testmodel"
+	_ "github.com/syssam/velox/internal/testmodel/runtime" // binds the schema's policies and hooks
 )
 
 func byName(spans tracetest.SpanStubs) map[string][]tracetest.SpanStub {

@@ -92,8 +92,14 @@ An `Update` or `Delete` with neither a `Where` nor `All()` fails with
 `ErrNoWhere`. The names differ because they mean different things: `Unbounded`
 lifts a read's row limit, and `All` confirms a write to every row.
 
-Policies and hooks are methods you write on the generated entity, in your own
-file in `gen`, not schema methods (see the package documentation).
+Policies and hooks are schema methods, as in ent, typed with the generated
+entity: `func (User) Policy() velox.Policy[gen.User]` and
+`func (User) Hooks() []velox.Hook[gen.User]`. As with ent's `ent/runtime`, a
+program imports the generated `gen/runtime` for its effect
+(`import _ "example.com/app/gen/runtime"`). Unlike ent, forgetting it fails the
+first statement instead of running without the hooks, and velox-gen generates
+even when `gen` is stale or missing, so no `schema/snapshot` is needed. `gen` is
+all generated (decision 0034).
 
 On SQLite, `velox.Connect` turns foreign keys on for every connection. A
 `*sql.DB` you pass to `velox.Open` is used as it is, so put

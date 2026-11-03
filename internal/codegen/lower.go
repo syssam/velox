@@ -34,7 +34,7 @@ var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": tr
 func Lower(g *Graph, cfg Config) (*Out, error) {
 	l := &lowerer{
 		g: g, cfg: cfg,
-		out:   &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc},
+		out:   &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc, Runtime: cfg.Runtime || len(cfg.Bound) > 0, GenPath: cfg.GenPath},
 		joins: map[string]*join{},
 	}
 	l.owned = map[string]string{
@@ -484,14 +484,19 @@ func qualifiers(ident string) []string {
 }
 
 // descriptor is the expression of f's descriptor in the schema package,
-// by its position.
+// by its position. Under Config.Runtime, the schema is the runtime's value,
+// rt.<E>, which the Descriptor function sets rt to.
 func (s *entState) descriptor(e *Entity, f *Field) string {
 	s.sch = true
 	p := f.Position
-	if p.MixedIn {
-		return fmt.Sprintf("(&sch.%s{}).Mixin()[%d].Fields()[%d].Descriptor()", e.Name, p.MixinIndex, p.Index)
+	v := "(&sch." + e.Name + "{})"
+	if s.l.out.Runtime {
+		v = "rt." + e.Name
 	}
-	return fmt.Sprintf("(&sch.%s{}).Fields()[%d].Descriptor()", e.Name, p.Index)
+	if p.MixedIn {
+		return fmt.Sprintf("%s.Mixin()[%d].Fields()[%d].Descriptor()", v, p.MixinIndex, p.Index)
+	}
+	return fmt.Sprintf("%s.Fields()[%d].Descriptor()", v, p.Index)
 }
 
 // defaults writes the code of f's Default, DefaultFunc and UpdateDefault.
@@ -1139,7 +1144,7 @@ func (l *lowerer) complete(s *entState) {
 }
 
 // descRead matches the read of a field's descriptor in the schema package.
-var descRead = regexp.MustCompile(`\(&sch\.\w+\{\}\)(?:\.Mixin\(\)\[\d+\])?\.Fields\(\)\[\d+\]\.Descriptor\(\)`)
+var descRead = regexp.MustCompile(`(?:\(&sch\.\w+\{\}\)|rt\.\w+)(?:\.Mixin\(\)\[\d+\])?\.Fields\(\)\[\d+\]\.Descriptor\(\)`)
 
 // shareReads makes each descriptor that more than one statement of setup reads
 // a variable of its own, set before the first statement that reads it, so that

@@ -211,10 +211,10 @@ func holdsInterface(t reflect.Type) bool {
 func unboundMethods(t reflect.Type, d *DescriptorFields) error {
 	pt := reflect.PointerTo(t)
 	if _, ok := pt.MethodByName("Policy"); ok && !d.Policy {
-		return &SchemaError{Entity: t.String(), Reason: "has a Policy method, but the generated metadata does not bind it; run go tool velox-gen"}
+		return &SchemaError{Entity: t.String(), Reason: "has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares, through package runtime"}
 	}
 	if _, ok := pt.MethodByName("Hooks"); ok && !d.Hooks {
-		return &SchemaError{Entity: t.String(), Reason: "has a Hooks method, but the generated metadata does not bind it; run go tool velox-gen"}
+		return &SchemaError{Entity: t.String(), Reason: "has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares, through package runtime"}
 	}
 	return nil
 }

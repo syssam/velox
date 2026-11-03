@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 
-	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -81,7 +80,8 @@ func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor
 
 // postDescriptor describes Post to velox: its table, columns, edges and hooks.
 func postDescriptor() velox.Descriptor[Post] {
-	v0 := (&sch.Post{}).Fields()[2].Descriptor().Validators[0].(func(string) error)
+	rt := veloxRuntime()
+	v0 := rt.Post.Fields()[2].Descriptor().Validators[0].(func(string) error)
 	return velox.Descriptor[Post]{
 		Table: "posts",
 		Columns: []velox.ColumnDescriptor{
@@ -98,7 +98,7 @@ func postDescriptor() velox.Descriptor[Post] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[User]("Author", postColAuthorID, userColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Post)(nil).Policy()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.PostPolicy()) },
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postColID:

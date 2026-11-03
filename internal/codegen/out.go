@@ -4,12 +4,21 @@ package codegen
 type Config struct {
 	Package    string           // the generated package's name; "gen" when empty
 	SchemaPath string           // the schema package's import path; Graph.Package when empty
-	Bound      map[string]Bound // per entity name: which methods the user's files declare
+	Bound      map[string]Bound // per entity name: which methods the schema package declares (see SchemaMethods)
 	UserDoc    bool             // a user's file has the package comment; velox.go then has none
+
+	// Runtime says the schema package imports the generated one, as it does
+	// when it declares Hooks or Policy; a non-empty Bound implies it. The generated package then cannot
+	// import the schema package: package runtime, written in the runtime
+	// directory below it, gives it the schemas and their methods when the
+	// program starts. GenPath is the generated package's import path, which
+	// package runtime imports.
+	Runtime bool
+	GenPath string
 }
 
-// Bound says which of an entity's methods the user's files declare, so that
-// its Descriptor binds them.
+// Bound says which of an entity's methods the schema package declares, so
+// that its Descriptor binds them.
 type Bound struct {
 	Policy, Hooks bool
 	// PolicyConds is "path:line" of the first Read or Write key of a
@@ -27,6 +36,8 @@ type Out struct {
 	NeedsSch   bool         // some entity reads the schema package
 	SchemaPath string       // the schema package's import path
 	UserDoc    bool         // Config.UserDoc
+	Runtime    bool         // Config.Runtime, or a non-empty Config.Bound
+	GenPath    string       // Config.GenPath
 
 	// ScopeKeys are the keys the schema's Scoped fields name, sorted by Var.
 	ScopeKeys []*OutScopeKey

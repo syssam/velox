@@ -59,6 +59,7 @@ func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor
 
 // userDescriptor describes User to velox: its table, columns, edges and hooks.
 func userDescriptor() velox.Descriptor[User] {
+	veloxRuntime()
 	return velox.Descriptor[User]{
 		Table: "users",
 		Columns: []velox.ColumnDescriptor{

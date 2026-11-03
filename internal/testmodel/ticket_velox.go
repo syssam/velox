@@ -87,6 +87,7 @@ func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDe
 
 // ticketDescriptor describes Ticket to velox: its table, columns, edges and hooks.
 func ticketDescriptor() velox.Descriptor[Ticket] {
+	rt := veloxRuntime()
 	return velox.Descriptor[Ticket]{
 		Table: "tickets",
 		Columns: []velox.ColumnDescriptor{
@@ -108,8 +109,8 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 			velox.EdgeTo[Ticket]("Children", ticketColID, ticketColParentID),
 			velox.EdgeTo[Ticket]("Parent", ticketColParentID, ticketColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Ticket)(nil).Policy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Ticket)(nil).Hooks()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.TicketPolicy()) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks(rt.TicketHooks()) },
 		FieldPtr: func(x *Ticket, i int) any {
 			switch i {
 			case ticketColID:

@@ -249,6 +249,7 @@ func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) 
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
 func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error
+func (m *Meta[E]) HasReadPolicy[_ Lazy[E]]() bool
 func (m *Mutation[E]) Affected[_ Lazy[E]]() int64
 func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E]
 func (m *Mutation[E]) DB[_ Lazy[E]]() *DB

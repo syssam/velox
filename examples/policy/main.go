@@ -17,7 +17,9 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/examples/policy/auth"
 	"github.com/syssam/velox/examples/policy/gen"
+	_ "github.com/syssam/velox/examples/policy/gen/runtime" // binds the schema's policies into gen
 	"github.com/syssam/velox/migrate"
 )
 
@@ -59,7 +61,7 @@ func run(ctx context.Context, w io.Writer) error {
 	D, C := gen.Docs, gen.Comments
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 
-	alice, bob, admin := gen.WithUser(ctx, "alice"), gen.WithUser(ctx, "bob"), gen.WithUser(ctx, "admin")
+	alice, bob, admin := auth.WithUser(ctx, "alice"), auth.WithUser(ctx, "bob"), auth.WithUser(ctx, "admin")
 
 	// Each owner inserts their own docs; the Insert policy checks the row.
 	docs := map[string]*gen.Doc{
@@ -69,7 +71,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	for _, title := range []string{"Roadmap", "Salaries", "Notes"} {
 		d := docs[title]
-		if err := db.Insert(d).Exec(gen.WithUser(ctx, d.Owner)); err != nil {
+		if err := db.Insert(d).Exec(auth.WithUser(ctx, d.Owner)); err != nil {
 			return err
 		}
 	}

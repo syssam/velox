@@ -175,6 +175,27 @@ func loadModel(dir, pattern, pkg string, env []string) (*genModel, error) {
 	return gm, nil
 }
 
+// genConfig is the codegen.Config of the package at out, named pkg, for the
+// schema package at pattern: the Hooks and Policy methods the schema package
+// declares, and, when it declares any, the import path of out, which package
+// runtime imports. UserDoc is left for the caller.
+func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string) (codegen.Config, error) {
+	cfg := codegen.Config{Package: pkg, SchemaPath: gm.importPath}
+	bound, err := codegen.Behaviour(dir, pattern, pkg, env, gm.names)
+	if err != nil {
+		return cfg, err
+	}
+	if len(bound) == 0 {
+		return cfg, nil
+	}
+	genPath, err := dirImportPath(out, env)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.Bound, cfg.Runtime, cfg.GenPath = bound, true, genPath
+	return cfg, nil
+}
+
 // runGenerate generates the gen package of the schema
 // package at pattern.
 func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr io.Writer) int {
@@ -200,15 +221,17 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		}
 		return fail(err)
 	}
-	bound, err := codegen.Methods(out, gm.names, gm.scopeNames())
+	if err := codegen.CheckUserFiles(out, gm.names, gm.scopeNames()); err != nil {
+		return failFile(err)
+	}
+	cfg, err := genConfig(gm, dir, pattern, out, pkg, env)
 	if err != nil {
 		return failFile(err)
 	}
-	userDoc, err := codegen.HasPackageDoc(out)
-	if err != nil {
+	if cfg.UserDoc, err = codegen.HasPackageDoc(out); err != nil {
 		return fail(err)
 	}
-	files, err := codegen.Generate(gm.graph, codegen.Config{Package: pkg, SchemaPath: gm.importPath, Bound: bound, UserDoc: userDoc})
+	files, err := codegen.Generate(gm.graph, cfg)
 	if err != nil {
 		return failFile(err)
 	}
@@ -548,7 +571,11 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	}
 	// A plugin path that collides with a file of velox-gen's fails as it does
 	// in generate.
-	files, err := codegen.Generate(gm.graph, codegen.Config{Package: pkg, SchemaPath: gm.importPath})
+	cfg, err := genConfig(gm, dir, pattern, out, pkg, env)
+	if err != nil {
+		return fail(err)
+	}
+	files, err := codegen.Generate(gm.graph, cfg)
 	if err != nil {
 		return fail(err)
 	}
@@ -579,7 +606,11 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	// An interrupt stops the check program, and its directory is removed.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return runProgram(ctx, mod, checkProgram([][2]string{{"g", outPath}}, types, rels), env, stdout, stderr)
+	imports := [][2]string{{"g", outPath}}
+	if cfg.Runtime {
+		imports = append(imports, [2]string{"_", outPath + "/runtime"})
+	}
+	return runProgram(ctx, mod, checkProgram(imports, types, rels), env, stdout, stderr)
 }
 
 // moduleDir is the directory of the module that holds the package at pattern.

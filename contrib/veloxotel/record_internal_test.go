@@ -14,6 +14,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
+	_ "github.com/syssam/velox/internal/testmodel/runtime" // binds the schema's policies and hooks
 )
 
 // unreachable is a connector to no database: a dry run never connects.

@@ -40,7 +40,8 @@ header, so a plugin's methods would never be bound.
 
 - The five examples that had a `scope.go` have none; routing, tenant and graphql have
   a fully generated `gen/`. Hooks and policies of an entity's own stay hand-written in
-  `gen/`, because they are methods on the generated type.
+  `gen/`, because they are methods on the generated type. (Superseded by 0034: the
+  schema declares them, and every example's `gen/` is fully generated.)
 - The engine and the `scope` package are unchanged. The hand-written form remains for
   a rule the annotation does not cover: a scope that is not "column equals the
   context's value", or two scoped columns.

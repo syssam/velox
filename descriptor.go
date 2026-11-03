@@ -45,13 +45,15 @@ type Descriptor[E any] struct {
 	// the absence of a value, nor with a pointer.
 	Check func(col int, v any) error
 
-	// Policy and Hooks bind the entity's Policy and Hooks methods, when it
-	// declares them. velox-gen writes
+	// Policy and Hooks bind the entity's policy and hooks, when it has them.
+	// velox-gen binds those its schema declares, which package runtime gives
+	// it, rt being what veloxRuntime returns:
 	//
-	//	Policy: func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
-	//	Hooks:  func() velox.BoundHooks  { return velox.BindHooks((*E)(nil).Hooks()) },
+	//	Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.EPolicy()) },
+	//	Hooks:  func() velox.BoundHooks  { return velox.BindHooks(rt.EHooks()) },
 	//
-	// and leaves the field nil when the entity has no such method, so that an
+	// An entity written by hand binds its own methods the same way,
+	// velox.BindPolicy((*E)(nil).Policy()). The field is nil when the entity has none, so that an
 	// entity without them instantiates none of the policy and hook generics.
 	// A method with another signature does not compile (BindPolicy takes a
 	// Policy[E], BindHooks a []Hook[E]), which is why no test checks it at

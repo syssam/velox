@@ -5,7 +5,6 @@ package gen
 import (
 	"fmt"
 
-	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -53,7 +52,8 @@ func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDescri
 
 // groupDescriptor describes Group to velox: its table, columns, edges and hooks.
 func groupDescriptor() velox.Descriptor[Group] {
-	d0 := (&sch.Group{}).Fields()[1].Descriptor().DefaultFunc.(func() string)
+	rt := veloxRuntime()
+	d0 := rt.Group.Fields()[1].Descriptor().DefaultFunc.(func() string)
 	return velox.Descriptor[Group]{
 		Table: "groups",
 		Columns: []velox.ColumnDescriptor{

@@ -152,14 +152,38 @@ func TestFromJSONExact(t *testing.T) {
 	}
 }
 
-// open has no Read policy, and guarded has one, for TestFKScoped.
+// open has no Read policy, and guarded's metadata has one, for TestFKScoped.
+// A Policy method alone is not enough: generated entities have none, as the
+// schema declares it, so gqlimpl reads the policy from the metadata.
 type (
-	open    struct{}
-	guarded struct{}
+	open    struct{ ID int64 }
+	guarded struct{ ID int64 }
 )
 
-func (*guarded) Policy() velox.Policy[guarded] {
-	return velox.Policy[guarded]{Read: func(context.Context) (velox.Pred[guarded], error) { return velox.And[guarded](), nil }}
+var (
+	openMeta    velox.MetaOnce[open]
+	guardedMeta velox.MetaOnce[guarded]
+)
+
+func (*open) VeloxMeta() *velox.Meta[open] {
+	return openMeta.Load(func() velox.Descriptor[open] {
+		return velox.Descriptor[open]{
+			Table: "opens", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+			FieldPtr: func(x *open, _ int) any { return &x.ID },
+		}
+	})
+}
+
+func (*guarded) VeloxMeta() *velox.Meta[guarded] {
+	return guardedMeta.Load(func() velox.Descriptor[guarded] {
+		return velox.Descriptor[guarded]{
+			Table: "guardeds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+			Policy: func() velox.BoundPolicy {
+				return velox.BindPolicy(velox.Policy[guarded]{Read: func(context.Context) (velox.Pred[guarded], error) { return velox.And[guarded](), nil }})
+			},
+			FieldPtr: func(x *guarded, _ int) any { return &x.ID },
+		}
+	})
 }
 
 // TestFKScoped: with no Read policy on the target a foreign key's predicate

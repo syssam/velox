@@ -38,6 +38,7 @@ func (*Tag) VeloxMeta() *velox.Meta[Tag] { return tagMeta.Load(tagDescriptor) }
 
 // tagDescriptor describes Tag to velox: its table, columns, edges and hooks.
 func tagDescriptor() velox.Descriptor[Tag] {
+	rt := veloxRuntime()
 	return velox.Descriptor[Tag]{
 		Table: "tags",
 		Columns: []velox.ColumnDescriptor{
@@ -46,7 +47,7 @@ func tagDescriptor() velox.Descriptor[Tag] {
 		},
 		PrimaryKey: []int{tagColID},
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy(tagScope.Policy()) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooksAfter(tagScope.Fill(), (*Tag)(nil).Hooks()) },
+		Hooks:      func() velox.BoundHooks { return velox.BindHooksAfter(tagScope.Fill(), rt.TagHooks()) },
 		FieldPtr: func(x *Tag, i int) any {
 			switch i {
 			case tagColID:

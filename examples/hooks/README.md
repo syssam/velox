@@ -11,16 +11,17 @@ cd examples
 go run ./hooks
 ```
 
-`schema/schema.go` declares the structure only: `Task`, the `Audit` rows its
-update hook writes, and a `CreatedBy` mixin. The hooks are a method you write
-on the generated entity, in `gen/task_hooks.go`, typed with the generated
-handles. velox-gen sees the method and binds it into `Task`'s metadata; a
-wrong signature does not compile. The first hook listed is the outermost:
+`schema/schema.go` declares the structure: `Task`, the `Audit` rows its
+update hook writes, and a `CreatedBy` mixin. `schema/hooks.go` declares
+`Task`'s hooks, as ent's schema does, typed with the generated `gen.Task` and
+its handles. velox-gen binds them through the generated `gen/runtime`, which
+`main.go` imports; a wrong signature is refused. The first hook listed is the
+outermost:
 
 ```go
-func (*Task) Hooks() []velox.Hook[Task] {
-	return []velox.Hook[Task]{
-		velox.On(auth.CreatedBy(func(t *Task) *string { return &t.CreatedBy }), velox.OpInsert),
+func (Task) Hooks() []velox.Hook[gen.Task] {
+	return []velox.Hook[gen.Task]{
+		velox.On(auth.CreatedBy(func(t *gen.Task) *string { return &t.CreatedBy }), velox.OpInsert),
 		velox.On(deriveSlug, velox.OpInsert),
 		velox.On(renamed, velox.OpUpdate),
 		velox.On(onlyDone, velox.OpDelete),

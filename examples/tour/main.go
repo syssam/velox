@@ -19,6 +19,8 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tour/gen"
+	_ "github.com/syssam/velox/examples/tour/gen/runtime" // binds the schema's policies and hooks into gen
+	"github.com/syssam/velox/examples/tour/role"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/scope"
 )
@@ -78,9 +80,9 @@ func run(ctx context.Context, w io.Writer) error {
 	// 1. The context says who is asking: the organization and the role,
 	// which the policies read. Middleware would set both.
 	say("\n== 1. Contexts and inserts")
-	acct := gen.WithRole(gen.OrgKey.With(ctx, acme), gen.RoleAccountant)
-	viewer := gen.WithRole(gen.OrgKey.With(ctx, acme), gen.RoleViewer)
-	globexAcct := gen.WithRole(gen.OrgKey.With(ctx, globex), gen.RoleAccountant)
+	acct := role.With(gen.OrgKey.With(ctx, acme), role.Accountant)
+	viewer := role.With(gen.OrgKey.With(ctx, acme), role.Viewer)
+	globexAcct := role.With(gen.OrgKey.With(ctx, globex), role.Accountant)
 
 	// Insert fills OrgID from the context and reads the generated ID back.
 	inv := gen.Invoice{Number: "INV-001", Customer: "Initech", Status: gen.InvoiceStatusSent, TotalCents: 150000}

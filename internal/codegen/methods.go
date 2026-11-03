@@ -31,23 +31,18 @@ func (e *FileError) Error() string {
 	return e.Path + ": " + e.Reason
 }
 
-// Methods reads the non-test .go files in dir that do not start with
-// velox-gen's header, and reports which of entities have a Policy or Hooks
-// method. The receiver must be *E: the binding calls the method on a nil *E,
-// which a method with a value receiver would panic on, so a method Policy or
-// Hooks with receiver E is a *FileError, and so is a file that declares a type
-// named like an entity (its methods would clash with the generated ones). A
-// file no build includes is not read, and one only some builds include is a
-// *FileError (see userFiles). A missing dir is no files.
-//
-// reserved are package-level names velox-gen writes, such as a scope key's
-// variable: a file that declares one is a *FileError, as one that declares an
-// entity's type is.
-//
-// The result holds only the entities that have at least one of the methods.
-func Methods(dir string, entities, reserved []string) (map[string]Bound, error) {
-	out := map[string]Bound{}
-	err := userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
+// CheckUserFiles reads the non-test .go files in dir, the generated package,
+// that do not start with velox-gen's header. Such a file may add to the
+// package, but not what velox-gen writes or binds: a file that declares a
+// type named like an entity (its methods would clash with the generated
+// ones), or one of reserved, the package-level names velox-gen writes such as
+// a scope key's variable, is a *FileError. So is a Hooks or Policy method on
+// an entity: those are declared in the schema package (see SchemaMethods),
+// and package runtime binds them. A file no build includes is not read, and
+// one only some builds include is a *FileError (see userFiles). A missing dir
+// is no files.
+func CheckUserFiles(dir string, entities, reserved []string) error {
+	return userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.GenDecl:
@@ -71,35 +66,21 @@ func Methods(dir string, entities, reserved []string) (map[string]Bound, error) 
 				if d.Recv == nil && slices.Contains(reserved, d.Name.Name) {
 					return &FileError{Path: path, Reason: "declares " + d.Name.Name + ", a name velox-gen generates"}
 				}
-				e, ptr := receiver(d)
-				if e == "" || !slices.Contains(entities, e) {
+				e, _ := receiver(d)
+				if e == "" || !slices.Contains(entities, e) || !slices.Contains(behaviourMethods, d.Name.Name) {
 					continue
 				}
-				b := out[e]
-				switch d.Name.Name {
-				case "Policy":
-					b.Policy = true
-					if pos := policyConds(f, d, e); pos.IsValid() {
-						b.PolicyConds = fmt.Sprintf("%s:%d", path, fset.Position(pos).Line)
-					}
-				case "Hooks":
-					b.Hooks = true
-				default:
-					continue
+				m := d.Name.Name
+				want := "[]velox.Hook[" + f.Name.Name + "." + e + "]"
+				if m == "Policy" {
+					want = "velox.Policy[" + f.Name.Name + "." + e + "]"
 				}
-				if !ptr {
-					m := d.Name.Name
-					return &FileError{Path: path, Reason: fmt.Sprintf("%s.%s must have a pointer receiver (func (*%[1]s) %[2]s())", e, m)}
-				}
-				out[e] = b
+				return &FileError{Path: path, Line: fset.Position(d.Pos()).Line, Reason: fmt.Sprintf(
+					"declares %s.%s in the generated package; declare it in the schema package, on %[1]s: func (%[1]s) %[2]s() %[3]s", e, m, want)}
 			}
 		}
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 // HasPackageDoc reports whether one of the non-test .go files in dir that do
@@ -167,8 +148,8 @@ func userFiles(dir string, mode parser.Mode, fn func(fset *token.FileSet, path s
 }
 
 // policyConds returns the position of the first Read or Write key, with a
-// value other than nil, of a composite literal of type velox.Policy[e] in the
-// body of d, the Policy method of entity e in file f, and token.NoPos when
+// value other than nil, of a composite literal of type velox.Policy[gen.e] in
+// the body of d, the Policy method of entity e in file f, and token.NoPos when
 // there is none. velox is the name f imports the module under. A Policy
 // built another way, by a positional literal, by assigning its fields or in
 // another function, is left to the runtime's check when the entity loads.
@@ -210,13 +191,13 @@ func policyConds(f *ast.File, d *ast.FuncDecl, e string) token.Pos {
 	return found
 }
 
-// isPolicyType reports whether t is <velox>.Policy[e].
+// isPolicyType reports whether t is <velox>.Policy[e] or <velox>.Policy[<gen>.e].
 func isPolicyType(t ast.Expr, velox, e string) bool {
 	ix, ok := t.(*ast.IndexExpr)
 	if !ok {
 		return false
 	}
-	if arg, ok := ix.Index.(*ast.Ident); !ok || arg.Name != e {
+	if arg, ok := ix.Index.(*ast.Ident); (!ok || arg.Name != e) && !entityArg(ix.Index, e) {
 		return false
 	}
 	sel, ok := ix.X.(*ast.SelectorExpr)

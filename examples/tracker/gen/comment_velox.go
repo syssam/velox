@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
 // Comment is the entity of schema Comment.
@@ -80,8 +79,9 @@ func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(comme
 
 // commentDescriptor describes Comment to velox: its table, columns, edges and hooks.
 func commentDescriptor() velox.Descriptor[Comment] {
-	d0 := (&sch.Comment{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	f0 := (&sch.Comment{}).Mixin()[0].Fields()[1].Descriptor()
+	rt := veloxRuntime()
+	d0 := rt.Comment.Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
+	f0 := rt.Comment.Mixin()[0].Fields()[1].Descriptor()
 	d1 := f0.Default.(func() time.Time)
 	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Comment]{
@@ -100,7 +100,7 @@ func commentDescriptor() velox.Descriptor[Comment] {
 			velox.EdgeTo[Issue]("Issue", commentColIssueID, issueColID),
 			velox.EdgeTo[User]("Author", commentColAuthorID, userColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(commentScope.Wrap((*Comment)(nil).Policy())) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(commentScope.Wrap(rt.CommentPolicy())) },
 		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Comment]{commentScope.Fill()}) },
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {

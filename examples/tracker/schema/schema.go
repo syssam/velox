@@ -64,7 +64,7 @@ func (Session) Fields() []schema.Field {
 	}
 }
 
-// Project groups Issues. Only an admin can change one (gen/policy.go).
+// Project groups Issues. Only an admin can change one (policy.go).
 type Project struct{ schema.Schema }
 
 // Mixin adds created_at and updated_at.
@@ -87,7 +87,7 @@ func (Project) Indexes() []schema.Index {
 }
 
 // Issue is the unit of work. Its author, its assignee and an admin can change it
-// (gen/policy.go).
+// (policy.go).
 type Issue struct{ schema.Schema }
 
 // Mixin adds created_at and updated_at.
