@@ -246,10 +246,10 @@ func TestMarshalRefusesBehaviourVariants(t *testing.T) {
 		s    schema.Interface
 		want string
 	}{
-		{ptrHooked{}, "schema ptrHooked: has a Hooks method; hooks and policies"},
-		{&ptrHooked{}, "schema ptrHooked: has a Hooks method; hooks and policies"},
-		{policed{}, "schema policed: has a Policy method; hooks and policies"},
-		{intercepted{}, "schema intercepted: has a Interceptors method; hooks and policies"},
+		{ptrHooked{}, "schema ptrHooked: has a Hooks method, which velox-gen binds from the schema package's source, as func (ptrHooked) Hooks() []velox.Hook[entity.ptrHooked]"},
+		{&ptrHooked{}, "schema ptrHooked: has a Hooks method, which velox-gen binds"},
+		{policed{}, "schema policed: has a Policy method, which velox-gen binds from the schema package's source, as func (policed) Policy() velox.Policy[entity.policed]"},
+		{intercepted{}, "schema intercepted: has an Interceptors method; velox has no interceptors"},
 	} {
 		if got := errorText(decode(t, c.s)); !strings.Contains(got, c.want) {
 			t.Errorf("got %q, want %q", got, c.want)
@@ -498,5 +498,29 @@ func TestMarshalPointerSchema(t *testing.T) {
 	}
 	if b.Fields[0].Name != "created_at" {
 		t.Errorf("the base's mixin is not first: %+v", b.Fields)
+	}
+}
+
+// policyBase declares a Policy that schemas embedding it would inherit.
+type policyBase struct{ schema.Schema }
+
+var policyBaseLine = here() + 2 // the line of Policy
+
+func (policyBase) Policy() any { return nil }
+
+type promoted struct{ policyBase }
+
+// A Policy promoted from an embedded type is not bound: velox-gen binds the
+// one the schema declares itself. The error says so, names the embedded
+// type, and is at the embedded method's line.
+func TestMarshalRefusesAPromotedPolicy(t *testing.T) {
+	m := decode(t, promoted{})
+	want := "schema promoted: has a Policy method promoted from load_test.policyBase, which velox-gen does not bind: " +
+		"declare Policy on the schema itself, in the schema package: func (promoted) Policy() velox.Policy[entity.promoted]"
+	if got := errorText(m); !strings.Contains(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if p := m.Errors[0].Pos; !strings.HasSuffix(p, fmt.Sprintf("/marshal_test.go:%d", policyBaseLine)) {
+		t.Errorf("pos %q, want line %d", p, policyBaseLine)
 	}
 }
