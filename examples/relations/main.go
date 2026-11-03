@@ -1,6 +1,6 @@
-// Command relations shows one-to-many and belongs-to relations: eager
-// loading with With, EXISTS conditions with Has and HasWhere, and keyset
-// pagination with After.
+// Command relations shows one-to-many, belongs-to and many-to-many relations:
+// eager loading with With, EXISTS conditions with Has and HasWhere, linking
+// and unlinking through a join entity, and keyset pagination with After.
 package main
 
 import (
@@ -31,6 +31,7 @@ func main() {
 //
 //	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./relations/migrations ./relations/schema
 //
+// and, once Tag was added, again with -name tags.
 // and applied with migrate.Up. The temporary SQLite database is this demo's;
 // a real application opens its own.
 //
@@ -140,7 +141,89 @@ func run(ctx context.Context, w io.Writer) error {
 		say("page %d: %s", i, titles(got))
 		page = page.After(&got[len(got)-1])
 	}
+	return manyToMany(ctx, db, say)
+}
+
+// manyToMany links posts and tags. A many-to-many edge has no column on either
+// side: a link is a row of the join entity, gen.PostTag, which you insert and
+// delete like any other. Its primary key is (post_id, tag_id), so linking twice
+// fails, unless the insert says OnConflict(...).DoNothing().
+func manyToMany(ctx context.Context, db *velox.DB, say func(string, ...any)) error {
+	P, T, PT := gen.Posts, gen.Tags, gen.PostTags
+	tags := map[string]int64{}
+	for _, name := range []string{"history", "languages"} {
+		tg := gen.Tag{Name: name}
+		if err := db.Insert(&tg).Exec(ctx); err != nil {
+			return err
+		}
+		tags[name] = tg.ID
+	}
+	posts := map[string]int64{}
+	all, err := db.Query[gen.Post]().Limit(10).All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, p := range all {
+		posts[p.Title] = p.ID
+	}
+
+	// Link: one join row per (post, tag).
+	if err := db.InsertAll([]gen.PostTag{
+		{PostID: posts["COBOL"], TagID: tags["history"]},
+		{PostID: posts["COBOL"], TagID: tags["languages"]},
+		{PostID: posts["Compilers"], TagID: tags["languages"]},
+		{PostID: posts["Engines"], TagID: tags["history"]},
+	}).Exec(ctx); err != nil {
+		return err
+	}
+	// Linking again keeps the existing row.
+	again := gen.PostTag{PostID: posts["COBOL"], TagID: tags["history"]}
+	if err := db.Insert(&again).OnConflict(PT.PostID, PT.TagID).DoNothing().Exec(ctx); err != nil {
+		return err
+	}
+
+	// With and Has work through the join table as on any relation.
+	tagged, err := db.Query[gen.Post]().
+		Where(P.Tags.Has()).
+		OrderBy(P.Title.Asc()).
+		With(P.Tags.OrderBy(T.Name.Asc())).
+		Limit(10).
+		All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, p := range tagged {
+		ts, _ := p.Tags.Get()
+		say("many-to-many: %s tagged %s", p.Title, tagNames(ts))
+	}
+	langs, err := db.Query[gen.Tag]().Where(T.Name.EQ("languages")).With(T.Posts.OrderBy(P.Title.Asc())).One(ctx)
+	if err != nil {
+		return err
+	}
+	ps, _ := langs.Posts.Get()
+	say("many-to-many, the other way: %s tags %s", langs.Name, titles(ps))
+
+	// Unlink: delete the join row.
+	n, err := db.Delete[gen.PostTag]().
+		Where(PT.PostID.EQ(posts["COBOL"]), PT.TagID.EQ(tags["history"])).
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+	history, err := db.Query[gen.Post]().Where(P.Tags.HasWhere(T.Name.EQ("history"))).OrderBy(P.Title.Asc()).Limit(10).All(ctx)
+	if err != nil {
+		return err
+	}
+	say("unlinked %d: history tags %s", n, titles(history))
 	return nil
+}
+
+func tagNames(ts []gen.Tag) string {
+	var s []string
+	for _, t := range ts {
+		s = append(s, t.Name)
+	}
+	return "[" + strings.Join(s, ", ") + "]"
 }
 
 // seed inserts three authors, five posts and three comments. Insert reads

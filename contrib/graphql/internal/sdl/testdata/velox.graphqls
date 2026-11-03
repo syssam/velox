@@ -228,7 +228,7 @@ type Post implements Node {
   slug: String!
   status: PostStatus!
   publishedAt: Time
-  tags: JSON! @goField(name: "TagsGQL")
+  tags: [String!]!
   views: Int!
   rating: Float
   """Who last edited the post; the update default fills it."""
@@ -332,7 +332,7 @@ input CreatePostInput {
   slug: String!
   status: PostStatus
   publishedAt: Time
-  tags: JSON
+  tags: [String!]
   rating: Float
   """Who last edited the post; the update default fills it."""
   editedBy: String!
@@ -347,7 +347,7 @@ input UpdatePostInput {
   status: PostStatus
   publishedAt: Time
   clearPublishedAt: Boolean
-  tags: JSON
+  tags: [String!]
   views: Int
   rating: Float
   clearRating: Boolean

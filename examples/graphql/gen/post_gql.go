@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion7
+const _ = veloxgql.GeneratedCodeIsVersion8
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -405,10 +405,10 @@ func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	return f.Pred()
 }
 
-// postFieldGQL is the GraphQL name of the mutation-input field that sets the
-// Post field whose Go name is goField, for the errors of its validators: "" for
-// a field no input sets.
-func postFieldGQL(goField string) string {
+// postCreateFieldGQL is the GraphQL name of the CreatePostInput field that sets
+// the Post field whose Go name is goField, for the errors of its validators: ""
+// for a field it does not set.
+func postCreateFieldGQL(goField string) string {
 	switch goField {
 	case "Title":
 		return "title"
@@ -479,7 +479,7 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 		cols = append(cols, Posts.PublishedAt)
 	}
 	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postFieldGQL)
+		return nil, gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postCreateFieldGQL)
 	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
@@ -493,7 +493,7 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 			}
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postFieldGQL)
+			return gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postCreateFieldGQL)
 		}
 		if len(tagIDsKeys) > 0 {
 			rows := make([]PostTag, len(tagIDsKeys))
@@ -511,6 +511,25 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// postUpdateFieldGQL is the GraphQL name of the UpdatePostInput field that sets
+// the Post field whose Go name is goField, for the errors of its validators: ""
+// for a field it does not set.
+func postUpdateFieldGQL(goField string) string {
+	switch goField {
+	case "Title":
+		return "title"
+	case "Status":
+		return "status"
+	case "Views":
+		return "views"
+	case "PublishedAt":
+		return "publishedAt"
+	case "AuthorID":
+		return "authorID"
+	}
+	return ""
 }
 
 // UpdatePostInput is the GraphQL input UpdatePostInput, the input of
@@ -597,7 +616,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 		set = append(set, Posts.PublishedAt.SetNull())
 	}
 	if err = velox.ValidateSet(set...); err != nil {
-		return nil, gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postFieldGQL)
+		return nil, gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postUpdateFieldGQL)
 	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
@@ -611,7 +630,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 		if len(set) > 0 {
 			n, err := db.Update[Post]().Set(set...).Where(Posts.ID.EQ(key)).Exec(ctx)
 			if err != nil {
-				return gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postFieldGQL)
+				return gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postUpdateFieldGQL)
 			}
 			if n == 0 {
 				return gqlimpl.NotFound("updatePost", "Post")

@@ -2,6 +2,8 @@ package graphql_test
 
 import (
 	"encoding/json"
+	"log/slog"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,6 +49,12 @@ var annotationCases = []annotationCase{
 	{"MaxList", graphql.MaxList(5), `{"max_list":5}`},
 	{"CreateInput(false)", graphql.CreateInput(false), `{"create_input":false}`},
 	{"UpdateInput(true)", graphql.UpdateInput(true), `{"update_input":true}`},
+	{"CreateDefault(true)", graphql.CreateDefault(true), `{"create_default":true}`},
+	{"CreateDefault(int8)", graphql.CreateDefault(int8(-3)), `{"create_default":-3}`},
+	{"CreateDefault(uint64)", graphql.CreateDefault(uint64(math.MaxUint64)), `{"create_default":18446744073709551615}`},
+	{"CreateDefault(float)", graphql.CreateDefault(1.5), `{"create_default":1.5}`},
+	{"CreateDefault(level)", graphql.CreateDefault(slog.LevelWarn), `{"create_default":4}`},
+	{"CreateDefault(NaN)", graphql.CreateDefault(math.NaN()), `{"create_default":"NaN"}`},
 	{"EnumValues", graphql.EnumValues(map[string]string{"b": "B", "a": "A"}), `{"enum_values":{"a":"A","b":"B"}}`},
 	{"Directives", graphql.Directives(graphql.Directive{Name: "auth", Args: map[string]any{"role": "admin"}}, graphql.Directive{Name: "x"}),
 		`{"directives":[{"name":"auth","args":{"role":"admin"}},{"name":"x"}]}`},
@@ -165,6 +173,14 @@ func TestMerge(t *testing.T) {
 		got = merge(t, graphql.Connection(false), graphql.FieldName("x"))
 		if got.Connection == nil || *got.Connection {
 			t.Errorf("an unset pointer must not erase: %v", got.Connection)
+		}
+		got = merge(t, graphql.CreateDefault(true), graphql.CreateDefault(false))
+		if string(got.CreateDefault) != "false" {
+			t.Errorf("CreateDefault = %s, want false", got.CreateDefault)
+		}
+		got = merge(t, graphql.CreateDefault(3), graphql.FieldName("x"))
+		if string(got.CreateDefault) != "3" {
+			t.Errorf("an unset CreateDefault must not erase: %s", got.CreateDefault)
 		}
 	})
 	t.Run("bools, lists and maps", func(t *testing.T) {

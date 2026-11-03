@@ -433,7 +433,11 @@ func TestGoCompiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for field, getter := range map[string]string{"email: String": "EmailGQL() *string", "code: String!": "CodeGQL() string", "tags: JSON!": "TagsGQL() (veloxgql.JSON, error)", "tier: String!": "TierGQL() string"} {
+	// tags, field.Strings, is a list of strings that binds the Go slice.
+	if !strings.Contains(string(sdlText), "  tags: [String!]!\n") || strings.Contains(string(owner), "TagsGQL") {
+		t.Errorf("tags is no [String!]! bound to the field in\n%s", sdlText)
+	}
+	for field, getter := range map[string]string{"email: String": "EmailGQL() *string", "code: String!": "CodeGQL() string", "tier: String!": "TierGQL() string"} {
 		method, _, _ := strings.Cut(getter, "(")
 		if !strings.Contains(string(sdlText), "  "+field+" @goField(name: \""+method+"\")\n") {
 			t.Errorf("no %s bound to %s in\n%s", field, method, sdlText)
@@ -856,6 +860,7 @@ const e2eWhere = `package app_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -1403,9 +1408,8 @@ func TestWhereIDs(t *testing.T) {
 }
 
 // TestOwnerTags: Owner.tags, a json field, is read by velox from the JSON
-// text stored, and bound to the schema's JSON scalar by the
-// generated getter: the stored JSON (a JSON null for a nil slice) and one
-// velox wrote.
+// text stored, and bound to [String!]! as its Go slice: the stored JSON (a
+// JSON null for a nil slice) and one velox wrote.
 func TestOwnerTags(t *testing.T) {
 	ctx, db := open(t)
 	tags := func(id ids.UserID) (veloxgql.JSON, error) {
@@ -1413,7 +1417,8 @@ func TestOwnerTags(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		return o.TagsGQL()
+		b, err := json.Marshal(o.Tags)
+		return veloxgql.JSON(b), err
 	}
 	for id, want := range map[ids.UserID]string{1: ` + "`" + `["x","y"]` + "`" + `, 2: ` + "`" + `[]` + "`" + `, 3: ` + "`" + `null` + "`" + `} {
 		got, err := tags(id)

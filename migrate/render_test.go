@@ -2,6 +2,7 @@ package migrate_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -383,10 +384,38 @@ func TestRenderReviewLines(t *testing.T) {
 	}
 }
 
+// TestRenderReviewOverItsStatement: a PostgreSQL column that takes a default and
+// NOT NULL at once has its SET DEFAULT in the main script's ALTER, beside other
+// columns' actions, and SET NOT NULL in an online unit. The set-not-null review sat
+// over the ALTER, which cannot fail on a NULL, and the unit that can had none.
+func TestRenderReviewOverItsStatement(t *testing.T) {
+	from := mustTables(velox.Postgres, nil)
+	to := mustTables(velox.Postgres, func(m *loadjson.Model) {
+		f := fieldOf(m, "User", "bio")
+		f.Optional, f.Nillable, f.Default = false, false, json.RawMessage(`"none"`)
+		fieldOf(m, "User", "logins").Type = "int64"
+	})
+	ss := render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{Allow: []migrate.Allow{{Code: "set-not-null"}}})
+	text := scriptsText(ss)
+	for _, s := range ss {
+		for _, st := range s.Statements {
+			says := strings.Contains(st.Review, "set-not-null: ")
+			if want := s.Kind == migrate.ScriptOnline && strings.Contains(st.SQL, "DROP CONSTRAINT IF EXISTS"); says != want {
+				t.Errorf("%s: %q has review %q; want the set-not-null review on the online unit alone\n%s", s.Kind, st.SQL, st.Review, text)
+			}
+		}
+	}
+}
+
 // TestRenderUnits: a MySQL statement and an ADD VALUE are each a unit; an
-// online unit is a run of statements that starts with an IF EXISTS drop;
-// a statement of a script in a transaction is unit 0.
+// online unit is a run of statements that starts with an IF EXISTS drop, or
+// a VALIDATE alone of a key or check the main script added NOT VALID; a
+// statement of a script in a transaction is unit 0.
 func TestRenderUnits(t *testing.T) {
+	validatesAlone := func(ss []migrate.Statement, i int) bool {
+		alone := (i == 0 || ss[i-1].Unit != ss[i].Unit) && (i+1 == len(ss) || ss[i+1].Unit != ss[i].Unit)
+		return alone && strings.Contains(ss[i].SQL, " VALIDATE CONSTRAINT ")
+	}
 	for _, d := range rendered {
 		for _, c := range cases {
 			if !slices.Contains(c.on(), d) {
@@ -405,7 +434,7 @@ func TestRenderUnits(t *testing.T) {
 								t.Errorf("%s: online statement %d has unit %d, want %d", c.name, i, st.Unit, want)
 							}
 						}
-						if first != strings.Contains(st.SQL, " IF EXISTS ") {
+						if first != (strings.Contains(st.SQL, " IF EXISTS ") || validatesAlone(s.Statements, i)) {
 							t.Errorf("%s: online statement %d, first of its unit %v: %s", c.name, i, first, st.SQL)
 						}
 						continue

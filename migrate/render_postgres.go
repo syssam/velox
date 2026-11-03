@@ -105,6 +105,11 @@ func (r *renderer) unit(i int, stmts ...string) {
 	if n := len(r.online); n > 0 {
 		u = r.online[n-1].Unit + 1
 	}
+	if later, ok := r.unitFindings[i]; ok {
+		// The main script's statement of the change had the rest.
+		delete(r.unitFindings, i)
+		r.findings[i], r.taken[i] = later, false
+	}
 	for j, s := range stmts {
 		st := Statement{SQL: s, Change: i, Unit: u}
 		if j == 0 {
@@ -144,7 +149,28 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 	case renameColumn:
 		return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " RENAME COLUMN " + r.ident(c.From) + " TO " + r.ident(c.To)}}, nil
 	case alterColumn:
-		return r.pgAlterColumn(c)
+		pc, err := r.pgAlterColumn(c)
+		if len(pc.units) > 0 && (len(pc.actions) > 0 || len(pc.stmts) > 0) {
+			// SET NOT NULL is the online unit, and the main script's statement of
+			// the change does not make the column NOT NULL: the review that says
+			// so goes on the unit.
+			var keep, later []Finding
+			for _, f := range r.findings[i] {
+				if f.Code == "set-not-null" {
+					later = append(later, f)
+				} else {
+					keep = append(keep, f)
+				}
+			}
+			if len(later) > 0 {
+				r.findings[i] = keep
+				if r.unitFindings == nil {
+					r.unitFindings = map[int][]Finding{}
+				}
+				r.unitFindings[i] = later
+			}
+		}
+		return pc, err
 	case renameSequence:
 		return pgParts{stmts: []string{"ALTER SEQUENCE " + r.indexName(c.Table, c.From) + " RENAME TO " + r.ident(c.To)}}, nil
 	case addIndex:
@@ -221,6 +247,12 @@ func schemaName(s string) string {
 // and in the main script on a table the plan creates.
 func (r *renderer) pgConstraint(i int, table TableRef, name, def string) pgParts {
 	t := r.table(table)
+	if r.l.existing(table) && r.replaces(i) {
+		return pgParts{
+			table: t, phase: phaseAdd, actions: []string{"ADD CONSTRAINT " + r.ident(name) + " " + def + " NOT VALID"},
+			units: [][]string{{"ALTER TABLE " + t + " VALIDATE CONSTRAINT " + r.ident(name)}},
+		}
+	}
 	if r.l.existing(table) {
 		r.unit(i,
 			"ALTER TABLE "+t+" DROP CONSTRAINT IF EXISTS "+r.ident(name),
@@ -229,6 +261,28 @@ func (r *renderer) pgConstraint(i int, table TableRef, name, def string) pgParts
 		return pgParts{}
 	}
 	return pgParts{table: t, phase: phaseAdd, actions: []string{"ADD CONSTRAINT " + r.ident(name) + " " + def}}
+}
+
+// replaces reports whether change i, a foreign key or check added to a table
+// that exists, takes the place of one an earlier change drops from the table:
+// of its name, or a key of its columns. The main script then adds it NOT
+// VALID, in the drop's transaction, which already locks what the add does, so
+// the table is never without it; only VALIDATE goes online.
+func (r *renderer) replaces(i int) bool {
+	for _, c := range r.cs[:i] {
+		switch a := r.cs[i].(type) {
+		case addForeignKey:
+			if d, ok := c.(dropForeignKey); ok && r.l.canon(d.Table) == r.l.canon(a.Table) &&
+				(d.ForeignKey.Name == a.ForeignKey.Name || slices.Equal(d.ForeignKey.Columns, a.ForeignKey.Columns)) {
+				return true
+			}
+		case addCheck:
+			if d, ok := c.(dropCheck); ok && r.l.canon(d.Table) == r.l.canon(a.Table) && d.Check.Name == a.Check.Name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // dropOnline reports whether the drop of an index goes to the online

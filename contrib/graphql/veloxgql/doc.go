@@ -3,7 +3,7 @@
 // the scalars, and the limits on what a client may ask for.
 //
 // What only generated code calls is in package gqlimpl, whose names are
-// stable by GeneratedCodeIsVersion7 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion8 and not by semantic versioning. Where a
 // name below belongs to gqlimpl it is written gqlimpl.Name.
 //
 // # IDs
@@ -173,7 +173,9 @@
 // connection's edges, the number of ids for nodes and MaxList for another list
 // of objects. On top of that, with no multiplier, a field that runs a statement
 // adds 100, so first: 0 and aliases count, and an input object adds its size at
-// each use. Every alias and every branch of a fragment counts, except a
+// each use. A where predicate no index serves adds 2000 at each use: a
+// <field>Contains, <field>HasPrefix or <field>HasSuffix, which reads the whole
+// table, and a has<Edge>With, whose subquery runs for each row. Every alias and every branch of a fragment counts, except a
 // selection that @skip(if: true) or @include(if: false) leaves out, which
 // costs nothing, its condition a literal or a variable's value (a missing
 // variable's default, when it has one; a condition that is not a boolean
@@ -201,8 +203,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion7 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion8 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
-// disagree. For generated code. It is replaced by GeneratedCodeIsVersion8 when
+// disagree. For generated code. It is replaced by GeneratedCodeIsVersion9 when
 // generated code must change.
-const GeneratedCodeIsVersion7 = true
+const GeneratedCodeIsVersion8 = true

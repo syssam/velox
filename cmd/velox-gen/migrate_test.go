@@ -941,11 +941,19 @@ func TestMigrateCancel(t *testing.T) {
 				return ctx, cancel
 			}
 			t.Cleanup(func() { signalContext = notifyContext })
+			// On PostgreSQL the SELECT runs in a transaction with its count, which a
+			// cancel rolls back; on MySQL it may finish on the server, and the way out
+			// leads with checking it.
+			way := "\n  version 1 is dirty; fix the cause and run migrate apply -resume, or undo statement 1 and run migrate resolve -version 1 -undone\n"
+			if c.d == velox.MySQL {
+				way = "the run was cancelled during statement 2; check whether it ran before resuming: context canceled\n" +
+					"  version 1 is dirty, and the run stopped with statement 2 under way: it may have run on the server after the history's count of 1"
+			}
 			start := time.Now()
 			code, out, errs := runCLI(t, dir, "migrate", "apply", "-dir", ".", "-db", dsn)
 			if code != 1 || out != "" || time.Since(start) > 20*time.Second ||
 				!strings.HasPrefix(errs, "velox-gen: migrate apply: 0001_slow.sql: statement 2 of 3: ") ||
-				!strings.Contains(errs, "\n  version 1 is dirty; fix the cause and run migrate apply -resume, or undo statement 1 and run migrate resolve -version 1 -undone\n") {
+				!strings.Contains(errs, way) {
 				t.Errorf("apply: %d %v\n%s\n%s", code, time.Since(start), out, errs)
 			}
 			signalContext = notifyContext

@@ -188,12 +188,14 @@ func (s *testServer) seedLargeTitle(t *testing.T, n int) {
 
 // TestLargeValuesBounded: cost cannot see a value's size. One title of 900 KB under 300
 // aliases, a query of 22 KB, allocated 3.7 GB and answered with 270 MB, as nothing
-// counted what a response held. MaxResponseBytes stops it with a clean error.
+// counted what a response held. MaxResponseBytes stops it with a clean error. The post
+// is found by its ID: titleHasPrefix, a scan, costs 2000 and refuses 300 of them first.
 func TestLargeValuesBounded(t *testing.T) {
 	s := newServer(t)
 	s.seedLargeTitle(t, 900<<10)
+	id := veloxgql.EncodeID("Post", int64(900001))
 	query := `{ ` + repeat(300, func(i int) string {
-		return fmt.Sprintf("a%d: posts(first: 1, where: {titleHasPrefix: \"xxxx\"}) { edges { node { title } } }", i)
+		return fmt.Sprintf("a%d: posts(first: 1, where: {id: %q}) { edges { node { title } } }", i, id)
 	}) + ` }`
 	var got string
 	n, d := allocated(func() { got = s.postQuery(t, query) })
@@ -263,9 +265,10 @@ func TestFieldErrorsBounded(t *testing.T) {
 
 // TestTimeoutCancelsStatements: a statement of a query past Limits.Timeout is interrupted,
 // and does not run to its end: 700 LIKE scans over 90k rows ran 13.6 s. These are 600 over
-// 22500.
+// 22500. Each now costs a scan, so the default MaxCost refuses them (TestScanFloodRefused):
+// it is raised here, as what is tested is a statement the Timeout stops.
 func TestTimeoutCancelsStatements(t *testing.T) {
-	s := newServer(t, veloxgql.WithLimits(veloxgql.Limits{Timeout: 100 * time.Millisecond}))
+	s := newServer(t, veloxgql.WithLimits(veloxgql.Limits{Timeout: 100 * time.Millisecond, MaxCost: 10_000_000}))
 	s.seedRows(t, 150)
 	query := `{ ` + repeat(600, func(i int) string {
 		return fmt.Sprintf(`a%d: posts(where: {titleContains: "nothing%d"}) { totalCount }`, i, i)
@@ -278,6 +281,34 @@ func TestTimeoutCancelsStatements(t *testing.T) {
 	}
 	if d > 5*time.Second {
 		t.Errorf("took %v, with a Timeout of 100ms", d)
+	}
+}
+
+// TestScanFloodRefused: cost counted statements, not rows read, so 700 aliases of a
+// Contains, which took 12.5 s over 90000 rows, passed every limit. A predicate no index
+// serves costs 2000 now: the flood is refused before any statement, and an ordinary
+// search that filters on a few passes.
+func TestScanFloodRefused(t *testing.T) {
+	s := newServer(t)
+	s.seedRows(t, 20)
+	flood := `{ ` + repeat(700, func(i int) string {
+		return fmt.Sprintf(`a%d: posts(first: 1, where: {titleContains: "x"}) { totalCount }`, i)
+	}) + ` }`
+	s.mu.Lock()
+	s.stmts = nil
+	s.mu.Unlock()
+	if got := s.postQuery(t, flood); !strings.Contains(got, `"code":"COST_LIMIT_EXCEEDED"`) || !strings.Contains(got, `"data":null`) {
+		t.Errorf("700 scans: %.300s", got)
+	}
+	s.mu.Lock()
+	sent := len(s.stmts)
+	s.mu.Unlock()
+	if sent != 0 {
+		t.Errorf("the flood sent %d statements", sent)
+	}
+	search := `{ posts(first: 100, where: {or: [{titleContains: "it"}, {titleHasSuffix: "le"}, {hasTagsWith: [{nameContains: "go"}]}]}) { edges { node { title tags { totalCount } } } } }`
+	if got := s.postQuery(t, search); !strings.Contains(got, `"data":{"posts"`) {
+		t.Errorf("an ordinary search: %.300s", got)
 	}
 }
 

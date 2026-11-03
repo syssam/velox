@@ -45,6 +45,21 @@ counted as 30. `nodes` adds one for each type of its ids, which it can read from
 plus one for each table of links (`deletePost` sends 3 and costs 301). An input object
 weighs by its type's fields and a string by its bytes (one for 128), at each use.
 
+**A scan costs 20 statements.** A fifth review proved that statements are not rows read:
+700 aliases of `items(first: 1, where: {nameContains: "x"})` over 90000 rows cost 74200,
+passed every limit and took 12.5 s, bounded only by `Timeout`. In a `<T>WhereInput`, each
+`<field>Contains`, `<field>HasPrefix` and `<field>HasSuffix` given now adds 2000 (`scanCost`),
+as a LIKE reads the whole table on every dialect (a prefix is served by an index only with
+a C collation or pattern ops, which velox does not know of), and so does each non-empty
+`has<Edge>With`, whose subquery runs for each row read. The flood costs 1474200 and is
+refused; the default admits about 70 such filters, 1.3 s at 18 ms a scan, and a page of 100
+users with 10 posts each, filtered by two LIKEs and a `has<Edge>With` holding a third, costs 10610. Null and `[]` add nothing, as
+they add no predicate. 20 is from the measure, a scan of 90000 rows being about 20 indexed
+statements; a larger table is slower still, and its server lowers `MaxCost`. Cost cannot see
+indexes, so an equality on an unindexed column stays a statement: the plugin model's
+indexes would tell, and a scan's cost then depends on the schema, which no client can read
+from the SDL.
+
 **`MaxCost` is 150000, 1500 statements.** It was 100000, 1000 statements, and refused
 clients' ordinary queries: two levels of full pages with 10 fields each cost 121102. They
 allocate 78 MB. Its worst shape, long aliases over rows, allocates about 2 KB a unit, so
@@ -323,13 +338,13 @@ change. Two edges bound to one foreign key are refused (rule 55).
 
 ## Evidence
 
-- `TestRequestBounded` (examples/graphql/bounded_test.go) asserts the table's budgets;
+- `TestRequestBounded` (examples/graphql/bounded_test.go) asserts the table's budgets, and `TestScanFloodRefused` the scans' cost;
   `TestIntrospectionOffShowsNothing` there; `TestDocumentShapes`, `TestDocumentPairs`,
   `TestVariablesShapes` (veloxgql/document_test.go); `TestValidationErrorsBounded`,
   `TestIntrospectionOff` (veloxgql/extension_test.go).
 - `TestCostIntrospection`, `TestCostStatements`, `TestCostInputs`, `TestCostInputWeighs`,
   `TestCostNodesByType`, `TestCostDeleteStatements`, `TestCostSkipStillReads`,
-  `TestCostMutationWrites` (veloxgql/cost_test.go); `TestRequestCost`
+  `TestCostMutationWrites` (veloxgql/cost_test.go), `TestCostScans` (veloxgql/cost_scan_test.go); `TestRequestCost`
   (examples/graphql/main_test.go).
 - `TestFromJSONExact`, `TestFromJSONNumbers`, `TestFromJSONArrayLength`, `TestFKScoped`
   (veloxgql/gqlimpl/exact_test.go).

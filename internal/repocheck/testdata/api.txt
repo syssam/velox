@@ -319,7 +319,9 @@ func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
 func Allow[E any]() Pred[E]
 func And[E any](ps ...Pred[E]) Pred[E]
+func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, float64], error)
 func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, float64], error)
+func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
 func BindHooksAfter[E any](first Hook[E], hs []Hook[E]) BoundHooks
 func BindHooks[E any](hs []Hook[E]) BoundHooks
@@ -339,9 +341,13 @@ func GoType(c ColumnInfo) reflect.Type
 func IsDryRun(ctx context.Context) bool
 func IsNotFound(err error) bool
 func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([][]T, error)
+func MaxByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func MaxBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
+func MaxNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
 func Max[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
+func MinByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func MinBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
+func MinNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
 func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
 func Not[E any](p Pred[E]) Pred[E]
 func On[E any](h Hook[E], ops ...Op) Hook[E]
@@ -354,7 +360,9 @@ func PinnedUntil(ctx context.Context) time.Time
 func Pool(db *DB) *sql.DB
 func RowScopeFromContext(ctx context.Context) RowScope
 func SQLConn(db *sql.DB) Conn
+func SumByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func SumBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
+func SumNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, error)
 func Sum[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, error)
 func TxIsolation(level sql.IsolationLevel) TxOption
 func TxReadOnly() TxOption
@@ -922,6 +930,7 @@ const SkipWhereInput
 func (Annotation) Name() string
 func (a Annotation) Merge(other schema.Annotation) schema.Annotation
 func Connection(on bool) Annotation
+func CreateDefault[T ~bool | ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64](v T) Annotation
 func CreateInput(on bool) Annotation
 func Directives(ds ...Directive) Annotation
 func EnumValues(m map[string]string) Annotation
@@ -938,7 +947,7 @@ func Type(name string) Annotation
 func UpdateInput(on bool) Annotation
 func WhereEdge() Annotation
 func WhereOps(ops ...WhereOp) Annotation
-type Annotation struct { Skip SkipMode Type string QueryField string Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool OrderVia []ViaOrder WhereOps WhereOp WhereEdge bool Connection *bool MaxList int CreateInput *bool UpdateInput *bool EnumValues map[string]string Directives []Directive }
+type Annotation struct { Skip SkipMode Type string QueryField string Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool OrderVia []ViaOrder WhereOps WhereOp WhereEdge bool Connection *bool MaxList int CreateInput *bool UpdateInput *bool CreateDefault json.RawMessage EnumValues map[string]string Directives []Directive }
 type Directive struct { Name string Args map[string]any }
 type MutationKind string
 type SkipMode uint16
@@ -953,7 +962,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion7
+const GeneratedCodeIsVersion8
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

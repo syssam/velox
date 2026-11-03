@@ -2,9 +2,13 @@ package graphql
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
+	"reflect"
 	"slices"
+	"strconv"
 
 	"github.com/syssam/velox/schema"
 )
@@ -124,6 +128,9 @@ type Annotation struct {
 	// UpdateInput says whether a field is in the update input. Nil leaves the
 	// default.
 	UpdateInput *bool `json:"update_input,omitempty"`
+	// CreateDefault is the value the create input gives a bool or number field
+	// it leaves out, as JSON.
+	CreateDefault json.RawMessage `json:"create_default,omitempty"`
 	// EnumValues maps an enum field's database values to GraphQL value names.
 	EnumValues map[string]string `json:"enum_values,omitempty"`
 	// Directives are put on the generated element.
@@ -178,6 +185,7 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		MaxList:        cmp.Or(a.MaxList, o.MaxList),
 		CreateInput:    pickPtr(a.CreateInput, o.CreateInput),
 		UpdateInput:    pickPtr(a.UpdateInput, o.UpdateInput),
+		CreateDefault:  pickRaw(a.CreateDefault, o.CreateDefault),
 	}
 	for _, k := range slices.Concat(o.Mutations, a.Mutations) {
 		if !slices.Contains(out.Mutations, k) {
@@ -202,6 +210,14 @@ func pick(later, earlier string) string {
 		return later
 	}
 	return earlier
+}
+
+// pickRaw is a copy of later if it is set, else of earlier.
+func pickRaw(later, earlier json.RawMessage) json.RawMessage {
+	if later != nil {
+		return slices.Clone(later)
+	}
+	return slices.Clone(earlier)
 }
 
 func pickPtr(later, earlier *bool) *bool {
@@ -326,6 +342,34 @@ func CreateInput(on bool) Annotation { return Annotation{CreateInput: &on} }
 
 // UpdateInput puts the field in the update input (true) or leaves it out.
 func UpdateInput(on bool) Annotation { return Annotation{UpdateInput: &on} }
+
+// CreateDefault is the value a create input gives a bool or number field that
+// it leaves out: the SDL writes it as the input field's default, active:
+// Boolean! = true, and the type keeps active: Boolean!. It is GraphQL's alone:
+// the field has no Default, so a Go struct inserted without it stores false or
+// 0, which a Default on a field that is not Nillable could not tell from
+// unset. It applies to a bool or number field in the create input that is not
+// nullable and has no Default.
+func CreateDefault[T ~bool | ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64](v T) Annotation {
+	r := reflect.ValueOf(v)
+	var s string
+	switch r.Kind() {
+	case reflect.Bool:
+		s = strconv.FormatBool(r.Bool())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		s = strconv.FormatInt(r.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		s = strconv.FormatUint(r.Uint(), 10)
+	default: // a float
+		f := r.Float()
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			s = strconv.Quote(strconv.FormatFloat(f, 'g', -1, 64)) // no number: the plugin refuses it
+		} else {
+			s = strconv.FormatFloat(f, 'g', -1, 64)
+		}
+	}
+	return Annotation{CreateDefault: json.RawMessage(s)}
+}
 
 // EnumValues maps an enum field's database values to GraphQL value names.
 func EnumValues(m map[string]string) Annotation {

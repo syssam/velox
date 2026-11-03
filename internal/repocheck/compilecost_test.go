@@ -228,7 +228,7 @@ var genericObjects = []struct {
 	// NumberCol[E, V] puts that in the export data of every package that uses a
 	// Query, called or not. Query.With and Rel.With stay methods: with both called,
 	// functions would save under 1%.
-	{"entityDescUse", "", entityDescUseSrc, 757760},        // measured 749204
+	{"entityDescUse", "", entityDescUseSrc, 768000},        // measured 759424
 	{"entityDescHooks", "", entityDescHooksBound, 1049600}, // measured 1038290
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	{"Mutation", "velox.Mutation[E]", "", 7168},            // measured 2226

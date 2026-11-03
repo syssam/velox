@@ -448,7 +448,7 @@ func typesModel(t *testing.T) *plugin.Model {
 				{Name: "rank", GoName: "Rank", Type: "int8", GoType: "int8", ElemType: "int8", Annotations: where(graphql.OpIn)},
 				{Name: "at", GoName: "At", Type: "time", GoType: "*time.Time", ElemType: "time.Time", PkgPath: "time", Nullable: true, Pointer: true, Annotations: where(graphql.OpLT | graphql.OpIsNil)},
 				{Name: "ref", GoName: "Ref", Type: "uuid", GoType: "uuid.UUID", ElemType: "uuid.UUID", PkgPath: "github.com/google/uuid", Kind: "array", Annotations: where(graphql.OpNEQ)},
-				{Name: "tags", GoName: "Tags", Type: "json", GoType: "[]string", ElemType: "[]string", Kind: "slice"},
+				{Name: "tags", GoName: "Tags", Type: "json", GoType: "[]int32", ElemType: "[]int32", Kind: "slice"},
 				// A foreign key of the application's own type, to Owner.
 				{Name: "owner_id", GoName: "OwnerID", Type: "int64", GoType: "*ids.UserID", ElemType: "ids.UserID", PkgPath: "example.com/app/ids", Kind: "int64", Pointer: true, Nullable: true, Annotations: where(graphql.OpsDefault)},
 			},
@@ -676,11 +676,6 @@ func TestRenderErrors(t *testing.T) {
 		"a where on a time of another Go type": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
 			"schema Thing, field at: velox-graphql converts a time field only from time.Time, and its Go type is types.Stamp"},
-		// Only a Nillable field is a pointer, and keyset paging needs an
-		// order column without NULLs.
-		"a pointer order field": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
-			&plugin.Field{Name: "n", GoName: "N", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"order_field":"N"}`)}})}},
-			"schema Thing, field n: a connection orders by it, and its Go field is a pointer, which only a Nillable field is"},
 		"a create-input field named String": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{creatable(withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "text", GoName: "Text", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"field_name":"string"}`)}}))}},
 			"schema Thing: the field string of CreateThingInput is the Go field String, which is the input's method"},
@@ -724,7 +719,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion7\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion8\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -866,7 +861,11 @@ func TestCreateInputs(t *testing.T) {
 					continue
 				}
 				sig := expr(fn.Type)
-				if want := "func(ctx context.Context, input " + in + ") (*" + ty.Entity.Name + ", error)"; sig != want {
+				set := ""
+				if len(leftOut(ty)) > 0 {
+					set = ", set func(*" + ty.Entity.Name + ")"
+				}
+				if want := "func(ctx context.Context, input " + in + set + ") (*" + ty.Entity.Name + ", error)"; sig != want {
 					t.Errorf("Create%s: %s, want %s", ty.Name, sig, want)
 				}
 			}
@@ -934,7 +933,7 @@ func updateOnlyModel(t *testing.T) *plugin.Model {
 // field for each of the Surface's InputFields, in order: a pointer for a
 // value or a unique edge's ID, a []string for an ID list and a bool for a
 // clear; and Update<T>, which takes the ID and the input and returns the
-// entity. A type with updateX and no createX still has <entity>FieldGQL,
+// entity, and <entity>UpdateFieldGQL, which names its fields alone and
 // which its UpdateX names.
 func TestUpdateInputs(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "update-only": updateOnlyModel(t)} {
@@ -995,7 +994,7 @@ func TestUpdateInputs(t *testing.T) {
 				if sig, want := expr(d.Type), "func(ctx context.Context, id string, input "+in+") (*"+ty.Entity.Name+", error)"; sig != want {
 					t.Errorf("%s: %s, want %s", fn, sig, want)
 				}
-				gql := strings.ToLower(ty.Entity.Name[:1]) + ty.Entity.Name[1:] + "FieldGQL"
+				gql := strings.ToLower(ty.Entity.Name[:1]) + ty.Entity.Name[1:] + "UpdateFieldGQL"
 				if funcs[gql] == nil {
 					t.Errorf("no func %s, which %s names", gql, fn)
 				}
@@ -1030,10 +1029,10 @@ func TestCreateConversions(t *testing.T) {
 		` OwnerID *string `,
 		` Tags veloxgql.JSON `,
 		`gqlimpl.DecodeIDAs[int64, idspkg.UserID]("CreateEventInput.ownerID", *input.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
-		`gqlimpl.FromJSON[[]string]("CreateEventInput.tags", input.Tags)`,
+		`gqlimpl.FromJSON[[]int32]("CreateEventInput.tags", input.Tags)`,
 		`gqlimpl.CheckExists(ctx, db.Query[Owner]().Where(Owners.ID.EQ(`,
 		`), 1, "CreateEventInput.ownerID", "Owner")`,
-		`return gqlimpl.WriteError(err, "CreateEventInput", "gen.Event", eventFieldGQL)`,
+		`return gqlimpl.WriteError(err, "CreateEventInput", "gen.Event", eventCreateFieldGQL)`,
 		`case "Tags": return "tags"`,
 	} {
 		if !strings.Contains(ev, want) {
@@ -1740,6 +1739,61 @@ func TestPackageNamedAsALocal(t *testing.T) {
 		src := render(t, m)["thing_gql.go"]
 		if want := pkg + `pkg "example.com/` + pkg + `"`; !strings.Contains(src, want) {
 			t.Errorf("package %s: no import %q in\n%s", pkg, want, src)
+		}
+	}
+}
+
+// TestNullableOrderTerm: a Nillable order field is a gqlimpl.NullTerm, whose get
+// says NULL and whose set writes nil, converting a field of another Go type.
+func TestNullableOrderTerm(t *testing.T) {
+	thing := &plugin.Entity{Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64"}}}
+	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(thing,
+		&plugin.Field{Name: "n", GoName: "N", Type: "int64", GoType: "*types.N", ElemType: "types.N", PkgPath: "example.com/types", Kind: "int64", Pointer: true, Nullable: true, Optional: true,
+			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"order_field":"N"}`)}})}}
+	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
+	want := `gqlimpl.NullTerm(string(o.Field), o.Direction, Things.N.Asc(), Things.N.Desc(), func(x *Thing) (int64, bool) { if x.N == nil { var z int64 return z, false } return int64(*x.N), true }, func(x *Thing, v int64, ok bool) { x.N = nil if ok { w := types.N(v) x.N = &w } }), nil`
+	if !strings.Contains(got, want) {
+		t.Errorf("no %q in:\n%s", want, got)
+	}
+}
+
+// TestZeroDefaultNotRefused: a create input that gives a field with a zero
+// Default (false, 0, "") its zero value stores what the Default would, so
+// Create<T> does not refuse it; a non-zero Default's zero is still refused.
+// A field with graphql.CreateDefault is a value, always set.
+func TestZeroDefaultNotRefused(t *testing.T) {
+	def := func(name, typ, d string) *plugin.Field {
+		return &plugin.Field{Name: name, GoName: plugin.GoName(name), Type: typ, GoType: typ, ElemType: typ, Optional: true, HasDefault: true, Default: json.RawMessage(d)}
+	}
+	active := &plugin.Field{Name: "active", GoName: "Active", Type: "bool", GoType: "bool", ElemType: "bool"}
+	b, err := json.Marshal(graphql.CreateDefault(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	active.Annotations = map[string]json.RawMessage{"graphql": b}
+	mut, err := json.Marshal(graphql.Mutations(graphql.MutationCreate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
+		Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+		Annotations: map[string]json.RawMessage{"graphql": mut},
+		Fields: []*plugin.Field{
+			{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64", AutoID: true},
+			def("off", "bool", "false"), def("views", "int64", "0"), def("score", "float64", "0.0"), def("s", "string", `""`),
+			def("handle", "string", `"anon"`), active,
+		},
+	}}}
+	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
+	for _, f := range []string{"Off", "Views", "Score", "S"} {
+		if strings.Contains(got, "gqlimpl.NotZero(\"CreateThingInput."+strings.ToLower(f[:1])+f[1:]+"\"") {
+			t.Errorf("%s: a zero Default's zero refused:\n%s", f, got)
+		}
+	}
+	for _, want := range []string{`gqlimpl.NotZero("CreateThingInput.handle"`, "Active bool", "x.Active = input.Active", "Things.Active}"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in:\n%s", want, got)
 		}
 	}
 }

@@ -18,6 +18,12 @@ const maxCost = 1 << 62
 // however many rows it reads: the default MaxCost allows 1500 of them.
 const statementCost = 100
 
+// scanCost is what a where predicate adds that no index serves, as it reads the
+// table: Contains, HasPrefix or HasSuffix of a <T>WhereInput, and has<Edge>With,
+// whose subquery runs for each row. It is 20 statements: 700 aliases of a
+// Contains over 90000 rows took 12.5 s, and the default MaxCost allows about 70.
+const scanCost = 20 * statementCost
+
 // stringUnit is the bytes of a string in an input that cost one more: the default
 // MaxCost allows 19 MB of them, each use counted.
 const stringUnit = 128
@@ -56,6 +62,11 @@ const stringUnit = 128
 //     included, read from the variables; a string one more for each 128 of its
 //     bytes, and an object one and one for each 16 of its type's fields, as gqlgen
 //     does work for each. A variable used twice counts twice;
+//   - in a <T>WhereInput, a predicate no index serves adds 2000, 20 statements,
+//     at each use: each <field>Contains, <field>HasPrefix and <field>HasSuffix
+//     given, as a LIKE reads the whole table, and each non-empty has<Edge>With,
+//     whose subquery runs for each row it reads. The default MaxCost allows about
+//     70 of them;
 //   - on a mutation, an input object adds a statement for the row it reads back,
 //     two for a non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, one for an
 //     <edge>ID, and three for a clear<Edge>: true, a page of its links, the targets
@@ -466,6 +477,9 @@ func (c *coster) size(v *ast.Value, d *ast.Definition) int64 {
 		n := inputWeight(d)
 		for _, child := range v.Children {
 			n = add(n, c.size(child.Value, c.inputField(d, child.Name)))
+			if child.Value != nil && child.Value.Kind != ast.NullValue && (child.Value.Kind != ast.ListValue || len(child.Value.Children) > 0) {
+				n = add(n, scans(d, child.Name))
+			}
 		}
 		return n
 	case ast.ListValue:
@@ -498,6 +512,9 @@ func (c *coster) sizeOf(v reflect.Value, d *ast.Definition) int64 {
 				fd = c.inputField(d, it.Key().String())
 			}
 			n = add(n, c.sizeOf(it.Value(), fd))
+			if it.Key().Kind() == reflect.String && given(it.Value()) {
+				n = add(n, scans(d, it.Key().String()))
+			}
 		}
 	case reflect.Slice, reflect.Array:
 		for i := range v.Len() {
@@ -509,6 +526,33 @@ func (c *coster) sizeOf(v reflect.Value, d *ast.Definition) int64 {
 		n = 1
 	}
 	return n
+}
+
+// given reports whether v, a variable's value of an input field, adds a
+// predicate: it is not null, nor an empty list.
+func given(v reflect.Value) bool {
+	for v.IsValid() && (v.Kind() == reflect.Interface || v.Kind() == reflect.Pointer) {
+		v = v.Elem()
+	}
+	return v.IsValid() && (v.Kind() != reflect.Slice && v.Kind() != reflect.Array || v.Len() > 0)
+}
+
+// scans is what the field name of the input type d adds as a scan: scanCost for
+// a predicate of a <T>WhereInput that no index serves, the names velox-graphql
+// gives Contains, HasPrefix and HasSuffix, and for has<Edge>With; else 0.
+func scans(d *ast.Definition, name string) int64 {
+	if d == nil || d.Kind != ast.InputObject || !strings.HasSuffix(d.Name, "WhereInput") || d.Fields.ForName(name) == nil {
+		return 0
+	}
+	for _, s := range []string{"Contains", "HasPrefix", "HasSuffix"} {
+		if len(name) > len(s) && strings.HasSuffix(name, s) {
+			return scanCost
+		}
+	}
+	if len(name) > len("hasWith") && strings.HasPrefix(name, "has") && strings.HasSuffix(name, "With") {
+		return scanCost
+	}
+	return 0
 }
 
 // inputField is the input type of the field name of the input type d, or nil.

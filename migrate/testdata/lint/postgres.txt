@@ -6,7 +6,7 @@
 == add-column-optional
 == add-column-nillable
 == add-column-required
-0 add-required-column destructive users.nickname [cases_test.go]: adds column users.nickname as NOT NULL with no default; it fails if the table has rows
+0 add-required-column destructive users.nickname [cases_test.go]: adds column users.nickname as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Optional (NOT NULL, its zero the default), or allow it only on an empty table
 == add-column-default
 == add-column-schema-default
 0 volatile-default review users.seen_at [cases_test.go]: adds column users.seen_at with default CURRENT_TIMESTAMP; if the expression is volatile, PostgreSQL rewrites the table under an exclusive lock
