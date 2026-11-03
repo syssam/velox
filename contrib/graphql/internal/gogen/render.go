@@ -578,12 +578,16 @@ func (r *renderer) writeOrder(f *file, t *sdl.Type) error {
 	f.p("// The values of %sOrderField.", n)
 	f.p("const (")
 	for _, v := range t.Order {
-		fd := e.Fields[v.Field]
-		c := n + "OrderField" + fd.GoName
-		if err := r.declare(c, what+", field "+fd.Name); err != nil {
+		fd, via := orderField(e, v)
+		c := n + "OrderField" + via + fd.GoName
+		label := fd.Name
+		if v.Edge != 0 {
+			label = e.Edges[v.Edge-1].Name + "." + fd.Name
+		}
+		if err := r.declare(c, what+", field "+label); err != nil {
 			return err
 		}
-		f.p("\t// %s orders by the field %s.", c, fd.Name)
+		f.p("\t// %s orders by the field %s.", c, label)
 		f.p("\t%s %sOrderField = %q", c, n, v.Value)
 	}
 	f.p(")")

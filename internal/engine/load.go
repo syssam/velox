@@ -204,6 +204,50 @@ func (r *ownerRows) Scan(dst ...any) error {
 	return nil
 }
 
+// JoinScan reads the columns of a statement's joins out of a row, after the
+// statement's own. The root package makes it, as it alone knows the joined
+// entities' types.
+type JoinScan struct {
+	// Width is how many columns the joins add to a row.
+	Width int
+	// Bind points dst, Width long, at the fields of new joined entities, and
+	// returns the function that stores them in the row, once it is scanned.
+	Bind func(dst []any) func(owner unsafe.Pointer)
+}
+
+// joinRows reads, after the columns its Scan is given, the joined columns, and
+// keeps what stores them, one for each row, to run when the kit has made the
+// rows: a row's address is not known while it is scanned.
+type joinRows struct {
+	Rows
+	js     *JoinScan
+	attach []func(unsafe.Pointer)
+}
+
+func (r *joinRows) Scan(dst ...any) error {
+	all := make([]any, len(dst)+r.js.Width)
+	copy(all, dst)
+	f := r.js.Bind(all[len(dst):])
+	if err := r.Rows.Scan(all...); err != nil {
+		return err
+	}
+	r.attach = append(r.attach, f)
+	return nil
+}
+
+// attachTo stores each row's joined entities in the rows of part, a kit's scan
+// of them, in the order they were read.
+func (r *joinRows) attachTo(part any) error {
+	_, ptrs := joinBlocks([]any{part})
+	if len(ptrs) != len(r.attach) {
+		return fmt.Errorf("velox: a read with joins made %d rows of %d scanned", len(ptrs), len(r.attach))
+	}
+	for i, f := range r.attach {
+		f(ptrs[i])
+	}
+	return nil
+}
+
 // blocks holds the rows a kit's scan reads, in arrays of its type that never
 // move once made, each twice the size of the one before up to blockMax rows,
 // so that a pointer to a row stays valid and no row is copied as more arrive.
@@ -714,7 +758,7 @@ func fetchPart(ctx context.Context, db *DB, pin Target, t *EntityInfo, cols []in
 	} else {
 		st.Where = append([]Predicate{NewPredicate(Node{Op: OpIn, Col: int32(cols[0]), V: keys})}, sp.Where...)
 	}
-	return readPart(ctx, db, pin, &st, t, cols, sp.With)
+	return readPart(ctx, db, pin, &st, t, cols, sp.With, nil)
 }
 
 // readPart runs st, a read of t's rows, and scans them. A Rewrite hook may
@@ -722,7 +766,7 @@ func fetchPart(ctx context.Context, db *DB, pin Target, t *EntityInfo, cols []in
 // loads with need. When st's Each has a Join, readPart returns each row's
 // owner key too, read from the join entity. st holds, once it returns, where
 // it ran. pin, when set, is where it runs: a With load's (DB.LoadPin).
-func readPart(ctx context.Context, db *DB, pin Target, st *Statement, t *EntityInfo, cols []int, with []LoadSpec) (any, []any, error) {
+func readPart(ctx context.Context, db *DB, pin Target, st *Statement, t *EntityInfo, cols []int, with []LoadSpec, joins *JoinScan) (any, []any, error) {
 	setStmtPin(st, pin)
 	var part any
 	var owners []any
@@ -745,6 +789,13 @@ func readPart(ctx context.Context, db *DB, pin Target, st *Statement, t *EntityI
 			part, err = infoKit(t).Scan(or, st.Columns)
 			owners = or.Keys
 			return err
+		}
+		if joins != nil && len(st.Joins) > 0 {
+			jr := &joinRows{Rows: r, js: joins}
+			if part, err = infoKit(t).Scan(jr, st.Columns); err != nil {
+				return err
+			}
+			return jr.attachTo(part)
 		}
 		part, err = infoKit(t).Scan(r, st.Columns)
 		return err

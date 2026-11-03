@@ -66,6 +66,9 @@ type EachQuery struct {
 	St    Statement
 	After unsafe.Pointer // After's row, or nil
 	Loads []LoadSpec
+	// Joins reads the columns of St's joins, which follow the target's own in
+	// each row; nil when St has none.
+	Joins *JoinScan
 }
 
 // planEach checks fn's (LoadEach's or CountEach's) arguments and plans its
@@ -160,7 +163,7 @@ func LoadEach(ctx context.Context, q EachQuery, owner *EntityInfo, ownerErr erro
 	var at Target
 	err = byChunks(len(p.Keys), per, func(lo, hi int) error {
 		c := chunk(st, ec, p.Keys[lo:hi])
-		part, own, err := readPart(ctx, db, Target{}, &c, t, key, loads)
+		part, own, err := readPart(ctx, db, Target{}, &c, t, key, loads, q.Joins)
 		if err != nil {
 			return err
 		}

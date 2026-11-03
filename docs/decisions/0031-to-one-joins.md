@@ -33,7 +33,7 @@ type, its Read policy and its relations, and a scope bound to `post` does not re
 - The statement carries the joins (`Statement.Joins`, a `JoinClause` each); a Rewrite hook
   may not change them, as the rows are scanned by them. The render cache keys on them.
   The target's table is `vxj<n>`, so a relation to the statement's own table is told apart.
-- `Count` and `Exists` join too. An aggregate, a group, a per-owner read and a locking
+- `Count` and `Exists` join too. An aggregate, a group, a per-owner read through a join table and a locking
   read refuse a join (PostgreSQL refuses to lock the nullable side of an outer join).
 - `After` pages over a joined column: the value comes from the joined entity stored in the
   row's relation field, and the condition is on the joined row (`rel.Is`). A row without
@@ -44,10 +44,31 @@ type, its Read policy and its relations, and a scope bound to `post` does not re
   to a non-generic `joinSet`, and the generic scan closures are made inside `Join`, which
   only a package that joins compiles (`repocheck`'s compile-cost bounds hold).
 
+## In the GraphQL plugin
+
+`graphql.OrderVia(field, value)` on a to-one edge adds an `orderBy` value that orders by
+the target's column (`AUTHOR_NAME`), with the cost limits of 0027 unchanged: the schema
+opts in for each column, and the join is one statement in the page query and in the count.
+The connection joins the edge with an **inner** JOIN: `After` reads the cursor's value from
+the row's joined entity, which a left join may not have, so a post whose author is missing
+or hidden by the author's Read policy is not in an ordered connection nor in its
+`totalCount`. The plugin refuses the annotation on a to-many edge, for a nullable, sensitive,
+json or bytes field, a field or an edge with an application directive (which guards neither
+the cursors nor the order), and a field or edge the type leaves out. `gqlimpl.JoinedTerm`
+is the runtime's term, and `Rel.Fill` and `Rel.Filled` set and read a joined entity, so a
+decoded cursor can build the row `After` pages from.
+
+The connection of an edge (`User.posts`) is read for every parent in one statement with a
+ranking window, and that window reads joins too: the joined columns are named inside the
+derived table (`vxj1_4`, which MySQL requires, as it refuses duplicate column names there) and
+read by the outer query, and the engine attaches each row's joined entities after its kit has
+made the rows. The join is before the rank, so a row it drops takes none: `LimitEach(n)` is the
+first n rows that have a joined row. `CountEach` counts the joined rows. A per-owner read
+through a join table (many-to-many) still joins no relation.
+
 ## Not decided here
 
 Polymorphic targets, an ordering by a given list of ids, subquery projections (counts,
 latest per parent), and schema views are separate; the join is a clause of the statement,
-not a special case of one edge, so they can build on it. projecting a narrower set of the target's columns, and reading the join in the GraphQL
-plugin (`orderBy` and `where` on a related field, which would be an explicit opt-in because
-of 0027's cost) follow.
+not a special case of one edge, so they can build on it. Projecting a narrower set of the
+target's columns follows. `where` on a related field stays `hasXWith`.

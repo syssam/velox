@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
 )
 
@@ -184,4 +185,103 @@ func wantOrder(t *testing.T, got, want []int64) {
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
+}
+
+// TestJoinInAPerOwnerRead: LoadEach and CountEach with a Join, on every database. The
+// children of tickets 3 and 6 are read with their invoice joined: a child whose
+// invoice the caller may not read is left out, before the window ranks the rows, so
+// LimitEach(1) is the first child that has one. The result is what a read with With
+// gives, minus the children With leaves without an invoice.
+func TestJoinInAPerOwnerRead(t *testing.T) {
+	eachCaller(t, func(t *testing.T, tg target, c who) {
+		xs, err := tg.db.Query[testmodel.Ticket]().Where(Tk.ID.In(3, 6)).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		owners := make([]*testmodel.Ticket, len(xs))
+		for i := range xs {
+			owners[i] = &xs[i]
+		}
+		plain, err := velox.LoadEach(c.ctx, tg.db.Query[testmodel.Ticket]().With(Tk.Invoice).OrderBy(Tk.ID.Asc()), Tk.Children, owners)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// What the join must give: the children that have an invoice, as With reads it.
+		want := make([][]int64, len(plain))
+		wantInvoice := map[int64]int64{}
+		for i, kids := range plain {
+			want[i] = []int64{}
+			for _, k := range kids {
+				if inv, _ := k.Invoice.Get(); inv != nil {
+					want[i] = append(want[i], k.ID)
+					wantInvoice[k.ID] = inv.ID
+				}
+			}
+		}
+		check := func(name string, got [][]testmodel.Ticket, per int) {
+			t.Helper()
+			if len(got) != len(want) {
+				t.Fatalf("%s: %d lists, want %d", name, len(got), len(want))
+			}
+			for i, kids := range got {
+				w := want[i]
+				if per > 0 && len(w) > per {
+					w = w[:per]
+				}
+				gotIDs := []int64{}
+				for _, k := range kids {
+					gotIDs = append(gotIDs, k.ID)
+					if inv, loaded := k.Invoice.Get(); !loaded || inv == nil || inv.ID != wantInvoice[k.ID] {
+						t.Errorf("%s: ticket %d: invoice %+v, loaded %v, want %d", name, k.ID, inv, loaded, wantInvoice[k.ID])
+					}
+				}
+				wantOrder(t, gotIDs, w)
+			}
+		}
+		q := tg.db.Query[testmodel.Ticket]().Join(Tk.Invoice).OrderBy(Tk.ID.Asc())
+		got, err := velox.LoadEach(c.ctx, q, Tk.Children, owners)
+		if err != nil {
+			t.Fatal(err)
+		}
+		check("no limit", got, 0)
+		if got, err = velox.LoadEach(c.ctx, q, Tk.Children.LimitEach(1), owners); err != nil {
+			t.Fatal(err)
+		}
+		check("LimitEach(1)", got, 1)
+		// Ordered by the joined invoice's number, descending: invoice 5 before invoice 1.
+		byInvoice := tg.db.Query[testmodel.Ticket]().Join(Tk.Invoice).OrderBy(Tk.Invoice.By(testmodel.Invoices.Number.Desc()), Tk.ID.Asc())
+		if got, err = velox.LoadEach(c.ctx, byInvoice, Tk.Children.LimitEach(5), owners); err != nil {
+			t.Fatal(err)
+		}
+		// The database's own order of the numbers: its collation is not Go's.
+		sorted, err := tg.db.Query[testmodel.Invoice]().OrderBy(testmodel.Invoices.Number.Desc()).Unbounded().All(c.ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rank := map[int64]int{}
+		for i, inv := range sorted {
+			rank[inv.ID] = i
+		}
+		for i, kids := range got {
+			if len(kids) != len(want[i]) {
+				t.Errorf("by invoice: owner %d has %d children, want %d", owners[i].ID, len(kids), len(want[i]))
+			}
+			for k := 1; k < len(kids); k++ {
+				a, _ := kids[k-1].Invoice.Get()
+				b, _ := kids[k].Invoice.Get()
+				if rank[a.ID] > rank[b.ID] {
+					t.Errorf("by invoice: owner %d: %s before %s", owners[i].ID, a.Number, b.Number)
+				}
+			}
+		}
+		counts, err := velox.CountEach(c.ctx, q, Tk.Children, owners)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, w := range want {
+			if counts[i] != int64(len(w)) {
+				t.Errorf("CountEach: owner %d has %d, want %d", owners[i].ID, counts[i], len(w))
+			}
+		}
+	})
 }

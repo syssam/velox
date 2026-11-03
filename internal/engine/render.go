@@ -169,6 +169,36 @@ func (w *writer) joinColumns() {
 	}
 }
 
+// joinColumnAlias is the name a joined column goes by inside a per-owner
+// window, whose derived table could not hold two columns of one name.
+func joinColumnAlias(join, col int) string { return joinAlias(join+1) + "_" + strconv.Itoa(col) }
+
+// joinColumnsAs is joinColumns for the inside of a window: each column under
+// its own name, which the outer query reads.
+func (w *writer) joinColumnsAs() {
+	for i := range w.joins {
+		t := w.joins[i].Link.Target
+		for c := range t.Columns {
+			w.str(", ")
+			w.ident(joinAlias(i + 1))
+			w.str(".")
+			w.ident(t.Columns[c].Name)
+			w.str(" AS ")
+			w.ident(joinColumnAlias(i, c))
+		}
+	}
+}
+
+// joinColumnsOuter reads, in the query around a window, the columns joinColumnsAs named.
+func (w *writer) joinColumnsOuter() {
+	for i := range w.joins {
+		for c := range w.joins[i].Link.Target.Columns {
+			w.str(", ")
+			w.ident(joinColumnAlias(i, c))
+		}
+	}
+}
+
 // joinClauses writes the joins after the FROM: each target under its alias,
 // on the owner's key equal to the target's, and the target's Read conditions.
 // A condition of a left join belongs here and not in the WHERE: a row without
@@ -362,10 +392,15 @@ func (w *writer) eachSelect(st *Statement) {
 		return
 	}
 	window, join := c.windowed(w.in), c.Join != nil
+	// A joined relation: its columns follow the target's own, and every column
+	// is named by its table.
+	w.joins = st.Joins
+	qual := join || len(st.Joins) > 0
 	if window {
 		w.reserved(st.Columns)
 		w.str("SELECT ")
 		w.selectColumns(st.Columns, false)
+		w.joinColumnsOuter()
 		if join {
 			w.str(", ")
 			w.ident(eachOwner)
@@ -373,7 +408,12 @@ func (w *writer) eachSelect(st *Statement) {
 		w.str(" FROM (")
 	}
 	w.str("SELECT ")
-	w.selectColumns(st.Columns, join)
+	w.selectColumns(st.Columns, qual)
+	if window {
+		w.joinColumnsAs()
+	} else {
+		w.joinColumns()
+	}
 	if join {
 		w.str(", ")
 		w.eachKey(c)
@@ -383,7 +423,7 @@ func (w *writer) eachSelect(st *Statement) {
 	if window {
 		w.str(", ROW_NUMBER() OVER (PARTITION BY ")
 		w.eachKey(c)
-		w.orderBy(st.OrderBy, join)
+		w.orderBy(st.OrderBy, qual)
 		w.str(") AS ")
 		w.ident(eachRank)
 	}
@@ -398,7 +438,7 @@ func (w *writer) eachSelect(st *Statement) {
 		w.str(" ORDER BY ")
 		w.ident(eachRank)
 	} else {
-		w.orderBy(st.OrderBy, join)
+		w.orderBy(st.OrderBy, qual)
 	}
 	w.selectTail(st)
 }
@@ -407,6 +447,7 @@ func (w *writer) eachSelect(st *Statement) {
 // GROUP BY <owner key>, a row for each owner with rows. An ordering a Rewrite
 // hook sets is not written: the rows are counts, one per owner.
 func (w *writer) eachCount(st *Statement) {
+	w.joins = st.Joins
 	w.str("SELECT ")
 	w.eachKey(st.Each)
 	w.str(", COUNT(*)")
@@ -428,7 +469,15 @@ func (w *writer) reserved(cs []int) {
 		if cs != nil {
 			c = cs[i]
 		}
-		if name := w.in.Columns[c].Name; name == eachRank || name == eachOwner {
+		name := w.in.Columns[c].Name
+		for j := range w.joins {
+			for k := range w.joins[j].Link.Target.Columns {
+				if name == joinColumnAlias(j, k) {
+					w.fail(fmt.Errorf("velox: %s: the column %q has the name of an alias velox gives a joined column in a per-owner read", w.in.Name, name))
+				}
+			}
+		}
+		if name == eachRank || name == eachOwner {
 			w.fail(fmt.Errorf("velox: %s: the column %q has the name of an alias velox gives a per-owner read; it cannot be read with Rel.LimitEach", w.in.Name, name))
 		}
 	}
@@ -479,13 +528,14 @@ func (w *writer) eachFrom(st *Statement) {
 		w.str(".")
 		w.col(int32(c.Target))
 	}
+	w.joinClauses()
 	sep := " WHERE "
 	if !keysWritten {
 		w.str(sep)
 		w.eachKeys(c, func() { w.eachKey(c) })
 		sep = " AND "
 	}
-	w.qualify = c.Join != nil
+	w.qualify = c.Join != nil || len(w.joins) > 0
 	for _, p := range st.Where {
 		w.str(sep)
 		w.pred(p.n)
@@ -542,6 +592,10 @@ func (w *writer) eachKey(c *EachClause) {
 		w.str(".")
 		w.ident(c.Join.Columns[c.JoinOwner].Name)
 		return
+	}
+	if len(w.joins) > 0 {
+		w.table()
+		w.str(".")
 	}
 	w.col(int32(c.Column))
 }

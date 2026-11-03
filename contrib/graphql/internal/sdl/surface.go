@@ -151,7 +151,12 @@ func (g Getter) JSON() bool { return g.Returns == "veloxgql.JSON" }
 // OrderValue is a value of XOrderField: the field it orders by.
 type OrderValue struct {
 	Value string // the enum value, as "NAME"
-	Field int    // the index of the field in Entity.Fields
+	Field int    // the index of the field in Entity.Fields, or in Target.Fields when Edge is set
+	// Edge is the index in Entity.Edges, plus one, of the to-one edge whose
+	// target's field this orders by (graphql.OrderVia); 0 for the entity's own.
+	Edge int
+	// Target is that edge's target entity; nil when Edge is 0.
+	Target *plugin.Entity
 }
 
 // WhereKind is what a field of a where input does.
@@ -233,7 +238,7 @@ func Build(m *plugin.Model) (*Surface, error) {
 		slices.SortStableFunc(t.Enums, func(a, b Enum) int { return a.Field - b.Field })
 		if o.order != nil {
 			for i, v := range o.order.values {
-				t.Order = append(t.Order, OrderValue{Value: v, Field: o.order.fields[i]})
+				t.Order = append(t.Order, OrderValue{Value: v, Field: o.order.fields[i], Edge: o.order.edges[i], Target: o.order.targets[i]})
 			}
 		}
 		for _, ef := range o.edges {

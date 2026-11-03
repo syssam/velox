@@ -56,9 +56,10 @@ func resolveJoins(st *Statement) error {
 }
 
 // guardJoins checks the joins of a SELECT as the caller built it. A join adds
-// columns to every row, which a count's, an aggregate's and a per-owner read's
-// rows have none to hold; a locking read would lock the joined rows, and
-// PostgreSQL refuses to lock the nullable side of a left join.
+// columns to every row, which an aggregate's rows have none to hold, and a
+// per-owner read through a join table puts the owner's key after them; a locking
+// read would lock the joined rows, and PostgreSQL refuses to lock the nullable
+// side of a left join.
 func guardJoins(st *Statement) error {
 	if len(st.Joins) == 0 {
 		return nil
@@ -67,8 +68,8 @@ func guardJoins(st *Statement) error {
 	switch {
 	case st.Aggregate != 0 || st.GroupBy != 0:
 		return fmt.Errorf("velox: %s: an aggregate reads no joined relation; Count and Exists do", name)
-	case st.Each != nil:
-		return fmt.Errorf("velox: %s: a per-owner read joins no relation", name)
+	case st.Each != nil && st.Each.Join != nil:
+		return fmt.Errorf("velox: %s: a per-owner read through a join table joins no relation", name)
 	case st.Lock != 0 || st.LockWait != 0:
 		return fmt.Errorf("velox: %s: a locking read joins no relation; lock the rows in one query and read the relation in another", name)
 	}

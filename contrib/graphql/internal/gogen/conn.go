@@ -194,12 +194,18 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("func %s(o *%sOrder) (%s.OrderTerm[%s], error) {", termFunc(t), n, impl, e.Name)
 	f.p("\tswitch o.Field {")
 	for _, v := range t.Order {
-		fd := e.Fields[v.Field]
-		term, err := r.term(f, e, fd, "string(o.Field)", "o.Direction", "\t\t")
+		fd, via := orderField(e, v)
+		var term string
+		var err error
+		if v.Edge == 0 {
+			term, err = r.term(f, e, fd, "string(o.Field)", "o.Direction", "\t\t")
+		} else {
+			term, err = r.viaTerm(f, e, v, fd, "string(o.Field)", "o.Direction", "\t\t")
+		}
 		if err != nil {
 			return err
 		}
-		f.p("\tcase %sOrderField%s:", n, fd.GoName)
+		f.p("\tcase %sOrderField%s%s:", n, via, fd.GoName)
 		f.p("\t\treturn %s, nil", term)
 	}
 	f.p("\t}")
@@ -326,8 +332,16 @@ func (r *renderer) writeSelects(f *file, t *sdl.Type) {
 	}
 	var cases []string
 	for _, v := range t.Order {
+		if v.Edge != 0 {
+			continue // the join reads the target's columns, and no column of the entity's
+		}
 		fd := e.Fields[v.Field]
 		cases = append(cases, fmt.Sprintf("o.Field == %sOrderField%s && !q.Selects(%s.%s)", n, fd.GoName, e.Handles, fd.GoName))
+	}
+	if len(cases) == 0 {
+		f.p("\t\t_ = o")
+		f.p("\t}")
+		return
 	}
 	f.p("\t\tswitch {")
 	f.p("\t\tcase %s:", strings.Join(cases, ",\n\t\t\t"))
@@ -370,7 +384,7 @@ func (r *renderer) writeColumns(f *file, t *sdl.Type) {
 		}
 	}
 	for _, v := range t.Order {
-		if !in(v.Field) {
+		if v.Edge == 0 && !in(v.Field) {
 			base = append(base, v.Field)
 		}
 	}
@@ -527,4 +541,49 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 	}
 	f.p("")
 	return nil
+}
+
+// orderField is the field an order value orders by, and the prefix of its
+// Go names: the edge's name for a field of an edge's target ("Author" for
+// AuthorName), so that a target's field and the entity's own do not clash.
+func orderField(e *plugin.Entity, v sdl.OrderValue) (fd *plugin.Field, via string) {
+	if v.Edge == 0 {
+		return e.Fields[v.Field], ""
+	}
+	return v.Target.Fields[v.Field], e.Edges[v.Edge-1].GoName
+}
+
+// viaTerm is the expression of a gqlimpl.JoinedTerm of the field fd of the
+// target of e's edge v.Edge, named field and in the direction dir, at indent.
+func (r *renderer) viaTerm(f *file, e *plugin.Entity, v sdl.OrderValue, fd *plugin.Field, field, dir, indent string) (string, error) {
+	ed := e.Edges[v.Edge-1]
+	t := v.Target
+	base, err := termBase(f, t, fd)
+	if err != nil {
+		return "", err
+	}
+	elem := cmp.Or(fd.ElemType, base)
+	conv := elem != base
+	if conv {
+		if err := r.converts(t, fd, base); err != nil {
+			return "", err
+		}
+		if elem, err = r.qualify(f, t, fd, elem, fd.PkgPath); err != nil {
+			return "", err
+		}
+	}
+	to := func(typ, x string) string {
+		if conv {
+			return typ + "(" + x + ")"
+		}
+		return x
+	}
+	if fd.Pointer {
+		return "", fmt.Errorf("schema %s, edge %s: a connection orders by %s.%s, and its Go field is a pointer, which only a Nillable field is", e.Name, ed.Name, t.Name, fd.Name)
+	}
+	rel := e.Handles + "." + ed.GoName
+	handle := t.Handles + "." + fd.GoName
+	get := fmt.Sprintf("func(x *%s) %s { return %s }", t.Name, base, to(base, "x."+fd.GoName))
+	set := fmt.Sprintf("func(x *%s, v %s) { x.%s = %s }", t.Name, base, fd.GoName, to(elem, "v"))
+	return fmt.Sprintf("%s.JoinedTerm(%s, %s, %s, %s.Asc(), %s.Desc(),\n%s\t%s,\n%s\t%s)", f.gqlimpl(), field, dir, rel, handle, handle, indent, get, indent, set), nil
 }

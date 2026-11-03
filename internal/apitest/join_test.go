@@ -335,3 +335,29 @@ func TestJoinAfterARowWithoutAJoinedRowIsRefused(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// Fill gives a hand-built row the joined entity After pages from.
+func TestJoinFillBuildsTheRowAfterPagesFrom(t *testing.T) {
+	e := &fakeconn.Exec{Results: [][][]any{{itemInvoiceRow(itemRow(12, 3, "C", 3), invoiceRow(3))}}}
+	db := openFake(velox.Postgres, e)
+	after := &testmodel.Item{ID: 11}
+	if err := It.Invoice.Fill(after, &testmodel.Invoice{Number: "INV-2"}); err != nil {
+		t.Fatal(err)
+	}
+	q := db.Query[testmodel.Item]().Join(It.Invoice).OrderBy(It.Invoice.By(I.Number.Desc()), It.ID.Asc()).Limit(2)
+	if _, err := q.After(after).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(e.ArgLog[0]); got != "[INV-2 INV-2 11 2]" {
+		t.Errorf("args %s", got)
+	}
+	if v, loaded := after.Invoice.Get(); !loaded || v.Number != "INV-2" {
+		t.Errorf("the field holds %v, %v", v, loaded)
+	}
+	if v, ok := It.Invoice.Filled(after); !ok || v.Number != "INV-2" {
+		t.Errorf("Filled: %v, %v", v, ok)
+	}
+	if v, ok := It.Invoice.Filled(&testmodel.Item{}); ok || v != nil {
+		t.Errorf("Filled of a row with none: %v, %v", v, ok)
+	}
+}

@@ -295,6 +295,10 @@ func postTermGQL(o *PostOrder) (gqlimpl.OrderTerm[Post], error) {
 		return gqlimpl.Term(string(o.Field), o.Direction, Posts.Views.Asc(), Posts.Views.Desc(),
 			func(x *Post) int { return x.Views },
 			func(x *Post, v int) { x.Views = v }), nil
+	case PostOrderFieldAuthorName:
+		return gqlimpl.JoinedTerm(string(o.Field), o.Direction, Posts.Author, Users.Name.Asc(), Users.Name.Desc(),
+			func(x *User) string { return x.Name },
+			func(x *User, v string) { x.Name = v }), nil
 	}
 	return gqlimpl.OrderTerm[Post]{}, gqlimpl.InputErrorf("PostOrder: %q is not a value of PostOrderField", o.Field)
 }
@@ -317,12 +321,14 @@ const (
 	PostOrderFieldTitle PostOrderField = "TITLE"
 	// PostOrderFieldViews orders by the field views.
 	PostOrderFieldViews PostOrderField = "VIEWS"
+	// PostOrderFieldAuthorName orders by the field author.name.
+	PostOrderFieldAuthorName PostOrderField = "AUTHOR_NAME"
 )
 
 // IsValid reports whether o is a value of PostOrderField.
 func (o PostOrderField) IsValid() bool {
 	switch o {
-	case "TITLE", "VIEWS":
+	case "TITLE", "VIEWS", "AUTHOR_NAME":
 		return true
 	}
 	return false
@@ -341,7 +347,7 @@ func (o PostOrderField) MarshalGQL(w io.Writer) {
 func (o *PostOrderField) UnmarshalGQL(v any) error {
 	s, _ := v.(string)
 	if !PostOrderField(s).IsValid() {
-		return gqlimpl.InputErrorf("PostOrderField must be TITLE or VIEWS")
+		return gqlimpl.InputErrorf("PostOrderField must be TITLE, VIEWS or AUTHOR_NAME")
 	}
 	*o = PostOrderField(s)
 	return nil

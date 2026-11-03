@@ -87,7 +87,7 @@
       "edges": [
         {"name": "author", "go_name": "Author", "target": "User", "ref": "posts", "kind": "M2O", "unique": true, "required": true, "inverse": true, "field": "author_id", "field_on": "Post", "owns_key": true,
           "comment": "The user who wrote the post.",
-          "annotations": {"graphql": {"field_name": "writer", "where_edge": true}}},
+          "annotations": {"graphql": {"field_name": "writer", "where_edge": true, "order_via": [{"field": "name", "value": "AUTHOR_NAME"}]}}},
         {"name": "likes", "go_name": "Likes", "target": "Like", "ref": "post", "kind": "O2M", "field": "post_id", "field_on": "Like",
           "annotations": {"graphql": {"connection": false}}},
         {"name": "related", "go_name": "Related", "target": "Post", "ref": "related_by", "kind": "M2M", "join": "PostRelated",

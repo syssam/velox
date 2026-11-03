@@ -818,3 +818,78 @@ func TestSelects(t *testing.T) {
 		}
 	}
 }
+
+// A per-owner read can join a to-one relation: the rows' relation is filled from the
+// same statement, in the ranking window or without one, and CountEach counts the
+// joined rows. The owner's invoice is the joined row here, so what the join changes
+// is the condition: an Is that leaves out an owner's rows leaves out its list.
+func TestLoadEachJoin(t *testing.T) {
+	db, log := eachDB(t)
+	owners := eachInvoices(t, db, 2, 1, 3, 1)
+	log.reset()
+	numbers := func(lists [][]testmodel.Item) [][]string {
+		out := [][]string{}
+		for _, items := range lists {
+			ns := []string{}
+			for _, it := range items {
+				inv, ok := it.Invoice.Get()
+				if !ok || inv == nil {
+					t.Fatalf("item %s: invoice not joined", it.SKU)
+				}
+				ns = append(ns, it.SKU+":"+inv.Number)
+			}
+			out = append(out, ns)
+		}
+		return out
+	}
+	q := db.Query[testmodel.Item]().Join(It.Invoice).OrderBy(It.Invoice.By(I.Number.Desc()), It.SKU.Desc())
+	got, err := velox.LoadEach(ctx, q, I.Items.LimitEach(2), owners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := [][]string{{"D:N2"}, {"C:N1", "B:N1"}, {}, {"C:N1", "B:N1"}}; !reflect.DeepEqual(numbers(got), want) {
+		t.Errorf("with a window: got %v, want %v", numbers(got), want)
+	}
+	st := log.of("testmodel.Item")
+	if len(st) != 1 || !strings.Contains(st[0], "ROW_NUMBER() OVER (PARTITION BY \"items\".\"invoice_id\" ORDER BY \"vxj1\".\"number\" DESC") ||
+		!strings.Contains(st[0], `"vxj1"."number" AS "vxj1_4"`) || !strings.Contains(st[0], `"vxj1_4"`) {
+		t.Errorf("the statement: %q", st)
+	}
+	// With no limit there is no window.
+	log.reset()
+	got, err = velox.LoadEach(ctx, q, I.Items, owners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := [][]string{{"D:N2"}, {"C:N1", "B:N1", "A:N1"}, {}, {"C:N1", "B:N1", "A:N1"}}; !reflect.DeepEqual(numbers(got), want) {
+		t.Errorf("without a limit: got %v, want %v", numbers(got), want)
+	}
+	if st := log.of("testmodel.Item"); len(st) != 1 || strings.Contains(st[0], "ROW_NUMBER") {
+		t.Errorf("the statement: %q", st)
+	}
+	// A condition on the joined row leaves out the owner's rows.
+	only := db.Query[testmodel.Item]().Join(It.Invoice).Where(It.Invoice.Is(I.Number.NEQ("N2"))).OrderBy(It.SKU.Asc())
+	if got, err = velox.LoadEach(ctx, only, I.Items.LimitEach(5), owners); err != nil {
+		t.Fatal(err)
+	}
+	if want := [][]string{{}, {"A:N1", "B:N1", "C:N1"}, {}, {"A:N1", "B:N1", "C:N1"}}; !reflect.DeepEqual(numbers(got), want) {
+		t.Errorf("with Is: got %v, want %v", numbers(got), want)
+	}
+	// CountEach counts the joined rows.
+	counts, err := velox.CountEach(ctx, only, I.Items, owners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []int64{0, 3, 0, 3}; !reflect.DeepEqual(counts, want) {
+		t.Errorf("CountEach: %v, want %v", counts, want)
+	}
+	// A relation of the joined entity loads as With loads it.
+	with := db.Query[testmodel.Item]().Join(It.Invoice.With(I.Items)).OrderBy(It.SKU.Asc())
+	if got, err = velox.LoadEach(ctx, with, I.Items.LimitEach(1), owners[:1]); err != nil {
+		t.Fatal(err)
+	}
+	inv, _ := got[0][0].Invoice.Get()
+	if items, ok := inv.Items.Get(); !ok || len(items) != 1 || items[0].SKU != "D" {
+		t.Errorf("the joined invoice's items: %v %v", items, ok)
+	}
+}

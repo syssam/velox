@@ -105,6 +105,9 @@ type Annotation struct {
 	// OrderUnguarded allows OrderField on a field with an application
 	// directive, which guards neither the cursors nor the order.
 	OrderUnguarded bool `json:"order_unguarded,omitempty"`
+	// OrderVia makes columns of a to-one edge's target orderable, on the
+	// connections to the edge's entity.
+	OrderVia []ViaOrder `json:"order_via,omitempty"`
 	// WhereOps is the predicates the field offers.
 	WhereOps WhereOp `json:"where_ops,omitempty"`
 	// WhereEdge allows the has and hasWith filters on an edge.
@@ -127,13 +130,22 @@ type Annotation struct {
 	Directives []Directive `json:"directives,omitempty"`
 }
 
+// ViaOrder is one column of an edge's target that connections to the edge's
+// entity can be ordered by: the target's field, under this enum value name.
+type ViaOrder struct {
+	// Field is the schema name of the target's field, such as "name".
+	Field string `json:"field"`
+	// Value is the XOrderField enum value, such as "AUTHOR_NAME".
+	Value string `json:"value"`
+}
+
 // Name returns "graphql".
 func (Annotation) Name() string { return "graphql" }
 
 // Merge combines the annotation with other, an earlier one of the same element
 // (velox's loader calls later.Merge(earlier)), field by field:
 //   - bitmasks (Skip, WhereOps) are ORed;
-//   - lists (Mutations, Directives) are other's followed by the receiver's,
+//   - lists (Mutations, Directives, OrderVia) are other's followed by the receiver's,
 //     and a mutation kind listed twice is kept once;
 //   - EnumValues keys are united;
 //   - the receiver's non-zero scalars and non-nil pointers win over other's.
@@ -159,6 +171,7 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		FieldName:      pick(a.FieldName, o.FieldName),
 		OrderField:     pick(a.OrderField, o.OrderField),
 		OrderUnguarded: o.OrderUnguarded || a.OrderUnguarded,
+		OrderVia:       slices.Concat(o.OrderVia, a.OrderVia),
 		WhereOps:       o.WhereOps | a.WhereOps,
 		WhereEdge:      o.WhereEdge || a.WhereEdge,
 		Connection:     pickPtr(a.Connection, o.Connection),
@@ -259,6 +272,22 @@ func OrderField(name string) Annotation { return Annotation{OrderField: name} }
 // the order of the nodes would reveal them. Without OrderUnguarded the plugin
 // refuses the pair. It applies to a field with OrderField only.
 func OrderUnguarded() Annotation { return Annotation{OrderUnguarded: true} }
+
+// OrderVia makes a field of a to-one edge's target orderable, on the
+// connections to the edge's entity, under this enum value name:
+//
+//	edge.To("author", User.Type).Unique().Annotations(graphql.OrderVia("name", "AUTHOR_NAME"))
+//
+// orderBy: {field: AUTHOR_NAME} then orders a Post connection by its author's name,
+// paged by cursors that hold it. The connection reads the edge with an inner JOIN, so
+// a row whose target is missing, or that the target's Read policy hides from the
+// caller, is not in the connection, nor in its totalCount, when it is ordered so. The
+// plugin refuses it on a to-many edge, for a nullable, sensitive, json or bytes field
+// or one the type leaves out, and for a field or an edge with an application directive,
+// which guards neither the cursors nor the order. Call it once for each field.
+func OrderVia(field, value string) Annotation {
+	return Annotation{OrderVia: []ViaOrder{{Field: field, Value: value}}}
+}
 
 // WhereOps offers the field these predicates in the entity's where input; with
 // no arguments, the defaults for the field's type. Two WhereOps annotations on

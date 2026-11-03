@@ -19,6 +19,27 @@ type joinSet struct {
 	bindOwner func(cols []int, dst []any, owner unsafe.Pointer)
 }
 
+// scanner is the joinSet as the engine reads rows with it: only the joins' columns,
+// the entity's own being scanned by the engine's kit.
+func (s *joinSet) scanner() *engine.JoinScan {
+	if s == nil {
+		return nil
+	}
+	return &engine.JoinScan{Width: s.width(), Bind: func(dst []any) func(unsafe.Pointer) {
+		attach := make([]func(unsafe.Pointer), len(s.fills))
+		off := 0
+		for i := range s.fills {
+			attach[i] = s.fills[i].bind(dst[off : off+s.fills[i].width])
+			off += s.fills[i].width
+		}
+		return func(owner unsafe.Pointer) {
+			for _, f := range attach {
+				f(owner)
+			}
+		}
+	}}
+}
+
 // joinFill reads one join's columns out of a row: the columns follow the
 // entity's own, in the order of the query's joins.
 type joinFill struct {
@@ -81,7 +102,7 @@ func (s *joinSet) scan(r engine.Rows, cols []int, rootN int, dst []any, owner un
 // Load it with With, or test it with Has or HasWhere. A join reads all of the
 // target's columns; Columns and Omit act on the entity's own. The target's
 // Read policy is in the join's ON clause. A query joins a relation once, and
-// a locking read and an aggregate cannot join. After pages over a joined column
+// a locking read, an aggregate and a per-owner read through a join table cannot join. After pages over a joined column
 // from the joined entity of the row it is given, which must have been read with
 // the same join and have one. With still loads other relations in its own queries.
 func (q Query[E]) Join[T any](r Rel[E, T]) Query[E] { return q.join(r, false) }
@@ -187,11 +208,46 @@ func (r Rel[E, T]) Is[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 
 // By is the ordering o of the joined relation's entity, as an ordering of the
 // query's: OrderBy(rel.By(gen.Posts.CreatedAt.Desc())). The query must Join or
-// LeftJoin r. After cannot page over it.
+// LeftJoin r. After pages over it from the row's joined entity (see Join).
 func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E] {
 	t := o.t
 	t.Rel = r.I + 1
 	return Order[E]{t}
+}
+
+// Fill stores t as the entity of r's field in owner, loaded, as a Join does
+// when it reads a row: the row After pages from needs its joined entity, and
+// code that builds such a row (a cursor's) sets one. Only the columns After
+// orders by need a value. It fails when r is not a relation of E held in a field.
+func (r Rel[E, T]) Fill[_ Lazy[T]](owner *E, t *T) error {
+	m, err := metaOf[E]()
+	if err != nil {
+		return err
+	}
+	off, err := engine.RelOffset(m.info, r.I)
+	if err != nil {
+		return err
+	}
+	h := (*engine.Holder)(unsafe.Add(unsafe.Pointer(owner), off))
+	h.Loaded = true
+	h.V = t
+	return nil
+}
+
+// Filled returns the entity of r's field in owner, and whether it holds one: a row
+// read with Join has it, and so has one Fill was given.
+func (r Rel[E, T]) Filled[_ Lazy[T]](owner *E) (*T, bool) {
+	m, err := metaOf[E]()
+	if err != nil {
+		return nil, false
+	}
+	off, err := engine.RelOffset(m.info, r.I)
+	if err != nil {
+		return nil, false
+	}
+	h := (*engine.Holder)(unsafe.Add(unsafe.Pointer(owner), off))
+	t, _ := h.V.(*T)
+	return t, t != nil
 }
 
 // nullProbe scans a joined column of a left join, counting NULLs: a row whose

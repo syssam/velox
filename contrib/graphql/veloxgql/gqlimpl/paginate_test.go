@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -513,4 +514,123 @@ func TestConnectionRefusesOrderedQuery(t *testing.T) {
 	if ran := st.take(); len(ran) != 0 {
 		t.Errorf("ran %v", ran)
 	}
+}
+
+// ownerNameOrder orders children by their owner's name: a joined term.
+func ownerNameOrder(dir veloxgql.OrderDirection) []gqlimpl.OrderTerm[child] {
+	return []gqlimpl.OrderTerm[child]{gqlimpl.JoinedTerm("OWNER_NAME", dir, children.Owner, owners.Name.Asc(), owners.Name.Desc(),
+		func(x *owner) string { return x.Name }, func(x *owner, v string) { x.Name = v })}
+}
+
+// A joined term orders by the related row's column, pages by cursors that hold
+// it, and leaves out a row with no related row, from the page and the count.
+func TestJoinedTermPages(t *testing.T) {
+	db, _, _ := edgeDB(t)
+	ctx := context.Background()
+	page := func(args gqlimpl.Args, dir veloxgql.OrderDirection) (*gqlimpl.Page[child], int) {
+		t.Helper()
+		c, err := gqlimpl.NewConnection(ctx, db.Query[child](), "Child", args, ownerNameOrder(dir), childKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := c.Page(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, err := c.TotalCount(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p, n
+	}
+	asc, desc := veloxgql.OrderDirectionAsc, veloxgql.OrderDirectionDesc
+
+	// Children 1-4 are owner a's, 5 and 6 owner b's; 7 has no owner.
+	all, n := page(gqlimpl.Args{}, asc)
+	if got := childIDs(all.Rows); !reflect.DeepEqual(got, []int64{1, 2, 3, 4, 5, 6}) || n != 6 {
+		t.Errorf("ascending: %v, totalCount %d", got, n)
+	}
+	if all, _ = page(gqlimpl.Args{}, desc); !reflect.DeepEqual(childIDs(all.Rows), []int64{5, 6, 1, 2, 3, 4}) {
+		t.Errorf("descending: %v", childIDs(all.Rows))
+	}
+
+	// Forward by twos, each page after the last cursor of the one before.
+	var got []int64
+	args := gqlimpl.Args{First: new(2)}
+	for range 4 {
+		p, _ := page(args, desc)
+		got = append(got, childIDs(p.Rows)...)
+		if !p.Info.HasNextPage {
+			break
+		}
+		args.After = p.Info.EndCursor
+		if f := args.After.Terms[0].Field; f != "OWNER_NAME" {
+			t.Fatalf("the cursor's field is %q", f)
+		}
+		if v := args.After.Terms[0].Value; v != "a" && v != "b" {
+			t.Fatalf("the cursor's value is %v, the owner's name", v)
+		}
+	}
+	if !reflect.DeepEqual(got, []int64{5, 6, 1, 2, 3, 4}) {
+		t.Errorf("descending by twos: %v", got)
+	}
+
+	// Backward from the end, through a cursor that crossed the wire as JSON.
+	last, _ := page(gqlimpl.Args{Last: new(2)}, asc)
+	if got := childIDs(last.Rows); !reflect.DeepEqual(got, []int64{5, 6}) || !last.Info.HasPreviousPage {
+		t.Errorf("last 2: %v %+v", got, last.Info)
+	}
+	enc, err := veloxgql.EncodeCursor(*last.Info.StartCursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire veloxgql.Cursor
+	if err := wire.UnmarshalGQLContext(ctx, enc); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := page(gqlimpl.Args{Last: new(2), Before: &wire}, asc); !reflect.DeepEqual(childIDs(p.Rows), []int64{3, 4}) {
+		t.Errorf("last 2 before 5: %v", childIDs(p.Rows))
+	}
+
+	// The same relation named by two terms is joined once.
+	two := append(ownerNameOrder(asc), gqlimpl.JoinedTerm("OWNER_AGE", asc, children.Owner, owners.Age.Asc(), owners.Age.Desc(),
+		func(x *owner) int64 { return x.Age }, func(x *owner, v int64) { x.Age = v }))
+	c, err := gqlimpl.NewConnection(ctx, db.Query[child](), "Child", gqlimpl.Args{}, two, childKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, err := c.Page(ctx); err != nil || len(p.Rows) != 6 {
+		t.Errorf("two terms of one relation: %v %v", err, p)
+	}
+}
+
+// The connection of an edge, read for every parent in one statement, orders by a
+// joined column too: each parent's page is what its own query gives.
+func TestJoinedTermInABatchedEdgeConnection(t *testing.T) {
+	db, _, log := edgeDB(t)
+	ctx := operation(t, db, childrenQuery)
+	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+	log.take("owners")
+	ectx := field(t, ctx, "owners", "edges", "node", "children")
+	args := gqlimpl.Args{First: new(2)}
+	order := ownerNameOrder(veloxgql.OrderDirectionDesc)
+	var loads, counts []string
+	for _, x := range xs {
+		got, n := childPage(t, ectx, db, x, db.Query[child](), args, order)
+		for _, s := range log.take("children") {
+			if strings.Contains(s, "COUNT(") {
+				counts = append(counts, s)
+			} else {
+				loads = append(loads, s)
+			}
+		}
+		want, wn := ownPage(t, db, x, db.Query[child](), args, order)
+		log.take("children")
+		samePage(t, x.Name, got, want)
+		if n != wn {
+			t.Errorf("%s: totalCount %d, want %d", x.Name, n, wn)
+		}
+	}
+	oneEach(t, "the load", loads, "ROW_NUMBER()")
+	oneEach(t, "the count", counts, "GROUP BY")
 }

@@ -25,10 +25,20 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   fill its `One` field from the same row. `Rel.Is` and `Rel.By` are a condition and an
   ordering on the joined row's columns; the target's Read policy is in the join's ON
   clause, so a join shows nothing a query on the target would not. A to-many relation is
-  refused (use `With` or `HasWhere`), as are an aggregate, a group, a per-owner read and a
-  locking read. `After` pages over a joined column. `Join(rel.With(…))` loads relations of the
+  refused (use `With` or `HasWhere`), as are an aggregate, a group, a per-owner read through a
+  join table and a locking read. `LoadEach` and `CountEach` read a joined query's rows for each
+  owner, in one statement, and `LimitEach` ranks the rows the join keeps. `After` pages over a joined column. `Join(rel.With(…))` loads relations of the
   joined entity. `Statement.Joins` lists the joins; a
   Rewrite hook may not change them. See `docs/decisions/0031-to-one-joins.md`.
+- `graphql.OrderVia(field, value)`, an annotation of a to-one edge: connections to the edge's
+  entity can be ordered by a column of its target (`orderBy: {field: AUTHOR_NAME}`), joined in
+  the page query and the count, and paged by cursors that hold the value. It is an inner join: a
+  row whose target is missing or hidden by the target's Read policy is not in the connection.
+  The plugin refuses it on a to-many edge and for a nullable, sensitive, json or bytes field, or a
+  field or edge with an application directive. The connection of an edge (`User.feed`), read for
+  every parent in one statement, orders by it too. `gqlimpl.JoinedTerm` is the term;
+  `Rel.Fill` and `Rel.Filled` set and read a joined entity. See
+  `docs/decisions/0031-to-one-joins.md`.
 - `schema.Scoped(key)`, a field annotation that marks the column an entity is scoped by.
   velox-gen writes the key (`OrgKey` for `"org"`) and each entity's scope into
   `scope_velox.go` and binds the scope around the entity's own `Policy` and `Hooks`, so a

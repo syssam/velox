@@ -61,7 +61,7 @@ func (Post) Fields() []schema.Field {
 
 func (Post) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id"),
+		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id").Annotations(graphql.OrderVia("name", "AUTHOR_NAME")),
 	}
 }
 
@@ -267,7 +267,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"input AccountOrder {\n",
 		"  direction: OrderDirection! = ASC\n  \"\"\"The field to order by.\"\"\"\n  field: AccountOrderField!\n",
 		"enum AccountOrderField {\n  NAME\n}\n",
-		"enum PostOrderField {\n  TITLE\n}\n",
+		"enum PostOrderField {\n  TITLE\n  AUTHOR_NAME\n}\n",
 		"  displayNameHasSuffix: String\n  hasPosts: Boolean\n  hasPostsWith: [PostWhereInput!]\n  hasGroups: Boolean\n}\n",
 		"  or: [PostWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  authorID: ID\n  authorIDNEQ: ID\n  authorIDIn: [ID!]\n  authorIDNotIn: [ID!]\n  title: String\n",
 		"type Mutation {\n",
@@ -514,6 +514,70 @@ func keys[E any](t *testing.T, ctx context.Context, c interface {
 		out = append(out, key(e))
 	}
 	return out, info
+}
+
+// TestConnectionOrderedByAnEdge orders posts by their author's name: one JOIN,
+// paged by cursors that hold the name, and cid, whose org the caller's scope hides,
+// has no posts in the connection, nor in its totalCount.
+func TestConnectionOrderedByAnEdge(t *testing.T) {
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(ddl); err != nil {
+		t.Fatal(err)
+	}
+
+	db := velox.Open(velox.SQLite, sqlDB)
+	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
+	by := func(d veloxgql.OrderDirection) *gen.PostOrder {
+		return &gen.PostOrder{Direction: d, Field: gen.PostOrderFieldAuthorName}
+	}
+	// ann's posts 1, 2 and 4, then bob's 3; post 5 is cid's, in org 8.
+	ps, err := gen.PostsConnection(ctx, nil, intp(2), nil, nil, by(veloxgql.OrderDirectionAsc), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, info := keys(t, ctx, ps, ps.Edges, post)
+	if !slices.Equal(got, []int64{1, 2}) || !info.HasNextPage {
+		t.Fatalf("by author ASC, first 2: %v %+v", got, info)
+	}
+	if n, err := ps.TotalCount(ctx); err != nil || n != 4 {
+		t.Errorf("totalCount %d %v, want 4: post 5's author is hidden", n, err)
+	}
+	var after veloxgql.Cursor
+	if s, err := veloxgql.EncodeCursor(*info.EndCursor); err != nil {
+		t.Fatal(err)
+	} else if err := after.UnmarshalGQLContext(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	if ps, err = gen.PostsConnection(ctx, &after, intp(2), nil, nil, by(veloxgql.OrderDirectionAsc), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, info := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{4, 3}) || info.HasNextPage {
+		t.Errorf("by author ASC after 2: %v %+v", got, info)
+	}
+	// Descending, and backward from the end.
+	if ps, err = gen.PostsConnection(ctx, nil, nil, nil, intp(2), by(veloxgql.OrderDirectionDesc), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, info := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{2, 4}) || !info.HasPreviousPage {
+		t.Errorf("by author DESC, last 2: %v %+v", got, info)
+	}
+	// A cursor of this order is refused under the key's.
+	if _, err := gen.PostsConnection(ctx, &after, intp(2), nil, nil, nil, nil); err == nil {
+		t.Error("an author cursor was accepted under the key's order")
+	}
+	// Without the order, no join: post 5 is there.
+	if ps, err = gen.PostsConnection(ctx, nil, nil, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{1, 2, 3, 4, 5}) {
+		t.Errorf("by key: %v", got)
+	}
 }
 
 func TestConnections(t *testing.T) {
@@ -1477,8 +1541,8 @@ func TestConnectionsRun(t *testing.T) {
 	if out, err := run("mod", "tidy", "-e"); err != nil {
 		t.Fatalf("go mod tidy: %v\n%s", err, out)
 	}
-	out, err := run("test", "-count=1", "-v", "-run", "TestConnections$|TestConnectionOf", ".")
-	if err != nil || !strings.Contains(out, "--- PASS: TestConnections") || !strings.Contains(out, "--- PASS: TestConnectionOfLimitOffset") {
+	out, err := run("test", "-count=1", "-v", "-run", "TestConnections$|TestConnectionOf|TestConnectionOrderedByAnEdge", ".")
+	if err != nil || !strings.Contains(out, "--- PASS: TestConnections") || !strings.Contains(out, "--- PASS: TestConnectionOfLimitOffset") || !strings.Contains(out, "--- PASS: TestConnectionOrderedByAnEdge") {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
 }

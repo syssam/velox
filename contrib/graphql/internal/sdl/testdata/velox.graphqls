@@ -277,6 +277,7 @@ input PostOrder {
 enum PostOrderField {
   TITLE
   VIEWS
+  AUTHOR_NAME
 }
 
 """Filters Post nodes: a node matches when every predicate given holds."""

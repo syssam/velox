@@ -40,6 +40,7 @@ var annotationCases = []annotationCase{
 	{"WhereOps(preset)", graphql.WhereOps(graphql.OpsEquality), `{"where_ops":15}`},
 	{"WhereOps(mixed)", graphql.WhereOps(graphql.OpEQ, graphql.OpsNullable), `{"where_ops":6145}`},
 	{"WhereOps(all)", graphql.WhereOps(graphql.OpsAll), `{"where_ops":8191}`},
+	{"OrderVia", graphql.OrderVia("name", "AUTHOR_NAME"), `{"order_via":[{"field":"name","value":"AUTHOR_NAME"}]}`},
 	{"WhereEdge", graphql.WhereEdge(), `{"where_edge":true}`},
 	{"Connection(false)", graphql.Connection(false), `{"connection":false}`},
 	{"Connection(true)", graphql.Connection(true), `{"connection":true}`},
@@ -111,6 +112,15 @@ func TestMutationsDefault(t *testing.T) {
 	got := graphql.Mutations().Mutations
 	if want := []graphql.MutationKind{graphql.MutationCreate, graphql.MutationUpdate}; !reflect.DeepEqual(got, want) {
 		t.Errorf("Mutations() = %v, want %v", got, want)
+	}
+}
+
+// OrderVia merges as a list: each call names one field, the earlier first.
+func TestMergeOrderVia(t *testing.T) {
+	got := merge(t, graphql.OrderVia("name", "A"), graphql.OrderVia("email", "B"))
+	want := []graphql.ViaOrder{{Field: "name", Value: "A"}, {Field: "email", Value: "B"}}
+	if !reflect.DeepEqual(got.OrderVia, want) {
+		t.Errorf("OrderVia: got %+v, want %+v", got.OrderVia, want)
 	}
 }
 

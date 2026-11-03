@@ -31,6 +31,7 @@ func misplaced(a graphql.Annotation, on, where string) error {
 		{"graphql.FieldName", a.FieldName != "", onField + " " + onEdge},
 		{"graphql.OrderField", a.OrderField != "", onField},
 		{"graphql.OrderUnguarded", a.OrderUnguarded, onField},
+		{"graphql.OrderVia", len(a.OrderVia) > 0, onEdge},
 		{"graphql.WhereOps", a.WhereOps != 0, onField},
 		{"graphql.WhereEdge", a.WhereEdge, onEdge},
 		{"graphql.Connection", a.Connection != nil, onEdge},

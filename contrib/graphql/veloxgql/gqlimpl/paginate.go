@@ -39,6 +39,10 @@ type OrderTerm[E any] struct {
 	asc, desc velox.Order[E]
 	get       func(*E) any
 	set       func(*E, any) error
+	// rel is the joined relation's index plus one, and join joins it; both
+	// are set by JoinedTerm. A connection joins each relation once.
+	rel  int32
+	join func(velox.Query[E]) velox.Query[E]
 }
 
 // Term is the order term field, in direction dir, of the column whose handle
@@ -63,6 +67,40 @@ func Term[E, V any](field string, dir veloxgql.OrderDirection, asc, desc velox.O
 			set(x, t)
 			return nil
 		},
+	}
+}
+
+// JoinedTerm is the order term field, in direction dir, of a column of the
+// entity that to-one relation rel leads to, as Term is of E's own: asc and desc
+// are that entity's (gen.Users.Name.Asc() and .Desc()), and get and set read and
+// set its value. A connection with such a term reads rel with an inner JOIN,
+// in the page query and in the count: a row with no related entity, or none that
+// the related entity's Read policy lets the caller read, is not in the
+// connection. A cursor's row carries a related entity with the term's value set.
+func JoinedTerm[E, T, V any](field string, dir veloxgql.OrderDirection, rel velox.Rel[E, T], asc, desc velox.Order[T], get func(*T) V, set func(*T, V)) OrderTerm[E] {
+	in := Term(field, dir, asc, desc, get, set)
+	return OrderTerm[E]{
+		Field: field, Direction: dir,
+		asc: rel.By(asc), desc: rel.By(desc),
+		get: func(x *E) any {
+			t, ok := rel.Filled(x)
+			if !ok {
+				t = new(T) // a row read without the join: the zero value, which no cursor of it is used from
+			}
+			return in.get(t)
+		},
+		set: func(x *E, v any) error {
+			t, ok := rel.Filled(x)
+			if !ok {
+				t = new(T)
+				if err := rel.Fill(x, t); err != nil {
+					return err
+				}
+			}
+			return in.set(t, v)
+		},
+		rel:  rel.I + 1,
+		join: func(q velox.Query[E]) velox.Query[E] { return q.Join(rel) },
 	}
 }
 
@@ -136,6 +174,13 @@ func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, arg
 		return nil, InputErrorf("%s connection: %w: orderBy has %d terms, and the most is %d", typ, veloxgql.ErrBadPagination, len(order), lim.MaxOrderTerms)
 	}
 	c := &Connection[E]{query: q.Offset(0), typ: typ, n: n, back: back, key: len(order)}
+	var joined []int32
+	for _, t := range order {
+		if t.join != nil && !slices.Contains(joined, t.rel) {
+			joined = append(joined, t.rel)
+			c.query = t.join(c.query)
+		}
+	}
 	c.terms = make([]OrderTerm[E], 0, len(order)+len(key))
 	for _, t := range slices.Concat(order, key) {
 		switch t.Direction {
