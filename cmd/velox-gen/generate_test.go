@@ -1371,3 +1371,26 @@ func TestGenerateCompileErrorInARewrittenFile(t *testing.T) {
 		t.Errorf("%d %q %q, want the error at schema/user_policy.go:11", code, out, errs)
 	}
 }
+
+// When the last Policy goes, gen is one package again and nothing imports
+// gen/entity. A file of the user's there stays, as it is the user's, and
+// velox-gen warns, naming it, since it would no longer be built with gen.
+func TestGenerateWarnsOfUserFilesLeftInEntity(t *testing.T) {
+	dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		t.Fatalf("split: %d %q", code, errs)
+	}
+	extra := filepath.Join(dir, "gen", "entity", "extra.go")
+	writeFile(t, extra, "package entity\n\n// Hello greets.\nfunc (u User) Hello() string { return \"hi \" + u.Name }\n")
+	if err := os.Remove(filepath.Join(dir, "schema", "user_policy.go")); err != nil {
+		t.Fatal(err)
+	}
+	code, _, errs := runCLI(t, dir, "./schema")
+	want := "velox-gen: warning: gen/entity/extra.go is yours, and stays; gen is one package now, which does not build gen/entity: move the file to gen, as package gen, or delete it\n"
+	if code != 0 || errs != want {
+		t.Errorf("plain: %d %q, want %q", code, errs, want)
+	}
+	if _, err := os.Stat(extra); err != nil {
+		t.Errorf("the user's file is gone: %v", err)
+	}
+}

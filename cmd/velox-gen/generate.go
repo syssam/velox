@@ -335,6 +335,18 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		return failFile(err)
 	}
 	want, owners := o.want, o.owners
+	if !o.cfg.Split {
+		// A plain gen does not build out/entity, which a split one left:
+		// the user's files there stay, and are named.
+		ed := filepath.Join(out, codegen.EntityDir)
+		matches, _ := filepath.Glob(filepath.Join(ed, "*.go"))
+		for _, p := range matches {
+			if !isGenerated(p) {
+				_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s is yours, and stays; %s is one package now, which does not build %s: move the file to %[2]s, as package %[4]s, or delete it\n",
+					relPath(dir, p), relPath(dir, out), relPath(dir, ed), pkg)
+			}
+		}
+	}
 	// Nothing is written before every path is known to be velox-gen's: a
 	// regular file with its header, below real directories.
 	for _, p := range slices.Sorted(maps.Keys(want)) {

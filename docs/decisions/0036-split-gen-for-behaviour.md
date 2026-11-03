@@ -58,7 +58,8 @@ and each new command. `gen/runtime` held a struct with three fields per entity
 - **Plain mode is unchanged.** A schema with neither method, which does not
   import `gen/entity`, gets one package gen, as before. The switch either way
   rewrites every file, and the sweep removes `gen/entity` when it is no longer
-  written.
+  written. A file of the user's there stays, and velox-gen warns, naming
+  it: a plain gen does not build it.
 - **Plugins write into gen/entity.** In split mode velox-gen gives a plugin
   `out_package` `entity` and `out_path` `…/gen/entity`, so velox-graphql's Go
   files sit beside the entities whose methods they declare. velox-gen
