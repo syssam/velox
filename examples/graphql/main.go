@@ -2,8 +2,9 @@
 // schema package declares the entities with graphql.* annotations;
 // velox-gen with the velox-graphql plugin writes gen/, the entities, the
 // GraphQL schema gen/velox.graphqls and the Go it binds to; gqlgen writes
-// graph/ from gqlgen.yml. The application writes the root query's
-// resolvers, one line each, and this file.
+// graph/ from gqlgen.yml. The application declares its mutations in
+// graph/app.graphqls, and writes the root query's and the mutations'
+// resolvers, most of them one line each, and this file.
 package main
 
 import (
@@ -75,8 +76,8 @@ func serve(ctx context.Context, ln net.Listener) error {
 		return err
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/graphql", orgFromHeader(roleFromHeader(server(db))))
-	fmt.Printf("POST GraphQL to http://%s/graphql, with X-Org-ID: 1 or 2 for posts, and X-Role: admin for emails\n", ln.Addr())
+	mux.Handle("/graphql", orgFromHeader(roleFromHeader(userFromHeader(server(db)))))
+	fmt.Printf("POST GraphQL to http://%s/graphql, with X-Org-ID: 1 or 2 for posts, X-Role: admin for emails, and X-User: 1, 2 or 3 to create a post\n", ln.Addr())
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	done := make(chan struct{})
 	go func() {
@@ -144,6 +145,25 @@ func roleFromHeader(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if h := r.Header.Get("X-Role"); h != "" {
 			r = r.WithContext(context.WithValue(r.Context(), roleKey{}, h))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// userFromHeader puts the user the X-User header names, by its key, in the
+// request's context: the viewer, whom createPost makes the post's author.
+// Like X-Role, it is for this demo only: a client that names its own user is
+// whoever it says. A real server takes the user from what authenticates the
+// request.
+func userFromHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h := r.Header.Get("X-User"); h != "" {
+			user, err := strconv.ParseInt(h, 10, 64)
+			if err != nil {
+				http.Error(w, "X-User is not a number", http.StatusBadRequest)
+				return
+			}
+			r = r.WithContext(graph.WithViewer(r.Context(), user))
 		}
 		next.ServeHTTP(w, r)
 	})

@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion8
+const _ = veloxgql.GeneratedCodeIsVersion9
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -342,10 +342,10 @@ func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) 
 	return f.Pred()
 }
 
-// userCreateFieldGQL is the GraphQL name of the CreateAccountInput field that
-// sets the User field whose Go name is goField, for the errors of its
-// validators: "" for a field it does not set.
-func userCreateFieldGQL(goField string) string {
+// userInputGQL is the GraphQL name of the CreateAccountInput field that sets
+// the User field whose Go name is goField, for the errors of its validators: ""
+// for a field it does not set.
+func userInputGQL(goField string) string {
 	switch goField {
 	case "CreatedAt":
 		return "createdAt"
@@ -383,9 +383,9 @@ func userCreateFieldGQL(goField string) string {
 	return ""
 }
 
-// CreateAccountInput is the GraphQL input CreateAccountInput, the input of
-// createAccount. A field that is a pointer, or a list, is optional: nil means
-// not given.
+// CreateAccountInput is the GraphQL input CreateAccountInput; its method Create
+// writes it. A field that is a pointer, or a list, is optional: nil means not
+// given.
 type CreateAccountInput struct {
 	CreatedAt *time.Time
 	UpdatedAt *time.Time
@@ -417,130 +417,77 @@ func (in CreateAccountInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in CreateAccountInput) GoString() string { return in.String() }
 
-// CreateAccount creates an Account from input, with its edges, as the mutation
-// createAccount does, and returns the row as written. It runs atomically on the
-// DB veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations"
-// in the documentation of package github.com/syssam/velox/contrib/graphql for
-// what each input field does, what the caller may link and change, and the
-// errors.
+// Create inserts x, an Account, with the input's fields and edges set, and
+// returns it. A nil x is a new one; fields the input does not set are inserted
+// as the caller set them, so a resolver sets there what the client must not
+// choose. It runs atomically on the DB in ctx, under the policies, and changes
+// x even when it fails. CreateAccountInput leaves out CreatedBy, OrgID, which
+// an insert requires: set them on x, or in a velox.Hook, or they are stored as
+// the zero value.
 //
-// set sets CreatedBy, OrgID, which CreateAccountInput leaves out and an insert
-// requires; nil leaves them to a velox.Hook.
-func CreateAccount(ctx context.Context, input CreateAccountInput, set func(*User)) (*User, error) {
-	var (
-		settingsJSON      map[string]any
-		membershipIDsKeys []int64
-		bestFriendIDKey   int64
-		err               error
-	)
-	if input.Settings != nil {
-		if settingsJSON, err = gqlimpl.FromJSON[map[string]any]("CreateAccountInput.settings", *input.Settings); err != nil {
-			return nil, err
-		}
+// See "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each input field does, what
+// the caller may link and change, and the errors.
+func (in *CreateAccountInput) Create(ctx context.Context, x *User) (*User, error) {
+	c, x := gqlimpl.NewCreate(ctx, "CreateAccountInput", "gen.User", x, userInputGQL, Users.Name, Users.Email, Users.PasswordHash, Users.Quota)
+	if in.CreatedAt != nil {
+		x.CreatedAt = *in.CreatedAt
+		gqlimpl.NotZero(c, "createdAt", x.CreatedAt)
+		c.Given(Users.CreatedAt)
 	}
-	if membershipIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "CreateAccountInput.membershipIDs", input.MembershipIDs, "Group"); err != nil {
-		return nil, err
+	if in.UpdatedAt != nil {
+		x.UpdatedAt = *in.UpdatedAt
+		gqlimpl.NotZero(c, "updatedAt", x.UpdatedAt)
+		c.Given(Users.UpdatedAt)
 	}
-	if input.BestFriendID != nil {
-		if bestFriendIDKey, err = gqlimpl.DecodeID[int64]("CreateAccountInput.bestFriendID", *input.BestFriendID, "Account"); err != nil {
-			return nil, err
-		}
+	x.Name = in.DisplayName
+	x.Email = in.Email
+	if in.Role != nil {
+		x.Role = *in.Role
+		c.Given(Users.Role)
 	}
-	var x User
-	cols := []velox.Column[User]{Users.Name, Users.Email, Users.PasswordHash, Users.Quota}
-	if input.CreatedAt != nil {
-		x.CreatedAt = *input.CreatedAt
-		if err := gqlimpl.NotZero("CreateAccountInput.createdAt", x.CreatedAt); err != nil {
-			return nil, err
-		}
-		cols = append(cols, Users.CreatedAt)
+	if in.Nickname != nil {
+		x.Nickname = in.Nickname
+		c.Given(Users.Nickname)
 	}
-	if input.UpdatedAt != nil {
-		x.UpdatedAt = *input.UpdatedAt
-		if err := gqlimpl.NotZero("CreateAccountInput.updatedAt", x.UpdatedAt); err != nil {
-			return nil, err
-		}
-		cols = append(cols, Users.UpdatedAt)
+	if in.Bio != nil {
+		x.Bio = in.Bio
+		c.Given(Users.Bio)
 	}
-	x.Name = input.DisplayName
-	x.Email = input.Email
-	if input.Role != nil {
-		x.Role = *input.Role
-		cols = append(cols, Users.Role)
+	if in.Age != nil {
+		x.Age = in.Age
+		c.Given(Users.Age)
 	}
-	if input.Nickname != nil {
-		x.Nickname = input.Nickname
-		cols = append(cols, Users.Nickname)
+	x.PasswordHash = in.PasswordHash
+	if in.Score != nil {
+		x.Score = *in.Score
+		c.Given(Users.Score)
 	}
-	if input.Bio != nil {
-		x.Bio = input.Bio
-		cols = append(cols, Users.Bio)
+	if in.ExternalID != nil {
+		x.ExternalID = *in.ExternalID
+		gqlimpl.NotZero(c, "externalID", x.ExternalID)
+		c.Given(Users.ExternalID)
 	}
-	if input.Age != nil {
-		x.Age = input.Age
-		cols = append(cols, Users.Age)
+	if in.Avatar != nil {
+		x.Avatar = *in.Avatar
+		c.Given(Users.Avatar)
 	}
-	x.PasswordHash = input.PasswordHash
-	if input.Score != nil {
-		x.Score = *input.Score
-		cols = append(cols, Users.Score)
+	x.Quota = in.Quota
+	if in.Active != nil {
+		x.Active = *in.Active
+		c.Given(Users.Active)
 	}
-	if input.ExternalID != nil {
-		x.ExternalID = *input.ExternalID
-		if err := gqlimpl.NotZero("CreateAccountInput.externalID", x.ExternalID); err != nil {
-			return nil, err
-		}
-		cols = append(cols, Users.ExternalID)
-	}
-	if input.Avatar != nil {
-		x.Avatar = *input.Avatar
-		cols = append(cols, Users.Avatar)
-	}
-	x.Quota = input.Quota
-	if input.Active != nil {
-		x.Active = *input.Active
-		cols = append(cols, Users.Active)
-	}
-	if input.Settings != nil {
+	if in.Settings != nil {
+		settingsJSON := gqlimpl.DecodeJSON[map[string]any](c, "settings", *in.Settings)
 		x.Settings = settingsJSON
-		cols = append(cols, Users.Settings)
+		c.Given(Users.Settings)
 	}
-	if set != nil {
-		set(&x)
+	membershipIDsKeys := gqlimpl.Keys[int64](c, "membershipIDs", in.MembershipIDs, "Group")
+	gqlimpl.Join(c, "membershipIDs", "Group", membershipIDsKeys, Groups.ID.In, func(x *User, k int64) UserGroup { return UserGroup{UserID: x.ID, GroupID: k} }, UserGroups.UserID, UserGroups.GroupID)
+	if in.BestFriendID != nil {
+		bestFriendIDKey := gqlimpl.Key[int64](c, "bestFriendID", *in.BestFriendID, "Account")
+		gqlimpl.Exists(c, "bestFriendID", "Account", 1, Users.ID.EQ(bestFriendIDKey))
+		x.UserBestFriend = &bestFriendIDKey
 	}
-	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userCreateFieldGQL)
-	}
-	var out *User
-	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if len(membershipIDsKeys) > 0 {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Group]().Where(Groups.ID.In(membershipIDsKeys...)), len(membershipIDsKeys), "CreateAccountInput.membershipIDs", "Group"); err != nil {
-				return err
-			}
-		}
-		if input.BestFriendID != nil {
-			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(bestFriendIDKey)), 1, "CreateAccountInput.bestFriendID", "Account"); err != nil {
-				return err
-			}
-			x.UserBestFriend = &bestFriendIDKey
-		}
-		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userCreateFieldGQL)
-		}
-		if len(membershipIDsKeys) > 0 {
-			rows := make([]UserGroup, len(membershipIDsKeys))
-			for i, k := range membershipIDsKeys {
-				rows[i] = UserGroup{UserID: x.ID, GroupID: k}
-			}
-			if err := db.InsertAll(rows).OnConflict(UserGroups.UserID, UserGroups.GroupID).DoNothing().Exec(ctx); err != nil {
-				return err
-			}
-		}
-		out = &x
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	return c.Insert()
 }

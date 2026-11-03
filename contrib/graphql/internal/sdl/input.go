@@ -9,26 +9,25 @@ import (
 	"strings"
 
 	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/contrib/graphql/internal/english"
 	"github.com/syssam/velox/plugin"
 )
 
 // mutationsOf computes o's mutation inputs, CreateXInput and UpdateXInput,
-// and adds its mutations to the root Mutation, for the kinds its Mutations
-// annotation lists.
+// for the kinds its Mutations annotation lists. The application declares the
+// mutations that take them in its own schema.
 func (g *graph) mutationsOf(o *object) error {
 	e := o.ent
 	where := "schema " + e.Name
-	var create, update, del bool
+	var create, update bool
 	for _, k := range o.ann.Mutations {
 		switch k {
 		case graphql.MutationCreate:
 			create = true
 		case graphql.MutationUpdate:
 			update = true
-		case graphql.MutationDelete:
-			del = true
 		default:
-			return fmt.Errorf("%s: graphql.Mutations: %q is not a mutation; the mutations are create, update and delete", where, string(k))
+			return fmt.Errorf("%s: graphql.Mutations: %q is not a mutation input; the inputs are create and update", where, string(k))
 		}
 	}
 	for _, c := range []struct {
@@ -44,13 +43,8 @@ func (g *graph) mutationsOf(o *object) error {
 			return fmt.Errorf("%s: graphql.Mutations lists %s, and graphql.Skip(%s) leaves out its input", where, c.kind, c.name)
 		}
 	}
-	for _, c := range []struct {
-		on   bool
-		kind string
-	}{{update, "update"}, {del, "delete"}} {
-		if c.on && !o.node {
-			return fmt.Errorf("%s: graphql.Mutations lists %s, which takes an ID, and %s: it is not a Node", where, c.kind, notNode(e))
-		}
+	if update && !o.node {
+		return fmt.Errorf("%s: graphql.Mutations lists update, which takes an ID, and %s: it is not a Node", where, notNode(e))
 	}
 
 	if !create {
@@ -63,7 +57,7 @@ func (g *graph) mutationsOf(o *object) error {
 	if create && o.node {
 		pk := e.Fields[e.PrimaryKey[0]]
 		if !pk.AutoID && !pk.HasDefault {
-			return fmt.Errorf("%s: graphql.Mutations lists create, and its key %s is supplied by the caller (no auto ID, no default): v1 does not generate createX for such a schema, as the key is never an input", where, pk.Name)
+			return fmt.Errorf("%s: graphql.Mutations lists create, and its key %s is supplied by the caller (no auto ID, no default): velox-graphql writes no create input for such a schema, as the key is never an input", where, pk.Name)
 		}
 	}
 	if create {
@@ -79,13 +73,9 @@ func (g *graph) mutationsOf(o *object) error {
 			return err
 		}
 		o.create, o.createGo = fs, gos
-		g.mutation = append(g.mutation, gqlField{
-			name: "create" + o.name, args: "(input: " + in + "!)", typ: o.name + "!",
-			desc: "Creates one " + o.name + ".", where: where,
-		})
 	}
 	if update {
-		// An update input with no fields gets no type, and no updateX.
+		// An update input with no fields gets no type.
 		in := "Update" + o.name + "Input"
 		fs, gos, err := g.inputFields(o, in, false)
 		if err != nil {
@@ -96,18 +86,7 @@ func (g *graph) mutationsOf(o *object) error {
 				return err
 			}
 			o.update, o.updateGo = fs, gos
-			g.mutation = append(g.mutation, gqlField{
-				name: "update" + o.name, args: "(id: ID!, input: " + in + "!)", typ: o.name + "!",
-				desc: "Updates the " + o.name + " with this ID: only the fields given change.", where: where,
-			})
 		}
-	}
-	if del {
-		o.del = true
-		g.mutation = append(g.mutation, gqlField{
-			name: "delete" + o.name, args: "(id: ID!)", typ: "ID!",
-			desc: "Deletes the " + o.name + " with this ID, and returns the ID.", where: where,
-		})
 	}
 	return nil
 }
@@ -254,7 +233,7 @@ type edgeInput struct {
 //   - an immutable key on o's row is set on create only;
 //   - an M2M edge writes join rows: <edge>IDs, add/remove/clear;
 //   - an edge to a type that is not a Node has no ID and no input. When that
-//     edge is required and holds its key on o's row, createX could never
+//     edge is required and holds its key on o's row, the create input could never
 //     succeed: an error.
 //
 // Each input carries the edge's directives, after those of its key when the
@@ -264,14 +243,14 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	t := g.byName[ed.Target]
 	where := "schema " + o.ent.Name + ", edge " + ed.Name
 	if t == nil || !t.node {
-		// A required key on o's own row that createX could never set. When
-		// the target's row holds the key, createX writes none of its own.
+		// A required key on o's own row that the create input could never
+		// set. When the target's row holds the key, it writes none of its own.
 		if create && ed.Unique && ed.Required && ed.OwnsKey {
 			why := "is skipped"
 			if t != nil {
 				why = "is not a Node"
 			}
-			return nil, fmt.Errorf("%s: a required edge whose target %s %s: create%s could never set it; skip the edge's create input with graphql.Skip(graphql.SkipMutationCreateInput), and set its key in the resolver through Create%s's set, or in a hook", where, ed.Target, why, o.name, o.name)
+			return nil, fmt.Errorf("%s: a required edge whose target %s %s: Create%sInput could never set it; skip the edge's create input with graphql.Skip(graphql.SkipMutationCreateInput), and set its key on the x the resolver gives Create%[4]sInput.Create, or in a hook", where, ed.Target, why, o.name)
 		}
 		return nil, nil
 	}
@@ -474,7 +453,7 @@ func inputDirs(ds []directive, typ string) []directive {
 // inputDesc is the description of o's create or update input.
 func inputDesc(o *object, create bool) string {
 	if create {
-		return "The input of create" + o.name + "."
+		return "The input that creates " + english.Article(o.name) + " " + o.name + "."
 	}
-	return "The input of update" + o.name + ": a field not given is left as it is."
+	return "The input that updates " + english.Article(o.name) + " " + o.name + ": a field not given is left as it is."
 }

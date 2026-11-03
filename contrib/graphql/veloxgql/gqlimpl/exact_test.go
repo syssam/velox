@@ -152,17 +152,6 @@ func TestFromJSONExact(t *testing.T) {
 	}
 }
 
-// TestNullOutsideAField: outside a gqlgen field no null can be read. Served,
-// TestUpdateNullClears and TestUpdateNullEdgeRefused (cmd/velox-graphql) have the rest.
-func TestNullOutsideAField(t *testing.T) {
-	if gqlimpl.NullGiven(context.Background(), "input", "n") {
-		t.Error("a null given")
-	}
-	if err := gqlimpl.NullEdge(context.Background(), "In.n", "input", "n", "clearN"); err != nil {
-		t.Error(err)
-	}
-}
-
 // open has no Read policy, and guarded has one, for TestFKScoped.
 type (
 	open    struct{}

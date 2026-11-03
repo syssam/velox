@@ -38,7 +38,7 @@ func Atomic(ctx context.Context, fn func(ctx context.Context, db *velox.DB) erro
 }
 
 // DecodeID decodes id, an ID of the GraphQL type typ, for the input field at
-// ("CreatePostInput.authorID", "updatePost.id"). For generated code. Its error
+// ("CreatePostInput.authorID", or "id" for Update's id). For generated code. Its error
 // is BAD_USER_INPUT, names at, and wraps veloxgql.ErrBadID or ErrWrongIDType.
 func DecodeID[K any](at, id, typ string) (K, error) {
 	k, err := veloxgql.DecodeID[K](id, typ)
@@ -228,11 +228,11 @@ func UnlinkAll[J, K any](ctx context.Context, links velox.Query[J], other func(*
 	}
 }
 
-// Disjoint fails with BAD_USER_INPUT "veloxgql: <input>: an ID is in both <add>
+// disjoint fails with BAD_USER_INPUT "veloxgql: <input>: an ID is in both <add>
 // and <remove>" when a key is in both a and b, the decoded IDs of the fields
-// add and remove of the input named input: the input has no single meaning. For
-// generated code. It echoes no ID.
-func Disjoint[K comparable](input, add, remove string, a, b []K) error {
+// add and remove of the input named input: the input has no single meaning. It
+// echoes no ID.
+func disjoint[K comparable](input, add, remove string, a, b []K) error {
 	if len(a) == 0 || len(b) == 0 {
 		return nil
 	}
@@ -302,55 +302,101 @@ func CountUnknown(at string) error {
 	return fmt.Errorf("veloxgql: %s: row count unknown", at)
 }
 
-// NotZero refuses v, what the input field at gives a field that has a Default,
-// when it is the field's zero value: an insert would store the Default in its
-// place, as it does for a field left out. The client gets BAD_USER_INPUT. For
-// generated code.
-func NotZero[V any](at string, v V) error {
+// notZero refuses v, what the input field at gives a field that has a
+// Default, when it is the field's zero value: an insert would store the
+// Default in its place, as it does for a field left out. The client gets
+// BAD_USER_INPUT.
+func notZero[V any](at string, v V) error {
 	if reflect.ValueOf(&v).Elem().IsZero() {
 		return InputErrorf("%s: invalid value: the empty value cannot be stored on create, where it means the field's default; leave the field out, or set it with an update", at)
 	}
 	return nil
 }
 
-// NotNull refuses a null the client gave the input field name, of the argument
-// arg of the running field, on a Nillable field that has a Default: an insert
-// would store the Default in its place, as it does for a field left out, and an
-// input's nil pointer cannot tell them apart. So NotNull reads the request. The
-// client gets BAD_USER_INPUT, naming at. Called outside a gqlgen field, or from a
-// field whose argument has another name, it finds no null and refuses nothing. For
-// generated code.
-func NotNull(ctx context.Context, at, arg, name string) error {
-	if !NullGiven(ctx, arg, name) {
-		return nil
-	}
-	return InputErrorf("%s: invalid value: null cannot be stored on create, where it means the field's default; leave the field out, or clear it with an update", at)
-}
-
-// NullEdge refuses a null the client gave the input field name, of the argument arg
-// of the running field, on an update of an edge's <edge>ID: clearing an edge unlinks a
-// row, so it is said by clearField, the input's other field. The client gets
-// BAD_USER_INPUT, naming at and clearField. Called outside a gqlgen field, or from a
-// field whose argument has another name, it finds no null and refuses nothing. For
-// generated code.
-func NullEdge(ctx context.Context, at, arg, name, clearField string) error {
-	if !NullGiven(ctx, arg, name) {
-		return nil
-	}
-	return InputErrorf("%s: invalid value: null would leave it as it is; give %s: true to clear it, or leave the field out", at, clearField)
-}
-
-// NullGiven reports whether the running field's argument arg gives the input field
-// name as null, which an input's nil pointer cannot tell from a field left out: an
-// update clears a nullable field by it. Outside a gqlgen field, or in a field whose
-// argument has another name, it finds none. For generated code.
-func NullGiven(ctx context.Context, arg, name string) bool {
+// nullsIn counts the values of the GraphQL input type input that the running
+// field's arguments hold, at any depth of input objects and lists, literals
+// and variables alike, and those of them that give the field name as null,
+// which an input's nil pointer cannot tell from a field left out. Outside a
+// gqlgen field it finds none. A value inside a variable is found below the
+// variable's own type only with the server's schema, which the Extension
+// keeps.
+func nullsIn(ctx context.Context, input, name string) (found, nulls int) {
 	fc := graphql.GetFieldContext(ctx)
 	if fc == nil || fc.Field.Field == nil || !graphql.HasOperationContext(ctx) {
-		return false
+		return 0, 0
 	}
-	a := fc.Field.Arguments.ForName(arg)
-	return a != nil && givenNull(a.Value, name, graphql.GetOperationContext(ctx).Variables)
+	w := nullWalk{input: input, name: name, vars: graphql.GetOperationContext(ctx).Variables, schema: gqlcore.TableFromContext(ctx).Schema()}
+	for _, a := range fc.Field.Arguments {
+		w.value(a.Value)
+	}
+	return w.found, w.nulls
+}
+
+// nullWalk is nullsIn's search.
+type nullWalk struct {
+	input, name  string
+	vars         map[string]any
+	schema       *ast.Schema
+	found, nulls int
+}
+
+// value searches v, a literal or a variable, whose type the validator
+// recorded in its Definition.
+func (w *nullWalk) value(v *ast.Value) {
+	if v == nil {
+		return
+	}
+	switch v.Kind {
+	case ast.Variable:
+		if x, ok := w.vars[v.Raw]; ok {
+			w.any(x, v.Definition)
+		}
+	case ast.ObjectValue:
+		if v.Definition != nil && v.Definition.Name == w.input {
+			w.found++
+			if givenNull(v, w.name, w.vars) {
+				w.nulls++
+			}
+			return
+		}
+		for _, c := range v.Children {
+			w.value(c.Value)
+		}
+	case ast.ListValue:
+		for _, c := range v.Children {
+			w.value(c.Value)
+		}
+	}
+}
+
+// any searches x, a variable's value or a part of one, whose type is def (a
+// list's, its elements').
+func (w *nullWalk) any(x any, def *ast.Definition) {
+	if def == nil || def.Kind != ast.InputObject {
+		return
+	}
+	switch x := x.(type) {
+	case []any:
+		for _, e := range x {
+			w.any(e, def)
+		}
+	case map[string]any:
+		if def.Name == w.input {
+			w.found++
+			if v, ok := x[w.name]; ok && v == nil {
+				w.nulls++
+			}
+			return
+		}
+		if w.schema == nil {
+			return
+		}
+		for _, f := range def.Fields {
+			if v, ok := x[f.Name]; ok && v != nil {
+				w.any(v, w.schema.Types[f.Type.Name()])
+			}
+		}
+	}
 }
 
 // givenNull reports whether the input object v, a literal or a variable, gives

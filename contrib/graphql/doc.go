@@ -38,7 +38,6 @@
 //			graphql.Mutations(
 //				graphql.MutationCreate,
 //				graphql.MutationUpdate,
-//				graphql.MutationDelete,
 //			),
 //			graphql.MultiOrder(),
 //		}
@@ -161,7 +160,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion8", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion9", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -190,27 +189,56 @@
 //
 // # Mutations
 //
-// For an entity with graphql.MutationCreate, its file also has Create<T>Input
-// and Create<T>(ctx, input), which createX's resolver returns; with
-// graphql.MutationUpdate, Update<T>Input and Update<T>(ctx, id, input), which
-// updateX's resolver returns.
+// velox-graphql writes inputs, as entgql does, not mutations: the application
+// declares its Mutation type in a schema file of its own, beside velox.graphqls,
+// and each resolver calls the generated input's method. For an entity with
+// graphql.MutationCreate, its file has the input type Create<T>Input, in the
+// SDL and in Go, and its method
 //
-// A field the create input leaves out (Skip(SkipMutationCreateInput) or
+//	func (in *Create<T>Input) Create(ctx context.Context, x *<T>) (*<T>, error)
+//
+// and with graphql.MutationUpdate, Update<T>Input and
+//
+//	func (in *Update<T>Input) Update(ctx context.Context, id string, set ...velox.Setter[<T>]) (*<T>, error)
+//
+// The application names its mutations, their arguments and their result, and
+// writes the resolvers:
+//
+//	type Mutation {
+//	  createPost(input: CreatePostInput!): Post!
+//	  updatePost(id: ID!, input: UpdatePostInput!): Post!
+//	  deletePost(id: ID!): ID!
+//	}
+//
+//	func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
+//		return input.Create(ctx, &gen.Post{AuthorID: viewer(ctx)})
+//	}
+//
+//	func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
+//		return input.Update(ctx, id)
+//	}
+//
+// No delete is generated: deleting a row is one velox statement, which the
+// application writes with the checks it wants (examples/graphql's deletePost).
+//
+// Create sets the input's fields on x, a nil x being a new row, and inserts
+// it: the fields the input does not set are inserted as the resolver set them
+// on x. A field the create input leaves out (Skip(SkipMutationCreateInput) or
 // CreateInput(false)) that the schema requires, not Optional, not Nillable and
-// with no Default, would be inserted as its zero value, "" in a NOT NULL column.
-// For such an entity Create<T> takes a third argument, set func(*T), which it
-// calls on the entity after the input's values are on it and before the
-// validators and any statement, so the resolver, which is where entgql users set
-// it, writes it:
+// with no Default, would be inserted as its zero value, "" in a NOT NULL column,
+// so the resolver, which is where entgql users set it, sets it on x, and Create's
+// godoc names it:
 //
-//	return gen.CreatePost(ctx, input, func(p *gen.Post) { p.Slug = slugify(input.Title) })
+//	return input.Create(ctx, &gen.Page{Slug: slugify(input.Title)})
 //
-// The resolver that gqlgen stubbed with two arguments does not compile, which
-// names the field to set. A nil set leaves the field to a velox.Hook, which runs
-// before the insert's validators; with neither, the zero value is stored. A
-// validator's error on such a field is the resolver's, not the client's: it names
-// no input field. An update input has no such field to set, as a field it leaves
-// out keeps its value, and Update<T> is unchanged.
+// A velox.Hook, which runs before the insert's validators, may set it instead;
+// with neither, the zero value is stored. A validator's error on such a field is
+// the resolver's, not the client's: it names no input field. Create changes x
+// even when it fails. Update applies the input's fields and then set, the
+// resolver's own setters, such as an updated_by the client must not choose; the
+// validators run on both, before any statement; an error on a field the input
+// has is named as the input names it, and one on a field it has not is velox's
+// *velox.ValidationError as it is, the resolver's error.
 //
 // A field with a Default, or a bool or number with
 // graphql.CreateDefault, is optional in the create input and stays non-null in
@@ -222,15 +250,23 @@
 // its zero value ("" or the zero time) is refused with BAD_USER_INPUT, unless the
 // Default is that zero value, since an
 // insert would store the Default in its place; an update stores it. So is a null
-// given to a Nillable field with a Default, literal or variable, on the create<T>
-// field: leave it out for the Default, or clear it with an update, as an insert
+// given to a Nillable field with a Default, literal or variable: leave it out
+// for the Default, or clear it with an update, as an insert
 // does not store NULL there. In an update input a field not given is left as
 // it is, and clear<Field> or a null given sets a nullable one to NULL:
 // updatePost(input: {publishedAt: null}) clears publishedAt, where entgql
 // ignores the null. A client that sends every field of a form, null for those
 // the user did not touch, clears them; it leaves them out instead. A null given to an
 // edge's <edge>ID is refused with BAD_USER_INPUT, naming clear<Edge>; a Required field
-// has no clear input, and its null is a field not given.
+// has no clear input, and its null is a field not given. Create and Update find
+// the null, which the Go input cannot hold, in the arguments of the field that
+// runs them, by the input's GraphQL type, through input objects and lists,
+// literals and variables alike: where the arguments give the input type once,
+// as a mutation's input argument does, its null is read; where they give it
+// more than once, in a list or in two arguments, a null on such a field is
+// refused with BAD_USER_INPUT naming clear<Field>, since it cannot tell which
+// one is this input's; where they give it not at all, as when Go code builds
+// the input, no field is null.
 // An edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
 // its clear, or an ID both to add and to remove, is refused with
@@ -250,8 +286,8 @@
 // by <edge>ID, <edge>IDs or add<Edge>IDs, but only a key that is nullable
 // and mutable: one that is never NULL always holds an owner, and one that is
 // immutable cannot move, so the owner's inputs have no such field, and the
-// child is linked from its own side, by its <edge>ID. Create<T> and
-// Update<T> re-point only a child no owner holds, or one the row already
+// child is linked from its own side, by its <edge>ID. Create and
+// Update re-point only a child no owner holds, or one the row already
 // holds: one that another owner holds is refused with BAD_USER_INPUT,
 // "already linked", and not taken from it.
 //
@@ -298,45 +334,27 @@
 // change, is a silent no-op, not an error: an error would tell the caller that
 // a child it may not change is linked there.
 //
-// A mutation returns the row as written. Create<T> returns the row it
-// inserted. Update<T> reads it back without the Read policy: its UPDATE is scoped by the Read policy too, so the caller could read
+// Create and Update return the row as written. Create returns the row it
+// inserted. Update reads it back without the Read policy: its UPDATE is scoped by the Read policy too, so the caller could read
 // the row before it wrote it. A mutation that takes the row out of what the
 // caller may read still returns it. This is a contract, and will not change.
 //
-// With graphql.MutationDelete, Delete<T>(ctx, id) deletes the row and every
-// join row that holds its key, of its own many-to-many edges, and returns the
-// ID encoded again from the key; deleteX's resolver returns it. velox-gen's own
-// migrations give a join table's foreign keys ON DELETE CASCADE, as ent's do,
-// so the database would remove them anyway; the delete matters for a schema
-// written by hand. The join delete has no scope of its own (a join entity has no
-// Read policy), and it goes only after an Exists under the DELETE's own
-// scope (Writable: the Read and Write policies; locking the
-// row with FOR UPDATE wherever the dialect can) has found the row, so a row the
-// caller may not delete keeps them. It removes every join row of the row,
-// whatever the scope of the row at the other end, so a shared row is unlinked
-// from every scope's rows, unless a Write policy or a Delete hook that the
-// application binds on a join entity that is not bidirectional narrows or
-// refuses it. Rows of other entities that hold the row's key are left to the
-// database's foreign keys: one that refuses the DELETE gives a
-// *velox.ConstraintError, shown as BAD_USER_INPUT.
+// The rows a write counts decide its result. The UPDATE of Update that
+// matched 0 rows is NOT_FOUND, "veloxgql: Update<T>Input: no <T> has this ID",
+// and a count the driver did not report (-1) falls back to the locking
+// existence check of an update with no field to set; an update that sets a
+// bidirectional key fails first instead, with the core's internal error for a
+// link whose count is unknown. The UPDATE that links the children whose key is
+// on their own rows gives the internal error "veloxgql: <Input>.<field>: row
+// count unknown" (gqlimpl.CountUnknown) for an unknown count, so that the write
+// fails and rolls back.
 //
-// The rows a write counts decide its result. The UPDATE of Update<T> that
-// matched 0 rows is NOT_FOUND, and a count the driver did not report (-1) falls
-// back to the locking existence check of an update with no field to set; an
-// update that sets a bidirectional key fails first instead, with the core's
-// internal error for a link whose count is unknown. The DELETE of Delete<T>
-// that removed 0 rows is NOT_FOUND, and an unknown count is the internal error
-// "veloxgql: <mutation>: row count unknown" (gqlimpl.CountUnknown), so that the
-// mutation fails and its writes roll back. The UPDATE that links the children
-// whose key is on their own rows gives the same kind of error for an unknown
-// count, naming the input field.
-//
-// The generated functions read the DB from the context, as the root query's do
-// (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in a
+// Create and Update read the DB from the context, as the root query's
+// functions do (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in a
 // savepoint inside the transaction the Extension opened for the operation, or
 // in a db.Tx of its own where there is none (outside a server, with
 // Extension.NewContext, or in an operation WithTxFilter leaves out). A
-// mutation's error rolls back its own writes at once, and the operation's when
+// failed Create or Update rolls back its own writes at once, and the operation's when
 // the resolver returns it; a resolver that swallows it keeps the operation's
 // other writes, and the operation commits. In a Go input a required field is a
 // value, an optional one a pointer (nil means not given), an ID a string, a
@@ -346,25 +364,26 @@
 // or JSON value, a conflicting input (a field given with its clear, an ID both
 // to add and to remove), too many IDs (more than veloxgql.Limits.MaxPage,
 // veloxgql.ErrPageTooLarge) and a child another owner holds are BAD_USER_INPUT,
-// naming the input field; the first three are refused before any statement. A
+// naming the input field, "CreatePostInput.tagIDs: ..."; the first three are
+// refused before any statement. Update's id, malformed or of another type, is
+// named "id". A
 // validator's refusal is BAD_USER_INPUT too, "UpdatePostInput.title: invalid
 // value: ..."; the validators of the fields an input sets run before any
 // statement, so an invalid field is refused even when an ID with it names no
 // row. An ID that names no row the caller may read, or change, is NOT_FOUND
 // (veloxgql.CodeNotFound), whether the row is missing, in another scope or
-// hidden by a policy, so that a client cannot tell; the mutation keeps nothing,
-// and a delete deletes nothing (see above). Other errors of velox are returned
+// hidden by a policy, so that a client cannot tell; the write keeps nothing. Other errors of velox are returned
 // as they are, and ErrorPresenter maps them as it does elsewhere. gqlgen's own
 // validation errors (a variable of the wrong shape) are left as gqlgen writes
 // them, GRAPHQL_VALIDATION_FAILED with a path or locations.
 //
-// Limits of the mutations:
-//   - An update that sets no field, and a delete, check their row before they
-//     write its edges or join rows, with a locking read (FOR UPDATE) wherever
+// Limits of Create and Update:
+//   - An update that sets no field checks its row before it writes its edges
+//     or join rows, with a locking read (FOR UPDATE) wherever
 //     the dialect has one: the row stays the caller's for the rest of the
 //     mutation's transaction, so there is no time-of-check race. SQLite has
 //     no locking reads, and its transactions lock the database.
-//   - On MySQL the DSN needs clientFoundRows=true: UpdateX counts the rows
+//   - On MySQL the DSN needs clientFoundRows=true: Update counts the rows
 //     its UPDATE matched, and MySQL counts only changed rows without it, so
 //     an UPDATE that changes nothing counts 0 and fails with a false
 //     NOT_FOUND.
@@ -393,9 +412,10 @@
 //   - An explicit null on a nullable field of an update input clears it, as
 //     clear<Field>: true does. entgql treats null as not given. A client that
 //     sends null for fields it means to keep must leave them out.
-//   - A field the create input leaves out that the schema requires, with no
-//     Default, is set by the resolver through Create<T>'s set func(*T), which
-//     entgql's resolver does with the builder's SetX.
+//   - The inputs' methods are Create(ctx, x) and Update(ctx, id, set...),
+//     where entgql's are Mutate(builder) on the builder the resolver made. A
+//     field the create input leaves out is set on x, which entgql's resolver
+//     does with the builder's SetX.
 //   - A Required one-to-one or many-to-one edge is T, not T!, in the type.
 //   - A null on an update's <edge>ID is refused, naming clear<Edge>.
 //   - A field.Strings and the other JSON lists of scalars are [String!], as in

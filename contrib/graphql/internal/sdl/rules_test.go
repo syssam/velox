@@ -82,8 +82,8 @@ func TestAnnotationMisuse(t *testing.T) {
 
 	// A mutation kind listed twice is harmless.
 	m := build(anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create", "create"}}})
-	if s, _ := load(t, m); typeOf(s, "Mutation", "createUser") != "User!" {
-		t.Error("no createUser")
+	if s, _ := load(t, m); s.Types["CreateUserInput"] == nil {
+		t.Error("no CreateUserInput")
 	}
 
 	// OrderField with the order skipped too, on a hidden field: no order, no
@@ -116,7 +116,7 @@ func TestAnnotationMisuse(t *testing.T) {
 			author.Required = true
 			post.Edges = []*plugin.Edge{author}
 			post.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate))
-			renderErr(t, model(post, target), "schema Post, edge author", "required", "createPost")
+			renderErr(t, model(post, target), "schema Post, edge author", "required", "CreatePostInput")
 			// The user may leave it to a hook.
 			author.Annotations = ann(t, graphql.Skip(graphql.SkipMutationCreateInput))
 			load(t, model(post, target))
@@ -137,19 +137,19 @@ func TestAnnotationMisuse(t *testing.T) {
 		}
 		// The same edge holding its key on User's row is refused.
 		profile.OwnsKey, profile.FieldOn = true, "User"
-		renderErr(t, model(target, user), "schema User, edge profile", "required", "createUser")
+		renderErr(t, model(target, user), "schema User, edge profile", "required", "CreateUserInput")
 	})
 
 	t.Run("a key the caller supplies", func(t *testing.T) {
 		code := entity("Country", field("name", "string"))
 		code.Fields[0] = &plugin.Field{Name: "id", GoName: "ID", Type: "string"}
 		code.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate))
-		renderErr(t, model(code), "schema Country", "create", "supplied by the caller", "v1")
+		renderErr(t, model(code), "schema Country", "create", "supplied by the caller", "no create input")
 		code.Fields[0].HasDefault = true
 		load(t, model(code))
-		// Update and delete need no new key.
+		// Update needs no new key.
 		code.Fields[0].HasDefault = false
-		code.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate, graphql.MutationDelete))
+		code.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate))
 		load(t, model(code))
 	})
 
@@ -162,13 +162,18 @@ func TestAnnotationMisuse(t *testing.T) {
 		renderErr(t, model(entity("User"), join), "schema UserGroup", "graphql.Mutations", "join")
 	})
 
-	t.Run("update or delete without an ID", func(t *testing.T) {
-		for _, k := range []graphql.MutationKind{graphql.MutationUpdate, graphql.MutationDelete} {
-			like := &plugin.Entity{Name: "Like", PrimaryKey: []int{0, 1},
-				Fields: []*plugin.Field{field("a", "string"), field("b", "string")}}
-			like.Annotations = ann(t, graphql.Mutations(k))
-			renderErr(t, model(like), "schema Like", string(k), "key")
-		}
+	t.Run("update without an ID", func(t *testing.T) {
+		like := &plugin.Entity{Name: "Like", PrimaryKey: []int{0, 1},
+			Fields: []*plugin.Field{field("a", "string"), field("b", "string")}}
+		like.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate))
+		renderErr(t, model(like), "schema Like", "update", "key")
+	})
+
+	t.Run("delete is no input", func(t *testing.T) {
+		// velox-graphql writes no delete: the application's resolver deletes.
+		like := entity("Like", field("a", "string"))
+		like.Annotations = ann(t, graphql.Mutations("delete"))
+		renderErr(t, model(like), "schema Like", `"delete" is not a mutation input`)
 	})
 }
 

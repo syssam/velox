@@ -68,7 +68,7 @@ func (Post) Edges() []schema.Edge {
 func (Post) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		graphql.QueryField("posts"),
-		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete),
+		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate),
 	}
 }
 
@@ -270,10 +270,6 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"enum PostOrderField {\n  TITLE\n  AUTHOR_NAME\n}\n",
 		"  displayNameHasSuffix: String\n  hasPosts: Boolean\n  hasPostsWith: [PostWhereInput!]\n  hasGroups: Boolean\n}\n",
 		"  or: [PostWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  authorID: ID\n  authorIDNEQ: ID\n  authorIDIn: [ID!]\n  authorIDNotIn: [ID!]\n  title: String\n",
-		"type Mutation {\n",
-		"  createPost(input: CreatePostInput!): Post!\n",
-		"  updatePost(id: ID!, input: UpdatePostInput!): Post!\n",
-		"  deletePost(id: ID!): ID!\n",
 		"input CreatePostInput {\n  title: String!\n  authorID: ID!\n}\n",
 		"input UpdatePostInput {\n  title: String\n  authorID: ID\n}\n",
 		// Category's self-edges, read through OwnsKey: parent, mentor and the
@@ -290,7 +286,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 			t.Errorf("no %q in\n%s", want, got)
 		}
 	}
-	for _, absent := range []string{"orgID", "passwordHash", "authorID: Int", "menteeID", "mentorID: Int", "draft", "Secret", "UserGroup", "type User", "AccountRole"} {
+	for _, absent := range []string{"orgID", "passwordHash", "authorID: Int", "menteeID", "mentorID: Int", "draft", "Secret", "UserGroup", "type User", "AccountRole", "type Mutation", "createPost", "deletePost"} {
 		if strings.Contains(got, absent) {
 			t.Errorf("%q is in\n%s", absent, got)
 		}
@@ -1445,7 +1441,7 @@ func TestCategoryTwin(t *testing.T) {
 	if err := db.Insert(c1).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	c2, err := gen.CreateCategory(ctx, gen.CreateCategoryInput{Title: "c2", TwinID: ptr(catID(c1.ID))})
+	c2, err := (&gen.CreateCategoryInput{Title: "c2", TwinID: ptr(catID(c1.ID))}).Create(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

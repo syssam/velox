@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion8
+const _ = veloxgql.GeneratedCodeIsVersion9
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -375,10 +375,10 @@ func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	return f.Pred()
 }
 
-// userCreateFieldGQL is the GraphQL name of the CreateUserInput field that sets
-// the User field whose Go name is goField, for the errors of its validators: ""
-// for a field it does not set.
-func userCreateFieldGQL(goField string) string {
+// userInputGQL is the GraphQL name of the CreateUserInput and UpdateUserInput
+// field that sets the User field whose Go name is goField, for the errors of
+// its validators: "" for a field it does not set.
+func userInputGQL(goField string) string {
 	switch goField {
 	case "Name":
 		return "name"
@@ -394,8 +394,8 @@ func userCreateFieldGQL(goField string) string {
 	return ""
 }
 
-// CreateUserInput is the GraphQL input CreateUserInput, the input of
-// createUser. A field that is a pointer, or a list, is optional: nil means not
+// CreateUserInput is the GraphQL input CreateUserInput; its method Create
+// writes it. A field that is a pointer, or a list, is optional: nil means not
 // given.
 type CreateUserInput struct {
 	Name         string
@@ -413,60 +413,30 @@ func (in CreateUserInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in CreateUserInput) GoString() string { return in.String() }
 
-// CreateUser creates a User from input, with its edges, as the mutation
-// createUser does, and returns the row as written. It runs atomically on the DB
-// veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations" in
-// the documentation of package github.com/syssam/velox/contrib/graphql for what
-// each input field does, what the caller may link and change, and the errors.
-func CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
-	var x User
-	cols := []velox.Column[User]{Users.Name, Users.Email, Users.JoinedAt, Users.PasswordHash}
-	x.Name = input.Name
-	x.Email = input.Email
-	if input.Role != nil {
-		x.Role = *input.Role
-		cols = append(cols, Users.Role)
+// Create inserts x, a User, with the input's fields and edges set, and returns
+// it. A nil x is a new one; fields the input does not set are inserted as the
+// caller set them, so a resolver sets there what the client must not choose. It
+// runs atomically on the DB in ctx, under the policies, and changes x even when
+// it fails.
+//
+// See "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each input field does, what
+// the caller may link and change, and the errors.
+func (in *CreateUserInput) Create(ctx context.Context, x *User) (*User, error) {
+	c, x := gqlimpl.NewCreate(ctx, "CreateUserInput", "gen.User", x, userInputGQL, Users.Name, Users.Email, Users.JoinedAt, Users.PasswordHash)
+	x.Name = in.Name
+	x.Email = in.Email
+	if in.Role != nil {
+		x.Role = *in.Role
+		c.Given(Users.Role)
 	}
-	x.JoinedAt = input.JoinedAt
-	x.PasswordHash = input.PasswordHash
-	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreateUserInput", "gen.User", userCreateFieldGQL)
-	}
-	var out *User
-	err := gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreateUserInput", "gen.User", userCreateFieldGQL)
-		}
-		out = &x
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	x.JoinedAt = in.JoinedAt
+	x.PasswordHash = in.PasswordHash
+	return c.Insert()
 }
 
-// userUpdateFieldGQL is the GraphQL name of the UpdateUserInput field that sets
-// the User field whose Go name is goField, for the errors of its validators: ""
-// for a field it does not set.
-func userUpdateFieldGQL(goField string) string {
-	switch goField {
-	case "Name":
-		return "name"
-	case "Email":
-		return "email"
-	case "Role":
-		return "role"
-	case "JoinedAt":
-		return "joinedAt"
-	case "PasswordHash":
-		return "passwordHash"
-	}
-	return ""
-}
-
-// UpdateUserInput is the GraphQL input UpdateUserInput, the input of
-// updateUser. A field that is a pointer, or a list, is optional: nil means not
+// UpdateUserInput is the GraphQL input UpdateUserInput; its method Update
+// writes it. A field that is a pointer, or a list, is optional: nil means not
 // given.
 type UpdateUserInput struct {
 	Name         *string
@@ -484,68 +454,29 @@ func (in UpdateUserInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in UpdateUserInput) GoString() string { return in.String() }
 
-// UpdateUser updates the User with the ID id from input, as the mutation
-// updateUser does, and returns the row as written. It runs atomically on the DB
-// veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations" in
-// the documentation of package github.com/syssam/velox/contrib/graphql for what
-// each input field does, what the caller may link and change, and the errors.
-func UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
-	var (
-		key int64
-		err error
-	)
-	if key, err = gqlimpl.DecodeID[int64]("updateUser.id", id, "User"); err != nil {
-		return nil, err
+// Update updates the User with the ID id from the input and then from set, the
+// application's own setters, validated with the input's, and returns the row as
+// written. It runs atomically on the DB in ctx, under the policies.
+//
+// See "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each input field does, what
+// the caller may link and change, and the errors.
+func (in *UpdateUserInput) Update(ctx context.Context, id string, set ...velox.Setter[User]) (*User, error) {
+	u, key := gqlimpl.NewUpdate[User, int64](ctx, "UpdateUserInput", "gen.User", id, userInputGQL)
+	if in.Name != nil {
+		u.Set(Users.Name.Set(*in.Name))
 	}
-	var set []velox.Setter[User]
-	if input.Name != nil {
-		set = append(set, Users.Name.Set(*input.Name))
+	if in.Email != nil {
+		u.Set(Users.Email.Set(*in.Email))
 	}
-	if input.Email != nil {
-		set = append(set, Users.Email.Set(*input.Email))
+	if in.Role != nil {
+		u.Set(Users.Role.Set(*in.Role))
 	}
-	if input.Role != nil {
-		set = append(set, Users.Role.Set(*input.Role))
+	if in.JoinedAt != nil {
+		u.Set(Users.JoinedAt.Set(*in.JoinedAt))
 	}
-	if input.JoinedAt != nil {
-		set = append(set, Users.JoinedAt.Set(*input.JoinedAt))
+	if in.PasswordHash != nil {
+		u.Set(Users.PasswordHash.Set(*in.PasswordHash))
 	}
-	if input.PasswordHash != nil {
-		set = append(set, Users.PasswordHash.Set(*input.PasswordHash))
-	}
-	if err = velox.ValidateSet(set...); err != nil {
-		return nil, gqlimpl.WriteError(err, "UpdateUserInput", "gen.User", userUpdateFieldGQL)
-	}
-	var out *User
-	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		counted := false
-		if len(set) > 0 {
-			n, err := db.Update[User]().Set(set...).Where(Users.ID.EQ(key)).Exec(ctx)
-			if err != nil {
-				return gqlimpl.WriteError(err, "UpdateUserInput", "gen.User", userUpdateFieldGQL)
-			}
-			if n == 0 {
-				return gqlimpl.NotFound("updateUser", "User")
-			}
-			counted = n > 0
-		}
-		if !counted {
-			if err := gqlimpl.LockRow(ctx, db, db.Query[User]().Where(Users.ID.EQ(key)), "updateUser", "User"); err != nil {
-				return err
-			}
-		}
-		x, err := db.Query[User]().Where(Users.ID.EQ(key)).One(velox.WithoutPolicy(ctx, "graphql: the row this update wrote"))
-		if velox.IsNotFound(err) {
-			return gqlimpl.NotFound("updateUser", "User")
-		}
-		if err != nil {
-			return err
-		}
-		out = x
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	return u.Exec(Users.ID.EQ(key), set...)
 }

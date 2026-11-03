@@ -33,7 +33,7 @@ var annotationCases = []annotationCase{
 	{"Type", graphql.Type("Account"), `{"type":"Account"}`},
 	{"QueryField", graphql.QueryField("users"), `{"query_field":"users"}`},
 	{"Mutations()", graphql.Mutations(), `{"mutations":["create","update"]}`},
-	{"Mutations(all)", graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete), `{"mutations":["create","update","delete"]}`},
+	{"Mutations(one)", graphql.Mutations(graphql.MutationUpdate), `{"mutations":["update"]}`},
 	{"MultiOrder", graphql.MultiOrder(), `{"multi_order":true}`},
 	{"FieldName", graphql.FieldName("fullName"), `{"field_name":"fullName"}`},
 	{"OrderField", graphql.OrderField("CREATED_AT"), `{"order_field":"CREATED_AT"}`},
@@ -146,12 +146,12 @@ func TestMerge(t *testing.T) {
 		}
 	})
 	t.Run("mutations append", func(t *testing.T) {
-		got := merge(t, graphql.Mutations(graphql.MutationCreate), graphql.Mutations(graphql.MutationDelete))
-		if want := []graphql.MutationKind{"create", "delete"}; !reflect.DeepEqual(got.Mutations, want) {
+		got := merge(t, graphql.Mutations(graphql.MutationCreate), graphql.Mutations(graphql.MutationUpdate))
+		if want := []graphql.MutationKind{"create", "update"}; !reflect.DeepEqual(got.Mutations, want) {
 			t.Errorf("Mutations = %v, want %v", got.Mutations, want)
 		}
-		got = merge(t, graphql.Mutations(), graphql.Mutations(graphql.MutationUpdate, graphql.MutationDelete))
-		if want := []graphql.MutationKind{"create", "update", "delete"}; !reflect.DeepEqual(got.Mutations, want) {
+		got = merge(t, graphql.Mutations(), graphql.Mutations(graphql.MutationUpdate))
+		if want := []graphql.MutationKind{"create", "update"}; !reflect.DeepEqual(got.Mutations, want) {
 			t.Errorf("repeated kind: Mutations = %v, want %v", got.Mutations, want)
 		}
 	})
@@ -253,7 +253,7 @@ func (User) Annotations() []schema.Annotation {
 		graphql.Mutations(),
 		graphql.Type("First"),
 		graphql.Type("Account"),
-		graphql.Mutations(graphql.MutationDelete),
+		graphql.Mutations(graphql.MutationUpdate),
 		graphql.Skip(graphql.SkipOrderField),
 		graphql.Skip(graphql.SkipWhereInput),
 	}
@@ -346,7 +346,7 @@ func TestThroughTheLoader(t *testing.T) {
 			Skip:       graphql.SkipOrderField | graphql.SkipWhereInput,
 			Type:       "Account",
 			QueryField: "users",
-			Mutations:  []graphql.MutationKind{"create", "update", "delete"},
+			Mutations:  []graphql.MutationKind{"create", "update"},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("User: got %+v\nwant %+v", got, want)

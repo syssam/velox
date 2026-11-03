@@ -95,7 +95,7 @@
         {"name": "related_by", "go_name": "RelatedBy", "target": "Post", "ref": "related", "kind": "M2M", "inverse": true, "join": "PostRelated"}
       ],
       "primary_key": [0],
-      "annotations": {"graphql": {"query_field": "posts", "multi_order": true, "mutations": ["create", "update", "delete"]}}
+      "annotations": {"graphql": {"query_field": "posts", "multi_order": true, "mutations": ["create", "update"]}}
     },
     {
       "name": "Session",

@@ -38,8 +38,8 @@ func TestNodeKeyTypes(t *testing.T) {
 	if def := sch.Types["Clock"]; len(def.Interfaces) != 0 || typeOf(sch, "Clock", "id") != "Float!" || goField(sch, "Clock", "id") != "" {
 		t.Errorf("a float key:\n%s", sdl)
 	}
-	clock.Annotations = ann(t, graphql.Mutations(graphql.MutationDelete))
-	renderErr(t, model(clock), "schema Clock", "delete", "of type float64, which an ID does not hold")
+	clock.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate))
+	renderErr(t, model(clock), "schema Clock", "update", "of type float64, which an ID does not hold")
 }
 
 // A field whose Go type is the application's own binds to a getter, which
@@ -157,15 +157,15 @@ func TestSurfaceInputs(t *testing.T) {
 	sch, sdl := load(t, m, readFile(t, filepath.Join("testdata", "app.graphqls")))
 
 	for _, c := range []struct {
-		name                   string
-		create, update, delete bool
+		name           string
+		create, update bool
 	}{
-		{"Post", true, true, true}, {"Category", true, true, false}, {"Like", true, false, false},
-		{"Account", true, false, false}, {"Group", false, false, false},
+		{"Post", true, true}, {"Category", true, true}, {"Like", true, false},
+		{"Account", true, false}, {"Group", false, false},
 	} {
 		ty := typeNamed(t, s, c.name)
-		if (ty.Create != nil) != c.create || (ty.Update != nil) != c.update || ty.Delete != c.delete {
-			t.Errorf("%s: Create %v, Update %v, Delete %v; want %v %v %v", c.name, ty.Create != nil, ty.Update != nil, ty.Delete, c.create, c.update, c.delete)
+		if (ty.Create != nil) != c.create || (ty.Update != nil) != c.update {
+			t.Errorf("%s: Create %v, Update %v; want %v %v", c.name, ty.Create != nil, ty.Update != nil, c.create, c.update)
 		}
 	}
 

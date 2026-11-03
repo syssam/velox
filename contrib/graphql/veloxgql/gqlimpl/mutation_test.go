@@ -897,21 +897,6 @@ func TestStillLinked(t *testing.T) {
 	}
 }
 
-// TestDisjoint: a key in both lists is BAD_USER_INPUT naming the input and
-// both fields, and echoes no ID; lists with no key in common, empty ones
-// included, are not an error.
-func TestDisjoint(t *testing.T) {
-	for _, c := range []struct{ add, remove []int64 }{{nil, nil}, {[]int64{1}, nil}, {nil, []int64{1}}, {[]int64{1, 2}, []int64{3}}} {
-		if err := gqlimpl.Disjoint("UpdatePostInput", "addTagIDs", "removeTagIDs", c.add, c.remove); err != nil {
-			t.Errorf("Disjoint(%v, %v) = %v, want nil", c.add, c.remove, err)
-		}
-	}
-	err := gqlimpl.Disjoint("UpdatePostInput", "addTagIDs", "removeTagIDs", []int64{1, 2, 3}, []int64{4, 3})
-	if codeOf(err) != veloxgql.CodeBadUserInput || err.Error() != "veloxgql: UpdatePostInput: an ID is in both addTagIDs and removeTagIDs" {
-		t.Errorf("Disjoint = %v (code %q)", err, codeOf(err))
-	}
-}
-
 func TestWriteError(t *testing.T) {
 	name := func(goField string) string {
 		if goField == "Title" {
@@ -969,13 +954,5 @@ func TestFromJSON(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "gqlimpl_test") || strings.Contains(err.Error(), "meta.Tags") {
 		t.Errorf("%q names a Go type", err)
-	}
-}
-
-// TestNotNullOutsideAField: outside a gqlgen field no null can be read, and none is
-// refused. TestExplicitNullRefused (cmd/velox-graphql) serves the rest.
-func TestNotNullOutsideAField(t *testing.T) {
-	if err := gqlimpl.NotNull(context.Background(), "In.n", "input", "n"); err != nil {
-		t.Error(err)
 	}
 }

@@ -49,10 +49,8 @@ type Type struct {
 	// that are neither skipped nor to a type that is.
 	Edges []Edge
 	// Create and Update are the fields of CreateXInput and UpdateXInput, in
-	// the SDL's order; nil when the type has no createX or no updateX.
+	// the SDL's order; nil when the type has no create or no update input.
 	Create, Update []InputField
-	// Delete reports whether the type has deleteX.
-	Delete bool
 }
 
 // InputKind is what a field of a mutation input does.
@@ -228,7 +226,7 @@ func Build(m *plugin.Model) (*Surface, error) {
 	for _, o := range g.objects {
 		t := types[o]
 		*t = Type{Entity: o.ent, Name: o.name, Node: o.node, Key: o.key, Getters: o.getters, MultiOrder: o.ann.MultiOrder, Where: o.whereGo,
-			Create: o.createGo, Update: o.updateGo, Delete: o.del, Fields: o.plain}
+			Create: o.createGo, Update: o.updateGo, Fields: o.plain}
 		for _, en := range o.enums {
 			i := slices.IndexFunc(o.ent.Fields, func(f *plugin.Field) bool { return f.Name == en.field })
 			t.Enums = append(t.Enums, Enum{Name: en.name, Field: i, Values: en.values})

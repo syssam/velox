@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion8
+const _ = veloxgql.GeneratedCodeIsVersion9
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -326,10 +326,10 @@ func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
 	return f.Pred()
 }
 
-// tagCreateFieldGQL is the GraphQL name of the CreateLabelInput field that sets
-// the Tag field whose Go name is goField, for the errors of its validators: ""
-// for a field it does not set.
-func tagCreateFieldGQL(goField string) string {
+// tagInputGQL is the GraphQL name of the CreateLabelInput and UpdateLabelInput
+// field that sets the Tag field whose Go name is goField, for the errors of its
+// validators: "" for a field it does not set.
+func tagInputGQL(goField string) string {
 	switch goField {
 	case "Name":
 		return "name"
@@ -339,8 +339,8 @@ func tagCreateFieldGQL(goField string) string {
 	return ""
 }
 
-// CreateLabelInput is the GraphQL input CreateLabelInput, the input of
-// createLabel. A field that is a pointer, or a list, is optional: nil means not
+// CreateLabelInput is the GraphQL input CreateLabelInput; its method Create
+// writes it. A field that is a pointer, or a list, is optional: nil means not
 // given.
 type CreateLabelInput struct {
 	Name string
@@ -349,78 +349,26 @@ type CreateLabelInput struct {
 	PostIDs []string
 }
 
-// String returns the input's fields except its sensitive ones.
-func (in CreateLabelInput) String() string {
-	return fmt.Sprintf("CreateLabelInput(Name=%v, Rank=%v, PostIDs=%v)", in.Name, in.Rank, in.PostIDs)
+// Create inserts x, a Label, with the input's fields and edges set, and returns
+// it. A nil x is a new one; fields the input does not set are inserted as the
+// caller set them, so a resolver sets there what the client must not choose. It
+// runs atomically on the DB in ctx, under the policies, and changes x even when
+// it fails.
+//
+// See "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each input field does, what
+// the caller may link and change, and the errors.
+func (in *CreateLabelInput) Create(ctx context.Context, x *Tag) (*Tag, error) {
+	c, x := gqlimpl.NewCreate(ctx, "CreateLabelInput", "gen.Tag", x, tagInputGQL, Tags.Name, Tags.Rank)
+	x.Name = in.Name
+	x.Rank = in.Rank
+	postIDsKeys := gqlimpl.Keys[int64](c, "postIDs", in.PostIDs, "Post")
+	gqlimpl.Join(c, "postIDs", "Post", postIDsKeys, Posts.ID.In, func(x *Tag, k int64) PostTag { return PostTag{TagID: x.ID, PostID: k} }, PostTags.TagID, PostTags.PostID)
+	return c.Insert()
 }
 
-// GoString is String, so that %#v does not print the sensitive fields either.
-func (in CreateLabelInput) GoString() string { return in.String() }
-
-// CreateLabel creates a Label from input, with its edges, as the mutation
-// createLabel does, and returns the row as written. It runs atomically on the
-// DB veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations"
-// in the documentation of package github.com/syssam/velox/contrib/graphql for
-// what each input field does, what the caller may link and change, and the
-// errors.
-func CreateLabel(ctx context.Context, input CreateLabelInput) (*Tag, error) {
-	var (
-		postIDsKeys []int64
-		err         error
-	)
-	if postIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "CreateLabelInput.postIDs", input.PostIDs, "Post"); err != nil {
-		return nil, err
-	}
-	var x Tag
-	cols := []velox.Column[Tag]{Tags.Name, Tags.Rank}
-	x.Name = input.Name
-	x.Rank = input.Rank
-	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreateLabelInput", "gen.Tag", tagCreateFieldGQL)
-	}
-	var out *Tag
-	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if len(postIDsKeys) > 0 {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(postIDsKeys...)), len(postIDsKeys), "CreateLabelInput.postIDs", "Post"); err != nil {
-				return err
-			}
-		}
-		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreateLabelInput", "gen.Tag", tagCreateFieldGQL)
-		}
-		if len(postIDsKeys) > 0 {
-			rows := make([]PostTag, len(postIDsKeys))
-			for i, k := range postIDsKeys {
-				rows[i] = PostTag{TagID: x.ID, PostID: k}
-			}
-			if err := db.InsertAll(rows).OnConflict(PostTags.TagID, PostTags.PostID).DoNothing().Exec(ctx); err != nil {
-				return err
-			}
-		}
-		out = &x
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// tagUpdateFieldGQL is the GraphQL name of the UpdateLabelInput field that sets
-// the Tag field whose Go name is goField, for the errors of its validators: ""
-// for a field it does not set.
-func tagUpdateFieldGQL(goField string) string {
-	switch goField {
-	case "Name":
-		return "name"
-	case "Rank":
-		return "rank"
-	}
-	return ""
-}
-
-// UpdateLabelInput is the GraphQL input UpdateLabelInput, the input of
-// updateLabel. A field that is a pointer, or a list, is optional: nil means not
+// UpdateLabelInput is the GraphQL input UpdateLabelInput; its method Update
+// writes it. A field that is a pointer, or a list, is optional: nil means not
 // given. A clear field that is true clears a field or an edge, and is refused
 // with the field or the edge's ID given too.
 type UpdateLabelInput struct {
@@ -436,109 +384,24 @@ type UpdateLabelInput struct {
 	ClearPosts bool
 }
 
-// String returns the input's fields except its sensitive ones.
-func (in UpdateLabelInput) String() string {
-	return fmt.Sprintf("UpdateLabelInput(Name=%v, Rank=%v, AddPostIDs=%v, RemovePostIDs=%v, ClearPosts=%v)", gqlimpl.Show(in.Name), gqlimpl.Show(in.Rank), in.AddPostIDs, in.RemovePostIDs, in.ClearPosts)
-}
-
-// GoString is String, so that %#v does not print the sensitive fields either.
-func (in UpdateLabelInput) GoString() string { return in.String() }
-
-// UpdateLabel updates the Label with the ID id from input, as the mutation
-// updateLabel does, and returns the row as written. It runs atomically on the
-// DB veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations"
-// in the documentation of package github.com/syssam/velox/contrib/graphql for
-// what each input field does, what the caller may link and change, and the
-// errors.
-func UpdateLabel(ctx context.Context, id string, input UpdateLabelInput) (*Tag, error) {
-	var (
-		key               int64
-		addPostIDsKeys    []int64
-		removePostIDsKeys []int64
-		err               error
-	)
-	if key, err = gqlimpl.DecodeID[int64]("updateLabel.id", id, "Label"); err != nil {
-		return nil, err
+// Update updates the Label with the ID id from the input and then from set, the
+// application's own setters, validated with the input's, and returns the row as
+// written. It runs atomically on the DB in ctx, under the policies.
+//
+// See "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each input field does, what
+// the caller may link and change, and the errors.
+func (in *UpdateLabelInput) Update(ctx context.Context, id string, set ...velox.Setter[Tag]) (*Tag, error) {
+	u, key := gqlimpl.NewUpdate[Tag, int64](ctx, "UpdateLabelInput", "gen.Tag", id, tagInputGQL)
+	if in.Name != nil {
+		u.Set(Tags.Name.Set(*in.Name))
 	}
-	if addPostIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateLabelInput.addPostIDs", input.AddPostIDs, "Post"); err != nil {
-		return nil, err
+	if in.Rank != nil {
+		u.Set(Tags.Rank.Set(*in.Rank))
 	}
-	if removePostIDsKeys, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateLabelInput.removePostIDs", input.RemovePostIDs, "Post"); err != nil {
-		return nil, err
-	}
-	if err = gqlimpl.Disjoint("UpdateLabelInput", "addPostIDs", "removePostIDs", addPostIDsKeys, removePostIDsKeys); err != nil {
-		return nil, err
-	}
-	var set []velox.Setter[Tag]
-	if input.Name != nil {
-		set = append(set, Tags.Name.Set(*input.Name))
-	}
-	if input.Rank != nil {
-		set = append(set, Tags.Rank.Set(*input.Rank))
-	}
-	if err = velox.ValidateSet(set...); err != nil {
-		return nil, gqlimpl.WriteError(err, "UpdateLabelInput", "gen.Tag", tagUpdateFieldGQL)
-	}
-	var out *Tag
-	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		counted := false
-		if len(set) > 0 {
-			n, err := db.Update[Tag]().Set(set...).Where(Tags.ID.EQ(key)).Exec(ctx)
-			if err != nil {
-				return gqlimpl.WriteError(err, "UpdateLabelInput", "gen.Tag", tagUpdateFieldGQL)
-			}
-			if n == 0 {
-				return gqlimpl.NotFound("updateLabel", "Label")
-			}
-			counted = n > 0
-		}
-		if !counted {
-			if err := gqlimpl.LockRow(ctx, db, db.Query[Tag]().Where(Tags.ID.EQ(key)), "updateLabel", "Label"); err != nil {
-				return err
-			}
-		}
-		unlinkPosts := func(ks []int64) error {
-			vs, err := gqlimpl.Readable(ctx, db.Query[Post]().Where(Posts.ID.In(ks...)).Columns(Posts.ID), len(ks), func(x *Post) int64 { return x.ID })
-			if err != nil || len(vs) == 0 {
-				return err
-			}
-			_, err = db.Delete[PostTag]().Where(PostTags.TagID.EQ(key), PostTags.PostID.In(vs...)).Exec(ctx)
-			return err
-		}
-		if input.ClearPosts {
-			if err := gqlimpl.UnlinkAll(ctx, db.Query[PostTag]().Where(PostTags.TagID.EQ(key)).OrderBy(PostTags.TagID.Asc(), PostTags.PostID.Asc()), func(j *PostTag) int64 { return j.PostID }, unlinkPosts); err != nil {
-				return err
-			}
-		}
-		if len(removePostIDsKeys) > 0 {
-			if err := unlinkPosts(removePostIDsKeys); err != nil {
-				return err
-			}
-		}
-		if len(addPostIDsKeys) > 0 {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(addPostIDsKeys...)), len(addPostIDsKeys), "UpdateLabelInput.addPostIDs", "Post"); err != nil {
-				return err
-			}
-			rows := make([]PostTag, len(addPostIDsKeys))
-			for i, c := range addPostIDsKeys {
-				rows[i] = PostTag{TagID: key, PostID: c}
-			}
-			if err := db.InsertAll(rows).OnConflict(PostTags.TagID, PostTags.PostID).DoNothing().Exec(ctx); err != nil {
-				return err
-			}
-		}
-		x, err := db.Query[Tag]().Where(Tags.ID.EQ(key)).One(velox.WithoutPolicy(ctx, "graphql: the row this update wrote"))
-		if velox.IsNotFound(err) {
-			return gqlimpl.NotFound("updateLabel", "Label")
-		}
-		if err != nil {
-			return err
-		}
-		out = x
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	addPostIDsKeys := gqlimpl.Keys[int64](u, "addPostIDs", in.AddPostIDs, "Post")
+	removePostIDsKeys := gqlimpl.Keys[int64](u, "removePostIDs", in.RemovePostIDs, "Post")
+	gqlimpl.Disjoint(u, "addPostIDs", "removePostIDs", addPostIDsKeys, removePostIDsKeys)
+	gqlimpl.Through[Post](u, "addPostIDs", "Post", in.ClearPosts, removePostIDsKeys, addPostIDsKeys, Posts.ID, func(x *Post) int64 { return x.ID }, PostTags.TagID, key, PostTags.PostID, func(j *PostTag) int64 { return j.PostID }, func(k int64) PostTag { return PostTag{TagID: key, PostID: k} })
+	return u.Exec(Tags.ID.EQ(key), set...)
 }

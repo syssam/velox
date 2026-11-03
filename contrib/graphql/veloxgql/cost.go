@@ -70,9 +70,10 @@ const stringUnit = 128
 //   - on a mutation, an input object adds a statement for the row it reads back,
 //     two for a non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, one for an
 //     <edge>ID, and three for a clear<Edge>: true, a page of its links, the targets
-//     and the delete, a page being up to MaxPage. A delete<T> of a type with
-//     connections or lists adds a statement for its check and one for each. An
-//     application's own mutation that names its fields so counts the same.
+//     and the delete, a page being up to MaxPage. A delete<T>, which the
+//     application writes, of a type with connections or lists adds a statement
+//     for a check of its row and one for each, the links it deletes. Any
+//     mutation of the application's that names its fields so counts the same.
 //
 // Sums and products saturate at 1<<62 (math.MaxInt where int is smaller),
 // checked before they are computed, so huge arguments and many aliases cannot

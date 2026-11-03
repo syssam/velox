@@ -19,7 +19,7 @@ type User struct{ schema.Schema }
 
 // Fields returns the columns after the ID. PasswordHash is Sensitive, so it
 // is in no GraphQL type, where input or order: it is an input only, of
-// createUser and updateUser, and never output. Email is for admins only: the
+// CreateUserInput and UpdateUserInput, and never output. Email is for admins only: the
 // application's directive @admin guards the field and, since velox-graphql
 // copies it onto them, its where predicates, by which a client could
 // otherwise find an email a prefix at a time.
@@ -52,7 +52,7 @@ type Post struct{ schema.Schema }
 // Fields returns the columns after the ID. OrgID is Immutable and graphql.Skip
 // leaves it out of every GraphQL type and input; Scoped confines every
 // statement on Post to the context's organization and fills it on insert.
-// AuthorID is the key of the Author edge, which stands for it in GraphQL. Views is Optional: createPost may leave it out, and it is
+// AuthorID is the key of the Author edge, which stands for it in GraphQL. Views is Optional: CreatePostInput may leave it out, and it is
 // then 0.
 func (Post) Fields() []schema.Field {
 	return []schema.Field{
@@ -66,10 +66,12 @@ func (Post) Fields() []schema.Field {
 }
 
 // Edges returns Author, and Tags, a many-to-many edge through the join table
-// post_tags.
+// post_tags. CreatePostInput has no authorID: the createPost resolver sets
+// the author to the viewer, so a client cannot post as another user;
+// UpdatePostInput keeps it.
 func (Post) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id"),
+		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id").Annotations(graphql.Skip(graphql.SkipMutationCreateInput)),
 		edge.To("tags", Tag.Type).Annotations(graphql.WhereEdge()),
 	}
 }
@@ -79,7 +81,7 @@ func (Post) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		graphql.QueryField("posts"),
 		graphql.MultiOrder(),
-		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete),
+		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate),
 	}
 }
 

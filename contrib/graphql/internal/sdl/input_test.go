@@ -37,7 +37,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	skipped.Annotations = ann(t, graphql.Skip())
 	bestFriend := &plugin.Field{Name: "user_best_friend", GoName: "UserBestFriend", Type: "int64", Nullable: true, Optional: true, Implicit: "best_friend"}
 	user := entity("User", name, nickname, role, created, updated, editedBy, touched, org, secret, handle, views, notes, hidden, createOnly, skipped, bestFriend)
-	user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete))
+	user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 	posts := edge("posts", plugin.O2M, "Post")
 	posts.Field, posts.FieldOn = "author_id", "Post"
 	groups := edge("groups", plugin.M2M, "Group")
@@ -112,24 +112,15 @@ func TestInputs(t *testing.T) {
 		t.Errorf("the field's description:\n%s", sdl)
 	}
 
-	// Mutation lists the kinds each schema asks for.
-	if s.Types["Mutation"] == nil {
-		t.Fatalf("no Mutation:\n%s", sdl)
+	// The inputs are those of the kinds each schema asks for, and no
+	// Mutation: the application declares its own.
+	if s.Types["Mutation"] != nil || strings.Contains(sdl, "type Mutation") {
+		t.Errorf("a Mutation:\n%s", sdl)
 	}
-	var got []string
-	for _, f := range s.Types["Mutation"].Fields {
-		got = append(got, f.Name+"("+strings.Join(argsOf(s, "Mutation", f.Name), ", ")+"): "+f.Type.String())
-	}
-	want := []string{
-		"createLike(input: CreateLikeInput!): Like!",
-		"createPost(input: CreatePostInput!): Post!",
-		"updatePost(id: ID!, input: UpdatePostInput!): Post!",
-		"createUser(input: CreateUserInput!): User!",
-		"updateUser(id: ID!, input: UpdateUserInput!): User!",
-		"deleteUser(id: ID!): ID!",
-	}
-	if !slices.Equal(got, want) {
-		t.Errorf("Mutation:\n got %v\nwant %v", got, want)
+	for _, in := range []string{"CreateLikeInput", "CreatePostInput", "UpdatePostInput", "CreateUserInput", "UpdateUserInput"} {
+		if s.Types[in] == nil {
+			t.Errorf("no %s:\n%s", in, sdl)
+		}
 	}
 	for _, absent := range []string{"UpdateLikeInput", "CreateGroupInput"} {
 		if s.Types[absent] != nil {
@@ -147,18 +138,18 @@ func TestInputs(t *testing.T) {
 	t.Run("no update fields", func(t *testing.T) {
 		msg := &plugin.Field{Name: "msg", GoName: "Msg", Type: "string", Immutable: true}
 		log := entity("Log", msg)
-		log.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete))
+		log.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 		s, sdl := load(t, model(log))
-		if s.Types["UpdateLogInput"] != nil || typeOf(s, "Mutation", "updateLog") != "" {
+		if s.Types["UpdateLogInput"] != nil {
 			t.Errorf("an update:\n%s", sdl)
 		}
-		if typeOf(s, "Mutation", "createLog") != "Log!" || typeOf(s, "Mutation", "deleteLog") != "ID!" {
-			t.Errorf("create or delete is missing:\n%s", sdl)
+		if s.Types["CreateLogInput"] == nil {
+			t.Errorf("create is missing:\n%s", sdl)
 		}
 	})
 
 	t.Run("no create fields", func(t *testing.T) {
-		// An input type cannot be empty, and createX takes its input.
+		// An input type cannot be empty.
 		only := field("only", "int64")
 		only.Annotations = ann(t, graphql.Skip(graphql.SkipMutationCreateInput))
 		u := entity("User", only)
@@ -170,8 +161,7 @@ func TestInputs(t *testing.T) {
 		u := entity("User", field("name", "string"))
 		u.Annotations = ann(t, graphql.Type("Account"), graphql.Mutations())
 		s, sdl := load(t, model(u))
-		if typeOf(s, "Mutation", "createAccount") != "Account!" || typeOf(s, "Mutation", "updateAccount") != "Account!" ||
-			s.Types["CreateAccountInput"] == nil || s.Types["UpdateAccountInput"] == nil || strings.Contains(sdl, "CreateUser") {
+		if s.Types["CreateAccountInput"] == nil || s.Types["UpdateAccountInput"] == nil || strings.Contains(sdl, "CreateUser") {
 			t.Errorf("renamed:\n%s", sdl)
 		}
 	})

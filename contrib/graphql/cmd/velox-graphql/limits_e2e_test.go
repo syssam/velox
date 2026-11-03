@@ -307,12 +307,12 @@ func (r *queryResolver) Posts(ctx context.Context, after *veloxgql.Cursor, first
 
 // CreatePost is the resolver for the createPost field.
 func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
-	return gen.CreatePost(ctx, input, nil)
+	return input.Create(ctx, nil)
 }
 
 // UpdatePost is the resolver for the updatePost field.
 func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
-	return gen.UpdatePost(ctx, id, input)
+	return input.Update(ctx, id)
 }
 
 // Things is the resolver for the things field.
@@ -322,22 +322,22 @@ func (r *queryResolver) Things(ctx context.Context, after *veloxgql.Cursor, firs
 
 // CreateThing is the resolver for the createThing field.
 func (r *mutationResolver) CreateThing(ctx context.Context, input gen.CreateThingInput) (*gen.Thing, error) {
-	return gen.CreateThing(ctx, input)
+	return input.Create(ctx, nil)
 }
 
 // UpdateThing is the resolver for the updateThing field.
 func (r *mutationResolver) UpdateThing(ctx context.Context, id string, input gen.UpdateThingInput) (*gen.Thing, error) {
-	return gen.UpdateThing(ctx, id, input)
+	return input.Update(ctx, id)
 }
 
 // CreateAcct is the resolver for the createAcct field.
 func (r *mutationResolver) CreateAcct(ctx context.Context, input gen.CreateAcctInput) (*gen.Acct, error) {
-	return gen.CreateAcct(ctx, input)
+	return input.Create(ctx, nil)
 }
 
 // UpdateAcct is the resolver for the updateAcct field.
 func (r *mutationResolver) UpdateAcct(ctx context.Context, id string, input gen.UpdateAcctInput) (*gen.Acct, error) {
-	return gen.UpdateAcct(ctx, id, input)
+	return input.Update(ctx, id)
 }
 
 // Docs is the resolver for the docs field.
@@ -347,7 +347,7 @@ func (r *queryResolver) Docs(ctx context.Context, after *veloxgql.Cursor, first 
 
 // UpdateDoc is the resolver for the updateDoc field.
 func (r *mutationResolver) UpdateDoc(ctx context.Context, id string, input gen.UpdateDocInput) (*gen.Doc, error) {
-	return gen.UpdateDoc(ctx, id, input)
+	return input.Update(ctx, id)
 }
 
 // Members is the resolver for the members field.
@@ -367,12 +367,12 @@ func (r *queryResolver) Items(ctx context.Context, after *veloxgql.Cursor, first
 
 // CreateItem is the resolver for the createItem field.
 func (r *mutationResolver) CreateItem(ctx context.Context, input gen.CreateItemInput) (*gen.Item, error) {
-	return gen.CreateItem(ctx, input)
+	return input.Create(ctx, nil)
 }
 
 // UpdateItem is the resolver for the updateItem field.
 func (r *mutationResolver) UpdateItem(ctx context.Context, id string, input gen.UpdateItemInput) (*gen.Item, error) {
-	return gen.UpdateItem(ctx, id, input)
+	return input.Update(ctx, id)
 }
 
 // Flags is the resolver for the flags field.
@@ -382,23 +382,23 @@ func (r *queryResolver) Flags(ctx context.Context, after *veloxgql.Cursor, first
 
 // CreateFlag is the resolver for the createFlag field.
 func (r *mutationResolver) CreateFlag(ctx context.Context, input gen.CreateFlagInput) (*gen.Flag, error) {
-	return gen.CreateFlag(ctx, input)
+	return input.Create(ctx, nil)
 }
 
 // UpdateFlag is the resolver for the updateFlag field.
 func (r *mutationResolver) UpdateFlag(ctx context.Context, id string, input gen.UpdateFlagInput) (*gen.Flag, error) {
-	return gen.UpdateFlag(ctx, id, input)
+	return input.Update(ctx, id)
 }
 
 // CreatePage is the resolver for the createPage field: it sets the slug the
 // input leaves out.
 func (r *mutationResolver) CreatePage(ctx context.Context, input gen.CreatePageInput) (*gen.Page, error) {
-	return gen.CreatePage(ctx, input, func(p *gen.Page) { p.Slug = strings.ToLower(input.Title) })
+	return input.Create(ctx, &gen.Page{Slug: strings.ToLower(input.Title)})
 }
 
 // UpdatePage is the resolver for the updatePage field.
 func (r *mutationResolver) UpdatePage(ctx context.Context, id string, input gen.UpdatePageInput) (*gen.Page, error) {
-	return gen.UpdatePage(ctx, id, input)
+	return input.Update(ctx, id)
 }
 
 // Mutation returns MutationResolver implementation.
@@ -409,6 +409,26 @@ func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+`
+
+// e2eLimitsSDL is the application's own schema: the mutations it serves,
+// which velox-graphql leaves to it, each a resolver calling its input's
+// Create or Update.
+const e2eLimitsSDL = `type Mutation {
+  createPost(input: CreatePostInput!): Post!
+  updatePost(id: ID!, input: UpdatePostInput!): Post!
+  createThing(input: CreateThingInput!): Thing!
+  updateThing(id: ID!, input: UpdateThingInput!): Thing!
+  createAcct(input: CreateAcctInput!): Acct!
+  updateAcct(id: ID!, input: UpdateAcctInput!): Acct!
+  updateDoc(id: ID!, input: UpdateDocInput!): Doc!
+  createItem(input: CreateItemInput!): Item!
+  updateItem(id: ID!, input: UpdateItemInput!): Item!
+  createFlag(input: CreateFlagInput!): Flag!
+  updateFlag(id: ID!, input: UpdateFlagInput!): Flag!
+  createPage(input: CreatePageInput!): Page!
+  updatePage(id: ID!, input: UpdatePageInput!): Page!
+}
 `
 
 // e2eLimitsRun is the application's test, on SQLite, through gqlgen's handler.
@@ -1008,6 +1028,7 @@ func TestLimitsServed(t *testing.T) {
 		"gen/member_policy.go":      e2eLimitsPolicy,
 		"gen/scope.go":              e2eLimitsScope,
 		"gqlgen.yml":                e2eCollectGqlgen,
+		"graph/app.graphqls":        e2eLimitsSDL,
 		"graph/schema.resolvers.go": e2eLimitsResolvers,
 		"limits_test.go":            strings.NewReplacer("'", "`", "~", "'", "_ context,", "_ context.Context,", `"database/sql"`, "\"context\"\n\t\"database/sql\"").Replace(e2eLimitsRun),
 	}, true)
