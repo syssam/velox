@@ -313,6 +313,7 @@ func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T]
 func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
 func (s SaveQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (s SaveQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) SaveQuery[E]
+func (s Setter[E]) Column[_ Lazy[E]]() int
 func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E]
 func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)

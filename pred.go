@@ -15,6 +15,12 @@ type Column[E any] interface{ column(*E) int32 }
 // SetNull, Add or Sub.
 type Setter[E any] struct{ a Assignment }
 
+// Column is the column s assigns, as Assignment.Column numbers it: two setters
+// of one column have the same Column. For generated code: velox-graphql's
+// Update drops its input's setter of a column the application's own setter
+// assigns, which an UPDATE refuses to assign twice.
+func (s Setter[E]) Column[_ Lazy[E]]() int { return s.a.Column }
+
 // Allow is the condition that matches every row: what a policy's Read or
 // Write returns for a caller it does not restrict. In a policy it adds nothing
 // to the SQL; in a Where it is 1 = 1, which an Update or Delete's guard does
