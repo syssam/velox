@@ -175,6 +175,9 @@ func Elem(p any) any { return reflect.ValueOf(p).Elem().Interface() }
 // velox's generic API.
 func infoKit(in *EntityInfo) *Kit { return in.kit }
 
+// InfoKit is in's kit; nil before MetaOnce.Load sets it.
+func InfoKit(in *EntityInfo) *Kit { return in.kit }
+
 // SetInfoKit sets in's kit.
 func SetInfoKit(in *EntityInfo, k *Kit) { in.kit = k }
 

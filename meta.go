@@ -18,6 +18,8 @@ type Meta[E any] struct {
 	err  error
 	// nilCols marks the columns nilScanner reads; nil when there are none.
 	nilCols []bool
+	// tbl is the entity's Table, built by its first TableOf.
+	tbl tableState
 }
 
 // nilColumns are the columns of a slice or a map that database/sql cannot read a NULL

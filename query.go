@@ -247,12 +247,7 @@ func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
 
 // prepare is the statement a run sends: the query's, with After's condition.
 func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
-	st := engine.CloneStatement(&q.st)
-	if q.after == nil {
-		return st, nil
-	}
-	err := engine.AddAfter(&st, q.meta.info, unsafe.Pointer(q.after))
-	return st, err
+	return prepareStmt(&q.st, q.meta.info, unsafe.Pointer(q.after))
 }
 
 // scanRow scans the current row into p through the entity's scan plan; a
@@ -564,21 +559,7 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	st.Count, st.Columns, st.OrderBy, st.Limit, st.Offset = true, nil, nil, 0, 0
-	var n int64
-	if q.db.e.Hooked() {
-		c := &engine.CountRun{St: st}
-		err = q.db.e.Run(ctx, &c.St, func(r engine.Rows) error { return engine.ReadCount(c, r) }, nil)
-		n = c.N
-	} else {
-		c := engine.CountRun{St: st}
-		err = q.db.e.Plain(ctx, &c.St, func(r engine.Rows) error { return engine.ReadCount(&c, r) }, nil)
-		n = c.N
-	}
-	if err != nil {
-		return 0, err
-	}
-	return n, nil
+	return countStmt(ctx, q.db, st)
 }
 
 // Exists reports whether a row matches the query's conditions, After's
@@ -596,21 +577,7 @@ func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	st.Exists, st.Columns, st.OrderBy, st.Limit, st.Offset = true, nil, nil, 1, 0
-	var found bool
-	if q.db.e.Hooked() {
-		x := &engine.ExistsRun{St: st}
-		err = q.db.e.Run(ctx, &x.St, func(r engine.Rows) error { return engine.ReadExists(x, r) }, nil)
-		found = x.Found
-	} else {
-		x := engine.ExistsRun{St: st}
-		err = q.db.e.Plain(ctx, &x.St, func(r engine.Rows) error { return engine.ReadExists(&x, r) }, nil)
-		found = x.Found
-	}
-	if err != nil {
-		return false, err
-	}
-	return found, nil
+	return existsStmt(ctx, q.db, st)
 }
 
 // SQL returns the statement and arguments All would send for ctx, or the
