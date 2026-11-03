@@ -51,55 +51,75 @@ Before 1.0 nothing is released, so nothing is kept for compatibility.
 `bash scripts/ci-local.sh` is the local mirror of CI. It needs Docker. Run it
 before you push.
 
-It starts PostgreSQL 18 and MySQL 8.4 from `scripts/docker-compose.ci.yml`, sets the
-database variables below, and runs what CI runs, module by module, in this
-order:
+It starts PostgreSQL 18 and MySQL 8.4 from `scripts/docker-compose.ci.yml` and
+sets the database variables below. Then, one after another, it runs `gofmt` over
+each module and `go mod tidy -diff` in each of the five, which fails on a
+`go.mod` or `go.sum` that is not tidy, and downloads the module graph of the
+root and of `contrib/graphql`. `bench/compare/veloxe` is left out.
 
-Each of the first five also runs `go mod tidy -diff`, which fails on a `go.mod` or
-`go.sum` that is not tidy. `bench/compare/veloxe` is left out. The first four run
-govulncheck.
+The rest runs in lanes, at once, as the jobs of `ci.yml` do:
 
-1. The root module: `gofmt`, `go vet`, golangci-lint v2.14.0, then
-   `go test -race -count=1` with a coverage profile. Then the nine root fuzz
-   targets, `velox-gen -check` and `velox-gen verify` on the test models, and
-   revive on their generated code.
-2. `examples`: `gofmt`, `go vet`, golangci-lint, revive on the generated code,
-   then the tests with a coverage profile. Then `velox-gen -check` and
-   `velox-gen verify` on every example, the migrations replay, and gqlgen's
-   output for `examples/graphql`.
-3. `contrib/veloxotel`: `gofmt`, `go vet`, golangci-lint, then the tests with
-   a coverage profile.
-4. `contrib/graphql`: `gofmt`, `go vet`, golangci-lint, the tests with a
-   coverage profile, then `FuzzCost`.
-5. `bench/compare`: `go vet`, golangci-lint and `go test -race -short`. The
-   measurements never run here.
-6. The coverage floors.
-7. `scripts/scale-check.sh`, which runs `bench/scale`, in plain and GraphQL form,
-   against `bench/scale/thresholds.json`.
-8. `scripts/bench-compare.sh`, which only reports.
-9. `scripts/gqlgen-latest.sh`, which tests `velox-graphql` against the newest
-   gqlgen in a copy of the tree.
+- `root_lint`: `go vet`, govulncheck and golangci-lint v2.14.0 in the root.
+- `root_test`: the root's `go test -race -count=1` with a coverage profile.
+- `fuzz`: the ten fuzz targets.
+- `generated`: `velox-gen -check` and `velox-gen verify` on the test models,
+  and revive on their generated code.
+- `examples`: `go vet`, govulncheck, golangci-lint, revive on the generated
+  code, and the tests with a coverage profile.
+- `examples_generated`: `velox-gen -check` and `velox-gen verify` on every
+  example, the migrations replay, and gqlgen's output for `examples/graphql`,
+  which waits for the `examples` lane, whose tests build it.
+- `veloxotel` and `graphql`: `go vet`, govulncheck, golangci-lint and the
+  tests with a coverage profile, in `contrib/veloxotel` and
+  `contrib/graphql`.
+- `bench_compare`: `go vet`, golangci-lint and `go test -race -short` in
+  `bench/compare`. The measurements never run here.
+- `scale` and `scale_graphql`: `scripts/scale-check.sh`, which runs
+  `bench/scale`, in plain and GraphQL form, against
+  `bench/scale/thresholds.json`.
+- `gqlgen_latest`: `scripts/gqlgen-latest.sh`, which tests `velox-graphql`
+  against the newest gqlgen in a copy of the tree.
+
+After the lanes come the coverage floors, and then
+`scripts/bench-compare.sh`, which only reports. It runs alone, so that its
+times compare.
+
+Each lane writes its own log. The script prints a line as each lane ends, and
+the whole log of the first lane that fails; that failure stops the other lanes.
+The root's tests use the database `velox`, as in CI. The `examples`,
+`veloxotel` and `graphql` lanes each use a database of their own on the same
+servers (`velox_examples`, `velox_veloxotel`, `velox_graphql`), as each CI job
+has its own containers. The fuzz, scale and gqlgen lanes run at a lower
+priority. `VELOX_CI_JOBS=n` runs at most `n` lanes at once; `VELOX_CI_JOBS=1`
+runs them one after another.
 
 CI tests PostgreSQL 14 and 18. `VELOX_CI_MATRIX=1 bash scripts/ci-local.sh`
-runs the tests again on PostgreSQL 14 at the end, in every module. It reads the
-image from `.github/workflows/ci.yml`. The root module's tests have a 40-minute
-timeout on PostgreSQL 14, and 20 minutes on 18.
+runs the tests again on PostgreSQL 14 at the end, in every module, one module
+at a time on `velox`. It reads the image from `.github/workflows/ci.yml`. The
+root module's tests have a 40-minute timeout on PostgreSQL 14, and 20 minutes
+on 18.
 
 `TestCILocalMirrorsCI` fails when the two scripts stop running the same commands.
 
-The script stops at the first failure. It removes its containers on exit. It
-does not push.
+The script removes its containers on exit. It does not push.
 
-For a quick loop, run one module's checks by hand, as the script does:
+### The quick loop
+
+`scripts/quick.sh` is for the inner loop, not for a push. It runs `gofmt`,
+`go vet` and `go test -short` in each module that has changed since `main`,
+committed or not, on SQLite only, without `-race`, and with go test's cache, so
+a package that did not change is not tested again. `-short` skips the tests
+that build whole modules.
 
 ```sh
-go vet ./...
-go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
-go test -race -count=1 ./...
+scripts/quick.sh          # the changed modules
+scripts/quick.sh -all     # every module
+scripts/quick.sh -race    # with the race detector
+scripts/quick.sh -long    # without -short
 ```
 
-Run them in the root, in `examples`, in `contrib/veloxotel` and in
-`contrib/graphql`.
+The other modules reach the root through a `replace`: after a change to the
+root's API, run it with `-all`.
 
 ## Database tests
 

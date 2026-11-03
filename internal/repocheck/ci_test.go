@@ -178,3 +178,30 @@ func TestCILocalMirrorsCI(t *testing.T) {
 		}
 	}
 }
+
+// TestCILocalRunsEveryLane: scripts/ci-local.sh runs its checks as lane
+// functions, started from its lanes list. A lane left out of the list would
+// still hold its commands, which TestCILocalMirrorsCI reads, and never run.
+// Every lane_ function is in the list once, and the list names no other.
+func TestCILocalRunsEveryLane(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(), ciLocal))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var defined []string
+	for _, m := range regexp.MustCompile(`(?m)^lane_(\w+)\(\) [({]$`).FindAllStringSubmatch(string(data), -1) {
+		defined = append(defined, m[1])
+	}
+	if len(defined) < 10 {
+		t.Fatalf("%s: read only %d lane functions: the test no longer reads the script", ciLocal, len(defined))
+	}
+	lists := regexp.MustCompile(`(?m)^lanes=\(([\w ]+)\)$`).FindAllStringSubmatch(string(data), -1)
+	if len(lists) != 1 {
+		t.Fatalf("%s: %d lanes=(…) lines, want 1", ciLocal, len(lists))
+	}
+	listed := strings.Fields(lists[0][1])
+	slices.Sort(defined)
+	if sorted := slices.Sorted(slices.Values(listed)); !slices.Equal(defined, sorted) {
+		t.Errorf("%s: the lane functions are %v, the lanes list %v", ciLocal, defined, sorted)
+	}
+}
