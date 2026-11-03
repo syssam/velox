@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -15,4 +16,18 @@ func TestOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	golden.Check(t, out.String())
+}
+
+// TestRunStopsOnACancelledContext: run returns the first error, here the
+// migrations', and prints nothing of the demo.
+func TestRunStopsOnACancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	var out strings.Builder
+	if err := run(ctx, &out); err == nil {
+		t.Fatal("run succeeded on a cancelled context")
+	}
+	if out.Len() != 0 {
+		t.Errorf("run printed %q before failing", out.String())
+	}
 }

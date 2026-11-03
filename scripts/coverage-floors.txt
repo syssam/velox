@@ -84,6 +84,7 @@ github.com/syssam/velox/examples/graphql/gen 0.0
 github.com/syssam/velox/examples/graphql/graph 0.0
 github.com/syssam/velox/examples/graphql/schema 0.0
 github.com/syssam/velox/examples/hooks 74.6
+github.com/syssam/velox/examples/hooks/auth 100.0
 github.com/syssam/velox/examples/hooks/gen 0.0
 github.com/syssam/velox/examples/hooks/schema 0.0
 github.com/syssam/velox/examples/internal/golden 0.0
