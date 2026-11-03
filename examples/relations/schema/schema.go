@@ -1,5 +1,6 @@
 // Package schema declares the relations example's entities: an Author has many
-// Posts, a Post belongs to its Author and has many Comments. go tool
+// Posts, a Post belongs to its Author and has many Comments, and Posts and Tags
+// are many-to-many, through the join table post_tags. go tool
 // velox-gen reads it and writes the gen package beside it.
 package schema
 
@@ -32,16 +33,28 @@ func (Post) Fields() []schema.Field {
 	}
 }
 
-// Edges returns Author, the inverse of Author.Posts, and Comments. Unique makes
-// Author a belongs-to (a velox.One), Required makes its key NOT NULL, Field
-// names the column that holds the key, and OnDelete(edge.Cascade) says the
-// database deletes an Author's posts with it.
+// Edges returns Author, the inverse of Author.Posts, Comments and Tags. Unique
+// makes Author a belongs-to (a velox.One), Required makes its key NOT NULL,
+// Field names the column that holds the key, and OnDelete(edge.Cascade) says
+// the database deletes an Author's posts with it. Tags, a To edge whose inverse
+// is not Unique either, is many-to-many: velox-gen writes the join entity
+// PostTag, a row of post_tags, whose primary key is (post_id, tag_id).
 func (Post) Edges() []schema.Edge {
 	return []schema.Edge{
 		edge.From("author", Author.Type).Ref("posts").Unique().Required().Field("author_id").OnDelete(edge.Cascade),
 		edge.To("comments", Comment.Type),
+		edge.To("tags", Tag.Type),
 	}
 }
+
+// Tag labels posts.
+type Tag struct{ schema.Schema }
+
+// Fields returns the column after the ID.
+func (Tag) Fields() []schema.Field { return []schema.Field{field.String("name").Unique()} }
+
+// Edges returns Posts, the inverse of Post.Tags.
+func (Tag) Edges() []schema.Edge { return []schema.Edge{edge.From("posts", Post.Type).Ref("tags")} }
 
 // Comment is a reply to a Post.
 type Comment struct{ schema.Schema }

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox"
 )
@@ -251,4 +253,199 @@ func TestOperationsDocMySQL(t *testing.T) {
 	if code, out, errs := m("status"); code != 0 || !strings.HasPrefix(out, "applied 1 0001_a.sql") {
 		t.Errorf("status: %d\n%s\n%s", code, out, errs)
 	}
+}
+
+// TestOperationsDocKilledMySQL: a run killed during a backfill UPDATE, which the
+// server finishes: status leads with checking, and the recovery the doc writes
+// applies the UPDATE once.
+func TestOperationsDocKilledMySQL(t *testing.T) {
+	dsn := testDSN(t, velox.MySQL)
+	dir := t.TempDir()
+	handDir(t, dir, velox.MySQL, map[string]string{"0001_a.sql": "CREATE TABLE a (id int PRIMARY KEY, n int NOT NULL);\nINSERT INTO a VALUES (1, 0);\n"})
+	o := &opsDB{t: t, dir: dir, dsn: dsn}
+	o.ok("apply")
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	o.db = db
+	o.files(nil, map[string]string{"0002_backfill.sql": "UPDATE a SET n = n + 1;\nCREATE TABLE b (id int);\n"})
+	if code, errs := killApply(t, velox.MySQL, db, dsn, dir); code != 1 {
+		t.Fatalf("apply: %d\n%s", code, errs)
+	}
+	code, out, errs := o.run("status")
+	if lines := strings.Split(errs, "\n"); code != 1 || !strings.Contains(out, "dirty 2 0002_backfill.sql: 0 statements done") || len(lines) < 3 ||
+		!strings.Contains(lines[1], "may have run on the server") || !strings.Contains(lines[1], "SHOW FULL PROCESSLIST") || strings.Contains(lines[1], "-resume") ||
+		!strings.Contains(lines[2], "resolve -version 2 -statements J, then migrate apply -resume") {
+		t.Fatalf("status: %d\n%s\n%s", code, out, errs)
+	}
+	// The UPDATE took effect: n moved.
+	if n := nOfA(t, db); n != 1 {
+		t.Fatalf("n is %d; want the UPDATE finished by the server", n)
+	}
+	o.ok("resolve", "-version", "2", "-statements", "1")
+	o.ok("apply", "-resume")
+	if n := nOfA(t, db); n != 1 {
+		t.Errorf("after the recovery n is %d; want 1", n)
+	}
+	if code, out, errs := o.run("status"); code != 0 || !strings.Contains(out, "applied 2 0002_backfill.sql") {
+		t.Errorf("status: %d\n%s\n%s", code, out, errs)
+	}
+}
+
+// killApply runs migrate apply of dir on dsn's database, through a proxy cut while
+// the file's UPDATE of a waits for a row lock the test holds on db: the run dies with
+// the UPDATE on the server, as if killed. The lock is let go, and once the server has
+// ended the run's session, apply's exit code and standard error are returned.
+func killApply(t *testing.T, d velox.Dialect, db *sql.DB, dsn, dir string) (int, string) {
+	t.Helper()
+	ctx := context.Background()
+	blocker, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = blocker.Close() }()
+	begin, through := "BEGIN", pgThrough
+	waiting := `SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE 'UPDATE a %'`
+	alive := `SELECT count(*) FROM pg_stat_activity WHERE pid = $1`
+	if d == velox.MySQL {
+		begin, through = "START TRANSACTION", mysqlThrough
+		waiting = `SELECT id FROM information_schema.processlist WHERE db = DATABASE() AND info LIKE 'UPDATE a %'`
+		alive = `SELECT count(*) FROM information_schema.processlist WHERE id = ?`
+	}
+	for _, q := range []string{begin, "SELECT n FROM a WHERE id = 1 FOR UPDATE"} {
+		if _, err := blocker.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	via, proxy := through(t, dsn)
+	type result struct {
+		code int
+		errs string
+	}
+	done := make(chan result, 1)
+	go func() {
+		code, _, errs := runCLI(t, dir, "migrate", "apply", "-dir", ".", "-db", via)
+		done <- result{code, errs}
+	}()
+	var id int64
+	poll := func(what string, cond func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(20 * time.Second); !cond(); {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting: %s", what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	poll("the run's UPDATE to wait", func() bool { return db.QueryRow(waiting).Scan(&id) == nil })
+	proxy.cut()
+	r := <-done
+	if _, err := blocker.ExecContext(ctx, "COMMIT"); err != nil {
+		t.Fatal(err)
+	}
+	poll("the server to end the run's session", func() bool {
+		var n int
+		return db.QueryRow(alive, id).Scan(&n) == nil && n == 0
+	})
+	return r.code, r.errs
+}
+
+// nOfA is a's n.
+func nOfA(t *testing.T, db *sql.DB) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRow(`SELECT n FROM a WHERE id = 1`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// TestOperationsDocPostgres: the recoveries of a dirty PostgreSQL online file and
+// of a hand hotfix, as the doc writes them, on a real server.
+func TestOperationsDocPostgres(t *testing.T) {
+	const a = "CREATE TABLE a (id integer, x integer);\nINSERT INTO a VALUES (1, 1), (2, 1);\n"
+	const online = "-- velox:no-transaction\n\n-- velox:unit\nDROP INDEX CONCURRENTLY IF EXISTS a_x_key;\nCREATE UNIQUE INDEX CONCURRENTLY a_x_key ON a (x);\n"
+	newPG := func(t *testing.T) *opsDB {
+		t.Helper()
+		dsn := testDSN(t, velox.Postgres)
+		dir := t.TempDir()
+		handDir(t, dir, velox.Postgres, map[string]string{"0001_a.sql": a, "0002_a_online.sql": online})
+		db, err := sql.Open("pgx", dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		return &opsDB{t: t, dir: dir, dsn: dsn, db: db}
+	}
+	valid := func(o *opsDB) string {
+		o.t.Helper()
+		var v string
+		if err := o.db.QueryRow(`SELECT coalesce((SELECT indisvalid::text FROM pg_index WHERE indexrelid = to_regclass('a_x_key')), 'none')`).Scan(&v); err != nil {
+			o.t.Fatal(err)
+		}
+		return v
+	}
+
+	t.Run("fix the cause and resume", func(t *testing.T) {
+		o := newPG(t)
+		o.refused([]string{"apply"}, "could not create unique index", "version 2 is dirty", "apply -resume")
+		if v := valid(o); v != "false" {
+			t.Errorf("the failed build left the index %s; want it invalid", v)
+		}
+		o.refused([]string{"apply"}, "version 2 is dirty")
+		o.exec("UPDATE a SET x = 2 WHERE id = 2")
+		o.ok("apply", "-resume")
+		if v := valid(o); v != "true" {
+			t.Errorf("after -resume the index is %s", v)
+		}
+	})
+
+	t.Run("give up the file", func(t *testing.T) {
+		o := newPG(t)
+		o.refused([]string{"apply"}, "version 2 is dirty")
+		o.exec("DROP INDEX CONCURRENTLY a_x_key")
+		o.ok("resolve", "-version", "2", "-undone")
+		if code, out, errs := o.run("status"); code != 3 || !strings.Contains(out, "pending 2") {
+			t.Errorf("status: %d\n%s%s", code, out, errs)
+		}
+	})
+
+	t.Run("a run killed during a one-statement unit", func(t *testing.T) {
+		dsn := testDSN(t, velox.Postgres)
+		dir := t.TempDir()
+		handDir(t, dir, velox.Postgres, map[string]string{"0001_a.sql": "CREATE TABLE a (id integer PRIMARY KEY, n integer NOT NULL);\nINSERT INTO a VALUES (1, 0);\n"})
+		db, err := sql.Open("pgx", dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		o := &opsDB{t: t, dir: dir, dsn: dsn, db: db}
+		o.ok("apply")
+		o.files(nil, map[string]string{"0002_backfill.sql": "-- velox:no-transaction\nUPDATE a SET n = n + 1;\nCREATE TABLE b (id integer);\n"})
+		if code, errs := killApply(t, velox.Postgres, db, dsn, dir); code != 1 {
+			t.Fatalf("apply: %d\n%s", code, errs)
+		}
+		if n := nOfA(t, db); n != 0 {
+			t.Fatalf("n is %d; want the UPDATE rolled back with its count", n)
+		}
+		o.refused([]string{"status"}, "version 2 is dirty\n  fix the cause and run migrate apply -resume")
+		o.ok("apply", "-resume")
+		if n := nOfA(t, db); n != 1 {
+			t.Errorf("after -resume n is %d; want 1", n)
+		}
+	})
+
+	t.Run("a hotfix the next file repeats", func(t *testing.T) {
+		o := newPG(t)
+		o.ok("apply", "-to", "1")
+		o.exec("UPDATE a SET x = 2 WHERE id = 2")
+		o.ok("apply")
+		o.exec("ALTER TABLE a ADD COLUMN note text")
+		o.files(nil, map[string]string{"0003_note.sql": "ALTER TABLE a ADD COLUMN note text;\n", "0004_b.sql": "CREATE TABLE b (id integer);\n"})
+		o.refused([]string{"apply"}, `column "note" of relation "a" already exists`, "rolled back")
+		o.ok("resolve", "-version", "3", "-applied")
+		o.ok("apply")
+	})
 }

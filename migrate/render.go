@@ -67,7 +67,7 @@ type Statement struct {
 type Directives struct {
 	NoTransaction  bool          // refused on SQLite
 	ForeignKeysOff bool          // SQLite
-	LockTimeout    time.Duration // 0: the Config's, or off in a PostgreSQL no-transaction file
+	LockTimeout    time.Duration // 0: the Config's; in a PostgreSQL no-transaction file, off for CONCURRENTLY and VALIDATE CONSTRAINT
 	LockTimeoutSet bool          // the file gave lock-timeout, 0 included
 	Allow          []Allow
 	Drops          []string // what the file changes on purpose of what the database holds, by the guard's names
@@ -81,8 +81,11 @@ type Directives struct {
 // ADD VALUE a unit. The main script runs in a transaction. The indexes,
 // foreign keys and checks added to an existing table, its indexes dropped,
 // and SET NOT NULL go to the online script, which runs last, outside a
-// transaction and with no lock timeout, as units that can each run again
-// from their first statement.
+// transaction, as units that can each run again from their first
+// statement; Up runs its CONCURRENTLY and VALIDATE CONSTRAINT with no lock
+// timeout. A foreign key or check that replaces one the plan drops is added
+// NOT VALID in the main script, so the table is never without it, and only
+// validated online.
 //
 // On MySQL it writes one script, run statement by statement, each statement
 // a unit of its own, with the lock timeout when opts.LockTimeout is set. On
@@ -223,7 +226,8 @@ type renderer struct {
 	fkOff    bool     // SQLite: the script needs foreign keys off
 	drops    []string // SQLite: what its rebuilds take away
 
-	enum, online []Statement // PostgreSQL: the enum and online scripts'
+	enum, online []Statement       // PostgreSQL: the enum and online scripts'
+	unitFindings map[int][]Finding // PostgreSQL: a change's findings for its online unit, not its first statement
 }
 
 // emit adds a statement that renders the changes of the indexes in changes

@@ -1,7 +1,7 @@
 # relations
 
 An `Author` has many `Post`s, a `Post` belongs to its `Author` and has many
-`Comment`s. Relations are `velox.Many[T]` and `velox.One[T]` fields that
+`Comment`s, and `Post`s and `Tag`s are many-to-many. Relations are `velox.Many[T]` and `velox.One[T]` fields that
 velox-gen writes into the entities, never columns, and never loaded lazily.
 
 ```sh
@@ -47,5 +47,27 @@ velox.Not(A.Posts.Has())            // authors with no posts
 
 page = page.After(&last)            // keyset pagination; OrderBy includes the key
 ```
+
+## Many-to-many
+
+`Post` has `edge.To("tags", Tag.Type)` and `Tag` has
+`edge.From("posts", Post.Type).Ref("tags")`; neither is `Unique`, so the relation
+is many-to-many. velox-gen writes the join entity `gen.PostTag`, a row of
+`post_tags` with the primary key `(post_id, tag_id)`, and handles `gen.PostTags`.
+Neither entity has a column for it: a link is a join row, which you insert and
+delete like any other.
+
+```go
+PT := gen.PostTags
+db.InsertAll([]gen.PostTag{{PostID: cobol, TagID: history}, {PostID: cobol, TagID: languages}}).Exec(ctx) // link
+db.Insert(&gen.PostTag{PostID: cobol, TagID: history}).OnConflict(PT.PostID, PT.TagID).DoNothing().Exec(ctx) // link, if not yet
+db.Delete[gen.PostTag]().Where(PT.PostID.EQ(cobol), PT.TagID.EQ(history)).Exec(ctx)               // unlink
+
+db.Query[gen.Post]().Where(P.Tags.Has()).With(P.Tags.OrderBy(T.Name.Asc())) // through post_tags
+P.Tags.HasWhere(T.Name.EQ("history"))
+```
+
+Linking a pair twice without `OnConflict` fails on the primary key. Deleting
+a post or a tag deletes its join rows (`ON DELETE CASCADE`).
 
 The output is in `testdata/output.golden`.

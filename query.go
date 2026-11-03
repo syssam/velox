@@ -69,6 +69,10 @@ func (q Query[E]) With[T any](r Rel[E, T]) Query[E] {
 }
 
 // OrderBy returns the query with orderings added, applied in the order given.
+// A nullable column's NULLs sort after every value ascending and before them
+// descending, as PostgreSQL sorts them, on every dialect: on MySQL and SQLite
+// a term "col IS NULL" goes before the column's, which an index on it does not
+// serve.
 func (q Query[E]) OrderBy[_ Lazy[E]](os ...Order[E]) Query[E] {
 	q.st.OrderBy = slices.Clip(q.st.OrderBy) // as in Where
 	for _, o := range os {
@@ -219,8 +223,11 @@ func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E] {
 // page: keyset pagination, which unlike Offset neither skips nor repeats rows
 // when rows are added between pages, and costs the same on every page. The
 // query's OrderBy must include every column of the primary key or of a
-// unique index, and no column that can be NULL or that is encoded (a json
-// field). With Columns or Omit, the query must select every column of its
+// unique index of columns that are not nullable, and no column that is encoded
+// (a json field) or a slice. A nullable column pages too: NULL sorts after every
+// value ascending and before them descending, on every dialect (see OrderBy),
+// and After from a row whose value is NULL continues among the NULLs. With
+// Columns or Omit, the query must select every column of its
 // OrderBy, or it fails: a row without one holds its zero value there. x must
 // be a row a query returned: its values carry the columns' stored precision,
 // which a value made in memory (a time with nanoseconds in a column that keeps

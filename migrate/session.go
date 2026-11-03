@@ -516,9 +516,11 @@ func lockName(database, table string) string {
 }
 
 // lockKey is PostgreSQL's advisory lock: the first 8 bytes of the SHA-256 of
-// the history table's name, big-endian. Advisory locks are per database.
-func lockKey(table string) int64 {
-	h := sha256.Sum256([]byte(table))
+// "<schema>.<table>", the history table's schema and name, big-endian.
+// Advisory locks are per database, and two schemas of one, each with its own
+// history, migrate apart.
+func lockKey(schema, table string) int64 {
+	h := sha256.Sum256([]byte(schema + "." + table))
 	return int64(binary.BigEndian.Uint64(h[:8]))
 }
 
@@ -537,20 +539,12 @@ func (s *session) lock(ctx context.Context, wait time.Duration) (unlock func(), 
 	wait = max(wait, 0)
 	switch s.d {
 	case velox.Postgres:
-		key := lockKey(s.cfg.Table)
+		key := lockKey(s.schema, s.cfg.Table)
 		var ok bool
 		if wait == 0 {
 			err = s.conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&ok)
 		} else {
-			if _, err = s.conn.ExecContext(ctx, "SET lock_timeout = "+pgLockTimeout(wait)); err != nil {
-				return nil, wrap(ctx, what, err)
-			}
-			_, err = s.conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, key)
-			ok = err == nil
-			if code, _ := velox.DriverCode(err); code == "55P03" {
-				err = nil
-			}
-			s.undo(ctx, `RESET lock_timeout`)
+			ok, err = s.pgWaitLock(ctx, key, wait)
 		}
 		switch {
 		case err != nil:
@@ -582,6 +576,35 @@ func (s *session) lock(ctx context.Context, wait time.Duration) (unlock func(), 
 		return func() { s.undo(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", s.busyWas)) }, nil
 	}
 	return nil, refuseSession("no dialect %s", s.d)
+}
+
+// pgWaitLock tries PostgreSQL's advisory lock key until the session holds it or
+// wait has passed. Each try is a statement of its own, and the session waits
+// between them in no transaction. A session waiting in pg_advisory_lock holds a
+// snapshot, and a CREATE INDEX CONCURRENTLY of the run that holds the lock waits
+// at its end for every older snapshot: a deadlock, which PostgreSQL broke by
+// cancelling one of the two, the build as often as not.
+func (s *session) pgWaitLock(ctx context.Context, key int64, wait time.Duration) (bool, error) {
+	deadline := time.Now().Add(min(wait, 100*365*24*time.Hour))
+	pause := 10 * time.Millisecond
+	for {
+		var ok bool
+		if err := s.conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&ok); err != nil || ok {
+			return ok, err
+		}
+		left := time.Until(deadline)
+		if left <= 0 {
+			return false, nil
+		}
+		t := time.NewTimer(min(pause, left))
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return false, ctx.Err()
+		case <-t.C:
+		}
+		pause = min(2*pause, 500*time.Millisecond)
+	}
 }
 
 // busyWait notes the connection's busy_timeout and sets it to wait: SQLite

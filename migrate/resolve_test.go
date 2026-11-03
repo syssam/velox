@@ -46,6 +46,82 @@ func TestDirtyErrorText(t *testing.T) {
 	}
 }
 
+// TestDirtyErrorUnsureText: a version left with a statement under way leads its way
+// out with checking whether the statement took effect, then -statements, then
+// -resume; on MySQL it lists the statements.
+func TestDirtyErrorUnsureText(t *testing.T) {
+	f, err := migrate.ParseFile(velox.MySQL, "0002_backfill.sql", []byte("UPDATE a SET n = n + 1;\nCREATE TABLE b (id int);\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &migrate.DirtyError{Version: 2, Path: f.Path, Statements: 2}
+	migrate.MarkUnsure(e, velox.MySQL, f, 0)
+	want := "migrate: 0002_backfill.sql: version 2 is dirty\n" +
+		"  version 2 is dirty, and the run stopped with statement 1 under way: it may have run on the server after the history's count of 0, or be running still. " +
+		"Wait until SHOW FULL PROCESSLIST no longer shows it, then check whether it took effect: SHOW CREATE TABLE for a schema change, its rows for an INSERT, UPDATE or DELETE\n" +
+		"  if the first J statements ran, J above 0, run migrate resolve -version 2 -statements J, then migrate apply -resume; " +
+		"if none past 0 did, fix the cause and run migrate apply -resume; or undo the statements that ran and run migrate resolve -version 2 -undone\n" +
+		"  the file's statements:\n" +
+		"    1. UPDATE a SET n = n + 1\n" +
+		"    2. CREATE TABLE b (id int)"
+	if got := e.Error(); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+	e = &migrate.DirtyError{Version: 2, Path: f.Path, Statement: 2, Statements: 2, Err: errors.New("boom")}
+	migrate.MarkUnsure(e, velox.Postgres, f, 1)
+	if got := e.Error(); !strings.HasPrefix(got, "migrate: 0002_backfill.sql: statement 2 of 2: boom\n  version 2 is dirty, and the run stopped with statement 2 under way") ||
+		!strings.Contains(got, "pg_stat_activity") || !strings.Contains(got, `\d of the table`) || strings.Contains(got, "the file's statements") {
+		t.Errorf("PostgreSQL:\n%s", got)
+	}
+	// A row that counts every statement has none under way.
+	e = &migrate.DirtyError{Version: 2, Path: f.Path, Statements: 2}
+	migrate.MarkUnsure(e, velox.MySQL, f, 2)
+	if got := e.Error(); strings.Contains(got, "under way") {
+		t.Errorf("every statement counted:\n%s", got)
+	}
+}
+
+// TestAtomicUnit: on PostgreSQL a no-transaction file's unit of one statement
+// commits with its count, unless PostgreSQL cannot run it in a transaction block,
+// it may end one, or the file begins or ends one.
+func TestAtomicUnit(t *testing.T) {
+	for _, c := range []struct {
+		d    velox.Dialect
+		src  string
+		want bool
+	}{
+		{velox.Postgres, "-- velox:no-transaction\nUPDATE a SET n = 1;\n", true},
+		{velox.Postgres, "-- velox:no-transaction\nALTER TABLE a VALIDATE CONSTRAINT c;\n", true},
+		{velox.Postgres, "-- velox:no-transaction\nALTER TYPE e ADD VALUE 'x';\n", true},
+		{velox.Postgres, "-- velox:no-transaction\nCREATE INDEX CONCURRENTLY i ON a (n);\n", false},
+		{velox.Postgres, "-- velox:no-transaction\nALTER TABLE p DETACH PARTITION c CONCURRENTLY;\n", false},
+		{velox.Postgres, "-- velox:no-transaction\nVACUUM a;\n", false},
+		{velox.Postgres, "-- velox:no-transaction\nCALL p();\n", false},
+		{velox.Postgres, "-- velox:no-transaction\nDO $$ BEGIN COMMIT; END $$;\n", false},
+		{velox.Postgres, "-- velox:no-transaction\nCREATE DATABASE x;\n", false},
+		{velox.Postgres, "-- velox:no-transaction\nALTER SYSTEM SET work_mem = '8MB';\n", false},
+		{velox.Postgres, "-- velox:no-transaction\nSET search_path = x;\n", false},
+		{velox.Postgres, "-- velox:no-transaction\nBEGIN;\nUPDATE a SET n = 1;\nCOMMIT;\n", false},
+		{velox.MySQL, "UPDATE a SET n = 1;\n", false},
+	} {
+		f, err := migrate.ParseFile(c.d, "0001_a.sql", []byte(c.src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		at := len(f.Statements) / 2
+		if got := migrate.AtomicUnit(c.d, f, at, at+1); got != c.want {
+			t.Errorf("%v %q: %v; want %v", c.d, c.src, got, c.want)
+		}
+	}
+	f, err := migrate.ParseFile(velox.Postgres, "0001_a.sql", []byte("-- velox:no-transaction\n-- velox:unit\nUPDATE a SET n = 1;\nUPDATE a SET m = 1;\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migrate.AtomicUnit(velox.Postgres, f, 0, 2) {
+		t.Error("a unit of two statements commits with its count")
+	}
+}
+
 // TestResolveSQLite: Resolve acts on a dirty version only; ResolveApplied
 // needs the file unchanged, ResolveUndone does not.
 func TestResolveSQLite(t *testing.T) {

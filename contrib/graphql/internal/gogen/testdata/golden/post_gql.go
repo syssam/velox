@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion7
+const _ = veloxgql.GeneratedCodeIsVersion8
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -32,13 +32,6 @@ func postNodeGQL() gqlimpl.NodeKind {
 		Posts.ID.EQ, Posts.ID.In,
 		func(x *Post) int64 { return x.ID },
 	)
-}
-
-// TagsGQL is the field tags as JSON, the GraphQL scalar it is: gqlgen binds the
-// field to it.
-func (x *Post) TagsGQL() (veloxgql.JSON, error) {
-	b, err := json.Marshal(x.Tags)
-	return veloxgql.JSON(b), err
 }
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
@@ -465,10 +458,10 @@ func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	return f.Pred()
 }
 
-// postFieldGQL is the GraphQL name of the mutation-input field that sets the
-// Post field whose Go name is goField, for the errors of its validators: "" for
-// a field no input sets.
-func postFieldGQL(goField string) string {
+// postCreateFieldGQL is the GraphQL name of the CreatePostInput field that sets
+// the Post field whose Go name is goField, for the errors of its validators: ""
+// for a field it does not set.
+func postCreateFieldGQL(goField string) string {
 	switch goField {
 	case "Title":
 		return "title"
@@ -486,8 +479,6 @@ func postFieldGQL(goField string) string {
 		return "editedBy"
 	case "AuthorID":
 		return "writerID"
-	case "Views":
-		return "views"
 	}
 	return ""
 }
@@ -500,7 +491,7 @@ type CreatePostInput struct {
 	Slug        string
 	Status      *PostStatus
 	PublishedAt *time.Time
-	Tags        *veloxgql.JSON
+	Tags        *[]string
 	Rating      *float64
 	// Who last edited the post; the update default fills it.
 	EditedBy string
@@ -514,7 +505,7 @@ type CreatePostInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in CreatePostInput) String() string {
-	return fmt.Sprintf("CreatePostInput(Title=%v, Slug=%v, Status=%v, PublishedAt=%v, Tags=%v, Rating=%v, EditedBy=%v, WriterID=%v, RelatedIDs=%v, RelatedByIDs=%v)", in.Title, in.Slug, gqlimpl.Show(in.Status), gqlimpl.Show(in.PublishedAt), gqlimpl.ShowJSON(in.Tags), gqlimpl.Show(in.Rating), in.EditedBy, in.WriterID, in.RelatedIDs, in.RelatedByIDs)
+	return fmt.Sprintf("CreatePostInput(Title=%v, Slug=%v, Status=%v, PublishedAt=%v, Tags=%v, Rating=%v, EditedBy=%v, WriterID=%v, RelatedIDs=%v, RelatedByIDs=%v)", in.Title, in.Slug, gqlimpl.Show(in.Status), gqlimpl.Show(in.PublishedAt), gqlimpl.Show(in.Tags), gqlimpl.Show(in.Rating), in.EditedBy, in.WriterID, in.RelatedIDs, in.RelatedByIDs)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -525,19 +516,16 @@ func (in CreatePostInput) GoString() string { return in.String() }
 // veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql for what
 // each input field does, what the caller may link and change, and the errors.
-func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
+//
+// set sets Views, which CreatePostInput leaves out and an insert requires; nil
+// leaves it to a velox.Hook.
+func CreatePost(ctx context.Context, input CreatePostInput, set func(*Post)) (*Post, error) {
 	var (
-		tagsJSON         []string
 		writerIDKey      int64
 		relatedIDsKeys   []int64
 		relatedByIDsKeys []int64
 		err              error
 	)
-	if input.Tags != nil {
-		if tagsJSON, err = gqlimpl.FromJSON[[]string]("CreatePostInput.tags", *input.Tags); err != nil {
-			return nil, err
-		}
-	}
 	if writerIDKey, err = gqlimpl.DecodeID[int64]("CreatePostInput.writerID", input.WriterID, "Account"); err != nil {
 		return nil, err
 	}
@@ -560,7 +548,7 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 		cols = append(cols, Posts.PublishedAt)
 	}
 	if input.Tags != nil {
-		x.Tags = tagsJSON
+		x.Tags = *input.Tags
 		cols = append(cols, Posts.Tags)
 	}
 	if input.Rating != nil {
@@ -568,8 +556,11 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 		cols = append(cols, Posts.Rating)
 	}
 	x.EditedBy = input.EditedBy
+	if set != nil {
+		set(&x)
+	}
 	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postFieldGQL)
+		return nil, gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postCreateFieldGQL)
 	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
@@ -588,7 +579,7 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 			}
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postFieldGQL)
+			return gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postCreateFieldGQL)
 		}
 		if len(relatedIDsKeys) > 0 {
 			rows := make([]PostRelated, len(relatedIDsKeys))
@@ -617,6 +608,29 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	return out, nil
 }
 
+// postUpdateFieldGQL is the GraphQL name of the UpdatePostInput field that sets
+// the Post field whose Go name is goField, for the errors of its validators: ""
+// for a field it does not set.
+func postUpdateFieldGQL(goField string) string {
+	switch goField {
+	case "Title":
+		return "title"
+	case "Status":
+		return "status"
+	case "PublishedAt":
+		return "publishedAt"
+	case "Tags":
+		return "tags"
+	case "Views":
+		return "views"
+	case "Rating":
+		return "rating"
+	case "AuthorID":
+		return "writerID"
+	}
+	return ""
+}
+
 // UpdatePostInput is the GraphQL input UpdatePostInput, the input of
 // updatePost. A field that is a pointer, or a list, is optional: nil means not
 // given. A clear field that is true clears a field or an edge, and is refused
@@ -627,7 +641,7 @@ type UpdatePostInput struct {
 	PublishedAt *time.Time
 	// ClearPublishedAt sets the field published_at to NULL.
 	ClearPublishedAt bool
-	Tags             *veloxgql.JSON
+	Tags             *[]string
 	Views            *int
 	Rating           *float64
 	// ClearRating sets the field rating to NULL.
@@ -654,7 +668,7 @@ type UpdatePostInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in UpdatePostInput) String() string {
-	return fmt.Sprintf("UpdatePostInput(Title=%v, Status=%v, PublishedAt=%v, ClearPublishedAt=%v, Tags=%v, Views=%v, Rating=%v, ClearRating=%v, WriterID=%v, AddRelatedIDs=%v, RemoveRelatedIDs=%v, ClearRelated=%v, AddRelatedByIDs=%v, RemoveRelatedByIDs=%v, ClearRelatedBy=%v)", gqlimpl.Show(in.Title), gqlimpl.Show(in.Status), gqlimpl.Show(in.PublishedAt), in.ClearPublishedAt, gqlimpl.ShowJSON(in.Tags), gqlimpl.Show(in.Views), gqlimpl.Show(in.Rating), in.ClearRating, gqlimpl.Show(in.WriterID), in.AddRelatedIDs, in.RemoveRelatedIDs, in.ClearRelated, in.AddRelatedByIDs, in.RemoveRelatedByIDs, in.ClearRelatedBy)
+	return fmt.Sprintf("UpdatePostInput(Title=%v, Status=%v, PublishedAt=%v, ClearPublishedAt=%v, Tags=%v, Views=%v, Rating=%v, ClearRating=%v, WriterID=%v, AddRelatedIDs=%v, RemoveRelatedIDs=%v, ClearRelated=%v, AddRelatedByIDs=%v, RemoveRelatedByIDs=%v, ClearRelatedBy=%v)", gqlimpl.Show(in.Title), gqlimpl.Show(in.Status), gqlimpl.Show(in.PublishedAt), in.ClearPublishedAt, gqlimpl.Show(in.Tags), gqlimpl.Show(in.Views), gqlimpl.Show(in.Rating), in.ClearRating, gqlimpl.Show(in.WriterID), in.AddRelatedIDs, in.RemoveRelatedIDs, in.ClearRelated, in.AddRelatedByIDs, in.RemoveRelatedByIDs, in.ClearRelatedBy)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -668,7 +682,6 @@ func (in UpdatePostInput) GoString() string { return in.String() }
 func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, error) {
 	var (
 		key                    int64
-		tagsJSON               []string
 		writerIDKey            int64
 		addRelatedIDsKeys      []int64
 		removeRelatedIDsKeys   []int64
@@ -678,11 +691,6 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	)
 	if key, err = gqlimpl.DecodeID[int64]("updatePost.id", id, "Post"); err != nil {
 		return nil, err
-	}
-	if input.Tags != nil {
-		if tagsJSON, err = gqlimpl.FromJSON[[]string]("UpdatePostInput.tags", *input.Tags); err != nil {
-			return nil, err
-		}
 	}
 	if input.WriterID != nil {
 		if writerIDKey, err = gqlimpl.DecodeID[int64]("UpdatePostInput.writerID", *input.WriterID, "Account"); err != nil {
@@ -733,7 +741,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 		set = append(set, Posts.PublishedAt.SetNull())
 	}
 	if input.Tags != nil {
-		set = append(set, Posts.Tags.Set(tagsJSON))
+		set = append(set, Posts.Tags.Set(*input.Tags))
 	}
 	if input.Views != nil {
 		set = append(set, Posts.Views.Set(*input.Views))
@@ -745,7 +753,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 		set = append(set, Posts.Rating.SetNull())
 	}
 	if err = velox.ValidateSet(set...); err != nil {
-		return nil, gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postFieldGQL)
+		return nil, gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postUpdateFieldGQL)
 	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
@@ -759,7 +767,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 		if len(set) > 0 {
 			n, err := db.Update[Post]().Set(set...).Where(Posts.ID.EQ(key)).Exec(ctx)
 			if err != nil {
-				return gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postFieldGQL)
+				return gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postUpdateFieldGQL)
 			}
 			if n == 0 {
 				return gqlimpl.NotFound("updatePost", "Post")

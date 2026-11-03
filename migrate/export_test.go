@@ -233,3 +233,15 @@ const (
 	ColumnNullable = columnNullable
 	ColumnType     = columnType
 )
+
+// MarkUnsure is markUnsure.
+var MarkUnsure = markUnsure
+
+// AtomicUnit is atomicUnit.
+var AtomicUnit = atomicUnit
+
+// SetEveryTxBlock sets everyTxBlock, and returns the function that undoes it.
+func SetEveryTxBlock() (restore func()) {
+	everyTxBlock = true
+	return func() { everyTxBlock = false }
+}

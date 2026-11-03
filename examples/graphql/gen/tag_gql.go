@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion7
+const _ = veloxgql.GeneratedCodeIsVersion8
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -326,10 +326,10 @@ func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
 	return f.Pred()
 }
 
-// tagFieldGQL is the GraphQL name of the mutation-input field that sets the Tag
-// field whose Go name is goField, for the errors of its validators: "" for a
-// field no input sets.
-func tagFieldGQL(goField string) string {
+// tagCreateFieldGQL is the GraphQL name of the CreateLabelInput field that sets
+// the Tag field whose Go name is goField, for the errors of its validators: ""
+// for a field it does not set.
+func tagCreateFieldGQL(goField string) string {
 	switch goField {
 	case "Name":
 		return "name"
@@ -376,7 +376,7 @@ func CreateLabel(ctx context.Context, input CreateLabelInput) (*Tag, error) {
 	x.Name = input.Name
 	x.Rank = input.Rank
 	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreateLabelInput", "gen.Tag", tagFieldGQL)
+		return nil, gqlimpl.WriteError(err, "CreateLabelInput", "gen.Tag", tagCreateFieldGQL)
 	}
 	var out *Tag
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
@@ -386,7 +386,7 @@ func CreateLabel(ctx context.Context, input CreateLabelInput) (*Tag, error) {
 			}
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreateLabelInput", "gen.Tag", tagFieldGQL)
+			return gqlimpl.WriteError(err, "CreateLabelInput", "gen.Tag", tagCreateFieldGQL)
 		}
 		if len(postIDsKeys) > 0 {
 			rows := make([]PostTag, len(postIDsKeys))
@@ -404,6 +404,19 @@ func CreateLabel(ctx context.Context, input CreateLabelInput) (*Tag, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// tagUpdateFieldGQL is the GraphQL name of the UpdateLabelInput field that sets
+// the Tag field whose Go name is goField, for the errors of its validators: ""
+// for a field it does not set.
+func tagUpdateFieldGQL(goField string) string {
+	switch goField {
+	case "Name":
+		return "name"
+	case "Rank":
+		return "rank"
+	}
+	return ""
 }
 
 // UpdateLabelInput is the GraphQL input UpdateLabelInput, the input of
@@ -464,7 +477,7 @@ func UpdateLabel(ctx context.Context, id string, input UpdateLabelInput) (*Tag, 
 		set = append(set, Tags.Rank.Set(*input.Rank))
 	}
 	if err = velox.ValidateSet(set...); err != nil {
-		return nil, gqlimpl.WriteError(err, "UpdateLabelInput", "gen.Tag", tagFieldGQL)
+		return nil, gqlimpl.WriteError(err, "UpdateLabelInput", "gen.Tag", tagUpdateFieldGQL)
 	}
 	var out *Tag
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
@@ -472,7 +485,7 @@ func UpdateLabel(ctx context.Context, id string, input UpdateLabelInput) (*Tag, 
 		if len(set) > 0 {
 			n, err := db.Update[Tag]().Set(set...).Where(Tags.ID.EQ(key)).Exec(ctx)
 			if err != nil {
-				return gqlimpl.WriteError(err, "UpdateLabelInput", "gen.Tag", tagFieldGQL)
+				return gqlimpl.WriteError(err, "UpdateLabelInput", "gen.Tag", tagUpdateFieldGQL)
 			}
 			if n == 0 {
 				return gqlimpl.NotFound("updateLabel", "Label")

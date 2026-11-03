@@ -181,6 +181,73 @@ func TestAggregatesOnRealDatabases(t *testing.T) {
 	})
 }
 
+// SumNull, AvgNull, MinNull and MaxNull, and their grouped forms, over
+// nullable numeric columns (NullNumberCol), on every dialect: the result is the
+// element type, as for a NumberCol, with the NULLs skipped; only NULLs sum to
+// 0, and the others report none.
+func TestAggregatesOnNullableColumns(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		S := testmodel.Samples
+		tg.exec(t, "DROP TABLE IF EXISTS samples")
+		tg.exec(t, sampleDDL(tg.d))
+		t.Cleanup(func() { tg.exec(t, "DROP TABLE IF EXISTS samples") })
+		add := func(status string, ratio, parent any) {
+			t.Helper()
+			ins := "INSERT INTO samples (name, status, price, ratio, flag, " + quoted(tg.d, "when") + ", " + quoted(tg.d, "blob") + ", parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+			tg.exec(t, ins, "s", status, 1, ratio, false, t0, []byte("b"), parent)
+		}
+		samples := tg.db.Query[testmodel.Sample]()
+		add("a", nil, nil)
+		if v, err := velox.SumNull(ctx, samples, S.Ratio); err != nil || v != 0 {
+			t.Errorf("Sum of NULLs: %v, %v", v, err)
+		}
+		if _, ok, err := velox.AvgNull(ctx, samples, S.ParentID); err != nil || ok {
+			t.Errorf("Avg of NULLs: %v, %v", ok, err)
+		}
+		if _, ok, err := velox.MinNull(ctx, samples, S.Ratio); err != nil || ok {
+			t.Errorf("Min of NULLs: %v, %v", ok, err)
+		}
+		if _, ok, err := velox.MaxNull(ctx, samples, S.ParentID); err != nil || ok {
+			t.Errorf("Max of NULLs: %v, %v", ok, err)
+		}
+		add("a", 0.5, int64(3))
+		add("b", 1.5, int64(9))
+		add("b", nil, int64(6))
+		if v, err := velox.SumNull(ctx, samples, S.Ratio); err != nil || v != 2 {
+			t.Errorf("Sum: %v, %v", v, err)
+		}
+		if v, err := velox.SumNull(ctx, samples, S.ParentID); err != nil || v != 18 {
+			t.Errorf("Sum of an int64: %v, %v", v, err)
+		}
+		if v, ok, err := velox.AvgNull(ctx, samples, S.ParentID); err != nil || !ok || v != 6 {
+			t.Errorf("Avg: %v, %v, %v", v, ok, err)
+		}
+		if v, ok, err := velox.MinNull(ctx, samples, S.Ratio); err != nil || !ok || v != 0.5 {
+			t.Errorf("Min: %v, %v, %v", v, ok, err)
+		}
+		if v, ok, err := velox.MaxNull(ctx, samples, S.ParentID); err != nil || !ok || v != 9 {
+			t.Errorf("Max: %v, %v, %v", v, ok, err)
+		}
+		all, key := samples.Unbounded(), S.Status.Key()
+		sums, err := velox.SumByNull(ctx, all, key, S.Ratio)
+		if want := []velox.Group[kind.Status, float64]{{Key: "a", Value: 0.5}, {Key: "b", Value: 1.5}}; err != nil || !slices.Equal(sums, want) {
+			t.Errorf("SumBy: %v, %v", sums, err)
+		}
+		avgs, err := velox.AvgByNull(ctx, all, key, S.ParentID)
+		if want := []velox.Group[kind.Status, float64]{{Key: "a", Value: 3}, {Key: "b", Value: 7.5}}; err != nil || !slices.Equal(avgs, want) {
+			t.Errorf("AvgBy: %v, %v", avgs, err)
+		}
+		mins, err := velox.MinByNull(ctx, all, key, S.ParentID)
+		if want := []velox.Group[kind.Status, int64]{{Key: "a", Value: 3}, {Key: "b", Value: 6}}; err != nil || !slices.Equal(mins, want) {
+			t.Errorf("MinBy: %v, %v", mins, err)
+		}
+		maxs, err := velox.MaxByNull(ctx, all, key, S.Ratio)
+		if want := []velox.Group[kind.Status, float64]{{Key: "a", Value: 0.5}, {Key: "b", Value: 1.5}}; err != nil || !slices.Equal(maxs, want) {
+			t.Errorf("MaxBy: %v, %v", maxs, err)
+		}
+	})
+}
+
 // An aggregate takes the scope as Count does.
 func TestAggregateIsScoped(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
@@ -240,10 +307,7 @@ func TestGroupedOnRealDatabases(t *testing.T) {
 		if err != nil || len(byPaidAt) != 2 {
 			t.Fatalf("by paid_at: %v, %v", byPaidAt, err)
 		}
-		nullAt, valueAt := 0, 1
-		if tg.d == velox.Postgres { // NULLs last there, first elsewhere
-			nullAt, valueAt = 1, 0
-		}
+		nullAt, valueAt := 1, 0 // NULL last on every dialect
 		if g := byPaidAt[nullAt]; g.Key != nil || g.Value != 2 {
 			t.Errorf("NULL key: %+v", g)
 		}
@@ -294,10 +358,6 @@ func TestGroupedOnRealDatabases(t *testing.T) {
 		byPrev, err := velox.SumBy(ctx, samples, S.Prev.Key(), S.Price)
 		if err != nil || len(byPrev) != 2 {
 			t.Fatalf("by prev: %v, %v", byPrev, err)
-		}
-		nullAt, valueAt = 0, 1
-		if tg.d == velox.Postgres {
-			nullAt, valueAt = 1, 0
 		}
 		if g := byPrev[nullAt]; g.Key != nil || g.Value != 101 {
 			t.Errorf("NULL key: %+v", g)

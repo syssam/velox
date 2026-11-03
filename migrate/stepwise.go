@@ -20,8 +20,9 @@ const maxLockWaitTimeout = 31536000
 // the lock timeout, and runs the file a unit at a time, from the statement
 // after those the row counts, which is the first of a unit unless
 // Resolve's ResolveStatements said otherwise, recording after each unit the
-// statements of the completed ones. On success the row is clean, with the
-// duration and applied_at now. The row is written though ctx is gone, and
+// statements of the completed ones; on PostgreSQL a unit of one statement
+// that runs in a transaction block (atomicUnit) runs in one with its count.
+// On success the row is clean, with the duration and applied_at now. The row is written though ctx is gone, and
 // ctx is checked before each unit, so a cancel keeps the count exact; a
 // count or clean row the session cannot write because its connection is
 // lost is never written through another, and the error says so. A
@@ -53,6 +54,7 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 		return Applied{}, s.failed(ctx, f, from, fmt.Errorf("setting the lock timeout: %w", err), o)
 	}
 	defer restore()
+	timeouts := s.statementTimeouts(f)
 	table := s.historyTable()
 	last := from // the first statement of the last unit run
 	for u, first := range units {
@@ -67,8 +69,43 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 		if err := ctx.Err(); err != nil {
 			return Applied{}, s.failed(ctx, f, first, err, o)
 		}
+		atomic := atomicUnit(s.d, f, first, end)
 		for i := first; i < end; i++ {
+			if err := timeouts.before(ctx, f.Statements[i]); err != nil {
+				return Applied{}, s.failed(ctx, f, i, fmt.Errorf("setting the lock timeout: %w", err), o)
+			}
+			if atomic {
+				if _, err := s.conn.ExecContext(ctx, "BEGIN"); err != nil {
+					return Applied{}, s.failed(ctx, f, i, fmt.Errorf("BEGIN: %w", err), o)
+				}
+			}
 			if _, err := s.conn.ExecContext(ctx, f.Statements[i]); err != nil {
+				if atomic {
+					// The statement and the block are rolled back: what follows reads
+					// the failure as that of the statement alone.
+					s.undo(ctx, "ROLLBACK")
+					if ctx.Err() == nil && txFallback(err) {
+						atomic = false
+						if _, err = s.conn.ExecContext(ctx, f.Statements[i]); err == nil {
+							continue
+						}
+					}
+				}
+				if !atomic {
+					switch {
+					case ctx.Err() != nil:
+						err = &unknownError{cancelMessage(i), err}
+					case s.lostConn(ctx):
+						err = &unknownError{lostMessage(i, i+1), err}
+					}
+				}
+				if s.d == velox.Postgres && ctx.Err() == nil && i == first && pgLockFailure(err) {
+					// A statement that failed on a lock changed nothing; at a unit's
+					// head the whole unit is still to run.
+					if open, oerr := s.inTransaction(ctx); !open && oerr == nil {
+						err = &retryError{err}
+					}
+				}
 				if s.d == velox.MySQL && ctx.Err() == nil {
 					if row == nil && i == 0 && nothingChanged(f.Statements[0], err) {
 						if refused := s.notRecorded(ctx, f, err); refused != nil {
@@ -86,6 +123,23 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 			o.unitDone(f.Version, end)
 		}
 		q := fmt.Sprintf("UPDATE %s SET %s = %s WHERE %s = %s", table, s.q("statements"), s.ph(1), s.q("version"), s.ph(2))
+		if atomic {
+			// The count commits with the statement: a run killed before the COMMIT
+			// leaves neither, as the server rolls the block back with the session.
+			err := s.write(ctx, q, end, int64(f.Version))
+			if err == nil {
+				err = s.write(ctx, "COMMIT")
+			}
+			if err != nil {
+				s.undo(ctx, "ROLLBACK")
+				if s.lostConn(ctx) {
+					err = fmt.Errorf("the connection was lost as statement %d committed with its count, which the history shows: %w", first+1, err)
+				}
+				return Applied{}, s.failed(ctx, f, first, err, o)
+			}
+			last = first
+			continue
+		}
 		if err := s.write(ctx, q, end, int64(f.Version)); err != nil {
 			if s.lostConn(ctx) {
 				return Applied{}, s.lost(ctx, f, first, end, o)
@@ -273,10 +327,66 @@ func (s *session) completed(ctx context.Context, v uint64, from int) int {
 	return from
 }
 
+// pgLockFailure reports whether err is PostgreSQL's lock timeout or deadlock:
+// the statement failed waiting, and changed nothing.
+func pgLockFailure(err error) bool {
+	code, _ := velox.DriverCode(err)
+	return code == "55P03" || code == "40P01"
+}
+
+// stmtTimeouts sets PostgreSQL's lock timeout before each statement of a file
+// run statement by statement with no lock-timeout directive: none for a
+// statement that waits for older transactions by design, which blocks no
+// query of the table while it waits, and the Config's for every other, as a
+// statement waiting for a table's lock queues each query of the table behind
+// it. cur is the value set, stepTimeout's 0 at first.
+type stmtTimeouts struct {
+	s       *session
+	on      bool
+	timeout string
+	cur     string
+}
+
+// statementTimeouts is the stmtTimeouts of f, which sets nothing unless f is
+// a PostgreSQL file without a lock-timeout directive.
+func (s *session) statementTimeouts(f File) *stmtTimeouts {
+	return &stmtTimeouts{s: s, on: s.d == velox.Postgres && !f.Directives.LockTimeoutSet, timeout: pgLockTimeout(s.cfg.LockTimeout), cur: "0"}
+}
+
+func (t *stmtTimeouts) before(ctx context.Context, q string) error {
+	if !t.on {
+		return nil
+	}
+	want := t.timeout
+	if waitsForOthers(q) {
+		want = "0"
+	}
+	if want == t.cur {
+		return nil
+	}
+	if _, err := t.s.conn.ExecContext(ctx, "SET lock_timeout = "+want); err != nil {
+		return err
+	}
+	t.cur = want
+	return nil
+}
+
+// waitsForOthers reports whether the PostgreSQL statement q waits for older
+// transactions by design, under a lock that blocks no read or write of the
+// table: CONCURRENTLY, and ALTER TABLE … VALIDATE CONSTRAINT. A short lock
+// timeout would make it fail routinely.
+func waitsForOthers(q string) bool {
+	l := &fileLinter{d: velox.Postgres, ws: lex(velox.Postgres, q)}
+	if l.concurrently() {
+		return true
+	}
+	return l.upper(0) == "ALTER" && l.upper(1) == "TABLE" && (l.has("VALIDATE", "CONSTRAINT") || l.has("DETACH", "PARTITION") && l.has("CONCURRENTLY"))
+}
+
 // stepTimeout sets the lock timeout for a file run statement by statement:
-// the file's directive, else on MySQL the Config's, else on PostgreSQL none.
-// On MySQL it is whole seconds, rounded up, and 0 sets back the session's
-// own. restore resets it.
+// the file's directive, else on MySQL the Config's, else on PostgreSQL none,
+// which statementTimeouts then sets per statement. On MySQL it is whole
+// seconds, rounded up, and 0 sets back the session's own. restore resets it.
 func (s *session) stepTimeout(ctx context.Context, f File) (restore func(), err error) {
 	switch s.d {
 	case velox.Postgres:
@@ -323,6 +433,9 @@ func (s *session) failed(ctx context.Context, f File, i int, err error, o option
 	if s.d == velox.MySQL && !e.retry {
 		e.guide = mysqlGuide(f, s.completed(ctx, f.Version, i))
 	}
+	if _, ok := errors.AsType[*unknownError](err); ok || strings.HasPrefix(err.Error(), lostPrefix) {
+		markUnsure(e, s.d, f, s.completed(ctx, f.Version, i))
+	}
 	return e
 }
 
@@ -348,17 +461,137 @@ func (s *session) recordError(ctx context.Context, f File, err error, o options)
 func mysqlGuide(f File, k int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n  the history counts %d of %d statements as run. A statement still on the server when the run died may have finished since: see SHOW FULL PROCESSLIST, and SHOW CREATE TABLE against these:", k, len(f.Statements))
+	writeStatements(&b, f)
+	fmt.Fprintf(&b, "\n  if the first K ran and the history counts otherwise, run migrate resolve -version %d -statements K, then migrate apply -resume", f.Version)
+	return b.String()
+}
+
+// writeStatements writes f's statements to b, a line each, numbered from 1, the
+// first 20 and at most 100 bytes of each.
+func writeStatements(b *strings.Builder, f File) {
 	for i, q := range f.Statements {
 		if i == 20 {
-			fmt.Fprintf(&b, "\n    and %d more", len(f.Statements)-i)
+			fmt.Fprintf(b, "\n    and %d more", len(f.Statements)-i)
 			break
 		}
 		q = strings.Join(strings.Fields(q), " ")
 		if len(q) > 100 {
 			q = q[:100] + "..."
 		}
-		fmt.Fprintf(&b, "\n    %d. %s", i+1, q)
+		fmt.Fprintf(b, "\n    %d. %s", i+1, q)
 	}
-	fmt.Fprintf(&b, "\n  if the first K ran and the history counts otherwise, run migrate resolve -version %d -statements K, then migrate apply -resume", f.Version)
-	return b.String()
+}
+
+// Prefixes of a dirty row's error that say nothing of whether the statement under
+// way ran: lostMessage's, and cancelMessage's.
+const (
+	lostPrefix   = "the connection was lost during "
+	cancelPrefix = "the run was cancelled during "
+)
+
+// outcomeUnknown reports whether msg, a dirty row's error, says nothing of whether
+// the statement after the count ran: "", as a run killed before it wrote one leaves,
+// or a lost connection's or a cancel's with a statement under way.
+func outcomeUnknown(msg string) bool {
+	return msg == "" || strings.HasPrefix(msg, lostPrefix) || strings.HasPrefix(msg, cancelPrefix)
+}
+
+// An unknownError is the failure of a statement that may have run all the same: the
+// session's connection was lost, or the run's context ended, with it on the server.
+type unknownError struct {
+	msg string // lostMessage's or cancelMessage's
+	err error
+}
+
+func (e *unknownError) Error() string { return e.msg + ": " + e.err.Error() }
+func (e *unknownError) Unwrap() error { return e.err }
+
+// cancelMessage is the error of a run cancelled during statement i (from 0).
+func cancelMessage(i int) string {
+	return fmt.Sprintf("%sstatement %d; check whether it ran before resuming", cancelPrefix, i+1)
+}
+
+// markUnsure marks e, the *DirtyError of f's version on d whose row counts k
+// statements, as stopped with a statement under way, which may have run after the
+// count: on MySQL its guide is then the file's statements. A row that counts every
+// statement, or a lock's retry, is left.
+func markUnsure(e *DirtyError, d velox.Dialect, f File, k int) {
+	if e.retry || k >= len(f.Statements) {
+		return
+	}
+	e.unsure, e.counted, e.pg, e.guide = true, k, d == velox.Postgres, ""
+	if d == velox.MySQL {
+		var b strings.Builder
+		b.WriteString("\n  the file's statements:")
+		writeStatements(&b, f)
+		e.guide = b.String()
+	}
+}
+
+// foundUnsure reports whether a dirty row of f on d, which counts k statements and
+// holds the error msg, was left with a statement under way that may have run after
+// the count: msg says nothing of whether it ran (outcomeUnknown), f runs statement
+// by statement, and the statement after the count does not commit with it
+// (atomicUnit).
+func foundUnsure(d velox.Dialect, f File, k int, msg string) bool {
+	byStatement := d == velox.MySQL || d == velox.Postgres && f.Directives.NoTransaction
+	return byStatement && outcomeUnknown(msg) && k < len(f.Statements) && !atomicUnit(d, f, k, unitEnd(f, k))
+}
+
+// unitEnd is the end (exclusive) of the unit of f that holds statement k.
+func unitEnd(f File, k int) int {
+	for _, u := range f.Units {
+		if u > k {
+			return u
+		}
+	}
+	return len(f.Statements)
+}
+
+// atomicUnit reports whether f's statements first to end (end exclusive) run in a
+// transaction with their count, which then commits with them or not at all: on
+// PostgreSQL, one statement of a no-transaction file that begins and ends no
+// transaction of its own, and that PostgreSQL runs in a transaction block. A unit of
+// more statements is not one: their locks would be held to its end, and an online
+// unit's add NOT VALID would block the table while it validates.
+func atomicUnit(d velox.Dialect, f File, first, end int) bool {
+	if d != velox.Postgres || !f.Directives.NoTransaction || end-first != 1 || checkTxControl(d, f) != nil {
+		return false
+	}
+	return everyTxBlock || pgTxBlock(f.Statements[first])
+}
+
+// everyTxBlock, for the tests, makes atomicUnit take every statement for one
+// PostgreSQL runs in a transaction block, to reach the run's fallback.
+var everyTxBlock bool
+
+// pgTxBlock reports whether PostgreSQL runs the statement q in a transaction block,
+// as far as its words tell: not CONCURRENTLY, not one PostgreSQL refuses there
+// (VACUUM, CREATE DATABASE, ALTER SYSTEM and the like), and not one that may end a
+// transaction of its own (CALL, DO) or means another thing in one (LOCK, SET). One
+// it misses fails at once with 25001, and runs again alone.
+func pgTxBlock(q string) bool {
+	l := &fileLinter{d: velox.Postgres, ws: lex(velox.Postgres, q)}
+	if l.has("CONCURRENTLY") {
+		return false
+	}
+	lead := l.upper(0)
+	switch lead {
+	case "VACUUM", "CLUSTER", "REINDEX", "CALL", "DO", "LOCK", "DISCARD", "CHECKPOINT", "PREPARE", "SET", "RESET":
+		return false
+	case "CREATE", "DROP", "ALTER":
+		switch l.upper(1) {
+		case "DATABASE", "TABLESPACE", "SUBSCRIPTION", "SYSTEM":
+			return false
+		}
+	}
+	return true
+}
+
+// txFallback reports whether err is PostgreSQL's refusal of a statement in a
+// transaction block, before it ran (25001), or of its ending one inside a block,
+// which the block's rollback undid (2D000): the statement runs again alone.
+func txFallback(err error) bool {
+	code, _ := velox.DriverCode(err)
+	return code == "25001" || code == "2D000"
 }

@@ -16,6 +16,7 @@ type Post struct {
 	Votes    int64               `json:"votes"`
 	Author   velox.One[Author]   `json:"author,omitzero"`
 	Comments velox.Many[Comment] `json:"comments,omitzero"`
+	Tags     velox.Many[Tag]     `json:"tags,omitzero"`
 }
 
 // The positions of Post's columns, in the order of its table.
@@ -30,6 +31,7 @@ const (
 const (
 	postEdgeAuthor = iota
 	postEdgeComments
+	postEdgeTags
 )
 
 // Posts holds the typed handles of Post's columns and relations.
@@ -46,6 +48,8 @@ var Posts = struct {
 	Author velox.Rel[Post, Author]
 	// Comments is the edge comments, to Comment.
 	Comments velox.Rel[Post, Comment]
+	// Tags is the edge tags, to Tag.
+	Tags velox.Rel[Post, Tag]
 }{
 	ID:       velox.NumberCol[Post, int64]{I: postColID},
 	AuthorID: velox.NumberCol[Post, int64]{I: postColAuthorID},
@@ -53,6 +57,7 @@ var Posts = struct {
 	Votes:    velox.NumberCol[Post, int64]{I: postColVotes},
 	Author:   velox.Rel[Post, Author]{I: postEdgeAuthor},
 	Comments: velox.Rel[Post, Comment]{I: postEdgeComments},
+	Tags:     velox.Rel[Post, Tag]{I: postEdgeTags},
 }
 
 var postMeta velox.MetaOnce[Post]
@@ -74,6 +79,7 @@ func postDescriptor() velox.Descriptor[Post] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Author]("Author", postColAuthorID, authorColID),
 			velox.EdgeTo[Comment]("Comments", postColID, commentColPostID),
+			velox.EdgeThrough[PostTag, Tag]("Tags", postColID, postTagColPostID, postTagColTagID, tagColID),
 		},
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
@@ -94,6 +100,8 @@ func postDescriptor() velox.Descriptor[Post] {
 				return &x.Author
 			case postEdgeComments:
 				return &x.Comments
+			case postEdgeTags:
+				return &x.Tags
 			}
 			return nil
 		},

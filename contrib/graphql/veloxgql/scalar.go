@@ -175,7 +175,7 @@ func (u *Uint64) UnmarshalGQL(v any) error {
 	}
 	n, err := strconv.ParseUint(s, 10, 64)
 	if err != nil || n > math.MaxInt64 {
-		return gqlcore.InputErrorf("Uint64 must be a decimal string of at most 9223372036854775807")
+		return gqlcore.InputErrorf("Uint64 must be a decimal string of at most 9223372036854775807: database/sql cannot send a uint64 with the high bit set")
 	}
 	*u = Uint64(n)
 	return nil

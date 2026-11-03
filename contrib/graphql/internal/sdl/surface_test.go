@@ -65,7 +65,7 @@ func TestGetters(t *testing.T) {
 		f("ref", "uuid", "uuid.UUID", "github.com/google/uuid"),
 		f("other", "uuid", "uuid.UUID", "github.com/gofrs/uuid"),
 		f("size", "uint64", "uint64", ""),
-		f("tags", "json", "[]string", ""),
+		f("tags", "json", "[]int32", ""),
 		f("blob", "bytes", "[]byte", ""),
 		maybe,
 	)
@@ -219,7 +219,7 @@ func TestSurfaceInputs(t *testing.T) {
 		"Status: status value field status PostStatus",
 		"PublishedAt: publishedAt value field published_at time.Time (time)",
 		"ClearPublishedAt: clearPublishedAt clear field published_at",
-		"Tags: tags value field tags veloxgql.JSON (" + veloxgqlPath + ")",
+		"Tags: tags value field tags []string", // a list of strings, not JSON
 		"Views: views value field views int",
 		"Rating: rating value field rating float64",
 		"ClearRating: clearRating clear field rating",

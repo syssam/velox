@@ -168,6 +168,11 @@ func TestLintAddColumn(t *testing.T) {
 		if len(got) != 1 || got[0].Class != migrate.Destructive || got[0].Target != "users.nickname" {
 			t.Errorf("on %v: %+v", d, got)
 		}
+		// -allow alone still fails on a table with rows: the message gives the
+		// schema's ways out first.
+		if len(got) == 1 && !strings.Contains(got[0].Message, "give the field a Default or make it Optional") {
+			t.Errorf("on %v: the message gives no way out: %s", d, got[0].Message)
+		}
 		// The same change on a table from lacks has no rows to fill.
 		bare := migrate.Clone(from)
 		bare.Tables = slices.DeleteFunc(bare.Tables, func(tb migrate.Table) bool { return tb.Name == "users" })

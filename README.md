@@ -4,6 +4,10 @@ velox is an ORM for Go. A schema is a Go struct in an ent-style DSL. velox-gen
 generates typed queries from it, and velox plans and applies its own
 migrations.
 
+Coming from ent? [docs/coming-from-ent.md](docs/coming-from-ent.md) lists what
+differs: `Optional` stays NOT NULL, IDs are int64, bool and number Defaults,
+foreign keys, many-to-many links and GraphQL nulls.
+
 ## Not released yet
 
 <!-- Remove this section when v1.0.0 is tagged. -->
@@ -87,7 +91,7 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    func main() {
    	ctx := context.Background()
 
-   	db, err := velox.Connect("sqlite", "app.db?_pragma=foreign_keys(1)")
+   	db, err := velox.Connect("sqlite", "app.db")
    	if err != nil {
    		log.Fatal(err)
    	}

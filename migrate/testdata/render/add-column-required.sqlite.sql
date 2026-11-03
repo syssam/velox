@@ -2,7 +2,7 @@
 -- velox:foreign-keys off
 -- velox:allow add-required-column users.nickname
 
--- review: add-required-column: adds column users.nickname as NOT NULL with no default; it fails if the table has rows; sqlite-rebuild: adds column users.nickname, which SQLite cannot add in place; SQLite rebuilds table users: it copies every row into a new table
+-- review: add-required-column: adds column users.nickname as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Optional (NOT NULL, its zero the default), or allow it only on an empty table; sqlite-rebuild: adds column users.nickname, which SQLite cannot add in place; SQLite rebuilds table users: it copies every row into a new table
 CREATE TABLE "velox_new_users" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "org_id" integer NOT NULL,

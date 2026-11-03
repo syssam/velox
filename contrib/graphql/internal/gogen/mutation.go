@@ -16,20 +16,68 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
-// fieldGQLFunc is the unexported function of t's entity that names, for a
-// validation error, the input field of an entity field.
-func fieldGQLFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "FieldGQL" }
+// zeroDefault reports whether fd's literal Default is its type's zero value:
+// false, a number equal to 0 or "".
+func zeroDefault(fd *plugin.Field) bool {
+	switch s := strings.TrimSpace(string(fd.Default)); {
+	case s == "false", s == `""`:
+		return true
+	case s == "", s == "true", s[0] == '"':
+		return false
+	default:
+		n, err := strconv.ParseFloat(s, 64)
+		return err == nil && n == 0
+	}
+}
 
-// writeMutations writes t's mutation inputs and mutations: CreateXInput and
-// CreateX, UpdateXInput and UpdateX, and the function they name input fields
-// with, which a type with either has; and DeleteX.
-func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
-	if t.Create != nil || t.Update != nil {
-		if err := r.writeFieldGQL(f, t); err != nil {
-			return err
+// fieldGQLFunc is the unexported function of t's entity that names, for a
+// validation error of the mutation kind ("Create" or "Update"), the field of its
+// input that sets an entity field.
+func fieldGQLFunc(t *sdl.Type, kind string) string {
+	return lowerFirst(t.Entity.Name) + kind + "FieldGQL"
+}
+
+// leftOut are the fields of t's entity that the create input does not set and
+// that an insert would store as their zero value though the schema requires
+// them: not Optional, not nullable, with no Default, and neither the key nor
+// the scoped column. A resolver sets them, through Create<T>'s set.
+func leftOut(t *sdl.Type) []*plugin.Field {
+	e := t.Entity
+	set := map[int]bool{e.PrimaryKey[0]: true}
+	for i, fd := range e.Fields {
+		if _, ok := fd.Annotations["Scoped"]; ok {
+			set[i] = true // the scope's hook fills it
 		}
 	}
+	for _, fi := range t.Create {
+		switch {
+		case fi.Kind == sdl.InputValue:
+			set[fi.Field] = true
+		case fi.Kind == sdl.InputEdgeID && e.Edges[fi.Edge].OwnsKey:
+			for i, fd := range e.Fields {
+				if fd.Name == e.Edges[fi.Edge].Field {
+					set[i] = true
+				}
+			}
+		}
+	}
+	var out []*plugin.Field
+	for i, fd := range e.Fields {
+		if !set[i] && !fd.Optional && !fd.Nullable && !fd.HasDefault {
+			out = append(out, fd)
+		}
+	}
+	return out
+}
+
+// writeMutations writes t's mutation inputs and mutations: CreateXInput and
+// CreateX, UpdateXInput and UpdateX, each with the function it names its input's
+// fields with; and DeleteX.
+func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
 	if t.Create != nil {
+		if err := r.writeFieldGQL(f, t, "Create", t.Create); err != nil {
+			return err
+		}
 		in := "Create" + t.Name + "Input"
 		if err := r.writeInput(f, t, in, "create"+t.Name, t.Create); err != nil {
 			return err
@@ -39,6 +87,9 @@ func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
 		}
 	}
 	if t.Update != nil {
+		if err := r.writeFieldGQL(f, t, "Update", t.Update); err != nil {
+			return err
+		}
 		in := "Update" + t.Name + "Input"
 		if err := r.writeInput(f, t, in, "update"+t.Name, t.Update); err != nil {
 			return err
@@ -58,13 +109,14 @@ func isList(k sdl.InputKind) bool {
 	return k == sdl.InputEdgeIDs || k == sdl.InputAddIDs || k == sdl.InputRemoveIDs
 }
 
-// writeFieldGQL writes t's <entity>FieldGQL: the GraphQL name of the input
-// field that sets an entity field, by the field's Go name, which a
-// validation error carries; "" for a field in no input. A foreign key's is
-// its edge's <edge>ID.
-func (r *renderer) writeFieldGQL(f *file, t *sdl.Type) error {
+// writeFieldGQL writes t's <entity><kind>FieldGQL: the GraphQL name of the
+// field of the input fs that sets an entity field, by the field's Go name,
+// which a validation error carries; "" for a field the input does not set, so
+// that an error names no field of another input. A foreign key's is its edge's
+// <edge>ID.
+func (r *renderer) writeFieldGQL(f *file, t *sdl.Type, kind string, fs []sdl.InputField) error {
 	e := t.Entity
-	name := fieldGQLFunc(t)
+	name := fieldGQLFunc(t, kind)
 	if err := r.declare(name, "schema "+e.Name); err != nil {
 		return err
 	}
@@ -75,7 +127,7 @@ func (r *renderer) writeFieldGQL(f *file, t *sdl.Type) error {
 			cases = append(cases, c{goName, gql})
 		}
 	}
-	for _, in := range slices.Concat(t.Create, t.Update) {
+	for _, in := range fs {
 		switch {
 		case in.Kind == sdl.InputValue:
 			add(e.Fields[in.Field].GoName, in.Name)
@@ -86,7 +138,7 @@ func (r *renderer) writeFieldGQL(f *file, t *sdl.Type) error {
 		}
 	}
 	f.p("")
-	f.doc("", fmt.Sprintf("%s is the GraphQL name of the mutation-input field that sets the %s field whose Go name is goField, for the errors of its validators: \"\" for a field no input sets.", name, e.Name))
+	f.doc("", fmt.Sprintf("%s is the GraphQL name of the %s%sInput field that sets the %s field whose Go name is goField, for the errors of its validators: \"\" for a field it does not set.", name, kind, t.Name, e.Name))
 	f.p("func %s(goField string) string {", name)
 	if len(cases) > 0 {
 		f.p("\tswitch goField {")
@@ -445,7 +497,21 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 
 	f.p("")
 	f.doc("", fmt.Sprintf("%s creates %s %s from input, with its edges, as the mutation %s does, and returns the row as written. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each input field does, what the caller may link and change, and the errors.", fn, english.Article(n), n, "create"+n))
-	f.p("func %s(ctx %s.Context, input %s) (*%s, error) {", fn, ctx, in, e.Name)
+	var names []string
+	for _, fd := range leftOut(t) {
+		names = append(names, fd.GoName)
+	}
+	setParam := ""
+	if len(names) > 0 {
+		them := "it"
+		if len(names) > 1 {
+			them = "them"
+		}
+		f.p("//")
+		f.doc("", fmt.Sprintf("set sets %s, which %s leaves out and an insert requires; nil leaves %s to a velox.Hook.", strings.Join(names, ", "), in, them))
+		setParam = ", set func(*" + e.Name + ")"
+	}
+	f.p("func %s(ctx %s.Context, input %s%s) (*%s, error) {", fn, ctx, in, setParam, e.Name)
 	writeDecodes(f, t.Create, dec, order, nil)
 
 	// given opens, at indent, the block of a field that is not Required:
@@ -516,8 +582,9 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 			setKey(f, indent, dst, "*"+src, conv, tmp, fd.Pointer)
 		}
 		// An insert fills the Default into a zero value, so the client's "" or
-		// zero time would not be what it stores. An enum's input is never "".
-		if fd.HasDefault && !fd.Pointer && fd.Type != "enum" {
+		// zero time would not be what it stores. An enum's input is never "",
+		// a zero Default stores the zero, and a list given is never nil.
+		if fd.HasDefault && !fd.Pointer && fd.Type != "enum" && fd.Type != "json" && !zeroDefault(fd) {
 			f.p("%sif err := %s.NotZero(%s, %s); err != nil {", indent, impl, at(fi), dst)
 			f.p("%s\treturn nil, err", indent)
 			f.p("%s}", indent)
@@ -525,8 +592,13 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 		col()
 		end()
 	}
+	if setParam != "" {
+		f.p("\tif set != nil {")
+		f.p("\t\tset(&x)")
+		f.p("\t}")
+	}
 	f.p("\tif err := %s.Validate(&x, cols...); err != nil {", velox)
-	f.p("\t\treturn nil, %s.WriteError(err, %q, %q, %s)", impl, in, r.outPkg+"."+e.Name, fieldGQLFunc(t))
+	f.p("\t\treturn nil, %s.WriteError(err, %q, %q, %s)", impl, in, r.outPkg+"."+e.Name, fieldGQLFunc(t, "Create"))
 	f.p("\t}")
 
 	f.p("\tvar out *%s", e.Name)
@@ -569,7 +641,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 	}
 
 	f.p("\t\tif err := db.Insert(&x).Exec(ctx); err != nil {")
-	f.p("\t\t\treturn %s.WriteError(err, %q, %q, %s)", impl, in, r.outPkg+"."+e.Name, fieldGQLFunc(t))
+	f.p("\t\t\treturn %s.WriteError(err, %q, %q, %s)", impl, in, r.outPkg+"."+e.Name, fieldGQLFunc(t, "Create"))
 	f.p("\t\t}")
 
 	// The edges whose key is on the targets' rows, and the join rows.
@@ -689,7 +761,7 @@ func (r *renderer) decodes(f *file, t *sdl.Type, in string, fs []sdl.InputField)
 			order = append(order, i)
 		case sdl.InputValue:
 			fd := e.Fields[fi.Field]
-			if fd.Type != "json" {
+			if fd.Type != "json" || fi.GoType != "veloxgql.JSON" { // a list binds its Go slice
 				continue
 			}
 			elem := cmp.Or(fd.ElemType, strings.TrimPrefix(fd.GoType, "*"))
@@ -873,7 +945,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		}
 	}
 	f.p("\tif err = %s.ValidateSet(set...); err != nil {", velox)
-	f.p("\t\treturn nil, %s.WriteError(err, %q, %q, %s)", impl, in, r.outPkg+"."+e.Name, fieldGQLFunc(t))
+	f.p("\t\treturn nil, %s.WriteError(err, %q, %q, %s)", impl, in, r.outPkg+"."+e.Name, fieldGQLFunc(t, "Update"))
 	f.p("\t}")
 
 	f.p("\tvar out *%s", e.Name)
@@ -939,7 +1011,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	f.p("\t\tif len(set) > 0 {")
 	f.p("\t\t\tn, err := db.Update[%s]().Set(set...).Where(%s.EQ(key)).Exec(ctx)", e.Name, pk)
 	f.p("\t\t\tif err != nil {")
-	f.p("\t\t\t\treturn %s.WriteError(err, %q, %q, %s)", impl, in, r.outPkg+"."+e.Name, fieldGQLFunc(t))
+	f.p("\t\t\t\treturn %s.WriteError(err, %q, %q, %s)", impl, in, r.outPkg+"."+e.Name, fieldGQLFunc(t, "Update"))
 	f.p("\t\t\t}")
 	f.p("\t\t\tif n == 0 {")
 	f.p("\t\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)

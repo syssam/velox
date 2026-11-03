@@ -1,6 +1,7 @@
 package sdl
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -378,6 +379,118 @@ func TestInputsOptionalAndNullable(t *testing.T) {
 	} {
 		if got := fieldsOf(s, typ); !slices.Equal(got, want) {
 			t.Errorf("%s:\n got %v\nwant %v\n%s", typ, got, want, sdl)
+		}
+	}
+}
+
+// graphql.CreateDefault makes a bool or number with no Default optional in the
+// create input, with its default in the SDL, while the type keeps it non-null:
+// what entgql gives Default(true), which velox-gen refuses on a field that is
+// not Nillable.
+func TestCreateDefault(t *testing.T) {
+	build := func(fs ...*plugin.Field) *plugin.Entity {
+		u := entity("User", fs...)
+		u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
+		return u
+	}
+	with := func(f *plugin.Field, a graphql.Annotation) *plugin.Field {
+		f.Annotations = ann(t, a)
+		return f
+	}
+	u := build(with(field("active", "bool"), graphql.CreateDefault(true)),
+		with(field("views", "int64"), graphql.CreateDefault(int64(-7))),
+		with(field("big", "uint64"), graphql.CreateDefault(uint64(5))),
+		with(field("score", "float32"), graphql.CreateDefault(1.5)))
+	s, sdl := load(t, model(u))
+	for _, want := range []string{"active: Boolean! = true", "views: Int! = -7", `big: Uint64! = "5"`, "score: Float! = 1.5"} {
+		if !strings.Contains(sdl, want) {
+			t.Errorf("no %q in\n%s", want, sdl)
+		}
+	}
+	for typ, want := range map[string][]string{
+		"User":            {"id: ID!", "active: Boolean!", "views: Int!", "big: Uint64!", "score: Float!"},
+		"UpdateUserInput": {"active: Boolean", "views: Int", "big: Uint64", "score: Float"},
+	} {
+		if got := fieldsOf(s, typ); !slices.Equal(got, want) {
+			t.Errorf("%s:\n got %v\nwant %v", typ, got, want)
+		}
+	}
+	if d := s.Types["CreateUserInput"].Fields.ForName("active"); d == nil || d.DefaultValue == nil || d.DefaultValue.Raw != "true" {
+		t.Errorf("active has no default true: %+v", d)
+	}
+
+	nullable := field("n", "int")
+	nullable.Nullable, nullable.Pointer = true, true
+	defaulted := field("n", "int")
+	defaulted.HasDefault, defaulted.Default = true, []byte("0")
+	noCreate := entity("User", with(field("n", "int"), graphql.CreateDefault(1)))
+	noCreate.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate))
+	for name, c := range map[string]struct {
+		m    *plugin.Model
+		want string
+	}{
+		"a string":       {model(build(with(field("n", "string"), graphql.CreateDefault(1)))), "graphql.CreateDefault on a field of type string"},
+		"nullable":       {model(build(with(nullable, graphql.CreateDefault(1)))), "graphql.CreateDefault on a nullable field"},
+		"with a Default": {model(build(with(defaulted, graphql.CreateDefault(1)))), "graphql.CreateDefault on a field with a Default"},
+		"not a bool":     {model(build(with(field("n", "bool"), graphql.CreateDefault(1)))), "graphql.CreateDefault(1) on a bool field"},
+		"not an integer": {model(build(with(field("n", "int8"), graphql.CreateDefault(1.5)))), "graphql.CreateDefault(1.5) is not a value of the int8 field"},
+		"out of range":   {model(build(with(field("n", "int8"), graphql.CreateDefault(300)))), "graphql.CreateDefault(300) is not a value of the int8 field"},
+		"negative uint":  {model(build(with(field("n", "uint16"), graphql.CreateDefault(-1)))), "graphql.CreateDefault(-1) is not a value of the uint16 field"},
+		"NaN":            {model(build(with(field("n", "float64"), graphql.CreateDefault(math.NaN())))), `graphql.CreateDefault("NaN") is not a value of the float64 field`},
+		"high bit":       {model(build(with(field("n", "uint64"), graphql.CreateDefault(uint64(math.MaxUint64))))), "database/sql cannot send a uint64 with the high bit set"},
+		"left out":       {model(build(with(field("n", "int"), graphql.Annotation{CreateInput: new(bool), CreateDefault: []byte("1")}))), "graphql.CreateDefault on a field the create input leaves out"},
+		"skipped":        {model(build(with(field("n", "int"), graphql.Annotation{Skip: graphql.SkipMutationCreateInput, CreateDefault: []byte("1")}))), "graphql.CreateDefault on a field the create input leaves out"},
+		"no create":      {model(noCreate), "schema User, field n: graphql.CreateDefault, and graphql.Mutations does not list create"},
+		"on an edge": {model(func() *plugin.Entity {
+			u := build()
+			e := edge("e", plugin.M2M, "User")
+			e.Annotations = ann(t, graphql.CreateDefault(1))
+			u.Edges = []*plugin.Edge{e}
+			return u
+		}()), "graphql.CreateDefault does not apply to an edge"},
+	} {
+		t.Run(name, func(t *testing.T) { renderErr(t, c.m, c.want) })
+	}
+}
+
+// A JSON field of []string, []int, []int64, []float64 or []bool is a list of
+// the element's non-null scalar, in the type and in the inputs, as entgql
+// gives field.Strings; one of any other Go type stays JSON.
+func TestJSONLists(t *testing.T) {
+	list := func(name, elem string, nullable bool) *plugin.Field {
+		return &plugin.Field{Name: name, GoName: goName(name), Column: name, Type: "json", GoType: elem, ElemType: elem, Kind: "slice", Nullable: nullable, Optional: nullable}
+	}
+	named := list("named", "schema.Tags", false)
+	named.PkgPath = "example.com/app/schema"
+	m := list("m", "map[string]any", true)
+	m.Kind = "map"
+	u := entity("User", list("ss", "[]string", false), list("is", "[]int", true), list("ls", "[]int64", false),
+		list("fs", "[]float64", false), list("bs", "[]bool", false), list("i8", "[]int8", false), named, m)
+	u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
+	s, sdl := load(t, model(u))
+	for typ, want := range map[string][]string{
+		"User":            {"id: ID!", "ss: [String!]!", "is: [Int!]", "ls: [Int!]!", "fs: [Float!]!", "bs: [Boolean!]!", "i8: JSON!", "named: JSON!", "m: JSON"},
+		"CreateUserInput": {"ss: [String!]!", "is: [Int!]", "ls: [Int!]!", "fs: [Float!]!", "bs: [Boolean!]!", "i8: JSON!", "named: JSON!", "m: JSON"},
+		"UpdateUserInput": {"ss: [String!]", "is: [Int!]", "clearIs: Boolean", "ls: [Int!]", "fs: [Float!]", "bs: [Boolean!]", "i8: JSON", "named: JSON", "m: JSON", "clearM: Boolean"},
+	} {
+		if got := fieldsOf(s, typ); !slices.Equal(got, want) {
+			t.Errorf("%s:\n got %v\nwant %v\n%s", typ, got, want, sdl)
+		}
+	}
+	// A list binds to the Go field, as gqlgen binds []string to [String!];
+	// JSON to its getter.
+	if strings.Contains(sdl, "SsGQL") || !strings.Contains(sdl, "NamedGQL") {
+		t.Errorf("getters:\n%s", sdl)
+	}
+	surf, err := Build(model(u))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ty := range surf.Types {
+		for _, fi := range ty.Create {
+			if fi.Name == "ss" && fi.GoType != "[]string" || fi.Name == "named" && fi.GoType != "veloxgql.JSON" {
+				t.Errorf("CreateUserInput.%s: Go type %s", fi.Name, fi.GoType)
+			}
 		}
 	}
 }

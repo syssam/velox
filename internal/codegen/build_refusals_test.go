@@ -134,3 +134,35 @@ func TestBuildNonASCIINamesRefused(t *testing.T) {
 		}
 	}
 }
+
+// A Default that is the Go zero value stores what an unset field stores, so
+// it is no loss on a bool or number that is not Nillable.
+type zeroDefaults struct{ schema.Schema }
+
+func (zeroDefaults) Fields() []schema.Field {
+	return []schema.Field{
+		field.Bool("active").Default(false),
+		field.Int64("views").Default(0),
+		field.Float("score").Optional().Default(0),
+		field.Uint8("rank").Default(0),
+		field.String("s").Default(""),
+	}
+}
+
+type nonZeroDefault struct{ schema.Schema }
+
+func (nonZeroDefault) Fields() []schema.Field {
+	return []schema.Field{field.Int64("views").Default(-0).Min(-5), field.Bool("on").Default(true)}
+}
+
+func TestBuildZeroDefaultAllowed(t *testing.T) {
+	mustBuild(t, zeroDefaults{})
+	_, err := build(t, nonZeroDefault{})
+	want := `schema nonZeroDefault: field "on": a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset when a Go struct is inserted, so false or 0 could never be stored; make the field Nillable, give it its zero value as the Default (name it so that false or 0 is the default), or drop the Default; a GraphQL create input can apply one with graphql.CreateDefault`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("got %v\nwant %s", err, want)
+	}
+	if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {
+		t.Errorf("%d errors, want 1, as -0 is zero: %v", n, err)
+	}
+}

@@ -276,13 +276,28 @@ func (w *writer) orderBy(os []OrderTerm, qualified bool) {
 		if w.in.Columns[o.Column].Codec {
 			w.fail(errCodecOrderBy(w.in, o.Column))
 		}
-		if qualified {
-			w.table()
-			w.str(".")
-		}
-		w.col(int32(o.Column))
-		if o.Desc {
-			w.str(" DESC")
+		// NULL sorts after every value, ascending, as PostgreSQL sorts it:
+		// MySQL and SQLite sort it first, so a term of IS NULL goes before.
+		// After's condition counts on it.
+		null := w.in.Columns[o.Column].Nullable && w.d != Postgres
+		for k := range 2 {
+			if k == 0 && !null {
+				continue
+			}
+			if qualified {
+				w.table()
+				w.str(".")
+			}
+			w.col(int32(o.Column))
+			if k == 0 {
+				w.str(" IS NULL")
+			}
+			if o.Desc {
+				w.str(" DESC")
+			}
+			if k == 0 {
+				w.str(", ")
+			}
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package sdl
 
 import (
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -48,7 +49,6 @@ func TestAnnotationMisuse(t *testing.T) {
 		a     anns
 		wants []string
 	}{
-		{"OrderField on a nullable field", anns{nickname: graphql.OrderField("NICK")}, []string{"schema User, field nickname", "graphql.OrderField", "nullable"}},
 		{"OrderField on a sensitive field", anns{secret: graphql.OrderField("SECRET")}, []string{"schema User, field secret", "graphql.OrderField", "sensitive"}},
 		{"OrderField on an edge", anns{posts: graphql.OrderField("POSTS")}, []string{"schema User, edge posts", "graphql.OrderField"}},
 		{"OrderField on a schema", anns{user: graphql.OrderField("X")}, []string{"schema User:", "graphql.OrderField"}},
@@ -378,11 +378,28 @@ func TestDefaultOnNonNillableNumber(t *testing.T) {
 		n := field("n", typ)
 		n.HasDefault = true
 		_, err := Render(model(entity("Thing", n)))
-		want := "schema Thing, field n: a Default on a bool or number that is not Nillable cannot be told from unset; velox-gen refuses it too"
+		want := "schema Thing, field n: a Default on a bool or number that is not Nillable cannot be told from unset, unless it is the zero value; velox-gen refuses it too"
 		if err == nil || err.Error() != want {
 			t.Errorf("%s:\n got  %v\nwant %s", typ, err, want)
 		}
+		n.Default = json.RawMessage(`1`)
+		if typ == "bool" {
+			n.Default = json.RawMessage(`true`)
+		}
+		if _, err := Render(model(entity("Thing", n))); err == nil || err.Error() != want {
+			t.Errorf("%s, non-zero:\n got  %v\nwant %s", typ, err, want)
+		}
+		// The zero value stores what unset does: allowed, and the type stays
+		// non-null.
+		n.Default = json.RawMessage(`0`)
+		if typ == "bool" {
+			n.Default = json.RawMessage(`false`)
+		}
+		if _, out := load(t, model(entity("Thing", n))); !strings.Contains(out, "n: ") {
+			t.Errorf("%s, zero: no n in\n%s", typ, out)
+		}
 		n.Pointer, n.Nullable, n.Optional = true, true, true
+		n.Default = nil
 		load(t, model(entity("Thing", n)))
 	}
 	// A string's empty value is unset, so Insert writes the Default.

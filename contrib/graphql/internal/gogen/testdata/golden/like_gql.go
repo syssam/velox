@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion7
+const _ = veloxgql.GeneratedCodeIsVersion8
 
 // UserGQL is the edge user: the Account it leads to, or nil when there is none.
 // It is read with the edge of every row read with x, in one query.
@@ -160,10 +160,10 @@ func likeColumnsGQL(fields []string) []velox.Column[Like] {
 	return cols
 }
 
-// likeFieldGQL is the GraphQL name of the mutation-input field that sets the
-// Like field whose Go name is goField, for the errors of its validators: "" for
-// a field no input sets.
-func likeFieldGQL(goField string) string {
+// likeCreateFieldGQL is the GraphQL name of the CreateLikeInput field that sets
+// the Like field whose Go name is goField, for the errors of its validators: ""
+// for a field it does not set.
+func likeCreateFieldGQL(goField string) string {
 	switch goField {
 	case "Weight":
 		return "weight"
@@ -228,7 +228,7 @@ func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 		cols = append(cols, Likes.CreatedAt)
 	}
 	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreateLikeInput", "gen.Like", likeFieldGQL)
+		return nil, gqlimpl.WriteError(err, "CreateLikeInput", "gen.Like", likeCreateFieldGQL)
 	}
 	var out *Like
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
@@ -241,7 +241,7 @@ func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 		}
 		x.PostID = postIDKey
 		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreateLikeInput", "gen.Like", likeFieldGQL)
+			return gqlimpl.WriteError(err, "CreateLikeInput", "gen.Like", likeCreateFieldGQL)
 		}
 		out = &x
 		return nil
