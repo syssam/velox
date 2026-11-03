@@ -23,7 +23,7 @@ func (t Table) NewRows(n int) TableRows {
 		return TableRows{}
 	}
 	v := reflect.MakeSlice(s.slice.(reflect.Type), n, n)
-	return TableRows{p: v.UnsafePointer(), size: s.size, n: n}
+	return TableRows{p: v.UnsafePointer(), size: s.size, n: n, info: s.info}
 }
 
 // SetField sets column col's field of the row at p to v, converted as
@@ -254,7 +254,15 @@ func (q TableInsert) check() error {
 	if q.single && q.one == nil {
 		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.t.info.Name)
 	}
+	if err := q.t.checkRows(q.many); err != nil {
+		return err
+	}
 	if q.conflict != nil {
+		for _, c := range append(slices.Clip(q.conflict.Columns), q.conflict.Update...) {
+			if err := checkCol(q.t.info, c); err != nil {
+				return err
+			}
+		}
 		return CheckConflict(q.t.info, q.conflict, q.one)
 	}
 	return nil
@@ -475,7 +483,11 @@ func (u TableUpdate) statement() (Statement, error) {
 	if len(u.st.Set) == 0 {
 		return Statement{}, fmt.Errorf("velox: %s: Update has no Set", u.t.info.Name)
 	}
-	return CloneStatement(&u.st), nil
+	st := CloneStatement(&u.st)
+	if err := u.t.checkStatement(&st); err != nil {
+		return Statement{}, err
+	}
+	return st, nil
 }
 
 // Exec is UpdateQuery.Exec.
@@ -536,6 +548,9 @@ func (d TableDelete) Exec(ctx context.Context) (int64, error) {
 		return 0, d.err
 	}
 	st := CloneStatement(&d.st)
+	if err := d.t.checkStatement(&st); err != nil {
+		return 0, err
+	}
 	n, _, _, err := Write(ctx, d.e, &st, false, false)
 	return n, err
 }
@@ -550,6 +565,9 @@ func (d TableDelete) SQL(ctx context.Context) (string, []any, error) {
 		return "", nil, d.err
 	}
 	st := CloneStatement(&d.st)
+	if err := d.t.checkStatement(&st); err != nil {
+		return "", nil, err
+	}
 	_, q, args, err := Write(ctx, d.e, &st, true, false)
 	return q, args, err
 }

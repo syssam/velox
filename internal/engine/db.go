@@ -104,11 +104,15 @@ func newConfig(opts []Option) *config {
 // CheckColumns reports a column index in st, set by a rewrite hook, that
 // st's entity does not have; rendering would panic on it. The generic API
 // sets only valid ones.
-func CheckColumns(st *Statement) error {
+func CheckColumns(st *Statement) error { return checkColumns(st, "a Rewrite hook set") }
+
+// checkColumns is CheckColumns, whose errors say who names a column: "a
+// Rewrite hook set".
+func checkColumns(st *Statement, who string) error {
 	n := len(st.Entity.Columns)
 	bad := func(c int) error {
 		if c < 0 || c >= n {
-			return fmt.Errorf("velox: %s: a Rewrite hook set column %d, the entity has %d columns", st.Entity.Name, c, n)
+			return fmt.Errorf("velox: %s: %s column %d, the entity has %d columns", st.Entity.Name, who, c, n)
 		}
 		return nil
 	}

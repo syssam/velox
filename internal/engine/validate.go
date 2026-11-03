@@ -11,6 +11,11 @@ import (
 // RequiredEdge among cols, then checks every column in cols whose value is
 // not a nil pointer. Non-generic.
 func ValidateRow(in *EntityInfo, p unsafe.Pointer, cols []int) error {
+	for _, c := range cols {
+		if err := checkCol(in, c); err != nil {
+			return err
+		}
+	}
 	if in.required {
 		for _, c := range cols {
 			if in.Columns[c].RequiredEdge != "" && isNil(in.kit.Value(p, c)) {
@@ -32,6 +37,11 @@ func ValidateRow(in *EntityInfo, p unsafe.Pointer, cols []int) error {
 // ValidateSetters refuses an Immutable column among set, and a nil AssignSet of
 // a RequiredEdge's key, then checks every AssignSet value that is not nil.
 func ValidateSetters(in *EntityInfo, set []Assignment) error {
+	for _, a := range set {
+		if err := checkCol(in, a.Column); err != nil {
+			return err
+		}
+	}
 	if in.required {
 		for _, a := range set {
 			if a.Op == AssignSet && in.Columns[a.Column].RequiredEdge != "" && isNil(a.Value) {

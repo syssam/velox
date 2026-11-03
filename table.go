@@ -151,12 +151,15 @@ func tableOfMeta[E any](m *Meta[E]) Table {
 	return t
 }
 
-// RowsOf returns r as a []E, sharing its memory. For generated code. E must be
-// the entity of the Table r was read from.
+// RowsOf returns r as a []E, sharing its memory. For generated code. Rows of
+// another entity than E give nil.
 func RowsOf[E any](r TableRows) []E {
-	p, n := engine.RowsData(r)
+	p, n, size, info := engine.RowsData(r)
 	if n == 0 {
 		return nil
+	}
+	if m, _ := metaOf[E](); m == nil || m.info != info || size != unsafe.Sizeof(*new(E)) {
+		return nil // rows of another entity
 	}
 	return unsafe.Slice((*E)(p), n)
 }

@@ -162,6 +162,7 @@ type TableRows struct {
 	p    unsafe.Pointer // the first row
 	size uintptr        // a row's size
 	n    int
+	info *EntityInfo // the rows' entity
 }
 
 // Len returns the number of rows.
@@ -175,21 +176,24 @@ func (r TableRows) At(i int) unsafe.Pointer {
 	return unsafe.Add(r.p, uintptr(i)*r.size)
 }
 
-// RowsData is r's first row, nil for none, and its length: for velox's
-// RowsOf.
-func RowsData(r TableRows) (unsafe.Pointer, int) { return r.p, r.n }
+// RowsData is r's first row, nil for none, its length, its row size and its
+// entity: for velox's RowsOf.
+func RowsData(r TableRows) (unsafe.Pointer, int, uintptr, *EntityInfo) {
+	return r.p, r.n, r.size, r.info
+}
 
-// sliceRows is the TableRows of v, a []E in an any, whose rows are size bytes.
-func sliceRows(v any, size uintptr) TableRows {
+// sliceRows is the TableRows of v, a []E in an any, whose rows are size
+// bytes, of the entity info.
+func sliceRows(v any, size uintptr, info *EntityInfo) TableRows {
 	// A slice in an interface is held by pointer, in its data word.
 	h := (*struct {
 		p    unsafe.Pointer
 		n, c int
 	})((*[2]unsafe.Pointer)(unsafe.Pointer(&v))[1])
 	if h == nil {
-		return TableRows{size: size}
+		return TableRows{size: size, info: info}
 	}
-	return TableRows{p: h.p, size: size, n: h.n}
+	return TableRows{p: h.p, size: size, n: h.n, info: info}
 }
 
 // PredOp is the operator of an untyped condition on a column (Table.Pred).
@@ -257,7 +261,7 @@ func (t Table) pred(col int, op PredOp, v any) (Node, error) {
 			return Node{}, err
 		}
 		n := predOps[op]
-		n.Col, n.V = int32(col), v
+		n.Col, n.V, n.W = int32(col), v, s.info
 		return n, nil
 	case PredIn, PredNotIn:
 		vs, ok := v.([]any)
@@ -273,7 +277,7 @@ func (t Table) pred(col int, op PredOp, v any) (Node, error) {
 			vs = []any{}
 		}
 		n := predOps[op]
-		n.Col, n.V = int32(col), vs
+		n.Col, n.V, n.W = int32(col), vs, s.info
 		return n, nil
 	case PredContains, PredHasPrefix, PredHasSuffix:
 		if want.Kind() != reflect.String {
@@ -291,7 +295,7 @@ func (t Table) pred(col int, op PredOp, v any) (Node, error) {
 		default:
 			s = "%" + s
 		}
-		return Node{Op: OpLike, Col: int32(col), V: s}, nil
+		return Node{Op: OpLike, Col: int32(col), V: s, W: t.t.info}, nil
 	case PredIsNull, PredNotNull:
 		if !c.Nullable {
 			return Node{}, fmt.Errorf("velox: %s: %s is not nullable", s.info.Name, c.Field)
@@ -300,7 +304,7 @@ func (t Table) pred(col int, op PredOp, v any) (Node, error) {
 			return Node{}, fmt.Errorf("velox: %s: IsNull and NotNull on %s take no value", s.info.Name, c.Field)
 		}
 		n := predOps[op]
-		n.Col = int32(col)
+		n.Col, n.W = int32(col), s.info
 		return n, nil
 	}
 	return Node{}, fmt.Errorf("velox: %s: no condition operator %d", s.info.Name, op)

@@ -308,9 +308,9 @@ func readTable(a *tableRun, r Rows) error {
 // rows is the run's rows.
 func (a *tableRun) rows() TableRows {
 	if a.n == 0 {
-		return TableRows{size: a.t.size}
+		return TableRows{size: a.t.size, info: a.t.info}
 	}
-	return TableRows{p: a.buf.UnsafePointer(), size: a.t.size, n: a.n}
+	return TableRows{p: a.buf.UnsafePointer(), size: a.t.size, n: a.n, info: a.t.info}
 }
 
 // check is the error any way of running q fails with before preparing it.
@@ -334,7 +334,7 @@ func (q TableQuery) read(ctx context.Context) (out TableRows, ran []int, at Targ
 			return TableRows{}, nil, at, err
 		}
 	}
-	st, err := PrepareStmt(&q.st, q.t.info, q.after)
+	st, err := q.prepare()
 	if err != nil {
 		return TableRows{}, nil, at, err
 	}
@@ -425,7 +425,7 @@ func (q TableQuery) Count(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	q.st.Columns = nil // as in Query.Count
-	st, err := PrepareStmt(&q.st, q.t.info, q.after)
+	st, err := q.prepare()
 	if err != nil {
 		return 0, err
 	}
@@ -438,7 +438,7 @@ func (q TableQuery) Exists(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	q.st.Columns = nil // as in Query.Count
-	st, err := PrepareStmt(&q.st, q.t.info, q.after)
+	st, err := q.prepare()
 	if err != nil {
 		return false, err
 	}
@@ -459,7 +459,7 @@ func (q TableQuery) SQL(ctx context.Context) (string, []any, error) {
 			return "", nil, err
 		}
 	}
-	st, err := PrepareStmt(&q.st, q.t.info, q.after)
+	st, err := q.prepare()
 	if err != nil {
 		return "", nil, err
 	}
@@ -496,7 +496,7 @@ func (q TableQuery) LoadEach(ctx context.Context, owner Table, edge, each int, o
 	}
 	out := make([]TableRows, len(parts))
 	for i, p := range parts {
-		out[i] = sliceRows(p, q.t.size)
+		out[i] = sliceRows(p, q.t.size, q.t.info)
 	}
 	return out, nil
 }
@@ -505,6 +505,16 @@ func (q TableQuery) LoadEach(ctx context.Context, owner Table, edge, each int, o
 func (q TableQuery) CountEach(ctx context.Context, owner Table, edge int, owners []unsafe.Pointer) ([]int64, error) {
 	os := owner.state()
 	return CountEach(ctx, q.each(), os.info, os.err, LoadSpec{Rel: int32(edge), Target: q.t.target}, owners)
+}
+
+// prepare is the statement a run of q sends, checked as the untyped entry
+// points check theirs.
+func (q TableQuery) prepare() (Statement, error) {
+	st, err := PrepareStmt(&q.st, q.t.info, q.after)
+	if err != nil {
+		return Statement{}, err
+	}
+	return st, q.t.checkStatement(&st)
 }
 
 // PrepareStmt is the statement a run of a query sends: st cloned, with the

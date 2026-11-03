@@ -257,12 +257,12 @@ func OfNode(ref RelRef, where []Predicate, err error, ps []unsafe.Pointer) Node 
 			keys = append(keys, k)
 		}
 	}
-	n := Node{Op: OpIn, Col: int32(l.TargetCol), V: keys}
+	n := Node{Op: OpIn, Col: int32(l.TargetCol), V: keys, W: l.Target}
 	if l.Join != nil {
 		// The target's own scope applies to the statement that holds the
 		// condition.
 		n = Node{Op: OpThrough, Col: int32(l.TargetCol), V: l.Join, W: l.JoinTarget,
-			Kids: []Node{{Op: OpIn, Col: int32(l.JoinOwner), V: keys}}}
+			Kids: []Node{{Op: OpIn, Col: int32(l.JoinOwner), V: keys, W: l.Join}}}
 	}
 	if len(where) == 0 {
 		return n
