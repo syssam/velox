@@ -46,14 +46,14 @@ func handle(err error) {
 }
 
 // record records a statement's duration, and a successful read's rows,
-// after it ran (not on a panic); coll and sum are its collection and
-// summary (see collection and summary), tkv its server's (Config.Target's
-// or TargetFor's) and f its failure. fellOver counts a failover. Its
-// attributes are bounded: never the tags, scope, SQL or call site, and the
-// fingerprint only with Config.RecordMetricFingerprint. An instrument that is
-// not enabled records nothing, and when none is, record returns before it
-// builds an attribute set.
-func (a *adapter) record(ctx context.Context, st *velox.Statement, coll, sum string, tkv []attribute.KeyValue, seconds float64, f failure, fellOver bool) {
+// after it ran (not on a panic); sh is its shape, tkv its server's
+// (Config.Target's or TargetFor's) and f its failure. fellOver counts a
+// failover. Its attributes are bounded: never the tags, scope, SQL or call
+// site, and the fingerprint only with Config.RecordMetricFingerprint. An
+// instrument that is not enabled records nothing, and when none is, record
+// returns before it builds an attribute set. A success on an unsharded DB
+// without TargetFor uses its shape's set, built once.
+func (a *adapter) record(ctx context.Context, st *velox.Statement, sh *shape, tkv []attribute.KeyValue, seconds float64, f failure, fellOver bool) {
 	dur, ret, fell := a.duration.Enabled(ctx), a.returned.Enabled(ctx), fellOver && a.fallbacks.Enabled(ctx)
 	if !dur && !ret && !fell {
 		return
@@ -65,13 +65,28 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, coll, sum str
 	if !dur && !ret {
 		return
 	}
+	set := sh.ok
+	if set == nil || f.errType != "" || st.Route.Shard != "" {
+		set = metric.WithAttributeSet(attribute.NewSet(a.pointAttrs(st, sh, st.Route.Shard, tkv, f)...))
+	}
+	if dur {
+		a.duration.Record(ctx, seconds, set)
+	}
+	if ret {
+		a.returned.Record(ctx, st.Result.Rows, set)
+	}
+}
+
+// pointAttrs are the attributes of a statement's metric points: those of
+// its shape sh, its shard ("": none), its server tkv and its failure f.
+func (a *adapter) pointAttrs(st *velox.Statement, sh *shape, shard string, tkv []attribute.KeyValue, f failure) []attribute.KeyValue {
 	kv := make([]attribute.KeyValue, 0, 9+len(tkv))
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
-	kv = target(kv, st, coll, sum)
+	kv = target(kv, st, sh.coll, sh.sum)
 	kv = append(kv, attribute.String(attrEntity, st.Entity.Name))
 	kv = append(kv, tkv...)
-	if st.Route.Shard != "" {
-		kv = append(kv, attribute.String(attrRouteShard, st.Route.Shard))
+	if shard != "" {
+		kv = append(kv, attribute.String(attrRouteShard, shard))
 	}
 	if f.errType != "" {
 		kv = append(kv, attribute.String(attrErrorType, f.errType))
@@ -82,13 +97,7 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, coll, sum str
 	if a.cfg.RecordMetricFingerprint {
 		kv = append(kv, attribute.String(attrFingerprint, st.Fingerprint))
 	}
-	set := metric.WithAttributeSet(attribute.NewSet(kv...))
-	if dur {
-		a.duration.Record(ctx, seconds, set)
-	}
-	if ret {
-		a.returned.Record(ctx, st.Result.Rows, set)
-	}
+	return kv
 }
 
 // shardSet is the attributes of a fallback count: the shard, when there is one.

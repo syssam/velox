@@ -499,6 +499,11 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	}
 	if err := ctl.Commit(ctx); err != nil {
 		endTx(info, TxError)
+		// A deferred constraint is checked here: it is a *ConstraintError,
+		// with no entity, as the commit is no one statement's.
+		if ce := constraint("", err); ce != nil {
+			err = ce
+		}
 		return true, fmt.Errorf("velox: commit: %w", err)
 	}
 	endTx(info, TxCommit)

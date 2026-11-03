@@ -57,7 +57,9 @@ func (k ConstraintKind) String() string {
 // ConstraintError reports a violated constraint, in the same form on every
 // dialect; find it with errors.As.
 type ConstraintError struct {
-	Entity string         // the Go type
+	// Entity is the Go type; "" for a constraint checked at commit (a
+	// deferred one), which is the transaction's and not one statement's.
+	Entity string
 	Kind   ConstraintKind // the kind of constraint
 	// Constraint is the constraint's name. SQLite reports the columns instead
 	// ("invoices.org_id, invoices.number"), and a NOT NULL error names the
@@ -67,11 +69,16 @@ type ConstraintError struct {
 }
 
 // Error is "velox: <Entity>: <Kind> constraint <Constraint> violated: <Err>",
-// with "(unnamed)" for an empty Constraint.
+// with "(unnamed)" for an empty Constraint. With no Entity it is "<Kind>
+// constraint <Constraint> violated: <Err>", which velox wraps as "velox:
+// commit: …".
 func (e *ConstraintError) Error() string {
 	name := e.Constraint
 	if name == "" {
 		name = "(unnamed)"
+	}
+	if e.Entity == "" {
+		return fmt.Sprintf("%s constraint %s violated: %v", e.Kind, name, e.Err)
 	}
 	return fmt.Sprintf("velox: %s: %s constraint %s violated: %v", e.Entity, e.Kind, name, e.Err)
 }

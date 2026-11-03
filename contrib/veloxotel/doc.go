@@ -2,6 +2,16 @@
 // with OpenTelemetry. It uses the OpenTelemetry API only: the application
 // chooses and configures the SDK.
 //
+// # At a glance
+//
+//	kind    name                              unit or kind  for each
+//	span    {operation} {table}               client        statement execution
+//	span    velox.tx                          internal      db.Tx, all its attempts
+//	metric  db.client.operation.duration      s             statement execution
+//	metric  db.client.response.returned_rows  {row}         successful read
+//	metric  velox.tx.duration                 s             transaction
+//	metric  velox.route.fallbacks             {fallback}    replica failover
+//
 // # Use
 //
 // Options returns the velox options that trace every statement. Give them to
@@ -178,6 +188,16 @@
 // Size pgxpool.Config.ConnConfig's StatementCacheCapacity for it, or set
 // Config.OmitCallers (the spans then carry no call site, and the comment is
 // one text per shape).
+//
+// # Cost
+//
+// What every execution of a statement's shape shares (its table, summary and
+// the attributes of a success's metric points) is built once per shape and
+// cached, for up to 2,048 shapes, as are the tag keys' attribute names. A span
+// that is not sampled gets its start attributes, which the sampler reads,
+// and nothing more; its metric points are recorded as a sampled one's.
+// Beyond those, the cost is the SDK's: storing the span's attributes and
+// recording the points.
 //
 // # Not covered
 //

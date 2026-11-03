@@ -565,27 +565,44 @@ func (db *DB) execute(ctx context.Context, st *Statement, t Target, read func(Ro
 	// Reset here as well as in exec: a hook that returns before calling
 	// next must leave the outer hooks no stale Result.
 	st.Result = Result{Affected: -1}
-	called := false
-	var last error // what the innermost next last returned
-	next := func(ctx context.Context) error {
-		called = true
-		last = db.exec(ctx, st, t, read, res)
-		return last
-	}
-	for _, v := range slices.Backward(db.Cfg.Arounds) {
-		a, inner := v, next
+	c := &aroundCall{db: db, st: st, t: t, read: read, res: res}
+	// The outermost hook is called directly; each inner one is wrapped as
+	// its outer hook's next. With one hook, that is c and its next alone.
+	next := c.innermost
+	arounds := db.Cfg.Arounds
+	for i := len(arounds) - 1; i > 0; i-- {
+		a, inner := arounds[i], next
 		next = func(ctx context.Context) error { return a(ctx, st, inner) }
 	}
-	if err := next(ctx); err != nil {
+	if err := arounds[0](ctx, st, next); err != nil {
 		return err
 	}
-	if !called {
+	if !c.called {
 		return fmt.Errorf("velox: %s: an Around hook returned without calling next", st.Entity.Name)
 	}
-	if last != nil {
+	if c.last != nil {
 		return fmt.Errorf("velox: %s: an Around hook discarded the error from next", st.Entity.Name)
 	}
 	return nil
+}
+
+// aroundCall is one execute through the Around hooks: what the innermost
+// next runs, and what it saw.
+type aroundCall struct {
+	db     *DB
+	st     *Statement
+	t      Target
+	read   func(Rows) error
+	res    *execResult
+	called bool  // whether any hook called the innermost next
+	last   error // what the innermost next last returned
+}
+
+// innermost is the innermost hook's next: it runs the statement.
+func (c *aroundCall) innermost(ctx context.Context) error {
+	c.called = true
+	c.last = c.db.exec(ctx, c.st, c.t, c.read, c.res)
+	return c.last
 }
 
 // rowCap is the most rows st may return: its own MaxRows, else, for a

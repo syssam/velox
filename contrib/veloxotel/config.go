@@ -83,9 +83,14 @@ func Options(cfg Config) []velox.Option {
 // adapter turns velox's statements and transactions into spans and metric
 // points, for one Config.
 type adapter struct {
-	cfg    Config
-	tracer trace.Tracer
-	target []attribute.KeyValue // Config.Target's, built once; nil with TargetFor
+	cfg     Config
+	tracer  trace.Tracer
+	target  []attribute.KeyValue // Config.Target's, built once; nil with TargetFor
+	shapes  cache[*shape]        // per fingerprint: see shapeOf
+	tagKeys cache[attribute.Key] // per tag key: see tagKey
+	// The span kinds' options, built once: each call of WithSpanKind
+	// allocates one.
+	clientKind, internalKind trace.SpanStartOption
 
 	duration   metric.Float64Histogram // db.client.operation.duration, s
 	returned   metric.Int64Histogram   // db.client.response.returned_rows, {row}
@@ -106,7 +111,9 @@ func newAdapter(cfg Config) *adapter {
 		cfg.Target = Target{} // TargetFor is used instead, everywhere
 	}
 	a := &adapter{cfg: cfg, target: cfg.Target.appendTo(nil), tracer: tp.Tracer(modulePath,
-		trace.WithInstrumentationVersion(version()), trace.WithSchemaURL(schemaURL))}
+		trace.WithInstrumentationVersion(version()), trace.WithSchemaURL(schemaURL)),
+		clientKind: trace.WithSpanKind(trace.SpanKindClient), internalKind: trace.WithSpanKind(trace.SpanKindInternal)}
+	a.shapes.max, a.tagKeys.max = maxShapes, maxTagKeys
 	a.instruments(mp.Meter(modulePath,
 		metric.WithInstrumentationVersion(version()), metric.WithSchemaURL(schemaURL)))
 	return a

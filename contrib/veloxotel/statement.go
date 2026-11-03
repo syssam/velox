@@ -14,10 +14,10 @@ import (
 // around is the Around hook: one client span per execution of a statement,
 // from the call to next to its return, and its metric points.
 func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-	// The collection and the summary are built once, for the span's name,
-	// its attributes and the metric points.
-	coll := collection(st)
-	sum := summary(st, coll)
+	// The shape's collection and summary are built once per shape, for the
+	// span's name, its attributes and the metric points.
+	sh := a.shapeOf(st)
+	coll, sum := sh.coll, sh.sum
 	name := sum
 	if name == "" { // raw SQL
 		name = rawName(st, a.cfg.Target) // zero with TargetFor: renamed below
@@ -26,7 +26,7 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	// samplers. TargetFor's depends on the route, which is final only once
 	// next has returned: it is set then (see below).
 	sctx, span := a.tracer.Start(ctx, name,
-		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(ctx, st, coll, sum)...))
+		a.clientKind, trace.WithAttributes(a.attributes(ctx, st, coll, sum)...))
 	// A panic in next, such as Iter's loop body's, ends the span and goes on:
 	// the adapter never recovers one. runtime.Goexit in an Iter loop body is
 	// reported the same way.
@@ -48,43 +48,31 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	seconds := max(0, time.Since(start)-st.Result.LoopBody).Seconds()
 	// The route is read after next returns: a fallback happens during it.
 	fellOver := st.Route.Fallback && !wasFallback
-	var buf [8]attribute.KeyValue
-	kv := routeAttributes(buf[:0], st, fellOver)
 	tkv := a.target
 	if a.cfg.TargetFor != nil {
 		// Called once: the span's attributes, its raw name and the duration
 		// point all share this server.
 		t := a.cfg.TargetFor(st.Route)
 		tkv = t.appendTo(make([]attribute.KeyValue, 0, 3))
-		kv = append(kv, tkv...)
 		if sum == "" { // raw SQL: the span is named for the final route's server
 			span.SetName(rawName(st, t))
 		}
 	}
-	switch {
-	case st.Op.Reads():
-		// db.response.returned_rows is Opt-In on spans in v1.43.0.
-		if a.cfg.RecordReturnedRows {
-			kv = append(kv, attribute.Int64(attrReturnedRows, st.Result.Rows))
-		}
-	case st.Result.Affected >= 0:
-		kv = append(kv, attribute.Int64(attrAffectedRows, st.Result.Affected))
-	}
 	var f failure
 	if err != nil {
 		f = failureOf(ctx, err)
-		kv = append(kv, attribute.String(attrErrorType, f.errType))
-		if f.code != "" {
-			kv = append(kv, attribute.String(attrStatusCode, f.code))
-		}
 	}
-	span.SetAttributes(kv...)
-	if err != nil {
-		setFailed(span, err)
+	// A span that is not sampled records nothing: what only it would carry
+	// is not built. Its start attributes were, for the sampler.
+	if span.IsRecording() {
+		a.endAttributes(span, st, fellOver, tkv, f)
+		if err != nil {
+			setFailed(span, err)
+		}
 	}
 	ended = true
 	span.End()
-	a.record(sctx, st, coll, sum, tkv, seconds, f, fellOver)
+	a.record(sctx, st, sh, tkv, seconds, f, fellOver)
 	return err
 }
 
@@ -104,6 +92,33 @@ func endPanicked(span trace.Span) {
 	span.SetAttributes(attribute.String(attrErrorType, errorTypeOther))
 	span.SetStatus(codes.Error, "panic")
 	span.End()
+}
+
+// endAttributes sets on span the attributes known once st ran: where it ran
+// (fellOver, and its server tkv when TargetFor names it), its rows, and its
+// failure f.
+func (a *adapter) endAttributes(span trace.Span, st *velox.Statement, fellOver bool, tkv []attribute.KeyValue, f failure) {
+	var buf [8]attribute.KeyValue
+	kv := routeAttributes(buf[:0], st, fellOver)
+	if a.cfg.TargetFor != nil {
+		kv = append(kv, tkv...)
+	}
+	switch {
+	case st.Op.Reads():
+		// db.response.returned_rows is Opt-In on spans in v1.43.0.
+		if a.cfg.RecordReturnedRows {
+			kv = append(kv, attribute.Int64(attrReturnedRows, st.Result.Rows))
+		}
+	case st.Result.Affected >= 0:
+		kv = append(kv, attribute.Int64(attrAffectedRows, st.Result.Affected))
+	}
+	if f.errType != "" {
+		kv = append(kv, attribute.String(attrErrorType, f.errType))
+		if f.code != "" {
+			kv = append(kv, attribute.String(attrStatusCode, f.code))
+		}
+	}
+	span.SetAttributes(kv...)
 }
 
 // routeAttributes appends to kv the span attributes of where st ran that
@@ -154,7 +169,7 @@ func (a *adapter) attributes(ctx context.Context, st *velox.Statement, coll, sum
 		)
 	}
 	for _, t := range st.Tags {
-		kv = append(kv, attribute.String(attrTagPrefix+t.Key, t.Value))
+		kv = append(kv, a.tagKey(t.Key).String(t.Value))
 	}
 	if st.Route.Shard != "" {
 		kv = append(kv, attribute.String(attrRouteShard, st.Route.Shard))

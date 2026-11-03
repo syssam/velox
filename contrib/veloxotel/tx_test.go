@@ -113,6 +113,7 @@ func TestTxOutcomes(t *testing.T) {
 		{"rollback", &fakeDB{}, func(context.Context, *velox.DB) error { return boom }, "rollback", "_OTHER", ""},
 		{"commit fails", &fakeDB{commitErr: boom}, func(context.Context, *velox.DB) error { return nil }, "error", "_OTHER", ""},
 		{"commit fails with a code", &fakeDB{commitErr: &pgconn.PgError{Code: "40P01"}}, func(context.Context, *velox.DB) error { return nil }, "error", "40P01", "40P01"},
+		{"deferred constraint fails at commit", &fakeDB{commitErr: &pgconn.PgError{Code: "23505"}}, func(context.Context, *velox.DB) error { return nil }, "error", "constraint.unique", "23505"},
 		{"begin fails", &fakeDB{errs: []error{boom}}, func(context.Context, *velox.DB) error { return nil }, "error", "_OTHER", ""},
 		{
 			// Ticket's policy denies a context that names no user (this one

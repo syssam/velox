@@ -233,6 +233,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- A constraint checked at commit (a deferred one) is a `*ConstraintError`, with no `Entity`,
+  as one a statement violates is; it was the driver's error alone. Its message is
+  `velox: commit: <kind> constraint <name> violated: …`.
+- An Around hook costs two fewer allocations per statement: the outermost hook is called
+  directly, and what the innermost `next` records lives in one struct.
+- veloxotel: each statement shape's table, summary and success metric set are built once and
+  cached (up to 2,048 shapes), as are tag keys' attribute names, and an unsampled span builds
+  no end attributes; with an SDK, a one-row read allocates 35 times instead of 42.
+  `TestAdapterAllocs` holds the adapter to 4 allocations per statement over a bare hook.
 - veloxotel: `Config.TargetFor` is called once per statement and once per transaction (a raw
   SQL span and a transaction called it twice), so it need not be deterministic for a route.
   With `TargetFor` set, `Config.Target` is ignored everywhere, as documented: it no longer

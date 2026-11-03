@@ -27,7 +27,7 @@ func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(cont
 	// duration point share it, so TargetFor is called once.
 	kv = a.txPlace(kv, tx)
 	place := kv[2:]
-	sctx, span := a.tracer.Start(ctx, spanTx, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(kv...))
+	sctx, span := a.tracer.Start(ctx, spanTx, a.internalKind, trace.WithAttributes(kv...))
 	// A panic in fn ends the span, records the duration and goes on: the
 	// adapter never recovers one. velox rolled the transaction back.
 	// runtime.Goexit in fn is reported the same way.
@@ -46,6 +46,12 @@ func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(cont
 	outcome := tx.Outcome
 	if outcome == 0 {
 		outcome = velox.TxError
+	}
+	if !span.IsRecording() { // not sampled: the span carries nothing more
+		ended = true
+		span.End()
+		a.txRecord(sctx, start, tx, outcome, place)
+		return err
 	}
 	txEnd(ctx, span, tx, outcome)
 	if err != nil {

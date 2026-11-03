@@ -43,8 +43,9 @@ func TestRecordSkipsDisabledInstruments(t *testing.T) {
 		t.Fatalf("statement %+v", st)
 	}
 	a := newAdapter(Config{TracerProvider: tracenoop.NewTracerProvider(), MeterProvider: metricnoop.NewMeterProvider()})
+	sh := a.newShape(st, false)
 	if n := testing.AllocsPerRun(100, func() {
-		a.record(ctx, st, "invoices", "SELECT invoices", nil, 0.001, failure{}, false)
+		a.record(ctx, st, sh, nil, 0.001, failure{}, false)
 	}); n != 0 {
 		t.Errorf("record: %v allocations, want 0", n)
 	}
@@ -82,8 +83,9 @@ func TestRecordSkipsInstrumentsAMeterDisables(t *testing.T) {
 		t.Fatalf("enabled: returned rows %v, duration %v, velox.tx.duration %v; want the first alone",
 			a.returned.Enabled(ctx), a.duration.Enabled(ctx), a.txDuration.Enabled(ctx))
 	}
+	sh := a.newShape(st, false)
 	if n := testing.AllocsPerRun(100, func() {
-		a.record(ctx, st, "invoices", "DELETE invoices", nil, 0.001, failure{}, false)
+		a.record(ctx, st, sh, nil, 0.001, failure{}, false)
 	}); n != 0 {
 		t.Errorf("record of a write: %v allocations, want 0", n)
 	}
