@@ -49,7 +49,11 @@ func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(cont
 	}
 	txEnd(ctx, span, tx, outcome)
 	if err != nil {
-		span.SetAttributes(attribute.String(attrErrorType, errorType(ctx, err)))
+		f := failureOf(ctx, err)
+		span.SetAttributes(attribute.String(attrErrorType, f.errType))
+		if f.code != "" {
+			span.SetAttributes(attribute.String(attrStatusCode, f.code))
+		}
 		setFailed(span, err)
 	}
 	ended = true

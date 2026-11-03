@@ -82,8 +82,9 @@
 //
 // # Errors
 //
-// A failed statement's span and duration point carry error.type and, when the
-// driver gave one, its code as db.response.status_code (see
+// A failed statement's span and duration point, and a failed transaction's
+// span, carry error.type and, when the driver gave one, its code as
+// db.response.status_code (see
 // velox.DriverCode): PostgreSQL's SQLSTATE, MySQL's error number or SQLite's
 // extended result code. error.type is velox's own value, such as
 // velox.denied or constraint.unique, where one fits, and otherwise the
@@ -177,4 +178,20 @@
 // Size pgxpool.Config.ConnConfig's StatementCacheCapacity for it, or set
 // Config.OmitCallers (the spans then carry no call site, and the comment is
 // one text per shape).
+//
+// # Not covered
+//
+// Connection-pool metrics (db.client.connection.*) are the driver's: with
+// pgx, otelpgx's RecordStats reads a pgxpool.Pool's statistics; with
+// database/sql, otelsql's RegisterDBStatsMetrics reads a sql.DB's. The adapter
+// sees statements, not connections.
+//
+// The SQL comment carries no trace context (traceparent), as sqlcommenter's
+// does: a trace ID is a per-request value, so pgx would prepare a statement
+// per request. A trace finds its statements by the spans, and a statement's
+// call site and tags are in its comment for the database's own views.
+//
+// Sampling is the tracer provider's. A statement's start attributes (its
+// operation, table, entity, shard and Config.Target) are there for a sampler
+// to decide on.
 package veloxotel

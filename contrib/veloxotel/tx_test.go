@@ -98,7 +98,8 @@ func TestTxOptions(t *testing.T) {
 }
 
 // TestTxOutcomes: how the transaction ended sets velox.tx.outcome, and a
-// failed one has the status Error, an error.type and an exception event.
+// failed one has the status Error, an error.type, the driver's code as
+// db.response.status_code when it gave one, and an exception event.
 func TestTxOutcomes(t *testing.T) {
 	boom := errors.New("boom")
 	cases := []struct {
@@ -107,10 +108,12 @@ func TestTxOutcomes(t *testing.T) {
 		fn      func(ctx context.Context, tx *velox.DB) error
 		outcome string
 		errType string
+		code    string // "": none
 	}{
-		{"rollback", &fakeDB{}, func(context.Context, *velox.DB) error { return boom }, "rollback", "_OTHER"},
-		{"commit fails", &fakeDB{commitErr: boom}, func(context.Context, *velox.DB) error { return nil }, "error", "_OTHER"},
-		{"begin fails", &fakeDB{errs: []error{boom}}, func(context.Context, *velox.DB) error { return nil }, "error", "_OTHER"},
+		{"rollback", &fakeDB{}, func(context.Context, *velox.DB) error { return boom }, "rollback", "_OTHER", ""},
+		{"commit fails", &fakeDB{commitErr: boom}, func(context.Context, *velox.DB) error { return nil }, "error", "_OTHER", ""},
+		{"commit fails with a code", &fakeDB{commitErr: &pgconn.PgError{Code: "40P01"}}, func(context.Context, *velox.DB) error { return nil }, "error", "40P01", "40P01"},
+		{"begin fails", &fakeDB{errs: []error{boom}}, func(context.Context, *velox.DB) error { return nil }, "error", "_OTHER", ""},
 		{
 			// Ticket's policy denies a context that names no user (this one
 			// has an org, and no policy bypass): the refusal comes before
@@ -121,7 +124,7 @@ func TestTxOutcomes(t *testing.T) {
 				_, err := tx.Query[testmodel.Ticket]().Limit(1).All(testmodel.Org.With(context.Background(), 1))
 				return err
 			},
-			"rollback", "velox.denied",
+			"rollback", "velox.denied", "",
 		},
 	}
 	for _, c := range cases {
@@ -138,6 +141,9 @@ func TestTxOutcomes(t *testing.T) {
 			a := attrs(s)
 			if a["velox.tx.outcome"] != attribute.StringValue(c.outcome) || a["error.type"] != attribute.StringValue(c.errType) {
 				t.Errorf("outcome %v, error.type %v; want %s, %s", a["velox.tx.outcome"].String(), a["error.type"].String(), c.outcome, c.errType)
+			}
+			if got, has := a["db.response.status_code"]; has != (c.code != "") || got.AsString() != c.code {
+				t.Errorf("db.response.status_code %q (%v), want %q", got.AsString(), has, c.code)
 			}
 			if s.Status.Code != codes.Error || s.Status.Description != err.Error() {
 				t.Errorf("status %v, want Error %q", s.Status, err)
