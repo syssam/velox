@@ -187,6 +187,13 @@ Beside this, in the same spirit, each found by running it:
 - PostgreSQL leaves narrowing to a string or bit type of limited length to the
   assignment cast. `USING c::varchar(5)` cut the row silently. Other changes keep
   `USING`: where an assignment cast also exists, both read a value alike.
+- The assignment cast to a string type trims spaces past the length, so `abc` and
+  seven spaces became `abc` and two in a `varchar(5)`, unseen. A narrowing
+  from a string now writes `USING CASE WHEN char_length(c) > 5 THEN c || '!' ELSE c
+  END`: a value over the length, by spaces or not, fails the assignment. An array
+  compares each element with its cut and appends one over the length when any
+  differs. A string type that already fits, as a widening, keeps no `USING` and no
+  rewrite.
 - `ALTER SEQUENCE … AS` follows a serial's type. An identity's follows on its own.
 - A column a foreign key references is renamed in place before a rebuild, as only
   `ALTER TABLE` rewrites the child's `REFERENCES`.

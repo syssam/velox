@@ -3,6 +3,7 @@ package migrate
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/syssam/velox"
@@ -501,10 +502,25 @@ func (r *renderer) serialSequence(c alterColumn) (string, bool) {
 // varbit, which has no limit, and assigned from there. The other types read the
 // same either way, or have no assignment cast, as text to integer has not, and
 // keep USING; Lint's finding says so of those that may still cut.
+//
+// The assignment cast to a string type trims the spaces past the length, as
+// SQL has it, and fails only on another character there. So a string over the
+// length gets a character past it, from a USING that is otherwise the column,
+// and fails whatever it ends with; in an array, every element is checked. A
+// string type that fits the length already is assigned as it is, so a widening
+// stays a change of the catalog only.
 func pgUsing(col, from, to string) string {
 	t, f := pgTypeOf(to), pgTypeOf(from)
 	if t.limited && (!t.array || f.array) {
+		fits := f.limited && f.length > 0 && f.length <= t.length
 		switch {
+		case t.text && f.text && t.length > 0 && fits:
+			return ""
+		case t.text && f.text && t.length > 0 && !t.array:
+			return fmt.Sprintf(" USING CASE WHEN char_length(%s) > %d THEN %s || '!' ELSE %s END", col, t.length, col, col)
+		case t.text && f.text && t.length > 0:
+			all := col + "::text[]"
+			return fmt.Sprintf(" USING CASE WHEN %s::varchar(%d)[]::text[] IS DISTINCT FROM %s THEN %s || ARRAY[repeat('!', %d)] ELSE %s END", all, t.length, all, all, t.length+1, all)
 		case !t.bits, f.bits:
 			return ""
 		case f.text && f.array:
@@ -527,6 +543,7 @@ type pgType struct {
 	text    bool // a string type
 	bits    bool // a bit string type
 	limited bool // a string or bit string type of limited length
+	length  int  // a limited string type's, 0 where it does not read
 }
 
 // pgStrings and pgBits are the spellings of the string and bit string types,
@@ -580,13 +597,20 @@ func pgTypeOf(t string) pgType {
 		}
 		word, quoted = word[1:end+1]+word[end+2:], true
 	}
-	word, _, sized := strings.Cut(word, "(")
+	word, size, sized := strings.Cut(word, "(")
 	word = strings.TrimSpace(word)
 	if quoted && word == "char" {
 		return out
 	}
 	if bare, ok := pgStrings[word]; ok {
 		out.known, out.text, out.limited = true, true, word != "text" && (sized || bare)
+		switch {
+		case sized:
+			size, _, _ = strings.Cut(size, ")")
+			out.length, _ = strconv.Atoi(strings.TrimSpace(size))
+		case bare:
+			out.length = 1
+		}
 		return out
 	}
 	if bare, ok := pgBits[word]; ok {

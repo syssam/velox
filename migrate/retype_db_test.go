@@ -2,6 +2,7 @@ package migrate_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
@@ -9,7 +10,8 @@ import (
 )
 
 // TestPostgresNarrowingFailsOnLongRow: narrowing a varchar fails on a row
-// over the new length, where an explicit cast would cut it.
+// over the new length, where an explicit cast would cut it. One over it by
+// trailing spaces fails too, which the assignment cast trims unseen.
 func TestPostgresNarrowingFailsOnLongRow(t *testing.T) {
 	d := velox.Postgres
 	for _, c := range []struct{ from, to string }{
@@ -24,27 +26,31 @@ func TestPostgresNarrowingFailsOnLongRow(t *testing.T) {
 		{"text", "bit(5)"},
 		{"text", "varbit(5)"},
 	} {
-		t.Run(c.from+" to "+c.to, func(t *testing.T) {
-			db, _ := freshDB(t, d)
-			fsys := dirOf(t, d, step{to: oneTable(d, migrate.Column{Name: "c", Type: c.from, Nullable: true}), name: "base"})
-			mustUp(t, db, fsys)
-			value := "'1234567890'"
-			switch c.from {
-			case "text[]":
-				value = "ARRAY['1234567890']"
-			case "bit(10)":
-				value = "B'1010101010'"
-			}
-			mustExec(t, db, `INSERT INTO t (id, c) VALUES (1, `+value+`)`)
-			fsys = extend(t, fsys, d, step{to: oneTable(d, migrate.Column{Name: "c", Type: c.to, Nullable: true}), name: "narrow", opts: allowAll("alter-type")})
-			if _, err := migrate.Up(context.Background(), db, fsys); err == nil {
-				t.Errorf("Up narrowed an over-length row\n%s", sqlFiles(fsys))
-			}
-			var n int
-			if err := db.QueryRow(`SELECT count(*) FROM t WHERE c::text = (` + value + `)::text`).Scan(&n); err != nil || n != 1 {
-				t.Errorf("the row changed: %d, %v", n, err)
-			}
-		})
+		values := []string{"'1234567890'"}
+		switch {
+		case c.from == "text[]":
+			values = []string{"ARRAY['1234567890']", "ARRAY['abc       ']", "ARRAY['ab', NULL, 'abc       ']"}
+		case c.from == "bit(10)":
+			values = []string{"B'1010101010'"}
+		case !strings.Contains(c.to, "bit"):
+			values = append(values, "'abc       '")
+		}
+		for _, value := range values {
+			t.Run(c.from+" to "+c.to+" "+value, func(t *testing.T) {
+				db, _ := freshDB(t, d)
+				fsys := dirOf(t, d, step{to: oneTable(d, migrate.Column{Name: "c", Type: c.from, Nullable: true}), name: "base"})
+				mustUp(t, db, fsys)
+				mustExec(t, db, `INSERT INTO t (id, c) VALUES (1, `+value+`)`)
+				fsys = extend(t, fsys, d, step{to: oneTable(d, migrate.Column{Name: "c", Type: c.to, Nullable: true}), name: "narrow", opts: allowAll("alter-type")})
+				if _, err := migrate.Up(context.Background(), db, fsys); err == nil {
+					t.Errorf("Up narrowed an over-length row\n%s", sqlFiles(fsys))
+				}
+				var n int
+				if err := db.QueryRow(`SELECT count(*) FROM t WHERE c::text = (` + value + `)::text`).Scan(&n); err != nil || n != 1 {
+					t.Errorf("the row changed: %d, %v", n, err)
+				}
+			})
+		}
 	}
 }
 

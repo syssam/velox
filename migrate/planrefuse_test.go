@@ -28,21 +28,28 @@ func TestParseAllowParenthesizedTarget(t *testing.T) {
 	}
 }
 
-// TestPostgresLimitedTargetUsing: every spelling of a target of limited length
-// goes without USING, so a row over the length fails rather than being cut; a
-// bit target from a string goes through an unlimited cast, which the assignment
-// then checks.
+// TestPostgresLimitedTargetUsing: every spelling of a string target of limited
+// length gets the column through the assignment cast, with a character past
+// the length on a string over it, so a row over the length fails rather than
+// being cut or trimmed; one that fits already goes without USING; a bit target
+// from a string goes through an unlimited cast, which the assignment then
+// checks.
 func TestPostgresLimitedTargetUsing(t *testing.T) {
+	over := ` USING CASE WHEN char_length("c") > 3 THEN "c" || '!' ELSE "c" END`
 	for _, c := range []struct{ from, to, using string }{
-		{"text", "bpchar(3)", ""},
-		{"text", "pg_catalog.varchar(3)", ""},
-		{"text", "pg_catalog.bpchar(3)", ""},
-		{"text", `"pg_catalog"."varchar"(3)`, ""},
-		{"text", `"varchar"(3)`, ""},
-		{"text", "nchar(3)", ""},
-		{"text", "national character varying(3)", ""},
-		{"text", "char varying(3)", ""},
-		{"text[]", "pg_catalog.bpchar(3)[]", ""},
+		{"text", "bpchar(3)", over},
+		{"text", "pg_catalog.varchar(3)", over},
+		{"text", "pg_catalog.bpchar(3)", over},
+		{"text", `"pg_catalog"."varchar"(3)`, over},
+		{"text", `"varchar"(3)`, over},
+		{"text", "nchar(3)", over},
+		{"text", "national character varying(3)", over},
+		{"text", "char varying(3)", over},
+		{"character varying(10)", "character(3)", over},
+		{"character", "varchar(3)", ""},
+		{"character varying(3)", "character varying(5)", ""},
+		{"text[]", "pg_catalog.bpchar(3)[]", ` USING CASE WHEN "c"::text[]::varchar(3)[]::text[] IS DISTINCT FROM "c"::text[] THEN "c"::text[] || ARRAY[repeat('!', 4)] ELSE "c"::text[] END`},
+		{"varchar(3)[]", "varchar(5)[]", ""},
 		{"text", "bit(3)", ` USING "c"::varbit`},
 		{"text", "pg_catalog.bit(3)", ` USING "c"::varbit`},
 		{"text", "varbit(3)", ` USING "c"::varbit`},
