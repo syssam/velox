@@ -1033,6 +1033,7 @@ func TestNullableOrderServed(t *testing.T) {
 // SQLite: what a Required edge reads when its target is hidden, a scope key,
 // an explicit zero value, or: [] and entities named as introspection types.
 func TestLimitsServed(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module")
 	}

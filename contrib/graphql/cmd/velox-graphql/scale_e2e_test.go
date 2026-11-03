@@ -184,6 +184,7 @@ func scaleDDL(t *testing.T, dir string, n int) string {
 // render the SDL of that many (veloxgql's cost_meta_test.go) or build a few.
 // It logs each step's time, and the application's test logs the handler's.
 func TestLargeSchemaServed(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module of hundreds of entities")
 	}

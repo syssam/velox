@@ -233,6 +233,7 @@ func gqlgenPins(t *testing.T, repo string) string {
 // module with velox-gen and velox-graphql as tools, and a schema package with
 // annotations.
 func TestPluginThroughVeloxGen(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
@@ -397,6 +398,7 @@ func (Level) Values() []string { return []string{"low", "high"} }
 // TestGoCompiles runs velox-gen with the plugin and builds and vets the
 // generated package: the plugin's Go compiles with velox-gen's.
 func TestGoCompiles(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
@@ -1512,6 +1514,7 @@ func TestNodesUnderTheRowCap(t *testing.T) {
 // which sets the key of a bidirectional self-edge on both rows
 // (TestCategoryTwin).
 func TestWhereRun(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
@@ -1538,6 +1541,7 @@ func TestWhereRun(t *testing.T) {
 // way a relation holds its key (the owner's row, the target's, a join
 // table), the org scope, and that a relation a With loaded is not read.
 func TestConnectionsRun(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module")
 	}

@@ -937,6 +937,7 @@ func TestListEdgeCap(t *testing.T) {
 // them; with VELOX_ITEST_REQUIRE=1, the application's TestMain fails unless
 // both do.
 func TestCollectRun(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module")
 	}

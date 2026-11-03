@@ -196,6 +196,7 @@ func TestAlertLevel(t *testing.T) {
 // for the enum: velox.graphql binds it with @goModel. The application is a
 // module of its own; it needs no database but SQLite.
 func TestAppEnumRenamed(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module")
 	}

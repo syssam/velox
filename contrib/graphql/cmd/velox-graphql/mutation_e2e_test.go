@@ -2297,6 +2297,7 @@ func TestBidiPartner(t *testing.T) {
 // VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL name them; with
 // VELOX_ITEST_REQUIRE=1, the application's TestMain fails unless both do.
 func TestMutationsRun(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
@@ -2481,6 +2482,7 @@ const e2eMutServeSDL = `type Mutation {
 // Required self edges, bind and serve. It
 // needs no database but SQLite.
 func TestMutationSchemaServes(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
