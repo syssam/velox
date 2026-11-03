@@ -1,8 +1,10 @@
 // Command velox-gen generates the Go code of velox entities.
 //
-// It reads a schema package, a package whose structs embed schema.Schema
-// directly: a struct that embeds another struct that embeds it is skipped. It
-// writes the gen package: one file, <entity>_velox.go, for every entity and
+// It reads a schema package. A schema is an exported, non-generic named
+// struct type of the package that implements schema.Interface, directly or
+// through embedding at any depth, by value or through a pointer, as ent's
+// rule has it; what looks like a schema and is not one is refused at its
+// line. It writes the gen package: one file, <entity>_velox.go, for every entity and
 // for every join entity of a many-to-many relation, and velox.go, which holds
 // the enums.
 //

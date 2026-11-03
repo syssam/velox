@@ -134,7 +134,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   A schema that imports `gen`, directly or through another package, is refused at the import
   with what to write. Plugins write into `gen/entity` then, and velox-gen re-exports their Go
   files in `gen`. Without `Policy` or `Hooks`, `gen` is one package, as before. Errors and
-  telemetry name `gen.User` in both layouts. See `docs/decisions/0036-split-gen-for-behaviour.md`.
+  telemetry name `gen.User` in both layouts once the entity's metadata is
+  built; an error while it is built, such as the not-linked one or a
+  relation's target, names `entity.User`. See `docs/decisions/0036-split-gen-for-behaviour.md`.
 - `GeneratedCodeIsVersion8`: regenerate. The generated descriptor reads an entity's
   `Policy` and `Hooks` from its schema value by an interface assertion, and the runtime holder
   has one schema value per entity. `Descriptor.Name`, new, names the entity in errors and

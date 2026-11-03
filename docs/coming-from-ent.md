@@ -142,7 +142,9 @@ at the first use of an entity and names the import, instead of running without
 the hooks. A schema that imports `gen`, directly or through another package,
 is refused with the chain: write `entity.User` where you wrote `gen.User`.
 velox-gen generates even when `gen` is stale or missing, so no
-`schema/snapshot` is needed. Errors and telemetry name `gen.User` in both layouts.
+`schema/snapshot` is needed. Errors and telemetry name `gen.User` in both layouts, except an error
+while the entity's metadata is built, such as the not-linked one, which names
+`entity.User`.
 Plugins write into `gen/entity` then, so velox-graphql's `velox.graphql` moves
 there; `gen/**/*.graphql` in gqlgen.yml reaches it in either layout. Without
 hooks or policies, `gen` is one package.

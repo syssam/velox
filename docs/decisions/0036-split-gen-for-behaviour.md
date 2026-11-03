@@ -77,8 +77,10 @@ and each new command. `gen/runtime` held a struct with three fields per entity
   the examples drop `_ ".../gen/runtime"`.
 - Errors and telemetry name the entity `gen.Doc` in either layout: the
   descriptor's new `Name` field, which velox-gen sets in split mode, overrides
-  the Go type's `entity.Doc`. `%T` and reflect still say `entity.Doc`, as
-  does the error of a descriptor that panics before it returns.
+  the Go type's `entity.Doc`, and so does the refusal of an unbound method.
+  `%T` and reflect still say `entity.Doc`, as does an error raised while
+  the descriptor is built, before it names the entity: the not-linked
+  panic, and a relation whose target's type is wrong.
 - A file of the user's in `gen/entity` is not re-exported; one in `gen` may not
   declare a name gen re-exports, nor a method on one: `gen.User` is an alias,
   and Go takes no method on another package's type. velox-gen refuses such a

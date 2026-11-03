@@ -57,7 +57,7 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 	if d.Table == "" {
 		return fail("", "the generated metadata has no Table; run go tool velox-gen")
 	}
-	if err := unboundMethods(t, d); err != nil {
+	if err := unboundMethods(t, name, d); err != nil {
 		return nil, err
 	}
 	cols := make([]ColumnInfo, len(d.Columns))
@@ -212,13 +212,14 @@ func holdsInterface(t reflect.Type) bool {
 // unboundMethods refuses an entity whose pointer type has a Policy or Hooks
 // method that the Descriptor does not bind: velox would never call it. The names
 // are constants, so that the linker can still drop the methods nobody calls.
-func unboundMethods(t reflect.Type, d *DescriptorFields) error {
+// name is the entity's, as the Descriptor names it.
+func unboundMethods(t reflect.Type, name string, d *DescriptorFields) error {
 	pt := reflect.PointerTo(t)
 	if _, ok := pt.MethodByName("Policy"); ok && !d.Policy {
-		return &SchemaError{Entity: t.String(), Reason: "has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
+		return &SchemaError{Entity: name, Reason: "has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
 	}
 	if _, ok := pt.MethodByName("Hooks"); ok && !d.Hooks {
-		return &SchemaError{Entity: t.String(), Reason: "has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
+		return &SchemaError{Entity: name, Reason: "has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
 	}
 	return nil
 }
