@@ -399,6 +399,9 @@ func (f *inputFixture) state(t *testing.T) string {
 			}
 			fmt.Fprintf(&b, "%s %d %s %s; ", kind, id, c, d)
 		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
 		if err := rows.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -422,6 +425,9 @@ func (f *inputFixture) kidOwners(t *testing.T) map[int64]int64 {
 		}
 		out[id] = owner
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 	return out
 }
 
@@ -440,6 +446,9 @@ func (f *inputFixture) links(t *testing.T, acct int64) []int64 {
 			t.Fatal(err)
 		}
 		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 	return out
 }
@@ -940,7 +949,7 @@ func TestKeyHelpersAs(t *testing.T) {
 	type acctID int64
 	conv := func(k int64) acctID { return acctID(k) }
 	f := newInputFixture(t)
-	u, key := gqlimpl.NewUpdateAs[acct, int64](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", acctGQL(2), acctInputGQL, conv)
+	u, key := gqlimpl.NewUpdateAs[acct](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", acctGQL(2), acctInputGQL, conv)
 	if key != 2 {
 		t.Errorf("NewUpdateAs key = %v, want 2", key)
 	}
@@ -966,7 +975,7 @@ func TestKeyHelpersAs(t *testing.T) {
 	}
 
 	// An ID in both lists, then a malformed one: the decode error wins.
-	u, _ = gqlimpl.NewUpdateAs[acct, int64](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", acctGQL(2), acctInputGQL, conv)
+	u, _ = gqlimpl.NewUpdateAs[acct](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", acctGQL(2), acctInputGQL, conv)
 	gqlimpl.AddRemoveAs(u, "Acct", "addIDs", mapIDs(acctGQL, []int64{1}), "removeIDs", mapIDs(acctGQL, []int64{1}), conv)
 	_, err := u.Exec(accts.ID.EQ(2))
 	wantErr(t, "an ID in both", err, veloxgql.CodeBadUserInput, "veloxgql: UpdateAcctInput: an ID is in both addIDs and removeIDs")
@@ -974,7 +983,7 @@ func TestKeyHelpersAs(t *testing.T) {
 	if _, err := u.Exec(accts.ID.EQ(2)); !errors.Is(err, veloxgql.ErrBadID) || !strings.HasPrefix(err.Error(), "veloxgql: UpdateAcctInput.a: ") {
 		t.Errorf("a malformed ID after an ID in both: %v, want the decode error naming UpdateAcctInput.a", err)
 	}
-	u, _ = gqlimpl.NewUpdateAs[acct, int64](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", "!", acctInputGQL, conv)
+	u, _ = gqlimpl.NewUpdateAs[acct](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", "!", acctInputGQL, conv)
 	if _, err := u.Exec(accts.ID.EQ(2)); !errors.Is(err, veloxgql.ErrBadID) || !strings.HasPrefix(err.Error(), "veloxgql: id: ") {
 		t.Errorf("NewUpdateAs of a malformed id: %v, want the decode error naming id", err)
 	}
