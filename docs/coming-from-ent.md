@@ -101,6 +101,15 @@ On SQLite, `velox.Connect` turns foreign keys on for every connection. A
 
 ## GraphQL (contrib/graphql, compared with entgql)
 
+- **Inputs, not mutations, as in entgql.** velox-graphql writes
+  `Create<T>Input` and `Update<T>Input`, and no `type Mutation`: the
+  application declares its mutations in its own `.graphqls` file and writes
+  the resolvers. Where entgql's resolver calls
+  `client.Todo.Create().SetInput(input).Save(ctx)`, velox's calls
+  `input.Create(ctx, x)`, with `x` the row the resolver has already set what
+  the client must not choose on (nil for a new one), and
+  `input.Update(ctx, id, setters...)`. No delete is generated: a delete is the
+  application's `db.Delete[T]()`.
 - **A null in an update input clears the field.** entgql ignores a null for an
   optional field, so only `clear<Field>: true` sets NULL. In velox, a null given
   to a nullable field sets it to NULL, as `clear<Field>` does, and a field left
