@@ -17,8 +17,7 @@ const _ = veloxgql.GeneratedCodeIsVersion11
 // veloxgql.Noder.
 func (*Post) IsNode() {}
 
-// IDGQL is the global ID of the Post, the GraphQL field id: the type Post and
-// the key id, encoded.
+// IDGQL is the global ID of the Post, the GraphQL field id.
 func (x *Post) IDGQL() string { return veloxgql.EncodeID("Post", x.ID) }
 
 // postNodeGQL is the Node type Post for Node and Nodes.
@@ -63,8 +62,8 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 	return nil
 }
 
-// AuthorGQL is the edge author: the Account it leads to, or nil when there is
-// none. It is read with the edge of every row read with x, in one query.
+// AuthorGQL is the edge author: the Account it leads to, or nil. It is read in
+// one query with the edge of every row read with x.
 func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -79,10 +78,8 @@ func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
 }
 
 // LikesGQL is the edge likes: the Like nodes it leads to, in key order. It is
-// read with the edge of every row read with x, in one query, which reads at
-// most the MaxList of veloxgql.LimitsFromContext(ctx) rows for each, whatever
-// the DB's WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error
-// that names the edge.
+// read in one query with the edge of every row read with x, up to MaxList; see
+// gqlimpl.EdgeList.
 func (x *Post) LikesGQL(ctx context.Context) ([]*Like, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -96,10 +93,9 @@ func (x *Post) LikesGQL(ctx context.Context) ([]*Like, error) {
 	return unsafe.Slice((**Like)(unsafe.Pointer(unsafe.SliceData(ps))), len(ps)), err
 }
 
-// RelatedGQL is the edge related: a connection to the Post nodes it leads to,
-// paged, ordered and filtered by the arguments. Its queries run when gqlgen
-// asks for the connection's fields, each with those of every row read with x,
-// in one query.
+// RelatedGQL is the edge related: a connection to the Post nodes it leads to.
+// Its queries batch with the edge of every row read with x; see
+// gqlimpl.EdgeConnection.
 func (x *Post) RelatedGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -113,9 +109,8 @@ func (x *Post) RelatedGQL(ctx context.Context, after *veloxgql.Cursor, first *in
 }
 
 // RelatedByGQL is the edge related_by: a connection to the Post nodes it leads
-// to, paged, ordered and filtered by the arguments. Its queries run when gqlgen
-// asks for the connection's fields, each with those of every row read with x,
-// in one query.
+// to. Its queries batch with the edge of every row read with x; see
+// gqlimpl.EdgeConnection.
 func (x *Post) RelatedByGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -129,16 +124,12 @@ func (x *Post) RelatedByGQL(ctx context.Context, after *veloxgql.Cursor, first *
 }
 
 // PostConnection is the GraphQL type PostConnection, a connection to a list of
-// Post. It holds the query of the whole list and the page asked for; gqlgen
-// calls its methods for the fields a query selects, and each runs its query
-// only then: edges and pageInfo share one page query, and totalCount runs a
-// COUNT.
+// Post. Its fields run their queries when gqlgen asks; see gqlimpl.Connection.
 type PostConnection struct {
 	c *gqlimpl.Connection
 }
 
-// Edges are the edges of the page, in the connection's order. The first call of
-// Edges or PageInfo runs the page query, and the other reads its page.
+// Edges are the edges of the page, in the connection's order.
 func (c *PostConnection) Edges(ctx context.Context) ([]*PostEdge, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -153,7 +144,7 @@ func (c *PostConnection) Edges(ctx context.Context) ([]*PostEdge, error) {
 	return edges, nil
 }
 
-// PageInfo is the page info of the page; see Edges.
+// PageInfo is the page info of the page.
 func (c *PostConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -163,8 +154,7 @@ func (c *PostConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, erro
 }
 
 // TotalCount is the number of Post nodes in the whole connection, not only on
-// this page. It counts the rows when gqlgen asks for it, which is only when the
-// field totalCount is selected.
+// this page.
 func (c *PostConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
 // PostEdge is the GraphQL type PostEdge, an edge in a connection to a list of
@@ -176,10 +166,8 @@ type PostEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// PostsConnection is the connection to every Post node, through the DB
-// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
-// a connection to Post: a Query field's resolver returns it. It fails before
-// any query runs on arguments gqlimpl.NewConnection refuses.
+// PostsConnection is the connection to every Post node, on the DB in ctx, for a
+// Query field's resolver. It is PostsConnectionOf of the whole table.
 func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -190,17 +178,8 @@ func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 
 // PostsConnectionOf is the connection to the Post nodes q returns, filtered by
 // where, ordered by orderBy and then the key, and paged by the other arguments.
-// q keeps its filters and With loads, and the scope the application gave it;
-// its Offset is cleared and its Limit replaced, since the page is the
-// connection's. q must have no OrderBy: the connection orders it, and a q with
-// one is refused with an internal error, since its order would come first and
-// break the cursors. q must also select the key and the columns orderBy names,
-// which the cursors hold: a q whose Columns or Omit drops one is refused with
-// an internal error. In a gqlgen field, the page reads only the columns the
-// selection needs (postColumnsGQL), of those q selects; a column the selection
-// does not need is left zero in the nodes, except the key, the foreign keys and
-// the order columns, so an application's resolver must not read one it did not
-// ask for. It runs no query.
+// q must not be ordered and must select the key and the order columns; see
+// gqlimpl.ConnectionBase and gqlimpl.NewConnection.
 func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	order := make([]gqlimpl.Order, len(orderBy))
 	for i, o := range orderBy {
@@ -224,8 +203,7 @@ func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql
 	return &PostConnection{c: c}, nil
 }
 
-// postConnGQL is what the connections to Post are made of: the key, which ends
-// every order, and the order fields' columns.
+// postConnGQL is the key and the order columns of the connections to Post.
 var postConnGQL = gqlimpl.Conn{
 	Type: "Post",
 	Key: []gqlimpl.Col{
@@ -239,10 +217,9 @@ var postConnGQL = gqlimpl.Conn{
 	Columns: postColumnsGQL,
 }
 
-// postColumnsGQL is the columns a selection of the Post fields fields reads:
-// the key, every foreign key on the row, every order field's column, and the
-// column of each field. It is nil, every column, when a field is not one
-// velox-graphql wrote, such as an application's own.
+// postColumnsGQL returns the columns a selection of the given Post fields
+// reads. It returns nil, every column, for a field that is not velox-graphql's;
+// see gqlimpl.Conn.
 func postColumnsGQL(fields []string) []int {
 	cols := []int{postColID, postColAuthorID, postColTitle, postColViews}
 	for _, f := range fields {
@@ -382,11 +359,8 @@ type PostWhereInput struct {
 	HasWriterWith []*AccountWhereInput
 }
 
-// Pred is the condition w stands for, on Post nodes: every predicate w sets
-// holds, and a w that sets none, or a nil w, holds for every node. It fails,
-// before any query runs, on an ID of another type or a malformed one, and on a
-// filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
-// gqlimpl.NewFilter's.
+// Pred is the condition w stands for on Post nodes, true for a nil or empty w.
+// Its errors are gqlimpl.NewFilter's.
 func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	p, err := w.PredicateGQL(ctx)
 	return velox.Pred[Post](p), err
@@ -443,9 +417,8 @@ func (w *PostWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 	return f.Pred()
 }
 
-// postCreateInputGQL is the GraphQL name of the CreatePostInput field that sets
-// the Post field whose Go name is goField, for the errors of its validators: ""
-// for a field it does not set.
+// postCreateInputGQL is the CreatePostInput field that sets the Post field
+// goField, or "". A validator's error names it.
 func postCreateInputGQL(goField string) string {
 	switch goField {
 	case "Title":
@@ -468,9 +441,8 @@ func postCreateInputGQL(goField string) string {
 	return ""
 }
 
-// postUpdateInputGQL is the GraphQL name of the UpdatePostInput field that sets
-// the Post field whose Go name is goField, for the errors of its validators: ""
-// for a field it does not set.
+// postUpdateInputGQL is the UpdatePostInput field that sets the Post field
+// goField, or "". A validator's error names it.
 func postUpdateInputGQL(goField string) string {
 	switch goField {
 	case "Title":
@@ -492,22 +464,21 @@ func postUpdateInputGQL(goField string) string {
 }
 
 // postRelatedEdgeGQL is the many-to-many edge related of Post, through
-// PostRelated, as its inputs write it.
+// PostRelated.
 func postRelatedEdgeGQL() gqlimpl.M2M {
 	return gqlimpl.M2M{Owner: velox.TableOf[Post](), Target: velox.TableOf[Post](), Join: velox.TableOf[PostRelated](),
 		OwnerKey: postColID, TargetKey: postColID, JoinOwner: postRelatedColPostID, JoinTarget: postRelatedColRelatedID}
 }
 
 // postRelatedByEdgeGQL is the many-to-many edge related_by of Post, through
-// PostRelated, as its inputs write it.
+// PostRelated.
 func postRelatedByEdgeGQL() gqlimpl.M2M {
 	return gqlimpl.M2M{Owner: velox.TableOf[Post](), Target: velox.TableOf[Post](), Join: velox.TableOf[PostRelated](),
 		OwnerKey: postColID, TargetKey: postColID, JoinOwner: postRelatedColRelatedID, JoinTarget: postRelatedColPostID}
 }
 
-// CreatePostInput is the GraphQL input CreatePostInput; its method Create
-// writes it. A field that is a pointer, or a list, is optional: nil means not
-// given.
+// CreatePostInput is the GraphQL input CreatePostInput, which Create writes. A
+// nil pointer or list is a field not given.
 type CreatePostInput struct {
 	Title       string
 	Slug        string
@@ -526,12 +497,9 @@ type CreatePostInput struct {
 }
 
 // Create inserts x, a Post, with the input's fields and edges set; a nil x is a
-// new one. The input's fields overwrite x's: to own a field, leave it out with
-// graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook. x's
-// other fields, foreign keys included, are trusted, not checked. It runs
-// atomically on the DB in ctx, under the policies, and changes x even when it
-// fails. CreatePostInput leaves out Views, which an insert requires: set it on
-// x, or in a velox.Hook, or it is stored as the zero value.
+// new one. It runs atomically on the DB in ctx, under the policies.
+// CreatePostInput leaves out Views, which an insert requires: set it on x, or
+// in a velox.Hook, or it is stored as the zero value.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
@@ -573,10 +541,9 @@ func (in *CreatePostInput) Create(ctx context.Context, x *Post) (*Post, error) {
 	return x, nil
 }
 
-// UpdatePostInput is the GraphQL input UpdatePostInput; its method Update
-// writes it. A field that is a pointer, or a list, is optional: nil means not
-// given. A clear field that is true clears a field or an edge, and is refused
-// with the field or the edge's ID given too.
+// UpdatePostInput is the GraphQL input UpdatePostInput, which Update writes. A
+// nil pointer or list is a field not given. A true clear field clears its field
+// or edge.
 type UpdatePostInput struct {
 	Title       *string
 	Status      *PostStatus
@@ -608,13 +575,9 @@ type UpdatePostInput struct {
 	ClearRelatedBy bool
 }
 
-// Update updates the Post with the ID id from the input and from set, the
-// application's own setters, and returns the row as written. A setter of set
-// wins over the input's field or edge that sets the same column, which is left
-// as set says. The input's fields are validated as the client's, and set apart
-// from them: a setter of set that its validator refuses is the application's
-// error, returned as velox's. It runs atomically on the DB in ctx, under the
-// policies.
+// Update updates the Post with the ID id from the input and from set, and
+// returns the row as written. A setter of set wins over the input's for the
+// same column.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what

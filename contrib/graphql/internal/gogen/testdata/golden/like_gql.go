@@ -12,8 +12,8 @@ import (
 
 const _ = veloxgql.GeneratedCodeIsVersion11
 
-// UserGQL is the edge user: the Account it leads to, or nil when there is none.
-// It is read with the edge of every row read with x, in one query.
+// UserGQL is the edge user: the Account it leads to, or nil. It is read in one
+// query with the edge of every row read with x.
 func (x *Like) UserGQL(ctx context.Context) (*User, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -27,8 +27,8 @@ func (x *Like) UserGQL(ctx context.Context) (*User, error) {
 	return (*User)(p), err
 }
 
-// PostGQL is the edge post: the Post it leads to, or nil when there is none. It
-// is read with the edge of every row read with x, in one query.
+// PostGQL is the edge post: the Post it leads to, or nil. It is read in one
+// query with the edge of every row read with x.
 func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -43,16 +43,12 @@ func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
 }
 
 // LikeConnection is the GraphQL type LikeConnection, a connection to a list of
-// Like. It holds the query of the whole list and the page asked for; gqlgen
-// calls its methods for the fields a query selects, and each runs its query
-// only then: edges and pageInfo share one page query, and totalCount runs a
-// COUNT.
+// Like. Its fields run their queries when gqlgen asks; see gqlimpl.Connection.
 type LikeConnection struct {
 	c *gqlimpl.Connection
 }
 
-// Edges are the edges of the page, in the connection's order. The first call of
-// Edges or PageInfo runs the page query, and the other reads its page.
+// Edges are the edges of the page, in the connection's order.
 func (c *LikeConnection) Edges(ctx context.Context) ([]*LikeEdge, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -67,7 +63,7 @@ func (c *LikeConnection) Edges(ctx context.Context) ([]*LikeEdge, error) {
 	return edges, nil
 }
 
-// PageInfo is the page info of the page; see Edges.
+// PageInfo is the page info of the page.
 func (c *LikeConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -77,8 +73,7 @@ func (c *LikeConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, erro
 }
 
 // TotalCount is the number of Like nodes in the whole connection, not only on
-// this page. It counts the rows when gqlgen asks for it, which is only when the
-// field totalCount is selected.
+// this page.
 func (c *LikeConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
 // LikeEdge is the GraphQL type LikeEdge, an edge in a connection to a list of
@@ -90,10 +85,8 @@ type LikeEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// LikesConnection is the connection to every Like node, through the DB
-// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
-// a connection to Like: a Query field's resolver returns it. It fails before
-// any query runs on arguments gqlimpl.NewConnection refuses.
+// LikesConnection is the connection to every Like node, on the DB in ctx, for a
+// Query field's resolver. It is LikesConnectionOf of the whole table.
 func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -103,18 +96,9 @@ func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 }
 
 // LikesConnectionOf is the connection to the Like nodes q returns, ordered by
-// the key, and paged by the other arguments. q keeps its filters and With
-// loads, and the scope the application gave it; its Offset is cleared and its
-// Limit replaced, since the page is the connection's. q must have no OrderBy:
-// the connection orders it, and a q with one is refused with an internal error,
-// since its order would come first and break the cursors. q must also select
-// the key and the columns orderBy names, which the cursors hold: a q whose
-// Columns or Omit drops one is refused with an internal error. In a gqlgen
-// field, the page reads only the columns the selection needs (likeColumnsGQL),
-// of those q selects; a column the selection does not need is left zero in the
-// nodes, except the key, the foreign keys and the order columns, so an
-// application's resolver must not read one it did not ask for. It runs no
-// query.
+// the key, and paged by the other arguments. q must not be ordered and must
+// select the key and the order columns; see gqlimpl.ConnectionBase and
+// gqlimpl.NewConnection.
 func LikesConnectionOf(ctx context.Context, q velox.Query[Like], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
 	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &likeConnGQL, nil)
 	if err != nil {
@@ -127,8 +111,7 @@ func LikesConnectionOf(ctx context.Context, q velox.Query[Like], after *veloxgql
 	return &LikeConnection{c: c}, nil
 }
 
-// likeConnGQL is what the connections to Like are made of: the key, which ends
-// every order, and the order fields' columns.
+// likeConnGQL is the key and the order columns of the connections to Like.
 var likeConnGQL = gqlimpl.Conn{
 	Type: "Like",
 	Key: []gqlimpl.Col{
@@ -138,10 +121,9 @@ var likeConnGQL = gqlimpl.Conn{
 	Columns: likeColumnsGQL,
 }
 
-// likeColumnsGQL is the columns a selection of the Like fields fields reads:
-// the key, every foreign key on the row, every order field's column, and the
-// column of each field. It is nil, every column, when a field is not one
-// velox-graphql wrote, such as an application's own.
+// likeColumnsGQL returns the columns a selection of the given Like fields
+// reads. It returns nil, every column, for a field that is not velox-graphql's;
+// see gqlimpl.Conn.
 func likeColumnsGQL(fields []string) []int {
 	cols := []int{likeColUserID, likeColPostID}
 	for _, f := range fields {
@@ -158,9 +140,8 @@ func likeColumnsGQL(fields []string) []int {
 	return cols
 }
 
-// likeInputGQL is the GraphQL name of the CreateLikeInput field that sets the
-// Like field whose Go name is goField, for the errors of its validators: "" for
-// a field it does not set.
+// likeInputGQL is the CreateLikeInput field that sets the Like field goField,
+// or "". A validator's error names it.
 func likeInputGQL(goField string) string {
 	switch goField {
 	case "Weight":
@@ -175,9 +156,8 @@ func likeInputGQL(goField string) string {
 	return ""
 }
 
-// CreateLikeInput is the GraphQL input CreateLikeInput; its method Create
-// writes it. A field that is a pointer, or a list, is optional: nil means not
-// given.
+// CreateLikeInput is the GraphQL input CreateLikeInput, which Create writes. A
+// nil pointer or list is a field not given.
 type CreateLikeInput struct {
 	Weight    *int8
 	CreatedAt *time.Time
@@ -188,11 +168,7 @@ type CreateLikeInput struct {
 }
 
 // Create inserts x, a Like, with the input's fields and edges set; a nil x is a
-// new one. The input's fields overwrite x's: to own a field, leave it out with
-// graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook. x's
-// other fields, foreign keys included, are trusted, not checked. It runs
-// atomically on the DB in ctx, under the policies, and changes x even when it
-// fails.
+// new one. It runs atomically on the DB in ctx, under the policies.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what

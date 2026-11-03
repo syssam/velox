@@ -16,8 +16,7 @@ const _ = veloxgql.GeneratedCodeIsVersion11
 // veloxgql.Noder.
 func (*Group) IsNode() {}
 
-// IDGQL is the global ID of the Group, the GraphQL field id: the type Group and
-// the key id, encoded.
+// IDGQL is the global ID of the Group, the GraphQL field id.
 func (x *Group) IDGQL() string { return veloxgql.EncodeID("Group", x.ID) }
 
 // groupNodeGQL is the Node type Group for Node and Nodes.
@@ -59,10 +58,9 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 	return nil
 }
 
-// UsersGQL is the edge users: a connection to the Account nodes it leads to,
-// paged, ordered and filtered by the arguments. Its queries run when gqlgen
-// asks for the connection's fields, each with those of every row read with x,
-// in one query.
+// UsersGQL is the edge users: a connection to the Account nodes it leads to.
+// Its queries batch with the edge of every row read with x; see
+// gqlimpl.EdgeConnection.
 func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -76,16 +74,13 @@ func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int
 }
 
 // GroupConnection is the GraphQL type GroupConnection, a connection to a list
-// of Group. It holds the query of the whole list and the page asked for; gqlgen
-// calls its methods for the fields a query selects, and each runs its query
-// only then: edges and pageInfo share one page query, and totalCount runs a
-// COUNT.
+// of Group. Its fields run their queries when gqlgen asks; see
+// gqlimpl.Connection.
 type GroupConnection struct {
 	c *gqlimpl.Connection
 }
 
-// Edges are the edges of the page, in the connection's order. The first call of
-// Edges or PageInfo runs the page query, and the other reads its page.
+// Edges are the edges of the page, in the connection's order.
 func (c *GroupConnection) Edges(ctx context.Context) ([]*GroupEdge, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -100,7 +95,7 @@ func (c *GroupConnection) Edges(ctx context.Context) ([]*GroupEdge, error) {
 	return edges, nil
 }
 
-// PageInfo is the page info of the page; see Edges.
+// PageInfo is the page info of the page.
 func (c *GroupConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -110,8 +105,7 @@ func (c *GroupConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, err
 }
 
 // TotalCount is the number of Group nodes in the whole connection, not only on
-// this page. It counts the rows when gqlgen asks for it, which is only when the
-// field totalCount is selected.
+// this page.
 func (c *GroupConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
 // GroupEdge is the GraphQL type GroupEdge, an edge in a connection to a list of
@@ -123,10 +117,8 @@ type GroupEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// GroupsConnection is the connection to every Group node, through the DB
-// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
-// a connection to Group: a Query field's resolver returns it. It fails before
-// any query runs on arguments gqlimpl.NewConnection refuses.
+// GroupsConnection is the connection to every Group node, on the DB in ctx, for
+// a Query field's resolver. It is GroupsConnectionOf of the whole table.
 func GroupsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -136,18 +128,9 @@ func GroupsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 }
 
 // GroupsConnectionOf is the connection to the Group nodes q returns, ordered by
-// orderBy and then the key, and paged by the other arguments. q keeps its
-// filters and With loads, and the scope the application gave it; its Offset is
-// cleared and its Limit replaced, since the page is the connection's. q must
-// have no OrderBy: the connection orders it, and a q with one is refused with
-// an internal error, since its order would come first and break the cursors. q
-// must also select the key and the columns orderBy names, which the cursors
-// hold: a q whose Columns or Omit drops one is refused with an internal error.
-// In a gqlgen field, the page reads only the columns the selection needs
-// (groupColumnsGQL), of those q selects; a column the selection does not need
-// is left zero in the nodes, except the key, the foreign keys and the order
-// columns, so an application's resolver must not read one it did not ask for.
-// It runs no query.
+// orderBy and then the key, and paged by the other arguments. q must not be
+// ordered and must select the key and the order columns; see
+// gqlimpl.ConnectionBase and gqlimpl.NewConnection.
 func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
 	var order []gqlimpl.Order
 	if o := orderBy; o != nil {
@@ -164,8 +147,7 @@ func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxg
 	return &GroupConnection{c: c}, nil
 }
 
-// groupConnGQL is what the connections to Group are made of: the key, which
-// ends every order, and the order fields' columns.
+// groupConnGQL is the key and the order columns of the connections to Group.
 var groupConnGQL = gqlimpl.Conn{
 	Type: "Group",
 	Key: []gqlimpl.Col{
@@ -177,10 +159,9 @@ var groupConnGQL = gqlimpl.Conn{
 	Columns: groupColumnsGQL,
 }
 
-// groupColumnsGQL is the columns a selection of the Group fields fields reads:
-// the key, every foreign key on the row, every order field's column, and the
-// column of each field. It is nil, every column, when a field is not one
-// velox-graphql wrote, such as an application's own.
+// groupColumnsGQL returns the columns a selection of the given Group fields
+// reads. It returns nil, every column, for a field that is not velox-graphql's;
+// see gqlimpl.Conn.
 func groupColumnsGQL(fields []string) []int {
 	cols := []int{groupColID, groupColName}
 	for _, f := range fields {

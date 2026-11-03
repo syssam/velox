@@ -24,8 +24,7 @@ type Account = User
 // veloxgql.Noder.
 func (*User) IsNode() {}
 
-// IDGQL is the global ID of the User, the GraphQL field id: the type Account
-// and the key id, encoded.
+// IDGQL is the global ID of the User, the GraphQL field id.
 func (x *User) IDGQL() string { return veloxgql.EncodeID("Account", x.ID) }
 
 // userNodeGQL is the Node type Account for Node and Nodes.
@@ -77,10 +76,9 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 	return nil
 }
 
-// PostsGQL is the edge posts: a connection to the Post nodes it leads to,
-// paged, ordered and filtered by the arguments. Its queries run when gqlgen
-// asks for the connection's fields, each with those of every row read with x,
-// in one query.
+// PostsGQL is the edge posts: a connection to the Post nodes it leads to. Its
+// queries batch with the edge of every row read with x; see
+// gqlimpl.EdgeConnection.
 func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -94,10 +92,8 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 }
 
 // GroupsGQL is the edge groups: the Group nodes it leads to, in key order. It
-// is read with the edge of every row read with x, in one query, which reads at
-// most the MaxList of veloxgql.LimitsFromContext(ctx) rows for each, whatever
-// the DB's WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error
-// that names the edge.
+// is read in one query with the edge of every row read with x, up to MaxList;
+// see gqlimpl.EdgeList.
 func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -111,10 +107,9 @@ func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
 	return unsafe.Slice((**Group)(unsafe.Pointer(unsafe.SliceData(ps))), len(ps)), err
 }
 
-// LikesGQL is the edge likes: a connection to the Like nodes it leads to,
-// paged, ordered and filtered by the arguments. Its queries run when gqlgen
-// asks for the connection's fields, each with those of every row read with x,
-// in one query.
+// LikesGQL is the edge likes: a connection to the Like nodes it leads to. Its
+// queries batch with the edge of every row read with x; see
+// gqlimpl.EdgeConnection.
 func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -128,16 +123,13 @@ func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 }
 
 // AccountConnection is the GraphQL type AccountConnection, a connection to a
-// list of Account. It holds the query of the whole list and the page asked for;
-// gqlgen calls its methods for the fields a query selects, and each runs its
-// query only then: edges and pageInfo share one page query, and totalCount runs
-// a COUNT.
+// list of Account. Its fields run their queries when gqlgen asks; see
+// gqlimpl.Connection.
 type AccountConnection struct {
 	c *gqlimpl.Connection
 }
 
-// Edges are the edges of the page, in the connection's order. The first call of
-// Edges or PageInfo runs the page query, and the other reads its page.
+// Edges are the edges of the page, in the connection's order.
 func (c *AccountConnection) Edges(ctx context.Context) ([]*AccountEdge, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -152,7 +144,7 @@ func (c *AccountConnection) Edges(ctx context.Context) ([]*AccountEdge, error) {
 	return edges, nil
 }
 
-// PageInfo is the page info of the page; see Edges.
+// PageInfo is the page info of the page.
 func (c *AccountConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -162,8 +154,7 @@ func (c *AccountConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, e
 }
 
 // TotalCount is the number of Account nodes in the whole connection, not only
-// on this page. It counts the rows when gqlgen asks for it, which is only when
-// the field totalCount is selected.
+// on this page.
 func (c *AccountConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
 // AccountEdge is the GraphQL type AccountEdge, an edge in a connection to a
@@ -175,10 +166,8 @@ type AccountEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// AccountsConnection is the connection to every Account node, through the DB
-// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
-// a connection to Account: a Query field's resolver returns it. It fails before
-// any query runs on arguments gqlimpl.NewConnection refuses.
+// AccountsConnection is the connection to every Account node, on the DB in ctx,
+// for a Query field's resolver. It is AccountsConnectionOf of the whole table.
 func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -189,17 +178,8 @@ func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int,
 
 // AccountsConnectionOf is the connection to the Account nodes q returns,
 // filtered by where, ordered by the key, and paged by the other arguments. q
-// keeps its filters and With loads, and the scope the application gave it; its
-// Offset is cleared and its Limit replaced, since the page is the connection's.
-// q must have no OrderBy: the connection orders it, and a q with one is refused
-// with an internal error, since its order would come first and break the
-// cursors. q must also select the key and the columns orderBy names, which the
-// cursors hold: a q whose Columns or Omit drops one is refused with an internal
-// error. In a gqlgen field, the page reads only the columns the selection needs
-// (userColumnsGQL), of those q selects; a column the selection does not need is
-// left zero in the nodes, except the key, the foreign keys and the order
-// columns, so an application's resolver must not read one it did not ask for.
-// It runs no query.
+// must not be ordered and must select the key and the order columns; see
+// gqlimpl.ConnectionBase and gqlimpl.NewConnection.
 func AccountsConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
 	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &userConnGQL, nil)
 	if err != nil {
@@ -219,8 +199,7 @@ func AccountsConnectionOf(ctx context.Context, q velox.Query[User], after *velox
 	return &AccountConnection{c: c}, nil
 }
 
-// userConnGQL is what the connections to Account are made of: the key, which
-// ends every order, and the order fields' columns.
+// userConnGQL is the key and the order columns of the connections to Account.
 var userConnGQL = gqlimpl.Conn{
 	Type: "Account",
 	Key: []gqlimpl.Col{
@@ -229,10 +208,9 @@ var userConnGQL = gqlimpl.Conn{
 	Columns: userColumnsGQL,
 }
 
-// userColumnsGQL is the columns a selection of the Account fields fields reads:
-// the key, every foreign key on the row, every order field's column, and the
-// column of each field. It is nil, every column, when a field is not one
-// velox-graphql wrote, such as an application's own.
+// userColumnsGQL returns the columns a selection of the given Account fields
+// reads. It returns nil, every column, for a field that is not velox-graphql's;
+// see gqlimpl.Conn.
 func userColumnsGQL(fields []string) []int {
 	cols := []int{userColID, userColUserBestFriend}
 	for _, f := range fields {
@@ -306,11 +284,8 @@ type AccountWhereInput struct {
 	HasPostsWith []*PostWhereInput
 }
 
-// Pred is the condition w stands for, on Account nodes: every predicate w sets
-// holds, and a w that sets none, or a nil w, holds for every node. It fails,
-// before any query runs, on an ID of another type or a malformed one, and on a
-// filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
-// gqlimpl.NewFilter's.
+// Pred is the condition w stands for on Account nodes, true for a nil or empty
+// w. Its errors are gqlimpl.NewFilter's.
 func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	p, err := w.PredicateGQL(ctx)
 	return velox.Pred[User](p), err
@@ -345,9 +320,8 @@ func (w *AccountWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, 
 	return f.Pred()
 }
 
-// userInputGQL is the GraphQL name of the CreateAccountInput field that sets
-// the User field whose Go name is goField, for the errors of its validators: ""
-// for a field it does not set.
+// userInputGQL is the CreateAccountInput field that sets the User field
+// goField, or "". A validator's error names it.
 func userInputGQL(goField string) string {
 	switch goField {
 	case "CreatedAt":
@@ -386,16 +360,14 @@ func userInputGQL(goField string) string {
 	return ""
 }
 
-// userGroupsEdgeGQL is the many-to-many edge groups of User, through UserGroup,
-// as its inputs write it.
+// userGroupsEdgeGQL is the many-to-many edge groups of User, through UserGroup.
 func userGroupsEdgeGQL() gqlimpl.M2M {
 	return gqlimpl.M2M{Owner: velox.TableOf[User](), Target: velox.TableOf[Group](), Join: velox.TableOf[UserGroup](),
 		OwnerKey: userColID, TargetKey: groupColID, JoinOwner: userGroupColUserID, JoinTarget: userGroupColGroupID}
 }
 
-// CreateAccountInput is the GraphQL input CreateAccountInput; its method Create
-// writes it. A field that is a pointer, or a list, is optional: nil means not
-// given.
+// CreateAccountInput is the GraphQL input CreateAccountInput, which Create
+// writes. A nil pointer or list is a field not given.
 type CreateAccountInput struct {
 	CreatedAt *time.Time
 	UpdatedAt *time.Time
@@ -428,13 +400,9 @@ func (in CreateAccountInput) String() string {
 func (in CreateAccountInput) GoString() string { return in.String() }
 
 // Create inserts x, an Account, with the input's fields and edges set; a nil x
-// is a new one. The input's fields overwrite x's: to own a field, leave it out
-// with graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook.
-// x's other fields, foreign keys included, are trusted, not checked. It runs
-// atomically on the DB in ctx, under the policies, and changes x even when it
-// fails. CreateAccountInput leaves out CreatedBy, OrgID, which an insert
-// requires: set them on x, or in a velox.Hook, or they are stored as the zero
-// value.
+// is a new one. It runs atomically on the DB in ctx, under the policies.
+// CreateAccountInput leaves out CreatedBy, OrgID, which an insert requires: set
+// them on x, or in a velox.Hook, or they are stored as the zero value.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what

@@ -15,8 +15,7 @@ const _ = veloxgql.GeneratedCodeIsVersion11
 // veloxgql.Noder.
 func (*Category) IsNode() {}
 
-// IDGQL is the global ID of the Category, the GraphQL field id: the type
-// Category and the key id, encoded.
+// IDGQL is the global ID of the Category, the GraphQL field id.
 func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
 
 // categoryNodeGQL is the Node type Category for Node and Nodes.
@@ -33,9 +32,8 @@ func categoryNodeGQL() gqlimpl.NodeKind {
 func categoryKeyGQL(x *Category) int64 { return x.ID }
 
 // ChildrenGQL is the edge children: a connection to the Category nodes it leads
-// to, paged, ordered and filtered by the arguments. Its queries run when gqlgen
-// asks for the connection's fields, each with those of every row read with x,
-// in one query.
+// to. Its queries batch with the edge of every row read with x; see
+// gqlimpl.EdgeConnection.
 func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -48,8 +46,8 @@ func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, firs
 	return &CategoryConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[Category](), unsafe.Pointer(x), categoryEdgeChildren, "Category.children", []any{after, first, before, last, where})}, nil
 }
 
-// ParentGQL is the edge parent: the Category it leads to, or nil when there is
-// none. It is read with the edge of every row read with x, in one query.
+// ParentGQL is the edge parent: the Category it leads to, or nil. It is read in
+// one query with the edge of every row read with x.
 func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
 	if x.CategoryChildren == nil {
 		return nil, nil
@@ -67,16 +65,13 @@ func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
 }
 
 // CategoryConnection is the GraphQL type CategoryConnection, a connection to a
-// list of Category. It holds the query of the whole list and the page asked
-// for; gqlgen calls its methods for the fields a query selects, and each runs
-// its query only then: edges and pageInfo share one page query, and totalCount
-// runs a COUNT.
+// list of Category. Its fields run their queries when gqlgen asks; see
+// gqlimpl.Connection.
 type CategoryConnection struct {
 	c *gqlimpl.Connection
 }
 
-// Edges are the edges of the page, in the connection's order. The first call of
-// Edges or PageInfo runs the page query, and the other reads its page.
+// Edges are the edges of the page, in the connection's order.
 func (c *CategoryConnection) Edges(ctx context.Context) ([]*CategoryEdge, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -91,7 +86,7 @@ func (c *CategoryConnection) Edges(ctx context.Context) ([]*CategoryEdge, error)
 	return edges, nil
 }
 
-// PageInfo is the page info of the page; see Edges.
+// PageInfo is the page info of the page.
 func (c *CategoryConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -101,8 +96,7 @@ func (c *CategoryConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, 
 }
 
 // TotalCount is the number of Category nodes in the whole connection, not only
-// on this page. It counts the rows when gqlgen asks for it, which is only when
-// the field totalCount is selected.
+// on this page.
 func (c *CategoryConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
 // CategoryEdge is the GraphQL type CategoryEdge, an edge in a connection to a
@@ -114,10 +108,9 @@ type CategoryEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// CategoriesConnection is the connection to every Category node, through the DB
-// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
-// a connection to Category: a Query field's resolver returns it. It fails
-// before any query runs on arguments gqlimpl.NewConnection refuses.
+// CategoriesConnection is the connection to every Category node, on the DB in
+// ctx, for a Query field's resolver. It is CategoriesConnectionOf of the whole
+// table.
 func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -128,17 +121,8 @@ func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *in
 
 // CategoriesConnectionOf is the connection to the Category nodes q returns,
 // filtered by where, ordered by the key, and paged by the other arguments. q
-// keeps its filters and With loads, and the scope the application gave it; its
-// Offset is cleared and its Limit replaced, since the page is the connection's.
-// q must have no OrderBy: the connection orders it, and a q with one is refused
-// with an internal error, since its order would come first and break the
-// cursors. q must also select the key and the columns orderBy names, which the
-// cursors hold: a q whose Columns or Omit drops one is refused with an internal
-// error. In a gqlgen field, the page reads only the columns the selection needs
-// (categoryColumnsGQL), of those q selects; a column the selection does not
-// need is left zero in the nodes, except the key, the foreign keys and the
-// order columns, so an application's resolver must not read one it did not ask
-// for. It runs no query.
+// must not be ordered and must select the key and the order columns; see
+// gqlimpl.ConnectionBase and gqlimpl.NewConnection.
 func CategoriesConnectionOf(ctx context.Context, q velox.Query[Category], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
 	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &categoryConnGQL, nil)
 	if err != nil {
@@ -158,8 +142,8 @@ func CategoriesConnectionOf(ctx context.Context, q velox.Query[Category], after 
 	return &CategoryConnection{c: c}, nil
 }
 
-// categoryConnGQL is what the connections to Category are made of: the key,
-// which ends every order, and the order fields' columns.
+// categoryConnGQL is the key and the order columns of the connections to
+// Category.
 var categoryConnGQL = gqlimpl.Conn{
 	Type: "Category",
 	Key: []gqlimpl.Col{
@@ -168,10 +152,9 @@ var categoryConnGQL = gqlimpl.Conn{
 	Columns: categoryColumnsGQL,
 }
 
-// categoryColumnsGQL is the columns a selection of the Category fields fields
-// reads: the key, every foreign key on the row, every order field's column, and
-// the column of each field. It is nil, every column, when a field is not one
-// velox-graphql wrote, such as an application's own.
+// categoryColumnsGQL returns the columns a selection of the given Category
+// fields reads. It returns nil, every column, for a field that is not
+// velox-graphql's; see gqlimpl.Conn.
 func categoryColumnsGQL(fields []string) []int {
 	cols := []int{categoryColID, categoryColCategoryChildren}
 	for _, f := range fields {
@@ -210,11 +193,8 @@ type CategoryWhereInput struct {
 	HasParentWith []*CategoryWhereInput
 }
 
-// Pred is the condition w stands for, on Category nodes: every predicate w sets
-// holds, and a w that sets none, or a nil w, holds for every node. It fails,
-// before any query runs, on an ID of another type or a malformed one, and on a
-// filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
-// gqlimpl.NewFilter's.
+// Pred is the condition w stands for on Category nodes, true for a nil or empty
+// w. Its errors are gqlimpl.NewFilter's.
 func (w *CategoryWhereInput) Pred(ctx context.Context) (velox.Pred[Category], error) {
 	p, err := w.PredicateGQL(ctx)
 	return velox.Pred[Category](p), err
@@ -242,9 +222,8 @@ func (w *CategoryWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate,
 	return f.Pred()
 }
 
-// categoryInputGQL is the GraphQL name of the CreateCategoryInput and
-// UpdateCategoryInput field that sets the Category field whose Go name is
-// goField, for the errors of its validators: "" for a field it does not set.
+// categoryInputGQL is the CreateCategoryInput and UpdateCategoryInput field
+// that sets the Category field goField, or "". A validator's error names it.
 func categoryInputGQL(goField string) string {
 	switch goField {
 	case "Title":
@@ -256,14 +235,13 @@ func categoryInputGQL(goField string) string {
 }
 
 // categoryChildrenEdgeGQL is the edge children of Category, whose key
-// Category's rows hold, as its inputs write it.
+// Category's rows hold.
 func categoryChildrenEdgeGQL() gqlimpl.Owned {
 	return gqlimpl.Owned{Owner: velox.TableOf[Category](), Target: velox.TableOf[Category](), OwnerKey: categoryColID, TargetKey: categoryColID, FK: categoryColCategoryChildren}
 }
 
-// CreateCategoryInput is the GraphQL input CreateCategoryInput; its method
-// Create writes it. A field that is a pointer, or a list, is optional: nil
-// means not given.
+// CreateCategoryInput is the GraphQL input CreateCategoryInput, which Create
+// writes. A nil pointer or list is a field not given.
 type CreateCategoryInput struct {
 	Title string
 	// ChildIDs are the IDs of the Category nodes the edge children leads to.
@@ -273,11 +251,7 @@ type CreateCategoryInput struct {
 }
 
 // Create inserts x, a Category, with the input's fields and edges set; a nil x
-// is a new one. The input's fields overwrite x's: to own a field, leave it out
-// with graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook.
-// x's other fields, foreign keys included, are trusted, not checked. It runs
-// atomically on the DB in ctx, under the policies, and changes x even when it
-// fails.
+// is a new one. It runs atomically on the DB in ctx, under the policies.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
@@ -301,10 +275,9 @@ func (in *CreateCategoryInput) Create(ctx context.Context, x *Category) (*Catego
 	return x, nil
 }
 
-// UpdateCategoryInput is the GraphQL input UpdateCategoryInput; its method
-// Update writes it. A field that is a pointer, or a list, is optional: nil
-// means not given. A clear field that is true clears a field or an edge, and is
-// refused with the field or the edge's ID given too.
+// UpdateCategoryInput is the GraphQL input UpdateCategoryInput, which Update
+// writes. A nil pointer or list is a field not given. A true clear field clears
+// its field or edge.
 type UpdateCategoryInput struct {
 	Title *string
 	// AddChildIDs are the IDs of Category nodes to add to the edge children.
@@ -321,13 +294,9 @@ type UpdateCategoryInput struct {
 	ClearParent bool
 }
 
-// Update updates the Category with the ID id from the input and from set, the
-// application's own setters, and returns the row as written. A setter of set
-// wins over the input's field or edge that sets the same column, which is left
-// as set says. The input's fields are validated as the client's, and set apart
-// from them: a setter of set that its validator refuses is the application's
-// error, returned as velox's. It runs atomically on the DB in ctx, under the
-// policies.
+// Update updates the Category with the ID id from the input and from set, and
+// returns the row as written. A setter of set wins over the input's for the
+// same column.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what

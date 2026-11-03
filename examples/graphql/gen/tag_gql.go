@@ -22,8 +22,7 @@ type Label = Tag
 // veloxgql.Noder.
 func (*Tag) IsNode() {}
 
-// IDGQL is the global ID of the Tag, the GraphQL field id: the type Label and
-// the key id, encoded.
+// IDGQL is the global ID of the Tag, the GraphQL field id.
 func (x *Tag) IDGQL() string { return veloxgql.EncodeID("Label", x.ID) }
 
 // tagNodeGQL is the Node type Label for Node and Nodes.
@@ -39,10 +38,9 @@ func tagNodeGQL() gqlimpl.NodeKind {
 // tagKeyGQL is the key of x, a Label.
 func tagKeyGQL(x *Tag) int64 { return x.ID }
 
-// PostsGQL is the edge posts: a connection to the Post nodes it leads to,
-// paged, ordered and filtered by the arguments. Its queries run when gqlgen
-// asks for the connection's fields, each with those of every row read with x,
-// in one query.
+// PostsGQL is the edge posts: a connection to the Post nodes it leads to. Its
+// queries batch with the edge of every row read with x; see
+// gqlimpl.EdgeConnection.
 func (x *Tag) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -56,16 +54,13 @@ func (x *Tag) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, 
 }
 
 // LabelConnection is the GraphQL type LabelConnection, a connection to a list
-// of Label. It holds the query of the whole list and the page asked for; gqlgen
-// calls its methods for the fields a query selects, and each runs its query
-// only then: edges and pageInfo share one page query, and totalCount runs a
-// COUNT.
+// of Label. Its fields run their queries when gqlgen asks; see
+// gqlimpl.Connection.
 type LabelConnection struct {
 	c *gqlimpl.Connection
 }
 
-// Edges are the edges of the page, in the connection's order. The first call of
-// Edges or PageInfo runs the page query, and the other reads its page.
+// Edges are the edges of the page, in the connection's order.
 func (c *LabelConnection) Edges(ctx context.Context) ([]*LabelEdge, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -80,7 +75,7 @@ func (c *LabelConnection) Edges(ctx context.Context) ([]*LabelEdge, error) {
 	return edges, nil
 }
 
-// PageInfo is the page info of the page; see Edges.
+// PageInfo is the page info of the page.
 func (c *LabelConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
 	p, err := c.c.Page(ctx)
 	if err != nil {
@@ -90,8 +85,7 @@ func (c *LabelConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, err
 }
 
 // TotalCount is the number of Label nodes in the whole connection, not only on
-// this page. It counts the rows when gqlgen asks for it, which is only when the
-// field totalCount is selected.
+// this page.
 func (c *LabelConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
 // LabelEdge is the GraphQL type LabelEdge, an edge in a connection to a list of
@@ -103,10 +97,8 @@ type LabelEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// LabelsConnection is the connection to every Label node, through the DB
-// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
-// a connection to Label: a Query field's resolver returns it. It fails before
-// any query runs on arguments gqlimpl.NewConnection refuses.
+// LabelsConnection is the connection to every Label node, on the DB in ctx, for
+// a Query field's resolver. It is LabelsConnectionOf of the whole table.
 func LabelsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
@@ -117,17 +109,8 @@ func LabelsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 
 // LabelsConnectionOf is the connection to the Label nodes q returns, filtered
 // by where, ordered by orderBy and then the key, and paged by the other
-// arguments. q keeps its filters and With loads, and the scope the application
-// gave it; its Offset is cleared and its Limit replaced, since the page is the
-// connection's. q must have no OrderBy: the connection orders it, and a q with
-// one is refused with an internal error, since its order would come first and
-// break the cursors. q must also select the key and the columns orderBy names,
-// which the cursors hold: a q whose Columns or Omit drops one is refused with
-// an internal error. In a gqlgen field, the page reads only the columns the
-// selection needs (tagColumnsGQL), of those q selects; a column the selection
-// does not need is left zero in the nodes, except the key, the foreign keys and
-// the order columns, so an application's resolver must not read one it did not
-// ask for. It runs no query.
+// arguments. q must not be ordered and must select the key and the order
+// columns; see gqlimpl.ConnectionBase and gqlimpl.NewConnection.
 func LabelsConnectionOf(ctx context.Context, q velox.Query[Tag], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	var order []gqlimpl.Order
 	if o := orderBy; o != nil {
@@ -151,8 +134,7 @@ func LabelsConnectionOf(ctx context.Context, q velox.Query[Tag], after *veloxgql
 	return &LabelConnection{c: c}, nil
 }
 
-// tagConnGQL is what the connections to Label are made of: the key, which ends
-// every order, and the order fields' columns.
+// tagConnGQL is the key and the order columns of the connections to Label.
 var tagConnGQL = gqlimpl.Conn{
 	Type: "Label",
 	Key: []gqlimpl.Col{
@@ -164,10 +146,9 @@ var tagConnGQL = gqlimpl.Conn{
 	Columns: tagColumnsGQL,
 }
 
-// tagColumnsGQL is the columns a selection of the Label fields fields reads:
-// the key, every foreign key on the row, every order field's column, and the
-// column of each field. It is nil, every column, when a field is not one
-// velox-graphql wrote, such as an application's own.
+// tagColumnsGQL returns the columns a selection of the given Label fields
+// reads. It returns nil, every column, for a field that is not velox-graphql's;
+// see gqlimpl.Conn.
 func tagColumnsGQL(fields []string) []int {
 	cols := []int{tagColID, tagColName}
 	for _, f := range fields {
@@ -265,11 +246,8 @@ type LabelWhereInput struct {
 	RankLTE   *int8
 }
 
-// Pred is the condition w stands for, on Label nodes: every predicate w sets
-// holds, and a w that sets none, or a nil w, holds for every node. It fails,
-// before any query runs, on an ID of another type or a malformed one, and on a
-// filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
-// gqlimpl.NewFilter's.
+// Pred is the condition w stands for on Label nodes, true for a nil or empty w.
+// Its errors are gqlimpl.NewFilter's.
 func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
 	p, err := w.PredicateGQL(ctx)
 	return velox.Pred[Tag](p), err
@@ -310,9 +288,8 @@ func (w *LabelWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, er
 	return f.Pred()
 }
 
-// tagInputGQL is the GraphQL name of the CreateLabelInput and UpdateLabelInput
-// field that sets the Tag field whose Go name is goField, for the errors of its
-// validators: "" for a field it does not set.
+// tagInputGQL is the CreateLabelInput and UpdateLabelInput field that sets the
+// Tag field goField, or "". A validator's error names it.
 func tagInputGQL(goField string) string {
 	switch goField {
 	case "Name":
@@ -323,16 +300,14 @@ func tagInputGQL(goField string) string {
 	return ""
 }
 
-// tagPostsEdgeGQL is the many-to-many edge posts of Tag, through PostTag, as
-// its inputs write it.
+// tagPostsEdgeGQL is the many-to-many edge posts of Tag, through PostTag.
 func tagPostsEdgeGQL() gqlimpl.M2M {
 	return gqlimpl.M2M{Owner: velox.TableOf[Tag](), Target: velox.TableOf[Post](), Join: velox.TableOf[PostTag](),
 		OwnerKey: tagColID, TargetKey: postColID, JoinOwner: postTagColTagID, JoinTarget: postTagColPostID}
 }
 
-// CreateLabelInput is the GraphQL input CreateLabelInput; its method Create
-// writes it. A field that is a pointer, or a list, is optional: nil means not
-// given.
+// CreateLabelInput is the GraphQL input CreateLabelInput, which Create writes.
+// A nil pointer or list is a field not given.
 type CreateLabelInput struct {
 	Name string
 	Rank int8
@@ -341,11 +316,7 @@ type CreateLabelInput struct {
 }
 
 // Create inserts x, a Label, with the input's fields and edges set; a nil x is
-// a new one. The input's fields overwrite x's: to own a field, leave it out
-// with graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook.
-// x's other fields, foreign keys included, are trusted, not checked. It runs
-// atomically on the DB in ctx, under the policies, and changes x even when it
-// fails.
+// a new one. It runs atomically on the DB in ctx, under the policies.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
@@ -365,10 +336,9 @@ func (in *CreateLabelInput) Create(ctx context.Context, x *Tag) (*Tag, error) {
 	return x, nil
 }
 
-// UpdateLabelInput is the GraphQL input UpdateLabelInput; its method Update
-// writes it. A field that is a pointer, or a list, is optional: nil means not
-// given. A clear field that is true clears a field or an edge, and is refused
-// with the field or the edge's ID given too.
+// UpdateLabelInput is the GraphQL input UpdateLabelInput, which Update writes.
+// A nil pointer or list is a field not given. A true clear field clears its
+// field or edge.
 type UpdateLabelInput struct {
 	Name *string
 	Rank *int8
@@ -382,13 +352,9 @@ type UpdateLabelInput struct {
 	ClearPosts bool
 }
 
-// Update updates the Label with the ID id from the input and from set, the
-// application's own setters, and returns the row as written. A setter of set
-// wins over the input's field or edge that sets the same column, which is left
-// as set says. The input's fields are validated as the client's, and set apart
-// from them: a setter of set that its validator refuses is the application's
-// error, returned as velox's. It runs atomically on the DB in ctx, under the
-// policies.
+// Update updates the Label with the ID id from the input and from set, and
+// returns the row as written. A setter of set wins over the input's for the
+// same column.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
