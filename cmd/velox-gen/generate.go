@@ -288,6 +288,9 @@ func buildOutput(f genFlags, gm *genModel, pattern, dir, out, pkg string, env []
 	if err := codegen.CheckUserFiles(out, gm.names, names); err != nil {
 		return nil, err
 	}
+	if err := codegen.CheckFacadeFiles(out, names, relPath(dir, entityDir)); err != nil {
+		return nil, err
+	}
 	return o, nil
 }
 

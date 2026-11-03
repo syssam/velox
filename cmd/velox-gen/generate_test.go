@@ -1299,3 +1299,34 @@ func TestGenerateRefusesAScopeName(t *testing.T) {
 		t.Errorf("%d %q", code, errs)
 	}
 }
+
+// A method of the user's on an entity in gen works in plain mode. Once a
+// Policy splits gen, gen.User is an alias of entity.User, which takes no
+// methods there: velox-gen refuses the method at its line and says where it
+// goes, instead of writing a gen that does not build. Moved to gen/entity,
+// it generates.
+func TestGenerateRefusesAMethodOnAnAlias(t *testing.T) {
+	dir := genModule(t, nil)
+	extra := "package gen\n\n// Hello greets.\nfunc (u User) Hello() string { return \"hi \" + u.Name }\n"
+	writeFile(t, filepath.Join(dir, "gen", "extra.go"), extra)
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		t.Fatalf("plain: %d %q", code, errs)
+	}
+	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy)
+	want := "velox-gen: gen/extra.go:4: declares method User.Hello in the package that re-exports package entity, where User is an alias of entity.User and takes no methods: move it to gen/entity, package entity\n"
+	for _, args := range [][]string{{"./schema"}, {"-check", "./schema"}} {
+		if code, out, errs := runCLI(t, dir, args...); code != 1 || out != "" || errs != want {
+			t.Errorf("%v: %d %q %q, want %q", args, code, out, errs, want)
+		}
+	}
+	if err := os.Remove(filepath.Join(dir, "gen", "extra.go")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "gen", "entity", "extra.go"), strings.Replace(extra, "package gen", "package entity", 1))
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		t.Fatalf("moved to entity: %d %q", code, errs)
+	}
+	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+}

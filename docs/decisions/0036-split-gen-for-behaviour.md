@@ -76,7 +76,11 @@ and each new command. `gen/runtime` held a struct with three fields per entity
   the Go type's `entity.Doc`. `%T` and reflect still say `entity.Doc`, as
   does the error of a descriptor that panics before it returns.
 - A file of the user's in `gen/entity` is not re-exported; one in `gen` may not
-  declare a name gen re-exports.
+  declare a name gen re-exports, nor a method on one: `gen.User` is an alias,
+  and Go takes no method on another package's type. velox-gen refuses such a
+  method at its line, with "move it to gen/entity", rather than write a gen
+  that does not build. A method written in plain mode moves when the first
+  Policy or Hooks splits gen.
 - A Go type of a field still cannot live in the schema package: `gen/entity`
   would import it, and it imports `gen/entity`.
 - Build cost at 100 entities, each with a `Policy` (darwin/arm64, a cache warm

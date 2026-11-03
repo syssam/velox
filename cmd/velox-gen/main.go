@@ -77,7 +77,10 @@
 // import. A schema package that imports -out itself, or through another
 // package, is refused with the chain, since -out imports the schema. Plugins
 // write into -out/entity then, and velox-gen re-exports their Go files in
-// -out. A file of yours in -out/entity is not re-exported. velox-gen reads
+// -out. A file of yours in -out/entity is not re-exported. A method of yours
+// on an entity, or on another name -out re-exports, belongs in -out/entity
+// then: -out holds aliases, which take no methods, and velox-gen refuses one
+// there at its line. velox-gen reads
 // the schema package without these methods and the declarations only they
 // use, so it runs when the generated package is stale or missing. velox-gen refuses any .go file of
 // yours, in -out or in the schema package, that some build would leave out,

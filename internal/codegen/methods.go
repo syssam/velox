@@ -83,6 +83,31 @@ func CheckUserFiles(dir string, entities, reserved []string) error {
 	})
 }
 
+// CheckFacadeFiles reads the user's files in dir, the package that
+// re-exports package entity in split mode, as CheckUserFiles does. A method
+// on one of names, the types it re-exports as aliases of entity's, is a
+// *FileError at its line: Go takes no method on a type of another package.
+// The error says to move the method to entityDir, the directory of package
+// entity, as the user sees it.
+func CheckFacadeFiles(dir string, names []string, entityDir string) error {
+	return userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
+		for _, d := range f.Decls {
+			fd, ok := d.(*ast.FuncDecl)
+			if !ok || fd.Recv == nil {
+				continue
+			}
+			t, _ := receiver(fd)
+			if t == "" || !slices.Contains(names, t) {
+				continue
+			}
+			return &FileError{Path: path, Line: fset.Position(fd.Pos()).Line, Reason: fmt.Sprintf(
+				"declares method %s.%s in the package that re-exports package %s, where %[1]s is an alias of %[3]s.%[1]s and takes no methods: move it to %[4]s, package %[3]s",
+				t, fd.Name.Name, EntityDir, entityDir)}
+		}
+		return nil
+	})
+}
+
 // HasPackageDoc reports whether one of the non-test .go files in dir that do
 // not start with velox-gen's header has a package comment with text, not only
 // directives. A file no build includes does not count, and one only some
