@@ -257,8 +257,12 @@ func Type(name string) Annotation { return Annotation{Type: name} }
 // entity's connection.
 func QueryField(name string) Annotation { return Annotation{QueryField: name} }
 
-// Mutations generates the listed mutations for the entity; with no arguments,
-// create and update.
+// Mutations generates the listed mutation inputs for the entity, as entgql's
+// Mutations does: MutationCreate the input CreateXInput and its method Create,
+// MutationUpdate UpdateXInput and its method Update. With no arguments, both.
+// velox-graphql writes no mutation field: the application declares its own in
+// its schema, with any name, argument, payload or directive, and its resolver
+// calls the input's method.
 func Mutations(kinds ...MutationKind) Annotation {
 	if len(kinds) == 0 {
 		kinds = []MutationKind{MutationCreate, MutationUpdate}
@@ -266,11 +270,10 @@ func Mutations(kinds ...MutationKind) Annotation {
 	return Annotation{Mutations: slices.Clone(kinds)}
 }
 
-// The kinds of mutation.
+// The kinds of mutation input.
 const (
 	MutationCreate MutationKind = "create"
 	MutationUpdate MutationKind = "update"
-	MutationDelete MutationKind = "delete"
 )
 
 // MultiOrder lets the entity's connection order by a list of fields.

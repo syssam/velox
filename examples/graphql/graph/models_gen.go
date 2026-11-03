@@ -2,6 +2,10 @@
 
 package graph
 
+// The mutations, which the application declares: velox-graphql writes their
+// inputs, and each resolver, in schema.resolvers.go, calls the input's Create or
+// Update. createPost's author is the viewer, the user X-User names; deletePost is
+// the application's own.
 type Mutation struct {
 }
 

@@ -13,7 +13,7 @@
 // Built as a second tool, fakeplugin2, it reads FAKEPLUGIN2_FILES and so on
 // before FAKEPLUGIN_FILES, so that two plugins answer differently.
 //
-// With none of these it writes fake.graphqls and fake_gql.go. It answers
+// With none of these it writes fake.graphql and fake_gql.go. It answers
 // through plugin.Main, but for the modes that a plugin of velox cannot
 // answer.
 package main
@@ -102,7 +102,7 @@ func generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	}
 	name, v := getenv("FAKEPLUGIN_NAME"), getenv("FAKEPLUGIN_V")
 	return []plugin.File{
-		{Path: "fake" + name + ".graphqls", Content: fmt.Sprintf("# variant %s\ntype Fake%s { id: ID! }\n", v, name)},
+		{Path: "fake" + name + ".graphql", Content: fmt.Sprintf("# variant %s\ntype Fake%s { id: ID! }\n", v, name)},
 		{Path: "fake" + name + "_gql.go", Content: fmt.Sprintf("package %s\n\nconst Fake%sVariant = %q\n", req.OutPackage, name, v)},
 	}, warnings, nil
 }

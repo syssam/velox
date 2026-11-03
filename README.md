@@ -171,8 +171,9 @@ it to you. On PostgreSQL, `veloxpgx.Open` takes a pgx pool and is faster.
 
 - `github.com/syssam/velox`: the runtime, with `schema`, `migrate`, `plugin`,
   `veloxtype` and `cmd/velox-gen`.
-- `github.com/syssam/velox/contrib/graphql`: the GraphQL generator and
-  `veloxgql`.
+- `github.com/syssam/velox/contrib/graphql`: the GraphQL generator, which
+  writes the types, connections, where and order inputs and, as entgql does,
+  the mutation inputs with their `Create` and `Update`, and `veloxgql`.
 - `github.com/syssam/velox/contrib/veloxotel`: OpenTelemetry tracing and
   metrics.
 

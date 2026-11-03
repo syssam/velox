@@ -62,25 +62,6 @@ type Query {
   users(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: UserOrder, where: UserWhereInput): UserConnection!
 }
 
-# The root mutation.
-
-type Mutation {
-  """Creates one Post."""
-  createPost(input: CreatePostInput!): Post!
-  """Updates the Post with this ID: only the fields given change."""
-  updatePost(id: ID!, input: UpdatePostInput!): Post!
-  """Deletes the Post with this ID, and returns the ID."""
-  deletePost(id: ID!): ID!
-  """Creates one Label."""
-  createLabel(input: CreateLabelInput!): Label!
-  """Updates the Label with this ID: only the fields given change."""
-  updateLabel(id: ID!, input: UpdateLabelInput!): Label!
-  """Creates one User."""
-  createUser(input: CreateUserInput!): User!
-  """Updates the User with this ID: only the fields given change."""
-  updateUser(id: ID!, input: UpdateUserInput!): User!
-}
-
 # Post
 
 type Post implements Node {
@@ -172,17 +153,16 @@ input PostWhereInput {
   hasTagsWith: [LabelWhereInput!]
 }
 
-"""The input of createPost."""
+"""The input that creates a Post."""
 input CreatePostInput {
   title: String!
   status: PostStatus
   views: Int
   publishedAt: Time
-  authorID: ID!
   tagIDs: [ID!]
 }
 
-"""The input of updatePost: a field not given is left as it is."""
+"""The input that updates a Post: a field not given is left as it is."""
 input UpdatePostInput {
   title: String
   status: PostStatus
@@ -265,14 +245,14 @@ input LabelWhereInput {
   rankLTE: Int
 }
 
-"""The input of createLabel."""
+"""The input that creates a Label."""
 input CreateLabelInput {
   name: String!
   rank: Int!
   postIDs: [ID!]
 }
 
-"""The input of updateLabel: a field not given is left as it is."""
+"""The input that updates a Label: a field not given is left as it is."""
 input UpdateLabelInput {
   name: String
   rank: Int
@@ -364,7 +344,7 @@ input UserWhereInput {
   hasPostsWith: [PostWhereInput!]
 }
 
-"""The input of createUser."""
+"""The input that creates a User."""
 input CreateUserInput {
   name: String!
   email: String! @admin
@@ -373,7 +353,7 @@ input CreateUserInput {
   passwordHash: String!
 }
 
-"""The input of updateUser: a field not given is left as it is."""
+"""The input that updates a User: a field not given is left as it is."""
 input UpdateUserInput {
   name: String
   email: String @admin

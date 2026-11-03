@@ -1,4 +1,4 @@
-// Package sdl renders the GraphQL schema, velox.graphqls, of a velox model.
+// Package sdl renders the GraphQL schema, velox.graphql, of a velox model.
 package sdl
 
 import (
@@ -18,14 +18,15 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
-// Render returns the SDL of m: the content of velox.graphqls, without the
+// Render returns the SDL of m: the content of velox.graphql, without the
 // generated-file header, which velox-gen adds.
 //
 // Each entity that is neither skipped nor a join entity becomes a type with
 // its connection and edge types, its enums, and as its annotations ask, its
 // order, its where input and its mutation inputs; the root Query has node,
-// nodes and each entity's QueryField, and the root Mutation, when an entity
-// has mutations, has them. The output depends only on m: entities come in
+// nodes and each entity's QueryField. It has no root Mutation: the
+// application declares its mutations, which take the inputs, in its own
+// schema. The output depends only on m: entities come in
 // name order, fields and edges in the model's order.
 //
 // It fails, naming the schema and the element, on a model it cannot render:
@@ -59,13 +60,12 @@ func Render(m *plugin.Model) (string, error) {
 
 // graph is the GraphQL surface of a model.
 type graph struct {
-	objects  []*object          // the entities with a type, in name order
-	byName   map[string]*object // by entity name
-	goEnums  map[string]bool    // the enum types velox-gen declares
-	types    typeNames
-	ents     map[string]*plugin.Entity // every entity, by name, join entities too
-	query    []gqlField                // the QueryFields, in entity name order
-	mutation []gqlField                // the mutations, in entity name order
+	objects []*object          // the entities with a type, in name order
+	byName  map[string]*object // by entity name
+	goEnums map[string]bool    // the enum types velox-gen declares
+	types   typeNames
+	ents    map[string]*plugin.Entity // every entity, by name, join entities too
+	query   []gqlField                // the QueryFields, in entity name order
 }
 
 // object is an entity's type.
@@ -93,7 +93,6 @@ type object struct {
 	update   []gqlField   // the update input's fields; nil for none
 	createGo []InputField // the create input's fields, for the Go code
 	updateGo []InputField // the update input's fields, for the Go code
-	del      bool         // it has deleteX
 }
 
 // edgeField is an edge field of an object.
@@ -878,17 +877,6 @@ func (g *graph) write(w *writer) {
 		w.field(f)
 	}
 	w.line("}")
-
-	if len(g.mutation) > 0 {
-		w.line()
-		w.line("# The root mutation.")
-		w.line()
-		w.line("type Mutation {")
-		for _, f := range g.mutation {
-			w.field(f)
-		}
-		w.line("}")
-	}
 
 	for _, o := range g.objects {
 		g.writeObject(w, o)

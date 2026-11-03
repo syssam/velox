@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion8
+const _ = veloxgql.GeneratedCodeIsVersion9
 
 // UserGQL is the edge user: the Account it leads to, or nil when there is none.
 // It is read with the edge of every row read with x, in one query.
@@ -160,10 +160,10 @@ func likeColumnsGQL(fields []string) []velox.Column[Like] {
 	return cols
 }
 
-// likeCreateFieldGQL is the GraphQL name of the CreateLikeInput field that sets
-// the Like field whose Go name is goField, for the errors of its validators: ""
-// for a field it does not set.
-func likeCreateFieldGQL(goField string) string {
+// likeInputGQL is the GraphQL name of the CreateLikeInput field that sets the
+// Like field whose Go name is goField, for the errors of its validators: "" for
+// a field it does not set.
+func likeInputGQL(goField string) string {
 	switch goField {
 	case "Weight":
 		return "weight"
@@ -177,8 +177,8 @@ func likeCreateFieldGQL(goField string) string {
 	return ""
 }
 
-// CreateLikeInput is the GraphQL input CreateLikeInput, the input of
-// createLike. A field that is a pointer, or a list, is optional: nil means not
+// CreateLikeInput is the GraphQL input CreateLikeInput; its method Create
+// writes it. A field that is a pointer, or a list, is optional: nil means not
 // given.
 type CreateLikeInput struct {
 	Weight    *int8
@@ -189,65 +189,31 @@ type CreateLikeInput struct {
 	PostID string
 }
 
-// String returns the input's fields except its sensitive ones.
-func (in CreateLikeInput) String() string {
-	return fmt.Sprintf("CreateLikeInput(Weight=%v, CreatedAt=%v, UserID=%v, PostID=%v)", gqlimpl.Show(in.Weight), gqlimpl.Show(in.CreatedAt), in.UserID, in.PostID)
-}
-
-// GoString is String, so that %#v does not print the sensitive fields either.
-func (in CreateLikeInput) GoString() string { return in.String() }
-
-// CreateLike creates a Like from input, with its edges, as the mutation
-// createLike does, and returns the row as written. It runs atomically on the DB
-// veloxgql.DBFromContext reads from ctx, under the policies. See "Mutations" in
-// the documentation of package github.com/syssam/velox/contrib/graphql for what
-// each input field does, what the caller may link and change, and the errors.
-func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
-	var (
-		userIDKey int64
-		postIDKey int64
-		err       error
-	)
-	if userIDKey, err = gqlimpl.DecodeID[int64]("CreateLikeInput.userID", input.UserID, "Account"); err != nil {
-		return nil, err
+// Create inserts x, a Like, with the input's fields and edges set, and returns
+// it. A nil x is a new one; fields the input does not set are inserted as the
+// caller set them, so a resolver sets there what the client must not choose. It
+// runs atomically on the DB in ctx, under the policies, and changes x even when
+// it fails.
+//
+// See "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each input field does, what
+// the caller may link and change, and the errors.
+func (in *CreateLikeInput) Create(ctx context.Context, x *Like) (*Like, error) {
+	c, x := gqlimpl.NewCreate(ctx, "CreateLikeInput", "gen.Like", x, likeInputGQL)
+	if in.Weight != nil {
+		x.Weight = *in.Weight
+		c.Given(Likes.Weight)
 	}
-	if postIDKey, err = gqlimpl.DecodeID[int64]("CreateLikeInput.postID", input.PostID, "Post"); err != nil {
-		return nil, err
+	if in.CreatedAt != nil {
+		x.CreatedAt = *in.CreatedAt
+		gqlimpl.NotZero(c, "createdAt", x.CreatedAt)
+		c.Given(Likes.CreatedAt)
 	}
-	var x Like
-	cols := []velox.Column[Like]{}
-	if input.Weight != nil {
-		x.Weight = *input.Weight
-		cols = append(cols, Likes.Weight)
-	}
-	if input.CreatedAt != nil {
-		x.CreatedAt = *input.CreatedAt
-		if err := gqlimpl.NotZero("CreateLikeInput.createdAt", x.CreatedAt); err != nil {
-			return nil, err
-		}
-		cols = append(cols, Likes.CreatedAt)
-	}
-	if err := velox.Validate(&x, cols...); err != nil {
-		return nil, gqlimpl.WriteError(err, "CreateLikeInput", "gen.Like", likeCreateFieldGQL)
-	}
-	var out *Like
-	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(userIDKey)), 1, "CreateLikeInput.userID", "Account"); err != nil {
-			return err
-		}
-		x.UserID = userIDKey
-		if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.EQ(postIDKey)), 1, "CreateLikeInput.postID", "Post"); err != nil {
-			return err
-		}
-		x.PostID = postIDKey
-		if err := db.Insert(&x).Exec(ctx); err != nil {
-			return gqlimpl.WriteError(err, "CreateLikeInput", "gen.Like", likeCreateFieldGQL)
-		}
-		out = &x
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	userIDKey := gqlimpl.Key[int64](c, "userID", in.UserID, "Account")
+	gqlimpl.Exists(c, "userID", "Account", 1, Users.ID.EQ(userIDKey))
+	x.UserID = userIDKey
+	postIDKey := gqlimpl.Key[int64](c, "postID", in.PostID, "Post")
+	gqlimpl.Exists(c, "postID", "Post", 1, Posts.ID.EQ(postIDKey))
+	x.PostID = postIDKey
+	return c.Insert()
 }

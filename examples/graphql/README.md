@@ -11,6 +11,10 @@ go run ./graphql            # serves http://localhost:8080/graphql
 curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
   -d '{"query":"{ posts(first: 2) { totalCount edges { node { title author { name } } } } }"}' \
   localhost:8080/graphql
+# X-User is the viewer, createPost's author, for this demo only too
+curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
+  -d '{"query":"mutation { createPost(input: {title: \"Hello\"}) { title author { name } } }"}' \
+  localhost:8080/graphql
 ```
 
 ## What the application writes
@@ -20,13 +24,17 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    connection, `OrderField` an `orderBy` value, `WhereOps` and `WhereEdge`
    the predicates of the `where` input, `MultiOrder` a list `orderBy`, and
    `Type` renames an entity's GraphQL type (`Tag` is `Label`), and
-   `Mutations` the root mutations (`createPost`, `updatePost`, `deletePost`,
-   `createLabel`, `updateLabel`, `createUser`, `updateUser`). A `Sensitive`
+   `Mutations` the mutation inputs (`CreatePostInput`, `UpdatePostInput`,
+   `CreateLabelInput`, `UpdateLabelInput`, `CreateUserInput`,
+   `UpdateUserInput`), which the application's own mutations take. A `Sensitive`
    field (`password_hash`) is in no type, where input or order: it is an
-   input only, `passwordHash` on `createUser` and `updateUser`. The `org_id`
+   input only, `passwordHash` in `CreateUserInput` and `UpdateUserInput`.
+   The author edge has `graphql.Skip(graphql.SkipMutationCreateInput)`:
+   `CreatePostInput` has no `authorID`, and the resolver sets the author to
+   the viewer. The `org_id`
    column is `graphql.Skip()`ped: it is in no type or input. `title` is `NotEmpty()`, a validator the
    mutations run before any statement, and the tag's `name` is `Unique()`.
-   `views` is `Optional()`: `createPost` may leave it out, and it is then 0,
+   `views` is `Optional()`: `CreatePostInput` may leave it out, and it is then 0,
    its zero value. `published_at` is `Optional().Nillable()`: `Optional`
    makes it optional on create, and `Nillable` makes its column NULL-able and
    the Go field a `*time.Time` with a `Null*` handle, so a draft's
@@ -36,14 +44,19 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    `email` has `graphql.Directives(graphql.Directive{Name: "admin"})`: see
    below.
 2. velox-gen with the plugin, which writes `gen/`: the entities, the GraphQL
-   schema `gen/velox.graphqls`, and the `*_gql.go` files it binds to (IDs,
-   connections, edges, orders, where inputs, `Node` and `Nodes`):
+   schema `gen/velox.graphql`, and the `*_gql.go` files it binds to (IDs,
+   connections, edges, orders, where inputs, mutation inputs with their
+   `Create` and `Update` methods, `Node` and `Nodes`):
 
    ```sh
    go tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema
    ```
-3. `gqlgen.yml`: the schema files, `autobind` to `gen`, and `models` binding
-   `Node` and the scalars to `veloxgql`.
+3. `graph/app.graphql`, the application's own schema: `type Mutation`,
+   with `createPost`, `updatePost`, `deletePost`, `createLabel`,
+   `updateLabel`, `createUser` and `updateUser`, which velox-graphql leaves to
+   it, as entgql does; and its own query and field (below). `gqlgen.yml`:
+   the schema files, `autobind` to `gen`, and `models` binding `Node` and the
+   scalars to `veloxgql`.
 4. gqlgen, which writes `graph/generated.go` and `graph/models_gen.go`, and
    the resolver stubs once:
 
@@ -51,7 +64,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    cd graphql && go tool gqlgen generate
    ```
 5. The root query's and mutations' resolvers in `graph/schema.resolvers.go`,
-   one call each:
+   most of them one call each:
 
    ```go
    func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
@@ -63,23 +76,29 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    }
 
    func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
-   	return gen.CreatePost(ctx, input)
+   	viewer, err := Viewer(ctx)
+   	if err != nil {
+   		return nil, err
+   	}
+   	return input.Create(ctx, &gen.Post{AuthorID: viewer})
    }
 
    func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
-   	return gen.UpdatePost(ctx, id, input)
-   }
-
-   func (r *mutationResolver) DeletePost(ctx context.Context, id string) (string, error) {
-   	return gen.DeletePost(ctx, id)
+   	return input.Update(ctx, id)
    }
    ```
+
+   `Create` takes the row to insert, with what the client must not choose
+   already on it (the author), and `Update` takes the application's own
+   setters after the ID. velox-graphql generates no delete: `DeletePost` is
+   the application's, a scoped `db.Delete[gen.Post]()` and then the post's
+   join rows, in a savepoint, `NOT_FOUND` when it deleted no row.
 
    The root function is named after the plural of the GraphQL type, as every
    name `gen` declares is: `gen.LabelsConnection` for the `labels` field of
    the type `Label` (the entity `Tag`).
 
-   And `User.initials`, the application's own field (`graph/app.graphqls`
+   And `User.initials`, the application's own field (`graph/app.graphql`
    extends `User`), from the name. velox-graphql cannot see what its
    resolver reads, so a page that selects it reads every column:
 
@@ -100,18 +119,18 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
 6. `main.go`: gqlgen's server with `veloxgql.NewExtension(db)` first, which
    puts the DB and the limits in each operation's context (and runs a
    mutation in one transaction), `veloxgql.ErrorPresenter`, a limit on the
-   cost of a request, middlewares that put the organization and the role in the
-   context, and the directive `@admin`.
+   cost of a request, middlewares that put the organization, the role and the
+   viewer in the context, and the directive `@admin`.
 
 ### Mutations
 
-`createX(input:)` inserts a row and links the edges its input names
-(`authorID`, `tagIDs`). `updateX(id:, input:)` changes only the fields
-given: a field left out, or `null`, is unchanged, `clearPublishedAt: true`
-sets a NULL-able column to NULL, and an edge is cleared, then has its
-`remove…IDs` removed, then its `add…IDs` added. `deleteX(id:)` deletes the
-row's join rows, then the row, and returns its ID. Repeated IDs count once,
-and adding a link that exists changes nothing.
+`createX(input:)`, through `Create`, inserts a row and links the edges its
+input names (`tagIDs`). `updateX(id:, input:)`, through `Update`, changes
+only the fields given: a field left out is unchanged, `clearPublishedAt: true`
+or `publishedAt: null` sets a NULL-able column to NULL, and an edge is cleared,
+then has its `remove…IDs` removed, then its `add…IDs` added. `deletePost(id:)`
+deletes the row, then its join rows, and returns its ID. Repeated IDs count
+once, and adding a link that exists changes nothing.
 
 Every ID to set or add is checked against what the caller may read: the
 organization scope and the entity's Read policy (the scope that
@@ -121,11 +140,8 @@ cannot tell that a row exists. An ID to remove is not checked, and neither
 it nor `clearTags` or `clearPosts` touches a link to a row the caller may
 not read: `updateLabel(id:, input: {clearPosts: true})` unlinks the
 caller's organization's posts from the label, and another organization's
-stay linked. `deletePost` of another organization's post is `NOT_FOUND`, and its
-join rows are left alone. A row's own delete
-removes all its join rows, whatever the organization at their other end: the row
-is gone, and a shared row, as a label is, is unlinked from every
-organization's posts.
+stay linked. `deletePost` of another organization's post is `NOT_FOUND`, as
+its DELETE is scoped to the organization, and its join rows are left alone.
 
 The validators (`title`'s `NotEmpty()`) run on the fields an input sets
 before any statement: `createPost` with an empty title is `BAD_USER_INPUT`,
@@ -135,15 +151,15 @@ naming `title`, whatever its IDs name.
 operation in one transaction, and rolls it back when the response has any
 error. In `mutation { a: createLabel(…) b: createLabel(…) }`, when `b` fails
 (its name is taken), `a`'s row is rolled back too, and `data` is `null`.
-Inside that transaction each generated mutation runs in a savepoint, so its
-error rolls back its own writes at once. A resolver that returns the error,
+Inside that transaction each `Create` and `Update` runs in a savepoint, so
+its error rolls back its own writes at once. A resolver that returns the error,
 as this example's do, fails the operation, and the transaction rolls back
 all of it; a resolver that swallows the error keeps the operation's other
-writes, and the operation commits. A generated mutation called outside a
+writes, and the operation commits. A `Create` or `Update` called outside a
 server, or in an operation `WithTxFilter` leaves out, runs in a transaction
 of its own, so it is never half-written either.
 
-**The row returned.** `createX` returns the row as written. `updateX`
+**The row returned.** `Create` returns the row as written. `Update`
 reads its row back by its key without the policies, the organization scope
 among them: the
 caller just wrote it, so an update that moves the row out of the caller's
@@ -171,7 +187,7 @@ or token), and ignores any header the client sets for it.
 ### A field for admins only
 
 `User.email` carries the application's directive `@admin`, which
-`graph/app.graphqls` declares and `main.go` implements: it lets the field
+`graph/app.graphql` declares and `main.go` implements: it lets the field
 through when the request's `X-Role` header is `admin`, and otherwise fails
 with an application error, code `FORBIDDEN`. velox-graphql copies a field's
 directives onto its `where` predicates (`email`, `emailHasPrefix`…), so the
@@ -216,7 +232,7 @@ organization, a client would read `velox: gen.Post: select denied by policy: vel
 | The error | `extensions.code` | `message` |
 |---|---|---|
 | a bad ID, cursor, paging argument, filter or scalar | `BAD_USER_INPUT` | what was expected, as `ID: malformed ID: not canonical base64url without padding` |
-| an ID in a mutation that names no row the caller may see or change | `NOT_FOUND` | `deletePost: no Post has this ID` |
+| an ID in a mutation that names no row the caller may see or change | `NOT_FOUND` | `UpdatePostInput: no Post has this ID`; `deletePost`'s own `no Post has this ID` |
 | a conflicting update input (`publishedAt` with `clearPublishedAt`), too many IDs | `BAD_USER_INPUT` | naming the input field |
 | no organization (`scope.ErrNoScope`) | `UNAUTHENTICATED` | `unauthenticated` |
 | a policy's denial | `FORBIDDEN` | `forbidden` |
@@ -336,21 +352,22 @@ gqlgen only).
 | `orderBy`, `where` (`and`/`or`/`not`, `hasPostsWith`) | `ORDER BY … "id"`, `WHERE …`, `EXISTS (…)` |
 | nested edges, `Post.tags` many-to-many | one statement per edge per level, whatever the parents: a `ROW_NUMBER()` window for the pages, a `GROUP BY` for `totalCount` |
 | a page's fields | only their columns, the key, the foreign keys and the order fields' columns: never `password_hash` |
-| `initials`, the application's own field on `User` (`graph/app.graphqls`) | every column, since velox-graphql cannot see what its resolver reads |
+| `initials`, the application's own field on `User` (`graph/app.graphql`) | every column, since velox-graphql cannot see what its resolver reads |
 | the same edge twice under aliases, with different arguments | one statement each, each alias its own page |
 | a request over `MaxCost` | a `COST_LIMIT_EXCEEDED` error naming the cost, and no statement |
 | a query or variables over a document limit (`MaxTokens`, `MaxFields`, `MaxFragments`, `MaxDepth`, `MaxNameBytes`, `MaxLiteralBytes`, `MaxVariableNodes`), or a body over `MaxBodyBytes` | `GRAPHQL_PARSE_FAILED` over the tokens, otherwise `BAD_USER_INPUT` naming the limit, and nothing validated or run |
 | an `orderBy` list of more than `MaxOrderTerms` terms | an error naming the limit, and no statement |
 | `email`, or a `where` on it, without `X-Role: admin` | a `FORBIDDEN` error; the filter runs no statement |
 | `Post` with organization 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
-| `createPost`, `updatePost`, `deletePost` | a `COUNT` per edge's IDs, then the writes; the row as written |
-| `deletePost` of another organization's post | `NOT_FOUND`, one `COUNT`, nothing deleted |
+| `createPost`, `updatePost` | a `COUNT` per edge's IDs, then the writes; the row as written |
+| `createPost` without `X-User` | `UNAUTHENTICATED`, nothing written; an `authorID` is no field of the input |
+| `deletePost` of another organization's post | `NOT_FOUND`, one scoped `DELETE`, nothing deleted |
 | two mutations, the second failing | both rolled back, `data` `null` |
 | `createUser` setting `email` without `X-Role: admin` | `FORBIDDEN`, nothing written |
 
 ### A connection over the application's own query
 
-`graph/app.graphqls` extends `Query` with `publishedPosts`. Its resolver
+`graph/app.graphql` extends `Query` with `publishedPosts`. Its resolver
 composes the connection from a query it writes, with `gen.PostsConnectionOf`
 (every Node entity has one):
 

@@ -899,7 +899,6 @@ var ErrNoScope
 
 package contrib/graphql
 const MutationCreate MutationKind
-const MutationDelete MutationKind
 const MutationUpdate MutationKind
 const OpContains
 const OpEQ WhereOp
@@ -962,7 +961,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion8
+const GeneratedCodeIsVersion9
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

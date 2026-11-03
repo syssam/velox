@@ -1,10 +1,10 @@
-// Package gogen writes the Go code velox.graphqls binds to: the Go types
+// Package gogen writes the Go code velox.graphql binds to: the Go types
 // gqlgen's autobind finds in the generated package, named after the SDL types
 // they bind to, and the methods and functions their fields resolve through.
 // It writes <label>_gql.go for each entity with a GraphQL type (its types,
 // its edge methods, its root connection function, and its mutation inputs
-// and mutations, which mutation.go writes), and node_gql.go with Node and
-// Nodes.
+// with their methods Create and Update, which input.go writes), and
+// node_gql.go with Node and Nodes.
 //
 // Every name comes from sdl.Build, which the SDL is rendered from too, so the
 // Go and the SDL cannot drift.
@@ -211,7 +211,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion8\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion9\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -399,7 +399,7 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 // none shadows the other.
 var locals = map[string]bool{
 	"ctx": true, "id": true, "ids": true, "typ": true, "err": true, "k": true, "db": true, "x": true, "input": true, "in": true,
-	"rows": true, "by": true, "i": true, "j": true, "out": true, "c": true, "n": true, "e": true,
+	"rows": true, "by": true, "u": true, "key": true, "set": true, "i": true, "j": true, "out": true, "c": true, "n": true, "e": true,
 	"s": true, "b": true, "w": true, "v": true, "o": true, "f": true, "q": true, "ok": true, "fields": true, "cols": true, "batch": true,
 	"context": true, "json": true, "errors": true, "fmt": true, "io": true, "velox": true, "veloxgql": true, "gqlimpl": true,
 	"any": true, "bool": true, "string": true, "int": true, "len": true, "make": true, "append": true,
@@ -435,9 +435,10 @@ func camel(name string) string {
 }
 
 // indexedLocal reports whether name is one of the locals the generated code
-// names after an input field (local), or an unlink<Edge> function.
+// names after an input field (local), or a clear<Edge>, whether an update
+// clears an edge.
 func indexedLocal(name string) bool {
-	if rest, ok := strings.CutPrefix(name, "unlink"); ok && rest != "" {
+	if rest, ok := strings.CutPrefix(name, "clear"); ok && rest != "" {
 		return true
 	}
 	for _, suffix := range localSuffixes {

@@ -243,9 +243,9 @@ func TestMutationStatementsCounted(t *testing.T) {
 			t.Errorf("%s: sent %d statements, and cost %d", in, sent, cost)
 		}
 	}
-	// nodes sends one for each type among its IDs, and a delete of a Post with tags
-	// three, as a review measured when they counted as one each: 960 and 950 of them
-	// fit the limit, and sent 2880 and 2850.
+	// nodes sends one for each type among its IDs, and the example's delete of a
+	// Post with tags two, its row and its links: when they counted as one each, a
+	// review measured 960 nodes fitting the limit, which sent 2880.
 	for name, query := range map[string]string{
 		"nodes of three types": `{ ` + repeat(30, func(i int) string {
 			return fmt.Sprintf(`a%d: nodes(ids: ["%s", "%s", "%s"]) { id }`, i, user1, post1, label1)
@@ -267,7 +267,7 @@ func TestMutationStatementsCounted(t *testing.T) {
 		s.mu.Unlock()
 		cost := veloxgql.Cost(schema, doc.Operations[0], nil, veloxgql.DefaultLimits())
 		t.Logf("%-70s sent %3d, cost %d", name, sent, cost)
-		if cost < 100*sent || sent < 3 {
+		if cost < 100*sent || sent < 2 {
 			t.Errorf("%s: sent %d statements, and cost %d", name, sent, cost)
 		}
 	}

@@ -61,25 +61,6 @@ type Query {
   accounts(after: Cursor, first: Int, before: Cursor, last: Int, where: AccountWhereInput): AccountConnection!
 }
 
-# The root mutation.
-
-type Mutation {
-  """Creates one Category."""
-  createCategory(input: CreateCategoryInput!): Category!
-  """Updates the Category with this ID: only the fields given change."""
-  updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
-  """Creates one Like."""
-  createLike(input: CreateLikeInput!): Like!
-  """Creates one Post."""
-  createPost(input: CreatePostInput!): Post!
-  """Updates the Post with this ID: only the fields given change."""
-  updatePost(id: ID!, input: UpdatePostInput!): Post!
-  """Deletes the Post with this ID, and returns the ID."""
-  deletePost(id: ID!): ID!
-  """Creates one Account."""
-  createAccount(input: CreateAccountInput!): Account!
-}
-
 # Category
 
 """A category of posts, in a tree."""
@@ -126,14 +107,14 @@ input CategoryWhereInput {
   hasParentWith: [CategoryWhereInput!]
 }
 
-"""The input of createCategory."""
+"""The input that creates a Category."""
 input CreateCategoryInput {
   title: String!
   childIDs: [ID!]
   parentID: ID
 }
 
-"""The input of updateCategory: a field not given is left as it is."""
+"""The input that updates a Category: a field not given is left as it is."""
 input UpdateCategoryInput {
   title: String
   addChildIDs: [ID!]
@@ -212,7 +193,7 @@ type LikeEdge {
   cursor: Cursor!
 }
 
-"""The input of createLike."""
+"""The input that creates a Like."""
 input CreateLikeInput {
   weight: Int
   createdAt: Time
@@ -326,7 +307,7 @@ input PostWhereInput {
   hasWriterWith: [AccountWhereInput!]
 }
 
-"""The input of createPost."""
+"""The input that creates a Post."""
 input CreatePostInput {
   title: String!
   slug: String!
@@ -341,7 +322,7 @@ input CreatePostInput {
   relatedByIDs: [ID!]
 }
 
-"""The input of updatePost: a field not given is left as it is."""
+"""The input that updates a Post: a field not given is left as it is."""
 input UpdatePostInput {
   title: String
   status: PostStatus
@@ -437,7 +418,7 @@ input AccountWhereInput {
   hasPostsWith: [PostWhereInput!] @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
 }
 
-"""The input of createAccount."""
+"""The input that creates an Account."""
 input CreateAccountInput {
   createdAt: Time
   updatedAt: Time

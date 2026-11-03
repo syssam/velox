@@ -1,5 +1,5 @@
 // Command velox-graphql is the velox-gen plugin that writes the GraphQL
-// schema of a velox schema package, gen/velox.graphqls, and the Go code in the
+// schema of a velox schema package, gen/velox.graphql, and the Go code in the
 // generated package that gqlgen's autobind binds the schema's types to,
 // gen/*_gql.go. An application adds it as a tool of its module and names it
 // to velox-gen:
@@ -29,7 +29,7 @@ func main() {
 	plugin.Main(plugin.Supports{Protocol: 2, Model: 3}, generate)
 }
 
-// generate answers a request: the schema, velox.graphqls, and the Go files
+// generate answers a request: the schema, velox.graphql, and the Go files
 // gqlgen binds it to. velox-graphql takes no options, and refuses any it is
 // given, as the plugin protocol asks.
 func generate(req *plugin.Request) ([]plugin.File, []string, error) {
@@ -45,5 +45,5 @@ func generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return append([]plugin.File{{Path: "velox.graphqls", Content: s}}, gofiles...), nil, nil
+	return append([]plugin.File{{Path: "velox.graphql", Content: s}}, gofiles...), nil, nil
 }

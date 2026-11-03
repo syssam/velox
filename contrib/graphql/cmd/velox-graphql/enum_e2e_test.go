@@ -193,7 +193,7 @@ func TestAlertLevel(t *testing.T) {
 
 // TestAppEnumRenamed generates an application whose renamed entity has a
 // field of its own enum type, then runs gqlgen over it with no models entry
-// for the enum: velox.graphqls binds it with @goModel. The application is a
+// for the enum: velox.graphql binds it with @goModel. The application is a
 // module of its own; it needs no database but SQLite.
 func TestAppEnumRenamed(t *testing.T) {
 	if testing.Short() {
@@ -215,7 +215,7 @@ func TestAppEnumRenamed(t *testing.T) {
 	// Bound by @goModel, the enum is the application's type. Unbound, gqlgen
 	// would generate a type of its own for it, which the field's marshaler
 	// happens to serve.
-	sdlText, err := os.ReadFile(filepath.Join(dir, "gen", "velox.graphqls"))
+	sdlText, err := os.ReadFile(filepath.Join(dir, "gen", "velox.graphql"))
 	if err != nil {
 		t.Fatal(err)
 	}

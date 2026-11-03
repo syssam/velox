@@ -242,13 +242,13 @@ func escape(s string, tabs bool) string {
 }
 
 // pluginExts are the extensions of the files a plugin writes.
-var pluginExts = []string{".go", ".graphqls", ".proto"}
+var pluginExts = []string{".go", ".graphql", ".proto"}
 
 // checkPluginPath accepts a slash path below the output directory: not
 // absolute, no empty, "." or ".." segment, no backslash or NUL, no directory
 // that starts with "." or "_" (the stale-file sweep skips those, and go
 // ignores them) or is testdata or vendor (which go's ./... leaves out), and a
-// file name ending in .go, .graphqls or .proto that is
+// file name ending in .go, .graphql or .proto that is
 // not velox.go in a directory below the output directory (which marks another
 // run's output, which the sweep leaves alone). The path is ASCII, and a .go
 // file's name is not one goIgnored reports.
@@ -279,7 +279,7 @@ func checkPluginPath(p string) error {
 	ext := path.Ext(base)
 	switch {
 	case !slices.Contains(pluginExts, ext):
-		return bad("a path ends in .go, .graphqls or .proto")
+		return bad("a path ends in .go, .graphql or .proto")
 	case ext == base:
 		return bad("a path needs a name before the extension")
 	case ext == ".go" && goIgnored(base):

@@ -6,6 +6,29 @@ as fields, or gqlgen refuses the schema.
 """
 directive @admin on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
 
+"""
+The mutations, which the application declares: velox-graphql writes their
+inputs, and each resolver, in schema.resolvers.go, calls the input's Create or
+Update. createPost's author is the viewer, the user X-User names; deletePost is
+the application's own.
+"""
+type Mutation {
+  "Creates a post by the viewer."
+  createPost(input: CreatePostInput!): Post!
+  "Updates the post with this ID: only the fields given change."
+  updatePost(id: ID!, input: UpdatePostInput!): Post!
+  "Deletes the post with this ID, and returns the ID."
+  deletePost(id: ID!): ID!
+  "Creates a label."
+  createLabel(input: CreateLabelInput!): Label!
+  "Updates the label with this ID: only the fields given change."
+  updateLabel(id: ID!, input: UpdateLabelInput!): Label!
+  "Creates a user."
+  createUser(input: CreateUserInput!): User!
+  "Updates the user with this ID: only the fields given change."
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+}
+
 extend type Query {
   """
   The published posts, composed by the application from its own query with

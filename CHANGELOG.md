@@ -102,6 +102,51 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-graphql writes its schema to `gen/velox.graphql`, which was `gen/velox.graphqls`, as
+  entgql writes `ent.graphql`: the extension more GraphQL tooling reads. velox-gen's plugins
+  write `.go`, `.graphql` and `.proto` files. gqlgen.yml's `schema` globs must change to match,
+  `gen/*.graphql` (and `graph/*.graphql` for the application's own files, which the examples
+  rename to `app.graphql`); delete the old `gen/velox.graphqls`, which velox-gen no longer owns
+  and so leaves in place.
+- velox-graphql generates inputs, not mutations, as entgql does (decision 0033). The
+  generated schema has `Create<T>Input` and `Update<T>Input` and no `type Mutation`; the
+  application declares its mutations in its own schema file and writes their resolvers.
+  `gen.Create<T>(ctx, input[, set])` and `gen.Update<T>(ctx, id, input)` are now methods of
+  the inputs, `input.Create(ctx, x)` and `input.Update(ctx, id, setters...)`: x is the row to
+  insert (nil for a new one), with what the client must not choose already set on it, which
+  replaces the `set func(*T)` of an entity whose create input leaves out a required field;
+  the setters are the resolver's own, validated with the input's. The generated code is a
+  description that `gqlimpl` runs, 12 to 25% shorter per entity
+  (`examples/graphql/gen/post_gql.go` 724 lines to 543). An explicit null is found by the
+  input's GraphQL type, not the argument named `input`; where the type occurs more than
+  once in the field's arguments, a null on a clearable field is refused, naming `clear<Field>`.
+  The errors name the input: `Update<T>Input: no <T> has this ID`, and `id` for a bad ID
+  of the row. `String` and `GoString` are written only for an input with a sensitive
+  field, and one `<entity>InputGQL` names both inputs' fields unless they differ.
+  `veloxgql.GeneratedCodeIsVersion9`: regenerate. To migrate, add to a schema file of
+  your own, which gqlgen.yml lists (`graph/*.graphql`),
+
+  ```graphql
+  type Mutation {
+    createPost(input: CreatePostInput!): Post!
+    updatePost(id: ID!, input: UpdatePostInput!): Post!
+  }
+  ```
+
+  run `go tool gqlgen generate`, and write the resolvers:
+
+  ```go
+  func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
+  	return input.Create(ctx, nil) // was gen.CreatePost(ctx, input)
+  }
+
+  func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
+  	return input.Update(ctx, id) // was gen.UpdatePost(ctx, id, input)
+  }
+  ```
+
+  A `gen.CreatePost(ctx, input, func(p *gen.Post) { p.Slug = s })` is
+  `input.Create(ctx, &gen.Post{Slug: s})`.
 - velox-gen: the generated entity code names what it used to number. A column's and an edge's
   position is a constant (`postColTitle`, `postEdgeAuthor`) that the handles, the descriptor's
   `PrimaryKey`, `Indexes`, `Edges`, `FieldPtr` and `Check` cases share, including the columns of
@@ -230,6 +275,34 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - A row kept from a to-many `With` or `LoadEach` keeps alive the rows it was loaded
   with, which share its arrays. Copy it to keep it alone.
 - `Open` and `OpenShards` panic on an unknown dialect. `Connect` returns an error.
+
+### Removed
+
+- `graphql.MutationDelete` and the generated `deleteX` mutation and `gen.Delete<T>`
+  (decision 0033). A delete is the application's: declare `deletePost(id: ID!): ID!` and
+  write its resolver, as `examples/graphql` does:
+
+  ```go
+  key, err := veloxgql.DecodeID[int64](id, "Post")
+  if err != nil {
+  	return "", err
+  }
+  db, err := veloxgql.DBFromContext(ctx)
+  if err != nil {
+  	return "", err
+  }
+  n, err := db.Delete[gen.Post]().Where(gen.Posts.ID.EQ(key)).Exec(ctx)
+  if err != nil {
+  	return "", err
+  }
+  if n == 0 {
+  	return "", &gqlerror.Error{Message: "no Post has this ID", Extensions: map[string]any{"code": veloxgql.CodeNotFound}}
+  }
+  return id, nil
+  ```
+
+  velox-gen's join tables delete their rows with the row (ON DELETE CASCADE) where the
+  database enforces foreign keys; elsewhere delete them in the same transaction.
 
 ### Fixed
 

@@ -18,7 +18,7 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden SDL")
 
-var golden = filepath.Join("testdata", "velox.graphqls")
+var golden = filepath.Join("testdata", "velox.graphql")
 
 func readFile(t *testing.T, path string) string {
 	t.Helper()
@@ -57,12 +57,12 @@ func TestRenderGolden(t *testing.T) {
 
 // TestSDLIsValid loads the golden SDL with gqlparser. The test model puts the
 // application's own directive (@cost) on elements; the application
-// declares it in its own schema file, testdata/app.graphqls, which gqlgen
-// loads beside velox.graphqls. Without those directives the SDL is valid on
+// declares it in its own schema file, testdata/app.graphql, which gqlgen
+// loads beside velox.graphql. Without those directives the SDL is valid on
 // its own: everything else it uses, it declares.
 func TestSDLIsValid(t *testing.T) {
 	sdl := readFile(t, golden)
-	if _, err := Check(sdl, readFile(t, filepath.Join("testdata", "app.graphqls"))); err != nil {
+	if _, err := Check(sdl, readFile(t, filepath.Join("testdata", "app.graphql"))); err != nil {
 		t.Fatalf("golden with the application's file: %v", err)
 	}
 	if _, err := Check(sdl); err == nil || !strings.Contains(err.Error(), "Undefined directive") {

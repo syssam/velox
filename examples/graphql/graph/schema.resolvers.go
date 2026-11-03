@@ -11,43 +11,83 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/examples/graphql/gen"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
-// CreatePost is the resolver for the createPost field.
+// CreatePost is the resolver for the createPost field: the post's author is
+// the viewer, which CreatePostInput leaves out, so a client cannot post as
+// another user.
 func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
-	return gen.CreatePost(ctx, input)
+	viewer, err := Viewer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return input.Create(ctx, &gen.Post{AuthorID: viewer})
 }
 
 // UpdatePost is the resolver for the updatePost field.
 func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
-	return gen.UpdatePost(ctx, id, input)
+	return input.Update(ctx, id)
 }
 
-// DeletePost is the resolver for the deletePost field.
+// DeletePost is the resolver for the deletePost field, which the application
+// writes: velox-graphql generates no delete. It deletes the post, under
+// Post's scope, so another organization's post is NOT_FOUND, and then the
+// post's join rows, which post_tags' ON DELETE CASCADE removes too where the
+// database enforces foreign keys. Both run in the operation's transaction,
+// in a savepoint of their own.
 func (r *mutationResolver) DeletePost(ctx context.Context, id string) (string, error) {
-	return gen.DeletePost(ctx, id)
+	key, err := veloxgql.DecodeID[int64](id, "Post")
+	if err != nil {
+		return "", err
+	}
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		n, err := tx.Delete[gen.Post]().Where(gen.Posts.ID.EQ(key)).Exec(ctx)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return &gqlerror.Error{
+				Path:       graphql.GetPath(ctx),
+				Message:    "no Post has this ID",
+				Extensions: map[string]any{"code": veloxgql.CodeNotFound},
+			}
+		}
+		_, err = tx.Delete[gen.PostTag]().Where(gen.PostTags.PostID.EQ(key)).Exec(ctx)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
 // CreateLabel is the resolver for the createLabel field.
 func (r *mutationResolver) CreateLabel(ctx context.Context, input gen.CreateLabelInput) (*gen.Tag, error) {
-	return gen.CreateLabel(ctx, input)
+	return input.Create(ctx, nil)
 }
 
 // UpdateLabel is the resolver for the updateLabel field.
 func (r *mutationResolver) UpdateLabel(ctx context.Context, id string, input gen.UpdateLabelInput) (*gen.Tag, error) {
-	return gen.UpdateLabel(ctx, id, input)
+	return input.Update(ctx, id)
 }
 
 // CreateUser is the resolver for the createUser field.
 func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserInput) (*gen.User, error) {
-	return gen.CreateUser(ctx, input)
+	return input.Create(ctx, nil)
 }
 
 // UpdateUser is the resolver for the updateUser field.
 func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input gen.UpdateUserInput) (*gen.User, error) {
-	return gen.UpdateUser(ctx, id, input)
+	return input.Update(ctx, id)
 }
 
 // Node is the resolver for the node field.

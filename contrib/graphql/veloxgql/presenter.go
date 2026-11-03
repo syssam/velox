@@ -27,8 +27,8 @@ const (
 	CodeForbidden = "FORBIDDEN"
 	// CodeUnauthenticated: the request has no scope value (scope.ErrNoScope).
 	CodeUnauthenticated = "UNAUTHENTICATED"
-	// CodeNotFound: the generated mutations return it for an ID that names
-	// no row the caller may see or change.
+	// CodeNotFound: the generated inputs' Create and Update return it for an
+	// ID that names no row the caller may see or change.
 	CodeNotFound = gqlcore.CodeNotFound
 	// CodeTooCostly: the request costs more than Limits.MaxCost allows
 	// (ErrTooCostly). It is not a bad argument: the client can ask for less.

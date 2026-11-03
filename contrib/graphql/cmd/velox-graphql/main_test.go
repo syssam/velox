@@ -56,7 +56,7 @@ func TestRun(t *testing.T) {
 			t.Errorf("%s has the generated-file header, which velox-gen adds", f.Path)
 		}
 	}
-	if resp.Error != "" || len(resp.Warnings) != 0 || strings.Join(paths, " ") != "velox.graphqls node_gql.go user_gql.go" ||
+	if resp.Error != "" || len(resp.Warnings) != 0 || strings.Join(paths, " ") != "velox.graphql node_gql.go user_gql.go" ||
 		!strings.Contains(resp.Files[0].Content, "type User implements Node {\n") ||
 		!strings.HasPrefix(resp.Files[2].Content, "package gen\n") || !strings.Contains(resp.Files[2].Content, "type UserConnection struct {") {
 		t.Errorf("%+v", resp)

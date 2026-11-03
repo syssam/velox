@@ -6,11 +6,12 @@ import (
 	"github.com/syssam/velox/contrib/graphql"
 )
 
-// An entity's Annotations choose what velox-graphql generates for it.
+// An entity's Annotations choose what velox-graphql generates for it: here
+// only CreateXInput, whose Create a resolver the application declares calls.
 func ExampleMutations() {
-	a := graphql.Mutations(graphql.MutationCreate, graphql.MutationDelete)
+	a := graphql.Mutations(graphql.MutationCreate)
 	fmt.Println(a.Mutations)
-	// Output: [create delete]
+	// Output: [create]
 }
 
 // Skip leaves generated parts out, and WhereOps narrows a field's filters.
