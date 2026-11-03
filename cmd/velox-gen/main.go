@@ -497,8 +497,9 @@ func relPath(dir, path string) string {
 	return path
 }
 
-// relErrors shows the positions of err's *codegen.Error values, as errors.Join
-// joined them, relative to dir when their files are inside it. That covers
+// relErrors shows the positions of err's *codegen.Error and *codegen.FileError
+// values, as errors.Join joined them, relative to dir when their files are
+// inside it. That covers
 // the positions inside a Reason too.
 func relErrors(dir string, err error) error {
 	errs := []error{err}
@@ -510,6 +511,12 @@ func relErrors(dir string, err error) error {
 	changed := false
 	for i, e := range errs {
 		out[i] = e
+		if fe, ok := e.(*codegen.FileError); ok {
+			c := *fe
+			c.Path = relPath(dir, fe.Path)
+			out[i], changed = &c, c != *fe
+			continue
+		}
 		if ge, ok := e.(*codegen.Error); ok {
 			c := *ge
 			if ge.Pos != "" {

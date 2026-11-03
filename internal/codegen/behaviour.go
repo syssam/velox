@@ -133,9 +133,32 @@ func entityArg(x ast.Expr, e string) bool {
 // the chain of imports. env is the environment of go list; nil means
 // os.Environ().
 func Behaviour(dir, pattern, genPath string, env, entities []string) (bound map[string]Bound, split bool, err error) {
-	pkg, err := list(dir, pattern, env)
+	pkgDir, entity, err := checkGenImports(dir, pattern, genPath, env)
 	if err != nil {
 		return nil, false, err
+	}
+	if bound, err = SchemaMethods(pkgDir, EntityDir, entities); err != nil {
+		return nil, false, err
+	}
+	return bound, len(bound) > 0 || entity, nil
+}
+
+// CheckGenImports refuses a schema package, at pattern, that imports
+// genPath, the generated package, directly or through other packages, as
+// Behaviour does. velox-gen runs it when the loader fails too, since go list
+// reports such an import cycle with no chain. env is the environment of go
+// list.
+func CheckGenImports(dir, pattern, genPath string, env []string) error {
+	_, _, err := checkGenImports(dir, pattern, genPath, env)
+	return err
+}
+
+// checkGenImports is CheckGenImports, which also returns the schema
+// package's directory and whether it imports genPath/entity.
+func checkGenImports(dir, pattern, genPath string, env []string) (pkgDir string, entity bool, err error) {
+	pkg, err := list(dir, pattern, env)
+	if err != nil {
+		return "", false, err
 	}
 	entityPath := genPath + "/" + EntityDir
 	err = userFiles(pkg.Dir, parser.ImportsOnly, func(fset *token.FileSet, path string, f *ast.File) error {
@@ -149,20 +172,17 @@ func Behaviour(dir, pattern, genPath string, env, entities []string) (bound map[
 		return nil
 	})
 	if err != nil {
-		return nil, false, err
-	}
-	if bound, err = SchemaMethods(pkg.Dir, EntityDir, entities); err != nil {
-		return nil, false, err
+		return "", false, err
 	}
 	chain, entity, err := genImports(pkg.Dir, pkg.ImportPath, genPath, entityPath, env)
 	if err != nil {
-		return nil, false, err
+		return "", false, err
 	}
 	if len(chain) > 0 {
-		return nil, false, fmt.Errorf("%s: the generated package imports the schema package to bind its Hooks and Policy, so a package the schema imports must import %s, which holds the entities, instead",
+		return "", false, fmt.Errorf("%s: the generated package imports the schema package to bind its Hooks and Policy, so a package the schema imports must import %s, which holds the entities, instead",
 			strings.Join(chain, " imports "), strconv.Quote(entityPath))
 	}
-	return bound, len(bound) > 0 || entity, nil
+	return pkg.Dir, entity, nil
 }
 
 // genImports lists the packages the schema package at importPath imports,

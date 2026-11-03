@@ -1330,3 +1330,32 @@ func TestGenerateRefusesAMethodOnAnAlias(t *testing.T) {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 }
+
+// A helper that imports gen and that the schema's structure reaches (Fields
+// calls it, or a blank import keeps it) makes an import cycle once gen
+// imports the schema. velox-gen names the chain and the way out, rather
+// than go list's bare "import cycle not allowed".
+func TestGenerateNamesTheChainOfACycle(t *testing.T) {
+	for _, c := range []struct{ name, use string }{
+		{"fields", "package schema\n\nimport (\n\t\"github.com/syssam/velox/schema\"\n\t\"github.com/syssam/velox/schema/field\"\n\n\t\"example.com/app/helper\"\n)\n\n" +
+			"// Note is a schema whose field is named by the helper.\ntype Note struct{ schema.Schema }\n\n" +
+			"func (Note) Fields() []schema.Field { return []schema.Field{field.String(helper.Name())} }\n"},
+		{"blank", "package schema\n\nimport _ \"example.com/app/helper\"\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
+			if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+				t.Fatalf("generate: %d %q", code, errs)
+			}
+			writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\nimport \"example.com/app/gen\"\n\n// Users is gen.Users.\nvar Users = gen.Users\n\n// Name is a field's name.\nfunc Name() string { return \"title\" }\n")
+			writeFile(t, filepath.Join(dir, "schema", "use.go"), c.use)
+			want := "velox-gen: example.com/app/schema imports example.com/app/helper imports example.com/app/gen: the generated package imports the schema package to bind its Hooks and Policy, " +
+				"so a package the schema imports must import \"example.com/app/gen/entity\", which holds the entities, instead\n"
+			for _, args := range [][]string{{"./schema"}, {"-check", "./schema"}} {
+				if code, out, errs := runCLI(t, dir, args...); code != 1 || out != "" || errs != want {
+					t.Errorf("%v: %d %q %q, want %q", args, code, out, errs, want)
+				}
+			}
+		})
+	}
+}

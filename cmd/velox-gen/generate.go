@@ -148,14 +148,25 @@ func (gm *genModel) scopeNames() []string {
 
 // loadModel loads and builds the schema package at pattern and lowers it to
 // the names of its generated entities.
-func loadModel(dir, pattern, pkg string, env []string) (*genModel, error) {
+func loadModel(dir, pattern, out, pkg string, env []string) (*genModel, error) {
+	// A schema package that reaches the generated package at out makes an
+	// import cycle once that package imports the schema, which go list
+	// reports with no chain: the error names the chain instead.
+	cycle := func(err error) error {
+		if genPath, perr := dirImportPath(out, env); perr == nil {
+			if cerr := codegen.CheckGenImports(dir, pattern, genPath, env); cerr != nil {
+				return relErrors(dir, cerr)
+			}
+		}
+		return relErrors(dir, err)
+	}
 	importPath, _, err := codegen.Inspect(dir, pattern, env)
 	if err != nil {
-		return nil, relErrors(dir, err)
+		return nil, cycle(err)
 	}
 	m, err := codegen.Load(dir, pattern, env)
 	if err != nil {
-		return nil, relErrors(dir, err)
+		return nil, cycle(err)
 	}
 	g, err := codegen.Build(m)
 	if err != nil {
@@ -305,7 +316,7 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	if err != nil {
 		return fail(err)
 	}
-	gm, err := loadModel(dir, pattern, pkg, env)
+	gm, err := loadModel(dir, pattern, f.outDir(dir), pkg, env)
 	if err != nil {
 		return fail(err)
 	}
@@ -623,7 +634,7 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	if err != nil {
 		return fail(err)
 	}
-	gm, err := loadModel(dir, pattern, pkg, env)
+	gm, err := loadModel(dir, pattern, f.outDir(dir), pkg, env)
 	if err != nil {
 		return fail(err)
 	}
