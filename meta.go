@@ -2,7 +2,6 @@ package velox
 
 import (
 	"database/sql"
-	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"sync"
@@ -16,7 +15,7 @@ type Meta[E any] struct {
 	info *EntityInfo
 	addr func(*E, int) any
 	err  error
-	// nilCols marks the columns nilScanner reads; nil when there are none.
+	// nilCols marks the columns engine.NilScanner reads; nil when there are none.
 	nilCols []bool
 	// tbl is the entity's Table, built by its first TableOf.
 	tbl tableState
@@ -41,18 +40,6 @@ func nilColumns(info *EntityInfo) []bool {
 		cols[i] = true
 	}
 	return cols
-}
-
-// nilScanner reads a column of nilColumns into its field, dst a pointer to it: a NULL
-// is nil, and any other value converts as database/sql does.
-type nilScanner struct{ dst any }
-
-func (s *nilScanner) Scan(src any) error {
-	if src == nil {
-		reflect.ValueOf(s.dst).Elem().SetZero()
-		return nil
-	}
-	return sql.ConvertAssign(driver.ScanContext{}, s.dst, src)
 }
 
 // MetaOnce builds an entity's Meta on first use. For generated code. Its zero

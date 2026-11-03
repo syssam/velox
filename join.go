@@ -1,86 +1,12 @@
 package velox
 
 import (
-	"database/sql"
-	"database/sql/driver"
 	"fmt"
 	"slices"
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
 )
-
-// joinSet is how a query reads its joins out of a row; it holds nothing generic,
-// so that the query's type does not reach a joined entity's: bindOwner and the
-// fills' closures are made by Join, which only a package that joins compiles.
-type joinSet struct {
-	fills []joinFill
-	// bindOwner points dst at the owner's own columns, cols as in Statement.Columns.
-	bindOwner func(cols []int, dst []any, owner unsafe.Pointer)
-}
-
-// scanner is the joinSet as the engine reads rows with it: only the joins' columns,
-// the entity's own being scanned by the engine's kit.
-func (s *joinSet) scanner() *engine.JoinScan {
-	if s == nil {
-		return nil
-	}
-	return &engine.JoinScan{Width: s.width(), Bind: func(dst []any) func(unsafe.Pointer) {
-		attach := make([]func(unsafe.Pointer), len(s.fills))
-		off := 0
-		for i := range s.fills {
-			attach[i] = s.fills[i].bind(dst[off : off+s.fills[i].width])
-			off += s.fills[i].width
-		}
-		return func(owner unsafe.Pointer) {
-			for _, f := range attach {
-				f(owner)
-			}
-		}
-	}}
-}
-
-// joinFill reads one join's columns out of a row: the columns follow the
-// entity's own, in the order of the query's joins.
-type joinFill struct {
-	width int // the target's column count
-	// bind points dst, width long, at the fields of a new target, and returns
-	// the function that, once the row is scanned, stores the target in the
-	// owner's relation field.
-	bind func(dst []any) func(owner unsafe.Pointer)
-}
-
-// width is how many columns the joins add to a row; 0 for no joins.
-func (s *joinSet) width() int {
-	if s == nil {
-		return 0
-	}
-	n := 0
-	for i := range s.fills {
-		n += s.fills[i].width
-	}
-	return n
-}
-
-// scan scans the current row: the entity's own columns (rootN of them) into
-// the owner, then the columns of each join into a new target stored in the
-// owner's relation field.
-func (s *joinSet) scan(r engine.Rows, cols []int, rootN int, dst []any, owner unsafe.Pointer) error {
-	s.bindOwner(cols, dst[:rootN], owner)
-	attach := make([]func(unsafe.Pointer), len(s.fills))
-	off := rootN
-	for i := range s.fills {
-		attach[i] = s.fills[i].bind(dst[off : off+s.fills[i].width])
-		off += s.fills[i].width
-	}
-	if err := r.Scan(dst...); err != nil {
-		return err
-	}
-	for _, f := range attach {
-		f(owner)
-	}
-	return nil
-}
 
 // Join returns the query also reading to-one relation r in the same
 // statement, as JOIN: the related entity fills r's field (One) in every row,
@@ -156,22 +82,22 @@ func (q Query[E]) join[T any](r Rel[E, T], left bool) Query[E] {
 	}
 	q.st.Joins = append(slices.Clip(q.st.Joins), engine.JoinClause{Ref: ref, Left: left})
 	n := len(mt.info.Columns)
-	set := joinSet{bindOwner: func(cols []int, dst []any, owner unsafe.Pointer) { bindRow(q.meta, cols, dst, (*E)(owner)) }}
+	set := engine.JoinSet{BindOwner: func(cols []int, dst []any, owner unsafe.Pointer) { bindRow(q.meta, cols, dst, (*E)(owner)) }}
 	if q.joins != nil {
-		set.fills = slices.Clip(q.joins.fills)
+		set.Fills = slices.Clip(q.joins.Fills)
 	}
-	set.fills = append(set.fills, joinFill{width: n, bind: func(dst []any) func(unsafe.Pointer) {
+	set.Fills = append(set.Fills, engine.JoinFill{Width: n, Bind: func(dst []any) func(unsafe.Pointer) {
 		t := new(T)
 		nulls := 0
 		for c := range n {
 			var d any
 			if mt.nilCols != nil && mt.nilCols[c] {
-				d = &nilScanner{dst: mt.addr(t, c)}
+				d = &engine.NilScanner{Dst: mt.addr(t, c)}
 			} else {
 				d = engine.ScanDst(mt.info, c, mt.addr(t, c))
 			}
 			if left {
-				d = &nullProbe{dst: d, nulls: &nulls}
+				d = &engine.NullProbe{Dst: d, Nulls: &nulls}
 			}
 			dst[c] = d
 		}
@@ -250,30 +176,9 @@ func (r Rel[E, T]) Filled[_ Lazy[T]](owner *E) (*T, bool) {
 	return t, t != nil
 }
 
-// nullProbe scans a joined column of a left join, counting NULLs: a row whose
-// columns are all NULL has no related entity. A NULL leaves the field as it
-// was, and any other value is read as database/sql would.
-type nullProbe struct {
-	dst   any
-	nulls *int
-}
-
-func (p *nullProbe) Scan(src any) error {
-	if src == nil {
-		*p.nulls++
-	}
-	if s, ok := p.dst.(sql.Scanner); ok {
-		return s.Scan(src)
-	}
-	if src == nil {
-		return nil
-	}
-	return sql.ConvertAssign(driver.ScanContext{}, p.dst, src)
-}
-
 // bindRow points dst at the fields of the entity at p that cols (all, for
 // nil) name: a JSON column through a decoder (ScanDst), and one of nilColumns
-// through nilScanner.
+// through engine.NilScanner.
 func bindRow[E any](m *Meta[E], cols []int, dst []any, p *E) {
 	for i := range dst {
 		c := i
@@ -281,7 +186,7 @@ func bindRow[E any](m *Meta[E], cols []int, dst []any, p *E) {
 			c = cols[i]
 		}
 		if m.nilCols != nil && m.nilCols[c] {
-			dst[i] = &nilScanner{dst: m.addr(p, c)}
+			dst[i] = &engine.NilScanner{Dst: m.addr(p, c)}
 			continue
 		}
 		dst[i] = engine.ScanDst(m.info, c, m.addr(p, c))

@@ -71,7 +71,7 @@ func EdgeConnection[E, T any](ctx context.Context, c *Connection, x *E, r velox.
 	owner, rel := velox.TableOf[E](), int(r.I)
 	ptrs := pointers(owners)
 	c.edge = &edge{
-		rows: func(q velox.TableQuery) (velox.Rows, error) {
+		rows: func(q velox.TableQuery) (velox.TableRows, error) {
 			// The page size and the cursor are the batch's arguments: the
 			// same in the connection of every caller of the batch.
 			v, err := b.Rows(func() (any, error) {
@@ -94,9 +94,9 @@ func EdgeConnection[E, T any](ctx context.Context, c *Connection, x *E, r velox.
 				return parts, nil
 			})
 			if err != nil {
-				return velox.Rows{}, err
+				return velox.TableRows{}, err
 			}
-			return v.([]velox.Rows)[i], nil
+			return v.([]velox.TableRows)[i], nil
 		},
 		count: func(q velox.TableQuery) (int, error) {
 			counts, err := b.Counts(func() ([]int64, error) { return q.Limit(0).CountEach(ctx, owner, rel, ptrs) })
@@ -190,7 +190,7 @@ func EdgeList[E, T any](ctx context.Context, tq velox.TableQuery, x *E, r velox.
 type edge struct {
 	// rows returns the connection's rows, q being its query in its order,
 	// after its cursor.
-	rows func(q velox.TableQuery) (velox.Rows, error)
+	rows func(q velox.TableQuery) (velox.TableRows, error)
 	// count returns the connection's totalCount, q being its query.
 	count func(q velox.TableQuery) (int, error)
 }

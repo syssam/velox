@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"context"
@@ -6,8 +6,16 @@ import (
 	"reflect"
 	"slices"
 	"unsafe"
+)
 
-	"github.com/syssam/velox/internal/engine"
+// FirstRows is the most rows a query's All allocates ahead, and RowGrowth how much further
+// each time they fill, up to Limit. BenchmarkLimitBound on a 168-byte entity:
+// Limit(1000) returning one row costs 3.5 KB at 16, 6.6 KB at 32, 11 KB at 64,
+// against 173 KB at 1024. Growing by append, all 1000 rows cost 603 KB against 196
+// KB at 1024; a read past 16 rows is likely a long one, so it grows eightfold.
+const (
+	FirstRows = 16
+	RowGrowth = 8
 )
 
 // TableQuery is a SELECT on the entity of a Table, Query with the entity's
@@ -19,50 +27,32 @@ import (
 // entity, and its columns and relations are indexes, as Statement numbers
 // them.
 type TableQuery struct {
-	db    *DB
+	owner any // the *velox.DB the query is of, for velox's Typed
+	e     *DB
 	t     *table
 	st    Statement
 	err   error
-	loads []engine.LoadSpec
+	loads []LoadSpec
 	after unsafe.Pointer // After's row, copied
-	joins *joinSet
+	joins *JoinSet
 }
 
-// QueryTable starts a query on t's entity: Query, untyped, for generated
-// code (see TableQuery).
-func (db *DB) QueryTable(t Table) TableQuery {
+// QueryTable starts a query on t's entity through e, the DB of owner, a
+// *velox.DB: velox's DB.QueryTable.
+func QueryTable(e *DB, owner any, t Table) TableQuery {
 	s := t.state()
-	return TableQuery{db: db, t: s, st: Statement{Op: OpSelect, Entity: s.info, InTx: db.e.InTx}}
+	return TableQuery{owner: owner, e: e, t: s, st: Statement{Op: OpSelect, Entity: s.info, InTx: e.InTx}}
 }
 
-// Untyped returns q as a TableQuery: the same statement, relations, After row
-// and joins. For generated code.
-func Untyped[E any](q Query[E]) TableQuery {
-	u := TableQuery{db: q.db, st: q.st, err: q.err, loads: q.loads, after: unsafe.Pointer(q.after), joins: q.joins}
-	if q.meta == nil {
-		u.t = &table{err: errNoTable}
-		return u
-	}
-	u.t = tableOfMeta(q.meta)
-	return u
+// TableQueryOf is the TableQuery of a typed query's parts: velox's Untyped.
+func TableQueryOf(owner any, e *DB, t Table, st Statement, err error, loads []LoadSpec, after unsafe.Pointer, joins *JoinSet) TableQuery {
+	return TableQuery{owner: owner, e: e, t: t.state(), st: st, err: err, loads: loads, after: after, joins: joins}
 }
 
-// Typed returns q as a Query of E, q's entity: the inverse of Untyped. For
-// generated code. A q of another entity gives a query that fails.
-func Typed[E any](q TableQuery) Query[E] {
-	m, err := metaOf[E]()
-	if m == nil {
-		return Query[E]{db: q.db, meta: &Meta[E]{err: err}}
-	}
-	out := Query[E]{db: q.db, meta: m, st: q.st, err: q.err, loads: q.loads, after: (*E)(q.after), joins: q.joins}
-	if m.err == nil && q.t.info != m.info {
-		name := "no entity"
-		if q.t.info != nil {
-			name = q.t.info.Name
-		}
-		out.err = fmt.Errorf("velox: %s: Typed was given a query of %s", m.info.Name, name)
-	}
-	return out
+// TableQueryParts is q's parts, for velox's Typed: the parts TableQueryOf
+// takes, but the Table.
+func TableQueryParts(q TableQuery) (owner any, e *DB, st Statement, err error, loads []LoadSpec, after unsafe.Pointer, joins *JoinSet) {
+	return q.owner, q.e, q.st, q.err, q.loads, q.after, q.joins
 }
 
 // Table returns the query's Table.
@@ -82,7 +72,7 @@ func (q TableQuery) Where(ps ...Predicate) TableQuery {
 	for _, p := range ps {
 		q.st.Where = append(q.st.Where, p)
 		if q.err == nil {
-			if err := engine.PredErr(engine.PredNode(p)); err != nil {
+			if err := PredErr(PredNode(p)); err != nil {
 				q.err = err
 			}
 		}
@@ -193,7 +183,7 @@ func (q TableQuery) join(edge int, target Table, left bool) TableQuery {
 		return q
 	}
 	ts := target.state()
-	ref := engine.RelRef{Owner: q.t.target.Get, Target: ts.target, I: int32(edge)}
+	ref := RelRef{Owner: q.t.target.Get, Target: ts.target, I: int32(edge)}
 	if ts.err != nil {
 		return q.fail(ts.err)
 	}
@@ -204,37 +194,37 @@ func (q TableQuery) join(edge int, target Table, left bool) TableQuery {
 	if l.Many || l.Join != nil {
 		return q.fail(fmt.Errorf("velox: %s: %s is a to-many relation, and Join reads a to-one relation; load it with With, or test it with Has or HasWhere", q.t.info.Name, l.Name))
 	}
-	if slices.ContainsFunc(q.st.Joins, func(j engine.JoinClause) bool { return j.Ref.I == int32(edge) }) {
+	if slices.ContainsFunc(q.st.Joins, func(j JoinClause) bool { return j.Ref.I == int32(edge) }) {
 		return q.fail(fmt.Errorf("velox: %s: the query joins %s twice", q.t.info.Name, l.Name))
 	}
-	off, err := engine.RelOffset(q.t.info, int32(edge))
+	off, err := RelOffset(q.t.info, int32(edge))
 	if err != nil {
 		return q.fail(err)
 	}
-	q.st.Joins = append(slices.Clip(q.st.Joins), engine.JoinClause{Ref: ref, Left: left})
+	q.st.Joins = append(slices.Clip(q.st.Joins), JoinClause{Ref: ref, Left: left})
 	own := q.t
-	set := joinSet{bindOwner: func(cols []int, dst []any, owner unsafe.Pointer) { bindTableRow(own, cols, dst, owner) }}
+	set := JoinSet{BindOwner: func(cols []int, dst []any, owner unsafe.Pointer) { bindTableRow(own, cols, dst, owner) }}
 	if q.joins != nil {
-		set.fills = slices.Clip(q.joins.fills)
+		set.Fills = slices.Clip(q.joins.Fills)
 	}
 	n := len(ts.info.Columns)
-	set.fills = append(set.fills, joinFill{width: n, bind: func(dst []any) func(unsafe.Pointer) {
+	set.Fills = append(set.Fills, JoinFill{Width: n, Bind: func(dst []any) func(unsafe.Pointer) {
 		row := target.New()
 		nulls := 0
 		for c := range n {
 			var d any
 			if ts.nilCols != nil && ts.nilCols[c] {
-				d = &nilScanner{dst: ts.addr(row, c)}
+				d = &NilScanner{Dst: ts.addr(row, c)}
 			} else {
-				d = engine.ScanDst(ts.info, c, ts.addr(row, c))
+				d = ScanDst(ts.info, c, ts.addr(row, c))
 			}
 			if left {
-				d = &nullProbe{dst: d, nulls: &nulls}
+				d = &NullProbe{Dst: d, Nulls: &nulls}
 			}
 			dst[c] = d
 		}
 		return func(owner unsafe.Pointer) {
-			h := (*engine.Holder)(unsafe.Add(owner, off))
+			h := (*Holder)(unsafe.Add(owner, off))
 			h.Loaded = true
 			if left && nulls == n {
 				h.V = nil // as in Query.Join
@@ -256,10 +246,10 @@ func bindTableRow(t *table, cols []int, dst []any, p unsafe.Pointer) {
 			c = cols[i]
 		}
 		if t.nilCols != nil && t.nilCols[c] {
-			dst[i] = &nilScanner{dst: t.addr(p, c)}
+			dst[i] = &NilScanner{Dst: t.addr(p, c)}
 			continue
 		}
-		dst[i] = engine.ScanDst(t.info, c, t.addr(p, c))
+		dst[i] = ScanDst(t.info, c, t.addr(p, c))
 	}
 }
 
@@ -267,27 +257,27 @@ func bindTableRow(t *table, cols []int, dst []any, p unsafe.Pointer) {
 type tableRun struct {
 	st    Statement
 	t     *table
-	joins *joinSet
+	joins *JoinSet
 	buf   reflect.Value // the rows' array, a []E
 	n     int
 }
 
 // readTable reads every row into a.buf, anew should an around hook retry. It
 // allocates as readAll does.
-func readTable(a *tableRun, r engine.Rows) error {
-	rootN := engine.ColumnCount(&a.st)
-	dst := make([]any, rootN+a.joins.width())
+func readTable(a *tableRun, r Rows) error {
+	rootN := ColumnCount(&a.st)
+	dst := make([]any, rootN+a.joins.Width())
 	n := 0
 	if !a.st.Unbounded {
-		n = min(a.st.Limit, firstRows)
+		n = min(a.st.Limit, FirstRows)
 	}
 	typ := a.t.slice.(reflect.Type)
 	a.buf, a.n = reflect.MakeSlice(typ, n, n), 0
 	for r.Next() {
 		if a.n == a.buf.Len() {
-			c := max(2*a.n, firstRows)
+			c := max(2*a.n, FirstRows)
 			if !a.st.Unbounded {
-				c = max(min(a.st.Limit, a.n*rowGrowth), a.n+1)
+				c = max(min(a.st.Limit, a.n*RowGrowth), a.n+1)
 			}
 			b := reflect.MakeSlice(typ, c, c)
 			reflect.Copy(b, a.buf)
@@ -296,7 +286,7 @@ func readTable(a *tableRun, r engine.Rows) error {
 		p := unsafe.Add(a.buf.UnsafePointer(), uintptr(a.n)*a.t.size)
 		a.n++
 		if a.joins != nil {
-			if err := a.joins.scan(r, a.st.Columns, rootN, dst, p); err != nil {
+			if err := a.joins.Scan(r, a.st.Columns, rootN, dst, p); err != nil {
 				return err
 			}
 			continue
@@ -310,11 +300,11 @@ func readTable(a *tableRun, r engine.Rows) error {
 }
 
 // rows is the run's rows.
-func (a *tableRun) rows() Rows {
+func (a *tableRun) rows() TableRows {
 	if a.n == 0 {
-		return Rows{size: a.t.size}
+		return TableRows{size: a.t.size}
 	}
-	return Rows{p: a.buf.UnsafePointer(), size: a.t.size, n: a.n}
+	return TableRows{p: a.buf.UnsafePointer(), size: a.t.size, n: a.n}
 }
 
 // check is the error any way of running q fails with before preparing it.
@@ -326,44 +316,44 @@ func (q TableQuery) check() error {
 }
 
 // read runs the query for its rows, as Query.read.
-func (q TableQuery) read(ctx context.Context) (out Rows, ran []int, at engine.Target, err error) {
+func (q TableQuery) read(ctx context.Context) (out TableRows, ran []int, at Target, err error) {
 	if err := q.check(); err != nil {
-		return Rows{}, nil, at, err
+		return TableRows{}, nil, at, err
 	}
 	if len(q.loads) > 0 {
 		if q.st.Lock != 0 {
-			return Rows{}, nil, at, fmt.Errorf("velox: %s: a locking read loads no relations; load them in another query", q.t.info.Name)
+			return TableRows{}, nil, at, fmt.Errorf("velox: %s: a locking read loads no relations; load them in another query", q.t.info.Name)
 		}
-		if err := engine.CheckLoads(q.t.info, q.st.Columns, q.loads); err != nil {
-			return Rows{}, nil, at, err
+		if err := CheckLoads(q.t.info, q.st.Columns, q.loads); err != nil {
+			return TableRows{}, nil, at, err
 		}
 	}
-	st, err := prepareStmt(&q.st, q.t.info, q.after)
+	st, err := PrepareStmt(&q.st, q.t.info, q.after)
 	if err != nil {
-		return Rows{}, nil, at, err
+		return TableRows{}, nil, at, err
 	}
-	if q.db.e.Hooked() {
+	if q.e.Hooked() {
 		a := &tableRun{st: st, t: q.t, joins: q.joins}
-		err = q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readTable(a, r) }, nil)
-		out, ran, at = a.rows(), a.st.Columns, engine.StmtRan(&a.st)
+		err = q.e.Run(ctx, &a.st, func(r Rows) error { return readTable(a, r) }, nil)
+		out, ran, at = a.rows(), a.st.Columns, StmtRan(&a.st)
 	} else {
 		a := tableRun{st: st, t: q.t, joins: q.joins}
-		err = q.db.e.Plain(ctx, &a.st, func(r engine.Rows) error { return readTable(&a, r) }, nil)
-		out, ran, at = a.rows(), a.st.Columns, engine.StmtRan(&a.st)
+		err = q.e.Plain(ctx, &a.st, func(r Rows) error { return readTable(&a, r) }, nil)
+		out, ran, at = a.rows(), a.st.Columns, StmtRan(&a.st)
 	}
 	if err != nil {
-		return Rows{}, nil, at, err
+		return TableRows{}, nil, at, err
 	}
 	return out, ran, at, nil
 }
 
 // load loads the query's relations for rows, as Query.load.
-func (q TableQuery) load(ctx context.Context, rows Rows, ran []int, at engine.Target) error {
+func (q TableQuery) load(ctx context.Context, rows TableRows, ran []int, at Target) error {
 	if len(q.loads) == 0 || rows.n == 0 {
 		return nil
 	}
 	if ran != nil {
-		if err := engine.CheckLoads(q.t.info, ran, q.loads); err != nil {
+		if err := CheckLoads(q.t.info, ran, q.loads); err != nil {
 			return err
 		}
 	}
@@ -371,17 +361,17 @@ func (q TableQuery) load(ctx context.Context, rows Rows, ran []int, at engine.Ta
 	for i := range ptrs {
 		ptrs[i] = rows.At(i)
 	}
-	return engine.LoadRelations(ctx, &q.db.e, q.db.e.LoadPin(at), q.t.info, ptrs, q.loads, q.st.MaxRows)
+	return LoadRelations(ctx, q.e, q.e.LoadPin(at), q.t.info, ptrs, q.loads, q.st.MaxRows)
 }
 
 // All runs the query and returns every row, as Query.All.
-func (q TableQuery) All(ctx context.Context) (Rows, error) {
+func (q TableQuery) All(ctx context.Context) (TableRows, error) {
 	out, ran, at, err := q.read(ctx)
 	if err != nil {
-		return Rows{}, err
+		return TableRows{}, err
 	}
 	if err := q.load(ctx, out, ran, at); err != nil {
-		return Rows{}, err
+		return TableRows{}, err
 	}
 	return out, nil
 }
@@ -429,11 +419,11 @@ func (q TableQuery) Count(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	q.st.Columns = nil // as in Query.Count
-	st, err := prepareStmt(&q.st, q.t.info, q.after)
+	st, err := PrepareStmt(&q.st, q.t.info, q.after)
 	if err != nil {
 		return 0, err
 	}
-	return countStmt(ctx, q.db, st)
+	return CountStmt(ctx, q.e, st)
 }
 
 // Exists is Query.Exists.
@@ -442,16 +432,16 @@ func (q TableQuery) Exists(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	q.st.Columns = nil // as in Query.Count
-	st, err := prepareStmt(&q.st, q.t.info, q.after)
+	st, err := PrepareStmt(&q.st, q.t.info, q.after)
 	if err != nil {
 		return false, err
 	}
-	return existsStmt(ctx, q.db, st)
+	return ExistsStmt(ctx, q.e, st)
 }
 
 // SQL is Query.SQL.
 func (q TableQuery) SQL(ctx context.Context) (string, []any, error) {
-	ctx = engine.DryRunContext(ctx) // first, so that every hook sees it
+	ctx = DryRunContext(ctx) // first, so that every hook sees it
 	if err := q.check(); err != nil {
 		return "", nil, err
 	}
@@ -459,20 +449,20 @@ func (q TableQuery) SQL(ctx context.Context) (string, []any, error) {
 		if q.st.Lock != 0 {
 			return "", nil, fmt.Errorf("velox: %s: a locking read loads no relations; load them in another query", q.t.info.Name)
 		}
-		if err := engine.CheckLoads(q.t.info, q.st.Columns, q.loads); err != nil {
+		if err := CheckLoads(q.t.info, q.st.Columns, q.loads); err != nil {
 			return "", nil, err
 		}
 	}
-	st, err := prepareStmt(&q.st, q.t.info, q.after)
+	st, err := PrepareStmt(&q.st, q.t.info, q.after)
 	if err != nil {
 		return "", nil, err
 	}
-	text, args, err := q.db.e.DryRun(ctx, &st)
+	text, args, err := q.e.DryRun(ctx, &st)
 	if err != nil {
 		return "", nil, err
 	}
 	if len(q.loads) > 0 && st.Columns != nil {
-		if err := engine.CheckLoads(q.t.info, st.Columns, q.loads); err != nil {
+		if err := CheckLoads(q.t.info, st.Columns, q.loads); err != nil {
 			return "", nil, err
 		}
 	}
@@ -480,11 +470,8 @@ func (q TableQuery) SQL(ctx context.Context) (string, []any, error) {
 }
 
 // each is what LoadEach and CountEach read of q, as eachOf.
-func (q TableQuery) each() engine.EachQuery {
-	e := engine.EachQuery{St: q.st, After: q.after, Loads: q.loads, Err: q.err, Joins: q.joins.scanner(), In: q.t.info}
-	if q.db != nil {
-		e.DB = &q.db.e
-	}
+func (q TableQuery) each() EachQuery {
+	e := EachQuery{DB: q.e, St: q.st, After: q.after, Loads: q.loads, Err: q.err, Joins: q.joins.Scanner(), In: q.t.info}
 	if q.t.err != nil {
 		e.Err = q.t.err
 	}
@@ -495,13 +482,13 @@ func (q TableQuery) each() engine.EachQuery {
 // of owner's entity, its rows of q related through owner's relation edge,
 // whose target is q's entity, with at most each per owner (Rel.LimitEach; 0
 // for no limit).
-func (q TableQuery) LoadEach(ctx context.Context, owner Table, edge, each int, owners []unsafe.Pointer) ([]Rows, error) {
+func (q TableQuery) LoadEach(ctx context.Context, owner Table, edge, each int, owners []unsafe.Pointer) ([]TableRows, error) {
 	os := owner.state()
-	parts, err := engine.LoadEach(ctx, q.each(), os.info, os.err, engine.LoadSpec{Rel: int32(edge), Target: q.t.target, Each: max(each, 0)}, owners)
+	parts, err := LoadEach(ctx, q.each(), os.info, os.err, LoadSpec{Rel: int32(edge), Target: q.t.target, Each: max(each, 0)}, owners)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Rows, len(parts))
+	out := make([]TableRows, len(parts))
 	for i, p := range parts {
 		out[i] = sliceRows(p, q.t.size)
 	}
@@ -511,32 +498,32 @@ func (q TableQuery) LoadEach(ctx context.Context, owner Table, edge, each int, o
 // CountEach is the package's CountEach, untyped, as LoadEach is LoadEach.
 func (q TableQuery) CountEach(ctx context.Context, owner Table, edge int, owners []unsafe.Pointer) ([]int64, error) {
 	os := owner.state()
-	return engine.CountEach(ctx, q.each(), os.info, os.err, engine.LoadSpec{Rel: int32(edge), Target: q.t.target}, owners)
+	return CountEach(ctx, q.each(), os.info, os.err, LoadSpec{Rel: int32(edge), Target: q.t.target}, owners)
 }
 
-// prepareStmt is the statement a run of a query sends: st cloned, with the
+// PrepareStmt is the statement a run of a query sends: st cloned, with the
 // condition of After's row (nil for none), a row of info's entity.
-func prepareStmt(st *Statement, info *EntityInfo, after unsafe.Pointer) (Statement, error) {
-	c := engine.CloneStatement(st)
+func PrepareStmt(st *Statement, info *EntityInfo, after unsafe.Pointer) (Statement, error) {
+	c := CloneStatement(st)
 	if after == nil {
 		return c, nil
 	}
-	err := engine.AddAfter(&c, info, after)
+	err := AddAfter(&c, info, after)
 	return c, err
 }
 
-// countStmt runs st, prepared, as a COUNT.
-func countStmt(ctx context.Context, db *DB, st Statement) (int64, error) {
+// CountStmt runs st, prepared, as a COUNT.
+func CountStmt(ctx context.Context, db *DB, st Statement) (int64, error) {
 	st.Count, st.Columns, st.OrderBy, st.Limit, st.Offset = true, nil, nil, 0, 0
 	var n int64
 	var err error
-	if db.e.Hooked() {
-		c := &engine.CountRun{St: st}
-		err = db.e.Run(ctx, &c.St, func(r engine.Rows) error { return engine.ReadCount(c, r) }, nil)
+	if db.Hooked() {
+		c := &CountRun{St: st}
+		err = db.Run(ctx, &c.St, func(r Rows) error { return ReadCount(c, r) }, nil)
 		n = c.N
 	} else {
-		c := engine.CountRun{St: st}
-		err = db.e.Plain(ctx, &c.St, func(r engine.Rows) error { return engine.ReadCount(&c, r) }, nil)
+		c := CountRun{St: st}
+		err = db.Plain(ctx, &c.St, func(r Rows) error { return ReadCount(&c, r) }, nil)
 		n = c.N
 	}
 	if err != nil {
@@ -545,18 +532,18 @@ func countStmt(ctx context.Context, db *DB, st Statement) (int64, error) {
 	return n, nil
 }
 
-// existsStmt runs st, prepared, as SELECT 1 … LIMIT 1.
-func existsStmt(ctx context.Context, db *DB, st Statement) (bool, error) {
+// ExistsStmt runs st, prepared, as SELECT 1 … LIMIT 1.
+func ExistsStmt(ctx context.Context, db *DB, st Statement) (bool, error) {
 	st.Exists, st.Columns, st.OrderBy, st.Limit, st.Offset = true, nil, nil, 1, 0
 	var found bool
 	var err error
-	if db.e.Hooked() {
-		x := &engine.ExistsRun{St: st}
-		err = db.e.Run(ctx, &x.St, func(r engine.Rows) error { return engine.ReadExists(x, r) }, nil)
+	if db.Hooked() {
+		x := &ExistsRun{St: st}
+		err = db.Run(ctx, &x.St, func(r Rows) error { return ReadExists(x, r) }, nil)
 		found = x.Found
 	} else {
-		x := engine.ExistsRun{St: st}
-		err = db.e.Plain(ctx, &x.St, func(r engine.Rows) error { return engine.ReadExists(&x, r) }, nil)
+		x := ExistsRun{St: st}
+		err = db.Plain(ctx, &x.St, func(r Rows) error { return ReadExists(&x, r) }, nil)
 		found = x.Found
 	}
 	if err != nil {

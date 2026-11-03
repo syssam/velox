@@ -440,7 +440,7 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 	if c.after != nil {
 		q = q.After(c.after)
 	}
-	var rows velox.Rows
+	var rows velox.TableRows
 	var err error
 	if c.edge != nil {
 		rows, err = c.edge.rows(q)

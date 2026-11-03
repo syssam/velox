@@ -33,6 +33,7 @@ JoinClause.Left bool
 JoinClause.Link Link
 JoinClause.On []Predicate
 JoinClause.Ref RelRef
+PredOp is uint8
 Shard.Primary Conn
 Shard.Replicas []Conn
 Statement.Aggregate Aggregate
@@ -70,6 +71,41 @@ Statement.Tx *TxInfo
 Statement.Unbounded bool
 Statement.Where []Predicate
 Statement.Writable bool
+Table.Err() error
+Table.Field(p unsafe.Pointer, col int) any
+Table.Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Pointer) error
+Table.Filled(owner unsafe.Pointer, edge int) (unsafe.Pointer, bool)
+Table.Has(edge int, target Table, ps ...Predicate) Predicate
+Table.Info() *EntityInfo
+Table.New() unsafe.Pointer
+Table.Pred(col int, op PredOp, v any) Predicate
+Table.Ptr(p unsafe.Pointer) any
+Table.Value(p unsafe.Pointer, col int) any
+TableQuery.After(p unsafe.Pointer) TableQuery
+TableQuery.All(ctx context.Context) (TableRows, error)
+TableQuery.Columns(cs ...int) TableQuery
+TableQuery.Count(ctx context.Context) (int64, error)
+TableQuery.CountEach(ctx context.Context, owner Table, edge int, owners []unsafe.Pointer) ([]int64, error)
+TableQuery.Exists(ctx context.Context) (bool, error)
+TableQuery.First(ctx context.Context) (unsafe.Pointer, error)
+TableQuery.ForShare() TableQuery
+TableQuery.ForUpdate() TableQuery
+TableQuery.Join(edge int, target Table) TableQuery
+TableQuery.LeftJoin(edge int, target Table) TableQuery
+TableQuery.Limit(n int) TableQuery
+TableQuery.LoadEach(ctx context.Context, owner Table, edge, each int, owners []unsafe.Pointer) ([]TableRows, error)
+TableQuery.MaxRows(n int) TableQuery
+TableQuery.Offset(n int) TableQuery
+TableQuery.One(ctx context.Context) (unsafe.Pointer, error)
+TableQuery.OrderBy(os ...OrderTerm) TableQuery
+TableQuery.Ordered() bool
+TableQuery.SQL(ctx context.Context) (string, []any, error)
+TableQuery.Selects(cs ...int) bool
+TableQuery.Table() Table
+TableQuery.Unbounded() TableQuery
+TableQuery.Where(ps ...Predicate) TableQuery
+TableRows.At(i int) unsafe.Pointer
+TableRows.Len() int
 const AggregateAvg
 const AggregateMax
 const AggregateMin
@@ -95,7 +131,7 @@ const OpSelect
 const OpUpdate
 const Postgres
 const PredContains
-const PredEQ PredOp
+const PredEQ
 const PredGT
 const PredGTE
 const PredHasPrefix
@@ -312,29 +348,6 @@ func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
 func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error]
 func (q RawQuery[E]) MaxRows[_ Lazy[E]](n int) RawQuery[E]
 func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
-func (q TableQuery) After(p unsafe.Pointer) TableQuery
-func (q TableQuery) All(ctx context.Context) (Rows, error)
-func (q TableQuery) Columns(cs ...int) TableQuery
-func (q TableQuery) Count(ctx context.Context) (int64, error)
-func (q TableQuery) CountEach(ctx context.Context, owner Table, edge int, owners []unsafe.Pointer) ([]int64, error)
-func (q TableQuery) Exists(ctx context.Context) (bool, error)
-func (q TableQuery) First(ctx context.Context) (unsafe.Pointer, error)
-func (q TableQuery) ForShare() TableQuery
-func (q TableQuery) ForUpdate() TableQuery
-func (q TableQuery) Join(edge int, target Table) TableQuery
-func (q TableQuery) LeftJoin(edge int, target Table) TableQuery
-func (q TableQuery) Limit(n int) TableQuery
-func (q TableQuery) LoadEach(ctx context.Context, owner Table, edge, each int, owners []unsafe.Pointer) ([]Rows, error)
-func (q TableQuery) MaxRows(n int) TableQuery
-func (q TableQuery) Offset(n int) TableQuery
-func (q TableQuery) One(ctx context.Context) (unsafe.Pointer, error)
-func (q TableQuery) OrderBy(os ...OrderTerm) TableQuery
-func (q TableQuery) Ordered() bool
-func (q TableQuery) SQL(ctx context.Context) (string, []any, error)
-func (q TableQuery) Selects(cs ...int) bool
-func (q TableQuery) Table() Table
-func (q TableQuery) Unbounded() TableQuery
-func (q TableQuery) Where(ps ...Predicate) TableQuery
 func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E]
 func (r Rel[E, T]) Fill[_ Lazy[T]](owner *E, t *T) error
 func (r Rel[E, T]) Filled[_ Lazy[T]](owner *E) (*T, bool)
@@ -347,22 +360,10 @@ func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T]
 func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T]
 func (r Rel[E, T]) Where[_ Lazy[T]](ps ...Pred[T]) Rel[E, T]
 func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T]
-func (r Rows) At(i int) unsafe.Pointer
-func (r Rows) Len() int
 func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
 func (s SaveQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (s SaveQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) SaveQuery[E]
 func (s Setter[E]) Column[_ Lazy[E]]() int
-func (t Table) Err() error
-func (t Table) Field(p unsafe.Pointer, col int) any
-func (t Table) Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Pointer) error
-func (t Table) Filled(owner unsafe.Pointer, edge int) (unsafe.Pointer, bool)
-func (t Table) Has(edge int, target Table, ps ...Predicate) Predicate
-func (t Table) Info() *EntityInfo
-func (t Table) New() unsafe.Pointer
-func (t Table) Pred(col int, op PredOp, v any) Predicate
-func (t Table) Ptr(p unsafe.Pointer) any
-func (t Table) Value(p unsafe.Pointer, col int) any
 func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E]
 func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
@@ -410,7 +411,7 @@ func PinUntil(ctx context.Context, t time.Time)
 func PinnedUntil(ctx context.Context) time.Time
 func Pool(db *DB) *sql.DB
 func RowScopeFromContext(ctx context.Context) RowScope
-func RowsOf[E any](r Rows) []E
+func RowsOf[E any](r TableRows) []E
 func SQLConn(db *sql.DB) Conn
 func SumByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func SumBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
@@ -500,7 +501,7 @@ type Order[E any] struct { }
 type OrderedCol[E, V any] struct { I int32 }
 type PolicyError = veloxtype.PolicyError
 type Policy[E any] struct { Read func(ctx context.Context) (Pred[E], error) Write func(ctx context.Context) (Pred[E], error) Insert func(ctx context.Context, x *E) error }
-type PredOp uint8
+type PredOp = engine.PredOp
 type Pred[E any] = engine.Pred[E]
 type Predicate = engine.Predicate
 type Query[E any] struct { }
@@ -510,15 +511,15 @@ type Result = veloxtype.Result
 type Rewrite func(ctx context.Context, st *Statement) error
 type Route = veloxtype.Route
 type RowScope = veloxtype.RowScope
-type Rows struct { }
 type SaveQuery[E any] struct { }
 type SchemaError = veloxtype.SchemaError
 type Setter[E any] struct { }
 type Shard = engine.Shard
 type Statement = engine.Statement
 type StringCol[E any, V ~string] struct { I int32 }
-type Table struct { }
-type TableQuery struct { }
+type Table = engine.Table
+type TableQuery = engine.TableQuery
+type TableRows = engine.TableRows
 type Tag = veloxtype.Tag
 type TxAround = veloxtype.TxAround
 type TxInfo = veloxtype.TxInfo

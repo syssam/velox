@@ -278,7 +278,7 @@
 // nothing else should: Descriptor, ColumnDescriptor, EdgeDescriptor, EdgeTo, EdgeBidi,
 // EdgeThrough, Meta, MetaOnce, BindPolicy, BindHooks, BindHooksAfter, BoundPolicy,
 // BoundHooks, Lazy, Validate, ValidateSet, the untyped surface (Table, TableOf,
-// Rows, RowsOf, PredOp, TableQuery, DB.QueryTable, Untyped and Typed: an entity's
+// TableRows, RowsOf, PredOp, TableQuery, DB.QueryTable, Untyped and Typed: an entity's
 // queries with its type erased, for runtimes compiled once for every entity)
 // and GeneratedCodeIsVersion7. Each
 // says "For generated code." in its documentation. They are not part of

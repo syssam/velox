@@ -23,7 +23,7 @@ type Query[E any] struct {
 	err   error             // a condition's error, returned by every way of running the query
 	loads []engine.LoadSpec // the relations All loads
 	after *E                // After's row, copied
-	joins *joinSet          // how to read the joined relations, in the order of st.Joins; nil without Join
+	joins *engine.JoinSet   // how to read the joined relations, in the order of st.Joins; nil without Join
 }
 
 // Query starts a query on entity E:
@@ -247,11 +247,11 @@ func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
 
 // prepare is the statement a run sends: the query's, with After's condition.
 func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
-	return prepareStmt(&q.st, q.meta.info, unsafe.Pointer(q.after))
+	return engine.PrepareStmt(&q.st, q.meta.info, unsafe.Pointer(q.after))
 }
 
 // scanRow scans the current row into p through the entity's scan plan; a
-// JSON column through a decoder (ScanDst), and one of nilColumns through nilScanner.
+// JSON column through a decoder (ScanDst), and one of nilColumns through engine.NilScanner.
 func scanRow[E any](r engine.Rows, m *Meta[E], cols []int, dst []any, p *E) error {
 	for i := range dst {
 		c := i
@@ -259,7 +259,7 @@ func scanRow[E any](r engine.Rows, m *Meta[E], cols []int, dst []any, p *E) erro
 			c = cols[i]
 		}
 		if m.nilCols != nil && m.nilCols[c] {
-			dst[i] = &nilScanner{dst: m.addr(p, c)}
+			dst[i] = &engine.NilScanner{Dst: m.addr(p, c)}
 			continue
 		}
 		dst[i] = engine.ScanDst(m.info, c, m.addr(p, c))
@@ -274,28 +274,24 @@ func scanRow[E any](r engine.Rows, m *Meta[E], cols []int, dst []any, p *E) erro
 // none, the struct is a local and plain is used, which keeps it, and the
 // closure reading the rows, on the stack.
 
-// firstRows is the most rows All allocates ahead, and rowGrowth how much further
-// each time they fill, up to Limit. BenchmarkLimitBound on a 168-byte entity:
-// Limit(1000) returning one row costs 3.5 KB at 16, 6.6 KB at 32, 11 KB at 64,
-// against 173 KB at 1024. Growing by append, all 1000 rows cost 603 KB against 196
-// KB at 1024; a read past 16 rows is likely a long one, so it grows eightfold.
+// firstRows and rowGrowth are engine.FirstRows and engine.RowGrowth.
 const (
-	firstRows = 16
-	rowGrowth = 8
+	firstRows = engine.FirstRows
+	rowGrowth = engine.RowGrowth
 )
 
 // allRun is the state of one All.
 type allRun[E any] struct {
 	st    Statement
 	m     *Meta[E]
-	joins *joinSet
+	joins *engine.JoinSet
 	out   []E
 }
 
 // readAll reads every row into a.out, anew should an around hook retry.
 func readAll[E any](a *allRun[E], r engine.Rows) error {
 	rootN := engine.ColumnCount(&a.st)
-	dst := make([]any, rootN+a.joins.width())
+	dst := make([]any, rootN+a.joins.Width())
 	// Limit is mandatory, so it is a bound and not a likely size: at most firstRows
 	// are allocated ahead for it, then rowGrowth times as many as they fill. The
 	// Limit of an Unbounded read is the row cap's (cap+1): nothing is allocated
@@ -311,7 +307,7 @@ func readAll[E any](a *allRun[E], r engine.Rows) error {
 		}
 		a.out = append(a.out, *new(E))
 		if a.joins != nil {
-			if err := a.joins.scan(r, a.st.Columns, rootN, dst, unsafe.Pointer(&a.out[len(a.out)-1])); err != nil {
+			if err := a.joins.Scan(r, a.st.Columns, rootN, dst, unsafe.Pointer(&a.out[len(a.out)-1])); err != nil {
 				return err
 			}
 			continue
@@ -443,7 +439,7 @@ func (q Query[E]) First[_ Lazy[E]](ctx context.Context) (*E, error) {
 type iterRun[E any] struct {
 	st      Statement
 	m       *Meta[E]
-	joins   *joinSet
+	joins   *engine.JoinSet
 	yield   func(E, error) bool
 	timed   bool // the DB has an Around hook: time the loop body
 	yielded bool // a row was yielded
@@ -456,13 +452,13 @@ func readIter[E any](it *iterRun[E], r engine.Rows) error {
 		return engine.ErrIterAgain
 	}
 	rootN := engine.ColumnCount(&it.st)
-	dst := make([]any, rootN+it.joins.width())
+	dst := make([]any, rootN+it.joins.Width())
 	for r.Next() {
 		var e E
 		if it.joins != nil {
 			// Its own allocation: &e would escape for every Iter, joined or not.
 			p := new(E)
-			if err := it.joins.scan(r, it.st.Columns, rootN, dst, unsafe.Pointer(p)); err != nil {
+			if err := it.joins.Scan(r, it.st.Columns, rootN, dst, unsafe.Pointer(p)); err != nil {
 				return err
 			}
 			e = *p
@@ -559,7 +555,7 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return countStmt(ctx, q.db, st)
+	return engine.CountStmt(ctx, &q.db.e, st)
 }
 
 // Exists reports whether a row matches the query's conditions, After's
@@ -577,7 +573,7 @@ func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return existsStmt(ctx, q.db, st)
+	return engine.ExistsStmt(ctx, &q.db.e, st)
 }
 
 // SQL returns the statement and arguments All would send for ctx, or the

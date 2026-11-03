@@ -229,12 +229,13 @@ var genericObjects = []struct {
 	// Query, called or not. Query.With and Rel.With stay methods: with both called,
 	// functions would save under 1%.
 	//
-	// The untyped surface (Table, TableQuery) added about 20 KB to both, with
-	// their text unchanged (276 bytes less: Count and Exists became calls to
-	// countStmt and existsStmt): the growth is in the objects' symbol and string
-	// tables, and goes away with Table.Pred's body stubbed out.
-	{"entityDescUse", "", entityDescUseSrc, 793600},        // measured 782774
-	{"entityDescHooks", "", entityDescHooksBound, 1063936}, // measured 1049760
+	// velox's own compiled code (not its generic bodies) must not inline what
+	// the generic bodies call, such as fmt.Errorf or engine.StmtRan: an inlined
+	// callee's body is carried in velox's export data, and then every
+	// package's instantiations inline it too, about 20 KB more here. The
+	// untyped surface (Table, TableQuery) is engine code for that reason.
+	{"entityDescUse", "", entityDescUseSrc, 768000},        // measured 759424
+	{"entityDescHooks", "", entityDescHooksBound, 1049600}, // measured 1038290
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	{"Mutation", "velox.Mutation[E]", "", 7168},            // measured 2226
 }
