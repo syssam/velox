@@ -482,14 +482,16 @@ func (r *pgReader) indexes(pt *pgTable, names map[int]string) error {
 }
 
 // The primary key, foreign keys and checks; a column list as JSON, so any
-// name reads back.
+// name reads back. conenforced is PostgreSQL 18's, read so that the query
+// runs on older servers.
 const pgConstraintsQuery = `SELECT k.conname, k.contype::text,
 	coalesce((SELECT json_agg(a.attname ORDER BY u.o) FROM unnest(k.conkey) WITH ORDINALITY u(n, o)
 		JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = u.n), '[]')::text,
 	coalesce((SELECT json_agg(a.attname ORDER BY u.o) FROM unnest(k.confkey) WITH ORDINALITY u(n, o)
 		JOIN pg_attribute a ON a.attrelid = k.confrelid AND a.attnum = u.n), '[]')::text,
 	coalesce(rn.nspname, ''), coalesce(rc.relname, ''), k.confdeltype::text, k.convalidated,
-	coalesce(pg_get_expr(k.conbin, k.conrelid), ''), k.confupdtype::text, k.condeferrable, k.confmatchtype::text
+	coalesce(pg_get_expr(k.conbin, k.conrelid), ''), k.confupdtype::text, k.condeferrable, k.confmatchtype::text,
+	coalesce((to_jsonb(k)->>'conenforced')::boolean, true)
 FROM pg_constraint k
 LEFT JOIN pg_class rc ON rc.oid = k.confrelid
 LEFT JOIN pg_namespace rn ON rn.oid = rc.relnamespace
@@ -503,16 +505,16 @@ var pgOnDelete = map[string]string{"a": "", "r": "RESTRICT", "c": "CASCADE", "n"
 // constraint is left out, its index read. An enum
 // check is in the model's form, any other check as PostgreSQL prints it.
 // What a constraint has that the model cannot hold is one note: NOT VALID,
-// an exclusion constraint, DEFERRABLE, and a foreign key's ON UPDATE or
-// MATCH FULL.
+// NOT ENFORCED, an exclusion constraint, DEFERRABLE, and a foreign key's ON
+// UPDATE or MATCH FULL.
 func (r *pgReader) constraints(pt *pgTable) error {
 	return r.each(pgConstraintsQuery, []any{pt.oid}, func(rows *sql.Rows) error {
 		var (
 			name, typ, cols, refCols, refNsp, refName, onDelete, expr, onUpdate, match string
-			validated, deferrable                                                      bool
+			validated, deferrable, enforced                                            bool
 		)
 		if err := rows.Scan(&name, &typ, &cols, &refCols, &refNsp, &refName, &onDelete, &validated, &expr,
-			&onUpdate, &deferrable, &match); err != nil {
+			&onUpdate, &deferrable, &match, &enforced); err != nil {
 			return err
 		}
 		var columns, refColumns []string
@@ -523,7 +525,7 @@ func (r *pgReader) constraints(pt *pgTable) error {
 			return err
 		}
 		var says []string
-		if !validated {
+		if !validated && enforced { // a NOT ENFORCED one is never validated
 			says = append(says, "the constraint is NOT VALID: the rows from before it are not checked; VALIDATE CONSTRAINT checks them")
 		}
 		var has []string
@@ -531,6 +533,10 @@ func (r *pgReader) constraints(pt *pgTable) error {
 		held := func(what, word string) {
 			has = append(has, what)
 			keeps = append(keeps, keep{what, []string{word}})
+		}
+		if !enforced {
+			says = append(says, "the constraint is NOT ENFORCED: no row is checked")
+			keeps = append(keeps, keep{"NOT ENFORCED", []string{"ENFORCED"}})
 		}
 		if typ == "x" {
 			held("an exclusion constraint", "EXCLUDE")

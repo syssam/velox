@@ -277,6 +277,9 @@ Beside this, in the same spirit, each found by running it:
   model that says NOT NULL found nothing while a row held NULL. It is read as
   nullable now, with a note naming the constraint, so `Drift` reports it and a plan
   to NOT NULL checks the rows.
+- PostgreSQL 18's `NOT ENFORCED` foreign key or check read as `NOT VALID`, whose note
+  advised `VALIDATE CONSTRAINT`, which the server refuses for it. It is a note of its
+  own now, and a keep, as MySQL's `NOT ENFORCED` check is.
 - A serial turned into an identity, as ent's tables are on their first plan, set the
   counter past the column's largest value and dropped the sequence. IDs that had been
   handed out to rows deleted since were handed out again: after IDs 9 and 10 were

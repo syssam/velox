@@ -58,3 +58,34 @@ func TestPostgresNotNullNotValid(t *testing.T) {
 		t.Errorf("Drift after the plan:\n%s", reportText(r))
 	}
 }
+
+// TestPostgresNotEnforced: PostgreSQL 18's NOT ENFORCED foreign key or check holds no
+// row to it. Inspect read it as NOT VALID, whose note said VALIDATE CONSTRAINT checks
+// the rows, which PostgreSQL refuses for it. It is a note of its own, as MySQL's NOT
+// ENFORCED check is, and a statement that adds it again must write it.
+func TestPostgresNotEnforced(t *testing.T) {
+	d := velox.Postgres
+	db, _ := freshDB(t, d)
+	if oneValue(t, db, `SELECT (current_setting('server_version_num')::int >= 180000)::text`) != "true" {
+		t.Skip("NOT ENFORCED is PostgreSQL 18's")
+	}
+	s := oneTable(d, migrate.Column{Name: "p", Type: "integer", Nullable: true})
+	s.Tables[0].ForeignKeys = []migrate.ForeignKey{{Name: "t_p_fkey", Columns: []string{"p"}, RefTable: migrate.TableRef{Name: "t"}, RefColumns: []string{"id"}}}
+	s.Tables[0].Checks = []migrate.Check{{Name: "t_p_check", Expr: "(p > 0)"}}
+	fsys := dirOf(t, d, step{to: s, name: "base"})
+	mustUp(t, db, fsys)
+	mustExec(t, db, `ALTER TABLE t DROP CONSTRAINT t_p_fkey, ADD CONSTRAINT t_p_fkey FOREIGN KEY (p) REFERENCES t (id) NOT ENFORCED`)
+	mustExec(t, db, `ALTER TABLE t DROP CONSTRAINT t_p_check, ADD CONSTRAINT t_p_check CHECK (p > 0) NOT ENFORCED`)
+	mustExec(t, db, `INSERT INTO t (id, p) VALUES (1, -5)`)
+	r, err := migrate.Drift(context.Background(), db, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"t.t_p_fkey", "t.t_p_check"} {
+		if !strings.Contains(reportText(r), name+": the constraint is NOT ENFORCED") {
+			t.Errorf("Drift says nothing of %s:\n%s", name, reportText(r))
+		}
+	}
+	refused(t, db, extend(t, fsys, d, files("0002_x.sql", "ALTER TABLE t DROP CONSTRAINT t_p_check, ADD CONSTRAINT t_p_check CHECK (p > 0);\n")),
+		"t.t_p_check", "NOT ENFORCED")
+}
