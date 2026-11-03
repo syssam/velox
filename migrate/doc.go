@@ -36,7 +36,8 @@
 //     two schemas' dialects differ, or Inspect or ParseFile was given
 //     another dialect.
 //   - "schema": a schema lists a table, an enum type, or a table's column,
-//     or a named index or constraint, twice.
+//     or a named index or constraint, twice, or a name over the server's
+//     limit: PostgreSQL's 63 bytes, MySQL's 64 characters.
 //   - "primary-key": a table's primary key changes its columns, or gains or
 //     loses its name, which Diff leaves to a hand-written migration.
 //   - "rename": a rename names a table or column that is not there, or one

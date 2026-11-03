@@ -301,6 +301,12 @@ Beside this, in the same spirit, each found by running it:
   IDENTITY`. The sequence the default names is the identity's, which `DROP IDENTITY`
   drops, so the file could only roll back. Render refuses it now, with the column's
   name. An identity that becomes a plain integer is still planned.
+- PostgreSQL cuts a name over 63 bytes with only a notice, so a hand-built model's
+  64-byte column was made under its first 63 and the database differed from the
+  snapshot from then on; MySQL refuses one over 64 characters part way through a
+  file. Codegen refused such names; the migrate API did not. `Diff`, and with it
+  `NewPlan`, now refuses a schema with a table, schema, column, sequence, index,
+  constraint, primary key or enum type name over the dialect's limit.
 - A plan refuses what can never run or would cut a value whatever it says: a `USING`
   cast to a limited type becomes the assignment cast, a truncating target under
   `alter-type` is a finding, an enum reorder over an array column and a `CONVERT TO`

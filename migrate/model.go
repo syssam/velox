@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"unicode/utf8"
 
 	"github.com/syssam/velox"
 )
@@ -210,7 +211,8 @@ func (s *Schema) sort() {
 }
 
 // validate refuses a schema no database has: an unknown dialect ("dialect");
-// a table, an enum type, or a table's column, index or constraint (a
+// a name over the server's limit ("schema"); a table, an enum type, or a
+// table's column, index or constraint (a
 // foreign key or check) listed twice ("schema"), where unnamed ones, named
 // "", may repeat; and an index marked a constraint outside PostgreSQL, or
 // one that is not unique or is partial ("schema"). name says which schema
@@ -221,6 +223,9 @@ func (s *Schema) validate(name string) error {
 	}
 	twice := func(object, format string, args ...any) error {
 		return &Error{Code: "schema", Object: object, Reason: name + " has " + fmt.Sprintf(format, args...) + " twice"}
+	}
+	if err := s.longName(name); err != nil {
+		return err
 	}
 	tables := map[TableRef]bool{}
 	for _, t := range s.Tables {
@@ -270,6 +275,47 @@ func (s *Schema) validate(name string) error {
 			return twice(e.ref().String(), "the enum type")
 		}
 		enums[e.ref()] = true
+	}
+	return nil
+}
+
+// longName refuses a name over the server's limit: PostgreSQL cuts one over 63
+// bytes with only a notice, so the database would hold another name than the
+// schema says; MySQL refuses one over 64 characters part way through a file.
+// SQLite has no limit.
+func (s *Schema) longName(name string) error {
+	check := func(object, what, n string) error {
+		switch {
+		case s.Dialect == velox.Postgres && len(n) > 63:
+			return &Error{Code: "schema", Object: object, Reason: fmt.Sprintf("%s has %s %q of %d bytes, over PostgreSQL's 63", name, what, n, len(n))}
+		case s.Dialect == velox.MySQL && utf8.RuneCountInString(n) > 64:
+			return &Error{Code: "schema", Object: object, Reason: fmt.Sprintf("%s has %s %q of %d characters, over MySQL's 64", name, what, n, utf8.RuneCountInString(n))}
+		}
+		return nil
+	}
+	for _, t := range s.Tables {
+		ref := t.Ref().String()
+		errs := []error{check(ref, "the schema", t.Schema), check(ref, "the table", t.Name), check(ref, "the primary key", t.PrimaryKeyName)}
+		for _, c := range t.Columns {
+			errs = append(errs, check(ref, "the column", c.Name), check(ref, "the sequence", c.Sequence))
+		}
+		for _, ix := range t.Indexes {
+			errs = append(errs, check(ref, "the index", ix.Name))
+		}
+		for _, fk := range t.ForeignKeys {
+			errs = append(errs, check(ref, "the constraint", fk.Name))
+		}
+		for _, ck := range t.Checks {
+			errs = append(errs, check(ref, "the constraint", ck.Name))
+		}
+		if err := cmp.Or(errs...); err != nil {
+			return err
+		}
+	}
+	for _, e := range s.Enums {
+		if err := cmp.Or(check(e.ref().String(), "the schema", e.Schema), check(e.ref().String(), "the enum type", e.Name)); err != nil {
+			return err
+		}
 	}
 	return nil
 }

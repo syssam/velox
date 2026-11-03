@@ -37,8 +37,8 @@ import (
 //
 // Its errors are *Error values: either schema is nil ("nil"), has a dialect
 // it does not know or the dialects differ ("dialect"), either schema lists a
-// table, an enum type, or a table's column, index or constraint twice
-// ("schema"), a primary key's columns change or its name changes to or
+// table, an enum type, or a table's column, index or constraint twice, or
+// has a name over the server's limit ("schema"), a primary key's columns change or its name changes to or
 // from "" ("primary-key"), or a rename names a table or column from does not
 // have, or one to does not have or from already has ("rename"). Without an
 // error, Diff gives no change exactly when from.Equal(to), on SQLite the
