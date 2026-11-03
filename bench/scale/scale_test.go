@@ -16,6 +16,7 @@ import (
 // TestScaleHarnessSmall is Review Focus 5: the harness generates, builds and
 // measures a small application, and -check fails when a threshold is exceeded.
 func TestScaleHarnessSmall(t *testing.T) {
+	t.Parallel() // each builds in its own directories and GOCACHE
 	if testing.Short() {
 		t.Skip("builds an application; run without -short")
 	}
@@ -55,6 +56,7 @@ func measured(t *testing.T, r report) {
 // binary grew with n until the use site named the target). The threshold in
 // thresholds.json catches the size; this names the entities.
 func TestServiceLinksOnlyItsEntities(t *testing.T) {
+	t.Parallel() // each builds in its own directories and GOCACHE
 	if testing.Short() {
 		t.Skip("builds an application; run without -short")
 	}
@@ -67,6 +69,7 @@ func TestServiceLinksOnlyItsEntities(t *testing.T) {
 // calls it or that reaches it by one relation, and not otherwise. A GraphQL
 // type that named every neighbour's code would link the whole connected model.
 func TestGraphQLServiceLinksOnlyItsEntities(t *testing.T) {
+	t.Parallel() // each builds in its own directories and GOCACHE
 	if testing.Short() {
 		t.Skip("builds an application; run without -short")
 	}
@@ -131,6 +134,7 @@ func linksOnlyItsEntities(t *testing.T, graphql bool) {
 // measures a small application, and its schemas and services carry what the
 // variant promises.
 func TestScaleHarnessSmallGraphQL(t *testing.T) {
+	t.Parallel() // each builds in its own directories and GOCACHE
 	if testing.Short() {
 		t.Skip("builds an application; run without -short")
 	}
