@@ -204,14 +204,19 @@ func keptRows(t *testing.T, db *sql.DB, d velox.Dialect, opts migrate.DiffOption
 
 // TestMigrateCases: every case on each of its dialects, from a fresh
 // database: from applied, with a row in each table, then the plan to to;
-// the three invariants hold after each apply, and the rows survive.
+// the three invariants hold after each apply, and the rows survive. The cases
+// run in parallel: each has a database of its own.
 func TestMigrateCases(t *testing.T) {
+	t.Parallel()
 	for _, d := range allDialects {
 		for _, c := range cases {
 			if !slices.Contains(c.on(), d) {
 				continue
 			}
-			t.Run(c.name+"."+d.String(), func(t *testing.T) { migrateCase(t, c, d) })
+			t.Run(c.name+"."+d.String(), func(t *testing.T) {
+				t.Parallel()
+				migrateCase(t, c, d)
+			})
 		}
 	}
 }

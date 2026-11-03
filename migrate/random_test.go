@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -456,20 +457,33 @@ func randomSeeds(d velox.Dialect) uint64 {
 // TestMigrateCases does, with every destructive finding allowed: from applied
 // and checked, the plan to to applied and checked, and the rows to keeps read
 // back the same. A failing seed is a finding: the message names it, the
-// dialect, both models and the scripts.
+// dialect, both models and the scripts. The seeds run in parallel: each has a
+// database of its own.
 func TestMigrateRandom(t *testing.T) {
+	t.Parallel()
 	env := map[velox.Dialect]string{velox.SQLite: "", velox.Postgres: "VELOX_TEST_POSTGRES", velox.MySQL: "VELOX_TEST_MYSQL_ADMIN"}
 	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
 		t.Run(d.String(), func(t *testing.T) {
+			t.Parallel()
 			if v := env[d]; v != "" && os.Getenv(v) == "" {
 				t.Skip("needs " + v)
 			}
 			start := time.Now()
 			n := randomSeeds(d)
-			ran := 0 // under -run, fewer seeds run than n
+			var (
+				mu  sync.Mutex
+				ran int // under -run, fewer seeds run than n
+			)
+			// After the parallel seeds, which run once this function returns.
+			t.Cleanup(func() {
+				t.Logf("%d seeds on %v in %v", ran, d, time.Since(start).Round(10*time.Millisecond))
+			})
 			for seed := uint64(1); seed <= n; seed++ {
 				t.Run(strconv.FormatUint(seed, 10), func(t *testing.T) {
+					t.Parallel()
+					mu.Lock()
 					ran++
+					mu.Unlock()
 					a, b, from, to := seedModels(t, seed, d)
 					defer func() {
 						if t.Failed() {
@@ -479,7 +493,6 @@ func TestMigrateRandom(t *testing.T) {
 					migrateSchemas(t, d, from, to, planOptionsAllowing(t, from, to))
 				})
 			}
-			t.Logf("%d seeds on %v in %v", ran, d, time.Since(start).Round(10*time.Millisecond))
 		})
 	}
 }

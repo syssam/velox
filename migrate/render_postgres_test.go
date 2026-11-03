@@ -438,6 +438,7 @@ func TestRenderPostgresDetails(t *testing.T) {
 // statements and run again, and the result is compared with a database made
 // fresh from to.
 func TestRenderPostgresExecutes(t *testing.T) {
+	t.Parallel()
 	dsn := os.Getenv("VELOX_TEST_POSTGRES")
 	if dsn == "" {
 		t.Skip("needs VELOX_TEST_POSTGRES")
@@ -452,6 +453,7 @@ func TestRenderPostgresExecutes(t *testing.T) {
 			continue
 		}
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			from, to := models(t, c, velox.Postgres)
 			db := pgDatabase(t, admin, dsn)
 			empty := &migrate.Schema{Dialect: velox.Postgres}

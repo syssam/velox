@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -38,9 +39,11 @@ func mustInspectMySQL(t *testing.T, db *sql.DB, tables ...migrate.TableRef) *mig
 }
 
 // mysqlDatabase makes the server-wide database name for t, dropped when t
-// ends; MySQL's schema is a database.
+// ends; MySQL's schema is a database. The names are fixed, so t holds
+// serverWide until it ends: parallel tests would drop each other's.
 func mysqlDatabase(t *testing.T, name string) {
 	t.Helper()
+	holdServerWide(t)
 	admin := openDB(t, "mysql", os.Getenv("VELOX_TEST_MYSQL_ADMIN"))
 	mustExec(t, admin, "DROP DATABASE IF EXISTS `"+name+"`")
 	mustExec(t, admin, "CREATE DATABASE `"+name+"`")
@@ -48,6 +51,27 @@ func mysqlDatabase(t *testing.T, name string) {
 		if _, err := admin.Exec("DROP DATABASE IF EXISTS `" + name + "`"); err != nil {
 			t.Errorf("drop %s: %v", name, err)
 		}
+	})
+}
+
+// serverWide is held by the one test at a time that makes MySQL's server-wide
+// databases; holdingServerWide is the tests that hold it.
+var (
+	serverWide        = make(chan struct{}, 1)
+	holdingServerWide sync.Map // *testing.T -> true
+)
+
+// holdServerWide makes t hold serverWide until it ends. A second call by t
+// does nothing.
+func holdServerWide(t *testing.T) {
+	t.Helper()
+	if _, held := holdingServerWide.LoadOrStore(t, true); held {
+		return
+	}
+	serverWide <- struct{}{}
+	t.Cleanup(func() {
+		holdingServerWide.Delete(t)
+		<-serverWide
 	})
 }
 
@@ -144,6 +168,7 @@ func mysqlDir(t *testing.T) fstest.MapFS {
 // directories and the hand-made schema, applied to a fresh database,
 // inspect as their snapshot with no change and no warning.
 func TestInspectMySQLCases(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	seen := map[string]bool{}
 	for _, c := range cases {
@@ -165,6 +190,7 @@ func TestInspectMySQLCases(t *testing.T) {
 			}
 			seen[string(b)] = true
 			t.Run(c.name, func(t *testing.T) {
+				t.Parallel()
 				noDriftMySQL(t, dirOf(t, velox.MySQL, step{to: s, name: "case"}), s)
 			})
 		}

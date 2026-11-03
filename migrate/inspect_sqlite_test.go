@@ -169,6 +169,7 @@ func sqliteDir(t *testing.T) fstest.MapFS {
 // directories and the hand-made schema, applied to a fresh database,
 // inspect as their snapshot with no change and no warning.
 func TestInspectSQLiteCases(t *testing.T) {
+	t.Parallel()
 	seen := map[string]bool{}
 	for _, c := range cases {
 		if !slices.Contains(c.on(), velox.SQLite) {
@@ -189,18 +190,21 @@ func TestInspectSQLiteCases(t *testing.T) {
 			}
 			seen[string(b)] = true
 			t.Run(c.name, func(t *testing.T) {
+				t.Parallel()
 				noDriftSQLite(t, dirOf(t, velox.SQLite, step{to: s, name: "case"}), s)
 			})
 		}
 		// The directory of from then to, rebuilds included.
 		if c.fromDB == nil {
 			t.Run(c.name+"-steps", func(t *testing.T) {
+				t.Parallel()
 				noDriftSQLite(t, caseDir(t, c, velox.SQLite), to)
 			})
 		}
 	}
 	for _, name := range goldenCases {
 		t.Run("golden-"+name, func(t *testing.T) {
+			t.Parallel()
 			fsys := os.DirFS(filepath.Join("testdata", "dir", name+".sqlite"))
 			dir, err := migrate.ReadDir(fsys)
 			if err != nil {

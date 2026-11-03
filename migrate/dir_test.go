@@ -748,6 +748,7 @@ func collatedAs(model, snap *migrate.Schema) *migrate.Schema {
 // that made it as its snapshot, and the statements Render wrote as its last
 // files'.
 func TestDirReadsWhatAddWrites(t *testing.T) {
+	t.Parallel()
 	for _, c := range cases {
 		for _, d := range c.on() {
 			from, to := models(t, c, d)
@@ -780,6 +781,7 @@ func TestDirReadsWhatAddWrites(t *testing.T) {
 }
 
 func TestDirDeterministic(t *testing.T) {
+	t.Parallel()
 	for _, c := range cases {
 		for _, d := range c.on() {
 			a, b := caseDir(t, c, d), caseDir(t, c, d)

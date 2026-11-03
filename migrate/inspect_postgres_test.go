@@ -107,6 +107,7 @@ func predicateDir(t *testing.T) fstest.MapFS {
 // directories and the hand-made predicate schema, applied to a fresh
 // database, inspect as their snapshot with no change and no warning.
 func TestInspectPostgresCases(t *testing.T) {
+	t.Parallel()
 	needPostgres(t)
 	seen := map[string]bool{}
 	for _, c := range cases {
@@ -128,12 +129,14 @@ func TestInspectPostgresCases(t *testing.T) {
 			}
 			seen[string(b)] = true
 			t.Run(c.name, func(t *testing.T) {
+				t.Parallel()
 				noDrift(t, dirOf(t, velox.Postgres, step{to: s, name: "case"}), s)
 			})
 		}
 	}
 	for _, name := range goldenCases {
 		t.Run("golden-"+name, func(t *testing.T) {
+			t.Parallel()
 			fsys := os.DirFS(filepath.Join("testdata", "dir", name+".postgres"))
 			dir, err := migrate.ReadDir(fsys)
 			if err != nil {
