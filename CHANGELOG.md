@@ -115,7 +115,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   the inputs, `input.Create(ctx, x)` and `input.Update(ctx, id, setters...)`: x is the row to
   insert (nil for a new one), with what the client must not choose already set on it, which
   replaces the `set func(*T)` of an entity whose create input leaves out a required field;
-  the setters are the resolver's own, validated with the input's. The generated code is a
+  the setters are the resolver's own, validated apart from the input's. The generated code is a
   description that `gqlimpl` runs, 12 to 25% shorter per entity
   (`examples/graphql/gen/post_gql.go` 724 lines to 543). An explicit null is found by the
   input's GraphQL type, not the argument named `input`; where the type occurs more than
@@ -147,6 +147,22 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
   A `gen.CreatePost(ctx, input, func(p *gen.Post) { p.Slug = s })` is
   `input.Create(ctx, &gen.Post{Slug: s})`.
+- velox-graphql's inputs, after review (decision 0033, "Review"): an application's setter
+  given to `Update` of a column the input sets too wins, the input's dropped, where the
+  UPDATE failed with "column assigned twice"; the application's setters are validated
+  apart, and a refusal of theirs is velox's `*velox.ValidationError` as it is, not
+  BAD_USER_INPUT. `Create`'s godoc says that the input's fields overwrite x's and that x's
+  own fields, foreign keys included, are trusted, not checked. The generated code passes
+  the GraphQL type to `gqlimpl.NewCreate` and `NewUpdate`, writes one function per edge that
+  both inputs write by the target's rows (`<entity><Edge>EdgeGQL`) and one key function per
+  Node entity (`<entity>KeyGQL`; the key's order is `<entity>KeyOrderGQL`), and decodes an
+  edge's add and remove IDs with one `gqlimpl.AddRemove`; the helpers take column handles
+  as `gqlimpl.Handle[T]`, so another entity's handle does not compile in their place.
+  `velox.Setter.Column` is the column a setter assigns, for generated code. Regenerate.
+  `examples/graphql`: `UpdatePostInput` has no `authorID`; only a post's author may update
+  or delete it (FORBIDDEN otherwise); `createPost` checks the viewer is a user; SQLite opens
+  with foreign keys on, so `deletePost` relies on `post_tags`' ON DELETE CASCADE, and a
+  delete count the driver does not report is an internal error.
 - velox-gen: the generated entity code names what it used to number. A column's and an edge's
   position is a constant (`postColTitle`, `postEdgeAuthor`) that the handles, the descriptor's
   `PrimaryKey`, `Indexes`, `Edges`, `FieldPtr` and `Check` cases share, including the columns of

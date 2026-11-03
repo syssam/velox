@@ -40,14 +40,17 @@ switches per entity.
   links of its type, as an upper bound.
 - **A generic runtime.** The per-entity code is a description that `gqlimpl`
   runs: `NewCreate` and `NewUpdate`, one call per field or edge (`Key`, `Keys`,
-  `DecodeJSON`, `NotZero`, `Cleared`, `ClearEdge`, `Disjoint`, `Exists`, `Join`,
+  `AddRemove`, `DecodeJSON`, `NotZero`, `Cleared`, `ClearEdge`, `Exists`, `Join`,
   `Repoint`, `Children`, `Child`, `Through`), then `Insert` or `Exec`. Each call
   records the first error, decode errors before the others as before, and registers
   the steps that run inside the transaction. Column handles are all
   `struct{ I int32 }`, so a step that needs many operations of a column takes the
-  handle as a `~struct{ I int32 }` type parameter and converts it, rather than
-  method values, which generated code would otherwise store and Go 1.27 fails to
-  compile. Every semantic of the generated mutations is kept, and
+  handle as a `gqlimpl.Handle[T]` type parameter, `interface{ ~struct{ I int32 };
+  velox.Column[T] }`, and converts it, rather than method values, which generated
+  code would otherwise store and Go 1.27 fails to compile. An edge written by the
+  target's rows is one descriptor, from one generated function per edge
+  (`gqlimpl.M2M` from `NewM2M`, `gqlimpl.Owned` from `NewOwned`), which Create and
+  Update both take. Every semantic of the generated mutations is kept, and
   `cmd/velox-graphql`'s mutation tests, ported to the methods, are the contract.
 - **Explicit nulls by type.** An explicit null was found in the field's argument
   named `input`, which the application now names. Create and Update find it by the
@@ -78,6 +81,54 @@ switches per entity.
   for the demo only) and `CreatePostInput` has no `authorID`.
 - Generated lines in `examples/graphql/gen`: `post_gql.go` 724 to 543, `tag_gql.go`
   544 to 407, `user_gql.go` 551 to 482, `node_gql.go` 53, unchanged.
+
+## Review
+
+An independent review of the first implementation (commits bbf9e4d..2b5f09c)
+found nine issues; the rulings, all applied:
+
+1. An application's setter on Update of a column the input sets too made the core
+   refuse the UPDATE, "column assigned twice", as an internal error. The
+   application's setter wins: Exec drops the input's setter of any column an
+   application's setter assigns (`velox.Setter.Column`), before validation. The
+   application's setters are validated apart, and their error is velox's as it is,
+   not BAD_USER_INPUT: it is the server's bug (`TestUpdateAppSetters`, in gqlimpl
+   and in `TestMutationsRun`).
+2. Create overwrites a field prefilled on x with the client's value for any field
+   the input has. Kept, and said in Create's godoc and in "Mutations": to own a
+   field server-side, leave it out of the input with
+   `graphql.Skip(graphql.SkipMutationCreateInput)` (or `SkipMutationUpdateInput`),
+   or set it in a hook.
+3. `examples/graphql`'s `UpdatePostInput` had `authorID`, so a client could give a
+   post to another author. The author edge skips the update input too, and
+   `updatePost` and `deletePost` let only the post's author, the viewer, change it:
+   FORBIDDEN otherwise, UNAUTHENTICATED without `X-User` (`TestOnlyAuthorWrites`).
+4. Keys prefilled on x are not checked against what the caller may read. Create's
+   godoc says x's own fields, foreign keys included, are trusted and unchecked;
+   the example's `createPost` checks the viewer is a user first, and its SQLite
+   DSN turns foreign keys on, so `deletePost` relies on `post_tags`' ON DELETE
+   CASCADE and sends no DELETE of the join rows (`TestDeletePost` counts them).
+5. `deletePost` took a count of -1 for success. Now 0 is NOT_FOUND and below 0 an
+   internal error that rolls back; the delete recipe in "Mutations" says both,
+   and that a self-referencing many-to-many edge's join rows hold the key in
+   either column.
+6. The generic helpers took handles as `~struct{ I int32 }`, so any entity's handle
+   compiled in any slot. They take `gqlimpl.Handle[T]`.
+7. NewCreate and NewUpdate guessed the GraphQL type by trimming the input's name.
+   The generated code passes it.
+8. The lookup of an explicit null by type: a sentence in "Mutations" and on
+   `Cleared` for what it leaves, an input Go code builds inside a field whose
+   arguments hold one of its type, and a value nested in a variable of another
+   input type without the Extension's schema.
+9. `Children`'s doc named a parameter it has not: fixed.
+
+And a cleanup: one descriptor function per edge for both inputs; one key
+function per Node entity (`<entity>KeyGQL`, the order of the key renamed
+`<entity>KeyOrderGQL`), which NewNode and the descriptors take; and `AddRemove`
+for the two decodes and the check that no ID is in both, which replaces
+`Disjoint`. Generated lines in `examples/graphql/gen`: `post_gql.go` 543 to 531,
+`tag_gql.go` 407 to 421, `user_gql.go` 482 to 490, `node_gql.go` 53: the
+descriptor functions and key functions add lines, and the calls are shorter.
 
 ## Build cost
 
