@@ -2,6 +2,7 @@ package gqlimpl
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"unsafe"
 
@@ -225,11 +226,19 @@ func newUpdate(ctx context.Context, input, typ, entity string, t velox.Table, ke
 }
 
 // assign is the assignment of v, converted as velox.Table.Convert does, to
-// column col: nil is NULL. An assignment the column cannot take is an error
-// of u, which the generated code never makes.
+// column col: nil is NULL. A number the column's type cannot hold is a
+// BAD_USER_INPUT error of the input's field. Another assignment the column
+// cannot take is an error of u, which the generated code never makes.
 func (u *Update) assign(col int, v any) (velox.Assignment, bool) {
 	if v != nil {
 		c, err := u.t.Convert(col, v)
+		if errors.Is(err, velox.ErrOutOfRange) {
+			field := u.t.Info().Columns[col].Field
+			if u.s.name != nil && u.s.name(field) != "" {
+				field = u.s.name(field)
+			}
+			err = InputErrorf("%s: invalid value: %v is out of the field's range", u.s.at(field), v)
+		}
 		if err != nil {
 			u.s.fail(err)
 			return velox.Assignment{}, false

@@ -573,6 +573,7 @@ var ErrNoShard
 var ErrNoWhere
 var ErrNotFound
 var ErrNotSingular
+var ErrOutOfRange
 var ErrOutsideTx
 var ErrPolicyUpsert
 var ErrTimeout

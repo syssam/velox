@@ -3,6 +3,7 @@ package apitest
 import (
 	"context"
 	"errors"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -392,6 +393,14 @@ func TestTableConvert(t *testing.T) {
 	}
 	if _, err := (velox.Table{}).Convert(0, int64(1)); err == nil {
 		t.Error("the zero Table: no error")
+	}
+	// A number the column's type cannot hold is ErrOutOfRange, not a value
+	// wrapped round.
+	if _, err := tkTable.Convert(col(Tk.ID), uint64(math.MaxUint64)); !errors.Is(err, velox.ErrOutOfRange) {
+		t.Errorf("MaxUint64 for an int64: %v, want ErrOutOfRange", err)
+	}
+	if got, err := tkTable.Convert(col(Tk.ID), uint64(math.MaxInt64)); err != nil || got != int64(math.MaxInt64) {
+		t.Errorf("MaxInt64 as a uint64: %v %v", got, err)
 	}
 }
 

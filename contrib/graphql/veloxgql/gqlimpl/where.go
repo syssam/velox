@@ -2,6 +2,7 @@ package gqlimpl
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strconv"
 	"time"
@@ -309,7 +310,7 @@ func Value(f *Filter, field string, v any, col int, op velox.PredOp) {
 	}
 	x, ok := deref(v)
 	if ok {
-		f.add(field, 0, f.pred(col, op, x))
+		f.add(field, 0, f.pred(field, col, op, x))
 	}
 }
 
@@ -323,16 +324,17 @@ func List(f *Filter, field string, vs any, col int, op velox.PredOp) {
 	}
 	xs, ok := values(vs)
 	if ok && f.width(field, len(xs)) {
-		f.add(field, len(xs), f.pred(col, op, xs))
+		f.add(field, len(xs), f.pred(field, col, op, xs))
 	}
 }
 
 // pred is the condition op on column col with v, a value or for In and
-// NotIn a []any, each converted to the column's Go type.
-func (f *Filter) pred(col int, op velox.PredOp, v any) velox.Predicate {
+// NotIn a []any, each converted to the column's Go type. A value the
+// column's type cannot hold is the client's error, of field.
+func (f *Filter) pred(field string, col int, op velox.PredOp, v any) velox.Predicate {
 	if xs, ok := v.([]any); ok {
 		for i, x := range xs {
-			c, err := f.t.Convert(col, x)
+			c, err := f.convert(field, col, x)
 			if err != nil {
 				return f.t.Pred(col, op, x) // the condition's error
 			}
@@ -340,11 +342,21 @@ func (f *Filter) pred(col int, op velox.PredOp, v any) velox.Predicate {
 		}
 		return f.t.Pred(col, op, xs)
 	}
-	c, err := f.t.Convert(col, v)
+	c, err := f.convert(field, col, v)
 	if err != nil {
 		return f.t.Pred(col, op, v)
 	}
 	return f.t.Pred(col, op, c)
+}
+
+// convert is v converted to column col's Go type; a number the type cannot
+// hold is refused as a BAD_USER_INPUT error of field.
+func (f *Filter) convert(field string, col int, v any) (any, error) {
+	c, err := f.t.Convert(col, v)
+	if errors.Is(err, velox.ErrOutOfRange) {
+		f.refuse(field, InputErrorf("invalid value: %v is out of the field's range", v))
+	}
+	return c, err
 }
 
 // deref is the value v points to; ok is false for a nil pointer.
@@ -439,7 +451,7 @@ func ID[K any](f *Filter, field string, id *string, typ string, col int, op velo
 		return
 	}
 	if k, ok := decode[K](f, field, *id, typ); ok {
-		f.add(field, 0, f.pred(col, op, k))
+		f.add(field, 0, f.pred(field, col, op, k))
 	}
 }
 
@@ -451,7 +463,7 @@ func IDList[K any](f *Filter, field string, ids []string, typ string, col int, o
 		return
 	}
 	if ks, ok := decodeAll[K](f, field, ids, typ); ok {
-		f.add(field, len(ks), f.pred(col, op, ks))
+		f.add(field, len(ks), f.pred(field, col, op, ks))
 	}
 }
 
@@ -495,7 +507,7 @@ func FKID[K any](f *Filter, field string, id *string, typ string, col int, op ve
 		return
 	}
 	if k, ok := decode[K](f, field, *id, typ); ok {
-		f.add(field, 0, f.scoped(f.pred(col, op, k), edge, target))
+		f.add(field, 0, f.scoped(f.pred(field, col, op, k), edge, target))
 	}
 }
 
@@ -505,7 +517,7 @@ func FKIDList[K any](f *Filter, field string, ids []string, typ string, col int,
 		return
 	}
 	if ks, ok := decodeAll[K](f, field, ids, typ); ok {
-		f.add(field, len(ks), f.scoped(f.pred(col, op, ks), edge, target))
+		f.add(field, len(ks), f.scoped(f.pred(field, col, op, ks), edge, target))
 	}
 }
 

@@ -2,7 +2,6 @@ package apitest
 
 import (
 	"fmt"
-	"runtime/debug"
 	"testing"
 	"unsafe"
 
@@ -25,7 +24,7 @@ func TestTableRefusesMismatches(t *testing.T) {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					err = fmt.Errorf("panic: %v\n%s", r, debug.Stack())
+					err = fmt.Errorf("panic: %v", r)
 					t.Errorf("%s: %v", name, err)
 				}
 			}()

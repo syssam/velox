@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"unsafe"
 )
@@ -314,7 +315,9 @@ func (t Table) pred(col int, op PredOp, v any) (Node, error) {
 // of another type of the same kind: a value as a GraphQL input holds it, in
 // the base type its scalar binds to, for a column of the application's own
 // Go type. Integers of any size count as one kind, and so do floats. A v of
-// the column's own type is returned as it is; a v of another kind fails.
+// the column's own type is returned as it is; a v of another kind fails. A
+// number the column's type cannot hold (300 for an int8, -1 for a uint64,
+// 1e300 for a float32) fails with ErrOutOfRange.
 func (t Table) Convert(col int, v any) (any, error) {
 	s := t.state()
 	if s.err != nil {
@@ -331,7 +334,35 @@ func (t Table) Convert(col int, v any) (any, error) {
 	if got == nil || want == nil || kindClass(got.Kind()) != kindClass(want.Kind()) || !got.ConvertibleTo(want) {
 		return nil, checkValue(s.info, &s.info.Columns[col], want, v)
 	}
-	return reflect.ValueOf(v).Convert(want).Interface(), nil
+	rv := reflect.ValueOf(v)
+	if overflows(rv, want) {
+		return nil, fmt.Errorf("velox: %s: %v for %s, a %v: %w", s.info.Name, v, s.info.Columns[col].Field, want, ErrOutOfRange)
+	}
+	return rv.Convert(want).Interface(), nil
+}
+
+// overflows reports whether v, a number, does not fit want, a number type
+// of the same kind class.
+func overflows(v reflect.Value, want reflect.Type) bool {
+	z := reflect.New(want).Elem()
+	switch {
+	case v.CanInt():
+		x := v.Int()
+		if z.CanUint() {
+			return x < 0 || z.OverflowUint(uint64(x))
+		}
+		return z.OverflowInt(x)
+	case v.CanUint():
+		x := v.Uint()
+		if z.CanInt() {
+			return x > math.MaxInt64 || z.OverflowInt(int64(x))
+		}
+		return z.OverflowUint(x)
+	case v.CanFloat():
+		x := v.Float()
+		return !math.IsInf(x, 0) && !math.IsNaN(x) && z.OverflowFloat(x)
+	}
+	return false
 }
 
 // kindClass is k, but one kind for the integers and one for the floats.
