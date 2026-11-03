@@ -67,7 +67,7 @@
 0 add-identity review users.id: adds an identity to column users.id and sets its counter past the column's largest value
 == serial-to-identity
 0 add-identity review users.id: adds an identity to column users.id and sets its counter past the column's largest value
-0 serial-to-identity review users.id: turns serial column users.id into an identity: its default and sequence are dropped
+0 serial-to-identity review users.id: turns serial column users.id into an identity that goes on from its sequence: its default and sequence are dropped
 == enum-swap-dependents
 0 drop-enum-value destructive users_role [cases_test.go]: removes 'guest' from enum type users_role; rows that hold it fail or change
 == index-name-to-table

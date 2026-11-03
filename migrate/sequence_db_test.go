@@ -57,3 +57,52 @@ func TestPostgresWideningIdentityFollows(t *testing.T) {
 		t.Errorf("the sequence is %s\n%s", typ, sqlFiles(fsys))
 	}
 }
+
+// TestPostgresSerialToIdentityKeepsCounter: a serial turned into an identity goes
+// on from where its sequence was, not from the column's largest value: the IDs of
+// rows deleted from the top were handed out once, and are not handed out again. A
+// row above the sequence still moves the counter past it.
+func TestPostgresSerialToIdentityKeepsCounter(t *testing.T) {
+	d := velox.Postgres
+	serial := func(cols ...migrate.Column) *migrate.Schema {
+		s := oneTable(d, cols...)
+		s.Tables[0].Columns[0] = migrate.Column{Name: "id", Type: "integer", Default: "nextval('t_id_seq'::regclass)", Sequence: "t_id_seq"}
+		return s
+	}
+	ident := func(cols ...migrate.Column) *migrate.Schema {
+		s := oneTable(d, cols...)
+		s.Tables[0].Columns[0] = migrate.Column{Name: "id", Type: "integer", Identity: true, Sequence: "t_id_seq"}
+		return s
+	}
+	c := migrate.Column{Name: "c", Type: "text", Nullable: true}
+	for _, named := range []string{"t_id_seq", ""} {
+		t.Run("named "+named, func(t *testing.T) {
+			db, _ := freshDB(t, d)
+			fsys := dirOf(t, d, step{to: serial(c), name: "base"})
+			mustUp(t, db, fsys)
+			mustExec(t, db, `INSERT INTO t (c) SELECT 'x' FROM generate_series(1, 10)`)
+			mustExec(t, db, `DELETE FROM t WHERE id > 8`)
+			if named == "" {
+				// A snapshot that does not name it, as an older baseline's.
+				fsys = rewrite(t, fsys, "schema.json", func(s string) string { return strings.ReplaceAll(s, `"sequence": "t_id_seq"`, `"comment": ""`) })
+			}
+			fsys = extend(t, fsys, d, step{to: ident(c), name: "ident"})
+			mustUp(t, db, fsys)
+			if id := oneValue(t, db, `INSERT INTO t (c) VALUES ('y') RETURNING id`); id != "11" {
+				t.Errorf("the next ID is %s; want 11\n%s", id, sqlFiles(fsys))
+			}
+			invariants(t, db, d, fsys, ident(c))
+		})
+	}
+	t.Run("a row past the sequence", func(t *testing.T) {
+		db, _ := freshDB(t, d)
+		fsys := dirOf(t, d, step{to: serial(), name: "base"})
+		mustUp(t, db, fsys)
+		mustExec(t, db, `INSERT INTO t (id) VALUES (40)`)
+		fsys = extend(t, fsys, d, step{to: ident(), name: "ident"})
+		mustUp(t, db, fsys)
+		if id := oneValue(t, db, `INSERT INTO t DEFAULT VALUES RETURNING id`); id != "41" {
+			t.Errorf("the next ID is %s; want 41", id)
+		}
+	})
+}

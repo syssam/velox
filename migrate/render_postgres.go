@@ -377,24 +377,37 @@ func (r *renderer) pgAlterColumn(c alterColumn) (pgParts, error) {
 	if c.What&columnIdentity != 0 {
 		switch {
 		case identity:
-			// A serial's default is dropped above; its sequence goes
-			// before the identity takes the name. One from does not
-			// name is read from the default.
+			// A serial's default is dropped above; its sequence lets go of
+			// the column and gives up its name before the identity takes
+			// it, and is dropped once the identity goes on from where it
+			// was: an ID it handed out, of a row deleted since, is not
+			// handed out again. One from does not name is read from the
+			// default.
+			next := fmt.Sprintf("coalesce(max(%s), 0) + 1", col)
+			var old string
 			if strings.HasPrefix(c.From.Default, "nextval(") {
-				seq := r.indexName(c.Table, c.From.Sequence)
+				ref := TableRef{Schema: c.Table.Schema, Name: c.From.Sequence}
 				if c.From.Sequence == "" {
-					ref, ok := nextvalSequence(c.From.Default)
-					if !ok {
+					var ok bool
+					if ref, ok = nextvalSequence(c.From.Default); !ok {
 						return pgParts{}, unnamedSequence(c)
 					}
-					seq = r.table(ref)
 				}
-				pc.stmts = append(pc.stmts, "DROP SEQUENCE "+seq)
+				seq := r.table(ref)
+				ref.Name = ddl.OldSequence(ref.Name)
+				old = r.table(ref)
+				pc.stmts = append(pc.stmts,
+					"ALTER SEQUENCE "+seq+" OWNED BY NONE",
+					"ALTER SEQUENCE "+seq+" RENAME TO "+r.ident(ref.Name))
+				next = fmt.Sprintf("greatest(%s, (SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END FROM %s))", next, old)
 			}
 			pc.stmts = append(pc.stmts,
 				"ALTER TABLE "+pc.table+" ALTER COLUMN "+col+" ADD "+r.identity(c.To),
-				fmt.Sprintf("SELECT setval(pg_get_serial_sequence(%s, %s), coalesce(max(%s), 0) + 1, false) FROM %s",
-					ddl.Literal(r.d, pc.table), ddl.Literal(r.d, c.To.Name), col, pc.table))
+				fmt.Sprintf("SELECT setval(pg_get_serial_sequence(%s, %s), %s, false) FROM %s",
+					ddl.Literal(r.d, pc.table), ddl.Literal(r.d, c.To.Name), next, pc.table))
+			if old != "" {
+				pc.stmts = append(pc.stmts, "DROP SEQUENCE "+old)
+			}
 		case c.From.Identity && !c.To.Identity:
 			act("DROP IDENTITY")
 		case c.From.Identity && c.To.Sequence != "":

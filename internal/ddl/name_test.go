@@ -73,6 +73,7 @@ func TestCapHelpers(t *testing.T) {
 	base := strings.Repeat("t", MaxName)
 	for _, c := range []struct{ got, whole string }{
 		{OldEnum(base), base + "_velox_old"},
+		{OldSequence(base), base + "_velox_old"},
 		{NotNull(base, "c"), base + "_c_not_null"},
 		{Rebuild(base), "velox_new_" + base},
 	} {
@@ -81,9 +82,10 @@ func TestCapHelpers(t *testing.T) {
 		}
 	}
 	for got, want := range map[string]string{
-		OldEnum("users_role"):     "users_role_velox_old",
-		NotNull("users", "email"): "users_email_not_null",
-		Rebuild("users"):          "velox_new_users",
+		OldEnum("users_role"):       "users_role_velox_old",
+		OldSequence("users_id_seq"): "users_id_seq_velox_old",
+		NotNull("users", "email"):   "users_email_not_null",
+		Rebuild("users"):            "velox_new_users",
 	} {
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)

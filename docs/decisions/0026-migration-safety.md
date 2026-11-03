@@ -255,6 +255,11 @@ Beside this, in the same spirit, each found by running it:
   plan rename `audit`, `Up` returned nil, and every `INSERT` into `t` then failed with
   42P01; so did a move, a drop, and a rename or drop of a column of `audit` the body
   named. The functions of every trigger are read now, as above.
+- A serial turned into an identity, as ent's tables are on their first plan, set the
+  counter past the column's largest value and dropped the sequence. IDs that had been
+  handed out to rows deleted since were handed out again: after IDs 9 and 10 were
+  deleted, the next insert got 9. The sequence now gives up its name for the identity,
+  which goes on from the larger of the two, and is dropped after.
 - A plan refuses what can never run or would cut a value whatever it says: a `USING`
   cast to a limited type becomes the assignment cast, a truncating target under
   `alter-type` is a finding, an enum reorder over an array column and a `CONVERT TO`

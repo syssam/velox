@@ -191,7 +191,10 @@ func TestRenderIdentity(t *testing.T) {
 	setval := `SELECT setval(pg_get_serial_sequence('"users"', 'id'), coalesce(max("id"), 0) + 1, false) FROM "users"`
 	for name, want := range map[string][]string{
 		"add-identity":       {add, setval},
-		"serial-to-identity": {`ALTER TABLE "users" ALTER COLUMN "id" DROP DEFAULT`, `DROP SEQUENCE "users_id_seq"`, add, setval},
+		"serial-to-identity": {`ALTER TABLE "users" ALTER COLUMN "id" DROP DEFAULT`, `ALTER SEQUENCE "users_id_seq" OWNED BY NONE`,
+			`ALTER SEQUENCE "users_id_seq" RENAME TO "users_id_seq_velox_old"`, add,
+			`SELECT setval(pg_get_serial_sequence('"users"', 'id'), greatest(coalesce(max("id"), 0) + 1, (SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END FROM "users_id_seq_velox_old")), false) FROM "users"`,
+			`DROP SEQUENCE "users_id_seq_velox_old"`},
 	} {
 		ss := caseScripts(t, caseNamed(name), velox.Postgres)
 		if len(ss) != 1 || !slices.Equal(stmtSQL(ss[0].Statements), want) {
@@ -208,15 +211,15 @@ func TestRenderIdentity(t *testing.T) {
 	from, to := models(t, caseNamed("serial-to-identity"), velox.Postgres)
 	id := column(table(from, "users"), "id")
 	id.Sequence = ""
-	for def, drop := range map[string]string{
-		`nextval('users_id_seq'::regclass)`:          `DROP SEQUENCE "users_id_seq"`,
-		`nextval('Users_ID_Seq')`:                    `DROP SEQUENCE "users_id_seq"`,
-		`nextval('"Odd""seq"'::regclass)`:            `DROP SEQUENCE "Odd""seq"`,
-		`nextval('public."users_id_seq"'::regclass)`: `DROP SEQUENCE "public"."users_id_seq"`,
+	for def, seq := range map[string][2]string{
+		`nextval('users_id_seq'::regclass)`:          {`"users_id_seq"`, `"users_id_seq_velox_old"`},
+		`nextval('Users_ID_Seq')`:                    {`"users_id_seq"`, `"users_id_seq_velox_old"`},
+		`nextval('"Odd""seq"'::regclass)`:            {`"Odd""seq"`, `"Odd""seq_velox_old"`},
+		`nextval('public."users_id_seq"'::regclass)`: {`"public"."users_id_seq"`, `"public"."users_id_seq_velox_old"`},
 	} {
 		id.Default = def
 		got := sqls(render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{}))
-		if len(got) != 4 || got[1] != drop || got[2] != add {
+		if len(got) != 6 || got[1] != "ALTER SEQUENCE "+seq[0]+" OWNED BY NONE" || got[3] != add || got[5] != "DROP SEQUENCE "+seq[1] {
 			t.Errorf("%s:\n%s", def, strings.Join(got, "\n"))
 		}
 	}

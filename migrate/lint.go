@@ -446,7 +446,7 @@ func (l *linter) alterColumn(i int, c alterColumn) {
 	if c.What&columnIdentity != 0 && l.d == velox.Postgres && !c.From.Identity && c.To.Identity {
 		l.add(i, "add-identity", Review, target, c.To.Pos, "adds an identity to column %s and sets its counter past the column's largest value", target)
 		if strings.HasPrefix(c.From.Default, "nextval(") {
-			l.add(i, "serial-to-identity", Review, target, c.To.Pos, "turns serial column %s into an identity: its default and sequence are dropped", target)
+			l.add(i, "serial-to-identity", Review, target, c.To.Pos, "turns serial column %s into an identity that goes on from its sequence: its default and sequence are dropped", target)
 		}
 	}
 	var what []string

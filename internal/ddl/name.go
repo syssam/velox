@@ -92,3 +92,7 @@ func Rebuild(table string) string { return Cap("velox_new_" + table) }
 // OldEnum is the name PostgreSQL's enum type typ takes while it is swapped
 // for a new one.
 func OldEnum(typ string) string { return Cap(typ + "_velox_old") }
+
+// OldSequence is the name a serial's sequence seq takes while an identity
+// takes its place.
+func OldSequence(seq string) string { return Cap(seq + "_velox_old") }
