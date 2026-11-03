@@ -2440,7 +2440,7 @@ func TestMutationSchemaServes(t *testing.T) {
 	_, run := app(t, map[string]string{
 		"schema/schema.go":          e2eMutSchema,
 		"gqlgen.yml":                e2eCollectGqlgen,
-		"graph/app.graphqls":        e2eMutServeSDL,
+		"graph/app.graphql":        e2eMutServeSDL,
 		"graph/schema.resolvers.go": e2eMutServeResolvers,
 		"serve_test.go":             e2eMutServeRun,
 	}, true)

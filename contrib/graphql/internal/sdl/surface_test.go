@@ -154,7 +154,7 @@ func TestSurfaceInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sch, sdl := load(t, m, readFile(t, filepath.Join("testdata", "app.graphqls")))
+	sch, sdl := load(t, m, readFile(t, filepath.Join("testdata", "app.graphql")))
 
 	for _, c := range []struct {
 		name           string
@@ -275,7 +275,7 @@ func TestSurfaceInputs(t *testing.T) {
 	}
 }
 
-// Every input object velox.graphqls declares for a type is the Surface's:
+// Every input object velox.graphql declares for a type is the Surface's:
 // its create, update and where inputs, field by field.
 func TestSurfaceMatchesSDL(t *testing.T) {
 	m := modeltest.Model(t)
@@ -283,7 +283,7 @@ func TestSurfaceMatchesSDL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sch, _ := load(t, m, readFile(t, filepath.Join("testdata", "app.graphqls")))
+	sch, _ := load(t, m, readFile(t, filepath.Join("testdata", "app.graphql")))
 	surface := map[string][]string{}
 	for _, ty := range s.Types {
 		for _, in := range []struct {

@@ -1,5 +1,5 @@
-// Package graph is the GraphQL server gqlgen generates from gen/velox.graphqls
-// and the application's app.graphqls (generated.go, models_gen.go), and its
+// Package graph is the GraphQL server gqlgen generates from gen/velox.graphql
+// and the application's app.graphql (generated.go, models_gen.go), and its
 // resolvers: Resolver here, and the root query's and the mutations' in
 // schema.resolvers.go, most of them one call into the gen package. Every
 // other field binds to gen's methods, so it needs no resolver.

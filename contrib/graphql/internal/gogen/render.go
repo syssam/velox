@@ -1,4 +1,4 @@
-// Package gogen writes the Go code velox.graphqls binds to: the Go types
+// Package gogen writes the Go code velox.graphql binds to: the Go types
 // gqlgen's autobind finds in the generated package, named after the SDL types
 // they bind to, and the methods and functions their fields resolve through.
 // It writes <label>_gql.go for each entity with a GraphQL type (its types,

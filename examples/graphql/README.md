@@ -44,14 +44,14 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    `email` has `graphql.Directives(graphql.Directive{Name: "admin"})`: see
    below.
 2. velox-gen with the plugin, which writes `gen/`: the entities, the GraphQL
-   schema `gen/velox.graphqls`, and the `*_gql.go` files it binds to (IDs,
+   schema `gen/velox.graphql`, and the `*_gql.go` files it binds to (IDs,
    connections, edges, orders, where inputs, mutation inputs with their
    `Create` and `Update` methods, `Node` and `Nodes`):
 
    ```sh
    go tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema
    ```
-3. `graph/app.graphqls`, the application's own schema: `type Mutation`,
+3. `graph/app.graphql`, the application's own schema: `type Mutation`,
    with `createPost`, `updatePost`, `deletePost`, `createLabel`,
    `updateLabel`, `createUser` and `updateUser`, which velox-graphql leaves to
    it, as entgql does; and its own query and field (below). `gqlgen.yml`:
@@ -98,7 +98,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    name `gen` declares is: `gen.LabelsConnection` for the `labels` field of
    the type `Label` (the entity `Tag`).
 
-   And `User.initials`, the application's own field (`graph/app.graphqls`
+   And `User.initials`, the application's own field (`graph/app.graphql`
    extends `User`), from the name. velox-graphql cannot see what its
    resolver reads, so a page that selects it reads every column:
 
@@ -187,7 +187,7 @@ or token), and ignores any header the client sets for it.
 ### A field for admins only
 
 `User.email` carries the application's directive `@admin`, which
-`graph/app.graphqls` declares and `main.go` implements: it lets the field
+`graph/app.graphql` declares and `main.go` implements: it lets the field
 through when the request's `X-Role` header is `admin`, and otherwise fails
 with an application error, code `FORBIDDEN`. velox-graphql copies a field's
 directives onto its `where` predicates (`email`, `emailHasPrefix`…), so the
@@ -352,7 +352,7 @@ gqlgen only).
 | `orderBy`, `where` (`and`/`or`/`not`, `hasPostsWith`) | `ORDER BY … "id"`, `WHERE …`, `EXISTS (…)` |
 | nested edges, `Post.tags` many-to-many | one statement per edge per level, whatever the parents: a `ROW_NUMBER()` window for the pages, a `GROUP BY` for `totalCount` |
 | a page's fields | only their columns, the key, the foreign keys and the order fields' columns: never `password_hash` |
-| `initials`, the application's own field on `User` (`graph/app.graphqls`) | every column, since velox-graphql cannot see what its resolver reads |
+| `initials`, the application's own field on `User` (`graph/app.graphql`) | every column, since velox-graphql cannot see what its resolver reads |
 | the same edge twice under aliases, with different arguments | one statement each, each alias its own page |
 | a request over `MaxCost` | a `COST_LIMIT_EXCEEDED` error naming the cost, and no statement |
 | a query or variables over a document limit (`MaxTokens`, `MaxFields`, `MaxFragments`, `MaxDepth`, `MaxNameBytes`, `MaxLiteralBytes`, `MaxVariableNodes`), or a body over `MaxBodyBytes` | `GRAPHQL_PARSE_FAILED` over the tokens, otherwise `BAD_USER_INPUT` naming the limit, and nothing validated or run |
@@ -367,7 +367,7 @@ gqlgen only).
 
 ### A connection over the application's own query
 
-`graph/app.graphqls` extends `Query` with `publishedPosts`. Its resolver
+`graph/app.graphql` extends `Query` with `publishedPosts`. Its resolver
 composes the connection from a query it writes, with `gen.PostsConnectionOf`
 (every Node entity has one):
 

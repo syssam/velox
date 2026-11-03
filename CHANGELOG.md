@@ -102,6 +102,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-graphql writes its schema to `gen/velox.graphql`, which was `gen/velox.graphqls`, as
+  entgql writes `ent.graphql`: the extension more GraphQL tooling reads. velox-gen's plugins
+  write `.go`, `.graphql` and `.proto` files. gqlgen.yml's `schema` globs must change to match,
+  `gen/*.graphql` (and `graph/*.graphql` for the application's own files, which the examples
+  rename to `app.graphql`); delete the old `gen/velox.graphqls`, which velox-gen no longer owns
+  and so leaves in place.
 - velox-graphql generates inputs, not mutations, as entgql does (decision 0033). The
   generated schema has `Create<T>Input` and `Update<T>Input` and no `type Mutation`; the
   application declares its mutations in its own schema file and writes their resolvers.
@@ -118,7 +124,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   of the row. `String` and `GoString` are written only for an input with a sensitive
   field, and one `<entity>InputGQL` names both inputs' fields unless they differ.
   `veloxgql.GeneratedCodeIsVersion9`: regenerate. To migrate, add to a schema file of
-  your own, which gqlgen.yml lists (`graph/*.graphqls`),
+  your own, which gqlgen.yml lists (`graph/*.graphql`),
 
   ```graphql
   type Mutation {

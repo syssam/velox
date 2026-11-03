@@ -1,11 +1,11 @@
 # gqlgen's configuration: go tool gqlgen generate, run in this directory,
 # reads it and writes graph/.
 #
-# The GraphQL schema is velox-graphql's gen/velox.graphqls plus the
-# application's own files in graph/ (app.graphqls adds publishedPosts).
+# The GraphQL schema is velox-graphql's gen/velox.graphql plus the
+# application's own files in graph/ (app.graphql adds publishedPosts).
 schema:
-  - gen/*.graphqls
-  - graph/*.graphqls
+  - gen/*.graphql
+  - graph/*.graphql
 
 exec:
   filename: graph/generated.go

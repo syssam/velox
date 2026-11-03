@@ -1,4 +1,4 @@
-// Package sdl renders the GraphQL schema, velox.graphqls, of a velox model.
+// Package sdl renders the GraphQL schema, velox.graphql, of a velox model.
 package sdl
 
 import (
@@ -18,7 +18,7 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
-// Render returns the SDL of m: the content of velox.graphqls, without the
+// Render returns the SDL of m: the content of velox.graphql, without the
 // generated-file header, which velox-gen adds.
 //
 // Each entity that is neither skipped nor a join entity becomes a type with

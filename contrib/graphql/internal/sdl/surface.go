@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
-// Surface is the GraphQL surface of a model: the types velox.graphqls
+// Surface is the GraphQL surface of a model: the types velox.graphql
 // declares for its entities, with the names the SDL gives them. The Go code
 // velox-graphql writes takes every name from here, so the Go and the SDL
 // cannot drift.

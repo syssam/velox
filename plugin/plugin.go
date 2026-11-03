@@ -37,10 +37,10 @@ type Response struct {
 // File is one file of a plugin's output.
 type File struct {
 	// Path is a slash-separated path relative to the output directory, such
-	// as "velox.graphqls" or "pb/user.proto". Its segments are not empty, ".",
+	// as "velox.graphql" or "pb/user.proto". Its segments are not empty, ".",
 	// or "..", its directories do not start with "." or "_" and are not
 	// testdata or vendor, it holds no backslash or NUL, and it ends in .go,
-	// .graphqls or .proto; it is ASCII, and a .go file's name is one go
+	// .graphql or .proto; it is ASCII, and a .go file's name is one go
 	// build always builds (not _x.go, .x.go, x_test.go or x_linux.go), as
 	// are its build constraints (not //go:build ignore, linux or prod).
 	Path    string `json:"path"`

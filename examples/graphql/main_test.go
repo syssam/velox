@@ -470,7 +470,7 @@ func TestAliasesBatch(t *testing.T) {
 }
 
 // TestAppFieldReadsAllColumns: initials is the application's own field
-// (app.graphqls), resolved from the name. velox-graphql cannot know what
+// (app.graphql), resolved from the name. velox-graphql cannot know what
 // its resolver reads, so a page that selects it reads every column.
 func TestAppFieldReadsAllColumns(t *testing.T) {
 	s := newServer(t)
@@ -768,7 +768,7 @@ func TestOrderTermsLimit(t *testing.T) {
 }
 
 // TestPublishedPosts is the application's own connection, composed from a
-// query it wrote (app.graphqls): under org 1 the published posts are
+// query it wrote (app.graphql): under org 1 the published posts are
 // Alpha, Gamma and Delta, and the connection keeps the base query's filter
 // and the scope.
 func TestPublishedPosts(t *testing.T) {

@@ -1,9 +1,9 @@
 // Command graphql serves a GraphQL API over velox entities with gqlgen. The
 // schema package declares the entities with graphql.* annotations;
 // velox-gen with the velox-graphql plugin writes gen/, the entities, the
-// GraphQL schema gen/velox.graphqls and the Go it binds to; gqlgen writes
+// GraphQL schema gen/velox.graphql and the Go it binds to; gqlgen writes
 // graph/ from gqlgen.yml. The application declares its mutations in
-// graph/app.graphqls, and writes the root query's and the mutations'
+// graph/app.graphql, and writes the root query's and the mutations'
 // resolvers, most of them one line each, and this file.
 package main
 

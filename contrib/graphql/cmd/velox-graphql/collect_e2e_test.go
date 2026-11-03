@@ -124,8 +124,8 @@ const e2eCollectGqlgen = `# gqlgen's configuration, as examples/graphql/gqlgen.y
 # of gqlgen's own dependencies.
 skip_mod_tidy: true
 schema:
-  - gen/*.graphqls
-  - graph/*.graphqls
+  - gen/*.graphql
+  - graph/*.graphql
 exec:
   filename: graph/generated.go
   package: graph

@@ -227,7 +227,7 @@ delete hide a target as well, and none is in any model. `Create<T>Input` still r
 the `<edge>ID`.
 
 **Names of introspection types work.** gqlgen's autobind binds `__Type` to a Go type
-`Type` before it applies its builtins. velox.graphqls writes `extend type __Type
+`Type` before it applies its builtins. velox.graphql writes `extend type __Type
 @goModel(...)` when the generated package has such a name, so an entity may be named
 `Type`, `Field`, `Schema`, `Directive`, `EnumValue` or `InputValue`, and an enum
 `TypeKind` or `DirectiveLocation`.

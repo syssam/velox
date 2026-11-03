@@ -1,5 +1,5 @@
 # The application's own schema file, which gqlgen loads beside
-# gen/velox.graphqls: it declares the directives the test model's annotations
+# gen/velox.graphql: it declares the directives the test model's annotations
 # use, and extends the Query.
 
 directive @cost(weight: Float, tags: [String!], meta: CostMeta) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION

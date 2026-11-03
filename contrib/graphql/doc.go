@@ -115,7 +115,7 @@
 //	go get -tool github.com/syssam/velox/contrib/graphql/cmd/velox-graphql
 //	go tool velox-gen -out gen -plugin velox-graphql ./schema
 //
-// That writes the entities, as velox-gen always does, and gen/velox.graphqls,
+// That writes the entities, as velox-gen always does, and gen/velox.graphql,
 // the GraphQL schema: a type for each entity, the Node interface, connections,
 // ordering, where inputs and mutation inputs. velox-gen owns the file like
 // its own: -check fails when the schema changed, and dropping -plugin
@@ -133,7 +133,7 @@
 //
 // The SDL binds to Go by gqlgen's @goField directive (a node's id to IDGQL, an
 // edge to <Edge>GQL) and by enum names (velox-gen's Go enum types).
-// velox.graphqls declares the directives @goField and @goModel itself, as
+// velox.graphql declares the directives @goField and @goModel itself, as
 // gqlgen documents them (gqlgen v0.17.86, docs/content/config.md), so the
 // application must not redeclare them: a second declaration fails gqlgen's
 // load. Any other directive, @goTag for one, the application declares in its
@@ -190,7 +190,7 @@
 // # Mutations
 //
 // velox-graphql writes inputs, as entgql does, not mutations: the application
-// declares its Mutation type in a schema file of its own, beside velox.graphqls,
+// declares its Mutation type in a schema file of its own, beside velox.graphql,
 // and each resolver calls the generated input's method. For an entity with
 // graphql.MutationCreate, its file has the input type Create<T>Input, in the
 // SDL and in Go, and its method
@@ -645,7 +645,7 @@
 //	    model: github.com/syssam/velox/contrib/graphql/veloxgql.PageInfo
 //
 // An enum field of the application's own Go type is an SDL enum that
-// velox.graphqls binds to that type with @goModel(model: "<package
+// velox.graphql binds to that type with @goModel(model: "<package
 // path>.<type>"), so gqlgen needs no models entry for it. The type is the
 // application's, so it implements gqlgen's graphql.Marshaler and
 // graphql.Unmarshaler itself (MarshalGQL and UnmarshalGQL, which write and

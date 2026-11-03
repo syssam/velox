@@ -103,7 +103,7 @@ On SQLite, `velox.Connect` turns foreign keys on for every connection. A
 
 - **Inputs, not mutations, as in entgql.** velox-graphql writes
   `Create<T>Input` and `Update<T>Input`, and no `type Mutation`: the
-  application declares its mutations in its own `.graphqls` file and writes
+  application declares its mutations in its own `.graphql` file and writes
   the resolvers. Where entgql's resolver calls
   `client.Todo.Create().SetInput(input).Save(ctx)`, velox's calls
   `input.Create(ctx, x)`, with `x` the row the resolver has already set what

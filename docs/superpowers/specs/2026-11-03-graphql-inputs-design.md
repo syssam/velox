@@ -34,7 +34,7 @@ compile of one package via `-toolexec`, Apple M3 Max):
 - `graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)` means "generate
   these inputs", as entgql's `entgql.Mutations` does. `graphql.MutationDelete` is
   removed (pre-1.0: a compile error, the CHANGELOG says what to write instead).
-- The application declares its mutations in its own `.graphqls`, e.g.
+- The application declares its mutations in its own `.graphql`, e.g.
   `createPost(input: CreatePostInput!): Post!`, with any name, argument name,
   payload or directive.
 - sdl rules that reserved the names `createX`/`updateX`/`deleteX` or checked the
@@ -137,7 +137,7 @@ BAD_USER_INPUT naming the `clearX` field to use; no explicit null anywhere is fi
 
 - Generated SDL: inputs, no Mutation. Generated Go: inputs + Create/Update, no
   DeleteX, no per-edge inline transaction code.
-- `examples/graphql` declares its mutations in `graph/app.graphqls`; `createPost`
+- `examples/graphql` declares its mutations in `graph/app.graphql`; `createPost`
   sets the author from the viewer (header-based, like `@admin`) and its
   `CreatePostInput` leaves `authorID` out with
   `graphql.Skip(graphql.SkipMutationCreateInput)` on the edge or field;

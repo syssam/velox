@@ -241,7 +241,7 @@ func gqlName(s string) string { return strings.ToLower(strings.ReplaceAll(s, "_"
 // run does.
 func TestNamesMatchSDL(t *testing.T) {
 	t.Run("testdata", func(t *testing.T) {
-		checkNames(t, modeltest.Model(t), readFile(t, filepath.Join("..", "sdl", "testdata", "app.graphqls")))
+		checkNames(t, modeltest.Model(t), readFile(t, filepath.Join("..", "sdl", "testdata", "app.graphql")))
 	})
 	t.Run("types", func(t *testing.T) { checkNames(t, typesModel(t)) })
 }
@@ -315,7 +315,7 @@ func checkNames(t *testing.T, m *plugin.Model, others ...string) {
 
 	sdlTypes := map[string]*gqlast.Definition{}
 	for name, def := range schema.Types {
-		if def.BuiltIn || strings.HasPrefix(name, "__") || def.Position.Src.Name != "velox.graphqls" {
+		if def.BuiltIn || strings.HasPrefix(name, "__") || def.Position.Src.Name != "velox.graphql" {
 			continue // gqlparser's, or the application's own
 		}
 		switch def.Kind {
@@ -1326,7 +1326,7 @@ func TestColumnsGQL(t *testing.T) {
 		}
 		var others []string
 		if label == "testdata" {
-			others = append(others, readFile(t, filepath.Join("..", "sdl", "testdata", "app.graphqls")))
+			others = append(others, readFile(t, filepath.Join("..", "sdl", "testdata", "app.graphql")))
 		}
 		schema, err := sdl.Check(sdlText, others...)
 		if err != nil {

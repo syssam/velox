@@ -1028,7 +1028,7 @@ func TestLimitsServed(t *testing.T) {
 		"gen/member_policy.go":      e2eLimitsPolicy,
 		"gen/scope.go":              e2eLimitsScope,
 		"gqlgen.yml":                e2eCollectGqlgen,
-		"graph/app.graphqls":        e2eLimitsSDL,
+		"graph/app.graphql":        e2eLimitsSDL,
 		"graph/schema.resolvers.go": e2eLimitsResolvers,
 		"limits_test.go":            strings.NewReplacer("'", "`", "~", "'", "_ context,", "_ context.Context,", `"database/sql"`, "\"context\"\n\t\"database/sql\"").Replace(e2eLimitsRun),
 	}, true)

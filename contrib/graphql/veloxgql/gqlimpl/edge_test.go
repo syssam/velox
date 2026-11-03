@@ -200,7 +200,7 @@ type ChildEdge { node: Child! cursor: String! }
 type PageInfo { hasNextPage: Boolean! hasPreviousPage: Boolean! }
 `
 
-var edgeSchema = gqlparser.MustLoadSchema(&ast.Source{Name: "edge.graphqls", Input: edgeSDL})
+var edgeSchema = gqlparser.MustLoadSchema(&ast.Source{Name: "edge.graphql", Input: edgeSDL})
 
 // edgeLog records the statements a DB runs, by table, and fails those fail
 // returns an error for.
