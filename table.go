@@ -34,6 +34,8 @@ import (
 //	Filled(owner unsafe.Pointer, edge int) (unsafe.Pointer, bool) // Rel.Filled
 //	Pred(col int, op PredOp, v any) Predicate // a condition on column col
 //	Has(edge int, target Table, ps ...Predicate) Predicate // Rel.HasWhere
+//	HasReadPolicy() bool // Meta.HasReadPolicy
+//	Convert(col int, v any) (any, error) // v as column col's Go type, from one of the same kind
 type Table = engine.Table
 
 // TableRows is a run of rows of one entity, one after another in memory: what
@@ -169,7 +171,7 @@ func Untyped[E any](q Query[E]) TableQuery {
 // Typed returns q as a Query of E, q's entity: the inverse of Untyped. For
 // generated code. A q of another entity gives a query that fails.
 func Typed[E any](q TableQuery) Query[E] {
-	owner, _, st, qerr, loads, after, joins := engine.TableQueryParts(q)
+	owner, _, st, loads, after, joins, qerr := engine.TableQueryParts(q)
 	db, _ := owner.(*DB)
 	m, err := metaOf[E]()
 	if m == nil {
@@ -185,3 +187,15 @@ func Typed[E any](q TableQuery) Query[E] {
 	}
 	return out
 }
+
+// AndPredicates is true when every p is: And, of untyped conditions. For
+// generated code.
+func AndPredicates(ps ...Predicate) Predicate { return engine.AndPredicates(ps...) }
+
+// OrPredicates is true when any p is: Or, of untyped conditions. For
+// generated code.
+func OrPredicates(ps ...Predicate) Predicate { return engine.OrPredicates(ps...) }
+
+// NotPredicate is true when p is false: Not, of an untyped condition. For
+// generated code.
+func NotPredicate(p Predicate) Predicate { return engine.NotPredicate(p) }

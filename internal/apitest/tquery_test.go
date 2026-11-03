@@ -302,3 +302,88 @@ func TestTableRows(t *testing.T) {
 		t.Error("Info and Err")
 	}
 }
+
+// TestPredicateLogic: AndPredicates, OrPredicates and NotPredicate render as
+// And, Or and Not of the same conditions, an Allow among them included.
+func TestPredicateLogic(t *testing.T) {
+	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	ctx := annIn7()
+	done, title := tkTable.Pred(col(Tk.Done), velox.PredEQ, true), tkTable.Pred(col(Tk.Title), velox.PredEQ, "t")
+	allow := velox.Predicate(velox.And[testmodel.Ticket]())
+	for name, c := range map[string]struct {
+		typed   velox.Pred[testmodel.Ticket]
+		untyped velox.Predicate
+	}{
+		"and":          {velox.And(Tk.Done.EQ(true), Tk.Title.EQ("t")), velox.AndPredicates(done, title)},
+		"and, allow":   {velox.And(Tk.Done.EQ(true), velox.And[testmodel.Ticket]()), velox.AndPredicates(done, allow)},
+		"and of none":  {velox.And[testmodel.Ticket](), velox.AndPredicates()},
+		"or":           {velox.Or(Tk.Done.EQ(true), Tk.Title.EQ("t")), velox.OrPredicates(done, title)},
+		"or, allow":    {velox.Or(Tk.Done.EQ(true), velox.And[testmodel.Ticket]()), velox.OrPredicates(done, allow)},
+		"or of none":   {velox.Or[testmodel.Ticket](), velox.OrPredicates()},
+		"not":          {velox.Not(Tk.Done.EQ(true)), velox.NotPredicate(done)},
+		"not of allow": {velox.Not(velox.And[testmodel.Ticket]()), velox.NotPredicate(allow)},
+	} {
+		want, wargs, werr := db.Query[testmodel.Ticket]().Where(c.typed).Limit(1).SQL(ctx)
+		got, gargs, gerr := db.QueryTable(tkTable).Where(c.untyped).Limit(1).SQL(ctx)
+		if got != want || !reflect.DeepEqual(gargs, wargs) || (gerr == nil) != (werr == nil) {
+			t.Errorf("%s:\n got %s %v %v\nwant %s %v %v", name, got, gargs, gerr, want, wargs, werr)
+		}
+	}
+}
+
+// TestTableConvert: Convert turns a value of the column's kind into the
+// column's Go type, and refuses another kind.
+func TestTableConvert(t *testing.T) {
+	type (
+		label string
+		flag  bool
+	)
+	for name, c := range map[string]struct {
+		col  int
+		v    any
+		want any
+	}{
+		"its own type":      {col(Tk.Title), "t", "t"},
+		"a string type":     {col(Tk.Title), label("t"), "t"},
+		"a bool type":       {col(Tk.Done), flag(true), true},
+		"another int size":  {col(Tk.ID), int32(3), int64(3)},
+		"an unsigned int":   {col(Tk.ID), uint8(3), int64(3)},
+		"a nullable column": {col(Tk.ParentID), int16(2), int64(2)},
+	} {
+		got, err := tkTable.Convert(c.col, c.v)
+		if err != nil || got != c.want {
+			t.Errorf("%s: %#v %v, want %#v", name, got, err, c.want)
+		}
+	}
+	for name, c := range map[string]struct {
+		col int
+		v   any
+	}{
+		"a string to a number": {col(Tk.ID), "3"},
+		"a number to a string": {col(Tk.Title), int64(3)},
+		"a float to a number":  {col(Tk.ID), 3.0},
+		"nil":                  {col(Tk.ID), nil},
+		"out of range":         {99, int64(1)},
+	} {
+		if _, err := tkTable.Convert(c.col, c.v); err == nil {
+			t.Errorf("%s: no error", name)
+		}
+	}
+	if _, err := (velox.Table{}).Convert(0, int64(1)); err == nil {
+		t.Error("the zero Table: no error")
+	}
+}
+
+// TestTableHasReadPolicy: Ticket's schema declares a Read policy; Item's
+// declares none, and the zero Table has none.
+func TestTableHasReadPolicy(t *testing.T) {
+	if !tkTable.HasReadPolicy() {
+		t.Error("Ticket: no Read policy")
+	}
+	if itTable.HasReadPolicy() {
+		t.Error("Item: a Read policy")
+	}
+	if (velox.Table{}).HasReadPolicy() {
+		t.Error("the zero Table: a Read policy")
+	}
+}

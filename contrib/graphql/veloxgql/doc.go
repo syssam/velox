@@ -81,23 +81,26 @@
 //
 // # Where
 //
-// A where input's generated method Pred turns it into a velox.Pred: a
-// gqlimpl.Filter (gqlimpl.NewFilter), one helper call for each field of the
-// input, and Filter.Pred, the And of what the helpers added. Each helper
+// A where input's generated method Pred turns it into a velox.Pred, and
+// PredicateGQL into the same condition untyped: a gqlimpl.Filter
+// (gqlimpl.NewFilter) on the entity's velox.Table, one helper call for each
+// field of the input, and Filter.Pred, the And of what the helpers added.
+// The helpers take columns and relations by index, and none is generic over
+// the entity, so they are compiled once for every where input. Each helper
 // adds nothing for a field the input does not set, and the first error stops
 // the filter:
 //   - gqlimpl.Not, And and Or nest inputs one level deeper, and HasWith
-//     through an edge (the relation's HasWhere); an empty and, or or
-//     has…With list adds nothing, and an input that sets nothing holds for
-//     every row;
-//   - gqlimpl.Value and List add a predicate of the column's handle (EQ, In,
-//     Contains…), and ValueAs and ListAs convert the input's values to the
-//     column's Go type first, with gqlimpl.AsString, AsInt, AsFloat, AsBool or
-//     AsUUID;
-//   - gqlimpl.ID, IDList, IDAs and IDListAs decode IDs with DecodeID, so an
-//     ID of another type fails with ErrWrongIDType;
-//   - gqlimpl.Is adds a Boolean predicate, or its negation: IsNil, NotNil and
-//     has<Edge>.
+//     through an edge (velox.Table.Has); an empty and, or or has…With list
+//     adds nothing, and an input that sets nothing holds for every row;
+//   - gqlimpl.Value and List add a predicate on a column (EQ, In,
+//     Contains…, velox.Table.Pred), converting the input's values to the
+//     column's Go type where they differ (velox.Table.Convert);
+//   - gqlimpl.ID and IDList decode IDs with DecodeID, so an ID of another
+//     type fails with ErrWrongIDType;
+//   - gqlimpl.Is adds IsNil or NotNil, or its negation, and Has has<Edge>;
+//   - gqlimpl.FKID, FKIDList and FKIs are ID, IDList and Is of a foreign
+//     key, which with a Read policy on the edge's target also hold the
+//     edge's EXISTS.
 //
 // The limits are LimitsFromContext(ctx)'s, read at the top of the where
 // argument. A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep. A

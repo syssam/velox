@@ -50,9 +50,9 @@ func TableQueryOf(owner any, e *DB, t Table, st Statement, err error, loads []Lo
 }
 
 // TableQueryParts is q's parts, for velox's Typed: the parts TableQueryOf
-// takes, but the Table.
-func TableQueryParts(q TableQuery) (owner any, e *DB, st Statement, err error, loads []LoadSpec, after unsafe.Pointer, joins *JoinSet) {
-	return q.owner, q.e, q.st, q.err, q.loads, q.after, q.joins
+// takes, but the Table, with the error last.
+func TableQueryParts(q TableQuery) (owner any, e *DB, st Statement, loads []LoadSpec, after unsafe.Pointer, joins *JoinSet, err error) {
+	return q.owner, q.e, q.st, q.loads, q.after, q.joins, q.err
 }
 
 // Table returns the query's Table.

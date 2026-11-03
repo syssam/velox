@@ -650,8 +650,8 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 			return fmt.Errorf("schema %s: the fields %s and %s of %s are one Go field to gqlgen, which ignores case and underscores; rename one with graphql.FieldName", e.Name, prev, w.GoName, in)
 		}
 		seen[key] = w.GoName
-		if w.GoName == "Pred" {
-			return fmt.Errorf("schema %s: the field %s of %s is the Go field Pred, which is the input's method; rename it with graphql.FieldName", e.Name, w.Name, in)
+		if w.GoName == "Pred" || w.GoName == "PredicateGQL" {
+			return fmt.Errorf("schema %s: the field %s of %s is the Go field %s, which is the input's method; rename it with graphql.FieldName", e.Name, w.Name, in, w.GoName)
 		}
 		typ, err := r.whereType(f, t, w)
 		if err != nil {

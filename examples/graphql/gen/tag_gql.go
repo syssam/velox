@@ -138,11 +138,11 @@ func LabelsConnectionOf(ctx context.Context, q velox.Query[Tag], after *veloxgql
 		return nil, err
 	}
 	if where != nil {
-		p, err := where.Pred(ctx)
+		p, err := where.PredicateGQL(ctx)
 		if err != nil {
 			return nil, err
 		}
-		b = b.Where(velox.Predicate(p))
+		b = b.Where(p)
 	}
 	c, err := gqlimpl.NewConnection(ctx, b, &tagConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order)
 	if err != nil {
@@ -273,36 +273,42 @@ type LabelWhereInput struct {
 // filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
 // gqlimpl.NewFilter's.
 func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
-	f := gqlimpl.NewFilter[Tag](ctx, "LabelWhereInput")
+	p, err := w.PredicateGQL(ctx)
+	return velox.Pred[Tag](p), err
+}
+
+// PredicateGQL is Pred, untyped, for velox-graphql's runtime.
+func (w *LabelWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, "LabelWhereInput", velox.TableOf[Tag]())
 	if w == nil {
 		return f.Pred()
 	}
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
-	gqlimpl.ID(f, "id", w.ID, "Label", Tags.ID.EQ)
-	gqlimpl.ID(f, "idNEQ", w.IDNEQ, "Label", Tags.ID.NEQ)
-	gqlimpl.IDList(f, "idIn", w.IDIn, "Label", Tags.ID.In)
-	gqlimpl.IDList(f, "idNotIn", w.IDNotIn, "Label", Tags.ID.NotIn)
-	gqlimpl.ID(f, "idGT", w.IDGT, "Label", Tags.ID.GT)
-	gqlimpl.ID(f, "idGTE", w.IDGTE, "Label", Tags.ID.GTE)
-	gqlimpl.ID(f, "idLT", w.IDLT, "Label", Tags.ID.LT)
-	gqlimpl.ID(f, "idLTE", w.IDLTE, "Label", Tags.ID.LTE)
-	gqlimpl.Value(f, "name", w.Name, Tags.Name.EQ)
-	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, Tags.Name.NEQ)
-	gqlimpl.List(f, "nameIn", w.NameIn, Tags.Name.In)
-	gqlimpl.List(f, "nameNotIn", w.NameNotIn, Tags.Name.NotIn)
-	gqlimpl.Value(f, "nameContains", w.NameContains, Tags.Name.Contains)
-	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, Tags.Name.HasPrefix)
-	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, Tags.Name.HasSuffix)
-	gqlimpl.Value(f, "rank", w.Rank, Tags.Rank.EQ)
-	gqlimpl.Value(f, "rankNEQ", w.RankNEQ, Tags.Rank.NEQ)
-	gqlimpl.List(f, "rankIn", w.RankIn, Tags.Rank.In)
-	gqlimpl.List(f, "rankNotIn", w.RankNotIn, Tags.Rank.NotIn)
-	gqlimpl.Value(f, "rankGT", w.RankGT, Tags.Rank.GT)
-	gqlimpl.Value(f, "rankGTE", w.RankGTE, Tags.Rank.GTE)
-	gqlimpl.Value(f, "rankLT", w.RankLT, Tags.Rank.LT)
-	gqlimpl.Value(f, "rankLTE", w.RankLTE, Tags.Rank.LTE)
+	gqlimpl.ID[int64](f, "id", w.ID, "Label", tagColID, velox.PredEQ)
+	gqlimpl.ID[int64](f, "idNEQ", w.IDNEQ, "Label", tagColID, velox.PredNEQ)
+	gqlimpl.IDList[int64](f, "idIn", w.IDIn, "Label", tagColID, velox.PredIn)
+	gqlimpl.IDList[int64](f, "idNotIn", w.IDNotIn, "Label", tagColID, velox.PredNotIn)
+	gqlimpl.ID[int64](f, "idGT", w.IDGT, "Label", tagColID, velox.PredGT)
+	gqlimpl.ID[int64](f, "idGTE", w.IDGTE, "Label", tagColID, velox.PredGTE)
+	gqlimpl.ID[int64](f, "idLT", w.IDLT, "Label", tagColID, velox.PredLT)
+	gqlimpl.ID[int64](f, "idLTE", w.IDLTE, "Label", tagColID, velox.PredLTE)
+	gqlimpl.Value(f, "name", w.Name, tagColName, velox.PredEQ)
+	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, tagColName, velox.PredNEQ)
+	gqlimpl.List(f, "nameIn", w.NameIn, tagColName, velox.PredIn)
+	gqlimpl.List(f, "nameNotIn", w.NameNotIn, tagColName, velox.PredNotIn)
+	gqlimpl.Value(f, "nameContains", w.NameContains, tagColName, velox.PredContains)
+	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, tagColName, velox.PredHasPrefix)
+	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, tagColName, velox.PredHasSuffix)
+	gqlimpl.Value(f, "rank", w.Rank, tagColRank, velox.PredEQ)
+	gqlimpl.Value(f, "rankNEQ", w.RankNEQ, tagColRank, velox.PredNEQ)
+	gqlimpl.List(f, "rankIn", w.RankIn, tagColRank, velox.PredIn)
+	gqlimpl.List(f, "rankNotIn", w.RankNotIn, tagColRank, velox.PredNotIn)
+	gqlimpl.Value(f, "rankGT", w.RankGT, tagColRank, velox.PredGT)
+	gqlimpl.Value(f, "rankGTE", w.RankGTE, tagColRank, velox.PredGTE)
+	gqlimpl.Value(f, "rankLT", w.RankLT, tagColRank, velox.PredLT)
+	gqlimpl.Value(f, "rankLTE", w.RankLTE, tagColRank, velox.PredLTE)
 	return f.Pred()
 }
 

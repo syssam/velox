@@ -43,13 +43,18 @@ type personName struct {
 }
 
 func (w *personName) Pred(ctx context.Context) (velox.Pred[person], error) {
-	f := gqlimpl.NewFilter[person](ctx, "PersonWhereInput")
+	p, err := w.PredicateGQL(ctx)
+	return velox.Pred[person](p), err
+}
+
+func (w *personName) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, "PersonWhereInput", velox.TableOf[person]())
 	if w == nil {
 		return f.Pred()
 	}
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
-	gqlimpl.List(f, "nameIn", w.NameIn, people.Name.In)
+	gqlimpl.List(f, "nameIn", w.NameIn, 1, velox.PredIn)
 	return f.Pred()
 }
 
@@ -61,10 +66,15 @@ type leaky struct {
 }
 
 func (w *leaky) Pred(ctx context.Context) (velox.Pred[person], error) {
+	p, err := w.PredicateGQL(ctx)
+	return velox.Pred[person](p), err
+}
+
+func (w *leaky) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
 	if w != nil && w.Leak {
-		return velox.Pred[person]{}, fmt.Errorf("sqlite: secret: %w", gqlimpl.InputErrorf("bad name"))
+		return velox.Predicate{}, fmt.Errorf("sqlite: secret: %w", gqlimpl.InputErrorf("bad name"))
 	}
-	f := gqlimpl.NewFilter[person](ctx, "LeakyWhereInput")
+	f := gqlimpl.NewFilter(ctx, "LeakyWhereInput", velox.TableOf[person]())
 	if w != nil {
 		gqlimpl.Not(f, "not", w.Not)
 	}

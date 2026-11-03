@@ -143,11 +143,11 @@ func CategoriesConnectionOf(ctx context.Context, q velox.Query[Category], after 
 		return nil, err
 	}
 	if where != nil {
-		p, err := where.Pred(ctx)
+		p, err := where.PredicateGQL(ctx)
 		if err != nil {
 			return nil, err
 		}
-		b = b.Where(velox.Predicate(p))
+		b = b.Where(p)
 	}
 	c, err := gqlimpl.NewConnection(ctx, b, &categoryConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil)
 	if err != nil {
@@ -214,23 +214,29 @@ type CategoryWhereInput struct {
 // filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
 // gqlimpl.NewFilter's.
 func (w *CategoryWhereInput) Pred(ctx context.Context) (velox.Pred[Category], error) {
-	f := gqlimpl.NewFilter[Category](ctx, "CategoryWhereInput")
+	p, err := w.PredicateGQL(ctx)
+	return velox.Pred[Category](p), err
+}
+
+// PredicateGQL is Pred, untyped, for velox-graphql's runtime.
+func (w *CategoryWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, "CategoryWhereInput", velox.TableOf[Category]())
 	if w == nil {
 		return f.Pred()
 	}
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
-	gqlimpl.ID(f, "id", w.ID, "Category", Categories.ID.EQ)
-	gqlimpl.ID(f, "idNEQ", w.IDNEQ, "Category", Categories.ID.NEQ)
-	gqlimpl.IDList(f, "idIn", w.IDIn, "Category", Categories.ID.In)
-	gqlimpl.IDList(f, "idNotIn", w.IDNotIn, "Category", Categories.ID.NotIn)
-	gqlimpl.ID(f, "idGT", w.IDGT, "Category", Categories.ID.GT)
-	gqlimpl.ID(f, "idGTE", w.IDGTE, "Category", Categories.ID.GTE)
-	gqlimpl.ID(f, "idLT", w.IDLT, "Category", Categories.ID.LT)
-	gqlimpl.ID(f, "idLTE", w.IDLTE, "Category", Categories.ID.LTE)
-	gqlimpl.Is(f, "hasParent", w.HasParent, Categories.Parent.Has)
-	gqlimpl.HasWith(f, "hasParentWith", w.HasParentWith, Categories.Parent.HasWhere)
+	gqlimpl.ID[int64](f, "id", w.ID, "Category", categoryColID, velox.PredEQ)
+	gqlimpl.ID[int64](f, "idNEQ", w.IDNEQ, "Category", categoryColID, velox.PredNEQ)
+	gqlimpl.IDList[int64](f, "idIn", w.IDIn, "Category", categoryColID, velox.PredIn)
+	gqlimpl.IDList[int64](f, "idNotIn", w.IDNotIn, "Category", categoryColID, velox.PredNotIn)
+	gqlimpl.ID[int64](f, "idGT", w.IDGT, "Category", categoryColID, velox.PredGT)
+	gqlimpl.ID[int64](f, "idGTE", w.IDGTE, "Category", categoryColID, velox.PredGTE)
+	gqlimpl.ID[int64](f, "idLT", w.IDLT, "Category", categoryColID, velox.PredLT)
+	gqlimpl.ID[int64](f, "idLTE", w.IDLTE, "Category", categoryColID, velox.PredLTE)
+	gqlimpl.Has(f, "hasParent", w.HasParent, categoryEdgeParent, velox.TableOf[Category]())
+	gqlimpl.HasWith(f, "hasParentWith", w.HasParentWith, categoryEdgeParent, velox.TableOf[Category]())
 	return f.Pred()
 }
 

@@ -187,28 +187,51 @@ func (*guarded) VeloxMeta() *velox.Meta[guarded] {
 }
 
 // TestFKScoped: with no Read policy on the target a foreign key's predicate
-// is the column's alone, and with one it holds the edge's too.
-// TestForeignKeyFilterHidden and TestForeignKeyFilterOtherScope (cmd/velox-graphql)
-// serve it.
+// is the column's alone, and with one it holds the edge's EXISTS too. person
+// has no relations, so a statement that holds an EXISTS on one fails to
+// render: that tells the two apart. person's key stands in for the foreign
+// key; it is not nullable, so FKIs's column predicate fails too, but with
+// another error. TestForeignKeyFilterHidden and
+// TestForeignKeyFilterOtherScope (cmd/velox-graphql) serve it.
 func TestFKScoped(t *testing.T) {
-	calls := 0
-	has := func() velox.Pred[person] { calls++; return velox.And[person]() }
-	op := func(int64) velox.Pred[person] { return velox.And[person]() }
-	list := func(...int64) velox.Pred[person] { return velox.And[person]() }
-	null := func() velox.Pred[person] { return velox.And[person]() }
-
-	gqlimpl.FK[open](op, has)(1)
-	gqlimpl.FKList[open](list, has)(1)
-	gqlimpl.FKIsNull[open](null, has)()
-	gqlimpl.FKNotNull[open](null, has)()
-	if calls != 0 {
-		t.Errorf("no policy, but the edge's Has ran %d times", calls)
-	}
-	gqlimpl.FK[guarded](op, has)(1)
-	gqlimpl.FKList[guarded](list, has)(1)
-	gqlimpl.FKIsNull[guarded](null, has)()
-	gqlimpl.FKNotNull[guarded](null, has)()
-	if calls != 4 {
-		t.Errorf("a Read policy, and the edge's Has ran %d times, want 4", calls)
+	db, _ := peopleDB(t)
+	ctx := context.Background()
+	id := veloxgql.EncodeID("Owner", int64(1))
+	yes := true
+	for _, c := range []struct {
+		name   string
+		target velox.Table
+		exists bool
+	}{
+		{"open", velox.TableOf[open](), false},
+		{"guarded", velox.TableOf[guarded](), true},
+	} {
+		for _, h := range []struct {
+			name string
+			add  func(f *gqlimpl.Filter)
+			col  string // the error of the column's predicate alone; "" for none
+		}{
+			{"FKID", func(f *gqlimpl.Filter) { gqlimpl.FKID[int64](f, "ownerID", &id, "Owner", 0, velox.PredEQ, 0, c.target) }, ""},
+			{"FKIDList", func(f *gqlimpl.Filter) {
+				gqlimpl.FKIDList[int64](f, "ownerIDIn", []string{id}, "Owner", 0, velox.PredIn, 0, c.target)
+			}, ""},
+			{"FKIs", func(f *gqlimpl.Filter) { gqlimpl.FKIs(f, "ownerIDNotNil", &yes, 0, velox.PredNotNull, 0, c.target) }, "not nullable"},
+		} {
+			f := gqlimpl.NewFilter(ctx, "PersonWhereInput", velox.TableOf[person]())
+			h.add(f)
+			p, err := f.Pred()
+			if err != nil {
+				t.Fatalf("%s %s: %v", c.name, h.name, err)
+			}
+			_, _, err = db.QueryTable(velox.TableOf[person]()).Where(p).Limit(1).SQL(ctx)
+			switch {
+			case c.exists && (err == nil || h.col != "" && strings.Contains(err.Error(), h.col)):
+				t.Errorf("%s %s: %v, want the EXISTS's error", c.name, h.name, err)
+			case !c.exists && h.col == "" && err != nil:
+				t.Errorf("%s %s: %v", c.name, h.name, err)
+			case !c.exists && h.col != "" && (err == nil || !strings.Contains(err.Error(), h.col)):
+				t.Errorf("%s %s: %v, want %q", c.name, h.name, err, h.col)
+			}
+		}
 	}
 }

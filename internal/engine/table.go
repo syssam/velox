@@ -299,6 +299,42 @@ func (t Table) pred(col int, op PredOp, v any) (Node, error) {
 	return Node{}, fmt.Errorf("velox: %s: no condition operator %d", s.info.Name, op)
 }
 
+// Convert returns v as column col's Go type, the one Pred takes, when v is
+// of another type of the same kind: a value as a GraphQL input holds it, in
+// the base type its scalar binds to, for a column of the application's own
+// Go type. Integers of any size count as one kind, and so do floats. A v of
+// the column's own type is returned as it is; a v of another kind fails.
+func (t Table) Convert(col int, v any) (any, error) {
+	s := t.state()
+	if s.err != nil {
+		return nil, s.err
+	}
+	if col < 0 || col >= len(s.info.Columns) {
+		return nil, fmt.Errorf("velox: %s: a value of column %d, of %d", s.info.Name, col, len(s.info.Columns))
+	}
+	want, _ := s.vals[col].(reflect.Type)
+	got := reflect.TypeOf(v)
+	if got == want {
+		return v, nil
+	}
+	if got == nil || want == nil || kindClass(got.Kind()) != kindClass(want.Kind()) || !got.ConvertibleTo(want) {
+		return nil, checkValue(s.info, &s.info.Columns[col], want, v)
+	}
+	return reflect.ValueOf(v).Convert(want).Interface(), nil
+}
+
+// kindClass is k, but one kind for the integers and one for the floats.
+func kindClass(k reflect.Kind) reflect.Kind {
+	switch k {
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8,
+		reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return reflect.Int
+	case reflect.Float32:
+		return reflect.Float64
+	}
+	return k
+}
+
 // checkValue reports a value v of a condition on column c of in that is not
 // of want, the column's Go type.
 func checkValue(in *EntityInfo, c *ColumnInfo, want reflect.Type, v any) error {
@@ -306,6 +342,17 @@ func checkValue(in *EntityInfo, c *ColumnInfo, want reflect.Type, v any) error {
 		return fmt.Errorf("velox: %s: a condition on %s takes a %v, not a %T", in.Name, c.Field, want, v)
 	}
 	return nil
+}
+
+// HasReadPolicy reports whether the entity has a Read policy, which the
+// schema declares or a scope adds: Meta.HasReadPolicy.
+func (t Table) HasReadPolicy() bool {
+	s := t.state()
+	if s.info == nil {
+		return false
+	}
+	p := InfoPolicy(s.info)
+	return p != nil && p.Read != nil
 }
 
 // Has is true when relation edge holds at least one entity of target that

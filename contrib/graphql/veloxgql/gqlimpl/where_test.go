@@ -13,23 +13,6 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-// The application's own Go types of person's columns, which a where input
-// takes as their base types and Pred converts.
-type (
-	personID   int64
-	personName string
-)
-
-// people's columns under the application's own Go types, as velox-gen
-// writes the handles of a field with a GoType.
-var peopleAs = struct {
-	ID   velox.NumberCol[person, personID]
-	Name velox.StringCol[person, personName]
-}{
-	ID:   velox.NumberCol[person, personID]{I: 0},
-	Name: velox.StringCol[person, personName]{I: 1},
-}
-
 // personWhere is a where input of person, as velox-graphql writes one: a
 // field for each predicate, and Pred with one helper call for each.
 type personWhere struct {
@@ -52,7 +35,7 @@ type personWhere struct {
 	NameHasPrefix *string
 	NameHasSuffix *string
 
-	// The name through its own Go type, as for a field of type personName.
+	// The name again, under another GraphQL name.
 	Label      *string
 	LabelNotIn []string
 
@@ -64,48 +47,46 @@ type personWhere struct {
 	AgeGTE   *int64
 	AgeLT    *int64
 	AgeLTE   *int64
-
-	// IsA is true for the people named a, and false for the others, as
-	// IsNil, NotNil and has<Edge> are.
-	IsA *bool
 }
 
 func (w *personWhere) Pred(ctx context.Context) (velox.Pred[person], error) {
-	f := gqlimpl.NewFilter[person](ctx, "PersonWhereInput")
+	p, err := w.PredicateGQL(ctx)
+	return velox.Pred[person](p), err
+}
+
+func (w *personWhere) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, "PersonWhereInput", velox.TableOf[person]())
 	if w == nil {
 		return f.Pred()
 	}
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
-	gqlimpl.ID(f, "id", w.ID, "Person", people.ID.EQ)
-	gqlimpl.IDAs(f, "idNEQ", w.IDNEQ, "Person", gqlimpl.AsInt[personID, int64], peopleAs.ID.NEQ)
-	gqlimpl.IDList(f, "idIn", w.IDIn, "Person", people.ID.In)
-	gqlimpl.IDListAs(f, "idNotIn", w.IDNotIn, "Person", gqlimpl.AsInt[personID, int64], peopleAs.ID.NotIn)
-	gqlimpl.ID(f, "idGT", w.IDGT, "Person", people.ID.GT)
-	gqlimpl.Value(f, "name", w.Name, people.Name.EQ)
-	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, people.Name.NEQ)
-	gqlimpl.List(f, "nameIn", w.NameIn, people.Name.In)
-	gqlimpl.List(f, "nameNotIn", w.NameNotIn, people.Name.NotIn)
-	gqlimpl.Value(f, "nameGT", w.NameGT, people.Name.GT)
-	gqlimpl.Value(f, "nameContains", w.NameContains, people.Name.Contains)
-	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, people.Name.HasPrefix)
-	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, people.Name.HasSuffix)
-	gqlimpl.ValueAs(f, "label", w.Label, gqlimpl.AsString[personName, string], peopleAs.Name.EQ)
-	gqlimpl.ListAs(f, "labelNotIn", w.LabelNotIn, gqlimpl.AsString[personName, string], peopleAs.Name.NotIn)
-	gqlimpl.Value(f, "age", w.Age, people.Age.EQ)
-	gqlimpl.Value(f, "ageNEQ", w.AgeNEQ, people.Age.NEQ)
-	gqlimpl.List(f, "ageIn", w.AgeIn, people.Age.In)
-	gqlimpl.List(f, "ageNotIn", w.AgeNotIn, people.Age.NotIn)
-	gqlimpl.Value(f, "ageGT", w.AgeGT, people.Age.GT)
-	gqlimpl.Value(f, "ageGTE", w.AgeGTE, people.Age.GTE)
-	gqlimpl.Value(f, "ageLT", w.AgeLT, people.Age.LT)
-	gqlimpl.Value(f, "ageLTE", w.AgeLTE, people.Age.LTE)
-	gqlimpl.Is(f, "isA", w.IsA, isA)
+	gqlimpl.ID[int64](f, "id", w.ID, "Person", 0, velox.PredEQ)
+	gqlimpl.ID[int64](f, "idNEQ", w.IDNEQ, "Person", 0, velox.PredNEQ)
+	gqlimpl.IDList[int64](f, "idIn", w.IDIn, "Person", 0, velox.PredIn)
+	gqlimpl.IDList[int64](f, "idNotIn", w.IDNotIn, "Person", 0, velox.PredNotIn)
+	gqlimpl.ID[int64](f, "idGT", w.IDGT, "Person", 0, velox.PredGT)
+	gqlimpl.Value(f, "name", w.Name, 1, velox.PredEQ)
+	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, 1, velox.PredNEQ)
+	gqlimpl.List(f, "nameIn", w.NameIn, 1, velox.PredIn)
+	gqlimpl.List(f, "nameNotIn", w.NameNotIn, 1, velox.PredNotIn)
+	gqlimpl.Value(f, "nameGT", w.NameGT, 1, velox.PredGT)
+	gqlimpl.Value(f, "nameContains", w.NameContains, 1, velox.PredContains)
+	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, 1, velox.PredHasPrefix)
+	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, 1, velox.PredHasSuffix)
+	gqlimpl.Value(f, "label", w.Label, 1, velox.PredEQ)
+	gqlimpl.List(f, "labelNotIn", w.LabelNotIn, 1, velox.PredNotIn)
+	gqlimpl.Value(f, "age", w.Age, 2, velox.PredEQ)
+	gqlimpl.Value(f, "ageNEQ", w.AgeNEQ, 2, velox.PredNEQ)
+	gqlimpl.List(f, "ageIn", w.AgeIn, 2, velox.PredIn)
+	gqlimpl.List(f, "ageNotIn", w.AgeNotIn, 2, velox.PredNotIn)
+	gqlimpl.Value(f, "ageGT", w.AgeGT, 2, velox.PredGT)
+	gqlimpl.Value(f, "ageGTE", w.AgeGTE, 2, velox.PredGTE)
+	gqlimpl.Value(f, "ageLT", w.AgeLT, 2, velox.PredLT)
+	gqlimpl.Value(f, "ageLTE", w.AgeLTE, 2, velox.PredLTE)
 	return f.Pred()
 }
-
-func isA() velox.Pred[person] { return people.Name.EQ("a") }
 
 func i64p(n int64) *int64 { return new(n) }
 
@@ -138,8 +119,8 @@ func except(ids ...int64) []int64 {
 	return slices.DeleteFunc(slices.Clone(all), func(id int64) bool { return slices.Contains(ids, id) })
 }
 
-// TestWhereOps: each helper adds its predicate, on the column's own Go type
-// or converted to the column's from the input's.
+// TestWhereOps: each helper adds its predicate. Table.Convert, which turns
+// an input's value into the column's Go type, has its tests in velox.
 func TestWhereOps(t *testing.T) {
 	db, _ := peopleDB(t)
 	for _, c := range []struct {
@@ -176,8 +157,6 @@ func TestWhereOps(t *testing.T) {
 		{"NameIn []", &personWhere{NameIn: []string{}}, nil},
 		{"NameNotIn []", &personWhere{NameNotIn: []string{}}, all},
 		{"IDIn []", &personWhere{IDIn: []string{}}, nil},
-		{"Is true", &personWhere{IsA: new(true)}, []int64{2, 4}},
-		{"Is false", &personWhere{IsA: new(false)}, except(2, 4)},
 		// Every predicate given holds.
 		{"several", &personWhere{NameIn: []string{"b", "d"}, AgeLT: i64p(95), IDNEQ: new(personID64(8))}, []int64{6, 9}},
 	} {
@@ -445,9 +424,9 @@ func TestWhereBudget(t *testing.T) {
 	// Each where argument has its own budget: a context the application
 	// holds starts one, and a nested input's context continues the one it
 	// came from.
-	f := gqlimpl.NewFilter[person](ctx, "PersonWhereInput")
+	f := gqlimpl.NewFilter(ctx, "PersonWhereInput", velox.TableOf[person]())
 	for range 9 {
-		gqlimpl.List(f, "ageIn", in(100), people.Age.In) // 909 of 1000
+		gqlimpl.List(f, "ageIn", in(100), 2, velox.PredIn) // 909 of 1000
 	}
 	spy := &ctxSpy{}
 	gqlimpl.Not(f, "not", spy)
@@ -467,9 +446,9 @@ func TestWhereBudget(t *testing.T) {
 // its Pred is called with.
 type ctxSpy struct{ ctx context.Context }
 
-func (s *ctxSpy) Pred(ctx context.Context) (velox.Pred[person], error) {
+func (s *ctxSpy) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
 	s.ctx = ctx
-	return velox.And[person](), nil
+	return velox.AndPredicates(), nil
 }
 
 // TestWhereValueLists: an In or a NotIn list of more than MaxFilterWidth
@@ -562,7 +541,7 @@ func TestFilterBudgetError(t *testing.T) {
 	if _, err := (&personWhere{NameIn: names(2), AgeIn: []int64{1, 2}}).Pred(small); !errors.Is(err, veloxgql.ErrFilterTooLarge) {
 		t.Errorf("7 nodes under MaxFilterNodes 5: %v, want ErrFilterTooLarge", err)
 	}
-	f := gqlimpl.NewFilter[person](small, "PersonWhereInput")
+	f := gqlimpl.NewFilter(small, "PersonWhereInput", velox.TableOf[person]())
 	spy := &ctxSpy{}
 	gqlimpl.Not(f, "not", spy)
 	if _, err := f.Pred(); err != nil {

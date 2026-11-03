@@ -175,11 +175,11 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("\t}")
 	if t.Where != nil {
 		f.p("\tif where != nil {")
-		f.p("\t\tp, err := where.Pred(ctx)")
+		f.p("\t\tp, err := where.PredicateGQL(ctx)")
 		f.p("\t\tif err != nil {")
 		f.p("\t\t\treturn nil, err")
 		f.p("\t\t}")
-		f.p("\t\tb = b.Where(%s.Predicate(p))", velox)
+		f.p("\t\tb = b.Where(p)")
 		f.p("\t}")
 	}
 	f.p("\tc, err := %s.NewConnection(ctx, b, &%s, %s.Args{After: after, First: first, Before: before, Last: last}, %s)", impl, connVar(t), impl, order)

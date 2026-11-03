@@ -87,6 +87,7 @@ type NullProbe struct {
 	Nulls *int
 }
 
+// Scan counts a NULL src and reads src into Dst.
 func (p *NullProbe) Scan(src any) error {
 	if src == nil {
 		*p.Nulls++
@@ -104,6 +105,7 @@ func (p *NullProbe) Scan(src any) error {
 // is nil, and any other value converts as database/sql does.
 type NilScanner struct{ Dst any }
 
+// Scan reads src into Dst: a NULL as the zero value.
 func (s *NilScanner) Scan(src any) error {
 	if src == nil {
 		reflect.ValueOf(s.Dst).Elem().SetZero()

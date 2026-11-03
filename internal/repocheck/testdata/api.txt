@@ -71,11 +71,13 @@ Statement.Tx *TxInfo
 Statement.Unbounded bool
 Statement.Where []Predicate
 Statement.Writable bool
+Table.Convert(col int, v any) (any, error)
 Table.Err() error
 Table.Field(p unsafe.Pointer, col int) any
 Table.Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Pointer) error
 Table.Filled(owner unsafe.Pointer, edge int) (unsafe.Pointer, bool)
 Table.Has(edge int, target Table, ps ...Predicate) Predicate
+Table.HasReadPolicy() bool
 Table.Info() *EntityInfo
 Table.New() unsafe.Pointer
 Table.Pred(col int, op PredOp, v any) Predicate
@@ -370,6 +372,7 @@ func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
 func Allow[E any]() Pred[E]
+func AndPredicates(ps ...Predicate) Predicate
 func And[E any](ps ...Pred[E]) Pred[E]
 func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, float64], error)
 func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, float64], error)
@@ -401,11 +404,13 @@ func MinByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K],
 func MinBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
 func MinNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
 func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
+func NotPredicate(p Predicate) Predicate
 func Not[E any](p Pred[E]) Pred[E]
 func On[E any](h Hook[E], ops ...Op) Hook[E]
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB
 func OpenConn(d Dialect, c Conn, opts ...Option) *DB
 func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB
+func OrPredicates(ps ...Predicate) Predicate
 func Or[E any](ps ...Pred[E]) Pred[E]
 func PinUntil(ctx context.Context, t time.Time)
 func PinnedUntil(ctx context.Context) time.Time

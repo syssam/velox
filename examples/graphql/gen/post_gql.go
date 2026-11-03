@@ -178,11 +178,11 @@ func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql
 		return nil, err
 	}
 	if where != nil {
-		p, err := where.Pred(ctx)
+		p, err := where.PredicateGQL(ctx)
 		if err != nil {
 			return nil, err
 		}
-		b = b.Where(velox.Predicate(p))
+		b = b.Where(p)
 	}
 	c, err := gqlimpl.NewConnection(ctx, b, &postConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order)
 	if err != nil {
@@ -336,48 +336,54 @@ type PostWhereInput struct {
 // filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
 // gqlimpl.NewFilter's.
 func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
-	f := gqlimpl.NewFilter[Post](ctx, "PostWhereInput")
+	p, err := w.PredicateGQL(ctx)
+	return velox.Pred[Post](p), err
+}
+
+// PredicateGQL is Pred, untyped, for velox-graphql's runtime.
+func (w *PostWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, "PostWhereInput", velox.TableOf[Post]())
 	if w == nil {
 		return f.Pred()
 	}
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
-	gqlimpl.ID(f, "id", w.ID, "Post", Posts.ID.EQ)
-	gqlimpl.ID(f, "idNEQ", w.IDNEQ, "Post", Posts.ID.NEQ)
-	gqlimpl.IDList(f, "idIn", w.IDIn, "Post", Posts.ID.In)
-	gqlimpl.IDList(f, "idNotIn", w.IDNotIn, "Post", Posts.ID.NotIn)
-	gqlimpl.ID(f, "idGT", w.IDGT, "Post", Posts.ID.GT)
-	gqlimpl.ID(f, "idGTE", w.IDGTE, "Post", Posts.ID.GTE)
-	gqlimpl.ID(f, "idLT", w.IDLT, "Post", Posts.ID.LT)
-	gqlimpl.ID(f, "idLTE", w.IDLTE, "Post", Posts.ID.LTE)
-	gqlimpl.ID(f, "authorID", w.AuthorID, "User", gqlimpl.FK[User](Posts.AuthorID.EQ, Posts.Author.Has))
-	gqlimpl.ID(f, "authorIDNEQ", w.AuthorIDNEQ, "User", gqlimpl.FK[User](Posts.AuthorID.NEQ, Posts.Author.Has))
-	gqlimpl.IDList(f, "authorIDIn", w.AuthorIDIn, "User", gqlimpl.FKList[User](Posts.AuthorID.In, Posts.Author.Has))
-	gqlimpl.IDList(f, "authorIDNotIn", w.AuthorIDNotIn, "User", gqlimpl.FKList[User](Posts.AuthorID.NotIn, Posts.Author.Has))
-	gqlimpl.Value(f, "title", w.Title, Posts.Title.EQ)
-	gqlimpl.Value(f, "titleNEQ", w.TitleNEQ, Posts.Title.NEQ)
-	gqlimpl.List(f, "titleIn", w.TitleIn, Posts.Title.In)
-	gqlimpl.List(f, "titleNotIn", w.TitleNotIn, Posts.Title.NotIn)
-	gqlimpl.Value(f, "titleContains", w.TitleContains, Posts.Title.Contains)
-	gqlimpl.Value(f, "titleHasPrefix", w.TitleHasPrefix, Posts.Title.HasPrefix)
-	gqlimpl.Value(f, "titleHasSuffix", w.TitleHasSuffix, Posts.Title.HasSuffix)
-	gqlimpl.Value(f, "status", w.Status, Posts.Status.EQ)
-	gqlimpl.Value(f, "statusNEQ", w.StatusNEQ, Posts.Status.NEQ)
-	gqlimpl.List(f, "statusIn", w.StatusIn, Posts.Status.In)
-	gqlimpl.List(f, "statusNotIn", w.StatusNotIn, Posts.Status.NotIn)
-	gqlimpl.Value(f, "publishedAt", w.PublishedAt, Posts.PublishedAt.EQ)
-	gqlimpl.Value(f, "publishedAtNEQ", w.PublishedAtNEQ, Posts.PublishedAt.NEQ)
-	gqlimpl.List(f, "publishedAtIn", w.PublishedAtIn, Posts.PublishedAt.In)
-	gqlimpl.List(f, "publishedAtNotIn", w.PublishedAtNotIn, Posts.PublishedAt.NotIn)
-	gqlimpl.Value(f, "publishedAtGT", w.PublishedAtGT, Posts.PublishedAt.GT)
-	gqlimpl.Value(f, "publishedAtGTE", w.PublishedAtGTE, Posts.PublishedAt.GTE)
-	gqlimpl.Value(f, "publishedAtLT", w.PublishedAtLT, Posts.PublishedAt.LT)
-	gqlimpl.Value(f, "publishedAtLTE", w.PublishedAtLTE, Posts.PublishedAt.LTE)
-	gqlimpl.Is(f, "publishedAtIsNil", w.PublishedAtIsNil, Posts.PublishedAt.IsNull)
-	gqlimpl.Is(f, "publishedAtNotNil", w.PublishedAtNotNil, Posts.PublishedAt.NotNull)
-	gqlimpl.Is(f, "hasTags", w.HasTags, Posts.Tags.Has)
-	gqlimpl.HasWith(f, "hasTagsWith", w.HasTagsWith, Posts.Tags.HasWhere)
+	gqlimpl.ID[int64](f, "id", w.ID, "Post", postColID, velox.PredEQ)
+	gqlimpl.ID[int64](f, "idNEQ", w.IDNEQ, "Post", postColID, velox.PredNEQ)
+	gqlimpl.IDList[int64](f, "idIn", w.IDIn, "Post", postColID, velox.PredIn)
+	gqlimpl.IDList[int64](f, "idNotIn", w.IDNotIn, "Post", postColID, velox.PredNotIn)
+	gqlimpl.ID[int64](f, "idGT", w.IDGT, "Post", postColID, velox.PredGT)
+	gqlimpl.ID[int64](f, "idGTE", w.IDGTE, "Post", postColID, velox.PredGTE)
+	gqlimpl.ID[int64](f, "idLT", w.IDLT, "Post", postColID, velox.PredLT)
+	gqlimpl.ID[int64](f, "idLTE", w.IDLTE, "Post", postColID, velox.PredLTE)
+	gqlimpl.FKID[int64](f, "authorID", w.AuthorID, "User", postColAuthorID, velox.PredEQ, postEdgeAuthor, velox.TableOf[User]())
+	gqlimpl.FKID[int64](f, "authorIDNEQ", w.AuthorIDNEQ, "User", postColAuthorID, velox.PredNEQ, postEdgeAuthor, velox.TableOf[User]())
+	gqlimpl.FKIDList[int64](f, "authorIDIn", w.AuthorIDIn, "User", postColAuthorID, velox.PredIn, postEdgeAuthor, velox.TableOf[User]())
+	gqlimpl.FKIDList[int64](f, "authorIDNotIn", w.AuthorIDNotIn, "User", postColAuthorID, velox.PredNotIn, postEdgeAuthor, velox.TableOf[User]())
+	gqlimpl.Value(f, "title", w.Title, postColTitle, velox.PredEQ)
+	gqlimpl.Value(f, "titleNEQ", w.TitleNEQ, postColTitle, velox.PredNEQ)
+	gqlimpl.List(f, "titleIn", w.TitleIn, postColTitle, velox.PredIn)
+	gqlimpl.List(f, "titleNotIn", w.TitleNotIn, postColTitle, velox.PredNotIn)
+	gqlimpl.Value(f, "titleContains", w.TitleContains, postColTitle, velox.PredContains)
+	gqlimpl.Value(f, "titleHasPrefix", w.TitleHasPrefix, postColTitle, velox.PredHasPrefix)
+	gqlimpl.Value(f, "titleHasSuffix", w.TitleHasSuffix, postColTitle, velox.PredHasSuffix)
+	gqlimpl.Value(f, "status", w.Status, postColStatus, velox.PredEQ)
+	gqlimpl.Value(f, "statusNEQ", w.StatusNEQ, postColStatus, velox.PredNEQ)
+	gqlimpl.List(f, "statusIn", w.StatusIn, postColStatus, velox.PredIn)
+	gqlimpl.List(f, "statusNotIn", w.StatusNotIn, postColStatus, velox.PredNotIn)
+	gqlimpl.Value(f, "publishedAt", w.PublishedAt, postColPublishedAt, velox.PredEQ)
+	gqlimpl.Value(f, "publishedAtNEQ", w.PublishedAtNEQ, postColPublishedAt, velox.PredNEQ)
+	gqlimpl.List(f, "publishedAtIn", w.PublishedAtIn, postColPublishedAt, velox.PredIn)
+	gqlimpl.List(f, "publishedAtNotIn", w.PublishedAtNotIn, postColPublishedAt, velox.PredNotIn)
+	gqlimpl.Value(f, "publishedAtGT", w.PublishedAtGT, postColPublishedAt, velox.PredGT)
+	gqlimpl.Value(f, "publishedAtGTE", w.PublishedAtGTE, postColPublishedAt, velox.PredGTE)
+	gqlimpl.Value(f, "publishedAtLT", w.PublishedAtLT, postColPublishedAt, velox.PredLT)
+	gqlimpl.Value(f, "publishedAtLTE", w.PublishedAtLTE, postColPublishedAt, velox.PredLTE)
+	gqlimpl.Is(f, "publishedAtIsNil", w.PublishedAtIsNil, postColPublishedAt, velox.PredIsNull)
+	gqlimpl.Is(f, "publishedAtNotNil", w.PublishedAtNotNil, postColPublishedAt, velox.PredNotNull)
+	gqlimpl.Has(f, "hasTags", w.HasTags, postEdgeTags, velox.TableOf[Tag]())
+	gqlimpl.HasWith(f, "hasTagsWith", w.HasTagsWith, postEdgeTags, velox.TableOf[Tag]())
 	return f.Pred()
 }
 

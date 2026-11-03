@@ -493,21 +493,22 @@ func TestGoTypes(t *testing.T) {
 		"{Field: \"LEVEL\", Col: eventColLevel},",
 		// A JSON field binds through a getter.
 		"func (x *Event) TagsGQL() (veloxgql.JSON, error) { b, err := json.Marshal(x.Tags) return veloxgql.JSON(b), err }",
-		// Pred: one helper call for each predicate, converting the input's
-		// values to the column's Go type where they differ.
-		` f := gqlimpl.NewFilter[Event](ctx, "EventWhereInput") `,
-		` gqlimpl.IDAs(f, "id", w.ID, "Event", gqlimpl.AsUUID[uuid.UUID, [16]byte], Events.ID.EQ) `,
-		` gqlimpl.IDListAs(f, "idIn", w.IDIn, "Event", gqlimpl.AsUUID[uuid.UUID, [16]byte], Events.ID.In) `,
-		` gqlimpl.Value(f, "level", w.Level, Events.Level.EQ) `,
-		` gqlimpl.Value(f, "sizeGT", w.SizeGT, Events.Size.GT) `,
-		` gqlimpl.List(f, "rankIn", w.RankIn, Events.Rank.In) `,
-		` gqlimpl.Value(f, "atLT", w.AtLT, Events.At.LT) `,
-		` gqlimpl.Is(f, "atIsNil", w.AtIsNil, Events.At.IsNull) `,
-		` gqlimpl.Value(f, "refNEQ", w.RefNEQ, Events.Ref.NEQ) `,
-		` gqlimpl.IDAs(f, "ownerID", w.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FK[Owner](Events.OwnerID.EQ, Events.Owner.Has)) `,
-		` gqlimpl.IDListAs(f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FKList[Owner](Events.OwnerID.NotIn, Events.Owner.Has)) `,
-		` gqlimpl.Is(f, "hasOwner", w.HasOwner, Events.Owner.Has) `,
-		` gqlimpl.HasWith(f, "hasOwnerWith", w.HasOwnerWith, Events.Owner.HasWhere) `,
+		// Pred: one helper call for each predicate, by column index and
+		// operator; gqlimpl converts the input's values to the column's Go
+		// type where they differ.
+		` f := gqlimpl.NewFilter(ctx, "EventWhereInput", velox.TableOf[Event]()) `,
+		` gqlimpl.ID[[16]byte](f, "id", w.ID, "Event", eventColID, velox.PredEQ) `,
+		` gqlimpl.IDList[[16]byte](f, "idIn", w.IDIn, "Event", eventColID, velox.PredIn) `,
+		` gqlimpl.Value(f, "level", w.Level, eventColLevel, velox.PredEQ) `,
+		` gqlimpl.Value(f, "sizeGT", w.SizeGT, eventColSize, velox.PredGT) `,
+		` gqlimpl.List(f, "rankIn", w.RankIn, eventColRank, velox.PredIn) `,
+		` gqlimpl.Value(f, "atLT", w.AtLT, eventColAt, velox.PredLT) `,
+		` gqlimpl.Is(f, "atIsNil", w.AtIsNil, eventColAt, velox.PredIsNull) `,
+		` gqlimpl.Value(f, "refNEQ", w.RefNEQ, eventColRef, velox.PredNEQ) `,
+		` gqlimpl.FKID[int64](f, "ownerID", w.OwnerID, "Owner", eventColOwnerID, velox.PredEQ, eventEdgeOwner, velox.TableOf[Owner]()) `,
+		` gqlimpl.FKIDList[int64](f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", eventColOwnerID, velox.PredNotIn, eventEdgeOwner, velox.TableOf[Owner]()) `,
+		` gqlimpl.Has(f, "hasOwner", w.HasOwner, eventEdgeOwner, velox.TableOf[Owner]()) `,
+		` gqlimpl.HasWith(f, "hasOwnerWith", w.HasOwnerWith, eventEdgeOwner, velox.TableOf[Owner]()) `,
 	} {
 		if !strings.Contains(ev, want) {
 			t.Errorf("no %q in\n%s", want, ev)
@@ -530,12 +531,12 @@ func TestGoTypes(t *testing.T) {
 		"{Field: \"RANK\", Col: ownerColRank},",
 		// Its where predicates take the scalar's Go type, and Pred converts.
 		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
-		` gqlimpl.IDAs(f, "id", w.ID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], Owners.ID.EQ) `,
-		` gqlimpl.ValueAs(f, "email", w.Email, gqlimpl.AsString[idspkg.Email, string], Owners.Email.EQ) `,
-		` gqlimpl.ListAs(f, "rankIn", w.RankIn, gqlimpl.AsInt[idspkg.Rank, int32], Owners.Rank.In) `,
-		` gqlimpl.ValueAs(f, "ref", w.Ref, gqlimpl.AsUUID[idspkg.Ref, uuid.UUID], Owners.Ref.EQ) `,
-		` gqlimpl.ValueAs(f, "ratioGT", w.RatioGT, gqlimpl.AsFloat[idspkg.Ratio, float64], Owners.Ratio.GT) `,
-		` gqlimpl.ValueAs(f, "on", w.On, gqlimpl.AsBool[idspkg.Flag, bool], Owners.On.EQ) `,
+		` gqlimpl.ID[int64](f, "id", w.ID, "Owner", ownerColID, velox.PredEQ) `,
+		` gqlimpl.Value(f, "email", w.Email, ownerColEmail, velox.PredEQ) `,
+		` gqlimpl.List(f, "rankIn", w.RankIn, ownerColRank, velox.PredIn) `,
+		` gqlimpl.Value(f, "ref", w.Ref, ownerColRef, velox.PredEQ) `,
+		` gqlimpl.Value(f, "ratioGT", w.RatioGT, ownerColRatio, velox.PredGT) `,
+		` gqlimpl.Value(f, "on", w.On, ownerColOn, velox.PredEQ) `,
 	} {
 		if !strings.Contains(owner, want) {
 			t.Errorf("no %q in\n%s", want, owner)
@@ -550,7 +551,6 @@ func TestGoTypes(t *testing.T) {
 			"eventColumnsGQL) }",
 			"func eventKeyGQL(x *Event) uuid.UUID { return x.ID }",
 			` "github.com/google/uuid" `,
-			` idspkg "example.com/app/ids" `,
 		},
 		owner: {
 			"func ownerNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode(\"Owner\", velox.TableOf[Owner](), ownerColID,",
@@ -697,6 +697,9 @@ func TestRenderErrors(t *testing.T) {
 		"a where field named Pred": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "pred", GoName: "Pred", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
 			"schema Thing: the field pred of ThingWhereInput is the Go field Pred"},
+		"a where field named PredicateGQL": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
+			&plugin.Field{Name: "predicateGQL", GoName: "PredicateGQL", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
+			"schema Thing: the field predicateGQL of ThingWhereInput is the Go field PredicateGQL"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Render(c.m, outPath, "gen"); err == nil || !strings.Contains(err.Error(), c.want) {

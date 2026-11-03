@@ -165,11 +165,11 @@ func UsersConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql
 		return nil, err
 	}
 	if where != nil {
-		p, err := where.Pred(ctx)
+		p, err := where.PredicateGQL(ctx)
 		if err != nil {
 			return nil, err
 		}
-		b = b.Where(velox.Predicate(p))
+		b = b.Where(p)
 	}
 	c, err := gqlimpl.NewConnection(ctx, b, &userConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order)
 	if err != nil {
@@ -314,41 +314,47 @@ type UserWhereInput struct {
 // filter over the limits of veloxgql.LimitsFromContext(ctx): the errors are
 // gqlimpl.NewFilter's.
 func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
-	f := gqlimpl.NewFilter[User](ctx, "UserWhereInput")
+	p, err := w.PredicateGQL(ctx)
+	return velox.Pred[User](p), err
+}
+
+// PredicateGQL is Pred, untyped, for velox-graphql's runtime.
+func (w *UserWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, "UserWhereInput", velox.TableOf[User]())
 	if w == nil {
 		return f.Pred()
 	}
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
-	gqlimpl.ID(f, "id", w.ID, "User", Users.ID.EQ)
-	gqlimpl.ID(f, "idNEQ", w.IDNEQ, "User", Users.ID.NEQ)
-	gqlimpl.IDList(f, "idIn", w.IDIn, "User", Users.ID.In)
-	gqlimpl.IDList(f, "idNotIn", w.IDNotIn, "User", Users.ID.NotIn)
-	gqlimpl.ID(f, "idGT", w.IDGT, "User", Users.ID.GT)
-	gqlimpl.ID(f, "idGTE", w.IDGTE, "User", Users.ID.GTE)
-	gqlimpl.ID(f, "idLT", w.IDLT, "User", Users.ID.LT)
-	gqlimpl.ID(f, "idLTE", w.IDLTE, "User", Users.ID.LTE)
-	gqlimpl.Value(f, "name", w.Name, Users.Name.EQ)
-	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, Users.Name.NEQ)
-	gqlimpl.List(f, "nameIn", w.NameIn, Users.Name.In)
-	gqlimpl.List(f, "nameNotIn", w.NameNotIn, Users.Name.NotIn)
-	gqlimpl.Value(f, "nameContains", w.NameContains, Users.Name.Contains)
-	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, Users.Name.HasPrefix)
-	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, Users.Name.HasSuffix)
-	gqlimpl.Value(f, "email", w.Email, Users.Email.EQ)
-	gqlimpl.Value(f, "emailNEQ", w.EmailNEQ, Users.Email.NEQ)
-	gqlimpl.List(f, "emailIn", w.EmailIn, Users.Email.In)
-	gqlimpl.List(f, "emailNotIn", w.EmailNotIn, Users.Email.NotIn)
-	gqlimpl.Value(f, "emailContains", w.EmailContains, Users.Email.Contains)
-	gqlimpl.Value(f, "emailHasPrefix", w.EmailHasPrefix, Users.Email.HasPrefix)
-	gqlimpl.Value(f, "emailHasSuffix", w.EmailHasSuffix, Users.Email.HasSuffix)
-	gqlimpl.Value(f, "role", w.Role, Users.Role.EQ)
-	gqlimpl.Value(f, "roleNEQ", w.RoleNEQ, Users.Role.NEQ)
-	gqlimpl.List(f, "roleIn", w.RoleIn, Users.Role.In)
-	gqlimpl.List(f, "roleNotIn", w.RoleNotIn, Users.Role.NotIn)
-	gqlimpl.Is(f, "hasPosts", w.HasPosts, Users.Posts.Has)
-	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, Users.Posts.HasWhere)
+	gqlimpl.ID[int64](f, "id", w.ID, "User", userColID, velox.PredEQ)
+	gqlimpl.ID[int64](f, "idNEQ", w.IDNEQ, "User", userColID, velox.PredNEQ)
+	gqlimpl.IDList[int64](f, "idIn", w.IDIn, "User", userColID, velox.PredIn)
+	gqlimpl.IDList[int64](f, "idNotIn", w.IDNotIn, "User", userColID, velox.PredNotIn)
+	gqlimpl.ID[int64](f, "idGT", w.IDGT, "User", userColID, velox.PredGT)
+	gqlimpl.ID[int64](f, "idGTE", w.IDGTE, "User", userColID, velox.PredGTE)
+	gqlimpl.ID[int64](f, "idLT", w.IDLT, "User", userColID, velox.PredLT)
+	gqlimpl.ID[int64](f, "idLTE", w.IDLTE, "User", userColID, velox.PredLTE)
+	gqlimpl.Value(f, "name", w.Name, userColName, velox.PredEQ)
+	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, userColName, velox.PredNEQ)
+	gqlimpl.List(f, "nameIn", w.NameIn, userColName, velox.PredIn)
+	gqlimpl.List(f, "nameNotIn", w.NameNotIn, userColName, velox.PredNotIn)
+	gqlimpl.Value(f, "nameContains", w.NameContains, userColName, velox.PredContains)
+	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, userColName, velox.PredHasPrefix)
+	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, userColName, velox.PredHasSuffix)
+	gqlimpl.Value(f, "email", w.Email, userColEmail, velox.PredEQ)
+	gqlimpl.Value(f, "emailNEQ", w.EmailNEQ, userColEmail, velox.PredNEQ)
+	gqlimpl.List(f, "emailIn", w.EmailIn, userColEmail, velox.PredIn)
+	gqlimpl.List(f, "emailNotIn", w.EmailNotIn, userColEmail, velox.PredNotIn)
+	gqlimpl.Value(f, "emailContains", w.EmailContains, userColEmail, velox.PredContains)
+	gqlimpl.Value(f, "emailHasPrefix", w.EmailHasPrefix, userColEmail, velox.PredHasPrefix)
+	gqlimpl.Value(f, "emailHasSuffix", w.EmailHasSuffix, userColEmail, velox.PredHasSuffix)
+	gqlimpl.Value(f, "role", w.Role, userColRole, velox.PredEQ)
+	gqlimpl.Value(f, "roleNEQ", w.RoleNEQ, userColRole, velox.PredNEQ)
+	gqlimpl.List(f, "roleIn", w.RoleIn, userColRole, velox.PredIn)
+	gqlimpl.List(f, "roleNotIn", w.RoleNotIn, userColRole, velox.PredNotIn)
+	gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
+	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, userEdgePosts, velox.TableOf[Post]())
 	return f.Pred()
 }
 
