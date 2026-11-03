@@ -74,6 +74,7 @@ type recreates struct {
 	uses           map[string][]mysqlUse // MySQL: by database
 	remakes        map[string]bool       // MySQL: the views and triggers the file makes or drops
 	where          map[string]string     // PostgreSQL: the schema of an unqualified table
+	built          []builtIndex          // PostgreSQL: the indexes the walk made, for a rename of one
 }
 
 // A tableState is a table of the walk: where it is in the database, its notes
@@ -342,6 +343,9 @@ func (w *recreates) statement(l *fileLinter) error {
 	case "ALTER":
 		if l.upper(1) == "TABLE" {
 			return w.alter(l)
+		}
+		if l.upper(1) == "INDEX" && w.s.d == velox.Postgres {
+			w.alterIndex(l)
 		}
 	case "EXECUTE", "CALL", "DO":
 		if lead != "DO" || w.s.d == velox.Postgres {

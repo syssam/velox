@@ -173,7 +173,8 @@ func TestObjects(t *testing.T) {
 		{spaceRelations, []string{
 			"orders", "dn_owners", "dn_owner_groups", "velox_new_orders", "velox_new_dn_owner_groups", "orders_pkey",
 			"orders_id_seq", "dn_owner_groups_pkey", "dn_owner_groups_dn_group_id", "dn_pets_dn_owner_pets",
-			"dnpet_dn_owner_pets", "dntoy_dn_owner_toys_name",
+			"dnpet_dn_owner_pets", "dntoy_dn_owner_toys_name", "dntoy_dn_owner_toys_name_velox_new",
+			"dn_owner_groups_dn_group_id_velox_new",
 		}, []string{"dn_owner_groups_id_seq", "dn_owner_groups_dn_owner_id", "dn_toys_dn_owner_toys", "orders_plain"}},
 		{spaceTypes, []string{"orders", "dn_owner_groups", "orders_plain", "dn_order_status", "mood", "orders_plain_velox_old", "mood_velox_old"},
 			[]string{"orders_text", "orders_pkey"}},

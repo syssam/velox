@@ -204,6 +204,10 @@ file up instead, drop what its units made, as `DROP INDEX CONCURRENTLY a_x_key`,
 
     migrate resolve -version N -undone
 
+A plan that changes an index `x` builds the new one as `x_velox_new` first, then drops
+`x` and renames `x_velox_new` to `x`, each a unit. A failed build leaves `x` as it was,
+with `x_velox_new` `INVALID` beside it; to give the file up, drop `x_velox_new`.
+
 A statement that waits for a table's lock waits for `lock_timeout` from `velox.json`,
 in an online file too; only `CONCURRENTLY` and `VALIDATE CONSTRAINT`, which block no
 query while they wait for older transactions, wait for as long as those take. A lock

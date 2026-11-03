@@ -318,6 +318,7 @@ type object struct {
 	what   string   // as an error names it: "table", "index 0", "enum type of field \"role\""…
 	values []string // an enum type's values; nil for other objects
 	table  string   // the table it belongs to, or is
+	helper bool     // an index's new-index helper, which clashes when the index does
 }
 
 // nameSpace is a set of names a database keeps apart from the others'.
@@ -349,8 +350,9 @@ func tableLoc(e *Entity) loc {
 // objects lists every object of g: tables (relations and types), indexes
 // (declared, unique-field, foreign-key), primary keys and identity sequences
 // (relations), enum types (types), foreign keys and checks (constraints), and
-// the helpers velox_new_<table> (relations), <type>_velox_old (types) and
-// <table>_<col>_not_null for each NOT NULL column (constraints). The indexes
+// the helpers velox_new_<table> and <index>_velox_new (relations),
+// <type>_velox_old (types) and <table>_<col>_not_null for each NOT NULL column
+// (constraints). The indexes
 // in refused are left out.
 //
 // The tables and their rebuild tables come first, then each table's other
@@ -392,6 +394,9 @@ func objects(g *Graph, refused map[*Index]bool) []object {
 		add := func(space nameSpace, name, what string, at loc) {
 			out = append(out, object{space: space, schema: e.TableSchema, name: name, owner: e.Name, at: at, what: what, table: e.Table})
 		}
+		addHelper := func(index, what string, at loc) {
+			out = append(out, object{space: spaceRelations, schema: e.TableSchema, name: ddl.NewIndex(index), owner: e.Name, at: at, what: "new-index helper of " + what, table: e.Table, helper: true})
+		}
 		id := e.Fields[0]
 		k := &keys{pk: []string{id.Column}}
 		tables[tableKey{e.TableSchema, e.Table}] = k
@@ -404,6 +409,7 @@ func objects(g *Graph, refused map[*Index]bool) []object {
 				continue
 			}
 			add(spaceRelations, ix.Name, indexAt(i), indexLoc(i, ix))
+			addHelper(ix.Name, indexAt(i), indexLoc(i, ix))
 			if ix.Where == "" {
 				k.indexes = append(k.indexes, ix.Columns)
 			}
@@ -411,6 +417,7 @@ func objects(g *Graph, refused map[*Index]bool) []object {
 		ixs, fs := fieldIndexes(e, refused, velox.Postgres)
 		for i, ix := range ixs {
 			add(spaceRelations, ix.Name, "unique index of "+fieldAt(fs[i].Name), fieldLoc(fs[i]))
+			addHelper(ix.Name, "the unique index of "+fieldAt(fs[i].Name), fieldLoc(fs[i]))
 			k.indexes = append(k.indexes, ix.Columns)
 		}
 		seen := map[string]bool{}
@@ -471,7 +478,9 @@ func objects(g *Graph, refused map[*Index]bool) []object {
 		if k := tables[tableKey{fk.Schema, fk.Table}]; k == nil || !fkIndexed(k.pk, k.indexes, fk.Column) {
 			ix := obj
 			ix.space, ix.name, ix.what = spaceRelations, fkIndexName(fk.Table, fk.Column), "foreign-key index of "+of
-			out = append(out, ix)
+			helper := ix
+			helper.name, helper.what, helper.helper = ddl.NewIndex(ix.name), "new-index helper of the foreign-key index of "+of, true
+			out = append(out, ix, helper)
 		}
 		obj.space, obj.name, obj.what = spaceConstraints, fk.Name, "foreign key of "+of
 		out = append(out, obj)

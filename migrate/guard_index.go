@@ -479,7 +479,46 @@ func (w *recreates) createIndex(l *fileLinter) {
 	stated, read := l.indexAt(j, len(l.ws))
 	stated.unique = unique
 	stated.method = cmp.Or(method, stated.method)
+	if w.s.d == velox.Postgres {
+		w.built = append(w.built, builtIndex{name: name, st: w.state(ref), ref: ref, shape: stated, read: read})
+	}
 	w.remade(w.state(ref), ref, name, stated, read)
+}
+
+// A builtIndex is an index a statement of the walk made, on the table st, named ref
+// then.
+type builtIndex struct {
+	name  string
+	st    *tableState
+	ref   TableRef
+	shape indexShape
+	read  bool
+}
+
+// alterIndex walks PostgreSQL's ALTER INDEX [IF EXISTS] a RENAME TO b. An index the
+// walk made, renamed to the name of one it dropped, makes that one again: a plan's
+// change of an index builds the new one beside the old and renames it.
+func (w *recreates) alterIndex(l *fileLinter) {
+	raw, j, ok := l.tableRef(l.skip(2, "IF", "EXISTS"))
+	if !ok || l.upper(j) != "RENAME" || l.upper(j+1) != "TO" || j+2 >= len(l.ws) {
+		return
+	}
+	name, schema := w.word(l, j-1), ""
+	if raw.Schema != "" {
+		schema = w.norm(TableRef{Schema: w.word(l, j-3)}).Schema
+	}
+	k := slices.IndexFunc(w.built, func(b builtIndex) bool {
+		return b.name == name && (raw.Schema == "" || b.ref.Schema == schema)
+	})
+	if k < 0 {
+		return
+	}
+	b := w.built[k]
+	w.built = slices.Delete(w.built, k, k+1)
+	to := w.word(l, j+2)
+	b.name = to
+	w.built = append(w.built, b)
+	w.remade(b.st, b.ref, to, b.shape, b.read)
 }
 
 // mysqlIndexAdd checks an action's ADD of an index, at i after ADD: [CONSTRAINT [x]]

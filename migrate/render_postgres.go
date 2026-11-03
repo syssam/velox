@@ -177,6 +177,9 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 		if c.Index.Constraint {
 			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " ADD CONSTRAINT " + r.ident(c.Index.Name) + " UNIQUE (" + r.idents(c.Index.Columns) + ")"}}, nil
 		}
+		if r.builtBeside[i] {
+			return pgParts{}, nil
+		}
 		if r.l.existing(c.Table) {
 			r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(c.Table, c.Index.Name), r.pgIndex(c.Table, c.Index, true))
 			return pgParts{}, nil
@@ -184,6 +187,10 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 		return pgParts{stmts: []string{r.pgIndex(c.Table, c.Index, false)}}, nil
 	case dropIndex:
 		if r.dropOnline(c) {
+			if j, ok := r.replacedOnline(i, c); ok {
+				r.buildBeside(i, j, c)
+				return pgParts{}, nil
+			}
 			r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(r.afterRename(c.Table), c.Index.Name))
 			return pgParts{}, nil
 		}
@@ -302,6 +309,37 @@ func (r *renderer) dropOnline(c dropIndex) bool {
 		}
 	}
 	return !indexNameTaken(r.to, c.Table.Schema, c.Index.Name, func(u TableRef) bool { return r.l.canon(u) == k })
+}
+
+// replacedOnline is the change after i that adds an index of the name of the one
+// c drops online, to the same table, in the online script: the index is changed.
+func (r *renderer) replacedOnline(i int, c dropIndex) (int, bool) {
+	for j := i + 1; j < len(r.cs); j++ {
+		a, ok := r.cs[j].(addIndex)
+		if ok && a.Index.Name == c.Index.Name && !a.Index.Constraint && r.l.existing(a.Table) && r.l.canon(a.Table) == r.l.canon(c.Table) {
+			return j, true
+		}
+	}
+	return 0, false
+}
+
+// buildBeside renders the change of an index: change i drops it and change j adds
+// it again. The new index is built under a helper name, the old one dropped, and the
+// new one renamed, each a unit, so that one of them holds the rows to it after
+// every unit: dropped first, a row written before the build could break a UNIQUE,
+// and the table kept neither.
+func (r *renderer) buildBeside(i, j int, c dropIndex) {
+	a := r.cs[j].(addIndex)
+	nu := a.Index
+	nu.Name = ddl.NewIndex(a.Index.Name)
+	helper := r.indexName(a.Table, nu.Name)
+	r.unit(j, "DROP INDEX CONCURRENTLY IF EXISTS "+helper, r.pgIndex(a.Table, nu, true))
+	r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(r.afterRename(c.Table), c.Index.Name))
+	r.unit(j, "ALTER INDEX IF EXISTS "+helper+" RENAME TO "+r.ident(a.Index.Name))
+	if r.builtBeside == nil {
+		r.builtBeside = map[int]bool{}
+	}
+	r.builtBeside[j] = true
 }
 
 // renamesConstraint reports whether c renames a unique constraint's index:

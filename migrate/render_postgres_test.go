@@ -237,6 +237,43 @@ func TestRenderIdentity(t *testing.T) {
 // whose sequence from does not name.
 const unnamedSequence = "migrate: users.id: the identity's sequence is not named in the snapshot; run velox-gen migrate baseline, or rename it by hand"
 
+// TestRenderIndexChange: an index changed under its name on a table that exists is
+// built beside the old one under a helper name, the old one dropped, and the new one
+// renamed, each a unit of the online script. One dropped in the main script, as a
+// constraint's, is made again under its name.
+func TestRenderIndexChange(t *testing.T) {
+	d := velox.Postgres
+	x := func(constraint bool, cols ...string) *migrate.Schema {
+		return indexed(d, migrate.Index{Name: "x", Columns: cols, Unique: true, Constraint: constraint})
+	}
+	plan, err := migrate.NewPlan(x(false, "a", "b"), x(false, "b", "a"), allowAll("add-unique"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []migrate.Statement{
+		{SQL: `DROP INDEX CONCURRENTLY IF EXISTS "x_velox_new"`, Change: 1, Unit: 0},
+		{SQL: `CREATE UNIQUE INDEX CONCURRENTLY "x_velox_new" ON "t" ("b", "a")`, Change: 1, Unit: 0},
+		{SQL: `DROP INDEX CONCURRENTLY IF EXISTS "x"`, Change: 0, Unit: 1},
+		{SQL: `ALTER INDEX IF EXISTS "x_velox_new" RENAME TO "x"`, Change: 1, Unit: 2},
+	}
+	if ss := plan.Scripts; len(ss) != 1 || ss[0].Kind != migrate.ScriptOnline || len(ss[0].Statements) != len(want) {
+		t.Fatalf("scripts:\n%s", scriptsText(ss))
+	}
+	for i, st := range plan.Scripts[0].Statements {
+		if st.SQL != want[i].SQL || st.Change != want[i].Change || st.Unit != want[i].Unit {
+			t.Errorf("statement %d: %q of change %d in unit %d; want %+v", i, st.SQL, st.Change, st.Unit, want[i])
+		}
+	}
+	plan, err = migrate.NewPlan(x(true, "a", "b"), x(false, "b", "a"), allowAll("add-unique"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sqls(plan.Scripts); !slices.Equal(got, []string{`ALTER TABLE "t" DROP CONSTRAINT "x"`,
+		`DROP INDEX CONCURRENTLY IF EXISTS "x"`, `CREATE UNIQUE INDEX CONCURRENTLY "x" ON "t" ("b", "a")`}) {
+		t.Errorf("a constraint's:\n%s", strings.Join(got, "\n"))
+	}
+}
+
 // TestRenderSequenceOnly: an identity whose sequence alone changes keeps its
 // identity: the sequence is renamed when from names it, and Render refuses
 // the change when from does not.

@@ -228,6 +228,7 @@ type renderer struct {
 
 	enum, online []Statement       // PostgreSQL: the enum and online scripts'
 	unitFindings map[int][]Finding // PostgreSQL: a change's findings for its online unit, not its first statement
+	builtBeside  map[int]bool      // PostgreSQL: an add-index change buildBeside rendered with its drop
 }
 
 // emit adds a statement that renders the changes of the indexes in changes

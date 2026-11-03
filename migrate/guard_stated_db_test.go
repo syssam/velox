@@ -436,6 +436,59 @@ func TestPostgresAddIndexSparesAnotherTables(t *testing.T) {
 	})
 }
 
+// TestPostgresIndexChangeKeepsTheOldUntilTheNew: a plan that changed a UNIQUE index
+// dropped it in one unit and made it in the next. A row written in between broke the
+// uniqueness, the new index failed on it, and the table was left with no UNIQUE and the
+// duplicate. The new index is now built under a helper name first, the old dropped,
+// and the new renamed, so one of them holds the rows to it after every unit.
+func TestPostgresIndexChangeKeepsTheOldUntilTheNew(t *testing.T) {
+	d := velox.Postgres
+	db, _ := freshDB(t, d)
+	x := func(cols ...string) *migrate.Schema {
+		return indexed(d, migrate.Index{Name: "x", Columns: cols, Unique: true})
+	}
+	fsys := dirOf(t, d, step{to: x("a", "b"), name: "base"})
+	mustUp(t, db, fsys)
+	mustExec(t, db, `INSERT INTO t (id, a, b) VALUES (1, 'p', 'q')`)
+	fsys = extend(t, fsys, d, step{to: x("b", "a"), name: "swap", opts: allowAll("add-unique")})
+	units := 0
+	hook := migrate.WithUnitDone(func(v uint64, end int) {
+		if v != 2 {
+			return
+		}
+		units++
+		if _, err := db.Exec(`INSERT INTO t (id, a, b) VALUES ($1, 'p', 'q')`, 100+end); err == nil {
+			t.Errorf("a duplicate went in after the unit that ends at statement %d\n%s", end, sqlFiles(fsys))
+		}
+	})
+	mustUp(t, db, fsys, hook)
+	if units < 2 {
+		t.Errorf("%d units ran", units)
+	}
+	if got := oneValue(t, db, "SELECT indexdef FROM pg_indexes WHERE tablename = 't' AND indexname <> 't_pkey'"); got != `CREATE UNIQUE INDEX x ON public.t USING btree (b, a)` {
+		t.Errorf("the indexes of t: %s", got)
+	}
+	invariants(t, db, d, fsys, x("b", "a"))
+
+	// A run stopped after any unit resumes to the same end.
+	for _, stop := range []int{2, 3} {
+		db, _ := freshDB(t, d)
+		mustUp(t, db, dirOf(t, d, step{to: x("a", "b"), name: "base"}))
+		ctx, cancel := context.WithCancel(context.Background())
+		_, err := migrate.Up(ctx, db, fsys, migrate.WithUnitDone(func(v uint64, end int) {
+			if v == 2 && end == stop {
+				cancel()
+			}
+		}))
+		cancel()
+		if err == nil {
+			t.Fatalf("stopped after statement %d: Up did not stop", stop)
+		}
+		mustUp(t, db, fsys, migrate.WithResume())
+		invariants(t, db, d, fsys, x("b", "a"))
+	}
+}
+
 // TestIndexChangeReadsWhatTheStatementWrites: a plan that changes an index drops it
 // and makes it from the model. What the model has no place for went with it, on
 // PostgreSQL and on MySQL, past the guard.

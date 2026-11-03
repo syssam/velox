@@ -262,6 +262,16 @@ Beside this, in the same spirit, each found by running it:
   under one name is now refused, by the dropped one's table, when the two are on
   different tables in one file; a plan that moves a name between tables drops it in
   its main file and makes it in the online one, which is let through.
+- A PostgreSQL plan that changed an index on a table that exists dropped it in one
+  online unit and made it in the next. A row written in between could break a
+  `UNIQUE`: run against PostgreSQL 18, a duplicate inserted after the drop made the
+  build fail, and the table kept neither index and the duplicate. The new index is
+  now built first as `ddl.NewIndex(x)`, `x_velox_new`, then `x` is dropped and the new
+  one renamed, each a unit that runs again as it is, so one of them holds the rows
+  after every unit. Codegen reserves the helper's name. The walk follows `ALTER INDEX
+  … RENAME TO` of an index the file made, and compares it with the one dropped under
+  the new name. A constraint's index, which the main file drops, is still made again
+  under its name in the online file, with no index in between.
 - A serial turned into an identity, as ent's tables are on their first plan, set the
   counter past the column's largest value and dropped the sequence. IDs that had been
   handed out to rows deleted since were handed out again: after IDs 9 and 10 were

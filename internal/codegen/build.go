@@ -752,6 +752,8 @@ func (b *builder) namespaces() {
 		switch {
 		case o.space == spaceTypes && o.isTable() && p.isTable():
 			continue
+		case o.helper && p.helper:
+			continue // their indexes clash, and that is reported
 		case o.values != nil && p.values != nil:
 			if !slices.Equal(o.values, p.values) {
 				other := "this schema"

@@ -93,6 +93,10 @@ func Rebuild(table string) string { return Cap("velox_new_" + table) }
 // for a new one.
 func OldEnum(typ string) string { return Cap(typ + "_velox_old") }
 
+// NewIndex is the name PostgreSQL's index name takes while it is built
+// again beside the one it replaces.
+func NewIndex(name string) string { return Cap(name + "_velox_new") }
+
 // OldSequence is the name a serial's sequence seq takes while an identity
 // takes its place.
 func OldSequence(seq string) string { return Cap(seq + "_velox_old") }
