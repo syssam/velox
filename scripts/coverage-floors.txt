@@ -76,7 +76,7 @@ github.com/syssam/velox/contrib/graphql/internal/modeltest 0.0
 github.com/syssam/velox/contrib/graphql/internal/sdl 93.1
 github.com/syssam/velox/contrib/graphql/veloxgql 92.3
 github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl 95.6
-github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore 0.0
+github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore 98.6
 
 # examples module
 github.com/syssam/velox/examples/graphql 76.4
