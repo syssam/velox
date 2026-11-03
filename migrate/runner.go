@@ -30,6 +30,9 @@ type options struct {
 	statements    int           // ResolveStatements': WithStatements
 	statementsSet bool
 	resume        bool
+	force         string // Resolve's: WithForce
+	forceSet      bool
+	scratch       *sql.DB // Resolve's: WithScratch
 
 	baseline    uint64
 	baselineSet bool // 0 is a version: 0000 is a valid file
@@ -144,7 +147,7 @@ type Applied struct {
 	Duration   time.Duration
 	Dirty      bool
 	Statements int    // statements of completed units, of a file run statement by statement
-	Error      string // the failure that left it dirty
+	Error      string // the failure that left it dirty; on a clean row, "forced: " and why, when Resolve recorded it by WithForce
 }
 
 // A Report is what Up did.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/syssam/velox"
@@ -52,10 +53,27 @@ func WithStatements(k int) Option {
 // velox.sum does not stop it. Resolve reads the history itself, not against
 // dir's other files, so an edited file does not stop it either. A version
 // not in the state the Resolution needs is an *Error of Code "history";
-// an unknown Resolution, or a count out of range, one of Code "resolution".
+// an unknown Resolution, a count out of range, or WithForce with no reason,
+// one of Code "resolution".
+//
+// ResolveApplied and ResolveAdopted check the database before they record.
+// With m the highest version the history would then hold, the database must
+// hold what the directory says it holds at m: schema.json when m is the
+// directory's last file, else the files up to m applied to WithScratch's
+// database and inspected there. As Drift does, only the tables and enum
+// types of that schema are read, so a table it does not name is no
+// difference. A change is an *Error of Code "drift" listing each, as
+// velox-gen migrate drift prints them. A claim that cannot be checked is
+// one of Code "unverified": a dirty version left, a version above the
+// directory's last file, a file pending below m, no scratch database on
+// PostgreSQL or MySQL, or files that fail there, as one whose rows a hand
+// fix made good may. WithForce records either, and drift warnings alone
+// come as notes. ResolveUndone, ResolveStatements and ResolveForgotten
+// check nothing: each leaves the version for a run, or takes the claim away.
+//
 // Like Up, it uses one connection of db, its session in UTC, and closes it
-// after. Of the Options, it takes WithLockWait, WithLogger, WithNotes and
-// WithStatements.
+// after. Of the Options, it takes WithLockWait, WithLogger, WithNotes,
+// WithStatements, WithForce and WithScratch.
 func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resolution, opts ...Option) error {
 	if r < ResolveApplied || r > ResolveForgotten {
 		return &Error{Code: "resolution", Reason: fmt.Sprintf("no resolution %d; use ResolveApplied, ResolveUndone, ResolveStatements, ResolveAdopted or ResolveForgotten", r)}
@@ -63,6 +81,9 @@ func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resol
 	o := optionsOf(opts)
 	if r == ResolveStatements && !o.statementsSet {
 		return &Error{Code: "resolution", Reason: "ResolveStatements needs WithStatements"}
+	}
+	if o.forceSet && strings.TrimSpace(o.force) == "" {
+		return &Error{Code: "resolution", Reason: "WithForce needs a reason"}
 	}
 	var d *Dir
 	var cfg Config
@@ -96,7 +117,7 @@ func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resol
 			return wrap(ctx, what, err)
 		}
 	}
-	err = s.resolve(ctx, d, version, r, o)
+	err = s.resolve(ctx, dir, d, version, r, o)
 	if s.d == velox.SQLite {
 		if err == nil {
 			if _, cerr := s.conn.ExecContext(ctx, "COMMIT"); cerr != nil {
@@ -156,8 +177,8 @@ func History(ctx context.Context, db *sql.DB, dir fs.FS) ([]Applied, error) {
 	return rows, nil
 }
 
-// resolve is Resolve's read and write of the history.
-func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resolution, o options) error {
+// resolve is Resolve's read and write of the history; fsys is dir's files.
+func (s *session) resolve(ctx context.Context, fsys fs.FS, dir *Dir, version uint64, r Resolution, o options) error {
 	what := fmt.Sprintf("resolving version %d in %s", version, s.cfg.Table)
 	rows, _, err := s.history(ctx)
 	if err != nil {
@@ -167,7 +188,7 @@ func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resol
 	table, where := s.historyTable(), s.q("version")
 	switch {
 	case i < 0 && r == ResolveApplied:
-		return s.markPending(ctx, dir, rows, version)
+		return s.markPending(ctx, fsys, dir, rows, version, o)
 	case i < 0:
 		return &Error{Code: "history", Reason: fmt.Sprintf("version %d is not in the history table %s", version, s.cfg.Table)}
 	case r == ResolveAdopted || r == ResolveForgotten:
@@ -175,7 +196,7 @@ func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resol
 			return &Error{Code: "history", Reason: fmt.Sprintf("version %d is dirty; end that first, with -resume, -undone or -applied", version)}
 		}
 		if r == ResolveAdopted {
-			return s.adopt(ctx, dir, rows[i])
+			return s.adopt(ctx, fsys, dir, rows, rows[i], o)
 		}
 		return s.forget(ctx, dir, rows, rows[i])
 	case !rows[i].Dirty:
@@ -202,9 +223,20 @@ func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resol
 		_, err = s.conn.ExecContext(ctx, q, o.statements, int64(version))
 		return wrap(ctx, what, err)
 	}
+	after := slices.Clone(rows)
+	after[i].Dirty = false
+	forced, err := s.checkClaim(ctx, fsys, dir, claim{
+		after: after,
+		not:   fmt.Sprintf("version %d is not marked applied", version),
+		done:  fmt.Sprintf("version %d is marked applied", version),
+		ways:  []string{"finish its statements by hand and resolve again", "record how many ran with -statements k and run migrate apply -resume"},
+	}, o)
+	if err != nil {
+		return err
+	}
 	q := fmt.Sprintf("UPDATE %s SET %s = %s, %s = %s, %s = %s WHERE %s = %s", table,
 		s.q("dirty"), s.ph(1), s.q("statements"), s.ph(2), s.q("error"), s.ph(3), where, s.ph(4))
-	_, err = s.conn.ExecContext(ctx, q, false, len(f.Statements), "", int64(version))
+	_, err = s.conn.ExecContext(ctx, q, false, len(f.Statements), forced, int64(version))
 	return wrap(ctx, what, err)
 }
 
@@ -212,7 +244,7 @@ func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resol
 // as applied with no statements, as none ran. A pending file below it is refused:
 // the history is linear. So is any while a version is dirty: -applied there meant
 // that version, and would otherwise skip a whole file in silence.
-func (s *session) markPending(ctx context.Context, dir *Dir, rows []Applied, version uint64) error {
+func (s *session) markPending(ctx context.Context, fsys fs.FS, dir *Dir, rows []Applied, version uint64, o options) error {
 	j := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == version })
 	if j < 0 {
 		return &Error{Code: "history", Reason: fmt.Sprintf("version %d is not in the history table %s, and the directory has no file for it", version, s.cfg.Table)}
@@ -226,20 +258,43 @@ func (s *session) markPending(ctx context.Context, dir *Dir, rows []Applied, ver
 		return &Error{Code: "history", Reason: fmt.Sprintf("version %d is dirty; end that first, with -resume, -undone or -applied on version %d, before marking version %d applied", rows[k].Version, rows[k].Version, version)}
 	}
 	f := dir.Files[j]
-	s.say(fmt.Sprintf("%s is recorded as applied, and none of it ran", f.Path))
 	a := Applied{Version: version, Name: f.Name, Sum: f.Sum, AppliedAt: time.Now().UTC().Truncate(time.Microsecond)}
+	forced, err := s.checkClaim(ctx, fsys, dir, claim{
+		after: append(slices.Clone(rows), a),
+		not:   fmt.Sprintf("version %d is not marked applied", version),
+		done:  fmt.Sprintf("version %d is marked applied", version),
+		ways:  []string{fmt.Sprintf("make the database hold what %s makes and resolve again", f.Path), "let migrate apply run it"},
+	}, o)
+	if err != nil {
+		return err
+	}
+	a.Error = forced
+	s.say(fmt.Sprintf("%s is recorded as applied, and none of it ran", f.Path))
 	return wrap(ctx, fmt.Sprintf("recording version %d in %s", version, s.cfg.Table), s.record(ctx, a))
 }
 
-// adopt is ResolveAdopted of the clean row.
-func (s *session) adopt(ctx context.Context, dir *Dir, row Applied) error {
+// adopt is ResolveAdopted of the clean row, one of rows. A forced adopt
+// writes the row's Error; a checked one keeps it.
+func (s *session) adopt(ctx context.Context, fsys fs.FS, dir *Dir, rows []Applied, row Applied, o options) error {
 	j := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == row.Version })
 	if j < 0 {
 		return &Error{Code: "history", Reason: fmt.Sprintf("version %d: the directory has no file to adopt; to take the row away use -forget", row.Version)}
 	}
 	f := dir.Files[j]
-	q := fmt.Sprintf("UPDATE %s SET %s = %s, %s = %s WHERE %s = %s", s.historyTable(), s.q("name"), s.ph(1), s.q("checksum"), s.ph(2), s.q("version"), s.ph(3))
-	if _, err := s.conn.ExecContext(ctx, q, f.Name, f.Sum, int64(row.Version)); err != nil {
+	forced, err := s.checkClaim(ctx, fsys, dir, claim{
+		after: rows,
+		not:   fmt.Sprintf("version %d is not adopted", row.Version),
+		done:  fmt.Sprintf("version %d is adopted", row.Version),
+		ways:  []string{fmt.Sprintf("make the database hold what %s now makes and resolve again", f.Path), "restore the file"},
+	}, o)
+	if err != nil {
+		return err
+	}
+	if forced == "" {
+		forced = row.Error
+	}
+	q := fmt.Sprintf("UPDATE %s SET %s = %s, %s = %s, %s = %s WHERE %s = %s", s.historyTable(), s.q("name"), s.ph(1), s.q("checksum"), s.ph(2), s.q("error"), s.ph(3), s.q("version"), s.ph(4))
+	if _, err := s.conn.ExecContext(ctx, q, f.Name, f.Sum, forced, int64(row.Version)); err != nil {
 		return wrap(ctx, fmt.Sprintf("resolving version %d in %s", row.Version, s.cfg.Table), err)
 	}
 	s.say(fmt.Sprintf("version %d was %s, checksum %s, and is now %s, checksum %s; none of the file ran, so the database holds what the old one did", row.Version, versionFile(row.Version, row.Name), row.Sum, f.Path, f.Sum))

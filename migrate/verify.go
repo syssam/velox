@@ -28,7 +28,7 @@ func Verify(ctx context.Context, db *sql.DB, dir fs.FS) error {
 	if db == nil {
 		return &Error{Code: "nil", Reason: "Verify needs a database"}
 	}
-	if err := verifyEmpty(ctx, db, d.Config); err != nil {
+	if err := verifyEmpty(ctx, db, d.Config, "Verify needs an empty database"); err != nil {
 		return err
 	}
 	if _, err := Up(ctx, db, dir); err != nil {
@@ -106,16 +106,16 @@ func strayTables(ctx context.Context, db *sql.DB, d *Dir) ([]string, error) {
 	return out, nil
 }
 
-// verifyEmpty refuses db unless its default schema holds no table but the
-// history table, and that no row.
-func verifyEmpty(ctx context.Context, db *sql.DB, cfg Config) error {
+// verifyEmpty refuses db, with need as the reason, unless its default
+// schema holds no table but the history table, and that no row.
+func verifyEmpty(ctx context.Context, db *sql.DB, cfg Config, need string) error {
 	s, err := open(ctx, db, cfg, defaultLockWait) // as Up waits after
 	if err != nil {
 		return err
 	}
 	defer s.close()
 	refuse := func(object string) error {
-		return &Error{Code: "drift", Object: object, Reason: "Verify needs an empty database"}
+		return &Error{Code: "drift", Object: object, Reason: need}
 	}
 	var found string
 	err = eachRow(ctx, s.conn, verifyTablesQuery[cfg.Dialect], nil, func(rows *sql.Rows) error {

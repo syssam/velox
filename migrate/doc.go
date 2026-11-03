@@ -97,11 +97,18 @@
 //   - "retry": MySQL refused a file's first statement with nothing changed, and
 //     no version is recorded: run Up again, once the cause is gone if it is not
 //     a lock.
-//   - "resolution": Resolve was given no Resolution it knows, or a count its file
-//     does not have.
+//   - "resolution": Resolve was given no Resolution it knows, a count its file
+//     does not have, or WithForce with no reason.
 //   - "drift": Verify was given a database that is not empty, or the
 //     database differs from schema.json after the directory's files ran, a
-//     table schema.json does not name included.
+//     table schema.json does not name included; or Resolve found the database
+//     differs from what the directory says it holds after the version, or was
+//     given a scratch database that is not empty.
+//   - "unverified": Resolve cannot read what the directory says the
+//     database holds after the version: a dirty version is left, a version is
+//     above the directory's last file, a file is pending below, files are
+//     pending above and PostgreSQL or MySQL has no WithScratch, or the files
+//     fail on the scratch database.
 //   - "baseline": Baseline found none of the schema's tables, a foreign key
 //     to a table outside them, or a sequence default the column does not
 //     own; or Up was given WithBaseline where it cannot record.
@@ -168,7 +175,9 @@
 // statements of its completed units: one that fails leaves its version
 // dirty, a [*DirtyError] that stops every later run until [WithResume]
 // continues it from its first incomplete unit or [Resolve] marks it applied
-// or undone. A run killed while a statement ran may have applied it, and on
+// or undone. Resolve marks a version applied, or adopts an edited file, only
+// when the database holds what the directory says it does after the
+// version, or under [WithForce]. A run killed while a statement ran may have applied it, and on
 // MySQL a cancelled statement may still have finished on the server, so
 // check the failed statement before resuming or undoing: resuming runs it
 // again. [Status] reads the directory against the history without applying.

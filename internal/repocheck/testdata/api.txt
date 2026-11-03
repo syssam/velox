@@ -908,10 +908,12 @@ func Sum(fsys fs.FS) ([]byte, error)
 func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, error)
 func Verify(ctx context.Context, db *sql.DB, dir fs.FS) error
 func WithBaseline(version uint64) Option
+func WithForce(reason string) Option
 func WithLockWait(d time.Duration) Option
 func WithLogger(l *slog.Logger) Option
 func WithNotes(f func(note string)) Option
 func WithResume() Option
+func WithScratch(db *sql.DB) Option
 func WithStatements(k int) Option
 func WithTarget(version uint64) Option
 type Allow struct { Code, Target string }
