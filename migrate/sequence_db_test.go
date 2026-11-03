@@ -1,6 +1,7 @@
 package migrate_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -106,3 +107,32 @@ func TestPostgresSerialToIdentityKeepsCounter(t *testing.T) {
 		}
 	})
 }
+
+// TestPostgresIdentityToSerialRefused: an identity turned back into a serial
+// is refused when it is planned. DROP IDENTITY drops the sequence the serial's
+// default names, so the file could only roll back. An identity that becomes a
+// plain integer, with no default, is still planned and runs.
+func TestPostgresIdentityToSerialRefused(t *testing.T) {
+	d := velox.Postgres
+	with := func(id migrate.Column) *migrate.Schema {
+		s := oneTable(d)
+		s.Tables[0].Columns[0] = id
+		return s
+	}
+	ident := with(migrate.Column{Name: "id", Type: "integer", Identity: true, Sequence: "t_id_seq"})
+	serial := with(migrate.Column{Name: "id", Type: "integer", Default: "nextval('t_id_seq'::regclass)", Sequence: "t_id_seq"})
+	_, err := migrate.NewPlan(ident, serial, migrate.PlanOptions{})
+	var e *migrate.Error
+	if !errors.As(err, &e) || e.Code != "render" || err.Error() != identityToSerial {
+		t.Fatalf("identity to serial: %v", err)
+	}
+	db, _ := freshDB(t, d)
+	fsys := dirOf(t, d, step{to: ident, name: "base"})
+	mustUp(t, db, fsys)
+	plain := with(migrate.Column{Name: "id", Type: "integer"})
+	fsys = extend(t, fsys, d, step{to: plain, name: "plain"})
+	mustUp(t, db, fsys)
+	invariants(t, db, d, fsys, plain)
+}
+
+const identityToSerial = "migrate: t.id: an identity is not turned back into a serial: DROP IDENTITY drops the sequence the serial's default names; keep the identity, or write the change by hand"

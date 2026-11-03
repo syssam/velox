@@ -447,6 +447,13 @@ func (r *renderer) pgAlterColumn(c alterColumn) (pgParts, error) {
 				pc.stmts = append(pc.stmts, "DROP SEQUENCE "+old)
 			}
 		case c.From.Identity && !c.To.Identity:
+			// DROP IDENTITY drops the identity's sequence, which a
+			// serial's default would name: the file could only roll
+			// back, so it is not written.
+			if strings.HasPrefix(c.To.Default, "nextval(") {
+				return pgParts{}, &Error{Object: colTarget(c.Table, c.To.Name), Code: "render",
+					Reason: "an identity is not turned back into a serial: DROP IDENTITY drops the sequence the serial's default names; keep the identity, or write the change by hand"}
+			}
 			act("DROP IDENTITY")
 		case c.From.Identity && c.To.Sequence != "":
 			// The identity stays; only its sequence's name changes, which
