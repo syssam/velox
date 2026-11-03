@@ -279,8 +279,11 @@
 // EdgeThrough, Meta, MetaOnce, BindPolicy, BindHooks, BindHooksAfter, BoundPolicy,
 // BoundHooks, Lazy, Validate, ValidateSet, the untyped surface (Table, TableOf,
 // TableRows, RowsOf, PredOp, TableQuery, DB.QueryTable, Untyped, Typed,
-// AndPredicates, OrPredicates and NotPredicate: an entity's
-// queries with its type erased, for runtimes compiled once for every entity)
+// AndPredicates, OrPredicates, NotPredicate, TableInsert, TableUpdate,
+// TableDelete, DB.InsertTable, DB.InsertRows, DB.UpdateTable, DB.DeleteTable
+// and Assignments: an entity's
+// queries and writes with its type erased, for runtimes compiled once for
+// every entity)
 // and GeneratedCodeIsVersion7. Each
 // says "For generated code." in its documentation. They are not part of
 // velox's API: they change only when GeneratedCodeIsVersion7 is replaced by

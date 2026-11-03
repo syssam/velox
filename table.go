@@ -34,8 +34,14 @@ import (
 //	Filled(owner unsafe.Pointer, edge int) (unsafe.Pointer, bool) // Rel.Filled
 //	Pred(col int, op PredOp, v any) Predicate // a condition on column col
 //	Has(edge int, target Table, ps ...Predicate) Predicate // Rel.HasWhere
+//	Of(edge int, target Table, owners ...unsafe.Pointer) Predicate // Rel.Of
 //	HasReadPolicy() bool // Meta.HasReadPolicy
 //	Convert(col int, v any) (any, error) // v as column col's Go type, from one of the same kind
+//	NewRows(n int) TableRows // n new zero rows, for InsertRows
+//	SetField(p unsafe.Pointer, col int, v any) error // sets a field, v converted as Convert does
+//	Assign(col int, v any) (Assignment, error) // a handle's Set, untyped; nil is SetNull
+//	Validate(p unsafe.Pointer, cols ...int) error // Validate
+//	ValidateSet(set ...Assignment) error // ValidateSet
 type Table = engine.Table
 
 // TableRows is a run of rows of one entity, one after another in memory: what
@@ -92,6 +98,7 @@ const (
 //	MaxRows(n int) TableQuery
 //	ForUpdate() TableQuery
 //	ForShare() TableQuery
+//	Writable() TableQuery
 //	Columns(cs ...int) TableQuery
 //	Selects(cs ...int) bool
 //	After(p unsafe.Pointer) TableQuery
@@ -108,10 +115,13 @@ const (
 type TableQuery = engine.TableQuery
 
 // tableState is the part of a Meta that holds its Table, built on the first
-// TableOf: an entity that no untyped code reads builds none.
+// TableOf: an entity that no untyped code reads builds none. It holds the
+// Table as any: a Meta that names Table puts Table's methods, and what they
+// reference, into the export data of every package of entities
+// (internal/repocheck's compile-cost test).
 type tableState struct {
 	once sync.Once
-	t    Table
+	t    any // a Table
 }
 
 // TableOf returns entity E's Table. For generated code. It builds E's
@@ -137,7 +147,8 @@ func tableOfMeta[E any](m *Meta[E]) Table {
 		}
 		m.tbl.t = engine.NewTable(m.info, m.err, addr, m.nilCols, typ, targetOf[E]())
 	})
-	return m.tbl.t
+	t, _ := m.tbl.t.(Table)
+	return t
 }
 
 // RowsOf returns r as a []E, sharing its memory. For generated code. E must be
@@ -199,3 +210,69 @@ func OrPredicates(ps ...Predicate) Predicate { return engine.OrPredicates(ps...)
 // NotPredicate is true when p is false: Not, of an untyped condition. For
 // generated code.
 func NotPredicate(p Predicate) Predicate { return engine.NotPredicate(p) }
+
+// TableInsert is an INSERT of rows of a Table's entity: InsertQuery with the
+// entity's type erased and columns by index. For generated code.
+// DB.InsertTable and DB.InsertRows start one. It builds the statements an
+// InsertQuery builds, through the same hooks, policies and scope.
+//
+// Its methods are InsertQuery's:
+//
+//	OnConflict(cols ...int) TableInsert
+//	Update(cols ...int) TableInsert
+//	DoNothing() TableInsert
+//	Exec(ctx context.Context) error
+//	SQL(ctx context.Context) (string, []any, error)
+type TableInsert = engine.TableInsert
+
+// TableUpdate is an UPDATE of a Table's entity: UpdateQuery with the
+// entity's type erased, its setters by column index. For generated code.
+// DB.UpdateTable starts one.
+//
+// Its methods are UpdateQuery's, and Set, SetNull and Assign:
+//
+//	Set(col int, v any) TableUpdate // Table.Assign's assignment; a wrong type fails Exec
+//	SetNull(col int) TableUpdate
+//	Assign(as ...Assignment) TableUpdate // assignments made elsewhere (Assignments)
+//	Where(ps ...Predicate) TableUpdate
+//	All() TableUpdate
+//	Exec(ctx context.Context) (int64, error)
+//	SQL(ctx context.Context) (string, []any, error)
+type TableUpdate = engine.TableUpdate
+
+// TableDelete is a DELETE of a Table's entity: DeleteQuery with the
+// entity's type erased. For generated code. DB.DeleteTable starts one.
+//
+// Its methods are DeleteQuery's:
+//
+//	Where(ps ...Predicate) TableDelete
+//	All() TableDelete
+//	Exec(ctx context.Context) (int64, error)
+//	SQL(ctx context.Context) (string, []any, error)
+type TableDelete = engine.TableDelete
+
+// InsertTable starts an INSERT of the row at p, of t's entity: Insert,
+// untyped, for generated code (see TableInsert).
+func (db *DB) InsertTable(t Table, p unsafe.Pointer) TableInsert {
+	return engine.InsertTable(&db.e, t, p)
+}
+
+// InsertRows starts an INSERT of every row of rows, of t's entity: InsertAll,
+// untyped, for generated code (see TableInsert).
+func (db *DB) InsertRows(t Table, rows TableRows) TableInsert {
+	return engine.InsertRows(&db.e, t, rows)
+}
+
+// UpdateTable starts an UPDATE of t's entity: Update, untyped, for generated
+// code (see TableUpdate).
+func (db *DB) UpdateTable(t Table) TableUpdate { return engine.UpdateTable(&db.e, t) }
+
+// DeleteTable starts a DELETE of t's entity: Delete, untyped, for generated
+// code (see TableDelete).
+func (db *DB) DeleteTable(t Table) TableDelete { return engine.DeleteTable(&db.e, t) }
+
+// Assignments returns the assignments of set, sharing its memory: what
+// TableUpdate.Assign takes. For generated code.
+func Assignments[E any](set []Setter[E]) []Assignment {
+	return unsafe.Slice((*Assignment)(unsafe.Pointer(unsafe.SliceData(set))), len(set))
+}

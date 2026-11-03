@@ -119,6 +119,12 @@ func (q TableQuery) ForUpdate() TableQuery {
 	return q
 }
 
+// Writable is Query.Writable.
+func (q TableQuery) Writable() TableQuery {
+	q.st.Writable = true
+	return q
+}
+
 // ForShare is Query.ForShare.
 func (q TableQuery) ForShare() TableQuery {
 	q.st.Lock = LockForShare

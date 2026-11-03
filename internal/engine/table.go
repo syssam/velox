@@ -376,3 +376,17 @@ func (t Table) Has(edge int, target Table, ps ...Predicate) Predicate {
 	}
 	return NewPredicate(Node{Op: OpExists, Col: int32(edge), V: RelRef{Owner: s.target.Get, Target: ts.target, I: int32(edge)}, Kids: kids})
 }
+
+// Of is true for the rows of target related through relation edge to any of
+// owners, rows of the entity: Rel.Of, untyped, of the relation as its handle
+// declares it, without a Where. A relation that does not resolve, or whose
+// target is not target, is an invalid condition.
+func (t Table) Of(edge int, target Table, owners ...unsafe.Pointer) Predicate {
+	s, ts := t.state(), target.state()
+	for _, err := range []error{s.err, ts.err} {
+		if err != nil {
+			return NewPredicate(Node{Op: OpInvalid, V: err})
+		}
+	}
+	return NewPredicate(OfNode(RelRef{Owner: s.target.Get, Target: ts.target, I: int32(edge)}, nil, nil, owners))
+}
