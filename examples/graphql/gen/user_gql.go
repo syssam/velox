@@ -8,13 +8,14 @@ import (
 	"fmt"
 	"io"
 	"time"
+	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion10
+const _ = veloxgql.GeneratedCodeIsVersion11
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -79,7 +80,7 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Posts, "User.posts", []any{after, first, before, last, orderBy, where})}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[User](), unsafe.Pointer(x), userEdgePosts, "User.posts", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // UserConnection is the GraphQL type UserConnection, a connection to a list of
@@ -407,16 +408,22 @@ func (in CreateUserInput) GoString() string { return in.String() }
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreateUserInput) Create(ctx context.Context, x *User) (*User, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreateUserInput", "User", "gen.User", x, userInputGQL, Users.Name, Users.Email, Users.JoinedAt, Users.PasswordHash)
+	if x == nil {
+		x = new(User)
+	}
+	c := gqlimpl.NewCreate(ctx, "CreateUserInput", "User", "gen.User", velox.TableOf[User](), unsafe.Pointer(x), userInputGQL, userColName, userColEmail, userColJoinedAt, userColPasswordHash)
 	x.Name = in.Name
 	x.Email = in.Email
 	if in.Role != nil {
 		x.Role = *in.Role
-		c.Given(Users.Role)
+		c.Given(userColRole)
 	}
 	x.JoinedAt = in.JoinedAt
 	x.PasswordHash = in.PasswordHash
-	return c.Insert()
+	if err := c.Insert(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
 // UpdateUserInput is the GraphQL input UpdateUserInput; its method Update
@@ -450,21 +457,22 @@ func (in UpdateUserInput) GoString() string { return in.String() }
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *UpdateUserInput) Update(ctx context.Context, id string, set ...velox.Setter[User]) (*User, error) {
-	u, key := gqlimpl.NewUpdate[User, int64](ctx, "UpdateUserInput", "User", "gen.User", id, userInputGQL)
+	u, key := gqlimpl.NewUpdate[int64](ctx, "UpdateUserInput", "User", "gen.User", velox.TableOf[User](), userColID, id, userInputGQL)
 	if in.Name != nil {
-		u.Set(Users.Name.Set(*in.Name))
+		u.Set(userColName, *in.Name)
 	}
 	if in.Email != nil {
-		u.Set(Users.Email.Set(*in.Email))
+		u.Set(userColEmail, *in.Email)
 	}
 	if in.Role != nil {
-		u.Set(Users.Role.Set(*in.Role))
+		u.Set(userColRole, *in.Role)
 	}
 	if in.JoinedAt != nil {
-		u.Set(Users.JoinedAt.Set(*in.JoinedAt))
+		u.Set(userColJoinedAt, *in.JoinedAt)
 	}
 	if in.PasswordHash != nil {
-		u.Set(Users.PasswordHash.Set(*in.PasswordHash))
+		u.Set(userColPasswordHash, *in.PasswordHash)
 	}
-	return u.Exec(Users.ID.EQ(key), set...)
+	p, err := u.Exec(key, velox.Assignments(set))
+	return (*User)(p), err
 }

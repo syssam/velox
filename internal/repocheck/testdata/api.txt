@@ -71,6 +71,7 @@ Statement.Tx *TxInfo
 Statement.Unbounded bool
 Statement.Where []Predicate
 Statement.Writable bool
+Table.Assign(col int, v any) (Assignment, error)
 Table.Convert(col int, v any) (any, error)
 Table.Err() error
 Table.Field(p unsafe.Pointer, col int) any
@@ -80,9 +81,23 @@ Table.Has(edge int, target Table, ps ...Predicate) Predicate
 Table.HasReadPolicy() bool
 Table.Info() *EntityInfo
 Table.New() unsafe.Pointer
+Table.NewRows(n int) TableRows
+Table.Of(edge int, target Table, owners ...unsafe.Pointer) Predicate
 Table.Pred(col int, op PredOp, v any) Predicate
 Table.Ptr(p unsafe.Pointer) any
+Table.SetField(p unsafe.Pointer, col int, v any) error
+Table.Validate(p unsafe.Pointer, cols ...int) error
+Table.ValidateSet(set ...Assignment) error
 Table.Value(p unsafe.Pointer, col int) any
+TableDelete.All() TableDelete
+TableDelete.Exec(ctx context.Context) (int64, error)
+TableDelete.SQL(ctx context.Context) (string, []any, error)
+TableDelete.Where(ps ...Predicate) TableDelete
+TableInsert.DoNothing() TableInsert
+TableInsert.Exec(ctx context.Context) error
+TableInsert.OnConflict(cols ...int) TableInsert
+TableInsert.SQL(ctx context.Context) (string, []any, error)
+TableInsert.Update(cols ...int) TableInsert
 TableQuery.After(p unsafe.Pointer) TableQuery
 TableQuery.All(ctx context.Context) (TableRows, error)
 TableQuery.Columns(cs ...int) TableQuery
@@ -106,8 +121,16 @@ TableQuery.Selects(cs ...int) bool
 TableQuery.Table() Table
 TableQuery.Unbounded() TableQuery
 TableQuery.Where(ps ...Predicate) TableQuery
+TableQuery.Writable() TableQuery
 TableRows.At(i int) unsafe.Pointer
 TableRows.Len() int
+TableUpdate.All() TableUpdate
+TableUpdate.Assign(as ...Assignment) TableUpdate
+TableUpdate.Exec(ctx context.Context) (int64, error)
+TableUpdate.SQL(ctx context.Context) (string, []any, error)
+TableUpdate.Set(col int, v any) TableUpdate
+TableUpdate.SetNull(col int) TableUpdate
+TableUpdate.Where(ps ...Predicate) TableUpdate
 const AggregateAvg
 const AggregateMax
 const AggregateMin
@@ -289,16 +312,20 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (d DeleteQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) DeleteQuery[E]
 func (db *DB) Close() error
+func (db *DB) DeleteTable(t Table) TableDelete
 func (db *DB) Delete[E any, PE Entity[E]]() DeleteQuery[E]
 func (db *DB) Dialect() Dialect
 func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error)
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E]
+func (db *DB) InsertRows(t Table, rows TableRows) TableInsert
+func (db *DB) InsertTable(t Table, p unsafe.Pointer) TableInsert
 func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E]
 func (db *DB) QueryTable(t Table) TableQuery
 func (db *DB) Query[E any, PE Entity[E]]() Query[E]
 func (db *DB) Raw[E any, PE Entity[E]](reason, query string, args ...any) RawQuery[E]
 func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) SaveQuery[E]
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
+func (db *DB) UpdateTable(t Table) TableUpdate
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
 func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error
 func (m *Meta[E]) HasReadPolicy[_ Lazy[E]]() bool
@@ -374,6 +401,7 @@ func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
 func Allow[E any]() Pred[E]
 func AndPredicates(ps ...Predicate) Predicate
 func And[E any](ps ...Pred[E]) Pred[E]
+func Assignments[E any](set []Setter[E]) []Assignment
 func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, float64], error)
 func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, float64], error)
 func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
@@ -523,8 +551,11 @@ type Shard = engine.Shard
 type Statement = engine.Statement
 type StringCol[E any, V ~string] struct { I int32 }
 type Table = engine.Table
+type TableDelete = engine.TableDelete
+type TableInsert = engine.TableInsert
 type TableQuery = engine.TableQuery
 type TableRows = engine.TableRows
+type TableUpdate = engine.TableUpdate
 type Tag = veloxtype.Tag
 type TxAround = veloxtype.TxAround
 type TxInfo = veloxtype.TxInfo
@@ -1026,7 +1057,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion10
+const GeneratedCodeIsVersion11
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

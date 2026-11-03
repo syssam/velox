@@ -147,7 +147,7 @@ func TestLockRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	lock := func(c context.Context, id int64) error {
-		return gqlimpl.LockRow(c, db, db.Query[post]().Where(posts.ID.EQ(id)), "updatePost", "Post")
+		return gqlimpl.LockRow(c, db, velox.Untyped(db.Query[post]().Where(posts.ID.EQ(id))), "updatePost", "Post")
 	}
 	if err := lock(ann, 1); err != nil {
 		t.Errorf("ann's post: %v", err)

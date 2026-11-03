@@ -440,7 +440,9 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		return fmt.Errorf("schema %s, edge %s: a to-many edge whose key is on the owner's row, which velox-gen does not write", e.Name, pe.Name)
 	}
 	ctx, vgql, impl := f.use("context", "context"), f.veloxgql(), f.gqlimpl()
-	rel := e.Handles + "." + pe.GoName
+	// The owner's Table, x and the relation's index: the batches are
+	// compiled once, on velox.Table, and the rows convert by a pointer cast.
+	rel := fmt.Sprintf("%s.TableOf[%s](), %s.Pointer(x), %s", f.velox(), e.Name, f.use("unsafe", "unsafe"), edgeConst(e, pe))
 	field := fmt.Sprintf("%q", t.Name+"."+ed.Name)
 	dbFrom := func() {
 		f.p("\tdb, err := %s.DBFromContext(ctx)", vgql)
@@ -467,7 +469,8 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 			f.p("\t}")
 		}
 		query()
-		f.p("\treturn %s.EdgeOne(ctx, q, x, %s, %s)", impl, rel, field)
+		f.p("\tp, err := %s.EdgeOne(ctx, q, %s, %s)", impl, rel, field)
+		f.p("\treturn (*%s)(p), err", tgt.Name)
 		f.p("}")
 	case sdl.EdgeList:
 		most := "the MaxList of veloxgql.LimitsFromContext(ctx)"
@@ -477,7 +480,8 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is read with the edge of every row read with x, in one query, which reads at most %s rows for each, whatever the DB's WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error that names the edge.", ed.Method, pe.Name, tt.Name, most))
 		f.p("func (x *%s) %s(ctx %s.Context) ([]*%s, error) {", e.Name, ed.Method, ctx, tgt.Name)
 		query()
-		f.p("\treturn %s.EdgeList(ctx, q, x, %s, %s, %d)", impl, rel, field, ed.MaxList)
+		f.p("\tps, err := %s.EdgeList(ctx, q, %s, %s, %d)", impl, rel, field, ed.MaxList)
+		f.p("\treturn %[1]s.Slice((**%[2]s)(%[1]s.Pointer(%[1]s.SliceData(ps))), len(ps)), err", f.use("unsafe", "unsafe"), tgt.Name)
 		f.p("}")
 	case sdl.EdgeConnection:
 		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to, paged, ordered and filtered by the arguments. Its queries run when gqlgen asks for the connection's fields, each with those of every row read with x, in one query.", ed.Method, pe.Name, tt.Name))
@@ -487,7 +491,7 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		f.p("\tif err != nil {")
 		f.p("\t\treturn nil, err")
 		f.p("\t}")
-		f.p("\treturn &%sConnection{c: %s.EdgeConnection(ctx, c.c, x, %s, %s, []any{%s})}, nil", tt.Name, impl, rel, field, connArgs(tt))
+		f.p("\treturn &%sConnection{c: %s.EdgeConnection(ctx, c.c, %s, %s, []any{%s})}, nil", tt.Name, impl, rel, field, connArgs(tt))
 		f.p("}")
 	}
 	f.p("")

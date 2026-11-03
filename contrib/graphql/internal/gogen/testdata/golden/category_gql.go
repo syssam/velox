@@ -2,13 +2,14 @@ package gen
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion10
+const _ = veloxgql.GeneratedCodeIsVersion11
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -44,7 +45,7 @@ func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, firs
 	if err != nil {
 		return nil, err
 	}
-	return &CategoryConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Categories.Children, "Category.children", []any{after, first, before, last, where})}, nil
+	return &CategoryConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[Category](), unsafe.Pointer(x), categoryEdgeChildren, "Category.children", []any{after, first, before, last, where})}, nil
 }
 
 // ParentGQL is the edge parent: the Category it leads to, or nil when there is
@@ -61,7 +62,8 @@ func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Category"); ok {
 		q = gqlimpl.Narrow(q, categoryColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeOne(ctx, q, x, Categories.Parent, "Category.parent")
+	p, err := gqlimpl.EdgeOne(ctx, q, velox.TableOf[Category](), unsafe.Pointer(x), categoryEdgeParent, "Category.parent")
+	return (*Category)(p), err
 }
 
 // CategoryConnection is the GraphQL type CategoryConnection, a connection to a
@@ -255,8 +257,8 @@ func categoryInputGQL(goField string) string {
 
 // categoryChildrenEdgeGQL is the edge children of Category, whose key
 // Category's rows hold, as its inputs write it.
-func categoryChildrenEdgeGQL() gqlimpl.Owned[Category, Category, int64, int64] {
-	return gqlimpl.NewOwned[Category, int64](categoryKeyGQL, Categories.ID, Categories.CategoryChildren)
+func categoryChildrenEdgeGQL() gqlimpl.Owned {
+	return gqlimpl.Owned{Owner: velox.TableOf[Category](), Target: velox.TableOf[Category](), OwnerKey: categoryColID, TargetKey: categoryColID, FK: categoryColCategoryChildren}
 }
 
 // CreateCategoryInput is the GraphQL input CreateCategoryInput; its method
@@ -281,16 +283,22 @@ type CreateCategoryInput struct {
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreateCategoryInput) Create(ctx context.Context, x *Category) (*Category, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreateCategoryInput", "Category", "gen.Category", x, categoryInputGQL, Categories.Title)
+	if x == nil {
+		x = new(Category)
+	}
+	c := gqlimpl.NewCreate(ctx, "CreateCategoryInput", "Category", "gen.Category", velox.TableOf[Category](), unsafe.Pointer(x), categoryInputGQL, categoryColTitle)
 	x.Title = in.Title
 	childIDsKeys := gqlimpl.Keys[int64](c, "childIDs", in.ChildIDs, "Category")
-	gqlimpl.Repoint(c, "childIDs", "Category", categoryChildrenEdgeGQL(), childIDsKeys...)
+	gqlimpl.Repoint(c, "childIDs", "Category", categoryChildrenEdgeGQL(), childIDsKeys)
 	if in.ParentID != nil {
 		parentIDKey := gqlimpl.Key[int64](c, "parentID", *in.ParentID, "Category")
-		gqlimpl.Exists(c, "parentID", "Category", 1, Categories.ID.EQ(parentIDKey))
+		gqlimpl.Exists(c, "parentID", "Category", velox.TableOf[Category](), categoryColID, []int64{parentIDKey})
 		x.CategoryChildren = &parentIDKey
 	}
-	return c.Insert()
+	if err := c.Insert(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
 // UpdateCategoryInput is the GraphQL input UpdateCategoryInput; its method
@@ -325,19 +333,20 @@ type UpdateCategoryInput struct {
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *UpdateCategoryInput) Update(ctx context.Context, id string, set ...velox.Setter[Category]) (*Category, error) {
-	u, key := gqlimpl.NewUpdate[Category, int64](ctx, "UpdateCategoryInput", "Category", "gen.Category", id, categoryInputGQL)
+	u, key := gqlimpl.NewUpdate[int64](ctx, "UpdateCategoryInput", "Category", "gen.Category", velox.TableOf[Category](), categoryColID, id, categoryInputGQL)
 	if in.Title != nil {
-		u.Set(Categories.Title.Set(*in.Title))
+		u.Set(categoryColTitle, *in.Title)
 	}
 	addChildIDsKeys, removeChildIDsKeys := gqlimpl.AddRemove[int64](u, "Category", "addChildIDs", in.AddChildIDs, "removeChildIDs", in.RemoveChildIDs)
 	if in.ParentID != nil {
 		parentIDKey := gqlimpl.Key[int64](u, "parentID", *in.ParentID, "Category")
-		gqlimpl.Exists(u, "parentID", "Category", 1, Categories.ID.EQ(parentIDKey))
-		u.SetKey(Categories.CategoryChildren.Set(parentIDKey))
+		gqlimpl.Exists(u, "parentID", "Category", velox.TableOf[Category](), categoryColID, []int64{parentIDKey})
+		u.SetKey(categoryColCategoryChildren, parentIDKey)
 	}
 	if gqlimpl.ClearEdge(u, "parentID", in.ParentID != nil, "clearParent", in.ClearParent) {
-		u.SetKey(Categories.CategoryChildren.SetNull())
+		u.SetKey(categoryColCategoryChildren, nil)
 	}
-	gqlimpl.Children(u, "addChildIDs", "Category", gqlimpl.Edit[int64]{Clear: in.ClearChildren, Remove: removeChildIDsKeys, Add: addChildIDsKeys}, key, categoryChildrenEdgeGQL())
-	return u.Exec(Categories.ID.EQ(key), set...)
+	gqlimpl.Children(u, "addChildIDs", "Category", gqlimpl.Edit{Clear: in.ClearChildren, Remove: removeChildIDsKeys, Add: addChildIDsKeys}, key, categoryChildrenEdgeGQL())
+	p, err := u.Exec(key, velox.Assignments(set))
+	return (*Category)(p), err
 }

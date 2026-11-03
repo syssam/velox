@@ -110,6 +110,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   column indexes. `gqlimpl.Term`, `NullTerm`, `JoinedTerm` and `OrderTerm` are gone, and
   `Connection` and `Page` are not generic. `XsConnectionOf` keeps its typed signature and every
   behaviour and error. `veloxgql.GeneratedCodeIsVersion10`: regenerate.
+- velox-graphql's where inputs, edge resolvers and mutation inputs run on the same
+  non-generic runtime, on velox's untyped writes (`DB.InsertTable`, `InsertRows`,
+  `UpdateTable`, `DeleteTable`, `Assignments`): `gqlimpl.Filter`, `Create`, `Update`,
+  `M2M`, `Owned` and `Edit` are not generic, and their helpers take column indexes.
+  `Create(ctx, x)` and `Update(ctx, id, set...)` keep their signatures, and an
+  application's setter still wins over the input's. `veloxgql.GeneratedCodeIsVersion11`:
+  regenerate.
 - velox-graphql writes its schema to `gen/velox.graphql`, which was `gen/velox.graphqls`, as
   entgql writes `ent.graphql`: the extension more GraphQL tooling reads. velox-gen's plugins
   write `.go`, `.graphql` and `.proto` files. gqlgen.yml's `schema` globs must change to match,

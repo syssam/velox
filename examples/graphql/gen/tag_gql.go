@@ -6,13 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion10
+const _ = veloxgql.GeneratedCodeIsVersion11
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -52,7 +53,7 @@ func (x *Tag) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, 
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Tags.Posts, "Label.posts", []any{after, first, before, last, orderBy, where})}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[Tag](), unsafe.Pointer(x), tagEdgePosts, "Label.posts", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // LabelConnection is the GraphQL type LabelConnection, a connection to a list
@@ -327,10 +328,9 @@ func tagInputGQL(goField string) string {
 
 // tagPostsEdgeGQL is the many-to-many edge posts of Tag, through PostTag, as
 // its inputs write it.
-func tagPostsEdgeGQL() gqlimpl.M2M[Tag, Post, PostTag, int64, int64] {
-	return gqlimpl.NewM2M(tagKeyGQL, Posts.ID, postKeyGQL, PostTags.TagID, PostTags.PostID,
-		func(j *PostTag) int64 { return j.PostID },
-		func(own, k int64) PostTag { return PostTag{TagID: own, PostID: k} })
+func tagPostsEdgeGQL() gqlimpl.M2M {
+	return gqlimpl.M2M{Owner: velox.TableOf[Tag](), Target: velox.TableOf[Post](), Join: velox.TableOf[PostTag](),
+		OwnerKey: tagColID, TargetKey: postColID, JoinOwner: postTagColTagID, JoinTarget: postTagColPostID}
 }
 
 // CreateLabelInput is the GraphQL input CreateLabelInput; its method Create
@@ -354,12 +354,18 @@ type CreateLabelInput struct {
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreateLabelInput) Create(ctx context.Context, x *Tag) (*Tag, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreateLabelInput", "Label", "gen.Tag", x, tagInputGQL, Tags.Name, Tags.Rank)
+	if x == nil {
+		x = new(Tag)
+	}
+	c := gqlimpl.NewCreate(ctx, "CreateLabelInput", "Label", "gen.Tag", velox.TableOf[Tag](), unsafe.Pointer(x), tagInputGQL, tagColName, tagColRank)
 	x.Name = in.Name
 	x.Rank = in.Rank
 	postIDsKeys := gqlimpl.Keys[int64](c, "postIDs", in.PostIDs, "Post")
-	gqlimpl.Join(c, "postIDs", "Post", tagPostsEdgeGQL(), postIDsKeys...)
-	return c.Insert()
+	gqlimpl.Join(c, "postIDs", "Post", tagPostsEdgeGQL(), postIDsKeys)
+	if err := c.Insert(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
 // UpdateLabelInput is the GraphQL input UpdateLabelInput; its method Update
@@ -391,14 +397,15 @@ type UpdateLabelInput struct {
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *UpdateLabelInput) Update(ctx context.Context, id string, set ...velox.Setter[Tag]) (*Tag, error) {
-	u, key := gqlimpl.NewUpdate[Tag, int64](ctx, "UpdateLabelInput", "Label", "gen.Tag", id, tagInputGQL)
+	u, key := gqlimpl.NewUpdate[int64](ctx, "UpdateLabelInput", "Label", "gen.Tag", velox.TableOf[Tag](), tagColID, id, tagInputGQL)
 	if in.Name != nil {
-		u.Set(Tags.Name.Set(*in.Name))
+		u.Set(tagColName, *in.Name)
 	}
 	if in.Rank != nil {
-		u.Set(Tags.Rank.Set(*in.Rank))
+		u.Set(tagColRank, *in.Rank)
 	}
 	addPostIDsKeys, removePostIDsKeys := gqlimpl.AddRemove[int64](u, "Post", "addPostIDs", in.AddPostIDs, "removePostIDs", in.RemovePostIDs)
-	gqlimpl.Through(u, "addPostIDs", "Post", gqlimpl.Edit[int64]{Clear: in.ClearPosts, Remove: removePostIDsKeys, Add: addPostIDsKeys}, key, tagPostsEdgeGQL())
-	return u.Exec(Tags.ID.EQ(key), set...)
+	gqlimpl.Through(u, "addPostIDs", "Post", gqlimpl.Edit{Clear: in.ClearPosts, Remove: removePostIDsKeys, Add: addPostIDsKeys}, key, tagPostsEdgeGQL())
+	p, err := u.Exec(key, velox.Assignments(set))
+	return (*Tag)(p), err
 }

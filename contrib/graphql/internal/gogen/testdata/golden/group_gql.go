@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion10
+const _ = veloxgql.GeneratedCodeIsVersion11
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -64,7 +65,7 @@ func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int
 	if err != nil {
 		return nil, err
 	}
-	return &AccountConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Groups.Users, "Group.users", []any{after, first, before, last, where})}, nil
+	return &AccountConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[Group](), unsafe.Pointer(x), groupEdgeUsers, "Group.users", []any{after, first, before, last, where})}, nil
 }
 
 // GroupConnection is the GraphQL type GroupConnection, a connection to a list

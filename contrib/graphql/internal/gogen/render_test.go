@@ -731,7 +731,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion10\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion11\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1056,8 +1056,8 @@ func TestCreateConversions(t *testing.T) {
 		` Tags veloxgql.JSON `,
 		`gqlimpl.KeyAs[int64](c, "ownerID", *in.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
 		`gqlimpl.DecodeJSON[[]int32](c, "tags", in.Tags)`,
-		`gqlimpl.Exists(c, "ownerID", "Owner", 1, Owners.ID.EQ(`,
-		`gqlimpl.NewCreate(ctx, "CreateEventInput", "Event", "gen.Event", x, eventInputGQL`,
+		`gqlimpl.Exists(c, "ownerID", "Owner", velox.TableOf[Owner](), ownerColID, []idspkg.UserID{`,
+		`gqlimpl.NewCreate(ctx, "CreateEventInput", "Event", "gen.Event", velox.TableOf[Event](), unsafe.Pointer(x), eventInputGQL`,
 		`case "Tags": return "tags"`,
 	} {
 		if !strings.Contains(ev, want) {
@@ -1156,8 +1156,8 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 	for _, w := range []string{
 		`func (in *UpdateGroupInput) Update(ctx context.Context, id string, set ...velox.Setter[Group]) (*Group, error) {`,
 		`addUserIDsKeys, removeUserIDsKeys := gqlimpl.AddRemove[int64](u, "Account", "addUserIDs", in.AddUserIDs, "removeUserIDs", in.RemoveUserIDs)`,
-		`gqlimpl.Through(u, "addUserIDs", "Account", gqlimpl.Edit[int64]{Clear: in.ClearUsers, Remove: removeUserIDsKeys, Add: addUserIDsKeys}, key, groupUsersEdgeGQL())`,
-		`func groupUsersEdgeGQL() gqlimpl.M2M[Group, User, UserGroup, int64, int64] { return gqlimpl.NewM2M(groupKeyGQL, Users.ID, userKeyGQL, UserGroups.GroupID, UserGroups.UserID,`,
+		`gqlimpl.Through(u, "addUserIDs", "Account", gqlimpl.Edit{Clear: in.ClearUsers, Remove: removeUserIDsKeys, Add: addUserIDsKeys}, key, groupUsersEdgeGQL())`,
+		`func groupUsersEdgeGQL() gqlimpl.M2M { return gqlimpl.M2M{Owner: velox.TableOf[Group](), Target: velox.TableOf[User](), Join: velox.TableOf[UserGroup](),`,
 	} {
 		if !strings.Contains(src, w) {
 			t.Errorf("group_gql.go: no %q in\n%s", w, src)
@@ -1177,17 +1177,17 @@ func TestUpdateLocksTheRow(t *testing.T) {
 		}
 	}
 	src := funcSrc(t, render(t, m), "UpdateGroupInput.Update")
-	if !strings.Contains(src, "return u.Exec(Groups.ID.EQ(key), set...)") {
+	if !strings.Contains(src, "p, err := u.Exec(key, velox.Assignments(set))") {
 		t.Errorf("UpdateGroupInput.Update does not end in Exec:\n%s", src)
 	}
 	impl := readFile(t, filepath.Join("..", "..", "veloxgql", "gqlimpl", "input.go"))
-	_, exec, _ := strings.Cut(impl, ") Exec[_ velox.Lazy[E]](")
+	_, exec, _ := strings.Cut(impl, ") Exec(key any, set []velox.Assignment) (")
 	exec, _, _ = strings.Cut(exec, "\n}\n")
-	if !strings.Contains(exec, "LockRow(ctx, db, db.Query[E, PE]().Where(row)") || strings.Contains(exec, "Writable().Count") {
+	if !strings.Contains(exec, "LockRow(ctx, db, db.QueryTable(u.t).Where(row)") || strings.Contains(exec, "Writable().Count") {
 		t.Errorf("Exec does not lock its row before its edges:\n%s", exec)
 	}
 	mut := readFile(t, filepath.Join("..", "..", "veloxgql", "gqlimpl", "mutation.go"))
-	if _, lock, _ := strings.Cut(mut, "func LockRow["); !strings.Contains(lock, "q.ForUpdate()") || !strings.Contains(lock, "q.Writable()") {
+	if _, lock, _ := strings.Cut(mut, "func LockRow("); !strings.Contains(lock, "q.ForUpdate()") || !strings.Contains(lock, "q.Writable()") {
 		t.Errorf("LockRow does not lock a Writable query:\n%s", lock)
 	}
 }
@@ -1271,7 +1271,7 @@ func funcSrc(t *testing.T, files map[string]string, name string) string {
 
 // TestEdgesBatch: every edge method reads its edge through gqlimpl's
 // batching (EdgeConnection, EdgeOne or EdgeList, by its kind, with the
-// owner's relation handle), and none reads the relation's field, which an
+// owner's Table and the relation's index), and none reads the relation's field, which an
 // application's With may have loaded filtered or limited.
 func TestEdgesBatch(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
@@ -1290,10 +1290,11 @@ func TestEdgesBatch(t *testing.T) {
 				// The edge's GraphQL field, which batches it, and a
 				// connection's arguments, which its batch keeps.
 				field := "\"" + ty.Name + "." + ed.Name + "\""
+				rel := "velox.TableOf[" + e.Name + "](), unsafe.Pointer(x), " + edgeConst(e, pe)
 				want := map[sdl.EdgeKind]string{
-					sdl.EdgeConnection: "gqlimpl.EdgeConnection(ctx, c.c, x, " + e.Handles + "." + pe.GoName + ", " + field + ", []any{" + connArgs(ed.Target) + "})",
-					sdl.EdgeUnique:     "gqlimpl.EdgeOne(ctx, q, x, " + e.Handles + "." + pe.GoName + ", " + field + ")",
-					sdl.EdgeList:       "gqlimpl.EdgeList(ctx, q, x, " + e.Handles + "." + pe.GoName + ", " + field + ", 0)",
+					sdl.EdgeConnection: "gqlimpl.EdgeConnection(ctx, c.c, " + rel + ", " + field + ", []any{" + connArgs(ed.Target) + "})",
+					sdl.EdgeUnique:     "gqlimpl.EdgeOne(ctx, q, " + rel + ", " + field + ")",
+					sdl.EdgeList:       "gqlimpl.EdgeList(ctx, q, " + rel + ", " + field + ", 0)",
 				}[ed.Kind]
 				if !strings.Contains(src, want) {
 					t.Errorf("%s: %s.%s: no %q in\n%s", label, e.Name, ed.Method, want, src)
@@ -1451,7 +1452,7 @@ func TestM2MWithoutInverse(t *testing.T) {
 	author.Edges = []*plugin.Edge{{Name: "books", GoName: "Books", Target: "Book", Kind: plugin.M2M, Join: "AuthorBook"}}
 	files := render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{author, entity("Book")}})
 	src := funcSrc(t, files, "Author.BooksGQL")
-	if !strings.Contains(src, "gqlimpl.EdgeConnection(ctx, c.c, x, Authors.Books, \"Author.books\", []any{after, first, before, last") {
+	if !strings.Contains(src, "gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[Author](), unsafe.Pointer(x), authorEdgeBooks, \"Author.books\", []any{after, first, before, last") {
 		t.Errorf("Author.BooksGQL:\n%s", src)
 	}
 }
@@ -1532,7 +1533,7 @@ func TestSingleOwnerKeyEQ(t *testing.T) {
 			t.Errorf("%s checks one owner key with In", name)
 		}
 	}
-	const want = `gqlimpl.Exists(c, "writerID", "Account", 1, Users.ID.EQ(writerIDKey))`
+	const want = `gqlimpl.Exists(c, "writerID", "Account", velox.TableOf[User](), userColID, []int64{writerIDKey})`
 	if !strings.Contains(files["post_gql.go"], want) {
 		t.Errorf("post_gql.go lacks %s", want)
 	}
@@ -1564,13 +1565,13 @@ func TestRepointO2OOrder(t *testing.T) {
 		t.Errorf("UpdateOwnerInput.Update has no %s:\n%s", want, gen)
 	}
 	// gqlimpl.Child, which runs the re-point, in its steps' order.
-	_, src, _ := strings.Cut(readFile(t, filepath.Join("..", "..", "veloxgql", "gqlimpl", "input.go")), "\nfunc Child[")
+	_, src, _ := strings.Cut(readFile(t, filepath.Join("..", "..", "veloxgql", "gqlimpl", "input.go")), "\nfunc Child(")
 	src, _, _ = strings.Cut(src, "\n}\n")
 	steps := []string{
-		`CheckExists(ctx, db.Query[T, PT]().Where(id.EQ(*k)), 1, at, typ)`,
-		`db.Update[T, PT]().Set(h.SetNull()).Where(h.EQ(own), id.NEQ(*k))`,
-		`StillLinked(ctx, db.Query[T, PT]().Where(h.EQ(own), id.NEQ(*k)), at, typ, owner)`,
-		`relink[T, PT](ctx, db, id.EQ(*k), 1, h, own, at, typ, owner)`,
+		`CheckExists(ctx, db.QueryTable(t).Where(id), 1, at, typ)`,
+		`db.UpdateTable(t).SetNull(fk).Where(held, other)`,
+		`StillLinked(ctx, db.QueryTable(t).Where(held, other), at, typ, owner)`,
+		`relink(ctx, db, o, id, 1, v, at, typ, owner)`,
 	}
 	at := -1
 	for _, s := range steps {
@@ -1696,7 +1697,7 @@ func TestZeroDefaultNotRefused(t *testing.T) {
 			t.Errorf("%s: a zero Default's zero refused:\n%s", f, got)
 		}
 	}
-	for _, want := range []string{`gqlimpl.NotZero(c, "handle"`, "Active bool", "x.Active = in.Active", ", Things.Active)"} {
+	for _, want := range []string{`gqlimpl.NotZero(c, "handle"`, "Active bool", "x.Active = in.Active", ", thingColActive)"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in:\n%s", want, got)
 		}

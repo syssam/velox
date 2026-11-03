@@ -707,7 +707,7 @@ func TestExist(t *testing.T) {
 		}
 	}
 	const at = "CreateUserInput.postIDs"
-	if err := gqlimpl.CheckExists(ann, db.Query[post]().Where(posts.ID.In(1)), 1, at, "Post"); err != nil {
+	if err := gqlimpl.CheckExists(ann, velox.Untyped(db.Query[post]().Where(posts.ID.In(1))), 1, at, "Post"); err != nil {
 		t.Errorf("one ID of ann's post: %v", err)
 	}
 	for name, c := range map[string]struct {
@@ -718,7 +718,7 @@ func TestExist(t *testing.T) {
 		"another scope's":  {ann, []int64{1, 2}},
 		"hidden by policy": {ann, []int64{1, 4}},
 	} {
-		err := gqlimpl.CheckExists(c.ctx, db.Query[post]().Where(posts.ID.In(c.ids...)), len(c.ids), at, "Post")
+		err := gqlimpl.CheckExists(c.ctx, velox.Untyped(db.Query[post]().Where(posts.ID.In(c.ids...))), len(c.ids), at, "Post")
 		if codeOf(err) != veloxgql.CodeNotFound {
 			t.Errorf("%s: %v, want NOT_FOUND", name, err)
 		}
@@ -728,7 +728,7 @@ func TestExist(t *testing.T) {
 	}
 	// One ID that names no row reads as NotFound does.
 	for name, id := range map[string]int64{"missing": 3, "another scope's": 2, "hidden by policy": 4} {
-		err := gqlimpl.CheckExists(ann, db.Query[post]().Where(posts.ID.In(id)), 1, at, "Post")
+		err := gqlimpl.CheckExists(ann, velox.Untyped(db.Query[post]().Where(posts.ID.In(id))), 1, at, "Post")
 		if codeOf(err) != veloxgql.CodeNotFound {
 			t.Errorf("one ID, %s: %v, want NOT_FOUND", name, err)
 		}
@@ -737,7 +737,7 @@ func TestExist(t *testing.T) {
 		}
 	}
 	// The query's own error is returned as it is.
-	if err := gqlimpl.CheckExists(ctx, db.Query[post]().Where(posts.ID.In(1)), 1, at, "Post"); !errors.Is(err, scope.ErrNoScope) {
+	if err := gqlimpl.CheckExists(ctx, velox.Untyped(db.Query[post]().Where(posts.ID.In(1))), 1, at, "Post"); !errors.Is(err, scope.ErrNoScope) {
 		t.Errorf("no scope: %v, want ErrNoScope", err)
 	}
 }
@@ -763,20 +763,20 @@ func TestReadable(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	id := func(x *post) int64 { return x.ID }
+	id := int(posts.ID.I)
 	ids := []int64{1, 2, 3, 4, 5}
-	got, err := gqlimpl.Readable(ann, db.Query[post]().Where(posts.ID.In(ids...)).Columns(posts.ID).OrderBy(posts.ID.Asc()), len(ids), id)
-	if err != nil || !slices.Equal(got, []int64{1, 3}) {
+	got, err := gqlimpl.Readable(ann, velox.Untyped(db.Query[post]().Where(posts.ID.In(ids...)).Columns(posts.ID).OrderBy(posts.ID.Asc())), len(ids), id)
+	if err != nil || fmt.Sprint(got) != "[1 3]" {
 		t.Errorf("Readable = %v, %v: want 1 and 3, without bob's and the hidden one", got, err)
 	}
 	r.take()
-	if got, err := gqlimpl.Readable(ann, db.Query[post]().Where(posts.ID.In()), 0, id); err != nil || len(got) != 0 {
+	if got, err := gqlimpl.Readable(ann, velox.Untyped(db.Query[post]().Where(posts.ID.In())), 0, id); err != nil || len(got) != 0 {
 		t.Errorf("Readable of no keys = %v, %v", got, err)
 	}
 	if _, stmts := r.take(); len(stmts) != 0 {
 		t.Errorf("Readable of no keys sent %v", stmts)
 	}
-	if _, err := gqlimpl.Readable(ctx, db.Query[post]().Where(posts.ID.In(1)), 1, id); !errors.Is(err, scope.ErrNoScope) {
+	if _, err := gqlimpl.Readable(ctx, velox.Untyped(db.Query[post]().Where(posts.ID.In(1))), 1, id); !errors.Is(err, scope.ErrNoScope) {
 		t.Errorf("no scope: %v, want ErrNoScope", err)
 	}
 }
@@ -792,13 +792,17 @@ func TestUnlinkAll(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	links := db.Query[person]().OrderBy(people.ID.Asc())
-	age := func(x *person) int64 { return x.Age }
+	links := velox.Untyped(db.Query[person]().OrderBy(people.ID.Asc()))
+	age := int(people.Age.I)
 	var pages [][]int64
 	// unlink deletes the odd ones, and leaves the even ones.
-	unlink := func(ks []int64) error {
-		pages = append(pages, ks)
-		for _, k := range ks {
+	unlink := func(ks []any) error {
+		page := make([]int64, len(ks))
+		for i, k := range ks {
+			page[i] = k.(int64)
+		}
+		pages = append(pages, page)
+		for _, k := range page {
 			if k%2 == 1 {
 				if _, err := db.Delete[person]().Where(people.ID.EQ(k)).Exec(ctx); err != nil {
 					return err
@@ -822,7 +826,7 @@ func TestUnlinkAll(t *testing.T) {
 		t.Errorf("pages %v, %v: want [[2 4]]", pages, err)
 	}
 	errStop := errors.New("stop")
-	if err := gqlimpl.UnlinkAll(ctx, links, age, func([]int64) error { return errStop }); !errors.Is(err, errStop) {
+	if err := gqlimpl.UnlinkAll(ctx, links, age, func([]any) error { return errStop }); !errors.Is(err, errStop) {
 		t.Errorf("unlink's error: %v", err)
 	}
 }
@@ -839,7 +843,7 @@ func TestRepointed(t *testing.T) {
 		t.Fatal(err)
 	}
 	const at = "CreateAccountInput.postIDs"
-	linked, none := db.Query[post]().Where(posts.ID.In(1)), db.Query[post]().Where(posts.ID.In(2))
+	linked, none := velox.Untyped(db.Query[post]().Where(posts.ID.In(1))), velox.Untyped(db.Query[post]().Where(posts.ID.In(2)))
 	// No scope value: the query would fail, so none runs.
 	if err := gqlimpl.Repointed(ctx, 2, 2, linked, at, "Post", "Account"); err != nil {
 		t.Errorf("all re-pointed: %v", err)
@@ -847,7 +851,7 @@ func TestRepointed(t *testing.T) {
 	for _, c := range []struct {
 		got        int64
 		n          int
-		q          velox.Query[post]
+		q          velox.TableQuery
 		typ, owner string
 		code, want string
 	}{
@@ -882,7 +886,7 @@ func TestStillLinked(t *testing.T) {
 	}
 	a := tenantKey.With(ctx, "a")
 	const at = "UpdateXInput.yID"
-	held, none := db.Query[post]().Where(posts.ID.EQ(1)), db.Query[post]().Where(posts.ID.EQ(2))
+	held, none := velox.Untyped(db.Query[post]().Where(posts.ID.EQ(1))), velox.Untyped(db.Query[post]().Where(posts.ID.EQ(2)))
 	for _, c := range []struct{ typ, want string }{
 		{"Y", "veloxgql: " + at + ": the X is already linked to a Y"},
 		{"Account", "veloxgql: " + at + ": the X is already linked to an Account"},

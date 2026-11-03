@@ -80,7 +80,19 @@ func NewConnectionOf[E any](ctx context.Context, q velox.Query[E], typ string, a
 
 // EdgeConnectionOf is EdgeConnection of a ConnectionOf.
 func EdgeConnectionOf[E, T any](ctx context.Context, c ConnectionOf[T], x *E, r velox.Rel[E, T], field string, args any) ConnectionOf[T] {
-	return ConnectionOf[T]{EdgeConnection(ctx, c.Connection, x, r, field, args)}
+	return ConnectionOf[T]{EdgeConnection(ctx, c.Connection, velox.TableOf[E](), unsafe.Pointer(x), int(r.I), field, args)}
+}
+
+// EdgeOneOf is EdgeOne, typed, as the generated code calls it.
+func EdgeOneOf[E, T any](ctx context.Context, q velox.TableQuery, x *E, r velox.Rel[E, T], field string) (*T, error) {
+	p, err := EdgeOne(ctx, q, velox.TableOf[E](), unsafe.Pointer(x), int(r.I), field)
+	return (*T)(p), err
+}
+
+// EdgeListOf is EdgeList, typed, as the generated code calls it.
+func EdgeListOf[E, T any](ctx context.Context, q velox.TableQuery, x *E, r velox.Rel[E, T], field string, maxList int) ([]*T, error) {
+	ps, err := EdgeList(ctx, q, velox.TableOf[E](), unsafe.Pointer(x), int(r.I), field, maxList)
+	return unsafe.Slice((**T)(unsafe.Pointer(unsafe.SliceData(ps))), len(ps)), err
 }
 
 // Paginate is NewConnectionOf and Page in one call.

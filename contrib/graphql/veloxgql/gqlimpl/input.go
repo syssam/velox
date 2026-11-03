@@ -3,6 +3,7 @@ package gqlimpl
 import (
 	"context"
 	"slices"
+	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -73,60 +74,67 @@ func (s *inputState) writeError(err error) error {
 	return WriteError(err, s.input, s.entity, s.name)
 }
 
-// Create is a create input of E being inserted: x, with the input's fields
-// set on it, and the statements of its edges. A create input's generated
-// method Create makes one with NewCreate, sets each field the input gives on
-// x, adds its edges with one helper call each, and returns Insert:
+// Create is a create input being inserted: the row x of the entity of t,
+// with the input's fields set on it, and the statements of its edges. None of
+// it is generic over the entity: it is compiled once, for every input. A
+// create input's generated method Create makes one with NewCreate, sets each
+// field the input gives on x, adds its edges with one helper call each, and
+// runs Insert:
 //
 //	func (in *CreatePostInput) Create(ctx context.Context, x *Post) (*Post, error) {
-//		c, x := gqlimpl.NewCreate(ctx, "CreatePostInput", "Post", "gen.Post", x, postInputGQL, Posts.Title)
+//		if x == nil {
+//			x = new(Post)
+//		}
+//		c := gqlimpl.NewCreate(ctx, "CreatePostInput", "Post", "gen.Post", velox.TableOf[Post](), unsafe.Pointer(x), postInputGQL, postColTitle)
 //		x.Title = in.Title
 //		if in.Views != nil {
 //			x.Views = *in.Views
-//			c.Given(Posts.Views)
+//			c.Given(postColViews)
 //		}
 //		x.AuthorID = gqlimpl.Key[int64](c, "authorID", in.AuthorID, "User")
-//		gqlimpl.Exists(c, "authorID", "User", 1, Users.ID.EQ(x.AuthorID))
+//		gqlimpl.Exists(c, "authorID", "User", velox.TableOf[User](), userColID, []int64{x.AuthorID})
 //		tagIDsKeys := gqlimpl.Keys[int64](c, "tagIDs", in.TagIDs, "Label")
-//		gqlimpl.Join(c, "tagIDs", "Label", postTagsEdgeGQL(), tagIDsKeys...)
-//		return c.Insert()
+//		gqlimpl.Join(c, "tagIDs", "Label", postTagsEdgeGQL(), tagIDsKeys)
+//		if err := c.Insert(); err != nil {
+//			return nil, err
+//		}
+//		return x, nil
 //	}
 //
 // where postTagsEdgeGQL returns the edge's M2M, which Update's Through takes
 // too.
-type Create[E any, PE velox.Entity[E]] struct {
+type Create struct {
 	s    inputState
-	x    *E
-	cols []velox.Column[E] // the columns the input sets, validated before any statement
+	t    velox.Table
+	x    unsafe.Pointer
+	cols []int // the columns the input sets, validated before any statement
 }
 
-func (c *Create[E, PE]) state() *inputState { return &c.s }
+func (c *Create) state() *inputState { return &c.s }
 
-// NewCreate returns the Create of x from the create input of the GraphQL type
-// input ("CreatePostInput"), and x, a new E when x is nil. typ is E's GraphQL
-// type ("Post"), which a NOT_FOUND or "already linked" error names, entity is
-// E as velox names it in a *velox.ValidationError ("gen.Post"), and name gives
-// the input's field that sets an entity field, by the field's Go name, ""
-// for one the input does not set: a validator's error on such a field
-// becomes BAD_USER_INPUT naming it (WriteError). required are the columns of
-// the input's required fields, whose validators run before any statement;
-// Given adds those of the optional fields the input gives.
-func NewCreate[E any, PE velox.Entity[E]](ctx context.Context, input, typ, entity string, x *E, name func(goField string) string, required ...velox.Column[E]) (*Create[E, PE], *E) {
-	if x == nil {
-		x = new(E)
-	}
-	return &Create[E, PE]{s: inputState{ctx: ctx, input: input, typ: typ, entity: entity, name: name}, x: x, cols: required}, x
+// NewCreate returns the Create of x, a row of t's entity, from the create
+// input of the GraphQL type input ("CreatePostInput"). typ is the entity's
+// GraphQL type ("Post"), which a NOT_FOUND or "already linked" error names,
+// entity is the entity as velox names it in a *velox.ValidationError
+// ("gen.Post"), and name gives the input's field that sets an entity field,
+// by the field's Go name, "" for one the input does not set: a validator's
+// error on such a field becomes BAD_USER_INPUT naming it (WriteError).
+// required are the columns of the input's required fields, whose validators
+// run before any statement; Given adds those of the optional fields the input
+// gives.
+func NewCreate(ctx context.Context, input, typ, entity string, t velox.Table, x unsafe.Pointer, name func(goField string) string, required ...int) *Create {
+	return &Create{s: inputState{ctx: ctx, input: input, typ: typ, entity: entity, name: name}, t: t, x: x, cols: required}
 }
 
 // Given adds col, the column of an optional field the input gives, to those
 // validated before any statement.
-func (c *Create[E, PE]) Given[_ velox.Lazy[E]](col velox.Column[E]) { c.cols = append(c.cols, col) }
+func (c *Create) Given(col int) { c.cols = append(c.cols, col) }
 
-// Insert inserts the row, and writes its edges, and returns x as written.
+// Insert inserts the row, and writes its edges.
 //
 // It fails, before any statement, with the first error a helper recorded
 // (see Mutation), and then with a validator's error on a column the input
-// sets (velox.Validate, through WriteError). Then, atomically on the DB
+// sets (velox.Table.Validate, through WriteError). Then, atomically on the DB
 // veloxgql.DBFromContext reads from ctx (Atomic), it runs each check the
 // helpers registered before the insert, in their order (the IDs of the edges
 // whose key is on the row, and of the many-to-many edges, must name rows the
@@ -135,20 +143,20 @@ func (c *Create[E, PE]) Given[_ velox.Lazy[E]](col velox.Column[E]) { c.cols = a
 // join row (Join), in their order. An error of any of them rolls the whole
 // create back. x is changed even when Insert fails: its key, the keys of its
 // edges and whatever a hook sets on it.
-func (c *Create[E, PE]) Insert[_ velox.Lazy[E]]() (*E, error) {
+func (c *Create) Insert() error {
 	if err := c.s.failed(); err != nil {
-		return nil, err
+		return err
 	}
-	if err := velox.Validate[E, PE](c.x, c.cols...); err != nil {
-		return nil, c.s.writeError(err)
+	if err := c.t.Validate(c.x, c.cols...); err != nil {
+		return c.s.writeError(err)
 	}
-	err := Atomic(c.s.ctx, func(ctx context.Context, db *velox.DB) error {
+	return Atomic(c.s.ctx, func(ctx context.Context, db *velox.DB) error {
 		for _, f := range c.s.before {
 			if err := f(ctx, db); err != nil {
 				return err
 			}
 		}
-		if err := db.Insert[E, PE](c.x).Exec(ctx); err != nil {
+		if err := db.InsertTable(c.t, c.x).Exec(ctx); err != nil {
 			return c.s.writeError(err)
 		}
 		for _, f := range c.s.after {
@@ -158,45 +166,46 @@ func (c *Create[E, PE]) Insert[_ velox.Lazy[E]]() (*E, error) {
 		}
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return c.x, nil
 }
 
-// Update is an update input of E being written: the setters of its fields
-// and of the keys on the row, and the statements of its edges. An update
-// input's generated method Update makes one with NewUpdate, adds a setter of
-// each field the input gives with Set, its edges with one helper call each,
-// and returns Exec:
+// Update is an update input being written: the assignments of its fields
+// and of the keys on the row, of the entity of a velox.Table, and the
+// statements of its edges. None of it is generic over the entity. An update
+// input's generated method Update makes one with NewUpdate, adds the
+// assignment of each field the input gives with Set, its edges with one
+// helper call each, and returns Exec's row:
 //
 //	func (in *UpdatePostInput) Update(ctx context.Context, id string, set ...velox.Setter[Post]) (*Post, error) {
-//		u, key := gqlimpl.NewUpdate[Post, int64](ctx, "UpdatePostInput", "Post", "gen.Post", id, postInputGQL)
+//		u, key := gqlimpl.NewUpdate[int64](ctx, "UpdatePostInput", "Post", "gen.Post", velox.TableOf[Post](), postColID, id, postInputGQL)
 //		if in.Title != nil {
-//			u.Set(Posts.Title.Set(*in.Title))
+//			u.Set(postColTitle, *in.Title)
 //		}
 //		if gqlimpl.Cleared(u, "publishedAt", in.PublishedAt != nil, "clearPublishedAt", in.ClearPublishedAt) {
-//			u.Set(Posts.PublishedAt.SetNull())
+//			u.SetNull(postColPublishedAt)
 //		}
 //		addTagIDsKeys, removeTagIDsKeys := gqlimpl.AddRemove[int64](u, "Label", "addTagIDs", in.AddTagIDs, "removeTagIDs", in.RemoveTagIDs)
-//		gqlimpl.Through(u, "addTagIDs", "Label", gqlimpl.Edit[int64]{Clear: in.ClearTags, Remove: removeTagIDsKeys, Add: addTagIDsKeys}, key, postTagsEdgeGQL())
-//		return u.Exec(Posts.ID.EQ(key), set...)
+//		gqlimpl.Through(u, "addTagIDs", "Label", gqlimpl.Edit{Clear: in.ClearTags, Remove: removeTagIDsKeys, Add: addTagIDsKeys}, key, postTagsEdgeGQL())
+//		p, err := u.Exec(key, velox.Assignments(set))
+//		return (*Post)(p), err
 //	}
-type Update[E any, PE velox.Entity[E]] struct {
+type Update struct {
 	s    inputState
-	set  []velox.Setter[E] // the setters of the input's fields
-	keys []velox.Setter[E] // the setters of the keys on the row
+	t    velox.Table
+	key  int                // the key's column
+	set  []velox.Assignment // the assignments of the input's fields
+	keys []velox.Assignment // the assignments of the keys on the row
 }
 
-func (u *Update[E, PE]) state() *inputState { return &u.s }
+func (u *Update) state() *inputState { return &u.s }
 
-// NewUpdate returns the Update of the row whose ID is id, of the GraphQL type
-// typ ("Post"), from the update input of the GraphQL type input
-// ("UpdatePostInput"), and the row's key, of the Go type K, decoded from id;
-// entity and name are NewCreate's. A malformed id, or an ID of another type,
-// is a decode error, the first: its text names "id".
-func NewUpdate[E, K any, PE velox.Entity[E]](ctx context.Context, input, typ, entity, id string, name func(goField string) string) (*Update[E, PE], K) {
-	u := newUpdate[E, PE](ctx, input, typ, entity, name)
+// NewUpdate returns the Update of the row of t's entity whose ID is id, of
+// the GraphQL type typ ("Post"), whose key is the column key, from the update
+// input of the GraphQL type input ("UpdatePostInput"), and the row's key, of
+// the Go type K, decoded from id; entity and name are NewCreate's. A
+// malformed id, or an ID of another type, is a decode error, the first: its
+// text names "id".
+func NewUpdate[K any](ctx context.Context, input, typ, entity string, t velox.Table, key int, id string, name func(goField string) string) (*Update, K) {
+	u := newUpdate(ctx, input, typ, entity, t, key, name)
 	k, err := DecodeID[K]("id", id, typ)
 	u.s.decodeFail(err)
 	return u, k
@@ -204,44 +213,74 @@ func NewUpdate[E, K any, PE velox.Entity[E]](ctx context.Context, input, typ, en
 
 // NewUpdateAs is NewUpdate of a key whose Go type V is a named type DecodeID
 // does not take: id is decoded as a K and converted by conv.
-func NewUpdateAs[E, K, V any, PE velox.Entity[E]](ctx context.Context, input, typ, entity, id string, name func(goField string) string, conv func(K) V) (*Update[E, PE], V) {
-	u := newUpdate[E, PE](ctx, input, typ, entity, name)
+func NewUpdateAs[K, V any](ctx context.Context, input, typ, entity string, t velox.Table, key int, id string, name func(goField string) string, conv func(K) V) (*Update, V) {
+	u := newUpdate(ctx, input, typ, entity, t, key, name)
 	v, err := DecodeIDAs("id", id, typ, conv)
 	u.s.decodeFail(err)
 	return u, v
 }
 
-func newUpdate[E any, PE velox.Entity[E]](ctx context.Context, input, typ, entity string, name func(goField string) string) *Update[E, PE] {
-	return &Update[E, PE]{s: inputState{ctx: ctx, input: input, typ: typ, entity: entity, name: name}}
+func newUpdate(ctx context.Context, input, typ, entity string, t velox.Table, key int, name func(goField string) string) *Update {
+	return &Update{s: inputState{ctx: ctx, input: input, typ: typ, entity: entity, name: name}, t: t, key: key}
 }
 
-// Set adds s, the setter of a field the input gives, to the update. Its
-// validator runs before any statement.
-func (u *Update[E, PE]) Set[_ velox.Lazy[E]](s velox.Setter[E]) { u.set = append(u.set, s) }
+// assign is the assignment of v, converted as velox.Table.Convert does, to
+// column col: nil is NULL. An assignment the column cannot take is an error
+// of u, which the generated code never makes.
+func (u *Update) assign(col int, v any) (velox.Assignment, bool) {
+	if v != nil {
+		c, err := u.t.Convert(col, v)
+		if err != nil {
+			u.s.fail(err)
+			return velox.Assignment{}, false
+		}
+		v = c
+	}
+	a, err := u.t.Assign(col, v)
+	u.s.fail(err)
+	return a, err == nil
+}
 
-// SetKey adds s, the setter of the key of an edge on the row, to the update,
-// after the setters of the fields and the application's: Exists checks the
-// ID it sets.
-func (u *Update[E, PE]) SetKey[_ velox.Lazy[E]](s velox.Setter[E]) { u.keys = append(u.keys, s) }
+// Set adds the assignment of v to column col, a field the input gives, to
+// the update. Its validator runs before any statement.
+func (u *Update) Set(col int, v any) {
+	if a, ok := u.assign(col, v); ok {
+		u.set = append(u.set, a)
+	}
+}
 
-// Exec updates the row row selects, writes its edges, and returns the row as
-// written. set are the application's own setters, which count as setting
-// something. An application's setter of a column wins: the input's setter of
-// that column, a field's or an edge's key, is dropped, as an UPDATE assigns a
-// column once.
+// SetNull adds the assignment of NULL to column col, a nullable field the
+// input clears.
+func (u *Update) SetNull(col int) { u.Set(col, nil) }
+
+// SetKey adds the assignment of v, or NULL for nil, to column col, the key of
+// an edge on the row, after the assignments of the fields and the
+// application's: Exists checks the ID it sets.
+func (u *Update) SetKey(col int, v any) {
+	if a, ok := u.assign(col, v); ok {
+		u.keys = append(u.keys, a)
+	}
+}
+
+// Exec updates the row whose key is key, writes its edges, and returns the
+// row as written, a pointer to a row of the entity. set are the
+// application's own assignments (velox.Assignments of its setters), which
+// count as setting something. An application's assignment of a column wins:
+// the input's assignment of that column, a field's or an edge's key, is
+// dropped, as an UPDATE assigns a column once.
 //
 // It fails, before any statement, with the first error a helper recorded
-// (see Mutation), then with a validator's error on what the input's setters
-// that are kept assign (velox.ValidateSet, through WriteError), and then with
-// one on what set assigns, as velox returns it: a setter of the application's
-// that its validator refuses is the server's error, not the client's, and is
-// not named as an input field. Then, atomically on the DB
-// veloxgql.DBFromContext reads from ctx (Atomic):
+// (see Mutation), then with a validator's error on what the input's
+// assignments that are kept assign (velox.Table.ValidateSet, through
+// WriteError), and then with one on what set assigns, as velox returns it:
+// an assignment of the application's that its validator refuses is the
+// server's error, not the client's, and is not named as an input field. Then,
+// atomically on the DB veloxgql.DBFromContext reads from ctx (Atomic):
 //   - each check registered before the row's write, in order: the IDs the
 //     keys on the row are set to must name rows the caller may read (Exists);
-//   - the UPDATE of the row with every setter, under the Write policy: a row
-//     it does not change is NOT_FOUND "<input>: no <Type> has this ID". When
-//     there is nothing to set, or the driver does not report the rows it
+//   - the UPDATE of the row with every assignment, under the Write policy: a
+//     row it does not change is NOT_FOUND "<input>: no <Type> has this ID".
+//     When there is nothing to set, or the driver does not report the rows it
 //     changed (-1), LockRow checks the row instead under the same scope, and
 //     locks it where the dialect can: no edge of a row the caller may read but
 //     not change is written;
@@ -250,20 +289,25 @@ func (u *Update[E, PE]) SetKey[_ velox.Lazy[E]](s velox.Setter[E]) { u.keys = ap
 //     update that moves the row out of the caller's Read view succeeds.
 //
 // An error of any of them rolls the whole update back.
-func (u *Update[E, PE]) Exec[_ velox.Lazy[E]](row velox.Pred[E], set ...velox.Setter[E]) (*E, error) {
+func (u *Update) Exec(key any, set []velox.Assignment) (unsafe.Pointer, error) {
 	if err := u.s.failed(); err != nil {
 		return nil, err
 	}
+	k, err := u.t.Convert(u.key, key)
+	if err != nil {
+		return nil, err
+	}
+	row := u.t.Pred(u.key, velox.PredEQ, k)
 	fields, keys := unassigned(u.set, set), unassigned(u.keys, set)
-	if err := velox.ValidateSet[E, PE](fields...); err != nil {
+	if err := u.t.ValidateSet(fields...); err != nil {
 		return nil, u.s.writeError(err)
 	}
-	if err := velox.ValidateSet[E, PE](set...); err != nil {
+	if err := u.t.ValidateSet(set...); err != nil {
 		return nil, err
 	}
 	all := append(append(slices.Clip(fields), set...), keys...)
-	var out *E
-	err := Atomic(u.s.ctx, func(ctx context.Context, db *velox.DB) error {
+	var out unsafe.Pointer
+	err = Atomic(u.s.ctx, func(ctx context.Context, db *velox.DB) error {
 		for _, f := range u.s.before {
 			if err := f(ctx, db); err != nil {
 				return err
@@ -271,7 +315,7 @@ func (u *Update[E, PE]) Exec[_ velox.Lazy[E]](row velox.Pred[E], set ...velox.Se
 		}
 		counted := false
 		if len(all) > 0 {
-			n, err := db.Update[E, PE]().Set(all...).Where(row).Exec(ctx)
+			n, err := db.UpdateTable(u.t).Assign(all...).Where(row).Exec(ctx)
 			if err != nil {
 				return u.s.writeError(err)
 			}
@@ -281,7 +325,7 @@ func (u *Update[E, PE]) Exec[_ velox.Lazy[E]](row velox.Pred[E], set ...velox.Se
 			counted = n > 0
 		}
 		if !counted {
-			if err := LockRow(ctx, db, db.Query[E, PE]().Where(row), u.s.input, u.s.typ); err != nil {
+			if err := LockRow(ctx, db, db.QueryTable(u.t).Where(row), u.s.input, u.s.typ); err != nil {
 				return err
 			}
 		}
@@ -290,7 +334,7 @@ func (u *Update[E, PE]) Exec[_ velox.Lazy[E]](row velox.Pred[E], set ...velox.Se
 				return err
 			}
 		}
-		x, err := db.Query[E, PE]().Where(row).One(velox.WithoutPolicy(ctx, "graphql: the row this update wrote"))
+		x, err := db.QueryTable(u.t).Where(row).One(velox.WithoutPolicy(ctx, "graphql: the row this update wrote"))
 		if velox.IsNotFound(err) {
 			return NotFound(u.s.input, u.s.typ)
 		}
@@ -306,15 +350,15 @@ func (u *Update[E, PE]) Exec[_ velox.Lazy[E]](row velox.Pred[E], set ...velox.Se
 	return out, nil
 }
 
-// unassigned are the setters of in but those of a column a setter of set
+// unassigned are the assignments of in but those of a column one of set
 // assigns.
-func unassigned[E any](in, set []velox.Setter[E]) []velox.Setter[E] {
+func unassigned(in, set []velox.Assignment) []velox.Assignment {
 	if len(set) == 0 {
 		return in
 	}
-	var out []velox.Setter[E]
+	var out []velox.Assignment
 	for _, s := range in {
-		if !slices.ContainsFunc(set, func(a velox.Setter[E]) bool { return a.Column() == s.Column() }) {
+		if !slices.ContainsFunc(set, func(a velox.Assignment) bool { return a.Column == s.Column }) {
 			out = append(out, s)
 		}
 	}
@@ -490,178 +534,222 @@ func AddRemoveAs[K, V comparable](m Mutation, typ, addField string, add []string
 	return a, r
 }
 
+// keyed is the condition on column col of t, a key, that it is one of
+// keys, a slice or nil (none), each converted to the column's Go type: = for
+// one key, else IN. n is the number of keys.
+func keyed(t velox.Table, col int, keys any) (p velox.Predicate, n int, err error) {
+	ks, err := converted(t, col, keys)
+	if len(ks) == 1 {
+		return t.Pred(col, velox.PredEQ, ks[0]), 1, err
+	}
+	return t.Pred(col, velox.PredIn, ks), len(ks), err
+}
+
+// in is keyed's condition as IN, for one key too.
+func in(t velox.Table, col int, keys any) (p velox.Predicate, n int, err error) {
+	ks, err := converted(t, col, keys)
+	return t.Pred(col, velox.PredIn, ks), len(ks), err
+}
+
+// converted is keys, a slice or nil, each converted to the Go type of t's
+// column col.
+func converted(t velox.Table, col int, keys any) ([]any, error) {
+	ks, _ := values(keys)
+	var err error
+	for i, k := range ks {
+		if ks[i], err = t.Convert(col, k); err != nil {
+			return nil, err
+		}
+	}
+	return ks, nil
+}
+
 // Exists checks, in the write's transaction and before the row's write, that
-// p selects n rows of T under the caller's Read policy: the n distinct IDs
-// the input's field gives name rows the caller may read (CheckExists).
-// Otherwise the write fails with NOT_FOUND naming the field and typ, T's
-// GraphQL type. For n 0 nothing runs.
-func Exists[T any, PT velox.Entity[T]](m Mutation, field, typ string, n int, p velox.Pred[T]) {
+// keys, the distinct keys of the IDs the input's field gives (a slice), name
+// rows of target, in its key column col, that the caller may read under its
+// Read policy (CheckExists). Otherwise the write fails with NOT_FOUND naming
+// the field and typ, target's GraphQL type. For no keys nothing runs.
+func Exists(m Mutation, field, typ string, target velox.Table, col int, keys any) {
+	p, n, err := keyed(target, col, keys)
+	exists(m, field, typ, target, p, n, err)
+}
+
+// exists is Exists of the condition p on n keys, or of err, the condition's.
+func exists(m Mutation, field, typ string, target velox.Table, p velox.Predicate, n int, err error) {
 	s := m.state()
+	if err != nil {
+		s.fail(err)
+		return
+	}
 	if n == 0 {
 		return
 	}
 	at := s.at(field)
 	s.before = append(s.before, func(ctx context.Context, db *velox.DB) error {
-		return CheckExists(ctx, db.Query[T, PT]().Where(p), n, at, typ)
+		return CheckExists(ctx, db.QueryTable(target).Where(p), n, at, typ)
 	})
-}
-
-// Handle is a column handle of E, as velox-gen declares them on the
-// entity's handles (Posts.ID, PostTags.TagID): a helper that takes one reads
-// its column, whatever the handle's kind, and a handle of another entity does
-// not compile in its place.
-type Handle[E any] interface {
-	~struct{ I int32 }
-	velox.Column[E]
 }
 
 // Edit is what an update input says of an edge to many: Clear is
 // clear<Edge>, and Remove and Add are the distinct keys of remove<Edge>IDs
-// and add<Edge>IDs (AddRemove). The edge is cleared, then the keys to remove
-// are unlinked, then those to add linked.
-type Edit[K any] struct {
+// and add<Edge>IDs (AddRemove), slices of the target's keys, or nil. The edge
+// is cleared, then the keys to remove are unlinked, then those to add linked.
+type Edit struct {
 	Clear       bool
-	Remove, Add []K
+	Remove, Add any
 }
 
 // unchanged reports whether ed changes nothing.
-func unchanged[K any](ed Edit[K]) bool { return !ed.Clear && len(ed.Remove) == 0 && len(ed.Add) == 0 }
+func unchanged(ed Edit) bool {
+	r, _ := values(ed.Remove)
+	a, _ := values(ed.Add)
+	return !ed.Clear && len(r) == 0 && len(a) == 0
+}
 
-// M2M is a many-to-many edge of E to T, through the join entity J, whose
-// column of E's key holds a V and whose column of T's key a K: what Join and
-// Through write it with. Generated code makes one per edge with NewM2M, in a
+// M2M is a many-to-many edge of Owner to Target through the join entity
+// Join, by column index: OwnerKey and TargetKey are the two entities' key
+// columns, and JoinOwner and JoinTarget the join entity's columns that hold
+// them. Join and Through write it. Generated code makes one per edge, in a
 // function that both a create input's Create and an update input's Update
-// call.
-type M2M[E, T, J, V any, K comparable] struct {
-	owner func(*E) V         // E's key, of a created row
-	pk    velox.Col[T, K]    // T's key column
-	key   func(*T) K         // T's key, of a row
-	jo    velox.Col[J, V]    // J's column of E's key
-	jt    velox.Col[J, K]    // J's column of T's key
-	other func(*J) K         // jt, of a join row
-	row   func(own V, k K) J // the join row of E's key own and T's k
+// call. The edge's direction is JoinOwner's: the inverse of an edge holds its
+// owner in the join entity's second column, and a bidirectional self edge's
+// two join rows are velox's to write.
+type M2M struct {
+	Owner, Target, Join   velox.Table
+	OwnerKey, TargetKey   int
+	JoinOwner, JoinTarget int
 }
 
-// NewM2M is the M2M whose join entity's column jo holds E's key, which owner
-// reads from a row, and jt T's key, whose column is pk and which key reads
-// from a row of T and other from a join row; row makes the join row of the
-// keys of a row of E and of a row of T. The edge's direction is jo's: the
-// inverse of an edge holds its owner in the join entity's second column, and
-// a bidirectional self edge's two join rows are velox's to write.
-func NewM2M[E, T, J, V any, K comparable, HP Handle[T], HO, HT Handle[J]](owner func(*E) V, pk HP, key func(*T) K, jo HO, jt HT, other func(*J) K, row func(own V, k K) J) M2M[E, T, J, V, K] {
-	return M2M[E, T, J, V, K]{owner: owner, pk: velox.Col[T, K](pk), key: key, jo: velox.Col[J, V](jo), jt: velox.Col[J, K](jt), other: other, row: row}
+// joinRows are the join rows of own, the owner's key, and each of keys.
+func (m M2M) joinRows(own any, keys []any) (velox.TableRows, error) {
+	rows := m.Join.NewRows(len(keys))
+	for i, k := range keys {
+		if err := m.Join.SetField(rows.At(i), m.JoinOwner, own); err != nil {
+			return velox.TableRows{}, err
+		}
+		if err := m.Join.SetField(rows.At(i), m.JoinTarget, k); err != nil {
+			return velox.TableRows{}, err
+		}
+	}
+	return rows, nil
 }
 
-// Owned is an edge of E to T whose foreign key is on T's rows: a one-to-many
-// edge, or a one-to-one one whose key T holds. Its column fk, nullable, holds
-// a V, E's key as T's rows hold it, which own reads from a row of E; pk is
-// T's key column, which holds a K. Generated code makes one per edge with
-// NewOwned, in a function that both Create (Repoint) and Update (Children or
-// Child) call.
-type Owned[E, T any, K comparable, V any] struct {
-	own func(*E) V
-	pk  velox.Col[T, K]
-	fk  velox.NullCol[T, V]
-}
-
-// NewOwned is the Owned of T's key column pk, of K keys, and T's foreign key
-// fk, which holds what own reads from a row of E.
-func NewOwned[T any, K comparable, E, V any, HP, HF Handle[T]](own func(*E) V, pk HP, fk HF) Owned[E, T, K, V] {
-	return Owned[E, T, K, V]{own: own, pk: velox.Col[T, K](pk), fk: velox.NullCol[T, V](fk)}
+// Owned is an edge of Owner to Target whose foreign key FK, nullable, is on
+// Target's rows, by column index: a one-to-many edge, or a one-to-one one
+// whose key Target holds. OwnerKey and TargetKey are the two entities' key
+// columns. Generated code makes one per edge, in a function that both Create
+// (Repoint) and Update (Children or Child) call.
+type Owned struct {
+	Owner, Target       velox.Table
+	OwnerKey, TargetKey int
+	FK                  int
 }
 
 // Join links a created row to keys, the distinct keys the input's field gives
-// of the many-to-many edge m, to T of the GraphQL type typ: before the insert,
-// Exists checks them; after it, one INSERT writes the join row of the created
-// row's key and each key, ON CONFLICT (m's two columns) DO NOTHING, so a join
-// row a hook or the other side wrote already is kept. With no keys nothing
-// runs.
-func Join[E any, PE velox.Entity[E], T, J, V any, K comparable, PT velox.Entity[T], PJ velox.Entity[J]](c *Create[E, PE], field, typ string, m M2M[E, T, J, V, K], keys ...K) {
-	if len(keys) == 0 {
+// of the many-to-many edge m (a slice), to the target of the GraphQL type
+// typ: before the insert, Exists checks them; after it, one INSERT writes the
+// join row of the created row's key and each key, ON CONFLICT (m's two
+// columns) DO NOTHING, so a join row a hook or the other side wrote already
+// is kept. With no keys nothing runs.
+func Join(c *Create, field, typ string, m M2M, keys any) {
+	ks, _ := values(keys)
+	if len(ks) == 0 {
 		return
 	}
-	Exists[T, PT](c, field, typ, len(keys), m.pk.In(keys...))
+	p, n, err := in(m.Target, m.TargetKey, keys)
+	exists(c, field, typ, m.Target, p, n, err)
 	c.s.after = append(c.s.after, func(ctx context.Context, db *velox.DB) error {
-		own := m.owner(c.x)
-		rows := make([]J, len(keys))
-		for i, k := range keys {
-			rows[i] = m.row(own, k)
+		rows, err := m.joinRows(m.Owner.Value(c.x, m.OwnerKey), ks)
+		if err != nil {
+			return err
 		}
-		return db.InsertAll[J, PJ](rows).OnConflict(m.jo, m.jt).DoNothing().Exec(ctx)
+		return db.InsertRows(m.Join, rows).OnConflict(m.JoinOwner, m.JoinTarget).DoNothing().Exec(ctx)
 	})
 }
 
 // Repoint links a created row to the children keys, the distinct keys the
-// input's field gives of the edge o, to T of the GraphQL type typ: after the
-// insert, one UPDATE sets o's foreign key to the created row's key on those of
-// them whose key is NULL. Only a child no owner holds is re-pointed, as in
-// ent: one another owner holds is not taken from it. The UPDATE's row count
-// checks the IDs, as the target's Read and Write policies leave out a row the
-// caller may not change, and Repointed tells a child the caller may read that
-// another owner holds from one it may not change. With no keys nothing runs.
-func Repoint[E any, PE velox.Entity[E], T any, K comparable, V any, PT velox.Entity[T]](c *Create[E, PE], field, typ string, o Owned[E, T, K, V], keys ...K) {
-	if len(keys) == 0 {
+// input's field gives of the edge o (a slice), to the target of the GraphQL
+// type typ: after the insert, one UPDATE sets o's foreign key to the created
+// row's key on those of them whose key is NULL. Only a child no owner holds
+// is re-pointed, as in ent: one another owner holds is not taken from it.
+// The UPDATE's row count checks the IDs, as the target's Read and Write
+// policies leave out a row the caller may not change, and Repointed tells a
+// child the caller may read that another owner holds from one it may not
+// change. With no keys nothing runs.
+func Repoint(c *Create, field, typ string, o Owned, keys any) {
+	ids, n, err := keyed(o.Target, o.TargetKey, keys)
+	if err != nil {
+		c.s.fail(err)
+		return
+	}
+	if n == 0 {
 		return
 	}
 	at, owner := c.s.at(field), c.s.typ
 	c.s.after = append(c.s.after, func(ctx context.Context, db *velox.DB) error {
-		ids, h, v := keyed(o.pk, keys), o.fk, o.own(c.x)
-		got, err := db.Update[T, PT]().Set(h.Set(v)).Where(ids, h.IsNull()).Exec(ctx)
+		v, err := o.Target.Convert(o.FK, o.Owner.Value(c.x, o.OwnerKey))
 		if err != nil {
 			return err
 		}
-		return Repointed(ctx, got, len(keys), db.Query[T, PT]().Where(ids, h.NotNull(), h.NEQ(v)), at, typ, owner)
+		t, fk := o.Target, o.FK
+		got, err := db.UpdateTable(t).Set(fk, v).Where(ids, t.Pred(fk, velox.PredIsNull, nil)).Exec(ctx)
+		if err != nil {
+			return err
+		}
+		return Repointed(ctx, got, n, db.QueryTable(t).Where(ids, t.Pred(fk, velox.PredNotNull, nil), t.Pred(fk, velox.PredNEQ, v)), at, typ, owner)
 	})
 }
 
-// keyed selects the rows whose key, in the column pk, is one of keys: by =
-// for one key, else by IN.
-func keyed[T any, K comparable](pk velox.Col[T, K], keys []K) velox.Pred[T] {
-	if len(keys) == 1 {
-		return pk.EQ(keys[0])
-	}
-	return pk.In(keys...)
-}
-
-// Children writes an update's edge to many o, to T of the GraphQL type typ,
-// whose foreign key T's rows hold, and hold own for the updated row. After
-// the row's write, in this order: ed.Clear unlinks every child the caller may
-// change (an UPDATE that sets the key to NULL); ed.Remove unlinks those of
-// its children the row holds; ed.Add, the keys of the input field addField,
-// links those no owner holds. Whether each key to add is linked is counted
-// after the UPDATE, under the Read policy, not from the UPDATE's own row
-// count: MySQL counts only the rows it changed unless the DSN has
-// clientFoundRows=true, and a child already linked here that the Write policy
-// hides is a link that exists. A child another owner holds, or that the
-// caller may not change, fails as Repoint's does.
-func Children[E any, PE velox.Entity[E], T any, K comparable, V any, PT velox.Entity[T]](u *Update[E, PE], addField, typ string, ed Edit[K], own V, o Owned[E, T, K, V]) {
+// Children writes an update's edge to many o, to the target of the GraphQL
+// type typ, whose foreign key the target's rows hold, and hold own for the
+// updated row. After the row's write, in this order: ed.Clear unlinks every
+// child the caller may change (an UPDATE that sets the key to NULL);
+// ed.Remove unlinks those of its children the row holds; ed.Add, the keys of
+// the input field addField, links those no owner holds. Whether each key to
+// add is linked is counted after the UPDATE, under the Read policy, not from
+// the UPDATE's own row count: MySQL counts only the rows it changed unless
+// the DSN has clientFoundRows=true, and a child already linked here that the
+// Write policy hides is a link that exists. A child another owner holds, or
+// that the caller may not change, fails as Repoint's does.
+func Children(u *Update, addField, typ string, ed Edit, own any, o Owned) {
 	if unchanged(ed) {
 		return
 	}
+	t, fk := o.Target, o.FK
+	v, err := t.Convert(fk, own)
+	if err != nil {
+		u.s.fail(err)
+		return
+	}
+	rm, nrm, err := in(t, o.TargetKey, ed.Remove)
+	u.s.fail(err)
+	add, nadd, err := in(t, o.TargetKey, ed.Add)
+	u.s.fail(err)
 	at, owner := u.s.at(addField), u.s.typ
+	held := t.Pred(fk, velox.PredEQ, v)
 	u.s.after = append(u.s.after, func(ctx context.Context, db *velox.DB) error {
-		h, id := o.fk, o.pk
 		if ed.Clear {
-			if _, err := db.Update[T, PT]().Set(h.SetNull()).Where(h.EQ(own)).Exec(ctx); err != nil {
+			if _, err := db.UpdateTable(t).SetNull(fk).Where(held).Exec(ctx); err != nil {
 				return err
 			}
 		}
-		if len(ed.Remove) > 0 {
-			if _, err := db.Update[T, PT]().Set(h.SetNull()).Where(id.In(ed.Remove...), h.EQ(own)).Exec(ctx); err != nil {
+		if nrm > 0 {
+			if _, err := db.UpdateTable(t).SetNull(fk).Where(rm, held).Exec(ctx); err != nil {
 				return err
 			}
 		}
-		if len(ed.Add) > 0 {
-			return relink[T, PT](ctx, db, id.In(ed.Add...), len(ed.Add), h, own, at, typ, owner)
+		if nadd > 0 {
+			return relink(ctx, db, o, add, nadd, v, at, typ, owner)
 		}
 		return nil
 	})
 }
 
-// Child writes an update's one-to-one edge o, to T of the GraphQL type typ,
-// whose foreign key the child's row holds, and holds own for the updated row.
-// After the row's write: clearAll unlinks the child the row holds; a non-nil k,
-// the key the input's field gives, re-points the edge to that child.
+// Child writes an update's one-to-one edge o, to the target of the GraphQL
+// type typ, whose foreign key the child's row holds, and holds own for the
+// updated row. After the row's write: clearAll unlinks the child the row
+// holds; a non-nil k, a pointer to the key the input's field gives,
+// re-points the edge to that child.
 //
 // The new child must be one the caller may read (CheckExists), or the
 // re-point is NOT_FOUND, as for an ID that names no child: otherwise
@@ -672,98 +760,136 @@ func Children[E any, PE velox.Entity[E], T any, K comparable, V any, PT velox.En
 // refuses the re-point before the link would fail on the unique key, and
 // the child stays linked. It looks whatever the UPDATE's row count, which
 // may be unknown (-1). Then the new child is linked as Children links one.
-func Child[E any, PE velox.Entity[E], T any, K comparable, V any, PT velox.Entity[T]](u *Update[E, PE], field, typ string, clearAll bool, k *K, own V, o Owned[E, T, K, V]) {
-	if !clearAll && k == nil {
+func Child(u *Update, field, typ string, clearAll bool, k any, own any, o Owned) {
+	key, given := deref(k)
+	if !clearAll && !given {
 		return
+	}
+	t, fk := o.Target, o.FK
+	v, err := t.Convert(fk, own)
+	if err != nil {
+		u.s.fail(err)
+		return
+	}
+	held := t.Pred(fk, velox.PredEQ, v)
+	var id, other velox.Predicate
+	if given {
+		c, err := t.Convert(o.TargetKey, key)
+		if err != nil {
+			u.s.fail(err)
+			return
+		}
+		id, other = t.Pred(o.TargetKey, velox.PredEQ, c), t.Pred(o.TargetKey, velox.PredNEQ, c)
 	}
 	at, owner := u.s.at(field), u.s.typ
 	u.s.after = append(u.s.after, func(ctx context.Context, db *velox.DB) error {
-		h, id := o.fk, o.pk
 		if clearAll {
-			if _, err := db.Update[T, PT]().Set(h.SetNull()).Where(h.EQ(own)).Exec(ctx); err != nil {
+			if _, err := db.UpdateTable(t).SetNull(fk).Where(held).Exec(ctx); err != nil {
 				return err
 			}
 		}
-		if k == nil {
+		if !given {
 			return nil
 		}
-		if err := CheckExists(ctx, db.Query[T, PT]().Where(id.EQ(*k)), 1, at, typ); err != nil {
+		if err := CheckExists(ctx, db.QueryTable(t).Where(id), 1, at, typ); err != nil {
 			return err
 		}
-		if _, err := db.Update[T, PT]().Set(h.SetNull()).Where(h.EQ(own), id.NEQ(*k)).Exec(ctx); err != nil {
+		if _, err := db.UpdateTable(t).SetNull(fk).Where(held, other).Exec(ctx); err != nil {
 			return err
 		}
-		if err := StillLinked(ctx, db.Query[T, PT]().Where(h.EQ(own), id.NEQ(*k)), at, typ, owner); err != nil {
+		if err := StillLinked(ctx, db.QueryTable(t).Where(held, other), at, typ, owner); err != nil {
 			return err
 		}
-		return relink[T, PT](ctx, db, id.EQ(*k), 1, h, own, at, typ, owner)
+		return relink(ctx, db, o, id, 1, v, at, typ, owner)
 	})
 }
 
-// relink links the n distinct children ids selects whose key h is NULL to
-// own, and checks, by a count after the UPDATE, that each of them holds own.
-func relink[T any, PT velox.Entity[T], V any](ctx context.Context, db *velox.DB, ids velox.Pred[T], n int, h velox.NullCol[T, V], own V, at, typ, owner string) error {
-	if _, err := db.Update[T, PT]().Set(h.Set(own)).Where(ids, h.IsNull()).Exec(ctx); err != nil {
+// relink links the n distinct children ids selects whose key is NULL to v,
+// the owner's key as o's FK holds it, and checks, by a count after the
+// UPDATE, that each of them holds v.
+func relink(ctx context.Context, db *velox.DB, o Owned, ids velox.Predicate, n int, v any, at, typ, owner string) error {
+	t, fk := o.Target, o.FK
+	if _, err := db.UpdateTable(t).Set(fk, v).Where(ids, t.Pred(fk, velox.PredIsNull, nil)).Exec(ctx); err != nil {
 		return err
 	}
-	got, err := db.Query[T, PT]().Where(ids, h.EQ(own)).Count(ctx)
+	got, err := db.QueryTable(t).Where(ids, t.Pred(fk, velox.PredEQ, v)).Count(ctx)
 	if err != nil {
 		return err
 	}
-	return Repointed(ctx, got, n, db.Query[T, PT]().Where(ids, h.NotNull(), h.NEQ(own)), at, typ, owner)
+	return Repointed(ctx, got, n, db.QueryTable(t).Where(ids, t.Pred(fk, velox.PredNotNull, nil), t.Pred(fk, velox.PredNEQ, v)), at, typ, owner)
 }
 
-// Through writes an update's many-to-many edge m, to T of the GraphQL type
-// typ, for the updated row, whose key is own. After the row's write, in this
-// order:
+// Through writes an update's many-to-many edge m, to the target of the
+// GraphQL type typ, for the updated row, whose key is own. After the row's
+// write, in this order:
 //   - ed.Clear deletes the row's join rows, read the MaxPage of
 //     veloxgql.LimitsFromContext(ctx) at a time in the order of m's two
 //     columns (UnlinkAll);
 //   - ed.Remove deletes the join rows of those keys;
-//   - ed.Add, the keys of the input field addField, are checked under T's
-//     Read policy (CheckExists, NOT_FOUND naming addField), then inserted in
-//     one INSERT ON CONFLICT (m's two columns) DO NOTHING, so a link that
-//     exists is kept.
+//   - ed.Add, the keys of the input field addField, are checked under the
+//     target's Read policy (CheckExists, NOT_FOUND naming addField), then
+//     inserted in one INSERT ON CONFLICT (m's two columns) DO NOTHING, so a
+//     link that exists is kept.
 //
 // Join rows are scoped by no policy of their own: ed.Clear and ed.Remove
-// delete only those to a target the caller may read, under T's Read policy
-// (Readable), as ed.Add checks its targets. A link to a target hidden from the
-// caller stays.
-func Through[E any, PE velox.Entity[E], T, J, V any, K comparable, PT velox.Entity[T], PJ velox.Entity[J]](u *Update[E, PE], addField, typ string, ed Edit[K], own V, m M2M[E, T, J, V, K]) {
+// delete only those to a target the caller may read, under the target's Read
+// policy (Readable), as ed.Add checks its targets. A link to a target hidden
+// from the caller stays.
+func Through(u *Update, addField, typ string, ed Edit, own any, m M2M) {
 	if unchanged(ed) {
 		return
 	}
+	j := m.Join
+	o, err := j.Convert(m.JoinOwner, own)
+	if err != nil {
+		u.s.fail(err)
+		return
+	}
+	rm, _ := values(ed.Remove)
+	add, _ := values(ed.Add)
+	addIDs, nadd, err := in(m.Target, m.TargetKey, ed.Add)
+	u.s.fail(err)
 	at := u.s.at(addField)
+	mine := j.Pred(m.JoinOwner, velox.PredEQ, o)
 	u.s.after = append(u.s.after, func(ctx context.Context, db *velox.DB) error {
-		id, o, t := m.pk, m.jo, m.jt
-		unlink := func(ks []K) error {
-			vs, err := Readable(ctx, db.Query[T, PT]().Where(id.In(ks...)).Columns(id), len(ks), m.key)
+		unlink := func(ks []any) error {
+			ids, n, err := in(m.Target, m.TargetKey, ks)
+			if err != nil || n == 0 {
+				return err
+			}
+			vs, err := Readable(ctx, db.QueryTable(m.Target).Where(ids).Columns(m.TargetKey), n, m.TargetKey)
 			if err != nil || len(vs) == 0 {
 				return err
 			}
-			_, err = db.Delete[J, PJ]().Where(o.EQ(own), t.In(vs...)).Exec(ctx)
+			for i, v := range vs {
+				if vs[i], err = j.Convert(m.JoinTarget, v); err != nil {
+					return err
+				}
+			}
+			_, err = db.DeleteTable(j).Where(mine, j.Pred(m.JoinTarget, velox.PredIn, vs)).Exec(ctx)
 			return err
 		}
 		if ed.Clear {
-			if err := UnlinkAll(ctx, db.Query[J, PJ]().Where(o.EQ(own)).OrderBy(o.Asc(), t.Asc()), m.other, unlink); err != nil {
+			links := db.QueryTable(j).Where(mine).OrderBy(velox.OrderTerm{Column: m.JoinOwner}, velox.OrderTerm{Column: m.JoinTarget})
+			if err := UnlinkAll(ctx, links, m.JoinTarget, unlink); err != nil {
 				return err
 			}
 		}
-		if len(ed.Remove) > 0 {
-			if err := unlink(ed.Remove); err != nil {
+		if len(rm) > 0 {
+			if err := unlink(rm); err != nil {
 				return err
 			}
 		}
-		if len(ed.Add) == 0 {
+		if nadd == 0 {
 			return nil
 		}
-		if err := CheckExists(ctx, db.Query[T, PT]().Where(id.In(ed.Add...)), len(ed.Add), at, typ); err != nil {
+		if err := CheckExists(ctx, db.QueryTable(m.Target).Where(addIDs), nadd, at, typ); err != nil {
 			return err
 		}
-		rows := make([]J, len(ed.Add))
-		for i, k := range ed.Add {
-			rows[i] = m.row(own, k)
+		rows, err := m.joinRows(o, add)
+		if err != nil {
+			return err
 		}
-		return db.InsertAll[J, PJ](rows).OnConflict(o, t).DoNothing().Exec(ctx)
+		return db.InsertRows(j, rows).OnConflict(m.JoinOwner, m.JoinTarget).DoNothing().Exec(ctx)
 	})
 }

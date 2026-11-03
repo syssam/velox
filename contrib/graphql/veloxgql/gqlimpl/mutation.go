@@ -103,7 +103,7 @@ func DecodeIDsAs[K comparable, V any](ctx context.Context, at string, ids []stri
 // IDs name no <typ>", or NotFound's for n 1, and echoes no ID. n is the number
 // of distinct IDs; for n 0, CheckExists runs no query. The query's own error is
 // returned as it is.
-func CheckExists[E any](ctx context.Context, q velox.Query[E], n int, at, typ string) error {
+func CheckExists(ctx context.Context, q velox.TableQuery, n int, at, typ string) error {
 	if n == 0 {
 		return nil
 	}
@@ -144,7 +144,7 @@ func matched(got int64, n int, at, typ string) error {
 // does not exist. The count's own error is returned as it is. A got of -1, a
 // count the driver did not report, is CountUnknown's error: the UPDATE's rows
 // cannot be told from the IDs that name no child.
-func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[E], at, typ, owner string) error {
+func Repointed(ctx context.Context, got int64, n int, linked velox.TableQuery, at, typ, owner string) error {
 	if got < 0 || got >= int64(n) {
 		return matched(got, n, at, typ)
 	}
@@ -165,7 +165,7 @@ func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[
 // <owner> is already linked to a or an <typ>" (as Repointed writes the
 // article), which says nothing about the child. The query's own error is
 // returned as it is.
-func StillLinked[E any](ctx context.Context, q velox.Query[E], at, typ, owner string) error {
+func StillLinked(ctx context.Context, q velox.TableQuery, at, typ, owner string) error {
 	const reason = "graphql: a hidden child of a one-to-one re-point"
 	ok, err := q.Exists(velox.WithoutPolicy(ctx, reason))
 	switch {
@@ -177,23 +177,24 @@ func StillLinked[E any](ctx context.Context, q velox.Query[E], at, typ, owner st
 	return nil
 }
 
-// Readable returns the keys, which key reads from a row, of the rows q selects:
-// q names at most n distinct keys, under the caller's Read policy,
-// so its rows are those of the keys the caller may read. For generated code.
-// For n 0, Readable runs no query. The query's own error is returned as it is.
+// Readable returns the values of column col, a key, of the rows q selects:
+// q names at most n distinct keys, under the caller's Read policy, so its
+// rows are those of the keys the caller may read. For generated code. For n
+// 0, Readable runs no query. The query's own error is returned as it is.
 // remove<Edge>IDs and clear<Edge> of a many-to-many edge delete only the join
 // rows of these keys.
-func Readable[T, K any](ctx context.Context, q velox.Query[T], n int, key func(*T) K) ([]K, error) {
+func Readable(ctx context.Context, q velox.TableQuery, n, col int) ([]any, error) {
 	if n == 0 {
 		return nil, nil
 	}
-	ts, err := q.Limit(n).MaxRows(n).All(ctx)
+	rows, err := q.Limit(n).MaxRows(n).All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ks := make([]K, len(ts))
-	for i := range ts {
-		ks[i] = key(&ts[i])
+	t := q.Table()
+	ks := make([]any, rows.Len())
+	for i := range ks {
+		ks[i] = t.Value(rows.At(i), col)
 	}
 	return ks, nil
 }
@@ -202,29 +203,31 @@ func Readable[T, K any](ctx context.Context, q velox.Query[T], n int, key func(*
 // selects the join rows of the row the mutation changes, ordered by their
 // primary key; UnlinkAll reads them the MaxPage of
 // veloxgql.LimitsFromContext(ctx) at a time, and gives unlink the target keys
-// of each page, which other reads from a join row. unlink deletes the join rows
-// of the keys whose target the caller may read (Readable), and leaves the
-// others: each page starts after the last row of the one before, so a join row
-// left is not read again. The first error is returned as it is.
-func UnlinkAll[J, K any](ctx context.Context, links velox.Query[J], other func(*J) K, unlink func(ks []K) error) error {
+// of each page, the values of the join rows' column col. unlink deletes the
+// join rows of the keys whose target the caller may read (Readable), and
+// leaves the others: each page starts after the last row of the one before,
+// so a join row left is not read again. The first error is returned as it
+// is.
+func UnlinkAll(ctx context.Context, links velox.TableQuery, col int, unlink func(ks []any) error) error {
 	page := veloxgql.LimitsFromContext(ctx).MaxPage
 	q := links.Limit(page).MaxRows(page)
+	t := q.Table()
 	for {
 		js, err := q.All(ctx)
-		if err != nil || len(js) == 0 {
+		if err != nil || js.Len() == 0 {
 			return err
 		}
-		ks := make([]K, len(js))
-		for i := range js {
-			ks[i] = other(&js[i])
+		ks := make([]any, js.Len())
+		for i := range ks {
+			ks[i] = t.Value(js.At(i), col)
 		}
 		if err := unlink(ks); err != nil {
 			return err
 		}
-		if len(js) < page {
+		if js.Len() < page {
 			return nil
 		}
-		q = q.After(&js[len(js)-1])
+		q = q.After(js.At(js.Len() - 1))
 	}
 }
 
@@ -262,7 +265,7 @@ func NotFound(at, typ string) error {
 // stays the caller's until the transaction ends; SQLite has none, and its
 // transactions lock the database. A missing row is NotFound(at, typ). For
 // generated code, inside Atomic's transaction, with db the DB it passes.
-func LockRow[E any](ctx context.Context, db *velox.DB, q velox.Query[E], at, typ string) error {
+func LockRow(ctx context.Context, db *velox.DB, q velox.TableQuery, at, typ string) error {
 	q = q.Writable()
 	if db.Dialect() != velox.SQLite {
 		q = q.ForUpdate()

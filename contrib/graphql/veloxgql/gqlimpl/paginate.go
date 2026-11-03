@@ -272,7 +272,7 @@ type Connection struct {
 	after unsafe.Pointer   // the row the page starts after, in the paging direction
 	// edge is set by EdgeConnection when the connection is its part of a
 	// batch.
-	edge *edge
+	edge *edgeMode
 
 	pageOnce  sync.Once
 	page      *Page

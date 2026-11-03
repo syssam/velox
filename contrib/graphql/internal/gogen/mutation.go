@@ -279,20 +279,16 @@ func setKey(f *file, indent, dst, src, conv, tmp string, ptr bool) {
 	}
 }
 
-// setNull is the setter that sets the nullable field fd of e to NULL: its
-// handle's SetNull when the Go field is a pointer, and else Set(nil), for a
-// field whose Go type holds nil (a slice, a map, a pointer or an interface),
-// whose handle has no SetNull: its ColumnDescriptor says Nullable, or its Go type
-// is a pointer, so the core binds that nil as SQL NULL. A field of another
-// Go type cannot be cleared: an error, which velox-gen's rule 48 keeps from
-// its models.
+// setNull is the call that clears the nullable field fd of e in an update,
+// u.SetNull of its column: a pointer field, or one whose Go type holds nil
+// (a slice, a map, a pointer or an interface), whose ColumnDescriptor says
+// Nullable, so the core binds the nil as SQL NULL. A field of another Go type
+// cannot be cleared: an error, which velox-gen's rule 48 keeps from its
+// models.
 func setNull(e *plugin.Entity, fd *plugin.Field) (string, error) {
-	h := e.Handles + "." + fd.GoName
 	switch {
-	case fd.Pointer:
-		return h + ".SetNull()", nil
-	case fd.Kind == "slice" || fd.Kind == "map" || fd.Kind == "ptr" || fd.Kind == "interface" || fd.Type == "bytes":
-		return h + ".Set(nil)", nil
+	case fd.Pointer, fd.Kind == "slice" || fd.Kind == "map" || fd.Kind == "ptr" || fd.Kind == "interface" || fd.Type == "bytes":
+		return "u.SetNull(" + colConst(e, fd) + ")", nil
 	}
 	return "", fmt.Errorf("schema %s, field %s: the model says its column holds NULL, and its Go type %s holds no nil; make the field Nillable", e.Name, fd.Name, cmp.Or(fd.ElemType, fd.GoType))
 }

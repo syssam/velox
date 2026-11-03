@@ -3,13 +3,14 @@ package gen
 import (
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion10
+const _ = veloxgql.GeneratedCodeIsVersion11
 
 // UserGQL is the edge user: the Account it leads to, or nil when there is none.
 // It is read with the edge of every row read with x, in one query.
@@ -22,7 +23,8 @@ func (x *Like) UserGQL(ctx context.Context) (*User, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Account"); ok {
 		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeOne(ctx, q, x, Likes.User, "Like.user")
+	p, err := gqlimpl.EdgeOne(ctx, q, velox.TableOf[Like](), unsafe.Pointer(x), likeEdgeUser, "Like.user")
+	return (*User)(p), err
 }
 
 // PostGQL is the edge post: the Post it leads to, or nil when there is none. It
@@ -36,7 +38,8 @@ func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Post"); ok {
 		q = gqlimpl.Narrow(q, postColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeOne(ctx, q, x, Likes.Post, "Like.post")
+	p, err := gqlimpl.EdgeOne(ctx, q, velox.TableOf[Like](), unsafe.Pointer(x), likeEdgePost, "Like.post")
+	return (*Post)(p), err
 }
 
 // LikeConnection is the GraphQL type LikeConnection, a connection to a list of
@@ -195,21 +198,27 @@ type CreateLikeInput struct {
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreateLikeInput) Create(ctx context.Context, x *Like) (*Like, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreateLikeInput", "Like", "gen.Like", x, likeInputGQL)
+	if x == nil {
+		x = new(Like)
+	}
+	c := gqlimpl.NewCreate(ctx, "CreateLikeInput", "Like", "gen.Like", velox.TableOf[Like](), unsafe.Pointer(x), likeInputGQL)
 	if in.Weight != nil {
 		x.Weight = *in.Weight
-		c.Given(Likes.Weight)
+		c.Given(likeColWeight)
 	}
 	if in.CreatedAt != nil {
 		x.CreatedAt = *in.CreatedAt
 		gqlimpl.NotZero(c, "createdAt", x.CreatedAt)
-		c.Given(Likes.CreatedAt)
+		c.Given(likeColCreatedAt)
 	}
 	userIDKey := gqlimpl.Key[int64](c, "userID", in.UserID, "Account")
-	gqlimpl.Exists(c, "userID", "Account", 1, Users.ID.EQ(userIDKey))
+	gqlimpl.Exists(c, "userID", "Account", velox.TableOf[User](), userColID, []int64{userIDKey})
 	x.UserID = userIDKey
 	postIDKey := gqlimpl.Key[int64](c, "postID", in.PostID, "Post")
-	gqlimpl.Exists(c, "postID", "Post", 1, Posts.ID.EQ(postIDKey))
+	gqlimpl.Exists(c, "postID", "Post", velox.TableOf[Post](), postColID, []int64{postIDKey})
 	x.PostID = postIDKey
-	return c.Insert()
+	if err := c.Insert(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }

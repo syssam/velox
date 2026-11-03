@@ -56,28 +56,28 @@ func TestInputEdgeKinds(t *testing.T) {
 			// insert would store the Default.
 			`gqlimpl.NotNull(c, "nick", in.Nick != nil) if in.Nick != nil {`,
 			// A Nillable JSON field decodes, and the row takes its address.
-			`metaJSON := gqlimpl.DecodeJSON[map[string]any](c, "meta", *in.Meta) x.Meta = &metaJSON c.Given(Owners.Meta)`,
+			`metaJSON := gqlimpl.DecodeJSON[map[string]any](c, "meta", *in.Meta) x.Meta = &metaJSON c.Given(ownerColMeta)`,
 			// A one-to-one edge whose key the target holds re-points one child.
-			`if in.PetID != nil { petIDKey := gqlimpl.Key[int64](c, "petID", *in.PetID, "Pet") gqlimpl.Repoint(c, "petID", "Pet", ownerPetEdgeGQL(), petIDKey) }`,
+			`if in.PetID != nil { petIDKey := gqlimpl.Key[int64](c, "petID", *in.PetID, "Pet") gqlimpl.Repoint(c, "petID", "Pet", ownerPetEdgeGQL(), []int64{petIDKey}) }`,
 		},
 		"UpdateOwnerInput.Update": {
-			`u, key := gqlimpl.NewUpdateAs[Owner, int64](ctx, "UpdateOwnerInput", "Owner", "gen.Owner", id, ownerInputGQL, gqlimpl.AsInt[types.OwnerID, int64])`,
+			`u, key := gqlimpl.NewUpdateAs[int64, types.OwnerID](ctx, "UpdateOwnerInput", "Owner", "gen.Owner", velox.TableOf[Owner](), ownerColID, id, ownerInputGQL, gqlimpl.AsInt[types.OwnerID, int64])`,
 			// The Pet's rows hold the owner's key as an int64.
 			`gqlimpl.Child(u, "petID", "Pet", clearPet, petIDKey, int64(key), ownerPetEdgeGQL())`,
 		},
 		"ownerPetEdgeGQL": {
-			`gqlimpl.NewOwned[Pet, int64](func(x *Owner) int64 { return int64(x.ID) }, Pets.ID, Pets.OwnerPet)`,
+			`gqlimpl.Owned{Owner: velox.TableOf[Owner](), Target: velox.TableOf[Pet](), OwnerKey: ownerColID, TargetKey: petColID, FK: petColOwnerPet}`,
 		},
 		"CreatePetInput.Create": {
 			`ownerIDVal := int64(ownerIDKey) x.OwnerPet = &ownerIDVal`,
 			`momIDKey := gqlimpl.Key[int64](c, "momID", in.MomID, "Pet")`,
 		},
 		"UpdatePetInput.Update": {
-			`u.SetKey(Pets.OwnerPet.Set(int64(ownerIDKey)))`,
+			`u.SetKey(petColOwnerPet, int64(ownerIDKey))`,
 			// A Required edge's NULL-able key can only be added to: no remove
 			// or clear, which would leave a child with none.
 			`addKitIDsKeys := gqlimpl.Keys[int64](u, "addKitIDs", in.AddKitIDs, "Pet")`,
-			`gqlimpl.Children(u, "addKitIDs", "Pet", gqlimpl.Edit[int64]{Add: addKitIDsKeys}, key, petKitsEdgeGQL())`,
+			`gqlimpl.Children(u, "addKitIDs", "Pet", gqlimpl.Edit{Add: addKitIDsKeys}, key, petKitsEdgeGQL())`,
 		},
 	} {
 		src := funcSrc(t, files, name)
@@ -120,9 +120,9 @@ func TestNonNodeOwnerM2M(t *testing.T) {
 	}}
 	files := render(t, m)
 	for name, want := range map[string]string{
-		"thingTagsEdgeGQL": `gqlimpl.NewM2M(func(x *Thing) float64 { return x.ID }, Tags.ID, tagKeyGQL, ThingTags.ThingID, ThingTags.TagID, ` +
-			`func(j *ThingTag) int64 { return j.TagID }, func(own float64, k int64) ThingTag { return ThingTag{ThingID: own, TagID: k} })`,
-		"CreateThingInput.Create": `gqlimpl.Join(c, "tagIDs", "Tag", thingTagsEdgeGQL(), tagIDsKeys...)`,
+		"thingTagsEdgeGQL": `gqlimpl.M2M{Owner: velox.TableOf[Thing](), Target: velox.TableOf[Tag](), Join: velox.TableOf[ThingTag](), ` +
+			`OwnerKey: thingColID, TargetKey: tagColID, JoinOwner: thingTagColThingID, JoinTarget: thingTagColTagID}`,
+		"CreateThingInput.Create": `gqlimpl.Join(c, "tagIDs", "Tag", thingTagsEdgeGQL(), tagIDsKeys)`,
 	} {
 		if src := funcSrc(t, files, name); !strings.Contains(src, want) {
 			t.Errorf("%s has no %s:\n%s", name, want, src)
@@ -202,7 +202,7 @@ func TestBytesOfANamedType(t *testing.T) {
 	files := render(t, m)
 	for name, want := range map[string]string{
 		"CreateThingInput.Create": "x.B = types.Blob(in.B)",
-		"UpdateThingInput.Update": "u.Set(Things.B.Set(types.Blob(*in.B)))",
+		"UpdateThingInput.Update": "u.Set(thingColB, types.Blob(*in.B))",
 	} {
 		if src := funcSrc(t, files, name); !strings.Contains(src, want) {
 			t.Errorf("%s has no %s:\n%s", name, want, src)

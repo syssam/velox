@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"time"
+	"unsafe"
 
 	"github.com/google/uuid"
 	"github.com/syssam/velox"
@@ -13,7 +14,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion10
+const _ = veloxgql.GeneratedCodeIsVersion11
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -93,7 +94,7 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Posts, "Account.posts", []any{after, first, before, last, orderBy, where})}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[User](), unsafe.Pointer(x), userEdgePosts, "Account.posts", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // GroupsGQL is the edge groups: the Group nodes it leads to, in key order. It
@@ -110,7 +111,8 @@ func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Group"); ok {
 		q = gqlimpl.Narrow(q, groupColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeList(ctx, q, x, Users.Groups, "Account.memberships", 0)
+	ps, err := gqlimpl.EdgeList(ctx, q, velox.TableOf[User](), unsafe.Pointer(x), userEdgeGroups, "Account.memberships", 0)
+	return unsafe.Slice((**Group)(unsafe.Pointer(unsafe.SliceData(ps))), len(ps)), err
 }
 
 // LikesGQL is the edge likes: a connection to the Like nodes it leads to,
@@ -126,7 +128,7 @@ func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 	if err != nil {
 		return nil, err
 	}
-	return &LikeConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Likes, "Account.likes", []any{after, first, before, last})}, nil
+	return &LikeConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[User](), unsafe.Pointer(x), userEdgeLikes, "Account.likes", []any{after, first, before, last})}, nil
 }
 
 // AccountConnection is the GraphQL type AccountConnection, a connection to a
@@ -390,10 +392,9 @@ func userInputGQL(goField string) string {
 
 // userGroupsEdgeGQL is the many-to-many edge groups of User, through UserGroup,
 // as its inputs write it.
-func userGroupsEdgeGQL() gqlimpl.M2M[User, Group, UserGroup, int64, int64] {
-	return gqlimpl.NewM2M(userKeyGQL, Groups.ID, groupKeyGQL, UserGroups.UserID, UserGroups.GroupID,
-		func(j *UserGroup) int64 { return j.GroupID },
-		func(own, k int64) UserGroup { return UserGroup{UserID: own, GroupID: k} })
+func userGroupsEdgeGQL() gqlimpl.M2M {
+	return gqlimpl.M2M{Owner: velox.TableOf[User](), Target: velox.TableOf[Group](), Join: velox.TableOf[UserGroup](),
+		OwnerKey: userColID, TargetKey: groupColID, JoinOwner: userGroupColUserID, JoinTarget: userGroupColGroupID}
 }
 
 // CreateAccountInput is the GraphQL input CreateAccountInput; its method Create
@@ -443,65 +444,71 @@ func (in CreateAccountInput) GoString() string { return in.String() }
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreateAccountInput) Create(ctx context.Context, x *User) (*User, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreateAccountInput", "Account", "gen.User", x, userInputGQL, Users.Name, Users.Email, Users.PasswordHash, Users.Quota)
+	if x == nil {
+		x = new(User)
+	}
+	c := gqlimpl.NewCreate(ctx, "CreateAccountInput", "Account", "gen.User", velox.TableOf[User](), unsafe.Pointer(x), userInputGQL, userColName, userColEmail, userColPasswordHash, userColQuota)
 	if in.CreatedAt != nil {
 		x.CreatedAt = *in.CreatedAt
 		gqlimpl.NotZero(c, "createdAt", x.CreatedAt)
-		c.Given(Users.CreatedAt)
+		c.Given(userColCreatedAt)
 	}
 	if in.UpdatedAt != nil {
 		x.UpdatedAt = *in.UpdatedAt
 		gqlimpl.NotZero(c, "updatedAt", x.UpdatedAt)
-		c.Given(Users.UpdatedAt)
+		c.Given(userColUpdatedAt)
 	}
 	x.Name = in.DisplayName
 	x.Email = in.Email
 	if in.Role != nil {
 		x.Role = *in.Role
-		c.Given(Users.Role)
+		c.Given(userColRole)
 	}
 	if in.Nickname != nil {
 		x.Nickname = in.Nickname
-		c.Given(Users.Nickname)
+		c.Given(userColNickname)
 	}
 	if in.Bio != nil {
 		x.Bio = in.Bio
-		c.Given(Users.Bio)
+		c.Given(userColBio)
 	}
 	if in.Age != nil {
 		x.Age = in.Age
-		c.Given(Users.Age)
+		c.Given(userColAge)
 	}
 	x.PasswordHash = in.PasswordHash
 	if in.Score != nil {
 		x.Score = *in.Score
-		c.Given(Users.Score)
+		c.Given(userColScore)
 	}
 	if in.ExternalID != nil {
 		x.ExternalID = *in.ExternalID
 		gqlimpl.NotZero(c, "externalID", x.ExternalID)
-		c.Given(Users.ExternalID)
+		c.Given(userColExternalID)
 	}
 	if in.Avatar != nil {
 		x.Avatar = *in.Avatar
-		c.Given(Users.Avatar)
+		c.Given(userColAvatar)
 	}
 	x.Quota = in.Quota
 	if in.Active != nil {
 		x.Active = *in.Active
-		c.Given(Users.Active)
+		c.Given(userColActive)
 	}
 	if in.Settings != nil {
 		settingsJSON := gqlimpl.DecodeJSON[map[string]any](c, "settings", *in.Settings)
 		x.Settings = settingsJSON
-		c.Given(Users.Settings)
+		c.Given(userColSettings)
 	}
 	membershipIDsKeys := gqlimpl.Keys[int64](c, "membershipIDs", in.MembershipIDs, "Group")
-	gqlimpl.Join(c, "membershipIDs", "Group", userGroupsEdgeGQL(), membershipIDsKeys...)
+	gqlimpl.Join(c, "membershipIDs", "Group", userGroupsEdgeGQL(), membershipIDsKeys)
 	if in.BestFriendID != nil {
 		bestFriendIDKey := gqlimpl.Key[int64](c, "bestFriendID", *in.BestFriendID, "Account")
-		gqlimpl.Exists(c, "bestFriendID", "Account", 1, Users.ID.EQ(bestFriendIDKey))
+		gqlimpl.Exists(c, "bestFriendID", "Account", velox.TableOf[User](), userColID, []int64{bestFriendIDKey})
 		x.UserBestFriend = &bestFriendIDKey
 	}
-	return c.Insert()
+	if err := c.Insert(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }

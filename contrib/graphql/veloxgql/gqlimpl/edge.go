@@ -48,58 +48,40 @@ import (
 // own context's cancellation, only the load's: every resolver of a response
 // has the request's. A batch's error is every row's.
 
-// EdgeConnection returns c, a connection over a query of every T that
-// XConnectionOf made with args, the edge's arguments as one value, as the
-// connection of x's edge r, whose GraphQL field is field ("User.posts").
-// When x is in a group and ctx is that field's, its page is read with the
-// pages of every row of the group whose arguments are args, in one
-// statement (velox.LoadEach, with LimitEach of the page size + 1 and c's
-// order and cursor), and its totalCount with theirs (velox.CountEach), on
-// the first call of either for any row, under the context its
+// EdgeConnection returns c, a connection over a query of every node of the
+// edge's target that XConnectionOf made with args, the edge's arguments as
+// one value, as the connection of the edge of x, a row of owner, through
+// owner's relation edge, whose GraphQL field is field ("User.posts"). When x
+// is in a group and ctx is that field's, its page is read with the pages of
+// every row of the group whose arguments are args, in one statement
+// (TableQuery.LoadEach, of the page size + 1 per owner, in c's order and
+// after its cursor), and its totalCount with theirs (TableQuery.CountEach),
+// on the first call of either for any row, under the context its
 // EdgeConnection was given; the rows read become a group. Otherwise its
-// queries are c's, filtered by r.Of(x). A base query with a lock (ForUpdate,
-// ForShare) is refused when batched: a per-owner read locks nothing.
-func EdgeConnection[E, T any](ctx context.Context, c *Connection, x *E, r velox.Rel[E, T], field string, args any) *Connection {
-	b, owners, i := batchOf(ctx, x, r, field, 0, args)
+// queries are c's, filtered by owner.Of(edge, …, x). A base query with a lock
+// (ForUpdate, ForShare) is refused when batched: a per-owner read locks
+// nothing.
+func EdgeConnection(ctx context.Context, c *Connection, owner velox.Table, x unsafe.Pointer, edge int, field string, args any) *Connection {
+	b, ptrs, i := batchOf(ctx, c.query.Table(), x, edge, field, 0, args)
 	if b == nil {
-		c.query = c.query.Where(velox.Predicate(r.Of(x)))
+		c.query = c.query.Where(owner.Of(edge, c.query.Table(), x))
 		return c
 	}
 	// The batch reads under the context of the edge's field, whose row scope
 	// keys it.
 	n := c.n
-	owner, rel := velox.TableOf[E](), int(r.I)
-	ptrs := pointers(owners)
-	c.edge = &edge{
+	c.edge = &edgeMode{
 		rows: func(q velox.TableQuery) (velox.TableRows, error) {
 			// The page size and the cursor are the batch's arguments: the
 			// same in the connection of every caller of the batch.
-			v, err := b.Rows(func() (any, error) {
-				parts, err := q.Limit(0).MaxRows(0).LoadEach(ctx, owner, rel, n+1, ptrs)
-				if err != nil {
-					return nil, err
-				}
-				// Owners with one key may get one run of rows: a row is added once.
-				seen := map[unsafe.Pointer]bool{}
-				var group []unsafe.Pointer
-				for _, p := range parts {
-					for k := range min(p.Len(), n) {
-						if x := p.At(k); !seen[x] {
-							seen[x] = true
-							group = append(group, x)
-						}
-					}
-				}
-				gqlcore.Add(ctx, group)
-				return parts, nil
-			})
+			parts, err := loadBatch(ctx, b, q.Limit(0).MaxRows(0), owner, edge, n+1, ptrs, func(r velox.TableRows) int { return min(r.Len(), n) })
 			if err != nil {
 				return velox.TableRows{}, err
 			}
-			return v.([]velox.TableRows)[i], nil
+			return parts[i], nil
 		},
 		count: func(q velox.TableQuery) (int, error) {
-			counts, err := b.Counts(func() ([]int64, error) { return q.Limit(0).CountEach(ctx, owner, rel, ptrs) })
+			counts, err := b.Counts(func() ([]int64, error) { return q.Limit(0).CountEach(ctx, owner, edge, ptrs) })
 			if err != nil {
 				return 0, err
 			}
@@ -109,85 +91,80 @@ func EdgeConnection[E, T any](ctx context.Context, c *Connection, x *E, r velox.
 	return c
 }
 
-// pointers is rows as pointers: a []*E has the layout of a []unsafe.Pointer.
-func pointers[E any](rows []*E) []unsafe.Pointer {
-	return unsafe.Slice((*unsafe.Pointer)(unsafe.Pointer(unsafe.SliceData(rows))), len(rows))
-}
-
-// EdgeOne returns x's node of the to-one edge r, whose GraphQL field is
-// field ("Post.author"), or nil: read with the other rows of x's group in
-// one statement (LoadEach, LimitEach(1)) when ctx is that field's, or alone
-// with q.Where(r.Of(x)).First. q selects the target's columns.
+// EdgeOne returns the node of the to-one edge of x, a row of owner, through
+// owner's relation edge, whose GraphQL field is field ("Post.author"), or
+// nil: read with the other rows of x's group in one statement (LoadEach, of
+// one per owner) when ctx is that field's, or alone with
+// q.Where(owner.Of(edge, …, x)).First. q, a query of the edge's target,
+// selects the target's columns.
 //
 // The node read alone is a group of its own, and so are the nodes of a
 // batch: their edges batch.
-func EdgeOne[E, T any](ctx context.Context, tq velox.TableQuery, x *E, r velox.Rel[E, T], field string) (*T, error) {
-	q := velox.Typed[T](tq)
-	b, owners, i := batchOf(ctx, x, r, field, 0, nil)
+func EdgeOne(ctx context.Context, q velox.TableQuery, owner velox.Table, x unsafe.Pointer, edge int, field string) (unsafe.Pointer, error) {
+	b, owners, i := batchOf(ctx, q.Table(), x, edge, field, 0, nil)
 	if b == nil {
-		v, err := q.Where(r.Of(x)).First(ctx)
+		v, err := q.Where(owner.Of(edge, q.Table(), x)).First(ctx)
 		if velox.IsNotFound(err) {
 			return nil, nil
 		}
 		if err != nil {
 			return nil, err
 		}
-		gqlcore.Add(ctx, []unsafe.Pointer{unsafe.Pointer(v)})
+		gqlcore.Add(ctx, []unsafe.Pointer{v})
 		return v, nil
 	}
-	parts, err := loadBatch(ctx, b, q, r.LimitEach(1), owners, func(rows []T) int { return len(rows) })
+	parts, err := loadBatch(ctx, b, q, owner, edge, 1, owners, velox.TableRows.Len)
 	if err != nil {
 		return nil, err
 	}
-	if len(parts[i]) == 0 {
+	if parts[i].Len() == 0 {
 		return nil, nil
 	}
-	return &parts[i][0], nil
+	return parts[i].At(0), nil
 }
 
-// EdgeList returns x's nodes of the list edge r, whose GraphQL field is
-// field ("Post.reviews"), in key order, batched as EdgeOne is, with
-// LimitEach of MaxList + 1: an owner with more than MaxList fails with
-// velox.ErrTooManyRows, in an error naming field, and the others do not.
+// EdgeList returns the nodes of the list edge of x, a row of owner, through
+// owner's relation edge, whose GraphQL field is field ("Post.reviews"), in
+// key order, batched as EdgeOne is, with at most MaxList + 1 per owner: an
+// owner with more than MaxList fails with velox.ErrTooManyRows, in an error
+// naming field, and the others do not.
 //
 // MaxList is that of veloxgql.LimitsFromContext(ctx), or maxList, the edge's
 // graphql.MaxList, when that is lower and not 0. Read alone, x's nodes are one
 // LoadEach of x, a group of their own.
-func EdgeList[E, T any](ctx context.Context, tq velox.TableQuery, x *E, r velox.Rel[E, T], field string, maxList int) ([]*T, error) {
-	q := velox.Typed[T](tq)
+func EdgeList(ctx context.Context, q velox.TableQuery, owner velox.Table, x unsafe.Pointer, edge int, field string, maxList int) ([]unsafe.Pointer, error) {
 	most := veloxgql.LimitsFromContext(ctx).MaxList
 	if maxList > 0 {
 		most = min(most, maxList)
 	}
-	rel := r.LimitEach(most + 1)
-	keep := func(rows []T) int {
-		if len(rows) > most {
+	keep := func(rows velox.TableRows) int {
+		if rows.Len() > most {
 			return 0
 		}
-		return len(rows)
+		return rows.Len()
 	}
-	b, owners, i := batchOf(ctx, x, r, field, most, nil)
+	b, owners, i := batchOf(ctx, q.Table(), x, edge, field, most, nil)
 	if b == nil {
-		b, owners, i = new(gqlcore.Batch), []*E{x}, 0
+		b, owners, i = new(gqlcore.Batch), []unsafe.Pointer{x}, 0
 	}
-	parts, err := loadBatch(ctx, b, q, rel, owners, keep)
+	parts, err := loadBatch(ctx, b, q, owner, edge, most+1, owners, keep)
 	if err != nil {
 		return nil, fmt.Errorf("veloxgql: %s: %w", field, err)
 	}
 	rows := parts[i]
-	if len(rows) > most {
+	if rows.Len() > most {
 		return nil, fmt.Errorf("veloxgql: %s: %w: more than %d, the edge's MaxList", field, velox.ErrTooManyRows, most)
 	}
-	out := make([]*T, len(rows))
-	for k := range rows {
-		out[k] = &rows[k]
+	out := make([]unsafe.Pointer, rows.Len())
+	for k := range out {
+		out[k] = rows.At(k)
 	}
 	return out, nil
 }
 
-// edge is a Connection's edge mode: its page and count are its part of a
+// edgeMode is a Connection's edge mode: its page and count are its part of a
 // batch.
-type edge struct {
+type edgeMode struct {
 	// rows returns the connection's rows, q being its query in its order,
 	// after its cursor.
 	rows func(q velox.TableQuery) (velox.TableRows, error)
@@ -198,22 +175,23 @@ type edge struct {
 // batchKey is what the callers of a batch share, besides its group, its
 // field and its selections: see the edges batch above.
 type batchKey struct {
-	field  string       // the edge's GraphQL field, "Post.likes"
-	rel    int32        // the relation's index on the owner
-	target reflect.Type // the relation's target, T
-	db     *velox.DB    // veloxgql.DBFromContext's
-	most   int          // EdgeList's MaxList; 0 for the others
+	field  string            // the edge's GraphQL field, "Post.likes"
+	rel    int               // the relation's index on the owner
+	target *velox.EntityInfo // the relation's target
+	db     *velox.DB         // veloxgql.DBFromContext's
+	most   int               // EdgeList's MaxList; 0 for the others
 	scope  velox.RowScope
 	app    any // veloxgql.WithBatchScope's value
 }
 
-// batchOf returns the batch of x's edge r, whose GraphQL field is field,
-// read with the arguments args (most being EdgeList's MaxList), for x's
-// group and ctx's key, the group's rows and x's index in them. The batch is
-// nil, and x reads alone, when ctx is in no gqlgen field or not in field, when x
-// is in no group of ctx's table, when the key cannot be compared, or when
-// the batch was made with other arguments.
-func batchOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field string, most int, args any) (*gqlcore.Batch, []*E, int) {
+// batchOf returns the batch of x's edge, through the relation edge to
+// target, whose GraphQL field is field, read with the arguments args (most
+// being EdgeList's MaxList), for x's group and ctx's key, the group's rows
+// and x's index in them. The batch is nil, and x reads alone, when ctx is in
+// no gqlgen field or not in field, when x is in no group of ctx's table,
+// when the key cannot be compared, or when the batch was made with other
+// arguments.
+func batchOf(ctx context.Context, target velox.Table, x unsafe.Pointer, edge int, field string, most int, args any) (*gqlcore.Batch, []unsafe.Pointer, int) {
 	fc := graphql.GetFieldContext(ctx)
 	if fc == nil || fc.Field.Field == nil {
 		return nil, nil, 0
@@ -222,12 +200,12 @@ func batchOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field strin
 		return nil, nil, 0
 	}
 	t := gqlcore.TableFromContext(ctx)
-	g, ps, i, ok := gqlcore.Find(t, unsafe.Pointer(x))
+	g, ps, i, ok := gqlcore.Find(t, x)
 	if !ok {
 		return nil, nil, 0
 	}
 	db, _ := veloxgql.DBFromContext(ctx)
-	key := batchKey{field: field, rel: r.I, target: reflect.TypeFor[T](), db: db, most: most, scope: velox.RowScopeFromContext(ctx), app: t.Scope(ctx)}
+	key := batchKey{field: field, rel: edge, target: target.Info(), db: db, most: most, scope: velox.RowScopeFromContext(ctx), app: t.Scope(ctx)}
 	if !canCompare(key.app) {
 		// A batch scope == would panic on: a read of its own.
 		return nil, nil, 0
@@ -236,8 +214,7 @@ func batchOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field strin
 	if b == nil {
 		return nil, nil, 0
 	}
-	// The group's rows are of E: x is.
-	return b, unsafe.Slice((**E)(unsafe.Pointer(unsafe.SliceData(ps))), len(ps)), i
+	return b, ps, i
 }
 
 // canCompare reports whether == on v cannot panic: what
@@ -257,31 +234,31 @@ func canCompare(v any) bool {
 	return t.Comparable()
 }
 
-// loadBatch returns b's rows: each owner's, read by velox.LoadEach(ctx, q,
-// r, owners) on the first call. The first keep(rows) rows of each owner
-// become one group.
-func loadBatch[E, T any](ctx context.Context, b *gqlcore.Batch, q velox.Query[T], r velox.Rel[E, T], owners []*E, keep func([]T) int) ([][]T, error) {
+// loadBatch returns b's rows: each owner's, rows of owner, read by
+// q.LoadEach(ctx, owner, edge, each, owners) on the first call. The first
+// keep(rows) rows of each owner become one group.
+func loadBatch(ctx context.Context, b *gqlcore.Batch, q velox.TableQuery, owner velox.Table, edge, each int, owners []unsafe.Pointer, keep func(velox.TableRows) int) ([]velox.TableRows, error) {
 	v, err := b.Rows(func() (any, error) {
-		parts, err := velox.LoadEach(ctx, q, r, owners)
+		parts, err := q.LoadEach(ctx, owner, edge, each, owners)
 		if err != nil {
 			return nil, err
 		}
-		// Owners with one key may get one slice: a row is added once.
-		seen := map[*T]bool{}
-		var group []*T
+		// Owners with one key may get one run of rows: a row is added once.
+		seen := map[unsafe.Pointer]bool{}
+		var group []unsafe.Pointer
 		for _, p := range parts {
 			for k := range keep(p) {
-				if x := &p[k]; !seen[x] {
+				if x := p.At(k); !seen[x] {
 					seen[x] = true
 					group = append(group, x)
 				}
 			}
 		}
-		gqlcore.Add(ctx, pointers(group))
+		gqlcore.Add(ctx, group)
 		return parts, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return v.([][]T), nil
+	return v.([]velox.TableRows), nil
 }
