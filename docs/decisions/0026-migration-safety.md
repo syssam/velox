@@ -282,8 +282,16 @@ Beside this, in the same spirit, each found by running it:
   one renamed, each a unit that runs again as it is, so one of them holds the rows
   after every unit. Codegen reserves the helper's name. The walk follows `ALTER INDEX
   … RENAME TO` of an index the file made, and compares it with the one dropped under
-  the new name. A constraint's index, which the main file drops, is still made again
-  under its name in the online file, with no index in between.
+  the new name.
+- A change of a unique constraint's index went the same way, worse: the main file
+  dropped the constraint and the online file built the new index, so the table had
+  no UNIQUE until the build ended, and a duplicate written then failed the build. An
+  index made a constraint added the constraint in the main file while the index held
+  its name, which could never run. Where a constraint is on either side, the new
+  index is now built as `x_velox_new` in the online file; made a constraint with `ADD
+  CONSTRAINT x_velox_new UNIQUE USING INDEX x_velox_new` when the model says one; the
+  old constraint or index dropped; and the new one renamed to `x`, by `RENAME
+  CONSTRAINT` or `ALTER INDEX`. Each is a unit, so a duplicate fails after every one.
 - PostgreSQL 18's `NOT NULL NOT VALID` sets `attnotnull` and leaves the rows from
   before it unchecked. Inspect read such a column as NOT NULL, so `Drift` against a
   model that says NOT NULL found nothing while a row held NULL. It is read as

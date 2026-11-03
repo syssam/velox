@@ -239,8 +239,10 @@ const unnamedSequence = "migrate: users.id: the identity's sequence is not named
 
 // TestRenderIndexChange: an index changed under its name on a table that exists is
 // built beside the old one under a helper name, the old one dropped, and the new one
-// renamed, each a unit of the online script. One dropped in the main script, as a
-// constraint's, is made again under its name.
+// renamed, each a unit of the online script. Where a unique constraint is on either
+// side, the new index is made a constraint of the helper's name when it is one, the
+// old constraint or index dropped, and the new renamed; nothing goes in the main
+// script.
 func TestRenderIndexChange(t *testing.T) {
 	d := velox.Postgres
 	x := func(constraint bool, cols ...string) *migrate.Schema {
@@ -264,13 +266,23 @@ func TestRenderIndexChange(t *testing.T) {
 			t.Errorf("statement %d: %q of change %d in unit %d; want %+v", i, st.SQL, st.Change, st.Unit, want[i])
 		}
 	}
-	plan, err = migrate.NewPlan(x(true, "a", "b"), x(false, "b", "a"), allowAll("add-unique"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := sqls(plan.Scripts); !slices.Equal(got, []string{`ALTER TABLE "t" DROP CONSTRAINT "x"`,
-		`DROP INDEX CONCURRENTLY IF EXISTS "x"`, `CREATE UNIQUE INDEX CONCURRENTLY "x" ON "t" ("b", "a")`}) {
-		t.Errorf("a constraint's:\n%s", strings.Join(got, "\n"))
+	build := []string{`DROP INDEX CONCURRENTLY IF EXISTS "x_velox_new"`, `CREATE UNIQUE INDEX CONCURRENTLY "x_velox_new" ON "t" ("b", "a")`}
+	attach := `ALTER TABLE "t" ADD CONSTRAINT "x_velox_new" UNIQUE USING INDEX "x_velox_new"`
+	for _, c := range []struct {
+		from, to bool
+		want     []string
+	}{
+		{true, false, append(slices.Clone(build), `ALTER TABLE "t" DROP CONSTRAINT IF EXISTS "x"`, `ALTER INDEX IF EXISTS "x_velox_new" RENAME TO "x"`)},
+		{false, true, append(slices.Clone(build), attach, `DROP INDEX CONCURRENTLY IF EXISTS "x"`, `ALTER TABLE "t" RENAME CONSTRAINT "x_velox_new" TO "x"`)},
+		{true, true, append(slices.Clone(build), attach, `ALTER TABLE "t" DROP CONSTRAINT IF EXISTS "x"`, `ALTER TABLE "t" RENAME CONSTRAINT "x_velox_new" TO "x"`)},
+	} {
+		plan, err = migrate.NewPlan(x(c.from, "a", "b"), x(c.to, "b", "a"), allowAll("add-unique"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ss := plan.Scripts; len(ss) != 1 || ss[0].Kind != migrate.ScriptOnline || !slices.Equal(sqls(ss), c.want) {
+			t.Errorf("constraint %v to %v:\n%s", c.from, c.to, scriptsText(ss))
+		}
 	}
 }
 
@@ -660,10 +672,12 @@ func TestRenderPostgresConstraintIndex(t *testing.T) {
 			[]string{`ALTER TABLE "users" RENAME CONSTRAINT "users_email_key" TO "users_mail_key"`}, nil},
 		{"redefine", schemaOf(velox.Postgres, constraintUsers("users", emailKey("users_email_key", false, "email", "name"))),
 			migrate.PlanOptions{Allow: addUnique},
-			[]string{`ALTER TABLE "users" DROP CONSTRAINT "users_email_key"`},
+			nil,
 			[]string{
-				`DROP INDEX CONCURRENTLY IF EXISTS "users_email_key"`,
-				`CREATE UNIQUE INDEX CONCURRENTLY "users_email_key" ON "users" ("email", "name")`,
+				`DROP INDEX CONCURRENTLY IF EXISTS "users_email_key_velox_new"`,
+				`CREATE UNIQUE INDEX CONCURRENTLY "users_email_key_velox_new" ON "users" ("email", "name")`,
+				`ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "users_email_key"`,
+				`ALTER INDEX IF EXISTS "users_email_key_velox_new" RENAME TO "users_email_key"`,
 			}},
 		{"table rename", schemaOf(velox.Postgres, constraintUsers("accounts", emailKey("accounts_email_key", false))),
 			migrate.PlanOptions{Diff: migrate.DiffOptions{RenameTables: map[migrate.TableRef]migrate.TableRef{{Name: "users"}: {Name: "accounts"}}}},

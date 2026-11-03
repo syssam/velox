@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -506,6 +507,80 @@ func TestPostgresIndexChangeKeepsTheOldUntilTheNew(t *testing.T) {
 		}
 		mustUp(t, db, fsys, migrate.WithResume())
 		invariants(t, db, d, fsys, x("b", "a"))
+	}
+}
+
+// TestPostgresUniqueConstraintChangeKeepsTheOld: a plan that changed a unique
+// constraint's columns, or made a unique index a constraint or a constraint an
+// index, dropped the old in the main file and made the new in the online one,
+// with no uniqueness in between; the index to constraint plan added the
+// constraint while the index held its name, and could not run. The new index is
+// built beside the old, made a constraint where the model says so, and the old
+// dropped only then, so a duplicate fails after every unit.
+func TestPostgresUniqueConstraintChangeKeepsTheOld(t *testing.T) {
+	d := velox.Postgres
+	x := func(constraint bool, cols ...string) *migrate.Schema {
+		return indexed(d, migrate.Index{Name: "x", Columns: cols, Unique: true, Constraint: constraint})
+	}
+	for _, c := range []struct {
+		name     string
+		from, to bool
+	}{{"constraint to index", true, false}, {"index to constraint", false, true}, {"constraint to constraint", true, true}} {
+		t.Run(c.name, func(t *testing.T) {
+			db, _ := freshDB(t, d)
+			fsys := dirOf(t, d, step{to: x(c.from, "a", "b"), name: "base"})
+			mustUp(t, db, fsys)
+			mustExec(t, db, `INSERT INTO t (id, a, b) VALUES (1, 'p', 'q')`)
+			fsys = extend(t, fsys, d, step{to: x(c.to, "b", "a"), name: "swap", opts: allowAll("add-unique")})
+			if f := fsys["0002_swap.sql"]; f != nil && strings.Contains(string(f.Data), " x") {
+				t.Errorf("the main file changes x:\n%s", sqlFiles(fsys))
+			}
+			// The hook runs before an atomic unit commits, whose lock the
+			// insert waits for: it goes in once the unit is done.
+			units := 0
+			var wg sync.WaitGroup
+			hook := migrate.WithUnitDone(func(v uint64, end int) {
+				units++
+				wg.Go(func() {
+					if _, err := db.Exec(`INSERT INTO t (id, a, b) VALUES ($1, 'p', 'q')`, 100+end); err == nil {
+						t.Errorf("a duplicate went in after the unit that ends at statement %d\n%s", end, sqlFiles(fsys))
+					}
+				})
+			})
+			_, err := migrate.Up(context.Background(), db, fsys, hook)
+			wg.Wait()
+			if err != nil {
+				t.Fatalf("Up: %v\n%s", err, sqlFiles(fsys))
+			}
+			if units < 3 {
+				t.Errorf("%d units ran", units)
+			}
+			if got := oneValue(t, db, "SELECT indexdef FROM pg_indexes WHERE tablename = 't' AND indexname <> 't_pkey'"); got != `CREATE UNIQUE INDEX x ON public.t USING btree (b, a)` {
+				t.Errorf("the indexes of t: %s", got)
+			}
+			if got := oneValue(t, db, "SELECT count(*) FROM pg_constraint WHERE conrelid = 't'::regclass AND contype = 'u' AND conname = 'x'"); got != map[bool]string{true: "1", false: "0"}[c.to] {
+				t.Errorf("%s unique constraints x", got)
+			}
+			invariants(t, db, d, fsys, x(c.to, "b", "a"))
+
+			// A run stopped after any unit resumes to the same end.
+			for stop := 1; stop <= 6; stop++ {
+				db, _ := freshDB(t, d)
+				mustUp(t, db, dirOf(t, d, step{to: x(c.from, "a", "b"), name: "base"}))
+				ctx, cancel := context.WithCancel(context.Background())
+				_, err := migrate.Up(ctx, db, fsys, migrate.WithUnitDone(func(v uint64, end int) {
+					if end == stop {
+						cancel()
+					}
+				}))
+				cancel()
+				if err == nil {
+					continue
+				}
+				mustUp(t, db, fsys, migrate.WithResume())
+				invariants(t, db, d, fsys, x(c.to, "b", "a"))
+			}
+		})
 	}
 }
 

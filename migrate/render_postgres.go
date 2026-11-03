@@ -175,11 +175,11 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 	case renameSequence:
 		return pgParts{stmts: []string{"ALTER SEQUENCE " + r.indexName(c.Table, c.From) + " RENAME TO " + r.ident(c.To)}}, nil
 	case addIndex:
-		if c.Index.Constraint {
-			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " ADD CONSTRAINT " + r.ident(c.Index.Name) + " UNIQUE (" + r.idents(c.Index.Columns) + ")"}}, nil
-		}
 		if r.builtBeside[i] {
 			return pgParts{}, nil
+		}
+		if c.Index.Constraint {
+			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " ADD CONSTRAINT " + r.ident(c.Index.Name) + " UNIQUE (" + r.idents(c.Index.Columns) + ")"}}, nil
 		}
 		if r.l.existing(c.Table) {
 			r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(c.Table, c.Index.Name), r.pgIndex(c.Table, c.Index, true))
@@ -187,6 +187,10 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 		}
 		return pgParts{stmts: []string{r.pgIndex(c.Table, c.Index, false)}}, nil
 	case dropIndex:
+		if j, ok := r.replacedUnique(i, c); ok {
+			r.buildBesideConstraint(i, j, c)
+			return pgParts{}, nil
+		}
 		if r.dropOnline(c) {
 			if j, ok := r.replacedOnline(i, c); ok {
 				r.buildBeside(i, j, c)
@@ -337,6 +341,53 @@ func (r *renderer) buildBeside(i, j int, c dropIndex) {
 	r.unit(j, "DROP INDEX CONCURRENTLY IF EXISTS "+helper, r.pgIndex(a.Table, nu, true))
 	r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(r.afterRename(c.Table), c.Index.Name))
 	r.unit(j, "ALTER INDEX IF EXISTS "+helper+" RENAME TO "+r.ident(a.Index.Name))
+	if r.builtBeside == nil {
+		r.builtBeside = map[int]bool{}
+	}
+	r.builtBeside[j] = true
+}
+
+// replacedUnique is the change after i that adds an index of the name of the one
+// c drops, to the same table that exists, where either is a unique constraint.
+func (r *renderer) replacedUnique(i int, c dropIndex) (int, bool) {
+	k := r.l.canon(c.Table)
+	if !r.l.existing(c.Table) || r.l.dropped[k] {
+		return 0, false
+	}
+	for j := i + 1; j < len(r.cs); j++ {
+		a, ok := r.cs[j].(addIndex)
+		if ok && a.Index.Name == c.Index.Name && r.l.canon(a.Table) == k && (a.Index.Constraint || c.Index.Constraint) {
+			return j, true
+		}
+	}
+	return 0, false
+}
+
+// buildBesideConstraint renders the change of an index where a unique
+// constraint is on either side: change i drops it and change j adds it again.
+// The new index is built under a helper name; made a constraint of that name
+// when j's is one; the old constraint or index dropped; and the new renamed.
+// Each is a unit, so a UNIQUE holds the rows after every one, where dropping
+// the old in the main file left the table with none until the build ended.
+func (r *renderer) buildBesideConstraint(i, j int, c dropIndex) {
+	a := r.cs[j].(addIndex)
+	nu := a.Index
+	nu.Name, nu.Constraint = ddl.NewIndex(a.Index.Name), false
+	t, helper, name := r.table(a.Table), r.ident(nu.Name), r.ident(a.Index.Name)
+	r.unit(j, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(a.Table, nu.Name), r.pgIndex(a.Table, nu, true))
+	if a.Index.Constraint {
+		r.unit(j, "ALTER TABLE "+t+" ADD CONSTRAINT "+helper+" UNIQUE USING INDEX "+helper)
+	}
+	if c.Index.Constraint {
+		r.unit(i, "ALTER TABLE "+t+" DROP CONSTRAINT IF EXISTS "+name)
+	} else {
+		r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(a.Table, a.Index.Name))
+	}
+	if a.Index.Constraint {
+		r.unit(j, "ALTER TABLE "+t+" RENAME CONSTRAINT "+helper+" TO "+name)
+	} else {
+		r.unit(j, "ALTER INDEX IF EXISTS "+r.indexName(a.Table, nu.Name)+" RENAME TO "+name)
+	}
 	if r.builtBeside == nil {
 		r.builtBeside = map[int]bool{}
 	}

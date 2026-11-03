@@ -172,10 +172,13 @@ func (r *renderer) dropLines() []string {
 			remade := false
 			for _, o := range r.cs {
 				a, ok := o.(addIndex)
-				if !ok || a.Index.Constraint || a.Index.Name != d.Index.Name || r.l.canon(a.Table) != r.l.canon(d.Table) {
+				if !ok || a.Index.Name != d.Index.Name || r.l.canon(a.Table) != r.l.canon(d.Table) {
 					continue
 				}
 				remade = true
+				if a.Index.Constraint {
+					continue
+				}
 				was := modelShape(d.Index)
 				for attr := range shapeDiffers(r.d, enumCasts(r.to), was, modelShape(a.Index)) {
 					r.drops = append(r.drops, colTarget(a.Table, a.Index.Name)+":"+attr+"="+shapeValue(was, attr))
