@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -441,6 +442,9 @@ func handDirOf(t *testing.T, dir string, snap *migrate.Schema, files map[string]
 	writeFile(t, filepath.Join(dir, "velox.sum"), string(sum))
 }
 
+// databaseCount counts the databases testDSN made.
+var databaseCount atomic.Int64
+
 // testDSN is the DSN of a new, empty database of dialect d, dropped when t
 // ends: on PostgreSQL one beside VELOX_TEST_POSTGRES's, on MySQL one made
 // through VELOX_TEST_MYSQL_ADMIN. It skips t when the variable is unset.
@@ -459,7 +463,8 @@ func testDSN(t *testing.T, d velox.Dialect) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = admin.Close() })
-	name := fmt.Sprintf("velox_gen_%d_%d", os.Getpid(), time.Now().UnixNano())
+	// The count tells apart two parallel tests that read the same clock.
+	name := fmt.Sprintf("velox_gen_%d_%d_%d", os.Getpid(), time.Now().UnixNano(), databaseCount.Add(1))
 	if _, err := admin.Exec("CREATE DATABASE " + q + name + q); err != nil {
 		t.Fatal(err)
 	}

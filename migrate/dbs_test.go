@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,11 +63,22 @@ func openDB(t *testing.T, driver, dsn string) *sql.DB {
 	return db
 }
 
+// databases counts the databases newDatabase made, for a name no other
+// test makes: two parallel tests can read the same clock.
+var databases struct {
+	sync.Mutex
+	n int
+}
+
 // newDatabase makes a database through admin, whose names are quoted with
 // q, and drops it when t ends. It returns its name.
 func newDatabase(t *testing.T, admin *sql.DB, q string) string {
 	t.Helper()
-	name := fmt.Sprintf("velox_migrate_%d_%d", os.Getpid(), time.Now().UnixNano())
+	databases.Lock()
+	databases.n++
+	n := databases.n
+	databases.Unlock()
+	name := fmt.Sprintf("velox_migrate_%d_%d_%d", os.Getpid(), time.Now().UnixNano(), n)
 	mustExec(t, admin, "CREATE DATABASE "+q+name+q)
 	t.Cleanup(func() {
 		drop := "DROP DATABASE IF EXISTS " + q + name + q
