@@ -1359,3 +1359,15 @@ func TestGenerateNamesTheChainOfACycle(t *testing.T) {
 		})
 	}
 }
+
+// A compile error in a schema file the loader rewrote, one that declares a
+// Policy, is reported at the user's file and line, not at the loader's
+// temporary copy.
+func TestGenerateCompileErrorInARewrittenFile(t *testing.T) {
+	dir := genModule(t, nil)
+	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy+"\nfunc init() { _ = undefinedName }\n")
+	code, out, errs := runCLI(t, dir, "./schema")
+	if code != 1 || out != "" || !strings.Contains(errs, "schema/user_policy.go:11:") || !strings.Contains(errs, "undefinedName") || strings.Contains(errs, ".velox-gen") || strings.Contains(errs, "overlay") {
+		t.Errorf("%d %q %q, want the error at schema/user_policy.go:11", code, out, errs)
+	}
+}

@@ -127,13 +127,13 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	overlay, err := writeOverlay(tmp, pkg, cands, files, env)
+	overlay, originals, err := writeOverlay(tmp, pkg, cands, files, env)
 	if err != nil {
 		return nil, err
 	}
 	exp, err := exports(pkg.Module.Dir, pkg.ImportPath, overlay, env)
 	if err != nil {
-		return nil, fmt.Errorf("loading %s:\n%w", pkg.ImportPath, err)
+		return nil, fmt.Errorf("loading %s:\n%s", pkg.ImportPath, unoverlay(err.Error(), originals, pkg.Module.Dir))
 	}
 	names, err := classify(pkg.ImportPath, exp)
 	if err != nil {
@@ -151,7 +151,7 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	}
 	out, stderr, err := run(pkg.Module.Dir, env, append(args, "./"+filepath.Base(tmp))...)
 	if err != nil {
-		msg := strings.ReplaceAll(stderr, tmp, "velox-gen")
+		msg := strings.ReplaceAll(unoverlay(stderr, originals, pkg.Module.Dir), tmp, "velox-gen")
 		msg = strings.ReplaceAll(msg, filepath.Base(tmp), "velox-gen")
 		// go run's own last line says how the program exited, which the
 		// lines before it already explain.
@@ -178,36 +178,56 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 // writeOverlay writes, in tmp, the schema package's files without the
 // entities' behaviour (see prune) and the go command's overlay file that puts
 // them in place of the package's, and returns the overlay file's path; ""
-// when the package declares no behaviour, which needs no overlay.
-func writeOverlay(tmp string, pkg *listed, schemas []string, files map[string][]byte, env []string) (string, error) {
+// when the package declares no behaviour, which needs no overlay. originals
+// maps each rewritten file's path to the user's file it stands for.
+func writeOverlay(tmp string, pkg *listed, schemas []string, files map[string][]byte, env []string) (overlay string, originals map[string]string, err error) {
 	var names map[string]string
 	if len(pkg.Imports) > 0 {
 		names = listNames(pkg.Module.Dir, pkg.Imports, env)
 	}
 	pruned, err := prune(files, schemas, names)
 	if err != nil || len(pruned) == 0 {
-		return "", err
+		return "", nil, err
 	}
 	// The files go below tmp, with a name go does not read as Go: tmp holds
 	// the program's package, which must have only its own files.
 	dir := filepath.Join(tmp, "overlay")
 	if err := os.Mkdir(dir, 0o755); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	replace := map[string]string{}
+	originals = map[string]string{}
 	for name, src := range pruned {
 		p := filepath.Join(dir, name+".txt")
 		if err := os.WriteFile(p, src, 0o644); err != nil {
-			return "", err
+			return "", nil, err
 		}
 		replace[filepath.Join(pkg.Dir, name)] = p
+		originals[p] = filepath.Join(pkg.Dir, name)
 	}
 	b, err := json.Marshal(struct{ Replace map[string]string }{replace})
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	p := filepath.Join(tmp, "overlay.json")
-	return p, os.WriteFile(p, b, 0o644)
+	return p, originals, os.WriteFile(p, b, 0o644)
+}
+
+// unoverlay replaces, in msg, the paths of the rewritten files in originals
+// with the user's files they stand for. The go command writes a path below
+// modDir relative to it, as ./x; the rewrite keeps every line where it was,
+// so a position stays true with the user's path.
+func unoverlay(msg string, originals map[string]string, modDir string) string {
+	for p, orig := range originals {
+		msg = strings.ReplaceAll(msg, p, orig)
+		rp, err1 := filepath.Rel(modDir, p)
+		ro, err2 := filepath.Rel(modDir, orig)
+		if err1 == nil && err2 == nil {
+			msg = strings.ReplaceAll(msg, "./"+filepath.ToSlash(rp), "./"+filepath.ToSlash(ro))
+			msg = strings.ReplaceAll(msg, filepath.ToSlash(rp), filepath.ToSlash(ro))
+		}
+	}
+	return msg
 }
 
 // listNames returns the package names of the import paths, as go list
