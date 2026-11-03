@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -30,8 +31,9 @@ func offlineEnv() []string {
 }
 
 // moduleSlots bounds the module tests that run at once: each runs go
-// commands, and the machine is short of memory.
-var moduleSlots = make(chan struct{}, 3)
+// commands, which use several cores and some memory. Half the CPUs, and at
+// least 3: 3 on CI's 4 cores, 7 on a 14-core machine.
+var moduleSlots = make(chan struct{}, max(3, runtime.NumCPU()/2))
 
 var slotted sync.Map // *testing.T that already hold a slot
 
