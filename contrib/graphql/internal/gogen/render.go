@@ -95,9 +95,9 @@ type renderer struct {
 	outPath    string
 	outPkg     string
 	veloxEnums map[string]*plugin.Enum // the enum types velox-gen declares
-	names      map[string]string    // Go name in the package → what declares it
-	types      map[string]*sdl.Type // the GraphQL types by name
-	typeOf     map[string]*sdl.Type // the GraphQL types by their entity's name
+	names      map[string]string       // Go name in the package → what declares it
+	types      map[string]*sdl.Type    // the GraphQL types by name
+	typeOf     map[string]*sdl.Type    // the GraphQL types by their entity's name
 	ents       map[string]*plugin.Entity
 }
 
@@ -506,6 +506,11 @@ func (r *renderer) writeEnum(f *file, t *sdl.Type, en sdl.Enum) error {
 	ve := r.veloxEnums[typ]
 	if ve == nil {
 		return nil
+	}
+	if len(ve.Consts) == 0 && len(ve.Values) > 0 {
+		// velox-gen writes the constants' names into the model since the
+		// enum marshalers switch on them; an older one leaves them out.
+		return fmt.Errorf("schema %s, field %s: the model has no Go constants of %s: velox-gen is too old for this velox-graphql; update velox-gen to the same velox version and regenerate", t.Entity.Name, fd.Name, typ)
 	}
 	if len(ve.Consts) != len(ve.Values) || !slices.Equal(ve.Values, fd.EnumValues) {
 		return fmt.Errorf("schema %s, field %s: the model gives no Go constant of each value of %s; regenerate with velox-gen", t.Entity.Name, fd.Name, typ)

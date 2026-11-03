@@ -774,6 +774,21 @@ func TestEnumErrorPercent(t *testing.T) {
 	}
 }
 
+// TestEnumWithoutConsts: a model from a velox-gen that writes no enum
+// constants fails with an error that says velox-gen is too old.
+func TestEnumWithoutConsts(t *testing.T) {
+	m := modeltest.Model(t)
+	for _, en := range m.Enums {
+		if en.Type == "GroupVisibility" {
+			en.Consts = nil
+		}
+	}
+	_, err := Render(m, outPath, "gen")
+	if err == nil || !strings.Contains(err.Error(), "velox-gen is too old") {
+		t.Errorf("Render: %v, want velox-gen is too old", err)
+	}
+}
+
 // TestConnectionOfEveryNode: every Node entity's file declares its
 // <Plural>ConnectionOf, and no file declares or calls a ConnectionGQL.
 func TestConnectionOfEveryNode(t *testing.T) {

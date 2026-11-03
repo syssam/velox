@@ -31,7 +31,10 @@ func TestTableWriteParity(t *testing.T) {
 			},
 			func(db *velox.DB) (func() (string, []any, error), func() error) {
 				x := newTicket()
-				return func() (string, []any, error) { x := newTicket(); return db.InsertTable(tkTable, unsafe.Pointer(&x)).SQL(ctx) },
+				return func() (string, []any, error) {
+						x := newTicket()
+						return db.InsertTable(tkTable, unsafe.Pointer(&x)).SQL(ctx)
+					},
 					func() error { return db.InsertTable(tkTable, unsafe.Pointer(&x)).Exec(ctx) }
 			}},
 		{"insert rows, on conflict",
@@ -126,19 +129,31 @@ func TestTableWriteRefuses(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	ctx := annIn7()
 	for name, f := range map[string]func() error{
-		"Set of another type":      func() error { _, err := db.UpdateTable(tkTable).Set(col(Tk.Title), 1).All().Exec(ctx); return err },
-		"SetNull not nullable":     func() error { _, err := db.UpdateTable(tkTable).SetNull(col(Tk.Title)).All().Exec(ctx); return err },
-		"Set out of range":         func() error { _, err := db.UpdateTable(tkTable).Set(99, "x").All().Exec(ctx); return err },
-		"no Set":                   func() error { _, err := db.UpdateTable(tkTable).All().Exec(ctx); return err },
-		"update with no Where":     func() error { _, err := db.UpdateTable(tkTable).Set(col(Tk.Title), "x").Exec(ctx); return err },
-		"update of an invalid row": func() error { _, err := db.UpdateTable(tkTable).Set(col(Tk.Title), "x").Where(tkTable.Pred(col(Tk.ID), velox.PredEQ, 1)).Exec(ctx); return err },
-		"delete with no Where":     func() error { _, err := db.DeleteTable(tkTable).Exec(ctx); return err },
-		"delete of an invalid row": func() error { _, err := db.DeleteTable(tkTable).Where(tkTable.Pred(col(Tk.ID), velox.PredEQ, 1)).Exec(ctx); return err },
-		"insert of nil":            func() error { return db.InsertTable(tkTable, nil).Exec(ctx) },
-		"insert of a zero Table":   func() error { x := testmodel.Ticket{}; return db.InsertTable(velox.Table{}, unsafe.Pointer(&x)).Exec(ctx) },
-		"insert the policy denies": func() error { x := testmodel.Ticket{Owner: "bob", Title: "t"}; return db.InsertTable(tkTable, unsafe.Pointer(&x)).Exec(ctx) },
-		"update of a zero Table":   func() error { _, err := db.UpdateTable(velox.Table{}).Set(0, int64(1)).All().Exec(ctx); return err },
-		"delete of a zero Table":   func() error { _, err := db.DeleteTable(velox.Table{}).All().Exec(ctx); return err },
+		"Set of another type":  func() error { _, err := db.UpdateTable(tkTable).Set(col(Tk.Title), 1).All().Exec(ctx); return err },
+		"SetNull not nullable": func() error { _, err := db.UpdateTable(tkTable).SetNull(col(Tk.Title)).All().Exec(ctx); return err },
+		"Set out of range":     func() error { _, err := db.UpdateTable(tkTable).Set(99, "x").All().Exec(ctx); return err },
+		"no Set":               func() error { _, err := db.UpdateTable(tkTable).All().Exec(ctx); return err },
+		"update with no Where": func() error { _, err := db.UpdateTable(tkTable).Set(col(Tk.Title), "x").Exec(ctx); return err },
+		"update of an invalid row": func() error {
+			_, err := db.UpdateTable(tkTable).Set(col(Tk.Title), "x").Where(tkTable.Pred(col(Tk.ID), velox.PredEQ, 1)).Exec(ctx)
+			return err
+		},
+		"delete with no Where": func() error { _, err := db.DeleteTable(tkTable).Exec(ctx); return err },
+		"delete of an invalid row": func() error {
+			_, err := db.DeleteTable(tkTable).Where(tkTable.Pred(col(Tk.ID), velox.PredEQ, 1)).Exec(ctx)
+			return err
+		},
+		"insert of nil": func() error { return db.InsertTable(tkTable, nil).Exec(ctx) },
+		"insert of a zero Table": func() error {
+			x := testmodel.Ticket{}
+			return db.InsertTable(velox.Table{}, unsafe.Pointer(&x)).Exec(ctx)
+		},
+		"insert the policy denies": func() error {
+			x := testmodel.Ticket{Owner: "bob", Title: "t"}
+			return db.InsertTable(tkTable, unsafe.Pointer(&x)).Exec(ctx)
+		},
+		"update of a zero Table": func() error { _, err := db.UpdateTable(velox.Table{}).Set(0, int64(1)).All().Exec(ctx); return err },
+		"delete of a zero Table": func() error { _, err := db.DeleteTable(velox.Table{}).All().Exec(ctx); return err },
 	} {
 		if err := f(); err == nil {
 			t.Errorf("%s: no error", name)
@@ -180,7 +195,9 @@ func TestTableWriteRows(t *testing.T) {
 				return db.UpdateTable(invTable).Set(col(I.Note), "x").Where(id).Exec(ctx)
 			}},
 		{"delete, hidden", in8, 0,
-			func(ctx context.Context) (int64, error) { return db.Delete[testmodel.Invoice]().Where(I.ID.EQ(x.ID)).Exec(ctx) },
+			func(ctx context.Context) (int64, error) {
+				return db.Delete[testmodel.Invoice]().Where(I.ID.EQ(x.ID)).Exec(ctx)
+			},
 			func(ctx context.Context) (int64, error) { return db.DeleteTable(invTable).Where(id).Exec(ctx) }},
 		{"update, seen", in7, 1,
 			func(ctx context.Context) (int64, error) {
