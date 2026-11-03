@@ -3,7 +3,6 @@ package gen
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 
 	"github.com/syssam/velox"
@@ -11,7 +10,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion9
+const _ = veloxgql.GeneratedCodeIsVersion10
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -23,14 +22,12 @@ func (x *Group) IDGQL() string { return veloxgql.EncodeID("Group", x.ID) }
 
 // groupNodeGQL is the Node type Group for Node and Nodes.
 func groupNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[Group, *Group](
-		"Group",
-		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "Group") },
-		func(db *velox.DB) velox.Query[Group] { return db.Query[Group]() },
-		groupColumnsGQL,
-		Groups.ID.EQ, Groups.ID.In,
-		groupKeyGQL,
-	)
+	return gqlimpl.NewNode("Group", velox.TableOf[Group](), groupColID,
+		func(id string) (any, error) {
+			k, err := veloxgql.DecodeID[int64](id, "Group")
+			return k, err
+		},
+		groupColumnsGQL)
 }
 
 // groupKeyGQL is the key of x, a Group.
@@ -76,7 +73,7 @@ func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int
 // only then: edges and pageInfo share one page query, and totalCount runs a
 // COUNT.
 type GroupConnection struct {
-	c *gqlimpl.Connection[Group]
+	c *gqlimpl.Connection
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -89,7 +86,7 @@ func (c *GroupConnection) Edges(ctx context.Context) ([]*GroupEdge, error) {
 	slab := make([]GroupEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*GroupEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		slab[i] = GroupEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = GroupEdge{Node: (*Group)(x), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -144,70 +141,50 @@ func GroupsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 // columns, so an application's resolver must not read one it did not ask for.
 // It runs no query.
 func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
-	if !q.Selects(Groups.ID) {
-		return nil, fmt.Errorf("veloxgql: GroupsConnectionOf: the base query does not select the key, which the cursors hold")
-	}
+	var order []gqlimpl.Order
 	if o := orderBy; o != nil {
-		switch {
-		case o.Field == GroupOrderFieldName && !q.Selects(Groups.Name):
-			return nil, fmt.Errorf("veloxgql: GroupsConnectionOf: the base query does not select the column of %s, which orderBy names and the cursors hold", o.Field)
-		}
+		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
-	if fields, ok := gqlimpl.Selected(ctx, "Group"); ok {
-		q = gqlimpl.Narrow(q, groupColumnsGQL(fields))
+	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &groupConnGQL, order)
+	if err != nil {
+		return nil, err
 	}
-	var order []gqlimpl.OrderTerm[Group]
-	if o := orderBy; o != nil {
-		term, err := groupTermGQL(o)
-		if err != nil {
-			return nil, err
-		}
-		order = append(order, term)
-	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Group", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, groupKeyOrderGQL())
+	c, err := gqlimpl.NewConnection(ctx, b, &groupConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order)
 	if err != nil {
 		return nil, err
 	}
 	return &GroupConnection{c: c}, nil
 }
 
-// groupKeyOrderGQL is the order of Group's key, which ends every order of a
-// connection to Group.
-func groupKeyOrderGQL() []gqlimpl.OrderTerm[Group] {
-	return []gqlimpl.OrderTerm[Group]{
-		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Groups.ID.Asc(), Groups.ID.Desc(),
-			func(x *Group) int64 { return x.ID },
-			func(x *Group, v int64) { x.ID = v }),
-	}
+// groupConnGQL is what the connections to Group are made of: the key, which
+// ends every order, and the order fields' columns.
+var groupConnGQL = gqlimpl.Conn{
+	Type: "Group",
+	Key: []gqlimpl.Col{
+		{Field: "id", Col: groupColID},
+	},
+	Order: []gqlimpl.Col{
+		{Field: "NAME", Col: groupColName},
+	},
+	Columns: groupColumnsGQL,
 }
 
 // groupColumnsGQL is the columns a selection of the Group fields fields reads:
 // the key, every foreign key on the row, every order field's column, and the
 // column of each field. It is nil, every column, when a field is not one
 // velox-graphql wrote, such as an application's own.
-func groupColumnsGQL(fields []string) []velox.Column[Group] {
-	cols := []velox.Column[Group]{Groups.ID, Groups.Name}
+func groupColumnsGQL(fields []string) []int {
+	cols := []int{groupColID, groupColName}
 	for _, f := range fields {
 		switch f {
 		case "id", "name", "users":
 		case "visibility":
-			cols = append(cols, Groups.Visibility)
+			cols = append(cols, groupColVisibility)
 		default:
 			return nil
 		}
 	}
 	return cols
-}
-
-// groupTermGQL is the order term o, an order of connections to Group.
-func groupTermGQL(o *GroupOrder) (gqlimpl.OrderTerm[Group], error) {
-	switch o.Field {
-	case GroupOrderFieldName:
-		return gqlimpl.Term(string(o.Field), o.Direction, Groups.Name.Asc(), Groups.Name.Desc(),
-			func(x *Group) string { return x.Name },
-			func(x *Group, v string) { x.Name = v }), nil
-	}
-	return gqlimpl.OrderTerm[Group]{}, gqlimpl.InputErrorf("GroupOrder: %q is not a value of GroupOrderField", o.Field)
 }
 
 // GroupOrder is the GraphQL input GroupOrder, an order of connections to Group.

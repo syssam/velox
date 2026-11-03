@@ -211,7 +211,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion9\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion10\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -313,7 +313,7 @@ func (r *renderer) nodeKeyType(f *file, t *sdl.Type, k *plugin.Field) (string, e
 }
 
 // writeNodeKind writes nodeFunc(t): what Node and Nodes need of t to look its
-// nodes up, which gqlimpl.NodeOf does.
+// nodes up, which gqlimpl.NewNode makes.
 func (r *renderer) writeNodeKind(f *file, t *sdl.Type, k *plugin.Field) error {
 	e := t.Entity
 	for _, name := range []string{nodeFunc(t), keyGetter(t)} {
@@ -330,21 +330,16 @@ func (r *renderer) writeNodeKind(f *file, t *sdl.Type, k *plugin.Field) error {
 	decode := fmt.Sprintf("%s.DecodeID[%s](id, %q)", vgql, t.Key, t.Name)
 	f.doc("", fmt.Sprintf("%s is the Node type %s for Node and Nodes.", nodeFunc(t), t.Name))
 	f.p("func %s() %s.NodeKind {", nodeFunc(t), impl)
-	f.p("\treturn %s.NewNode[%s, *%[2]s](", impl, e.Name)
-	f.p("\t\t%q,", t.Name)
+	f.p("\treturn %s.NewNode(%q, %s.TableOf[%s](), %s,", impl, t.Name, velox, e.Name, colConst(e, k))
+	f.p("\t\tfunc(id string) (any, error) {")
+	f.p("\t\t\tk, err := %s", decode)
 	if elem == t.Key {
-		f.p("\t\tfunc(id string) (%s, error) { return %s },", key, decode)
+		f.p("\t\t\treturn k, err")
 	} else {
-		f.p("\t\tfunc(id string) (%s, error) {", key)
-		f.p("\t\t\tk, err := %s", decode)
 		f.p("\t\t\treturn %s(k), err", key)
-		f.p("\t\t},")
 	}
-	f.p("\t\tfunc(db *%s.DB) %[1]s.Query[%s] { return db.Query[%[2]s]() },", velox, e.Name)
-	f.p("\t\t%s,", colsFunc(t))
-	f.p("\t\t%s.%s.EQ, %[1]s.%[2]s.In,", e.Handles, k.GoName)
-	f.p("\t\t%s,", keyGetter(t))
-	f.p("\t)")
+	f.p("\t\t},")
+	f.p("\t\t%s)", colsFunc(t))
 	f.p("}")
 	f.p("")
 	f.doc("", fmt.Sprintf("%s is the key of x, %s %s.", keyGetter(t), english.Article(t.Name), t.Name))
@@ -746,8 +741,8 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	f.p("\treturn %s.NodesByID(ctx, ids, %s)", impl, nodeKindFunc)
 	f.p("}")
 	f.p("")
-	f.doc("", nodeKindFunc+" is the Node type the ID type typ names, or nil when it names none.")
-	f.p("func %s(typ string) %s.NodeKind {", nodeKindFunc, impl)
+	f.doc("", nodeKindFunc+" is the Node type the ID type typ names, and false when it names none.")
+	f.p("func %s(typ string) (%s.NodeKind, bool) {", nodeKindFunc, impl)
 	var cases bool
 	for _, t := range s.Types {
 		if !t.Node {
@@ -758,12 +753,12 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 			cases = true
 		}
 		f.p("\tcase %q:", t.Name)
-		f.p("\t\treturn %s()", nodeFunc(t))
+		f.p("\t\treturn %s(), true", nodeFunc(t))
 	}
 	if cases {
 		f.p("\t}")
 	}
-	f.p("\treturn nil")
+	f.p("\treturn %s.NodeKind{}, false", impl)
 	f.p("}")
 	return f.finish("node_gql.go", r.outPkg)
 }

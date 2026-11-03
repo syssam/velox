@@ -2,7 +2,6 @@ package gen
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/syssam/velox"
@@ -10,7 +9,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion9
+const _ = veloxgql.GeneratedCodeIsVersion10
 
 // UserGQL is the edge user: the Account it leads to, or nil when there is none.
 // It is read with the edge of every row read with x, in one query.
@@ -19,7 +18,7 @@ func (x *Like) UserGQL(ctx context.Context) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	q := db.Query[User]()
+	q := db.QueryTable(velox.TableOf[User]())
 	if fields, ok := gqlimpl.Selected(ctx, "Account"); ok {
 		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
 	}
@@ -33,7 +32,7 @@ func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
 	if err != nil {
 		return nil, err
 	}
-	q := db.Query[Post]()
+	q := db.QueryTable(velox.TableOf[Post]())
 	if fields, ok := gqlimpl.Selected(ctx, "Post"); ok {
 		q = gqlimpl.Narrow(q, postColumnsGQL(fields))
 	}
@@ -46,7 +45,7 @@ func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
 // only then: edges and pageInfo share one page query, and totalCount runs a
 // COUNT.
 type LikeConnection struct {
-	c *gqlimpl.Connection[Like]
+	c *gqlimpl.Connection
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -59,7 +58,7 @@ func (c *LikeConnection) Edges(ctx context.Context) ([]*LikeEdge, error) {
 	slab := make([]LikeEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*LikeEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		slab[i] = LikeEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = LikeEdge{Node: (*Like)(x), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -114,45 +113,41 @@ func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // application's resolver must not read one it did not ask for. It runs no
 // query.
 func LikesConnectionOf(ctx context.Context, q velox.Query[Like], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
-	if !q.Selects(Likes.UserID, Likes.PostID) {
-		return nil, fmt.Errorf("veloxgql: LikesConnectionOf: the base query does not select the key, which the cursors hold")
+	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &likeConnGQL, nil)
+	if err != nil {
+		return nil, err
 	}
-	if fields, ok := gqlimpl.Selected(ctx, "Like"); ok {
-		q = gqlimpl.Narrow(q, likeColumnsGQL(fields))
-	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Like", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, likeKeyOrderGQL())
+	c, err := gqlimpl.NewConnection(ctx, b, &likeConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil)
 	if err != nil {
 		return nil, err
 	}
 	return &LikeConnection{c: c}, nil
 }
 
-// likeKeyOrderGQL is the order of Like's key, which ends every order of a
-// connection to Like.
-func likeKeyOrderGQL() []gqlimpl.OrderTerm[Like] {
-	return []gqlimpl.OrderTerm[Like]{
-		gqlimpl.Term("user_id", veloxgql.OrderDirectionAsc, Likes.UserID.Asc(), Likes.UserID.Desc(),
-			func(x *Like) int64 { return x.UserID },
-			func(x *Like, v int64) { x.UserID = v }),
-		gqlimpl.Term("post_id", veloxgql.OrderDirectionAsc, Likes.PostID.Asc(), Likes.PostID.Desc(),
-			func(x *Like) int64 { return x.PostID },
-			func(x *Like, v int64) { x.PostID = v }),
-	}
+// likeConnGQL is what the connections to Like are made of: the key, which ends
+// every order, and the order fields' columns.
+var likeConnGQL = gqlimpl.Conn{
+	Type: "Like",
+	Key: []gqlimpl.Col{
+		{Field: "user_id", Col: likeColUserID},
+		{Field: "post_id", Col: likeColPostID},
+	},
+	Columns: likeColumnsGQL,
 }
 
 // likeColumnsGQL is the columns a selection of the Like fields fields reads:
 // the key, every foreign key on the row, every order field's column, and the
 // column of each field. It is nil, every column, when a field is not one
 // velox-graphql wrote, such as an application's own.
-func likeColumnsGQL(fields []string) []velox.Column[Like] {
-	cols := []velox.Column[Like]{Likes.UserID, Likes.PostID}
+func likeColumnsGQL(fields []string) []int {
+	cols := []int{likeColUserID, likeColPostID}
 	for _, f := range fields {
 		switch f {
 		case "user", "post":
 		case "weight":
-			cols = append(cols, Likes.Weight)
+			cols = append(cols, likeColWeight)
 		case "createdAt":
-			cols = append(cols, Likes.CreatedAt)
+			cols = append(cols, likeColCreatedAt)
 		default:
 			return nil
 		}

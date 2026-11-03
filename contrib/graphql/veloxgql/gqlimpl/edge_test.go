@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unsafe"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2"
@@ -147,18 +148,15 @@ func ownerTagDescriptor() velox.Descriptor[ownerTag] {
 
 // The order terms, as the generated code makes them.
 func ownerKey() []gqlimpl.OrderTerm[owner] {
-	return []gqlimpl.OrderTerm[owner]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, owners.ID.Asc(), owners.ID.Desc(),
-		func(x *owner) int64 { return x.ID }, func(x *owner, v int64) { x.ID = v })}
+	return []gqlimpl.OrderTerm[owner]{gqlimpl.TermOf[owner]("id", veloxgql.OrderDirectionAsc, int(owners.ID.I))}
 }
 
 func childKey() []gqlimpl.OrderTerm[child] {
-	return []gqlimpl.OrderTerm[child]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, children.ID.Asc(), children.ID.Desc(),
-		func(x *child) int64 { return x.ID }, func(x *child, v int64) { x.ID = v })}
+	return []gqlimpl.OrderTerm[child]{gqlimpl.TermOf[child]("id", veloxgql.OrderDirectionAsc, int(children.ID.I))}
 }
 
 func titleOrder() []gqlimpl.OrderTerm[child] {
-	return []gqlimpl.OrderTerm[child]{gqlimpl.Term("TITLE", veloxgql.OrderDirectionAsc, children.Title.Asc(), children.Title.Desc(),
-		func(x *child) string { return x.Title }, func(x *child, v string) { x.Title = v })}
+	return []gqlimpl.OrderTerm[child]{gqlimpl.TermOf[child]("TITLE", veloxgql.OrderDirectionAsc, int(children.Title.I))}
 }
 
 // edgeSDL is the schema the edges' operations are parsed against.
@@ -315,7 +313,7 @@ func field(t *testing.T, ctx context.Context, path ...string) context.Context {
 func ownersPage(t *testing.T, ctx context.Context, db *velox.DB, q velox.Query[owner], args gqlimpl.Args) []*owner {
 	t.Helper()
 	ctx = field(t, ctx, "owners")
-	c, err := gqlimpl.NewConnection(ctx, q, "Owner", args, nil, ownerKey())
+	c, err := gqlimpl.NewConnectionOf(ctx, q, "Owner", args, nil, ownerKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,13 +327,13 @@ func ownersPage(t *testing.T, ctx context.Context, db *velox.DB, q velox.Query[o
 // childPage is x's page of the edge children, made at ctx (a field of the
 // edge, or not), and its totalCount. The edge's arguments are args, and
 // those of q are in more, if any.
-func childPage(t *testing.T, ctx context.Context, db *velox.DB, x *owner, q velox.Query[child], args gqlimpl.Args, order []gqlimpl.OrderTerm[child], more ...any) (*gqlimpl.Page[child], int) {
+func childPage(t *testing.T, ctx context.Context, db *velox.DB, x *owner, q velox.Query[child], args gqlimpl.Args, order []gqlimpl.OrderTerm[child], more ...any) (*gqlimpl.PageOf[child], int) {
 	t.Helper()
-	c, err := gqlimpl.NewConnection(ctx, q, "Child", args, order, childKey())
+	c, err := gqlimpl.NewConnectionOf(ctx, q, "Child", args, order, childKey())
 	if err != nil {
 		t.Fatal(err)
 	}
-	c = gqlimpl.EdgeConnection(ctx, c, x, owners.Children, "Owner.children", []any{args, more})
+	c = gqlimpl.EdgeConnectionOf(ctx, c, x, owners.Children, "Owner.children", []any{args, more})
 	p, err := c.Page(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -349,10 +347,10 @@ func childPage(t *testing.T, ctx context.Context, db *velox.DB, x *owner, q velo
 
 // ownPage is x's page of the children of q, read alone: the query of the
 // connection filtered by Of, as before batching.
-func ownPage(t *testing.T, db *velox.DB, x *owner, q velox.Query[child], args gqlimpl.Args, order []gqlimpl.OrderTerm[child]) (*gqlimpl.Page[child], int) {
+func ownPage(t *testing.T, db *velox.DB, x *owner, q velox.Query[child], args gqlimpl.Args, order []gqlimpl.OrderTerm[child]) (*gqlimpl.PageOf[child], int) {
 	t.Helper()
 	ctx := context.Background()
-	c, err := gqlimpl.NewConnection(ctx, q.Where(owners.Children.Of(x)), "Child", args, order, childKey())
+	c, err := gqlimpl.NewConnectionOf(ctx, q.Where(owners.Children.Of(x)), "Child", args, order, childKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,7 +374,7 @@ func childIDs(rows []*child) []int64 {
 }
 
 // samePage fails t when got is not want: its rows, cursors and page info.
-func samePage(t *testing.T, name string, got, want *gqlimpl.Page[child]) {
+func samePage(t *testing.T, name string, got, want *gqlimpl.PageOf[child]) {
 	t.Helper()
 	if g, w := childIDs(got.Rows), childIDs(want.Rows); !reflect.DeepEqual(g, w) {
 		t.Errorf("%s: rows %v, want %v", name, g, w)
@@ -448,7 +446,7 @@ func TestEdgeConnectionBatches(t *testing.T) {
 	// The pages' rows are one group: each child's owner is one statement.
 	octx := field(t, ctx, "owners", "edges", "node", "children", "edges", "node", "owner")
 	for _, x := range rows {
-		o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), x, children.Owner, "Child.owner")
+		o, err := gqlimpl.EdgeOne(octx, db.QueryTable(velox.TableOf[owner]()), x, children.Owner, "Child.owner")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -551,11 +549,11 @@ func TestEdgeAliases(t *testing.T) {
 			q    velox.Query[child]
 			args gqlimpl.Args
 		}{{"a", actx, aq, aargs}, {"b", bctx, bq, bargs}} {
-			pc, err := gqlimpl.NewConnection(c.ctx, c.q, "Child", c.args, nil, childKey())
+			pc, err := gqlimpl.NewConnectionOf(c.ctx, c.q, "Child", c.args, nil, childKey())
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := gqlimpl.EdgeConnection(c.ctx, pc, x, owners.Children, "Owner.children", c.args).Page(c.ctx)
+			got, err := gqlimpl.EdgeConnectionOf(c.ctx, pc, x, owners.Children, "Owner.children", c.args).Page(c.ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -597,11 +595,11 @@ func testEdgeScopes(t *testing.T, scope func(context.Context, string) context.Co
 	log.take("")
 	var loads []string
 	for _, x := range xs {
-		c, err := gqlimpl.NewConnection(scoped[x.ID], db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
+		c, err := gqlimpl.NewConnectionOf(scoped[x.ID], db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := gqlimpl.EdgeConnection(scoped[x.ID], c, x, owners.Children, "Owner.children", nil).Page(ectx)
+		got, err := gqlimpl.EdgeConnectionOf(scoped[x.ID], c, x, owners.Children, "Owner.children", nil).Page(ectx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -643,7 +641,7 @@ func TestEdgeFromAppField(t *testing.T) {
 				t.Errorf("%s %s: totalCount %d, want %d", x.Name, c.name, n, wn)
 			}
 		}
-		rows, err := gqlimpl.EdgeList(nctx, db.Query[tag](), x, owners.Tags, "Owner.tags", 0)
+		rows, err := gqlimpl.EdgeList(nctx, db.QueryTable(velox.TableOf[tag]()), x, owners.Tags, "Owner.tags", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -665,7 +663,7 @@ func TestEdgeOneOwnerAndEditor(t *testing.T) {
 	db, _, _ := edgeDB(t)
 	ctx := operation(t, db, `{ children { edges { node { title owner { name } } } } }`)
 	cctx := field(t, ctx, "children")
-	c, err := gqlimpl.NewConnection(cctx, db.Query[child]().Where(children.OwnerID.NotNull()), "Child", gqlimpl.Args{}, nil, childKey())
+	c, err := gqlimpl.NewConnectionOf(cctx, db.Query[child]().Where(children.OwnerID.NotNull()), "Child", gqlimpl.Args{}, nil, childKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -683,11 +681,11 @@ func TestEdgeOneOwnerAndEditor(t *testing.T) {
 		path, editor := c.path, c.editor
 		fctx := field(t, ctx, path...)
 		for _, x := range p.Rows {
-			o, err := gqlimpl.EdgeOne(fctx, db.Query[owner](), x, children.Owner, "Child.owner")
+			o, err := gqlimpl.EdgeOne(fctx, db.QueryTable(velox.TableOf[owner]()), x, children.Owner, "Child.owner")
 			if err != nil {
 				t.Fatal(err)
 			}
-			e, err := gqlimpl.EdgeOne(fctx, db.Query[owner](), x, children.Editor, editor)
+			e, err := gqlimpl.EdgeOne(fctx, db.QueryTable(velox.TableOf[owner]()), x, children.Editor, editor)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -726,7 +724,7 @@ func TestEdgeOneBatches(t *testing.T) {
 	db, _, log := edgeDB(t)
 	ctx := operation(t, db, `{ children { edges { node { owner { name } } } } }`)
 	cctx := field(t, ctx, "children")
-	c, err := gqlimpl.NewConnection(cctx, db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
+	c, err := gqlimpl.NewConnectionOf(cctx, db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -738,7 +736,7 @@ func TestEdgeOneBatches(t *testing.T) {
 	log.take("")
 	got := map[int64]string{}
 	for _, x := range p.Rows {
-		o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), x, children.Owner, "Child.owner")
+		o, err := gqlimpl.EdgeOne(octx, db.QueryTable(velox.TableOf[owner]()), x, children.Owner, "Child.owner")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -757,7 +755,7 @@ func TestEdgeOneBatches(t *testing.T) {
 
 	orphan := *p.Rows[6]
 	veloxgql.Batch(cctx, []*child{&orphan})
-	if o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), &orphan, children.Owner, "Child.owner"); o != nil || err != nil {
+	if o, err := gqlimpl.EdgeOne(octx, db.QueryTable(velox.TableOf[owner]()), &orphan, children.Owner, "Child.owner"); o != nil || err != nil {
 		t.Errorf("the orphan's owner: %v, %v", o, err)
 	}
 	if sql := log.take("owners"); len(sql) != 0 {
@@ -765,7 +763,7 @@ func TestEdgeOneBatches(t *testing.T) {
 	}
 
 	alone := child{ID: 9, OwnerID: new(int64(2))}
-	if o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), &alone, children.Owner, "Child.owner"); err != nil || o == nil || o.Name != "b" {
+	if o, err := gqlimpl.EdgeOne(octx, db.QueryTable(velox.TableOf[owner]()), &alone, children.Owner, "Child.owner"); err != nil || o == nil || o.Name != "b" {
 		t.Errorf("alone: %v, %v", o, err)
 	}
 	if sql := log.take("owners"); len(sql) != 1 {
@@ -787,7 +785,7 @@ func TestEdgeListCap(t *testing.T) {
 		log.take("")
 		got, errs := map[int64][]int64{}, map[int64]error{}
 		for _, x := range xs {
-			rows, err := gqlimpl.EdgeList(tctx, db.Query[tag](), x, owners.Tags, "Owner.tags", 0)
+			rows, err := gqlimpl.EdgeList(tctx, db.QueryTable(velox.TableOf[tag]()), x, owners.Tags, "Owner.tags", 0)
 			if err != nil {
 				errs[x.ID] = err
 				continue
@@ -834,11 +832,11 @@ func TestBatchErrorShared(t *testing.T) {
 	}
 	log.mu.Unlock()
 	for _, x := range xs {
-		c, err := gqlimpl.NewConnection(ectx, db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
+		c, err := gqlimpl.NewConnectionOf(ectx, db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
 		if err != nil {
 			t.Fatal(err)
 		}
-		c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children, "Owner.children", nil)
+		c = gqlimpl.EdgeConnectionOf(ectx, c, x, owners.Children, "Owner.children", nil)
 		if _, err := c.Page(ectx); !errors.Is(err, boom) {
 			t.Errorf("%s: page error %v, want boom", x.Name, err)
 		}
@@ -868,11 +866,11 @@ func TestBatchPanicShared(t *testing.T) {
 	}
 	log.mu.Unlock()
 	for i, x := range xs {
-		c, err := gqlimpl.NewConnection(ectx, db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
+		c, err := gqlimpl.NewConnectionOf(ectx, db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
 		if err != nil {
 			t.Fatal(err)
 		}
-		c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children, "Owner.children", nil)
+		c = gqlimpl.EdgeConnectionOf(ectx, c, x, owners.Children, "Owner.children", nil)
 		var p any
 		func() {
 			defer func() { p = recover() }()
@@ -917,12 +915,12 @@ func TestBatchRace(t *testing.T) {
 	for i, x := range xs {
 		wg.Go(func() {
 			<-start
-			c, err := gqlimpl.NewConnection(ectx, db.Query[child](), "Child", gqlimpl.Args{First: new(1)}, nil, childKey())
+			c, err := gqlimpl.NewConnectionOf(ectx, db.Query[child](), "Child", gqlimpl.Args{First: new(1)}, nil, childKey())
 			if err != nil {
 				t.Error(err)
 				return
 			}
-			c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children, "Owner.children", nil)
+			c = gqlimpl.EdgeConnectionOf(ectx, c, x, owners.Children, "Owner.children", nil)
 			p, err := c.Page(ectx)
 			if err != nil {
 				t.Error(err)
@@ -951,7 +949,7 @@ func TestBatchRace(t *testing.T) {
 func TestNoFieldNoGroup(t *testing.T) {
 	db, _, _ := edgeDB(t)
 	ctx := operation(t, db, childrenQuery)
-	c, err := gqlimpl.NewConnection(ctx, db.Query[owner](), "Owner", gqlimpl.Args{}, nil, ownerKey())
+	c, err := gqlimpl.NewConnectionOf(ctx, db.Query[owner](), "Owner", gqlimpl.Args{}, nil, ownerKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -959,12 +957,12 @@ func TestNoFieldNoGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), p.Rows[0]); ok {
+	if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), unsafe.Pointer(p.Rows[0])); ok {
 		t.Error("a page outside a field is a group")
 	}
 	if xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{}); len(xs) == 0 {
 		t.Fatal("no owners")
-	} else if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), xs[0]); !ok {
+	} else if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), unsafe.Pointer(xs[0])); !ok {
 		t.Error("a page in a field is no group")
 	}
 }
@@ -974,7 +972,7 @@ func TestNoFieldNoGroup(t *testing.T) {
 func TestPagePanicShared(t *testing.T) {
 	db, _, log := edgeDB(t)
 	log.fail = func(*velox.Statement) error { panic("boom") }
-	c, err := gqlimpl.NewConnection(context.Background(), db.Query[owner](), "Owner", gqlimpl.Args{}, nil, ownerKey())
+	c, err := gqlimpl.NewConnectionOf(context.Background(), db.Query[owner](), "Owner", gqlimpl.Args{}, nil, ownerKey())
 	if err != nil {
 		t.Fatal(err)
 	}

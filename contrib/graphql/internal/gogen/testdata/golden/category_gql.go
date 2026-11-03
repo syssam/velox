@@ -2,14 +2,13 @@ package gen
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion9
+const _ = veloxgql.GeneratedCodeIsVersion10
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -21,14 +20,12 @@ func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
 
 // categoryNodeGQL is the Node type Category for Node and Nodes.
 func categoryNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[Category, *Category](
-		"Category",
-		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "Category") },
-		func(db *velox.DB) velox.Query[Category] { return db.Query[Category]() },
-		categoryColumnsGQL,
-		Categories.ID.EQ, Categories.ID.In,
-		categoryKeyGQL,
-	)
+	return gqlimpl.NewNode("Category", velox.TableOf[Category](), categoryColID,
+		func(id string) (any, error) {
+			k, err := veloxgql.DecodeID[int64](id, "Category")
+			return k, err
+		},
+		categoryColumnsGQL)
 }
 
 // categoryKeyGQL is the key of x, a Category.
@@ -60,7 +57,7 @@ func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
 	if err != nil {
 		return nil, err
 	}
-	q := db.Query[Category]()
+	q := db.QueryTable(velox.TableOf[Category]())
 	if fields, ok := gqlimpl.Selected(ctx, "Category"); ok {
 		q = gqlimpl.Narrow(q, categoryColumnsGQL(fields))
 	}
@@ -73,7 +70,7 @@ func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
 // its query only then: edges and pageInfo share one page query, and totalCount
 // runs a COUNT.
 type CategoryConnection struct {
-	c *gqlimpl.Connection[Category]
+	c *gqlimpl.Connection
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -86,7 +83,7 @@ func (c *CategoryConnection) Edges(ctx context.Context) ([]*CategoryEdge, error)
 	slab := make([]CategoryEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*CategoryEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		slab[i] = CategoryEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = CategoryEdge{Node: (*Category)(x), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -141,47 +138,45 @@ func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *in
 // order columns, so an application's resolver must not read one it did not ask
 // for. It runs no query.
 func CategoriesConnectionOf(ctx context.Context, q velox.Query[Category], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
-	if !q.Selects(Categories.ID) {
-		return nil, fmt.Errorf("veloxgql: CategoriesConnectionOf: the base query does not select the key, which the cursors hold")
-	}
-	if fields, ok := gqlimpl.Selected(ctx, "Category"); ok {
-		q = gqlimpl.Narrow(q, categoryColumnsGQL(fields))
+	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &categoryConnGQL, nil)
+	if err != nil {
+		return nil, err
 	}
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {
 			return nil, err
 		}
-		q = q.Where(p)
+		b = b.Where(velox.Predicate(p))
 	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Category", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, categoryKeyOrderGQL())
+	c, err := gqlimpl.NewConnection(ctx, b, &categoryConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil)
 	if err != nil {
 		return nil, err
 	}
 	return &CategoryConnection{c: c}, nil
 }
 
-// categoryKeyOrderGQL is the order of Category's key, which ends every order of
-// a connection to Category.
-func categoryKeyOrderGQL() []gqlimpl.OrderTerm[Category] {
-	return []gqlimpl.OrderTerm[Category]{
-		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Categories.ID.Asc(), Categories.ID.Desc(),
-			func(x *Category) int64 { return x.ID },
-			func(x *Category, v int64) { x.ID = v }),
-	}
+// categoryConnGQL is what the connections to Category are made of: the key,
+// which ends every order, and the order fields' columns.
+var categoryConnGQL = gqlimpl.Conn{
+	Type: "Category",
+	Key: []gqlimpl.Col{
+		{Field: "id", Col: categoryColID},
+	},
+	Columns: categoryColumnsGQL,
 }
 
 // categoryColumnsGQL is the columns a selection of the Category fields fields
 // reads: the key, every foreign key on the row, every order field's column, and
 // the column of each field. It is nil, every column, when a field is not one
 // velox-graphql wrote, such as an application's own.
-func categoryColumnsGQL(fields []string) []velox.Column[Category] {
-	cols := []velox.Column[Category]{Categories.ID, Categories.CategoryChildren}
+func categoryColumnsGQL(fields []string) []int {
+	cols := []int{categoryColID, categoryColCategoryChildren}
 	for _, f := range fields {
 		switch f {
 		case "id", "children", "parent":
 		case "title":
-			cols = append(cols, Categories.Title)
+			cols = append(cols, categoryColTitle)
 		default:
 			return nil
 		}

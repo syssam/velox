@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion9
+const _ = veloxgql.GeneratedCodeIsVersion10
 
 // Node returns the node with the global ID id, or nil when no row has its key.
 // It reads the ID's type, decodes the key as that type's, and looks the row up
@@ -38,16 +38,16 @@ func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 	return gqlimpl.NodesByID(ctx, ids, nodeKindGQL)
 }
 
-// nodeKindGQL is the Node type the ID type typ names, or nil when it names
+// nodeKindGQL is the Node type the ID type typ names, and false when it names
 // none.
-func nodeKindGQL(typ string) gqlimpl.NodeKind {
+func nodeKindGQL(typ string) (gqlimpl.NodeKind, bool) {
 	switch typ {
 	case "Post":
-		return postNodeGQL()
+		return postNodeGQL(), true
 	case "Label":
-		return tagNodeGQL()
+		return tagNodeGQL(), true
 	case "User":
-		return userNodeGQL()
+		return userNodeGQL(), true
 	}
-	return nil
+	return gqlimpl.NodeKind{}, false
 }

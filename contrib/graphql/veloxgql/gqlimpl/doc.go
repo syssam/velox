@@ -1,7 +1,8 @@
 // Package gqlimpl is for generated code. It holds what the Go that
 // velox-graphql writes calls: the where filter and its helpers, the conversions
 // between a where input's Go types and a column's, the connection with its
-// paging, the edges, which read in batches (the edge of every row of a page in
+// paging (Conn, Col, Order, ConnectionBase and NewConnection: one runtime for
+// every type, on velox's untyped TableQuery), the Node lookups (NewNode), the edges, which read in batches (the edge of every row of a page in
 // one statement: EdgeConnection, EdgeOne and EdgeList), the fields a selection
 // reads (Selected and Narrow), the runtime of the inputs' Create and Update
 // methods (NewCreate and NewUpdate, whose Insert and Exec run one in Atomic, a
@@ -14,7 +15,7 @@
 // InputErrorf, the coded error of a client's input. An
 // application does not call this package.
 //
-// Compatibility is by veloxgql.GeneratedCodeIsVersion9, which every
+// Compatibility is by veloxgql.GeneratedCodeIsVersion10, which every
 // generated file references, and not by semantic versioning, as protobuf's
 // protoimpl is: a name here may change or go when the generated code
 // changes, and then the version constant is replaced, so that generated code

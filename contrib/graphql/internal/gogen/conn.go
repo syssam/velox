@@ -18,11 +18,33 @@ func lowerFirst(name string) string {
 }
 
 // The functions of t's connections: the exported one the application composes
-// a connection with, and the unexported ones of its key's and its terms.
+// a connection with, and the unexported table its connections are made of and
+// the columns its selections read.
 func connFunc(t *sdl.Type) string { return plugin.GoPlural(t.Name) + "ConnectionOf" }
-func keyFunc(t *sdl.Type) string  { return lowerFirst(t.Entity.Name) + "KeyOrderGQL" }
-func termFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "TermGQL" }
+func connVar(t *sdl.Type) string  { return lowerFirst(t.Entity.Name) + "ConnGQL" }
 func colsFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "ColumnsGQL" }
+
+// labelCamel is an entity's label as velox-gen begins the names of its
+// constants: post_tag is postTag.
+func labelCamel(label string) string {
+	first, rest, ok := strings.Cut(label, "_")
+	if !ok {
+		return label
+	}
+	return first + plugin.GoName(rest)
+}
+
+// colConst is the constant velox-gen declares for the position of e's field
+// fd, its column: postColTitle.
+func colConst(e *plugin.Entity, fd *plugin.Field) string {
+	return labelCamel(e.Label) + "Col" + fd.GoName
+}
+
+// edgeConst is the constant velox-gen declares for the position of e's edge
+// ed: postEdgeAuthor.
+func edgeConst(e *plugin.Entity, ed *plugin.Edge) string {
+	return labelCamel(e.Label) + "Edge" + ed.GoName
+}
 
 // connParams are the parameters of a connection to t's nodes, in the SDL's
 // argument order (sdl's connArgs): paging, and orderBy and where when t has
@@ -62,7 +84,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	e, n := t.Entity, t.Name
 	what := "schema " + e.Name
 	root := plugin.GoPlural(n) + "Connection"
-	for _, name := range []string{n + "Connection", n + "Edge", root, connFunc(t), keyFunc(t), colsFunc(t)} {
+	for _, name := range []string{n + "Connection", n + "Edge", root, connFunc(t), connVar(t), colsFunc(t)} {
 		if err := r.declare(name, what); err != nil {
 			return err
 		}
@@ -71,7 +93,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 
 	f.doc("", fmt.Sprintf("%sConnection is the GraphQL type %[1]sConnection, a connection to a list of %[1]s. It holds the query of the whole list and the page asked for; gqlgen calls its methods for the fields a query selects, and each runs its query only then: edges and pageInfo share one page query, and totalCount runs a COUNT.", n))
 	f.p("type %sConnection struct {", n)
-	f.p("\tc *%s.Connection[%s]", impl, e.Name)
+	f.p("\tc *%s.Connection", impl)
 	f.p("}")
 	f.p("")
 	f.doc("", "Edges are the edges of the page, in the connection's order. The first call of Edges or PageInfo runs the page query, and the other reads its page.")
@@ -83,7 +105,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("\tslab := make([]%sEdge, len(p.Rows)) // one allocation for all the edges", n)
 	f.p("\tedges := make([]*%sEdge, len(p.Rows))", n)
 	f.p("\tfor i, x := range p.Rows {")
-	f.p("\t\tslab[i] = %sEdge{Node: x, Cursor: p.Cursors[i]}", n)
+	f.p("\t\tslab[i] = %sEdge{Node: (*%s)(x), Cursor: p.Cursors[i]}", n, e.Name)
 	f.p("\t\tedges[i] = &slab[i]")
 	f.p("\t}")
 	f.p("\treturn edges, nil")
@@ -131,9 +153,25 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	}
 	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q keeps its filters and With loads, and the scope the application gave it; its Offset is cleared and its Limit replaced, since the page is the connection's. q must have no OrderBy: the connection orders it, and a q with one is refused with an internal error, since its order would come first and break the cursors. q must also select the key and the columns orderBy names, which the cursors hold: a q whose Columns or Omit drops one is refused with an internal error. In a gqlgen field, the page reads only the columns the selection needs (%s), of those q selects; a column the selection does not need is left zero in the nodes, except the key, the foreign keys and the order columns, so an application's resolver must not read one it did not ask for. It runs no query.", connFunc(t), n, strings.Join(how, ", "), colsFunc(t)))
 	f.p("func %s(ctx %s.Context, q %s.Query[%s], %s) (*%sConnection, error) {", connFunc(t), ctx, velox, e.Name, connParams(f, t), n)
-	r.writeSelects(f, t)
-	f.p("\tif fields, ok := %s.Selected(ctx, %q); ok {", impl, n)
-	f.p("\t\tq = %s.Narrow(q, %s(fields))", impl, colsFunc(t))
+	order := "nil"
+	if t.Order != nil {
+		order = "order"
+		if t.MultiOrder {
+			// NewConnection refuses more than MaxOrderTerms terms.
+			f.p("\torder := make([]%s.Order, len(orderBy))", impl)
+			f.p("\tfor i, o := range orderBy {")
+			f.p("\t\torder[i] = %s.Order{Field: string(o.Field), Direction: o.Direction}", impl)
+			f.p("\t}")
+		} else {
+			f.p("\tvar order []%s.Order", impl)
+			f.p("\tif o := orderBy; o != nil {")
+			f.p("\t\torder = []%s.Order{{Field: string(o.Field), Direction: o.Direction}}", impl)
+			f.p("\t}")
+		}
+	}
+	f.p("\tb, err := %s.ConnectionBase(ctx, %s.Untyped(q), &%s, %s)", impl, velox, connVar(t), order)
+	f.p("\tif err != nil {")
+	f.p("\t\treturn nil, err")
 	f.p("\t}")
 	if t.Where != nil {
 		f.p("\tif where != nil {")
@@ -141,27 +179,10 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		f.p("\t\tif err != nil {")
 		f.p("\t\t\treturn nil, err")
 		f.p("\t\t}")
-		f.p("\t\tq = q.Where(p)")
+		f.p("\t\tb = b.Where(%s.Predicate(p))", velox)
 		f.p("\t}")
 	}
-	order := "nil"
-	if t.Order != nil {
-		order = "order"
-		f.p("\tvar order []%s.OrderTerm[%s]", impl, e.Name)
-		if t.MultiOrder {
-			// NewConnection refuses more than MaxOrderTerms terms.
-			f.p("\tfor _, o := range orderBy {")
-		} else {
-			f.p("\tif o := orderBy; o != nil {")
-		}
-		f.p("\t\tterm, err := %s(o)", termFunc(t))
-		f.p("\t\tif err != nil {")
-		f.p("\t\t\treturn nil, err")
-		f.p("\t\t}")
-		f.p("\t\torder = append(order, term)")
-		f.p("\t}")
-	}
-	f.p("\tc, err := %s.NewConnection(ctx, q, %q, %s.Args{After: after, First: first, Before: before, Last: last}, %s, %s())", impl, n, impl, order, keyFunc(t))
+	f.p("\tc, err := %s.NewConnection(ctx, b, &%s, %s.Args{After: after, First: first, Before: before, Last: last}, %s)", impl, connVar(t), impl, order)
 	f.p("\tif err != nil {")
 	f.p("\t\treturn nil, err")
 	f.p("\t}")
@@ -169,92 +190,60 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("}")
 	f.p("")
 
-	f.doc("", fmt.Sprintf("%s is the order of %s's key, which ends every order of a connection to %s.", keyFunc(t), e.Name, n))
-	f.p("func %s() []%s.OrderTerm[%s] {", keyFunc(t), impl, e.Name)
-	f.p("\treturn []%s.OrderTerm[%s]{", impl, e.Name)
+	f.doc("", fmt.Sprintf("%s is what the connections to %s are made of: the key, which ends every order, and the order fields' columns.", connVar(t), n))
+	f.p("var %s = %s.Conn{", connVar(t), impl)
+	f.p("\tType: %q,", n)
+	f.p("\tKey: []%s.Col{", impl)
 	for _, i := range e.PrimaryKey {
 		fd := e.Fields[i]
-		term, err := r.term(f, e, fd, fmt.Sprintf("%q", fd.Name), vgql+".OrderDirectionAsc", "\t\t")
-		if err != nil {
+		// The key's Go type pages.
+		if err := r.checkTerm(e, fd); err != nil {
 			return err
 		}
-		f.p("\t\t%s,", term)
+		f.p("\t\t{Field: %q, Col: %s},", fd.Name, colConst(e, fd))
 	}
-	f.p("\t}")
+	f.p("\t},")
+	if t.Order != nil {
+		f.p("\tOrder: []%s.Col{", impl)
+		for _, v := range t.Order {
+			fd, _ := orderField(e, v)
+			if v.Edge == 0 {
+				if err := r.checkTerm(e, fd); err != nil {
+					return err
+				}
+				f.p("\t\t{Field: %q, Col: %s},", v.Value, colConst(e, fd))
+				continue
+			}
+			if err := r.checkViaTerm(e, v, fd); err != nil {
+				return err
+			}
+			f.p("\t\t{Field: %q, Col: %s, Edge: %s + 1, Target: %s.TableOf[%s]},", v.Value, colConst(v.Target, fd), edgeConst(e, e.Edges[v.Edge-1]), velox, v.Target.Name)
+		}
+		f.p("\t},")
+	}
+	f.p("\tColumns: %s,", colsFunc(t))
 	f.p("}")
 	r.writeColumns(f, t)
-	if t.Order == nil {
-		return nil
-	}
-	if err := r.declare(termFunc(t), what); err != nil {
-		return err
-	}
-	f.p("")
-	f.doc("", fmt.Sprintf("%s is the order term o, an order of connections to %s.", termFunc(t), n))
-	f.p("func %s(o *%sOrder) (%s.OrderTerm[%s], error) {", termFunc(t), n, impl, e.Name)
-	f.p("\tswitch o.Field {")
-	for _, v := range t.Order {
-		fd, via := orderField(e, v)
-		var term string
-		var err error
-		if v.Edge == 0 {
-			term, err = r.term(f, e, fd, "string(o.Field)", "o.Direction", "\t\t")
-		} else {
-			term, err = r.viaTerm(f, e, v, fd, "string(o.Field)", "o.Direction", "\t\t")
-		}
-		if err != nil {
-			return err
-		}
-		f.p("\tcase %sOrderField%s%s:", n, via, fd.GoName)
-		f.p("\t\treturn %s, nil", term)
-	}
-	f.p("\t}")
-	f.p("\treturn %s.OrderTerm[%s]{}, %s.InputErrorf(\"%sOrder: %%q is not a value of %sOrderField\", o.Field)", impl, e.Name, impl, n, n)
-	f.p("}")
 	return nil
 }
 
-// term is the expression of a gqlimpl.Term of the field fd, named field
-// and in the direction dir (Go expressions both), at indent.
-func (r *renderer) term(f *file, e *plugin.Entity, fd *plugin.Field, field, dir, indent string) (string, error) {
-	base, err := termBase(f, e, fd)
+// checkTerm checks that a connection can order by e's field fd: keyset paging
+// continues after a value of its column's type (termBase), and gqlimpl
+// converts a value of its Go type to that type and back.
+func (r *renderer) checkTerm(e *plugin.Entity, fd *plugin.Field) error {
+	base, err := termBase(newFile(), e, fd)
 	if err != nil {
-		return "", err
+		return err
 	}
-	elem := cmp.Or(fd.ElemType, base) // a model written by hand gives none: velox's own
-	conv := elem != base
-	if conv {
-		if err := r.converts(e, fd, base); err != nil {
-			return "", err
-		}
-		if elem, err = r.qualify(f, e, fd, elem, fd.PkgPath); err != nil {
-			return "", err
-		}
+	if elem := cmp.Or(fd.ElemType, base); elem != base { // a model written by hand gives none: velox's own
+		return r.converts(e, fd, base)
 	}
-	to := func(typ, v string) string {
-		if conv {
-			return typ + "(" + v + ")"
-		}
-		return v
-	}
-	handle := e.Handles + "." + fd.GoName
-	if fd.Pointer {
-		// A Nillable field: nil is NULL, which the cursor carries as null. A
-		// key is never Nillable.
-		get := fmt.Sprintf("func(x *%s) (%s, bool) {\n%s\t\tif x.%s == nil {\n%s\t\t\tvar z %s\n%s\t\t\treturn z, false\n%s\t\t}\n%s\t\treturn %s, true\n%s\t}",
-			e.Name, base, indent, fd.GoName, indent, base, indent, indent, indent, to(base, "*x."+fd.GoName), indent)
-		set := fmt.Sprintf("func(x *%s, v %s, ok bool) {\n%s\t\tx.%s = nil\n%s\t\tif ok {\n%s\t\t\tw := %s\n%s\t\t\tx.%s = &w\n%s\t\t}\n%s\t}",
-			e.Name, base, indent, fd.GoName, indent, indent, to(elem, "v"), indent, fd.GoName, indent, indent)
-		return fmt.Sprintf("%s.NullTerm(%s, %s, %s.Asc(), %s.Desc(),\n%s\t%s,\n%s\t%s)", f.gqlimpl(), field, dir, handle, handle, indent, get, indent, set), nil
-	}
-	get := fmt.Sprintf("func(x *%s) %s { return %s }", e.Name, base, to(base, "x."+fd.GoName))
-	set := fmt.Sprintf("func(x *%s, v %s) { x.%s = %s }", e.Name, base, fd.GoName, to(elem, "v"))
-	return fmt.Sprintf("%s.Term(%s, %s, %s.Asc(), %s.Desc(),\n%s\t%s,\n%s\t%s)", f.gqlimpl(), field, dir, handle, handle, indent, get, indent, set), nil
+	return nil
 }
 
-// termBase is the Go type gqlimpl.Term takes the values of fd as: velox's
-// standard Go type of its column, which the connection converts a cursor's
-// values to.
+// termBase is the Go type a cursor holds the values of fd as: velox's
+// standard Go type of its column, which gqlimpl converts a cursor's values
+// to.
 func termBase(f *file, e *plugin.Entity, fd *plugin.Field) (string, error) {
 	switch fd.Type {
 	case "string", "enum":
@@ -313,47 +302,6 @@ func (r *renderer) converts(e *plugin.Entity, fd *plugin.Field, base string) err
 	return nil
 }
 
-// writeSelects writes the refusal, in XConnectionOf, of a q that does not
-// select the key or a column of an orderBy term: the cursors hold them.
-func (r *renderer) writeSelects(f *file, t *sdl.Type) {
-	e, n := t.Entity, t.Name
-	errorf := f.use("fmt", "fmt") + ".Errorf"
-	var keys []string
-	for _, i := range e.PrimaryKey {
-		keys = append(keys, e.Handles+"."+e.Fields[i].GoName)
-	}
-	f.p("\tif !q.Selects(%s) {", strings.Join(keys, ", "))
-	f.p("\t\treturn nil, %s(\"veloxgql: %s: the base query does not select the key, which the cursors hold\")", errorf, connFunc(t))
-	f.p("\t}")
-	if t.Order == nil {
-		return
-	}
-	if t.MultiOrder {
-		f.p("\tfor _, o := range orderBy {")
-	} else {
-		f.p("\tif o := orderBy; o != nil {")
-	}
-	var cases []string
-	for _, v := range t.Order {
-		if v.Edge != 0 {
-			continue // the join reads the target's columns, and no column of the entity's
-		}
-		fd := e.Fields[v.Field]
-		cases = append(cases, fmt.Sprintf("o.Field == %sOrderField%s && !q.Selects(%s.%s)", n, fd.GoName, e.Handles, fd.GoName))
-	}
-	if len(cases) == 0 {
-		f.p("\t\t_ = o")
-		f.p("\t}")
-		return
-	}
-	f.p("\t\tswitch {")
-	f.p("\t\tcase %s:", strings.Join(cases, ",\n\t\t\t"))
-	f.p("\t\t\treturn nil, %s(\"veloxgql: %s: the base query does not select the column of %%s, which orderBy names and the cursors hold\", o.Field)", errorf, connFunc(t))
-	f.p("\t\t}")
-	f.p("\t}")
-
-}
-
 // foreignKey reports whether e's field fd is a foreign key on e's rows: a
 // field velox added for an edge, or the field an edge of any entity names
 // on e.
@@ -378,7 +326,7 @@ func (r *renderer) foreignKey(e *plugin.Entity, fd *plugin.Field) bool {
 // each selected field's column. A field it does not know, an application's
 // own, may read any column: then all of them.
 func (r *renderer) writeColumns(f *file, t *sdl.Type) {
-	e, velox := t.Entity, f.velox()
+	e := t.Entity
 	base := slices.Clone(e.PrimaryKey) // the indexes in e.Fields of the columns always read
 	in := func(i int) bool { return slices.Contains(base, i) }
 	for i, fd := range e.Fields {
@@ -393,7 +341,7 @@ func (r *renderer) writeColumns(f *file, t *sdl.Type) {
 	}
 	cols := make([]string, len(base))
 	for k, i := range base {
-		cols[k] = e.Handles + "." + e.Fields[i].GoName
+		cols[k] = colConst(e, e.Fields[i])
 	}
 	var none []string // the fields whose columns are read always, and the edges
 	for _, fd := range t.Fields {
@@ -406,8 +354,8 @@ func (r *renderer) writeColumns(f *file, t *sdl.Type) {
 	}
 	f.p("")
 	f.doc("", fmt.Sprintf("%s is the columns a selection of the %s fields fields reads: the key, every foreign key on the row, every order field's column, and the column of each field. It is nil, every column, when a field is not one velox-graphql wrote, such as an application's own.", colsFunc(t), t.Name))
-	f.p("func %s(fields []string) []%s.Column[%s] {", colsFunc(t), velox, e.Name)
-	f.p("\tcols := []%s.Column[%s]{%s}", velox, e.Name, strings.Join(cols, ", "))
+	f.p("func %s(fields []string) []int {", colsFunc(t))
+	f.p("\tcols := []int{%s}", strings.Join(cols, ", "))
 	f.p("\tfor _, f := range fields {")
 	f.p("\t\tswitch f {")
 	if len(none) > 0 {
@@ -416,7 +364,7 @@ func (r *renderer) writeColumns(f *file, t *sdl.Type) {
 	for _, fd := range t.Fields {
 		if !in(fd.Field) {
 			f.p("\t\tcase %q:", fd.Name)
-			f.p("\t\t\tcols = append(cols, %s.%s)", e.Handles, e.Fields[fd.Field].GoName)
+			f.p("\t\t\tcols = append(cols, %s)", colConst(e, e.Fields[fd.Field]))
 		}
 	}
 	f.p("\t\tdefault:")
@@ -504,7 +452,7 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 	// field's selection needs.
 	query := func() {
 		dbFrom()
-		f.p("\tq := db.Query[%s]()", tgt.Name)
+		f.p("\tq := db.QueryTable(%s.TableOf[%s]())", f.velox(), tgt.Name)
 		f.p("\tif fields, ok := %s.Selected(ctx, %q); ok {", impl, tt.Name)
 		f.p("\t\tq = %s.Narrow(q, %s(fields))", impl, colsFunc(tt))
 		f.p("\t}")
@@ -556,37 +504,15 @@ func orderField(e *plugin.Entity, v sdl.OrderValue) (fd *plugin.Field, via strin
 	return v.Target.Fields[v.Field], e.Edges[v.Edge-1].GoName
 }
 
-// viaTerm is the expression of a gqlimpl.JoinedTerm of the field fd of the
-// target of e's edge v.Edge, named field and in the direction dir, at indent.
-func (r *renderer) viaTerm(f *file, e *plugin.Entity, v sdl.OrderValue, fd *plugin.Field, field, dir, indent string) (string, error) {
-	ed := e.Edges[v.Edge-1]
-	t := v.Target
-	base, err := termBase(f, t, fd)
-	if err != nil {
-		return "", err
-	}
-	elem := cmp.Or(fd.ElemType, base)
-	conv := elem != base
-	if conv {
-		if err := r.converts(t, fd, base); err != nil {
-			return "", err
-		}
-		if elem, err = r.qualify(f, t, fd, elem, fd.PkgPath); err != nil {
-			return "", err
-		}
-	}
-	to := func(typ, x string) string {
-		if conv {
-			return typ + "(" + x + ")"
-		}
-		return x
+// checkViaTerm checks that a connection can order by the field fd of the
+// target of e's edge v.Edge, as checkTerm does; a pointer field is refused.
+func (r *renderer) checkViaTerm(e *plugin.Entity, v sdl.OrderValue, fd *plugin.Field) error {
+	ed, t := e.Edges[v.Edge-1], v.Target
+	if err := r.checkTerm(t, fd); err != nil {
+		return err
 	}
 	if fd.Pointer {
-		return "", fmt.Errorf("schema %s, edge %s: a connection orders by %s.%s, and its Go field is a pointer, which only a Nillable field is", e.Name, ed.Name, t.Name, fd.Name)
+		return fmt.Errorf("schema %s, edge %s: a connection orders by %s.%s, and its Go field is a pointer, which only a Nillable field is", e.Name, ed.Name, t.Name, fd.Name)
 	}
-	rel := e.Handles + "." + ed.GoName
-	handle := t.Handles + "." + fd.GoName
-	get := fmt.Sprintf("func(x *%s) %s { return %s }", t.Name, base, to(base, "x."+fd.GoName))
-	set := fmt.Sprintf("func(x *%s, v %s) { x.%s = %s }", t.Name, base, fd.GoName, to(elem, "v"))
-	return fmt.Sprintf("%s.JoinedTerm(%s, %s, %s, %s.Asc(), %s.Desc(),\n%s\t%s,\n%s\t%s)", f.gqlimpl(), field, dir, rel, handle, handle, indent, get, indent, set), nil
+	return nil
 }

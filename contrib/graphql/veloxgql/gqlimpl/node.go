@@ -2,76 +2,59 @@ package gqlimpl
 
 import (
 	"context"
+	"fmt"
+	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // NodeKind is one Node type, as generated code hands it to NodeByID and
-// NodesByID: what looks up the type's nodes by their IDs. NodeOf is the one
-// implementation. For generated code.
-type NodeKind interface {
-	// one is the node with the ID id, or nil when no row has its key.
-	one(ctx context.Context, id string) (veloxgql.Noder, error)
-	// set starts the lookup of several IDs of the type.
-	set() nodeSet
-}
-
-// nodeSet is the IDs of one Node type that NodesByID looks up with one query.
-type nodeSet interface {
-	// add decodes id, the ID at index at of the request's ids.
-	add(id string, at int) error
-	// load reads the rows of the IDs added, and puts each at its index in out.
-	load(ctx context.Context, out []veloxgql.Noder) error
-}
-
-// NodeOf is the Node type of the entity E, whose pointer PE is a Noder, with
-// the key type K. NewNode makes one.
-type NodeOf[E any, PE interface {
-	*E
-	veloxgql.Noder
-}, K comparable] struct {
+// NodesByID: what looks up the type's nodes by their IDs. NewNode makes one.
+// For generated code.
+type NodeKind struct {
 	typ     string
-	decode  func(id string) (K, error)
-	query   func(db *velox.DB) velox.Query[E]
-	columns func(fields []string) []velox.Column[E]
-	eq      func(K) velox.Pred[E]
-	in      func(...K) velox.Pred[E]
-	key     func(*E) K
+	table   velox.Table
+	key     int
+	decode  func(id string) (any, error)
+	columns func(fields []string) []int
 }
 
-// NewNode returns the Node type of the entity E, for generated code, which
-// writes one for each Node type in a function, so that nothing runs at start.
-// typ is the GraphQL type's name, the one an ID of the type holds; decode
-// decodes an ID of the type into the key; query is the query of every row of
-// the entity on db; columns is the columns a selection of fields reads (see
-// Narrow); eq and in are the predicates of the key column, and key returns the
-// key of a row.
-//
-// It takes the predicates as arguments, not as fields of a struct, since a
-// generic method's value is not assignable to a field.
-func NewNode[E any, PE interface {
-	*E
-	veloxgql.Noder
-}, K comparable](typ string, decode func(id string) (K, error), query func(db *velox.DB) velox.Query[E], columns func(fields []string) []velox.Column[E], eq func(K) velox.Pred[E], in func(...K) velox.Pred[E], key func(*E) K) NodeKind {
-	return NodeOf[E, PE, K]{typ, decode, query, columns, eq, in, key}
+// NewNode returns the Node type typ, the GraphQL type's name, the one an ID of
+// the type holds, of the entity t, whose rows are Noders, for generated code,
+// which writes one for each Node type in a function, so that nothing runs at
+// start. key is the index of t's key column; decode decodes an ID of the type
+// into the key, a value of the key column's Go type; columns is the columns a
+// selection of fields reads (see Narrow).
+func NewNode(typ string, t velox.Table, key int, decode func(id string) (any, error), columns func(fields []string) []int) NodeKind {
+	return NodeKind{typ: typ, table: t, key: key, decode: decode, columns: columns}
 }
 
 // base is the query of the type's rows, reading only the columns the
 // selection of the field in ctx needs.
-func (n NodeOf[E, PE, K]) base(ctx context.Context) (velox.Query[E], error) {
+func (n NodeKind) base(ctx context.Context) (velox.TableQuery, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
-		return velox.Query[E]{}, err
+		return velox.TableQuery{}, err
 	}
-	q := n.query(db)
+	q := db.QueryTable(n.table)
 	if fields, ok := Selected(ctx, n.typ); ok {
 		q = Narrow(q, n.columns(fields))
 	}
 	return q, nil
 }
 
-func (n NodeOf[E, PE, K]) one(ctx context.Context, id string) (veloxgql.Noder, error) {
+// noder is the row at p as a Noder.
+func (n NodeKind) noder(p unsafe.Pointer) (veloxgql.Noder, error) {
+	x, ok := n.table.Ptr(p).(veloxgql.Noder)
+	if !ok {
+		return nil, fmt.Errorf("veloxgql: %s: the entity %s is no Node; run go tool velox-gen", n.typ, n.table.Info().Name)
+	}
+	return x, nil
+}
+
+func (n NodeKind) one(ctx context.Context, id string) (veloxgql.Noder, error) {
 	k, err := n.decode(id)
 	if err != nil {
 		return nil, err
@@ -80,30 +63,27 @@ func (n NodeOf[E, PE, K]) one(ctx context.Context, id string) (veloxgql.Noder, e
 	if err != nil {
 		return nil, err
 	}
-	x, err := q.Where(n.eq(k)).One(ctx)
+	p, err := q.Where(n.table.Pred(n.key, velox.PredEQ, k)).One(ctx)
 	switch {
 	case velox.IsNotFound(err):
 		return nil, nil
 	case err != nil:
 		return nil, err
 	}
-	veloxgql.Batch(ctx, []*E{x})
-	return PE(x), nil
+	gqlcore.Add(ctx, []unsafe.Pointer{p})
+	return n.noder(p)
 }
 
-func (n NodeOf[E, PE, K]) set() nodeSet { return &nodeRows[E, PE, K]{n: n} }
-
-// nodeRows is the keys of one type, and the indexes of their IDs.
-type nodeRows[E any, PE interface {
-	*E
-	veloxgql.Noder
-}, K comparable] struct {
-	n    NodeOf[E, PE, K]
-	keys []K
+// nodeSet is the keys of one type that NodesByID looks up with one query,
+// and the indexes of their IDs.
+type nodeSet struct {
+	n    NodeKind
+	keys []any
 	at   []int
 }
 
-func (s *nodeRows[E, PE, K]) add(id string, at int) error {
+// add decodes id, the ID at index at of the request's ids.
+func (s *nodeSet) add(id string, at int) error {
 	k, err := s.n.decode(id)
 	if err != nil {
 		return err
@@ -113,40 +93,46 @@ func (s *nodeRows[E, PE, K]) add(id string, at int) error {
 	return nil
 }
 
-func (s *nodeRows[E, PE, K]) load(ctx context.Context, out []veloxgql.Noder) error {
+// load reads the rows of the IDs added, and puts each at its index in out.
+func (s *nodeSet) load(ctx context.Context, out []veloxgql.Noder) error {
 	q, err := s.n.base(ctx)
 	if err != nil {
 		return err
 	}
-	rows, err := q.Where(s.n.in(s.keys...)).Unbounded().MaxRows(len(s.keys)).All(ctx)
+	rows, err := q.Where(s.n.table.Pred(s.n.key, velox.PredIn, s.keys)).Unbounded().MaxRows(len(s.keys)).All(ctx)
 	if err != nil {
 		return err
 	}
-	by := make(map[K]*E, len(rows))
-	batch := make([]*E, len(rows))
-	for i := range rows {
-		by[s.n.key(&rows[i])] = &rows[i]
-		batch[i] = &rows[i]
+	by := make(map[any]unsafe.Pointer, rows.Len())
+	batch := make([]unsafe.Pointer, rows.Len())
+	for i := range batch {
+		p := rows.At(i)
+		by[s.n.table.Value(p, s.n.key)] = p
+		batch[i] = p
 	}
-	veloxgql.Batch(ctx, batch)
+	gqlcore.Add(ctx, batch)
 	for j, k := range s.keys {
-		if x := by[k]; x != nil {
-			out[s.at[j]] = PE(x)
+		if p := by[k]; p != nil {
+			x, err := s.n.noder(p)
+			if err != nil {
+				return err
+			}
+			out[s.at[j]] = x
 		}
 	}
 	return nil
 }
 
 // NodeByID returns the node with the global ID id, or nil when no row has its
-// key: the root field node. kind returns the Node type an ID's type names, or
-// nil for none. For generated code; see the Node function it writes.
-func NodeByID(ctx context.Context, id string, kind func(typ string) NodeKind) (veloxgql.Noder, error) {
+// key: the root field node. kind returns the Node type an ID's type names,
+// and false for none. For generated code; see the Node function it writes.
+func NodeByID(ctx context.Context, id string, kind func(typ string) (NodeKind, bool)) (veloxgql.Noder, error) {
 	typ, err := veloxgql.IDType(id)
 	if err != nil {
 		return nil, err
 	}
-	k := kind(typ)
-	if k == nil {
+	k, ok := kind(typ)
+	if !ok {
 		return nil, noNodeType("Node")
 	}
 	return k.one(ctx, id)
@@ -159,13 +145,13 @@ func NodeByID(ctx context.Context, id string, kind func(typ string) NodeKind) (v
 // with veloxgql.ErrPageTooLarge on more IDs than the MaxPage of
 // veloxgql.LimitsFromContext(ctx). For generated code; see the Nodes function
 // it writes.
-func NodesByID(ctx context.Context, ids []string, kind func(typ string) NodeKind) ([]veloxgql.Noder, error) {
+func NodesByID(ctx context.Context, ids []string, kind func(typ string) (NodeKind, bool)) ([]veloxgql.Noder, error) {
 	if most := veloxgql.LimitsFromContext(ctx).MaxPage; len(ids) > most {
 		return nil, InputErrorf("Nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), most)
 	}
 	var (
-		order []nodeSet
-		sets  = map[string]nodeSet{}
+		order []*nodeSet
+		sets  = map[string]*nodeSet{}
 	)
 	for i, id := range ids {
 		typ, err := veloxgql.IDType(id)
@@ -174,11 +160,11 @@ func NodesByID(ctx context.Context, ids []string, kind func(typ string) NodeKind
 		}
 		s := sets[typ]
 		if s == nil {
-			k := kind(typ)
-			if k == nil {
+			k, ok := kind(typ)
+			if !ok {
 				return nil, noNodeType("Nodes")
 			}
-			s = k.set()
+			s = &nodeSet{n: k}
 			sets[typ] = s
 			order = append(order, s)
 		}

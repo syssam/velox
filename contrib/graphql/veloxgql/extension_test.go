@@ -303,9 +303,8 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 		if n, ok := args["first"].(int64); ok {
 			first = new(int(n))
 		}
-		key := []gqlimpl.OrderTerm[person]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, people.ID.Asc(), people.ID.Desc(),
-			func(x *person) int64 { return x.ID }, func(x *person, v int64) { x.ID = v })}
-		c, err := gqlimpl.NewConnection(ctx, db.Query[person](), "Person", gqlimpl.Args{First: first}, nil, key)
+		key := &gqlimpl.Conn{Type: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}, Columns: func([]string) []int { return nil }}
+		c, err := gqlimpl.NewConnection(ctx, db.QueryTable(velox.TableOf[person]()), key, gqlimpl.Args{First: first}, nil)
 		if err != nil {
 			return nil, err
 		}

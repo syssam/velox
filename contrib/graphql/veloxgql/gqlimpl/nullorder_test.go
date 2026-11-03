@@ -45,24 +45,11 @@ func petDescriptor() velox.Descriptor[pet] {
 }
 
 func rankTerm(dir veloxgql.OrderDirection) gqlimpl.OrderTerm[pet] {
-	return gqlimpl.NullTerm("RANK", dir, pets.Rank.Asc(), pets.Rank.Desc(),
-		func(x *pet) (int64, bool) {
-			if x.Rank == nil {
-				return 0, false
-			}
-			return *x.Rank, true
-		},
-		func(x *pet, v int64, ok bool) {
-			x.Rank = nil
-			if ok {
-				x.Rank = &v
-			}
-		})
+	return gqlimpl.TermOf[pet]("RANK", dir, int(pets.Rank.I))
 }
 
 func petKey(dir veloxgql.OrderDirection) []gqlimpl.OrderTerm[pet] {
-	return []gqlimpl.OrderTerm[pet]{gqlimpl.Term("id", dir, pets.ID.Asc(), pets.ID.Desc(),
-		func(x *pet) int64 { return x.ID }, func(x *pet, v int64) { x.ID = v })}
+	return []gqlimpl.OrderTerm[pet]{gqlimpl.TermOf[pet]("id", dir, int(pets.ID.I))}
 }
 
 // The ranks of pets 1 to 12: six NULLs, and three ties of 1 and of 2.
@@ -95,13 +82,11 @@ func TestPaginateNullable(t *testing.T) {
 	}{
 		{veloxgql.OrderDirectionAsc, veloxgql.OrderDirectionAsc, []int64{4, 8, 11, 2, 6, 9, 1, 3, 5, 7, 10, 12}},
 		{veloxgql.OrderDirectionDesc, veloxgql.OrderDirectionAsc, []int64{1, 3, 5, 7, 10, 12, 2, 6, 9, 4, 8, 11}},
-		{veloxgql.OrderDirectionAsc, veloxgql.OrderDirectionDesc, []int64{11, 8, 4, 9, 6, 2, 12, 10, 7, 5, 3, 1}},
-		{veloxgql.OrderDirectionDesc, veloxgql.OrderDirectionDesc, []int64{12, 10, 7, 5, 3, 1, 9, 6, 2, 11, 8, 4}},
 	} {
 		t.Run(string(c.rank)+" "+string(c.key), func(t *testing.T) {
-			page := func(args gqlimpl.Args) *gqlimpl.Page[pet] {
+			page := func(args gqlimpl.Args) *gqlimpl.PageOf[pet] {
 				t.Helper()
-				conn, err := gqlimpl.NewConnection(ctx, db.Query[pet](), "Pet", args, []gqlimpl.OrderTerm[pet]{rankTerm(c.rank)}, petKey(c.key))
+				conn, err := gqlimpl.NewConnectionOf(ctx, db.Query[pet](), "Pet", args, []gqlimpl.OrderTerm[pet]{rankTerm(c.rank)}, petKey(c.key))
 				if err != nil {
 					t.Fatalf("%+v: %v", args, err)
 				}

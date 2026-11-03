@@ -134,16 +134,17 @@ func TestSelectedInterfaces(t *testing.T) {
 // keep the query.
 func TestNarrow(t *testing.T) {
 	db, _, log := edgeDB(t)
-	q := db.Query[owner]().Unbounded()
-	idName := []velox.Column[owner]{owners.ID, owners.Name}
+	q := db.QueryTable(velox.TableOf[owner]()).Unbounded()
+	idName := []int{int(owners.ID.I), int(owners.Name.I)}
 	for _, c := range []struct {
 		name string
-		q    velox.Query[owner]
+		q    velox.TableQuery
 		want string
 	}{
 		{"every column", gqlimpl.Narrow(q, nil), `SELECT "id", "name", "age" FROM "owners"`},
 		{"two", gqlimpl.Narrow(q, idName), `SELECT "id", "name" FROM "owners"`},
-		{"never added", gqlimpl.Narrow(q.Columns(owners.ID, owners.Age), idName), `SELECT "id" FROM "owners"`},
+		{"never added", gqlimpl.Narrow(q.Columns(int(owners.ID.I), int(owners.Age.I)), idName), `SELECT "id" FROM "owners"`},
+		{"none selected", gqlimpl.Narrow(q.Columns(int(owners.ID.I)), []int{int(owners.Age.I)}), `SELECT "id" FROM "owners"`},
 	} {
 		log.take("")
 		if _, err := c.q.All(context.Background()); err != nil {

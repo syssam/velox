@@ -102,6 +102,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-graphql's connections, cursors and Node lookups run on one non-generic runtime,
+  `gqlimpl.Conn` and `gqlimpl.NewConnection` on velox's untyped `TableQuery` (`velox.Table`,
+  `TableOf`, `Untyped`, `Typed`, for generated code), and the generated code only names the
+  columns: a `<entity>ConnGQL` table of the key and the order fields' columns replaces the
+  `<entity>KeyOrderGQL` and `<entity>TermGQL` functions, and `<entity>ColumnsGQL` returns
+  column indexes. `gqlimpl.Term`, `NullTerm`, `JoinedTerm` and `OrderTerm` are gone, and
+  `Connection` and `Page` are not generic. `XsConnectionOf` keeps its typed signature and every
+  behaviour and error. `veloxgql.GeneratedCodeIsVersion10`: regenerate.
 - velox-graphql writes its schema to `gen/velox.graphql`, which was `gen/velox.graphqls`, as
   entgql writes `ent.graphql`: the extension more GraphQL tooling reads. velox-gen's plugins
   write `.go`, `.graphql` and `.proto` files. gqlgen.yml's `schema` globs must change to match,

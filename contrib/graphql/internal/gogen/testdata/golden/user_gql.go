@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion9
+const _ = veloxgql.GeneratedCodeIsVersion10
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -29,14 +29,12 @@ func (x *User) IDGQL() string { return veloxgql.EncodeID("Account", x.ID) }
 
 // userNodeGQL is the Node type Account for Node and Nodes.
 func userNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[User, *User](
-		"Account",
-		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "Account") },
-		func(db *velox.DB) velox.Query[User] { return db.Query[User]() },
-		userColumnsGQL,
-		Users.ID.EQ, Users.ID.In,
-		userKeyGQL,
-	)
+	return gqlimpl.NewNode("Account", velox.TableOf[User](), userColID,
+		func(id string) (any, error) {
+			k, err := veloxgql.DecodeID[int64](id, "Account")
+			return k, err
+		},
+		userColumnsGQL)
 }
 
 // userKeyGQL is the key of x, an Account.
@@ -108,7 +106,7 @@ func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	q := db.Query[Group]()
+	q := db.QueryTable(velox.TableOf[Group]())
 	if fields, ok := gqlimpl.Selected(ctx, "Group"); ok {
 		q = gqlimpl.Narrow(q, groupColumnsGQL(fields))
 	}
@@ -137,7 +135,7 @@ func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 // query only then: edges and pageInfo share one page query, and totalCount runs
 // a COUNT.
 type AccountConnection struct {
-	c *gqlimpl.Connection[User]
+	c *gqlimpl.Connection
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -150,7 +148,7 @@ func (c *AccountConnection) Edges(ctx context.Context) ([]*AccountEdge, error) {
 	slab := make([]AccountEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*AccountEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		slab[i] = AccountEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = AccountEdge{Node: (*User)(x), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -205,73 +203,71 @@ func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int,
 // columns, so an application's resolver must not read one it did not ask for.
 // It runs no query.
 func AccountsConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
-	if !q.Selects(Users.ID) {
-		return nil, fmt.Errorf("veloxgql: AccountsConnectionOf: the base query does not select the key, which the cursors hold")
-	}
-	if fields, ok := gqlimpl.Selected(ctx, "Account"); ok {
-		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
+	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &userConnGQL, nil)
+	if err != nil {
+		return nil, err
 	}
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {
 			return nil, err
 		}
-		q = q.Where(p)
+		b = b.Where(velox.Predicate(p))
 	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Account", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, userKeyOrderGQL())
+	c, err := gqlimpl.NewConnection(ctx, b, &userConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil)
 	if err != nil {
 		return nil, err
 	}
 	return &AccountConnection{c: c}, nil
 }
 
-// userKeyOrderGQL is the order of User's key, which ends every order of a
-// connection to Account.
-func userKeyOrderGQL() []gqlimpl.OrderTerm[User] {
-	return []gqlimpl.OrderTerm[User]{
-		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Users.ID.Asc(), Users.ID.Desc(),
-			func(x *User) int64 { return x.ID },
-			func(x *User, v int64) { x.ID = v }),
-	}
+// userConnGQL is what the connections to Account are made of: the key, which
+// ends every order, and the order fields' columns.
+var userConnGQL = gqlimpl.Conn{
+	Type: "Account",
+	Key: []gqlimpl.Col{
+		{Field: "id", Col: userColID},
+	},
+	Columns: userColumnsGQL,
 }
 
 // userColumnsGQL is the columns a selection of the Account fields fields reads:
 // the key, every foreign key on the row, every order field's column, and the
 // column of each field. It is nil, every column, when a field is not one
 // velox-graphql wrote, such as an application's own.
-func userColumnsGQL(fields []string) []velox.Column[User] {
-	cols := []velox.Column[User]{Users.ID, Users.UserBestFriend}
+func userColumnsGQL(fields []string) []int {
+	cols := []int{userColID, userColUserBestFriend}
 	for _, f := range fields {
 		switch f {
 		case "id", "posts", "memberships", "likes":
 		case "createdAt":
-			cols = append(cols, Users.CreatedAt)
+			cols = append(cols, userColCreatedAt)
 		case "updatedAt":
-			cols = append(cols, Users.UpdatedAt)
+			cols = append(cols, userColUpdatedAt)
 		case "displayName":
-			cols = append(cols, Users.Name)
+			cols = append(cols, userColName)
 		case "email":
-			cols = append(cols, Users.Email)
+			cols = append(cols, userColEmail)
 		case "role":
-			cols = append(cols, Users.Role)
+			cols = append(cols, userColRole)
 		case "nickname":
-			cols = append(cols, Users.Nickname)
+			cols = append(cols, userColNickname)
 		case "bio":
-			cols = append(cols, Users.Bio)
+			cols = append(cols, userColBio)
 		case "age":
-			cols = append(cols, Users.Age)
+			cols = append(cols, userColAge)
 		case "score":
-			cols = append(cols, Users.Score)
+			cols = append(cols, userColScore)
 		case "externalID":
-			cols = append(cols, Users.ExternalID)
+			cols = append(cols, userColExternalID)
 		case "avatar":
-			cols = append(cols, Users.Avatar)
+			cols = append(cols, userColAvatar)
 		case "quota":
-			cols = append(cols, Users.Quota)
+			cols = append(cols, userColQuota)
 		case "active":
-			cols = append(cols, Users.Active)
+			cols = append(cols, userColActive)
 		case "settings":
-			cols = append(cols, Users.Settings)
+			cols = append(cols, userColSettings)
 		default:
 			return nil
 		}

@@ -487,8 +487,10 @@ func TestGoTypes(t *testing.T) {
 		" RefNEQ *uuid.UUID ",
 		` levels "example.com/app/types/v2" `, ` "time" `, ` "github.com/google/uuid" `,
 		// The key's order term, and an order field of the application's enum.
-		"func(x *Event) [16]byte { return [16]byte(x.ID) }, func(x *Event, v [16]byte) { x.ID = uuid.UUID(v) }),",
-		"func(x *Event) string { return string(x.Level) }, func(x *Event, v string) { x.Level = levels.Level(v) }), nil",
+		// The connection's columns: gqlimpl converts their values to and from
+		// their base types.
+		"Key: []gqlimpl.Col{ {Field: \"id\", Col: eventColID}, },",
+		"{Field: \"LEVEL\", Col: eventColLevel},",
 		// A JSON field binds through a getter.
 		"func (x *Event) TagsGQL() (veloxgql.JSON, error) { b, err := json.Marshal(x.Tags) return veloxgql.JSON(b), err }",
 		// Pred: one helper call for each predicate, converting the input's
@@ -522,10 +524,10 @@ func TestGoTypes(t *testing.T) {
 		// A field of the application's own Go type binds through a getter.
 		"func (x *Owner) CodeGQL() string { return string(x.Code) }",
 		"func (x *Owner) EmailGQL() *string { if x.Email == nil { return nil } v := string(*x.Email) return &v }",
-		// The key's order term converts the key to and from its base type,
-		// and an order field held in a pointer to and from its value.
-		"func(x *Owner) int64 { return int64(x.ID) }, func(x *Owner, v int64) { x.ID = idspkg.UserID(v) }),",
-		"func(x *Owner) int32 { return int32(x.Rank) }, func(x *Owner, v int32) { x.Rank = idspkg.Rank(v) }), nil",
+		// The connection's columns: gqlimpl converts the key and an order
+		// field of the application's Go types to and from their base types.
+		"Key: []gqlimpl.Col{ {Field: \"id\", Col: ownerColID}, },",
+		"{Field: \"RANK\", Col: ownerColRank},",
 		// Its where predicates take the scalar's Go type, and Pred converts.
 		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
 		` gqlimpl.IDAs(f, "id", w.ID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], Owners.ID.EQ) `,
@@ -543,24 +545,22 @@ func TestGoTypes(t *testing.T) {
 	// decodes to and the Go type of the column.
 	for file, wants := range map[string][]string{
 		ev: {
-			"func eventNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode[Event, *Event](",
-			"func(id string) (uuid.UUID, error) { k, err := veloxgql.DecodeID[[16]byte](id, \"Event\") return uuid.UUID(k), err },",
-			"Events.ID.EQ, Events.ID.In,",
-			"eventKeyGQL, ) }",
+			"func eventNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode(\"Event\", velox.TableOf[Event](), eventColID,",
+			"func(id string) (any, error) { k, err := veloxgql.DecodeID[[16]byte](id, \"Event\") return uuid.UUID(k), err },",
+			"eventColumnsGQL) }",
 			"func eventKeyGQL(x *Event) uuid.UUID { return x.ID }",
 			` "github.com/google/uuid" `,
 			` idspkg "example.com/app/ids" `,
 		},
 		owner: {
-			"func ownerNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode[Owner, *Owner](",
-			"func(id string) (idspkg.UserID, error) { k, err := veloxgql.DecodeID[int64](id, \"Owner\") return idspkg.UserID(k), err },",
-			"Owners.ID.EQ, Owners.ID.In,",
-			"ownerKeyGQL, ) }",
+			"func ownerNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode(\"Owner\", velox.TableOf[Owner](), ownerColID,",
+			"func(id string) (any, error) { k, err := veloxgql.DecodeID[int64](id, \"Owner\") return idspkg.UserID(k), err },",
+			"ownerColumnsGQL) }",
 			"func ownerKeyGQL(x *Owner) idspkg.UserID { return x.ID }",
 		},
 		node: {
-			`case "Event": return eventNodeGQL()`,
-			`case "Owner": return ownerNodeGQL()`,
+			`case "Event": return eventNodeGQL(), true`,
+			`case "Owner": return ownerNodeGQL(), true`,
 			"return gqlimpl.NodeByID(ctx, id, nodeKindGQL)",
 			"return gqlimpl.NodesByID(ctx, ids, nodeKindGQL)",
 		},
@@ -584,7 +584,7 @@ func TestNoNodes(t *testing.T) {
 		},
 	}}}
 	node := render(t, m)["node_gql.go"]
-	if !strings.Contains(node, "func nodeKindGQL(typ string) gqlimpl.NodeKind {") || strings.Contains(node, "switch") {
+	if !strings.Contains(node, "func nodeKindGQL(typ string) (gqlimpl.NodeKind, bool) {") || strings.Contains(node, "switch") {
 		t.Errorf("node_gql.go:\n%s", node)
 	}
 }
@@ -728,7 +728,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion9\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion10\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1346,7 +1346,7 @@ func TestColumnsGQL(t *testing.T) {
 			e := ty.Entity
 			name := lowerFirst(e.Name) + "ColumnsGQL"
 			src := funcSrc(t, files, name)
-			if !strings.HasPrefix(src, "func "+name+"(fields []string) []velox.Column["+e.Name+"] {") {
+			if !strings.HasPrefix(src, "func "+name+"(fields []string) []int {") {
 				t.Errorf("%s: %s: no %s:\n%s", label, ty.Name, name, src)
 				continue
 			}
@@ -1378,14 +1378,14 @@ func TestColumnsGQL(t *testing.T) {
 				t.Errorf("%s: %s: no cols literal:\n%s", label, name, src)
 			}
 			for _, k := range e.PrimaryKey {
-				if !slices.Contains(cols, e.Handles+"."+e.Fields[k].GoName) {
+				if !slices.Contains(cols, colConst(e, e.Fields[k])) {
 					t.Errorf("%s: %s: cols %v lack the key %s", label, name, cols, e.Fields[k].Name)
 				}
 			}
 			for _, fd := range e.Fields {
 				if fd.Sensitive {
 					sensitive++
-					if slices.Contains(cols, e.Handles+"."+fd.GoName) || regexp.MustCompile(`\b`+e.Handles+`\.`+fd.GoName+`\b`).MatchString(src) {
+					if slices.Contains(cols, colConst(e, fd)) || regexp.MustCompile(`\b`+colConst(e, fd)+`\b`).MatchString(src) {
 						t.Errorf("%s: %s reads the sensitive %s:\n%s", label, name, fd.Name, src)
 					}
 				}
@@ -1398,14 +1398,15 @@ func TestColumnsGQL(t *testing.T) {
 	// The key, the foreign keys on the row and the order columns, always, in
 	// this order.
 	cols := colsLiteral(t, render(t, modeltest.Model(t)), "postColumnsGQL")
-	if len(cols) < 2 || cols[0] != "Posts.ID" || cols[1] != "Posts.AuthorID" {
+	if len(cols) < 2 || cols[0] != "postColID" || cols[1] != "postColAuthorID" {
 		t.Errorf("postColumnsGQL's cols %v, want the key and then the foreign keys", cols)
 	}
 }
 
-// TestConnectionOfChecksSelects: XConnectionOf refuses a base query that
-// does not select the key or an orderBy column, and narrows its columns to
-// the selection, before anything else.
+// TestConnectionOfChecksSelects: XConnectionOf hands its base query to
+// gqlimpl.ConnectionBase, which refuses one that does not select the key or
+// an orderBy column and narrows its columns to the selection, before
+// anything else.
 func TestConnectionOfChecksSelects(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		surf, err := sdl.Build(m)
@@ -1415,15 +1416,17 @@ func TestConnectionOfChecksSelects(t *testing.T) {
 		files := render(t, m)
 		for _, ty := range surf.Types {
 			src := funcSrc(t, files, connFunc(ty))
-			sel, narrow, conn := strings.Index(src, "q.Selects("), strings.Index(src, "gqlimpl.Narrow(q, "+lowerFirst(ty.Entity.Name)+"ColumnsGQL(fields))"), strings.Index(src, "gqlimpl.NewConnection(")
-			if sel < 0 || narrow < sel || conn < narrow {
-				t.Errorf("%s: %s does not check q.Selects, then narrow, before NewConnection:\n%s", label, connFunc(ty), src)
+			order := "nil"
+			if ty.Order != nil {
+				order = "order"
 			}
-			if w := strings.Index(src, "where.Pred("); w >= 0 && w < narrow {
+			base := strings.Index(src, "gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &"+connVar(ty)+", "+order+")")
+			conn := strings.Index(src, "gqlimpl.NewConnection(ctx, b, &"+connVar(ty)+",")
+			if base < 0 || conn < base {
+				t.Errorf("%s: %s does not call ConnectionBase before NewConnection:\n%s", label, connFunc(ty), src)
+			}
+			if w := strings.Index(src, "where.Pred("); w >= 0 && w < base {
 				t.Errorf("%s: %s: the where input before the check:\n%s", label, connFunc(ty), src)
-			}
-			if ty.Order != nil && !strings.Contains(src, "which orderBy names") {
-				t.Errorf("%s: %s does not check orderBy's columns:\n%s", label, connFunc(ty), src)
 			}
 		}
 	}
@@ -1641,8 +1644,9 @@ func TestPackageNamedAsALocal(t *testing.T) {
 	}
 }
 
-// TestNullableOrderTerm: a Nillable order field is a gqlimpl.NullTerm, whose get
-// says NULL and whose set writes nil, converting a field of another Go type.
+// TestNullableOrderTerm: a Nillable order field of another Go type is a
+// column of the connection like any other: gqlimpl reads its pointer, NULL
+// for nil, and converts its value.
 func TestNullableOrderTerm(t *testing.T) {
 	thing := &plugin.Entity{Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
 		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64"}}}
@@ -1650,7 +1654,7 @@ func TestNullableOrderTerm(t *testing.T) {
 		&plugin.Field{Name: "n", GoName: "N", Type: "int64", GoType: "*types.N", ElemType: "types.N", PkgPath: "example.com/types", Kind: "int64", Pointer: true, Nullable: true, Optional: true,
 			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"order_field":"N"}`)}})}}
 	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
-	want := `gqlimpl.NullTerm(string(o.Field), o.Direction, Things.N.Asc(), Things.N.Desc(), func(x *Thing) (int64, bool) { if x.N == nil { var z int64 return z, false } return int64(*x.N), true }, func(x *Thing, v int64, ok bool) { x.N = nil if ok { w := types.N(v) x.N = &w } }), nil`
+	want := `Order: []gqlimpl.Col{ {Field: "N", Col: thingColN}, },`
 	if !strings.Contains(got, want) {
 		t.Errorf("no %q in:\n%s", want, got)
 	}

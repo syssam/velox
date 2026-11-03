@@ -3,7 +3,6 @@ package gen
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion9
+const _ = veloxgql.GeneratedCodeIsVersion10
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -24,14 +23,12 @@ func (x *Post) IDGQL() string { return veloxgql.EncodeID("Post", x.ID) }
 
 // postNodeGQL is the Node type Post for Node and Nodes.
 func postNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[Post, *Post](
-		"Post",
-		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "Post") },
-		func(db *velox.DB) velox.Query[Post] { return db.Query[Post]() },
-		postColumnsGQL,
-		Posts.ID.EQ, Posts.ID.In,
-		postKeyGQL,
-	)
+	return gqlimpl.NewNode("Post", velox.TableOf[Post](), postColID,
+		func(id string) (any, error) {
+			k, err := veloxgql.DecodeID[int64](id, "Post")
+			return k, err
+		},
+		postColumnsGQL)
 }
 
 // postKeyGQL is the key of x, a Post.
@@ -77,7 +74,7 @@ func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	q := db.Query[User]()
+	q := db.QueryTable(velox.TableOf[User]())
 	if fields, ok := gqlimpl.Selected(ctx, "Account"); ok {
 		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
 	}
@@ -94,7 +91,7 @@ func (x *Post) LikesGQL(ctx context.Context) ([]*Like, error) {
 	if err != nil {
 		return nil, err
 	}
-	q := db.Query[Like]()
+	q := db.QueryTable(velox.TableOf[Like]())
 	if fields, ok := gqlimpl.Selected(ctx, "Like"); ok {
 		q = gqlimpl.Narrow(q, likeColumnsGQL(fields))
 	}
@@ -139,7 +136,7 @@ func (x *Post) RelatedByGQL(ctx context.Context, after *veloxgql.Cursor, first *
 // only then: edges and pageInfo share one page query, and totalCount runs a
 // COUNT.
 type PostConnection struct {
-	c *gqlimpl.Connection[Post]
+	c *gqlimpl.Connection
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -152,7 +149,7 @@ func (c *PostConnection) Edges(ctx context.Context) ([]*PostEdge, error) {
 	slab := make([]PostEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*PostEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		slab[i] = PostEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = PostEdge{Node: (*Post)(x), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -207,96 +204,69 @@ func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // the order columns, so an application's resolver must not read one it did not
 // ask for. It runs no query.
 func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	if !q.Selects(Posts.ID) {
-		return nil, fmt.Errorf("veloxgql: PostsConnectionOf: the base query does not select the key, which the cursors hold")
+	order := make([]gqlimpl.Order, len(orderBy))
+	for i, o := range orderBy {
+		order[i] = gqlimpl.Order{Field: string(o.Field), Direction: o.Direction}
 	}
-	for _, o := range orderBy {
-		switch {
-		case o.Field == PostOrderFieldTitle && !q.Selects(Posts.Title),
-			o.Field == PostOrderFieldViews && !q.Selects(Posts.Views):
-			return nil, fmt.Errorf("veloxgql: PostsConnectionOf: the base query does not select the column of %s, which orderBy names and the cursors hold", o.Field)
-		}
-	}
-	if fields, ok := gqlimpl.Selected(ctx, "Post"); ok {
-		q = gqlimpl.Narrow(q, postColumnsGQL(fields))
+	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &postConnGQL, order)
+	if err != nil {
+		return nil, err
 	}
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {
 			return nil, err
 		}
-		q = q.Where(p)
+		b = b.Where(velox.Predicate(p))
 	}
-	var order []gqlimpl.OrderTerm[Post]
-	for _, o := range orderBy {
-		term, err := postTermGQL(o)
-		if err != nil {
-			return nil, err
-		}
-		order = append(order, term)
-	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Post", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, postKeyOrderGQL())
+	c, err := gqlimpl.NewConnection(ctx, b, &postConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order)
 	if err != nil {
 		return nil, err
 	}
 	return &PostConnection{c: c}, nil
 }
 
-// postKeyOrderGQL is the order of Post's key, which ends every order of a
-// connection to Post.
-func postKeyOrderGQL() []gqlimpl.OrderTerm[Post] {
-	return []gqlimpl.OrderTerm[Post]{
-		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Posts.ID.Asc(), Posts.ID.Desc(),
-			func(x *Post) int64 { return x.ID },
-			func(x *Post, v int64) { x.ID = v }),
-	}
+// postConnGQL is what the connections to Post are made of: the key, which ends
+// every order, and the order fields' columns.
+var postConnGQL = gqlimpl.Conn{
+	Type: "Post",
+	Key: []gqlimpl.Col{
+		{Field: "id", Col: postColID},
+	},
+	Order: []gqlimpl.Col{
+		{Field: "TITLE", Col: postColTitle},
+		{Field: "VIEWS", Col: postColViews},
+		{Field: "AUTHOR_NAME", Col: userColName, Edge: postEdgeAuthor + 1, Target: velox.TableOf[User]},
+	},
+	Columns: postColumnsGQL,
 }
 
 // postColumnsGQL is the columns a selection of the Post fields fields reads:
 // the key, every foreign key on the row, every order field's column, and the
 // column of each field. It is nil, every column, when a field is not one
 // velox-graphql wrote, such as an application's own.
-func postColumnsGQL(fields []string) []velox.Column[Post] {
-	cols := []velox.Column[Post]{Posts.ID, Posts.AuthorID, Posts.Title, Posts.Views}
+func postColumnsGQL(fields []string) []int {
+	cols := []int{postColID, postColAuthorID, postColTitle, postColViews}
 	for _, f := range fields {
 		switch f {
 		case "id", "title", "views", "writer", "likes", "related", "relatedBy":
 		case "slug":
-			cols = append(cols, Posts.Slug)
+			cols = append(cols, postColSlug)
 		case "status":
-			cols = append(cols, Posts.Status)
+			cols = append(cols, postColStatus)
 		case "publishedAt":
-			cols = append(cols, Posts.PublishedAt)
+			cols = append(cols, postColPublishedAt)
 		case "tags":
-			cols = append(cols, Posts.Tags)
+			cols = append(cols, postColTags)
 		case "rating":
-			cols = append(cols, Posts.Rating)
+			cols = append(cols, postColRating)
 		case "editedBy":
-			cols = append(cols, Posts.EditedBy)
+			cols = append(cols, postColEditedBy)
 		default:
 			return nil
 		}
 	}
 	return cols
-}
-
-// postTermGQL is the order term o, an order of connections to Post.
-func postTermGQL(o *PostOrder) (gqlimpl.OrderTerm[Post], error) {
-	switch o.Field {
-	case PostOrderFieldTitle:
-		return gqlimpl.Term(string(o.Field), o.Direction, Posts.Title.Asc(), Posts.Title.Desc(),
-			func(x *Post) string { return x.Title },
-			func(x *Post, v string) { x.Title = v }), nil
-	case PostOrderFieldViews:
-		return gqlimpl.Term(string(o.Field), o.Direction, Posts.Views.Asc(), Posts.Views.Desc(),
-			func(x *Post) int { return x.Views },
-			func(x *Post, v int) { x.Views = v }), nil
-	case PostOrderFieldAuthorName:
-		return gqlimpl.JoinedTerm(string(o.Field), o.Direction, Posts.Author, Users.Name.Asc(), Users.Name.Desc(),
-			func(x *User) string { return x.Name },
-			func(x *User, v string) { x.Name = v }), nil
-	}
-	return gqlimpl.OrderTerm[Post]{}, gqlimpl.InputErrorf("PostOrder: %q is not a value of PostOrderField", o.Field)
 }
 
 // PostOrder is the GraphQL input PostOrder, an order of connections to Post.

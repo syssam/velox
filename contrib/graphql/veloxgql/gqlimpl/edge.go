@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"unsafe"
 
 	"github.com/99designs/gqlgen/graphql"
 
@@ -58,27 +59,47 @@ import (
 // EdgeConnection was given; the rows read become a group. Otherwise its
 // queries are c's, filtered by r.Of(x). A base query with a lock (ForUpdate,
 // ForShare) is refused when batched: a per-owner read locks nothing.
-func EdgeConnection[E, T any](ctx context.Context, c *Connection[T], x *E, r velox.Rel[E, T], field string, args any) *Connection[T] {
+func EdgeConnection[E, T any](ctx context.Context, c *Connection, x *E, r velox.Rel[E, T], field string, args any) *Connection {
 	b, owners, i := batchOf(ctx, x, r, field, 0, args)
 	if b == nil {
-		c.query = c.query.Where(r.Of(x))
+		c.query = c.query.Where(velox.Predicate(r.Of(x)))
 		return c
 	}
 	// The batch reads under the context of the edge's field, whose row scope
 	// keys it.
 	n := c.n
-	c.edge = &edge[T]{
-		rows: func(q velox.Query[T]) ([]T, error) {
+	owner, rel := velox.TableOf[E](), int(r.I)
+	ptrs := pointers(owners)
+	c.edge = &edge{
+		rows: func(q velox.TableQuery) (velox.Rows, error) {
 			// The page size and the cursor are the batch's arguments: the
 			// same in the connection of every caller of the batch.
-			parts, err := loadBatch(ctx, b, q.Limit(0).MaxRows(0), r.LimitEach(n+1), owners, func(rows []T) int { return min(len(rows), n) })
+			v, err := b.Rows(func() (any, error) {
+				parts, err := q.Limit(0).MaxRows(0).LoadEach(ctx, owner, rel, n+1, ptrs)
+				if err != nil {
+					return nil, err
+				}
+				// Owners with one key may get one run of rows: a row is added once.
+				seen := map[unsafe.Pointer]bool{}
+				var group []unsafe.Pointer
+				for _, p := range parts {
+					for k := range min(p.Len(), n) {
+						if x := p.At(k); !seen[x] {
+							seen[x] = true
+							group = append(group, x)
+						}
+					}
+				}
+				gqlcore.Add(ctx, group)
+				return parts, nil
+			})
 			if err != nil {
-				return nil, err
+				return velox.Rows{}, err
 			}
-			return parts[i], nil
+			return v.([]velox.Rows)[i], nil
 		},
-		count: func(q velox.Query[T]) (int, error) {
-			counts, err := b.Counts(func() ([]int64, error) { return velox.CountEach(ctx, q.Limit(0), r, owners) })
+		count: func(q velox.TableQuery) (int, error) {
+			counts, err := b.Counts(func() ([]int64, error) { return q.Limit(0).CountEach(ctx, owner, rel, ptrs) })
 			if err != nil {
 				return 0, err
 			}
@@ -88,6 +109,11 @@ func EdgeConnection[E, T any](ctx context.Context, c *Connection[T], x *E, r vel
 	return c
 }
 
+// pointers is rows as pointers: a []*E has the layout of a []unsafe.Pointer.
+func pointers[E any](rows []*E) []unsafe.Pointer {
+	return unsafe.Slice((*unsafe.Pointer)(unsafe.Pointer(unsafe.SliceData(rows))), len(rows))
+}
+
 // EdgeOne returns x's node of the to-one edge r, whose GraphQL field is
 // field ("Post.author"), or nil: read with the other rows of x's group in
 // one statement (LoadEach, LimitEach(1)) when ctx is that field's, or alone
@@ -95,7 +121,8 @@ func EdgeConnection[E, T any](ctx context.Context, c *Connection[T], x *E, r vel
 //
 // The node read alone is a group of its own, and so are the nodes of a
 // batch: their edges batch.
-func EdgeOne[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[E, T], field string) (*T, error) {
+func EdgeOne[E, T any](ctx context.Context, tq velox.TableQuery, x *E, r velox.Rel[E, T], field string) (*T, error) {
+	q := velox.Typed[T](tq)
 	b, owners, i := batchOf(ctx, x, r, field, 0, nil)
 	if b == nil {
 		v, err := q.Where(r.Of(x)).First(ctx)
@@ -105,7 +132,7 @@ func EdgeOne[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[
 		if err != nil {
 			return nil, err
 		}
-		gqlcore.Add(ctx, []*T{v})
+		gqlcore.Add(ctx, []unsafe.Pointer{unsafe.Pointer(v)})
 		return v, nil
 	}
 	parts, err := loadBatch(ctx, b, q, r.LimitEach(1), owners, func(rows []T) int { return len(rows) })
@@ -126,7 +153,8 @@ func EdgeOne[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[
 // MaxList is that of veloxgql.LimitsFromContext(ctx), or maxList, the edge's
 // graphql.MaxList, when that is lower and not 0. Read alone, x's nodes are one
 // LoadEach of x, a group of their own.
-func EdgeList[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[E, T], field string, maxList int) ([]*T, error) {
+func EdgeList[E, T any](ctx context.Context, tq velox.TableQuery, x *E, r velox.Rel[E, T], field string, maxList int) ([]*T, error) {
+	q := velox.Typed[T](tq)
 	most := veloxgql.LimitsFromContext(ctx).MaxList
 	if maxList > 0 {
 		most = min(most, maxList)
@@ -159,12 +187,12 @@ func EdgeList[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel
 
 // edge is a Connection's edge mode: its page and count are its part of a
 // batch.
-type edge[T any] struct {
+type edge struct {
 	// rows returns the connection's rows, q being its query in its order,
 	// after its cursor.
-	rows func(q velox.Query[T]) ([]T, error)
+	rows func(q velox.TableQuery) (velox.Rows, error)
 	// count returns the connection's totalCount, q being its query.
-	count func(q velox.Query[T]) (int, error)
+	count func(q velox.TableQuery) (int, error)
 }
 
 // batchKey is what the callers of a batch share, besides its group, its
@@ -194,7 +222,7 @@ func batchOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field strin
 		return nil, nil, 0
 	}
 	t := gqlcore.TableFromContext(ctx)
-	g, rows, i, ok := gqlcore.Find(t, x)
+	g, ps, i, ok := gqlcore.Find(t, unsafe.Pointer(x))
 	if !ok {
 		return nil, nil, 0
 	}
@@ -208,7 +236,8 @@ func batchOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field strin
 	if b == nil {
 		return nil, nil, 0
 	}
-	return b, rows, i
+	// The group's rows are of E: x is.
+	return b, unsafe.Slice((**E)(unsafe.Pointer(unsafe.SliceData(ps))), len(ps)), i
 }
 
 // canCompare reports whether == on v cannot panic: what
@@ -248,7 +277,7 @@ func loadBatch[E, T any](ctx context.Context, b *gqlcore.Batch, q velox.Query[T]
 				}
 			}
 		}
-		gqlcore.Add(ctx, group)
+		gqlcore.Add(ctx, pointers(group))
 		return parts, nil
 	})
 	if err != nil {

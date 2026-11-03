@@ -18,21 +18,19 @@ func (x *post) IDGQL() string { return veloxgql.EncodeID("Post", x.ID) }
 
 // postKind is post as a Node type, as the generated code writes it.
 func postKind() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[post, *post](
-		"Post",
-		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "Post") },
-		func(db *velox.DB) velox.Query[post] { return db.Query[post]() },
-		func([]string) []velox.Column[post] { return nil },
-		posts.ID.EQ, posts.ID.In,
-		func(x *post) int64 { return x.ID },
-	)
+	return gqlimpl.NewNode("Post", velox.TableOf[post](), int(posts.ID.I),
+		func(id string) (any, error) {
+			k, err := veloxgql.DecodeID[int64](id, "Post")
+			return k, err
+		},
+		func([]string) []int { return nil })
 }
 
-func postKinds(typ string) gqlimpl.NodeKind {
+func postKinds(typ string) (gqlimpl.NodeKind, bool) {
 	if typ == "Post" {
-		return postKind()
+		return postKind(), true
 	}
-	return nil
+	return gqlimpl.NodeKind{}, false
 }
 
 func seedPosts(ctx context.Context, t *testing.T, db *velox.DB) {

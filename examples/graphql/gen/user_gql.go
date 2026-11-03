@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion9
+const _ = veloxgql.GeneratedCodeIsVersion10
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -26,14 +26,12 @@ func (x *User) IDGQL() string { return veloxgql.EncodeID("User", x.ID) }
 
 // userNodeGQL is the Node type User for Node and Nodes.
 func userNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[User, *User](
-		"User",
-		func(id string) (int64, error) { return veloxgql.DecodeID[int64](id, "User") },
-		func(db *velox.DB) velox.Query[User] { return db.Query[User]() },
-		userColumnsGQL,
-		Users.ID.EQ, Users.ID.In,
-		userKeyGQL,
-	)
+	return gqlimpl.NewNode("User", velox.TableOf[User](), userColID,
+		func(id string) (any, error) {
+			k, err := veloxgql.DecodeID[int64](id, "User")
+			return k, err
+		},
+		userColumnsGQL)
 }
 
 // userKeyGQL is the key of x, a User.
@@ -90,7 +88,7 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 // only then: edges and pageInfo share one page query, and totalCount runs a
 // COUNT.
 type UserConnection struct {
-	c *gqlimpl.Connection[User]
+	c *gqlimpl.Connection
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -103,7 +101,7 @@ func (c *UserConnection) Edges(ctx context.Context) ([]*UserEdge, error) {
 	slab := make([]UserEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*UserEdge, len(p.Rows))
 	for i, x := range p.Rows {
-		slab[i] = UserEdge{Node: x, Cursor: p.Cursors[i]}
+		slab[i] = UserEdge{Node: (*User)(x), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -158,84 +156,60 @@ func UsersConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // the order columns, so an application's resolver must not read one it did not
 // ask for. It runs no query.
 func UsersConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *UserOrder, where *UserWhereInput) (*UserConnection, error) {
-	if !q.Selects(Users.ID) {
-		return nil, fmt.Errorf("veloxgql: UsersConnectionOf: the base query does not select the key, which the cursors hold")
-	}
+	var order []gqlimpl.Order
 	if o := orderBy; o != nil {
-		switch {
-		case o.Field == UserOrderFieldName && !q.Selects(Users.Name),
-			o.Field == UserOrderFieldJoinedAt && !q.Selects(Users.JoinedAt):
-			return nil, fmt.Errorf("veloxgql: UsersConnectionOf: the base query does not select the column of %s, which orderBy names and the cursors hold", o.Field)
-		}
+		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
-	if fields, ok := gqlimpl.Selected(ctx, "User"); ok {
-		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
+	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &userConnGQL, order)
+	if err != nil {
+		return nil, err
 	}
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {
 			return nil, err
 		}
-		q = q.Where(p)
+		b = b.Where(velox.Predicate(p))
 	}
-	var order []gqlimpl.OrderTerm[User]
-	if o := orderBy; o != nil {
-		term, err := userTermGQL(o)
-		if err != nil {
-			return nil, err
-		}
-		order = append(order, term)
-	}
-	c, err := gqlimpl.NewConnection(ctx, q, "User", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, userKeyOrderGQL())
+	c, err := gqlimpl.NewConnection(ctx, b, &userConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order)
 	if err != nil {
 		return nil, err
 	}
 	return &UserConnection{c: c}, nil
 }
 
-// userKeyOrderGQL is the order of User's key, which ends every order of a
-// connection to User.
-func userKeyOrderGQL() []gqlimpl.OrderTerm[User] {
-	return []gqlimpl.OrderTerm[User]{
-		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Users.ID.Asc(), Users.ID.Desc(),
-			func(x *User) int64 { return x.ID },
-			func(x *User, v int64) { x.ID = v }),
-	}
+// userConnGQL is what the connections to User are made of: the key, which ends
+// every order, and the order fields' columns.
+var userConnGQL = gqlimpl.Conn{
+	Type: "User",
+	Key: []gqlimpl.Col{
+		{Field: "id", Col: userColID},
+	},
+	Order: []gqlimpl.Col{
+		{Field: "NAME", Col: userColName},
+		{Field: "JOINED_AT", Col: userColJoinedAt},
+	},
+	Columns: userColumnsGQL,
 }
 
 // userColumnsGQL is the columns a selection of the User fields fields reads:
 // the key, every foreign key on the row, every order field's column, and the
 // column of each field. It is nil, every column, when a field is not one
 // velox-graphql wrote, such as an application's own.
-func userColumnsGQL(fields []string) []velox.Column[User] {
-	cols := []velox.Column[User]{Users.ID, Users.Name, Users.JoinedAt}
+func userColumnsGQL(fields []string) []int {
+	cols := []int{userColID, userColName, userColJoinedAt}
 	for _, f := range fields {
 		switch f {
 		case "id", "name", "joinedAt", "posts":
 		case "email":
-			cols = append(cols, Users.Email)
+			cols = append(cols, userColEmail)
 		case "role":
-			cols = append(cols, Users.Role)
+			cols = append(cols, userColRole)
 		default:
 			return nil
 		}
 	}
 	return cols
-}
-
-// userTermGQL is the order term o, an order of connections to User.
-func userTermGQL(o *UserOrder) (gqlimpl.OrderTerm[User], error) {
-	switch o.Field {
-	case UserOrderFieldName:
-		return gqlimpl.Term(string(o.Field), o.Direction, Users.Name.Asc(), Users.Name.Desc(),
-			func(x *User) string { return x.Name },
-			func(x *User, v string) { x.Name = v }), nil
-	case UserOrderFieldJoinedAt:
-		return gqlimpl.Term(string(o.Field), o.Direction, Users.JoinedAt.Asc(), Users.JoinedAt.Desc(),
-			func(x *User) time.Time { return x.JoinedAt },
-			func(x *User, v time.Time) { x.JoinedAt = v }), nil
-	}
-	return gqlimpl.OrderTerm[User]{}, gqlimpl.InputErrorf("UserOrder: %q is not a value of UserOrderField", o.Field)
 }
 
 // UserOrder is the GraphQL input UserOrder, an order of connections to User.

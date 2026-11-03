@@ -3,7 +3,7 @@
 // the scalars, and the limits on what a client may ask for.
 //
 // What only generated code calls is in package gqlimpl, whose names are
-// stable by GeneratedCodeIsVersion9 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion10 and not by semantic versioning. Where a
 // name below belongs to gqlimpl it is written gqlimpl.Name.
 //
 // # IDs
@@ -53,9 +53,11 @@
 // # Connections
 //
 // A gqlimpl.Connection (gqlimpl.NewConnection) holds a connection's query,
-// its paging arguments (gqlimpl.Args) and its order (gqlimpl.OrderTerm, made
-// by gqlimpl.Term), and runs nothing until asked: Page runs the page query
-// once, whoever calls it first, and TotalCount the COUNT. The order always
+// its paging arguments (gqlimpl.Args) and its order (gqlimpl.Order, of the
+// columns of the type's gqlimpl.Conn), and runs nothing until asked: Page
+// runs the page query once, whoever calls it first, and TotalCount the COUNT.
+// It is one non-generic runtime for every type, on velox's untyped
+// TableQuery, and the generated code only names the columns. The order always
 // ends with the key. Paging is keyset, through velox's Query.After: last and
 // before reverse every term and reverse the rows read, and one row more than
 // the page sets hasNextPage or hasPreviousPage.
@@ -203,8 +205,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion9 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion10 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
-// disagree. For generated code. It is replaced by GeneratedCodeIsVersion10 when
+// disagree. For generated code. It is replaced by GeneratedCodeIsVersion11 when
 // generated code must change.
-const GeneratedCodeIsVersion9 = true
+const GeneratedCodeIsVersion10 = true

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 	"sync"
+	"unsafe"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -34,9 +35,11 @@ type Table struct {
 	scope func(context.Context) any
 
 	mu sync.Mutex
-	// rows maps a row's pointer (a *E, in an any) to its group and its
-	// place in the group's rows.
-	rows map[any]member
+	// rows maps a row's pointer to its group and its place in the group's
+	// rows. A row is keyed by its address alone: two rows of different
+	// entities never share one while either is held here, as the map keeps
+	// them alive, and no entity is the first field of another.
+	rows map[unsafe.Pointer]member
 	// selected are Selected's results, per field.
 	selected map[*ast.Field][]*selection
 }
@@ -56,9 +59,10 @@ type selection struct {
 	ok     bool
 }
 
-// Group is a set of rows that one statement read: a []*E, held as an any.
+// Group is a set of rows that one statement read: pointers to its rows, of
+// one entity.
 type Group struct {
-	rows any
+	rows []unsafe.Pointer
 	mu   sync.Mutex
 	// batches are the group's batches, per edge field: one per field and
 	// selection, since two aliases are two fields.
@@ -123,12 +127,12 @@ func TableFromContext(ctx context.Context) *Table {
 // already in a group moves to this one. Add does nothing when ctx has no
 // table, or is in no gqlgen field: there nothing batches, and a context kept
 // long must not keep its rows.
-func Add[E any](ctx context.Context, rows []*E) {
+func Add(ctx context.Context, rows []unsafe.Pointer) {
 	t := TableFromContext(ctx)
 	if t == nil || len(rows) == 0 || graphql.GetFieldContext(ctx) == nil {
 		return
 	}
-	rows = slices.DeleteFunc(slices.Clone(rows), func(x *E) bool { return x == nil })
+	rows = slices.DeleteFunc(slices.Clone(rows), func(x unsafe.Pointer) bool { return x == nil })
 	if len(rows) == 0 {
 		return
 	}
@@ -136,7 +140,7 @@ func Add[E any](ctx context.Context, rows []*E) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.rows == nil {
-		t.rows = make(map[any]member, len(rows))
+		t.rows = make(map[unsafe.Pointer]member, len(rows))
 	}
 	for i, x := range rows {
 		t.rows[x] = member{g, i}
@@ -145,7 +149,7 @@ func Add[E any](ctx context.Context, rows []*E) {
 
 // Find returns x's group, the group's rows and x's index in them; ok is
 // false when t is nil or x is in no group.
-func Find[E any](t *Table, x *E) (g *Group, rows []*E, i int, ok bool) {
+func Find(t *Table, x unsafe.Pointer) (g *Group, rows []unsafe.Pointer, i int, ok bool) {
 	if t == nil || x == nil {
 		return nil, nil, 0, false
 	}
@@ -155,7 +159,7 @@ func Find[E any](t *Table, x *E) (g *Group, rows []*E, i int, ok bool) {
 	if !ok {
 		return nil, nil, 0, false
 	}
-	return m.g, m.g.rows.([]*E), m.i, true
+	return m.g, m.g.rows, m.i, true
 }
 
 // Batch returns the group's batch of the edge field f with the selections

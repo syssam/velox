@@ -76,10 +76,9 @@ func (w *leaky) Pred(ctx context.Context) (velox.Pred[person], error) {
 func TestErrorsAreCoded(t *testing.T) {
 	db, _ := handlerDB(t)
 	ctx := context.Background()
-	key := []gqlimpl.OrderTerm[person]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, people.ID.Asc(), people.ID.Desc(),
-		func(x *person) int64 { return x.ID }, func(x *person, v int64) { x.ID = v })}
+	key := &gqlimpl.Conn{Type: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}, Columns: func([]string) []int { return nil }}
 	conn := func(args gqlimpl.Args) error {
-		_, err := gqlimpl.NewConnection(ctx, db.Query[person](), "Person", args, nil, key)
+		_, err := gqlimpl.NewConnection(ctx, db.QueryTable(velox.TableOf[person]()), key, args, nil)
 		return err
 	}
 	pred := func(w *personName) error {

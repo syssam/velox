@@ -60,18 +60,15 @@ func personDescriptor() velox.Descriptor[person] {
 
 // The order terms of person, as the generated code makes them.
 func nameTerm(dir veloxgql.OrderDirection) gqlimpl.OrderTerm[person] {
-	return gqlimpl.Term("NAME", dir, people.Name.Asc(), people.Name.Desc(),
-		func(x *person) string { return x.Name }, func(x *person, v string) { x.Name = v })
+	return gqlimpl.TermOf[person]("NAME", dir, int(people.Name.I))
 }
 
 func ageTerm(dir veloxgql.OrderDirection) gqlimpl.OrderTerm[person] {
-	return gqlimpl.Term("AGE", dir, people.Age.Asc(), people.Age.Desc(),
-		func(x *person) int64 { return x.Age }, func(x *person, v int64) { x.Age = v })
+	return gqlimpl.TermOf[person]("AGE", dir, int(people.Age.I))
 }
 
 func personKey() []gqlimpl.OrderTerm[person] {
-	return []gqlimpl.OrderTerm[person]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, people.ID.Asc(), people.ID.Desc(),
-		func(x *person) int64 { return x.ID }, func(x *person, v int64) { x.ID = v })}
+	return []gqlimpl.OrderTerm[person]{gqlimpl.TermOf[person]("id", veloxgql.OrderDirectionAsc, int(people.ID.I))}
 }
 
 // The ten people. Names tie: two a, three b, two d.
@@ -168,7 +165,7 @@ func TestPaginate(t *testing.T) {
 		}, []int64{10, 7, 9, 5, 1, 8, 6, 3, 4, 2}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			page := func(args gqlimpl.Args) *gqlimpl.Page[person] {
+			page := func(args gqlimpl.Args) *gqlimpl.PageOf[person] {
 				t.Helper()
 				st.take()
 				p, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", args, c.order(), personKey())
@@ -194,7 +191,7 @@ func TestPaginate(t *testing.T) {
 				}
 				return p
 			}
-			check := func(what string, p *gqlimpl.Page[person], want []int64, next, prev bool) {
+			check := func(what string, p *gqlimpl.PageOf[person], want []int64, next, prev bool) {
 				t.Helper()
 				if got := ids(p.Rows); !slices.Equal(got, want) || p.Info.HasNextPage != next || p.Info.HasPreviousPage != prev {
 					t.Errorf("%s: %v next %v prev %v, want %v next %v prev %v", what, got, p.Info.HasNextPage, p.Info.HasPreviousPage, want, next, prev)
@@ -338,7 +335,7 @@ func TestConnectionIsLazy(t *testing.T) {
 	ctx := context.Background()
 	db, st := peopleDB(t)
 	q := db.Query[person]().Where(people.Name.NEQ("b"))
-	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
+	c, err := gqlimpl.NewConnectionOf(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +351,7 @@ func TestConnectionIsLazy(t *testing.T) {
 	}
 	// Edges and PageInfo, called at once as gqlgen may: one page query.
 	var wg sync.WaitGroup
-	pages := make([]*gqlimpl.Page[person], 4)
+	pages := make([]*gqlimpl.PageOf[person], 4)
 	for i := range pages {
 		wg.Go(func() {
 			p, err := c.Page(ctx)
@@ -369,7 +366,7 @@ func TestConnectionIsLazy(t *testing.T) {
 		t.Errorf("Page ran %v, want one page query", ran)
 	}
 	for _, p := range pages {
-		if p != pages[0] || !slices.Equal(ids(p.Rows), []int64{1, 2}) || !p.Info.HasNextPage {
+		if p.Info.StartCursor != pages[0].Info.StartCursor || !slices.Equal(ids(p.Rows), []int64{1, 2}) || !p.Info.HasNextPage {
 			t.Errorf("page %+v", p)
 		}
 	}
@@ -461,7 +458,7 @@ func TestConnectionWithoutExtension(t *testing.T) {
 		}
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	c, err := gqlimpl.NewConnection(ctx, db.Query[person](), "Person", gqlimpl.Args{}, nil, personKey())
+	c, err := gqlimpl.NewConnectionOf(ctx, db.Query[person](), "Person", gqlimpl.Args{}, nil, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +466,7 @@ func TestConnectionWithoutExtension(t *testing.T) {
 	if err != nil || len(p.Rows) != 100 || !p.Info.HasNextPage {
 		t.Fatalf("NewConnection under context.Background(): %v, %d rows, %+v; want 100 and a next page", err, len(p.Rows), p.Info)
 	}
-	if _, err := gqlimpl.NewConnection(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(101)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
+	if _, err := gqlimpl.NewConnectionOf(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(101)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("first 101 under context.Background(): %v, want ErrPageTooLarge", err)
 	}
 
@@ -481,7 +478,7 @@ func TestPaginateClearsOffset(t *testing.T) {
 	db, _ := peopleDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().Limit(1).Offset(3)
-	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
+	c, err := gqlimpl.NewConnectionOf(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,9 +499,9 @@ func TestConnectionRefusesOrderedQuery(t *testing.T) {
 	db, st := peopleDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().OrderBy(people.Age.Asc())
-	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
+	c, err := gqlimpl.NewConnectionOf(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
 	want := "veloxgql: PersonsConnectionOf: the base query has an OrderBy; the connection orders by its orderBy argument"
-	if c != nil || err == nil || err.Error() != want {
+	if c.Connection != nil || err == nil || err.Error() != want {
 		t.Fatalf("%v %v, want no connection and %q", c, err, want)
 	}
 	var coded interface{ Extensions() map[string]any }
@@ -518,8 +515,7 @@ func TestConnectionRefusesOrderedQuery(t *testing.T) {
 
 // ownerNameOrder orders children by their owner's name: a joined term.
 func ownerNameOrder(dir veloxgql.OrderDirection) []gqlimpl.OrderTerm[child] {
-	return []gqlimpl.OrderTerm[child]{gqlimpl.JoinedTerm("OWNER_NAME", dir, children.Owner, owners.Name.Asc(), owners.Name.Desc(),
-		func(x *owner) string { return x.Name }, func(x *owner, v string) { x.Name = v })}
+	return []gqlimpl.OrderTerm[child]{gqlimpl.JoinedTermOf[child, owner]("OWNER_NAME", dir, int(children.Owner.I), int(owners.Name.I))}
 }
 
 // A joined term orders by the related row's column, pages by cursors that hold
@@ -527,9 +523,9 @@ func ownerNameOrder(dir veloxgql.OrderDirection) []gqlimpl.OrderTerm[child] {
 func TestJoinedTermPages(t *testing.T) {
 	db, _, _ := edgeDB(t)
 	ctx := context.Background()
-	page := func(args gqlimpl.Args, dir veloxgql.OrderDirection) (*gqlimpl.Page[child], int) {
+	page := func(args gqlimpl.Args, dir veloxgql.OrderDirection) (*gqlimpl.PageOf[child], int) {
 		t.Helper()
-		c, err := gqlimpl.NewConnection(ctx, db.Query[child](), "Child", args, ownerNameOrder(dir), childKey())
+		c, err := gqlimpl.NewConnectionOf(ctx, db.Query[child](), "Child", args, ownerNameOrder(dir), childKey())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -593,9 +589,8 @@ func TestJoinedTermPages(t *testing.T) {
 	}
 
 	// The same relation named by two terms is joined once.
-	two := append(ownerNameOrder(asc), gqlimpl.JoinedTerm("OWNER_AGE", asc, children.Owner, owners.Age.Asc(), owners.Age.Desc(),
-		func(x *owner) int64 { return x.Age }, func(x *owner, v int64) { x.Age = v }))
-	c, err := gqlimpl.NewConnection(ctx, db.Query[child](), "Child", gqlimpl.Args{}, two, childKey())
+	two := append(ownerNameOrder(asc), gqlimpl.JoinedTermOf[child, owner]("OWNER_AGE", asc, int(children.Owner.I), int(owners.Age.I)))
+	c, err := gqlimpl.NewConnectionOf(ctx, db.Query[child](), "Child", gqlimpl.Args{}, two, childKey())
 	if err != nil {
 		t.Fatal(err)
 	}

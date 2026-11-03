@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/99designs/gqlgen/graphql"
 
@@ -193,15 +194,14 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			return out, nil
 		}
 	}
-	key := []gqlimpl.OrderTerm[pet]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, pets.ID.Asc(), pets.ID.Desc(),
-		func(x *pet) int64 { return x.ID }, func(x *pet, v int64) { x.ID = v })}
+	key := &gqlimpl.Conn{Type: "Pet", Key: []gqlimpl.Col{{Field: "id", Col: int(pets.ID.I)}}, Columns: func([]string) []int { return nil }}
 	petConn := func(edge string) resolver {
 		return func(ctx context.Context, _ map[string]any) (any, error) {
 			db, err := veloxgql.DBFromContext(ctx)
 			if err != nil {
 				return nil, err
 			}
-			c, err := gqlimpl.NewConnection(ctx, db.Query[pet](), "Pet", gqlimpl.Args{}, nil, key)
+			c, err := gqlimpl.NewConnection(ctx, db.QueryTable(velox.TableOf[pet]()), key, gqlimpl.Args{}, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -231,16 +231,16 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			return petConn("Keeper.viewerPets")(context.WithValue(ctx, viewerKey{}, 3-2*(parent(ctx).(*keeper).ID%2)), args)
 		},
 		"PetConnection.totalCount": func(ctx context.Context, _ map[string]any) (any, error) {
-			return parent(ctx).(*gqlimpl.Connection[pet]).TotalCount(ctx)
+			return parent(ctx).(*gqlimpl.Connection).TotalCount(ctx)
 		},
 		"PetConnection.nodes": func(ctx context.Context, _ map[string]any) (any, error) {
-			p, err := parent(ctx).(*gqlimpl.Connection[pet]).Page(ctx)
+			p, err := parent(ctx).(*gqlimpl.Connection).Page(ctx)
 			if err != nil {
 				return nil, err
 			}
 			out := make([]any, len(p.Rows))
 			for i, r := range p.Rows {
-				out[i] = r
+				out[i] = (*pet)(r)
 			}
 			return out, nil
 		},
@@ -395,10 +395,10 @@ func TestSubscriptionEventsLetGo(t *testing.T) {
 	var events [][]*keeper
 	var found []bool // per event: whether its own rows, then the event before's, are in its table
 	srv := batchServer(db, func(ctx context.Context, rows []*keeper) {
-		_, _, _, own := gqlcore.Find(gqlcore.TableFromContext(ctx), rows[0])
+		_, _, _, own := gqlcore.Find(gqlcore.TableFromContext(ctx), unsafe.Pointer(rows[0]))
 		found = append(found, own)
 		if len(events) > 0 {
-			_, _, _, old := gqlcore.Find(gqlcore.TableFromContext(ctx), events[len(events)-1][0])
+			_, _, _, old := gqlcore.Find(gqlcore.TableFromContext(ctx), unsafe.Pointer(events[len(events)-1][0]))
 			found = append(found, old)
 		}
 		events = append(events, rows)
