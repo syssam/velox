@@ -41,7 +41,12 @@ var Orgs = struct {
 var orgMeta velox.MetaOnce[Org]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Org) VeloxMeta() *velox.Meta[Org] { return orgMeta.Load(orgDescriptor) }
+func (*Org) VeloxMeta() *velox.Meta[Org] {
+	if veloxRT == nil {
+		return new(velox.MetaOnce[Org]).Load(orgDescriptor)
+	}
+	return orgMeta.Load(orgDescriptor)
+}
 
 // orgDescriptor describes Org to velox: its table, columns, edges and hooks.
 func orgDescriptor() velox.Descriptor[Org] {

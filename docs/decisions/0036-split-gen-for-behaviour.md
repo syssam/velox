@@ -43,7 +43,11 @@ and each new command. `gen/runtime` held a struct with three fields per entity
 - **Fail closed.** A program that links `gen/entity` without `gen` fails at
   the first use of any entity, with "entity: the schema's hooks, policies and
   defaults are not linked: import "…/gen", which re-exports "…/gen/entity" and
-  links the schema, in the program or test".
+  links the schema, in the program or test". The failure is not kept: an
+  entity touched before gen's `init` runs, from a package-level var or an
+  `init` of the schema or a helper, which Go initializes first, fails then
+  and works once gen has bound the schema. VeloxMeta builds the failing
+  metadata anew on each use until then.
 - **The schema may not import gen.** velox-gen refuses a schema package that
   imports gen, at the import: "the schema package imports "…/gen", the
   generated package, which imports the schema package to bind its Hooks and

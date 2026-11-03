@@ -83,7 +83,12 @@ var Tickets = struct {
 var ticketMeta velox.MetaOnce[Ticket]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDescriptor) }
+func (*Ticket) VeloxMeta() *velox.Meta[Ticket] {
+	if veloxRT == nil {
+		return new(velox.MetaOnce[Ticket]).Load(ticketDescriptor)
+	}
+	return ticketMeta.Load(ticketDescriptor)
+}
 
 // ticketDescriptor describes Ticket to velox: its table, columns, edges and hooks.
 func ticketDescriptor() velox.Descriptor[Ticket] {

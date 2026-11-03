@@ -34,7 +34,12 @@ var Homes = struct {
 var homeMeta velox.MetaOnce[Home]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Home) VeloxMeta() *velox.Meta[Home] { return homeMeta.Load(homeDescriptor) }
+func (*Home) VeloxMeta() *velox.Meta[Home] {
+	if veloxRT == nil {
+		return new(velox.MetaOnce[Home]).Load(homeDescriptor)
+	}
+	return homeMeta.Load(homeDescriptor)
+}
 
 // homeDescriptor describes Home to velox: its table, columns, edges and hooks.
 func homeDescriptor() velox.Descriptor[Home] {

@@ -485,6 +485,17 @@ func TestCheckEntity(t *testing.T) {
 	}
 }
 
+// Note, touched while the schema package initialized, before gen bound
+// the schema, failed then, and works now.
+func TestEntityUsedBeforeGenInit(t *testing.T) {
+	if schema.NoteEarly == nil || !strings.Contains(schema.NoteEarly.Error(), "not linked") {
+		t.Fatalf("the early check got %v, want the not-linked error", schema.NoteEarly)
+	}
+	if err := velox.CheckEntity[gen.Note](); err != nil {
+		t.Fatalf("Note after gen's init: %v", err)
+	}
+}
+
 func TestScope(t *testing.T) {
 	db := open(t)
 	org := func(id int64) context.Context { return schema.Org.With(ctx, id) }

@@ -53,7 +53,12 @@ var Docs = struct {
 var docMeta velox.MetaOnce[Doc]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Doc) VeloxMeta() *velox.Meta[Doc] { return docMeta.Load(docDescriptor) }
+func (*Doc) VeloxMeta() *velox.Meta[Doc] {
+	if veloxRT == nil {
+		return new(velox.MetaOnce[Doc]).Load(docDescriptor)
+	}
+	return docMeta.Load(docDescriptor)
+}
 
 // docDescriptor describes Doc to velox: its table, columns, edges and hooks.
 func docDescriptor() velox.Descriptor[Doc] {

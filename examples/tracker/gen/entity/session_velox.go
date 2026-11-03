@@ -50,7 +50,12 @@ var Sessions = struct {
 var sessionMeta velox.MetaOnce[Session]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Session) VeloxMeta() *velox.Meta[Session] { return sessionMeta.Load(sessionDescriptor) }
+func (*Session) VeloxMeta() *velox.Meta[Session] {
+	if veloxRT == nil {
+		return new(velox.MetaOnce[Session]).Load(sessionDescriptor)
+	}
+	return sessionMeta.Load(sessionDescriptor)
+}
 
 // sessionDescriptor describes Session to velox: its table, columns, edges and hooks.
 func sessionDescriptor() velox.Descriptor[Session] {

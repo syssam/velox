@@ -34,7 +34,12 @@ var Tags = struct {
 var tagMeta velox.MetaOnce[Tag]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Tag) VeloxMeta() *velox.Meta[Tag] { return tagMeta.Load(tagDescriptor) }
+func (*Tag) VeloxMeta() *velox.Meta[Tag] {
+	if veloxRT == nil {
+		return new(velox.MetaOnce[Tag]).Load(tagDescriptor)
+	}
+	return tagMeta.Load(tagDescriptor)
+}
 
 // tagDescriptor describes Tag to velox: its table, columns, edges and hooks.
 func tagDescriptor() velox.Descriptor[Tag] {

@@ -34,7 +34,12 @@ var Memos = struct {
 var memoMeta velox.MetaOnce[Memo]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Memo) VeloxMeta() *velox.Meta[Memo] { return memoMeta.Load(memoDescriptor) }
+func (*Memo) VeloxMeta() *velox.Meta[Memo] {
+	if veloxRT == nil {
+		return new(velox.MetaOnce[Memo]).Load(memoDescriptor)
+	}
+	return memoMeta.Load(memoDescriptor)
+}
 
 // memoDescriptor describes Memo to velox: its table, columns, edges and hooks.
 func memoDescriptor() velox.Descriptor[Memo] {

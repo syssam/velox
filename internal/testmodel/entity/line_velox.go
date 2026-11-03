@@ -43,7 +43,12 @@ var Lines = struct {
 var lineMeta velox.MetaOnce[Line]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDescriptor) }
+func (*Line) VeloxMeta() *velox.Meta[Line] {
+	if veloxRT == nil {
+		return new(velox.MetaOnce[Line]).Load(lineDescriptor)
+	}
+	return lineMeta.Load(lineDescriptor)
+}
 
 // lineDescriptor describes Line to velox: its table, columns, edges and hooks.
 func lineDescriptor() velox.Descriptor[Line] {

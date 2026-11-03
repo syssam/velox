@@ -35,6 +35,9 @@ var userFriendMeta velox.MetaOnce[UserFriend]
 
 // VeloxMeta is called by velox, not by applications.
 func (*UserFriend) VeloxMeta() *velox.Meta[UserFriend] {
+	if veloxRT == nil {
+		return new(velox.MetaOnce[UserFriend]).Load(userFriendDescriptor)
+	}
 	return userFriendMeta.Load(userFriendDescriptor)
 }
 

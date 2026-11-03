@@ -39,7 +39,12 @@ var Audits = struct {
 var auditMeta velox.MetaOnce[Audit]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Audit) VeloxMeta() *velox.Meta[Audit] { return auditMeta.Load(auditDescriptor) }
+func (*Audit) VeloxMeta() *velox.Meta[Audit] {
+	if veloxRT == nil {
+		return new(velox.MetaOnce[Audit]).Load(auditDescriptor)
+	}
+	return auditMeta.Load(auditDescriptor)
+}
 
 // auditDescriptor describes Audit to velox: its table, columns, edges and hooks.
 func auditDescriptor() velox.Descriptor[Audit] {
