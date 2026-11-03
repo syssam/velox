@@ -29,9 +29,10 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    `UpdateUserInput`), which the application's own mutations take. A `Sensitive`
    field (`password_hash`) is in no type, where input or order: it is an
    input only, `passwordHash` in `CreateUserInput` and `UpdateUserInput`.
-   The author edge has `graphql.Skip(graphql.SkipMutationCreateInput)`:
-   `CreatePostInput` has no `authorID`, and the resolver sets the author to
-   the viewer. The `org_id`
+   The author edge has `graphql.Skip(graphql.SkipMutationCreateInput,
+   graphql.SkipMutationUpdateInput)`: neither post input has `authorID`, the
+   create resolver sets the author to the viewer, and no update gives a post
+   to another author. The `org_id`
    column is `graphql.Skip()`ped: it is in no type or input. `title` is `NotEmpty()`, a validator the
    mutations run before any statement, and the tag's `name` is `Unique()`.
    `views` is `Optional()`: `CreatePostInput` may leave it out, and it is then 0,
@@ -76,7 +77,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    }
 
    func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
-   	viewer, err := Viewer(ctx)
+   	viewer, err := Author(ctx)
    	if err != nil {
    		return nil, err
    	}
@@ -84,15 +85,27 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    }
 
    func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
+   	db, err := veloxgql.DBFromContext(ctx)
+   	if err != nil {
+   		return nil, err
+   	}
+   	if _, err := OwnPost(ctx, db, id); err != nil {
+   		return nil, err
+   	}
    	return input.Update(ctx, id)
    }
    ```
 
    `Create` takes the row to insert, with what the client must not choose
-   already on it (the author), and `Update` takes the application's own
-   setters after the ID. velox-graphql generates no delete: `DeletePost` is
-   the application's, a scoped `db.Delete[gen.Post]()` and then the post's
-   join rows, in a savepoint, `NOT_FOUND` when it deleted no row.
+   already on it (the author). It trusts that row's own fields, foreign keys
+   included, so `Author` checks first that the viewer is a user. `Update`
+   takes the application's own setters after the ID; `OwnPost` lets only a
+   post's author change it (`FORBIDDEN` otherwise). velox-graphql generates no
+   delete: `DeletePost` is the application's, `OwnPost` and a scoped
+   `db.Delete[gen.Post]()`, in a savepoint, `NOT_FOUND` when it deleted no
+   row and an internal error when the driver reports no count. The post's
+   join rows go with it by `post_tags`' `ON DELETE CASCADE`: `main.go` opens
+   SQLite with foreign keys on (`_pragma=foreign_keys(1)`).
 
    The root function is named after the plural of the GraphQL type, as every
    name `gen` declares is: `gen.LabelsConnection` for the `labels` field of
@@ -129,7 +142,8 @@ input names (`tagIDs`). `updateX(id:, input:)`, through `Update`, changes
 only the fields given: a field left out is unchanged, `clearPublishedAt: true`
 or `publishedAt: null` sets a NULL-able column to NULL, and an edge is cleared,
 then has its `remove…IDs` removed, then its `add…IDs` added. `deletePost(id:)`
-deletes the row, then its join rows, and returns its ID. Repeated IDs count
+deletes the row, and with it its join rows, and returns its ID. Only a
+post's author, the `X-User`, may update or delete it. Repeated IDs count
 once, and adding a link that exists changes nothing.
 
 Every ID to set or add is checked against what the caller may read: the
@@ -141,7 +155,8 @@ it nor `clearTags` or `clearPosts` touches a link to a row the caller may
 not read: `updateLabel(id:, input: {clearPosts: true})` unlinks the
 caller's organization's posts from the label, and another organization's
 stay linked. `deletePost` of another organization's post is `NOT_FOUND`, as
-its DELETE is scoped to the organization, and its join rows are left alone.
+its check of the author is scoped to the organization, and its join rows
+are left alone.
 
 The validators (`title`'s `NotEmpty()`) run on the fields an input sets
 before any statement: `createPost` with an empty title is `BAD_USER_INPUT`,
@@ -360,8 +375,9 @@ gqlgen only).
 | `email`, or a `where` on it, without `X-Role: admin` | a `FORBIDDEN` error; the filter runs no statement |
 | `Post` with organization 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
 | `createPost`, `updatePost` | a `COUNT` per edge's IDs, then the writes; the row as written |
-| `createPost` without `X-User` | `UNAUTHENTICATED`, nothing written; an `authorID` is no field of the input |
-| `deletePost` of another organization's post | `NOT_FOUND`, one scoped `DELETE`, nothing deleted |
+| `createPost` without `X-User`, or with one that names no user | `UNAUTHENTICATED`, nothing written; an `authorID` is no field of the input |
+| `updatePost`, `deletePost` of another user's post | `FORBIDDEN`, nothing written; `UNAUTHENTICATED` without `X-User` |
+| `deletePost` of another organization's post | `NOT_FOUND`, one scoped read of its author, nothing deleted |
 | two mutations, the second failing | both rolled back, `data` `null` |
 | `createUser` setting `email` without `X-Role: admin` | `FORBIDDEN`, nothing written |
 

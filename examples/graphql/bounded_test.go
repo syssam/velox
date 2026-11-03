@@ -355,7 +355,7 @@ func TestIntrospectionOffShowsNothing(t *testing.T) {
 // mustSQLite is an empty database.
 func mustSQLite(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "graphql.db"))
+	db, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "graphql.db")))
 	if err != nil {
 		t.Fatal(err)
 	}

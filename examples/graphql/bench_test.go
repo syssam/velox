@@ -111,7 +111,7 @@ func seedBench(t testing.TB, db *velox.DB, users, posts, tags int) {
 // called directly: no network.
 func benchHandler(t testing.TB) (http.Handler, *atomic.Int64) {
 	t.Helper()
-	sqlDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "graphql.db"))
+	sqlDB, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "graphql.db")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,10 +241,11 @@ func TestNestedRequestBudget(t *testing.T) {
 	}
 }
 
-// budgetMutation is the request TestMutationBudget serves: an update of post
-// 1's title. Every run sends the same statements: an UPDATE to an unchanged
-// value is still sent.
-const budgetMutation = `mutation { updatePost(id: "` + post1 + `", input: {title: "Alpha 2"}) { title } }`
+// budgetMutation is the request TestMutationBudget serves: an update of label
+// 1's rank, the generated Update alone (updatePost checks its author first,
+// a statement of the application's). Every run sends the same statements: an
+// UPDATE to an unchanged value is still sent.
+const budgetMutation = `mutation { updateLabel(id: "` + label1 + `", input: {rank: 9}) { rank } }`
 
 // mutationStmts is the number of statements budgetMutation sends, as
 // velox.WithAround counts them, which does not see SAVEPOINT or RELEASE.
@@ -259,6 +260,9 @@ const budgetMutation = `mutation { updatePost(id: "` + post1 + `", input: {title
 // budget is 498 plus 10%, 548, rounded up to 550. The counting wrapper hides
 // the SQLite conn's optional interfaces (NamedValueChecker, SessionResetter,
 // Validator), so the figures are the wrapped path's, not the bare driver's.
+// On 2026-11-03 the request became updateLabel's, once updatePost checked its
+// author: 2 statements, 2 savepoint statements and 472 allocations; the
+// budget stays.
 const (
 	mutationStmts        = 2
 	mutationAllocsBudget = 550
@@ -274,7 +278,7 @@ func TestMutationBudget(t *testing.T) {
 	drv := probe.Driver()
 	_ = probe.Close()
 	var savepoints, stmts atomic.Int64
-	sqlDB := sql.OpenDB(savepointCounter{drv, filepath.Join(t.TempDir(), "graphql.db"), &savepoints})
+	sqlDB := sql.OpenDB(savepointCounter{drv, sqliteDSN(filepath.Join(t.TempDir(), "graphql.db")), &savepoints})
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	db, err := open(t.Context(), sqlDB, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		stmts.Add(1)
@@ -300,7 +304,7 @@ func TestMutationBudget(t *testing.T) {
 		return rec.Body.Bytes()
 	}
 
-	const want = `{"data":{"updatePost":{"title":"Alpha 2"}}}`
+	const want = `{"data":{"updateLabel":{"rank":9}}}`
 	stmts.Store(0)
 	savepoints.Store(0)
 	resp := send()

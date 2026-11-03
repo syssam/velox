@@ -869,7 +869,6 @@ input UpdatePostInput {
   views: Int
   publishedAt: Time
   clearPublishedAt: Boolean
-  authorID: ID
   addTagIDs: [ID!]
   removeTagIDs: [ID!]
   clearTags: Boolean
@@ -5746,7 +5745,7 @@ func (ec *executionContext) unmarshalInputUpdatePostInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"title", "status", "views", "publishedAt", "clearPublishedAt", "authorID", "addTagIDs", "removeTagIDs", "clearTags"}
+	fieldsInOrder := [...]string{"title", "status", "views", "publishedAt", "clearPublishedAt", "addTagIDs", "removeTagIDs", "clearTags"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -5788,13 +5787,6 @@ func (ec *executionContext) unmarshalInputUpdatePostInput(ctx context.Context, o
 				return it, err
 			}
 			it.ClearPublishedAt = data
-		case "authorID":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("authorID"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.AuthorID = data
 		case "addTagIDs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("addTagIDs"))
 			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)

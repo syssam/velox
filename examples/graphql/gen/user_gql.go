@@ -32,9 +32,12 @@ func userNodeGQL() gqlimpl.NodeKind {
 		func(db *velox.DB) velox.Query[User] { return db.Query[User]() },
 		userColumnsGQL,
 		Users.ID.EQ, Users.ID.In,
-		func(x *User) int64 { return x.ID },
+		userKeyGQL,
 	)
 }
+
+// userKeyGQL is the key of x, a User.
+func userKeyGQL(x *User) int64 { return x.ID }
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -183,16 +186,16 @@ func UsersConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql
 		}
 		order = append(order, term)
 	}
-	c, err := gqlimpl.NewConnection(ctx, q, "User", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, userKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "User", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, userKeyOrderGQL())
 	if err != nil {
 		return nil, err
 	}
 	return &UserConnection{c: c}, nil
 }
 
-// userKeyGQL is the order of User's key, which ends every order of a connection
-// to User.
-func userKeyGQL() []gqlimpl.OrderTerm[User] {
+// userKeyOrderGQL is the order of User's key, which ends every order of a
+// connection to User.
+func userKeyOrderGQL() []gqlimpl.OrderTerm[User] {
 	return []gqlimpl.OrderTerm[User]{
 		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Users.ID.Asc(), Users.ID.Desc(),
 			func(x *User) int64 { return x.ID },
@@ -413,17 +416,18 @@ func (in CreateUserInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in CreateUserInput) GoString() string { return in.String() }
 
-// Create inserts x, a User, with the input's fields and edges set, and returns
-// it. A nil x is a new one; fields the input does not set are inserted as the
-// caller set them, so a resolver sets there what the client must not choose. It
-// runs atomically on the DB in ctx, under the policies, and changes x even when
-// it fails.
+// Create inserts x, a User, with the input's fields and edges set; a nil x is a
+// new one. The input's fields overwrite x's: to own a field, leave it out with
+// graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook. x's
+// other fields, foreign keys included, are trusted, not checked. It runs
+// atomically on the DB in ctx, under the policies, and changes x even when it
+// fails.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreateUserInput) Create(ctx context.Context, x *User) (*User, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreateUserInput", "gen.User", x, userInputGQL, Users.Name, Users.Email, Users.JoinedAt, Users.PasswordHash)
+	c, x := gqlimpl.NewCreate(ctx, "CreateUserInput", "User", "gen.User", x, userInputGQL, Users.Name, Users.Email, Users.JoinedAt, Users.PasswordHash)
 	x.Name = in.Name
 	x.Email = in.Email
 	if in.Role != nil {
@@ -454,15 +458,19 @@ func (in UpdateUserInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in UpdateUserInput) GoString() string { return in.String() }
 
-// Update updates the User with the ID id from the input and then from set, the
-// application's own setters, validated with the input's, and returns the row as
-// written. It runs atomically on the DB in ctx, under the policies.
+// Update updates the User with the ID id from the input and from set, the
+// application's own setters, and returns the row as written. A setter of set
+// wins over the input's field or edge that sets the same column, which is left
+// as set says. The input's fields are validated as the client's, and set apart
+// from them: a setter of set that its validator refuses is the application's
+// error, returned as velox's. It runs atomically on the DB in ctx, under the
+// policies.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *UpdateUserInput) Update(ctx context.Context, id string, set ...velox.Setter[User]) (*User, error) {
-	u, key := gqlimpl.NewUpdate[User, int64](ctx, "UpdateUserInput", "gen.User", id, userInputGQL)
+	u, key := gqlimpl.NewUpdate[User, int64](ctx, "UpdateUserInput", "User", "gen.User", id, userInputGQL)
 	if in.Name != nil {
 		u.Set(Users.Name.Set(*in.Name))
 	}

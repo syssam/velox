@@ -11,7 +11,9 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/examples/graphql/gen"
 )
 
 // Resolver is the root resolver. It holds nothing: the generated code reads
@@ -34,9 +36,64 @@ func Viewer(ctx context.Context) (int64, error) {
 	if user, ok := ctx.Value(viewerKey{}).(int64); ok {
 		return user, nil
 	}
-	return 0, &gqlerror.Error{
-		Path:       graphql.GetPath(ctx),
-		Message:    "a viewer is required: the X-User header",
-		Extensions: map[string]any{"code": veloxgql.CodeUnauthenticated},
+	return 0, codedError(ctx, "a viewer is required: the X-User header", veloxgql.CodeUnauthenticated)
+}
+
+// Author is the viewer, as an author: Viewer's, once it names a user the
+// request may read. A viewer that names none is UNAUTHENTICATED too.
+func Author(ctx context.Context) (int64, error) {
+	viewer, err := Viewer(ctx)
+	if err != nil {
+		return 0, err
 	}
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return 0, err
+	}
+	ok, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(viewer)).Exists(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if !ok {
+		return 0, codedError(ctx, "the X-User header names no user", veloxgql.CodeUnauthenticated)
+	}
+	return viewer, nil
+}
+
+// OwnPost checks, on db, that the viewer wrote the post whose ID is id, and
+// returns the post's key. Without a viewer it is UNAUTHENTICATED (Viewer);
+// an ID that names no post the request may read is NOT_FOUND, as one of
+// another organization is; a post by another user is FORBIDDEN.
+func OwnPost(ctx context.Context, db *velox.DB, id string) (int64, error) {
+	viewer, err := Viewer(ctx)
+	if err != nil {
+		return 0, err
+	}
+	key, err := veloxgql.DecodeID[int64](id, "Post")
+	if err != nil {
+		return 0, err
+	}
+	p, err := db.Query[gen.Post]().Where(gen.Posts.ID.EQ(key)).Columns(gen.Posts.AuthorID).One(ctx)
+	if velox.IsNotFound(err) {
+		return 0, NotFound(ctx)
+	}
+	if err != nil {
+		return 0, err
+	}
+	if p.AuthorID != viewer {
+		return 0, codedError(ctx, "only the post's author may change it", veloxgql.CodeForbidden)
+	}
+	return key, nil
+}
+
+// NotFound is the NOT_FOUND error of a post ID that names no post the
+// request may read.
+func NotFound(ctx context.Context) error {
+	return codedError(ctx, "no Post has this ID", veloxgql.CodeNotFound)
+}
+
+// codedError is the error message with the code code, which
+// veloxgql.ErrorPresenter shows the client as it is.
+func codedError(ctx context.Context, message, code string) error {
+	return &gqlerror.Error{Path: graphql.GetPath(ctx), Message: message, Extensions: map[string]any{"code": code}}
 }

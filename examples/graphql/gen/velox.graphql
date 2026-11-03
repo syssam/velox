@@ -169,7 +169,6 @@ input UpdatePostInput {
   views: Int
   publishedAt: Time
   clearPublishedAt: Boolean
-  authorID: ID
   addTagIDs: [ID!]
   removeTagIDs: [ID!]
   clearTags: Boolean

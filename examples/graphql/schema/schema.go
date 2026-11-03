@@ -66,12 +66,12 @@ func (Post) Fields() []schema.Field {
 }
 
 // Edges returns Author, and Tags, a many-to-many edge through the join table
-// post_tags. CreatePostInput has no authorID: the createPost resolver sets
-// the author to the viewer, so a client cannot post as another user;
-// UpdatePostInput keeps it.
+// post_tags. Neither input has authorID: the createPost resolver sets the
+// author to the viewer, so a client cannot post as another user, and no
+// update re-assigns a post to another author.
 func (Post) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id").Annotations(graphql.Skip(graphql.SkipMutationCreateInput)),
+		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id").Annotations(graphql.Skip(graphql.SkipMutationCreateInput, graphql.SkipMutationUpdateInput)),
 		edge.To("tags", Tag.Type).Annotations(graphql.WhereEdge()),
 	}
 }

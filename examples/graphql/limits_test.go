@@ -36,6 +36,7 @@ func (s *testServer) postBody(t *testing.T, body io.Reader) (int, string) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-ID", "1")
+	req.Header.Set("X-User", "1") // Ada, post 1's author
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -208,21 +209,23 @@ func TestIntrospectionAtItsLimit(t *testing.T) {
 }
 
 // TestMutationStatementsCounted: what a mutation's input makes it send counts in
-// its cost, as an upper bound: 30 updatePost with clearTags and addTagIDs cost
-// what they send, not one statement each.
+// its cost, as an upper bound: 30 updateLabel with clearPosts and addPostIDs cost
+// what they send, not one statement each. They are the generated Update alone:
+// updatePost's resolver checks the post's author first, a statement of the
+// application's, which the cost does not see.
 func TestMutationStatementsCounted(t *testing.T) {
 	s := newServer(t)
 	schema := graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}, Directives: graph.DirectiveRoot{Admin: admin}}).Schema()
-	tag := `["` + label1 + `"]`
+	post := `["` + post1 + `"]`
 	for _, in := range []string{
-		`title: "x"`,
-		`addTagIDs: ` + tag,
-		`removeTagIDs: ` + tag,
-		`clearTags: true`,
-		`title: "x", clearTags: true, addTagIDs: ` + tag,
+		`name: "x"`,
+		`addPostIDs: ` + post,
+		`removePostIDs: ` + post,
+		`clearPosts: true`,
+		`name: "x", clearPosts: true, addPostIDs: ` + post,
 	} {
 		query := `mutation { ` + repeat(30, func(i int) string {
-			return fmt.Sprintf(`a%d: updatePost(id: "%s", input: {%s}) { id }`, i, post1, in)
+			return fmt.Sprintf(`a%d: updateLabel(id: "%s", input: {%s}) { id }`, i, label1, in)
 		}) + ` }`
 		doc, errs := gqlparser.LoadQueryWithRules(schema, query, nil)
 		if len(errs) > 0 {
@@ -244,8 +247,9 @@ func TestMutationStatementsCounted(t *testing.T) {
 		}
 	}
 	// nodes sends one for each type among its IDs, and the example's delete of a
-	// Post with tags two, its row and its links: when they counted as one each, a
-	// review measured 960 nodes fitting the limit, which sent 2880.
+	// Post two, the check of its author and its DELETE, whose links the
+	// database's cascade deletes: when they counted as one each, a review
+	// measured 960 nodes fitting the limit, which sent 2880.
 	for name, query := range map[string]string{
 		"nodes of three types": `{ ` + repeat(30, func(i int) string {
 			return fmt.Sprintf(`a%d: nodes(ids: ["%s", "%s", "%s"]) { id }`, i, user1, post1, label1)

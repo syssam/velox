@@ -35,9 +35,12 @@ func tagNodeGQL() gqlimpl.NodeKind {
 		func(db *velox.DB) velox.Query[Tag] { return db.Query[Tag]() },
 		tagColumnsGQL,
 		Tags.ID.EQ, Tags.ID.In,
-		func(x *Tag) int64 { return x.ID },
+		tagKeyGQL,
 	)
 }
+
+// tagKeyGQL is the key of x, a Label.
+func tagKeyGQL(x *Tag) int64 { return x.ID }
 
 // PostsGQL is the edge posts: a connection to the Post nodes it leads to,
 // paged, ordered and filtered by the arguments. Its queries run when gqlgen
@@ -156,16 +159,16 @@ func LabelsConnectionOf(ctx context.Context, q velox.Query[Tag], after *veloxgql
 		}
 		order = append(order, term)
 	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Label", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, tagKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Label", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, tagKeyOrderGQL())
 	if err != nil {
 		return nil, err
 	}
 	return &LabelConnection{c: c}, nil
 }
 
-// tagKeyGQL is the order of Tag's key, which ends every order of a connection
-// to Label.
-func tagKeyGQL() []gqlimpl.OrderTerm[Tag] {
+// tagKeyOrderGQL is the order of Tag's key, which ends every order of a
+// connection to Label.
+func tagKeyOrderGQL() []gqlimpl.OrderTerm[Tag] {
 	return []gqlimpl.OrderTerm[Tag]{
 		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Tags.ID.Asc(), Tags.ID.Desc(),
 			func(x *Tag) int64 { return x.ID },
@@ -339,6 +342,14 @@ func tagInputGQL(goField string) string {
 	return ""
 }
 
+// tagPostsEdgeGQL is the many-to-many edge posts of Tag, through PostTag, as
+// its inputs write it.
+func tagPostsEdgeGQL() gqlimpl.M2M[Tag, Post, PostTag, int64, int64] {
+	return gqlimpl.NewM2M(tagKeyGQL, Posts.ID, postKeyGQL, PostTags.TagID, PostTags.PostID,
+		func(j *PostTag) int64 { return j.PostID },
+		func(own, k int64) PostTag { return PostTag{TagID: own, PostID: k} })
+}
+
 // CreateLabelInput is the GraphQL input CreateLabelInput; its method Create
 // writes it. A field that is a pointer, or a list, is optional: nil means not
 // given.
@@ -349,21 +360,22 @@ type CreateLabelInput struct {
 	PostIDs []string
 }
 
-// Create inserts x, a Label, with the input's fields and edges set, and returns
-// it. A nil x is a new one; fields the input does not set are inserted as the
-// caller set them, so a resolver sets there what the client must not choose. It
-// runs atomically on the DB in ctx, under the policies, and changes x even when
-// it fails.
+// Create inserts x, a Label, with the input's fields and edges set; a nil x is
+// a new one. The input's fields overwrite x's: to own a field, leave it out
+// with graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook.
+// x's other fields, foreign keys included, are trusted, not checked. It runs
+// atomically on the DB in ctx, under the policies, and changes x even when it
+// fails.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreateLabelInput) Create(ctx context.Context, x *Tag) (*Tag, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreateLabelInput", "gen.Tag", x, tagInputGQL, Tags.Name, Tags.Rank)
+	c, x := gqlimpl.NewCreate(ctx, "CreateLabelInput", "Label", "gen.Tag", x, tagInputGQL, Tags.Name, Tags.Rank)
 	x.Name = in.Name
 	x.Rank = in.Rank
 	postIDsKeys := gqlimpl.Keys[int64](c, "postIDs", in.PostIDs, "Post")
-	gqlimpl.Join(c, "postIDs", "Post", postIDsKeys, Posts.ID.In, func(x *Tag, k int64) PostTag { return PostTag{TagID: x.ID, PostID: k} }, PostTags.TagID, PostTags.PostID)
+	gqlimpl.Join(c, "postIDs", "Post", tagPostsEdgeGQL(), postIDsKeys...)
 	return c.Insert()
 }
 
@@ -384,24 +396,26 @@ type UpdateLabelInput struct {
 	ClearPosts bool
 }
 
-// Update updates the Label with the ID id from the input and then from set, the
-// application's own setters, validated with the input's, and returns the row as
-// written. It runs atomically on the DB in ctx, under the policies.
+// Update updates the Label with the ID id from the input and from set, the
+// application's own setters, and returns the row as written. A setter of set
+// wins over the input's field or edge that sets the same column, which is left
+// as set says. The input's fields are validated as the client's, and set apart
+// from them: a setter of set that its validator refuses is the application's
+// error, returned as velox's. It runs atomically on the DB in ctx, under the
+// policies.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *UpdateLabelInput) Update(ctx context.Context, id string, set ...velox.Setter[Tag]) (*Tag, error) {
-	u, key := gqlimpl.NewUpdate[Tag, int64](ctx, "UpdateLabelInput", "gen.Tag", id, tagInputGQL)
+	u, key := gqlimpl.NewUpdate[Tag, int64](ctx, "UpdateLabelInput", "Label", "gen.Tag", id, tagInputGQL)
 	if in.Name != nil {
 		u.Set(Tags.Name.Set(*in.Name))
 	}
 	if in.Rank != nil {
 		u.Set(Tags.Rank.Set(*in.Rank))
 	}
-	addPostIDsKeys := gqlimpl.Keys[int64](u, "addPostIDs", in.AddPostIDs, "Post")
-	removePostIDsKeys := gqlimpl.Keys[int64](u, "removePostIDs", in.RemovePostIDs, "Post")
-	gqlimpl.Disjoint(u, "addPostIDs", "removePostIDs", addPostIDsKeys, removePostIDsKeys)
-	gqlimpl.Through[Post](u, "addPostIDs", "Post", in.ClearPosts, removePostIDsKeys, addPostIDsKeys, Posts.ID, func(x *Post) int64 { return x.ID }, PostTags.TagID, key, PostTags.PostID, func(j *PostTag) int64 { return j.PostID }, func(k int64) PostTag { return PostTag{TagID: key, PostID: k} })
+	addPostIDsKeys, removePostIDsKeys := gqlimpl.AddRemove[int64](u, "Post", "addPostIDs", in.AddPostIDs, "removePostIDs", in.RemovePostIDs)
+	gqlimpl.Through(u, "addPostIDs", "Post", gqlimpl.Edit[int64]{Clear: in.ClearPosts, Remove: removePostIDsKeys, Add: addPostIDsKeys}, key, tagPostsEdgeGQL())
 	return u.Exec(Tags.ID.EQ(key), set...)
 }

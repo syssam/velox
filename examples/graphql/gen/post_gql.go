@@ -32,9 +32,12 @@ func postNodeGQL() gqlimpl.NodeKind {
 		func(db *velox.DB) velox.Query[Post] { return db.Query[Post]() },
 		postColumnsGQL,
 		Posts.ID.EQ, Posts.ID.In,
-		func(x *Post) int64 { return x.ID },
+		postKeyGQL,
 	)
 }
+
+// postKeyGQL is the key of x, a Post.
+func postKeyGQL(x *Post) int64 { return x.ID }
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -197,16 +200,16 @@ func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql
 		}
 		order = append(order, term)
 	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Post", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, postKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Post", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, postKeyOrderGQL())
 	if err != nil {
 		return nil, err
 	}
 	return &PostConnection{c: c}, nil
 }
 
-// postKeyGQL is the order of Post's key, which ends every order of a connection
-// to Post.
-func postKeyGQL() []gqlimpl.OrderTerm[Post] {
+// postKeyOrderGQL is the order of Post's key, which ends every order of a
+// connection to Post.
+func postKeyOrderGQL() []gqlimpl.OrderTerm[Post] {
 	return []gqlimpl.OrderTerm[Post]{
 		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Posts.ID.Asc(), Posts.ID.Desc(),
 			func(x *Post) int64 { return x.ID },
@@ -405,10 +408,10 @@ func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	return f.Pred()
 }
 
-// postCreateInputGQL is the GraphQL name of the CreatePostInput field that sets
-// the Post field whose Go name is goField, for the errors of its validators: ""
-// for a field it does not set.
-func postCreateInputGQL(goField string) string {
+// postInputGQL is the GraphQL name of the CreatePostInput and UpdatePostInput
+// field that sets the Post field whose Go name is goField, for the errors of
+// its validators: "" for a field it does not set.
+func postInputGQL(goField string) string {
 	switch goField {
 	case "Title":
 		return "title"
@@ -422,23 +425,12 @@ func postCreateInputGQL(goField string) string {
 	return ""
 }
 
-// postUpdateInputGQL is the GraphQL name of the UpdatePostInput field that sets
-// the Post field whose Go name is goField, for the errors of its validators: ""
-// for a field it does not set.
-func postUpdateInputGQL(goField string) string {
-	switch goField {
-	case "Title":
-		return "title"
-	case "Status":
-		return "status"
-	case "Views":
-		return "views"
-	case "PublishedAt":
-		return "publishedAt"
-	case "AuthorID":
-		return "authorID"
-	}
-	return ""
+// postTagsEdgeGQL is the many-to-many edge tags of Post, through PostTag, as
+// its inputs write it.
+func postTagsEdgeGQL() gqlimpl.M2M[Post, Tag, PostTag, int64, int64] {
+	return gqlimpl.NewM2M(postKeyGQL, Tags.ID, tagKeyGQL, PostTags.PostID, PostTags.TagID,
+		func(j *PostTag) int64 { return j.TagID },
+		func(own, k int64) PostTag { return PostTag{PostID: own, TagID: k} })
 }
 
 // CreatePostInput is the GraphQL input CreatePostInput; its method Create
@@ -453,18 +445,19 @@ type CreatePostInput struct {
 	TagIDs []string
 }
 
-// Create inserts x, a Post, with the input's fields and edges set, and returns
-// it. A nil x is a new one; fields the input does not set are inserted as the
-// caller set them, so a resolver sets there what the client must not choose. It
-// runs atomically on the DB in ctx, under the policies, and changes x even when
-// it fails. CreatePostInput leaves out AuthorID, which an insert requires: set
-// it on x, or in a velox.Hook, or it is stored as the zero value.
+// Create inserts x, a Post, with the input's fields and edges set; a nil x is a
+// new one. The input's fields overwrite x's: to own a field, leave it out with
+// graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook. x's
+// other fields, foreign keys included, are trusted, not checked. It runs
+// atomically on the DB in ctx, under the policies, and changes x even when it
+// fails. CreatePostInput leaves out AuthorID, which an insert requires: set it
+// on x, or in a velox.Hook, or it is stored as the zero value.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreatePostInput) Create(ctx context.Context, x *Post) (*Post, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreatePostInput", "gen.Post", x, postCreateInputGQL, Posts.Title)
+	c, x := gqlimpl.NewCreate(ctx, "CreatePostInput", "Post", "gen.Post", x, postInputGQL, Posts.Title)
 	x.Title = in.Title
 	if in.Status != nil {
 		x.Status = *in.Status
@@ -479,7 +472,7 @@ func (in *CreatePostInput) Create(ctx context.Context, x *Post) (*Post, error) {
 		c.Given(Posts.PublishedAt)
 	}
 	tagIDsKeys := gqlimpl.Keys[int64](c, "tagIDs", in.TagIDs, "Label")
-	gqlimpl.Join(c, "tagIDs", "Label", tagIDsKeys, Tags.ID.In, func(x *Post, k int64) PostTag { return PostTag{PostID: x.ID, TagID: k} }, PostTags.PostID, PostTags.TagID)
+	gqlimpl.Join(c, "tagIDs", "Label", postTagsEdgeGQL(), tagIDsKeys...)
 	return c.Insert()
 }
 
@@ -494,8 +487,6 @@ type UpdatePostInput struct {
 	PublishedAt *time.Time
 	// ClearPublishedAt sets the field published_at to NULL.
 	ClearPublishedAt bool
-	// AuthorID is the ID of the User the edge author leads to.
-	AuthorID *string
 	// AddTagIDs are the IDs of Label nodes to add to the edge tags.
 	AddTagIDs []string
 	// RemoveTagIDs are the IDs of Label nodes to remove from the edge tags; an
@@ -506,15 +497,19 @@ type UpdatePostInput struct {
 	ClearTags bool
 }
 
-// Update updates the Post with the ID id from the input and then from set, the
-// application's own setters, validated with the input's, and returns the row as
-// written. It runs atomically on the DB in ctx, under the policies.
+// Update updates the Post with the ID id from the input and from set, the
+// application's own setters, and returns the row as written. A setter of set
+// wins over the input's field or edge that sets the same column, which is left
+// as set says. The input's fields are validated as the client's, and set apart
+// from them: a setter of set that its validator refuses is the application's
+// error, returned as velox's. It runs atomically on the DB in ctx, under the
+// policies.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *UpdatePostInput) Update(ctx context.Context, id string, set ...velox.Setter[Post]) (*Post, error) {
-	u, key := gqlimpl.NewUpdate[Post, int64](ctx, "UpdatePostInput", "gen.Post", id, postUpdateInputGQL)
+	u, key := gqlimpl.NewUpdate[Post, int64](ctx, "UpdatePostInput", "Post", "gen.Post", id, postInputGQL)
 	if in.Title != nil {
 		u.Set(Posts.Title.Set(*in.Title))
 	}
@@ -530,14 +525,7 @@ func (in *UpdatePostInput) Update(ctx context.Context, id string, set ...velox.S
 	if gqlimpl.Cleared(u, "publishedAt", in.PublishedAt != nil, "clearPublishedAt", in.ClearPublishedAt) {
 		u.Set(Posts.PublishedAt.SetNull())
 	}
-	if in.AuthorID != nil {
-		authorIDKey := gqlimpl.Key[int64](u, "authorID", *in.AuthorID, "User")
-		gqlimpl.Exists(u, "authorID", "User", 1, Users.ID.EQ(authorIDKey))
-		u.SetKey(Posts.AuthorID.Set(authorIDKey))
-	}
-	addTagIDsKeys := gqlimpl.Keys[int64](u, "addTagIDs", in.AddTagIDs, "Label")
-	removeTagIDsKeys := gqlimpl.Keys[int64](u, "removeTagIDs", in.RemoveTagIDs, "Label")
-	gqlimpl.Disjoint(u, "addTagIDs", "removeTagIDs", addTagIDsKeys, removeTagIDsKeys)
-	gqlimpl.Through[Tag](u, "addTagIDs", "Label", in.ClearTags, removeTagIDsKeys, addTagIDsKeys, Tags.ID, func(x *Tag) int64 { return x.ID }, PostTags.PostID, key, PostTags.TagID, func(j *PostTag) int64 { return j.TagID }, func(k int64) PostTag { return PostTag{PostID: key, TagID: k} })
+	addTagIDsKeys, removeTagIDsKeys := gqlimpl.AddRemove[int64](u, "Label", "addTagIDs", in.AddTagIDs, "removeTagIDs", in.RemoveTagIDs)
+	gqlimpl.Through(u, "addTagIDs", "Label", gqlimpl.Edit[int64]{Clear: in.ClearTags, Remove: removeTagIDsKeys, Add: addTagIDsKeys}, key, postTagsEdgeGQL())
 	return u.Exec(Posts.ID.EQ(key), set...)
 }

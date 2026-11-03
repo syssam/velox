@@ -63,7 +63,7 @@ func serve(ctx context.Context, ln net.Listener) error {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	sqlDB, err := sql.Open("sqlite", filepath.Join(dir, "graphql.db"))
+	sqlDB, err := sql.Open("sqlite", sqliteDSN(filepath.Join(dir, "graphql.db")))
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func serve(ctx context.Context, ln net.Listener) error {
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/graphql", orgFromHeader(roleFromHeader(userFromHeader(server(db)))))
-	fmt.Printf("POST GraphQL to http://%s/graphql, with X-Org-ID: 1 or 2 for posts, X-Role: admin for emails, and X-User: 1, 2 or 3 to create a post\n", ln.Addr())
+	fmt.Printf("POST GraphQL to http://%s/graphql, with X-Org-ID: 1 or 2 for posts, X-Role: admin for emails, and X-User: 1, 2 or 3 to create a post or change your own\n", ln.Addr())
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	done := make(chan struct{})
 	go func() {
@@ -151,7 +151,8 @@ func roleFromHeader(next http.Handler) http.Handler {
 }
 
 // userFromHeader puts the user the X-User header names, by its key, in the
-// request's context: the viewer, whom createPost makes the post's author.
+// request's context: the viewer, whom createPost makes the post's author, and
+// who alone may update or delete it.
 // Like X-Role, it is for this demo only: a client that names its own user is
 // whoever it says. A real server takes the user from what authenticates the
 // request.
@@ -195,6 +196,11 @@ func admin(ctx context.Context, _ any, next gqlgen.Resolver) (any, error) {
 //
 //go:embed migrations
 var migrations embed.FS
+
+// sqliteDSN is the DSN of the SQLite file path, with foreign keys on: SQLite
+// enforces none unless the connection says so, and deletePost relies on
+// post_tags' ON DELETE CASCADE.
+func sqliteDSN(path string) string { return path + "?_pragma=foreign_keys(1)" }
 
 // open creates the tables on sqlDB, a SQLite file, by applying migrations/,
 // and opens a DB on it with opts.

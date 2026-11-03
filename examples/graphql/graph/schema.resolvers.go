@@ -7,62 +7,70 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/99designs/gqlgen/graphql"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/examples/graphql/gen"
-	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
 // CreatePost is the resolver for the createPost field: the post's author is
-// the viewer, which CreatePostInput leaves out, so a client cannot post as
-// another user.
+// the viewer, a user the request may read, which CreatePostInput leaves out,
+// so a client cannot post as another user. Create trusts what x holds, the
+// author's key among it, so the resolver checks it.
 func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
-	viewer, err := Viewer(ctx)
+	viewer, err := Author(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return input.Create(ctx, &gen.Post{AuthorID: viewer})
 }
 
-// UpdatePost is the resolver for the updatePost field.
+// UpdatePost is the resolver for the updatePost field: only the post's
+// author may change it, and UpdatePostInput has no authorID, so a post stays
+// its author's.
 func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := OwnPost(ctx, db, id); err != nil {
+		return nil, err
+	}
 	return input.Update(ctx, id)
 }
 
 // DeletePost is the resolver for the deletePost field, which the application
-// writes: velox-graphql generates no delete. It deletes the post, under
-// Post's scope, so another organization's post is NOT_FOUND, and then the
-// post's join rows, which post_tags' ON DELETE CASCADE removes too where the
-// database enforces foreign keys. Both run in the operation's transaction,
-// in a savepoint of their own.
+// writes: velox-graphql generates no delete. Only the post's author may delete
+// it (OwnPost). It deletes the post, under Post's scope, so another
+// organization's post is NOT_FOUND; post_tags' ON DELETE CASCADE, which the
+// database enforces with foreign keys on (main.go's DSN), deletes its join
+// rows. A count the driver did not report is an internal error: the delete
+// is rolled back, not reported done. It runs in the operation's transaction,
+// in a savepoint of its own.
 func (r *mutationResolver) DeletePost(ctx context.Context, id string) (string, error) {
-	key, err := veloxgql.DecodeID[int64](id, "Post")
-	if err != nil {
-		return "", err
-	}
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return "", err
 	}
 	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-		n, err := tx.Delete[gen.Post]().Where(gen.Posts.ID.EQ(key)).Exec(ctx)
+		key, err := OwnPost(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		if n == 0 {
-			return &gqlerror.Error{
-				Path:       graphql.GetPath(ctx),
-				Message:    "no Post has this ID",
-				Extensions: map[string]any{"code": veloxgql.CodeNotFound},
-			}
+		n, err := tx.Delete[gen.Post]().Where(gen.Posts.ID.EQ(key)).Exec(ctx)
+		switch {
+		case err != nil:
+			return err
+		case n == 0:
+			return NotFound(ctx)
+		case n < 0:
+			return errors.New("deletePost: the driver did not report the rows it deleted")
 		}
-		_, err = tx.Delete[gen.PostTag]().Where(gen.PostTags.PostID.EQ(key)).Exec(ctx)
-		return err
+		return nil
 	})
 	if err != nil {
 		return "", err

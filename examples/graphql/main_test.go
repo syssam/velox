@@ -61,7 +61,7 @@ type testServer struct {
 func newServer(t *testing.T, opts ...veloxgql.Option) *testServer {
 	t.Helper()
 	s := &testServer{}
-	sqlDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "graphql.db"))
+	sqlDB, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "graphql.db")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,8 +192,12 @@ const (
 	selPosts = `SELECT "id", "org_id", "author_id", "title", "status", "views", "published_at" FROM "posts"`
 	selTags  = `SELECT "id", "name", "rank" FROM "tags"`
 	users    = `SELECT "id", "name", "joined_at" FROM "users"`
-	posts    = `SELECT "id", "author_id", "title", "views" FROM "posts"`
-	tags     = `SELECT "id", "name" FROM "tags"`
+	// viewerCheck is the resolvers' check that the viewer is a user, and
+	// authorCheck their read of a post's author (graph.Author, graph.OwnPost).
+	viewerCheck = `SELECT 1 FROM "users" WHERE "id" = ? LIMIT ?`
+	authorCheck = `SELECT "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ?`
+	posts       = `SELECT "id", "author_id", "title", "views" FROM "posts"`
+	tags        = `SELECT "id", "name" FROM "tags"`
 )
 
 // postsOf is the windowed load of the posts of users, ordered by order (its
@@ -483,7 +487,8 @@ func TestAppFieldReadsAllColumns(t *testing.T) {
 
 // TestBatchInMutation: a mutation's fields resolve one at a time, under the
 // extension's lock, and its edges still batch, in its transaction: the new
-// post is among Ada's, its tag counted, with one statement for the author,
+// post is among Ada's, its tag counted, with one statement for the viewer,
+// one for the author,
 // one posts load, one posts count and one tags count after the writes.
 func TestBatchInMutation(t *testing.T) {
 	s := newServer(t)
@@ -499,6 +504,7 @@ func TestBatchInMutation(t *testing.T) {
 			{"node": {"title": "Zeta", "tags": {"totalCount": 1}}}
 		]}}}}}`,
 		stmts: []string{
+			viewerCheck + ` [1 1]`,
 			`SELECT COUNT(*) FROM "tags" WHERE "id" IN (?) [1]`,
 			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at") VALUES (?, ?, ?, ?, ?, ?) RETURNING "id" [1 1 Zeta draft 0 <nil>]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1]`,
@@ -879,10 +885,11 @@ func captureLog(t *testing.T) *bytes.Buffer {
 }
 
 // TestCreatePost creates an acme post with an author and two tags, one of
-// them named twice, which links once. Each ID is checked against what the
-// caller may read before anything is written: one COUNT per edge. status
-// takes its Default, views, Optional, its zero value, and the post is
-// returned as written.
+// them named twice, which links once. The resolver checks that the viewer,
+// the author, is a user, as Create trusts x's own fields; each ID is checked
+// against what the caller may read before anything is written: one COUNT per
+// edge. status takes its Default, views, Optional, its zero value, and the
+// post is returned as written.
 func TestCreatePost(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
@@ -893,6 +900,7 @@ func TestCreatePost(t *testing.T) {
 		} }`,
 		want: `{"data": {"createPost": {"title": "Epsilon", "status": "DRAFT", "author": {"name": "Brian"}, "tags": {"totalCount": 2}}}}`,
 		stmts: []string{
+			viewerCheck + ` [2 1]`,
 			`SELECT COUNT(*) FROM "tags" WHERE "id" IN (?, ?) [1 2]`,
 			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at") VALUES (?, ?, ?, ?, ?, ?) RETURNING "id" [1 2 Epsilon draft 0 <nil>]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?), (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1 6 2]`,
@@ -910,6 +918,16 @@ func TestCreatePost(t *testing.T) {
 		want: `{"errors": [{"message": "a viewer is required: the X-User header", "path": ["createPost"], "extensions": {"code": "UNAUTHENTICATED"}}],
 			"data": null}`,
 	})
+	// A viewer that names no user is refused before Create, which would
+	// insert the key as it is.
+	s.do(t, request{
+		org:   "1",
+		user:  "9",
+		query: `mutation { createPost(input: {title: "Zeta"}) { title } }`,
+		want: `{"errors": [{"message": "the X-User header names no user", "path": ["createPost"], "extensions": {"code": "UNAUTHENTICATED"}}],
+			"data": null}`,
+		stmts: []string{viewerCheck + ` [9 1]`},
+	})
 	s.do(t, request{
 		org:   "1",
 		user:  "2",
@@ -919,16 +937,19 @@ func TestCreatePost(t *testing.T) {
 	})
 }
 
-// TestUpdatePost clears a post's publishedAt and removes one of its two
-// tags, which it may read. An empty title fails Post's NotEmpty validator, named by its input
-// field, before any statement.
+// TestUpdatePost: Ada, post 1's author, clears its publishedAt and removes
+// one of its two tags, which she may read, once the resolver has checked
+// that she wrote it. An empty title fails Post's NotEmpty validator, named by
+// its input field, before any statement of Update.
 func TestUpdatePost(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
 		org:   "1",
+		user:  "1",
 		query: `mutation { updatePost(id: "` + post1 + `", input: {clearPublishedAt: true, removeTagIDs: ["` + label1 + `"]}) { title publishedAt tags { edges { node { name } } } } }`,
 		want:  `{"data": {"updatePost": {"title": "Alpha", "publishedAt": null, "tags": {"edges": [{"node": {"name": "graphql"}}]}}}}`,
 		stmts: []string{
+			authorCheck + ` [1 1 2]`,
 			`UPDATE "posts" SET "published_at" = ? WHERE "id" = ? AND "org_id" = ? [<nil> 1 1]`,
 			// The tags to remove the caller may read, then their join rows.
 			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT ? [1 1]`,
@@ -940,9 +961,77 @@ func TestUpdatePost(t *testing.T) {
 	})
 	s.do(t, request{
 		org:   "1",
+		user:  "1",
 		query: `mutation { updatePost(id: "` + post1 + `", input: {title: ""}) { title } }`,
 		want: `{"errors": [{"message": "UpdatePostInput.title: invalid value: must not be empty", "path": ["updatePost"], "extensions": {"code": "BAD_USER_INPUT"}}],
 			"data": null}`,
+		stmts: []string{authorCheck + ` [1 1 2]`},
+	})
+}
+
+// TestOnlyAuthorWrites: only a post's author may update or delete it. Brian,
+// who did not write post 1, is FORBIDDEN, and a request with no viewer
+// UNAUTHENTICATED, each before any write; another organization's post is
+// NOT_FOUND, as for one that does not exist. UpdatePostInput has no authorID,
+// so no update gives a post to another author. Post 1 is unchanged.
+func TestOnlyAuthorWrites(t *testing.T) {
+	s := newServer(t)
+	forbidden := func(field string) string {
+		return `{"errors": [{"message": "only the post's author may change it", "path": ["` + field + `"], "extensions": {"code": "FORBIDDEN"}}], "data": null}`
+	}
+	s.do(t, request{
+		org:   "1",
+		user:  "2",
+		query: `mutation { updatePost(id: "` + post1 + `", input: {title: "Mine"}) { title } }`,
+		want:  forbidden("updatePost"),
+		stmts: []string{authorCheck + ` [1 1 2]`},
+	})
+	s.do(t, request{
+		org:   "1",
+		user:  "2",
+		query: `mutation { deletePost(id: "` + post1 + `") }`,
+		want:  forbidden("deletePost"),
+		stmts: []string{authorCheck + ` [1 1 2]`},
+	})
+	for _, q := range []string{
+		`mutation { updatePost(id: "` + post1 + `", input: {title: "Mine"}) { title } }`,
+		`mutation { deletePost(id: "` + post1 + `") }`,
+	} {
+		field := "updatePost"
+		if strings.Contains(q, "deletePost") {
+			field = "deletePost"
+		}
+		s.do(t, request{
+			org:   "1",
+			query: q,
+			want: `{"errors": [{"message": "a viewer is required: the X-User header", "path": ["` + field + `"], "extensions": {"code": "UNAUTHENTICATED"}}],
+				"data": null}`,
+		})
+	}
+	// Post 5 is globex's: Ada wrote it, but acme cannot see it.
+	s.do(t, request{
+		org:   "1",
+		user:  "1",
+		query: `mutation { updatePost(id: "` + post5 + `", input: {title: "Mine"}) { title } }`,
+		want: `{"errors": [{"message": "no Post has this ID", "path": ["updatePost"], "extensions": {"code": "NOT_FOUND"}}],
+			"data": null}`,
+		stmts: []string{authorCheck + ` [5 1 2]`},
+	})
+	s.do(t, request{
+		org:   "1",
+		user:  "1",
+		query: `mutation { updatePost(id: "` + post1 + `", input: {authorID: "` + user2 + `"}) { title } }`,
+		want: `{"errors": [{"message": "Field \"authorID\" is not defined by type \"UpdatePostInput\".", "extensions": {"code": "GRAPHQL_VALIDATION_FAILED"}}],
+			"data": null}`,
+	})
+	s.do(t, request{
+		org:   "1",
+		query: `{ node(id: "` + post1 + `") { ... on Post { title author { name } } } }`,
+		want:  `{"data": {"node": {"title": "Alpha", "author": {"name": "Ada"}}}}`,
+		stmts: []string{
+			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
+			users + ` WHERE "id" IN (?) ORDER BY "id" [1]`,
+		},
 	})
 }
 
@@ -999,17 +1088,18 @@ func TestUnlinkOtherOrg(t *testing.T) {
 }
 
 // TestDeleteOtherOrg: acme cannot delete globex's post 5, which it cannot
-// see: the application's deletePost, whose DELETE is scoped to the org, is
-// NOT_FOUND, as for a post that does not exist, and the post keeps its join
-// row.
+// see, though Ada wrote it: the application's deletePost, whose check of the
+// author is scoped to the org, is NOT_FOUND, as for a post that does not
+// exist, and the post keeps its join row.
 func TestDeleteOtherOrg(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
 		org:   "1",
+		user:  "1",
 		query: `mutation { deletePost(id: "` + post5 + `") }`,
 		want: `{"errors": [{"message": "no Post has this ID", "path": ["deletePost"], "extensions": {"code": "NOT_FOUND"}}],
 			"data": null}`,
-		stmts: []string{`DELETE FROM "posts" WHERE "id" = ? AND "org_id" = ? [5 1]`},
+		stmts: []string{authorCheck + ` [5 1 2]`},
 	})
 	s.do(t, request{
 		org:   "2",
@@ -1022,19 +1112,35 @@ func TestDeleteOtherOrg(t *testing.T) {
 	})
 }
 
-// TestDeletePost deletes acme's post 1, then its join rows, and returns its
-// ID; the post is then gone.
+// TestDeletePost: Ada deletes acme's post 1, which she wrote, and gets its
+// ID; the post is then gone, and so are its two join rows, which the
+// database's ON DELETE CASCADE deleted: foreign keys are on (sqliteDSN), and
+// deletePost sends no DELETE of its own for them.
 func TestDeletePost(t *testing.T) {
 	s := newServer(t)
+	links := func() int {
+		var n int
+		if err := s.sql.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM post_tags WHERE post_id = 1`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := links(); n != 2 {
+		t.Fatalf("post 1 has %d join rows before the delete, want 2", n)
+	}
 	s.do(t, request{
 		org:   "1",
+		user:  "1",
 		query: `mutation { deletePost(id: "` + post1 + `") }`,
 		want:  `{"data": {"deletePost": "` + post1 + `"}}`,
 		stmts: []string{
-			`DELETE FROM "post_tags" WHERE "post_id" = ? [1]`,
+			authorCheck + ` [1 1 2]`,
 			`DELETE FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`,
 		},
 	})
+	if n := links(); n != 0 {
+		t.Errorf("post 1 has %d join rows after the delete, want 0: the cascade deletes them", n)
+	}
 	s.do(t, request{
 		org:   "1",
 		query: `{ node(id: "` + post1 + `") { id } }`,
@@ -1094,9 +1200,9 @@ func TestCreateUserDirective(t *testing.T) {
 // field as the GraphQL spec has it: a variable's by its path, an inline
 // literal's by its locations. Only velox's own validation errors name the
 // input field in their message, with BAD_USER_INPUT. Neither runs a
-// statement: velox's validators run before any statement, so an empty title
-// by a viewer that does not exist is the validator's error. (gqlgen accepts a number for a String variable, as
-// "3": its leniency.)
+// statement of Create: velox's validators run before any, so an empty title
+// is the validator's error after only the resolver's check of the viewer.
+// (gqlgen accepts a number for a String variable, as "3": its leniency.)
 func TestMutationInputShape(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
@@ -1118,11 +1224,12 @@ func TestMutationInputShape(t *testing.T) {
 	}
 	s.do(t, request{
 		org:   "1",
-		user:  "9",
+		user:  "1",
 		query: `mutation($input: CreatePostInput!) { createPost(input: $input) { title } }`,
 		vars:  map[string]any{"input": map[string]any{"title": ""}},
 		want: `{"errors": [{"message": "CreatePostInput.title: invalid value: must not be empty", "path": ["createPost"],
 			"extensions": {"code": "BAD_USER_INPUT"}}], "data": null}`,
+		stmts: []string{viewerCheck + ` [1 1]`},
 	})
 }
 
