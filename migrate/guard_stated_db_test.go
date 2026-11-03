@@ -393,6 +393,49 @@ func TestPostgresAddIndexSparesAValidOne(t *testing.T) {
 	}
 }
 
+// TestPostgresAddIndexSparesAnotherTables: PostgreSQL names an index in its schema,
+// not its table, so an add-index plan's DROP INDEX CONCURRENTLY IF EXISTS x dropped a
+// hand index x of another table, of the same shape, and Up made x on t: the other
+// table lost its UNIQUE in silence. It is refused by the other table's name.
+func TestPostgresAddIndexSparesAnotherTables(t *testing.T) {
+	d := velox.Postgres
+	x := migrate.Index{Name: "x", Columns: []string{"a"}, Unique: true}
+	for _, hand := range []string{`CREATE UNIQUE INDEX x ON other (a)`, `CREATE INDEX x ON other (lower(a))`} {
+		t.Run(hand, func(t *testing.T) {
+			db, _ := freshDB(t, d)
+			fsys := dirOf(t, d, step{to: indexed(d), name: "base"})
+			mustUp(t, db, fsys)
+			mustExec(t, db, `CREATE TABLE other (a text)`)
+			mustExec(t, db, hand)
+			fsys = extend(t, fsys, d, step{to: indexed(d, x), name: "change", opts: allowAll("add-unique")})
+			refused(t, db, fsys, "other.x", "-- velox:allow unmodeled-loss other.x")
+			if got := oneValue(t, db, "SELECT tablename FROM pg_indexes WHERE indexname = 'x'"); got != "other" {
+				t.Errorf("the index x is on %q after the refusal", got)
+			}
+		})
+	}
+	t.Run("a plan that moves the name", func(t *testing.T) {
+		db, _ := freshDB(t, d)
+		two := func(on string) *migrate.Schema {
+			s := indexed(d)
+			s.Tables = append(s.Tables, migrate.Table{Name: "u", Columns: []migrate.Column{{Name: "a", Type: "text", Nullable: true}}})
+			for i := range s.Tables {
+				if s.Tables[i].Name == on {
+					s.Tables[i].Indexes = []migrate.Index{{Name: "x", Columns: []string{"a"}}}
+				}
+			}
+			return s
+		}
+		fsys := dirOf(t, d, step{to: two("t"), name: "base"})
+		mustUp(t, db, fsys)
+		fsys = extend(t, fsys, d, step{to: two("u"), name: "move"})
+		mustUp(t, db, fsys)
+		if got := oneValue(t, db, "SELECT tablename FROM pg_indexes WHERE indexname = 'x'"); got != "u" {
+			t.Errorf("the index x is on %q\n%s", got, sqlFiles(fsys))
+		}
+	})
+}
+
 // TestIndexChangeReadsWhatTheStatementWrites: a plan that changes an index drops it
 // and makes it from the model. What the model has no place for went with it, on
 // PostgreSQL and on MySQL, past the guard.

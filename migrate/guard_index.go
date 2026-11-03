@@ -253,11 +253,12 @@ func (l *fileLinter) indexAt(i, end int) (indexShape, bool) {
 }
 
 // A droppedIndex is an index a statement of the walk dropped, as it was: of st on
-// MySQL, where a table holds the names, in schema on PostgreSQL.
+// MySQL, where a table holds the names, in schema on PostgreSQL, of the table on.
 type droppedIndex struct {
 	name   string
 	st     *tableState
 	schema string
+	on     TableRef // PostgreSQL: its table, as the database names it
 	shape  indexShape
 }
 
@@ -322,13 +323,14 @@ func (w *recreates) pgIndexDrop(ref TableRef) error {
 	if ref.Schema != "" {
 		name = ddl.Ident(velox.Postgres, ref.Schema) + "." + name
 	}
-	var nsp, def string
+	var nsp, table, def string
 	var valid, found bool
-	err := eachRow(w.ctx, w.s.conn, `SELECT n.nspname, i.indisvalid, pg_get_indexdef(i.indexrelid)
+	err := eachRow(w.ctx, w.s.conn, `SELECT n.nspname, t.relname, i.indisvalid, pg_get_indexdef(i.indexrelid)
 FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_class t ON t.oid = i.indrelid
 WHERE i.indexrelid = to_regclass($1)`, []any{name}, func(rows *sql.Rows) error {
 		found = true
-		return rows.Scan(&nsp, &valid, &def)
+		return rows.Scan(&nsp, &table, &valid, &def)
 	})
 	if err != nil {
 		return fmt.Errorf("migrate: %s: reading the index %s: %w", w.f.Path, ref, err)
@@ -339,7 +341,7 @@ WHERE i.indexrelid = to_regclass($1)`, []any{name}, func(rows *sql.Rows) error {
 	schema := w.norm(TableRef{Schema: nsp, Name: ref.Name}).Schema
 	shape, ok := pgDefShape(def)
 	if ok && w.index(nil, schema, ref.Name) < 0 {
-		w.indexes = append(w.indexes, droppedIndex{name: ref.Name, schema: schema, shape: shape})
+		w.indexes = append(w.indexes, droppedIndex{name: ref.Name, schema: schema, on: w.norm(TableRef{Schema: nsp, Name: table}), shape: shape})
 	}
 	return nil
 }
@@ -530,9 +532,17 @@ func (w *recreates) remade(st *tableState, ref TableRef, name string, stated ind
 	if i < 0 {
 		return
 	}
-	was := w.indexes[i].shape
+	was, on := w.indexes[i].shape, w.indexes[i].on
 	w.indexes = slices.Delete(w.indexes, i, i+1)
 	object := colTarget(ref, name)
+	if w.s.d == velox.Postgres && on != st.ref && !w.quiet {
+		// PostgreSQL names an index in its schema: the one dropped was another
+		// table's, which loses it whatever this one is. A file before a later one
+		// that makes the name on another table dropped it on purpose.
+		other := colTarget(on, name)
+		w.lost(on, nil, other, other+": the index is on "+on.String()+", and the statement that makes one of its name is on "+ref.String()+"; rename one of them")
+		return
+	}
 	if !read {
 		w.lost(ref, nil, object, object+": the statement that makes the index again cannot be read, and may lose what it has")
 		return

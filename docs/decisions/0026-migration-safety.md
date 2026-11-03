@@ -255,6 +255,13 @@ Beside this, in the same spirit, each found by running it:
   plan rename `audit`, `Up` returned nil, and every `INSERT` into `t` then failed with
   42P01; so did a move, a drop, and a rename or drop of a column of `audit` the body
   named. The functions of every trigger are read now, as above.
+- PostgreSQL names an index in its schema, not its table. An add-index plan's `DROP
+  INDEX CONCURRENTLY IF EXISTS x` dropped a hand `UNIQUE` index `x` of another table,
+  the statement after it made `x` of the same shape on the plan's table, and the other
+  table lost its uniqueness while `Up` returned nil. An index dropped and made again
+  under one name is now refused, by the dropped one's table, when the two are on
+  different tables in one file; a plan that moves a name between tables drops it in
+  its main file and makes it in the online one, which is let through.
 - A serial turned into an identity, as ent's tables are on their first plan, set the
   counter past the column's largest value and dropped the sequence. IDs that had been
   handed out to rows deleted since were handed out again: after IDs 9 and 10 were
