@@ -99,6 +99,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `docs/coming-from-ent.md`; `examples/relations` links a many-to-many edge.
 - `OrderField` on a nullable field, and `After` over nullable columns, with
   `gqlimpl.NullTerm` carrying NULL in the cursor (decision 0032).
+- An untyped surface over the same engine path as the typed API, for generated code
+  (decision 0035): `Table`, `TableOf`, `TableRows`, `RowsOf`, `PredOp` and its operators,
+  `TableQuery` (`DB.QueryTable`, `Untyped`, `Typed`), `TableInsert`, `TableUpdate`,
+  `TableDelete` (`DB.InsertTable`, `InsertRows`, `UpdateTable`, `DeleteTable`),
+  `AndPredicates`, `OrPredicates`, `NotPredicate` and `Assignments`. It refuses a
+  condition of another entity's Table, an EXISTS on another entity's relation, an
+  assignment whose value is not of its column's Go type, rows of another entity and a
+  column index out of range, with an error before anything is sent.
+- `ErrOutOfRange`: `Table.Convert` refuses a number its column's Go type cannot hold
+  (300 for an int8, a negative number for a uint), where it converted it with wrap-round.
+  gqlimpl's where filters and update inputs report it as `BAD_USER_INPUT` naming the field.
 
 ### Changed
 
@@ -120,7 +131,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - velox-graphql's enum marshalers switch on velox-gen's constants and write each known
   value as a literal, with no `encoding/json`; `gqlimpl.WriteString` writes any other
   value as a JSON string. An unknown value's error names it: "PostStatus must be DRAFT
-  or PUBLISHED, not ARCHIVED". `plugin.Enum.Consts` gives the plugins the constants.
+  or PUBLISHED, not ARCHIVED". `plugin.Enum.Consts` gives the plugins the constants;
+  velox-graphql refuses a model without them and says velox-gen is too old.
+- velox-graphql's generated doc comments say what each thing is in a sentence or two;
+  how the generated code uses the runtime is documented once, in gqlimpl's godoc.
 - velox-graphql writes its schema to `gen/velox.graphql`, which was `gen/velox.graphqls`, as
   entgql writes `ent.graphql`: the extension more GraphQL tooling reads. velox-gen's plugins
   write `.go`, `.graphql` and `.proto` files. gqlgen.yml's `schema` globs must change to match,
