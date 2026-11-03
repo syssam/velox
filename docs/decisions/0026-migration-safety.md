@@ -262,6 +262,11 @@ Beside this, in the same spirit, each found by running it:
   under one name is now refused, by the dropped one's table, when the two are on
   different tables in one file; a plan that moves a name between tables drops it in
   its main file and makes it in the online one, which is let through.
+- A plan's plain `DROP INDEX x` of `t` dropped the `x` of another table, when the
+  database had the name there instead. The file now carries `-- velox:drops t.x` for
+  each index it drops and does not make again, and `Up` refuses the drop of an `x` on a
+  table no such line names, by that table's `table.x`. A file with no line for `x`, as
+  one from before the line or by hand, drops it wherever it is.
 - A PostgreSQL plan that changed an index on a table that exists dropped it in one
   online unit and made it in the next. A row written in between could break a
   `UNIQUE`: run against PostgreSQL 18, a duplicate inserted after the drop made the

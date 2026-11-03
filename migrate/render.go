@@ -169,15 +169,26 @@ func (r *renderer) dropLines() []string {
 			if !ok || d.Index.Constraint {
 				continue
 			}
+			remade := false
 			for _, o := range r.cs {
 				a, ok := o.(addIndex)
 				if !ok || a.Index.Constraint || a.Index.Name != d.Index.Name || r.l.canon(a.Table) != r.l.canon(d.Table) {
 					continue
 				}
+				remade = true
 				was := modelShape(d.Index)
 				for attr := range shapeDiffers(r.d, enumCasts(r.to), was, modelShape(a.Index)) {
 					r.drops = append(r.drops, colTarget(a.Table, a.Index.Name)+":"+attr+"="+shapeValue(was, attr))
 				}
+			}
+			if !remade && r.d == velox.Postgres {
+				// PostgreSQL's DROP INDEX names no table: the line says
+				// which one the plan means, as the statement sees it.
+				on := d.Table
+				if r.dropOnline(d) {
+					on = r.afterRename(on)
+				}
+				r.drops = append(r.drops, colTarget(on, d.Index.Name))
 			}
 		}
 	}

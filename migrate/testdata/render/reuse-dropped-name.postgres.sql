@@ -1,6 +1,7 @@
 -- script: main
 -- velox:lock-timeout 5s
 -- velox:allow drop-table posts
+-- velox:drops posts.shared_idx
 
 ALTER TABLE "posts" DROP CONSTRAINT "shared_fk";
 DROP INDEX "shared_idx";
@@ -9,6 +10,7 @@ ALTER TABLE "users" RENAME CONSTRAINT "user_mentor" TO "shared_fk";
 DROP TABLE "posts";
 -- script: online
 -- velox:no-transaction
+-- velox:drops posts.shared_idx
 
 -- velox:unit
 -- review: add-index: adds index users.shared_idx; building it scans the table

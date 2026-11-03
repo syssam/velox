@@ -339,11 +339,49 @@ WHERE i.indexrelid = to_regclass($1)`, []any{name}, func(rows *sql.Rows) error {
 		return nil
 	}
 	schema := w.norm(TableRef{Schema: nsp, Name: ref.Name}).Schema
+	on := w.norm(TableRef{Schema: nsp, Name: table})
+	if meant, ok := w.meantOn(ref.Name, on); !ok {
+		// PostgreSQL names an index in its schema: the plan's DROP INDEX
+		// would drop another table's.
+		other := colTarget(on, ref.Name)
+		w.lost(on, nil, other, other+": the index is on "+on.String()+", and the plan drops "+colTarget(meant, ref.Name)+"; rename one of them")
+		return nil
+	}
 	shape, ok := pgDefShape(def)
 	if ok && w.index(nil, schema, ref.Name) < 0 {
-		w.indexes = append(w.indexes, droppedIndex{name: ref.Name, schema: schema, on: w.norm(TableRef{Schema: nsp, Name: table}), shape: shape})
+		w.indexes = append(w.indexes, droppedIndex{name: ref.Name, schema: schema, on: on, shape: shape})
 	}
 	return nil
+}
+
+// meantOn reports whether the table on, where the database has the index name,
+// is the one a drops line of the file names it on, as the line "t.x" a plan
+// writes for a PostgreSQL DROP INDEX does. With no such line any table is.
+// Otherwise it gives the table a line names.
+func (w *recreates) meantOn(name string, on TableRef) (TableRef, bool) {
+	var meant []TableRef
+	for _, f := range []File{w.f, w.file} {
+		for _, line := range f.Directives.Drops {
+			parts := strings.Split(line, ".")
+			if strings.Contains(line, ":") || len(parts) < 2 || len(parts) > 3 || parts[len(parts)-1] != name {
+				continue
+			}
+			t := TableRef{Name: parts[len(parts)-2]}
+			if len(parts) == 3 {
+				t.Schema = parts[0]
+			}
+			meant = append(meant, w.norm(t))
+		}
+	}
+	for _, t := range meant {
+		if st := w.tables[t.String()]; t == on || st != nil && st.ref == on {
+			return t, true
+		}
+	}
+	if len(meant) == 0 {
+		return TableRef{}, true
+	}
+	return meant[0], false
 }
 
 // pgDefShape reads what pg_get_indexdef prints.

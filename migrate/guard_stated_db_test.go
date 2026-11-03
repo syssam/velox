@@ -436,6 +436,26 @@ func TestPostgresAddIndexSparesAnotherTables(t *testing.T) {
 	})
 }
 
+// TestPostgresDropIndexSparesAnotherTables: PostgreSQL names an index in its
+// schema, so a plan's DROP INDEX x of t dropped the x the database had on another
+// table, unasked. The file's drops line names t.x, and Up refuses the drop of an x
+// on another table, naming it.
+func TestPostgresDropIndexSparesAnotherTables(t *testing.T) {
+	d := velox.Postgres
+	x := migrate.Index{Name: "x", Columns: []string{"a"}}
+	db, _ := freshDB(t, d)
+	fsys := dirOf(t, d, step{to: indexed(d, x), name: "base"})
+	mustUp(t, db, fsys)
+	mustExec(t, db, `CREATE TABLE other (a text)`)
+	mustExec(t, db, `DROP INDEX x`)
+	mustExec(t, db, `CREATE INDEX x ON other (a)`)
+	fsys = extend(t, fsys, d, step{to: indexed(d), name: "drop"})
+	refused(t, db, fsys, "other.x: the index is on other, and the plan drops t.x", "-- velox:allow unmodeled-loss other.x")
+	if got := oneValue(t, db, "SELECT tablename FROM pg_indexes WHERE indexname = 'x'"); got != "other" {
+		t.Errorf("the index x is on %q after the refusal", got)
+	}
+}
+
 // TestPostgresIndexChangeKeepsTheOldUntilTheNew: a plan that changed a UNIQUE index
 // dropped it in one unit and made it in the next. A row written in between broke the
 // uniqueness, the new index failed on it, and the table was left with no UNIQUE and the

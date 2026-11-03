@@ -1,5 +1,6 @@
 -- script: online
 -- velox:no-transaction
+-- velox:drops users.user_org_id_created_at
 
 -- velox:unit
 -- review: add-index: adds index users.users_org_id; building it scans the table
