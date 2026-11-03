@@ -47,8 +47,9 @@ func NoSchemas(importPath string) error {
 // a file that only some builds include is refused (see inspect).
 
 // candidates returns, from the schema package's files, the types that may be
-// schemas, sorted: those of a struct with an embedded field, the aliases, and
-// those with a method named Type. The loader keeps them, and what they reach,
+// schemas, sorted: those of a struct with an embedded field, the aliases,
+// the defined types of another named type, and those with a method named
+// Type. The loader keeps them, and what they reach,
 // when it prunes the package (see prune). It also refuses an unexported
 // struct that embeds schema.Schema, directly or through other unexported
 // structs of the package, when no type of the package embeds it.
@@ -58,6 +59,7 @@ func candidates(files map[string][]byte) ([]string, error) {
 		pos    token.Position
 		schema bool     // embeds schema.Schema directly
 		embeds []string // the package's types it embeds, by name
+		named  bool     // a defined type of another named type: type Release Item
 	}
 	fset := token.NewFileSet()
 	specs := map[string]*spec{}
@@ -84,6 +86,10 @@ func candidates(files map[string][]byte) ([]string, error) {
 				for _, sp := range d.Specs {
 					ts := sp.(*ast.TypeSpec)
 					s := &spec{ts: ts, pos: fset.Position(ts.Pos())}
+					switch ts.Type.(type) {
+					case *ast.Ident, *ast.SelectorExpr, *ast.IndexExpr, *ast.IndexListExpr, *ast.ParenExpr:
+						s.named = true
+					}
 					if st, ok := ts.Type.(*ast.StructType); ok {
 						s.schema = embedsSchema(st, local, false) || embedsSchema(st, local, true)
 						for _, fld := range st.Fields.List {
@@ -147,7 +153,9 @@ func candidates(files map[string][]byte) ([]string, error) {
 			}
 			continue
 		}
-		if s.ts.Assign.IsValid() || len(s.embeds) > 0 || typeMethod[n] {
+		// A defined type of another named type has its underlying struct's
+		// promoted methods, so it may be a schema too: classify decides.
+		if s.ts.Assign.IsValid() || len(s.embeds) > 0 || typeMethod[n] || s.named {
 			out = append(out, n)
 		}
 	}

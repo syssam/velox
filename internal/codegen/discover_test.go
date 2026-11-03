@@ -6,8 +6,9 @@ import (
 )
 
 // candidates keeps the types that may be schemas: a struct with an embedded
-// field, at any depth or from another package, an alias and a type that
-// declares Type. It refuses an unexported struct that embeds schema.Schema
+// field, at any depth or from another package, an alias, a defined type of
+// another named type (Level too, which classify then passes over) and a
+// type that declares Type. It refuses an unexported struct that embeds schema.Schema
 // when no type embeds it, and passes an unexported base.
 func TestCandidates(t *testing.T) {
 	files := map[string][]byte{
@@ -30,10 +31,14 @@ type Post struct {
 type Alias = Post
 type Ptr struct{ *schema.Schema }
 type Gen[T any] struct{ schema.Schema }
+type Release Post
+type Draft other.Base
+type Level int
+type ids []int
 `),
 	}
 	got, err := candidates(files)
-	if want := "Alias,Derived,Gen,Other,Own,Post,Ptr,User"; err != nil || strings.Join(got, ",") != want {
+	if want := "Alias,Derived,Draft,Gen,Level,Other,Own,Post,Ptr,Release,User"; err != nil || strings.Join(got, ",") != want {
 		t.Fatalf("got %v %v, want %s", got, err, want)
 	}
 	_, err = candidates(map[string][]byte{"c.go": []byte("package s\nimport \"github.com/syssam/velox/schema\"\ntype user struct{ schema.Schema }\ntype deeper struct{ user }\n")})

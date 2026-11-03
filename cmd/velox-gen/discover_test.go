@@ -495,3 +495,56 @@ func (User) Fields() []schema.Field { return []schema.Field{field.String(helper.
 		}
 	}
 }
+
+// A defined type over a struct that reaches schema.Schema, type Release Item
+// or type Draft mixins.Base, is a schema by its underlying struct, as in
+// plain mode, so also when a Policy splits gen: the loader keeps it.
+func TestDiscoverDefinedTypeInSplitMode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir := tempModule(t, map[string]string{
+		"mixins/m.go": `package mixins
+
+import "github.com/syssam/velox/schema"
+
+// Base is a struct a schema may be defined as.
+type Base struct{ schema.Schema }
+`,
+		"schema/s.go": `package schema
+
+import (
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+
+	"example.com/app/mixins"
+)
+
+type Item struct{ schema.Schema }
+
+func (Item) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+
+type Release Item
+
+type Draft mixins.Base
+`})
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		t.Fatalf("plain: %d %q", code, errs)
+	}
+	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft_velox.go item_velox.go release_velox.go velox.go"; got != want {
+		t.Fatalf("plain: generated %s, want %s", got, want)
+	}
+	writeFile(t, filepath.Join(dir, "schema", "item_policy.go"), "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen/entity\"\n)\n\n"+
+		"func (Item) Policy() velox.Policy[entity.Item] { return velox.Policy[entity.Item]{} }\n")
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		t.Fatalf("split: %d %q", code, errs)
+	}
+	for _, name := range []string{"draft_velox.go", "release_velox.go", filepath.Join("entity", "draft_velox.go"), filepath.Join("entity", "release_velox.go")} {
+		if _, err := os.Stat(filepath.Join(dir, "gen", name)); err != nil {
+			t.Errorf("split: no gen/%s: %v", name, err)
+		}
+	}
+	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+}
