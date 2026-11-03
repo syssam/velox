@@ -54,7 +54,7 @@ func TestCreateSetsSkipped(t *testing.T) {
 		t.Errorf("CreateThingInput.Create: %s, want %s", sig, want)
 	}
 	create := funcSrc(t, files, "CreateThingInput.Create")
-	if !strings.Contains(create, `gqlimpl.NewCreate(ctx, "CreateThingInput", "gen.Thing", x, thingCreateInputGQL, Things.Name)`) {
+	if !strings.Contains(create, `gqlimpl.NewCreate(ctx, "CreateThingInput", "Thing", "gen.Thing", x, thingCreateInputGQL, Things.Name)`) {
 		t.Errorf("Create does not name its own input's fields:\n%s", create)
 	}
 	for fn, want := range map[string]bool{"thingCreateInputGQL": false, "thingUpdateInputGQL": true} {
@@ -62,7 +62,7 @@ func TestCreateSetsSkipped(t *testing.T) {
 			t.Errorf("%s names Slug: %v, want %v", fn, got, want)
 		}
 	}
-	if !strings.Contains(funcSrc(t, files, "UpdateThingInput.Update"), `"UpdateThingInput", "gen.Thing", id, thingUpdateInputGQL)`) {
+	if !strings.Contains(funcSrc(t, files, "UpdateThingInput.Update"), `"UpdateThingInput", "Thing", "gen.Thing", id, thingUpdateInputGQL)`) {
 		t.Error("Update does not name its own input's fields")
 	}
 	if doc := strings.Join(strings.Fields(funcs["CreateThingInput.Create"].Doc.Text()), " "); !strings.Contains(doc, "CreateThingInput leaves out Slug, which an insert requires: set it on x, or in a velox.Hook") {

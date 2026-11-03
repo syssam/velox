@@ -22,6 +22,9 @@ func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
 	if err != nil {
 		return err
 	}
+	if err := r.writeInputEdges(f, t); err != nil {
+		return err
+	}
 	if t.Create != nil {
 		in := "Create" + t.Name + "Input"
 		if err := r.writeInput(f, t, in, t.Create); err != nil {
@@ -39,6 +42,123 @@ func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
 		if err := r.writeUpdate(f, t, in, updateName); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// edgeFunc is the function that returns the edge ed of t's entity as the
+// inputs write it: a gqlimpl.M2M, or a gqlimpl.Owned for an edge whose key
+// is on the target's rows.
+func edgeFunc(t *sdl.Type, ed *plugin.Edge) string {
+	return lowerFirst(t.Entity.Name) + ed.GoName + "EdgeGQL"
+}
+
+// inputEdges are the edges of t's entity that its inputs write by the
+// target's rows, by their index, in the edges' order: the many-to-many
+// edges and those whose key is on the target's rows.
+func inputEdges(t *sdl.Type) []int {
+	e := t.Entity
+	var out []int
+	for _, fs := range [][]sdl.InputField{t.Create, t.Update} {
+		for _, fi := range fs {
+			switch fi.Kind {
+			case sdl.InputEdgeID, sdl.InputEdgeIDs, sdl.InputAddIDs, sdl.InputRemoveIDs, sdl.InputClearEdge:
+			default:
+				continue
+			}
+			if ed := e.Edges[fi.Edge]; ed.OwnsKey && ed.Kind != plugin.M2M || slices.Contains(out, fi.Edge) {
+				continue
+			}
+			out = append(out, fi.Edge)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// ownKey is the Go type of the key of t's entity, as the file names it, and
+// the function that reads it from a row: t's keyGetter for a Node, else a
+// function literal.
+func (r *renderer) ownKey(f *file, t *sdl.Type) (typ, get string, err error) {
+	e := t.Entity
+	ok := e.Fields[e.PrimaryKey[0]]
+	if t.Node {
+		typ, err := r.nodeKeyType(f, t, ok)
+		return typ, keyGetter(t), err
+	}
+	if typ, err = r.qualify(f, e, ok, cmp.Or(ok.ElemType, ok.GoType), ok.PkgPath); err != nil {
+		return "", "", err
+	}
+	return typ, fmt.Sprintf("func(x *%s) %s { return x.%s }", e.Name, typ, ok.GoName), nil
+}
+
+// writeInputEdges writes edgeFunc of each of inputEdges(t), which Create and
+// Update both call.
+func (r *renderer) writeInputEdges(f *file, t *sdl.Type) error {
+	e := t.Entity
+	impl := f.gqlimpl()
+	for _, ei := range inputEdges(t) {
+		ed := e.Edges[ei]
+		if len(e.PrimaryKey) != 1 {
+			return fmt.Errorf("schema %s, edge %s: velox-graphql writes it by the key of %s, which is %d columns; skip its inputs with graphql.Skip(graphql.SkipMutationCreateInput, graphql.SkipMutationUpdateInput)", e.Name, ed.Name, e.Name, len(e.PrimaryKey))
+		}
+		tt := r.typeOf[ed.Target]
+		if tt == nil {
+			return fmt.Errorf("schema %s, edge %s: its target %s has no GraphQL type, which is a bug", e.Name, ed.Name, ed.Target)
+		}
+		tk, err := r.idKeyOf(f, e, tt)
+		if err != nil {
+			return err
+		}
+		tgt := tt.Entity
+		name := edgeFunc(t, ed)
+		if err := r.declare(name, "schema "+e.Name+", edge "+ed.Name); err != nil {
+			return err
+		}
+		ownTyp, ownGet, err := r.ownKey(f, t)
+		if err != nil {
+			return err
+		}
+		f.p("")
+		if ed.Kind == plugin.M2M {
+			j, own, other, err := r.joinCols(e, ed)
+			if err != nil {
+				return err
+			}
+			f.doc("", fmt.Sprintf("%s is the many-to-many edge %s of %s, through %s, as its inputs write it.", name, ed.Name, e.Name, j.Name))
+			f.p("func %s() %s.M2M[%s, %s, %s, %s, %s] {", name, impl, e.Name, tgt.Name, j.Name, ownTyp, tk.typ)
+			f.p("\treturn %s.NewM2M(%s, %s.%s, %s, %s.%s, %[6]s.%[8]s,", impl, ownGet, tgt.Handles, tk.fd.GoName, keyGetter(tt), j.Handles, own.GoName, other.GoName)
+			f.p("\t\tfunc(j *%s) %s { return j.%s },", j.Name, tk.typ, other.GoName)
+			params := fmt.Sprintf("own %s, k %s", ownTyp, tk.typ)
+			if ownTyp == tk.typ {
+				params = "own, k " + ownTyp
+			}
+			f.p("\t\tfunc(%s) %s { return %[2]s{%s: own, %s: k} })", params, j.Name, own.GoName, other.GoName)
+			f.p("}")
+			continue
+		}
+		// The target's rows hold the key. sdl gives a key that is never NULL
+		// no input that re-points it: it is an owner's on every row.
+		tfk, err := fkOf(e, ed, tgt)
+		if err != nil {
+			return err
+		}
+		if !tfk.Nullable {
+			return fmt.Errorf("schema %s, edge %s: an input re-points %s's rows, whose key %s is never NULL, which is a bug", e.Name, ed.Name, tgt.Name, tfk.Name)
+		}
+		ok := e.Fields[e.PrimaryKey[0]]
+		conv, err := r.keyConv(f, tgt, tfk, ok, cmp.Or(t.Key, tfk.Type))
+		if err != nil {
+			return err
+		}
+		vt, get := ownTyp, ownGet
+		if conv != "" {
+			vt, get = conv, fmt.Sprintf("func(x *%s) %s { return %s(x.%s) }", e.Name, conv, conv, ok.GoName)
+		}
+		f.doc("", fmt.Sprintf("%s is the edge %s of %s, whose key %s's rows hold, as its inputs write it.", name, ed.Name, e.Name, tgt.Name))
+		f.p("func %s() %s.Owned[%s, %s, %s, %s] {", name, impl, e.Name, tgt.Name, tk.typ, vt)
+		f.p("\treturn %s.NewOwned[%s, %s](%s, %s.%s, %[5]s.%[7]s)", impl, tgt.Name, tk.typ, get, tgt.Handles, tk.fd.GoName, tfk.GoName)
+		f.p("}")
 	}
 	return nil
 }
@@ -255,7 +375,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in, name string) error {
 	fs := t.Create
 
 	f.p("")
-	doc := fmt.Sprintf("Create inserts x, %s %s, with the input's fields and edges set, and returns it. A nil x is a new one; fields the input does not set are inserted as the caller set them, so a resolver sets there what the client must not choose. It runs atomically on the DB in ctx, under the policies, and changes x even when it fails.", english.Article(t.Name), t.Name)
+	doc := fmt.Sprintf("Create inserts x, %s %s, with the input's fields and edges set; a nil x is a new one. The input's fields overwrite x's: to own a field, leave it out with graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook. x's other fields, foreign keys included, are trusted, not checked. It runs atomically on the DB in ctx, under the policies, and changes x even when it fails.", english.Article(t.Name), t.Name)
 	var names []string
 	for _, fd := range leftOut(t) {
 		names = append(names, fd.GoName)
@@ -277,7 +397,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in, name string) error {
 			required = append(required, ", "+e.Handles+"."+e.Fields[fi.Field].GoName)
 		}
 	}
-	f.p("\tc, x := %s.NewCreate(ctx, %q, %q, x, %s%s)", impl, in, r.outPkg+"."+e.Name, name, strings.Join(required, ""))
+	f.p("\tc, x := %s.NewCreate(ctx, %q, %q, %q, x, %s%s)", impl, in, t.Name, r.outPkg+"."+e.Name, name, strings.Join(required, ""))
 
 	// given opens, at indent, the block of a field that is not Required:
 	// it runs only when the field is given. It returns the block's indent
@@ -377,53 +497,23 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in, name string) error {
 				end()
 				continue
 			}
-			if len(e.PrimaryKey) != 1 {
-				return fmt.Errorf("schema %s, edge %s: velox-graphql writes it by the key of %s, which is %d columns; skip its create input with graphql.Skip(graphql.SkipMutationCreateInput)", e.Name, ed.Name, e.Name, len(e.PrimaryKey))
+			// A many-to-many edge's join rows, or the target's rows that hold
+			// the key: inputEdges gives it an edgeFunc.
+			fn := "Join"
+			if ed.Kind != plugin.M2M {
+				fn = "Repoint"
 			}
-			ok := e.Fields[e.PrimaryKey[0]]
-			if ed.Kind == plugin.M2M {
-				j, own, other, err := r.joinCols(e, ed)
-				if err != nil {
-					return err
-				}
-				v := local(fi.GoName, "Keys")
-				f.p("\t%s := %s", v, keyCall(f, "c", "Keys", k, fi, "in."+fi.GoName))
-				f.p("\t%s.Join(c, %q, %q, %s, %s.In, func(x *%s, k %s) %s { return %[8]s{%s: x.%s, %s: k} }, %s.%[9]s, %[12]s.%[11]s)",
-					impl, fi.Name, fi.Target, v, pk, e.Name, k.typ, j.Name, own.GoName, ok.GoName, other.GoName, j.Handles)
-				continue
-			}
-			// The target's rows hold the key: re-point them. sdl gives a key
-			// that is never NULL no such input: it is an owner's on every row.
-			tfk, err := fkOf(e, ed, tgt)
-			if err != nil {
-				return err
-			}
-			if !tfk.Nullable {
-				return fmt.Errorf("schema %s, edge %s: an input re-points %s's rows, whose key %s is never NULL, which is a bug", e.Name, ed.Name, tgt.Name, tfk.Name)
-			}
-			conv, err := r.keyConv(f, tgt, tfk, ok, cmp.Or(t.Key, tfk.Type))
-			if err != nil {
-				return err
-			}
-			vt, ov := conv, "x."+ok.GoName
-			if conv != "" {
-				ov = conv + "(" + ov + ")"
-			} else if vt, err = r.qualify(f, e, ok, cmp.Or(ok.ElemType, ok.GoType), ok.PkgPath); err != nil {
-				return err
-			}
-			own := fmt.Sprintf("func(x *%s) %s { return %s }", e.Name, vt, ov)
-			fkh := tgt.Handles + "." + tfk.GoName
 			if fi.Kind == sdl.InputEdgeID {
 				indent, end := given("\t", fi)
 				v := local(fi.GoName, "Key")
 				f.p("%s%s := %s", indent, v, keyCall(f, "c", "Key", k, fi, src(fi)))
-				f.p("%s%s.Repoint(c, %q, %q, 1, %s.EQ(%s), %s, %s)", indent, impl, fi.Name, fi.Target, pk, v, fkh, own)
+				f.p("%s%s.%s(c, %q, %q, %s(), %s)", indent, impl, fn, fi.Name, fi.Target, edgeFunc(t, ed), v)
 				end()
 				continue
 			}
 			v := local(fi.GoName, "Keys")
 			f.p("\t%s := %s", v, keyCall(f, "c", "Keys", k, fi, "in."+fi.GoName))
-			f.p("\t%[1]s.Repoint(c, %[2]q, %[3]q, len(%[4]s), %[5]s.In(%[4]s...), %[6]s, %[7]s)", impl, fi.Name, fi.Target, v, pk, fkh, own)
+			f.p("\t%s.%s(c, %q, %q, %s(), %s...)", impl, fn, fi.Name, fi.Target, edgeFunc(t, ed), v)
 		}
 	}
 	f.p("\treturn c.Insert()")
@@ -448,14 +538,14 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in, name string) error {
 	pk := e.Handles + "." + self.fd.GoName
 
 	f.p("")
-	f.doc("", fmt.Sprintf("Update updates the %s with the ID id from the input and then from set, the application's own setters, validated with the input's, and returns the row as written. It runs atomically on the DB in ctx, under the policies.", n))
+	f.doc("", fmt.Sprintf("Update updates the %s with the ID id from the input and from set, the application's own setters, and returns the row as written. A setter of set wins over the input's field or edge that sets the same column, which is left as set says. The input's fields are validated as the client's, and set apart from them: a setter of set that its validator refuses is the application's error, returned as velox's. It runs atomically on the DB in ctx, under the policies.", n))
 	f.p("//")
 	f.doc("", "See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each input field does, what the caller may link and change, and the errors.")
 	f.p("func (in *%s) Update(ctx %s.Context, id string, set ...%s.Setter[%s]) (*%[4]s, error) {", in, ctx, velox, e.Name)
 	if self.conv != "" {
-		f.p("\tu, key := %s.NewUpdate%s(ctx, %q, %q, id, %s%s)", impl, strings.Replace(self.args, "[", "["+e.Name+", ", 1), in, r.outPkg+"."+e.Name, name, self.conv)
+		f.p("\tu, key := %s.NewUpdate%s(ctx, %q, %q, %q, id, %s%s)", impl, strings.Replace(self.args, "[", "["+e.Name+", ", 1), in, n, r.outPkg+"."+e.Name, name, self.conv)
 	} else {
-		f.p("\tu, key := %s.NewUpdate[%s, %s](ctx, %q, %q, id, %s)", impl, e.Name, self.typ, in, r.outPkg+"."+e.Name, name)
+		f.p("\tu, key := %s.NewUpdate[%s, %s](ctx, %q, %q, %q, id, %s)", impl, e.Name, self.typ, in, n, r.outPkg+"."+e.Name, name)
 	}
 
 	// vars are the variables of the edges' inputs, by the input field's index.
@@ -562,19 +652,25 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in, name string) error {
 			vars[i] = cond
 
 		case sdl.InputAddIDs, sdl.InputRemoveIDs:
+			if _, ok := vars[i]; ok {
+				continue // decoded with its pair
+			}
 			k, err := r.idKeyOf(f, e, r.types[fi.Target])
 			if err != nil {
 				return err
 			}
 			v := local(fi.GoName, "Keys")
-			f.p("\t%s := %s", v, keyCall(f, "u", "Keys", k, fi, "in."+fi.GoName))
 			vars[i] = v
-			if fi.Kind == sdl.InputRemoveIDs {
-				add := slices.IndexFunc(fs, func(x sdl.InputField) bool { return x.Kind == sdl.InputAddIDs && x.Edge == fi.Edge })
-				if add >= 0 {
-					f.p("\t%s.Disjoint(u, %q, %q, %s, %s)", impl, fs[add].Name, fi.Name, vars[add], v)
-				}
+			pair := slices.IndexFunc(fs, func(x sdl.InputField) bool {
+				return x.Kind == sdl.InputRemoveIDs && fi.Kind == sdl.InputAddIDs && x.Edge == fi.Edge
+			})
+			if pair < 0 {
+				f.p("\t%s := %s", v, keyCall(f, "u", "Keys", k, fi, "in."+fi.GoName))
+				continue
 			}
+			rm := fs[pair]
+			vars[pair] = local(rm.GoName, "Keys")
+			f.p("\t%s, %s := %s.AddRemove%s(u, %q, %q, in.%s, %q, in.%s%s)", v, vars[pair], impl, k.args, fi.Target, fi.Name, fi.GoName, rm.Name, rm.GoName, k.conv)
 		}
 	}
 
@@ -609,17 +705,9 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in, name string) error {
 		if tt == nil {
 			return fmt.Errorf("schema %s, edge %s: its target %s has no GraphQL type, which is a bug", e.Name, ed.Name, ed.Target)
 		}
-		tgt := tt.Entity
 		tk, err := r.idKeyOf(f, e, tt)
 		if err != nil {
 			return err
-		}
-		tpk := tgt.Handles + "." + tk.fd.GoName
-		arg := func(i int, none string) string {
-			if i < 0 {
-				return none
-			}
-			return vars[i]
 		}
 		field := func(i int) string {
 			if i < 0 {
@@ -627,39 +715,48 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in, name string) error {
 			}
 			return fs[i].Name
 		}
+		var parts []string
+		for _, x := range []struct {
+			name string
+			i    int
+		}{{"Clear", clr}, {"Remove", rm}, {"Add", add}} {
+			if x.i >= 0 {
+				parts = append(parts, x.name+": "+vars[x.i])
+			}
+		}
+		edit := fmt.Sprintf("%s.Edit[%s]{%s}", impl, tk.typ, strings.Join(parts, ", "))
 
 		if ed.Kind == plugin.M2M {
-			j, own, other, err := r.joinCols(e, ed)
-			if err != nil {
-				return err
-			}
-			f.p("\t%[1]s.Through[%[2]s](u, %[3]q, %[4]q, %[5]s, %[6]s, %[7]s, %[8]s, func(x *%[2]s) %[9]s { return x.%[10]s }, %[12]s.%[11]s, key, %[12]s.%[13]s, func(j *%[14]s) %[9]s { return j.%[13]s }, func(k %[9]s) %[14]s { return %[14]s{%[11]s: key, %[13]s: k} })",
-				impl, tgt.Name, field(add), tt.Name, arg(clr, "false"), arg(rm, "nil"), arg(add, "nil"), tpk, tk.typ, tk.fd.GoName, own.GoName, j.Handles, other.GoName, j.Name)
+			f.p("\t%s.Through(u, %q, %q, %s, key, %s())", impl, field(add), tt.Name, edit, edgeFunc(t, ed))
 			continue
 		}
 
-		// The target's rows hold the key.
-		tfk, err := fkOf(e, ed, tgt)
+		// The target's rows hold the key, which holds own for the row.
+		tfk, err := fkOf(e, ed, tt.Entity)
 		if err != nil {
 			return err
 		}
-		if !tfk.Nullable {
-			return fmt.Errorf("schema %s, edge %s: an input re-points %s's rows, whose key %s is never NULL, which is a bug", e.Name, ed.Name, tgt.Name, tfk.Name)
-		}
-		conv, err := r.keyConv(f, tgt, tfk, ok, cmp.Or(t.Key, tfk.Type))
+		conv, err := r.keyConv(f, tt.Entity, tfk, ok, cmp.Or(t.Key, tfk.Type))
 		if err != nil {
 			return err
 		}
-		v := "key"
+		own := "key"
 		if conv != "" {
-			v = conv + "(key)"
+			own = conv + "(key)"
 		}
-		fkh := tgt.Handles + "." + tfk.GoName
 		if ed.Unique {
-			f.p("\t%s.Child[%s](u, %q, %q, %s, %s, %s, %s, %s)", impl, tgt.Name, field(one), tt.Name, arg(clr, "false"), arg(one, "(*"+tk.typ+")(nil)"), tpk, fkh, v)
+			k := "(*" + tk.typ + ")(nil)"
+			if one >= 0 {
+				k = vars[one]
+			}
+			c := "false"
+			if clr >= 0 {
+				c = vars[clr]
+			}
+			f.p("\t%s.Child(u, %q, %q, %s, %s, %s, %s())", impl, field(one), tt.Name, c, k, own, edgeFunc(t, ed))
 			continue
 		}
-		f.p("\t%s.Children[%s](u, %q, %q, %s, %s, %s, %s, %s, %s)", impl, tgt.Name, field(add), tt.Name, arg(clr, "false"), arg(rm, "nil"), arg(add, "nil"), tpk, fkh, v)
+		f.p("\t%s.Children(u, %q, %q, %s, %s, %s())", impl, field(add), tt.Name, edit, own, edgeFunc(t, ed))
 	}
 	f.p("\treturn u.Exec(%s.EQ(key), set...)", pk)
 	f.p("}")

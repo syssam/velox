@@ -219,11 +219,28 @@
 //	}
 //
 // No delete is generated: deleting a row is one velox statement, which the
-// application writes with the checks it wants (examples/graphql's deletePost).
+// application writes with the checks it wants (examples/graphql's deletePost):
+//
+//	n, err := tx.Delete[gen.Post]().Where(gen.Posts.ID.EQ(key)).Exec(ctx)
+//
+// n 0 is a row the caller may not delete, missing, in another scope or hidden
+// by a policy: NOT_FOUND. n below 0 is a driver that did not report the rows
+// it deleted: the resolver returns an internal error, which rolls the
+// transaction back, not a success it cannot know. The row's join rows go with
+// it where their foreign keys have ON DELETE CASCADE, as velox-gen's
+// migrations declare them; otherwise the resolver deletes them too. A
+// self-referencing many-to-many edge's join rows hold the row's key in either
+// column, so both are deleted; the cascade covers both where each column's
+// foreign key has it.
 //
 // Create sets the input's fields on x, a nil x being a new row, and inserts
 // it: the fields the input does not set are inserted as the resolver set them
-// on x. A field the create input leaves out (Skip(SkipMutationCreateInput) or
+// on x. A field the input sets overwrites x's, whatever the resolver set
+// there: to own a field server-side, leave it out of the input with
+// graphql.Skip(graphql.SkipMutationCreateInput) (SkipMutationUpdateInput for
+// an update), or set it in a velox.Hook. x's own fields, its foreign keys
+// included, are trusted: Create checks the input's IDs against what the
+// caller may read, and not x's, which the resolver checks if it must. A field the create input leaves out (Skip(SkipMutationCreateInput) or
 // CreateInput(false)) that the schema requires, not Optional, not Nillable and
 // with no Default, would be inserted as its zero value, "" in a NOT NULL column,
 // so the resolver, which is where entgql users set it, sets it on x, and Create's
@@ -234,11 +251,14 @@
 // A velox.Hook, which runs before the insert's validators, may set it instead;
 // with neither, the zero value is stored. A validator's error on such a field is
 // the resolver's, not the client's: it names no input field. Create changes x
-// even when it fails. Update applies the input's fields and then set, the
-// resolver's own setters, such as an updated_by the client must not choose; the
-// validators run on both, before any statement; an error on a field the input
-// has is named as the input names it, and one on a field it has not is velox's
-// *velox.ValidationError as it is, the resolver's error.
+// even when it fails. Update applies the input's fields and set, the
+// resolver's own setters, such as an updated_by the client must not choose. A
+// setter of set wins over the input's field, or edge key, that sets the same
+// column: the input's setter is dropped, as an UPDATE sets a column once. The
+// validators run on both, apart, before any statement: an error on the input's
+// fields is BAD_USER_INPUT, named as the input names the field, and one on a
+// setter of set is velox's *velox.ValidationError as it is, the resolver's
+// error, not the client's.
 //
 // A field with a Default, or a bool or number with
 // graphql.CreateDefault, is optional in the create input and stays non-null in
@@ -266,7 +286,11 @@
 // more than once, in a list or in two arguments, a null on such a field is
 // refused with BAD_USER_INPUT naming clear<Field>, since it cannot tell which
 // one is this input's; where they give it not at all, as when Go code builds
-// the input, no field is null.
+// the input, no field is null. Two cases remain: Go code that builds an input
+// of that type, in a field whose arguments hold one, reads the client's
+// explicit nulls of that one; and a value nested in a variable of another
+// input type is found only with the server's schema, which the Extension
+// keeps, so without it its nulls are not seen.
 // An edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
 // its clear, or an ID both to add and to remove, is refused with

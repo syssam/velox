@@ -87,18 +87,34 @@ func TestNotZero(t *testing.T) {
 
 // TestDisjoint: a key in both lists is BAD_USER_INPUT naming the input and
 // both fields, and echoes no ID; lists with no key in common, empty ones
-// included, are not an error.
+// included, are not an error. AddRemove decodes both lists and refuses a key
+// in both.
 func TestDisjoint(t *testing.T) {
 	for _, c := range []struct{ add, remove []int64 }{{nil, nil}, {[]int64{1}, nil}, {nil, []int64{1}}, {[]int64{1, 2}, []int64{3}}} {
 		if err := disjoint("UpdatePostInput", "addTagIDs", "removeTagIDs", c.add, c.remove); err != nil {
 			t.Errorf("disjoint(%v, %v) = %v, want nil", c.add, c.remove, err)
 		}
 	}
+	ids := func(ks ...int64) []string {
+		out := make([]string, len(ks))
+		for i, k := range ks {
+			out[i] = veloxgql.EncodeID("Label", k)
+		}
+		return out
+	}
 	m := newFake(context.Background())
 	m.s.input = "UpdatePostInput"
-	Disjoint(m, "addTagIDs", "removeTagIDs", []int64{1, 2, 3}, []int64{4, 3})
+	add, rm := AddRemove[int64](m, "Label", "addTagIDs", ids(1, 2, 3), "removeTagIDs", ids(4, 3))
 	if err := m.s.err; codeOf(err) != veloxgql.CodeBadUserInput || err.Error() != "veloxgql: UpdatePostInput: an ID is in both addTagIDs and removeTagIDs" {
-		t.Errorf("Disjoint = %v (code %q)", err, codeOf(err))
+		t.Errorf("AddRemove = %v (code %q)", err, codeOf(err))
+	}
+	if len(add) != 3 || len(rm) != 2 || m.s.decode != nil {
+		t.Errorf("AddRemove = %v, %v (decode error %v), want the 3 and 2 keys", add, rm, m.s.decode)
+	}
+	m = newFake(context.Background())
+	AddRemove[int64](m, "Label", "addTagIDs", []string{"bad"}, "removeTagIDs", ids(1))
+	if m.s.decode == nil || !strings.Contains(m.s.decode.Error(), "In.addTagIDs") {
+		t.Errorf("AddRemove of a malformed ID: decode error %v, want one naming In.addTagIDs", m.s.decode)
 	}
 }
 

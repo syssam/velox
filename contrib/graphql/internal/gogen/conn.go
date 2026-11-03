@@ -20,7 +20,7 @@ func lowerFirst(name string) string {
 // The functions of t's connections: the exported one the application composes
 // a connection with, and the unexported ones of its key's and its terms.
 func connFunc(t *sdl.Type) string { return plugin.GoPlural(t.Name) + "ConnectionOf" }
-func keyFunc(t *sdl.Type) string  { return lowerFirst(t.Entity.Name) + "KeyGQL" }
+func keyFunc(t *sdl.Type) string  { return lowerFirst(t.Entity.Name) + "KeyOrderGQL" }
 func termFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "TermGQL" }
 func colsFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "ColumnsGQL" }
 

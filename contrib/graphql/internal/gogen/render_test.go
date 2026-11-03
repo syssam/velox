@@ -546,7 +546,8 @@ func TestGoTypes(t *testing.T) {
 			"func eventNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode[Event, *Event](",
 			"func(id string) (uuid.UUID, error) { k, err := veloxgql.DecodeID[[16]byte](id, \"Event\") return uuid.UUID(k), err },",
 			"Events.ID.EQ, Events.ID.In,",
-			"func(x *Event) uuid.UUID { return x.ID },",
+			"eventKeyGQL, ) }",
+			"func eventKeyGQL(x *Event) uuid.UUID { return x.ID }",
 			` "github.com/google/uuid" `,
 			` idspkg "example.com/app/ids" `,
 		},
@@ -554,7 +555,8 @@ func TestGoTypes(t *testing.T) {
 			"func ownerNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode[Owner, *Owner](",
 			"func(id string) (idspkg.UserID, error) { k, err := veloxgql.DecodeID[int64](id, \"Owner\") return idspkg.UserID(k), err },",
 			"Owners.ID.EQ, Owners.ID.In,",
-			"func(x *Owner) idspkg.UserID { return x.ID },",
+			"ownerKeyGQL, ) }",
+			"func ownerKeyGQL(x *Owner) idspkg.UserID { return x.ID }",
 		},
 		node: {
 			`case "Event": return eventNodeGQL()`,
@@ -1052,7 +1054,7 @@ func TestCreateConversions(t *testing.T) {
 		`gqlimpl.KeyAs[int64](c, "ownerID", *in.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
 		`gqlimpl.DecodeJSON[[]int32](c, "tags", in.Tags)`,
 		`gqlimpl.Exists(c, "ownerID", "Owner", 1, Owners.ID.EQ(`,
-		`gqlimpl.NewCreate(ctx, "CreateEventInput", "gen.Event", x, eventInputGQL`,
+		`gqlimpl.NewCreate(ctx, "CreateEventInput", "Event", "gen.Event", x, eventInputGQL`,
 		`case "Tags": return "tags"`,
 	} {
 		if !strings.Contains(ev, want) {
@@ -1150,7 +1152,9 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 	src := strings.Join(strings.Fields(render(t, m)["group_gql.go"]), " ")
 	for _, w := range []string{
 		`func (in *UpdateGroupInput) Update(ctx context.Context, id string, set ...velox.Setter[Group]) (*Group, error) {`,
-		`gqlimpl.Through[User](u, "addUserIDs", "Account", in.ClearUsers, removeUserIDsKeys, addUserIDsKeys, Users.ID, func(x *User) int64 { return x.ID }, UserGroups.GroupID, key, UserGroups.UserID,`,
+		`addUserIDsKeys, removeUserIDsKeys := gqlimpl.AddRemove[int64](u, "Account", "addUserIDs", in.AddUserIDs, "removeUserIDs", in.RemoveUserIDs)`,
+		`gqlimpl.Through(u, "addUserIDs", "Account", gqlimpl.Edit[int64]{Clear: in.ClearUsers, Remove: removeUserIDsKeys, Add: addUserIDsKeys}, key, groupUsersEdgeGQL())`,
+		`func groupUsersEdgeGQL() gqlimpl.M2M[Group, User, UserGroup, int64, int64] { return gqlimpl.NewM2M(groupKeyGQL, Users.ID, userKeyGQL, UserGroups.GroupID, UserGroups.UserID,`,
 	} {
 		if !strings.Contains(src, w) {
 			t.Errorf("group_gql.go: no %q in\n%s", w, src)
@@ -1550,7 +1554,7 @@ func TestRepointO2OOrder(t *testing.T) {
 		Edges: []*plugin.Edge{{Name: "owner", GoName: "Owner", Target: "Owner", Ref: "pet", Kind: plugin.O2O, Unique: true, Inverse: true, Field: "owner_pet", FieldOn: "Pet", OwnsKey: true}},
 	}
 	gen := funcSrc(t, render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{owner, pet}}), "UpdateOwnerInput.Update")
-	if want := `gqlimpl.Child[Pet](u, "petID", "Pet", clearPet, petIDKey, Pets.ID, Pets.OwnerPet, key)`; !strings.Contains(gen, want) {
+	if want := `gqlimpl.Child(u, "petID", "Pet", clearPet, petIDKey, key, ownerPetEdgeGQL())`; !strings.Contains(gen, want) {
 		t.Errorf("UpdateOwnerInput.Update has no %s:\n%s", want, gen)
 	}
 	// gqlimpl.Child, which runs the re-point, in its steps' order.

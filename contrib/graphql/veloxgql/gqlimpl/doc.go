@@ -6,9 +6,10 @@
 // reads (Selected and Narrow), the runtime of the inputs' Create and Update
 // methods (NewCreate and NewUpdate, whose Insert and Exec run one in Atomic, a
 // savepoint inside the operation's transaction or a transaction of its own;
-// the steps the generated methods give them: Key, Keys, DecodeJSON, NotZero,
-// NotNull, Cleared, ClearEdge, Disjoint, Exists, Join, Repoint, Children,
-// Child and Through; and what those run on: CheckExists, Repointed,
+// the steps the generated methods give them: Key, Keys, AddRemove,
+// DecodeJSON, NotZero, NotNull, Cleared, ClearEdge, Exists, Join, Repoint,
+// Children, Child and Through, the last four with an edge's M2M or Owned,
+// which NewM2M and NewOwned make; and what those run on: CheckExists, Repointed,
 // StillLinked, Readable, UnlinkAll, NotFound, LockRow and WriteError), and
 // InputErrorf, the coded error of a client's input. An
 // application does not call this package.

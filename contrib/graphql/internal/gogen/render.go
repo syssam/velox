@@ -302,15 +302,27 @@ const nodeKindFunc = "nodeKindGQL"
 
 func nodeFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "NodeGQL" }
 
+// keyGetter is the function that reads a Node t's key from a row: the one
+// function of the key that the Node type, and the inputs' edges, take.
+func keyGetter(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "KeyGQL" }
+
+// nodeKeyType is the Go type of the key of the Node t, whose key field is k,
+// as the file names it.
+func (r *renderer) nodeKeyType(f *file, t *sdl.Type, k *plugin.Field) (string, error) {
+	return r.qualify(f, t.Entity, k, cmp.Or(k.ElemType, t.Key), k.PkgPath)
+}
+
 // writeNodeKind writes nodeFunc(t): what Node and Nodes need of t to look its
 // nodes up, which gqlimpl.NodeOf does.
 func (r *renderer) writeNodeKind(f *file, t *sdl.Type, k *plugin.Field) error {
 	e := t.Entity
-	if err := r.declare(nodeFunc(t), "schema "+e.Name); err != nil {
-		return err
+	for _, name := range []string{nodeFunc(t), keyGetter(t)} {
+		if err := r.declare(name, "schema "+e.Name); err != nil {
+			return err
+		}
 	}
 	elem := cmp.Or(k.ElemType, t.Key)
-	key, err := r.qualify(f, e, k, elem, k.PkgPath)
+	key, err := r.nodeKeyType(f, t, k)
 	if err != nil {
 		return err
 	}
@@ -331,9 +343,12 @@ func (r *renderer) writeNodeKind(f *file, t *sdl.Type, k *plugin.Field) error {
 	f.p("\t\tfunc(db *%s.DB) %[1]s.Query[%s] { return db.Query[%[2]s]() },", velox, e.Name)
 	f.p("\t\t%s,", colsFunc(t))
 	f.p("\t\t%s.%s.EQ, %[1]s.%[2]s.In,", e.Handles, k.GoName)
-	f.p("\t\tfunc(x *%s) %s { return x.%s },", e.Name, key, k.GoName)
+	f.p("\t\t%s,", keyGetter(t))
 	f.p("\t)")
 	f.p("}")
+	f.p("")
+	f.doc("", fmt.Sprintf("%s is the key of x, %s %s.", keyGetter(t), english.Article(t.Name), t.Name))
+	f.p("func %s(x *%s) %s { return x.%s }", keyGetter(t), e.Name, key, k.GoName)
 	f.p("")
 	return nil
 }

@@ -120,16 +120,16 @@ func LikesConnectionOf(ctx context.Context, q velox.Query[Like], after *veloxgql
 	if fields, ok := gqlimpl.Selected(ctx, "Like"); ok {
 		q = gqlimpl.Narrow(q, likeColumnsGQL(fields))
 	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Like", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, likeKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Like", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, likeKeyOrderGQL())
 	if err != nil {
 		return nil, err
 	}
 	return &LikeConnection{c: c}, nil
 }
 
-// likeKeyGQL is the order of Like's key, which ends every order of a connection
-// to Like.
-func likeKeyGQL() []gqlimpl.OrderTerm[Like] {
+// likeKeyOrderGQL is the order of Like's key, which ends every order of a
+// connection to Like.
+func likeKeyOrderGQL() []gqlimpl.OrderTerm[Like] {
 	return []gqlimpl.OrderTerm[Like]{
 		gqlimpl.Term("user_id", veloxgql.OrderDirectionAsc, Likes.UserID.Asc(), Likes.UserID.Desc(),
 			func(x *Like) int64 { return x.UserID },
@@ -189,17 +189,18 @@ type CreateLikeInput struct {
 	PostID string
 }
 
-// Create inserts x, a Like, with the input's fields and edges set, and returns
-// it. A nil x is a new one; fields the input does not set are inserted as the
-// caller set them, so a resolver sets there what the client must not choose. It
-// runs atomically on the DB in ctx, under the policies, and changes x even when
-// it fails.
+// Create inserts x, a Like, with the input's fields and edges set; a nil x is a
+// new one. The input's fields overwrite x's: to own a field, leave it out with
+// graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook. x's
+// other fields, foreign keys included, are trusted, not checked. It runs
+// atomically on the DB in ctx, under the policies, and changes x even when it
+// fails.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreateLikeInput) Create(ctx context.Context, x *Like) (*Like, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreateLikeInput", "gen.Like", x, likeInputGQL)
+	c, x := gqlimpl.NewCreate(ctx, "CreateLikeInput", "Like", "gen.Like", x, likeInputGQL)
 	if in.Weight != nil {
 		x.Weight = *in.Weight
 		c.Given(Likes.Weight)

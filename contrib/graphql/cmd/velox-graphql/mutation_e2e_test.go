@@ -1685,6 +1685,42 @@ func TestUpdateErrors(t *testing.T) {
 	})
 }
 
+// TestUpdateAppSetters: the application's setter of a column the input sets
+// too wins, the input's dropped (a field, and an edge's key on the row), so
+// no UPDATE assigns a column twice; an application's setter that its
+// validator refuses is velox's error, uncoded, the server's, and writes
+// nothing.
+func TestUpdateAppSetters(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		m1, m2 := &gen.Writer{Name: "m1", Password: "x"}, &gen.Writer{Name: "m2", Password: "x"}
+		w := &gen.Writer{Name: "w", Password: "x"}
+		insert(t, e.ctx, e.db, m1)
+		insert(t, e.ctx, e.db, m2)
+		insert(t, e.ctx, e.db, w)
+		in := gen.UpdateWriterInput{Name: ptr("client"), Bio: ptr("bio"), MentorID: ptr(writerID(m1.ID))}
+		got, err := in.Update(e.ctx, writerID(w.ID), gen.Writers.Name.Set("server"), gen.Writers.MentorID.Set(m2.ID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Name != "server" || got.Bio == nil || *got.Bio != "bio" || got.MentorID == nil || *got.MentorID != m2.ID {
+			t.Errorf("the row = %+v, want the server's name and mentor, and the client's bio", got)
+		}
+		// The client's empty name is dropped for the server's.
+		if got, err := (&gen.UpdateWriterInput{Name: ptr("")}).Update(e.ctx, writerID(w.ID), gen.Writers.Name.Set("server 2")); err != nil || got.Name != "server 2" {
+			t.Errorf("an invalid client name the server's replaces: %+v, %v", got, err)
+		}
+		e.reset()
+		_, err = (&gen.UpdateWriterInput{Bio: ptr("other")}).Update(e.ctx, writerID(w.ID), gen.Writers.Name.Set(""))
+		var ve *velox.ValidationError
+		if !errors.As(err, &ve) || code(err) != "" || strings.Contains(err.Error(), "UpdateWriterInput") {
+			t.Errorf("an invalid server setter: %v (code %q), want velox's *velox.ValidationError, uncoded", err, code(err))
+		}
+		if s := e.stmts(); len(s) != 0 {
+			t.Errorf("an invalid server setter sent %v", s)
+		}
+	})
+}
+
 // friendsOf are the IDs of writer id's friends, loaded through the edge
 // Writer.friends: the writers its join rows name in friend_id.
 func friendsOf(t *testing.T, e *env, id int64) []int64 {
@@ -2295,7 +2331,7 @@ func TestMutationsRun(t *testing.T) {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
 	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestM2MLinkNeedsReadOnly", "TestAtomic", "TestCreateErrors", "TestRepoint", "TestRepointHiddenChild",
-		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors", "TestMutationWaitsOnTheLock",
+		"TestUpdate", "TestUpdateAppSetters", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors", "TestMutationWaitsOnTheLock",
 		"TestSelfM2M", "TestUnlinkScope", "TestValidateFirst", "TestRequiredSelfEdge", "TestBidiPeers", "TestBidiPartner", "TestWriteHiddenProfile"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)

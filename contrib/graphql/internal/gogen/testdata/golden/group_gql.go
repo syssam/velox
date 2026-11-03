@@ -29,9 +29,12 @@ func groupNodeGQL() gqlimpl.NodeKind {
 		func(db *velox.DB) velox.Query[Group] { return db.Query[Group]() },
 		groupColumnsGQL,
 		Groups.ID.EQ, Groups.ID.In,
-		func(x *Group) int64 { return x.ID },
+		groupKeyGQL,
 	)
 }
+
+// groupKeyGQL is the key of x, a Group.
+func groupKeyGQL(x *Group) int64 { return x.ID }
 
 // MarshalGQL writes e as a GraphQL String, its stored value: the field
 // visibility of Group is a String, as graphql.Skip(graphql.SkipEnumField) asks.
@@ -161,16 +164,16 @@ func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxg
 		}
 		order = append(order, term)
 	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Group", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, groupKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Group", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, groupKeyOrderGQL())
 	if err != nil {
 		return nil, err
 	}
 	return &GroupConnection{c: c}, nil
 }
 
-// groupKeyGQL is the order of Group's key, which ends every order of a
+// groupKeyOrderGQL is the order of Group's key, which ends every order of a
 // connection to Group.
-func groupKeyGQL() []gqlimpl.OrderTerm[Group] {
+func groupKeyOrderGQL() []gqlimpl.OrderTerm[Group] {
 	return []gqlimpl.OrderTerm[Group]{
 		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Groups.ID.Asc(), Groups.ID.Desc(),
 			func(x *Group) int64 { return x.ID },

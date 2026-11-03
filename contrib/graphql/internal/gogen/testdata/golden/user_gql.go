@@ -35,9 +35,12 @@ func userNodeGQL() gqlimpl.NodeKind {
 		func(db *velox.DB) velox.Query[User] { return db.Query[User]() },
 		userColumnsGQL,
 		Users.ID.EQ, Users.ID.In,
-		func(x *User) int64 { return x.ID },
+		userKeyGQL,
 	)
 }
+
+// userKeyGQL is the key of x, an Account.
+func userKeyGQL(x *User) int64 { return x.ID }
 
 // SettingsGQL is the field settings as JSON, the GraphQL scalar it is: gqlgen
 // binds the field to it.
@@ -215,16 +218,16 @@ func AccountsConnectionOf(ctx context.Context, q velox.Query[User], after *velox
 		}
 		q = q.Where(p)
 	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Account", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, userKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Account", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, userKeyOrderGQL())
 	if err != nil {
 		return nil, err
 	}
 	return &AccountConnection{c: c}, nil
 }
 
-// userKeyGQL is the order of User's key, which ends every order of a connection
-// to Account.
-func userKeyGQL() []gqlimpl.OrderTerm[User] {
+// userKeyOrderGQL is the order of User's key, which ends every order of a
+// connection to Account.
+func userKeyOrderGQL() []gqlimpl.OrderTerm[User] {
 	return []gqlimpl.OrderTerm[User]{
 		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Users.ID.Asc(), Users.ID.Desc(),
 			func(x *User) int64 { return x.ID },
@@ -383,6 +386,14 @@ func userInputGQL(goField string) string {
 	return ""
 }
 
+// userGroupsEdgeGQL is the many-to-many edge groups of User, through UserGroup,
+// as its inputs write it.
+func userGroupsEdgeGQL() gqlimpl.M2M[User, Group, UserGroup, int64, int64] {
+	return gqlimpl.NewM2M(userKeyGQL, Groups.ID, groupKeyGQL, UserGroups.UserID, UserGroups.GroupID,
+		func(j *UserGroup) int64 { return j.GroupID },
+		func(own, k int64) UserGroup { return UserGroup{UserID: own, GroupID: k} })
+}
+
 // CreateAccountInput is the GraphQL input CreateAccountInput; its method Create
 // writes it. A field that is a pointer, or a list, is optional: nil means not
 // given.
@@ -417,19 +428,20 @@ func (in CreateAccountInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in CreateAccountInput) GoString() string { return in.String() }
 
-// Create inserts x, an Account, with the input's fields and edges set, and
-// returns it. A nil x is a new one; fields the input does not set are inserted
-// as the caller set them, so a resolver sets there what the client must not
-// choose. It runs atomically on the DB in ctx, under the policies, and changes
-// x even when it fails. CreateAccountInput leaves out CreatedBy, OrgID, which
-// an insert requires: set them on x, or in a velox.Hook, or they are stored as
-// the zero value.
+// Create inserts x, an Account, with the input's fields and edges set; a nil x
+// is a new one. The input's fields overwrite x's: to own a field, leave it out
+// with graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook.
+// x's other fields, foreign keys included, are trusted, not checked. It runs
+// atomically on the DB in ctx, under the policies, and changes x even when it
+// fails. CreateAccountInput leaves out CreatedBy, OrgID, which an insert
+// requires: set them on x, or in a velox.Hook, or they are stored as the zero
+// value.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreateAccountInput) Create(ctx context.Context, x *User) (*User, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreateAccountInput", "gen.User", x, userInputGQL, Users.Name, Users.Email, Users.PasswordHash, Users.Quota)
+	c, x := gqlimpl.NewCreate(ctx, "CreateAccountInput", "Account", "gen.User", x, userInputGQL, Users.Name, Users.Email, Users.PasswordHash, Users.Quota)
 	if in.CreatedAt != nil {
 		x.CreatedAt = *in.CreatedAt
 		gqlimpl.NotZero(c, "createdAt", x.CreatedAt)
@@ -483,7 +495,7 @@ func (in *CreateAccountInput) Create(ctx context.Context, x *User) (*User, error
 		c.Given(Users.Settings)
 	}
 	membershipIDsKeys := gqlimpl.Keys[int64](c, "membershipIDs", in.MembershipIDs, "Group")
-	gqlimpl.Join(c, "membershipIDs", "Group", membershipIDsKeys, Groups.ID.In, func(x *User, k int64) UserGroup { return UserGroup{UserID: x.ID, GroupID: k} }, UserGroups.UserID, UserGroups.GroupID)
+	gqlimpl.Join(c, "membershipIDs", "Group", userGroupsEdgeGQL(), membershipIDsKeys...)
 	if in.BestFriendID != nil {
 		bestFriendIDKey := gqlimpl.Key[int64](c, "bestFriendID", *in.BestFriendID, "Account")
 		gqlimpl.Exists(c, "bestFriendID", "Account", 1, Users.ID.EQ(bestFriendIDKey))

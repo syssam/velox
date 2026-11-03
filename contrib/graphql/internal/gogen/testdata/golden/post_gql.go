@@ -30,9 +30,12 @@ func postNodeGQL() gqlimpl.NodeKind {
 		func(db *velox.DB) velox.Query[Post] { return db.Query[Post]() },
 		postColumnsGQL,
 		Posts.ID.EQ, Posts.ID.In,
-		func(x *Post) int64 { return x.ID },
+		postKeyGQL,
 	)
 }
+
+// postKeyGQL is the key of x, a Post.
+func postKeyGQL(x *Post) int64 { return x.ID }
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -232,16 +235,16 @@ func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql
 		}
 		order = append(order, term)
 	}
-	c, err := gqlimpl.NewConnection(ctx, q, "Post", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, postKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Post", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, postKeyOrderGQL())
 	if err != nil {
 		return nil, err
 	}
 	return &PostConnection{c: c}, nil
 }
 
-// postKeyGQL is the order of Post's key, which ends every order of a connection
-// to Post.
-func postKeyGQL() []gqlimpl.OrderTerm[Post] {
+// postKeyOrderGQL is the order of Post's key, which ends every order of a
+// connection to Post.
+func postKeyOrderGQL() []gqlimpl.OrderTerm[Post] {
 	return []gqlimpl.OrderTerm[Post]{
 		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Posts.ID.Asc(), Posts.ID.Desc(),
 			func(x *Post) int64 { return x.ID },
@@ -512,6 +515,22 @@ func postUpdateInputGQL(goField string) string {
 	return ""
 }
 
+// postRelatedEdgeGQL is the many-to-many edge related of Post, through
+// PostRelated, as its inputs write it.
+func postRelatedEdgeGQL() gqlimpl.M2M[Post, Post, PostRelated, int64, int64] {
+	return gqlimpl.NewM2M(postKeyGQL, Posts.ID, postKeyGQL, PostRelateds.PostID, PostRelateds.RelatedID,
+		func(j *PostRelated) int64 { return j.RelatedID },
+		func(own, k int64) PostRelated { return PostRelated{PostID: own, RelatedID: k} })
+}
+
+// postRelatedByEdgeGQL is the many-to-many edge related_by of Post, through
+// PostRelated, as its inputs write it.
+func postRelatedByEdgeGQL() gqlimpl.M2M[Post, Post, PostRelated, int64, int64] {
+	return gqlimpl.NewM2M(postKeyGQL, Posts.ID, postKeyGQL, PostRelateds.RelatedID, PostRelateds.PostID,
+		func(j *PostRelated) int64 { return j.PostID },
+		func(own, k int64) PostRelated { return PostRelated{RelatedID: own, PostID: k} })
+}
+
 // CreatePostInput is the GraphQL input CreatePostInput; its method Create
 // writes it. A field that is a pointer, or a list, is optional: nil means not
 // given.
@@ -532,18 +551,19 @@ type CreatePostInput struct {
 	RelatedByIDs []string
 }
 
-// Create inserts x, a Post, with the input's fields and edges set, and returns
-// it. A nil x is a new one; fields the input does not set are inserted as the
-// caller set them, so a resolver sets there what the client must not choose. It
-// runs atomically on the DB in ctx, under the policies, and changes x even when
-// it fails. CreatePostInput leaves out Views, which an insert requires: set it
-// on x, or in a velox.Hook, or it is stored as the zero value.
+// Create inserts x, a Post, with the input's fields and edges set; a nil x is a
+// new one. The input's fields overwrite x's: to own a field, leave it out with
+// graphql.Skip(graphql.SkipMutationCreateInput) or set it in a velox.Hook. x's
+// other fields, foreign keys included, are trusted, not checked. It runs
+// atomically on the DB in ctx, under the policies, and changes x even when it
+// fails. CreatePostInput leaves out Views, which an insert requires: set it on
+// x, or in a velox.Hook, or it is stored as the zero value.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *CreatePostInput) Create(ctx context.Context, x *Post) (*Post, error) {
-	c, x := gqlimpl.NewCreate(ctx, "CreatePostInput", "gen.Post", x, postCreateInputGQL, Posts.Title, Posts.Slug, Posts.EditedBy)
+	c, x := gqlimpl.NewCreate(ctx, "CreatePostInput", "Post", "gen.Post", x, postCreateInputGQL, Posts.Title, Posts.Slug, Posts.EditedBy)
 	x.Title = in.Title
 	x.Slug = in.Slug
 	if in.Status != nil {
@@ -567,9 +587,9 @@ func (in *CreatePostInput) Create(ctx context.Context, x *Post) (*Post, error) {
 	gqlimpl.Exists(c, "writerID", "Account", 1, Users.ID.EQ(writerIDKey))
 	x.AuthorID = writerIDKey
 	relatedIDsKeys := gqlimpl.Keys[int64](c, "relatedIDs", in.RelatedIDs, "Post")
-	gqlimpl.Join(c, "relatedIDs", "Post", relatedIDsKeys, Posts.ID.In, func(x *Post, k int64) PostRelated { return PostRelated{PostID: x.ID, RelatedID: k} }, PostRelateds.PostID, PostRelateds.RelatedID)
+	gqlimpl.Join(c, "relatedIDs", "Post", postRelatedEdgeGQL(), relatedIDsKeys...)
 	relatedByIDsKeys := gqlimpl.Keys[int64](c, "relatedByIDs", in.RelatedByIDs, "Post")
-	gqlimpl.Join(c, "relatedByIDs", "Post", relatedByIDsKeys, Posts.ID.In, func(x *Post, k int64) PostRelated { return PostRelated{RelatedID: x.ID, PostID: k} }, PostRelateds.RelatedID, PostRelateds.PostID)
+	gqlimpl.Join(c, "relatedByIDs", "Post", postRelatedByEdgeGQL(), relatedByIDsKeys...)
 	return c.Insert()
 }
 
@@ -608,15 +628,19 @@ type UpdatePostInput struct {
 	ClearRelatedBy bool
 }
 
-// Update updates the Post with the ID id from the input and then from set, the
-// application's own setters, validated with the input's, and returns the row as
-// written. It runs atomically on the DB in ctx, under the policies.
+// Update updates the Post with the ID id from the input and from set, the
+// application's own setters, and returns the row as written. A setter of set
+// wins over the input's field or edge that sets the same column, which is left
+// as set says. The input's fields are validated as the client's, and set apart
+// from them: a setter of set that its validator refuses is the application's
+// error, returned as velox's. It runs atomically on the DB in ctx, under the
+// policies.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *UpdatePostInput) Update(ctx context.Context, id string, set ...velox.Setter[Post]) (*Post, error) {
-	u, key := gqlimpl.NewUpdate[Post, int64](ctx, "UpdatePostInput", "gen.Post", id, postUpdateInputGQL)
+	u, key := gqlimpl.NewUpdate[Post, int64](ctx, "UpdatePostInput", "Post", "gen.Post", id, postUpdateInputGQL)
 	if in.Title != nil {
 		u.Set(Posts.Title.Set(*in.Title))
 	}
@@ -646,13 +670,9 @@ func (in *UpdatePostInput) Update(ctx context.Context, id string, set ...velox.S
 		gqlimpl.Exists(u, "writerID", "Account", 1, Users.ID.EQ(writerIDKey))
 		u.SetKey(Posts.AuthorID.Set(writerIDKey))
 	}
-	addRelatedIDsKeys := gqlimpl.Keys[int64](u, "addRelatedIDs", in.AddRelatedIDs, "Post")
-	removeRelatedIDsKeys := gqlimpl.Keys[int64](u, "removeRelatedIDs", in.RemoveRelatedIDs, "Post")
-	gqlimpl.Disjoint(u, "addRelatedIDs", "removeRelatedIDs", addRelatedIDsKeys, removeRelatedIDsKeys)
-	addRelatedByIDsKeys := gqlimpl.Keys[int64](u, "addRelatedByIDs", in.AddRelatedByIDs, "Post")
-	removeRelatedByIDsKeys := gqlimpl.Keys[int64](u, "removeRelatedByIDs", in.RemoveRelatedByIDs, "Post")
-	gqlimpl.Disjoint(u, "addRelatedByIDs", "removeRelatedByIDs", addRelatedByIDsKeys, removeRelatedByIDsKeys)
-	gqlimpl.Through[Post](u, "addRelatedIDs", "Post", in.ClearRelated, removeRelatedIDsKeys, addRelatedIDsKeys, Posts.ID, func(x *Post) int64 { return x.ID }, PostRelateds.PostID, key, PostRelateds.RelatedID, func(j *PostRelated) int64 { return j.RelatedID }, func(k int64) PostRelated { return PostRelated{PostID: key, RelatedID: k} })
-	gqlimpl.Through[Post](u, "addRelatedByIDs", "Post", in.ClearRelatedBy, removeRelatedByIDsKeys, addRelatedByIDsKeys, Posts.ID, func(x *Post) int64 { return x.ID }, PostRelateds.RelatedID, key, PostRelateds.PostID, func(j *PostRelated) int64 { return j.PostID }, func(k int64) PostRelated { return PostRelated{RelatedID: key, PostID: k} })
+	addRelatedIDsKeys, removeRelatedIDsKeys := gqlimpl.AddRemove[int64](u, "Post", "addRelatedIDs", in.AddRelatedIDs, "removeRelatedIDs", in.RemoveRelatedIDs)
+	addRelatedByIDsKeys, removeRelatedByIDsKeys := gqlimpl.AddRemove[int64](u, "Post", "addRelatedByIDs", in.AddRelatedByIDs, "removeRelatedByIDs", in.RemoveRelatedByIDs)
+	gqlimpl.Through(u, "addRelatedIDs", "Post", gqlimpl.Edit[int64]{Clear: in.ClearRelated, Remove: removeRelatedIDsKeys, Add: addRelatedIDsKeys}, key, postRelatedEdgeGQL())
+	gqlimpl.Through(u, "addRelatedByIDs", "Post", gqlimpl.Edit[int64]{Clear: in.ClearRelatedBy, Remove: removeRelatedByIDsKeys, Add: addRelatedByIDsKeys}, key, postRelatedByEdgeGQL())
 	return u.Exec(Posts.ID.EQ(key), set...)
 }
