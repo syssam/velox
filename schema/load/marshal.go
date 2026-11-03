@@ -231,8 +231,7 @@ func promotedFrom(t reflect.Type, name string) (reflect.Type, string) {
 	if methodPos(t, name) != "" || t.Kind() != reflect.Struct {
 		return nil, ""
 	}
-	for i := range t.NumField() {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		if !f.Anonymous {
 			continue
 		}
