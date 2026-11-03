@@ -83,7 +83,12 @@ func TestGodocCitesNoSpec(t *testing.T) {
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce",
 		"BindPolicy", "BindHooks", "BindHooksAfter", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet",
-		"Table", "TableOf", "TableRows", "RowsOf", "PredOp", "TableQuery", "Untyped", "Typed", "AndPredicates", "OrPredicates", "NotPredicate", "TableInsert", "TableUpdate", "TableDelete", "Assignments", "GeneratedCodeIsVersion7"}
+		"Table", "TableOf", "TableRows", "RowsOf", "PredOp", "TableQuery", "Untyped", "Typed", "AndPredicates", "OrPredicates", "NotPredicate", "TableInsert", "TableUpdate", "TableDelete", "Assignments", "GeneratedCodeIsVersion7",
+		"PredEQ", "PredNEQ", "PredIn", "PredNotIn", "PredGT", "PredGTE", "PredLT", "PredLTE", "PredContains", "PredHasPrefix", "PredHasSuffix", "PredIsNull", "PredNotNull"}
+	// DB's methods, keyed as packageDocs keys a method.
+	for _, m := range []string{"QueryTable", "InsertTable", "InsertRows", "UpdateTable", "DeleteTable"} {
+		names = append(names, "(method) "+m)
+	}
 	listed := map[string]bool{}
 	for _, n := range names {
 		listed[n] = true
@@ -116,7 +121,10 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 		if doc, ok := veloxtypeDocs[n]; ok && !strings.Contains(strings.Join(strings.Fields(doc), " "), generatedMarker) {
 			t.Errorf("veloxtype.%s: documentation %.40q does not say %q", n, doc, generatedMarker)
 		}
-		if !regexp.MustCompile(`\b` + n + `\b`).MatchString(section) {
+		if !markedGenerated(docs[n]) {
+			t.Errorf("%s: documentation %.40q does not say %q after its first sentence", n, docs[n], generatedMarker)
+		}
+		if !regexp.MustCompile(`\b` + strings.TrimPrefix(n, "(method) ") + `\b`).MatchString(section) {
 			t.Errorf("the Generated code section does not name %s", n)
 		}
 	}

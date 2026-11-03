@@ -278,13 +278,14 @@
 // nothing else should: Descriptor, ColumnDescriptor, EdgeDescriptor, EdgeTo, EdgeBidi,
 // EdgeThrough, Meta, MetaOnce, BindPolicy, BindHooks, BindHooksAfter, BoundPolicy,
 // BoundHooks, Lazy, Validate, ValidateSet, the untyped surface (Table, TableOf,
-// TableRows, RowsOf, PredOp, TableQuery, DB.QueryTable, Untyped, Typed,
-// AndPredicates, OrPredicates, NotPredicate, TableInsert, TableUpdate,
-// TableDelete, DB.InsertTable, DB.InsertRows, DB.UpdateTable, DB.DeleteTable
-// and Assignments: an entity's
-// queries and writes with its type erased, for runtimes compiled once for
-// every entity)
-// and GeneratedCodeIsVersion7. Each
+// TableRows, RowsOf, PredOp and its operators PredEQ, PredNEQ, PredIn,
+// PredNotIn, PredGT, PredGTE, PredLT, PredLTE, PredContains, PredHasPrefix,
+// PredHasSuffix, PredIsNull and PredNotNull, TableQuery, DB.QueryTable,
+// Untyped, Typed, AndPredicates, OrPredicates, NotPredicate, TableInsert,
+// TableUpdate, TableDelete, DB.InsertTable, DB.InsertRows, DB.UpdateTable,
+// DB.DeleteTable and Assignments: an entity's queries and writes with its
+// type erased, for runtimes compiled once for every entity) and
+// GeneratedCodeIsVersion7. Each
 // says "For generated code." in its documentation. They are not part of
 // velox's API: they change only when GeneratedCodeIsVersion7 is replaced by
 // the next version, which is outside semantic versioning. Run velox-gen

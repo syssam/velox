@@ -59,7 +59,7 @@ type TableRows = engine.TableRows
 type PredOp = engine.PredOp
 
 // The operators of Table.Pred, each that of the column handles' method of
-// the same name.
+// the same name. For generated code.
 const (
 	PredEQ        = engine.PredEQ        // column = v
 	PredNEQ       = engine.PredNEQ       // column <> v
@@ -164,8 +164,8 @@ func RowsOf[E any](r TableRows) []E {
 	return unsafe.Slice((*E)(p), n)
 }
 
-// QueryTable starts a query on t's entity: Query, untyped, for generated
-// code (see TableQuery).
+// QueryTable starts a query on t's entity: Query, untyped. For generated
+// code. See TableQuery.
 func (db *DB) QueryTable(t Table) TableQuery { return engine.QueryTable(&db.e, db, t) }
 
 // Untyped returns q as a TableQuery: the same statement, relations, After row
@@ -255,23 +255,24 @@ type TableUpdate = engine.TableUpdate
 type TableDelete = engine.TableDelete
 
 // InsertTable starts an INSERT of the row at p, of t's entity: Insert,
-// untyped, for generated code (see TableInsert).
+// untyped. For generated code. See TableInsert.
 func (db *DB) InsertTable(t Table, p unsafe.Pointer) TableInsert {
 	return engine.InsertTable(&db.e, t, p)
 }
 
 // InsertRows starts an INSERT of every row of rows, of t's entity: InsertAll,
-// untyped, for generated code (see TableInsert).
+// untyped. For generated code. Rows of another entity fail the insert. See
+// TableInsert.
 func (db *DB) InsertRows(t Table, rows TableRows) TableInsert {
 	return engine.InsertRows(&db.e, t, rows)
 }
 
-// UpdateTable starts an UPDATE of t's entity: Update, untyped, for generated
-// code (see TableUpdate).
+// UpdateTable starts an UPDATE of t's entity: Update, untyped. For generated
+// code. See TableUpdate.
 func (db *DB) UpdateTable(t Table) TableUpdate { return engine.UpdateTable(&db.e, t) }
 
-// DeleteTable starts a DELETE of t's entity: Delete, untyped, for generated
-// code (see TableDelete).
+// DeleteTable starts a DELETE of t's entity: Delete, untyped. For generated
+// code. See TableDelete.
 func (db *DB) DeleteTable(t Table) TableDelete { return engine.DeleteTable(&db.e, t) }
 
 // Assignments returns the assignments of set, sharing its memory: what
