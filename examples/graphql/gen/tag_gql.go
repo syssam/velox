@@ -4,7 +4,6 @@ package gen
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"unsafe"
 
@@ -214,18 +213,16 @@ func (o LabelOrderField) IsValid() bool {
 func (o LabelOrderField) String() string { return string(o) }
 
 // MarshalGQL writes o as a value of the GraphQL enum LabelOrderField.
-func (o LabelOrderField) MarshalGQL(w io.Writer) {
-	b, _ := json.Marshal(string(o)) // never fails for a string
-	_, _ = w.Write(b)
-}
+func (o LabelOrderField) MarshalGQL(w io.Writer) { gqlimpl.WriteString(w, string(o)) }
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum LabelOrderField.
 func (o *LabelOrderField) UnmarshalGQL(v any) error {
-	s, _ := v.(string)
-	if !LabelOrderField(s).IsValid() {
-		return gqlimpl.InputErrorf("LabelOrderField must be NAME")
+	switch v {
+	case "NAME":
+		*o = LabelOrderFieldName
+	default:
+		return gqlimpl.InputErrorf("LabelOrderField must be NAME, not %v", v)
 	}
-	*o = LabelOrderField(s)
 	return nil
 }
 

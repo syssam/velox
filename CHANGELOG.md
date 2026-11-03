@@ -117,6 +117,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `Create(ctx, x)` and `Update(ctx, id, set...)` keep their signatures, and an
   application's setter still wins over the input's. `veloxgql.GeneratedCodeIsVersion11`:
   regenerate.
+- velox-graphql's enum marshalers switch on velox-gen's constants and write each known
+  value as a literal, with no `encoding/json`; `gqlimpl.WriteString` writes any other
+  value as a JSON string. An unknown value's error names it: "PostStatus must be DRAFT
+  or PUBLISHED, not ARCHIVED". `plugin.Enum.Consts` gives the plugins the constants.
 - velox-graphql writes its schema to `gen/velox.graphql`, which was `gen/velox.graphqls`, as
   entgql writes `ent.graphql`: the extension more GraphQL tooling reads. velox-gen's plugins
   write `.go`, `.graphql` and `.proto` files. gqlgen.yml's `schema` globs must change to match,

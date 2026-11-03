@@ -13,6 +13,7 @@ package gogen
 import (
 	"bytes"
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"go/format"
 	"maps"
@@ -49,7 +50,7 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &renderer{m: m, outPath: outPath, outPkg: outPkg, veloxEnums: map[string]bool{}, names: map[string]string{}, types: map[string]*sdl.Type{}, typeOf: map[string]*sdl.Type{}, ents: map[string]*plugin.Entity{}}
+	r := &renderer{m: m, outPath: outPath, outPkg: outPkg, veloxEnums: map[string]*plugin.Enum{}, names: map[string]string{}, types: map[string]*sdl.Type{}, typeOf: map[string]*sdl.Type{}, ents: map[string]*plugin.Entity{}}
 	for _, e := range m.Entities {
 		r.ents[e.Name] = e
 	}
@@ -58,7 +59,7 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 		r.typeOf[t.Entity.Name] = t
 	}
 	for _, en := range m.Enums {
-		r.veloxEnums[en.Type] = true
+		r.veloxEnums[en.Type] = en
 	}
 	r.reserve()
 	files := make([]plugin.File, 0, len(s.Types)+1)
@@ -93,7 +94,7 @@ type renderer struct {
 	m          *plugin.Model
 	outPath    string
 	outPkg     string
-	veloxEnums map[string]bool      // the enum types velox-gen declares
+	veloxEnums map[string]*plugin.Enum // the enum types velox-gen declares
 	names      map[string]string    // Go name in the package → what declares it
 	types      map[string]*sdl.Type // the GraphQL types by name
 	typeOf     map[string]*sdl.Type // the GraphQL types by their entity's name
@@ -502,64 +503,64 @@ func (r *renderer) qualify(f *file, e *plugin.Entity, fd *plugin.Field, typ, pkg
 func (r *renderer) writeEnum(f *file, t *sdl.Type, en sdl.Enum) error {
 	fd := t.Entity.Fields[en.Field]
 	typ := fd.Enum
-	if !r.veloxEnums[typ] {
+	ve := r.veloxEnums[typ]
+	if ve == nil {
 		return nil
+	}
+	if len(ve.Consts) != len(ve.Values) || !slices.Equal(ve.Values, fd.EnumValues) {
+		return fmt.Errorf("schema %s, field %s: the model gives no Go constant of each value of %s; regenerate with velox-gen", t.Entity.Name, fd.Name, typ)
 	}
 	if err := r.declare(typ+".MarshalGQL", "schema "+t.Entity.Name+", field "+fd.Name); err != nil {
 		return err
 	}
-	json, io := f.use("encoding/json", "json"), f.use("io", "io")
+	io := f.use("io", "io")
+	gql := en.Values
 	if en.Name == "" {
 		// A String: graphql.Skip(SkipEnumField) shows the stored values.
+		gql = fd.EnumValues
 		f.doc("", fmt.Sprintf("MarshalGQL writes e as a GraphQL String, its stored value: the field %s of %s is a String, as graphql.Skip(graphql.SkipEnumField) asks.", fd.Name, t.Entity.Name))
-		f.p("func (e %s) MarshalGQL(w %s.Writer) {", typ, io)
-		f.p("\tb, _ := %s.Marshal(string(e)) // never fails for a string", json)
-		f.p("\t_, _ = w.Write(b)")
-		f.p("}")
-		f.p("")
-		f.p("// UnmarshalGQL sets e from v, a String that is one of its stored values.")
-		f.p("func (e *%s) UnmarshalGQL(v any) error {", typ)
-		f.p("\ts, _ := v.(string)")
-		f.p("\tswitch s {")
-		f.p("\tcase %s:", quoteList(fd.EnumValues))
-		f.p("\t\t*e = %s(s)", typ)
-		f.p("\t\treturn nil")
-		f.p("\t}")
-		f.p("\treturn %s.InputErrorf(%q)", f.gqlimpl(), strings.ReplaceAll(typ+" must be "+orList(fd.EnumValues), "%", "%%"))
-		f.p("}")
-		f.p("")
-		return nil
+	} else {
+		f.p("// MarshalGQL writes e as its value of the GraphQL enum %s.", en.Name)
 	}
-	f.p("// MarshalGQL writes e as its value of the GraphQL enum %s.", en.Name)
 	f.p("func (e %s) MarshalGQL(w %s.Writer) {", typ, io)
-	f.p("\tvar s string")
 	f.p("\tswitch e {")
-	for i, v := range fd.EnumValues {
-		f.p("\tcase %q:", v)
-		f.p("\t\ts = %q", en.Values[i])
+	for i, c := range ve.Consts {
+		f.p("\tcase %s:", c)
+		f.p("\t\t_, _ = %s.WriteString(w, %s)", io, jsonLiteral(gql[i]))
 	}
-	f.p("\tdefault:")
-	f.p("\t\ts = string(e) // not a value of the enum")
+	f.p("\tdefault: // not a value of the enum")
+	f.p("\t\t%s.WriteString(w, string(e))", f.gqlimpl())
 	f.p("\t}")
-	f.p("\tb, _ := %s.Marshal(s) // never fails for a string", json)
-	f.p("\t_, _ = w.Write(b)")
 	f.p("}")
 	f.p("")
-	f.p("// UnmarshalGQL sets e from v, a value of the GraphQL enum %s.", en.Name)
+	if en.Name == "" {
+		f.p("// UnmarshalGQL sets e from v, a String that is one of its stored values.")
+	} else {
+		f.p("// UnmarshalGQL sets e from v, a value of the GraphQL enum %s.", en.Name)
+	}
 	f.p("func (e *%s) UnmarshalGQL(v any) error {", typ)
-	f.p("\ts, _ := v.(string)")
-	f.p("\tswitch s {")
-	for i, v := range fd.EnumValues {
-		f.p("\tcase %q:", en.Values[i])
-		f.p("\t\t*e = %q", v)
+	f.p("\tswitch v {")
+	for i, c := range ve.Consts {
+		f.p("\tcase %s:", strconv.Quote(gql[i]))
+		f.p("\t\t*e = %s", c)
 	}
 	f.p("\tdefault:")
-	f.p("\t\treturn %s.InputErrorf(%q)", f.gqlimpl(), strings.ReplaceAll(typ+" must be "+orList(en.Values), "%", "%%"))
+	f.p("\t\treturn %s.InputErrorf(%q, v)", f.gqlimpl(), strings.ReplaceAll(typ+" must be "+orList(gql), "%", "%%")+", not %v")
 	f.p("\t}")
 	f.p("\treturn nil")
 	f.p("}")
 	f.p("")
 	return nil
+}
+
+// jsonLiteral is the Go literal of s as a JSON string: `"DRAFT"`, or a
+// quoted literal when s needs escaping in JSON or holds a backquote.
+func jsonLiteral(s string) string {
+	b, _ := json.Marshal(s) // never fails for a string
+	if !strings.ContainsAny(string(b), "`\\") && strconv.CanBackquote(string(b)) {
+		return "`" + string(b) + "`"
+	}
+	return strconv.Quote(string(b))
 }
 
 func (r *renderer) writeOrder(f *file, t *sdl.Type) error {
@@ -616,18 +617,19 @@ func (r *renderer) writeOrder(f *file, t *sdl.Type) error {
 	f.p("func (o %sOrderField) String() string { return string(o) }", n)
 	f.p("")
 	f.p("// MarshalGQL writes o as a value of the GraphQL enum %sOrderField.", n)
-	f.p("func (o %sOrderField) MarshalGQL(w %s.Writer) {", n, f.use("io", "io"))
-	f.p("\tb, _ := %s.Marshal(string(o)) // never fails for a string", f.use("encoding/json", "json"))
-	f.p("\t_, _ = w.Write(b)")
-	f.p("}")
+	f.p("func (o %sOrderField) MarshalGQL(w %s.Writer) { %s.WriteString(w, string(o)) }", n, f.use("io", "io"), f.gqlimpl())
 	f.p("")
 	f.p("// UnmarshalGQL sets o from v, a value of the GraphQL enum %sOrderField.", n)
 	f.p("func (o *%sOrderField) UnmarshalGQL(v any) error {", n)
-	f.p("\ts, _ := v.(string)")
-	f.p("\tif !%sOrderField(s).IsValid() {", n)
-	f.p("\t\treturn %s.InputErrorf(%q)", f.gqlimpl(), strings.ReplaceAll(n+"OrderField must be "+orList(values), "%", "%%"))
+	f.p("\tswitch v {")
+	for _, v := range t.Order {
+		fd, via := orderField(e, v)
+		f.p("\tcase %q:", v.Value)
+		f.p("\t\t*o = %sOrderField%s%s", n, via, fd.GoName)
+	}
+	f.p("\tdefault:")
+	f.p("\t\treturn %s.InputErrorf(%q, v)", f.gqlimpl(), strings.ReplaceAll(n+"OrderField must be "+orList(values), "%", "%%")+", not %v")
 	f.p("\t}")
-	f.p("\t*o = %sOrderField(s)", n)
 	f.p("\treturn nil")
 	f.p("}")
 	return nil

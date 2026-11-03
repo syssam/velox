@@ -28,7 +28,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 	enums := make(map[string]bool, len(o.Enums))
 	for _, en := range o.Enums {
 		enums[en.Type] = true
-		m.Enums = append(m.Enums, &plugin.Enum{Type: en.Type, Values: append([]string{}, en.Values...)})
+		m.Enums = append(m.Enums, &plugin.Enum{Type: en.Type, Values: append([]string{}, en.Values...), Consts: append([]string{}, en.Consts...)})
 	}
 	// The join entity of a many-to-many edge is the one on its table.
 	joins := map[string]string{}

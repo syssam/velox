@@ -193,4 +193,5 @@ const (
 type Enum struct {
 	Type   string   `json:"type"`   // the Go type's name in the generated package, e.g. "UserRole"; a Field's Enum names it
 	Values []string `json:"values"` // stored values, in declaration order
+	Consts []string `json:"consts"` // the Go constants of Values, in their order, e.g. "UserRoleViewer"
 }

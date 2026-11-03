@@ -50,33 +50,29 @@ func (x *User) SettingsGQL() (veloxgql.JSON, error) {
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
-	var s string
 	switch e {
-	case "admin":
-		s = "ADMIN"
-	case "editor":
-		s = "EDITOR"
-	case "viewer":
-		s = "VIEWER"
-	default:
-		s = string(e) // not a value of the enum
+	case UserRoleAdmin:
+		_, _ = io.WriteString(w, `"ADMIN"`)
+	case UserRoleEditor:
+		_, _ = io.WriteString(w, `"EDITOR"`)
+	case UserRoleViewer:
+		_, _ = io.WriteString(w, `"VIEWER"`)
+	default: // not a value of the enum
+		gqlimpl.WriteString(w, string(e))
 	}
-	b, _ := json.Marshal(s) // never fails for a string
-	_, _ = w.Write(b)
 }
 
 // UnmarshalGQL sets e from v, a value of the GraphQL enum UserRole.
 func (e *UserRole) UnmarshalGQL(v any) error {
-	s, _ := v.(string)
-	switch s {
+	switch v {
 	case "ADMIN":
-		*e = "admin"
+		*e = UserRoleAdmin
 	case "EDITOR":
-		*e = "editor"
+		*e = UserRoleEditor
 	case "VIEWER":
-		*e = "viewer"
+		*e = UserRoleViewer
 	default:
-		return gqlimpl.InputErrorf("UserRole must be ADMIN, EDITOR or VIEWER")
+		return gqlimpl.InputErrorf("UserRole must be ADMIN, EDITOR or VIEWER, not %v", v)
 	}
 	return nil
 }

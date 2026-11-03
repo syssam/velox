@@ -186,8 +186,8 @@
     }
   ],
   "enums": [
-    {"type": "GroupVisibility", "values": ["public", "private"]},
-    {"type": "PostStatus", "values": ["draft", "in_review", "published"]},
-    {"type": "UserRole", "values": ["admin", "editor", "viewer"]}
+    {"type": "GroupVisibility", "values": ["public", "private"], "consts": ["GroupVisibilityPublic", "GroupVisibilityPrivate"]},
+    {"type": "PostStatus", "values": ["draft", "in_review", "published"], "consts": ["PostStatusDraft", "PostStatusInReview", "PostStatusPublished"]},
+    {"type": "UserRole", "values": ["admin", "editor", "viewer"], "consts": ["UserRoleAdmin", "UserRoleEditor", "UserRoleViewer"]}
   ]
 }

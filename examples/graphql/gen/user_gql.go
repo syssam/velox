@@ -4,7 +4,6 @@ package gen
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -40,29 +39,25 @@ func userKeyGQL(x *User) int64 { return x.ID }
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
-	var s string
 	switch e {
-	case "admin":
-		s = "ADMIN"
-	case "member":
-		s = "MEMBER"
-	default:
-		s = string(e) // not a value of the enum
+	case UserRoleAdmin:
+		_, _ = io.WriteString(w, `"ADMIN"`)
+	case UserRoleMember:
+		_, _ = io.WriteString(w, `"MEMBER"`)
+	default: // not a value of the enum
+		gqlimpl.WriteString(w, string(e))
 	}
-	b, _ := json.Marshal(s) // never fails for a string
-	_, _ = w.Write(b)
 }
 
 // UnmarshalGQL sets e from v, a value of the GraphQL enum UserRole.
 func (e *UserRole) UnmarshalGQL(v any) error {
-	s, _ := v.(string)
-	switch s {
+	switch v {
 	case "ADMIN":
-		*e = "admin"
+		*e = UserRoleAdmin
 	case "MEMBER":
-		*e = "member"
+		*e = UserRoleMember
 	default:
-		return gqlimpl.InputErrorf("UserRole must be ADMIN or MEMBER")
+		return gqlimpl.InputErrorf("UserRole must be ADMIN or MEMBER, not %v", v)
 	}
 	return nil
 }
@@ -246,18 +241,18 @@ func (o UserOrderField) IsValid() bool {
 func (o UserOrderField) String() string { return string(o) }
 
 // MarshalGQL writes o as a value of the GraphQL enum UserOrderField.
-func (o UserOrderField) MarshalGQL(w io.Writer) {
-	b, _ := json.Marshal(string(o)) // never fails for a string
-	_, _ = w.Write(b)
-}
+func (o UserOrderField) MarshalGQL(w io.Writer) { gqlimpl.WriteString(w, string(o)) }
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum UserOrderField.
 func (o *UserOrderField) UnmarshalGQL(v any) error {
-	s, _ := v.(string)
-	if !UserOrderField(s).IsValid() {
-		return gqlimpl.InputErrorf("UserOrderField must be NAME or JOINED_AT")
+	switch v {
+	case "NAME":
+		*o = UserOrderFieldName
+	case "JOINED_AT":
+		*o = UserOrderFieldJoinedAt
+	default:
+		return gqlimpl.InputErrorf("UserOrderField must be NAME or JOINED_AT, not %v", v)
 	}
-	*o = UserOrderField(s)
 	return nil
 }
 

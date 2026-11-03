@@ -2,7 +2,6 @@ package gen
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"unsafe"
 
@@ -37,19 +36,27 @@ func groupKeyGQL(x *Group) int64 { return x.ID }
 // MarshalGQL writes e as a GraphQL String, its stored value: the field
 // visibility of Group is a String, as graphql.Skip(graphql.SkipEnumField) asks.
 func (e GroupVisibility) MarshalGQL(w io.Writer) {
-	b, _ := json.Marshal(string(e)) // never fails for a string
-	_, _ = w.Write(b)
+	switch e {
+	case GroupVisibilityPublic:
+		_, _ = io.WriteString(w, `"public"`)
+	case GroupVisibilityPrivate:
+		_, _ = io.WriteString(w, `"private"`)
+	default: // not a value of the enum
+		gqlimpl.WriteString(w, string(e))
+	}
 }
 
 // UnmarshalGQL sets e from v, a String that is one of its stored values.
 func (e *GroupVisibility) UnmarshalGQL(v any) error {
-	s, _ := v.(string)
-	switch s {
-	case "public", "private":
-		*e = GroupVisibility(s)
-		return nil
+	switch v {
+	case "public":
+		*e = GroupVisibilityPublic
+	case "private":
+		*e = GroupVisibilityPrivate
+	default:
+		return gqlimpl.InputErrorf("GroupVisibility must be public or private, not %v", v)
 	}
-	return gqlimpl.InputErrorf("GroupVisibility must be public or private")
+	return nil
 }
 
 // UsersGQL is the edge users: a connection to the Account nodes it leads to,
@@ -219,17 +226,15 @@ func (o GroupOrderField) IsValid() bool {
 func (o GroupOrderField) String() string { return string(o) }
 
 // MarshalGQL writes o as a value of the GraphQL enum GroupOrderField.
-func (o GroupOrderField) MarshalGQL(w io.Writer) {
-	b, _ := json.Marshal(string(o)) // never fails for a string
-	_, _ = w.Write(b)
-}
+func (o GroupOrderField) MarshalGQL(w io.Writer) { gqlimpl.WriteString(w, string(o)) }
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum GroupOrderField.
 func (o *GroupOrderField) UnmarshalGQL(v any) error {
-	s, _ := v.(string)
-	if !GroupOrderField(s).IsValid() {
-		return gqlimpl.InputErrorf("GroupOrderField must be NAME")
+	switch v {
+	case "NAME":
+		*o = GroupOrderFieldName
+	default:
+		return gqlimpl.InputErrorf("GroupOrderField must be NAME, not %v", v)
 	}
-	*o = GroupOrderField(s)
 	return nil
 }

@@ -4,7 +4,6 @@ package gen
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"time"
 	"unsafe"
@@ -39,29 +38,25 @@ func postKeyGQL(x *Post) int64 { return x.ID }
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
-	var s string
 	switch e {
-	case "draft":
-		s = "DRAFT"
-	case "published":
-		s = "PUBLISHED"
-	default:
-		s = string(e) // not a value of the enum
+	case PostStatusDraft:
+		_, _ = io.WriteString(w, `"DRAFT"`)
+	case PostStatusPublished:
+		_, _ = io.WriteString(w, `"PUBLISHED"`)
+	default: // not a value of the enum
+		gqlimpl.WriteString(w, string(e))
 	}
-	b, _ := json.Marshal(s) // never fails for a string
-	_, _ = w.Write(b)
 }
 
 // UnmarshalGQL sets e from v, a value of the GraphQL enum PostStatus.
 func (e *PostStatus) UnmarshalGQL(v any) error {
-	s, _ := v.(string)
-	switch s {
+	switch v {
 	case "DRAFT":
-		*e = "draft"
+		*e = PostStatusDraft
 	case "PUBLISHED":
-		*e = "published"
+		*e = PostStatusPublished
 	default:
-		return gqlimpl.InputErrorf("PostStatus must be DRAFT or PUBLISHED")
+		return gqlimpl.InputErrorf("PostStatus must be DRAFT or PUBLISHED, not %v", v)
 	}
 	return nil
 }
@@ -260,18 +255,18 @@ func (o PostOrderField) IsValid() bool {
 func (o PostOrderField) String() string { return string(o) }
 
 // MarshalGQL writes o as a value of the GraphQL enum PostOrderField.
-func (o PostOrderField) MarshalGQL(w io.Writer) {
-	b, _ := json.Marshal(string(o)) // never fails for a string
-	_, _ = w.Write(b)
-}
+func (o PostOrderField) MarshalGQL(w io.Writer) { gqlimpl.WriteString(w, string(o)) }
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum PostOrderField.
 func (o *PostOrderField) UnmarshalGQL(v any) error {
-	s, _ := v.(string)
-	if !PostOrderField(s).IsValid() {
-		return gqlimpl.InputErrorf("PostOrderField must be TITLE or VIEWS")
+	switch v {
+	case "TITLE":
+		*o = PostOrderFieldTitle
+	case "VIEWS":
+		*o = PostOrderFieldViews
+	default:
+		return gqlimpl.InputErrorf("PostOrderField must be TITLE or VIEWS, not %v", v)
 	}
-	*o = PostOrderField(s)
 	return nil
 }
 

@@ -742,7 +742,8 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 }
 
 // TestEnumErrorPercent: a stored enum value with a % in it is text in the
-// generated error, never a format verb of gqlimpl.InputErrorf.
+// generated error, never a format verb of gqlimpl.InputErrorf, whose one
+// verb is the value given.
 func TestEnumErrorPercent(t *testing.T) {
 	m := modeltest.Model(t)
 	for _, e := range m.Entities {
@@ -762,13 +763,13 @@ func TestEnumErrorPercent(t *testing.T) {
 	if !ok {
 		t.Fatalf("group_gql.go calls no gqlimpl.InputErrorf:\n%s", src)
 	}
-	lit, _, _ := strings.Cut(rest, ")\n")
+	lit, _, _ := strings.Cut(rest, ", v)\n")
 	format, err := strconv.Unquote(lit)
 	if err != nil {
 		t.Fatalf("the format %s: %v", lit, err)
 	}
-	// As InputErrorf formats it, with no arguments.
-	if got := fmt.Sprintf(format, []any{}...); got != "GroupVisibility must be public or 50% off" {
+	// As InputErrorf formats it, with the value given.
+	if got := fmt.Sprintf(format, "x"); got != "GroupVisibility must be public or 50% off, not x" {
 		t.Errorf("the error reads %q", got)
 	}
 }
