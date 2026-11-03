@@ -161,7 +161,7 @@ func (t *term) row(p unsafe.Pointer, own velox.Table) unsafe.Pointer {
 	if t.edge == 0 {
 		return p
 	}
-	r, _ := own.Filled(p, t.edge-1)
+	r, _ := own.Filled(p, t.edge-1, t.tbl)
 	return r
 }
 

@@ -31,7 +31,7 @@ import (
 //	Ptr(p unsafe.Pointer) any // the row at p as an *E
 //	New() unsafe.Pointer // a new zero row
 //	Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Pointer) error // Rel.Fill
-//	Filled(owner unsafe.Pointer, edge int) (unsafe.Pointer, bool) // Rel.Filled
+//	Filled(owner unsafe.Pointer, edge int, target Table) (unsafe.Pointer, bool) // Rel.Filled
 //	Pred(col int, op PredOp, v any) Predicate // a condition on column col
 //	Has(edge int, target Table, ps ...Predicate) Predicate // Rel.HasWhere
 //	Of(edge int, target Table, owners ...unsafe.Pointer) Predicate // Rel.Of

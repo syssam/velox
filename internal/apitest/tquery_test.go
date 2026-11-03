@@ -184,6 +184,27 @@ func TestTableQueryRows(t *testing.T) {
 			t.Errorf("join: item %d: %v %v", it.ID, inv, ok)
 		}
 	}
+	// Filled of a to-many relation holds no row, loaded or not.
+	invs, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(10).All(ctx)
+	if err != nil || len(invs) == 0 {
+		t.Fatalf("invoices: %v %v", invs, err)
+	}
+	loaded := 0
+	for i := range invs {
+		items, _ := invs[i].Items.Get()
+		loaded += len(items)
+		for _, target := range []velox.Table{itTable, invTable} {
+			if r, ok := invTable.Filled(unsafe.Pointer(&invs[i]), int(I.Items.I), target); ok || r != nil {
+				t.Errorf("Filled of the loaded to-many Items: %v %v", r, ok)
+			}
+		}
+	}
+	if loaded == 0 {
+		t.Error("no invoice has items: the case is not covered")
+	}
+	if r, ok := invTable.Filled(unsafe.Pointer(&testmodel.Invoice{}), int(I.Items.I), itTable); ok || r != nil {
+		t.Errorf("Filled of an empty to-many Items: %v %v", r, ok)
+	}
 	p, err := uq.First(ctx)
 	if err != nil || (*testmodel.Item)(p).ID != want[0].ID {
 		t.Errorf("First: %v %v", p, err)
@@ -286,7 +307,7 @@ func TestTableRows(t *testing.T) {
 	if err := tkTable.Fill(p, int(Tk.Invoice.I), invTable, inv); err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := tkTable.Filled(p, int(Tk.Invoice.I)); !ok || got != inv {
+	if got, ok := tkTable.Filled(p, int(Tk.Invoice.I), invTable); !ok || got != inv {
 		t.Errorf("Filled: %v %v", got, ok)
 	}
 	if v, ok := x.Invoice.Get(); !ok || unsafe.Pointer(v) != inv {
@@ -295,7 +316,7 @@ func TestTableRows(t *testing.T) {
 	if err := tkTable.Fill(p, int(Tk.Invoice.I), tkTable, inv); err == nil {
 		t.Error("Fill with another target: no error")
 	}
-	if _, ok := tkTable.Filled(p, int(Tk.Parent.I)); ok {
+	if _, ok := tkTable.Filled(p, int(Tk.Parent.I), tkTable); ok {
 		t.Error("Filled of an empty relation")
 	}
 	if tkTable.Info().Name != "testmodel.Ticket" || tkTable.Err() != nil || (velox.Table{}).Err() == nil {

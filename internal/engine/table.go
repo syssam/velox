@@ -128,11 +128,13 @@ func (t Table) Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Poi
 	return nil
 }
 
-// Filled returns the entity of relation edge's field in the row at owner, and
-// whether it holds one: Rel.Filled, untyped.
-func (t Table) Filled(owner unsafe.Pointer, edge int) (unsafe.Pointer, bool) {
-	s := t.state()
-	if s.err != nil {
+// Filled returns the entity of relation edge's field in the row at owner, a
+// row of target, and whether it holds one: Rel.Filled, untyped. A field that
+// holds no *T of target's entity, such as a to-many relation's slice, holds
+// none.
+func (t Table) Filled(owner unsafe.Pointer, edge int, target Table) (unsafe.Pointer, bool) {
+	s, ts := t.state(), target.state()
+	if s.err != nil || ts.err != nil {
 		return nil, false
 	}
 	off, err := RelOffset(s.info, int32(edge))
@@ -143,9 +145,14 @@ func (t Table) Filled(owner unsafe.Pointer, edge int) (unsafe.Pointer, bool) {
 	if h.V == nil {
 		return nil, false
 	}
-	// V holds a *T, which an interface keeps in its data word.
-	p := (*[2]unsafe.Pointer)(unsafe.Pointer(&h.V))[1]
-	return p, p != nil
+	// V holds a *T, which an interface keeps in its data word, with *T's
+	// type in its type word.
+	probe := ts.kit.Ptr(nil)
+	w, pw := (*[2]unsafe.Pointer)(unsafe.Pointer(&h.V)), (*[2]unsafe.Pointer)(unsafe.Pointer(&probe))
+	if w[0] != pw[0] {
+		return nil, false
+	}
+	return w[1], w[1] != nil
 }
 
 // TableRows is a run of rows of one entity, one after another in memory: what an

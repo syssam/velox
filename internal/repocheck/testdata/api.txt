@@ -76,7 +76,7 @@ Table.Convert(col int, v any) (any, error)
 Table.Err() error
 Table.Field(p unsafe.Pointer, col int) any
 Table.Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Pointer) error
-Table.Filled(owner unsafe.Pointer, edge int) (unsafe.Pointer, bool)
+Table.Filled(owner unsafe.Pointer, edge int, target Table) (unsafe.Pointer, bool)
 Table.Has(edge int, target Table, ps ...Predicate) Predicate
 Table.HasReadPolicy() bool
 Table.Info() *EntityInfo
