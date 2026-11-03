@@ -198,7 +198,8 @@ func (r *pgReader) baselineNote(pt *pgTable, name, message string) {
 // the column's collation when it is not its type's; the extension its type
 // comes from, and that extension's type when a domain lies before it; and
 // the nearest domain its type passes that is neither an extension's member
-// nor information_schema's or pg_catalog's. They walk from the column's
+// nor information_schema's or pg_catalog's; and the name of a NOT VALID NOT
+// NULL constraint of the column, PostgreSQL 18's. They walk from the column's
 // type through typbasetype while it is a domain and through typelem while
 // it is an array, at most 16 steps, the nearest type with an extension
 // member row (deptype e) winning.
@@ -210,7 +211,9 @@ const pgColumnsQuery = `SELECT a.attnum, a.attname, format_type(a.atttypid, a.at
 	coalesce((SELECT quote_ident(co.collname) FROM pg_collation co
 		WHERE co.oid = a.attcollation AND a.attcollation <> t.typcollation AND a.attcollation <> 0), ''),
 	coalesce(w.ext, ''), coalesce(w.over, ''), coalesce(w.dom, ''),
-	CASE WHEN a.attstorage <> t.typstorage THEN a.attstorage::text ELSE '' END, a.attcompression::text
+	CASE WHEN a.attstorage <> t.typstorage THEN a.attstorage::text ELSE '' END, a.attcompression::text,
+	coalesce((SELECT k.conname FROM pg_constraint k WHERE k.conrelid = a.attrelid AND k.contype = 'n'
+		AND NOT k.convalidated AND k.conkey[1] = a.attnum ORDER BY k.conname LIMIT 1), '')
 FROM pg_attribute a
 JOIN pg_type t ON t.oid = a.atttypid
 JOIN pg_namespace tn ON tn.oid = t.typnamespace
@@ -271,12 +274,12 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 			typ, typtype, tnsp, tname, def            string
 			identity, generated, seqNsp, seqName, reg string
 			collation, ext, over, domain              string
-			storage, compression                      string
+			storage, compression, notValid            string
 			typOID, start, increment                  int64
 			notNull                                   bool
 		)
 		if err := rows.Scan(&num, &c.Name, &typ, &typtype, &typOID, &tnsp, &tname, &notNull, &def,
-			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg, &start, &increment, &collation, &ext, &over, &domain, &storage, &compression); err != nil {
+			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg, &start, &increment, &collation, &ext, &over, &domain, &storage, &compression, &notValid); err != nil {
 			return err
 		}
 		if collation != "" {
@@ -293,6 +296,12 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 		}
 		names[num] = c.Name
 		c.Nullable = !notNull
+		if notValid != "" {
+			// attnotnull is set, but the rows from before the constraint
+			// may hold NULL.
+			c.Nullable = true
+			r.note(pt, c.Name, "the column's NOT NULL is the constraint "+notValid+", which is NOT VALID: the rows from before it are not checked, so the column is read as nullable; VALIDATE CONSTRAINT checks them")
+		}
 		c.Type = ddl.NormalizeType(velox.Postgres, typ)
 		if typtype == "e" {
 			ref := TableRef{Schema: r.schema(tnsp), Name: tname}

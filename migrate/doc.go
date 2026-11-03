@@ -138,7 +138,9 @@
 // differs, a predicate the normaliser cannot read whose text differs, a
 // primary key that differs, or what the model has no place for, such as a
 // MySQL table that is not InnoDB, an invalid PostgreSQL index or a NOT VALID
-// constraint. A PostgreSQL index the database holds as a UNIQUE constraint
+// constraint. A PostgreSQL 18 column whose NOT NULL is NOT VALID is read as
+// nullable, with a Warning, as rows from before it may hold NULL. A
+// PostgreSQL index the database holds as a UNIQUE constraint
 // and schema.json as a plain index, or the reverse, is a Warning, not a
 // change: a drop of it is rendered from schema.json, so it fails on that
 // database.
