@@ -13,7 +13,8 @@ import (
 // e2eModule writes a temporary module holding testdata/e2e/schema and the
 // files of the listed schemaDirs (behaviour/, say), generates it into gen/
 // with cfg, and copies in the user's files: each file of the listed
-// testdata/e2e userDirs (user/, say) and, as gen/main_test.go, the test file.
+// testdata/e2e userDirs (user/, say), into gen/entity as package entity in
+// split mode, and, as gen/main_test.go, the test file.
 // It returns the module's directory. A schema file's first line is the
 // //go:build ignore that keeps the fixture out of the packages of velox.
 func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile string) string {
@@ -82,7 +83,11 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 			t.Fatalf("no files in %s: %v", d, err)
 		}
 		for _, p := range matches {
-			write(filepath.Base(p), read(p))
+			if cfg.Split {
+				write(filepath.Join(EntityDir, filepath.Base(p)), bytes.Replace(read(p), []byte("package gen\n"), []byte("package entity\n"), 1))
+			} else {
+				write(filepath.Base(p), read(p))
+			}
 		}
 	}
 	if testFile != "" {
@@ -96,13 +101,15 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 }
 
 // The generated code compiles, and works against the runtime on SQLite:
-// testdata/e2e/main_test.go runs inside the generated package.
+// testdata/e2e/main_test.go runs inside the generated package, which links
+// the schema with no other import. closed/closed_test.go runs in package
+// entity alone, which fails closed.
 func TestGeneratedRunsOnSQLite(t *testing.T) {
-	dir := e2eModule(t, Config{Package: "gen", Runtime: true, GenPath: "example.com/tmp/gen", Bound: map[string]Bound{
+	dir := e2eModule(t, Config{Package: "gen", Split: true, GenPath: "example.com/tmp/gen", Bound: map[string]Bound{
 		"Post": {Policy: true},
 		"User": {Hooks: true},
 		"Note": {Policy: true, Hooks: true},
-	}}, []string{"behaviour"}, []string{"user"}, "main_test.go")
+	}}, []string{"behaviour"}, []string{"user", "closed"}, "main_test.go")
 	if out, err := tempmod.Go(dir, "vet", "./..."); err != nil {
 		t.Fatalf("go vet:\n%v", out)
 	}
@@ -112,18 +119,18 @@ func TestGeneratedRunsOnSQLite(t *testing.T) {
 }
 
 // A schema's Policy method with another signature than the one velox binds,
-// which SchemaMethods would refuse, does not compile once package runtime
-// binds it (Review Focus 3).
+// which SchemaMethods would refuse, does not compile: the generated package
+// checks it in velox.go.
 func TestWrongPolicySignatureDoesNotCompile(t *testing.T) {
-	dir := e2eModule(t, Config{Package: "gen", Runtime: true, GenPath: "example.com/tmp/gen", Bound: map[string]Bound{"Post": {Policy: true}}}, []string{"wrongsig"}, nil, "")
+	dir := e2eModule(t, Config{Package: "gen", Split: true, GenPath: "example.com/tmp/gen", Bound: map[string]Bound{"Post": {Policy: true}}}, []string{"wrongsig"}, nil, "")
 	out, err := tempmod.Go(dir, "vet", "./...")
 	if err == nil {
 		t.Fatal("go vet accepted a Policy method that returns a pointer")
 	}
-	if !strings.Contains(out, "(&sch.Post{}).Policy") || !strings.Contains(out, "*velox.Policy[gen.Post]") {
-		t.Errorf("the error does not name Post.Policy and the mismatched *velox.Policy[gen.Post]:\n%s", out)
+	if !strings.Contains(out, "(*sch.Post).Policy") || !strings.Contains(out, "*velox.Policy[entity.Post]") {
+		t.Errorf("the error does not name Post.Policy and the mismatched *velox.Policy[entity.Post]:\n%s", out)
 	}
-	if !strings.Contains(out, "runtime_velox.go") {
+	if !strings.Contains(out, "gen/velox.go") {
 		t.Errorf("the error is not in the generated file:\n%s", out)
 	}
 }

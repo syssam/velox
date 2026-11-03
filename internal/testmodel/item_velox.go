@@ -2,101 +2,10 @@
 
 package testmodel
 
-import (
-	"fmt"
-
-	"github.com/syssam/velox"
-)
+import "github.com/syssam/velox/internal/testmodel/entity"
 
 // Item is the entity of schema Item.
-type Item struct {
-	ID        int64              `json:"id"`
-	InvoiceID int64              `json:"invoice_id"`
-	SKU       string             `json:"SKU"`
-	Qty       int64              `json:"qty"`
-	Invoice   velox.One[Invoice] `json:"invoice,omitzero"`
-}
-
-// The positions of Item's columns, in the order of its table.
-const (
-	itemColID = iota
-	itemColInvoiceID
-	itemColSKU
-	itemColQty
-)
-
-// The positions of Item's edges.
-const (
-	itemEdgeInvoice = iota
-)
+type Item = entity.Item
 
 // Items holds the typed handles of Item's columns and relations.
-var Items = struct {
-	// ID is the column id.
-	ID velox.NumberCol[Item, int64]
-	// InvoiceID is the column invoice_id.
-	InvoiceID velox.NumberCol[Item, int64]
-	// SKU is the column sku.
-	SKU velox.StringCol[Item, string]
-	// Qty is the column qty.
-	Qty velox.NumberCol[Item, int64]
-	// Invoice is the edge invoice, to Invoice.
-	Invoice velox.Rel[Item, Invoice]
-}{
-	ID:        velox.NumberCol[Item, int64]{I: itemColID},
-	InvoiceID: velox.NumberCol[Item, int64]{I: itemColInvoiceID},
-	SKU:       velox.StringCol[Item, string]{I: itemColSKU},
-	Qty:       velox.NumberCol[Item, int64]{I: itemColQty},
-	Invoice:   velox.Rel[Item, Invoice]{I: itemEdgeInvoice},
-}
-
-var itemMeta velox.MetaOnce[Item]
-
-// VeloxMeta is called by velox, not by applications.
-func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Load(itemDescriptor) }
-
-// itemDescriptor describes Item to velox: its table, columns, edges and hooks.
-func itemDescriptor() velox.Descriptor[Item] {
-	veloxRuntime()
-	return velox.Descriptor[Item]{
-		Table: "items",
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"},
-			{Field: "InvoiceID", Name: "invoice_id"},
-			{Field: "SKU", Name: "sku"},
-			{Field: "Qty", Name: "qty"},
-		},
-		PrimaryKey: []int{itemColID},
-		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Invoice]("Invoice", itemColInvoiceID, invoiceColID),
-		},
-		FieldPtr: func(x *Item, i int) any {
-			switch i {
-			case itemColID:
-				return &x.ID
-			case itemColInvoiceID:
-				return &x.InvoiceID
-			case itemColSKU:
-				return &x.SKU
-			case itemColQty:
-				return &x.Qty
-			}
-			return nil
-		},
-		EdgeFieldPtr: func(x *Item, i int) any {
-			switch i {
-			case itemEdgeInvoice:
-				return &x.Invoice
-			}
-			return nil
-		},
-	}
-}
-
-// String returns the entity's fields.
-func (x Item) String() string {
-	return fmt.Sprintf("Item(ID=%v, InvoiceID=%v, SKU=%v, Qty=%v)", x.ID, x.InvoiceID, x.SKU, x.Qty)
-}
-
-// GoString is String, so that %#v prints the same text.
-func (x Item) GoString() string { return x.String() }
+var Items = entity.Items

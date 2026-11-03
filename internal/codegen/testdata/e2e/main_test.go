@@ -17,7 +17,7 @@ import (
 	"github.com/syssam/velox/scope"
 
 	"example.com/tmp/gen"
-	_ "example.com/tmp/gen/runtime"
+	"example.com/tmp/gen/entity"
 	"example.com/tmp/schema"
 )
 
@@ -441,7 +441,7 @@ func TestSensitiveNeverPrints(t *testing.T) {
 func TestColumnDefaultsDoNotReadTheDescriptorPerCall(t *testing.T) {
 	var sink any
 	n := 0
-	for _, c := range gen.UserDescriptor().Columns {
+	for _, c := range entity.UserDescriptor().Columns {
 		for kind, f := range map[string]func() any{"DefaultFunc": c.DefaultFunc, "UpdateDefault": c.UpdateDefault} {
 			if f == nil {
 				continue

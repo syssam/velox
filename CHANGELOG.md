@@ -125,6 +125,20 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   another signature, a lone unexported struct that embeds `schema.Schema`, and a schema file
   that only some builds include. A package that the schema's structure reaches and that does
   not compile is reported with the chain of imports. See `docs/coming-from-ent.md`.
+- A schema that declares `Policy` or `Hooks` splits the generated package. `gen/entity`
+  holds every entity, handle and descriptor, and does not import the schema package; the
+  schema imports it and writes `velox.Policy[entity.User]`. `gen` imports both, re-exports
+  every name of `gen/entity` (types as aliases, functions as wrappers) and binds the schema
+  in its `init`. `gen/runtime` is gone, and so is the blank import: a program imports `gen`.
+  A program that links `gen/entity` alone fails at an entity's first use, naming the import.
+  A schema that imports `gen`, directly or through another package, is refused at the import
+  with what to write. Plugins write into `gen/entity` then, and velox-gen re-exports their Go
+  files in `gen`. Without `Policy` or `Hooks`, `gen` is one package, as before. Errors and
+  telemetry name `gen.User` in both layouts. See `docs/decisions/0036-split-gen-for-behaviour.md`.
+- `GeneratedCodeIsVersion8`: regenerate. The generated descriptor reads an entity's
+  `Policy` and `Hooks` from its schema value by an interface assertion, and the runtime holder
+  has one schema value per entity. `Descriptor.Name`, new, names the entity in errors and
+  telemetry; velox-gen sets it to `gen.User` when the type is `entity.User`.
 - `migrate resolve -applied` and `-adopt` (`migrate.Resolve`'s `ResolveApplied` and
   `ResolveAdopted`) compare the database with what the directory says it holds after the
   version, and refuse a difference, listed as `migrate drift` lists it, unless `-force`

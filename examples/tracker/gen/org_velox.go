@@ -2,100 +2,10 @@
 
 package gen
 
-import (
-	"errors"
-	"fmt"
-	"unicode/utf8"
-
-	"github.com/syssam/velox"
-)
+import "github.com/syssam/velox/examples/tracker/gen/entity"
 
 // Org is the entity of schema Org.
-type Org struct {
-	ID   int64  `json:"id"`
-	Slug string `json:"slug"`
-	Name string `json:"name"`
-}
-
-// The positions of Org's columns, in the order of its table.
-const (
-	orgColID = iota
-	orgColSlug
-	orgColName
-)
+type Org = entity.Org
 
 // Orgs holds the typed handles of Org's columns and relations.
-var Orgs = struct {
-	// ID is the column id.
-	ID velox.NumberCol[Org, int64]
-	// Slug is the column slug.
-	Slug velox.StringCol[Org, string]
-	// Name is the column name.
-	Name velox.StringCol[Org, string]
-}{
-	ID:   velox.NumberCol[Org, int64]{I: orgColID},
-	Slug: velox.StringCol[Org, string]{I: orgColSlug},
-	Name: velox.StringCol[Org, string]{I: orgColName},
-}
-
-var orgMeta velox.MetaOnce[Org]
-
-// VeloxMeta is called by velox, not by applications.
-func (*Org) VeloxMeta() *velox.Meta[Org] { return orgMeta.Load(orgDescriptor) }
-
-// orgDescriptor describes Org to velox: its table, columns, edges and hooks.
-func orgDescriptor() velox.Descriptor[Org] {
-	veloxRuntime()
-	return velox.Descriptor[Org]{
-		Table: "orgs",
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"},
-			{Field: "Slug", Name: "slug"},
-			{Field: "Name", Name: "name"},
-		},
-		PrimaryKey: []int{orgColID},
-		Indexes: []velox.IndexInfo{
-			{Columns: []int{orgColSlug}, Unique: true}, // slug
-		},
-		FieldPtr: func(x *Org, i int) any {
-			switch i {
-			case orgColID:
-				return &x.ID
-			case orgColSlug:
-				return &x.Slug
-			case orgColName:
-				return &x.Name
-			}
-			return nil
-		},
-		Check: func(col int, v any) error {
-			switch col {
-			case orgColSlug:
-				x := v.(string)
-				if x == "" {
-					return errors.New("must not be empty")
-				}
-				if len(x) > 40 {
-					return errors.New("length is more than 40")
-				}
-			case orgColName:
-				x := v.(string)
-				if x == "" {
-					return errors.New("must not be empty")
-				}
-				if utf8.RuneCountInString(x) > 100 {
-					return errors.New("length in characters is more than 100")
-				}
-			}
-			return nil
-		},
-	}
-}
-
-// String returns the entity's fields.
-func (x Org) String() string {
-	return fmt.Sprintf("Org(ID=%v, Slug=%v, Name=%v)", x.ID, x.Slug, x.Name)
-}
-
-// GoString is String, so that %#v prints the same text.
-func (x Org) GoString() string { return x.String() }
+var Orgs = entity.Orgs

@@ -1,63 +1,67 @@
 package codegen
 
 import (
+	"maps"
+	"slices"
 	"strconv"
+	"strings"
 )
 
-// runtimeFile is the file of package runtime, below the generated package.
-const runtimeFile = "runtime/runtime_velox.go"
-
-// runtimeNeeds reports what e takes from the runtime: its schema, read for
-// defaults and validators, and the Hooks and Policy the schema package
-// declares for it.
-func runtimeNeeds(e *OutEntity) (schema, hooks, policy bool) {
-	return e.NeedsSch, e.Bound.Hooks, e.Bound.Policy
+// runtimeValue reports whether entity e reads a value of its schema at run
+// time: for its defaults and validators, or for the Hooks and Policy the
+// schema package declares for it.
+func runtimeValue(e *OutEntity) bool {
+	return e.NeedsSch || e.Bound.Hooks || e.Bound.Policy
 }
 
-// renderRuntimeHolder writes runtime_velox.go: the type VeloxRuntime, which
-// package runtime fills, the function it calls with it, and veloxRuntime,
-// which every Descriptor function calls first.
+// renderRuntimeHolder writes entity/runtime_velox.go in split mode: the type
+// VeloxRuntime, one schema value per entity that reads one, which package gen
+// fills; SetVeloxRuntime, which gen calls with it; veloxRuntime, which every
+// Descriptor function calls first; and the functions that read the Policy
+// and Hooks methods from a schema value.
 func renderRuntimeHolder(o *Out) string {
+	schemas, policy, hooks := false, false, false
+	for _, e := range o.Entities {
+		schemas = schemas || (runtimeValue(e) && !e.Join)
+		policy = policy || e.Bound.Policy
+		hooks = hooks || e.Bound.Hooks
+	}
+	genImport := strconv.Quote(o.GenPath)
 	var w writer
 	w.WriteString(header)
 	w.p("package %s", o.Package)
 	w.p("")
-	schemas := false
-	for _, e := range o.Entities {
-		schemas = schemas || e.NeedsSch
-	}
 	w.p("import (")
-	w.p("%s", strconv.Quote("github.com/syssam/velox"))
+	if policy || hooks {
+		w.p(`"fmt"`)
+		w.p("")
+		w.p(`"github.com/syssam/velox"`)
+	}
 	if schemas {
-		w.p("%s", strconv.Quote("github.com/syssam/velox/schema"))
+		w.p(`"github.com/syssam/velox/schema"`)
 	}
 	w.p(")")
 	w.p("")
-	w.p("// VeloxRuntime is what %s takes from the schema package when the program", o.Package)
-	w.p("// starts: the schemas, whose defaults and validators the entities read, and")
-	w.p("// the Hooks and Policy methods the schema package declares. The schema")
-	w.p("// package imports %s, so %s cannot import it: package runtime fills", o.Package, o.Package)
-	w.p("// VeloxRuntime. Applications import that package, and do not use this type:")
-	w.p("//")
-	w.p("//	import _ %s", strconv.Quote(o.GenPath+"/runtime"))
+	w.p("// VeloxRuntime is what package %s gives package %s when the program", o.Facade, o.Package)
+	w.p("// starts: a value of each schema whose defaults, validators, Hooks or")
+	w.p("// Policy an entity reads. A join entity's value is the struct of its name")
+	w.p("// in the schema package. The schema package imports %s, so %[1]s cannot", o.Package)
+	w.p("// import it. Applications do not use this type: they import %s.", genImport)
 	w.p("type VeloxRuntime struct {")
 	for _, e := range o.Entities {
-		schema, hooks, policy := runtimeNeeds(e)
-		if schema {
+		switch {
+		case !runtimeValue(e):
+		case e.Join:
+			w.p("%s any", e.Name)
+		default:
 			w.p("%s schema.Interface", e.Name)
-		}
-		if hooks {
-			w.p("%sHooks func() []velox.Hook[%s]", e.Name, e.Name)
-		}
-		if policy {
-			w.p("%sPolicy func() velox.Policy[%s]", e.Name, e.Name)
 		}
 	}
 	w.p("}")
 	w.p("")
 	w.p("var veloxRT *VeloxRuntime")
 	w.p("")
-	w.p("// SetVeloxRuntime is called by package runtime, once, when the program")
+	w.p("// SetVeloxRuntime is called by package %s, once, when the program", o.Facade)
 	w.p("// starts; applications do not call it. A second call panics.")
 	w.p("func SetVeloxRuntime(r VeloxRuntime) {")
 	w.p("if veloxRT != nil {")
@@ -66,56 +70,132 @@ func renderRuntimeHolder(o *Out) string {
 	w.p("veloxRT = &r")
 	w.p("}")
 	w.p("")
-	w.p("// veloxRuntime returns what package runtime set. It panics when the program")
-	w.p("// does not link package runtime: the entities would run without the")
+	w.p("// veloxRuntime returns what package %s set. It panics when the program", o.Facade)
+	w.p("// does not link package %s: the entities would run without the", o.Facade)
 	w.p("// schema's hooks, policies and defaults.")
 	w.p("func veloxRuntime() *VeloxRuntime {")
 	w.p("if veloxRT == nil {")
-	w.p("panic(%s)", strconv.Quote(o.Package+": the schema's hooks, policies and defaults are not linked: import _ "+strconv.Quote(o.GenPath+"/runtime")+" in package main, and in the tests that use "+o.Package))
+	w.p("panic(%s)", strconv.Quote(o.Package+": the schema's hooks, policies and defaults are not linked: import "+
+		genImport+", which re-exports "+strconv.Quote(o.GenPath+"/"+EntityDir)+" and links the schema, in the program or test"))
 	w.p("}")
 	w.p("return veloxRT")
 	w.p("}")
+	if policy {
+		w.p("")
+		w.p("// veloxPolicy returns the Policy method of s, the schema value of the")
+		w.p("// entity name. It panics, naming the method, when s has none of its type.")
+		w.p("func veloxPolicy[E any](s any, name string) func() velox.Policy[E] {")
+		w.p("if m, ok := s.(interface{ Policy() velox.Policy[E] }); ok {")
+		w.p("return m.Policy")
+		w.p("}")
+		w.p("panic(fmt.Sprintf(%s, s, name))", strconv.Quote(o.Package+": %T, the schema of %s, has no method Policy() velox.Policy["+o.Package+".%[2]s]: run velox-gen"))
+		w.p("}")
+	}
+	if hooks {
+		w.p("")
+		w.p("// veloxHooks returns the Hooks method of s, the schema value of the")
+		w.p("// entity name. It panics, naming the method, when s has none of its type.")
+		w.p("func veloxHooks[E any](s any, name string) func() []velox.Hook[E] {")
+		w.p("if m, ok := s.(interface{ Hooks() []velox.Hook[E] }); ok {")
+		w.p("return m.Hooks")
+		w.p("}")
+		w.p("panic(fmt.Sprintf(%s, s, name))", strconv.Quote(o.Package+": %T, the schema of %s, has no method Hooks() []velox.Hook["+o.Package+".%[2]s]: run velox-gen"))
+		w.p("}")
+	}
 	return w.String()
 }
 
-// renderRuntime writes runtime/runtime_velox.go, package runtime, whose init
-// gives the generated package the schemas and their methods.
-func renderRuntime(o *Out) string {
-	gen, sch := o.Package, "sch"
-	if gen == sch {
-		sch = "schemapkg"
+// renderFacade writes the head of velox.go in split mode, package gen: the
+// package comment, the imports, the checks of the schema's methods, and the
+// init that gives package entity the schema's values. imports are the
+// imports the re-exports of entity.go that follow need, by name; decls are
+// those re-exports.
+func renderFacade(o *Out, imports map[string]string, decls string) string {
+	values, bound := false, false
+	for _, e := range o.Entities {
+		values = values || runtimeValue(e)
+		bound = bound || e.Bound.Policy || e.Bound.Hooks
 	}
+	entityPath := o.GenPath + "/" + EntityDir
 	var w writer
 	w.WriteString(header)
-	w.p("// Package runtime gives %s what it takes from the schema package: the", o.Package)
-	w.p("// schemas and the Hooks and Policy methods they declare. Import it, for its")
-	w.p("// effect, in package main and in the tests that use %s:", o.Package)
-	w.p("//")
-	w.p("//\timport _ %s", strconv.Quote(o.GenPath+"/runtime"))
-	w.p("//")
-	w.p("// %s panics at the first use of an entity when it is not linked.", o.Package)
-	w.p("package runtime")
+	if !o.UserDoc {
+		w.p("// Package %s holds the entities of %s, generated by velox-gen.", o.Facade, o.SchemaPath)
+		w.p("// They are declared in package %s, which the schema package imports for", EntityDir)
+		w.p("// the types of its Hooks and Policy methods. %s re-exports every name", o.Facade)
+		w.p("// %s declares, and gives %[1]s the schema's values when the program", EntityDir)
+		w.p("// starts. A program imports %s, which links the schema.", o.Facade)
+	}
+	w.p("package %s", o.Facade)
 	w.p("")
-	w.p("import (")
-	w.p("%s %s", gen, strconv.Quote(o.GenPath))
-	w.p("%s %s", sch, strconv.Quote(o.SchemaPath))
-	w.p(")")
+	all := map[string]string{"velox": "github.com/syssam/velox", EntityDir: entityPath}
+	if values {
+		all["sch"] = o.SchemaPath
+	}
+	maps.Copy(all, imports)
+	writeImports(&w, all)
+	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
+	if bound {
+		w.p("")
+		w.p("// The schema's Hooks and Policy methods, of the types %s binds.", EntityDir)
+		w.p("var (")
+		for _, e := range o.Entities {
+			if e.Bound.Policy {
+				w.p("_ func(*sch.%s) velox.Policy[%s.%[1]s] = (*sch.%[1]s).Policy", e.Name, EntityDir)
+			}
+			if e.Bound.Hooks {
+				w.p("_ func(*sch.%s) []velox.Hook[%s.%[1]s] = (*sch.%[1]s).Hooks", e.Name, EntityDir)
+			}
+		}
+		w.p(")")
+	}
 	w.p("")
 	w.p("func init() {")
-	w.p("%s.SetVeloxRuntime(%s.VeloxRuntime{", gen, gen)
+	w.p("%s.SetVeloxRuntime(%[1]s.VeloxRuntime{", EntityDir)
 	for _, e := range o.Entities {
-		schema, hooks, policy := runtimeNeeds(e)
-		if schema {
-			w.p("%s: &%s.%s{},", e.Name, sch, e.Name)
-		}
-		if hooks {
-			w.p("%sHooks: (&%s.%s{}).Hooks,", e.Name, sch, e.Name)
-		}
-		if policy {
-			w.p("%sPolicy: (&%s.%s{}).Policy,", e.Name, sch, e.Name)
+		if runtimeValue(e) {
+			w.p("%s: &sch.%[1]s{},", e.Name)
 		}
 	}
 	w.p("})")
 	w.p("}")
+	w.WriteString(decls)
 	return w.String()
+}
+
+// writeImports writes the import declaration of imports, by name: the
+// standard packages first, then the others. A name that is the last element
+// of its path is left out.
+func writeImports(w *writer, imports map[string]string) {
+	var std, other []string
+	for n, p := range imports {
+		spec := strconv.Quote(p)
+		if guessName(p) != n {
+			spec = n + " " + spec
+		}
+		if first, _, _ := strings.Cut(p, "/"); strings.Contains(first, ".") {
+			other = append(other, spec)
+		} else {
+			std = append(std, spec)
+		}
+	}
+	slices.Sort(std)
+	slices.Sort(other)
+	if len(std)+len(other) == 1 {
+		w.p("import %s", slices.Concat(std, other)[0])
+		w.p("")
+		return
+	}
+	w.p("import (")
+	for _, s := range std {
+		w.p("%s", s)
+	}
+	if len(std) > 0 && len(other) > 0 {
+		w.p("")
+	}
+	for _, s := range other {
+		w.p("%s", s)
+	}
+	w.p(")")
+	w.p("")
 }

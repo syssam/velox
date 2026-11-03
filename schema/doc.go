@@ -48,31 +48,30 @@
 //
 // which writes the package ./gen. Nothing in a schema runs at program start.
 // A schema also declares its entity's behaviour, as ent's do: the methods
-// Policy and Hooks, typed with the generated entity and handles:
+// Policy and Hooks, typed with the generated entity and handles of package
+// gen/entity:
 //
-//	func (User) Policy() velox.Policy[gen.User] {
-//		return velox.Policy[gen.User]{
-//			Read: func(ctx context.Context) (velox.Pred[gen.User], error) {
-//				return gen.Users.DeletedAt.IsNull(), nil
+//	func (User) Policy() velox.Policy[entity.User] {
+//		return velox.Policy[entity.User]{
+//			Read: func(ctx context.Context) (velox.Pred[entity.User], error) {
+//				return entity.Users.DeletedAt.IsNull(), nil
 //			},
 //		}
 //	}
 //
-//	func (User) Hooks() []velox.Hook[gen.User] { ... }
+//	func (User) Hooks() []velox.Hook[entity.User] { ... }
 //
-// The method takes nothing and returns velox.Policy[gen.E] or
-// []velox.Hook[gen.E], E being the schema; velox-gen refuses another shape.
-// A many-to-many join entity has no schema: declare an empty struct of its
-// name, type UserFriend struct{}, and the methods on it.
+// The method takes nothing and returns velox.Policy[entity.E] or
+// []velox.Hook[entity.E], E being the schema; velox-gen refuses another
+// shape. A many-to-many join entity has no schema: declare an empty struct
+// of its name, type UserFriend struct{}, and the methods on it.
 //
-// The schema package then imports gen, so gen cannot import it: velox-gen
-// writes the package gen/runtime, which gives gen the schemas and their
-// methods when the program starts. Import it in package main, and in the
-// tests that use gen:
-//
-//	import _ "example.com/app/gen/runtime"
-//
-// gen fails at its first use of an entity when it is not linked, rather than
-// run without the policies. velox-gen reads the schema without these methods
-// and what only they use, so it generates even when gen is stale or missing.
+// velox-gen then writes the entities into gen/entity, which does not import
+// the schema package. gen re-exports every name of gen/entity, and its init
+// gives gen/entity the schemas. A program imports gen as it would without
+// behaviour. A program that links gen/entity without gen fails at its first
+// use of an entity, rather than run without the policies. The schema package
+// may not import gen, directly or through another package, as gen imports
+// it. velox-gen reads the schema without these methods and what only they
+// use, so it generates even when gen is stale or missing.
 package schema

@@ -19,7 +19,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tour/gen"
-	_ "github.com/syssam/velox/examples/tour/gen/runtime" // binds the schema's policies and hooks into gen
 	"github.com/syssam/velox/examples/tour/role"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/scope"

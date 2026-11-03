@@ -10,6 +10,7 @@ import (
 // DescriptorFields are the fields of a Descriptor that do not depend on E, so that
 // BuildDescriptor, which uses reflect, need not be generic.
 type DescriptorFields struct {
+	Name       string // the entity's name; "" for its Go type
 	Table      string
 	Schema     string
 	Columns    []ColumnDescriptor
@@ -44,6 +45,9 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 	}()
 	v := load()
 	d := v.D
+	if d.Name != "" {
+		name = d.Name
+	}
 	fail := func(field, format string, args ...any) (*EntityInfo, error) {
 		return nil, &SchemaError{Entity: name, Field: field, Reason: fmt.Sprintf(format, args...)}
 	}
@@ -211,10 +215,10 @@ func holdsInterface(t reflect.Type) bool {
 func unboundMethods(t reflect.Type, d *DescriptorFields) error {
 	pt := reflect.PointerTo(t)
 	if _, ok := pt.MethodByName("Policy"); ok && !d.Policy {
-		return &SchemaError{Entity: t.String(), Reason: "has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares, through package runtime"}
+		return &SchemaError{Entity: t.String(), Reason: "has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
 	}
 	if _, ok := pt.MethodByName("Hooks"); ok && !d.Hooks {
-		return &SchemaError{Entity: t.String(), Reason: "has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares, through package runtime"}
+		return &SchemaError{Entity: t.String(), Reason: "has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
 	}
 	return nil
 }

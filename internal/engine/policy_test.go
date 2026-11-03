@@ -5,7 +5,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
-	_ "github.com/syssam/velox/internal/testmodel/runtime" // binds the schema's policies and hooks
 )
 
 func TestTicketMetadata(t *testing.T) {

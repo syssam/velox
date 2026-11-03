@@ -2,105 +2,10 @@
 
 package gen
 
-import (
-	"fmt"
-
-	"github.com/syssam/velox"
-)
+import "example.com/blog/gen/entity"
 
 // Category is the entity of schema Category.
-type Category struct {
-	ID               int64                `json:"id"`
-	Title            string               `json:"title"`
-	CategoryChildren *int64               `json:"-"`
-	Children         velox.Many[Category] `json:"children,omitzero"`
-	Parent           velox.One[Category]  `json:"parent,omitzero"`
-}
-
-// The positions of Category's columns, in the order of its table.
-const (
-	categoryColID = iota
-	categoryColTitle
-	categoryColCategoryChildren
-)
-
-// The positions of Category's edges.
-const (
-	categoryEdgeChildren = iota
-	categoryEdgeParent
-)
+type Category = entity.Category
 
 // Categories holds the typed handles of Category's columns and relations.
-var Categories = struct {
-	// ID is the column id.
-	ID velox.NumberCol[Category, int64]
-	// Title is the column title.
-	Title velox.StringCol[Category, string]
-	// CategoryChildren is the column category_children.
-	CategoryChildren velox.NullNumberCol[Category, int64]
-	// Children is the edge children, to Category.
-	Children velox.Rel[Category, Category]
-	// Parent is the edge parent, to Category.
-	Parent velox.Rel[Category, Category]
-}{
-	ID:               velox.NumberCol[Category, int64]{I: categoryColID},
-	Title:            velox.StringCol[Category, string]{I: categoryColTitle},
-	CategoryChildren: velox.NullNumberCol[Category, int64]{I: categoryColCategoryChildren},
-	Children:         velox.Rel[Category, Category]{I: categoryEdgeChildren},
-	Parent:           velox.Rel[Category, Category]{I: categoryEdgeParent},
-}
-
-var categoryMeta velox.MetaOnce[Category]
-
-// VeloxMeta is called by velox, not by applications.
-func (*Category) VeloxMeta() *velox.Meta[Category] { return categoryMeta.Load(categoryDescriptor) }
-
-// categoryDescriptor describes Category to velox: its table, columns, edges and hooks.
-func categoryDescriptor() velox.Descriptor[Category] {
-	veloxRuntime()
-	return velox.Descriptor[Category]{
-		Table:  "categories",
-		Schema: "blog",
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"},
-			{Field: "Title", Name: "title"},
-			{Field: "CategoryChildren", Name: "category_children"},
-		},
-		PrimaryKey: []int{categoryColID},
-		Indexes: []velox.IndexInfo{
-			{Columns: []int{categoryColTitle, categoryColCategoryChildren}}, // title, category_children
-		},
-		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Category]("Children", categoryColID, categoryColCategoryChildren),
-			velox.EdgeTo[Category]("Parent", categoryColCategoryChildren, categoryColID),
-		},
-		FieldPtr: func(x *Category, i int) any {
-			switch i {
-			case categoryColID:
-				return &x.ID
-			case categoryColTitle:
-				return &x.Title
-			case categoryColCategoryChildren:
-				return &x.CategoryChildren
-			}
-			return nil
-		},
-		EdgeFieldPtr: func(x *Category, i int) any {
-			switch i {
-			case categoryEdgeChildren:
-				return &x.Children
-			case categoryEdgeParent:
-				return &x.Parent
-			}
-			return nil
-		},
-	}
-}
-
-// String returns the entity's fields except the sensitive ones and the foreign keys velox added.
-func (x Category) String() string {
-	return fmt.Sprintf("Category(ID=%v, Title=%v)", x.ID, x.Title)
-}
-
-// GoString is String, so that %#v does not print them either.
-func (x Category) GoString() string { return x.String() }
+var Categories = entity.Categories

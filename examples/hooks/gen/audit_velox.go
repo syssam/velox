@@ -2,74 +2,10 @@
 
 package gen
 
-import (
-	"fmt"
-
-	"github.com/syssam/velox"
-)
+import "github.com/syssam/velox/examples/hooks/gen/entity"
 
 // Audit is the entity of schema Audit.
-type Audit struct {
-	ID      int64  `json:"id"`
-	Actor   string `json:"actor"`
-	Message string `json:"message"`
-}
-
-// The positions of Audit's columns, in the order of its table.
-const (
-	auditColID = iota
-	auditColActor
-	auditColMessage
-)
+type Audit = entity.Audit
 
 // Audits holds the typed handles of Audit's columns and relations.
-var Audits = struct {
-	// ID is the column id.
-	ID velox.NumberCol[Audit, int64]
-	// Actor is the column actor.
-	Actor velox.StringCol[Audit, string]
-	// Message is the column message.
-	Message velox.StringCol[Audit, string]
-}{
-	ID:      velox.NumberCol[Audit, int64]{I: auditColID},
-	Actor:   velox.StringCol[Audit, string]{I: auditColActor},
-	Message: velox.StringCol[Audit, string]{I: auditColMessage},
-}
-
-var auditMeta velox.MetaOnce[Audit]
-
-// VeloxMeta is called by velox, not by applications.
-func (*Audit) VeloxMeta() *velox.Meta[Audit] { return auditMeta.Load(auditDescriptor) }
-
-// auditDescriptor describes Audit to velox: its table, columns, edges and hooks.
-func auditDescriptor() velox.Descriptor[Audit] {
-	veloxRuntime()
-	return velox.Descriptor[Audit]{
-		Table: "audits",
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"},
-			{Field: "Actor", Name: "actor"},
-			{Field: "Message", Name: "message"},
-		},
-		PrimaryKey: []int{auditColID},
-		FieldPtr: func(x *Audit, i int) any {
-			switch i {
-			case auditColID:
-				return &x.ID
-			case auditColActor:
-				return &x.Actor
-			case auditColMessage:
-				return &x.Message
-			}
-			return nil
-		},
-	}
-}
-
-// String returns the entity's fields.
-func (x Audit) String() string {
-	return fmt.Sprintf("Audit(ID=%v, Actor=%v, Message=%v)", x.ID, x.Actor, x.Message)
-}
-
-// GoString is String, so that %#v prints the same text.
-func (x Audit) GoString() string { return x.String() }
+var Audits = entity.Audits

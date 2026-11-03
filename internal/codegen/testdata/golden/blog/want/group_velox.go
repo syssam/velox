@@ -2,94 +2,10 @@
 
 package gen
 
-import (
-	"fmt"
-
-	"github.com/syssam/velox"
-)
+import "example.com/blog/gen/entity"
 
 // Group is the entity of schema Group.
-type Group struct {
-	ID    int64            `json:"id"`
-	Name  string           `json:"name"`
-	Token string           `json:"token"`
-	Users velox.Many[User] `json:"users,omitzero"`
-}
-
-// The positions of Group's columns, in the order of its table.
-const (
-	groupColID = iota
-	groupColName
-	groupColToken
-)
-
-// The positions of Group's edges.
-const (
-	groupEdgeUsers = iota
-)
+type Group = entity.Group
 
 // Groups holds the typed handles of Group's columns and relations.
-var Groups = struct {
-	// ID is the column id.
-	ID velox.NumberCol[Group, int64]
-	// Name is the column name.
-	Name velox.StringCol[Group, string]
-	// Token is the column token.
-	Token velox.StringCol[Group, string]
-	// Users is the edge users, to User.
-	Users velox.Rel[Group, User]
-}{
-	ID:    velox.NumberCol[Group, int64]{I: groupColID},
-	Name:  velox.StringCol[Group, string]{I: groupColName},
-	Token: velox.StringCol[Group, string]{I: groupColToken},
-	Users: velox.Rel[Group, User]{I: groupEdgeUsers},
-}
-
-var groupMeta velox.MetaOnce[Group]
-
-// VeloxMeta is called by velox, not by applications.
-func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDescriptor) }
-
-// groupDescriptor describes Group to velox: its table, columns, edges and hooks.
-func groupDescriptor() velox.Descriptor[Group] {
-	rt := veloxRuntime()
-	d0 := rt.Group.Fields()[1].Descriptor().DefaultFunc.(func() string)
-	return velox.Descriptor[Group]{
-		Table: "groups",
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"},
-			{Field: "Name", Name: "name"},
-			{Field: "Token", Name: "token", DefaultFunc: func() any { return d0() }},
-		},
-		PrimaryKey: []int{groupColID},
-		Edges: []velox.EdgeDescriptor{
-			velox.EdgeThrough[UserGroup, User]("Users", groupColID, userGroupColGroupID, userGroupColUserID, userColID),
-		},
-		FieldPtr: func(x *Group, i int) any {
-			switch i {
-			case groupColID:
-				return &x.ID
-			case groupColName:
-				return &x.Name
-			case groupColToken:
-				return &x.Token
-			}
-			return nil
-		},
-		EdgeFieldPtr: func(x *Group, i int) any {
-			switch i {
-			case groupEdgeUsers:
-				return &x.Users
-			}
-			return nil
-		},
-	}
-}
-
-// String returns the entity's fields.
-func (x Group) String() string {
-	return fmt.Sprintf("Group(ID=%v, Name=%v, Token=%v)", x.ID, x.Name, x.Token)
-}
-
-// GoString is String, so that %#v prints the same text.
-func (x Group) GoString() string { return x.String() }
+var Groups = entity.Groups

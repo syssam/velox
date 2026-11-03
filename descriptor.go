@@ -10,6 +10,11 @@ import (
 // entity's first use. For generated code. Its column order is the scan order.
 // EntityInfo is its runtime view.
 type Descriptor[E any] struct {
+	// Name is the entity's name in errors and telemetry. velox-gen sets it
+	// when the type is declared in another package than the one programs
+	// import, gen/entity, so that the name is gen.User either way. Empty, it
+	// is the Go type, e.g. billing.Invoice.
+	Name       string
 	Table      string
 	Schema     string // the schema (PostgreSQL) or database holding Table; "" for the default
 	Columns    []ColumnDescriptor
@@ -46,11 +51,11 @@ type Descriptor[E any] struct {
 	Check func(col int, v any) error
 
 	// Policy and Hooks bind the entity's policy and hooks, when it has them.
-	// velox-gen binds those its schema declares, which package runtime gives
-	// it, rt being what veloxRuntime returns:
+	// velox-gen binds those its schema declares, policy and hooks being the
+	// schema's methods:
 	//
-	//	Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.EPolicy()) },
-	//	Hooks:  func() velox.BoundHooks  { return velox.BindHooks(rt.EHooks()) },
+	//	Policy: func() velox.BoundPolicy { return velox.BindPolicy(policy()) },
+	//	Hooks:  func() velox.BoundHooks  { return velox.BindHooks(hooks()) },
 	//
 	// An entity written by hand binds its own methods the same way,
 	// velox.BindPolicy((*E)(nil).Policy()). The field is nil when the entity has none, so that an
@@ -88,7 +93,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 		var d Descriptor[E]
 		info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
 			d = descriptor()
-			v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
+			v := engine.DescriptorView{D: &engine.DescriptorFields{Name: d.Name, Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
 				Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
 				Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
 			if a := d.FieldPtr; a != nil {

@@ -253,12 +253,12 @@ import (
 
 	"github.com/syssam/velox"
 
-	"example.com/app/gen"
+	"example.com/app/gen/entity"
 )
 
-func (Member) Policy() velox.Policy[gen.Member] {
-	return velox.Policy[gen.Member]{Read: func(context.Context) (velox.Pred[gen.Member], error) {
-		return gen.Members.Name.NEQ("hidden"), nil
+func (Member) Policy() velox.Policy[entity.Member] {
+	return velox.Policy[entity.Member]{Read: func(context.Context) (velox.Pred[entity.Member], error) {
+		return entity.Members.Name.NEQ("hidden"), nil
 	}}
 }
 `
@@ -271,23 +271,23 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
 
-	"example.com/app/gen"
+	"example.com/app/gen/entity"
 )
 
 var OrgKey = scope.NewKey[int64]("org")
 
 var (
-	postScope   = scope.By(OrgKey, gen.Posts.OrgID.EQ, func(x *gen.Post) *int64 { return &x.OrgID })
-	ticketScope = scope.By(OrgKey, gen.Tickets.OrgID.EQ, func(x *gen.Ticket) *int64 { return &x.OrgID })
-	remarkScope = scope.By(OrgKey, gen.Remarks.OrgID.EQ, func(x *gen.Remark) *int64 { return &x.OrgID })
+	postScope   = scope.By(OrgKey, entity.Posts.OrgID.EQ, func(x *entity.Post) *int64 { return &x.OrgID })
+	ticketScope = scope.By(OrgKey, entity.Tickets.OrgID.EQ, func(x *entity.Ticket) *int64 { return &x.OrgID })
+	remarkScope = scope.By(OrgKey, entity.Remarks.OrgID.EQ, func(x *entity.Remark) *int64 { return &x.OrgID })
 )
 
-func (Post) Policy() velox.Policy[gen.Post]     { return postScope.Policy() }
-func (Post) Hooks() []velox.Hook[gen.Post]      { return []velox.Hook[gen.Post]{postScope.Fill()} }
-func (Ticket) Policy() velox.Policy[gen.Ticket] { return ticketScope.Policy() }
-func (Ticket) Hooks() []velox.Hook[gen.Ticket]  { return []velox.Hook[gen.Ticket]{ticketScope.Fill()} }
-func (Remark) Policy() velox.Policy[gen.Remark] { return remarkScope.Policy() }
-func (Remark) Hooks() []velox.Hook[gen.Remark]  { return []velox.Hook[gen.Remark]{remarkScope.Fill()} }
+func (Post) Policy() velox.Policy[entity.Post]     { return postScope.Policy() }
+func (Post) Hooks() []velox.Hook[entity.Post]      { return []velox.Hook[entity.Post]{postScope.Fill()} }
+func (Ticket) Policy() velox.Policy[entity.Ticket] { return ticketScope.Policy() }
+func (Ticket) Hooks() []velox.Hook[entity.Ticket]  { return []velox.Hook[entity.Ticket]{ticketScope.Fill()} }
+func (Remark) Policy() velox.Policy[entity.Remark] { return remarkScope.Policy() }
+func (Remark) Hooks() []velox.Hook[entity.Remark]  { return []velox.Hook[entity.Remark]{remarkScope.Fill()} }
 `
 
 // e2eLimitsResolvers are the resolvers TestLimitsServed uses, one line each;
@@ -459,7 +459,6 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	_ "modernc.org/sqlite"
 
-	_ "example.com/app/gen/runtime"
 	"example.com/app/graph"
 	"example.com/app/schema"
 	"github.com/syssam/velox"

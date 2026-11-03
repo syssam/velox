@@ -8,19 +8,19 @@ import (
 
 	"github.com/syssam/velox"
 
-	"example.com/tmp/gen"
+	"example.com/tmp/gen/entity"
 )
 
 // HookRuns counts the inserts of Users that the hook saw.
 var HookRuns atomic.Int64
 
 // Hooks gives every inserted User without a nickname the nickname "hooked".
-func (User) Hooks() []velox.Hook[gen.User] {
-	return []velox.Hook[gen.User]{velox.On(nickname, velox.OpInsert)}
+func (User) Hooks() []velox.Hook[entity.User] {
+	return []velox.Hook[entity.User]{velox.On(nickname, velox.OpInsert)}
 }
 
-func nickname(next velox.Mutator[gen.User]) velox.Mutator[gen.User] {
-	return velox.MutateFunc[gen.User](func(ctx context.Context, m *velox.Mutation[gen.User]) error {
+func nickname(next velox.Mutator[entity.User]) velox.Mutator[entity.User] {
+	return velox.MutateFunc[entity.User](func(ctx context.Context, m *velox.Mutation[entity.User]) error {
 		HookRuns.Add(1)
 		for _, x := range m.Rows() {
 			if x.Nickname == "" {

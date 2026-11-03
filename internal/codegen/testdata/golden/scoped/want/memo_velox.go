@@ -2,68 +2,10 @@
 
 package gen
 
-import (
-	"fmt"
-
-	"github.com/syssam/velox"
-)
+import "example.com/scoped/gen/entity"
 
 // Memo is the entity of schema Memo.
-type Memo struct {
-	ID    int64 `json:"id"`
-	OrgID int64 `json:"org_id"`
-}
-
-// The positions of Memo's columns, in the order of its table.
-const (
-	memoColID = iota
-	memoColOrgID
-)
+type Memo = entity.Memo
 
 // Memos holds the typed handles of Memo's columns and relations.
-var Memos = struct {
-	// ID is the column id.
-	ID velox.NumberCol[Memo, int64]
-	// OrgID is the column org_id.
-	OrgID velox.NumberCol[Memo, int64]
-}{
-	ID:    velox.NumberCol[Memo, int64]{I: memoColID},
-	OrgID: velox.NumberCol[Memo, int64]{I: memoColOrgID},
-}
-
-var memoMeta velox.MetaOnce[Memo]
-
-// VeloxMeta is called by velox, not by applications.
-func (*Memo) VeloxMeta() *velox.Meta[Memo] { return memoMeta.Load(memoDescriptor) }
-
-// memoDescriptor describes Memo to velox: its table, columns, edges and hooks.
-func memoDescriptor() velox.Descriptor[Memo] {
-	rt := veloxRuntime()
-	return velox.Descriptor[Memo]{
-		Table: "memos",
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"},
-			{Field: "OrgID", Name: "org_id", Immutable: true},
-		},
-		PrimaryKey: []int{memoColID},
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy(memoScope.Wrap(rt.MemoPolicy())) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Memo]{memoScope.Fill()}) },
-		FieldPtr: func(x *Memo, i int) any {
-			switch i {
-			case memoColID:
-				return &x.ID
-			case memoColOrgID:
-				return &x.OrgID
-			}
-			return nil
-		},
-	}
-}
-
-// String returns the entity's fields.
-func (x Memo) String() string {
-	return fmt.Sprintf("Memo(ID=%v, OrgID=%v)", x.ID, x.OrgID)
-}
-
-// GoString is String, so that %#v prints the same text.
-func (x Memo) GoString() string { return x.String() }
+var Memos = entity.Memos

@@ -172,14 +172,14 @@ func (*Card) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("board", Board.Type).Ref("cards").Unique()}
 }
 `,
-		"schema/board_policy.go": "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen\"\n)\n\n" +
-			"func (*Board) Policy() velox.Policy[gen.Board] { return velox.Policy[gen.Board]{} }\n\n" +
-			"func (*Card) Hooks() []velox.Hook[gen.Card] { return nil }\n",
+		"schema/board_policy.go": "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen/entity\"\n)\n\n" +
+			"func (*Board) Policy() velox.Policy[entity.Board] { return velox.Policy[entity.Board]{} }\n\n" +
+			"func (*Card) Hooks() []velox.Hook[entity.Card] { return nil }\n",
 	}, tempModule)
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	board, _ := os.ReadFile(filepath.Join(dir, "gen", "board_velox.go"))
+	board, _ := os.ReadFile(filepath.Join(dir, "gen", "entity", "board_velox.go"))
 	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "BindPolicy"} {
 		if !strings.Contains(string(board), want) {
 			t.Errorf("board_velox.go lacks %q:\n%s", want, board)

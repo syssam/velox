@@ -2,94 +2,10 @@
 
 package gen
 
-import (
-	"fmt"
-
-	"github.com/syssam/velox"
-)
+import "github.com/syssam/velox/examples/policy/gen/entity"
 
 // Comment is the entity of schema Comment.
-type Comment struct {
-	ID    int64          `json:"id"`
-	DocID int64          `json:"doc_id"`
-	Body  string         `json:"body"`
-	Doc   velox.One[Doc] `json:"doc,omitzero"`
-}
-
-// The positions of Comment's columns, in the order of its table.
-const (
-	commentColID = iota
-	commentColDocID
-	commentColBody
-)
-
-// The positions of Comment's edges.
-const (
-	commentEdgeDoc = iota
-)
+type Comment = entity.Comment
 
 // Comments holds the typed handles of Comment's columns and relations.
-var Comments = struct {
-	// ID is the column id.
-	ID velox.NumberCol[Comment, int64]
-	// DocID is the column doc_id.
-	DocID velox.NumberCol[Comment, int64]
-	// Body is the column body.
-	Body velox.StringCol[Comment, string]
-	// Doc is the edge doc, to Doc.
-	Doc velox.Rel[Comment, Doc]
-}{
-	ID:    velox.NumberCol[Comment, int64]{I: commentColID},
-	DocID: velox.NumberCol[Comment, int64]{I: commentColDocID},
-	Body:  velox.StringCol[Comment, string]{I: commentColBody},
-	Doc:   velox.Rel[Comment, Doc]{I: commentEdgeDoc},
-}
-
-var commentMeta velox.MetaOnce[Comment]
-
-// VeloxMeta is called by velox, not by applications.
-func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDescriptor) }
-
-// commentDescriptor describes Comment to velox: its table, columns, edges and hooks.
-func commentDescriptor() velox.Descriptor[Comment] {
-	rt := veloxRuntime()
-	return velox.Descriptor[Comment]{
-		Table: "comments",
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"},
-			{Field: "DocID", Name: "doc_id"},
-			{Field: "Body", Name: "body"},
-		},
-		PrimaryKey: []int{commentColID},
-		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Doc]("Doc", commentColDocID, docColID),
-		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.CommentPolicy()) },
-		FieldPtr: func(x *Comment, i int) any {
-			switch i {
-			case commentColID:
-				return &x.ID
-			case commentColDocID:
-				return &x.DocID
-			case commentColBody:
-				return &x.Body
-			}
-			return nil
-		},
-		EdgeFieldPtr: func(x *Comment, i int) any {
-			switch i {
-			case commentEdgeDoc:
-				return &x.Doc
-			}
-			return nil
-		},
-	}
-}
-
-// String returns the entity's fields.
-func (x Comment) String() string {
-	return fmt.Sprintf("Comment(ID=%v, DocID=%v, Body=%v)", x.ID, x.DocID, x.Body)
-}
-
-// GoString is String, so that %#v prints the same text.
-func (x Comment) GoString() string { return x.String() }
+var Comments = entity.Comments

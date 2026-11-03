@@ -34,8 +34,11 @@ var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": tr
 func Lower(g *Graph, cfg Config) (*Out, error) {
 	l := &lowerer{
 		g: g, cfg: cfg,
-		out:   &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc, Runtime: cfg.Runtime || len(cfg.Bound) > 0, GenPath: cfg.GenPath},
+		out:   &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc, EntityDoc: cfg.EntityDoc, Split: cfg.Split || len(cfg.Bound) > 0, GenPath: cfg.GenPath},
 		joins: map[string]*join{},
+	}
+	if l.out.Split {
+		l.out.Facade, l.out.Package = l.out.Package, EntityDir
 	}
 	l.owned = map[string]string{
 		"velox": "github.com/syssam/velox", "sch": l.out.SchemaPath, "errors": "errors", "fmt": "fmt",
@@ -484,13 +487,13 @@ func qualifiers(ident string) []string {
 }
 
 // descriptor is the expression of f's descriptor in the schema package,
-// by its position. Under Config.Runtime, the schema is the runtime's value,
-// rt.<E>, which the Descriptor function sets rt to.
+// by its position. In split mode, the schema is the runtime's value, rt.<E>,
+// which the Descriptor function sets rt to.
 func (s *entState) descriptor(e *Entity, f *Field) string {
 	s.sch = true
 	p := f.Position
 	v := "(&sch." + e.Name + "{})"
-	if s.l.out.Runtime {
+	if s.l.out.Split {
 		v = "rt." + e.Name
 	}
 	if p.MixedIn {

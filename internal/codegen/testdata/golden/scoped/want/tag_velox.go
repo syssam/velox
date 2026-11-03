@@ -2,68 +2,10 @@
 
 package gen
 
-import (
-	"fmt"
-
-	"github.com/syssam/velox"
-)
+import "example.com/scoped/gen/entity"
 
 // Tag is the entity of schema Tag.
-type Tag struct {
-	ID    int64 `json:"id"`
-	OrgID int64 `json:"org_id"`
-}
-
-// The positions of Tag's columns, in the order of its table.
-const (
-	tagColID = iota
-	tagColOrgID
-)
+type Tag = entity.Tag
 
 // Tags holds the typed handles of Tag's columns and relations.
-var Tags = struct {
-	// ID is the column id.
-	ID velox.NumberCol[Tag, int64]
-	// OrgID is the column org_id.
-	OrgID velox.NumberCol[Tag, int64]
-}{
-	ID:    velox.NumberCol[Tag, int64]{I: tagColID},
-	OrgID: velox.NumberCol[Tag, int64]{I: tagColOrgID},
-}
-
-var tagMeta velox.MetaOnce[Tag]
-
-// VeloxMeta is called by velox, not by applications.
-func (*Tag) VeloxMeta() *velox.Meta[Tag] { return tagMeta.Load(tagDescriptor) }
-
-// tagDescriptor describes Tag to velox: its table, columns, edges and hooks.
-func tagDescriptor() velox.Descriptor[Tag] {
-	rt := veloxRuntime()
-	return velox.Descriptor[Tag]{
-		Table: "tags",
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"},
-			{Field: "OrgID", Name: "org_id", Immutable: true},
-		},
-		PrimaryKey: []int{tagColID},
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy(tagScope.Policy()) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooksAfter(tagScope.Fill(), rt.TagHooks()) },
-		FieldPtr: func(x *Tag, i int) any {
-			switch i {
-			case tagColID:
-				return &x.ID
-			case tagColOrgID:
-				return &x.OrgID
-			}
-			return nil
-		},
-	}
-}
-
-// String returns the entity's fields.
-func (x Tag) String() string {
-	return fmt.Sprintf("Tag(ID=%v, OrgID=%v)", x.ID, x.OrgID)
-}
-
-// GoString is String, so that %#v prints the same text.
-func (x Tag) GoString() string { return x.String() }
+var Tags = entity.Tags

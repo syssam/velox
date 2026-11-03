@@ -83,7 +83,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce",
 		"BindPolicy", "BindHooks", "BindHooksAfter", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet",
-		"Table", "TableOf", "TableRows", "RowsOf", "PredOp", "TableQuery", "Untyped", "Typed", "AndPredicates", "OrPredicates", "NotPredicate", "TableInsert", "TableUpdate", "TableDelete", "Assignments", "GeneratedCodeIsVersion7",
+		"Table", "TableOf", "TableRows", "RowsOf", "PredOp", "TableQuery", "Untyped", "Typed", "AndPredicates", "OrPredicates", "NotPredicate", "TableInsert", "TableUpdate", "TableDelete", "Assignments", "GeneratedCodeIsVersion8",
 		"PredEQ", "PredNEQ", "PredIn", "PredNotIn", "PredGT", "PredGTE", "PredLT", "PredLTE", "PredContains", "PredHasPrefix", "PredHasSuffix", "PredIsNull", "PredNotNull"}
 	// DB's methods, keyed as packageDocs keys a method.
 	for _, m := range []string{"QueryTable", "InsertTable", "InsertRows", "UpdateTable", "DeleteTable"} {

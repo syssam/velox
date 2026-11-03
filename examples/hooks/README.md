@@ -13,15 +13,15 @@ go run ./hooks
 
 `schema/schema.go` declares the structure: `Task`, the `Audit` rows its
 update hook writes, and a `CreatedBy` mixin. `schema/hooks.go` declares
-`Task`'s hooks, as ent's schema does, typed with the generated `gen.Task` and
-its handles. velox-gen binds them through the generated `gen/runtime`, which
-`main.go` imports; a wrong signature is refused. The first hook listed is the
+`Task`'s hooks, as ent's schema does, typed with the generated `entity.Task`
+and its handles, from `gen/entity`. `gen` re-exports them and binds the hooks,
+so `main.go` imports `gen` alone; a wrong signature is refused. The first hook listed is the
 outermost:
 
 ```go
-func (Task) Hooks() []velox.Hook[gen.Task] {
-	return []velox.Hook[gen.Task]{
-		velox.On(auth.CreatedBy(func(t *gen.Task) *string { return &t.CreatedBy }), velox.OpInsert),
+func (Task) Hooks() []velox.Hook[entity.Task] {
+	return []velox.Hook[entity.Task]{
+		velox.On(auth.CreatedBy(func(t *entity.Task) *string { return &t.CreatedBy }), velox.OpInsert),
 		velox.On(deriveSlug, velox.OpInsert),
 		velox.On(renamed, velox.OpUpdate),
 		velox.On(onlyDone, velox.OpDelete),

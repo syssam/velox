@@ -87,13 +87,13 @@ import (
 
 	"github.com/syssam/velox"
 
-	"example.com/app/gen"
+	"example.com/app/gen/entity"
 )
 
 // Policy hides the withdrawn reviews, those of 0 stars.
-func (Review) Policy() velox.Policy[gen.Review] {
-	return velox.Policy[gen.Review]{
-		Read: func(context.Context) (velox.Pred[gen.Review], error) { return gen.Reviews.Stars.NEQ(0), nil },
+func (Review) Policy() velox.Policy[entity.Review] {
+	return velox.Policy[entity.Review]{
+		Read: func(context.Context) (velox.Pred[entity.Review], error) { return entity.Reviews.Stars.NEQ(0), nil },
 	}
 }
 `
@@ -106,20 +106,20 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
 
-	"example.com/app/gen"
+	"example.com/app/gen/entity"
 )
 
 var Org = scope.NewKey[int64]("org")
 
 var (
-	authorScope = scope.By(Org, gen.Authors.OrgID.EQ, func(x *gen.Author) *int64 { return &x.OrgID })
-	bookScope   = scope.By(Org, gen.Books.OrgID.EQ, func(x *gen.Book) *int64 { return &x.OrgID })
+	authorScope = scope.By(Org, entity.Authors.OrgID.EQ, func(x *entity.Author) *int64 { return &x.OrgID })
+	bookScope   = scope.By(Org, entity.Books.OrgID.EQ, func(x *entity.Book) *int64 { return &x.OrgID })
 )
 
-func (Author) Policy() velox.Policy[gen.Author] { return authorScope.Policy() }
-func (Author) Hooks() []velox.Hook[gen.Author]  { return []velox.Hook[gen.Author]{authorScope.Fill()} }
-func (Book) Policy() velox.Policy[gen.Book]     { return bookScope.Policy() }
-func (Book) Hooks() []velox.Hook[gen.Book]      { return []velox.Hook[gen.Book]{bookScope.Fill()} }
+func (Author) Policy() velox.Policy[entity.Author] { return authorScope.Policy() }
+func (Author) Hooks() []velox.Hook[entity.Author]  { return []velox.Hook[entity.Author]{authorScope.Fill()} }
+func (Book) Policy() velox.Policy[entity.Book]     { return bookScope.Policy() }
+func (Book) Hooks() []velox.Hook[entity.Book]      { return []velox.Hook[entity.Book]{bookScope.Fill()} }
 `
 
 // e2eCollectGqlgen is the application's gqlgen.yml.
@@ -128,7 +128,7 @@ const e2eCollectGqlgen = `# gqlgen's configuration, as examples/graphql/gqlgen.y
 # of gqlgen's own dependencies.
 skip_mod_tidy: true
 schema:
-  - gen/*.graphql
+  - gen/**/*.graphql
   - graph/*.graphql
 exec:
   filename: graph/generated.go
@@ -239,7 +239,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
-	_ "example.com/app/gen/runtime"
 	"example.com/app/graph"
 	"example.com/app/schema"
 	"github.com/syssam/velox"
@@ -949,8 +948,20 @@ func TestCollectRun(t *testing.T) {
 		"graph/schema.resolvers.go": e2eCollectResolvers,
 		"collect_test.go":           e2eCollectRun,
 	}, true)
-	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
+	// The schema declares behaviour, so velox-gen splits gen: the plugin
+	// writes into gen/entity, gen re-exports its Go files, and gqlgen binds
+	// through gen's aliases.
+	out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema")
+	if err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
+	}
+	for _, want := range []string{"gen/entity/velox.graphql\n", "gen/entity/node_gql.go\n", "gen/node_gql.go\n", "gen/entity/runtime_velox.go\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("velox-gen wrote no %s", want)
+		}
+	}
+	if out, err := run("tool", "velox-gen", "-check", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil || out != "" {
+		t.Errorf("-check: %v\n%s", err, out)
 	}
 	if out, err := run("tool", "gqlgen", "generate"); err != nil {
 		t.Fatalf("gqlgen generate: %v\n%s", err, out)
@@ -969,7 +980,7 @@ func TestCollectRun(t *testing.T) {
 		targets = append(targets, "mysql")
 	}
 	t.Logf("targets: %v", targets)
-	out, err := run("test", "-count=1", "-v", ".")
+	out, err = run("test", "-count=1", "-v", ".")
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}

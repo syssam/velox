@@ -22,8 +22,8 @@ var goldenCases = []struct {
 	cfg  Config
 }{
 	{"minimal", Config{Package: "gen"}},
-	{"blog", Config{Package: "gen", Runtime: true, GenPath: "example.com/blog/gen", Bound: map[string]Bound{"Post": {Policy: true}}}},
-	{"scoped", Config{Package: "gen", Runtime: true, GenPath: "example.com/scoped/gen", Bound: map[string]Bound{
+	{"blog", Config{Package: "gen", Split: true, GenPath: "example.com/blog/gen", Bound: map[string]Bound{"Post": {Policy: true}}}},
+	{"scoped", Config{Package: "gen", Split: true, GenPath: "example.com/scoped/gen", Bound: map[string]Bound{
 		"Task": {Policy: true, Hooks: true}, "Memo": {Policy: true}, "Tag": {Hooks: true},
 	}}},
 }
@@ -123,7 +123,7 @@ func goldenGraph(t *testing.T, name string) *Graph {
 // and the users' groups do not mark theirs.
 func TestGoldenBidi(t *testing.T) {
 	read := func(name string) string {
-		b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", name))
+		b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", EntityDir, name))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -141,10 +141,10 @@ func TestGoldenBidi(t *testing.T) {
 	}
 }
 
-// The blog golden's velox.go gives each enum Values, String and IsValid, all
+// The blog golden's entity.go gives each enum Values, String and IsValid, all
 // with the receiver e.
 func TestGoldenEnumMethods(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", "velox.go"))
+	b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", EntityDir, "entity.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func (e PostStatus) IsValid() bool {
 }
 `
 	if !strings.Contains(string(b), want) {
-		t.Errorf("velox.go lacks PostStatus's methods:\n%s", b)
+		t.Errorf("entity.go lacks PostStatus's methods:\n%s", b)
 	}
 }
 
@@ -275,6 +275,25 @@ func TestRenderPackageDoc(t *testing.T) {
 			t.Errorf("%s has a package comment beside the user's", f.Name)
 		}
 	}
+	// In split mode, gen's doc and entity's each give way to the user's own.
+	for _, c := range []struct {
+		cfg  Config
+		want map[string]bool // file: has a package comment
+	}{
+		{Config{Split: true, GenPath: "m/gen"}, map[string]bool{"velox.go": true, "entity/entity.go": true}},
+		{Config{Split: true, GenPath: "m/gen", UserDoc: true}, map[string]bool{"velox.go": false, "entity/entity.go": true}},
+		{Config{Split: true, GenPath: "m/gen", EntityDoc: true}, map[string]bool{"velox.go": true, "entity/entity.go": false}},
+	} {
+		files, err := Generate(mustBuild(t, User{}, Post{}, Group{}), c.cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, want := range c.want {
+			if got := bytes.Contains(fileNamed(t, files, name), []byte("// Package")); got != want {
+				t.Errorf("%+v: %s has a package comment: %v, want %v", c.cfg, name, got, want)
+			}
+		}
+	}
 }
 
 // TestRenderScopeFile: scope_velox.go holds each key once and each scoped
@@ -284,7 +303,7 @@ func TestRenderScopeFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := string(fileNamed(t, files, "scope_velox.go"))
+	got := string(fileNamed(t, files, "entity/scope_velox.go"))
 	for _, want := range []string{
 		`var OrgKey = scope.NewKey[int64]("org")`,
 		`var RegionKey = scope.NewKey[string]("region")`,
@@ -328,18 +347,20 @@ func TestRenderScopedBinding(t *testing.T) {
 	for _, c := range []struct{ file, want string }{
 		{"note_velox.go", "velox.BindPolicy(noteScope.Policy())"},
 		{"note_velox.go", "velox.BindHooks([]velox.Hook[Note]{noteScope.Fill()})"},
-		{"task_velox.go", "velox.BindPolicy(taskScope.Wrap(rt.TaskPolicy()))"},
-		{"task_velox.go", "velox.BindHooksAfter(taskScope.Fill(), rt.TaskHooks())"},
-		{"memo_velox.go", "velox.BindPolicy(memoScope.Wrap(rt.MemoPolicy()))"},
+		{"task_velox.go", `policy := veloxPolicy[Task](rt.Task, "Task")`},
+		{"task_velox.go", `hooks := veloxHooks[Task](rt.Task, "Task")`},
+		{"task_velox.go", "velox.BindPolicy(taskScope.Wrap(policy()))"},
+		{"task_velox.go", "velox.BindHooksAfter(taskScope.Fill(), hooks())"},
+		{"memo_velox.go", "velox.BindPolicy(memoScope.Wrap(policy()))"},
 		{"memo_velox.go", "velox.BindHooks([]velox.Hook[Memo]{memoScope.Fill()})"},
 		{"tag_velox.go", "velox.BindPolicy(tagScope.Policy())"},
-		{"tag_velox.go", "velox.BindHooksAfter(tagScope.Fill(), rt.TagHooks())"},
+		{"tag_velox.go", "velox.BindHooksAfter(tagScope.Fill(), hooks())"},
 	} {
-		if got := string(fileNamed(t, files, c.file)); !strings.Contains(got, c.want) {
+		if got := string(fileNamed(t, files, EntityDir+"/"+c.file)); !strings.Contains(got, c.want) {
 			t.Errorf("%s lacks %s", c.file, c.want)
 		}
 	}
-	if got := string(fileNamed(t, files, "owner_velox.go")); strings.Contains(got, "Scope") || strings.Contains(got, "Policy:") || strings.Contains(got, "Hooks:") {
+	if got := string(fileNamed(t, files, EntityDir+"/owner_velox.go")); strings.Contains(got, "Scope") || strings.Contains(got, "Policy:") || strings.Contains(got, "Hooks:") {
 		t.Errorf("an unscoped entity without methods binds something:\n%s", got)
 	}
 }

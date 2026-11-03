@@ -26,25 +26,24 @@
 //	users, err := db.Query[gen.User]().Where(gen.Users.Name.EQ("ada")).Limit(10).All(ctx)
 //
 // Policies and hooks are declared in the schema, as ent's are, typed with the
-// generated entity and handles:
+// generated entity and handles. The schema imports them from gen/entity,
+// which velox-gen writes when the schema declares behaviour:
 //
-//	func (User) Policy() velox.Policy[gen.User] {
-//		return velox.Policy[gen.User]{
-//			Read: func(ctx context.Context) (velox.Pred[gen.User], error) {
-//				return gen.Users.DeletedAt.IsNull(), nil
+//	func (User) Policy() velox.Policy[entity.User] {
+//		return velox.Policy[entity.User]{
+//			Read: func(ctx context.Context) (velox.Pred[entity.User], error) {
+//				return entity.Users.DeletedAt.IsNull(), nil
 //			},
 //		}
 //	}
 //
-// Hooks are a method Hooks() []velox.Hook[gen.User] in the same way. The
-// schema package then imports gen, so gen cannot import it: velox-gen writes
-// the package gen/runtime, which binds the methods into gen. Import it in
-// package main, and in the tests that use gen:
-//
-//	import _ "example.com/app/gen/runtime"
-//
-// Without it, gen's first use of an entity fails, rather than run without the
-// policies. Everything in ./gen is generated.
+// Hooks are a method Hooks() []velox.Hook[entity.User] in the same way.
+// Package gen imports gen/entity and the schema, binds the methods when the
+// program starts, and re-exports every name of gen/entity: gen.User is
+// entity.User. A program imports gen, as without behaviour, and that links
+// the schema. A program that imports only gen/entity fails at its first use
+// of an entity, rather than run without the policies. Everything in ./gen
+// is generated.
 //
 // # Reads
 //
@@ -285,9 +284,9 @@
 // TableUpdate, TableDelete, DB.InsertTable, DB.InsertRows, DB.UpdateTable,
 // DB.DeleteTable and Assignments: an entity's queries and writes with its
 // type erased, for runtimes compiled once for every entity) and
-// GeneratedCodeIsVersion7. Each
+// GeneratedCodeIsVersion8. Each
 // says "For generated code." in its documentation. They are not part of
-// velox's API: they change only when GeneratedCodeIsVersion7 is replaced by
+// velox's API: they change only when GeneratedCodeIsVersion8 is replaced by
 // the next version, which is outside semantic versioning. Run velox-gen
 // again after you update velox; code generated for another version fails to
 // compile.
@@ -295,11 +294,11 @@ package velox
 
 //go:generate go run ./internal/cmd/handlegen
 
-// GeneratedCodeIsVersion7 is referenced by every file velox-gen writes from a
+// GeneratedCodeIsVersion8 is referenced by every file velox-gen writes from a
 // schema package, so that generated code and this library fail to compile
 // together when they disagree. For generated code. It is replaced by
-// GeneratedCodeIsVersion8 when generated code must change.
-const GeneratedCodeIsVersion7 = true
+// GeneratedCodeIsVersion9 when generated code must change.
+const GeneratedCodeIsVersion8 = true
 
 // Lazy is the constraint of the type parameter that every method of a generic
 // velox type carries, and that callers never write. For generated code. A

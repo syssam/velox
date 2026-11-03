@@ -545,11 +545,11 @@ func TestUnboundMethodsAreRefused(t *testing.T) {
 	db := openFake(velox.Postgres, e)
 	var se *velox.SchemaError
 	err := db.Insert(&uPolicy{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || err.Error() != "velox: apitest.uPolicy: has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares, through package runtime" {
+	if !errors.As(err, &se) || err.Error() != "velox: apitest.uPolicy: has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares" {
 		t.Fatalf("got %v", err)
 	}
 	err = db.Insert(&uHooks{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || err.Error() != "velox: apitest.uHooks: has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares, through package runtime" {
+	if !errors.As(err, &se) || err.Error() != "velox: apitest.uHooks: has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares" {
 		t.Fatalf("got %v", err)
 	}
 	if e.Calls != 0 {
@@ -560,8 +560,8 @@ func TestUnboundMethodsAreRefused(t *testing.T) {
 		err  error
 		want string
 	}{
-		{velox.CheckEntity[uPolicy](), "velox: apitest.uPolicy: has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares, through package runtime"},
-		{velox.CheckEntity[uHooks](), "velox: apitest.uHooks: has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares, through package runtime"},
+		{velox.CheckEntity[uPolicy](), "velox: apitest.uPolicy: has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"},
+		{velox.CheckEntity[uHooks](), "velox: apitest.uHooks: has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"},
 	} {
 		if !errors.As(c.err, &se) || c.err.Error() != c.want {
 			t.Errorf("CheckEntity: got %v, want %s", c.err, c.want)

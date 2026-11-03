@@ -2,32 +2,12 @@
 
 package gen
 
-import (
-	"github.com/syssam/velox"
-	"github.com/syssam/velox/scope"
-)
-
-const _ = velox.GeneratedCodeIsVersion7
+import "example.com/scoped/gen/entity"
 
 // OrgKey is the "org" scope: a request carries its value with OrgKey.With(ctx, v),
 // and a statement on an entity scoped by it, without one, fails with scope.ErrNoScope.
-var OrgKey = scope.NewKey[int64]("org")
+var OrgKey = entity.OrgKey
 
 // RegionKey is the "region" scope: a request carries its value with RegionKey.With(ctx, v),
 // and a statement on an entity scoped by it, without one, fails with scope.ErrNoScope.
-var RegionKey = scope.NewKey[string]("region")
-
-// homeScope confines Home to the context's region: it is bound around Home's Policy and Hooks.
-var homeScope = scope.By(RegionKey, Homes.Region.EQ, func(x *Home) *string { return &x.Region })
-
-// memoScope confines Memo to the context's org: it is bound around Memo's Policy and Hooks.
-var memoScope = scope.By(OrgKey, Memos.OrgID.EQ, func(x *Memo) *int64 { return &x.OrgID })
-
-// noteScope confines Note to the context's org: it is bound around Note's Policy and Hooks.
-var noteScope = scope.By(OrgKey, Notes.OrgID.EQ, func(x *Note) *int64 { return &x.OrgID })
-
-// tagScope confines Tag to the context's org: it is bound around Tag's Policy and Hooks.
-var tagScope = scope.By(OrgKey, Tags.OrgID.EQ, func(x *Tag) *int64 { return &x.OrgID })
-
-// taskScope confines Task to the context's org: it is bound around Task's Policy and Hooks.
-var taskScope = scope.By(OrgKey, Tasks.OrgID.EQ, func(x *Task) *int64 { return &x.OrgID })
+var RegionKey = entity.RegionKey

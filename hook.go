@@ -26,7 +26,7 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 //
 // A generated entity's hooks are declared in the schema package, on the
 // entity's schema (see package schema), and bound into the generated
-// metadata by the generated package runtime. An entity written by hand
+// metadata by velox-gen. An entity written by hand
 // declares them with a method on its pointer type,
 //
 //	func (*E) Hooks() []velox.Hook[E]
@@ -84,7 +84,7 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 // BindPolicy erases p's entity type, for Descriptor.Policy. For generated code.
 // velox-gen writes
 //
-//	Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.EPolicy()) },
+//	Policy: func() velox.BoundPolicy { return velox.BindPolicy(policy()) },
 //
 // only for an entity whose schema declares the Policy method, so that a method of
 // another signature does not compile, and an entity without one instantiates

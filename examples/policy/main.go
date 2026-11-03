@@ -19,7 +19,6 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/policy/auth"
 	"github.com/syssam/velox/examples/policy/gen"
-	_ "github.com/syssam/velox/examples/policy/gen/runtime" // binds the schema's policies into gen
 	"github.com/syssam/velox/migrate"
 )
 

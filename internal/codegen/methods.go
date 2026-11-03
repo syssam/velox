@@ -38,7 +38,7 @@ func (e *FileError) Error() string {
 // ones), or one of reserved, the package-level names velox-gen writes such as
 // a scope key's variable, is a *FileError. So is a Hooks or Policy method on
 // an entity: those are declared in the schema package (see SchemaMethods),
-// and package runtime binds them. A file no build includes is not read, and
+// and package entity binds them. A file no build includes is not read, and
 // one only some builds include is a *FileError (see userFiles). A missing dir
 // is no files.
 func CheckUserFiles(dir string, entities, reserved []string) error {
@@ -71,9 +71,9 @@ func CheckUserFiles(dir string, entities, reserved []string) error {
 					continue
 				}
 				m := d.Name.Name
-				want := "[]velox.Hook[" + f.Name.Name + "." + e + "]"
+				want := "[]velox.Hook[" + EntityDir + "." + e + "]"
 				if m == "Policy" {
-					want = "velox.Policy[" + f.Name.Name + "." + e + "]"
+					want = "velox.Policy[" + EntityDir + "." + e + "]"
 				}
 				return &FileError{Path: path, Line: fset.Position(d.Pos()).Line, Reason: fmt.Sprintf(
 					"declares %s.%s in the generated package; declare it in the schema package, on %[1]s: func (%[1]s) %[2]s() %[3]s", e, m, want)}

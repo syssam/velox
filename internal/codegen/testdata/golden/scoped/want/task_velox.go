@@ -2,76 +2,10 @@
 
 package gen
 
-import (
-	"fmt"
-
-	"github.com/syssam/velox"
-)
+import "example.com/scoped/gen/entity"
 
 // Task is the entity of schema Task.
-type Task struct {
-	ID    int64  `json:"id"`
-	OrgID int64  `json:"org_id"`
-	Title string `json:"title"`
-}
-
-// The positions of Task's columns, in the order of its table.
-const (
-	taskColID = iota
-	taskColOrgID
-	taskColTitle
-)
+type Task = entity.Task
 
 // Tasks holds the typed handles of Task's columns and relations.
-var Tasks = struct {
-	// ID is the column id.
-	ID velox.NumberCol[Task, int64]
-	// OrgID is the column org_id.
-	OrgID velox.NumberCol[Task, int64]
-	// Title is the column title.
-	Title velox.StringCol[Task, string]
-}{
-	ID:    velox.NumberCol[Task, int64]{I: taskColID},
-	OrgID: velox.NumberCol[Task, int64]{I: taskColOrgID},
-	Title: velox.StringCol[Task, string]{I: taskColTitle},
-}
-
-var taskMeta velox.MetaOnce[Task]
-
-// VeloxMeta is called by velox, not by applications.
-func (*Task) VeloxMeta() *velox.Meta[Task] { return taskMeta.Load(taskDescriptor) }
-
-// taskDescriptor describes Task to velox: its table, columns, edges and hooks.
-func taskDescriptor() velox.Descriptor[Task] {
-	rt := veloxRuntime()
-	return velox.Descriptor[Task]{
-		Table: "tasks",
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"},
-			{Field: "OrgID", Name: "org_id", Immutable: true},
-			{Field: "Title", Name: "title"},
-		},
-		PrimaryKey: []int{taskColID},
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy(taskScope.Wrap(rt.TaskPolicy())) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooksAfter(taskScope.Fill(), rt.TaskHooks()) },
-		FieldPtr: func(x *Task, i int) any {
-			switch i {
-			case taskColID:
-				return &x.ID
-			case taskColOrgID:
-				return &x.OrgID
-			case taskColTitle:
-				return &x.Title
-			}
-			return nil
-		},
-	}
-}
-
-// String returns the entity's fields.
-func (x Task) String() string {
-	return fmt.Sprintf("Task(ID=%v, OrgID=%v, Title=%v)", x.ID, x.OrgID, x.Title)
-}
-
-// GoString is String, so that %#v prints the same text.
-func (x Task) GoString() string { return x.String() }
+var Tasks = entity.Tasks

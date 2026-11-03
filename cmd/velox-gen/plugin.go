@@ -325,17 +325,14 @@ func withHeader(path, content string) []byte {
 
 // pluginFiles runs f's plugins on the model of gm and returns their files by
 // absolute path, and the plugin that wrote each. It runs them in the module of
-// the schema package at pattern.
-func pluginFiles(f genFlags, gm *genModel, pattern, dir, pkg string, env []string, stderr io.Writer) (files map[string][]byte, owners map[string]string, err error) {
+// the schema package at pattern. out is the directory of the package that
+// holds the entities, named pkg, at import path outPath: the plugins' paths
+// are below it.
+func pluginFiles(f genFlags, gm *genModel, pattern, dir, out, pkg, outPath string, env []string, stderr io.Writer) (files map[string][]byte, owners map[string]string, err error) {
 	if len(f.plugins) == 0 {
 		return nil, nil, nil
 	}
 	mod, err := moduleDir(dir, pattern, env)
-	if err != nil {
-		return nil, nil, err
-	}
-	out := f.outDir(dir)
-	outPath, err := dirImportPath(out, env)
 	if err != nil {
 		return nil, nil, err
 	}

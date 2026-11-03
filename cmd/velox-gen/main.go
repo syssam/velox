@@ -66,16 +66,20 @@
 // -out ./gen/b beside -out ./gen. The files you add to the output directory
 // stay, but may not declare a type named like a generated one, nor a Policy
 // or Hooks method on a generated entity: those are declared in the schema
-// package, on the entity's schema, as func (E) Policy() velox.Policy[gen.E]
-// and func (E) Hooks() []velox.Hook[gen.E]. When the schema package declares
-// any, velox-gen also writes the package runtime in -out/runtime, which binds
-// them into the generated package; a program imports it for its effect. The
-// generated package cannot import the schema package then, as the schema
-// imports it: what it read from the schema, such as a default function, comes
-// through package runtime too, and every entity fails at its first use when
-// package runtime is not linked. velox-gen reads the schema package without
-// these methods and the declarations only they use, so it runs when the
-// generated package is stale or missing. velox-gen refuses any .go file of
+// package, on the entity's schema, as func (E) Policy() velox.Policy[entity.E]
+// and func (E) Hooks() []velox.Hook[entity.E]. When the schema package declares
+// any, or imports -out/entity, velox-gen splits the output: -out/entity,
+// package entity, holds the entities and does not import the schema
+// package, which imports it for its methods' types. The package in -out
+// re-exports every name of package entity and binds the schema into it when
+// the program starts, so a program imports it alone. A program that links
+// package entity without it fails at an entity's first use, naming the
+// import. A schema package that imports -out itself, or through another
+// package, is refused with the chain, since -out imports the schema. Plugins
+// write into -out/entity then, and velox-gen re-exports their Go files in
+// -out. A file of yours in -out/entity is not re-exported. velox-gen reads
+// the schema package without these methods and the declarations only they
+// use, so it runs when the generated package is stale or missing. velox-gen refuses any .go file of
 // yours, in -out or in the schema package, that some build would leave out,
 // by its name or its build constraints, such as x_linux.go, //go:build linux
 // or //go:build prod, since the generated code would bind its methods in one
@@ -140,7 +144,7 @@
 // describe prints the entities, columns and relations that the schema package
 // (default ./schema) declares; with -json, the model that a plugin receives as
 // "model", indented. version prints one line, such as
-// "velox-gen v1.2.3 (generated code 7, plugin protocol 2, model 2)".
+// "velox-gen v1.2.3 (generated code 8, plugin protocol 2, model 3)".
 //
 // migrate works on a migration directory, ./migrations unless -dir names
 // another, which holds velox.json, schema.json, the migration files and

@@ -2,82 +2,10 @@
 
 package testmodel
 
-import (
-	"fmt"
-	"time"
-
-	"github.com/syssam/velox"
-	"github.com/syssam/velox/internal/testmodel/kind"
-)
+import "github.com/syssam/velox/internal/testmodel/entity"
 
 // Event is the entity of schema Event.
-type Event struct {
-	ID      int64        `json:"id"`
-	At      kind.Moment  `json:"at,omitzero"`
-	MaybeAt *kind.Moment `json:"maybe_at,omitempty"`
-}
-
-// The positions of Event's columns, in the order of its table.
-const (
-	eventColID = iota
-	eventColAt
-	eventColMaybeAt
-)
+type Event = entity.Event
 
 // Events holds the typed handles of Event's columns and relations.
-var Events = struct {
-	// ID is the column id.
-	ID velox.NumberCol[Event, int64]
-	// At is the column at.
-	At velox.OrderedCol[Event, kind.Moment]
-	// MaybeAt is the column maybe_at.
-	MaybeAt velox.NullOrderedCol[Event, kind.Moment]
-}{
-	ID:      velox.NumberCol[Event, int64]{I: eventColID},
-	At:      velox.OrderedCol[Event, kind.Moment]{I: eventColAt},
-	MaybeAt: velox.NullOrderedCol[Event, kind.Moment]{I: eventColMaybeAt},
-}
-
-var eventMeta velox.MetaOnce[Event]
-
-// VeloxMeta is called by velox, not by applications.
-func (*Event) VeloxMeta() *velox.Meta[Event] { return eventMeta.Load(eventDescriptor) }
-
-// eventDescriptor describes Event to velox: its table, columns, edges and hooks.
-func eventDescriptor() velox.Descriptor[Event] {
-	rt := veloxRuntime()
-	d0 := rt.Event.Fields()[0].Descriptor().Default.(func() time.Time)
-	d1 := rt.Event.Fields()[1].Descriptor().Default.(func() time.Time)
-	return velox.Descriptor[Event]{
-		Table: "events",
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"},
-			{Field: "At", Name: "at", DefaultFunc: func() any { return kind.Moment(d0()) }},
-			{Field: "MaybeAt", Name: "maybe_at", DefaultFunc: func() any { return kind.Moment(d1()) }},
-		},
-		PrimaryKey: []int{eventColID},
-		FieldPtr: func(x *Event, i int) any {
-			switch i {
-			case eventColID:
-				return &x.ID
-			case eventColAt:
-				return &x.At
-			case eventColMaybeAt:
-				return &x.MaybeAt
-			}
-			return nil
-		},
-	}
-}
-
-// String returns the entity's fields.
-func (x Event) String() string {
-	var maybeAtVal any
-	if x.MaybeAt != nil {
-		maybeAtVal = *x.MaybeAt
-	}
-	return fmt.Sprintf("Event(ID=%v, At=%v, MaybeAt=%v)", x.ID, x.At, maybeAtVal)
-}
-
-// GoString is String, so that %#v prints the same text.
-func (x Event) GoString() string { return x.String() }
+var Events = entity.Events

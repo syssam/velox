@@ -1,15 +1,21 @@
 package codegen
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
+	"go/parser"
 	"go/token"
+	"io"
 	"slices"
+	"strconv"
+	"strings"
 )
 
 // behaviourMethods are the methods a schema package declares an entity's
 // behaviour with. The loader leaves them, and what only they use, out of the
-// program it compiles, and package runtime binds them.
+// program it compiles, and package entity binds them.
 var behaviourMethods = []string{"Hooks", "Policy"}
 
 // SchemaMethods reads the schema package's files in dir, as userFiles does,
@@ -18,18 +24,20 @@ var behaviourMethods = []string{"Hooks", "Policy"}
 // a schema's on the schema, and a join entity's, which has no schema, on a
 // type the user declares for it, such as type UserFriend struct{}.
 //
-// The method takes nothing and returns []velox.Hook[gen.E] or
-// velox.Policy[gen.E], gen being the generated package and E the entity; another shape is a *FileError, and
-// so is a Hooks or Policy method on a type that is not an entity's. The
-// receiver may be a value or a pointer: package runtime calls the method on a
-// new *E of the schema package.
+// The method takes nothing and returns []velox.Hook[entity.E] or
+// velox.Policy[entity.E], entity being the package of the generated
+// entities and E the entity; another shape is a *FileError, and so is a
+// Hooks or Policy method on a type that is not an entity's. The receiver may
+// be a value or a pointer: package entity calls the method on a new *E of
+// the schema package.
 //
 // The result holds only the entities that have at least one of the methods.
 //
-// genPkg is the generated package's name, which the errors use; "" is gen.
+// genPkg is the name of the entities' package, which the errors use; "" is
+// entity.
 func SchemaMethods(dir, genPkg string, entities []string) (map[string]Bound, error) {
 	if genPkg == "" {
-		genPkg = "gen"
+		genPkg = EntityDir
 	}
 	out := map[string]Bound{}
 	err := userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
@@ -111,13 +119,99 @@ func entityArg(x ast.Expr, e string) bool {
 	return ok
 }
 
-// Behaviour is SchemaMethods of the schema package that pattern names, from
-// the module that holds dir. env is the environment of go list; nil means
+// Behaviour reads the schema package that pattern names, from the module
+// that holds dir, and says how the package at genPath, the generated one, is
+// written. bound is SchemaMethods. split is true when bound is not empty, or
+// when the schema package imports genPath/entity, directly or through other
+// packages: the entities then go in package entity, which the schema package
+// imports, and the generated package re-exports them (Config.Split).
+//
+// The schema package never imports the generated package itself: in split
+// mode it imports the schema package, and without split it may. An import of
+// it, by a file of the schema package, is a *FileError at its line that
+// names genPath/entity; one through other packages is an error that names
+// the chain of imports. env is the environment of go list; nil means
 // os.Environ().
-func Behaviour(dir, pattern, genPkg string, env, entities []string) (map[string]Bound, error) {
+func Behaviour(dir, pattern, genPath string, env, entities []string) (bound map[string]Bound, split bool, err error) {
 	pkg, err := list(dir, pattern, env)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return SchemaMethods(pkg.Dir, genPkg, entities)
+	entityPath := genPath + "/" + EntityDir
+	err = userFiles(pkg.Dir, parser.ImportsOnly, func(fset *token.FileSet, path string, f *ast.File) error {
+		for _, im := range f.Imports {
+			if p, _ := strconv.Unquote(im.Path.Value); p == genPath {
+				return &FileError{Path: path, Line: fset.Position(im.Pos()).Line, Reason: fmt.Sprintf(
+					"the schema package imports %s, the generated package, which imports the schema package to bind its Hooks and Policy: "+
+						"import %s, which holds the entities, and write %s.User for %s.User", strconv.Quote(genPath), strconv.Quote(entityPath), EntityDir, guessName(genPath))}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if bound, err = SchemaMethods(pkg.Dir, EntityDir, entities); err != nil {
+		return nil, false, err
+	}
+	chain, entity, err := genImports(pkg.Dir, pkg.ImportPath, genPath, entityPath, env)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(chain) > 0 {
+		return nil, false, fmt.Errorf("%s: the generated package imports the schema package to bind its Hooks and Policy, so a package the schema imports must import %s, which holds the entities, instead",
+			strings.Join(chain, " imports "), strconv.Quote(entityPath))
+	}
+	return bound, len(bound) > 0 || entity, nil
+}
+
+// genImports lists the packages the schema package at importPath imports,
+// directly and through others, with go list run in dir, and returns the
+// shortest chain of imports from it to genPath, or nil, and whether it
+// reaches entityPath. A package go list cannot find, such as a generated
+// package not written yet, is still a node of the graph.
+func genImports(dir, importPath, genPath, entityPath string, env []string) (chain []string, entity bool, err error) {
+	out, stderr, err := run(dir, env, "list", "-e", "-deps", "-json=ImportPath,Imports", importPath)
+	if err != nil {
+		return nil, false, fmt.Errorf("go list -deps %s: %w\n%s", importPath, err, strings.TrimSpace(stderr))
+	}
+	imports := map[string][]string{}
+	dec := json.NewDecoder(strings.NewReader(out))
+	for {
+		var p struct {
+			ImportPath string
+			Imports    []string
+		}
+		if err := dec.Decode(&p); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return nil, false, fmt.Errorf("reading go list output: %w", err)
+		}
+		imports[p.ImportPath] = p.Imports
+	}
+	prev := map[string]string{importPath: ""}
+	queue := []string{importPath}
+	for len(queue) > 0 {
+		p := queue[0]
+		queue = queue[1:]
+		for _, q := range imports[p] {
+			if _, seen := prev[q]; seen {
+				continue
+			}
+			prev[q] = p
+			switch q {
+			case entityPath:
+				entity = true
+			case genPath:
+				if chain == nil {
+					for x := q; x != ""; x = prev[x] {
+						chain = append([]string{x}, chain...)
+					}
+				}
+				continue // what gen imports is not the schema's
+			}
+			queue = append(queue, q)
+		}
+	}
+	return chain, entity, nil
 }

@@ -27,6 +27,16 @@ type Mutation interface {
 	state() *inputState
 }
 
+// entityName is the name velox gives t's entity in its errors, or entity, the
+// generated code's, when t is invalid. The two differ when velox-gen splits
+// gen: the plugin writes entity.Post, and velox names it gen.Post.
+func entityName(t velox.Table, entity string) string {
+	if info := t.Info(); info != nil {
+		return info.Name
+	}
+	return entity
+}
+
 // inputState is what a Create and an Update share: the input, its errors,
 // and the steps of the write's transaction.
 type inputState struct {
@@ -124,7 +134,7 @@ func (c *Create) state() *inputState { return &c.s }
 // run before any statement; Given adds those of the optional fields the input
 // gives.
 func NewCreate(ctx context.Context, input, typ, entity string, t velox.Table, x unsafe.Pointer, name func(goField string) string, required ...int) *Create {
-	return &Create{s: inputState{ctx: ctx, input: input, typ: typ, entity: entity, name: name}, t: t, x: x, cols: required}
+	return &Create{s: inputState{ctx: ctx, input: input, typ: typ, entity: entityName(t, entity), name: name}, t: t, x: x, cols: required}
 }
 
 // Given adds col, the column of an optional field the input gives, to those
@@ -222,7 +232,7 @@ func NewUpdateAs[K, V any](ctx context.Context, input, typ, entity string, t vel
 }
 
 func newUpdate(ctx context.Context, input, typ, entity string, t velox.Table, key int, name func(goField string) string) *Update {
-	return &Update{s: inputState{ctx: ctx, input: input, typ: typ, entity: entity, name: name}, t: t, key: key}
+	return &Update{s: inputState{ctx: ctx, input: input, typ: typ, entity: entityName(t, entity), name: name}, t: t, key: key}
 }
 
 // assign is the assignment of v, converted as velox.Table.Convert does, to

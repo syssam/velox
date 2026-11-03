@@ -6,16 +6,22 @@ type Config struct {
 	SchemaPath string           // the schema package's import path; Graph.Package when empty
 	Bound      map[string]Bound // per entity name: which methods the schema package declares (see SchemaMethods)
 	UserDoc    bool             // a user's file has the package comment; velox.go then has none
+	EntityDoc  bool             // in split mode, a user's file in entity has the package comment; entity.go then has none
 
-	// Runtime says the schema package imports the generated one, as it does
-	// when it declares Hooks or Policy; a non-empty Bound implies it. The generated package then cannot
-	// import the schema package: package runtime, written in the runtime
-	// directory below it, gives it the schemas and their methods when the
-	// program starts. GenPath is the generated package's import path, which
-	// package runtime imports.
-	Runtime bool
+	// Split says the schema package imports the generated entities, as it
+	// does when it declares Hooks or Policy; a non-empty Bound implies it.
+	// The entities then go in package entity (EntityDir below the output
+	// directory), which imports nothing of the user's, and the generated
+	// package re-exports them: it imports package entity and the schema
+	// package, and gives entity the schema's values when the program starts.
+	// GenPath is the generated package's import path.
+	Split   bool
 	GenPath string
 }
+
+// EntityDir is the directory, below the output directory, of package entity
+// in split mode, and the package's name.
+const EntityDir = "entity"
 
 // Bound says which of an entity's methods the schema package declares, so
 // that its Descriptor binds them.
@@ -36,7 +42,9 @@ type Out struct {
 	NeedsSch   bool         // some entity reads the schema package
 	SchemaPath string       // the schema package's import path
 	UserDoc    bool         // Config.UserDoc
-	Runtime    bool         // Config.Runtime, or a non-empty Config.Bound
+	EntityDoc  bool         // Config.EntityDoc
+	Split      bool         // Config.Split, or a non-empty Config.Bound
+	Facade     string       // in split mode, the generated package's name, which re-exports package entity; Package is then "entity"
 	GenPath    string       // Config.GenPath
 
 	// ScopeKeys are the keys the schema's Scoped fields name, sorted by Var.
@@ -128,4 +136,4 @@ type OutEnum struct {
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 7
+const GeneratedCodeVersion = 8

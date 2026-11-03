@@ -144,20 +144,20 @@ import (
 
 	"github.com/syssam/velox"
 
-	"example.com/app/gen"
+	"example.com/app/gen/entity"
 )
 
 // Policy refuses to insert an article titled "forbidden", and lets no
 // "locked" article change.
-func (Article) Policy() velox.Policy[gen.Article] {
-	return velox.Policy[gen.Article]{
-		Insert: func(_ context.Context, x *gen.Article) error {
+func (Article) Policy() velox.Policy[entity.Article] {
+	return velox.Policy[entity.Article]{
+		Insert: func(_ context.Context, x *entity.Article) error {
 			if x.Title == "forbidden" {
 				return errors.New("the title is forbidden")
 			}
 			return nil
 		},
-		Write: func(context.Context) (velox.Pred[gen.Article], error) { return gen.Articles.Title.NEQ("locked"), nil },
+		Write: func(context.Context) (velox.Pred[entity.Article], error) { return entity.Articles.Title.NEQ("locked"), nil },
 	}
 }
 `
@@ -172,24 +172,24 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
 
-	"example.com/app/gen"
+	"example.com/app/gen/entity"
 )
 
 // Org is the organization a request acts for.
 var Org = scope.NewKey[int64]("org")
 
-var writerScope = scope.By(Org, gen.Writers.OrgID.EQ, func(x *gen.Writer) *int64 { return &x.OrgID })
+var writerScope = scope.By(Org, entity.Writers.OrgID.EQ, func(x *entity.Writer) *int64 { return &x.OrgID })
 
 // Policy confines the writers to the context's org, and lets no "frozen"
 // writer change.
-func (Writer) Policy() velox.Policy[gen.Writer] {
-	return writerScope.Wrap(velox.Policy[gen.Writer]{
-		Write: func(context.Context) (velox.Pred[gen.Writer], error) { return gen.Writers.Name.NEQ("frozen"), nil },
+func (Writer) Policy() velox.Policy[entity.Writer] {
+	return writerScope.Wrap(velox.Policy[entity.Writer]{
+		Write: func(context.Context) (velox.Pred[entity.Writer], error) { return entity.Writers.Name.NEQ("frozen"), nil },
 	})
 }
 
 // Hooks fills org_id from the context.
-func (Writer) Hooks() []velox.Hook[gen.Writer] { return []velox.Hook[gen.Writer]{writerScope.Fill()} }
+func (Writer) Hooks() []velox.Hook[entity.Writer] { return []velox.Hook[entity.Writer]{writerScope.Fill()} }
 `
 
 // e2eMutCirclePolicy is Circle's policy: its Read hides the circle named
@@ -202,14 +202,14 @@ import (
 
 	"github.com/syssam/velox"
 
-	"example.com/app/gen"
+	"example.com/app/gen/entity"
 )
 
 // Policy hides the circle named "hidden", and lets no "frozen" circle change.
-func (Circle) Policy() velox.Policy[gen.Circle] {
-	return velox.Policy[gen.Circle]{
-		Read:  func(context.Context) (velox.Pred[gen.Circle], error) { return gen.Circles.Name.NEQ("hidden"), nil },
-		Write: func(context.Context) (velox.Pred[gen.Circle], error) { return gen.Circles.Name.NEQ("frozen"), nil },
+func (Circle) Policy() velox.Policy[entity.Circle] {
+	return velox.Policy[entity.Circle]{
+		Read:  func(context.Context) (velox.Pred[entity.Circle], error) { return entity.Circles.Name.NEQ("hidden"), nil },
+		Write: func(context.Context) (velox.Pred[entity.Circle], error) { return entity.Circles.Name.NEQ("frozen"), nil },
 	}
 }
 `
@@ -224,15 +224,15 @@ import (
 
 	"github.com/syssam/velox"
 
-	"example.com/app/gen"
+	"example.com/app/gen/entity"
 )
 
 // Policy hides the profile whose handle is "hidden", and lets no "frozen"
 // profile change.
-func (Profile) Policy() velox.Policy[gen.Profile] {
-	return velox.Policy[gen.Profile]{
-		Read:  func(context.Context) (velox.Pred[gen.Profile], error) { return gen.Profiles.Handle.NEQ("hidden"), nil },
-		Write: func(context.Context) (velox.Pred[gen.Profile], error) { return gen.Profiles.Handle.NEQ("frozen"), nil },
+func (Profile) Policy() velox.Policy[entity.Profile] {
+	return velox.Policy[entity.Profile]{
+		Read:  func(context.Context) (velox.Pred[entity.Profile], error) { return entity.Profiles.Handle.NEQ("hidden"), nil },
+		Write: func(context.Context) (velox.Pred[entity.Profile], error) { return entity.Profiles.Handle.NEQ("frozen"), nil },
 	}
 }
 `
@@ -361,7 +361,6 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
-	_ "example.com/app/gen/runtime"
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"

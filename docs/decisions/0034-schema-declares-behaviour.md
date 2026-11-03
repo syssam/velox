@@ -1,6 +1,8 @@
 # 34. The schema declares an entity's hooks and policy; gen is all generated
 
 Status: accepted, 2026-11-03. Supersedes the hand-written part of 0030. Builds on 0033.
+Revised by 0036: gen/runtime is gone; a schema with behaviour splits gen into
+gen/entity, which the schema imports, and gen, which binds the schema.
 
 ## Context
 

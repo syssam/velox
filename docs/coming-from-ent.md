@@ -126,13 +126,26 @@ An `Update` or `Delete` with neither a `Where` nor `All()` fails with
 lifts a read's row limit, and `All` confirms a write to every row.
 
 Policies and hooks are schema methods, as in ent, typed with the generated
-entity: `func (User) Policy() velox.Policy[gen.User]` and
-`func (User) Hooks() []velox.Hook[gen.User]`. As with ent's `ent/runtime`, a
-program imports the generated `gen/runtime` for its effect
-(`import _ "example.com/app/gen/runtime"`). Unlike ent, forgetting it fails the
-first statement instead of running without the hooks, and velox-gen generates
-even when `gen` is stale or missing, so no `schema/snapshot` is needed. `gen` is
-all generated (decision 0034).
+entity of package `gen/entity`: `func (User) Policy() velox.Policy[entity.User]`
+and `func (User) Hooks() []velox.Hook[entity.User]`. When a schema declares
+either, velox-gen splits its output (decision 0036):
+
+- `gen/entity` holds every entity, handle and descriptor, and does not import
+  the schema package. The schema package imports it.
+- `gen` imports `gen/entity` and the schema, re-exports every name of
+  `gen/entity` (`gen.User` is an alias of `entity.User`), and gives
+  `gen/entity` the schema's values in its `init`.
+
+There is no `ent/runtime` to import for its effect: a program imports `gen` as
+it would without hooks. A program that links `gen/entity` without `gen` fails
+at the first use of an entity and names the import, instead of running without
+the hooks. A schema that imports `gen`, directly or through another package,
+is refused with the chain: write `entity.User` where you wrote `gen.User`.
+velox-gen generates even when `gen` is stale or missing, so no
+`schema/snapshot` is needed. Errors and telemetry name `gen.User` in both layouts.
+Plugins write into `gen/entity` then, so velox-graphql's `velox.graphql` moves
+there; `gen/**/*.graphql` in gqlgen.yml reaches it in either layout. Without
+hooks or policies, `gen` is one package.
 
 On SQLite, `velox.Connect` turns foreign keys on for every connection. A
 `*sql.DB` you pass to `velox.Open` is used as it is, so put
