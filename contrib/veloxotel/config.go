@@ -13,8 +13,12 @@ import (
 // TracerProvider and measures into the global MeterProvider, with call sites
 // recorded and no SQL comment.
 type Config struct {
+	// Providers.
 	TracerProvider trace.TracerProvider // nil: otel.GetTracerProvider()
 	MeterProvider  metric.MeterProvider // nil: otel.GetMeterProvider()
+
+	// SQL comment.
+
 	// App names the application in the SQL comment; empty: no comment. With
 	// call sites recorded (the default), the comment carries the call site, so
 	// pgx prepares a statement per call site per connection: see the package
@@ -25,11 +29,15 @@ type Config struct {
 	// route template, never an ID): see velox.WithSQLComment.
 	CommentTags []string
 
+	// What a span or metric carries. The defaults are the safe ones.
+
 	OmitCallers             bool // leave call sites out: no code.* attributes, one SQL comment per shape
 	OmitQueryText           bool // leave db.query.text off spans
 	RecordScope             bool // add velox.scope, the scope values of the context, to spans
 	RecordMetricFingerprint bool // add velox.fingerprint to the statement metrics
 	RecordReturnedRows      bool // add db.response.returned_rows to spans
+
+	// Which server ran it.
 
 	// Target names the server every statement and transaction runs on, for
 	// its span and its duration point. The adapter sees no connection
@@ -40,10 +48,9 @@ type Config struct {
 	// per statement, after it ran, with its final route: a read that fell
 	// over from a failed replica names the primary. Its attributes are
 	// therefore not a statement's start attributes. A transaction's route
-	// is known when it starts: TargetFor is called with it then, for the
-	// span, and again for its duration point, so it must be deterministic
-	// for a Route, or the two would name different servers. The package doc
-	// has an example. It must be safe for concurrent use.
+	// is known when it starts: TargetFor is called with it then, once, for
+	// its span and its duration point. The package doc has an example. It
+	// must be safe for concurrent use.
 	TargetFor func(r velox.Route) Target
 }
 
@@ -95,11 +102,11 @@ func newAdapter(cfg Config) *adapter {
 	if mp == nil {
 		mp = otel.GetMeterProvider()
 	}
-	a := &adapter{cfg: cfg, tracer: tp.Tracer(modulePath,
-		trace.WithInstrumentationVersion(version()), trace.WithSchemaURL(schemaURL))}
-	if cfg.TargetFor == nil {
-		a.target = cfg.Target.appendTo(nil)
+	if cfg.TargetFor != nil {
+		cfg.Target = Target{} // TargetFor is used instead, everywhere
 	}
+	a := &adapter{cfg: cfg, target: cfg.Target.appendTo(nil), tracer: tp.Tracer(modulePath,
+		trace.WithInstrumentationVersion(version()), trace.WithSchemaURL(schemaURL))}
 	a.instruments(mp.Meter(modulePath,
 		metric.WithInstrumentationVersion(version()), metric.WithSchemaURL(schemaURL)))
 	return a

@@ -51,7 +51,7 @@ func TestRecordSkipsDisabledInstruments(t *testing.T) {
 	start := time.Now()
 	tx := &velox.TxInfo{Attempt: 1}
 	if n := testing.AllocsPerRun(100, func() {
-		a.txRecord(ctx, start, tx, velox.TxCommit)
+		a.txRecord(ctx, start, tx, velox.TxCommit, nil)
 	}); n != 0 {
 		t.Errorf("txRecord: %v allocations, want 0", n)
 	}
@@ -90,7 +90,7 @@ func TestRecordSkipsInstrumentsAMeterDisables(t *testing.T) {
 	start := time.Now()
 	tx := &velox.TxInfo{Attempt: 1}
 	if n := testing.AllocsPerRun(100, func() {
-		a.txRecord(ctx, start, tx, velox.TxCommit)
+		a.txRecord(ctx, start, tx, velox.TxCommit, nil)
 	}); n != 0 {
 		t.Errorf("txRecord: %v allocations, want 0", n)
 	}

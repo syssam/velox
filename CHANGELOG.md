@@ -233,6 +233,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- veloxotel: `Config.TargetFor` is called once per statement and once per transaction (a raw
+  SQL span and a transaction called it twice), so it need not be deterministic for a route.
+  With `TargetFor` set, `Config.Target` is ignored everywhere, as documented: it no longer
+  names a raw SQL span at its start.
 - migrate: on PostgreSQL, a no-transaction unit of one statement commits with its history
   count, so `apply -resume` after a killed run never applies it twice.
 - A PostgreSQL `Up` waiting for the migration lock polls outside a transaction, so it no

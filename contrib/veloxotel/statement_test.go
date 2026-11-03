@@ -976,14 +976,21 @@ func TestRawSpanNames(t *testing.T) {
 	}
 
 	t.Run("TargetFor", func(t *testing.T) {
+		calls := 0
 		db, exp, _ := traced(t, &fakeDB{affected: 1}, veloxotel.Config{
-			TargetFor: func(velox.Route) veloxotel.Target { return veloxotel.Target{Namespace: "primary-db"} },
+			TargetFor: func(velox.Route) veloxotel.Target {
+				calls++
+				return veloxotel.Target{Namespace: "primary-db"}
+			},
 		})
 		if _, err := db.Exec(context.Background(), "cleanup", "DELETE FROM invoices"); err != nil {
 			t.Fatal(err)
 		}
 		if got := only(t, exp).Name; got != "primary-db" {
 			t.Errorf("span %q, want primary-db", got)
+		}
+		if calls != 1 {
+			t.Errorf("TargetFor was called %d times, want once: the span's name and attributes share one call", calls)
 		}
 	})
 }

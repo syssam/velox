@@ -20,23 +20,20 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	sum := summary(st, coll)
 	name := sum
 	if name == "" { // raw SQL
-		name = rawName(st, a.cfg.Target)
+		name = rawName(st, a.cfg.Target) // zero with TargetFor: renamed below
 	}
 	// Config.Target cannot change, so it is a start attribute, for
 	// samplers. TargetFor's depends on the route, which is final only once
 	// next has returned: it is set then (see below).
 	sctx, span := a.tracer.Start(ctx, name,
-		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(ctx, st, coll, sum, a.target)...))
+		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(ctx, st, coll, sum)...))
 	// A panic in next, such as Iter's loop body's, ends the span and goes on:
 	// the adapter never recovers one. runtime.Goexit in an Iter loop body is
-	// reported the same way, with the description "panic". error.type is
-	// _OTHER, the conventions' fallback (see errorTypeOther).
+	// reported the same way.
 	ended := false
 	defer func() {
 		if !ended {
-			span.SetAttributes(attribute.String(attrErrorType, errorTypeOther))
-			span.SetStatus(codes.Error, "panic")
-			span.End()
+			endPanicked(span)
 		}
 	}()
 
@@ -55,10 +52,13 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	kv := routeAttributes(buf[:0], st, fellOver)
 	tkv := a.target
 	if a.cfg.TargetFor != nil {
-		tkv = a.cfg.TargetFor(st.Route).appendTo(make([]attribute.KeyValue, 0, 3))
+		// Called once: the span's attributes, its raw name and the duration
+		// point all share this server.
+		t := a.cfg.TargetFor(st.Route)
+		tkv = t.appendTo(make([]attribute.KeyValue, 0, 3))
 		kv = append(kv, tkv...)
 		if sum == "" { // raw SQL: the span is named for the final route's server
-			span.SetName(rawName(st, a.cfg.TargetFor(st.Route)))
+			span.SetName(rawName(st, t))
 		}
 	}
 	switch {
@@ -80,13 +80,30 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	}
 	span.SetAttributes(kv...)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
+		setFailed(span, err)
 	}
 	ended = true
 	span.End()
 	a.record(sctx, st, coll, sum, tkv, seconds, f, fellOver)
 	return err
+}
+
+// setFailed marks span as failed with err: its status and an exception
+// event. error.type is the caller's, as a statement and a transaction build
+// it differently.
+func setFailed(span trace.Span, err error) {
+	span.SetStatus(codes.Error, err.Error())
+	span.RecordError(err)
+}
+
+// endPanicked ends a span whose hook's next panicked or called
+// runtime.Goexit: the status Error, the description "panic", and error.type
+// _OTHER, the conventions' fallback, as a panic value's Go type is not a
+// bounded set and Goexit has no value.
+func endPanicked(span trace.Span) {
+	span.SetAttributes(attribute.String(attrErrorType, errorTypeOther))
+	span.SetStatus(codes.Error, "panic")
+	span.End()
 }
 
 // routeAttributes appends to kv the span attributes of where st ran that
@@ -111,13 +128,14 @@ func (a *adapter) queryText(st *velox.Statement) bool {
 	return !a.cfg.OmitQueryText && (!st.Op.Raw() || len(st.Args) > 0)
 }
 
-// attributes are a statement's span attributes known before it runs; sum is
-// its collection and summary (see collection and summary), and tkv Config.Target's (nil with TargetFor).
-func (a *adapter) attributes(ctx context.Context, st *velox.Statement, coll, sum string, tkv []attribute.KeyValue) []attribute.KeyValue {
-	kv := make([]attribute.KeyValue, 0, 15+len(st.Tags)+len(tkv))
+// attributes are a statement's span attributes known before it runs; coll
+// and sum are its collection and summary (see collection and summary). The
+// server is Config.Target's, none with TargetFor, whose is set at the end.
+func (a *adapter) attributes(ctx context.Context, st *velox.Statement, coll, sum string) []attribute.KeyValue {
+	kv := make([]attribute.KeyValue, 0, 15+len(st.Tags)+len(a.target))
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
 	kv = target(kv, st, coll, sum)
-	kv = append(kv, tkv...)
+	kv = append(kv, a.target...)
 	kv = append(kv,
 		attribute.String(attrEntity, st.Entity.Name),
 		attribute.String(attrFingerprint, st.Fingerprint),

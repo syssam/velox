@@ -292,7 +292,9 @@ func TestTxSpanRoute(t *testing.T) {
 		r := sdkmetric.NewManualReader()
 		mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
 		t.Cleanup(func() { _ = tp.Shutdown(context.Background()); _ = mp.Shutdown(context.Background()) })
+		calls := 0
 		cfg := veloxotel.Config{TracerProvider: tp, MeterProvider: mp, TargetFor: func(r velox.Route) veloxotel.Target {
+			calls++
 			return veloxotel.Target{Namespace: "db_" + r.Shard, Address: "h"}
 		}}
 		db := velox.OpenShards(velox.Postgres, map[string]velox.Shard{
@@ -331,6 +333,9 @@ func TestTxSpanRoute(t *testing.T) {
 		}
 		if !reflect.DeepEqual(got, full) {
 			t.Errorf("velox.tx.duration's attributes %v, want %v", got, full)
+		}
+		if calls != 1 {
+			t.Errorf("TargetFor was called %d times, want once: the span and the point share one call", calls)
 		}
 	})
 	t.Run("Target", func(t *testing.T) {

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -24,20 +23,20 @@ func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(cont
 		attribute.String(attrTxIsolation, tx.Isolation.String()),
 		attribute.Bool(attrTxReadOnly, tx.ReadOnly),
 	)
+	// Where tx runs is known now and cannot change: the span and the
+	// duration point share it, so TargetFor is called once.
 	kv = a.txPlace(kv, tx)
+	place := kv[2:]
 	sctx, span := a.tracer.Start(ctx, spanTx, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(kv...))
 	// A panic in fn ends the span, records the duration and goes on: the
 	// adapter never recovers one. velox rolled the transaction back.
-	// runtime.Goexit in fn is reported the same way, as "panic", with
-	// error.type _OTHER.
+	// runtime.Goexit in fn is reported the same way.
 	ended := false
 	defer func() {
 		if !ended {
 			txEnd(ctx, span, tx, velox.TxRollback)
-			span.SetAttributes(attribute.String(attrErrorType, errorTypeOther))
-			span.SetStatus(codes.Error, "panic")
-			span.End()
-			a.txRecord(sctx, start, tx, velox.TxRollback)
+			endPanicked(span)
+			a.txRecord(sctx, start, tx, velox.TxRollback, place)
 		}
 	}()
 
@@ -50,30 +49,29 @@ func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(cont
 	}
 	txEnd(ctx, span, tx, outcome)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		span.SetAttributes(attribute.String(attrErrorType, errorType(ctx, err)))
-		span.RecordError(err)
+		setFailed(span, err)
 	}
 	ended = true
 	span.End()
-	a.txRecord(sctx, start, tx, outcome)
+	a.txRecord(sctx, start, tx, outcome, place)
 	return err
 }
 
 // txRecord records the velox.tx.duration point of a transaction that
-// started at start and ended with outcome, with its shard and server; it
-// does nothing when the instrument is not enabled.
-func (a *adapter) txRecord(ctx context.Context, start time.Time, tx *velox.TxInfo, outcome velox.TxOutcome) {
+// started at start and ended with outcome, with place, where it ran (see
+// txPlace); it does nothing when the instrument is not enabled.
+func (a *adapter) txRecord(ctx context.Context, start time.Time, tx *velox.TxInfo, outcome velox.TxOutcome, place []attribute.KeyValue) {
 	if !a.txDuration.Enabled(ctx) {
 		return
 	}
-	kv := make([]attribute.KeyValue, 0, 3+txPlaceAttrs)
+	kv := make([]attribute.KeyValue, 0, 3+len(place))
 	kv = append(kv,
 		attribute.String(attrTxOutcome, outcome.String()),
 		attribute.Bool(attrTxReadOnly, tx.ReadOnly),
 		attribute.Bool(attrTxRetried, tx.Attempt > 1),
 	)
-	kv = a.txPlace(kv, tx)
+	kv = append(kv, place...)
 	a.txDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributeSet(attribute.NewSet(kv...)))
 }
 
@@ -81,9 +79,9 @@ func (a *adapter) txRecord(ctx context.Context, start time.Time, tx *velox.TxInf
 // Target's three.
 const txPlaceAttrs = 4
 
-// txPlace appends to kv the attributes of where tx runs, the span's and the
-// duration point's alike: its shard, when it has one, and its server,
-// TargetFor's for its route when it is set, Config.Target's otherwise.
+// txPlace appends to kv the attributes of where tx runs: its shard, when it
+// has one, and its server, TargetFor's for its route when it is set,
+// Config.Target's otherwise.
 func (a *adapter) txPlace(kv []attribute.KeyValue, tx *velox.TxInfo) []attribute.KeyValue {
 	if tx.Route.Shard != "" {
 		kv = append(kv, attribute.String(attrRouteShard, tx.Route.Shard))
