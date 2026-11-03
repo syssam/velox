@@ -61,7 +61,26 @@ func genModuleWith(t *testing.T, extra map[string]string, mk func(*testing.T, ma
 	}
 	files := map[string]string{"schema/user.go": genUserSchema, "schema/tag.go": genTagSchema}
 	maps.Copy(files, extra)
-	return mk(t, files)
+	return withSchemaMethods(t, files, mk)
+}
+
+// withSchemaMethods makes the module of files with mk, but writes the schema
+// files that import the generated package after it: mk's go mod tidy cannot
+// resolve a package that velox-gen has not written yet.
+func withSchemaMethods(t *testing.T, files map[string]string, mk func(*testing.T, map[string]string) string) string {
+	t.Helper()
+	later := map[string]string{}
+	for name, src := range files {
+		if strings.HasPrefix(name, "schema/") && strings.Contains(src, `"example.com/app/gen"`) {
+			later[name] = src
+			delete(files, name)
+		}
+	}
+	dir := mk(t, files)
+	for name, src := range later {
+		writeFile(t, filepath.Join(dir, name), src)
+	}
+	return dir
 }
 
 func mtimes(t *testing.T, dir string) map[string]time.Time {
@@ -227,15 +246,58 @@ func TestCheckAndRewrite(t *testing.T) {
 	}
 }
 
-func TestGenerateBindsUserMethods(t *testing.T) {
-	dir := genModule(t, map[string]string{
-		"gen/user_policy.go": "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n",
-	})
+// schemaUserPolicy is a Policy for User, declared in the schema package.
+const schemaUserPolicy = "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen\"\n)\n\n" +
+	"func (User) Policy() velox.Policy[gen.User] { return velox.Policy[gen.User]{} }\n"
+
+// The schema package's Policy is bound through package runtime, which
+// velox-gen writes below gen, generated from nothing: the schema imports a gen
+// that does not exist yet. Removing the Policy removes package runtime.
+func TestGenerateBindsSchemaMethods(t *testing.T) {
+	dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	if !strings.Contains(string(user), "velox.BindPolicy((*User)(nil).Policy())") {
+	if !strings.Contains(string(user), "velox.BindPolicy(rt.UserPolicy())") {
+		t.Errorf("user_velox.go does not bind the policy:\n%s", user)
+	}
+	rt, _ := os.ReadFile(filepath.Join(dir, "gen", "runtime", "runtime_velox.go"))
+	if !strings.Contains(string(rt), "UserPolicy: (&sch.User{}).Policy,") || !strings.Contains(string(rt), `sch "example.com/app/schema"`) {
+		t.Errorf("runtime/runtime_velox.go does not bind the policy:\n%s", rt)
+	}
+	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
+		t.Errorf("-check: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+	noVerifyDirs(t, dir)
+	if err := os.Remove(filepath.Join(dir, "schema", "user_policy.go")); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		t.Fatalf("without the policy: %d %q", code, errs)
+	}
+	for _, name := range []string{"runtime_velox.go", filepath.Join("runtime", "runtime_velox.go")} {
+		if _, err := os.Stat(filepath.Join(dir, "gen", name)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("gen/%s is still there: %v", name, err)
+		}
+	}
+	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+		t.Errorf("verify without the policy: %d %q %q", code, out, errs)
+	}
+}
+
+// The policy test of the generated package itself: velox-gen binds what
+// the schema declares.
+func TestGenerateBindsUserMethods(t *testing.T) {
+	dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		t.Fatalf("%d %q", code, errs)
+	}
+	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
+	if !strings.Contains(string(user), "velox.BindPolicy(rt.UserPolicy())") {
 		t.Errorf("user_velox.go does not bind the policy:\n%s", user)
 	}
 	if strings.Contains(string(user), "BindHooks") {
@@ -276,26 +338,21 @@ func TestGeneratePackageDoc(t *testing.T) {
 	}
 }
 
-// A Policy or Hooks method added after generation is not bound: -check says
-// the entity's file is out of date, and verify reports the method the
-// metadata leaves out.
-func TestPolicyAddedAfterGenerationFailsCheckAndVerify(t *testing.T) {
+// A Policy and Hooks added to the schema after generation are not bound:
+// -check says the entity's file and the runtime's are out of date, and every
+// other entity's, which now checks that package runtime is linked.
+func TestPolicyAddedAfterGenerationFailsCheck(t *testing.T) {
 	dir := genModule(t, nil)
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	writeFile(t, filepath.Join(dir, "gen", "user_policy.go"), "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n"+
-		"func (*User) Hooks() []velox.Hook[User] { return nil }\n")
+	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy+
+		"\nfunc (User) Hooks() []velox.Hook[gen.User] { return nil }\n")
 	code, out, errs := runCLI(t, dir, "-check", "./schema")
-	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/user_velox.go is out of date\n") || strings.Contains(errs, "tag_velox.go") {
+	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/user_velox.go is out of date\n") ||
+		!strings.Contains(errs, "velox-gen: gen/runtime/runtime_velox.go is out of date\n") || !strings.Contains(errs, "velox-gen: gen/tag_velox.go is out of date\n") {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
-	code, out, errs = runCLI(t, dir, "verify", "./schema")
-	if code != 1 || !strings.Contains(out, "2 entities, 1 with errors") ||
-		!strings.Contains(errs, "velox: gen.User: has a Policy method, but the generated metadata does not bind it; run go tool velox-gen") {
-		t.Errorf("verify: %d %q %q", code, out, errs)
-	}
-	noVerifyDirs(t, dir)
 	// Regenerating binds both, and the check passes.
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("regenerate: %d %q", code, errs)
@@ -356,19 +413,24 @@ func TestGenerateRefusesARedeclaredType(t *testing.T) {
 	}
 }
 
-// A Policy or Hooks method with a value receiver is an error, with a path
-// relative to the working directory, and nothing is written.
-func TestGenerateRefusesAValueReceiver(t *testing.T) {
-	dir := genModule(t, map[string]string{
-		"gen/user_policy.go": "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n",
-	})
-	code, out, errs := runCLI(t, dir, "./schema")
-	want := "velox-gen: gen/user_policy.go: User.Policy must have a pointer receiver (func (*User) Policy())\n"
-	if code != 1 || out != "" || errs != want {
-		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "gen", "user_velox.go")); !os.IsNotExist(err) {
-		t.Error("a file was written")
+// A Policy or Hooks method in the generated package is an error that says
+// where it goes, with a path relative to the working directory, and nothing
+// is written. So is one in the schema package of another shape.
+func TestGenerateRefusesMisplacedMethods(t *testing.T) {
+	for _, c := range []struct{ name, file, src, want string }{
+		{"in gen", "gen/user_policy.go", "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n",
+			"velox-gen: gen/user_policy.go:5: declares User.Policy in the generated package; declare it in the schema package, on User: func (User) Policy() velox.Policy[gen.User]\n"},
+		{"wrong shape", "schema/user_policy.go", "package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (User) Policy() *velox.Policy[User] { return nil }\n",
+			"velox-gen: schema/user_policy.go:5: User.Policy must take nothing and return velox.Policy[gen.User] (func (User) Policy() velox.Policy[gen.User])\n"},
+	} {
+		dir := genModule(t, map[string]string{c.file: c.src})
+		code, out, errs := runCLI(t, dir, "./schema")
+		if code != 1 || out != "" || errs != c.want {
+			t.Fatalf("%s: %d %q %q, want %q", c.name, code, out, errs, c.want)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "gen", "user_velox.go")); !os.IsNotExist(err) {
+			t.Errorf("%s: a file was written", c.name)
+		}
 	}
 }
 
@@ -394,14 +456,15 @@ func TestGenerateRefusesABidiJoinPolicy(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{
+	dir := withSchemaMethods(t, map[string]string{
 		"schema/schema.go": genFriendsSchema,
-		"gen/user_friend_policy.go": "package gen\n\nimport (\n\t\"context\"\n\n\t\"github.com/syssam/velox\"\n)\n\n" +
-			"func (*UserFriend) Policy() velox.Policy[UserFriend] {\n\treturn velox.Policy[UserFriend]{\n\t\t" +
-			"Write: func(context.Context) (velox.Pred[UserFriend], error) { return velox.Allow[UserFriend](), nil },\n\t}\n}\n",
-	})
+		"schema/user_friend_policy.go": "package schema\n\nimport (\n\t\"context\"\n\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen\"\n)\n\n" +
+			"// UserFriend is the join entity of User's friends, which has no schema.\ntype UserFriend struct{}\n\n" +
+			"func (UserFriend) Policy() velox.Policy[gen.UserFriend] {\n\treturn velox.Policy[gen.UserFriend]{\n\t\t" +
+			"Write: func(context.Context) (velox.Pred[gen.UserFriend], error) { return velox.Allow[gen.UserFriend](), nil },\n\t}\n}\n",
+	}, tempModule)
 	code, out, errs := runCLI(t, dir, "./schema")
-	want := "velox-gen: gen/user_friend_policy.go:11: UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
+	want := "velox-gen: schema/user_friend_policy.go:16: UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
 	if code != 1 || out != "" || errs != want {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
@@ -1119,14 +1182,11 @@ func (User) Fields() []schema.Field {
 }
 `
 
-const genUserPolicy = "package gen\n\nimport \"github.com/syssam/velox\"\n\n" +
-	"func (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n"
-
 // A scoped entity's descriptor wraps the user's Policy in the scope, which the
 // user's file does not call; scope_velox.go holds the key and the scope; and
 // -check and verify, which builds the generated package, agree.
 func TestGenerateScoped(t *testing.T) {
-	dir := genModule(t, map[string]string{"schema/user.go": genScopedUserSchema, "gen/user_policy.go": genUserPolicy})
+	dir := genModule(t, map[string]string{"schema/user.go": genScopedUserSchema, "schema/user_policy.go": schemaUserPolicy})
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
@@ -1135,7 +1195,7 @@ func TestGenerateScoped(t *testing.T) {
 		t.Fatalf("scope_velox.go: %v\n%s", err, scope)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	if !strings.Contains(string(user), "velox.BindPolicy(userScope.Wrap((*User)(nil).Policy()))") ||
+	if !strings.Contains(string(user), "velox.BindPolicy(userScope.Wrap(rt.UserPolicy()))") ||
 		!strings.Contains(string(user), "velox.BindHooks([]velox.Hook[User]{userScope.Fill()})") {
 		t.Errorf("user_velox.go does not bind the scope around the policy:\n%s", user)
 	}
@@ -1150,7 +1210,7 @@ func TestGenerateScoped(t *testing.T) {
 // Dropping Scoped from the last scoped entity removes scope_velox.go and the
 // wrapping, and the package still builds.
 func TestGenerateScopedRemoved(t *testing.T) {
-	dir := genModule(t, map[string]string{"schema/user.go": genScopedUserSchema, "gen/user_policy.go": genUserPolicy})
+	dir := genModule(t, map[string]string{"schema/user.go": genScopedUserSchema, "schema/user_policy.go": schemaUserPolicy})
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
@@ -1164,7 +1224,7 @@ func TestGenerateScopedRemoved(t *testing.T) {
 		t.Errorf("scope_velox.go is still there: %v", err)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	if strings.Contains(string(user), "Scope") || !strings.Contains(string(user), "velox.BindPolicy((*User)(nil).Policy())") {
+	if strings.Contains(string(user), "Scope") || !strings.Contains(string(user), "velox.BindPolicy(rt.UserPolicy())") {
 		t.Errorf("user_velox.go still wraps the scope:\n%s", user)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema"); code != 0 {

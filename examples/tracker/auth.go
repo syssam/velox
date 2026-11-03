@@ -16,6 +16,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tracker/gen"
+	"github.com/syssam/velox/examples/tracker/principal"
 )
 
 const (
@@ -134,7 +135,7 @@ func (s *server) signup(w http.ResponseWriter, r *http.Request) {
 
 // invite adds a member to the caller's organization; only an admin may.
 func (s *server) invite(w http.ResponseWriter, r *http.Request) {
-	if p, _ := gen.PrincipalFromContext(r.Context()); !p.Admin {
+	if p, _ := principal.FromContext(r.Context()); !p.Admin {
 		writeJSON(w, http.StatusForbidden, errorBody{"only an admin can add a user"})
 		return
 	}
@@ -209,7 +210,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 
 // me returns the caller.
 func (s *server) me(w http.ResponseWriter, r *http.Request) {
-	p, _ := gen.PrincipalFromContext(r.Context())
+	p, _ := principal.FromContext(r.Context())
 	u, err := s.db.Query[gen.User]().Where(gen.Users.ID.EQ(p.UserID)).One(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
@@ -255,7 +256,7 @@ func (s *server) authed(next http.HandlerFunc) http.HandlerFunc {
 			s.fail(w, r, err)
 			return
 		}
-		ctx = gen.WithPrincipal(ctx, gen.Principal{UserID: u.ID, Admin: u.Role == gen.UserRoleAdmin})
+		ctx = principal.With(ctx, principal.Principal{UserID: u.ID, Admin: u.Role == gen.UserRoleAdmin})
 		next(w, r.WithContext(ctx))
 	}
 }

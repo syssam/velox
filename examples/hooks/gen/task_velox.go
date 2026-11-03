@@ -53,6 +53,7 @@ func (*Task) VeloxMeta() *velox.Meta[Task] { return taskMeta.Load(taskDescriptor
 
 // taskDescriptor describes Task to velox: its table, columns, edges and hooks.
 func taskDescriptor() velox.Descriptor[Task] {
+	rt := veloxRuntime()
 	return velox.Descriptor[Task]{
 		Table: "tasks",
 		Columns: []velox.ColumnDescriptor{
@@ -63,7 +64,7 @@ func taskDescriptor() velox.Descriptor[Task] {
 			{Field: "Done", Name: "done"},
 		},
 		PrimaryKey: []int{taskColID},
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*Task)(nil).Hooks()) },
+		Hooks:      func() velox.BoundHooks { return velox.BindHooks(rt.TaskHooks()) },
 		FieldPtr: func(x *Task, i int) any {
 			switch i {
 			case taskColID:

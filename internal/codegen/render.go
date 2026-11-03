@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"errors"
 	"fmt"
 	"go/format"
 	"slices"
@@ -31,9 +32,13 @@ func Generate(g *Graph, cfg Config) ([]File, error) {
 
 // Render writes one file per entity, <label>_velox.go (the join entities too),
 // velox.go: the package comment and the enums, and, when some entity is scoped,
-// scope_velox.go: the scope keys and each scoped entity's scope.
+// scope_velox.go: the scope keys and each scoped entity's scope. Under
+// Runtime it also writes runtime_velox.go, which holds what the runtime
+// gives the package, and runtime/runtime_velox.go, package runtime, which
+// gives it.
 //
-// The files are in the order of o.Entities, then velox.go, then scope_velox.go.
+// The files are in the order of o.Entities, then velox.go, scope_velox.go,
+// runtime_velox.go and runtime/runtime_velox.go.
 // Render does not change o, and the same o gives the same bytes.
 func Render(o *Out) ([]File, error) {
 	files := make([]File, 0, len(o.Entities)+1)
@@ -50,14 +55,29 @@ func Render(o *Out) ([]File, error) {
 		return nil, err
 	}
 	files = append(files, File{Name: "velox.go", Data: data})
-	if len(o.ScopeKeys) == 0 {
+	if len(o.ScopeKeys) > 0 {
+		data, err = formatted("scope_velox.go", renderScope(o))
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, File{Name: "scope_velox.go", Data: data})
+	}
+	if !o.Runtime {
 		return files, nil
 	}
-	data, err = formatted("scope_velox.go", renderScope(o))
+	if o.GenPath == "" {
+		return nil, errors.New("codegen: Config.Runtime needs Config.GenPath, the generated package's import path")
+	}
+	data, err = formatted("runtime_velox.go", renderRuntimeHolder(o))
 	if err != nil {
 		return nil, err
 	}
-	return append(files, File{Name: "scope_velox.go", Data: data}), nil
+	files = append(files, File{Name: "runtime_velox.go", Data: data})
+	data, err = formatted(runtimeFile, renderRuntime(o))
+	if err != nil {
+		return nil, err
+	}
+	return append(files, File{Name: runtimeFile, Data: data}), nil
 }
 
 func formatted(name, src string) ([]byte, error) {
@@ -223,7 +243,7 @@ func renderEntity(o *Out, e *OutEntity) string {
 	w.p("// VeloxMeta is called by velox, not by applications.")
 	w.p("func (*%s) VeloxMeta() *velox.Meta[%[1]s] { return %sMeta.Load(%[2]sDescriptor) }", e.Name, id)
 	w.p("")
-	entityDescriptor(&w, e)
+	entityDescriptor(&w, o, e)
 	w.p("")
 	entityString(&w, e)
 	return w.String()
@@ -251,7 +271,7 @@ func entityImports(w *writer, o *Out, e *OutEntity) {
 	for _, p := range slices.Compact(other) {
 		w.p("%s", strconv.Quote(p))
 	}
-	if e.NeedsSch {
+	if e.NeedsSch && !o.Runtime {
 		w.p("sch %s", strconv.Quote(o.SchemaPath))
 	}
 	w.p(")")
@@ -340,9 +360,19 @@ func entityHandles(w *writer, e *OutEntity) {
 }
 
 // entityDescriptor writes the function that returns e's Descriptor.
-func entityDescriptor(w *writer, e *OutEntity) {
+func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 	w.p("// %sDescriptor describes %s to velox: its table, columns, edges and hooks.", camel(e.Label), e.Name)
 	w.p("func %sDescriptor() velox.Descriptor[%s] {", camel(e.Label), e.Name)
+	// Under Runtime every entity checks that package runtime is linked, so
+	// that a program without it fails at its first use of any entity, not
+	// only of one that has behaviour.
+	if o.Runtime {
+		if e.NeedsSch || e.Bound.Policy || e.Bound.Hooks {
+			w.p("rt := veloxRuntime()")
+		} else {
+			w.p("veloxRuntime()")
+		}
+	}
 	if e.CheckSetup != "" {
 		w.p("%s", e.CheckSetup)
 	}
@@ -408,22 +438,24 @@ func entityDescriptor(w *writer, e *OutEntity) {
 		w.p("},")
 	}
 	// A scoped entity's scope is outermost, whether or not the user declares
-	// the methods: the policy is wrapped in it, and its Fill runs first.
+	// the methods: the policy is wrapped in it, and its Fill runs first. The
+	// schema's methods come from the runtime: rt.<E>Policy and rt.<E>Hooks are
+	// the methods of a new *E of the schema package.
 	switch {
 	case e.Scope != nil && e.Bound.Policy:
-		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(%s.Wrap((*%s)(nil).Policy())) },", e.Scope.Var, e.Name)
+		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(%s.Wrap(rt.%sPolicy())) },", e.Scope.Var, e.Name)
 	case e.Scope != nil:
 		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(%s.Policy()) },", e.Scope.Var)
 	case e.Bound.Policy:
-		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy((*%s)(nil).Policy()) },", e.Name)
+		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.%sPolicy()) },", e.Name)
 	}
 	switch {
 	case e.Scope != nil && e.Bound.Hooks:
-		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(%s.Fill(), (*%s)(nil).Hooks()) },", e.Scope.Var, e.Name)
+		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(%s.Fill(), rt.%sHooks()) },", e.Scope.Var, e.Name)
 	case e.Scope != nil:
 		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[%s]{%s.Fill()}) },", e.Name, e.Scope.Var)
 	case e.Bound.Hooks:
-		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks((*%s)(nil).Hooks()) },", e.Name)
+		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks(rt.%sHooks()) },", e.Name)
 	}
 	w.p("FieldPtr: func(x *%s, i int) any {", e.Name)
 	w.p("switch i {")

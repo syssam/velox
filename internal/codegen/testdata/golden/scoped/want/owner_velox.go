@@ -38,6 +38,7 @@ func (*Owner) VeloxMeta() *velox.Meta[Owner] { return ownerMeta.Load(ownerDescri
 
 // ownerDescriptor describes Owner to velox: its table, columns, edges and hooks.
 func ownerDescriptor() velox.Descriptor[Owner] {
+	veloxRuntime()
 	return velox.Descriptor[Owner]{
 		Table: "owners",
 		Columns: []velox.ColumnDescriptor{

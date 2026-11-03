@@ -38,6 +38,7 @@ func (*Home) VeloxMeta() *velox.Meta[Home] { return homeMeta.Load(homeDescriptor
 
 // homeDescriptor describes Home to velox: its table, columns, edges and hooks.
 func homeDescriptor() velox.Descriptor[Home] {
+	veloxRuntime()
 	return velox.Descriptor[Home]{
 		Table: "homes",
 		Columns: []velox.ColumnDescriptor{

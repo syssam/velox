@@ -461,9 +461,9 @@ func FKNotNull[T, E any](op, has func() velox.Pred[E]) func() velox.Pred[E] {
 	return has
 }
 
-// hides reports whether the edge to T may hide a row its key names: T has a Read
-// policy.
+// hides reports whether the edge to T may hide a row its key names: T's
+// metadata has a Read policy, which the schema declares or a scope adds.
 func hides[T any]() bool {
-	p, ok := any((*T)(nil)).(interface{ Policy() velox.Policy[T] })
-	return ok && p.Policy().Read != nil
+	m, ok := any((*T)(nil)).(interface{ VeloxMeta() *velox.Meta[T] })
+	return ok && m.VeloxMeta().HasReadPolicy()
 }

@@ -63,15 +63,23 @@
 // not those whose name starts with "." or "_", nor those that hold a go.mod or
 // velox-gen's own velox.go: another module, or another run's output, such as
 // -out ./gen/b beside -out ./gen. The files you add to the output directory
-// stay: a method Policy or Hooks on a generated entity E, with receiver *E,
-// in a file of yours there, is bound into E's metadata. A value receiver is an
-// error, because velox calls the method on a nil *E. Your own file must not
-// declare a type named like a generated one. velox-gen refuses any .go file
-// of yours in -out that some build would leave out, by its name or its build
-// constraints, such as x_linux.go, //go:build linux or //go:build prod, since
-// the generated code would bind its methods in one build and not another; it
-// reads neither a file //go:build ignore leaves out nor one whose name starts
-// with "_" or "." or ends in _test.go. A go1.N tag holds when the go line of
+// stay, but may not declare a type named like a generated one, nor a Policy
+// or Hooks method on a generated entity: those are declared in the schema
+// package, on the entity's schema, as func (E) Policy() velox.Policy[gen.E]
+// and func (E) Hooks() []velox.Hook[gen.E]. When the schema package declares
+// any, velox-gen also writes the package runtime in -out/runtime, which binds
+// them into the generated package; a program imports it for its effect. The
+// generated package cannot import the schema package then, as the schema
+// imports it: what it read from the schema, such as a default function, comes
+// through package runtime too, and every entity fails at its first use when
+// package runtime is not linked. velox-gen reads the schema package without
+// these methods and the declarations only they use, so it runs when the
+// generated package is stale or missing. velox-gen refuses any .go file of
+// yours, in -out or in the schema package, that some build would leave out,
+// by its name or its build constraints, such as x_linux.go, //go:build linux
+// or //go:build prod, since the generated code would bind its methods in one
+// build and not another; it reads neither a file //go:build ignore leaves out
+// nor one whose name starts with "_" or "." or ends in _test.go. A go1.N tag holds when the go line of
 // the module's go.mod is go1.N or later. The generated velox.go has the
 // package comment, unless a file of yours there has one.
 //

@@ -23,7 +23,7 @@ func TestUnboundMethodsAreRefused(t *testing.T) {
 	defer func() { _ = raw.Close() }()
 	db := velox.Open(velox.SQLite, raw)
 	_, err = db.Query[gen.Post]().Limit(1).All(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "does not bind it; run go tool velox-gen") {
+	if err == nil || !strings.Contains(err.Error(), "does not bind it: velox-gen binds the one the schema package declares, through package runtime") {
 		t.Fatalf("got %v", err)
 	}
 	if err := velox.CheckEntity[gen.Post](); err == nil {
@@ -31,7 +31,7 @@ func TestUnboundMethodsAreRefused(t *testing.T) {
 	}
 	// User declares Hooks, which is unbound as well.
 	_, err = db.Query[gen.User]().Limit(1).All(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "has a Hooks method") || !strings.Contains(err.Error(), "does not bind it; run go tool velox-gen") {
+	if err == nil || !strings.Contains(err.Error(), "has a Hooks method") || !strings.Contains(err.Error(), "does not bind it: velox-gen binds the one the schema package declares, through package runtime") {
 		t.Fatalf("got %v", err)
 	}
 }

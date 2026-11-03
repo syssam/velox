@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"time"
 
-	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -127,11 +126,12 @@ func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor
 
 // userDescriptor describes User to velox: its table, columns, edges and hooks.
 func userDescriptor() velox.Descriptor[User] {
-	d0 := (&sch.User{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	f0 := (&sch.User{}).Mixin()[0].Fields()[1].Descriptor()
+	rt := veloxRuntime()
+	d0 := rt.User.Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
+	f0 := rt.User.Mixin()[0].Fields()[1].Descriptor()
 	d1 := f0.Default.(func() time.Time)
 	d2 := f0.UpdateDefault.(func() time.Time)
-	v0 := (&sch.User{}).Mixin()[1].Fields()[0].Descriptor().Validators[0].(func(string) error)
+	v0 := rt.User.Mixin()[1].Fields()[0].Descriptor().Validators[0].(func(string) error)
 	re0 := regexp.MustCompile("^[^@]+@[^@]+$")
 	return velox.Descriptor[User]{
 		Table: "users",

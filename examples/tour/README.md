@@ -15,13 +15,14 @@ go run ./tour
   `Invoice`, which lists the `mixin.Time` mixin (`created_at` and
   `updated_at`), has an `OrgID` that is `Immutable` and `Scoped`, a unique number per
   organization, a `Lines` relation and a `status` enum. `line.go` declares `Line`.
-- `gen/` is written by `go tool velox-gen -out ./tour/gen ./tour/schema`,
-  except the files you write by hand. The `OrgKey` key and the scope that confines every
-  statement to one organization (the `scope` package) are generated, from the
-  `Scoped` columns of the schema, into `scope_velox.go`; `invoice.go` has
-  `Invoice`'s `Policy()` and its `Hooks()`, `line.go` has `Line`'s, and `role.go`
-  has the billing role. velox-gen binds the `Policy` and `Hooks` methods into the
-  entities' metadata.
+  `invoice_behaviour.go` declares `Invoice`'s `Policy()` and `Hooks()`, and
+  `line_policy.go` `Line`'s `Policy()`, typed with the generated entities.
+- `gen/` is written entirely by `go tool velox-gen -out ./tour/gen ./tour/schema`.
+  The `OrgKey` key and the scope that confines every statement to one
+  organization (the `scope` package) are generated, from the `Scoped` columns of
+  the schema, into `scope_velox.go`. velox-gen binds the schema's `Policy` and
+  `Hooks` through `gen/runtime`, which `main.go` imports, around the scope.
+- `role/` holds the billing role a request acts with.
 - `migrations/` holds the tables, made by `go tool velox-gen migrate diff
   -dialect sqlite -dir ./tour/migrations ./tour/schema`; `main.go` applies it
   with `migrate.Up` to a fresh SQLite file and runs the walkthrough.

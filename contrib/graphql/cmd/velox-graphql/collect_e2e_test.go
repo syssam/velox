@@ -9,9 +9,9 @@ import (
 // e2eCollectSchema is the schema of the collection integration test: nested connections
 // and edges served through real gqlgen. Its tables share no name with the
 // other e2e apps'.
-//   - Author and Book are scoped by org_id, in gen/scope.go.
+//   - Author and Book are scoped by org_id, in schema/scope.go.
 //   - Genre is the M2M's other side, and Review a list edge (not a
-//     connection) of Book; Review's policy, in gen/review_policy.go, hides
+//     connection) of Book; Review's policy, in schema/review_policy.go, hides
 //     the reviews of 0 stars.
 const e2eCollectSchema = `package schema
 
@@ -78,44 +78,48 @@ func (Review) Edges() []schema.Edge {
 }
 `
 
-// e2eCollectPolicy is Review's policy, written by hand in the generated
-// package: a review of 0 stars is withdrawn, and no read sees it.
-const e2eCollectPolicy = `package gen
+// e2eCollectPolicy is Review's policy, declared in the schema package: a
+// review of 0 stars is withdrawn, and no read sees it.
+const e2eCollectPolicy = `package schema
 
 import (
 	"context"
 
 	"github.com/syssam/velox"
+
+	"example.com/app/gen"
 )
 
 // Policy hides the withdrawn reviews, those of 0 stars.
-func (*Review) Policy() velox.Policy[Review] {
-	return velox.Policy[Review]{
-		Read: func(context.Context) (velox.Pred[Review], error) { return Reviews.Stars.NEQ(0), nil },
+func (Review) Policy() velox.Policy[gen.Review] {
+	return velox.Policy[gen.Review]{
+		Read: func(context.Context) (velox.Pred[gen.Review], error) { return gen.Reviews.Stars.NEQ(0), nil },
 	}
 }
 `
 
-// e2eCollectScope scopes Author and Book to the org the context names, by
-// hand in the generated package.
-const e2eCollectScope = `package gen
+// e2eCollectScope scopes Author and Book to the org the context names, in
+// the schema package.
+const e2eCollectScope = `package schema
 
 import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
+
+	"example.com/app/gen"
 )
 
 var Org = scope.NewKey[int64]("org")
 
 var (
-	authorScope = scope.By(Org, Authors.OrgID.EQ, func(x *Author) *int64 { return &x.OrgID })
-	bookScope   = scope.By(Org, Books.OrgID.EQ, func(x *Book) *int64 { return &x.OrgID })
+	authorScope = scope.By(Org, gen.Authors.OrgID.EQ, func(x *gen.Author) *int64 { return &x.OrgID })
+	bookScope   = scope.By(Org, gen.Books.OrgID.EQ, func(x *gen.Book) *int64 { return &x.OrgID })
 )
 
-func (*Author) Policy() velox.Policy[Author] { return authorScope.Policy() }
-func (*Author) Hooks() []velox.Hook[Author]  { return []velox.Hook[Author]{authorScope.Fill()} }
-func (*Book) Policy() velox.Policy[Book]     { return bookScope.Policy() }
-func (*Book) Hooks() []velox.Hook[Book]      { return []velox.Hook[Book]{bookScope.Fill()} }
+func (Author) Policy() velox.Policy[gen.Author] { return authorScope.Policy() }
+func (Author) Hooks() []velox.Hook[gen.Author]  { return []velox.Hook[gen.Author]{authorScope.Fill()} }
+func (Book) Policy() velox.Policy[gen.Book]     { return bookScope.Policy() }
+func (Book) Hooks() []velox.Hook[gen.Book]      { return []velox.Hook[gen.Book]{bookScope.Fill()} }
 `
 
 // e2eCollectGqlgen is the application's gqlgen.yml.
@@ -234,8 +238,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
-	"example.com/app/gen"
+	_ "example.com/app/gen/runtime"
 	"example.com/app/graph"
+	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/veloxpgx"
@@ -492,7 +497,7 @@ func newEnv(t *testing.T, tg target, opts ...veloxgql.Option) *env {
 			http.Error(w, "X-Org-ID is not a number", http.StatusBadRequest)
 			return
 		}
-		srv.ServeHTTP(w, r.WithContext(gen.Org.With(r.Context(), org)))
+		srv.ServeHTTP(w, r.WithContext(schema.Org.With(r.Context(), org)))
 	}))
 	t.Cleanup(ts.Close)
 	e.url = ts.URL
@@ -936,8 +941,8 @@ func TestCollectRun(t *testing.T) {
 	}
 	_, run := app(t, map[string]string{
 		"schema/schema.go":          e2eCollectSchema,
-		"gen/review_policy.go":      e2eCollectPolicy,
-		"gen/scope.go":              e2eCollectScope,
+		"schema/review_policy.go":   e2eCollectPolicy,
+		"schema/scope.go":           e2eCollectScope,
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/schema.resolvers.go": e2eCollectResolvers,
 		"collect_test.go":           e2eCollectRun,

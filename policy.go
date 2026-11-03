@@ -7,15 +7,18 @@ import (
 	"github.com/syssam/velox/internal/engine"
 )
 
-// Policy is entity E's row-level policy, declared once: by a method on the
-// entity's pointer type,
+// Policy is entity E's row-level policy, declared once. A generated entity's
+// is declared in the schema package, on the entity's schema (see package
+// schema), and bound into the generated metadata by the generated package
+// runtime. An entity written by hand declares it with a method on its pointer
+// type,
 //
 //	func (*E) Policy() velox.Policy[E]
 //
-// velox-gen binds the method in the generated metadata (Descriptor.Policy calls
-// BindPolicy on it): a method with another signature does not compile, and
-// one the metadata does not bind is refused at the entity's first use. velox calls it once, when it
-// builds the metadata, on a nil *E, so the method must not read its receiver.
+// which its Descriptor binds (Descriptor.Policy calls BindPolicy on it); a
+// method the metadata does not bind is refused at the entity's first use.
+// velox calls the method once, when it builds the metadata: a hand-written
+// one on a nil *E, so it must not read its receiver.
 // Nor may its body, outside the functions it returns, read the entity's own
 // metadata (a query on it, say): that waits on the build in progress and
 // deadlocks. A Has or HasWhere reads none, so the body may build them, and the

@@ -118,22 +118,24 @@ func (Secret) Fields() []schema.Field { return []schema.Field{field.String("valu
 func (Secret) Annotations() []schema.Annotation { return []schema.Annotation{graphql.Skip()} }
 `
 
-// e2eScope is the hand-written file of the gen package that confines the
+// e2eScope is the hand-written file of the schema package that confines the
 // users to the org the context names, as examples/tenant does.
-const e2eScope = `package gen
+const e2eScope = `package schema
 
 import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
+
+	"example.com/app/gen"
 )
 
 var Org = scope.NewKey[int64]("org")
 
-var userScope = scope.By(Org, Users.OrgID.EQ, func(x *User) *int64 { return &x.OrgID })
+var userScope = scope.By(Org, gen.Users.OrgID.EQ, func(x *gen.User) *int64 { return &x.OrgID })
 
-func (*User) Policy() velox.Policy[User] { return userScope.Policy() }
+func (User) Policy() velox.Policy[gen.User] { return userScope.Policy() }
 
-func (*User) Hooks() []velox.Hook[User] { return []velox.Hook[User]{userScope.Fill()} }
+func (User) Hooks() []velox.Hook[gen.User] { return []velox.Hook[gen.User]{userScope.Fill()} }
 `
 
 // app writes a module with velox-gen and velox-graphql as tools, and the
@@ -478,6 +480,8 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
+	_ "example.com/app/gen/runtime"
+	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
@@ -535,7 +539,7 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 	}
 
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 	by := func(d veloxgql.OrderDirection) *gen.PostOrder {
 		return &gen.PostOrder{Direction: d, Field: gen.PostOrderFieldAuthorName}
@@ -599,7 +603,7 @@ func TestConnections(t *testing.T) {
 		ran.Add(1)
 		return next(ctx)
 	}))
-	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	user := func(e *gen.AccountEdge) int64 { return e.Node.ID }
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
@@ -793,7 +797,7 @@ func TestConnectionOf(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
 	c, err := gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Where(gen.Posts.Title.EQ("a")), nil, nil, nil, nil, nil, nil)
@@ -822,7 +826,7 @@ func TestConnectionOfLimitOffset(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
 	var all []int64
@@ -873,8 +877,10 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
+	_ "example.com/app/gen/runtime"
 	"example.com/app/ids"
 	"example.com/app/levels"
+	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
@@ -919,7 +925,7 @@ func open(t *testing.T, opts ...velox.Option) (context.Context, *velox.DB) {
 		return next(ctx)
 	}))
 	db := velox.Open(velox.SQLite, sqlDB, opts...)
-	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	return ctx, db
 }
 
@@ -1513,7 +1519,7 @@ func TestWhereRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "schema/event.go": e2eEvent, "levels/levels.go": e2eLevels, "ids/ids.go": e2eIDs, "gen/scope.go": e2eScope, "where_test.go": e2eWhere})
+	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "schema/event.go": e2eEvent, "levels/levels.go": e2eLevels, "ids/ids.go": e2eIDs, "schema/scope.go": e2eScope, "where_test.go": e2eWhere})
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
@@ -1539,7 +1545,7 @@ func TestConnectionsRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "gen/scope.go": e2eScope, "app_test.go": e2eRun})
+	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "schema/scope.go": e2eScope, "app_test.go": e2eRun})
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}

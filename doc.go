@@ -25,19 +25,26 @@
 //
 //	users, err := db.Query[gen.User]().Where(gen.Users.Name.EQ("ada")).Limit(10).All(ctx)
 //
-// Policies and hooks are not in the schema. You write them as methods on the
-// generated entity, in a file of your own in ./gen, and velox-gen binds them:
+// Policies and hooks are declared in the schema, as ent's are, typed with the
+// generated entity and handles:
 //
-//	func (*User) Policy() velox.Policy[User] {
-//		return velox.Policy[User]{
-//			Read: func(ctx context.Context) (velox.Pred[User], error) {
-//				return Users.DeletedAt.IsNull(), nil
+//	func (User) Policy() velox.Policy[gen.User] {
+//		return velox.Policy[gen.User]{
+//			Read: func(ctx context.Context) (velox.Pred[gen.User], error) {
+//				return gen.Users.DeletedAt.IsNull(), nil
 //			},
 //		}
 //	}
 //
-// A method with a wrong signature does not compile. Hooks are a method
-// Hooks() []velox.Hook[User] in the same way.
+// Hooks are a method Hooks() []velox.Hook[gen.User] in the same way. The
+// schema package then imports gen, so gen cannot import it: velox-gen writes
+// the package gen/runtime, which binds the methods into gen. Import it in
+// package main, and in the tests that use gen:
+//
+//	import _ "example.com/app/gen/runtime"
+//
+// Without it, gen's first use of an entity fails, rather than run without the
+// policies. Everything in ./gen is generated.
 //
 // # Reads
 //

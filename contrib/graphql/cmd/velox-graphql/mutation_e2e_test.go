@@ -9,7 +9,7 @@ import (
 // e2eMutSchema is the schema of the mutation tests: every kind of edge a
 // create input sets, and a field of each kind the input treats apart. Its
 // tables share no name with internal/integration's.
-//   - Writer is scoped by org_id (gen/writer_policy.go), with a validator (name), a Nillable field
+//   - Writer is scoped by org_id (schema/writer_policy.go), with a validator (name), a Nillable field
 //     (bio), an Optional one with a Default (nick), an Optional number
 //     without one (score), a sensitive field (password) and an Optional JSON
 //     field (meta); its edges are an O2M (articles), an M2M (circles), an
@@ -18,14 +18,14 @@ import (
 //     whose inverse is friended_by: a join row holds the writer in either
 //     column) and two bidirectional self edges, which have no inverse: an
 //     M2M (peers, on writer_peers) and an O2O (partner, on writer_partner);
-//     its policy, in gen/writer_policy.go, lets no "frozen" writer change.
+//     its policy, in schema/writer_policy.go, lets no "frozen" writer change.
 //   - Article's writer is an M2O whose nullable key is on its own row; its
-//     policy, in gen/article_policy.go, refuses the title "forbidden" on
+//     policy, in schema/article_policy.go, refuses the title "forbidden" on
 //     insert and lets no "locked" row change.
 //   - Circle is the M2M's other side, with a unique name; its policy, in
-//     gen/circle_policy.go, hides the circle named "hidden" and lets no
+//     schema/circle_policy.go, hides the circle named "hidden" and lets no
 //     "frozen" one change.
-//   - Profile holds the O2O's key; its policy, in gen/profile_policy.go,
+//   - Profile holds the O2O's key; its policy, in schema/profile_policy.go,
 //     hides the profile whose handle is "hidden" and lets no "frozen" one
 //     change.
 //   - Folder has two Required self edges, whose implicit keys are NULL-able
@@ -134,76 +134,82 @@ func (Folder) Annotations() []schema.Annotation {
 }
 `
 
-// e2eMutPolicy is Article's policy, written by hand in the generated
+// e2eMutPolicy is Article's policy, declared in the schema
 // package, where velox-gen finds and binds it.
-const e2eMutPolicy = `package gen
+const e2eMutPolicy = `package schema
 
 import (
 	"context"
 	"errors"
 
 	"github.com/syssam/velox"
+
+	"example.com/app/gen"
 )
 
 // Policy refuses to insert an article titled "forbidden", and lets no
 // "locked" article change.
-func (*Article) Policy() velox.Policy[Article] {
-	return velox.Policy[Article]{
-		Insert: func(_ context.Context, x *Article) error {
+func (Article) Policy() velox.Policy[gen.Article] {
+	return velox.Policy[gen.Article]{
+		Insert: func(_ context.Context, x *gen.Article) error {
 			if x.Title == "forbidden" {
 				return errors.New("the title is forbidden")
 			}
 			return nil
 		},
-		Write: func(context.Context) (velox.Pred[Article], error) { return Articles.Title.NEQ("locked"), nil },
+		Write: func(context.Context) (velox.Pred[gen.Article], error) { return gen.Articles.Title.NEQ("locked"), nil },
 	}
 }
 `
 
 // e2eMutWriterPolicy is Writer's policy: the org scope, and a Write that lets
 // no "frozen" writer change, though every writer of the org may be read.
-const e2eMutWriterPolicy = `package gen
+const e2eMutWriterPolicy = `package schema
 
 import (
 	"context"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
+
+	"example.com/app/gen"
 )
 
 // Org is the organization a request acts for.
 var Org = scope.NewKey[int64]("org")
 
-var writerScope = scope.By(Org, Writers.OrgID.EQ, func(x *Writer) *int64 { return &x.OrgID })
+var writerScope = scope.By(Org, gen.Writers.OrgID.EQ, func(x *gen.Writer) *int64 { return &x.OrgID })
 
 // Policy confines the writers to the context's org, and lets no "frozen"
 // writer change.
-func (*Writer) Policy() velox.Policy[Writer] {
-	return writerScope.Wrap(velox.Policy[Writer]{
-		Write: func(context.Context) (velox.Pred[Writer], error) { return Writers.Name.NEQ("frozen"), nil },
+func (Writer) Policy() velox.Policy[gen.Writer] {
+	return writerScope.Wrap(velox.Policy[gen.Writer]{
+		Write: func(context.Context) (velox.Pred[gen.Writer], error) { return gen.Writers.Name.NEQ("frozen"), nil },
 	})
 }
 
 // Hooks fills org_id from the context.
-func (*Writer) Hooks() []velox.Hook[Writer] { return []velox.Hook[Writer]{writerScope.Fill()} }
+func (Writer) Hooks() []velox.Hook[gen.Writer] { return []velox.Hook[gen.Writer]{writerScope.Fill()} }
 `
 
 // e2eMutCirclePolicy is Circle's policy: its Read hides the circle named
 // "hidden", and its Write lets no circle named "frozen" change, though it
 // may be read.
-const e2eMutCirclePolicy = `package gen
+const e2eMutCirclePolicy = `package schema
 
 import (
 	"context"
 
 	"github.com/syssam/velox"
+
+	"example.com/app/gen"
 )
 
 // Policy hides the circle named "hidden", and lets no "frozen" circle change.
-func (*Circle) Policy() velox.Policy[Circle] {
-	return velox.Policy[Circle]{
-		Read:  func(context.Context) (velox.Pred[Circle], error) { return Circles.Name.NEQ("hidden"), nil },
-		Write: func(context.Context) (velox.Pred[Circle], error) { return Circles.Name.NEQ("frozen"), nil },
+func (Circle) Policy() velox.Policy[gen.Circle] {
+	return velox.Policy[gen.Circle]{
+		Read:  func(context.Context) (velox.Pred[gen.Circle], error) { return gen.Circles.Name.NEQ("hidden"), nil },
+		Write: func(context.Context) (velox.Pred[gen.Circle], error) { return gen.Circles.Name.NEQ("frozen"), nil },
 	}
 }
 `
@@ -211,20 +217,22 @@ func (*Circle) Policy() velox.Policy[Circle] {
 // e2eMutProfilePolicy is Profile's policy: its Read hides the profile whose
 // handle is "hidden", and its Write lets no profile whose handle is "frozen"
 // change, though every one may be read.
-const e2eMutProfilePolicy = `package gen
+const e2eMutProfilePolicy = `package schema
 
 import (
 	"context"
 
 	"github.com/syssam/velox"
+
+	"example.com/app/gen"
 )
 
 // Policy hides the profile whose handle is "hidden", and lets no "frozen"
 // profile change.
-func (*Profile) Policy() velox.Policy[Profile] {
-	return velox.Policy[Profile]{
-		Read:  func(context.Context) (velox.Pred[Profile], error) { return Profiles.Handle.NEQ("hidden"), nil },
-		Write: func(context.Context) (velox.Pred[Profile], error) { return Profiles.Handle.NEQ("frozen"), nil },
+func (Profile) Policy() velox.Policy[gen.Profile] {
+	return velox.Policy[gen.Profile]{
+		Read:  func(context.Context) (velox.Pred[gen.Profile], error) { return gen.Profiles.Handle.NEQ("hidden"), nil },
+		Write: func(context.Context) (velox.Pred[gen.Profile], error) { return gen.Profiles.Handle.NEQ("frozen"), nil },
 	}
 }
 `
@@ -243,6 +251,7 @@ import (
 	"testing"
 
 	"example.com/app/gen"
+	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
@@ -305,7 +314,7 @@ func TestUnknownRowCount(t *testing.T) {
 		}
 	}
 	db := velox.Open(velox.SQLite, raw)
-	ctx := gen.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	w := &gen.Writer{Name: "w", Password: "x"}
 	insert(t, ctx, db, w)
 	a := &gen.Article{Title: "a"}
@@ -360,6 +369,8 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
+	_ "example.com/app/gen/runtime"
+	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/veloxpgx"
@@ -595,7 +606,7 @@ func run(t *testing.T, fk bool, fn func(t *testing.T, e *env)) {
 				}
 			}
 			e.raw, e.db = raw, db
-			e.ctx = gen.Org.With(veloxgql.NewExtension(e.db).NewContext(context.Background()), int64(7))
+			e.ctx = schema.Org.With(veloxgql.NewExtension(e.db).NewContext(context.Background()), int64(7))
 			fn(t, e)
 		})
 	}
@@ -767,7 +778,7 @@ func TestRepeatedIDs(t *testing.T) {
 func TestEdgeScope(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
 		other := &gen.Writer{Name: "other", Password: "x"}
-		insert(t, gen.Org.With(e.ctx, int64(8)), e.db, other)
+		insert(t, schema.Org.With(e.ctx, int64(8)), e.db, other)
 		locked := &gen.Article{Title: "locked"}
 		insert(t, e.ctx, e.db, locked)
 
@@ -824,7 +835,7 @@ func TestEdgeScope(t *testing.T) {
 		// The org scope hides org 8's writer from the UPDATE that
 		// re-points a mentee, and from the count of linked mentees: it has
 		// a mentor, and still reads as missing.
-		ctx8 := gen.Org.With(e.ctx, int64(8))
+		ctx8 := schema.Org.With(e.ctx, int64(8))
 		mentor8 := &gen.Writer{Name: "mentor8", Password: "x"}
 		insert(t, ctx8, e.db, mentor8)
 		mentee8 := &gen.Writer{Name: "mentee8", Password: "x", MentorID: ptr(mentor8.ID)}
@@ -894,8 +905,8 @@ func TestEdgeScope(t *testing.T) {
 		// On delete: org 8's writer is NOT_FOUND, and its join rows, which only
 		// org 8 sees, are all still there.
 		// other is org 8's, whom a join row's foreign key is checked against.
-		insert(t, gen.Org.With(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: visible.ID})
-		insert(t, gen.Org.With(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: hidden.ID})
+		insert(t, schema.Org.With(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: visible.ID})
+		insert(t, schema.Org.With(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: hidden.ID})
 		e.reset()
 		_, err = gen.DeleteWriter(e.ctx, writerID(other.ID))
 		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: deleteWriter: no Writer has this ID" {
@@ -1882,7 +1893,7 @@ func TestSelfM2M(t *testing.T) {
 // a page at a time, and the links it leaves do not stop it.
 func TestUnlinkScope(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
-		ctx8 := gen.Org.With(e.ctx, int64(8))
+		ctx8 := schema.Org.With(e.ctx, int64(8))
 		all := velox.WithoutPolicy(e.ctx, "the test's view")
 		linked := func(w, c int64) bool {
 			t.Helper()
@@ -1936,7 +1947,7 @@ func TestUnlinkScope(t *testing.T) {
 
 		// Pages of 2: five writers, of orgs 7 and 8 in turn, in one
 		// circle; clearWriters unlinks org 7's three.
-		paged := gen.Org.With(veloxgql.NewExtension(e.db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background()), int64(7))
+		paged := schema.Org.With(veloxgql.NewExtension(e.db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background()), int64(7))
 		big := &gen.Circle{Name: "big"}
 		insert(t, e.ctx, e.db, big)
 		for i := range 5 {
@@ -2397,13 +2408,13 @@ func TestBidiPartner(t *testing.T) {
 		// A partner of another org is not the caller's to name: the
 		// mutation's existence check, under the org, finds no such writer.
 		h := &gen.Writer{Name: "h", Password: "x"}
-		insert(t, gen.Org.With(e.ctx, int64(8)), e.db, h)
+		insert(t, schema.Org.With(e.ctx, int64(8)), e.db, h)
 		_, err = gen.UpdateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(h.ID))})
 		if code(err) != veloxgql.CodeNotFound || err == nil || err.Error() != "veloxgql: UpdateWriterInput.partnerID: no Writer has this ID" {
 			t.Errorf("c takes h, of org 8: %v (code %q), want NOT_FOUND", err, code(err))
 		}
 		wantPartners(t, e, "c fails to take h", c.ID, 0, a.ID, d.ID, d.ID, a.ID)
-		if hw, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(h.ID)).One(gen.Org.With(e.ctx, int64(8))); err != nil {
+		if hw, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(h.ID)).One(schema.Org.With(e.ctx, int64(8))); err != nil {
 			t.Fatal(err)
 		} else if hw.WriterPartner != nil {
 			t.Errorf("c fails to take h: h's writer_partner = %d, want NULL", *hw.WriterPartner)
@@ -2454,7 +2465,7 @@ func TestMutationsRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	_, run := app(t, map[string]string{"schema/schema.go": e2eMutSchema, "gen/article_policy.go": e2eMutPolicy, "gen/circle_policy.go": e2eMutCirclePolicy, "gen/writer_policy.go": e2eMutWriterPolicy, "gen/profile_policy.go": e2eMutProfilePolicy, "mutation_test.go": e2eMutRun, "countless_test.go": e2eMutCountless})
+	_, run := app(t, map[string]string{"schema/schema.go": e2eMutSchema, "schema/article_policy.go": e2eMutPolicy, "schema/circle_policy.go": e2eMutCirclePolicy, "schema/writer_policy.go": e2eMutWriterPolicy, "schema/profile_policy.go": e2eMutProfilePolicy, "mutation_test.go": e2eMutRun, "countless_test.go": e2eMutCountless})
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}

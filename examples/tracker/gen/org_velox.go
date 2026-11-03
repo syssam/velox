@@ -45,6 +45,7 @@ func (*Org) VeloxMeta() *velox.Meta[Org] { return orgMeta.Load(orgDescriptor) }
 
 // orgDescriptor describes Org to velox: its table, columns, edges and hooks.
 func orgDescriptor() velox.Descriptor[Org] {
+	veloxRuntime()
 	return velox.Descriptor[Org]{
 		Table: "orgs",
 		Columns: []velox.ColumnDescriptor{

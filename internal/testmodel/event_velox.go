@@ -8,7 +8,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel/kind"
-	sch "github.com/syssam/velox/internal/testmodel/schema"
 )
 
 // Event is the entity of schema Event.
@@ -46,8 +45,9 @@ func (*Event) VeloxMeta() *velox.Meta[Event] { return eventMeta.Load(eventDescri
 
 // eventDescriptor describes Event to velox: its table, columns, edges and hooks.
 func eventDescriptor() velox.Descriptor[Event] {
-	d0 := (&sch.Event{}).Fields()[0].Descriptor().Default.(func() time.Time)
-	d1 := (&sch.Event{}).Fields()[1].Descriptor().Default.(func() time.Time)
+	rt := veloxRuntime()
+	d0 := rt.Event.Fields()[0].Descriptor().Default.(func() time.Time)
+	d1 := rt.Event.Fields()[1].Descriptor().Default.(func() time.Time)
 	return velox.Descriptor[Event]{
 		Table: "events",
 		Columns: []velox.ColumnDescriptor{

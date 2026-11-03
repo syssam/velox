@@ -14,6 +14,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tracker/gen"
+	"github.com/syssam/velox/examples/tracker/principal"
 )
 
 const (
@@ -157,7 +158,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, errorBody{fmt.Sprintf("an issue has at most %d labels", maxLabels)})
 		return
 	}
-	p, _ := gen.PrincipalFromContext(r.Context())
+	p, _ := principal.FromContext(r.Context())
 	issue := gen.Issue{ProjectID: project, AuthorID: p.UserID, Title: in.Title, Body: in.Body}
 	err := s.db.Tx(r.Context(), func(ctx context.Context, tx *velox.DB) error {
 		exists, err := tx.Query[gen.Project]().Where(gen.Projects.ID.EQ(project)).Exists(ctx)
@@ -355,7 +356,7 @@ func (s *server) addComment(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	p, _ := gen.PrincipalFromContext(ctx)
+	p, _ := principal.FromContext(ctx)
 	c := gen.Comment{IssueID: id, AuthorID: p.UserID, Body: in.Body}
 	if err := s.db.Insert(&c).Exec(ctx); err != nil {
 		s.fail(w, r, err)

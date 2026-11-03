@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
 // Project is the entity of schema Project.
@@ -65,8 +64,9 @@ func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(proje
 
 // projectDescriptor describes Project to velox: its table, columns, edges and hooks.
 func projectDescriptor() velox.Descriptor[Project] {
-	d0 := (&sch.Project{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	f0 := (&sch.Project{}).Mixin()[0].Fields()[1].Descriptor()
+	rt := veloxRuntime()
+	d0 := rt.Project.Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
+	f0 := rt.Project.Mixin()[0].Fields()[1].Descriptor()
 	d1 := f0.Default.(func() time.Time)
 	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Project]{
@@ -85,7 +85,7 @@ func projectDescriptor() velox.Descriptor[Project] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Issue]("Issues", projectColID, issueColProjectID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(projectScope.Wrap((*Project)(nil).Policy())) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(projectScope.Wrap(rt.ProjectPolicy())) },
 		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Project]{projectScope.Fill()}) },
 		FieldPtr: func(x *Project, i int) any {
 			switch i {

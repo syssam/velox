@@ -6,9 +6,9 @@ import (
 )
 
 // e2eLimitsSchema is the schema of TestLimitsServed. Its tables are its own.
-//   - Post, Ticket and Remark are scoped by org_id (gen/scope.go); for Post it is
+//   - Post, Ticket and Remark are scoped by org_id (schema/scope.go); for Post it is
 //     the key of a Required edge to Org that the scope fills, and Post
-//     has a Required edge to Member, whose policy, in gen/member_policy.go, hides
+//     has a Required edge to Member, whose policy, in schema/member_policy.go, hides
 //     the member named "hidden".
 //   - Acct has a string and a time with a Default.
 //   - Type, Field, Schema, Directive, EnumValue, InputValue, and the enums
@@ -24,6 +24,8 @@ import (
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
+
+	"example.com/app/shapes"
 )
 
 type Org struct{ schema.Schema }
@@ -99,12 +101,6 @@ func (Doc) Annotations() []schema.Annotation {
 	return []schema.Annotation{graphql.QueryField("docs"), graphql.Mutations(graphql.MutationUpdate)}
 }
 
-// Shape is the Go type of a JSON field.
-type Shape struct {
-	A string
-	N *int
-}
-
 type Item struct{ schema.Schema }
 
 func (Item) Fields() []schema.Field {
@@ -112,7 +108,7 @@ func (Item) Fields() []schema.Field {
 		field.String("s_nil").Optional().Nillable(),
 		field.JSON("j_map", map[string]any{}).Optional(),
 		field.Strings("ss").Optional(),
-		field.JSON("j_struct", Shape{}).Optional().Nillable(),
+		field.JSON("j_struct", shapes.Shape{}).Optional().Nillable(),
 		field.Uint64("big").Optional(),
 		field.Bytes("ip").GoType(net.IP{}).Optional().Nillable(),
 		field.JSON("trio", [3]int{}).Optional().Nillable(),
@@ -237,45 +233,61 @@ type InputValue struct{ schema.Schema }
 func (InputValue) Fields() []schema.Field { return []schema.Field{field.String("name")} }
 `
 
+// e2eLimitsShapes is the Go type of Item's JSON field j_struct, in a package
+// of its own: gen imports it, and the schema package, which imports gen,
+// cannot hold it.
+const e2eLimitsShapes = `package shapes
+
+// Shape is the Go type of a JSON field.
+type Shape struct {
+	A string
+	N *int
+}
+`
+
 // e2eLimitsPolicy hides the member named "hidden".
-const e2eLimitsPolicy = `package gen
+const e2eLimitsPolicy = `package schema
 
 import (
 	"context"
 
 	"github.com/syssam/velox"
+
+	"example.com/app/gen"
 )
 
-func (*Member) Policy() velox.Policy[Member] {
-	return velox.Policy[Member]{Read: func(context.Context) (velox.Pred[Member], error) {
-		return Members.Name.NEQ("hidden"), nil
+func (Member) Policy() velox.Policy[gen.Member] {
+	return velox.Policy[gen.Member]{Read: func(context.Context) (velox.Pred[gen.Member], error) {
+		return gen.Members.Name.NEQ("hidden"), nil
 	}}
 }
 `
 
 // e2eLimitsScope scopes Post, Ticket and Remark to the org the context names,
-// by hand in the generated package.
-const e2eLimitsScope = `package gen
+// in the schema package. Its key is OrgKey: the schema declares Org.
+const e2eLimitsScope = `package schema
 
 import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
+
+	"example.com/app/gen"
 )
 
 var OrgKey = scope.NewKey[int64]("org")
 
 var (
-	postScope   = scope.By(OrgKey, Posts.OrgID.EQ, func(x *Post) *int64 { return &x.OrgID })
-	ticketScope = scope.By(OrgKey, Tickets.OrgID.EQ, func(x *Ticket) *int64 { return &x.OrgID })
-	remarkScope = scope.By(OrgKey, Remarks.OrgID.EQ, func(x *Remark) *int64 { return &x.OrgID })
+	postScope   = scope.By(OrgKey, gen.Posts.OrgID.EQ, func(x *gen.Post) *int64 { return &x.OrgID })
+	ticketScope = scope.By(OrgKey, gen.Tickets.OrgID.EQ, func(x *gen.Ticket) *int64 { return &x.OrgID })
+	remarkScope = scope.By(OrgKey, gen.Remarks.OrgID.EQ, func(x *gen.Remark) *int64 { return &x.OrgID })
 )
 
-func (*Post) Policy() velox.Policy[Post]       { return postScope.Policy() }
-func (*Post) Hooks() []velox.Hook[Post]        { return []velox.Hook[Post]{postScope.Fill()} }
-func (*Ticket) Policy() velox.Policy[Ticket]   { return ticketScope.Policy() }
-func (*Ticket) Hooks() []velox.Hook[Ticket]    { return []velox.Hook[Ticket]{ticketScope.Fill()} }
-func (*Remark) Policy() velox.Policy[Remark]   { return remarkScope.Policy() }
-func (*Remark) Hooks() []velox.Hook[Remark]    { return []velox.Hook[Remark]{remarkScope.Fill()} }
+func (Post) Policy() velox.Policy[gen.Post]     { return postScope.Policy() }
+func (Post) Hooks() []velox.Hook[gen.Post]      { return []velox.Hook[gen.Post]{postScope.Fill()} }
+func (Ticket) Policy() velox.Policy[gen.Ticket] { return ticketScope.Policy() }
+func (Ticket) Hooks() []velox.Hook[gen.Ticket]  { return []velox.Hook[gen.Ticket]{ticketScope.Fill()} }
+func (Remark) Policy() velox.Policy[gen.Remark] { return remarkScope.Policy() }
+func (Remark) Hooks() []velox.Hook[gen.Remark]  { return []velox.Hook[gen.Remark]{remarkScope.Fill()} }
 `
 
 // e2eLimitsResolvers are the resolvers TestLimitsServed uses, one line each;
@@ -427,8 +439,9 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	_ "modernc.org/sqlite"
 
-	"example.com/app/gen"
+	_ "example.com/app/gen/runtime"
 	"example.com/app/graph"
+	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
@@ -491,7 +504,7 @@ func serve(t *testing.T) served {
 		}
 		req := httptest.NewRequest("POST", "/", strings.NewReader(string(b)))
 		req.Header.Set("Content-Type", "application/json")
-		req = req.WithContext(gen.OrgKey.With(req.Context(), int64(1)))
+		req = req.WithContext(schema.OrgKey.With(req.Context(), int64(1)))
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		return w.Body.String()
@@ -1005,8 +1018,9 @@ func TestLimitsServed(t *testing.T) {
 	}
 	_, run := app(t, map[string]string{
 		"schema/schema.go":          e2eLimitsSchema,
-		"gen/member_policy.go":      e2eLimitsPolicy,
-		"gen/scope.go":              e2eLimitsScope,
+		"shapes/shapes.go":          e2eLimitsShapes,
+		"schema/member_policy.go":   e2eLimitsPolicy,
+		"schema/scope.go":           e2eLimitsScope,
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/schema.resolvers.go": e2eLimitsResolvers,
 		"limits_test.go":            strings.NewReplacer("'", "`", "~", "'", "_ context,", "_ context.Context,", `"database/sql"`, "\"context\"\n\t\"database/sql\"").Replace(e2eLimitsRun),

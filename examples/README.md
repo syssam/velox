@@ -30,12 +30,15 @@ go run ./start
 
 - Entities are declared in `schema/` with the ent-style DSL: a struct that
   embeds `schema.Schema`, with `Fields`, `Edges`, `Indexes` and `Mixin`
-  methods. A schema holds structure only.
-- `gen/` is written by velox-gen from the schema, except the files you write
-  by hand: the `Policy()` and `Hooks()` methods of an entity, typed with its
-  generated handles (`gen.Users`, …), and any helpers they use. velox-gen
-  binds those methods into the entity's metadata. Never edit the
-  `*_velox.go` files.
+  methods. As in ent, a schema also declares its entity's `Policy()` and
+  `Hooks()`, typed with the generated entity and handles
+  (`velox.Policy[gen.Doc]`, `gen.Docs.Owner.EQ(u)`).
+- `gen/` is written entirely by velox-gen from the schema; never edit it. When
+  a schema declares `Policy()` or `Hooks()`, velox-gen also writes
+  `gen/runtime`, which binds them into `gen`, and `main.go` imports it for its
+  effect: `import _ ".../gen/runtime"`. Without it, the first statement on an
+  entity fails. Context helpers the policies read (the request's user, role or
+  principal) are small packages of their own, such as `policy/auth`.
 - Each example's tables come from its `migrations/` directory, made by
   `go tool velox-gen migrate diff -dialect sqlite` and applied with
   `migrate.Up` to a fresh SQLite file; CI checks the directories with

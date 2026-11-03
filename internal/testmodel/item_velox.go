@@ -57,6 +57,7 @@ func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Load(itemDescriptor
 
 // itemDescriptor describes Item to velox: its table, columns, edges and hooks.
 func itemDescriptor() velox.Descriptor[Item] {
+	veloxRuntime()
 	return velox.Descriptor[Item]{
 		Table: "items",
 		Columns: []velox.ColumnDescriptor{

@@ -57,6 +57,7 @@ func (*Category) VeloxMeta() *velox.Meta[Category] { return categoryMeta.Load(ca
 
 // categoryDescriptor describes Category to velox: its table, columns, edges and hooks.
 func categoryDescriptor() velox.Descriptor[Category] {
+	veloxRuntime()
 	return velox.Descriptor[Category]{
 		Table:  "categories",
 		Schema: "blog",

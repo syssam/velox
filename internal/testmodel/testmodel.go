@@ -3,7 +3,10 @@
 //
 //	go build -o bin/velox-gen ./cmd/velox-gen && bin/velox-gen -out internal/testmodel -package testmodel ./internal/testmodel/schema
 //
-// Invoice and Ticket's Policy and Hooks (scope.go, ticket.go), WithUser and the aliases below are written by hand.
+// Invoice and Ticket's Policy and Hooks are declared in the schema package, and
+// bound through package runtime, which every test package that uses the
+// entities imports. Org, WithUser (context.go) and the aliases below are written
+// by hand.
 package testmodel
 
 import "github.com/syssam/velox/internal/testmodel/kind"

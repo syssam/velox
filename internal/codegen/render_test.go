@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"go/format"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,8 +22,8 @@ var goldenCases = []struct {
 	cfg  Config
 }{
 	{"minimal", Config{Package: "gen"}},
-	{"blog", Config{Package: "gen", Bound: map[string]Bound{"Post": {Policy: true}}}},
-	{"scoped", Config{Package: "gen", Bound: map[string]Bound{
+	{"blog", Config{Package: "gen", Runtime: true, GenPath: "example.com/blog/gen", Bound: map[string]Bound{"Post": {Policy: true}}}},
+	{"scoped", Config{Package: "gen", Runtime: true, GenPath: "example.com/scoped/gen", Bound: map[string]Bound{
 		"Task": {Policy: true, Hooks: true}, "Memo": {Policy: true}, "Tag": {Hooks: true},
 	}}},
 }
@@ -46,7 +47,11 @@ func TestGolden(t *testing.T) {
 					t.Fatal(err)
 				}
 				for _, f := range got {
-					if err := os.WriteFile(filepath.Join(want, f.Name), f.Data, 0o644); err != nil {
+					p := filepath.Join(want, f.Name)
+					if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(p, f.Data, 0o644); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -56,12 +61,16 @@ func TestGolden(t *testing.T) {
 			for _, f := range got {
 				names = append(names, f.Name)
 			}
-			entries, err := os.ReadDir(want)
+			err = filepath.WalkDir(want, func(p string, d fs.DirEntry, err error) error {
+				if err != nil || d.IsDir() {
+					return err
+				}
+				rel, err := filepath.Rel(want, p)
+				wanted = append(wanted, filepath.ToSlash(rel))
+				return err
+			})
 			if err != nil {
 				t.Fatal(err)
-			}
-			for _, e := range entries {
-				wanted = append(wanted, e.Name())
 			}
 			slices.Sort(names)
 			slices.Sort(wanted)
@@ -173,7 +182,7 @@ func firstDiff(a, b string) int {
 // Generate gives the same bytes for the same Graph, and for a Graph built
 // from the same schemas listed in another order.
 func TestRenderDeterministic(t *testing.T) {
-	cfg := Config{Bound: map[string]Bound{"User": {Policy: true, Hooks: true}}}
+	cfg := Config{GenPath: "example.com/blog/gen", Bound: map[string]Bound{"User": {Policy: true, Hooks: true}}}
 	var runs [][]File
 	for _, g := range []*Graph{
 		mustBuild(t, User{}, Post{}, Group{}),
@@ -319,12 +328,12 @@ func TestRenderScopedBinding(t *testing.T) {
 	for _, c := range []struct{ file, want string }{
 		{"note_velox.go", "velox.BindPolicy(noteScope.Policy())"},
 		{"note_velox.go", "velox.BindHooks([]velox.Hook[Note]{noteScope.Fill()})"},
-		{"task_velox.go", "velox.BindPolicy(taskScope.Wrap((*Task)(nil).Policy()))"},
-		{"task_velox.go", "velox.BindHooksAfter(taskScope.Fill(), (*Task)(nil).Hooks())"},
-		{"memo_velox.go", "velox.BindPolicy(memoScope.Wrap((*Memo)(nil).Policy()))"},
+		{"task_velox.go", "velox.BindPolicy(taskScope.Wrap(rt.TaskPolicy()))"},
+		{"task_velox.go", "velox.BindHooksAfter(taskScope.Fill(), rt.TaskHooks())"},
+		{"memo_velox.go", "velox.BindPolicy(memoScope.Wrap(rt.MemoPolicy()))"},
 		{"memo_velox.go", "velox.BindHooks([]velox.Hook[Memo]{memoScope.Fill()})"},
 		{"tag_velox.go", "velox.BindPolicy(tagScope.Policy())"},
-		{"tag_velox.go", "velox.BindHooksAfter(tagScope.Fill(), (*Tag)(nil).Hooks())"},
+		{"tag_velox.go", "velox.BindHooksAfter(tagScope.Fill(), rt.TagHooks())"},
 	} {
 		if got := string(fileNamed(t, files, c.file)); !strings.Contains(got, c.want) {
 			t.Errorf("%s lacks %s", c.file, c.want)

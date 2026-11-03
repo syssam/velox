@@ -8,16 +8,16 @@
 //	field.Int64("org_id").Immutable().Annotations(schema.Scoped("org"))
 //
 // velox-gen then writes the key, gen.OrgKey, and each entity's scope, and binds
-// the scope around the Policy and Hooks the entity declares itself. By hand, for a
-// rule the annotation does not cover, an entity declares the scope in its own
-// Policy and Hooks methods:
+// the scope around the Policy and Hooks the schema declares. By hand, for a
+// rule the annotation does not cover, the schema declares the scope in the
+// entity's own Policy and Hooks methods:
 //
 //	var Org = scope.NewKey[int64]("org")
 //
-//	func (*Issue) Policy() velox.Policy[Issue] { return issueScope.Policy() }
-//	func (*Issue) Hooks() []velox.Hook[Issue]  { return []velox.Hook[Issue]{issueScope.Fill()} }
+//	func (Issue) Policy() velox.Policy[gen.Issue] { return issueScope.Policy() }
+//	func (Issue) Hooks() []velox.Hook[gen.Issue]  { return []velox.Hook[gen.Issue]{issueScope.Fill()} }
 //
-//	var issueScope = scope.By(Org, Issues.OrgID.EQ, func(x *Issue) *int64 { return &x.OrgID })
+//	var issueScope = scope.By(Org, gen.Issues.OrgID.EQ, func(x *gen.Issue) *int64 { return &x.OrgID })
 //
 // and a request carries the value:
 //

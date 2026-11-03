@@ -1,7 +1,7 @@
 // Package schema declares the hooks example's entities: a Task, and the Audit
-// rows that its update hook writes. A schema holds structure only. The hooks
-// are methods and functions in the gen package, typed with the generated
-// handles.
+// rows that its update hook writes. Task's hooks, in hooks.go, are typed with
+// the generated gen.Task and its handles; velox-gen binds them through
+// gen/runtime.
 package schema
 
 import (

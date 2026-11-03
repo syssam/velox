@@ -114,6 +114,7 @@ func (*Sample) VeloxMeta() *velox.Meta[Sample] { return sampleMeta.Load(sampleDe
 
 // sampleDescriptor describes Sample to velox: its table, columns, edges and hooks.
 func sampleDescriptor() velox.Descriptor[Sample] {
+	veloxRuntime()
 	return velox.Descriptor[Sample]{
 		Table: "samples",
 		Columns: []velox.ColumnDescriptor{

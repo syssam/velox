@@ -17,6 +17,8 @@ import (
 	"github.com/syssam/velox/scope"
 
 	"example.com/tmp/gen"
+	_ "example.com/tmp/gen/runtime"
+	"example.com/tmp/schema"
 )
 
 const ddl = `
@@ -108,7 +110,7 @@ func wantStrings(t *testing.T, what string, got, want []string) {
 
 func TestDefaults(t *testing.T) {
 	db := open(t)
-	before := gen.HookRuns.Load()
+	before := schema.HookRuns.Load()
 	u := newUser("ada")
 	mustInsert(t, db, &u)
 	if u.ID == 0 || u.CreatedAt.IsZero() || u.UpdatedAt.IsZero() || time.Since(u.CreatedAt) > time.Minute {
@@ -120,8 +122,8 @@ func TestDefaults(t *testing.T) {
 	if u.Score == nil || *u.Score != 1.5 {
 		t.Errorf("literal default: %v", u.Score)
 	}
-	if u.Nickname != "hooked" || gen.HookRuns.Load() != before+1 {
-		t.Errorf("hook: nickname %v, runs %d, before %d", u.Nickname, gen.HookRuns.Load(), before)
+	if u.Nickname != "hooked" || schema.HookRuns.Load() != before+1 {
+		t.Errorf("hook: nickname %v, runs %d, before %d", u.Nickname, schema.HookRuns.Load(), before)
 	}
 	got, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(u.ID)).One(ctx)
 	if err != nil {
@@ -341,7 +343,7 @@ func TestPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantStrings(t, "no viewer", titles(all), []string{"a1", "a2", "b1"})
-	seen, err := db.Query[gen.Post]().OrderBy(gen.Posts.ID.Asc()).Limit(10).All(gen.AsViewer(ctx))
+	seen, err := db.Query[gen.Post]().OrderBy(gen.Posts.ID.Asc()).Limit(10).All(schema.AsViewer(ctx))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +487,7 @@ func TestCheckEntity(t *testing.T) {
 
 func TestScope(t *testing.T) {
 	db := open(t)
-	org := func(id int64) context.Context { return gen.Org.With(ctx, id) }
+	org := func(id int64) context.Context { return schema.Org.With(ctx, id) }
 	// An insert under the scope stamps org_id.
 	for _, n := range []struct {
 		org  int64

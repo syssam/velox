@@ -46,20 +46,33 @@
 //
 //	go tool velox-gen ./schema
 //
-// which writes the package ./gen. A schema holds only declarative structure.
-// Nothing in it runs at program start. Policies and hooks are not part of it:
-// they are methods, Policy and Hooks, that you write on the generated entity
-// in a file of your own in the generated package, typed with the generated
-// handles:
+// which writes the package ./gen. Nothing in a schema runs at program start.
+// A schema also declares its entity's behaviour, as ent's do: the methods
+// Policy and Hooks, typed with the generated entity and handles:
 //
-//	func (*User) Policy() velox.Policy[User] {
-//		return velox.Policy[User]{
-//			Read: func(ctx context.Context) (velox.Pred[User], error) {
-//				return Users.DeletedAt.IsNull(), nil
+//	func (User) Policy() velox.Policy[gen.User] {
+//		return velox.Policy[gen.User]{
+//			Read: func(ctx context.Context) (velox.Pred[gen.User], error) {
+//				return gen.Users.DeletedAt.IsNull(), nil
 //			},
 //		}
 //	}
 //
-// velox-gen binds them in the generated metadata when the entity declares
-// them, so a wrong signature does not compile.
+//	func (User) Hooks() []velox.Hook[gen.User] { ... }
+//
+// The method takes nothing and returns velox.Policy[gen.E] or
+// []velox.Hook[gen.E], E being the schema; velox-gen refuses another shape.
+// A many-to-many join entity has no schema: declare an empty struct of its
+// name, type UserFriend struct{}, and the methods on it.
+//
+// The schema package then imports gen, so gen cannot import it: velox-gen
+// writes the package gen/runtime, which gives gen the schemas and their
+// methods when the program starts. Import it in package main, and in the
+// tests that use gen:
+//
+//	import _ "example.com/app/gen/runtime"
+//
+// gen fails at its first use of an entity when it is not linked, rather than
+// run without the policies. velox-gen reads the schema without these methods
+// and what only they use, so it generates even when gen is stale or missing.
 package schema

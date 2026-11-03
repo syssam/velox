@@ -1,9 +1,13 @@
-package gen
+//go:build ignore
+
+package schema
 
 import (
 	"context"
 
 	"github.com/syssam/velox"
+
+	"example.com/tmp/gen"
 )
 
 // viewerKey marks a context as a viewer's: such a context reads only
@@ -17,15 +21,15 @@ func AsViewer(ctx context.Context) context.Context {
 
 // Policy shows a viewer only published posts, and refuses a post titled
 // "forbidden".
-func (*Post) Policy() velox.Policy[Post] {
-	return velox.Policy[Post]{
-		Read: func(ctx context.Context) (velox.Pred[Post], error) {
+func (Post) Policy() velox.Policy[gen.Post] {
+	return velox.Policy[gen.Post]{
+		Read: func(ctx context.Context) (velox.Pred[gen.Post], error) {
 			if v, _ := ctx.Value(viewerKey{}).(bool); v {
-				return Posts.Status.EQ(PostStatusPublished), nil
+				return gen.Posts.Status.EQ(gen.PostStatusPublished), nil
 			}
-			return velox.Allow[Post](), nil
+			return velox.Allow[gen.Post](), nil
 		},
-		Insert: func(ctx context.Context, x *Post) error {
+		Insert: func(ctx context.Context, x *gen.Post) error {
 			if x.Title == "forbidden" {
 				return velox.Deny("that title is forbidden")
 			}

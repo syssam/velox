@@ -52,6 +52,7 @@ func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(comme
 
 // commentDescriptor describes Comment to velox: its table, columns, edges and hooks.
 func commentDescriptor() velox.Descriptor[Comment] {
+	rt := veloxRuntime()
 	return velox.Descriptor[Comment]{
 		Table: "comments",
 		Columns: []velox.ColumnDescriptor{
@@ -63,7 +64,7 @@ func commentDescriptor() velox.Descriptor[Comment] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Doc]("Doc", commentColDocID, docColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Comment)(nil).Policy()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.CommentPolicy()) },
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case commentColID:
