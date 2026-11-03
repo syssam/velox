@@ -130,6 +130,15 @@ func spellings(ss []string) []string {
 	return slices.Compact(out)
 }
 
+// and is s and t together: what of either DSN no message may show.
+func (s secret) and(t secret) secret {
+	return secret{
+		dsns:      spellings(append(slices.Clone(s.dsns), t.dsns...)),
+		passwords: spellings(append(slices.Clone(s.passwords), t.passwords...)),
+		pg:        s.pg || t.pg,
+	}
+}
+
 // joined adds to s each of its spellings as join, which text applies before
 // redact, would print it: a DSN or password holding a file's name, such as
 // velox.sum, is still hidden.

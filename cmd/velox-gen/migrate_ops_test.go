@@ -232,6 +232,80 @@ func TestOperationsDoc(t *testing.T) {
 			t.Errorf("diff after -forget: %s", errs)
 		}
 	})
+
+	t.Run("what -applied and -adopt check", func(t *testing.T) {
+		o := newOps(t, map[string]string{"0001_a.sql": a, "0002_mine.sql": mine})
+		o.files(nil, map[string]string{"0003_c.sql": "CREATE TABLE c (id integer);\n"})
+		o.exec("UPDATE velox_migrations SET dirty = true, statements = 0, error = 'boom' WHERE version = 2")
+		o.exec("DROP TABLE mine")
+		code, out, errs := o.run("resolve", "-version", "2", "-applied")
+		want(t, "a difference", code, out, errs, 1, "",
+			"velox-gen: migrate resolve: version 2 is not marked applied: the database differs from what the files up to 0002_mine.sql make on an empty database; what would bring it there:\n"+
+				"  change: create-table mine\n"+
+				"finish its statements by hand and resolve again; record how many ran with -statements k and run migrate apply -resume; or pass -force with the reason\n")
+		for _, args := range [][]string{
+			{"resolve", "-version", "2", "-applied", "-force", " "},
+			{"resolve", "-version", "2", "-undone", "-force", "x"},
+			{"resolve", "-version", "2", "-forget", "-scratch-db", "x.db"},
+		} {
+			if code, out, errs := o.run(args...); code != 2 || out != "" || !strings.Contains(errs, "Flags of migrate resolve:") {
+				t.Errorf("%v: %d %q %q", args, code, out, errs)
+			}
+		}
+		errs = o.ok("resolve", "-version", "2", "-applied", "-force", "restored from the backup")
+		if want := "velox-gen: note: version 2 is marked applied by force (restored from the backup), though the database differs from what the files up to 0002_mine.sql make on an empty database; what would bring it there:\n  change: create-table mine\n"; errs != want {
+			t.Errorf("the note:\n%s\nwant\n%s", errs, want)
+		}
+		code, out, _ = o.run("status", "-json")
+		if code != 3 || !strings.Contains(out, `"error": "forced: restored from the backup; the database differed from what the files up to 0002_mine.sql make on an empty database: create-table mine"`) {
+			t.Errorf("status -json: %d\n%s", code, out)
+		}
+		if code, out, _ := o.run("status"); !strings.Contains(out, "0002_mine.sql") || !strings.Contains(out, ": forced: restored from the backup;") {
+			t.Errorf("status: %d\n%s", code, out)
+		}
+		o.exec(strings.TrimSpace(mine))
+		o.ok("apply")
+	})
+}
+
+// TestResolveScratchDB: on PostgreSQL and MySQL, -applied with a file pending
+// above the version cannot be checked without -scratch-db; with it, a
+// hand-finished version is accepted, and no message shows either DSN.
+func TestResolveScratchDB(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL} {
+		t.Run(d.String(), func(t *testing.T) {
+			dsn, scratch := testDSN(t, d), testDSN(t, d)
+			dir := t.TempDir()
+			handDir(t, dir, d, map[string]string{
+				"0001_a.sql": "CREATE TABLE a (id integer NOT NULL PRIMARY KEY);\n",
+				"0002_b.sql": "CREATE TABLE b (id integer NOT NULL PRIMARY KEY, x integer NOT NULL);\n",
+			})
+			o := &opsDB{t: t, dir: dir, dsn: dsn}
+			o.ok("apply")
+			db, err := openDB(d, dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+			o.db = db
+			o.files(nil, map[string]string{"0003_c.sql": "CREATE TABLE c (id integer NOT NULL PRIMARY KEY);\n"})
+			o.exec("UPDATE velox_migrations SET dirty = true WHERE version = 2")
+			code, out, errs := o.run("resolve", "-version", "2", "-applied")
+			want(t, "no scratch", code, out, errs, 1, "",
+				"velox-gen: migrate resolve: version 2 is not marked applied: files above version 2 are pending, so only the files up to it, applied to an empty database, say what the database holds; give one with -scratch-db; or pass -force with the reason\n")
+			o.exec("ALTER TABLE b DROP COLUMN x")
+			code, out, errs = o.run("resolve", "-version", "2", "-applied", "-scratch-db", scratch)
+			if code != 1 || !strings.Contains(errs, "\n  change: add-column b.x\n") || strings.Contains(errs, scratch) || strings.Contains(errs, dsn) {
+				t.Errorf("a difference: %d\n%s\n%s", code, out, errs)
+			}
+			o.exec("ALTER TABLE b ADD COLUMN x integer NOT NULL")
+			fresh := testDSN(t, d)
+			if code, out, errs := o.run("resolve", "-version", "2", "-applied", "-scratch-db", fresh); code != 0 || out != "resolved version 2 as applied\n" || errs != "" {
+				t.Errorf("finished: %d\n%s\n%s", code, out, errs)
+			}
+			o.ok("apply")
+		})
+	}
 }
 
 // TestOperationsDocMySQL: -statements, as the doc writes it, on a real server.
@@ -445,7 +519,15 @@ func TestOperationsDocPostgres(t *testing.T) {
 		o.exec("ALTER TABLE a ADD COLUMN note text")
 		o.files(nil, map[string]string{"0003_note.sql": "ALTER TABLE a ADD COLUMN note text;\n", "0004_b.sql": "CREATE TABLE b (id integer);\n"})
 		o.refused([]string{"apply"}, `column "note" of relation "a" already exists`, "rolled back")
-		o.ok("resolve", "-version", "3", "-applied")
+		// 0004 is pending above, so the check needs a scratch database. There
+		// 0002 fails, as only the hotfix of a's rows let it run: -force.
+		o.refused([]string{"resolve", "-version", "3", "-applied"}, "give one with -scratch-db")
+		o.refused([]string{"resolve", "-version", "3", "-applied", "-scratch-db", testDSN(t, velox.Postgres)},
+			"the files up to version 3 fail on the scratch database", "could not create unique index", "or pass -force with the reason")
+		errs := o.ok("resolve", "-version", "3", "-applied", "-scratch-db", testDSN(t, velox.Postgres), "-force", "the hotfix added note")
+		if !strings.Contains(errs, "version 3 is marked applied by force (the hotfix added note), unchecked: the files up to version 3 fail") {
+			t.Errorf("the note: %s", errs)
+		}
 		o.ok("apply")
 	})
 }

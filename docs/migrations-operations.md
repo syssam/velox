@@ -7,11 +7,46 @@ writes the history table.
 
 | Way out | When | What it does |
 | --- | --- | --- |
-| `resolve -version N -applied` | a dirty version you finished by hand, or a pending file the database already holds | records the file as applied, running nothing |
+| `resolve -version N -applied` | a dirty version you finished by hand, or a pending file the database already holds | checks the database, then records the file as applied, running nothing |
 | `resolve -version N -undone` | a dirty version you reverted by hand | deletes the row, so the file runs again |
 | `resolve -version N -statements K` | a dirty version whose count is behind what ran: MySQL, or a PostgreSQL no-transaction file | records that the first K statements ran; `apply -resume` runs K+1 on |
-| `resolve -version N -adopt` | an applied version whose file changed, and the database holds what the file does | records the file's checksum and name, running nothing |
+| `resolve -version N -adopt` | an applied version whose file changed, and the database holds what the file does | checks the database, then records the file's checksum and name, running nothing |
 | `resolve -version N -forget` | an applied version whose file is gone, differs, or never ran | deletes the row and undoes nothing; prints what the database keeps |
+
+## What -applied and -adopt check
+
+`-applied` and `-adopt` say the database holds what the directory makes. They
+compare before they record. With M the highest version the history would then
+hold, the database must match what the directory says it holds at M:
+
+- `schema.json`, when M is the directory's last file;
+- else what the files up to M make on an empty database. On SQLite that is a
+  temporary file. On PostgreSQL and MySQL, pass one with `-scratch-db`; the files
+  are left applied there, so give a new one each time.
+
+As `migrate drift` does, only the tables and enum types of that schema are read. A
+table that schema does not name is no difference. A difference is refused, listed
+as `migrate drift` lists it:
+
+    version 2 is not marked applied: the database differs from what the files up to 0002_mine.sql make on an empty database; what would bring it there:
+      change: create-table mine
+    finish its statements by hand and resolve again; record how many ran with -statements k and run migrate apply -resume; or pass -force with the reason
+
+Make the database match and run it again. If you know better, `-force` records it
+all the same:
+
+    migrate resolve -version 2 -applied -force "restored from the backup"
+
+It prints the differences as a note. The row's error column keeps `forced: `, the
+reason and the differences; `status` and `status -json` show it. A claim that
+cannot be checked is refused the same way: a dirty version left, a version above
+the directory's last file, no `-scratch-db` on PostgreSQL or MySQL, or files that
+fail on it. A file whose rows a hand fix made good, as the hotfix below, may fail on
+an empty database; then `-force` is the way.
+
+`-undone`, `-statements` and `-forget` check nothing. `-undone` and `-statements`
+leave the file to run again, which meets the real schema and Up's checks.
+`-forget` takes the claim away.
 
 ## Two branches took one version
 
@@ -92,9 +127,8 @@ last version:
        migrate resolve -version 3 -applied
 
 `apply` refuses to run it over rows below it, saying that, and never skips it unasked.
-The rows below stay in the history, which no longer asks for their files. Nothing checks
-that a database was at the last version before you ran `-applied`; one that was behind
-stays behind, and `migrate drift` is how to see that.
+The rows below stay in the history, which no longer asks for their files. `-applied`
+compares the database with `schema.json` first, so one that was behind is refused.
 
 ## A dirty MySQL version
 

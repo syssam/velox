@@ -329,11 +329,47 @@ Beside this, in the same spirit, each found by running it:
   the safe side.
 - `diff` sees a database only under `-db`, and only one, so two branches that have not
   met are found at the merge or at `apply`. `-forget` undoes nothing. `-adopt` and
-  `-applied` run nothing and check nothing against the database.
-- Nothing checks that a database was at the last version before a squash's `-applied`.
+  `-applied` run nothing; they check the database as the Review below says.
+- `-applied` and `-adopt` read only the tables and enum types the expected schema names.
+  A view, a trigger, a routine or a table in another PostgreSQL schema that a file
+  makes is not compared. A hand-written last file whose change `schema.json` does not
+  hold is compared as `schema.json` says.
 - A new MySQL table at `utf8mb4_bin` with a string key to a table kept at another
   collation fails 3780 until `schema.Collation` states one for it.
 - SQLite check text is compared by the normaliser, so a check spelled otherwise in a
   rewritten rebuild, which it cannot parse as the same, is refused.
 - `LintFile` judges `MERGE` by its `WHEN` clauses, not by what they reach.
 - `migrate drift` cannot report a hand-added column while a file is pending.
+
+## Review
+
+An independent review found that `resolve -applied` and `-adopt` checked nothing
+against the database. An operator who was wrong left a history that said version N
+while the schema differed, and later files ran from a false base. Rulings, applied:
+
+1. Both compare before they record. With M the highest version the history would then
+   hold, the expected schema is `schema.json` when M is the directory's last file.
+   Else it is what the files up to M make on an empty database: a temporary SQLite
+   file, or `-scratch-db` (`WithScratch`) on PostgreSQL and MySQL. This keeps the
+   directory without a snapshot per version: a replay stands in for one, only when
+   asked.
+2. The comparison is `drift`'s, unchanged: the expected schema's tables and enum types
+   are read, and a table it does not name is no difference. A change refuses, as Code
+   `drift`, listing each as `migrate drift` prints it, with the ways on. Warnings alone
+   are notes.
+3. A claim that cannot be checked refuses as Code `unverified`: a dirty version left, a
+   version above the directory's last file, a file pending below M, PostgreSQL or
+   MySQL with files pending above and no scratch database, or files that fail on the
+   scratch database. A file may need rows a hand fix made good: `TestOperationsDocPostgres`'s
+   hotfix case fails there and is forced.
+4. `-force reason` records either. The history has no column for a note, and `error`
+   is read only for a dirty row, so a forced clean row keeps `forced: `, the reason
+   and the changes there. `status` prints it; a checked `-adopt` keeps what was there.
+5. `-undone`, `-statements` and `-forget` check nothing. `-undone` and `-statements`
+   leave the file to run again, against the real schema and `Up`'s checks; `-undone`
+   reads only `velox.json`, so the file can be edited before it runs. `-forget`
+   takes the claim away and says what the database keeps.
+
+`TestResolveChecksTheDatabase`, `TestResolveAdoptChecks` and `TestResolveChecksByReplay`
+run each case on SQLite, PostgreSQL and MySQL; `TestOperationsDoc` and
+`TestResolveScratchDB` run the command line.

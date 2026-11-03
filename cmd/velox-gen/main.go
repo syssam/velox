@@ -28,6 +28,7 @@
 //	velox-gen migrate lint [-dir ./migrations] [-since version]
 //	velox-gen migrate hash [-dir ./migrations] [-check]
 //	velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone | -statements k | -adopt | -forget)
+//	                          [-force reason] [-scratch-db dsn]
 //	velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
 //
 // Each subcommand has its own flags; a flag it does not take is a usage
@@ -213,7 +214,8 @@
 // do next.
 //
 // migrate status prints a line per version, in version order: "applied
-// <version> <path> <time>", the time in RFC 3339 and UTC, "pending <version>
+// <version> <path> <time>", the time in RFC 3339 and UTC, then ": " and what
+// resolve -force recorded, if it did, "pending <version>
 // <path>", "dirty <version> <path>: <n> statement(s) done: <error>" and "ahead
 // <version> <name>" for a version above the directory's last file. It exits
 // 0 when the database is up to date or ahead, 3 with pending files and 1
@@ -249,6 +251,22 @@
 // and removes the row of a version whose file is gone, differs or never ran
 // (-forget). A version not in the state its way needs is exit 1; no -version,
 // or not exactly one way, is exit 2. docs/migrations-operations.md has when.
+//
+// -applied and -adopt check the claim first. With m the highest version the
+// history then holds, the database must hold what the directory says it
+// holds at m: schema.json when m is the directory's last file, else what the
+// files up to m make on an empty database. That database is -scratch-db, or
+// on SQLite a temporary file; on PostgreSQL and MySQL, without -scratch-db,
+// the claim cannot be checked. As migrate drift does, only the tables and
+// enum types of that schema are read, so a table it does not name is not a
+// difference. A difference is exit 1, listed as migrate drift lists it, with
+// the ways on. So is a claim that cannot be checked: a dirty version left, a
+// version above the directory's last file, no scratch database, or files
+// that fail there, as one whose rows a hand fix made good may. -force
+// records it all the same, prints the differences as a note and keeps the
+// reason and the differences in the row's error column, which status -json
+// shows. -force and -scratch-db go only with -applied and -adopt; -force
+// with no reason is exit 2.
 package main
 
 import (
@@ -439,7 +457,11 @@ func printUsage(w io.Writer) {
   velox-gen migrate hash [-dir ./migrations] [-check]
         rewrite velox.sum
   velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone | -statements k | -adopt | -forget)
-        tell the history what was done by hand
+        [-force reason] [-scratch-db dsn]
+        tell the history what was done by hand; -applied and -adopt first
+        compare the database with schema.json, or, when files above the
+        version are pending, with the files up to it applied to -scratch-db,
+        and refuse a difference unless -force gives the reason
   velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
         print the schema package's DDL, for Atlas's external_schema
 

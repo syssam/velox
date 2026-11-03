@@ -59,6 +59,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `migrate resolve -statements`, `-adopt` and `-forget`; `-applied` works on a pending file;
   `diff -db`; `schema.Collation`. `docs/migrations-operations.md` covers merges and recovery.
 - `ErrTxControl`.
+- `migrate resolve -force reason` and `-scratch-db dsn`; `migrate.WithForce`, `migrate.WithScratch`
+  and the `Error` Code `unverified`.
 - `veloxgql.Limits`: `MaxFragments`, `MaxDepth`, `MaxNameBytes`, `MaxLiteralBytes`,
   `MaxVariableNodes` and `MaxErrors`. The `Server` interface `Setup` takes gains
   `SetValidationRulesFn`.
@@ -113,6 +115,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `migrate resolve -applied` and `-adopt` (`migrate.Resolve`'s `ResolveApplied` and
+  `ResolveAdopted`) compare the database with what the directory says it holds after the
+  version, and refuse a difference, listed as `migrate drift` lists it, unless `-force`
+  gives a reason. That schema is `schema.json` at the directory's last file, else the files
+  up to the version applied to a scratch database. A forced row keeps the reason in its
+  error column, which `status` shows. `docs/migrations-operations.md` has the rule.
 - velox-graphql's connections, cursors and Node lookups run on one non-generic runtime,
   `gqlimpl.Conn` and `gqlimpl.NewConnection` on velox's untyped `TableQuery` (`velox.Table`,
   `TableOf`, `Untyped`, `Typed`, for generated code), and the generated code only names the

@@ -371,7 +371,11 @@ func runMigrateStatus(args []string, dir string, env []string, stdout, stderr io
 		}
 		var lines []line
 		for _, a := range st.Applied {
-			lines = append(lines, line{a.Version, fmt.Sprintf("applied %d %s %s", a.Version, c.path(filePath(d, a)), a.AppliedAt.UTC().Format(time.RFC3339))})
+			s := fmt.Sprintf("applied %d %s %s", a.Version, c.path(filePath(d, a)), a.AppliedAt.UTC().Format(time.RFC3339))
+			if a.Error != "" {
+				s += ": " + c.text(a.Error) // what a forced resolve recorded
+			}
+			lines = append(lines, line{a.Version, s})
 		}
 		for _, f := range st.Pending {
 			lines = append(lines, line{f.Version, fmt.Sprintf("pending %d %s", f.Version, c.path(f.Path))})
@@ -494,6 +498,9 @@ func runMigrateDrift(args []string, dir string, env []string, stdout, stderr io.
 
 // runMigrateResolve is velox-gen migrate resolve: it ends the dirty version
 // -version with migrate.Resolve, as applied (-applied) or undone (-undone).
+// -applied and -adopt compare the database with the directory first, on
+// -scratch-db when files above the version are pending, and record a
+// difference only with -force.
 func runMigrateResolve(args []string, dir string, env []string, stdout, stderr io.Writer) int {
 	c := newDBCmd("resolve", stderr)
 	version := c.fs.Uint64("version", 0, "the `version` to resolve")
@@ -502,6 +509,8 @@ func runMigrateResolve(args []string, dir string, env []string, stdout, stderr i
 	adopt := c.fs.Bool("adopt", false, "the directory's file is what this applied version is now: record its checksum, running nothing")
 	forget := c.fs.Bool("forget", false, "the file of this clean version is gone or never ran: delete its row, undoing nothing")
 	statements := c.fs.Int("statements", 0, "the first `k` statements of the dirty version ran: record that, so that apply -resume goes on from statement k+1")
+	force := c.fs.String("force", "", "with -applied or -adopt: record it though the database differs from the directory, or cannot be compared; the `reason` goes in the history")
+	scratch := c.fs.String("scratch-db", "", "with -applied or -adopt: an empty database's `dsn`, which the files up to the version are applied to, to compare with when files above it are pending (default on SQLite: a temporary file)")
 	rest, code, done := parseFlags(c.fs, args)
 	if done {
 		return code
@@ -517,6 +526,19 @@ func runMigrateResolve(args []string, dir string, env []string, stdout, stderr i
 	}
 	if !given(c.fs, "version") || ways != 1 {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: migrate resolve needs -version and one of -applied, -undone, -statements, -adopt and -forget\n")
+		c.fs.Usage()
+		return 2
+	}
+	checked := given(c.fs, "applied") || *adopt
+	for _, f := range []string{"force", "scratch-db"} {
+		if given(c.fs, f) && !checked {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: migrate resolve: -%s goes with -applied or -adopt\n", f)
+			c.fs.Usage()
+			return 2
+		}
+	}
+	if given(c.fs, "force") && strings.TrimSpace(*force) == "" {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: migrate resolve: -force needs a reason\n")
 		c.fs.Usage()
 		return 2
 	}
@@ -545,9 +567,22 @@ func runMigrateResolve(args []string, dir string, env []string, stdout, stderr i
 		return code
 	}
 	defer func() { _ = db.Close() }()
+	r, how, opts := migrate.ResolveApplied, "applied", []migrate.Option{migrate.WithNotes(func(n string) { _, _ = fmt.Fprintf(stderr, "velox-gen: note: %s\n", c.text(n)) })}
+	if *scratch != "" {
+		hidden := c.secret
+		sdb, code, ok := c.open(dialect.d, *scratch, "-scratch-db", false)
+		c.secret = hidden.and(c.secret)
+		if !ok {
+			return code
+		}
+		defer func() { _ = sdb.Close() }()
+		opts = append(opts, migrate.WithScratch(sdb))
+	}
+	if given(c.fs, "force") {
+		opts = append(opts, migrate.WithForce(*force))
+	}
 	ctx, stop := signalContext()
 	defer stop()
-	r, how, opts := migrate.ResolveApplied, "applied", []migrate.Option{migrate.WithNotes(func(n string) { _, _ = fmt.Fprintf(stderr, "velox-gen: note: %s\n", c.text(n)) })}
 	switch {
 	case *undone:
 		r, how = migrate.ResolveUndone, "undone"

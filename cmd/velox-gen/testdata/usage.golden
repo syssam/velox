@@ -28,7 +28,11 @@ Usage:
   velox-gen migrate hash [-dir ./migrations] [-check]
         rewrite velox.sum
   velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone | -statements k | -adopt | -forget)
-        tell the history what was done by hand
+        [-force reason] [-scratch-db dsn]
+        tell the history what was done by hand; -applied and -adopt first
+        compare the database with schema.json, or, when files above the
+        version are pending, with the files up to it applied to -scratch-db,
+        and refuse a difference unless -force gives the reason
   velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
         print the schema package's DDL, for Atlas's external_schema
 
