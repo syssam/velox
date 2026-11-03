@@ -330,6 +330,9 @@ func (w *recreates) statement(l *fileLinter) error {
 			if err := w.breaks(w.state(ref), ref, ""); err != nil {
 				return err
 			}
+			if err := w.pgTableBreaks(w.state(ref), ref, true); err != nil {
+				return err
+			}
 			w.put(ref, nil)
 			if !l.punct(j, ",") {
 				return nil
@@ -763,6 +766,9 @@ func (w *recreates) postgresAction(l *fileLinter, st *tableState, ref TableRef, 
 				return st, ref, w.unknown(l, st, ref)
 			}
 			b := TableRef{Schema: ref.Schema, Name: w.word(l, i+2)}
+			if err := w.pgTableBreaks(st, ref, false); err != nil {
+				return st, ref, err
+			}
 			w.rename(ref, b)
 			return w.state(b), b, nil
 		default:
@@ -784,6 +790,9 @@ func (w *recreates) postgresAction(l *fileLinter, st *tableState, ref TableRef, 
 	case "SET":
 		if l.upper(i+1) == "SCHEMA" && i+2 < end {
 			b := w.norm(TableRef{Schema: w.word(l, i+2), Name: ref.Name})
+			if err := w.pgTableBreaks(st, ref, false); err != nil {
+				return st, ref, err
+			}
 			w.rename(ref, b)
 			return w.state(b), b, nil
 		}

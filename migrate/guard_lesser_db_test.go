@@ -149,3 +149,51 @@ CREATE TRIGGER t_touch BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION touch();
 		mustUp(t, db, extend(t, base, d, files("0002_x.sql", "ALTER TABLE t DROP COLUMN other;\n")))
 	})
 }
+
+// TestPostgresTriggerFunctionNamesTable: a PL/pgSQL function of a trigger on one
+// table that writes another names that table, and PostgreSQL does not read the body
+// until the trigger fires. A rename, move or drop of the other table, or a rename or
+// drop of a column of it the body names, ran, and every write to the trigger's table
+// failed after. Up refuses, a directive accepts, and a file that replaces the function
+// needs none. A drop of the trigger's own table takes the trigger with it.
+func TestPostgresTriggerFunctionNamesTable(t *testing.T) {
+	d := velox.Postgres
+	const trigger = `CREATE TABLE t (id integer PRIMARY KEY, c integer);
+CREATE TABLE audit (c integer, other integer);
+CREATE FUNCTION log_t() RETURNS trigger LANGUAGE plpgsql AS $f$ BEGIN INSERT INTO audit (c) VALUES (NEW.c); RETURN NEW; END $f$;
+CREATE TRIGGER t_log AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION log_t();
+`
+	const replaced = `CREATE OR REPLACE FUNCTION log_t() RETURNS trigger LANGUAGE plpgsql AS $f$ BEGIN RETURN NEW; END $f$;
+`
+	for _, c := range []struct{ q, target string }{
+		{"ALTER TABLE audit RENAME TO audit_log", "audit"},
+		{"ALTER TABLE IF EXISTS public.audit RENAME TO audit_log", "audit"},
+		{"CREATE SCHEMA old;\nALTER TABLE audit SET SCHEMA old", "audit"},
+		{"DROP TABLE audit", "audit"},
+		{"ALTER TABLE audit RENAME COLUMN c TO d", "audit.c"},
+		{"ALTER TABLE audit DROP COLUMN c", "audit.c"},
+	} {
+		t.Run(c.q, func(t *testing.T) {
+			db, _ := freshDB(t, d)
+			base := dirOf(t, d, files("0001_base.sql", trigger))
+			mustUp(t, db, base)
+			refused(t, db, extend(t, base, d, files("0002_x.sql", c.q+";\n")), "log_t", "t_log", c.target, "-- velox:allow unmodeled-loss log_t")
+			mustUp(t, db, extend(t, base, d, files("0002_x.sql", "-- velox:allow unmodeled-loss log_t\n"+c.q+";\n")))
+		})
+	}
+	t.Run("a file that replaces it", func(t *testing.T) {
+		db, _ := freshDB(t, d)
+		base := dirOf(t, d, files("0001_base.sql", trigger))
+		mustUp(t, db, base)
+		mustUp(t, db, extend(t, base, d, files("0002_x.sql", "ALTER TABLE audit RENAME TO audit_log;\n"+replaced)))
+		mustExec(t, db, "INSERT INTO t (id) VALUES (1)")
+	})
+	for _, q := range []string{"ALTER TABLE audit DROP COLUMN other", "DROP TABLE t", "ALTER TABLE t RENAME TO t2"} {
+		t.Run(q, func(t *testing.T) {
+			db, _ := freshDB(t, d)
+			base := dirOf(t, d, files("0001_base.sql", trigger))
+			mustUp(t, db, base)
+			mustUp(t, db, extend(t, base, d, files("0002_x.sql", q+";\n")))
+		})
+	}
+}

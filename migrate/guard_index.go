@@ -686,35 +686,63 @@ func (w *recreates) mysqlUsesOf(db string) ([]mysqlUse, error) {
 	return uses, nil
 }
 
-// pgFunctionsBreak records each PL/pgSQL function of a trigger on st whose body names
-// the column col, which the statement renames or drops: PostgreSQL lets it, as it does
-// not read the body until the trigger fires, and every write to the table then fails.
-// The body is read as words, which errs on the safe side; a name built into an
-// EXECUTE's string is not seen.
+// pgFunctionsBreak records each PL/pgSQL function of a trigger whose body names the
+// column col of st, which the statement renames or drops; "" is a column the file
+// made, which nothing names yet.
 func (w *recreates) pgFunctionsBreak(st *tableState, ref TableRef, col string) error {
-	if w.quiet || st.made || col == "" {
+	if col == "" {
+		return nil
+	}
+	return w.pgTriggersNaming(st, ref, col, false)
+}
+
+// pgTableBreaks records each PL/pgSQL function of a trigger whose body names st,
+// which the statement renames, moves, or drops when drops says so.
+func (w *recreates) pgTableBreaks(st *tableState, ref TableRef, drops bool) error {
+	return w.pgTriggersNaming(st, ref, "", drops)
+}
+
+// pgTriggersNaming records each PL/pgSQL function of a trigger whose body names what
+// the statement renames, moves or drops: the column col of st, or st itself when col
+// is "". PostgreSQL lets it, as it does not read the body until the trigger fires, and
+// every write to the trigger's table then fails. A trigger on st counts when its body
+// names col; a trigger on another table when it names st, and col too when there is
+// one. A trigger on st goes with st when drops says the statement drops the table. The
+// body is read as words, which errs on the safe side; a name built into an EXECUTE's
+// string is not seen.
+func (w *recreates) pgTriggersNaming(st *tableState, ref TableRef, col string, drops bool) error {
+	if w.quiet || w.s.d != velox.Postgres || st.made || col == "" && w.fileRemakes(st.ref.Name) {
 		return nil
 	}
 	name := ddl.Ident(velox.Postgres, st.ref.Name)
 	if st.ref.Schema != "" {
 		name = ddl.Ident(velox.Postgres, st.ref.Schema) + "." + name
 	}
-	err := eachRow(w.ctx, w.s.conn, `SELECT t.tgname, p.proname, p.prosrc
+	err := eachRow(w.ctx, w.s.conn, `SELECT t.tgname, p.proname, p.prosrc, t.tgrelid::regclass::text, t.tgrelid = to_regclass($1)
 FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid JOIN pg_language g ON g.oid = p.prolang
-WHERE t.tgrelid = to_regclass($1) AND NOT t.tgisinternal AND g.lanname = 'plpgsql'
+WHERE NOT t.tgisinternal AND g.lanname = 'plpgsql'
 ORDER BY t.tgname`, []any{name}, func(rows *sql.Rows) error {
-		var trigger, function, body string
-		if err := rows.Scan(&trigger, &function, &body); err != nil {
+		var trigger, function, body, on string
+		var own bool
+		if err := rows.Scan(&trigger, &function, &body, &on, &own); err != nil {
 			return err
 		}
-		hit := slices.ContainsFunc(lex(velox.Postgres, body), func(wd word) bool { return strings.EqualFold(wd.text, col) })
+		words := lex(velox.Postgres, body)
+		names := func(s string) bool {
+			return slices.ContainsFunc(words, func(wd word) bool { return strings.EqualFold(wd.text, s) })
+		}
+		hit := names(st.ref.Name) && !(own && drops)
+		what := ref.String()
+		if col != "" {
+			hit, what = names(col) && (own || names(st.ref.Name)), colTarget(ref, col)
+		}
 		if hit && !w.fileRemakes(function) && !w.fileRemakes(trigger) {
-			w.lost(ref, nil, function, fmt.Sprintf("the function %s of the trigger %s names %s, and every write to the table fails once the statement has renamed or dropped it; replace the function in the file", function, trigger, colTarget(ref, col)))
+			w.lost(ref, nil, function, fmt.Sprintf("the function %s of the trigger %s on %s names %s, and every write to %s fails once the statement has renamed, moved or dropped it; replace the function in the file", function, trigger, on, what, on))
 		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("migrate: %s: reading the triggers of %s: %w", w.f.Path, ref, err)
+		return fmt.Errorf("migrate: %s: reading the triggers that name %s: %w", w.f.Path, ref, err)
 	}
 	return nil
 }

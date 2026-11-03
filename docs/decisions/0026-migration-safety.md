@@ -135,11 +135,14 @@ follows the edit.
   multi-column index is refused as `t.x`, which `-allow drop-column` does not cover,
   unless the file drops the index or all its columns go. A plain index only serves
   other queries: it is let through, with a note.
-- PostgreSQL's `RENAME COLUMN` and `DROP COLUMN` read as words the bodies of the
-  PL/pgSQL functions of the table's triggers, which PostgreSQL does not read until one
-  fires, so every write to the table would fail after. One that names the column is
-  refused by the function's name, unless the file replaces it or drops it or the
-  trigger, or a directive accepts it.
+- PostgreSQL's `RENAME COLUMN`, `DROP COLUMN`, `RENAME TO`, `SET SCHEMA` and `DROP
+  TABLE` read as words the bodies of the PL/pgSQL functions of the database's
+  triggers, which PostgreSQL does not read until one fires, so every write to the
+  trigger's table would fail after. One of a trigger on the table that names the
+  column, or of a trigger on another table that names the table (and the column, for a
+  column's change), is refused by the function's name, unless the file replaces it or
+  drops it or the trigger, or a directive accepts it. A table's own triggers go with
+  its `DROP TABLE`.
 - What the server refuses with a file under way, its earlier statements kept, is
   refused first, as Code `unsupported`: `CONCURRENTLY` on a PostgreSQL partitioned table
   or index, and on a MyISAM table `ALGORITHM=INPLACE` or `LOCK=NONE` on anything but a
@@ -247,6 +250,11 @@ Beside this, in the same spirit, each found by running it:
   cancel) leads its way out, in `apply` and `status`, with waiting for the statement in
   the process list or `pg_stat_activity` and checking what it did, then
   `resolve -statements`, then `-resume`.
+- PostgreSQL's guard read only the functions of the triggers on the table a statement
+  renamed or dropped a column of. A trigger on `t` whose function wrote `audit` let a
+  plan rename `audit`, `Up` returned nil, and every `INSERT` into `t` then failed with
+  42P01; so did a move, a drop, and a rename or drop of a column of `audit` the body
+  named. The functions of every trigger are read now, as above.
 - A plan refuses what can never run or would cut a value whatever it says: a `USING`
   cast to a limited type becomes the assignment cast, a truncating target under
   `alter-type` is a finding, an enum reorder over an array column and a `CONVERT TO`
@@ -296,9 +304,8 @@ Beside this, in the same spirit, each found by running it:
 - Views and triggers are read as words: an alias of a column's name refuses falsely,
   and a routine, an event, another database's view, or a view whose text the user may
   not read (no `SHOW VIEW`) is not seen. PostgreSQL follows a rename in views itself. Of
-  its functions only a PL/pgSQL one a trigger on the table runs is read: another that
-  one calls, one a view or a default calls, and a name built into an `EXECUTE` string
-  break unseen.
+  its functions only a PL/pgSQL one a trigger runs is read: another that one calls, one
+  a view or a default calls, and a name built into an `EXECUTE` string break unseen.
 - The walk resolves a name when it reads it. A `CREATE TABLE` without a schema is taken
   as made in `Up`'s, the first of the path.
 - A shared-cache database whose only other connection belongs to another pool is

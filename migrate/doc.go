@@ -87,7 +87,7 @@
 //     the model or not, and the file does not name; a foreign key or index made
 //     again without what it has; a MySQL rename or drop that a view or trigger
 //     uses, or a DROP COLUMN that shrinks a UNIQUE index; a PostgreSQL rename or
-//     drop that a PL/pgSQL function of a trigger on the table names; a value a
+//     drop that a PL/pgSQL function of a trigger names; a value a
 //     file's velox:drops line expects and the database does not hold; or a
 //     statement it cannot read on such a table. It names each, and a directive
 //     -- velox:allow unmodeled-loss accepts the loss.

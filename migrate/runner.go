@@ -196,7 +196,7 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // write what the column has; a foreign key or an index dropped and made again
 // without what it has; a MySQL rename or drop that a view or trigger uses, or a
 // DROP COLUMN that shrinks a UNIQUE index; and a PostgreSQL rename or drop that a
-// PL/pgSQL function of a trigger on the table names. The SQLite file is rolled back;
+// PL/pgSQL function of a trigger names. The SQLite file is rolled back;
 // the others do not start. A plan's own drops are listed in the file as -- velox:drops,
 // by the attribute where it can and with the value it expects where it has one, which
 // Up compares, and -- velox:allow unmodeled-loss [<object>] accepts a loss, but for a
