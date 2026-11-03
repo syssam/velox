@@ -627,7 +627,7 @@ func (w *recreates) remade(st *tableState, ref TableRef, name string, stated ind
 	if err := w.load(st); err != nil {
 		w.fail = cmp.Or(w.fail, err)
 	}
-	lines := shapeDiffers(w.s.d, st.enums, was, stated)
+	lines := shapeDiffers(w.s.d, st.enums, was, w.beforeRenames(st, stated))
 	for _, attr := range slices.Sorted(maps.Keys(lines)) {
 		if w.quiet && slices.Contains(modelAttrs, attr) {
 			continue
@@ -640,6 +640,42 @@ func (w *recreates) remade(st *tableState, ref TableRef, name string, stated ind
 			return strings.EqualFold(shapeValue(was, attr), want)
 		})
 	}
+}
+
+// beforeRenames is the shape a statement writes, with each column the file
+// renamed before it by its name in the database: the index the walk dropped
+// was read from there, before the file ran.
+func (w *recreates) beforeRenames(st *tableState, s indexShape) indexShape {
+	type rename struct{ now, was, tmp string }
+	var renames []rename
+	for _, now := range slices.Sorted(maps.Keys(st.cols)) {
+		if was := st.cols[now]; was != "" && was != now {
+			renames = append(renames, rename{now, was, fmt.Sprintf("velox_rename_%d", len(renames))})
+		}
+	}
+	if len(renames) == 0 {
+		return s
+	}
+	// Through a name of its own each, so that a swap of two names holds.
+	back := func(expr string) string {
+		for _, r := range renames {
+			expr = renameIdent(w.s.d, expr, r.now, r.tmp)
+		}
+		for _, r := range renames {
+			expr = renameIdent(w.s.d, expr, r.tmp, r.was)
+		}
+		return expr
+	}
+	s.keys = slices.Clone(s.keys)
+	for i := range s.keys {
+		s.keys[i].name = back(s.keys[i].name)
+	}
+	s.include = slices.Clone(s.include)
+	for i := range s.include {
+		s.include[i] = back(s.include[i])
+	}
+	s.where = back(s.where)
+	return s
 }
 
 // shapeValue is the attribute attr of an index as a velox:drops line records it, for

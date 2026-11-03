@@ -292,6 +292,11 @@ Beside this, in the same spirit, each found by running it:
   CONSTRAINT x_velox_new UNIQUE USING INDEX x_velox_new` when the model says one; the
   old constraint or index dropped; and the new one renamed to `x`, by `RENAME
   CONSTRAINT` or `ALTER INDEX`. Each is a unit, so a duplicate fails after every one.
+- A plan that renamed an enum column and removed one of its values was refused. The
+  type swap drops a partial index over the column and makes it again, and the walk
+  compared the index as the database had it, over the old name, with the statement
+  over the new one. The statement's keys, `INCLUDE` and predicate are now read by
+  the names in the database before the file's renames.
 - PostgreSQL 18's `NOT NULL NOT VALID` sets `attnotnull` and leaves the rows from
   before it unchecked. Inspect read such a column as NOT NULL, so `Drift` against a
   model that says NOT NULL found nothing while a row held NULL. It is read as
