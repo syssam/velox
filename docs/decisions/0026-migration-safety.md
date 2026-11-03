@@ -340,6 +340,9 @@ Beside this, in the same spirit, each found by running it:
   not read (no `SHOW VIEW`) is not seen. PostgreSQL follows a rename in views itself. Of
   its functions only a PL/pgSQL one a trigger runs is read: another that one calls, one
   a view or a default calls, and a name built into an `EXECUTE` string break unseen.
+- velox sets no `statement_timeout`. One the session has can cancel an online
+  file's build and leave it dirty; docs/migrations-operations.md tells operators to
+  set it off for that session.
 - The walk resolves a name when it reads it. A `CREATE TABLE` without a schema is taken
   as made in `Up`'s, the first of the path.
 - A shared-cache database whose only other connection belongs to another pool is

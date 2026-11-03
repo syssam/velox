@@ -214,6 +214,12 @@ query while they wait for older transactions, wait for as long as those take. A 
 timeout at a unit's first statement changed nothing: run `apply` again, with no
 `-resume`.
 
+velox sets no `statement_timeout`. One the role or database sets cancels a long
+`CREATE INDEX CONCURRENTLY` or `VALIDATE CONSTRAINT` and leaves the file dirty. Set it
+to 0, or past the longest build, for the role or the connection that runs the online
+file, as `ALTER ROLE migrator SET statement_timeout = 0` or `options=-c
+statement_timeout=0` in the DSN.
+
 A run killed during a unit's statement may leave the statement running on the server,
 as `pg_stat_activity` shows, with the run's lock: the next `apply` waits for it up to
 `-lock-wait`. Check what it did as in the section above. A unit `migrate diff` wrote
