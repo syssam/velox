@@ -5,12 +5,22 @@ import (
 	"testing"
 )
 
-func TestDiscover(t *testing.T) {
+// candidates keeps the types that may be schemas: a struct with an embedded
+// field, at any depth or from another package, an alias and a type that
+// declares Type. It refuses an unexported struct that embeds schema.Schema
+// when no type embeds it, and passes an unexported base.
+func TestCandidates(t *testing.T) {
 	files := map[string][]byte{
 		"a.go": []byte(`package s
 import vs "github.com/syssam/velox/schema"
 type User struct{ vs.Schema }
 type notASchema struct{ Name string }
+type base struct{ vs.Schema }
+type Derived struct{ base }
+type Other struct{ other.Base }
+type Own struct{}
+func (Own) Type() {}
+type Plain struct{ Name string }
 `),
 		"b.go": []byte(`package s
 import "github.com/syssam/velox/schema"
@@ -18,25 +28,17 @@ type Post struct {
 	schema.Schema
 }
 type Alias = Post
+type Ptr struct{ *schema.Schema }
+type Gen[T any] struct{ schema.Schema }
 `),
 	}
-	got, err := discover(files)
-	if err != nil || strings.Join(got, ",") != "Post,User" {
-		t.Fatalf("got %v %v", got, err)
+	got, err := candidates(files)
+	if want := "Alias,Derived,Gen,Other,Own,Post,Ptr,User"; err != nil || strings.Join(got, ",") != want {
+		t.Fatalf("got %v %v, want %s", got, err, want)
 	}
-	// Only a direct embedding is found: Derived embeds Base, which embeds
-	// schema.Schema, and is not a schema.
-	got, err = discover(map[string][]byte{"d.go": []byte("package s\nimport \"github.com/syssam/velox/schema\"\ntype Base struct{ schema.Schema }\ntype Derived struct{ Base }\n")})
-	if err != nil || strings.Join(got, ",") != "Base" {
-		t.Fatalf("got %v %v", got, err)
-	}
-	_, err = discover(map[string][]byte{"c.go": []byte("package s\nimport \"github.com/syssam/velox/schema\"\ntype user struct{ schema.Schema }\n")})
-	if err == nil || !strings.Contains(err.Error(), "schema type user is unexported") {
-		t.Fatalf("got %v", err)
-	}
-	_, err = discover(map[string][]byte{"d.go": []byte("package s\nimport \"github.com/syssam/velox/schema\"\ntype Ok struct{ schema.Schema }\ntype Ptr struct{ *schema.Schema }\n")})
-	if err == nil || !strings.Contains(err.Error(), "schema type Ptr must embed schema.Schema by value, not a pointer") {
-		t.Fatalf("got %v", err)
+	_, err = candidates(map[string][]byte{"c.go": []byte("package s\nimport \"github.com/syssam/velox/schema\"\ntype user struct{ schema.Schema }\ntype deeper struct{ user }\n")})
+	if want := "c.go:4: type deeper embeds schema.Schema and is unexported: a schema must be exported, and a shared base is embedded by one"; err == nil || err.Error() != want {
+		t.Fatalf("got %v, want %s", err, want)
 	}
 }
 

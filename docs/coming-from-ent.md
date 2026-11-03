@@ -8,6 +8,39 @@ lists the differences that change what a schema means or what a call does.
 [Decision 0032](decisions/0032-ent-refusals.md) says which ent schemas velox-gen
 refuses, and why.
 
+## Finding schemas
+
+velox-gen finds schemas by ent's rule. A schema is an exported, non-generic
+struct type of the schema package that implements `schema.Interface`. It may
+implement it by value or through a pointer, so every method may have a
+pointer receiver. It may declare the methods itself or have them from an
+embedded struct, at any depth: embedding `schema.Schema` is the usual way.
+Only the files of the package's build are read, as by ent: a `_test.go` file
+is not, and nor is a file no build includes (`//go:build ignore`).
+
+velox-gen refuses, at the type's line, what looks like a schema and is not
+one, where ent would skip it or fail later:
+
+- **A schema that embeds another schema.** ent makes both entities, so
+  `type Release struct{ Base }` with an exported `Base` gives a `bases` table
+  too. velox-gen refuses it. A shared base is unexported, which is never a
+  schema: `type base struct{ schema.Schema }`, with the methods all its
+  schemas share, such as a `Mixin`. To share fields, a mixin is the usual way.
+- **An unexported struct that embeds `schema.Schema` and that no type
+  embeds.** It is likely a schema with a lower-case name.
+- **`*schema.Schema` embedded**, at any depth: its methods panic on the nil
+  pointer.
+- **A generic type, an alias or a non-struct type** that implements
+  `schema.Interface` or embeds `schema.Schema`.
+- **A method of another signature**, such as `Fields() []ent.Field`, or a
+  field named like a method, which hides `schema.Schema`'s.
+- **A file of the schema package that only some builds include**, behind a
+  tag or named for a system: the model would depend on the build.
+
+A schema's methods may be in any file of the package. A many-to-many join
+entity has no schema; its `Policy` or `Hooks` go on an empty struct of its
+name (`type UserFriend struct{}`), which is not a schema.
+
 ## Fields
 
 **`Optional` is NOT NULL.** In ent, `Optional()` makes the column NULL-able. In

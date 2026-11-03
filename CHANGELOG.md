@@ -115,6 +115,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-gen finds schemas by ent's rule: an exported, non-generic struct type of the schema
+  package that implements `schema.Interface`, by value or through a pointer, directly or
+  through embedding at any depth. A schema that embeds an unexported base (`type Release
+  struct{ base }`) was skipped without a word, and is now a schema; a method with a pointer
+  receiver failed in velox-gen's internal program, and now works. What looks like a schema and
+  is not one is refused at its line: a schema that embeds another schema (both would be
+  entities), `*schema.Schema` embedded at any depth, a generic type, an alias, a method of
+  another signature, a lone unexported struct that embeds `schema.Schema`, and a schema file
+  that only some builds include. A package that the schema's structure reaches and that does
+  not compile is reported with the chain of imports. See `docs/coming-from-ent.md`.
 - `migrate resolve -applied` and `-adopt` (`migrate.Resolve`'s `ResolveApplied` and
   `ResolveAdopted`) compare the database with what the directory says it holds after the
   version, and refuse a difference, listed as `migrate drift` lists it, unless `-force`

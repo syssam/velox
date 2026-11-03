@@ -76,10 +76,10 @@ func schemaPackage(dir string, patterns, env []string) (string, error) {
 	}
 	importPath, schemas, err := codegen.Inspect(dir, pattern, env)
 	if err != nil {
-		return "", err
+		return "", relErrors(dir, err)
 	}
 	if len(schemas) == 0 {
-		return "", fmt.Errorf("no schemas in %s: a schema is a struct that embeds schema.Schema directly", importPath)
+		return "", codegen.NoSchemas(importPath)
 	}
 	return pattern, nil
 }
@@ -151,7 +151,7 @@ func (gm *genModel) scopeNames() []string {
 func loadModel(dir, pattern, pkg string, env []string) (*genModel, error) {
 	importPath, _, err := codegen.Inspect(dir, pattern, env)
 	if err != nil {
-		return nil, err
+		return nil, relErrors(dir, err)
 	}
 	m, err := codegen.Load(dir, pattern, env)
 	if err != nil {

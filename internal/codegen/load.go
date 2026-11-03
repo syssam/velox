@@ -6,14 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
-	"go/parser"
+
 	"go/token"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
+
 	"strconv"
 	"strings"
 
@@ -22,25 +23,31 @@ import (
 
 // listed is the part of a go list package that Load reads.
 type listed struct {
-	ImportPath string
-	Name       string
-	Dir        string
-	GoFiles    []string
-	Imports    []string
-	Module     *struct{ Dir string }
-	Error      *struct{ Err string }
+	ImportPath     string
+	Name           string
+	Dir            string
+	GoFiles        []string
+	IgnoredGoFiles []string
+	Imports        []string
+	Module         *struct{ Dir string }
+	Error          *struct{ Err string }
 }
 
+// listFields are the fields of listed, for go list.
+const listFields = "-json=ImportPath,Name,Dir,GoFiles,IgnoredGoFiles,Imports,Module,Error"
+
 // Inspect runs go list for pattern, in the module that holds dir, and reports
-// the import path of the one package it names and the schemas the package
-// declares: the exported structs that embed schema.Schema, sorted. It does not
-// run any of the package's code. env is the environment of the go command; nil
-// means os.Environ().
+// the import path of the one package it names and the types of the package
+// that may be schemas, sorted (see candidates). Load decides which are. It
+// does not compile or run any of the package's code. env is the environment
+// of the go command; nil means os.Environ().
 //
 // An error says that pattern names no package, more than one, or is not in a
 // module, or is one go list reports as it wrote it, such as a go.mod that needs
-// go mod tidy, or a directory that holds two packages. A package that has no
-// schemas is not an error: schemas is empty.
+// go mod tidy, or a directory that holds two packages. It is also a file of
+// the package that only some builds include, or an unexported struct that
+// embeds schema.Schema and that no type embeds. A package that has no
+// candidates is not an error: schemas is empty.
 func Inspect(dir, pattern string, env []string) (importPath string, schemas []string, err error) {
 	pkg, names, _, err := inspect(dir, pattern, env)
 	if err != nil {
@@ -50,54 +57,95 @@ func Inspect(dir, pattern string, env []string) (importPath string, schemas []st
 }
 
 // inspect is Inspect's work, which also returns the package's files by name.
+// A file that only some builds include is refused: velox-gen generates one
+// model for every build. A file no build includes, such as one behind
+// //go:build ignore, and a _test.go file are not read.
 func inspect(dir, pattern string, env []string) (*listed, []string, map[string][]byte, error) {
 	pkg, err := list(dir, pattern, env)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	goVersion := ModuleGoVersion(pkg.Dir)
 	files := make(map[string][]byte, len(pkg.GoFiles))
-	for _, name := range pkg.GoFiles {
-		src, err := os.ReadFile(filepath.Join(pkg.Dir, name))
+	for _, name := range slices.Concat(pkg.GoFiles, pkg.IgnoredGoFiles) {
+		if filepath.Ext(name) != ".go" || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		path := filepath.Join(pkg.Dir, name)
+		src, err := os.ReadFile(path)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		files[name] = src
+		if sys, line := GoFileSystems(name, src, goVersion); sys == SomeSystems {
+			return nil, nil, nil, &Error{Pos: posString(token.Position{Filename: path, Line: max(line, 1)}),
+				Reason: "go builds this file of the schema package only on some systems or with some tags; velox-gen reads the schemas from files that every build includes"}
+		}
+		if slices.Contains(pkg.GoFiles, name) {
+			files[name] = src
+		}
 	}
-	names, err := discover(files)
+	names, err := candidates(files)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, prefixFiles(err, pkg.Dir)
 	}
 	return pkg, names, files, nil
+}
+
+// prefixFiles puts dir before the file name of each *Error's position in err.
+func prefixFiles(err error, dir string) error {
+	errs := []error{err}
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = j.Unwrap()
+	}
+	for _, e := range errs {
+		if ge, ok := e.(*Error); ok && ge.Pos != "" && !filepath.IsAbs(ge.Pos) {
+			ge.Pos = filepath.Join(dir, ge.Pos)
+		}
+	}
+	return err
 }
 
 // Load loads the schema package that pattern names, from the module that
 // holds dir, by compiling and running a program that marshals its schemas.
 // env is the environment of the go commands it runs; nil means os.Environ().
 //
-// The misuses of the DSL the model reports, such as a builder's, are returned
-// as *Error values joined with errors.Join, each with the position of the
-// element when it has one.
+// It finds the schemas by the discovery rule (see classify) in the package's
+// export data, and refuses what looks like a schema and is not one. Those
+// refusals, and the misuses of the DSL the model reports, such as a
+// builder's, are returned as *Error values joined with errors.Join, each with
+// the position of the type or element when it has one.
 func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
-	pkg, names, files, err := inspect(dir, pattern, env)
+	pkg, cands, files, err := inspect(dir, pattern, env)
 	if err != nil {
 		return nil, err
 	}
-	if len(names) == 0 {
-		return nil, fmt.Errorf("no schemas in %s: a schema is a struct that embeds schema.Schema directly", pkg.ImportPath)
+	if len(cands) == 0 {
+		return nil, NoSchemas(pkg.ImportPath)
 	}
 	tmp, err := os.MkdirTemp(pkg.Module.Dir, ".velox-gen-")
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
+	overlay, err := writeOverlay(tmp, pkg, cands, files, env)
+	if err != nil {
+		return nil, err
+	}
+	exp, err := exports(pkg.Module.Dir, pkg.ImportPath, overlay, env)
+	if err != nil {
+		return nil, fmt.Errorf("loading %s:\n%w", pkg.ImportPath, err)
+	}
+	names, err := classify(pkg.ImportPath, exp)
+	if err != nil {
+		return nil, err
+	}
+	if len(names) == 0 {
+		return nil, NoSchemas(pkg.ImportPath)
+	}
 	if err := os.WriteFile(filepath.Join(tmp, "main.go"), program(pkg.ImportPath, names), 0o644); err != nil {
 		return nil, err
 	}
 	args := []string{"run"}
-	overlay, err := writeOverlay(tmp, pkg, names, files, env)
-	if err != nil {
-		return nil, err
-	}
 	if overlay != "" {
 		args = append(args, "-overlay="+overlay)
 	}
@@ -204,7 +252,7 @@ func decodeModel(b []byte) (*loadjson.Model, error) {
 
 // list runs go list for pattern and returns the one package it names.
 func list(dir, pattern string, env []string) (*listed, error) {
-	out, stderr, err := run(dir, env, "list", "-json=ImportPath,Name,Dir,GoFiles,Imports,Module,Error", pattern)
+	out, stderr, err := run(dir, env, "list", listFields, pattern)
 	if err != nil {
 		if pkg := listCycle(dir, pattern, env); pkg != nil {
 			return pkg, nil
@@ -250,7 +298,7 @@ func list(dir, pattern string, env []string) (*listed, error) {
 // package's own error is in an import, its import stack longer than the
 // package; nil otherwise, and list reports go list's error.
 func listCycle(dir, pattern string, env []string) *listed {
-	out, _, err := run(dir, env, "list", "-e", "-json=ImportPath,Name,Dir,GoFiles,Imports,Module,Error", pattern)
+	out, _, err := run(dir, env, "list", "-e", listFields, pattern)
 	if err != nil {
 		return nil
 	}
@@ -307,60 +355,10 @@ func program(importPath string, names []string) []byte {
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		b.WriteString("s." + n + "{}")
+		b.WriteString("new(s." + n + ")")
 	}
 	b.WriteString("}...)\n\tif err != nil {\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n\tos.Stdout.Write(b)\n}\n")
 	return []byte(b.String())
-}
-
-// discover returns the exported struct types of the package's files that
-// embed schema.Schema, sorted, and an error for an unexported one. Only a type
-// that embeds schema.Schema directly is found: a type that embeds another
-// struct which embeds schema.Schema is not, and is not loaded.
-func discover(files map[string][]byte) ([]string, error) {
-	fnames := make([]string, 0, len(files))
-	for name := range files {
-		fnames = append(fnames, name)
-	}
-	sort.Strings(fnames)
-	fset := token.NewFileSet()
-	seen := map[string]bool{}
-	var out []string
-	for _, fname := range fnames {
-		f, err := parser.ParseFile(fset, fname, files[fname], parser.SkipObjectResolution)
-		if err != nil {
-			return nil, err
-		}
-		local := schemaName(f)
-		for _, d := range f.Decls {
-			gd, ok := d.(*ast.GenDecl)
-			if !ok || gd.Tok != token.TYPE {
-				continue
-			}
-			for _, sp := range gd.Specs {
-				ts := sp.(*ast.TypeSpec)
-				st, ok := ts.Type.(*ast.StructType)
-				if !ok {
-					continue
-				}
-				if embedsSchema(st, local, true) {
-					return nil, fmt.Errorf("schema type %s must embed schema.Schema by value, not a pointer", ts.Name.Name)
-				}
-				if !embedsSchema(st, local, false) {
-					continue
-				}
-				if !ts.Name.IsExported() {
-					return nil, fmt.Errorf("schema type %s is unexported; a schema must be exported", ts.Name.Name)
-				}
-				if !seen[ts.Name.Name] {
-					seen[ts.Name.Name] = true
-					out = append(out, ts.Name.Name)
-				}
-			}
-		}
-	}
-	sort.Strings(out)
-	return out, nil
 }
 
 // schemaName returns the name f gives the schema package, or "" when f does

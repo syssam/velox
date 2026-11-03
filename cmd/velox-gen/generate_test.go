@@ -508,13 +508,13 @@ func TestNoSchemasIsAnError(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
-		{[]string{"-out", "gen", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
-		{[]string{"-check", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
-		{[]string{"verify", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
-		{[]string{"example.com/app/plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
-		{[]string{"describe", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
-		{[]string{"describe", "-json", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
+		{[]string{"./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
+		{[]string{"-out", "gen", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
+		{[]string{"-check", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
+		{[]string{"verify", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
+		{[]string{"example.com/app/plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
+		{[]string{"describe", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
+		{[]string{"describe", "-json", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
 	} {
 		if code, out, errs := runCLI(t, dir, c.args...); code != 1 || out != "" || errs != c.want {
 			t.Errorf("%v: %d %q %q, want %q", c.args, code, out, errs, c.want)
@@ -638,7 +638,7 @@ func TestSchemaDirectoryWithoutSchemas(t *testing.T) {
 		t.Skip("builds a module")
 	}
 	dir := tempModule(t, map[string]string{"schema/doc.go": "package schema\n"})
-	const want = "velox-gen: no schemas in example.com/app/schema: a schema is a struct that embeds schema.Schema directly\n"
+	const want = "velox-gen: no schemas in example.com/app/schema: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"
 	// Named, and by default.
 	for _, args := range [][]string{{"./schema"}, {}, {"-check"}, {"verify"}} {
 		if code, out, errs := runCLI(t, dir, args...); code != 1 || out != "" || errs != want {
@@ -1137,7 +1137,8 @@ func TestGenerateKeepsYoursInALeftover(t *testing.T) {
 
 // A struct that embeds a struct that embeds schema.Schema is not a schema:
 // describe skips it without a message.
-func TestDescribeSkipsIndirectSchema(t *testing.T) {
+// describe lists the schemas that embed an unexported base, and not the base.
+func TestDescribeListsSchemasOfABase(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
@@ -1145,23 +1146,23 @@ func TestDescribeSkipsIndirectSchema(t *testing.T) {
 
 import "github.com/syssam/velox/schema"
 
-type Base struct{ schema.Schema }
+type base struct{ schema.Schema }
 
-type Café struct{ Base }
+type Shop struct{ base }
 
-type Order struct{ Base }
+type Order struct{ base }
 `})
 	code, out, errs := runCLI(t, dir, "describe", "./schema")
 	if code != 0 || errs != "" {
 		t.Fatalf("describe: %d %q %q", code, out, errs)
 	}
-	if !strings.Contains(out, "Base") {
-		t.Errorf("Base is not listed: %q", out)
-	}
-	for _, name := range []string{"Order", "Café"} {
-		if strings.Contains(out, name) {
-			t.Errorf("%s is listed: %q", name, out)
+	for _, name := range []string{"Order", "Shop"} {
+		if !strings.Contains(out, name) {
+			t.Errorf("%s is not listed: %q", name, out)
 		}
+	}
+	if strings.Contains(out, "base") {
+		t.Errorf("base is listed: %q", out)
 	}
 }
 

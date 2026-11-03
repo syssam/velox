@@ -468,3 +468,35 @@ func TestTypedConstructorsEqualGoType(t *testing.T) {
 		}
 	}
 }
+
+// Board declares its methods with pointer receivers, and embeds an
+// unexported base that brings the times.
+type Board struct{ boardBase }
+
+type boardBase struct{ schema.Schema }
+
+func (boardBase) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
+
+func (*Board) Fields() []schema.Field { return []schema.Field{field.String("title")} }
+func (*Board) Edges() []schema.Edge   { return []schema.Edge{edge.To("posts", Post.Type)} }
+func (*Board) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("title").Unique()}
+}
+func (*Board) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("boards")} }
+
+// The program velox-gen writes passes each schema as a pointer: Marshal reads
+// the methods of either receiver, and a base's, and names the schema by its
+// type, not the pointer's.
+func TestMarshalPointerSchema(t *testing.T) {
+	m := decode(t, new(Board), new(Post))
+	if len(m.Errors) != 0 || len(m.Schemas) != 2 {
+		t.Fatalf("%+v", m)
+	}
+	b := m.Schemas[0]
+	if b.Name != "Board" || len(b.Fields) != 3 || b.Fields[2].Name != "title" || len(b.Edges) != 1 || len(b.Indexes) != 1 {
+		t.Fatalf("%+v", b)
+	}
+	if b.Fields[0].Name != "created_at" {
+		t.Errorf("the base's mixin is not first: %+v", b.Fields)
+	}
+}

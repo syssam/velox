@@ -38,8 +38,11 @@ type Mixin interface {
 	Annotations() []Annotation
 }
 
-// Interface is implemented by every schema: a struct that embeds Schema.
-// velox-gen finds schemas by that embedding.
+// Interface is implemented by every schema. A schema is an exported,
+// non-generic struct type of the schema package that implements Interface,
+// by value or through a pointer, as ent's rule has it. Embedding Schema, at
+// any depth, is the usual way. An unexported struct is never a schema: it can
+// be a base that schemas embed.
 type Interface interface {
 	// Type is never called. Edges name a schema by its method expression:
 	// edge.To("posts", Post.Type).
@@ -51,9 +54,9 @@ type Interface interface {
 	Annotations() []Annotation
 }
 
-// Schema is embedded, directly, by every schema; velox-gen skips a struct that
-// embeds it through another struct. Its methods declare nothing; a schema
-// overrides the ones it needs.
+// Schema is embedded by value by a schema, or by an unexported base that the
+// schema embeds. Its methods declare nothing; a schema overrides the ones it
+// needs, with a value or a pointer receiver.
 type Schema struct{}
 
 // Type is never called. Edges name a schema by its method expression:
