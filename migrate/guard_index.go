@@ -780,7 +780,7 @@ ORDER BY t.tgname`, []any{name}, func(rows *sql.Rows) error {
 		names := func(s string) bool {
 			return slices.ContainsFunc(words, func(wd word) bool { return strings.EqualFold(wd.text, s) })
 		}
-		hit := names(st.ref.Name) && !(own && drops)
+		hit := names(st.ref.Name) && (!own || !drops)
 		what := ref.String()
 		if col != "" {
 			hit, what = names(col) && (own || names(st.ref.Name)), colTarget(ref, col)
