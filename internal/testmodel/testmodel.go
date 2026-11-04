@@ -4,27 +4,14 @@
 //	go build -o bin/velox-gen ./cmd/velox-gen && bin/velox-gen -out internal/testmodel -package testmodel ./internal/testmodel/schema
 //
 // Invoice and Ticket's Policy and Hooks are declared in the schema package,
-// typed with package entity, which holds the entities. testmodel re-exports
-// entity and binds the methods: a test package imports testmodel only. Org,
-// WithUser and UserFromContext (entity/context.go), their re-exports and the
-// aliases below are written by hand.
+// typed with testmodel, which the schema therefore imports. Package
+// runtime binds them: a test package that uses the entities imports it for
+// its effect, import _ "github.com/syssam/velox/internal/testmodel/runtime".
+// Org, WithUser and UserFromContext (context.go) and the aliases below are
+// written by hand.
 package testmodel
 
-import (
-	"context"
-
-	"github.com/syssam/velox/internal/testmodel/entity"
-	"github.com/syssam/velox/internal/testmodel/kind"
-)
-
-// Org is entity.Org, the organization the tests act for.
-var Org = entity.Org
-
-// WithUser returns ctx acting as user; "admin" sees and changes every ticket.
-func WithUser(ctx context.Context, user string) context.Context { return entity.WithUser(ctx, user) }
-
-// UserFromContext returns the user WithUser put in ctx, or "" if there is none.
-func UserFromContext(ctx context.Context) string { return entity.UserFromContext(ctx) }
+import "github.com/syssam/velox/internal/testmodel/kind"
 
 // Status is a named string type: its handle is a StringCol.
 type Status = kind.Status

@@ -87,7 +87,7 @@ github.com/syssam/velox/examples/graphql/schema 0.0
 github.com/syssam/velox/examples/hooks 74.6
 github.com/syssam/velox/examples/hooks/auth 100.0
 github.com/syssam/velox/examples/hooks/gen 0.0
-github.com/syssam/velox/examples/hooks/gen/entity 0.0
+github.com/syssam/velox/examples/hooks/gen/runtime 0.0
 github.com/syssam/velox/examples/hooks/schema 0.0
 github.com/syssam/velox/examples/internal/golden 0.0
 github.com/syssam/velox/examples/otel 87.8
@@ -96,7 +96,7 @@ github.com/syssam/velox/examples/otel/schema 0.0
 github.com/syssam/velox/examples/policy 77.6
 github.com/syssam/velox/examples/policy/auth 0.0
 github.com/syssam/velox/examples/policy/gen 0.0
-github.com/syssam/velox/examples/policy/gen/entity 0.0
+github.com/syssam/velox/examples/policy/gen/runtime 0.0
 github.com/syssam/velox/examples/policy/schema 0.0
 github.com/syssam/velox/examples/relations 79.5
 github.com/syssam/velox/examples/relations/gen 0.0
@@ -112,13 +112,13 @@ github.com/syssam/velox/examples/tenant/gen 0.0
 github.com/syssam/velox/examples/tenant/schema 0.0
 github.com/syssam/velox/examples/tour 80.0
 github.com/syssam/velox/examples/tour/gen 0.0
-github.com/syssam/velox/examples/tour/gen/entity 0.0
+github.com/syssam/velox/examples/tour/gen/runtime 0.0
 github.com/syssam/velox/examples/tour/role 0.0
 github.com/syssam/velox/examples/tour/schema 0.0
-github.com/syssam/velox/examples/tracker/gen/entity 0.0
+github.com/syssam/velox/examples/tracker/gen/runtime 0.0
 github.com/syssam/velox/examples/tracker/principal 0.0
 github.com/syssam/velox/examples/tx 84.7
 github.com/syssam/velox/examples/tx/gen 0.0
 github.com/syssam/velox/examples/tx/schema 0.0
-github.com/syssam/velox/internal/testmodel/entity 67.4
+github.com/syssam/velox/internal/testmodel/runtime 0.0
 github.com/syssam/velox/veloxpgx 95.4

@@ -10,23 +10,25 @@ type Config struct {
 	// and validators, by import path (see FuncPackages). A function of a
 	// package that is not here, or that the entities cannot import, is read
 	// from the schema.
-	Funcs     map[string]FuncPkg
-	EntityDoc bool // in split mode, a user's file in entity has the package comment; entity.go then has none
+	Funcs map[string]FuncPkg
 
-	// Split says the schema package imports the generated entities, as it
-	// does when it declares Hooks or Policy; a non-empty Bound implies it.
-	// The entities then go in package entity (EntityDir below the output
-	// directory), which imports nothing of the user's, and the generated
-	// package re-exports them: it imports package entity and the schema
-	// package, and gives entity the schema's values when the program starts.
+	// SchemaImportsGen says the schema package imports the generated
+	// package, as it does when it declares Hooks or Policy; a non-empty
+	// Bound implies it. The generated package then does not import the
+	// schema package: what its entities need from it, the schema's Hooks
+	// and Policy methods and the defaults and validators they cannot call
+	// by name, package runtime (RuntimeDir below the output directory)
+	// gives them when the program starts. It imports the generated package
+	// and the schema package, and a program imports it for its effect.
 	// GenPath is the generated package's import path.
-	Split   bool
-	GenPath string
+	SchemaImportsGen bool
+	GenPath          string
 }
 
-// EntityDir is the directory, below the output directory, of package entity
-// in split mode, and the package's name.
-const EntityDir = "entity"
+// RuntimeDir is the directory, below the output directory, of package
+// runtime, which binds the schema when it imports the generated package, and
+// the package's name.
+const RuntimeDir = "runtime"
 
 // Bound says which of an entity's methods the schema package declares, so
 // that its Descriptor binds them.
@@ -49,10 +51,13 @@ type Out struct {
 	NeedsSch   bool         // some entity reads the schema package
 	SchemaPath string       // the schema package's import path
 	UserDoc    bool         // Config.UserDoc
-	EntityDoc  bool         // Config.EntityDoc
-	Split      bool         // Config.Split, or a non-empty Config.Bound
-	Facade     string       // in split mode, the generated package's name, which re-exports package entity; Package is then "entity"
-	GenPath    string       // Config.GenPath
+	// SchemaImportsGen is Config.SchemaImportsGen, or a non-empty
+	// Config.Bound: the generated package does not import the schema.
+	SchemaImportsGen bool
+	// Runtime says some entity reads a value of VeloxRuntime, which package
+	// runtime sets (OutEntity.Binds); only when SchemaImportsGen.
+	Runtime bool
+	GenPath string // Config.GenPath
 
 	// ScopeKeys are the keys the schema's Scoped fields name, sorted by Var.
 	ScopeKeys []*OutScopeKey
@@ -80,9 +85,10 @@ type OutEntity struct {
 	// the file imports under the alias sch.
 	NeedsSch bool
 
-	// Binds are what package gen gives this entity in split mode, as fields
-	// of entity.VeloxRuntime: its Policy and Hooks methods, and the defaults
-	// and validators the entity cannot call by name.
+	// Binds are what package runtime gives this entity when the schema
+	// imports the generated package, as fields of VeloxRuntime: its Policy
+	// and Hooks methods, and the defaults and validators the entity cannot
+	// call by name.
 	Binds []*OutBind
 
 	CheckCode  string // the cases of Check's switch on the column, "" when none
@@ -126,16 +132,17 @@ type OutField struct {
 	UpdateDefaultCode    string // "" or "func() any { … }"
 }
 
-// OutBind is a field of entity.VeloxRuntime, which package gen sets.
+// OutBind is a field of the generated package's VeloxRuntime, which package
+// runtime sets.
 type OutBind struct {
 	Field string // e.g. "CommentPolicy", "GroupTokenDefault"
-	Type  string // its type, as package entity writes it, e.g. "func() velox.Policy[Comment]"
-	// Value is the expression gen sets it to, e.g. "sch.Comment{}.Policy",
+	Type  string // its type, as the generated package writes it, e.g. "func() velox.Policy[Comment]"
+	// Value is the expression package runtime sets it to, e.g. "sch.Comment{}.Policy",
 	// or, when Desc is set, a read of the variable DescVar, e.g.
 	// "groupToken.DefaultFunc.(func() string)".
 	Value string
 	// Desc is the name of the schema's field whose descriptor Value reads,
-	// DescVar the variable gen holds it in; "" when Value reads none.
+	// DescVar the variable package runtime holds it in; "" when Value reads none.
 	Desc, DescVar string
 	// Imports are the packages Value names, but sch and the schema DSL
 	// package: import name → path.
@@ -164,4 +171,4 @@ type OutEnum struct {
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 10
+const GeneratedCodeVersion = 11

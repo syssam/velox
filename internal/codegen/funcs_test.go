@@ -19,7 +19,7 @@ func TestInternalOK(t *testing.T) {
 		{"example.com/app/gen", "time", true},
 		{"example.com/app/gen", "github.com/google/uuid", true},
 		{"example.com/app/gen", "example.com/app/internal/ids", true},
-		{"example.com/app/gen/entity", "example.com/app/internal/ids", true},
+		{"example.com/app/gen/runtime", "example.com/app/internal/ids", true},
 		{"example.com/app", "example.com/app/internal", true},
 		{"example.com/app/gen", "example.com/app/schema/internal/clock", false},
 		{"example.com/app/gen", "example.com/other/internal/ids", false},
@@ -117,16 +117,16 @@ func TestDefaults(t *testing.T) {
 `
 
 // A default or validator that is a named, exported function of a package
-// gen can import is called by its name, in the entities' package; the
-// schema package's own is called from gen in split mode, and in the entity's
-// file in plain mode. A closure, and a function of a package gen cannot
-// import, is read from the field's descriptor, by the field's name. All of
-// them run, in both modes.
+// gen can import is called by its name, in the entity's file; the schema
+// package's own is called from package runtime when the schema imports gen,
+// and in the entity's file otherwise. A closure, and a function of a package
+// gen cannot import, is read from the field's descriptor, by the field's
+// name. All of them run, in both modes.
 func TestFunctionDefaults(t *testing.T) {
-	for _, split := range []bool{false, true} {
+	for _, importsGen := range []bool{false, true} {
 		name := "plain"
-		if split {
-			name = "split"
+		if importsGen {
+			name = "runtime"
 		}
 		t.Run(name, func(t *testing.T) {
 			dir := module(t, map[string]string{
@@ -154,11 +154,11 @@ func Check(s string) error {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cfg := Config{Package: "gen", GenPath: "example.com/tmp/gen", Split: split}
+			cfg := Config{Package: "gen", GenPath: "example.com/tmp/gen", SchemaImportsGen: importsGen}
 			if cfg.Funcs, err = FuncPackages(dir, g, cfg, offline()); err != nil {
 				t.Fatal(err)
 			}
-			if p := cfg.Funcs["example.com/tmp/schema/internal/clock"]; p.Entity {
+			if p := cfg.Funcs["example.com/tmp/schema/internal/clock"]; p.Gen {
 				t.Errorf("an internal package of the schema is importable from gen: %+v", p)
 			}
 			files, err := Generate(g, cfg)
@@ -176,19 +176,25 @@ func Check(s string) error {
 				}
 				src[f.Name] = string(f.Data)
 			}
-			entity, facade := src["doc_velox.go"], src["velox.go"]
+			entity, rt := src["doc_velox.go"], src["runtime/runtime.go"]
 			want := []string{"return time.Now() }", "return ids.New() }", `schema.FieldDescriptor(&sch.Doc{}, "token")`,
 				`schema.FieldDescriptor(&sch.Doc{}, "stamp")`, "ids.Check(x)", "return sch.NewSlug() }"}
-			if split {
-				entity = src["entity/doc_velox.go"]
+			if importsGen {
 				want = []string{"return time.Now() }", "return ids.New() }", "rt.DocTokenDefault()", "rt.DocStampDefault()",
 					"ids.Check(x)", "rt.DocNameValidator2(x)", "rt.DocSlugDefault()"}
 				for _, w := range []string{"sch.NewSlug,", `docToken := schema.FieldDescriptor(&sch.Doc{}, "token")`,
 					"docToken.DefaultFunc.(func() string)", "docName.Validators[1].(func(string) error)"} {
-					if !strings.Contains(facade, w) {
-						t.Errorf("gen/velox.go has no %s:\n%s", w, facade)
+					if !strings.Contains(rt, w) {
+						t.Errorf("gen/runtime/runtime.go has no %s:\n%s", w, rt)
 					}
 				}
+				// The test links package runtime, as a program does.
+				link := "package gen_test\n\nimport _ \"example.com/tmp/gen/runtime\"\n"
+				if err := os.WriteFile(filepath.Join(dir, "gen", "link_test.go"), []byte(link), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			} else if rt != "" {
+				t.Errorf("a schema that does not import gen has gen/runtime:\n%s", rt)
 			}
 			for _, w := range want {
 				if !strings.Contains(entity, w) {

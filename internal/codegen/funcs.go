@@ -17,9 +17,8 @@ import (
 // default or a validator, as Lower reads it to call the function by name.
 type FuncPkg struct {
 	Name string // the package's name
-	// Entity says that the package of the entities (package entity in split
-	// mode, the generated package otherwise) can import it.
-	Entity bool
+	// Gen says that the generated package can import it.
+	Gen bool
 }
 
 // FuncPackages reports, by import path, the packages that declare a
@@ -29,10 +28,10 @@ type FuncPkg struct {
 // whose function the loader found no name for: Lower then reads each such
 // function from the schema.
 //
-// A package is importable from the entities' package when Go's rule for
+// A package is importable from the generated package when Go's rule for
 // internal packages allows it and it does not import, directly or through
-// others, the generated package or package entity, nor, in split mode, the
-// schema package, which imports package entity.
+// others, the generated package, nor, when the schema imports the generated
+// package, the schema package.
 func FuncPackages(dir string, g *Graph, cfg Config, env []string) (map[string]FuncPkg, error) {
 	seen := map[string]bool{}
 	for _, e := range g.Entities {
@@ -69,12 +68,8 @@ func FuncPackages(dir string, g *Graph, cfg Config, env []string) (map[string]Fu
 		listed[p.ImportPath] = &p
 	}
 	genPath := cfg.GenPath
-	entityPath := genPath
-	split := cfg.Split || len(cfg.Bound) > 0
 	forbidden := map[string]bool{genPath: true}
-	if split {
-		entityPath = genPath + "/" + EntityDir
-		forbidden[entityPath] = true
+	if cfg.SchemaImportsGen || len(cfg.Bound) > 0 {
 		forbidden[cmp.Or(cfg.SchemaPath, g.Package)] = true
 	}
 	// reaches reports whether p imports a forbidden package, or is one.
@@ -100,7 +95,7 @@ func FuncPackages(dir string, g *Graph, cfg Config, env []string) (map[string]Fu
 		if q == nil || q.Error != nil || q.Name == "" || q.Name == "main" {
 			continue
 		}
-		res[p] = FuncPkg{Name: q.Name, Entity: genPath != "" && internalOK(entityPath, p) && !reaches(p)}
+		res[p] = FuncPkg{Name: q.Name, Gen: genPath != "" && internalOK(genPath, p) && !reaches(p)}
 	}
 	return res, nil
 }

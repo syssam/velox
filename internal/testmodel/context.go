@@ -1,6 +1,4 @@
-// Package entity holds testmodel's entities, which testmodel re-exports, and
-// the context helpers its schema's policies read.
-package entity
+package testmodel
 
 import (
 	"context"

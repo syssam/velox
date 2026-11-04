@@ -996,25 +996,3 @@ func TestRewriteLeavesExistsTables(t *testing.T) {
 		t.Errorf("SQL %s\nwant it to contain %s", sql, want)
 	}
 }
-
-// uNamed is uPolicy with a Descriptor that names it.
-type uNamed struct{ ID int64 }
-
-func (*uNamed) Policy() velox.Policy[uNamed] { return velox.Policy[uNamed]{} }
-
-var uNamedMeta velox.MetaOnce[uNamed]
-
-func (*uNamed) VeloxMeta() *velox.Meta[uNamed] {
-	return uNamedMeta.Load(func() velox.Descriptor[uNamed] {
-		return velox.Descriptor[uNamed]{Name: "gen.Named", Table: "un", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			FieldPtr: func(x *uNamed, i int) any { return &x.ID }}
-	})
-}
-
-// The refusal of an unbound method names the entity as its Descriptor does.
-func TestUnboundMethodUsesTheDescriptorName(t *testing.T) {
-	want := "velox: gen.Named: has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"
-	if err := velox.CheckEntity[uNamed](); err == nil || err.Error() != want {
-		t.Fatalf("got %v, want %s", err, want)
-	}
-}

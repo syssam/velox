@@ -12,7 +12,6 @@ import (
 // DescriptorFields are the fields of a Descriptor that do not depend on E, so that
 // BuildDescriptor, which uses reflect, need not be generic.
 type DescriptorFields struct {
-	Name       string // the entity's name; "" for its Go type
 	Table      string
 	Schema     string
 	Columns    []ColumnDescriptor
@@ -86,9 +85,6 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 	name := t.String()
 	v := load()
 	d := v.D
-	if d.Name != "" {
-		name = d.Name
-	}
 	fail := func(field, format string, args ...any) (*EntityInfo, error) {
 		return nil, &SchemaError{Entity: name, Field: field, Reason: fmt.Sprintf(format, args...)}
 	}
@@ -253,7 +249,7 @@ func holdsInterface(t reflect.Type) bool {
 // unboundMethods refuses an entity whose pointer type has a Policy or Hooks
 // method that the Descriptor does not bind: velox would never call it. The names
 // are constants, so that the linker can still drop the methods nobody calls.
-// name is the entity's, as the Descriptor names it.
+// name is the entity's Go type.
 func unboundMethods(t reflect.Type, name string, d *DescriptorFields) error {
 	pt := reflect.PointerTo(t)
 	if _, ok := pt.MethodByName("Policy"); ok && !d.Policy {

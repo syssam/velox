@@ -68,21 +68,20 @@
 // -out ./gen/b beside -out ./gen. The files you add to the output directory
 // stay, but may not declare a type named like a generated one, nor a Policy
 // or Hooks method on a generated entity: those are declared in the schema
-// package, on the entity's schema, as func (E) Policy() velox.Policy[entity.E]
-// and func (E) Hooks() []velox.Hook[entity.E]. When the schema package declares
-// any, or imports -out/entity, velox-gen splits the output: -out/entity,
-// package entity, holds the entities and does not import the schema
-// package, which imports it for its methods' types. The package in -out
-// re-exports every name of package entity and binds the schema into it when
-// the program starts, so a program imports it alone. A program that links
-// package entity without it fails at an entity's first use, naming the
-// import. A schema package that imports -out itself, or through another
-// package, is refused with the chain, since -out imports the schema. Plugins
-// write into -out/entity then, and velox-gen re-exports their Go files in
-// -out. A file of yours in -out/entity is not re-exported. A method of yours
-// on an entity, or on another name -out re-exports, belongs in -out/entity
-// then: -out holds aliases, which take no methods, and velox-gen refuses one
-// there at its line. velox-gen reads
+// package, on the entity's schema, as func (E) Policy() velox.Policy[gen.E]
+// and func (E) Hooks() []velox.Hook[gen.E]. Every entity is in -out. When the
+// schema package imports -out, as it does for these methods' types, -out does
+// not import the schema package: -out/runtime, package runtime, imports both
+// and binds the schema's methods, and the defaults and validators -out
+// cannot call by name, when the program starts. A program imports it once,
+// for its effect, in its main package and in each test package, as
+// import _ "<module>/gen/runtime"; without it, a statement on an entity
+// fails, naming that line, and velox-gen warns when no file of the module
+// imports it. -out/runtime is written only when something needs binding. A
+// schema package that imports -out/runtime itself, or through another
+// package, is refused with the chain, since it imports the schema. velox-gen
+// removes the generated files of -out/entity, which an older velox-gen
+// wrote, and names a file of yours left there. velox-gen reads
 // the schema package without these methods and the declarations only they
 // use, so it runs when the generated package is stale or missing. velox-gen refuses any .go file of
 // yours, in -out or in the schema package, that some build would leave out,

@@ -115,6 +115,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `GeneratedCodeIsVersion11`: regenerate. The layout is ent's (decision 0037), and
+  replaces the split of 0036. Every entity is in `gen`, always; there is no `gen/entity`
+  and no re-export. A schema with `Policy` or `Hooks` imports `gen` and types them with
+  `gen.User`. gen then does not import the schema: velox-gen writes `gen/runtime`, which
+  binds the schema's methods, defaults and validators by name in its `init`, and only
+  when something needs binding. A program imports it once, in its main package and in
+  each test package, `import _ "<module>/gen/runtime"`; without it, a statement on an
+  entity fails with `velox.NotLinkedError`, which names that line. velox-gen warns when
+  no file of the module imports it, and refuses a schema that imports it. Plugins write
+  into `gen`. Regenerating removes an old `gen/entity`'s generated files, the old
+  facade's content and a plugin's re-export file; a file of yours there stays, named.
 - `GeneratedCodeIsVersion10`: regenerate. In split mode gen is one file, `gen/velox.go`,
   which re-exports every entity, enum, scope key and handle; a plugin's re-exports are one
   `gen/<plugin>_velox.go`, and velox-gen removes the old per-entity files. An entity's
@@ -381,6 +392,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Removed
 
+- `Descriptor.Name`: an entity's name in errors is its Go type, `gen.User`, as no alias
+  stands between them now (decision 0037).
 - `graphql.MutationDelete` and the generated `deleteX` mutation and `gen.Delete<T>`
   (decision 0033). A delete is the application's: declare `deletePost(id: ID!): ID!` and
   write its resolver, as `examples/graphql` does:

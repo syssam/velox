@@ -38,7 +38,7 @@ func (e *FileError) Error() string {
 // ones), or one of reserved, the package-level names velox-gen writes such as
 // a scope key's variable, is a *FileError. So is a Hooks or Policy method on
 // an entity: those are declared in the schema package (see SchemaMethods),
-// and package entity binds them. A file no build includes is not read, and
+// and the generated code binds them. A file no build includes is not read, and
 // one only some builds include is a *FileError (see userFiles). A missing dir
 // is no files.
 func CheckUserFiles(dir string, entities, reserved []string) error {
@@ -71,38 +71,13 @@ func CheckUserFiles(dir string, entities, reserved []string) error {
 					continue
 				}
 				m := d.Name.Name
-				want := "[]velox.Hook[" + EntityDir + "." + e + "]"
+				want := "[]velox.Hook[" + f.Name.Name + "." + e + "]"
 				if m == "Policy" {
-					want = "velox.Policy[" + EntityDir + "." + e + "]"
+					want = "velox.Policy[" + f.Name.Name + "." + e + "]"
 				}
 				return &FileError{Path: path, Line: fset.Position(d.Pos()).Line, Reason: fmt.Sprintf(
 					"declares %s.%s in the generated package; declare it in the schema package, on %[1]s: func (%[1]s) %[2]s() %[3]s", e, m, want)}
 			}
-		}
-		return nil
-	})
-}
-
-// CheckFacadeFiles reads the user's files in dir, the package that
-// re-exports package entity in split mode, as CheckUserFiles does. A method
-// on one of names, the types it re-exports as aliases of entity's, is a
-// *FileError at its line: Go takes no method on a type of another package.
-// The error says to move the method to entityDir, the directory of package
-// entity, as the user sees it.
-func CheckFacadeFiles(dir string, names []string, entityDir string) error {
-	return userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
-		for _, d := range f.Decls {
-			fd, ok := d.(*ast.FuncDecl)
-			if !ok || fd.Recv == nil {
-				continue
-			}
-			t, _ := receiver(fd)
-			if t == "" || !slices.Contains(names, t) {
-				continue
-			}
-			return &FileError{Path: path, Line: fset.Position(fd.Pos()).Line, Reason: fmt.Sprintf(
-				"declares method %s.%s in the package that re-exports package %s, where %[1]s is an alias of %[3]s.%[1]s and takes no methods: move it to %[4]s, package %[3]s",
-				t, fd.Name.Name, EntityDir, entityDir)}
 		}
 		return nil
 	})

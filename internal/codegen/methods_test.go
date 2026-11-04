@@ -40,16 +40,16 @@ func TestSchemaMethodsFindsMethods(t *testing.T) {
 	}
 }
 
-// A Hooks or Policy method of another shape than package entity binds is
+// A Hooks or Policy method of another shape than package runtime binds is
 // refused at its line, as is one on a type that is no entity's.
 func TestSchemaMethodsRefusesAWrongShape(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
-		{"policy result", "package schema\n\nfunc (User) Policy() int { return 0 }\n", "User.Policy must take nothing and return velox.Policy[entity.User] (func (User) Policy() velox.Policy[entity.User])"},
-		{"hooks result", "package schema\n\nfunc (u User) Hooks() velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[entity.User] (func (User) Hooks() []velox.Hook[entity.User])"},
-		{"another entity", "package schema\n\nfunc (User) Hooks() []velox.Hook[gen.Post] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[entity.User] (func (User) Hooks() []velox.Hook[entity.User])"},
-		{"unqualified", "package schema\n\nfunc (User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n", "User.Policy must take nothing and return velox.Policy[entity.User] (func (User) Policy() velox.Policy[entity.User])"},
-		{"a parameter", "package schema\n\nfunc (User) Hooks(int) []velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[entity.User] (func (User) Hooks() []velox.Hook[entity.User])"},
-		{"an array", "package schema\n\nfunc (User) Hooks() [2]velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[entity.User] (func (User) Hooks() []velox.Hook[entity.User])"},
+		{"policy result", "package schema\n\nfunc (User) Policy() int { return 0 }\n", "User.Policy must take nothing and return velox.Policy[gen.User] (func (User) Policy() velox.Policy[gen.User])"},
+		{"hooks result", "package schema\n\nfunc (u User) Hooks() velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
+		{"another entity", "package schema\n\nfunc (User) Hooks() []velox.Hook[gen.Post] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
+		{"unqualified", "package schema\n\nfunc (User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n", "User.Policy must take nothing and return velox.Policy[gen.User] (func (User) Policy() velox.Policy[gen.User])"},
+		{"a parameter", "package schema\n\nfunc (User) Hooks(int) []velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
+		{"an array", "package schema\n\nfunc (User) Hooks() [2]velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
 		{"not an entity", "package schema\n\nfunc (Mixin) Hooks() []velox.Hook[gen.User] { return nil }\n", "Mixin.Hooks: Mixin is not an entity; Hooks and Policy are declared on an entity's schema, or on a type named like a join entity"},
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": c.src})
@@ -65,8 +65,8 @@ func TestSchemaMethodsRefusesAWrongShape(t *testing.T) {
 // Policy: velox-gen binds them from the schema package, and says so.
 func TestCheckUserFilesRefusesBehaviour(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
-		{"policy", "package gen\n\nfunc (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n", "declares User.Policy in the generated package; declare it in the schema package, on User: func (User) Policy() velox.Policy[entity.User]"},
-		{"hooks", "package gen\n\nfunc (u User) Hooks() []velox.Hook[User] { return nil }\n", "declares User.Hooks in the generated package; declare it in the schema package, on User: func (User) Hooks() []velox.Hook[entity.User]"},
+		{"policy", "package gen\n\nfunc (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n", "declares User.Policy in the generated package; declare it in the schema package, on User: func (User) Policy() velox.Policy[gen.User]"},
+		{"hooks", "package gen\n\nfunc (u User) Hooks() []velox.Hook[User] { return nil }\n", "declares User.Hooks in the generated package; declare it in the schema package, on User: func (User) Hooks() []velox.Hook[gen.User]"},
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": c.src})
 		err := CheckUserFiles(dir, []string{"User"}, nil)
@@ -360,7 +360,7 @@ func TestGenerateRefusesABidiPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = Generate(goldenGraph(t, "blog"), Config{Package: "gen", Bound: bound, Split: true, GenPath: "m/gen"})
+	_, err = Generate(goldenGraph(t, "blog"), Config{Package: "gen", Bound: bound, GenPath: "m/gen"})
 	var fe *FileError
 	if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "friend.go") || fe.Line != 8 ||
 		fe.Reason != "UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link" {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/parser"
 	"go/token"
 	"io"
 	"io/fs"
@@ -17,6 +18,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -189,23 +191,20 @@ func loadModel(dir, pattern, out, pkg string, env []string) (*genModel, error) {
 
 // genConfig is the codegen.Config of the package at out, named pkg, for the
 // schema package at pattern: the import path of out, the Hooks and Policy
-// methods the schema package declares, and whether the entities go in
-// package entity below out (codegen.Behaviour). UserDoc is left for the
-// caller.
+// methods the schema package declares, and whether it imports out
+// (codegen.Behaviour). UserDoc is left for the caller.
 func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string) (codegen.Config, error) {
 	cfg := codegen.Config{Package: pkg, SchemaPath: gm.importPath}
 	genPath, err := dirImportPath(out, env)
 	if err != nil {
 		return cfg, err
 	}
-	bound, split, err := codegen.Behaviour(dir, pattern, genPath, env, gm.names)
+	bound, importsGen, err := codegen.Behaviour(dir, pattern, genPath, env, gm.names)
 	if err != nil {
 		return cfg, err
 	}
 	cfg.GenPath = genPath
-	if split {
-		cfg.Bound, cfg.Split = bound, true
-	}
+	cfg.Bound, cfg.SchemaImportsGen = bound, importsGen
 	if cfg.Funcs, err = codegen.FuncPackages(dir, gm.graph, cfg, env); err != nil {
 		return cfg, err
 	}
@@ -214,37 +213,27 @@ func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string) (codeg
 
 // output is what one run of velox-gen writes below out.
 type output struct {
-	cfg    codegen.Config
-	want   map[string][]byte // every file, velox-gen's and the plugins', by absolute path
-	plugin map[string][]byte // the plugins' files, by absolute path
-	owners map[string]string // the plugin that wrote each of plugin
+	cfg     codegen.Config
+	want    map[string][]byte // every file, velox-gen's and the plugins', by absolute path
+	plugin  map[string][]byte // the plugins' files, by absolute path
+	owners  map[string]string // the plugin that wrote each of plugin
+	runtime bool              // out/runtime binds the schema
 }
 
 // buildOutput generates the files of the package at out, named pkg, for the
-// schema package at pattern, and runs the plugins on the model. In split
-// mode the plugins write below out/entity, the package that holds the
-// entities, and their Go files there are re-exported in out, one file per
-// plugin. The files of the user's in out, and in split mode in out/entity,
-// are checked against what velox-gen writes. Nothing is written.
+// schema package at pattern, and runs the plugins on the model. The files of
+// the user's in out are checked against what velox-gen writes. Nothing is
+// written.
 func buildOutput(f genFlags, gm *genModel, pattern, dir, out, pkg string, env []string, stderr io.Writer) (*output, error) {
 	cfg, err := genConfig(gm, dir, pattern, out, pkg, env)
 	if err != nil {
 		return nil, err
 	}
-	entityDir := out
-	if cfg.Split {
-		entityDir = filepath.Join(out, codegen.EntityDir)
-	}
-	if err := codegen.CheckUserFiles(entityDir, gm.names, gm.scopeNames()); err != nil {
+	if err := codegen.CheckUserFiles(out, gm.names, gm.scopeNames()); err != nil {
 		return nil, err
 	}
 	if cfg.UserDoc, err = codegen.HasPackageDoc(out); err != nil {
 		return nil, err
-	}
-	if cfg.Split {
-		if cfg.EntityDoc, err = codegen.HasPackageDoc(entityDir); err != nil {
-			return nil, err
-		}
 	}
 	files, err := codegen.Generate(gm.graph, cfg)
 	if err != nil {
@@ -253,80 +242,18 @@ func buildOutput(f genFlags, gm *genModel, pattern, dir, out, pkg string, env []
 	o := &output{cfg: cfg, want: make(map[string][]byte, len(files))}
 	for _, file := range files {
 		o.want[filepath.Join(out, filepath.FromSlash(file.Name))] = file.Data
+		o.runtime = o.runtime || path.Dir(file.Name) == codegen.RuntimeDir
 	}
 	// The plugins run after velox-gen's own files are built and before
 	// anything is written.
-	ppkg, ppath := pkg, cfg.GenPath
-	if cfg.Split {
-		ppkg, ppath = codegen.EntityDir, cfg.GenPath+"/"+codegen.EntityDir
-	}
-	o.plugin, o.owners, err = pluginFiles(f, gm, pattern, dir, entityDir, ppkg, ppath, env, stderr)
+	o.plugin, o.owners, err = pluginFiles(f, gm, pattern, dir, out, pkg, cfg.GenPath, env, stderr)
 	if err != nil {
 		return nil, err
 	}
 	if err := mergePluginFiles(dir, out, o.want, o.plugin, o.owners); err != nil {
 		return nil, err
 	}
-	if !cfg.Split {
-		return o, nil
-	}
-	// Each plugin's Go files directly in entityDir are re-exported in one
-	// file of out, <plugin>_velox.go, in the order of their paths.
-	byPlugin := map[string][]codegen.File{}
-	for _, p := range slices.Sorted(maps.Keys(o.plugin)) {
-		if filepath.Ext(p) != ".go" || filepath.Dir(p) != entityDir {
-			continue
-		}
-		byPlugin[o.owners[p]] = append(byPlugin[o.owners[p]], codegen.File{Name: relPath(dir, p), Data: o.plugin[p]})
-	}
-	for _, name := range slices.Sorted(maps.Keys(byPlugin)) {
-		rf, ok, err := codegen.Reexport(pluginReexportFile(name), byPlugin[name], pkg, ppath)
-		if err != nil {
-			return nil, fmt.Errorf("plugin %s: %w", name, err)
-		}
-		if !ok {
-			continue
-		}
-		q := filepath.Join(out, rf.Name)
-		if _, dup := o.want[q]; dup {
-			return nil, fmt.Errorf("plugin %s: its re-exports, %s, collide with a file velox-gen or another plugin writes", name, relPath(dir, q))
-		}
-		o.want[q] = rf.Data
-	}
-	// A file of the user's in out may not declare what out re-exports.
-	var names []string
-	for p, data := range o.want {
-		if filepath.Dir(p) != out || filepath.Ext(p) != ".go" {
-			continue
-		}
-		ns, err := codegen.ReexportedNames(filepath.Base(p), data)
-		if err != nil {
-			return nil, err
-		}
-		names = append(names, ns...)
-	}
-	slices.Sort(names)
-	if err := codegen.CheckUserFiles(out, gm.names, names); err != nil {
-		return nil, err
-	}
-	if err := codegen.CheckFacadeFiles(out, names, relPath(dir, entityDir)); err != nil {
-		return nil, err
-	}
 	return o, nil
-}
-
-// pluginReexportFile is the name of the file of the generated package that
-// re-exports the Go files the plugin name writes in package entity: the last
-// element of its name, each byte other than a letter, a digit, - and _
-// replaced by _, then _velox.go. velox-graphql's is velox-graphql_velox.go.
-func pluginReexportFile(name string) string {
-	b := []byte(path.Base(name))
-	for i, c := range b {
-		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' && c != '_' {
-			b[i] = '_'
-		}
-	}
-	return string(b) + "_velox.go"
 }
 
 // runGenerate generates the gen package of the schema
@@ -359,17 +286,18 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		return failFile(err)
 	}
 	want, owners := o.want, o.owners
-	if !o.cfg.Split {
-		// A plain gen does not build out/entity, which a split one left:
-		// the user's files there stay, and are named.
-		ed := filepath.Join(out, codegen.EntityDir)
-		matches, _ := filepath.Glob(filepath.Join(ed, "*.go"))
-		for _, p := range matches {
-			if !isGenerated(p) {
-				_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s is yours, and stays; %s is one package now, which does not build %s: move the file to %[2]s, as package %[4]s, or delete it\n",
-					relPath(dir, p), relPath(dir, out), relPath(dir, ed), pkg)
-			}
+	// An older velox-gen wrote the entities in out/entity: the sweep removes
+	// its files there, and the user's files stay, and are named.
+	ed := filepath.Join(out, "entity")
+	matches, _ := filepath.Glob(filepath.Join(ed, "*.go"))
+	for _, p := range matches {
+		if !isGenerated(p) {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s is yours, and stays; velox-gen writes every entity in %s and does not build %s: move the file to %[2]s, as package %[4]s, or delete it\n",
+				relPath(dir, p), relPath(dir, out), relPath(dir, ed), pkg)
 		}
+	}
+	if o.runtime {
+		warnRuntimeUnlinked(dir, out, o.cfg.GenPath, stderr)
 	}
 	// Nothing is written before every path is known to be velox-gen's: a
 	// regular file with its header, below real directories.
@@ -683,23 +611,14 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 		return fail(err)
 	}
 	// The plugins' Go files are compiled with the package, as they are on
-	// disk; they must be the files the plugins write now, and so must their
-	// re-exports. A plugin path that collides with a file of velox-gen's
-	// fails as it does in generate.
+	// disk; they must be the files the plugins write now. A plugin path that
+	// collides with a file of velox-gen's fails as it does in generate.
 	o, err := buildOutput(f, gm, pattern, dir, out, pkg, env, stderr)
 	if err != nil {
 		return fail(err)
 	}
 	outPath := o.cfg.GenPath
-	check := slices.Sorted(maps.Keys(o.plugin))
-	if o.cfg.Split {
-		for _, p := range check {
-			if q := filepath.Join(out, filepath.Base(p)); filepath.Dir(p) == filepath.Join(out, codegen.EntityDir) && o.want[q] != nil {
-				check = append(check, q)
-			}
-		}
-	}
-	for _, p := range check {
+	for _, p := range slices.Sorted(maps.Keys(o.plugin)) {
 		if filepath.Ext(p) != ".go" {
 			continue
 		}
@@ -720,6 +639,9 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	imports := [][2]string{{"g", outPath}}
+	if o.runtime {
+		imports = append(imports, [2]string{"_", outPath + "/" + codegen.RuntimeDir})
+	}
 	return runProgram(ctx, mod, checkProgram(imports, types, rels), env, stdout, stderr)
 }
 
@@ -740,4 +662,72 @@ func moduleDir(dir, pattern string, env []string) (string, error) {
 		return "", fmt.Errorf("%s is not in a module", pattern)
 	}
 	return mod, nil
+}
+
+// warnRuntimeUnlinked warns when no Go file of the module that holds out,
+// tests included, imports genPath/runtime, which binds the schema to the
+// generated package at out: a program that does not link it fails at its
+// first statement on an entity. It reads only the files' imports, and says
+// nothing when it finds no module.
+func warnRuntimeUnlinked(dir, out, genPath string, stderr io.Writer) {
+	mod := out
+	for {
+		if fi, err := os.Stat(filepath.Join(mod, "go.mod")); err == nil && !fi.IsDir() {
+			break
+		}
+		parent := filepath.Dir(mod)
+		if parent == mod {
+			return
+		}
+		mod = parent
+	}
+	rt := genPath + "/" + codegen.RuntimeDir
+	if importsPackage(mod, rt) {
+		return
+	}
+	_, _ = fmt.Fprintf(stderr, "velox-gen: warning: no package of the module in %s imports %q, which binds the schema's hooks, policies and defaults, and a statement on an entity fails without it: add %s to the program's main package, and to each test package that uses the entities\n",
+		relPath(dir, mod), rt, codegen.RuntimeImport(genPath))
+}
+
+// importsPackage reports whether a .go file below mod, the root of a module,
+// imports the package at p. It skips the directories go skips (those whose
+// name starts with "." or "_", and testdata), vendor, and those that hold
+// another module.
+func importsPackage(mod, p string) bool {
+	quoted := strconv.Quote(p)
+	fset := token.NewFileSet()
+	found := false
+	_ = filepath.WalkDir(mod, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil //nolint:nilerr // an unreadable directory imports nothing; the walk goes on
+		}
+		if d.IsDir() {
+			if path == mod {
+				return nil
+			}
+			n := d.Name()
+			if n[0] == '.' || n[0] == '_' || n == "testdata" || n == "vendor" {
+				return filepath.SkipDir
+			}
+			if fi, err := os.Stat(filepath.Join(path, "go.mod")); err == nil && !fi.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if err != nil {
+			return nil //nolint:nilerr // a file that does not parse imports nothing go builds
+		}
+		for _, im := range f.Imports {
+			if im.Path.Value == quoted {
+				found = true
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+	return found
 }

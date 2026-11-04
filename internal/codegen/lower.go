@@ -33,11 +33,9 @@ var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": tr
 func Lower(g *Graph, cfg Config) (*Out, error) {
 	l := &lowerer{
 		g: g, cfg: cfg,
-		out:   &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc, EntityDoc: cfg.EntityDoc, Split: cfg.Split || len(cfg.Bound) > 0, GenPath: cfg.GenPath},
+		out: &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc,
+			SchemaImportsGen: cfg.SchemaImportsGen || len(cfg.Bound) > 0, GenPath: cfg.GenPath},
 		joins: map[string]*join{},
-	}
-	if l.out.Split {
-		l.out.Facade, l.out.Package = l.out.Package, EntityDir
 	}
 	l.owned = map[string]string{
 		"velox": "github.com/syssam/velox", "sch": l.out.SchemaPath, "errors": "errors", "fmt": "fmt",
@@ -46,15 +44,16 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	l.entities()
 	l.relations()
 	l.finish()
-	if l.out.Split {
+	if l.out.SchemaImportsGen {
 		owner := map[string]string{}
 		for _, e := range l.out.Entities {
 			e.Binds = slices.Concat(methodBinds(e), e.Binds)
 			for _, b := range e.Binds {
 				if old, ok := owner[b.Field]; ok {
-					l.errs = append(l.errs, &Error{Schema: e.Name, Reason: fmt.Sprintf("velox-gen names a value of %s and one of %s %s in entity.VeloxRuntime; rename a field or a schema", old, e.Name, b.Field)})
+					l.errs = append(l.errs, &Error{Schema: e.Name, Reason: fmt.Sprintf("velox-gen names a value of %s and one of %s %s in %s.VeloxRuntime; rename a field or a schema", old, e.Name, b.Field, l.out.Package)})
 				}
 				owner[b.Field] = e.Name
+				l.out.Runtime = true
 			}
 		}
 	}
@@ -74,10 +73,10 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	return l.out, nil
 }
 
-// methodBinds are the fields of entity.VeloxRuntime that hold e's Policy and
-// Hooks methods: method values of a new value of the schema's type, a
-// pointer when the method has a pointer receiver. gen sets them, so the
-// compiler checks each method's signature at its line of gen/velox.go.
+// methodBinds are the fields of VeloxRuntime that hold e's Policy and Hooks
+// methods: method values of a new value of the schema's type, a pointer when
+// the method has a pointer receiver. Package runtime sets them, so the
+// compiler checks each method's signature at its line of runtime.go.
 func methodBinds(e *OutEntity) []*OutBind {
 	recv := func(ptr bool) string {
 		if ptr {
@@ -542,13 +541,13 @@ func (s *entState) descriptor(e *Entity, f *Field) string {
 // schemaFunc returns the expression, of the type typ, of a function of f
 // that the schema holds: its descriptor's member (DefaultFunc, Validators[0]).
 // ref names the function. It is the function itself, pkg.Name, when ref
-// names one the entities' package can import, of the type typ. Otherwise
-// it is, in split mode, the field of entity.VeloxRuntime named for e, f and
-// suffix, which package gen sets; in plain mode, a variable of the setup
-// block that reads the descriptor once.
+// names one the generated package can import, of the type typ. Otherwise
+// it is, when the schema imports the generated package, the field of
+// VeloxRuntime named for e, f and suffix, which package runtime sets; else a
+// variable of the setup block that reads the descriptor once.
 func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member, typ, suffix, where string) string {
 	if ref != nil && ref.Pkg != "" && ref.Type == typ {
-		if p, ok := s.l.cfg.Funcs[ref.Pkg]; ok && p.Entity {
+		if p, ok := s.l.cfg.Funcs[ref.Pkg]; ok && p.Gen {
 			name := p.Name
 			if ref.Pkg == s.l.out.SchemaPath {
 				name, s.sch = "sch", true
@@ -561,7 +560,7 @@ func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member
 			}
 		}
 	}
-	if !s.l.out.Split {
+	if !s.l.out.SchemaImportsGen {
 		s.use(schemaPkg, "schema", where)
 		fd := s.descriptor(e, f)
 		v := "d" + strconv.Itoa(s.reads)
@@ -576,7 +575,7 @@ func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member
 		}
 	}
 	if ref != nil && ref.Pkg == s.l.out.SchemaPath && ref.Type == typ {
-		b.Value = "sch." + ref.Name // gen imports the schema package
+		b.Value = "sch." + ref.Name // package runtime imports the schema package
 	} else {
 		b.Desc, b.DescVar = f.Name, camel(s.out.Label)+f.GoName
 		b.Value = fmt.Sprintf("%s.%s.(%s)", b.DescVar, member, typ)
@@ -645,11 +644,11 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 }
 
 // schemaValue returns the expression of a value of f's descriptor, its
-// member, of type any, that is not a function: in split mode the field of
-// entity.VeloxRuntime package gen sets, in plain mode a variable of the setup
-// block.
+// member, of type any, that is not a function: when the schema imports the
+// generated package, the field of VeloxRuntime that package runtime sets,
+// else a variable of the setup block.
 func (s *entState) schemaValue(e *Entity, f *Field, member, where string) string {
-	if !s.l.out.Split {
+	if !s.l.out.SchemaImportsGen {
 		s.use(schemaPkg, "schema", where)
 		fd := s.descriptor(e, f)
 		v := "d" + strconv.Itoa(s.reads)

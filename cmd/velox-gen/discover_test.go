@@ -172,14 +172,15 @@ func (*Card) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("board", Board.Type).Ref("cards").Unique()}
 }
 `,
-		"schema/board_policy.go": "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen/entity\"\n)\n\n" +
-			"func (*Board) Policy() velox.Policy[entity.Board] { return velox.Policy[entity.Board]{} }\n\n" +
-			"func (*Card) Hooks() []velox.Hook[entity.Card] { return nil }\n",
+		"schema/board_policy.go": "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen\"\n)\n\n" +
+			"func (*Board) Policy() velox.Policy[gen.Board] { return velox.Policy[gen.Board]{} }\n\n" +
+			"func (*Card) Hooks() []velox.Hook[gen.Card] { return nil }\n",
+		"cmd/app/main.go": linkRuntime["cmd/app/main.go"],
 	}, tempModule)
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	board, _ := os.ReadFile(filepath.Join(dir, "gen", "entity", "board_velox.go"))
+	board, _ := os.ReadFile(filepath.Join(dir, "gen", "board_velox.go"))
 	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "BindPolicy"} {
 		if !strings.Contains(string(board), want) {
 			t.Errorf("board_velox.go lacks %q:\n%s", want, board)
@@ -498,8 +499,8 @@ func (User) Fields() []schema.Field { return []schema.Field{field.String(helper.
 
 // A defined type over a struct that reaches schema.Schema, type Release Item
 // or type Draft mixins.Base, is a schema by its underlying struct, as in
-// plain mode, so also when a Policy splits gen: the loader keeps it.
-func TestDiscoverDefinedTypeInSplitMode(t *testing.T) {
+// plain mode, so also with a Policy, which the loader prunes: it keeps it.
+func TestDiscoverDefinedTypeWithAPolicy(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
@@ -534,26 +535,13 @@ type Draft mixins.Base
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft_velox.go item_velox.go release_velox.go velox.go"; got != want {
 		t.Fatalf("plain: generated %s, want %s", got, want)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "item_policy.go"), "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen/entity\"\n)\n\n"+
-		"func (Item) Policy() velox.Policy[entity.Item] { return velox.Policy[entity.Item]{} }\n")
+	writeFile(t, filepath.Join(dir, "schema", "item_policy.go"), "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen\"\n)\n\n"+
+		"func (Item) Policy() velox.Policy[gen.Item] { return velox.Policy[gen.Item]{} }\n")
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
-		t.Fatalf("split: %d %q", code, errs)
+		t.Fatalf("with a Policy: %d %q", code, errs)
 	}
-	for _, name := range []string{filepath.Join("entity", "draft_velox.go"), filepath.Join("entity", "release_velox.go")} {
-		if _, err := os.Stat(filepath.Join(dir, "gen", name)); err != nil {
-			t.Errorf("split: no gen/%s: %v", name, err)
-		}
-	}
-	// The per-entity files of the plain gen are swept: velox.go re-exports
-	// every entity.
-	if got := strings.Join(generatedFiles(t, dir), " "); got != "velox.go" {
-		t.Errorf("split: gen holds %s, want velox.go", got)
-	}
-	facade, _ := os.ReadFile(filepath.Join(dir, "gen", "velox.go"))
-	for _, want := range []string{"Draft = entity.Draft", "Release = entity.Release"} {
-		if !strings.Contains(string(facade), want) {
-			t.Errorf("split: velox.go lacks %s:\n%s", want, facade)
-		}
+	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft_velox.go item_velox.go release_velox.go runtime_velox.go velox.go"; got != want {
+		t.Errorf("with a Policy: generated %s, want %s", got, want)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)

@@ -22,8 +22,8 @@ var goldenCases = []struct {
 	cfg  Config
 }{
 	{"minimal", Config{Package: "gen"}},
-	{"blog", Config{Package: "gen", Split: true, GenPath: "example.com/blog/gen", Bound: map[string]Bound{"Post": {Policy: true}}}},
-	{"scoped", Config{Package: "gen", Split: true, GenPath: "example.com/scoped/gen", Bound: map[string]Bound{
+	{"blog", Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/blog/gen", Bound: map[string]Bound{"Post": {Policy: true}}}},
+	{"scoped", Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/scoped/gen", Bound: map[string]Bound{
 		"Task": {Policy: true, Hooks: true}, "Memo": {Policy: true}, "Tag": {Hooks: true},
 	}}},
 }
@@ -145,7 +145,7 @@ func goldenModule(t *testing.T, name string) (*Graph, string) {
 // and the users' groups do not mark theirs.
 func TestGoldenBidi(t *testing.T) {
 	read := func(name string) string {
-		b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", EntityDir, name))
+		b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", name))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,10 +163,10 @@ func TestGoldenBidi(t *testing.T) {
 	}
 }
 
-// The blog golden's entity.go gives each enum Values, String and IsValid, all
+// The blog golden's velox.go gives each enum Values, String and IsValid, all
 // with the receiver e.
 func TestGoldenEnumMethods(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", EntityDir, "entity.go"))
+	b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", "velox.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func (e PostStatus) IsValid() bool {
 }
 `
 	if !strings.Contains(string(b), want) {
-		t.Errorf("entity.go lacks PostStatus's methods:\n%s", b)
+		t.Errorf("velox.go lacks PostStatus's methods:\n%s", b)
 	}
 }
 
@@ -297,14 +297,15 @@ func TestRenderPackageDoc(t *testing.T) {
 			t.Errorf("%s has a package comment beside the user's", f.Name)
 		}
 	}
-	// In split mode, gen's doc and entity's each give way to the user's own.
+	// With package runtime, gen's doc names the import, and gives way to the
+	// user's own; runtime.go always has its own.
+	bound := map[string]Bound{"User": {Policy: true}}
 	for _, c := range []struct {
 		cfg  Config
 		want map[string]bool // file: has a package comment
 	}{
-		{Config{Split: true, GenPath: "m/gen"}, map[string]bool{"velox.go": true, "entity/entity.go": true}},
-		{Config{Split: true, GenPath: "m/gen", UserDoc: true}, map[string]bool{"velox.go": false, "entity/entity.go": true}},
-		{Config{Split: true, GenPath: "m/gen", EntityDoc: true}, map[string]bool{"velox.go": true, "entity/entity.go": false}},
+		{Config{Bound: bound, GenPath: "m/gen"}, map[string]bool{"velox.go": true, "runtime/runtime.go": true}},
+		{Config{Bound: bound, GenPath: "m/gen", UserDoc: true}, map[string]bool{"velox.go": false, "runtime/runtime.go": true}},
 	} {
 		files, err := Generate(mustBuild(t, User{}, Post{}, Group{}), c.cfg)
 		if err != nil {
@@ -325,7 +326,7 @@ func TestRenderScopeFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := string(fileNamed(t, files, "entity/scope_velox.go"))
+	got := string(fileNamed(t, files, "scope_velox.go"))
 	for _, want := range []string{
 		`var OrgKey = scope.NewKey[int64]("org")`,
 		`var RegionKey = scope.NewKey[string]("region")`,
@@ -377,11 +378,11 @@ func TestRenderScopedBinding(t *testing.T) {
 		{"tag_velox.go", "velox.BindPolicy(tagScope.Policy())"},
 		{"tag_velox.go", "velox.BindHooksAfter(tagScope.Fill(), rt.TagHooks())"},
 	} {
-		if got := string(fileNamed(t, files, EntityDir+"/"+c.file)); !strings.Contains(got, c.want) {
+		if got := string(fileNamed(t, files, c.file)); !strings.Contains(got, c.want) {
 			t.Errorf("%s lacks %s", c.file, c.want)
 		}
 	}
-	if got := string(fileNamed(t, files, EntityDir+"/owner_velox.go")); strings.Contains(got, "Scope") || strings.Contains(got, "Policy:") || strings.Contains(got, "Hooks:") {
+	if got := string(fileNamed(t, files, "owner_velox.go")); strings.Contains(got, "Scope") || strings.Contains(got, "Policy:") || strings.Contains(got, "Hooks:") {
 		t.Errorf("an unscoped entity without methods binds something:\n%s", got)
 	}
 }

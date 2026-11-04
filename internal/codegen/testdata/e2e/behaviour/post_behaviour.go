@@ -7,7 +7,7 @@ import (
 
 	"github.com/syssam/velox"
 
-	"example.com/tmp/gen/entity"
+	"example.com/tmp/gen"
 )
 
 // viewerKey marks a context as a viewer's: such a context reads only
@@ -21,15 +21,15 @@ func AsViewer(ctx context.Context) context.Context {
 
 // Policy shows a viewer only published posts, and refuses a post titled
 // "forbidden".
-func (Post) Policy() velox.Policy[entity.Post] {
-	return velox.Policy[entity.Post]{
-		Read: func(ctx context.Context) (velox.Pred[entity.Post], error) {
+func (Post) Policy() velox.Policy[gen.Post] {
+	return velox.Policy[gen.Post]{
+		Read: func(ctx context.Context) (velox.Pred[gen.Post], error) {
 			if v, _ := ctx.Value(viewerKey{}).(bool); v {
-				return entity.Posts.Status.EQ(entity.PostStatusPublished), nil
+				return gen.Posts.Status.EQ(gen.PostStatusPublished), nil
 			}
-			return velox.Allow[entity.Post](), nil
+			return velox.Allow[gen.Post](), nil
 		},
-		Insert: func(ctx context.Context, x *entity.Post) error {
+		Insert: func(ctx context.Context, x *gen.Post) error {
 			if x.Title == "forbidden" {
 				return velox.Deny("that title is forbidden")
 			}

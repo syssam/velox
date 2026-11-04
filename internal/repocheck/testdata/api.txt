@@ -144,7 +144,7 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
-const GeneratedCodeIsVersion10
+const GeneratedCodeIsVersion11
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -501,7 +501,7 @@ type ConstraintKind = veloxtype.ConstraintKind
 type DB struct { }
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Descriptor[E any] struct { Name string Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Policy func() BoundPolicy Hooks func() BoundHooks }
+type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Policy func() BoundPolicy Hooks func() BoundHooks }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type EdgeDescriptor = engine.EdgeDescriptor

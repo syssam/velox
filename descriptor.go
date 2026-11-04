@@ -10,11 +10,6 @@ import (
 // entity's first use. For generated code. Its column order is the scan order.
 // EntityInfo is its runtime view.
 type Descriptor[E any] struct {
-	// Name is the entity's name in errors and telemetry. velox-gen sets it
-	// when the type is declared in another package than the one programs
-	// import, gen/entity, so that the name is gen.User either way. Empty, it
-	// is the Go type, e.g. billing.Invoice.
-	Name       string
 	Table      string
 	Schema     string // the schema (PostgreSQL) or database holding Table; "" for the default
 	Columns    []ColumnDescriptor
@@ -98,7 +93,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 		var d Descriptor[E]
 		info, retry, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
 			d = descriptor()
-			v := engine.DescriptorView{D: &engine.DescriptorFields{Name: d.Name, Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
+			v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
 				Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
 				Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
 			if a := d.FieldPtr; a != nil {
