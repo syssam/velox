@@ -144,7 +144,7 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
-const GeneratedCodeIsVersion9
+const GeneratedCodeIsVersion10
 const LockForShare
 const LockForUpdate
 const LockNoWait

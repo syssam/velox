@@ -115,6 +115,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `GeneratedCodeIsVersion10`: regenerate. In split mode gen is one file, `gen/velox.go`,
+  which re-exports every entity, enum, scope key and handle; a plugin's re-exports are one
+  `gen/<plugin>_velox.go`, and velox-gen removes the old per-entity files. An entity's
+  handles have a named type (`var Users = userHandles{…}`), `String` prints a pointer field
+  with `velox.Show`, and `VeloxMeta` is one line in split mode too: an entity used before
+  gen's init panics with `velox.NotLinkedError`, which `MetaOnce` does not keep. A SIGINT
+  or SIGTERM while velox-gen loads the schema removes its `.velox-gen-` directory.
 - The generated descriptor calls a default or a validator by its name when it is an
   exported function declared at package level in a package gen can import: `mixin.Time`'s
   `time.Now` is `func() any { return time.Now() }`. The schema package's own such function

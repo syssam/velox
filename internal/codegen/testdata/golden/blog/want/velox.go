@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion9
+const _ = velox.GeneratedCodeIsVersion10
 
 func init() {
 	groupToken := schema.FieldDescriptor(&sch.Group{}, "token")

@@ -67,7 +67,7 @@ func TestCIChangesGroups(t *testing.T) {
 		{"the plugin protocol", map[string]string{"plugin/x.go": "1"}, nil, "graphql otel"},
 		{"the generator", map[string]string{"internal/codegen/x.go": "1"}, nil, "graphql otel"},
 		{"the root's go.mod", nil, map[string]string{"go.mod": "module m\n\ngo 1.27\n"}, "graphql otel"},
-		{"the generated code's version", map[string]string{"doc.go": "package velox\n\nconst GeneratedCodeIsVersion9 = true\n"}, nil, "graphql otel"},
+		{"the generated code's version", map[string]string{"doc.go": "package velox\n\nconst GeneratedCodeIsVersion10 = true\n"}, nil, "graphql otel"},
 		{"another line of doc.go", map[string]string{"doc.go": "package velox\n\n// GeneratedCodeIsVersion8 ties the code.\nconst GeneratedCodeIsVersion8 = true\n"}, nil, ""},
 		{"the CI", map[string]string{".github/workflows/ci.yml": "1"}, nil, "graphql otel bench"},
 		{"an agent's worktree", nil, map[string]string{".claude/worktrees/a/contrib/graphql/x.go": "1"}, ""},

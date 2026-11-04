@@ -8,7 +8,7 @@ import (
 	sch "github.com/syssam/velox/internal/testmodel/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion9
+const _ = velox.GeneratedCodeIsVersion10
 
 func init() {
 	entity.SetVeloxRuntime(entity.VeloxRuntime{
