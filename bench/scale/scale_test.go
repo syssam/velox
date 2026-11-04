@@ -10,20 +10,61 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
+
+// shared is a run of the harness at n=60 with two services, plain or with
+// GraphQL, made once for the tests that read it: a run builds the
+// application and a reference module cold, each with a GOCACHE of its own,
+// so it is the slow part of every test here.
+type shared struct {
+	once sync.Once
+	dir  string
+	r    report
+	err  error
+}
+
+var sharedRuns [2]shared // plain, GraphQL
+
+// sharedRun is the shared run of the variant, made on first use, and the
+// directory it wrote; TestMain removes it.
+func sharedRun(t *testing.T, graphql bool) (report, string) {
+	t.Helper()
+	s := &sharedRuns[0]
+	if graphql {
+		s = &sharedRuns[1]
+	}
+	s.once.Do(func() {
+		if s.dir, s.err = os.MkdirTemp("", "velox-scale-test-"); s.err != nil {
+			return
+		}
+		s.r, s.err = run(config{n: 60, services: 2, graphql: graphql, dir: s.dir})
+	})
+	if s.err != nil {
+		t.Fatal(s.err)
+	}
+	return s.r, s.dir
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	for i := range sharedRuns {
+		if dir := sharedRuns[i].dir; dir != "" {
+			_ = os.RemoveAll(dir)
+		}
+	}
+	os.Exit(code)
+}
 
 // TestScaleHarnessSmall is Review Focus 5: the harness generates, builds and
 // measures a small application, and -check fails when a threshold is exceeded.
 func TestScaleHarnessSmall(t *testing.T) {
-	t.Parallel() // each builds in its own directories and GOCACHE
+	t.Parallel() // the variants build in their own directories and GOCACHE
 	if testing.Short() {
 		t.Skip("builds an application; run without -short")
 	}
-	r, err := run(config{n: 20, services: 4, dir: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	r, _ := sharedRun(t, false)
 	measured(t, r)
 	th := filepath.Join(t.TempDir(), "th.json")
 	tight := map[string]map[string]any{"20": {"cold_build_x": r.ColdBuildX / 1000}}
@@ -56,7 +97,7 @@ func measured(t *testing.T, r report) {
 // binary grew with n until the use site named the target). The threshold in
 // thresholds.json catches the size; this names the entities.
 func TestServiceLinksOnlyItsEntities(t *testing.T) {
-	t.Parallel() // each builds in its own directories and GOCACHE
+	t.Parallel() // the variants build in their own directories and GOCACHE
 	if testing.Short() {
 		t.Skip("builds an application; run without -short")
 	}
@@ -69,7 +110,7 @@ func TestServiceLinksOnlyItsEntities(t *testing.T) {
 // calls it or that reaches it by one relation, and not otherwise. A GraphQL
 // type that named every neighbour's code would link the whole connected model.
 func TestGraphQLServiceLinksOnlyItsEntities(t *testing.T) {
-	t.Parallel() // each builds in its own directories and GOCACHE
+	t.Parallel() // the variants build in their own directories and GOCACHE
 	if testing.Short() {
 		t.Skip("builds an application; run without -short")
 	}
@@ -77,11 +118,8 @@ func TestGraphQLServiceLinksOnlyItsEntities(t *testing.T) {
 }
 
 func linksOnlyItsEntities(t *testing.T, graphql bool) {
-	const n, s = 60, 2
-	dir := t.TempDir()
-	if _, err := run(config{n: n, services: s, graphql: graphql, dir: dir}); err != nil {
-		t.Fatal(err)
-	}
+	const n, s = 60, 2 // sharedRun's
+	_, dir := sharedRun(t, graphql)
 	schemas, services := generate(n, s, graphql)
 	src := services[filepath.Join("s0", "main.go")]
 	entity := regexp.MustCompile(`gen\.E(\d+)\b`)
@@ -134,14 +172,11 @@ func linksOnlyItsEntities(t *testing.T, graphql bool) {
 // measures a small application, and its schemas and services carry what the
 // variant promises.
 func TestScaleHarnessSmallGraphQL(t *testing.T) {
-	t.Parallel() // each builds in its own directories and GOCACHE
+	t.Parallel() // the variants build in their own directories and GOCACHE
 	if testing.Short() {
 		t.Skip("builds an application; run without -short")
 	}
-	r, err := run(config{n: 20, services: 2, graphql: true, dir: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	r, _ := sharedRun(t, true)
 	measured(t, r)
 	schemas, services := generate(20, 2, true)
 	for _, want := range []string{`graphql.QueryField("e7s")`, `graphql.OrderField("NAME"), graphql.WhereOps()`} {
