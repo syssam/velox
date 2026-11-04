@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion8
+const _ = velox.GeneratedCodeIsVersion9
 
 func init() {
 	entity.SetVeloxRuntime(entity.VeloxRuntime{

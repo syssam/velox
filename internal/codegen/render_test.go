@@ -369,14 +369,13 @@ func TestRenderScopedBinding(t *testing.T) {
 	for _, c := range []struct{ file, want string }{
 		{"note_velox.go", "velox.BindPolicy(noteScope.Policy())"},
 		{"note_velox.go", "velox.BindHooks([]velox.Hook[Note]{noteScope.Fill()})"},
-		{"task_velox.go", `policy := veloxPolicy[Task](rt.Task, "Task")`},
-		{"task_velox.go", `hooks := veloxHooks[Task](rt.Task, "Task")`},
-		{"task_velox.go", "velox.BindPolicy(taskScope.Wrap(policy()))"},
-		{"task_velox.go", "velox.BindHooksAfter(taskScope.Fill(), hooks())"},
-		{"memo_velox.go", "velox.BindPolicy(memoScope.Wrap(policy()))"},
+		{"task_velox.go", "rt := veloxRuntime()"},
+		{"task_velox.go", "velox.BindPolicy(taskScope.Wrap(rt.TaskPolicy()))"},
+		{"task_velox.go", "velox.BindHooksAfter(taskScope.Fill(), rt.TaskHooks())"},
+		{"memo_velox.go", "velox.BindPolicy(memoScope.Wrap(rt.MemoPolicy()))"},
 		{"memo_velox.go", "velox.BindHooks([]velox.Hook[Memo]{memoScope.Fill()})"},
 		{"tag_velox.go", "velox.BindPolicy(tagScope.Policy())"},
-		{"tag_velox.go", "velox.BindHooksAfter(tagScope.Fill(), hooks())"},
+		{"tag_velox.go", "velox.BindHooksAfter(tagScope.Fill(), rt.TagHooks())"},
 	} {
 		if got := string(fileNamed(t, files, EntityDir+"/"+c.file)); !strings.Contains(got, c.want) {
 			t.Errorf("%s lacks %s", c.file, c.want)
