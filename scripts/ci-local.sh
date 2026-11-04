@@ -116,14 +116,18 @@ export VELOX_ITEST_REQUIRE=1
 
 # The serial start: what writes go.mod and go.sum, and what reads every file,
 # runs before the lanes build anything.
-# .claude/ holds agent worktrees, which CI does not have and go ignores (a dot directory).
-unformatted=$(gofmt -l . | grep -v '^\.claude/' || true)
+# gofmt skips what is under a dot directory, which go ignores too: .claude/
+# holds agent worktrees, which CI does not have, and a velox-gen that a
+# stopped lane killed can leave its .velox-gen-* or .velox-verify-* directory
+# behind.
+undotted() { grep -vE '(^|/)\.' || true; }
+unformatted=$(gofmt -l . | undotted)
 if [ -n "$unformatted" ]; then
   echo "gofmt needed:"; echo "$unformatted"; exit 1
 fi
-# Each module's gofmt too, before velox-gen verify writes its .velox-verify-*
-# directories there. The root's covers the contrib modules' files.
-(cd examples && test -z "$(gofmt -l .)") || { echo "gofmt needed in examples:"; (cd examples && gofmt -l .); exit 1; }
+# Each module's gofmt too. The root's covers the contrib modules' files.
+unformatted=$(cd examples && gofmt -l . | undotted)
+[ -z "$unformatted" ] || { echo "gofmt needed in examples:"; echo "$unformatted"; exit 1; }
 # The tests build modules offline, with gqlgen as a tool: they need its dependencies too,
 # which "go mod download" alone leaves out. The tidy check comes first: download all
 # dirties go.sum, and the tidy after it restores it.
