@@ -52,7 +52,7 @@ func (*hnote) VeloxMeta() *Meta[hnote] { return hnoteMeta.Load(hnoteDescriptor) 
 
 func hnoteDescriptor() Descriptor[hnote] {
 	return Descriptor[hnote]{
-		Hooks: []func() BoundHooks{func() BoundHooks { return BindHooks((*hnote)(nil).Hooks()) }},
+		Hooks: BindHooks((*hnote)(nil).Hooks),
 		Table: "hnotes",
 		Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
@@ -175,8 +175,8 @@ func (*hooked) VeloxMeta() *Meta[hooked] { return hookedMeta.Load(hookedDescript
 
 func hookedDescriptor() Descriptor[hooked] {
 	return Descriptor[hooked]{
-		Policy:     []func() BoundPolicy{func() BoundPolicy { return BindPolicy((*hooked)(nil).Policy()) }},
-		Hooks:      []func() BoundHooks{func() BoundHooks { return BindHooks((*hooked)(nil).Hooks()) }},
+		Policy:     BindPolicy((*hooked)(nil).Policy),
+		Hooks:      BindHooks((*hooked)(nil).Hooks),
 		Table:      "hooked",
 		Columns:    []ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},

@@ -87,10 +87,15 @@ type OutEntity struct {
 	NeedsSch bool
 
 	// Binds are what package runtime gives this entity when the schema
-	// imports the generated package, as fields of VeloxRuntime: its Policy
-	// and Hooks methods, and the defaults and validators the entity cannot
-	// call by name.
+	// imports the generated package, as fields of VeloxRuntime: its Policy,
+	// Hooks and Interceptors lists, and the defaults and validators the
+	// entity cannot call by name.
 	Binds []*OutBind
+
+	// Policy, Hooks and Interceptors are the sources of the entity's
+	// behaviour, in the order velox composes them: its mixins', in Mixin
+	// order, then its schema's own method. Each is nil when it has none.
+	Policy, Hooks, Interceptors []OutSource
 
 	CheckCode  string // the cases of Check's switch on the column, "" when none
 	CheckSetup string // statements run once inside Descriptor before the literal (regexps, validator funcs, descriptor reads), "" when none
@@ -145,13 +150,23 @@ type OutBind struct {
 	// Desc is the name of the schema's field whose descriptor Value reads,
 	// DescVar the variable package runtime holds it in; "" when Value reads none.
 	Desc, DescVar string
-	// Imports are the packages Value names, but sch and the schema DSL
-	// package: import name → path.
+	// Imports are the packages Value names, but sch, the schema DSL package
+	// and the generated package: import name → path.
 	Imports map[string]string
-	// Bound is the type the Descriptor functions read the value as, such as
-	// "func() velox.BoundPolicy", and Bind the function that binds it, such
-	// as "velox.BindPolicy"; both "" when they read it as Type.
-	Bound, Bind string
+}
+
+// OutSource is one source of an entity's Policy, Hooks or Interceptors: a
+// mixin's generic method or the schema's own.
+type OutSource struct {
+	// Name is the source's type, as the behaviour header of package runtime
+	// lists it, e.g. "InOrg" or "Comment".
+	Name string
+	// Expr is the method value, as the file that binds it writes it, e.g.
+	// "sch.InOrg{}.Policy" or "(&sch.Comment{}).Hooks". A mixin's generic
+	// method is instantiated by inference: the Bind call names the entity.
+	Expr string
+	// Imports are the packages Expr names, but sch: import name → path.
+	Imports map[string]string
 }
 
 // OutRel is a relation of an entity.
@@ -176,4 +191,4 @@ type OutEnum struct {
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 13
+const GeneratedCodeVersion = 14

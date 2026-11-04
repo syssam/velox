@@ -74,8 +74,8 @@ func (*lzTask) Hooks() []velox.Hook[lzTask] {
 
 func lzTaskDescriptor() velox.Descriptor[lzTask] {
 	return velox.Descriptor[lzTask]{
-		Policy:       []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*lzTask)(nil).Policy()) }},
-		Hooks:        []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*lzTask)(nil).Hooks()) }},
+		Policy:       velox.BindPolicy((*lzTask)(nil).Policy),
+		Hooks:        velox.BindHooks((*lzTask)(nil).Hooks),
 		Table:        "lz_tasks",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey:   []int{0},
@@ -150,7 +150,7 @@ func (*lzRace) Policy() velox.Policy[lzRace] {
 
 func lzRaceDescriptor() velox.Descriptor[lzRace] {
 	return velox.Descriptor[lzRace]{
-		Policy:       []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*lzRace)(nil).Policy()) }},
+		Policy:       velox.BindPolicy((*lzRace)(nil).Policy),
 		Table:        "lz_races",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey:   []int{0},
@@ -324,7 +324,7 @@ func (*lzNote) Hooks() []velox.Hook[lzNote] {
 
 func lzNoteDescriptor() velox.Descriptor[lzNote] {
 	return velox.Descriptor[lzNote]{
-		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*lzNote)(nil).Hooks()) }},
+		Hooks:      velox.BindHooks((*lzNote)(nil).Hooks),
 		Table:      "lz_notes",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},

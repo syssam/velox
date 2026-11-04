@@ -455,19 +455,19 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 		w.p("},")
 	}
 	// Each part is named, and velox composes them: the scope is outermost.
-	// The schema's methods are the ones package runtime set, which
-	// SetVeloxRuntime binds.
+	// The lists are the ones package runtime bound, or, when the schema does
+	// not import the generated package, bound here.
 	if e.Scope != nil {
 		w.p("Scope: %s,", e.Scope.Var)
 	}
-	if e.Bound.Policy {
-		w.p("Policy: rt.%sPolicy,", e.Name)
-	}
-	if e.Bound.Hooks {
-		w.p("Hooks: rt.%sHooks,", e.Name)
-	}
-	if e.Bound.Interceptors {
-		w.p("Interceptors: rt.%sInterceptors,", e.Name)
+	for _, k := range behaviourKinds {
+		switch srcs := *e.sources(k); {
+		case len(srcs) == 0:
+		case o.SchemaImportsGen:
+			w.p("%s: rt.%s%[1]s,", k, e.Name)
+		default:
+			w.p("%s: %s,", k, bindCall(k, e.Name, srcs))
+		}
 	}
 	w.p("FieldPtr: func(x *%s, i int) any {", e.Name)
 	w.p("switch i {")

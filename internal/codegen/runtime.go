@@ -25,11 +25,10 @@ func RuntimeImport(genPath string) string {
 
 // renderRuntimeHolder writes runtime_velox.go when the generated package
 // reads values of the schema: the type VeloxRuntime, a field per value
-// package runtime gives an entity (OutBind); veloxBound, the same with the
-// schema's Policy, Hooks and Interceptors methods bound, each in a list, the
-// form of the Descriptor's fields; SetVeloxRuntime, which package runtime
-// calls with a VeloxRuntime and which binds them; and veloxRuntime, which
-// every Descriptor function calls first.
+// package runtime gives an entity (OutBind), its Policy, Hooks and
+// Interceptors already bound, in the form of the Descriptor's fields;
+// SetVeloxRuntime, which package runtime calls with a VeloxRuntime; and
+// veloxRuntime, which every Descriptor function calls first.
 func renderRuntimeHolder(o *Out) string {
 	imports := map[string]string{"velox": veloxPkg}
 	for _, e := range o.Entities {
@@ -43,10 +42,11 @@ func renderRuntimeHolder(o *Out) string {
 	w.p("")
 	writeImports(&w, imports)
 	w.p("// VeloxRuntime is what package %s gives package %s when the program", RuntimeDir, o.Package)
-	w.p("// starts: the schema's Hooks, Policy and Interceptors methods, and the")
-	w.p("// defaults and validators that %s cannot call by name. The schema", o.Package)
-	w.p("// package imports %s, so %[1]s cannot import it. Applications do not", o.Package)
-	w.p("// use this type: they import package %s for its effect.", RuntimeDir)
+	w.p("// starts: the Policy, Hooks and Interceptors of the schema and its")
+	w.p("// mixins, bound, and the defaults and validators that %s cannot call", o.Package)
+	w.p("// by name. The schema package imports %s, so %[1]s cannot import it.", o.Package)
+	w.p("// Applications do not use this type: they import package %s for its", RuntimeDir)
+	w.p("// effect.")
 	w.p("type VeloxRuntime struct {")
 	for _, e := range o.Entities {
 		for _, b := range e.Binds {
@@ -55,51 +55,24 @@ func renderRuntimeHolder(o *Out) string {
 	}
 	w.p("}")
 	w.p("")
-	// The Descriptor functions read the schema's methods bound, so that each
-	// names its policy and hooks as a plain field; the binding, which
-	// instantiates velox's generics for the entity, is written once here.
-	w.p("// veloxBound is VeloxRuntime as the Descriptor functions read it, with the")
-	w.p("// schema's Policy, Hooks and Interceptors methods bound for velox.")
-	w.p("type veloxBound struct {")
-	for _, e := range o.Entities {
-		for _, b := range e.Binds {
-			if b.Bound != "" {
-				w.p("%s []%s", b.Field, b.Bound)
-			} else {
-				w.p("%s %s", b.Field, b.Type)
-			}
-		}
-	}
-	w.p("}")
-	w.p("")
-	w.p("var veloxRT *veloxBound")
+	w.p("var veloxRT *VeloxRuntime")
 	w.p("")
 	w.p("// SetVeloxRuntime is called by package %s, once, when the program", RuntimeDir)
-	w.p("// starts; applications do not call it. A second call panics. It binds")
-	w.p("// the schema's methods and does not call them: velox calls each once,")
+	w.p("// starts; applications do not call it. A second call panics. The")
+	w.p("// functions it is given are not called yet: velox calls each once,")
 	w.p("// when it builds the entity's metadata.")
 	w.p("func SetVeloxRuntime(r VeloxRuntime) {")
 	w.p("if veloxRT != nil {")
 	w.p("panic(%s)", strconv.Quote(o.Package+": SetVeloxRuntime called twice"))
 	w.p("}")
-	w.p("veloxRT = &veloxBound{")
-	for _, e := range o.Entities {
-		for _, b := range e.Binds {
-			if b.Bind != "" {
-				w.p("%s: []%s{func() %s { return %s(r.%[1]s()) }},", b.Field, b.Bound, strings.TrimPrefix(b.Bound, "func() "), b.Bind)
-			} else {
-				w.p("%s: r.%[1]s,", b.Field)
-			}
-		}
-	}
-	w.p("}")
+	w.p("veloxRT = &r")
 	w.p("}")
 	w.p("")
 	w.p("// veloxRuntime returns what package %s set. It panics when the program", RuntimeDir)
 	w.p("// does not link package %s: the entities would run without the", RuntimeDir)
 	w.p("// schema's hooks, policies and defaults. velox does not keep the")
 	w.p("// failure: an entity used before %s's init works once it has run.", RuntimeDir)
-	w.p("func veloxRuntime() *veloxBound {")
+	w.p("func veloxRuntime() *VeloxRuntime {")
 	w.p("if veloxRT == nil {")
 	w.p("panic(velox.NotLinkedError(%s))", strconv.Quote(NotLinkedMessage(o.Package, o.GenPath)))
 	w.p("}")
@@ -142,6 +115,7 @@ func renderRuntime(o *Out) string {
 	w.p("//\t%s", RuntimeImport(o.GenPath))
 	w.p("//")
 	w.p("// Without it, a statement on an entity fails.")
+	behaviourHeader(&w, o)
 	w.p("package %s", RuntimeDir)
 	w.p("")
 	all := map[string]string{o.Package: o.GenPath, "sch": o.SchemaPath}
@@ -152,6 +126,12 @@ func renderRuntime(o *Out) string {
 		for _, b := range e.Binds {
 			if b.Desc != "" {
 				maps.Copy(all, b.Imports)
+			}
+		}
+		for _, k := range behaviourKinds {
+			for _, s := range *e.sources(k) {
+				all["velox"] = veloxPkg
+				maps.Copy(all, s.Imports)
 			}
 		}
 	}
@@ -175,6 +155,59 @@ func renderRuntime(o *Out) string {
 	w.p("})")
 	w.p("}")
 	return w.String()
+}
+
+// behaviourHeader writes, in package runtime's comment, where each entity's
+// Policy, Hooks and Interceptors come from, in the order velox runs them,
+// one entity to a line, in columns:
+//
+//	Comment  Policy: InOrg, Comment  Hooks: InOrg
+//
+// It writes nothing when no entity has any. A source missing from a line,
+// or a line that changes, shows in review as a changed generated line.
+func behaviourHeader(w *writer, o *Out) {
+	var rows [][]string
+	width := make([]int, 1+len(behaviourKinds))
+	for _, e := range o.Entities {
+		row := []string{e.Name}
+		some := false
+		for _, k := range behaviourKinds {
+			cell := ""
+			if srcs := *e.sources(k); len(srcs) > 0 {
+				names := make([]string, len(srcs))
+				for i, s := range srcs {
+					names[i] = s.Name
+				}
+				cell, some = k+": "+strings.Join(names, ", "), true
+			}
+			row = append(row, cell)
+		}
+		if some {
+			rows = append(rows, row)
+			for i, c := range row {
+				width[i] = max(width[i], len(c))
+			}
+		}
+	}
+	if len(rows) == 0 {
+		return
+	}
+	w.p("//")
+	w.p("// Behaviour, outermost first:")
+	w.p("//")
+	for _, row := range rows {
+		var b strings.Builder
+		for i, c := range row {
+			if width[i] == 0 {
+				continue
+			}
+			if b.Len() > 0 {
+				b.WriteString("  ")
+			}
+			b.WriteString(c + strings.Repeat(" ", width[i]-len(c)))
+		}
+		w.p("//\t%s", strings.TrimRight(b.String(), " "))
+	}
 }
 
 // writeImports writes the import declaration of imports, by name: the

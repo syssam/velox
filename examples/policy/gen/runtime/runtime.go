@@ -9,16 +9,22 @@
 //	import _ "github.com/syssam/velox/examples/policy/gen/runtime"
 //
 // Without it, a statement on an entity fails.
+//
+// Behaviour, outermost first:
+//
+//	Comment  Policy: Comment
+//	Doc      Policy: Doc
 package runtime
 
 import (
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/policy/gen"
 	sch "github.com/syssam/velox/examples/policy/schema"
 )
 
 func init() {
 	gen.SetVeloxRuntime(gen.VeloxRuntime{
-		CommentPolicy: sch.Comment{}.Policy,
-		DocPolicy:     sch.Doc{}.Policy,
+		CommentPolicy: velox.BindPolicy[gen.Comment](sch.Comment{}.Policy),
+		DocPolicy:     velox.BindPolicy[gen.Doc](sch.Doc{}.Policy),
 	})
 }

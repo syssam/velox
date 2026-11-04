@@ -263,9 +263,9 @@ func TestBidiDescriptorRefused(t *testing.T) {
 		t.Fatalf("a valid Desc: %v", err)
 	}
 	ok := bidiDescriptor()
-	ok.Policy = []func() velox.BoundPolicy{func() velox.BoundPolicy {
-		return velox.BindPolicy(velox.Policy[dBidi]{Insert: func(context.Context, *dBidi) error { return nil }})
-	}}
+	ok.Policy = velox.BindPolicy(func() velox.Policy[dBidi] {
+		return velox.Policy[dBidi]{Insert: func(context.Context, *dBidi) error { return nil }}
+	})
 	if _, err := loadDescriptor(ok); err != nil {
 		t.Fatalf("a Policy with Insert only: %v", err)
 	}
@@ -283,10 +283,10 @@ func TestBidiDescriptorRefused(t *testing.T) {
 			d.FieldPtr = func(x *dBidi, i int) any { return [...]any{&x.A, &x.C}[i] }
 		}, "the join entity of a bidirectional edge has columns of two types, int64 and string"},
 		{"read policy", func(d *velox.Descriptor[dBidi]) {
-			d.Policy = []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy(velox.Policy[dBidi]{Read: allow}) }}
+			d.Policy = velox.BindPolicy(func() velox.Policy[dBidi] { return velox.Policy[dBidi]{Read: allow} })
 		}, "the join entity of a bidirectional edge cannot have a Read or Write policy: its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"},
 		{"write policy", func(d *velox.Descriptor[dBidi]) {
-			d.Policy = []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy(velox.Policy[dBidi]{Write: allow}) }}
+			d.Policy = velox.BindPolicy(func() velox.Policy[dBidi] { return velox.Policy[dBidi]{Write: allow} })
 		}, "the join entity of a bidirectional edge cannot have a Read or Write policy: its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

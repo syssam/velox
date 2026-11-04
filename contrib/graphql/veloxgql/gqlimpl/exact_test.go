@@ -172,11 +172,11 @@ func (*intercepted) VeloxMeta() *velox.Meta[intercepted] {
 	return interceptedMeta.Load(func() velox.Descriptor[intercepted] {
 		return velox.Descriptor[intercepted]{
 			Table: "intercepteds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Interceptors: []func() velox.BoundInterceptors{func() velox.BoundInterceptors {
-				return velox.BindInterceptors([]velox.Interceptor[intercepted]{{Filter: func(context.Context) (velox.Pred[intercepted], error) {
+			Interceptors: velox.BindInterceptors(func() []velox.Interceptor[intercepted] {
+				return []velox.Interceptor[intercepted]{{Filter: func(context.Context) (velox.Pred[intercepted], error) {
 					return velox.And[intercepted](), nil
-				}}})
-			}},
+				}}}
+			}),
 			FieldPtr: func(x *intercepted, _ int) any { return &x.ID },
 		}
 	})
@@ -195,9 +195,9 @@ func (*guarded) VeloxMeta() *velox.Meta[guarded] {
 	return guardedMeta.Load(func() velox.Descriptor[guarded] {
 		return velox.Descriptor[guarded]{
 			Table: "guardeds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy {
-				return velox.BindPolicy(velox.Policy[guarded]{Read: func(context.Context) (velox.Pred[guarded], error) { return velox.And[guarded](), nil }})
-			}},
+			Policy: velox.BindPolicy(func() velox.Policy[guarded] {
+				return velox.Policy[guarded]{Read: func(context.Context) (velox.Pred[guarded], error) { return velox.And[guarded](), nil }}
+			}),
 			FieldPtr: func(x *guarded, _ int) any { return &x.ID },
 		}
 	})

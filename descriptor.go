@@ -53,9 +53,9 @@ type Descriptor[E any] struct {
 	// The scope is outermost: its Wrap holds the AND of the policies, or an
 	// empty Policy, and its Fill runs before the hooks.
 	//
-	// velox-gen names the scope of a schema.Scoped column and the schema's
-	// methods, which the generated package binds with BindPolicy, BindHooks
-	// and BindInterceptors:
+	// velox-gen names the scope of a schema.Scoped column, and the lists
+	// that the generated package runtime binds with BindPolicy, BindHooks
+	// and BindInterceptors, from the mixins' methods and the schema's:
 	//
 	//	Scope:        commentScope,
 	//	Policy:       rt.CommentPolicy,
@@ -64,7 +64,7 @@ type Descriptor[E any] struct {
 	//
 	// An entity written by hand binds its own methods,
 	//
-	//	Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) }},
+	//	Policy: velox.BindPolicy((*E)(nil).Policy),
 	//
 	// A method with another signature does not compile, which is why no
 	// test checks it at run time. An entity whose pointer type has a

@@ -5,22 +5,12 @@ package gen
 import "github.com/syssam/velox"
 
 // VeloxRuntime is what package runtime gives package gen when the program
-// starts: the schema's Hooks, Policy and Interceptors methods, and the
-// defaults and validators that gen cannot call by name. The schema
-// package imports gen, so gen cannot import it. Applications do not
-// use this type: they import package runtime for its effect.
+// starts: the Policy, Hooks and Interceptors of the schema and its
+// mixins, bound, and the defaults and validators that gen cannot call
+// by name. The schema package imports gen, so gen cannot import it.
+// Applications do not use this type: they import package runtime for its
+// effect.
 type VeloxRuntime struct {
-	CategoryInterceptors   func() []velox.Interceptor[Category]
-	GroupTokenDefault      func() string
-	PostPolicy             func() velox.Policy[Post]
-	PostInterceptors       func() []velox.Interceptor[Post]
-	PostSlugValidator      func(string) error
-	UserCreatedByValidator func(string) error
-}
-
-// veloxBound is VeloxRuntime as the Descriptor functions read it, with the
-// schema's Policy, Hooks and Interceptors methods bound for velox.
-type veloxBound struct {
 	CategoryInterceptors   []func() velox.BoundInterceptors
 	GroupTokenDefault      func() string
 	PostPolicy             []func() velox.BoundPolicy
@@ -29,31 +19,24 @@ type veloxBound struct {
 	UserCreatedByValidator func(string) error
 }
 
-var veloxRT *veloxBound
+var veloxRT *VeloxRuntime
 
 // SetVeloxRuntime is called by package runtime, once, when the program
-// starts; applications do not call it. A second call panics. It binds
-// the schema's methods and does not call them: velox calls each once,
+// starts; applications do not call it. A second call panics. The
+// functions it is given are not called yet: velox calls each once,
 // when it builds the entity's metadata.
 func SetVeloxRuntime(r VeloxRuntime) {
 	if veloxRT != nil {
 		panic("gen: SetVeloxRuntime called twice")
 	}
-	veloxRT = &veloxBound{
-		CategoryInterceptors:   []func() velox.BoundInterceptors{func() velox.BoundInterceptors { return velox.BindInterceptors(r.CategoryInterceptors()) }},
-		GroupTokenDefault:      r.GroupTokenDefault,
-		PostPolicy:             []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy(r.PostPolicy()) }},
-		PostInterceptors:       []func() velox.BoundInterceptors{func() velox.BoundInterceptors { return velox.BindInterceptors(r.PostInterceptors()) }},
-		PostSlugValidator:      r.PostSlugValidator,
-		UserCreatedByValidator: r.UserCreatedByValidator,
-	}
+	veloxRT = &r
 }
 
 // veloxRuntime returns what package runtime set. It panics when the program
 // does not link package runtime: the entities would run without the
 // schema's hooks, policies and defaults. velox does not keep the
 // failure: an entity used before runtime's init works once it has run.
-func veloxRuntime() *veloxBound {
+func veloxRuntime() *VeloxRuntime {
 	if veloxRT == nil {
 		panic(velox.NotLinkedError("gen: the schema's hooks, policies and defaults are not linked: add import _ \"example.com/blog/gen/runtime\" to the program's main package, or to the test"))
 	}

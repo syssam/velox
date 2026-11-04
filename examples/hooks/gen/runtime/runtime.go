@@ -9,15 +9,20 @@
 //	import _ "github.com/syssam/velox/examples/hooks/gen/runtime"
 //
 // Without it, a statement on an entity fails.
+//
+// Behaviour, outermost first:
+//
+//	Task  Hooks: Task
 package runtime
 
 import (
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/hooks/gen"
 	sch "github.com/syssam/velox/examples/hooks/schema"
 )
 
 func init() {
 	gen.SetVeloxRuntime(gen.VeloxRuntime{
-		TaskHooks: sch.Task{}.Hooks,
+		TaskHooks: velox.BindHooks[gen.Task](sch.Task{}.Hooks),
 	})
 }

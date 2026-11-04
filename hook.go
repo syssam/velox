@@ -31,7 +31,7 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 //
 //	func (*E) Hooks() []velox.Hook[E]
 //
-// which its Descriptor binds (Descriptor.Hooks calls BindHooks on it); a
+// which its Descriptor binds with BindHooks; a
 // method the metadata does not bind is refused at the entity's first use.
 // velox calls the method once, when it builds the entity's metadata: a hand
 // written one on a nil *E, so it must not read its receiver. Nor may its
@@ -81,20 +81,48 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 	}
 }
 
-// BindPolicy erases p's entity type, for Descriptor.Policy. For generated
-// code. The generated package binds the schema's method in a function that
-// velox calls once, when it builds the metadata,
+// BindPolicy erases the entity type of the policy functions fs, for
+// Descriptor.Policy: one entry per function, in order. For generated code.
+// It does not call them: velox calls each once, when it builds the metadata.
+// Package runtime binds an entity's sources, its mixins' first, and an
+// entity written by hand binds its own method:
 //
-//	func() velox.BoundPolicy { return velox.BindPolicy(r.CommentPolicy()) }
+//	Policy: velox.BindPolicy((*E)(nil).Policy),
 //
-// and an entity written by hand binds its own the same way, with
-// (*E)(nil).Policy(). A method of another signature does not compile.
-func BindPolicy[E any](p Policy[E]) BoundPolicy { return engine.NewBoundPolicy(policyOf(p)) }
+// A function of another signature does not compile. A nil one stays nil,
+// which the metadata refuses.
+//
+//go:noinline
+func BindPolicy[E any](fs ...func() Policy[E]) []func() BoundPolicy {
+	// It is not inlined, nor are BindHooks and BindInterceptors: inlined,
+	// the loop and its closure are compiled again into each caller.
+	out := make([]func() BoundPolicy, len(fs))
+	for i, f := range fs {
+		if f != nil {
+			out[i] = func() BoundPolicy { return engine.NewBoundPolicy(policyOf(f())) }
+		}
+	}
+	return out
+}
 
-// BindHooks erases hs's entity type, for Descriptor.Hooks, as BindPolicy
-// erases a Policy. For generated code. A nil hook is refused, by its index
-// in hs, when the metadata is built.
-func BindHooks[E any](hs []Hook[E]) BoundHooks {
+// BindHooks erases the entity type of the hook functions fs, for
+// Descriptor.Hooks, as BindPolicy erases policies. For generated code. A
+// nil hook a function returns is refused, by its index, when the metadata
+// is built.
+//
+//go:noinline
+func BindHooks[E any](fs ...func() []Hook[E]) []func() BoundHooks {
+	out := make([]func() BoundHooks, len(fs))
+	for i, f := range fs {
+		if f != nil {
+			out[i] = func() BoundHooks { return bindHooks(f()) }
+		}
+	}
+	return out
+}
+
+// bindHooks erases hs's entity type.
+func bindHooks[E any](hs []Hook[E]) BoundHooks {
 	var b BoundHooks
 	for i, f := range hs {
 		if f == nil {

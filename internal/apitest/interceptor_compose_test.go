@@ -34,9 +34,9 @@ func lMode(ctx context.Context, m string) context.Context {
 
 func (*lAnd) VeloxMeta() *velox.Meta[lAnd] {
 	return lAndMeta.Load(func() velox.Descriptor[lAnd] {
-		policy := func(label string, insert string) func() velox.BoundPolicy {
-			return func() velox.BoundPolicy {
-				return velox.BindPolicy(velox.Policy[lAnd]{
+		policy := func(label string, insert string) func() velox.Policy[lAnd] {
+			return func() velox.Policy[lAnd] {
+				return velox.Policy[lAnd]{
 					Read: func(ctx context.Context) (velox.Pred[lAnd], error) {
 						lAndTrace = append(lAndTrace, "read "+label)
 						if label == "a" {
@@ -56,7 +56,7 @@ func (*lAnd) VeloxMeta() *velox.Meta[lAnd] {
 						}
 						return nil
 					},
-				})
+				}
 			}
 		}
 		hook := func(label string) velox.Hook[lAnd] {
@@ -67,23 +67,23 @@ func (*lAnd) VeloxMeta() *velox.Meta[lAnd] {
 				})
 			}
 		}
-		filter := func(label string) func() velox.BoundInterceptors {
-			return func() velox.BoundInterceptors {
-				return velox.BindInterceptors([]velox.Interceptor[lAnd]{{Filter: func(context.Context) (velox.Pred[lAnd], error) {
+		filter := func(label string) func() []velox.Interceptor[lAnd] {
+			return func() []velox.Interceptor[lAnd] {
+				return []velox.Interceptor[lAnd]{{Filter: func(context.Context) (velox.Pred[lAnd], error) {
 					return lAndName.NEQ(label), nil
-				}}})
+				}}}
 			}
 		}
 		return velox.Descriptor[lAnd]{
 			Table:      "ands",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 			PrimaryKey: []int{0},
-			Policy:     []func() velox.BoundPolicy{policy("a", "ia"), policy("b", "ib")},
-			Hooks: []func() velox.BoundHooks{
-				func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[lAnd]{hook("h1"), hook("h2")}) },
-				func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[lAnd]{hook("h3")}) },
-			},
-			Interceptors: []func() velox.BoundInterceptors{filter("f1"), filter("f2")},
+			Policy:     velox.BindPolicy(policy("a", "ia"), policy("b", "ib")),
+			Hooks: velox.BindHooks(
+				func() []velox.Hook[lAnd] { return []velox.Hook[lAnd]{hook("h1"), hook("h2")} },
+				func() []velox.Hook[lAnd] { return []velox.Hook[lAnd]{hook("h3")} },
+			),
+			Interceptors: velox.BindInterceptors(filter("f1"), filter("f2")),
 			FieldPtr:     func(x *lAnd, i int) any { return [...]any{&x.ID, &x.Name}[i] },
 		}
 	})
@@ -198,12 +198,12 @@ func lBadErr(f func(d *velox.Descriptor[lBad])) error {
 // when the metadata is built, with a *SchemaError.
 func TestNilInterceptorRefused(t *testing.T) {
 	allow := velox.Interceptor[lBad]{Filter: func(context.Context) (velox.Pred[lBad], error) { return velox.Allow[lBad](), nil }}
-	bind := func(is ...velox.Interceptor[lBad]) func() velox.BoundInterceptors {
-		return func() velox.BoundInterceptors { return velox.BindInterceptors(is) }
+	bind := func(is ...velox.Interceptor[lBad]) func() []velox.Interceptor[lBad] {
+		return func() []velox.Interceptor[lBad] { return is }
 	}
-	nilHook := func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[lBad]{nil}) }
-	someHook := func() velox.BoundHooks {
-		return velox.BindHooks([]velox.Hook[lBad]{func(next velox.Mutator[lBad]) velox.Mutator[lBad] { return next }})
+	nilHook := func() []velox.Hook[lBad] { return []velox.Hook[lBad]{nil} }
+	someHook := func() []velox.Hook[lBad] {
+		return []velox.Hook[lBad]{func(next velox.Mutator[lBad]) velox.Mutator[lBad] { return next }}
 	}
 	for _, c := range []struct {
 		name string
@@ -211,19 +211,19 @@ func TestNilInterceptorRefused(t *testing.T) {
 		want string
 	}{
 		{"a nil Filter", func(d *velox.Descriptor[lBad]) {
-			d.Interceptors = []func() velox.BoundInterceptors{bind(allow), bind(allow, velox.Interceptor[lBad]{})}
+			d.Interceptors = velox.BindInterceptors(bind(allow), bind(allow, velox.Interceptor[lBad]{}))
 		}, "velox: apitest.lBad: Interceptors()[2] has a nil Filter"},
 		{"a nil hook", func(d *velox.Descriptor[lBad]) {
-			d.Hooks = []func() velox.BoundHooks{someHook, nilHook}
+			d.Hooks = velox.BindHooks(someHook, nilHook)
 		}, "velox: apitest.lBad: Hooks()[1] is nil"},
 		{"a nil Interceptors function", func(d *velox.Descriptor[lBad]) {
-			d.Interceptors = []func() velox.BoundInterceptors{bind(allow), nil}
+			d.Interceptors = velox.BindInterceptors(bind(allow), nil)
 		}, "velox: apitest.lBad: Descriptor.Interceptors[1] is nil"},
 		{"a nil Policy function", func(d *velox.Descriptor[lBad]) {
-			d.Policy = []func() velox.BoundPolicy{nil}
+			d.Policy = velox.BindPolicy[lBad](nil)
 		}, "velox: apitest.lBad: Descriptor.Policy[0] is nil"},
 		{"a nil Hooks function", func(d *velox.Descriptor[lBad]) {
-			d.Hooks = []func() velox.BoundHooks{nil}
+			d.Hooks = velox.BindHooks[lBad](nil)
 		}, "velox: apitest.lBad: Descriptor.Hooks[0] is nil"},
 		{"a panic", func(d *velox.Descriptor[lBad]) {
 			d.Interceptors = []func() velox.BoundInterceptors{func() velox.BoundInterceptors { panic("boom") }}
@@ -232,7 +232,7 @@ func TestNilInterceptorRefused(t *testing.T) {
 			d.Bidi = true
 			d.Columns = []velox.ColumnDescriptor{{Field: "ID", Name: "a"}, {Field: "B", Name: "b"}}
 			d.PrimaryKey = []int{0, 1}
-			d.Interceptors = []func() velox.BoundInterceptors{bind(allow)}
+			d.Interceptors = velox.BindInterceptors(bind(allow))
 		}, "cannot have interceptors"},
 	} {
 		err := lBadErr(c.set)
@@ -274,11 +274,11 @@ func (*lJoin) VeloxMeta() *velox.Meta[lJoin] {
 	return lJoinMeta.Load(func() velox.Descriptor[lJoin] {
 		return velox.Descriptor[lJoin]{
 			Table: "joins", Columns: []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}}, PrimaryKey: []int{0, 1},
-			Interceptors: []func() velox.BoundInterceptors{func() velox.BoundInterceptors {
-				return velox.BindInterceptors([]velox.Interceptor[lJoin]{{Filter: func(context.Context) (velox.Pred[lJoin], error) {
+			Interceptors: velox.BindInterceptors(func() []velox.Interceptor[lJoin] {
+				return []velox.Interceptor[lJoin]{{Filter: func(context.Context) (velox.Pred[lJoin], error) {
 					return velox.Allow[lJoin](), nil
-				}}})
-			}},
+				}}}
+			}),
 			FieldPtr: func(x *lJoin, i int) any { return [...]any{&x.A, &x.B}[i] },
 		}
 	})
@@ -364,9 +364,9 @@ func (*lCycA) VeloxMeta() *velox.Meta[lCycA] {
 		return velox.Descriptor[lCycA]{
 			Table: "cyc_as", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BID", Name: "b_id"}}, PrimaryKey: []int{0},
 			Edges: []velox.EdgeDescriptor{velox.EdgeTo[lCycB]("B", 1, 0)},
-			Interceptors: []func() velox.BoundInterceptors{func() velox.BoundInterceptors {
-				return velox.BindInterceptors([]velox.Interceptor[lCycA]{{Filter: func(context.Context) (velox.Pred[lCycA], error) { return lCycAB.Has(), nil }}})
-			}},
+			Interceptors: velox.BindInterceptors(func() []velox.Interceptor[lCycA] {
+				return []velox.Interceptor[lCycA]{{Filter: func(context.Context) (velox.Pred[lCycA], error) { return lCycAB.Has(), nil }}}
+			}),
 			FieldPtr:     func(x *lCycA, i int) any { return [...]any{&x.ID, &x.BID}[i] },
 			EdgeFieldPtr: func(x *lCycA, i int) any { return &x.B },
 		}
@@ -378,9 +378,9 @@ func (*lCycB) VeloxMeta() *velox.Meta[lCycB] {
 		return velox.Descriptor[lCycB]{
 			Table: "cyc_bs", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AID", Name: "a_id"}}, PrimaryKey: []int{0},
 			Edges: []velox.EdgeDescriptor{velox.EdgeTo[lCycA]("A", 1, 0)},
-			Interceptors: []func() velox.BoundInterceptors{func() velox.BoundInterceptors {
-				return velox.BindInterceptors([]velox.Interceptor[lCycB]{{Filter: func(context.Context) (velox.Pred[lCycB], error) { return lCycBA.Has(), nil }}})
-			}},
+			Interceptors: velox.BindInterceptors(func() []velox.Interceptor[lCycB] {
+				return []velox.Interceptor[lCycB]{{Filter: func(context.Context) (velox.Pred[lCycB], error) { return lCycBA.Has(), nil }}}
+			}),
 			FieldPtr:     func(x *lCycB, i int) any { return [...]any{&x.ID, &x.AID}[i] },
 			EdgeFieldPtr: func(x *lCycB, i int) any { return &x.A },
 		}

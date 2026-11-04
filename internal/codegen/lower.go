@@ -44,10 +44,13 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	l.entities()
 	l.relations()
 	l.finish()
+	for _, e := range l.out.Entities {
+		ownSources(e)
+	}
 	if l.out.SchemaImportsGen {
 		owner := map[string]string{}
 		for _, e := range l.out.Entities {
-			e.Binds = slices.Concat(methodBinds(e), e.Binds)
+			e.Binds = slices.Concat(methodBinds(e, l.out.Package), e.Binds)
 			for _, b := range e.Binds {
 				if old, ok := owner[b.Field]; ok {
 					l.errs = append(l.errs, &Error{Schema: e.Name, Reason: fmt.Sprintf("velox-gen names a value of %s and one of %s %s in %s.VeloxRuntime; rename a field or a schema", old, e.Name, b.Field, l.out.Package)})
@@ -73,26 +76,68 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	return l.out, nil
 }
 
-// methodBinds are the fields of VeloxRuntime that hold e's Policy, Hooks and
-// Interceptors methods: method values of a new value of the schema's type, a pointer when
-// the method has a pointer receiver. Package runtime sets them, so the
-// compiler checks each method's signature at its line of runtime.go.
-func methodBinds(e *OutEntity) []*OutBind {
+// behaviourKinds are the kinds of an entity's behaviour, in the order the
+// generated code lists them.
+var behaviourKinds = []string{"Policy", "Hooks", "Interceptors"}
+
+// sources returns the sources of e's behaviour of kind k.
+func (e *OutEntity) sources(k string) *[]OutSource {
+	switch k {
+	case "Policy":
+		return &e.Policy
+	case "Hooks":
+		return &e.Hooks
+	}
+	return &e.Interceptors
+}
+
+// ownSources appends to e's sources the Policy, Hooks and Interceptors
+// methods its schema declares: method values of a new value of the schema's
+// type, a pointer when the method has a pointer receiver.
+func ownSources(e *OutEntity) {
 	recv := func(ptr bool) string {
 		if ptr {
 			return "(&sch." + e.Name + "{})"
 		}
 		return "sch." + e.Name + "{}"
 	}
-	var out []*OutBind
+	own := func(k string, ptr bool) {
+		*e.sources(k) = append(*e.sources(k), OutSource{Name: e.Name, Expr: recv(ptr) + "." + k})
+	}
 	if e.Bound.Policy {
-		out = append(out, &OutBind{Field: e.Name + "Policy", Type: "func() velox.Policy[" + e.Name + "]", Value: recv(e.Bound.PolicyPtr) + ".Policy", Bound: "func() velox.BoundPolicy", Bind: "velox.BindPolicy", Imports: map[string]string{"velox": veloxPkg}})
+		own("Policy", e.Bound.PolicyPtr)
 	}
 	if e.Bound.Hooks {
-		out = append(out, &OutBind{Field: e.Name + "Hooks", Type: "func() []velox.Hook[" + e.Name + "]", Value: recv(e.Bound.HooksPtr) + ".Hooks", Bound: "func() velox.BoundHooks", Bind: "velox.BindHooks", Imports: map[string]string{"velox": veloxPkg}})
+		own("Hooks", e.Bound.HooksPtr)
 	}
 	if e.Bound.Interceptors {
-		out = append(out, &OutBind{Field: e.Name + "Interceptors", Type: "func() []velox.Interceptor[" + e.Name + "]", Value: recv(e.Bound.InterceptorsPtr) + ".Interceptors", Bound: "func() velox.BoundInterceptors", Bind: "velox.BindInterceptors", Imports: map[string]string{"velox": veloxPkg}})
+		own("Interceptors", e.Bound.InterceptorsPtr)
+	}
+}
+
+// bindCall is the call that binds srcs, e's sources of kind k, where the
+// entity is named entity, such as
+// velox.BindPolicy[gen.Comment](sch.InOrg{}.Policy, sch.Comment{}.Policy).
+// Naming the entity checks each source's signature at that line, and
+// instantiates a mixin's generic method by inference.
+func bindCall(k, entity string, srcs []OutSource) string {
+	exprs := make([]string, len(srcs))
+	for i, s := range srcs {
+		exprs[i] = s.Expr
+	}
+	return "velox.Bind" + k + "[" + entity + "](" + strings.Join(exprs, ", ") + ")"
+}
+
+// methodBinds are the fields of VeloxRuntime that hold e's Policy, Hooks
+// and Interceptors, bound: package runtime sets each to the bindCall of its
+// sources, naming the entity in package pkg.
+func methodBinds(e *OutEntity, pkg string) []*OutBind {
+	var out []*OutBind
+	for _, k := range behaviourKinds {
+		if srcs := *e.sources(k); len(srcs) > 0 {
+			out = append(out, &OutBind{Field: e.Name + k, Type: "[]func() velox.Bound" + k,
+				Value: bindCall(k, pkg+"."+e.Name, srcs), Imports: map[string]string{"velox": veloxPkg}})
+		}
 	}
 	return out
 }

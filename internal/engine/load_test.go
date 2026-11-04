@@ -84,7 +84,7 @@ var ovNoteMeta velox.MetaOnce[ovNote]
 func (*ovNote) VeloxMeta() *velox.Meta[ovNote] {
 	return ovNoteMeta.Load(func() velox.Descriptor[ovNote] {
 		return velox.Descriptor[ovNote]{
-			Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*ovNote)(nil).Policy()) }},
+			Policy:     velox.BindPolicy((*ovNote)(nil).Policy),
 			Table:      "ov_notes",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Rank", Name: "rank"}},
 			PrimaryKey: []int{0},

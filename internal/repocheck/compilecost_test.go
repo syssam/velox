@@ -166,8 +166,8 @@ var (
 // methods.
 var entityDescHooksBound = strings.Replace(entityDescHooksSrc, `		PrimaryKey: []int{0},
 		Edges:`, `		PrimaryKey: []int{0},
-		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) }},
-		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*E)(nil).Hooks()) }},
+		Policy:     velox.BindPolicy((*E)(nil).Policy),
+		Hooks:      velox.BindHooks((*E)(nil).Hooks),
 		Edges:`, 1)
 
 // genericObjects is one unexported variable of each exported generic type,
@@ -214,9 +214,9 @@ var genericObjects = []struct {
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
 	// The entity packages. entityDescriptor is the minimal entity velox-gen writes: Load
 	// takes no Policy or Hook generic, and the Descriptor's Policy and Hooks fields hold
-	// E-erased BoundPolicy and BoundHooks that BindPolicy and BindHooks make in the
-	// entity's own generated code, so that only an entity that declares the methods
-	// instantiates those generics. entityDescUse adds a default, two relations and a
+	// E-erased BoundPolicy and BoundHooks that BindPolicy and BindHooks make where the
+	// methods are bound (velox-gen's package runtime), so that only an entity that has
+	// behaviour instantiates those generics. entityDescUse adds a default, two relations and a
 	// Use function that queries, inserts, saves, updates and deletes. entityDescHooks
 	// is that with a Policy and three hooks bound through the fields; the generics it
 	// instantiates are the cost of having a policy and hooks (policyGrowthMax).
@@ -241,8 +241,16 @@ var genericObjects = []struct {
 	// field Interceptors (GeneratedCodeIsVersion13) took entityDescUse from
 	// 766634 to 770270 bytes. Load's retry of a binding that panics with a
 	// NotLinkedError took it to 770548.
-	{"entityDescUse", "", entityDescUseSrc, 780288},        // measured 770548
-	{"entityDescHooks", "", entityDescHooksBound, 1049600}, // measured 1037932
+	//
+	// BindPolicy, BindHooks and BindInterceptors bind a list of functions
+	// (GeneratedCodeIsVersion14): each instance holds a loop and a closure,
+	// which took entityDescHooks from 1037930 to 1058404 bytes, 20 KB, with
+	// them not inlined (inlined, 1071690). velox-gen writes that binding in
+	// package runtime, which exports nothing, and gen no longer holds the
+	// closures that bound each method, nor a second struct of the bound
+	// fields.
+	{"entityDescUse", "", entityDescUseSrc, 780288},        // measured 770560
+	{"entityDescHooks", "", entityDescHooksBound, 1072128}, // measured 1058404
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	{"Mutation", "velox.Mutation[E]", "", 7168},            // measured 2226
 }
@@ -253,7 +261,7 @@ var genericObjects = []struct {
 // the generics velox instantiates for E (BindPolicy, BindHooks, On, the
 // Mutator and Mutation methods) and the export data of the types the
 // functions mention.
-const policyGrowthMax = 348160 // measured 289120
+const policyGrowthMax = 354304 // measured 287844
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package

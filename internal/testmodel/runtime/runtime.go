@@ -9,18 +9,24 @@
 //	import _ "github.com/syssam/velox/internal/testmodel/runtime"
 //
 // Without it, a statement on an entity fails.
+//
+// Behaviour, outermost first:
+//
+//	Invoice  Policy: Invoice  Hooks: Invoice
+//	Ticket   Policy: Ticket   Hooks: Ticket
 package runtime
 
 import (
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
 	sch "github.com/syssam/velox/internal/testmodel/schema"
 )
 
 func init() {
 	testmodel.SetVeloxRuntime(testmodel.VeloxRuntime{
-		InvoicePolicy: sch.Invoice{}.Policy,
-		InvoiceHooks:  sch.Invoice{}.Hooks,
-		TicketPolicy:  sch.Ticket{}.Policy,
-		TicketHooks:   sch.Ticket{}.Hooks,
+		InvoicePolicy: velox.BindPolicy[testmodel.Invoice](sch.Invoice{}.Policy),
+		InvoiceHooks:  velox.BindHooks[testmodel.Invoice](sch.Invoice{}.Hooks),
+		TicketPolicy:  velox.BindPolicy[testmodel.Ticket](sch.Ticket{}.Policy),
+		TicketHooks:   velox.BindHooks[testmodel.Ticket](sch.Ticket{}.Hooks),
 	})
 }

@@ -260,8 +260,8 @@ func (*note) Hooks() []velox.Hook[note] { return []velox.Hook[note]{noteScope.Fi
 
 func noteDescriptor() velox.Descriptor[note] {
 	return velox.Descriptor[note]{
-		Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*note)(nil).Policy()) }},
-		Hooks:  []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*note)(nil).Hooks()) }},
+		Policy: velox.BindPolicy((*note)(nil).Policy),
+		Hooks:  velox.BindHooks((*note)(nil).Hooks),
 		Table:  "notes",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Pos", Name: "pos"}, {Field: "Secret", Name: "secret"}},

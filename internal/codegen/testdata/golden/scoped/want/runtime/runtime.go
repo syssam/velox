@@ -9,18 +9,25 @@
 //	import _ "example.com/scoped/gen/runtime"
 //
 // Without it, a statement on an entity fails.
+//
+// Behaviour, outermost first:
+//
+//	Memo  Policy: Memo
+//	Tag                 Hooks: Tag
+//	Task  Policy: Task  Hooks: Task
 package runtime
 
 import (
 	"example.com/scoped/gen"
 	sch "example.com/tmp/schema"
+	"github.com/syssam/velox"
 )
 
 func init() {
 	gen.SetVeloxRuntime(gen.VeloxRuntime{
-		MemoPolicy: sch.Memo{}.Policy,
-		TagHooks:   sch.Tag{}.Hooks,
-		TaskPolicy: sch.Task{}.Policy,
-		TaskHooks:  sch.Task{}.Hooks,
+		MemoPolicy: velox.BindPolicy[gen.Memo](sch.Memo{}.Policy),
+		TagHooks:   velox.BindHooks[gen.Tag](sch.Tag{}.Hooks),
+		TaskPolicy: velox.BindPolicy[gen.Task](sch.Task{}.Policy),
+		TaskHooks:  velox.BindHooks[gen.Task](sch.Task{}.Hooks),
 	})
 }

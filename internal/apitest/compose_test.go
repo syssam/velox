@@ -113,8 +113,8 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 		d.Scope = scope.By(composeOrg, org.EQ, func(x *E) *int64 { return &row(x).OrgID })
 	}
 	if table[2] == '1' {
-		d.Policy = []func() velox.BoundPolicy{func() velox.BoundPolicy {
-			return velox.BindPolicy(velox.Policy[E]{
+		d.Policy = velox.BindPolicy(func() velox.Policy[E] {
+			return velox.Policy[E]{
 				Read: func(context.Context) (velox.Pred[E], error) { return name.NEQ("hidden"), nil },
 				Insert: func(_ context.Context, x *E) error {
 					if row(x).Name == "banned" {
@@ -122,8 +122,8 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 					}
 					return nil
 				},
-			})
-		}}
+			}
+		})
 	}
 	if table[3] == '1' {
 		hook := func(label string) velox.Hook[E] {
@@ -136,7 +136,7 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 				})
 			}
 		}
-		d.Hooks = []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[E]{hook("h1"), hook("h2")}) }}
+		d.Hooks = velox.BindHooks(func() []velox.Hook[E] { return []velox.Hook[E]{hook("h1"), hook("h2")} })
 	}
 	return d
 }

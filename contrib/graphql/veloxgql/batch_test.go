@@ -89,14 +89,14 @@ func petDescriptor() velox.Descriptor[pet] {
 		PrimaryKey: []int{0},
 		FieldPtr:   func(x *pet, i int) any { return [...]any{&x.ID, &x.KeeperID, &x.OrgID, &x.Name}[i] },
 		Scope:      petScope,
-		Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy {
-			return velox.BindPolicy(velox.Policy[pet]{Read: func(ctx context.Context) (velox.Pred[pet], error) {
+		Policy: velox.BindPolicy(func() velox.Policy[pet] {
+			return velox.Policy[pet]{Read: func(ctx context.Context) (velox.Pred[pet], error) {
 				if v, ok := ctx.Value(viewerKey{}).(int64); ok {
 					return pets.ID.LTE(v), nil
 				}
 				return velox.Allow[pet](), nil
-			}})
-		}},
+			}}
+		}),
 	}
 }
 

@@ -63,7 +63,7 @@ func (*Pnote) VeloxMeta() *velox.Meta[Pnote] { return PnoteMeta.Load(PnoteDescri
 
 func PnoteDescriptor() velox.Descriptor[Pnote] {
 	return velox.Descriptor[Pnote]{
-		Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*Pnote)(nil).Policy()) }},
+		Policy: velox.BindPolicy((*Pnote)(nil).Policy),
 		Table:  "pnotes",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}, {Field: "Locked", Name: "locked"},
 			{Field: "ParentID", Name: "parent_id"}, {Field: "InvoiceID", Name: "invoice_id"}},
@@ -168,8 +168,8 @@ func (*Dnote) VeloxMeta() *velox.Meta[Dnote] { return DnoteMeta.Load(DnoteDescri
 
 func DnoteDescriptor() velox.Descriptor[Dnote] {
 	return velox.Descriptor[Dnote]{
-		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*Dnote)(nil).Policy()) }},
-		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*Dnote)(nil).Hooks()) }},
+		Policy:     velox.BindPolicy((*Dnote)(nil).Policy),
+		Hooks:      velox.BindHooks((*Dnote)(nil).Hooks),
 		Table:      "dnotes",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},

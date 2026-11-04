@@ -9,17 +9,23 @@
 //	import _ "github.com/syssam/velox/examples/tour/gen/runtime"
 //
 // Without it, a statement on an entity fails.
+//
+// Behaviour, outermost first:
+//
+//	Invoice  Policy: Invoice  Hooks: Invoice
+//	Line     Policy: Line
 package runtime
 
 import (
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tour/gen"
 	sch "github.com/syssam/velox/examples/tour/schema"
 )
 
 func init() {
 	gen.SetVeloxRuntime(gen.VeloxRuntime{
-		InvoicePolicy: sch.Invoice{}.Policy,
-		InvoiceHooks:  sch.Invoice{}.Hooks,
-		LinePolicy:    sch.Line{}.Policy,
+		InvoicePolicy: velox.BindPolicy[gen.Invoice](sch.Invoice{}.Policy),
+		InvoiceHooks:  velox.BindHooks[gen.Invoice](sch.Invoice{}.Hooks),
+		LinePolicy:    velox.BindPolicy[gen.Line](sch.Line{}.Policy),
 	})
 }

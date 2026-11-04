@@ -277,7 +277,7 @@ func TestGenerateBindsSchemaMethods(t *testing.T) {
 		t.Errorf("tag_velox.go does not check the runtime, or binds a policy:\n%s", tag)
 	}
 	rt, _ := os.ReadFile(filepath.Join(dir, "gen", "runtime", "runtime.go"))
-	for _, want := range []string{"package runtime\n", "UserPolicy: sch.User{}.Policy,", `sch "example.com/app/schema"`, "\"example.com/app/gen\"\n",
+	for _, want := range []string{"package runtime\n", "UserPolicy: velox.BindPolicy[gen.User](sch.User{}.Policy),", `sch "example.com/app/schema"`, "\"example.com/app/gen\"\n",
 		"gen.SetVeloxRuntime(gen.VeloxRuntime{", `//	import _ "example.com/app/gen/runtime"`} {
 		if !strings.Contains(string(rt), want) {
 			t.Errorf("runtime.go lacks %q:\n%s", want, rt)
@@ -399,7 +399,7 @@ func TestGenerateFirstPolicyOverAGenThatImportsTheSchema(t *testing.T) {
 		t.Errorf("gen still imports the schema:\n%s", src)
 	}
 	rt, _ := os.ReadFile(filepath.Join(dir, "gen", "runtime", "runtime.go"))
-	for _, want := range []string{" sch.User{}.Policy,\n", " userCreatedAt.Default.(func() time.Time),\n"} {
+	for _, want := range []string{" velox.BindPolicy[gen.User](sch.User{}.Policy),\n", " userCreatedAt.Default.(func() time.Time),\n"} {
 		if !strings.Contains(string(rt), want) {
 			t.Errorf("runtime.go lacks %q:\n%s", want, rt)
 		}

@@ -59,9 +59,9 @@ func (*fNote) VeloxMeta() *velox.Meta[fNote] {
 			Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 				{Field: "Title", Name: "title"}, {Field: "DeletedAt", Name: "deleted_at"}},
 			PrimaryKey:   []int{0},
-			Policy:       []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy(orgMixin{}.Policy[fNote]()) }},
-			Hooks:        []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks(orgMixin{}.Hooks[fNote]()) }},
-			Interceptors: []func() velox.BoundInterceptors{func() velox.BoundInterceptors { return velox.BindInterceptors(orgMixin{}.Interceptors[fNote]()) }},
+			Policy:       velox.BindPolicy(orgMixin{}.Policy[fNote]),
+			Hooks:        velox.BindHooks(orgMixin{}.Hooks[fNote]),
+			Interceptors: velox.BindInterceptors(orgMixin{}.Interceptors[fNote]),
 			FieldPtr:     func(x *fNote, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Title, &x.DeletedAt}[i] },
 		}
 	})
@@ -380,10 +380,10 @@ var (
 func (*fBadName) VeloxMeta() *velox.Meta[fBadName] {
 	return fBadNameMeta.Load(func() velox.Descriptor[fBadName] {
 		return velox.Descriptor[fBadName]{Table: "bad_names", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy {
+			Policy: velox.BindPolicy(func() velox.Policy[fBadName] {
 				c := velox.Field[fBadName, int64]("nope")
-				return velox.BindPolicy(velox.Policy[fBadName]{Read: func(context.Context) (velox.Pred[fBadName], error) { return c.EQ(1), nil }})
-			}},
+				return velox.Policy[fBadName]{Read: func(context.Context) (velox.Pred[fBadName], error) { return c.EQ(1), nil }}
+			}),
 			FieldPtr: func(x *fBadName, i int) any { return &x.ID }}
 	})
 }
@@ -392,12 +392,12 @@ func (*fBadType) VeloxMeta() *velox.Meta[fBadType] {
 	return fBadTypeMeta.Load(func() velox.Descriptor[fBadType] {
 		return velox.Descriptor[fBadType]{Table: "bad_types", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "DeletedAt", Name: "deleted_at"}},
 			PrimaryKey: []int{0},
-			Interceptors: []func() velox.BoundInterceptors{func() velox.BoundInterceptors {
+			Interceptors: velox.BindInterceptors(func() []velox.Interceptor[fBadType] {
 				c := velox.Field[fBadType, time.Time]("deleted_at")
-				return velox.BindInterceptors([]velox.Interceptor[fBadType]{{Filter: func(context.Context) (velox.Pred[fBadType], error) {
+				return []velox.Interceptor[fBadType]{{Filter: func(context.Context) (velox.Pred[fBadType], error) {
 					return c.EQ(time.Time{}), nil
-				}}})
-			}},
+				}}}
+			}),
 			FieldPtr: func(x *fBadType, i int) any { return [...]any{&x.ID, &x.DeletedAt}[i] }}
 	})
 }
@@ -406,11 +406,11 @@ func (*fLate) VeloxMeta() *velox.Meta[fLate] {
 	return fLateMeta.Load(func() velox.Descriptor[fLate] {
 		return velox.Descriptor[fLate]{Table: "lates", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
 			PrimaryKey: []int{0},
-			Interceptors: []func() velox.BoundInterceptors{func() velox.BoundInterceptors {
-				return velox.BindInterceptors([]velox.Interceptor[fLate]{{Filter: func(context.Context) (velox.Pred[fLate], error) {
+			Interceptors: velox.BindInterceptors(func() []velox.Interceptor[fLate] {
+				return []velox.Interceptor[fLate]{{Filter: func(context.Context) (velox.Pred[fLate], error) {
 					return velox.Field[fLate, string]("title").NEQ("x"), nil
-				}}})
-			}},
+				}}}
+			}),
 			FieldPtr: func(x *fLate, i int) any { return [...]any{&x.ID, &x.Title}[i] }}
 	})
 }
@@ -427,10 +427,10 @@ func (*fPing) VeloxMeta() *velox.Meta[fPing] {
 	return fPingMeta.Load(func() velox.Descriptor[fPing] {
 		return velox.Descriptor[fPing]{Table: "pings", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "PongID", Name: "pong_id"}},
 			PrimaryKey: []int{0},
-			Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy {
+			Policy: velox.BindPolicy(func() velox.Policy[fPing] {
 				velox.Field[fPong, int64]("ping_id")
-				return velox.BindPolicy(velox.Policy[fPing]{})
-			}},
+				return velox.Policy[fPing]{}
+			}),
 			FieldPtr: func(x *fPing, i int) any { return [...]any{&x.ID, &x.PongID}[i] }}
 	})
 }
@@ -439,10 +439,10 @@ func (*fPong) VeloxMeta() *velox.Meta[fPong] {
 	return fPongMeta.Load(func() velox.Descriptor[fPong] {
 		return velox.Descriptor[fPong]{Table: "pongs", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "PingID", Name: "ping_id"}},
 			PrimaryKey: []int{0},
-			Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy {
+			Policy: velox.BindPolicy(func() velox.Policy[fPong] {
 				velox.Field[fPing, int64]("pong_id")
-				return velox.BindPolicy(velox.Policy[fPong]{})
-			}},
+				return velox.Policy[fPong]{}
+			}),
 			FieldPtr: func(x *fPong, i int) any { return [...]any{&x.ID, &x.PingID}[i] }}
 	})
 }
@@ -451,11 +451,11 @@ func (*fRetry) VeloxMeta() *velox.Meta[fRetry] {
 	return fRetryMeta.Load(func() velox.Descriptor[fRetry] {
 		fRetryBuilds++
 		return velox.Descriptor[fRetry]{Table: "retries", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy {
+			Policy: velox.BindPolicy(func() velox.Policy[fRetry] {
 				velox.Field[fRetry, int64]("id")
 				velox.Field[fUnlinked, int64]("id")
-				return velox.BindPolicy(velox.Policy[fRetry]{})
-			}},
+				return velox.Policy[fRetry]{}
+			}),
 			FieldPtr: func(x *fRetry, i int) any { return &x.ID }}
 	})
 }

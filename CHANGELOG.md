@@ -131,6 +131,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `GeneratedCodeIsVersion14`: regenerate. `velox.BindPolicy`, `BindHooks` and
+  `BindInterceptors` take the functions to bind, `BindPolicy(fs ...func() Policy[E])`, and
+  return the Descriptor's list. Package runtime binds each entity's sources there,
+  `velox.BindPolicy[gen.Comment](sch.Comment{}.Policy)`, so gen's `VeloxRuntime` holds the
+  bound lists and `veloxBound` is gone. Package runtime's comment lists where each
+  entity's Policy, Hooks and Interceptors come from. A hand-written entity binds its
+  method as `Policy: velox.BindPolicy((*E)(nil).Policy)`.
 - `GeneratedCodeIsVersion13`: regenerate. `Descriptor.Policy`, `Descriptor.Hooks` and
   the new `Descriptor.Interceptors` are lists of erased bindings
   (`[]func() velox.BoundPolicy` and so on), which velox composes: the policies ANDed in

@@ -142,8 +142,8 @@ func iNoteDescriptor() velox.Descriptor[INote] {
 		PrimaryKey:   []int{0},
 		Indexes:      []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
 		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[IOwner]("Owner", 1, 0)},
-		Policy:       []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*INote)(nil).Policy()) }},
-		Interceptors: []func() velox.BoundInterceptors{func() velox.BoundInterceptors { return velox.BindInterceptors((*INote)(nil).Interceptors()) }},
+		Policy:       velox.BindPolicy((*INote)(nil).Policy),
+		Interceptors: velox.BindInterceptors((*INote)(nil).Interceptors),
 		FieldPtr: func(x *INote, i int) any {
 			return [...]any{&x.ID, &x.OwnerID, &x.Body, &x.Hidden}[i]
 		},

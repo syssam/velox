@@ -28,9 +28,8 @@ import (
 //
 //	func (*E) Interceptors() []velox.Interceptor[E]
 //
-// which its Descriptor binds (Descriptor.Interceptors calls BindInterceptors
-// on it); a method the metadata does not bind is refused at the entity's
-// first use. velox calls the method once, when it builds the metadata, under
+// which its Descriptor binds with BindInterceptors; a method the metadata
+// does not bind is refused at the entity's first use. velox calls the method once, when it builds the metadata, under
 // the rules of Descriptor.Policy. An Interceptor with a nil Filter is refused
 // then, by its index.
 //
@@ -42,10 +41,24 @@ type Interceptor[E any] struct {
 	Filter func(ctx context.Context) (Pred[E], error)
 }
 
-// BindInterceptors erases is's entity type, for Descriptor.Interceptors, as
-// BindPolicy erases a Policy. For generated code. An Interceptor with a nil
-// Filter is refused, by its index in is, when the metadata is built.
-func BindInterceptors[E any](is []Interceptor[E]) BoundInterceptors {
+// BindInterceptors erases the entity type of the interceptor functions fs,
+// for Descriptor.Interceptors, as BindPolicy erases policies. For generated
+// code. An Interceptor with a nil Filter is refused, by its index, when the
+// metadata is built.
+//
+//go:noinline
+func BindInterceptors[E any](fs ...func() []Interceptor[E]) []func() BoundInterceptors {
+	out := make([]func() BoundInterceptors, len(fs))
+	for i, f := range fs {
+		if f != nil {
+			out[i] = func() BoundInterceptors { return bindInterceptors(f()) }
+		}
+	}
+	return out
+}
+
+// bindInterceptors erases is's entity type.
+func bindInterceptors[E any](is []Interceptor[E]) BoundInterceptors {
 	var b BoundInterceptors
 	for i, x := range is {
 		f := x.Filter

@@ -65,13 +65,13 @@ func TestMetaOnceRetriesNotLinkedBinding(t *testing.T) {
 	linked, calls := false, 0
 	desc := func() Descriptor[other] {
 		return Descriptor[other]{Table: "other", Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Policy: []func() BoundPolicy{func() BoundPolicy {
+			Policy: BindPolicy(func() Policy[other] {
 				calls++
 				if !linked {
 					panic(NotLinkedError("target: not linked: import the generated package"))
 				}
-				return BindPolicy(Policy[other]{})
-			}},
+				return Policy[other]{}
+			}),
 			FieldPtr: func(x *other, i int) any { return &x.ID }}
 	}
 	m := o.Load(desc)

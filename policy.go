@@ -15,7 +15,7 @@ import (
 //
 //	func (*E) Policy() velox.Policy[E]
 //
-// which its Descriptor binds (Descriptor.Policy calls BindPolicy on it); a
+// which its Descriptor binds with BindPolicy; a
 // method the metadata does not bind is refused at the entity's first use.
 // velox calls the method once, when it builds the metadata: a hand-written
 // one on a nil *E, so it must not read its receiver.

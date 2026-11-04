@@ -388,7 +388,7 @@ var dPolicyJoinMeta velox.MetaOnce[dPolicyJoin]
 func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 	return dPolicyJoinMeta.Load(func() velox.Descriptor[dPolicyJoin] {
 		return velox.Descriptor[dPolicyJoin]{
-			Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*dPolicyJoin)(nil).Policy()) }},
+			Policy:     velox.BindPolicy((*dPolicyJoin)(nil).Policy),
 			Table:      "policy_joins",
 			Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
@@ -443,7 +443,7 @@ var dLinkMeta velox.MetaOnce[dLink]
 func (*dLink) VeloxMeta() *velox.Meta[dLink] {
 	return dLinkMeta.Load(func() velox.Descriptor[dLink] {
 		return velox.Descriptor[dLink]{
-			Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*dLink)(nil).Policy()) }},
+			Policy:     velox.BindPolicy((*dLink)(nil).Policy),
 			Table:      "links",
 			Columns:    []velox.ColumnDescriptor{{Field: "LinkerID", Name: "linker_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
@@ -638,7 +638,7 @@ var dPeerMeta velox.MetaOnce[dPeer]
 func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 	return dPeerMeta.Load(func() velox.Descriptor[dPeer] {
 		return velox.Descriptor[dPeer]{
-			Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*dPeer)(nil).Policy()) }},
+			Policy:     velox.BindPolicy((*dPeer)(nil).Policy),
 			Table:      "peers",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},

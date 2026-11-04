@@ -9,11 +9,17 @@
 //	import _ "example.com/blog/gen/runtime"
 //
 // Without it, a statement on an entity fails.
+//
+// Behaviour, outermost first:
+//
+//	Category                Interceptors: Category
+//	Post      Policy: Post  Interceptors: Post
 package runtime
 
 import (
 	"example.com/blog/gen"
 	sch "example.com/tmp/schema"
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema"
 )
 
@@ -22,10 +28,10 @@ func init() {
 	postSlug := schema.FieldDescriptor(&sch.Post{}, "slug")
 	userCreatedBy := schema.FieldDescriptor(&sch.User{}, "created_by")
 	gen.SetVeloxRuntime(gen.VeloxRuntime{
-		CategoryInterceptors:   (&sch.Category{}).Interceptors,
+		CategoryInterceptors:   velox.BindInterceptors[gen.Category]((&sch.Category{}).Interceptors),
 		GroupTokenDefault:      groupToken.DefaultFunc.(func() string),
-		PostPolicy:             sch.Post{}.Policy,
-		PostInterceptors:       sch.Post{}.Interceptors,
+		PostPolicy:             velox.BindPolicy[gen.Post](sch.Post{}.Policy),
+		PostInterceptors:       velox.BindInterceptors[gen.Post](sch.Post{}.Interceptors),
 		PostSlugValidator:      postSlug.Validators[0].(func(string) error),
 		UserCreatedByValidator: userCreatedBy.Validators[0].(func(string) error),
 	})

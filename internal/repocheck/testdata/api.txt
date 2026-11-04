@@ -144,7 +144,7 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
-const GeneratedCodeIsVersion13
+const GeneratedCodeIsVersion14
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -417,9 +417,9 @@ func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K],
 func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, float64], error)
 func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
-func BindHooks[E any](hs []Hook[E]) BoundHooks
-func BindInterceptors[E any](is []Interceptor[E]) BoundInterceptors
-func BindPolicy[E any](p Policy[E]) BoundPolicy
+func BindHooks[E any](fs ...func() []Hook[E]) []func() BoundHooks
+func BindInterceptors[E any](fs ...func() []Interceptor[E]) []func() BoundInterceptors
+func BindPolicy[E any](fs ...func() Policy[E]) []func() BoundPolicy
 func CheckEntity[E any, PE Entity[E]]() error
 func CheckRelation[E, T any](r Rel[E, T]) error
 func ColumnEQ(column int, v any) Predicate
