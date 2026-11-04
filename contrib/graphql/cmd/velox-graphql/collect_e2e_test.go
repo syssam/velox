@@ -111,15 +111,12 @@ import (
 
 var Org = scope.NewKey[int64]("org")
 
-var (
-	authorScope = scope.By(Org, gen.Authors.OrgID.EQ, func(x *gen.Author) *int64 { return &x.OrgID })
-	bookScope   = scope.By(Org, gen.Books.OrgID.EQ, func(x *gen.Book) *int64 { return &x.OrgID })
-)
+func orgOf[E any]() scope.Scope[E, int64] { return scope.By[E](Org, "org_id") }
 
-func (Author) Policy() velox.Policy[gen.Author] { return authorScope.Policy() }
-func (Author) Hooks() []velox.Hook[gen.Author]  { return []velox.Hook[gen.Author]{authorScope.Fill()} }
-func (Book) Policy() velox.Policy[gen.Book]     { return bookScope.Policy() }
-func (Book) Hooks() []velox.Hook[gen.Book]      { return []velox.Hook[gen.Book]{bookScope.Fill()} }
+func (Author) Policy() velox.Policy[gen.Author] { return orgOf[gen.Author]().Policy() }
+func (Author) Hooks() []velox.Hook[gen.Author]  { return []velox.Hook[gen.Author]{orgOf[gen.Author]().Fill()} }
+func (Book) Policy() velox.Policy[gen.Book]     { return orgOf[gen.Book]().Policy() }
+func (Book) Hooks() []velox.Hook[gen.Book]      { return []velox.Hook[gen.Book]{orgOf[gen.Book]().Fill()} }
 `
 
 // e2eCollectGqlgen is the application's gqlgen.yml.

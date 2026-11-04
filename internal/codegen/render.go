@@ -167,7 +167,7 @@ func renderPackage(o *Out) string {
 }
 
 // renderScope writes scope_velox.go: a variable for each scope key, and for
-// each scoped entity the scope.By of its column. The descriptors bind them.
+// each scoped entity the scope.ByHandle of its column. The descriptors bind them.
 func renderScope(o *Out) string {
 	var w writer
 	w.WriteString(header)
@@ -211,7 +211,7 @@ func renderScope(o *Out) string {
 		}
 		w.p("")
 		w.p("// %s confines %s to the context's %s: it is bound around %s's Policy and Hooks.", e.Scope.Var, e.Name, e.Scope.Key, e.Name)
-		w.p("var %s = scope.By(%s, %s, func(x *%s) *%s { return &x.%s })", e.Scope.Var, e.Scope.KeyVar, e.Scope.Handle, e.Name,
+		w.p("var %s = scope.ByHandle(%s, %s, func(x *%s) *%s { return &x.%s })", e.Scope.Var, e.Scope.KeyVar, e.Scope.Handle, e.Name,
 			scopeGoType(o, e.Scope.KeyVar), e.Scope.Field)
 	}
 	return w.String()

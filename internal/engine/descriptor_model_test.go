@@ -82,11 +82,11 @@ type moveOrg struct {
 	OrgID int64
 }
 
-var moveOrgScope = scope.By(moveOrgKey, velox.NumberCol[moveOrg, int64]{I: 1}.EQ, func(x *moveOrg) *int64 { return &x.OrgID })
-
 var moveOrgKey = scope.NewKey[int64]("org")
 
-func (*moveOrg) Policy() velox.Policy[moveOrg] { return moveOrgScope.Policy() }
+func (*moveOrg) Policy() velox.Policy[moveOrg] {
+	return scope.By[moveOrg](moveOrgKey, "org_id").Policy()
+}
 
 func (*moveOrg) Hooks() []velox.Hook[moveOrg] {
 	return []velox.Hook[moveOrg]{func(next velox.Mutator[moveOrg]) velox.Mutator[moveOrg] {
@@ -108,7 +108,7 @@ func moveOrgDescriptor() velox.Descriptor[moveOrg] {
 		Policy:     velox.BindPolicy((*moveOrg)(nil).Policy),
 		Hooks:      velox.BindHooks((*moveOrg)(nil).Hooks),
 		Table:      "move_org",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}},
 		PrimaryKey: []int{0},
 		FieldPtr: func(x *moveOrg, i int) any {
 			if i == 0 {

@@ -110,7 +110,7 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 		},
 	}
 	if table[1] == '1' {
-		d.Scope = scope.By(composeOrg, org.EQ, func(x *E) *int64 { return &row(x).OrgID })
+		d.Scope = scope.ByHandle(composeOrg, org.EQ, func(x *E) *int64 { return &row(x).OrgID })
 	}
 	if table[2] == '1' {
 		d.Policy = velox.BindPolicy(func() velox.Policy[E] {

@@ -72,8 +72,6 @@ var pets = struct {
 // petOrg is the scope of pets: a pet is in the org the context names.
 var petOrg = scope.NewKey[int64]("org")
 
-var petScope = scope.By(petOrg, pets.OrgID.EQ, func(x *pet) *int64 { return &x.OrgID })
-
 // viewerKey is the context key of a viewer: an int64, the highest pet id it
 // may see, which pet's Read policy reads. Without one every pet is seen.
 type viewerKey struct{}
@@ -85,11 +83,10 @@ func (*pet) VeloxMeta() *velox.Meta[pet] { return petMeta.Load(petDescriptor) }
 func petDescriptor() velox.Descriptor[pet] {
 	return velox.Descriptor[pet]{
 		Table:      "pets",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeeperID", Name: "keeper_id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeeperID", Name: "keeper_id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		FieldPtr:   func(x *pet, i int) any { return [...]any{&x.ID, &x.KeeperID, &x.OrgID, &x.Name}[i] },
-		Scope:      petScope,
-		Policy: velox.BindPolicy(func() velox.Policy[pet] {
+		Policy: velox.BindPolicy(func() velox.Policy[pet] { return scope.By[pet](petOrg, "org_id").Policy() }, func() velox.Policy[pet] {
 			return velox.Policy[pet]{Read: func(ctx context.Context) (velox.Pred[pet], error) {
 				if v, ok := ctx.Value(viewerKey{}).(int64); ok {
 					return pets.ID.LTE(v), nil

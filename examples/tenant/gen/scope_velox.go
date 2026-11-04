@@ -14,4 +14,4 @@ const _ = velox.GeneratedCodeIsVersion14
 var OrgKey = scope.NewKey[int64]("org")
 
 // projectScope confines Project to the context's org: it is bound around Project's Policy and Hooks.
-var projectScope = scope.By(OrgKey, Projects.OrgID.EQ, func(x *Project) *int64 { return &x.OrgID })
+var projectScope = scope.ByHandle(OrgKey, Projects.OrgID.EQ, func(x *Project) *int64 { return &x.OrgID })

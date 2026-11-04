@@ -17,10 +17,10 @@ var Org = scope.NewKey[int64]("org")
 // works once runtime has bound it.
 var NoteEarly = velox.CheckEntity[gen.Note]()
 
-var noteScope = scope.By(Org, gen.Notes.OrgID.EQ, func(x *gen.Note) *int64 { return &x.OrgID })
-
 // Policy confines notes to the context's organisation.
-func (Note) Policy() velox.Policy[gen.Note] { return noteScope.Policy() }
+func (Note) Policy() velox.Policy[gen.Note] { return scope.By[gen.Note](Org, "org_id").Policy() }
 
 // Hooks stamps org_id on inserted notes.
-func (Note) Hooks() []velox.Hook[gen.Note] { return []velox.Hook[gen.Note]{noteScope.Fill()} }
+func (Note) Hooks() []velox.Hook[gen.Note] {
+	return []velox.Hook[gen.Note]{scope.By[gen.Note](Org, "org_id").Fill()}
+}

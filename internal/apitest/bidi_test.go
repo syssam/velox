@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
-	"github.com/syssam/velox/scope"
 )
 
 // The bidirectional many-to-many model: bnode's friends through bnodeFriend,
@@ -806,12 +806,10 @@ type btspouse struct {
 	Spouse   velox.One[btspouse]
 }
 
-var btspouseScope = scope.By(testmodel.Org, velox.NumberCol[btspouse, int64]{I: 1}.EQ, func(x *btspouse) *int64 { return &x.OrgID })
-
 // Policy confines the model to the context's org and lets every write: the
 // clearing of the old partner bypasses it, and says so.
 func (*btspouse) Policy() velox.Policy[btspouse] {
-	return btspouseScope.Wrap(velox.Policy[btspouse]{Write: func(context.Context) (velox.Pred[btspouse], error) { return velox.Allow[btspouse](), nil }})
+	return velox.Policy[btspouse]{Write: func(context.Context) (velox.Pred[btspouse], error) { return velox.Allow[btspouse](), nil }}
 }
 
 var btspouseMeta velox.MetaOnce[btspouse]
@@ -819,9 +817,9 @@ var btspouseMeta velox.MetaOnce[btspouse]
 func (*btspouse) VeloxMeta() *velox.Meta[btspouse] {
 	return btspouseMeta.Load(func() velox.Descriptor[btspouse] {
 		return velox.Descriptor[btspouse]{
-			Policy:     velox.BindPolicy((*btspouse)(nil).Policy),
+			Policy:     velox.BindPolicy(fixture.OrgPolicy[btspouse], (*btspouse)(nil).Policy),
 			Table:      "btspouses",
-			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "SpouseID", Name: "spouse_id"}},
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},
 			Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
 			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[btspouse]("Spouse", 2, 0)},

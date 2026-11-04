@@ -12,7 +12,6 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/testmodel"
-	"github.com/syssam/velox/scope"
 )
 
 // eUser has posts; ePost is confined to the context's org and has a Read policy that hides
@@ -97,17 +96,15 @@ var ePostMeta velox.MetaOnce[ePost]
 
 func (*ePost) VeloxMeta() *velox.Meta[ePost] { return ePostMeta.Load(ePostDescriptor) }
 
-var ePostScope = scope.By(testmodel.Org, ePosts.OrgID.EQ, func(x *ePost) *int64 { return &x.OrgID })
-
 func (*ePost) Policy() velox.Policy[ePost] {
-	return ePostScope.Wrap(velox.Policy[ePost]{Read: func(context.Context) (velox.Pred[ePost], error) { return ePosts.Secret.EQ(false), nil }})
+	return velox.Policy[ePost]{Read: func(context.Context) (velox.Pred[ePost], error) { return ePosts.Secret.EQ(false), nil }}
 }
 
 func ePostDescriptor() velox.Descriptor[ePost] {
 	return velox.Descriptor[ePost]{
-		Policy: velox.BindPolicy((*ePost)(nil).Policy),
+		Policy: velox.BindPolicy(fixture.OrgPolicy[ePost], (*ePost)(nil).Policy),
 		Table:  "e_posts",
-		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "OrgID", Name: "org_id"},
+		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Title", Name: "title"}, {Field: "Secret", Name: "secret"}},
 		PrimaryKey: []int{0},
 		FieldPtr:   func(x *ePost, i int) any { return [...]any{&x.ID, &x.UserID, &x.OrgID, &x.Title, &x.Secret}[i] },

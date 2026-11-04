@@ -13,8 +13,8 @@
 //
 // Behaviour, outermost first:
 //
-//	Invoice  Policy: Invoice  Hooks: Invoice
-//	Ticket   Policy: Ticket   Hooks: Ticket
+//	Invoice  Policy: InOrg          Hooks: InOrg
+//	Ticket   Policy: InOrg, Ticket  Hooks: InOrg, Ticket
 package runtime
 
 import (
@@ -25,9 +25,9 @@ import (
 
 func init() {
 	testmodel.SetVeloxRuntime(testmodel.VeloxRuntime{
-		InvoicePolicy: velox.BindPolicy[testmodel.Invoice](sch.Invoice{}.Policy),
-		InvoiceHooks:  velox.BindHooks[testmodel.Invoice](sch.Invoice{}.Hooks),
-		TicketPolicy:  velox.BindPolicy[testmodel.Ticket](sch.Ticket{}.Policy),
-		TicketHooks:   velox.BindHooks[testmodel.Ticket](sch.Ticket{}.Hooks),
+		InvoicePolicy: velox.BindPolicy[testmodel.Invoice](sch.InOrg{}.Policy),
+		InvoiceHooks:  velox.BindHooks[testmodel.Invoice](sch.InOrg{}.Hooks),
+		TicketPolicy:  velox.BindPolicy[testmodel.Ticket](sch.InOrg{}.Policy, sch.Ticket{}.Policy),
+		TicketHooks:   velox.BindHooks[testmodel.Ticket](sch.InOrg{}.Hooks, sch.Ticket{}.Hooks),
 	})
 }

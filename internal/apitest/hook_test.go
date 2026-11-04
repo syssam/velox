@@ -11,7 +11,6 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
-	"github.com/syssam/velox/scope"
 )
 
 func TestHookOrderAndRows(t *testing.T) {
@@ -756,10 +755,8 @@ var hSofts = struct {
 	Deleted   velox.Col[hSoft, bool]
 }{velox.NumberCol[hSoft, int64]{I: 0}, velox.NumberCol[hSoft, int64]{I: 1}, velox.Col[hSoft, bool]{I: 2}}
 
-var hSoftScope = scope.By(testmodel.Org, hSofts.OrgID.EQ, func(x *hSoft) *int64 { return &x.OrgID })
-
 func (*hSoft) Policy() velox.Policy[hSoft] {
-	return hSoftScope.Wrap(velox.Policy[hSoft]{Read: func(context.Context) (velox.Pred[hSoft], error) { return hSofts.ID.GT(0), nil }})
+	return velox.Policy[hSoft]{Read: func(context.Context) (velox.Pred[hSoft], error) { return hSofts.ID.GT(0), nil }}
 }
 
 type noCount struct{}
@@ -798,10 +795,10 @@ var hSoftMeta velox.MetaOnce[hSoft]
 func (*hSoft) VeloxMeta() *velox.Meta[hSoft] {
 	return hSoftMeta.Load(func() velox.Descriptor[hSoft] {
 		return velox.Descriptor[hSoft]{
-			Policy: velox.BindPolicy((*hSoft)(nil).Policy),
+			Policy: velox.BindPolicy(fixture.OrgPolicy[hSoft], (*hSoft)(nil).Policy),
 			Hooks:  velox.BindHooks((*hSoft)(nil).Hooks),
 			Table:  "softs",
-			Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"},
+			Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 				{Field: "Deleted", Name: "deleted"}},
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *hSoft, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Deleted}[i] },

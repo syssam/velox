@@ -42,8 +42,8 @@ var ErrEmptyName = errors.New("must not be empty")
 
 func DAuthorDescriptor() velox.Descriptor[DAuthor] {
 	return velox.Descriptor[DAuthor]{
-		Policy: velox.BindPolicy((*DAuthor)(nil).Policy),
-		Hooks:  velox.BindHooks((*DAuthor)(nil).Hooks),
+		Policy: velox.BindPolicy(OrgPolicy[DAuthor], (*DAuthor)(nil).Policy),
+		Hooks:  velox.BindHooks(OrgHooks[DAuthor], (*DAuthor)(nil).Hooks),
 		Table:  "authors",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
@@ -183,7 +183,7 @@ func DTagDescriptor() velox.Descriptor[DTag] {
 		Policy:     velox.BindPolicy((*DTag)(nil).Policy),
 		Hooks:      velox.BindHooks((*DTag)(nil).Hooks),
 		Table:      "tags",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[DBookTag, DBook]("Books", 0, 1, 0, 0)},
 		FieldPtr: func(x *DTag, i int) any {

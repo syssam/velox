@@ -49,15 +49,16 @@ var posts = struct {
 // tenantKey is the scope of posts: the tenant the context names.
 var tenantKey = scope.NewKey[string]("tenant")
 
-var postScope = scope.By(tenantKey, posts.Tenant.EQ, func(x *post) *string { return &x.Tenant })
+// postTenant is the scope of posts by their tenant column.
+func postTenant() scope.Scope[post, string] { return scope.By[post](tenantKey, "tenant") }
 
 func (*post) Policy() velox.Policy[post] {
-	return postScope.Wrap(velox.Policy[post]{
+	return velox.Policy[post]{
 		Read: func(context.Context) (velox.Pred[post], error) { return posts.Title.NEQ("hidden"), nil },
-	})
+	}
 }
 
-func (*post) Hooks() []velox.Hook[post] { return []velox.Hook[post]{postScope.Fill()} }
+func (*post) Hooks() []velox.Hook[post] { return []velox.Hook[post]{postTenant().Fill()} }
 
 var postMeta velox.MetaOnce[post]
 
@@ -66,9 +67,9 @@ func (*post) VeloxMeta() *velox.Meta[post] { return postMeta.Load(postDescriptor
 func postDescriptor() velox.Descriptor[post] {
 	return velox.Descriptor[post]{
 		Table:      "posts",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tenant", Name: "tenant"}, {Field: "Title", Name: "title"}},
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tenant", Name: "tenant", Immutable: true}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
-		Policy:     velox.BindPolicy((*post)(nil).Policy),
+		Policy:     velox.BindPolicy(func() velox.Policy[post] { return postTenant().Policy() }, (*post)(nil).Policy),
 		Hooks:      velox.BindHooks((*post)(nil).Hooks),
 		FieldPtr: func(x *post, i int) any {
 			switch i {

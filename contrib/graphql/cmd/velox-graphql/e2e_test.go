@@ -131,11 +131,11 @@ import (
 
 var Org = scope.NewKey[int64]("org")
 
-var userScope = scope.By(Org, gen.Users.OrgID.EQ, func(x *gen.User) *int64 { return &x.OrgID })
+func (User) Policy() velox.Policy[gen.User] { return scope.By[gen.User](Org, "org_id").Policy() }
 
-func (User) Policy() velox.Policy[gen.User] { return userScope.Policy() }
-
-func (User) Hooks() []velox.Hook[gen.User] { return []velox.Hook[gen.User]{userScope.Fill()} }
+func (User) Hooks() []velox.Hook[gen.User] {
+	return []velox.Hook[gen.User]{scope.By[gen.User](Org, "org_id").Fill()}
+}
 `
 
 // app writes a module with velox-gen and velox-graphql as tools, and the

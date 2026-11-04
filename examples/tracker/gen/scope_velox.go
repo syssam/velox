@@ -14,16 +14,16 @@ const _ = velox.GeneratedCodeIsVersion14
 var OrgKey = scope.NewKey[int64]("org")
 
 // commentScope confines Comment to the context's org: it is bound around Comment's Policy and Hooks.
-var commentScope = scope.By(OrgKey, Comments.OrgID.EQ, func(x *Comment) *int64 { return &x.OrgID })
+var commentScope = scope.ByHandle(OrgKey, Comments.OrgID.EQ, func(x *Comment) *int64 { return &x.OrgID })
 
 // issueScope confines Issue to the context's org: it is bound around Issue's Policy and Hooks.
-var issueScope = scope.By(OrgKey, Issues.OrgID.EQ, func(x *Issue) *int64 { return &x.OrgID })
+var issueScope = scope.ByHandle(OrgKey, Issues.OrgID.EQ, func(x *Issue) *int64 { return &x.OrgID })
 
 // labelScope confines Label to the context's org: it is bound around Label's Policy and Hooks.
-var labelScope = scope.By(OrgKey, Labels.OrgID.EQ, func(x *Label) *int64 { return &x.OrgID })
+var labelScope = scope.ByHandle(OrgKey, Labels.OrgID.EQ, func(x *Label) *int64 { return &x.OrgID })
 
 // projectScope confines Project to the context's org: it is bound around Project's Policy and Hooks.
-var projectScope = scope.By(OrgKey, Projects.OrgID.EQ, func(x *Project) *int64 { return &x.OrgID })
+var projectScope = scope.ByHandle(OrgKey, Projects.OrgID.EQ, func(x *Project) *int64 { return &x.OrgID })
 
 // userScope confines User to the context's org: it is bound around User's Policy and Hooks.
-var userScope = scope.By(OrgKey, Users.OrgID.EQ, func(x *User) *int64 { return &x.OrgID })
+var userScope = scope.ByHandle(OrgKey, Users.OrgID.EQ, func(x *User) *int64 { return &x.OrgID })

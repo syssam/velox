@@ -276,18 +276,14 @@ import (
 
 var OrgKey = scope.NewKey[int64]("org")
 
-var (
-	postScope   = scope.By(OrgKey, gen.Posts.OrgID.EQ, func(x *gen.Post) *int64 { return &x.OrgID })
-	ticketScope = scope.By(OrgKey, gen.Tickets.OrgID.EQ, func(x *gen.Ticket) *int64 { return &x.OrgID })
-	remarkScope = scope.By(OrgKey, gen.Remarks.OrgID.EQ, func(x *gen.Remark) *int64 { return &x.OrgID })
-)
+func orgOf[E any]() scope.Scope[E, int64] { return scope.By[E](OrgKey, "org_id") }
 
-func (Post) Policy() velox.Policy[gen.Post]     { return postScope.Policy() }
-func (Post) Hooks() []velox.Hook[gen.Post]      { return []velox.Hook[gen.Post]{postScope.Fill()} }
-func (Ticket) Policy() velox.Policy[gen.Ticket] { return ticketScope.Policy() }
-func (Ticket) Hooks() []velox.Hook[gen.Ticket]  { return []velox.Hook[gen.Ticket]{ticketScope.Fill()} }
-func (Remark) Policy() velox.Policy[gen.Remark] { return remarkScope.Policy() }
-func (Remark) Hooks() []velox.Hook[gen.Remark]  { return []velox.Hook[gen.Remark]{remarkScope.Fill()} }
+func (Post) Policy() velox.Policy[gen.Post]     { return orgOf[gen.Post]().Policy() }
+func (Post) Hooks() []velox.Hook[gen.Post]      { return []velox.Hook[gen.Post]{orgOf[gen.Post]().Fill()} }
+func (Ticket) Policy() velox.Policy[gen.Ticket] { return orgOf[gen.Ticket]().Policy() }
+func (Ticket) Hooks() []velox.Hook[gen.Ticket]  { return []velox.Hook[gen.Ticket]{orgOf[gen.Ticket]().Fill()} }
+func (Remark) Policy() velox.Policy[gen.Remark] { return orgOf[gen.Remark]().Policy() }
+func (Remark) Hooks() []velox.Hook[gen.Remark]  { return []velox.Hook[gen.Remark]{orgOf[gen.Remark]().Fill()} }
 `
 
 // e2eLimitsResolvers are the resolvers TestLimitsServed uses, one line each;

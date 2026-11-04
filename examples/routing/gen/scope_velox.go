@@ -14,4 +14,4 @@ const _ = velox.GeneratedCodeIsVersion14
 var OrgKey = scope.NewKey[int64]("org")
 
 // noteScope confines Note to the context's org: it is bound around Note's Policy and Hooks.
-var noteScope = scope.By(OrgKey, Notes.OrgID.EQ, func(x *Note) *int64 { return &x.OrgID })
+var noteScope = scope.ByHandle(OrgKey, Notes.OrgID.EQ, func(x *Note) *int64 { return &x.OrgID })

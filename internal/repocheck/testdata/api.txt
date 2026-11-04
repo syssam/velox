@@ -1011,7 +1011,8 @@ func (k *Key[V]) With(ctx context.Context, v V) context.Context
 func (s Scope[E, V]) Fill() velox.Hook[E]
 func (s Scope[E, V]) Policy() velox.Policy[E]
 func (s Scope[E, V]) Wrap(p velox.Policy[E]) velox.Policy[E]
-func By[E any, V comparable](key *Key[V], eq func(V) velox.Pred[E], field func(*E) *V) Scope[E, V]
+func ByHandle[E any, V comparable](key *Key[V], eq func(V) velox.Pred[E], field func(*E) *V) Scope[E, V]
+func By[E any, V comparable](key *Key[V], column string) Scope[E, V]
 func NewKey[V comparable](name string) *Key[V]
 type Key[V comparable] struct { }
 type Scope[E any, V comparable] struct { }

@@ -178,18 +178,18 @@ import (
 // Org is the organization a request acts for.
 var Org = scope.NewKey[int64]("org")
 
-var writerScope = scope.By(Org, gen.Writers.OrgID.EQ, func(x *gen.Writer) *int64 { return &x.OrgID })
-
 // Policy confines the writers to the context's org, and lets no "frozen"
 // writer change.
 func (Writer) Policy() velox.Policy[gen.Writer] {
-	return writerScope.Wrap(velox.Policy[gen.Writer]{
-		Write: func(context.Context) (velox.Pred[gen.Writer], error) { return gen.Writers.Name.NEQ("frozen"), nil },
-	})
+	p := scope.By[gen.Writer](Org, "org_id").Policy()
+	p.Write = func(context.Context) (velox.Pred[gen.Writer], error) { return gen.Writers.Name.NEQ("frozen"), nil }
+	return p
 }
 
 // Hooks fills org_id from the context.
-func (Writer) Hooks() []velox.Hook[gen.Writer] { return []velox.Hook[gen.Writer]{writerScope.Fill()} }
+func (Writer) Hooks() []velox.Hook[gen.Writer] {
+	return []velox.Hook[gen.Writer]{scope.By[gen.Writer](Org, "org_id").Fill()}
+}
 `
 
 // e2eMutCirclePolicy is Circle's policy: its Read hides the circle named

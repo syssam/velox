@@ -15,16 +15,15 @@ type Stamp struct{ mixin.Schema }
 func (Stamp) Fields() []schema.Field { return []schema.Field{field.String("created_by")} }
 
 // Ticket is tenant-scoped, unique by OrgID and Title, and has a policy and
-// hooks for every kind of write (Policy and Hooks are in testmodel/ticket.go).
+// hooks for every kind of write (Policy and Hooks are in behaviour.go).
 type Ticket struct{ schema.Schema }
 
-// Mixin adds created_by.
-func (Ticket) Mixin() []schema.Mixin { return []schema.Mixin{Stamp{}} }
+// Mixin adds created_by, and org_id, the tenant, with its scope.
+func (Ticket) Mixin() []schema.Mixin { return []schema.Mixin{Stamp{}, InOrg{}} }
 
 // Fields returns the columns after the ID and the mixin's.
 func (Ticket) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable(),
 		field.String("owner"),
 		field.String("title"),
 		field.Bool("done"),

@@ -17,13 +17,13 @@ import (
 // inserted, and its UpdatedAt on every insert and update.
 type Invoice struct{ schema.Schema }
 
-// Mixin adds created_at and updated_at.
-func (Invoice) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
+// Mixin adds created_at and updated_at, and org_id, the tenant, with its
+// scope.
+func (Invoice) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}, InOrg{}} }
 
 // Fields returns the columns after the ID and the mixin's.
 func (Invoice) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable(),
 		field.String("number"),
 		field.Float("total"),
 		field.Bool("paid"),

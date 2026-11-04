@@ -18,16 +18,16 @@ var OrgKey = scope.NewKey[int64]("org")
 var RegionKey = scope.NewKey[string]("region")
 
 // homeScope confines Home to the context's region: it is bound around Home's Policy and Hooks.
-var homeScope = scope.By(RegionKey, Homes.Region.EQ, func(x *Home) *string { return &x.Region })
+var homeScope = scope.ByHandle(RegionKey, Homes.Region.EQ, func(x *Home) *string { return &x.Region })
 
 // memoScope confines Memo to the context's org: it is bound around Memo's Policy and Hooks.
-var memoScope = scope.By(OrgKey, Memos.OrgID.EQ, func(x *Memo) *int64 { return &x.OrgID })
+var memoScope = scope.ByHandle(OrgKey, Memos.OrgID.EQ, func(x *Memo) *int64 { return &x.OrgID })
 
 // noteScope confines Note to the context's org: it is bound around Note's Policy and Hooks.
-var noteScope = scope.By(OrgKey, Notes.OrgID.EQ, func(x *Note) *int64 { return &x.OrgID })
+var noteScope = scope.ByHandle(OrgKey, Notes.OrgID.EQ, func(x *Note) *int64 { return &x.OrgID })
 
 // tagScope confines Tag to the context's org: it is bound around Tag's Policy and Hooks.
-var tagScope = scope.By(OrgKey, Tags.OrgID.EQ, func(x *Tag) *int64 { return &x.OrgID })
+var tagScope = scope.ByHandle(OrgKey, Tags.OrgID.EQ, func(x *Tag) *int64 { return &x.OrgID })
 
 // taskScope confines Task to the context's org: it is bound around Task's Policy and Hooks.
-var taskScope = scope.By(OrgKey, Tasks.OrgID.EQ, func(x *Task) *int64 { return &x.OrgID })
+var taskScope = scope.ByHandle(OrgKey, Tasks.OrgID.EQ, func(x *Task) *int64 { return &x.OrgID })

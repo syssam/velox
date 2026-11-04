@@ -14,7 +14,7 @@ const _ = velox.GeneratedCodeIsVersion14
 var OrgKey = scope.NewKey[int64]("org")
 
 // invoiceScope confines Invoice to the context's org: it is bound around Invoice's Policy and Hooks.
-var invoiceScope = scope.By(OrgKey, Invoices.OrgID.EQ, func(x *Invoice) *int64 { return &x.OrgID })
+var invoiceScope = scope.ByHandle(OrgKey, Invoices.OrgID.EQ, func(x *Invoice) *int64 { return &x.OrgID })
 
 // lineScope confines Line to the context's org: it is bound around Line's Policy and Hooks.
-var lineScope = scope.By(OrgKey, Lines.OrgID.EQ, func(x *Line) *int64 { return &x.OrgID })
+var lineScope = scope.ByHandle(OrgKey, Lines.OrgID.EQ, func(x *Line) *int64 { return &x.OrgID })

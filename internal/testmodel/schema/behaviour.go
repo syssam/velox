@@ -6,25 +6,11 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
-	"github.com/syssam/velox/scope"
 )
 
-var (
-	invoiceScope = scope.By(testmodel.Org, testmodel.Invoices.OrgID.EQ, func(x *testmodel.Invoice) *int64 { return &x.OrgID })
-	ticketScope  = scope.By(testmodel.Org, testmodel.Tickets.OrgID.EQ, func(x *testmodel.Ticket) *int64 { return &x.OrgID })
-)
-
-// Policy confines Invoice to the context's Org.
-func (Invoice) Policy() velox.Policy[testmodel.Invoice] { return invoiceScope.Policy() }
-
-// Hooks fills OrgID on insert.
-func (Invoice) Hooks() []velox.Hook[testmodel.Invoice] {
-	return []velox.Hook[testmodel.Invoice]{invoiceScope.Fill()}
-}
-
-// Policy confines tickets to the context's Org, and lets a user see and change
-// only their own tickets, and create only tickets they own; "admin" sees,
-// changes and creates every ticket.
+// Policy lets a user see and change only their own tickets, and create only
+// tickets they own; "admin" sees, changes and creates every ticket. InOrg's
+// policy, ANDed before it, confines tickets to the context's Org.
 func (Ticket) Policy() velox.Policy[testmodel.Ticket] {
 	own := func(ctx context.Context) (velox.Pred[testmodel.Ticket], error) {
 		switch u := testmodel.UserFromContext(ctx); u {
@@ -36,7 +22,7 @@ func (Ticket) Policy() velox.Policy[testmodel.Ticket] {
 			return testmodel.Tickets.Owner.EQ(u), nil
 		}
 	}
-	return ticketScope.Wrap(velox.Policy[testmodel.Ticket]{
+	return velox.Policy[testmodel.Ticket]{
 		Read:  own,
 		Write: own,
 		Insert: func(ctx context.Context, x *testmodel.Ticket) error {
@@ -45,14 +31,14 @@ func (Ticket) Policy() velox.Policy[testmodel.Ticket] {
 			}
 			return nil
 		},
-	})
+	}
 }
 
 // Hooks fills CreatedBy on insert, refuses an empty title on insert and
-// update, and deletes only finished tickets.
+// update, and deletes only finished tickets. InOrg's hook, before them,
+// fills OrgID on insert.
 func (Ticket) Hooks() []velox.Hook[testmodel.Ticket] {
 	return []velox.Hook[testmodel.Ticket]{
-		ticketScope.Fill(),
 		velox.On(stamp, velox.OpInsert),
 		velox.On(needsTitle, velox.OpInsert, velox.OpUpdate),
 		velox.On(onlyDone, velox.OpDelete),

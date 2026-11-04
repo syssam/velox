@@ -2,8 +2,7 @@ package integration
 
 import (
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/internal/testmodel"
-	"github.com/syssam/velox/scope"
+	"github.com/syssam/velox/internal/apitest/fixture"
 )
 
 // The many-to-many model: books and tags through bookTag, written by hand as
@@ -69,11 +68,9 @@ var tagMeta velox.MetaOnce[tag]
 
 func (*tag) VeloxMeta() *velox.Meta[tag] { return tagMeta.Load(tagDescriptor) }
 
-var tagScope = scope.By(testmodel.Org, Tags.OrgID.EQ, func(x *tag) *int64 { return &x.OrgID })
+func (*tag) Policy() velox.Policy[tag] { return fixture.OrgPolicy[tag]() }
 
-func (*tag) Policy() velox.Policy[tag] { return tagScope.Policy() }
-
-func (*tag) Hooks() []velox.Hook[tag] { return []velox.Hook[tag]{tagScope.Fill()} }
+func (*tag) Hooks() []velox.Hook[tag] { return fixture.OrgHooks[tag]() }
 
 func tagDescriptor() velox.Descriptor[tag] {
 	return velox.Descriptor[tag]{

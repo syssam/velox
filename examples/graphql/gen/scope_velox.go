@@ -14,4 +14,4 @@ const _ = velox.GeneratedCodeIsVersion14
 var OrgKey = scope.NewKey[int64]("org")
 
 // postScope confines Post to the context's org: it is bound around Post's Policy and Hooks.
-var postScope = scope.By(OrgKey, Posts.OrgID.EQ, func(x *Post) *int64 { return &x.OrgID })
+var postScope = scope.ByHandle(OrgKey, Posts.OrgID.EQ, func(x *Post) *int64 { return &x.OrgID })
