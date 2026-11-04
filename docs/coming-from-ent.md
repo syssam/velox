@@ -126,28 +126,27 @@ An `Update` or `Delete` with neither a `Where` nor `All()` fails with
 lifts a read's row limit, and `All` confirms a write to every row.
 
 Policies and hooks are schema methods, as in ent, typed with the generated
-entity of package `gen/entity`: `func (User) Policy() velox.Policy[entity.User]`
-and `func (User) Hooks() []velox.Hook[entity.User]`. When a schema declares
-either, velox-gen splits its output (decision 0036):
+entity of package `gen`: `func (User) Policy() velox.Policy[gen.User]` and
+`func (User) Hooks() []velox.Hook[gen.User]`. The layout is ent's
+(decision 0037):
 
-- `gen/entity` holds every entity, handle and descriptor, and does not import
-  the schema package. The schema package imports it.
-- `gen` imports `gen/entity` and the schema, re-exports every name of
-  `gen/entity` (`gen.User` is an alias of `entity.User`), and gives
-  `gen/entity` the schema's values in its `init`.
+- `gen` holds every entity, handle and descriptor. When the schema package
+  imports `gen`, as it does for these methods, `gen` does not import it.
+- `gen/runtime` imports `gen` and the schema, and gives `gen` the schema's
+  methods, and the defaults and validators `gen` cannot call by name, in its
+  `init`. velox-gen writes it only when something needs binding: a schema
+  whose defaults are named functions, such as `time.Now`, and that has no
+  `Policy` or `Hooks`, gets none.
 
-There is no `ent/runtime` to import for its effect: a program imports `gen` as
-it would without hooks. A program that links `gen/entity` without `gen` fails
-at the first use of an entity and names the import, instead of running without
-the hooks. A schema that imports `gen`, directly or through another package,
-is refused with the chain: write `entity.User` where you wrote `gen.User`.
-velox-gen generates even when `gen` is stale or missing, so no
-`schema/snapshot` is needed. Errors and telemetry name `gen.User` in both layouts, except an error
-while the entity's metadata is built, such as the not-linked one, which names
-`entity.User`.
-Plugins write into `gen/entity` then, so velox-graphql's `velox.graphql` moves
-there; `gen/**/*.graphql` in gqlgen.yml reaches it in either layout. Without
-hooks or policies, `gen` is one package.
+As with `ent/runtime`, a program imports `gen/runtime` once, for its effect,
+in its main package and in each test package that uses the entities:
+`import _ "<module>/gen/runtime"`. A program that does not fails at its
+first statement on an entity, with an error that names that line, instead of
+running without the hooks. velox-gen warns when no file of the module imports
+it. A schema that imports `gen/runtime`, directly or through another package,
+is refused with the chain, since it imports the schema. velox-gen generates
+even when `gen` is stale or missing, so no `schema/snapshot` is needed.
+Plugins write into `gen` either way.
 
 On SQLite, `velox.Connect` turns foreign keys on for every connection. A
 `*sql.DB` you pass to `velox.Open` is used as it is, so put
