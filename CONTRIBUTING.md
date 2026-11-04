@@ -142,7 +142,9 @@ on the same servers (`velox_examples`, `velox_examples_graphql`,
 `velox_examples_otel`, `velox_veloxotel`, `velox_graphql`), as each CI job has
 its own containers. The fuzz, scale and gqlgen lanes run at a lower priority.
 `VELOX_CI_JOBS=n` runs at most `n` lanes at once; `VELOX_CI_JOBS=1` runs them
-one after another.
+one after another. In the merge gate, `VELOX_CI_GROUPS` names the groups in
+place of `ci-changes.sh`: `VELOX_CI_GROUPS= bash scripts/ci-local.sh` runs the
+ORM's checks alone, and `VELOX_CI_GROUPS=otel` adds `otel`'s.
 
 CI tests PostgreSQL 14 and 18. `VELOX_CI_MATRIX=1 bash scripts/ci-local.sh`
 runs the tests again on PostgreSQL 14 at the end, in every module the run's

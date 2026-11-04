@@ -45,9 +45,16 @@ esac
 
 command -v docker >/dev/null || { echo "ci-local.sh needs docker" >&2; exit 1; }
 
-# The groups beyond the ORM's that this run checks.
+# The groups beyond the ORM's that this run checks. VELOX_CI_GROUPS, when
+# set, names them in place of scripts/ci-changes.sh: empty for the ORM's
+# checks alone.
 if [ -n "$full" ]; then
   groups=" graphql otel bench "
+elif [ -n "${VELOX_CI_GROUPS+set}" ]; then
+  for g in $VELOX_CI_GROUPS; do
+    case $g in graphql|otel|bench) ;; *) echo "VELOX_CI_GROUPS: no group $g (graphql, otel, bench)" >&2; exit 2 ;; esac
+  done
+  groups=" $VELOX_CI_GROUPS "
 else
   base=$(git merge-base main HEAD)
   groups=" $(scripts/ci-changes.sh "$base" | tr '\n' ' ')"
