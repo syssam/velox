@@ -21,6 +21,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `velox.Interceptor[E]`, a row filter an entity declares with an `Interceptors()` method
+  on its schema, which velox-gen binds. Its `Filter`'s condition is ANDed into every
+  SELECT, Count, aggregate, With load, EXISTS, join ON, UPDATE, DELETE, Save and upsert
+  update branch on the entity, before the Read policy. `WithoutPolicy` does not lift it,
+  and its error is not a denial. A join entity cannot have one, and on MySQL an upsert
+  that updates an entity with one is refused with `ErrPolicyUpsert`.
 - `Query.Join` and `Query.LeftJoin` read a to-one relation in the query's own statement and
   fill its `One` field from the same row. `Rel.Is` and `Rel.By` are a condition and an
   ordering on the joined row's columns; the target's Read policy is in the join's ON
@@ -115,6 +121,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `GeneratedCodeIsVersion13`: regenerate. `Descriptor.Policy`, `Descriptor.Hooks` and
+  the new `Descriptor.Interceptors` are lists of erased bindings
+  (`[]func() velox.BoundPolicy` and so on), which velox composes: the policies ANDed in
+  order, with no short-circuit, the hooks in order, the first outermost, and the
+  interceptors' conditions ANDed in order. A hand-written entity wraps its binding in a
+  one-element list. `Meta.HasReadPolicy` and `Table.HasReadPolicy` are `HasRowFilter`,
+  true for a Read policy or an interceptor.
 - `GeneratedCodeIsVersion12`: regenerate. A descriptor names each part of an entity's
   behaviour by one line: `Scope: commentScope` when it is `schema.Scoped`,
   `Policy: rt.CommentPolicy` when the schema declares `Policy`, and `Hooks: rt.CommentHooks`

@@ -128,18 +128,46 @@ type Scoper interface {
 // a scope compiles them.
 type ScopeKit[E any] struct{}
 
-// bind keeps in info the policy and hooks that s, p and h compose, for the
-// entity whose new row is x. It is not generic, so that Load, compiled for
-// every entity, instantiates nothing for them: BindPolicy and BindHooks
-// erase a policy and hooks where they are bound, and a scope's bindings are
-// ScopeKit's methods. The scope is outermost: its Wrap holds p's policy, and
-// its Fill runs before h's hooks.
-func bind(info *EntityInfo, x any, s Scoper, p func() BoundPolicy, h func() BoundHooks) error {
-	if s != nil || p != nil {
+// bind keeps in info the interceptors, policy and hooks that s, ps, hs and
+// is compose, for the entity whose new row is x. It is not generic, so that
+// Load, compiled for every entity, instantiates nothing for them: BindPolicy,
+// BindHooks and BindInterceptors erase them where they are bound, and a
+// scope's bindings are ScopeKit's methods. The policies are ANDed in order,
+// the hooks run in order, the first outermost, and the interceptors' are
+// ANDed in order. The scope is outermost: its Wrap holds the AND of ps, and
+// its Fill runs before hs's hooks.
+func bind(info *EntityInfo, x any, s Scoper, ps []func() BoundPolicy, hs []func() BoundHooks, is []func() BoundInterceptors) error {
+	if len(is) > 0 {
+		err := engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
+			var fs []engine.FilterFn
+			for i, f := range is {
+				if f == nil {
+					return nil, engine.NilBinding("Interceptors", i)
+				}
+				own, reason := engine.FiltersOf(f(), len(fs))
+				if reason != "" {
+					return nil, reason
+				}
+				fs = append(fs, own...)
+			}
+			return fs, ""
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if s != nil || len(ps) > 0 {
 		err := engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
 			var own *engine.EntityPolicy
-			if p != nil {
-				own = engine.PolicyOf(p())
+			if len(ps) > 0 {
+				all := make([]*engine.EntityPolicy, len(ps))
+				for i, p := range ps {
+					if p == nil {
+						return nil, engine.NilBinding("Policy", i)
+					}
+					all[i] = engine.PolicyOf(p())
+				}
+				own = engine.AndPolicies(all)
 			}
 			if s == nil {
 				return own, ""
@@ -150,26 +178,31 @@ func bind(info *EntityInfo, x any, s Scoper, p func() BoundPolicy, h func() Boun
 			return err
 		}
 	}
-	if s == nil && h == nil {
+	if s == nil && len(hs) == 0 {
 		return nil
 	}
 	return engine.EraseHooks(info, func() ([]engine.HookFn, string) {
-		var hs []engine.HookFn
+		var all []engine.HookFn
 		if s != nil {
 			fill, reason := s.scopeFill(x, s)
 			if reason != "" {
 				return nil, reason
 			}
-			hs = append(hs, fill)
+			all = append(all, fill)
 		}
-		if h != nil {
-			own, reason := engine.HooksOf(h())
+		base := 0
+		for i, h := range hs {
+			if h == nil {
+				return nil, engine.NilBinding("Hooks", i)
+			}
+			own, reason := engine.HooksOf(h(), base)
 			if reason != "" {
 				return nil, reason
 			}
-			hs = append(hs, own...)
+			all = append(all, own...)
+			base += len(own)
 		}
-		return hs, ""
+		return all, ""
 	})
 }
 

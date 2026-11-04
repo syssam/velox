@@ -68,6 +68,132 @@ type BoundHooks struct {
 	nilAt1 int // 1 + the index of the first nil hook; 0 when none
 }
 
+// BoundInterceptors is an entity's interceptors with E erased, made by
+// BindInterceptors for Descriptor.Interceptors. For generated code. Its fields
+// are not exported: only BindInterceptors makes one.
+type BoundInterceptors struct {
+	fs     []FilterFn
+	nilAt1 int // 1 + the index of the first nil Filter; 0 when none
+}
+
+// FilterFn is an Interceptor's Filter with E erased.
+type FilterFn func(ctx context.Context) (Predicate, error)
+
+// AddBoundFilter appends f to b's filters.
+func AddBoundFilter(b *BoundInterceptors, f FilterFn) { b.fs = append(b.fs, f) }
+
+// SetFilterNil records that interceptor i has a nil Filter.
+func SetFilterNil(b *BoundInterceptors, i int) { b.nilAt1 = i + 1 }
+
+// FiltersOf is b's filters, and the reason a nil Filter is refused when one
+// of them is: base is the index of b's first in the entity's list.
+func FiltersOf(b BoundInterceptors, base int) ([]FilterFn, string) {
+	if b.nilAt1 != 0 {
+		return nil, fmt.Sprintf("Interceptors()[%d] has a nil Filter", base+b.nilAt1-1)
+	}
+	return b.fs, ""
+}
+
+// EraseFilters calls f, which composes the Descriptor's Interceptors with E
+// erased, and keeps its filters in info. A panic in f is the entity's
+// *SchemaError, and so is the reason f returns when it refuses them. On the
+// join entity of a bidirectional edge (Descriptor.Bidi) it refuses any.
+func EraseFilters(info *EntityInfo, f func() ([]FilterFn, string)) error {
+	var (
+		fs     []FilterFn
+		reason string
+	)
+	if err := recovered(info.Name, "Interceptors()", func() { fs, reason = f() }); err != nil {
+		return err
+	}
+	if reason != "" {
+		return &SchemaError{Entity: info.Name, Reason: reason}
+	}
+	if info.bidi && len(fs) > 0 {
+		return &SchemaError{Entity: info.Name, Reason: "the join entity of a bidirectional edge cannot have interceptors: " +
+			"their conditions would show or change one row of a link"}
+	}
+	info.filters = fs
+	return nil
+}
+
+// AndPolicies is the policy that ANDs ps, in order: Read is the AND of each
+// non-nil Read, and so is Write, and Insert runs each non-nil Insert. A nil
+// in ps is skipped; nil when none is left. It returns the one policy left
+// as is.
+func AndPolicies(ps []*EntityPolicy) *EntityPolicy {
+	ps = slices.DeleteFunc(slices.Clone(ps), func(p *EntityPolicy) bool { return p == nil })
+	switch len(ps) {
+	case 0:
+		return nil
+	case 1:
+		return ps[0]
+	}
+	var reads, writes []func(ctx context.Context) (Predicate, error)
+	var inserts []func(ctx context.Context, p unsafe.Pointer) error
+	for _, p := range ps {
+		if p.Read != nil {
+			reads = append(reads, p.Read)
+		}
+		if p.Write != nil {
+			writes = append(writes, p.Write)
+		}
+		if p.Insert != nil {
+			inserts = append(inserts, p.Insert)
+		}
+	}
+	out := &EntityPolicy{Read: andConds(reads), Write: andConds(writes)}
+	switch len(inserts) {
+	case 0:
+	case 1:
+		out.Insert = inserts[0]
+	default:
+		out.Insert = func(ctx context.Context, p unsafe.Pointer) error {
+			for _, f := range inserts {
+				if err := f(ctx, p); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+	return out
+}
+
+// andConds is the condition that ANDs what each of fs returns, in order; nil
+// for none. The first error, or the first zero Pred, ends it: PolicyCond
+// denies the one and fails the other. An Allow adds nothing.
+func andConds(fs []func(ctx context.Context) (Predicate, error)) func(ctx context.Context) (Predicate, error) {
+	switch len(fs) {
+	case 0:
+		return nil
+	case 1:
+		return fs[0]
+	}
+	return func(ctx context.Context) (Predicate, error) {
+		var kids []Node
+		for _, f := range fs {
+			p, err := f(ctx)
+			switch {
+			case err != nil:
+				return Predicate{}, err
+			case p.n.Op == opZero:
+				return Predicate{}, nil
+			case p.n.Op == OpAllow:
+				continue
+			}
+			kids = append(kids, p.n)
+		}
+		switch len(kids) {
+		case 0:
+			return Predicate{Node{Op: OpAllow}}, nil
+		case 1:
+			return Predicate{kids[0]}, nil
+		}
+		return Predicate{Group(OpAnd, kids)}, nil
+	}
+}
+
 // NewBoundPolicy wraps p.
 func NewBoundPolicy(p *EntityPolicy) BoundPolicy { return BoundPolicy{p} }
 
@@ -80,10 +206,11 @@ func AddBoundHook(b *BoundHooks, h HookFn) { b.hs = append(b.hs, h) }
 // SetBoundNil records that hook i is nil.
 func SetBoundNil(b *BoundHooks, i int) { b.nilAt1 = i + 1 }
 
-// HooksOf is b's hooks, and NilHook's reason when one of them is nil.
-func HooksOf(b BoundHooks) ([]HookFn, string) {
+// HooksOf is b's hooks, and NilHook's reason when one of them is nil: base
+// is the index of b's first in the entity's list.
+func HooksOf(b BoundHooks, base int) ([]HookFn, string) {
 	if b.nilAt1 != 0 {
-		return nil, NilHook(b.nilAt1 - 1)
+		return nil, NilHook(base + b.nilAt1 - 1)
 	}
 	return b.hs, ""
 }
@@ -142,6 +269,14 @@ func NilHook(i int) string {
 		return "Scope.Fill() is nil"
 	}
 	return fmt.Sprintf("Hooks()[%d] is nil", i)
+}
+
+// NilBinding is the reason a nil function at index i of the Descriptor's
+// field is refused. It is not inlined, as NilHook is not.
+//
+//go:noinline
+func NilBinding(field string, i int) string {
+	return fmt.Sprintf("Descriptor.%s[%d] is nil", field, i)
 }
 
 // OtherEntity is the reason a Descriptor's Scope, held in part, is refused

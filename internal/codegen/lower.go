@@ -20,7 +20,7 @@ import (
 
 // reserved are the Go names of the methods an entity has, which no field or
 // edge may take.
-var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": true, "Policy": true, "Hooks": true}
+var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": true, "Policy": true, "Hooks": true, "Interceptors": true}
 
 // Lower maps g to the model Render writes: Go names and types, handle kinds,
 // enums, the join entities of many-to-many relations, and the code of
@@ -73,8 +73,8 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	return l.out, nil
 }
 
-// methodBinds are the fields of VeloxRuntime that hold e's Policy and Hooks
-// methods: method values of a new value of the schema's type, a pointer when
+// methodBinds are the fields of VeloxRuntime that hold e's Policy, Hooks and
+// Interceptors methods: method values of a new value of the schema's type, a pointer when
 // the method has a pointer receiver. Package runtime sets them, so the
 // compiler checks each method's signature at its line of runtime.go.
 func methodBinds(e *OutEntity) []*OutBind {
@@ -90,6 +90,9 @@ func methodBinds(e *OutEntity) []*OutBind {
 	}
 	if e.Bound.Hooks {
 		out = append(out, &OutBind{Field: e.Name + "Hooks", Type: "func() []velox.Hook[" + e.Name + "]", Value: recv(e.Bound.HooksPtr) + ".Hooks", Bound: "func() velox.BoundHooks", Bind: "velox.BindHooks", Imports: map[string]string{"velox": veloxPkg}})
+	}
+	if e.Bound.Interceptors {
+		out = append(out, &OutBind{Field: e.Name + "Interceptors", Type: "func() []velox.Interceptor[" + e.Name + "]", Value: recv(e.Bound.InterceptorsPtr) + ".Interceptors", Bound: "func() velox.BoundInterceptors", Bind: "velox.BindInterceptors", Imports: map[string]string{"velox": veloxPkg}})
 	}
 	return out
 }

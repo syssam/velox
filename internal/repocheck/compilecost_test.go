@@ -166,8 +166,8 @@ var (
 // methods.
 var entityDescHooksBound = strings.Replace(entityDescHooksSrc, `		PrimaryKey: []int{0},
 		Edges:`, `		PrimaryKey: []int{0},
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*E)(nil).Hooks()) },
+		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) }},
+		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*E)(nil).Hooks()) }},
 		Edges:`, 1)
 
 // genericObjects is one unexported variable of each exported generic type,
@@ -234,7 +234,12 @@ var genericObjects = []struct {
 	// callee's body is carried in velox's export data, and then every
 	// package's instantiations inline it too, about 20 KB more here. The
 	// untyped surface (Table, TableQuery) is engine code for that reason.
-	{"entityDescUse", "", entityDescUseSrc, 768000},        // measured 759424
+	//
+	// Each field of Descriptor costs an entity's package about 0.9 KB, in
+	// type descriptors and relocations: the lists of Policy and Hooks and the
+	// field Interceptors (GeneratedCodeIsVersion13) took entityDescUse from
+	// 766634 to 770270 bytes.
+	{"entityDescUse", "", entityDescUseSrc, 780288},        // measured 770270
 	{"entityDescHooks", "", entityDescHooksBound, 1049600}, // measured 1038290
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	{"Mutation", "velox.Mutation[E]", "", 7168},            // measured 2226

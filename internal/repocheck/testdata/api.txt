@@ -80,7 +80,7 @@ Table.Field(p unsafe.Pointer, col int) any
 Table.Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Pointer) error
 Table.Filled(owner unsafe.Pointer, edge int, target Table) (unsafe.Pointer, bool)
 Table.Has(edge int, target Table, ps ...Predicate) Predicate
-Table.HasReadPolicy() bool
+Table.HasRowFilter() bool
 Table.Info() *EntityInfo
 Table.New() unsafe.Pointer
 Table.NewRows(n int) TableRows
@@ -144,7 +144,7 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
-const GeneratedCodeIsVersion12
+const GeneratedCodeIsVersion13
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -330,7 +330,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 func (db *DB) UpdateTable(t Table) TableUpdate
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
 func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error
-func (m *Meta[E]) HasReadPolicy[_ Lazy[E]]() bool
+func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
 func (m *Mutation[E]) Affected[_ Lazy[E]]() int64
 func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E]
 func (m *Mutation[E]) DB[_ Lazy[E]]() *DB
@@ -409,6 +409,7 @@ func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c N
 func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
 func BindHooks[E any](hs []Hook[E]) BoundHooks
+func BindInterceptors[E any](is []Interceptor[E]) BoundInterceptors
 func BindPolicy[E any](p Policy[E]) BoundPolicy
 func CheckEntity[E any, PE Entity[E]]() error
 func CheckRelation[E, T any](r Rel[E, T]) error
@@ -487,6 +488,7 @@ type Around func(ctx context.Context, st *Statement, next func(context.Context) 
 type AssignOp = veloxtype.AssignOp
 type Assignment = veloxtype.Assignment
 type BoundHooks = engine.BoundHooks
+type BoundInterceptors = engine.BoundInterceptors
 type BoundPolicy = engine.BoundPolicy
 type Caller = veloxtype.Caller
 type Col[E, V any] struct { I int32 }
@@ -500,7 +502,7 @@ type ConstraintKind = veloxtype.ConstraintKind
 type DB struct { }
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Scope Scoper Policy func() BoundPolicy Hooks func() BoundHooks }
+type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Scope Scoper Policy []func() BoundPolicy Hooks []func() BoundHooks Interceptors []func() BoundInterceptors }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type EdgeDescriptor = engine.EdgeDescriptor
@@ -511,6 +513,7 @@ type Group[K, V any] struct { Key K Value V }
 type Hook[E any] func(next Mutator[E]) Mutator[E]
 type IndexInfo = veloxtype.IndexInfo
 type InsertQuery[E any] struct { }
+type Interceptor[E any] struct { Filter func(ctx context.Context) (Pred[E], error) }
 type JSONCol[E, V any] struct { I int32 }
 type JoinClause = engine.JoinClause
 type Lazy[T any] interface{ *T }

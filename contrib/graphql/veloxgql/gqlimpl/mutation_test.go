@@ -68,8 +68,8 @@ func postDescriptor() velox.Descriptor[post] {
 		Table:      "posts",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tenant", Name: "tenant"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*post)(nil).Policy()) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*post)(nil).Hooks()) },
+		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*post)(nil).Policy()) }},
+		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*post)(nil).Hooks()) }},
 		FieldPtr: func(x *post, i int) any {
 			switch i {
 			case 0:

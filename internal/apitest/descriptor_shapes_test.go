@@ -62,7 +62,7 @@ func (*pcomment) VeloxMeta() *velox.Meta[pcomment] { return pcommentMeta.Load(pc
 
 func pcommentDescriptor() velox.Descriptor[pcomment] {
 	return velox.Descriptor[pcomment]{
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*pcomment)(nil).Policy()) },
+		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*pcomment)(nil).Policy()) }},
 		Table:      "pcomments",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
@@ -117,7 +117,7 @@ func (*pcycB) VeloxMeta() *velox.Meta[pcycB] { return pcycBMeta.Load(pcycBDescri
 
 func pcycADescriptor() velox.Descriptor[pcycA] {
 	return velox.Descriptor[pcycA]{
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*pcycA)(nil).Policy()) },
+		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*pcycA)(nil).Policy()) }},
 		Table:      "pcyc_as",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BID", Name: "b_id"}},
 		PrimaryKey: []int{0},
@@ -134,7 +134,7 @@ func pcycADescriptor() velox.Descriptor[pcycA] {
 
 func pcycBDescriptor() velox.Descriptor[pcycB] {
 	return velox.Descriptor[pcycB]{
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*pcycB)(nil).Policy()) },
+		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*pcycB)(nil).Policy()) }},
 		Table:      "pcyc_bs",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AID", Name: "a_id"}},
 		PrimaryKey: []int{0},

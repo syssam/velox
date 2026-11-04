@@ -106,8 +106,8 @@ var bnodeFriendPMeta velox.MetaOnce[bnodeFriendP]
 func (*bnodeFriendP) VeloxMeta() *velox.Meta[bnodeFriendP] {
 	return bnodeFriendPMeta.Load(func() velox.Descriptor[bnodeFriendP] {
 		return velox.Descriptor[bnodeFriendP]{
-			Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*bnodeFriendP)(nil).Policy()) },
-			Hooks:      func() velox.BoundHooks { return velox.BindHooks((*bnodeFriendP)(nil).Hooks()) },
+			Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*bnodeFriendP)(nil).Policy()) }},
+			Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*bnodeFriendP)(nil).Hooks()) }},
 			Table:      "bnode_friends",
 			Columns:    []velox.ColumnDescriptor{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
 			PrimaryKey: []int{0, 1},
@@ -311,7 +311,7 @@ var bspouseMeta velox.MetaOnce[bspouse]
 func (*bspouse) VeloxMeta() *velox.Meta[bspouse] {
 	return bspouseMeta.Load(func() velox.Descriptor[bspouse] {
 		return velox.Descriptor[bspouse]{
-			Hooks:      func() velox.BoundHooks { return velox.BindHooks((*bspouse)(nil).Hooks()) },
+			Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*bspouse)(nil).Hooks()) }},
 			Table:      "bspouses",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},
@@ -819,7 +819,7 @@ var btspouseMeta velox.MetaOnce[btspouse]
 func (*btspouse) VeloxMeta() *velox.Meta[btspouse] {
 	return btspouseMeta.Load(func() velox.Descriptor[btspouse] {
 		return velox.Descriptor[btspouse]{
-			Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*btspouse)(nil).Policy()) },
+			Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*btspouse)(nil).Policy()) }},
 			Table:      "btspouses",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},

@@ -8,17 +8,17 @@ import (
 )
 
 // ConditionUpsert scopes the condition of the update branch of st's upsert:
-// every EXISTS in it, a Rewrite hook's included, gets its target's Read
-// condition, as in a Where, and with policy it gains entity in's Read
-// and Write conditions. It works on a copy of the clause: the caller's
+// every EXISTS in it, a Rewrite hook's included, gets its target's row
+// condition, as in a Where. It gains entity in's interceptors' conditions,
+// and with policy its Read and Write conditions. It works on a copy of the clause: the caller's
 // InsertQuery may share it with other runs. A denial is the upsert's, as an
 // update's.
 func (sc *Scoper) ConditionUpsert(in *EntityInfo, st *Statement, policy bool) error {
 	var read, write Predicate
 	var err error
-	// The entity's own policy first, as in scope.
-	if policy && in.policy.Read != nil {
-		if read, err = sc.ReadOf(in, OpUpdate); err != nil {
+	// The entity's own conditions first, as in scope.
+	if len(in.filters) > 0 || (policy && in.policy.Read != nil) {
+		if read, err = sc.RowCond(in, OpUpdate); err != nil {
 			return err
 		}
 	}
@@ -59,7 +59,7 @@ func (sc *Scoper) Record(st *Statement) {
 }
 
 // Scoper is one statement's scope: the context's WithoutPolicy, looked up when
-// an entity first needs it, and the Read conditions made so far.
+// an entity first needs it, and the row conditions made so far.
 type Scoper struct {
 	Ctx    context.Context
 	Entity string // the statement's entity, which every error names
@@ -69,10 +69,10 @@ type Scoper struct {
 	skipped  bool   // a policy that would have applied was skipped
 
 	reads     []readCond
-	computing []*EntityInfo // the entities whose Read is being made, outermost first
+	computing []*EntityInfo // the entities whose row condition is being made, outermost first
 }
 
-// readCond is an entity's Read condition, made once per statement.
+// readCond is an entity's row condition, made once per statement.
 type readCond struct {
 	entity *EntityInfo
 	p      Predicate
@@ -92,23 +92,24 @@ func (sc *Scoper) PolicyOn() bool {
 	return true
 }
 
-// ReadOf returns entity t's Read condition, calling its policy the first time
-// only; a denial is a *PolicyError for op. The EXISTS in the condition get
-// their targets' Read conditions in turn; a condition that reaches t's own
-// Read again, directly or through other entities, cannot be made, and the
-// statement is refused.
-func (sc *Scoper) ReadOf(t *EntityInfo, op Op) (Predicate, error) {
+// RowCond returns entity t's row condition: the AND of its interceptors'
+// conditions, in order, then its Read policy's unless WithoutPolicy. It calls
+// them the first time only. A denial of the policy is a *PolicyError for op;
+// an interceptor's error fails the statement and is not a denial. The EXISTS
+// in the condition get their targets' row conditions in turn; a condition
+// that reaches t's own again, directly or through other entities, cannot be
+// made, and the statement is refused.
+func (sc *Scoper) RowCond(t *EntityInfo, op Op) (Predicate, error) {
 	for _, r := range sc.reads {
 		if r.entity == t {
 			return r.p, nil
 		}
 	}
 	if slices.Contains(sc.computing, t) {
-		return Predicate{}, &cycleError{entity: sc.Entity, policy: t.Name}
+		return Predicate{}, &cycleError{entity: sc.Entity, policy: t.Name, filters: len(t.filters) > 0}
 	}
 	sc.computing = append(sc.computing, t)
-	p, err := t.policy.Read(sc.Ctx)
-	p, err = sc.PolicyCond(t, op, "Read", p, err)
+	p, err := sc.rowCond(t, op)
 	sc.computing = sc.computing[:len(sc.computing)-1]
 	if err != nil {
 		return Predicate{}, err
@@ -117,13 +118,70 @@ func (sc *Scoper) ReadOf(t *EntityInfo, op Op) (Predicate, error) {
 	return p, nil
 }
 
-// cycleError is a Read policy that reaches its own Read through an EXISTS:
+// rowCond makes RowCond's condition.
+func (sc *Scoper) rowCond(t *EntityInfo, op Op) (Predicate, error) {
+	var kids []Node
+	for i, f := range t.filters {
+		p, err := f(sc.Ctx)
+		c, err := sc.filterCond(t, i, p, err)
+		if err != nil {
+			return Predicate{}, err
+		}
+		for _, k := range conjuncts(c) {
+			kids = append(kids, k.n)
+		}
+	}
+	if t.policy != nil && t.policy.Read != nil && sc.PolicyOn() {
+		p, err := t.policy.Read(sc.Ctx)
+		c, err := sc.PolicyCond(t, op, "Read", p, err)
+		if err != nil {
+			return Predicate{}, err
+		}
+		for _, k := range conjuncts(c) {
+			kids = append(kids, k.n)
+		}
+	}
+	switch len(kids) {
+	case 0:
+		return Predicate{}, nil
+	case 1:
+		return Predicate{kids[0]}, nil
+	}
+	return Predicate{Group(OpAnd, kids)}, nil
+}
+
+// filterCond checks what entity t's interceptor i returned, as PolicyCond
+// checks a policy's: an error fails the statement, wrapped and not as a
+// denial, a zero Pred fails it, and Allow is no condition.
+func (sc *Scoper) filterCond(t *EntityInfo, i int, p Predicate, err error) (Predicate, error) {
+	switch {
+	case err != nil:
+		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]: %w", t.Name, i, err)
+	case p.n.Op == opZero:
+		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d] returned the zero Pred; return velox.Allow[E]() for no restriction", t.Name, i)
+	case p.n.Op == OpAllow:
+		return Predicate{}, nil
+	case hasZero(p.n):
+		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]'s condition holds the zero Pred", t.Name, i)
+	}
+	if err := PredErr(p.n); err != nil {
+		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]'s condition: %w", t.Name, i, err)
+	}
+	n, _, err := sc.Node(p.n)
+	return Predicate{n}, err
+}
+
+// cycleError is a row condition that reaches its own through an EXISTS:
 // applying it would never end. It is the schema's bug, not a denial.
 type cycleError struct {
-	entity, policy string // the statement's entity; the entity whose Read loops
+	entity, policy string // the statement's entity; the entity whose condition loops
+	filters        bool   // the looping entity has interceptors
 }
 
 func (e *cycleError) Error() string {
+	if e.filters {
+		return "velox: " + e.entity + ": the interceptors and Read policy of " + e.policy + " reach their own condition through an EXISTS; such a condition cannot be applied"
+	}
 	return "velox: " + e.entity + ": the Read policy of " + e.policy + " reaches its own Read through an EXISTS; such a policy cannot be applied"
 }
 
@@ -261,14 +319,14 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 	return n, true, nil
 }
 
-// target returns what an EXISTS on entity t gets: t's Read condition (zero for
+// target returns what an EXISTS on entity t gets: t's row condition (zero for
 // none).
 func (sc *Scoper) target(t *EntityInfo) (Predicate, error) {
-	if t.policy == nil || t.policy.Read == nil || !sc.PolicyOn() {
+	if len(t.filters) == 0 && (t.policy == nil || t.policy.Read == nil || !sc.PolicyOn()) {
 		return Predicate{}, nil
 	}
 	// An EXISTS reads its target, whatever the statement's kind.
-	return sc.ReadOf(t, OpSelect)
+	return sc.RowCond(t, OpSelect)
 }
 
 // inExists returns err, an error from inside an EXISTS on t (from the EXISTS
@@ -301,10 +359,11 @@ func (e *existsError) Error() string {
 
 func (e *existsError) Unwrap() error { return e.err }
 
-// scope applies the entities' policies to a statement. Unless the context says
-// WithoutPolicy, a SELECT gets the entity's Read policy and an UPDATE or
-// DELETE, or a Writable SELECT, its Read and Write policies. Every EXISTS gets
-// its target's Read policy the same way. scope runs after the guard and the
+// scope applies the entities' interceptors and policies to a statement. A
+// SELECT, UPDATE or DELETE gets the entity's interceptors' conditions. Unless
+// the context says WithoutPolicy, a SELECT then gets its Read policy, and an
+// UPDATE or DELETE, or a Writable SELECT, its Read and Write policies. Every
+// EXISTS gets its target's interceptors and Read policy the same way. scope runs after the guard and the
 // Rewrite hooks, so neither sees what it adds and no hook can remove it.
 //
 // Raw SQL (OpRawQuery and OpRawExec) is never scoped: prepare does not call
@@ -323,16 +382,17 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	}
 	in := st.Entity
 	sc := Scoper{Ctx: ctx, Entity: in.Name}
-	// The entity's own policy first, so that its denial is reported as the
-	// statement's, and an EXISTS on the same entity reuses its Read.
+	// The entity's own conditions first, so that a denial is reported as the
+	// statement's, and an EXISTS on the same entity reuses its row condition.
 	var read, write Predicate
 	var err error
-	if pol := InfoPolicy(in); pol != nil {
-		if pol.Read != nil && sc.PolicyOn() {
-			if read, err = sc.ReadOf(in, st.Op); err != nil {
-				return err
-			}
+	pol := InfoPolicy(in)
+	if len(in.filters) > 0 || (pol != nil && pol.Read != nil && sc.PolicyOn()) {
+		if read, err = sc.RowCond(in, st.Op); err != nil {
+			return err
 		}
+	}
+	if pol != nil {
 		if (st.Op != OpSelect || st.Writable) && pol.Write != nil && sc.PolicyOn() {
 			p, err := pol.Write(ctx)
 			if write, err = sc.PolicyCond(in, st.Op, "Write", p, err); err != nil {
@@ -359,7 +419,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	return nil
 }
 
-// scopeJoins gives each joined target its Read condition, in the join's ON
+// scopeJoins gives each joined target its row condition, in the join's ON
 // clause: a joined row is read through the target's policy as a With load
 // reads it, so a join exposes nothing that a query on the target would not.
 // The joins are the statement's own copy: resolve made it.
@@ -382,10 +442,11 @@ func (sc *Scoper) scopeJoins(st *Statement) error {
 
 // scopeInsert applies the entity's policy to an INSERT. InsertAllowed has
 // asked the Insert policy. An upsert that updates must not reach a row the
-// policy hides from an update: its update branch gets the Read and Write
-// conditions; an EXISTS a Rewrite hook put in that branch's condition gets its
-// target's Read, as one in a Where does. MySQL's ON DUPLICATE KEY UPDATE takes
-// no condition, so an entity with a Read or Write policy is refused. Keeping
+// interceptors or the policy hide from an update: its update branch gets
+// their conditions; an EXISTS a Rewrite hook put in that branch's condition
+// gets its target's row condition, as one in a Where does. MySQL's ON
+// DUPLICATE KEY UPDATE takes no condition, so an entity with a Read or Write
+// policy or an interceptor is refused. Keeping
 // the existing row (DoNothing) changes nothing, so it is exempt.
 func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	in := st.Entity
@@ -396,8 +457,8 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	}
 	if cf := st.Conflict; cf != nil && !cf.DoNothing && len(cf.Update) > 0 {
 		conditioned := pol != nil && (pol.Read != nil || pol.Write != nil) && sc.PolicyOn()
-		if conditioned && db.D == MySQL {
-			return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE takes no condition, and the entity has a Read or Write policy; keep the existing row with DoNothing, or update it with Update or Save", in.Name, ErrPolicyUpsert)
+		if (conditioned || len(in.filters) > 0) && db.D == MySQL {
+			return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE takes no condition, and the entity has a Read or Write policy or an interceptor; keep the existing row with DoNothing, or update it with Update or Save", in.Name, ErrPolicyUpsert)
 		}
 		if err := sc.ConditionUpsert(in, st, conditioned); err != nil {
 			return err

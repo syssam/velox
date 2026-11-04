@@ -386,15 +386,15 @@ func checkValue(in *EntityInfo, c *ColumnInfo, want reflect.Type, v any) error {
 	return nil
 }
 
-// HasReadPolicy reports whether the entity has a Read policy, which the
-// schema declares or a scope adds: Meta.HasReadPolicy.
-func (t Table) HasReadPolicy() bool {
+// HasRowFilter reports whether the entity's rows are filtered for reads, by
+// an interceptor or a Read policy, which the schema declares or a scope
+// adds: Meta.HasRowFilter.
+func (t Table) HasRowFilter() bool {
 	s := t.state()
 	if s.info == nil {
 		return false
 	}
-	p := InfoPolicy(s.info)
-	return p != nil && p.Read != nil
+	return HasRowFilter(s.info)
 }
 
 // Has is true when relation edge holds at least one entity of target that

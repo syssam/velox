@@ -5,10 +5,10 @@ package gen
 import "github.com/syssam/velox"
 
 // VeloxRuntime is what package runtime gives package gen when the program
-// starts: the schema's Hooks and Policy methods, and the defaults and
-// validators that gen cannot call by name. The schema package imports
-// gen, so gen cannot import it. Applications do not use this type:
-// they import package runtime for its effect.
+// starts: the schema's Hooks, Policy and Interceptors methods, and the
+// defaults and validators that gen cannot call by name. The schema
+// package imports gen, so gen cannot import it. Applications do not
+// use this type: they import package runtime for its effect.
 type VeloxRuntime struct {
 	MemoPolicy func() velox.Policy[Memo]
 	TagHooks   func() []velox.Hook[Tag]
@@ -17,12 +17,12 @@ type VeloxRuntime struct {
 }
 
 // veloxBound is VeloxRuntime as the Descriptor functions read it, with the
-// schema's Policy and Hooks methods bound for velox.
+// schema's Policy, Hooks and Interceptors methods bound for velox.
 type veloxBound struct {
-	MemoPolicy func() velox.BoundPolicy
-	TagHooks   func() velox.BoundHooks
-	TaskPolicy func() velox.BoundPolicy
-	TaskHooks  func() velox.BoundHooks
+	MemoPolicy []func() velox.BoundPolicy
+	TagHooks   []func() velox.BoundHooks
+	TaskPolicy []func() velox.BoundPolicy
+	TaskHooks  []func() velox.BoundHooks
 }
 
 var veloxRT *veloxBound
@@ -36,10 +36,10 @@ func SetVeloxRuntime(r VeloxRuntime) {
 		panic("gen: SetVeloxRuntime called twice")
 	}
 	veloxRT = &veloxBound{
-		MemoPolicy: func() velox.BoundPolicy { return velox.BindPolicy(r.MemoPolicy()) },
-		TagHooks:   func() velox.BoundHooks { return velox.BindHooks(r.TagHooks()) },
-		TaskPolicy: func() velox.BoundPolicy { return velox.BindPolicy(r.TaskPolicy()) },
-		TaskHooks:  func() velox.BoundHooks { return velox.BindHooks(r.TaskHooks()) },
+		MemoPolicy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy(r.MemoPolicy()) }},
+		TagHooks:   []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks(r.TagHooks()) }},
+		TaskPolicy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy(r.TaskPolicy()) }},
+		TaskHooks:  []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks(r.TaskHooks()) }},
 	}
 }
 

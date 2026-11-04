@@ -16,18 +16,32 @@ import (
 // behaviourMethods are the methods a schema package declares an entity's
 // behaviour with. The loader leaves them, and what only they use, out of the
 // program it compiles, and package runtime binds them.
-var behaviourMethods = []string{"Hooks", "Policy"}
+var behaviourMethods = []string{"Hooks", "Interceptors", "Policy"}
+
+// behaviourResult is the result method m of entity e must return, in the
+// generated package genPkg: []velox.Hook[gen.E], velox.Policy[gen.E] or
+// []velox.Interceptor[gen.E].
+func behaviourResult(m, genPkg, e string) string {
+	switch m {
+	case "Policy":
+		return "velox.Policy[" + genPkg + "." + e + "]"
+	case "Interceptors":
+		return "[]velox.Interceptor[" + genPkg + "." + e + "]"
+	}
+	return "[]velox.Hook[" + genPkg + "." + e + "]"
+}
 
 // SchemaMethods reads the schema package's files in dir, as userFiles does,
-// and reports which of entities have a Hooks or a Policy method there. An
+// and reports which of entities have a Hooks, a Policy or an Interceptors
+// method there. An
 // entity's method is declared on the type of its name in the schema package:
 // a schema's on the schema, and a join entity's, which has no schema, on a
 // type the user declares for it, such as type UserFriend struct{}.
 //
-// The method takes nothing and returns []velox.Hook[gen.E] or
-// velox.Policy[gen.E], gen being the generated package and E the entity;
-// another shape is a *FileError, and so is a Hooks or Policy method on a type
-// that is not an entity's. The receiver may be a value or a pointer: package
+// The method takes nothing and returns []velox.Hook[gen.E],
+// velox.Policy[gen.E] or []velox.Interceptor[gen.E], gen being the generated
+// package and E the entity; another shape is a *FileError, and so is such a
+// method on a type that is not an entity's. The receiver may be a value or a pointer: package
 // runtime binds the method of a new value, or a new pointer, of the schema
 // package's type.
 //
@@ -53,22 +67,22 @@ func SchemaMethods(dir, genPkg string, entities []string) (map[string]Bound, err
 			m := fd.Name.Name
 			line := fset.Position(fd.Pos()).Line
 			if !slices.Contains(entities, e) {
-				return &FileError{Path: path, Line: line, Reason: fmt.Sprintf("%s.%s: %s is not an entity; Hooks and Policy are declared on an entity's schema, or on a type named like a join entity", e, m, e)}
+				return &FileError{Path: path, Line: line, Reason: fmt.Sprintf("%s.%s: %s is not an entity; Hooks, Policy and Interceptors are declared on an entity's schema, or on a type named like a join entity", e, m, e)}
 			}
 			if !behaviourSignature(fd, e) {
-				want := "[]velox.Hook[" + genPkg + "." + e + "]"
-				if m == "Policy" {
-					want = "velox.Policy[" + genPkg + "." + e + "]"
-				}
+				want := behaviourResult(m, genPkg, e)
 				return &FileError{Path: path, Line: line, Reason: fmt.Sprintf("%s.%s must take nothing and return %s (func (%[1]s) %[2]s() %[3]s)", e, m, want)}
 			}
 			b := out[e]
-			if m == "Policy" {
+			switch m {
+			case "Policy":
 				b.Policy, b.PolicyPtr = true, ptr
 				if pos := policyConds(f, fd, e); pos.IsValid() {
 					b.PolicyConds = fmt.Sprintf("%s:%d", path, fset.Position(pos).Line)
 				}
-			} else {
+			case "Interceptors":
+				b.Interceptors, b.InterceptorsPtr = true, ptr
+			default:
 				b.Hooks, b.HooksPtr = true, ptr
 			}
 			out[e] = b
@@ -81,10 +95,10 @@ func SchemaMethods(dir, genPkg string, entities []string) (map[string]Bound, err
 	return out, nil
 }
 
-// behaviourSignature reports whether fd, a Hooks or Policy method of entity
-// e, takes nothing and returns []<x>.Hook[<y>.e] or <x>.Policy[<y>.e]. It
-// reads names only; the compiler checks the packages when it builds package
-// runtime.
+// behaviourSignature reports whether fd, a Hooks, Policy or Interceptors
+// method of entity e, takes nothing and returns []<x>.Hook[<y>.e],
+// <x>.Policy[<y>.e] or []<x>.Interceptor[<y>.e]. It reads names only; the
+// compiler checks the packages when it builds package runtime.
 func behaviourSignature(fd *ast.FuncDecl, e string) bool {
 	t := fd.Type
 	if t.TypeParams != nil || len(t.Params.List) != 0 || t.Results == nil || len(t.Results.List) != 1 || len(t.Results.List[0].Names) > 1 {
@@ -92,12 +106,12 @@ func behaviourSignature(fd *ast.FuncDecl, e string) bool {
 	}
 	r := t.Results.List[0].Type
 	name := "Policy"
-	if fd.Name.Name == "Hooks" {
+	if m := fd.Name.Name; m != "Policy" {
 		at, ok := r.(*ast.ArrayType)
 		if !ok || at.Len != nil {
 			return false
 		}
-		r, name = at.Elt, "Hook"
+		r, name = at.Elt, strings.TrimSuffix(m, "s")
 	}
 	ix, ok := r.(*ast.IndexExpr)
 	if !ok {

@@ -33,9 +33,10 @@ const RuntimeDir = "runtime"
 // Bound says which of an entity's methods the schema package declares, so
 // that its Descriptor binds them.
 type Bound struct {
-	Policy, Hooks bool
-	// PolicyPtr and HooksPtr say the method has a pointer receiver.
-	PolicyPtr, HooksPtr bool
+	Policy, Hooks, Interceptors bool
+	// PolicyPtr, HooksPtr and InterceptorsPtr say the method has a pointer
+	// receiver.
+	PolicyPtr, HooksPtr, InterceptorsPtr bool
 	// PolicyConds is "path:line" of the first Read or Write key of a
 	// velox.Policy literal in the Policy method's body, "" when it has none.
 	// The join entity of a bidirectional edge cannot have either.
@@ -175,4 +176,4 @@ type OutEnum struct {
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 12
+const GeneratedCodeVersion = 13

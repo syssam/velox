@@ -5,10 +5,10 @@ package gen
 import "github.com/syssam/velox"
 
 // VeloxRuntime is what package runtime gives package gen when the program
-// starts: the schema's Hooks and Policy methods, and the defaults and
-// validators that gen cannot call by name. The schema package imports
-// gen, so gen cannot import it. Applications do not use this type:
-// they import package runtime for its effect.
+// starts: the schema's Hooks, Policy and Interceptors methods, and the
+// defaults and validators that gen cannot call by name. The schema
+// package imports gen, so gen cannot import it. Applications do not
+// use this type: they import package runtime for its effect.
 type VeloxRuntime struct {
 	CommentPolicy func() velox.Policy[Comment]
 	IssuePolicy   func() velox.Policy[Issue]
@@ -16,11 +16,11 @@ type VeloxRuntime struct {
 }
 
 // veloxBound is VeloxRuntime as the Descriptor functions read it, with the
-// schema's Policy and Hooks methods bound for velox.
+// schema's Policy, Hooks and Interceptors methods bound for velox.
 type veloxBound struct {
-	CommentPolicy func() velox.BoundPolicy
-	IssuePolicy   func() velox.BoundPolicy
-	ProjectPolicy func() velox.BoundPolicy
+	CommentPolicy []func() velox.BoundPolicy
+	IssuePolicy   []func() velox.BoundPolicy
+	ProjectPolicy []func() velox.BoundPolicy
 }
 
 var veloxRT *veloxBound
@@ -34,9 +34,9 @@ func SetVeloxRuntime(r VeloxRuntime) {
 		panic("gen: SetVeloxRuntime called twice")
 	}
 	veloxRT = &veloxBound{
-		CommentPolicy: func() velox.BoundPolicy { return velox.BindPolicy(r.CommentPolicy()) },
-		IssuePolicy:   func() velox.BoundPolicy { return velox.BindPolicy(r.IssuePolicy()) },
-		ProjectPolicy: func() velox.BoundPolicy { return velox.BindPolicy(r.ProjectPolicy()) },
+		CommentPolicy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy(r.CommentPolicy()) }},
+		IssuePolicy:   []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy(r.IssuePolicy()) }},
+		ProjectPolicy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy(r.ProjectPolicy()) }},
 	}
 }
 

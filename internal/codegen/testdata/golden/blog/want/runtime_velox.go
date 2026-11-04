@@ -5,22 +5,26 @@ package gen
 import "github.com/syssam/velox"
 
 // VeloxRuntime is what package runtime gives package gen when the program
-// starts: the schema's Hooks and Policy methods, and the defaults and
-// validators that gen cannot call by name. The schema package imports
-// gen, so gen cannot import it. Applications do not use this type:
-// they import package runtime for its effect.
+// starts: the schema's Hooks, Policy and Interceptors methods, and the
+// defaults and validators that gen cannot call by name. The schema
+// package imports gen, so gen cannot import it. Applications do not
+// use this type: they import package runtime for its effect.
 type VeloxRuntime struct {
+	CategoryInterceptors   func() []velox.Interceptor[Category]
 	GroupTokenDefault      func() string
 	PostPolicy             func() velox.Policy[Post]
+	PostInterceptors       func() []velox.Interceptor[Post]
 	PostSlugValidator      func(string) error
 	UserCreatedByValidator func(string) error
 }
 
 // veloxBound is VeloxRuntime as the Descriptor functions read it, with the
-// schema's Policy and Hooks methods bound for velox.
+// schema's Policy, Hooks and Interceptors methods bound for velox.
 type veloxBound struct {
+	CategoryInterceptors   []func() velox.BoundInterceptors
 	GroupTokenDefault      func() string
-	PostPolicy             func() velox.BoundPolicy
+	PostPolicy             []func() velox.BoundPolicy
+	PostInterceptors       []func() velox.BoundInterceptors
 	PostSlugValidator      func(string) error
 	UserCreatedByValidator func(string) error
 }
@@ -36,8 +40,10 @@ func SetVeloxRuntime(r VeloxRuntime) {
 		panic("gen: SetVeloxRuntime called twice")
 	}
 	veloxRT = &veloxBound{
+		CategoryInterceptors:   []func() velox.BoundInterceptors{func() velox.BoundInterceptors { return velox.BindInterceptors(r.CategoryInterceptors()) }},
 		GroupTokenDefault:      r.GroupTokenDefault,
-		PostPolicy:             func() velox.BoundPolicy { return velox.BindPolicy(r.PostPolicy()) },
+		PostPolicy:             []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy(r.PostPolicy()) }},
+		PostInterceptors:       []func() velox.BoundInterceptors{func() velox.BoundInterceptors { return velox.BindInterceptors(r.PostInterceptors()) }},
 		PostSlugValidator:      r.PostSlugValidator,
 		UserCreatedByValidator: r.UserCreatedByValidator,
 	}

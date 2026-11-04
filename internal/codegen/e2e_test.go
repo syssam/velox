@@ -110,7 +110,7 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 // closed.
 func TestGeneratedRunsOnSQLite(t *testing.T) {
 	dir := e2eModule(t, Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/tmp/gen", Bound: map[string]Bound{
-		"Post": {Policy: true},
+		"Post": {Policy: true, Interceptors: true},
 		"User": {Hooks: true},
 		"Note": {Policy: true, Hooks: true},
 	}}, []string{"behaviour"}, []string{"user", "closed"}, "main_test.go")

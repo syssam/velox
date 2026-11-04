@@ -55,7 +55,7 @@ func (*daudited) VeloxMeta() *velox.Meta[daudited] { return dauditedMeta.Load(da
 
 func dauditedDescriptor() velox.Descriptor[daudited] {
 	return velox.Descriptor[daudited]{
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*daudited)(nil).Hooks()) },
+		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*daudited)(nil).Hooks()) }},
 		Table:      "daudited",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
@@ -331,7 +331,7 @@ func (*dhooked) VeloxMeta() *velox.Meta[dhooked] { return dhookedMeta.Load(dhook
 
 func dhookedDescriptor() velox.Descriptor[dhooked] {
 	return velox.Descriptor[dhooked]{
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*dhooked)(nil).Hooks()) },
+		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*dhooked)(nil).Hooks()) }},
 		Table:      "dhooked",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},

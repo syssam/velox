@@ -60,7 +60,7 @@ func (*Category) VeloxMeta() *velox.Meta[Category] { return categoryMeta.Load(ca
 
 // categoryDescriptor describes Category to velox: its table, columns, edges and hooks.
 func categoryDescriptor() velox.Descriptor[Category] {
-	veloxRuntime()
+	rt := veloxRuntime()
 	return velox.Descriptor[Category]{
 		Table:  "categories",
 		Schema: "blog",
@@ -77,6 +77,7 @@ func categoryDescriptor() velox.Descriptor[Category] {
 			velox.EdgeTo[Category]("Children", categoryColID, categoryColCategoryChildren),
 			velox.EdgeTo[Category]("Parent", categoryColCategoryChildren, categoryColID),
 		},
+		Interceptors: rt.CategoryInterceptors,
 		FieldPtr: func(x *Category, i int) any {
 			switch i {
 			case categoryColID:

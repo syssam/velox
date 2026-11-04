@@ -11,8 +11,8 @@ import (
 const veloxPkg = "github.com/syssam/velox"
 
 // runtimeValue reports whether entity e reads a value package runtime sets:
-// its Policy or Hooks method, or a default or validator it cannot call by
-// name.
+// its Policy, Hooks or Interceptors method, or a default or validator it
+// cannot call by name.
 func runtimeValue(e *OutEntity) bool {
 	return len(e.Binds) > 0
 }
@@ -26,9 +26,10 @@ func RuntimeImport(genPath string) string {
 // renderRuntimeHolder writes runtime_velox.go when the generated package
 // reads values of the schema: the type VeloxRuntime, a field per value
 // package runtime gives an entity (OutBind); veloxBound, the same with the
-// schema's Policy and Hooks methods bound; SetVeloxRuntime, which package
-// runtime calls with a VeloxRuntime and which binds them; and veloxRuntime,
-// which every Descriptor function calls first.
+// schema's Policy, Hooks and Interceptors methods bound, each in a list, the
+// form of the Descriptor's fields; SetVeloxRuntime, which package runtime
+// calls with a VeloxRuntime and which binds them; and veloxRuntime, which
+// every Descriptor function calls first.
 func renderRuntimeHolder(o *Out) string {
 	imports := map[string]string{"velox": veloxPkg}
 	for _, e := range o.Entities {
@@ -42,10 +43,10 @@ func renderRuntimeHolder(o *Out) string {
 	w.p("")
 	writeImports(&w, imports)
 	w.p("// VeloxRuntime is what package %s gives package %s when the program", RuntimeDir, o.Package)
-	w.p("// starts: the schema's Hooks and Policy methods, and the defaults and")
-	w.p("// validators that %s cannot call by name. The schema package imports", o.Package)
-	w.p("// %s, so %[1]s cannot import it. Applications do not use this type:", o.Package)
-	w.p("// they import package %s for its effect.", RuntimeDir)
+	w.p("// starts: the schema's Hooks, Policy and Interceptors methods, and the")
+	w.p("// defaults and validators that %s cannot call by name. The schema", o.Package)
+	w.p("// package imports %s, so %[1]s cannot import it. Applications do not", o.Package)
+	w.p("// use this type: they import package %s for its effect.", RuntimeDir)
 	w.p("type VeloxRuntime struct {")
 	for _, e := range o.Entities {
 		for _, b := range e.Binds {
@@ -58,12 +59,12 @@ func renderRuntimeHolder(o *Out) string {
 	// names its policy and hooks as a plain field; the binding, which
 	// instantiates velox's generics for the entity, is written once here.
 	w.p("// veloxBound is VeloxRuntime as the Descriptor functions read it, with the")
-	w.p("// schema's Policy and Hooks methods bound for velox.")
+	w.p("// schema's Policy, Hooks and Interceptors methods bound for velox.")
 	w.p("type veloxBound struct {")
 	for _, e := range o.Entities {
 		for _, b := range e.Binds {
 			if b.Bound != "" {
-				w.p("%s %s", b.Field, b.Bound)
+				w.p("%s []%s", b.Field, b.Bound)
 			} else {
 				w.p("%s %s", b.Field, b.Type)
 			}
@@ -85,7 +86,7 @@ func renderRuntimeHolder(o *Out) string {
 	for _, e := range o.Entities {
 		for _, b := range e.Binds {
 			if b.Bind != "" {
-				w.p("%s: func() %s { return %s(r.%[1]s()) },", b.Field, strings.TrimPrefix(b.Bound, "func() "), b.Bind)
+				w.p("%s: []%s{func() %s { return %s(r.%[1]s()) }},", b.Field, b.Bound, strings.TrimPrefix(b.Bound, "func() "), b.Bind)
 			} else {
 				w.p("%s: r.%[1]s,", b.Field)
 			}
@@ -133,10 +134,10 @@ func renderRuntime(o *Out) string {
 	var w writer
 	w.WriteString(header)
 	w.p("// Package %s binds the schema package to package %s, which the", RuntimeDir, o.Package)
-	w.p("// schema imports, when the program starts: its Hooks and Policy methods,")
-	w.p("// and the defaults and validators %s cannot call by name. A program", o.Package)
-	w.p("// imports it once, for its effect, in its main package and in each test")
-	w.p("// package that uses the entities:")
+	w.p("// schema imports, when the program starts: its Hooks, Policy and")
+	w.p("// Interceptors methods, and the defaults and validators %s cannot call", o.Package)
+	w.p("// by name. A program imports it once, for its effect, in its main")
+	w.p("// package and in each test package that uses the entities:")
 	w.p("//")
 	w.p("//\t%s", RuntimeImport(o.GenPath))
 	w.p("//")

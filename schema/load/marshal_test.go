@@ -246,10 +246,10 @@ func TestMarshalRefusesBehaviourVariants(t *testing.T) {
 		s    schema.Interface
 		want string
 	}{
-		{ptrHooked{}, "schema ptrHooked: has a Hooks method, which velox-gen binds from the schema package's source, as func (ptrHooked) Hooks() []velox.Hook[entity.ptrHooked]"},
+		{ptrHooked{}, "schema ptrHooked: has a Hooks method, which velox-gen binds from the schema package's source, as func (ptrHooked) Hooks() []velox.Hook[gen.ptrHooked]"},
 		{&ptrHooked{}, "schema ptrHooked: has a Hooks method, which velox-gen binds"},
-		{policed{}, "schema policed: has a Policy method, which velox-gen binds from the schema package's source, as func (policed) Policy() velox.Policy[entity.policed]"},
-		{intercepted{}, "schema intercepted: has an Interceptors method; velox has no interceptors"},
+		{policed{}, "schema policed: has a Policy method, which velox-gen binds from the schema package's source, as func (policed) Policy() velox.Policy[gen.policed]"},
+		{intercepted{}, "schema intercepted: has an Interceptors method, which velox-gen binds from the schema package's source, as func (intercepted) Interceptors() []velox.Interceptor[gen.intercepted]"},
 	} {
 		if got := errorText(decode(t, c.s)); !strings.Contains(got, c.want) {
 			t.Errorf("got %q, want %q", got, c.want)
@@ -516,7 +516,7 @@ type promoted struct{ policyBase }
 func TestMarshalRefusesAPromotedPolicy(t *testing.T) {
 	m := decode(t, promoted{})
 	want := "schema promoted: has a Policy method promoted from load_test.policyBase, which velox-gen does not bind: " +
-		"declare Policy on the schema itself, in the schema package: func (promoted) Policy() velox.Policy[entity.promoted]"
+		"declare Policy on the schema itself, in the schema package: func (promoted) Policy() velox.Policy[gen.promoted]"
 	if got := errorText(m); !strings.Contains(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}

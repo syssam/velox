@@ -71,10 +71,7 @@ func CheckUserFiles(dir string, entities, reserved []string) error {
 					continue
 				}
 				m := d.Name.Name
-				want := "[]velox.Hook[" + f.Name.Name + "." + e + "]"
-				if m == "Policy" {
-					want = "velox.Policy[" + f.Name.Name + "." + e + "]"
-				}
+				want := behaviourResult(m, f.Name.Name, e)
 				return &FileError{Path: path, Line: fset.Position(d.Pos()).Line, Reason: fmt.Sprintf(
 					"declares %s.%s in the generated package; declare it in the schema package, on %[1]s: func (%[1]s) %[2]s() %[3]s", e, m, want)}
 			}

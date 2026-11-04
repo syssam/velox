@@ -404,16 +404,16 @@ func TestTableConvert(t *testing.T) {
 	}
 }
 
-// TestTableHasReadPolicy: Ticket's schema declares a Read policy; Item's
+// TestTableHasRowFilter: Ticket's schema declares a Read policy; Item's
 // declares none, and the zero Table has none.
-func TestTableHasReadPolicy(t *testing.T) {
-	if !tkTable.HasReadPolicy() {
+func TestTableHasRowFilter(t *testing.T) {
+	if !tkTable.HasRowFilter() {
 		t.Error("Ticket: no Read policy")
 	}
-	if itTable.HasReadPolicy() {
+	if itTable.HasRowFilter() {
 		t.Error("Item: a Read policy")
 	}
-	if (velox.Table{}).HasReadPolicy() {
+	if (velox.Table{}).HasRowFilter() {
 		t.Error("the zero Table: a Read policy")
 	}
 }

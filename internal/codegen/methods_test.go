@@ -20,7 +20,7 @@ func methodsDir(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-// SchemaMethods finds an entity's Hooks and Policy on the schema package's
+// SchemaMethods finds an entity's Hooks, Policy and Interceptors on the schema package's
 // type of its name, with a value or a pointer receiver: package runtime calls
 // them on a new *E.
 func TestSchemaMethodsFindsMethods(t *testing.T) {
@@ -29,12 +29,14 @@ func TestSchemaMethodsFindsMethods(t *testing.T) {
 		"post.go":        "package schema\n\nfunc (p *Post) Hooks() []velox.Hook[gen.Post] { return nil }\n\nfunc (p Post) Other() {}\n",
 		"both.go":        "package schema\n\nfunc (t Tag) Policy() velox.Policy[gen.Tag] { return velox.Policy[gen.Tag]{} }\nfunc (t Tag) Hooks() []vx.Hook[g.Tag] { return nil }\n",
 		"other.go":       "package schema\n\nfunc (Comment) Policies() {}\nfunc Policy() {}\n",
+		"note.go":        "package schema\n\nfunc (Note) Interceptors() []velox.Interceptor[gen.Note] { return nil }\nfunc (*Memo) Interceptors() []velox.Interceptor[gen.Memo] { return nil }\n",
 	})
-	got, err := SchemaMethods(dir, "", []string{"User", "Post", "Tag", "Comment"})
+	got, err := SchemaMethods(dir, "", []string{"User", "Post", "Tag", "Comment", "Note", "Memo"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]Bound{"User": {Policy: true}, "Post": {Hooks: true, HooksPtr: true}, "Tag": {Policy: true, Hooks: true}}
+	want := map[string]Bound{"User": {Policy: true}, "Post": {Hooks: true, HooksPtr: true}, "Tag": {Policy: true, Hooks: true},
+		"Note": {Interceptors: true}, "Memo": {Interceptors: true, InterceptorsPtr: true}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -50,7 +52,9 @@ func TestSchemaMethodsRefusesAWrongShape(t *testing.T) {
 		{"unqualified", "package schema\n\nfunc (User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n", "User.Policy must take nothing and return velox.Policy[gen.User] (func (User) Policy() velox.Policy[gen.User])"},
 		{"a parameter", "package schema\n\nfunc (User) Hooks(int) []velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
 		{"an array", "package schema\n\nfunc (User) Hooks() [2]velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
-		{"not an entity", "package schema\n\nfunc (Mixin) Hooks() []velox.Hook[gen.User] { return nil }\n", "Mixin.Hooks: Mixin is not an entity; Hooks and Policy are declared on an entity's schema, or on a type named like a join entity"},
+		{"interceptors result", "package schema\n\nfunc (User) Interceptors() []velox.Hook[gen.User] { return nil }\n", "User.Interceptors must take nothing and return []velox.Interceptor[gen.User] (func (User) Interceptors() []velox.Interceptor[gen.User])"},
+		{"one interceptor", "package schema\n\nfunc (User) Interceptors() velox.Interceptor[gen.User] { return velox.Interceptor[gen.User]{} }\n", "User.Interceptors must take nothing and return []velox.Interceptor[gen.User] (func (User) Interceptors() []velox.Interceptor[gen.User])"},
+		{"not an entity", "package schema\n\nfunc (Mixin) Hooks() []velox.Hook[gen.User] { return nil }\n", "Mixin.Hooks: Mixin is not an entity; Hooks, Policy and Interceptors are declared on an entity's schema, or on a type named like a join entity"},
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": c.src})
 		_, err := SchemaMethods(dir, "", []string{"User", "Post"})
@@ -67,6 +71,7 @@ func TestCheckUserFilesRefusesBehaviour(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
 		{"policy", "package gen\n\nfunc (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n", "declares User.Policy in the generated package; declare it in the schema package, on User: func (User) Policy() velox.Policy[gen.User]"},
 		{"hooks", "package gen\n\nfunc (u User) Hooks() []velox.Hook[User] { return nil }\n", "declares User.Hooks in the generated package; declare it in the schema package, on User: func (User) Hooks() []velox.Hook[gen.User]"},
+		{"interceptors", "package gen\n\nfunc (*User) Interceptors() []velox.Interceptor[User] { return nil }\n", "declares User.Interceptors in the generated package; declare it in the schema package, on User: func (User) Interceptors() []velox.Interceptor[gen.User]"},
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": c.src})
 		err := CheckUserFiles(dir, []string{"User"}, nil)

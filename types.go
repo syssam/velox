@@ -41,6 +41,11 @@ type BoundPolicy = engine.BoundPolicy
 // makes one.
 type BoundHooks = engine.BoundHooks
 
+// BoundInterceptors is an entity's interceptors with E erased, made by
+// BindInterceptors for Descriptor.Interceptors. For generated code. Its
+// fields are not exported: only BindInterceptors makes one.
+type BoundInterceptors = engine.BoundInterceptors
+
 // EntityInfo is what velox knows about an entity, built once on its first use.
 // It is the non-generic view that hooks see in a Statement, and the runtime
 // view of the generated Descriptor it is built from.

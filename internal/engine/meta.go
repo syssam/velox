@@ -32,6 +32,7 @@ type EntityInfo struct {
 	bidi       bool                       // Descriptor.Bidi: a link is two rows, (a, b) and (b, a)
 	bidiKeys   []bidiKey                  // the keys of the EdgeBidi relations, which both partners' rows hold
 	hooks      []HookFn                   // the Hooks method's, outermost first
+	filters    []FilterFn                 // the interceptors' Filters, in order
 
 	// The entity's policy, bound once from its Policy method.
 	policy *EntityPolicy // nil when none
@@ -191,6 +192,18 @@ func infoBidiKeys(in *EntityInfo) []bidiKey { return in.bidiKeys }
 
 // InfoPolicy is in's policy; nil when it has none.
 func InfoPolicy(in *EntityInfo) *EntityPolicy { return in.policy }
+
+// InfoFilters is in's interceptors' Filters, in order.
+func InfoFilters(in *EntityInfo) []FilterFn { return in.filters }
+
+// SetInfoFilters sets in's interceptors' Filters.
+func SetInfoFilters(in *EntityInfo, fs []FilterFn) { in.filters = fs }
+
+// HasRowFilter reports whether in's rows are filtered for reads: by its
+// interceptors, or by a Read policy.
+func HasRowFilter(in *EntityInfo) bool {
+	return len(in.filters) > 0 || (in.policy != nil && in.policy.Read != nil)
+}
 
 // InfoRels is in's relations, in the order of the generated shape.
 func InfoRels(in *EntityInfo) []*relation { return in.rels }

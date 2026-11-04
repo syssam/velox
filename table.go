@@ -35,7 +35,7 @@ import (
 //	Pred(col int, op PredOp, v any) Predicate // a condition on column col
 //	Has(edge int, target Table, ps ...Predicate) Predicate // Rel.HasWhere
 //	Of(edge int, target Table, owners ...unsafe.Pointer) Predicate // Rel.Of
-//	HasReadPolicy() bool // Meta.HasReadPolicy
+//	HasRowFilter() bool // Meta.HasRowFilter
 //	Convert(col int, v any) (any, error) // v as column col's Go type, from one of the same kind
 //	NewRows(n int) TableRows // n new zero rows, for InsertRows
 //	SetField(p unsafe.Pointer, col int, v any) error // sets a field, v converted as Convert does

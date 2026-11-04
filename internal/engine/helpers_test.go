@@ -320,7 +320,7 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 	info, _, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
 		v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
 			Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
-			Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
+			Policy: len(d.Policy) > 0, Hooks: len(d.Hooks) > 0, Interceptors: len(d.Interceptors) > 0}}
 		if a := d.FieldPtr; a != nil {
 			v.FieldPtr = func(i int) any { return a(x, i) }
 		}
@@ -329,11 +329,40 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 		}
 		return v
 	})
-	if err == nil && d.Policy != nil {
-		err = engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) { return engine.PolicyOf(d.Policy()), "" })
+	if err == nil && len(d.Policy) > 0 {
+		err = engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
+			ps := make([]*engine.EntityPolicy, len(d.Policy))
+			for i, p := range d.Policy {
+				ps[i] = engine.PolicyOf(p())
+			}
+			return engine.AndPolicies(ps), ""
+		})
 	}
-	if err == nil && d.Hooks != nil {
-		err = engine.EraseHooks(info, func() ([]engine.HookFn, string) { return engine.HooksOf(d.Hooks()) })
+	if err == nil && len(d.Hooks) > 0 {
+		err = engine.EraseHooks(info, func() ([]engine.HookFn, string) {
+			var hs []engine.HookFn
+			for _, h := range d.Hooks {
+				own, reason := engine.HooksOf(h(), len(hs))
+				if reason != "" {
+					return nil, reason
+				}
+				hs = append(hs, own...)
+			}
+			return hs, ""
+		})
+	}
+	if err == nil && len(d.Interceptors) > 0 {
+		err = engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
+			var fs []engine.FilterFn
+			for _, f := range d.Interceptors {
+				own, reason := engine.FiltersOf(f(), len(fs))
+				if reason != "" {
+					return nil, reason
+				}
+				fs = append(fs, own...)
+			}
+			return fs, ""
+		})
 	}
 	if err != nil {
 		return nil, err

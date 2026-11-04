@@ -83,16 +83,16 @@ func CheckEntity[E any, PE Entity[E]]() error {
 	return PE(nil).VeloxMeta().err
 }
 
-// HasReadPolicy reports whether entity E's policy has a Read condition: one
-// the schema declares, a scope's, or both. For generated code, such as a
-// GraphQL filter that treats a key whose row Read hides as null. It is false
-// when E's metadata failed to build; the entity's first statement reports why.
-func (m *Meta[E]) HasReadPolicy[_ Lazy[E]]() bool {
+// HasRowFilter reports whether entity E's rows are filtered for reads: by an
+// interceptor, or by a Read policy the schema declares or a scope adds. For
+// generated code, such as a GraphQL filter that treats a key whose row is
+// hidden as null. It is false when E's metadata failed to build; the
+// entity's first statement reports why.
+func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool {
 	if m == nil || m.info == nil {
 		return false
 	}
-	p := engine.InfoPolicy(m.info)
-	return p != nil && p.Read != nil
+	return engine.HasRowFilter(m.info)
 }
 
 // kitOf builds entity E's kit from its scan plan.

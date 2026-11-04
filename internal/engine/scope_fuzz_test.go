@@ -67,12 +67,26 @@ func (g *scopeGen) preds(depth int) []velox.Pred[testmodel.Ticket] {
 	return ps
 }
 
+// filteredTicket is a copy of Ticket's metadata with an interceptor, whose
+// condition holds an EXISTS: Title <> "gone" and Has(Invoice).
+var filteredTicket = func() *velox.EntityInfo {
+	cp := *infoOf[testmodel.Ticket]()
+	engine.SetInfoFilters(&cp, []engine.FilterFn{func(context.Context) (velox.Predicate, error) {
+		return velox.Predicate(velox.And(Tk.Title.NEQ("gone"), Tk.Invoice.Has())), nil
+	}})
+	return &cp
+}
+
 // scopeCase is a Ticket statement built from fuzz input, and the Rewrite
-// hooks that edit it before the scope.
+// hooks that edit it before the scope. The second byte's top bit gives the
+// statement filteredTicket's metadata.
 func scopeCase(ops []byte, s string) (*velox.Statement, []velox.Option) {
 	g := &scopeGen{b: ops, s: s}
 	head := g.next()
 	st := &velox.Statement{Entity: infoOf[testmodel.Ticket](), Op: velox.OpSelect, Limit: 10}
+	if len(ops) > 1 && ops[1]&0x80 != 0 {
+		st.Entity = filteredTicket()
+	}
 	switch head % 4 {
 	case 1:
 		st.Count, st.Limit = true, 0
@@ -125,14 +139,18 @@ func scopeCase(ops []byte, s string) (*velox.Statement, []velox.Option) {
 // a Ticket statement as ann under org n gets the org condition and the
 // owner condition as conditions of its own, every EXISTS on Ticket gets both
 // among its conditions, at every depth, and every EXISTS on Invoice its
-// org condition; and the caller's conditions are left as they were.
+// org condition; and the caller's conditions are left as they were. With an
+// interceptor, the statement's own conditions also hold its condition, before
+// the policy's, and its EXISTS on Invoice gets the org condition too.
 func FuzzScope(f *testing.F) {
 	f.Add(int64(7), []byte{}, "")
-	f.Add(int64(7), []byte{0, 3, 2, 3, 0}, "a")                  // select: Has(Parent), Has(Invoice), Title
-	f.Add(int64(-1), []byte{1, 1, 7, 2, 7, 1, 2, 3}, "b")        // count: HasWhere(Parent, HasWhere(Parent, Has(Parent)), Has(Invoice))
-	f.Add(int64(3), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "") // update: And(Not(HasWhere(Parent, Has(Parent))), Or(Has(Invoice))), Title
-	f.Add(int64(0), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "") // the same under the zero org, which is refused
-	f.Add(int64(9), []byte{3 | 15<<2, 2, 7, 1, 7, 1, 2, 1}, "c") // delete with every hook: three EXISTS deep
+	f.Add(int64(7), []byte{0, 3, 2, 3, 0}, "a")                    // select: Has(Parent), Has(Invoice), Title
+	f.Add(int64(-1), []byte{1, 1, 7, 2, 7, 1, 2, 3}, "b")          // count: HasWhere(Parent, HasWhere(Parent, Has(Parent)), Has(Invoice))
+	f.Add(int64(3), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "")   // update: And(Not(HasWhere(Parent, Has(Parent))), Or(Has(Invoice))), Title
+	f.Add(int64(0), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "")   // the same under the zero org, which is refused
+	f.Add(int64(9), []byte{3 | 15<<2, 2, 7, 1, 7, 1, 2, 1}, "c")   // delete with every hook: three EXISTS deep
+	f.Add(int64(7), []byte{0, 0x80 | 3, 2, 3, 0}, "a")             // select with an interceptor: Has(Parent), Has(Invoice), Title
+	f.Add(int64(9), []byte{2 | 15<<2, 0x82, 7, 1, 7, 1, 2, 1}, "") // update with an interceptor and every hook
 	f.Fuzz(func(t *testing.T, n int64, ops []byte, s string) {
 		if len(ops) > 64 {
 			ops = ops[:64]
@@ -154,15 +172,22 @@ func FuzzScope(f *testing.F) {
 			t.Fatalf("%v", err)
 		}
 
-		ticket, invoice := st.Entity, infoOf[testmodel.Invoice]()
+		ticket, invoice := infoOf[testmodel.Ticket](), infoOf[testmodel.Invoice]()
 		owner := velox.Predicate(Tk.Owner.EQ("ann"))
 		ticketOrg := velox.ColumnEQ(int(Tk.OrgID.I), n)
 		invoiceOrg := velox.ColumnEQ(int(testmodel.Invoices.OrgID.I), n)
-		has := func(ps []velox.Predicate, p velox.Predicate) bool {
-			return slices.ContainsFunc(ps, func(q velox.Predicate) bool { return reflect.DeepEqual(q, p) })
+		index := func(ps []velox.Predicate, p velox.Predicate) int {
+			return slices.IndexFunc(ps, func(q velox.Predicate) bool { return reflect.DeepEqual(q, p) })
 		}
+		has := func(ps []velox.Predicate, p velox.Predicate) bool { return index(ps, p) >= 0 }
 		if !has(st.Where, ticketOrg) || !has(st.Where, owner) {
 			t.Fatalf("the statement's own conditions lack the org or the owner condition: %#v", st.Where)
+		}
+		if len(engine.InfoFilters(st.Entity)) > 0 {
+			gone := velox.Predicate(Tk.Title.NEQ("gone"))
+			if i := index(st.Where, gone); i < 0 || i > index(st.Where, ticketOrg) {
+				t.Fatalf("the statement's own conditions lack the interceptor's, or hold it after the policy's: %#v", st.Where)
+			}
 		}
 		var walk func(p velox.Predicate, depth int)
 		walk = func(p velox.Predicate, depth int) {

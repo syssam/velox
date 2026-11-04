@@ -105,7 +105,7 @@ func (*ePost) Policy() velox.Policy[ePost] {
 
 func ePostDescriptor() velox.Descriptor[ePost] {
 	return velox.Descriptor[ePost]{
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*ePost)(nil).Policy()) },
+		Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*ePost)(nil).Policy()) }},
 		Table:  "e_posts",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "OrgID", Name: "org_id"},
 			{Field: "Title", Name: "title"}, {Field: "Secret", Name: "secret"}},

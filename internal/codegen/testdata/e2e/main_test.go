@@ -357,6 +357,47 @@ func TestPolicy(t *testing.T) {
 	}
 }
 
+// The schema's Interceptors method, bound by velox-gen, hides the archived
+// post from reads, relations and writes; WithoutPolicy does not lift it,
+// and its own context does.
+func TestInterceptors(t *testing.T) {
+	db := open(t)
+	ada, _, _, _, _ := seed(t, db)
+	mustInsert(t, db, &gen.Post{AuthorID: ada.ID, Title: "archived", Status: gen.PostStatusPublished})
+	count := func(ctx context.Context) int64 {
+		t.Helper()
+		n, err := db.Query[gen.Post]().Count(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := count(ctx); n != 3 {
+		t.Errorf("Count: %d, want 3", n)
+	}
+	if n := count(velox.WithoutPolicy(ctx, "test")); n != 3 {
+		t.Errorf("Count under WithoutPolicy: %d, want 3", n)
+	}
+	if n := count(schema.WithArchived(ctx)); n != 4 {
+		t.Errorf("Count with archived: %d, want 4", n)
+	}
+	u, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(ada.ID)).With(gen.Users.Posts.OrderBy(gen.Posts.ID.Asc())).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps, _ := u.Posts.Get()
+	wantStrings(t, "ada's posts", titles(ps), []string{"a1", "a2"})
+	if n, err := db.Update[gen.Post]().Set(gen.Posts.Views.Set(9)).All().Exec(ctx); err != nil || n != 3 {
+		t.Errorf("Update all: %d, %v; want 3", n, err)
+	}
+	if n, err := db.Delete[gen.Post]().Where(gen.Posts.Title.EQ("archived")).Exec(ctx); err != nil || n != 0 {
+		t.Errorf("Delete the archived post: %d, %v; want 0", n, err)
+	}
+	if n, err := db.Delete[gen.Post]().Where(gen.Posts.Title.EQ("archived")).Exec(schema.WithArchived(ctx)); err != nil || n != 1 {
+		t.Errorf("Delete the archived post with archived: %d, %v; want 1", n, err)
+	}
+}
+
 func TestStringAndJSON(t *testing.T) {
 	db := open(t)
 	seed(t, db)

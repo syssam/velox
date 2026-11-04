@@ -42,8 +42,8 @@ func (*note) Hooks() []velox.Hook[note] { return []velox.Hook[note]{noteScope.Fi
 
 func noteDescriptor() velox.Descriptor[note] {
 	return velox.Descriptor[note]{
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*note)(nil).Policy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*note)(nil).Hooks()) },
+		Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*note)(nil).Policy()) }},
+		Hooks:  []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*note)(nil).Hooks()) }},
 		Table:  "notes",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Title", Name: "title"},
@@ -101,8 +101,8 @@ func (*wrapped) Hooks() []velox.Hook[wrapped] { return []velox.Hook[wrapped]{wra
 
 func wrappedDescriptor() velox.Descriptor[wrapped] {
 	return velox.Descriptor[wrapped]{
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*wrapped)(nil).Policy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*wrapped)(nil).Hooks()) },
+		Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*wrapped)(nil).Policy()) }},
+		Hooks:  []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*wrapped)(nil).Hooks()) }},
 		Table:  "notes",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Title", Name: "title"},

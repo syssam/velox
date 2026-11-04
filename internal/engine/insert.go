@@ -370,13 +370,13 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 }
 
 // ConditionedUpsert predicts, before the scope runs, whether it will give
-// the update branch of an InsertAll of n rows of entity in the policy's Read
-// or Write conditions. A row those conditions hide fails the upsert once the
+// the update branch of an InsertAll of n rows of entity in the conditions of
+// its interceptors or of its policy's Read or Write. A row those conditions hide fails the upsert once the
 // statement has written the others, so such an InsertAll of several rows runs
 // in a transaction, which the failure rolls back. The scope conditions an
 // upsert that updates, on any dialect but MySQL (which refuses it), of an
 // entity with a Read or Write policy, unless WithoutPolicy.
 func ConditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int) bool {
 	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.D != MySQL &&
-		InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && PolicyBypassReason(ctx) == ""
+		(len(in.filters) > 0 || InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && PolicyBypassReason(ctx) == "")
 }

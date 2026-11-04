@@ -77,8 +77,8 @@ func (*tag) Hooks() []velox.Hook[tag] { return []velox.Hook[tag]{tagScope.Fill()
 
 func tagDescriptor() velox.Descriptor[tag] {
 	return velox.Descriptor[tag]{
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*tag)(nil).Policy()) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*tag)(nil).Hooks()) },
+		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*tag)(nil).Policy()) }},
+		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*tag)(nil).Hooks()) }},
 		Table:      "tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},

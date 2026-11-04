@@ -466,6 +466,9 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 	if e.Bound.Hooks {
 		w.p("Hooks: rt.%sHooks,", e.Name)
 	}
+	if e.Bound.Interceptors {
+		w.p("Interceptors: rt.%sInterceptors,", e.Name)
+	}
 	w.p("FieldPtr: func(x *%s, i int) any {", e.Name)
 	w.p("switch i {")
 	for i, f := range e.Fields {

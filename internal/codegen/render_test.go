@@ -22,7 +22,9 @@ var goldenCases = []struct {
 	cfg  Config
 }{
 	{"minimal", Config{Package: "gen"}},
-	{"blog", Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/blog/gen", Bound: map[string]Bound{"Post": {Policy: true}}}},
+	{"blog", Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/blog/gen", Bound: map[string]Bound{
+		"Post": {Policy: true, Interceptors: true}, "Category": {Interceptors: true, InterceptorsPtr: true},
+	}}},
 	{"scoped", Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/scoped/gen", Bound: map[string]Bound{
 		"Task": {Policy: true, Hooks: true}, "Memo": {Policy: true}, "Tag": {Hooks: true},
 	}}},

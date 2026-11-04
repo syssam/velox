@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/syssam/velox/internal/conn"
 )
@@ -486,6 +487,9 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		// The scope reads the policy from the statement's Entity: a copy without
 		// it would unscope the statement.
 		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with a copy whose policy differs", entity.Name)
+	case len(st.Entity.filters) != len(entity.filters) || unsafe.SliceData(st.Entity.filters) != unsafe.SliceData(entity.filters):
+		// The scope reads the interceptors from the statement's Entity too.
+		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with a copy whose interceptors differ", entity.Name)
 	}
 	if len(db.Cfg.Rewrites) > 0 {
 		if err := CheckColumns(st); err != nil {

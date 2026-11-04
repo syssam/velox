@@ -46,7 +46,7 @@ func (*hnote) VeloxMeta() *velox.Meta[hnote] { return hnoteMeta.Load(hnoteDescri
 
 func hnoteDescriptor() velox.Descriptor[hnote] {
 	return velox.Descriptor[hnote]{
-		Hooks: func() velox.BoundHooks { return velox.BindHooks((*hnote)(nil).Hooks()) },
+		Hooks: []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*hnote)(nil).Hooks()) }},
 		Table: "hnotes",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
@@ -105,8 +105,8 @@ func (*moveOrg) VeloxMeta() *velox.Meta[moveOrg] { return moveOrgMeta.Load(moveO
 
 func moveOrgDescriptor() velox.Descriptor[moveOrg] {
 	return velox.Descriptor[moveOrg]{
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*moveOrg)(nil).Policy()) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*moveOrg)(nil).Hooks()) },
+		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*moveOrg)(nil).Policy()) }},
+		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*moveOrg)(nil).Hooks()) }},
 		Table:      "move_org",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}},
 		PrimaryKey: []int{0},
@@ -362,8 +362,8 @@ func (*hooked) VeloxMeta() *velox.Meta[hooked] { return hookedMeta.Load(hookedDe
 
 func hookedDescriptor() velox.Descriptor[hooked] {
 	return velox.Descriptor[hooked]{
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*hooked)(nil).Policy()) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*hooked)(nil).Hooks()) },
+		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*hooked)(nil).Policy()) }},
+		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*hooked)(nil).Hooks()) }},
 		Table:      "hooked",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},

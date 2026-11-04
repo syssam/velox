@@ -42,8 +42,8 @@ var ErrEmptyName = errors.New("must not be empty")
 
 func DAuthorDescriptor() velox.Descriptor[DAuthor] {
 	return velox.Descriptor[DAuthor]{
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*DAuthor)(nil).Policy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*DAuthor)(nil).Hooks()) },
+		Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*DAuthor)(nil).Policy()) }},
+		Hooks:  []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*DAuthor)(nil).Hooks()) }},
 		Table:  "authors",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
@@ -125,7 +125,7 @@ func (*DBook) VeloxMeta() *velox.Meta[DBook] { return DBookMeta.Load(DBookDescri
 
 func DBookDescriptor() velox.Descriptor[DBook] {
 	return velox.Descriptor[DBook]{
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*DBook)(nil).Hooks()) },
+		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*DBook)(nil).Hooks()) }},
 		Table:      "books",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
@@ -180,8 +180,8 @@ func (*DTag) VeloxMeta() *velox.Meta[DTag] { return DTagMeta.Load(DTagDescriptor
 
 func DTagDescriptor() velox.Descriptor[DTag] {
 	return velox.Descriptor[DTag]{
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*DTag)(nil).Policy()) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*DTag)(nil).Hooks()) },
+		Policy:     []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*DTag)(nil).Policy()) }},
+		Hooks:      []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*DTag)(nil).Hooks()) }},
 		Table:      "tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},

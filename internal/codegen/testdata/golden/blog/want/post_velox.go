@@ -100,7 +100,8 @@ func postDescriptor() velox.Descriptor[Post] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[User]("Author", postColAuthorID, userColID),
 		},
-		Policy: rt.PostPolicy,
+		Policy:       rt.PostPolicy,
+		Interceptors: rt.PostInterceptors,
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postColID:

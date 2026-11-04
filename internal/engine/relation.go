@@ -153,10 +153,14 @@ func (r *relation) buildThrough(owner *EntityInfo, l Link, fail func(string, ...
 	}
 	// Has reads the join rows inside its EXISTS, bound to the owner and the target,
 	// which are scoped, while a query of their own would need a condition: the two
-	// could disagree. So a join entity cannot have a Read policy. Its Insert
-	// and Write policies apply only to writes of its rows, which they may check.
+	// could disagree. So a join entity cannot have a Read policy or an
+	// interceptor. Its Insert and Write policies apply only to writes of its
+	// rows, which they may check.
 	if p := j.policy; p != nil && p.Read != nil {
 		return fail("its join entity %s has a Read policy; a join entity is read through its two sides, whose Read policies apply, and cannot have one of its own", j.Name)
+	}
+	if len(j.filters) > 0 {
+		return fail("its join entity %s has interceptors; a join entity is read through its two sides, whose interceptors apply, and cannot have its own", j.Name)
 	}
 	for _, c := range [...]int{r.through.OwnerCol, r.through.TargetCol} {
 		if c < 0 || c >= len(j.Columns) {

@@ -159,7 +159,8 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 		vt = vt.Elem()
 	}
 	// The method set of a value type leaves out pointer-receiver methods.
-	// velox-gen binds a Hooks or Policy method the schema declares itself,
+	// velox-gen binds a Hooks, Policy or Interceptors method the schema
+	// declares itself,
 	// from the package's source, and the loader leaves such a method out of
 	// what it compiles: one seen here is promoted from an embedded type, or
 	// the schema was loaded without velox-gen.
@@ -167,20 +168,23 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 		if _, ok := reflect.PointerTo(vt).MethodByName(h); !ok {
 			continue
 		}
-		if h == "Interceptors" {
-			l.fail(methodPos(vt, h), "", "has an Interceptors method; velox has no interceptors: a Hooks method declared on the schema wraps its writes")
-			continue
-		}
-		result := "velox.Policy[entity." + vt.Name() + "]"
-		if h == "Hooks" {
-			result = "[]velox.Hook[entity." + vt.Name() + "]"
+		result := "velox.Policy[gen." + vt.Name() + "]"
+		switch h {
+		case "Hooks":
+			result = "[]velox.Hook[gen." + vt.Name() + "]"
+		case "Interceptors":
+			result = "[]velox.Interceptor[gen." + vt.Name() + "]"
 		}
 		want := fmt.Sprintf("func (%s) %s() %s", vt.Name(), h, result)
+		article := "a"
+		if h == "Interceptors" {
+			article = "an"
+		}
 		if from, pos := promotedFrom(vt, h); from != nil {
-			l.fail(pos, "", "has a %s method promoted from %s, which velox-gen does not bind: declare %[1]s on the schema itself, in the schema package: %[3]s", h, from, want)
+			l.fail(pos, "", "has %s %s method promoted from %s, which velox-gen does not bind: declare %[2]s on the schema itself, in the schema package: %[4]s", article, h, from, want)
 			continue
 		}
-		l.fail(methodPos(vt, h), "", "has a %s method, which velox-gen binds from the schema package's source, as %s; the schema was loaded without velox-gen", h, want)
+		l.fail(methodPos(vt, h), "", "has %s %s method, which velox-gen binds from the schema package's source, as %s; the schema was loaded without velox-gen", article, h, want)
 	}
 	l.mixinPos = methodPos(vt, "Mixin")
 	out := &loadjson.Schema{Name: l.name}

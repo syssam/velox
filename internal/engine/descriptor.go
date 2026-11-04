@@ -22,6 +22,8 @@ type DescriptorFields struct {
 	Check      func(col int, v any) error
 	Policy     bool // Descriptor.Policy is set
 	Hooks      bool // Descriptor.Hooks is set
+	// Interceptors says Descriptor.Interceptors is set.
+	Interceptors bool
 }
 
 // DescriptorView is a Descriptor with E erased: its fields, and its FieldPtr and EdgeFieldPtr
@@ -246,8 +248,8 @@ func holdsInterface(t reflect.Type) bool {
 	return false
 }
 
-// unboundMethods refuses an entity whose pointer type has a Policy or Hooks
-// method that the Descriptor does not bind: velox would never call it. The names
+// unboundMethods refuses an entity whose pointer type has a Policy, Hooks or
+// Interceptors method that the Descriptor does not bind: velox would never call it. The names
 // are constants, so that the linker can still drop the methods nobody calls.
 // name is the entity's Go type.
 func unboundMethods(t reflect.Type, name string, d *DescriptorFields) error {
@@ -257,6 +259,9 @@ func unboundMethods(t reflect.Type, name string, d *DescriptorFields) error {
 	}
 	if _, ok := pt.MethodByName("Hooks"); ok && !d.Hooks {
 		return &SchemaError{Entity: name, Reason: "has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
+	}
+	if _, ok := pt.MethodByName("Interceptors"); ok && !d.Interceptors {
+		return &SchemaError{Entity: name, Reason: "has an Interceptors method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
 	}
 	return nil
 }

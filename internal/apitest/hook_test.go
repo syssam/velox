@@ -143,7 +143,7 @@ func (*hFlex) VeloxMeta() *velox.Meta[hFlex] { return hFlexMeta.Load(hFlexDescri
 
 func hFlexDescriptor() velox.Descriptor[hFlex] {
 	return velox.Descriptor[hFlex]{
-		Hooks: func() velox.BoundHooks { return velox.BindHooks((*hFlex)(nil).Hooks()) },
+		Hooks: []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*hFlex)(nil).Hooks()) }},
 		Table: "flex",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"},
 			{Field: "Stamp", Name: "stamp", UpdateDefault: func() any { return int64(9) }}},
@@ -219,7 +219,7 @@ var hNilMeta velox.MetaOnce[hNil]
 
 func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 	return hNilMeta.Load(func() velox.Descriptor[hNil] {
-		return velox.Descriptor[hNil]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNil)(nil).Hooks()) }, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNil]{Hooks: []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*hNil)(nil).Hooks()) }}, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNil, i int) any { return &x.ID }}
 	})
 }
@@ -234,7 +234,7 @@ var hNilAfterMeta velox.MetaOnce[hNilAfter]
 
 func (*hNilAfter) VeloxMeta() *velox.Meta[hNilAfter] {
 	return hNilAfterMeta.Load(func() velox.Descriptor[hNilAfter] {
-		return velox.Descriptor[hNilAfter]{Scope: nilAfterScope{}, Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNilAfter)(nil).Hooks()) }, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNilAfter]{Scope: nilAfterScope{}, Hooks: []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*hNilAfter)(nil).Hooks()) }}, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNilAfter, i int) any { return &x.ID }}
 	})
 }
@@ -260,7 +260,7 @@ var hPanicMeta velox.MetaOnce[hPanic]
 
 func (*hPanic) VeloxMeta() *velox.Meta[hPanic] {
 	return hPanicMeta.Load(func() velox.Descriptor[hPanic] {
-		return velox.Descriptor[hPanic]{Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hPanic)(nil).Policy()) }, Table: "p", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hPanic]{Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*hPanic)(nil).Policy()) }}, Table: "p", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hPanic, i int) any { return &x.ID }}
 	})
 }
@@ -467,7 +467,7 @@ var hNilMutMeta velox.MetaOnce[hNilMut]
 
 func (*hNilMut) VeloxMeta() *velox.Meta[hNilMut] {
 	return hNilMutMeta.Load(func() velox.Descriptor[hNilMut] {
-		return velox.Descriptor[hNilMut]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNilMut)(nil).Hooks()) }, Table: "m", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNilMut]{Hooks: []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*hNilMut)(nil).Hooks()) }}, Table: "m", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNilMut, i int) any { return &x.ID }}
 	})
 }
@@ -484,7 +484,7 @@ var hPanicHooksMeta velox.MetaOnce[hPanicHooks]
 
 func (*hPanicHooks) VeloxMeta() *velox.Meta[hPanicHooks] {
 	return hPanicHooksMeta.Load(func() velox.Descriptor[hPanicHooks] {
-		return velox.Descriptor[hPanicHooks]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hPanicHooks)(nil).Hooks()) }, Table: "ph", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hPanicHooks]{Hooks: []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*hPanicHooks)(nil).Hooks()) }}, Table: "ph", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hPanicHooks, i int) any { return &x.ID }}
 	})
 }
@@ -612,7 +612,7 @@ var hUpMeta velox.MetaOnce[hUp]
 func (*hUp) VeloxMeta() *velox.Meta[hUp] {
 	return hUpMeta.Load(func() velox.Descriptor[hUp] {
 		return velox.Descriptor[hUp]{
-			Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hUp)(nil).Policy()) }, Hooks: func() velox.BoundHooks { return velox.BindHooks((*hUp)(nil).Hooks()) },
+			Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*hUp)(nil).Policy()) }}, Hooks: []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*hUp)(nil).Hooks()) }},
 			Table: "ups", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "N", Name: "n"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hUp, i int) any { return [...]any{&x.ID, &x.N}[i] },
 		}
@@ -695,7 +695,7 @@ var hCondMeta velox.MetaOnce[hCond]
 func (*hCond) VeloxMeta() *velox.Meta[hCond] {
 	return hCondMeta.Load(func() velox.Descriptor[hCond] {
 		return velox.Descriptor[hCond]{
-			Hooks: func() velox.BoundHooks { return velox.BindHooks((*hCond)(nil).Hooks()) },
+			Hooks: []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*hCond)(nil).Hooks()) }},
 			Table: "conds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Stamp", Name: "stamp"}},
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *hCond, i int) any { return [...]any{&x.ID, &x.Stamp}[i] },
@@ -798,8 +798,8 @@ var hSoftMeta velox.MetaOnce[hSoft]
 func (*hSoft) VeloxMeta() *velox.Meta[hSoft] {
 	return hSoftMeta.Load(func() velox.Descriptor[hSoft] {
 		return velox.Descriptor[hSoft]{
-			Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hSoft)(nil).Policy()) },
-			Hooks:  func() velox.BoundHooks { return velox.BindHooks((*hSoft)(nil).Hooks()) },
+			Policy: []func() velox.BoundPolicy{func() velox.BoundPolicy { return velox.BindPolicy((*hSoft)(nil).Policy()) }},
+			Hooks:  []func() velox.BoundHooks{func() velox.BoundHooks { return velox.BindHooks((*hSoft)(nil).Hooks()) }},
 			Table:  "softs",
 			Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"},
 				{Field: "Deleted", Name: "deleted"}},
