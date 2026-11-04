@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -34,15 +36,54 @@ type DescriptorView struct {
 // BuildDescriptor builds the metadata of the entity x, a new *E at base, from the
 // Descriptor that load returns with E erased. A panic in load, or in the Descriptor's
 // functions, is recovered as a *SchemaError, so that it is the entity's error
-// on every use rather than a crash on the first.
-func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (info *EntityInfo, err error) {
+// on every use rather than a crash on the first. retry is true when the
+// panic is a NotLinkedError: the caller does not keep the error, and builds the
+// metadata again on the next use.
+func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (info *EntityInfo, retry bool, err error) {
 	t := reflect.TypeOf(x).Elem()
-	name := t.String()
 	defer func() {
 		if p := recover(); p != nil {
-			info, err = nil, &SchemaError{Entity: name, Reason: fmt.Sprintf("the generated metadata panicked: %v", p)}
+			_, retry = p.(NotLinkedError)
+			info, err = nil, &SchemaError{Entity: t.String(), Reason: fmt.Sprintf("the generated metadata panicked: %v", p)}
 		}
 	}()
+	info, err = buildDescriptor(t, base, load)
+	return info, false, err
+}
+
+// NotLinkedError is what generated code panics with when an entity is used
+// before the package that binds its schema has run its init. The entity's
+// build fails then, and is tried again on its next use.
+type NotLinkedError string
+
+// Error returns the message.
+func (e NotLinkedError) Error() string { return string(e) }
+
+// Once runs a build until one is kept, as sync.Once runs a function once.
+// Its zero value is ready.
+type Once struct {
+	done atomic.Bool
+	mu   sync.Mutex
+}
+
+// Do calls f unless an earlier f returned true, which keeps its result.
+// Calls of Do wait for each other.
+func (o *Once) Do(f func() bool) {
+	if !o.done.Load() {
+		o.doSlow(f)
+	}
+}
+
+func (o *Once) doSlow(f func() bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !o.done.Load() && f() {
+		o.done.Store(true)
+	}
+}
+
+func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() DescriptorView) (*EntityInfo, error) {
+	name := t.String()
 	v := load()
 	d := v.D
 	if d.Name != "" {
@@ -149,7 +190,7 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 		}
 		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
-	info = &EntityInfo{Name: name, Table: d.Table, Schema: d.Schema, Columns: cols, PrimaryKey: d.PrimaryKey,
+	info := &EntityInfo{Name: name, Table: d.Table, Schema: d.Schema, Columns: cols, PrimaryKey: d.PrimaryKey,
 		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
 	if err := validate(info); err != nil {
 		return nil, err

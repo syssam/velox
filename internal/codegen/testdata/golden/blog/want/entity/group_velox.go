@@ -48,12 +48,7 @@ var Groups = struct {
 var groupMeta velox.MetaOnce[Group]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Group) VeloxMeta() *velox.Meta[Group] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Group]).Load(groupDescriptor)
-	}
-	return groupMeta.Load(groupDescriptor)
-}
+func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDescriptor) }
 
 // groupDescriptor describes Group to velox: its table, columns, edges and hooks.
 func groupDescriptor() velox.Descriptor[Group] {

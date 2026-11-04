@@ -41,12 +41,7 @@ var Events = struct {
 var eventMeta velox.MetaOnce[Event]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Event) VeloxMeta() *velox.Meta[Event] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Event]).Load(eventDescriptor)
-	}
-	return eventMeta.Load(eventDescriptor)
-}
+func (*Event) VeloxMeta() *velox.Meta[Event] { return eventMeta.Load(eventDescriptor) }
 
 // eventDescriptor describes Event to velox: its table, columns, edges and hooks.
 func eventDescriptor() velox.Descriptor[Event] {

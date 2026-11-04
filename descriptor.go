@@ -87,11 +87,16 @@ type Descriptor[E any] struct {
 // Hooks is not generic, so that Load, compiled in every entity's package, holds
 // no reflect.Type and instantiates nothing for an entity that has no policy or
 // hook.
+//
+// A build that panics with a NotLinkedError is returned and not kept, so that an
+// entity used before its generated package's init works once the init has
+// run.
 func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] {
-	o.once.Do(func() {
+	var m *Meta[E]
+	o.once.Do(func() bool {
 		x := new(E)
 		var d Descriptor[E]
-		info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
+		info, retry, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
 			d = descriptor()
 			v := engine.DescriptorView{D: &engine.DescriptorFields{Name: d.Name, Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
 				Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
@@ -117,13 +122,21 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 		if err != nil {
 			info, addr = nil, nil // an error Meta has no scan plan
 		}
-		o.m = &Meta[E]{info: info, addr: addr, err: err}
+		m = &Meta[E]{info: info, addr: addr, err: err}
+		if retry {
+			return false
+		}
 		if info != nil {
-			o.m.nilCols = nilColumns(info)
+			m.nilCols = nilColumns(info)
 			engine.SetInfoKit(info, kitOf(info, addr))
 			engine.SetInfoCheck(info, d.Check)
 		}
+		o.m = m
+		return true
 	})
+	if m != nil {
+		return m
+	}
 	return o.m
 }
 

@@ -22,7 +22,7 @@ func runtimeValue(e *OutEntity) bool {
 // SetVeloxRuntime, which gen calls with it; and veloxRuntime, which every
 // Descriptor function calls first.
 func renderRuntimeHolder(o *Out) string {
-	imports := map[string]string{}
+	imports := map[string]string{"velox": veloxPkg}
 	for _, e := range o.Entities {
 		for _, b := range e.Binds {
 			maps.Copy(imports, b.Imports)
@@ -33,9 +33,7 @@ func renderRuntimeHolder(o *Out) string {
 	w.WriteString(header)
 	w.p("package %s", o.Package)
 	w.p("")
-	if len(imports) > 0 {
-		writeImports(&w, imports)
-	}
+	writeImports(&w, imports)
 	w.p("// VeloxRuntime is what package %s gives package %s when the program", o.Facade, o.Package)
 	w.p("// starts: the schema's Hooks and Policy methods, and the defaults and")
 	w.p("// validators that %s cannot call by name. The schema package imports", o.Package)
@@ -62,10 +60,11 @@ func renderRuntimeHolder(o *Out) string {
 	w.p("")
 	w.p("// veloxRuntime returns what package %s set. It panics when the program", o.Facade)
 	w.p("// does not link package %s: the entities would run without the", o.Facade)
-	w.p("// schema's hooks, policies and defaults.")
+	w.p("// schema's hooks, policies and defaults. velox does not keep the")
+	w.p("// failure: an entity used before %s's init works once it has run.", o.Facade)
 	w.p("func veloxRuntime() *VeloxRuntime {")
 	w.p("if veloxRT == nil {")
-	w.p("panic(%s)", strconv.Quote(o.Package+": the schema's hooks, policies and defaults are not linked: import "+
+	w.p("panic(velox.NotLinkedError(%s))", strconv.Quote(o.Package+": the schema's hooks, policies and defaults are not linked: import "+
 		genImport+", which re-exports "+strconv.Quote(o.GenPath+"/"+EntityDir)+" and links the schema, in the program or test"))
 	w.p("}")
 	w.p("return veloxRT")

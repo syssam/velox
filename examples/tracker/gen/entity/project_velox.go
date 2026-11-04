@@ -60,12 +60,7 @@ var Projects = struct {
 var projectMeta velox.MetaOnce[Project]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Project) VeloxMeta() *velox.Meta[Project] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Project]).Load(projectDescriptor)
-	}
-	return projectMeta.Load(projectDescriptor)
-}
+func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(projectDescriptor) }
 
 // projectDescriptor describes Project to velox: its table, columns, edges and hooks.
 func projectDescriptor() velox.Descriptor[Project] {

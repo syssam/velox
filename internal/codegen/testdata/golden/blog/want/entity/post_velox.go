@@ -76,12 +76,7 @@ var Posts = struct {
 var postMeta velox.MetaOnce[Post]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Post) VeloxMeta() *velox.Meta[Post] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Post]).Load(postDescriptor)
-	}
-	return postMeta.Load(postDescriptor)
-}
+func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor) }
 
 // postDescriptor describes Post to velox: its table, columns, edges and hooks.
 func postDescriptor() velox.Descriptor[Post] {

@@ -105,12 +105,7 @@ var Issues = struct {
 var issueMeta velox.MetaOnce[Issue]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Issue) VeloxMeta() *velox.Meta[Issue] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Issue]).Load(issueDescriptor)
-	}
-	return issueMeta.Load(issueDescriptor)
-}
+func (*Issue) VeloxMeta() *velox.Meta[Issue] { return issueMeta.Load(issueDescriptor) }
 
 // issueDescriptor describes Issue to velox: its table, columns, edges and hooks.
 func issueDescriptor() velox.Descriptor[Issue] {

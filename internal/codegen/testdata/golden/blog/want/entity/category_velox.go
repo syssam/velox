@@ -53,12 +53,7 @@ var Categories = struct {
 var categoryMeta velox.MetaOnce[Category]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Category) VeloxMeta() *velox.Meta[Category] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Category]).Load(categoryDescriptor)
-	}
-	return categoryMeta.Load(categoryDescriptor)
-}
+func (*Category) VeloxMeta() *velox.Meta[Category] { return categoryMeta.Load(categoryDescriptor) }
 
 // categoryDescriptor describes Category to velox: its table, columns, edges and hooks.
 func categoryDescriptor() velox.Descriptor[Category] {

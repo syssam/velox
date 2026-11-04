@@ -34,12 +34,7 @@ var Owners = struct {
 var ownerMeta velox.MetaOnce[Owner]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Owner) VeloxMeta() *velox.Meta[Owner] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Owner]).Load(ownerDescriptor)
-	}
-	return ownerMeta.Load(ownerDescriptor)
-}
+func (*Owner) VeloxMeta() *velox.Meta[Owner] { return ownerMeta.Load(ownerDescriptor) }
 
 // ownerDescriptor describes Owner to velox: its table, columns, edges and hooks.
 func ownerDescriptor() velox.Descriptor[Owner] {

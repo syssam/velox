@@ -29,10 +29,11 @@ func SetVeloxRuntime(r VeloxRuntime) {
 
 // veloxRuntime returns what package testmodel set. It panics when the program
 // does not link package testmodel: the entities would run without the
-// schema's hooks, policies and defaults.
+// schema's hooks, policies and defaults. velox does not keep the
+// failure: an entity used before testmodel's init works once it has run.
 func veloxRuntime() *VeloxRuntime {
 	if veloxRT == nil {
-		panic("entity: the schema's hooks, policies and defaults are not linked: import \"github.com/syssam/velox/internal/testmodel\", which re-exports \"github.com/syssam/velox/internal/testmodel/entity\" and links the schema, in the program or test")
+		panic(velox.NotLinkedError("entity: the schema's hooks, policies and defaults are not linked: import \"github.com/syssam/velox/internal/testmodel\", which re-exports \"github.com/syssam/velox/internal/testmodel/entity\" and links the schema, in the program or test"))
 	}
 	return veloxRT
 }

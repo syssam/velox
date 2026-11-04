@@ -46,8 +46,9 @@ and each new command. `gen/runtime` held a struct with three fields per entity
   links the schema, in the program or test". The failure is not kept: an
   entity touched before gen's `init` runs, from a package-level var or an
   `init` of the schema or a helper, which Go initializes first, fails then
-  and works once gen has bound the schema. VeloxMeta builds the failing
-  metadata anew on each use until then.
+  and works once gen has bound the schema. The panic is a `velox.NotLinked`,
+  and MetaOnce does not keep a build that panics with one (second Review,
+  point 1).
 - **The schema may not import gen.** velox-gen refuses a schema package that
   imports gen, at the import: "the schema package imports "…/gen", the
   generated package, which imports the schema package to bind its Hooks and
@@ -140,3 +141,14 @@ hand. The rulings, all applied (`GeneratedCodeIsVersion9`):
 5. Cost: gen of examples/tracker went from 1 345 lines to 1 309,
    internal/testmodel's from 1 006 to 967. The repocheck compile-cost
    tests measure the generic runtime, which does not change.
+
+2026-11-04, second: a review of the generated code. The rulings, all
+applied (`GeneratedCodeIsVersion10`):
+
+1. **The not-linked failure is the runtime's.** `veloxRuntime()` panics
+   with `velox.NotLinked`, a string type. `engine.BuildDescriptor` reports
+   such a panic, and `MetaOnce.Load` returns its error Meta without keeping
+   it, so the next use builds again (`TestMetaOnceRetriesNotLinked`). Any
+   other failure is kept, as before. VeloxMeta is the one line it is in
+   plain mode, `return projectMeta.Load(projectDescriptor)`. The closed e2e
+   and `TestEntityUsedBeforeGenInit` still pass.

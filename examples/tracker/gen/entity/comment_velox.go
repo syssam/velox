@@ -75,12 +75,7 @@ var Comments = struct {
 var commentMeta velox.MetaOnce[Comment]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Comment) VeloxMeta() *velox.Meta[Comment] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Comment]).Load(commentDescriptor)
-	}
-	return commentMeta.Load(commentDescriptor)
-}
+func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDescriptor) }
 
 // commentDescriptor describes Comment to velox: its table, columns, edges and hooks.
 func commentDescriptor() velox.Descriptor[Comment] {

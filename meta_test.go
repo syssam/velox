@@ -2,6 +2,7 @@ package velox
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -19,6 +20,40 @@ func TestMetaOnceBuildsOnce(t *testing.T) {
 	a, b := o.Load(desc), o.Load(desc)
 	if calls != 1 || a != b || a.err != nil || a.info.Table != "other" {
 		t.Fatalf("calls %d, same %v, meta %+v", calls, a == b, a)
+	}
+}
+
+// A build that panics with NotLinkedError, as generated code does before its
+// package's init binds the schema, is not kept: the next Load builds again,
+// and its Meta is kept. Any other failure is kept.
+func TestMetaOnceRetriesNotLinked(t *testing.T) {
+	var o MetaOnce[other]
+	linked, calls := false, 0
+	desc := func() Descriptor[other] {
+		calls++
+		if !linked {
+			panic(NotLinkedError("other: not linked: import the generated package"))
+		}
+		return Descriptor[other]{Table: "other", Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+			FieldPtr: func(x *other, i int) any { return &x.ID }}
+	}
+	for range 2 {
+		m := o.Load(desc)
+		if m.err == nil || !strings.Contains(m.err.Error(), "other: not linked: import the generated package") || m.info != nil {
+			t.Fatalf("before the link: %+v", m)
+		}
+	}
+	linked = true
+	a, b := o.Load(desc), o.Load(desc)
+	if calls != 3 || a != b || a.err != nil || a.info.Table != "other" {
+		t.Fatalf("calls %d, same %v, meta %+v", calls, a == b, a)
+	}
+
+	var bad MetaOnce[other]
+	n := 0
+	fail := func() Descriptor[other] { n++; panic("broken") }
+	if c, d := bad.Load(fail), bad.Load(fail); c != d || n != 1 {
+		t.Fatalf("a failure that is not NotLinkedError was built %d times", n)
 	}
 }
 

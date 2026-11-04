@@ -84,12 +84,7 @@ var Invoices = struct {
 var invoiceMeta velox.MetaOnce[Invoice]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Invoice) VeloxMeta() *velox.Meta[Invoice] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Invoice]).Load(invoiceDescriptor)
-	}
-	return invoiceMeta.Load(invoiceDescriptor)
-}
+func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoiceDescriptor) }
 
 // invoiceDescriptor describes Invoice to velox: its table, columns, edges and hooks.
 func invoiceDescriptor() velox.Descriptor[Invoice] {

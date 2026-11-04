@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"sync"
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
@@ -44,11 +43,18 @@ func nilColumns(info *EntityInfo) []bool {
 
 // MetaOnce builds an entity's Meta on first use. For generated code. Its zero
 // value is ready, so a generated file declares one without running anything at
-// program start.
+// program start. A build that fails with a NotLinkedError panic is not kept: the
+// next use builds the Meta again.
 type MetaOnce[E any] struct {
-	once sync.Once
+	once engine.Once
 	m    *Meta[E]
 }
+
+// NotLinkedError is what generated code panics with when an entity is used before
+// the package that binds its schema has run its init. For generated code. The
+// entity's Meta holds the error, and MetaOnce does not keep it: the entity
+// works once that init has run. Its Error returns the message.
+type NotLinkedError = engine.NotLinkedError
 
 // Entity is the constraint velox's generic API puts on an entity type E: its
 // pointer has the method velox-gen writes.

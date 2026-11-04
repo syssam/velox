@@ -110,12 +110,7 @@ var Samples = struct {
 var sampleMeta velox.MetaOnce[Sample]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Sample) VeloxMeta() *velox.Meta[Sample] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Sample]).Load(sampleDescriptor)
-	}
-	return sampleMeta.Load(sampleDescriptor)
-}
+func (*Sample) VeloxMeta() *velox.Meta[Sample] { return sampleMeta.Load(sampleDescriptor) }
 
 // sampleDescriptor describes Sample to velox: its table, columns, edges and hooks.
 func sampleDescriptor() velox.Descriptor[Sample] {

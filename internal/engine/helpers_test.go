@@ -317,7 +317,7 @@ func targetOf[T any]() engine.RelTarget { return relRef[T, T]().Target }
 // a use site would name. A relation with no target there is left unresolved.
 func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (*velox.EntityInfo, error) {
 	x := new(E)
-	info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
+	info, _, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
 		v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
 			Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
 			Policy: d.Policy != nil, Hooks: d.Hooks != nil}}

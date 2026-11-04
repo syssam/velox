@@ -33,6 +33,8 @@ JoinClause.Left bool
 JoinClause.Link Link
 JoinClause.On []Predicate
 JoinClause.Ref RelRef
+NotLinkedError is string
+NotLinkedError.Error() string
 PredOp is uint8
 Shard.Primary Conn
 Shard.Replicas []Conn
@@ -520,6 +522,7 @@ type Meta[E any] struct { }
 type MutateFunc[E any] func(ctx context.Context, m *Mutation[E]) error
 type Mutation[E any] struct { }
 type Mutator[E any] interface { Mutate(ctx context.Context, m *Mutation[E]) error }
+type NotLinkedError = engine.NotLinkedError
 type NullCol[E, V any] struct { I int32 }
 type NullJSONCol[E, V any] struct { I int32 }
 type NullNumberCol[E, V any] struct { I int32 }

@@ -49,12 +49,7 @@ var Tasks = struct {
 var taskMeta velox.MetaOnce[Task]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Task) VeloxMeta() *velox.Meta[Task] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Task]).Load(taskDescriptor)
-	}
-	return taskMeta.Load(taskDescriptor)
-}
+func (*Task) VeloxMeta() *velox.Meta[Task] { return taskMeta.Load(taskDescriptor) }
 
 // taskDescriptor describes Task to velox: its table, columns, edges and hooks.
 func taskDescriptor() velox.Descriptor[Task] {

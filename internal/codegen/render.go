@@ -277,19 +277,9 @@ func renderEntity(o *Out, e *OutEntity) string {
 	w.p("var %sMeta velox.MetaOnce[%s]", id, e.Name)
 	w.p("")
 	w.p("// VeloxMeta is called by velox, not by applications.")
-	if o.Split {
-		// Before gen binds the schema, from a package-level var or an init
-		// of the schema or a helper, the not-linked failure is built anew on
-		// each use and not kept: the entity works once gen has bound it.
-		w.p("func (*%s) VeloxMeta() *velox.Meta[%[1]s] {", e.Name)
-		w.p("if veloxRT == nil {")
-		w.p("return new(velox.MetaOnce[%s]).Load(%sDescriptor)", e.Name, id)
-		w.p("}")
-		w.p("return %sMeta.Load(%[1]sDescriptor)", id)
-		w.p("}")
-	} else {
-		w.p("func (*%s) VeloxMeta() *velox.Meta[%[1]s] { return %sMeta.Load(%[2]sDescriptor) }", e.Name, id)
-	}
+	// In split mode, before gen binds the schema, the descriptor panics with
+	// velox.NotLinked, which MetaOnce does not keep.
+	w.p("func (*%s) VeloxMeta() *velox.Meta[%[1]s] { return %sMeta.Load(%[2]sDescriptor) }", e.Name, id)
 	w.p("")
 	entityDescriptor(&w, o, e)
 	w.p("")

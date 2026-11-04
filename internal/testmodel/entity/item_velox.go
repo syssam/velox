@@ -53,12 +53,7 @@ var Items = struct {
 var itemMeta velox.MetaOnce[Item]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Item) VeloxMeta() *velox.Meta[Item] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Item]).Load(itemDescriptor)
-	}
-	return itemMeta.Load(itemDescriptor)
-}
+func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Load(itemDescriptor) }
 
 // itemDescriptor describes Item to velox: its table, columns, edges and hooks.
 func itemDescriptor() velox.Descriptor[Item] {

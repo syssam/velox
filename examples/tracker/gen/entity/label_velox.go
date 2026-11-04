@@ -49,12 +49,7 @@ var Labels = struct {
 var labelMeta velox.MetaOnce[Label]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Label) VeloxMeta() *velox.Meta[Label] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Label]).Load(labelDescriptor)
-	}
-	return labelMeta.Load(labelDescriptor)
-}
+func (*Label) VeloxMeta() *velox.Meta[Label] { return labelMeta.Load(labelDescriptor) }
 
 // labelDescriptor describes Label to velox: its table, columns, edges and hooks.
 func labelDescriptor() velox.Descriptor[Label] {

@@ -39,12 +39,7 @@ var Notes = struct {
 var noteMeta velox.MetaOnce[Note]
 
 // VeloxMeta is called by velox, not by applications.
-func (*Note) VeloxMeta() *velox.Meta[Note] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[Note]).Load(noteDescriptor)
-	}
-	return noteMeta.Load(noteDescriptor)
-}
+func (*Note) VeloxMeta() *velox.Meta[Note] { return noteMeta.Load(noteDescriptor) }
 
 // noteDescriptor describes Note to velox: its table, columns, edges and hooks.
 func noteDescriptor() velox.Descriptor[Note] {

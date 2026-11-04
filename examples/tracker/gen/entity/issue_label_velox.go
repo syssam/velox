@@ -35,9 +35,6 @@ var issueLabelMeta velox.MetaOnce[IssueLabel]
 
 // VeloxMeta is called by velox, not by applications.
 func (*IssueLabel) VeloxMeta() *velox.Meta[IssueLabel] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[IssueLabel]).Load(issueLabelDescriptor)
-	}
 	return issueLabelMeta.Load(issueLabelDescriptor)
 }
 

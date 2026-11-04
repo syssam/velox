@@ -34,12 +34,7 @@ var UserGroups = struct {
 var userGroupMeta velox.MetaOnce[UserGroup]
 
 // VeloxMeta is called by velox, not by applications.
-func (*UserGroup) VeloxMeta() *velox.Meta[UserGroup] {
-	if veloxRT == nil {
-		return new(velox.MetaOnce[UserGroup]).Load(userGroupDescriptor)
-	}
-	return userGroupMeta.Load(userGroupDescriptor)
-}
+func (*UserGroup) VeloxMeta() *velox.Meta[UserGroup] { return userGroupMeta.Load(userGroupDescriptor) }
 
 // userGroupDescriptor describes UserGroup to velox: its table, columns, edges and hooks.
 func userGroupDescriptor() velox.Descriptor[UserGroup] {
