@@ -7,7 +7,7 @@ together in a real service. The others show one topic each.
 |---|---|
 | Entities, relations, a many-to-many, a cascading foreign key | `schema/schema.go` |
 | Each organization sees only its own rows | `schema.Scoped("org")` on each `org_id`, which velox-gen turns into `scope.By` and binds as a Policy and a Hook of the entity; `authed` in `auth.go` names the Org once per request |
-| Who may change what, enforced in the statements themselves for projects, issues and comments | `schema/policy.go`, typed with `gen/entity` and bound by `gen`, and `principal/principal.go`; `User` has only the Org scope, as signing up inserts one before anyone is logged in, so `invite` checks the role itself |
+| Who may change what, enforced in the statements themselves for projects, issues and comments | `schema/policy.go`, typed with `gen` and bound by `gen/runtime`, which `main.go` imports for its effect, and `principal/principal.go`; `User` has only the Org scope, as signing up inserts one before anyone is logged in, so `invite` checks the role itself |
 | Logins: salted password hashes, tokens stored only as hashes | `auth.go` |
 | Transactions | `signup` in `auth.go`, `createIssue` in `server.go` |
 | A label upsert that is safe under concurrency, its names sorted so that transactions cannot deadlock | `setLabels` in `server.go` |

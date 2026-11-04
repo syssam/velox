@@ -10,6 +10,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/hooks/auth"
 	"github.com/syssam/velox/examples/hooks/gen"
+	_ "github.com/syssam/velox/examples/hooks/gen/runtime" // binds the schema's hooks and policies
 	"github.com/syssam/velox/migrate"
 )
 

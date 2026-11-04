@@ -21,8 +21,8 @@ go run ./tour
   The `OrgKey` key and the scope that confines every statement to one
   organization (the `scope` package) are generated, from the `Scoped` columns of
   the schema, into `scope_velox.go`. The schema's `Policy` and `Hooks` are typed
-  with `gen/entity`, and `gen`, which `main.go` imports, binds them around the
-  scope.
+  with `gen`, and `gen/runtime`, which `main.go` imports for its effect, binds
+  them around the scope.
 - `role/` holds the billing role a request acts with.
 - `migrations/` holds the tables, made by `go tool velox-gen migrate diff
   -dialect sqlite -dir ./tour/migrations ./tour/schema`; `main.go` applies it

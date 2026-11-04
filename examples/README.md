@@ -33,10 +33,12 @@ go run ./start
   methods. As in ent, a schema also declares its entity's `Policy()` and
   `Hooks()`, typed with the generated entity and handles
   (`velox.Policy[gen.Doc]`, `gen.Docs.Owner.EQ(u)`).
-- `gen/` is written entirely by velox-gen from the schema; never edit it. When
-  a schema declares `Policy()` or `Hooks()`, velox-gen writes the entities into
-  `gen/entity`, which the schema imports for the methods' types, and `gen`
-  re-exports them and binds the schema. `main.go` imports `gen` either way.
+- `gen/` is written entirely by velox-gen from the schema; never edit it. It
+  holds every entity. When a schema declares `Policy()` or `Hooks()`, it
+  imports `gen` for the methods' types, and velox-gen writes `gen/runtime`,
+  which binds the schema to `gen`, as ent's `ent/runtime` does. `main.go`
+  then imports it once, `import _ ".../gen/runtime"`; without it, a statement
+  on an entity fails and names that line.
   Context helpers the policies read (the request's user, role or
   principal) are small packages of their own, such as `policy/auth`.
 - Each example's tables come from its `migrations/` directory, made by

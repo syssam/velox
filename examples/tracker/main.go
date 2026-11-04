@@ -26,6 +26,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
+	_ "github.com/syssam/velox/examples/tracker/gen/runtime" // binds the schema's hooks and policies
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/veloxpgx"
 )

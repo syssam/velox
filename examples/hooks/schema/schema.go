@@ -1,6 +1,6 @@
 // Package schema declares the hooks example's entities: a Task, and the Audit
 // rows that its update hook writes. Task's hooks, in hooks.go, are typed with
-// the generated entity.Task and its handles, and gen binds them.
+// the generated gen.Task and its handles, and gen/runtime binds them.
 package schema
 
 import (

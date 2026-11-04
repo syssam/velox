@@ -11,18 +11,18 @@ go run ./policy
 
 `schema/schema.go` declares the entities' structure, and
 `schema/doc_policy.go` and `schema/comment_policy.go` their policies, as ent's
-schema does, typed with the generated entity and handles
-(`entity.Docs.Owner.EQ(u)`) of `gen/entity`. `gen` re-exports them and binds
-the policies, so `main.go` imports `gen` alone; a wrong signature is
+schema does, typed with the generated entity and handles of `gen`
+(`gen.Docs.Owner.EQ(u)`). `gen/runtime` binds the policies, and `main.go`
+imports it once, `import _ ".../policy/gen/runtime"`; a wrong signature is
 refused. The user
 a request acts as is in the small package `auth`:
 
 ```go
-func (Doc) Policy() velox.Policy[entity.Doc] {
-	return velox.Policy[entity.Doc]{
-		Read:   func(ctx context.Context) (velox.Pred[entity.Doc], error) { … }, // ANDed into every read
-		Write:  func(ctx context.Context) (velox.Pred[entity.Doc], error) { … }, // ANDed into every update and delete
-		Insert: func(ctx context.Context, x *entity.Doc) error { … },            // checks each new row
+func (Doc) Policy() velox.Policy[gen.Doc] {
+	return velox.Policy[gen.Doc]{
+		Read:   func(ctx context.Context) (velox.Pred[gen.Doc], error) { … }, // ANDed into every read
+		Write:  func(ctx context.Context) (velox.Pred[gen.Doc], error) { … }, // ANDed into every update and delete
+		Insert: func(ctx context.Context, x *gen.Doc) error { … },            // checks each new row
 	}
 }
 ```
