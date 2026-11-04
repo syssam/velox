@@ -22,6 +22,7 @@ func TestMigrateOrdinarySequence(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
+	t.Parallel() // each dialect's subtest takes a slot of its own (tempModule)
 	const post = `package schema
 
 import "github.com/syssam/velox/schema"
@@ -56,7 +57,7 @@ type Post struct{ schema.Schema }
 	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
 		t.Run(d.String(), func(t *testing.T) {
 			files := map[string]string{"schema/user.go": userSchema(name(50, "name"), ageNull), "schema/post.go": post}
-			dir := tempModuleSerial(t, files)
+			dir := tempModule(t, files)
 			dsn, driver := filepath.Join(dir, "app.db"), "sqlite"
 			switch d {
 			case velox.SQLite:

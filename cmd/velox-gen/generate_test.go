@@ -1013,6 +1013,7 @@ func TestOutputIgnoresPositions(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
+	parallel(t)
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

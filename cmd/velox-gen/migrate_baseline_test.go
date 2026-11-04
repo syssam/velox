@@ -28,7 +28,7 @@ func TestMigrateBaselineSQLite(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModuleSerial(t, map[string]string{"schema/user.go": userSchema(`field.String("name")`)})
+	dir := tempModule(t, map[string]string{"schema/user.go": userSchema(`field.String("name")`)})
 	dsn := filepath.Join(dir, "app.db")
 	if code, _, errs := runCLI(t, dir, "migrate", "diff", "-dialect", "sqlite", "-dir", "made"); code != 0 {
 		t.Fatalf("diff: %d %s", code, errs)
@@ -93,6 +93,7 @@ func TestMigrateBaselineEnt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
+	t.Parallel() // each dialect's subtest takes a slot of its own (tempModule)
 	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 		t.Run(d.String(), func(t *testing.T) { baselineEnt(t, d) })
 	}
@@ -111,7 +112,7 @@ func baselineEnt(t *testing.T, d velox.Dialect) {
 	for _, f := range []string{"user.go", "post.go", "audit_entry.go"} {
 		files["schema/"+f] = readFile(t, filepath.Join("testdata", "ent", "schema", f))
 	}
-	dir := tempModuleSerial(t, files)
+	dir := tempModule(t, files)
 	execFile(t, d, original, filepath.Join("testdata", "ent", d.String()+".sql"))
 	mig := filepath.Join(dir, "migrations")
 	golden := filepath.Join("testdata", "ent", "want", d.String())
