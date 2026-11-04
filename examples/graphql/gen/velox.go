@@ -5,7 +5,7 @@ package gen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion10
+const _ = velox.GeneratedCodeIsVersion11
 
 // PostStatus is an enum of the model.
 type PostStatus string

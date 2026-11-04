@@ -2,11 +2,9 @@
 # reads it and writes graph/.
 #
 # The GraphQL schema is velox-graphql's gen/velox.graphql plus the
-# application's own files in graph/ (app.graphql adds publishedPosts). A
-# schema with Hooks or Policy moves it to gen/entity/velox.graphql, which
-# gen/**/*.graphql reaches too.
+# application's own files in graph/ (app.graphql adds publishedPosts).
 schema:
-  - gen/**/*.graphql
+  - gen/*.graphql
   - graph/*.graphql
 
 exec:

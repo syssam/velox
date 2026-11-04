@@ -126,16 +126,16 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
 
-	"example.com/app/gen/entity"
+	"example.com/app/gen"
 )
 
 var Org = scope.NewKey[int64]("org")
 
-var userScope = scope.By(Org, entity.Users.OrgID.EQ, func(x *entity.User) *int64 { return &x.OrgID })
+var userScope = scope.By(Org, gen.Users.OrgID.EQ, func(x *gen.User) *int64 { return &x.OrgID })
 
-func (User) Policy() velox.Policy[entity.User] { return userScope.Policy() }
+func (User) Policy() velox.Policy[gen.User] { return userScope.Policy() }
 
-func (User) Hooks() []velox.Hook[entity.User] { return []velox.Hook[entity.User]{userScope.Fill()} }
+func (User) Hooks() []velox.Hook[gen.User] { return []velox.Hook[gen.User]{userScope.Fill()} }
 `
 
 // app writes a module with velox-gen and velox-graphql as tools, and the
@@ -478,6 +478,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
+	_ "example.com/app/gen/runtime"
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -874,6 +875,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
+	_ "example.com/app/gen/runtime"
 	"example.com/app/ids"
 	"example.com/app/levels"
 	"example.com/app/schema"
