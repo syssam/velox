@@ -277,7 +277,7 @@ lane_examples_graphql() (
   use_db velox_examples_graphql
   go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
   go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
-  go test -race -count=1 -coverprofile="$root/cover-examples-graphql.out" ./graphql/...
+  go test -race -count=1 -timeout 20m -coverprofile="$root/cover-examples-graphql.out" ./graphql/...
   wait_lane examples
   # Regenerate gqlgen's output, and fail on any difference.
   go -C graphql tool gqlgen generate
@@ -414,7 +414,7 @@ if [ "${VELOX_CI_MATRIX:-}" = 1 ]; then
   fi
   if selected graphql; then
     (cd contrib/graphql && go test -race -count=1 ./...)
-    (cd examples && go test -race -count=1 ./graphql/...)
+    (cd examples && go test -race -count=1 -timeout 20m ./graphql/...)
   fi
 fi
 

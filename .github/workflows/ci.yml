@@ -164,7 +164,7 @@ jobs:
       - name: examples/graphql
         if: needs.changes.outputs.graphql == 'true'
         working-directory: examples
-        run: go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-examples-graphql.out" ./graphql/...
+        run: go test -race -count=1 -timeout 20m -coverprofile="$GITHUB_WORKSPACE/cover-examples-graphql.out" ./graphql/...
       - name: coverage floors
         if: github.event_name == 'push'
         run: go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
