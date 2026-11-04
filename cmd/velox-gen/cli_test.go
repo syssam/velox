@@ -35,20 +35,51 @@ func offlineEnv() []string {
 // least 3: 3 on CI's 4 cores, 7 on a 14-core machine.
 var moduleSlots = make(chan struct{}, max(3, runtime.NumCPU()/2))
 
-var slotted sync.Map // *testing.T that already hold a slot
+var slotted sync.Map // the names of the tests that hold a slot
 
 // parallel makes t a parallel test that holds one of moduleSlots until it
-// ends. Calling it twice for one test does nothing.
+// ends. Calling it twice for one test does nothing. A subtest of a test that
+// holds a slot runs in its parent's slot, and not in parallel: a parent keeps
+// its slot until its subtests end, so a subtest that waited for a slot of its
+// own could wait forever once such parents held every slot.
 func parallel(t *testing.T) {
 	t.Helper()
-	if _, dup := slotted.LoadOrStore(t, true); dup {
-		return
+	name := t.Name()
+	for p := name; ; p = p[:strings.LastIndex(p, "/")] {
+		if _, held := slotted.Load(p); held {
+			return
+		}
+		if !strings.Contains(p, "/") {
+			break
+		}
 	}
+	slotted.Store(name, true)
 	t.Parallel()
 	moduleSlots <- struct{}{}
 	t.Cleanup(func() {
 		<-moduleSlots
-		slotted.Delete(t)
+		slotted.Delete(name)
+	})
+}
+
+// A subtest of a test that holds a slot takes none of its own, so that
+// parents cannot hold every slot while their subtests wait for one.
+func TestParallelSubtestUsesItsParentsSlot(t *testing.T) {
+	parallel(t)
+	if _, held := slotted.Load(t.Name()); !held {
+		t.Fatal("the test holds no slot")
+	}
+	t.Run("sub", func(t *testing.T) {
+		parallel(t)
+		t.Run("subsub", func(t *testing.T) {
+			parallel(t)
+			if _, held := slotted.Load(t.Name()); held {
+				t.Error("a subtest two levels down took a slot of its own")
+			}
+		})
+		if _, held := slotted.Load(t.Name()); held {
+			t.Error("the subtest took a slot of its own")
+		}
 	})
 }
 
