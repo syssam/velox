@@ -10,7 +10,6 @@ import (
 	"go/parser"
 	"path"
 	"reflect"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -141,7 +140,8 @@ type entState struct {
 	paths   map[string]string // import name → path
 	sch     bool              // the code reads the schema package
 	regexps int
-	reads   int // descriptor reads hoisted into setup
+	reads   int               // values read from descriptors into setup
+	descs   map[string]string // a field's name → the setup variable of its descriptor
 	setup   []string
 	cases   []string
 }
@@ -522,11 +522,21 @@ func qualifiers(ident string) []string {
 // FieldDescriptor reads a field's descriptor by its name.
 const schemaPkg = "github.com/syssam/velox/schema"
 
-// descriptor is the expression of f's descriptor in the schema package, by
-// the field's name, in plain mode.
+// descriptor returns the variable of the setup block that holds f's
+// descriptor, read from the schema package by the field's name, in plain
+// mode. The first call for f declares it, so each descriptor is read once.
 func (s *entState) descriptor(e *Entity, f *Field) string {
+	if v, ok := s.descs[f.Name]; ok {
+		return v
+	}
 	s.sch = true
-	return fmt.Sprintf("schema.FieldDescriptor(&sch.%s{}, %s)", e.Name, strconv.Quote(f.Name))
+	if s.descs == nil {
+		s.descs = map[string]string{}
+	}
+	v := "f" + strconv.Itoa(len(s.descs))
+	s.descs[f.Name] = v
+	s.setup = append(s.setup, fmt.Sprintf("%s := schema.FieldDescriptor(&sch.%s{}, %s)", v, e.Name, strconv.Quote(f.Name)))
+	return v
 }
 
 // schemaFunc returns the expression, of the type typ, of a function of f
@@ -553,9 +563,10 @@ func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member
 	}
 	if !s.l.out.Split {
 		s.use(schemaPkg, "schema", where)
+		fd := s.descriptor(e, f)
 		v := "d" + strconv.Itoa(s.reads)
 		s.reads++
-		s.setup = append(s.setup, fmt.Sprintf("%s := %s.%s.(%s)", v, s.descriptor(e, f), member, typ))
+		s.setup = append(s.setup, fmt.Sprintf("%s := %s.%s.(%s)", v, fd, member, typ))
 		return v
 	}
 	b := &OutBind{Field: e.Name + f.GoName + suffix, Type: typ, Imports: map[string]string{}}
@@ -640,9 +651,10 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 func (s *entState) schemaValue(e *Entity, f *Field, member, where string) string {
 	if !s.l.out.Split {
 		s.use(schemaPkg, "schema", where)
+		fd := s.descriptor(e, f)
 		v := "d" + strconv.Itoa(s.reads)
 		s.reads++
-		s.setup = append(s.setup, fmt.Sprintf("%s := %s.%s", v, s.descriptor(e, f), member))
+		s.setup = append(s.setup, fmt.Sprintf("%s := %s.%s", v, fd, member))
 		return v
 	}
 	b := &OutBind{Field: e.Name + f.GoName + member, Type: "any", Desc: f.Name, DescVar: camel(s.out.Label) + f.GoName}
@@ -1238,48 +1250,11 @@ func kindOf(o *OutEntity) string {
 func (l *lowerer) complete(s *entState) {
 	o := s.out
 	o.CheckCode = strings.TrimRight(strings.Join(s.cases, ""), "\n")
-	o.CheckSetup = strings.Join(shareReads(s.setup), "\n")
+	o.CheckSetup = strings.Join(s.setup, "\n")
 	for _, p := range s.paths {
 		o.Imports = append(o.Imports, p)
 	}
 	slices.Sort(o.Imports)
 	o.NeedsSch = s.sch
 	l.out.NeedsSch = l.out.NeedsSch || s.sch
-}
-
-// descRead matches the read of a field's descriptor in the schema package.
-var descRead = regexp.MustCompile(`schema\.FieldDescriptor\(&sch\.\w+\{\}, "[^"]*"\)`)
-
-// shareReads makes each descriptor that more than one statement of setup reads
-// a variable of its own, set before the first statement that reads it, so that
-// the schema's Fields is called once for it.
-func shareReads(setup []string) []string {
-	count := map[string]int{}
-	for _, st := range setup {
-		seen := map[string]bool{}
-		for _, r := range descRead.FindAllString(st, -1) {
-			if !seen[r] {
-				seen[r] = true
-				count[r]++
-			}
-		}
-	}
-	vars := map[string]string{}
-	var out []string
-	for _, st := range setup {
-		for _, r := range descRead.FindAllString(st, -1) {
-			if count[r] < 2 || vars[r] != "" {
-				continue
-			}
-			vars[r] = "f" + strconv.Itoa(len(vars))
-			out = append(out, vars[r]+" := "+r)
-		}
-		out = append(out, descRead.ReplaceAllStringFunc(st, func(r string) string {
-			if v := vars[r]; v != "" {
-				return v
-			}
-			return r
-		}))
-	}
-	return out
 }

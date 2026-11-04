@@ -310,8 +310,10 @@ func TestLowerChecks(t *testing.T) {
 	}
 	for _, want := range []string{
 		`re0 := regexp.MustCompile("^[a-z]+$")`,
-		`d0 := schema.FieldDescriptor(&sch.LwChecked{}, "code").Validators[0].(func(string) error)`,
-		`d1 := schema.FieldDescriptor(&sch.LwChecked{}, "age").Validators[0].(func(int) error)`,
+		`f0 := schema.FieldDescriptor(&sch.LwChecked{}, "code")`,
+		`d0 := f0.Validators[0].(func(string) error)`,
+		`f1 := schema.FieldDescriptor(&sch.LwChecked{}, "age")`,
+		`d1 := f1.Validators[0].(func(int) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
@@ -450,10 +452,11 @@ func TestLowerMixinPosition(t *testing.T) {
 	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwMixed{})
 	e := o.entity("LwMixed")
 	for _, want := range []string{
-		`d0 := schema.FieldDescriptor(&sch.LwMixed{}, "slug").Validators[0].(func(string) error)`,
+		`f0 := schema.FieldDescriptor(&sch.LwMixed{}, "slug")`,
+		`d0 := f0.Validators[0].(func(string) error)`,
 		// The descriptor of the field read twice is read once.
-		`f0 := schema.FieldDescriptor(&sch.LwMixed{}, "own")`,
-		`d4 := f0.Validators[0].(func(string) error)`,
+		`f3 := schema.FieldDescriptor(&sch.LwMixed{}, "own")`,
+		`d4 := f3.Validators[0].(func(string) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
@@ -462,11 +465,12 @@ func TestLowerMixinPosition(t *testing.T) {
 	// Each descriptor read is a statement of the setup, run once; the closure
 	// of a column only calls or returns what it read.
 	for _, want := range []string{
-		`d1 := schema.FieldDescriptor(&sch.LwMixed{}, "made").Default.(func() time.Time)`,
-		`d2 := schema.FieldDescriptor(&sch.LwMixed{}, "rev").DefaultFunc.(func() int64)`,
-		`d3 := f0.DefaultFunc.(func() string)`,
-		`d5 := schema.FieldDescriptor(&sch.LwMixed{}, "touched").UpdateDefault.(func() time.Time)`,
-		`d6 := schema.FieldDescriptor(&sch.LwMixed{}, "pt").Default` + "\n",
+		`d1 := f1.Default.(func() time.Time)`,
+		`d2 := f2.DefaultFunc.(func() int64)`,
+		`d3 := f3.DefaultFunc.(func() string)`,
+		`d5 := f4.UpdateDefault.(func() time.Time)`,
+		`f5 := schema.FieldDescriptor(&sch.LwMixed{}, "pt")`,
+		`d6 := f5.Default` + "\n",
 	} {
 		if !strings.Contains(e.CheckSetup+"\n", want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
@@ -1096,7 +1100,8 @@ func TestLowerTypedConstructors(t *testing.T) {
 	}
 	e := outs[0].entity("LwPriced")
 	for _, want := range []string{
-		`d0 := schema.FieldDescriptor(&sch.LwPriced{}, "price").Validators[0].(func(int64) error)`,
+		`f0 := schema.FieldDescriptor(&sch.LwPriced{}, "price")`,
+		`d0 := f0.Validators[0].(func(int64) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
@@ -1132,7 +1137,8 @@ func TestLowerTimeDefaultConverts(t *testing.T) {
 		`f0 := schema.FieldDescriptor(&sch.LwStamped{}, "at")`,
 		`d0 := f0.Default.(func() time.Time)`,
 		`d1 := f0.UpdateDefault.(func() time.Time)`,
-		`d2 := schema.FieldDescriptor(&sch.LwStamped{}, "plain").Default.(func() time.Time)`,
+		`f1 := schema.FieldDescriptor(&sch.LwStamped{}, "plain")`,
+		`d2 := f1.Default.(func() time.Time)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
