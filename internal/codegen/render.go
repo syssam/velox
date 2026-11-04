@@ -552,12 +552,7 @@ func entityString(w *writer, e *OutEntity) {
 			args = append(args, "x."+f.GoName)
 			continue
 		}
-		v := camel(plugin.Snake(f.GoName)) + "Val"
-		w.p("var %s any", v)
-		w.p("if x.%s != nil {", f.GoName)
-		w.p("%s = *x.%s", v, f.GoName)
-		w.p("}")
-		args = append(args, v)
+		args = append(args, "velox.Show(x."+f.GoName+")")
 	}
 	call := strconv.Quote(e.Name + "(" + strings.Join(verbs, ", ") + ")")
 	if len(args) > 0 {

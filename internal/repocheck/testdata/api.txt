@@ -448,6 +448,7 @@ func Pool(db *DB) *sql.DB
 func RowScopeFromContext(ctx context.Context) RowScope
 func RowsOf[E any](r TableRows) []E
 func SQLConn(db *sql.DB) Conn
+func Show[T any](p *T) any
 func SumByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func SumBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
 func SumNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, error)

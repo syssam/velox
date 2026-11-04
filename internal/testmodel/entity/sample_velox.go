@@ -186,27 +186,7 @@ func sampleDescriptor() velox.Descriptor[Sample] {
 
 // String returns the entity's fields.
 func (x Sample) String() string {
-	var prevVal any
-	if x.Prev != nil {
-		prevVal = *x.Prev
-	}
-	var ratioVal any
-	if x.Ratio != nil {
-		ratioVal = *x.Ratio
-	}
-	var maybeFlagVal any
-	if x.MaybeFlag != nil {
-		maybeFlagVal = *x.MaybeFlag
-	}
-	var maybeWhenVal any
-	if x.MaybeWhen != nil {
-		maybeWhenVal = *x.MaybeWhen
-	}
-	var parentIDVal any
-	if x.ParentID != nil {
-		parentIDVal = *x.ParentID
-	}
-	return fmt.Sprintf("Sample(ID=%v, Name=%v, Status=%v, Prev=%v, Price=%v, Ratio=%v, Flag=%v, MaybeFlag=%v, When=%v, MaybeWhen=%v, Blob=<%d bytes>, ParentID=%v, Score=%v)", x.ID, x.Name, x.Status, prevVal, x.Price, ratioVal, x.Flag, maybeFlagVal, x.When, maybeWhenVal, len(x.Blob), parentIDVal, x.Score)
+	return fmt.Sprintf("Sample(ID=%v, Name=%v, Status=%v, Prev=%v, Price=%v, Ratio=%v, Flag=%v, MaybeFlag=%v, When=%v, MaybeWhen=%v, Blob=<%d bytes>, ParentID=%v, Score=%v)", x.ID, x.Name, x.Status, velox.Show(x.Prev), x.Price, velox.Show(x.Ratio), x.Flag, velox.Show(x.MaybeFlag), x.When, velox.Show(x.MaybeWhen), len(x.Blob), velox.Show(x.ParentID), x.Score)
 }
 
 // GoString is String, so that %#v prints the same text.

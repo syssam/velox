@@ -57,6 +57,17 @@ func TestMetaOnceRetriesNotLinked(t *testing.T) {
 	}
 }
 
+// Show is the value a pointer points to, or nil.
+func TestShow(t *testing.T) {
+	n := 5
+	if got := Show(&n); got != 5 {
+		t.Errorf("Show(&5) = %v", got)
+	}
+	if got := Show[int](nil); got != nil {
+		t.Errorf("Show(nil) = %v", got)
+	}
+}
+
 func TestColumnTypeIsTheFieldsType(t *testing.T) {
 	info, err := loadDescriptor(orderedDescriptor())
 	if err != nil {

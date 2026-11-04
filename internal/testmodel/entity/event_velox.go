@@ -71,11 +71,7 @@ func eventDescriptor() velox.Descriptor[Event] {
 
 // String returns the entity's fields.
 func (x Event) String() string {
-	var maybeAtVal any
-	if x.MaybeAt != nil {
-		maybeAtVal = *x.MaybeAt
-	}
-	return fmt.Sprintf("Event(ID=%v, At=%v, MaybeAt=%v)", x.ID, x.At, maybeAtVal)
+	return fmt.Sprintf("Event(ID=%v, At=%v, MaybeAt=%v)", x.ID, x.At, velox.Show(x.MaybeAt))
 }
 
 // GoString is String, so that %#v prints the same text.

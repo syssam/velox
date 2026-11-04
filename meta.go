@@ -56,6 +56,15 @@ type MetaOnce[E any] struct {
 // works once that init has run. Its Error returns the message.
 type NotLinkedError = engine.NotLinkedError
 
+// Show is what an entity's String prints for p, a field that is a pointer:
+// the value it points to, or nil. For generated code.
+func Show[T any](p *T) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
 // Entity is the constraint velox's generic API puts on an entity type E: its
 // pointer has the method velox-gen writes.
 type Entity[E any] interface {
