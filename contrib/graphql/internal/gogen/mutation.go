@@ -32,13 +32,15 @@ func zeroDefault(fd *plugin.Field) bool {
 // leftOut are the fields of t's entity that the create input does not set and
 // that an insert would store as their zero value though the schema requires
 // them: not Optional, not nullable, with no Default, and neither the key nor
-// the scoped column. A resolver sets them on the x it gives Create.
+// a field the schema leaves out of the create input explicitly, which the
+// application or a hook sets, as a tenancy mixin's hook sets its column. A
+// resolver sets them on the x it gives Create.
 func leftOut(t *sdl.Type) []*plugin.Field {
 	e := t.Entity
 	set := map[int]bool{e.PrimaryKey[0]: true}
 	for i, fd := range e.Fields {
-		if _, ok := fd.Annotations["Scoped"]; ok {
-			set[i] = true // the scope's hook fills it
+		if sdl.SkipsCreate(fd) {
+			set[i] = true
 		}
 	}
 	for _, fi := range t.Create {

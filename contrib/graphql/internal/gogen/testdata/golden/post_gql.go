@@ -498,8 +498,6 @@ type CreatePostInput struct {
 
 // Create inserts x, a Post, with the input's fields and edges set; a nil x is a
 // new one. It runs atomically on the DB in ctx, under the policies.
-// CreatePostInput leaves out Views, which an insert requires: set it on x, or
-// in a velox.Hook, or it is stored as the zero value.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what

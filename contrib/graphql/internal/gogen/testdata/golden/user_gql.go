@@ -401,8 +401,6 @@ func (in CreateAccountInput) GoString() string { return in.String() }
 
 // Create inserts x, an Account, with the input's fields and edges set; a nil x
 // is a new one. It runs atomically on the DB in ctx, under the policies.
-// CreateAccountInput leaves out CreatedBy, OrgID, which an insert requires: set
-// them on x, or in a velox.Hook, or they are stored as the zero value.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what

@@ -46,7 +46,10 @@ func setModel(t *testing.T, skipSlug bool) *plugin.Model {
 // CreateThingInput.slug, which the SDL has not. Create takes the row x then, whose
 // other fields the resolver sets before the validators run, and its doc names the
 // field; its errors name only the create input's fields, by thingCreateInputGQL,
-// apart from the update input's thingUpdateInputGQL, which names slug.
+// apart from the update input's thingUpdateInputGQL, which names slug. Its doc
+// does not name slug: a field the schema leaves out of the create input
+// explicitly is the application's or a hook's to set, as a tenancy mixin's
+// hook sets its column.
 func TestCreateSetsSkipped(t *testing.T) {
 	files := render(t, setModel(t, true))
 	_, funcs, expr := mutationDecls(t, files)
@@ -65,8 +68,8 @@ func TestCreateSetsSkipped(t *testing.T) {
 	if !strings.Contains(funcSrc(t, files, "UpdateThingInput.Update"), `"UpdateThingInput", "Thing", "gen.Thing", velox.TableOf[Thing](), thingColID, id, thingUpdateInputGQL)`) {
 		t.Error("Update does not name its own input's fields")
 	}
-	if doc := strings.Join(strings.Fields(funcs["CreateThingInput.Create"].Doc.Text()), " "); !strings.Contains(doc, "CreateThingInput leaves out Slug, which an insert requires: set it on x, or in a velox.Hook") {
-		t.Errorf("Create's doc does not name slug: %q", doc)
+	if doc := funcs["CreateThingInput.Create"].Doc.Text(); strings.Contains(doc, "leaves out") {
+		t.Errorf("Create's doc names slug, which the schema skips explicitly: %q", doc)
 	}
 
 	files = render(t, setModel(t, false))

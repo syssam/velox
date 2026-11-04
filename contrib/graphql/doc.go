@@ -240,16 +240,20 @@
 // graphql.Skip(graphql.SkipMutationCreateInput) (SkipMutationUpdateInput for
 // an update), or set it in a velox.Hook. x's own fields, its foreign keys
 // included, are trusted: Create checks the input's IDs against what the
-// caller may read, and not x's, which the resolver checks if it must. A field the create input leaves out (Skip(SkipMutationCreateInput) or
-// CreateInput(false)) that the schema requires, not Optional, not Nillable and
-// with no Default, would be inserted as its zero value, "" in a NOT NULL column,
-// so the resolver, which is where entgql users set it, sets it on x, and Create's
-// godoc names it:
+// caller may read, and not x's, which the resolver checks if it must. A field
+// the create input leaves out that the schema requires, not Optional, not
+// Nillable and with no Default, would be inserted as its zero value, "" in a
+// NOT NULL column, so the resolver, which is where entgql users set it, sets
+// it on x:
 //
 //	return input.Create(ctx, &gen.Page{Slug: slugify(input.Title)})
 //
-// A velox.Hook, which runs before the insert's validators, may set it instead;
-// with neither, the zero value is stored. A validator's error on such a field is
+// A velox.Hook, which runs before the insert's validators, may set it instead,
+// as a tenancy mixin's hook sets its column; with neither, the zero value is
+// stored. Create's godoc names such a field unless the schema leaves it out
+// explicitly, with Skip(SkipMutationCreateInput) or CreateInput(false): that
+// says the application or a hook sets it. A foreign key whose edge's create
+// input is skipped is named. A validator's error on such a field is
 // the resolver's, not the client's: it names no input field. Create changes x
 // even when it fails. Update applies the input's fields and set, the
 // resolver's own setters, such as an updated_by the client must not choose. A

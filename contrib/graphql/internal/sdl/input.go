@@ -457,3 +457,15 @@ func inputDesc(o *object, create bool) string {
 	}
 	return "The input that updates " + english.Article(o.name) + " " + o.name + ": a field not given is left as it is."
 }
+
+// SkipsCreate reports whether f's graphql annotation leaves it out of the
+// create input explicitly, with Skip(SkipMutationCreateInput) or
+// CreateInput(false): the application, or a hook, sets it. An annotation
+// that does not decode, which Render refuses, skips nothing.
+func SkipsCreate(f *plugin.Field) bool {
+	a, err := decode(f.Annotations, "")
+	if err != nil {
+		return false
+	}
+	return a.Skip&graphql.SkipMutationCreateInput != 0 || a.CreateInput != nil && !*a.CreateInput
+}
