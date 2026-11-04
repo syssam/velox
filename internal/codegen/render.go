@@ -31,16 +31,14 @@ func Generate(g *Graph, cfg Config) ([]File, error) {
 }
 
 // Render writes one file per entity, <label>_velox.go (the join entities too),
-// velox.go: the package comment and the enums, and, when some entity is scoped,
-// scope_velox.go: the scope keys and each scoped entity's scope.
+// and velox.go: the package comment and the enums.
 //
 // When the schema imports the generated package and some entity reads a
 // value of the schema (Out.Runtime), runtime_velox.go holds those values,
 // and runtime/runtime.go, package runtime, gives them when the program
 // starts: it imports the generated package and the schema package.
 //
-// The files are in the order of o.Entities, then velox.go and scope_velox.go,
-// then runtime_velox.go and runtime/runtime.go. Render does not change o,
+// The files are in the order of o.Entities, then velox.go, then runtime_velox.go and runtime/runtime.go. Render does not change o,
 // and the same o gives the same bytes.
 func Render(o *Out) ([]File, error) {
 	if o.Runtime && o.GenPath == "" {
@@ -62,11 +60,6 @@ func Render(o *Out) ([]File, error) {
 	}
 	if err := add("velox.go", renderPackage(o)); err != nil {
 		return nil, err
-	}
-	if len(o.ScopeKeys) > 0 {
-		if err := add("scope_velox.go", renderScope(o)); err != nil {
-			return nil, err
-		}
 	}
 	if !o.Runtime {
 		return files, nil
@@ -164,67 +157,6 @@ func renderPackage(o *Out) string {
 		w.p("}")
 	}
 	return w.String()
-}
-
-// renderScope writes scope_velox.go: a variable for each scope key, and for
-// each scoped entity the scope.ByHandle of its column. The descriptors bind them.
-func renderScope(o *Out) string {
-	var w writer
-	w.WriteString(header)
-	w.p("package %s", o.Package)
-	w.p("")
-	w.p("import (")
-	std := []string{}
-	other := []string{"github.com/syssam/velox", "github.com/syssam/velox/scope"}
-	for _, k := range o.ScopeKeys {
-		for _, p := range k.Imports {
-			if first, _, _ := strings.Cut(p, "/"); strings.Contains(first, ".") {
-				other = append(other, p)
-			} else {
-				std = append(std, p)
-			}
-		}
-	}
-	slices.Sort(std)
-	slices.Sort(other)
-	for _, p := range slices.Compact(std) {
-		w.p("%s", strconv.Quote(p))
-	}
-	if len(std) > 0 {
-		w.p("")
-	}
-	for _, p := range slices.Compact(other) {
-		w.p("%s", strconv.Quote(p))
-	}
-	w.p(")")
-	w.p("")
-	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
-	for _, k := range o.ScopeKeys {
-		w.p("")
-		w.p("// %s is the %q scope: a request carries its value with %s.With(ctx, v),", k.Var, k.Name, k.Var)
-		w.p("// and a statement on an entity scoped by it, without one, fails with scope.ErrNoScope.")
-		w.p("var %s = scope.NewKey[%s](%s)", k.Var, k.GoType, strconv.Quote(k.Name))
-	}
-	for _, e := range o.Entities {
-		if e.Scope == nil {
-			continue
-		}
-		w.p("")
-		w.p("// %s confines %s to the context's %s: it is bound around %s's Policy and Hooks.", e.Scope.Var, e.Name, e.Scope.Key, e.Name)
-		w.p("var %s = scope.ByHandle(%s, %s, func(x *%s) *%s { return &x.%s })", e.Scope.Var, e.Scope.KeyVar, e.Scope.Handle, e.Name,
-			scopeGoType(o, e.Scope.KeyVar), e.Scope.Field)
-	}
-	return w.String()
-}
-
-// scopeGoType is the Go type of the key whose variable is keyVar.
-func scopeGoType(o *Out, keyVar string) string {
-	for _, k := range o.ScopeKeys {
-		if k.Var == keyVar {
-			return k.GoType
-		}
-	}
-	return "any"
 }
 
 func quoteAll(ss []string) string {
@@ -458,12 +390,8 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 		}
 		w.p("},")
 	}
-	// Each part is named, and velox composes them: the scope is outermost.
-	// The lists are the ones package runtime bound, or, when the schema does
+	// Each part is named, and velox composes them. The lists are the ones package runtime bound, or, when the schema does
 	// not import the generated package, bound here.
-	if e.Scope != nil {
-		w.p("Scope: %s,", e.Scope.Var)
-	}
 	for _, k := range behaviourKinds {
 		switch srcs := *e.sources(k); {
 		case len(srcs) == 0:

@@ -10,8 +10,10 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tenant/gen"
+	"github.com/syssam/velox/examples/tenant/schema"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/scope"
+	"github.com/syssam/velox/scope/scopetest"
 )
 
 // openScoped returns a database with the example's tables.
@@ -33,8 +35,8 @@ func openScoped(t *testing.T) *velox.DB {
 }
 
 func TestScopeKeyZeroIsNoValue(t *testing.T) {
-	ctx := gen.OrgKey.With(t.Context(), 0)
-	if v, ok := gen.OrgKey.From(ctx); ok {
+	ctx := schema.OrgKey.With(t.Context(), 0)
+	if v, ok := schema.OrgKey.From(ctx); ok {
 		t.Errorf("the zero value is a scope value: %v", v)
 	}
 	if _, err := openScoped(t).Query[gen.Project]().Count(ctx); !errors.Is(err, scope.ErrNoScope) {
@@ -53,7 +55,7 @@ func TestScopeKeysAreDistinct(t *testing.T) {
 
 func TestScopeIsolatesEveryStatement(t *testing.T) {
 	db := openScoped(t)
-	a, b := gen.OrgKey.With(t.Context(), 1), gen.OrgKey.With(t.Context(), 2)
+	a, b := schema.OrgKey.With(t.Context(), 1), schema.OrgKey.With(t.Context(), 2)
 	p := gen.Project{Name: "x", Status: "open"}
 	if err := db.Insert(&p).Exec(a); err != nil {
 		t.Fatal(err)
@@ -76,10 +78,17 @@ func TestScopeIsolatesEveryStatement(t *testing.T) {
 	}
 }
 
+// scopetest checks InOrg on Project as it would on any entity that lists
+// it: the hook fills org_id, and the policy confines every statement.
+func TestInOrgIsolatesProject(t *testing.T) {
+	scopetest.Isolates(t, t.Context(), openScoped(t), schema.OrgKey, "org_id", 1, 2,
+		func() *gen.Project { return &gen.Project{Name: "x", Status: "open"} })
+}
+
 func TestScopeWithoutPolicyReadsAll(t *testing.T) {
 	db := openScoped(t)
 	for org := int64(1); org <= 2; org++ {
-		if err := db.Insert(&gen.Project{Name: "n", Status: "s"}).Exec(gen.OrgKey.With(t.Context(), org)); err != nil {
+		if err := db.Insert(&gen.Project{Name: "n", Status: "s"}).Exec(schema.OrgKey.With(t.Context(), org)); err != nil {
 			t.Fatal(err)
 		}
 	}

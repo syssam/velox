@@ -88,17 +88,11 @@ func (k *Key[V]) From(ctx context.Context) (V, bool) {
 	return v, ok && v != zero
 }
 
-// Scope is the scope of entity E by one column of type V. It is a
-// velox.Scoper, for a Descriptor's Scope.
+// Scope is the scope of entity E by one column of type V, made by By.
 type Scope[E any, V comparable] struct {
-	kit[E] //nolint:unused // its methods make Scope a velox.Scoper
-	key    *Key[V]
-	eq     func(V) velox.Pred[E]
-	field  func(*E) *V
+	key *Key[V]
+	col velox.Named[E, V]
 }
-
-// kit names velox.ScopeKit for embedding, so that the field is not exported.
-type kit[E any] = velox.ScopeKit[E] //nolint:unused // embedded in Scope
 
 // By returns the scope of E by its column named column, whose Go field is
 // of type V. Call it in a mixin's Policy or Hooks method:
@@ -117,55 +111,34 @@ func By[E any, V comparable](key *Key[V], column string) Scope[E, V] {
 	case col.Nullable():
 		panic(fmt.Sprintf("velox/scope: %s: column %q is nullable: a scope's column holds a value in every row", key.name, column))
 	}
-	return Scope[E, V]{key: key, eq: func(v V) velox.Pred[E] { return col.EQ(v) }, field: func(x *E) *V { return col.Ptr(x) }}
-}
-
-// ByHandle returns the scope of E by the column eq compares and field
-// reaches. For the code velox-gen writes for a schema.Scoped column.
-func ByHandle[E any, V comparable](key *Key[V], eq func(V) velox.Pred[E], field func(*E) *V) Scope[E, V] {
-	return Scope[E, V]{key: key, eq: eq, field: field}
+	return Scope[E, V]{key: key, col: col}
 }
 
 // Policy returns the policy that confines E's reads, updates and deletes to
 // the context's value, and checks that an insert is in it. velox ANDs it with
 // the entity's other policies.
-func (s Scope[E, V]) Policy() velox.Policy[E] { return s.Wrap(velox.Policy[E]{}) }
-
-// Wrap returns p with the scope added: a statement's Read condition is the
-// scope's and p's both, and an insert must be in the scope and pass p's Insert.
-// The engine ANDs Read into every update and delete, so the scope reaches those
-// too. p is not changed. For a Descriptor's Scope.
-func (s Scope[E, V]) Wrap(p velox.Policy[E]) velox.Policy[E] {
-	inner := p.Read
-	p.Read = func(ctx context.Context) (velox.Pred[E], error) {
-		v, ok := s.key.From(ctx)
-		if !ok {
-			return velox.Pred[E]{}, fmt.Errorf("%w: %s", ErrNoScope, s.key.name)
-		}
-		if inner == nil {
-			return s.eq(v), nil
-		}
-		c, err := inner(ctx)
-		if err != nil {
-			return velox.Pred[E]{}, err
-		}
-		return velox.And(s.eq(v), c), nil
+// The engine ANDs Read into every update and delete, so the scope reaches
+// those too.
+func (s Scope[E, V]) Policy() velox.Policy[E] {
+	return velox.Policy[E]{
+		Read: func(ctx context.Context) (velox.Pred[E], error) {
+			v, ok := s.key.From(ctx)
+			if !ok {
+				return velox.Pred[E]{}, fmt.Errorf("%w: %s", ErrNoScope, s.key.name)
+			}
+			return s.col.EQ(v), nil
+		},
+		Insert: func(ctx context.Context, x *E) error {
+			v, ok := s.key.From(ctx)
+			if !ok {
+				return fmt.Errorf("%w: %s", ErrNoScope, s.key.name)
+			}
+			if got := *s.col.Ptr(x); got != v {
+				return fmt.Errorf("%w: %s is %v, the context's is %v", ErrMismatch, s.key.name, got, v)
+			}
+			return nil
+		},
 	}
-	insert := p.Insert
-	p.Insert = func(ctx context.Context, x *E) error {
-		v, ok := s.key.From(ctx)
-		if !ok {
-			return fmt.Errorf("%w: %s", ErrNoScope, s.key.name)
-		}
-		if got := *s.field(x); got != v {
-			return fmt.Errorf("%w: %s is %v, the context's is %v", ErrMismatch, s.key.name, got, v)
-		}
-		if insert != nil {
-			return insert(ctx, x)
-		}
-		return nil
-	}
-	return p
 }
 
 // Fill returns the hook that sets E's scope column to the context's value on
@@ -178,7 +151,7 @@ func (s Scope[E, V]) Fill() velox.Hook[E] {
 			if v, ok := s.key.From(ctx); ok {
 				var zero V
 				for _, x := range m.Rows() {
-					if p := s.field(x); *p == zero {
+					if p := s.col.Ptr(x); *p == zero {
 						*p = v
 					}
 				}

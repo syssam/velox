@@ -8,9 +8,9 @@ import (
 	"github.com/syssam/velox/examples/tracker/principal"
 )
 
-// The scope that Scoped generates confines every statement to the caller's Org,
-// and is bound around each policy here. These policies decide what a member may do within the Org.
-// gen/runtime binds each Policy method. Read and Write
+// InOrg's policy confines every statement to the caller's Org, and velox ANDs
+// it with each policy here, which decides what a member may do within the Org.
+// gen/runtime binds each Policy method, the mixin's first. Read and Write
 // return a condition ANDed into every statement, so a row the caller may not
 // change is one the statement does not touch; an error denies the statement.
 

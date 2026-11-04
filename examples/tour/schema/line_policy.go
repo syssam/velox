@@ -9,8 +9,8 @@ import (
 )
 
 // Policy has no Read of its own, so anyone in the organization may read lines;
-// only accountants change them. The scope that Scoped generates is bound around
-// it, so the organization is not its business.
+// only accountants change them. velox ANDs it after InOrg's policy, so the
+// organization is not its business.
 func (Line) Policy() velox.Policy[gen.Line] {
 	return velox.Policy[gen.Line]{
 		Write: func(ctx context.Context) (velox.Pred[gen.Line], error) {

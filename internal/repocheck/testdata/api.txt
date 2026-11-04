@@ -144,7 +144,7 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
-const GeneratedCodeIsVersion14
+const GeneratedCodeIsVersion15
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -512,7 +512,7 @@ type ConstraintKind = veloxtype.ConstraintKind
 type DB struct { }
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Scope Scoper Policy []func() BoundPolicy Hooks []func() BoundHooks Interceptors []func() BoundInterceptors }
+type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Policy []func() BoundPolicy Hooks []func() BoundHooks Interceptors []func() BoundInterceptors }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type EdgeDescriptor = engine.EdgeDescriptor
@@ -563,8 +563,6 @@ type Route = veloxtype.Route
 type RowScope = veloxtype.RowScope
 type SaveQuery[E any] struct { }
 type SchemaError = veloxtype.SchemaError
-type ScopeKit[E any] struct { }
-type Scoper interface { scopePolicy(x, scope any, own *engine.EntityPolicy) (*engine.EntityPolicy, string) scopeFill(x, scope any) (engine.HookFn, string) }
 type Setter[E any] struct { }
 type Shard = engine.Shard
 type Statement = engine.Statement
@@ -678,7 +676,6 @@ Annotation is interface{ Name() string }
 func (*CheckAnnotation) Name() string
 func (*CollationAnnotation) Name() string
 func (*CommentAnnotation) Name() string
-func (*ScopedAnnotation) Name() string
 func (*TableAnnotation) Name() string
 func (Schema) Annotations() []Annotation
 func (Schema) Edges() []Edge
@@ -692,7 +689,6 @@ func Collation(name string) *CollationAnnotation
 func Comment(text string) *CommentAnnotation
 func FieldDescriptor(s Interface, name string) *desc.Field
 func MixinAt[T any](s Interface, i int) *T
-func Scoped(key string) *ScopedAnnotation
 func Table(name string) *TableAnnotation
 func TableIn(schema, table string) *TableAnnotation
 type Annotation = desc.Annotation
@@ -707,7 +703,6 @@ type Interface interface { Type() Fields() []Field Edges() []Edge Indexes() []In
 type Merger interface{ Merge(Annotation) Annotation }
 type Mixin interface { Fields() []Field Edges() []Edge Indexes() []Index Annotations() []Annotation }
 type Schema struct { }
-type ScopedAnnotation struct { Key string }
 type TableAnnotation struct { Schema string Table string }
 
 package schema/edge
@@ -1014,13 +1009,10 @@ type Response struct { Protocol int Files []File Warnings []string Error string 
 type Supports struct { Protocol, Model int }
 
 package scope
-Scope embeds kit[E]
 func (k *Key[V]) From(ctx context.Context) (V, bool)
 func (k *Key[V]) With(ctx context.Context, v V) context.Context
 func (s Scope[E, V]) Fill() velox.Hook[E]
 func (s Scope[E, V]) Policy() velox.Policy[E]
-func (s Scope[E, V]) Wrap(p velox.Policy[E]) velox.Policy[E]
-func ByHandle[E any, V comparable](key *Key[V], eq func(V) velox.Pred[E], field func(*E) *V) Scope[E, V]
 func By[E any, V comparable](key *Key[V], column string) Scope[E, V]
 func NewKey[V comparable](name string) *Key[V]
 type Key[V comparable] struct { }

@@ -159,10 +159,9 @@ type lowerer struct {
 	cfg   Config
 	out   *Out
 	errs  []*Error
-	state map[string]*entState    // by entity name
-	keys  map[string]*OutScopeKey // the scope keys, by name
-	joins map[string]*join        // by join table
-	owned map[string]string       // the package names the generated code uses, with their paths
+	state map[string]*entState // by entity name
+	joins map[string]*join     // by join table
+	owned map[string]string    // the package names the generated code uses, with their paths
 	enums []*enumDecl
 	// mixinNames are the names of the packages of mixins with behaviour, by
 	// import path.
@@ -238,9 +237,6 @@ func (l *lowerer) entities() {
 				s.exported(f)
 			}
 			s.out.Fields = append(s.out.Fields, s.field(e, i, f))
-			if key, ok, _ := scoped(f); ok { // build refused a malformed annotation
-				s.scope(e, f, s.out.Fields[i], key)
-			}
 		}
 		s.out.PrimaryKey = []int{0}
 		for i, ix := range e.Indexes {
@@ -270,34 +266,6 @@ func (l *lowerer) entities() {
 		l.state[e.Name] = s
 		l.out.Entities = append(l.out.Entities, s.out)
 	}
-	for _, k := range l.keys {
-		l.out.ScopeKeys = append(l.out.ScopeKeys, k)
-	}
-	slices.SortFunc(l.out.ScopeKeys, func(a, b *OutScopeKey) int {
-		return cmp.Or(strings.Compare(a.Var, b.Var), strings.Compare(a.Name, b.Name))
-	})
-}
-
-// scope records f, the Scoped field of e that lowered to of, as e's scope and
-// as a use of its key. build has checked the field, so it only resolves names.
-func (s *entState) scope(e *Entity, f *Field, of *OutField, key string) {
-	l := s.l
-	keyVar := plugin.GoName(key) + "Key"
-	s.out.Scope = &OutScope{
-		Key: key, KeyVar: keyVar, Var: camel(e.Label) + "Scope", Field: f.GoName,
-		Handle: s.out.Handles + "." + f.GoName + ".EQ",
-	}
-	if l.keys == nil {
-		l.keys = map[string]*OutScopeKey{}
-	}
-	if _, ok := l.keys[key]; ok {
-		return
-	}
-	k := &OutScopeKey{Name: key, Var: keyVar, GoType: of.ElemType}
-	if f.GoType != nil {
-		k.Imports = slices.Sorted(slices.Values(f.GoType.Imports))
-	}
-	l.keys[key] = k
 }
 
 // exported refuses a GoType of f that names an unexported type, such as
@@ -1254,19 +1222,6 @@ func (l *lowerer) finish() {
 			add(j.ent.Handles, "handles variable", j.owner, j.where)
 		}
 	}
-	// The variables of scope_velox.go: a key's, once, and each scoped entity's.
-	keyed := map[string]bool{}
-	for _, e := range l.out.Entities {
-		if e.Scope == nil {
-			continue
-		}
-		if !keyed[e.Scope.Key] {
-			keyed[e.Scope.Key] = true
-			add(e.Scope.KeyVar, fmt.Sprintf("scope key %q variable", e.Scope.Key), e.Name, "")
-		}
-		add(e.Scope.Var, "scope variable", e.Name, "")
-	}
-
 	// A join table is not an entity's table, and the generated functions of an
 	// entity are named by its label, so no two entities share one.
 	for _, j := range joins {

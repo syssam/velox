@@ -12,8 +12,15 @@ import "github.com/syssam/velox"
 // effect.
 type VeloxRuntime struct {
 	CommentPolicy []func() velox.BoundPolicy
+	CommentHooks  []func() velox.BoundHooks
 	IssuePolicy   []func() velox.BoundPolicy
+	IssueHooks    []func() velox.BoundHooks
+	LabelPolicy   []func() velox.BoundPolicy
+	LabelHooks    []func() velox.BoundHooks
 	ProjectPolicy []func() velox.BoundPolicy
+	ProjectHooks  []func() velox.BoundHooks
+	UserPolicy    []func() velox.BoundPolicy
+	UserHooks     []func() velox.BoundHooks
 }
 
 var veloxRT *VeloxRuntime

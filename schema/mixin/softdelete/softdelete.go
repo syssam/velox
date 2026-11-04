@@ -103,7 +103,7 @@ func Skipped(ctx context.Context) bool {
 // Interceptors returns the interceptor that hides rows whose deleted_at is
 // set, but under Skip.
 func (Mixin) Interceptors[E any]() []velox.Interceptor[E] {
-	del := velox.Field[E, *time.Time](Column)
+	del := velox.Field[E, *time.Time]("deleted_at") // a literal, which velox-gen checks
 	return []velox.Interceptor[E]{{Filter: func(ctx context.Context) (velox.Pred[E], error) {
 		if Skipped(ctx) {
 			return velox.Allow[E](), nil
@@ -115,7 +115,7 @@ func (Mixin) Interceptors[E any]() []velox.Interceptor[E] {
 // Hooks returns the hook that makes a delete an update that sets
 // deleted_at, but under Skip.
 func (Mixin) Hooks[E any]() []velox.Hook[E] {
-	del := velox.Field[E, *time.Time](Column)
+	del := velox.Field[E, *time.Time]("deleted_at") // a literal, which velox-gen checks
 	return []velox.Hook[E]{velox.On(func(next velox.Mutator[E]) velox.Mutator[E] {
 		return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
 			if Skipped(ctx) {

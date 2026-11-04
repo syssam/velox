@@ -147,8 +147,8 @@ post's author, the `X-User`, may update or delete it. Repeated IDs count
 once, and adding a link that exists changes nothing.
 
 Every ID to set or add is checked against what the caller may read: the
-organization scope and the entity's Read policy (the scope that
-`Scoped` generates and `Post`'s Policy). An ID of another organization's row, or
+organization scope and the entity's Read policy (the `InOrg` mixin's
+policy and `Post`'s own). An ID of another organization's row, or
 of one a policy hides, is `NOT_FOUND`, as a missing one is, so a client
 cannot tell that a row exists. An ID to remove is not checked, and neither
 it nor `clearTags` or `clearPosts` touches a link to a row the caller may

@@ -86,26 +86,3 @@ func (a *CheckAnnotation) Merge(other Annotation) Annotation {
 func Check(name, expr string) *CheckAnnotation {
 	return &CheckAnnotation{Checks: []CheckConstraint{{Name: name, Expr: expr}}}
 }
-
-// ScopedAnnotation marks the column that confines an entity's rows to a value
-// the context carries.
-type ScopedAnnotation struct {
-	Key string `json:"key"`
-}
-
-// Name returns "Scoped".
-func (*ScopedAnnotation) Name() string { return "Scoped" }
-
-// Scoped marks a field as the column that confines its entity's rows to the
-// value the context carries under key: a tenant, an owner, a region. velox-gen
-// then writes the key, <Key>Key (OrgKey for "org"), and the wiring, and binds
-// the scope around the entity's own Policy and Hooks, so that a request's
-// reads, updates and deletes see only rows of its value, and an insert gets it
-// (see package scope). The same key on several entities is one key.
-//
-// The column must be Immutable, so that an update cannot move a row to another
-// scope, and neither Optional nor Nillable, so that a missing value never means
-// every scope. An entity has at most one scoped column.
-//
-//	field.Int64("org_id").Immutable().Annotations(schema.Scoped("org"))
-func Scoped(key string) *ScopedAnnotation { return &ScopedAnnotation{Key: key} }

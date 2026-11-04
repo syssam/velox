@@ -56,7 +56,7 @@ func (*Label) VeloxMeta() *velox.Meta[Label] { return labelMeta.Load(labelDescri
 
 // labelDescriptor describes Label to velox: its table, columns, edges and hooks.
 func labelDescriptor() velox.Descriptor[Label] {
-	veloxRuntime()
+	rt := veloxRuntime()
 	return velox.Descriptor[Label]{
 		Table: "labels",
 		Columns: []velox.ColumnDescriptor{
@@ -71,7 +71,8 @@ func labelDescriptor() velox.Descriptor[Label] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[IssueLabel, Issue]("Issues", labelColID, issueLabelColLabelID, issueLabelColIssueID, issueColID),
 		},
-		Scope: labelScope,
+		Policy: rt.LabelPolicy,
+		Hooks:  rt.LabelHooks,
 		FieldPtr: func(x *Label, i int) any {
 			switch i {
 			case labelColID:

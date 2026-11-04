@@ -13,9 +13,11 @@
 //
 // Behaviour, outermost first:
 //
-//	Memo  Policy: Memo
-//	Tag                 Hooks: Tag
-//	Task  Policy: Task  Hooks: Task
+//	Home  Policy: InRegion     Hooks: InRegion
+//	Memo  Policy: InOrg, Memo  Hooks: InOrg
+//	Note  Policy: InOrg        Hooks: InOrg
+//	Tag   Policy: InOrg        Hooks: InOrg, Tag
+//	Task  Policy: InOrg, Task  Hooks: InOrg, Task
 package runtime
 
 import (
@@ -26,9 +28,15 @@ import (
 
 func init() {
 	gen.SetVeloxRuntime(gen.VeloxRuntime{
-		MemoPolicy: velox.BindPolicy[gen.Memo](sch.Memo{}.Policy),
-		TagHooks:   velox.BindHooks[gen.Tag](sch.Tag{}.Hooks),
-		TaskPolicy: velox.BindPolicy[gen.Task](sch.Task{}.Policy),
-		TaskHooks:  velox.BindHooks[gen.Task](sch.Task{}.Hooks),
+		HomePolicy: velox.BindPolicy[gen.Home](sch.InRegion{}.Policy),
+		HomeHooks:  velox.BindHooks[gen.Home](sch.InRegion{}.Hooks),
+		MemoPolicy: velox.BindPolicy[gen.Memo](sch.InOrg{}.Policy, sch.Memo{}.Policy),
+		MemoHooks:  velox.BindHooks[gen.Memo](sch.InOrg{}.Hooks),
+		NotePolicy: velox.BindPolicy[gen.Note](sch.InOrg{}.Policy),
+		NoteHooks:  velox.BindHooks[gen.Note](sch.InOrg{}.Hooks),
+		TagPolicy:  velox.BindPolicy[gen.Tag](sch.InOrg{}.Policy),
+		TagHooks:   velox.BindHooks[gen.Tag](sch.InOrg{}.Hooks, sch.Tag{}.Hooks),
+		TaskPolicy: velox.BindPolicy[gen.Task](sch.InOrg{}.Policy, sch.Task{}.Policy),
+		TaskHooks:  velox.BindHooks[gen.Task](sch.InOrg{}.Hooks, sch.Task{}.Hooks),
 	})
 }

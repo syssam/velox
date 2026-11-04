@@ -1,9 +1,8 @@
 # tenant
 
 `gen.Project` belongs to an organization. velox has no tenant concept: the
-scope is a `Policy` and a hook of the `scope` package, which velox-gen writes for a
-column marked `schema.Scoped("org")`, so that a soft delete or an owner rule is
-written the same way, by hand.
+scope is a `Policy` and a hook of the `scope` package, which the `InOrg` mixin
+declares, so that a soft delete or an owner rule is written the same way.
 
 ```sh
 cd examples
@@ -11,19 +10,27 @@ go run ./tenant
 ```
 
 ```go
-// schema/project.go
-field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
-
-// gen/scope_velox.go, written by velox-gen
+// schema/inorg.go
 var OrgKey = scope.NewKey[int64]("org")
-var projectScope = scope.By(OrgKey, Projects.OrgID.EQ, func(x *Project) *int64 { return &x.OrgID })
+
+type InOrg struct{ mixin.Schema }
+
+func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
+func (InOrg) Policy[E any]() velox.Policy[E] { return scope.By[E](OrgKey, "org_id").Policy() }
+func (InOrg) Hooks[E any]() []velox.Hook[E] {
+	return []velox.Hook[E]{scope.By[E](OrgKey, "org_id").Fill()}
+}
+
+// schema/project.go
+func (Project) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
 ```
 
-The descriptor binds `projectScope`'s policy and fill hook, and wraps the `Policy` and
-`Hooks` a `Project` declares itself, if any, in them.
+gen/runtime binds `InOrg`'s policy and fill hook before the `Policy` and `Hooks` a
+`Project` declares itself, if any. The policies are ANDed, so Project's own cannot
+lift the scope. `scope_test.go` checks it with `scopetest.Isolates`.
 
 ```go
-ctx = gen.OrgKey.With(ctx, acme)          // acme is an int64, the column's type
+ctx = schema.OrgKey.With(ctx, acme)          // acme is an int64, the column's type
 
 db.Insert(&p).Exec(ctx)                // fills p.OrgID
 db.Query[gen.Project]().Count(ctx)     // ... WHERE "org_id" = ?

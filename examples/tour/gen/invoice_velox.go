@@ -16,6 +16,7 @@ type Invoice struct {
 	CreatedAt  time.Time        `json:"created_at,omitzero"`
 	UpdatedAt  time.Time        `json:"updated_at,omitzero"`
 	OrgID      int64            `json:"org_id"`
+	DeletedAt  *time.Time       `json:"deleted_at,omitempty"`
 	Number     string           `json:"number"`
 	Customer   string           `json:"customer"`
 	Status     InvoiceStatus    `json:"status"`
@@ -29,6 +30,7 @@ const (
 	invoiceColCreatedAt
 	invoiceColUpdatedAt
 	invoiceColOrgID
+	invoiceColDeletedAt
 	invoiceColNumber
 	invoiceColCustomer
 	invoiceColStatus
@@ -50,6 +52,8 @@ type invoiceHandles struct {
 	UpdatedAt velox.OrderedCol[Invoice, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Invoice, int64]
+	// DeletedAt is the column deleted_at.
+	DeletedAt velox.NullOrderedCol[Invoice, time.Time]
 	// Number is the column number.
 	Number velox.StringCol[Invoice, string]
 	// Customer is the column customer.
@@ -68,6 +72,7 @@ var Invoices = invoiceHandles{
 	CreatedAt:  velox.OrderedCol[Invoice, time.Time]{I: invoiceColCreatedAt},
 	UpdatedAt:  velox.OrderedCol[Invoice, time.Time]{I: invoiceColUpdatedAt},
 	OrgID:      velox.NumberCol[Invoice, int64]{I: invoiceColOrgID},
+	DeletedAt:  velox.NullOrderedCol[Invoice, time.Time]{I: invoiceColDeletedAt},
 	Number:     velox.StringCol[Invoice, string]{I: invoiceColNumber},
 	Customer:   velox.StringCol[Invoice, string]{I: invoiceColCustomer},
 	Status:     velox.StringCol[Invoice, InvoiceStatus]{I: invoiceColStatus},
@@ -90,6 +95,7 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return time.Now() }, Immutable: true},
 			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return time.Now() }, UpdateDefault: func() any { return time.Now() }},
 			{Field: "OrgID", Name: "org_id", Immutable: true},
+			{Field: "DeletedAt", Name: "deleted_at"},
 			{Field: "Number", Name: "number"},
 			{Field: "Customer", Name: "customer"},
 			{Field: "Status", Name: "status"},
@@ -97,14 +103,14 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 		},
 		PrimaryKey: []int{invoiceColID},
 		Indexes: []velox.IndexInfo{
-			{Columns: []int{invoiceColOrgID, invoiceColNumber}, Unique: true}, // org_id, number
+			{Columns: []int{invoiceColOrgID, invoiceColNumber}}, // org_id, number
 		},
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Line]("Lines", invoiceColID, lineColInvoiceID),
 		},
-		Scope:  invoiceScope,
-		Policy: rt.InvoicePolicy,
-		Hooks:  rt.InvoiceHooks,
+		Policy:       rt.InvoicePolicy,
+		Hooks:        rt.InvoiceHooks,
+		Interceptors: rt.InvoiceInterceptors,
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case invoiceColID:
@@ -115,6 +121,8 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 				return &x.UpdatedAt
 			case invoiceColOrgID:
 				return &x.OrgID
+			case invoiceColDeletedAt:
+				return &x.DeletedAt
 			case invoiceColNumber:
 				return &x.Number
 			case invoiceColCustomer:
@@ -148,7 +156,7 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 
 // String returns the entity's fields.
 func (x Invoice) String() string {
-	return fmt.Sprintf("Invoice(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Number=%v, Customer=%v, Status=%v, TotalCents=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Number, x.Customer, x.Status, x.TotalCents)
+	return fmt.Sprintf("Invoice(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, DeletedAt=%v, Number=%v, Customer=%v, Status=%v, TotalCents=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, velox.Show(x.DeletedAt), x.Number, x.Customer, x.Status, x.TotalCents)
 }
 
 // GoString is String, so that %#v prints the same text.

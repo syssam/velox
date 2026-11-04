@@ -1,6 +1,7 @@
 // Package schema declares the tracker's entities. go tool velox-gen reads it and
-// writes the gen package beside it. A schema holds structure only: the policies
-// are methods in the gen package.
+// writes the gen package beside it. The InOrg mixin (inorg.go) confines the
+// entities that list it to the caller's Org; the policies (policy.go) decide
+// what a member may do within it.
 package schema
 
 import (
@@ -31,12 +32,13 @@ func (Org) Annotations() []schema.Annotation {
 // User is a member of one Org. An email is unique within the Org.
 type User struct{ schema.Schema }
 
-// Fields returns the columns after the ID. OrgID is Immutable, so that an update
-// cannot move a row to another Org; Scoped confines every statement on
-// User to the context's Org, and fails without one.
+// Mixin adds org_id: InOrg confines every statement on User to the
+// context's Org, and fails without one.
+func (User) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
+
+// Fields returns the columns after the ID and the mixin's.
 func (User) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.String("email").NotEmpty().MaxLen(200),
 		field.String("name").NotEmpty().MaxLen(100),
 		field.String("password_hash").Sensitive(),
@@ -67,13 +69,12 @@ func (Session) Fields() []schema.Field {
 // Project groups Issues. Only an admin can change one (policy.go).
 type Project struct{ schema.Schema }
 
-// Mixin adds created_at and updated_at.
-func (Project) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
+// Mixin adds created_at and updated_at, and org_id, which InOrg confines.
+func (Project) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}, InOrg{}} }
 
-// Fields returns the columns after the ID and the mixin's.
+// Fields returns the columns after the ID and the mixins'.
 func (Project) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.String("name").NotEmpty().MaxLen(100),
 	}
 }
@@ -90,13 +91,12 @@ func (Project) Indexes() []schema.Index {
 // (policy.go).
 type Issue struct{ schema.Schema }
 
-// Mixin adds created_at and updated_at.
-func (Issue) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
+// Mixin adds created_at and updated_at, and org_id, which InOrg confines.
+func (Issue) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}, InOrg{}} }
 
-// Fields returns the columns after the ID and the mixin's.
+// Fields returns the columns after the ID and the mixins'.
 func (Issue) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.Int64("project_id"),
 		field.Int64("author_id"),
 		field.Int64("assignee_id").Optional().Nillable(),
@@ -126,13 +126,12 @@ func (Issue) Indexes() []schema.Index {
 // Comment is a remark on an Issue. Its author and an admin can change it.
 type Comment struct{ schema.Schema }
 
-// Mixin adds created_at and updated_at.
-func (Comment) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
+// Mixin adds created_at and updated_at, and org_id, which InOrg confines.
+func (Comment) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}, InOrg{}} }
 
-// Fields returns the columns after the ID and the mixin's.
+// Fields returns the columns after the ID and the mixins'.
 func (Comment) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.Int64("issue_id"),
 		field.Int64("author_id"),
 		field.Text("body").NotEmpty(),
@@ -151,10 +150,12 @@ func (Comment) Edges() []schema.Edge {
 // Label tags Issues. A name is unique within its Org.
 type Label struct{ schema.Schema }
 
-// Fields returns the columns after the ID.
+// Mixin adds org_id, which InOrg confines.
+func (Label) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
+
+// Fields returns the columns after the ID and the mixin's.
 func (Label) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.String("name").NotEmpty().MaxLen(50),
 	}
 }

@@ -49,8 +49,8 @@ func memoDescriptor() velox.Descriptor[Memo] {
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 		},
 		PrimaryKey: []int{memoColID},
-		Scope:      memoScope,
 		Policy:     rt.MemoPolicy,
+		Hooks:      rt.MemoHooks,
 		FieldPtr: func(x *Memo, i int) any {
 			switch i {
 			case memoColID:

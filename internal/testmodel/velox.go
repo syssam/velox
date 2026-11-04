@@ -4,4 +4,4 @@ package testmodel
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion14
+const _ = velox.GeneratedCodeIsVersion15

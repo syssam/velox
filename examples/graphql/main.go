@@ -35,6 +35,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/examples/graphql/gen"
 	"github.com/syssam/velox/examples/graphql/graph"
+	"github.com/syssam/velox/examples/graphql/schema"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -128,7 +129,7 @@ func orgFromHeader(next http.Handler) http.Handler {
 				http.Error(w, "X-Org-ID is not a number", http.StatusBadRequest)
 				return
 			}
-			r = r.WithContext(gen.OrgKey.With(r.Context(), org))
+			r = r.WithContext(schema.OrgKey.With(r.Context(), org))
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -247,7 +248,7 @@ func seed(ctx context.Context, db *velox.DB) error {
 		},
 	}
 	for _, org := range []int64{acme, globex} {
-		if err := db.InsertAll(posts[org]).Exec(gen.OrgKey.With(ctx, org)); err != nil {
+		if err := db.InsertAll(posts[org]).Exec(schema.OrgKey.With(ctx, org)); err != nil {
 			return err
 		}
 	}

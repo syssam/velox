@@ -134,43 +134,19 @@ func bindHooks[E any](hs []Hook[E]) BoundHooks {
 	return b
 }
 
-// Scoper is what Descriptor.Scope holds. For generated code. It is a
-// scope.Scope, or another type that embeds ScopeKit[E] and has the methods
-//
-//	Wrap(p velox.Policy[E]) velox.Policy[E]
-//	Fill() velox.Hook[E]
-//
-// velox wraps the entity's policy, or an empty one, in Wrap, and runs the
-// hook Fill returns before the entity's hooks. It calls each once, when it
-// builds the metadata. A Scoper without Wrap or Fill, or of another entity,
-// is refused then with a *SchemaError, and so is a nil hook from Fill.
-type Scoper interface {
-	scopePolicy(x, scope any, own *engine.EntityPolicy) (*engine.EntityPolicy, string)
-	scopeFill(x, scope any) (engine.HookFn, string)
-}
-
-// ScopeKit makes the type that embeds it a Scoper of entity E. For generated
-// code. It holds nothing. Package scope embeds it in scope.Scope.
-//
-// A scope's bindings are ScopeKit's methods, so that only an entity that has
-// a scope compiles them.
-type ScopeKit[E any] struct{}
-
-// bind keeps in info the interceptors, policy and hooks that s, ps, hs and
-// is compose, for the entity whose new row is x. It is not generic, so that
-// Load, compiled for every entity, instantiates nothing for them: BindPolicy,
-// BindHooks and BindInterceptors erase them where they are bound, and a
-// scope's bindings are ScopeKit's methods. The policies are ANDed in order,
-// the hooks run in order, the first outermost, and the interceptors' are
-// ANDed in order. The scope is outermost: its Wrap holds the AND of ps, and
-// its Fill runs before hs's hooks. retry says the failure is a
-// NotLinkedError's, which Load does not keep.
-func bind(info *EntityInfo, x any, s Scoper, ps []func() BoundPolicy, hs []func() BoundHooks, is []func() BoundInterceptors) (retry bool, err error) {
-	return engine.Unlinked(bindAll(info, x, s, ps, hs, is))
+// bind keeps in info the interceptors, policy and hooks that ps, hs and is
+// compose. It is not generic, so that Load, compiled for every entity,
+// instantiates nothing for them: BindPolicy, BindHooks and BindInterceptors
+// erase them where they are bound. The policies are ANDed in order, the
+// hooks run in order, the first outermost, and the interceptors' are ANDed
+// in order. retry says the failure is a NotLinkedError's, which Load does
+// not keep.
+func bind(info *EntityInfo, ps []func() BoundPolicy, hs []func() BoundHooks, is []func() BoundInterceptors) (retry bool, err error) {
+	return engine.Unlinked(bindAll(info, ps, hs, is))
 }
 
 // bindAll is bind, with a NotLinkedError's failure wrapped.
-func bindAll(info *EntityInfo, x any, s Scoper, ps []func() BoundPolicy, hs []func() BoundHooks, is []func() BoundInterceptors) error {
+func bindAll(info *EntityInfo, ps []func() BoundPolicy, hs []func() BoundHooks, is []func() BoundInterceptors) error {
 	if len(is) > 0 {
 		err := engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
 			var fs []engine.FilterFn
@@ -190,40 +166,26 @@ func bindAll(info *EntityInfo, x any, s Scoper, ps []func() BoundPolicy, hs []fu
 			return err
 		}
 	}
-	if s != nil || len(ps) > 0 {
+	if len(ps) > 0 {
 		err := engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
-			var own *engine.EntityPolicy
-			if len(ps) > 0 {
-				all := make([]*engine.EntityPolicy, len(ps))
-				for i, p := range ps {
-					if p == nil {
-						return nil, engine.NilBinding("Policy", i)
-					}
-					all[i] = engine.PolicyOf(p())
+			all := make([]*engine.EntityPolicy, len(ps))
+			for i, p := range ps {
+				if p == nil {
+					return nil, engine.NilBinding("Policy", i)
 				}
-				own = engine.AndPolicies(all)
+				all[i] = engine.PolicyOf(p())
 			}
-			if s == nil {
-				return own, ""
-			}
-			return s.scopePolicy(x, s, own)
+			return engine.AndPolicies(all), ""
 		})
 		if err != nil {
 			return err
 		}
 	}
-	if s == nil && len(hs) == 0 {
+	if len(hs) == 0 {
 		return nil
 	}
 	return engine.EraseHooks(info, func() ([]engine.HookFn, string) {
 		var all []engine.HookFn
-		if s != nil {
-			fill, reason := s.scopeFill(x, s)
-			if reason != "" {
-				return nil, reason
-			}
-			all = append(all, fill)
-		}
 		base := 0
 		for i, h := range hs {
 			if h == nil {
@@ -238,61 +200,6 @@ func bindAll(info *EntityInfo, x any, s Scoper, ps []func() BoundPolicy, hs []fu
 		}
 		return all, ""
 	})
-}
-
-// wrapper and filler are a Scoper's methods.
-type (
-	wrapper[E any] interface{ Wrap(p Policy[E]) Policy[E] }
-	filler[E any]  interface{ Fill() Hook[E] }
-)
-
-// scopePolicy is scope's Wrap around own, or around an empty Policy when
-// own is nil, with E erased. scope is the Scoper that embeds k.
-func (k ScopeKit[E]) scopePolicy(x, scope any, own *engine.EntityPolicy) (*engine.EntityPolicy, string) {
-	if _, ok := x.(*E); !ok {
-		return nil, engine.OtherEntity(scope)
-	}
-	w, ok := scope.(wrapper[E])
-	if !ok {
-		return nil, engine.ScopeLacks(scope, "Wrap(velox.Policy[E]) velox.Policy[E]")
-	}
-	return policyOf(w.Wrap(typedPolicy[E](own))), ""
-}
-
-// typedPolicy is pol as a Policy[E], undoing policyOf; the zero Policy when
-// pol is nil. A field nil in pol is nil in the result.
-func typedPolicy[E any](pol *engine.EntityPolicy) Policy[E] {
-	var p Policy[E]
-	if pol == nil {
-		return p
-	}
-	if r := pol.Read; r != nil {
-		p.Read = func(ctx context.Context) (Pred[E], error) { q, err := r(ctx); return Pred[E](q), err }
-	}
-	if w := pol.Write; w != nil {
-		p.Write = func(ctx context.Context) (Pred[E], error) { q, err := w(ctx); return Pred[E](q), err }
-	}
-	if ins := pol.Insert; ins != nil {
-		p.Insert = func(ctx context.Context, x *E) error { return ins(ctx, unsafe.Pointer(x)) }
-	}
-	return p
-}
-
-// scopeFill is scope's Fill hook with E erased. scope is the Scoper that
-// embeds k.
-func (k ScopeKit[E]) scopeFill(x, scope any) (engine.HookFn, string) {
-	if _, ok := x.(*E); !ok {
-		return nil, engine.OtherEntity(scope)
-	}
-	s, ok := scope.(filler[E])
-	if !ok {
-		return nil, engine.ScopeLacks(scope, "Fill() velox.Hook[E]")
-	}
-	fill := s.Fill()
-	if fill == nil {
-		return nil, engine.NilHook(-1)
-	}
-	return erase(fill), ""
 }
 
 // policyOf is p with E erased.

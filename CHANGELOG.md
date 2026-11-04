@@ -152,8 +152,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 - **Breaking.** `scope.By[E](key, column)` finds the scope's column by its name, with
   `velox.Field`, so that a mixin's generic `Policy` and `Hooks` can call it. It refuses a
-  column that is mutable or nullable, as the entity's `*SchemaError` at its first use. The
-  old `scope.By(key, eq, field)` is `scope.ByHandle`, for the code `schema.Scoped` generates.
+  column that is mutable or nullable, as the entity's `*SchemaError` at its first use.
+  `Scope.Wrap` is gone: velox ANDs a scope's `Policy()` with the entity's own.
+- **Breaking.** `GeneratedCodeIsVersion15`: regenerate. Tenancy is a mixin (ADR 0038):
+  `schema.Scoped`, `scope_velox.go` and its key variables, `Descriptor.Scope`,
+  `velox.Scoper` and `velox.ScopeKit` are gone. Declare the key in the schema package,
+  `var OrgKey = scope.NewKey[int64]("org")`, and a mixin whose `Fields` holds the
+  Immutable column, whose `Policy[E]` returns `scope.By[E](OrgKey, "org_id").Policy()` and
+  whose `Hooks[E]` returns its `Fill()`. `gen.OrgKey` becomes `schema.OrgKey`.
+- velox-graphql: Create's doc no longer names a required field that the schema leaves out
+  of the create input explicitly, with `Skip(SkipMutationCreateInput)` or
+  `CreateInput(false)`: the application or a hook sets it, as a tenancy mixin's hook does.
 - `GeneratedCodeIsVersion14`: regenerate. `velox.BindPolicy`, `BindHooks` and
   `BindInterceptors` take the functions to bind, `BindPolicy(fs ...func() Policy[E])`, and
   return the Descriptor's list. Package runtime binds each entity's sources there,

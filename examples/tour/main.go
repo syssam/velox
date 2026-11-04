@@ -21,7 +21,9 @@ import (
 	"github.com/syssam/velox/examples/tour/gen"
 	_ "github.com/syssam/velox/examples/tour/gen/runtime" // binds the schema's hooks and policies
 	"github.com/syssam/velox/examples/tour/role"
+	"github.com/syssam/velox/examples/tour/schema"
 	"github.com/syssam/velox/migrate"
+	"github.com/syssam/velox/schema/mixin/softdelete"
 	"github.com/syssam/velox/scope"
 )
 
@@ -80,9 +82,9 @@ func run(ctx context.Context, w io.Writer) error {
 	// 1. The context says who is asking: the organization and the role,
 	// which the policies read. Middleware would set both.
 	say("\n== 1. Contexts and inserts")
-	acct := role.With(gen.OrgKey.With(ctx, acme), role.Accountant)
-	viewer := role.With(gen.OrgKey.With(ctx, acme), role.Viewer)
-	globexAcct := role.With(gen.OrgKey.With(ctx, globex), role.Accountant)
+	acct := role.With(schema.OrgKey.With(ctx, acme), role.Accountant)
+	viewer := role.With(schema.OrgKey.With(ctx, acme), role.Viewer)
+	globexAcct := role.With(schema.OrgKey.With(ctx, globex), role.Accountant)
 
 	// Insert fills OrgID from the context and reads the generated ID back.
 	inv := gen.Invoice{Number: "INV-001", Customer: "Initech", Status: gen.InvoiceStatusSent, TotalCents: 150000}
@@ -223,6 +225,28 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	say("Delete: %d empty line removed", n)
+
+	// softdelete.Mixin makes Invoice's delete an update that sets deleted_at,
+	// and hides the rows it is set on. softdelete.Skip shows them, and a
+	// restore is an update under it.
+	n, err = db.Delete[gen.Invoice]().Where(I.Number.EQ("INV-002")).Exec(acct)
+	if err != nil {
+		return err
+	}
+	live, err := db.Query[gen.Invoice]().Count(acct)
+	if err != nil {
+		return err
+	}
+	all, err := db.Query[gen.Invoice]().Count(softdelete.Skip(acct))
+	if err != nil {
+		return err
+	}
+	say("soft delete: %d invoice deleted; org 1 sees %d, and %d under softdelete.Skip", n, live, all)
+	n, err = db.Update[gen.Invoice]().Where(I.Number.EQ("INV-002")).Set(I.DeletedAt.SetNull()).Exec(softdelete.Skip(acct))
+	if err != nil {
+		return err
+	}
+	say("restore under softdelete.Skip: %d invoice", n)
 
 	// 5. Guards are always on: a read without a Limit, and an update or
 	// delete without a Where, are refused before anything is sent.

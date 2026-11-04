@@ -45,19 +45,16 @@ type Descriptor[E any] struct {
 	// the absence of a value, nor with a pointer.
 	Check func(col int, v any) error
 
-	// Scope names the entity's scope, nil when it has none. Policy, Hooks
-	// and Interceptors list the entity's policies, hooks and interceptors,
-	// each nil when it has none. velox composes them. The policies are
-	// ANDed, in order, and none can lift another. The hooks run in order,
-	// the first outermost. The interceptors' conditions are ANDed, in order.
-	// The scope is outermost: its Wrap holds the AND of the policies, or an
-	// empty Policy, and its Fill runs before the hooks.
+	// Policy, Hooks and Interceptors list the entity's policies, hooks and
+	// interceptors, each nil when it has none. velox composes them. The
+	// policies are ANDed, in order, and none can lift another. The hooks run
+	// in order, the first outermost. The interceptors' conditions are ANDed,
+	// in order.
 	//
-	// velox-gen names the scope of a schema.Scoped column, and the lists
-	// that the generated package runtime binds with BindPolicy, BindHooks
-	// and BindInterceptors, from the mixins' methods and the schema's:
+	// velox-gen names the lists that the generated package runtime binds
+	// with BindPolicy, BindHooks and BindInterceptors, from the mixins'
+	// methods and the schema's:
 	//
-	//	Scope:        commentScope,
 	//	Policy:       rt.CommentPolicy,
 	//	Hooks:        rt.CommentHooks,
 	//	Interceptors: rt.CommentInterceptors,
@@ -73,10 +70,9 @@ type Descriptor[E any] struct {
 	// an interceptor is never silently left out.
 	//
 	// None of the fields names E, and Load composes them in code that is
-	// not generic. So an entity without a policy, hooks, interceptors or a
-	// scope compiles none of their generics. BindPolicy, BindHooks and
-	// BindInterceptors instantiate them where a method is bound, and a
-	// scope's are ScopeKit's methods.
+	// not generic. So an entity without a policy, hooks or interceptors
+	// compiles none of their generics. BindPolicy, BindHooks and
+	// BindInterceptors instantiate them where a method is bound.
 	//
 	// Load calls each function once, when it builds the metadata. A
 	// hand-written method runs on a nil *E, so it may not read its receiver.
@@ -88,7 +84,6 @@ type Descriptor[E any] struct {
 	// that holds the condition resolves it, so the body may build them.
 	// Field does not either: Load records the entity's columns before it
 	// calls the functions, and Field reads them there.
-	Scope        Scoper
 	Policy       []func() BoundPolicy
 	Hooks        []func() BoundHooks
 	Interceptors []func() BoundInterceptors
@@ -127,8 +122,8 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 			return v
 		})
 		addr := d.FieldPtr
-		if err == nil && (d.Scope != nil || len(d.Policy) > 0 || len(d.Hooks) > 0 || len(d.Interceptors) > 0) {
-			retry, err = bind(info, x, d.Scope, d.Policy, d.Hooks, d.Interceptors)
+		if err == nil && (len(d.Policy) > 0 || len(d.Hooks) > 0 || len(d.Interceptors) > 0) {
+			retry, err = bind(info, d.Policy, d.Hooks, d.Interceptors)
 		}
 		if err != nil {
 			info, addr = nil, nil // an error Meta has no scan plan

@@ -13,7 +13,7 @@ package gen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion14
+const _ = velox.GeneratedCodeIsVersion15
 
 // IssueStatus is an enum of the model.
 type IssueStatus string

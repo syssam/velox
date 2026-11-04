@@ -18,6 +18,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/graphql/gen"
+	"github.com/syssam/velox/examples/graphql/schema"
 )
 
 // nested is the request the benchmark serves: users, each with a page of its
@@ -96,9 +97,9 @@ func seedBench(t testing.TB, db *velox.DB, users, posts, tags int) {
 		do   func() error
 	}{
 		{"users", func() error { return db.InsertAll(us).Exec(ctx) }},
-		{"posts", func() error { return db.InsertAll(ps).Exec(gen.OrgKey.With(ctx, acme)) }},
+		{"posts", func() error { return db.InsertAll(ps).Exec(schema.OrgKey.With(ctx, acme)) }},
 		{"tags", func() error { return db.InsertAll(ts).Exec(ctx) }},
-		{"links", func() error { return db.InsertAll(links).Exec(gen.OrgKey.With(ctx, acme)) }},
+		{"links", func() error { return db.InsertAll(links).Exec(schema.OrgKey.With(ctx, acme)) }},
 	} {
 		if err := step.do(); err != nil {
 			t.Fatalf("seeding %s: %v", step.name, err)

@@ -29,7 +29,6 @@ func TestAnnotationJSON(t *testing.T) {
 		{schema.Table("users"), "Table", `{"table":"users"}`},
 		{schema.TableIn("s", "t"), "Table", `{"schema":"s","table":"t"}`},
 		{schema.Comment("a user"), "Comment", `{"text":"a user"}`},
-		{schema.Scoped("org"), "Scoped", `{"key":"org"}`},
 	} {
 		b, err := json.Marshal(c.a)
 		if err != nil || string(b) != c.js || c.a.Name() != c.name {

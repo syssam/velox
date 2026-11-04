@@ -17,6 +17,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tracker/gen"
 	"github.com/syssam/velox/examples/tracker/principal"
+	"github.com/syssam/velox/examples/tracker/schema"
 )
 
 const (
@@ -118,7 +119,7 @@ func (s *server) signup(w http.ResponseWriter, r *http.Request) {
 		if err := tx.Insert(&org).Exec(ctx); err != nil {
 			return err
 		}
-		ctx = gen.OrgKey.With(ctx, org.ID)
+		ctx = schema.OrgKey.With(ctx, org.ID)
 		u := gen.User{Email: in.Email, Name: in.Name, PasswordHash: hash, Role: gen.UserRoleAdmin}
 		if err := tx.Insert(&u).Exec(ctx); err != nil {
 			return err
@@ -180,7 +181,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, errorBody{errBadLogin.Error()})
 		return
 	}
-	token, err := newSession(gen.OrgKey.With(r.Context(), u.OrgID), s.db, u)
+	token, err := newSession(schema.OrgKey.With(r.Context(), u.OrgID), s.db, u)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -195,7 +196,7 @@ func (s *server) findLogin(ctx context.Context, slug, email string) (*gen.User, 
 	if err != nil {
 		return nil, err
 	}
-	return s.db.Query[gen.User]().Where(gen.Users.Email.EQ(email)).One(gen.OrgKey.With(ctx, org.ID))
+	return s.db.Query[gen.User]().Where(gen.Users.Email.EQ(email)).One(schema.OrgKey.With(ctx, org.ID))
 }
 
 // logout ends the session of the request's token.
@@ -246,7 +247,7 @@ func (s *server) authed(next http.HandlerFunc) http.HandlerFunc {
 			s.fail(w, r, err)
 			return
 		}
-		ctx = gen.OrgKey.With(ctx, sess.OrgID)
+		ctx = schema.OrgKey.With(ctx, sess.OrgID)
 		u, err := s.db.Query[gen.User]().Where(gen.Users.ID.EQ(sess.UserID)).One(ctx)
 		if velox.IsNotFound(err) {
 			writeJSON(w, http.StatusUnauthorized, errorBody{"log in first"})

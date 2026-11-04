@@ -13,20 +13,23 @@
 //
 // Behaviour, outermost first:
 //
-//	Invoice  Policy: Invoice  Hooks: Invoice
-//	Line     Policy: Line
+//	Invoice  Policy: InOrg, Invoice  Hooks: InOrg, softdelete.Mixin, Invoice  Interceptors: softdelete.Mixin
+//	Line     Policy: InOrg, Line     Hooks: InOrg
 package runtime
 
 import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tour/gen"
 	sch "github.com/syssam/velox/examples/tour/schema"
+	"github.com/syssam/velox/schema/mixin/softdelete"
 )
 
 func init() {
 	gen.SetVeloxRuntime(gen.VeloxRuntime{
-		InvoicePolicy: velox.BindPolicy[gen.Invoice](sch.Invoice{}.Policy),
-		InvoiceHooks:  velox.BindHooks[gen.Invoice](sch.Invoice{}.Hooks),
-		LinePolicy:    velox.BindPolicy[gen.Line](sch.Line{}.Policy),
+		InvoicePolicy:       velox.BindPolicy[gen.Invoice](sch.InOrg{}.Policy, sch.Invoice{}.Policy),
+		InvoiceHooks:        velox.BindHooks[gen.Invoice](sch.InOrg{}.Hooks, softdelete.Mixin{}.Hooks, sch.Invoice{}.Hooks),
+		InvoiceInterceptors: velox.BindInterceptors[gen.Invoice](softdelete.Mixin{}.Interceptors),
+		LinePolicy:          velox.BindPolicy[gen.Line](sch.InOrg{}.Policy, sch.Line{}.Policy),
+		LineHooks:           velox.BindHooks[gen.Line](sch.InOrg{}.Hooks),
 	})
 }

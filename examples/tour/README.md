@@ -13,16 +13,15 @@ go run ./tour
 
 - `schema/` declares the entities in the ent-style DSL. `invoice.go` declares
   `Invoice`, which lists the `mixin.Time` mixin (`created_at` and
-  `updated_at`), has an `OrgID` that is `Immutable` and `Scoped`, a unique number per
-  organization, a `Lines` relation and a `status` enum. `line.go` declares `Line`.
+  `updated_at`), the `InOrg` mixin (`inorg.go`: an `Immutable` `org_id`, and the
+  policy and hook that confine every statement to one organization), the
+  `softdelete` mixin (`deleted_at`), a unique number per organization among the
+  invoices that are not deleted, a `Lines` relation and a `status` enum. `line.go` declares `Line`.
   `invoice_behaviour.go` declares `Invoice`'s `Policy()` and `Hooks()`, and
   `line_policy.go` `Line`'s `Policy()`, typed with the generated entities.
 - `gen/` is written entirely by `go tool velox-gen -out ./tour/gen ./tour/schema`.
-  The `OrgKey` key and the scope that confines every statement to one
-  organization (the `scope` package) are generated, from the `Scoped` columns of
-  the schema, into `scope_velox.go`. The schema's `Policy` and `Hooks` are typed
-  with `gen`, and `gen/runtime`, which `main.go` imports for its effect, binds
-  them around the scope.
+  The schema's `Policy` and `Hooks` are typed with `gen`, and `gen/runtime`,
+  which `main.go` imports for its effect, binds them after the mixins'.
 - `role/` holds the billing role a request acts with.
 - `migrations/` holds the tables, made by `go tool velox-gen migrate diff
   -dialect sqlite -dir ./tour/migrations ./tour/schema`; `main.go` applies it
@@ -30,7 +29,7 @@ go run ./tour
 
 ## What it shows
 
-1. A context carrying the organization (`gen.OrgKey.With`) and a role for the
+1. A context carrying the organization (`schema.OrgKey.With`) and a role for the
    policy; `Insert` and `InsertAll` fill the `org_id` column from it, and the
    insert hook refuses an invalid invoice.
 2. Reads: `Where`, `OrderBy`, `Limit` and `All`; `One`; `Count`; `Iter`;
@@ -38,7 +37,8 @@ go run ./tour
 3. `SQL(ctx)`, which prints the statement a query would send, with the
    organization condition and the policy's condition for that context.
 4. Writes: `Update` with `Set` and `Where`, `Save` of named columns, and
-   `Delete` with `Where`.
+   `Delete` with `Where`; an invoice's delete is soft, `softdelete.Skip` shows it,
+   and an update under `Skip` restores it.
 5. Guards: a query with no `Limit` fails with `ErrUnbounded`, a delete with no
    `Where` with `ErrNoWhere`.
 6. Policy and organizations: a viewer's update fails with `ErrDenied`, a viewer

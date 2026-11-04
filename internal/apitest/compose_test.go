@@ -96,7 +96,6 @@ var composeTrace []string
 // "hidden" and refuses to insert "banned"; the hooks, two, record the OrgID
 // they see.
 func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
-	org := velox.NumberCol[E, int64]{I: 1}
 	name := velox.StringCol[E, string]{I: 2}
 	d := velox.Descriptor[E]{
 		Table: table,
@@ -109,11 +108,14 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 			return [...]any{&r.ID, &r.OrgID, &r.Name}[i]
 		},
 	}
-	if table[1] == '1' {
-		d.Scope = scope.ByHandle(composeOrg, org.EQ, func(x *E) *int64 { return &row(x).OrgID })
+	var policies []func() velox.Policy[E]
+	var hooks []func() []velox.Hook[E]
+	if table[1] == '1' { // a tenancy mixin's, first
+		policies = append(policies, func() velox.Policy[E] { return scope.By[E](composeOrg, "org_id").Policy() })
+		hooks = append(hooks, func() []velox.Hook[E] { return []velox.Hook[E]{scope.By[E](composeOrg, "org_id").Fill()} })
 	}
 	if table[2] == '1' {
-		d.Policy = velox.BindPolicy(func() velox.Policy[E] {
+		policies = append(policies, func() velox.Policy[E] {
 			return velox.Policy[E]{
 				Read: func(context.Context) (velox.Pred[E], error) { return name.NEQ("hidden"), nil },
 				Insert: func(_ context.Context, x *E) error {
@@ -124,6 +126,9 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 				},
 			}
 		})
+	}
+	if len(policies) > 0 {
+		d.Policy = velox.BindPolicy(policies...)
 	}
 	if table[3] == '1' {
 		hook := func(label string) velox.Hook[E] {
@@ -136,14 +141,18 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 				})
 			}
 		}
-		d.Hooks = velox.BindHooks(func() []velox.Hook[E] { return []velox.Hook[E]{hook("h1"), hook("h2")} })
+		hooks = append(hooks, func() []velox.Hook[E] { return []velox.Hook[E]{hook("h1"), hook("h2")} })
+	}
+	if len(hooks) > 0 {
+		d.Hooks = velox.BindHooks(hooks...)
 	}
 	return d
 }
 
-// TestComposeScopePolicyHooks: for each combination of a scope, a policy and
-// hooks, the policy is the scope's Wrap around the entity's own, or around an
-// empty one, and the hooks are the scope's Fill, then the entity's, in order.
+// TestComposeScopePolicyHooks: for each combination of a scope, bound as a
+// tenancy mixin's policy and hook are, first, a policy and hooks, the policies
+// are ANDed, the scope's first, and the hooks are the scope's Fill, then the
+// entity's, in order.
 func TestComposeScopePolicyHooks(t *testing.T) {
 	type ops struct {
 		query   func(db *velox.DB, ctx context.Context) error
@@ -238,55 +247,4 @@ func composeOps[E any, PE velox.Entity[E]]() (o struct {
 	}
 	o.checked = velox.CheckEntity[E, PE]
 	return o
-}
-
-// The bad scopes: one with neither Wrap nor Fill, one with Wrap only, one of
-// another entity, and one whose Fill is nil.
-type (
-	kitOnly    struct{ velox.ScopeKit[sBad] }
-	wrapOnly   struct{ velox.ScopeKit[sBad] }
-	otherScope struct{ velox.ScopeKit[c000] }
-	nilFill    struct{ velox.ScopeKit[sBad] }
-)
-
-func (wrapOnly) Wrap(p velox.Policy[sBad]) velox.Policy[sBad] { return p }
-func (nilFill) Wrap(p velox.Policy[sBad]) velox.Policy[sBad]  { return p }
-func (nilFill) Fill() velox.Hook[sBad]                        { return nil }
-
-// sBad is an entity whose descriptor's Scope is sBadScope, and whose
-// metadata sBadMeta holds: a test sets both.
-type sBad struct{ ID int64 }
-
-var (
-	sBadScope velox.Scoper
-	sBadMeta  *velox.MetaOnce[sBad]
-)
-
-func (*sBad) VeloxMeta() *velox.Meta[sBad] {
-	return sBadMeta.Load(func() velox.Descriptor[sBad] {
-		return velox.Descriptor[sBad]{Scope: sBadScope, Table: "bad", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
-			PrimaryKey: []int{0}, FieldPtr: func(x *sBad, i int) any { return &x.ID }}
-	})
-}
-
-// TestBadScopeIsRefused: a Scoper without Wrap or Fill, of another entity, or
-// whose Fill is nil, is refused when the metadata is built, with a
-// *SchemaError that says why.
-func TestBadScopeIsRefused(t *testing.T) {
-	for _, c := range []struct {
-		scope velox.Scoper
-		want  string
-	}{
-		{kitOnly{}, "velox: apitest.sBad: its Scope, a apitest.kitOnly, has no method Wrap(velox.Policy[E]) velox.Policy[E]"},
-		{wrapOnly{}, "velox: apitest.sBad: its Scope, a apitest.wrapOnly, has no method Fill() velox.Hook[E]"},
-		{otherScope{}, "velox: apitest.sBad: its Descriptor names a apitest.otherScope, which is another entity's"},
-		{nilFill{}, "velox: apitest.sBad: Scope.Fill() is nil"},
-	} {
-		sBadScope, sBadMeta = c.scope, new(velox.MetaOnce[sBad])
-		err := velox.CheckEntity[sBad]()
-		var se *velox.SchemaError
-		if !errors.As(err, &se) || err.Error() != c.want {
-			t.Errorf("%T: got %v, want %s", c.scope, err, c.want)
-		}
-	}
 }

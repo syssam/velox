@@ -6,7 +6,7 @@ together in a real service. The others show one topic each.
 | Piece | Where |
 |---|---|
 | Entities, relations, a many-to-many, a cascading foreign key | `schema/schema.go` |
-| Each organization sees only its own rows | `schema.Scoped("org")` on each `org_id`, which velox-gen turns into `scope.By` and binds as a Policy and a Hook of the entity; `authed` in `auth.go` names the Org once per request |
+| Each organization sees only its own rows | the `InOrg` mixin in `schema/inorg.go`, whose Policy and Hooks are `scope.By`'s, listed in each entity's `Mixin()`; `authed` in `auth.go` names the Org once per request |
 | Who may change what, enforced in the statements themselves for projects, issues and comments | `schema/policy.go`, typed with `gen` and bound by `gen/runtime`, which `main.go` imports for its effect, and `principal/principal.go`; `User` has only the Org scope, as signing up inserts one before anyone is logged in, so `invite` checks the role itself |
 | Logins: salted password hashes, tokens stored only as hashes | `auth.go` |
 | Transactions | `signup` in `auth.go`, `createIssue` in `server.go` |
@@ -67,7 +67,7 @@ until it is null.
 
 - **Isolation is not the handlers' job.** No handler filters by organization.
   `authed` puts the Org in the context, and every statement on an entity whose
-  descriptor has the scope (`Scoped` on its `org_id`) is confined to it, or fails with
+  schema lists the `InOrg` mixin is confined to it, or fails with
   `scope.ErrNoScope` without one. Another organization's issue is a
   404, not a 403: it does not exist for the caller.
 - **A foreign key does not know about the Org.** `updateIssue` and `addComment`

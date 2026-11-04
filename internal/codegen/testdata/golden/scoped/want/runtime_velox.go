@@ -11,7 +11,13 @@ import "github.com/syssam/velox"
 // Applications do not use this type: they import package runtime for its
 // effect.
 type VeloxRuntime struct {
+	HomePolicy []func() velox.BoundPolicy
+	HomeHooks  []func() velox.BoundHooks
 	MemoPolicy []func() velox.BoundPolicy
+	MemoHooks  []func() velox.BoundHooks
+	NotePolicy []func() velox.BoundPolicy
+	NoteHooks  []func() velox.BoundHooks
+	TagPolicy  []func() velox.BoundPolicy
 	TagHooks   []func() velox.BoundHooks
 	TaskPolicy []func() velox.BoundPolicy
 	TaskHooks  []func() velox.BoundHooks

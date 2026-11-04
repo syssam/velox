@@ -12,12 +12,13 @@ import (
 // the organization, not across organizations.
 type Project struct{ schema.Schema }
 
-// Fields returns the columns after the ID. OrgID is Immutable, so that an
-// update cannot move a row to another organization, and Scoped: velox-gen
-// confines every statement on Project to the organization the context names.
+// Mixin adds org_id: InOrg (inorg.go) confines every statement on Project to
+// the organization the context names.
+func (Project) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
+
+// Fields returns the columns after the ID and the mixin's.
 func (Project) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.String("name"),
 		field.String("status"),
 	}

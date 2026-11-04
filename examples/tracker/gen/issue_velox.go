@@ -138,8 +138,8 @@ func issueDescriptor() velox.Descriptor[Issue] {
 			velox.EdgeTo[Comment]("Comments", issueColID, commentColIssueID),
 			velox.EdgeThrough[IssueLabel, Label]("Labels", issueColID, issueLabelColIssueID, issueLabelColLabelID, labelColID),
 		},
-		Scope:  issueScope,
 		Policy: rt.IssuePolicy,
+		Hooks:  rt.IssueHooks,
 		FieldPtr: func(x *Issue, i int) any {
 			switch i {
 			case issueColID:

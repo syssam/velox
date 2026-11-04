@@ -11,9 +11,11 @@ import "github.com/syssam/velox"
 // Applications do not use this type: they import package runtime for its
 // effect.
 type VeloxRuntime struct {
-	InvoicePolicy []func() velox.BoundPolicy
-	InvoiceHooks  []func() velox.BoundHooks
-	LinePolicy    []func() velox.BoundPolicy
+	InvoicePolicy       []func() velox.BoundPolicy
+	InvoiceHooks        []func() velox.BoundHooks
+	InvoiceInterceptors []func() velox.BoundInterceptors
+	LinePolicy          []func() velox.BoundPolicy
+	LineHooks           []func() velox.BoundHooks
 }
 
 var veloxRT *VeloxRuntime

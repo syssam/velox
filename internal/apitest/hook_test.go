@@ -223,8 +223,7 @@ func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 	})
 }
 
-// hNilAfter's Hooks lists a nil hook, and its scope's Fill binds a hook
-// before it.
+// hNilAfter's Hooks lists a nil hook, and a mixin's binds a hook before it.
 type hNilAfter struct{ ID int64 }
 
 func (*hNilAfter) Hooks() []velox.Hook[hNilAfter] { return []velox.Hook[hNilAfter]{nil} }
@@ -233,18 +232,14 @@ var hNilAfterMeta velox.MetaOnce[hNilAfter]
 
 func (*hNilAfter) VeloxMeta() *velox.Meta[hNilAfter] {
 	return hNilAfterMeta.Load(func() velox.Descriptor[hNilAfter] {
-		return velox.Descriptor[hNilAfter]{Scope: nilAfterScope{}, Hooks: velox.BindHooks((*hNilAfter)(nil).Hooks), Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNilAfter]{Hooks: velox.BindHooks(nilAfterMixin, (*hNilAfter)(nil).Hooks), Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNilAfter, i int) any { return &x.ID }}
 	})
 }
 
-// nilAfterScope is hNilAfter's scope: its Fill is a hook that does nothing.
-type nilAfterScope struct{ velox.ScopeKit[hNilAfter] }
-
-func (nilAfterScope) Wrap(p velox.Policy[hNilAfter]) velox.Policy[hNilAfter] { return p }
-
-func (nilAfterScope) Fill() velox.Hook[hNilAfter] {
-	return func(next velox.Mutator[hNilAfter]) velox.Mutator[hNilAfter] { return next }
+// nilAfterMixin is a mixin's Hooks for hNilAfter: one hook that does nothing.
+func nilAfterMixin() []velox.Hook[hNilAfter] {
+	return []velox.Hook[hNilAfter]{func(next velox.Mutator[hNilAfter]) velox.Mutator[hNilAfter] { return next }}
 }
 
 // hPanic's Policy reads its receiver, which is nil.
@@ -271,9 +266,9 @@ func TestHooksAndPolicyRefusals(t *testing.T) {
 	if !errors.As(err, &se) || err.Error() != "velox: apitest.hNil: Hooks()[0] is nil" {
 		t.Fatalf("got %v", err)
 	}
-	// The nil hook is the first of the entity's own Hooks, whatever is bound before it.
+	// The nil hook's index counts the hooks bound before it, a mixin's.
 	err = db.Insert(&hNilAfter{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || err.Error() != "velox: apitest.hNilAfter: Hooks()[0] is nil" {
+	if !errors.As(err, &se) || err.Error() != "velox: apitest.hNilAfter: Hooks()[1] is nil" {
 		t.Fatalf("got %v", err)
 	}
 	err = db.Insert(&hPanic{ID: 1}).Exec(ctx)

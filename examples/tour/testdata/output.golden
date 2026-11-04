@@ -18,16 +18,18 @@ Has: 1 invoice with lines, INV-001
 
 == 3. SQL(ctx)
 as accountant:
-  SELECT "id", "number" FROM "invoices" WHERE "customer" = ? AND "org_id" = ? LIMIT ?
+  SELECT "id", "number" FROM "invoices" WHERE "customer" = ? AND "deleted_at" IS NULL AND "org_id" = ? LIMIT ?
   [Initech 1 10]
 as viewer:
-  SELECT "id", "number" FROM "invoices" WHERE "customer" = ? AND "org_id" = ? AND "status" <> ? LIMIT ?
+  SELECT "id", "number" FROM "invoices" WHERE "customer" = ? AND "deleted_at" IS NULL AND "org_id" = ? AND "status" <> ? LIMIT ?
   [Initech 1 draft 10]
 
 == 4. Writing
 Update: 1 row marked paid
 Save: INV-002 customer is now Umbrella Corp
 Delete: 1 empty line removed
+soft delete: 1 invoice deleted; org 1 sees 2, and 3 under softdelete.Skip
+restore under softdelete.Skip: 1 invoice
 
 == 5. Guards
 no Limit: ErrUnbounded=true: velox: gen.Invoice: query has no Limit: add Limit, or Unbounded to read every row
@@ -45,7 +47,7 @@ INV-003 is taken (unique constraint on invoices.org_id, invoices.number); using 
 committed: org 1 has 4 invoices
 
 == 8. WithoutPolicy
-SELECT "id", "created_at", "updated_at", "org_id", "number", "customer", "status", "total_cents" FROM "invoices" WHERE "status" <> ?
+SELECT "id", "created_at", "updated_at", "org_id", "deleted_at", "number", "customer", "status", "total_cents" FROM "invoices" WHERE "status" <> ? AND "deleted_at" IS NULL
 paid in all: 1950.00
 org 1: 2750.00
 org 2: 990.00

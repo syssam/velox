@@ -25,6 +25,11 @@
           "type": "integer"
         },
         {
+          "name": "deleted_at",
+          "type": "datetime",
+          "nullable": true
+        },
+        {
           "name": "number",
           "type": "text"
         },
@@ -51,7 +56,8 @@
             "org_id",
             "number"
           ],
-          "unique": true
+          "unique": true,
+          "where": "deleted_at IS NULL"
         }
       ],
       "checks": [

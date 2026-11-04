@@ -11,12 +11,14 @@ import (
 // organization's rows are all in the same database.
 type Note struct{ schema.Schema }
 
-// Fields returns the columns after the ID. OrgID is Immutable and Scoped: the
-// generated gen.OrgKey and Note's policy confine every statement on Note to the
-// context's organization; WithShardFor maps that organization to a shard.
+// Mixin adds org_id: InOrg (inorg.go) confines every statement on Note to
+// the context's organization, OrgKey; WithShardFor maps that organization to
+// a shard.
+func (Note) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
+
+// Fields returns the columns after the ID and the mixin's.
 func (Note) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org")),
 		field.String("body"),
 	}
 }

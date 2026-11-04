@@ -99,8 +99,8 @@ func commentDescriptor() velox.Descriptor[Comment] {
 			velox.EdgeTo[Issue]("Issue", commentColIssueID, issueColID),
 			velox.EdgeTo[User]("Author", commentColAuthorID, userColID),
 		},
-		Scope:  commentScope,
 		Policy: rt.CommentPolicy,
+		Hooks:  rt.CommentHooks,
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case commentColID:

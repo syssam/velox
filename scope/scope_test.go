@@ -269,45 +269,6 @@ func TestScopeANDsWithTheEntitysPolicy(t *testing.T) {
 	}
 }
 
-// TestWrapAddsToThePoliciesRules: Wrap, which a Descriptor's Scope uses,
-// ANDs the scope with the policy it wraps.
-func TestWrapAddsToThePoliciesRules(t *testing.T) {
-	db := openNotes(t)
-	s := scope.ByHandle(org, Notes.OrgID.EQ, func(x *note) *int64 { return &x.OrgID })
-	p := s.Wrap(velox.Policy[note]{
-		Read: func(context.Context) (velox.Pred[note], error) { return Notes.Title.EQ("ok"), nil },
-		Insert: func(_ context.Context, x *note) error {
-			if x.Title == "banned" {
-				return errors.New("banned title")
-			}
-			return nil
-		},
-	})
-	a := org.With(context.Background(), 1)
-	if err := p.Insert(a, &note{OrgID: 1, Title: "banned"}); err == nil {
-		t.Error("the wrapped Insert was skipped")
-	}
-	if err := p.Insert(a, &note{OrgID: 1, Title: "ok"}); err != nil {
-		t.Error(err)
-	}
-	cond, err := p.Read(a)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Insert(&note{Title: "ok"}).Exec(a); err != nil {
-		t.Fatal(err)
-	}
-	if n, err := db.Query[note]().Where(cond).Count(a); err != nil || n != 1 {
-		t.Errorf("count = %d, %v", n, err)
-	}
-	failing := s.Wrap(velox.Policy[note]{Read: func(context.Context) (velox.Pred[note], error) {
-		return velox.Pred[note]{}, errors.New("inner")
-	}})
-	if _, err := failing.Read(a); err == nil || err.Error() != "inner" {
-		t.Errorf("the wrapped Read's error: %v", err)
-	}
-}
-
 // TestByRefuses: By refuses a column that is missing, of another type,
 // mutable or nullable, as the entity's *SchemaError at its first use.
 func TestByRefuses(t *testing.T) {

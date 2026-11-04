@@ -20,6 +20,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/routing/gen"
+	"github.com/syssam/velox/examples/routing/schema"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -51,7 +52,7 @@ const (
 // names no shard, which refuses the statement with ErrNoShard; an error refuses
 // it too.
 func shardFor(ctx context.Context) (string, error) {
-	org, ok := gen.OrgKey.From(ctx)
+	org, ok := schema.OrgKey.From(ctx)
 	if !ok {
 		return "", nil
 	}
@@ -201,13 +202,13 @@ func run(ctx context.Context, w io.Writer) error {
 		// current.
 		return read(velox.WithPrimaryReads(ctx), "read, Primary")
 	})
-	if err := edit(gen.OrgKey.With(ctx, acme)); err != nil {
+	if err := edit(schema.OrgKey.With(ctx, acme)); err != nil {
 		return err
 	}
 
 	// A write for globex reaches only the us shard.
 	note := gen.Note{Body: "us note"}
-	if err := db.Insert(&note).Exec(gen.OrgKey.With(ctx, globex)); err != nil {
+	if err := db.Insert(&note).Exec(schema.OrgKey.With(ctx, globex)); err != nil {
 		return err
 	}
 	say("%-18s %q for org %d on %s", "insert:", note.Body, note.OrgID, where(ran))

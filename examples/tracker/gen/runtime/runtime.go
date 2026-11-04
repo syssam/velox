@@ -13,9 +13,11 @@
 //
 // Behaviour, outermost first:
 //
-//	Comment  Policy: Comment
-//	Issue    Policy: Issue
-//	Project  Policy: Project
+//	Comment  Policy: InOrg, Comment  Hooks: InOrg
+//	Issue    Policy: InOrg, Issue    Hooks: InOrg
+//	Label    Policy: InOrg           Hooks: InOrg
+//	Project  Policy: InOrg, Project  Hooks: InOrg
+//	User     Policy: InOrg           Hooks: InOrg
 package runtime
 
 import (
@@ -26,8 +28,15 @@ import (
 
 func init() {
 	gen.SetVeloxRuntime(gen.VeloxRuntime{
-		CommentPolicy: velox.BindPolicy[gen.Comment](sch.Comment{}.Policy),
-		IssuePolicy:   velox.BindPolicy[gen.Issue](sch.Issue{}.Policy),
-		ProjectPolicy: velox.BindPolicy[gen.Project](sch.Project{}.Policy),
+		CommentPolicy: velox.BindPolicy[gen.Comment](sch.InOrg{}.Policy, sch.Comment{}.Policy),
+		CommentHooks:  velox.BindHooks[gen.Comment](sch.InOrg{}.Hooks),
+		IssuePolicy:   velox.BindPolicy[gen.Issue](sch.InOrg{}.Policy, sch.Issue{}.Policy),
+		IssueHooks:    velox.BindHooks[gen.Issue](sch.InOrg{}.Hooks),
+		LabelPolicy:   velox.BindPolicy[gen.Label](sch.InOrg{}.Policy),
+		LabelHooks:    velox.BindHooks[gen.Label](sch.InOrg{}.Hooks),
+		ProjectPolicy: velox.BindPolicy[gen.Project](sch.InOrg{}.Policy, sch.Project{}.Policy),
+		ProjectHooks:  velox.BindHooks[gen.Project](sch.InOrg{}.Hooks),
+		UserPolicy:    velox.BindPolicy[gen.User](sch.InOrg{}.Policy),
+		UserHooks:     velox.BindHooks[gen.User](sch.InOrg{}.Hooks),
 	})
 }

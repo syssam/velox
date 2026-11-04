@@ -41,7 +41,7 @@ func (*Home) VeloxMeta() *velox.Meta[Home] { return homeMeta.Load(homeDescriptor
 
 // homeDescriptor describes Home to velox: its table, columns, edges and hooks.
 func homeDescriptor() velox.Descriptor[Home] {
-	veloxRuntime()
+	rt := veloxRuntime()
 	return velox.Descriptor[Home]{
 		Table: "homes",
 		Columns: []velox.ColumnDescriptor{
@@ -49,7 +49,8 @@ func homeDescriptor() velox.Descriptor[Home] {
 			{Field: "Region", Name: "region", Immutable: true},
 		},
 		PrimaryKey: []int{homeColID},
-		Scope:      homeScope,
+		Policy:     rt.HomePolicy,
+		Hooks:      rt.HomeHooks,
 		FieldPtr: func(x *Home, i int) any {
 			switch i {
 			case homeColID:

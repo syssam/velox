@@ -36,10 +36,8 @@ var handleKinds = map[string]bool{
 // ordinaryMethod reports whether the method name of the generic type recv is
 // one of the exact exceptions: the handles' column and Named's, which make
 // them a Column[E], the MarshalJSON of One
-// and Many (encoding/json finds it by name), MutateFunc's Mutate
-// (interface satisfaction: Mutator's method set needs it), and ScopeKit's
-// scopePolicy and scopeFill (Scoper's method set needs them; only an entity
-// with a scope compiles them).
+// and Many (encoding/json finds it by name), and MutateFunc's Mutate
+// (interface satisfaction: Mutator's method set needs it).
 func ordinaryMethod(name, recv string) bool {
 	switch name {
 	case "column":
@@ -48,8 +46,6 @@ func ordinaryMethod(name, recv string) bool {
 		return recv == "One" || recv == "Many"
 	case "Mutate":
 		return recv == "MutateFunc"
-	case "scopePolicy", "scopeFill":
-		return recv == "ScopeKit"
 	}
 	return false
 }
@@ -111,8 +107,8 @@ func genericOwnTypeParam(fd *ast.FuncDecl) bool {
 // TestMethodsOfGenericTypesAreGeneric enforces that a method of
 // a generic type is a generic method, compiled only where it is called. The
 // exceptions are exact: column on the ten handle kinds and on Named, which
-// makes a handle a Column[E], MarshalJSON on One and Many, Mutate on MutateFunc, and
-// scopePolicy and scopeFill on ScopeKit.
+// makes a handle a Column[E], MarshalJSON on One and Many, and Mutate on
+// MutateFunc.
 func TestMethodsOfGenericTypesAreGeneric(t *testing.T) {
 	t.Parallel()
 	fset := token.NewFileSet()

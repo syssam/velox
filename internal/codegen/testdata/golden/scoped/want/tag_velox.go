@@ -49,7 +49,7 @@ func tagDescriptor() velox.Descriptor[Tag] {
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 		},
 		PrimaryKey: []int{tagColID},
-		Scope:      tagScope,
+		Policy:     rt.TagPolicy,
 		Hooks:      rt.TagHooks,
 		FieldPtr: func(x *Tag, i int) any {
 			switch i {

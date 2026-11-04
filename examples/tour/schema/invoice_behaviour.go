@@ -10,9 +10,10 @@ import (
 	"github.com/syssam/velox/examples/tour/role"
 )
 
-// Policy says who may see and change invoices, within the context's organization
-// (the scope that Scoped generates is bound around it). velox-gen binds it into
-// Invoice's metadata, and velox calls it once, on a nil *gen.Invoice.
+// Policy says who may see and change invoices, within the context's
+// organization: velox ANDs it after InOrg's policy, which confines them to
+// it. gen/runtime binds both into Invoice's metadata, and velox calls each
+// once.
 func (Invoice) Policy() velox.Policy[gen.Invoice] {
 	return velox.Policy[gen.Invoice]{
 		// Accountants see every invoice of their organization; viewers see
@@ -37,7 +38,8 @@ func (Invoice) Policy() velox.Policy[gen.Invoice] {
 }
 
 // Hooks says what a valid new invoice is: a number that starts with INV-.
-// gen/runtime binds it after the scope's fill of the organization.
+// gen/runtime binds it after InOrg's fill of the organization and the soft
+// delete's hook.
 func (Invoice) Hooks() []velox.Hook[gen.Invoice] {
 	return []velox.Hook[gen.Invoice]{velox.On(validNumber, velox.OpInsert)}
 }

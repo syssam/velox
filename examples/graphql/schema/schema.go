@@ -49,14 +49,14 @@ func (User) Annotations() []schema.Annotation {
 // Post belongs to an organization, and to its author.
 type Post struct{ schema.Schema }
 
-// Fields returns the columns after the ID. OrgID is Immutable and graphql.Skip
-// leaves it out of every GraphQL type and input; Scoped confines every
-// statement on Post to the context's organization and fills it on insert.
-// AuthorID is the key of the Author edge, which stands for it in GraphQL. Views is Optional: CreatePostInput may leave it out, and it is
+// Mixin adds org_id: InOrg confines every statement on Post to the context's
+// organization and fills it on insert.
+func (Post) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
+
+// Fields returns the columns after the ID and the mixin's. AuthorID is the key of the Author edge, which stands for it in GraphQL. Views is Optional: CreatePostInput may leave it out, and it is
 // then 0.
 func (Post) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("org_id").Immutable().Annotations(schema.Scoped("org"), graphql.Skip()),
 		field.Int64("author_id").Annotations(graphql.WhereOps(graphql.OpsEquality)),
 		field.String("title").NotEmpty().Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
 		field.Enum("status").Values("draft", "published").Default("draft").Annotations(graphql.WhereOps()),

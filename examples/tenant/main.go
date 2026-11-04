@@ -1,8 +1,8 @@
 // Command tenant shows tenant scoping with the scope package: the context
 // names the organization, and every read, write and insert on a scoped entity
-// is confined to it. The scope is a Policy and a hook (gen/scope_velox.go, from the schema's Scoped), not
-// something the engine knows about, so a rule of another shape is written the
-// same way.
+// is confined to it. The scope is a Policy and a hook of the InOrg mixin
+// (schema/inorg.go), not something the engine knows about, so a rule of
+// another shape is written the same way.
 package main
 
 import (
@@ -19,6 +19,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tenant/gen"
+	"github.com/syssam/velox/examples/tenant/schema"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/scope"
 )
@@ -71,8 +72,8 @@ func run(ctx context.Context, w io.Writer) error {
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 
 	// Middleware would set the organization once per request.
-	acmeCtx := gen.OrgKey.With(ctx, acme)
-	globexCtx := gen.OrgKey.With(ctx, globex)
+	acmeCtx := schema.OrgKey.With(ctx, acme)
+	globexCtx := schema.OrgKey.With(ctx, globex)
 
 	// Inserts fill OrgID from the context, into the caller's structs too.
 	rocket := gen.Project{Name: "Rocket", Status: "active"}

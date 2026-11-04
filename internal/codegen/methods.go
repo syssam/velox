@@ -35,37 +35,22 @@ func (e *FileError) Error() string {
 // that do not start with velox-gen's header. Such a file may add to the
 // package, but not what velox-gen writes or binds: a file that declares a
 // type named like an entity (its methods would clash with the generated
-// ones), or one of reserved, the package-level names velox-gen writes such as
-// a scope key's variable, is a *FileError. So is a Hooks or Policy method on
+// ones), is a *FileError. So is a Hooks or Policy method on
 // an entity: those are declared in the schema package (see SchemaMethods),
 // and the generated code binds them. A file no build includes is not read, and
 // one only some builds include is a *FileError (see userFiles). A missing dir
 // is no files.
-func CheckUserFiles(dir string, entities, reserved []string) error {
+func CheckUserFiles(dir string, entities []string) error {
 	return userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.GenDecl:
 				for _, sp := range d.Specs {
-					switch sp := sp.(type) {
-					case *ast.TypeSpec:
-						if n := sp.Name.Name; slices.Contains(entities, n) {
-							return &FileError{Path: path, Reason: "declares type " + n + ", which velox-gen generates"}
-						} else if slices.Contains(reserved, n) {
-							return &FileError{Path: path, Reason: "declares " + n + ", a name velox-gen generates"}
-						}
-					case *ast.ValueSpec:
-						for _, id := range sp.Names {
-							if slices.Contains(reserved, id.Name) {
-								return &FileError{Path: path, Reason: "declares " + id.Name + ", a name velox-gen generates"}
-							}
-						}
+					if sp, ok := sp.(*ast.TypeSpec); ok && slices.Contains(entities, sp.Name.Name) {
+						return &FileError{Path: path, Reason: "declares type " + sp.Name.Name + ", which velox-gen generates"}
 					}
 				}
 			case *ast.FuncDecl:
-				if d.Recv == nil && slices.Contains(reserved, d.Name.Name) {
-					return &FileError{Path: path, Reason: "declares " + d.Name.Name + ", a name velox-gen generates"}
-				}
 				e, _ := receiver(d)
 				if e == "" || !slices.Contains(entities, e) || !slices.Contains(behaviourMethods, d.Name.Name) {
 					continue

@@ -215,10 +215,9 @@ func HooksOf(b BoundHooks, base int) ([]HookFn, string) {
 	return b.hs, ""
 }
 
-// ErasePolicy calls f, which composes the Descriptor's Scope and Policy with E
-// erased, and keeps its result in info. A panic in f is the entity's
-// *SchemaError, and so is the reason f returns when it refuses them, such as
-// ScopeLacks's. On the join entity of a bidirectional edge (Descriptor.Bidi)
+// ErasePolicy calls f, which composes the Descriptor's Policy with E erased,
+// and keeps its result in info. A panic in f is the entity's *SchemaError,
+// and so is the reason f returns when it refuses them, such as NilBinding's. On the join entity of a bidirectional edge (Descriptor.Bidi)
 // it refuses a Read or Write.
 func ErasePolicy(info *EntityInfo, f func() (*EntityPolicy, string)) error {
 	var (
@@ -239,7 +238,7 @@ func ErasePolicy(info *EntityInfo, f func() (*EntityPolicy, string)) error {
 	return nil
 }
 
-// EraseHooks calls f, which composes the Descriptor's Scope and Hooks with E
+// EraseHooks calls f, which composes the Descriptor's Hooks with E
 // erased, and keeps its hooks in info. A panic in f is the entity's
 // *SchemaError, and so is the reason f returns when it refuses them, such as
 // NilHook's.
@@ -258,16 +257,12 @@ func EraseHooks(info *EntityInfo, f func() ([]HookFn, string)) error {
 	return nil
 }
 
-// NilHook is the reason a nil hook is refused: Hooks()[i] when i >= 0, and
-// the scope's Fill when i is -1. It is not inlined, so that the generic
+// NilHook is the reason a nil hook is refused: Hooks()[i]. It is not inlined, so that the generic
 // bindings that call it do not compile its body
 // (TestGenericTypesCompileSmall).
 //
 //go:noinline
 func NilHook(i int) string {
-	if i < 0 {
-		return "Scope.Fill() is nil"
-	}
 	return fmt.Sprintf("Hooks()[%d] is nil", i)
 }
 
@@ -277,22 +272,6 @@ func NilHook(i int) string {
 //go:noinline
 func NilBinding(field string, i int) string {
 	return fmt.Sprintf("Descriptor.%s[%d] is nil", field, i)
-}
-
-// OtherEntity is the reason a Descriptor's Scope, held in part, is refused
-// when it is another entity's. It is not inlined, as NilHook is not.
-//
-//go:noinline
-func OtherEntity(part any) string {
-	return fmt.Sprintf("its Descriptor names a %T, which is another entity's", part)
-}
-
-// ScopeLacks is the reason a Descriptor.Scope whose type, held in scope,
-// lacks method is refused. It is not inlined, as NilHook is not.
-//
-//go:noinline
-func ScopeLacks(scope any, method string) string {
-	return fmt.Sprintf("its Scope, a %T, has no method %s", scope, method)
 }
 
 // recovered calls f, recovering a panic as the entity's *SchemaError. A

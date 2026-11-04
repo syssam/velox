@@ -62,9 +62,6 @@ type Out struct {
 	// runtime sets (OutEntity.Binds); only when SchemaImportsGen.
 	Runtime bool
 	GenPath string // Config.GenPath
-
-	// ScopeKeys are the keys the schema's Scoped fields name, sorted by Var.
-	ScopeKeys []*OutScopeKey
 }
 
 // OutEntity is one generated entity: a schema's, or a many-to-many join entity.
@@ -78,7 +75,6 @@ type OutEntity struct {
 	Bidi                                     bool   // the join entity of a bidirectional self edge: its Descriptor says Bidi
 	Comment                                  string // the Comment annotation's text, "" when none
 	Bound                                    Bound
-	Scope                                    *OutScope // the entity's Scoped field, nil when it has none
 
 	// Imports are the import paths this entity's file needs besides velox and
 	// the schema package: those of its fields' Go types, and the standard
@@ -107,23 +103,6 @@ type OutEntity struct {
 
 	CheckCode  string // the cases of Check's switch on the column, "" when none
 	CheckSetup string // statements run once inside Descriptor before the literal (regexps, validator funcs, descriptor reads), "" when none
-}
-
-// OutScope is the scope of an entity: its Scoped field.
-type OutScope struct {
-	Key    string // the annotation's key, e.g. "org"
-	KeyVar string // the package variable that is the key, e.g. "OrgKey"
-	Var    string // the entity's scope variable, e.g. "noteScope"
-	Field  string // the Go name of the scoped column, e.g. "OrgID"
-	Handle string // the equality function of the column's handle, e.g. "Notes.OrgID.EQ"
-}
-
-// OutScopeKey is a scope key: one variable shared by every entity that names it.
-type OutScopeKey struct {
-	Name    string   // the annotation's key, e.g. "org"
-	Var     string   // e.g. "OrgKey"
-	GoType  string   // the type of the value, as the generated code writes it, e.g. "int64"
-	Imports []string // the import paths GoType needs, sorted
 }
 
 // OutField is a column of an entity.
@@ -199,4 +178,4 @@ type OutEnum struct {
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 14
+const GeneratedCodeVersion = 15
