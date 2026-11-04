@@ -63,7 +63,7 @@ func localLevels(t *testing.T, data string) (map[string]string, map[string][]str
 			t.Errorf("%s: two %s=(…) lines", ciLocal, m[1])
 		}
 		lists[m[1]] = []string{}
-		for _, f := range strings.Fields(m[2]) {
+		for f := range strings.FieldsSeq(m[2]) {
 			name, level, ok := strings.Cut(f, ":")
 			if !ok || !slices.Contains(levels, level) {
 				t.Errorf("%s: %s: %q has no level of %v", ciLocal, m[1], f, levels)
@@ -139,7 +139,7 @@ func scriptLines(t *testing.T, script string) []scriptLine {
 			matrix = false
 		}
 
-		level := ""
+		var level string
 		if local != nil {
 			if m := localFunc.FindStringSubmatch(raw); m != nil {
 				scope = m[1] + "_" + m[2]

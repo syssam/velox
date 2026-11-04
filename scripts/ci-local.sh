@@ -357,7 +357,8 @@ set -m
 max=${VELOX_CI_JOBS:-${#run[@]}}
 next=0 running=0 done_lanes=0
 summary=""
-if [ -n "$full" ]; then level=--full; else level="merge gate, groups:${groups% }"; fi
+named=$(echo $groups)
+if [ -n "$full" ]; then level=--full; else level="merge gate, groups: ${named:-none}"; fi
 echo "ci-local ($level): ${#run[@]} lanes, at most $max at once; logs in $logs"
 while [ "$done_lanes" -lt "${#run[@]}" ]; do
   while [ "$next" -lt "${#run[@]}" ] && [ "$running" -lt "$max" ]; do
