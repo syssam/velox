@@ -358,32 +358,46 @@ func TestRenderScopeFile(t *testing.T) {
 	}
 }
 
-// TestRenderScopedBinding: a scoped entity's descriptor wraps the user's Policy
-// in the scope and puts the scope's Fill before the user's Hooks, for each
-// combination of the methods the user declares; an unscoped entity's lines are
-// as they were.
+// TestRenderScopedBinding: an entity's descriptor names its scope when it is
+// scoped, its Policy when the schema declares one and its Hooks when the
+// schema declares them, each by one line, and nothing else: velox composes
+// them. The scoped golden schema has each combination.
 func TestRenderScopedBinding(t *testing.T) {
 	files, err := goldenGenerate(t, "scoped", goldenCases[2].cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, c := range []struct{ file, want string }{
-		{"note_velox.go", "velox.BindPolicy(noteScope.Policy())"},
-		{"note_velox.go", "velox.BindHooks([]velox.Hook[Note]{noteScope.Fill()})"},
-		{"task_velox.go", "rt := veloxRuntime()"},
-		{"task_velox.go", "velox.BindPolicy(taskScope.Wrap(rt.TaskPolicy()))"},
-		{"task_velox.go", "velox.BindHooksAfter(taskScope.Fill(), rt.TaskHooks())"},
-		{"memo_velox.go", "velox.BindPolicy(memoScope.Wrap(rt.MemoPolicy()))"},
-		{"memo_velox.go", "velox.BindHooks([]velox.Hook[Memo]{memoScope.Fill()})"},
-		{"tag_velox.go", "velox.BindPolicy(tagScope.Policy())"},
-		{"tag_velox.go", "velox.BindHooksAfter(tagScope.Fill(), rt.TagHooks())"},
+	for _, c := range []struct {
+		file, entity        string
+		scope, policy, hook bool
+	}{
+		{"note_velox.go", "Note", true, false, false},
+		{"task_velox.go", "Task", true, true, true},
+		{"memo_velox.go", "Memo", true, true, false},
+		{"tag_velox.go", "Tag", true, false, true},
+		{"owner_velox.go", "Owner", false, false, false},
 	} {
-		if got := string(fileNamed(t, files, c.file)); !strings.Contains(got, c.want) {
-			t.Errorf("%s lacks %s", c.file, c.want)
+		got := string(fileNamed(t, files, c.file))
+		lower := strings.ToLower(c.entity[:1]) + c.entity[1:]
+		for _, l := range []struct {
+			field, value string
+			want         bool
+		}{
+			{"Scope", lower + "Scope", c.scope},
+			{"Policy", "rt." + c.entity + "Policy", c.policy},
+			{"Hooks", "rt." + c.entity + "Hooks", c.hook},
+		} {
+			line := regexp.MustCompile(`\n\t\t` + l.field + `: +` + regexp.QuoteMeta(l.value) + `,\n`)
+			if line.MatchString(got) != l.want {
+				t.Errorf("%s: the line %s: %s, is there: %v, want %v", c.file, l.field, l.value, !l.want, l.want)
+			}
+			if n := strings.Count(got, "\t\t"+l.field+":"); n > 1 || (n == 1) != l.want {
+				t.Errorf("%s names %s %d times", c.file, l.field, n)
+			}
 		}
-	}
-	if got := string(fileNamed(t, files, "owner_velox.go")); strings.Contains(got, "Scope") || strings.Contains(got, "Policy:") || strings.Contains(got, "Hooks:") {
-		t.Errorf("an unscoped entity without methods binds something:\n%s", got)
+		if strings.Contains(got, "Bind") || strings.Contains(got, ".Wrap(") || strings.Contains(got, ".Fill(") {
+			t.Errorf("%s composes the scope, policy or hooks itself:\n%s", c.file, got)
+		}
 	}
 }
 

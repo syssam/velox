@@ -67,7 +67,7 @@ func commentDescriptor() velox.Descriptor[Comment] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Doc]("Doc", commentColDocID, docColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.CommentPolicy()) },
+		Policy: rt.CommentPolicy,
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case commentColID:

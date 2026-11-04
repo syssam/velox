@@ -112,8 +112,8 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 			velox.EdgeTo[Ticket]("Children", ticketColID, ticketColParentID),
 			velox.EdgeTo[Ticket]("Parent", ticketColParentID, ticketColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.TicketPolicy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks(rt.TicketHooks()) },
+		Policy: rt.TicketPolicy,
+		Hooks:  rt.TicketHooks,
 		FieldPtr: func(x *Ticket, i int) any {
 			switch i {
 			case ticketColID:

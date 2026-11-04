@@ -86,10 +86,10 @@ func methodBinds(e *OutEntity) []*OutBind {
 	}
 	var out []*OutBind
 	if e.Bound.Policy {
-		out = append(out, &OutBind{Field: e.Name + "Policy", Type: "func() velox.Policy[" + e.Name + "]", Value: recv(e.Bound.PolicyPtr) + ".Policy", Imports: map[string]string{"velox": veloxPkg}})
+		out = append(out, &OutBind{Field: e.Name + "Policy", Type: "func() velox.Policy[" + e.Name + "]", Value: recv(e.Bound.PolicyPtr) + ".Policy", Bound: "func() velox.BoundPolicy", Bind: "velox.BindPolicy", Imports: map[string]string{"velox": veloxPkg}})
 	}
 	if e.Bound.Hooks {
-		out = append(out, &OutBind{Field: e.Name + "Hooks", Type: "func() []velox.Hook[" + e.Name + "]", Value: recv(e.Bound.HooksPtr) + ".Hooks", Imports: map[string]string{"velox": veloxPkg}})
+		out = append(out, &OutBind{Field: e.Name + "Hooks", Type: "func() []velox.Hook[" + e.Name + "]", Value: recv(e.Bound.HooksPtr) + ".Hooks", Bound: "func() velox.BoundHooks", Bind: "velox.BindHooks", Imports: map[string]string{"velox": veloxPkg}})
 	}
 	return out
 }

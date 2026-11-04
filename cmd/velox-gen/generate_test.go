@@ -266,14 +266,14 @@ func TestGenerateBindsSchemaMethods(t *testing.T) {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	if !strings.Contains(string(user), "rt := veloxRuntime()") || !strings.Contains(string(user), "velox.BindPolicy(rt.UserPolicy())") {
+	if !strings.Contains(string(user), "rt := veloxRuntime()") || !strings.Contains(string(user), "rt.UserPolicy,") {
 		t.Errorf("user_velox.go does not bind the policy:\n%s", user)
 	}
-	if strings.Contains(string(user), "BindHooks") {
+	if strings.Contains(string(user), "rt.UserHooks") {
 		t.Errorf("user_velox.go binds hooks the user did not declare")
 	}
 	tag, _ := os.ReadFile(filepath.Join(dir, "gen", "tag_velox.go"))
-	if !strings.Contains(string(tag), "\tveloxRuntime()\n") || strings.Contains(string(tag), "BindPolicy") {
+	if !strings.Contains(string(tag), "\tveloxRuntime()\n") || strings.Contains(string(tag), "rt.TagPolicy") {
 		t.Errorf("tag_velox.go does not check the runtime, or binds a policy:\n%s", tag)
 	}
 	rt, _ := os.ReadFile(filepath.Join(dir, "gen", "runtime", "runtime.go"))
@@ -1387,8 +1387,8 @@ func TestGenerateScoped(t *testing.T) {
 		t.Fatalf("scope_velox.go: %v\n%s", err, scope)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	if !strings.Contains(string(user), "velox.BindPolicy(userScope.Wrap(rt.UserPolicy()))") ||
-		!strings.Contains(string(user), "velox.BindHooks([]velox.Hook[User]{userScope.Fill()})") {
+	if !strings.Contains(string(user), "Scope:      userScope,") ||
+		!strings.Contains(string(user), "rt.UserPolicy,") {
 		t.Errorf("user_velox.go does not bind the scope around the policy:\n%s", user)
 	}
 	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
@@ -1416,7 +1416,7 @@ func TestGenerateScopedRemoved(t *testing.T) {
 		t.Errorf("scope_velox.go is still there: %v", err)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	if strings.Contains(string(user), "Scope") || !strings.Contains(string(user), "velox.BindPolicy(rt.UserPolicy())") {
+	if strings.Contains(string(user), "Scope") || !strings.Contains(string(user), "rt.UserPolicy,") {
 		t.Errorf("user_velox.go still wraps the scope:\n%s", user)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema"); code != 0 {

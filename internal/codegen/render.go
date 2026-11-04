@@ -454,24 +454,17 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 		}
 		w.p("},")
 	}
-	// A scoped entity's scope is outermost, whether or not the user declares
-	// the methods: the policy is wrapped in it, and its Fill runs first. The
-	// schema's methods are the ones package runtime set.
-	switch {
-	case e.Scope != nil && e.Bound.Policy:
-		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(%s.Wrap(rt.%sPolicy())) },", e.Scope.Var, e.Name)
-	case e.Scope != nil:
-		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(%s.Policy()) },", e.Scope.Var)
-	case e.Bound.Policy:
-		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.%sPolicy()) },", e.Name)
+	// Each part is named, and velox composes them: the scope is outermost.
+	// The schema's methods are the ones package runtime set, which
+	// SetVeloxRuntime binds.
+	if e.Scope != nil {
+		w.p("Scope: %s,", e.Scope.Var)
 	}
-	switch {
-	case e.Scope != nil && e.Bound.Hooks:
-		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(%s.Fill(), rt.%sHooks()) },", e.Scope.Var, e.Name)
-	case e.Scope != nil:
-		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[%s]{%s.Fill()}) },", e.Name, e.Scope.Var)
-	case e.Bound.Hooks:
-		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks(rt.%sHooks()) },", e.Name)
+	if e.Bound.Policy {
+		w.p("Policy: rt.%sPolicy,", e.Name)
+	}
+	if e.Bound.Hooks {
+		w.p("Hooks: rt.%sHooks,", e.Name)
 	}
 	w.p("FieldPtr: func(x *%s, i int) any {", e.Name)
 	w.p("switch i {")

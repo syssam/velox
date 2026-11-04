@@ -79,8 +79,8 @@ func lineDescriptor() velox.Descriptor[Line] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Invoice]("Invoice", lineColInvoiceID, invoiceColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(lineScope.Wrap(rt.LinePolicy())) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Line]{lineScope.Fill()}) },
+		Scope:  lineScope,
+		Policy: rt.LinePolicy,
 		FieldPtr: func(x *Line, i int) any {
 			switch i {
 			case lineColID:

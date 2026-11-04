@@ -181,7 +181,7 @@ func (*Card) Edges() []schema.Edge {
 		t.Fatalf("%d %q", code, errs)
 	}
 	board, _ := os.ReadFile(filepath.Join(dir, "gen", "board_velox.go"))
-	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "BindPolicy"} {
+	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "rt.BoardPolicy,"} {
 		if !strings.Contains(string(board), want) {
 			t.Errorf("board_velox.go lacks %q:\n%s", want, board)
 		}

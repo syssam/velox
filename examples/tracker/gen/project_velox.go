@@ -84,8 +84,8 @@ func projectDescriptor() velox.Descriptor[Project] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Issue]("Issues", projectColID, issueColProjectID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(projectScope.Wrap(rt.ProjectPolicy())) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Project]{projectScope.Fill()}) },
+		Scope:  projectScope,
+		Policy: rt.ProjectPolicy,
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
 			case projectColID:

@@ -71,8 +71,7 @@ func labelDescriptor() velox.Descriptor[Label] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[IssueLabel, Issue]("Issues", labelColID, issueLabelColLabelID, issueLabelColIssueID, issueColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(labelScope.Policy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Label]{labelScope.Fill()}) },
+		Scope: labelScope,
 		FieldPtr: func(x *Label, i int) any {
 			switch i {
 			case labelColID:

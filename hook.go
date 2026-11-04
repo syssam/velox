@@ -106,21 +106,6 @@ func BindHooks[E any](hs []Hook[E]) BoundHooks {
 	return b
 }
 
-// BindHooksAfter is BindHooks of first followed by hs, and a nil hook in hs is
-// reported at its index in hs: first is not counted. For generated code.
-func BindHooksAfter[E any](first Hook[E], hs []Hook[E]) BoundHooks {
-	var b BoundHooks
-	engine.AddBoundHook(&b, erase(first))
-	for i, f := range hs {
-		if f == nil {
-			engine.SetBoundNil(&b, i)
-			return b
-		}
-		engine.AddBoundHook(&b, erase(f))
-	}
-	return b
-}
-
 // Scoper is what Descriptor.Scope holds. For generated code. It is a
 // scope.Scope, or another type that embeds ScopeKit[E] and has the methods
 //

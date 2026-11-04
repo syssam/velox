@@ -147,6 +147,10 @@ type OutBind struct {
 	// Imports are the packages Value names, but sch and the schema DSL
 	// package: import name → path.
 	Imports map[string]string
+	// Bound is the type the Descriptor functions read the value as, such as
+	// "func() velox.BoundPolicy", and Bind the function that binds it, such
+	// as "velox.BindPolicy"; both "" when they read it as Type.
+	Bound, Bind string
 }
 
 // OutRel is a relation of an entity.
@@ -171,4 +175,4 @@ type OutEnum struct {
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 11
+const GeneratedCodeVersion = 12

@@ -115,6 +115,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `GeneratedCodeIsVersion12`: regenerate. A descriptor names each part of an entity's
+  behaviour by one line: `Scope: commentScope` when it is `schema.Scoped`,
+  `Policy: rt.CommentPolicy` when the schema declares `Policy`, and `Hooks: rt.CommentHooks`
+  when it declares `Hooks`. velox composes them, as the generated code did: the policy is
+  the scope's `Wrap` around the entity's own, or around an empty one, and the hooks are the
+  scope's `Fill`, then the entity's. `Descriptor.Scope` is a `velox.Scoper`; `scope.Scope`
+  is one by embedding `velox.ScopeKit`. A Scoper without `Wrap` or `Fill`, of another
+  entity, or whose `Fill` is nil is refused with a `*SchemaError`. `velox.BindHooksAfter`
+  is gone.
 - `GeneratedCodeIsVersion11`: regenerate. The layout is ent's (decision 0037), and
   replaces the split of 0036. Every entity is in `gen`, always; there is no `gen/entity`
   and no re-export. A schema with `Policy` or `Hooks` imports `gen` and types them with

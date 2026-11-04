@@ -15,22 +15,36 @@ type VeloxRuntime struct {
 	LinePolicy    func() velox.Policy[Line]
 }
 
-var veloxRT *VeloxRuntime
+// veloxBound is VeloxRuntime as the Descriptor functions read it, with the
+// schema's Policy and Hooks methods bound for velox.
+type veloxBound struct {
+	InvoicePolicy func() velox.BoundPolicy
+	InvoiceHooks  func() velox.BoundHooks
+	LinePolicy    func() velox.BoundPolicy
+}
+
+var veloxRT *veloxBound
 
 // SetVeloxRuntime is called by package runtime, once, when the program
-// starts; applications do not call it. A second call panics.
+// starts; applications do not call it. A second call panics. It binds
+// the schema's methods and does not call them: velox calls each once,
+// when it builds the entity's metadata.
 func SetVeloxRuntime(r VeloxRuntime) {
 	if veloxRT != nil {
 		panic("gen: SetVeloxRuntime called twice")
 	}
-	veloxRT = &r
+	veloxRT = &veloxBound{
+		InvoicePolicy: func() velox.BoundPolicy { return velox.BindPolicy(r.InvoicePolicy()) },
+		InvoiceHooks:  func() velox.BoundHooks { return velox.BindHooks(r.InvoiceHooks()) },
+		LinePolicy:    func() velox.BoundPolicy { return velox.BindPolicy(r.LinePolicy()) },
+	}
 }
 
 // veloxRuntime returns what package runtime set. It panics when the program
 // does not link package runtime: the entities would run without the
 // schema's hooks, policies and defaults. velox does not keep the
 // failure: an entity used before runtime's init works once it has run.
-func veloxRuntime() *VeloxRuntime {
+func veloxRuntime() *veloxBound {
 	if veloxRT == nil {
 		panic(velox.NotLinkedError("gen: the schema's hooks, policies and defaults are not linked: add import _ \"github.com/syssam/velox/examples/tour/gen/runtime\" to the program's main package, or to the test"))
 	}

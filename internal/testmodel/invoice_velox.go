@@ -113,8 +113,8 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Item]("Items", invoiceColID, itemColInvoiceID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.InvoicePolicy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks(rt.InvoiceHooks()) },
+		Policy: rt.InvoicePolicy,
+		Hooks:  rt.InvoiceHooks,
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case invoiceColID:

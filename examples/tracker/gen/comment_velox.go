@@ -99,8 +99,8 @@ func commentDescriptor() velox.Descriptor[Comment] {
 			velox.EdgeTo[Issue]("Issue", commentColIssueID, issueColID),
 			velox.EdgeTo[User]("Author", commentColAuthorID, userColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(commentScope.Wrap(rt.CommentPolicy())) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Comment]{commentScope.Fill()}) },
+		Scope:  commentScope,
+		Policy: rt.CommentPolicy,
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case commentColID:

@@ -49,8 +49,7 @@ func homeDescriptor() velox.Descriptor[Home] {
 			{Field: "Region", Name: "region", Immutable: true},
 		},
 		PrimaryKey: []int{homeColID},
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy(homeScope.Policy()) },
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Home]{homeScope.Fill()}) },
+		Scope:      homeScope,
 		FieldPtr: func(x *Home, i int) any {
 			switch i {
 			case homeColID:

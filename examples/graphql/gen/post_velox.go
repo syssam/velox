@@ -98,8 +98,7 @@ func postDescriptor() velox.Descriptor[Post] {
 			velox.EdgeTo[User]("Author", postColAuthorID, userColID),
 			velox.EdgeThrough[PostTag, Tag]("Tags", postColID, postTagColPostID, postTagColTagID, tagColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(postScope.Policy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Post]{postScope.Fill()}) },
+		Scope: postScope,
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postColID:

@@ -67,7 +67,7 @@ func taskDescriptor() velox.Descriptor[Task] {
 			{Field: "Done", Name: "done"},
 		},
 		PrimaryKey: []int{taskColID},
-		Hooks:      func() velox.BoundHooks { return velox.BindHooks(rt.TaskHooks()) },
+		Hooks:      rt.TaskHooks,
 		FieldPtr: func(x *Task, i int) any {
 			switch i {
 			case taskColID:

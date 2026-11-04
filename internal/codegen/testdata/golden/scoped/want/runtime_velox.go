@@ -16,22 +16,38 @@ type VeloxRuntime struct {
 	TaskHooks  func() []velox.Hook[Task]
 }
 
-var veloxRT *VeloxRuntime
+// veloxBound is VeloxRuntime as the Descriptor functions read it, with the
+// schema's Policy and Hooks methods bound for velox.
+type veloxBound struct {
+	MemoPolicy func() velox.BoundPolicy
+	TagHooks   func() velox.BoundHooks
+	TaskPolicy func() velox.BoundPolicy
+	TaskHooks  func() velox.BoundHooks
+}
+
+var veloxRT *veloxBound
 
 // SetVeloxRuntime is called by package runtime, once, when the program
-// starts; applications do not call it. A second call panics.
+// starts; applications do not call it. A second call panics. It binds
+// the schema's methods and does not call them: velox calls each once,
+// when it builds the entity's metadata.
 func SetVeloxRuntime(r VeloxRuntime) {
 	if veloxRT != nil {
 		panic("gen: SetVeloxRuntime called twice")
 	}
-	veloxRT = &r
+	veloxRT = &veloxBound{
+		MemoPolicy: func() velox.BoundPolicy { return velox.BindPolicy(r.MemoPolicy()) },
+		TagHooks:   func() velox.BoundHooks { return velox.BindHooks(r.TagHooks()) },
+		TaskPolicy: func() velox.BoundPolicy { return velox.BindPolicy(r.TaskPolicy()) },
+		TaskHooks:  func() velox.BoundHooks { return velox.BindHooks(r.TaskHooks()) },
+	}
 }
 
 // veloxRuntime returns what package runtime set. It panics when the program
 // does not link package runtime: the entities would run without the
 // schema's hooks, policies and defaults. velox does not keep the
 // failure: an entity used before runtime's init works once it has run.
-func veloxRuntime() *VeloxRuntime {
+func veloxRuntime() *veloxBound {
 	if veloxRT == nil {
 		panic(velox.NotLinkedError("gen: the schema's hooks, policies and defaults are not linked: add import _ \"example.com/scoped/gen/runtime\" to the program's main package, or to the test"))
 	}

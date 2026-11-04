@@ -25,9 +25,10 @@ func RuntimeImport(genPath string) string {
 
 // renderRuntimeHolder writes runtime_velox.go when the generated package
 // reads values of the schema: the type VeloxRuntime, a field per value
-// package runtime gives an entity (OutBind); SetVeloxRuntime, which package
-// runtime calls with it; and veloxRuntime, which every Descriptor function
-// calls first.
+// package runtime gives an entity (OutBind); veloxBound, the same with the
+// schema's Policy and Hooks methods bound; SetVeloxRuntime, which package
+// runtime calls with a VeloxRuntime and which binds them; and veloxRuntime,
+// which every Descriptor function calls first.
 func renderRuntimeHolder(o *Out) string {
 	imports := map[string]string{"velox": veloxPkg}
 	for _, e := range o.Entities {
@@ -53,22 +54,51 @@ func renderRuntimeHolder(o *Out) string {
 	}
 	w.p("}")
 	w.p("")
-	w.p("var veloxRT *VeloxRuntime")
+	// The Descriptor functions read the schema's methods bound, so that each
+	// names its policy and hooks as a plain field; the binding, which
+	// instantiates velox's generics for the entity, is written once here.
+	w.p("// veloxBound is VeloxRuntime as the Descriptor functions read it, with the")
+	w.p("// schema's Policy and Hooks methods bound for velox.")
+	w.p("type veloxBound struct {")
+	for _, e := range o.Entities {
+		for _, b := range e.Binds {
+			if b.Bound != "" {
+				w.p("%s %s", b.Field, b.Bound)
+			} else {
+				w.p("%s %s", b.Field, b.Type)
+			}
+		}
+	}
+	w.p("}")
+	w.p("")
+	w.p("var veloxRT *veloxBound")
 	w.p("")
 	w.p("// SetVeloxRuntime is called by package %s, once, when the program", RuntimeDir)
-	w.p("// starts; applications do not call it. A second call panics.")
+	w.p("// starts; applications do not call it. A second call panics. It binds")
+	w.p("// the schema's methods and does not call them: velox calls each once,")
+	w.p("// when it builds the entity's metadata.")
 	w.p("func SetVeloxRuntime(r VeloxRuntime) {")
 	w.p("if veloxRT != nil {")
 	w.p("panic(%s)", strconv.Quote(o.Package+": SetVeloxRuntime called twice"))
 	w.p("}")
-	w.p("veloxRT = &r")
+	w.p("veloxRT = &veloxBound{")
+	for _, e := range o.Entities {
+		for _, b := range e.Binds {
+			if b.Bind != "" {
+				w.p("%s: func() %s { return %s(r.%[1]s()) },", b.Field, strings.TrimPrefix(b.Bound, "func() "), b.Bind)
+			} else {
+				w.p("%s: r.%[1]s,", b.Field)
+			}
+		}
+	}
+	w.p("}")
 	w.p("}")
 	w.p("")
 	w.p("// veloxRuntime returns what package %s set. It panics when the program", RuntimeDir)
 	w.p("// does not link package %s: the entities would run without the", RuntimeDir)
 	w.p("// schema's hooks, policies and defaults. velox does not keep the")
 	w.p("// failure: an entity used before %s's init works once it has run.", RuntimeDir)
-	w.p("func veloxRuntime() *VeloxRuntime {")
+	w.p("func veloxRuntime() *veloxBound {")
 	w.p("if veloxRT == nil {")
 	w.p("panic(velox.NotLinkedError(%s))", strconv.Quote(NotLinkedMessage(o.Package, o.GenPath)))
 	w.p("}")
