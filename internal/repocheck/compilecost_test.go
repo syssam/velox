@@ -269,7 +269,7 @@ var genericObjects = []struct {
 	// Use function that queries, inserts, saves, updates and deletes. entityDescHooks
 	// is that with a Policy and three hooks bound through the fields; the generics it
 	// instantiates are the cost of having a policy and hooks (policyGrowthMax).
-	{"entityDescriptor", "", entityDescSrc, 153600}, // measured 132904
+	{"entityDescriptor", "", entityDescSrc, 153600}, // measured 141368
 	// entityDescUse and entityDescHooks are held tighter than the rule above, which
 	// would let them grow by 64 KiB unseen: each bound is the measurement plus about
 	// 1.2%, rounded up to the next KiB.
@@ -298,14 +298,19 @@ var genericObjects = []struct {
 	// package runtime, which exports nothing, and gen no longer holds the
 	// closures that bound each method, nor a second struct of the bound
 	// fields.
-	{"entityDescUse", "", entityDescUseSrc, 780288},        // measured 770560
-	{"entityDescHooks", "", entityDescHooksBound, 1072128}, // measured 1058404
+	//
+	// Removing Descriptor.Scope and velox.Scoper (GeneratedCodeIsVersion15)
+	// took entityDescriptor from 142268 to 141368 bytes, entityDescUse from
+	// 770560 to 769648, entityDescHooks from 1058404 to 1057508 and
+	// entityDescMixin from 1132944 to 1132078; the bounds were lowered.
+	{"entityDescUse", "", entityDescUseSrc, 779264},        // measured 769648
+	{"entityDescHooks", "", entityDescHooksBound, 1071104}, // measured 1057508
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// generic over the entity, whose columns are velox.Field handles: 74540
 	// bytes, 7%, more than an entity's own methods, for the instances of the
 	// mixin's methods and of velox.Field and Named. An entity without mixin
 	// behaviour pays none of it.
-	{"entityDescMixin", "", entityDescMixinSrc, 1146880}, // measured 1132944
+	{"entityDescMixin", "", entityDescMixinSrc, 1145856}, // measured 1132078
 	{"Policy", "velox.Policy[E]", "", 8192},              // measured 4050
 	{"Mutation", "velox.Mutation[E]", "", 7168},          // measured 2226
 }
@@ -316,7 +321,7 @@ var genericObjects = []struct {
 // the generics velox instantiates for E (BindPolicy, BindHooks, On, the
 // Mutator and Mutation methods) and the export data of the types the
 // functions mention.
-const policyGrowthMax = 354304 // measured 287844
+const policyGrowthMax = 354304 // measured 287860
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package
