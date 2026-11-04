@@ -7,7 +7,7 @@ package loadjson
 import "encoding/json"
 
 // Version is the version of the Model's JSON format.
-const Version = 5
+const Version = 6
 
 // SchemaPath is the import path of the schema DSL package. velox-gen uses it
 // to find the schemas of a package by their embedding of schema.Schema.
@@ -46,6 +46,24 @@ type Schema struct {
 	Edges       []*Edge                    `json:"edges,omitempty"`   // likewise
 	Indexes     []*Index                   `json:"indexes,omitempty"` // likewise
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
+	// Mixins are the values its Mixin method returns, in order.
+	Mixins []Mixin `json:"mixins,omitempty"`
+	// Pointer says the schema implements schema.Interface only through a
+	// pointer, so the generated code that reads its Mixin method takes
+	// &sch.<Name>{}.
+	Pointer bool `json:"pointer,omitempty"`
+}
+
+// Mixin is one value of a schema's Mixin method: its type, by which
+// velox-gen finds the behaviour methods it declares in its package's
+// source.
+type Mixin struct {
+	PkgPath string `json:"pkg_path,omitempty"` // "" for a type with no name
+	Name    string `json:"name,omitempty"`     // the type's name, without type arguments
+	Generic bool   `json:"generic,omitempty"`  // an instance of a generic type
+	// NonZero says the value is not its type's zero value (for a pointer,
+	// the value it points to).
+	NonZero bool `json:"non_zero,omitempty"`
 }
 
 // Check is a built-in validator on a field.

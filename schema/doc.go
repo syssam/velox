@@ -79,4 +79,24 @@
 // package, as it imports the schema. velox-gen reads the schema without
 // these methods and what only they use, so it generates even when gen is
 // stale or missing.
+//
+// A mixin declares behaviour too, for every entity that lists it, with the
+// same methods made generic over the entity. It names its columns by name,
+// with velox.Field:
+//
+//	func (InOrg) Policy[E any]() velox.Policy[E] {
+//		org := velox.Field[E, int64]("org_id")
+//		return velox.Policy[E]{Read: func(ctx context.Context) (velox.Pred[E], error) {
+//			return org.EQ(orgOf(ctx)), nil
+//		}}
+//	}
+//
+// velox runs an entity's mixins' behaviour first, in Mixin order, then its
+// schema's: the policies are ANDed, the hooks run in that order, the first
+// outermost, and the interceptors' conditions are ANDed. velox-gen refuses
+// a method of another shape, and a literal column name that an entity
+// listing the mixin lacks, or of another type, each at its line. A mixin
+// that is not its type's zero value is read where the schema returns it,
+// with MixinAt. A schema that does not import gen and whose behaviour comes
+// from mixins alone needs no gen/runtime: gen binds it.
 package schema

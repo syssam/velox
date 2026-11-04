@@ -192,8 +192,10 @@ func loadModel(dir, pattern, out, pkg string, env []string) (*genModel, error) {
 // genConfig is the codegen.Config of the package at out, named pkg, for the
 // schema package at pattern: the import path of out, the Hooks and Policy
 // methods the schema package declares, and whether it imports out
-// (codegen.Behaviour). UserDoc is left for the caller.
-func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string) (codegen.Config, error) {
+// (codegen.Behaviour), and the behaviour of the entities' mixins
+// (codegen.MixinBehaviour), whose warnings go to stderr. UserDoc is left
+// for the caller.
+func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr io.Writer) (codegen.Config, error) {
 	cfg := codegen.Config{Package: pkg, SchemaPath: gm.importPath}
 	genPath, err := dirImportPath(out, env)
 	if err != nil {
@@ -205,6 +207,14 @@ func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string) (codeg
 	}
 	cfg.GenPath = genPath
 	cfg.Bound, cfg.SchemaImportsGen = bound, importsGen
+	mixins, warnings, err := codegen.MixinBehaviour(dir, pattern, gm.graph, env)
+	if err != nil {
+		return cfg, relErrors(dir, err)
+	}
+	for _, w := range warnings {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s\n", relWarning(dir, w))
+	}
+	cfg.Mixins = mixins
 	if cfg.Funcs, err = codegen.FuncPackages(dir, gm.graph, cfg, env); err != nil {
 		return cfg, err
 	}
@@ -225,7 +235,7 @@ type output struct {
 // the user's in out are checked against what velox-gen writes. Nothing is
 // written.
 func buildOutput(f genFlags, gm *genModel, pattern, dir, out, pkg string, env []string, stderr io.Writer) (*output, error) {
-	cfg, err := genConfig(gm, dir, pattern, out, pkg, env)
+	cfg, err := genConfig(gm, dir, pattern, out, pkg, env, stderr)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +247,7 @@ func buildOutput(f genFlags, gm *genModel, pattern, dir, out, pkg string, env []
 	}
 	files, err := codegen.Generate(gm.graph, cfg)
 	if err != nil {
-		return nil, err
+		return nil, relErrors(dir, err)
 	}
 	o := &output{cfg: cfg, want: make(map[string][]byte, len(files))}
 	for _, file := range files {

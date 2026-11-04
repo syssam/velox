@@ -21,6 +21,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A mixin may declare behaviour: `func (M) Policy[E any]() velox.Policy[E]`,
+  `Hooks[E any]() []velox.Hook[E]` and `Interceptors[E any]() []velox.Interceptor[E]`.
+  velox-gen binds each for every entity that lists the mixin, mixins first in `Mixin()`
+  order, then the entity's own methods. It refuses another shape at its line, and a
+  literal name in a `velox.Field` call that an entity lacks or types differently; a name
+  that is not a literal is a warning. A mixin value that is not its type's zero value is
+  read with `schema.MixinAt`. gen/runtime's package comment lists each entity's sources.
+  A schema that does not import gen needs no gen/runtime: gen binds its mixins.
+- `schema.MixinAt[T](s, i)` returns a copy of `s.Mixin()[i]`, a `T` or `*T`, for the
+  generated code; it panics, naming velox-gen, when the schema has changed since.
 - `velox.Field[E, V]("org_id")` returns `velox.Named[E, V]`, the handle of entity E's column
   found by its name, for code that cannot name the generated handles, such as a mixin's
   behaviour. V must be the field's Go type exactly. A wrong name or type panics, which,

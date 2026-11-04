@@ -5,7 +5,10 @@ type Config struct {
 	Package    string           // the generated package's name; "gen" when empty
 	SchemaPath string           // the schema package's import path; Graph.Package when empty
 	Bound      map[string]Bound // per entity name: which methods the schema package declares (see SchemaMethods)
-	UserDoc    bool             // a user's file has the package comment; velox.go then has none
+	// Mixins are, per entity name, its mixins that declare behaviour, in
+	// Mixin order (see MixinBehaviour).
+	Mixins  map[string][]MixinBound
+	UserDoc bool // a user's file has the package comment; velox.go then has none
 	// Funcs are the packages of the functions the schemas name as defaults
 	// and validators, by import path (see FuncPackages). A function of a
 	// package that is not here, or that the entities cannot import, is read
@@ -85,6 +88,11 @@ type OutEntity struct {
 	// NeedsSch reports that this entity's code reads the schema package, which
 	// the file imports under the alias sch.
 	NeedsSch bool
+
+	// ImportAs names the imports, by path, that the entity's file imports
+	// under a name other than the package's own: a mixin's package whose
+	// name another package of the file has.
+	ImportAs map[string]string
 
 	// Binds are what package runtime gives this entity when the schema
 	// imports the generated package, as fields of VeloxRuntime: its Policy,

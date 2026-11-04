@@ -43,6 +43,7 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	}
 	l.entities()
 	l.relations()
+	l.mixinSources()
 	l.finish()
 	for _, e := range l.out.Entities {
 		ownSources(e)
@@ -163,6 +164,9 @@ type lowerer struct {
 	joins map[string]*join        // by join table
 	owned map[string]string       // the package names the generated code uses, with their paths
 	enums []*enumDecl
+	// mixinNames are the names of the packages of mixins with behaviour, by
+	// import path.
+	mixinNames map[string]string
 }
 
 // join is a join entity with the edge that made it.

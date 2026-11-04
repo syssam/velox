@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/syssam/velox/schema/internal/desc"
 )
@@ -34,7 +35,9 @@ type Edge interface{ Descriptor() *desc.Edge }
 type Index interface{ Descriptor() *desc.Index }
 
 // Mixin contributes fields, edges, indexes and annotations to the schemas that
-// list it. A mixin carries no behaviour.
+// list it. A mixin may also declare generic Policy, Hooks and Interceptors
+// methods, which velox-gen binds for each entity that lists it (see the
+// package documentation).
 type Mixin interface {
 	Fields() []Field
 	Edges() []Edge
@@ -81,6 +84,31 @@ func (Schema) Mixin() []Mixin { return nil }
 
 // Annotations returns no annotations.
 func (Schema) Annotations() []Annotation { return nil }
+
+// MixinAt returns the mixin at index i of s's Mixin method, as a *T. It is
+// for the code velox-gen writes, which calls the Policy, Hooks or
+// Interceptors method of a mixin that is not its type's zero value on the
+// value itself. A mixin that is a T is copied; one that is a *T is returned.
+// It panics when the mixin is neither, which means the generated code is
+// older than the schema: run velox-gen.
+func MixinAt[T any](s Interface, i int) *T {
+	ms := s.Mixin()
+	if i >= 0 && i < len(ms) {
+		switch m := any(ms[i]).(type) {
+		case T:
+			return &m
+		case *T:
+			if m != nil {
+				return m
+			}
+		}
+	}
+	var got any = "nothing"
+	if i >= 0 && i < len(ms) {
+		got = fmt.Sprintf("%T", ms[i])
+	}
+	panic(fmt.Sprintf("schema: %T: Mixin()[%d] is %v, not %v: the generated code is older than the schema; run velox-gen", s, i, got, reflect.TypeFor[T]()))
+}
 
 // FieldDescriptor returns the descriptor of the field name of s, declared
 // by s or by one of its mixins. It is for the code velox-gen writes, which

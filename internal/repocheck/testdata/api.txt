@@ -691,6 +691,7 @@ func Check(name, expr string) *CheckAnnotation
 func Collation(name string) *CollationAnnotation
 func Comment(text string) *CommentAnnotation
 func FieldDescriptor(s Interface, name string) *desc.Field
+func MixinAt[T any](s Interface, i int) *T
 func Scoped(key string) *ScopedAnnotation
 func Table(name string) *TableAnnotation
 func TableIn(schema, table string) *TableAnnotation

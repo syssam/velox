@@ -211,12 +211,15 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 	if err != nil {
 		l.fail("", "", "%v", err)
 	}
+	out.Pointer = !vt.Implements(reflect.TypeFor[schema.Interface]())
 	for i, m := range mixins {
 		prefix := fmt.Sprintf("Mixin()[%d]: ", i)
 		if isNil(m) {
 			l.fail("", "", "Mixin()[%d] is nil", i)
+			out.Mixins = append(out.Mixins, loadjson.Mixin{})
 			continue
 		}
+		out.Mixins = append(out.Mixins, mixinOf(m))
 		add(l.read(prefix, m.Fields, m.Edges, m.Indexes, m.Annotations), prefix, i, true)
 	}
 	add(l.read("", s.Fields, s.Edges, s.Indexes, s.Annotations), "", 0, false)
@@ -224,6 +227,18 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 		l.fail("", "", "%v", err)
 	}
 	return out
+}
+
+// mixinOf describes the mixin m, which is not nil: the type velox-gen reads
+// its behaviour methods from, and whether m is its zero value.
+func mixinOf(m schema.Mixin) loadjson.Mixin {
+	v := reflect.ValueOf(m)
+	if v.Kind() == reflect.Pointer {
+		v = v.Elem()
+	}
+	t := v.Type()
+	name, _, generic := strings.Cut(t.Name(), "[")
+	return loadjson.Mixin{PkgPath: t.PkgPath(), Name: name, Generic: generic, NonZero: !v.IsZero()}
 }
 
 // methodPos is the file:line of the method name of the schema type t, or ""

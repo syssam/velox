@@ -28,6 +28,12 @@ type Entity struct {
 	Edges       []*Edge                    `json:"edges"`
 	Indexes     []*Index                   `json:"indexes,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
+
+	// Mixins are the values of the schema's Mixin method, and Pointer says
+	// the schema implements schema.Interface only through a pointer. They
+	// are for velox-gen's binding of mixin behaviour, not the model's JSON.
+	Mixins  []loadjson.Mixin `json:"-"`
+	Pointer bool             `json:"-"`
 }
 
 // Field is a field of an entity: a field of the model, the ID velox adds when

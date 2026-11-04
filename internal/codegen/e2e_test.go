@@ -61,6 +61,11 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 	if cfg.Funcs, err = FuncPackages(dir, g, cfg, offline()); err != nil {
 		t.Fatal(err)
 	}
+	if cfg.Mixins == nil {
+		if cfg.Mixins, _, err = MixinBehaviour(dir, "./schema", g, offline()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	out, err := Generate(g, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -149,5 +154,31 @@ func TestUnboundMethodIsRefused(t *testing.T) {
 	}
 	if out, err := tempmod.Go(dir, "test", "-count=1", "./..."); err != nil {
 		t.Fatalf("go test:\n%v", out)
+	}
+}
+
+// Mixins' Policy, Hooks and Interceptors, bound in package runtime, run end
+// to end on SQLite (testdata/e2e/mixintest).
+func TestMixinBehaviourRunsOnSQLite(t *testing.T) {
+	dir := e2eModule(t, Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/tmp/gen", Bound: map[string]Bound{
+		"Ticket": {Hooks: true},
+	}}, []string{"mixin"}, nil, "mixintest/main_test.go")
+	if out, err := tempmod.Go(dir, "test", "-count=1", "./gen/..."); err != nil {
+		t.Fatalf("go test:\n%v", out)
+	}
+}
+
+// A mixin's method of another signature than velox binds, which
+// MixinBehaviour would refuse, does not compile: the line of package
+// runtime that binds it names the entity.
+func TestWrongMixinSignatureDoesNotCompile(t *testing.T) {
+	bad := map[string][]MixinBound{"Note": {{PkgPath: "example.com/tmp/schema", PkgName: "schema", Name: "Bad", Methods: map[string]bool{"Policy": false}}}}
+	dir := e2eModule(t, Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/tmp/gen", Mixins: bad}, []string{"wrongmixin"}, nil, "")
+	out, err := tempmod.Go(dir, "vet", "./...")
+	if err == nil {
+		t.Fatal("go vet accepted a mixin Policy method that returns a pointer")
+	}
+	if !strings.Contains(out, "gen/runtime/runtime.go") || !strings.Contains(out, "sch.Bad{}.Policy") {
+		t.Errorf("the error does not name the binding in package runtime:\n%s", out)
 	}
 }

@@ -579,3 +579,12 @@ func relPos(dir, pos string) string {
 	}
 	return relPath(dir, file) + line
 }
+
+// relWarning is the warning w, "file:line: text", with the file relative
+// to dir, as relPos makes it.
+func relWarning(dir, w string) string {
+	if i := strings.Index(w, ": "); i > 0 {
+		return relPos(dir, w[:i]) + w[i:]
+	}
+	return w
+}

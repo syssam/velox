@@ -28,6 +28,13 @@ var goldenCases = []struct {
 	{"scoped", Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/scoped/gen", Bound: map[string]Bound{
 		"Task": {Policy: true, Hooks: true}, "Memo": {Policy: true}, "Tag": {Hooks: true},
 	}}},
+	// Mixins with behaviour, bound in package runtime (mixinbehaviour) and,
+	// for a schema that does not import gen, in gen (mixinplain). Config.Mixins
+	// is MixinBehaviour's.
+	{"mixinbehaviour", Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/mixinbehaviour/gen", Bound: map[string]Bound{
+		"Project": {Policy: true},
+	}}},
+	{"mixinplain", Config{Package: "gen"}},
 }
 
 // TestGolden loads each case's schema package, generates it and compares every
@@ -109,6 +116,9 @@ func goldenGenerate(t *testing.T, name string, cfg Config) ([]File, error) {
 		t.Fatal(err)
 	}
 	cfg.Funcs = funcs
+	if cfg.Mixins, _, err = MixinBehaviour(dir, "./schema", g, offline()); err != nil {
+		t.Fatal(err)
+	}
 	return Generate(g, cfg)
 }
 
@@ -120,6 +130,17 @@ func goldenModule(t *testing.T, name string) (*Graph, string) {
 	matches, err := filepath.Glob(filepath.Join("testdata", "golden", name, "schema", "*.go"))
 	if err != nil || len(matches) == 0 {
 		t.Fatalf("no schema files: %v", err)
+	}
+	// A golden case may hold mixins' packages beside the schema, below
+	// mixins/.
+	others, _ := filepath.Glob(filepath.Join("testdata", "golden", name, "mixins", "*", "*.go"))
+	for _, p := range others {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, src, _ := bytes.Cut(b, []byte("\n"))
+		files["mixins/"+filepath.Base(filepath.Dir(p))+"/"+filepath.Base(p)] = string(src)
 	}
 	for _, p := range matches {
 		b, err := os.ReadFile(p)

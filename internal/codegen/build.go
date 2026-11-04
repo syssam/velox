@@ -131,7 +131,7 @@ func (b *builder) entities(m *loadjson.Model) {
 	schemas := slices.Clone(m.Schemas)
 	slices.SortStableFunc(schemas, func(x, y *loadjson.Schema) int { return strings.Compare(x.Name, y.Name) })
 	for _, s := range schemas {
-		e := &Entity{Name: s.Name, Label: plugin.Snake(s.Name), Fields: []*Field{}, Edges: []*Edge{}, Annotations: s.Annotations}
+		e := &Entity{Name: s.Name, Label: plugin.Snake(s.Name), Fields: []*Field{}, Edges: []*Edge{}, Annotations: s.Annotations, Mixins: s.Mixins, Pointer: s.Pointer}
 		e.Table = tableName(e.Name)
 		if raw, ok := s.Annotations["Table"]; ok {
 			var t struct {

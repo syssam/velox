@@ -1,9 +1,9 @@
 // Package mixin holds the mixins a schema lists in its Mixin method, and the
 // Schema to embed in a mixin of your own.
 //
-// A mixin carries fields, edges, indexes and annotations, and nothing else.
-// A reusable hook is not part of a mixin: it is a generic function, and each
-// entity that wants it lists it in its own Hooks.
+// A mixin carries fields, edges, indexes and annotations, and it may declare
+// behaviour: generic Policy, Hooks and Interceptors methods, which velox-gen
+// binds for each entity that lists it (see package schema).
 package mixin
 
 import (
@@ -14,8 +14,8 @@ import (
 )
 
 // Schema is embedded by every mixin. Its methods declare nothing; a mixin
-// overrides the ones it needs. A mixin carries fields, edges, indexes and
-// annotations only; a reusable hook is a generic function each entity lists.
+// overrides the ones it needs. It declares no behaviour methods, so a mixin
+// that embeds it has only those it declares.
 type Schema struct{}
 
 // Fields returns no fields.

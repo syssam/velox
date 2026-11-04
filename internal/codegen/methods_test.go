@@ -54,7 +54,7 @@ func TestSchemaMethodsRefusesAWrongShape(t *testing.T) {
 		{"an array", "package schema\n\nfunc (User) Hooks() [2]velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
 		{"interceptors result", "package schema\n\nfunc (User) Interceptors() []velox.Hook[gen.User] { return nil }\n", "User.Interceptors must take nothing and return []velox.Interceptor[gen.User] (func (User) Interceptors() []velox.Interceptor[gen.User])"},
 		{"one interceptor", "package schema\n\nfunc (User) Interceptors() velox.Interceptor[gen.User] { return velox.Interceptor[gen.User]{} }\n", "User.Interceptors must take nothing and return []velox.Interceptor[gen.User] (func (User) Interceptors() []velox.Interceptor[gen.User])"},
-		{"not an entity", "package schema\n\nfunc (Mixin) Hooks() []velox.Hook[gen.User] { return nil }\n", "Mixin.Hooks: Mixin is not an entity; Hooks, Policy and Interceptors are declared on an entity's schema, or on a type named like a join entity"},
+		{"not an entity", "package schema\n\nfunc (Mixin) Hooks() []velox.Hook[gen.User] { return nil }\n", "Mixin.Hooks: Mixin is not an entity; Hooks, Policy and Interceptors are declared on an entity's schema, on a type named like a join entity, or, generic over the entity, on a mixin: func (Mixin) Hooks[E any]() []velox.Hook[E]"},
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": c.src})
 		_, err := SchemaMethods(dir, "", []string{"User", "Post"})
@@ -62,6 +62,11 @@ func TestSchemaMethodsRefusesAWrongShape(t *testing.T) {
 		if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "mine.go") || fe.Line != 3 || fe.Reason != c.want {
 			t.Errorf("%s: err = %v; want a FileError at mine.go:3: %s", c.name, err, c.want)
 		}
+	}
+	// Generic, the method is a mixin's, which MixinBehaviour reads.
+	dir := methodsDir(t, map[string]string{"mine.go": "package schema\n\nfunc (Mixin) Hooks[E any]() []velox.Hook[E] { return nil }\n"})
+	if got, err := SchemaMethods(dir, "", []string{"User", "Post"}); err != nil || len(got) != 0 {
+		t.Errorf("a mixin's method: %v %v", got, err)
 	}
 }
 

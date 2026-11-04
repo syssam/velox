@@ -281,7 +281,11 @@ func entityImports(w *writer, o *Out, e *OutEntity) {
 	}
 	w.p("")
 	for _, p := range slices.Compact(other) {
-		w.p("%s", strconv.Quote(p))
+		if n := e.ImportAs[p]; n != "" {
+			w.p("%s %s", n, strconv.Quote(p))
+		} else {
+			w.p("%s", strconv.Quote(p))
+		}
 	}
 	if e.NeedsSch && !o.SchemaImportsGen {
 		w.p("sch %s", strconv.Quote(o.SchemaPath))

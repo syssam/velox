@@ -1491,3 +1491,82 @@ func TestGenerateCompileErrorInARewrittenFile(t *testing.T) {
 		t.Errorf("%d %q %q, want the error at schema/user_policy.go:11", code, out, errs)
 	}
 }
+
+// genInOrg is a mixin, InOrg, whose Policy names its column with col, and
+// which User lists.
+func genInOrg(col string) map[string]string {
+	return map[string]string{
+		"schema/inorg.go": `package schema
+
+import (
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/mixin"
+)
+
+const orgCol = "org_id"
+
+type InOrg struct{ mixin.Schema }
+
+func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id")} }
+
+func (InOrg) Policy[E any]() velox.Policy[E] {
+	_ = velox.Field[E, int64](` + col + `)
+	return velox.Policy[E]{}
+}
+`,
+		"schema/user.go": strings.Replace(genUserSchema, "type User struct{ schema.Schema }\n",
+			"type User struct{ schema.Schema }\n\nfunc (User) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }\n", 1),
+	}
+}
+
+// A mixin's Policy binds in gen when the schema does not import gen, and in
+// package runtime, generated from nothing, when it does; a velox.Field name
+// velox-gen cannot read is a warning with its line, and a wrong one is
+// refused at its line, as is a mixin method of the wrong shape.
+func TestGenerateMixinBehaviour(t *testing.T) {
+	dir := genModule(t, genInOrg(`"org_id"`))
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
+		t.Fatalf("plain: %d %q", code, errs)
+	}
+	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(string(src), "velox.BindPolicy[User](sch.InOrg{}.Policy),") {
+		t.Errorf("gen does not bind the mixin:\n%s", src)
+	}
+	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+
+	// The schema imports gen, which is gone: package runtime binds both.
+	if err := os.RemoveAll(filepath.Join(dir, "gen")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy)
+	writeFile(t, filepath.Join(dir, "cmd", "app", "main.go"), linkRuntime["cmd/app/main.go"])
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
+		t.Fatalf("bootstrap: %d %q", code, errs)
+	}
+	rt, _ := os.ReadFile(filepath.Join(dir, "gen", "runtime", "runtime.go"))
+	for _, want := range []string{"UserPolicy: velox.BindPolicy[gen.User](sch.InOrg{}.Policy, sch.User{}.Policy),", "//\tUser  Policy: InOrg, User\n"} {
+		if !strings.Contains(string(rt), want) {
+			t.Errorf("runtime.go lacks %q:\n%s", want, rt)
+		}
+	}
+	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+
+	writeFile(t, filepath.Join(dir, "schema", "inorg.go"), genInOrg("orgCol")["schema/inorg.go"])
+	want := "velox-gen: warning: schema/inorg.go:17: velox.Field[E, int64](orgCol) names its column with a value velox-gen cannot read; velox checks it when it builds each entity's metadata\n"
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != want {
+		t.Errorf("not a literal: %d %q, want %q", code, errs, want)
+	}
+	writeFile(t, filepath.Join(dir, "schema", "inorg.go"), genInOrg(`"org"`)["schema/inorg.go"])
+	if code, _, errs := runCLI(t, dir, "./schema"); code == 0 || !strings.Contains(errs, `schema/inorg.go:17: schema User: velox.Field[E, int64]("org"): User, which lists InOrg, has no column "org"`) {
+		t.Errorf("a wrong name: %d %q", code, errs)
+	}
+	writeFile(t, filepath.Join(dir, "schema", "inorg.go"), strings.Replace(genInOrg(`"org_id"`)["schema/inorg.go"], "Policy[E any]() velox.Policy[E]", "Policy[E any]() *velox.Policy[E]", 1))
+	if code, _, errs := runCLI(t, dir, "./schema"); code == 0 || !strings.Contains(errs, "schema/inorg.go:16: InOrg.Policy must return velox.Policy[E]") {
+		t.Errorf("a wrong shape: %d %q", code, errs)
+	}
+}

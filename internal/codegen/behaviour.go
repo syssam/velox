@@ -31,6 +31,11 @@ func behaviourResult(m, genPkg, e string) string {
 	return "[]velox.Hook[" + genPkg + "." + e + "]"
 }
 
+// mixinResult is the result of a mixin's method m, generic over E.
+func mixinResult(m string) string {
+	return map[string]string{"Policy": "velox.Policy[E]", "Hooks": "[]velox.Hook[E]", "Interceptors": "[]velox.Interceptor[E]"}[m]
+}
+
 // SchemaMethods reads the schema package's files in dir, as userFiles does,
 // and reports which of entities have a Hooks, a Policy or an Interceptors
 // method there. An
@@ -41,7 +46,8 @@ func behaviourResult(m, genPkg, e string) string {
 // The method takes nothing and returns []velox.Hook[gen.E],
 // velox.Policy[gen.E] or []velox.Interceptor[gen.E], gen being the generated
 // package and E the entity; another shape is a *FileError, and so is such a
-// method on a type that is not an entity's. The receiver may be a value or a pointer: package
+// method on a type that is not an entity's, unless it is generic: a mixin's
+// method, which MixinBehaviour reads. The receiver may be a value or a pointer: package
 // runtime binds the method of a new value, or a new pointer, of the schema
 // package's type.
 //
@@ -67,7 +73,10 @@ func SchemaMethods(dir, genPkg string, entities []string) (map[string]Bound, err
 			m := fd.Name.Name
 			line := fset.Position(fd.Pos()).Line
 			if !slices.Contains(entities, e) {
-				return &FileError{Path: path, Line: line, Reason: fmt.Sprintf("%s.%s: %s is not an entity; Hooks, Policy and Interceptors are declared on an entity's schema, or on a type named like a join entity", e, m, e)}
+				if fd.Type.TypeParams != nil {
+					continue // a mixin's, which MixinBehaviour reads
+				}
+				return &FileError{Path: path, Line: line, Reason: fmt.Sprintf("%[1]s.%[2]s: %[1]s is not an entity; Hooks, Policy and Interceptors are declared on an entity's schema, on a type named like a join entity, or, generic over the entity, on a mixin: func (%[1]s) %[2]s[E any]() %[3]s", e, m, mixinResult(m))}
 			}
 			if !behaviourSignature(fd, e) {
 				want := behaviourResult(m, genPkg, e)

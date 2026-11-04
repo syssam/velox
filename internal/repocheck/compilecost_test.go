@@ -170,6 +170,55 @@ var entityDescHooksBound = strings.Replace(entityDescHooksSrc, `		PrimaryKey: []
 		Hooks:      velox.BindHooks((*E)(nil).Hooks),
 		Edges:`, 1)
 
+// entityDescMixinSrc is entityDescUseSrc with entityDescHooksSrc's Policy
+// and three hooks declared by a mixin, generic over the entity, whose
+// columns are velox.Field handles, and bound as velox-gen binds a mixin's.
+var entityDescMixinSrc = strings.Replace(strings.Replace(entityDescUseSrc, `var (
+	eID `, `type M struct{}
+
+func (M) Policy[T any]() velox.Policy[T] {
+	name := velox.Field[T, string]("name")
+	return velox.Policy[T]{
+		Read:   func(context.Context) (velox.Pred[T], error) { return name.EQ("r"), nil },
+		Write:  func(context.Context) (velox.Pred[T], error) { return velox.Allow[T](), nil },
+		Insert: func(_ context.Context, x *T) error { return nil },
+	}
+}
+
+func (M) Hooks[T any]() []velox.Hook[T] {
+	id, name := velox.Field[T, int64]("id"), velox.Field[T, string]("name")
+	return []velox.Hook[T]{
+		velox.On(func(next velox.Mutator[T]) velox.Mutator[T] {
+			return velox.MutateFunc[T](func(ctx context.Context, m *velox.Mutation[T]) error {
+				for _, x := range m.Rows() {
+					*name.Ptr(x) = "i"
+				}
+				return next.Mutate(ctx, m)
+			})
+		}, velox.OpInsert),
+		velox.On(func(next velox.Mutator[T]) velox.Mutator[T] {
+			return velox.MutateFunc[T](func(ctx context.Context, m *velox.Mutation[T]) error {
+				m.Set(name.Set("u"))
+				_ = m.DB()
+				return next.Mutate(ctx, m)
+			})
+		}, velox.OpUpdate),
+		velox.On(func(next velox.Mutator[T]) velox.Mutator[T] {
+			return velox.MutateFunc[T](func(ctx context.Context, m *velox.Mutation[T]) error {
+				m.Where(id.EQ(1))
+				return next.Mutate(ctx, m)
+			})
+		}, velox.OpDelete),
+	}
+}
+
+var (
+	eID `, 1), `		PrimaryKey: []int{0},
+		Edges:`, `		PrimaryKey: []int{0},
+		Policy:     velox.BindPolicy[E](M{}.Policy),
+		Hooks:      velox.BindHooks[E](M{}.Hooks),
+		Edges:`, 1)
+
 // genericObjects is one unexported variable of each exported generic type,
 // and of the non-generic types generated code reaches, as a package would
 // declare it (or, with src, a whole package), and the most bytes its compiled
@@ -251,8 +300,14 @@ var genericObjects = []struct {
 	// fields.
 	{"entityDescUse", "", entityDescUseSrc, 780288},        // measured 770560
 	{"entityDescHooks", "", entityDescHooksBound, 1072128}, // measured 1058404
-	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
-	{"Mutation", "velox.Mutation[E]", "", 7168},            // measured 2226
+	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
+	// generic over the entity, whose columns are velox.Field handles: 74540
+	// bytes, 7%, more than an entity's own methods, for the instances of the
+	// mixin's methods and of velox.Field and Named. An entity without mixin
+	// behaviour pays none of it.
+	{"entityDescMixin", "", entityDescMixinSrc, 1146880}, // measured 1132944
+	{"Policy", "velox.Policy[E]", "", 8192},              // measured 4050
+	{"Mutation", "velox.Mutation[E]", "", 7168},          // measured 2226
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
