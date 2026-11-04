@@ -277,19 +277,30 @@ func TestCILocalMirrorsCI(t *testing.T) {
 		}
 	}
 
-	// The PostgreSQL 14 run. The root's tests run in it whatever the level,
-	// and the merge and full forms of a test are the gate's there.
+	// The PostgreSQL 14 run, of what CI's test job runs on both versions. The
+	// root's tests run in it whatever the level, and the merge and full forms
+	// of a test are the gate's there.
 	var matrix []command
 	for _, l := range scriptLines(t, ciLocal) {
 		if l.matrix && strings.HasPrefix(l.text, "go test ") {
 			matrix = append(matrix, command{l.dir, l.text, l.level})
 		}
 	}
-	if want := (command{".", "go test -race -count=1 -timeout " + timeouts["14"] + " ./...", "gate"}); !slices.Contains(matrix, want) {
-		t.Errorf("%s's PostgreSQL 14 run has %q, want %q", ciLocal, matrix, want)
+	// The root's: the merge gate's command, with the 14 leg's timeout.
+	rootTests := 0
+	for c, l := range ci {
+		if c.dir == "." && c.level == "merge" && l.scope == "test" && strings.HasPrefix(c.text, "go test -race -count=1 ") {
+			rootTests++
+			if want := (command{".", normalizeCommand(l.text, timeouts["14"]), "gate"}); !slices.Contains(matrix, want) {
+				t.Errorf("%s's PostgreSQL 14 run has %q, want %q", ciLocal, matrix, want)
+			}
+		}
+	}
+	if rootTests != 1 {
+		t.Errorf("%s's test job has %d merge-level go test lines in the root, want 1", ciWorkflow, rootTests)
 	}
 	for c, l := range ci {
-		if !strings.HasPrefix(c.text, "go test -race -count=1 ") || strings.Contains(c.text, " -short ") {
+		if l.scope != "test" || !strings.HasPrefix(c.text, "go test -race -count=1 ") || strings.Contains(c.text, " -short ") {
 			continue
 		}
 		level := c.level
@@ -362,7 +373,7 @@ func TestCIGateIsTheORM(t *testing.T) {
 		{"examples", "go tool velox-gen migrate apply "},
 	}
 	full := []struct{ dir, prefix string }{
-		{".", "go test -race -count=1 -timeout 20m -coverpkg=./... "},
+		{".", "go test -race -count=1 -timeout 20m -coverpkg=./... -coverprofile=cover-root.out "},
 		{".", "go run ./scripts/covfloor "},
 	}
 	for _, script := range []string{ciWorkflow, ciLocal} {

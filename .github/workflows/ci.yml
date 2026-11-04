@@ -134,10 +134,10 @@ jobs:
           go mod tidy # download all adds to go.sum what tidy leaves out
       - name: root
         if: github.event_name == 'pull_request'
-        run: go test -race -count=1 -timeout ${{ matrix.test-timeout }} ./...
+        run: go test -race -count=1 -timeout ${{ matrix.test-timeout }} -skip '^(TestGraphQLServiceLinksOnlyItsEntities|TestScaleHarnessSmallGraphQL)$' ./...
       - name: root, with coverage
         if: github.event_name == 'push'
-        run: go test -race -count=1 -timeout ${{ matrix.test-timeout }} -coverpkg=./... -coverprofile=cover-root.out ./...
+        run: go test -race -count=1 -timeout ${{ matrix.test-timeout }} -coverpkg=./... -coverprofile=cover-root.out -skip '^(TestGraphQLServiceLinksOnlyItsEntities|TestScaleHarnessSmallGraphQL)$' ./...
       - name: examples
         working-directory: examples
         run: go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-examples.out" $(go list ./... | grep -vE '/examples/(graphql|otel)(/|$)')
@@ -167,7 +167,7 @@ jobs:
         run: go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-examples-graphql.out" ./graphql/...
       - name: coverage floors
         if: github.event_name == 'push'
-        run: go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
+        run: go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -282,6 +282,10 @@ jobs:
           go -C graphql tool gqlgen generate
           git diff --exit-code HEAD -- graphql/graph
           test -z "$(git ls-files --others --exclude-standard -- graphql/graph)"
+      # bench/scale's GraphQL tests, which the test job leaves out: they
+      # need no database.
+      - name: root's GraphQL tests
+        run: go test -race -count=1 -timeout 20m -coverpkg=./... -coverprofile=cover-root-graphql.out -run '^(TestGraphQLServiceLinksOnlyItsEntities|TestScaleHarnessSmallGraphQL)$' ./bench/scale
       - name: scale (n=500, GraphQL, report-only)
         run: scripts/scale-check.sh -n 500 -s 100 -graphql
   # velox-graphql against the newest gqlgen. A red job says gqlgen moved.

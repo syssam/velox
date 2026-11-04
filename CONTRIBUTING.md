@@ -257,7 +257,7 @@ checks the merged profiles of the four modules against them, in
 `scripts/ci-local.sh --full` and on a push to `main`:
 
 ```sh
-go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
+go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
 ```
 
 The profiles are the `-coverprofile` files of the test runs above. The
