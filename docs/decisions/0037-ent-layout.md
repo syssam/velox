@@ -78,12 +78,20 @@ gen, always.
   behaviour, in `main.go` and in a test package outside main.
 - gen's types are what a reader, gopls, `%T` and reflect see; a user's
   method on an entity stays in gen with or without behaviour.
-- Build cost at 100 entities, each with a `Policy` (darwin/arm64, a cache
-  warm with every dependency, the app's packages built cold, five runs at a
-  load average near 30): see the second section of this record's Review
-  once measured. The facade's 700-odd lines and one package go.
+- Build cost does not grow: see the Review. The facade's 700 lines go, and
+  so does a package, gen/entity, for gen/runtime's one file.
 
 ## Review
 
 2026-11-04: measured with bench/scale's shape at N=100, a `Policy` per
-entity, building `./gen/...` and `./schema` with every dependency cached.
+entity, building `./gen/...` and `./schema` cold with every dependency
+cached (darwin/arm64, five runs each, back to back, at a load average of
+32 to 38, so wall time is noise):
+
+| layout | packages | lines in gen | user CPU | max RSS |
+| --- | --- | --- | --- | --- |
+| 0036, split | gen, gen/entity | 13832 | 4.81 to 5.30 s, median 4.97 | 258 to 312 MB, median 285 |
+| 0037, ent's | gen, gen/runtime | 13133 | 3.69 to 3.80 s, median 3.75 | 277 to 325 MB, median 285 |
+
+The facade's aliases and wrappers cost about a second of CPU to type-check
+and compile; memory is the same.
