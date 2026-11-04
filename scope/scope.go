@@ -80,12 +80,17 @@ func (k *Key[V]) From(ctx context.Context) (V, bool) {
 	return v, ok && v != zero
 }
 
-// Scope is the scope of entity E by one column of type V.
+// Scope is the scope of entity E by one column of type V. It is a
+// velox.Scoper, for a Descriptor's Scope.
 type Scope[E any, V comparable] struct {
-	key   *Key[V]
-	eq    func(V) velox.Pred[E]
-	field func(*E) *V
+	kit[E] // makes Scope a velox.Scoper
+	key    *Key[V]
+	eq     func(V) velox.Pred[E]
+	field  func(*E) *V
 }
+
+// kit names velox.ScopeKit for embedding, so that the field is not exported.
+type kit[E any] = velox.ScopeKit[E]
 
 // By returns the scope of E by the column eq compares and field reaches:
 //

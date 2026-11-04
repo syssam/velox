@@ -84,7 +84,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	t.Parallel()
 	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce", "NotLinkedError", "Show",
-		"BindPolicy", "BindHooks", "BindHooksAfter", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet",
+		"BindPolicy", "BindHooks", "BindHooksAfter", "BoundPolicy", "BoundHooks", "Scoper", "ScopeKit", "Lazy", "Validate", "ValidateSet",
 		"Table", "TableOf", "TableRows", "RowsOf", "PredOp", "TableQuery", "Untyped", "Typed", "AndPredicates", "OrPredicates", "NotPredicate", "TableInsert", "TableUpdate", "TableDelete", "Assignments", "GeneratedCodeIsVersion11",
 		"PredEQ", "PredNEQ", "PredIn", "PredNotIn", "PredGT", "PredGTE", "PredLT", "PredLTE", "PredContains", "PredHasPrefix", "PredHasSuffix", "PredIsNull", "PredNotNull"}
 	// DB's methods, keyed as packageDocs keys a method.

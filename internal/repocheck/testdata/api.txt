@@ -501,7 +501,7 @@ type ConstraintKind = veloxtype.ConstraintKind
 type DB struct { }
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Policy func() BoundPolicy Hooks func() BoundHooks }
+type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Scope Scoper Policy func() BoundPolicy Hooks func() BoundHooks }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type EdgeDescriptor = engine.EdgeDescriptor
@@ -550,6 +550,8 @@ type Route = veloxtype.Route
 type RowScope = veloxtype.RowScope
 type SaveQuery[E any] struct { }
 type SchemaError = veloxtype.SchemaError
+type ScopeKit[E any] struct { }
+type Scoper interface { scopePolicy(x, scope any, own *engine.EntityPolicy) (*engine.EntityPolicy, string) scopeFill(x, scope any) (engine.HookFn, string) }
 type Setter[E any] struct { }
 type Shard = engine.Shard
 type Statement = engine.Statement
@@ -989,6 +991,7 @@ type Response struct { Protocol int Files []File Warnings []string Error string 
 type Supports struct { Protocol, Model int }
 
 package scope
+Scope embeds kit[E]
 func (k *Key[V]) From(ctx context.Context) (V, bool)
 func (k *Key[V]) With(ctx context.Context, v V) context.Context
 func (s Scope[E, V]) Fill() velox.Hook[E]

@@ -88,15 +88,15 @@ func petDescriptor() velox.Descriptor[pet] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeeperID", Name: "keeper_id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		FieldPtr:   func(x *pet, i int) any { return [...]any{&x.ID, &x.KeeperID, &x.OrgID, &x.Name}[i] },
+		Scope:      petScope,
 		Policy: func() velox.BoundPolicy {
-			return velox.BindPolicy(petScope.Wrap(velox.Policy[pet]{Read: func(ctx context.Context) (velox.Pred[pet], error) {
+			return velox.BindPolicy(velox.Policy[pet]{Read: func(ctx context.Context) (velox.Pred[pet], error) {
 				if v, ok := ctx.Value(viewerKey{}).(int64); ok {
 					return pets.ID.LTE(v), nil
 				}
 				return velox.Allow[pet](), nil
-			}}))
+			}})
 		},
-		Hooks: func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[pet]{petScope.Fill()}) },
 	}
 }
 

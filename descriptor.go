@@ -45,30 +45,40 @@ type Descriptor[E any] struct {
 	// the absence of a value, nor with a pointer.
 	Check func(col int, v any) error
 
-	// Policy and Hooks bind the entity's policy and hooks, when it has them.
-	// velox-gen binds those its schema declares, policy and hooks being the
-	// schema's methods:
+	// Scope, Policy and Hooks name the entity's scope, policy and hooks, each
+	// nil when it has none, and velox composes them: the policy is Scope's
+	// Wrap around what Policy binds, or around an empty Policy, and the hooks
+	// are Scope's Fill, then what Hooks binds. velox-gen names the scope of a
+	// schema.Scoped column and the schema's methods, which the generated
+	// package binds with BindPolicy and BindHooks:
 	//
-	//	Policy: func() velox.BoundPolicy { return velox.BindPolicy(policy()) },
-	//	Hooks:  func() velox.BoundHooks  { return velox.BindHooks(hooks()) },
+	//	Scope:  commentScope,
+	//	Policy: rt.CommentPolicy,
+	//	Hooks:  rt.CommentHooks,
 	//
-	// An entity written by hand binds its own methods the same way,
-	// velox.BindPolicy((*E)(nil).Policy()). The field is nil when the entity has none, so that an
-	// entity without them instantiates none of the policy and hook generics.
-	// A method with another signature does not compile (BindPolicy takes a
-	// Policy[E], BindHooks a []Hook[E]), which is why no test checks it at
-	// run time; and an entity whose pointer type has a Policy or Hooks method
-	// that its Descriptor does not bind is refused at first use with a
-	// *SchemaError, so a policy or a hook is never silently left out.
+	// An entity written by hand binds its own methods,
 	//
-	// Load calls each function once, when it builds the metadata: the
-	// methods run on a nil *E, so neither may read its receiver, and a panic
-	// in either becomes the entity's *SchemaError. Neither method may read the
-	// entity's own metadata in its body, outside the functions it returns:
-	// anything that calls its VeloxMeta waits on the build in progress and
-	// deadlocks. A Has or HasWhere does not: it names its relation, and the
-	// statement that holds the condition resolves it, so the body may build
-	// them.
+	//	Policy: func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
+	//
+	// A method with another signature does not compile, which is why no test
+	// checks it at run time; and an entity whose pointer type has a Policy or
+	// Hooks method that its Descriptor does not name is refused at first use
+	// with a *SchemaError, so a policy or a hook is never silently left out.
+	//
+	// None of the three fields names E, and Load composes them in code that
+	// is not generic, so that an entity without a policy, hooks or a scope
+	// compiles none of their generics: BindPolicy and BindHooks instantiate
+	// them where the method is bound, and a scope's are ScopeKit's methods.
+	//
+	// Load calls each function once, when it builds the metadata: a
+	// hand-written method runs on a nil *E, so it may not read its receiver,
+	// and a panic in either becomes the entity's *SchemaError, as does a nil
+	// hook. Neither may read the entity's own metadata in its body, outside
+	// the functions it returns: anything that calls its VeloxMeta waits on
+	// the build in progress and deadlocks. A Has or HasWhere does not: it
+	// names its relation, and the statement that holds the condition resolves
+	// it, so the body may build them.
+	Scope  Scoper
 	Policy func() BoundPolicy
 	Hooks  func() BoundHooks
 }
@@ -105,14 +115,8 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 			return v
 		})
 		addr := d.FieldPtr
-		// Descriptor.Policy and Descriptor.Hooks have E erased (BoundPolicy, BoundHooks):
-		// the generated code instantiates BindPolicy and BindHooks, so that
-		// an entity that has neither compiles no Policy or Hook generic.
-		if err == nil && d.Policy != nil {
-			err = engine.ErasePolicy(info, d.Policy)
-		}
-		if err == nil && d.Hooks != nil {
-			err = engine.EraseHooks(info, d.Hooks)
+		if err == nil && (d.Scope != nil || d.Policy != nil || d.Hooks != nil) {
+			err = bind(info, x, d.Scope, d.Policy, d.Hooks)
 		}
 		if err != nil {
 			info, addr = nil, nil // an error Meta has no scan plan

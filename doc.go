@@ -279,7 +279,7 @@
 // velox-gen and its plugins write code that uses part of this package, and
 // nothing else should: Descriptor, ColumnDescriptor, EdgeDescriptor, EdgeTo, EdgeBidi,
 // EdgeThrough, Meta, MetaOnce, NotLinkedError, Show, BindPolicy, BindHooks,
-// BindHooksAfter, BoundPolicy, BoundHooks, Lazy, Validate, ValidateSet, the untyped surface (Table, TableOf,
+// BindHooksAfter, BoundPolicy, BoundHooks, Scoper, ScopeKit, Lazy, Validate, ValidateSet, the untyped surface (Table, TableOf,
 // TableRows, RowsOf, PredOp and its operators PredEQ, PredNEQ, PredIn,
 // PredNotIn, PredGT, PredGTE, PredLT, PredLTE, PredContains, PredHasPrefix,
 // PredHasSuffix, PredIsNull and PredNotNull, TableQuery, DB.QueryTable,

@@ -330,10 +330,10 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 		return v
 	})
 	if err == nil && d.Policy != nil {
-		err = engine.ErasePolicy(info, d.Policy)
+		err = engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) { return engine.PolicyOf(d.Policy()), "" })
 	}
 	if err == nil && d.Hooks != nil {
-		err = engine.EraseHooks(info, d.Hooks)
+		err = engine.EraseHooks(info, func() ([]engine.HookFn, string) { return engine.HooksOf(d.Hooks()) })
 	}
 	if err != nil {
 		return nil, err

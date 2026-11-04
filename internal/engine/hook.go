@@ -56,45 +56,108 @@ var (
 )
 
 // BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
-// Descriptor.Policy. For generated code. Its fields are not exported: only BindPolicy
-// makes one.
+// Descriptor.Policy. For generated code. Its fields are not exported: only
+// BindPolicy makes one.
 type BoundPolicy struct{ p *EntityPolicy }
 
 // BoundHooks is an entity's hooks with E erased, made by BindHooks for
-// Descriptor.Hooks. For generated code. Its fields are not exported: only BindHooks
-// makes one.
+// Descriptor.Hooks. For generated code. Its fields are not exported: only
+// BindHooks makes one.
 type BoundHooks struct {
 	hs     []HookFn
 	nilAt1 int // 1 + the index of the first nil hook; 0 when none
 }
 
-// ErasePolicy calls f, the Descriptor's Policy, and keeps its result in info. On the
-// join entity of a bidirectional edge (Descriptor.Bidi) it refuses a Read or Write.
-func ErasePolicy(info *EntityInfo, f func() BoundPolicy) error {
-	var b BoundPolicy
-	if err := recovered(info.Name, "Policy()", func() { b = f() }); err != nil {
+// NewBoundPolicy wraps p.
+func NewBoundPolicy(p *EntityPolicy) BoundPolicy { return BoundPolicy{p} }
+
+// PolicyOf is the policy b wraps; nil for the zero BoundPolicy.
+func PolicyOf(b BoundPolicy) *EntityPolicy { return b.p }
+
+// AddBoundHook appends h to b's hooks.
+func AddBoundHook(b *BoundHooks, h HookFn) { b.hs = append(b.hs, h) }
+
+// SetBoundNil records that hook i is nil.
+func SetBoundNil(b *BoundHooks, i int) { b.nilAt1 = i + 1 }
+
+// HooksOf is b's hooks, and NilHook's reason when one of them is nil.
+func HooksOf(b BoundHooks) ([]HookFn, string) {
+	if b.nilAt1 != 0 {
+		return nil, NilHook(b.nilAt1 - 1)
+	}
+	return b.hs, ""
+}
+
+// ErasePolicy calls f, which composes the Descriptor's Scope and Policy with E
+// erased, and keeps its result in info. A panic in f is the entity's
+// *SchemaError, and so is the reason f returns when it refuses them, such as
+// ScopeLacks's. On the join entity of a bidirectional edge (Descriptor.Bidi)
+// it refuses a Read or Write.
+func ErasePolicy(info *EntityInfo, f func() (*EntityPolicy, string)) error {
+	var (
+		p      *EntityPolicy
+		reason string
+	)
+	if err := recovered(info.Name, "Policy()", func() { p, reason = f() }); err != nil {
 		return err
 	}
-	info.policy = b.p
-	if info.bidi && b.p != nil && (b.p.Read != nil || b.p.Write != nil) {
+	if reason != "" {
+		return &SchemaError{Entity: info.Name, Reason: reason}
+	}
+	info.policy = p
+	if info.bidi && p != nil && (p.Read != nil || p.Write != nil) {
 		return &SchemaError{Entity: info.Name, Reason: "the join entity of a bidirectional edge cannot have a Read or Write policy: " +
 			"its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"}
 	}
 	return nil
 }
 
-// EraseHooks calls f, the Descriptor's Hooks, and keeps its hooks in info. A nil
-// hook is refused.
-func EraseHooks(info *EntityInfo, f func() BoundHooks) error {
-	var b BoundHooks
-	if err := recovered(info.Name, "Hooks()", func() { b = f() }); err != nil {
+// EraseHooks calls f, which composes the Descriptor's Scope and Hooks with E
+// erased, and keeps its hooks in info. A panic in f is the entity's
+// *SchemaError, and so is the reason f returns when it refuses them, such as
+// NilHook's.
+func EraseHooks(info *EntityInfo, f func() ([]HookFn, string)) error {
+	var (
+		hs     []HookFn
+		reason string
+	)
+	if err := recovered(info.Name, "Hooks()", func() { hs, reason = f() }); err != nil {
 		return err
 	}
-	if b.nilAt1 != 0 {
-		return errNilHook(info.Name, b.nilAt1-1)
+	if reason != "" {
+		return &SchemaError{Entity: info.Name, Reason: reason}
 	}
-	info.hooks = append(info.hooks, b.hs...)
+	info.hooks = append(info.hooks, hs...)
 	return nil
+}
+
+// NilHook is the reason a nil hook is refused: Hooks()[i] when i >= 0, and
+// the scope's Fill when i is -1. It is not inlined, so that the generic
+// bindings that call it do not compile its body
+// (TestGenericTypesCompileSmall).
+//
+//go:noinline
+func NilHook(i int) string {
+	if i < 0 {
+		return "Scope.Fill() is nil"
+	}
+	return fmt.Sprintf("Hooks()[%d] is nil", i)
+}
+
+// OtherEntity is the reason a Descriptor's Scope, held in part, is refused
+// when it is another entity's. It is not inlined, as NilHook is not.
+//
+//go:noinline
+func OtherEntity(part any) string {
+	return fmt.Sprintf("its Descriptor names a %T, which is another entity's", part)
+}
+
+// ScopeLacks is the reason a Descriptor.Scope whose type, held in scope,
+// lacks method is refused. It is not inlined, as NilHook is not.
+//
+//go:noinline
+func ScopeLacks(scope any, method string) string {
+	return fmt.Sprintf("its Scope, a %T, has no method %s", scope, method)
 }
 
 // recovered calls f, recovering a panic as the entity's *SchemaError.
@@ -107,19 +170,6 @@ func recovered(entity, what string, f func()) (err error) {
 	f()
 	return nil
 }
-
-func errNilHook(entity string, i int) error {
-	return &SchemaError{Entity: entity, Reason: fmt.Sprintf("Hooks()[%d] is nil", i)}
-}
-
-// SetBoundNil records that hook at1-1 is nil: at1 is 1 + its index, and 0 means none.
-func SetBoundNil(b *BoundHooks, at1 int) { b.nilAt1 = at1 }
-
-// AddBoundHook appends h to b's hooks.
-func AddBoundHook(b *BoundHooks, h HookFn) { b.hs = append(b.hs, h) }
-
-// NewBoundPolicy wraps p.
-func NewBoundPolicy(p *EntityPolicy) BoundPolicy { return BoundPolicy{p} }
 
 // Mutate runs in's hooks around core, which runs on db: the hooks reach it
 // as Mutation.DB. With no hooks it calls core alone. The writes call core

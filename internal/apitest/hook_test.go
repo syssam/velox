@@ -224,8 +224,8 @@ func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 	})
 }
 
-// hNilAfter's Hooks lists a nil hook, and the descriptor binds a hook of its own
-// (what velox-gen writes for a scoped entity) before it.
+// hNilAfter's Hooks lists a nil hook, and its scope's Fill binds a hook
+// before it.
 type hNilAfter struct{ ID int64 }
 
 func (*hNilAfter) Hooks() []velox.Hook[hNilAfter] { return []velox.Hook[hNilAfter]{nil} }
@@ -234,10 +234,18 @@ var hNilAfterMeta velox.MetaOnce[hNilAfter]
 
 func (*hNilAfter) VeloxMeta() *velox.Meta[hNilAfter] {
 	return hNilAfterMeta.Load(func() velox.Descriptor[hNilAfter] {
-		first := func(next velox.Mutator[hNilAfter]) velox.Mutator[hNilAfter] { return next }
-		return velox.Descriptor[hNilAfter]{Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(first, (*hNilAfter)(nil).Hooks()) }, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNilAfter]{Scope: nilAfterScope{}, Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNilAfter)(nil).Hooks()) }, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNilAfter, i int) any { return &x.ID }}
 	})
+}
+
+// nilAfterScope is hNilAfter's scope: its Fill is a hook that does nothing.
+type nilAfterScope struct{ velox.ScopeKit[hNilAfter] }
+
+func (nilAfterScope) Wrap(p velox.Policy[hNilAfter]) velox.Policy[hNilAfter] { return p }
+
+func (nilAfterScope) Fill() velox.Hook[hNilAfter] {
+	return func(next velox.Mutator[hNilAfter]) velox.Mutator[hNilAfter] { return next }
 }
 
 // hPanic's Policy reads its receiver, which is nil.
