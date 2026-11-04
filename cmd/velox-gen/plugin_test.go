@@ -163,6 +163,9 @@ func TestVerifyRefusesAPluginPathOfVeloxGen(t *testing.T) {
 	}
 }
 
+// TestPluginPathsAreChecked and the two tests after it are one table of a
+// plugin's paths, in three tests that each take a module and a slot of their
+// own, so that the table runs in three slots rather than one.
 func TestPluginPathsAreChecked(t *testing.T) {
 	dir := pluginModule(t)
 	gen := filepath.Join(dir, "gen")
@@ -213,6 +216,13 @@ func TestPluginPathsAreChecked(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPluginPathsAreCheckedGoFiles is TestPluginPathsAreChecked's table of Go
+// files go build leaves out.
+func TestPluginPathsAreCheckedGoFiles(t *testing.T) {
+	dir := pluginModule(t)
+	gen := filepath.Join(dir, "gen")
 
 	// A .go file go build leaves out, or builds only for some systems, and
 	// a path that is not ASCII.
@@ -264,6 +274,14 @@ func TestPluginPathsAreChecked(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPluginPathsAreCheckedTogether is TestPluginPathsAreChecked's table of
+// paths that clash with each other or with what the directory holds, and of
+// the names it accepts.
+func TestPluginPathsAreCheckedTogether(t *testing.T) {
+	dir := pluginModule(t)
+	gen := filepath.Join(dir, "gen")
 
 	t.Run("twice", func(t *testing.T) {
 		env := fakeEnv(filesEnv(t, plugin.File{Path: "x.go", Content: "package gen\n"}, plugin.File{Path: "x.go", Content: "package gen\n"}))
