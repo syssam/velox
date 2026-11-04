@@ -45,6 +45,9 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 	defer func() {
 		if p := recover(); p != nil {
 			_, retry = p.(NotLinkedError)
+			if retry {
+				unlinked.Store(t, true)
+			}
 			info, err = nil, &SchemaError{Entity: t.String(), Reason: fmt.Sprintf("the generated metadata panicked: %v", p)}
 		}
 	}()
@@ -193,6 +196,7 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 	if err := validate(info); err != nil {
 		return nil, err
 	}
+	publishLayout(t, info)
 	return info, nil
 }
 

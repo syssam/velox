@@ -135,8 +135,14 @@ type ScopeKit[E any] struct{}
 // scope's bindings are ScopeKit's methods. The policies are ANDed in order,
 // the hooks run in order, the first outermost, and the interceptors' are
 // ANDed in order. The scope is outermost: its Wrap holds the AND of ps, and
-// its Fill runs before hs's hooks.
-func bind(info *EntityInfo, x any, s Scoper, ps []func() BoundPolicy, hs []func() BoundHooks, is []func() BoundInterceptors) error {
+// its Fill runs before hs's hooks. retry says the failure is a
+// NotLinkedError's, which Load does not keep.
+func bind(info *EntityInfo, x any, s Scoper, ps []func() BoundPolicy, hs []func() BoundHooks, is []func() BoundInterceptors) (retry bool, err error) {
+	return engine.Unlinked(bindAll(info, x, s, ps, hs, is))
+}
+
+// bindAll is bind, with a NotLinkedError's failure wrapped.
+func bindAll(info *EntityInfo, x any, s Scoper, ps []func() BoundPolicy, hs []func() BoundHooks, is []func() BoundInterceptors) error {
 	if len(is) > 0 {
 		err := engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
 			var fs []engine.FilterFn

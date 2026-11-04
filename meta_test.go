@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -54,6 +55,34 @@ func TestMetaOnceRetriesNotLinked(t *testing.T) {
 	fail := func() Descriptor[other] { n++; panic("broken") }
 	if c, d := bad.Load(fail), bad.Load(fail); c != d || n != 1 {
 		t.Fatalf("a failure that is not NotLinkedError was built %d times", n)
+	}
+}
+
+// A build whose Policy, Hooks or Interceptors panic with NotLinkedError, as
+// one that names an entity not linked yet does, is not kept either.
+func TestMetaOnceRetriesNotLinkedBinding(t *testing.T) {
+	var o MetaOnce[other]
+	linked, calls := false, 0
+	desc := func() Descriptor[other] {
+		return Descriptor[other]{Table: "other", Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+			Policy: []func() BoundPolicy{func() BoundPolicy {
+				calls++
+				if !linked {
+					panic(NotLinkedError("target: not linked: import the generated package"))
+				}
+				return BindPolicy(Policy[other]{})
+			}},
+			FieldPtr: func(x *other, i int) any { return &x.ID }}
+	}
+	m := o.Load(desc)
+	var se *SchemaError
+	if !errors.As(m.err, &se) || !strings.Contains(m.err.Error(), "target: not linked") || m.info != nil {
+		t.Fatalf("before the link: %+v", m)
+	}
+	linked = true
+	a, b := o.Load(desc), o.Load(desc)
+	if calls != 2 || a != b || a.err != nil {
+		t.Fatalf("calls %d, same %v, meta %+v", calls, a == b, a)
 	}
 }
 

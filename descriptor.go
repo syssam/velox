@@ -104,7 +104,7 @@ type Descriptor[E any] struct {
 //
 // A build that panics with a NotLinkedError is returned and not kept, so that an
 // entity used before its generated package's init works once the init has
-// run.
+// run. So is one whose Policy, Hooks or Interceptors panic with one.
 func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] {
 	var m *Meta[E]
 	o.once.Do(func() bool {
@@ -125,7 +125,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 		})
 		addr := d.FieldPtr
 		if err == nil && (d.Scope != nil || len(d.Policy) > 0 || len(d.Hooks) > 0 || len(d.Interceptors) > 0) {
-			err = bind(info, x, d.Scope, d.Policy, d.Hooks, d.Interceptors)
+			retry, err = bind(info, x, d.Scope, d.Policy, d.Hooks, d.Interceptors)
 		}
 		if err != nil {
 			info, addr = nil, nil // an error Meta has no scan plan

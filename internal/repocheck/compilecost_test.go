@@ -238,9 +238,10 @@ var genericObjects = []struct {
 	// Each field of Descriptor costs an entity's package about 0.9 KB, in
 	// type descriptors and relocations: the lists of Policy and Hooks and the
 	// field Interceptors (GeneratedCodeIsVersion13) took entityDescUse from
-	// 766634 to 770270 bytes.
-	{"entityDescUse", "", entityDescUseSrc, 780288},        // measured 770270
-	{"entityDescHooks", "", entityDescHooksBound, 1049600}, // measured 1038290
+	// 766634 to 770270 bytes. Load's retry of a binding that panics with a
+	// NotLinkedError took it to 770548.
+	{"entityDescUse", "", entityDescUseSrc, 780288},        // measured 770548
+	{"entityDescHooks", "", entityDescHooksBound, 1049600}, // measured 1037932
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	{"Mutation", "velox.Mutation[E]", "", 7168},            // measured 2226
 }
