@@ -48,8 +48,8 @@
 //
 // which writes the package ./gen. Nothing in a schema runs at program start.
 // A schema also declares its entity's behaviour, as ent's do: the methods
-// Policy and Hooks, typed with the generated entity and handles of package
-// gen:
+// Policy, Hooks and Interceptors, typed with the generated entity and
+// handles of package gen:
 //
 //	func (User) Policy() velox.Policy[gen.User] {
 //		return velox.Policy[gen.User]{
@@ -61,9 +61,11 @@
 //
 //	func (User) Hooks() []velox.Hook[gen.User] { ... }
 //
-// The method takes nothing and returns velox.Policy[gen.E] or
-// []velox.Hook[gen.E], E being the schema; velox-gen refuses another
-// shape. A many-to-many join entity has no schema: declare an empty struct
+//	func (User) Interceptors() []velox.Interceptor[gen.User] { ... }
+//
+// The method takes nothing and returns velox.Policy[gen.E],
+// []velox.Hook[gen.E] or []velox.Interceptor[gen.E], E being the schema;
+// velox-gen refuses another shape. A many-to-many join entity has no schema: declare an empty struct
 // of its name, type UserFriend struct{}, and the methods on it.
 //
 // The schema package then imports gen, so gen does not import it.

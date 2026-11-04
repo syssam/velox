@@ -125,9 +125,13 @@ An `Update` or `Delete` with neither a `Where` nor `All()` fails with
 `ErrNoWhere`. The names differ because they mean different things: `Unbounded`
 lifts a read's row limit, and `All` confirms a write to every row.
 
-Policies and hooks are schema methods, as in ent, typed with the generated
-entity of package `gen`: `func (User) Policy() velox.Policy[gen.User]` and
-`func (User) Hooks() []velox.Hook[gen.User]`. The layout is ent's
+Policies, hooks and interceptors are schema methods, as in ent, typed with
+the generated entity of package `gen`: `func (User) Policy() velox.Policy[gen.User]`,
+`func (User) Hooks() []velox.Hook[gen.User]` and
+`func (User) Interceptors() []velox.Interceptor[gen.User]`. A velox
+interceptor is a row filter, not ent's query middleware: its condition
+reaches every read and write of the entity, a relation's included, before
+the Read policy, and `WithoutPolicy` does not lift it. The layout is ent's
 (decision 0037):
 
 - `gen` holds every entity, handle and descriptor. When the schema package
@@ -136,7 +140,7 @@ entity of package `gen`: `func (User) Policy() velox.Policy[gen.User]` and
   methods, and the defaults and validators `gen` cannot call by name, in its
   `init`. velox-gen writes it only when something needs binding: a schema
   whose defaults are named functions, such as `time.Now`, and that has no
-  `Policy` or `Hooks`, gets none.
+  `Policy`, `Hooks` or `Interceptors`, gets none.
 
 As with `ent/runtime`, a program imports `gen/runtime` once, for its effect,
 in its main package and in each test package that uses the entities:
