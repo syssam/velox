@@ -71,7 +71,7 @@ groups:
 
 | Group | Its lanes | Touched by |
 |---|---|---|
-| `graphql` | `graphql`, `examples_graphql`, `scale_graphql`, `gqlgen_latest` | `contrib/graphql/**`, `examples/graphql/**`, `scripts/gqlgen-latest.sh`, `schema/**`, `internal/tempmod/**`, `bench/scale/**`, `scripts/scale-check.sh` |
+| `graphql` | `graphql`, `examples_graphql`, `root_graphql`, `scale_graphql`, `gqlgen_latest` | `contrib/graphql/**`, `examples/graphql/**`, `scripts/gqlgen-latest.sh`, `schema/**`, `internal/tempmod/**`, `bench/scale/**`, `scripts/scale-check.sh` |
 | `otel` | `veloxotel`, `examples_otel` | `contrib/veloxotel/**`, `examples/otel/**`, `internal/testmodel/**` |
 | `bench` | `bench_compare`, then `scripts/bench-compare.sh` | `bench/**`, `scripts/bench-compare.sh` |
 
@@ -101,7 +101,8 @@ group.
 
 - `root_lint` (gate): `go vet`, govulncheck and golangci-lint v2.14.0 in the
   root.
-- `root_test` (merge): the root's `go test -race -count=1`.
+- `root_test` (merge): the root's `go test -race -count=1`, but for
+  `bench/scale`'s two GraphQL tests, which `root_graphql` runs.
 - `root_cover` (full): the same, with `-coverpkg=./...` and a coverage profile.
 - `fuzz` (gate): the root's nine fuzz targets.
 - `generated` (gate): `velox-gen -check` and `velox-gen verify` on the test
@@ -118,6 +119,8 @@ group.
 - `examples_graphql` (graphql): `examples/graphql`'s generated files, its tests,
   and gqlgen's output, which waits for the `examples` lane, whose vet builds
   it.
+- `root_graphql` (graphql): `bench/scale`'s GraphQL tests, which build
+  velox-graphql's output cold, with a coverage profile of their own.
 - `scale_graphql` (graphql): `scripts/scale-check.sh -graphql`.
 - `gqlgen_latest` (graphql): `scripts/gqlgen-latest.sh`, which tests
   `velox-graphql` against the newest gqlgen in a copy of the tree.
