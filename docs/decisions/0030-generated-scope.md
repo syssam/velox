@@ -25,7 +25,9 @@ A column is marked `schema.Scoped("org")`. velox-gen then writes `scope_velox.go
 The entity's descriptor binds the scope around whatever the user declares, so the scope
 is outermost and cannot be dropped: `BindPolicy(noteScope.Wrap(user's Policy))`, or
 `noteScope.Policy()` when there is none, and `Fill()` first in the hooks. A user's
-`Policy` holds only its own rules and never calls `Wrap`.
+`Policy` holds only its own rules and never calls `Wrap`. (Since 0037's Review of
+2026-11-04 the descriptor names the scope in `Descriptor.Scope`, and velox composes it
+in the same order.)
 
 velox-gen refuses, with the entity and field: a scoped column that is not `Immutable`,
 is `Optional` or `Nillable`, or is not an integer, string or UUID; two scoped columns on

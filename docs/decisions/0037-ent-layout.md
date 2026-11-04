@@ -95,3 +95,30 @@ cached (darwin/arm64, five runs each, back to back, at a load average of
 
 The facade's aliases and wrappers cost about a second of CPU to type-check
 and compile; memory is the same.
+
+2026-11-04, one shape for behaviour (`GeneratedCodeIsVersion12`): a
+descriptor names each part by one line, `Scope: commentScope`,
+`Policy: rt.CommentPolicy` and `Hooks: rt.CommentHooks`, and velox
+composes them in `Load`, in code that is not generic. The order is as
+before: the scope's `Wrap` around the entity's policy, or around an empty
+one, and the scope's `Fill` before the entity's hooks. gen's
+`SetVeloxRuntime` binds the schema's methods with `BindPolicy` and
+`BindHooks`, in closures velox calls once, when it builds the metadata.
+
+The fields keep the erased types, `func() BoundPolicy` and
+`func() BoundHooks`. Typed fields (`func() Policy[E]`) and a typed
+`PolicyFunc[E]` were measured and refused: every generic function or type
+instantiated for an entity carries the go.shape name of its struct, which
+at bench/scale's shape is about a kilobyte, in each of its symbols. Typed
+fields cost 175 KB per entity in `entityDescHooks` and 42% of gen's object
+at N=100; `PolicyFunc[E]` cost 3.7%. The erased form instantiates what the
+old generated closures did, `BindPolicy[E]` and `BindHooks[E]`, and a
+scope's composition is `ScopeKit[E]`'s methods, so only a scoped entity
+compiles it.
+
+Measured in one worktree at 18c9d64d and at the change, so paths are
+equal: `TestGenericTypesCompileSmall`'s entityDescriptor 138146 → 138384
+bytes, entityDescUse 766412 → 766634, entityDescHooks 1032448 → 1032512,
+policy and hooks 266036 → 265878. At N=100 with a `Policy` per entity, gen's
+archive is 28697904 → 28701420 bytes and gen/runtime's 3558650 → 3557106,
+with the same 17101 go.shape symbols. No budget changed.
