@@ -7,6 +7,7 @@ import (
 // TestReviewLine: a review line holds review and destructive findings only,
 // each distinct one once, on one line.
 func TestReviewLine(t *testing.T) {
+	t.Parallel()
 	fs := []Finding{
 		{Code: "widen-type", Class: Safe, Change: 0, Message: "widens"},
 		{Code: "rename-column", Class: Review, Change: 1, Message: "renames"},

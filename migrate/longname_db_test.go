@@ -14,6 +14,7 @@ import (
 // name and the database drifted from the snapshot from then on. The plan is
 // refused now, naming the column, as codegen refuses such a name.
 func TestPostgresLongNameRefused(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	long := strings.Repeat("c", 64)
 	to := oneTable(d, migrate.Column{Name: long, Type: "text", Nullable: true})
@@ -36,6 +37,7 @@ func TestPostgresLongNameRefused(t *testing.T) {
 // TestLongNamesRefused: each named object of a model is held to the server's
 // limit, PostgreSQL's 63 bytes and MySQL's 64 characters; SQLite has none.
 func TestLongNamesRefused(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d    velox.Dialect
 		name string

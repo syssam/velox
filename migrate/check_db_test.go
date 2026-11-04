@@ -43,6 +43,7 @@ func (ChkOrder) Annotations() []schema.Annotation {
 // *velox.ConstraintError and reads it back as no drift. A row that breaks no
 // check goes in.
 func TestCheckOnRealDatabases(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
 		t.Run(d.String(), func(t *testing.T) {
 			g, err := codegen.Build(marshal(ChkOrder{}))

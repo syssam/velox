@@ -12,6 +12,7 @@ import (
 )
 
 func TestNormalizeDefault(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ in, want string }{
 		{`'x'::text`, `'x'`},
 		{`'it''s'::character varying`, `'it''s'`},
@@ -54,6 +55,7 @@ func TestNormalizeDefault(t *testing.T) {
 }
 
 func TestInspectRefuses(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openDB(t, "sqlite", ":memory:")
 	var e *migrate.Error
@@ -80,6 +82,7 @@ func TestInspectRefuses(t *testing.T) {
 // column to the column's type; drift matches that cast to the literal
 // written, for the enum types the schemas have, and only there.
 func TestDriftEnumCasts(t *testing.T) {
+	t.Parallel()
 	schema := func(where, check string, enums ...migrate.Enum) *migrate.Schema {
 		return &migrate.Schema{Dialect: velox.Postgres, Enums: enums, Tables: []migrate.Table{{
 			Name:    "users",
@@ -123,6 +126,7 @@ func TestDriftEnumCasts(t *testing.T) {
 // TestDriftTimeDefaults: a date or time default PostgreSQL prints in its own
 // form is compared by value; another value is a change.
 func TestDriftTimeDefaults(t *testing.T) {
+	t.Parallel()
 	schema := func(def string) *migrate.Schema {
 		return &migrate.Schema{Dialect: velox.Postgres, Tables: []migrate.Table{{
 			Name:    "t",
@@ -151,6 +155,7 @@ func TestDriftTimeDefaults(t *testing.T) {
 // TestDriftMySQLTimeDefaults: a date or time default MySQL prints padded is
 // compared by value; another value is a change.
 func TestDriftMySQLTimeDefaults(t *testing.T) {
+	t.Parallel()
 	schema := func(typ, def string) *migrate.Schema {
 		return &migrate.Schema{Dialect: velox.MySQL, Tables: []migrate.Table{{
 			Name: "t", Collation: "utf8mb4_bin",
@@ -184,6 +189,7 @@ func TestDriftMySQLTimeDefaults(t *testing.T) {
 // TestUnescapeMySQL: information_schema's escape level is read, and the
 // escapes of the literal under it are kept for the normaliser.
 func TestUnescapeMySQL(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ in, want string }{
 		{`_utf8mb4\'x\'`, `_utf8mb4'x'`},
 		{`_utf8mb4\'a\\nb\'`, `_utf8mb4'a\nb'`},
@@ -200,6 +206,7 @@ func TestUnescapeMySQL(t *testing.T) {
 
 // TestMySQLDefault: a COLUMN_DEFAULT in the model's spelling.
 func TestMySQLDefault(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		typ  string
 		expr bool
@@ -244,6 +251,7 @@ func TestMySQLDefault(t *testing.T) {
 // CREATE TABLE prints it, in the model's spelling: printable ASCII is the
 // model's literal, binary's padding dropped; other bytes are as printed.
 func TestMySQLBinaryDefault(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ typ, shown, want string }{
 		{"varbinary(8)", `'a'`, `'a'`},
 		{"varbinary(8)", `0x6100FF`, `0x6100FF`},
@@ -268,6 +276,7 @@ func TestMySQLBinaryDefault(t *testing.T) {
 // TestMyShownDefault: one column's DEFAULT literal in SHOW CREATE TABLE's
 // text, a name or literal holding DEFAULT not misread.
 func TestMyShownDefault(t *testing.T) {
+	t.Parallel()
 	create := "CREATE TABLE `bins` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n  `code` varbinary(8) NOT NULL DEFAULT 'a',\n" +
 		"  `raw` varbinary(8) NOT NULL DEFAULT 0x6100FF,\n  `nul` varbinary(8) DEFAULT 'a\\0b',\n" +
 		"  `c DEFAULT d` varbinary(8) NOT NULL DEFAULT 'x'' DEFAULT y',\n  PRIMARY KEY (`id`)\n) ENGINE=InnoDB"
@@ -316,6 +325,7 @@ func TestMyShownDefault(t *testing.T) {
 // compared by its bytes, both sides decoded alike: the same bytes are no
 // difference, other bytes a change and never only a warning.
 func TestDriftMySQLBinaryDefaults(t *testing.T) {
+	t.Parallel()
 	schema := func(typ, def string) *migrate.Schema {
 		return &migrate.Schema{Dialect: velox.MySQL, Tables: []migrate.Table{{
 			Name:      "t",
@@ -378,6 +388,7 @@ func TestDriftMySQLBinaryDefaults(t *testing.T) {
 // by value on every dialect; another value is a change, and on a text
 // column the text is the value.
 func TestDriftNumberDefaults(t *testing.T) {
+	t.Parallel()
 	schema := func(d velox.Dialect, typ, def string) *migrate.Schema {
 		s := &migrate.Schema{Dialect: d, Tables: []migrate.Table{{
 			Name:    "t",
@@ -419,6 +430,7 @@ func TestDriftNumberDefaults(t *testing.T) {
 // TestDriftMySQLPrimaryKeyName: MySQL names every primary key PRIMARY, so
 // a snapshot naming it otherwise is no rename and no warning.
 func TestDriftMySQLPrimaryKeyName(t *testing.T) {
+	t.Parallel()
 	schema := func(name string) *migrate.Schema {
 		return &migrate.Schema{Dialect: velox.MySQL, Tables: []migrate.Table{{
 			Name: "t", Collation: "utf8mb4_bin",

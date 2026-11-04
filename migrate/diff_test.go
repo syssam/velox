@@ -88,6 +88,7 @@ func eachCase(t *testing.T, f func(t *testing.T, c testCase, from, to *migrate.S
 }
 
 func TestDiffSelfIsEmpty(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		for _, s := range []*migrate.Schema{from, to} {
 			if cs := diff(t, s, s, migrate.DiffOptions{}); len(cs) > 0 {
@@ -115,6 +116,7 @@ func TestDiffSelfIsEmpty(t *testing.T) {
 }
 
 func TestApplyDiffGivesTo(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		cs := diff(t, from, to, c.opts)
 		if len(cs) == 0 {
@@ -159,6 +161,7 @@ func keyNamesOf(s, to *migrate.Schema) *migrate.Schema {
 }
 
 func TestDiffDoesNotMutate(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		f, w := migrate.Clone(from), migrate.Clone(to)
 		diff(t, from, to, c.opts)
@@ -169,6 +172,7 @@ func TestDiffDoesNotMutate(t *testing.T) {
 }
 
 func TestDiffDeterministic(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		a, b := diff(t, from, to, c.opts), diff(t, from, to, c.opts)
 		if !reflect.DeepEqual(a, b) {
@@ -279,6 +283,7 @@ func orderPair() (from, to *migrate.Schema, opts migrate.DiffOptions) {
 }
 
 func TestDiffOrder(t *testing.T) {
+	t.Parallel()
 	from, to, opts := orderPair()
 	cs := diff(t, from, to, opts)
 	want := []string{
@@ -324,6 +329,7 @@ func TestDiffOrder(t *testing.T) {
 // The drops before the renames name the table and the object as from does,
 // and an object they drop is not renamed.
 func TestDiffStepOneUsesFromNames(t *testing.T) {
+	t.Parallel()
 	renames := []string{
 		"rename-table accounts users accounts",
 		"rename-sequence accounts id users_id_seq accounts_id_seq",
@@ -357,6 +363,7 @@ func TestDiffStepOneUsesFromNames(t *testing.T) {
 // foreign key's on PostgreSQL and MySQL, whose constraint names are. On MySQL
 // the key's index has the key's name, and is renamed with it.
 func TestDiffReusedName(t *testing.T) {
+	t.Parallel()
 	for _, d := range allDialects {
 		var first []string
 		if d != velox.SQLite {
@@ -380,6 +387,7 @@ func TestDiffReusedName(t *testing.T) {
 // An index on a dropped column goes before it, except on MySQL when it keeps
 // other columns: MySQL shrinks it, and it is dropped after the adds.
 func TestDiffDropColumnInIndex(t *testing.T) {
+	t.Parallel()
 	for _, d := range allDialects {
 		want := []string{"drop-index users user_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
 		if d == velox.MySQL {
@@ -412,6 +420,7 @@ func TestDiffDropColumnInIndex(t *testing.T) {
 // column: a derived check is renamed, and a partial index whose name has no
 // hash of its Where keeps it; neither is dropped and added.
 func TestDiffRenameColumnRewrites(t *testing.T) {
+	t.Parallel()
 	want := map[velox.Dialect][]string{
 		velox.Postgres: {"rename-column users role kind", "rename-enum users_kind users_role"},
 		velox.MySQL:    {"rename-column users role kind"},
@@ -440,6 +449,7 @@ func TestDiffRenameColumnRewrites(t *testing.T) {
 }
 
 func TestDiffRenameTableCarriesDerivedNames(t *testing.T) {
+	t.Parallel()
 	want := map[velox.Dialect][]string{
 		velox.Postgres: {
 			"rename-table accounts users accounts",
@@ -484,6 +494,7 @@ func TestDiffRenameTableCarriesDerivedNames(t *testing.T) {
 }
 
 func TestDiffMatchesByDefinition(t *testing.T) {
+	t.Parallel()
 	u := migrate.Table{Name: "u", Columns: []migrate.Column{{Name: "id", Type: "bigint"}}, PrimaryKey: []string{"id"}}
 	tb := func(ix migrate.Index, fk migrate.ForeignKey, ck migrate.Check) *migrate.Schema {
 		return &migrate.Schema{Dialect: velox.SQLite, Tables: []migrate.Table{
@@ -527,6 +538,7 @@ func TestDiffMatchesByDefinition(t *testing.T) {
 // key whose definition changes too is dropped and added: its table is
 // rebuilt.
 func TestDiffSQLiteKeyNameAlone(t *testing.T) {
+	t.Parallel()
 	id := []migrate.Column{{Name: "id", Type: "integer", Identity: true}}
 	onDelete := "CASCADE"
 	schema := func(users, key string) *migrate.Schema {
@@ -563,6 +575,7 @@ func TestDiffSQLiteKeyNameAlone(t *testing.T) {
 }
 
 func TestDiffFKIndexReplaced(t *testing.T) {
+	t.Parallel()
 	for _, d := range allDialects {
 		fkIndex := "users_org_id"
 		if d == velox.MySQL {
@@ -576,6 +589,7 @@ func TestDiffFKIndexReplaced(t *testing.T) {
 }
 
 func TestDiffCreateOrder(t *testing.T) {
+	t.Parallel()
 	for _, d := range allDialects {
 		cs := caseChanges(t, "create-tables", d)
 		at := func(l string) int {
@@ -620,6 +634,7 @@ func TestDiffCreateOrder(t *testing.T) {
 }
 
 func TestDiffEnumValues(t *testing.T) {
+	t.Parallel()
 	for name, want := range map[string]string{
 		"enum-append":  `alter-enum users_role ["admin" "viewer"] ["admin" "viewer" "owner"]`,
 		"enum-insert":  `alter-enum users_role ["admin" "viewer"] ["admin" "editor" "viewer"]`,
@@ -656,6 +671,7 @@ func TestDiffEnumValues(t *testing.T) {
 }
 
 func TestDiffErrors(t *testing.T) {
+	t.Parallel()
 	users := func(pk ...string) *migrate.Schema {
 		return &migrate.Schema{Dialect: velox.Postgres, Tables: []migrate.Table{{
 			Name:       "users",
@@ -707,6 +723,7 @@ func TestDiffErrors(t *testing.T) {
 }
 
 func TestDiffValidates(t *testing.T) {
+	t.Parallel()
 	ok := func() *migrate.Schema {
 		return &migrate.Schema{Dialect: velox.Postgres, Tables: []migrate.Table{{
 			Name:        "users",
@@ -756,6 +773,7 @@ func TestDiffValidates(t *testing.T) {
 // TestDiffEmptyIffEqual holds Diff and Equal to one notion of a difference:
 // Diff gives no change, and no error, exactly when the schemas are equal.
 func TestDiffEmptyIffEqual(t *testing.T) {
+	t.Parallel()
 	check := func(t *testing.T, name string, a, b *migrate.Schema, opts migrate.DiffOptions) {
 		t.Helper()
 		cs, err := migrate.Diff(a, b, opts)

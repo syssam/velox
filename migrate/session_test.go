@@ -11,6 +11,7 @@ import (
 
 // TestCheckVersion: each dialect's minimum, and MariaDB refused.
 func TestCheckVersion(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d  velox.Dialect
 		v  string
@@ -47,6 +48,7 @@ func TestCheckVersion(t *testing.T) {
 
 // TestCheckVersionText: the refusal names the version as PostgreSQL does.
 func TestCheckVersionText(t *testing.T) {
+	t.Parallel()
 	for v, want := range map[string]string{"90624": "PostgreSQL 9.6;", "110005": "PostgreSQL 11;", "130000": "PostgreSQL 13;"} {
 		if err := migrate.CheckVersion(velox.Postgres, v); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v; want %q", v, err, want)
@@ -56,6 +58,7 @@ func TestCheckVersionText(t *testing.T) {
 
 // TestCheckVersionFloors: the refusal names the minimum.
 func TestCheckVersionFloors(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d    velox.Dialect
 		v    string
@@ -71,12 +74,14 @@ func TestCheckVersionFloors(t *testing.T) {
 }
 
 func TestLockName(t *testing.T) {
+	t.Parallel()
 	if got, want := migrate.LockName("velox", "velox_migrations"), "velox_migrate_28873223e55a53b9"; got != want {
 		t.Errorf("LockName = %s; want %s", got, want)
 	}
 }
 
 func TestLockKey(t *testing.T) {
+	t.Parallel()
 	if got, want := migrate.LockKey("public", "velox_migrations"), int64(-4521918464851113452); got != want {
 		t.Errorf("LockKey = %d; want %d", got, want)
 	}

@@ -7,6 +7,7 @@ import (
 )
 
 func TestRenameIdent(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d          velox.Dialect
 		expr, want string

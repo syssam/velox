@@ -31,6 +31,7 @@ func adoptWarnings(ws []migrate.Warning) string { return strings.Join(warningStr
 // own way takes the schema's spelling; an index matched by definition keeps
 // its name.
 func TestAdoptSpellings(t *testing.T) {
+	t.Parallel()
 	inspected := schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) {
 		tb.Columns = append(tb.Columns, migrate.Column{Name: "active", Type: "boolean"},
 			migrate.Column{Name: "price", Type: "numeric(10,2)", Default: "0.00"})
@@ -62,6 +63,7 @@ func TestAdoptSpellings(t *testing.T) {
 // TestAdoptKeepsDifferences: what differs keeps the database's form, with a
 // warning only where the comparison cannot settle it.
 func TestAdoptKeepsDifferences(t *testing.T) {
+	t.Parallel()
 	adoptIndex := func(db, schema string) (*migrate.Schema, []migrate.Warning) {
 		return adoptOf(t, schemaOf(velox.Postgres, usersOf(velox.Postgres, withIndex(db))),
 			schemaOf(velox.Postgres, usersOf(velox.Postgres, withIndex(schema))))
@@ -131,6 +133,7 @@ func warningObjects(ws []migrate.Warning) []string {
 // a nextval of a sequence the column does not own are refused together; one
 // alone is a bare *Error.
 func TestAdoptRefusals(t *testing.T) {
+	t.Parallel()
 	fk := migrate.ForeignKey{Name: "users_org_id_fkey", Columns: []string{"qty"}, RefTable: migrate.TableRef{Name: "orgs"}, RefColumns: []string{"id"}}
 	inspected := schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) {
 		tb.ForeignKeys = []migrate.ForeignKey{fk}
@@ -172,6 +175,7 @@ func TestAdoptRefusals(t *testing.T) {
 // TestBaselineNoTables: a database that holds none of the schema's tables
 // is refused; a missing table beside a found one is a warning, and left out.
 func TestBaselineNoTables(t *testing.T) {
+	t.Parallel()
 	inspected := schemaOf(velox.Postgres, migrate.Table{Name: "audit"})
 	snap, ws, err := migrate.AdoptOf(inspected, schemaOf(velox.Postgres, usersOf(velox.Postgres, nil)))
 	if e, ok := err.(*migrate.Error); !ok || e.Code != "baseline" || snap != nil || ws != nil ||
@@ -192,6 +196,7 @@ func TestBaselineNoTables(t *testing.T) {
 
 // TestAdoptNotes: a baseline note is a warning of Baseline's, not Drift's.
 func TestAdoptNotes(t *testing.T) {
+	t.Parallel()
 	s := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
 	notes := []migrate.Note{
 		{Table: migrate.TableRef{Name: "users"}, Object: "users.id", Message: "loses its start", Baseline: true},
@@ -208,6 +213,7 @@ func TestAdoptNotes(t *testing.T) {
 
 // TestBaselineDoesNotMutate: AdoptOf never writes through want.
 func TestBaselineDoesNotMutate(t *testing.T) {
+	t.Parallel()
 	inspected := schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) {
 		tb.Indexes = []migrate.Index{{Name: "user_active", Columns: []string{"email"}, Where: "(status = 'a'::text)"}}
 		tb.PrimaryKey = []string{"id", "qty"}
@@ -242,6 +248,7 @@ func sqliteUsers() migrate.Table {
 // even one that references a schema table; an index the schema lacks is
 // kept.
 func TestBaselineUnknownTables(t *testing.T) {
+	t.Parallel()
 	db := sqliteDB(t,
 		`CREATE TABLE users (id integer NOT NULL PRIMARY KEY AUTOINCREMENT, email text NOT NULL)`,
 		`CREATE INDEX users_extra ON users (email)`,
@@ -266,6 +273,7 @@ func TestBaselineUnknownTables(t *testing.T) {
 // empty, makes what it says; so it does with a UNIQUE and a REFERENCES key
 // SQLite keeps no name for.
 func TestBaselineSQLiteVerify(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	posts := migrate.Table{Name: "posts", PrimaryKey: []string{"id"},
 		Columns: []migrate.Column{
@@ -342,6 +350,7 @@ func noChanges(t *testing.T, db *sql.DB, snap *migrate.Schema) {
 // table, never a DROP INDEX, and the result applies with no drift; a
 // schema that names it by definition does not name it in the snapshot.
 func TestBaselineSQLiteConstraintIndex(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	named := sqliteUsers()
 	named.Indexes = []migrate.Index{{Name: "users_email", Columns: []string{"email"}, Unique: true}}
@@ -378,6 +387,7 @@ func TestBaselineSQLiteConstraintIndex(t *testing.T) {
 // TestBaselineSQLiteUnnamedRefusals: keys SQLite keeps no name for are
 // named by their columns in the refusals.
 func TestBaselineSQLiteUnnamedRefusals(t *testing.T) {
+	t.Parallel()
 	db := sqliteDB(t, `CREATE TABLE orgs (id integer NOT NULL PRIMARY KEY AUTOINCREMENT)`,
 		`CREATE TABLE users (id integer NOT NULL PRIMARY KEY AUTOINCREMENT, email text NOT NULL,
 			a integer REFERENCES orgs (id), b integer REFERENCES orgs (id))`)
@@ -394,6 +404,7 @@ func TestBaselineSQLiteUnnamedRefusals(t *testing.T) {
 // TestBaselinePostgres: what PostgreSQL's baseline warns about and refuses,
 // and that its snapshot, planned from empty, makes what it says.
 func TestBaselinePostgres(t *testing.T) {
+	t.Parallel()
 	needPostgres(t)
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.Postgres)
@@ -465,6 +476,7 @@ func TestBaselinePostgres(t *testing.T) {
 
 // TestBaselineNil: a nil schema or database is Code "nil".
 func TestBaselineNil(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	for _, c := range []struct {
 		db   *sql.DB
@@ -480,6 +492,7 @@ func TestBaselineNil(t *testing.T) {
 // has is in the snapshot, with the database's values, though the table
 // using it is missing; the next diff creates only the table.
 func TestAdoptKeepsEnumTypes(t *testing.T) {
+	t.Parallel()
 	inspected := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
 	inspected.Enums = []migrate.Enum{{Name: "posts_state", Values: []string{"draft", "live"}}}
 	want := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil), migrate.Table{Name: "posts",
@@ -504,6 +517,7 @@ func TestAdoptKeepsEnumTypes(t *testing.T) {
 // TestAdoptWarningsNameTheSchema: a warning of Baseline's names the schema
 // where Drift's names the snapshot.
 func TestAdoptWarningsNameTheSchema(t *testing.T) {
+	t.Parallel()
 	inspected := schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) { tb.PrimaryKey = []string{"id", "qty"} }))
 	want := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
 	_, ws := adoptOf(t, inspected, want)
@@ -549,6 +563,7 @@ func twoUnnamed(t *testing.T) (*sql.DB, *migrate.Schema) {
 // snapshot's: Diff of the snapshot with itself is empty, and Drift of the
 // database against it finds no change.
 func TestUnnamedSelf(t *testing.T) {
+	t.Parallel()
 	db, snap := twoUnnamed(t)
 	if cs := diff(t, snap, snap, migrate.DiffOptions{}); len(cs) > 0 {
 		t.Errorf("Diff(snap, snap): %v", changeStrings(cs))
@@ -559,6 +574,7 @@ func TestUnnamedSelf(t *testing.T) {
 // TestUnnamedOneMore: an unnamed index, key and check the database has
 // beyond the snapshot are found by Drift, and planned by Diff.
 func TestUnnamedOneMore(t *testing.T) {
+	t.Parallel()
 	db, snap := twoUnnamed(t)
 	less := migrate.Clone(snap)
 	tb := table(less, "users")
@@ -599,6 +615,7 @@ func sameSet(a, b []string) bool {
 // TestUnnamedRenames: two unnamed unique indexes renamed by definition are
 // each named, by their columns, in the rebuild's review.
 func TestUnnamedRenames(t *testing.T) {
+	t.Parallel()
 	_, snap := twoUnnamed(t)
 	to := migrate.Clone(snap)
 	tb := table(to, "users")
@@ -627,6 +644,7 @@ func TestUnnamedRenames(t *testing.T) {
 // TestUnnamedDropLabels: an unnamed index, key and check dropped before a
 // column rename runs are named by from's columns and expression.
 func TestUnnamedDropLabels(t *testing.T) {
+	t.Parallel()
 	orgs := migrate.Table{Name: "orgs", PrimaryKey: []string{"id"}, Columns: []migrate.Column{{Name: "id", Type: "integer", Identity: true}}}
 	from := migrate.Table{Name: "users", PrimaryKey: []string{"id"}, Columns: []migrate.Column{
 		{Name: "id", Type: "integer", Identity: true},
@@ -656,6 +674,7 @@ func TestUnnamedDropLabels(t *testing.T) {
 // is named by its definition, in the change and in the rebuild's review. An
 // unnamed key that takes a name is no change on SQLite; the rebuild names it.
 func TestUnnamedRenameLabels(t *testing.T) {
+	t.Parallel()
 	_, snap := twoUnnamed(t)
 	to := migrate.Clone(snap)
 	tb := table(to, "users")
@@ -692,6 +711,7 @@ func TestUnnamedRenameLabels(t *testing.T) {
 // TestUnnamedCheckReviews: the rebuild's review of an unnamed check says
 // "check" once.
 func TestUnnamedCheckReviews(t *testing.T) {
+	t.Parallel()
 	_, snap := twoUnnamed(t)
 	less := migrate.Clone(snap)
 	tb := table(less, "users")
@@ -719,6 +739,7 @@ func TestUnnamedCheckReviews(t *testing.T) {
 // warns; and the next plan's drop of it applies both on the adopted
 // database and on a fresh one built from the directory.
 func TestDriftPostgresAdoptedUnique(t *testing.T) {
+	t.Parallel()
 	needPostgres(t)
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.Postgres)
@@ -782,6 +803,7 @@ func TestDriftPostgresAdoptedUnique(t *testing.T) {
 // dropping that index later is a DROP INDEX, which applies both on the
 // adopted database and on a fresh one.
 func TestDriftPostgresReplacedUnique(t *testing.T) {
+	t.Parallel()
 	needPostgres(t)
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.Postgres)

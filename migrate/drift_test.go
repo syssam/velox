@@ -82,6 +82,7 @@ func wantDrift(t *testing.T, r *migrate.DriftReport, changes []string, objects .
 }
 
 func TestDriftSelf(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		for _, s := range []*migrate.Schema{from, to} {
 			r := driftOf(t, s, s)
@@ -99,6 +100,7 @@ func withIndex(where string) func(*migrate.Table) {
 }
 
 func TestDriftPredicateSpelling(t *testing.T) {
+	t.Parallel()
 	snap := schemaOf(velox.Postgres, usersOf(velox.Postgres, withIndex(`status = 'active'`)))
 	db := func(where string) *migrate.Schema {
 		return schemaOf(velox.Postgres, usersOf(velox.Postgres, withIndex(where)))
@@ -121,6 +123,7 @@ func TestDriftPredicateSpelling(t *testing.T) {
 }
 
 func TestDriftDefaultExpression(t *testing.T) {
+	t.Parallel()
 	withDefault := func(def string) *migrate.Schema {
 		return schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) {
 			tb.Columns = append(tb.Columns, migrate.Column{Name: "created_at", Type: "timestamp with time zone", Default: def})
@@ -142,6 +145,7 @@ func TestDriftDefaultExpression(t *testing.T) {
 }
 
 func TestDriftEnumCheck(t *testing.T) {
+	t.Parallel()
 	withRole := func(values string) *migrate.Schema {
 		return schemaOf(velox.SQLite, usersOf(velox.SQLite, func(tb *migrate.Table) {
 			tb.Columns = append(tb.Columns, migrate.Column{Name: "role", Type: "text"})
@@ -155,6 +159,7 @@ func TestDriftEnumCheck(t *testing.T) {
 }
 
 func TestDriftCheckSpelling(t *testing.T) {
+	t.Parallel()
 	withCheck := func(expr string) *migrate.Schema {
 		return schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) {
 			tb.Checks = []migrate.Check{{Name: "users_qty_check", Expr: expr}}
@@ -169,6 +174,7 @@ func TestDriftCheckSpelling(t *testing.T) {
 }
 
 func TestDriftMySQLRestrict(t *testing.T) {
+	t.Parallel()
 	posts := func(onDelete string) migrate.Table {
 		return migrate.Table{
 			Name:           "posts",
@@ -199,6 +205,7 @@ func TestDriftMySQLRestrict(t *testing.T) {
 }
 
 func TestDriftUnnamedConstraints(t *testing.T) {
+	t.Parallel()
 	posts := func(named bool, extra bool) migrate.Table {
 		name := func(s string) string {
 			if named {
@@ -237,6 +244,7 @@ func TestDriftUnnamedConstraints(t *testing.T) {
 }
 
 func TestDriftPrimaryKey(t *testing.T) {
+	t.Parallel()
 	snap := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
 	r := driftOf(t, schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) { tb.PrimaryKey = []string{"id", "email"} })), snap)
 	wantDrift(t, r, nil, "users")
@@ -250,6 +258,7 @@ func TestDriftPrimaryKey(t *testing.T) {
 }
 
 func TestDriftNotes(t *testing.T) {
+	t.Parallel()
 	for _, n := range []migrate.Note{
 		{Table: users, Object: "users", Message: "table users uses engine MyISAM, not InnoDB"},
 		{Table: users, Object: "users.users_x", Message: "index users_x is invalid: a CREATE INDEX CONCURRENTLY failed; run migrate apply -resume, or drop it"},
@@ -269,6 +278,7 @@ func TestDriftNotes(t *testing.T) {
 }
 
 func TestDriftUnknownTables(t *testing.T) {
+	t.Parallel()
 	legacy := migrate.Table{
 		Name:           "legacy",
 		Columns:        []migrate.Column{{Name: "id", Type: "bigint"}, {Name: "mood", Type: `"legacy_mood"`}},
@@ -315,6 +325,7 @@ func spelled() (db, snap *migrate.Schema) {
 }
 
 func TestDriftOfDoesNotMutate(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		f, w := migrate.Clone(from), migrate.Clone(to)
 		driftOf(t, from, to)
@@ -333,6 +344,7 @@ func TestDriftOfDoesNotMutate(t *testing.T) {
 }
 
 func TestDriftDeterministic(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		a, b := driftOf(t, from, to), driftOf(t, from, to)
 		if !reflect.DeepEqual(a, b) {
@@ -369,6 +381,7 @@ func TestDriftDeterministic(t *testing.T) {
 // Equal calls the two the same. Baseline, whose schema never sets the flag,
 // does not warn.
 func TestDriftPostgresConstraintFlag(t *testing.T) {
+	t.Parallel()
 	users := func(constraint bool) *migrate.Schema {
 		return schemaOf(velox.Postgres, migrate.Table{Name: "users", PrimaryKey: []string{"id"},
 			Columns: []migrate.Column{{Name: "id", Type: "bigint"}, {Name: "email", Type: "text"}},
@@ -400,6 +413,7 @@ func TestDriftPostgresConstraintFlag(t *testing.T) {
 // with "; also, " in their order; baseline notes count only when adopting; a
 // warning of drift's own stays apart.
 func TestDriftNotesMerged(t *testing.T) {
+	t.Parallel()
 	s := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
 	identity := "the column is GENERATED ALWAYS AS IDENTITY, which the model holds as BY DEFAULT: a value given on insert is refused"
 	sequence := "the sequence users_id_seq starts at 5 and increments by 1; 0001_baseline.sql creates it with the defaults"
@@ -436,6 +450,7 @@ func TestDriftNotesMerged(t *testing.T) {
 }
 
 func TestDriftErrors(t *testing.T) {
+	t.Parallel()
 	pg := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
 	twice := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil), usersOf(velox.Postgres, nil))
 	for _, c := range []struct {
@@ -460,6 +475,7 @@ func TestDriftErrors(t *testing.T) {
 }
 
 func TestChangeStrings(t *testing.T) {
+	t.Parallel()
 	billing := migrate.TableRef{Schema: "billing", Name: "invoices"}
 	col := migrate.Column{Name: "email"}
 	for _, c := range []struct {

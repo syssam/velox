@@ -12,6 +12,7 @@ import (
 // uses, the key kept, works on MySQL, whose error 1553 would leave the version
 // dirty; so does replacing it, and dropping one of two; a row keeps its key.
 func TestMySQLDropForeignKeysOnlyIndex(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	parent := migrate.Table{Name: "p", Columns: []migrate.Column{{Name: "id", Type: "bigint"}}, PrimaryKey: []string{"id"}, PrimaryKeyName: "PRIMARY", Collation: "utf8mb4_bin"}
 	schema := func(ix ...migrate.Index) *migrate.Schema {

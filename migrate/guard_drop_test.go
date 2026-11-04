@@ -18,6 +18,7 @@ import (
 // as gone only when it is gone by the drop. With foreign keys off the rows stay,
 // and a rebuild that lets go of the key accounts for it.
 func TestUpDropTableThroughRebuiltChild(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	const rebuild = `DROP TABLE p;
 CREATE TABLE velox_new_c (id integer NOT NULL, p integer, PRIMARY KEY (id));
@@ -57,6 +58,7 @@ ALTER TABLE velox_new_c RENAME TO c;
 // TestLintFileDropsAndPartitions: a domain, type or collation dropped takes
 // columns with CASCADE, and a partition its rows; Up said nothing of them.
 func TestLintFileDropsAndPartitions(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d     velox.Dialect
 		sql   string

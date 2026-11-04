@@ -81,6 +81,7 @@ func wantUnmodeled(t *testing.T, db *sql.DB, fsys fstest.MapFS, err error, names
 // model cannot is refused before it changes anything, names each object and
 // says what to do; the allow directive lets that loss through.
 func TestUpRefusesRebuildLoss(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name   string
 		hand   []string
@@ -139,6 +140,7 @@ func TestUpRefusesRebuildLoss(t *testing.T) {
 // TestUpRebuildGuardNamesEach: two objects are named together, and a directive
 // for one leaves the other refused.
 func TestUpRebuildGuardNamesEach(t *testing.T) {
+	t.Parallel()
 	hand := []string{"CREATE UNIQUE INDEX t_lower ON t (lower(s))", "CREATE TRIGGER t_ai AFTER INSERT ON t BEGIN UPDATE o SET s = 'x'; END"}
 	db, fsys := guarded(t, migrate.PlanOptions{}, hand...)
 	_, err := migrate.Up(context.Background(), db, fsys)
@@ -155,6 +157,7 @@ func TestUpRebuildGuardNamesEach(t *testing.T) {
 // directive is needed: the index a statement makes after the rebuild, or the
 // collation an edit keeps in the new table.
 func TestUpRebuildKeptByTheFile(t *testing.T) {
+	t.Parallel()
 	db, fsys := guarded(t, migrate.PlanOptions{}, "CREATE UNIQUE INDEX t_lower ON t (lower(s))")
 	fsys = rewrite(t, fsys, "0002_rebuild.sql", func(s string) string { return s + "CREATE UNIQUE INDEX t_lower ON t (lower(s));\n" })
 	mustUp(t, db, fsys)
@@ -172,6 +175,7 @@ func TestUpRebuildKeptByTheFile(t *testing.T) {
 // TestUpRebuildDropColumnCovers: a column the plan drops under -allow is not
 // lost by accident: its collation goes with it.
 func TestUpRebuildDropColumnCovers(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	db, _ := freshDB(t, d)
 	base := dirOf(t, d, step{to: guardSchema(false), name: "base"})
@@ -191,6 +195,7 @@ ALTER TABLE "velox_new_t" RENAME TO "t";
 // the rebuilt table makes its RENAME fail, whatever a directive says: Up
 // refuses, naming it, and a file that drops the view and makes it again runs.
 func TestUpRebuildRefusesDependents(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ name, hand, object string }{
 		{"view", "CREATE VIEW v AS SELECT n FROM t", "v"},
 		{"quoted view", `CREATE VIEW "my view" AS SELECT n FROM "t"`, "my view"},
@@ -224,6 +229,7 @@ func TestUpRebuildRefusesDependents(t *testing.T) {
 // TestSQLiteRenameFailsOnDependents pins why the guard refuses them: with no
 // guard in the way, the rebuild's RENAME fails on each.
 func TestSQLiteRenameFailsOnDependents(t *testing.T) {
+	t.Parallel()
 	for _, hand := range []string{
 		"CREATE VIEW v AS SELECT n FROM t",
 		"CREATE TRIGGER o_ai AFTER INSERT ON o BEGIN UPDATE t SET n = 2; END",
@@ -244,6 +250,7 @@ func TestSQLiteRenameFailsOnDependents(t *testing.T) {
 // TestUpRebuildRenamedTable: the guard reads the table as the rebuild finds
 // it, after the plan's rename.
 func TestUpRebuildRenamedTable(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	db, _ := freshDB(t, d)
 	base := dirOf(t, d, step{to: guardSchema(false), name: "base"})
@@ -264,6 +271,7 @@ func TestUpRebuildRenamedTable(t *testing.T) {
 // TestUpRebuildOnConflict: a constraint's ON CONFLICT clause is lost like the
 // rest, so Inspect notes it and the guard refuses.
 func TestUpRebuildOnConflict(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	db, _ := freshDB(t, d)
 	base := dirOf(t, d, files("0001_base.sql", `CREATE TABLE t (id integer NOT NULL PRIMARY KEY, n integer NOT NULL, s text, o integer, UNIQUE (s) ON CONFLICT REPLACE);`))
@@ -280,6 +288,7 @@ ALTER TABLE "velox_new_t" RENAME TO "t";
 
 // TestUpRebuildNoLoss: a plain rebuild runs as ever.
 func TestUpRebuildNoLoss(t *testing.T) {
+	t.Parallel()
 	db, fsys := guarded(t, migrate.PlanOptions{})
 	if r := mustUp(t, db, fsys); len(r.Applied) != 1 {
 		t.Errorf("applied %v", r.Applied)

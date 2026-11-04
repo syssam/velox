@@ -58,6 +58,7 @@ func caseFindings(t *testing.T, name string, d velox.Dialect) []migrate.Finding 
 }
 
 func TestLintGolden(t *testing.T) {
+	t.Parallel()
 	for _, d := range allDialects {
 		var b strings.Builder
 		for _, c := range cases {
@@ -93,6 +94,7 @@ func TestLintGolden(t *testing.T) {
 // TestLintCases pins the findings of the cases that matter most, by code and
 // target, apart from the goldens, which a regenerated file would accept.
 func TestLintCases(t *testing.T) {
+	t.Parallel()
 	type key struct {
 		name string
 		d    velox.Dialect
@@ -148,6 +150,7 @@ func TestLintCases(t *testing.T) {
 // TestLintAddColumn: a field added to a populated table is safe when it is
 // optional, nillable or has a default, and blocks when it is required.
 func TestLintAddColumn(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"add-column-optional", "add-column-nillable", "add-column-default"} {
 		for _, d := range allDialects {
 			if got := caseFindings(t, name, d); len(got) > 0 {
@@ -183,6 +186,7 @@ func TestLintAddColumn(t *testing.T) {
 }
 
 func TestLintWidenType(t *testing.T) {
+	t.Parallel()
 	pgM, my, lite := velox.Postgres, velox.MySQL, velox.SQLite
 	const (
 		widen = "widen-type"
@@ -269,6 +273,7 @@ func TestLintWidenType(t *testing.T) {
 // TestLintReplacementsAreQuiet: what a type change or a replacement drops and
 // adds again leaves no finding of its own.
 func TestLintReplacementsAreQuiet(t *testing.T) {
+	t.Parallel()
 	for _, d := range pgMySQL {
 		cs := caseChanges(t, "key-type-change", d)
 		if !slices.ContainsFunc(cs, func(c migrate.Change) bool { _, ok := c.(migrate.DropForeignKey); return ok }) {
@@ -308,6 +313,7 @@ func TestLintReplacementsAreQuiet(t *testing.T) {
 // TestLintSQLiteRebuild: a change SQLite can only make by rebuilding the
 // table says so, and the drops folded into the rebuild say nothing.
 func TestLintSQLiteRebuild(t *testing.T) {
+	t.Parallel()
 	has := func(fs []migrate.Finding, code string) bool {
 		return slices.ContainsFunc(fs, func(f migrate.Finding) bool { return f.Code == code })
 	}
@@ -355,6 +361,7 @@ func TestLintSQLiteRebuild(t *testing.T) {
 // TestLintEnumChecks: a check-based enum losing a value is destructive, and
 // gaining one is only a new check.
 func TestLintEnumChecks(t *testing.T) {
+	t.Parallel()
 	got := codes(caseFindings(t, "enum-remove", velox.SQLite))
 	if !slices.Contains(got, "drop-enum-value@users.users_role_check") || !slices.Contains(got, "add-check@users.users_role_check") {
 		t.Errorf("enum-remove on SQLite: %v", got)
@@ -371,6 +378,7 @@ func TestLintEnumChecks(t *testing.T) {
 // to it is about; a drop finding carries none, as the element is no longer in
 // the schema.
 func TestLintPos(t *testing.T) {
+	t.Parallel()
 	pgM, lite := velox.Postgres, velox.SQLite
 	byName := func(t *testing.T, name string, d velox.Dialect) (*migrate.Schema, []migrate.Finding) {
 		c := caseNamed(name)
@@ -489,6 +497,7 @@ func TestLintPos(t *testing.T) {
 }
 
 func TestParseAllow(t *testing.T) {
+	t.Parallel()
 	got, err := migrate.ParseAllow("drop-column=users.name,drop-table")
 	want := []migrate.Allow{{Code: "drop-column", Target: "users.name"}, {Code: "drop-table"}}
 	if err != nil || !slices.Equal(got, want) {
@@ -512,6 +521,7 @@ func TestParseAllow(t *testing.T) {
 }
 
 func TestBlocked(t *testing.T) {
+	t.Parallel()
 	fs := []migrate.Finding{
 		{Code: "drop-column", Class: migrate.Destructive, Change: 0, Target: "users.name"},
 		{Code: "rename-table", Class: migrate.Review, Change: 1, Target: "accounts"},
@@ -545,6 +555,7 @@ func TestBlocked(t *testing.T) {
 // finding it has, and without any one item some dialect of the case is
 // blocked.
 func TestCaseAllowsCoverTheCases(t *testing.T) {
+	t.Parallel()
 	needed := map[string]bool{} // case/code
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		fs := lint(t, from, diff(t, from, to, c.opts))
@@ -580,6 +591,7 @@ func TestCaseAllowsCoverTheCases(t *testing.T) {
 }
 
 func TestLintDoesNotMutate(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		cs := diff(t, from, to, c.opts)
 		f, want := migrate.Clone(from), diff(t, from, to, c.opts)
@@ -591,6 +603,7 @@ func TestLintDoesNotMutate(t *testing.T) {
 }
 
 func TestLintDeterministic(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		cs := diff(t, from, to, c.opts)
 		a, b := lint(t, from, cs), lint(t, from, cs)
@@ -618,6 +631,7 @@ func TestLintDeterministic(t *testing.T) {
 // to an existing table, and a drop folded into a rebuild of a renamed SQLite
 // table is quiet.
 func TestLintRenamedTable(t *testing.T) {
+	t.Parallel()
 	for _, d := range allDialects {
 		from := mustTables(d, nil)
 		to := mustTables(d, func(m *loadjson.Model) {
@@ -656,6 +670,7 @@ func TestLintRenamedTable(t *testing.T) {
 // TestLintVolatileDefaultIsPostgresOnly: MySQL and SQLite add a column with an
 // expression default without the rewrite PostgreSQL may do.
 func TestLintVolatileDefaultIsPostgresOnly(t *testing.T) {
+	t.Parallel()
 	for _, d := range allDialects {
 		has := slices.ContainsFunc(caseFindings(t, "add-column-schema-default", d), func(f migrate.Finding) bool { return f.Code == "volatile-default" })
 		if has != (d == velox.Postgres) {
@@ -673,6 +688,7 @@ func TestLintVolatileDefaultIsPostgresOnly(t *testing.T) {
 }
 
 func TestLintNilChange(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 		s := &migrate.Schema{Dialect: d, Tables: []migrate.Table{{Name: "t", Columns: []migrate.Column{{Name: "a", Type: "text"}}}}}
 		drop := migrate.DropColumn{Table: migrate.TableRef{Name: "t"}, Column: s.Tables[0].Columns[0]}
@@ -687,6 +703,7 @@ func TestLintNilChange(t *testing.T) {
 // column's affinity, so a type change is destructive where that can change a
 // value, and silent where the affinity keeps them.
 func TestLintSQLiteTypeAffinity(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	for _, c := range []struct {
 		from, to string

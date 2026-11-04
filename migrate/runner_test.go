@@ -108,6 +108,7 @@ func files(kv ...string) step {
 // TestUpAppliesInOrder: two files apply as versions 1 and 2, the history
 // records them, and a second Up applies nothing.
 func TestUpAppliesInOrder(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite,
 		step{to: mustTables(velox.SQLite, nil), name: "base"},
@@ -143,6 +144,7 @@ func TestUpAppliesInOrder(t *testing.T) {
 }
 
 func TestUpWithTarget(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files(
 		"0001_a.sql", "CREATE TABLE a (x integer);",
@@ -159,6 +161,7 @@ func TestUpWithTarget(t *testing.T) {
 // TestUpWithTargetZero: 0 is a target like any other: it applies a file 0000_*
 // and nothing above it, and on a directory that starts higher, nothing.
 func TestUpWithTargetZero(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files(
 		"0000_a.sql", "CREATE TABLE a (x integer);",
@@ -182,6 +185,7 @@ func TestUpWithTargetZero(t *testing.T) {
 // the file does not touch stops nothing; one in a table it touches or in a
 // child of one, or anywhere when a statement cannot be read, rolls it back.
 func TestUpForeignKeyCheckScope(t *testing.T) {
+	t.Parallel()
 	const tables = `CREATE TABLE p (id integer PRIMARY KEY);
 CREATE TABLE c (id integer PRIMARY KEY, p integer REFERENCES p (id));
 CREATE TABLE lone (id integer PRIMARY KEY);
@@ -234,6 +238,7 @@ INSERT INTO u VALUES (1, 1);
 // TestUpRollsBack: a failing statement rolls its file back, and the error
 // names the file and the statement and wraps the driver's.
 func TestUpRollsBack(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files(
 		"0001_ok.sql", "CREATE TABLE ok (x integer);",
@@ -258,6 +263,7 @@ func TestUpRollsBack(t *testing.T) {
 
 // TestUpChecksum: an applied file edited, or gone, is a *ChecksumError.
 func TestUpChecksum(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files(
 		"0001_a.sql", "CREATE TABLE a (x integer);",
@@ -300,6 +306,7 @@ func TestUpChecksum(t *testing.T) {
 // TestUpAhead: a database a newer directory migrated is not an error; Up
 // applies nothing and says so.
 func TestUpAhead(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	a := "CREATE TABLE a (x integer);"
 	mustUp(t, db, dirOf(t, velox.SQLite, files("0001_a.sql", a, "0002_b.sql", "CREATE TABLE b (x integer);")))
@@ -315,6 +322,7 @@ func TestUpAhead(t *testing.T) {
 }
 
 func TestUpPendingBelow(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	a, b, c := "CREATE TABLE a (x integer);", "CREATE TABLE b (x integer);", "CREATE TABLE c (x integer);"
 	mustUp(t, db, dirOf(t, velox.SQLite, files("0001_a.sql", a, "0003_c.sql", c)))
@@ -329,6 +337,7 @@ func TestUpPendingBelow(t *testing.T) {
 }
 
 func TestUpStaleSum(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);"))
 	fsys["0001_a.sql"] = &fstest.MapFile{Data: []byte("CREATE TABLE b (x integer);")}
@@ -342,6 +351,7 @@ func TestUpStaleSum(t *testing.T) {
 }
 
 func TestUpNoTransactionOnSQLite(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "-- velox:no-transaction\nCREATE TABLE a (x integer);\n"))
 	var e *migrate.Error
@@ -351,6 +361,7 @@ func TestUpNoTransactionOnSQLite(t *testing.T) {
 }
 
 func TestUpDialectMismatch(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.Postgres, files("0001_a.sql", "CREATE TABLE a (x integer);"))
 	var e *migrate.Error
@@ -365,6 +376,7 @@ func TestUpDialectMismatch(t *testing.T) {
 // TestRunnerNilDatabase: Up, Status and Resolve given no database refuse
 // it, as Inspect and Verify do, rather than panic.
 func TestRunnerNilDatabase(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);"))
 	for name, call := range map[string]func() error{
@@ -383,6 +395,7 @@ func TestRunnerNilDatabase(t *testing.T) {
 // AUTOINCREMENT counter through the runner, which sets foreign keys back on
 // after; a foreign-keys off file that leaves an orphan is rolled back.
 func TestUpSQLiteRebuild(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	db.SetMaxOpenConns(1) // the connection Up used is the one read after
 	c := caseNamed("rebuild-parent")
@@ -466,6 +479,7 @@ func upTwice(t *testing.T, fsys fstest.MapFS, a, b *sql.DB) {
 }
 
 func TestUpSQLiteConcurrent(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files(concurrentFiles...))
 	upTwice(t, fsys, db, openDB(t, "sqlite", dsn))
@@ -481,6 +495,7 @@ func TestUpSQLiteConcurrent(t *testing.T) {
 // A run waits on SQLite from its first statement: a writer committing as the
 // run opens its session must not make the session's first query busy.
 func TestUpSQLiteWaitsFromFirstStatement(t *testing.T) {
+	t.Parallel()
 	_, dsn := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files(concurrentFiles...))
 	ctx := context.Background()
@@ -536,6 +551,7 @@ func holdSQLite(t *testing.T, dsn string) *sql.Conn {
 
 // TestUpSQLiteNoWait: a lock wait of 0 tries once.
 func TestUpSQLiteNoWait(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.SQLite)
 	mustUp(t, db, dirOf(t, velox.SQLite), migrate.WithLockWait(0))
 	holdSQLite(t, dsn)
@@ -550,11 +566,13 @@ func TestUpSQLiteNoWait(t *testing.T) {
 
 // TestUpSQLiteHugeWait: a wait past what the database takes is clamped.
 func TestUpSQLiteHugeWait(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	mustUp(t, db, dirOf(t, velox.SQLite), migrate.WithLockWait(math.MaxInt64))
 }
 
 func TestLockWaitUnits(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		wait        time.Duration
 		ms, seconds int64
@@ -576,6 +594,7 @@ func TestLockWaitUnits(t *testing.T) {
 // TestUpSQLiteLockWaitCancel: a cancelled context ends the wait at once,
 // with the context's error.
 func TestUpSQLiteLockWaitCancel(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.SQLite)
 	holdSQLite(t, dsn)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -592,6 +611,7 @@ func TestUpSQLiteLockWaitCancel(t *testing.T) {
 
 // TestRunnerErrorsSayWhat: a driver's error is wrapped with what failed.
 func TestRunnerErrorsSayWhat(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	// An index takes the history table's name.
 	if _, err := db.Exec(`CREATE TABLE x (a integer); CREATE INDEX velox_migrations ON x (a)`); err != nil {
@@ -616,6 +636,7 @@ func TestRunnerErrorsSayWhat(t *testing.T) {
 // TestSessionDiscard: the runner's connection is closed after its run, on
 // success too, never returned to the pool.
 func TestSessionDiscard(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	if err := migrate.SessionClose(context.Background(), db); err != nil {
 		t.Fatal(err)
@@ -636,6 +657,7 @@ func TestSessionDiscard(t *testing.T) {
 // TestUpSQLiteLockWait: a writer holding the database makes Up wait, then
 // give ErrLockWait, before it creates the history table.
 func TestUpSQLiteLockWait(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, dsn := freshDB(t, velox.SQLite)
 	holder, err := openDB(t, "sqlite", dsn).Conn(ctx)
@@ -665,6 +687,7 @@ func TestUpSQLiteLockWait(t *testing.T) {
 // TestStatusDirty: a dirty version is the state and a *DirtyError together,
 // whatever its file's checksum, and also above the directory's last file.
 func TestStatusDirty(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	a, b := "CREATE TABLE a (x integer);", "CREATE TABLE b (x integer);"
 	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", a, "0002_b.sql", b))
@@ -702,6 +725,7 @@ func TestStatusDirty(t *testing.T) {
 
 // TestStatus: Status neither locks nor creates the history table.
 func TestStatus(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);", "0002_b.sql", "CREATE TABLE b (x integer);"))
 	s := mustStatus(t, db, fsys)
@@ -719,6 +743,7 @@ func TestStatus(t *testing.T) {
 }
 
 func TestHistoryTableSQLite(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	mustUp(t, db, dirOf(t, velox.SQLite))
 	rows, err := db.Query(`SELECT name, type, "notnull", pk FROM pragma_table_info('velox_migrations') ORDER BY cid`)
@@ -780,6 +805,7 @@ var registerNotSQLite sync.Once
 // A SQLite run on a database that is not SQLite is the session refusal,
 // whatever its first statement is.
 func TestUpRefusesADatabaseThatIsNotSQLite(t *testing.T) {
+	t.Parallel()
 	registerNotSQLite.Do(func() { sql.Register("velox-not-sqlite", notSQLite{}) })
 	db := openDB(t, "velox-not-sqlite", "")
 	fsys := dirOf(t, velox.SQLite, files(concurrentFiles...))
@@ -794,6 +820,7 @@ func TestUpRefusesADatabaseThatIsNotSQLite(t *testing.T) {
 // TestUpRefusesTransactionControl: a file run in a transaction that ends
 // it, with COMMIT or ROLLBACK, is refused at its line before any file runs.
 func TestUpRefusesTransactionControl(t *testing.T) {
+	t.Parallel()
 	for _, lead := range []string{"COMMIT", "ROLLBACK", "end transaction"} {
 		t.Run(lead, func(t *testing.T) {
 			db, _ := freshDB(t, velox.SQLite)
@@ -821,6 +848,7 @@ func TestUpRefusesTransactionControl(t *testing.T) {
 // in a way the check before the run cannot see is reported, and its version
 // is not recorded.
 func TestUpTransactionEndedByFile(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files("0001_x.sql", "CREATE TABLE a (id integer);\nCOMMIT;\nCREATE TABLE b (id integer);\n"))
 	_, err := migrate.Up(context.Background(), db, fsys, migrate.WithoutTxControlCheck())
@@ -835,6 +863,7 @@ func TestUpTransactionEndedByFile(t *testing.T) {
 // TestUpSavepoint: a file that rolls back to a savepoint runs, in the
 // runner's transaction.
 func TestUpSavepoint(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	mustUp(t, db, dirOf(t, velox.SQLite, files("0001_x.sql", "CREATE TABLE a (id integer);\nSAVEPOINT s;\nCREATE TABLE b (id integer);\nROLLBACK TO SAVEPOINT s;\nRELEASE s;\n")))
 	if !hasTable(t, db, "a") || hasTable(t, db, "b") {
@@ -865,6 +894,7 @@ func baselineErr(t *testing.T, name string, err error, text string) {
 // TestUpBaseline: WithBaseline records the files up to its version, with
 // their sums and nothing run, then applies the files above it.
 func TestUpBaseline(t *testing.T) {
+	t.Parallel()
 	db := sqliteDB(t, "CREATE TABLE t (x integer)")
 	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
 	dir, err := migrate.ReadDir(fsys)
@@ -917,6 +947,7 @@ func TestUpBaseline(t *testing.T) {
 // TestUpBaselineRefusals: the misuses refused before the database is
 // touched.
 func TestUpBaselineRefusals(t *testing.T) {
+	t.Parallel()
 	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
 	for _, c := range []struct {
 		name string
@@ -939,6 +970,7 @@ func TestUpBaselineRefusals(t *testing.T) {
 // TestUpBaselineEmptyDatabase: a database with no table but the history
 // is refused, and the history stays empty.
 func TestUpBaselineEmptyDatabase(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
 	_, err := migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1))
@@ -953,6 +985,7 @@ const baselinedText = "the database already has a migration history (1 row): a b
 // TestUpBaselineTwice: a second baseline is refused, not a no-op, and
 // leaves the history as it was.
 func TestUpBaselineTwice(t *testing.T) {
+	t.Parallel()
 	db := sqliteDB(t, "CREATE TABLE t (x integer)")
 	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
 	mustUp(t, db, fsys, migrate.WithBaseline(1), migrate.WithTarget(1))
@@ -966,6 +999,7 @@ func TestUpBaselineTwice(t *testing.T) {
 
 // TestUpBaselineMigrated: a database Up migrated is refused.
 func TestUpBaselineMigrated(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
 	mustUp(t, db, fsys, migrate.WithTarget(1))
@@ -980,6 +1014,7 @@ func TestUpBaselineMigrated(t *testing.T) {
 // TestUpBaselineBelowTarget: a baseline below the target records the files
 // up to it, applies those up to the target, and leaves the rest pending.
 func TestUpBaselineBelowTarget(t *testing.T) {
+	t.Parallel()
 	db := sqliteDB(t, "CREATE TABLE t (x integer)")
 	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
 	r := mustUp(t, db, fsys, migrate.WithBaseline(1), migrate.WithTarget(2))
@@ -998,6 +1033,7 @@ func TestUpBaselineBelowTarget(t *testing.T) {
 // Up read the history, and before it baselines, is found by the read under
 // SQLite's write lock, and the baseline is refused.
 func TestUpBaselineMeanwhile(t *testing.T) {
+	// Serial: beforeBaselining is the package's, and every other baseline would call it.
 	db, dsn := freshDB(t, velox.SQLite)
 	mustExec(t, db, "CREATE TABLE t (x integer)")
 	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
@@ -1015,6 +1051,7 @@ func TestUpBaselineMeanwhile(t *testing.T) {
 // TestUpBaselineConcurrent: of two baselines at once, one records and the
 // other is refused.
 func TestUpBaselineConcurrent(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.SQLite)
 	mustExec(t, db, "CREATE TABLE t (x integer)")
 	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
@@ -1051,6 +1088,7 @@ func TestUpBaselineConcurrent(t *testing.T) {
 
 // TestZeroOptionIsIgnored: a zero Option changes nothing.
 func TestZeroOptionIsIgnored(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);"))
 	if r := mustUp(t, db, fsys, migrate.Option{}); !hasTable(t, db, "a") {

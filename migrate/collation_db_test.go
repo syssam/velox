@@ -34,6 +34,7 @@ func mustDir(t *testing.T, fsys fstest.MapFS) *migrate.Dir {
 // case-sensitive. A table whose model states no collation keeps what the database
 // holds; a new table keeps the planner's default; a stated one is still a plan.
 func TestMySQLUnstatedCollationStays(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	ctx := context.Background()
 	db, _ := freshDB(t, d)

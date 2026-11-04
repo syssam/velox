@@ -26,6 +26,7 @@ func keyed(onDelete string) *migrate.Schema {
 // that, so a hand ON UPDATE and DEFERRABLE on the key are still seen. A plain plan
 // runs, and a key the plan really drops is dropped whole.
 func TestRebuildDropsNameTheAttribute(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	base := dirOf(t, d, step{to: keyed("CASCADE"), name: "base"})
 	fsys := extend(t, base, d, step{to: keyed("SET NULL"), name: "action"})
@@ -73,6 +74,7 @@ func TestRebuildDropsNameTheAttribute(t *testing.T) {
 // the plan's copy renumbers the rowids, and PRIMARY KEY (id DESC) loses DESC. Inspect
 // notes both, so the guard refuses both, and either form can be accepted.
 func TestRebuildRefusesPrimaryKeyDescriptor(t *testing.T) {
+	t.Parallel()
 	for _, create := range []string{
 		"CREATE TABLE t (id INTEGER PRIMARY KEY DESC, n integer NOT NULL, s text, o integer)",
 		"CREATE TABLE t (id integer NOT NULL, n integer NOT NULL, s text, o integer, PRIMARY KEY (id DESC))",
@@ -113,6 +115,7 @@ func droppedUse(t *testing.T, head string, hand ...string) (*sql.DB, fstest.MapF
 // file that drops the dependent first needs none, and one that makes p again leaves
 // no dependent broken.
 func TestDropTableRefusesDependents(t *testing.T) {
+	t.Parallel()
 	trigger := "CREATE TRIGGER o_ai AFTER INSERT ON o BEGIN INSERT INTO p (id) VALUES (new.id); END"
 	view := "CREATE VIEW p_v AS SELECT id FROM p"
 	ctx := context.Background()

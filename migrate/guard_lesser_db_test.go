@@ -13,6 +13,7 @@ import (
 // TestMySQLDropColumnPlainIndexIsANote: only a UNIQUE index means something else when
 // a DROP COLUMN narrows it. A plain one was refused for nothing; it gets a note.
 func TestMySQLDropColumnPlainIndexIsANote(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	a, b := migrate.Column{Name: "a", Type: "int", Nullable: true}, migrate.Column{Name: "b", Type: "int", Nullable: true}
 	setup := func(t *testing.T, hand string) (func() error, func() []string) {
@@ -55,6 +56,7 @@ func unsupported(t *testing.T, err error, says string) {
 // partitioned table or index with the file under way, its earlier statements run. Up
 // refuses before any of it, and says how an index gets onto one.
 func TestPostgresConcurrentlyOnPartitioned(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	ctx := context.Background()
 	db, _ := freshDB(t, d)
@@ -89,6 +91,7 @@ DROP INDEX CONCURRENTLY plain_id;
 // TestMySQLInplaceOnMyISAM: 1845 comes with the file under way, each statement before
 // it kept. Up refuses before any. What MyISAM runs as INPLACE is let through.
 func TestMySQLInplaceOnMyISAM(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	ctx := context.Background()
 	db, _ := freshDB(t, d)
@@ -119,6 +122,7 @@ ALTER TABLE n ADD INDEX i (a), ALGORITHM=INPLACE, LOCK=NONE;
 // the table failed after. Up refuses, a directive accepts, and a file that replaces the
 // function needs none.
 func TestPostgresTriggerFunctionNamesColumn(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	const trigger = `CREATE TABLE t (id integer PRIMARY KEY, c integer, other integer);
 CREATE FUNCTION touch() RETURNS trigger LANGUAGE plpgsql AS $f$ BEGIN NEW.c := 1; RETURN NEW; END $f$;
@@ -157,6 +161,7 @@ CREATE TRIGGER t_touch BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION touch();
 // failed after. Up refuses, a directive accepts, and a file that replaces the function
 // needs none. A drop of the trigger's own table takes the trigger with it.
 func TestPostgresTriggerFunctionNamesTable(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	const trigger = `CREATE TABLE t (id integer PRIMARY KEY, c integer);
 CREATE TABLE audit (c integer, other integer);

@@ -14,6 +14,7 @@ import (
 // The directive that lets production through leaves staging's history as it is,
 // though velox.sum sees the line; a changed statement is a *ChecksumError still.
 func TestAcceptedLinesLeaveTheHistorySum(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	base := dirOf(t, d, step{to: guardSchema(false), name: "base"})
 	fsys := extend(t, base, d, step{to: guardSchema(true), name: "nullable"})
@@ -63,6 +64,7 @@ func TestAcceptedLinesLeaveTheHistorySum(t *testing.T) {
 // TestSumReadsOnlyDirectives: the lines left out are the allow and drops
 // directives, not a line of a literal that looks like one, nor another directive.
 func TestSumReadsOnlyDirectives(t *testing.T) {
+	t.Parallel()
 	sumOf := func(d velox.Dialect, src string) string {
 		t.Helper()
 		f, err := migrate.ParseFile(d, "0001_a.sql", []byte(src))

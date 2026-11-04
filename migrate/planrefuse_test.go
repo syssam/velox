@@ -14,6 +14,7 @@ import (
 // target's, as in an unnamed index's or key's label, and the target round-trips
 // through a file's directive.
 func TestParseAllowParenthesizedTarget(t *testing.T) {
+	t.Parallel()
 	got, err := migrate.ParseAllow("unmodeled-loss=t.(a, b),drop-table=x, unmodeled-loss=t.check (a IN (1, 2))")
 	want := []migrate.Allow{{Code: "unmodeled-loss", Target: "t.(a, b)"}, {Code: "drop-table", Target: "x"}, {Code: "unmodeled-loss", Target: "t.check (a IN (1, 2))"}}
 	if err != nil || !slices.Equal(got, want) {
@@ -35,6 +36,7 @@ func TestParseAllowParenthesizedTarget(t *testing.T) {
 // from a string goes through an unlimited cast, which the assignment then
 // checks.
 func TestPostgresLimitedTargetUsing(t *testing.T) {
+	t.Parallel()
 	over := ` USING CASE WHEN char_length("c") > 3 THEN "c" || '!' ELSE "c" END`
 	for _, c := range []struct{ from, to, using string }{
 		{"text", "bpchar(3)", over},
@@ -68,6 +70,7 @@ func TestPostgresLimitedTargetUsing(t *testing.T) {
 // TestLintPostgresTruncatingTargets: a target velox cannot classify, and a
 // number to bit, keep a destructive finding that says what the cast may do.
 func TestLintPostgresTruncatingTargets(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	retype := func(from, to string) string {
 		t.Helper()
@@ -116,6 +119,7 @@ func TestLintPostgresTruncatingTargets(t *testing.T) {
 // could never run, DROP TYPE failing on the array; the plan is refused, naming
 // the column.
 func TestRenderRefusesEnumArray(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	schema := func(values ...string) *migrate.Schema {
 		s := oneTable(d, migrate.Column{Name: "moods", Type: `"mood"[]`, Nullable: true})
@@ -137,6 +141,7 @@ func TestRenderRefusesEnumArray(t *testing.T) {
 // collation of another character set always fails, leaving a dirty version, so
 // the plan is refused.
 func TestRenderRefusesForeignCollation(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	schema := func(coll string) *migrate.Schema {
 		s := oneTable(d)
@@ -156,6 +161,7 @@ func TestRenderRefusesForeignCollation(t *testing.T) {
 // TestMySQLCreateNamesTheCollationsCharset: CREATE TABLE of a collation of
 // another character set, as a baseline can hold, is not refused by MySQL.
 func TestMySQLCreateNamesTheCollationsCharset(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	db, _ := freshDB(t, d)
 	s := oneTable(d, migrate.Column{Name: "c", Type: "varchar(10)", Nullable: true})

@@ -16,6 +16,7 @@ import (
 // with a note that names the constraint, and a plan that makes it NOT NULL checks the
 // rows.
 func TestPostgresNotNullNotValid(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	db, _ := freshDB(t, d)
 	if oneValue(t, db, `SELECT (current_setting('server_version_num')::int >= 180000)::text`) != "true" {
@@ -64,6 +65,7 @@ func TestPostgresNotNullNotValid(t *testing.T) {
 // the rows, which PostgreSQL refuses for it. It is a note of its own, as MySQL's NOT
 // ENFORCED check is, and a statement that adds it again must write it.
 func TestPostgresNotEnforced(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	db, _ := freshDB(t, d)
 	if oneValue(t, db, `SELECT (current_setting('server_version_num')::int >= 180000)::text`) != "true" {

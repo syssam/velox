@@ -13,6 +13,7 @@ import (
 // place first, as only ALTER TABLE rewrites the child's REFERENCES; a rebuild
 // alone left a "foreign key mismatch". The rows and the key survive.
 func TestSQLiteRebuildRenamesReferencedColumn(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	schema := func(code string, nullable bool) *migrate.Schema {
 		return &migrate.Schema{Dialect: d, Tables: []migrate.Table{

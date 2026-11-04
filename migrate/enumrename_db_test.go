@@ -13,6 +13,7 @@ import (
 // over the old name, with the statement over the new one, and refused the plan
 // for its columns and predicate. It compares under the names after the rename.
 func TestPostgresEnumSwapAfterColumnRename(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	model := func(col string, values ...string) *migrate.Schema {
 		return &migrate.Schema{Dialect: d,

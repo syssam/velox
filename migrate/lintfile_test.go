@@ -25,6 +25,7 @@ func lintFile(t *testing.T, d velox.Dialect, src string) ([]migrate.Finding, err
 type found struct{ Code, Target, Pos string }
 
 func TestLintFile(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d    velox.Dialect
 		src  string
@@ -217,6 +218,7 @@ ALTER TABLE "velox_new_t" RENAME TO "t";
 // TestLintFileGeneratedClean: what Dir.Add writes, with its directives, lints
 // clean on every case and dialect.
 func TestLintFileGeneratedClean(t *testing.T) {
+	t.Parallel()
 	for _, c := range cases {
 		for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 			if !slices.Contains(c.on(), d) {
@@ -240,6 +242,7 @@ func TestLintFileGeneratedClean(t *testing.T) {
 }
 
 func TestWords(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d    velox.Dialect
 		sql  string
@@ -259,6 +262,7 @@ func TestWords(t *testing.T) {
 // TestLintFileSavepoint: ROLLBACK TO a savepoint never ends the transaction,
 // so it is not refused; ROLLBACK itself is.
 func TestLintFileSavepoint(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
 		for _, q := range []string{"ROLLBACK TO SAVEPOINT s", "ROLLBACK TO s", "rollback work to savepoint s", "ROLLBACK TRANSACTION TO s"} {
 			if _, err := lintFile(t, d, "SAVEPOINT s;\nCREATE TABLE a (x integer);\n"+q+";\nRELEASE s;\n"); err != nil {
@@ -275,6 +279,7 @@ func TestLintFileSavepoint(t *testing.T) {
 // turn foreign keys off, whose DROP TABLE would delete the children's rows, is
 // LintFile's refusal; generated files have the directive.
 func TestLintFileRebuildWithoutForeignKeysOff(t *testing.T) {
+	t.Parallel()
 	rebuild := `CREATE TABLE "velox_new_t" (a integer);
 INSERT INTO "velox_new_t" (a) SELECT a FROM t;
 DROP TABLE t;

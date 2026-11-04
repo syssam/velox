@@ -73,6 +73,7 @@ func same(d velox.Dialect, a, b string) bool {
 }
 
 func TestNormalizePredicate(t *testing.T) {
+	t.Parallel()
 	cs := readPredicates(t, predicatesPath)
 	if *update {
 		for i := range cs {
@@ -107,6 +108,7 @@ func TestNormalizePredicate(t *testing.T) {
 // is the predicate written, and not its neighbour of another meaning, and
 // Inspect reads it as printed. With -update it writes the printed lines.
 func TestPredicatesPostgres(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.Postgres)
 	db.SetMaxOpenConns(1)
 	mustExec(t, db, "SET TimeZone = 'UTC'")
@@ -179,6 +181,7 @@ func TestPredicatesPostgres(t *testing.T) {
 // common predicates, written by hand, apart from the goldens a real
 // PostgreSQL fills.
 func TestNormalizePredicatePrinted(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ printed, written string }{
 		{`(status = 'active'::text)`, `status = 'active'`},
 		{`((code)::text = 'x'::text)`, `code = 'x'`},
@@ -233,6 +236,7 @@ func TestNormalizePredicatePrinted(t *testing.T) {
 }
 
 func TestNormalizePredicateKeepsMeaning(t *testing.T) {
+	t.Parallel()
 	norm := func(s string) string { return migrate.NormalizePredicate(velox.Postgres, s) }
 	for _, c := range [][2]string{
 		{`a AND (b OR c)`, `a AND b OR c`},
@@ -431,6 +435,7 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 // y)) and NOT (a = 1) as a <> 1; these hold in SQL's three-valued logic.
 // Nothing else is folded: no De Morgan.
 func TestNormalizePredicateNegation(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d    velox.Dialect
 		a, b string

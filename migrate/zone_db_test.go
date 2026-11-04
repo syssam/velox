@@ -48,6 +48,7 @@ func zoned(t *testing.T, d velox.Dialect) *sql.DB {
 // what it says and Inspect, which reads in UTC, finds no drift; the zone
 // does not reach the pool.
 func TestUpSessionInUTC(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d                 velox.Dialect
 		typ, probe, query string
@@ -103,6 +104,7 @@ func TestUpSessionInUTC(t *testing.T) {
 // whatever the file before it set: the zone, PostgreSQL's search_path,
 // MySQL's sql_mode.
 func TestUpSessionPerFile(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d            velox.Dialect
 		first, probe string
@@ -132,6 +134,7 @@ func TestUpSessionPerFile(t *testing.T) {
 // standard_conforming_strings over the database's default), hold for every
 // file, and what a file sets does not reach the next.
 func TestUpPostgresSessionGiven(t *testing.T) {
+	t.Parallel()
 	base := os.Getenv("VELOX_TEST_POSTGRES")
 	if base == "" {
 		t.Skip("needs VELOX_TEST_POSTGRES")

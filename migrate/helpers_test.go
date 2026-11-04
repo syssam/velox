@@ -235,6 +235,7 @@ func golden(t *testing.T, name string, d velox.Dialect) string {
 // TABLEs": the goldens hold the combined statements, and each applies on
 // MySQL with rows.
 func TestMigrateMySQLCombined(t *testing.T) {
+	t.Parallel()
 	want := map[string][]string{
 		"literals": {"ALTER TABLE `users` ADD COLUMN `motto` varchar(255) NOT NULL DEFAULT 'it''s a \\\\ test' COMMENT 'it''s a \\\\ comment', MODIFY COLUMN `role` enum('admin','viewer','o''neil') NOT NULL DEFAULT 'viewer';"},
 		"reuse-dropped-name": {
@@ -284,6 +285,7 @@ func TestMigrateMySQLCombined(t *testing.T) {
 // made for a foreign key, then goes again, on MySQL with rows, without error
 // 1553 (ruling 46).
 func TestMigrateFKIndexReplacedMySQL(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	d := velox.MySQL
 	base := mustTables(d, nil)
@@ -310,6 +312,7 @@ func TestMigrateFKIndexReplacedMySQL(t *testing.T) {
 // with foreign keys off, and foreign keys are on after; the same file with
 // an orphan row added fails foreign_key_check and is rolled back.
 func TestMigrateSQLiteDropCycle(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	from := mustTables(d, caseNamed("create-tables").to)
 	to := mustTables(d, nil)
@@ -422,6 +425,7 @@ func pgStrings(t *testing.T, db *sql.DB, q string) []string {
 // the rows hold, an identity added to a plain or serial key starts past the
 // largest ID, and SET NOT NULL validates over rows with no NULL.
 func TestMigrateRowsSurvive(t *testing.T) {
+	t.Parallel()
 	needPostgres(t)
 	d := velox.Postgres
 	constant := func(v string) func(int) string { return func(int) string { return v } }
@@ -494,6 +498,7 @@ func TestMigrateRowsSurvive(t *testing.T) {
 // rows, fails in its second; the resume runs that unit again and leaves the
 // first's index as it was built.
 func TestMigrateRowsSurvivePostgresUnits(t *testing.T) {
+	t.Parallel()
 	needPostgres(t)
 	d := velox.Postgres
 	from := mustTables(d, nil)
@@ -533,6 +538,7 @@ func TestMigrateRowsSurvivePostgresUnits(t *testing.T) {
 // value o'neil reads back, and so do the comments through Inspect (ruling
 // 53).
 func TestMigrateLiterals(t *testing.T) {
+	t.Parallel()
 	for _, d := range allDialects {
 		t.Run(d.String(), func(t *testing.T) {
 			m := migrateCase(t, caseNamed("literals"), d)
@@ -592,6 +598,7 @@ func (RowOver) Fields() []schema.Field {
 // created on MySQL 8.4 through Up and holds a row of full-length values;
 // one byte more is refused at plan time (rulings 47 and 35).
 func TestMigrateMySQLRowLimit(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	build := func(s schema.Interface) (*migrate.Schema, error) {
 		g, err := codegen.Build(marshal(s))
@@ -640,6 +647,7 @@ func (NaMember) Edges() []schema.Edge {
 // spelled out and ON DELETE SET NULL, has no drift from a schema whose
 // edges set NoAction and nothing.
 func TestDriftNoAction(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL} {
 		t.Run(d.String(), func(t *testing.T) {
 			g, err := codegen.Build(marshal(NaTeam{}, NaMember{}))

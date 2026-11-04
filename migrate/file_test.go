@@ -35,6 +35,7 @@ func wantFileError(t *testing.T, what string, err error, pos, reason string) {
 }
 
 func TestParseFileName(t *testing.T) {
+	t.Parallel()
 	f := parseFile(t, velox.Postgres, "0002_add_users_email.sql", "SELECT 1;")
 	if f.Version != 2 || f.Name != "add_users_email" || f.Path != "0002_add_users_email.sql" {
 		t.Errorf("version %d, name %q, path %q", f.Version, f.Name, f.Path)
@@ -52,6 +53,7 @@ func TestParseFileName(t *testing.T) {
 }
 
 func TestParseFileDirectives(t *testing.T) {
+	t.Parallel()
 	var notDestructive string
 	if _, err := migrate.ParseAllow("add-index"); err != nil {
 		notDestructive = err.(*migrate.Error).Reason
@@ -110,6 +112,7 @@ func TestParseFileDirectives(t *testing.T) {
 }
 
 func TestParseFileUnits(t *testing.T) {
+	t.Parallel()
 	f := parseFile(t, velox.Postgres, "0001_x.sql", "-- velox:no-transaction\nSELECT 1;\n-- velox:unit\nSELECT 2;\nSELECT 3;\n-- velox:unit\nSELECT 4;\n")
 	if want := []int{0, 1, 3}; !reflect.DeepEqual(f.Units, want) {
 		t.Errorf("no-transaction: units %v, want %v", f.Units, want)
@@ -132,6 +135,7 @@ func TestParseFileUnits(t *testing.T) {
 }
 
 func TestParseFileCRLF(t *testing.T) {
+	t.Parallel()
 	src := genHeader + "-- velox:no-transaction\n-- velox:lock-timeout 5s\n\n-- velox:unit\n-- review: x\nSELECT 'a\nb';\n-- velox:unit\nSELECT 2;\n"
 	lf := parseFile(t, velox.Postgres, "0001_x.sql", src)
 	crlf := parseFile(t, velox.Postgres, "0001_x.sql", strings.ReplaceAll(src, "\n", "\r\n"))
@@ -147,6 +151,7 @@ func TestParseFileCRLF(t *testing.T) {
 }
 
 func TestParseFileBackslash(t *testing.T) {
+	t.Parallel()
 	for src, want := range map[string]bool{
 		`INSERT INTO t VALUES ('a\\b')`:       true,
 		`INSERT INTO t VALUES ("a\\b")`:       true,
@@ -165,6 +170,7 @@ func TestParseFileBackslash(t *testing.T) {
 }
 
 func TestParseFileDquote(t *testing.T) {
+	t.Parallel()
 	for src, want := range map[string]bool{
 		`INSERT INTO t VALUES ("a")`:         true,
 		`INSERT INTO t VALUES ('"a"')`:       false,
@@ -181,6 +187,7 @@ func TestParseFileDquote(t *testing.T) {
 }
 
 func TestParseFileBOM(t *testing.T) {
+	t.Parallel()
 	src := genHeader + "-- velox:no-transaction\nSELECT 1;\n"
 	plain := parseFile(t, velox.Postgres, "0001_x.sql", src)
 	bom := parseFile(t, velox.Postgres, "0001_x.sql", "\xEF\xBB\xBF"+src)
@@ -201,6 +208,7 @@ func TestParseFileBOM(t *testing.T) {
 }
 
 func TestParseFileGenerated(t *testing.T) {
+	t.Parallel()
 	for src, want := range map[string]bool{
 		genHeader + "SELECT 1;":        true,
 		"\n" + genHeader + "SELECT 1;": false,
@@ -213,6 +221,7 @@ func TestParseFileGenerated(t *testing.T) {
 }
 
 func TestWriteScriptParses(t *testing.T) {
+	t.Parallel()
 	sortAllow := func(a []migrate.Allow) []migrate.Allow {
 		a = slices.Clone(a)
 		slices.SortFunc(a, func(x, y migrate.Allow) int {
@@ -270,6 +279,7 @@ func TestWriteScriptParses(t *testing.T) {
 // -allow, writes a directive ParseFile reads back, whose target LintFile's
 // finding matches. A target of one plain word stays as it was written before.
 func TestAllowTargetRoundTrips(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
 		for _, name := range []string{"plain", "my col", `a"b`, `"q"`, `"open`, "it's", `sp ace"s`, "tab\there", "new\nline", `back\slash`, "a,b"} {
 			base := oneTable(d, migrate.Column{Name: "keep", Type: "integer", Nullable: true}, migrate.Column{Name: name, Type: "integer", Nullable: true})

@@ -22,6 +22,7 @@ import (
 // give their constraint names, checks and AUTOINCREMENT; a text it cannot
 // read gives false.
 func TestParseCreateTable(t *testing.T) {
+	t.Parallel()
 	src, err := os.ReadFile(filepath.Join("testdata", "dir", "create-tables.sqlite", "0001_create_orgs.sql"))
 	if err != nil {
 		t.Fatal(err)
@@ -219,6 +220,7 @@ func TestInspectSQLiteCases(t *testing.T) {
 // TestInspectSQLiteAutoincrement: only an integer key with AUTOINCREMENT is
 // an identity; an INTEGER PRIMARY KEY without it reuses a deleted top ID.
 func TestInspectSQLiteAutoincrement(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	mustExec(t, db, `CREATE TABLE a (id integer PRIMARY KEY)`)
 	mustExec(t, db, `CREATE TABLE b (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT)`)
@@ -259,6 +261,7 @@ func TestInspectSQLiteAutoincrement(t *testing.T) {
 // sqlite_sequence and the history table; a named table that is not there,
 // or a view, is absent; main names the default schema.
 func TestInspectSQLiteFilter(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	mustUp(t, db, dirOf(t, velox.SQLite, files("0001_tables.sql",
 		"CREATE TABLE b (id integer PRIMARY KEY AUTOINCREMENT);\nCREATE TABLE a (id integer PRIMARY KEY, b_id integer REFERENCES b);\nINSERT INTO b DEFAULT VALUES;\n")))
@@ -293,6 +296,7 @@ func TestInspectSQLiteFilter(t *testing.T) {
 // object naming it; an index over an expression is left out, any other is
 // read in the form the model has.
 func TestInspectSQLiteUnheld(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.SQLite)
 	for _, q := range []string{
@@ -409,6 +413,7 @@ func replace(from, to string) func(string) string {
 // TestDriftSQLiteLive: a table rebuilt by hand after Up gives the changes
 // that undo the edit, and what the model cannot hold is a warning.
 func TestDriftSQLiteLive(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name    string
 		edit    func(string) string
@@ -466,6 +471,7 @@ func TestDriftSQLiteLive(t *testing.T) {
 // added by hand is the drop that undoes it; a table the snapshot does not
 // name is never read, even one with what the model cannot hold.
 func TestDriftSQLite(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, to := models(t, caseNamed("add-index"), velox.SQLite)
 	db, _ := freshDB(t, velox.SQLite)
@@ -492,6 +498,7 @@ func TestDriftSQLite(t *testing.T) {
 // TestInspectSQLiteDoesNotMutate: Inspect leaves the tables it is given as
 // they were, and Drift its snapshot; each gives the same twice.
 func TestInspectSQLiteDoesNotMutate(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	mustUp(t, db, sqliteDir(t))
 	mustExec(t, db, `CREATE TABLE h (id integer PRIMARY KEY, a integer UNIQUE, b integer UNIQUE, CHECK (a > 0), CHECK (b > 0))`)
@@ -541,6 +548,7 @@ func TestInspectSQLiteDoesNotMutate(t *testing.T) {
 // column's declared name; a key's name and DEFERRABLE are kept, and
 // comments are not part of a check or predicate.
 func TestInspectSQLiteCase(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.SQLite)
 	for _, q := range []string{
@@ -582,6 +590,7 @@ func TestInspectSQLiteCase(t *testing.T) {
 // columns, table and referenced columns, identical ones in order, so each
 // keeps its own name.
 func TestInspectSQLiteKeyNames(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	for _, q := range []string{
 		`CREATE TABLE u (id integer PRIMARY KEY)`,
@@ -609,6 +618,7 @@ func TestInspectSQLiteKeyNames(t *testing.T) {
 // does not read is a note on the table, and the table is read without its
 // checks.
 func TestInspectSQLiteUnreadable(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	mustExec(t, db, `CREATE TABLE r (a text DEFAULT -'x', CONSTRAINT r_a CHECK (a <> ''))`)
 	s, notes, err := migrate.InspectNotes(context.Background(), db, velox.SQLite, nil)
@@ -626,6 +636,7 @@ func TestInspectSQLiteUnreadable(t *testing.T) {
 // TestInspectSQLiteWaits: Inspect and Drift wait for a writer that holds
 // the database, rather than fail at once.
 func TestInspectSQLiteWaits(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, dsn := freshDB(t, velox.SQLite)
 	if _, err := db.Exec(`CREATE TABLE a (id integer PRIMARY KEY)`); err != nil {

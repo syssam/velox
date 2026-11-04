@@ -34,6 +34,7 @@ func holdingLock(t *testing.T, ctx context.Context, db *sql.DB) func() {
 // file's first statement takes its row away; a later file's at the head of a unit
 // leaves a row the next Up goes on from, unasked.
 func TestMySQLLockWaitLeavesNoDirtyVersion(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	ctx := context.Background()
 	t.Run("the first statement", func(t *testing.T) {
@@ -97,6 +98,7 @@ func TestMySQLLockWaitLeavesNoDirtyVersion(t *testing.T) {
 // twice. The refusal lists the file; -statements K says which ran, and -resume goes on
 // from K+1. The count may fall inside a unit.
 func TestMySQLStrandedResolve(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	ctx := context.Background()
 	db, _ := freshDB(t, d)

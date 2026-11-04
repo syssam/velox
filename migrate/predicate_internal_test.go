@@ -12,6 +12,7 @@ import (
 // pairs read apart, yet match; an interval literal keeps its cast, so the
 // third pair does not.
 func TestSamePredicateKnownLimits(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		a, b         string
 		same, parsed bool

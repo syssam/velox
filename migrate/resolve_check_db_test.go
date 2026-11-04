@@ -95,6 +95,7 @@ func refusedWith(t *testing.T, err error, code string, says ...string) {
 // missing column, a wrong type and an extra index are refused and listed;
 // WithForce records the override in the row's Error.
 func TestResolveChecksTheDatabase(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
 		t.Run(d.String(), func(t *testing.T) {
 			fsys := checkDirs(t, d, false)
@@ -185,6 +186,7 @@ func TestResolveChecksTheDatabase(t *testing.T) {
 // TestResolveAdoptChecks: ResolveAdopted of an edited file is accepted when
 // the database holds what the file now makes, and refused when not.
 func TestResolveAdoptChecks(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
 		t.Run(d.String(), func(t *testing.T) {
 			fsys := checkDirs(t, d, false)
@@ -231,6 +233,7 @@ func TestResolveAdoptChecks(t *testing.T) {
 // WithScratch, or WithForce, and a scratch database that is not empty is
 // refused.
 func TestResolveChecksByReplay(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
 		t.Run(d.String(), func(t *testing.T) {
 			fsys := checkDirs(t, d, true)

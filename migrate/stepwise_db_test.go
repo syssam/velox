@@ -39,6 +39,7 @@ func mysqlNumber(err error) uint16 {
 // statements before it; a later run is refused until it resumes, and the
 // resume starts after them.
 func TestUpMySQLDirty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.MySQL)
 	fsys := dirOf(t, velox.MySQL, files("0001_abc.sql", "CREATE TABLE a (x int);\nINSERT INTO b VALUES (1);\nCREATE TABLE c (x int);\n"))
@@ -79,6 +80,7 @@ func TestUpMySQLDirty(t *testing.T) {
 }
 
 func TestResolveMySQL(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.MySQL)
 	fsys := dirOf(t, velox.MySQL, files("0001_abc.sql", "CREATE TABLE a (x int);\nINSERT INTO b VALUES (1);\n"))
@@ -123,6 +125,7 @@ func TestResolveMySQL(t *testing.T) {
 // TestUpMySQLLockTimeout: a file's lock timeout bounds its wait for a
 // metadata lock another session holds.
 func TestUpMySQLLockTimeout(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.MySQL)
 	mustExec(t, db, "CREATE TABLE t (x int)")
@@ -156,6 +159,7 @@ func TestUpMySQLLockTimeout(t *testing.T) {
 // TestUpMySQLSQLMode: a session whose sql_mode would read a pending file's
 // literals otherwise is refused before any file runs.
 func TestUpMySQLSQLMode(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, dsn := freshDB(t, velox.MySQL)
 	withMode := func(mode string) *sql.DB {
@@ -191,6 +195,7 @@ func TestUpMySQLSQLMode(t *testing.T) {
 }
 
 func TestUpMySQLConcurrent(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.MySQL)
 	fsys := dirOf(t, velox.MySQL, files(concurrentFiles...))
 	upTwice(t, fsys, db, openDB(t, "mysql", dsn))
@@ -224,6 +229,7 @@ func usersRows(t *testing.T, db *sql.DB, n int) {
 // an older snapshot leaves the version dirty with its error and an invalid
 // index; the resume drops it and builds it again.
 func TestUpPostgresOnlineResume(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, dsn := freshDB(t, velox.Postgres)
 	fsys := caseDir(t, caseNamed("add-index"), velox.Postgres)
@@ -269,6 +275,7 @@ func TestUpPostgresOnlineResume(t *testing.T) {
 // TestUpPostgresSetNotNullResume: SET NOT NULL fails at VALIDATE on a NULL;
 // fixed, the resume runs the unit from its start.
 func TestUpPostgresSetNotNullResume(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.Postgres)
 	fsys := caseDir(t, caseNamed("set-not-null"), velox.Postgres)
@@ -306,6 +313,7 @@ func lockTimeoutIs(want string) string {
 // a statement that waits for older transactions by design runs with none
 // (TestUpPostgresOnlineConcurrentlyWaits) and any other with the Config's.
 func TestUpPostgresNoTransactionLockTimeout(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.Postgres)
 	mustUp(t, db, dirOf(t, velox.Postgres, files(
 		"0001_off.sql", "-- velox:no-transaction\n"+lockTimeoutIs("5s"),
@@ -367,6 +375,7 @@ CREATE INDEX CONCURRENTLY t_x ON t (x);
 // waited behind it. The lock failed at a unit's head and changed nothing, so
 // the next Up goes on from it unasked.
 func TestUpPostgresOnlineLockTimeout(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, dsn := freshDB(t, velox.Postgres)
 	fsys := dirOf(t, velox.Postgres, files("0001_t.sql", "CREATE TABLE t (x int);\nINSERT INTO t VALUES (1);\n"), files("0002_t_online.sql", onlineCheckFile))
@@ -408,6 +417,7 @@ func TestUpPostgresOnlineLockTimeout(t *testing.T) {
 // design, CREATE INDEX CONCURRENTLY and VALIDATE CONSTRAINT, blocks no query
 // while it waits, and runs with no lock timeout though the Config has one.
 func TestUpPostgresOnlineConcurrentlyWaits(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, dsn := freshDB(t, velox.Postgres)
 	fsys := dirOf(t, velox.Postgres, files("0001_t.sql", "CREATE TABLE t (x int);\nINSERT INTO t VALUES (1);\nCREATE TABLE other (y int);\n"), files("0002_t_online.sql", onlineCheckFile))
@@ -438,6 +448,7 @@ func TestUpPostgresOnlineConcurrentlyWaits(t *testing.T) {
 // main file's commit until the online file ran: rows written then went
 // unchecked, and a lock timeout or a stop there left the table without one.
 func TestUpPostgresForeignKeyReplacedInPlace(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"on-delete-change", "key-type-change", "rename-table-key-type"} {
 		t.Run(name, func(t *testing.T) {
 			db, _ := freshDB(t, velox.Postgres)
@@ -498,6 +509,7 @@ func countKeys(t *testing.T, c testCase) int {
 // lock_wait_timeout in whole seconds, rounded up, else the Config's; 0 is
 // the session's own, which is set back after each file.
 func TestUpMySQLLockWaitTimeout(t *testing.T) {
+	t.Parallel()
 	_, dsn := freshDB(t, velox.MySQL)
 	cfg, err := mysql.ParseDSN(dsn)
 	if err != nil {
@@ -539,6 +551,7 @@ func TestUpMySQLLockWaitTimeout(t *testing.T) {
 // TestUpMySQLCancelAfterUnit: a cancel that lands after a unit ran keeps
 // its count, and the run stops before the next unit with a *DirtyError.
 func TestUpMySQLCancelAfterUnit(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.MySQL)
 	fsys := dirOf(t, velox.MySQL, files("0001_abc.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\nCREATE TABLE c (x int);\n"))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -566,6 +579,7 @@ func TestUpMySQLCancelAfterUnit(t *testing.T) {
 // committed, the row is not locked, the pooled connection holds no
 // transaction, and the resume starts at START TRANSACTION.
 func TestUpMySQLOwnTransaction(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, dsn := freshDB(t, velox.MySQL)
 	db.SetMaxOpenConns(1)
@@ -627,6 +641,7 @@ func TestUpMySQLOwnTransaction(t *testing.T) {
 // TestUpPostgresOwnTransaction: a no-transaction file left in a
 // transaction block is rolled back and dirty.
 func TestUpPostgresOwnTransaction(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.Postgres)
 	db.SetMaxOpenConns(1)
 	fsys := dirOf(t, velox.Postgres, files("0001_open.sql", "-- velox:no-transaction\nBEGIN;\nCREATE TABLE p (x int);\n"))
@@ -646,6 +661,7 @@ func TestUpPostgresOwnTransaction(t *testing.T) {
 // TestUpMySQLProgressLost: a unit's count that cannot be written is a
 // wrapped error, not a *DirtyError.
 func TestUpMySQLProgressLost(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.MySQL)
 	other := openDB(t, "mysql", dsn)
 	fsys := dirOf(t, velox.MySQL, files("0001_ab.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\n"))
@@ -665,6 +681,7 @@ func TestUpMySQLProgressLost(t *testing.T) {
 // a unit, the count stays at what the session last wrote, and the error,
 // written through the pool, says the unit's outcome is unknown.
 func TestUpMySQLConnectionKilled(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.MySQL)
 	killer := openDB(t, "mysql", dsn)
 	fsys := dirOf(t, velox.MySQL, files("0001_abc.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\nCREATE TABLE c (x int);\n"))
@@ -703,6 +720,7 @@ func stepwiseFailing(t *testing.T, fail string) fstest.MapFS {
 // the statements that record it name the history table by its schema. Status
 // and Resolve find the row too.
 func TestUpPostgresStepwiseSearchPath(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.Postgres)
 	fsys := stepwiseFailing(t, "SELECT 1/0;")
@@ -736,6 +754,7 @@ func TestUpPostgresStepwiseSearchPath(t *testing.T) {
 // session leaves the row dirty with an error, written through the pool
 // when the session no longer answers.
 func TestUpPostgresStepwiseLostConnection(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.Postgres)
 	fsys := stepwiseFailing(t, "SELECT pg_terminate_backend(pg_backend_pid());")
@@ -758,6 +777,7 @@ func TestUpPostgresStepwiseLostConnection(t *testing.T) {
 // transaction open, at its end or when it fails; either way it is rolled
 // back, the row's error is committed, and the row is not locked.
 func TestUpMySQLAutocommitOff(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, c := range []struct {
 		name, file, error string
@@ -804,6 +824,7 @@ func TestUpMySQLAutocommitOff(t *testing.T) {
 // TestUpMySQLSessionNotPooled: what a file sets on the session never
 // reaches the pool, though the file applies.
 func TestUpMySQLSessionNotPooled(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.MySQL)
 	db.SetMaxOpenConns(1)
 	mustUp(t, db, dirOf(t, velox.MySQL, files("0001_mode.sql", "SET SESSION sql_mode = 'ANSI_QUOTES';\nSET SESSION foreign_key_checks = 0;\n")))

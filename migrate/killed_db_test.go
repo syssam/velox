@@ -89,6 +89,7 @@ func nOf(t *testing.T, db *sql.DB) int {
 // one statement now commits with its count, so the server rolls the UPDATE back with
 // the session, and -resume runs it once.
 func TestUpPostgresKilledDuringStatement(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.Postgres)
 	fsys := dirOf(t, velox.Postgres, files("0001_a.sql", killedBase))
 	mustUp(t, db, fsys)
@@ -115,6 +116,7 @@ func TestUpPostgresKilledDuringStatement(t *testing.T) {
 // transaction, and a run killed during it may have run some: the refusal says to
 // check first, with pg_stat_activity and the rows, and how to say what ran.
 func TestUpPostgresKilledDuringUnit(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.Postgres)
 	fsys := dirOf(t, velox.Postgres, files("0001_a.sql", killedBase))
 	mustUp(t, db, fsys)
@@ -132,6 +134,7 @@ func TestUpPostgresKilledDuringUnit(t *testing.T) {
 // refusal said to run -resume first, which ran the UPDATE twice; it says to check
 // first, with the process list and the rows, then how to tell the history.
 func TestUpMySQLKilledDuringStatement(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.MySQL)
 	fsys := dirOf(t, velox.MySQL, files("0001_a.sql", killedBase))
 	mustUp(t, db, fsys)
@@ -160,6 +163,7 @@ func checkFirst(t *testing.T, msg string, v int, tool string) {
 // that atomicUnit takes for one fails with 25001 before it runs, and runs again alone;
 // a DO block that commits fails with 2D000, rolled back, and runs again alone.
 func TestUpPostgresOutsideABlock(t *testing.T) {
+	// Serial: everyTxBlock is the package's, and every other Up would see it.
 	defer migrate.SetEveryTxBlock()()
 	db, _ := freshDB(t, velox.Postgres)
 	fsys := dirOf(t, velox.Postgres, files("0001_a.sql", killedBase))

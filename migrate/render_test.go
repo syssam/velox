@@ -62,6 +62,7 @@ func sqls(ss []migrate.Script) []string {
 }
 
 func TestRenderGolden(t *testing.T) {
+	t.Parallel()
 	for _, d := range rendered {
 		for _, c := range cases {
 			if !slices.Contains(c.on(), d) {
@@ -92,6 +93,7 @@ func TestRenderGolden(t *testing.T) {
 // TestRenderMySQLIndexStatement: a table's index changes are one statement
 // that builds in place, the add first.
 func TestRenderMySQLIndexStatement(t *testing.T) {
+	t.Parallel()
 	for name, want := range map[string]string{
 		"fk-index-replaced": "ALTER TABLE `users` ADD INDEX `user_org_id_created_at` (`org_id`, `created_at`), DROP INDEX `users_orgs_users`, ALGORITHM=INPLACE, LOCK=NONE",
 		"fk-index-restored": "ALTER TABLE `users` ADD INDEX `users_orgs_users` (`org_id`), DROP INDEX `user_org_id_created_at`, ALGORITHM=INPLACE, LOCK=NONE",
@@ -108,6 +110,7 @@ func TestRenderMySQLIndexStatement(t *testing.T) {
 // shrunk by MySQL and dropped with the adds; a foreign key whose only index
 // goes first is dropped first and added after the new index.
 func TestRenderMySQLOrder(t *testing.T) {
+	t.Parallel()
 	for name, want := range map[string][]string{
 		"drop-column-in-unique": {
 			"ALTER TABLE `users` DROP INDEX `user_name_logins`, ALGORITHM=INPLACE, LOCK=NONE",
@@ -159,6 +162,7 @@ func TestRenderMySQLOrder(t *testing.T) {
 // TestRenderMySQLIndexRedefined: an index whose definition changes under
 // its name is dropped and added in one statement, at the add.
 func TestRenderMySQLIndexRedefined(t *testing.T) {
+	t.Parallel()
 	from := mustTables(velox.MySQL, func(m *loadjson.Model) { addField(m, "User", field.String("legacy").Optional()) })
 	to := mustTables(velox.MySQL, func(m *loadjson.Model) {
 		addField(m, "User", field.String("legacy").Optional())
@@ -179,6 +183,7 @@ func (Tag) Fields() []schema.Field {
 }
 
 func TestRenderSQLiteRebuild(t *testing.T) {
+	t.Parallel()
 	ss := caseScripts(t, caseNamed("rebuild-parent"), velox.SQLite)
 	if len(ss) != 1 || ss[0].Kind != migrate.ScriptMain || !ss[0].Directives.ForeignKeysOff {
 		t.Fatalf("want one main script with foreign keys off, got %+v", ss)
@@ -252,6 +257,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 // TestRenderSQLiteRebuildsWhereLintSays: Render rebuilds exactly the tables
 // Lint's sqlite-rebuild findings name, and says so once on each rebuild.
 func TestRenderSQLiteRebuildsWhereLintSays(t *testing.T) {
+	t.Parallel()
 	for _, c := range cases {
 		if !slices.Contains(c.on(), velox.SQLite) {
 			continue
@@ -294,6 +300,7 @@ func TestRenderSQLiteRebuildsWhereLintSays(t *testing.T) {
 // TestRenderSQLiteDropCycle: dropping tables that reference each other turns
 // foreign keys off, as the first one dropped is still referenced.
 func TestRenderSQLiteDropCycle(t *testing.T) {
+	t.Parallel()
 	from := mustTables(velox.SQLite, func(m *loadjson.Model) { addSchema(m, Alpha{}, Beta{}) })
 	to := mustTables(velox.SQLite, nil)
 	ss := render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{})
@@ -307,6 +314,7 @@ func TestRenderSQLiteDropCycle(t *testing.T) {
 }
 
 func TestRenderQuotesIdentifiers(t *testing.T) {
+	t.Parallel()
 	for d, want := range map[velox.Dialect][]string{
 		velox.Postgres: {"\"a`b\"", `"a""b"`},
 		velox.MySQL:    {"`a``b`", "`a\"b`"},
@@ -328,6 +336,7 @@ func TestRenderQuotesIdentifiers(t *testing.T) {
 }
 
 func TestRenderLiterals(t *testing.T) {
+	t.Parallel()
 	for d, want := range map[velox.Dialect][]string{
 		velox.Postgres: {`DEFAULT 'it''s a \ test'`, `COMMENT ON COLUMN "users"."motto" IS 'it''s a \ comment'`, `ADD VALUE IF NOT EXISTS 'o''neil'`},
 		velox.MySQL:    {`DEFAULT 'it''s a \\ test'`, `COMMENT 'it''s a \\ comment'`, `'o''neil'`},
@@ -343,6 +352,7 @@ func TestRenderLiterals(t *testing.T) {
 }
 
 func TestRenderDirectives(t *testing.T) {
+	t.Parallel()
 	from := func(d velox.Dialect) *migrate.Schema {
 		return mustTables(d, func(m *loadjson.Model) { addField(m, "User", field.String("legacy").Optional()) })
 	}
@@ -370,6 +380,7 @@ func TestRenderDirectives(t *testing.T) {
 // TestRenderReviewLines: a statement's review line holds the review and
 // destructive findings of its changes, on a change's first statement only.
 func TestRenderReviewLines(t *testing.T) {
+	t.Parallel()
 	ss := caseScripts(t, caseNamed("drop-column"), velox.MySQL)
 	var got []string
 	for _, st := range ss[0].Statements {
@@ -389,6 +400,7 @@ func TestRenderReviewLines(t *testing.T) {
 // columns' actions, and SET NOT NULL in an online unit. The set-not-null review sat
 // over the ALTER, which cannot fail on a NULL, and the unit that can had none.
 func TestRenderReviewOverItsStatement(t *testing.T) {
+	t.Parallel()
 	from := mustTables(velox.Postgres, nil)
 	to := mustTables(velox.Postgres, func(m *loadjson.Model) {
 		f := fieldOf(m, "User", "bio")
@@ -412,6 +424,7 @@ func TestRenderReviewOverItsStatement(t *testing.T) {
 // a VALIDATE alone of a key or check the main script added NOT VALID; a
 // statement of a script in a transaction is unit 0.
 func TestRenderUnits(t *testing.T) {
+	t.Parallel()
 	validatesAlone := func(ss []migrate.Statement, i int) bool {
 		alone := (i == 0 || ss[i-1].Unit != ss[i].Unit) && (i+1 == len(ss) || ss[i+1].Unit != ss[i].Unit)
 		return alone && strings.Contains(ss[i].SQL, " VALIDATE CONSTRAINT ")
@@ -453,6 +466,7 @@ func TestRenderUnits(t *testing.T) {
 }
 
 func TestRenderRefuses(t *testing.T) {
+	t.Parallel()
 	s := func(d velox.Dialect) *migrate.Schema { return mustTables(d, nil) }
 	for _, tc := range []struct {
 		d velox.Dialect
@@ -489,6 +503,7 @@ func TestRenderRefuses(t *testing.T) {
 }
 
 func TestRenderDoesNotMutate(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		cs := diff(t, from, to, c.opts)
 		f, w, want := migrate.Clone(from), migrate.Clone(to), diff(t, from, to, c.opts)
@@ -500,6 +515,7 @@ func TestRenderDoesNotMutate(t *testing.T) {
 }
 
 func TestRenderDeterministic(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		cs := diff(t, from, to, c.opts)
 		opts := migrate.RenderOptions{LockTimeout: time.Second, Allow: c.allow}
@@ -514,6 +530,7 @@ func TestRenderDeterministic(t *testing.T) {
 // own scripts, then the case's script runs, and the database has to's
 // tables, columns and indexes.
 func TestRenderSQLiteExecutes(t *testing.T) {
+	t.Parallel()
 	for _, c := range cases {
 		if !slices.Contains(c.on(), velox.SQLite) {
 			continue
@@ -528,6 +545,7 @@ func TestRenderSQLiteExecutes(t *testing.T) {
 // TestRenderSQLiteRebuildKeepsRows: a rebuilt parent keeps its rows, its
 // ON DELETE CASCADE children, and its AUTOINCREMENT counter.
 func TestRenderSQLiteRebuildKeepsRows(t *testing.T) {
+	t.Parallel()
 	c := caseNamed("rebuild-parent")
 	from, to := models(t, c, velox.SQLite)
 	db := openSQLite(t)
@@ -741,6 +759,7 @@ func checkClauses(ddl string) []string {
 }
 
 func TestKindStrings(t *testing.T) {
+	t.Parallel()
 	for k, want := range map[migrate.ScriptKind]string{
 		migrate.ScriptMain: "main", migrate.ScriptEnum: "enum", migrate.ScriptOnline: "online", 7: "ScriptKind(7)",
 	} {
@@ -762,6 +781,7 @@ func TestKindStrings(t *testing.T) {
 // TestRenderMySQLRefusesPrimaryKeyRename: MySQL names every primary key
 // PRIMARY, so a rename of one is refused, whichever name it gives.
 func TestRenderMySQLRefusesPrimaryKeyRename(t *testing.T) {
+	t.Parallel()
 	s := mustTables(velox.MySQL, nil)
 	named := migrate.Clone(s)
 	table(named, "users").PrimaryKeyName = "users_pk"
@@ -786,6 +806,7 @@ func TestRenderMySQLRefusesPrimaryKeyRename(t *testing.T) {
 // keeps no name for is written in the CREATE TABLE as SQLite reads it back:
 // a key and a check with no CONSTRAINT, a unique index as UNIQUE (…).
 func TestRenderSQLiteUnnamed(t *testing.T) {
+	t.Parallel()
 	empty := &migrate.Schema{Dialect: velox.SQLite}
 	to := &migrate.Schema{Dialect: velox.SQLite, Tables: []migrate.Table{
 		{Name: "orgs", Columns: []migrate.Column{{Name: "id", Type: "integer", Identity: true}}, PrimaryKey: []string{"id"}},

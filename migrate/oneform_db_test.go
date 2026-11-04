@@ -40,6 +40,7 @@ var spellings = map[velox.Dialect][]migrate.Column{
 // TestDriftReadsOneForm: a type or default as a schema spells it is the one its
 // server prints, so a clean apply has no drift, and a baseline plans nothing.
 func TestDriftReadsOneForm(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 		t.Run(d.String(), func(t *testing.T) {
 			ctx := context.Background()

@@ -212,6 +212,7 @@ func TestInspectMySQLCases(t *testing.T) {
 // whatever CREATE TABLE called it, so Diff against a snapshot of the same
 // tables renames none.
 func TestInspectMySQLPrimaryKeyName(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	_, to := models(t, caseNamed("add-index"), velox.MySQL)
 	db, _ := freshDB(t, velox.MySQL)
@@ -246,6 +247,7 @@ func TestInspectMySQLPrimaryKeyName(t *testing.T) {
 // a ' and a \ in a literal, a comment and an enum value; CURRENT_TIMESTAMP(6),
 // an expression on a text column, numbers, a decimal and tinyint(1).
 func TestInspectMySQLDefaults(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	_, lit := models(t, caseNamed("literals"), velox.MySQL)
 	db, _ := freshDB(t, velox.MySQL)
@@ -283,6 +285,7 @@ func TestInspectMySQLDefaults(t *testing.T) {
 // TestInspectMySQLRestrict: RESTRICT and no action are one action on MySQL:
 // either spelling in the snapshot gives no drift.
 func TestInspectMySQLRestrict(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	snap := mysqlSchema()
 	tb := &snap.Tables[0]
@@ -314,6 +317,7 @@ func TestInspectMySQLRestrict(t *testing.T) {
 // TestInspectMySQLEngine: a table that is not InnoDB is a note, and so a
 // drift warning that is no change.
 func TestInspectMySQLEngine(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.MySQL)
@@ -339,6 +343,7 @@ func TestInspectMySQLEngine(t *testing.T) {
 // table of another database is read only when named with it, and its
 // foreign key to DATABASE() names its table without a schema.
 func TestInspectMySQLFilter(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	db, _ := freshDB(t, velox.MySQL)
 	mustUp(t, db, dirOf(t, velox.MySQL, files("0001_tables.sql", "CREATE TABLE b (id integer PRIMARY KEY);\nCREATE TABLE a (id integer PRIMARY KEY, b_id integer, CONSTRAINT a_b FOREIGN KEY (b_id) REFERENCES b (id));\n")))
@@ -383,6 +388,7 @@ func TestInspectMySQLFilter(t *testing.T) {
 // object naming it; an index over an expression or a prefix is left out,
 // any other is read in the form the model has.
 func TestInspectMySQLUnheld(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.MySQL)
@@ -460,6 +466,7 @@ func TestInspectMySQLUnheld(t *testing.T) {
 // TestDriftMySQLLive: a hand change to the database after Up is the change
 // that undoes it, and what the model cannot hold is a warning.
 func TestDriftMySQLLive(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	for _, c := range []struct {
 		name    string
@@ -517,6 +524,7 @@ func TestDriftMySQLLive(t *testing.T) {
 // its first NUL; a binary type's expression and an ASCII _latin1 literal
 // are the model's. Another default set by hand is a change.
 func TestInspectMySQLBinaryDefaults(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	s := &migrate.Schema{Dialect: velox.MySQL, Tables: []migrate.Table{{
 		Name: "bins",
@@ -610,6 +618,7 @@ func TestInspectMySQLBinaryDefaults(t *testing.T) {
 // TestInspectMySQLDoesNotMutate: Inspect leaves the tables it is given as
 // they were, and Drift its snapshot; each gives the same twice.
 func TestInspectMySQLDoesNotMutate(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	db, _ := freshDB(t, velox.MySQL)
 	mustUp(t, db, mysqlDir(t))

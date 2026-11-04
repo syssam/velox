@@ -35,6 +35,7 @@ func orphaned(t *testing.T, db *sql.DB, id int) {
 // rebuild of its parent or child, and Up says it is there. A row the file orphans is
 // still a refusal, rolled back.
 func TestSQLiteOrphansAlreadyThere(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	base := dirOf(t, d, step{to: keyed(""), name: "base"})
 	setup := func(t *testing.T) *sql.DB {
@@ -91,6 +92,7 @@ DELETE FROM c WHERE id = 2;
 // file's checksum, which an environment that applied it then refuses. It says so, and
 // names what has no effect on the checksum.
 func TestRefusalSaysWhereAnEditIsSafe(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	small, wide := migrate.Column{Name: "c", Type: "varchar(10)", Nullable: true}, migrate.Column{Name: "c", Type: "varchar(20)", Nullable: true}
 	db, fsys := planned(t, d, small, wide, migrate.PlanOptions{}, "ALTER TABLE t MODIFY c varchar(10) NULL DEFAULT 'x'")

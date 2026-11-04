@@ -12,6 +12,7 @@ import (
 )
 
 func TestDirtyErrorText(t *testing.T) {
+	t.Parallel()
 	cause := errors.New("Error 1205: Lock wait timeout exceeded")
 	e := &migrate.DirtyError{Version: 4, Path: "0004_add_users_org_id.sql", Statement: 2, Statements: 3, Err: cause}
 	want := "migrate: 0004_add_users_org_id.sql: statement 2 of 3: Error 1205: Lock wait timeout exceeded\n" +
@@ -50,6 +51,7 @@ func TestDirtyErrorText(t *testing.T) {
 // out with checking whether the statement took effect, then -statements, then
 // -resume; on MySQL it lists the statements.
 func TestDirtyErrorUnsureText(t *testing.T) {
+	t.Parallel()
 	f, err := migrate.ParseFile(velox.MySQL, "0002_backfill.sql", []byte("UPDATE a SET n = n + 1;\nCREATE TABLE b (id int);\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -85,6 +87,7 @@ func TestDirtyErrorUnsureText(t *testing.T) {
 // commits with its count, unless PostgreSQL cannot run it in a transaction block,
 // it may end one, or the file begins or ends one.
 func TestAtomicUnit(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d    velox.Dialect
 		src  string
@@ -125,6 +128,7 @@ func TestAtomicUnit(t *testing.T) {
 // TestResolveSQLite: Resolve acts on a dirty version only; ResolveApplied
 // needs the file unchanged, ResolveUndone does not.
 func TestResolveSQLite(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);", "0002_b.sql", "CREATE TABLE b (x integer);\nCREATE TABLE c (x integer);"))
@@ -187,6 +191,7 @@ func TestResolveSQLite(t *testing.T) {
 // TestUpResumeRefused: WithResume needs the dirty version's file, unchanged,
 // and one run statement by statement.
 func TestUpResumeRefused(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.SQLite)
 	a, b := "CREATE TABLE a (x integer);", "CREATE TABLE b (x integer);"
@@ -226,6 +231,7 @@ func TestUpResumeRefused(t *testing.T) {
 // TestUpResumeAhead: a dirty version with clean versions above the
 // directory's last file is refused with WithResume too.
 func TestUpResumeAhead(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	a := "CREATE TABLE a (x integer);"
 	newer := dirOf(t, velox.SQLite, files("0001_a.sql", a, "0002_b.sql", "CREATE TABLE b (x integer);", "0003_c.sql", "CREATE TABLE c (x integer);"))
@@ -253,6 +259,7 @@ func TestUpResumeAhead(t *testing.T) {
 }
 
 func TestLostMessage(t *testing.T) {
+	t.Parallel()
 	if got, want := migrate.LostMessage(1, 3), "the connection was lost during statements 2 to 3; check whether they ran before resuming"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -265,6 +272,7 @@ func TestLostMessage(t *testing.T) {
 // another version is dirty is refused. An operator who meant the dirty version and
 // typed the next one would skip the whole file and see every command succeed.
 func TestResolveAppliedPendingRefusedWhileDirty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.SQLite)
 	one := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);"))

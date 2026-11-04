@@ -35,6 +35,7 @@ func lastFile(t *testing.T, fsys fstest.MapFS) string {
 // schema.json; a hand edit schema.json does not know fails, naming the
 // change; a database that is not empty is refused.
 func TestVerify(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	fsys := caseDir(t, caseNamed("add-index"), velox.SQLite)
 	db, _ := freshDB(t, velox.SQLite)
@@ -86,6 +87,7 @@ func TestVerify(t *testing.T) {
 
 // TestVerifyPostgres: a case's directory verifies on PostgreSQL.
 func TestVerifyPostgres(t *testing.T) {
+	t.Parallel()
 	needPostgres(t)
 	db, _ := freshDB(t, velox.Postgres)
 	if err := migrate.Verify(context.Background(), db, caseDir(t, caseNamed("add-index"), velox.Postgres)); err != nil {
@@ -95,6 +97,7 @@ func TestVerifyPostgres(t *testing.T) {
 
 // TestVerifyMySQL: a case's directory verifies on MySQL.
 func TestVerifyMySQL(t *testing.T) {
+	t.Parallel()
 	needMySQL(t)
 	db, _ := freshDB(t, velox.MySQL)
 	if err := migrate.Verify(context.Background(), db, caseDir(t, caseNamed("add-index"), velox.MySQL)); err != nil {
@@ -106,6 +109,7 @@ func TestVerifyMySQL(t *testing.T) {
 // fails Verify, naming it, on each dialect; on PostgreSQL in any schema, but a
 // table of an extension's. A file's row of the history table is no stray.
 func TestVerifyStrayTable(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
 		t.Run(d.String(), func(t *testing.T) {
 			if d == velox.Postgres {

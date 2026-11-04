@@ -13,6 +13,7 @@ import (
 // over the new length, where an explicit cast would cut it. One over it by
 // trailing spaces fails too, which the assignment cast trims unseen.
 func TestPostgresNarrowingFailsOnLongRow(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	for _, c := range []struct{ from, to string }{
 		{"character varying(10)", "character varying(5)"},
@@ -58,6 +59,7 @@ func TestPostgresNarrowingFailsOnLongRow(t *testing.T) {
 // makes, text to integer, keeps its USING and runs; a narrowing that fits
 // runs without it; a number to a string needs none.
 func TestPostgresRetypeKeepsCastWithoutAssignment(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	db, _ := freshDB(t, d)
 	col := func(name, typ string) migrate.Column { return migrate.Column{Name: name, Type: typ, Nullable: true} }
@@ -78,6 +80,7 @@ func TestPostgresRetypeKeepsCastWithoutAssignment(t *testing.T) {
 // value of another length fails where a cast to bit(3) would cut it to 101, and
 // one that fits runs. A varbit target takes a shorter one.
 func TestPostgresBitFromString(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	col := func(typ string) migrate.Column { return migrate.Column{Name: "c", Type: typ, Nullable: true} }
 	for _, to := range []string{"bit(3)", "pg_catalog.bit(3)", "bit varying(3)"} {

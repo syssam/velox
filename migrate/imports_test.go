@@ -13,6 +13,7 @@ import (
 // internal/ddl and internal/buildinfo, and nothing else, so a tool that reads a snapshot links no
 // driver and no generator.
 func TestImports(t *testing.T) {
+	t.Parallel()
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)

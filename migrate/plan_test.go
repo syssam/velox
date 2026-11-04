@@ -13,6 +13,7 @@ import (
 )
 
 func TestNewPlan(t *testing.T) {
+	t.Parallel()
 	for _, d := range rendered {
 		from := mustTables(d, func(m *loadjson.Model) { addField(m, "User", field.String("legacy").Optional()) })
 		to := mustTables(d, nil)
@@ -52,6 +53,7 @@ func TestNewPlan(t *testing.T) {
 }
 
 func TestBlockedError(t *testing.T) {
+	t.Parallel()
 	e := &migrate.BlockedError{Findings: []migrate.Finding{
 		{Code: "drop-table", Target: "posts", Message: "drops table posts and its rows"},
 		{Code: "set-not-null", Target: "users.bio", Pos: "user.go:12", Message: "makes column users.bio NOT NULL"},
@@ -65,6 +67,7 @@ func TestBlockedError(t *testing.T) {
 }
 
 func TestNewPlanDoesNotMutate(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		f, w := migrate.Clone(from), migrate.Clone(to)
 		opts := migrate.PlanOptions{Diff: c.opts, Allow: c.allow, LockTimeout: time.Second}
@@ -78,6 +81,7 @@ func TestNewPlanDoesNotMutate(t *testing.T) {
 }
 
 func TestNewPlanDeterministic(t *testing.T) {
+	t.Parallel()
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		opts := migrate.PlanOptions{Diff: c.opts, Allow: c.allow, LockTimeout: time.Second}
 		a, err := migrate.NewPlan(from, to, opts)

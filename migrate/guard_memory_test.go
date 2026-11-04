@@ -14,6 +14,7 @@ import (
 // and a database in memory ends with its connection: Up returned nil and left no
 // table. It says so, and a table already there, on the pool's connection, stays.
 func TestUpRefusesMemoryDatabase(t *testing.T) {
+	t.Parallel()
 	fsys := dirOf(t, velox.SQLite, step{to: oneTable(velox.SQLite), name: "base"})
 	for _, dsn := range []string{":memory:", "file::memory:", "file:one?mode=memory", "", "file::memory:?cache=shared"} {
 		t.Run("one connection "+dsn, func(t *testing.T) {
@@ -55,6 +56,7 @@ func TestUpRefusesMemoryDatabase(t *testing.T) {
 // keeps open does outlive Up: its tables are there after, and a second Up finds
 // them applied.
 func TestUpKeepsSharedMemoryDatabase(t *testing.T) {
+	t.Parallel()
 	fsys := dirOf(t, velox.SQLite, step{to: oneTable(velox.SQLite), name: "base"})
 	db := openDB(t, "sqlite", "file:kept?mode=memory&cache=shared")
 	conn, err := db.Conn(context.Background())

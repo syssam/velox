@@ -13,6 +13,7 @@ import (
 // column's type, or nextval stops at the old type's top; with no name in the
 // snapshot it is read from the default.
 func TestPostgresWideningSerialWidensSequence(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	for _, named := range []string{"t_n_seq", ""} {
 		t.Run("named "+named, func(t *testing.T) {
@@ -44,6 +45,7 @@ func TestPostgresWideningSerialWidensSequence(t *testing.T) {
 // TestPostgresWideningIdentityFollows: an identity's sequence follows its
 // column on its own, so no statement is added for it.
 func TestPostgresWideningIdentityFollows(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	db, _ := freshDB(t, d)
 	fsys := dirOf(t, d, step{to: oneTable(d, migrate.Column{Name: "n", Type: "integer", Identity: true, Sequence: "t_n_seq"}), name: "base"})
@@ -64,6 +66,7 @@ func TestPostgresWideningIdentityFollows(t *testing.T) {
 // rows deleted from the top were handed out once, and are not handed out again. A
 // row above the sequence still moves the counter past it.
 func TestPostgresSerialToIdentityKeepsCounter(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	serial := func(cols ...migrate.Column) *migrate.Schema {
 		s := oneTable(d, cols...)
@@ -113,6 +116,7 @@ func TestPostgresSerialToIdentityKeepsCounter(t *testing.T) {
 // default names, so the file could only roll back. An identity that becomes a
 // plain integer, with no default, is still planned and runs.
 func TestPostgresIdentityToSerialRefused(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	with := func(id migrate.Column) *migrate.Schema {
 		s := oneTable(d)

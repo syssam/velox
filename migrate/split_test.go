@@ -121,6 +121,7 @@ var splitCases = []struct {
 }
 
 func TestSplit(t *testing.T) {
+	t.Parallel()
 	for _, c := range splitCases {
 		got, err := migrate.Split(c.d, c.src)
 		if c.err != "" {

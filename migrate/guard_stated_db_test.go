@@ -56,6 +56,7 @@ func planned(t *testing.T, d velox.Dialect, base, to migrate.Column, opts migrat
 // snapshot, so a comment-only plan would change what a hand edit made, with Up nil.
 // Whatever differs and the file does not name is refused, and the row keeps its value.
 func TestMySQLModifyComparesEveryAttribute(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	const price = "decimal(12,2)"
 	plain := migrate.Column{Name: "c", Type: price, Nullable: true}
@@ -141,6 +142,7 @@ func TestMySQLModifyComparesEveryAttribute(t *testing.T) {
 // varchar(50) to varchar(100) would shrink. Up names both and changes nothing, and a
 // line with no value, written by hand, accepts it.
 func TestPlanLineExpectsAValue(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.MySQL, velox.Postgres} {
 		t.Run(d.String(), func(t *testing.T) {
 			num, str := "decimal(12,4)", "varchar(500)"
@@ -241,6 +243,7 @@ func columnTypeQuery(d velox.Dialect) string {
 // TestMySQLModifyReadsDefaultSpellings: a statement's default spelled otherwise than
 // the server prints it is one value, so a comment change is no refusal.
 func TestMySQLModifyReadsDefaultSpellings(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	for _, c := range []struct{ typ, def string }{
 		{"datetime(6)", "now(6)"},
@@ -281,6 +284,7 @@ func TestMySQLModifyReadsDefaultSpellings(t *testing.T) {
 // it after, which replaced a hand default, 42 with 1. Up refuses; a default the plan
 // changes passes, and one the statement leaves alone stays.
 func TestPostgresRetypeReadsTheDefault(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	col := func(typ, def string) migrate.Column { return migrate.Column{Name: "c", Type: typ, Default: def} }
 	db, fsys := planned(t, d, col("integer", "1"), col("bigint", "1"), migrate.PlanOptions{}, "ALTER TABLE t ALTER COLUMN c SET DEFAULT 42")
@@ -317,6 +321,7 @@ func TestPostgresRetypeReadsTheDefault(t *testing.T) {
 // TestPostgresRetypeReadsStorage: ALTER COLUMN TYPE resets STORAGE and COMPRESSION to
 // the new type's. Up refuses until the file sets them again or a directive accepts it.
 func TestPostgresRetypeReadsStorage(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	small, wide := migrate.Column{Name: "c", Type: "character varying(10)", Nullable: true}, migrate.Column{Name: "c", Type: "character varying(20)", Nullable: true}
 	probe, _ := freshDB(t, d)
@@ -370,6 +375,7 @@ func indexPlan(t *testing.T, d velox.Dialect, from, to []migrate.Index, hand ...
 // over an expression. A valid index that is not what the plan makes is refused; an
 // invalid one goes, and one of the same shape is made again.
 func TestPostgresAddIndexSparesAValidOne(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	x := []migrate.Index{{Name: "x", Columns: []string{"a"}}}
 	db, fsys := indexPlan(t, d, nil, x, `CREATE UNIQUE INDEX x ON t (lower(a)) WHERE a IS NOT NULL`)
@@ -399,6 +405,7 @@ func TestPostgresAddIndexSparesAValidOne(t *testing.T) {
 // hand index x of another table, of the same shape, and Up made x on t: the other
 // table lost its UNIQUE in silence. It is refused by the other table's name.
 func TestPostgresAddIndexSparesAnotherTables(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	x := migrate.Index{Name: "x", Columns: []string{"a"}, Unique: true}
 	for _, hand := range []string{`CREATE UNIQUE INDEX x ON other (a)`, `CREATE INDEX x ON other (lower(a))`} {
@@ -442,6 +449,7 @@ func TestPostgresAddIndexSparesAnotherTables(t *testing.T) {
 // table, unasked. The file's drops line names t.x, and Up refuses the drop of an x
 // on another table, naming it.
 func TestPostgresDropIndexSparesAnotherTables(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	x := migrate.Index{Name: "x", Columns: []string{"a"}}
 	db, _ := freshDB(t, d)
@@ -463,6 +471,7 @@ func TestPostgresDropIndexSparesAnotherTables(t *testing.T) {
 // duplicate. The new index is now built under a helper name first, the old dropped,
 // and the new renamed, so one of them holds the rows to it after every unit.
 func TestPostgresIndexChangeKeepsTheOldUntilTheNew(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	db, _ := freshDB(t, d)
 	x := func(cols ...string) *migrate.Schema {
@@ -518,6 +527,7 @@ func TestPostgresIndexChangeKeepsTheOldUntilTheNew(t *testing.T) {
 // built beside the old, made a constraint where the model says so, and the old
 // dropped only then, so a duplicate fails after every unit.
 func TestPostgresUniqueConstraintChangeKeepsTheOld(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	x := func(constraint bool, cols ...string) *migrate.Schema {
 		return indexed(d, migrate.Index{Name: "x", Columns: cols, Unique: true, Constraint: constraint})
@@ -588,6 +598,7 @@ func TestPostgresUniqueConstraintChangeKeepsTheOld(t *testing.T) {
 // and makes it from the model. What the model has no place for went with it, on
 // PostgreSQL and on MySQL, past the guard.
 func TestIndexChangeReadsWhatTheStatementWrites(t *testing.T) {
+	t.Parallel()
 	one := []migrate.Index{{Name: "x", Columns: []string{"a"}}}
 	two := []migrate.Index{{Name: "x", Columns: []string{"a", "b"}}}
 	for _, c := range []struct {
@@ -665,6 +676,7 @@ func mysqlFile(t *testing.T, file string, hand ...string) (*sql.DB, fstest.MapFS
 // and a trigger, whose INSERT then fails 1054, with Up nil. Up names each; a directive
 // accepts it; a file that remakes the view or drops the trigger needs none.
 func TestMySQLRefusesWhatARenameBreaks(t *testing.T) {
+	t.Parallel()
 	view := "CREATE VIEW v AS SELECT a FROM t"
 	viewB := "CREATE VIEW vb AS SELECT b FROM t"
 	other := "CREATE TABLE u (id int)"
@@ -719,6 +731,7 @@ func TestMySQLRefusesWhatARenameBreaks(t *testing.T) {
 // UNIQUE (a), in silence. Up refuses it; -allow drop-column says nothing of the index,
 // and a file that drops the index does.
 func TestMySQLDropColumnShrinksIndex(t *testing.T) {
+	t.Parallel()
 	hand := "CREATE UNIQUE INDEX pair ON t (a, b)"
 	db, fsys := mysqlFile(t, "ALTER TABLE t DROP COLUMN b;\n", hand)
 	refused(t, db, fsys, "t.pair", "velox:allow unmodeled-loss t.pair")
@@ -742,6 +755,7 @@ func TestMySQLDropColumnShrinksIndex(t *testing.T) {
 // the server's t is public.t. The guard read app.t, found nothing, and let the
 // collation go.
 func TestPostgresGuardReadsTheSearchPath(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	admin, dsn := freshDB(t, d)
 	mustExec(t, admin, `CREATE SCHEMA app`)
@@ -771,6 +785,7 @@ func TestPostgresGuardReadsTheSearchPath(t *testing.T) {
 // TestUpTargetKeepsTheGuardsView: a foreign key dropped in a file under -to and added
 // again in a pending file past it lost ON UPDATE: the later file was out of sight.
 func TestUpTargetKeepsTheGuardsView(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	const key = "ALTER TABLE c DROP CONSTRAINT c_p;\n"
 	db, _ := freshDB(t, d)

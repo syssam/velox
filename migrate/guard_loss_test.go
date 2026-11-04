@@ -50,6 +50,7 @@ func handTable(t *testing.T, create string, allow []string, hand ...string) (*sq
 // which the rebuild's INSERT leaves out, is refused with its data untouched; the
 // directive accepts it. A stale branch's rebuild does it with no hand edit.
 func TestUpRebuildRefusesUnsnapshottedColumn(t *testing.T) {
+	t.Parallel()
 	db, fsys := handTable(t, "", nil, "ALTER TABLE t ADD COLUMN secret text", "UPDATE t SET secret = 'x'")
 	_, err := migrate.Up(context.Background(), db, fsys)
 	wantUnmodeled(t, db, fsys, err, "t.secret", "velox:allow unmodeled-loss t.secret", "migrate hash")
@@ -84,6 +85,7 @@ func TestUpRebuildRefusesUnsnapshottedColumn(t *testing.T) {
 // not goes with a rebuild like a column, and is refused by name; the directive
 // lets it through. The database is what is read: nothing here is in a file.
 func TestUpRebuildRefusesHandMade(t *testing.T) {
+	t.Parallel()
 	const cols = `id integer NOT NULL PRIMARY KEY, n integer NOT NULL, s text, o integer`
 	for _, c := range []struct {
 		name, create string
@@ -125,6 +127,7 @@ func guardedRow(t *testing.T, db *sql.DB) {
 // in the file's change list, as -- velox:drops, so it needs no directive of the
 // user's; take the line out and the same loss is refused.
 func TestUpRebuildPlannedDropsPass(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	base := guardSchema(false)
 	tb := &base.Tables[1]
@@ -163,6 +166,7 @@ func TestUpRebuildPlannedDropsPass(t *testing.T) {
 // SELECT list, and what is over it, a check, an index or a default, is the same
 // after the rename: no refusal, under no directive.
 func TestUpRebuildRenamedColumnNoLoss(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	schema := func(name string, nullable bool) *migrate.Schema {
 		s := oneTable(d, migrate.Column{Name: name, Type: "text", Nullable: nullable, Default: "'x'"})
@@ -189,6 +193,7 @@ func TestUpRebuildRenamedColumnNoLoss(t *testing.T) {
 // TestUpRebuildOtherTemporaryName: a rebuild under another temporary name is
 // guarded like a generated one.
 func TestUpRebuildOtherTemporaryName(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	db, _ := freshDB(t, d)
 	base := dirOf(t, d, step{to: guardSchema(false), name: "base"})
@@ -222,6 +227,7 @@ func textKeyed(t *testing.T, cols ...migrate.Column) (*sql.DB, fstest.MapFS) {
 // TestUpRebuildKeepsRowids: a rebuild of a rowid table copies the rowid, on
 // which external-content FTS5 depends, by a name no column takes.
 func TestUpRebuildKeepsRowids(t *testing.T) {
+	t.Parallel()
 	db, fsys := textKeyed(t)
 	mustExec(t, db, "INSERT INTO t (rowid, k, s) VALUES (10, 'a', 'one'), (20, 'b', 'two')")
 	mustExec(t, db, "CREATE VIRTUAL TABLE f USING fts5(s, content='t', content_rowid='rowid')")
@@ -259,6 +265,7 @@ func TestUpRebuildKeepsRowids(t *testing.T) {
 // so under the directive that accepts the option's loss the file must lose the
 // rowid too, and the refusal says which.
 func TestUpRebuildWithoutRowidSaysSo(t *testing.T) {
+	t.Parallel()
 	db, fsys := textKeyed(t)
 	mustExec(t, db, "DROP TABLE t")
 	mustExec(t, db, "CREATE TABLE t (k text NOT NULL PRIMARY KEY, s text NOT NULL) WITHOUT ROWID")
@@ -309,6 +316,7 @@ func count(t *testing.T, db *sql.DB, table string) int {
 // references, with foreign keys on, would delete the child's rows: refused,
 // naming the child, until a directive accepts it or the file drops the child.
 func TestUpDropTableRefusesChild(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	const drop = "-- velox:allow drop-table p\nDROP TABLE p;\n"
 	db, fsys, _ := parentChild(t)
@@ -351,6 +359,7 @@ ALTER TABLE velox_new_c RENAME TO c;
 // out would delete the children's rows through its DROP TABLE: Up refuses,
 // naming them, where it returned nil.
 func TestUpRebuildForeignKeysOnRefused(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	schema := func(nullable bool) *migrate.Schema {
 		return &migrate.Schema{Dialect: d, Tables: []migrate.Table{
@@ -377,6 +386,7 @@ func TestUpRebuildForeignKeysOnRefused(t *testing.T) {
 // drops may have written anywhere before it went: the check covers the whole
 // database then.
 func TestForeignKeyCheckSeesADroppedTablesTrigger(t *testing.T) {
+	t.Parallel()
 	d := velox.SQLite
 	db, _ := freshDB(t, d)
 	base := dirOf(t, d, files("0001_base.sql", `CREATE TABLE z (id integer PRIMARY KEY);
@@ -402,6 +412,7 @@ INSERT INTO x (id) VALUES (1);
 // the rebuilt table has, as a column of another table or an alias, is no use of
 // it, and the RENAME runs; one that does use it is refused.
 func TestUpRebuildDependentsByReference(t *testing.T) {
+	t.Parallel()
 	for _, hand := range [][]string{
 		{"ALTER TABLE o ADD COLUMN t integer", "CREATE VIEW v AS SELECT t FROM o"},
 		{"ALTER TABLE o ADD COLUMN t integer", "CREATE TRIGGER o_au AFTER UPDATE ON o BEGIN UPDATE o SET t = 1 WHERE id = new.id AND t IS NULL; END"},

@@ -11,6 +11,7 @@ import (
 )
 
 func TestSnapshotRoundTrip(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 		s := full()
 		s.Dialect = d
@@ -37,6 +38,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 }
 
 func TestSnapshotShape(t *testing.T) {
+	t.Parallel()
 	s := &Schema{
 		Dialect: velox.Postgres,
 		Tables: []Table{{
@@ -79,6 +81,7 @@ func TestSnapshotShape(t *testing.T) {
 }
 
 func TestSnapshotSorted(t *testing.T) {
+	t.Parallel()
 	s := &Schema{
 		Dialect: velox.MySQL,
 		Tables: []Table{
@@ -102,6 +105,7 @@ func TestSnapshotSorted(t *testing.T) {
 }
 
 func TestSnapshotOmitsPos(t *testing.T) {
+	t.Parallel()
 	b, err := full().MarshalJSON()
 	if err != nil {
 		t.Fatal(err)
@@ -124,6 +128,7 @@ func TestSnapshotOmitsPos(t *testing.T) {
 }
 
 func TestSnapshotSortsOnRead(t *testing.T) {
+	t.Parallel()
 	var s Schema
 	in := `{"version":1,"dialect":"postgres","tables":[{"name":"b"},{"name":"a"}],"enums":[{"name":"y","values":["1"]},{"name":"x","values":["2"]}]}`
 	if err := s.UnmarshalJSON([]byte(in)); err != nil {
@@ -135,6 +140,7 @@ func TestSnapshotSortsOnRead(t *testing.T) {
 }
 
 func TestSnapshotRefusesVersion(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ in, want string }{
 		{`{"version":2,"dialect":"postgres"}`, "migrate: schema.json is version 2; this velox reads version 1"},
 		{`{"version":0,"dialect":"postgres"}`, "migrate: schema.json is version 0; this velox reads version 1"},
@@ -159,6 +165,7 @@ func TestSnapshotRefusesVersion(t *testing.T) {
 }
 
 func TestSnapshotRefusesDialect(t *testing.T) {
+	t.Parallel()
 	for _, d := range []velox.Dialect{0, 4, 255} {
 		b, err := (&Schema{Dialect: d}).MarshalJSON()
 		e, ok := err.(*Error)
@@ -189,6 +196,7 @@ func orderSchema() *Schema {
 }
 
 func TestOrderedListsKeepTheirOrder(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name string
 		rev  func(*Schema)
@@ -221,6 +229,7 @@ func TestOrderedListsKeepTheirOrder(t *testing.T) {
 }
 
 func TestSnapshotMarshalsValues(t *testing.T) {
+	t.Parallel()
 	s := full()
 	want, err := s.MarshalJSON()
 	if err != nil {
@@ -254,6 +263,7 @@ func TestSnapshotMarshalsValues(t *testing.T) {
 }
 
 func TestSnapshotRefusesDuplicates(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ json, text string }{
 		{`{"version":1,"dialect":"sqlite","tables":[{"name":"t"},{"name":"t"}]}`, "migrate: t: schema.json has the table twice"},
 		{`{"version":1,"dialect":"mysql","tables":[{"name":"t","columns":[{"name":"a","type":"int"},{"name":"a","type":"int"}]}]}`,
@@ -271,6 +281,7 @@ func TestSnapshotRefusesDuplicates(t *testing.T) {
 // TestSnapshotConstraint: a constraint index is written with "constraint"
 // and read back with it.
 func TestSnapshotConstraint(t *testing.T) {
+	t.Parallel()
 	s := &Schema{Dialect: velox.Postgres, Tables: []Table{{
 		Name:    "users",
 		Columns: []Column{{Name: "email", Type: "text"}},

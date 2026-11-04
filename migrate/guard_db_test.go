@@ -43,6 +43,7 @@ func mysqlGuarded(t *testing.T, opts migrate.PlanOptions) (*sql.DB, fstest.MapFS
 // MODIFY COLUMN, which would lose ON UPDATE and the collation: Up refuses
 // before it changes anything, naming them, and records no version.
 func TestMySQLCommentChangeRefused(t *testing.T) {
+	t.Parallel()
 	db, fsys := mysqlGuarded(t, migrate.PlanOptions{})
 	_, err := migrate.Up(context.Background(), db, fsys)
 	var e *migrate.Error
@@ -69,6 +70,7 @@ func TestMySQLCommentChangeRefused(t *testing.T) {
 // TestMySQLModifyKeptByTheFile: a statement that writes what it would lose
 // runs, and keeps it, with no directive.
 func TestMySQLModifyKeptByTheFile(t *testing.T) {
+	t.Parallel()
 	db, fsys := mysqlGuarded(t, migrate.PlanOptions{})
 	fsys = rewrite(t, fsys, "0002_comment.sql", func(s string) string {
 		s = strings.Replace(s, "DEFAULT CURRENT_TIMESTAMP COMMENT", "DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT", 1)
@@ -88,6 +90,7 @@ func TestMySQLModifyKeptByTheFile(t *testing.T) {
 // TestMySQLModifyAllowed: the directive accepts the loss, for its target, and
 // one for the other column alone leaves this one refused.
 func TestMySQLModifyAllowed(t *testing.T) {
+	t.Parallel()
 	db, fsys := mysqlGuarded(t, allowAll("unmodeled-loss"))
 	if _, err := migrate.Up(context.Background(), db, fsys); err != nil {
 		t.Fatalf("Up: %v\n%s", err, sqlFiles(fsys))
@@ -108,6 +111,7 @@ func TestMySQLModifyAllowed(t *testing.T) {
 // database holds, before a rename the same file makes; a column it creates has
 // nothing to lose.
 func TestMySQLModifyFollowsRenames(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	db, _ := freshDB(t, d)
 	at := migrate.Column{Name: "at", Type: "timestamp", Default: "CURRENT_TIMESTAMP"}
@@ -139,6 +143,7 @@ func nonStrict(t *testing.T, db *sql.DB) {
 // change rows and call it done. Up runs its files strict, so each fails, the
 // rows as they were; no server setting changes.
 func TestMySQLUpIsStrict(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	for _, c := range []struct {
 		name, from, to   string
@@ -188,6 +193,7 @@ func TestMySQLUpIsStrict(t *testing.T) {
 // TestMySQLUpStaysStrict: a file that turns the mode off does so for itself;
 // the next file is strict again.
 func TestMySQLUpStaysStrict(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	db, _ := freshDB(t, d)
 	col := func(typ string) migrate.Column { return migrate.Column{Name: "c", Type: typ, Nullable: true} }
@@ -206,6 +212,7 @@ func TestMySQLUpStaysStrict(t *testing.T) {
 // the guard loses ON UPDATE no longer: another case, a qualified name, a column
 // followed through CHANGE, an executable comment, and what it cannot read at all.
 func TestMySQLGuardReadsEveryShape(t *testing.T) {
+	t.Parallel()
 	d := velox.MySQL
 	setup := func(t *testing.T, q string) (*sql.DB, fstest.MapFS) {
 		t.Helper()
@@ -302,6 +309,7 @@ func retypedKey(t *testing.T, d velox.Dialect, attrs string, opts migrate.PlanOp
 // anything, naming them; the directive accepts it, and a file that writes them
 // keeps them.
 func TestUpForeignKeyAddedAgain(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		d     velox.Dialect
 		attrs string
@@ -388,6 +396,7 @@ func pgCollation(t *testing.T, db *sql.DB) string {
 // Up refuses, naming it; a file that writes it keeps it, and the directive
 // accepts the loss.
 func TestPostgresRetypeKeepsCollation(t *testing.T) {
+	t.Parallel()
 	d := velox.Postgres
 	setup := func(t *testing.T, opts migrate.PlanOptions) (*sql.DB, fstest.MapFS) {
 		t.Helper()

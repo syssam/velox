@@ -40,6 +40,7 @@ func full() *Schema {
 }
 
 func TestTableRefString(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		ref  TableRef
 		want string
@@ -54,6 +55,7 @@ func TestTableRefString(t *testing.T) {
 }
 
 func TestTableRef(t *testing.T) {
+	t.Parallel()
 	tb := Table{Schema: "s", Name: "t"}
 	if got := tb.Ref(); got != (TableRef{Schema: "s", Name: "t"}) {
 		t.Errorf("%+v", got)
@@ -61,6 +63,7 @@ func TestTableRef(t *testing.T) {
 }
 
 func TestSchemaTable(t *testing.T) {
+	t.Parallel()
 	s := full()
 	got, ok := s.Table(TableRef{Schema: "billing", Name: "invoices"})
 	if !ok || got != &s.Tables[0] {
@@ -78,6 +81,7 @@ func TestSchemaTable(t *testing.T) {
 }
 
 func TestEqualIgnoresPosAndColumnOrder(t *testing.T) {
+	t.Parallel()
 	a, b := full(), full()
 	if !a.Equal(b) {
 		t.Fatal("a clone is not Equal")
@@ -98,6 +102,7 @@ func TestEqualIgnoresPosAndColumnOrder(t *testing.T) {
 }
 
 func TestEqualNilAndEmpty(t *testing.T) {
+	t.Parallel()
 	a, b := full(), full()
 	b.Tables[1].Indexes = []Index{}
 	b.Tables[1].Checks = []Check{}
@@ -112,6 +117,7 @@ func TestEqualNilAndEmpty(t *testing.T) {
 }
 
 func TestEqualComparesEverythingElse(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name string
 		edit func(*Schema)
@@ -166,6 +172,7 @@ func TestEqualComparesEverythingElse(t *testing.T) {
 }
 
 func TestEqualIgnoresListOrder(t *testing.T) {
+	t.Parallel()
 	a, b := full(), full()
 	b.Tables[0], b.Tables[1] = b.Tables[1], b.Tables[0]
 	b.Enums[0], b.Enums[1] = b.Enums[1], b.Enums[0]
@@ -176,6 +183,7 @@ func TestEqualIgnoresListOrder(t *testing.T) {
 }
 
 func TestCloneIsDeep(t *testing.T) {
+	t.Parallel()
 	a := full()
 	b := a.clone()
 	if !a.Equal(b) {
@@ -193,6 +201,7 @@ func TestCloneIsDeep(t *testing.T) {
 }
 
 func TestSortOrders(t *testing.T) {
+	t.Parallel()
 	s := &Schema{
 		Tables: []Table{
 			{Schema: "b", Name: "a"}, {Name: "z"}, {Schema: "a", Name: "z"},
@@ -224,6 +233,7 @@ func TestSortOrders(t *testing.T) {
 }
 
 func TestErrorText(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		e    Error
 		want string
@@ -245,6 +255,7 @@ func TestErrorText(t *testing.T) {
 // TestEqualIgnoresConstraint: Equal does not compare Index.Constraint,
 // which only Inspect and Baseline set.
 func TestEqualIgnoresConstraint(t *testing.T) {
+	t.Parallel()
 	a := full()
 	b := a.clone()
 	b.Tables[0].Indexes[1].Constraint = true
@@ -256,6 +267,7 @@ func TestEqualIgnoresConstraint(t *testing.T) {
 // TestSchemaRefusesConstraint: a constraint index outside PostgreSQL, and a
 // non-unique or partial one, are refused.
 func TestSchemaRefusesConstraint(t *testing.T) {
+	t.Parallel()
 	schema := func(d velox.Dialect, ix Index) *Schema {
 		ix.Name, ix.Columns, ix.Constraint = "k", []string{"a"}, true
 		return &Schema{Dialect: d, Tables: []Table{{Name: "t", Columns: []Column{{Name: "a", Type: "text"}}, Indexes: []Index{ix}}}}
@@ -286,6 +298,7 @@ func TestSchemaRefusesConstraint(t *testing.T) {
 // index of to that is the same one, after renames; a redefined, partial or
 // other index is plain; to's own flag is kept.
 func TestCarryConstraints(t *testing.T) {
+	t.Parallel()
 	users := TableRef{Name: "users"}
 	accounts := TableRef{Name: "accounts"}
 	tbl := func(name string, ix ...Index) *Schema {

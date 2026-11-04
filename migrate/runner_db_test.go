@@ -47,6 +47,7 @@ func columnsOf(t *testing.T, db *sql.DB, q string) []string {
 // TestUpPostgres: a plan and a hand file apply, each with the Config's lock
 // timeout, and the history table has its PostgreSQL types.
 func TestUpPostgres(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.Postgres)
 	_, to := models(t, caseNamed("create-tables"), velox.Postgres)
 	fsys := dirOf(t, velox.Postgres, step{to: to}, files("0002_check.sql",
@@ -93,6 +94,7 @@ func TestUpPostgres(t *testing.T) {
 // by cancelling the build, leaving the version dirty and the index invalid.
 // The second Up now waits between tries, in no transaction.
 func TestUpPostgresConcurrentIndexBuild(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, dsn := freshDB(t, velox.Postgres)
 	fsys := dirOf(t, velox.Postgres,
@@ -154,6 +156,7 @@ func waitFor(t *testing.T, db *sql.DB, q string) {
 }
 
 func TestUpPostgresConcurrent(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.Postgres)
 	fsys := dirOf(t, velox.Postgres, files(concurrentFiles...))
 	upTwice(t, fsys, db, openDB(t, "pgx", dsn))
@@ -167,6 +170,7 @@ func TestUpPostgresConcurrent(t *testing.T) {
 }
 
 func TestUpPostgresLockWait(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.Postgres)
 	other, err := db.Conn(ctx)
@@ -200,6 +204,7 @@ func TestUpPostgresLockWait(t *testing.T) {
 // history table, migrate at once. The lock's key held the table's name alone, so the
 // second run waited for the first, and with no lock wait was refused.
 func TestUpPostgresLockPerSchema(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin, dsn := freshDB(t, velox.Postgres)
 	mustExec(t, admin, "CREATE SCHEMA a")
@@ -252,6 +257,7 @@ func TestUpPostgresLockPerSchema(t *testing.T) {
 }
 
 func TestUpPostgresStandardConformingStrings(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.Postgres)
 	var name string
 	if err := db.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
@@ -269,6 +275,7 @@ func TestUpPostgresStandardConformingStrings(t *testing.T) {
 // itself, and the next file runs with the session as Up was given it. The
 // history table is named by the schema open read.
 func TestUpPostgresSearchPath(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.Postgres)
 	fsys := dirOf(t, velox.Postgres, files(
 		"0001_dump.sql", "SELECT pg_catalog.set_config('search_path', '', false);\nCREATE TABLE public.dumped (id integer);\n",
@@ -303,6 +310,7 @@ func withSearchPath(t *testing.T, dsn, value string) string {
 // name cannot be Config.Table's, which NewDir refuses dotted; it comes from
 // the session.
 func TestUpPostgresQuotedSchema(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, c := range []struct{ name, schema string }{
 		{"dotted", "my.schema"},
@@ -365,6 +373,7 @@ func TestUpPostgresQuotedSchema(t *testing.T) {
 // names, holds the history table: Up applies, Status reads the row, and a
 // second Up applies nothing.
 func TestUpMySQLDottedDatabase(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const name = "my.db"
 	base := os.Getenv("VELOX_TEST_MYSQL_ADMIN")
@@ -407,6 +416,7 @@ func TestUpMySQLDottedDatabase(t *testing.T) {
 // TestUpPostgresNoCurrentSchema: a session whose search_path names no
 // schema is refused, not left to fail on the history table.
 func TestUpPostgresNoCurrentSchema(t *testing.T) {
+	t.Parallel()
 	db, dsn := freshDB(t, velox.Postgres)
 	var name string
 	if err := db.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
@@ -422,6 +432,7 @@ func TestUpPostgresNoCurrentSchema(t *testing.T) {
 // TestUpMySQLUse: a file that USEs another database records itself in the
 // database open read, and the next file runs there again.
 func TestUpMySQLUse(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.MySQL)
 	mysqlDatabase(t, "velox_use_other")
 	fsys := dirOf(t, velox.MySQL, files(
@@ -453,6 +464,7 @@ func TestUpMySQLUse(t *testing.T) {
 // TestMySQLLock: another session holding the lock makes Up wait, then give
 // ErrLockWait; released, Up creates the history table with MySQL's types.
 func TestMySQLLock(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.MySQL)
 	other, err := db.Conn(ctx)
@@ -513,6 +525,7 @@ func TestMySQLLock(t *testing.T) {
 // is refused before any file runs; one the check cannot see is reported
 // after the file, and its version is not recorded.
 func TestUpPostgresTransactionControl(t *testing.T) {
+	t.Parallel()
 	for _, lead := range []string{"COMMIT", "ROLLBACK", "ABORT"} {
 		db, _ := freshDB(t, velox.Postgres)
 		fsys := dirOf(t, velox.Postgres, files(
@@ -543,6 +556,7 @@ func TestUpPostgresTransactionControl(t *testing.T) {
 // TestUpPostgresHugeLockTimeout: a Config lock timeout past what
 // lock_timeout takes is cut to it, as a file's directive is.
 func TestUpPostgresHugeLockTimeout(t *testing.T) {
+	t.Parallel()
 	db, _ := freshDB(t, velox.Postgres)
 	fsys := dirOf(t, velox.Postgres, files("0001_x.sql", lockTimeoutIs("2147483647ms")))
 	dir, err := migrate.NewDir(migrate.Config{Dialect: velox.Postgres, LockTimeout: 720 * time.Hour})
@@ -559,6 +573,7 @@ func TestUpPostgresHugeLockTimeout(t *testing.T) {
 // table an extension owns do not count, and a table in any other user
 // schema does, even one named as the history.
 func TestUpBaselineEmptyDatabasePostgres(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	fsys := dirOf(t, velox.Postgres, files(baselineFiles...))
 	run := func(db *sql.DB) (*migrate.Report, error) {
@@ -631,6 +646,7 @@ func baselinedOne(t *testing.T, db *sql.DB) func(*migrate.Report, error) {
 }
 
 func TestUpBaselineEmptyDatabaseMySQL(t *testing.T) {
+	t.Parallel()
 	fsys := dirOf(t, velox.MySQL, files(baselineFiles...))
 	run := func(db *sql.DB) (*migrate.Report, error) {
 		return migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1), migrate.WithTarget(1))
