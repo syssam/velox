@@ -20,13 +20,16 @@ const (
 	tagColOrgID
 )
 
-// Tags holds the typed handles of Tag's columns and relations.
-var Tags = struct {
+// tagHandles is the type of Tags.
+type tagHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Tag, int64]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Tag, int64]
-}{
+}
+
+// Tags holds the typed handles of Tag's columns and relations.
+var Tags = tagHandles{
 	ID:    velox.NumberCol[Tag, int64]{I: tagColID},
 	OrgID: velox.NumberCol[Tag, int64]{I: tagColOrgID},
 }

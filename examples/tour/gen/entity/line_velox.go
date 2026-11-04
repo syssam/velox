@@ -32,8 +32,8 @@ const (
 	lineEdgeInvoice = iota
 )
 
-// Lines holds the typed handles of Line's columns and relations.
-var Lines = struct {
+// lineHandles is the type of Lines.
+type lineHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Line, int64]
 	// OrgID is the column org_id.
@@ -46,7 +46,10 @@ var Lines = struct {
 	AmountCents velox.NumberCol[Line, int64]
 	// Invoice is the edge invoice, to Invoice.
 	Invoice velox.Rel[Line, Invoice]
-}{
+}
+
+// Lines holds the typed handles of Line's columns and relations.
+var Lines = lineHandles{
 	ID:          velox.NumberCol[Line, int64]{I: lineColID},
 	OrgID:       velox.NumberCol[Line, int64]{I: lineColOrgID},
 	InvoiceID:   velox.NumberCol[Line, int64]{I: lineColInvoiceID},

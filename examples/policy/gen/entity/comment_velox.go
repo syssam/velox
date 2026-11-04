@@ -28,8 +28,8 @@ const (
 	commentEdgeDoc = iota
 )
 
-// Comments holds the typed handles of Comment's columns and relations.
-var Comments = struct {
+// commentHandles is the type of Comments.
+type commentHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Comment, int64]
 	// DocID is the column doc_id.
@@ -38,7 +38,10 @@ var Comments = struct {
 	Body velox.StringCol[Comment, string]
 	// Doc is the edge doc, to Doc.
 	Doc velox.Rel[Comment, Doc]
-}{
+}
+
+// Comments holds the typed handles of Comment's columns and relations.
+var Comments = commentHandles{
 	ID:    velox.NumberCol[Comment, int64]{I: commentColID},
 	DocID: velox.NumberCol[Comment, int64]{I: commentColDocID},
 	Body:  velox.StringCol[Comment, string]{I: commentColBody},

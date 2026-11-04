@@ -41,8 +41,8 @@ const (
 	postEdgeAuthor = iota
 )
 
-// Posts holds the typed handles of Post's columns and relations.
-var Posts = struct {
+// postHandles is the type of Posts.
+type postHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Post, int64]
 	// AuthorID is the column author_id.
@@ -61,7 +61,10 @@ var Posts = struct {
 	Views velox.NumberCol[Post, int]
 	// Author is the edge author, to User.
 	Author velox.Rel[Post, User]
-}{
+}
+
+// Posts holds the typed handles of Post's columns and relations.
+var Posts = postHandles{
 	ID:          velox.NumberCol[Post, int64]{I: postColID},
 	AuthorID:    velox.NumberCol[Post, int64]{I: postColAuthorID},
 	Title:       velox.StringCol[Post, string]{I: postColTitle},

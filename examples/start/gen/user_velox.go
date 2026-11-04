@@ -24,8 +24,8 @@ const (
 	userColAge
 )
 
-// Users holds the typed handles of User's columns and relations.
-var Users = struct {
+// userHandles is the type of Users.
+type userHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[User, int64]
 	// Name is the column name.
@@ -34,7 +34,10 @@ var Users = struct {
 	Email velox.StringCol[User, string]
 	// Age is the column age.
 	Age velox.NumberCol[User, int64]
-}{
+}
+
+// Users holds the typed handles of User's columns and relations.
+var Users = userHandles{
 	ID:    velox.NumberCol[User, int64]{I: userColID},
 	Name:  velox.StringCol[User, string]{I: userColName},
 	Email: velox.StringCol[User, string]{I: userColEmail},

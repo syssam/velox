@@ -43,8 +43,8 @@ const (
 	invoiceEdgeItems = iota
 )
 
-// Invoices holds the typed handles of Invoice's columns and relations.
-var Invoices = struct {
+// invoiceHandles is the type of Invoices.
+type invoiceHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Invoice, int64]
 	// CreatedAt is the column created_at.
@@ -67,7 +67,10 @@ var Invoices = struct {
 	Data velox.Col[Invoice, []byte]
 	// Items is the edge items, to Item.
 	Items velox.Rel[Invoice, Item]
-}{
+}
+
+// Invoices holds the typed handles of Invoice's columns and relations.
+var Invoices = invoiceHandles{
 	ID:        velox.NumberCol[Invoice, int64]{I: invoiceColID},
 	CreatedAt: velox.OrderedCol[Invoice, time.Time]{I: invoiceColCreatedAt},
 	UpdatedAt: velox.OrderedCol[Invoice, time.Time]{I: invoiceColUpdatedAt},

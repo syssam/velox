@@ -164,3 +164,11 @@ applied (`GeneratedCodeIsVersion10`):
    (`TestCollectRun`). The sweep removes the per-file re-exports an older
    velox-gen wrote (`TestSplitFacadeIsOneFile`). examples/tracker's gen
    went from 10 files of 139 lines to 1 of 96.
+3. **The handles have a named type.** `var Projects = projectHandles{…}`,
+   where `projectHandles` is an unexported struct type: gopls's hover of
+   `gen.Projects` says `var gen.Projects entity.projectHandles` rather than
+   the whole struct. Each handle's generic type is still written twice, in
+   the type and the literal. At 200 entities, compiling gen took 3.07 s of
+   CPU before and 3.11 s after (15 builds each, at a load average of 25),
+   and its export data shrank 2%. The repocheck compile-cost tests do not
+   include the handles.

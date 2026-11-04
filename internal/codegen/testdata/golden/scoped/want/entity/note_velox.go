@@ -22,15 +22,18 @@ const (
 	noteColTitle
 )
 
-// Notes holds the typed handles of Note's columns and relations.
-var Notes = struct {
+// noteHandles is the type of Notes.
+type noteHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Note, int64]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Note, int64]
 	// Title is the column title.
 	Title velox.StringCol[Note, string]
-}{
+}
+
+// Notes holds the typed handles of Note's columns and relations.
+var Notes = noteHandles{
 	ID:    velox.NumberCol[Note, int64]{I: noteColID},
 	OrgID: velox.NumberCol[Note, int64]{I: noteColOrgID},
 	Title: velox.StringCol[Note, string]{I: noteColTitle},

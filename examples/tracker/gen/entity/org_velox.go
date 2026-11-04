@@ -24,15 +24,18 @@ const (
 	orgColName
 )
 
-// Orgs holds the typed handles of Org's columns and relations.
-var Orgs = struct {
+// orgHandles is the type of Orgs.
+type orgHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Org, int64]
 	// Slug is the column slug.
 	Slug velox.StringCol[Org, string]
 	// Name is the column name.
 	Name velox.StringCol[Org, string]
-}{
+}
+
+// Orgs holds the typed handles of Org's columns and relations.
+var Orgs = orgHandles{
 	ID:   velox.NumberCol[Org, int64]{I: orgColID},
 	Slug: velox.StringCol[Org, string]{I: orgColSlug},
 	Name: velox.StringCol[Org, string]{I: orgColName},

@@ -60,8 +60,8 @@ const (
 	userEdgeSpouse
 )
 
-// Users holds the typed handles of User's columns and relations.
-var Users = struct {
+// userHandles is the type of Users.
+type userHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[User, int64]
 	// CreatedAt is the column created_at.
@@ -98,7 +98,10 @@ var Users = struct {
 	Friends velox.Rel[User, User]
 	// Spouse is the edge spouse, to User.
 	Spouse velox.Rel[User, User]
-}{
+}
+
+// Users holds the typed handles of User's columns and relations.
+var Users = userHandles{
 	ID:           velox.NumberCol[User, int64]{I: userColID},
 	CreatedAt:    velox.OrderedCol[User, time.Time]{I: userColCreatedAt},
 	UpdatedAt:    velox.OrderedCol[User, time.Time]{I: userColUpdatedAt},

@@ -34,8 +34,8 @@ const (
 	projectEdgeIssues = iota
 )
 
-// Projects holds the typed handles of Project's columns and relations.
-var Projects = struct {
+// projectHandles is the type of Projects.
+type projectHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Project, int64]
 	// CreatedAt is the column created_at.
@@ -48,7 +48,10 @@ var Projects = struct {
 	Name velox.StringCol[Project, string]
 	// Issues is the edge issues, to Issue.
 	Issues velox.Rel[Project, Issue]
-}{
+}
+
+// Projects holds the typed handles of Project's columns and relations.
+var Projects = projectHandles{
 	ID:        velox.NumberCol[Project, int64]{I: projectColID},
 	CreatedAt: velox.OrderedCol[Project, time.Time]{I: projectColCreatedAt},
 	UpdatedAt: velox.OrderedCol[Project, time.Time]{I: projectColUpdatedAt},

@@ -20,13 +20,16 @@ const (
 	ownerColName
 )
 
-// Owners holds the typed handles of Owner's columns and relations.
-var Owners = struct {
+// ownerHandles is the type of Owners.
+type ownerHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Owner, int64]
 	// Name is the column name.
 	Name velox.StringCol[Owner, string]
-}{
+}
+
+// Owners holds the typed handles of Owner's columns and relations.
+var Owners = ownerHandles{
 	ID:   velox.NumberCol[Owner, int64]{I: ownerColID},
 	Name: velox.StringCol[Owner, string]{I: ownerColName},
 }

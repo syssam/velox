@@ -40,8 +40,8 @@ const (
 	postEdgeTags
 )
 
-// Posts holds the typed handles of Post's columns and relations.
-var Posts = struct {
+// postHandles is the type of Posts.
+type postHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Post, int64]
 	// OrgID is the column org_id.
@@ -60,7 +60,10 @@ var Posts = struct {
 	Author velox.Rel[Post, User]
 	// Tags is the edge tags, to Tag.
 	Tags velox.Rel[Post, Tag]
-}{
+}
+
+// Posts holds the typed handles of Post's columns and relations.
+var Posts = postHandles{
 	ID:          velox.NumberCol[Post, int64]{I: postColID},
 	OrgID:       velox.NumberCol[Post, int64]{I: postColOrgID},
 	AuthorID:    velox.NumberCol[Post, int64]{I: postColAuthorID},

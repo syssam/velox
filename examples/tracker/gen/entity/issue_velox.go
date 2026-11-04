@@ -52,8 +52,8 @@ const (
 	issueEdgeLabels
 )
 
-// Issues holds the typed handles of Issue's columns and relations.
-var Issues = struct {
+// issueHandles is the type of Issues.
+type issueHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Issue, int64]
 	// CreatedAt is the column created_at.
@@ -84,7 +84,10 @@ var Issues = struct {
 	Comments velox.Rel[Issue, Comment]
 	// Labels is the edge labels, to Label.
 	Labels velox.Rel[Issue, Label]
-}{
+}
+
+// Issues holds the typed handles of Issue's columns and relations.
+var Issues = issueHandles{
 	ID:         velox.NumberCol[Issue, int64]{I: issueColID},
 	CreatedAt:  velox.OrderedCol[Issue, time.Time]{I: issueColCreatedAt},
 	UpdatedAt:  velox.OrderedCol[Issue, time.Time]{I: issueColUpdatedAt},

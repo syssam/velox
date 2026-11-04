@@ -26,8 +26,8 @@ const (
 	taskColDone
 )
 
-// Tasks holds the typed handles of Task's columns and relations.
-var Tasks = struct {
+// taskHandles is the type of Tasks.
+type taskHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Task, int64]
 	// CreatedBy is the column created_by.
@@ -38,7 +38,10 @@ var Tasks = struct {
 	Slug velox.StringCol[Task, string]
 	// Done is the column done.
 	Done velox.Col[Task, bool]
-}{
+}
+
+// Tasks holds the typed handles of Task's columns and relations.
+var Tasks = taskHandles{
 	ID:        velox.NumberCol[Task, int64]{I: taskColID},
 	CreatedBy: velox.StringCol[Task, string]{I: taskColCreatedBy},
 	Title:     velox.StringCol[Task, string]{I: taskColTitle},

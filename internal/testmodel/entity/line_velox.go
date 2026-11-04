@@ -26,15 +26,18 @@ const (
 	lineEdgeSample = iota
 )
 
-// Lines holds the typed handles of Line's columns and relations.
-var Lines = struct {
+// lineHandles is the type of Lines.
+type lineHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Line, int64]
 	// SampleID is the column sample_id.
 	SampleID velox.NumberCol[Line, int64]
 	// Sample is the edge sample, to Sample.
 	Sample velox.Rel[Line, Sample]
-}{
+}
+
+// Lines holds the typed handles of Line's columns and relations.
+var Lines = lineHandles{
 	ID:       velox.NumberCol[Line, int64]{I: lineColID},
 	SampleID: velox.NumberCol[Line, int64]{I: lineColSampleID},
 	Sample:   velox.Rel[Line, Sample]{I: lineEdgeSample},

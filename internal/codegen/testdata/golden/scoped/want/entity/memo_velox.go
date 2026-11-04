@@ -20,13 +20,16 @@ const (
 	memoColOrgID
 )
 
-// Memos holds the typed handles of Memo's columns and relations.
-var Memos = struct {
+// memoHandles is the type of Memos.
+type memoHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Memo, int64]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Memo, int64]
-}{
+}
+
+// Memos holds the typed handles of Memo's columns and relations.
+var Memos = memoHandles{
 	ID:    velox.NumberCol[Memo, int64]{I: memoColID},
 	OrgID: velox.NumberCol[Memo, int64]{I: memoColOrgID},
 }

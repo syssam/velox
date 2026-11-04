@@ -29,8 +29,8 @@ const (
 	labelEdgeIssues = iota
 )
 
-// Labels holds the typed handles of Label's columns and relations.
-var Labels = struct {
+// labelHandles is the type of Labels.
+type labelHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Label, int64]
 	// OrgID is the column org_id.
@@ -39,7 +39,10 @@ var Labels = struct {
 	Name velox.StringCol[Label, string]
 	// Issues is the edge issues, to Issue.
 	Issues velox.Rel[Label, Issue]
-}{
+}
+
+// Labels holds the typed handles of Label's columns and relations.
+var Labels = labelHandles{
 	ID:     velox.NumberCol[Label, int64]{I: labelColID},
 	OrgID:  velox.NumberCol[Label, int64]{I: labelColOrgID},
 	Name:   velox.StringCol[Label, string]{I: labelColName},

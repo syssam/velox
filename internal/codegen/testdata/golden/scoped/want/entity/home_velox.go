@@ -20,13 +20,16 @@ const (
 	homeColRegion
 )
 
-// Homes holds the typed handles of Home's columns and relations.
-var Homes = struct {
+// homeHandles is the type of Homes.
+type homeHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Home, int64]
 	// Region is the column region.
 	Region velox.StringCol[Home, string]
-}{
+}
+
+// Homes holds the typed handles of Home's columns and relations.
+var Homes = homeHandles{
 	ID:     velox.NumberCol[Home, int64]{I: homeColID},
 	Region: velox.StringCol[Home, string]{I: homeColRegion},
 }

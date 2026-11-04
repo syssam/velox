@@ -40,8 +40,8 @@ const (
 	commentEdgeAuthor
 )
 
-// Comments holds the typed handles of Comment's columns and relations.
-var Comments = struct {
+// commentHandles is the type of Comments.
+type commentHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Comment, int64]
 	// CreatedAt is the column created_at.
@@ -60,7 +60,10 @@ var Comments = struct {
 	Issue velox.Rel[Comment, Issue]
 	// Author is the edge author, to User.
 	Author velox.Rel[Comment, User]
-}{
+}
+
+// Comments holds the typed handles of Comment's columns and relations.
+var Comments = commentHandles{
 	ID:        velox.NumberCol[Comment, int64]{I: commentColID},
 	CreatedAt: velox.OrderedCol[Comment, time.Time]{I: commentColCreatedAt},
 	UpdatedAt: velox.OrderedCol[Comment, time.Time]{I: commentColUpdatedAt},

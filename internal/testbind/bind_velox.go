@@ -68,8 +68,8 @@ const (
 	bindColNote
 )
 
-// Binds holds the typed handles of Bind's columns and relations.
-var Binds = struct {
+// bindHandles is the type of Binds.
+type bindHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Bind, int64]
 	// Flag is the column flag.
@@ -118,7 +118,10 @@ var Binds = struct {
 	Doc velox.JSONCol[Bind, bindtype.Doc]
 	// Note is the column note.
 	Note velox.NullStringCol[Bind, string]
-}{
+}
+
+// Binds holds the typed handles of Bind's columns and relations.
+var Binds = bindHandles{
 	ID:        velox.NumberCol[Bind, int64]{I: bindColID},
 	Flag:      velox.Col[Bind, bool]{I: bindColFlag},
 	I8:        velox.NumberCol[Bind, int8]{I: bindColI8},

@@ -20,13 +20,16 @@ const (
 	userFriendColFriendID
 )
 
-// UserFriends holds the typed handles of UserFriend's columns and relations.
-var UserFriends = struct {
+// userFriendHandles is the type of UserFriends.
+type userFriendHandles struct {
 	// UserID is the column user_id.
 	UserID velox.NumberCol[UserFriend, int64]
 	// FriendID is the column friend_id.
 	FriendID velox.NumberCol[UserFriend, int64]
-}{
+}
+
+// UserFriends holds the typed handles of UserFriend's columns and relations.
+var UserFriends = userFriendHandles{
 	UserID:   velox.NumberCol[UserFriend, int64]{I: userFriendColUserID},
 	FriendID: velox.NumberCol[UserFriend, int64]{I: userFriendColFriendID},
 }

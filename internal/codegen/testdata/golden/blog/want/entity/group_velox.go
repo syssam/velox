@@ -28,8 +28,8 @@ const (
 	groupEdgeUsers = iota
 )
 
-// Groups holds the typed handles of Group's columns and relations.
-var Groups = struct {
+// groupHandles is the type of Groups.
+type groupHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Group, int64]
 	// Name is the column name.
@@ -38,7 +38,10 @@ var Groups = struct {
 	Token velox.StringCol[Group, string]
 	// Users is the edge users, to User.
 	Users velox.Rel[Group, User]
-}{
+}
+
+// Groups holds the typed handles of Group's columns and relations.
+var Groups = groupHandles{
 	ID:    velox.NumberCol[Group, int64]{I: groupColID},
 	Name:  velox.StringCol[Group, string]{I: groupColName},
 	Token: velox.StringCol[Group, string]{I: groupColToken},

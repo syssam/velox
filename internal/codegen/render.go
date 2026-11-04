@@ -358,10 +358,12 @@ func entityPositions(w *writer, e *OutEntity) {
 }
 
 // entityHandles writes the variable of the typed handles of e's columns and
-// relations, in the layout of internal/testmodel/ticket_velox.go.
+// relations, in the layout of internal/testmodel/entity/ticket_velox.go: a named
+// type, so that a hover shows its name, and the variable.
 func entityHandles(w *writer, e *OutEntity) {
-	w.p("// %s holds the typed handles of %s's columns and relations.", e.Handles, e.Name)
-	w.p("var %s = struct {", e.Handles)
+	typ := camel(e.Label) + "Handles"
+	w.p("// %s is the type of %s.", typ, e.Handles)
+	w.p("type %s struct {", typ)
 	for _, f := range e.Fields {
 		w.p("// %s is the column %s.", f.GoName, f.Column)
 		w.p("%s %s", f.GoName, f.Handle)
@@ -370,7 +372,10 @@ func entityHandles(w *writer, e *OutEntity) {
 		w.p("// %s is the edge %s, to %s.", r.GoName, r.Name, r.Target)
 		w.p("%s velox.Rel[%s, %s]", r.GoName, e.Name, r.Target)
 	}
-	w.p("}{")
+	w.p("}")
+	w.p("")
+	w.p("// %s holds the typed handles of %s's columns and relations.", e.Handles, e.Name)
+	w.p("var %s = %s{", e.Handles, typ)
 	for i, f := range e.Fields {
 		w.p("%s: %s{I: %s},", f.GoName, f.Handle, colConst(e, i))
 	}

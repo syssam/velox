@@ -24,15 +24,18 @@ const (
 	eventColMaybeAt
 )
 
-// Events holds the typed handles of Event's columns and relations.
-var Events = struct {
+// eventHandles is the type of Events.
+type eventHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Event, int64]
 	// At is the column at.
 	At velox.OrderedCol[Event, kind.Moment]
 	// MaybeAt is the column maybe_at.
 	MaybeAt velox.NullOrderedCol[Event, kind.Moment]
-}{
+}
+
+// Events holds the typed handles of Event's columns and relations.
+var Events = eventHandles{
 	ID:      velox.NumberCol[Event, int64]{I: eventColID},
 	At:      velox.OrderedCol[Event, kind.Moment]{I: eventColAt},
 	MaybeAt: velox.NullOrderedCol[Event, kind.Moment]{I: eventColMaybeAt},
