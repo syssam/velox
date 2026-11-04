@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"errors"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/syssam/velox/internal/codegen/loadjson"
 )
 
 // mixinEntities is a schema package of two entities: Project lists the
@@ -239,6 +242,21 @@ func TestMixinNonZeroValueUsesMixinAt(t *testing.T) {
 			t.Errorf("%+v", e.Policy)
 		}
 	}
+
+	// A schema that implements schema.Interface through a pointer is read
+	// through one.
+	for _, e := range g.Entities {
+		e.Pointer = e.Name == "Project"
+	}
+	o, err = Lower(g, Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/tmp/gen", Mixins: mixins})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range o.Entities {
+		if e.Name == "Project" && (len(e.Policy) != 1 || e.Policy[0].Expr != "schema.MixinAt[sch.A](&sch.Project{}, 0).Policy") {
+			t.Errorf("pointer: %+v", e.Policy)
+		}
+	}
 }
 
 // TestMixinColumnLiteralChecked: a velox.Field call in a mixin's method
@@ -466,6 +484,229 @@ import (
 	for local, want := range map[string]string{"v": "github.com/syssam/velox", "plain": "example.com/plain", "velox": "", "thing": "example.com/go-thing", "none": ""} {
 		if got := importPath(f, local, nil); got != want {
 			t.Errorf("importPath(%s) = %q, want %q", local, got, want)
+		}
+	}
+}
+
+// mixinSourceB is mixinTypes with B declared as decl, velox imported, and
+// behaviour after it.
+func mixinSourceB(decl, behaviour string) string {
+	src := strings.Replace(mixinTypes, "type B struct{ mixin.Schema }", decl, 1)
+	return strings.Replace(src, "\t\"time\"\n", "\t\"context\"\n\t\"time\"\n\n\t\"github.com/syssam/velox\"\n", 1) +
+		"\nvar _ context.Context\nvar _ velox.Dialect\n" + behaviour
+}
+
+// mixinBehaviourB is mixinBehaviour with B declared as decl.
+func mixinBehaviourB(t *testing.T, g *Graph, dir, decl, behaviour string) (map[string][]MixinBound, []string, error) {
+	t.Helper()
+	src := mixinSourceB(decl, behaviour)
+	if err := os.WriteFile(filepath.Join(dir, "schema", "mixins.go"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return MixinBehaviour(dir, "./schema", g, offline())
+}
+
+// TestMixinResultRefused: a behaviour method's result must be a slice of
+// velox's type, not an array, and velox's type, not another package's of
+// that name.
+func TestMixinResultRefused(t *testing.T) {
+	g, dir := mixinModule(t)
+	for _, c := range []struct{ name, src, want string }{
+		{"an array", "func (B) Hooks[E any]() [2]velox.Hook[E] { return [2]velox.Hook[E]{} }\n", "B.Hooks must return []velox.Hook[E]"},
+		{"another package", "func (B) Policy[E any]() context.Policy[E] { return nil }\n", "B.Policy must return velox.Policy[E]"},
+		{"unqualified", "func (B) Policy[E any]() Policy[E] { return nil }\n", "B.Policy must return velox.Policy[E]"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, _, err := mixinBehaviour(t, g, dir, c.src)
+			var fe *FileError
+			if !errors.As(err, &fe) || !strings.Contains(fe.Reason, c.want) {
+				t.Fatalf("got %v, want %s", err, c.want)
+			}
+		})
+	}
+}
+
+// TestMixinBodyReadsOnlyVeloxField: a call in a method's body is a column
+// check only when it is velox.Field with two type arguments and one
+// argument; a method without a body names no column.
+func TestMixinBodyReadsOnlyVeloxField(t *testing.T) {
+	g, dir := mixinModule(t)
+	mixins, warnings, err := mixinBehaviour(t, g, dir, `func pair[A, B any](string) {}
+
+func (B) Policy[E any]() velox.Policy[E] {
+	pair[E, int64]("org_id")
+	_ = velox.Field[E, int64]
+	_ = velox.Desc[E, int64]("org_id")
+	return velox.Policy[E]{}
+}
+
+func (B) Hooks[E any]() []velox.Hook[E]
+`)
+	if err != nil || len(warnings) != 0 {
+		t.Fatal(err, warnings)
+	}
+	ms := mixins["Label"]
+	if len(ms) != 1 || len(ms[0].Methods) != 2 || len(ms[0].Fields) != 0 {
+		t.Fatalf("%+v", ms)
+	}
+}
+
+// TestMixinEmbeddedMethods: a mixin has the behaviour methods of a struct
+// it embeds, by value or through a pointer, and their shape is checked; its
+// own method of a kind hides an embedded one, whose shape is not read; an
+// embedded interface or predeclared type adds nothing.
+func TestMixinEmbeddedMethods(t *testing.T) {
+	g, dir := mixinModule(t)
+	const inner = "type inner struct{}\n\n"
+	t.Run("through a pointer", func(t *testing.T) {
+		mixins, _, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\t*inner\n}", inner+policy("inner"))
+		if ms := mixins["Label"]; err != nil || len(ms) != 1 || len(ms[0].Methods) != 1 || len(ms[0].Fields) != 1 {
+			t.Fatalf("%+v %v", ms, err)
+		}
+	})
+	t.Run("of a wrong shape", func(t *testing.T) {
+		_, _, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\tinner\n}",
+			inner+"func (inner) Policy() velox.Policy[int] { return velox.Policy[int]{} }\n")
+		var fe *FileError
+		if !errors.As(err, &fe) || !strings.Contains(fe.Reason, "inner.Policy is not generic") {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("hidden by the mixin's own", func(t *testing.T) {
+		mixins, _, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\tinner\n}",
+			inner+"func (inner) Policy() velox.Policy[int] { return velox.Policy[int]{} }\n\n"+
+				"func (*B) Policy[E any]() velox.Policy[E] { return velox.Policy[E]{} }\n")
+		if ms := mixins["Label"]; err != nil || len(ms) != 1 || !ms[0].Methods["Policy"] {
+			t.Fatalf("%+v %v", ms, err)
+		}
+	})
+	t.Run("an interface and error", func(t *testing.T) {
+		mixins, _, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\tnamer\n\terror\n}",
+			"type namer interface{ Name() string }\n")
+		if _, ok := mixins["Label"]; err != nil || ok {
+			t.Fatalf("%+v %v", mixins, err)
+		}
+	})
+}
+
+// TestMixinEmbedsOtherPackage: a mixin's struct embedded from another
+// package is read from that package, found by its package name when that
+// is not its path's last element, and its method's shape is checked there.
+func TestMixinEmbedsOtherPackage(t *testing.T) {
+	g, dir := mixinModule(t)
+	if err := os.MkdirAll(filepath.Join(dir, "orgsrc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "orgsrc", "o.go"), []byte("package orgs\n\nimport \"github.com/syssam/velox\"\n\ntype Base struct{}\n\nfunc (Base) Hooks() []velox.Hook[int] { return nil }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := strings.Replace(mixinSourceB("type B struct {\n\tmixin.Schema\n\torgs.Base\n}", ""),
+		"\t\"github.com/syssam/velox\"\n", "\t\"github.com/syssam/velox\"\n\t\"example.com/tmp/orgsrc\"\n", 1)
+	if err := os.WriteFile(filepath.Join(dir, "schema", "mixins.go"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := MixinBehaviour(dir, "./schema", g, offline())
+	var fe *FileError
+	if !errors.As(err, &fe) || filepath.Base(fe.Path) != "o.go" || fe.Line != 7 || !strings.Contains(fe.Reason, "Base.Hooks is not generic") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// TestMixinPackageErrors: a mixin package go list cannot find, a schema
+// package pattern it cannot list and a mixin file only some builds include
+// are errors; a mixin of no named type is passed over.
+func TestMixinPackageErrors(t *testing.T) {
+	t.Run("a missing package", func(t *testing.T) {
+		g, dir := mixinModule(t)
+		for _, e := range g.Entities {
+			if e.Name == "Label" {
+				e.Mixins = append(e.Mixins, loadjson.Mixin{PkgPath: "example.com/tmp/gone", Name: "M"})
+			}
+		}
+		_, _, err := mixinBehaviour(t, g, dir, "")
+		if err == nil || !strings.HasPrefix(err.Error(), "finding mixin package example.com/tmp/gone: ") {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("a bad pattern", func(t *testing.T) {
+		g, dir := mixinModule(t)
+		if _, _, err := MixinBehaviour(dir, "./gone", g, offline()); err == nil || !strings.Contains(err.Error(), "gone") {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("go list fails", func(t *testing.T) {
+		_, err := listDirs(filepath.Join(t.TempDir(), "gone"), []string{"example.com/x"}, offline())
+		if err == nil || !strings.HasPrefix(err.Error(), "go list example.com/x: ") {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("a file of some builds", func(t *testing.T) {
+		g, dir := mixinModule(t)
+		if err := os.WriteFile(filepath.Join(dir, "schema", "linux.go"), []byte("//go:build linux\n\npackage schema\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, _, err := mixinBehaviour(t, g, dir, policy("A"))
+		var fe *FileError
+		if !errors.As(err, &fe) || filepath.Base(fe.Path) != "linux.go" || !strings.Contains(fe.Reason, "go leaves it out of some builds") {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("a mixin of no name", func(t *testing.T) {
+		g, dir := mixinModule(t)
+		for _, e := range g.Entities {
+			if e.Name == "Label" {
+				e.Mixins = append([]loadjson.Mixin{{}}, e.Mixins...)
+			}
+		}
+		mixins, _, err := mixinBehaviour(t, g, dir, policy("B"))
+		if ms := mixins["Label"]; err != nil || len(ms) != 1 || ms[0].Name != "B" || ms[0].Index != 1 {
+			t.Fatalf("%+v %v", ms, err)
+		}
+	})
+}
+
+// TestRecvPtr: only a method with one pointer receiver has a pointer
+// receiver.
+func TestRecvPtr(t *testing.T) {
+	f, err := parser.ParseFile(token.NewFileSet(), "f.go", "package p\n\nfunc F() {}\n\nfunc (T) V() {}\n\nfunc (*T) P() {}\n", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []bool{false, false, true} {
+		if got := recvPtr(f.Decls[i].(*ast.FuncDecl)); got != want {
+			t.Errorf("decl %d: %v", i, got)
+		}
+	}
+}
+
+// TestMixinPackageNames: the generated code names another package's mixin
+// package by its name, once per package, or by its name and a number when
+// the generated package, or another mixin package, has that name; a
+// velox.Field call whose type velox-gen cannot read checks only the name.
+func TestMixinPackageNames(t *testing.T) {
+	g, _ := mixinModule(t)
+	bound := func(path, name string, i int, fields ...MixinField) MixinBound {
+		return MixinBound{Index: i, PkgPath: path, PkgName: guessName(path), Name: name, Methods: map[string]bool{"Policy": false}, Fields: fields}
+	}
+	unread := MixinField{Pos: "m.go:1", Call: `velox.Field[E, func()]("org_id")`, Name: "org_id"}
+	o, err := Lower(g, Config{Package: "gen", Mixins: map[string][]MixinBound{
+		"Project": {bound("example.com/a/gen", "M", 0, unread), bound("example.com/b/gen", "N", 1)},
+		"Label":   {bound("example.com/a/gen", "M", 0)},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range o.Entities {
+		var got []string
+		for _, s := range e.Policy {
+			got = append(got, s.Expr)
+		}
+		want := map[string][]string{"Project": {"gen2.M{}.Policy", "gen3.N{}.Policy"}, "Label": {"gen2.M{}.Policy"}}[e.Name]
+		if !slices.Equal(got, want) {
+			t.Errorf("%s: %v, want %v", e.Name, got, want)
+		}
+		if e.Name == "Project" && (e.ImportAs["example.com/a/gen"] != "gen2" || e.ImportAs["example.com/b/gen"] != "gen3") {
+			t.Errorf("ImportAs %v", e.ImportAs)
 		}
 	}
 }

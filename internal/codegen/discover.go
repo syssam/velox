@@ -435,12 +435,10 @@ func embeddedSchema(t types.Type, schemas []*types.TypeName) *types.TypeName {
 }
 
 // missing says which method of schema.Interface *t lacks, or has with
-// another signature.
+// another signature. classify calls it only for a t whose pointer does not
+// implement schema.Interface, so a method is missing.
 func missing(t types.Type, iface *types.Interface, qual types.Qualifier) string {
 	m, wrong := types.MissingMethod(types.NewPointer(t), iface, true)
-	if m == nil {
-		return "a method is missing"
-	}
 	want := types.TypeString(m.Type(), qual)
 	if wrong {
 		got, _, _ := types.LookupFieldOrMethod(types.NewPointer(t), true, m.Pkg(), m.Name())

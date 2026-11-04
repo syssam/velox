@@ -333,10 +333,7 @@ func recvPtr(fd *ast.FuncDecl) bool {
 // which r reads, or its path's last element.
 func importPath(f *ast.File, local string, r *mixinReader) string {
 	for _, im := range f.Imports {
-		p, err := strconv.Unquote(im.Path.Value)
-		if err != nil {
-			continue
-		}
+		p, _ := strconv.Unquote(im.Path.Value) // the parser checked the literal
 		if im.Name != nil {
 			if im.Name.Name == local {
 				return p
