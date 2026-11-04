@@ -949,13 +949,13 @@ func TestCollectRun(t *testing.T) {
 		"collect_test.go":           e2eCollectRun,
 	}, true)
 	// The schema declares behaviour, so velox-gen splits gen: the plugin
-	// writes into gen/entity, gen re-exports its Go files, and gqlgen binds
-	// through gen's aliases.
+	// writes into gen/entity, gen/velox-graphql_velox.go re-exports its Go
+	// files, and gqlgen binds through gen's aliases.
 	out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema")
 	if err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
-	for _, want := range []string{"gen/entity/velox.graphql\n", "gen/entity/node_gql.go\n", "gen/node_gql.go\n", "gen/entity/runtime_velox.go\n"} {
+	for _, want := range []string{"gen/entity/velox.graphql\n", "gen/entity/node_gql.go\n", "gen/velox-graphql_velox.go\n", "gen/entity/runtime_velox.go\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("velox-gen wrote no %s", want)
 		}

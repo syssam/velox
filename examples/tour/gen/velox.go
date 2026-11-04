@@ -23,12 +23,32 @@ func init() {
 	})
 }
 
-// InvoiceStatus is an enum of the model.
-type InvoiceStatus = entity.InvoiceStatus
+type (
+	// Invoice is the entity of schema Invoice.
+	Invoice = entity.Invoice
+
+	// Line is the entity of schema Line.
+	Line = entity.Line
+
+	// InvoiceStatus is an enum of the model.
+	InvoiceStatus = entity.InvoiceStatus
+)
 
 // The values of InvoiceStatus.
 const (
 	InvoiceStatusDraft = entity.InvoiceStatusDraft
 	InvoiceStatusSent  = entity.InvoiceStatusSent
 	InvoiceStatusPaid  = entity.InvoiceStatusPaid
+)
+
+var (
+	// Invoices holds the typed handles of Invoice's columns and relations.
+	Invoices = entity.Invoices
+
+	// Lines holds the typed handles of Line's columns and relations.
+	Lines = entity.Lines
+
+	// OrgKey is the "org" scope: a request carries its value with OrgKey.With(ctx, v),
+	// and a statement on an entity scoped by it, without one, fails with scope.ErrNoScope.
+	OrgKey = entity.OrgKey
 )

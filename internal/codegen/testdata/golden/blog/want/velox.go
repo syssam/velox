@@ -28,8 +28,31 @@ func init() {
 	})
 }
 
-// PostStatus is an enum of the model.
-type PostStatus = entity.PostStatus
+type (
+	// Category is the entity of schema Category.
+	Category = entity.Category
+
+	// Group is the entity of schema Group.
+	Group = entity.Group
+
+	// Post is the entity of schema Post.
+	Post = entity.Post
+
+	// User is a person who writes posts.
+	User = entity.User
+
+	// UserFriend is the join entity of table user_friends.
+	UserFriend = entity.UserFriend
+
+	// UserGroup is the join entity of table user_groups.
+	UserGroup = entity.UserGroup
+
+	// PostStatus is an enum of the model.
+	PostStatus = entity.PostStatus
+
+	// UserRole is an enum of the model.
+	UserRole = entity.UserRole
+)
 
 // The values of PostStatus.
 const (
@@ -37,12 +60,29 @@ const (
 	PostStatusPublished = entity.PostStatusPublished
 )
 
-// UserRole is an enum of the model.
-type UserRole = entity.UserRole
-
 // The values of UserRole.
 const (
 	UserRoleAdmin  = entity.UserRoleAdmin
 	UserRoleEditor = entity.UserRoleEditor
 	UserRoleViewer = entity.UserRoleViewer
+)
+
+var (
+	// Categories holds the typed handles of Category's columns and relations.
+	Categories = entity.Categories
+
+	// Groups holds the typed handles of Group's columns and relations.
+	Groups = entity.Groups
+
+	// Posts holds the typed handles of Post's columns and relations.
+	Posts = entity.Posts
+
+	// Users holds the typed handles of User's columns and relations.
+	Users = entity.Users
+
+	// UserFriends holds the typed handles of UserFriend's columns and relations.
+	UserFriends = entity.UserFriends
+
+	// UserGroups holds the typed handles of UserGroup's columns and relations.
+	UserGroups = entity.UserGroups
 )

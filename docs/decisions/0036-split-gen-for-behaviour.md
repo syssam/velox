@@ -27,7 +27,8 @@ and each new command. `gen/runtime` held a struct with three fields per entity
   same name in `gen` that re-exports its exported names: a type is an alias (a generic type a generic alias), a const or var is
   `X = entity.X`, a function is a wrapper that passes its parameters and type
   parameters on. A function whose signature names an unexported type is a var
-  instead; a generic one is refused, since it cannot be re-exported.
+  instead; a generic one is refused, since it cannot be re-exported. (The
+  second Review, point 2, puts every re-export in `gen/velox.go`.)
   `entity/entity.go` is re-exported into `gen/velox.go`, which also holds the
   `init`: `entity.SetVeloxRuntime(entity.VeloxRuntime{Doc: &sch.Doc{}, ...})`.
   A program imports gen, as it would without behaviour, and links the schema
@@ -46,7 +47,7 @@ and each new command. `gen/runtime` held a struct with three fields per entity
   links the schema, in the program or test". The failure is not kept: an
   entity touched before gen's `init` runs, from a package-level var or an
   `init` of the schema or a helper, which Go initializes first, fails then
-  and works once gen has bound the schema. The panic is a `velox.NotLinked`,
+  and works once gen has bound the schema. The panic is a `velox.NotLinkedError`,
   and MetaOnce does not keep a build that panics with one (second Review,
   point 1).
 - **The schema may not import gen.** velox-gen refuses a schema package that
@@ -64,7 +65,8 @@ and each new command. `gen/runtime` held a struct with three fields per entity
 - **Plugins write into gen/entity.** In split mode velox-gen gives a plugin
   `out_package` `entity` and `out_path` `…/gen/entity`, so velox-graphql's Go
   files sit beside the entities whose methods they declare. velox-gen
-  re-exports each Go file the plugin writes directly in `gen/entity`.
+  re-exports each Go file the plugin writes directly in `gen/entity` (in
+  one file per plugin since the second Review, point 2).
   velox-graphql's `velox.graphql` moves to `gen/entity`; `gen/**/*.graphql` in
   gqlgen.yml finds it in either layout, and gqlgen's autobind of gen binds
   through the aliases.
@@ -146,9 +148,19 @@ hand. The rulings, all applied (`GeneratedCodeIsVersion9`):
 applied (`GeneratedCodeIsVersion10`):
 
 1. **The not-linked failure is the runtime's.** `veloxRuntime()` panics
-   with `velox.NotLinked`, a string type. `engine.BuildDescriptor` reports
+   with `velox.NotLinkedError`, a string type. `engine.BuildDescriptor` reports
    such a panic, and `MetaOnce.Load` returns its error Meta without keeping
    it, so the next use builds again (`TestMetaOnceRetriesNotLinked`). Any
    other failure is kept, as before. VeloxMeta is the one line it is in
    plain mode, `return projectMeta.Load(projectDescriptor)`. The closed e2e
    and `TestEntityUsedBeforeGenInit` still pass.
+2. **gen is one file.** In split mode gen holds `velox.go` alone: the
+   package comment, the init, and the re-exports of every file velox-gen
+   writes in gen/entity, as one `type (…)`, one `const (…)` and one
+   `var (…)` declaration in the order of the files. A plugin's Go files in
+   gen/entity are re-exported the same way in one file per plugin,
+   `<plugin>_velox.go`: velox-graphql's is `velox-graphql_velox.go`.
+   gqlgen's autobind of gen binds through the aliases wherever they are
+   (`TestCollectRun`). The sweep removes the per-file re-exports an older
+   velox-gen wrote (`TestSplitFacadeIsOneFile`). examples/tracker's gen
+   went from 10 files of 139 lines to 1 of 96.

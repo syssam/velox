@@ -18,3 +18,43 @@ func init() {
 		TicketHooks:   sch.Ticket{}.Hooks,
 	})
 }
+
+type (
+	// Event is the entity of schema Event.
+	Event = entity.Event
+
+	// Invoice is the entity of schema Invoice.
+	Invoice = entity.Invoice
+
+	// Item is the entity of schema Item.
+	Item = entity.Item
+
+	// Line is the entity of schema Line.
+	Line = entity.Line
+
+	// Sample is the entity of schema Sample.
+	Sample = entity.Sample
+
+	// Ticket is the entity of schema Ticket.
+	Ticket = entity.Ticket
+)
+
+var (
+	// Events holds the typed handles of Event's columns and relations.
+	Events = entity.Events
+
+	// Invoices holds the typed handles of Invoice's columns and relations.
+	Invoices = entity.Invoices
+
+	// Items holds the typed handles of Item's columns and relations.
+	Items = entity.Items
+
+	// Lines holds the typed handles of Line's columns and relations.
+	Lines = entity.Lines
+
+	// Samples holds the typed handles of Sample's columns and relations.
+	Samples = entity.Samples
+
+	// Tickets holds the typed handles of Ticket's columns and relations.
+	Tickets = entity.Tickets
+)

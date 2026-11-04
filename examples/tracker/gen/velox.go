@@ -23,8 +23,37 @@ func init() {
 	})
 }
 
-// IssueStatus is an enum of the model.
-type IssueStatus = entity.IssueStatus
+type (
+	// Comment is the entity of schema Comment.
+	Comment = entity.Comment
+
+	// Issue is the entity of schema Issue.
+	Issue = entity.Issue
+
+	// Label is the entity of schema Label.
+	Label = entity.Label
+
+	// Org is the entity of schema Org.
+	Org = entity.Org
+
+	// Project is the entity of schema Project.
+	Project = entity.Project
+
+	// Session is the entity of schema Session.
+	Session = entity.Session
+
+	// User is the entity of schema User.
+	User = entity.User
+
+	// IssueLabel is the join entity of table issue_labels.
+	IssueLabel = entity.IssueLabel
+
+	// IssueStatus is an enum of the model.
+	IssueStatus = entity.IssueStatus
+
+	// UserRole is an enum of the model.
+	UserRole = entity.UserRole
+)
 
 // The values of IssueStatus.
 const (
@@ -32,11 +61,38 @@ const (
 	IssueStatusClosed = entity.IssueStatusClosed
 )
 
-// UserRole is an enum of the model.
-type UserRole = entity.UserRole
-
 // The values of UserRole.
 const (
 	UserRoleAdmin  = entity.UserRoleAdmin
 	UserRoleMember = entity.UserRoleMember
+)
+
+var (
+	// Comments holds the typed handles of Comment's columns and relations.
+	Comments = entity.Comments
+
+	// Issues holds the typed handles of Issue's columns and relations.
+	Issues = entity.Issues
+
+	// Labels holds the typed handles of Label's columns and relations.
+	Labels = entity.Labels
+
+	// Orgs holds the typed handles of Org's columns and relations.
+	Orgs = entity.Orgs
+
+	// Projects holds the typed handles of Project's columns and relations.
+	Projects = entity.Projects
+
+	// Sessions holds the typed handles of Session's columns and relations.
+	Sessions = entity.Sessions
+
+	// Users holds the typed handles of User's columns and relations.
+	Users = entity.Users
+
+	// IssueLabels holds the typed handles of IssueLabel's columns and relations.
+	IssueLabels = entity.IssueLabels
+
+	// OrgKey is the "org" scope: a request carries its value with OrgKey.With(ctx, v),
+	// and a statement on an entity scoped by it, without one, fails with scope.ErrNoScope.
+	OrgKey = entity.OrgKey
 )

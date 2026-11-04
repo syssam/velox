@@ -8,6 +8,7 @@ import (
 	"go/printer"
 	"go/token"
 	"go/types"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -15,23 +16,29 @@ import (
 // In split mode the generated package re-exports every exported name of the
 // Go files of package entity that velox-gen and its plugins write:
 //
-//   - a type is an alias, type T = entity.T, and its methods come with it; a
-//     generic type is a generic alias, type T[P any] = entity.T[P];
-//   - a const is const C = entity.C, which keeps its type;
-//   - a var is var V = entity.V, a copy made when the program starts:
+//   - a type is an alias, T = entity.T, and its methods come with it; a
+//     generic type is a generic alias, T[P any] = entity.T[P];
+//   - a const is C = entity.C, which keeps its type;
+//   - a var is V = entity.V, a copy made when the program starts:
 //     velox-gen's and velox-graphql's variables do not change after it;
 //   - a function is a function that calls entity's, with its signature; a
 //     generic one passes its type parameters on. A function whose signature
 //     names an unexported type is var F = entity.F instead, as no function
 //     of gen can name that type.
 //
-// The re-exports keep the doc comments of what they re-export.
+// The re-exports of many files go in one: velox-gen's in velox.go, each
+// plugin's in <plugin>_velox.go. Its types are one type declaration, its
+// consts one const declaration and its vars one var declaration, in the
+// order of the files; a declaration whose doc comment documents a group,
+// such as an enum's values, stays a declaration of its own, after them.
+// The functions follow. The re-exports keep the doc comments of what they
+// re-export.
 
-// Reexport returns the file of package pkg that re-exports the exported
-// names of src, a Go file of package entity at entityPath, under the same
-// name; ok is false when src exports nothing.
-func Reexport(name string, src []byte, pkg, entityPath string) (f File, ok bool, err error) {
-	imports, decls, names, err := reexports(name, src)
+// Reexport returns the file name of package pkg that re-exports the exported
+// names of srcs, Go files of package entity at entityPath; ok is false when
+// they export nothing.
+func Reexport(name string, srcs []File, pkg, entityPath string) (f File, ok bool, err error) {
+	imports, decls, names, err := reexports(srcs)
 	if err != nil || len(names) == 0 {
 		return File{}, false, err
 	}
@@ -53,72 +60,172 @@ func Reexport(name string, src []byte, pkg, entityPath string) (f File, ok bool,
 // src: the names a file of the user's in the generated package must not
 // declare.
 func ReexportedNames(name string, src []byte) ([]string, error) {
-	_, _, names, err := reexports(name, src)
+	_, _, names, err := reexports([]File{{Name: name, Data: src}})
 	return names, err
 }
 
 // reexports returns the declarations that re-export the exported names of
-// src, each after a blank line, the imports they need by name, and the
+// srcs, each after a blank line, the imports they need by name, and the
 // names.
-func reexports(name string, src []byte) (imports map[string]string, decls string, names []string, err error) {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, name, src, parser.ParseComments|parser.SkipObjectResolution)
-	if err != nil {
-		return nil, "", nil, err
-	}
-	r := &reexporter{fset: fset, file: f, imports: map[string]string{}}
-	for _, d := range f.Decls {
-		switch d := d.(type) {
-		case *ast.GenDecl:
-			switch d.Tok {
-			case token.TYPE:
-				for _, sp := range d.Specs {
-					r.typeSpec(d, sp.(*ast.TypeSpec))
+func reexports(srcs []File) (imports map[string]string, decls string, names []string, err error) {
+	r := &reexporter{imports: map[string]string{}}
+	for _, src := range srcs {
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, src.Name, src.Data, parser.ParseComments|parser.SkipObjectResolution)
+		if err != nil {
+			return nil, "", nil, err
+		}
+		r.fset, r.file = fset, f
+		for _, d := range f.Decls {
+			switch d := d.(type) {
+			case *ast.GenDecl:
+				switch d.Tok {
+				case token.TYPE:
+					for _, sp := range d.Specs {
+						r.typeSpec(d, sp.(*ast.TypeSpec))
+					}
+				case token.CONST:
+					r.values(d, &r.consts)
+				case token.VAR:
+					r.values(d, &r.vars)
 				}
-			case token.CONST, token.VAR:
-				r.values(d)
+			case *ast.FuncDecl:
+				if d.Recv == nil && d.Name.IsExported() {
+					r.function(d)
+				}
 			}
-		case *ast.FuncDecl:
-			if d.Recv == nil && d.Name.IsExported() {
-				r.function(d)
+		}
+		if r.err != nil {
+			return nil, "", nil, r.err
+		}
+	}
+	if _, ok := r.imports[EntityDir]; ok {
+		return nil, "", nil, fmt.Errorf("an import named %s, which the re-exports use for package %[1]s", EntityDir)
+	}
+	return r.imports, r.decls(), r.names, nil
+}
+
+// reSpec is one spec of a re-export, X = entity.X, with its doc comment.
+type reSpec struct {
+	doc  []string
+	line string
+}
+
+// reBlock is the re-export of one declaration: its doc comment and specs.
+type reBlock struct {
+	doc   []string
+	specs []reSpec
+}
+
+// reexporter collects the re-exports of files of package entity.
+type reexporter struct {
+	fset                *token.FileSet
+	file                *ast.File // the file being read
+	types, consts, vars []reBlock
+	funcs               strings.Builder
+	imports             map[string]string // the imports the re-exports need, by name
+	names               []string
+	err                 error
+}
+
+// p writes a line of the functions.
+func (r *reexporter) p(format string, args ...any) {
+	fmt.Fprintf(&r.funcs, format, args...)
+	r.funcs.WriteByte('\n')
+}
+
+// decls writes the type, const and var declarations, then the functions.
+func (r *reexporter) decls() string {
+	var b strings.Builder
+	line := func(s string) {
+		b.WriteString(s)
+		b.WriteByte('\n')
+	}
+	// decl writes one declaration of the blocks.
+	decl := func(kw string, blocks []reBlock) {
+		n := 0
+		for _, bl := range blocks {
+			n += len(bl.specs)
+		}
+		if n == 0 {
+			return
+		}
+		line("")
+		if n == 1 {
+			bl := blocks[0]
+			for _, l := range slices.Concat(bl.doc, bl.specs[0].doc) {
+				line(l)
+			}
+			line(kw + " " + bl.specs[0].line)
+			return
+		}
+		if len(blocks) == 1 {
+			for _, l := range blocks[0].doc {
+				line(l)
+			}
+		}
+		line(kw + " (")
+		for i, bl := range blocks {
+			if i > 0 {
+				line("")
+			}
+			for _, s := range bl.specs {
+				for _, l := range s.doc {
+					line(l)
+				}
+				line(s.line)
+			}
+		}
+		line(")")
+	}
+	// A block with a doc comment of its own, such as an enum's values, is
+	// its own declaration, which the comment documents; the others are one.
+	for _, g := range []struct {
+		kw     string
+		blocks []reBlock
+	}{{"type", r.types}, {"const", r.consts}, {"var", r.vars}} {
+		var grouped []reBlock
+		for _, bl := range g.blocks {
+			if len(bl.doc) == 0 {
+				grouped = append(grouped, bl)
+			}
+		}
+		decl(g.kw, grouped)
+		for _, bl := range g.blocks {
+			if len(bl.doc) > 0 {
+				decl(g.kw, []reBlock{bl})
 			}
 		}
 	}
-	if r.err != nil {
-		return nil, "", nil, r.err
-	}
-	if _, ok := r.imports[EntityDir]; ok {
-		return nil, "", nil, fmt.Errorf("%s: an import named %s, which the re-exports use for package %[2]s", name, EntityDir)
-	}
-	return r.imports, r.out.String(), r.names, nil
+	b.WriteString(r.funcs.String())
+	return b.String()
 }
 
-// reexporter collects the re-exports of one file.
-type reexporter struct {
-	fset    *token.FileSet
-	file    *ast.File
-	out     strings.Builder
-	imports map[string]string // the imports the re-exports need, by name
-	names   []string
-	err     error
-}
-
-func (r *reexporter) p(format string, args ...any) {
-	fmt.Fprintf(&r.out, format, args...)
-	r.out.WriteByte('\n')
-}
-
-// doc writes the doc comment cg, or else "// <name> is entity.<name>.".
-func (r *reexporter) doc(cg *ast.CommentGroup, name string) {
+// docLines returns the doc comment cg as lines, or else
+// "// <name> is entity.<name>.", or nothing when name is "".
+func docLines(cg *ast.CommentGroup, name string) []string {
 	text := ""
 	if cg != nil {
 		text = cg.Text()
 	}
 	if strings.TrimSpace(text) == "" {
+		if name == "" {
+			return nil
+		}
 		text = name + " is " + EntityDir + "." + name + "."
 	}
+	var ls []string
 	for l := range strings.SplitSeq(strings.TrimRight(text, "\n"), "\n") {
-		r.p("//%s", strings.TrimRight(" "+l, " "))
+		ls = append(ls, "//"+strings.TrimRight(" "+l, " "))
+	}
+	return ls
+}
+
+// doc writes the doc comment cg, or else "// <name> is entity.<name>.",
+// before a function.
+func (r *reexporter) doc(cg *ast.CommentGroup, name string) {
+	for _, l := range docLines(cg, name) {
+		r.p("%s", l)
 	}
 }
 
@@ -142,7 +249,8 @@ func (r *reexporter) node(n ast.Node) string {
 	return b.String()
 }
 
-// qualifier records the import of the file that name stands for.
+// qualifier records the import of the file that name stands for. Two files
+// that import different packages by one name are an error.
 func (r *reexporter) qualifier(name string) {
 	for _, im := range r.file.Imports {
 		p, err := strconv.Unquote(im.Path.Value)
@@ -150,6 +258,9 @@ func (r *reexporter) qualifier(name string) {
 			continue
 		}
 		if (im.Name != nil && im.Name.Name == name) || (im.Name == nil && guessName(p) == name) {
+			if old, ok := r.imports[name]; ok && old != p && r.err == nil {
+				r.err = fmt.Errorf("%s: imports %s as %s, which another file re-exported here imports for %s", r.fset.Position(r.file.Pos()).Filename, p, name, old)
+			}
 			r.imports[name] = p
 			return
 		}
@@ -187,13 +298,12 @@ func (r *reexporter) typeSpec(d *ast.GenDecl, ts *ast.TypeSpec) {
 		doc = d.Doc
 	}
 	params, args := r.typeParams(ts.TypeParams)
-	r.p("")
-	r.doc(doc, n)
-	r.p("type %s%s = %s.%[1]s%[4]s", n, params, EntityDir, args)
+	r.types = append(r.types, reBlock{specs: []reSpec{{docLines(doc, n), fmt.Sprintf("%s%s = %s.%[1]s%[4]s", n, params, EntityDir, args)}}})
 	r.names = append(r.names, n)
 }
 
-func (r *reexporter) values(d *ast.GenDecl) {
+// values adds the re-export of the const or var declaration d to *to.
+func (r *reexporter) values(d *ast.GenDecl, to *[]reBlock) {
 	type spec struct {
 		doc   *ast.CommentGroup
 		names []string
@@ -216,28 +326,25 @@ func (r *reexporter) values(d *ast.GenDecl) {
 	if count == 0 {
 		return
 	}
-	kw := d.Tok.String()
-	r.p("")
+	reexp := func(n string) string { return fmt.Sprintf("%s = %s.%[1]s", n, EntityDir) }
 	if count == 1 && specs[0].doc == nil {
-		r.doc(d.Doc, specs[0].names[0])
-		r.p("%s %s = %s.%[2]s", kw, specs[0].names[0], EntityDir)
-		r.names = append(r.names, specs[0].names[0])
+		n := specs[0].names[0]
+		*to = append(*to, reBlock{specs: []reSpec{{docLines(d.Doc, n), reexp(n)}}})
+		r.names = append(r.names, n)
 		return
 	}
-	if d.Doc != nil {
-		r.doc(d.Doc, "")
-	}
-	r.p("%s (", kw)
+	b := reBlock{doc: docLines(d.Doc, "")}
 	for _, s := range specs {
-		if s.doc != nil {
-			r.doc(s.doc, "")
-		}
-		for _, n := range s.names {
-			r.p("%s = %s.%[1]s", n, EntityDir)
+		for i, n := range s.names {
+			rs := reSpec{line: reexp(n)}
+			if i == 0 {
+				rs.doc = docLines(s.doc, "")
+			}
+			b.specs = append(b.specs, rs)
 			r.names = append(r.names, n)
 		}
 	}
-	r.p(")")
+	*to = append(*to, b)
 }
 
 func (r *reexporter) function(d *ast.FuncDecl) {

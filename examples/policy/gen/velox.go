@@ -21,3 +21,19 @@ func init() {
 		DocPolicy:     sch.Doc{}.Policy,
 	})
 }
+
+type (
+	// Comment is the entity of schema Comment.
+	Comment = entity.Comment
+
+	// Doc is the entity of schema Doc.
+	Doc = entity.Doc
+)
+
+var (
+	// Comments holds the typed handles of Comment's columns and relations.
+	Comments = entity.Comments
+
+	// Docs holds the typed handles of Doc's columns and relations.
+	Docs = entity.Docs
+)

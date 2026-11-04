@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -222,9 +223,9 @@ type output struct {
 // buildOutput generates the files of the package at out, named pkg, for the
 // schema package at pattern, and runs the plugins on the model. In split
 // mode the plugins write below out/entity, the package that holds the
-// entities, and each of their Go files there gets its re-export in out. The
-// files of the user's in out, and in split mode in out/entity, are checked
-// against what velox-gen writes. Nothing is written.
+// entities, and their Go files there are re-exported in out, one file per
+// plugin. The files of the user's in out, and in split mode in out/entity,
+// are checked against what velox-gen writes. Nothing is written.
 func buildOutput(f genFlags, gm *genModel, pattern, dir, out, pkg string, env []string, stderr io.Writer) (*output, error) {
 	cfg, err := genConfig(gm, dir, pattern, out, pkg, env)
 	if err != nil {
@@ -269,20 +270,26 @@ func buildOutput(f genFlags, gm *genModel, pattern, dir, out, pkg string, env []
 	if !cfg.Split {
 		return o, nil
 	}
+	// Each plugin's Go files directly in entityDir are re-exported in one
+	// file of out, <plugin>_velox.go, in the order of their paths.
+	byPlugin := map[string][]codegen.File{}
 	for _, p := range slices.Sorted(maps.Keys(o.plugin)) {
 		if filepath.Ext(p) != ".go" || filepath.Dir(p) != entityDir {
 			continue
 		}
-		rf, ok, err := codegen.Reexport(filepath.Base(p), o.plugin[p], pkg, ppath)
+		byPlugin[o.owners[p]] = append(byPlugin[o.owners[p]], codegen.File{Name: relPath(dir, p), Data: o.plugin[p]})
+	}
+	for _, name := range slices.Sorted(maps.Keys(byPlugin)) {
+		rf, ok, err := codegen.Reexport(pluginReexportFile(name), byPlugin[name], pkg, ppath)
 		if err != nil {
-			return nil, fmt.Errorf("plugin %s: %w", o.owners[p], err)
+			return nil, fmt.Errorf("plugin %s: %w", name, err)
 		}
 		if !ok {
 			continue
 		}
 		q := filepath.Join(out, rf.Name)
 		if _, dup := o.want[q]; dup {
-			return nil, fmt.Errorf("plugin %s: %s, whose re-export is %s, collides with a file velox-gen writes", o.owners[p], relPath(dir, p), relPath(dir, q))
+			return nil, fmt.Errorf("plugin %s: its re-exports, %s, collide with a file velox-gen or another plugin writes", name, relPath(dir, q))
 		}
 		o.want[q] = rf.Data
 	}
@@ -306,6 +313,20 @@ func buildOutput(f genFlags, gm *genModel, pattern, dir, out, pkg string, env []
 		return nil, err
 	}
 	return o, nil
+}
+
+// pluginReexportFile is the name of the file of the generated package that
+// re-exports the Go files the plugin name writes in package entity: the last
+// element of its name, each byte other than a letter, a digit, - and _
+// replaced by _, then _velox.go. velox-graphql's is velox-graphql_velox.go.
+func pluginReexportFile(name string) string {
+	b := []byte(path.Base(name))
+	for i, c := range b {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' && c != '_' {
+			b[i] = '_'
+		}
+	}
+	return string(b) + "_velox.go"
 }
 
 // runGenerate generates the gen package of the schema

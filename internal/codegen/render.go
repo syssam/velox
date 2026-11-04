@@ -36,15 +36,13 @@ func Generate(g *Graph, cfg Config) ([]File, error) {
 //
 // In split mode those files are package entity's, in the directory entity,
 // with entity.go in place of velox.go, and entity/runtime_velox.go holds what
-// the generated package gives entity. The generated package then has a file
-// of the same name that re-exports each of them (see Reexport), velox.go
-// re-exporting entity.go and holding the init that gives entity the schema's
-// values.
+// the generated package gives entity. The generated package then has one
+// file, velox.go, which re-exports all of them (see Reexport) and holds the
+// init that gives entity the schema's values.
 //
 // The files are in the order of o.Entities, then velox.go and scope_velox.go;
-// in split mode each of entity's comes before its re-export, and
-// entity/runtime_velox.go is last. Render does not change o, and the same o
-// gives the same bytes.
+// in split mode entity/runtime_velox.go follows them, and velox.go is last.
+// Render does not change o, and the same o gives the same bytes.
 func Render(o *Out) ([]File, error) {
 	dir, pkgFile := "", "velox.go"
 	if o.Split {
@@ -53,24 +51,14 @@ func Render(o *Out) ([]File, error) {
 		}
 		dir, pkgFile = EntityDir+"/", "entity.go"
 	}
-	entityPath := o.GenPath + "/" + EntityDir
-	files := make([]File, 0, 2*len(o.Entities)+4)
-	// add appends the file name of package entity and, in split mode, its
-	// re-export, as name in the generated package.
+	files := make([]File, 0, len(o.Entities)+4)
+	// add appends the file name of package entity.
 	add := func(name, src string) error {
 		data, err := formatted(dir+name, src)
 		if err != nil {
 			return err
 		}
 		files = append(files, File{Name: dir + name, Data: data})
-		if !o.Split {
-			return nil
-		}
-		f, ok, err := Reexport(name, data, o.Facade, entityPath)
-		if err != nil || !ok {
-			return err
-		}
-		files = append(files, f)
 		return nil
 	}
 	for _, e := range o.Entities {
@@ -78,21 +66,8 @@ func Render(o *Out) ([]File, error) {
 			return nil, err
 		}
 	}
-	pkgData, err := formatted(dir+pkgFile, renderPackage(o))
-	if err != nil {
+	if err := add(pkgFile, renderPackage(o)); err != nil {
 		return nil, err
-	}
-	files = append(files, File{Name: dir + pkgFile, Data: pkgData})
-	if o.Split {
-		imports, decls, _, err := reexports(pkgFile, pkgData)
-		if err != nil {
-			return nil, err
-		}
-		data, err := formatted("velox.go", renderFacade(o, imports, decls))
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, File{Name: "velox.go", Data: data})
 	}
 	if len(o.ScopeKeys) > 0 {
 		if err := add("scope_velox.go", renderScope(o)); err != nil {
@@ -102,11 +77,19 @@ func Render(o *Out) ([]File, error) {
 	if !o.Split {
 		return files, nil
 	}
-	data, err := formatted(dir+"runtime_velox.go", renderRuntimeHolder(o))
+	// Every file so far is re-exported, in its order.
+	imports, decls, _, err := reexports(files)
 	if err != nil {
 		return nil, err
 	}
-	return append(files, File{Name: dir + "runtime_velox.go", Data: data}), nil
+	if err := add("runtime_velox.go", renderRuntimeHolder(o)); err != nil {
+		return nil, err
+	}
+	data, err := formatted("velox.go", renderFacade(o, imports, decls))
+	if err != nil {
+		return nil, err
+	}
+	return append(files, File{Name: "velox.go", Data: data}), nil
 }
 
 func formatted(name, src string) ([]byte, error) {
@@ -278,7 +261,7 @@ func renderEntity(o *Out, e *OutEntity) string {
 	w.p("")
 	w.p("// VeloxMeta is called by velox, not by applications.")
 	// In split mode, before gen binds the schema, the descriptor panics with
-	// velox.NotLinked, which MetaOnce does not keep.
+	// velox.NotLinkedError, which MetaOnce does not keep.
 	w.p("func (*%s) VeloxMeta() *velox.Meta[%[1]s] { return %sMeta.Load(%[2]sDescriptor) }", e.Name, id)
 	w.p("")
 	entityDescriptor(&w, o, e)

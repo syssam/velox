@@ -539,9 +539,20 @@ type Draft mixins.Base
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("split: %d %q", code, errs)
 	}
-	for _, name := range []string{"draft_velox.go", "release_velox.go", filepath.Join("entity", "draft_velox.go"), filepath.Join("entity", "release_velox.go")} {
+	for _, name := range []string{filepath.Join("entity", "draft_velox.go"), filepath.Join("entity", "release_velox.go")} {
 		if _, err := os.Stat(filepath.Join(dir, "gen", name)); err != nil {
 			t.Errorf("split: no gen/%s: %v", name, err)
+		}
+	}
+	// The per-entity files of the plain gen are swept: velox.go re-exports
+	// every entity.
+	if got := strings.Join(generatedFiles(t, dir), " "); got != "velox.go" {
+		t.Errorf("split: gen holds %s, want velox.go", got)
+	}
+	facade, _ := os.ReadFile(filepath.Join(dir, "gen", "velox.go"))
+	for _, want := range []string{"Draft = entity.Draft", "Release = entity.Release"} {
+		if !strings.Contains(string(facade), want) {
+			t.Errorf("split: velox.go lacks %s:\n%s", want, facade)
 		}
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {

@@ -20,3 +20,19 @@ func init() {
 		TaskHooks: sch.Task{}.Hooks,
 	})
 }
+
+type (
+	// Audit is the entity of schema Audit.
+	Audit = entity.Audit
+
+	// Task is the entity of schema Task.
+	Task = entity.Task
+)
+
+var (
+	// Audits holds the typed handles of Audit's columns and relations.
+	Audits = entity.Audits
+
+	// Tasks holds the typed handles of Task's columns and relations.
+	Tasks = entity.Tasks
+)

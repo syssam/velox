@@ -23,3 +23,51 @@ func init() {
 		TaskHooks:  sch.Task{}.Hooks,
 	})
 }
+
+type (
+	// Home is the entity of schema Home.
+	Home = entity.Home
+
+	// Memo is the entity of schema Memo.
+	Memo = entity.Memo
+
+	// Note is the entity of schema Note.
+	Note = entity.Note
+
+	// Owner is the entity of schema Owner.
+	Owner = entity.Owner
+
+	// Tag is the entity of schema Tag.
+	Tag = entity.Tag
+
+	// Task is the entity of schema Task.
+	Task = entity.Task
+)
+
+var (
+	// Homes holds the typed handles of Home's columns and relations.
+	Homes = entity.Homes
+
+	// Memos holds the typed handles of Memo's columns and relations.
+	Memos = entity.Memos
+
+	// Notes holds the typed handles of Note's columns and relations.
+	Notes = entity.Notes
+
+	// Owners holds the typed handles of Owner's columns and relations.
+	Owners = entity.Owners
+
+	// Tags holds the typed handles of Tag's columns and relations.
+	Tags = entity.Tags
+
+	// Tasks holds the typed handles of Task's columns and relations.
+	Tasks = entity.Tasks
+
+	// OrgKey is the "org" scope: a request carries its value with OrgKey.With(ctx, v),
+	// and a statement on an entity scoped by it, without one, fails with scope.ErrNoScope.
+	OrgKey = entity.OrgKey
+
+	// RegionKey is the "region" scope: a request carries its value with RegionKey.With(ctx, v),
+	// and a statement on an entity scoped by it, without one, fails with scope.ErrNoScope.
+	RegionKey = entity.RegionKey
+)
