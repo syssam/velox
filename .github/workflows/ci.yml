@@ -11,10 +11,41 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 # The jobs run at once. Only test needs the databases, and only it runs on both
 # PostgreSQL versions; the others do not depend on the version and run once.
-# scripts/ci-local.sh runs the same commands, in lanes of the same shape.
+# scripts/ci-local.sh runs the same commands, in lanes of the same shape and
+# levels: a job or step without an if is the merge gate's and always runs; one
+# on a push only is --full's; one on a pull request only is the merge gate's
+# form of a --full check; one on a changes output runs on a push, and on a pull
+# request that touches its group (scripts/ci-changes.sh).
 jobs:
-  # gofmt, tidiness, vet, govulncheck and the linters of every module, and
-  # bench/compare's checks.
+  # The groups beyond the ORM's that the run checks: all of them on a push, and
+  # on a pull request those its files touch.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      graphql: ${{ steps.groups.outputs.graphql }}
+      otel: ${{ steps.groups.outputs.otel }}
+      bench: ${{ steps.groups.outputs.bench }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # the pull request's base, which ci-changes.sh compares with
+      - id: groups
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            groups=" $(scripts/ci-changes.sh "$BASE" | tr '\n' ' ')"
+          else
+            groups=" graphql otel bench "
+          fi
+          echo "groups:$groups"
+          for g in graphql otel bench; do
+            case $groups in *" $g "*) v=true ;; *) v=false ;; esac
+            echo "$g=$v" >> "$GITHUB_OUTPUT"
+          done
+  # gofmt, tidiness, vet, govulncheck and the linters of the root and the
+  # examples.
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -42,34 +73,12 @@ jobs:
           go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
           # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
           go run github.com/mgechev/revive@v1.17.0 -config ../scripts/revive.toml -set_exit_status ./*/gen
-      - name: contrib/veloxotel
-        working-directory: contrib/veloxotel
-        run: |
-          go mod tidy -diff
-          test -z "$(gofmt -l . | tee /dev/stderr)"
-          go vet ./...
-          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
-          go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
-      - name: contrib/graphql
-        working-directory: contrib/graphql
-        run: |
-          go mod tidy -diff
-          test -z "$(gofmt -l . | tee /dev/stderr)"
-          go vet ./...
-          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
-          go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
-      - name: bench/compare (the harness's checks; the measurements run only from run.sh)
-        working-directory: bench/compare
-        run: |
-          go mod tidy -diff
-          go vet ./...
-          go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
-          go test -race -short -count=1 ./...
-  # The tests of the four modules, on each PostgreSQL version, with their
-  # coverage profiles, checked against the per-package floors at the end
-  # (scripts/coverage-floors.txt).
+  # The tests, on each PostgreSQL version: the ORM's always, and the groups'
+  # when they run. A push measures coverage and checks it against the
+  # per-package floors at the end (scripts/coverage-floors.txt).
   test:
     name: test (PostgreSQL ${{ matrix.pg }})
+    needs: changes
     strategy:
       fail-fast: false
       matrix:
@@ -123,26 +132,42 @@ jobs:
       - run: |
           go mod download all
           go mod tidy # download all adds to go.sum what tidy leaves out
-      - run: go test -race -count=1 -timeout ${{ matrix.test-timeout }} -coverpkg=./... -coverprofile=cover-root.out ./...
+      - name: root
+        if: github.event_name == 'pull_request'
+        run: go test -race -count=1 -timeout ${{ matrix.test-timeout }} ./...
+      - name: root, with coverage
+        if: github.event_name == 'push'
+        run: go test -race -count=1 -timeout ${{ matrix.test-timeout }} -coverpkg=./... -coverprofile=cover-root.out ./...
       - name: examples
         working-directory: examples
-        run: go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-examples.out" ./...
+        run: go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-examples.out" $(go list ./... | grep -vE '/examples/(graphql|otel)(/|$)')
       - name: contrib/veloxotel
+        if: needs.changes.outputs.otel == 'true'
         working-directory: contrib/veloxotel
         run: go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-veloxotel.out" ./...
+      - name: examples/otel
+        if: needs.changes.outputs.otel == 'true'
+        working-directory: examples
+        run: go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-examples-otel.out" ./otel/...
       # The annotations package, the velox-graphql plugin and the runtime. Its
       # mutation and collection itests (TestMutationsRun, TestCollectRun) run on
       # SQLite, and on PostgreSQL and MySQL under the job's VELOX_TEST_POSTGRES
       # and VELOX_TEST_MYSQL.
       - name: contrib/graphql
+        if: needs.changes.outputs.graphql == 'true'
         working-directory: contrib/graphql
         run: |
           # The collection integration test builds an application offline, with gqlgen as a tool.
           go mod download all
           go mod tidy # download all adds to go.sum what tidy leaves out
           go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-graphql.out" ./...
+      - name: examples/graphql
+        if: needs.changes.outputs.graphql == 'true'
+        working-directory: examples
+        run: go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-examples-graphql.out" ./graphql/...
       - name: coverage floors
-        run: go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-veloxotel.out cover-graphql.out
+        if: github.event_name == 'push'
+        run: go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -162,11 +187,9 @@ jobs:
           go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s ./internal/engine
           go test -run XXX -fuzz '^FuzzDiff$' -fuzztime 10s ./migrate
           go test -run XXX -fuzz '^FuzzColumnScan$' -fuzztime 10s ./internal/conn
-      - name: contrib/graphql fuzz (short)
-        working-directory: contrib/graphql
-        run: go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql
-  # velox-gen's output is current and valid, in the root and in every example,
-  # and the examples' migrations replay.
+  # velox-gen's output is current and valid, in the root and in every example
+  # but examples/graphql (the graphql job's), and the examples' migrations
+  # replay.
   generated:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -189,7 +212,7 @@ jobs:
         run: |
           for d in */schema; do
             x=${d%/schema}
-            [ "$x" = graphql ] && continue # its own lines below, with the plugin
+            [ "$x" = graphql ] && continue # the graphql job's, with the plugin
             go tool velox-gen -check -out "./$x/gen" "./$x/schema"
             go tool velox-gen verify -out "./$x/gen" "./$x/schema"
           done
@@ -207,15 +230,29 @@ jobs:
           rm -rf "$migdb"
           # tracker's PostgreSQL migrations: its tests apply them, under VELOX_TEST_POSTGRES.
           go tool velox-gen migrate diff -check -dir ./tracker/migrations/postgres ./tracker/schema
-          go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
-          go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
-          # gqlgen's output is checked in: regenerate it, and fail on any difference.
-          go -C graphql tool gqlgen generate
-          git diff --exit-code HEAD -- graphql/graph
-          test -z "$(git ls-files --others --exclude-standard -- graphql/graph)"
-  # bench/scale, plain and with GraphQL, and the benchmarks against the
-  # committed baselines. All report-only here.
-  bench:
+  # velox's own build cost, report-only here until a Linux run recalibrates
+  # thresholds.json, which was measured on darwin/arm64 only. A run that fails
+  # still fails the step.
+  scale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      # bench/scale builds offline: it needs the whole module graph, as the
+      # test job does.
+      - run: |
+          go mod download all
+          go mod tidy # download all adds to go.sum what tidy leaves out
+      - name: scale (n=500, report-only)
+        run: scripts/scale-check.sh -n 500 -s 100
+  # contrib/graphql's checks, its fuzz target, examples/graphql's generated
+  # files and gqlgen's output, and bench/scale with GraphQL.
+  graphql:
+    needs: changes
+    if: needs.changes.outputs.graphql == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -223,29 +260,34 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-      # bench/scale builds offline: it needs the whole module graph of the root
-      # and of contrib/graphql, as the test job does.
       - run: |
           go mod download all
           go mod tidy # download all adds to go.sum what tidy leaves out
-      - name: contrib/graphql's module graph
+      - name: contrib/graphql
         working-directory: contrib/graphql
         run: |
+          go mod tidy -diff
           go mod download all
           go mod tidy # download all adds to go.sum what tidy leaves out
-      # Report-only here until a Linux run recalibrates thresholds.json, which was
-      # measured on darwin/arm64 only. A run that fails still fails the step.
-      - name: scale (n=500, report-only)
-        run: scripts/scale-check.sh -n 500 -s 100
+          go vet ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+          go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
+          go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql
+      - name: examples/graphql
+        working-directory: examples
+        run: |
+          go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
+          go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
+          # gqlgen's output is checked in: regenerate it, and fail on any difference.
+          go -C graphql tool gqlgen generate
+          git diff --exit-code HEAD -- graphql/graph
+          test -z "$(git ls-files --others --exclude-standard -- graphql/graph)"
       - name: scale (n=500, GraphQL, report-only)
         run: scripts/scale-check.sh -n 500 -s 100 -graphql
-      # Report-only: the baselines in bench/baseline come from other hardware, so
-      # the time deltas are informational. Allocation counts are enforced by the
-      # budget tests.
-      - name: benchmarks against the committed baselines (report-only)
-        run: scripts/bench-compare.sh
   # velox-graphql against the newest gqlgen. A red job says gqlgen moved.
   gqlgen-latest:
+    needs: changes
+    if: needs.changes.outputs.graphql == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -254,3 +296,45 @@ jobs:
         with:
           go-version-file: go.mod
       - run: scripts/gqlgen-latest.sh
+  # contrib/veloxotel's checks.
+  otel:
+    needs: changes
+    if: needs.changes.outputs.otel == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: contrib/veloxotel
+        working-directory: contrib/veloxotel
+        run: |
+          go mod tidy -diff
+          go vet ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+          go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
+  # bench/compare's checks (the measurements run only from run.sh), and the
+  # benchmarks against the committed baselines.
+  bench:
+    needs: changes
+    if: needs.changes.outputs.bench == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: bench/compare
+        working-directory: bench/compare
+        run: |
+          go mod tidy -diff
+          go vet ./...
+          go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
+          go test -race -short -count=1 ./...
+      # Report-only: the baselines in bench/baseline come from other hardware, so
+      # the time deltas are informational. Allocation counts are enforced by the
+      # budget tests.
+      - name: benchmarks against the committed baselines (report-only)
+        run: scripts/bench-compare.sh

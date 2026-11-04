@@ -2,7 +2,8 @@
 # The inner loop: gofmt, go vet and go test -short of the modules a change
 # touches, on SQLite only, without -race, and with go test's cache, so that
 # what did not change is not tested again. -short skips the tests that build
-# whole modules. It is not CI: run scripts/ci-local.sh before a push.
+# whole modules. It is not CI: run scripts/ci-local.sh before a merge, and
+# scripts/ci-local.sh --full before a push.
 #
 #   scripts/quick.sh            the modules changed since main, committed or not
 #   scripts/quick.sh -all       every module

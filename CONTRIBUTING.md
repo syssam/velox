@@ -48,64 +48,129 @@ Before 1.0 nothing is released, so nothing is kept for compatibility.
 
 ## Checks
 
-`bash scripts/ci-local.sh` is the local mirror of CI. It needs Docker. Run it
-before you push.
+`scripts/ci-local.sh` is the local mirror of CI. It needs Docker. It has two
+levels:
 
-It starts PostgreSQL 18 and MySQL 8.4 from `scripts/docker-compose.ci.yml` and
-sets the database variables below. Then, one after another, it runs `gofmt` over
-each module and `go mod tidy -diff` in each of the five, which fails on a
-`go.mod` or `go.sum` that is not tidy, and downloads the module graph of the
-root and of `contrib/graphql`. `bench/compare/veloxe` is left out.
+```sh
+bash scripts/ci-local.sh          # the merge gate: run it before a local merge
+bash scripts/ci-local.sh --full   # everything: run it before any push
+```
 
-The rest runs in lanes, at once, as the jobs of `ci.yml` do:
+The merge gate is about the ORM. It always runs the root module's gofmt,
+tidiness, vet, govulncheck and golangci-lint, the root's tests with `-race`
+on PostgreSQL and MySQL, `velox-gen -check` and `verify` on the test models
+and the examples, the examples' lint, tests and migrations, the root's fuzz
+targets, and `scripts/scale-check.sh`, velox's own build cost. The examples'
+lint covers `examples/graphql` and `examples/otel`; their tests run with their
+groups.
 
-- `root_lint`: `go vet`, govulncheck and golangci-lint v2.14.0 in the root.
-- `root_test`: the root's `go test -race -count=1` with a coverage profile.
-- `fuzz`: the ten fuzz targets.
-- `generated`: `velox-gen -check` and `velox-gen verify` on the test models,
-  and revive on their generated code.
-- `examples`: `go vet`, govulncheck, golangci-lint, revive on the generated
-  code, and the tests with a coverage profile.
-- `examples_generated`: `velox-gen -check` and `velox-gen verify` on every
-  example, the migrations replay, and gqlgen's output for `examples/graphql`,
-  which waits for the `examples` lane, whose tests build it.
-- `veloxotel` and `graphql`: `go vet`, govulncheck, golangci-lint and the
-  tests with a coverage profile, in `contrib/veloxotel` and
-  `contrib/graphql`.
-- `bench_compare`: `go vet`, golangci-lint and `go test -race -short` in
-  `bench/compare`. The measurements never run here.
-- `scale` and `scale_graphql`: `scripts/scale-check.sh`, which runs
-  `bench/scale`, in plain and GraphQL form, against
+The rest is in three groups, which the merge gate runs only when the change
+touches them. The change is every file that differs from the merge base with
+`main`, committed or not. `scripts/ci-changes.sh` reads it and prints the
+groups:
+
+| Group | Its lanes | Touched by |
+|---|---|---|
+| `graphql` | `graphql`, `examples_graphql`, `scale_graphql`, `gqlgen_latest` | `contrib/graphql/**`, `examples/graphql/**`, `scripts/gqlgen-latest.sh`, `schema/**`, `internal/tempmod/**`, `bench/scale/**`, `scripts/scale-check.sh` |
+| `otel` | `veloxotel`, `examples_otel` | `contrib/veloxotel/**`, `examples/otel/**`, `internal/testmodel/**` |
+| `bench` | `bench_compare`, then `scripts/bench-compare.sh` | `bench/**`, `scripts/bench-compare.sh` |
+
+`graphql` and `otel` also run on a change to what both contrib modules
+compile against: `internal/repocheck/testdata/api.txt` (an exported name),
+`plugin/**`, `internal/codegen/**`, `scope/**`, `veloxpgx/**`, the root's
+`go.mod` or `go.sum`, or the line that declares `GeneratedCodeIsVersionN`. A
+change to the CI itself (`ci.yml`, `ci-local.sh`, `ci-changes.sh`,
+`docker-compose.ci.yml`) runs all three. The header of `scripts/ci-changes.sh`
+has the rules.
+
+`--full` runs every group, and two checks the merge gate leaves out: the
+root's tests with `-coverpkg=./...` and a coverage profile, in place of the
+plain run, and the coverage floors after the lanes. Coverage costs the root's
+tests little, but the floors need the profile of every module, so they run only
+when every group does.
+
+The script starts PostgreSQL 18 and MySQL 8.4 from
+`scripts/docker-compose.ci.yml` and sets the database variables below. Then,
+one after another, it runs `gofmt` and `go mod tidy -diff` in the root and in
+`examples`, and downloads the root's module graph. Each other module's tidy
+check runs at the start of its lane. `bench/compare/veloxe` is left out.
+
+The rest runs in lanes, at once, as the jobs of `ci.yml` do. Each lane has a
+level: `gate`, `merge` (the merge gate only), `full` (`--full` only) or a
+group.
+
+- `root_lint` (gate): `go vet`, govulncheck and golangci-lint v2.14.0 in the
+  root.
+- `root_test` (merge): the root's `go test -race -count=1`.
+- `root_cover` (full): the same, with `-coverpkg=./...` and a coverage profile.
+- `fuzz` (gate): the root's nine fuzz targets.
+- `generated` (gate): `velox-gen -check` and `velox-gen verify` on the test
+  models, and revive on their generated code.
+- `examples` (gate): `go vet`, govulncheck, golangci-lint, revive on the
+  generated code, and the tests with a coverage profile, but for
+  `examples/graphql` and `examples/otel`.
+- `examples_generated` (gate): `velox-gen -check` and `velox-gen verify` on
+  every example but `examples/graphql`, and the migrations replay.
+- `scale` (gate): `scripts/scale-check.sh`, which runs `bench/scale` against
   `bench/scale/thresholds.json`.
-- `gqlgen_latest`: `scripts/gqlgen-latest.sh`, which tests `velox-graphql`
-  against the newest gqlgen in a copy of the tree.
+- `graphql` (graphql): the tidy check, `go vet`, govulncheck, golangci-lint, the
+  tests with a coverage profile and `FuzzCost`, in `contrib/graphql`.
+- `examples_graphql` (graphql): `examples/graphql`'s generated files, its tests,
+  and gqlgen's output, which waits for the `examples` lane, whose vet builds
+  it.
+- `scale_graphql` (graphql): `scripts/scale-check.sh -graphql`.
+- `gqlgen_latest` (graphql): `scripts/gqlgen-latest.sh`, which tests
+  `velox-graphql` against the newest gqlgen in a copy of the tree.
+- `veloxotel` (otel): the tidy check, `go vet`, govulncheck, golangci-lint and
+  the tests with a coverage profile, in `contrib/veloxotel`.
+- `examples_otel` (otel): `examples/otel`'s tests.
+- `bench_compare` (bench): the tidy check, `go vet`, golangci-lint and
+  `go test -race -short` in `bench/compare`. The measurements never run here.
 
-After the lanes come the coverage floors, and then
-`scripts/bench-compare.sh`, which only reports. It runs alone, so that its
-times compare.
+After the lanes come the finals, one after another: the coverage floors
+(full), and then `scripts/bench-compare.sh` (bench), which only reports. It runs
+alone, so that its times compare.
 
-Each lane writes its own log. The script prints a line as each lane ends, and
-the whole log of the first lane that fails; that failure stops the other lanes.
-The root's tests use the database `velox`, as in CI. The `examples`,
-`veloxotel` and `graphql` lanes each use a database of their own on the same
-servers (`velox_examples`, `velox_veloxotel`, `velox_graphql`), as each CI job
-has its own containers. The fuzz, scale and gqlgen lanes run at a lower
-priority. `VELOX_CI_JOBS=n` runs at most `n` lanes at once; `VELOX_CI_JOBS=1`
-runs them one after another.
+Each lane writes its own log. The script prints the level and the groups it
+runs, a line as each lane ends, and the whole log of the first lane that
+fails; that failure stops the other lanes. The root's tests use the database
+`velox`, as in CI. The other lanes with tests each use a database of their own
+on the same servers (`velox_examples`, `velox_examples_graphql`,
+`velox_examples_otel`, `velox_veloxotel`, `velox_graphql`), as each CI job has
+its own containers. The fuzz, scale and gqlgen lanes run at a lower priority.
+`VELOX_CI_JOBS=n` runs at most `n` lanes at once; `VELOX_CI_JOBS=1` runs them
+one after another.
 
 CI tests PostgreSQL 14 and 18. `VELOX_CI_MATRIX=1 bash scripts/ci-local.sh`
-runs the tests again on PostgreSQL 14 at the end, in every module, one module
-at a time on `velox`. It reads the image from `.github/workflows/ci.yml`. The
-root module's tests have a 40-minute timeout on PostgreSQL 14, and 20 minutes
-on 18.
+runs the tests again on PostgreSQL 14 at the end, in every module the run's
+level tests, one module at a time on `velox`. It reads the image from
+`.github/workflows/ci.yml`. The root module's tests have a 40-minute timeout on
+PostgreSQL 14, and 20 minutes on 18.
 
-`TestCILocalMirrorsCI` fails when the two scripts stop running the same commands.
+`ci.yml` has the same levels. A pull request is the merge gate: its `changes`
+job runs `scripts/ci-changes.sh` against the pull request's base, and the
+`graphql`, `otel` and `bench` jobs, and the group steps of the `test` job, run
+on its outputs. A push to `main` is `--full`: every group runs, the root's
+tests measure coverage, and the floors are checked.
+
+`TestCILocalMirrorsCI` fails when the two scripts stop running the same
+commands in the same directories at the same levels. `TestCIGateIsTheORM`
+fails when the merge gate loses an ORM check or a contrib test joins it, and
+`TestCIChangesGroups` checks `ci-changes.sh`'s rules.
 
 The script removes its containers on exit. It does not push.
 
+### Merging, for agents
+
+Agents that work in parallel share the machine, so a check costs every
+session. Iterate with `scripts/quick.sh`. Run the merge gate,
+`bash scripts/ci-local.sh`, once, at the end, before the merge. Leave
+`--full` for the push. Never run two `ci-local.sh` at once: both use the
+compose project `velox-ci`.
+
 ### The quick loop
 
-`scripts/quick.sh` is for the inner loop, not for a push. It runs `gofmt`,
+`scripts/quick.sh` is for the inner loop, not for a merge or a push. It runs `gofmt`,
 `go vet` and `go test -short` in each module that has changed since `main`,
 committed or not, on SQLite only, without `-race`, and with go test's cache, so
 a package that did not change is not tested again. `-short` skips the tests
@@ -188,13 +253,16 @@ A change to the generated code's shape replaces `GeneratedCodeIsVersionN` with
 
 `scripts/coverage-floors.txt` holds a floor for each package, in percent. A
 floor is the coverage measured at its commit minus 1.0. `scripts/covfloor`
-checks the merged profiles of the four modules against them:
+checks the merged profiles of the four modules against them, in
+`scripts/ci-local.sh --full` and on a push to `main`:
 
 ```sh
-go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-veloxotel.out cover-graphql.out
+go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
 ```
 
-The profiles are the `-coverprofile` files of the test runs above. A new
+The profiles are the `-coverprofile` files of the test runs above. The
+examples module writes three: its ORM examples, `examples/graphql` and
+`examples/otel`, which run with their groups. A new
 package needs a line. After you add tests, raise the floor to the measured
 value minus 1.0. The checker prints that value. The file's header has the rest.
 
@@ -268,7 +336,8 @@ starts PostgreSQL, and writes `bench/compare/results/`. The last report is
 ## Commits
 
 Name the area, then what changed: `migrate: a PostgreSQL unique constraint is
-Index.Constraint`. Stage files by name. Run the checks above before you push.
+Index.Constraint`. Stage files by name. Run the merge gate before you merge, and
+`scripts/ci-local.sh --full` before you push.
 
 ## Releases
 

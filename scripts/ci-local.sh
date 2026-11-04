@@ -1,5 +1,21 @@
 #!/usr/bin/env bash
 # Runs what CI runs, against the same database versions, in local containers.
+#
+#   scripts/ci-local.sh          the merge gate: the ORM's checks, and the groups
+#                                the change touches (scripts/ci-changes.sh)
+#   scripts/ci-local.sh --full   everything, as CI runs on a push to main
+#
+# Run the merge gate before a local merge, and --full before any push.
+#
+# Each lane has a level (lanes, below). gate lanes run in both runs. merge
+# lanes run in the merge gate only: --full runs their full form instead.
+# full lanes run in --full only. graphql, otel and bench lanes run in --full,
+# and in the merge gate when the change touches their group: the files that
+# differ from the merge base with main, committed or not, as
+# scripts/ci-changes.sh reads them. ci.yml's jobs and steps carry the same
+# levels: none for gate, a push for full, a pull request for merge, and the
+# changes job's output for a group.
+#
 # CI tests PostgreSQL 14 and 18; this runs 18, and VELOX_CI_MATRIX=1 then runs the tests again on 14.
 # golangci-lint waits here for another run on the machine, which CI does not have.
 #
@@ -7,13 +23,20 @@
 # checks run in lanes, at once, as ci.yml's jobs do. Each lane writes a log
 # of its own; the first lane to fail stops the others, and its log is
 # printed. Each module's tests get a database of their own on the two
-# servers, as each CI job gets its own containers. The coverage floors and
-# the benchmarks run after the lanes, the benchmarks alone, so that their
-# times mean something. VELOX_CI_JOBS=n runs at most n lanes at once
-# (VELOX_CI_JOBS=1: one after another).
+# servers, as each CI job gets its own containers. The finals (the coverage
+# floors and the benchmarks) run after the lanes, the benchmarks alone, so
+# that their times mean something. VELOX_CI_JOBS=n runs at most n lanes at
+# once (VELOX_CI_JOBS=1: one after another).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 root=$PWD
+
+full=
+case "${1:-}" in
+  "") ;;
+  --full) full=1 ;;
+  *) echo "usage: scripts/ci-local.sh [--full]" >&2; exit 2 ;;
+esac
 
 case "$(go env GOVERSION)" in
   go1.27*) ;;
@@ -21,6 +44,23 @@ case "$(go env GOVERSION)" in
 esac
 
 command -v docker >/dev/null || { echo "ci-local.sh needs docker" >&2; exit 1; }
+
+# The groups beyond the ORM's that this run checks.
+if [ -n "$full" ]; then
+  groups=" graphql otel bench "
+else
+  base=$(git merge-base main HEAD)
+  groups=" $(scripts/ci-changes.sh "$base" | tr '\n' ' ')"
+fi
+# selected reports whether this run runs the lanes of level $1.
+selected() {
+  case $1 in
+    gate) return 0 ;;
+    merge) [ -z "$full" ] ;;
+    full) [ -n "$full" ] ;;
+    *) case $groups in *" $1 "*) return 0 ;; *) return 1 ;; esac ;;
+  esac
+}
 
 # VELOX_CI_MATRIX=1's PostgreSQL 14 is the image of CI's matrix, read from
 # ci.yml, so that it is pinned in one place.
@@ -33,7 +73,7 @@ started=$(date +%s)
 tmp=${TMPDIR:-/tmp}
 logs=$(mktemp -d "${tmp%/}/velox-ci.XXXXXX")
 compose=(docker compose -f scripts/docker-compose.ci.yml -p velox-ci)
-pids=() # of the running lanes, by index into lanes; empty when not running
+pids=() # of the running lanes, by index into run; empty when not running
 starts=()
 # Stops the running lanes and everything they started.
 stop_lanes() {
@@ -55,7 +95,7 @@ use_db() {
   export VELOX_TEST_POSTGRES="postgres://velox:velox@127.0.0.1:55432/$1?sslmode=disable"
   export VELOX_TEST_MYSQL="velox:velox@tcp(127.0.0.1:53306)/$1?parseTime=true&clientFoundRows=true"
 }
-lane_dbs="velox_examples velox_veloxotel velox_graphql"
+lane_dbs="velox_examples velox_examples_graphql velox_examples_otel velox_veloxotel velox_graphql"
 # Makes each of lane_dbs on both servers, owned or granted to velox.
 make_lane_dbs() {
   local db
@@ -82,10 +122,8 @@ if [ -n "$unformatted" ]; then
   echo "gofmt needed:"; echo "$unformatted"; exit 1
 fi
 # Each module's gofmt too, before velox-gen verify writes its .velox-verify-*
-# directories there.
+# directories there. The root's covers the contrib modules' files.
 (cd examples && test -z "$(gofmt -l .)") || { echo "gofmt needed in examples:"; (cd examples && gofmt -l .); exit 1; }
-(cd contrib/veloxotel && test -z "$(gofmt -l .)") || { echo "gofmt needed in contrib/veloxotel:"; (cd contrib/veloxotel && gofmt -l .); exit 1; }
-(cd contrib/graphql && test -z "$(gofmt -l .)") || { echo "gofmt needed in contrib/graphql:"; (cd contrib/graphql && gofmt -l .); exit 1; }
 # The tests build modules offline, with gqlgen as a tool: they need its dependencies too,
 # which "go mod download" alone leaves out. The tidy check comes first: download all
 # dirties go.sum, and the tidy after it restores it.
@@ -93,12 +131,6 @@ go mod tidy -diff
 go mod download all
 go mod tidy # download all adds to go.sum what tidy leaves out
 (cd examples && go mod tidy -diff)
-(cd contrib/veloxotel && go mod tidy -diff)
-(cd contrib/graphql && go mod tidy -diff)
-# The collection integration test builds an application offline, with gqlgen as a tool.
-(cd contrib/graphql && go mod download all)
-(cd contrib/graphql && go mod tidy) # download all adds to go.sum what tidy leaves out
-(cd bench/compare && go mod tidy -diff)
 
 # The lanes. Each is a function, run in the background with its output in
 # its own log, under set -e.
@@ -115,13 +147,20 @@ lane_root_lint() {
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
 }
 
-# Per-package coverage floors (scripts/coverage-floors.txt) are checked over the four modules' profiles
-# below, which are measured as CI measures them: with -race, and with the database tests as run.
+# The root's tests with the race detector, against both databases.
 lane_root_test() {
+  go test -race -count=1 -timeout 20m ./...
+}
+
+# The same, with the coverage profile the floors read. Per-package coverage
+# floors (scripts/coverage-floors.txt) are checked over the modules' profiles,
+# which are measured as CI measures them: with -race, and with the database
+# tests as run.
+lane_root_cover() {
   go test -race -count=1 -timeout 20m -coverpkg=./... -coverprofile="$root/cover-root.out" ./...
 }
 
-# The fuzz targets, with CI's 4 workers each: the lanes share the machine.
+# The root's fuzz targets, with CI's 4 workers each: the lanes share the machine.
 lane_fuzz() {
   export GOMAXPROCS=4
   go test -run XXX -fuzz '^FuzzRender$' -fuzztime 20s ./internal/engine
@@ -133,7 +172,6 @@ lane_fuzz() {
   go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s ./internal/engine
   go test -run XXX -fuzz '^FuzzDiff$' -fuzztime 10s ./migrate
   go test -run XXX -fuzz '^FuzzColumnScan$' -fuzztime 10s ./internal/conn
-  (cd contrib/graphql && go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql)
 }
 
 lane_generated() {
@@ -146,7 +184,9 @@ lane_generated() {
   go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_status ./internal/testmodel ./internal/testbind
 }
 
-# The examples are their own module: its own vet, lint, tests and generated files.
+# The examples are their own module: its own vet, lint, tests and generated
+# files. Its vet and lint cover every example; the tests of examples/graphql
+# and examples/otel run with their groups.
 lane_examples() (
   cd examples
   use_db velox_examples
@@ -155,7 +195,7 @@ lane_examples() (
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
   go run github.com/mgechev/revive@v1.17.0 -config ../scripts/revive.toml -set_exit_status ./*/gen
-  go test -race -count=1 -coverprofile="$root/cover-examples.out" ./...
+  go test -race -count=1 -coverprofile="$root/cover-examples.out" $(go list ./... | grep -vE '/examples/(graphql|otel)(/|$)')
 )
 
 # The examples' generated files and migrations, as CI's generated job checks them.
@@ -163,7 +203,7 @@ lane_examples_generated() (
   cd examples
   for d in */schema; do
     x=${d%/schema}
-    [ "$x" = graphql ] && continue # its own lines below, with the plugin
+    [ "$x" = graphql ] && continue # its own lane, with the plugin
     go tool velox-gen -check -out "./$x/gen" "./$x/schema"
     go tool velox-gen verify -out "./$x/gen" "./$x/schema"
   done
@@ -181,54 +221,50 @@ lane_examples_generated() (
   rm -rf "$migdb"
   # tracker's PostgreSQL migrations: its tests apply them, under VELOX_TEST_POSTGRES.
   go tool velox-gen migrate diff -check -dir ./tracker/migrations/postgres ./tracker/schema
-  go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
-  go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
-  # gqlgen's output is checked in: regenerate it, and fail on any difference.
-  # It rewrites files the examples lane builds, so it waits for that lane.
-  wait_lane examples
-  go -C graphql tool gqlgen generate
-  git diff --exit-code HEAD -- graphql/graph
-  test -z "$(git ls-files --others --exclude-standard -- graphql/graph)"
 )
 
-# contrib/veloxotel is its own module: its own vet, lint and tests. Its PostgreSQL
-# test runs under VELOX_TEST_POSTGRES.
-lane_veloxotel() (
-  cd contrib/veloxotel
-  use_db velox_veloxotel
-  go vet ./...
-  go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
-  go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
-  go test -race -count=1 -coverprofile="$root/cover-veloxotel.out" ./...
-)
+# velox's own build cost. It fails over a threshold only where they were
+# measured, darwin/arm64; CI only reports. It checks CPU-time ratios, which a
+# busy machine leaves about the same.
+lane_scale() {
+  scripts/scale-check.sh -n 500 -s 100
+}
 
-# contrib/graphql is its own module too: the annotations package, the
+# contrib/graphql is its own module: the annotations package, the
 # velox-graphql plugin and the runtime. Its mutation and collection itests
 # (TestMutationsRun, TestCollectRun) run on SQLite, and on PostgreSQL and MySQL
-# under VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL.
+# under VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL. The collection integration
+# test builds an application offline, with gqlgen as a tool: go mod download
+# all fetches its dependencies, after the tidy check, which it would fail.
 lane_graphql() (
   cd contrib/graphql
   use_db velox_graphql
+  go mod tidy -diff
+  go mod download all
+  go mod tidy # download all adds to go.sum what tidy leaves out
   go vet ./...
   go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   go test -race -count=1 -coverprofile="$root/cover-graphql.out" ./...
+  export GOMAXPROCS=4 # CI's 4 workers, as the fuzz lane's
+  go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql
 )
 
-# bench/compare is its own module: the comparison harness. CI checks it; the
-# measurements run only from bench/compare/run.sh.
-lane_bench_compare() (
-  cd bench/compare
-  go vet ./...
-  go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
-  go test -race -short -count=1 ./...
+# examples/graphql: its generated files, with the plugin, its tests, and
+# gqlgen's output, which is checked in. gqlgen rewrites files the examples
+# lane builds, so it waits for that lane.
+lane_examples_graphql() (
+  cd examples
+  use_db velox_examples_graphql
+  go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
+  go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
+  go test -race -count=1 -coverprofile="$root/cover-examples-graphql.out" ./graphql/...
+  wait_lane examples
+  # Regenerate gqlgen's output, and fail on any difference.
+  go -C graphql tool gqlgen generate
+  git diff --exit-code HEAD -- graphql/graph
+  test -z "$(git ls-files --others --exclude-standard -- graphql/graph)"
 )
-
-# It fails over a threshold only where they were measured, darwin/arm64; CI only reports.
-# It checks CPU-time ratios, which a busy machine leaves about the same.
-lane_scale() {
-  scripts/scale-check.sh -n 500 -s 100
-}
 
 lane_scale_graphql() {
   scripts/scale-check.sh -n 500 -s 100 -graphql
@@ -241,22 +277,72 @@ lane_gqlgen_latest() {
   scripts/gqlgen-latest.sh
 }
 
-# The lanes, the slowest first. The root's tests are the longest; the lanes in
-# niced run at a lower priority, so that they take the cores the others leave:
-# fuzzing runs for its fixed time, and the scale checks measure CPU time.
-lanes=(root_test scale_graphql examples gqlgen_latest fuzz scale graphql examples_generated root_lint generated veloxotel bench_compare)
+# contrib/veloxotel is its own module: its own vet, lint and tests. Its
+# PostgreSQL test runs under VELOX_TEST_POSTGRES.
+lane_veloxotel() (
+  cd contrib/veloxotel
+  use_db velox_veloxotel
+  go mod tidy -diff
+  go vet ./...
+  go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+  go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
+  go test -race -count=1 -coverprofile="$root/cover-veloxotel.out" ./...
+)
+
+# examples/otel's tests.
+lane_examples_otel() (
+  cd examples
+  use_db velox_examples_otel
+  go test -race -count=1 -coverprofile="$root/cover-examples-otel.out" ./otel/...
+)
+
+# bench/compare is its own module: the comparison harness. CI checks it; the
+# measurements run only from bench/compare/run.sh.
+lane_bench_compare() (
+  cd bench/compare
+  go mod tidy -diff
+  go vet ./...
+  go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
+  go test -race -short -count=1 ./...
+)
+
+# The finals run after the lanes, one after another.
+
+# No package may fall below its floor, or lack one (scripts/coverage-floors.txt).
+final_covfloor() {
+  go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
+}
+
+# Benchmarks against the committed baselines (bench/baseline). Report-only: the
+# baselines come from other hardware, so the deltas inform and never fail.
+final_bench() {
+  scripts/bench-compare.sh
+}
+
+# The lanes and their levels, the slowest first. The root's tests are the
+# longest; the lanes in niced run at a lower priority, so that they take the
+# cores the others leave: fuzzing runs for its fixed time, and the scale
+# checks measure CPU time.
+lanes=(root_test:merge root_cover:full scale_graphql:graphql examples:gate gqlgen_latest:graphql fuzz:gate scale:gate graphql:graphql examples_generated:gate examples_graphql:graphql root_lint:gate generated:gate veloxotel:otel examples_otel:otel bench_compare:bench)
 niced=" scale_graphql scale gqlgen_latest fuzz "
+finals=(covfloor:full bench:bench)
+
+run=()
+for l in "${lanes[@]}"; do
+  if selected "${l#*:}"; then run+=("${l%%:*}"); fi
+done
 
 # Each lane runs in a process group of its own (set -m), so that stop_lanes
 # reaches the go commands it started.
 set -m
-max=${VELOX_CI_JOBS:-${#lanes[@]}}
+max=${VELOX_CI_JOBS:-${#run[@]}}
 next=0 running=0 done_lanes=0
 summary=""
-echo "ci-local: ${#lanes[@]} lanes, at most $max at once; logs in $logs"
-while [ "$done_lanes" -lt "${#lanes[@]}" ]; do
-  while [ "$next" -lt "${#lanes[@]}" ] && [ "$running" -lt "$max" ]; do
-    lane=${lanes[$next]}
+if [ -n "$full" ]; then level=--full; else level="merge gate, groups:${groups% }"; fi
+echo "ci-local ($level): ${#run[@]} lanes, at most $max at once; logs in $logs"
+while [ "$done_lanes" -lt "${#run[@]}" ]; do
+  while [ "$next" -lt "${#run[@]}" ] && [ "$running" -lt "$max" ]; do
+    lane=${run[$next]}
     ( set -euo pipefail; "lane_$lane" ) >"$logs/$lane.log" 2>&1 &
     pids[$next]=$!
     case $niced in *" $lane "*) renice -n 10 -g "$!" >/dev/null 2>&1 || true ;; esac
@@ -271,7 +357,7 @@ while [ "$done_lanes" -lt "${#lanes[@]}" ]; do
     wait "$pid" || rc=$?
     pids[$i]=""
     running=$((running - 1)) done_lanes=$((done_lanes + 1))
-    lane=${lanes[$i]}
+    lane=${run[$i]}
     took=$(($(date +%s) - starts[i]))
     if [ "$rc" != 0 ]; then
       stop_lanes
@@ -281,30 +367,37 @@ while [ "$done_lanes" -lt "${#lanes[@]}" ]; do
     fi
     touch "$logs/$lane.ok"
     summary+=$(printf '%5ss  %s' "$took" "$lane")$'\n'
-    printf 'ok   %-14s %5ss\n' "$lane" "$took"
+    printf 'ok   %-18s %5ss\n' "$lane" "$took"
   done
 done
 set +m
 
-# No package may fall below its floor, or lack one (scripts/coverage-floors.txt).
-go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-veloxotel.out cover-graphql.out
-
-# Benchmarks against the committed baselines (bench/baseline). Report-only: the
-# baselines come from other hardware, so the deltas inform and never fail.
-scripts/bench-compare.sh
+for f in "${finals[@]}"; do
+  if selected "${f#*:}"; then
+    s=$(date +%s)
+    "final_${f%%:*}"
+    summary+=$(printf '%5ss  %s' "$(($(date +%s) - s))" "${f%%:*}")$'\n'
+  fi
+done
 
 # VELOX_CI_MATRIX=1 runs the tests again on PostgreSQL 14, CI's other entry,
-# in every module CI's 14 leg tests.
+# in every module CI's 14 leg tests in a run of this level.
 if [ "${VELOX_CI_MATRIX:-}" = 1 ]; then
   "${compose[@]}" down -v
   VELOX_CI_POSTGRES_IMAGE=$pg14 "${compose[@]}" up -d --wait
   # One module at a time, all on velox, as CI's 14 leg runs them.
   go test -race -count=1 -timeout 40m ./...
-  (cd examples && go test -race -count=1 ./...)
-  (cd contrib/veloxotel && go test -race -count=1 ./...)
-  (cd contrib/graphql && go test -race -count=1 ./...)
+  (cd examples && go test -race -count=1 $(go list ./... | grep -vE '/examples/(graphql|otel)(/|$)'))
+  if selected otel; then
+    (cd contrib/veloxotel && go test -race -count=1 ./...)
+    (cd examples && go test -race -count=1 ./otel/...)
+  fi
+  if selected graphql; then
+    (cd contrib/graphql && go test -race -count=1 ./...)
+    (cd examples && go test -race -count=1 ./graphql/...)
+  fi
 fi
 
 printf '%s' "$summary"
-echo "ci-local: ok in $(($(date +%s) - started))s"
+echo "ci-local ($level): ok in $(($(date +%s) - started))s"
 rm -rf "$logs"
