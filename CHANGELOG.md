@@ -21,6 +21,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- Package `schema/mixin/softdelete`: `softdelete.Mixin{}` in a schema's `Mixin()` adds
+  `deleted_at`, an interceptor that ANDs `deleted_at IS NULL` into every statement on the
+  entity, and a hook that turns a delete into an update that sets `deleted_at`.
+  `softdelete.Skip(ctx)` lifts only the mixin: reads see deleted rows, and a delete is a
+  hard delete. `velox.WithoutPolicy` does not lift it. Uniqueness over live rows is a
+  partial index, `.Unique().Where("deleted_at IS NULL")`, on PostgreSQL and SQLite.
+- Package `scope/scopetest`: `scopetest.Isolates[E](t, ctx, db, key, column, a, b, row)`
+  checks that a scope confines entity E. It fails an entity that lacks the scope's hook or
+  policy, or lets a read or an insert through without a value or into another scope.
 - A mixin may declare behaviour: `func (M) Policy[E any]() velox.Policy[E]`,
   `Hooks[E any]() []velox.Hook[E]` and `Interceptors[E any]() []velox.Interceptor[E]`.
   velox-gen binds each for every entity that lists the mixin, mixins first in `Mixin()`
@@ -141,6 +150,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- **Breaking.** `scope.By[E](key, column)` finds the scope's column by its name, with
+  `velox.Field`, so that a mixin's generic `Policy` and `Hooks` can call it. It refuses a
+  column that is mutable or nullable, as the entity's `*SchemaError` at its first use. The
+  old `scope.By(key, eq, field)` is `scope.ByHandle`, for the code `schema.Scoped` generates.
 - `GeneratedCodeIsVersion14`: regenerate. `velox.BindPolicy`, `BindHooks` and
   `BindInterceptors` take the functions to bind, `BindPolicy(fs ...func() Policy[E])`, and
   return the Descriptor's list. Package runtime binds each entity's sources there,

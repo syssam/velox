@@ -54,6 +54,7 @@ github.com/syssam/velox/internal/testrepo 99.0
 github.com/syssam/velox/migrate 81.2
 github.com/syssam/velox/plugin 95.5
 github.com/syssam/velox/scope 96.0
+github.com/syssam/velox/scope/scopetest 93.7
 github.com/syssam/velox/schema 99.0
 github.com/syssam/velox/schema/edge 90.4
 github.com/syssam/velox/schema/field 86.4
@@ -61,6 +62,7 @@ github.com/syssam/velox/schema/index 86.5
 github.com/syssam/velox/schema/internal/desc 90.4
 github.com/syssam/velox/schema/load 80.4
 github.com/syssam/velox/schema/mixin 99.0
+github.com/syssam/velox/schema/mixin/softdelete 99.0
 github.com/syssam/velox/scripts/covfloor 77.8
 
 # contrib/veloxotel

@@ -879,6 +879,15 @@ type Schema struct { }
 type Time struct { Schema }
 type UpdateTime struct { Schema }
 
+package schema/mixin/softdelete
+const Column
+func (Mixin) Fields() []schema.Field
+func (Mixin) Hooks[E any]() []velox.Hook[E]
+func (Mixin) Interceptors[E any]() []velox.Interceptor[E]
+func Skip(ctx context.Context) context.Context
+func Skipped(ctx context.Context) bool
+type Mixin struct { mixin.Schema }
+
 package migrate
 const Destructive
 const ResolveAdopted
@@ -1018,6 +1027,10 @@ type Key[V comparable] struct { }
 type Scope[E any, V comparable] struct { }
 var ErrMismatch
 var ErrNoScope
+
+package scope/scopetest
+func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Key[V], column string, a, b V, row func() *E) (err error)
+func Isolates[E any, V comparable](t testing.TB, ctx context.Context, db *velox.DB, key *scope.Key[V], column string, a, b V, row func() *E)
 
 package contrib/graphql
 const MutationCreate MutationKind

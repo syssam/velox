@@ -318,7 +318,7 @@ func TestByRefuses(t *testing.T) {
 	}{
 		{"TestByRefusesMutableColumn", []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Title", Name: "title"}},
 			`column "org_id" is mutable`},
-		{"TestByRefusesNullableColumn", []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true, Nullable: true}, {Field: "Title", Name: "title"}},
+		{"TestByRefusesNullableColumn", []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Title", Name: "title"}},
 			`column "org_id" is nullable`},
 		{"TestByRefusesMissingColumn", []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org", Immutable: true}, {Field: "Title", Name: "title"}},
 			`no column is named "org_id"`},
