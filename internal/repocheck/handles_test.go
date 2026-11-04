@@ -15,6 +15,7 @@ import (
 )
 
 func TestHandlesFileIsCurrent(t *testing.T) {
+	t.Parallel()
 	want, err := handlegen.Generate()
 	if err != nil {
 		t.Fatal(err)
@@ -32,6 +33,7 @@ func TestHandlesFileIsCurrent(t *testing.T) {
 // handles.go's source, to the handle table: a method granted to the
 // wrong kind, or dropped from the right one, fails here.
 func TestHandleMethodSets(t *testing.T) {
+	t.Parallel()
 	want := map[string]string{
 		"Col":            "Asc Desc EQ In Key NEQ NotIn Set ValueIn column",
 		"OrderedCol":     "Asc Between Desc EQ GT GTE In Key LT LTE NEQ NotIn Set ValueIn column",

@@ -13,6 +13,7 @@ import (
 // the revive rules of .golangci.yml: the same rules, in the same order, with
 // the same arguments.
 func TestReviveConfigsAgree(t *testing.T) {
+	t.Parallel()
 	yml, err := os.ReadFile(filepath.Join(repoRoot(), ".golangci.yml"))
 	if err != nil {
 		t.Fatal(err)

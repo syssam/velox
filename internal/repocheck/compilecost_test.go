@@ -256,6 +256,7 @@ const policyGrowthMax = 348160 // measured 289120
 // relations: E has none, so a relation type reaching its target's types is
 // not measured here.
 func TestGenericTypesCompileSmall(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds packages; run without -short")
 	}

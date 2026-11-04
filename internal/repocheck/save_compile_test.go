@@ -23,8 +23,10 @@ func (s srcImporter) Import(path string) (*types.Package, error) {
 }
 
 // The file set and the importer are shared, so that the module's packages are
-// type-checked from source once.
+// type-checked from source once. The importer is not safe for concurrent
+// use: srcMu holds it for one type check at a time.
 var (
+	srcMu   sync.Mutex
 	srcFset = token.NewFileSet()
 	srcImp  = sync.OnceValue(func() types.Importer {
 		return srcImporter{repoRoot(), importer.ForCompiler(srcFset, "source", nil).(types.ImporterFrom)}
@@ -35,6 +37,8 @@ var (
 // returns the errors the checker reports.
 func typeCheck(t *testing.T, src string) []string {
 	t.Helper()
+	srcMu.Lock()
+	defer srcMu.Unlock()
 	fset := srcFset
 	f, err := parser.ParseFile(fset, "snippet.go", src, parser.AllErrors)
 	if err != nil {
@@ -52,6 +56,7 @@ func typeCheck(t *testing.T, src string) []string {
 // TestSaveNamesAColumnAtCompileTime: db.Save(&x) with no column is a compile
 // error, not a runtime one; the same call with a column compiles.
 func TestSaveNamesAColumnAtCompileTime(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("type-checks the module from source; run without -short")
 	}
@@ -79,6 +84,7 @@ func save(db *velox.DB, x *testmodel.Invoice) {
 // and refuses, when it compiles, a JSON column, another entity's column, a bare
 // handle and a value column of another entity.
 func TestGroupKeyAtCompileTime(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("type-checks the module from source; run without -short")
 	}

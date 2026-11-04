@@ -72,6 +72,7 @@ func fuzzTargets(t *testing.T, dir string) []string {
 // package, the two scripts must list the same targets in the same packages, and
 // every target in the repository must be listed.
 func TestFuzzLinesNameRealTargets(t *testing.T) {
+	t.Parallel()
 	listed := map[string]string{}
 	var targets []string // the first script's, sorted
 	for _, script := range []string{ciWorkflow, ciLocal} {

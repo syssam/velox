@@ -82,6 +82,7 @@ func readmeGet(t *testing.T, args []string, rootMod string) []string {
 // from the text in two ways, both because it works offline: a replace points at
 // this checkout straight after go mod init, and a go get names a version.
 func TestReadmeQuickStart(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds a module; run without -short")
 	}

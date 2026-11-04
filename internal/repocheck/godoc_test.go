@@ -23,6 +23,7 @@ var citation = regexp.MustCompile(`\x{00a7}|\bRuling \d|\b(design|spec) (section
 // and cmd/velox-gen) and no string literal in them, which holds the messages a
 // user sees, cites a design document or a ruling.
 func TestGodocCitesNoSpec(t *testing.T) {
+	t.Parallel()
 	root := repoRoot()
 	var files []string
 	add := func(dir string, tests, recursive bool) {
@@ -81,6 +82,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 // after their first sentence, and the section names each of them as a whole
 // word. A name that lives in veloxtype says it in both packages' documentation.
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
+	t.Parallel()
 	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce",
 		"BindPolicy", "BindHooks", "BindHooksAfter", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet",
 		"Table", "TableOf", "TableRows", "RowsOf", "PredOp", "TableQuery", "Untyped", "Typed", "AndPredicates", "OrPredicates", "NotPredicate", "TableInsert", "TableUpdate", "TableDelete", "Assignments", "GeneratedCodeIsVersion8",
@@ -196,6 +198,7 @@ func markedGenerated(doc string) bool {
 // space (strings.HasPrefix(doc, name+" ")), Error, String and Unwrap included,
 // which revive's exported rule skips.
 func TestExportedMethodsHaveDocs(t *testing.T) {
+	t.Parallel()
 	root := repoRoot()
 	var files []string
 	add := func(dir string, recursive bool) {
@@ -311,6 +314,7 @@ func rootDecls(t *testing.T, fset *token.FileSet, mode parser.Mode) []ast.Decl {
 // its exported ones. An alias of a veloxtype type lists none: its documentation is
 // public, and links through.
 func TestAliasDocsListMembers(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	docs := map[string]string{}
 	for _, d := range rootDecls(t, fset, parser.ParseComments) {
@@ -407,6 +411,7 @@ func aliasedPackage(e ast.Expr) string {
 // under the same name, as that name of veloxtype, so application code never needs to
 // import it. veloxtype's non-test files import only the standard library.
 func TestVeloxTypeIsReExported(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	dir := filepath.Join(repoRoot(), "veloxtype")
 	entries, err := os.ReadDir(dir)

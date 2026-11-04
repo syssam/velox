@@ -31,6 +31,7 @@ var apiPackages = []string{
 // fails. The members of an alias of an engine type are listed under the alias:
 // they are public, though they are declared in an internal package.
 func TestPublicAPISnapshot(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	for _, dir := range apiPackages {
 		fmt.Fprintf(&b, "package %s\n", dir)
@@ -74,6 +75,7 @@ func TestPublicAPISnapshot(t *testing.T) {
 // TestAPILinesSeeThroughAliases pins what the snapshot rests on: a field and a
 // method of an engine type appear under its alias, and an unexported one does not.
 func TestAPILinesSeeThroughAliases(t *testing.T) {
+	t.Parallel()
 	lines := apiLines(t, ".")
 	for _, want := range []string{"type Statement = engine.Statement", "Statement.SQL string", "EntityInfo.Column"} {
 		if !slices.ContainsFunc(lines, func(l string) bool { return strings.HasPrefix(l, want) }) {
@@ -89,6 +91,7 @@ func TestAPILinesSeeThroughAliases(t *testing.T) {
 // most of the schema DSL gets from a type it embeds that is not exported, and
 // what an alias of a non-struct is.
 func TestAPILinesSeePromotedMethods(t *testing.T) {
+	t.Parallel()
 	has := func(dir, want string) {
 		t.Helper()
 		if !slices.ContainsFunc(apiLines(t, dir), func(l string) bool { return strings.HasPrefix(l, want) }) {

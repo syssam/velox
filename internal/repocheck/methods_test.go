@@ -108,6 +108,7 @@ func genericOwnTypeParam(fd *ast.FuncDecl) bool {
 // exceptions are exact: column on the ten handle kinds, which makes a handle
 // a Column[E], MarshalJSON on One and Many, and Mutate on MutateFunc.
 func TestMethodsOfGenericTypesAreGeneric(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	files, err := filepath.Glob(filepath.Join(repoRoot(), "*.go"))
 	if err != nil {
@@ -128,6 +129,7 @@ func TestMethodsOfGenericTypesAreGeneric(t *testing.T) {
 }
 
 func TestMethodGuardCatchesAnOrdinaryMethod(t *testing.T) {
+	t.Parallel()
 	src := `package velox
 type Col[E, V any] struct{ I int32 }
 func (c Col[E, V]) column(*E) int32 { return c.I }
