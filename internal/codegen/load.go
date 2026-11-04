@@ -127,6 +127,9 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
+	// A deferred call does not run when a signal ends the process, as
+	// ci-local's fail-fast does: the handler removes tmp then.
+	defer removeOnSignal(tmp)()
 	overlay, originals, err := writeOverlay(tmp, pkg, cands, files, env)
 	if err != nil {
 		return nil, err

@@ -156,14 +156,15 @@ applied (`GeneratedCodeIsVersion10`):
    and `TestEntityUsedBeforeGenInit` still pass.
 2. **gen is one file.** In split mode gen holds `velox.go` alone: the
    package comment, the init, and the re-exports of every file velox-gen
-   writes in gen/entity, as one `type (…)`, one `const (…)` and one
-   `var (…)` declaration in the order of the files. A plugin's Go files in
-   gen/entity are re-exported the same way in one file per plugin,
+   writes in gen/entity, as one `type (…)` and one `var (…)` declaration
+   in the order of the files, and each enum's values as a `const (…)` of
+   their own, which the doc comment documents (revive). A plugin's Go
+   files in gen/entity are re-exported the same way in one file per plugin,
    `<plugin>_velox.go`: velox-graphql's is `velox-graphql_velox.go`.
    gqlgen's autobind of gen binds through the aliases wherever they are
    (`TestCollectRun`). The sweep removes the per-file re-exports an older
    velox-gen wrote (`TestSplitFacadeIsOneFile`). examples/tracker's gen
-   went from 10 files of 139 lines to 1 of 96.
+   went from 10 files of 139 lines to 1 of 98.
 3. **The handles have a named type.** `var Projects = projectHandles{…}`,
    where `projectHandles` is an unexported struct type: gopls's hover of
    `gen.Projects` says `var gen.Projects entity.projectHandles` rather than
@@ -172,3 +173,9 @@ applied (`GeneratedCodeIsVersion10`):
    CPU before and 3.11 s after (15 builds each, at a load average of 25),
    and its export data shrank 2%. The repocheck compile-cost tests do not
    include the handles.
+4. **A signal does not leave velox-gen's directory.** `Load` writes the
+   loader program in `.velox-gen-NNN` below the module and removed it with
+   a deferred call, which does not run when SIGINT or SIGTERM ends the
+   process, as ci-local's fail-fast sends. A handler now removes it, then
+   ends the process with the same signal; a signal the process ignores
+   stays ignored (`TestLoadSignalRemovesTempDir`, a child process).
