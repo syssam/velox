@@ -491,16 +491,16 @@ func decodeAll[K any](f *Filter, field string, ids []string, typ string) ([]any,
 }
 
 // The FK helpers are ID, IDList and Is of a foreign key, scoped to what its
-// relation edge lets the reader see, the target's Read policy: a row it
-// hides reads as null, to the edge and so to every predicate of its key, or
-// a filter would say which hidden row another row links to. With no Read
-// policy on target, the predicate is the column's alone, and there is no
-// EXISTS.
+// relation edge lets the reader see, the target's interceptors and Read
+// policy: a row they hide reads as null, to the edge and so to every
+// predicate of its key, or a filter would say which hidden row another row
+// links to. With no row filter on target, the predicate is the column's
+// alone, and there is no EXISTS.
 //
 // A WithRewrite in the application's own query is not known here, nor is it
 // to the edge's Has.
 
-// FKID is ID of a foreign key: with a Read policy on target, the key's
+// FKID is ID of a foreign key: with a row filter on target, the key's
 // predicate and the edge's Has.
 func FKID[K any](f *Filter, field string, id *string, typ string, col int, op velox.PredOp, edge int, target velox.Table) {
 	if f.err != nil || id == nil {
@@ -521,15 +521,15 @@ func FKIDList[K any](f *Filter, field string, ids []string, typ string, col int,
 	}
 }
 
-// FKIs is Is of a foreign key: with a Read policy on target, IsNil is the
-// edge's Has negated, and NotNil the edge's Has, as a hidden target counts
-// as none.
+// FKIs is Is of a foreign key: with a row filter on target (an interceptor
+// or a Read policy), IsNil is the edge's Has negated, and NotNil the edge's
+// Has, as a hidden target counts as none.
 func FKIs(f *Filter, field string, b *bool, col int, op velox.PredOp, edge int, target velox.Table) {
 	if f.err != nil || b == nil {
 		return
 	}
 	p := f.t.Pred(col, op, nil)
-	if target.HasReadPolicy() {
+	if target.HasRowFilter() {
 		p = f.t.Has(edge, target)
 		if op == velox.PredIsNull {
 			p = velox.NotPredicate(p)
@@ -538,10 +538,10 @@ func FKIs(f *Filter, field string, b *bool, col int, op velox.PredOp, edge int, 
 	f.is(field, *b, p)
 }
 
-// scoped is p, a predicate on the key of relation edge, and with a Read
-// policy on target the edge's Has too.
+// scoped is p, a predicate on the key of relation edge, and with a row
+// filter on target (an interceptor or a Read policy) the edge's Has too.
 func (f *Filter) scoped(p velox.Predicate, edge int, target velox.Table) velox.Predicate {
-	if !target.HasReadPolicy() {
+	if !target.HasRowFilter() {
 		return p
 	}
 	return velox.AndPredicates(p, f.t.Has(edge, target))
