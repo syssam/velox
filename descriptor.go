@@ -86,6 +86,8 @@ type Descriptor[E any] struct {
 	// calls its VeloxMeta waits on the build in progress and deadlocks. A
 	// Has or HasWhere does not: it names its relation, and the statement
 	// that holds the condition resolves it, so the body may build them.
+	// Field does not either: Load records the entity's columns before it
+	// calls the functions, and Field reads them there.
 	Scope        Scoper
 	Policy       []func() BoundPolicy
 	Hooks        []func() BoundHooks
@@ -104,7 +106,8 @@ type Descriptor[E any] struct {
 //
 // A build that panics with a NotLinkedError is returned and not kept, so that an
 // entity used before its generated package's init works once the init has
-// run. So is one whose Policy, Hooks or Interceptors panic with one.
+// run. So is one whose Policy, Hooks or Interceptors panic with one, as
+// Field does when the entity it names is not linked yet.
 func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] {
 	var m *Meta[E]
 	o.once.Do(func() bool {

@@ -185,6 +185,15 @@ func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c Col[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
 func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c JSONCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
+func (c Named[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c Named[E, V]) Immutable[_ Lazy[V]]() bool
+func (c Named[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c Named[E, V]) IsNull[_ Lazy[V]]() Pred[E]
+func (c Named[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c Named[E, V]) NotNull[_ Lazy[V]]() Pred[E]
+func (c Named[E, V]) Nullable[_ Lazy[V]]() bool
+func (c Named[E, V]) Ptr[_ Lazy[V]](x *E) *V
+func (c Named[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c NullCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
@@ -422,6 +431,7 @@ func DriverCode(err error) (string, bool)
 func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescriptor
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDescriptor
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescriptor
+func Field[E, V any](name string) Named[E, V]
 func GoType(c ColumnInfo) reflect.Type
 func IsDryRun(ctx context.Context) bool
 func IsNotFound(err error) bool
@@ -525,6 +535,7 @@ type Meta[E any] struct { }
 type MutateFunc[E any] func(ctx context.Context, m *Mutation[E]) error
 type Mutation[E any] struct { }
 type Mutator[E any] interface { Mutate(ctx context.Context, m *Mutation[E]) error }
+type Named[E, V any] struct { }
 type NotLinkedError = engine.NotLinkedError
 type NullCol[E, V any] struct { I int32 }
 type NullJSONCol[E, V any] struct { I int32 }

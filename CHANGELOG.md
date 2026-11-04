@@ -21,6 +21,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `velox.Field[E, V]("org_id")` returns `velox.Named[E, V]`, the handle of entity E's column
+  found by its name, for code that cannot name the generated handles, such as a mixin's
+  behaviour. V must be the field's Go type exactly. A wrong name or type panics, which,
+  called from a Policy, Hooks or Interceptors function, is E's `*SchemaError` at its
+  first use. velox records E's columns before it calls those functions, so a call from
+  one does not wait on the build in progress. A `Named` is a `Column[E]`, and has `EQ`,
+  `NEQ`, `In`, `IsNull`, `NotNull`, `Set`, `Ptr`, `Immutable` and `Nullable`; for a
+  pointer V, `EQ(nil)` is IS NULL and `Set(nil)` sets NULL. A Policy, Hooks or
+  Interceptors function that panics with `NotLinkedError` is retried at the next use, as
+  a descriptor that panics with one is.
 - `velox.Interceptor[E]`, a row filter an entity declares with an `Interceptors()` method
   on its schema, which velox-gen binds. Its `Filter`'s condition is ANDed into every
   SELECT, Count, aggregate, With load, EXISTS, join ON, UPDATE, DELETE, Save and upsert
