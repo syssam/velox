@@ -1,6 +1,8 @@
 # 30. A scoped column is declared in the schema; velox-gen writes the scope
 
-Status: accepted, 2026-11-02. Builds on 0029.
+Status: superseded by 0038, 2026-11-05: tenancy is a mixin over package `scope`, and
+`schema.Scoped`, `scope_velox.go` and `Descriptor.Scope` are gone. Accepted 2026-11-02.
+Builds on 0029.
 
 ## Context
 

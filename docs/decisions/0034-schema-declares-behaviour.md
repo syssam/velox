@@ -4,7 +4,8 @@ Status: accepted, 2026-11-03. Supersedes the hand-written part of 0030. Builds o
 Revised by 0036: gen/runtime is gone; a schema with behaviour splits gen into
 gen/entity, which the schema imports, and gen, which binds the schema.
 Revised again by 0037: gen holds every entity, and gen/runtime binds the
-schema, as here, when the schema imports gen.
+schema, as here, when the schema imports gen. Revised by 0038: a mixin declares
+behaviour too, and tenancy is one; the generated scope of 0030 is gone.
 
 ## Context
 
@@ -74,7 +75,9 @@ and policies, silently.
   calls a function a hook also uses keeps that function, and if it uses gen, loading
   needs gen to compile, as before.
 - Mixins still carry no behaviour: a hook a mixin's column needs is a generic function
-  each entity lists (`auth.CreatedBy` in the hooks example).
+  each entity lists (`auth.CreatedBy` in the hooks example). (Revised: a mixin declares
+  generic `Policy[E]`, `Hooks[E]` and `Interceptors[E]` methods, which velox-gen binds
+  before the entity's; tenancy is one, 0038.)
 - The engine's check for an unbound `Policy` or `Hooks` method stays, for entities
   written by hand, and its message now points to the schema package.
 - A Go type of a field (`GoType`, a JSON field's struct) cannot be declared in a schema

@@ -1,7 +1,7 @@
 # 29. A scope is a Policy and a hook; the core has no tenant
 
 Status: accepted, 2026-11-02. Supersedes 0016, and the tenant-reference and join-row
-parts of 0028.
+parts of 0028. Revised by 0038: a scope is applied by a tenancy mixin.
 
 ## Context
 
@@ -25,7 +25,10 @@ The core knows no tenant. Row scoping is a `Policy` plus a hook, made by the pac
   and reports false for the zero value.
 - `scope.By(key, eq, fieldPtr)` gives `Policy()`, `Wrap(p)`, which ANDs the scope into a
   policy's Read and Write and checks an insert's column against the context, and
-  `Fill()`, an insert hook that fills a zero column.
+  `Fill()`, an insert hook that fills a zero column. (Revised by 0038: `scope.By[E](key,
+  column)` finds the column by name, refuses a mutable or nullable one, and has no
+  `Wrap`; a tenancy mixin returns its `Policy()` and `Fill()`, and velox ANDs the
+  policies.)
 - No value in the context is `scope.ErrNoScope`; a row for another value is
   `scope.ErrMismatch`. Both are policy errors, so a statement fails closed.
 - `WithoutPolicy(ctx, reason)` lifts every policy, a scope included, so there is one

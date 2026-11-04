@@ -131,8 +131,35 @@ the generated entity of package `gen`: `func (User) Policy() velox.Policy[gen.Us
 `func (User) Interceptors() []velox.Interceptor[gen.User]`. A velox
 interceptor is a row filter, not ent's query middleware: its condition
 reaches every read and write of the entity, a relation's included, before
-the Read policy, and `WithoutPolicy` does not lift it. The layout is ent's
-(decision 0037):
+the Read policy, and `WithoutPolicy` does not lift it.
+
+A mixin declares behaviour as ent's does, with generic methods:
+`func (InOrg) Policy[E any]() velox.Policy[E]`, `Hooks[E any]()` and
+`Interceptors[E any]()`. velox-gen binds them for every entity that lists the
+mixin, mixins first, in `Mixin()` order, then the entity's own. The policies
+are ANDed, so none lifts another. Tenancy is such a mixin, over package
+`scope` (decision 0038), as in ent's privacytenant example:
+
+```go
+var OrgKey = scope.NewKey[int64]("org")
+
+type InOrg struct{ mixin.Schema }
+
+func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
+
+func (InOrg) Policy[E any]() velox.Policy[E] { return scope.By[E](OrgKey, "org_id").Policy() }
+
+func (InOrg) Hooks[E any]() []velox.Hook[E] {
+	return []velox.Hook[E]{scope.By[E](OrgKey, "org_id").Fill()}
+}
+```
+
+Soft delete is `softdelete.Mixin{}` from `schema/mixin/softdelete`: a delete
+sets `deleted_at`, and `softdelete.Skip(ctx)` shows deleted rows and makes a
+delete hard. `scopetest.Isolates` checks, in a test, that an entity is
+confined.
+
+The layout is ent's (decision 0037):
 
 - `gen` holds every entity, handle and descriptor. When the schema package
   imports `gen`, as it does for these methods, `gen` does not import it.

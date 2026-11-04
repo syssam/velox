@@ -3,6 +3,7 @@
 Status: accepted, 2026-11-04. Supersedes 0036's layout: gen/entity, the
 facade of re-exports and its plugin re-exports are gone. 0036's typed
 binds by name, `NotLinkedError` and MetaOnce's retry stay.
+Revised by 0038: the descriptor has no `Scope`.
 
 ## Context
 
@@ -122,3 +123,13 @@ bytes, entityDescUse 766412 → 766634, entityDescHooks 1032448 → 1032512,
 policy and hooks 266036 → 265878. At N=100 with a `Policy` per entity, gen's
 archive is 28697904 → 28701420 bytes and gen/runtime's 3558650 → 3557106,
 with the same 17101 go.shape symbols. No budget changed.
+
+2026-11-05, mixins with behaviour (`GeneratedCodeIsVersion14` and 15): the
+`Scope:` line, `Descriptor.Scope`, `velox.Scoper` and `ScopeKit` are gone
+(0038). A descriptor names `Policy`, `Hooks` and `Interceptors`, each a list
+of bindings, and gen/runtime binds each entity's sources there, mixins first:
+`velox.BindPolicy[gen.Comment](sch.InOrg{}.Policy, sch.Comment{}.Policy)`.
+gen's `veloxBound`, which flagged the methods `SetVeloxRuntime` had bound,
+was removed with version 14: gen's `VeloxRuntime` holds the bound lists, and
+an entity without behaviour names none. The erased types stay, for the
+reason above.
