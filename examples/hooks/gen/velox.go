@@ -13,15 +13,10 @@ import (
 	sch "github.com/syssam/velox/examples/hooks/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion8
-
-// The schema's Hooks and Policy methods, of the types entity binds.
-var (
-	_ func(*sch.Task) []velox.Hook[entity.Task] = (*sch.Task).Hooks
-)
+const _ = velox.GeneratedCodeIsVersion9
 
 func init() {
 	entity.SetVeloxRuntime(entity.VeloxRuntime{
-		Task: &sch.Task{},
+		TaskHooks: sch.Task{}.Hooks,
 	})
 }

@@ -1,6 +1,10 @@
 package schema
 
-import "github.com/syssam/velox/schema/internal/desc"
+import (
+	"fmt"
+
+	"github.com/syssam/velox/schema/internal/desc"
+)
 
 // Annotation is extra data attached to a schema, field, edge or index. Name
 // identifies it, and velox-gen passes annotations it does not know to the
@@ -77,3 +81,29 @@ func (Schema) Mixin() []Mixin { return nil }
 
 // Annotations returns no annotations.
 func (Schema) Annotations() []Annotation { return nil }
+
+// FieldDescriptor returns the descriptor of the field name of s, declared
+// by s or by one of its mixins. It is for the code velox-gen writes, which
+// reads from it a default or a validator it cannot call by name. It panics
+// when s has no such field, which means the generated code is older than
+// the schema: run velox-gen.
+func FieldDescriptor(s Interface, name string) *desc.Field {
+	var lists [][]Field
+	for _, m := range s.Mixin() {
+		if m != nil {
+			lists = append(lists, m.Fields())
+		}
+	}
+	lists = append(lists, s.Fields())
+	for _, l := range lists {
+		for _, f := range l {
+			if f == nil {
+				continue
+			}
+			if d := f.Descriptor(); d != nil && d.Name == name {
+				return d
+			}
+		}
+	}
+	panic(fmt.Sprintf("schema: %T has no field %q: the generated code is older than the schema; run velox-gen", s, name))
+}

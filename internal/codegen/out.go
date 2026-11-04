@@ -6,7 +6,12 @@ type Config struct {
 	SchemaPath string           // the schema package's import path; Graph.Package when empty
 	Bound      map[string]Bound // per entity name: which methods the schema package declares (see SchemaMethods)
 	UserDoc    bool             // a user's file has the package comment; velox.go then has none
-	EntityDoc  bool             // in split mode, a user's file in entity has the package comment; entity.go then has none
+	// Funcs are the packages of the functions the schemas name as defaults
+	// and validators, by import path (see FuncPackages). A function of a
+	// package that is not here, or that the entities cannot import, is read
+	// from the schema.
+	Funcs     map[string]FuncPkg
+	EntityDoc bool // in split mode, a user's file in entity has the package comment; entity.go then has none
 
 	// Split says the schema package imports the generated entities, as it
 	// does when it declares Hooks or Policy; a non-empty Bound implies it.
@@ -27,6 +32,8 @@ const EntityDir = "entity"
 // that its Descriptor binds them.
 type Bound struct {
 	Policy, Hooks bool
+	// PolicyPtr and HooksPtr say the method has a pointer receiver.
+	PolicyPtr, HooksPtr bool
 	// PolicyConds is "path:line" of the first Read or Write key of a
 	// velox.Policy literal in the Policy method's body, "" when it has none.
 	// The join entity of a bidirectional edge cannot have either.
@@ -73,6 +80,11 @@ type OutEntity struct {
 	// the file imports under the alias sch.
 	NeedsSch bool
 
+	// Binds are what package gen gives this entity in split mode, as fields
+	// of entity.VeloxRuntime: its Policy and Hooks methods, and the defaults
+	// and validators the entity cannot call by name.
+	Binds []*OutBind
+
 	CheckCode  string // the cases of Check's switch on the column, "" when none
 	CheckSetup string // statements run once inside Descriptor before the literal (regexps, validator funcs, descriptor reads), "" when none
 }
@@ -114,6 +126,22 @@ type OutField struct {
 	UpdateDefaultCode    string // "" or "func() any { … }"
 }
 
+// OutBind is a field of entity.VeloxRuntime, which package gen sets.
+type OutBind struct {
+	Field string // e.g. "CommentPolicy", "GroupTokenDefault"
+	Type  string // its type, as package entity writes it, e.g. "func() velox.Policy[Comment]"
+	// Value is the expression gen sets it to, e.g. "sch.Comment{}.Policy",
+	// or, when Desc is set, a read of the variable DescVar, e.g.
+	// "groupToken.DefaultFunc.(func() string)".
+	Value string
+	// Desc is the name of the schema's field whose descriptor Value reads,
+	// DescVar the variable gen holds it in; "" when Value reads none.
+	Desc, DescVar string
+	// Imports are the packages Value names, but sch and the schema DSL
+	// package: import name → path.
+	Imports map[string]string
+}
+
 // OutRel is a relation of an entity.
 type OutRel struct {
 	GoName, Name, Target string
@@ -136,4 +164,4 @@ type OutEnum struct {
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 8
+const GeneratedCodeVersion = 9

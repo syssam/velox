@@ -310,8 +310,8 @@ func TestLowerChecks(t *testing.T) {
 	}
 	for _, want := range []string{
 		`re0 := regexp.MustCompile("^[a-z]+$")`,
-		`v0 := (&sch.LwChecked{}).Fields()[0].Descriptor().Validators[0].(func(string) error)`,
-		`v1 := (&sch.LwChecked{}).Fields()[1].Descriptor().Validators[0].(func(int) error)`,
+		`d0 := schema.FieldDescriptor(&sch.LwChecked{}, "code").Validators[0].(func(string) error)`,
+		`d1 := schema.FieldDescriptor(&sch.LwChecked{}, "age").Validators[0].(func(int) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
@@ -324,13 +324,13 @@ func TestLowerChecks(t *testing.T) {
 		`if x == "" {`, `errors.New("must not be empty")`,
 		"if len(x) > 5 {", `errors.New("length is more than 5")`,
 		"if !re0.MatchString(x) {", `errors.New("does not match ^[a-z]+$")`,
-		"if err := v0(x); err != nil {",
+		"if err := d0(x); err != nil {",
 		"case lwCheckedColAge:",
 		"x := v.(int)",
 		"if x == 0 {", "return nil", // Optional: zero is unset, and valid
 		"if x < 1 {", `errors.New("is less than 1")`,
 		"if x > 120 {", `errors.New("is more than 120")`,
-		"if err := v1(x); err != nil {",
+		"if err := d1(x); err != nil {",
 		"case lwCheckedColState:",
 		"x := v.(LwCheckedState)",
 		"if !x.IsValid() {", `errors.New("is not one of on, off")`,
@@ -354,7 +354,7 @@ func TestLowerChecks(t *testing.T) {
 	if strings.Contains(e.CheckCode, "case lwCheckedColPlain:") || strings.Contains(e.CheckCode, "case lwCheckedColID:") {
 		t.Errorf("a column without checks has a case:\n%s", e.CheckCode)
 	}
-	if !reflect.DeepEqual(e.Imports, []string{"errors", "regexp"}) {
+	if !reflect.DeepEqual(e.Imports, []string{"errors", "github.com/syssam/velox/schema", "regexp"}) {
 		t.Errorf("imports %v", e.Imports)
 	}
 	// An entity without checks has no code.
@@ -413,8 +413,8 @@ func TestLowerDefaultKeepsType(t *testing.T) {
 	}
 }
 
-// A mixin's field is read at Mixin()[m].Fields()[i], and every default that is
-// not a literal comes from the descriptor.
+// A mixin's field is read by its name, as the schema's own are, and every
+// default that is not a literal comes from the descriptor.
 type lwMix struct{ mixin.Schema }
 
 func (lwMix) Fields() []schema.Field {
@@ -449,12 +449,11 @@ type LwBox struct{ W, H int }
 func TestLowerMixinPosition(t *testing.T) {
 	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwMixed{})
 	e := o.entity("LwMixed")
-	const mix = "(&sch.LwMixed{}).Mixin()[1].Fields()"
 	for _, want := range []string{
-		`v0 := ` + mix + `[0].Descriptor().Validators[0].(func(string) error)`,
+		`d0 := schema.FieldDescriptor(&sch.LwMixed{}, "slug").Validators[0].(func(string) error)`,
 		// The descriptor of the field read twice is read once.
-		`f0 := (&sch.LwMixed{}).Fields()[0].Descriptor()`,
-		`v1 := f0.Validators[0].(func(string) error)`,
+		`f0 := schema.FieldDescriptor(&sch.LwMixed{}, "own")`,
+		`d4 := f0.Validators[0].(func(string) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
@@ -463,24 +462,24 @@ func TestLowerMixinPosition(t *testing.T) {
 	// Each descriptor read is a statement of the setup, run once; the closure
 	// of a column only calls or returns what it read.
 	for _, want := range []string{
-		`d0 := ` + mix + `[1].Descriptor().Default.(func() time.Time)`,
-		`d1 := ` + mix + `[2].Descriptor().DefaultFunc.(func() int64)`,
-		`d2 := f0.DefaultFunc.(func() string)`,
-		`d3 := (&sch.LwMixed{}).Fields()[1].Descriptor().UpdateDefault.(func() time.Time)`,
-		`d4 := (&sch.LwMixed{}).Fields()[7].Descriptor().Default` + "\n",
+		`d1 := schema.FieldDescriptor(&sch.LwMixed{}, "made").Default.(func() time.Time)`,
+		`d2 := schema.FieldDescriptor(&sch.LwMixed{}, "rev").DefaultFunc.(func() int64)`,
+		`d3 := f0.DefaultFunc.(func() string)`,
+		`d5 := schema.FieldDescriptor(&sch.LwMixed{}, "touched").UpdateDefault.(func() time.Time)`,
+		`d6 := schema.FieldDescriptor(&sch.LwMixed{}, "pt").Default` + "\n",
 	} {
 		if !strings.Contains(e.CheckSetup+"\n", want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
 		}
 	}
 	for _, c := range []struct{ name, def, fn, upd string }{
-		{"made", "", `func() any { return d0() }`, ""},
-		{"rev", "", `func() any { return d1() }`, ""},
-		{"own", "", `func() any { return d2() }`, ""},
-		{"touched", "", "", `func() any { return d3() }`},
+		{"made", "", `func() any { return d1() }`, ""},
+		{"rev", "", `func() any { return d2() }`, ""},
+		{"own", "", `func() any { return d3() }`, ""},
+		{"touched", "", "", `func() any { return d5() }`},
 		{"blob", "", `func() any { var v []byte; _ = json.Unmarshal([]byte("\"Yg==\""), &v); return v }`, ""},
 		{"labels", "", `func() any { return []string{"a", "b"} }`, ""},
-		{"pt", "", `func() any { return d4 }`, ""},
+		{"pt", "", `func() any { return d6 }`, ""},
 		{"tier", "LwMixedTierPaid", "", ""},
 		{"lit", `"hi"`, "", ""},
 		{"count", `int(5)`, "", ""},
@@ -499,7 +498,7 @@ func TestLowerMixinPosition(t *testing.T) {
 			}
 		}
 	}
-	if !reflect.DeepEqual(e.Imports, []string{"encoding/json", "errors", "github.com/syssam/velox/internal/codegen", "time"}) {
+	if !reflect.DeepEqual(e.Imports, []string{"encoding/json", "errors", "github.com/syssam/velox/internal/codegen", "github.com/syssam/velox/schema", "time"}) {
 		t.Errorf("imports %v", e.Imports)
 	}
 }
@@ -1044,10 +1043,10 @@ func (LwConv) Fields() []schema.Field {
 func TestLowerChecksConvertOnlyWhenTypesDiffer(t *testing.T) {
 	e := mustLower(t, Config{}, LwConv{}).entity("LwConv")
 	for _, want := range []string{
-		"x := v.(string)", "re0.MatchString(x)", "v0(x)",
-		"x := v.(codegen.LwSlug)", "re1.MatchString(string(x))", "v1(string(x))",
-		"x := v.(int64)", "if x < 0 {", "if x > 9 {", "v2(x)",
-		"x := v.(codegen.LwCents)", "if x < codegen.LwCents(0) {", "if x > codegen.LwCents(9) {", "v3(int64(x))",
+		"x := v.(string)", "re0.MatchString(x)", "d0(x)",
+		"x := v.(codegen.LwSlug)", "re1.MatchString(string(x))", "d1(string(x))",
+		"x := v.(int64)", "if x < 0 {", "if x > 9 {", "d2(x)",
+		"x := v.(codegen.LwCents)", "if x < codegen.LwCents(0) {", "if x > codegen.LwCents(9) {", "d3(int64(x))",
 	} {
 		if !strings.Contains(e.CheckCode, want) {
 			t.Errorf("CheckCode lacks %q:\n%s", want, e.CheckCode)
@@ -1097,13 +1096,13 @@ func TestLowerTypedConstructors(t *testing.T) {
 	}
 	e := outs[0].entity("LwPriced")
 	for _, want := range []string{
-		`v0 := (&sch.LwPriced{}).Fields()[0].Descriptor().Validators[0].(func(int64) error)`,
+		`d0 := schema.FieldDescriptor(&sch.LwPriced{}, "price").Validators[0].(func(int64) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
 		}
 	}
-	for _, want := range []string{"case lwPricedColPrice:", "x := v.(codegen.LwCents)", "if x < codegen.LwCents(1) {", "if err := v0(int64(x)); err != nil {"} {
+	for _, want := range []string{"case lwPricedColPrice:", "x := v.(codegen.LwCents)", "if x < codegen.LwCents(1) {", "if err := d0(int64(x)); err != nil {"} {
 		if !strings.Contains(e.CheckCode, want) {
 			t.Errorf("CheckCode lacks %s:\n%s", want, e.CheckCode)
 		}
@@ -1130,10 +1129,10 @@ func (LwStamped) Fields() []schema.Field {
 func TestLowerTimeDefaultConverts(t *testing.T) {
 	e := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwStamped{}).entity("LwStamped")
 	for _, want := range []string{
-		`f0 := (&sch.LwStamped{}).Fields()[0].Descriptor()`,
+		`f0 := schema.FieldDescriptor(&sch.LwStamped{}, "at")`,
 		`d0 := f0.Default.(func() time.Time)`,
 		`d1 := f0.UpdateDefault.(func() time.Time)`,
-		`d2 := (&sch.LwStamped{}).Fields()[1].Descriptor().Default.(func() time.Time)`,
+		`d2 := schema.FieldDescriptor(&sch.LwStamped{}, "plain").Default.(func() time.Time)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)

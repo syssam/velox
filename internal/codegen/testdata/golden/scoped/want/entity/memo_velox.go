@@ -44,7 +44,6 @@ func (*Memo) VeloxMeta() *velox.Meta[Memo] {
 // memoDescriptor describes Memo to velox: its table, columns, edges and hooks.
 func memoDescriptor() velox.Descriptor[Memo] {
 	rt := veloxRuntime()
-	policy := veloxPolicy[Memo](rt.Memo, "Memo")
 	return velox.Descriptor[Memo]{
 		Name:  "gen.Memo",
 		Table: "memos",
@@ -53,7 +52,7 @@ func memoDescriptor() velox.Descriptor[Memo] {
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 		},
 		PrimaryKey: []int{memoColID},
-		Policy:     func() velox.BoundPolicy { return velox.BindPolicy(memoScope.Wrap(policy())) },
+		Policy:     func() velox.BoundPolicy { return velox.BindPolicy(memoScope.Wrap(rt.MemoPolicy())) },
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Memo]{memoScope.Fill()}) },
 		FieldPtr: func(x *Memo, i int) any {
 			switch i {

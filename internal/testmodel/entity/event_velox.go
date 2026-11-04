@@ -50,16 +50,14 @@ func (*Event) VeloxMeta() *velox.Meta[Event] {
 
 // eventDescriptor describes Event to velox: its table, columns, edges and hooks.
 func eventDescriptor() velox.Descriptor[Event] {
-	rt := veloxRuntime()
-	d0 := rt.Event.Fields()[0].Descriptor().Default.(func() time.Time)
-	d1 := rt.Event.Fields()[1].Descriptor().Default.(func() time.Time)
+	veloxRuntime()
 	return velox.Descriptor[Event]{
 		Name:  "testmodel.Event",
 		Table: "events",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "At", Name: "at", DefaultFunc: func() any { return kind.Moment(d0()) }},
-			{Field: "MaybeAt", Name: "maybe_at", DefaultFunc: func() any { return kind.Moment(d1()) }},
+			{Field: "At", Name: "at", DefaultFunc: func() any { return kind.Moment(time.Now()) }},
+			{Field: "MaybeAt", Name: "maybe_at", DefaultFunc: func() any { return kind.Moment(time.Now()) }},
 		},
 		PrimaryKey: []int{eventColID},
 		FieldPtr: func(x *Event, i int) any {

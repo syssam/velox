@@ -47,6 +47,18 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	l.entities()
 	l.relations()
 	l.finish()
+	if l.out.Split {
+		owner := map[string]string{}
+		for _, e := range l.out.Entities {
+			e.Binds = slices.Concat(methodBinds(e), e.Binds)
+			for _, b := range e.Binds {
+				if old, ok := owner[b.Field]; ok {
+					l.errs = append(l.errs, &Error{Schema: e.Name, Reason: fmt.Sprintf("velox-gen names a value of %s and one of %s %s in entity.VeloxRuntime; rename a field or a schema", old, e.Name, b.Field)})
+				}
+				owner[b.Field] = e.Name
+			}
+		}
+	}
 	if len(l.errs) > 0 {
 		slices.SortStableFunc(l.errs, func(x, y *Error) int { return strings.Compare(x.Schema, y.Schema) })
 		errs := make([]error, len(l.errs))
@@ -61,6 +73,27 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 		}
 	}
 	return l.out, nil
+}
+
+// methodBinds are the fields of entity.VeloxRuntime that hold e's Policy and
+// Hooks methods: method values of a new value of the schema's type, a
+// pointer when the method has a pointer receiver. gen sets them, so the
+// compiler checks each method's signature at its line of gen/velox.go.
+func methodBinds(e *OutEntity) []*OutBind {
+	recv := func(ptr bool) string {
+		if ptr {
+			return "(&sch." + e.Name + "{})"
+		}
+		return "sch." + e.Name + "{}"
+	}
+	var out []*OutBind
+	if e.Bound.Policy {
+		out = append(out, &OutBind{Field: e.Name + "Policy", Type: "func() velox.Policy[" + e.Name + "]", Value: recv(e.Bound.PolicyPtr) + ".Policy", Imports: map[string]string{"velox": veloxPkg}})
+	}
+	if e.Bound.Hooks {
+		out = append(out, &OutBind{Field: e.Name + "Hooks", Type: "func() []velox.Hook[" + e.Name + "]", Value: recv(e.Bound.HooksPtr) + ".Hooks", Imports: map[string]string{"velox": veloxPkg}})
+	}
+	return out
 }
 
 // bidiPolicyError is the *FileError of the Policy of e, the join entity of a
@@ -108,7 +141,6 @@ type entState struct {
 	paths   map[string]string // import name → path
 	sch     bool              // the code reads the schema package
 	regexps int
-	valids  int
 	reads   int // descriptor reads hoisted into setup
 	setup   []string
 	cases   []string
@@ -486,44 +518,88 @@ func qualifiers(ident string) []string {
 	return qs
 }
 
-// descriptor is the expression of f's descriptor in the schema package,
-// by its position. In split mode, the schema is the runtime's value, rt.<E>,
-// which the Descriptor function sets rt to.
+// schemaPkg is the import path of the schema DSL package, whose
+// FieldDescriptor reads a field's descriptor by its name.
+const schemaPkg = "github.com/syssam/velox/schema"
+
+// descriptor is the expression of f's descriptor in the schema package, by
+// the field's name, in plain mode.
 func (s *entState) descriptor(e *Entity, f *Field) string {
 	s.sch = true
-	p := f.Position
-	v := "(&sch." + e.Name + "{})"
-	if s.l.out.Split {
-		v = "rt." + e.Name
+	return fmt.Sprintf("schema.FieldDescriptor(&sch.%s{}, %s)", e.Name, strconv.Quote(f.Name))
+}
+
+// schemaFunc returns the expression, of the type typ, of a function of f
+// that the schema holds: its descriptor's member (DefaultFunc, Validators[0]).
+// ref names the function. It is the function itself, pkg.Name, when ref
+// names one the entities' package can import, of the type typ. Otherwise
+// it is, in split mode, the field of entity.VeloxRuntime named for e, f and
+// suffix, which package gen sets; in plain mode, a variable of the setup
+// block that reads the descriptor once.
+func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member, typ, suffix, where string) string {
+	if ref != nil && ref.Pkg != "" && ref.Type == typ {
+		if p, ok := s.l.cfg.Funcs[ref.Pkg]; ok && p.Entity {
+			name := p.Name
+			if ref.Pkg == s.l.out.SchemaPath {
+				name, s.sch = "sch", true
+			}
+			if s.free(ref.Pkg, name) {
+				if name != "sch" {
+					s.use(ref.Pkg, name, where)
+				}
+				return name + "." + ref.Name
+			}
+		}
 	}
-	if p.MixedIn {
-		return fmt.Sprintf("%s.Mixin()[%d].Fields()[%d].Descriptor()", v, p.MixinIndex, p.Index)
+	if !s.l.out.Split {
+		s.use(schemaPkg, "schema", where)
+		v := "d" + strconv.Itoa(s.reads)
+		s.reads++
+		s.setup = append(s.setup, fmt.Sprintf("%s := %s.%s.(%s)", v, s.descriptor(e, f), member, typ))
+		return v
 	}
-	return fmt.Sprintf("%s.Fields()[%d].Descriptor()", v, p.Index)
+	b := &OutBind{Field: e.Name + f.GoName + suffix, Type: typ, Imports: map[string]string{}}
+	for _, q := range qualifiers(typ) {
+		if p := s.paths[q]; p != "" {
+			b.Imports[q] = p
+		}
+	}
+	if ref != nil && ref.Pkg == s.l.out.SchemaPath && ref.Type == typ {
+		b.Value = "sch." + ref.Name // gen imports the schema package
+	} else {
+		b.Desc, b.DescVar = f.Name, camel(s.out.Label)+f.GoName
+		b.Value = fmt.Sprintf("%s.%s.(%s)", b.DescVar, member, typ)
+	}
+	s.out.Binds = append(s.out.Binds, b)
+	return "rt." + b.Field
+}
+
+// free reports whether the entity's file can import the package at p by
+// name: no other package the generated code uses has the name.
+func (s *entState) free(p, name string) bool {
+	if owner, ok := s.l.owned[name]; ok && owner != p {
+		return false
+	}
+	old, ok := s.paths[name]
+	return !ok || old == p
 }
 
 // defaults writes the code of f's Default, DefaultFunc and UpdateDefault.
-// Each read of the descriptor is a statement of the setup block,
-// which runs once, so the closure of a column does no descriptor read per row.
+// A function is called by its name when it has one the generated code can
+// use (see schemaFunc), and is read from the schema once otherwise, so the
+// closure of a column reads no descriptor per row.
 func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 	elem := o.ElemType
-	// hoist adds the statement that reads expr once and returns its variable.
-	hoist := func(expr string) string {
-		name := "d" + strconv.Itoa(s.reads)
-		s.reads++
-		s.setup = append(s.setup, name+" := "+expr)
-		return name
-	}
-	// call reads a function from the descriptor once and calls it per row.
-	call := func(member string) string {
+	// call returns the column's closure, which calls the function member.
+	call := func(member, suffix string, ref *loadjson.FuncRef) string {
 		if f.Type == "time" && elem != "time.Time" {
 			// A time default is a func() time.Time, which the builder let
 			// through only for a GoType that converts from time.Time.
 			s.use("time", "time", where)
-			d := hoist(fmt.Sprintf("%s.%s.(func() time.Time)", s.descriptor(e, f), member))
+			d := s.schemaFunc(e, f, ref, member, "func() time.Time", suffix, where)
 			return fmt.Sprintf("func() any { return %s(%s()) }", elem, d)
 		}
-		d := hoist(fmt.Sprintf("%s.%s.(func() %s)", s.descriptor(e, f), member, elem))
+		d := s.schemaFunc(e, f, ref, member, "func() "+elem, suffix, where)
 		return fmt.Sprintf("func() any { return %s() }", d)
 	}
 	if len(f.Default) > 0 {
@@ -541,20 +617,38 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 			s.use("encoding/json", "json", where)
 			o.DefaultFuncCode = fmt.Sprintf("func() any { var v %s; _ = json.Unmarshal([]byte(%s), &v); return v }", elem, strconv.Quote(compact(f.Default)))
 		case !f.DefaultFunc: // else DefaultFunc below replaces it, and nothing reads this
-			d := hoist(s.descriptor(e, f) + ".Default")
+			d := s.schemaValue(e, f, "Default", where)
 			o.DefaultFuncCode = fmt.Sprintf("func() any { return %s }", d)
 		}
 	}
 	if f.DefaultFunc {
 		if f.Type == "time" || f.Type == "uuid" {
-			o.DefaultFuncCode = call("Default") // their Default takes a func
+			o.DefaultFuncCode = call("Default", "Default", f.DefaultRef) // their Default takes a func
 		} else {
-			o.DefaultFuncCode = call("DefaultFunc")
+			o.DefaultFuncCode = call("DefaultFunc", "Default", f.DefaultRef)
 		}
 	}
 	if f.UpdateDefault {
-		o.UpdateDefaultCode = call("UpdateDefault")
+		o.UpdateDefaultCode = call("UpdateDefault", "UpdateDefault", f.UpdateDefaultRef)
 	}
+}
+
+// schemaValue returns the expression of a value of f's descriptor, its
+// member, of type any, that is not a function: in split mode the field of
+// entity.VeloxRuntime package gen sets, in plain mode a variable of the setup
+// block.
+func (s *entState) schemaValue(e *Entity, f *Field, member, where string) string {
+	if !s.l.out.Split {
+		s.use(schemaPkg, "schema", where)
+		v := "d" + strconv.Itoa(s.reads)
+		s.reads++
+		s.setup = append(s.setup, fmt.Sprintf("%s := %s.%s", v, s.descriptor(e, f), member))
+		return v
+	}
+	b := &OutBind{Field: e.Name + f.GoName + member, Type: "any", Desc: f.Name, DescVar: camel(s.out.Label) + f.GoName}
+	b.Value = b.DescVar + "." + member
+	s.out.Binds = append(s.out.Binds, b)
+	return "rt." + b.Field
 }
 
 // literal writes f's literal Default as a Go literal of the element type
@@ -880,11 +974,18 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 			s.fail(where, "Validate is not allowed on a field of type %s", f.Type)
 			break
 		}
-		s.setup = append(s.setup, fmt.Sprintf("v%d := %s.Validators[%d].(func(%s) error)", s.valids, s.descriptor(e, f), j, v))
-		line(1, "if err := v%d(%s); err != nil {", s.valids, conv(v))
+		var ref *loadjson.FuncRef
+		if j < len(f.ValidatorRefs) {
+			ref = &f.ValidatorRefs[j]
+		}
+		suffix := "Validator"
+		if f.Validators > 1 {
+			suffix += strconv.Itoa(j + 1)
+		}
+		fn := s.schemaFunc(e, f, ref, fmt.Sprintf("Validators[%d]", j), fmt.Sprintf("func(%s) error", v), suffix, where)
+		line(1, "if err := %s(%s); err != nil {", fn, conv(v))
 		line(2, "return err")
 		line(1, "}")
-		s.valids++
 	}
 	if b.Len() == header {
 		return // every check was one that cannot fail on a value that is set
@@ -1147,7 +1248,7 @@ func (l *lowerer) complete(s *entState) {
 }
 
 // descRead matches the read of a field's descriptor in the schema package.
-var descRead = regexp.MustCompile(`(?:\(&sch\.\w+\{\}\)|rt\.\w+)(?:\.Mixin\(\)\[\d+\])?\.Fields\(\)\[\d+\]\.Descriptor\(\)`)
+var descRead = regexp.MustCompile(`schema\.FieldDescriptor\(&sch\.\w+\{\}, "[^"]*"\)`)
 
 // shareReads makes each descriptor that more than one statement of setup reads
 // a variable of its own, set before the first statement that reads it, so that

@@ -8,20 +8,13 @@ import (
 	sch "github.com/syssam/velox/internal/testmodel/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion8
-
-// The schema's Hooks and Policy methods, of the types entity binds.
-var (
-	_ func(*sch.Invoice) velox.Policy[entity.Invoice] = (*sch.Invoice).Policy
-	_ func(*sch.Invoice) []velox.Hook[entity.Invoice] = (*sch.Invoice).Hooks
-	_ func(*sch.Ticket) velox.Policy[entity.Ticket]   = (*sch.Ticket).Policy
-	_ func(*sch.Ticket) []velox.Hook[entity.Ticket]   = (*sch.Ticket).Hooks
-)
+const _ = velox.GeneratedCodeIsVersion9
 
 func init() {
 	entity.SetVeloxRuntime(entity.VeloxRuntime{
-		Event:   &sch.Event{},
-		Invoice: &sch.Invoice{},
-		Ticket:  &sch.Ticket{},
+		InvoicePolicy: sch.Invoice{}.Policy,
+		InvoiceHooks:  sch.Invoice{}.Hooks,
+		TicketPolicy:  sch.Ticket{}.Policy,
+		TicketHooks:   sch.Ticket{}.Hooks,
 	})
 }

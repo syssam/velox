@@ -261,11 +261,11 @@ func TestGenerateBindsSchemaMethods(t *testing.T) {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "entity", "user_velox.go"))
-	if !strings.Contains(string(user), `policy := veloxPolicy[User](rt.User, "User")`) || !strings.Contains(string(user), "velox.BindPolicy(policy())") {
+	if !strings.Contains(string(user), "rt := veloxRuntime()") || !strings.Contains(string(user), "velox.BindPolicy(rt.UserPolicy())") {
 		t.Errorf("entity/user_velox.go does not bind the policy:\n%s", user)
 	}
 	facade, _ := os.ReadFile(filepath.Join(dir, "gen", "velox.go"))
-	for _, want := range []string{"User: &sch.User{},", `sch "example.com/app/schema"`, "_ func(*sch.User) velox.Policy[entity.User] = (*sch.User).Policy"} {
+	for _, want := range []string{"UserPolicy: sch.User{}.Policy,", `sch "example.com/app/schema"`} {
 		if !strings.Contains(string(facade), want) {
 			t.Errorf("velox.go lacks %q:\n%s", want, facade)
 		}
@@ -306,7 +306,7 @@ func TestGenerateBindsUserMethods(t *testing.T) {
 		t.Fatalf("%d %q", code, errs)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "entity", "user_velox.go"))
-	if !strings.Contains(string(user), "velox.BindPolicy(policy())") {
+	if !strings.Contains(string(user), "velox.BindPolicy(rt.UserPolicy())") {
 		t.Errorf("user_velox.go does not bind the policy:\n%s", user)
 	}
 	if strings.Contains(string(user), "BindHooks") {
@@ -1252,7 +1252,7 @@ func TestGenerateScoped(t *testing.T) {
 		t.Errorf("scope_velox.go does not re-export OrgKey:\n%s", reexp)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "entity", "user_velox.go"))
-	if !strings.Contains(string(user), "velox.BindPolicy(userScope.Wrap(policy()))") ||
+	if !strings.Contains(string(user), "velox.BindPolicy(userScope.Wrap(rt.UserPolicy()))") ||
 		!strings.Contains(string(user), "velox.BindHooks([]velox.Hook[User]{userScope.Fill()})") {
 		t.Errorf("user_velox.go does not bind the scope around the policy:\n%s", user)
 	}
@@ -1283,7 +1283,7 @@ func TestGenerateScopedRemoved(t *testing.T) {
 		}
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "entity", "user_velox.go"))
-	if strings.Contains(string(user), "Scope") || !strings.Contains(string(user), "velox.BindPolicy(policy())") {
+	if strings.Contains(string(user), "Scope") || !strings.Contains(string(user), "velox.BindPolicy(rt.UserPolicy())") {
 		t.Errorf("user_velox.go still wraps the scope:\n%s", user)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema"); code != 0 {

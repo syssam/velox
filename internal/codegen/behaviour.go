@@ -46,7 +46,7 @@ func SchemaMethods(dir, genPkg string, entities []string) (map[string]Bound, err
 			if !ok || fd.Recv == nil || !slices.Contains(behaviourMethods, fd.Name.Name) {
 				continue
 			}
-			e, _ := receiver(fd)
+			e, ptr := receiver(fd)
 			if e == "" {
 				continue
 			}
@@ -64,12 +64,12 @@ func SchemaMethods(dir, genPkg string, entities []string) (map[string]Bound, err
 			}
 			b := out[e]
 			if m == "Policy" {
-				b.Policy = true
+				b.Policy, b.PolicyPtr = true, ptr
 				if pos := policyConds(f, fd, e); pos.IsValid() {
 					b.PolicyConds = fmt.Sprintf("%s:%d", path, fset.Position(pos).Line)
 				}
 			} else {
-				b.Hooks = true
+				b.Hooks, b.HooksPtr = true, ptr
 			}
 			out[e] = b
 		}

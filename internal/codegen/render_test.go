@@ -34,7 +34,7 @@ func TestGolden(t *testing.T) {
 	for _, c := range goldenCases {
 		t.Run(c.name, func(t *testing.T) {
 			dir := filepath.Join("testdata", "golden", c.name)
-			got, err := Generate(goldenGraph(t, c.name), c.cfg)
+			got, err := goldenGenerate(t, c.name, c.cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -93,6 +93,27 @@ func TestGolden(t *testing.T) {
 // goldenGraph loads and builds the schema package of the golden case name.
 func goldenGraph(t *testing.T, name string) *Graph {
 	t.Helper()
+	g, _ := goldenModule(t, name)
+	return g
+}
+
+// goldenGenerate generates the golden case name with cfg, and the packages of
+// the functions its schemas name, as velox-gen finds them.
+func goldenGenerate(t *testing.T, name string, cfg Config) ([]File, error) {
+	t.Helper()
+	g, dir := goldenModule(t, name)
+	funcs, err := FuncPackages(dir, g, cfg, offline())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Funcs = funcs
+	return Generate(g, cfg)
+}
+
+// goldenModule loads and builds the schema package of the golden case name,
+// in a module of its own, and returns the module's directory.
+func goldenModule(t *testing.T, name string) (*Graph, string) {
+	t.Helper()
 	files := map[string]string{}
 	matches, err := filepath.Glob(filepath.Join("testdata", "golden", name, "schema", "*.go"))
 	if err != nil || len(matches) == 0 {
@@ -108,7 +129,8 @@ func goldenGraph(t *testing.T, name string) *Graph {
 		_, src, _ := bytes.Cut(b, []byte("\n"))
 		files["schema/"+filepath.Base(p)] = string(src)
 	}
-	m, err := Load(module(t, files), "./schema", offline())
+	dir := module(t, files)
+	m, err := Load(dir, "./schema", offline())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +138,7 @@ func goldenGraph(t *testing.T, name string) *Graph {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return g
+	return g, dir
 }
 
 // The blog golden's bidirectional friends edge marks its join entity Bidi,
@@ -299,7 +321,7 @@ func TestRenderPackageDoc(t *testing.T) {
 // TestRenderScopeFile: scope_velox.go holds each key once and each scoped
 // entity's scope, and exists only when some entity is scoped.
 func TestRenderScopeFile(t *testing.T) {
-	files, err := Generate(goldenGraph(t, "scoped"), goldenCases[2].cfg)
+	files, err := goldenGenerate(t, "scoped", goldenCases[2].cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +346,7 @@ func TestRenderScopeFile(t *testing.T) {
 	if strings.Contains(got, "ownerScope") {
 		t.Errorf("an unscoped entity has a scope variable:\n%s", got)
 	}
-	plain, err := Generate(goldenGraph(t, "minimal"), Config{Package: "gen"})
+	plain, err := goldenGenerate(t, "minimal", Config{Package: "gen"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +362,7 @@ func TestRenderScopeFile(t *testing.T) {
 // combination of the methods the user declares; an unscoped entity's lines are
 // as they were.
 func TestRenderScopedBinding(t *testing.T) {
-	files, err := Generate(goldenGraph(t, "scoped"), goldenCases[2].cfg)
+	files, err := goldenGenerate(t, "scoped", goldenCases[2].cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

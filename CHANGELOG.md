@@ -115,6 +115,19 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- The generated descriptor calls a default or a validator by its name when it is an
+  exported function declared at package level in a package gen can import: `mixin.Time`'s
+  `time.Now` is `func() any { return time.Now() }`. The schema package's own such function
+  is called from the facade, `gen/velox.go`, in split mode. A closure, a method value, an
+  instance of a generic function, an unexported function and one of a package gen cannot
+  import (package main, an internal package of another tree, one that imports gen) is read
+  from its field's descriptor by the field's name, with `schema.FieldDescriptor`, which is
+  new. In split mode `entity.VeloxRuntime` holds typed fields, set by name in `gen/velox.go`:
+  `CommentPolicy: sch.Comment{}.Policy`, `GroupTokenDefault func() string`. The compiler
+  checks each at its line there. Generated code reads no field by its index.
+- `GeneratedCodeIsVersion9`: regenerate. `entity.VeloxRuntime` has a typed field per bound
+  method, default and validator in place of a schema value per entity, and `veloxPolicy` and
+  `veloxHooks` are gone.
 - velox-gen finds schemas by ent's rule: an exported, non-generic struct type of the schema
   package that implements `schema.Interface`, by value or through a pointer, directly or
   through embedding at any depth. A schema that embeds an unexported base (`type Release

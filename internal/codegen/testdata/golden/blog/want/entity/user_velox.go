@@ -132,19 +132,14 @@ func (*User) VeloxMeta() *velox.Meta[User] {
 // userDescriptor describes User to velox: its table, columns, edges and hooks.
 func userDescriptor() velox.Descriptor[User] {
 	rt := veloxRuntime()
-	d0 := rt.User.Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	f0 := rt.User.Mixin()[0].Fields()[1].Descriptor()
-	d1 := f0.Default.(func() time.Time)
-	d2 := f0.UpdateDefault.(func() time.Time)
-	v0 := rt.User.Mixin()[1].Fields()[0].Descriptor().Validators[0].(func(string) error)
 	re0 := regexp.MustCompile("^[^@]+@[^@]+$")
 	return velox.Descriptor[User]{
 		Name:  "gen.User",
 		Table: "users",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
-			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
+			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return time.Now() }, Immutable: true},
+			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return time.Now() }, UpdateDefault: func() any { return time.Now() }},
 			{Field: "CreatedBy", Name: "created_by"},
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Name", Name: "name"},
@@ -222,7 +217,7 @@ func userDescriptor() velox.Descriptor[User] {
 				if len(x) < 2 {
 					return errors.New("length is less than 2")
 				}
-				if err := v0(x); err != nil {
+				if err := rt.UserCreatedByValidator(x); err != nil {
 					return err
 				}
 			case userColName:

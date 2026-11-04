@@ -13,20 +13,13 @@ import (
 	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion8
-
-// The schema's Hooks and Policy methods, of the types entity binds.
-var (
-	_ func(*sch.Comment) velox.Policy[entity.Comment] = (*sch.Comment).Policy
-	_ func(*sch.Issue) velox.Policy[entity.Issue]     = (*sch.Issue).Policy
-	_ func(*sch.Project) velox.Policy[entity.Project] = (*sch.Project).Policy
-)
+const _ = velox.GeneratedCodeIsVersion9
 
 func init() {
 	entity.SetVeloxRuntime(entity.VeloxRuntime{
-		Comment: &sch.Comment{},
-		Issue:   &sch.Issue{},
-		Project: &sch.Project{},
+		CommentPolicy: sch.Comment{}.Policy,
+		IssuePolicy:   sch.Issue{}.Policy,
+		ProjectPolicy: sch.Project{}.Policy,
 	})
 }
 

@@ -15,18 +15,11 @@ import (
 
 const _ = velox.GeneratedCodeIsVersion8
 
-// The schema's Hooks and Policy methods, of the types entity binds.
-var (
-	_ func(*sch.Memo) velox.Policy[entity.Memo] = (*sch.Memo).Policy
-	_ func(*sch.Tag) []velox.Hook[entity.Tag]   = (*sch.Tag).Hooks
-	_ func(*sch.Task) velox.Policy[entity.Task] = (*sch.Task).Policy
-	_ func(*sch.Task) []velox.Hook[entity.Task] = (*sch.Task).Hooks
-)
-
 func init() {
 	entity.SetVeloxRuntime(entity.VeloxRuntime{
-		Memo: &sch.Memo{},
-		Tag:  &sch.Tag{},
-		Task: &sch.Task{},
+		MemoPolicy: sch.Memo{}.Policy,
+		TagHooks:   sch.Tag{}.Hooks,
+		TaskPolicy: sch.Task{}.Policy,
+		TaskHooks:  sch.Task{}.Hooks,
 	})
 }

@@ -11,20 +11,20 @@ import (
 	"example.com/blog/gen/entity"
 	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema"
 )
 
 const _ = velox.GeneratedCodeIsVersion8
 
-// The schema's Hooks and Policy methods, of the types entity binds.
-var (
-	_ func(*sch.Post) velox.Policy[entity.Post] = (*sch.Post).Policy
-)
-
 func init() {
+	groupToken := schema.FieldDescriptor(&sch.Group{}, "token")
+	postSlug := schema.FieldDescriptor(&sch.Post{}, "slug")
+	userCreatedBy := schema.FieldDescriptor(&sch.User{}, "created_by")
 	entity.SetVeloxRuntime(entity.VeloxRuntime{
-		Group: &sch.Group{},
-		Post:  &sch.Post{},
-		User:  &sch.User{},
+		GroupTokenDefault:      groupToken.DefaultFunc.(func() string),
+		PostPolicy:             sch.Post{}.Policy,
+		PostSlugValidator:      postSlug.Validators[0].(func(string) error),
+		UserCreatedByValidator: userCreatedBy.Validators[0].(func(string) error),
 	})
 }
 

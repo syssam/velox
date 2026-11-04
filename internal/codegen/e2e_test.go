@@ -57,6 +57,9 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 	if err != nil {
 		t.Fatal(err)
 	}
+	if cfg.Funcs, err = FuncPackages(dir, g, cfg, offline()); err != nil {
+		t.Fatal(err)
+	}
 	out, err := Generate(g, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -127,7 +130,7 @@ func TestWrongPolicySignatureDoesNotCompile(t *testing.T) {
 	if err == nil {
 		t.Fatal("go vet accepted a Policy method that returns a pointer")
 	}
-	if !strings.Contains(out, "(*sch.Post).Policy") || !strings.Contains(out, "*velox.Policy[entity.Post]") {
+	if !strings.Contains(out, "sch.Post{}.Policy") || !strings.Contains(out, "*velox.Policy[entity.Post]") {
 		t.Errorf("the error does not name Post.Policy and the mismatched *velox.Policy[entity.Post]:\n%s", out)
 	}
 	if !strings.Contains(out, "gen/velox.go") {

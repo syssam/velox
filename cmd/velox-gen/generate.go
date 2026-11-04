@@ -205,6 +205,9 @@ func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string) (codeg
 	if split {
 		cfg.Bound, cfg.Split = bound, true
 	}
+	if cfg.Funcs, err = codegen.FuncPackages(dir, gm.graph, cfg, env); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
 }
 

@@ -7,7 +7,7 @@ package loadjson
 import "encoding/json"
 
 // Version is the version of the Model's JSON format.
-const Version = 4
+const Version = 5
 
 // SchemaPath is the import path of the schema DSL package. velox-gen uses it
 // to find the schemas of a package by their embedding of schema.Schema.
@@ -69,31 +69,48 @@ type GoType struct {
 	Marshaler bool     `json:"marshaler,omitempty"` // the type, or a pointer to it, has its own JSON or text encoding
 }
 
+// FuncRef is a function value of a schema. Pkg and Name are set when it is
+// an exported function declared at package level, which generated code can
+// call as name.Name if it can import Pkg; Why says why not otherwise. Type
+// is the function's type, as reflect prints it.
+type FuncRef struct {
+	Pkg  string `json:"pkg,omitempty"`
+	Name string `json:"name,omitempty"`
+	Type string `json:"type,omitempty"`
+	Why  string `json:"why,omitempty"`
+}
+
 // Field describes one field.
 type Field struct {
-	Name          string                     `json:"name"`
-	Type          string                     `json:"type"`
-	Size          int                        `json:"size,omitempty"`
-	GoType        *GoType                    `json:"go_type,omitempty"`
-	Optional      bool                       `json:"optional,omitempty"`
-	Nillable      bool                       `json:"nillable,omitempty"`
-	Immutable     bool                       `json:"immutable,omitempty"`
-	Unique        bool                       `json:"unique,omitempty"`
-	Sensitive     bool                       `json:"sensitive,omitempty"`
-	Default       json.RawMessage            `json:"default,omitempty"`      // a literal Default
-	DefaultFunc   bool                       `json:"default_func,omitempty"` // DefaultFunc, or a func Default on time/uuid
-	UpdateDefault bool                       `json:"update_default,omitempty"`
-	Enums         []Enum                     `json:"enums,omitempty"`
-	Checks        []Check                    `json:"checks,omitempty"`
-	Validators    int                        `json:"validators,omitempty"` // the number of custom validators
-	StorageKey    string                     `json:"storage_key,omitempty"`
-	SchemaType    map[string]string          `json:"schema_type,omitempty"`
-	SchemaDefault map[string]string          `json:"schema_default,omitempty"`
-	Comment       string                     `json:"comment,omitempty"`
-	StructTag     string                     `json:"struct_tag,omitempty"`
-	Annotations   map[string]json.RawMessage `json:"annotations,omitempty"`
-	Position      Position                   `json:"position"`
-	Pos           string                     `json:"pos,omitempty"` // file:line of the constructor's call
+	Name          string          `json:"name"`
+	Type          string          `json:"type"`
+	Size          int             `json:"size,omitempty"`
+	GoType        *GoType         `json:"go_type,omitempty"`
+	Optional      bool            `json:"optional,omitempty"`
+	Nillable      bool            `json:"nillable,omitempty"`
+	Immutable     bool            `json:"immutable,omitempty"`
+	Unique        bool            `json:"unique,omitempty"`
+	Sensitive     bool            `json:"sensitive,omitempty"`
+	Default       json.RawMessage `json:"default,omitempty"`      // a literal Default
+	DefaultFunc   bool            `json:"default_func,omitempty"` // DefaultFunc, or a func Default on time/uuid
+	UpdateDefault bool            `json:"update_default,omitempty"`
+	Enums         []Enum          `json:"enums,omitempty"`
+	Checks        []Check         `json:"checks,omitempty"`
+	Validators    int             `json:"validators,omitempty"` // the number of custom validators
+	// DefaultRef, UpdateDefaultRef and ValidatorRefs describe the function
+	// of the DefaultFunc (or a func Default), of the UpdateDefault and of
+	// each validator: by name, when generated code can call it so.
+	DefaultRef       *FuncRef                   `json:"default_ref,omitempty"`
+	UpdateDefaultRef *FuncRef                   `json:"update_default_ref,omitempty"`
+	ValidatorRefs    []FuncRef                  `json:"validator_refs,omitempty"` // one per validator
+	StorageKey       string                     `json:"storage_key,omitempty"`
+	SchemaType       map[string]string          `json:"schema_type,omitempty"`
+	SchemaDefault    map[string]string          `json:"schema_default,omitempty"`
+	Comment          string                     `json:"comment,omitempty"`
+	StructTag        string                     `json:"struct_tag,omitempty"`
+	Annotations      map[string]json.RawMessage `json:"annotations,omitempty"`
+	Position         Position                   `json:"position"`
+	Pos              string                     `json:"pos,omitempty"` // file:line of the constructor's call
 }
 
 // Edge describes one edge. An inverse declared inline, with To(...).From(...),

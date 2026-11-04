@@ -77,6 +77,9 @@ func (f Field) MarshalJSON() ([]byte, error) {
 	type plain Field // without this method
 	p := plain(f)
 	p.Field.Pos = ""
+	// What names the functions is the loader's, for Lower, and not part of
+	// the plugin model.
+	p.DefaultRef, p.UpdateDefaultRef, p.ValidatorRefs = nil, nil, nil
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)

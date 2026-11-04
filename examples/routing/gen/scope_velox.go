@@ -7,7 +7,7 @@ import (
 	"github.com/syssam/velox/scope"
 )
 
-const _ = velox.GeneratedCodeIsVersion8
+const _ = velox.GeneratedCodeIsVersion9
 
 // OrgKey is the "org" scope: a request carries its value with OrgKey.With(ctx, v),
 // and a statement on an entity scoped by it, without one, fails with scope.ErrNoScope.

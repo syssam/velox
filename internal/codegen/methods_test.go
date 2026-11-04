@@ -34,7 +34,7 @@ func TestSchemaMethodsFindsMethods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]Bound{"User": {Policy: true}, "Post": {Hooks: true}, "Tag": {Policy: true, Hooks: true}}
+	want := map[string]Bound{"User": {Policy: true}, "Post": {Hooks: true, HooksPtr: true}, "Tag": {Policy: true, Hooks: true}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -342,7 +342,7 @@ func TestSchemaMethodsFindsPolicyConds(t *testing.T) {
 	}
 	want := map[string]Bound{
 		"UserFriend": {Policy: true, PolicyConds: filepath.Join(dir, "friend.go") + ":10"},
-		"UserGroup":  {Policy: true},
+		"UserGroup":  {Policy: true, PolicyPtr: true},
 		"UserPair":   {Policy: true},
 	}
 	if !reflect.DeepEqual(got, want) {

@@ -2,21 +2,16 @@
 
 package entity
 
-import (
-	"fmt"
-
-	"github.com/syssam/velox"
-	"github.com/syssam/velox/schema"
-)
+import "github.com/syssam/velox"
 
 // VeloxRuntime is what package gen gives package entity when the program
-// starts: a value of each schema whose defaults, validators, Hooks or
-// Policy an entity reads. A join entity's value is the struct of its name
-// in the schema package. The schema package imports entity, so entity cannot
-// import it. Applications do not use this type: they import "github.com/syssam/velox/examples/policy/gen".
+// starts: the schema's Hooks and Policy methods, and the defaults and
+// validators that entity cannot call by name. The schema package imports
+// entity, so entity cannot import it. Applications do not use this type:
+// they import "github.com/syssam/velox/examples/policy/gen".
 type VeloxRuntime struct {
-	Comment schema.Interface
-	Doc     schema.Interface
+	CommentPolicy func() velox.Policy[Comment]
+	DocPolicy     func() velox.Policy[Doc]
 }
 
 var veloxRT *VeloxRuntime
@@ -38,13 +33,4 @@ func veloxRuntime() *VeloxRuntime {
 		panic("entity: the schema's hooks, policies and defaults are not linked: import \"github.com/syssam/velox/examples/policy/gen\", which re-exports \"github.com/syssam/velox/examples/policy/gen/entity\" and links the schema, in the program or test")
 	}
 	return veloxRT
-}
-
-// veloxPolicy returns the Policy method of s, the schema value of the
-// entity name. It panics, naming the method, when s has none of its type.
-func veloxPolicy[E any](s any, name string) func() velox.Policy[E] {
-	if m, ok := s.(interface{ Policy() velox.Policy[E] }); ok {
-		return m.Policy
-	}
-	panic(fmt.Sprintf("entity: %T, the schema of %s, has no method Policy() velox.Policy[entity.%[2]s]: run velox-gen", s, name))
 }

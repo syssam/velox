@@ -85,18 +85,13 @@ func (*Comment) VeloxMeta() *velox.Meta[Comment] {
 // commentDescriptor describes Comment to velox: its table, columns, edges and hooks.
 func commentDescriptor() velox.Descriptor[Comment] {
 	rt := veloxRuntime()
-	policy := veloxPolicy[Comment](rt.Comment, "Comment")
-	d0 := rt.Comment.Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	f0 := rt.Comment.Mixin()[0].Fields()[1].Descriptor()
-	d1 := f0.Default.(func() time.Time)
-	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Comment]{
 		Name:  "gen.Comment",
 		Table: "comments",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
-			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
+			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return time.Now() }, Immutable: true},
+			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return time.Now() }, UpdateDefault: func() any { return time.Now() }},
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "IssueID", Name: "issue_id"},
 			{Field: "AuthorID", Name: "author_id"},
@@ -107,7 +102,7 @@ func commentDescriptor() velox.Descriptor[Comment] {
 			velox.EdgeTo[Issue]("Issue", commentColIssueID, issueColID),
 			velox.EdgeTo[User]("Author", commentColAuthorID, userColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(commentScope.Wrap(policy())) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(commentScope.Wrap(rt.CommentPolicy())) },
 		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Comment]{commentScope.Fill()}) },
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {

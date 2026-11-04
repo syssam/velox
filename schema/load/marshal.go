@@ -348,11 +348,28 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 		g := loadjson.GoType(*d.GoType)
 		out.GoType = &g
 	}
+	if isFunc(d.DefaultFunc) {
+		r := funcRef(d.DefaultFunc)
+		out.DefaultRef = &r
+	}
+	if isFunc(d.UpdateDefault) {
+		r := funcRef(d.UpdateDefault)
+		out.UpdateDefaultRef = &r
+	}
+	for _, v := range d.Validators {
+		if isFunc(v) {
+			out.ValidatorRefs = append(out.ValidatorRefs, funcRef(v))
+		} else {
+			out.ValidatorRefs = append(out.ValidatorRefs, loadjson.FuncRef{Why: "not a function"})
+		}
+	}
 	ok := true
 	switch {
 	case d.Default == nil:
 	case isFunc(d.Default):
 		out.DefaultFunc = true
+		r := funcRef(d.Default)
+		out.DefaultRef = &r
 	default:
 		b, err := json.Marshal(d.Default)
 		if err != nil {

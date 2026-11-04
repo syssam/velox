@@ -97,3 +97,46 @@ and each new command. `gen/runtime` held a struct with three fields per entity
   schema values are held as interfaces, so the linker keeps their types and
   methods. gen has 13 366 lines before and 14 685 after. The repocheck
   compile-cost tests measure the generic runtime, which does not change.
+
+## Review
+
+2026-11-04: the generated descriptor read every default, validator and
+method off the schema by position, `rt.Comment.Mixin()[0].Fields()[1]`, and
+the methods by an interface assertion per entity. It is now written as by
+hand. The rulings, all applied (`GeneratedCodeIsVersion9`):
+
+1. **A named function is called by its name.** The loader names each
+   default, update default and validator function with
+   `runtime.FuncForPC`. An exported function declared at package level is
+   called as `pkg.Name`, in the entity's file, when the entities' package
+   can import its package: go list says it loads and is not package main,
+   Go's internal rule allows it, and it imports neither gen nor gen/entity
+   (nor, in split mode, the schema package). `mixin.Time` is
+   `func() any { return time.Now() }`. A closure, a method value, a method,
+   an instance of a generic function, an unexported function, one of
+   package main or a vendored package, or one whose type is not the one
+   the column calls, is not (`TestFuncRef`, `TestSplitFuncName`,
+   `TestInternalOK`).
+2. **The rest is bound by name and typed.** `entity.VeloxRuntime` has a
+   field per value gen gives an entity: `CommentPolicy func()
+   velox.Policy[Comment]`, `GroupTokenDefault func() string`,
+   `PostSlugValidator func(string) error`. `gen/velox.go` sets each by
+   name: a method value, `sch.Comment{}.Policy` (or `(&sch.Comment{}).Policy`
+   for a pointer receiver); the schema package's own exported function,
+   `sch.NewSlug`; else a read of the field's descriptor by its name,
+   `schema.FieldDescriptor(&sch.Group{}, "token").DefaultFunc.(func()
+   string)`. `schema.FieldDescriptor` is new; it finds a mixin's field too,
+   and panics, naming the schema and the field, when the generated code is
+   older than the schema. A wrong Policy signature fails to compile at its
+   line of `gen/velox.go` (`TestWrongPolicySignatureDoesNotCompile`).
+   `veloxPolicy` and `veloxHooks`, a generic instance per entity, are gone,
+   and so are the compile-check vars they needed.
+3. In plain mode the entity's file calls the function by name as well, and
+   reads the others with `schema.FieldDescriptor` in its Descriptor
+   function (`TestFunctionDefaults`, both modes).
+4. Fail-closed is kept: `veloxRuntime()` still runs first in every
+   Descriptor, with the same message, and an entity used before gen's init
+   works once gen has run.
+5. Cost: gen of examples/tracker went from 1 345 lines to 1 309,
+   internal/testmodel's from 1 006 to 967. The repocheck compile-cost
+   tests measure the generic runtime, which does not change.

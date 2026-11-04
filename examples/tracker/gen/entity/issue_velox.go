@@ -115,18 +115,13 @@ func (*Issue) VeloxMeta() *velox.Meta[Issue] {
 // issueDescriptor describes Issue to velox: its table, columns, edges and hooks.
 func issueDescriptor() velox.Descriptor[Issue] {
 	rt := veloxRuntime()
-	policy := veloxPolicy[Issue](rt.Issue, "Issue")
-	d0 := rt.Issue.Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	f0 := rt.Issue.Mixin()[0].Fields()[1].Descriptor()
-	d1 := f0.Default.(func() time.Time)
-	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Issue]{
 		Name:  "gen.Issue",
 		Table: "issues",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
-			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
+			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return time.Now() }, Immutable: true},
+			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return time.Now() }, UpdateDefault: func() any { return time.Now() }},
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "ProjectID", Name: "project_id"},
 			{Field: "AuthorID", Name: "author_id"},
@@ -146,7 +141,7 @@ func issueDescriptor() velox.Descriptor[Issue] {
 			velox.EdgeTo[Comment]("Comments", issueColID, commentColIssueID),
 			velox.EdgeThrough[IssueLabel, Label]("Labels", issueColID, issueLabelColIssueID, issueLabelColLabelID, labelColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(issueScope.Wrap(policy())) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(issueScope.Wrap(rt.IssuePolicy())) },
 		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Issue]{issueScope.Fill()}) },
 		FieldPtr: func(x *Issue, i int) any {
 			switch i {

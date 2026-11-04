@@ -13,17 +13,11 @@ import (
 	sch "github.com/syssam/velox/examples/policy/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion8
-
-// The schema's Hooks and Policy methods, of the types entity binds.
-var (
-	_ func(*sch.Comment) velox.Policy[entity.Comment] = (*sch.Comment).Policy
-	_ func(*sch.Doc) velox.Policy[entity.Doc]         = (*sch.Doc).Policy
-)
+const _ = velox.GeneratedCodeIsVersion9
 
 func init() {
 	entity.SetVeloxRuntime(entity.VeloxRuntime{
-		Comment: &sch.Comment{},
-		Doc:     &sch.Doc{},
+		CommentPolicy: sch.Comment{}.Policy,
+		DocPolicy:     sch.Doc{}.Policy,
 	})
 }

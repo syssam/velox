@@ -70,18 +70,13 @@ func (*Project) VeloxMeta() *velox.Meta[Project] {
 // projectDescriptor describes Project to velox: its table, columns, edges and hooks.
 func projectDescriptor() velox.Descriptor[Project] {
 	rt := veloxRuntime()
-	policy := veloxPolicy[Project](rt.Project, "Project")
-	d0 := rt.Project.Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	f0 := rt.Project.Mixin()[0].Fields()[1].Descriptor()
-	d1 := f0.Default.(func() time.Time)
-	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Project]{
 		Name:  "gen.Project",
 		Table: "projects",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
-			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
+			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return time.Now() }, Immutable: true},
+			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return time.Now() }, UpdateDefault: func() any { return time.Now() }},
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Name", Name: "name"},
 		},
@@ -92,7 +87,7 @@ func projectDescriptor() velox.Descriptor[Project] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Issue]("Issues", projectColID, issueColProjectID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(projectScope.Wrap(policy())) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(projectScope.Wrap(rt.ProjectPolicy())) },
 		Hooks:  func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[Project]{projectScope.Fill()}) },
 		FieldPtr: func(x *Project, i int) any {
 			switch i {

@@ -413,19 +413,12 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 	w.p("func %sDescriptor() velox.Descriptor[%s] {", camel(e.Label), e.Name)
 	// In split mode every entity checks that the generated package is
 	// linked, so that a program without it fails at its first use of any
-	// entity, not only of one that has behaviour. The schema's methods are
-	// read from its value here, so that one of another type fails then too.
+	// entity, not only of one that has behaviour.
 	if o.Split {
 		if runtimeValue(e) {
 			w.p("rt := veloxRuntime()")
 		} else {
 			w.p("veloxRuntime()")
-		}
-		if e.Bound.Policy {
-			w.p("policy := veloxPolicy[%s](rt.%[1]s, %s)", e.Name, strconv.Quote(e.Name))
-		}
-		if e.Bound.Hooks {
-			w.p("hooks := veloxHooks[%s](rt.%[1]s, %s)", e.Name, strconv.Quote(e.Name))
 		}
 	}
 	if e.CheckSetup != "" {
@@ -499,23 +492,22 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 	}
 	// A scoped entity's scope is outermost, whether or not the user declares
 	// the methods: the policy is wrapped in it, and its Fill runs first. The
-	// schema's methods, policy and hooks, are those of the runtime's value, a
-	// new *E of the schema package.
+	// schema's methods are the ones package gen set in the runtime.
 	switch {
 	case e.Scope != nil && e.Bound.Policy:
-		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(%s.Wrap(policy())) },", e.Scope.Var)
+		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(%s.Wrap(rt.%sPolicy())) },", e.Scope.Var, e.Name)
 	case e.Scope != nil:
 		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(%s.Policy()) },", e.Scope.Var)
 	case e.Bound.Policy:
-		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(policy()) },")
+		w.p("Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.%sPolicy()) },", e.Name)
 	}
 	switch {
 	case e.Scope != nil && e.Bound.Hooks:
-		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(%s.Fill(), hooks()) },", e.Scope.Var)
+		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooksAfter(%s.Fill(), rt.%sHooks()) },", e.Scope.Var, e.Name)
 	case e.Scope != nil:
 		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks([]velox.Hook[%s]{%s.Fill()}) },", e.Name, e.Scope.Var)
 	case e.Bound.Hooks:
-		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks(hooks()) },")
+		w.p("Hooks: func() velox.BoundHooks { return velox.BindHooks(rt.%sHooks()) },", e.Name)
 	}
 	w.p("FieldPtr: func(x *%s, i int) any {", e.Name)
 	w.p("switch i {")

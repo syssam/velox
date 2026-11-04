@@ -94,19 +94,13 @@ func (*Invoice) VeloxMeta() *velox.Meta[Invoice] {
 // invoiceDescriptor describes Invoice to velox: its table, columns, edges and hooks.
 func invoiceDescriptor() velox.Descriptor[Invoice] {
 	rt := veloxRuntime()
-	policy := veloxPolicy[Invoice](rt.Invoice, "Invoice")
-	hooks := veloxHooks[Invoice](rt.Invoice, "Invoice")
-	d0 := rt.Invoice.Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
-	f0 := rt.Invoice.Mixin()[0].Fields()[1].Descriptor()
-	d1 := f0.Default.(func() time.Time)
-	d2 := f0.UpdateDefault.(func() time.Time)
 	return velox.Descriptor[Invoice]{
 		Name:  "testmodel.Invoice",
 		Table: "invoices",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
-			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
+			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return time.Now() }, Immutable: true},
+			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return time.Now() }, UpdateDefault: func() any { return time.Now() }},
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Number", Name: "number"},
 			{Field: "Total", Name: "total"},
@@ -122,8 +116,8 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Item]("Items", invoiceColID, itemColInvoiceID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(policy()) },
-		Hooks:  func() velox.BoundHooks { return velox.BindHooks(hooks()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.InvoicePolicy()) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks(rt.InvoiceHooks()) },
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case invoiceColID:

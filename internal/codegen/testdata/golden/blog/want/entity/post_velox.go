@@ -86,8 +86,6 @@ func (*Post) VeloxMeta() *velox.Meta[Post] {
 // postDescriptor describes Post to velox: its table, columns, edges and hooks.
 func postDescriptor() velox.Descriptor[Post] {
 	rt := veloxRuntime()
-	policy := veloxPolicy[Post](rt.Post, "Post")
-	v0 := rt.Post.Fields()[2].Descriptor().Validators[0].(func(string) error)
 	return velox.Descriptor[Post]{
 		Name:  "gen.Post",
 		Table: "posts",
@@ -105,7 +103,7 @@ func postDescriptor() velox.Descriptor[Post] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[User]("Author", postColAuthorID, userColID),
 		},
-		Policy: func() velox.BoundPolicy { return velox.BindPolicy(policy()) },
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy(rt.PostPolicy()) },
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postColID:
@@ -143,7 +141,7 @@ func postDescriptor() velox.Descriptor[Post] {
 				}
 			case postColSlug:
 				x := v.(string)
-				if err := v0(x); err != nil {
+				if err := rt.PostSlugValidator(x); err != nil {
 					return err
 				}
 			case postColStatus:

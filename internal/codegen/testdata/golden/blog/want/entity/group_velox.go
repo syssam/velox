@@ -58,14 +58,13 @@ func (*Group) VeloxMeta() *velox.Meta[Group] {
 // groupDescriptor describes Group to velox: its table, columns, edges and hooks.
 func groupDescriptor() velox.Descriptor[Group] {
 	rt := veloxRuntime()
-	d0 := rt.Group.Fields()[1].Descriptor().DefaultFunc.(func() string)
 	return velox.Descriptor[Group]{
 		Name:  "gen.Group",
 		Table: "groups",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
-			{Field: "Token", Name: "token", DefaultFunc: func() any { return d0() }},
+			{Field: "Token", Name: "token", DefaultFunc: func() any { return rt.GroupTokenDefault() }},
 		},
 		PrimaryKey: []int{groupColID},
 		Edges: []velox.EdgeDescriptor{

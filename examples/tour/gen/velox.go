@@ -13,19 +13,13 @@ import (
 	sch "github.com/syssam/velox/examples/tour/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion8
-
-// The schema's Hooks and Policy methods, of the types entity binds.
-var (
-	_ func(*sch.Invoice) velox.Policy[entity.Invoice] = (*sch.Invoice).Policy
-	_ func(*sch.Invoice) []velox.Hook[entity.Invoice] = (*sch.Invoice).Hooks
-	_ func(*sch.Line) velox.Policy[entity.Line]       = (*sch.Line).Policy
-)
+const _ = velox.GeneratedCodeIsVersion9
 
 func init() {
 	entity.SetVeloxRuntime(entity.VeloxRuntime{
-		Invoice: &sch.Invoice{},
-		Line:    &sch.Line{},
+		InvoicePolicy: sch.Invoice{}.Policy,
+		InvoiceHooks:  sch.Invoice{}.Hooks,
+		LinePolicy:    sch.Line{}.Policy,
 	})
 }
 
