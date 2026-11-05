@@ -411,7 +411,10 @@ var mysqlExprDefault = map[string]bool{
 }
 
 // baseTypes are the column types of the field types whose type does not
-// depend on their Size: PostgreSQL's, MySQL's, then SQLite's.
+// depend on their Size: PostgreSQL's, MySQL's, then SQLite's. A time on
+// SQLite is datetime(9): nine fractional digits, as velox writes it, and a
+// type the driver hands over as text, which velox parses without the
+// driver's failed first parse of every DATETIME cell.
 var baseTypes = map[string][3]string{
 	"bool":    {"boolean", "tinyint(1)", "boolean"},
 	"int8":    {"smallint", "tinyint", "integer"},
@@ -426,7 +429,7 @@ var baseTypes = map[string][3]string{
 	"uint64":  {"numeric(20,0)", "bigint unsigned", "integer"},
 	"float32": {"real", "float", "real"},
 	"float64": {"double precision", "double", "real"},
-	"time":    {"timestamp with time zone", "datetime(6)", "datetime"},
+	"time":    {"timestamp with time zone", "datetime(6)", "datetime(9)"},
 	"uuid":    {"uuid", "char(36)", "text"},
 	"json":    {"jsonb", "json", "text"},
 }

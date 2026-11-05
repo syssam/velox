@@ -16,7 +16,7 @@ CREATE TABLE "velox_new_accounts" (
   "role" text NOT NULL DEFAULT 'viewer',
   "status" text NOT NULL DEFAULT 'active',
   "logins" integer NOT NULL DEFAULT 0,
-  "created_at" datetime NOT NULL,
+  "created_at" datetime(9) NOT NULL,
   "mentor_id" integer,
   CONSTRAINT "accounts_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "accounts" ("id") ON DELETE SET NULL,

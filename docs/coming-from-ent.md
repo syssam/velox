@@ -239,6 +239,12 @@ On SQLite, `velox.Connect` turns foreign keys on for every connection. A
 `*sql.DB` you pass to `velox.Open` is used as it is, so put
 `_pragma=foreign_keys(1)` in its DSN.
 
+On SQLite a time field is a `datetime(9)` column, where ent's is `datetime`.
+velox writes every time as UTC text with nine fractional digits and parses it
+itself; the driver parses a `datetime` column, slower, and velox reads that
+too. `migrate diff` on a database ent made plans the change to `datetime(9)`,
+a table rebuild on SQLite.
+
 ## GraphQL (contrib/graphql, compared with entgql)
 
 - **Inputs, not mutations, as in entgql.** velox-graphql writes

@@ -325,7 +325,7 @@ func TestTablesTypes(t *testing.T) {
 		"by256":      {"bytea", "blob", "blob"},
 		"by65536":    {"bytea", "mediumblob", "blob"},
 		"by16777216": {"bytea", "longblob", "blob"},
-		"t":          {"timestamp with time zone", "datetime(6)", "datetime"},
+		"t":          {"timestamp with time zone", "datetime(6)", "datetime(9)"},
 		"uu":         {"uuid", "char(36)", "text"},
 		"j":          {"jsonb", "json", "text"},
 		"o":          {"money", "int", "numeric"},

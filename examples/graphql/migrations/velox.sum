@@ -1,4 +1,5 @@
-h1:E4XHN0CRybMG+DleOmbMkrzM/RxLm7erUnp1QZdiOTI=
+h1:mv4MNNnVjgPgIBR8YXAA4KZWr3etMB6122kIOS7SOgE=
 0001_init.sql h1:KzvHy/592VmWTIeDYXySjCVAeAVn/yv0aNm59i/2Tpk=
-schema.json h1:pgRuR/wkBfjs9YttHJpAKeFVssJcYG0HstrmLMAUx5g=
+0002_sqlite_datetime9.sql h1:ZSv1M+FNujhm+O/8tCCw0EMLIe8bXSbjLkgJzlGKGLw=
+schema.json h1:/DeMY7fxuINLRZJ71xu1ppeuWVsnu3VBs9fMlvjpqIc=
 velox.json h1:kwGXDUmLy0YS8XIgvaPehFkSYOwxr3lcNqybqvcDGRc=

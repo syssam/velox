@@ -198,7 +198,7 @@
         },
         {
           "name": "created_at",
-          "type": "datetime"
+          "type": "datetime(9)"
         },
         {
           "name": "mentor_id",

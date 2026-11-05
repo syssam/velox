@@ -12,7 +12,7 @@ CREATE TABLE "velox_new_users" (
   "role" text NOT NULL DEFAULT 'viewer',
   "status" text NOT NULL DEFAULT 'active',
   "logins" integer NOT NULL DEFAULT 0,
-  "created_at" datetime NOT NULL,
+  "created_at" datetime(9) NOT NULL,
   "mentor_id" integer,
   "nickname" text NOT NULL,
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id") ON DELETE SET NULL,

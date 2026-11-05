@@ -205,6 +205,15 @@
 // is not so strict: a time field scans every text form of SQLite's date
 // functions, the result of MAX(created_at) included.
 //
+// A time column is declared datetime(9), for the nine digits, where ent and
+// older velox declare datetime. The modernc.org/sqlite driver parses only a
+// column declared exactly DATE, DATETIME or TIMESTAMP, and its first attempt
+// fails on velox's form, which costs allocations on every cell. It hands
+// over a datetime(9) column's text, which velox parses itself, allocating
+// nothing. A program reading the table through database/sql alone gets that
+// text. A datetime column still reads: migrate diff plans its change to
+// datetime(9), which on SQLite rebuilds the table.
+//
 // Connect opens one connection, as SQLite has one writer. A loop over Iter holds
 // it, so a statement in the loop's body fails: see Query.Iter.
 //

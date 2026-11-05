@@ -151,6 +151,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- On SQLite a time column is `datetime(9)`, was `datetime`. The modernc.org/sqlite
+  driver hands its text over, and velox parses velox's form itself with no allocation,
+  where the driver's parse of a `datetime` cell failed once and allocated on every
+  read. bench/compare's Query100 and EagerO2M100 on SQLite allocate about 30% less.
+  `migrate diff` plans the change of an existing `datetime` column, a table rebuild
+  whose file drops `type=datetime`; until then the column reads as before. A
+  `sql.Scanner` or `*any` destination of a `datetime(9)` column receives a `time.Time`,
+  as from a `datetime` one; a `*string` receives the stored text.
 - **Breaking.** `GeneratedCodeIsVersion17`: regenerate. A descriptor names its schema's
   value, `Schema: schema.Issue{}`, and velox reads the behaviour from it when it builds
   the metadata: each `Mixin()` value's Policy, Hooks and Interceptors, in order, then the

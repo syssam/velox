@@ -87,7 +87,7 @@
         },
         {
           "name": "published_at",
-          "type": "datetime",
+          "type": "datetime(9)",
           "nullable": true
         }
       ],
@@ -176,7 +176,7 @@
         },
         {
           "name": "joined_at",
-          "type": "datetime"
+          "type": "datetime(9)"
         },
         {
           "name": "password_hash",

@@ -198,7 +198,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
   "role" text NOT NULL DEFAULT 'viewer',
   "status" text NOT NULL DEFAULT 'active',
   "logins" real NOT NULL DEFAULT 0,
-  "created_at" datetime NOT NULL,
+  "created_at" datetime(9) NOT NULL,
   "mentor_id" integer,
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id") ON DELETE SET NULL,
   CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),

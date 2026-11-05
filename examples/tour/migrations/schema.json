@@ -12,12 +12,12 @@
         },
         {
           "name": "created_at",
-          "type": "datetime",
+          "type": "datetime(9)",
           "default": "(strftime('%Y-%m-%d %H:%M:%f000000+00:00','now'))"
         },
         {
           "name": "updated_at",
-          "type": "datetime",
+          "type": "datetime(9)",
           "default": "(strftime('%Y-%m-%d %H:%M:%f000000+00:00','now'))"
         },
         {
@@ -26,7 +26,7 @@
         },
         {
           "name": "deleted_at",
-          "type": "datetime",
+          "type": "datetime(9)",
           "nullable": true
         },
         {
