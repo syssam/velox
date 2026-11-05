@@ -4,6 +4,7 @@ package codegen
 type Config struct {
 	Package    string           // the generated package's name; "gen" when empty
 	SchemaPath string           // the schema package's import path; Graph.Package when empty
+	SchemaName string           // the schema package's name; the last element of SchemaPath when empty
 	Bound      map[string]Bound // per entity name: which methods the schema package declares (see SchemaMethods)
 	// Mixins are, per entity name, its mixins that declare behaviour, in
 	// Mixin order (see MixinBehaviour).
@@ -17,7 +18,7 @@ type Config struct {
 
 	// Linked are, per entity name, the names of its relations whose target
 	// velox-gen links (velox.Linked): those its behaviour names with
-	// velox.Edge (see CheckBehaviour).
+	// velox.HasEdge or HasEdgeWith (see CheckBehaviour).
 	Linked map[string][]string
 	// GenPath is the generated package's import path.
 	GenPath string
@@ -27,9 +28,6 @@ type Config struct {
 // that its Descriptor binds them.
 type Bound struct {
 	Policy, Hooks, Interceptors bool
-	// PolicyPtr, HooksPtr and InterceptorsPtr say the method has a pointer
-	// receiver.
-	PolicyPtr, HooksPtr, InterceptorsPtr bool
 	// PolicyConds is "path:line" of the first Read or Write key of a
 	// velox.Policy literal in the Policy method's body, "" when it has none.
 	// The join entity of a bidirectional edge cannot have either.
@@ -44,8 +42,11 @@ type Out struct {
 	Enums      []*OutEnum   // sorted by type name
 	NeedsSch   bool         // some entity reads the schema package
 	SchemaPath string       // the schema package's import path
-	UserDoc    bool         // Config.UserDoc
-	GenPath    string       // Config.GenPath
+	// SchemaName is the name the generated code gives the schema package:
+	// its own, unless the generated code uses that name for another.
+	SchemaName string
+	UserDoc    bool   // Config.UserDoc
+	GenPath    string // Config.GenPath
 }
 
 // OutEntity is one generated entity: a schema's, or a many-to-many join entity.
@@ -66,18 +67,18 @@ type OutEntity struct {
 	Imports []string
 
 	// NeedsSch reports that this entity's code reads the schema package, which
-	// the file imports under the alias sch.
+	// the file imports as Out.SchemaName.
 	NeedsSch bool
 
 	// ImportAs names the imports, by path, that the entity's file imports
-	// under a name other than the package's own: a mixin's package whose
-	// name another package of the file has.
+	// under a name other than the package's own: velox's schema package,
+	// when the schema package is named schema too.
 	ImportAs map[string]string
 
-	// Policy, Hooks and Interceptors are the sources of the entity's
-	// behaviour, in the order velox composes them: its mixins', in Mixin
-	// order, then its schema's own method. Each is nil when it has none.
-	Policy, Hooks, Interceptors []OutSource
+	// Schema is the value the Descriptor names for velox to read the
+	// entity's behaviour from, such as "schema.Issue{}": "" when neither
+	// its schema nor a mixin it lists declares any.
+	Schema string
 
 	CheckCode  string // the cases of Check's switch on the column, "" when none
 	CheckSetup string // statements run once inside Descriptor before the literal (regexps, validator funcs, descriptor reads), "" when none
@@ -101,18 +102,6 @@ type OutField struct {
 	DefaultCode          string // "" or a Go expression for ColumnDescriptor.Default
 	DefaultFuncCode      string // "" or "func() any { … }"
 	UpdateDefaultCode    string // "" or "func() any { … }"
-}
-
-// OutSource is one source of an entity's Policy, Hooks or Interceptors: a
-// mixin's method or the schema's own.
-type OutSource struct {
-	// Name is the source's type, e.g. "InOrg" or "Comment".
-	Name string
-	// Expr is the method value, as the entity's file writes it, e.g.
-	// "sch.InOrg{}.Policy" or "(&sch.Comment{}).Hooks".
-	Expr string
-	// Imports are the packages Expr names, but sch: import name → path.
-	Imports map[string]string
 }
 
 // OutRel is a relation of an entity.
@@ -140,4 +129,4 @@ const veloxPkg = "github.com/syssam/velox"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 16
+const GeneratedCodeVersion = 17

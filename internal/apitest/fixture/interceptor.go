@@ -16,7 +16,7 @@ const (
 	FilterHide FilterMode = iota // hide rows whose hidden is true: the default
 	FilterSkip                   // no restriction
 	FilterFail                   // return ErrFilter
-	FilterZero                   // return the zero Cond
+	FilterZero                   // return the zero Predicate
 )
 
 // ErrFilter is the error of INote's interceptor under FilterFail.
@@ -109,18 +109,18 @@ func (*INote) VeloxMeta() *velox.Meta[INote] { return iNoteMeta.Load(iNoteDescri
 // Interceptors hides the rows whose hidden is true, as the context's mode
 // says.
 func (*INote) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Cond, error) {
+	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) {
 		FilterCalls++
 		m, _ := ctx.Value(filterModeKey{}).(FilterMode)
 		switch m {
 		case FilterSkip:
 			return velox.Allow(), nil
 		case FilterFail:
-			return velox.Cond{}, ErrFilter
+			return velox.Predicate{}, ErrFilter
 		case FilterZero:
-			return velox.Cond{}, nil
+			return velox.Predicate{}, nil
 		}
-		return velox.C("hidden").EQ(false), nil
+		return velox.FieldEQ("hidden", false), nil
 	}}}
 }
 
@@ -128,8 +128,8 @@ func (*INote) Interceptors() []velox.Interceptor {
 // writes.
 func (*INote) Policy() velox.Policy {
 	return velox.Policy{
-		Read:  func(context.Context) (velox.Cond, error) { return velox.C("body").NEQ("secret"), nil },
-		Write: func(context.Context) (velox.Cond, error) { return velox.C("body").NEQ("locked"), nil },
+		Read:  func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("body", "secret"), nil },
+		Write: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("body", "locked"), nil },
 	}
 }
 
@@ -139,11 +139,11 @@ func iNoteDescriptor() velox.Descriptor[INote] {
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Body", Name: "body"}, {Field: "Hidden", Name: "hidden"},
 		},
-		PrimaryKey:   []int{0},
-		Indexes:      []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
-		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[IOwner]("owner", 1, 0)},
-		Policy:       []func() velox.Policy{(*INote)(nil).Policy},
-		Interceptors: []func() []velox.Interceptor{(*INote)(nil).Interceptors},
+		PrimaryKey: []int{0},
+		Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[IOwner]("owner", 1, 0)},
+		Schema:     (*INote)(nil),
+
 		FieldPtr: func(x *INote, i int) any {
 			return [...]any{&x.ID, &x.OwnerID, &x.Body, &x.Hidden}[i]
 		},

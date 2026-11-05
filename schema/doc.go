@@ -53,8 +53,8 @@
 //
 //	func (User) Policy() velox.Policy {
 //		return velox.Policy{
-//			Read: func(ctx context.Context) (velox.Cond, error) {
-//				return velox.C("deleted_at").IsNull(), nil
+//			Read: func(ctx context.Context) (velox.Predicate, error) {
+//				return velox.FieldIsNull("deleted_at"), nil
 //			},
 //		}
 //	}
@@ -69,19 +69,21 @@
 // them. A many-to-many join entity has no schema: declare an empty struct
 // of its name, type UserFriend struct{}, and the methods on it.
 //
-// gen imports the schema package, as sch, and each entity's descriptor
-// lists the method values, sch.User{}.Policy. velox-gen refuses a schema
-// package that imports gen, directly or through another package. A
-// relation that a behaviour method names with velox.Edge, by a constant,
-// is linked in the descriptor, so that its Has and HasWhere apply the
+// gen imports the schema package by its own name, and the descriptor of
+// each entity with behaviour names the schema's value, Schema:
+// schema.User{}; velox reads the methods of each value Mixin returns, in
+// order, then the schema's own. velox-gen refuses a schema package that
+// imports gen, directly or through another package. A relation that a
+// behaviour method names with velox.HasEdge or velox.HasEdgeWith, by a
+// constant, is linked in the descriptor, so that the condition applies the
 // target's Read policy.
 //
 // A mixin declares behaviour too, for every entity that lists it, with the
 // same methods, which are not generic:
 //
 //	func (InOrg) Policy() velox.Policy {
-//		return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
-//			return velox.C("org_id").EQ(orgOf(ctx)), nil
+//		return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+//			return velox.FieldEQ("org_id", orgOf(ctx)), nil
 //		}}
 //	}
 //
@@ -89,6 +91,6 @@
 // schema's: the policies are ANDed, the hooks run in that order, the first
 // outermost, and the interceptors' conditions are ANDed. velox-gen refuses
 // a method of another shape at its line. A column name an entity lacks
-// fails the statement that resolves it. A mixin that is not its type's
-// zero value is read where the schema returns it, with MixinAt.
+// fails the statement that resolves it. velox reads the values the
+// schema's Mixin method returns, so a mixin's configuration is its own.
 package schema

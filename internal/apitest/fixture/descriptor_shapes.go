@@ -31,7 +31,7 @@ var PnoteReads, PnoteWrites atomic.Int64
 type PnoteKey struct{}
 
 type PnoteAnswer struct {
-	P   velox.Cond
+	P   velox.Predicate
 	Err error
 }
 
@@ -40,19 +40,19 @@ type PnoteWriteKey struct{}
 
 func (*Pnote) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			PnoteReads.Add(1)
 			if a, ok := ctx.Value(PnoteKey{}).(PnoteAnswer); ok {
 				return a.P, a.Err
 			}
-			return velox.C("owner").EQ("ann"), nil
+			return velox.FieldEQ("owner", "ann"), nil
 		},
-		Write: func(ctx context.Context) (velox.Cond, error) {
+		Write: func(ctx context.Context) (velox.Predicate, error) {
 			PnoteWrites.Add(1)
 			if a, ok := ctx.Value(PnoteWriteKey{}).(PnoteAnswer); ok {
 				return a.P, a.Err
 			}
-			return velox.C("locked").EQ(false), nil
+			return velox.FieldEQ("locked", false), nil
 		},
 	}
 }
@@ -63,7 +63,7 @@ func (*Pnote) VeloxMeta() *velox.Meta[Pnote] { return PnoteMeta.Load(PnoteDescri
 
 func PnoteDescriptor() velox.Descriptor[Pnote] {
 	return velox.Descriptor[Pnote]{
-		Policy: []func() velox.Policy{(*Pnote)(nil).Policy},
+		Schema: (*Pnote)(nil),
 		Table:  "pnotes",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}, {Field: "Locked", Name: "locked"},
 			{Field: "ParentID", Name: "parent_id"}, {Field: "InvoiceID", Name: "invoice_id"}},
@@ -129,11 +129,11 @@ func NoteDryRun(ctx context.Context, hook string) {
 
 func (*Dnote) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			NoteDryRun(ctx, "Read")
 			return velox.Allow(), nil
 		},
-		Write: func(ctx context.Context) (velox.Cond, error) {
+		Write: func(ctx context.Context) (velox.Predicate, error) {
 			NoteDryRun(ctx, "Write")
 			return velox.Allow(), nil
 		},
@@ -168,8 +168,8 @@ func (*Dnote) VeloxMeta() *velox.Meta[Dnote] { return DnoteMeta.Load(DnoteDescri
 
 func DnoteDescriptor() velox.Descriptor[Dnote] {
 	return velox.Descriptor[Dnote]{
-		Policy:     []func() velox.Policy{(*Dnote)(nil).Policy},
-		Hooks:      []func() []velox.Hook{(*Dnote)(nil).Hooks},
+		Schema: (*Dnote)(nil),
+
 		Table:      "dnotes",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},

@@ -5,7 +5,7 @@ package gen
 import (
 	"fmt"
 
-	sch "example.com/tmp/schema"
+	"example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -49,8 +49,7 @@ func homeDescriptor() velox.Descriptor[Home] {
 			{Field: "Region", Name: "region", Immutable: true},
 		},
 		PrimaryKey: []int{homeColID},
-		Policy:     []func() velox.Policy{sch.InRegion{}.Policy},
-		Hooks:      []func() []velox.Hook{sch.InRegion{}.Hooks},
+		Schema:     schema.Home{},
 		FieldPtr: func(x *Home, i int) any {
 			switch i {
 			case homeColID:

@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/policy/schema"
+	"github.com/syssam/velox/examples/policy/schema"
 )
 
 // Doc is the entity of schema Doc.
@@ -73,7 +73,7 @@ func docDescriptor() velox.Descriptor[Doc] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Comment]("comments", docColID, commentColDocID),
 		},
-		Policy: []func() velox.Policy{sch.Doc{}.Policy},
+		Schema: schema.Doc{},
 		FieldPtr: func(x *Doc, i int) any {
 			switch i {
 			case docColID:

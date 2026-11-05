@@ -10,12 +10,12 @@ import (
 )
 
 // Policy is an entity's row-level policy, declared in the schema package on
-// the entity's schema or on a mixin. It names columns by name (C), so that
-// one Policy serves every entity that lists a mixin, and the schema package
-// never imports the generated one.
+// the entity's schema or on a mixin. It names columns by name (FieldEQ), so
+// that one Policy serves every entity that lists a mixin, and the schema
+// package never imports the generated one.
 //
 // Any field may be nil. Read and Write return Allow() for no restriction;
-// their zero Cond fails the statement, naming the entity, so that a code
+// their zero Predicate fails the statement, naming the entity, so that a code
 // path that forgot to return a condition never lets a caller through. Any
 // error they return denies the statement.
 //
@@ -26,7 +26,7 @@ type Policy struct {
 	// Read is ANDed into every SELECT, Count, With load and Has/HasWhere
 	// subquery on the entity, into every UPDATE, DELETE and Save, and into
 	// the update branch of an upsert, on the existing row.
-	Read func(ctx context.Context) (Cond, error)
+	Read func(ctx context.Context) (Predicate, error)
 	// Write is ANDed into every UPDATE, DELETE and Save, and into an upsert's
 	// update branch, with Read. It decides which existing rows may change; it
 	// does not check the new values, so a writer may set a column the policy
@@ -35,7 +35,7 @@ type Policy struct {
 	// A row Write hides is left alone, and that is not an error: an Update or
 	// Delete that matches only such rows affects 0 rows, as with SQL
 	// row-level security.
-	Write func(ctx context.Context) (Cond, error)
+	Write func(ctx context.Context) (Predicate, error)
 	// Insert checks every inserted or upserted row, after the entity's hooks,
 	// the defaults and the validators. It reads the row with Row.Value; a
 	// Row.Set in it is a misuse, which fails the insert: a policy decides,
@@ -55,7 +55,7 @@ type Policy struct {
 // context value records it with WithScopeValue, so that the GraphQL batcher
 // keeps callers apart.
 //
-// Filter returns Allow() for no restriction. Its zero Cond fails the
+// Filter returns Allow() for no restriction. Its zero Predicate fails the
 // statement, as a policy's does. An error fails the statement and is not a
 // denial. A nil Filter is refused when the metadata is built, by its index.
 //
@@ -64,18 +64,13 @@ type Policy struct {
 // upsert that updates an entity with interceptors is refused with
 // ErrPolicyUpsert.
 type Interceptor struct {
-	Filter func(ctx context.Context) (Cond, error)
+	Filter func(ctx context.Context) (Predicate, error)
 }
 
 // PolicyFor is p as entity in keeps it.
 func PolicyFor(in *EntityInfo, p Policy) *EntityPolicy {
 	pol := &EntityPolicy{}
-	if r := p.Read; r != nil {
-		pol.Read = func(ctx context.Context) (Predicate, error) { c, err := r(ctx); return Predicate(c), err }
-	}
-	if w := p.Write; w != nil {
-		pol.Write = func(ctx context.Context) (Predicate, error) { c, err := w(ctx); return Predicate(c), err }
-	}
+	pol.Read, pol.Write = p.Read, p.Write
 	if ins := p.Insert; ins != nil {
 		pol.Insert = func(ctx context.Context, x unsafe.Pointer) error {
 			var misuse error
@@ -106,7 +101,7 @@ func FiltersFor(is []Interceptor, base int) ([]FilterFn, string) {
 		if f == nil {
 			return nil, fmt.Sprintf("Interceptors()[%d] has a nil Filter", base+i)
 		}
-		fs[i] = func(ctx context.Context) (Predicate, error) { c, err := f(ctx); return Predicate(c), err }
+		fs[i] = f
 	}
 	return fs, ""
 }

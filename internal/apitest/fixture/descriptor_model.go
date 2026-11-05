@@ -42,8 +42,7 @@ var ErrEmptyName = errors.New("must not be empty")
 
 func DAuthorDescriptor() velox.Descriptor[DAuthor] {
 	return velox.Descriptor[DAuthor]{
-		Policy: []func() velox.Policy{OrgPolicy, (*DAuthor)(nil).Policy},
-		Hooks:  []func() []velox.Hook{OrgHooks, (*DAuthor)(nil).Hooks},
+		Schema: (*DAuthor)(nil),
 		Table:  "authors",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
@@ -125,7 +124,7 @@ func (*DBook) VeloxMeta() *velox.Meta[DBook] { return DBookMeta.Load(DBookDescri
 
 func DBookDescriptor() velox.Descriptor[DBook] {
 	return velox.Descriptor[DBook]{
-		Hooks:      []func() []velox.Hook{(*DBook)(nil).Hooks},
+		Schema:     (*DBook)(nil),
 		Table:      "books",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
@@ -180,8 +179,8 @@ func (*DTag) VeloxMeta() *velox.Meta[DTag] { return DTagMeta.Load(DTagDescriptor
 
 func DTagDescriptor() velox.Descriptor[DTag] {
 	return velox.Descriptor[DTag]{
-		Policy:     []func() velox.Policy{(*DTag)(nil).Policy},
-		Hooks:      []func() []velox.Hook{(*DTag)(nil).Hooks},
+		Schema: (*DTag)(nil),
+
 		Table:      "tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},

@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/routing/schema"
+	"github.com/syssam/velox/examples/routing/schema"
 )
 
 // Note is the entity of schema Note.
@@ -55,8 +55,7 @@ func noteDescriptor() velox.Descriptor[Note] {
 			{Field: "Body", Name: "body"},
 		},
 		PrimaryKey: []int{noteColID},
-		Policy:     []func() velox.Policy{sch.InOrg{}.Policy},
-		Hooks:      []func() []velox.Hook{sch.InOrg{}.Hooks},
+		Schema:     schema.Note{},
 		FieldPtr: func(x *Note, i int) any {
 			switch i {
 			case noteColID:

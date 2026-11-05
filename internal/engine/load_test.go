@@ -72,9 +72,9 @@ func ovReading(n int) context.Context {
 }
 
 func (*ovNote) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
 		if vs, ok := ctx.Value(ovKey{}).([]any); ok {
-			return velox.C("rank").In(vs...), nil
+			return velox.FieldIn("rank", vs...), nil
 		}
 		return velox.Allow(), nil
 	}}
@@ -85,7 +85,7 @@ var ovNoteMeta velox.MetaOnce[ovNote]
 func (*ovNote) VeloxMeta() *velox.Meta[ovNote] {
 	return ovNoteMeta.Load(func() velox.Descriptor[ovNote] {
 		return velox.Descriptor[ovNote]{
-			Policy:     []func() velox.Policy{(*ovNote)(nil).Policy},
+			Schema:     (*ovNote)(nil),
 			Table:      "ov_notes",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Rank", Name: "rank"}},
 			PrimaryKey: []int{0},

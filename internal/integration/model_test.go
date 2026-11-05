@@ -74,8 +74,8 @@ func (*tag) Hooks() []velox.Hook { return fixture.OrgHooks() }
 
 func tagDescriptor() velox.Descriptor[tag] {
 	return velox.Descriptor[tag]{
-		Policy:     []func() velox.Policy{(*tag)(nil).Policy},
-		Hooks:      []func() []velox.Hook{(*tag)(nil).Hooks},
+		Schema: (*tag)(nil),
+
 		Table:      "tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},

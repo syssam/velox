@@ -74,7 +74,7 @@ func schemaPackage(dir string, patterns, env []string) (string, error) {
 	if len(patterns) == 1 {
 		pattern = patterns[0]
 	}
-	importPath, schemas, err := codegen.Inspect(dir, pattern, env)
+	importPath, _, schemas, err := codegen.Inspect(dir, pattern, env)
 	if err != nil {
 		return "", relErrors(dir, err)
 	}
@@ -126,6 +126,7 @@ type genModel struct {
 	graph      *codegen.Graph
 	out        *codegen.Out // what Lower made of graph, for the plugins' model
 	importPath string
+	name       string // the schema package's name
 	names      []string
 	rels       []string // every relation's handle, e.g. "Users.Posts", join entities included
 }
@@ -160,7 +161,7 @@ func explainLoad(dir, pattern, out string, env []string, err error, schemas []st
 // loadModel loads and builds the schema package at pattern and lowers it to
 // the names of its generated entities.
 func loadModel(dir, pattern, out, pkg string, env []string) (*genModel, error) {
-	importPath, schemas, err := codegen.Inspect(dir, pattern, env)
+	importPath, name, schemas, err := codegen.Inspect(dir, pattern, env)
 	if err != nil {
 		return nil, explainLoad(dir, pattern, out, env, relErrors(dir, err), nil)
 	}
@@ -172,11 +173,11 @@ func loadModel(dir, pattern, out, pkg string, env []string) (*genModel, error) {
 	if err != nil {
 		return nil, relErrors(dir, err)
 	}
-	o, err := codegen.Lower(g, codegen.Config{Package: pkg, SchemaPath: importPath})
+	o, err := codegen.Lower(g, codegen.Config{Package: pkg, SchemaPath: importPath, SchemaName: name})
 	if err != nil {
 		return nil, err
 	}
-	gm := &genModel{graph: g, out: o, importPath: importPath}
+	gm := &genModel{graph: g, out: o, importPath: importPath, name: name}
 	for _, e := range o.Entities {
 		gm.names = append(gm.names, e.Name)
 		for _, r := range e.Rels {
@@ -193,7 +194,7 @@ func loadModel(dir, pattern, out, pkg string, env []string) (*genModel, error) {
 // behaviour names (codegen.CheckBehaviour), whose warnings go to stderr.
 // UserDoc is left for the caller.
 func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr io.Writer) (codegen.Config, error) {
-	cfg := codegen.Config{Package: pkg, SchemaPath: gm.importPath}
+	cfg := codegen.Config{Package: pkg, SchemaPath: gm.importPath, SchemaName: gm.name}
 	genPath, err := dirImportPath(out, env)
 	if err != nil {
 		return cfg, err

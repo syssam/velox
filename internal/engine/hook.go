@@ -161,7 +161,7 @@ func andConds(fs []func(ctx context.Context) (Predicate, error)) func(ctx contex
 
 // ErasePolicy calls f, which composes the Descriptor's Policy with E erased,
 // and keeps its result in info. A panic in f is the entity's *SchemaError,
-// and so is the reason f returns when it refuses them, such as NilBinding's. On the join entity of a bidirectional edge (Descriptor.Bidi)
+// and so is the reason f returns when it refuses them. On the join entity of a bidirectional edge (Descriptor.Bidi)
 // it refuses a Read or Write.
 func ErasePolicy(info *EntityInfo, f func() (*EntityPolicy, string)) error {
 	var (
@@ -210,19 +210,60 @@ func NilHook(i int) string {
 	return fmt.Sprintf("Hooks()[%d] is nil", i)
 }
 
-// NilBinding is the reason a nil function at index i of the Descriptor's
-// field is refused. It is not inlined, as NilHook is not.
-//
-//go:noinline
-func NilBinding(field string, i int) string {
-	return fmt.Sprintf("Descriptor.%s[%d] is nil", field, i)
+// Addr returns v when it is a pointer or nil, and else a pointer to a copy
+// of v, whose method set holds the methods of both receivers: a schema's or
+// a mixin's behaviour method may have either.
+func Addr(v any) any {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() || rv.Kind() == reflect.Pointer {
+		return v
+	}
+	p := reflect.New(rv.Type())
+	p.Elem().Set(rv)
+	return p.Interface()
+}
+
+// WrongBehaviour is the error of x, a schema or a mixin, that has a method
+// of the name of a behaviour kind (Policy, Hooks or Interceptors) whose
+// signature is not want, so that velox would not call it; nil when x has
+// no method of that name. The names are constants, so that the linker can
+// still drop the methods nobody calls.
+func WrongBehaviour(info *EntityInfo, x any, kind, want string) error {
+	t := reflect.TypeOf(x)
+	var ok bool
+	switch kind {
+	case "Policy":
+		_, ok = t.MethodByName("Policy")
+	case "Hooks":
+		_, ok = t.MethodByName("Hooks")
+	default:
+		_, ok = t.MethodByName("Interceptors")
+	}
+	if !ok {
+		return nil
+	}
+	return &SchemaError{Entity: info.Name, Reason: fmt.Sprintf("%v's %s method is not %s: velox would not call it", t, kind, want)}
+}
+
+// NoBehaviour is the error of a Descriptor whose Schema s, and the mixins
+// it lists, declare no Policy, Hooks or Interceptors method: a Schema that
+// is set by mistake, such as a database schema's name.
+func NoBehaviour(info *EntityInfo, s any) error {
+	return &SchemaError{Entity: info.Name, Reason: fmt.Sprintf("Descriptor.Schema, a %T, and its mixins declare no Policy, Hooks or Interceptors method; "+
+		"a database schema's name is TableSchema", s)}
+}
+
+// Recover calls f, recovering a panic as the entity's *SchemaError, which
+// names what f called.
+func Recover(info *EntityInfo, what string, f func()) error {
+	return recovered(info.Name, what, f)
 }
 
 // recovered calls f, recovering a panic as the entity's *SchemaError.
 func recovered(entity, what string, f func()) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
-			err = &SchemaError{Entity: entity, Reason: fmt.Sprintf("%s panicked: %v; it is called on a nil receiver", what, p)}
+			err = &SchemaError{Entity: entity, Reason: fmt.Sprintf("%s panicked: %v", what, p)}
 		}
 	}()
 	f()

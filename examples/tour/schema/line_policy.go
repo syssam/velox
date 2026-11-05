@@ -11,9 +11,9 @@ import (
 // only accountants change them. velox ANDs it after InOrg's policy.
 func (Line) Policy() velox.Policy {
 	return velox.Policy{
-		Write: func(ctx context.Context) (velox.Cond, error) {
+		Write: func(ctx context.Context) (velox.Predicate, error) {
 			if err := role.RequireAccountant(ctx); err != nil {
-				return velox.Cond{}, err
+				return velox.Predicate{}, err
 			}
 			return velox.Allow(), nil
 		},

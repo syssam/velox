@@ -91,10 +91,6 @@ func GoType(c ColumnInfo) reflect.Type { return engine.GoType(c) }
 // IndexInfo describes one index.
 type IndexInfo = veloxtype.IndexInfo
 
-// Predicate is a condition in a Statement: the form hooks see and add. It is
-// the untyped form of Pred, as OrderTerm is of Order.
-type Predicate = engine.Predicate
-
 // OrderTerm is an ordering by one column of a Statement's entity.
 type OrderTerm = veloxtype.OrderTerm
 

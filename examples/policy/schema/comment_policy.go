@@ -11,6 +11,6 @@ import (
 // policy inside it, for this context.
 func (Comment) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(context.Context) (velox.Cond, error) { return velox.Edge("doc").Has(), nil },
+		Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("doc"), nil },
 	}
 }

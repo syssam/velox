@@ -388,7 +388,7 @@ var dPolicyJoinMeta velox.MetaOnce[dPolicyJoin]
 func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 	return dPolicyJoinMeta.Load(func() velox.Descriptor[dPolicyJoin] {
 		return velox.Descriptor[dPolicyJoin]{
-			Policy:     []func() velox.Policy{(*dPolicyJoin)(nil).Policy},
+			Schema:     (*dPolicyJoin)(nil),
 			Table:      "policy_joins",
 			Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
@@ -406,7 +406,7 @@ func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 }
 
 func (*dPolicyJoin) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.Allow(), nil }}
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil }}
 }
 
 // dLinker has tags through dLink, a join entity whose Insert policy checks a
@@ -443,7 +443,7 @@ var dLinkMeta velox.MetaOnce[dLink]
 func (*dLink) VeloxMeta() *velox.Meta[dLink] {
 	return dLinkMeta.Load(func() velox.Descriptor[dLink] {
 		return velox.Descriptor[dLink]{
-			Policy:     []func() velox.Policy{(*dLink)(nil).Policy},
+			Schema:     (*dLink)(nil),
 			Table:      "links",
 			Columns:    []velox.ColumnDescriptor{{Field: "LinkerID", Name: "linker_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
@@ -471,7 +471,7 @@ func (*dLink) Policy() velox.Policy {
 			}
 			return nil
 		},
-		Write: func(context.Context) (velox.Cond, error) { return velox.Allow(), nil },
+		Write: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil },
 	}
 }
 
@@ -639,7 +639,7 @@ var dPeerMeta velox.MetaOnce[dPeer]
 func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 	return dPeerMeta.Load(func() velox.Descriptor[dPeer] {
 		return velox.Descriptor[dPeer]{
-			Policy:     []func() velox.Policy{(*dPeer)(nil).Policy},
+			Schema:     (*dPeer)(nil),
 			Table:      "peers",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
@@ -667,11 +667,11 @@ func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 }
 
 func (*dPeer) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
 		if ctx.Value(peerCycle{}) != nil {
-			return velox.Edge("friends").HasWhere(velox.C("id").GT(0)), nil
+			return velox.HasEdgeWith("friends", velox.FieldGT("id", 0)), nil
 		}
-		return velox.Edge("tags").HasWhere(velox.C("name").EQ("public")), nil
+		return velox.HasEdgeWith("tags", velox.FieldEQ("name", "public")), nil
 	}}
 }
 

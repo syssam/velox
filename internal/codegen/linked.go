@@ -21,7 +21,8 @@ import (
 // CheckBehaviour reads the behaviour each entity's schema declares: its own
 // Policy, Hooks and Interceptors methods (bound, from SchemaMethods) and
 // its mixins' (mixins, from MixinBehaviour). It returns, per entity name,
-// the relations that behaviour names with velox.Edge, whose targets the
+// the relations that behaviour names with velox.HasEdge or HasEdgeWith,
+// whose targets the
 // generated code links (velox.Linked), and a warning for each column it
 // names with a value velox-gen cannot read.
 //
@@ -33,14 +34,15 @@ import (
 // package that the body names. It is checked against every entity whose
 // method reaches it:
 //
-//   - velox.Edge(name) names a relation of the entity. The name must be a
-//     constant, which velox-gen can read, since velox-gen links the
-//     relation's target. The conditions of its HasWhere name the target's
-//     columns.
-//   - velox.C(name) names a column. The value of the operator called on
-//     the call itself fits the column: EQ, NEQ, GT, GTE, LT and LTE's, and
-//     each of In and NotIn's. Contains, HasPrefix and HasSuffix need a text
-//     column; IsNull and NotNull a nullable one.
+//   - velox.HasEdge(name) and HasEdgeWith(name, ...) name a relation of
+//     the entity. The name must be a constant, which velox-gen can read,
+//     since velox-gen links the relation's target. The conditions of
+//     HasEdgeWith name the target's columns.
+//   - velox.FieldEQ(name, v) and the other Field functions name a column.
+//     The value fits the column: FieldEQ, FieldNEQ, FieldGT, FieldGTE,
+//     FieldLT and FieldLTE's, and each of FieldIn and FieldNotIn's.
+//     FieldContains, FieldHasPrefix, FieldHasSuffix and FieldEqualFold need
+//     a text column; FieldIsNull and FieldNotNull a nullable one.
 //   - A *velox.Mutation's Set, Fill and Value, and a velox.Row's Value,
 //     IsZero and Set, name a column of the entity; a Set or Fill value fits
 //     it.
@@ -157,16 +159,16 @@ type walked struct {
 type use struct {
 	kind useKind
 	// chain are the relations from the root's entity to the entity the
-	// call names: those of the Edge calls whose HasWhere holds it. A
+	// call names: those of the HasEdgeWith calls that hold it. A
 	// mutation's or a row's call names the root's entity, whatever chain.
 	chain []string
 	pos   token.Pos
 	call  ast.Expr // the call, for errors
-	named ast.Expr // the velox.C call of an operator, for the errors of its name
+	named ast.Expr // the call that names the column, for the errors of its name
 	name  string   // the name, "" when it is not a constant
-	op    string   // the method called: EQ, In, Set, Value, …; "" for a bare velox.C
+	op    string   // the operator, FieldEQ's EQ, or the method: Set, Value, …
 	args  []ast.Expr
-	// spread says the values are passed as a slice (In(vs...)), which
+	// spread says the values are passed as a slice (FieldIn(name, vs...)), which
 	// velox-gen does not read.
 	spread bool
 }
@@ -175,8 +177,8 @@ type use struct {
 type useKind uint8
 
 const (
-	useEdge     useKind = iota // velox.Edge(name)
-	useColumn                  // velox.C(name), and the operator called on it
+	useEdge     useKind = iota // velox.HasEdge(name) or HasEdgeWith(name, ...)
+	useColumn                  // velox.FieldEQ(name, v) and the other Field functions
 	useMutation                // a *velox.Mutation's or a velox.Row's method
 )
 
@@ -366,14 +368,21 @@ func (sc *sources) inspect(n ast.Node, prefix []string, w *walked) {
 // reports whether ast.Inspect should look inside c: false when call has
 // inspected what c holds itself.
 func (sc *sources) call(c *ast.CallExpr, prefix []string, w *walked) bool {
-	if name, ok := sc.funcCall(c, "Edge", w); ok {
+	switch fn := sc.veloxFunc(c); {
+	case fn == "HasEdge" || fn == "HasEdgeWith":
+		name := sc.constName(c, w)
 		if name != "" {
 			w.uses = append(w.uses, use{kind: useEdge, chain: prefix, pos: c.Pos(), call: c, name: name})
+			sc.inspectAll(c.Args[1:], append(slices.Clone(prefix), name), w)
 		}
 		return false
-	}
-	if name, ok := sc.funcCall(c, "C", w); ok {
-		w.uses = append(w.uses, use{kind: useColumn, chain: prefix, pos: c.Pos(), call: c, named: c, name: name})
+	case fieldOps[fn]:
+		name := ""
+		if tv := sc.info.Types[c.Args[0]]; tv.Value != nil && tv.Value.Kind() == constant.String {
+			name = constant.StringVal(tv.Value)
+		}
+		w.uses = append(w.uses, use{kind: useColumn, chain: prefix, pos: c.Pos(), call: c, named: c, name: name,
+			op: strings.TrimPrefix(fn, "Field"), args: c.Args[1:], spread: c.Ellipsis.IsValid()})
 		sc.inspectAll(c.Args, prefix, w)
 		return false
 	}
@@ -383,34 +392,6 @@ func (sc *sources) call(c *ast.CallExpr, prefix []string, w *walked) bool {
 	}
 	fn, _ := sc.info.Uses[sel.Sel].(*types.Func)
 	switch recvName(fn) {
-	case enginePkg + ".NamedEdge":
-		inner, ok := ast.Unparen(sel.X).(*ast.CallExpr)
-		if !ok || fn.Name() != "HasWhere" {
-			return true
-		}
-		name, ok := sc.funcCall(inner, "Edge", w)
-		if !ok {
-			return true
-		}
-		if name != "" {
-			chain := append(slices.Clone(prefix), name)
-			w.uses = append(w.uses, use{kind: useEdge, chain: prefix, pos: inner.Pos(), call: inner, name: name})
-			sc.inspectAll(c.Args, chain, w)
-		}
-		return false
-	case enginePkg + ".Named":
-		inner, ok := ast.Unparen(sel.X).(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		name, ok := sc.funcCall(inner, "C", w)
-		if !ok {
-			return true
-		}
-		w.uses = append(w.uses, use{kind: useColumn, chain: prefix, pos: c.Pos(), call: c, named: inner, name: name, op: fn.Name(), args: c.Args, spread: c.Ellipsis.IsValid()})
-		sc.inspectAll(inner.Args, prefix, w)
-		sc.inspectAll(c.Args, prefix, w)
-		return false
 	case veloxPkg + ".Mutation", enginePkg + ".Row":
 		switch fn.Name() {
 		case "Set", "Fill", "Value", "IsZero":
@@ -456,10 +437,16 @@ func recvName(fn *types.Func) string {
 	return n.Obj().Pkg().Path() + "." + n.Obj().Name()
 }
 
-// funcCall reports whether c is a call of velox's function name, Edge or
-// C, and returns the name its argument gives: "" when it is not a
-// constant, which for Edge is recorded in w as a *FileError.
-func (sc *sources) funcCall(c *ast.CallExpr, name string, w *walked) (string, bool) {
+// fieldOps are velox's functions that name a column.
+var fieldOps = map[string]bool{
+	"FieldEQ": true, "FieldNEQ": true, "FieldGT": true, "FieldGTE": true, "FieldLT": true, "FieldLTE": true,
+	"FieldIn": true, "FieldNotIn": true, "FieldContains": true, "FieldHasPrefix": true, "FieldHasSuffix": true,
+	"FieldEqualFold": true, "FieldIsNull": true, "FieldNotNull": true,
+}
+
+// veloxFunc returns the name of velox's function that c calls with at
+// least one argument, "" when c calls another.
+func (sc *sources) veloxFunc(c *ast.CallExpr) string {
 	var id *ast.Ident
 	switch f := ast.Unparen(c.Fun).(type) {
 	case *ast.SelectorExpr:
@@ -467,20 +454,24 @@ func (sc *sources) funcCall(c *ast.CallExpr, name string, w *walked) (string, bo
 	case *ast.Ident:
 		id = f
 	default:
-		return "", false
+		return ""
 	}
 	fn, ok := sc.info.Uses[id].(*types.Func)
-	if !ok || fn.Pkg() == nil || fn.Pkg().Path() != veloxPkg || fn.Name() != name || fn.Signature().Recv() != nil || len(c.Args) != 1 {
-		return "", false
+	if !ok || fn.Pkg() == nil || fn.Pkg().Path() != veloxPkg || fn.Signature().Recv() != nil || len(c.Args) == 0 {
+		return ""
 	}
+	return fn.Name()
+}
+
+// constName returns the relation c's first argument names: "" when it is
+// not a constant, which is recorded in w as a *FileError.
+func (sc *sources) constName(c *ast.CallExpr, w *walked) string {
 	tv := sc.info.Types[c.Args[0]]
 	if tv.Value != nil && tv.Value.Kind() == constant.String {
-		return constant.StringVal(tv.Value), true
+		return constant.StringVal(tv.Value)
 	}
-	if name == "Edge" {
-		pos := sc.fset.Position(c.Pos())
-		w.errs = append(w.errs, &FileError{Path: pos.Filename, Line: pos.Line, Reason: fmt.Sprintf(
-			"%s names its relation with a value velox-gen cannot read; name it with a constant, so that velox-gen links the relation's target", exprString(c))})
-	}
-	return "", true
+	pos := sc.fset.Position(c.Pos())
+	w.errs = append(w.errs, &FileError{Path: pos.Filename, Line: pos.Line, Reason: fmt.Sprintf(
+		"%s names its relation with a value velox-gen cannot read; name it with a constant, so that velox-gen links the relation's target", exprString(c))})
+	return ""
 }

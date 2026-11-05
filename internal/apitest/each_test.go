@@ -12,6 +12,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/schema"
 )
 
 // eUser has posts; ePost is confined to the context's org and has a Read policy that hides
@@ -97,12 +98,17 @@ var ePostMeta velox.MetaOnce[ePost]
 func (*ePost) VeloxMeta() *velox.Meta[ePost] { return ePostMeta.Load(ePostDescriptor) }
 
 func (*ePost) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.C("secret").EQ(false), nil }}
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("secret", false), nil }}
+}
+
+// Mixin lists the behaviour that runs before ePost's own.
+func (*ePost) Mixin() []schema.Mixin {
+	return fixture.Fns{Policy: []func() velox.Policy{fixture.OrgPolicy}}.Mixin()
 }
 
 func ePostDescriptor() velox.Descriptor[ePost] {
 	return velox.Descriptor[ePost]{
-		Policy: []func() velox.Policy{fixture.OrgPolicy, (*ePost)(nil).Policy},
+		Schema: (*ePost)(nil),
 		Table:  "e_posts",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Title", Name: "title"}, {Field: "Secret", Name: "secret"}},

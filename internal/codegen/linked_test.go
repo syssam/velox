@@ -66,10 +66,11 @@ func linkedModule(t *testing.T, behaviour string) (string, *Graph, map[string]Bo
 	return dir, g, bound
 }
 
-// A relation that behaviour names with velox.Edge, through a helper of the
-// schema package and a named constant, is linked: its descriptor wraps it
-// in velox.Linked. An Edge in HasWhere's conditions names a relation of the
-// edge's target. A relation no behaviour names is not linked.
+// A relation that behaviour names with velox.HasEdge or HasEdgeWith,
+// through a helper of the schema package and a named constant, is linked:
+// its descriptor wraps it in velox.Linked. A HasEdge in HasEdgeWith's
+// conditions names a relation of the edge's target. A relation no
+// behaviour names is not linked.
 func TestEdgeLinkedWhenBehaviourNamesIt(t *testing.T) {
 	dir, g, bound := linkedModule(t, `package schema
 
@@ -82,10 +83,10 @@ import (
 const docEdge = "doc"
 
 func (Comment) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return visible(), nil }}
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return visible(), nil }}
 }
 
-func visible() velox.Cond { return velox.Edge(docEdge).HasWhere(velox.Edge("owner").Has()) }
+func visible() velox.Predicate { return velox.HasEdgeWith(docEdge, velox.HasEdge("owner")) }
 `)
 	linked, _, err := CheckBehaviour(dir, "./schema", g, bound, nil, offline())
 	if err != nil {
@@ -131,15 +132,15 @@ import (
 var edgeName = "doc"
 
 func (Comment) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) {
-		return velox.Edge(edgeName).Has(), nil
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) {
+		return velox.HasEdge(edgeName), nil
 	}}
 }
 `)
 	_, _, err := CheckBehaviour(dir, "./schema", g, bound, nil, offline())
 	var fe *FileError
 	if !errors.As(err, &fe) || filepath.Base(fe.Path) != "behaviour.go" || fe.Line != 13 ||
-		!strings.Contains(fe.Reason, "velox.Edge(edgeName) names its relation with a value velox-gen cannot read") {
+		!strings.Contains(fe.Reason, "velox.HasEdge(edgeName) names its relation with a value velox-gen cannot read") {
 		t.Fatalf("got %v", err)
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/internal/testmodel/schema"
+	"github.com/syssam/velox/internal/testmodel/schema"
 )
 
 // Ticket is the entity of schema Ticket.
@@ -112,8 +112,7 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 			velox.EdgeTo[Ticket]("children", ticketColID, ticketColParentID),
 			velox.EdgeTo[Ticket]("parent", ticketColParentID, ticketColID),
 		},
-		Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.Ticket{}.Policy},
-		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks, sch.Ticket{}.Hooks},
+		Schema: schema.Ticket{},
 		FieldPtr: func(x *Ticket, i int) any {
 			switch i {
 			case ticketColID:

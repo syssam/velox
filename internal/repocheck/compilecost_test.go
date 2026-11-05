@@ -122,13 +122,12 @@ func Use(ctx context.Context, db *velox.DB, e *E) error {
 `
 
 // entityDescHooksSrc is entityDescUseSrc with a Policy and three hooks,
-// declared as methods that name columns by name, and bound through the
-// Descriptor's Policy and Hooks fields as velox-gen binds them.
+// declared as methods that name columns by name.
 var entityDescHooksSrc = strings.Replace(entityDescUseSrc, `var (
 	eID `, `func (*E) Policy() velox.Policy {
 	return velox.Policy{
-		Read:   func(context.Context) (velox.Cond, error) { return velox.C("name").EQ("r"), nil },
-		Write:  func(context.Context) (velox.Cond, error) { return velox.Allow(), nil },
+		Read:   func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("name", "r"), nil },
+		Write:  func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil },
 		Insert: func(_ context.Context, r velox.Row) error { _ = r.Value("name"); return nil },
 	}
 }
@@ -146,7 +145,7 @@ func (*E) Hooks() []velox.Hook {
 			})
 		}, velox.OpUpdate),
 		velox.Before(func(_ context.Context, m *velox.Mutation) error {
-			m.Where(velox.C("id").EQ(1))
+			m.Where(velox.FieldEQ("id", 1))
 			return nil
 		}, velox.OpDelete),
 	}
@@ -155,24 +154,28 @@ func (*E) Hooks() []velox.Hook {
 var (
 	eID `, 1)
 
-// entityDescHooksBound is entityDescHooksSrc with its Descriptor binding the
-// methods.
+// entityDescHooksBound is entityDescHooksSrc with its Descriptor naming the
+// value that declares the methods, as a hand-written entity names itself.
 var entityDescHooksBound = strings.Replace(entityDescHooksSrc, `		PrimaryKey: []int{0},
 		Edges:`, `		PrimaryKey: []int{0},
-		Policy:     []func() velox.Policy{(*E)(nil).Policy},
-		Hooks:      []func() []velox.Hook{(*E)(nil).Hooks},
+		Schema:     (*E)(nil),
 		Edges:`, 1)
 
 // entityDescMixinSrc is entityDescUseSrc with entityDescHooksSrc's Policy
-// and three hooks declared by a mixin, and bound as velox-gen binds a
-// mixin's.
-var entityDescMixinSrc = strings.Replace(strings.Replace(entityDescUseSrc, `var (
-	eID `, `type M struct{}
+// and three hooks declared by a mixin M that a schema S lists, and S named
+// as velox-gen names a schema. S and M live in the entity's package here,
+// where velox-gen's live in the schema package.
+var entityDescMixinSrc = strings.Replace(strings.Replace(strings.Replace(entityDescUseSrc, `var (
+	eID `, `type S struct{}
+
+func (S) Mixin() []schema.Mixin { return []schema.Mixin{M{}} }
+
+type M struct{ mixin.Schema }
 
 func (M) Policy() velox.Policy {
 	return velox.Policy{
-		Read:   func(context.Context) (velox.Cond, error) { return velox.C("name").EQ("r"), nil },
-		Write:  func(context.Context) (velox.Cond, error) { return velox.Allow(), nil },
+		Read:   func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("name", "r"), nil },
+		Write:  func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil },
 		Insert: func(_ context.Context, r velox.Row) error { _ = r.Value("name"); return nil },
 	}
 }
@@ -190,7 +193,7 @@ func (M) Hooks() []velox.Hook {
 			})
 		}, velox.OpUpdate),
 		velox.Before(func(_ context.Context, m *velox.Mutation) error {
-			m.Where(velox.C("id").EQ(1))
+			m.Where(velox.FieldEQ("id", 1))
 			return nil
 		}, velox.OpDelete),
 	}
@@ -199,9 +202,12 @@ func (M) Hooks() []velox.Hook {
 var (
 	eID `, 1), `		PrimaryKey: []int{0},
 		Edges:`, `		PrimaryKey: []int{0},
-		Policy:     []func() velox.Policy{M{}.Policy},
-		Hooks:      []func() []velox.Hook{M{}.Hooks},
-		Edges:`, 1)
+		Schema:     S{},
+		Edges:`, 1), `	"github.com/syssam/velox"
+`, `	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/mixin"
+`, 1)
 
 // genericObjects is one unexported variable of each exported generic type,
 // and of the non-generic types generated code reaches, as a package would
@@ -245,12 +251,13 @@ var genericObjects = []struct {
 	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 1140
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
 	// The entity packages. entityDescriptor is the minimal entity velox-gen writes.
-	// The Descriptor's Policy, Hooks and Interceptors fields are lists of functions
-	// that return the untyped velox.Policy, []velox.Hook and []velox.Interceptor
-	// (GeneratedCodeIsVersion16), so an entity's behaviour instantiates no generic
-	// for it. entityDescUse adds a default, two relations and a Use function that
-	// queries, inserts, saves, updates and deletes. entityDescHooks is that with a
-	// Policy and three hooks bound through the fields (policyGrowthMax).
+	// The Descriptor names the value that declares the behaviour in its field
+	// Schema, an any (GeneratedCodeIsVersion17), and velox reads the untyped
+	// velox.Policy, []velox.Hook and []velox.Interceptor from it, so an entity's
+	// behaviour instantiates no generic for it. entityDescUse adds a default, two
+	// relations and a Use function that queries, inserts, saves, updates and
+	// deletes. entityDescHooks is that with a Policy and three hooks named through
+	// the field (policyGrowthMax).
 	//
 	// The entity packages are held tighter than the rule above, which would let
 	// them grow by 64 KiB unseen: each bound is the measurement plus about 1.2%,
@@ -274,7 +281,13 @@ var genericObjects = []struct {
 	// entityDescriptor to 143080 bytes but gen of 100 entities with a Policy
 	// each from 24.5 to 25.8 MB, as its closure was compiled into every
 	// entity's VeloxMeta.
-	{"entityDescriptor", "", entityDescSrc, 286720}, // measured 282970
+	//
+	// The field Schema is an any, where the lists named velox.Hook, so an
+	// entity package that uses no DB no longer describes DB's methods
+	// (GeneratedCodeIsVersion17): entityDescriptor took 136078 bytes, down from
+	// 287036 in the same worktree, entityDescUse 763846, down from 774634, and
+	// entityDescHooks 847422, down from 863410.
+	{"entityDescriptor", "", entityDescSrc, 138240}, // measured 136078
 	//
 	// Sum, Avg, Min and Max stay functions: a method of Query whose signature names
 	// NumberCol[E, V] puts that in the export data of every package that uses a
@@ -304,11 +317,16 @@ var genericObjects = []struct {
 	// took entityDescriptor from 142268 to 141368 bytes, entityDescUse from
 	// 770560 to 769648, entityDescHooks from 1058404 to 1057508 and
 	// entityDescMixin from 1132944 to 1132078; the bounds were lowered.
-	{"entityDescUse", "", entityDescUseSrc, 780288},       // measured 770188
-	{"entityDescHooks", "", entityDescHooksBound, 869376}, // measured 858964
-	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's:
-	// 10248 bytes more than an entity's own methods, for the mixin's type.
-	{"entityDescMixin", "", entityDescMixinSrc, 880640}, // measured 869212
+	{"entityDescUse", "", entityDescUseSrc, 773120},       // measured 763846
+	{"entityDescHooks", "", entityDescHooksBound, 858112}, // measured 847422
+	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
+	// which a schema S lists. S, M and the schema and mixin types they name
+	// compile into this package: 45232 bytes more than an entity's own
+	// methods, up from 10248 when the Descriptor listed M's method values.
+	// velox-gen's S and M live in the schema package, so gen does not pay
+	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
+	// down from 24455668, and the schema's 5008904, up from 4959122.
+	{"entityDescMixin", "", entityDescMixinSrc, 904192}, // measured 892654
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
@@ -316,7 +334,7 @@ var genericObjects = []struct {
 // about 1.2%, rounded up to the next KiB. velox instantiates no generic for
 // them; the cost is the methods' bodies and closures, and the export data of
 // the types they mention.
-const policyGrowthMax = 90112 // measured 88776
+const policyGrowthMax = 84992 // measured 83576
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package

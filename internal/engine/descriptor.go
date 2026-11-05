@@ -10,18 +10,17 @@ import (
 // DescriptorFields are the fields of a Descriptor that do not depend on E, so that
 // BuildDescriptor, which uses reflect, need not be generic.
 type DescriptorFields struct {
-	Table      string
-	Schema     string
-	Columns    []ColumnDescriptor
-	PrimaryKey []int
-	Bidi       bool
-	Indexes    []IndexInfo
-	Relations  []EdgeDescriptor
-	Check      func(col int, v any) error
-	Policy     bool // Descriptor.Policy is set
-	Hooks      bool // Descriptor.Hooks is set
-	// Interceptors says Descriptor.Interceptors is set.
-	Interceptors bool
+	Table       string
+	TableSchema string
+	Columns     []ColumnDescriptor
+	PrimaryKey  []int
+	Bidi        bool
+	Indexes     []IndexInfo
+	Relations   []EdgeDescriptor
+	Check       func(col int, v any) error
+	// Schema is Descriptor.Schema: the value whose methods declare the
+	// entity's behaviour, nil when it has none.
+	Schema any
 }
 
 // DescriptorView is a Descriptor with E erased: its fields, and its FieldPtr and EdgeFieldPtr
@@ -152,7 +151,7 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 		}
 		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through, target: r.target}
 	}
-	info := &EntityInfo{Name: name, Table: d.Table, Schema: d.Schema, Columns: cols, PrimaryKey: d.PrimaryKey,
+	info := &EntityInfo{Name: name, Table: d.Table, Schema: d.TableSchema, Columns: cols, PrimaryKey: d.PrimaryKey,
 		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
 	if err := validate(info); err != nil {
 		return nil, err
@@ -214,19 +213,29 @@ func holdsInterface(t reflect.Type) bool {
 }
 
 // unboundMethods refuses an entity whose pointer type has a Policy, Hooks or
-// Interceptors method that the Descriptor does not bind: velox would never call it. The names
-// are constants, so that the linker can still drop the methods nobody calls.
-// name is the entity's Go type.
+// Interceptors method that the Descriptor does not bind, as its Schema is
+// not a *E: velox would never call it. The names are constants, so that the
+// linker can still drop the methods nobody calls. name is the entity's Go
+// type.
 func unboundMethods(t reflect.Type, name string, d *DescriptorFields) error {
 	pt := reflect.PointerTo(t)
-	if _, ok := pt.MethodByName("Policy"); ok && !d.Policy {
-		return &SchemaError{Entity: name, Reason: "has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
+	if reflect.TypeOf(d.Schema) == pt {
+		return nil
 	}
-	if _, ok := pt.MethodByName("Hooks"); ok && !d.Hooks {
-		return &SchemaError{Entity: name, Reason: "has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
-	}
-	if _, ok := pt.MethodByName("Interceptors"); ok && !d.Interceptors {
-		return &SchemaError{Entity: name, Reason: "has an Interceptors method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"}
+	for _, m := range [...]struct{ name, article string }{{"Policy", "a"}, {"Hooks", "a"}, {"Interceptors", "an"}} {
+		var ok bool
+		switch m.name {
+		case "Policy":
+			_, ok = pt.MethodByName("Policy")
+		case "Hooks":
+			_, ok = pt.MethodByName("Hooks")
+		default:
+			_, ok = pt.MethodByName("Interceptors")
+		}
+		if ok {
+			return &SchemaError{Entity: name, Reason: fmt.Sprintf("has %s %s method, but the metadata does not bind it: "+
+				"velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)", m.article, m.name)}
+		}
 	}
 	return nil
 }

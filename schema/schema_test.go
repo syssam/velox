@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/syssam/velox/schema"
-	"github.com/syssam/velox/schema/mixin"
 )
 
 type User struct{ schema.Schema }
@@ -45,50 +44,5 @@ func TestCheckMerge(t *testing.T) {
 	}
 	if got := a.Merge(schema.Table("t")); got != schema.Annotation(a) {
 		t.Errorf("Merge of another annotation = %+v", got)
-	}
-}
-
-type audited struct {
-	mixin.Schema
-	By string
-}
-
-type other struct{ audited }
-
-type withMixins struct{ schema.Schema }
-
-func (withMixins) Mixin() []schema.Mixin {
-	return []schema.Mixin{audited{By: "a"}, &audited{By: "b"}, other{}}
-}
-
-// TestMixinAt: the mixin at an index, a value copied or a pointer returned.
-func TestMixinAt(t *testing.T) {
-	if m := schema.MixinAt[audited](withMixins{}, 0); m.By != "a" {
-		t.Errorf("value: %+v", m)
-	}
-	if m := schema.MixinAt[audited](withMixins{}, 1); m.By != "b" {
-		t.Errorf("pointer: %+v", m)
-	}
-}
-
-// TestMixinAtStalePanics: a mixin of another type, or an index past the
-// list, as code generated before the schema changed reads, panics with
-// "run velox-gen".
-func TestMixinAtStalePanics(t *testing.T) {
-	for _, c := range []struct {
-		i    int
-		want string
-	}{
-		{2, "schema: schema_test.withMixins: Mixin()[2] is schema_test.other, not schema_test.audited: the generated code is older than the schema; run velox-gen"},
-		{3, "schema: schema_test.withMixins: Mixin()[3] is nothing, not schema_test.audited: the generated code is older than the schema; run velox-gen"},
-	} {
-		func() {
-			defer func() {
-				if r := recover(); r != c.want {
-					t.Errorf("index %d: got %v, want %s", c.i, r, c.want)
-				}
-			}()
-			schema.MixinAt[audited](withMixins{}, c.i)
-		}()
 	}
 }

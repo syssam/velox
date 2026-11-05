@@ -5,7 +5,7 @@ package gen
 import (
 	"fmt"
 
-	sch "example.com/tmp/schema"
+	"example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -55,7 +55,7 @@ func memoDescriptor() velox.Descriptor[Memo] {
 			{Field: "Text", Name: "text"},
 		},
 		PrimaryKey: []int{memoColID},
-		Policy:     []func() velox.Policy{sch.InOrg{}.Policy},
+		Schema:     schema.Memo{},
 		FieldPtr: func(x *Memo, i int) any {
 			switch i {
 			case memoColID:

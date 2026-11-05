@@ -170,8 +170,9 @@ func Check(s string) error {
 		src[f.Name] = string(f.Data)
 	}
 	entity := src["doc_velox.go"]
-	want := []string{"return time.Now() }", "return ids.New() }", `schema.FieldDescriptor(&sch.Doc{}, "token")`,
-		`schema.FieldDescriptor(&sch.Doc{}, "stamp")`, "ids.Check(x)", "return sch.NewSlug() }"}
+	want := []string{"return time.Now() }", "return ids.New() }", `veloxschema.FieldDescriptor(&schema.Doc{}, "token")`,
+		`veloxschema.FieldDescriptor(&schema.Doc{}, "stamp")`, "ids.Check(x)", "return schema.NewSlug() }",
+		`veloxschema "github.com/syssam/velox/schema"`}
 	for _, w := range want {
 		if !strings.Contains(entity, w) {
 			t.Errorf("the entity's file has no %s:\n%s", w, entity)

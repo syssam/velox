@@ -89,12 +89,11 @@ func sDocDescriptor() velox.Descriptor[SDoc] {
 			{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "OwnerID", Name: "owner_id"},
 			{Field: "Title", Name: "title"}, {Field: "DeletedAt", Name: "deleted_at"},
 		},
-		PrimaryKey:   []int{0},
-		Indexes:      []velox.IndexInfo{{Columns: []int{1, 3}, Unique: true}},
-		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[SOwner]("owner", 2, 0)},
-		Policy:       []func() velox.Policy{OrgPolicy},
-		Hooks:        []func() []velox.Hook{OrgHooks, softdelete.Mixin{}.Hooks},
-		Interceptors: []func() []velox.Interceptor{softdelete.Mixin{}.Interceptors},
+		PrimaryKey: []int{0},
+		Indexes:    []velox.IndexInfo{{Columns: []int{1, 3}, Unique: true}},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[SOwner]("owner", 2, 0)},
+		Schema:     Fns{Policy: []func() velox.Policy{OrgPolicy}, Hooks: []func() []velox.Hook{OrgHooks, softdelete.Mixin{}.Hooks}, Interceptors: []func() []velox.Interceptor{softdelete.Mixin{}.Interceptors}},
+
 		FieldPtr: func(x *SDoc, i int) any {
 			return [...]any{&x.ID, &x.OrgID, &x.OwnerID, &x.Title, &x.DeletedAt}[i]
 		},

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"example.com/tmp/mixins/softdel"
+	"example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -55,8 +55,8 @@ func noteDescriptor() velox.Descriptor[Note] {
 			{Field: "DeletedAt", Name: "deleted_at"},
 			{Field: "Text", Name: "text"},
 		},
-		PrimaryKey:   []int{noteColID},
-		Interceptors: []func() []velox.Interceptor{softdel.Mixin{}.Interceptors},
+		PrimaryKey: []int{noteColID},
+		Schema:     schema.Note{},
 		FieldPtr: func(x *Note, i int) any {
 			switch i {
 			case noteColID:

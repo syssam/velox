@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/tracker/schema"
+	"github.com/syssam/velox/examples/tracker/schema"
 )
 
 // User is the entity of schema User.
@@ -77,8 +77,7 @@ func userDescriptor() velox.Descriptor[User] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{userColOrgID, userColEmail}, Unique: true}, // org_id, email
 		},
-		Policy: []func() velox.Policy{sch.InOrg{}.Policy},
-		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
+		Schema: schema.User{},
 		FieldPtr: func(x *User, i int) any {
 			switch i {
 			case userColID:

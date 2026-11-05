@@ -5,7 +5,7 @@ package gen
 import (
 	"fmt"
 
-	sch "example.com/tmp/schema"
+	"example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -49,8 +49,7 @@ func tagDescriptor() velox.Descriptor[Tag] {
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 		},
 		PrimaryKey: []int{tagColID},
-		Policy:     []func() velox.Policy{sch.InOrg{}.Policy},
-		Hooks:      []func() []velox.Hook{sch.InOrg{}.Hooks, sch.Tag{}.Hooks},
+		Schema:     schema.Tag{},
 		FieldPtr: func(x *Tag, i int) any {
 			switch i {
 			case tagColID:

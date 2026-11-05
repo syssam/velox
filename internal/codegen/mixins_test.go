@@ -152,7 +152,7 @@ func (Note) Mixin() []schema.Mixin { return []schema.Mixin{G[int]{}} }
 
 // policy is a Policy method for mixin m, which names org_id.
 func policy(m string) string {
-	return "func (" + m + ") Policy() velox.Policy {\n\t_ = velox.C(\"org_id\")\n\treturn velox.Policy{}\n}\n"
+	return "func (" + m + ") Policy() velox.Policy {\n\t_ = velox.FieldEQ(\"org_id\", 1)\n\treturn velox.Policy{}\n}\n"
 }
 
 // TestMixinBehaviourOrder: an entity's sources are its mixins', in Mixin
@@ -183,21 +183,18 @@ func TestMixinBehaviourOrder(t *testing.T) {
 			p = e
 		}
 	}
-	exprs := func(srcs []OutSource) []string {
-		var out []string
-		for _, s := range srcs {
-			out = append(out, s.Expr)
-		}
-		return out
+	var names []string
+	for _, mb := range mixins["Project"] {
+		names = append(names, mb.Name)
 	}
-	if got, want := exprs(p.Policy), []string{"sch.A{}.Policy", "sch.C{}.Policy", "sch.Project{}.Policy"}; !slices.Equal(got, want) {
-		t.Errorf("Policy %v, want %v", got, want)
+	if want := []string{"A", "C"}; !slices.Equal(names, want) {
+		t.Errorf("mixins %v, want %v", names, want)
 	}
-	if got, want := exprs(p.Hooks), []string{"(&sch.A{}).Hooks"}; !slices.Equal(got, want) {
-		t.Errorf("Hooks %v, want %v", got, want)
+	if a := mixins["Project"][0].Methods; len(a) != 2 || !a["Hooks"] || a["Policy"] {
+		t.Errorf("A's methods %v", a)
 	}
-	if len(p.Interceptors) != 0 {
-		t.Errorf("Interceptors %v: base is not embedded", exprs(p.Interceptors))
+	if p.Schema != "schema.Project{}" || !p.NeedsSch {
+		t.Errorf("Schema %q, NeedsSch %v", p.Schema, p.NeedsSch)
 	}
 
 	// Embedded, base's Interceptors is C's.
@@ -212,46 +209,39 @@ func TestMixinBehaviourOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ms := mixins["Project"]; len(ms) != 1 || ms[0].Name != "C" || ms[0].Index != 2 || len(ms[0].Methods) != 1 {
+	if ms := mixins["Project"]; len(ms) != 1 || ms[0].Name != "C" || len(ms[0].Methods) != 1 {
 		t.Errorf("embedded: %+v", ms)
 	}
 }
 
-// TestMixinNonZeroValueUsesMixinAt: a mixin value that is not its type's
-// zero value is read with schema.MixinAt, at its index, from a new value of
-// the schema.
-func TestMixinNonZeroValueUsesMixinAt(t *testing.T) {
+// TestSchemaValueOfMixinBehaviour: an entity whose only behaviour is a
+// mixin's names its schema, through a pointer when the schema implements
+// schema.Interface through one; velox reads the mixin's values from it.
+func TestSchemaValueOfMixinBehaviour(t *testing.T) {
 	g, dir := mixinModule(t)
 	mixins, err := mixinBehaviour(t, g, dir, policy("A"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	mixins["Project"][0].NonZero = true // as the loader reports A{By: "x"}
-	o, err := Lower(g, Config{Package: "gen", GenPath: "example.com/tmp/gen", Mixins: mixins})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range o.Entities {
-		if e.Name != "Project" {
-			continue
+	for _, ptr := range []bool{false, true} {
+		for _, e := range g.Entities {
+			e.Pointer = ptr && e.Name == "Project"
 		}
-		if len(e.Policy) != 1 || e.Policy[0].Expr != "schema.MixinAt[sch.A](sch.Project{}, 0).Policy" || e.Policy[0].Imports["schema"] != schemaPkg {
-			t.Errorf("%+v", e.Policy)
+		o, err := Lower(g, Config{Package: "gen", GenPath: "example.com/tmp/gen", Mixins: mixins})
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
-
-	// A schema that implements schema.Interface through a pointer is read
-	// through one.
-	for _, e := range g.Entities {
-		e.Pointer = e.Name == "Project"
-	}
-	o, err = Lower(g, Config{Package: "gen", GenPath: "example.com/tmp/gen", Mixins: mixins})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range o.Entities {
-		if e.Name == "Project" && (len(e.Policy) != 1 || e.Policy[0].Expr != "schema.MixinAt[sch.A](&sch.Project{}, 0).Policy") {
-			t.Errorf("pointer: %+v", e.Policy)
+		want := "schema.Project{}"
+		if ptr {
+			want = "&" + want
+		}
+		for _, e := range o.Entities {
+			if e.Name == "Project" && e.Schema != want {
+				t.Errorf("pointer %v: Schema %q, want %q", ptr, e.Schema, want)
+			}
+			if e.Name == "Label" && e.Schema != "" {
+				t.Errorf("Label, whose mixin declares nothing: Schema %q", e.Schema)
+			}
 		}
 	}
 }
@@ -272,8 +262,8 @@ func TestMixinListedTwiceRefused(t *testing.T) {
 }
 
 // TestMixinInOtherPackage: a mixin of another package of the module is
-// read from its source, and the generated code imports its package under
-// its name, or another when its name is taken.
+// read from its source. The generated code names the schema, whose Mixin
+// method velox reads, and does not import the mixin's package.
 func TestMixinInOtherPackage(t *testing.T) {
 	dir := module(t, map[string]string{
 		"tenancy/tenancy.go": `package tenancy
@@ -311,7 +301,7 @@ func (Note) Mixin() []schema.Mixin { return []schema.Mixin{tenancy.InOrg{}} }
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ms := mixins["Note"]; len(ms) != 1 || ms[0].PkgPath != "example.com/tmp/tenancy" || ms[0].PkgName != "tenancy" {
+	if ms := mixins["Note"]; len(ms) != 1 || ms[0].PkgPath != "example.com/tmp/tenancy" || ms[0].Name != "InOrg" {
 		t.Fatalf("%+v", ms)
 	}
 	files, err := Generate(g, Config{Package: "gen", GenPath: "example.com/tmp/gen", Mixins: mixins})
@@ -319,22 +309,13 @@ func (Note) Mixin() []schema.Mixin { return []schema.Mixin{tenancy.InOrg{}} }
 		t.Fatal(err)
 	}
 	note := fileText(t, files, "note_velox.go")
-	for _, want := range []string{"\"example.com/tmp/tenancy\"\n", "Policy: []func() velox.Policy{tenancy.InOrg{}.Policy},"} {
+	for _, want := range []string{"\"example.com/tmp/schema\"\n", "Schema: schema.Note{},"} {
 		if !strings.Contains(squeeze(note), want) {
 			t.Errorf("note_velox.go lacks %q:\n%s", want, note)
 		}
 	}
-	// A mixin package named velox takes another name.
-	mixins["Note"][0].PkgPath, mixins["Note"][0].PkgName = "example.com/tmp/velox", "velox"
-	files, err = Generate(g, Config{Package: "gen", Mixins: mixins})
-	if err != nil {
-		t.Fatal(err)
-	}
-	note = fileText(t, files, "note_velox.go")
-	for _, want := range []string{"velox2 \"example.com/tmp/velox\"\n", "Policy: []func() velox.Policy{velox2.InOrg{}.Policy},"} {
-		if !strings.Contains(squeeze(note), want) {
-			t.Errorf("note_velox.go lacks %q:\n%s", want, note)
-		}
+	if strings.Contains(note, "tenancy") {
+		t.Errorf("note_velox.go names the mixin's package:\n%s", note)
 	}
 }
 
@@ -355,7 +336,7 @@ func fileText(t *testing.T, files []File, name string) string {
 }
 
 // TestMixinBoundInEntityFile: a schema whose behaviour comes from mixins
-// alone gets no package runtime: each entity's descriptor binds its mixins,
+// alone gets no package runtime: each entity's descriptor names its schema,
 // and its file imports the schema package.
 func TestMixinBoundInEntityFile(t *testing.T) {
 	g, dir := mixinModule(t)
@@ -373,7 +354,7 @@ func TestMixinBoundInEntityFile(t *testing.T) {
 		}
 	}
 	p := fileText(t, files, "project_velox.go")
-	for _, want := range []string{"sch \"example.com/tmp/schema\"\n", "Policy: []func() velox.Policy{sch.A{}.Policy},"} {
+	for _, want := range []string{"\"example.com/tmp/schema\"\n", "Schema: schema.Project{},"} {
 		if !strings.Contains(squeeze(p), want) {
 			t.Errorf("project_velox.go lacks %q", want)
 		}
@@ -568,7 +549,7 @@ func TestMixinPackageErrors(t *testing.T) {
 			}
 		}
 		mixins, err := mixinBehaviour(t, g, dir, policy("B"))
-		if ms := mixins["Label"]; err != nil || len(ms) != 1 || ms[0].Name != "B" || ms[0].Index != 1 {
+		if ms := mixins["Label"]; err != nil || len(ms) != 1 || ms[0].Name != "B" {
 			t.Fatalf("%+v %v", ms, err)
 		}
 	})
@@ -588,33 +569,43 @@ func TestRecvPtr(t *testing.T) {
 	}
 }
 
-// TestMixinPackageNames: the generated code names another package's mixin
-// package by its name, once per package, or by its name and a number when
-// the generated package, or another mixin package, has that name.
-func TestMixinPackageNames(t *testing.T) {
+// TestSchemaPackageNames: the generated code names the schema package by
+// its name, and by userschema when the generated code uses that name for
+// another package; velox's schema package is veloxschema when the schema
+// package is named schema.
+func TestSchemaPackageNames(t *testing.T) {
 	g, _ := mixinModule(t)
-	bound := func(path, name string, i int) MixinBound {
-		return MixinBound{Index: i, PkgPath: path, PkgName: guessName(path), Name: name, Methods: map[string]bool{"Policy": false}}
+	for _, c := range []struct {
+		path, name, want, vschema string
+	}{
+		{"example.com/tmp/schema", "", "schema", "veloxschema"},
+		{"example.com/tmp/models", "", "models", "schema"},
+		{"example.com/tmp/schema", "models", "models", "schema"},
+		{"example.com/tmp/gen", "", "userschema", "schema"},
+		{"example.com/tmp/velox", "", "userschema", "schema"},
+	} {
+		l := &lowerer{g: g, cfg: Config{SchemaName: c.name}, out: &Out{Package: "gen", SchemaPath: c.path},
+			owned: map[string]string{"velox": veloxPkg}}
+		l.schemaNames()
+		if l.out.SchemaName != c.want || l.vschema != c.vschema {
+			t.Errorf("%s %q: %s and %s, want %s and %s", c.path, c.name, l.out.SchemaName, l.vschema, c.want, c.vschema)
+		}
 	}
-	o, err := Lower(g, Config{Package: "gen", Mixins: map[string][]MixinBound{
-		"Project": {bound("example.com/a/gen", "M", 0), bound("example.com/b/gen", "N", 1)},
-		"Label":   {bound("example.com/a/gen", "M", 0)},
-	}})
+	o, err := Lower(g, Config{Package: "gen", SchemaPath: "example.com/tmp/schema", SchemaName: "models", Bound: map[string]Bound{"Project": {Policy: true}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range o.Entities {
-		var got []string
-		for _, s := range e.Policy {
-			got = append(got, s.Expr)
+		if e.Name == "Project" && e.Schema != "models.Project{}" {
+			t.Errorf("Schema %q", e.Schema)
 		}
-		want := map[string][]string{"Project": {"gen2.M{}.Policy", "gen3.N{}.Policy"}, "Label": {"gen2.M{}.Policy"}}[e.Name]
-		if !slices.Equal(got, want) {
-			t.Errorf("%s: %v, want %v", e.Name, got, want)
-		}
-		if e.Name == "Project" && (e.ImportAs["example.com/a/gen"] != "gen2" || e.ImportAs["example.com/b/gen"] != "gen3") {
-			t.Errorf("ImportAs %v", e.ImportAs)
-		}
+	}
+	files, err := Render(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := fileText(t, files, "project_velox.go"); !strings.Contains(p, "models \"example.com/tmp/schema\"") {
+		t.Errorf("project_velox.go:\n%s", p)
 	}
 }
 

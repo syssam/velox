@@ -58,12 +58,12 @@ var lzTaskMeta velox.MetaOnce[lzTask]
 func (*lzTask) VeloxMeta() *velox.Meta[lzTask] { return lzTaskMeta.Load(lzTaskDescriptor) }
 
 func (*lzTask) Policy() velox.Policy {
-	open := velox.Edge("project").HasWhere(velox.C("done").EQ(false)) // built in the body
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return open, nil }}
+	open := velox.HasEdgeWith("project", velox.FieldEQ("done", false)) // built in the body
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return open, nil }}
 }
 
 func (*lzTask) Hooks() []velox.Hook {
-	hasProject := velox.Edge("project").Has() // built in the body
+	hasProject := velox.HasEdge("project") // built in the body
 	return []velox.Hook{velox.On(func(next velox.Mutator) velox.Mutator {
 		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			m.Where(hasProject)
@@ -74,8 +74,8 @@ func (*lzTask) Hooks() []velox.Hook {
 
 func lzTaskDescriptor() velox.Descriptor[lzTask] {
 	return velox.Descriptor[lzTask]{
-		Policy:       []func() velox.Policy{(*lzTask)(nil).Policy},
-		Hooks:        []func() []velox.Hook{(*lzTask)(nil).Hooks},
+		Schema: (*lzTask)(nil),
+
 		Table:        "lz_tasks",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey:   []int{0},
@@ -141,16 +141,16 @@ var lzRaceMeta velox.MetaOnce[lzRace]
 func (*lzRace) VeloxMeta() *velox.Meta[lzRace] { return lzRaceMeta.Load(lzRaceDescriptor) }
 
 func (*lzRace) Policy() velox.Policy {
-	shared := velox.Edge("project").HasWhere(velox.C("done").EQ(false))
+	shared := velox.HasEdgeWith("project", velox.FieldEQ("done", false))
 	return velox.Policy{
-		Read:  func(context.Context) (velox.Cond, error) { return shared, nil },
-		Write: func(context.Context) (velox.Cond, error) { return shared, nil },
+		Read:  func(context.Context) (velox.Predicate, error) { return shared, nil },
+		Write: func(context.Context) (velox.Predicate, error) { return shared, nil },
 	}
 }
 
 func lzRaceDescriptor() velox.Descriptor[lzRace] {
 	return velox.Descriptor[lzRace]{
-		Policy:       []func() velox.Policy{(*lzRace)(nil).Policy},
+		Schema:       (*lzRace)(nil),
 		Table:        "lz_races",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey:   []int{0},
@@ -325,7 +325,7 @@ func (*lzNote) Hooks() []velox.Hook {
 
 func lzNoteDescriptor() velox.Descriptor[lzNote] {
 	return velox.Descriptor[lzNote]{
-		Hooks:      []func() []velox.Hook{(*lzNote)(nil).Hooks},
+		Schema:     (*lzNote)(nil),
 		Table:      "lz_notes",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},

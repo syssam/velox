@@ -180,7 +180,7 @@ func (*Card) Edges() []schema.Edge {
 		t.Fatalf("%d %q", code, errs)
 	}
 	board, _ := os.ReadFile(filepath.Join(dir, "gen", "board_velox.go"))
-	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "Policy: []func() velox.Policy{(&sch.Board{}).Policy},"} {
+	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "Schema: &schema.Board{},"} {
 		if !strings.Contains(squeeze(string(board)), want) {
 			t.Errorf("board_velox.go lacks %q:\n%s", want, board)
 		}

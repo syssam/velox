@@ -4,73 +4,119 @@ import (
 	"github.com/syssam/velox/internal/engine"
 )
 
-// Cond is a condition that names its columns by name, as the schema declares
-// them: what a Policy, an Interceptor and a hook's Where use, since the
-// schema package cannot name the generated entities. It is an instance of
-// Pred, so And, Or and Not combine conditions of both forms, though not one
-// of each: velox.Or(velox.C("a").EQ(1), gen.Users.ID.EQ(2)) does not
-// compile.
+// anyEntity is the entity of a Predicate: none.
+type anyEntity = engine.AnyEntity
+
+// Predicate is a condition that names no entity's type: what a Policy's
+// Read and Write and an Interceptor's Filter return, what a hook's
+// Mutation.Where takes, and what the untyped surface (TableQuery,
+// TableUpdate, TableDelete) filters by. It is Pred of no entity, so And, Or
+// and Not combine predicates as they combine a Pred of one entity, though
+// not one of each: velox.Or(velox.FieldEQ("a", 1), gen.Users.ID.EQ(2))
+// does not compile. Predicate(p) converts a typed p.
 //
-// A Cond is resolved against the entity of the statement it is used in, when
-// the statement runs: a name the entity has no column of, a value of another
-// kind, a text operator on a column that is not text, or IsNull on a NOT NULL
-// column fails the statement before anything is sent. Its zero value fails
-// the statement too, so that a policy that forgot to return a condition lets
-// nothing through. In a schema's behaviour, velox-gen refuses a constant
-// name the entity lacks, and a constant value that does not fit the column,
+// FieldEQ and the other Field functions name a column by its name, as the
+// schema's field names it, and HasEdge and HasEdgeWith a relation by its
+// edge's name, as ent's sql.FieldEQ and generated HasX and HasXWith do,
+// since the schema package cannot name the generated entities:
+//
+//	velox.FieldEQ("org_id", org)
+//	velox.Or(velox.FieldEQ("author_id", u), velox.FieldIsNull("deleted_at"))
+//	velox.HasEdgeWith("doc", velox.FieldEQ("public", true))
+//
+// A condition by name is resolved against the entity of the statement it is
+// used in, when the statement runs: a name the entity has no column of, a
+// value of another kind, a text operator on a column that is not text, or
+// FieldIsNull on a NOT NULL column fails the statement before anything is
+// sent. A value is converted as Table.Convert converts it: the column's own
+// type as it is, another type of the same kind (an int for an int64 column,
+// a string for a column of a named string type) converted and
+// range-checked. In a schema's behaviour, velox-gen refuses a constant name
+// the entity lacks, and a constant value that does not fit the column,
 // before any of it runs.
-type Cond = engine.Cond
-
-// Named is a column by its name, made by C. Its operators, EQ, NEQ, GT, GTE,
-// LT, LTE, In, NotIn, Contains, HasPrefix, HasSuffix, IsNull and NotNull,
-// return a Cond.
-// A value is converted as Table.Convert converts it: the column's own type
-// as it is, another type of the same kind (an int for an int64 column, a
-// string for a column of a named string type) converted and range-checked.
-// A value of another kind fails the statement. EQ(nil) fails: IsNull says
-// that. On a nullable column a value compares the value.
-type Named = engine.Named
-
-// NamedEdge is a relation by its name, made by Edge. Has and HasWhere
-// return a Cond.
-type NamedEdge = engine.NamedEdge
-
-// C returns the column of the given name, as the schema's field names it:
 //
-//	velox.C("org_id").EQ(org)
-func C(name string) Named { return engine.C(name) }
+// The zero Predicate fails the statement that holds it, so that a policy
+// that forgot to return a condition lets nothing through: a policy that
+// denies returns velox.Predicate{} with its error. Allow is the condition
+// that matches every row.
+type Predicate = Pred[anyEntity]
 
-// Edge returns the relation of the given name, as the schema's edge names it:
+// FieldEQ is the column of the given name = v. FieldEQ(name, nil) fails
+// the statement: FieldIsNull says that. On a nullable column, a value
+// compares the value.
+func FieldEQ(name string, v any) Predicate { return engine.FieldEQ(name, v) }
+
+// FieldNEQ is the column of the given name <> v.
+func FieldNEQ(name string, v any) Predicate { return engine.FieldNEQ(name, v) }
+
+// FieldGT is the column of the given name > v.
+func FieldGT(name string, v any) Predicate { return engine.FieldGT(name, v) }
+
+// FieldGTE is the column of the given name >= v.
+func FieldGTE(name string, v any) Predicate { return engine.FieldGTE(name, v) }
+
+// FieldLT is the column of the given name < v.
+func FieldLT(name string, v any) Predicate { return engine.FieldLT(name, v) }
+
+// FieldLTE is the column of the given name <= v.
+func FieldLTE(name string, v any) Predicate { return engine.FieldLTE(name, v) }
+
+// FieldIn is the column of the given name IN (vs...). With no values it is
+// false.
+func FieldIn(name string, vs ...any) Predicate { return engine.FieldIn(name, vs...) }
+
+// FieldNotIn is the column of the given name NOT IN (vs...). With no
+// values it is true.
+func FieldNotIn(name string, vs ...any) Predicate { return engine.FieldNotIn(name, vs...) }
+
+// FieldContains is true when the text column of the given name contains s,
+// taken literally (LIKE %s%, with s's LIKE characters escaped).
+func FieldContains(name, s string) Predicate { return engine.FieldContains(name, s) }
+
+// FieldHasPrefix is true when the text column of the given name begins
+// with s, taken literally.
+func FieldHasPrefix(name, s string) Predicate { return engine.FieldHasPrefix(name, s) }
+
+// FieldHasSuffix is true when the text column of the given name ends with
+// s, taken literally.
+func FieldHasSuffix(name, s string) Predicate { return engine.FieldHasSuffix(name, s) }
+
+// FieldEqualFold is LOWER(column) = LOWER(s), on the text column of the
+// given name. SQLite's LOWER folds ASCII letters only.
+func FieldEqualFold(name, s string) Predicate { return engine.FieldEqualFold(name, s) }
+
+// FieldIsNull is true when the nullable column of the given name is NULL.
+func FieldIsNull(name string) Predicate { return engine.FieldIsNull(name) }
+
+// FieldNotNull is true when the nullable column of the given name is not
+// NULL.
+func FieldNotNull(name string) Predicate { return engine.FieldNotNull(name) }
+
+// HasEdge is true when the relation of the given name, as the schema's
+// edge names it, holds at least one row:
 //
-//	velox.Edge("doc").Has()
+//	velox.HasEdge("doc")
 //
-// Has and HasWhere are an EXISTS on the relation's target, which applies the
-// target's Read policy and interceptors for the statement's context. The
-// conditions given HasWhere name the target's columns. velox-gen links the
-// target of a relation an entity's behaviour names with a constant name; a
-// statement that names one it did not link fails.
-func Edge(name string) NamedEdge { return engine.Edge(name) }
+// It is an EXISTS on the relation's target, which applies the target's
+// Read policy and interceptors for the statement's context. velox-gen
+// links the target of a relation an entity's behaviour names with a
+// constant name; a statement that names one it did not link fails.
+func HasEdge(name string) Predicate { return engine.HasEdge(name) }
+
+// HasEdgeWith is true when the relation of the given name holds at least
+// one row that meets every condition of ps, which name the target's
+// columns, as HasEdge applies the target's policy.
+func HasEdgeWith(name string, ps ...Predicate) Predicate { return engine.HasEdgeWith(name, ps...) }
 
 // Allow is the condition that matches every row: what a policy's Read or
 // Write, or an interceptor's Filter, returns for a caller it does not
 // restrict. In a policy it adds nothing to the SQL; in a Where it is 1 = 1,
 // which an Update or Delete's guard does not count as a condition. A policy
-// that returns the zero Cond instead fails the statement, so that no
+// that returns the zero Predicate instead fails the statement, so that no
 // restriction is said, never implied.
 //
 // Allow composes as its meaning says: And drops it (And(Allow(), x) is x),
 // Or(Allow(), x) matches every row (see Or), and Not(Allow()) matches no
 // row. Typed code that wants a condition that matches every row writes
 // And[E]().
-func Allow() Cond { return Cond(engine.NewPredicate(engine.Node{Op: engine.OpAllow})) }
-
-// Predicates returns cs for the untyped surface: a TableQuery's,
-// TableUpdate's or TableDelete's Where. A condition by name resolves
-// against the statement's entity when the statement runs.
-func Predicates(cs []Cond) []Predicate {
-	out := make([]Predicate, len(cs))
-	for i, c := range cs {
-		out[i] = Predicate(c)
-	}
-	return out
-}
+func Allow() Predicate { return engine.NewPredicate(engine.Node{Op: engine.OpAllow}) }

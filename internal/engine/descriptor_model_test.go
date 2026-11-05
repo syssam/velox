@@ -46,8 +46,8 @@ func (*hnote) VeloxMeta() *velox.Meta[hnote] { return hnoteMeta.Load(hnoteDescri
 
 func hnoteDescriptor() velox.Descriptor[hnote] {
 	return velox.Descriptor[hnote]{
-		Hooks: []func() []velox.Hook{(*hnote)(nil).Hooks},
-		Table: "hnotes",
+		Schema: (*hnote)(nil),
+		Table:  "hnotes",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
 		PrimaryKey: []int{0},
@@ -86,12 +86,12 @@ var moveOrgKey = scope.NewKey[int64]("org")
 
 func (*moveOrg) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			org, err := moveOrgKey.Require(ctx)
 			if err != nil {
-				return velox.Cond{}, err
+				return velox.Predicate{}, err
 			}
-			return velox.C("org_id").EQ(org), nil
+			return velox.FieldEQ("org_id", org), nil
 		},
 		Insert: func(ctx context.Context, r velox.Row) error {
 			return moveOrgKey.Match(ctx, r.Value("org_id"))
@@ -111,8 +111,8 @@ func (*moveOrg) VeloxMeta() *velox.Meta[moveOrg] { return moveOrgMeta.Load(moveO
 
 func moveOrgDescriptor() velox.Descriptor[moveOrg] {
 	return velox.Descriptor[moveOrg]{
-		Policy:     []func() velox.Policy{(*moveOrg)(nil).Policy},
-		Hooks:      []func() []velox.Hook{(*moveOrg)(nil).Hooks},
+		Schema: (*moveOrg)(nil),
+
 		Table:      "move_org",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}},
 		PrimaryKey: []int{0},
@@ -344,7 +344,7 @@ func (*hooked) Hooks() []velox.Hook {
 
 func (*hooked) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(context.Context) (velox.Cond, error) { return velox.C("title").EQ("r"), nil },
+		Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("title", "r"), nil },
 		Insert: func(_ context.Context, r velox.Row) error {
 			if r.Value("title") == "" {
 				return velox.Deny("no title")
@@ -360,8 +360,8 @@ func (*hooked) VeloxMeta() *velox.Meta[hooked] { return hookedMeta.Load(hookedDe
 
 func hookedDescriptor() velox.Descriptor[hooked] {
 	return velox.Descriptor[hooked]{
-		Policy:     []func() velox.Policy{(*hooked)(nil).Policy},
-		Hooks:      []func() []velox.Hook{(*hooked)(nil).Hooks},
+		Schema: (*hooked)(nil),
+
 		Table:      "hooked",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},

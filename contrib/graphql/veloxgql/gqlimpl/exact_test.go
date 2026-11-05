@@ -11,6 +11,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/internal/apitest/fixture"
 )
 
 // TestFromJSONNumbers: a number in an any is the float64 a hook expects when that says
@@ -172,11 +173,11 @@ func (*intercepted) VeloxMeta() *velox.Meta[intercepted] {
 	return interceptedMeta.Load(func() velox.Descriptor[intercepted] {
 		return velox.Descriptor[intercepted]{
 			Table: "intercepteds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Interceptors: []func() []velox.Interceptor{func() []velox.Interceptor {
-				return []velox.Interceptor{{Filter: func(context.Context) (velox.Cond, error) {
+			Schema: fixture.Fns{Interceptors: []func() []velox.Interceptor{func() []velox.Interceptor {
+				return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) {
 					return velox.Allow(), nil
 				}}}
-			}},
+			}}},
 			FieldPtr: func(x *intercepted, _ int) any { return &x.ID },
 		}
 	})
@@ -195,9 +196,9 @@ func (*guarded) VeloxMeta() *velox.Meta[guarded] {
 	return guardedMeta.Load(func() velox.Descriptor[guarded] {
 		return velox.Descriptor[guarded]{
 			Table: "guardeds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Policy: []func() velox.Policy{func() velox.Policy {
-				return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.Allow(), nil }}
-			}},
+			Schema: fixture.Fns{Policy: []func() velox.Policy{func() velox.Policy {
+				return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil }}
+			}}},
 			FieldPtr: func(x *guarded, _ int) any { return &x.ID },
 		}
 	})

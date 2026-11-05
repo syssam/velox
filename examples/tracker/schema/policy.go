@@ -14,9 +14,9 @@ import (
 // the statement.
 
 // member lets anyone logged in read.
-func member(ctx context.Context) (velox.Cond, error) {
+func member(ctx context.Context) (velox.Predicate, error) {
 	if _, ok := principal.FromContext(ctx); !ok {
-		return velox.Cond{}, velox.Deny("not logged in")
+		return velox.Predicate{}, velox.Deny("not logged in")
 	}
 	return velox.Allow(), nil
 }
@@ -35,9 +35,9 @@ func authoredBy(why string) func(context.Context, velox.Row) error {
 func (Project) Policy() velox.Policy {
 	return velox.Policy{
 		Read: member,
-		Write: func(ctx context.Context) (velox.Cond, error) {
+		Write: func(ctx context.Context) (velox.Predicate, error) {
 			if p, ok := principal.FromContext(ctx); !ok || !p.Admin {
-				return velox.Cond{}, velox.Deny("only an admin can change a project")
+				return velox.Predicate{}, velox.Deny("only an admin can change a project")
 			}
 			return velox.Allow(), nil
 		},
@@ -55,15 +55,15 @@ func (Project) Policy() velox.Policy {
 func (Issue) Policy() velox.Policy {
 	return velox.Policy{
 		Read: member,
-		Write: func(ctx context.Context) (velox.Cond, error) {
+		Write: func(ctx context.Context) (velox.Predicate, error) {
 			p, ok := principal.FromContext(ctx)
 			switch {
 			case !ok:
-				return velox.Cond{}, velox.Deny("not logged in")
+				return velox.Predicate{}, velox.Deny("not logged in")
 			case p.Admin:
 				return velox.Allow(), nil
 			}
-			return velox.Or(velox.C("author_id").EQ(p.UserID), velox.C("assignee_id").EQ(p.UserID)), nil
+			return velox.Or(velox.FieldEQ("author_id", p.UserID), velox.FieldEQ("assignee_id", p.UserID)), nil
 		},
 		Insert: authoredBy("an issue must be created by its author"),
 	}
@@ -74,15 +74,15 @@ func (Issue) Policy() velox.Policy {
 func (Comment) Policy() velox.Policy {
 	return velox.Policy{
 		Read: member,
-		Write: func(ctx context.Context) (velox.Cond, error) {
+		Write: func(ctx context.Context) (velox.Predicate, error) {
 			p, ok := principal.FromContext(ctx)
 			switch {
 			case !ok:
-				return velox.Cond{}, velox.Deny("not logged in")
+				return velox.Predicate{}, velox.Deny("not logged in")
 			case p.Admin:
 				return velox.Allow(), nil
 			}
-			return velox.C("author_id").EQ(p.UserID), nil
+			return velox.FieldEQ("author_id", p.UserID), nil
 		},
 		Insert: authoredBy("a comment must be created by its author"),
 	}

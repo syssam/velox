@@ -19,7 +19,7 @@ go run ./tour
   invoices that are not deleted, a `Lines` relation and a `status` enum. `line.go` declares `Line`.
   `invoice_behaviour.go` declares `Invoice`'s `Policy()` and `Hooks()`, and
   `line_policy.go` `Line`'s `Policy()`. They name columns by their schema
-  names (`velox.C("status")`, `r.Value("number")`) and do not import `gen`.
+  names (`velox.FieldEQ("status", s)`, `r.Value("number")`) and do not import `gen`.
 - `gen/` is written entirely by `go tool velox-gen -out ./tour/gen ./tour/schema`.
   Each entity's descriptor lists the mixins' `Policy` and `Hooks`, then the
   entity's own.

@@ -32,7 +32,7 @@ go run ./start
   embeds `schema.Schema`, with `Fields`, `Edges`, `Indexes` and `Mixin`
   methods. As in ent, a schema also declares its entity's `Policy()` and
   `Hooks()`, and a mixin its own. They name columns and edges by their
-  schema names (`velox.C("owner").EQ(u)`, `velox.Edge("doc").Has()`,
+  schema names (`velox.FieldEQ("owner", u)`, `velox.HasEdge("doc")`,
   `m.Fill("org_id", org)`), so the schema never imports `gen`.
 - `gen/` is written entirely by velox-gen from the schema; never edit it. It
   holds every entity. Each entity's descriptor lists the `Policy` and

@@ -52,8 +52,8 @@ func (*hnote) VeloxMeta() *Meta[hnote] { return hnoteMeta.Load(hnoteDescriptor) 
 
 func hnoteDescriptor() Descriptor[hnote] {
 	return Descriptor[hnote]{
-		Hooks: []func() []Hook{(*hnote)(nil).Hooks},
-		Table: "hnotes",
+		Schema: (*hnote)(nil),
+		Table:  "hnotes",
 		Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
 		PrimaryKey: []int{0},
@@ -140,7 +140,7 @@ func (*hooked) Hooks() []Hook {
 
 func (*hooked) Policy() Policy {
 	return Policy{
-		Read: func(context.Context) (Cond, error) { return C("title").EQ("r"), nil },
+		Read: func(context.Context) (Predicate, error) { return FieldEQ("title", "r"), nil },
 		Insert: func(_ context.Context, r Row) error {
 			if r.Value("title") == "" {
 				return Deny("no title")
@@ -156,8 +156,8 @@ func (*hooked) VeloxMeta() *Meta[hooked] { return hookedMeta.Load(hookedDescript
 
 func hookedDescriptor() Descriptor[hooked] {
 	return Descriptor[hooked]{
-		Policy:     []func() Policy{(*hooked)(nil).Policy},
-		Hooks:      []func() []Hook{(*hooked)(nil).Hooks},
+		Schema: (*hooked)(nil),
+
 		Table:      "hooked",
 		Columns:    []ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},

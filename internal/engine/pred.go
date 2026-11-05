@@ -82,9 +82,16 @@ func Group(o op, kids []Node) Node {
 // statement resolves against its entity.
 func named(n Node) bool { return n.ByName || n.Op == opNamed || n.Op == opNamedEdge }
 
-// Predicate is a condition in a Statement: the form hooks see and add. It is
-// the untyped form of Pred, as OrderTerm is of Order.
-type Predicate struct{ n Node }
+// AnyEntity is the entity of a Predicate: none, since an untyped condition
+// names no entity's type.
+type AnyEntity struct{}
+
+// Predicate is an untyped condition: the form a Statement holds, and the one
+// a policy, an interceptor and a hook use. It is the instance of Pred of no
+// entity, so And, Or and Not combine it as they combine a Pred of one
+// entity. Its zero value fails the statement that holds it, as the zero Pred
+// does.
+type Predicate = Pred[AnyEntity]
 
 // ColumnEQ returns the condition column = v, for hooks that add conditions;
 // column is an index into the statement's EntityInfo.Columns.
@@ -258,10 +265,7 @@ func PredNode(p Predicate) Node { return p.n }
 func NewPredicate(n Node) Predicate { return Predicate{n} }
 
 // Pred is a condition on entity E, made by a column handle or by And, Or and
-// Not. It is the typed form of Predicate, as Order is of OrderTerm.
-//
-// Predicate(p) converts it, so its one field must be Predicate's, though nothing
-// reads it here: the root package converts first.
+// Not. Predicate is its untyped instance, and Predicate(p) converts p.
 type Pred[E any] struct {
-	n Node //nolint:unused // see above
+	n Node
 }

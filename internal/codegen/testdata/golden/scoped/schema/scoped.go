@@ -74,12 +74,12 @@ func (Owner) Fields() []schema.Field { return []schema.Field{field.String("name"
 // keyPolicy confines rows to key's value in the context, by column.
 func keyPolicy[V comparable](key *scope.Key[V], column string) velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			v, err := key.Require(ctx)
 			if err != nil {
-				return velox.Cond{}, err
+				return velox.Predicate{}, err
 			}
-			return velox.C(column).EQ(v), nil
+			return velox.FieldEQ(column, v), nil
 		},
 		Insert: func(ctx context.Context, r velox.Row) error { return key.Match(ctx, r.Value(column)) },
 	}

@@ -36,17 +36,22 @@ func TestMetaOnceKeepsFailure(t *testing.T) {
 	}
 }
 
-// A panic in a Descriptor's Policy, Hooks or Interceptors becomes the
-// entity's *SchemaError, and is kept.
+// panicking's Policy panics, counting its calls.
+type panicking struct{ calls *int }
+
+func (p panicking) Policy() Policy {
+	*p.calls++
+	panic("broken")
+}
+
+// A panic in the Policy, Hooks or Interceptors of a Descriptor's Schema
+// becomes the entity's *SchemaError, and is kept.
 func TestMetaOnceKeepsBindingPanic(t *testing.T) {
 	var o MetaOnce[other]
 	calls := 0
 	desc := func() Descriptor[other] {
 		return Descriptor[other]{Table: "other", Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Policy: []func() Policy{func() Policy {
-				calls++
-				panic("broken")
-			}},
+			Schema:   panicking{&calls},
 			FieldPtr: func(x *other, i int) any { return &x.ID }}
 	}
 	m := o.Load(desc)

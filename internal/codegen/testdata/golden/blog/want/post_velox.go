@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	sch "example.com/tmp/schema"
+	"example.com/tmp/schema"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/schema"
+	veloxschema "github.com/syssam/velox/schema"
 )
 
 // Post is the entity of schema Post.
@@ -85,7 +85,7 @@ func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor
 
 // postDescriptor describes Post to velox: its table, columns, edges and hooks.
 func postDescriptor() velox.Descriptor[Post] {
-	f0 := schema.FieldDescriptor(&sch.Post{}, "slug")
+	f0 := veloxschema.FieldDescriptor(&schema.Post{}, "slug")
 	d0 := f0.Validators[0].(func(string) error)
 	return velox.Descriptor[Post]{
 		Table: "posts",
@@ -103,8 +103,7 @@ func postDescriptor() velox.Descriptor[Post] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[User]("author", postColAuthorID, userColID),
 		},
-		Policy:       []func() velox.Policy{sch.Post{}.Policy},
-		Interceptors: []func() []velox.Interceptor{sch.Post{}.Interceptors},
+		Schema: schema.Post{},
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postColID:

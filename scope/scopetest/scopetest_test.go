@@ -194,7 +194,7 @@ var rowColumns = []velox.ColumnDescriptor{
 // describe returns the descriptor of the row entity E, on table, with p and
 // h bound when not nil.
 func describe[E any](table string, p []func() velox.Policy, h []func() []velox.Hook) velox.Descriptor[E] {
-	return velox.Descriptor[E]{
+	d := velox.Descriptor[E]{
 		Table:      table,
 		Columns:    rowColumns,
 		PrimaryKey: []int{0},
@@ -202,9 +202,11 @@ func describe[E any](table string, p []func() velox.Policy, h []func() []velox.H
 			r := (*row)(unsafe.Pointer(x))
 			return [...]any{&r.ID, &r.OrgID, &r.Name}[i]
 		},
-		Policy: p,
-		Hooks:  h,
 	}
+	if p != nil || h != nil {
+		d.Schema = fixture.Fns{Policy: p, Hooks: h}
+	}
+	return d
 }
 
 // orgPolicy and orgHooks list the scope's policy and hooks, as velox-gen
@@ -219,7 +221,7 @@ var (
 func openReadPolicy() velox.Policy {
 	p := fixture.OrgPolicy()
 	read := p.Read
-	p.Read = func(ctx context.Context) (velox.Cond, error) {
+	p.Read = func(ctx context.Context) (velox.Predicate, error) {
 		if _, ok := testmodel.Org.From(ctx); !ok {
 			return velox.Allow(), nil
 		}
@@ -285,11 +287,11 @@ var (
 func hiddenPolicy() velox.Policy {
 	p := fixture.OrgPolicy()
 	read := p.Read
-	p.Read = func(ctx context.Context) (velox.Cond, error) {
+	p.Read = func(ctx context.Context) (velox.Predicate, error) {
 		if _, err := read(ctx); err != nil {
-			return velox.Cond{}, err
+			return velox.Predicate{}, err
 		}
-		return velox.C("org_id").EQ(int64(-1)), nil
+		return velox.FieldEQ("org_id", int64(-1)), nil
 	}
 	return p
 }
@@ -390,8 +392,7 @@ func (*nullable) VeloxMeta() *velox.Meta[nullable] {
 			Columns:    rowColumns,
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *nullable, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Name}[i] },
-			Policy:     orgPolicy,
-			Hooks:      orgHooks,
+			Schema:     fixture.Fns{Policy: orgPolicy, Hooks: orgHooks},
 		}
 	})
 }

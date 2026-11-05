@@ -227,7 +227,7 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 }
 
 // mixinOf describes the mixin m, which is not nil: the type velox-gen reads
-// its behaviour methods from, and whether m is its zero value.
+// its behaviour methods from.
 func mixinOf(m schema.Mixin) loadjson.Mixin {
 	v := reflect.ValueOf(m)
 	if v.Kind() == reflect.Pointer {
@@ -235,7 +235,7 @@ func mixinOf(m schema.Mixin) loadjson.Mixin {
 	}
 	t := v.Type()
 	name, _, generic := strings.Cut(t.Name(), "[")
-	return loadjson.Mixin{PkgPath: t.PkgPath(), Name: name, Generic: generic, NonZero: !v.IsZero()}
+	return loadjson.Mixin{PkgPath: t.PkgPath(), Name: name, Generic: generic}
 }
 
 // methodPos is the file:line of the method name of the schema type t, or ""

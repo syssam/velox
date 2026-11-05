@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"maps"
 	"path"
 	"reflect"
 	"slices"
@@ -38,15 +39,15 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 		joins: map[string]*join{},
 	}
 	l.owned = map[string]string{
-		"velox": "github.com/syssam/velox", "sch": l.out.SchemaPath, "errors": "errors", "fmt": "fmt",
-		"regexp": "regexp", "time": "time", "json": "encoding/json",
+		"velox": "github.com/syssam/velox", "errors": "errors", "fmt": "fmt",
+		"regexp": "regexp", "time": "time", "json": "encoding/json", "utf8": "unicode/utf8",
 	}
+	l.schemaNames()
 	l.entities()
 	l.relations()
-	l.mixinSources()
 	l.finish()
-	for _, e := range l.out.Entities {
-		if ownSources(e) {
+	for _, ge := range l.g.Entities {
+		if l.schemaValue(ge) {
 			l.out.NeedsSch = true
 		}
 	}
@@ -66,49 +67,68 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	return l.out, nil
 }
 
-// behaviourKinds are the kinds of an entity's behaviour, in the order the
-// generated code lists them.
+// behaviourKinds are the kinds of an entity's behaviour.
 var behaviourKinds = []string{"Policy", "Hooks", "Interceptors"}
 
-// sources returns the sources of e's behaviour of kind k.
-func (e *OutEntity) sources(k string) *[]OutSource {
-	switch k {
-	case "Policy":
-		return &e.Policy
-	case "Hooks":
-		return &e.Hooks
+// schemaNames picks the names the generated code gives the schema package
+// and velox's schema package: their own, schema for velox's, unless a name
+// is taken, by the generated code or a field type's package. Then the
+// schema package is userschema, and velox's is veloxschema.
+func (l *lowerer) schemaNames() {
+	taken := maps.Clone(l.owned)
+	taken[l.out.Package] = ""
+	for _, e := range l.g.Entities {
+		for _, f := range e.Fields {
+			if f.GoType != nil {
+				for _, p := range importNames(f.GoType) {
+					if _, ok := taken[p.name]; !ok {
+						taken[p.name] = p.path
+					}
+				}
+			}
+		}
 	}
-	return &e.Interceptors
+	free := func(n, p string) bool {
+		old, ok := taken[n]
+		return !ok || old == p
+	}
+	pick := func(want, alt, p string) string {
+		n := want
+		for i := 1; !free(n, p); i++ {
+			n = alt
+			if i > 1 {
+				n = alt + strconv.Itoa(i)
+			}
+		}
+		taken[n] = p
+		l.owned[n] = p
+		return n
+	}
+	l.out.SchemaName = pick(cmp.Or(l.cfg.SchemaName, guessName(l.out.SchemaPath)), "userschema", l.out.SchemaPath)
+	l.vschema = pick("schema", "veloxschema", schemaPkg)
 }
 
-// ownSources appends to e's sources the Policy, Hooks and Interceptors
-// methods its schema declares: method values of a new value of the schema's
-// type, a pointer when the method has a pointer receiver. It reports
-// whether it appended one, which the file reads from the schema package.
-func ownSources(e *OutEntity) bool {
-	recv := func(ptr bool) string {
-		if ptr {
-			return "(&sch." + e.Name + "{})"
-		}
-		return "sch." + e.Name + "{}"
+// schemaValue sets the Schema of ge's entity, the value its Descriptor names
+// for velox to read its behaviour from, when the schema or a mixin it lists
+// declares a Policy, Hooks or Interceptors method. It is a pointer when the
+// schema implements schema.Interface through one. It reports whether it
+// set it, which the file reads from the schema package.
+func (l *lowerer) schemaValue(ge *Entity) bool {
+	s := l.state[ge.Name]
+	if s == nil {
+		return false
 	}
-	own := func(k string, ptr bool) {
-		*e.sources(k) = append(*e.sources(k), OutSource{Name: e.Name, Expr: recv(ptr) + "." + k})
-	}
-	if e.Bound.Policy {
-		own("Policy", e.Bound.PolicyPtr)
-	}
-	if e.Bound.Hooks {
-		own("Hooks", e.Bound.HooksPtr)
-	}
-	if e.Bound.Interceptors {
-		own("Interceptors", e.Bound.InterceptorsPtr)
-	}
+	e := s.out
 	b := e.Bound
-	if b.Policy || b.Hooks || b.Interceptors {
-		e.NeedsSch = true
+	if !b.Policy && !b.Hooks && !b.Interceptors && len(l.cfg.Mixins[ge.Name]) == 0 {
+		return false
 	}
-	return e.NeedsSch
+	e.Schema = l.out.SchemaName + "." + e.Name + "{}"
+	if ge.Pointer {
+		e.Schema = "&" + e.Schema
+	}
+	e.NeedsSch = true
+	return true
 }
 
 // bidiPolicyError is the *FileError of the Policy of e, the join entity of a
@@ -131,9 +151,8 @@ type lowerer struct {
 	joins map[string]*join     // by join table
 	owned map[string]string    // the package names the generated code uses, with their paths
 	enums []*enumDecl
-	// mixinNames are the names of the packages of mixins with behaviour, by
-	// import path.
-	mixinNames map[string]string
+	// vschema is the name the generated code gives velox's schema package.
+	vschema string
 }
 
 // join is a join entity with the edge that made it.
@@ -522,7 +541,7 @@ func (s *entState) descriptor(e *Entity, f *Field) string {
 	}
 	v := "f" + strconv.Itoa(len(s.descs))
 	s.descs[f.Name] = v
-	s.setup = append(s.setup, fmt.Sprintf("%s := schema.FieldDescriptor(&sch.%s{}, %s)", v, e.Name, strconv.Quote(f.Name)))
+	s.setup = append(s.setup, fmt.Sprintf("%s := %s.FieldDescriptor(&%s.%s{}, %s)", v, s.l.vschema, s.l.out.SchemaName, e.Name, strconv.Quote(f.Name)))
 	return v
 }
 
@@ -536,17 +555,17 @@ func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member
 		if p, ok := s.l.cfg.Funcs[ref.Pkg]; ok && p.Gen {
 			name := p.Name
 			if ref.Pkg == s.l.out.SchemaPath {
-				name, s.sch = "sch", true
+				name, s.sch = s.l.out.SchemaName, true
 			}
 			if s.free(ref.Pkg, name) {
-				if name != "sch" {
+				if ref.Pkg != s.l.out.SchemaPath {
 					s.use(ref.Pkg, name, where)
 				}
 				return name + "." + ref.Name
 			}
 		}
 	}
-	s.use(schemaPkg, "schema", where)
+	s.use(schemaPkg, s.l.vschema, where)
 	fd := s.descriptor(e, f)
 	v := "d" + strconv.Itoa(s.reads)
 	s.reads++
@@ -617,7 +636,7 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 // member, of type any, that is not a function: a variable of the setup
 // block.
 func (s *entState) schemaValue(e *Entity, f *Field, member, where string) string {
-	s.use(schemaPkg, "schema", where)
+	s.use(schemaPkg, s.l.vschema, where)
 	fd := s.descriptor(e, f)
 	v := "d" + strconv.Itoa(s.reads)
 	s.reads++
@@ -1037,7 +1056,7 @@ func (l *lowerer) relations() {
 				}
 			}
 			if slices.Contains(l.cfg.Linked[e.Name], ed.Name) {
-				// The entity's behaviour names the relation with velox.Edge.
+				// The entity's behaviour names the relation with velox.HasEdge.
 				r.Desc = fmt.Sprintf("velox.Linked[%s](%s)", t.Name, r.Desc)
 			}
 			s.out.Rels = append(s.out.Rels, r)
@@ -1204,6 +1223,9 @@ func (l *lowerer) complete(s *entState) {
 		o.Imports = append(o.Imports, p)
 	}
 	slices.Sort(o.Imports)
+	if _, ok := s.paths[s.l.vschema]; ok && s.l.vschema != "schema" {
+		o.ImportAs = map[string]string{schemaPkg: s.l.vschema}
+	}
 	o.NeedsSch = s.sch
 	l.out.NeedsSch = l.out.NeedsSch || s.sch
 }

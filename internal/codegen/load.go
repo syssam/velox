@@ -46,13 +46,13 @@ const listFields = "-json=ImportPath,Name,Dir,GoFiles,IgnoredGoFiles,Module,Erro
 // go mod tidy, or a directory that holds two packages. It is also a file of
 // the package that only some builds include, or an unexported struct that
 // embeds schema.Schema and that no type embeds. A package that has no
-// candidates is not an error: schemas is empty.
-func Inspect(dir, pattern string, env []string) (importPath string, schemas []string, err error) {
+// candidates is not an error: schemas is empty. name is the package's name.
+func Inspect(dir, pattern string, env []string) (importPath, name string, schemas []string, err error) {
 	pkg, names, err := inspect(dir, pattern, env)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
-	return pkg.ImportPath, names, nil
+	return pkg.ImportPath, pkg.Name, names, nil
 }
 
 // inspect is Inspect's work, which returns the package go list reports. A

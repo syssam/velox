@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/tracker/schema"
+	"github.com/syssam/velox/examples/tracker/schema"
 )
 
 // Issue is the entity of schema Issue.
@@ -138,8 +138,7 @@ func issueDescriptor() velox.Descriptor[Issue] {
 			velox.EdgeTo[Comment]("comments", issueColID, commentColIssueID),
 			velox.EdgeThrough[IssueLabel, Label]("labels", issueColID, issueLabelColIssueID, issueLabelColLabelID, labelColID),
 		},
-		Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.Issue{}.Policy},
-		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
+		Schema: schema.Issue{},
 		FieldPtr: func(x *Issue, i int) any {
 			switch i {
 			case issueColID:

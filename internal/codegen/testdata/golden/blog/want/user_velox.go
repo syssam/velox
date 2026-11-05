@@ -8,9 +8,9 @@ import (
 	"regexp"
 	"time"
 
-	sch "example.com/tmp/schema"
+	"example.com/tmp/schema"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/schema"
+	veloxschema "github.com/syssam/velox/schema"
 )
 
 // User is a person who writes posts.
@@ -131,7 +131,7 @@ func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor
 
 // userDescriptor describes User to velox: its table, columns, edges and hooks.
 func userDescriptor() velox.Descriptor[User] {
-	f0 := schema.FieldDescriptor(&sch.User{}, "created_by")
+	f0 := veloxschema.FieldDescriptor(&schema.User{}, "created_by")
 	d0 := f0.Validators[0].(func(string) error)
 	re0 := regexp.MustCompile("^[^@]+@[^@]+$")
 	return velox.Descriptor[User]{

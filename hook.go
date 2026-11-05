@@ -6,6 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/schema"
 )
 
 // Mutator applies a write.
@@ -26,11 +27,12 @@ func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error { return f(ct
 // entity that lists it.
 //
 // A generated entity's hooks are declared in the schema package, on the
-// entity's schema or on a mixin it lists (see package schema), and bound
-// into the generated metadata by velox-gen. An entity written by hand
-// declares them with a method on its pointer type,
-// func (*E) Hooks() []velox.Hook, which its Descriptor lists; a method the
-// metadata does not bind is refused at the entity's first use. velox calls
+// entity's schema or on a mixin it lists (see package schema), and read
+// from the schema's value that the generated descriptor names. An entity
+// written by hand declares them with a method on its pointer type,
+// func (*E) Hooks() []velox.Hook, and names itself in its Descriptor,
+// Schema: (*E)(nil); a method the metadata does not reach is refused at
+// the entity's first use. velox calls
 // the method once, when it builds the entity's metadata: a hand-written one
 // on a nil *E, so it must not read its receiver. Nor may its body, outside
 // the hooks it returns, read the entity's own metadata (a query on it, say):
@@ -124,20 +126,57 @@ func WithHooks[E any, PE Entity[E]](hs ...Hook) Option {
 	return engine.WithEntityHooks(PE(nil).VeloxMeta().info, hookFns(hs))
 }
 
-// bind keeps in info the interceptors, policy and hooks that ps, hs and is
-// compose. It is not generic, so that Load, compiled for every entity,
-// instantiates nothing for them. The policies are ANDed in order, the hooks
-// run in order, the first outermost, and the interceptors' conditions are
-// ANDed in order.
-func bind(info *EntityInfo, ps []func() Policy, hs []func() []Hook, is []func() []Interceptor) error {
+// bind keeps in info the interceptors, policy and hooks that s declares:
+// those of each value its Mixin method returns, in order, then its own. It
+// is not generic, so that Load, compiled for every entity, instantiates
+// nothing for them. The policies are ANDed in order, the hooks run in
+// order, the first outermost, and the interceptors' conditions are ANDed in
+// order.
+func bind(info *EntityInfo, s any) error {
+	var srcs []any
+	err := engine.Recover(info, "Mixin()", func() {
+		if m, ok := s.(interface{ Mixin() []schema.Mixin }); ok {
+			for _, x := range m.Mixin() {
+				if x != nil {
+					srcs = append(srcs, engine.Addr(x))
+				}
+			}
+		}
+	})
+	if err != nil {
+		return err
+	}
+	srcs = append(srcs, engine.Addr(s))
+	var (
+		ps []interface{ Policy() Policy }
+		hs []interface{ Hooks() []Hook }
+		is []interface{ Interceptors() []Interceptor }
+	)
+	for _, x := range srcs {
+		if v, ok := x.(interface{ Policy() Policy }); ok {
+			ps = append(ps, v)
+		} else if err := engine.WrongBehaviour(info, x, "Policy", "func() velox.Policy"); err != nil {
+			return err
+		}
+		if v, ok := x.(interface{ Hooks() []Hook }); ok {
+			hs = append(hs, v)
+		} else if err := engine.WrongBehaviour(info, x, "Hooks", "func() []velox.Hook"); err != nil {
+			return err
+		}
+		if v, ok := x.(interface{ Interceptors() []Interceptor }); ok {
+			is = append(is, v)
+		} else if err := engine.WrongBehaviour(info, x, "Interceptors", "func() []velox.Interceptor"); err != nil {
+			return err
+		}
+	}
+	if len(ps) == 0 && len(hs) == 0 && len(is) == 0 {
+		return engine.NoBehaviour(info, s)
+	}
 	if len(is) > 0 {
 		err := engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
 			var fs []engine.FilterFn
-			for i, f := range is {
-				if f == nil {
-					return nil, engine.NilBinding("Interceptors", i)
-				}
-				own, reason := engine.FiltersFor(f(), len(fs))
+			for _, x := range is {
+				own, reason := engine.FiltersFor(x.Interceptors(), len(fs))
 				if reason != "" {
 					return nil, reason
 				}
@@ -152,11 +191,8 @@ func bind(info *EntityInfo, ps []func() Policy, hs []func() []Hook, is []func() 
 	if len(ps) > 0 {
 		err := engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
 			all := make([]*engine.EntityPolicy, len(ps))
-			for i, p := range ps {
-				if p == nil {
-					return nil, engine.NilBinding("Policy", i)
-				}
-				all[i] = engine.PolicyFor(info, p())
+			for i, x := range ps {
+				all[i] = engine.PolicyFor(info, x.Policy())
 			}
 			return engine.AndPolicies(all), ""
 		})
@@ -169,13 +205,10 @@ func bind(info *EntityInfo, ps []func() Policy, hs []func() []Hook, is []func() 
 	}
 	return engine.EraseHooks(info, func() ([]engine.HookFn, string) {
 		var all []engine.HookFn
-		for i, h := range hs {
-			if h == nil {
-				return nil, engine.NilBinding("Hooks", i)
-			}
-			own := h()
-			for j, x := range own {
-				if x == nil {
+		for _, x := range hs {
+			own := x.Hooks()
+			for j, h := range own {
+				if h == nil {
 					return nil, engine.NilHook(len(all) + j)
 				}
 			}

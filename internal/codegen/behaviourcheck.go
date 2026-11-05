@@ -11,8 +11,8 @@ import (
 	"strings"
 )
 
-// enginePkg is the import path of velox's engine, which declares the types
-// behind velox.Named, velox.NamedEdge and velox.Row.
+// enginePkg is the import path of velox's engine, which declares the type
+// behind velox.Row.
 const enginePkg = veloxPkg + "/internal/engine"
 
 // behaviourCheck checks the uses that behaviour methods reach against the
@@ -101,7 +101,7 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 				return
 			}
 		}
-	case "Contains", "HasPrefix", "HasSuffix":
+	case "Contains", "HasPrefix", "HasSuffix", "EqualFold":
 		if k := col.kind(); k != "" && kindClassOf(k) != "string" {
 			refuse(u.call, "%s is %s, not text", what, article(col.typeName()))
 		}

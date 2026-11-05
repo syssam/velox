@@ -20,6 +20,8 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/mixin"
 	"github.com/syssam/velox/scope"
 )
 
@@ -80,25 +82,33 @@ var petMeta velox.MetaOnce[pet]
 
 func (*pet) VeloxMeta() *velox.Meta[pet] { return petMeta.Load(petDescriptor) }
 
+// petOrgMixin is pet's OrgPolicy as a mixin, whose policy runs before pet's own.
+type petOrgMixin struct{ mixin.Schema }
+
+func (petOrgMixin) Policy() velox.Policy { return (*pet)(nil).OrgPolicy() }
+
+// Mixin lists petOrgMixin.
+func (*pet) Mixin() []schema.Mixin { return []schema.Mixin{petOrgMixin{}} }
+
 func petDescriptor() velox.Descriptor[pet] {
 	return velox.Descriptor[pet]{
 		Table:      "pets",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeeperID", Name: "keeper_id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		FieldPtr:   func(x *pet, i int) any { return [...]any{&x.ID, &x.KeeperID, &x.OrgID, &x.Name}[i] },
-		Policy:     []func() velox.Policy{(*pet)(nil).OrgPolicy, (*pet)(nil).Policy},
+		Schema:     (*pet)(nil),
 	}
 }
 
 // OrgPolicy confines pets to the context's org, as an InOrg mixin would.
 func (*pet) OrgPolicy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			org, err := petOrg.Require(ctx)
 			if err != nil {
-				return velox.Cond{}, err
+				return velox.Predicate{}, err
 			}
-			return velox.C("org_id").EQ(org), nil
+			return velox.FieldEQ("org_id", org), nil
 		},
 		Insert: func(ctx context.Context, r velox.Row) error {
 			return petOrg.Match(ctx, r.Value("org_id"))
@@ -108,9 +118,9 @@ func (*pet) OrgPolicy() velox.Policy {
 
 // Policy hides the pets above the viewer's id.
 func (*pet) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
 		if v, ok := ctx.Value(viewerKey{}).(int64); ok {
-			return velox.C("id").LTE(v), nil
+			return velox.FieldLTE("id", v), nil
 		}
 		return velox.Allow(), nil
 	}}

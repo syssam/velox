@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/tenant/schema"
+	"github.com/syssam/velox/examples/tenant/schema"
 )
 
 // Project is the entity of schema Project.
@@ -64,8 +64,7 @@ func projectDescriptor() velox.Descriptor[Project] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{projectColOrgID, projectColName}, Unique: true}, // org_id, name
 		},
-		Policy: []func() velox.Policy{sch.InOrg{}.Policy},
-		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
+		Schema: schema.Project{},
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
 			case projectColID:

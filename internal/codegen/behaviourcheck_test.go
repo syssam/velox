@@ -77,7 +77,7 @@ import (
 
 var (
 	_ context.Context
-	_ = velox.C
+	_ = velox.FieldEQ
 )
 
 `
@@ -136,7 +136,7 @@ func lineOf(t *testing.T, decls, marker string) int {
 
 // read is a Policy of entity whose Read returns cond.
 func read(entity, cond string) string {
-	return "func (" + entity + ") Policy() velox.Policy {\n\treturn velox.Policy{Read: func(context.Context) (velox.Cond, error) {\n\t\treturn " + cond + ", nil\n\t}}\n}\n"
+	return "func (" + entity + ") Policy() velox.Policy {\n\treturn velox.Policy{Read: func(context.Context) (velox.Predicate, error) {\n\t\treturn " + cond + ", nil\n\t}}\n}\n"
 }
 
 // hook is a Hooks of entity whose one hook runs body on m.
@@ -187,9 +187,9 @@ func (c *checkEnv) accepts(t *testing.T, cases map[string]string) {
 func TestCheckColumnsRefusesUnknown(t *testing.T) {
 	c := newCheckEnv(t)
 	c.refuses(t, []checkRefusal{
-		{"C", read("User", `velox.C("nme").EQ("x")`), `"nme"`, `velox.C("nme"): User has no column "nme" (User.Policy)`},
-		{"bare C", "func (User) Interceptors() []velox.Interceptor {\n\t_ = velox.C(\"nme\")\n\treturn nil\n}\n", `"nme"`, `velox.C("nme"): User has no column "nme" (User.Interceptors)`},
-		{"Edge", read("Comment", `velox.Edge("dco").Has()`), `"dco"`, `velox.Edge("dco"): Comment has no relation "dco" (Comment.Policy)`},
+		{"FieldEQ", read("User", `velox.FieldEQ("nme", "x")`), `"nme"`, `velox.FieldEQ("nme", "x"): User has no column "nme" (User.Policy)`},
+		{"in Interceptors", "func (User) Interceptors() []velox.Interceptor {\n\t_ = velox.FieldIsNull(\"nme\")\n\treturn nil\n}\n", `"nme"`, `velox.FieldIsNull("nme"): User has no column "nme" (User.Interceptors)`},
+		{"HasEdge", read("Comment", `velox.HasEdge("dco")`), `"dco"`, `velox.HasEdge("dco"): Comment has no relation "dco" (Comment.Policy)`},
 		{"Mutation.Set", hook("Doc", `return m.Set("titel", "x")`), `"titel"`, `m.Set("titel", "x"): Doc has no column "titel" (Doc.Hooks)`},
 		{"Mutation.Fill", hook("Doc", `return m.Fill("titel", "x")`), `"titel"`, `m.Fill("titel", "x"): Doc has no column "titel" (Doc.Hooks)`},
 		{"Mutation.Value", hook("Doc", "_, _ = m.Value(\"titel\")\n\t\treturn nil"), `"titel"`, `m.Value("titel"): Doc has no column "titel" (Doc.Hooks)`},
@@ -198,7 +198,7 @@ func TestCheckColumnsRefusesUnknown(t *testing.T) {
 		{"Row.Set", insert("Doc", `return r.Set("titel", "x")`), `"titel"`, `r.Set("titel", "x"): Doc has no column "titel" (Doc.Policy)`},
 	})
 	// Every refusal is reported, joined.
-	decls := read("User", `velox.And(velox.C("a").EQ(1), velox.C("b").EQ(1))`)
+	decls := read("User", `velox.And(velox.FieldEQ("a", 1), velox.FieldEQ("b", 1))`)
 	if _, _, err := c.run(t, decls); err == nil || !strings.Contains(err.Error(), `no column "a"`) || !strings.Contains(err.Error(), `no column "b"`) {
 		t.Errorf("got %v", err)
 	}
@@ -209,16 +209,16 @@ func TestCheckColumnsRefusesUnknown(t *testing.T) {
 func TestCheckColumnsAccepts(t *testing.T) {
 	c := newCheckEnv(t)
 	c.accepts(t, map[string]string{
-		"conditions": read("User", `velox.And(velox.C("name").EQ("a"), velox.C("level").LT(100), velox.C("level").GTE(-128),
-			velox.C("rank").In(1, int32(2), uint8(3)), velox.C("score").GT(1.5), velox.C("nick").EQ("n"),
-			velox.C("nick").IsNull(), velox.C("name").HasPrefix("a"), velox.C("flags").EQ(255), velox.C("id").EQ(7))`),
+		"conditions": read("User", `velox.And(velox.FieldEQ("name", "a"), velox.FieldLT("level", 100), velox.FieldGTE("level", -128),
+			velox.FieldIn("rank", 1, int32(2), uint8(3)), velox.FieldGT("score", 1.5), velox.FieldEQ("nick", "n"),
+			velox.FieldIsNull("nick"), velox.FieldHasPrefix("name", "a"), velox.FieldEQ("flags", 255), velox.FieldEQ("id", 7))`),
 		"values velox-gen cannot read": "var xs = []any{1}\n\n" + read("User",
-			"velox.And(velox.C(\"rank\").In(xs...), velox.C(\"rank\").EQ(xs[0]), velox.C(\"level\").EQ(any(300)))"),
+			"velox.And(velox.FieldIn(\"rank\", xs...), velox.FieldEQ(\"rank\", xs[0]), velox.FieldEQ(\"level\", any(300)))"),
 		"mutation":  hook("User", "if err := m.Set(\"nick\", nil); err != nil {\n\t\t\treturn err\n\t\t}\n\t\t_, _ = m.Value(\"rank\")\n\t\treturn m.Fill(\"level\", 3)"),
 		"row":       insert("User", "_ = r.Value(\"nick\")\n\t\t_ = r.IsZero(\"rank\")\n\t\treturn nil"),
-		"unreached": "func unused() velox.Cond { return velox.C(\"nope\").EQ(1) }\n",
+		"unreached": "func unused() velox.Predicate { return velox.FieldEQ(\"nope\", 1) }\n",
 	})
-	linked, _, err := c.run(t, read("User", `velox.Edge("docs").HasWhere(velox.Edge("comments").HasWhere(velox.C("doc_id").EQ(1)))`))
+	linked, _, err := c.run(t, read("User", `velox.HasEdgeWith("docs", velox.HasEdgeWith("comments", velox.FieldEQ("doc_id", 1)))`))
 	if want := map[string][]string{"User": {"docs"}, "Doc": {"comments"}}; err != nil || !reflect.DeepEqual(linked, want) {
 		t.Fatalf("got %v, %v, want %v", linked, err, want)
 	}
@@ -228,13 +228,13 @@ func TestCheckColumnsAccepts(t *testing.T) {
 // that lacks the column is refused, by name, and one that has it is not.
 func TestCheckColumnsPerMixinEntity(t *testing.T) {
 	c := newCheckEnv(t)
-	decls := read("InOrg", `velox.C("owner_id").EQ(1)`)
+	decls := read("InOrg", `velox.FieldEQ("owner_id", 1)`)
 	_, _, err := c.run(t, decls)
-	want := "behaviour.go:" + strconv.Itoa(lineOf(t, decls, "owner_id")) + `: velox.C("owner_id"): Comment, which lists InOrg, has no column "owner_id" (InOrg.Policy)`
+	want := "behaviour.go:" + strconv.Itoa(lineOf(t, decls, "owner_id")) + `: velox.FieldEQ("owner_id", 1): Comment, which lists InOrg, has no column "owner_id" (InOrg.Policy)`
 	if err == nil || !strings.HasSuffix(err.Error(), want) || strings.Contains(err.Error(), "\n") {
 		t.Fatalf("got %v\nwant %s", err, want)
 	}
-	c.accepts(t, map[string]string{"the mixin's column": read("InOrg", `velox.C("org_id").EQ(1)`)})
+	c.accepts(t, map[string]string{"the mixin's column": read("InOrg", `velox.FieldEQ("org_id", 1)`)})
 }
 
 // A call in a function, a method or a variable of the schema package that
@@ -242,12 +242,12 @@ func TestCheckColumnsPerMixinEntity(t *testing.T) {
 // reaches it.
 func TestCheckColumnsFollowsHelpers(t *testing.T) {
 	c := newCheckEnv(t)
-	helpers := "func member() velox.Cond { return authoredBy() }\n\nfunc authoredBy() velox.Cond { return velox.C(\"owner_id\").EQ(1) }\n\n"
+	helpers := "func member() velox.Predicate { return authoredBy() }\n\nfunc authoredBy() velox.Predicate { return velox.FieldEQ(\"owner_id\", 1) }\n\n"
 	c.accepts(t, map[string]string{"Doc's column": helpers + read("Doc", "member()")})
 	c.refuses(t, []checkRefusal{
-		{"function", helpers + read("Doc", "member()") + read("User", "member()"), `velox.C("owner_id")`, `velox.C("owner_id"): User has no column "owner_id" (User.Policy)`},
-		{"method", "func (User) own() velox.Cond { return velox.C(\"owner\").EQ(1) }\n\n" + read("User", "User{}.own()"), `velox.C("owner")`, `velox.C("owner"): User has no column "owner" (User.Policy)`},
-		{"variable", "var titled = velox.C(\"titel\")\n\n" + read("Doc", `titled.EQ("x")`), `velox.C("titel")`, `velox.C("titel"): Doc has no column "titel" (Doc.Policy)`},
+		{"function", helpers + read("Doc", "member()") + read("User", "member()"), `velox.FieldEQ("owner_id"`, `velox.FieldEQ("owner_id", 1): User has no column "owner_id" (User.Policy)`},
+		{"method", "func (User) own() velox.Predicate { return velox.FieldEQ(\"owner\", 1) }\n\n" + read("User", "User{}.own()"), `velox.FieldEQ("owner"`, `velox.FieldEQ("owner", 1): User has no column "owner" (User.Policy)`},
+		{"variable", "var titled = velox.FieldEQ(\"titel\", \"x\")\n\n" + read("Doc", `titled`), `velox.FieldEQ("titel"`, `velox.FieldEQ("titel", "x"): Doc has no column "titel" (Doc.Policy)`},
 	})
 }
 
@@ -255,10 +255,10 @@ func TestCheckColumnsFollowsHelpers(t *testing.T) {
 func TestCheckColumnsConstName(t *testing.T) {
 	c := newCheckEnv(t)
 	c.refuses(t, []checkRefusal{
-		{"const", "const titleCol = \"titel\"\n\n" + read("Doc", `velox.C(titleCol).EQ("x")`), "titleCol).EQ", `velox.C(titleCol): Doc has no column "titel" (Doc.Policy)`},
-		{"expression", "const prefix = \"tit\"\n\n" + read("Doc", `velox.C(prefix+"el").EQ("x")`), `prefix+"el"`, `Doc has no column "titel"`},
+		{"const", "const titleCol = \"titel\"\n\n" + read("Doc", `velox.FieldEQ(titleCol, "x")`), "FieldEQ(titleCol", `velox.FieldEQ(titleCol, "x"): Doc has no column "titel" (Doc.Policy)`},
+		{"expression", "const prefix = \"tit\"\n\n" + read("Doc", `velox.FieldEQ(prefix+"el", "x")`), `prefix+"el"`, `Doc has no column "titel"`},
 	})
-	c.accepts(t, map[string]string{"const": "const titleCol = \"title\"\n\n" + read("Doc", `velox.C(titleCol).EQ("x")`)})
+	c.accepts(t, map[string]string{"const": "const titleCol = \"title\"\n\n" + read("Doc", `velox.FieldEQ(titleCol, "x")`)})
 }
 
 // A value of another kind than the column's, or a constant its type cannot
@@ -266,13 +266,13 @@ func TestCheckColumnsConstName(t *testing.T) {
 func TestCheckColumnsValueKind(t *testing.T) {
 	c := newCheckEnv(t)
 	c.refuses(t, []checkRefusal{
-		{"a string for an int64", read("User", `velox.C("rank").EQ("7")`), `"rank"`, `velox.C("rank").EQ("7"): column "rank" of User is an int64, not a string (User.Policy)`},
-		{"300 for an int8", read("User", `velox.C("level").EQ(300)`), `"level"`, `velox.C("level").EQ(300): column "level" of User is an int8, which cannot hold 300 (User.Policy)`},
-		{"-1 for a uint8", read("User", `velox.C("flags").GT(-1)`), `"flags"`, `column "flags" of User is a uint8, which cannot hold -1`},
-		{"an int for a float32", read("User", `velox.C("score").GT(3)`), `"score"`, `column "score" of User is a float32, not an int`},
-		{"1e300 for a float32", read("User", `velox.C("score").GT(1e300)`), `"score"`, `column "score" of User is a float32, which cannot hold`},
-		{"each In value", read("User", `velox.C("rank").In(1, "2")`), `"rank"`, `velox.C("rank").In(1, "2"): column "rank" of User is an int64, not a string`},
-		{"a pointer", "var s = \"n\"\n\n" + read("User", `velox.C("nick").EQ(&s)`), `"nick"`, `column "nick" of User is a string, not a *string`},
+		{"a string for an int64", read("User", `velox.FieldEQ("rank", "7")`), `"rank"`, `velox.FieldEQ("rank", "7"): column "rank" of User is an int64, not a string (User.Policy)`},
+		{"300 for an int8", read("User", `velox.FieldEQ("level", 300)`), `"level"`, `velox.FieldEQ("level", 300): column "level" of User is an int8, which cannot hold 300 (User.Policy)`},
+		{"-1 for a uint8", read("User", `velox.FieldGT("flags", -1)`), `"flags"`, `column "flags" of User is a uint8, which cannot hold -1`},
+		{"an int for a float32", read("User", `velox.FieldGT("score", 3)`), `"score"`, `column "score" of User is a float32, not an int`},
+		{"1e300 for a float32", read("User", `velox.FieldGT("score", 1e300)`), `"score"`, `column "score" of User is a float32, which cannot hold`},
+		{"each In value", read("User", `velox.FieldIn("rank", 1, "2")`), `"rank"`, `velox.FieldIn("rank", 1, "2"): column "rank" of User is an int64, not a string`},
+		{"a pointer", "var s = \"n\"\n\n" + read("User", `velox.FieldEQ("nick", &s)`), `"nick"`, `column "nick" of User is a string, not a *string`},
 		{"Set", hook("Doc", `return m.Set("title", 1)`), `"title"`, `m.Set("title", 1): column "title" of Doc is a string, not an int (Doc.Hooks)`},
 		{"Fill out of range", hook("User", `return m.Fill("level", 1000)`), `"level"`, `column "level" of User is an int8, which cannot hold 1000`},
 		{"Row.Set", insert("User", `return r.Set("rank", 1.5)`), `"rank"`, `r.Set("rank", 1.5): column "rank" of User is an int64, not a float64`},
@@ -286,56 +286,58 @@ func TestCheckColumnsNilOnNotNull(t *testing.T) {
 	c.refuses(t, []checkRefusal{
 		{"Set", hook("Doc", `return m.Set("title", nil)`), `"title"`, `m.Set("title", nil): column "title" of Doc is not nullable: it takes no nil (Doc.Hooks)`},
 		{"Fill", hook("Doc", `return m.Fill("title", nil)`), `"title"`, `column "title" of Doc is not nullable: it takes no nil`},
-		{"EQ", read("User", `velox.C("nick").EQ(nil)`), `"nick"`, `velox.C("nick").EQ(nil): column "nick" of User is compared with nil: compare it with IsNull or NotNull`},
-		{"In", read("User", `velox.C("nick").In("a", nil)`), `"nick"`, `column "nick" of User is compared with nil`},
+		{"EQ", read("User", `velox.FieldEQ("nick", nil)`), `"nick"`, `velox.FieldEQ("nick", nil): column "nick" of User is compared with nil: compare it with IsNull or NotNull`},
+		{"In", read("User", `velox.FieldIn("nick", "a", nil)`), `"nick"`, `column "nick" of User is compared with nil`},
 	})
 	c.accepts(t, map[string]string{"nullable": hook("User", `return m.Set("nick", nil)`)})
 }
 
-// Contains, HasPrefix and HasSuffix need a text column.
+// FieldContains, FieldHasPrefix, FieldHasSuffix and FieldEqualFold need a
+// text column.
 func TestCheckColumnsTextOpOnNumber(t *testing.T) {
 	c := newCheckEnv(t)
 	c.refuses(t, []checkRefusal{
-		{"Contains", read("User", `velox.C("rank").Contains("1")`), `"rank"`, `velox.C("rank").Contains("1"): column "rank" of User is an int64, not text (User.Policy)`},
-		{"HasSuffix", read("User", `velox.C("score").HasSuffix("1")`), `"score"`, `column "score" of User is a float32, not text`},
+		{"Contains", read("User", `velox.FieldContains("rank", "1")`), `"rank"`, `velox.FieldContains("rank", "1"): column "rank" of User is an int64, not text (User.Policy)`},
+		{"HasSuffix", read("User", `velox.FieldHasSuffix("score", "1")`), `"score"`, `column "score" of User is a float32, not text`},
+		{"EqualFold", read("User", `velox.FieldEqualFold("level", "1")`), `"level"`, `velox.FieldEqualFold("level", "1"): column "level" of User is an int8, not text (User.Policy)`},
 	})
-	c.accepts(t, map[string]string{"text": read("User", `velox.C("nick").Contains("a")`)})
+	c.accepts(t, map[string]string{"text": read("User", `velox.And(velox.FieldContains("nick", "a"), velox.FieldEqualFold("name", "A"))`)})
 }
 
-// IsNull and NotNull need a nullable column.
+// FieldIsNull and FieldNotNull need a nullable column.
 func TestCheckColumnsIsNullOnNotNull(t *testing.T) {
 	c := newCheckEnv(t)
 	c.refuses(t, []checkRefusal{
-		{"IsNull", read("User", `velox.C("name").IsNull()`), `"name"`, `velox.C("name").IsNull(): column "name" of User is not nullable (User.Policy)`},
-		{"the ID", read("User", `velox.C("id").NotNull()`), `"id"`, `column "id" of User is not nullable`},
+		{"IsNull", read("User", `velox.FieldIsNull("name")`), `"name"`, `velox.FieldIsNull("name"): column "name" of User is not nullable (User.Policy)`},
+		{"the ID", read("User", `velox.FieldNotNull("id")`), `"id"`, `column "id" of User is not nullable`},
 	})
 }
 
-// The conditions of an Edge's HasWhere name the columns of its target.
+// The conditions of a HasEdgeWith name the columns of its target.
 func TestCheckColumnsHasWhereTarget(t *testing.T) {
 	c := newCheckEnv(t)
 	c.refuses(t, []checkRefusal{
-		{"target", read("Comment", `velox.Edge("doc").HasWhere(velox.C("name").EQ("x"))`), `"doc"`, `velox.C("name"): Doc, the target of Comment's relation doc, has no column "name" (Comment.Policy)`},
-		{"two deep", read("Comment", `velox.Edge("doc").HasWhere(velox.Edge("owner").HasWhere(velox.C("title").EQ("x")))`), `"doc"`, `velox.C("title"): User, the target of Doc's relation owner, has no column "title" (Comment.Policy)`},
-		{"value", read("Comment", `velox.Edge("doc").HasWhere(velox.C("title").EQ(1))`), `"doc"`, `column "title" of Doc, the target of Comment's relation doc, is a string, not an int`},
-		{"a helper", "func titled() velox.Cond { return velox.C(\"titel\").EQ(\"x\") }\n\n" + read("Comment", `velox.Edge("doc").HasWhere(titled())`), `velox.C("titel")`, `Doc, the target of Comment's relation doc, has no column "titel"`},
-		{"unknown inner relation", read("Comment", `velox.Edge("doc").HasWhere(velox.Edge("ownr").Has())`), `"doc"`, `velox.Edge("ownr"): Doc, the target of Comment's relation doc, has no relation "ownr" (Comment.Policy)`},
+		{"target", read("Comment", `velox.HasEdgeWith("doc", velox.FieldEQ("name", "x"))`), `"doc"`, `velox.FieldEQ("name", "x"): Doc, the target of Comment's relation doc, has no column "name" (Comment.Policy)`},
+		{"two deep", read("Comment", `velox.HasEdgeWith("doc", velox.HasEdgeWith("owner", velox.FieldEQ("title", "x")))`), `"doc"`, `velox.FieldEQ("title", "x"): User, the target of Doc's relation owner, has no column "title" (Comment.Policy)`},
+		{"value", read("Comment", `velox.HasEdgeWith("doc", velox.FieldEQ("title", 1))`), `"doc"`, `column "title" of Doc, the target of Comment's relation doc, is a string, not an int`},
+		{"a helper", "func titled() velox.Predicate { return velox.FieldEQ(\"titel\", \"x\") }\n\n" + read("Comment", `velox.HasEdgeWith("doc", titled())`), `velox.FieldEQ("titel"`, `Doc, the target of Comment's relation doc, has no column "titel"`},
+		{"unknown inner relation", read("Comment", `velox.HasEdgeWith("doc", velox.HasEdge("ownr"))`), `"doc"`, `velox.HasEdge("ownr"): Doc, the target of Comment's relation doc, has no relation "ownr" (Comment.Policy)`},
 	})
-	c.accepts(t, map[string]string{"target": read("Comment", `velox.Edge("doc").HasWhere(velox.C("title").EQ("x"))`)})
+	c.accepts(t, map[string]string{"target": read("Comment", `velox.HasEdgeWith("doc", velox.FieldEQ("title", "x"))`)})
 }
 
 // A column named by a value velox-gen cannot read is a warning, at its
 // line, once; the statement checks it.
 func TestCheckColumnsWarnsNonConstant(t *testing.T) {
 	c := newCheckEnv(t)
-	decls := "func col() string { return \"title\" }\n\n" + read("Doc", `velox.C(col()).EQ("x")`) +
+	decls := "func col() string { return \"title\" }\n\n" + read("Doc", `velox.FieldEQ(col(), "x")`) +
 		hook("Doc", "name := col()\n\t\treturn m.Set(name, \"x\")")
 	_, warnings, err := c.run(t, decls)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
-		"behaviour.go:" + strconv.Itoa(lineOf(t, decls, "velox.C(col())")) + ": velox.C(col()) names its column with a value velox-gen cannot read; velox checks it when the statement runs",
+		"behaviour.go:" + strconv.Itoa(lineOf(t, decls, "velox.FieldEQ(col()")) + `: velox.FieldEQ(col(), "x") names its column with a value velox-gen cannot read; velox checks it when the statement runs`,
 		"behaviour.go:" + strconv.Itoa(lineOf(t, decls, "m.Set(name")) + `: m.Set(name, "x") names its column with a value velox-gen cannot read; velox checks it when the statement runs`,
 	}
 	if len(warnings) != len(want) {

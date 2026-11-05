@@ -50,7 +50,7 @@ func renamed(_ context.Context, m *velox.Mutation) error {
 // onlyDone narrows a delete to the finished tasks, even one that deletes
 // every row.
 func onlyDone(_ context.Context, m *velox.Mutation) error {
-	m.Where(velox.C("done").EQ(true))
+	m.Where(velox.FieldEQ("done", true))
 	return nil
 }
 

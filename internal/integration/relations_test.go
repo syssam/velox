@@ -8,6 +8,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/schema"
 )
 
 var It = testmodel.Items
@@ -250,17 +251,21 @@ func (*note) VeloxMeta() *velox.Meta[note] { return noteMeta.Load(noteDescriptor
 // Policy hides secret notes; fixture.OrgPolicy, bound before it, confines
 // notes to the context's org.
 func (*note) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) {
-		return velox.C("secret").EQ(false), nil
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) {
+		return velox.FieldEQ("secret", false), nil
 	}}
 }
 
 func (*note) Hooks() []velox.Hook { return fixture.OrgHooks() }
 
+// Mixin lists the behaviour that runs before note's own.
+func (*note) Mixin() []schema.Mixin {
+	return fixture.Fns{Policy: []func() velox.Policy{fixture.OrgPolicy}}.Mixin()
+}
+
 func noteDescriptor() velox.Descriptor[note] {
 	return velox.Descriptor[note]{
-		Policy: []func() velox.Policy{fixture.OrgPolicy, (*note)(nil).Policy},
-		Hooks:  []func() []velox.Hook{(*note)(nil).Hooks},
+		Schema: (*note)(nil),
 		Table:  "notes",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Pos", Name: "pos"}, {Field: "Secret", Name: "secret"}},

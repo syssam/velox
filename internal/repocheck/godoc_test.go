@@ -85,7 +85,7 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	t.Parallel()
 	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce", "Show",
 		"Linked", "Lazy", "Validate", "ValidateSet",
-		"Table", "TableOf", "TableRows", "RowsOf", "PredOp", "TableQuery", "Untyped", "Typed", "AndPredicates", "OrPredicates", "NotPredicate", "TableInsert", "TableUpdate", "TableDelete", "Assignments", "GeneratedCodeIsVersion16",
+		"Table", "TableOf", "TableRows", "RowsOf", "PredOp", "TableQuery", "Untyped", "Typed", "AndPredicates", "OrPredicates", "NotPredicate", "TableInsert", "TableUpdate", "TableDelete", "Assignments", "GeneratedCodeIsVersion17",
 		"PredEQ", "PredNEQ", "PredIn", "PredNotIn", "PredGT", "PredGTE", "PredLT", "PredLTE", "PredContains", "PredHasPrefix", "PredHasSuffix", "PredIsNull", "PredNotNull"}
 	// DB's methods, keyed as packageDocs keys a method.
 	for _, m := range []string{"QueryTable", "InsertTable", "InsertRows", "UpdateTable", "DeleteTable"} {
@@ -336,7 +336,7 @@ func TestAliasDocsListMembers(t *testing.T) {
 		}
 	}
 	// Not vacuous: the aliases that cannot move are read.
-	for _, kept := range []string{"Statement", "Option", "Conn", "EntityInfo", "Predicate"} {
+	for _, kept := range []string{"Statement", "Option", "Conn", "EntityInfo"} {
 		if _, ok := docs[kept]; !ok {
 			t.Errorf("%s is not an alias of an engine type: the check reads nothing", kept)
 		}

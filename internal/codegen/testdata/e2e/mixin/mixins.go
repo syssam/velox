@@ -29,7 +29,7 @@ type Tenant struct{ mixin.Schema }
 func (Tenant) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
 
 func (Tenant) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) { return velox.C("org_id").EQ(orgOf(ctx)), nil }}
+	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) { return velox.FieldEQ("org_id", orgOf(ctx)), nil }}
 }
 
 func (Tenant) Hooks() []velox.Hook {
@@ -45,7 +45,7 @@ type Hidden struct{ mixin.Schema }
 func (Hidden) Fields() []schema.Field { return []schema.Field{field.Bool("hidden").Default(false)} }
 
 func (Hidden) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(context.Context) (velox.Cond, error) { return velox.C("hidden").EQ(false), nil }}}
+	return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("hidden", false), nil }}}
 }
 
 // Stamp records its Prefix: a configured mixin, which the generated code

@@ -15,6 +15,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/internal/apitest/fixture"
 )
 
 // acct, kid, lbl and acctLbl are hand-written entities, as velox-gen would
@@ -80,12 +81,12 @@ func (*kid) VeloxMeta() *velox.Meta[kid] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AcctID", Name: "acct_id"}, {Field: "Title", Name: "title"}},
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *kid, i int) any { return [...]any{&x.ID, &x.AcctID, &x.Title}[i] },
-			Policy: []func() velox.Policy{func() velox.Policy {
+			Schema: fixture.Fns{Policy: []func() velox.Policy{func() velox.Policy {
 				return velox.Policy{
-					Read:  func(context.Context) (velox.Cond, error) { return velox.C("title").NEQ("hidden"), nil },
-					Write: func(context.Context) (velox.Cond, error) { return velox.C("title").NEQ("locked"), nil },
+					Read:  func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("title", "hidden"), nil },
+					Write: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("title", "locked"), nil },
 				}
-			}},
+			}}},
 		}
 	})
 }
@@ -109,11 +110,11 @@ func (*lbl) VeloxMeta() *velox.Meta[lbl] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *lbl, i int) any { return [...]any{&x.ID, &x.Name}[i] },
-			Policy: []func() velox.Policy{func() velox.Policy {
+			Schema: fixture.Fns{Policy: []func() velox.Policy{func() velox.Policy {
 				return velox.Policy{
-					Read: func(context.Context) (velox.Cond, error) { return velox.C("name").NEQ("hidden"), nil },
+					Read: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("name", "hidden"), nil },
 				}
-			}},
+			}}},
 		}
 	})
 }

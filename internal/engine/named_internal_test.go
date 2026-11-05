@@ -100,7 +100,7 @@ func TestColumnsByNameEveryKind(t *testing.T) {
 // name resolve on a copy of the clause.
 func TestResolveConflictWhereByName(t *testing.T) {
 	info := kindsInfo(t)
-	cf := &ConflictClause{Columns: []int{0}, Update: []int{1}, Where: []Predicate{Predicate(C("s").EQ("x"))}}
+	cf := &ConflictClause{Columns: []int{0}, Update: []int{1}, Where: []Predicate{FieldEQ("s", "x")}}
 	st := &Statement{Op: OpInsert, Entity: info, Conflict: cf}
 	if err := ResolveStatement(st); err != nil {
 		t.Fatal(err)
@@ -108,11 +108,11 @@ func TestResolveConflictWhereByName(t *testing.T) {
 	if st.Conflict == cf || st.Conflict.Where[0].n.Op != OpEQ || cf.Where[0].n.Op != opNamed {
 		t.Errorf("the clause %+v, the caller's %+v", st.Conflict.Where, cf.Where)
 	}
-	st = &Statement{Op: OpInsert, Entity: info, Conflict: &ConflictClause{Where: []Predicate{Predicate(C("nope").EQ(1))}}}
+	st = &Statement{Op: OpInsert, Entity: info, Conflict: &ConflictClause{Where: []Predicate{FieldEQ("nope", 1)}}}
 	if err := ResolveStatement(st); err == nil || !strings.Contains(err.Error(), `no column "nope"`) {
 		t.Errorf("err %v", err)
 	}
-	st = &Statement{Op: OpSelect, Entity: info, Where: []Predicate{Predicate(C("nope").EQ(1))}}
+	st = &Statement{Op: OpSelect, Entity: info, Where: []Predicate{FieldEQ("nope", 1)}}
 	if err := ResolveStatement(st); err == nil {
 		t.Error("a Where of no column: no error")
 	}
@@ -121,7 +121,7 @@ func TestResolveConflictWhereByName(t *testing.T) {
 // TestResolveNamedLeftovers: what no constructor makes still fails closed.
 func TestResolveNamedLeftovers(t *testing.T) {
 	info := kindsInfo(t)
-	n := C("s").EQ("x").n
+	n := FieldEQ("s", "x").n
 	n.Col = n.Col&^0xff | 99
 	if _, err := resolveNamed(info, n); err == nil || !strings.Contains(err.Error(), "no condition operator 99") {
 		t.Errorf("err %v", err)

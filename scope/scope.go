@@ -13,12 +13,12 @@
 //
 //	func (InOrg) Policy() velox.Policy {
 //		return velox.Policy{
-//			Read: func(ctx context.Context) (velox.Cond, error) {
+//			Read: func(ctx context.Context) (velox.Predicate, error) {
 //				org, err := OrgKey.Require(ctx)
 //				if err != nil {
-//					return velox.Cond{}, err
+//					return velox.Predicate{}, err
 //				}
-//				return velox.C("org_id").EQ(org), nil
+//				return velox.FieldEQ("org_id", org), nil
 //			},
 //			Insert: func(ctx context.Context, r velox.Row) error {
 //				return OrgKey.Match(ctx, r.Value("org_id"))

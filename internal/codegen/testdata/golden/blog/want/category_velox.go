@@ -5,7 +5,7 @@ package gen
 import (
 	"fmt"
 
-	sch "example.com/tmp/schema"
+	"example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -62,8 +62,8 @@ func (*Category) VeloxMeta() *velox.Meta[Category] { return categoryMeta.Load(ca
 // categoryDescriptor describes Category to velox: its table, columns, edges and hooks.
 func categoryDescriptor() velox.Descriptor[Category] {
 	return velox.Descriptor[Category]{
-		Table:  "categories",
-		Schema: "blog",
+		Table:       "categories",
+		TableSchema: "blog",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Title", Name: "title"},
@@ -77,7 +77,7 @@ func categoryDescriptor() velox.Descriptor[Category] {
 			velox.EdgeTo[Category]("children", categoryColID, categoryColCategoryChildren),
 			velox.EdgeTo[Category]("parent", categoryColCategoryChildren, categoryColID),
 		},
-		Interceptors: []func() []velox.Interceptor{(&sch.Category{}).Interceptors},
+		Schema: schema.Category{},
 		FieldPtr: func(x *Category, i int) any {
 			switch i {
 			case categoryColID:

@@ -18,14 +18,8 @@ import (
 // Hooks or Interceptors method, which the generated code binds for the
 // entity.
 type MixinBound struct {
-	Index   int    // the mixin's position in the schema's Mixin method
 	PkgPath string // the import path of the mixin's package
-	PkgName string // that package's name
 	Name    string // the mixin's type name
-	// NonZero says the value Mixin returns is not the zero value of its
-	// type: the generated code reads it with schema.MixinAt, rather than
-	// write a new one.
-	NonZero bool
 	// Methods are the kinds the mixin declares ("Policy", "Hooks",
 	// "Interceptors"), each with whether its receiver is a pointer.
 	Methods map[string]bool
@@ -96,7 +90,7 @@ func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]M
 				return nil, &Error{Schema: e.Name, Reason: fmt.Sprintf("Mixin()[%d] is %s again, which declares behaviour: list a mixin once", i, m.Name)}
 			}
 			seen[key] = true
-			mb := MixinBound{Index: i, PkgPath: m.PkgPath, PkgName: r.pkgs[m.PkgPath].name, Name: m.Name, NonZero: m.NonZero, Methods: map[string]bool{}}
+			mb := MixinBound{PkgPath: m.PkgPath, Name: m.Name, Methods: map[string]bool{}}
 			for _, k := range behaviourKinds {
 				fm, ok := found[k]
 				if !ok {

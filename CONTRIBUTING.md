@@ -240,9 +240,11 @@ CI fails when a generated file is stale.
   `-plugin velox-graphql` and `go -C graphql tool gqlgen generate`. The commands
   CI runs to check them are in `scripts/ci-local.sh`.
 - velox-gen writes one package, gen: `velox.go` and an `<entity>_velox.go`
-  per entity. gen imports the schema package, as `sch`, when it binds a
-  behaviour method, a mixin's or a closure default; the schema package
-  never imports gen (decision 0039). A run removes the generated files it
+  per entity. gen imports the schema package by its own name when a
+  descriptor names a schema's value, `Schema: schema.Issue{}`, because the
+  schema or a mixin it lists declares behaviour, or reads a closure
+  default; `velox/schema` is then `veloxschema`. The schema package never
+  imports gen (decisions 0039 and 0040). A run removes the generated files it
   no longer writes, an older velox-gen's `gen/runtime` among them.
 - Golden files are rewritten with the test package's `-update` flag. Run it for
   one package, and read the diff before you commit it:

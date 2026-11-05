@@ -24,6 +24,8 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/mixin"
 	"github.com/syssam/velox/scope"
 )
 
@@ -53,12 +55,12 @@ var tenantKey = scope.NewKey[string]("tenant")
 // would.
 func (*post) TenantPolicy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			t, err := tenantKey.Require(ctx)
 			if err != nil {
-				return velox.Cond{}, err
+				return velox.Predicate{}, err
 			}
-			return velox.C("tenant").EQ(t), nil
+			return velox.FieldEQ("tenant", t), nil
 		},
 		Insert: func(ctx context.Context, r velox.Row) error {
 			return tenantKey.Match(ctx, r.Value("tenant"))
@@ -68,7 +70,7 @@ func (*post) TenantPolicy() velox.Policy {
 
 func (*post) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(context.Context) (velox.Cond, error) { return velox.C("title").NEQ("hidden"), nil },
+		Read: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("title", "hidden"), nil },
 	}
 }
 
@@ -86,13 +88,20 @@ var postMeta velox.MetaOnce[post]
 
 func (*post) VeloxMeta() *velox.Meta[post] { return postMeta.Load(postDescriptor) }
 
+// postTenantMixin is post's TenantPolicy as a mixin, whose policy runs before post's own.
+type postTenantMixin struct{ mixin.Schema }
+
+func (postTenantMixin) Policy() velox.Policy { return (*post)(nil).TenantPolicy() }
+
+// Mixin lists postTenantMixin.
+func (*post) Mixin() []schema.Mixin { return []schema.Mixin{postTenantMixin{}} }
+
 func postDescriptor() velox.Descriptor[post] {
 	return velox.Descriptor[post]{
 		Table:      "posts",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tenant", Name: "tenant", Immutable: true}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
-		Policy:     []func() velox.Policy{(*post)(nil).TenantPolicy, (*post)(nil).Policy},
-		Hooks:      []func() []velox.Hook{(*post)(nil).Hooks},
+		Schema:     (*post)(nil),
 		FieldPtr: func(x *post, i int) any {
 			switch i {
 			case 0:

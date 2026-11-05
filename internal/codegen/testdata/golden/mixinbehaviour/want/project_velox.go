@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"example.com/tmp/mixins/softdel"
-	sch "example.com/tmp/schema"
+	"example.com/tmp/schema"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/schema"
 )
 
 // Project is the entity of schema Project.
@@ -75,10 +73,8 @@ func projectDescriptor() velox.Descriptor[Project] {
 			{Field: "DeletedAt", Name: "deleted_at"},
 			{Field: "Name", Name: "name"},
 		},
-		PrimaryKey:   []int{projectColID},
-		Policy:       []func() velox.Policy{sch.InOrg{}.Policy, sch.Project{}.Policy},
-		Hooks:        []func() []velox.Hook{sch.InOrg{}.Hooks, schema.MixinAt[sch.Audited](sch.Project{}, 2).Hooks},
-		Interceptors: []func() []velox.Interceptor{softdel.Mixin{}.Interceptors},
+		PrimaryKey: []int{projectColID},
+		Schema:     schema.Project{},
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
 			case projectColID:

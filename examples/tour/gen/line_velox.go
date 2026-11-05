@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/tour/schema"
+	"github.com/syssam/velox/examples/tour/schema"
 )
 
 // Line is the entity of schema Line.
@@ -79,8 +79,7 @@ func lineDescriptor() velox.Descriptor[Line] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Invoice]("invoice", lineColInvoiceID, invoiceColID),
 		},
-		Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.Line{}.Policy},
-		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
+		Schema: schema.Line{},
 		FieldPtr: func(x *Line, i int) any {
 			switch i {
 			case lineColID:

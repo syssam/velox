@@ -310,9 +310,9 @@ func TestLowerChecks(t *testing.T) {
 	}
 	for _, want := range []string{
 		`re0 := regexp.MustCompile("^[a-z]+$")`,
-		`f0 := schema.FieldDescriptor(&sch.LwChecked{}, "code")`,
+		`f0 := schema.FieldDescriptor(&codegen.LwChecked{}, "code")`,
 		`d0 := f0.Validators[0].(func(string) error)`,
-		`f1 := schema.FieldDescriptor(&sch.LwChecked{}, "age")`,
+		`f1 := schema.FieldDescriptor(&codegen.LwChecked{}, "age")`,
 		`d1 := f1.Validators[0].(func(int) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
@@ -452,10 +452,10 @@ func TestLowerMixinPosition(t *testing.T) {
 	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwMixed{})
 	e := o.entity("LwMixed")
 	for _, want := range []string{
-		`f0 := schema.FieldDescriptor(&sch.LwMixed{}, "slug")`,
+		`f0 := schema.FieldDescriptor(&codegen.LwMixed{}, "slug")`,
 		`d0 := f0.Validators[0].(func(string) error)`,
 		// The descriptor of the field read twice is read once.
-		`f3 := schema.FieldDescriptor(&sch.LwMixed{}, "own")`,
+		`f3 := schema.FieldDescriptor(&codegen.LwMixed{}, "own")`,
 		`d4 := f3.Validators[0].(func(string) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
@@ -469,7 +469,7 @@ func TestLowerMixinPosition(t *testing.T) {
 		`d2 := f2.DefaultFunc.(func() int64)`,
 		`d3 := f3.DefaultFunc.(func() string)`,
 		`d5 := f4.UpdateDefault.(func() time.Time)`,
-		`f5 := schema.FieldDescriptor(&sch.LwMixed{}, "pt")`,
+		`f5 := schema.FieldDescriptor(&codegen.LwMixed{}, "pt")`,
 		`d6 := f5.Default` + "\n",
 	} {
 		if !strings.Contains(e.CheckSetup+"\n", want) {
@@ -881,16 +881,20 @@ func TestLowerPackageNameClash(t *testing.T) {
 	if err == nil {
 		t.Fatal("no error")
 	}
-	for _, w := range []string{
-		`schema LwPkgClash: field "a": imports github.com/syssam/velox/internal/codegen/internal/errors, but the generated code uses the name errors for errors`,
-		`schema LwPkgClash: field "b": imports github.com/syssam/velox/internal/codegen/internal/sch, but the generated code uses the name sch for ` + lowerSchemaPath,
-	} {
-		if !strings.Contains(err.Error(), w) {
-			t.Errorf("error lacks %q: %v", w, err)
-		}
+	w := `schema LwPkgClash: field "a": imports github.com/syssam/velox/internal/codegen/internal/errors, but the generated code uses the name errors for errors`
+	if err.Error() != w {
+		t.Errorf("error %v, want %s", err, w)
 	}
-	if n := strings.Count(err.Error(), "\n") + 1; n != 2 {
-		t.Errorf("%d errors: %v", n, err)
+	// A schema package named as a field type's package, sch here, takes
+	// another name.
+	g, err := build(t, LwPkgClash{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := &lowerer{g: g, out: &Out{Package: "gen", SchemaPath: "example.com/x/sch"}, owned: map[string]string{}}
+	l.schemaNames()
+	if l.out.SchemaName != "userschema" {
+		t.Errorf("SchemaName %s, want userschema", l.out.SchemaName)
 	}
 }
 
@@ -1100,7 +1104,7 @@ func TestLowerTypedConstructors(t *testing.T) {
 	}
 	e := outs[0].entity("LwPriced")
 	for _, want := range []string{
-		`f0 := schema.FieldDescriptor(&sch.LwPriced{}, "price")`,
+		`f0 := schema.FieldDescriptor(&codegen.LwPriced{}, "price")`,
 		`d0 := f0.Validators[0].(func(int64) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
@@ -1134,10 +1138,10 @@ func (LwStamped) Fields() []schema.Field {
 func TestLowerTimeDefaultConverts(t *testing.T) {
 	e := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwStamped{}).entity("LwStamped")
 	for _, want := range []string{
-		`f0 := schema.FieldDescriptor(&sch.LwStamped{}, "at")`,
+		`f0 := schema.FieldDescriptor(&codegen.LwStamped{}, "at")`,
 		`d0 := f0.Default.(func() time.Time)`,
 		`d1 := f0.UpdateDefault.(func() time.Time)`,
-		`f1 := schema.FieldDescriptor(&sch.LwStamped{}, "plain")`,
+		`f1 := schema.FieldDescriptor(&codegen.LwStamped{}, "plain")`,
 		`d2 := f1.Default.(func() time.Time)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {

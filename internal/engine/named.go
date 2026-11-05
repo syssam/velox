@@ -8,39 +8,10 @@ import (
 	"unsafe"
 )
 
-// anyEntity is the entity of a Cond: none, since a condition by name is
-// resolved against the entity of the statement that holds it.
-type anyEntity struct{}
-
-// Cond is a condition that names its columns by name. It is resolved
-// against the statement's entity when the statement runs. Or, And and Not
-// combine it as they combine a Pred of one entity.
-//
-// Its zero value fails the statement that holds it, as the zero Pred does.
-type Cond = Pred[anyEntity]
-
-// Named is a column named by its name, as the schema declares it (C). Its
-// methods make conditions on it. Its fields are not exported.
-type Named struct{ name string }
-
-// NamedEdge is a relation named by its name, as the schema declares it
-// (Edge). Its fields are not exported.
-type NamedEdge struct{ name string }
-
-// C returns the column of the given name, as the schema declares it. A
-// condition on it is resolved when the statement that holds it runs: a name
-// the entity has no column of fails the statement, and so does a value of
-// another kind than the column's.
-func C(name string) Named { return Named{name} }
-
-// Edge returns the relation of the given name, as the schema declares the
-// edge. A condition on it is resolved when the statement that holds it
-// runs, and only on a relation whose target the generated code links.
-func Edge(name string) NamedEdge { return NamedEdge{name} }
-
-// cond is the condition op on c with the value v.
-func (c Named) cond(op PredOp, v any) Cond {
-	return Cond{Node{Op: opNamed, Col: int32(op) | int32(len(c.name))<<8, V: v, W: nameData(c.name)}}
+// cond is the condition op on the column of the given name, with the
+// value v.
+func cond(name string, op PredOp, v any) Predicate {
+	return Predicate{Node{Op: opNamed, Col: int32(op) | int32(len(name))<<8, V: v, W: nameData(name)}}
 }
 
 // nameData is the bytes of name, as a node's W holds a name: a string in an
@@ -53,51 +24,60 @@ func nodeName(n Node) string {
 	return unsafe.String((*byte)(n.W.(unsafe.Pointer)), int(n.Col>>8))
 }
 
-// EQ is column = v. v is converted to the column's type: a value of
-// another type of the same kind (an int for an int64 column, a string for
-// a string enum) is converted, and a value of another kind fails the
-// statement. EQ(nil) fails: IsNull says that. On a nullable column, a
-// value compares the value.
-func (c Named) EQ(v any) Cond { return c.cond(PredEQ, v) }
+// predEqualFold is the operator of FieldEqualFold. It is not a PredOp of
+// Table.Pred.
+const predEqualFold PredOp = 0x80
 
-// NEQ is column <> v, with v converted as EQ converts it.
-func (c Named) NEQ(v any) Cond { return c.cond(PredNEQ, v) }
+// FieldEQ is the column of the given name = v. A condition by name is
+// resolved when the statement that holds it runs: a name the entity has no
+// column of fails the statement. v is converted to the column's type: a
+// value of another type of the same kind (an int for an int64 column, a
+// string for a string enum) is converted, and a value of another kind fails
+// the statement. FieldEQ(name, nil) fails: FieldIsNull says that. On a
+// nullable column, a value compares the value.
+func FieldEQ(name string, v any) Predicate { return cond(name, PredEQ, v) }
 
-// GT is column > v, with v converted as EQ converts it.
-func (c Named) GT(v any) Cond { return c.cond(PredGT, v) }
+// FieldNEQ is column <> v, with v converted as FieldEQ converts it.
+func FieldNEQ(name string, v any) Predicate { return cond(name, PredNEQ, v) }
 
-// GTE is column >= v, with v converted as EQ converts it.
-func (c Named) GTE(v any) Cond { return c.cond(PredGTE, v) }
+// FieldGT is column > v, with v converted as FieldEQ converts it.
+func FieldGT(name string, v any) Predicate { return cond(name, PredGT, v) }
 
-// LT is column < v, with v converted as EQ converts it.
-func (c Named) LT(v any) Cond { return c.cond(PredLT, v) }
+// FieldGTE is column >= v, with v converted as FieldEQ converts it.
+func FieldGTE(name string, v any) Predicate { return cond(name, PredGTE, v) }
 
-// LTE is column <= v, with v converted as EQ converts it.
-func (c Named) LTE(v any) Cond { return c.cond(PredLTE, v) }
+// FieldLT is column < v, with v converted as FieldEQ converts it.
+func FieldLT(name string, v any) Predicate { return cond(name, PredLT, v) }
 
-// In is column IN (vs...), each converted as EQ converts it. With no
-// values it is false.
-func (c Named) In(vs ...any) Cond { return c.cond(PredIn, nonNil(vs)) }
+// FieldLTE is column <= v, with v converted as FieldEQ converts it.
+func FieldLTE(name string, v any) Predicate { return cond(name, PredLTE, v) }
 
-// NotIn is column NOT IN (vs...), each converted as EQ converts it. With
-// no values it is true.
-func (c Named) NotIn(vs ...any) Cond { return c.cond(PredNotIn, nonNil(vs)) }
+// FieldIn is column IN (vs...), each converted as FieldEQ converts it.
+// With no values it is false.
+func FieldIn(name string, vs ...any) Predicate { return cond(name, PredIn, nonNil(vs)) }
 
-// Contains is column LIKE %s%, with s's LIKE characters escaped. The column
-// must be text.
-func (c Named) Contains(s string) Cond { return c.cond(PredContains, s) }
+// FieldNotIn is column NOT IN (vs...), each converted as FieldEQ converts
+// it. With no values it is true.
+func FieldNotIn(name string, vs ...any) Predicate { return cond(name, PredNotIn, nonNil(vs)) }
 
-// HasPrefix is column LIKE s%. The column must be text.
-func (c Named) HasPrefix(s string) Cond { return c.cond(PredHasPrefix, s) }
+// FieldContains is column LIKE %s%, with s's LIKE characters escaped. The
+// column must be text.
+func FieldContains(name, s string) Predicate { return cond(name, PredContains, s) }
 
-// HasSuffix is column LIKE %s. The column must be text.
-func (c Named) HasSuffix(s string) Cond { return c.cond(PredHasSuffix, s) }
+// FieldHasPrefix is column LIKE s%. The column must be text.
+func FieldHasPrefix(name, s string) Predicate { return cond(name, PredHasPrefix, s) }
 
-// IsNull is column IS NULL. The column must be nullable.
-func (c Named) IsNull() Cond { return c.cond(PredIsNull, nil) }
+// FieldHasSuffix is column LIKE %s. The column must be text.
+func FieldHasSuffix(name, s string) Predicate { return cond(name, PredHasSuffix, s) }
 
-// NotNull is column IS NOT NULL. The column must be nullable.
-func (c Named) NotNull() Cond { return c.cond(PredNotNull, nil) }
+// FieldEqualFold is LOWER(column) = LOWER(s). The column must be text.
+func FieldEqualFold(name, s string) Predicate { return cond(name, predEqualFold, s) }
+
+// FieldIsNull is column IS NULL. The column must be nullable.
+func FieldIsNull(name string) Predicate { return cond(name, PredIsNull, nil) }
+
+// FieldNotNull is column IS NOT NULL. The column must be nullable.
+func FieldNotNull(name string) Predicate { return cond(name, PredNotNull, nil) }
 
 // nonNil is vs, or an empty slice for none.
 func nonNil(vs []any) []any {
@@ -107,19 +87,22 @@ func nonNil(vs []any) []any {
 	return vs
 }
 
-// Has is true when the relation holds at least one row. The target's
-// interceptors and Read policy apply inside it, as they apply to a typed
-// relation's Has.
-func (e NamedEdge) Has() Cond { return e.HasWhere() }
+// HasEdge is true when the relation of the given name, as the schema
+// declares the edge, holds at least one row. The target's interceptors and
+// Read policy apply inside it, as they apply to a typed relation's Has. It
+// is resolved when the statement that holds it runs, and only on a
+// relation whose target the generated code links.
+func HasEdge(name string) Predicate { return HasEdgeWith(name) }
 
-// HasWhere is true when the relation holds at least one row that meets
-// every condition of cs, which name the target's columns.
-func (e NamedEdge) HasWhere(cs ...Cond) Cond {
-	kids := make([]Node, len(cs))
-	for i, c := range cs {
-		kids[i] = c.n
+// HasEdgeWith is true when the relation of the given name holds at least
+// one row that meets every condition of ps, which name the target's
+// columns.
+func HasEdgeWith(name string, ps ...Predicate) Predicate {
+	kids := make([]Node, len(ps))
+	for i, p := range ps {
+		kids[i] = p.n
 	}
-	return Cond{Node{Op: opNamedEdge, Col: int32(len(e.name)) << 8, W: nameData(e.name), Kids: kids}}
+	return Predicate{Node{Op: opNamedEdge, Col: int32(len(name)) << 8, W: nameData(name), Kids: kids}}
 }
 
 // nameIndex is each column's index by its name.
@@ -186,7 +169,7 @@ func resolveNamedPreds(in *EntityInfo, ps []Predicate) ([]Predicate, error) {
 // resolveNamed returns n with every condition by name in it resolved
 // against in, the entity of the statement or the EXISTS that holds it. It
 // never edits n: a changed node is a copy with new kids. The leaves become
-// those Table.Pred makes and an Edge's EXISTS that of a typed Has, so the
+// those Table.Pred makes and a HasEdge's EXISTS that of a typed Has, so the
 // SQL and the render cache's key are a typed condition's.
 func resolveNamed(in *EntityInfo, n Node) (Node, error) {
 	switch n.Op {
@@ -262,7 +245,7 @@ func namedLeaf(in *EntityInfo, n Node) (Node, error) {
 		out := make([]any, len(vs))
 		for k, x := range vs {
 			if x == nil {
-				return n, fmt.Errorf("In or NotIn of nil on %s: use IsNull or NotNull", name)
+				return n, fmt.Errorf("a FieldIn or FieldNotIn of nil on %s: use FieldIsNull or FieldNotNull", name)
 			}
 			v, err := namedValue(c, x)
 			if err != nil {
@@ -287,6 +270,11 @@ func namedLeaf(in *EntityInfo, n Node) (Node, error) {
 			s = "%" + s
 		}
 		return Node{Op: OpLike, Col: i, V: s, W: in}, nil
+	case predEqualFold:
+		if rtype(c.val).Kind() != reflect.String {
+			return n, fmt.Errorf("%s is not a text column", name)
+		}
+		return Node{Op: OpFold, Col: i, V: n.V, W: in}, nil
 	case PredIsNull, PredNotNull:
 		if !c.Nullable {
 			return n, fmt.Errorf("%s is not nullable", name)
@@ -308,7 +296,7 @@ func namedEdge(in *EntityInfo, n Node) (Node, error) {
 	}
 	r := in.rels[i]
 	if r.target == nil {
-		return n, fmt.Errorf("relation %s's target is not linked: velox-gen links it when the schema names it with velox.Edge", name)
+		return n, fmt.Errorf("relation %s's target is not linked: velox-gen links it when the schema names it with velox.HasEdge or velox.HasEdgeWith", name)
 	}
 	l, err := r.Resolve(in, RelTarget{Get: r.target, One: r.typ, Many: r.typ})
 	if err != nil {

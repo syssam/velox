@@ -22,9 +22,9 @@ func (InOrg) Fields() []schema.Field {
 }
 
 func (InOrg) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
 		v, _ := ctx.Value(orgKey{}).(int64)
-		return velox.C("org_id").EQ(v), nil
+		return velox.FieldEQ("org_id", v), nil
 	}}
 }
 

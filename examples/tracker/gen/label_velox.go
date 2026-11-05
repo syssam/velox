@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/tracker/schema"
+	"github.com/syssam/velox/examples/tracker/schema"
 )
 
 // Label is the entity of schema Label.
@@ -71,8 +71,7 @@ func labelDescriptor() velox.Descriptor[Label] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[IssueLabel, Issue]("issues", labelColID, issueLabelColLabelID, issueLabelColIssueID, issueColID),
 		},
-		Policy: []func() velox.Policy{sch.InOrg{}.Policy},
-		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
+		Schema: schema.Label{},
 		FieldPtr: func(x *Label, i int) any {
 			switch i {
 			case labelColID:

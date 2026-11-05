@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/schema/mixin/softdelete"
 )
 
@@ -35,7 +36,7 @@ func (*noCol) VeloxMeta() *velox.Meta[noCol] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *noCol, i int) any { return [...]any{&x.ID, &x.Name}[i] },
-			Hooks:      []func() []velox.Hook{softdelete.Mixin{}.Hooks},
+			Schema:     fixture.Fns{Hooks: []func() []velox.Hook{softdelete.Mixin{}.Hooks}},
 		}
 	})
 }
@@ -47,7 +48,7 @@ func (*textCol) VeloxMeta() *velox.Meta[textCol] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "DeletedAt", Name: "deleted_at"}},
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *textCol, i int) any { return [...]any{&x.ID, &x.DeletedAt}[i] },
-			Hooks:      []func() []velox.Hook{softdelete.Mixin{}.Hooks},
+			Schema:     fixture.Fns{Hooks: []func() []velox.Hook{softdelete.Mixin{}.Hooks}},
 		}
 	})
 }

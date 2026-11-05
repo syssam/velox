@@ -12,14 +12,14 @@ import (
 // tickets they own; "admin" sees, changes and creates every ticket. InOrg's
 // policy, ANDed before it, confines tickets to the context's Org.
 func (Ticket) Policy() velox.Policy {
-	own := func(ctx context.Context) (velox.Cond, error) {
+	own := func(ctx context.Context) (velox.Predicate, error) {
 		switch u := actor.UserFromContext(ctx); u {
 		case "":
-			return velox.Cond{}, velox.Deny("no user")
+			return velox.Predicate{}, velox.Deny("no user")
 		case "admin":
 			return velox.Allow(), nil
 		default:
-			return velox.C("owner").EQ(u), nil
+			return velox.FieldEQ("owner", u), nil
 		}
 	}
 	return velox.Policy{
@@ -67,6 +67,6 @@ func needsTitle(_ context.Context, m *velox.Mutation) error {
 
 // onlyDone narrows a delete to finished tickets.
 func onlyDone(_ context.Context, m *velox.Mutation) error {
-	m.Where(velox.C("done").EQ(true))
+	m.Where(velox.FieldEQ("done", true))
 	return nil
 }

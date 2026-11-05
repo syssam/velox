@@ -158,7 +158,7 @@ func (sc *Scoper) filterCond(t *EntityInfo, i int, p Predicate, err error) (Pred
 	case err != nil:
 		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]: %w", t.Name, i, err)
 	case p.n.Op == opZero:
-		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d] returned the zero Cond; return velox.Allow() for no restriction", t.Name, i)
+		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d] returned the zero Predicate; return velox.Allow() for no restriction", t.Name, i)
 	case p.n.Op == OpAllow:
 		return Predicate{}, nil
 	case hasZero(p.n):
@@ -204,7 +204,7 @@ func (sc *Scoper) PolicyCond(t *EntityInfo, op Op, which string, p Predicate, er
 	case err != nil:
 		return Predicate{}, &PolicyError{Entity: t.Name, Op: op, Err: err}
 	case p.n.Op == opZero:
-		return Predicate{}, fmt.Errorf("velox: %s: the %s policy returned the zero Cond; return velox.Allow() for no restriction", t.Name, which)
+		return Predicate{}, fmt.Errorf("velox: %s: the %s policy returned the zero Predicate; return velox.Allow() for no restriction", t.Name, which)
 	case p.n.Op == OpAllow:
 		return Predicate{}, nil // no restriction
 	case hasZero(p.n):

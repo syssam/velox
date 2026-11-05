@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/syssam/velox/internal/tempmod"
@@ -126,20 +125,13 @@ func TestGeneratedRunsOnSQLite(t *testing.T) {
 	}
 }
 
-// A schema's Policy method with another signature than the one velox binds,
-// which SchemaMethods would refuse, does not compile: the descriptor's list
-// of method values names it.
-func TestWrongPolicySignatureDoesNotCompile(t *testing.T) {
-	dir := e2eModule(t, Config{Package: "gen", GenPath: "example.com/tmp/gen", Bound: map[string]Bound{"Post": {Policy: true}}}, []string{"wrongsig"}, nil, "")
-	out, err := tempmod.Go(dir, "vet", "./...")
-	if err == nil {
-		t.Fatal("go vet accepted a Policy method that returns a pointer")
-	}
-	if !strings.Contains(out, "sch.Post{}.Policy") || !strings.Contains(out, "*velox.Policy") {
-		t.Errorf("the error does not name Post.Policy and the mismatched *velox.Policy:\n%s", out)
-	}
-	if !strings.Contains(out, "gen/post_velox.go") {
-		t.Errorf("the error is not in the generated file:\n%s", out)
+// A schema's Policy method with another signature than the one velox
+// calls, which SchemaMethods would refuse, is refused at the entity's first
+// use: velox never leaves a policy out.
+func TestWrongPolicySignatureIsRefused(t *testing.T) {
+	dir := e2eModule(t, Config{Package: "gen", GenPath: "example.com/tmp/gen", Bound: map[string]Bound{"Post": {Policy: true}}}, []string{"wrongsig"}, nil, "wrongsigtest/main_test.go")
+	if out, err := tempmod.Go(dir, "test", "-count=1", "./..."); err != nil {
+		t.Fatalf("go test:\n%v", out)
 	}
 }
 
@@ -164,20 +156,5 @@ func TestMixinBehaviourRunsOnSQLite(t *testing.T) {
 	}}, []string{"mixin"}, nil, "mixintest/main_test.go")
 	if out, err := tempmod.Go(dir, "test", "-count=1", "./gen/..."); err != nil {
 		t.Fatalf("go test:\n%v", out)
-	}
-}
-
-// A mixin's method of another signature than velox binds, which
-// MixinBehaviour would refuse, does not compile: the line of the entity's
-// descriptor that binds it names it.
-func TestWrongMixinSignatureDoesNotCompile(t *testing.T) {
-	bad := map[string][]MixinBound{"Note": {{PkgPath: "example.com/tmp/schema", PkgName: "schema", Name: "Bad", Methods: map[string]bool{"Policy": false}}}}
-	dir := e2eModule(t, Config{Package: "gen", GenPath: "example.com/tmp/gen", Mixins: bad}, []string{"wrongmixin"}, nil, "")
-	out, err := tempmod.Go(dir, "vet", "./...")
-	if err == nil {
-		t.Fatal("go vet accepted a mixin Policy method that returns a pointer")
-	}
-	if !strings.Contains(out, "gen/note_velox.go") || !strings.Contains(out, "sch.Bad{}.Policy") {
-		t.Errorf("the error does not name the binding in the descriptor:\n%s", out)
 	}
 }

@@ -22,7 +22,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 ### Added
 
 - velox-gen checks the names a schema's behaviour gives: each constant name passed to
-  `velox.C`, `velox.Edge`, `m.Set`, `m.Fill`, `m.Value`, `r.Value`, `r.IsZero` and
+  a `velox.Field*` function, `velox.HasEdge`, `velox.HasEdgeWith`, `m.Set`, `m.Fill`, `m.Value`, `r.Value`, `r.IsZero` and
   `r.Set`, in a Policy, Hooks or Interceptors method or a mixin's, or in a function of
   the same package they reach, must name a column or relation of each entity the method
   serves, and a constant value must fit the column. It refuses each at its line, with the
@@ -42,11 +42,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   velox-gen binds each for every entity that lists the mixin, mixins first in `Mixin()`
   order, then the entity's own methods. It refuses another shape at its line, and a
   literal name in a `velox.Field` call that an entity lacks or types differently; a name
-  that is not a literal is a warning. A mixin value that is not its type's zero value is
-  read with `schema.MixinAt`. gen/runtime's package comment lists each entity's sources.
-  A schema that does not import gen needs no gen/runtime: gen binds its mixins.
-- `schema.MixinAt[T](s, i)` returns a copy of `s.Mixin()[i]`, a `T` or `*T`, for the
-  generated code; it panics, naming velox-gen, when the schema has changed since.
+  that is not a literal is a warning.
 - `velox.Field[E, V]("org_id")` returns `velox.Named[E, V]`, the handle of entity E's column
   found by its name, for code that cannot name the generated handles, such as a mixin's
   behaviour. V must be the field's Go type exactly. A wrong name or type panics, which,
@@ -155,6 +151,22 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- **Breaking.** `GeneratedCodeIsVersion17`: regenerate. A descriptor names its schema's
+  value, `Schema: schema.Issue{}`, and velox reads the behaviour from it when it builds
+  the metadata: each `Mixin()` value's Policy, Hooks and Interceptors, in order, then the
+  schema's own (ADR 0040). The lists `Descriptor.Policy`, `Hooks` and `Interceptors` are
+  gone; the database schema's name is `Descriptor.TableSchema`. gen imports the schema
+  package by its own name, and `velox/schema` as `veloxschema` when the two collide. A
+  hand-written entity names itself, `Schema: (*E)(nil)`. A method named Policy, Hooks or
+  Interceptors whose signature velox does not call is the entity's `*SchemaError`.
+- **Breaking.** The untyped behaviour API takes ent's names. `velox.FieldEQ("org_id", v)`,
+  `FieldNEQ`, `FieldGT`, `FieldGTE`, `FieldLT`, `FieldLTE`, `FieldIn`, `FieldNotIn`,
+  `FieldIsNull`, `FieldNotNull`, `FieldContains`, `FieldHasPrefix`, `FieldHasSuffix` and
+  `FieldEqualFold` replace `velox.C(name).EQ(v)` and the rest; `velox.HasEdge("doc")` and
+  `HasEdgeWith("doc", ps...)` replace `velox.Edge("doc").Has()` and `HasWhere`. `Cond` is
+  `velox.Predicate`, an alias of `Pred` that `And`, `Or` and `Not` combine; `C`, `Named`,
+  `Edge`, `NamedEdge`, `Cond` and `velox.Predicates` are gone, and `Mutation.Conds` is
+  `Mutation.Predicates`. `schema.MixinAt` is gone.
 - `veloxgql.GeneratedCodeIsVersion12`: regenerate. velox-graphql's `*_gql.go` files
   import no `unsafe` and convert no pointer: gqlimpl takes and returns rows as `*E` in an
   `any`, which the generated code type-asserts. Each type's `<entity>ConnGQL`

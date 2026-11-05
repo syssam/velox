@@ -8,8 +8,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/tour/schema"
-	"github.com/syssam/velox/schema/mixin/softdelete"
+	"github.com/syssam/velox/examples/tour/schema"
 )
 
 // Invoice is the entity of schema Invoice.
@@ -109,9 +108,7 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Line]("lines", invoiceColID, lineColInvoiceID),
 		},
-		Policy:       []func() velox.Policy{sch.InOrg{}.Policy, sch.Invoice{}.Policy},
-		Hooks:        []func() []velox.Hook{sch.InOrg{}.Hooks, softdelete.Mixin{}.Hooks, sch.Invoice{}.Hooks},
-		Interceptors: []func() []velox.Interceptor{softdelete.Mixin{}.Interceptors},
+		Schema: schema.Invoice{},
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case invoiceColID:

@@ -11,7 +11,9 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/schema"
 )
 
 // The entities of the untyped behaviour tests, written by hand in the shape
@@ -61,10 +63,10 @@ var ubDocs = struct {
 // The behaviour of ubDoc, which a test sets with ubSet. A nil Read, Write
 // or Filter is Allow; a nil Insert accepts; a nil hook calls next.
 var (
-	ubRead   func(ctx context.Context) (velox.Cond, error)
-	ubWrite  func(ctx context.Context) (velox.Cond, error)
+	ubRead   func(ctx context.Context) (velox.Predicate, error)
+	ubWrite  func(ctx context.Context) (velox.Predicate, error)
 	ubInsert func(ctx context.Context, r velox.Row) error
-	ubFilter func(ctx context.Context) (velox.Cond, error)
+	ubFilter func(ctx context.Context) (velox.Predicate, error)
 	ubHook   func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error
 	ubTrace  []string
 )
@@ -79,8 +81,8 @@ func ubSet(t *testing.T, f func()) {
 	})
 }
 
-func ubAllow(f func(ctx context.Context) (velox.Cond, error)) func(ctx context.Context) (velox.Cond, error) {
-	return func(ctx context.Context) (velox.Cond, error) {
+func ubAllow(f func(ctx context.Context) (velox.Predicate, error)) func(ctx context.Context) (velox.Predicate, error) {
+	return func(ctx context.Context) (velox.Predicate, error) {
 		if f == nil {
 			return velox.Allow(), nil
 		}
@@ -90,8 +92,8 @@ func ubAllow(f func(ctx context.Context) (velox.Cond, error)) func(ctx context.C
 
 func (*ubDoc) Policy() velox.Policy {
 	return velox.Policy{
-		Read:  func(ctx context.Context) (velox.Cond, error) { return ubAllow(ubRead)(ctx) },
-		Write: func(ctx context.Context) (velox.Cond, error) { return ubAllow(ubWrite)(ctx) },
+		Read:  func(ctx context.Context) (velox.Predicate, error) { return ubAllow(ubRead)(ctx) },
+		Write: func(ctx context.Context) (velox.Predicate, error) { return ubAllow(ubWrite)(ctx) },
 		Insert: func(ctx context.Context, r velox.Row) error {
 			if ubInsert == nil {
 				return nil
@@ -102,7 +104,7 @@ func (*ubDoc) Policy() velox.Policy {
 }
 
 func (*ubDoc) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Cond, error) { return ubAllow(ubFilter)(ctx) }}}
+	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) { return ubAllow(ubFilter)(ctx) }}}
 }
 
 // ubMixinHooks is a tenancy mixin's Hooks: it fills org_id from the
@@ -135,6 +137,11 @@ func (*ubDoc) Hooks() []velox.Hook {
 
 var ubDocMeta velox.MetaOnce[ubDoc]
 
+// Mixin lists the behaviour that runs before ubDoc's own.
+func (*ubDoc) Mixin() []schema.Mixin {
+	return fixture.Fns{Hooks: []func() []velox.Hook{ubMixinHooks}}.Mixin()
+}
+
 func (*ubDoc) VeloxMeta() *velox.Meta[ubDoc] {
 	return ubDocMeta.Load(func() velox.Descriptor[ubDoc] {
 		return velox.Descriptor[ubDoc]{
@@ -143,10 +150,8 @@ func (*ubDoc) VeloxMeta() *velox.Meta[ubDoc] {
 				{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Title", Name: "title"},
 				{Field: "Kind", Name: "kind"}, {Field: "Size", Name: "size"}, {Field: "Rank", Name: "rank"}, {Field: "Note", Name: "note"},
 			},
-			PrimaryKey:   []int{0},
-			Policy:       []func() velox.Policy{(*ubDoc)(nil).Policy},
-			Hooks:        []func() []velox.Hook{ubMixinHooks, (*ubDoc)(nil).Hooks},
-			Interceptors: []func() []velox.Interceptor{(*ubDoc)(nil).Interceptors},
+			PrimaryKey: []int{0},
+			Schema:     (*ubDoc)(nil),
 			FieldPtr: func(x *ubDoc, i int) any {
 				return [...]any{&x.ID, &x.OrgID, &x.Title, &x.Kind, &x.Size, &x.Rank, &x.Note}[i]
 			},
@@ -154,10 +159,10 @@ func (*ubDoc) VeloxMeta() *velox.Meta[ubDoc] {
 	})
 }
 
-// Policy lets a comment be read only when its doc is: velox.Edge("doc")
+// Policy lets a comment be read only when its doc is: velox.HasEdge("doc")
 // names the relation, whose target's Read policy applies inside the EXISTS.
 func (*ubComment) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.Edge("doc").Has(), nil }}
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("doc"), nil }}
 }
 
 var ubCommentMeta velox.MetaOnce[ubComment]
@@ -169,7 +174,7 @@ func (*ubComment) VeloxMeta() *velox.Meta[ubComment] {
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "DocID", Name: "doc_id"}, {Field: "Body", Name: "body"}},
 			PrimaryKey:   []int{0},
 			Edges:        []velox.EdgeDescriptor{velox.Linked[ubDoc](velox.EdgeTo[ubDoc]("doc", 1, 0))},
-			Policy:       []func() velox.Policy{(*ubComment)(nil).Policy},
+			Schema:       (*ubComment)(nil),
 			FieldPtr:     func(x *ubComment, i int) any { return [...]any{&x.ID, &x.DocID, &x.Body}[i] },
 			EdgeFieldPtr: func(x *ubComment, i int) any { return &x.Doc },
 		}
@@ -178,7 +183,7 @@ func (*ubComment) VeloxMeta() *velox.Meta[ubComment] {
 
 // Policy names the relation "doc", which ubLoose's descriptor does not link.
 func (*ubLoose) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.Edge("doc").Has(), nil }}
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("doc"), nil }}
 }
 
 var ubLooseMeta velox.MetaOnce[ubLoose]
@@ -190,7 +195,7 @@ func (*ubLoose) VeloxMeta() *velox.Meta[ubLoose] {
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "DocID", Name: "doc_id"}},
 			PrimaryKey:   []int{0},
 			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[ubDoc]("doc", 1, 0)},
-			Policy:       []func() velox.Policy{(*ubLoose)(nil).Policy},
+			Schema:       (*ubLoose)(nil),
 			FieldPtr:     func(x *ubLoose, i int) any { return [...]any{&x.ID, &x.DocID}[i] },
 			EdgeFieldPtr: func(x *ubLoose, i int) any { return &x.Doc },
 		}
@@ -358,14 +363,14 @@ func TestInsertPolicySeesHookFill(t *testing.T) {
 // sent.
 func TestUnknownColumnFailsClosed(t *testing.T) {
 	const want = `no column "nope"`
-	nope := func(context.Context) (velox.Cond, error) { return velox.C("nope").EQ(1), nil }
+	nope := func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("nope", 1), nil }
 	for name, c := range map[string]func(){
 		"policy Read":  func() { ubRead = nope },
 		"policy Write": func() { ubWrite = nope },
 		"interceptor":  func() { ubFilter = nope },
 		"hook Where": func() {
 			ubHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
-				m.Where(velox.C("nope").EQ(1))
+				m.Where(velox.FieldEQ("nope", 1))
 				return next.Mutate(ctx, m)
 			}
 		},
@@ -423,44 +428,44 @@ func TestCondValueConverted(t *testing.T) {
 	db := ubDB(t)
 	ctx := context.Background()
 	for _, c := range []struct {
-		cond velox.Cond
+		cond velox.Predicate
 		want []string
 	}{
-		{velox.C("size").EQ(10), []string{"a"}},
-		{velox.C("size").GT(int8(10)), []string{"secret"}},
-		{velox.C("kind").EQ("memo"), []string{"a", "secret"}},
-		{velox.C("kind").In("memo", ubKind("x")), []string{"a", "secret"}},
-		{velox.C("rank").EQ(int64(2)), []string{"secret"}},
-		{velox.C("rank").In(uint8(1), 2), []string{"a", "secret"}},
-		{velox.C("title").HasPrefix("sec"), []string{"secret"}},
+		{velox.FieldEQ("size", 10), []string{"a"}},
+		{velox.FieldGT("size", int8(10)), []string{"secret"}},
+		{velox.FieldEQ("kind", "memo"), []string{"a", "secret"}},
+		{velox.FieldIn("kind", "memo", ubKind("x")), []string{"a", "secret"}},
+		{velox.FieldEQ("rank", int64(2)), []string{"secret"}},
+		{velox.FieldIn("rank", uint8(1), 2), []string{"a", "secret"}},
+		{velox.FieldHasPrefix("title", "sec"), []string{"secret"}},
 	} {
-		ubSet(t, func() { ubFilter = func(context.Context) (velox.Cond, error) { return c.cond, nil } })
+		ubSet(t, func() { ubFilter = func(context.Context) (velox.Predicate, error) { return c.cond, nil } })
 		if got := ubTitles(ctx, t, db); !slices.Equal(got, c.want) {
 			t.Errorf("%v: %v, want %v", c.cond, got, c.want)
 		}
 	}
 	for _, c := range []struct {
 		name string
-		cond velox.Cond
+		cond velox.Predicate
 		want string
 	}{
-		{"out of range", velox.C("rank").EQ(int64(math.MaxInt32) + 1), "2147483648 for rank, an int32: value out of the column's range"},
-		{"a string for an integer", velox.C("size").EQ("10"), "size is an int64, not a string"},
-		{"an integer for a string", velox.C("kind").EQ(1), "kind is an apitest.ubKind, not an int"},
-		{"a float for an integer", velox.C("size").EQ(1.5), "size is an int64, not a float64"},
+		{"out of range", velox.FieldEQ("rank", int64(math.MaxInt32)+1), "2147483648 for rank, an int32: value out of the column's range"},
+		{"a string for an integer", velox.FieldEQ("size", "10"), "size is an int64, not a string"},
+		{"an integer for a string", velox.FieldEQ("kind", 1), "kind is an apitest.ubKind, not an int"},
+		{"a float for an integer", velox.FieldEQ("size", 1.5), "size is an int64, not a float64"},
 	} {
-		ubSet(t, func() { ubFilter = func(context.Context) (velox.Cond, error) { return c.cond, nil } })
+		ubSet(t, func() { ubFilter = func(context.Context) (velox.Predicate, error) { return c.cond, nil } })
 		_, err := db.Query[ubDoc]().Limit(1).All(ctx)
 		wantErrContains(t, c.name, err, c.want)
 	}
 }
 
-// TestEdgeHasAppliesTargetPolicy: velox.Edge("doc").Has() in a comment's
+// TestEdgeHasAppliesTargetPolicy: velox.HasEdge("doc") in a comment's
 // policy is an EXISTS on the linked target, and the doc's Read policy
 // applies inside it: a comment on a doc the reader cannot see is hidden.
 func TestEdgeHasAppliesTargetPolicy(t *testing.T) {
 	ubSet(t, func() {
-		ubRead = func(context.Context) (velox.Cond, error) { return velox.C("title").NEQ("secret"), nil }
+		ubRead = func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("title", "secret"), nil }
 	})
 	db := ubDB(t)
 	ctx := context.Background()

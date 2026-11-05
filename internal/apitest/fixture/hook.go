@@ -8,6 +8,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/scope"
 )
 
@@ -62,12 +63,12 @@ func OrgHooks() []velox.Hook { return KeyHooks(testmodel.Org, "org_id") }
 // refuses a row whose column is not it.
 func KeyPolicy[V comparable](key *scope.Key[V], column string) velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			v, err := key.Require(ctx)
 			if err != nil {
-				return velox.Cond{}, err
+				return velox.Predicate{}, err
 			}
-			return velox.C(column).EQ(v), nil
+			return velox.FieldEQ(column, v), nil
 		},
 		Insert: func(ctx context.Context, r velox.Row) error {
 			return key.Match(ctx, r.Value(column))
@@ -91,6 +92,9 @@ func (*DTag) Policy() velox.Policy { return OrgPolicy() }
 
 // Hooks fills DTag's OrgID on insert.
 func (*DTag) Hooks() []velox.Hook { return OrgHooks() }
+
+// Mixin lists Org, whose policy and hooks run before DAuthor's own.
+func (*DAuthor) Mixin() []schema.Mixin { return []schema.Mixin{Org{}} }
 
 func (*DAuthor) Hooks() []velox.Hook {
 	return []velox.Hook{func(next velox.Mutator) velox.Mutator {

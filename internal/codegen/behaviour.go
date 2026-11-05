@@ -54,7 +54,7 @@ func SchemaMethods(dir string, entities []string) (map[string]Bound, error) {
 			if !ok || fd.Recv == nil || !slices.Contains(behaviourMethods, fd.Name.Name) {
 				continue
 			}
-			e, ptr := receiver(fd)
+			e, _ := receiver(fd)
 			if e == "" {
 				continue
 			}
@@ -72,14 +72,14 @@ func SchemaMethods(dir string, entities []string) (map[string]Bound, error) {
 			b := out[e]
 			switch m {
 			case "Policy":
-				b.Policy, b.PolicyPtr = true, ptr
+				b.Policy = true
 				if pos := policyConds(f, fd); pos.IsValid() {
 					b.PolicyConds = fmt.Sprintf("%s:%d", path, fset.Position(pos).Line)
 				}
 			case "Interceptors":
-				b.Interceptors, b.InterceptorsPtr = true, ptr
+				b.Interceptors = true
 			default:
-				b.Hooks, b.HooksPtr = true, ptr
+				b.Hooks = true
 			}
 			out[e] = b
 		}

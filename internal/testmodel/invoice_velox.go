@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/internal/testmodel/schema"
+	"github.com/syssam/velox/internal/testmodel/schema"
 )
 
 // Invoice is the entity of schema Invoice.
@@ -113,8 +113,7 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Item]("items", invoiceColID, itemColInvoiceID),
 		},
-		Policy: []func() velox.Policy{sch.InOrg{}.Policy},
-		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
+		Schema: schema.Invoice{},
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case invoiceColID:

@@ -7,11 +7,11 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 )
 
-func pnoteReading(p velox.Cond, err error) context.Context {
+func pnoteReading(p velox.Predicate, err error) context.Context {
 	return context.WithValue(context.Background(), fixture.PnoteKey{}, fixture.PnoteAnswer{P: p, Err: err})
 }
 
-func pnoteWriting(p velox.Cond, err error) context.Context {
+func pnoteWriting(p velox.Predicate, err error) context.Context {
 	return context.WithValue(context.Background(), fixture.PnoteWriteKey{}, fixture.PnoteAnswer{P: p, Err: err})
 }
 
@@ -52,7 +52,7 @@ type pcomment struct {
 
 func (*pcomment) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(context.Context) (velox.Cond, error) { return velox.Edge("note").Has(), nil },
+		Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("note"), nil },
 	}
 }
 
@@ -62,7 +62,7 @@ func (*pcomment) VeloxMeta() *velox.Meta[pcomment] { return pcommentMeta.Load(pc
 
 func pcommentDescriptor() velox.Descriptor[pcomment] {
 	return velox.Descriptor[pcomment]{
-		Policy:     []func() velox.Policy{(*pcomment)(nil).Policy},
+		Schema:     (*pcomment)(nil),
 		Table:      "pcomments",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
@@ -94,11 +94,11 @@ type pcycB struct {
 }
 
 func (*pcycA) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.Edge("b").Has(), nil }}
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("b"), nil }}
 }
 
 func (*pcycB) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.Edge("a").Has(), nil }}
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("a"), nil }}
 }
 
 var (
@@ -112,7 +112,7 @@ func (*pcycB) VeloxMeta() *velox.Meta[pcycB] { return pcycBMeta.Load(pcycBDescri
 
 func pcycADescriptor() velox.Descriptor[pcycA] {
 	return velox.Descriptor[pcycA]{
-		Policy:     []func() velox.Policy{(*pcycA)(nil).Policy},
+		Schema:     (*pcycA)(nil),
 		Table:      "pcyc_as",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BID", Name: "b_id"}},
 		PrimaryKey: []int{0},
@@ -129,7 +129,7 @@ func pcycADescriptor() velox.Descriptor[pcycA] {
 
 func pcycBDescriptor() velox.Descriptor[pcycB] {
 	return velox.Descriptor[pcycB]{
-		Policy:     []func() velox.Policy{(*pcycB)(nil).Policy},
+		Schema:     (*pcycB)(nil),
 		Table:      "pcyc_bs",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AID", Name: "a_id"}},
 		PrimaryKey: []int{0},

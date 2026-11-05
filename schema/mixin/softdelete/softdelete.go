@@ -104,11 +104,11 @@ func Skipped(ctx context.Context) bool {
 // Interceptors returns the interceptor that hides rows whose deleted_at is
 // set, but under Skip.
 func (Mixin) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Cond, error) {
+	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) {
 		if Skipped(ctx) {
 			return velox.Allow(), nil
 		}
-		return velox.C(Column).IsNull(), nil
+		return velox.FieldIsNull(Column), nil
 	}}}
 }
 
@@ -142,8 +142,8 @@ func softDelete(ctx context.Context, m *velox.Mutation, now time.Time) (int64, e
 		return 0, err
 	}
 	u := m.DB().UpdateTable(t).Assign(set)
-	if cs := m.Conds(); len(cs) > 0 {
-		u = u.Where(velox.Predicates(cs)...)
+	if cs := m.Predicates(); len(cs) > 0 {
+		u = u.Where(cs...)
 	} else {
 		u = u.All()
 	}

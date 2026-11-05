@@ -16,6 +16,7 @@ import (
 	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/schema"
 )
 
 // dryContext returns a context that IsDryRun reports true for, as SQL(ctx)
@@ -318,9 +319,8 @@ func targetOf[T any]() engine.RelTarget { return relRef[T, T]().Target }
 func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (*velox.EntityInfo, error) {
 	x := new(E)
 	info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
-		v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
-			Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
-			Policy: len(d.Policy) > 0, Hooks: len(d.Hooks) > 0, Interceptors: len(d.Interceptors) > 0}}
+		v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, TableSchema: d.TableSchema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
+			Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check, Schema: d.Schema}}
 		if a := d.FieldPtr; a != nil {
 			v.FieldPtr = func(i int) any { return a(x, i) }
 		}
@@ -329,34 +329,58 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 		}
 		return v
 	})
-	if err == nil && len(d.Policy) > 0 {
-		err = engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
-			ps := make([]*engine.EntityPolicy, len(d.Policy))
-			for i, p := range d.Policy {
-				ps[i] = engine.PolicyFor(info, p())
+	var (
+		ps []interface{ Policy() velox.Policy }
+		hs []interface{ Hooks() []velox.Hook }
+		is []interface{ Interceptors() []velox.Interceptor }
+	)
+	if d.Schema != nil {
+		var srcs []any
+		if m, ok := d.Schema.(interface{ Mixin() []schema.Mixin }); ok {
+			for _, x := range m.Mixin() {
+				srcs = append(srcs, engine.Addr(x))
 			}
-			return engine.AndPolicies(ps), ""
+		}
+		for _, x := range append(srcs, engine.Addr(d.Schema)) {
+			if v, ok := x.(interface{ Policy() velox.Policy }); ok {
+				ps = append(ps, v)
+			}
+			if v, ok := x.(interface{ Hooks() []velox.Hook }); ok {
+				hs = append(hs, v)
+			}
+			if v, ok := x.(interface{ Interceptors() []velox.Interceptor }); ok {
+				is = append(is, v)
+			}
+		}
+	}
+	if err == nil && len(ps) > 0 {
+		err = engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
+			all := make([]*engine.EntityPolicy, len(ps))
+			for i, p := range ps {
+				all[i] = engine.PolicyFor(info, p.Policy())
+			}
+			return engine.AndPolicies(all), ""
 		})
 	}
-	if err == nil && len(d.Hooks) > 0 {
+	if err == nil && len(hs) > 0 {
 		err = engine.EraseHooks(info, func() ([]engine.HookFn, string) {
-			var hs []engine.HookFn
-			for _, h := range d.Hooks {
-				for _, x := range h() {
+			var all []engine.HookFn
+			for _, h := range hs {
+				for _, x := range h.Hooks() {
 					if x == nil {
-						return nil, engine.NilHook(len(hs))
+						return nil, engine.NilHook(len(all))
 					}
-					hs = append(hs, eraseHook(x))
+					all = append(all, eraseHook(x))
 				}
 			}
-			return hs, ""
+			return all, ""
 		})
 	}
-	if err == nil && len(d.Interceptors) > 0 {
+	if err == nil && len(is) > 0 {
 		err = engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
 			var fs []engine.FilterFn
-			for _, f := range d.Interceptors {
-				own, reason := engine.FiltersFor(f(), len(fs))
+			for _, f := range is {
+				own, reason := engine.FiltersFor(f.Interceptors(), len(fs))
 				if reason != "" {
 					return nil, reason
 				}

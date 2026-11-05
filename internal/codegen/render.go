@@ -190,7 +190,11 @@ func entityImports(w *writer, o *Out, e *OutEntity) {
 		}
 	}
 	if e.NeedsSch {
-		w.p("sch %s", strconv.Quote(o.SchemaPath))
+		if o.SchemaName != guessName(o.SchemaPath) {
+			w.p("%s %s", o.SchemaName, strconv.Quote(o.SchemaPath))
+		} else {
+			w.p("%s", strconv.Quote(o.SchemaPath))
+		}
 	}
 	w.p(")")
 	w.p("")
@@ -292,7 +296,7 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 	w.p("return velox.Descriptor[%s]{", e.Name)
 	w.p("Table: %s,", strconv.Quote(e.Table))
 	if e.TableSchema != "" {
-		w.p("Schema: %s,", strconv.Quote(e.TableSchema))
+		w.p("TableSchema: %s,", strconv.Quote(e.TableSchema))
 	}
 	w.p("Columns: []velox.ColumnDescriptor{")
 	for _, f := range e.Fields {
@@ -350,12 +354,10 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 		}
 		w.p("},")
 	}
-	// Each part is named, and velox composes them: the mixins' methods, in
-	// Mixin order, then the schema's own.
-	for _, k := range behaviourKinds {
-		if srcs := *e.sources(k); len(srcs) > 0 {
-			w.p("%s: %s,", k, sourceList(k, srcs))
-		}
+	// velox reads the behaviour of the schema's mixins, in Mixin order,
+	// then the schema's own.
+	if e.Schema != "" {
+		w.p("Schema: %s,", e.Schema)
 	}
 	w.p("FieldPtr: func(x *%s, i int) any {", e.Name)
 	w.p("switch i {")
@@ -442,18 +444,4 @@ func entityString(w *writer, e *OutEntity) {
 		w.p("// GoString is String, so that %%#v prints the same text.")
 	}
 	w.p("func (x %s) GoString() string { return x.String() }", e.Name)
-}
-
-// sourceList is the Descriptor's list of srcs, e's sources of kind k, such
-// as []func() velox.Policy{sch.InOrg{}.Policy, sch.Comment{}.Policy}.
-func sourceList(k string, srcs []OutSource) string {
-	exprs := make([]string, len(srcs))
-	for i, s := range srcs {
-		exprs[i] = s.Expr
-	}
-	typ := "velox.Policy"
-	if k != "Policy" {
-		typ = "[]velox." + strings.TrimSuffix(k, "s")
-	}
-	return "[]func() " + typ + "{" + strings.Join(exprs, ", ") + "}"
 }

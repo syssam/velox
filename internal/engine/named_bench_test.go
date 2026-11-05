@@ -41,18 +41,18 @@ func bnBadOf(ctx context.Context) string { v, _ := ctx.Value(bnBad{}).(string); 
 // by its index, converted to a Cond: the statement does not resolve it.
 func (*bnIdx) Policy() velox.Policy {
 	org := velox.NumberCol[bnIdx, int64]{I: 1}
-	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
-		return velox.Cond(org.EQ(bnOrgOf(ctx))), nil
+	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+		return velox.Predicate(org.EQ(bnOrgOf(ctx))), nil
 	}}
 }
 
 func (*bnName) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			if bnBadOf(ctx) == "policy" {
-				return velox.C("orgg_id").EQ(1), nil
+				return velox.FieldEQ("orgg_id", 1), nil
 			}
-			return velox.C("org_id").EQ(bnOrgOf(ctx)), nil
+			return velox.FieldEQ("org_id", bnOrgOf(ctx)), nil
 		},
 		Insert: func(ctx context.Context, r velox.Row) error {
 			if r.Value("org_id") != bnOrgOf(ctx) {
@@ -64,9 +64,9 @@ func (*bnName) Policy() velox.Policy {
 }
 
 func (*bnName) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Cond, error) {
+	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) {
 		if bnBadOf(ctx) == "interceptor" {
-			return velox.C("titel").NEQ(""), nil
+			return velox.FieldNEQ("titel", ""), nil
 		}
 		return velox.Allow(), nil
 	}}}
@@ -94,7 +94,7 @@ func (*bnIdx) VeloxMeta() *velox.Meta[bnIdx] {
 			Table:      "bn_idx",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Title", Name: "title"}},
 			PrimaryKey: []int{0},
-			Policy:     []func() velox.Policy{(*bnIdx)(nil).Policy},
+			Schema:     (*bnIdx)(nil),
 			FieldPtr:   func(x *bnIdx, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Title}[i] },
 		}
 	})
@@ -103,13 +103,12 @@ func (*bnIdx) VeloxMeta() *velox.Meta[bnIdx] {
 func (*bnName) VeloxMeta() *velox.Meta[bnName] {
 	return bnNameMeta.Load(func() velox.Descriptor[bnName] {
 		return velox.Descriptor[bnName]{
-			Table:        "bn_name",
-			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Title", Name: "title"}},
-			PrimaryKey:   []int{0},
-			Policy:       []func() velox.Policy{(*bnName)(nil).Policy},
-			Hooks:        []func() []velox.Hook{(*bnName)(nil).Hooks},
-			Interceptors: []func() []velox.Interceptor{(*bnName)(nil).Interceptors},
-			FieldPtr:     func(x *bnName, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Title}[i] },
+			Table:      "bn_name",
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Title", Name: "title"}},
+			PrimaryKey: []int{0},
+			Schema:     (*bnName)(nil),
+
+			FieldPtr: func(x *bnName, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Title}[i] },
 		}
 	})
 }

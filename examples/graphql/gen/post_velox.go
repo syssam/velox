@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/graphql/schema"
+	"github.com/syssam/velox/examples/graphql/schema"
 )
 
 // Post is the entity of schema Post.
@@ -99,8 +99,7 @@ func postDescriptor() velox.Descriptor[Post] {
 			velox.EdgeTo[User]("author", postColAuthorID, userColID),
 			velox.EdgeThrough[PostTag, Tag]("tags", postColID, postTagColPostID, postTagColTagID, tagColID),
 		},
-		Policy: []func() velox.Policy{sch.InOrg{}.Policy},
-		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
+		Schema: schema.Post{},
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postColID:

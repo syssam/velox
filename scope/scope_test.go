@@ -11,6 +11,8 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/scope"
 )
 
@@ -36,12 +38,12 @@ var org = scope.NewKey[int64]("org")
 // and Hooks return, for key and column.
 func keyPolicy[V comparable](key *scope.Key[V], column string) velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			v, err := key.Require(ctx)
 			if err != nil {
-				return velox.Cond{}, err
+				return velox.Predicate{}, err
 			}
-			return velox.C(column).EQ(v), nil
+			return velox.FieldEQ(column, v), nil
 		},
 		Insert: func(ctx context.Context, r velox.Row) error {
 			return key.Match(ctx, r.Value(column))
@@ -74,8 +76,8 @@ var noteColumns = []velox.ColumnDescriptor{
 
 func noteDescriptor() velox.Descriptor[note] {
 	return velox.Descriptor[note]{
-		Policy:     []func() velox.Policy{orgPolicy},
-		Hooks:      []func() []velox.Hook{orgHooks},
+		Schema: fixture.Fns{Policy: []func() velox.Policy{orgPolicy}, Hooks: []func() []velox.Hook{orgHooks}},
+
 		Table:      "notes",
 		Columns:    noteColumns,
 		PrimaryKey: []int{0},
@@ -99,7 +101,7 @@ func (*ruled) VeloxMeta() *velox.Meta[ruled] { return ruledMeta.Load(ruledDescri
 
 func (*ruled) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(context.Context) (velox.Cond, error) { return velox.C("title").EQ("ok"), nil },
+		Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("title", "ok"), nil },
 		Insert: func(_ context.Context, r velox.Row) error {
 			if r.Value("title") == "banned" {
 				return errors.New("banned title")
@@ -109,10 +111,14 @@ func (*ruled) Policy() velox.Policy {
 	}
 }
 
+// Mixin lists the behaviour that runs before ruled's own.
+func (*ruled) Mixin() []schema.Mixin {
+	return fixture.Fns{Policy: []func() velox.Policy{orgPolicy}, Hooks: []func() []velox.Hook{orgHooks}}.Mixin()
+}
+
 func ruledDescriptor() velox.Descriptor[ruled] {
 	return velox.Descriptor[ruled]{
-		Policy:     []func() velox.Policy{orgPolicy, (*ruled)(nil).Policy},
-		Hooks:      []func() []velox.Hook{orgHooks},
+		Schema:     (*ruled)(nil),
 		Table:      "notes",
 		Columns:    noteColumns,
 		PrimaryKey: []int{0},
@@ -334,8 +340,8 @@ var (
 func (*typed) VeloxMeta() *velox.Meta[typed] {
 	return typedMeta.Load(func() velox.Descriptor[typed] {
 		return velox.Descriptor[typed]{
-			Policy:     []func() velox.Policy{func() velox.Policy { return keyPolicy(strOrg, "org_id") }},
-			Hooks:      []func() []velox.Hook{func() []velox.Hook { return keyHooks(strOrg, "org_id") }},
+			Schema: fixture.Fns{Policy: []func() velox.Policy{func() velox.Policy { return keyPolicy(strOrg, "org_id") }}, Hooks: []func() []velox.Hook{func() []velox.Hook { return keyHooks(strOrg, "org_id") }}},
+
 			Table:      "notes",
 			Columns:    noteColumns,
 			PrimaryKey: []int{0},
@@ -347,8 +353,8 @@ func (*typed) VeloxMeta() *velox.Meta[typed] {
 func (*missing) VeloxMeta() *velox.Meta[missing] {
 	return missingMeta.Load(func() velox.Descriptor[missing] {
 		return velox.Descriptor[missing]{
-			Policy:     []func() velox.Policy{orgPolicy},
-			Hooks:      []func() []velox.Hook{orgHooks},
+			Schema: fixture.Fns{Policy: []func() velox.Policy{orgPolicy}, Hooks: []func() []velox.Hook{orgHooks}},
+
 			Table:      "notes",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org", Immutable: true}, {Field: "Title", Name: "title"}},
 			PrimaryKey: []int{0},

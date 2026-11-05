@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 )
 
@@ -17,7 +18,7 @@ import (
 type orgMixin struct{}
 
 func (orgMixin) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.C("org_id").EQ(7), nil }}
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("org_id", 7), nil }}
 }
 
 func (orgMixin) Hooks() []velox.Hook {
@@ -27,7 +28,7 @@ func (orgMixin) Hooks() []velox.Hook {
 }
 
 func (orgMixin) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(context.Context) (velox.Cond, error) { return velox.C("deleted_at").IsNull(), nil }}}
+	return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) { return velox.FieldIsNull("deleted_at"), nil }}}
 }
 
 // fNote is an entity whose behaviour is orgMixin's.
@@ -46,11 +47,10 @@ func (*fNote) VeloxMeta() *velox.Meta[fNote] {
 			Table: "notes",
 			Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 				{Field: "Title", Name: "title"}, {Field: "DeletedAt", Name: "deleted_at"}},
-			PrimaryKey:   []int{0},
-			Policy:       []func() velox.Policy{orgMixin{}.Policy},
-			Hooks:        []func() []velox.Hook{orgMixin{}.Hooks},
-			Interceptors: []func() []velox.Interceptor{orgMixin{}.Interceptors},
-			FieldPtr:     func(x *fNote, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Title, &x.DeletedAt}[i] },
+			PrimaryKey: []int{0},
+			Schema:     fixture.Fns{Policy: []func() velox.Policy{orgMixin{}.Policy}, Hooks: []func() []velox.Hook{orgMixin{}.Hooks}, Interceptors: []func() []velox.Interceptor{orgMixin{}.Interceptors}},
+
+			FieldPtr: func(x *fNote, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Title, &x.DeletedAt}[i] },
 		}
 	})
 }
@@ -91,8 +91,8 @@ func TestMixinByName(t *testing.T) {
 
 // fNoteWhere returns the SQL of a query of fNote under cs, through the
 // untyped surface.
-func fNoteWhere(db *velox.DB, cs ...velox.Cond) (string, []any, error) {
-	return db.QueryTable(velox.TableOf[fNote]()).Where(velox.Predicates(cs)...).Limit(1).SQL(context.Background())
+func fNoteWhere(db *velox.DB, cs ...velox.Predicate) (string, []any, error) {
+	return db.QueryTable(velox.TableOf[fNote]()).Where(cs...).Limit(1).SQL(context.Background())
 }
 
 // TestCondNullable: IsNull and NotNull on a nullable column are IS NULL and
@@ -100,7 +100,7 @@ func fNoteWhere(db *velox.DB, cs ...velox.Cond) (string, []any, error) {
 func TestCondNullable(t *testing.T) {
 	db, _ := fakeNotes()
 	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	q, args, err := fNoteWhere(db, velox.C("deleted_at").NotNull(), velox.C("deleted_at").EQ(ts), velox.C("title").In("a", "b"))
+	q, args, err := fNoteWhere(db, velox.FieldNotNull("deleted_at"), velox.FieldEQ("deleted_at", ts), velox.FieldIn("title", "a", "b"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestCondNullable(t *testing.T) {
 	if _, ok := args[0].(time.Time); !ok {
 		t.Errorf("args %#v: the time is not passed by value", args)
 	}
-	if q, _, err := fNoteWhere(db, velox.C("deleted_at").IsNull()); err != nil || !strings.Contains(q, `WHERE "deleted_at" IS NULL AND "deleted_at" IS NULL`) {
+	if q, _, err := fNoteWhere(db, velox.FieldIsNull("deleted_at")); err != nil || !strings.Contains(q, `WHERE "deleted_at" IS NULL AND "deleted_at" IS NULL`) {
 		t.Errorf("IsNull: %s, %v", q, err)
 	}
 }
@@ -120,11 +120,11 @@ func TestCondNullable(t *testing.T) {
 func TestCondInvalid(t *testing.T) {
 	db, e := fakeNotes()
 	ts := time.Now()
-	for name, c := range map[string]velox.Cond{
-		"EQ(nil)":       velox.C("deleted_at").EQ(nil),
-		"In(ts, nil)":   velox.C("deleted_at").In(ts, nil),
-		"IsNull":        velox.C("org_id").IsNull(),
-		"NotNull":       velox.C("org_id").NotNull(),
+	for name, c := range map[string]velox.Predicate{
+		"EQ(nil)":       velox.FieldEQ("deleted_at", nil),
+		"In(ts, nil)":   velox.FieldIn("deleted_at", ts, nil),
+		"IsNull":        velox.FieldIsNull("org_id"),
+		"NotNull":       velox.FieldNotNull("org_id"),
 		"the zero Cond": {},
 	} {
 		if q, _, err := fNoteWhere(db, c); err == nil {

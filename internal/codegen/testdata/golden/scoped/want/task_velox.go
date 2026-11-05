@@ -5,7 +5,7 @@ package gen
 import (
 	"fmt"
 
-	sch "example.com/tmp/schema"
+	"example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -55,8 +55,7 @@ func taskDescriptor() velox.Descriptor[Task] {
 			{Field: "Title", Name: "title"},
 		},
 		PrimaryKey: []int{taskColID},
-		Policy:     []func() velox.Policy{sch.InOrg{}.Policy, sch.Task{}.Policy},
-		Hooks:      []func() []velox.Hook{sch.InOrg{}.Hooks, sch.Task{}.Hooks},
+		Schema:     schema.Task{},
 		FieldPtr: func(x *Task, i int) any {
 			switch i {
 			case taskColID:

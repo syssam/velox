@@ -252,9 +252,9 @@ func TestCheckAndRewrite(t *testing.T) {
 const schemaUserPolicy = "package schema\n\nimport \"github.com/syssam/velox\"\n\n" +
 	"func (User) Policy() velox.Policy { return velox.Policy{} }\n"
 
-// The schema package's Policy, which names no type of gen, is bound by the
-// entity's descriptor: gen imports the schema, as sch, and lists the method
-// value. No gen/runtime is written. Removing the Policy rewrites the
+// The schema package's Policy, which names no type of gen, is read from the
+// entity's descriptor: gen imports the schema, by its name, and names the
+// schema's value. No gen/runtime is written. Removing the Policy rewrites the
 // entity's file alone.
 func TestGenerateWithBehaviourWithoutGen(t *testing.T) {
 	dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
@@ -263,7 +263,7 @@ func TestGenerateWithBehaviourWithoutGen(t *testing.T) {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	for _, want := range []string{`sch "example.com/app/schema"`, "Policy: []func() velox.Policy{sch.User{}.Policy},"} {
+	for _, want := range []string{`"example.com/app/schema"`, "Schema: schema.User{},"} {
 		if !strings.Contains(squeeze(string(user)), want) {
 			t.Errorf("user_velox.go lacks %q:\n%s", want, user)
 		}
@@ -345,14 +345,14 @@ func TestGenerateRefusesSchemaImportingGen(t *testing.T) {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
 	src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	if !strings.Contains(string(src), `sch "example.com/app/schema"`) || !strings.Contains(string(src), `schema.FieldDescriptor(&sch.User{}, "created_at")`) {
+	if !strings.Contains(string(src), `veloxschema "github.com/syssam/velox/schema"`) || !strings.Contains(string(src), `veloxschema.FieldDescriptor(&schema.User{}, "created_at")`) {
 		t.Fatalf("user_velox.go does not read the closure from the schema:\n%s", src)
 	}
 	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy)
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
 		t.Fatalf("with the Policy: %d %q", code, errs)
 	}
-	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(squeeze(string(src)), "Policy: []func() velox.Policy{sch.User{}.Policy},") {
+	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(squeeze(string(src)), "Schema: schema.User{},") {
 		t.Errorf("user_velox.go does not bind the policy:\n%s", src)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
@@ -580,7 +580,7 @@ func TestGenerateRefusesABidiJoinPolicy(t *testing.T) {
 		"schema/user_friend_policy.go": "package schema\n\nimport (\n\t\"context\"\n\n\t\"github.com/syssam/velox\"\n)\n\n" +
 			"// UserFriend is the join entity of User's friends, which has no schema.\ntype UserFriend struct{}\n\n" +
 			"func (UserFriend) Policy() velox.Policy {\n\treturn velox.Policy{\n\t\t" +
-			"Write: func(context.Context) (velox.Cond, error) { return velox.Allow(), nil },\n\t}\n}\n",
+			"Write: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil },\n\t}\n}\n",
 	}, tempModule)
 	code, out, errs := runCLI(t, dir, "./schema")
 	want := "velox-gen: schema/user_friend_policy.go:14: UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
@@ -1306,12 +1306,12 @@ func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id
 
 func (InOrg) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			org, err := OrgKey.Require(ctx)
 			if err != nil {
-				return velox.Cond{}, err
+				return velox.Predicate{}, err
 			}
-			return velox.C("org_id").EQ(org), nil
+			return velox.FieldEQ("org_id", org), nil
 		},
 		Insert: func(ctx context.Context, r velox.Row) error { return OrgKey.Match(ctx, r.Value("org_id")) },
 	}
@@ -1346,7 +1346,7 @@ func TestGenerateTenancyMixin(t *testing.T) {
 		t.Errorf("scope_velox.go is written: %v", err)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	for _, want := range []string{"Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.User{}.Policy},", "Hooks: []func() []velox.Hook{sch.InOrg{}.Hooks},"} {
+	for _, want := range []string{"Schema: schema.User{},"} {
 		if !strings.Contains(squeeze(string(user)), want) {
 			t.Errorf("user_velox.go lacks %s:\n%s", want, user)
 		}
@@ -1458,16 +1458,16 @@ func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id
 	}
 }
 
-// A mixin's Policy binds in the entity's descriptor, alone and before the
-// schema's own; a mixin method of the wrong shape, or generic, is refused
+// A mixin's Policy makes the entity's descriptor name its schema, whose
+// Mixin method velox reads; a mixin method of the wrong shape, or generic, is refused
 // at its line.
 func TestGenerateMixinBehaviour(t *testing.T) {
-	const policy = "func (InOrg) Policy() velox.Policy {\n\t_ = velox.C(\"org_id\")\n\treturn velox.Policy{}\n}\n"
+	const policy = "func (InOrg) Policy() velox.Policy {\n\t_ = velox.FieldEQ(\"org_id\", 1)\n\treturn velox.Policy{}\n}\n"
 	dir := genModule(t, genInOrg(policy))
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
 		t.Fatalf("mixin: %d %q", code, errs)
 	}
-	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(squeeze(string(src)), "Policy: []func() velox.Policy{sch.InOrg{}.Policy},") {
+	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(squeeze(string(src)), "Schema: schema.User{},") {
 		t.Errorf("gen does not bind the mixin:\n%s", src)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
@@ -1479,7 +1479,7 @@ func TestGenerateMixinBehaviour(t *testing.T) {
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
 		t.Fatalf("with the schema's: %d %q", code, errs)
 	}
-	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(squeeze(string(src)), "Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.User{}.Policy},") {
+	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(squeeze(string(src)), "Schema: schema.User{},") {
 		t.Errorf("gen does not bind the mixin's before the schema's:\n%s", src)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {

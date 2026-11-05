@@ -5,7 +5,7 @@ package gen
 import (
 	"fmt"
 
-	sch "example.com/tmp/schema"
+	"example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -55,8 +55,7 @@ func labelDescriptor() velox.Descriptor[Label] {
 			{Field: "Name", Name: "name"},
 		},
 		PrimaryKey: []int{labelColID},
-		Policy:     []func() velox.Policy{sch.InOrg{}.Policy},
-		Hooks:      []func() []velox.Hook{sch.InOrg{}.Hooks},
+		Schema:     schema.Label{},
 		FieldPtr: func(x *Label, i int) any {
 			switch i {
 			case labelColID:

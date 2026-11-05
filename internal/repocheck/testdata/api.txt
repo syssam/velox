@@ -11,7 +11,6 @@ ColumnInfo.RequiredEdge string
 ColumnInfo.Sensitive bool
 ColumnInfo.Type any
 ColumnInfo.UpdateDefault func() any
-Cond is Pred[anyEntity]
 ConflictClause.Columns []int
 ConflictClause.DoNothing bool
 ConflictClause.Update []int
@@ -30,29 +29,14 @@ EntityInfo.Name string
 EntityInfo.PrimaryKey []int
 EntityInfo.Schema string
 EntityInfo.Table string
-Interceptor.Filter func(ctx context.Context) (Cond, error)
+Interceptor.Filter func(ctx context.Context) (Predicate, error)
 JoinClause.Left bool
 JoinClause.Link Link
 JoinClause.On []Predicate
 JoinClause.Ref RelRef
-Named.Contains(s string) Cond
-Named.EQ(v any) Cond
-Named.GT(v any) Cond
-Named.GTE(v any) Cond
-Named.HasPrefix(s string) Cond
-Named.HasSuffix(s string) Cond
-Named.In(vs ...any) Cond
-Named.IsNull() Cond
-Named.LT(v any) Cond
-Named.LTE(v any) Cond
-Named.NEQ(v any) Cond
-Named.NotIn(vs ...any) Cond
-Named.NotNull() Cond
-NamedEdge.Has() Cond
-NamedEdge.HasWhere(cs ...Cond) Cond
 Policy.Insert func(ctx context.Context, r Row) error
-Policy.Read func(ctx context.Context) (Cond, error)
-Policy.Write func(ctx context.Context) (Cond, error)
+Policy.Read func(ctx context.Context) (Predicate, error)
+Policy.Write func(ctx context.Context) (Predicate, error)
 PredOp is uint8
 Row.Entity() any
 Row.IsZero(name string) bool
@@ -166,7 +150,7 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
-const GeneratedCodeIsVersion16
+const GeneratedCodeIsVersion17
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -344,16 +328,16 @@ func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
 func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
 func (m *Mutation) Affected() int64
-func (m *Mutation) Conds() []Cond
 func (m *Mutation) DB() *DB
 func (m *Mutation) Fill(name string, v any) error
 func (m *Mutation) Op() Op
+func (m *Mutation) Predicates() []Predicate
 func (m *Mutation) Rows() iter.Seq[Row]
 func (m *Mutation) Set(name string, v any) error
 func (m *Mutation) SetAffected(n int64)
 func (m *Mutation) Table() Table
 func (m *Mutation) Value(name string) (any, bool)
-func (m *Mutation) Where(cs ...Cond)
+func (m *Mutation) Where(ps ...Predicate)
 func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool)
 func (m Many[T]) MarshalJSON() ([]byte, error)
 func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E]
@@ -415,7 +399,7 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
-func Allow() Cond
+func Allow() Predicate
 func AndPredicates(ps ...Predicate) Predicate
 func And[E any](ps ...Pred[E]) Pred[E]
 func Assignments[E any](set []Setter[E]) []Assignment
@@ -424,7 +408,6 @@ func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c N
 func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
 func Before(f MutateFunc, ops ...Op) Hook
-func C(name string) Named
 func CheckEntity[E any, PE Entity[E]]() error
 func CheckRelation[E, T any](r Rel[E, T]) error
 func ColumnEQ(column int, v any) Predicate
@@ -433,11 +416,26 @@ func CountBy[E, K any](ctx context.Context, q Query[E], key GroupKey[E, K]) ([]G
 func CountEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([]int64, error)
 func Deny(reason string) error
 func DriverCode(err error) (string, bool)
-func Edge(name string) NamedEdge
 func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescriptor
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDescriptor
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescriptor
+func FieldContains(name, s string) Predicate
+func FieldEQ(name string, v any) Predicate
+func FieldEqualFold(name, s string) Predicate
+func FieldGT(name string, v any) Predicate
+func FieldGTE(name string, v any) Predicate
+func FieldHasPrefix(name, s string) Predicate
+func FieldHasSuffix(name, s string) Predicate
+func FieldIn(name string, vs ...any) Predicate
+func FieldIsNull(name string) Predicate
+func FieldLT(name string, v any) Predicate
+func FieldLTE(name string, v any) Predicate
+func FieldNEQ(name string, v any) Predicate
+func FieldNotIn(name string, vs ...any) Predicate
+func FieldNotNull(name string) Predicate
 func GoType(c ColumnInfo) reflect.Type
+func HasEdge(name string) Predicate
+func HasEdgeWith(name string, ps ...Predicate) Predicate
 func IsDryRun(ctx context.Context) bool
 func IsNotFound(err error) bool
 func Linked[T any, PT Entity[T]](e EdgeDescriptor) EdgeDescriptor
@@ -461,7 +459,6 @@ func Or[E any](ps ...Pred[E]) Pred[E]
 func PinUntil(ctx context.Context, t time.Time)
 func PinnedUntil(ctx context.Context) time.Time
 func Pool(db *DB) *sql.DB
-func Predicates(cs []Cond) []Predicate
 func RowScopeFromContext(ctx context.Context) RowScope
 func RowsOf[E any](r TableRows) []E
 func SQLConn(db *sql.DB) Conn
@@ -510,7 +507,6 @@ type Col[E, V any] struct { I int32 }
 type ColumnDescriptor = veloxtype.ColumnDescriptor
 type ColumnInfo = engine.ColumnInfo
 type Column[E any] interface{ column(*E) int32 }
-type Cond = engine.Cond
 type ConflictClause = engine.ConflictClause
 type Conn = engine.Conn
 type ConstraintError = veloxtype.ConstraintError
@@ -518,7 +514,7 @@ type ConstraintKind = veloxtype.ConstraintKind
 type DB struct { }
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Policy []func() Policy Hooks []func() []Hook Interceptors []func() []Interceptor }
+type Descriptor[E any] struct { Table string TableSchema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Schema any }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type EdgeDescriptor = engine.EdgeDescriptor
@@ -541,8 +537,6 @@ type Meta[E any] struct { }
 type MutateFunc func(ctx context.Context, m *Mutation) error
 type Mutation struct { }
 type Mutator interface { Mutate(ctx context.Context, m *Mutation) error }
-type Named = engine.Named
-type NamedEdge = engine.NamedEdge
 type NullCol[E, V any] struct { I int32 }
 type NullJSONCol[E, V any] struct { I int32 }
 type NullNumberCol[E, V any] struct { I int32 }
@@ -559,7 +553,7 @@ type Policy = engine.Policy
 type PolicyError = veloxtype.PolicyError
 type PredOp = engine.PredOp
 type Pred[E any] = engine.Pred[E]
-type Predicate = engine.Predicate
+type Predicate = Pred[anyEntity]
 type Query[E any] struct { }
 type RawQuery[E any] struct { }
 type Rel[E, T any] struct { I int32 }
@@ -695,7 +689,6 @@ func Check(name, expr string) *CheckAnnotation
 func Collation(name string) *CollationAnnotation
 func Comment(text string) *CommentAnnotation
 func FieldDescriptor(s Interface, name string) *desc.Field
-func MixinAt[T any](s Interface, i int) *T
 func Table(name string) *TableAnnotation
 func TableIn(schema, table string) *TableAnnotation
 type Annotation = desc.Annotation

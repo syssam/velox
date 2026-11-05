@@ -9,28 +9,28 @@ import (
 
 // Policy declares Doc's policy. Read and Write return a condition that velox
 // ANDs into every statement; an error denies the statement. Allow means no
-// restriction, and a zero Cond is an error.
+// restriction, and a zero Predicate is an error.
 func (Doc) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			switch u := auth.UserFromContext(ctx); u {
 			case "":
-				return velox.Cond{}, velox.Deny("no user")
+				return velox.Predicate{}, velox.Deny("no user")
 			case "admin":
 				return velox.Allow(), nil
 			default:
-				return velox.Or(velox.C("owner").EQ(u), velox.C("shared").EQ(true)), nil
+				return velox.Or(velox.FieldEQ("owner", u), velox.FieldEQ("shared", true)), nil
 			}
 		},
 		// Write filters which rows may change; Read applies too.
-		Write: func(ctx context.Context) (velox.Cond, error) {
+		Write: func(ctx context.Context) (velox.Predicate, error) {
 			switch u := auth.UserFromContext(ctx); u {
 			case "":
-				return velox.Cond{}, velox.Deny("no user")
+				return velox.Predicate{}, velox.Deny("no user")
 			case "admin":
 				return velox.Allow(), nil
 			default:
-				return velox.C("owner").EQ(u), nil
+				return velox.FieldEQ("owner", u), nil
 			}
 		},
 		// Insert checks each new row.

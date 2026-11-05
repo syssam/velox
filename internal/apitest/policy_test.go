@@ -167,7 +167,7 @@ func TestPolicyInsideHasOfAnEntityWithout(t *testing.T) {
 	wantSent(t, e, `DELETE FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND "owner" = $1)`, "ann")
 
 	calls := e.Calls
-	_, err := q.All(pnoteReading(velox.Cond{}, velox.Deny("hidden")))
+	_, err := q.All(pnoteReading(velox.Predicate{}, velox.Deny("hidden")))
 	want(t, err, velox.ErrDenied, "velox: apitest.pbox: in the EXISTS on fixture.Pnote: select denied by policy: hidden")
 	var pe *velox.PolicyError
 	if !errors.As(err, &pe) || pe.Entity != "fixture.Pnote" || pe.Op != velox.OpSelect {
@@ -233,12 +233,12 @@ func TestPolicyCalledOncePerStatement(t *testing.T) {
 
 // TestPolicyConditionIsScopedAndChecked: an EXISTS in a policy's condition
 // gets the org (and the Read policy, see TestPolicyIsInherited); a
-// condition holding the zero Cond is refused.
+// condition holding the zero Predicate is refused.
 func TestPolicyConditionIsScopedAndChecked(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	q := db.Query[fixture.Pnote]().Limit(1)
-	ctx := pnoteReading(velox.Edge("invoice").HasWhere(velox.C("paid").EQ(true)), nil)
+	ctx := pnoteReading(velox.HasEdgeWith("invoice", velox.FieldEQ("paid", true)), nil)
 	if _, err := q.All(testmodel.Org.With(ctx, int64(7))); err != nil {
 		t.Fatal(err)
 	}
@@ -257,9 +257,9 @@ func TestPolicyConditionIsScopedAndChecked(t *testing.T) {
 		true, int64(7), 1)
 
 	calls := e.Calls
-	_, err = q.All(pnoteReading(velox.Or(velox.C("owner").EQ("ann"), velox.Cond{}), nil))
+	_, err = q.All(pnoteReading(velox.Or(velox.FieldEQ("owner", "ann"), velox.Predicate{}), nil))
 	if err == nil || err.Error() != "velox: fixture.Pnote: the Read policy's condition holds the zero Pred" || errors.Is(err, velox.ErrDenied) {
-		t.Errorf("a zero Cond in the policy's condition: %v", err)
+		t.Errorf("a zero Predicate in the policy's condition: %v", err)
 	}
 	if e.Calls != calls {
 		t.Errorf("%d refused statements sent", e.Calls-calls)
@@ -359,7 +359,7 @@ func TestPolicyIsInherited(t *testing.T) {
 	}
 
 	calls := e.Calls
-	_, err := db.Query[pcomment]().Limit(1).All(pnoteReading(velox.Cond{}, velox.Deny("hidden")))
+	_, err := db.Query[pcomment]().Limit(1).All(pnoteReading(velox.Predicate{}, velox.Deny("hidden")))
 	want(t, err, velox.ErrDenied, "velox: apitest.pcomment: in the EXISTS on fixture.Pnote: select denied by policy: hidden")
 	if e.Calls != calls {
 		t.Errorf("%d denied statements sent", e.Calls-calls)
@@ -372,7 +372,7 @@ func TestPolicyIsInherited(t *testing.T) {
 func TestPolicyCycleIsRefused(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
-	self := pnoteReading(velox.Edge("parent").HasWhere(velox.C("locked").EQ(false)), nil)
+	self := pnoteReading(velox.HasEdgeWith("parent", velox.FieldEQ("locked", false)), nil)
 	for name, c := range map[string]struct {
 		run  func() error
 		want string
@@ -421,15 +421,15 @@ func TestPolicyMutualCycleIsRefused(t *testing.T) {
 	}
 }
 
-// TestZeroCondFails: a policy that returns the zero Cond, as one that
+// TestZeroPredicateFails: a policy that returns the zero Predicate, as one that
 // forgot to return a condition does, fails the statement; it never lets the
 // caller through. Allow is the way to say no restriction.
-func TestZeroCondFails(t *testing.T) {
+func TestZeroPredicateFails(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
-	const msg = "the Read policy returned the zero Cond; return velox.Allow() for no restriction"
-	const writeMsg = "the Write policy returned the zero Cond; return velox.Allow() for no restriction"
-	zeroRead := pnoteReading(velox.Cond{}, nil)
+	const msg = "the Read policy returned the zero Predicate; return velox.Allow() for no restriction"
+	const writeMsg = "the Write policy returned the zero Predicate; return velox.Allow() for no restriction"
+	zeroRead := pnoteReading(velox.Predicate{}, nil)
 
 	calls := e.Calls
 	_, err := db.Query[fixture.Pnote]().Limit(1).All(zeroRead)
@@ -437,7 +437,7 @@ func TestZeroCondFails(t *testing.T) {
 		t.Errorf("Read: %v", err)
 	}
 	if errors.Is(err, velox.ErrDenied) {
-		t.Errorf("a zero Cond is a policy bug, not a denial: %v", err)
+		t.Errorf("a zero Predicate is a policy bug, not a denial: %v", err)
 	}
 	_, err = db.Query[fixture.Pnote]().Count(zeroRead)
 	if err == nil || !strings.Contains(err.Error(), msg) {
@@ -456,7 +456,7 @@ func TestZeroCondFails(t *testing.T) {
 		t.Errorf("EXISTS: %v", err)
 	}
 
-	zeroWrite := pnoteWriting(velox.Cond{}, nil)
+	zeroWrite := pnoteWriting(velox.Predicate{}, nil)
 	_, err = db.Update[fixture.Pnote]().Set(fixture.Pn.Owner.Set("x")).Where(fixture.Pn.ID.EQ(1)).Exec(zeroWrite)
 	if err == nil || err.Error() != "velox: fixture.Pnote: "+writeMsg {
 		t.Errorf("Write on update: %v", err)
@@ -484,11 +484,11 @@ func TestZeroCondFails(t *testing.T) {
 		t.Errorf("upsert with a zero Write: %v", err)
 	}
 
-	// The error comes first: a policy that returns the zero Cond with an error
+	// The error comes first: a policy that returns the zero Predicate with an error
 	// denies the statement with that error.
 	boom := errors.New("boom")
-	_, err = db.Delete[fixture.Pnote]().Where(fixture.Pn.ID.EQ(1)).Exec(pnoteWriting(velox.Cond{}, boom))
-	if !errors.Is(err, boom) || !errors.Is(err, velox.ErrDenied) || strings.Contains(err.Error(), "zero Cond") {
+	_, err = db.Delete[fixture.Pnote]().Where(fixture.Pn.ID.EQ(1)).Exec(pnoteWriting(velox.Predicate{}, boom))
+	if !errors.Is(err, boom) || !errors.Is(err, velox.ErrDenied) || strings.Contains(err.Error(), "zero Predicate") {
 		t.Errorf("Write (zero, err): %v", err)
 	}
 	if e.Calls != calls {
@@ -561,14 +561,14 @@ func TestAllowComposes(t *testing.T) {
 	db := openFake(velox.Postgres, e)
 	pn := velox.TableOf[fixture.Pnote]()
 	allow := velox.Allow()
-	x := velox.C("owner").EQ("ann")
-	y := velox.C("locked").EQ(true)
+	x := velox.FieldEQ("owner", "ann")
+	y := velox.FieldEQ("locked", true)
 	skip := velox.WithoutPolicy(context.Background(), "test")
 
-	query := func(c velox.Cond) (string, []any, error) {
-		return db.QueryTable(pn).Where(velox.Predicates([]velox.Cond{c})...).Limit(1).SQL(skip)
+	query := func(c velox.Predicate) (string, []any, error) {
+		return db.QueryTable(pn).Where([]velox.Predicate{c}...).Limit(1).SQL(skip)
 	}
-	sql := func(c velox.Cond) (string, []any) {
+	sql := func(c velox.Predicate) (string, []any) {
 		t.Helper()
 		s, args, err := query(c)
 		if err != nil {
@@ -576,11 +576,11 @@ func TestAllowComposes(t *testing.T) {
 		}
 		return s, args
 	}
-	del := func(c velox.Cond) error {
-		_, err := db.DeleteTable(pn).Where(velox.Predicates([]velox.Cond{c})...).Exec(skip)
+	del := func(c velox.Predicate) error {
+		_, err := db.DeleteTable(pn).Where([]velox.Predicate{c}...).Exec(skip)
 		return err
 	}
-	same := func(name string, got, want velox.Cond) {
+	same := func(name string, got, want velox.Predicate) {
 		t.Helper()
 		gs, ga := sql(got)
 		ws, wa := sql(want)
@@ -592,14 +592,14 @@ func TestAllowComposes(t *testing.T) {
 	same("And(x, Allow)", velox.And(x, allow), x)
 	same("And(Allow, Allow)", velox.And(allow, allow), allow)
 	same("And(Allow, x, y)", velox.And(allow, x, y), velox.And(x, y))
-	for name, c := range map[string]velox.Cond{
+	for name, c := range map[string]velox.Predicate{
 		"Or(Allow, x)": velox.Or(allow, x), "Or(x, Allow)": velox.Or(x, allow), "And(x, Or(Allow, y))": velox.And(x, velox.Or(allow, y)),
 	} {
 		if s, _ := sql(c); !strings.Contains(s, "1 = 1") || !strings.Contains(s, " OR ") {
 			t.Errorf("%s: %s", name, s)
 		}
 	}
-	if _, _, err := query(velox.Or(allow, velox.C("nope").EQ(1))); err == nil || !strings.Contains(err.Error(), `no column "nope"`) {
+	if _, _, err := query(velox.Or(allow, velox.FieldEQ("nope", 1))); err == nil || !strings.Contains(err.Error(), `no column "nope"`) {
 		t.Errorf("Or(Allow, an unknown column): %v", err)
 	}
 
@@ -618,11 +618,11 @@ func TestAllowComposes(t *testing.T) {
 	// An Allow does not hide a zero or invalid kid of Or: the statement still
 	// fails on it, as it does without the Allow.
 	calls := e.Calls
-	_, _, err = query(velox.Or(allow, velox.Cond{}))
+	_, _, err = query(velox.Or(allow, velox.Predicate{}))
 	if err == nil || !strings.Contains(err.Error(), "a condition is the zero Predicate") {
 		t.Errorf("Or(Allow, zero): %v", err)
 	}
-	bad := velox.Edge("nope").Has()
+	bad := velox.HasEdge("nope")
 	_, _, wantErr := query(bad)
 	_, _, err = query(velox.Or(allow, bad))
 	if wantErr == nil || err == nil || err.Error() != wantErr.Error() {
@@ -633,9 +633,9 @@ func TestAllowComposes(t *testing.T) {
 	}
 	// A Has next to an Allow is kept, to resolve when the statement runs, and
 	// the Or still matches every row.
-	err = del(velox.Or(allow, velox.Edge("parent").Has()))
+	err = del(velox.Or(allow, velox.HasEdge("parent")))
 	want(t, err, velox.ErrNoWhere, "velox: fixture.Pnote: "+velox.ErrNoWhere.Error()+": its conditions match every row; add a condition, or All to change every row")
-	if s, _ := sql(velox.Or(allow, velox.Edge("parent").Has())); !strings.Contains(s, "1 = 1 OR EXISTS") {
+	if s, _ := sql(velox.Or(allow, velox.HasEdge("parent"))); !strings.Contains(s, "1 = 1 OR EXISTS") {
 		t.Errorf("Or(Allow, Has): %s", s)
 	}
 }
@@ -658,7 +658,7 @@ func TestPolicyWritable(t *testing.T) {
 	wantSent(t, e, `SELECT COUNT(*) FROM "pnotes" WHERE "id" = $1 AND "owner" = $2`, int64(1), "ann")
 
 	calls := e.Calls
-	_, err := q.Writable().Count(pnoteWriting(velox.Cond{}, velox.Deny("read-only")))
+	_, err := q.Writable().Count(pnoteWriting(velox.Predicate{}, velox.Deny("read-only")))
 	var pe *velox.PolicyError
 	if !errors.As(err, &pe) || pe.Op != velox.OpSelect || !errors.Is(err, velox.ErrDenied) {
 		t.Errorf("a denied Write: %v", err)
@@ -691,12 +691,12 @@ func TestPolicyWritable(t *testing.T) {
 }
 
 // TestPolicySQLOnEveryDialect: SQL(ctx) applies the policy as execution does,
-// on every dialect. Allow leaves the unscoped text; a zero Cond, from Read or
+// on every dialect. Allow leaves the unscoped text; a zero Predicate, from Read or
 // from Write, fails SQL(ctx) with the message execution gives.
 func TestPolicySQLOnEveryDialect(t *testing.T) {
 	const (
-		readMsg  = "velox: fixture.Pnote: the Read policy returned the zero Cond; return velox.Allow() for no restriction"
-		writeMsg = "velox: fixture.Pnote: the Write policy returned the zero Cond; return velox.Allow() for no restriction"
+		readMsg  = "velox: fixture.Pnote: the Read policy returned the zero Predicate; return velox.Allow() for no restriction"
+		writeMsg = "velox: fixture.Pnote: the Write policy returned the zero Predicate; return velox.Allow() for no restriction"
 	)
 	for _, c := range []struct {
 		d    velox.Dialect
@@ -716,11 +716,11 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 		if err != nil || got != c.want || !slices.Equal(args, uargs) || !slices.Equal(args, []any{int64(0), 3}) {
 			t.Errorf("%v: Allow\n got %s %v, %v\nwant %s %v", c.d, got, args, err, c.want, uargs)
 		}
-		if _, _, err := q.SQL(pnoteReading(velox.Cond{}, nil)); err == nil || err.Error() != readMsg {
+		if _, _, err := q.SQL(pnoteReading(velox.Predicate{}, nil)); err == nil || err.Error() != readMsg {
 			t.Errorf("%v: a zero Read: %v", c.d, err)
 		}
 		u := db.Update[fixture.Pnote]().Set(fixture.Pn.Owner.Set("x")).Where(fixture.Pn.ID.EQ(1))
-		if _, _, err := u.SQL(pnoteWriting(velox.Cond{}, nil)); err == nil || err.Error() != writeMsg {
+		if _, _, err := u.SQL(pnoteWriting(velox.Predicate{}, nil)); err == nil || err.Error() != writeMsg {
 			t.Errorf("%v: a zero Write: %v", c.d, err)
 		}
 	}

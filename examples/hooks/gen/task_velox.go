@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
-	sch "github.com/syssam/velox/examples/hooks/schema"
+	"github.com/syssam/velox/examples/hooks/schema"
 )
 
 // Task is the entity of schema Task.
@@ -67,7 +67,7 @@ func taskDescriptor() velox.Descriptor[Task] {
 			{Field: "Done", Name: "done"},
 		},
 		PrimaryKey: []int{taskColID},
-		Hooks:      []func() []velox.Hook{sch.CreatedBy{}.Hooks, sch.Task{}.Hooks},
+		Schema:     schema.Task{},
 		FieldPtr: func(x *Task, i int) any {
 			switch i {
 			case taskColID:

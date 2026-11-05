@@ -111,26 +111,26 @@ func TestInspect(t *testing.T) {
 		"mixed/a.go":      "package a\n",
 		"mixed/b.go":      "package b\n",
 	})
-	path, schemas, err := Inspect(dir, "./schema", offline())
-	if err != nil || path != "example.com/tmp/schema" || !slices.Equal(schemas, []string{"User"}) {
-		t.Errorf("schema: %q %v %v", path, schemas, err)
+	path, name, schemas, err := Inspect(dir, "./schema", offline())
+	if err != nil || path != "example.com/tmp/schema" || name != "schema" || !slices.Equal(schemas, []string{"User"}) {
+		t.Errorf("schema: %q %q %v %v", path, name, schemas, err)
 	}
-	path, schemas, err = Inspect(dir, "./plain", offline())
+	path, _, schemas, err = Inspect(dir, "./plain", offline())
 	if err != nil || path != "example.com/tmp/plain" || len(schemas) != 0 {
 		t.Errorf("plain: %q %v %v", path, schemas, err)
 	}
 	// Not a package.
 	for _, pattern := range []string{"./nothing", "./empty", "./...", "example.com/tmp/nothing"} {
-		if _, _, err := Inspect(dir, pattern, offline()); err == nil {
+		if _, _, _, err := Inspect(dir, pattern, offline()); err == nil {
 			t.Errorf("%s: no error", pattern)
 		}
 	}
 	// Another failure of go list is shown as go wrote it.
-	if _, _, err := Inspect(dir, "./mixed", offline()); err == nil || !strings.Contains(err.Error(), "found packages a (a.go) and b (b.go)") {
+	if _, _, _, err := Inspect(dir, "./mixed", offline()); err == nil || !strings.Contains(err.Error(), "found packages a (a.go) and b (b.go)") {
 		t.Errorf("mixed: %v", err)
 	}
 	// A package that cannot be read says why.
-	if _, _, err := Inspect(dir, "./unexp", offline()); err == nil || !strings.Contains(err.Error(), "unexported") {
+	if _, _, _, err := Inspect(dir, "./unexp", offline()); err == nil || !strings.Contains(err.Error(), "unexported") {
 		t.Errorf("unexp: %v", err)
 	}
 }

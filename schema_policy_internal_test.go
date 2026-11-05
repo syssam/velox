@@ -38,20 +38,20 @@ func TestMutation(t *testing.T) {
 	if set[0].Value != "t" {
 		t.Error("Set changed the query's own assignments")
 	}
-	m.Where(C("title").EQ("u"))
+	m.Where(FieldEQ("title", "u"))
 	if m.mu.Err != nil || len(st.Where) != 1 {
 		t.Fatalf("Where: err %v, %d conditions", m.mu.Err, len(st.Where))
 	}
-	if cs := m.Conds(); len(cs) != 1 {
-		t.Errorf("Conds: %d conditions", len(cs))
+	if cs := m.Predicates(); len(cs) != 1 {
+		t.Errorf("Predicates: %d conditions", len(cs))
 	}
-	m.Where(Cond{})
+	m.Where(Predicate{})
 	if m.mu.Err == nil || !strings.Contains(m.mu.Err.Error(), "zero Predicate") || len(st.Where) != 1 {
 		t.Errorf("a zero condition: err %v, %d conditions", m.mu.Err, len(st.Where))
 	}
 	bad := errors.New("unresolved")
 	m = &Mutation{mu: engine.MutationState{St: &st}}
-	m.Where(Cond(engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: bad})))
+	m.Where(engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: bad}))
 	if !errors.Is(m.mu.Err, bad) || len(st.Where) != 1 {
 		t.Errorf("an invalid condition: err %v, %d conditions", m.mu.Err, len(st.Where))
 	}
@@ -65,8 +65,8 @@ func TestMutation(t *testing.T) {
 		t.Errorf("Set on a delete: err %v, set %+v", err, del.Set)
 	}
 	ins := &Mutation{mu: engine.MutationState{Op: OpInsert, In: info}}
-	ins.Where(C("title").EQ("u"))
-	if !errors.Is(ins.mu.Err, engine.ErrInsertMutation) || ins.Conds() != nil {
+	ins.Where(FieldEQ("title", "u"))
+	if !errors.Is(ins.mu.Err, engine.ErrInsertMutation) || ins.Predicates() != nil {
 		t.Errorf("Where on an insert: err %v", ins.mu.Err)
 	}
 }

@@ -31,16 +31,17 @@
 //
 //	func (User) Policy() velox.Policy {
 //		return velox.Policy{
-//			Read: func(ctx context.Context) (velox.Cond, error) {
-//				return velox.C("deleted_at").IsNull(), nil
+//			Read: func(ctx context.Context) (velox.Predicate, error) {
+//				return velox.FieldIsNull("deleted_at"), nil
 //			},
 //		}
 //	}
 //
 // Hooks() []velox.Hook and Interceptors() []velox.Interceptor are methods
 // in the same way, on the schema or on a mixin it lists. The entity's
-// descriptor in gen lists the method values, its mixins' first, and velox
-// calls them on the entity's first use. A condition by name is resolved
+// descriptor in gen names the schema's value, Schema: schema.User{}, and
+// velox calls its mixins' methods, then its own, on the entity's first
+// use. A condition by name is resolved
 // when its statement runs: a name the entity has no column of fails the
 // statement, as does a value of another kind.
 // Everything in ./gen is generated.
@@ -285,9 +286,9 @@
 // TableUpdate, TableDelete, DB.InsertTable, DB.InsertRows, DB.UpdateTable,
 // DB.DeleteTable and Assignments: an entity's queries and writes with its
 // type erased, for runtimes compiled once for every entity) and
-// GeneratedCodeIsVersion16. Each
+// GeneratedCodeIsVersion17. Each
 // says "For generated code." in its documentation. They are not part of
-// velox's API: they change only when GeneratedCodeIsVersion16 is replaced by
+// velox's API: they change only when GeneratedCodeIsVersion17 is replaced by
 // the next version, which is outside semantic versioning. Run velox-gen
 // again after you update velox; code generated for another version fails to
 // compile.
@@ -295,11 +296,11 @@ package velox
 
 //go:generate go run ./internal/cmd/handlegen
 
-// GeneratedCodeIsVersion16 is referenced by every file velox-gen writes from a
+// GeneratedCodeIsVersion17 is referenced by every file velox-gen writes from a
 // schema package, so that generated code and this library fail to compile
 // together when they disagree. For generated code. It is replaced by
-// GeneratedCodeIsVersion17 when generated code must change.
-const GeneratedCodeIsVersion16 = true
+// GeneratedCodeIsVersion18 when generated code must change.
+const GeneratedCodeIsVersion17 = true
 
 // Lazy is the constraint of the type parameter that every method of a generic
 // velox type carries, and that callers never write. For generated code. A

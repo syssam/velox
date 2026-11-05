@@ -28,11 +28,11 @@ func WithArchived(ctx context.Context) context.Context {
 // Interceptors hides the post titled "archived", unless the context is
 // WithArchived's.
 func (Post) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Cond, error) {
+	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) {
 		if v, _ := ctx.Value(archiveKey{}).(bool); v {
 			return velox.Allow(), nil
 		}
-		return velox.C("title").NEQ("archived"), nil
+		return velox.FieldNEQ("title", "archived"), nil
 	}}}
 }
 
@@ -40,9 +40,9 @@ func (Post) Interceptors() []velox.Interceptor {
 // "forbidden".
 func (Post) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			if v, _ := ctx.Value(viewerKey{}).(bool); v {
-				return velox.C("status").EQ("published"), nil
+				return velox.FieldEQ("status", "published"), nil
 			}
 			return velox.Allow(), nil
 		},

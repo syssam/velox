@@ -2,6 +2,7 @@ package velox
 
 import (
 	"iter"
+	"slices"
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
@@ -10,29 +11,30 @@ import (
 // Policy is an entity's row-level policy. A generated entity's is declared
 // in the schema package, on the entity's schema or on a mixin it lists (see
 // package schema), and velox-gen binds it into the generated metadata. It
-// names columns by name (C), so the schema package never imports the
+// names columns by name (FieldEQ), so the schema package never imports the
 // generated one, and a mixin's Policy serves every entity that lists it:
 //
 //	func (Issue) Policy() velox.Policy {
 //		return velox.Policy{
-//			Write: func(ctx context.Context) (velox.Cond, error) {
+//			Write: func(ctx context.Context) (velox.Predicate, error) {
 //				u, ok := UserFrom(ctx)
 //				if !ok {
-//					return velox.Cond{}, velox.Deny("not logged in")
+//					return velox.Predicate{}, velox.Deny("not logged in")
 //				}
-//				return velox.C("author_id").EQ(u), nil
+//				return velox.FieldEQ("author_id", u), nil
 //			},
 //		}
 //	}
 //
 // An entity written by hand declares it with a method on its pointer type,
-// func (*E) Policy() velox.Policy, which its Descriptor lists; a method the
-// metadata does not bind is refused at the entity's first use. velox calls
+// func (*E) Policy() velox.Policy, and names itself in its Descriptor,
+// Schema: (*E)(nil); a method the metadata does not reach is refused at the
+// entity's first use, as is a Policy method of another signature. velox calls
 // the method once, when it builds the metadata: a hand-written one on a nil
 // *E, so it must not read its receiver.
 //
 // Any field may be nil. Read and Write return Allow() for no restriction;
-// their zero Cond fails the statement, naming the entity, so that a code
+// their zero Predicate fails the statement, naming the entity, so that a code
 // path that forgot to return a condition never lets a caller through. Any
 // error they return denies the statement.
 //
@@ -63,7 +65,7 @@ type Policy = engine.Policy
 // in Mutation.Rows, and what Policy.Insert checks. It is a value, cheap to
 // copy, valid while the write runs. Value reads a column (nil for NULL; a
 // nullable column's value, not its pointer), Set sets one, converting the
-// value as a Cond's is, IsZero reports a Go zero value, and Entity returns
+// value as a Predicate's is, IsZero reports a Go zero value, and Entity returns
 // the row as its *E, for application code that can name E. A wrong name, a
 // value of another kind, or a Set in Policy.Insert is a misuse, which fails
 // the write.
@@ -85,8 +87,8 @@ type Row = engine.Row
 //	set, err := t.Assign(col, now)
 //	...
 //	u := m.DB().UpdateTable(t).Assign(set)
-//	if cs := m.Conds(); len(cs) > 0 {
-//		u = u.Where(velox.Predicates(cs)...)
+//	if cs := m.Predicates(); len(cs) > 0 {
+//		u = u.Where(cs...)
 //	} else {
 //		u = u.All()
 //	}
@@ -113,8 +115,8 @@ func (m *Mutation) Op() Op {
 func (m *Mutation) Rows() iter.Seq[Row] { return m.mu.RowsByName() }
 
 // Set sets the column of the given name: in every row of an insert, or in
-// an update's assignment, which it replaces. v is converted as a Cond's
-// value is, and nil sets NULL on a nullable column. On a delete it is a
+// an update's assignment, which it replaces. v is converted as a
+// Predicate's value is, and nil sets NULL on a nullable column. On a delete it is a
 // misuse. A misuse is recorded, and returned.
 func (m *Mutation) Set(name string, v any) error { return m.mu.SetByName(name, v) }
 
@@ -134,28 +136,29 @@ func (m *Mutation) Fill(name string, v any) error { return m.mu.FillByName(name,
 // assignment with Set, not in place.
 func (m *Mutation) Value(name string) (any, bool) { return m.mu.ValueByName(name) }
 
-// Where narrows the rows an update or a delete changes: all of the
-// conditions must hold, with the statement's own. Where on an insert is a
+// Where narrows the rows an update or a delete changes: all of ps must
+// hold, with the statement's own conditions. Where on an insert is a
 // misuse.
-func (m *Mutation) Where(cs ...Cond) {
+func (m *Mutation) Where(ps ...Predicate) {
 	if m.mu.St == nil {
 		m.mu.Record(engine.ErrInsertMutation)
 		return
 	}
-	for _, c := range cs {
-		engine.MutateWhere(m.mu.St, &m.mu.Err, Predicate(c))
+	for _, p := range ps {
+		engine.MutateWhere(m.mu.St, &m.mu.Err, p)
 	}
 }
 
-// Conds returns the conditions of an update or a delete as the caller and
-// the hooks gave them: the caller's Where and those the hooks before this
-// one added, in order, as copies (changing the slice changes nothing). Once
-// the innermost hook has called next, it returns them as they were then, so
-// an outer hook whose next has returned also sees the conditions the hooks
-// inside it added. It never holds the policy's or a Rewrite hook's
-// conditions, which next adds. It is empty only when the statement said
-// All, and nil for an insert. Mutation shows a soft delete built on it.
-func (m *Mutation) Conds() []Cond {
+// Predicates returns the conditions of an update or a delete as the caller
+// and the hooks gave them: the caller's Where and those the hooks before
+// this one added, in order, as a copy (changing the slice changes nothing).
+// Once the innermost hook has called next, it returns them as they were
+// then, so an outer hook whose next has returned also sees the conditions
+// the hooks inside it added. It never holds the policy's or a Rewrite
+// hook's conditions, which next adds. It is empty only when the statement
+// said All, and nil for an insert. Mutation shows a soft delete built on
+// it.
+func (m *Mutation) Predicates() []Predicate {
 	if m.mu.St == nil {
 		return nil
 	}
@@ -163,11 +166,7 @@ func (m *Mutation) Conds() []Cond {
 	if m.mu.Called {
 		w = m.mu.Where
 	}
-	out := make([]Cond, len(w))
-	for i, p := range w {
-		out[i] = Cond(p)
-	}
-	return out
+	return slices.Clone(w)
 }
 
 // DB returns the DB the write runs on: the transaction's, inside db.Tx, or
@@ -219,16 +218,16 @@ func (m *Mutation) SetAffected(n int64) { m.mu.SetAffected(n) }
 // context value records it with WithScopeValue, so that the GraphQL batcher
 // keeps callers apart.
 //
-// Filter returns Allow() for no restriction. Its zero Cond fails the
+// Filter returns Allow() for no restriction. Its zero Predicate fails the
 // statement, as a policy's does. An error fails the statement and is not a
 // denial: errors.Is(err, ErrDenied) holds only when the error is a Deny.
 //
 // A generated entity's interceptors are declared in the schema package, on
 // the entity's schema or a mixin, and bound by velox-gen. An entity written
 // by hand declares them with a method on its pointer type,
-// func (*E) Interceptors() []velox.Interceptor, which its Descriptor lists.
+// func (*E) Interceptors() []velox.Interceptor, as Policy is declared.
 // velox calls the method once, when it builds the metadata, under the rules
-// of Descriptor.Policy. An Interceptor with a nil Filter is refused then,
+// of Policy. An Interceptor with a nil Filter is refused then,
 // by its index.
 //
 // A join entity of a many-to-many edge cannot have interceptors, as it

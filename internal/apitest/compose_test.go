@@ -117,7 +117,7 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 	if table[2] == '1' {
 		policies = append(policies, func() velox.Policy {
 			return velox.Policy{
-				Read: func(context.Context) (velox.Cond, error) { return velox.C("name").NEQ("hidden"), nil },
+				Read: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("name", "hidden"), nil },
 				Insert: func(_ context.Context, r velox.Row) error {
 					if r.Value("name") == "banned" {
 						return errors.New("banned")
@@ -127,7 +127,6 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 			}
 		})
 	}
-	d.Policy = policies
 	if table[3] == '1' {
 		hook := func(label string) velox.Hook {
 			return func(next velox.Mutator) velox.Mutator {
@@ -141,7 +140,9 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 		}
 		hooks = append(hooks, func() []velox.Hook { return []velox.Hook{hook("h1"), hook("h2")} })
 	}
-	d.Hooks = hooks
+	if len(policies)+len(hooks) > 0 {
+		d.Schema = fixture.Fns{Policy: policies, Hooks: hooks}
+	}
 	return d
 }
 

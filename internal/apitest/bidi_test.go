@@ -13,6 +13,7 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/schema"
 )
 
 // The bidirectional many-to-many model: bnode's friends through bnodeFriend,
@@ -109,8 +110,8 @@ var bnodeFriendPMeta velox.MetaOnce[bnodeFriendP]
 func (*bnodeFriendP) VeloxMeta() *velox.Meta[bnodeFriendP] {
 	return bnodeFriendPMeta.Load(func() velox.Descriptor[bnodeFriendP] {
 		return velox.Descriptor[bnodeFriendP]{
-			Policy:     []func() velox.Policy{(*bnodeFriendP)(nil).Policy},
-			Hooks:      []func() []velox.Hook{(*bnodeFriendP)(nil).Hooks},
+			Schema: (*bnodeFriendP)(nil),
+
 			Table:      "bnode_friends",
 			Columns:    []velox.ColumnDescriptor{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
 			PrimaryKey: []int{0, 1},
@@ -314,7 +315,7 @@ var bspouseMeta velox.MetaOnce[bspouse]
 func (*bspouse) VeloxMeta() *velox.Meta[bspouse] {
 	return bspouseMeta.Load(func() velox.Descriptor[bspouse] {
 		return velox.Descriptor[bspouse]{
-			Hooks:      []func() []velox.Hook{(*bspouse)(nil).Hooks},
+			Schema:     (*bspouse)(nil),
 			Table:      "bspouses",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},
@@ -812,15 +813,20 @@ type btspouse struct {
 // Policy confines the model to the context's org and lets every write: the
 // clearing of the old partner bypasses it, and says so.
 func (*btspouse) Policy() velox.Policy {
-	return velox.Policy{Write: func(context.Context) (velox.Cond, error) { return velox.Allow(), nil }}
+	return velox.Policy{Write: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil }}
 }
 
 var btspouseMeta velox.MetaOnce[btspouse]
 
+// Mixin lists the behaviour that runs before btspouse's own.
+func (*btspouse) Mixin() []schema.Mixin {
+	return fixture.Fns{Policy: []func() velox.Policy{fixture.OrgPolicy}}.Mixin()
+}
+
 func (*btspouse) VeloxMeta() *velox.Meta[btspouse] {
 	return btspouseMeta.Load(func() velox.Descriptor[btspouse] {
 		return velox.Descriptor[btspouse]{
-			Policy:     []func() velox.Policy{fixture.OrgPolicy, (*btspouse)(nil).Policy},
+			Schema:     (*btspouse)(nil),
 			Table:      "btspouses",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},

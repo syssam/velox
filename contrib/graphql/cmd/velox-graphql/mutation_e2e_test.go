@@ -155,7 +155,7 @@ func (Article) Policy() velox.Policy {
 			}
 			return nil
 		},
-		Write: func(context.Context) (velox.Cond, error) { return velox.C("title").NEQ("locked"), nil },
+		Write: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("title", "locked"), nil },
 	}
 }
 `
@@ -178,14 +178,14 @@ var Org = scope.NewKey[int64]("org")
 // writer change.
 func (Writer) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			org, err := Org.Require(ctx)
 			if err != nil {
-				return velox.Cond{}, err
+				return velox.Predicate{}, err
 			}
-			return velox.C("org_id").EQ(org), nil
+			return velox.FieldEQ("org_id", org), nil
 		},
-		Write:  func(context.Context) (velox.Cond, error) { return velox.C("name").NEQ("frozen"), nil },
+		Write:  func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("name", "frozen"), nil },
 		Insert: func(ctx context.Context, r velox.Row) error { return Org.Match(ctx, r.Value("org_id")) },
 	}
 }
@@ -215,8 +215,8 @@ import (
 // Policy hides the circle named "hidden", and lets no "frozen" circle change.
 func (Circle) Policy() velox.Policy {
 	return velox.Policy{
-		Read:  func(context.Context) (velox.Cond, error) { return velox.C("name").NEQ("hidden"), nil },
-		Write: func(context.Context) (velox.Cond, error) { return velox.C("name").NEQ("frozen"), nil },
+		Read:  func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("name", "hidden"), nil },
+		Write: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("name", "frozen"), nil },
 	}
 }
 `
@@ -236,8 +236,8 @@ import (
 // profile change.
 func (Profile) Policy() velox.Policy {
 	return velox.Policy{
-		Read:  func(context.Context) (velox.Cond, error) { return velox.C("handle").NEQ("hidden"), nil },
-		Write: func(context.Context) (velox.Cond, error) { return velox.C("handle").NEQ("frozen"), nil },
+		Read:  func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("handle", "hidden"), nil },
+		Write: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("handle", "frozen"), nil },
 	}
 }
 `

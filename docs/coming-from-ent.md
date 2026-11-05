@@ -151,9 +151,28 @@ Policies, hooks and interceptors are schema methods, as in ent, and name
 columns by name, as ent's `ent.Policy`, `ent.Hook` and generic
 `ent.Mutation` (`Field`, `SetField`) do: `func (User) Policy() velox.Policy`,
 `func (User) Hooks() []velox.Hook` and
-`func (User) Interceptors() []velox.Interceptor` (decision 0039). A condition
-is `velox.C("org_id").EQ(org)` or `velox.Edge("doc").Has()`, a `velox.Cond`;
-a hook reads and writes a row with `m.Value`, `m.Set` and `m.Fill`, and a
+`func (User) Interceptors() []velox.Interceptor` (decisions 0039 and 0040).
+A condition is a `velox.Predicate`, built by ent's names:
+
+| ent (generic `sql` predicates) | velox |
+| --- | --- |
+| `sql.FieldEQ("org_id", v)` | `velox.FieldEQ("org_id", v)` |
+| `sql.FieldNEQ`, `FieldGT`, `FieldGTE`, `FieldLT`, `FieldLTE` | `velox.FieldNEQ`, `FieldGT`, `FieldGTE`, `FieldLT`, `FieldLTE` |
+| `sql.FieldIn(name, vs...)`, `FieldNotIn` | `velox.FieldIn(name, vs...)`, `FieldNotIn` |
+| `sql.FieldIsNull(name)`, `FieldNotNull` | `velox.FieldIsNull(name)`, `FieldNotNull` |
+| `sql.FieldContains`, `FieldHasPrefix`, `FieldHasSuffix`, `FieldEqualFold` | `velox.FieldContains`, `FieldHasPrefix`, `FieldHasSuffix`, `FieldEqualFold` |
+| `sqlgraph.HasNeighbors` (`user.HasPets()`) | `velox.HasEdge("pets")` |
+| `sqlgraph.HasNeighborsWith` (`user.HasPetsWith(...)`) | `velox.HasEdgeWith("pets", ps...)` |
+| `sql.AndPredicates`, `OrPredicates`, `NotPredicates` | `velox.And`, `velox.Or`, `velox.Not` |
+| `privacy.Allow` | `velox.Allow()` |
+
+ent's `sql.FieldContainsFold` has no velox form: the engine has no
+case-insensitive substring match. A `velox.Predicate` is a `Pred` of no
+entity, so `And`, `Or` and `Not` take it, and `velox.Predicate(p)` turns a
+typed handle's `Pred[E]` into one. Its zero value fails the statement: it
+is a struct, not an interface, so it cannot be nil, and a policy that
+returns `velox.Predicate{}` with its error is refused, never read as
+"no condition". A hook reads and writes a row with `m.Value`, `m.Set` and `m.Fill`, and a
 policy's `Insert` reads it with `r.Value`. velox-gen refuses a constant name
 the entity has no column of, at its line, and a constant value that does
 not fit the column; any other name the entity has no column of fails the
@@ -164,7 +183,7 @@ lift it. A hook that must use the typed API of `gen` (another entity, say)
 is a run-time hook, `velox.WithHooks[gen.Task](...)`, a DB option.
 
 A mixin declares behaviour as ent's does, with the same plain methods.
-velox-gen binds them for every entity that lists the mixin, mixins first,
+velox reads them for every entity that lists the mixin, mixins first,
 in `Mixin()` order, then the entity's own. The policies are ANDed, so none
 lifts another. Tenancy is such a mixin, over package `scope` (decisions
 0038 and 0039), as in ent's privacytenant example:
@@ -178,12 +197,12 @@ func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id
 
 func (InOrg) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Cond, error) {
+		Read: func(ctx context.Context) (velox.Predicate, error) {
 			org, err := OrgKey.Require(ctx)
 			if err != nil {
-				return velox.Cond{}, err
+				return velox.Predicate{}, err
 			}
-			return velox.C("org_id").EQ(org), nil
+			return velox.FieldEQ("org_id", org), nil
 		},
 		Insert: func(ctx context.Context, r velox.Row) error { return OrgKey.Match(ctx, r.Value("org_id")) },
 	}
@@ -204,11 +223,14 @@ sets `deleted_at`, and `softdelete.Skip(ctx)` shows deleted rows and makes a
 delete hard. `scopetest.Isolates` checks, in a test, that an entity is
 confined, and that its column is immutable, NOT NULL and of the key's type.
 
-The layout is ent's, with no runtime package (decisions 0037 and 0039):
-`gen` holds every entity, handle and descriptor, and imports the schema
-package, as `sch`, to bind its methods, defaults and validators:
-`Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.Issue{}.Policy}`.
-There is no `gen/runtime` and no blank import. The schema package may not
+The layout is ent's, with no runtime package (decisions 0037, 0039 and
+0040): `gen` holds every entity, handle and descriptor, and imports the
+schema package by its own name for its defaults, validators and
+behaviour. A descriptor names the schema's value, `Schema: schema.Issue{}`,
+and velox reads the behaviour from it as ent's generated runtime reads
+`schema.Issue{}.Policy()`: each `Mixin()` value's, in order, then the
+schema's own. An entity with no behaviour, its own or a mixin's, names no
+schema. There is no `gen/runtime` and no blank import. The schema package may not
 import `gen`, directly or through another package: velox-gen refuses it,
 with the chain. A schema compiles before `gen` exists, so no
 `schema/snapshot` is needed. Plugins write into `gen`.

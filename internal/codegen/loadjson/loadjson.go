@@ -49,8 +49,7 @@ type Schema struct {
 	// Mixins are the values its Mixin method returns, in order.
 	Mixins []Mixin `json:"mixins,omitempty"`
 	// Pointer says the schema implements schema.Interface only through a
-	// pointer, so the generated code that reads its Mixin method takes
-	// &sch.<Name>{}.
+	// pointer, so the generated code names &schema.<Name>{}.
 	Pointer bool `json:"pointer,omitempty"`
 }
 
@@ -61,9 +60,6 @@ type Mixin struct {
 	PkgPath string `json:"pkg_path,omitempty"` // "" for a type with no name
 	Name    string `json:"name,omitempty"`     // the type's name, without type arguments
 	Generic bool   `json:"generic,omitempty"`  // an instance of a generic type
-	// NonZero says the value is not its type's zero value (for a pointer,
-	// the value it points to).
-	NonZero bool `json:"non_zero,omitempty"`
 }
 
 // Check is a built-in validator on a field.

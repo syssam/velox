@@ -193,10 +193,10 @@ func TestMutationErrors(t *testing.T) {
 		text string
 	}{
 		{func(*velox.Mutation) error { return bad }, "velox: engine_test.hnote: hook: bad"},
-		{func(m *velox.Mutation) error { m.Where(velox.Cond{}); return nil },
+		{func(m *velox.Mutation) error { m.Where(velox.Predicate{}); return nil },
 			"velox: engine_test.hnote: hook: a condition is the zero Predicate; make conditions with column handles, And, Or and Not"},
 		{func(m *velox.Mutation) error {
-			m.Where(velox.Cond(engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: errors.Join(errors.New("velox: engine_test.hnote: has no relation 3"), bad)})))
+			m.Where(engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: errors.Join(errors.New("velox: engine_test.hnote: has no relation 3"), bad)}))
 			return nil
 		}, "velox: engine_test.hnote: hook: has no relation 3\nbad"},
 		{func(*velox.Mutation) error { return errors.Join(errors.New("velox: testmodel.Other: x"), bad) },
@@ -222,7 +222,7 @@ func TestSaveWhereIsTheStatementsWhere(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
 	ctx := withHook(func(m *velox.Mutation) error {
-		m.Where(velox.C("note").EQ("hook"))
+		m.Where(velox.FieldEQ("note", "hook"))
 		return nil
 	})
 	x := hnote{ID: 1, Title: "t"}

@@ -54,9 +54,9 @@ runs before the write: it calls `next` when `f` returns nil.
   with the update. Outside a transaction it is the database, and the two
   statements are separate.
 - **Delete hook.** `onlyDone` narrows with
-  `m.Where(velox.C("done").EQ(true))`: even `Delete().All()` removes only
+  `m.Where(velox.FieldEQ("done", true))`: even `Delete().All()` removes only
   finished tasks.
-- **Conditions and counts.** `m.Conds()` returns the conditions the caller
+- **Conditions and counts.** `m.Predicates()` returns the conditions the caller
   and the earlier hooks gave an update or a delete, as given: never the
   policy's, and empty after `All()`. A hook that makes the write itself, as
   a soft delete does, passes them to an update instead of calling `next`,

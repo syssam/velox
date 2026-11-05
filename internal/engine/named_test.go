@@ -112,7 +112,7 @@ func nmSQL(t *testing.T, ps ...velox.Predicate) (string, []any, error) {
 }
 
 // cond is c as the untyped surface's Predicate.
-func cond(c engine.Cond) velox.Predicate { return velox.Predicate(c) }
+func cond(c engine.Predicate) velox.Predicate { return c }
 
 // TestResolveByName: a condition by name resolves against the statement's
 // entity: its value converted to the column's type, and every misfit failing
@@ -120,36 +120,36 @@ func cond(c engine.Cond) velox.Predicate { return velox.Predicate(c) }
 func TestResolveByName(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		c    engine.Cond
+		c    engine.Predicate
 		sql  string
 		args []any
 		err  string
 	}{
-		{"own type", engine.C("org_id").EQ(int64(7)), `"org_id" = $1`, []any{int64(7)}, ""},
-		{"converted", engine.C("org_id").GT(7), `"org_id" > $1`, []any{int64(7)}, ""},
-		{"enum", engine.C("status").NEQ("draft"), `"status" <> $1`, []any{nmStatus("draft")}, ""},
-		{"nullable value", engine.C("note").EQ("x"), `"note" = $1`, []any{"x"}, ""},
-		{"in", engine.C("rank").In(1, int64(2)), `"rank" IN ($1, $2)`, []any{int8(1), int8(2)}, ""},
-		{"in none", engine.C("rank").In(), `1 = 0`, nil, ""},
-		{"not in", engine.C("rank").NotIn(3), `"rank" NOT IN ($1)`, []any{int8(3)}, ""},
-		{"lte", engine.C("score").LTE(1.5), `"score" <= $1`, []any{1.5}, ""},
-		{"gte", engine.C("at").GTE(t0), `"at" >= $1`, []any{t0}, ""},
-		{"lt", engine.C("rank").LT(int8(3)), `"rank" < $1`, []any{int8(3)}, ""},
-		{"contains", engine.C("title").Contains("a%"), `"title" LIKE $1 ESCAPE '!'`, []any{"%a!%%"}, ""},
-		{"prefix", engine.C("title").HasPrefix("a"), `"title" LIKE $1 ESCAPE '!'`, []any{"a%"}, ""},
-		{"suffix", engine.C("status").HasSuffix("t"), `"status" LIKE $1 ESCAPE '!'`, []any{"%t"}, ""},
-		{"is null", engine.C("note").IsNull(), `"note" IS NULL`, nil, ""},
-		{"not null", engine.C("peer_id").NotNull(), `"peer_id" IS NOT NULL`, nil, ""},
-		{"unknown column", engine.C("authr_id").EQ(1), "", nil, `velox: engine_test.nmDoc: no column "authr_id"`},
-		{"out of range", engine.C("rank").EQ(300), "", nil, "300 for rank, an int8: value out of"},
-		{"wrong kind", engine.C("org_id").EQ("7"), "", nil, "velox: engine_test.nmDoc: org_id is an int64, not a string"},
-		{"wrong kind in", engine.C("org_id").In(1, "7"), "", nil, "org_id is an int64, not a string"},
-		{"nil in", engine.C("org_id").In(nil), "", nil, "In or NotIn of nil on org_id"},
-		{"eq nil", engine.C("note").EQ(nil), "", nil, "a comparison of note with nil: use IsNull or NotNull"},
-		{"is null on not null", engine.C("title").IsNull(), "", nil, "title is not nullable"},
-		{"text on a number", engine.C("rank").Contains("1"), "", nil, "rank is not a text column"},
-		{"in a group", velox.And(engine.C("rank").EQ(1), velox.Or(engine.C("title").EQ("a"), engine.C("nope").EQ(1))), "", nil, `no column "nope"`},
-		{"not", velox.Not(engine.C("visible").EQ(true)), `NOT ("visible" = $1)`, []any{true}, ""},
+		{"own type", engine.FieldEQ("org_id", int64(7)), `"org_id" = $1`, []any{int64(7)}, ""},
+		{"converted", engine.FieldGT("org_id", 7), `"org_id" > $1`, []any{int64(7)}, ""},
+		{"enum", engine.FieldNEQ("status", "draft"), `"status" <> $1`, []any{nmStatus("draft")}, ""},
+		{"nullable value", engine.FieldEQ("note", "x"), `"note" = $1`, []any{"x"}, ""},
+		{"in", engine.FieldIn("rank", 1, int64(2)), `"rank" IN ($1, $2)`, []any{int8(1), int8(2)}, ""},
+		{"in none", engine.FieldIn("rank"), `1 = 0`, nil, ""},
+		{"not in", engine.FieldNotIn("rank", 3), `"rank" NOT IN ($1)`, []any{int8(3)}, ""},
+		{"lte", engine.FieldLTE("score", 1.5), `"score" <= $1`, []any{1.5}, ""},
+		{"gte", engine.FieldGTE("at", t0), `"at" >= $1`, []any{t0}, ""},
+		{"lt", engine.FieldLT("rank", int8(3)), `"rank" < $1`, []any{int8(3)}, ""},
+		{"contains", engine.FieldContains("title", "a%"), `"title" LIKE $1 ESCAPE '!'`, []any{"%a!%%"}, ""},
+		{"prefix", engine.FieldHasPrefix("title", "a"), `"title" LIKE $1 ESCAPE '!'`, []any{"a%"}, ""},
+		{"suffix", engine.FieldHasSuffix("status", "t"), `"status" LIKE $1 ESCAPE '!'`, []any{"%t"}, ""},
+		{"is null", engine.FieldIsNull("note"), `"note" IS NULL`, nil, ""},
+		{"not null", engine.FieldNotNull("peer_id"), `"peer_id" IS NOT NULL`, nil, ""},
+		{"unknown column", engine.FieldEQ("authr_id", 1), "", nil, `velox: engine_test.nmDoc: no column "authr_id"`},
+		{"out of range", engine.FieldEQ("rank", 300), "", nil, "300 for rank, an int8: value out of"},
+		{"wrong kind", engine.FieldEQ("org_id", "7"), "", nil, "velox: engine_test.nmDoc: org_id is an int64, not a string"},
+		{"wrong kind in", engine.FieldIn("org_id", 1, "7"), "", nil, "org_id is an int64, not a string"},
+		{"nil in", engine.FieldIn("org_id", nil), "", nil, "a FieldIn or FieldNotIn of nil on org_id: use FieldIsNull or FieldNotNull"},
+		{"eq nil", engine.FieldEQ("note", nil), "", nil, "a comparison of note with nil: use IsNull or NotNull"},
+		{"is null on not null", engine.FieldIsNull("title"), "", nil, "title is not nullable"},
+		{"text on a number", engine.FieldContains("rank", "1"), "", nil, "rank is not a text column"},
+		{"in a group", velox.And(engine.FieldEQ("rank", 1), velox.Or(engine.FieldEQ("title", "a"), engine.FieldEQ("nope", 1))), "", nil, `no column "nope"`},
+		{"not", velox.Not(engine.FieldEQ("visible", true)), `NOT ("visible" = $1)`, []any{true}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sql, args, err := nmSQL(t, cond(tc.c))
@@ -179,7 +179,7 @@ func TestResolveByName(t *testing.T) {
 
 // TestResolveOutOfRangeIs: an out-of-range value matches ErrOutOfRange.
 func TestResolveOutOfRangeIs(t *testing.T) {
-	_, _, err := nmSQL(t, cond(engine.C("rank").EQ(-200)))
+	_, _, err := nmSQL(t, cond(engine.FieldEQ("rank", -200)))
 	if !errors.Is(err, velox.ErrOutOfRange) {
 		t.Fatalf("err %v, want ErrOutOfRange", err)
 	}
@@ -190,10 +190,10 @@ func TestResolveOutOfRangeIs(t *testing.T) {
 func TestResolveRendersAsTyped(t *testing.T) {
 	tbl := velox.TableOf[nmDoc]()
 	pairs := []struct{ named, typed velox.Predicate }{
-		{cond(engine.C("org_id").EQ(int64(3))), tbl.Pred(nmOrgID, velox.PredEQ, int64(3))},
-		{cond(engine.C("title").HasPrefix("x")), tbl.Pred(nmTitle, velox.PredHasPrefix, "x")},
-		{cond(engine.C("note").IsNull()), tbl.Pred(nmNote, velox.PredIsNull, nil)},
-		{cond(engine.C("rank").In(int8(1), int8(2))), tbl.Pred(nmRank, velox.PredIn, []any{int8(1), int8(2)})},
+		{cond(engine.FieldEQ("org_id", int64(3))), tbl.Pred(nmOrgID, velox.PredEQ, int64(3))},
+		{cond(engine.FieldHasPrefix("title", "x")), tbl.Pred(nmTitle, velox.PredHasPrefix, "x")},
+		{cond(engine.FieldIsNull("note")), tbl.Pred(nmNote, velox.PredIsNull, nil)},
+		{cond(engine.FieldIn("rank", int8(1), int8(2))), tbl.Pred(nmRank, velox.PredIn, []any{int8(1), int8(2)})},
 	}
 	db := velox.OpenConn(velox.Postgres, fakeConn(nil))
 	for _, p := range pairs {
@@ -228,7 +228,7 @@ func TestResolveRendersAsTyped(t *testing.T) {
 // linked relation, with its conditions on the target, and fails the
 // statement on a relation that is not linked or not there.
 func TestResolveEdgeNeedsLink(t *testing.T) {
-	sql, args, err := nmSQL(t, cond(engine.Edge("org").HasWhere(engine.C("name").EQ("acme"))))
+	sql, args, err := nmSQL(t, cond(engine.HasEdgeWith("org", engine.FieldEQ("name", "acme"))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,16 +242,16 @@ func TestResolveEdgeNeedsLink(t *testing.T) {
 	if typed != sql {
 		t.Errorf("by name %s, typed %s", sql, typed)
 	}
-	if _, _, err := nmSQL(t, cond(velox.Or(engine.C("visible").EQ(true), engine.Edge("org").Has()))); err != nil {
+	if _, _, err := nmSQL(t, cond(velox.Or(engine.FieldEQ("visible", true), engine.HasEdge("org")))); err != nil {
 		t.Errorf("an Edge in an Or: %v", err)
 	}
 	for _, tc := range []struct {
-		c   engine.Cond
+		c   engine.Predicate
 		err string
 	}{
-		{engine.Edge("peer").Has(), "relation peer's target is not linked: velox-gen links it when the schema names it with velox.Edge"},
-		{engine.Edge("nope").Has(), `no relation "nope"`},
-		{engine.Edge("org").HasWhere(engine.C("title").EQ("x")), `relation org: no column "title"`},
+		{engine.HasEdge("peer"), "relation peer's target is not linked: velox-gen links it when the schema names it with velox.HasEdge or velox.HasEdgeWith"},
+		{engine.HasEdge("nope"), `no relation "nope"`},
+		{engine.HasEdgeWith("org", engine.FieldEQ("title", "x")), `relation org: no column "title"`},
 	} {
 		if _, _, err := nmSQL(t, cond(tc.c)); err == nil || !strings.Contains(err.Error(), tc.err) {
 			t.Errorf("err %v, want %q", err, tc.err)
@@ -262,7 +262,7 @@ func TestResolveEdgeNeedsLink(t *testing.T) {
 // TestZeroCondFails: the zero Cond fails the statement, alone or inside a
 // condition.
 func TestZeroCondFails(t *testing.T) {
-	for _, c := range []engine.Cond{{}, velox.And(engine.C("rank").EQ(1), engine.Cond{}), engine.Edge("org").HasWhere(engine.Cond{})} {
+	for _, c := range []engine.Predicate{{}, velox.And(engine.FieldEQ("rank", 1), engine.Predicate{}), engine.HasEdgeWith("org", engine.Predicate{})} {
 		if _, _, err := nmSQL(t, cond(c)); err == nil {
 			t.Errorf("%v: no error", c)
 		}
@@ -500,18 +500,18 @@ func TestRowsByName(t *testing.T) {
 // TestRewriteByName: a Rewrite hook's conditions by name resolve too, and a
 // wrong one fails the statement.
 func TestRewriteByName(t *testing.T) {
-	add := func(c engine.Cond) velox.Option {
+	add := func(c engine.Predicate) velox.Option {
 		return velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 			st.Where = append(st.Where, cond(c))
 			return nil
 		})
 	}
-	db := velox.OpenConn(velox.Postgres, fakeConn(nil), add(engine.C("title").EQ("x")))
+	db := velox.OpenConn(velox.Postgres, fakeConn(nil), add(engine.FieldEQ("title", "x")))
 	sql, args, err := db.QueryTable(velox.TableOf[nmDoc]()).Limit(1).SQL(ctx)
 	if err != nil || !strings.Contains(sql, `WHERE "title" = $1`) || args[0] != "x" {
 		t.Errorf("%s %v %v", sql, args, err)
 	}
-	db = velox.OpenConn(velox.Postgres, fakeConn(nil), add(engine.C("nope").EQ("x")))
+	db = velox.OpenConn(velox.Postgres, fakeConn(nil), add(engine.FieldEQ("nope", "x")))
 	if _, _, err := db.QueryTable(velox.TableOf[nmDoc]()).Limit(1).SQL(ctx); err == nil || !strings.Contains(err.Error(), `no column "nope"`) {
 		t.Errorf("err %v", err)
 	}
@@ -520,14 +520,14 @@ func TestRewriteByName(t *testing.T) {
 // TestTableHasByName: Table.Has takes conditions by name on its target.
 func TestTableHasByName(t *testing.T) {
 	docs, orgs := velox.TableOf[nmDoc](), velox.TableOf[nmOrg]()
-	sql, args, err := nmSQL(t, docs.Has(0, orgs, cond(engine.C("name").EQ("acme"))))
+	sql, args, err := nmSQL(t, docs.Has(0, orgs, cond(engine.FieldEQ("name", "acme"))))
 	if err != nil || !strings.Contains(sql, `"name" = $1`) || args[0] != "acme" {
 		t.Errorf("%s %v %v", sql, args, err)
 	}
-	if _, _, err := nmSQL(t, docs.Has(0, orgs, cond(engine.C("title").EQ("acme")))); err == nil {
+	if _, _, err := nmSQL(t, docs.Has(0, orgs, cond(engine.FieldEQ("title", "acme")))); err == nil {
 		t.Error("a condition on no column of the target: no error")
 	}
-	if _, _, err := nmSQL(t, docs.Has(5, orgs, cond(engine.C("name").EQ("acme")))); err == nil {
+	if _, _, err := nmSQL(t, docs.Has(5, orgs, cond(engine.FieldEQ("name", "acme")))); err == nil {
 		t.Error("no relation 5: no error")
 	}
 }

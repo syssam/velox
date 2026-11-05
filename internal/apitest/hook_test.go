@@ -11,6 +11,8 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/mixin"
 )
 
 func TestHookOrderAndRows(t *testing.T) {
@@ -142,8 +144,8 @@ func (*hFlex) VeloxMeta() *velox.Meta[hFlex] { return hFlexMeta.Load(hFlexDescri
 
 func hFlexDescriptor() velox.Descriptor[hFlex] {
 	return velox.Descriptor[hFlex]{
-		Hooks: []func() []velox.Hook{(*hFlex)(nil).Hooks},
-		Table: "flex",
+		Schema: (*hFlex)(nil),
+		Table:  "flex",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"},
 			{Field: "Stamp", Name: "stamp", UpdateDefault: func() any { return int64(9) }}},
 		PrimaryKey: []int{0},
@@ -175,7 +177,7 @@ func TestMutationMisuseOnAnInsert(t *testing.T) {
 		if n != 1 {
 			return errors.New("an insert has rows")
 		}
-		m.Where(velox.C("title").EQ("x"))
+		m.Where(velox.FieldEQ("title", "x"))
 		return next.Mutate(ctx, m)
 	}
 	e := &fakeconn.Exec{}
@@ -223,7 +225,7 @@ var hNilMeta velox.MetaOnce[hNil]
 
 func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 	return hNilMeta.Load(func() velox.Descriptor[hNil] {
-		return velox.Descriptor[hNil]{Hooks: []func() []velox.Hook{(*hNil)(nil).Hooks}, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNil]{Schema: (*hNil)(nil), Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNil, i int) any { return &x.ID }}
 	})
 }
@@ -235,9 +237,14 @@ func (*hNilAfter) Hooks() []velox.Hook { return []velox.Hook{nil} }
 
 var hNilAfterMeta velox.MetaOnce[hNilAfter]
 
+// Mixin lists the behaviour that runs before hNilAfter's own.
+func (*hNilAfter) Mixin() []schema.Mixin {
+	return fixture.Fns{Hooks: []func() []velox.Hook{nilAfterMixin}}.Mixin()
+}
+
 func (*hNilAfter) VeloxMeta() *velox.Meta[hNilAfter] {
 	return hNilAfterMeta.Load(func() velox.Descriptor[hNilAfter] {
-		return velox.Descriptor[hNilAfter]{Hooks: []func() []velox.Hook{nilAfterMixin, (*hNilAfter)(nil).Hooks}, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNilAfter]{Schema: (*hNilAfter)(nil), Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNilAfter, i int) any { return &x.ID }}
 	})
 }
@@ -259,7 +266,7 @@ var hPanicMeta velox.MetaOnce[hPanic]
 
 func (*hPanic) VeloxMeta() *velox.Meta[hPanic] {
 	return hPanicMeta.Load(func() velox.Descriptor[hPanic] {
-		return velox.Descriptor[hPanic]{Policy: []func() velox.Policy{(*hPanic)(nil).Policy}, Table: "p", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hPanic]{Schema: (*hPanic)(nil), Table: "p", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hPanic, i int) any { return &x.ID }}
 	})
 }
@@ -425,7 +432,7 @@ func TestValidatorsRunBeforeTheInsertPolicy(t *testing.T) {
 // nil without calling next fails the write, and nothing is sent.
 func TestMisuseWithoutNextIsReported(t *testing.T) {
 	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
-		m.Where(velox.Cond{})
+		m.Where(velox.Predicate{})
 		return nil
 	}
 	e := &fakeconn.Exec{}
@@ -466,7 +473,7 @@ var hNilMutMeta velox.MetaOnce[hNilMut]
 
 func (*hNilMut) VeloxMeta() *velox.Meta[hNilMut] {
 	return hNilMutMeta.Load(func() velox.Descriptor[hNilMut] {
-		return velox.Descriptor[hNilMut]{Hooks: []func() []velox.Hook{(*hNilMut)(nil).Hooks}, Table: "m", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNilMut]{Schema: (*hNilMut)(nil), Table: "m", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNilMut, i int) any { return &x.ID }}
 	})
 }
@@ -483,7 +490,7 @@ var hPanicHooksMeta velox.MetaOnce[hPanicHooks]
 
 func (*hPanicHooks) VeloxMeta() *velox.Meta[hPanicHooks] {
 	return hPanicHooksMeta.Load(func() velox.Descriptor[hPanicHooks] {
-		return velox.Descriptor[hPanicHooks]{Hooks: []func() []velox.Hook{(*hPanicHooks)(nil).Hooks}, Table: "ph", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hPanicHooks]{Schema: (*hPanicHooks)(nil), Table: "ph", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hPanicHooks, i int) any { return &x.ID }}
 	})
 }
@@ -544,19 +551,102 @@ func (*uPlain) VeloxMeta() *velox.Meta[uPlain] {
 	})
 }
 
-// A Policy or Hooks method with the wrong signature needs no test here: the
-// method value velox-gen lists in Descriptor.Policy or
-// Descriptor.Hooks does not compile.
+// wDesc is a Descriptor of table name whose Schema is s.
+func wDesc[E any](name string, s any, ptr func(x *E, i int) any) velox.Descriptor[E] {
+	return velox.Descriptor[E]{Table: name, Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		FieldPtr: ptr, Schema: s}
+}
+
+// wWrongHooks, wWrongInterceptors and wWrongMixin's mixin declare a method
+// of a behaviour's name whose signature velox does not call.
+type wWrongHooks struct{ ID int64 }
+
+func (*wWrongHooks) Hooks() []velox.Hook { return nil }
+
+func (*wWrongHooks) Policy() *velox.Policy { return nil }
+
+var wWrongHooksMeta velox.MetaOnce[wWrongHooks]
+
+func (*wWrongHooks) VeloxMeta() *velox.Meta[wWrongHooks] {
+	return wWrongHooksMeta.Load(func() velox.Descriptor[wWrongHooks] {
+		return wDesc("wh", (*wWrongHooks)(nil), func(x *wWrongHooks, i int) any { return &x.ID })
+	})
+}
+
+type wWrongInterceptors struct{ ID int64 }
+
+func (*wWrongInterceptors) Interceptors() velox.Interceptor { return velox.Interceptor{} }
+
+var wWrongInterceptorsMeta velox.MetaOnce[wWrongInterceptors]
+
+func (*wWrongInterceptors) VeloxMeta() *velox.Meta[wWrongInterceptors] {
+	return wWrongInterceptorsMeta.Load(func() velox.Descriptor[wWrongInterceptors] {
+		return wDesc("wi", (*wWrongInterceptors)(nil), func(x *wWrongInterceptors, i int) any { return &x.ID })
+	})
+}
+
+type wBadMixin struct{ mixin.Schema }
+
+func (wBadMixin) Hooks() velox.Hook { return nil }
+
+type wWrongMixinSchema struct{}
+
+func (wWrongMixinSchema) Mixin() []schema.Mixin { return []schema.Mixin{nil, wBadMixin{}} }
+
+type wWrongMixin struct{ ID int64 }
+
+var wWrongMixinMeta velox.MetaOnce[wWrongMixin]
+
+func (*wWrongMixin) VeloxMeta() *velox.Meta[wWrongMixin] {
+	return wWrongMixinMeta.Load(func() velox.Descriptor[wWrongMixin] {
+		return wDesc("wm", wWrongMixinSchema{}, func(x *wWrongMixin, i int) any { return &x.ID })
+	})
+}
+
+// wNone's Schema declares nothing: a string meant for TableSchema, say.
+type wNone struct{ ID int64 }
+
+var wNoneMeta velox.MetaOnce[wNone]
+
+func (*wNone) VeloxMeta() *velox.Meta[wNone] {
+	return wNoneMeta.Load(func() velox.Descriptor[wNone] {
+		return wDesc("wn", "app", func(x *wNone, i int) any { return &x.ID })
+	})
+}
+
+// A method named Policy, Hooks or Interceptors, on the schema or on a
+// mixin it lists, whose signature velox does not call, is the entity's
+// *SchemaError rather than a policy or hook left out; a nil mixin is
+// skipped. A Schema that declares no behaviour is refused too.
+func TestWrongBehaviourIsRefused(t *testing.T) {
+	var se *velox.SchemaError
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{velox.CheckEntity[wWrongHooks](), "velox: apitest.wWrongHooks: *apitest.wWrongHooks's Policy method is not func() velox.Policy: velox would not call it"},
+		{velox.CheckEntity[wWrongInterceptors](), "velox: apitest.wWrongInterceptors: *apitest.wWrongInterceptors's Interceptors method is not func() []velox.Interceptor: velox would not call it"},
+		{velox.CheckEntity[wWrongMixin](), "velox: apitest.wWrongMixin: *apitest.wBadMixin's Hooks method is not func() []velox.Hook: velox would not call it"},
+		{velox.CheckEntity[wNone](), "velox: apitest.wNone: Descriptor.Schema, a string, and its mixins declare no Policy, Hooks or Interceptors method; a database schema's name is TableSchema"},
+	} {
+		if !errors.As(c.err, &se) || c.err.Error() != c.want {
+			t.Errorf("got %v, want %s", c.err, c.want)
+		}
+	}
+}
+
+// A hand-written entity's method of another signature is refused at its
+// first use (TestWrongBehaviourIsRefused).
 func TestUnboundMethodsAreRefused(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	var se *velox.SchemaError
 	err := db.Insert(&uPolicy{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || err.Error() != "velox: apitest.uPolicy: has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares" {
+	if !errors.As(err, &se) || err.Error() != "velox: apitest.uPolicy: has a Policy method, but the metadata does not bind it: velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)" {
 		t.Fatalf("got %v", err)
 	}
 	err = db.Insert(&uHooks{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || err.Error() != "velox: apitest.uHooks: has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares" {
+	if !errors.As(err, &se) || err.Error() != "velox: apitest.uHooks: has a Hooks method, but the metadata does not bind it: velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)" {
 		t.Fatalf("got %v", err)
 	}
 	if e.Calls != 0 {
@@ -567,8 +657,8 @@ func TestUnboundMethodsAreRefused(t *testing.T) {
 		err  error
 		want string
 	}{
-		{velox.CheckEntity[uPolicy](), "velox: apitest.uPolicy: has a Policy method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"},
-		{velox.CheckEntity[uHooks](), "velox: apitest.uHooks: has a Hooks method, but the generated metadata does not bind it: velox-gen binds the one the schema package declares"},
+		{velox.CheckEntity[uPolicy](), "velox: apitest.uPolicy: has a Policy method, but the metadata does not bind it: velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)"},
+		{velox.CheckEntity[uHooks](), "velox: apitest.uHooks: has a Hooks method, but the metadata does not bind it: velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)"},
 	} {
 		if !errors.As(c.err, &se) || c.err.Error() != c.want {
 			t.Errorf("CheckEntity: got %v, want %s", c.err, c.want)
@@ -593,7 +683,7 @@ var hUps = struct {
 var hUpAffected int64 = -1
 
 func (*hUp) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.C("n").GT(0), nil }}
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldGT("n", 0), nil }}
 }
 
 func (*hUp) Hooks() []velox.Hook {
@@ -611,8 +701,8 @@ var hUpMeta velox.MetaOnce[hUp]
 func (*hUp) VeloxMeta() *velox.Meta[hUp] {
 	return hUpMeta.Load(func() velox.Descriptor[hUp] {
 		return velox.Descriptor[hUp]{
-			Policy: []func() velox.Policy{(*hUp)(nil).Policy}, Hooks: []func() []velox.Hook{(*hUp)(nil).Hooks},
-			Table: "ups", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "N", Name: "n"}}, PrimaryKey: []int{0},
+			Schema: (*hUp)(nil),
+			Table:  "ups", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "N", Name: "n"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hUp, i int) any { return [...]any{&x.ID, &x.N}[i] },
 		}
 	})
@@ -675,7 +765,7 @@ func (*hCond) Hooks() []velox.Hook {
 		func(next velox.Mutator) velox.Mutator {
 			return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 				if m.Op() != velox.OpInsert {
-					m.Where(velox.C("stamp").EQ(2))
+					m.Where(velox.FieldEQ("stamp", 2))
 				}
 				return next.Mutate(ctx, m)
 			})
@@ -694,8 +784,8 @@ var hCondMeta velox.MetaOnce[hCond]
 func (*hCond) VeloxMeta() *velox.Meta[hCond] {
 	return hCondMeta.Load(func() velox.Descriptor[hCond] {
 		return velox.Descriptor[hCond]{
-			Hooks: []func() []velox.Hook{(*hCond)(nil).Hooks},
-			Table: "conds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Stamp", Name: "stamp"}},
+			Schema: (*hCond)(nil),
+			Table:  "conds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Stamp", Name: "stamp"}},
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *hCond, i int) any { return [...]any{&x.ID, &x.Stamp}[i] },
 		}
@@ -705,16 +795,16 @@ func (*hCond) VeloxMeta() *velox.Meta[hCond] {
 // TestConds: Conds is the caller's Where and the earlier hooks' conditions,
 // in order, as a copy; nil for an insert.
 func TestConds(t *testing.T) {
-	want := []velox.Cond{velox.Cond(hcID.EQ(1)), velox.Cond(hcStamp.GT(0)), velox.C("stamp").EQ(2)}
-	var got, again []velox.Cond
+	want := []velox.Predicate{velox.Predicate(hcID.EQ(1)), velox.Predicate(hcStamp.GT(0)), velox.FieldEQ("stamp", 2)}
+	var got, again []velox.Predicate
 	condsHook = func(m *velox.Mutation) {
-		got = m.Conds()
+		got = m.Predicates()
 		if len(got) > 0 {
-			cs := m.Conds()
-			cs[0] = velox.C("id").EQ(9)
-			_ = append(cs[:1], velox.C("id").EQ(8))
-			_ = append(cs, velox.C("id").EQ(7))
-			again = m.Conds()
+			cs := m.Predicates()
+			cs[0] = velox.FieldEQ("id", 9)
+			_ = append(cs[:1], velox.FieldEQ("id", 8))
+			_ = append(cs, velox.FieldEQ("id", 7))
+			again = m.Predicates()
 		}
 	}
 	e := &fakeconn.Exec{Affected: 1}
@@ -735,7 +825,7 @@ func TestConds(t *testing.T) {
 	if _, err := db.Delete[hCond]().All().Exec(ctx); err != nil || !reflect.DeepEqual(got, want[2:]) {
 		t.Errorf("on a delete of All: %v, Conds %v", err, got)
 	}
-	got = []velox.Cond{}
+	got = []velox.Predicate{}
 	if err := db.Insert(&hCond{ID: 1}).Exec(ctx); err != nil || got != nil {
 		t.Errorf("on an insert: %v, Conds %v", err, got)
 	}
@@ -756,12 +846,12 @@ var hSofts = struct {
 }{velox.NumberCol[hSoft, int64]{I: 0}, velox.NumberCol[hSoft, int64]{I: 1}, velox.Col[hSoft, bool]{I: 2}}
 
 func (*hSoft) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.C("id").GT(0), nil }}
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldGT("id", 0), nil }}
 }
 
 type noCount struct{}
 
-var softConds []velox.Cond
+var softConds []velox.Predicate
 
 func (*hSoft) Hooks() []velox.Hook {
 	return []velox.Hook{
@@ -774,8 +864,8 @@ func (*hSoft) Hooks() []velox.Hook {
 					return err
 				}
 				q := m.DB().UpdateTable(t).Assign(set)
-				if cs := m.Conds(); len(cs) > 0 {
-					q = q.Where(velox.Predicates(cs)...)
+				if cs := m.Predicates(); len(cs) > 0 {
+					q = q.Where(cs...)
 				} else {
 					q = q.All()
 				}
@@ -789,7 +879,7 @@ func (*hSoft) Hooks() []velox.Hook {
 		velox.On(func(next velox.Mutator) velox.Mutator {
 			return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 				err := next.Mutate(ctx, m)
-				softConds = m.Conds()
+				softConds = m.Predicates()
 				return err
 			})
 		}, velox.OpUpdate),
@@ -798,11 +888,15 @@ func (*hSoft) Hooks() []velox.Hook {
 
 var hSoftMeta velox.MetaOnce[hSoft]
 
+// Mixin lists the behaviour that runs before hSoft's own.
+func (*hSoft) Mixin() []schema.Mixin {
+	return fixture.Fns{Policy: []func() velox.Policy{fixture.OrgPolicy}}.Mixin()
+}
+
 func (*hSoft) VeloxMeta() *velox.Meta[hSoft] {
 	return hSoftMeta.Load(func() velox.Descriptor[hSoft] {
 		return velox.Descriptor[hSoft]{
-			Policy: []func() velox.Policy{fixture.OrgPolicy, (*hSoft)(nil).Policy},
-			Hooks:  []func() []velox.Hook{(*hSoft)(nil).Hooks},
+			Schema: (*hSoft)(nil),
 			Table:  "softs",
 			Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 				{Field: "Deleted", Name: "deleted"}},
@@ -830,7 +924,7 @@ func TestSoftDeleteThroughConds(t *testing.T) {
 		t.Errorf("SQL %s %v, want %s", e.SQL, e.Args, one)
 	}
 	// The update's hook, after next, saw the delete's conditions only.
-	if want := []velox.Cond{velox.Cond(hSofts.ID.EQ(1))}; !reflect.DeepEqual(softConds, want) {
+	if want := []velox.Predicate{velox.Predicate(hSofts.ID.EQ(1))}; !reflect.DeepEqual(softConds, want) {
 		t.Errorf("Conds after next %v, want %v", softConds, want)
 	}
 	n, err = db.Delete[hSoft]().All().Exec(tctx)
@@ -868,7 +962,7 @@ func TestCondsAfterNext(t *testing.T) {
 	if _, err := db.Update[hSoft]().Set(hSofts.Deleted.Set(true)).Where(hSofts.ID.EQ(1), hSofts.ID.LT(9)).Exec(testmodel.Org.With(context.Background(), int64(7))); err != nil {
 		t.Fatal(err)
 	}
-	if want := []velox.Cond{velox.Cond(hSofts.ID.EQ(1)), velox.Cond(hSofts.ID.LT(9))}; !reflect.DeepEqual(softConds, want) {
+	if want := []velox.Predicate{velox.Predicate(hSofts.ID.EQ(1)), velox.Predicate(hSofts.ID.LT(9))}; !reflect.DeepEqual(softConds, want) {
 		t.Errorf("Conds after next %v, want %v", softConds, want)
 	}
 	if !strings.Contains(e.SQL, `"org_id" = `) || !strings.Contains(e.SQL, `"id" > `) || strings.Count(e.SQL, `"deleted" = `) != 2 {

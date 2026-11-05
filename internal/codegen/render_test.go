@@ -23,7 +23,7 @@ var goldenCases = []struct {
 }{
 	{"minimal", Config{Package: "gen"}},
 	{"blog", Config{Package: "gen", GenPath: "example.com/blog/gen", Bound: map[string]Bound{
-		"Post": {Policy: true, Interceptors: true}, "Category": {Interceptors: true, InterceptorsPtr: true},
+		"Post": {Policy: true, Interceptors: true}, "Category": {Interceptors: true},
 	}}},
 	{"scoped", Config{Package: "gen", GenPath: "example.com/scoped/gen", Bound: map[string]Bound{
 		"Task": {Policy: true, Hooks: true}, "Memo": {Policy: true}, "Tag": {Hooks: true},
@@ -333,12 +333,12 @@ func TestRenderPackageDoc(t *testing.T) {
 	}
 }
 
-// TestRenderBindsMethodValues: an entity's descriptor lists the method
-// values of its policies and hooks, its mixins' before its own, each list
-// on one line, whether the schema declares its own or only the mixin does.
-// velox composes them. No scope_velox.go is written. The scoped golden
-// schema has each combination.
-func TestRenderBindsMethodValues(t *testing.T) {
+// TestRenderNamesSchema: an entity's descriptor names its schema value,
+// Schema: schema.E{}, once, when the schema or a mixin it lists declares
+// behaviour, and lists no methods: velox reads them from the value. No
+// scope_velox.go is written. The scoped golden schema has each
+// combination.
+func TestRenderNamesSchema(t *testing.T) {
 	files, err := goldenGenerate(t, "scoped", goldenCases[2].cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -349,34 +349,23 @@ func TestRenderBindsMethodValues(t *testing.T) {
 		}
 	}
 	for _, c := range []struct {
-		file, entity, mixin string
-		policy, hook        bool // the schema's own
+		file, entity string
+		named        bool // the schema or a mixin it lists declares behaviour
 	}{
-		{"note_velox.go", "Note", "InOrg", false, false},
-		{"task_velox.go", "Task", "InOrg", true, true},
-		{"memo_velox.go", "Memo", "InOrg", true, false},
-		{"tag_velox.go", "Tag", "InOrg", false, true},
-		{"home_velox.go", "Home", "InRegion", false, false},
-		{"owner_velox.go", "Owner", "", false, false},
+		{"note_velox.go", "Note", true},
+		{"task_velox.go", "Task", true},
+		{"memo_velox.go", "Memo", true},
+		{"tag_velox.go", "Tag", true},
+		{"home_velox.go", "Home", true},
+		{"owner_velox.go", "Owner", false},
 	} {
 		got := squeeze(string(fileNamed(t, files, c.file)))
-		scoped := c.mixin != ""
-		for _, l := range []struct {
-			field, typ string
-			own        bool
-		}{{"Policy", "velox.Policy", c.policy}, {"Hooks", "[]velox.Hook", c.hook}} {
-			want := scoped || l.own
-			bind := "sch." + c.mixin + "{}." + l.field
-			if l.own {
-				bind += ", sch." + c.entity + "{}." + l.field
-			}
-			line := "\t\t" + l.field + ": []func() " + l.typ + "{" + bind + "},\n"
-			if strings.Contains(got, line) != want {
-				t.Errorf("%s: the line %q is there: %v, want %v", c.file, line, !want, want)
-			}
-			if n := strings.Count(got, "\t\t"+l.field+":"); n > 1 || (n == 1) != want {
-				t.Errorf("%s names %s %d times", c.file, l.field, n)
-			}
+		line := "\t\tSchema: schema." + c.entity + "{},\n"
+		if strings.Contains(got, line) != c.named || strings.Count(got, "Schema:") > 1 {
+			t.Errorf("%s: the line %q is there: %v, want %v", c.file, line, !c.named, c.named)
+		}
+		if strings.Contains(got, "\t\tPolicy:") || strings.Contains(got, "\t\tHooks:") {
+			t.Errorf("%s lists methods:\n%s", c.file, got)
 		}
 		if strings.Contains(got, "Scope") || strings.Contains(got, "Bind") || strings.Contains(got, ".Fill(") {
 			t.Errorf("%s names a scope or composes the policy or hooks itself:\n%s", c.file, got)
