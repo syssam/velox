@@ -218,34 +218,15 @@ func NilBinding(field string, i int) string {
 	return fmt.Sprintf("Descriptor.%s[%d] is nil", field, i)
 }
 
-// recovered calls f, recovering a panic as the entity's *SchemaError. A
-// NotLinkedError's is held in an unlinkedError, which Unlinked unwraps, so
-// that the build is retried.
+// recovered calls f, recovering a panic as the entity's *SchemaError.
 func recovered(entity, what string, f func()) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			err = &SchemaError{Entity: entity, Reason: fmt.Sprintf("%s panicked: %v; it is called on a nil receiver", what, p)}
-			if _, ok := p.(NotLinkedError); ok {
-				err = unlinkedError{err.(*SchemaError)}
-			}
 		}
 	}()
 	f()
 	return nil
-}
-
-// unlinkedError is the *SchemaError of a binding that panicked with a
-// NotLinkedError: one that found another entity's columns by name before
-// that entity's package had run its init.
-type unlinkedError struct{ *SchemaError }
-
-// Unlinked reports whether err is a binding's failure that a NotLinkedError
-// caused, which Load does not keep, and returns err unwrapped.
-func Unlinked(err error) (bool, error) {
-	if u, ok := err.(unlinkedError); ok {
-		return true, u.SchemaError
-	}
-	return false, err
 }
 
 // Mutate runs in's hooks around core, which runs on db: the hooks reach it

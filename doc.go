@@ -276,7 +276,7 @@
 //
 // velox-gen and its plugins write code that uses part of this package, and
 // nothing else should: Descriptor, ColumnDescriptor, EdgeDescriptor, EdgeTo, EdgeBidi,
-// EdgeThrough, Linked, Meta, MetaOnce, NotLinkedError, Show, Lazy, Validate,
+// EdgeThrough, Linked, Meta, MetaOnce, Show, Lazy, Validate,
 // ValidateSet, the untyped surface (Table, TableOf,
 // TableRows, RowsOf, PredOp and its operators PredEQ, PredNEQ, PredIn,
 // PredNotIn, PredGT, PredGTE, PredLT, PredLTE, PredContains, PredHasPrefix,

@@ -54,9 +54,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   first use. velox records E's columns before it calls those functions, so a call from
   one does not wait on the build in progress. A `Named` is a `Column[E]`, and has `EQ`,
   `NEQ`, `In`, `IsNull`, `NotNull`, `Set`, `Ptr`, `Immutable` and `Nullable`; for a
-  pointer V, `EQ(nil)` is IS NULL and `Set(nil)` sets NULL. A Policy, Hooks or
-  Interceptors function that panics with `NotLinkedError` is retried at the next use, as
-  a descriptor that panics with one is.
+  pointer V, `EQ(nil)` is IS NULL and `Set(nil)` sets NULL.
 - `velox.Interceptor[E]`, a row filter an entity declares with an `Interceptors()` method
   on its schema, which velox-gen binds. Its `Filter`'s condition is ANDed into every
   SELECT, Count, aggregate, With load, EXISTS, join ON, UPDATE, DELETE, Save and upsert
@@ -481,6 +479,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Removed
 
+- `velox.NotLinkedError` and `MetaOnce`'s retry of a build that panicked with one: no
+  package binds gen late (ADR 0039). A failed build is the entity's error on every use.
 - `Descriptor.Name`: an entity's name in errors is its Go type, `gen.User`, as no alias
   stands between them now (decision 0037).
 - `graphql.MutationDelete` and the generated `deleteX` mutation and `gen.Delete<T>`

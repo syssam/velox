@@ -83,7 +83,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 // word. A name that lives in veloxtype says it in both packages' documentation.
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	t.Parallel()
-	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce", "NotLinkedError", "Show",
+	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce", "Show",
 		"Linked", "Lazy", "Validate", "ValidateSet",
 		"Table", "TableOf", "TableRows", "RowsOf", "PredOp", "TableQuery", "Untyped", "Typed", "AndPredicates", "OrPredicates", "NotPredicate", "TableInsert", "TableUpdate", "TableDelete", "Assignments", "GeneratedCodeIsVersion16",
 		"PredEQ", "PredNEQ", "PredIn", "PredNotIn", "PredGT", "PredGTE", "PredLT", "PredLTE", "PredContains", "PredHasPrefix", "PredHasSuffix", "PredIsNull", "PredNotNull"}

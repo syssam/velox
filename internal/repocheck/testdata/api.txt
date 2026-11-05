@@ -50,8 +50,6 @@ Named.NotIn(vs ...any) Cond
 Named.NotNull() Cond
 NamedEdge.Has() Cond
 NamedEdge.HasWhere(cs ...Cond) Cond
-NotLinkedError is string
-NotLinkedError.Error() string
 Policy.Insert func(ctx context.Context, r Row) error
 Policy.Read func(ctx context.Context) (Cond, error)
 Policy.Write func(ctx context.Context) (Cond, error)
@@ -545,7 +543,6 @@ type Mutation struct { }
 type Mutator interface { Mutate(ctx context.Context, m *Mutation) error }
 type Named = engine.Named
 type NamedEdge = engine.NamedEdge
-type NotLinkedError = engine.NotLinkedError
 type NullCol[E, V any] struct { I int32 }
 type NullJSONCol[E, V any] struct { I int32 }
 type NullNumberCol[E, V any] struct { I int32 }

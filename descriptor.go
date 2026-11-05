@@ -90,17 +90,18 @@ type Descriptor[E any] struct {
 // build, which uses reflect, is BuildDescriptor's, and the binding of Policy,
 // Hooks and Interceptors is not generic, so that Load, compiled in every
 // entity's package, holds no reflect.Type and instantiates nothing for an
-// entity that has no policy, hook or interceptor.
+// entity that has no policy, hook or interceptor. A build that fails is
+// kept, as one that succeeds is.
 //
-// A build that panics with a NotLinkedError is returned and not kept, so that an
-// entity used before its generated package's init works once the init has
-// run.
+// Load is not inlined: inlined into each entity's VeloxMeta, with its
+// closure, it took gen of 100 entities from 24.5 to 25.8 MB (ADR 0039).
+//
+//go:noinline
 func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] {
-	var m *Meta[E]
-	o.once.Do(func() bool {
+	o.once.Do(func() {
 		x := new(E)
 		var d Descriptor[E]
-		info, retry, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
+		info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
 			d = descriptor()
 			v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
 				Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
@@ -120,21 +121,14 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 		if err != nil {
 			info, addr = nil, nil // an error Meta has no scan plan
 		}
-		m = &Meta[E]{info: info, addr: addr, err: err}
-		if retry {
-			return false
-		}
+		m := &Meta[E]{info: info, addr: addr, err: err}
 		if info != nil {
 			m.nilCols = engine.NilColumns(info)
 			engine.SetInfoKit(info, kitOf(info, addr))
 			engine.SetInfoCheck(info, d.Check)
 		}
 		o.m = m
-		return true
 	})
-	if m != nil {
-		return m
-	}
 	return o.m
 }
 

@@ -2,6 +2,7 @@ package velox
 
 import (
 	"fmt"
+	"sync"
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
@@ -20,18 +21,11 @@ type Meta[E any] struct {
 
 // MetaOnce builds an entity's Meta on first use. For generated code. Its zero
 // value is ready, so a generated file declares one without running anything at
-// program start. A build that fails with a NotLinkedError panic is not kept: the
-// next use builds the Meta again.
+// program start. A build that fails is kept, as one that succeeds is.
 type MetaOnce[E any] struct {
-	once engine.Once
+	once sync.Once
 	m    *Meta[E]
 }
-
-// NotLinkedError is what generated code panics with when an entity is used before
-// the package that binds its schema has run its init. For generated code. The
-// entity's Meta holds the error, and MetaOnce does not keep it: the entity
-// works once that init has run. Its Error returns the message.
-type NotLinkedError = engine.NotLinkedError
 
 // Show is what an entity's String prints for p, a field that is a pointer:
 // the value it points to, or nil. For generated code.

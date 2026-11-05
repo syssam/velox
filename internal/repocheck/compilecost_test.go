@@ -266,7 +266,15 @@ var genericObjects = []struct {
 	// 88788 bytes over entityDescUse, down from 287980: entityDescHooks took
 	// 861366 bytes, down from 1055932, and entityDescMixin, whose mixin's methods
 	// are no longer generic, 871618, down from 1130512.
-	{"entityDescriptor", "", entityDescSrc, 288768}, // measured 284684
+	//
+	// MetaOnce.Load no longer retries a build that panics with a
+	// NotLinkedError (ADR 0039), and is not inlined: entityDescriptor took
+	// 282970 bytes, entityDescUse 770188, entityDescHooks 858964 and
+	// entityDescMixin 869212, each about 2.3 KB less. Inlined, Load took
+	// entityDescriptor to 143080 bytes but gen of 100 entities with a Policy
+	// each from 24.5 to 25.8 MB, as its closure was compiled into every
+	// entity's VeloxMeta.
+	{"entityDescriptor", "", entityDescSrc, 286720}, // measured 282970
 	//
 	// Sum, Avg, Min and Max stay functions: a method of Query whose signature names
 	// NumberCol[E, V] puts that in the export data of every package that uses a
@@ -282,8 +290,7 @@ var genericObjects = []struct {
 	// Each field of Descriptor costs an entity's package about 0.9 KB, in
 	// type descriptors and relocations: the lists of Policy and Hooks and the
 	// field Interceptors (GeneratedCodeIsVersion13) took entityDescUse from
-	// 766634 to 770270 bytes. Load's retry of a binding that panics with a
-	// NotLinkedError took it to 770548.
+	// 766634 to 770270 bytes.
 	//
 	// BindPolicy, BindHooks and BindInterceptors bind a list of functions
 	// (GeneratedCodeIsVersion14): each instance holds a loop and a closure,
@@ -297,11 +304,11 @@ var genericObjects = []struct {
 	// took entityDescriptor from 142268 to 141368 bytes, entityDescUse from
 	// 770560 to 769648, entityDescHooks from 1058404 to 1057508 and
 	// entityDescMixin from 1132944 to 1132078; the bounds were lowered.
-	{"entityDescUse", "", entityDescUseSrc, 782336},       // measured 772578
-	{"entityDescHooks", "", entityDescHooksBound, 872448}, // measured 861366
+	{"entityDescUse", "", entityDescUseSrc, 780288},       // measured 770188
+	{"entityDescHooks", "", entityDescHooksBound, 869376}, // measured 858964
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's:
-	// 10252 bytes more than an entity's own methods, for the mixin's type.
-	{"entityDescMixin", "", entityDescMixinSrc, 882688}, // measured 871618
+	// 10248 bytes more than an entity's own methods, for the mixin's type.
+	{"entityDescMixin", "", entityDescMixinSrc, 880640}, // measured 869212
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
@@ -309,7 +316,7 @@ var genericObjects = []struct {
 // about 1.2%, rounded up to the next KiB. velox instantiates no generic for
 // them; the cost is the methods' bodies and closures, and the export data of
 // the types they mention.
-const policyGrowthMax = 90112 // measured 88788
+const policyGrowthMax = 90112 // measured 88776
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package

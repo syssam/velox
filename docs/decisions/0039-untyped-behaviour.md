@@ -70,8 +70,9 @@ ent's `ent.Policy`, `ent.Hook` and generic `ent.Mutation` do.
   immutable, NOT NULL and of the key's type.
 - Removed: `Policy[E]`, `Hook[E]`, `Mutator[E]`, `MutateFunc[E]`,
   `Mutation[E]`, `Interceptor[E]`, `Named[E, V]`, `velox.Field`, `Bind*`,
-  `Bound*`, `Allow[E]` and the handles' `ValueIn`. `NotLinkedError` and
-  MetaOnce's retry go in Phase 4 of the spec.
+  `Bound*`, `Allow[E]` and the handles' `ValueIn`; then `NotLinkedError`,
+  MetaOnce's retry of a build that panicked with one, and the loader's
+  prune overlay and `listCycle`. A failed build is kept, as any other.
 - `GeneratedCodeIsVersion16`.
 
 ## Consequences
@@ -83,12 +84,14 @@ ent's `ent.Policy`, `ent.Hook` and generic `ent.Mutation` do.
   constant ones; the statement checks every name when it runs.
 - Typed handles (`gen.Issues.AuthorID.EQ`) stay for application code.
 - Compile cost (`TestGenericTypesCompileSmall`, darwin/arm64): a Policy and
-  three hooks add 88788 bytes to an entity's package, down from 287980;
-  entityDescHooks is 861366 bytes, down from 1055932, and entityDescMixin
-  871618, down from 1130512. The Descriptor's fields name `velox.Hook`,
+  three hooks add 88776 bytes to an entity's package, down from 287980;
+  entityDescHooks is 858964 bytes, down from 1055932, and entityDescMixin
+  869212, down from 1130512. The Descriptor's fields name `velox.Hook`,
   whose `Mutation.DB` names `*DB`, so the export data of an entity package
-  that used no DB grows: entityDescriptor is 284684 bytes, up from 143458.
-  A package that uses a DB already pays it: entityDescUse grew 0.6%.
+  that used no DB grows: entityDescriptor is 282970 bytes, up from 143458.
+  A package that uses a DB already pays it: entityDescUse grew 0.3%. At
+  N=100 with a Policy per entity, the build loses a package and 42% of
+  its archive bytes and 30% of its CPU (Review).
 - Run time: a by-name policy resolves its names against the entity's index
   when the statement is prepared. BenchmarkPolicyByName and
   BenchmarkPolicyByIndex (`internal/engine`, SQLite in memory) allocate the
@@ -111,3 +114,36 @@ ent's `ent.Policy`, `ent.Hook` and generic `ent.Mutation` do.
   `TestSweepRemovesGenRuntime`, `TestGenerateRefusesSchemaImportingGen`,
   `TestGenerateRefusesWrongColumns` (golden `testdata/wrongcolumn`).
 - The examples, regenerated, with no gen/runtime.
+- Phase 4: `TestMetaOnceKeepsFailure`, `TestMarshalLeavesOwnBehaviour`,
+  `TestBehaviourRefusesSchemaImportingGen`'s `cycle`, and
+  `TestGenerateNamesTheChainOfACycle`, which passes without `listCycle`.
+
+## Review
+
+2026-11-05: 0037's Review variant, bench/scale's shape at N=100 with a
+`Policy` per entity, building `./gen/...` and `./schema` cold with every
+dependency cached (darwin/arm64, three runs each, back to back, each tree
+at a path of the same length):
+
+| tree | packages | lines in gen | user CPU | max RSS | archives |
+| --- | --- | --- | --- | --- | --- |
+| d5ac7a1b, typed, gen/runtime | gen, gen/runtime, schema | 13457 | 5.03 to 5.12 s | 260 to 285 MB | 50.69 MB |
+| 7eac9b9d, untyped (Phase 3) | gen, schema | 13084 | 3.05 to 3.52 s | 270 to 288 MB | 29.68 MB |
+| Phase 4 | gen, schema | 13084 | 3.43 to 3.58 s | 267 to 276 MB | 29.44 MB |
+
+The archives are gen 24375300, gen/runtime 10465702 and schema 15846552
+bytes typed; gen 24699782 and schema 4980680 at Phase 3; gen 24463186 and
+schema 4980680 at Phase 4. The schema package loses its `Policy[gen.X]`
+instances, 69% of its bytes. gen grows 0.4% from typed to Phase 4: each
+descriptor lists method values in place of `rt.XPolicy`. Wall time fell
+from 1.8 s to 1.2 s: the critical path is schema → gen, not
+gen → schema → gen/runtime.
+
+`MetaOnce.Load` is `//go:noinline`. Without the retry, Load became
+inlinable, and inlined with its closure into each entity's `VeloxMeta` it
+took gen to 25806666 bytes and 3.6 to 3.9 s of CPU. Not inlined, gen is
+1% smaller than at Phase 3. `TestGenericTypesCompileSmall` in one
+worktree, Phase 4 against Phase 3's bounds: entityDescriptor 282970
+bytes, entityDescUse 770188, entityDescHooks 858964, entityDescMixin
+869212, policy and hooks 88776. The entity rows' bounds are each
+measurement plus 1.2%, rounded up to the next KiB.
