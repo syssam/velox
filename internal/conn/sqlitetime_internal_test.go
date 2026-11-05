@@ -1,6 +1,7 @@
 package conn
 
 import (
+	"context"
 	"database/sql"
 	"reflect"
 	"strings"
@@ -193,5 +194,59 @@ func BenchmarkSQLiteTimeScan(b *testing.B) {
 		if err := s.Scan(src); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// oneRows is an Executor whose every query returns rows.
+type oneRows struct {
+	Executor
+	rows Rows
+}
+
+func (e oneRows) Query(context.Context, string, []any) (Rows, error) { return e.rows, nil }
+
+type closingRows struct {
+	textRows
+	closed int
+}
+
+func (r *closingRows) Close() { r.closed++ }
+
+// TestSQLiteQueryReusesItsSlots: a query of times, past the first, allocates
+// only its sqliteRows: Close hands its slots to the next query. A second
+// Close changes nothing.
+func TestSQLiteQueryReusesItsSlots(t *testing.T) {
+	rows := &closingRows{}
+	rows.vals = []any{"2026-11-01 12:34:56.000000007+00:00", nil}
+	ex := SQLiteTimes(oneRows{rows: rows})
+	var (
+		a time.Time
+		b = new(time.Time)
+	)
+	dst := []any{&a, &b}
+	query := func() {
+		r, err := ex.Query(context.Background(), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := r.Scan(dst...); err != nil {
+			t.Fatal(err)
+		}
+		r.Close()
+	}
+	query()
+	if n := testing.AllocsPerRun(100, query); n > 1 {
+		t.Errorf("a query allocates %v times, want 1", n)
+	}
+	r, _ := ex.Query(context.Background(), "", nil)
+	_ = r.Scan(dst...)
+	before := rows.closed
+	r.Close()
+	r.Close()
+	if rows.closed != before+2 {
+		t.Errorf("Close reached the driver's rows %d times, want 2", rows.closed-before)
+	}
+	if want := time.Date(2026, 11, 1, 12, 34, 56, 7, time.UTC); a != want || b != nil {
+		t.Errorf("scanned %v, %v; want %v, nil", a, b, want)
 	}
 }

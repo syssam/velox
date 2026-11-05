@@ -36,10 +36,13 @@ func (e sqliteTimes) Query(ctx context.Context, s string, args []any) (Rows, err
 // datetime(9), which the driver hands over as the text the column holds, and
 // SQLite gives a computed column, such as MAX(created_at), no declared type at
 // all. Scan parses that text for each destination that holds a time. Its slots
-// and args are made at the first row that needs them and reused after, so a
-// row allocates nothing of its own.
+// and args come at the first row that needs them, from those an earlier
+// query closed, and serve every row after, so a row allocates nothing of its
+// own. Close hands them on; the sqliteRows itself stays, as Err is read after
+// Close.
 type sqliteRows struct {
 	Rows
+	buf   *sqliteBuf
 	slots []sqliteSlot
 	args  []any
 	// declTimes says, by column, whether its declared type is a time that the
@@ -54,6 +57,36 @@ type sqliteSlot struct {
 	typ reflect.Type
 	how scanHow
 	ts  sqliteTime
+}
+
+// sqliteBuf holds the slots and args of a closed sqliteRows for the next.
+type sqliteBuf struct {
+	slots []sqliteSlot
+	args  []any
+}
+
+// sqliteBufs keeps closed queries' slots and args. A buffer past
+// maxPooledColumns is dropped rather than kept.
+var sqliteBufs = sync.Pool{New: func() any { return new(sqliteBuf) }}
+
+const maxPooledColumns = 64
+
+// Close closes the driver's rows and hands the slots and args on, cleared
+// so that they hold no destination. A second Close hands nothing on.
+func (r *sqliteRows) Close() {
+	r.Rows.Close()
+	b := r.buf
+	if b == nil {
+		return
+	}
+	r.buf = nil
+	if cap(r.slots) <= maxPooledColumns {
+		clear(r.slots[:cap(r.slots)])
+		clear(r.args[:cap(r.args)])
+		b.slots, b.args = r.slots[:0], r.args[:0]
+		sqliteBufs.Put(b)
+	}
+	r.slots, r.args = nil, nil
 }
 
 // scanHow is how sqliteRows reads a column into a destination.
@@ -89,8 +122,7 @@ func (r *sqliteRows) Scan(dst ...any) error {
 		return r.Rows.Scan(dst...)
 	}
 	if len(r.slots) != len(dst) {
-		r.slots = make([]sqliteSlot, len(dst))
-		r.args = make([]any, len(dst))
+		r.grow(len(dst))
 	}
 	for i, d := range dst {
 		s := &r.slots[i]
@@ -109,6 +141,23 @@ func (r *sqliteRows) Scan(dst ...any) error {
 		r.args[i] = &s.ts
 	}
 	return r.Rows.Scan(r.args...)
+}
+
+// grow gives r n cleared slots and args, from the pool's buffer when it
+// holds enough.
+func (r *sqliteRows) grow(n int) {
+	if r.buf == nil {
+		r.buf = sqliteBufs.Get().(*sqliteBuf)
+		r.slots, r.args = r.buf.slots, r.buf.args
+		r.buf.slots, r.buf.args = nil, nil
+	}
+	if cap(r.slots) < n {
+		r.slots, r.args = make([]sqliteSlot, n), make([]any, n)
+		return
+	}
+	r.slots, r.args = r.slots[:n], r.args[:n]
+	clear(r.slots)
+	clear(r.args)
 }
 
 // takesTime reports whether a destination of dst may take a time.
