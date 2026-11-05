@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,16 +29,50 @@ func (e sqliteTimes) Query(ctx context.Context, s string, args []any) (Rows, err
 	if err != nil {
 		return nil, err
 	}
-	return sqliteRows{r}, nil
+	return &sqliteRows{Rows: r}, nil
 }
 
-// sqliteRows reads a time from text. SQLite gives a computed column, such as
-// MAX(created_at), no declared type, so the driver hands over the text that
-// database/sql cannot scan into a time.
-type sqliteRows struct{ Rows }
+// sqliteRows read times from SQLite's text. velox declares a time column
+// datetime(9), which the driver hands over as the text the column holds, and
+// SQLite gives a computed column, such as MAX(created_at), no declared type at
+// all. Scan parses that text for each destination that holds a time. Its slots
+// and args are made at the first row that needs them and reused after, so a
+// row allocates nothing of its own.
+type sqliteRows struct {
+	Rows
+	slots []sqliteSlot
+	args  []any
+	// declTimes says, by column, whether its declared type is a time that the
+	// driver hands over as text. It is read once, when a slot first needs it.
+	declTimes []bool
+	declRead  bool
+}
+
+// sqliteSlot is one column of a sqliteRows: the destination type its last
+// scan was given, how Scan reads into it, and the scanner it hands the driver.
+type sqliteSlot struct {
+	typ reflect.Type
+	how scanHow
+	ts  sqliteTime
+}
+
+// scanHow is how sqliteRows reads a column into a destination.
+type scanHow uint8
+
+const (
+	// scanAsIs hands the destination to the driver.
+	scanAsIs scanHow = iota
+	// scanTime reads through sqliteTime, whatever the column: the
+	// destination holds a time.
+	scanTime
+	// scanByDecl reads through sqliteTime when the column's declared type is
+	// a time, and as it is otherwise: the destination may take a time, as a
+	// sql.Scanner or an *any does, but its type does not say.
+	scanByDecl
+)
 
 // Columns returns the names of the columns, as Raw reads them.
-func (r sqliteRows) Columns() ([]string, error) {
+func (r *sqliteRows) Columns() ([]string, error) {
 	c, ok := r.Rows.(interface{ Columns() ([]string, error) })
 	if !ok {
 		return nil, fmt.Errorf("the driver's rows (%T) do not name their columns", r.Rows)
@@ -45,66 +80,200 @@ func (r sqliteRows) Columns() ([]string, error) {
 	return c.Columns()
 }
 
-// Scan scans as the driver does. Only after that fails does it look for time
-// destinations, which it tries again through sqliteTime: a row of columns with
-// declared types costs nothing. The first error stays the one returned.
-func (r sqliteRows) Scan(dst ...any) error {
-	err := r.Rows.Scan(dst...)
-	if err == nil {
-		return nil
+// Scan scans the row into dst as the driver does, but for a destination that
+// takes a time, whose column's text it parses. A row of no such destination
+// goes to the driver as it is. It never writes to dst itself: a nil pointer
+// goes to the driver, which rejects it with its own error.
+func (r *sqliteRows) Scan(dst ...any) error {
+	if r.slots == nil && !takesTime(dst) {
+		return r.Rows.Scan(dst...)
 	}
-	var again []any
+	if len(r.slots) != len(dst) {
+		r.slots = make([]sqliteSlot, len(dst))
+		r.args = make([]any, len(dst))
+	}
 	for i, d := range dst {
-		switch d.(type) {
-		case *time.Time, **time.Time:
-			if again == nil {
-				again = slices.Clone(dst)
-			}
-			again[i] = sqliteTime{d}
+		s := &r.slots[i]
+		if t := reflect.TypeOf(d); t != s.typ {
+			s.typ, s.how = t, sqliteScanHow(t)
 		}
+		how := s.how
+		if how == scanByDecl && !r.declTime(i) {
+			how = scanAsIs
+		}
+		if how == scanAsIs || reflect.ValueOf(d).IsNil() {
+			r.args[i] = d
+			continue
+		}
+		s.ts.dst = d
+		r.args[i] = &s.ts
 	}
-	if again == nil || r.Rows.Scan(again...) != nil {
-		return err
-	}
-	return nil
+	return r.Rows.Scan(r.args...)
 }
 
-// sqliteTime scans into dst, a *time.Time or a **time.Time, the time SQLite's
-// text holds, as well as what the driver would hand over for a time column.
+// takesTime reports whether a destination of dst may take a time.
+func takesTime(dst []any) bool {
+	for _, d := range dst {
+		switch d.(type) {
+		case *time.Time, **time.Time:
+			return true
+		case *int64, *int, *string, *bool, *float64, *[]byte, **int64, **string:
+		default:
+			if sqliteScanHow(reflect.TypeOf(d)) != scanAsIs {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// declTime reports whether column i's declared type is a time that the driver
+// hands over as text. Rows that cannot give their column types have none.
+func (r *sqliteRows) declTime(i int) bool {
+	if !r.declRead {
+		r.declRead = true
+		if c, ok := r.Rows.(interface {
+			ColumnTypes() ([]*sql.ColumnType, error)
+		}); ok {
+			if cts, err := c.ColumnTypes(); err == nil {
+				r.declTimes = make([]bool, len(cts))
+				for j, ct := range cts {
+					r.declTimes[j] = sqliteTextTimeType(ct.DatabaseTypeName())
+				}
+			}
+		}
+	}
+	return i < len(r.declTimes) && r.declTimes[i]
+}
+
+// sqliteTextTimeType reports whether the declared type typ is a time that
+// the driver hands over as text: DATE, DATETIME or TIMESTAMP with a
+// precision, such as velox's datetime(9). The driver parses those words
+// alone into a time.Time itself, and only them.
+func sqliteTextTimeType(typ string) bool {
+	word, rest, ok := strings.Cut(typ, "(")
+	if !ok || !strings.HasSuffix(rest, ")") {
+		return false
+	}
+	switch strings.ToUpper(strings.TrimSpace(word)) {
+	case "DATE", "DATETIME", "TIMESTAMP":
+		return true
+	}
+	return false
+}
+
+// scanHowCache holds sqliteScanHow's answers: reflect.Type to scanHow.
+var scanHowCache sync.Map
+
+// sqliteScanHow is how sqliteRows reads into a destination of type t,
+// remembered by type. A pointer, at any depth, to time.Time or to a struct
+// that converts to it is scanTime. Another pointer to a sql.Scanner, to an
+// interface or to a struct is scanByDecl. The rest is scanAsIs.
+func sqliteScanHow(t reflect.Type) scanHow {
+	if t == nil || t.Kind() != reflect.Pointer {
+		return scanAsIs
+	}
+	if v, ok := scanHowCache.Load(t); ok {
+		return v.(scanHow)
+	}
+	how := scanAsIs
+	scanner := reflect.TypeFor[sql.Scanner]()
+	e := t
+	for e.Kind() == reflect.Pointer {
+		if e.Implements(scanner) {
+			how = scanByDecl
+		}
+		e = e.Elem()
+	}
+	switch {
+	case e.Kind() == reflect.Struct && e.ConvertibleTo(reflect.TypeFor[time.Time]()):
+		how = scanTime
+	case e.Kind() == reflect.Struct || e.Kind() == reflect.Interface:
+		how = scanByDecl
+	}
+	scanHowCache.Store(t, how)
+	return how
+}
+
+// sqliteTime scans into dst, a pointer that takes a time, the time SQLite's
+// text holds, as well as what the driver hands over for a time column. What
+// it does not read as a time, and NULL but into a **time.Time, goes to
+// database/sql's conversion, which converts or fails as it would have.
 type sqliteTime struct{ dst any }
 
 // Scan implements sql.Scanner.
-func (s sqliteTime) Scan(src any) error {
-	var t time.Time
+func (s *sqliteTime) Scan(src any) error {
+	var (
+		t  time.Time
+		ok bool
+	)
 	switch v := src.(type) {
+	case time.Time:
+		t, ok = v, true
+	case string:
+		t, ok = sqliteTextTime(v)
+	case []byte:
+		t, ok = sqliteTextTime(v)
 	case nil:
-		if p, ok := s.dst.(**time.Time); ok {
+		if p, isPtr := s.dst.(**time.Time); isPtr {
 			*p = nil
 			return nil
 		}
-		return errors.New("NULL in a column that is not nullable")
-	case time.Time:
-		t = v
-	case string:
-		var err error
-		if t, err = parseSQLiteTime(v); err != nil {
-			return err
-		}
-	case []byte:
-		var err error
-		if t, err = parseSQLiteTime(string(v)); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("a %T is not a time", src)
+	}
+	if !ok {
+		return sql.ConvertAssign(driver.ScanContext{}, s.dst, src)
 	}
 	switch p := s.dst.(type) {
 	case *time.Time:
 		*p = t
+		return nil
 	case **time.Time:
-		*p = &t
+		*p = new(t) // not &t, which would move t to the heap on every call
+		return nil
 	}
-	return nil
+	return sql.ConvertAssign(driver.ScanContext{}, s.dst, t)
+}
+
+// sqliteTextTime reads s, in velox's form or another of sqliteTextTimes.
+func sqliteTextTime[S string | []byte](s S) (time.Time, bool) {
+	if t, ok := parseVeloxTime(s); ok {
+		return t, true
+	}
+	t, err := parseSQLiteTime(string(s))
+	return t, err == nil
+}
+
+// parseVeloxTime reads s in sqliteTimeLayout with the offset +00:00, the form
+// velox writes, into a time in UTC. It allocates nothing. It does not read
+// other text, an impossible date included: parseSQLiteTime reads that or
+// refuses it.
+func parseVeloxTime[S string | []byte](s S) (time.Time, bool) {
+	if len(s) != len(sqliteTimeLayout) || s[4] != '-' || s[7] != '-' || s[10] != ' ' || s[13] != ':' ||
+		s[16] != ':' || s[19] != '.' || string(s[29:]) != "+00:00" {
+		return time.Time{}, false
+	}
+	num := func(from, to int) int {
+		n := 0
+		for i := from; i < to; i++ {
+			c := s[i]
+			if c < '0' || c > '9' {
+				return -1
+			}
+			n = n*10 + int(c-'0')
+		}
+		return n
+	}
+	year, month, day := num(0, 4), num(5, 7), num(8, 10)
+	hour, minute, sec, nsec := num(11, 13), num(14, 16), num(17, 19), num(20, 29)
+	if year < 0 || month < 1 || month > 12 || day < 1 || hour < 0 || hour > 23 ||
+		minute < 0 || minute > 59 || sec < 0 || sec > 59 || nsec < 0 {
+		return time.Time{}, false
+	}
+	t := time.Date(year, time.Month(month), day, hour, minute, sec, nsec, time.UTC)
+	if t.Day() != day { // past the month's last day
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 // sqliteTextTimes are the forms of a time that SQLite's date functions read and
