@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -155,10 +156,44 @@ func (nonZeroDefault) Fields() []schema.Field {
 	return []schema.Field{field.Int64("views").Default(-0).Min(-5), field.Bool("on").Default(true)}
 }
 
+// defaultWaysOut has the lines rule 36's message tells an ent user to write
+// for field.Bool("on").Default(true) and field.Float("score").Default(1.5).
+type defaultWaysOut struct{ schema.Schema }
+
+func (defaultWaysOut) Fields() []schema.Field {
+	return []schema.Field{
+		field.Bool("on").Nillable().Default(true),
+		field.Bool("active").SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "1", field.SQLite: "1"}),
+		field.Float("score").SchemaDefault(map[string]string{field.Postgres: "1.5", field.MySQL: "1.5", field.SQLite: "1.5"}),
+	}
+}
+
+// The ways out build, and give the columns the message says: Nillable a
+// NULL-able column with the default, SchemaDefault a NOT NULL column with
+// it, as an ent database has.
+func TestBuildDefaultWaysOut(t *testing.T) {
+	for _, d := range allDialects {
+		tb := table(t, tables(t, d, defaultWaysOut{}), "default_ways_outs")
+		one := map[velox.Dialect]string{velox.Postgres: "true", velox.MySQL: "1", velox.SQLite: "1"}[d]
+		for _, c := range []struct {
+			name, def string
+			null      bool
+		}{{"on", one, true}, {"active", one, false}, {"score", "1.5", false}} {
+			if col := column(t, tb, c.name); col.Default != c.def || col.Nullable != c.null {
+				t.Errorf("%v: %s: DEFAULT %q, NULL %v; want %q, %v", d, c.name, col.Default, col.Nullable, c.def, c.null)
+			}
+		}
+	}
+}
+
 func TestBuildZeroDefaultAllowed(t *testing.T) {
 	mustBuild(t, zeroDefaults{})
 	_, err := build(t, nonZeroDefault{})
-	want := `schema nonZeroDefault: field "on": a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset when a Go struct is inserted, so false or 0 could never be stored; make the field Nillable, give it its zero value as the Default (name it so that false or 0 is the default), or drop the Default; a GraphQL create input can apply one with graphql.CreateDefault`
+	// The message spells the ent user's ways out with the field's own line.
+	want := `schema nonZeroDefault: field "on": field.Bool("on") with Default(true): velox inserts a Go struct, whose false cannot be told from unset, so the Default would overwrite an explicit false (ent fills it only when the builder never set the field). ` +
+		`Write field.Bool("on").Nillable().Default(true), a pointer whose nil stores true (the column then holds NULL); or rename it so that false is the default ("disabled" for "enabled"); or drop the Default and set the value in the struct. ` +
+		`To keep an ent database's column, NOT NULL DEFAULT true, add .SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "1", field.SQLite: "1"}), which only rows written outside velox take. ` +
+		`graphql.CreateDefault(true) gives a GraphQL create input the default`
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("got %v\nwant %s", err, want)
 	}

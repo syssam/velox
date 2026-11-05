@@ -90,3 +90,21 @@ the decisions below keeps that rule and removes the refusals it does not need.
 `TestNullableOrderTerm`, `TestNullableOrderServed`; `TestJSONLists`,
 `TestJSONListsServed`, `TestJSONInputExact`; `TestUint64OverSaysWhy`;
 `TestCreateSetsSkipped`, `TestSkippedFieldSetByResolver`; `TestUpdateNullClears`.
+
+## Review
+
+2026-11-05, the non-zero Default re-examined for ent users. The refusal
+stays. Two ways to accept `field.Bool("active").Default(true)` were weighed.
+Writing the struct as it is, with the Default as the column's only, stores
+false where a ported ent create left the field unset: a silent difference.
+A pointer Go field over a NOT NULL column keeps ent's column and its create,
+but its type says NULL where the column holds none, it breaks 0003's rule
+that a pointer is NULL, and the engine, the handles and the GraphQL runtime
+all read a pointer field as nullable. The message now spells the ways out
+with the field's own builder, name and value, `SchemaDefault` included, which
+keeps an ent database's `NOT NULL DEFAULT true`. `TestBuildDefaultWaysOut`
+checks the columns of the lines it suggests.
+
+The same day, an `OrderVia` of a nullable field was allowed, and an
+ordering by a joined nullable column sorts NULL last on MySQL and SQLite
+too: see 0031's Review.

@@ -153,7 +153,8 @@ func ofKind[T Numeric](fn func(T) error) any {
 // changes the Go type. A field that is not a pointer is unset when it holds its
 // zero value, so velox-gen refuses a Default on a number that is not Nillable,
 // which could then never store 0, unless the Default is 0 itself: make the
-// field Nillable, or drop the Default.
+// field Nillable, or drop the Default. SchemaDefault gives the column a
+// default without it, for rows written outside velox.
 func (b *NumberBuilder[T]) Default(v T) *NumberBuilder[T] { b.d.Default = base(v); return b }
 
 // base returns v as a value of T's kind, such as an int for a slog.Level, so

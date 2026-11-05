@@ -945,7 +945,7 @@ func (b *builder) validateFields(e *Entity) {
 		// bool or number that is not a pointer it could never store false or
 		// 0. A Default that is the zero value stores what unset does.
 		if (len(f.Default) > 0 && !zeroDefault(f) || f.DefaultFunc) && !f.Nillable && (f.Type == "bool" || numeric[f.Type]) {
-			b.fail(36, e.Name, fieldLoc(f), "a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset when a Go struct is inserted, so false or 0 could never be stored; make the field Nillable, give it its zero value as the Default (name it so that false or 0 is the default), or drop the Default; a GraphQL create input can apply one with graphql.CreateDefault")
+			b.fail(36, e.Name, fieldLoc(f), "%s", defaultWayOut(f))
 		}
 		if b.keyEdges[f] == nil && uniqueUnset(e, f) { // a bound key is rule 38's
 			b.fail(54, e.Name, fieldLoc(f), "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide, or give it a DefaultFunc that a value a hook fills can stand in for, as velox-gen cannot see a hook")
@@ -1001,6 +1001,42 @@ func (b *builder) validateFields(e *Entity) {
 			b.fail(22, e.Name, fieldLoc(id), "the ID cannot be of type %s", id.Type)
 		}
 	}
+}
+
+// defaultWayOut is rule 36's message for f, a bool or number that is not
+// Nillable and has a non-zero Default or a DefaultFunc. ent schemas have such
+// lines, so it spells what to write instead with f's own builder, name and
+// default.
+func defaultWayOut(f *Field) string {
+	builder := "Float"
+	if f.Type != "float64" {
+		builder = strings.ToUpper(f.Type[:1]) + f.Type[1:]
+	}
+	decl := fmt.Sprintf("field.%s(%q)", builder, f.Name)
+	lit, def := strings.TrimSpace(string(f.Default)), "a DefaultFunc"
+	if !f.DefaultFunc {
+		def = "Default(" + lit + ")"
+	}
+	zero, rename := "0", ""
+	if f.Type == "bool" {
+		zero, rename = "false", `; or rename it so that false is the default ("disabled" for "enabled")`
+	}
+	var s strings.Builder
+	fmt.Fprintf(&s, "%s with %s: velox inserts a Go struct, whose %s cannot be told from unset, so the Default would overwrite an explicit %s (ent fills it only when the builder never set the field). ", decl, def, zero, zero)
+	if f.DefaultFunc {
+		fmt.Fprintf(&s, "Write %s.Nillable() with the DefaultFunc, a pointer whose nil takes it (the column then holds NULL)%s; or drop the DefaultFunc and set the value in the struct", decl, rename)
+		return s.String()
+	}
+	fmt.Fprintf(&s, "Write %s.Nillable().%s, a pointer whose nil stores %s (the column then holds NULL)%s; or drop the Default and set the value in the struct. ", decl, def, lit, rename)
+	// The literal as the column's DEFAULT: a bool is true on PostgreSQL and
+	// 1 on MySQL and SQLite, as columnDefault writes it.
+	other := lit
+	if f.Type == "bool" {
+		other = "1"
+	}
+	fmt.Fprintf(&s, "To keep an ent database's column, NOT NULL DEFAULT %s, add .SchemaDefault(map[string]string{field.Postgres: %q, field.MySQL: %q, field.SQLite: %q}), which only rows written outside velox take. ", lit, lit, other, other)
+	fmt.Fprintf(&s, "graphql.CreateDefault(%s) gives a GraphQL create input the default", lit)
+	return s.String()
 }
 
 // zeroDefault reports whether f's literal Default is the zero value of a

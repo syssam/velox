@@ -65,19 +65,31 @@ those rows, and `-allow add-required-column=...` only helps on an empty table.
 foreign-key field must have its target's ID type: declare it `field.Int64`, or
 declare the target's ID with `field.Int("id")`.
 
-**Defaults on bool and number.** A struct's `false` or `0` cannot be told from
-unset, so:
+**Defaults on a NOT NULL column.** A `Default` on a field that is not
+`Nillable` is accepted for a string, an enum, a time (`Default(time.Now)`), a
+JSON field such as `field.Strings` and a bool or number whose `Default` is its
+zero value. An unset field takes the `Default` on insert, as in ent, and the
+literal `Default` of a string, enum, bool or number is the column's `DEFAULT`
+too. One case is refused: a non-zero `Default`, or any `DefaultFunc`, on a
+bool or number that is not `Nillable`. A struct's `false` or `0` cannot be
+told from unset, and ent fills
+`Default(true)` only when the builder never set the field, so velox would
+store `true` where your struct said `false`. A refusal is safer than that
+silent overwrite. For `field.Bool("active").Default(true)` the message offers,
+spelled with the field's own name and value:
 
-- `Default(false)` or `Default(0)` on a field that is not `Nillable` is allowed.
-  It stores what unset stores.
-- A non-zero `Default`, or any `DefaultFunc`, on a bool or number that is not
-  `Nillable` is refused. ent fills `Default(true)` only when the builder never
-  set the field. velox would store `true` where your struct said `false`. The
-  ways out: make the field `Nillable`, name it so that its zero is the default
-  (`disabled` rather than `enabled`), or drop the `Default`.
-- For GraphQL, `graphql.CreateDefault(true)` renders `active: Boolean! = true`
-  in the create input. gqlgen fills it in when a client leaves the field out,
-  and the column keeps no default.
+| You want | Write |
+| --- | --- |
+| unset stores `true` | `field.Bool("active").Nillable().Default(true)`: a `*bool`, and the column holds NULL |
+| ent's column, `NOT NULL DEFAULT true` | `field.Bool("active").SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "1", field.SQLite: "1"})`, and set `Active: true` in Go |
+| a GraphQL create input that defaults | `graphql.CreateDefault(true)` on the field: `active: Boolean! = true` |
+| no default | a name whose zero is the default (`disabled` for `enabled`), or drop the `Default` |
+
+`Default(false)` or `Default(0)` is allowed, as it stores what unset stores.
+`SchemaDefault` is the column's default only: velox's inserts write every
+column, so only rows written outside velox take it; the column is an ent
+database's `NOT NULL DEFAULT true`. `CreateDefault` is filled in by gqlgen
+when a client leaves the field out.
 
 The same holds for a string: with `Default("x")`, an insert can never store `""`.
 
