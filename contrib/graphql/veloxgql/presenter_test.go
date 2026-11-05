@@ -54,7 +54,7 @@ func (w *personName) PredicateGQL(ctx context.Context) (velox.Predicate, error) 
 	}
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
-	gqlimpl.List(f, "nameIn", w.NameIn, 1, velox.PredIn)
+	gqlimpl.Field(f, "name", 1, gqlimpl.Ops[string]{In: w.NameIn})
 	return f.Pred()
 }
 

@@ -3,6 +3,7 @@ package gqlimpl
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"unsafe"
 
@@ -918,4 +919,62 @@ func Through(u *Update, addField, typ string, ed Edit, own any, m M2M) {
 		}
 		return db.InsertRows(j, rows).OnConflict(m.JoinOwner, m.JoinTarget).DoNothing().Exec(ctx)
 	})
+}
+
+// deref is the value v points to, a key of an input, by reflect but for the
+// usual keys; ok is false for a nil pointer.
+func deref(v any) (x any, ok bool) {
+	switch v := v.(type) {
+	case *string:
+		return deref1(v)
+	case *int64:
+		return deref1(v)
+	case nil:
+		return nil, false
+	}
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return nil, false
+	}
+	return rv.Elem().Interface(), true
+}
+
+func deref1[V any](p *V) (any, bool) {
+	if p == nil {
+		return nil, false
+	}
+	return *p, true
+}
+
+// values is the values of vs, a slice of keys, as a []any, by reflect but
+// for the usual keys; ok is false for a nil slice.
+func values(vs any) (xs []any, ok bool) {
+	switch vs := vs.(type) {
+	case []string:
+		return anys(vs)
+	case []int64:
+		return anys(vs)
+	case nil:
+		return nil, false
+	}
+	rv := reflect.ValueOf(vs)
+	if rv.Kind() != reflect.Slice || rv.IsNil() {
+		return nil, false
+	}
+	xs = make([]any, rv.Len())
+	for i := range xs {
+		xs[i] = rv.Index(i).Interface()
+	}
+	return xs, true
+}
+
+func anys[V any](vs []V) ([]any, bool) {
+	if vs == nil {
+		return nil, false
+	}
+	xs := make([]any, len(vs))
+	for i, v := range vs {
+		xs[i] = v
+	}
+	return xs, true
 }

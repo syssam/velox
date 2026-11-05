@@ -208,7 +208,7 @@ func (*guarded) VeloxMeta() *velox.Meta[guarded] {
 // edge's EXISTS too. person
 // has no relations, so a statement that holds an EXISTS on one fails to
 // render: that tells the two apart. person's key stands in for the foreign
-// key; it is not nullable, so FKIs's column predicate fails too, but with
+// key; it is not nullable, so NotNil's column predicate fails too, but with
 // another error. TestForeignKeyFilterHidden and
 // TestForeignKeyFilterOtherScope (cmd/velox-graphql) serve it.
 func TestFKScoped(t *testing.T) {
@@ -225,16 +225,21 @@ func TestFKScoped(t *testing.T) {
 		{"guarded", velox.TableOf[guarded](), true},
 		{"intercepted", velox.TableOf[intercepted](), true},
 	} {
+		target := &gqlimpl.Conn{Type: "Owner", Table: func() velox.Table { return c.target }}
 		for _, h := range []struct {
 			name string
 			add  func(f *gqlimpl.Filter)
 			col  string // the error of the column's predicate alone; "" for none
 		}{
-			{"FKID", func(f *gqlimpl.Filter) { gqlimpl.FKID[int64](f, "ownerID", &id, "Owner", 0, velox.PredEQ, 0, c.target) }, ""},
-			{"FKIDList", func(f *gqlimpl.Filter) {
-				gqlimpl.FKIDList[int64](f, "ownerIDIn", []string{id}, "Owner", 0, velox.PredIn, 0, c.target)
+			{"EQ", func(f *gqlimpl.Filter) {
+				gqlimpl.FKField[int64](f, "ownerID", 0, 0, target, gqlimpl.Ops[string]{EQ: &id})
 			}, ""},
-			{"FKIs", func(f *gqlimpl.Filter) { gqlimpl.FKIs(f, "ownerIDNotNil", &yes, 0, velox.PredNotNull, 0, c.target) }, "not nullable"},
+			{"In", func(f *gqlimpl.Filter) {
+				gqlimpl.FKField[int64](f, "ownerID", 0, 0, target, gqlimpl.Ops[string]{In: []string{id}})
+			}, ""},
+			{"NotNil", func(f *gqlimpl.Filter) {
+				gqlimpl.FKField[int64](f, "ownerID", 0, 0, target, gqlimpl.Ops[string]{NotNil: &yes})
+			}, "not nullable"},
 		} {
 			f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[person]("Person"))
 			h.add(f)

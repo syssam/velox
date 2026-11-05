@@ -3,46 +3,42 @@ package gogen
 import (
 	"cmp"
 	"fmt"
+	"strings"
 
 	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox/plugin"
 )
 
-// The kinds of value a predicate's helper takes.
-const (
-	takesValue = iota // one value: gqlimpl.Value
-	takesList         // a list: gqlimpl.List
-	takesBool         // a Boolean: gqlimpl.Is
-)
-
-// predOps are velox's operator of each predicate, and the kind of value it
-// takes.
+// predOps are, for each predicate, the field of gqlimpl.Ops that holds its
+// value and the suffix of its name, as sdl names it ("titleNEQ"); whether it
+// takes a Boolean, IsNil or NotNil, rather than a value of the field.
 var predOps = map[graphql.WhereOp]struct {
-	op    string
-	takes int
+	field, suffix string
+	isBool        bool
 }{
-	graphql.OpEQ:        {"PredEQ", takesValue},
-	graphql.OpNEQ:       {"PredNEQ", takesValue},
-	graphql.OpIn:        {"PredIn", takesList},
-	graphql.OpNotIn:     {"PredNotIn", takesList},
-	graphql.OpGT:        {"PredGT", takesValue},
-	graphql.OpGTE:       {"PredGTE", takesValue},
-	graphql.OpLT:        {"PredLT", takesValue},
-	graphql.OpLTE:       {"PredLTE", takesValue},
-	graphql.OpContains:  {"PredContains", takesValue},
-	graphql.OpHasPrefix: {"PredHasPrefix", takesValue},
-	graphql.OpHasSuffix: {"PredHasSuffix", takesValue},
-	graphql.OpIsNil:     {"PredIsNull", takesBool},
-	graphql.OpNotNil:    {"PredNotNull", takesBool},
+	graphql.OpEQ:        {"EQ", "", false},
+	graphql.OpNEQ:       {"NEQ", "NEQ", false},
+	graphql.OpIn:        {"In", "In", false},
+	graphql.OpNotIn:     {"NotIn", "NotIn", false},
+	graphql.OpGT:        {"GT", "GT", false},
+	graphql.OpGTE:       {"GTE", "GTE", false},
+	graphql.OpLT:        {"LT", "LT", false},
+	graphql.OpLTE:       {"LTE", "LTE", false},
+	graphql.OpContains:  {"Contains", "Contains", false},
+	graphql.OpHasPrefix: {"HasPrefix", "HasPrefix", false},
+	graphql.OpHasSuffix: {"HasSuffix", "HasSuffix", false},
+	graphql.OpIsNil:     {"IsNil", "IsNil", true},
+	graphql.OpNotNil:    {"NotNil", "NotNil", true},
 }
 
 // writePred writes the where input's methods Pred, which turns it into a
 // velox.Pred, and PredicateGQL, the same condition untyped: a
 // gqlimpl.Filter on the entity's velox.Table, and one call of a gqlimpl
-// helper for each field of the input, which adds the field's predicate when
-// it is set. The helpers take columns and relations by index, so that none
-// is compiled once per entity.
+// helper for each not, and, or and edge of the input and for each field's
+// predicates together, which adds each predicate that is set. The helpers
+// take columns and relations by index, so that none is compiled once per
+// entity.
 func (r *renderer) writePred(f *file, t *sdl.Type) error {
 	n, e := t.Name, t.Entity
 	in := n + "WhereInput"
@@ -60,21 +56,30 @@ func (r *renderer) writePred(f *file, t *sdl.Type) error {
 	f.p("	if w == nil {")
 	f.p("		return f.Pred()")
 	f.p("	}")
-	for _, w := range t.Where {
-		call, err := r.predCall(f, t, w)
+	ws := t.Where
+	for i := 0; i < len(ws); {
+		// A field's predicates are one run: sdl writes them together.
+		j := i + 1
+		for ws[i].Kind == sdl.WherePred && j < len(ws) && ws[j].Kind == sdl.WherePred && ws[j].Field == ws[i].Field && ws[j].Edge == ws[i].Edge {
+			j++
+		}
+		call, err := r.predCall(f, t, ws[i:j])
 		if err != nil {
 			return err
 		}
 		f.p("	%s", call)
+		i = j
 	}
 	f.p("	return f.Pred()")
 	f.p("}")
 	return nil
 }
 
-// predCall is the helper call that adds the predicate of the where-input
-// field w of t.
-func (r *renderer) predCall(f *file, t *sdl.Type, w sdl.WhereField) (string, error) {
+// predCall is the helper call that adds the predicates of ws, where-input
+// fields of t: a not, an and, an or or an edge's, alone, or the predicates of
+// one field, together.
+func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, error) {
+	w := ws[0]
 	e, impl, velox := t.Entity, f.gqlimpl(), f.velox()
 	field := fmt.Sprintf("%q, w.%s", w.Name, w.GoName) // the GraphQL name, for errors, and the value
 	edge := func() string {
@@ -93,63 +98,62 @@ func (r *renderer) predCall(f *file, t *sdl.Type, w sdl.WhereField) (string, err
 	case sdl.WhereHasWith:
 		return fmt.Sprintf("%s.HasWith(f, %s, %s)", impl, field, edge()), nil
 	}
-	pm, ok := predOps[w.Op]
-	if !ok {
-		return "", fmt.Errorf("velox-graphql has no predicate WhereOp(%#x), which is a bug: schema %s, field %s", uint32(w.Op), e.Name, w.Name)
-	}
+	// The field's predicates: the value of each in its field of gqlimpl.Ops,
+	// and the field's GraphQL name, which the predicates' names begin with.
 	fd := e.Fields[w.Field]
-	col := fmt.Sprintf("%s, %s.%s", colConst(e, fd), velox, pm.op)
-	fk := ""
-	if w.Edge >= 0 {
-		// A foreign key: its target's Read policy holds of it, as of the edge.
-		fk = ", " + edge()
-	}
-	if pm.takes == takesBool {
-		if fk != "" {
-			return fmt.Sprintf("%s.FKIs(f, %s, %s%s)", impl, field, col, fk), nil
+	var base string
+	ops := make([]string, len(ws))
+	for k, x := range ws {
+		pm, ok := predOps[x.Op]
+		if !ok {
+			return "", fmt.Errorf("velox-graphql has no predicate WhereOp(%#x), which is a bug: schema %s, field %s", uint32(x.Op), e.Name, x.Name)
 		}
-		return fmt.Sprintf("%s.Is(f, %s, %s)", impl, field, col), nil
+		if k == 0 {
+			base = strings.TrimSuffix(x.Name, pm.suffix)
+		}
+		if x.Name != base+pm.suffix {
+			return "", fmt.Errorf("schema %s: the where field %s is not %s%s, which is a bug", e.Name, x.Name, base, pm.suffix)
+		}
+		ops[k] = pm.field + ": w." + x.GoName
 	}
+	set := strings.Join(ops, ", ")
+	col := colConst(e, fd)
 	if w.IDs() {
-		return r.idCall(f, t, w, fd, field, col, fk, pm.takes)
+		// IDs: of t's key, or of the foreign key fd, which holds the keys of
+		// the edge's target. Each ID is decoded with veloxgql.DecodeID as the
+		// target's Key, which the helper converts to fd's Go type when that
+		// is not the Key.
+		tt := r.types[w.Target]
+		if tt == nil || !tt.Node {
+			return "", fmt.Errorf("schema %s, field %s: its predicates take IDs of %s, which is not a Node, which is a bug", e.Name, w.Name, w.Target)
+		}
+		if elem := cmp.Or(fd.ElemType, tt.Key); elem != tt.Key {
+			if err := r.converts(e, fd, tt.Key); err != nil {
+				return "", err
+			}
+		}
+		if w.Edge >= 0 {
+			// A foreign key: its target's Read policy holds of it, as of the edge.
+			return fmt.Sprintf("%s.FKField[%s](f, %q, %s, %s, &%s, %s.Ops[string]{%s})", impl, tt.Key, base, col, edgeConst(e, e.Edges[w.Edge]), connVar(tt), impl, set), nil
+		}
+		return fmt.Sprintf("%s.IDField[%s](f, %q, %s, %s.Ops[string]{%s})", impl, tt.Key, base, col, impl, set), nil
 	}
-	if fk != "" {
+	if w.Edge >= 0 {
 		return "", fmt.Errorf("schema %s, field %s: a foreign key's predicate that takes no IDs, which is a bug", e.Name, w.Name)
 	}
-	if err := r.whereConv(e, fd, w); err != nil {
-		return "", err
-	}
-	helper := "Value"
-	if pm.takes == takesList {
-		helper = "List"
-	}
-	return fmt.Sprintf("%s.%s(f, %s, %s)", impl, helper, field, col), nil
-}
-
-// idCall is the helper call of a predicate on IDs: of t's key, or of the
-// foreign key fd, which holds the keys of the edge's target (fk, the edge's
-// arguments, is then not ""). Each ID is decoded with veloxgql.DecodeID as
-// the target's Key, which the helper converts to fd's Go type when that is
-// not the Key.
-func (r *renderer) idCall(f *file, t *sdl.Type, w sdl.WhereField, fd *plugin.Field, field, col, fk string, takes int) (string, error) {
-	e, impl := t.Entity, f.gqlimpl()
-	tt := r.types[w.Target]
-	if tt == nil || !tt.Node {
-		return "", fmt.Errorf("schema %s, field %s: its predicates take IDs of %s, which is not a Node, which is a bug", e.Name, w.Name, w.Target)
-	}
-	helper := "ID"
-	if takes == takesList {
-		helper = "IDList"
-	}
-	if fk != "" {
-		helper = "FK" + helper
-	}
-	if elem := cmp.Or(fd.ElemType, tt.Key); elem != tt.Key {
-		if err := r.converts(e, fd, tt.Key); err != nil {
+	// The first predicate holds the field's Go type: sdl writes IsNil and
+	// NotNil last, so a run that starts with one has no value.
+	typ := "bool"
+	if !predOps[w.Op].isBool {
+		if err := r.whereConv(e, fd, w); err != nil {
+			return "", err
+		}
+		var err error
+		if typ, err = r.qualify(f, e, fd, w.GoType, w.GoPkg); err != nil {
 			return "", err
 		}
 	}
-	return fmt.Sprintf("%s.%s[%s](f, %s, %q, %s%s)", impl, helper, tt.Key, field, w.Target, col, fk), nil
+	return fmt.Sprintf("%s.Field(f, %q, %s, %s.Ops[%s]{%s})", impl, base, col, impl, typ, set), nil
 }
 
 // whereConv checks that the where-input field w's values convert to the Go

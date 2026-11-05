@@ -50,34 +50,29 @@ func dialInputGQL(goField string) string {
 // value wrapped round; one at the bound is taken.
 func TestOutOfRangeIsUserInput(t *testing.T) {
 	ctx := context.Background()
-	filter := func(field string, v any, list bool) error {
+	filter := func(o gqlimpl.Ops[int64]) error {
 		f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[dial]("Dial"))
-		if list {
-			gqlimpl.List(f, field, v, 1, velox.PredIn)
-		} else {
-			gqlimpl.Value(f, field, v, 1, velox.PredEQ)
-		}
+		gqlimpl.Field(f, "level", 1, o)
 		_, err := f.Pred()
 		return err
 	}
 	for name, c := range map[string]struct {
 		field string
-		v     any
-		list  bool
+		o     gqlimpl.Ops[int64]
 	}{
-		"over":      {"level", new(int64(128)), false},
-		"under":     {"level", new(int64(-129)), false},
-		"in a list": {"levelIn", []int64{1, 300}, true},
+		"over":      {"level", gqlimpl.Ops[int64]{EQ: new(int64(128))}},
+		"under":     {"level", gqlimpl.Ops[int64]{EQ: new(int64(-129))}},
+		"in a list": {"levelIn", gqlimpl.Ops[int64]{In: []int64{1, 300}}},
 	} {
-		err := filter(c.field, c.v, c.list)
+		err := filter(c.o)
 		if codeOf(err) != "BAD_USER_INPUT" || !strings.Contains(err.Error(), "DialWhereInput."+c.field) {
 			t.Errorf("%s: %v (code %q), want BAD_USER_INPUT naming DialWhereInput.%s", name, err, codeOf(err), c.field)
 		}
 	}
-	if err := filter("level", new(int64(127)), false); err != nil {
+	if err := filter(gqlimpl.Ops[int64]{EQ: new(int64(127))}); err != nil {
 		t.Errorf("127: %v", err)
 	}
-	if err := filter("level", new(int64(-128)), false); err != nil {
+	if err := filter(gqlimpl.Ops[int64]{EQ: new(int64(-128))}); err != nil {
 		t.Errorf("-128: %v", err)
 	}
 
@@ -86,5 +81,24 @@ func TestOutOfRangeIsUserInput(t *testing.T) {
 	_, err := u.Exec(int64(1), nil)
 	if codeOf(err) != "BAD_USER_INPUT" || !strings.Contains(err.Error(), "UpdateDialInput.level") {
 		t.Errorf("update with 300: %v (code %q), want BAD_USER_INPUT naming UpdateDialInput.level", err, codeOf(err))
+	}
+}
+
+// TestFirstWhereErrorStays: a filter keeps its first error. A value out of
+// the column's range that also spends the last of the budget is the
+// range's error, and a foreign key's NotNil after a refused ID adds
+// nothing.
+func TestFirstWhereErrorStays(t *testing.T) {
+	ctx := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxFilterNodes: 1})).NewContext(context.Background())
+	f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[dial]("Dial"))
+	gqlimpl.Field(f, "level", 1, gqlimpl.Ops[int64]{EQ: new(int64(300))})
+	if _, err := f.Pred(); err == nil || !strings.Contains(err.Error(), "out of the field's range") {
+		t.Errorf("out of range and over the budget: %v, want the range's error", err)
+	}
+	f = gqlimpl.NewFilter(context.Background(), gqlimpl.TableConn[dial]("Dial"))
+	yes := true
+	gqlimpl.FKField[int64](f, "dialID", 0, 0, gqlimpl.TableConn[dial]("Dial"), gqlimpl.Ops[string]{EQ: new("bad"), NotNil: &yes})
+	if _, err := f.Pred(); err == nil || !strings.Contains(err.Error(), "DialWhereInput.dialID:") {
+		t.Errorf("a bad ID, then NotNil: %v, want the ID's error", err)
 	}
 }

@@ -3,9 +3,7 @@ package gqlimpl
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strconv"
-	"time"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -14,9 +12,9 @@ import (
 
 // Filter is a where input being turned into a condition on the entity of a
 // velox.Table: the conditions the helpers added, or the first error. A where
-// input's generated method PredicateGQL makes one, adds each predicate the
-// input sets with one helper call, by column or relation index, and returns
-// Filter.Pred; its method Pred is PredicateGQL, typed:
+// input's generated method PredicateGQL makes one, adds the predicates the
+// input sets with one helper call for each field, by column or relation
+// index, and returns Filter.Pred; its method Pred is PredicateGQL, typed:
 //
 //	func (w *AccountWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
 //		f := gqlimpl.NewFilter(ctx, &userConnGQL)
@@ -26,8 +24,9 @@ import (
 //		gqlimpl.Not(f, "not", w.Not)
 //		gqlimpl.And(f, "and", w.And)
 //		gqlimpl.Or(f, "or", w.Or)
-//		gqlimpl.Value(f, "displayName", w.DisplayName, userColName, velox.PredEQ)
-//		gqlimpl.List(f, "displayNameIn", w.DisplayNameIn, userColName, velox.PredIn)
+//		gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{EQ: w.ID, In: w.IDIn})
+//		gqlimpl.Field(f, "displayName", userColName, gqlimpl.Ops[string]{EQ: w.DisplayName, In: w.DisplayNameIn})
+//		gqlimpl.FKField[int64](f, "teamID", userColTeamID, userEdgeTeam, &teamConnGQL, gqlimpl.Ops[string]{EQ: w.TeamID})
 //		gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
 //		gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, userEdgePosts, velox.TableOf[Post]())
 //		return f.Pred()
@@ -37,7 +36,8 @@ import (
 // a nil list, and nothing once the filter has an error: the first error
 // stops it, and Pred returns it. None of them runs a query, so a refused
 // filter fails before any statement is built. None of them is generic over
-// the entity: they are compiled once, for every where input.
+// the entity: they are compiled once, for every where input, and those
+// generic over a field's Go type once for each type's shape.
 type Filter struct {
 	ctx    context.Context
 	typ    string // the GraphQL type: errors name its where input, "<Type>WhereInput"
@@ -47,6 +47,14 @@ type Filter struct {
 	ps     []velox.Predicate
 	err    error
 }
+
+// name is the GraphQL name of a field of a where input, as its errors name
+// it: base, the name of the field or edge the input field is about, and op,
+// the suffix of its predicate ("NEQ"; "" for EQ and for a field that is not
+// a predicate's), which are joined only for an error.
+type name struct{ base, op string }
+
+func (n name) String() string { return n.base + n.op }
 
 // NewFilter returns the Filter of a where input of c's type,
 // "<Type>WhereInput", on the entity of c's Table.
@@ -82,10 +90,10 @@ func NewFilter(ctx context.Context, c *Conn) *Filter {
 	}
 	f := &Filter{ctx: ctx, typ: c.Type, t: c.table(), depth: st.depth, budget: st.budget}
 	if err := checkDepth(f.depth, f.budget.limits.MaxFilterDepth); err != nil {
-		f.refuse("", err)
+		f.refuse(name{}, err)
 		return f
 	}
-	f.charge("", 1)
+	f.charge(name{}, 1)
 	return f
 }
 
@@ -122,7 +130,7 @@ type stateKey struct{}
 
 // charge counts n against the where argument's budget, for the field of
 // f's input; ok is false when that is over it, and f has the error.
-func (f *Filter) charge(field string, n int) (ok bool) {
+func (f *Filter) charge(field name, n int) (ok bool) {
 	f.budget.left -= n
 	if f.budget.left < 0 {
 		f.refuse(field, InputErrorf("%w: the where argument has more than %d inputs, predicates and list values", veloxgql.ErrFilterTooLarge, f.budget.limits.MaxFilterNodes))
@@ -131,25 +139,25 @@ func (f *Filter) charge(field string, n int) (ok bool) {
 	return true
 }
 
-// refuse records err, an error of field of the filter's input ("" for the
+// refuse records err, an error of field of the filter's input (none for the
 // input itself), as the filter's error, unless it has one already. The
 // error's text is "veloxgql: <Input>.<field>: <err>", err's own "veloxgql: "
 // left out, so that the error of an input nested in a field names the path
 // to it, and it keeps err's code.
-func (f *Filter) refuse(field string, err error) {
+func (f *Filter) refuse(field name, err error) {
 	if f.err != nil {
 		return
 	}
 	at := f.typ + "WhereInput"
-	if field != "" {
-		at += "." + field
+	if field != (name{}) {
+		at += "." + field.String()
 	}
 	f.err = gqlcore.Within(at, err)
 }
 
 // add adds p to the filter's conditions, a predicate of field, which counts
 // one against the budget, and n more for its values.
-func (f *Filter) add(field string, n int, p velox.Predicate) {
+func (f *Filter) add(field name, n int, p velox.Predicate) {
 	if f.charge(field, 1+n) {
 		f.ps = append(f.ps, p)
 	}
@@ -187,7 +195,7 @@ type Where interface {
 // deeper (in the context PredicateGQL is called with); a nil w is an input
 // that sets nothing, which holds for every row. ok is false when w fails, and
 // f has its error.
-func nested[W Where](f *Filter, field string, w W) (p velox.Predicate, ok bool) {
+func nested[W Where](f *Filter, field name, w W) (p velox.Predicate, ok bool) {
 	var none W
 	if w == none {
 		return velox.AndPredicates(), true
@@ -204,12 +212,12 @@ func nested[W Where](f *Filter, field string, w W) (p velox.Predicate, ok bool) 
 // checkWidth; ok is false when one fails, and f has its error, which names
 // the entry, as "or[3]".
 func list[W Where](f *Filter, field string, ws []W) (ps []velox.Predicate, ok bool) {
-	if !f.width(field, len(ws)) {
+	if !f.width(name{base: field}, len(ws)) {
 		return nil, false
 	}
 	ps = make([]velox.Predicate, 0, len(ws))
 	for i, w := range ws {
-		p, ok := nested(f, field+"["+strconv.Itoa(i)+"]", w)
+		p, ok := nested(f, name{base: field + "[" + strconv.Itoa(i) + "]"}, w)
 		if !ok {
 			return nil, false
 		}
@@ -220,8 +228,8 @@ func list[W Where](f *Filter, field string, ws []W) (ps []velox.Predicate, ok bo
 
 // Each helper takes the filter, the GraphQL name of the input's field,
 // which the errors of the field name, and the field's value; one on a column
-// takes the column's index, as velox-gen numbers it, and the operator, and
-// one on a relation the relation's index and its target's Table.
+// takes the column's index, as velox-gen numbers it, and one on a relation
+// the relation's index and its target.
 
 // Not adds the negation of w, the input's not: a node matches when it does
 // not match w. A nil w adds nothing.
@@ -230,8 +238,8 @@ func Not[W Where](f *Filter, field string, w W) {
 	if f.err != nil || w == none {
 		return
 	}
-	if p, ok := nested(f, field, w); ok {
-		f.add(field, 0, velox.NotPredicate(p))
+	if p, ok := nested(f, name{base: field}, w); ok {
+		f.add(name{base: field}, 0, velox.NotPredicate(p))
 	}
 }
 
@@ -242,7 +250,7 @@ func And[W Where](f *Filter, field string, ws []W) {
 	if f.err != nil || ws == nil {
 		return
 	}
-	if ps, ok := list(f, field, ws); ok && f.charge(field, 1) {
+	if ps, ok := list(f, field, ws); ok && f.charge(name{base: field}, 1) {
 		f.ps = append(f.ps, ps...)
 	}
 }
@@ -258,9 +266,9 @@ func Or[W Where](f *Filter, field string, ws []W) {
 	switch {
 	case !ok:
 	case len(ps) == 1:
-		f.add(field, 0, ps[0])
+		f.add(name{base: field}, 0, ps[0])
 	default:
-		f.add(field, 0, velox.OrPredicates(ps...))
+		f.add(name{base: field}, 0, velox.OrPredicates(ps...))
 	}
 }
 
@@ -272,7 +280,7 @@ func HasWith[W Where](f *Filter, field string, ws []W, edge int, target velox.Ta
 		return
 	}
 	if ps, ok := list(f, field, ws); ok {
-		f.add(field, 0, f.t.Has(edge, target, ps...))
+		f.add(name{base: field}, 0, f.t.Has(edge, target, ps...))
 	}
 }
 
@@ -280,58 +288,93 @@ func HasWith[W Where](f *Filter, field string, ws []W, edge int, target velox.Ta
 // target, for a true b, and when it holds none, for a false one.
 func Has(f *Filter, field string, b *bool, edge int, target velox.Table) {
 	if f.err == nil && b != nil {
-		f.is(field, *b, f.t.Has(edge, target))
-	}
-}
-
-// Is adds IsNil (op velox.PredIsNull) or NotNil (velox.PredNotNull) of
-// column col: the predicate for a true b, and its negation for a false one.
-func Is(f *Filter, field string, b *bool, col int, op velox.PredOp) {
-	if f.err == nil && b != nil {
-		f.is(field, *b, f.t.Pred(col, op, nil))
+		f.is(name{base: field}, *b, f.t.Has(edge, target))
 	}
 }
 
 // is adds p for a true b, and its negation for a false one.
-func (f *Filter) is(field string, b bool, p velox.Predicate) {
+func (f *Filter) is(field name, b bool, p velox.Predicate) {
 	if !b {
 		p = velox.NotPredicate(p)
 	}
 	f.add(field, 0, p)
 }
 
-// Value adds op on column col with *v, v a pointer to one value: EQ, NEQ,
-// GT, GTE, LT, LTE, Contains, HasPrefix or HasSuffix. A value of the base
-// type the field's scalar binds to is converted to the column's Go type, as
-// velox.Table.Convert does.
-func Value(f *Filter, field string, v any, col int, op velox.PredOp) {
-	if f.err != nil {
-		return
-	}
-	x, ok := deref(v)
-	if ok {
-		f.add(field, 0, f.pred(field, col, op, x))
+// Ops are the values of the predicates a where input offers on one field, as
+// the generated code gives them to Field, IDField and FKField: each a field
+// of the input, nil when the client does not set it or the input does not
+// offer it. The GraphQL name of each is the field's name with the
+// predicate's suffix, which is the name of the field of Ops ("titleNEQ"), but
+// for EQ, which is the field's name alone ("title").
+type Ops[V any] struct {
+	EQ, NEQ *V
+	// In and NotIn match one of the values, and none of them. A non-nil empty
+	// list is a list of nothing, as the client sent it: In matches no node,
+	// and NotIn every node. More than MaxFilterWidth values fail with
+	// ErrFilterTooWide.
+	In, NotIn                      []V
+	GT, GTE, LT, LTE               *V
+	Contains, HasPrefix, HasSuffix *V
+	// IsNil and NotNil test the column for NULL: the predicate for true, and
+	// its negation for false.
+	IsNil, NotNil *bool
+}
+
+// Field adds the predicates o sets on column col, of the input's field
+// field: each with its operator, in the order of Ops's fields, each counted
+// against the budget. A value of the base type the field's scalar binds to
+// is converted to the column's Go type, as velox.Table.Convert does, and one
+// the column's type cannot hold is a BAD_USER_INPUT error of the predicate.
+// V is the Go type of the input's values: the function is compiled once for
+// each shape of V, not for each entity.
+func Field[V any](f *Filter, field string, col int, o Ops[V]) {
+	one(f, name{field, ""}, col, velox.PredEQ, o.EQ)
+	one(f, name{field, "NEQ"}, col, velox.PredNEQ, o.NEQ)
+	many(f, name{field, "In"}, col, velox.PredIn, o.In)
+	many(f, name{field, "NotIn"}, col, velox.PredNotIn, o.NotIn)
+	one(f, name{field, "GT"}, col, velox.PredGT, o.GT)
+	one(f, name{field, "GTE"}, col, velox.PredGTE, o.GTE)
+	one(f, name{field, "LT"}, col, velox.PredLT, o.LT)
+	one(f, name{field, "LTE"}, col, velox.PredLTE, o.LTE)
+	one(f, name{field, "Contains"}, col, velox.PredContains, o.Contains)
+	one(f, name{field, "HasPrefix"}, col, velox.PredHasPrefix, o.HasPrefix)
+	one(f, name{field, "HasSuffix"}, col, velox.PredHasSuffix, o.HasSuffix)
+	f.null(name{field, "IsNil"}, col, velox.PredIsNull, o.IsNil)
+	f.null(name{field, "NotNil"}, col, velox.PredNotNull, o.NotNil)
+}
+
+// one adds op on column col with *v, unless v is nil.
+func one[V any](f *Filter, field name, col int, op velox.PredOp, v *V) {
+	if f.err == nil && v != nil {
+		f.add(field, 0, f.pred(field, col, op, *v))
 	}
 }
 
-// List adds op on column col with the values of vs, a slice: In or NotIn. A
-// non-nil empty list is a list of nothing, as the client sent it: In
-// matches no node, and NotIn every node. More than MaxFilterWidth values
-// fail with ErrFilterTooWide. The values are converted as Value's are.
-func List(f *Filter, field string, vs any, col int, op velox.PredOp) {
-	if f.err != nil {
+// many adds op, In or NotIn, on column col with the values of vs, unless vs
+// is nil.
+func many[V any](f *Filter, field name, col int, op velox.PredOp, vs []V) {
+	if f.err != nil || vs == nil || !f.width(field, len(vs)) {
 		return
 	}
-	xs, ok := values(vs)
-	if ok && f.width(field, len(xs)) {
-		f.add(field, len(xs), f.pred(field, col, op, xs))
+	xs := make([]any, len(vs))
+	for i, v := range vs {
+		xs[i] = v
+	}
+	f.add(field, len(xs), f.pred(field, col, op, xs))
+}
+
+// null adds op, IsNull or NotNull, on column col, for a true *b, and its
+// negation for a false one, unless b is nil.
+func (f *Filter) null(field name, col int, op velox.PredOp, b *bool) {
+	if f.err == nil && b != nil {
+		f.is(field, *b, f.t.Pred(col, op, nil))
 	}
 }
 
 // pred is the condition op on column col with v, a value or for In and
 // NotIn a []any, each converted to the column's Go type. A value the
 // column's type cannot hold is the client's error, of field.
-func (f *Filter) pred(field string, col int, op velox.PredOp, v any) velox.Predicate {
+func (f *Filter) pred(field name, col int, op velox.PredOp, v any) velox.Predicate {
 	if xs, ok := v.([]any); ok {
 		for i, x := range xs {
 			c, err := f.convert(field, col, x)
@@ -351,7 +394,7 @@ func (f *Filter) pred(field string, col int, op velox.PredOp, v any) velox.Predi
 
 // convert is v converted to column col's Go type; a number the type cannot
 // hold is refused as a BAD_USER_INPUT error of field.
-func (f *Filter) convert(field string, col int, v any) (any, error) {
+func (f *Filter) convert(field name, col int, v any) (any, error) {
 	c, err := f.t.Convert(col, v)
 	if errors.Is(err, velox.ErrOutOfRange) {
 		f.refuse(field, InputErrorf("invalid value: %v is out of the field's range", v))
@@ -359,81 +402,8 @@ func (f *Filter) convert(field string, col int, v any) (any, error) {
 	return c, err
 }
 
-// deref is the value v points to; ok is false for a nil pointer.
-func deref(v any) (x any, ok bool) {
-	switch v := v.(type) {
-	case *string:
-		return deref1(v)
-	case *int64:
-		return deref1(v)
-	case *int:
-		return deref1(v)
-	case *int32:
-		return deref1(v)
-	case *bool:
-		return deref1(v)
-	case *float64:
-		return deref1(v)
-	case *time.Time:
-		return deref1(v)
-	case nil:
-		return nil, false
-	}
-	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Pointer || rv.IsNil() {
-		return nil, false
-	}
-	return rv.Elem().Interface(), true
-}
-
-func deref1[V any](p *V) (any, bool) {
-	if p == nil {
-		return nil, false
-	}
-	return *p, true
-}
-
-// values is the values of vs, a slice, as a []any; ok is false for a nil
-// slice.
-func values(vs any) (xs []any, ok bool) {
-	switch vs := vs.(type) {
-	case []string:
-		return anys(vs)
-	case []int64:
-		return anys(vs)
-	case []int:
-		return anys(vs)
-	case []int32:
-		return anys(vs)
-	case []float64:
-		return anys(vs)
-	case nil:
-		return nil, false
-	}
-	rv := reflect.ValueOf(vs)
-	if rv.Kind() != reflect.Slice || rv.IsNil() {
-		return nil, false
-	}
-	xs = make([]any, rv.Len())
-	for i := range xs {
-		xs[i] = rv.Index(i).Interface()
-	}
-	return xs, true
-}
-
-func anys[V any](vs []V) ([]any, bool) {
-	if vs == nil {
-		return nil, false
-	}
-	xs := make([]any, len(vs))
-	for i, v := range vs {
-		xs[i] = v
-	}
-	return xs, true
-}
-
 // width is checkWidth of field's list of n, with its error recorded in f.
-func (f *Filter) width(field string, n int) bool {
+func (f *Filter) width(field name, n int) bool {
 	if err := checkWidth(n, f.budget.limits.MaxFilterWidth); err != nil {
 		f.refuse(field, err)
 		return false
@@ -441,34 +411,79 @@ func (f *Filter) width(field string, n int) bool {
 	return true
 }
 
-// ID adds op on column col with the key of id, an ID of the GraphQL type typ
-// decoded with DecodeID[K]: EQ, NEQ, GT, GTE, LT or LTE on the key, or on a
-// foreign key that holds typ's keys. The key is converted to the column's Go
-// type as Value's values are. An ID of another type fails with
-// ErrWrongIDType, and a malformed one with ErrBadID.
-func ID[K any](f *Filter, field string, id *string, typ string, col int, op velox.PredOp) {
-	if f.err != nil || id == nil {
+// IDField is Field of IDs of the filter's own type, on column col, its key:
+// each ID is decoded with DecodeID[K] and its key converted to the column's
+// Go type as Field's values are. An ID of another type fails with
+// ErrWrongIDType, and a malformed one with ErrBadID. The predicates on IDs
+// are EQ, NEQ, In, NotIn, GT, GTE, LT and LTE; the others of o are ignored.
+func IDField[K any](f *Filter, field string, col int, o Ops[string]) {
+	ids[K](f, field, f.typ, col, o, fkScope{})
+}
+
+// FKField is IDField of a foreign key, on column col, which holds the keys
+// of target's type, through the relation edge, and its IsNil and NotNil. Its
+// predicates are scoped to what the relation lets the reader see, the
+// target's interceptors and Read policy: a row they hide reads as null, to
+// the edge and so to every predicate of its key, or a filter would say which
+// hidden row another row links to. With a row filter on target, a
+// predicate on IDs is the key's predicate and the edge's Has, IsNil is the
+// edge's Has negated and NotNil the edge's Has; with none, each is the
+// column's alone, and there is no EXISTS.
+//
+// A WithRewrite in the application's own query is not known here, nor is it
+// to the edge's Has.
+func FKField[K any](f *Filter, field string, col, edge int, target *Conn, o Ops[string]) {
+	fk := fkScope{edge: edge, target: target.table(), on: true}
+	ids[K](f, field, target.Type, col, o, fk)
+	f.fkNull(name{field, "IsNil"}, col, velox.PredIsNull, o.IsNil, fk)
+	f.fkNull(name{field, "NotNil"}, col, velox.PredNotNull, o.NotNil, fk)
+}
+
+// fkScope is the relation of a foreign key's predicates, when on.
+type fkScope struct {
+	edge   int
+	target velox.Table
+	on     bool
+}
+
+// ids adds the predicates on IDs of typ that o sets on column col, scoped
+// by fk.
+func ids[K any](f *Filter, field, typ string, col int, o Ops[string], fk fkScope) {
+	id[K](f, name{field, ""}, typ, col, velox.PredEQ, o.EQ, fk)
+	id[K](f, name{field, "NEQ"}, typ, col, velox.PredNEQ, o.NEQ, fk)
+	idList[K](f, name{field, "In"}, typ, col, velox.PredIn, o.In, fk)
+	idList[K](f, name{field, "NotIn"}, typ, col, velox.PredNotIn, o.NotIn, fk)
+	id[K](f, name{field, "GT"}, typ, col, velox.PredGT, o.GT, fk)
+	id[K](f, name{field, "GTE"}, typ, col, velox.PredGTE, o.GTE, fk)
+	id[K](f, name{field, "LT"}, typ, col, velox.PredLT, o.LT, fk)
+	id[K](f, name{field, "LTE"}, typ, col, velox.PredLTE, o.LTE, fk)
+}
+
+// id adds op on column col with the key of *v, an ID of typ, unless v is
+// nil.
+func id[K any](f *Filter, field name, typ string, col int, op velox.PredOp, v *string, fk fkScope) {
+	if f.err != nil || v == nil {
 		return
 	}
-	if k, ok := decode[K](f, field, *id, typ); ok {
-		f.add(field, 0, f.pred(field, col, op, k))
+	if k, ok := decode[K](f, field, *v, typ); ok {
+		f.add(field, 0, f.scoped(f.pred(field, col, op, k), fk))
 	}
 }
 
-// IDList adds op on column col with the keys of ids, as ID decodes them: In
-// or NotIn on the key, or on a foreign key. One ID of another type, or
-// malformed, fails the filter, and so do more than MaxFilterWidth IDs.
-func IDList[K any](f *Filter, field string, ids []string, typ string, col int, op velox.PredOp) {
-	if f.err != nil || ids == nil || !f.width(field, len(ids)) {
+// idList adds op, In or NotIn, on column col with the keys of vs, IDs of
+// typ, unless vs is nil. One ID of another type, or malformed, fails the
+// filter, and so do more than MaxFilterWidth IDs.
+func idList[K any](f *Filter, field name, typ string, col int, op velox.PredOp, vs []string, fk fkScope) {
+	if f.err != nil || vs == nil || !f.width(field, len(vs)) {
 		return
 	}
-	if ks, ok := decodeAll[K](f, field, ids, typ); ok {
-		f.add(field, len(ks), f.pred(field, col, op, ks))
+	if ks, ok := decodeAll[K](f, field, vs, typ); ok {
+		f.add(field, len(ks), f.scoped(f.pred(field, col, op, ks), fk))
 	}
 }
 
 // decode is DecodeID[K](id, typ), with its error recorded in f as field's.
-func decode[K any](f *Filter, field, id, typ string) (K, bool) {
+func decode[K any](f *Filter, field name, id, typ string) (K, bool) {
 	k, err := veloxgql.DecodeID[K](id, typ)
 	if err != nil {
 		f.refuse(field, err)
@@ -478,7 +493,7 @@ func decode[K any](f *Filter, field, id, typ string) (K, bool) {
 }
 
 // decodeAll is the keys of ids, as a []any.
-func decodeAll[K any](f *Filter, field string, ids []string, typ string) ([]any, bool) {
+func decodeAll[K any](f *Filter, field name, ids []string, typ string) ([]any, bool) {
 	out := make([]any, len(ids))
 	for i, id := range ids {
 		k, ok := decode[K](f, field, id, typ)
@@ -490,47 +505,16 @@ func decodeAll[K any](f *Filter, field string, ids []string, typ string) ([]any,
 	return out, true
 }
 
-// The FK helpers are ID, IDList and Is of a foreign key, scoped to what its
-// relation edge lets the reader see, the target's interceptors and Read
-// policy: a row they hide reads as null, to the edge and so to every
-// predicate of its key, or a filter would say which hidden row another row
-// links to. With no row filter on target, the predicate is the column's
-// alone, and there is no EXISTS.
-//
-// A WithRewrite in the application's own query is not known here, nor is it
-// to the edge's Has.
-
-// FKID is ID of a foreign key: with a row filter on target, the key's
-// predicate and the edge's Has.
-func FKID[K any](f *Filter, field string, id *string, typ string, col int, op velox.PredOp, edge int, target velox.Table) {
-	if f.err != nil || id == nil {
-		return
-	}
-	if k, ok := decode[K](f, field, *id, typ); ok {
-		f.add(field, 0, f.scoped(f.pred(field, col, op, k), edge, target))
-	}
-}
-
-// FKIDList is IDList of a foreign key, scoped as FKID is.
-func FKIDList[K any](f *Filter, field string, ids []string, typ string, col int, op velox.PredOp, edge int, target velox.Table) {
-	if f.err != nil || ids == nil || !f.width(field, len(ids)) {
-		return
-	}
-	if ks, ok := decodeAll[K](f, field, ids, typ); ok {
-		f.add(field, len(ks), f.scoped(f.pred(field, col, op, ks), edge, target))
-	}
-}
-
-// FKIs is Is of a foreign key: with a row filter on target (an interceptor
-// or a Read policy), IsNil is the edge's Has negated, and NotNil the edge's
-// Has, as a hidden target counts as none.
-func FKIs(f *Filter, field string, b *bool, col int, op velox.PredOp, edge int, target velox.Table) {
+// fkNull is null of a foreign key: with a row filter on fk's target (an
+// interceptor or a Read policy), IsNil is the edge's Has negated, and NotNil
+// the edge's Has, as a hidden target counts as none.
+func (f *Filter) fkNull(field name, col int, op velox.PredOp, b *bool, fk fkScope) {
 	if f.err != nil || b == nil {
 		return
 	}
 	p := f.t.Pred(col, op, nil)
-	if target.HasRowFilter() {
-		p = f.t.Has(edge, target)
+	if fk.target.HasRowFilter() {
+		p = f.t.Has(fk.edge, fk.target)
 		if op == velox.PredIsNull {
 			p = velox.NotPredicate(p)
 		}
@@ -538,13 +522,13 @@ func FKIs(f *Filter, field string, b *bool, col int, op velox.PredOp, edge int, 
 	f.is(field, *b, p)
 }
 
-// scoped is p, a predicate on the key of relation edge, and with a row
-// filter on target (an interceptor or a Read policy) the edge's Has too.
-func (f *Filter) scoped(p velox.Predicate, edge int, target velox.Table) velox.Predicate {
-	if !target.HasRowFilter() {
+// scoped is p, a predicate on the key of fk's relation, and with a row
+// filter on its target (an interceptor or a Read policy) the edge's Has too.
+func (f *Filter) scoped(p velox.Predicate, fk fkScope) velox.Predicate {
+	if !fk.on || !fk.target.HasRowFilter() {
 		return p
 	}
-	return velox.AndPredicates(p, f.t.Has(edge, target))
+	return velox.AndPredicates(p, f.t.Has(fk.edge, fk.target))
 }
 
 // The conversions from the Go type an input holds, the base type its scalar

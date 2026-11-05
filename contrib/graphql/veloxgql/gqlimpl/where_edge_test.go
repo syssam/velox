@@ -22,9 +22,8 @@ func (w *childWhere) PredicateGQL(ctx context.Context) (velox.Predicate, error) 
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Value(f, "title", w.Title, int(children.Title.I), velox.PredEQ)
-	gqlimpl.Is(f, "editorIDIsNil", w.EditorIDIsNil, int(children.EditorID.I), velox.PredIsNull)
-	gqlimpl.Is(f, "editorIDNotNil", w.EditorIDNotNil, int(children.EditorID.I), velox.PredNotNull)
+	gqlimpl.Field(f, "title", int(children.Title.I), gqlimpl.Ops[string]{EQ: w.Title})
+	gqlimpl.Field(f, "editorID", int(children.EditorID.I), gqlimpl.Ops[bool]{IsNil: w.EditorIDIsNil, NotNil: w.EditorIDNotNil})
 	return f.Pred()
 }
 
@@ -113,42 +112,28 @@ func TestWhereValueTypes(t *testing.T) {
 	age, name := int(owners.Age.I), int(owners.Name.I)
 	for _, c := range []struct {
 		name string
-		v    any
-		list bool
-		col  int
+		add  func(f *gqlimpl.Filter)
 		want []int64
 	}{
-		{"*int", new(30), false, age, []int64{1}},
-		{"*int32", new(int32(20)), false, age, []int64{2}},
-		{"*small, by reflect", new(small(10)), false, age, []int64{3}},
-		{"nil *small", (*small)(nil), false, age, []int64{1, 2, 3}},
-		{"nil *int", (*int)(nil), false, age, []int64{1, 2, 3}},
-		{"nil", nil, false, age, []int64{1, 2, 3}},
-		{"*string", new("b"), false, name, []int64{2}},
-		{"[]int", []int{10, 30}, true, age, []int64{1, 3}},
-		{"[]int32", []int32{20}, true, age, []int64{2}},
-		{"[]small, by reflect", []small{10, 20}, true, age, []int64{2, 3}},
-		{"nil []small", []small(nil), true, age, []int64{1, 2, 3}},
-		{"nil list", nil, true, age, []int64{1, 2, 3}},
-		{"[]string", []string{"a", "c"}, true, name, []int64{1, 3}},
+		{"*int", func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", age, gqlimpl.Ops[int]{EQ: new(30)}) }, []int64{1}},
+		{"*int32", func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", age, gqlimpl.Ops[int32]{EQ: new(int32(20))}) }, []int64{2}},
+		{"*small", func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", age, gqlimpl.Ops[small]{EQ: new(small(10))}) }, []int64{3}},
+		{"nil *small", func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", age, gqlimpl.Ops[small]{}) }, []int64{1, 2, 3}},
+		{"*string", func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", name, gqlimpl.Ops[string]{EQ: new("b")}) }, []int64{2}},
+		{"[]int", func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", age, gqlimpl.Ops[int]{In: []int{10, 30}}) }, []int64{1, 3}},
+		{"[]int32", func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", age, gqlimpl.Ops[int32]{In: []int32{20}}) }, []int64{2}},
+		{"[]small", func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", age, gqlimpl.Ops[small]{In: []small{10, 20}}) }, []int64{2, 3}},
+		{"[]string", func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", name, gqlimpl.Ops[string]{In: []string{"a", "c"}}) }, []int64{1, 3}},
 	} {
-		got, err := filtered[owner](t, db, func(f *gqlimpl.Filter) {
-			if c.list {
-				gqlimpl.List(f, "f", c.v, c.col, velox.PredIn)
-			} else {
-				gqlimpl.Value(f, "f", c.v, c.col, velox.PredEQ)
-			}
-		})
+		got, err := filtered[owner](t, db, c.add)
 		if err != nil || !slices.Equal(got, c.want) {
 			t.Errorf("%s: %v %v, want %v", c.name, got, err, c.want)
 		}
 	}
 	for name, build := range map[string]func(f *gqlimpl.Filter){
-		"*float64 for an int": func(f *gqlimpl.Filter) { gqlimpl.Value(f, "f", new(1.5), age, velox.PredEQ) },
-		"*bool for an int":    func(f *gqlimpl.Filter) { gqlimpl.Value(f, "f", new(true), age, velox.PredEQ) },
-		"[]float64 for an int": func(f *gqlimpl.Filter) {
-			gqlimpl.List(f, "f", []float64{1.5}, age, velox.PredIn)
-		},
+		"*float64 for an int":  func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", age, gqlimpl.Ops[float64]{EQ: new(1.5)}) },
+		"*bool for an int":     func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", age, gqlimpl.Ops[bool]{EQ: new(true)}) },
+		"[]float64 for an int": func(f *gqlimpl.Filter) { gqlimpl.Field(f, "f", age, gqlimpl.Ops[float64]{In: []float64{1.5}}) },
 	} {
 		if _, err := filtered[owner](t, db, build); err == nil {
 			t.Errorf("%s: no error", name)

@@ -162,7 +162,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `UpdateField`), and `NewNode`, `NewFilter`, `NewCreate`, `NewUpdate`, `EdgeOne`,
   `EdgeList` and `EdgeConnection` take it in place of the type's names, its table and its
   columns. `EdgeOne` and `EdgeList` read the DB from the context and narrow to the
-  selection themselves. The GraphQL schema and every behaviour are unchanged.
+  selection themselves. A where input's `PredicateGQL` adds a field's predicates with
+  one call, `gqlimpl.Field`, `IDField` or `FKField`, whose `gqlimpl.Ops[V]` holds the
+  input's values of each operator; `Value`, `List`, `Is`, `ID`, `IDList`, `FKID`,
+  `FKIDList` and `FKIs` are gone. The GraphQL schema and every behaviour are unchanged.
 - **Breaking.** `GeneratedCodeIsVersion16`: regenerate. Behaviour declared in the schema
   is untyped and names columns by name; gen imports the schema; gen/runtime is gone;
   remove `import _ ".../gen/runtime"`. `velox.Policy`, `Hook`, `Mutator`, `MutateFunc`,

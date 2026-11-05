@@ -62,29 +62,16 @@ func (w *personWhere) PredicateGQL(ctx context.Context) (velox.Predicate, error)
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
-	gqlimpl.ID[int64](f, "id", w.ID, "Person", 0, velox.PredEQ)
-	gqlimpl.ID[int64](f, "idNEQ", w.IDNEQ, "Person", 0, velox.PredNEQ)
-	gqlimpl.IDList[int64](f, "idIn", w.IDIn, "Person", 0, velox.PredIn)
-	gqlimpl.IDList[int64](f, "idNotIn", w.IDNotIn, "Person", 0, velox.PredNotIn)
-	gqlimpl.ID[int64](f, "idGT", w.IDGT, "Person", 0, velox.PredGT)
-	gqlimpl.Value(f, "name", w.Name, 1, velox.PredEQ)
-	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, 1, velox.PredNEQ)
-	gqlimpl.List(f, "nameIn", w.NameIn, 1, velox.PredIn)
-	gqlimpl.List(f, "nameNotIn", w.NameNotIn, 1, velox.PredNotIn)
-	gqlimpl.Value(f, "nameGT", w.NameGT, 1, velox.PredGT)
-	gqlimpl.Value(f, "nameContains", w.NameContains, 1, velox.PredContains)
-	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, 1, velox.PredHasPrefix)
-	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, 1, velox.PredHasSuffix)
-	gqlimpl.Value(f, "label", w.Label, 1, velox.PredEQ)
-	gqlimpl.List(f, "labelNotIn", w.LabelNotIn, 1, velox.PredNotIn)
-	gqlimpl.Value(f, "age", w.Age, 2, velox.PredEQ)
-	gqlimpl.Value(f, "ageNEQ", w.AgeNEQ, 2, velox.PredNEQ)
-	gqlimpl.List(f, "ageIn", w.AgeIn, 2, velox.PredIn)
-	gqlimpl.List(f, "ageNotIn", w.AgeNotIn, 2, velox.PredNotIn)
-	gqlimpl.Value(f, "ageGT", w.AgeGT, 2, velox.PredGT)
-	gqlimpl.Value(f, "ageGTE", w.AgeGTE, 2, velox.PredGTE)
-	gqlimpl.Value(f, "ageLT", w.AgeLT, 2, velox.PredLT)
-	gqlimpl.Value(f, "ageLTE", w.AgeLTE, 2, velox.PredLTE)
+	gqlimpl.IDField[int64](f, "id", 0, gqlimpl.Ops[string]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT})
+	gqlimpl.Field(f, "name", 1, gqlimpl.Ops[string]{
+		EQ: w.Name, NEQ: w.NameNEQ, In: w.NameIn, NotIn: w.NameNotIn, GT: w.NameGT,
+		Contains: w.NameContains, HasPrefix: w.NameHasPrefix, HasSuffix: w.NameHasSuffix,
+	})
+	gqlimpl.Field(f, "label", 1, gqlimpl.Ops[string]{EQ: w.Label, NotIn: w.LabelNotIn})
+	gqlimpl.Field(f, "age", 2, gqlimpl.Ops[int64]{
+		EQ: w.Age, NEQ: w.AgeNEQ, In: w.AgeIn, NotIn: w.AgeNotIn,
+		GT: w.AgeGT, GTE: w.AgeGTE, LT: w.AgeLT, LTE: w.AgeLTE,
+	})
 	return f.Pred()
 }
 
@@ -426,7 +413,7 @@ func TestWhereBudget(t *testing.T) {
 	// came from.
 	f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[person]("Person"))
 	for range 9 {
-		gqlimpl.List(f, "ageIn", in(100), 2, velox.PredIn) // 909 of 1000
+		gqlimpl.Field(f, "age", 2, gqlimpl.Ops[int64]{In: in(100)}) // 909 of 1000
 	}
 	spy := &ctxSpy{}
 	gqlimpl.Not(f, "not", spy)
@@ -466,11 +453,11 @@ func TestWhereValueLists(t *testing.T) {
 		w     *personWhere
 		field string
 	}{
-		"In":       {&personWhere{NameIn: many}, "nameIn"},
-		"NotIn":    {&personWhere{AgeNotIn: ages}, "ageNotIn"},
-		"ListAs":   {&personWhere{LabelNotIn: many}, "labelNotIn"},
-		"IDList":   {&personWhere{IDIn: many}, "idIn"},
-		"IDListAs": {&personWhere{IDNotIn: many}, "idNotIn"},
+		"nameIn":     {&personWhere{NameIn: many}, "nameIn"},
+		"ageNotIn":   {&personWhere{AgeNotIn: ages}, "ageNotIn"},
+		"labelNotIn": {&personWhere{LabelNotIn: many}, "labelNotIn"},
+		"idIn":       {&personWhere{IDIn: many}, "idIn"},
+		"idNotIn":    {&personWhere{IDNotIn: many}, "idNotIn"},
 	} {
 		_, err := c.w.Pred(ctx)
 		if !errors.Is(err, veloxgql.ErrFilterTooWide) || !strings.HasPrefix(err.Error(), "veloxgql: PersonWhereInput."+c.field+": ") {
