@@ -100,7 +100,7 @@ func TestClassifyErrors(t *testing.T) {
 	if testing.Short() {
 		t.Skip("lists velox's schema package")
 	}
-	exp, err := exports(repoRoot(t), loadjson.SchemaPath, "", offline())
+	exp, err := exports(repoRoot(t), loadjson.SchemaPath, offline())
 	if err != nil {
 		t.Fatal(err)
 	}

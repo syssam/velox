@@ -28,13 +28,12 @@ type listed struct {
 	Dir            string
 	GoFiles        []string
 	IgnoredGoFiles []string
-	Imports        []string
 	Module         *struct{ Dir string }
 	Error          *struct{ Err string }
 }
 
 // listFields are the fields of listed, for go list.
-const listFields = "-json=ImportPath,Name,Dir,GoFiles,IgnoredGoFiles,Imports,Module,Error"
+const listFields = "-json=ImportPath,Name,Dir,GoFiles,IgnoredGoFiles,Module,Error"
 
 // Inspect runs go list for pattern, in the module that holds dir, and reports
 // the import path of the one package it names and the types of the package
@@ -49,21 +48,21 @@ const listFields = "-json=ImportPath,Name,Dir,GoFiles,IgnoredGoFiles,Imports,Mod
 // embeds schema.Schema and that no type embeds. A package that has no
 // candidates is not an error: schemas is empty.
 func Inspect(dir, pattern string, env []string) (importPath string, schemas []string, err error) {
-	pkg, names, _, err := inspect(dir, pattern, env)
+	pkg, names, err := inspect(dir, pattern, env)
 	if err != nil {
 		return "", nil, err
 	}
 	return pkg.ImportPath, names, nil
 }
 
-// inspect is Inspect's work, which also returns the package's files by name.
-// A file that only some builds include is refused: velox-gen generates one
+// inspect is Inspect's work, which returns the package go list reports. A
+// file that only some builds include is refused: velox-gen generates one
 // model for every build. A file no build includes, such as one behind
 // //go:build ignore, and a _test.go file are not read.
-func inspect(dir, pattern string, env []string) (*listed, []string, map[string][]byte, error) {
+func inspect(dir, pattern string, env []string) (*listed, []string, error) {
 	pkg, err := list(dir, pattern, env)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	goVersion := ModuleGoVersion(pkg.Dir)
 	files := make(map[string][]byte, len(pkg.GoFiles))
@@ -74,10 +73,10 @@ func inspect(dir, pattern string, env []string) (*listed, []string, map[string][
 		path := filepath.Join(pkg.Dir, name)
 		src, err := os.ReadFile(path)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		if sys, line := GoFileSystems(name, src, goVersion); sys == SomeSystems {
-			return nil, nil, nil, &Error{Pos: posString(token.Position{Filename: path, Line: max(line, 1)}),
+			return nil, nil, &Error{Pos: posString(token.Position{Filename: path, Line: max(line, 1)}),
 				Reason: "go builds this file of the schema package only on some systems or with some tags; velox-gen reads the schemas from files that every build includes"}
 		}
 		if slices.Contains(pkg.GoFiles, name) {
@@ -86,9 +85,9 @@ func inspect(dir, pattern string, env []string) (*listed, []string, map[string][
 	}
 	names, err := candidates(files)
 	if err != nil {
-		return nil, nil, nil, prefixFiles(err, pkg.Dir)
+		return nil, nil, prefixFiles(err, pkg.Dir)
 	}
-	return pkg, names, files, nil
+	return pkg, names, nil
 }
 
 // prefixFiles puts dir before the file name of each *Error's position in err.
@@ -115,7 +114,7 @@ func prefixFiles(err error, dir string) error {
 // builder's, are returned as *Error values joined with errors.Join, each with
 // the position of the type or element when it has one.
 func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
-	pkg, cands, files, err := inspect(dir, pattern, env)
+	pkg, cands, err := inspect(dir, pattern, env)
 	if err != nil {
 		return nil, err
 	}
@@ -130,13 +129,9 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	// A deferred call does not run when a signal ends the process, as
 	// ci-local's fail-fast does: the handler removes tmp then.
 	defer removeOnSignal(tmp)()
-	overlay, originals, err := writeOverlay(tmp, pkg, cands, files, env)
+	exp, err := exports(pkg.Module.Dir, pkg.ImportPath, env)
 	if err != nil {
-		return nil, err
-	}
-	exp, err := exports(pkg.Module.Dir, pkg.ImportPath, overlay, env)
-	if err != nil {
-		return nil, fmt.Errorf("loading %s:\n%s", pkg.ImportPath, unoverlay(err.Error(), originals, pkg.Module.Dir))
+		return nil, fmt.Errorf("loading %s:\n%s", pkg.ImportPath, err)
 	}
 	names, err := classify(pkg.ImportPath, exp)
 	if err != nil {
@@ -148,13 +143,9 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	if err := os.WriteFile(filepath.Join(tmp, "main.go"), program(pkg.ImportPath, names), 0o644); err != nil {
 		return nil, err
 	}
-	args := []string{"run"}
-	if overlay != "" {
-		args = append(args, "-overlay="+overlay)
-	}
-	out, stderr, err := run(pkg.Module.Dir, env, append(args, "./"+filepath.Base(tmp))...)
+	out, stderr, err := run(pkg.Module.Dir, env, "run", "./"+filepath.Base(tmp))
 	if err != nil {
-		msg := strings.ReplaceAll(unoverlay(stderr, originals, pkg.Module.Dir), tmp, "velox-gen")
+		msg := strings.ReplaceAll(stderr, tmp, "velox-gen")
 		msg = strings.ReplaceAll(msg, filepath.Base(tmp), "velox-gen")
 		// go run's own last line says how the program exited, which the
 		// lines before it already explain.
@@ -176,80 +167,6 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 		return nil, errors.Join(errs...)
 	}
 	return m, nil
-}
-
-// writeOverlay writes, in tmp, the schema package's files without the
-// entities' behaviour (see prune) and the go command's overlay file that puts
-// them in place of the package's, and returns the overlay file's path; ""
-// when the package declares no behaviour, which needs no overlay. originals
-// maps each rewritten file's path to the user's file it stands for.
-func writeOverlay(tmp string, pkg *listed, schemas []string, files map[string][]byte, env []string) (overlay string, originals map[string]string, err error) {
-	var names map[string]string
-	if len(pkg.Imports) > 0 {
-		names = listNames(pkg.Module.Dir, pkg.Imports, env)
-	}
-	pruned, err := prune(files, schemas, names)
-	if err != nil || len(pruned) == 0 {
-		return "", nil, err
-	}
-	// The files go below tmp, with a name go does not read as Go: tmp holds
-	// the program's package, which must have only its own files.
-	dir := filepath.Join(tmp, "overlay")
-	if err := os.Mkdir(dir, 0o755); err != nil {
-		return "", nil, err
-	}
-	replace := map[string]string{}
-	originals = map[string]string{}
-	for name, src := range pruned {
-		p := filepath.Join(dir, name+".txt")
-		if err := os.WriteFile(p, src, 0o644); err != nil {
-			return "", nil, err
-		}
-		replace[filepath.Join(pkg.Dir, name)] = p
-		originals[p] = filepath.Join(pkg.Dir, name)
-	}
-	b, err := json.Marshal(struct{ Replace map[string]string }{replace})
-	if err != nil {
-		return "", nil, err
-	}
-	p := filepath.Join(tmp, "overlay.json")
-	return p, originals, os.WriteFile(p, b, 0o644)
-}
-
-// unoverlay replaces, in msg, the paths of the rewritten files in originals
-// with the user's files they stand for. The go command writes a path below
-// modDir relative to it, as ./x; the rewrite keeps every line where it was,
-// so a position stays true with the user's path.
-func unoverlay(msg string, originals map[string]string, modDir string) string {
-	for p, orig := range originals {
-		msg = strings.ReplaceAll(msg, p, orig)
-		rp, err1 := filepath.Rel(modDir, p)
-		ro, err2 := filepath.Rel(modDir, orig)
-		if err1 == nil && err2 == nil {
-			msg = strings.ReplaceAll(msg, "./"+filepath.ToSlash(rp), "./"+filepath.ToSlash(ro))
-			msg = strings.ReplaceAll(msg, filepath.ToSlash(rp), filepath.ToSlash(ro))
-		}
-	}
-	return msg
-}
-
-// listNames returns the package names of the import paths, as go list
-// reports them. A path go list cannot name, such as a generated package that
-// does not exist yet, is left out. It is best effort: on an error, the result
-// is empty, and prune guesses every name.
-func listNames(dir string, imports []string, env []string) map[string]string {
-	out, _, _ := run(dir, env, append([]string{"list", "-e", "-json=ImportPath,Name"}, imports...)...)
-	names := map[string]string{}
-	dec := json.NewDecoder(strings.NewReader(out))
-	for {
-		var p struct{ ImportPath, Name string }
-		if dec.Decode(&p) != nil {
-			return names
-		}
-		if p.Name != "" {
-			names[p.ImportPath] = p.Name
-		}
-	}
 }
 
 // exitStatus matches the line go run writes last when the program fails.
@@ -277,9 +194,6 @@ func decodeModel(b []byte) (*loadjson.Model, error) {
 func list(dir, pattern string, env []string) (*listed, error) {
 	out, stderr, err := run(dir, env, "list", listFields, pattern)
 	if err != nil {
-		if pkg := listCycle(dir, pattern, env); pkg != nil {
-			return pkg, nil
-		}
 		msg := strings.TrimSpace(stderr)
 		switch {
 		case !inModule(dir, env):
@@ -310,40 +224,6 @@ func list(dir, pattern string, env []string) (*listed, error) {
 		return nil, errors.New("the schema package must be in a module")
 	}
 	return &pkg, nil
-}
-
-// listCycle is list's way past an import cycle through the schema package:
-// one that declares Hooks or Policy imports the generated package, which,
-// generated before the schema declared them, imports the schema package.
-// go list refuses the cycle, but the loader compiles the package without what
-// imports the generated one (see prune), and the generation that follows
-// breaks the cycle. It returns the package go list -e reports when the
-// package's own error is in an import, its import stack longer than the
-// package; nil otherwise, and list reports go list's error.
-func listCycle(dir, pattern string, env []string) *listed {
-	out, _, err := run(dir, env, "list", "-e", listFields, pattern)
-	if err != nil {
-		return nil
-	}
-	var pkg struct {
-		listed
-		Error *struct {
-			ImportStack []string
-			Err         string
-		}
-	}
-	dec := json.NewDecoder(strings.NewReader(out))
-	if dec.Decode(&pkg) != nil || dec.More() {
-		return nil
-	}
-	if pkg.Error == nil || len(pkg.Error.ImportStack) < 2 || !strings.Contains(pkg.Error.Err, "import cycle") {
-		return nil
-	}
-	if pkg.Name == "" || len(pkg.GoFiles) == 0 || pkg.Module == nil || pkg.Module.Dir == "" {
-		return nil
-	}
-	pkg.listed.Error = nil
-	return &pkg.listed
 }
 
 // inModule reports whether the go command in dir runs in a module.

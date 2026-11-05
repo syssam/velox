@@ -49,8 +49,7 @@ func NoSchemas(importPath string) error {
 // candidates returns, from the schema package's files, the types that may be
 // schemas, sorted: those of a struct with an embedded field, the aliases,
 // the defined types of another named type, and those with a method named
-// Type. The loader keeps them, and what they reach,
-// when it prunes the package (see prune). It also refuses an unexported
+// Type: a package with none has no schemas. It also refuses an unexported
 // struct that embeds schema.Schema, directly or through other unexported
 // structs of the package, when no type of the package embeds it.
 func candidates(files map[string][]byte) ([]string, error) {
@@ -187,16 +186,11 @@ func posString(p token.Position) string {
 }
 
 // exports runs go list -export for the package at importPath and its
-// dependencies, with the overlay file when it is not "", and returns the
-// export data file of each package by import path. A package that does not
-// compile is an error that names it, and the chain of imports that reaches
-// it from the schema package.
-func exports(dir, importPath, overlay string, env []string) (map[string]string, error) {
-	args := []string{"list", "-e", "-export", "-deps", "-json=ImportPath,Export,Imports,Error"}
-	if overlay != "" {
-		args = append(args, "-overlay="+overlay)
-	}
-	out, stderr, err := run(dir, env, append(args, importPath)...)
+// dependencies, and returns the export data file of each package by import
+// path. A package that does not compile is an error that names it, and the
+// chain of imports that reaches it from the schema package.
+func exports(dir, importPath string, env []string) (map[string]string, error) {
+	out, stderr, err := run(dir, env, "list", "-e", "-export", "-deps", "-json=ImportPath,Export,Imports,Error", importPath)
 	if err != nil {
 		msg := strings.TrimSpace(stderr)
 		if msg == "" {

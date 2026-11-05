@@ -157,7 +157,7 @@ const genImportReason = "the schema declares behaviour by column name and does n
 // checkGenImports is CheckGenImports, which also returns the schema
 // package's directory.
 func checkGenImports(dir, pattern, genPath string, env []string) (string, error) {
-	pkg, err := list(dir, pattern, env)
+	pkg, err := listAny(dir, pattern, env)
 	if err != nil {
 		return "", err
 	}
@@ -180,6 +180,27 @@ func checkGenImports(dir, pattern, genPath string, env []string) (string, error)
 		return "", fmt.Errorf("%s: %s", strings.Join(chain, " imports "), genImportReason)
 	}
 	return pkg.Dir, nil
+}
+
+// listAny is list, but for a package whose own error is go list's, such as
+// an import cycle through the generated package, which checkGenImports
+// explains: it returns the package go list -e reports, when it has a
+// directory, and list's error otherwise.
+func listAny(dir, pattern string, env []string) (*listed, error) {
+	pkg, err := list(dir, pattern, env)
+	if err == nil {
+		return pkg, nil
+	}
+	out, _, lerr := run(dir, env, "list", "-e", listFields, pattern)
+	if lerr != nil {
+		return nil, err
+	}
+	var p listed
+	dec := json.NewDecoder(strings.NewReader(out))
+	if dec.Decode(&p) != nil || dec.More() || p.Dir == "" || p.ImportPath == "" {
+		return nil, err
+	}
+	return &p, nil
 }
 
 // genImports lists the packages the schema package at importPath imports,

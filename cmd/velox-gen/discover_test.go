@@ -466,8 +466,7 @@ func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("notes", Note.T
 
 // A package that the schema's structure reaches and that does not compile,
 // such as a helper that uses a generated package not written yet, is
-// reported with the chain of imports and what to do; the Hooks and Policy
-// methods are pruned only from the schema package itself.
+// reported with the chain of imports and what to do.
 func TestDiscoverHelperThatDoesNotCompile(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
@@ -498,7 +497,7 @@ func (User) Fields() []schema.Field { return []schema.Field{field.String(helper.
 
 // A defined type over a struct that reaches schema.Schema, type Release Item
 // or type Draft mixins.Base, is a schema by its underlying struct, as in
-// plain mode, so also with a Policy, which the loader prunes: it keeps it.
+// plain mode, so also with a Policy.
 func TestDiscoverDefinedTypeWithAPolicy(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")

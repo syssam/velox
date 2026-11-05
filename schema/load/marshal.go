@@ -160,10 +160,9 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 	}
 	// The method set of a value type leaves out pointer-receiver methods.
 	// velox-gen binds a Hooks, Policy or Interceptors method the schema
-	// declares itself,
-	// from the package's source, and the loader leaves such a method out of
-	// what it compiles: one seen here is promoted from an embedded type, or
-	// the schema was loaded without velox-gen.
+	// declares itself, from the package's source, which gives its shape and
+	// position: the loader leaves it alone. One promoted from an embedded
+	// type is not bound, and is refused.
 	for _, h := range []string{"Hooks", "Policy", "Interceptors"} {
 		if _, ok := reflect.PointerTo(vt).MethodByName(h); !ok {
 			continue
@@ -182,9 +181,7 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 		}
 		if from, pos := promotedFrom(vt, h); from != nil {
 			l.fail(pos, "", "has %s %s method promoted from %s, which velox-gen does not bind: declare %[2]s on the schema itself, in the schema package: %[4]s", article, h, from, want)
-			continue
 		}
-		l.fail(methodPos(vt, h), "", "has %s %s method, which velox-gen binds from the schema package's source, as %s; the schema was loaded without velox-gen", article, h, want)
 	}
 	l.mixinPos = methodPos(vt, "Mixin")
 	out := &loadjson.Schema{Name: l.name}

@@ -130,27 +130,43 @@ type genModel struct {
 	rels       []string // every relation's handle, e.g. "Users.Posts", join entities included
 }
 
+// explainLoad is err, the failure to read the schema package at pattern,
+// or the reason velox-gen finds for it. A schema package that reaches the
+// generated package at out makes an import cycle once that package imports
+// the schema, which go list reports with no chain: the reason names the
+// chain. A behaviour method of a shape velox-gen does not bind, such as an
+// older velox's typed one, may not compile: when schemas, the schemas'
+// names, are known, the reason names the shape velox-gen binds.
+func explainLoad(dir, pattern, out string, env []string, err error, schemas []string) error {
+	genPath, perr := dirImportPath(out, env)
+	if perr != nil {
+		return err
+	}
+	var cerr error
+	switch {
+	case schemas != nil:
+		_, cerr = codegen.Behaviour(dir, pattern, genPath, env, schemas)
+	case strings.Contains(err.Error(), "import cycle not allowed"):
+		// go list's words for the cycle: another failure to list the
+		// package, such as a file only some builds include, is its own.
+		cerr = codegen.CheckGenImports(dir, pattern, genPath, env)
+	}
+	if cerr != nil {
+		return relErrors(dir, cerr)
+	}
+	return err
+}
+
 // loadModel loads and builds the schema package at pattern and lowers it to
 // the names of its generated entities.
 func loadModel(dir, pattern, out, pkg string, env []string) (*genModel, error) {
-	// A schema package that reaches the generated package at out makes an
-	// import cycle once that package imports the schema, which go list
-	// reports with no chain: the error names the chain instead.
-	cycle := func(err error) error {
-		if genPath, perr := dirImportPath(out, env); perr == nil {
-			if cerr := codegen.CheckGenImports(dir, pattern, genPath, env); cerr != nil {
-				return relErrors(dir, cerr)
-			}
-		}
-		return relErrors(dir, err)
-	}
-	importPath, _, err := codegen.Inspect(dir, pattern, env)
+	importPath, schemas, err := codegen.Inspect(dir, pattern, env)
 	if err != nil {
-		return nil, cycle(err)
+		return nil, explainLoad(dir, pattern, out, env, relErrors(dir, err), nil)
 	}
 	m, err := codegen.Load(dir, pattern, env)
 	if err != nil {
-		return nil, cycle(err)
+		return nil, explainLoad(dir, pattern, out, env, relErrors(dir, err), schemas)
 	}
 	g, err := codegen.Build(m)
 	if err != nil {

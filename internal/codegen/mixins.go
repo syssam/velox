@@ -359,3 +359,50 @@ func exprString(x ast.Expr) string {
 // noBehaviour are velox's packages whose types a mixin embeds, which
 // declare no behaviour methods: velox-gen does not read them.
 var noBehaviour = map[string]bool{loadjson.SchemaPath: true, loadjson.SchemaPath + "/mixin": true}
+
+// guessName is the name a package at import path p is conventionally
+// declared with: its last element, without a major version element or suffix
+// (example.com/x/v2 and gopkg.in/x.v2 are x) or a go- prefix.
+func guessName(p string) string {
+	elems := strings.Split(p, "/")
+	last := elems[len(elems)-1]
+	if len(elems) > 1 && majorVersion(last) {
+		last = elems[len(elems)-2]
+	}
+	if i := strings.LastIndex(last, ".v"); i > 0 && majorVersion(last[i+1:]) {
+		last = last[:i]
+	}
+	last = strings.TrimPrefix(last, "go-")
+	return strings.ReplaceAll(last, "-", "_")
+}
+
+// majorVersion reports whether s is v followed by digits.
+func majorVersion(s string) bool {
+	if len(s) < 2 || s[0] != 'v' {
+		return false
+	}
+	_, err := strconv.Atoi(s[1:])
+	return err == nil
+}
+
+// recvType is the name of the type of d's receiver, generic or not: T for
+// (T), (*T), (T[P]) and (*T[P]); "" for another shape.
+func recvType(d *ast.FuncDecl) string {
+	if d.Recv == nil || len(d.Recv.List) != 1 {
+		return ""
+	}
+	t := d.Recv.List[0].Type
+	if star, ok := t.(*ast.StarExpr); ok {
+		t = star.X
+	}
+	switch x := t.(type) {
+	case *ast.IndexExpr:
+		t = x.X
+	case *ast.IndexListExpr:
+		t = x.X
+	}
+	if id, ok := t.(*ast.Ident); ok {
+		return id.Name
+	}
+	return ""
+}

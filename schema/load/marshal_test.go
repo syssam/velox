@@ -150,23 +150,6 @@ func TestMarshalSchemaDefault(t *testing.T) {
 	}
 }
 
-type hooked struct{ schema.Schema }
-
-var hookedLine = here() + 2 // the line of Hooks
-
-func (hooked) Hooks() []any { return nil }
-
-func TestMarshalRefusesBehaviour(t *testing.T) {
-	m := decode(t, hooked{})
-	if got := errorText(m); !strings.Contains(got, "schema hooked: has a Hooks method") {
-		t.Fatalf("got %q", got)
-	}
-	// The error is at the method.
-	if p := m.Errors[0].Pos; !strings.HasSuffix(p, fmt.Sprintf("/marshal_test.go:%d", hookedLine)) {
-		t.Errorf("pos %q, want line %d", p, hookedLine)
-	}
-}
-
 type panics struct{ schema.Schema }
 
 func (panics) Fields() []schema.Field { panic("boom") }
@@ -229,6 +212,10 @@ func TestMarshalDeterministic(t *testing.T) {
 	}
 }
 
+type hooked struct{ schema.Schema }
+
+func (hooked) Hooks() []any { return nil }
+
 type ptrHooked struct{ schema.Schema }
 
 func (*ptrHooked) Hooks() []any { return nil }
@@ -241,18 +228,13 @@ type intercepted struct{ schema.Schema }
 
 func (*intercepted) Interceptors() []any { return nil }
 
-func TestMarshalRefusesBehaviourVariants(t *testing.T) {
-	for _, c := range []struct {
-		s    schema.Interface
-		want string
-	}{
-		{ptrHooked{}, "schema ptrHooked: has a Hooks method, which velox-gen binds from the schema package's source, as func (ptrHooked) Hooks() []velox.Hook"},
-		{&ptrHooked{}, "schema ptrHooked: has a Hooks method, which velox-gen binds"},
-		{policed{}, "schema policed: has a Policy method, which velox-gen binds from the schema package's source, as func (policed) Policy() velox.Policy"},
-		{intercepted{}, "schema intercepted: has an Interceptors method, which velox-gen binds from the schema package's source, as func (intercepted) Interceptors() []velox.Interceptor"},
-	} {
-		if got := errorText(decode(t, c.s)); !strings.Contains(got, c.want) {
-			t.Errorf("got %q, want %q", got, c.want)
+// A Hooks, Policy or Interceptors method the schema declares itself, by
+// value or pointer receiver, is left to velox-gen, which reads it from the
+// source: Marshal reports no error for it.
+func TestMarshalLeavesOwnBehaviour(t *testing.T) {
+	for _, s := range []schema.Interface{hooked{}, ptrHooked{}, &ptrHooked{}, policed{}, intercepted{}} {
+		if got := errorText(decode(t, s)); got != "" {
+			t.Errorf("%T: %q", s, got)
 		}
 	}
 }

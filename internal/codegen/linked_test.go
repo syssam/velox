@@ -178,6 +178,28 @@ func TestBehaviourRefusesSchemaImportingGen(t *testing.T) {
 			t.Fatalf("CheckGenImports: got %v", err)
 		}
 	})
+	// gen, generated earlier, imports the schema: go list refuses the
+	// cycle, and the refusal names the import still.
+	t.Run("cycle", func(t *testing.T) {
+		dir := module(t, map[string]string{"schema/schema.go": linkedSchema})
+		files := map[string]string{
+			"gen/gen.go":     "package gen\n\nimport _ \"example.com/tmp/schema\"\n\nconst X = 1\n",
+			"schema/uses.go": "package schema\n\nimport \"example.com/tmp/gen\"\n\nvar _ = gen.X\n",
+		}
+		for name, src := range files {
+			if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(name)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		err := CheckGenImports(dir, "./schema", "example.com/tmp/gen", offline())
+		var fe *FileError
+		if !errors.As(err, &fe) || filepath.Base(fe.Path) != "uses.go" || fe.Line != 3 {
+			t.Fatalf("got %v", err)
+		}
+	})
 	t.Run("none", func(t *testing.T) {
 		dir := module(t, map[string]string{"schema/schema.go": linkedSchema})
 		if err := os.WriteFile(filepath.Join(dir, "schema", "p.go"), []byte("package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (User) Policy() velox.Policy { return velox.Policy{} }\n"), 0o644); err != nil {

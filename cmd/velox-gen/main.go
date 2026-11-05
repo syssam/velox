@@ -353,12 +353,15 @@ func runGenCommand(name string, args []string, dir string, env []string, stdout,
 			}
 		}
 	})
+	f := genFlags{out: *outDir, pkg: *pkgName, plugins: plugins, rerun: append(rerun, patterns...)}
 	pattern, err := schemaPackage(dir, patterns, env)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
+		if pattern = defaultSchema; len(patterns) == 1 {
+			pattern = patterns[0]
+		}
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", explainLoad(dir, pattern, f.outDir(dir), env, err, nil))
 		return 1
 	}
-	f := genFlags{out: *outDir, pkg: *pkgName, plugins: plugins, rerun: append(rerun, patterns...)}
 	if verify {
 		return runGenerateVerify(f, pattern, dir, env, stdout, stderr)
 	}

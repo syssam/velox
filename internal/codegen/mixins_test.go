@@ -617,3 +617,18 @@ func TestMixinPackageNames(t *testing.T) {
 		}
 	}
 }
+
+func TestGuessName(t *testing.T) {
+	for p, want := range map[string]string{
+		"example.com/x":         "x",
+		"example.com/x/v2":      "x",
+		"gopkg.in/yaml.v3":      "yaml",
+		"github.com/a/go-thing": "thing",
+		"example.com/a-b":       "a_b",
+		"v2":                    "v2",
+	} {
+		if got := guessName(p); got != want {
+			t.Errorf("guessName(%q) = %q, want %q", p, got, want)
+		}
+	}
+}
