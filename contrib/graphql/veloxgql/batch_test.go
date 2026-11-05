@@ -221,7 +221,7 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			if err != nil {
 				return nil, err
 			}
-			return gqlimpl.EdgeConnection(ctx, c, velox.TableOf[keeper](), unsafe.Pointer(parent(ctx).(*keeper)), int(keepers.Pets.I), edge, nil), nil
+			return gqlimpl.EdgeConnection(ctx, c, &gqlimpl.Conn{Type: "Keeper", Table: velox.TableOf[keeper]}, parent(ctx), int(keepers.Pets.I), edge, nil), nil
 		}
 	}
 	return serveSchema(testSchemaOf(batchSDL, map[string]resolver{

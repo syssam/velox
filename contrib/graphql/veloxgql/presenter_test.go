@@ -48,7 +48,7 @@ func (w *personName) Pred(ctx context.Context) (velox.Pred[person], error) {
 }
 
 func (w *personName) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, "PersonWhereInput", velox.TableOf[person]())
+	f := gqlimpl.NewFilter(ctx, &gqlimpl.Conn{Type: "Person", Table: velox.TableOf[person]})
 	if w == nil {
 		return f.Pred()
 	}
@@ -74,7 +74,7 @@ func (w *leaky) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
 	if w != nil && w.Leak {
 		return velox.Predicate{}, fmt.Errorf("sqlite: secret: %w", gqlimpl.InputErrorf("bad name"))
 	}
-	f := gqlimpl.NewFilter(ctx, "LeakyWhereInput", velox.TableOf[person]())
+	f := gqlimpl.NewFilter(ctx, &gqlimpl.Conn{Type: "Leaky", Table: velox.TableOf[person]})
 	if w != nil {
 		gqlimpl.Not(f, "not", w.Not)
 	}

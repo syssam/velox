@@ -212,7 +212,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion11\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion12\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -322,25 +322,22 @@ func (r *renderer) writeNodeKind(f *file, t *sdl.Type, k *plugin.Field) error {
 			return err
 		}
 	}
-	elem := cmp.Or(k.ElemType, t.Key)
 	key, err := r.nodeKeyType(f, t, k)
 	if err != nil {
 		return err
 	}
-	vgql, impl, velox := f.veloxgql(), f.gqlimpl(), f.velox()
-	decode := fmt.Sprintf("%s.DecodeID[%s](id, %q)", vgql, t.Key, t.Name)
+	self, err := r.idKeyOf(f, e, t)
+	if err != nil {
+		return err
+	}
+	impl := f.gqlimpl()
 	f.doc("", fmt.Sprintf("%s is the Node type %s for Node and Nodes.", nodeFunc(t), t.Name))
 	f.p("func %s() %s.NodeKind {", nodeFunc(t), impl)
-	f.p("\treturn %s.NewNode(%q, %s.TableOf[%s](), %s,", impl, t.Name, velox, e.Name, colConst(e, k))
-	f.p("\t\tfunc(id string) (any, error) {")
-	f.p("\t\t\tk, err := %s", decode)
-	if elem == t.Key {
-		f.p("\t\t\treturn k, err")
+	if self.conv != "" {
+		f.p("\treturn %s.NewNode%s(&%s%s)", impl, strings.TrimSuffix(self.args, "]")+", "+self.typ+"]", connVar(t), self.conv)
 	} else {
-		f.p("\t\t\treturn %s(k), err", key)
+		f.p("\treturn %s.NewNode[%s](&%s)", impl, self.typ, connVar(t))
 	}
-	f.p("\t\t},")
-	f.p("\t\t%s)", colsFunc(t))
 	f.p("}")
 	f.p("")
 	f.doc("", fmt.Sprintf("%s is the key of x, %s %s.", keyGetter(t), english.Article(t.Name), t.Name))

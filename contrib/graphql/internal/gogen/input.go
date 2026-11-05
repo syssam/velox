@@ -18,8 +18,7 @@ func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
 	if t.Create == nil && t.Update == nil {
 		return nil
 	}
-	createName, updateName, err := r.writeInputGQL(f, t)
-	if err != nil {
+	if _, _, err := r.writeInputGQL(f, t); err != nil {
 		return err
 	}
 	if err := r.writeInputEdges(f, t); err != nil {
@@ -30,7 +29,7 @@ func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
 		if err := r.writeInput(f, t, in, t.Create); err != nil {
 			return err
 		}
-		if err := r.writeCreate(f, t, in, createName); err != nil {
+		if err := r.writeCreate(f, t, in); err != nil {
 			return err
 		}
 	}
@@ -39,7 +38,7 @@ func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
 		if err := r.writeInput(f, t, in, t.Update); err != nil {
 			return err
 		}
-		if err := r.writeUpdate(f, t, in, updateName); err != nil {
+		if err := r.writeUpdate(f, t, in); err != nil {
 			return err
 		}
 	}
@@ -170,9 +169,9 @@ func inputNames(e *plugin.Entity, fs []sdl.InputField) []inputName {
 // the create input's and the update input's.
 func (r *renderer) writeInputGQL(f *file, t *sdl.Type) (create, update string, err error) {
 	e := t.Entity
-	base := lowerFirst(e.Name)
 	cn, un := inputNames(e, t.Create), inputNames(e, t.Update)
-	if t.Create == nil || t.Update == nil || slices.Equal(cn, un) {
+	create, update = inputFuncs(t)
+	if create == "" || update == "" || create == update {
 		names, in := cn, "Create"+t.Name+"Input"
 		switch {
 		case t.Create == nil:
@@ -180,13 +179,12 @@ func (r *renderer) writeInputGQL(f *file, t *sdl.Type) (create, update string, e
 		case t.Update != nil:
 			in += " and Update" + t.Name + "Input"
 		}
-		name := base + "InputGQL"
+		name := cmp.Or(create, update)
 		if err := r.writeNameFunc(f, t, name, in, names); err != nil {
 			return "", "", err
 		}
-		return name, name, nil
+		return create, update, nil
 	}
-	create, update = base+"CreateInputGQL", base+"UpdateInputGQL"
 	if err := r.writeNameFunc(f, t, create, "Create"+t.Name+"Input", cn); err != nil {
 		return "", "", err
 	}
@@ -194,6 +192,24 @@ func (r *renderer) writeInputGQL(f *file, t *sdl.Type) (create, update string, e
 		return "", "", err
 	}
 	return create, update, nil
+}
+
+// inputFuncs are the names of the functions writeInputGQL writes for t's
+// create and update inputs: one name for both when they name the same fields
+// alike, and "" for an input t does not have.
+func inputFuncs(t *sdl.Type) (create, update string) {
+	base := lowerFirst(t.Entity.Name)
+	switch {
+	case t.Create == nil && t.Update == nil:
+		return "", ""
+	case t.Create == nil:
+		return "", base + "InputGQL"
+	case t.Update == nil:
+		return base + "InputGQL", ""
+	case slices.Equal(inputNames(t.Entity, t.Create), inputNames(t.Entity, t.Update)):
+		return base + "InputGQL", base + "InputGQL"
+	}
+	return base + "CreateInputGQL", base + "UpdateInputGQL"
 }
 
 // writeNameFunc writes the function name of the input (or inputs) in, by
@@ -340,7 +356,7 @@ func keyCall(f *file, m, fn string, k idKey, fi sdl.InputField, src string) stri
 // writeCreate writes the method Create of the create input in, whose fields
 // t.Create names, with the name function name: a description of the insert
 // and its edges, which gqlimpl.Create runs.
-func (r *renderer) writeCreate(f *file, t *sdl.Type, in, name string) error {
+func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 	e := t.Entity
 	ctx, impl := f.use("context", "context"), f.gqlimpl()
 	fs := t.Create
@@ -371,7 +387,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in, name string) error {
 	f.p("\tif x == nil {")
 	f.p("\t\tx = new(%s)", e.Name)
 	f.p("\t}")
-	f.p("\tc := %s.NewCreate(ctx, %q, %q, %q, %s.TableOf[%s](), %s.Pointer(x), %s%s)", impl, in, t.Name, r.outPkg+"."+e.Name, f.velox(), e.Name, f.use("unsafe", "unsafe"), name, strings.Join(required, ""))
+	f.p("\tc := %s.NewCreate(ctx, &%s, x%s)", impl, connVar(t), strings.Join(required, ""))
 
 	// given opens, at indent, the block of a field that is not Required:
 	// it runs only when the field is given. It returns the block's indent
@@ -501,7 +517,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in, name string) error {
 // writeUpdate writes the method Update of the update input in, whose fields
 // t.Update names, with the name function name: a description of the UPDATE
 // and its edges, which gqlimpl.Update runs.
-func (r *renderer) writeUpdate(f *file, t *sdl.Type, in, name string) error {
+func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	e, n := t.Entity, t.Name
 	if len(e.PrimaryKey) != 1 {
 		return fmt.Errorf("schema %s: an update takes the ID of a key of one column, and %s's is %d columns, which is a bug", e.Name, e.Name, len(e.PrimaryKey))
@@ -512,17 +528,15 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in, name string) error {
 	if err != nil {
 		return err
 	}
-	tbl := fmt.Sprintf("%s.TableOf[%s](), %s", velox, e.Name, colConst(e, self.fd))
-
 	f.p("")
 	f.doc("", fmt.Sprintf("Update updates the %s with the ID id from the input and from set, and returns the row as written. A setter of set wins over the input's for the same column.", n))
 	f.p("//")
 	f.doc("", "See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each input field does, what the caller may link and change, and the errors.")
 	f.p("func (in *%s) Update(ctx %s.Context, id string, set ...%s.Setter[%s]) (*%[4]s, error) {", in, ctx, velox, e.Name)
 	if self.conv != "" {
-		f.p("\tu, key := %s.NewUpdate%s(ctx, %q, %q, %q, %s, id, %s%s)", impl, strings.TrimSuffix(self.args, "]")+", "+self.typ+"]", in, n, r.outPkg+"."+e.Name, tbl, name, self.conv)
+		f.p("\tu, key := %s.NewUpdate%s(ctx, &%s, id%s)", impl, strings.TrimSuffix(self.args, "]")+", "+self.typ+"]", connVar(t), self.conv)
 	} else {
-		f.p("\tu, key := %s.NewUpdate[%s](ctx, %q, %q, %q, %s, id, %s)", impl, self.typ, in, n, r.outPkg+"."+e.Name, tbl, name)
+		f.p("\tu, key := %s.NewUpdate[%s](ctx, &%s, id)", impl, self.typ, connVar(t))
 	}
 
 	// vars are the variables of the edges' inputs, by the input field's index.
@@ -733,8 +747,9 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in, name string) error {
 		}
 		f.p("\t%s.Children(u, %q, %q, %s, %s, %s())", impl, field(add), tt.Name, edit, own, edgeFunc(t, ed))
 	}
-	f.p("\tp, err := u.Exec(key, %s.Assignments(set))", velox)
-	f.p("\treturn (*%s)(p), err", e.Name)
+	f.p("\tv, err := u.Exec(key, %s.Assignments(set))", velox)
+	f.p("\tn, _ := v.(*%s)", e.Name)
+	f.p("\treturn n, err")
 	f.p("}")
 	return nil
 }

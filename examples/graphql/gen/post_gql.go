@@ -6,14 +6,13 @@ import (
 	"context"
 	"io"
 	"time"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion11
+const _ = veloxgql.GeneratedCodeIsVersion12
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -24,12 +23,7 @@ func (x *Post) IDGQL() string { return veloxgql.EncodeID("Post", x.ID) }
 
 // postNodeGQL is the Node type Post for Node and Nodes.
 func postNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode("Post", velox.TableOf[Post](), postColID,
-		func(id string) (any, error) {
-			k, err := veloxgql.DecodeID[int64](id, "Post")
-			return k, err
-		},
-		postColumnsGQL)
+	return gqlimpl.NewNode[int64](&postConnGQL)
 }
 
 // postKeyGQL is the key of x, a Post.
@@ -63,31 +57,20 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 // AuthorGQL is the edge author: the User it leads to, or nil. It is read in one
 // query with the edge of every row read with x.
 func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	q := db.QueryTable(velox.TableOf[User]())
-	if fields, ok := gqlimpl.Selected(ctx, "User"); ok {
-		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
-	}
-	p, err := gqlimpl.EdgeOne(ctx, q, velox.TableOf[Post](), unsafe.Pointer(x), postEdgeAuthor, "Post.author")
-	return (*User)(p), err
+	v, err := gqlimpl.EdgeOne(ctx, &userConnGQL, &postConnGQL, x, postEdgeAuthor, "Post.author")
+	n, _ := v.(*User)
+	return n, err
 }
 
 // TagsGQL is the edge tags: a connection to the Label nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
 func (x *Post) TagsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
+	c, err := LabelsConnection(ctx, after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err
 	}
-	c, err := LabelsConnectionOf(ctx, db.Query[Tag](), after, first, before, last, orderBy, where)
-	if err != nil {
-		return nil, err
-	}
-	return &LabelConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[Post](), unsafe.Pointer(x), postEdgeTags, "Post.tags", []any{after, first, before, last, orderBy, where})}, nil
+	return &LabelConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &postConnGQL, x, postEdgeTags, "Post.tags", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // PostConnection is the GraphQL type PostConnection, a connection to a list of
@@ -104,8 +87,8 @@ func (c *PostConnection) Edges(ctx context.Context) ([]*PostEdge, error) {
 	}
 	slab := make([]PostEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*PostEdge, len(p.Rows))
-	for i, x := range p.Rows {
-		slab[i] = PostEdge{Node: (*Post)(x), Cursor: p.Cursors[i]}
+	for i := range p.Rows {
+		slab[i] = PostEdge{Node: p.Node(i).(*Post), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -170,9 +153,12 @@ func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql
 	return &PostConnection{c: c}, nil
 }
 
-// postConnGQL is the key and the order columns of the connections to Post.
+// postConnGQL is what the runtime knows of the GraphQL type Post: its table,
+// the key and the order columns of its connections, the columns its selections
+// read and the fields of its inputs.
 var postConnGQL = gqlimpl.Conn{
-	Type: "Post",
+	Type:  "Post",
+	Table: velox.TableOf[Post],
 	Key: []gqlimpl.Col{
 		{Field: "id", Col: postColID},
 	},
@@ -180,7 +166,9 @@ var postConnGQL = gqlimpl.Conn{
 		{Field: "TITLE", Col: postColTitle},
 		{Field: "VIEWS", Col: postColViews},
 	},
-	Columns: postColumnsGQL,
+	Columns:     postColumnsGQL,
+	CreateField: postInputGQL,
+	UpdateField: postInputGQL,
 }
 
 // postColumnsGQL returns the columns a selection of the given Post fields
@@ -316,7 +304,7 @@ func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 
 // PredicateGQL is Pred, untyped, for velox-graphql's runtime.
 func (w *PostWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, "PostWhereInput", velox.TableOf[Post]())
+	f := gqlimpl.NewFilter(ctx, &postConnGQL)
 	if w == nil {
 		return f.Pred()
 	}
@@ -406,7 +394,7 @@ func (in *CreatePostInput) Create(ctx context.Context, x *Post) (*Post, error) {
 	if x == nil {
 		x = new(Post)
 	}
-	c := gqlimpl.NewCreate(ctx, "CreatePostInput", "Post", "gen.Post", velox.TableOf[Post](), unsafe.Pointer(x), postInputGQL, postColTitle)
+	c := gqlimpl.NewCreate(ctx, &postConnGQL, x, postColTitle)
 	x.Title = in.Title
 	if in.Status != nil {
 		x.Status = *in.Status
@@ -456,7 +444,7 @@ type UpdatePostInput struct {
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *UpdatePostInput) Update(ctx context.Context, id string, set ...velox.Setter[Post]) (*Post, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, "UpdatePostInput", "Post", "gen.Post", velox.TableOf[Post](), postColID, id, postInputGQL)
+	u, key := gqlimpl.NewUpdate[int64](ctx, &postConnGQL, id)
 	if in.Title != nil {
 		u.Set(postColTitle, *in.Title)
 	}
@@ -474,6 +462,7 @@ func (in *UpdatePostInput) Update(ctx context.Context, id string, set ...velox.S
 	}
 	addTagIDsKeys, removeTagIDsKeys := gqlimpl.AddRemove[int64](u, "Label", "addTagIDs", in.AddTagIDs, "removeTagIDs", in.RemoveTagIDs)
 	gqlimpl.Through(u, "addTagIDs", "Label", gqlimpl.Edit{Clear: in.ClearTags, Remove: removeTagIDsKeys, Add: addTagIDsKeys}, key, postTagsEdgeGQL())
-	p, err := u.Exec(key, velox.Assignments(set))
-	return (*Post)(p), err
+	v, err := u.Exec(key, velox.Assignments(set))
+	n, _ := v.(*Post)
+	return n, err
 }

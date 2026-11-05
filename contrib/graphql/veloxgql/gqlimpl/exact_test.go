@@ -236,7 +236,7 @@ func TestFKScoped(t *testing.T) {
 			}, ""},
 			{"FKIs", func(f *gqlimpl.Filter) { gqlimpl.FKIs(f, "ownerIDNotNil", &yes, 0, velox.PredNotNull, 0, c.target) }, "not nullable"},
 		} {
-			f := gqlimpl.NewFilter(ctx, "PersonWhereInput", velox.TableOf[person]())
+			f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[person]("Person"))
 			h.add(f)
 			p, err := f.Pred()
 			if err != nil {

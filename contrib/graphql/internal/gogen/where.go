@@ -56,7 +56,7 @@ func (r *renderer) writePred(f *file, t *sdl.Type) error {
 	f.p("")
 	f.doc("", "PredicateGQL is Pred, untyped, for velox-graphql's runtime.")
 	f.p("func (w *%s) PredicateGQL(ctx %s.Context) (%s.Predicate, error) {", in, ctx, velox)
-	f.p("	f := %s.NewFilter(ctx, %q, %s.TableOf[%s]())", impl, in, velox, e.Name)
+	f.p("	f := %s.NewFilter(ctx, &%s)", impl, connVar(t))
 	f.p("	if w == nil {")
 	f.p("		return f.Pred()")
 	f.p("	}")

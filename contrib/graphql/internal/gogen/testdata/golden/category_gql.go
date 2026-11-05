@@ -2,14 +2,13 @@ package gen
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion11
+const _ = veloxgql.GeneratedCodeIsVersion12
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -20,12 +19,7 @@ func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
 
 // categoryNodeGQL is the Node type Category for Node and Nodes.
 func categoryNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode("Category", velox.TableOf[Category](), categoryColID,
-		func(id string) (any, error) {
-			k, err := veloxgql.DecodeID[int64](id, "Category")
-			return k, err
-		},
-		categoryColumnsGQL)
+	return gqlimpl.NewNode[int64](&categoryConnGQL)
 }
 
 // categoryKeyGQL is the key of x, a Category.
@@ -35,15 +29,11 @@ func categoryKeyGQL(x *Category) int64 { return x.ID }
 // to. Its queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
 func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
+	c, err := CategoriesConnection(ctx, after, first, before, last, where)
 	if err != nil {
 		return nil, err
 	}
-	c, err := CategoriesConnectionOf(ctx, db.Query[Category](), after, first, before, last, where)
-	if err != nil {
-		return nil, err
-	}
-	return &CategoryConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[Category](), unsafe.Pointer(x), categoryEdgeChildren, "Category.children", []any{after, first, before, last, where})}, nil
+	return &CategoryConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &categoryConnGQL, x, categoryEdgeChildren, "Category.children", []any{after, first, before, last, where})}, nil
 }
 
 // ParentGQL is the edge parent: the Category it leads to, or nil. It is read in
@@ -52,16 +42,9 @@ func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
 	if x.CategoryChildren == nil {
 		return nil, nil
 	}
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	q := db.QueryTable(velox.TableOf[Category]())
-	if fields, ok := gqlimpl.Selected(ctx, "Category"); ok {
-		q = gqlimpl.Narrow(q, categoryColumnsGQL(fields))
-	}
-	p, err := gqlimpl.EdgeOne(ctx, q, velox.TableOf[Category](), unsafe.Pointer(x), categoryEdgeParent, "Category.parent")
-	return (*Category)(p), err
+	v, err := gqlimpl.EdgeOne(ctx, &categoryConnGQL, &categoryConnGQL, x, categoryEdgeParent, "Category.parent")
+	n, _ := v.(*Category)
+	return n, err
 }
 
 // CategoryConnection is the GraphQL type CategoryConnection, a connection to a
@@ -79,8 +62,8 @@ func (c *CategoryConnection) Edges(ctx context.Context) ([]*CategoryEdge, error)
 	}
 	slab := make([]CategoryEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*CategoryEdge, len(p.Rows))
-	for i, x := range p.Rows {
-		slab[i] = CategoryEdge{Node: (*Category)(x), Cursor: p.Cursors[i]}
+	for i := range p.Rows {
+		slab[i] = CategoryEdge{Node: p.Node(i).(*Category), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -142,14 +125,18 @@ func CategoriesConnectionOf(ctx context.Context, q velox.Query[Category], after 
 	return &CategoryConnection{c: c}, nil
 }
 
-// categoryConnGQL is the key and the order columns of the connections to
-// Category.
+// categoryConnGQL is what the runtime knows of the GraphQL type Category: its
+// table, the key and the order columns of its connections, the columns its
+// selections read and the fields of its inputs.
 var categoryConnGQL = gqlimpl.Conn{
-	Type: "Category",
+	Type:  "Category",
+	Table: velox.TableOf[Category],
 	Key: []gqlimpl.Col{
 		{Field: "id", Col: categoryColID},
 	},
-	Columns: categoryColumnsGQL,
+	Columns:     categoryColumnsGQL,
+	CreateField: categoryInputGQL,
+	UpdateField: categoryInputGQL,
 }
 
 // categoryColumnsGQL returns the columns a selection of the given Category
@@ -202,7 +189,7 @@ func (w *CategoryWhereInput) Pred(ctx context.Context) (velox.Pred[Category], er
 
 // PredicateGQL is Pred, untyped, for velox-graphql's runtime.
 func (w *CategoryWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, "CategoryWhereInput", velox.TableOf[Category]())
+	f := gqlimpl.NewFilter(ctx, &categoryConnGQL)
 	if w == nil {
 		return f.Pred()
 	}
@@ -260,7 +247,7 @@ func (in *CreateCategoryInput) Create(ctx context.Context, x *Category) (*Catego
 	if x == nil {
 		x = new(Category)
 	}
-	c := gqlimpl.NewCreate(ctx, "CreateCategoryInput", "Category", "gen.Category", velox.TableOf[Category](), unsafe.Pointer(x), categoryInputGQL, categoryColTitle)
+	c := gqlimpl.NewCreate(ctx, &categoryConnGQL, x, categoryColTitle)
 	x.Title = in.Title
 	childIDsKeys := gqlimpl.Keys[int64](c, "childIDs", in.ChildIDs, "Category")
 	gqlimpl.Repoint(c, "childIDs", "Category", categoryChildrenEdgeGQL(), childIDsKeys)
@@ -302,7 +289,7 @@ type UpdateCategoryInput struct {
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *UpdateCategoryInput) Update(ctx context.Context, id string, set ...velox.Setter[Category]) (*Category, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, "UpdateCategoryInput", "Category", "gen.Category", velox.TableOf[Category](), categoryColID, id, categoryInputGQL)
+	u, key := gqlimpl.NewUpdate[int64](ctx, &categoryConnGQL, id)
 	if in.Title != nil {
 		u.Set(categoryColTitle, *in.Title)
 	}
@@ -316,6 +303,7 @@ func (in *UpdateCategoryInput) Update(ctx context.Context, id string, set ...vel
 		u.SetKey(categoryColCategoryChildren, nil)
 	}
 	gqlimpl.Children(u, "addChildIDs", "Category", gqlimpl.Edit{Clear: in.ClearChildren, Remove: removeChildIDsKeys, Add: addChildIDsKeys}, key, categoryChildrenEdgeGQL())
-	p, err := u.Exec(key, velox.Assignments(set))
-	return (*Category)(p), err
+	v, err := u.Exec(key, velox.Assignments(set))
+	n, _ := v.(*Category)
+	return n, err
 }

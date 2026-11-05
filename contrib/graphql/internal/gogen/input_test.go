@@ -61,7 +61,7 @@ func TestInputEdgeKinds(t *testing.T) {
 			`if in.PetID != nil { petIDKey := gqlimpl.Key[int64](c, "petID", *in.PetID, "Pet") gqlimpl.Repoint(c, "petID", "Pet", ownerPetEdgeGQL(), []int64{petIDKey}) }`,
 		},
 		"UpdateOwnerInput.Update": {
-			`u, key := gqlimpl.NewUpdateAs[int64, types.OwnerID](ctx, "UpdateOwnerInput", "Owner", "gen.Owner", velox.TableOf[Owner](), ownerColID, id, ownerInputGQL, gqlimpl.AsInt[types.OwnerID, int64])`,
+			`u, key := gqlimpl.NewUpdateAs[int64, types.OwnerID](ctx, &ownerConnGQL, id, gqlimpl.AsInt[types.OwnerID, int64])`,
 			// The Pet's rows hold the owner's key as an int64.
 			`gqlimpl.Child(u, "petID", "Pet", clearPet, petIDKey, int64(key), ownerPetEdgeGQL())`,
 		},

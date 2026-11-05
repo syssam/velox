@@ -3,43 +3,28 @@ package gen
 import (
 	"context"
 	"time"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion11
+const _ = veloxgql.GeneratedCodeIsVersion12
 
 // UserGQL is the edge user: the Account it leads to, or nil. It is read in one
 // query with the edge of every row read with x.
 func (x *Like) UserGQL(ctx context.Context) (*User, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	q := db.QueryTable(velox.TableOf[User]())
-	if fields, ok := gqlimpl.Selected(ctx, "Account"); ok {
-		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
-	}
-	p, err := gqlimpl.EdgeOne(ctx, q, velox.TableOf[Like](), unsafe.Pointer(x), likeEdgeUser, "Like.user")
-	return (*User)(p), err
+	v, err := gqlimpl.EdgeOne(ctx, &userConnGQL, &likeConnGQL, x, likeEdgeUser, "Like.user")
+	n, _ := v.(*User)
+	return n, err
 }
 
 // PostGQL is the edge post: the Post it leads to, or nil. It is read in one
 // query with the edge of every row read with x.
 func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	q := db.QueryTable(velox.TableOf[Post]())
-	if fields, ok := gqlimpl.Selected(ctx, "Post"); ok {
-		q = gqlimpl.Narrow(q, postColumnsGQL(fields))
-	}
-	p, err := gqlimpl.EdgeOne(ctx, q, velox.TableOf[Like](), unsafe.Pointer(x), likeEdgePost, "Like.post")
-	return (*Post)(p), err
+	v, err := gqlimpl.EdgeOne(ctx, &postConnGQL, &likeConnGQL, x, likeEdgePost, "Like.post")
+	n, _ := v.(*Post)
+	return n, err
 }
 
 // LikeConnection is the GraphQL type LikeConnection, a connection to a list of
@@ -56,8 +41,8 @@ func (c *LikeConnection) Edges(ctx context.Context) ([]*LikeEdge, error) {
 	}
 	slab := make([]LikeEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*LikeEdge, len(p.Rows))
-	for i, x := range p.Rows {
-		slab[i] = LikeEdge{Node: (*Like)(x), Cursor: p.Cursors[i]}
+	for i := range p.Rows {
+		slab[i] = LikeEdge{Node: p.Node(i).(*Like), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -111,14 +96,18 @@ func LikesConnectionOf(ctx context.Context, q velox.Query[Like], after *veloxgql
 	return &LikeConnection{c: c}, nil
 }
 
-// likeConnGQL is the key and the order columns of the connections to Like.
+// likeConnGQL is what the runtime knows of the GraphQL type Like: its table,
+// the key and the order columns of its connections, the columns its selections
+// read and the fields of its inputs.
 var likeConnGQL = gqlimpl.Conn{
-	Type: "Like",
+	Type:  "Like",
+	Table: velox.TableOf[Like],
 	Key: []gqlimpl.Col{
 		{Field: "user_id", Col: likeColUserID},
 		{Field: "post_id", Col: likeColPostID},
 	},
-	Columns: likeColumnsGQL,
+	Columns:     likeColumnsGQL,
+	CreateField: likeInputGQL,
 }
 
 // likeColumnsGQL returns the columns a selection of the given Like fields
@@ -177,7 +166,7 @@ func (in *CreateLikeInput) Create(ctx context.Context, x *Like) (*Like, error) {
 	if x == nil {
 		x = new(Like)
 	}
-	c := gqlimpl.NewCreate(ctx, "CreateLikeInput", "Like", "gen.Like", velox.TableOf[Like](), unsafe.Pointer(x), likeInputGQL)
+	c := gqlimpl.NewCreate(ctx, &likeConnGQL, x)
 	if in.Weight != nil {
 		x.Weight = *in.Weight
 		c.Given(likeColWeight)

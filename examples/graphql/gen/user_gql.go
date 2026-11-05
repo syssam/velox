@@ -7,14 +7,13 @@ import (
 	"fmt"
 	"io"
 	"time"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion11
+const _ = veloxgql.GeneratedCodeIsVersion12
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -25,12 +24,7 @@ func (x *User) IDGQL() string { return veloxgql.EncodeID("User", x.ID) }
 
 // userNodeGQL is the Node type User for Node and Nodes.
 func userNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode("User", velox.TableOf[User](), userColID,
-		func(id string) (any, error) {
-			k, err := veloxgql.DecodeID[int64](id, "User")
-			return k, err
-		},
-		userColumnsGQL)
+	return gqlimpl.NewNode[int64](&userConnGQL)
 }
 
 // userKeyGQL is the key of x, a User.
@@ -65,15 +59,11 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
 func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
+	c, err := PostsConnection(ctx, after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err
 	}
-	c, err := PostsConnectionOf(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
-	if err != nil {
-		return nil, err
-	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[User](), unsafe.Pointer(x), userEdgePosts, "User.posts", []any{after, first, before, last, orderBy, where})}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &userConnGQL, x, userEdgePosts, "User.posts", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // UserConnection is the GraphQL type UserConnection, a connection to a list of
@@ -90,8 +80,8 @@ func (c *UserConnection) Edges(ctx context.Context) ([]*UserEdge, error) {
 	}
 	slab := make([]UserEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*UserEdge, len(p.Rows))
-	for i, x := range p.Rows {
-		slab[i] = UserEdge{Node: (*User)(x), Cursor: p.Cursors[i]}
+	for i := range p.Rows {
+		slab[i] = UserEdge{Node: p.Node(i).(*User), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -156,9 +146,12 @@ func UsersConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql
 	return &UserConnection{c: c}, nil
 }
 
-// userConnGQL is the key and the order columns of the connections to User.
+// userConnGQL is what the runtime knows of the GraphQL type User: its table,
+// the key and the order columns of its connections, the columns its selections
+// read and the fields of its inputs.
 var userConnGQL = gqlimpl.Conn{
-	Type: "User",
+	Type:  "User",
+	Table: velox.TableOf[User],
 	Key: []gqlimpl.Col{
 		{Field: "id", Col: userColID},
 	},
@@ -166,7 +159,9 @@ var userConnGQL = gqlimpl.Conn{
 		{Field: "NAME", Col: userColName},
 		{Field: "JOINED_AT", Col: userColJoinedAt},
 	},
-	Columns: userColumnsGQL,
+	Columns:     userColumnsGQL,
+	CreateField: userInputGQL,
+	UpdateField: userInputGQL,
 }
 
 // userColumnsGQL returns the columns a selection of the given User fields
@@ -293,7 +288,7 @@ func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 
 // PredicateGQL is Pred, untyped, for velox-graphql's runtime.
 func (w *UserWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, "UserWhereInput", velox.TableOf[User]())
+	f := gqlimpl.NewFilter(ctx, &userConnGQL)
 	if w == nil {
 		return f.Pred()
 	}
@@ -377,7 +372,7 @@ func (in *CreateUserInput) Create(ctx context.Context, x *User) (*User, error) {
 	if x == nil {
 		x = new(User)
 	}
-	c := gqlimpl.NewCreate(ctx, "CreateUserInput", "User", "gen.User", velox.TableOf[User](), unsafe.Pointer(x), userInputGQL, userColName, userColEmail, userColJoinedAt, userColPasswordHash)
+	c := gqlimpl.NewCreate(ctx, &userConnGQL, x, userColName, userColEmail, userColJoinedAt, userColPasswordHash)
 	x.Name = in.Name
 	x.Email = in.Email
 	if in.Role != nil {
@@ -418,7 +413,7 @@ func (in UpdateUserInput) GoString() string { return in.String() }
 // github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func (in *UpdateUserInput) Update(ctx context.Context, id string, set ...velox.Setter[User]) (*User, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, "UpdateUserInput", "User", "gen.User", velox.TableOf[User](), userColID, id, userInputGQL)
+	u, key := gqlimpl.NewUpdate[int64](ctx, &userConnGQL, id)
 	if in.Name != nil {
 		u.Set(userColName, *in.Name)
 	}
@@ -434,6 +429,7 @@ func (in *UpdateUserInput) Update(ctx context.Context, id string, set ...velox.S
 	if in.PasswordHash != nil {
 		u.Set(userColPasswordHash, *in.PasswordHash)
 	}
-	p, err := u.Exec(key, velox.Assignments(set))
-	return (*User)(p), err
+	v, err := u.Exec(key, velox.Assignments(set))
+	n, _ := v.(*User)
+	return n, err
 }

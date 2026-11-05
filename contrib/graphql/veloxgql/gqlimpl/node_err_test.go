@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
@@ -15,14 +14,11 @@ import (
 // person declares no IsNode: the generated code never makes it.
 func personKinds(decodeErr error) func(string) (gqlimpl.NodeKind, bool) {
 	return func(typ string) (gqlimpl.NodeKind, bool) {
-		return gqlimpl.NewNode("Person", velox.TableOf[person](), int(people.ID.I),
-			func(id string) (any, error) {
-				if decodeErr != nil {
-					return nil, decodeErr
-				}
-				return veloxgql.DecodeID[int64](id, "Person")
-			},
-			func([]string) []int { return nil }), typ == "Person"
+		c := gqlimpl.InputConn[person]("Person", int(people.ID.I), nil)
+		if decodeErr != nil {
+			return gqlimpl.NewNodeWith(c, func(string) (any, error) { return nil, decodeErr }), typ == "Person"
+		}
+		return gqlimpl.NewNode[int64](c), typ == "Person"
 	}
 }
 

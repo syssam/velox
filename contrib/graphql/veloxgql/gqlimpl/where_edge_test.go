@@ -18,7 +18,7 @@ type childWhere struct {
 }
 
 func (w *childWhere) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, "ChildWhereInput", velox.TableOf[child]())
+	f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[child]("Child"))
 	if w == nil {
 		return f.Pred()
 	}
@@ -34,7 +34,7 @@ func filtered[E any](t *testing.T, db *velox.DB, build func(f *gqlimpl.Filter)) 
 	t.Helper()
 	ctx := context.Background()
 	tbl := velox.TableOf[E]()
-	f := gqlimpl.NewFilter(ctx, "In", tbl)
+	f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[E]("In"))
 	build(f)
 	p, err := f.Pred()
 	if err != nil {

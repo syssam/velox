@@ -7,7 +7,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion11
+const _ = veloxgql.GeneratedCodeIsVersion12
 
 // Node returns the node with the global ID id, or nil when no row has its key.
 // It reads only the columns the selection needs; see gqlimpl.NodeByID.

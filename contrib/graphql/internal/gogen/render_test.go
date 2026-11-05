@@ -496,7 +496,7 @@ func TestGoTypes(t *testing.T) {
 		// Pred: one helper call for each predicate, by column index and
 		// operator; gqlimpl converts the input's values to the column's Go
 		// type where they differ.
-		` f := gqlimpl.NewFilter(ctx, "EventWhereInput", velox.TableOf[Event]()) `,
+		` f := gqlimpl.NewFilter(ctx, &eventConnGQL) `,
 		` gqlimpl.ID[[16]byte](f, "id", w.ID, "Event", eventColID, velox.PredEQ) `,
 		` gqlimpl.IDList[[16]byte](f, "idIn", w.IDIn, "Event", eventColID, velox.PredIn) `,
 		` gqlimpl.Value(f, "level", w.Level, eventColLevel, velox.PredEQ) `,
@@ -546,16 +546,14 @@ func TestGoTypes(t *testing.T) {
 	// decodes to and the Go type of the column.
 	for file, wants := range map[string][]string{
 		ev: {
-			"func eventNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode(\"Event\", velox.TableOf[Event](), eventColID,",
-			"func(id string) (any, error) { k, err := veloxgql.DecodeID[[16]byte](id, \"Event\") return uuid.UUID(k), err },",
-			"eventColumnsGQL) }",
+			"func eventNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNodeAs[[16]byte, uuid.UUID](&eventConnGQL, gqlimpl.AsUUID[uuid.UUID, [16]byte]) }",
 			"func eventKeyGQL(x *Event) uuid.UUID { return x.ID }",
 			` "github.com/google/uuid" `,
+			" Type: \"Event\", Table: velox.TableOf[Event], ",
+			" Columns: eventColumnsGQL, } ",
 		},
 		owner: {
-			"func ownerNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNode(\"Owner\", velox.TableOf[Owner](), ownerColID,",
-			"func(id string) (any, error) { k, err := veloxgql.DecodeID[int64](id, \"Owner\") return idspkg.UserID(k), err },",
-			"ownerColumnsGQL) }",
+			"func ownerNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNodeAs[int64, idspkg.UserID](&ownerConnGQL, gqlimpl.AsInt[idspkg.UserID, int64]) }",
 			"func ownerKeyGQL(x *Owner) idspkg.UserID { return x.ID }",
 		},
 		node: {
@@ -731,7 +729,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion11\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion12\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1040,8 +1038,11 @@ func TestUpdateInputs(t *testing.T) {
 				if funcs[gql] == nil {
 					t.Errorf("no func %sInputGQL or %s, which %s names", base, gql, fn)
 				}
-				if src := funcSrc(t, files, fn); !strings.Contains(src, ", "+gql) {
-					t.Errorf("%s does not name %s:\n%s", fn, gql, src)
+				if src := funcSrc(t, files, fn); !strings.Contains(src, "(ctx, &"+base+"ConnGQL, id") {
+					t.Errorf("%s does not take %sConnGQL:\n%s", fn, base, src)
+				}
+				if src := strings.Join(strings.Fields(files[ty.Entity.Label+"_gql.go"]), " "); !strings.Contains(src, "UpdateField: "+gql+",") {
+					t.Errorf("%sConnGQL does not name %s", base, gql)
 				}
 			}
 			if n == 0 {
@@ -1073,7 +1074,7 @@ func TestCreateConversions(t *testing.T) {
 		`gqlimpl.KeyAs[int64](c, "ownerID", *in.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
 		`gqlimpl.DecodeJSON[[]int32](c, "tags", in.Tags)`,
 		`gqlimpl.Exists(c, "ownerID", "Owner", velox.TableOf[Owner](), ownerColID, []idspkg.UserID{`,
-		`gqlimpl.NewCreate(ctx, "CreateEventInput", "Event", "gen.Event", velox.TableOf[Event](), unsafe.Pointer(x), eventInputGQL`,
+		`gqlimpl.NewCreate(ctx, &eventConnGQL, x`,
 		`case "Tags": return "tags"`,
 	} {
 		if !strings.Contains(ev, want) {
@@ -1193,7 +1194,7 @@ func TestUpdateLocksTheRow(t *testing.T) {
 		}
 	}
 	src := funcSrc(t, render(t, m), "UpdateGroupInput.Update")
-	if !strings.Contains(src, "p, err := u.Exec(key, velox.Assignments(set))") {
+	if !strings.Contains(src, "v, err := u.Exec(key, velox.Assignments(set)) n, _ := v.(*Group) return n, err") {
 		t.Errorf("UpdateGroupInput.Update does not end in Exec:\n%s", src)
 	}
 	impl := readFile(t, filepath.Join("..", "..", "veloxgql", "gqlimpl", "input.go"))
@@ -1285,10 +1286,27 @@ func funcSrc(t *testing.T, files map[string]string, name string) string {
 	return ""
 }
 
+// TestNoPointerCasts: the generated code imports no unsafe and converts no
+// pointer: gqlimpl takes and gives its rows as *E in an any.
+func TestNoPointerCasts(t *testing.T) {
+	cast := regexp.MustCompile(`\(\*[A-Z]\w*\)\(\w+\)`)
+	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
+		for name, src := range render(t, m) {
+			if strings.Contains(src, "unsafe") {
+				t.Errorf("%s: %s names unsafe", label, name)
+			}
+			if c := cast.FindString(src); c != "" {
+				t.Errorf("%s: %s converts a pointer: %s", label, name, c)
+			}
+		}
+	}
+}
+
 // TestEdgesBatch: every edge method reads its edge through gqlimpl's
 // batching (EdgeConnection, EdgeOne or EdgeList, by its kind, with the
-// owner's Table and the relation's index), and none reads the relation's field, which an
-// application's With may have loaded filtered or limited.
+// owner's table, the row and the relation's index), and none reads the
+// relation's field, which an application's With may have loaded filtered or
+// limited.
 func TestEdgesBatch(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		surf, err := sdl.Build(m)
@@ -1306,11 +1324,14 @@ func TestEdgesBatch(t *testing.T) {
 				// The edge's GraphQL field, which batches it, and a
 				// connection's arguments, which its batch keeps.
 				field := "\"" + ty.Name + "." + ed.Name + "\""
-				rel := "velox.TableOf[" + e.Name + "](), unsafe.Pointer(x), " + edgeConst(e, pe)
+				rel := "&" + connVar(ty) + ", x, " + edgeConst(e, pe)
+				// The target's table, which reads only the columns its
+				// selection needs, and the typed result.
+				tt := ed.Target
 				want := map[sdl.EdgeKind]string{
 					sdl.EdgeConnection: "gqlimpl.EdgeConnection(ctx, c.c, " + rel + ", " + field + ", []any{" + connArgs(ed.Target) + "})",
-					sdl.EdgeUnique:     "gqlimpl.EdgeOne(ctx, q, " + rel + ", " + field + ")",
-					sdl.EdgeList:       "gqlimpl.EdgeList(ctx, q, " + rel + ", " + field + ", 0)",
+					sdl.EdgeUnique:     "v, err := gqlimpl.EdgeOne(ctx, &" + connVar(tt) + ", " + rel + ", " + field + ") n, _ := v.(*" + tt.Entity.Name + ") return n, err",
+					sdl.EdgeList:       "v, err := gqlimpl.EdgeList(ctx, &" + connVar(tt) + ", " + rel + ", " + field + ", 0) n, _ := v.([]*" + tt.Entity.Name + ") return n, err",
 				}[ed.Kind]
 				if !strings.Contains(src, want) {
 					t.Errorf("%s: %s.%s: no %q in\n%s", label, e.Name, ed.Method, want, src)
@@ -1318,13 +1339,8 @@ func TestEdgesBatch(t *testing.T) {
 				if strings.Contains(src, ".Get()") || strings.Contains(src, "LoadedConnection") {
 					t.Errorf("%s: %s.%s reads the relation's field:\n%s", label, e.Name, ed.Method, src)
 				}
-				if ed.Kind != sdl.EdgeConnection {
-					// The target's query reads only the columns selected.
-					tt := ed.Target
-					sel := "if fields, ok := gqlimpl.Selected(ctx, \"" + tt.Name + "\"); ok { q = gqlimpl.Narrow(q, " + lowerFirst(tt.Entity.Name) + "ColumnsGQL(fields)) }"
-					if !strings.Contains(src, sel) {
-						t.Errorf("%s: %s.%s: no %q in\n%s", label, e.Name, ed.Method, sel, src)
-					}
+				if strings.Contains(src, "unsafe") {
+					t.Errorf("%s: %s.%s converts a pointer:\n%s", label, e.Name, ed.Method, src)
 				}
 			}
 		}
@@ -1468,7 +1484,7 @@ func TestM2MWithoutInverse(t *testing.T) {
 	author.Edges = []*plugin.Edge{{Name: "books", GoName: "Books", Target: "Book", Kind: plugin.M2M, Join: "AuthorBook"}}
 	files := render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{author, entity("Book")}})
 	src := funcSrc(t, files, "Author.BooksGQL")
-	if !strings.Contains(src, "gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[Author](), unsafe.Pointer(x), authorEdgeBooks, \"Author.books\", []any{after, first, before, last") {
+	if !strings.Contains(src, "gqlimpl.EdgeConnection(ctx, c.c, &authorConnGQL, x, authorEdgeBooks, \"Author.books\", []any{after, first, before, last") {
 		t.Errorf("Author.BooksGQL:\n%s", src)
 	}
 }

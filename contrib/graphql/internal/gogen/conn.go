@@ -104,8 +104,8 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("\t}")
 	f.p("\tslab := make([]%sEdge, len(p.Rows)) // one allocation for all the edges", n)
 	f.p("\tedges := make([]*%sEdge, len(p.Rows))", n)
-	f.p("\tfor i, x := range p.Rows {")
-	f.p("\t\tslab[i] = %sEdge{Node: (*%s)(x), Cursor: p.Cursors[i]}", n, e.Name)
+	f.p("\tfor i := range p.Rows {")
+	f.p("\t\tslab[i] = %sEdge{Node: p.Node(i).(*%s), Cursor: p.Cursors[i]}", n, e.Name)
 	f.p("\t\tedges[i] = &slab[i]")
 	f.p("\t}")
 	f.p("\treturn edges, nil")
@@ -190,9 +190,10 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("}")
 	f.p("")
 
-	f.doc("", fmt.Sprintf("%s is the key and the order columns of the connections to %s.", connVar(t), n))
+	f.doc("", fmt.Sprintf("%s is what the runtime knows of the GraphQL type %s: its table, the key and the order columns of its connections, the columns its selections read and the fields of its inputs.", connVar(t), n))
 	f.p("var %s = %s.Conn{", connVar(t), impl)
-	f.p("\tType: %q,", n)
+	f.p("\tType:  %q,", n)
+	f.p("\tTable: %s.TableOf[%s],", velox, e.Name)
 	f.p("\tKey: []%s.Col{", impl)
 	for _, i := range e.PrimaryKey {
 		fd := e.Fields[i]
@@ -224,6 +225,13 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		f.p("\t},")
 	}
 	f.p("\tColumns: %s,", colsFunc(t))
+	create, update := inputFuncs(t)
+	if create != "" {
+		f.p("\tCreateField: %s,", create)
+	}
+	if update != "" {
+		f.p("\tUpdateField: %s,", update)
+	}
 	f.p("}")
 	r.writeColumns(f, t)
 	return nil
@@ -441,26 +449,11 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 	if nilKey != "" && ed.Kind != sdl.EdgeUnique {
 		return fmt.Errorf("schema %s, edge %s: a to-many edge whose key is on the owner's row, which velox-gen does not write", e.Name, pe.Name)
 	}
-	ctx, vgql, impl := f.use("context", "context"), f.veloxgql(), f.gqlimpl()
-	// The owner's Table, x and the relation's index: the batches are
-	// compiled once, on velox.Table, and the rows convert by a pointer cast.
-	rel := fmt.Sprintf("%s.TableOf[%s](), %s.Pointer(x), %s", f.velox(), e.Name, f.use("unsafe", "unsafe"), edgeConst(e, pe))
-	field := fmt.Sprintf("%q", t.Name+"."+ed.Name)
-	dbFrom := func() {
-		f.p("\tdb, err := %s.DBFromContext(ctx)", vgql)
-		f.p("\tif err != nil {")
-		f.p("\t\treturn nil, err")
-		f.p("\t}")
-	}
-	// query writes q, the target's query, reading only the columns the
-	// field's selection needs.
-	query := func() {
-		dbFrom()
-		f.p("\tq := db.QueryTable(%s.TableOf[%s]())", f.velox(), tgt.Name)
-		f.p("\tif fields, ok := %s.Selected(ctx, %q); ok {", impl, tt.Name)
-		f.p("\t\tq = %s.Narrow(q, %s(fields))", impl, colsFunc(tt))
-		f.p("\t}")
-	}
+	ctx, impl := f.use("context", "context"), f.gqlimpl()
+	// The owner's table, x and the relation's index: the batches are
+	// compiled once, on velox.Table, and gqlimpl takes and gives the rows
+	// as *E in an any.
+	rel := fmt.Sprintf("&%s, x, %s, %q", connVar(t), edgeConst(e, pe), t.Name+"."+ed.Name)
 	switch ed.Kind {
 	case sdl.EdgeUnique:
 		f.doc("", fmt.Sprintf("%s is the edge %s: the %s it leads to, or nil. It is read in one query with the edge of every row read with x.", ed.Method, pe.Name, tt.Name))
@@ -470,26 +463,25 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 			f.p("\t\treturn nil, nil")
 			f.p("\t}")
 		}
-		query()
-		f.p("\tp, err := %s.EdgeOne(ctx, q, %s, %s)", impl, rel, field)
-		f.p("\treturn (*%s)(p), err", tgt.Name)
+		f.p("\tv, err := %s.EdgeOne(ctx, &%s, %s)", impl, connVar(tt), rel)
+		f.p("\tn, _ := v.(*%s)", tgt.Name)
+		f.p("\treturn n, err")
 		f.p("}")
 	case sdl.EdgeList:
 		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is read in one query with the edge of every row read with x, up to MaxList; see gqlimpl.EdgeList.", ed.Method, pe.Name, tt.Name))
 		f.p("func (x *%s) %s(ctx %s.Context) ([]*%s, error) {", e.Name, ed.Method, ctx, tgt.Name)
-		query()
-		f.p("\tps, err := %s.EdgeList(ctx, q, %s, %s, %d)", impl, rel, field, ed.MaxList)
-		f.p("\treturn %[1]s.Slice((**%[2]s)(%[1]s.Pointer(%[1]s.SliceData(ps))), len(ps)), err", f.use("unsafe", "unsafe"), tgt.Name)
+		f.p("\tv, err := %s.EdgeList(ctx, &%s, %s, %d)", impl, connVar(tt), rel, ed.MaxList)
+		f.p("\tn, _ := v.([]*%s)", tgt.Name)
+		f.p("\treturn n, err")
 		f.p("}")
 	case sdl.EdgeConnection:
 		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to. Its queries batch with the edge of every row read with x; see gqlimpl.EdgeConnection.", ed.Method, pe.Name, tt.Name))
 		f.p("func (x *%s) %s(ctx %s.Context, %s) (*%sConnection, error) {", e.Name, ed.Method, ctx, connParams(f, tt), tt.Name)
-		dbFrom()
-		f.p("\tc, err := %s(ctx, db.Query[%s](), %s)", connFunc(tt), tgt.Name, connArgs(tt))
+		f.p("\tc, err := %sConnection(ctx, %s)", plugin.GoPlural(tt.Name), connArgs(tt))
 		f.p("\tif err != nil {")
 		f.p("\t\treturn nil, err")
 		f.p("\t}")
-		f.p("\treturn &%sConnection{c: %s.EdgeConnection(ctx, c.c, %s, %s, []any{%s})}, nil", tt.Name, impl, rel, field, connArgs(tt))
+		f.p("\treturn &%sConnection{c: %s.EdgeConnection(ctx, c.c, %s, []any{%s})}, nil", tt.Name, impl, rel, connArgs(tt))
 		f.p("}")
 	}
 	f.p("")

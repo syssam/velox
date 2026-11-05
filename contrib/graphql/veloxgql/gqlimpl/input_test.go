@@ -67,7 +67,7 @@ func itemInputGQL(goField string) string {
 // updateItem is what an UpdateItemInput's generated Update does with the
 // fields name and age, when given, and the application's setters set.
 func updateItem(ctx context.Context, name *string, age *int64, set ...velox.Setter[item]) (*item, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, "UpdateItemInput", "Item", "gqlimpl_test.item", velox.TableOf[item](), int(items.ID.I), veloxgql.EncodeID("Item", int64(1)), itemInputGQL)
+	u, key := gqlimpl.NewUpdate[int64](ctx, gqlimpl.InputConn[item]("Item", int(items.ID.I), itemInputGQL), veloxgql.EncodeID("Item", int64(1)))
 	if name != nil {
 		u.Set(int(items.Name.I), *name)
 	}
@@ -75,7 +75,7 @@ func updateItem(ctx context.Context, name *string, age *int64, set ...velox.Sett
 		u.Set(int(items.Age.I), *age)
 	}
 	p, err := u.Exec(key, velox.Assignments(set))
-	return (*item)(p), err
+	return gqlimpl.As[*item](p, err)
 }
 
 // TestUpdateAppSetters: an application's setter of a column the input sets

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"time"
-	"unsafe"
 
 	"github.com/google/uuid"
 	"github.com/syssam/velox"
@@ -14,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion11
+const _ = veloxgql.GeneratedCodeIsVersion12
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -29,12 +28,7 @@ func (x *User) IDGQL() string { return veloxgql.EncodeID("Account", x.ID) }
 
 // userNodeGQL is the Node type Account for Node and Nodes.
 func userNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode("Account", velox.TableOf[User](), userColID,
-		func(id string) (any, error) {
-			k, err := veloxgql.DecodeID[int64](id, "Account")
-			return k, err
-		},
-		userColumnsGQL)
+	return gqlimpl.NewNode[int64](&userConnGQL)
 }
 
 // userKeyGQL is the key of x, an Account.
@@ -80,46 +74,31 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
 func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
+	c, err := PostsConnection(ctx, after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err
 	}
-	c, err := PostsConnectionOf(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
-	if err != nil {
-		return nil, err
-	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[User](), unsafe.Pointer(x), userEdgePosts, "Account.posts", []any{after, first, before, last, orderBy, where})}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &userConnGQL, x, userEdgePosts, "Account.posts", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // GroupsGQL is the edge groups: the Group nodes it leads to, in key order. It
 // is read in one query with the edge of every row read with x, up to MaxList;
 // see gqlimpl.EdgeList.
 func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	q := db.QueryTable(velox.TableOf[Group]())
-	if fields, ok := gqlimpl.Selected(ctx, "Group"); ok {
-		q = gqlimpl.Narrow(q, groupColumnsGQL(fields))
-	}
-	ps, err := gqlimpl.EdgeList(ctx, q, velox.TableOf[User](), unsafe.Pointer(x), userEdgeGroups, "Account.memberships", 0)
-	return unsafe.Slice((**Group)(unsafe.Pointer(unsafe.SliceData(ps))), len(ps)), err
+	v, err := gqlimpl.EdgeList(ctx, &groupConnGQL, &userConnGQL, x, userEdgeGroups, "Account.memberships", 0)
+	n, _ := v.([]*Group)
+	return n, err
 }
 
 // LikesGQL is the edge likes: a connection to the Like nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
 func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
+	c, err := LikesConnection(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	c, err := LikesConnectionOf(ctx, db.Query[Like](), after, first, before, last)
-	if err != nil {
-		return nil, err
-	}
-	return &LikeConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[User](), unsafe.Pointer(x), userEdgeLikes, "Account.likes", []any{after, first, before, last})}, nil
+	return &LikeConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &userConnGQL, x, userEdgeLikes, "Account.likes", []any{after, first, before, last})}, nil
 }
 
 // AccountConnection is the GraphQL type AccountConnection, a connection to a
@@ -137,8 +116,8 @@ func (c *AccountConnection) Edges(ctx context.Context) ([]*AccountEdge, error) {
 	}
 	slab := make([]AccountEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*AccountEdge, len(p.Rows))
-	for i, x := range p.Rows {
-		slab[i] = AccountEdge{Node: (*User)(x), Cursor: p.Cursors[i]}
+	for i := range p.Rows {
+		slab[i] = AccountEdge{Node: p.Node(i).(*User), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -199,13 +178,17 @@ func AccountsConnectionOf(ctx context.Context, q velox.Query[User], after *velox
 	return &AccountConnection{c: c}, nil
 }
 
-// userConnGQL is the key and the order columns of the connections to Account.
+// userConnGQL is what the runtime knows of the GraphQL type Account: its table,
+// the key and the order columns of its connections, the columns its selections
+// read and the fields of its inputs.
 var userConnGQL = gqlimpl.Conn{
-	Type: "Account",
+	Type:  "Account",
+	Table: velox.TableOf[User],
 	Key: []gqlimpl.Col{
 		{Field: "id", Col: userColID},
 	},
-	Columns: userColumnsGQL,
+	Columns:     userColumnsGQL,
+	CreateField: userInputGQL,
 }
 
 // userColumnsGQL returns the columns a selection of the given Account fields
@@ -293,7 +276,7 @@ func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) 
 
 // PredicateGQL is Pred, untyped, for velox-graphql's runtime.
 func (w *AccountWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, "AccountWhereInput", velox.TableOf[User]())
+	f := gqlimpl.NewFilter(ctx, &userConnGQL)
 	if w == nil {
 		return f.Pred()
 	}
@@ -409,7 +392,7 @@ func (in *CreateAccountInput) Create(ctx context.Context, x *User) (*User, error
 	if x == nil {
 		x = new(User)
 	}
-	c := gqlimpl.NewCreate(ctx, "CreateAccountInput", "Account", "gen.User", velox.TableOf[User](), unsafe.Pointer(x), userInputGQL, userColName, userColEmail, userColPasswordHash, userColQuota)
+	c := gqlimpl.NewCreate(ctx, &userConnGQL, x, userColName, userColEmail, userColPasswordHash, userColQuota)
 	if in.CreatedAt != nil {
 		x.CreatedAt = *in.CreatedAt
 		gqlimpl.NotZero(c, "createdAt", x.CreatedAt)

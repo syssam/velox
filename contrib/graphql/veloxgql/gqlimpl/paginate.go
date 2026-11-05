@@ -30,13 +30,17 @@ type Args struct {
 	First, Last   *int
 }
 
-// Conn is what the connections to the nodes of one GraphQL type are made of,
-// as a literal table the generated code writes once per type: the type, the
-// key's columns, the order fields and their columns, and the columns a
-// selection reads.
+// Conn is what the generated code knows of one GraphQL type, as a literal
+// table it writes once per type: the type, its entity's Table, the key's
+// columns, the order fields and their columns, the columns a selection reads
+// and the fields of its inputs. The type's connections, Node lookups, edges,
+// where filters and inputs all take it.
 type Conn struct {
 	// Type is the GraphQL type of the nodes, "Post".
 	Type string
+	// Table is the entity's Table, velox.TableOf of the entity. It is a
+	// function so that nothing runs at start.
+	Table func() velox.Table
 	// Key is the primary key's columns, each ASC: Field is the column's
 	// name, which a cursor's terms name "key:<column>".
 	Key []Col
@@ -47,6 +51,21 @@ type Conn struct {
 	// column, and the column of each field. It is nil, every column, for a
 	// field it does not know, such as an application's own.
 	Columns func(fields []string) []int
+	// CreateField and UpdateField give the field of the type's create and
+	// update input that sets an entity field, by the field's Go name, or ""
+	// for one the input does not set: a validator's error on such a field
+	// becomes BAD_USER_INPUT naming it (WriteError). Each is nil when the
+	// type has no such input.
+	CreateField, UpdateField func(goField string) string
+}
+
+// table is the Table of c's entity: the zero Table, whose queries fail,
+// when c names none.
+func (c *Conn) table() velox.Table {
+	if c.Table == nil {
+		return velox.Table{}
+	}
+	return c.Table()
 }
 
 // Col is a column of a connection's key or of an order field.
@@ -255,7 +274,12 @@ type Page struct {
 	// Info is the page info. Its StartCursor and EndCursor point into
 	// Cursors.
 	Info veloxgql.PageInfo
+	t    velox.Table // the rows' entity
 }
+
+// Node returns row i as a *E of the node's entity E, in an any. It panics
+// when i is out of range.
+func (p *Page) Node(i int) any { return p.t.Ptr(p.Rows[i]) }
 
 // Connection is a connection to a list of nodes: the query of the whole list
 // and what one page of it is. It runs nothing until it is asked: Page runs
@@ -461,7 +485,7 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 	}
 	n := min(rows.Len(), c.n)
 	more := rows.Len() > c.n
-	p := &Page{Rows: make([]unsafe.Pointer, n), Cursors: make([]veloxgql.Cursor, n)}
+	p := &Page{Rows: make([]unsafe.Pointer, n), Cursors: make([]veloxgql.Cursor, n), t: c.query.Table()}
 	for i := range n {
 		p.Rows[i] = rows.At(i)
 	}

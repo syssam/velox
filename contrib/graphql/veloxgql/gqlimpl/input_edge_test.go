@@ -11,7 +11,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -184,7 +183,7 @@ func (in *createAcctInput) Create(ctx context.Context, x *acct) (*acct, error) {
 	if x == nil {
 		x = new(acct)
 	}
-	c := gqlimpl.NewCreate(ctx, "CreateAcctInput", "Acct", "gqlimpl_test.acct", velox.TableOf[acct](), unsafe.Pointer(x), acctInputGQL, int(accts.Name.I))
+	c := gqlimpl.NewCreate(ctx, gqlimpl.InputConn[acct]("Acct", 0, acctInputGQL), x, int(accts.Name.I))
 	x.Name = in.Name
 	if in.Age != nil {
 		x.Age = *in.Age
@@ -211,7 +210,7 @@ func (in *createKidInput) Create(ctx context.Context, x *kid) (*kid, error) {
 	if x == nil {
 		x = new(kid)
 	}
-	c := gqlimpl.NewCreate(ctx, "CreateKidInput", "Kid", "gqlimpl_test.kid", velox.TableOf[kid](), unsafe.Pointer(x), kidInputGQL, int(kids.Title.I))
+	c := gqlimpl.NewCreate(ctx, gqlimpl.InputConn[kid]("Kid", 0, kidInputGQL), x, int(kids.Title.I))
 	x.Title = in.Title
 	if k := gqlimpl.OptionalKey[int64](c, "acctID", in.AcctID, "Acct"); k != nil {
 		gqlimpl.Exists(c, "acctID", "Acct", velox.TableOf[acct](), int(accts.ID.I), []int64{*k})
@@ -236,7 +235,7 @@ type updateAcctInput struct {
 }
 
 func (in *updateAcctInput) Update(ctx context.Context, id string, set ...velox.Setter[acct]) (*acct, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", velox.TableOf[acct](), int(accts.ID.I), id, acctInputGQL)
+	u, key := gqlimpl.NewUpdate[int64](ctx, gqlimpl.InputConn[acct]("Acct", int(accts.ID.I), acctInputGQL), id)
 	if in.Name != nil {
 		u.Set(int(accts.Name.I), *in.Name)
 	}
@@ -248,7 +247,7 @@ func (in *updateAcctInput) Update(ctx context.Context, id string, set ...velox.S
 	addLblIDsKeys, removeLblIDsKeys := gqlimpl.AddRemove[int64](u, "Lbl", "addLblIDs", in.AddLblIDs, "removeLblIDs", in.RemoveLblIDs)
 	gqlimpl.Through(u, "addLblIDs", "Lbl", gqlimpl.Edit{Clear: in.ClearLbls, Remove: removeLblIDsKeys, Add: addLblIDsKeys}, key, acctLblsEdgeGQL())
 	p, err := u.Exec(key, velox.Assignments(set))
-	return (*acct)(p), err
+	return gqlimpl.As[*acct](p, err)
 }
 
 // updateKidInput is UpdateKidInput, with the edge acct, whose key is on the
@@ -260,7 +259,7 @@ type updateKidInput struct {
 }
 
 func (in *updateKidInput) Update(ctx context.Context, id string, set ...velox.Setter[kid]) (*kid, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, "UpdateKidInput", "Kid", "gqlimpl_test.kid", velox.TableOf[kid](), int(kids.ID.I), id, kidInputGQL)
+	u, key := gqlimpl.NewUpdate[int64](ctx, gqlimpl.InputConn[kid]("Kid", int(kids.ID.I), kidInputGQL), id)
 	if in.Title != nil {
 		u.Set(int(kids.Title.I), *in.Title)
 	}
@@ -273,7 +272,7 @@ func (in *updateKidInput) Update(ctx context.Context, id string, set ...velox.Se
 		u.SetKey(int(kids.AcctID.I), nil)
 	}
 	p, err := u.Exec(key, velox.Assignments(set))
-	return (*kid)(p), err
+	return gqlimpl.As[*kid](p, err)
 }
 
 // inputLog records each statement a DB runs as "<op> <table>", and fails the
@@ -961,7 +960,7 @@ func TestKeyHelpersAs(t *testing.T) {
 	type acctID int64
 	conv := func(k int64) acctID { return acctID(k) }
 	f := newInputFixture(t)
-	u, key := gqlimpl.NewUpdateAs[int64, acctID](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", velox.TableOf[acct](), int(accts.ID.I), acctGQL(2), acctInputGQL, conv)
+	u, key := gqlimpl.NewUpdateAs[int64, acctID](f.ctx, gqlimpl.InputConn[acct]("Acct", int(accts.ID.I), acctInputGQL), acctGQL(2), conv)
 	if key != 2 {
 		t.Errorf("NewUpdateAs key = %v, want 2", key)
 	}
@@ -982,12 +981,12 @@ func TestKeyHelpersAs(t *testing.T) {
 		t.Errorf("AddRemoveAs = %v, %v; want [1], [2]", add, rm)
 	}
 	// Nothing failed: the update runs, and changes nothing.
-	if p, err := u.Exec(key, nil); err != nil || (*acct)(p).Name != "b" {
+	if p, err := u.Exec(key, nil); err != nil || p.(*acct).Name != "b" {
 		t.Errorf("Exec = %+v, %v", p, err)
 	}
 
 	// An ID in both lists, then a malformed one: the decode error wins.
-	u, _ = gqlimpl.NewUpdateAs[int64, acctID](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", velox.TableOf[acct](), int(accts.ID.I), acctGQL(2), acctInputGQL, conv)
+	u, _ = gqlimpl.NewUpdateAs[int64, acctID](f.ctx, gqlimpl.InputConn[acct]("Acct", int(accts.ID.I), acctInputGQL), acctGQL(2), conv)
 	gqlimpl.AddRemoveAs(u, "Acct", "addIDs", mapIDs(acctGQL, []int64{1}), "removeIDs", mapIDs(acctGQL, []int64{1}), conv)
 	_, err := u.Exec(2, nil)
 	wantErr(t, "an ID in both", err, veloxgql.CodeBadUserInput, "veloxgql: UpdateAcctInput: an ID is in both addIDs and removeIDs")
@@ -995,7 +994,7 @@ func TestKeyHelpersAs(t *testing.T) {
 	if _, err := u.Exec(2, nil); !errors.Is(err, veloxgql.ErrBadID) || !strings.HasPrefix(err.Error(), "veloxgql: UpdateAcctInput.a: ") {
 		t.Errorf("a malformed ID after an ID in both: %v, want the decode error naming UpdateAcctInput.a", err)
 	}
-	u, _ = gqlimpl.NewUpdateAs[int64, acctID](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", velox.TableOf[acct](), int(accts.ID.I), "!", acctInputGQL, conv)
+	u, _ = gqlimpl.NewUpdateAs[int64, acctID](f.ctx, gqlimpl.InputConn[acct]("Acct", int(accts.ID.I), acctInputGQL), "!", conv)
 	if _, err := u.Exec(2, nil); !errors.Is(err, veloxgql.ErrBadID) || !strings.HasPrefix(err.Error(), "veloxgql: id: ") {
 		t.Errorf("NewUpdateAs of a malformed id: %v, want the decode error naming id", err)
 	}
@@ -1008,7 +1007,7 @@ func TestKeyHelpersAs(t *testing.T) {
 // the input, which wins over the input's other errors.
 func TestDecodeJSONInput(t *testing.T) {
 	f := newInputFixture(t)
-	c := gqlimpl.NewCreate(f.ctx, "CreateAcctInput", "Acct", "gqlimpl_test.acct", velox.TableOf[acct](), unsafe.Pointer(new(acct)), acctInputGQL, int(accts.Name.I))
+	c := gqlimpl.NewCreate(f.ctx, gqlimpl.InputConn[acct]("Acct", 0, acctInputGQL), new(acct), int(accts.Name.I))
 	if got := gqlimpl.DecodeJSON[[]int](c, "tags", veloxgql.JSON(`[1, 2]`)); !slices.Equal(got, []int{1, 2}) {
 		t.Errorf("DecodeJSON = %v, want [1 2]", got)
 	}
@@ -1027,7 +1026,7 @@ func TestDecodeJSONInput(t *testing.T) {
 // given, or its clear field alone, is no null to look for.
 func TestNoIDsNoCheck(t *testing.T) {
 	f := newInputFixture(t)
-	c := gqlimpl.NewCreate(f.ctx, "CreateKidInput", "Kid", "gqlimpl_test.kid", velox.TableOf[kid](), unsafe.Pointer(new(kid)), kidInputGQL, int(kids.Title.I))
+	c := gqlimpl.NewCreate(f.ctx, gqlimpl.InputConn[kid]("Kid", 0, kidInputGQL), new(kid), int(kids.Title.I))
 	gqlimpl.Exists(c, "acctID", "Acct", velox.TableOf[acct](), int(accts.ID.I), []int64{})
 	if err := gqlimpl.CheckExists(f.ctx, f.db.QueryTable(velox.TableOf[acct]()).Where(velox.Predicate(accts.ID.In())), 0, "at", "Acct"); err != nil {
 		t.Errorf("CheckExists of no IDs: %v", err)
@@ -1035,7 +1034,7 @@ func TestNoIDsNoCheck(t *testing.T) {
 	if got := f.log.take(); len(got) != 0 {
 		t.Errorf("statements %q, want none", got)
 	}
-	u, _ := gqlimpl.NewUpdate[int64](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", velox.TableOf[acct](), int(accts.ID.I), acctGQL(1), acctInputGQL)
+	u, _ := gqlimpl.NewUpdate[int64](f.ctx, gqlimpl.InputConn[acct]("Acct", int(accts.ID.I), acctInputGQL), acctGQL(1))
 	if gqlimpl.Cleared(u, "age", true, "clearAge", false) {
 		t.Error("Cleared of a field given: true")
 	}

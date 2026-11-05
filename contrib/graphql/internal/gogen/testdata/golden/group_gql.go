@@ -3,14 +3,13 @@ package gen
 import (
 	"context"
 	"io"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion11
+const _ = veloxgql.GeneratedCodeIsVersion12
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -21,12 +20,7 @@ func (x *Group) IDGQL() string { return veloxgql.EncodeID("Group", x.ID) }
 
 // groupNodeGQL is the Node type Group for Node and Nodes.
 func groupNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode("Group", velox.TableOf[Group](), groupColID,
-		func(id string) (any, error) {
-			k, err := veloxgql.DecodeID[int64](id, "Group")
-			return k, err
-		},
-		groupColumnsGQL)
+	return gqlimpl.NewNode[int64](&groupConnGQL)
 }
 
 // groupKeyGQL is the key of x, a Group.
@@ -62,15 +56,11 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 // Its queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
 func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
+	c, err := AccountsConnection(ctx, after, first, before, last, where)
 	if err != nil {
 		return nil, err
 	}
-	c, err := AccountsConnectionOf(ctx, db.Query[User](), after, first, before, last, where)
-	if err != nil {
-		return nil, err
-	}
-	return &AccountConnection{c: gqlimpl.EdgeConnection(ctx, c.c, velox.TableOf[Group](), unsafe.Pointer(x), groupEdgeUsers, "Group.users", []any{after, first, before, last, where})}, nil
+	return &AccountConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &groupConnGQL, x, groupEdgeUsers, "Group.users", []any{after, first, before, last, where})}, nil
 }
 
 // GroupConnection is the GraphQL type GroupConnection, a connection to a list
@@ -88,8 +78,8 @@ func (c *GroupConnection) Edges(ctx context.Context) ([]*GroupEdge, error) {
 	}
 	slab := make([]GroupEdge, len(p.Rows)) // one allocation for all the edges
 	edges := make([]*GroupEdge, len(p.Rows))
-	for i, x := range p.Rows {
-		slab[i] = GroupEdge{Node: (*Group)(x), Cursor: p.Cursors[i]}
+	for i := range p.Rows {
+		slab[i] = GroupEdge{Node: p.Node(i).(*Group), Cursor: p.Cursors[i]}
 		edges[i] = &slab[i]
 	}
 	return edges, nil
@@ -147,9 +137,12 @@ func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxg
 	return &GroupConnection{c: c}, nil
 }
 
-// groupConnGQL is the key and the order columns of the connections to Group.
+// groupConnGQL is what the runtime knows of the GraphQL type Group: its table,
+// the key and the order columns of its connections, the columns its selections
+// read and the fields of its inputs.
 var groupConnGQL = gqlimpl.Conn{
-	Type: "Group",
+	Type:  "Group",
+	Table: velox.TableOf[Group],
 	Key: []gqlimpl.Col{
 		{Field: "id", Col: groupColID},
 	},

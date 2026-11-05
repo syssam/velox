@@ -86,7 +86,7 @@ func (s *inputState) writeError(err error) error {
 //		if x == nil {
 //			x = new(Post)
 //		}
-//		c := gqlimpl.NewCreate(ctx, "CreatePostInput", "Post", "gen.Post", velox.TableOf[Post](), unsafe.Pointer(x), postInputGQL, postColTitle)
+//		c := gqlimpl.NewCreate(ctx, &postConnGQL, x, postColTitle)
 //		x.Title = in.Title
 //		if in.Views != nil {
 //			x.Views = *in.Views
@@ -113,18 +113,29 @@ type Create struct {
 
 func (c *Create) state() *inputState { return &c.s }
 
-// NewCreate returns the Create of x, a row of t's entity, from the create
-// input of the GraphQL type input ("CreatePostInput"). typ is the entity's
-// GraphQL type ("Post"), which a NOT_FOUND or "already linked" error names,
-// entity is the entity as velox names it in a *velox.ValidationError
-// ("gen.Post"), and name gives the input's field that sets an entity field,
-// by the field's Go name, "" for one the input does not set: a validator's
-// error on such a field becomes BAD_USER_INPUT naming it (WriteError).
-// required are the columns of the input's required fields, whose validators
-// run before any statement; Given adds those of the optional fields the input
-// gives.
-func NewCreate(ctx context.Context, input, typ, entity string, t velox.Table, x unsafe.Pointer, name func(goField string) string, required ...int) *Create {
-	return &Create{s: inputState{ctx: ctx, input: input, typ: typ, entity: entity, name: name}, t: t, x: x, cols: required}
+// NewCreate returns the Create of x, a *E of the entity E of c's Table, from
+// the create input of the GraphQL type "Create<Type>Input", Type being c's
+// type ("Post"), which a NOT_FOUND or "already linked" error names. A
+// validator's error on a field c.CreateField names becomes BAD_USER_INPUT
+// naming the input's field (WriteError). required are the columns of the
+// input's required fields, whose validators run before any statement; Given
+// adds those of the optional fields the input gives.
+func NewCreate(ctx context.Context, c *Conn, x any, required ...int) *Create {
+	return &Create{s: newState(ctx, "Create", c, c.CreateField), t: c.table(), x: rowOf(c, x), cols: required}
+}
+
+// newState is the inputState of the input "<verb><Type>Input" of c's type,
+// whose field name gives.
+func newState(ctx context.Context, verb string, c *Conn, name func(goField string) string) inputState {
+	t := c.table()
+	entity := ""
+	if info := t.Info(); info != nil {
+		entity = info.Name
+	}
+	if name == nil {
+		name = func(string) string { return "" }
+	}
+	return inputState{ctx: ctx, input: verb + c.Type + "Input", typ: c.Type, entity: entity, name: name}
 }
 
 // Given adds col, the column of an optional field the input gives, to those
@@ -177,7 +188,7 @@ func (c *Create) Insert() error {
 // helper call each, and returns Exec's row:
 //
 //	func (in *UpdatePostInput) Update(ctx context.Context, id string, set ...velox.Setter[Post]) (*Post, error) {
-//		u, key := gqlimpl.NewUpdate[int64](ctx, "UpdatePostInput", "Post", "gen.Post", velox.TableOf[Post](), postColID, id, postInputGQL)
+//		u, key := gqlimpl.NewUpdate[int64](ctx, &postConnGQL, id)
 //		if in.Title != nil {
 //			u.Set(postColTitle, *in.Title)
 //		}
@@ -187,7 +198,8 @@ func (c *Create) Insert() error {
 //		addTagIDsKeys, removeTagIDsKeys := gqlimpl.AddRemove[int64](u, "Label", "addTagIDs", in.AddTagIDs, "removeTagIDs", in.RemoveTagIDs)
 //		gqlimpl.Through(u, "addTagIDs", "Label", gqlimpl.Edit{Clear: in.ClearTags, Remove: removeTagIDsKeys, Add: addTagIDsKeys}, key, postTagsEdgeGQL())
 //		p, err := u.Exec(key, velox.Assignments(set))
-//		return (*Post)(p), err
+//		n, _ := p.(*Post)
+//		return n, err
 //	}
 type Update struct {
 	s    inputState
@@ -199,30 +211,35 @@ type Update struct {
 
 func (u *Update) state() *inputState { return &u.s }
 
-// NewUpdate returns the Update of the row of t's entity whose ID is id, of
-// the GraphQL type typ ("Post"), whose key is the column key, from the update
-// input of the GraphQL type input ("UpdatePostInput"), and the row's key, of
-// the Go type K, decoded from id; entity and name are NewCreate's. A
+// NewUpdate returns the Update of the row of the entity of c's Table whose ID
+// is id, of c's GraphQL type ("Post"), whose key is c.Key's one column, from
+// the update input of the GraphQL type "Update<Type>Input", and the row's
+// key, of the Go type K, decoded from id. A validator's error on a field
+// c.UpdateField names becomes BAD_USER_INPUT naming the input's field. A
 // malformed id, or an ID of another type, is a decode error, the first: its
 // text names "id".
-func NewUpdate[K any](ctx context.Context, input, typ, entity string, t velox.Table, key int, id string, name func(goField string) string) (*Update, K) {
-	u := newUpdate(ctx, input, typ, entity, t, key, name)
-	k, err := DecodeID[K]("id", id, typ)
+func NewUpdate[K any](ctx context.Context, c *Conn, id string) (*Update, K) {
+	u := newUpdate(ctx, c)
+	k, err := DecodeID[K]("id", id, c.Type)
 	u.s.decodeFail(err)
 	return u, k
 }
 
 // NewUpdateAs is NewUpdate of a key whose Go type V is a named type DecodeID
 // does not take: id is decoded as a K and converted by conv.
-func NewUpdateAs[K, V any](ctx context.Context, input, typ, entity string, t velox.Table, key int, id string, name func(goField string) string, conv func(K) V) (*Update, V) {
-	u := newUpdate(ctx, input, typ, entity, t, key, name)
-	v, err := DecodeIDAs("id", id, typ, conv)
+func NewUpdateAs[K, V any](ctx context.Context, c *Conn, id string, conv func(K) V) (*Update, V) {
+	u := newUpdate(ctx, c)
+	v, err := DecodeIDAs("id", id, c.Type, conv)
 	u.s.decodeFail(err)
 	return u, v
 }
 
-func newUpdate(ctx context.Context, input, typ, entity string, t velox.Table, key int, name func(goField string) string) *Update {
-	return &Update{s: inputState{ctx: ctx, input: input, typ: typ, entity: entity, name: name}, t: t, key: key}
+func newUpdate(ctx context.Context, c *Conn) *Update {
+	key := -1
+	if len(c.Key) == 1 {
+		key = c.Key[0].Col
+	}
+	return &Update{s: newState(ctx, "Update", c, c.UpdateField), t: c.table(), key: key}
 }
 
 // assign is the assignment of v, converted as velox.Table.Convert does, to
@@ -272,7 +289,7 @@ func (u *Update) SetKey(col int, v any) {
 }
 
 // Exec updates the row whose key is key, writes its edges, and returns the
-// row as written, a pointer to a row of the entity. set are the
+// row as written, a *E of the entity E in an any. set are the
 // application's own assignments (velox.Assignments of its setters), which
 // count as setting something. An application's assignment of a column wins:
 // the input's assignment of that column, a field's or an edge's key, is
@@ -298,7 +315,7 @@ func (u *Update) SetKey(col int, v any) {
 //     update that moves the row out of the caller's Read view succeeds.
 //
 // An error of any of them rolls the whole update back.
-func (u *Update) Exec(key any, set []velox.Assignment) (unsafe.Pointer, error) {
+func (u *Update) Exec(key any, set []velox.Assignment) (any, error) {
 	if err := u.s.failed(); err != nil {
 		return nil, err
 	}
@@ -356,7 +373,7 @@ func (u *Update) Exec(key any, set []velox.Assignment) (unsafe.Pointer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return u.t.Ptr(out), nil
 }
 
 // unassigned are the assignments of in but those of a column one of set

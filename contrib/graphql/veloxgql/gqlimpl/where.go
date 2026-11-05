@@ -19,7 +19,7 @@ import (
 // Filter.Pred; its method Pred is PredicateGQL, typed:
 //
 //	func (w *AccountWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-//		f := gqlimpl.NewFilter(ctx, "AccountWhereInput", velox.TableOf[User]())
+//		f := gqlimpl.NewFilter(ctx, &userConnGQL)
 //		if w == nil {
 //			return f.Pred()
 //		}
@@ -40,7 +40,7 @@ import (
 // the entity: they are compiled once, for every where input.
 type Filter struct {
 	ctx    context.Context
-	input  string // the where input's GraphQL type, for errors
+	typ    string // the GraphQL type: errors name its where input, "<Type>WhereInput"
 	t      velox.Table
 	depth  int
 	budget *budget // the where argument's
@@ -48,8 +48,8 @@ type Filter struct {
 	err    error
 }
 
-// NewFilter returns the Filter of a where input of the GraphQL type input,
-// on t's entity.
+// NewFilter returns the Filter of a where input of c's type,
+// "<Type>WhereInput", on the entity of c's Table.
 //
 // The depth, how deeply the input is nested in the where argument, and the
 // argument's node budget travel in ctx, under one unexported key. A context
@@ -74,13 +74,13 @@ type Filter struct {
 // (veloxgql.ErrFilterTooWide); and on a where argument of more than
 // MaxFilterNodes inputs, predicates and values in all
 // (veloxgql.ErrFilterTooLarge).
-func NewFilter(ctx context.Context, input string, t velox.Table) *Filter {
+func NewFilter(ctx context.Context, c *Conn) *Filter {
 	st, ok := ctx.Value(stateKey{}).(*state)
 	if !ok {
 		lim := veloxgql.LimitsFromContext(ctx)
 		st = &state{budget: &budget{left: lim.MaxFilterNodes, limits: lim}}
 	}
-	f := &Filter{ctx: ctx, input: input, t: t, depth: st.depth, budget: st.budget}
+	f := &Filter{ctx: ctx, typ: c.Type, t: c.table(), depth: st.depth, budget: st.budget}
 	if err := checkDepth(f.depth, f.budget.limits.MaxFilterDepth); err != nil {
 		f.refuse("", err)
 		return f
@@ -140,7 +140,7 @@ func (f *Filter) refuse(field string, err error) {
 	if f.err != nil {
 		return
 	}
-	at := f.input
+	at := f.typ + "WhereInput"
 	if field != "" {
 		at += "." + field
 	}

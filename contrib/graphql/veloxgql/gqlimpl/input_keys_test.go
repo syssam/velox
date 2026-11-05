@@ -2,7 +2,6 @@ package gqlimpl_test
 
 import (
 	"testing"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -18,7 +17,7 @@ func TestEdgeKeyOfAnotherType(t *testing.T) {
 	bad := []string{"x"} // keys of int64 columns
 	update := func(name string, add func(u *gqlimpl.Update, key int64)) {
 		t.Helper()
-		u, key := gqlimpl.NewUpdate[int64](f.ctx, "UpdateAcctInput", "Acct", "gqlimpl_test.acct", velox.TableOf[acct](), int(accts.ID.I), acctGQL(1), acctInputGQL)
+		u, key := gqlimpl.NewUpdate[int64](f.ctx, gqlimpl.InputConn[acct]("Acct", int(accts.ID.I), acctInputGQL), acctGQL(1))
 		add(u, key)
 		if _, err := u.Exec(key, nil); err == nil {
 			t.Errorf("%s: no error", name)
@@ -44,7 +43,7 @@ func TestEdgeKeyOfAnotherType(t *testing.T) {
 	})
 
 	x := &acct{Name: "n"}
-	c := gqlimpl.NewCreate(f.ctx, "CreateAcctInput", "Acct", "gqlimpl_test.acct", velox.TableOf[acct](), unsafe.Pointer(x), acctInputGQL, int(accts.Name.I))
+	c := gqlimpl.NewCreate(f.ctx, gqlimpl.InputConn[acct]("Acct", 0, acctInputGQL), x, int(accts.Name.I))
 	gqlimpl.Repoint(c, "kidIDs", "Kid", acctKidsEdgeGQL(), bad)
 	if err := c.Insert(); err == nil {
 		t.Error("Repoint, keys of another type: no error")
@@ -57,13 +56,13 @@ func TestEdgeKeyOfAnotherType(t *testing.T) {
 // TestUpdateSetNull: SetNull clears a nullable field.
 func TestUpdateSetNull(t *testing.T) {
 	f := newInputFixture(t)
-	u, key := gqlimpl.NewUpdate[int64](f.ctx, "UpdateKidInput", "Kid", "gqlimpl_test.kid", velox.TableOf[kid](), int(kids.ID.I), veloxgql.EncodeID("Kid", int64(1)), kidInputGQL)
+	u, key := gqlimpl.NewUpdate[int64](f.ctx, gqlimpl.InputConn[kid]("Kid", int(kids.ID.I), kidInputGQL), veloxgql.EncodeID("Kid", int64(1)))
 	u.SetNull(int(kids.AcctID.I))
 	p, err := u.Exec(key, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if k := (*kid)(p); k.AcctID != nil {
+	if k := p.(*kid); k.AcctID != nil {
 		t.Errorf("acct_id = %d, want NULL", *k.AcctID)
 	}
 	var n int

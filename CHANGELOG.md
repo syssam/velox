@@ -155,6 +155,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `veloxgql.GeneratedCodeIsVersion12`: regenerate. velox-graphql's `*_gql.go` files
+  import no `unsafe` and convert no pointer: gqlimpl takes and returns rows as `*E` in an
+  `any`, which the generated code type-asserts. Each type's `<entity>ConnGQL`
+  (`gqlimpl.Conn`) also holds its `Table` and its inputs' field names (`CreateField`,
+  `UpdateField`), and `NewNode`, `NewFilter`, `NewCreate`, `NewUpdate`, `EdgeOne`,
+  `EdgeList` and `EdgeConnection` take it in place of the type's names, its table and its
+  columns. `EdgeOne` and `EdgeList` read the DB from the context and narrow to the
+  selection themselves. The GraphQL schema and every behaviour are unchanged.
 - **Breaking.** `GeneratedCodeIsVersion16`: regenerate. Behaviour declared in the schema
   is untyped and names columns by name; gen imports the schema; gen/runtime is gone;
   remove `import _ ".../gen/runtime"`. `velox.Policy`, `Hook`, `Mutator`, `MutateFunc`,

@@ -50,9 +50,8 @@ func dialInputGQL(goField string) string {
 // value wrapped round; one at the bound is taken.
 func TestOutOfRangeIsUserInput(t *testing.T) {
 	ctx := context.Background()
-	tbl := velox.TableOf[dial]()
 	filter := func(field string, v any, list bool) error {
-		f := gqlimpl.NewFilter(ctx, "DialWhereInput", tbl)
+		f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[dial]("Dial"))
 		if list {
 			gqlimpl.List(f, field, v, 1, velox.PredIn)
 		} else {
@@ -82,7 +81,7 @@ func TestOutOfRangeIsUserInput(t *testing.T) {
 		t.Errorf("-128: %v", err)
 	}
 
-	u, _ := gqlimpl.NewUpdate[int64](ctx, "UpdateDialInput", "Dial", "gqlimpl_test.dial", tbl, 0, veloxgql.EncodeID("Dial", int64(1)), dialInputGQL)
+	u, _ := gqlimpl.NewUpdate[int64](ctx, gqlimpl.InputConn[dial]("Dial", 0, dialInputGQL), veloxgql.EncodeID("Dial", int64(1)))
 	u.Set(1, int64(300))
 	_, err := u.Exec(int64(1), nil)
 	if codeOf(err) != "BAD_USER_INPUT" || !strings.Contains(err.Error(), "UpdateDialInput.level") {
