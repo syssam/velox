@@ -85,6 +85,8 @@ func checkTags(n Node, in *EntityInfo) error {
 		return checkCol(in, int(n.Col))
 	case OpJoined:
 		return nil // the joined target's: no untyped entry point makes one
+	case opNamed, opNamedEdge:
+		return nil // resolved against the statement's entity when it runs
 	}
 	if tag, ok := n.W.(*EntityInfo); ok && n.Op != OpBetween && tag != in {
 		return fmt.Errorf("velox: %s: a condition on a column of %s", in.Name, tag.Name)

@@ -33,6 +33,7 @@ type EntityInfo struct {
 	bidiKeys   []bidiKey                  // the keys of the EdgeBidi relations, which both partners' rows hold
 	hooks      []HookFn                   // the Hooks method's, outermost first
 	filters    []FilterFn                 // the interceptors' Filters, in order
+	names      map[string]int32           // each column's index by its name, for the conditions and mutations by name
 
 	// The entity's policy, bound once from its Policy method.
 	policy *EntityPolicy // nil when none
@@ -81,6 +82,13 @@ type ColumnInfo struct {
 	encode func(v any) ([]byte, error)    // ColumnDescriptor.Encode
 	decode func(data []byte, v any) error // ColumnDescriptor.Decode
 	off    uintptr                        // the field's offset in the entity
+	// val is the Go type, a reflect.Type, of a value a condition or a
+	// mutation by name gives the column: Type, without the pointer of a
+	// nullable field.
+	val any
+	// fast is the field's type when a mutation by name stores it without
+	// reflect (fastInt64 and the rest); 0 for any other type.
+	fast uint8
 	// copyDefault says Default holds memory a row would share: FillDefault
 	// gives each row a deep copy of it.
 	copyDefault bool

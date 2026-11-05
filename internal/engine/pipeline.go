@@ -492,6 +492,10 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with a copy whose interceptors differ", entity.Name)
 	}
 	if len(db.Cfg.Rewrites) > 0 {
+		// A Rewrite hook may add conditions by name.
+		if err := resolveStatementNames(st); err != nil {
+			return err
+		}
 		if err := CheckColumns(st); err != nil {
 			return err
 		}

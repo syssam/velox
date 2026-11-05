@@ -164,6 +164,13 @@ func (sc *Scoper) filterCond(t *EntityInfo, i int, p Predicate, err error) (Pred
 	case hasZero(p.n):
 		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]'s condition holds the zero Pred", t.Name, i)
 	}
+	if named(p.n) {
+		n, err := resolveNamed(t, p.n)
+		if err != nil {
+			return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]'s condition: %w", t.Name, i, err)
+		}
+		p = Predicate{n}
+	}
 	if err := PredErr(p.n); err != nil {
 		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]'s condition: %w", t.Name, i, err)
 	}
@@ -202,6 +209,13 @@ func (sc *Scoper) PolicyCond(t *EntityInfo, op Op, which string, p Predicate, er
 		return Predicate{}, nil // no restriction
 	case hasZero(p.n):
 		return Predicate{}, fmt.Errorf("velox: %s: the %s policy's condition holds the zero Pred", t.Name, which)
+	}
+	if named(p.n) {
+		n, err := resolveNamed(t, p.n)
+		if err != nil {
+			return Predicate{}, fmt.Errorf("velox: %s: the %s policy's condition: %w", t.Name, which, err)
+		}
+		p = Predicate{n}
 	}
 	if err := PredErr(p.n); err != nil {
 		return Predicate{}, fmt.Errorf("velox: %s: the %s policy's condition: %w", t.Name, which, err)

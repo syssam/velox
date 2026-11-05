@@ -178,6 +178,8 @@ func checkColumns(st *Statement, who string) error {
 			return bad(l.OwnerCol)
 		case OpInvalid:
 			return nd.V.(error)
+		case opNamed, opNamedEdge:
+			return nil // resolved against the statement's entity when it runs
 		case OpAllow:
 			return nil // it names no column
 		case OpThrough:

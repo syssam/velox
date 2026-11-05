@@ -32,15 +32,25 @@ const (
 	OpInvalid // v is the error
 	OpThrough // col is the target's column, v the join *EntityInfo, w the join's column equal to it, kids the join's conditions
 	OpJoined  // col is the relation index, kids the conditions on the target of the join Query.Join made for it
+	// opNamed is a condition on a column named by its name, not yet resolved:
+	// col's low byte is its PredOp, v its value, and w and the rest of col
+	// the name (nameData). The statement's preparation resolves it against
+	// the entity, to the leaf Table.Pred makes.
+	opNamed
+	// opNamedEdge is an EXISTS on a relation named by its name, not yet
+	// resolved: w and col are the name, as opNamed's, kids the conditions on
+	// its target, by name.
+	opNamedEdge
 )
 
 // Node is a condition, typed by nothing: the generic API wraps it.
 type Node struct {
-	Op   op
-	Deep bool // an OpExists or OpThrough is among the kids, at any depth; set by group
-	Col  int32
-	V, W any
-	Kids []Node
+	Op     op
+	Deep   bool // an OpExists or OpThrough is among the kids, at any depth; set by group
+	ByName bool // a condition by name is among the kids, at any depth; set by group
+	Col    int32
+	V, W   any
+	Kids   []Node
 }
 
 // JoinedNode is the conjunction of kids, conditions on the target of relation
@@ -60,11 +70,17 @@ func Group(o op, kids []Node) Node {
 	for _, k := range kids {
 		if k.Op == OpExists || k.Op == OpThrough || k.Deep {
 			n.Deep = true
-			break
+		}
+		if named(k) {
+			n.ByName = true
 		}
 	}
 	return n
 }
+
+// named reports whether n is or holds a condition by name, which the
+// statement resolves against its entity.
+func named(n Node) bool { return n.ByName || n.Op == opNamed || n.Op == opNamedEdge }
 
 // Predicate is a condition in a Statement: the form hooks see and add. It is
 // the untyped form of Pred, as OrderTerm is of Order.
@@ -80,7 +96,7 @@ func ColumnEQ(column int, v any) Predicate {
 // no EXISTS: a condition that a rewrite hook may build with the public API.
 func Sound(n Node) bool {
 	switch n.Op {
-	case opZero, OpInvalid, OpExists, OpJoined:
+	case opZero, OpInvalid, OpExists, OpJoined, opNamed, opNamedEdge:
 		return false
 	}
 	for _, k := range n.Kids {
@@ -203,6 +219,9 @@ func resolvePreds(ps []Predicate) ([]Predicate, error) {
 // links. A relation that cannot be resolved fails the statement.
 func ResolveStatement(st *Statement) error {
 	if err := resolveJoins(st); err != nil {
+		return err
+	}
+	if err := resolveStatementNames(st); err != nil {
 		return err
 	}
 	where, err := resolvePreds(st.Where)

@@ -37,6 +37,9 @@ type EdgeDescriptor struct {
 	targetCol int      // an index into the target's Columns
 	through   *Through // EdgeThrough's join entity; nil for any other relation
 	bidi      any      // EdgeBidi made it: the reflect.Type of T, which must be the owner; nil otherwise
+	// target is the target's metadata, when SetEdgeTarget linked it; nil
+	// otherwise.
+	target func() (*EntityInfo, error)
 
 	// holders are the reflect.Types of One[T] and Many[T] for the target T:
 	// the types the relation's field may have.
@@ -57,6 +60,10 @@ type relation struct {
 	ownerCol  int
 	targetCol int
 	through   *Through // EdgeThrough's join entity; nil for any other relation
+	// target is the target's metadata when the descriptor linked it
+	// (SetEdgeTarget), which a condition by the relation's name needs; nil
+	// otherwise.
+	target func() (*EntityInfo, error)
 
 	once sync.Once
 	link Link

@@ -114,6 +114,7 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable,
 			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
 			Immutable: c.Immutable, Sensitive: c.Sensitive, RequiredEdge: c.RequiredEdge, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
+		ci.val, ci.fast = valType(ft), fastOf(ft)
 		if (c.Encode == nil) != (c.Decode == nil) {
 			return fail(c.Field, "column %s has one of Encode and Decode; a codec needs both", c.Name)
 		}
@@ -189,13 +190,14 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 			}
 			bidiKeys = append(bidiKeys, bk)
 		}
-		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
+		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through, target: r.target}
 	}
 	info := &EntityInfo{Name: name, Table: d.Table, Schema: d.Schema, Columns: cols, PrimaryKey: d.PrimaryKey,
 		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
 	if err := validate(info); err != nil {
 		return nil, err
 	}
+	info.names = nameIndex(cols)
 	publishLayout(t, info)
 	return info, nil
 }
@@ -341,6 +343,11 @@ func SetEdgeBidi(e *EdgeDescriptor, t any) { e.bidi = t }
 
 // SetEdgeThrough makes e an edge through the join entity t.
 func SetEdgeThrough(e *EdgeDescriptor, t *Through) { e.through = t }
+
+// SetEdgeTarget links e's target: get returns its metadata. A condition
+// by the relation's name (Edge) resolves only on a linked relation, since
+// it names no target type of its own.
+func SetEdgeTarget(e *EdgeDescriptor, get func() (*EntityInfo, error)) { e.target = get }
 
 // EdgeThroughOf is the join entity of e; nil when e has none.
 func EdgeThroughOf(e EdgeDescriptor) *Through { return e.through }

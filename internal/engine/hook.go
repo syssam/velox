@@ -14,6 +14,7 @@ import (
 // made every Descriptor entity's package 14 KiB larger (compilecost_test.go).
 type MutationState struct {
 	DB       any              // the *DB the write runs on; set only when in has hooks
+	In       *EntityInfo      // the write's entity; set only when it has hooks
 	Op       Op               // set before the hooks run: Mutation.Op reads it, since an insert has no st
 	St       *Statement       // the update or delete; nil for an insert
 	Rows     []unsafe.Pointer // an insert's rows
@@ -312,7 +313,7 @@ func Mutate(ctx context.Context, db *DB, in *EntityInfo, mu *MutationState, core
 	if len(InfoHooks(in)) == 0 {
 		return core(ctx, mu)
 	}
-	mu.DB = db
+	mu.DB, mu.In = db, in
 	next := func(ctx context.Context, mu *MutationState) error {
 		if mu.Called {
 			// Running the core again would send the write again.

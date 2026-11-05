@@ -56,11 +56,7 @@ func NewTable(info *EntityInfo, err error, addr func(p unsafe.Pointer, col int) 
 		t.slice, t.size = reflect.SliceOf(rt), rt.Size()
 		t.vals = make([]any, len(info.Columns))
 		for i := range info.Columns {
-			ft := GoType(info.Columns[i])
-			if ft != nil && ft.Kind() == reflect.Pointer {
-				ft = ft.Elem()
-			}
-			t.vals[i] = ft
+			t.vals[i] = info.Columns[i].val
 		}
 	}
 	return Table{t}
@@ -327,18 +323,13 @@ func (t Table) Convert(col int, v any) (any, error) {
 		return nil, fmt.Errorf("velox: %s: a value of column %d, of %d", s.info.Name, col, len(s.info.Columns))
 	}
 	want, _ := s.vals[col].(reflect.Type)
-	got := reflect.TypeOf(v)
-	if got == want {
-		return v, nil
-	}
-	if got == nil || want == nil || kindClass(got.Kind()) != kindClass(want.Kind()) || !got.ConvertibleTo(want) {
-		return nil, checkValue(s.info, &s.info.Columns[col], want, v)
-	}
-	rv := reflect.ValueOf(v)
-	if overflows(rv, want) {
+	switch out, res := coerce(want, v); res {
+	case coerced:
+		return out, nil
+	case overflow:
 		return nil, fmt.Errorf("velox: %s: %v for %s, a %v: %w", s.info.Name, v, s.info.Columns[col].Field, want, ErrOutOfRange)
 	}
-	return rv.Convert(want).Interface(), nil
+	return nil, checkValue(s.info, &s.info.Columns[col], want, v)
 }
 
 // overflows reports whether v, a number, does not fit want, a number type
@@ -410,13 +401,15 @@ func (t Table) Has(edge int, target Table, ps ...Predicate) Predicate {
 		}
 	}
 	kids := make([]Node, len(ps))
+	byName := false
 	for i, p := range ps {
 		if err := PredErr(PredNode(p)); err != nil {
 			return NewPredicate(Node{Op: OpInvalid, V: err})
 		}
 		kids[i] = PredNode(p)
+		byName = byName || named(kids[i])
 	}
-	return NewPredicate(Node{Op: OpExists, Col: int32(edge), V: RelRef{Owner: s.target.Get, Target: ts.target, I: int32(edge)}, Kids: kids})
+	return NewPredicate(Node{Op: OpExists, ByName: byName, Col: int32(edge), V: RelRef{Owner: s.target.Get, Target: ts.target, I: int32(edge)}, Kids: kids})
 }
 
 // Of is true for the rows of target related through relation edge to any of
