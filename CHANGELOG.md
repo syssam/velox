@@ -511,6 +511,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- A statement, `BEGIN`, `SAVEPOINT`, `RELEASE` or `COMMIT` that fails once its context
+  has ended matches the context's error (`context.DeadlineExceeded` or
+  `context.Canceled`), or `ErrTimeout` for velox's deadline, whatever the driver
+  returned; the driver's error is kept. pgx's database/sql driver reports a statement
+  whose context ended before it was sent as `driver.ErrBadConn`, which a transaction
+  returned as is, and a socket can time out at the deadline before the context's
+  `Done` closes.
 - A constraint checked at commit (a deferred one) is a `*ConstraintError`, with no `Entity`,
   as one a statement violates is; it was the driver's error alone. Its message is
   `velox: commit: <kind> constraint <name> violated: …`.

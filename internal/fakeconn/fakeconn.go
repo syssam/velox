@@ -43,8 +43,12 @@ type Exec struct {
 	RowsErr  error
 	RowsErrs []error
 	// Block makes query and exec wait until their context ends, then return
-	// its error.
+	// its error, or BlockErr when that is set.
 	Block bool
+	// BlockErr, when set, is what a call that Block held returns once its
+	// context ends: a driver error that does not say the context ended, as
+	// pgx's database/sql driver returns driver.ErrBadConn.
+	BlockErr error
 	// Deadline is the deadline of the last query's or exec's context; zero
 	// when it had none.
 	Deadline time.Time
@@ -61,7 +65,10 @@ type Exec struct {
 	ArgLog    [][]any
 	Errs      []error // returned by the next calls, one each, before Err
 	CommitErr error
-	BeginErr  error // what BEGIN returns
+	// BlockCommit makes COMMIT wait until its context ends, then return
+	// CommitErr.
+	BlockCommit bool
+	BeginErr    error // what BEGIN returns
 	// RollbackErr is what ROLLBACK returns, as pgx does once it has closed a
 	// connection whose statement a deadline cut off.
 	RollbackErr error
@@ -108,12 +115,15 @@ func (e *Exec) next() error {
 func (e *Exec) wait(ctx context.Context) error {
 	e.mu.Lock()
 	e.Deadline, _ = ctx.Deadline()
-	block := e.Block
+	block, berr := e.Block, e.BlockErr
 	e.mu.Unlock()
 	if !block {
 		return nil
 	}
 	<-ctx.Done()
+	if berr != nil {
+		return berr
+	}
 	return ctx.Err()
 }
 
@@ -193,7 +203,13 @@ func (e *Exec) Begin(_ context.Context, o sql.TxOptions) (conn.Executor, conn.Tx
 
 type fakeTx struct{ e *Exec }
 
-func (t fakeTx) Commit(context.Context) error {
+func (t fakeTx) Commit(ctx context.Context) error {
+	t.e.mu.Lock()
+	block := t.e.BlockCommit
+	t.e.mu.Unlock()
+	if block {
+		<-ctx.Done()
+	}
 	t.e.mu.Lock()
 	defer t.e.mu.Unlock()
 	t.e.Log = append(t.e.Log, "COMMIT")

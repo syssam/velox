@@ -72,6 +72,38 @@ func ctxErr(ctx context.Context) error {
 	return fmt.Errorf("%w: %w", err, cause)
 }
 
+// endedErr is err, the error of who run on ctx, saying why ctx ended when it
+// has and err does not: ErrTimeout when velox's deadline ended it, else the
+// context's own error. The driver's error is kept.
+//
+// A driver may report a context that ended as an error of its own. pgx's
+// database/sql driver reports a statement whose context ended before it was
+// sent as driver.ErrBadConn, which database/sql retries outside a
+// transaction but returns inside one. pgx also gives the deadline to the
+// socket, whose i/o timeout can come before ctx's Done closes, so endedErr
+// waits for it as over does.
+func endedErr(ctx context.Context, who string, err error) error {
+	if err == nil || !over(ctx) {
+		return err
+	}
+	if timedOut(ctx) {
+		if errors.Is(err, ErrTimeout) {
+			return err
+		}
+		return errors.Join(timeoutError(who), err)
+	}
+	why := ctx.Err()
+	switch {
+	case why == nil:
+		why = context.DeadlineExceeded // past its deadline, Done not closed within the grace
+	case errors.Is(err, why):
+		return err
+	default:
+		why = ctxErr(ctx)
+	}
+	return errors.Join(fmt.Errorf("velox: %s: %w", who, why), err)
+}
+
 // timeoutError is the error of a statement or transaction (who) that ran past
 // velox's deadline.
 func timeoutError(who string) error {

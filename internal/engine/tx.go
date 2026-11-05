@@ -127,13 +127,10 @@ func over(ctx context.Context) bool {
 }
 
 // savepointErr is the error of a SAVEPOINT or RELEASE (what) that failed
-// with err on sctx; it matches ErrTimeout when velox's deadline ended sctx.
+// with err on sctx; it matches ErrTimeout when velox's deadline ended sctx,
+// and the context's error when the caller's ended it (endedErr).
 func savepointErr(sctx context.Context, what string, err error) error {
-	err = fmt.Errorf("velox: %s: %w", what, err)
-	if timedOut(sctx) {
-		return errors.Join(timeoutError(what), err)
-	}
-	return err
+	return endedErr(sctx, what, fmt.Errorf("velox: %s: %w", what, err))
 }
 
 // WithoutTx returns ctx without the mark that Tx puts on fn's ctx, keeping
@@ -436,7 +433,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	ex, ctl, err := primary.Begin(ctx, sql.TxOptions{Isolation: o.Isolation, ReadOnly: o.ReadOnly})
 	if err != nil {
 		endTx(info, TxError)
-		return false, fmt.Errorf("velox: begin: %w", err)
+		return false, endedErr(ctx, "transaction", fmt.Errorf("velox: begin: %w", err))
 	}
 	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard}, nil)
 	h := holdConn(db, 1)
@@ -504,7 +501,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		if ce := constraint("", err); ce != nil {
 			err = ce
 		}
-		return true, fmt.Errorf("velox: commit: %w", err)
+		return true, endedErr(ctx, "transaction", fmt.Errorf("velox: commit: %w", err))
 	}
 	endTx(info, TxCommit)
 	return true, nil

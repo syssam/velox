@@ -2,6 +2,7 @@ package apitest
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"strings"
@@ -436,4 +437,137 @@ func TestMaxTxCapsALargerTx(t *testing.T) {
 // TestMaxTxAlone: MaxTx alone is the transaction's deadline.
 func TestMaxTxAlone(t *testing.T) {
 	checkTxDeadline(t, velox.Deadlines{MaxTx: time.Second})
+}
+
+// TestEndedContextIsReportedOverTheDriversError: a statement whose context
+// ends is reported with the context's error even when the driver's error
+// does not say so, as pgx's database/sql driver reports driver.ErrBadConn
+// for a statement whose context ended before it was sent. The driver's
+// error is kept. It holds outside a transaction and inside one bounded by
+// the caller's deadline, with and without an Around hook.
+func TestEndedContextIsReportedOverTheDriversError(t *testing.T) {
+	for _, hooked := range []bool{false, true} {
+		var opts []velox.Option
+		if hooked {
+			opts = append(opts, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+				return next(ctx)
+			}))
+		}
+		e := &fakeconn.Exec{Block: true, BlockErr: driver.ErrBadConn}
+		db := openFake(velox.Postgres, e, opts...)
+		cctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+		_, err := db.Query[testmodel.Invoice]().Limit(1).All(cctx)
+		cancel()
+		if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, velox.ErrTimeout) || !errors.Is(err, driver.ErrBadConn) ||
+			!strings.HasPrefix(err.Error(), "velox: testmodel.Invoice: context deadline exceeded") {
+			t.Errorf("hooked=%v: past the caller's deadline: %v", hooked, err)
+		}
+
+		cctx, cancel = context.WithCancel(ctx)
+		time.AfterFunc(20*time.Millisecond, cancel)
+		_, err = db.Update[testmodel.Invoice]().Set(I.Total.Set(1)).Where(I.ID.EQ(1)).Exec(cctx)
+		if !errors.Is(err, context.Canceled) || !errors.Is(err, driver.ErrBadConn) {
+			t.Errorf("hooked=%v: canceled: %v", hooked, err)
+		}
+
+		e = &fakeconn.Exec{BlockErr: driver.ErrBadConn}
+		db = openFake(velox.Postgres, e, append(opts, velox.WithDeadlines(velox.Deadlines{MaxTx: time.Hour}))...)
+		cctx, cancel = context.WithTimeout(ctx, 20*time.Millisecond)
+		err = db.Tx(cctx, func(_ context.Context, tx *velox.DB) error {
+			e.Block = true
+			_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx) // ctx has no deadline
+			return err
+		})
+		cancel()
+		if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, velox.ErrTimeout) {
+			t.Errorf("hooked=%v: in a transaction past the caller's deadline: %v", hooked, err)
+		}
+		notCommitted(t, e)
+	}
+}
+
+// TestEndedContextIsReportedOverTxStepsError: BEGIN, SAVEPOINT and COMMIT
+// that fail with a driver error once the caller's context has ended report
+// the context's error too; a COMMIT that fails in time does not.
+func TestEndedContextIsReportedOverTxStepsError(t *testing.T) {
+	e := &fakeconn.Exec{BeginErr: driver.ErrBadConn}
+	db := openFake(velox.Postgres, e)
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	err := db.Tx(cctx, func(context.Context, *velox.DB) error { return nil })
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, driver.ErrBadConn) || !strings.Contains(err.Error(), "velox: begin: ") {
+		t.Errorf("begin: %v", err)
+	}
+
+	e = &fakeconn.Exec{BlockErr: driver.ErrBadConn}
+	db = openFake(velox.Postgres, e)
+	cctx, cancel = context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	var nested error
+	_ = db.Tx(cctx, func(_ context.Context, tx *velox.DB) error {
+		e.Block = true
+		nested = tx.Tx(ctx, func(context.Context, *velox.DB) error { return nil })
+		return nested
+	})
+	if !errors.Is(nested, context.DeadlineExceeded) || errors.Is(nested, velox.ErrTimeout) || !strings.Contains(fmt.Sprint(nested), "velox: savepoint: ") {
+		t.Errorf("savepoint: %v", nested)
+	}
+
+	e = &fakeconn.Exec{CommitErr: driver.ErrBadConn}
+	db = openFake(velox.Postgres, e)
+	cctx, cancel = context.WithCancel(ctx)
+	err = db.Tx(cctx, func(context.Context, *velox.DB) error {
+		e.BlockCommit = true
+		time.AfterFunc(20*time.Millisecond, cancel)
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, driver.ErrBadConn) || !strings.Contains(err.Error(), "velox: commit: ") {
+		t.Errorf("commit: %v", err)
+	}
+
+	e = &fakeconn.Exec{CommitErr: driver.ErrBadConn}
+	db = openFake(velox.Postgres, e)
+	cctx, cancel = context.WithTimeout(ctx, time.Hour)
+	defer cancel()
+	err = db.Tx(cctx, func(context.Context, *velox.DB) error { return nil })
+	if !errors.Is(err, driver.ErrBadConn) || errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("commit in time: %v", err)
+	}
+}
+
+// doneLate is a context whose deadline has passed but whose Done closes
+// only at the deadline of the context it wraps, a little later: pgx gives
+// the deadline to the socket, which can time out in that gap.
+type doneLate struct {
+	context.Context
+	at time.Time
+}
+
+func (c doneLate) Deadline() (time.Time, bool) { return c.at, true }
+
+// TestDeadlineBeforeDoneIsReported: a driver error that comes once the
+// context's deadline has passed but before its Done closes is reported with
+// the context's error, for a statement and for BEGIN.
+func TestDeadlineBeforeDoneIsReported(t *testing.T) {
+	timeout := errors.New("write tcp: i/o timeout")
+	late := func() (context.Context, context.CancelFunc) {
+		inner, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+		return doneLate{inner, time.Now()}, cancel
+	}
+
+	db := openFake(velox.Postgres, &fakeconn.Exec{Err: timeout})
+	cctx, cancel := late()
+	_, err := db.Query[testmodel.Invoice]().Limit(1).All(cctx)
+	cancel()
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, timeout) || errors.Is(err, velox.ErrTimeout) {
+		t.Errorf("statement: %v", err)
+	}
+
+	db = openFake(velox.Postgres, &fakeconn.Exec{BeginErr: timeout})
+	cctx, cancel = late()
+	err = db.Tx(cctx, func(context.Context, *velox.DB) error { return nil })
+	cancel()
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, timeout) || !strings.Contains(err.Error(), "velox: begin: ") {
+		t.Errorf("begin: %v", err)
+	}
 }

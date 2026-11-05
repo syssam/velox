@@ -299,7 +299,7 @@ func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, r
 		return err
 	}
 	if !db.timed() {
-		return db.exec(ctx, st, t, read, res)
+		return endedErr(ctx, st.Entity.Name, db.exec(ctx, st, t, read, res))
 	}
 	// tctx is ctx itself when ctx's deadline comes first: then it is velox's
 	// only on a context velox bounded, such as a transaction's fn's ctx.
@@ -307,13 +307,7 @@ func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, r
 	if cancel != nil {
 		defer cancel()
 	}
-	if err := db.exec(tctx, st, t, read, res); err != nil {
-		if timedOut(tctx) {
-			return errors.Join(timeoutError(st.Entity.Name), err)
-		}
-		return err
-	}
-	return nil
+	return endedErr(tctx, st.Entity.Name, db.exec(tctx, st, t, read, res))
 }
 
 // Run takes a statement through the pipeline: prepare's stages, the route
@@ -345,15 +339,9 @@ func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res
 		if cancel != nil {
 			defer cancel()
 		}
-		if err := db.execute(tctx, st, t, read, res); err != nil {
-			if timedOut(tctx) {
-				return errors.Join(timeoutError(st.Entity.Name), err)
-			}
-			return err
-		}
-		return nil
+		return endedErr(tctx, st.Entity.Name, db.execute(tctx, st, t, read, res))
 	}
-	return db.execute(ctx, st, t, read, res)
+	return endedErr(ctx, st.Entity.Name, db.execute(ctx, st, t, read, res))
 }
 
 // prepare takes a statement through every stage before execution, for run
