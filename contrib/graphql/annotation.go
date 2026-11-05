@@ -300,10 +300,12 @@ func OrderUnguarded() Annotation { return Annotation{OrderUnguarded: true} }
 // orderBy: {field: AUTHOR_NAME} then orders a Post connection by its author's name,
 // paged by cursors that hold it. The connection reads the edge with an inner JOIN, so
 // a row whose target is missing, or that the target's Read policy hides from the
-// caller, is not in the connection, nor in its totalCount, when it is ordered so. The
-// plugin refuses it on a to-many edge, for a nullable, sensitive, json or bytes field
-// or one the type leaves out, and for a field or an edge with an application directive,
-// which guards neither the cursors nor the order. Call it once for each field.
+// caller, is not in the connection, nor in its totalCount, when it is ordered so. A
+// nullable field orders as an OrderField does: NULL after every value ascending, and
+// a cursor holds it as null. The plugin refuses it on a to-many edge, for a sensitive,
+// json or bytes field or one the type leaves out, and for a field or an edge with an
+// application directive, which guards neither the cursors nor the order. Call it once
+// for each field.
 func OrderVia(field, value string) Annotation {
 	return Annotation{OrderVia: []ViaOrder{{Field: field, Value: value}}}
 }

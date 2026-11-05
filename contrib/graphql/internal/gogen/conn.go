@@ -214,7 +214,9 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 				f.p("\t\t{Field: %q, Col: %s},", v.Value, colConst(e, fd))
 				continue
 			}
-			if err := r.checkViaTerm(e, v, fd); err != nil {
+			// The target's field pages as the node's own does: a pointer's
+			// nil is NULL, which a cursor holds as null.
+			if err := r.checkTerm(v.Target, fd); err != nil {
 				return err
 			}
 			f.p("\t\t{Field: %q, Col: %s, Edge: %s + 1, Target: %s.TableOf[%s]},", v.Value, colConst(v.Target, fd), edgeConst(e, e.Edges[v.Edge-1]), velox, v.Target.Name)
@@ -502,17 +504,4 @@ func orderField(e *plugin.Entity, v sdl.OrderValue) (fd *plugin.Field, via strin
 		return e.Fields[v.Field], ""
 	}
 	return v.Target.Fields[v.Field], e.Edges[v.Edge-1].GoName
-}
-
-// checkViaTerm checks that a connection can order by the field fd of the
-// target of e's edge v.Edge, as checkTerm does; a pointer field is refused.
-func (r *renderer) checkViaTerm(e *plugin.Entity, v sdl.OrderValue, fd *plugin.Field) error {
-	ed, t := e.Edges[v.Edge-1], v.Target
-	if err := r.checkTerm(t, fd); err != nil {
-		return err
-	}
-	if fd.Pointer {
-		return fmt.Errorf("schema %s, edge %s: a connection orders by %s.%s, and its Go field is a pointer, which only a Nillable field is", e.Name, ed.Name, t.Name, fd.Name)
-	}
-	return nil
 }

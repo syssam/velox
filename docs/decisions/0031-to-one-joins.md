@@ -52,7 +52,7 @@ opts in for each column, and the join is one statement in the page query and in 
 The connection joins the edge with an **inner** JOIN: `After` reads the cursor's value from
 the row's joined entity, which a left join may not have, so a post whose author is missing
 or hidden by the author's Read policy is not in an ordered connection nor in its
-`totalCount`. The plugin refuses the annotation on a to-many edge, for a nullable, sensitive,
+`totalCount`. The plugin refuses the annotation on a to-many edge, for a nullable (lifted: see the Review), sensitive,
 json or bytes field, a field or an edge with an application directive (which guards neither
 the cursors nor the order), and a field or edge the type leaves out. `gqlimpl.JoinedTerm`
 is the runtime's term, and `Rel.Fill` and `Rel.Filled` set and read a joined entity, so a
@@ -72,3 +72,16 @@ Polymorphic targets, an ordering by a given list of ids, subquery projections (c
 latest per parent), and schema views are separate; the join is a clause of the statement,
 not a special case of one edge, so they can build on it. Projecting a narrower set of the
 target's columns follows. `where` on a related field stays `hasXWith`.
+
+## Review
+
+2026-11-05, a nullable joined column: an ordering by a joined column put NULL
+first ascending on MySQL and SQLite, where `After` counts on it last, so a
+page over a Nillable target field skipped or repeated rows there. The
+ordering now adds `IS NULL` before the column when it is nullable or the
+join is a left join, as an ordering by the row's own column does (0032). The
+plugin no longer refuses `OrderVia` of a nullable field: the cursor holds
+NULL as null, as for an `OrderField`. Evidence: `TestJoinOrderByANullableColumn`,
+`TestJoinAfterANullableColumn`, `TestJoinAfterNullsExact` (SQLite,
+PostgreSQL through pgx and database/sql, MySQL), `TestPaginateNullableVia`,
+`TestNullableViaServed`.

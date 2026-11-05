@@ -189,6 +189,22 @@ func (Flag) Annotations() []schema.Annotation {
 	return []schema.Annotation{graphql.QueryField("flags"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
+// Pin belongs to a flag, and connections order it by the flag's nullable
+// rank: an OrderVia of a Nillable field.
+type Pin struct{ schema.Schema }
+
+func (Pin) Fields() []schema.Field { return []schema.Field{field.Int64("flag_id")} }
+
+func (Pin) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.To("flag", Flag.Type).Unique().Required().Field("flag_id").Annotations(graphql.OrderVia("rank", "FLAG_RANK")),
+	}
+}
+
+func (Pin) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField("pins")}
+}
+
 // Page has a required slug the create input leaves out, as entgql users write
 // it, for the resolver to set.
 type Page struct{ schema.Schema }
@@ -388,6 +404,11 @@ func (r *queryResolver) Flags(ctx context.Context, after *veloxgql.Cursor, first
 	return gen.FlagsConnection(ctx, after, first, before, last, orderBy)
 }
 
+// Pins is the resolver for the pins field.
+func (r *queryResolver) Pins(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.PinOrder) (*gen.PinConnection, error) {
+	return gen.PinsConnection(ctx, after, first, before, last, orderBy)
+}
+
 // CreateFlag is the resolver for the createFlag field.
 func (r *mutationResolver) CreateFlag(ctx context.Context, input gen.CreateFlagInput) (*gen.Flag, error) {
 	return input.Create(ctx, nil)
@@ -493,6 +514,7 @@ func serve(t *testing.T) served {
 		"CREATE TABLE tickets (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, title TEXT NOT NULL)",
 		"CREATE TABLE remarks (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, body TEXT NOT NULL, ticket_id INTEGER)",
 		"CREATE TABLE flags (id INTEGER PRIMARY KEY, active BOOLEAN NOT NULL, views INTEGER NOT NULL DEFAULT 0, off BOOLEAN NOT NULL DEFAULT false, tags JSON, nums JSON NOT NULL, fs JSON, bs JSON, rank INTEGER)",
+		"CREATE TABLE pins (id INTEGER PRIMARY KEY, flag_id INTEGER NOT NULL REFERENCES flags (id))",
 		"INSERT INTO orgs (id, name) VALUES (1, ~o1~), (2, ~o2~)",
 		"INSERT INTO members (id, name) VALUES (1, ~seen~), (2, ~hidden~)",
 		"INSERT INTO posts (id, org_id, member_id, title) VALUES (1, 1, 1, ~p1~), (2, 1, 2, ~p2~)",
@@ -1022,6 +1044,82 @@ func TestNullableOrderServed(t *testing.T) {
 		}
 	}
 }
+
+// TestNullableViaServed: a connection ordered by a nullable field of a to-one
+// edge's target (OrderVia), with NULLs and ties, pages forward and backward
+// exactly, one row at a time, NULL last ascending and first descending.
+func TestNullableViaServed(t *testing.T) {
+	s := serve(t)
+	for i, r := range []string{"null", "2", "null", "1", "2", "null", "1"} {
+		if got := s.do("mutation { createFlag(input: {nums: [], rank: " + r + "}) { id } }"); strings.Contains(got, "errors") {
+			t.Fatal(got)
+		}
+		if _, err := s.db.Exec("INSERT INTO pins (id, flag_id) VALUES (?, ?)", i+1, i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	type page struct {
+		Data struct {
+			Pins struct {
+				Edges    []struct{ Node struct{ Flag struct{ Rank *int } } }
+				PageInfo struct {
+					HasNextPage, HasPreviousPage bool
+					StartCursor, EndCursor       string
+				}
+			}
+		}
+	}
+	read := func(q string) page {
+		t.Helper()
+		var p page
+		got := s.do(q)
+		if err := json.Unmarshal([]byte(got), &p); err != nil || strings.Contains(got, "errors") {
+			t.Fatalf("%s: %v", got, err)
+		}
+		return p
+	}
+	ranks := func(p page) string {
+		var out []string
+		for _, e := range p.Data.Pins.Edges {
+			if e.Node.Flag.Rank == nil {
+				out = append(out, "-")
+			} else {
+				out = append(out, fmt.Sprint(*e.Node.Flag.Rank))
+			}
+		}
+		return strings.Join(out, " ")
+	}
+	const sel = ") { edges { node { flag { rank } } } pageInfo { hasNextPage hasPreviousPage startCursor endCursor } } }"
+	for dir, want := range map[string]string{"ASC": "1 1 2 2 - - -", "DESC": "- - - 2 2 1 1"} {
+		order := "orderBy: {field: FLAG_RANK, direction: " + dir + "}"
+		var fwd []string
+		after := ""
+		for {
+			p := read("{ pins(first: 1" + after + ", " + order + sel)
+			fwd = append(fwd, ranks(p))
+			if !p.Data.Pins.PageInfo.HasNextPage {
+				break
+			}
+			after = fmt.Sprintf(", after: %q", p.Data.Pins.PageInfo.EndCursor)
+		}
+		if got := strings.Join(fwd, " "); got != want {
+			t.Errorf("%s forward: %s, want %s", dir, got, want)
+		}
+		var back []string
+		before := ""
+		for {
+			p := read("{ pins(last: 1" + before + ", " + order + sel)
+			back = append([]string{ranks(p)}, back...)
+			if !p.Data.Pins.PageInfo.HasPreviousPage {
+				break
+			}
+			before = fmt.Sprintf(", before: %q", p.Data.Pins.PageInfo.StartCursor)
+		}
+		if got := strings.Join(back, " "); got != want {
+			t.Errorf("%s backward: %s, want %s", dir, got, want)
+		}
+	}
+}
 `
 
 // TestLimitsServed generates its schema's application with velox-gen and the
@@ -1059,7 +1157,7 @@ func TestLimitsServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestRequiredEdgeHidden", "TestScopeKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullClears", "TestUpdateNullEdgeRefused", "TestNullBytesGoType", "TestForeignKeyFilterOtherScope", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit", "TestCreateDefaultServed", "TestJSONListsServed", "TestNullableOrderServed", "TestSkippedFieldSetByResolver"} {
+	for _, name := range []string{"TestRequiredEdgeHidden", "TestScopeKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullClears", "TestUpdateNullEdgeRefused", "TestNullBytesGoType", "TestForeignKeyFilterOtherScope", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit", "TestCreateDefaultServed", "TestJSONListsServed", "TestNullableOrderServed", "TestNullableViaServed", "TestSkippedFieldSetByResolver"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

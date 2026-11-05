@@ -135,6 +135,8 @@ func (r Rel[E, T]) Is[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 // By is the ordering o of the joined relation's entity, as an ordering of the
 // query's: OrderBy(rel.By(gen.Posts.CreatedAt.Desc())). The query must Join or
 // LeftJoin r. After pages over it from the row's joined entity (see Join).
+// NULL sorts after every value ascending, as OrderBy sorts it, on every
+// dialect; a left join's row with no target counts as NULL.
 func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E] {
 	t := o.t
 	t.Rel = r.I + 1

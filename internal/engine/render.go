@@ -347,11 +347,25 @@ func (w *writer) joinedOrder(o OrderTerm) {
 	if t.Columns[o.Column].Codec {
 		w.fail(errCodecOrderBy(t, o.Column))
 	}
-	w.ident(joinAlias(i + 1))
-	w.str(".")
-	w.ident(t.Columns[o.Column].Name)
-	if o.Desc {
-		w.str(" DESC")
+	// NULL sorts after every value here too, as orderBy puts it. The column
+	// is NULL when it is nullable, or when a left join found no target.
+	null := (t.Columns[o.Column].Nullable || w.joins[i].Left) && w.d != Postgres
+	for k := range 2 {
+		if k == 0 && !null {
+			continue
+		}
+		w.ident(joinAlias(i + 1))
+		w.str(".")
+		w.ident(t.Columns[o.Column].Name)
+		if k == 0 {
+			w.str(" IS NULL")
+		}
+		if o.Desc {
+			w.str(" DESC")
+		}
+		if k == 0 {
+			w.str(", ")
+		}
 	}
 }
 

@@ -147,11 +147,10 @@ func (g *graph) orderVia(o *object, ord *order, by map[string]string) error {
 }
 
 // viaCheck refuses a field of an edge's target that a cursor cannot hold or a
-// connection must not order by, as checkField does for an OrderField.
+// connection must not order by, as checkField does for an OrderField. A
+// nullable field orders as an OrderField's does: NULL after every value.
 func viaCheck(f *plugin.Field, a graphql.Annotation, where string) error {
 	switch {
-	case f.Nullable:
-		return fmt.Errorf("%s: the field is nullable: keyset paging needs an order column without NULLs", where)
 	case f.Sensitive:
 		return fmt.Errorf("%s: the field is sensitive: its values would be in the cursors", where)
 	case f.Type == "json":

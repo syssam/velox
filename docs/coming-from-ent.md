@@ -206,3 +206,11 @@ On SQLite, `velox.Connect` turns foreign keys on for every connection. A
   is the `JSON` scalar.
 - `CreateDefault` stands in for a non-zero `Default` on a bool or number, as
   shown above.
+- **Nullable order fields sort NULL last.** An `OrderField`, or an `OrderVia`
+  of a to-one edge's target, may be on a `Nillable` field. NULL sorts after
+  every value ascending and before every value descending, on PostgreSQL,
+  MySQL and SQLite alike, and a cursor holds it as null, so cursor pages over
+  NULL keys are exact. ent leaves the place of NULL to the database, which on
+  MySQL and SQLite is first ascending, and offers `sql.OrderNullsFirst()`;
+  velox has one place for NULL and no such option. The core's `OrderBy`, and a
+  joined column's `rel.By`, sort NULL the same way.

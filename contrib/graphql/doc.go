@@ -164,9 +164,10 @@
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
-// below for how it reads its rows and their edges. An OrderField may be on a
-// nullable field: NULL sorts after every value ascending and before them
-// descending, on every dialect, and a cursor holds it as null. A where
+// below for how it reads its rows and their edges. An OrderField, or an
+// OrderVia of a to-one edge's target, may be on a nullable field: NULL sorts
+// after every value ascending and before them descending, on every dialect,
+// and a cursor holds it as null. A where
 // argument's Pred is one gqlimpl helper call for each predicate the input
 // sets; it decodes IDs as their type's, and refuses an ID of another type,
 // and a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth

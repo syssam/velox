@@ -128,6 +128,13 @@ func TestOrderVia(t *testing.T) {
 	if s, _ = load(t, m); s.Types["PostOrderField"] == nil || len(s.Types["PostOrderField"].EnumValues) != 1 {
 		t.Errorf("an order of an edge's value alone: %+v", s.Types["PostOrderField"])
 	}
+	// A nullable field of the target orders as an OrderField's does.
+	m = build(via, func(user, _ *plugin.Entity, _ *plugin.Edge) {
+		user.Fields[1].Nullable, user.Fields[1].Pointer = true, true
+	})
+	if s, _ = load(t, m); s.Types["PostOrderField"] == nil || s.Types["PostOrderField"].EnumValues.ForName("AUTHOR_NAME") == nil {
+		t.Errorf("an order of a nullable field of an edge: %+v", s.Types["PostOrderField"])
+	}
 	surface, err := Build(build(via, nil))
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +159,6 @@ func TestOrderVia(t *testing.T) {
 		{"a field the target lacks", []graphql.Annotation{graphql.OrderVia("nope", "X")}, nil, []string{"schema Post, edge author", "User has no field nope"}},
 		{"an enum value that is not one", []graphql.Annotation{graphql.OrderVia("name", "by-name")}, nil, []string{`"by-name"`}},
 		{"a value that clashes with an own value", []graphql.Annotation{graphql.OrderVia("name", "TITLE")}, nil, []string{"both order by", `"TITLE"`}},
-		{"a nullable field", via, func(user, _ *plugin.Entity, _ *plugin.Edge) { user.Fields[1].Nullable = true }, []string{"nullable"}},
 		{"a sensitive field", via, func(user, _ *plugin.Entity, _ *plugin.Edge) { user.Fields[1].Sensitive = true }, []string{"sensitive"}},
 		{"a json field", via, func(user, _ *plugin.Entity, _ *plugin.Edge) { user.Fields[1].Type = "json" }, []string{"json"}},
 		{"a field with an application directive", via, func(user, _ *plugin.Entity, _ *plugin.Edge) {
