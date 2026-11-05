@@ -173,8 +173,8 @@ func loadModel(dir, pattern, out, pkg string, env []string) (*genModel, error) {
 // genConfig is the codegen.Config of the package at out, named pkg, for the
 // schema package at pattern: the import path of out, the Hooks and Policy
 // methods the schema package declares (codegen.Behaviour), the behaviour of
-// the entities' mixins (codegen.MixinBehaviour), whose warnings go to
-// stderr, and the relations that behaviour names (codegen.LinkedEdges).
+// the entities' mixins (codegen.MixinBehaviour), and the relations that
+// behaviour names (codegen.CheckBehaviour), whose warnings go to stderr.
 // UserDoc is left for the caller.
 func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr io.Writer) (codegen.Config, error) {
 	cfg := codegen.Config{Package: pkg, SchemaPath: gm.importPath}
@@ -188,17 +188,19 @@ func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr
 	}
 	cfg.GenPath = genPath
 	cfg.Bound = bound
-	mixins, warnings, err := codegen.MixinBehaviour(dir, pattern, gm.graph, env)
+	mixins, err := codegen.MixinBehaviour(dir, pattern, gm.graph, env)
 	if err != nil {
 		return cfg, relErrors(dir, err)
 	}
+	cfg.Mixins = mixins
+	linked, warnings, err := codegen.CheckBehaviour(dir, pattern, gm.graph, bound, mixins, env)
 	for _, w := range warnings {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s\n", relWarning(dir, w))
 	}
-	cfg.Mixins = mixins
-	if cfg.Linked, err = codegen.LinkedEdges(dir, pattern, gm.graph, bound, mixins, env); err != nil {
-		return cfg, err
+	if err != nil {
+		return cfg, relErrors(dir, err)
 	}
+	cfg.Linked = linked
 	if cfg.Funcs, err = codegen.FuncPackages(dir, gm.graph, cfg, env); err != nil {
 		return cfg, err
 	}
@@ -266,6 +268,10 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	out := f.outDir(dir)
 	// A *FileError names a user's file: relative to dir, as other paths are.
 	failFile := func(err error) int {
+		if _, ok := err.(interface{ Unwrap() []error }); ok {
+			// Joined errors, each shown: relErrors shows their paths.
+			return fail(relErrors(dir, err))
+		}
 		if fe := (*codegen.FileError)(nil); errors.As(err, &fe) {
 			c := *fe
 			c.Path = relPath(dir, fe.Path)

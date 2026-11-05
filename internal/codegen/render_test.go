@@ -116,7 +116,7 @@ func goldenGenerate(t *testing.T, name string, cfg Config) ([]File, error) {
 		t.Fatal(err)
 	}
 	cfg.Funcs = funcs
-	if cfg.Mixins, _, err = MixinBehaviour(dir, "./schema", g, offline()); err != nil {
+	if cfg.Mixins, err = MixinBehaviour(dir, "./schema", g, offline()); err != nil {
 		t.Fatal(err)
 	}
 	return Generate(g, cfg)

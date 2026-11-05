@@ -62,7 +62,7 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 		t.Fatal(err)
 	}
 	if cfg.Mixins == nil {
-		if cfg.Mixins, _, err = MixinBehaviour(dir, "./schema", g, offline()); err != nil {
+		if cfg.Mixins, err = MixinBehaviour(dir, "./schema", g, offline()); err != nil {
 			t.Fatal(err)
 		}
 	}

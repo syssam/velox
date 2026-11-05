@@ -29,19 +29,6 @@ type MixinBound struct {
 	// Methods are the kinds the mixin declares ("Policy", "Hooks",
 	// "Interceptors"), each with whether its receiver is a pointer.
 	Methods map[string]bool
-	// Fields are the velox.Field calls of its methods' bodies.
-	Fields []MixinField
-}
-
-// MixinField is a velox.Field[E, V](name) call in a mixin's method.
-type MixinField struct {
-	Pos  string // file:line of the call
-	Call string // the call as written, for errors: velox.Field[E, int64]("org_id")
-	Name string // the column's name: the literal's value
-	// Type is V, with each package named by its import path, such as
-	// "*time.Time" → "*time.Time" or "uuid.UUID" →
-	// "github.com/google/uuid.UUID"; "" when velox-gen cannot read it.
-	Type string
 }
 
 // MixinBehaviour finds the Policy, Hooks and Interceptors methods of the
@@ -61,12 +48,8 @@ type MixinField struct {
 // shape of an older velox among them, and so is a behaviour method on a
 // mixin that is itself a generic type, whose instance velox-gen could not
 // name. A mixin with behaviour listed twice by one entity is an *Error.
-//
-// Each velox.Field call in a method's body whose name is a string literal
-// is checked against every entity that lists the mixin (see Lower); a
-// call whose name is not a literal is left to the check velox makes when it
-// builds the metadata, and is a warning, with its line.
-func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]MixinBound, []string, error) {
+// CheckBehaviour checks the columns the methods' bodies name.
+func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]MixinBound, error) {
 	r := &mixinReader{dir: dir, env: env, dirs: map[string]string{}, pkgs: map[string]*mixinPkg{}}
 	var paths []string
 	for _, e := range g.Entities {
@@ -77,12 +60,12 @@ func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]M
 		}
 	}
 	if len(paths) == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 	if slices.Contains(paths, g.Package) {
 		pkg, err := list(dir, pattern, env)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		r.dirs[g.Package] = pkg.Dir
 		paths = slices.DeleteFunc(paths, func(p string) bool { return p == g.Package })
@@ -90,13 +73,11 @@ func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]M
 	if len(paths) > 0 {
 		dirs, err := listDirs(dir, paths, env)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		maps.Copy(r.dirs, dirs)
 	}
 	out := map[string][]MixinBound{}
-	var warnings []string
-	warned := map[string]bool{}
 	for _, e := range g.Entities {
 		seen := map[string]bool{}
 		for i, m := range e.Mixins {
@@ -105,14 +86,14 @@ func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]M
 			}
 			found, err := r.methods(m.PkgPath, m.Name)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			if len(found) == 0 {
 				continue
 			}
 			key := m.PkgPath + "." + m.Name
 			if seen[key] {
-				return nil, nil, &Error{Schema: e.Name, Reason: fmt.Sprintf("Mixin()[%d] is %s again, which declares behaviour: list a mixin once", i, m.Name)}
+				return nil, &Error{Schema: e.Name, Reason: fmt.Sprintf("Mixin()[%d] is %s again, which declares behaviour: list a mixin once", i, m.Name)}
 			}
 			seen[key] = true
 			mb := MixinBound{Index: i, PkgPath: m.PkgPath, PkgName: r.pkgs[m.PkgPath].name, Name: m.Name, NonZero: m.NonZero, Methods: map[string]bool{}}
@@ -122,19 +103,11 @@ func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]M
 					continue
 				}
 				mb.Methods[k] = fm.ptr
-				for _, c := range fm.fields {
-					if c.literal {
-						mb.Fields = append(mb.Fields, c.MixinField)
-					} else if !warned[c.Pos] {
-						warned[c.Pos] = true
-						warnings = append(warnings, fmt.Sprintf("%s: %s names its column with a value velox-gen cannot read; velox checks it when it builds each entity's metadata", c.Pos, c.Call))
-					}
-				}
 			}
 			out[e.Name] = append(out[e.Name], mb)
 		}
 	}
-	return out, warnings, nil
+	return out, nil
 }
 
 // listDirs returns the directories of the packages at paths, by go list run
@@ -192,13 +165,7 @@ type mixinMethodDecl struct {
 
 // foundMethod is a behaviour method a mixin has.
 type foundMethod struct {
-	ptr    bool // a pointer receiver
-	fields []fieldCall
-}
-
-type fieldCall struct {
-	MixinField
-	literal bool
+	ptr bool // a pointer receiver
 }
 
 // pkg parses the package at path, once.
@@ -274,11 +241,10 @@ func (r *mixinReader) methods(path, name string) (map[string]foundMethod, error)
 			if t != nil && t.spec.TypeParams != nil {
 				return &FileError{Path: m.path, Line: pos.Line, Reason: fmt.Sprintf("%s.%s: %s is a generic type, whose instance velox-gen cannot name; declare the behaviour on a mixin that is not generic", name, k, name)}
 			}
-			calls, err := mixinMethodShape(p, m, name)
-			if err != nil {
+			if err := mixinMethodShape(p, m, name); err != nil {
 				return err
 			}
-			found[k] = foundMethod{ptr: recvPtr(m.fd), fields: calls}
+			found[k] = foundMethod{ptr: recvPtr(m.fd)}
 			depth[k] = d
 		}
 		if t == nil {
@@ -353,51 +319,17 @@ func importPath(f *ast.File, local string, r *mixinReader) string {
 }
 
 // mixinMethodShape checks that m, a behaviour method of mixin name, takes
-// nothing and returns the behaviour of its kind, and returns the
-// velox.Field calls of its body.
-func mixinMethodShape(p *mixinPkg, m *mixinMethodDecl, name string) ([]fieldCall, error) {
+// nothing and returns the behaviour of its kind.
+func mixinMethodShape(p *mixinPkg, m *mixinMethodDecl, name string) error {
 	k := m.fd.Name.Name
 	line := p.fset.Position(m.fd.Pos()).Line
 	if m.fd.Type.TypeParams != nil {
-		return nil, &FileError{Path: m.path, Line: line, Reason: notGeneric(name, k)}
+		return &FileError{Path: m.path, Line: line, Reason: notGeneric(name, k)}
 	}
 	if !behaviourSignature(m.fd.Type, k, localName(m.file, veloxPkg)) {
-		return nil, &FileError{Path: m.path, Line: line, Reason: fmt.Sprintf("%s.%s must take nothing and return %s; a mixin's method serves every entity that lists it: func (%[1]s) %[2]s() %[3]s", name, k, behaviourResult(k))}
+		return &FileError{Path: m.path, Line: line, Reason: fmt.Sprintf("%s.%s must take nothing and return %s; a mixin's method serves every entity that lists it: func (%[1]s) %[2]s() %[3]s", name, k, behaviourResult(k))}
 	}
-	velox := localName(m.file, veloxPkg)
-	var calls []fieldCall
-	if m.fd.Body == nil {
-		return nil, nil
-	}
-	ast.Inspect(m.fd.Body, func(n ast.Node) bool {
-		c, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		ix, ok := c.Fun.(*ast.IndexListExpr)
-		if !ok || len(ix.Indices) != 2 || len(c.Args) != 1 {
-			return true
-		}
-		sel, ok := ix.X.(*ast.SelectorExpr)
-		if !ok || sel.Sel.Name != "Field" {
-			return true
-		}
-		if id, ok := sel.X.(*ast.Ident); !ok || id.Name != velox {
-			return true
-		}
-		var fc fieldCall
-		fc.Pos = fmt.Sprintf("%s:%d", m.path, p.fset.Position(c.Pos()).Line)
-		fc.Call = exprString(c)
-		fc.Type = canonicalType(ix.Indices[1], func(n string) string { return importPath(m.file, n, nil) }, p.path)
-		if lit, ok := c.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
-			if s, err := strconv.Unquote(lit.Value); err == nil {
-				fc.Name, fc.literal = s, true
-			}
-		}
-		calls = append(calls, fc)
-		return true
-	})
-	return calls, nil
+	return nil
 }
 
 // localName is the name f gives the package at path, "" when f does not
@@ -412,58 +344,6 @@ func localName(f *ast.File, path string) string {
 				return ""
 			}
 			return im.Name.Name
-		}
-	}
-	return ""
-}
-
-// predeclared are Go's predeclared type names.
-var predeclared = map[string]bool{"bool": true, "byte": true, "complex64": true, "complex128": true, "error": true,
-	"float32": true, "float64": true, "int": true, "int8": true, "int16": true, "int32": true, "int64": true,
-	"rune": true, "string": true, "uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
-	"uintptr": true, "any": true}
-
-// canonicalType writes the type x with each named type qualified by its
-// package's import path, such as "*time.Time" or "[]example.com/x.Tag":
-// qual gives the import path of a package name, and local the path of a
-// type x names without one. It returns "" for a type velox-gen does not
-// read, such as a func or a struct.
-func canonicalType(x ast.Expr, qual func(string) string, local string) string {
-	switch x := x.(type) {
-	case *ast.Ident:
-		switch {
-		case x.Name == "byte":
-			return "uint8"
-		case x.Name == "rune":
-			return "int32"
-		case predeclared[x.Name]:
-			return x.Name
-		}
-		return local + "." + x.Name
-	case *ast.StarExpr:
-		if s := canonicalType(x.X, qual, local); s != "" {
-			return "*" + s
-		}
-	case *ast.ArrayType:
-		if x.Len == nil {
-			if s := canonicalType(x.Elt, qual, local); s != "" {
-				return "[]" + s
-			}
-		}
-	case *ast.MapType:
-		k, v := canonicalType(x.Key, qual, local), canonicalType(x.Value, qual, local)
-		if k != "" && v != "" {
-			return "map[" + k + "]" + v
-		}
-	case *ast.InterfaceType:
-		if len(x.Methods.List) == 0 {
-			return "any"
-		}
-	case *ast.SelectorExpr:
-		if id, ok := x.X.(*ast.Ident); ok {
-			if p := qual(id.Name); p != "" {
-				return p + "." + x.Sel.Name
-			}
 		}
 	}
 	return ""

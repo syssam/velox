@@ -17,7 +17,7 @@ type Config struct {
 
 	// Linked are, per entity name, the names of its relations whose target
 	// velox-gen links (velox.Linked): those its behaviour names with
-	// velox.Edge (see LinkedEdges).
+	// velox.Edge (see CheckBehaviour).
 	Linked map[string][]string
 	// GenPath is the generated package's import path.
 	GenPath string

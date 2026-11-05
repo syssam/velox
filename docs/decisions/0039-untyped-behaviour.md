@@ -49,6 +49,18 @@ ent's `ent.Policy`, `ent.Hook` and generic `ent.Mutation` do.
   target's Read policy. velox-gen finds them with go/types. A name that is
   not a constant is refused at its line; a relation not linked fails the
   statement.
+- velox-gen checks, on the same scan, each constant name a behaviour
+  method reaches: `velox.C`'s, `velox.Edge`'s, a `Mutation`'s `Set`,
+  `Fill` and `Value`, and a `Row`'s `Value`, `IsZero` and `Set`. The
+  name must be a column (a relation, for `Edge`) of every entity the
+  method serves: an entity's own, and each entity that lists the mixin.
+  The conditions of `HasWhere` name the target's columns. A value of known
+  type must be of the column's kind class, a constant must fit the
+  column's type, nil fits only a nullable column's `Set` or `Fill`, a text
+  operator needs a text column and `IsNull` a nullable one. Each refusal
+  is a `file:line` error that names the entity and the method; a name
+  velox-gen cannot read is a warning. A call in another package is left
+  to run time.
 - `EdgeTo`, `EdgeBidi` and `EdgeThrough` take the schema's edge name.
 - A hook that must use gen's typed API is a run-time hook:
   `velox.WithHooks[gen.Task](hooks...)`, a DB option, which runs after the
@@ -67,8 +79,8 @@ ent's `ent.Policy`, `ent.Hook` and generic `ent.Mutation` do.
 - The schema compiles before gen exists. gen/runtime, its blank import, the
   runtime warning and `veloxRuntime()` are gone; velox-gen's sweep removes an
   older gen/runtime and names a user's file left there.
-- A condition's names are checked when its statement runs, not at compile
-  time. Phase 3 of the spec adds velox-gen's check of constant names.
+- A condition's names are not checked at compile time. velox-gen checks the
+  constant ones; the statement checks every name when it runs.
 - Typed handles (`gen.Issues.AuthorID.EQ`) stay for application code.
 - Compile cost (`TestGenericTypesCompileSmall`, darwin/arm64): a Policy and
   three hooks add 88788 bytes to an entity's package, down from 287980;
@@ -93,7 +105,9 @@ ent's `ent.Policy`, `ent.Hook` and generic `ent.Mutation` do.
   `mixinplain` with no runtime files; `TestSchemaMethodsRefusesTypedShape`,
   `TestMixinMethodRefusesGeneric`, `TestBehaviourRefusesSchemaImportingGen`,
   `TestRenderBindsMethodValues`, `TestEdgeLinkedWhenBehaviourNamesIt`,
-  `TestEdgeNameMustBeConstant`.
+  `TestEdgeNameMustBeConstant`; the column checks' `TestCheckColumns*` in
+  `behaviourcheck_test.go`.
 - `cmd/velox-gen`: `TestGenerateWithBehaviourWithoutGen`,
-  `TestSweepRemovesGenRuntime`, `TestGenerateRefusesSchemaImportingGen`.
+  `TestSweepRemovesGenRuntime`, `TestGenerateRefusesSchemaImportingGen`,
+  `TestGenerateRefusesWrongColumns` (golden `testdata/wrongcolumn`).
 - The examples, regenerated, with no gen/runtime.

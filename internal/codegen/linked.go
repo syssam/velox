@@ -18,30 +18,51 @@ import (
 	"strings"
 )
 
-// LinkedEdges finds the relations each entity's behaviour names with
-// velox.Edge, whose targets the generated code links (velox.Linked), and
-// returns their names per entity name. bound and mixins say which methods
-// declare the behaviour: an entity's own (SchemaMethods) and its mixins'
-// (MixinBehaviour).
+// CheckBehaviour reads the behaviour each entity's schema declares: its own
+// Policy, Hooks and Interceptors methods (bound, from SchemaMethods) and
+// its mixins' (mixins, from MixinBehaviour). It returns, per entity name,
+// the relations that behaviour names with velox.Edge, whose targets the
+// generated code links (velox.Linked), and a warning for each column it
+// names with a value velox-gen cannot read.
 //
 // It type-checks, with go/types, the schema package that pattern names and
 // each package that declares a mixin with behaviour, from source, against
 // the export data go list, run in the module that holds dir, writes for
-// their imports. A call velox.Edge(name) counts when a behaviour method
-// reaches it: in its body, or, transitively, in a function, method or
-// variable of the same package that the body names. Its name must be a
-// constant, which velox-gen can read; another is a *FileError at its line.
-// An Edge in the conditions of HasWhere names a relation of the edge's
-// target. A name the entity has no relation of is left to the statement,
-// which fails. A call in another package is not seen: its relation is not
-// linked, and the statement that names it fails.
-func LinkedEdges(dir, pattern string, g *Graph, bound map[string]Bound, mixins map[string][]MixinBound, env []string) (map[string][]string, error) {
+// their imports. A call counts when a behaviour method reaches it: in its
+// body, or, transitively, in a function, method or variable of the same
+// package that the body names. It is checked against every entity whose
+// method reaches it:
+//
+//   - velox.Edge(name) names a relation of the entity. The name must be a
+//     constant, which velox-gen can read, since velox-gen links the
+//     relation's target. The conditions of its HasWhere name the target's
+//     columns.
+//   - velox.C(name) names a column. The value of the operator called on
+//     the call itself fits the column: EQ, NEQ, GT, GTE, LT and LTE's, and
+//     each of In and NotIn's. Contains, HasPrefix and HasSuffix need a text
+//     column; IsNull and NotNull a nullable one.
+//   - A *velox.Mutation's Set, Fill and Value, and a velox.Row's Value,
+//     IsZero and Set, name a column of the entity; a Set or Fill value fits
+//     it.
+//
+// A name is checked when go/types gives it a constant value. A value is
+// checked when its type is not an interface: it must be of the column's
+// kind, integers of any size being one kind and floats another, as velox's
+// conversion at run time requires, and a constant must fit the column's
+// type. nil fits only a Set or Fill of a nullable column. A refusal is a
+// *FileError at the call's line that names the entity and the method; all
+// are joined. A column named by a value velox-gen cannot read is a warning,
+// returned with any refusal, by file and line; the statement checks it
+// when it runs. A call in another package is not seen: it is checked at
+// run time, and a relation it names is not linked, so the statement that
+// names it fails.
+func CheckBehaviour(dir, pattern string, g *Graph, bound map[string]Bound, mixins map[string][]MixinBound, env []string) (map[string][]string, []string, error) {
 	var roots []edgeRoot
 	pkgs := []string{g.Package}
 	for _, e := range g.Entities {
 		for _, mb := range mixins[e.Name] {
 			for _, k := range slices.Sorted(maps.Keys(mb.Methods)) {
-				roots = append(roots, edgeRoot{entity: e.Name, pkg: mb.PkgPath, typ: mb.Name, method: k})
+				roots = append(roots, edgeRoot{entity: e.Name, pkg: mb.PkgPath, typ: mb.Name, method: k, mixin: true})
 			}
 			if !slices.Contains(pkgs, mb.PkgPath) {
 				pkgs = append(pkgs, mb.PkgPath)
@@ -57,63 +78,49 @@ func LinkedEdges(dir, pattern string, g *Graph, bound map[string]Bound, mixins m
 		}
 	}
 	if len(roots) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	pattern = strings.TrimSpace(pattern)
 	sc, err := checkSources(dir, g.Package, pattern, pkgs, env)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	slices.SortFunc(roots, func(a, b edgeRoot) int {
 		return strings.Compare(a.entity+"."+a.typ+"."+a.method, b.entity+"."+b.typ+"."+b.method)
 	})
-	edges := map[string]map[string]string{} // entity → edge name → target
-	for _, e := range g.Entities {
-		edges[e.Name] = map[string]string{}
-		for _, ed := range e.Edges {
-			edges[e.Name][ed.Name] = ed.Target
-		}
-	}
-	linked := map[string][]string{}
-	link := func(entity string, chain []string) {
-		for _, name := range chain {
-			target, ok := edges[entity][name]
-			if !ok {
-				return
-			}
-			if !slices.Contains(linked[entity], name) {
-				linked[entity] = append(linked[entity], name)
-			}
-			entity = target
-		}
-	}
-	var errs []error
+	ck := newBehaviourCheck(sc, g)
 	for _, r := range roots {
 		key, err := sc.methodKey(r)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if key == "" {
 			continue
 		}
-		chains, ferrs := sc.walk(key)
-		errs = append(errs, ferrs...)
-		for _, c := range chains {
-			link(r.entity, c)
+		w := sc.walk(key)
+		ck.errs = append(ck.errs, w.errs...)
+		for _, u := range w.uses {
+			ck.check(r, u)
 		}
 	}
-	if len(errs) > 0 {
-		return nil, errors.Join(dedupe(errs)...)
+	if len(ck.errs) > 0 {
+		return nil, ck.warningList(), errors.Join(byLine(dedupe(ck.errs))...)
 	}
-	for _, names := range linked {
+	if len(ck.linked) == 0 {
+		return nil, ck.warningList(), nil
+	}
+	for _, names := range ck.linked {
 		slices.Sort(names)
 	}
-	return linked, nil
+	return ck.linked, ck.warningList(), nil
 }
 
 // edgeRoot is a behaviour method, method of the type typ of the package at
-// pkg, for entity.
-type edgeRoot struct{ entity, pkg, typ, method string }
+// pkg, for entity; mixin says typ is a mixin the entity lists.
+type edgeRoot struct {
+	entity, pkg, typ, method string
+	mixin                    bool
+}
 
 // dedupe drops the errors whose text an earlier one has: one call is
 // reached from many roots.
@@ -138,9 +145,47 @@ type sources struct {
 	memo  map[string]walked
 }
 
+// walked is what a body names: its calls that name relations and columns,
+// and the errors of the relations it names with a value velox-gen cannot
+// read.
 type walked struct {
-	chains [][]string
-	errs   []error
+	uses []use
+	errs []error
+}
+
+// use is one call that names a relation or a column.
+type use struct {
+	kind useKind
+	// chain are the relations from the root's entity to the entity the
+	// call names: those of the Edge calls whose HasWhere holds it. A
+	// mutation's or a row's call names the root's entity, whatever chain.
+	chain []string
+	pos   token.Pos
+	call  ast.Expr // the call, for errors
+	named ast.Expr // the velox.C call of an operator, for the errors of its name
+	name  string   // the name, "" when it is not a constant
+	op    string   // the method called: EQ, In, Set, Value, …; "" for a bare velox.C
+	args  []ast.Expr
+	// spread says the values are passed as a slice (In(vs...)), which
+	// velox-gen does not read.
+	spread bool
+}
+
+// useKind is what a use names.
+type useKind uint8
+
+const (
+	useEdge     useKind = iota // velox.Edge(name)
+	useColumn                  // velox.C(name), and the operator called on it
+	useMutation                // a *velox.Mutation's or a velox.Row's method
+)
+
+// prefixed is u after the relations prefix.
+func (u use) prefixed(prefix []string) use {
+	if len(prefix) > 0 {
+		u.chain = append(slices.Clone(prefix), u.chain...)
+	}
+	return u
 }
 
 // objKey names a package-level object across packages: "path.Name", or
@@ -282,13 +327,12 @@ func (sc *sources) methodKey(r edgeRoot) (string, error) {
 	return objKey(obj), nil
 }
 
-// walk returns the relations the body of the object at key names with
-// velox.Edge, and those of the package-level objects it names, each as a
-// chain of names: an Edge in HasWhere's conditions follows the Edge of the
-// HasWhere. A call in a function the body names is a chain of its own.
-func (sc *sources) walk(key string) ([][]string, []error) {
+// walk returns the calls the body of the object at key makes that name
+// relations and columns, and those of the package-level objects it names:
+// a call in a function the body names counts as the body's.
+func (sc *sources) walk(key string) walked {
 	if w, ok := sc.memo[key]; ok {
-		return w.chains, w.errs
+		return w
 	}
 	sc.memo[key] = walked{} // a cycle ends here
 	var w walked
@@ -296,52 +340,126 @@ func (sc *sources) walk(key string) ([][]string, []error) {
 		sc.inspect(n, nil, &w)
 	}
 	sc.memo[key] = w
-	return w.chains, w.errs
+	return w
 }
 
-// inspect adds to w the relations n names, after prefix.
+// inspect adds to w the calls n makes, after the relations prefix.
 func (sc *sources) inspect(n ast.Node, prefix []string, w *walked) {
 	ast.Inspect(n, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.CallExpr:
-			if name, ok := sc.edgeCall(n, w); ok {
-				if name != "" {
-					w.chains = append(w.chains, append(slices.Clone(prefix), name))
-				}
-				return false
-			}
-			if sel, ok := n.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "HasWhere" {
-				if inner, ok := ast.Unparen(sel.X).(*ast.CallExpr); ok {
-					if name, ok := sc.edgeCall(inner, w); ok {
-						if name == "" {
-							return false
-						}
-						chain := append(slices.Clone(prefix), name)
-						w.chains = append(w.chains, chain)
-						for _, a := range n.Args {
-							sc.inspect(a, chain, w)
-						}
-						return false
-					}
-				}
-			}
+			return sc.call(n, prefix, w)
 		case *ast.Ident:
 			if k := objKey(sc.info.Uses[n]); k != "" && sc.decls[k] != nil {
-				chains, errs := sc.walk(k)
-				for _, c := range chains {
-					w.chains = append(w.chains, append(slices.Clone(prefix), c...))
+				sub := sc.walk(k)
+				for _, u := range sub.uses {
+					w.uses = append(w.uses, u.prefixed(prefix))
 				}
-				w.errs = append(w.errs, errs...)
+				w.errs = append(w.errs, sub.errs...)
 			}
 		}
 		return true
 	})
 }
 
-// edgeCall reports whether c is a call of velox.Edge, and returns the
-// relation's name: "" when it is not a constant, which is recorded in w as
-// a *FileError.
-func (sc *sources) edgeCall(c *ast.CallExpr, w *walked) (string, bool) {
+// call adds to w the call c, when it names a relation or a column, and
+// reports whether ast.Inspect should look inside c: false when call has
+// inspected what c holds itself.
+func (sc *sources) call(c *ast.CallExpr, prefix []string, w *walked) bool {
+	if name, ok := sc.funcCall(c, "Edge", w); ok {
+		if name != "" {
+			w.uses = append(w.uses, use{kind: useEdge, chain: prefix, pos: c.Pos(), call: c, name: name})
+		}
+		return false
+	}
+	if name, ok := sc.funcCall(c, "C", w); ok {
+		w.uses = append(w.uses, use{kind: useColumn, chain: prefix, pos: c.Pos(), call: c, named: c, name: name})
+		sc.inspectAll(c.Args, prefix, w)
+		return false
+	}
+	sel, ok := ast.Unparen(c.Fun).(*ast.SelectorExpr)
+	if !ok {
+		return true
+	}
+	fn, _ := sc.info.Uses[sel.Sel].(*types.Func)
+	switch recvName(fn) {
+	case enginePkg + ".NamedEdge":
+		inner, ok := ast.Unparen(sel.X).(*ast.CallExpr)
+		if !ok || fn.Name() != "HasWhere" {
+			return true
+		}
+		name, ok := sc.funcCall(inner, "Edge", w)
+		if !ok {
+			return true
+		}
+		if name != "" {
+			chain := append(slices.Clone(prefix), name)
+			w.uses = append(w.uses, use{kind: useEdge, chain: prefix, pos: inner.Pos(), call: inner, name: name})
+			sc.inspectAll(c.Args, chain, w)
+		}
+		return false
+	case enginePkg + ".Named":
+		inner, ok := ast.Unparen(sel.X).(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		name, ok := sc.funcCall(inner, "C", w)
+		if !ok {
+			return true
+		}
+		w.uses = append(w.uses, use{kind: useColumn, chain: prefix, pos: c.Pos(), call: c, named: inner, name: name, op: fn.Name(), args: c.Args, spread: c.Ellipsis.IsValid()})
+		sc.inspectAll(inner.Args, prefix, w)
+		sc.inspectAll(c.Args, prefix, w)
+		return false
+	case veloxPkg + ".Mutation", enginePkg + ".Row":
+		switch fn.Name() {
+		case "Set", "Fill", "Value", "IsZero":
+		default:
+			return true
+		}
+		if len(c.Args) == 0 {
+			return true
+		}
+		name := ""
+		if tv := sc.info.Types[c.Args[0]]; tv.Value != nil && tv.Value.Kind() == constant.String {
+			name = constant.StringVal(tv.Value)
+		}
+		w.uses = append(w.uses, use{kind: useMutation, pos: c.Pos(), call: c, name: name, op: fn.Name(), args: c.Args[1:]})
+		sc.inspectAll([]ast.Expr{sel.X}, prefix, w)
+		sc.inspectAll(c.Args, prefix, w)
+		return false
+	}
+	return true
+}
+
+// inspectAll inspects each of xs.
+func (sc *sources) inspectAll(xs []ast.Expr, prefix []string, w *walked) {
+	for _, x := range xs {
+		sc.inspect(x, prefix, w)
+	}
+}
+
+// recvName is "path.Type" of the type whose method fn is, "" when fn is
+// not a method of a named type.
+func recvName(fn *types.Func) string {
+	if fn == nil || fn.Signature().Recv() == nil {
+		return ""
+	}
+	t := fn.Signature().Recv().Type()
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	n, ok := types.Unalias(t).(*types.Named)
+	if !ok || n.Obj().Pkg() == nil {
+		return ""
+	}
+	return n.Obj().Pkg().Path() + "." + n.Obj().Name()
+}
+
+// funcCall reports whether c is a call of velox's function name, Edge or
+// C, and returns the name its argument gives: "" when it is not a
+// constant, which for Edge is recorded in w as a *FileError.
+func (sc *sources) funcCall(c *ast.CallExpr, name string, w *walked) (string, bool) {
 	var id *ast.Ident
 	switch f := ast.Unparen(c.Fun).(type) {
 	case *ast.SelectorExpr:
@@ -352,15 +470,17 @@ func (sc *sources) edgeCall(c *ast.CallExpr, w *walked) (string, bool) {
 		return "", false
 	}
 	fn, ok := sc.info.Uses[id].(*types.Func)
-	if !ok || fn.Pkg() == nil || fn.Pkg().Path() != veloxPkg || fn.Name() != "Edge" || fn.Signature().Recv() != nil || len(c.Args) != 1 {
+	if !ok || fn.Pkg() == nil || fn.Pkg().Path() != veloxPkg || fn.Name() != name || fn.Signature().Recv() != nil || len(c.Args) != 1 {
 		return "", false
 	}
 	tv := sc.info.Types[c.Args[0]]
-	if tv.Value == nil || tv.Value.Kind() != constant.String {
+	if tv.Value != nil && tv.Value.Kind() == constant.String {
+		return constant.StringVal(tv.Value), true
+	}
+	if name == "Edge" {
 		pos := sc.fset.Position(c.Pos())
 		w.errs = append(w.errs, &FileError{Path: pos.Filename, Line: pos.Line, Reason: fmt.Sprintf(
 			"%s names its relation with a value velox-gen cannot read; name it with a constant, so that velox-gen links the relation's target", exprString(c))})
-		return "", true
 	}
-	return constant.StringVal(tv.Value), true
+	return "", true
 }

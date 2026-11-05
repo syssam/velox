@@ -154,8 +154,10 @@ columns by name, as ent's `ent.Policy`, `ent.Hook` and generic
 `func (User) Interceptors() []velox.Interceptor` (decision 0039). A condition
 is `velox.C("org_id").EQ(org)` or `velox.Edge("doc").Has()`, a `velox.Cond`;
 a hook reads and writes a row with `m.Value`, `m.Set` and `m.Fill`, and a
-policy's `Insert` reads it with `r.Value`. A name the entity has no column
-of fails the statement. A velox interceptor is a row filter, not ent's query
+policy's `Insert` reads it with `r.Value`. velox-gen refuses a constant name
+the entity has no column of, at its line, and a constant value that does
+not fit the column; any other name the entity has no column of fails the
+statement. A velox interceptor is a row filter, not ent's query
 middleware: its condition reaches every read and write of the entity, a
 relation's included, before the Read policy, and `WithoutPolicy` does not
 lift it. A hook that must use the typed API of `gen` (another entity, say)

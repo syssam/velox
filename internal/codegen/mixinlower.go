@@ -2,14 +2,12 @@ package codegen
 
 import (
 	"fmt"
-	"go/parser"
 	"strconv"
 )
 
 // mixinSources adds to each entity's sources the behaviour of its mixins
-// (Config.Mixins), before its schema's own, and checks the columns their
-// velox.Field calls name. The entity's own file binds them, and imports
-// their packages.
+// (Config.Mixins), before its schema's own. The entity's own file binds
+// them, and imports their packages.
 func (l *lowerer) mixinSources() {
 	for _, ge := range l.g.Entities {
 		mbs := l.cfg.Mixins[ge.Name]
@@ -18,7 +16,6 @@ func (l *lowerer) mixinSources() {
 		}
 		s := l.state[ge.Name]
 		for _, mb := range mbs {
-			l.checkMixinFields(s, mb)
 			q := l.mixinName(mb.PkgPath, mb.PkgName)
 			imports := map[string]string{}
 			if q != "sch" {
@@ -101,43 +98,4 @@ func (l *lowerer) mixinName(path, pkgName string) string {
 	}
 	l.mixinNames[path] = n
 	return n
-}
-
-// checkMixinFields refuses each velox.Field call of mixin mb that names a
-// column s's entity does not have, or gives it another Go type, at the
-// call's line.
-func (l *lowerer) checkMixinFields(s *entState, mb MixinBound) {
-	local := l.out.GenPath
-	if local == "" {
-		local = l.out.Package
-	}
-	for _, c := range mb.Fields {
-		var f *OutField
-		for _, of := range s.out.Fields {
-			if of.Column == c.Name {
-				f = of
-				break
-			}
-		}
-		if f == nil {
-			l.errs = append(l.errs, &Error{Pos: c.Pos, Schema: s.name, Reason: fmt.Sprintf("%s: %s, which lists %s, has no column %q", c.Call, s.name, mb.Name, c.Name)})
-			continue
-		}
-		if c.Type == "" {
-			continue
-		}
-		x, err := parser.ParseExpr(f.GoType)
-		if err != nil {
-			continue
-		}
-		qual := func(n string) string {
-			if p, ok := s.paths[n]; ok {
-				return p
-			}
-			return l.owned[n]
-		}
-		if got := canonicalType(x, qual, local); got != c.Type {
-			l.errs = append(l.errs, &Error{Pos: c.Pos, Schema: s.name, Reason: fmt.Sprintf("%s: %s's column %q is of type %s", c.Call, s.name, c.Name, f.GoType)})
-		}
-	}
 }

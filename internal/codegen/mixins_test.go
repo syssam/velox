@@ -79,7 +79,7 @@ func mixinModule(t *testing.T) (*Graph, string) {
 }
 
 // mixinBehaviour writes behaviour after mixinTypes, and runs MixinBehaviour.
-func mixinBehaviour(t *testing.T, g *Graph, dir, behaviour string) (map[string][]MixinBound, []string, error) {
+func mixinBehaviour(t *testing.T, g *Graph, dir, behaviour string) (map[string][]MixinBound, error) {
 	t.Helper()
 	src := strings.Replace(mixinTypes, "\t\"time\"\n", "\t\"context\"\n\t\"time\"\n\n\t\"github.com/syssam/velox\"\n", 1) +
 		"\nvar _ context.Context\nvar _ velox.Dialect\n" + behaviour
@@ -107,7 +107,7 @@ func TestMixinMethodShapeRefused(t *testing.T) {
 			"B.Hooks must take nothing and return []velox.Hook;"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			_, _, err := mixinBehaviour(t, g, dir, c.src)
+			_, err := mixinBehaviour(t, g, dir, c.src)
 			var fe *FileError
 			if !errors.As(err, &fe) || !strings.Contains(fe.Reason, c.want) || filepath.Base(fe.Path) != "mixins.go" || fe.Line == 0 {
 				t.Fatalf("got %v, want a *FileError in mixins.go: %s", err, c.want)
@@ -143,7 +143,7 @@ func (Note) Mixin() []schema.Mixin { return []schema.Mixin{G[int]{}} }
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = MixinBehaviour(dir, "./schema", g, offline())
+	_, err = MixinBehaviour(dir, "./schema", g, offline())
 	var fe *FileError
 	if !errors.As(err, &fe) || !strings.Contains(fe.Reason, "G is a generic type, whose instance velox-gen cannot name") || fe.Line != 11 {
 		t.Fatalf("got %v", err)
@@ -161,12 +161,12 @@ func policy(m string) string {
 // called on a pointer.
 func TestMixinBehaviourOrder(t *testing.T) {
 	g, dir := mixinModule(t)
-	mixins, warnings, err := mixinBehaviour(t, g, dir, policy("A")+
+	mixins, err := mixinBehaviour(t, g, dir, policy("A")+
 		"func (*A) Hooks() []velox.Hook { return nil }\n"+
 		"type base struct{}\n\nfunc (base) Interceptors() []velox.Interceptor { return nil }\n"+
 		"func (C) Policy() velox.Policy { return velox.Policy{} }\n")
-	if err != nil || len(warnings) != 0 {
-		t.Fatal(err, warnings)
+	if err != nil {
+		t.Fatal(err)
 	}
 	// B declares nothing: an entity that lists only it has no mixin
 	// behaviour.
@@ -208,7 +208,7 @@ func TestMixinBehaviourOrder(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "schema", "mixins.go"), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	mixins, _, err = MixinBehaviour(dir, "./schema", g, offline())
+	mixins, err = MixinBehaviour(dir, "./schema", g, offline())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestMixinBehaviourOrder(t *testing.T) {
 // the schema.
 func TestMixinNonZeroValueUsesMixinAt(t *testing.T) {
 	g, dir := mixinModule(t)
-	mixins, _, err := mixinBehaviour(t, g, dir, policy("A"))
+	mixins, err := mixinBehaviour(t, g, dir, policy("A"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,54 +256,6 @@ func TestMixinNonZeroValueUsesMixinAt(t *testing.T) {
 	}
 }
 
-// TestMixinColumnLiteralChecked: a velox.Field call in a mixin's method
-// whose literal name an entity listing the mixin lacks, or whose type is
-// not the column's, is refused at its line; a name that is not a literal
-// is a warning, with its line.
-func TestMixinColumnLiteralChecked(t *testing.T) {
-	g, dir := mixinModule(t)
-	lower := func(behaviour string) ([]string, error) {
-		t.Helper()
-		mixins, warnings, err := mixinBehaviour(t, g, dir, behaviour)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = Lower(g, Config{Package: "gen", GenPath: "example.com/tmp/gen", Mixins: mixins})
-		return warnings, err
-	}
-	method := func(call string) string {
-		return "func (A) Interceptors() []velox.Interceptor {\n\t_ = " + call + "\n\treturn nil\n}\n"
-	}
-	// The method starts on line 28 of mixins.go; the call is on the next.
-	for _, c := range []struct{ name, call, want string }{
-		{"a right name and type", `velox.Field[E, int64]("org_id")`, ""},
-		{"the id", `velox.Field[E, int64]("id")`, ""},
-		{"a nullable time", `velox.Field[E, *time.Time]("deleted_at")`, ""},
-		{"a wrong name", `velox.Field[E, int64]("org")`, `mixins.go:29: schema Project: velox.Field[E, int64]("org"): Project, which lists A, has no column "org"`},
-		{"a wrong type", `velox.Field[E, string]("org_id")`, `mixins.go:29: schema Project: velox.Field[E, string]("org_id"): Project's column "org_id" is of type int64`},
-		{"a pointer missing", `velox.Field[E, time.Time]("deleted_at")`, `Project's column "deleted_at" is of type *time.Time`},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			_, err := lower(method(c.call))
-			switch {
-			case c.want == "" && err != nil:
-				t.Fatal(err)
-			case c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)):
-				t.Fatalf("got %v, want %s", err, c.want)
-			}
-		})
-	}
-	t.Run("not a literal", func(t *testing.T) {
-		warnings, err := lower("const orgCol = \"org_id\"\n\n" + method(`velox.Field[E, int64](orgCol)`))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(warnings) != 1 || !strings.HasSuffix(warnings[0], `mixins.go:31: velox.Field[E, int64](orgCol) names its column with a value velox-gen cannot read; velox checks it when it builds each entity's metadata`) {
-			t.Errorf("warnings %q", warnings)
-		}
-	})
-}
-
 // TestMixinListedTwiceRefused: a mixin with behaviour that one entity lists
 // twice would run twice.
 func TestMixinListedTwiceRefused(t *testing.T) {
@@ -313,7 +265,7 @@ func TestMixinListedTwiceRefused(t *testing.T) {
 			e.Mixins[2] = e.Mixins[0]
 		}
 	}
-	_, _, err := mixinBehaviour(t, g, dir, policy("A"))
+	_, err := mixinBehaviour(t, g, dir, policy("A"))
 	if err == nil || err.Error() != "schema Project: Mixin()[2] is A again, which declares behaviour: list a mixin once" {
 		t.Fatalf("got %v", err)
 	}
@@ -355,7 +307,7 @@ func (Note) Mixin() []schema.Mixin { return []schema.Mixin{tenancy.InOrg{}} }
 	if err != nil {
 		t.Fatal(err)
 	}
-	mixins, _, err := MixinBehaviour(dir, "./schema", g, offline())
+	mixins, err := MixinBehaviour(dir, "./schema", g, offline())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,7 +359,7 @@ func fileText(t *testing.T, files []File, name string) string {
 // and its file imports the schema package.
 func TestMixinBoundInEntityFile(t *testing.T) {
 	g, dir := mixinModule(t)
-	mixins, _, err := mixinBehaviour(t, g, dir, policy("A"))
+	mixins, err := mixinBehaviour(t, g, dir, policy("A"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,33 +384,13 @@ func TestMixinBoundInEntityFile(t *testing.T) {
 // older velox, is refused with the shape velox binds now.
 func TestMixinMethodRefusesGeneric(t *testing.T) {
 	g, dir := mixinModule(t)
-	_, _, err := mixinBehaviour(t, g, dir, "func (A) Policy[E any]() velox.Policy[E] { return velox.Policy[E]{} }\n")
+	_, err := mixinBehaviour(t, g, dir, "func (A) Policy[E any]() velox.Policy[E] { return velox.Policy[E]{} }\n")
 	if err == nil || !strings.Contains(err.Error(), "A.Policy: behaviour methods are not generic: func (A) Policy() velox.Policy") {
 		t.Fatalf("got %v", err)
 	}
-	_, _, err = mixinBehaviour(t, g, dir, "func (A) Hooks() []velox.Hook[int] { return nil }\n")
+	_, err = mixinBehaviour(t, g, dir, "func (A) Hooks() []velox.Hook[int] { return nil }\n")
 	if err == nil || !strings.Contains(err.Error(), "A.Hooks must take nothing and return []velox.Hook; a mixin's method serves every entity that lists it: func (A) Hooks() []velox.Hook") {
 		t.Fatalf("typed: got %v", err)
-	}
-}
-
-// canonicalType qualifies each named type by its import path, spells byte
-// and rune as uint8 and int32, and gives "" for a type it does not read.
-func TestCanonicalType(t *testing.T) {
-	qual := func(n string) string { return map[string]string{"time": "time", "j": "encoding/json"}[n] }
-	for src, want := range map[string]string{
-		"int64": "int64", "byte": "uint8", "[]rune": "[]int32", "*time.Time": "*time.Time",
-		"[]Tag": "[]example.com/x.Tag", "map[string]any": "map[string]any", "interface{}": "any",
-		"j.RawMessage": "encoding/json.RawMessage", "x.Y": "", "func()": "", "[2]int": "",
-		"interface{ M() }": "", "map[string]func()": "", "*func()": "", "[]func()": "", "a.b.C": "",
-	} {
-		x, err := parser.ParseExpr(src)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := canonicalType(x, qual, "example.com/x"); got != want {
-			t.Errorf("%s: %q, want %q", src, got, want)
-		}
 	}
 }
 
@@ -498,7 +430,7 @@ func mixinSourceB(decl, behaviour string) string {
 }
 
 // mixinBehaviourB is mixinBehaviour with B declared as decl.
-func mixinBehaviourB(t *testing.T, g *Graph, dir, decl, behaviour string) (map[string][]MixinBound, []string, error) {
+func mixinBehaviourB(t *testing.T, g *Graph, dir, decl, behaviour string) (map[string][]MixinBound, error) {
 	t.Helper()
 	src := mixinSourceB(decl, behaviour)
 	if err := os.WriteFile(filepath.Join(dir, "schema", "mixins.go"), []byte(src), 0o644); err != nil {
@@ -519,37 +451,12 @@ func TestMixinResultRefused(t *testing.T) {
 		{"a parameter", "func (B) Policy(int) velox.Policy { return velox.Policy{} }\n", "B.Policy must take nothing and return velox.Policy;"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			_, _, err := mixinBehaviour(t, g, dir, c.src)
+			_, err := mixinBehaviour(t, g, dir, c.src)
 			var fe *FileError
 			if !errors.As(err, &fe) || !strings.Contains(fe.Reason, c.want) {
 				t.Fatalf("got %v, want %s", err, c.want)
 			}
 		})
-	}
-}
-
-// TestMixinBodyReadsOnlyVeloxField: a call in a method's body is a column
-// check only when it is velox.Field with two type arguments and one
-// argument; a method without a body names no column.
-func TestMixinBodyReadsOnlyVeloxField(t *testing.T) {
-	g, dir := mixinModule(t)
-	mixins, warnings, err := mixinBehaviour(t, g, dir, `func pair[A, B any](string) {}
-
-func (B) Policy() velox.Policy {
-	pair[int, int64]("org_id")
-	_ = velox.Field[int, int64]
-	_ = velox.Desc[int, int64]("org_id")
-	return velox.Policy{}
-}
-
-func (B) Hooks() []velox.Hook
-`)
-	if err != nil || len(warnings) != 0 {
-		t.Fatal(err, warnings)
-	}
-	ms := mixins["Label"]
-	if len(ms) != 1 || len(ms[0].Methods) != 2 || len(ms[0].Fields) != 0 {
-		t.Fatalf("%+v", ms)
 	}
 }
 
@@ -561,13 +468,13 @@ func TestMixinEmbeddedMethods(t *testing.T) {
 	g, dir := mixinModule(t)
 	const inner = "type inner struct{}\n\n"
 	t.Run("through a pointer", func(t *testing.T) {
-		mixins, _, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\t*inner\n}", inner+policy("inner"))
+		mixins, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\t*inner\n}", inner+policy("inner"))
 		if ms := mixins["Label"]; err != nil || len(ms) != 1 || len(ms[0].Methods) != 1 {
 			t.Fatalf("%+v %v", ms, err)
 		}
 	})
 	t.Run("of a wrong shape", func(t *testing.T) {
-		_, _, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\tinner\n}",
+		_, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\tinner\n}",
 			inner+"func (inner) Policy[E any]() velox.Policy[E] { return velox.Policy[E]{} }\n")
 		var fe *FileError
 		if !errors.As(err, &fe) || !strings.Contains(fe.Reason, "inner.Policy: behaviour methods are not generic") {
@@ -575,7 +482,7 @@ func TestMixinEmbeddedMethods(t *testing.T) {
 		}
 	})
 	t.Run("hidden by the mixin's own", func(t *testing.T) {
-		mixins, _, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\tinner\n}",
+		mixins, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\tinner\n}",
 			inner+"func (inner) Policy[E any]() velox.Policy[E] { return velox.Policy[E]{} }\n\n"+
 				"func (*B) Policy() velox.Policy { return velox.Policy{} }\n")
 		if ms := mixins["Label"]; err != nil || len(ms) != 1 || !ms[0].Methods["Policy"] {
@@ -583,7 +490,7 @@ func TestMixinEmbeddedMethods(t *testing.T) {
 		}
 	})
 	t.Run("an interface and error", func(t *testing.T) {
-		mixins, _, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\tnamer\n\terror\n}",
+		mixins, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\tnamer\n\terror\n}",
 			"type namer interface{ Name() string }\n")
 		if _, ok := mixins["Label"]; err != nil || ok {
 			t.Fatalf("%+v %v", mixins, err)
@@ -607,7 +514,7 @@ func TestMixinEmbedsOtherPackage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "schema", "mixins.go"), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := MixinBehaviour(dir, "./schema", g, offline())
+	_, err := MixinBehaviour(dir, "./schema", g, offline())
 	var fe *FileError
 	if !errors.As(err, &fe) || filepath.Base(fe.Path) != "o.go" || fe.Line != 7 || !strings.Contains(fe.Reason, "Base.Hooks: behaviour methods are not generic") {
 		t.Fatalf("got %v", err)
@@ -625,14 +532,14 @@ func TestMixinPackageErrors(t *testing.T) {
 				e.Mixins = append(e.Mixins, loadjson.Mixin{PkgPath: "example.com/tmp/gone", Name: "M"})
 			}
 		}
-		_, _, err := mixinBehaviour(t, g, dir, "")
+		_, err := mixinBehaviour(t, g, dir, "")
 		if err == nil || !strings.HasPrefix(err.Error(), "finding mixin package example.com/tmp/gone: ") {
 			t.Fatalf("got %v", err)
 		}
 	})
 	t.Run("a bad pattern", func(t *testing.T) {
 		g, dir := mixinModule(t)
-		if _, _, err := MixinBehaviour(dir, "./gone", g, offline()); err == nil || !strings.Contains(err.Error(), "gone") {
+		if _, err := MixinBehaviour(dir, "./gone", g, offline()); err == nil || !strings.Contains(err.Error(), "gone") {
 			t.Fatalf("got %v", err)
 		}
 	})
@@ -647,7 +554,7 @@ func TestMixinPackageErrors(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "schema", "linux.go"), []byte("//go:build linux\n\npackage schema\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		_, _, err := mixinBehaviour(t, g, dir, policy("A"))
+		_, err := mixinBehaviour(t, g, dir, policy("A"))
 		var fe *FileError
 		if !errors.As(err, &fe) || filepath.Base(fe.Path) != "linux.go" || !strings.Contains(fe.Reason, "go leaves it out of some builds") {
 			t.Fatalf("got %v", err)
@@ -660,7 +567,7 @@ func TestMixinPackageErrors(t *testing.T) {
 				e.Mixins = append([]loadjson.Mixin{{}}, e.Mixins...)
 			}
 		}
-		mixins, _, err := mixinBehaviour(t, g, dir, policy("B"))
+		mixins, err := mixinBehaviour(t, g, dir, policy("B"))
 		if ms := mixins["Label"]; err != nil || len(ms) != 1 || ms[0].Name != "B" || ms[0].Index != 1 {
 			t.Fatalf("%+v %v", ms, err)
 		}
@@ -683,16 +590,14 @@ func TestRecvPtr(t *testing.T) {
 
 // TestMixinPackageNames: the generated code names another package's mixin
 // package by its name, once per package, or by its name and a number when
-// the generated package, or another mixin package, has that name; a
-// velox.Field call whose type velox-gen cannot read checks only the name.
+// the generated package, or another mixin package, has that name.
 func TestMixinPackageNames(t *testing.T) {
 	g, _ := mixinModule(t)
-	bound := func(path, name string, i int, fields ...MixinField) MixinBound {
-		return MixinBound{Index: i, PkgPath: path, PkgName: guessName(path), Name: name, Methods: map[string]bool{"Policy": false}, Fields: fields}
+	bound := func(path, name string, i int) MixinBound {
+		return MixinBound{Index: i, PkgPath: path, PkgName: guessName(path), Name: name, Methods: map[string]bool{"Policy": false}}
 	}
-	unread := MixinField{Pos: "m.go:1", Call: `velox.Field[E, func()]("org_id")`, Name: "org_id"}
 	o, err := Lower(g, Config{Package: "gen", Mixins: map[string][]MixinBound{
-		"Project": {bound("example.com/a/gen", "M", 0, unread), bound("example.com/b/gen", "N", 1)},
+		"Project": {bound("example.com/a/gen", "M", 0), bound("example.com/b/gen", "N", 1)},
 		"Label":   {bound("example.com/a/gen", "M", 0)},
 	}})
 	if err != nil {

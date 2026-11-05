@@ -87,7 +87,7 @@ func (Comment) Policy() velox.Policy {
 
 func visible() velox.Cond { return velox.Edge(docEdge).HasWhere(velox.Edge("owner").Has()) }
 `)
-	linked, err := LinkedEdges(dir, "./schema", g, bound, nil, offline())
+	linked, _, err := CheckBehaviour(dir, "./schema", g, bound, nil, offline())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func visible() velox.Cond { return velox.Edge(docEdge).HasWhere(velox.Edge("owne
 		}
 	}
 	// Without behaviour, nothing is linked, and the schema is not read.
-	if linked, err := LinkedEdges(dir, "./schema", g, nil, nil, offline()); err != nil || linked != nil {
+	if linked, _, err := CheckBehaviour(dir, "./schema", g, nil, nil, offline()); err != nil || linked != nil {
 		t.Errorf("no behaviour: %v, %v", linked, err)
 	}
 }
@@ -136,7 +136,7 @@ func (Comment) Policy() velox.Policy {
 	}}
 }
 `)
-	_, err := LinkedEdges(dir, "./schema", g, bound, nil, offline())
+	_, _, err := CheckBehaviour(dir, "./schema", g, bound, nil, offline())
 	var fe *FileError
 	if !errors.As(err, &fe) || filepath.Base(fe.Path) != "behaviour.go" || fe.Line != 13 ||
 		!strings.Contains(fe.Reason, "velox.Edge(edgeName) names its relation with a value velox-gen cannot read") {

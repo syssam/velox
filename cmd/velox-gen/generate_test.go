@@ -1501,3 +1501,27 @@ func TestGenerateMixinBehaviour(t *testing.T) {
 // squeeze is s with each run of spaces one space, so that a test does not
 // depend on gofmt's alignment.
 func squeeze(s string) string { return regexp.MustCompile(` +`).ReplaceAllString(s, " ") }
+
+// velox-gen refuses the columns and relations that testdata/wrongcolumn's
+// behaviour names wrongly, each at its line, with the entity and the
+// method, warns of a column it cannot read, and writes nothing. Its output
+// is testdata/wrongcolumn/output.golden.
+func TestGenerateRefusesWrongColumns(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	files := map[string]string{}
+	for _, name := range []string{"schema.go", "behaviour.go"} {
+		_, src, _ := strings.Cut(readFile(t, filepath.Join("testdata", "wrongcolumn", name)), "\n")
+		files["schema/"+name] = strings.TrimPrefix(src, "\n")
+	}
+	dir := tempModule(t, files)
+	code, out, errs := runCLI(t, dir, "./schema")
+	if code == 0 || out != "" {
+		t.Fatalf("%d %q", code, out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gen")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("gen was written: %v", err)
+	}
+	compareGolden(t, filepath.Join("testdata", "wrongcolumn", "output.golden"), errs)
+}

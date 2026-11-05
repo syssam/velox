@@ -16,7 +16,9 @@ import (
 // kind, a text operator on a column that is not text, or IsNull on a NOT NULL
 // column fails the statement before anything is sent. Its zero value fails
 // the statement too, so that a policy that forgot to return a condition lets
-// nothing through.
+// nothing through. In a schema's behaviour, velox-gen refuses a constant
+// name the entity lacks, and a constant value that does not fit the column,
+// before any of it runs.
 type Cond = engine.Cond
 
 // Named is a column by its name, made by C. Its operators, EQ, NEQ, GT, GTE,

@@ -21,6 +21,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- velox-gen checks the names a schema's behaviour gives: each constant name passed to
+  `velox.C`, `velox.Edge`, `m.Set`, `m.Fill`, `m.Value`, `r.Value`, `r.IsZero` and
+  `r.Set`, in a Policy, Hooks or Interceptors method or a mixin's, or in a function of
+  the same package they reach, must name a column or relation of each entity the method
+  serves, and a constant value must fit the column. It refuses each at its line, with the
+  entity and the method; a name it cannot read is a warning, checked when the statement
+  runs (ADR 0039).
 - Package `schema/mixin/softdelete`: `softdelete.Mixin{}` in a schema's `Mixin()` adds
   `deleted_at`, an interceptor that ANDs `deleted_at IS NULL` into every statement on the
   entity, and a hook that turns a delete into an update that sets `deleted_at`.
