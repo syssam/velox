@@ -145,7 +145,7 @@ func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 	if st.Op == OpUpdate && InfoBidi(st.Entity) {
 		return 0, "", nil, errBidiUpdate(st.Entity)
 	}
-	if len(InfoHooks(st.Entity)) == 0 {
+	if !db.HasHooks(st.Entity) {
 		var err error
 		mu := MutationState{St: st, Dry: dry}
 		if save {

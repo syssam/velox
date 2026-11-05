@@ -68,14 +68,14 @@ var tagMeta velox.MetaOnce[tag]
 
 func (*tag) VeloxMeta() *velox.Meta[tag] { return tagMeta.Load(tagDescriptor) }
 
-func (*tag) Policy() velox.Policy[tag] { return fixture.OrgPolicy[tag]() }
+func (*tag) Policy() velox.Policy { return fixture.OrgPolicy() }
 
-func (*tag) Hooks() []velox.Hook[tag] { return fixture.OrgHooks[tag]() }
+func (*tag) Hooks() []velox.Hook { return fixture.OrgHooks() }
 
 func tagDescriptor() velox.Descriptor[tag] {
 	return velox.Descriptor[tag]{
-		Policy:     velox.BindPolicy((*tag)(nil).Policy),
-		Hooks:      velox.BindHooks((*tag)(nil).Hooks),
+		Policy:     []func() velox.Policy{(*tag)(nil).Policy},
+		Hooks:      []func() []velox.Hook{(*tag)(nil).Hooks},
 		Table:      "tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},

@@ -34,7 +34,7 @@ func toyDescriptor() velox.Descriptor[toy] {
 		Table:        "toys",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "PetID", Name: "pet_id"}},
 		PrimaryKey:   []int{0},
-		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[pet]("Pet", 1, 0)},
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[pet]("pet", 1, 0)},
 		FieldPtr:     func(x *toy, i int) any { return [...]any{&x.ID, &x.PetID}[i] },
 		EdgeFieldPtr: func(x *toy, i int) any { return &x.Pet },
 	}

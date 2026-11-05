@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
 // Issue is the entity of schema Issue.
@@ -112,7 +113,6 @@ func (*Issue) VeloxMeta() *velox.Meta[Issue] { return issueMeta.Load(issueDescri
 
 // issueDescriptor describes Issue to velox: its table, columns, edges and hooks.
 func issueDescriptor() velox.Descriptor[Issue] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Issue]{
 		Table: "issues",
 		Columns: []velox.ColumnDescriptor{
@@ -132,14 +132,14 @@ func issueDescriptor() velox.Descriptor[Issue] {
 			{Columns: []int{issueColProjectID, issueColStatus, issueColID}}, // project_id, status, id
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Project]("Project", issueColProjectID, projectColID),
-			velox.EdgeTo[User]("Author", issueColAuthorID, userColID),
-			velox.EdgeTo[User]("Assignee", issueColAssigneeID, userColID),
-			velox.EdgeTo[Comment]("Comments", issueColID, commentColIssueID),
-			velox.EdgeThrough[IssueLabel, Label]("Labels", issueColID, issueLabelColIssueID, issueLabelColLabelID, labelColID),
+			velox.EdgeTo[Project]("project", issueColProjectID, projectColID),
+			velox.EdgeTo[User]("author", issueColAuthorID, userColID),
+			velox.EdgeTo[User]("assignee", issueColAssigneeID, userColID),
+			velox.EdgeTo[Comment]("comments", issueColID, commentColIssueID),
+			velox.EdgeThrough[IssueLabel, Label]("labels", issueColID, issueLabelColIssueID, issueLabelColLabelID, labelColID),
 		},
-		Policy: rt.IssuePolicy,
-		Hooks:  rt.IssueHooks,
+		Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.Issue{}.Policy},
+		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
 		FieldPtr: func(x *Issue, i int) any {
 			switch i {
 			case issueColID:

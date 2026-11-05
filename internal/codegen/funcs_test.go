@@ -117,21 +117,14 @@ func TestDefaults(t *testing.T) {
 `
 
 // A default or validator that is a named, exported function of a package
-// gen can import is called by its name, in the entity's file; the schema
-// package's own is called from package runtime when the schema imports gen,
-// and in the entity's file otherwise. A closure, and a function of a package
-// gen cannot import, is read from the field's descriptor, by the field's
-// name. All of them run, in both modes.
+// gen can import is called by its name, in the entity's file, the schema
+// package's own too. A closure, and a function of a package gen cannot
+// import, is read from the field's descriptor, by the field's name. All of
+// them run.
 func TestFunctionDefaults(t *testing.T) {
-	for _, importsGen := range []bool{false, true} {
-		name := "plain"
-		if importsGen {
-			name = "runtime"
-		}
-		t.Run(name, func(t *testing.T) {
-			dir := module(t, map[string]string{
-				"schema/doc.go": funcsSchema,
-				"ids/ids.go": `package ids
+	dir := module(t, map[string]string{
+		"schema/doc.go": funcsSchema,
+		"ids/ids.go": `package ids
 
 import "errors"
 
@@ -144,80 +137,61 @@ func Check(s string) error {
 	return nil
 }
 `,
-				"schema/internal/clock/clock.go": "package clock\n\nfunc Stamp() string { return \"stamp\" }\n",
-			})
-			m, err := Load(dir, "./schema", offline())
-			if err != nil {
-				t.Fatal(err)
-			}
-			g, err := Build(m)
-			if err != nil {
-				t.Fatal(err)
-			}
-			cfg := Config{Package: "gen", GenPath: "example.com/tmp/gen", SchemaImportsGen: importsGen}
-			if cfg.Funcs, err = FuncPackages(dir, g, cfg, offline()); err != nil {
-				t.Fatal(err)
-			}
-			if p := cfg.Funcs["example.com/tmp/schema/internal/clock"]; p.Gen {
-				t.Errorf("an internal package of the schema is importable from gen: %+v", p)
-			}
-			files, err := Generate(g, cfg)
-			if err != nil {
-				t.Fatal(err)
-			}
-			src := map[string]string{}
-			for _, f := range files {
-				p := filepath.Join(dir, "gen", f.Name)
-				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(p, f.Data, 0o644); err != nil {
-					t.Fatal(err)
-				}
-				src[f.Name] = string(f.Data)
-			}
-			entity, rt := src["doc_velox.go"], src["runtime/runtime.go"]
-			want := []string{"return time.Now() }", "return ids.New() }", `schema.FieldDescriptor(&sch.Doc{}, "token")`,
-				`schema.FieldDescriptor(&sch.Doc{}, "stamp")`, "ids.Check(x)", "return sch.NewSlug() }"}
-			if importsGen {
-				want = []string{"return time.Now() }", "return ids.New() }", "rt.DocTokenDefault()", "rt.DocStampDefault()",
-					"ids.Check(x)", "rt.DocNameValidator2(x)", "rt.DocSlugDefault()"}
-				for _, w := range []string{"sch.NewSlug,", `docToken := schema.FieldDescriptor(&sch.Doc{}, "token")`,
-					"docToken.DefaultFunc.(func() string)", "docName.Validators[1].(func(string) error)"} {
-					if !strings.Contains(rt, w) {
-						t.Errorf("gen/runtime/runtime.go has no %s:\n%s", w, rt)
-					}
-				}
-				// The test links package runtime, as a program does.
-				link := "package gen_test\n\nimport _ \"example.com/tmp/gen/runtime\"\n"
-				if err := os.WriteFile(filepath.Join(dir, "gen", "link_test.go"), []byte(link), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			} else if rt != "" {
-				t.Errorf("a schema that does not import gen has gen/runtime:\n%s", rt)
-			}
-			for _, w := range want {
-				if !strings.Contains(entity, w) {
-					t.Errorf("the entity's file has no %s:\n%s", w, entity)
-				}
-			}
-			for name, s := range src {
-				if strings.Contains(s, "Mixin()[") || strings.Contains(s, "Fields()[") {
-					t.Errorf("%s reads a field by its index:\n%s", name, s)
-				}
-			}
-			if err := os.WriteFile(filepath.Join(dir, "gen", "main_test.go"), []byte(funcsTest), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := tempmod.Go(dir, "mod", "tidy"); err != nil {
-				t.Fatal(err)
-			}
-			if out, err := tempmod.Go(dir, "vet", "./..."); err != nil {
-				t.Fatalf("go vet:\n%v", out)
-			}
-			if out, err := tempmod.Go(dir, "test", "-count=1", "./gen"); err != nil {
-				t.Fatalf("go test:\n%v", out)
-			}
-		})
+		"schema/internal/clock/clock.go": "package clock\n\nfunc Stamp() string { return \"stamp\" }\n",
+	})
+	m, err := Load(dir, "./schema", offline())
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := Build(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{Package: "gen", GenPath: "example.com/tmp/gen"}
+	if cfg.Funcs, err = FuncPackages(dir, g, cfg, offline()); err != nil {
+		t.Fatal(err)
+	}
+	if p := cfg.Funcs["example.com/tmp/schema/internal/clock"]; p.Gen {
+		t.Errorf("an internal package of the schema is importable from gen: %+v", p)
+	}
+	files, err := Generate(g, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := map[string]string{}
+	for _, f := range files {
+		p := filepath.Join(dir, "gen", f.Name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, f.Data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		src[f.Name] = string(f.Data)
+	}
+	entity := src["doc_velox.go"]
+	want := []string{"return time.Now() }", "return ids.New() }", `schema.FieldDescriptor(&sch.Doc{}, "token")`,
+		`schema.FieldDescriptor(&sch.Doc{}, "stamp")`, "ids.Check(x)", "return sch.NewSlug() }"}
+	for _, w := range want {
+		if !strings.Contains(entity, w) {
+			t.Errorf("the entity's file has no %s:\n%s", w, entity)
+		}
+	}
+	for name, s := range src {
+		if strings.Contains(s, "Mixin()[") || strings.Contains(s, "Fields()[") {
+			t.Errorf("%s reads a field by its index:\n%s", name, s)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "gen", "main_test.go"), []byte(funcsTest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tempmod.Go(dir, "mod", "tidy"); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tempmod.Go(dir, "vet", "./..."); err != nil {
+		t.Fatalf("go vet:\n%v", out)
+	}
+	if out, err := tempmod.Go(dir, "test", "-count=1", "./gen"); err != nil {
+		t.Fatalf("go test:\n%v", out)
 	}
 }

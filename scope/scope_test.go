@@ -32,10 +32,36 @@ var Notes = struct {
 
 var org = scope.NewKey[int64]("org")
 
-// orgPolicy and orgHooks are what a tenancy mixin's methods return.
-func orgPolicy[E any]() velox.Policy[E] { return scope.By[E](org, "org_id").Policy() }
+// keyPolicy and keyHooks are what an InOrg-style tenancy mixin's Policy
+// and Hooks return, for key and column.
+func keyPolicy[V comparable](key *scope.Key[V], column string) velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			v, err := key.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C(column).EQ(v), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error {
+			return key.Match(ctx, r.Value(column))
+		},
+	}
+}
 
-func orgHooks[E any]() []velox.Hook[E] { return []velox.Hook[E]{scope.By[E](org, "org_id").Fill()} }
+func keyHooks[V comparable](key *scope.Key[V], column string) []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if v, ok := key.From(ctx); ok {
+			return m.Fill(column, v)
+		}
+		return nil
+	}, velox.OpInsert)}
+}
+
+// orgPolicy and orgHooks are the InOrg mixin's methods.
+func orgPolicy() velox.Policy { return keyPolicy(org, "org_id") }
+
+func orgHooks() []velox.Hook { return keyHooks(org, "org_id") }
 
 var noteMeta velox.MetaOnce[note]
 
@@ -48,8 +74,8 @@ var noteColumns = []velox.ColumnDescriptor{
 
 func noteDescriptor() velox.Descriptor[note] {
 	return velox.Descriptor[note]{
-		Policy:     velox.BindPolicy(orgPolicy[note]),
-		Hooks:      velox.BindHooks(orgHooks[note]),
+		Policy:     []func() velox.Policy{orgPolicy},
+		Hooks:      []func() []velox.Hook{orgHooks},
 		Table:      "notes",
 		Columns:    noteColumns,
 		PrimaryKey: []int{0},
@@ -67,17 +93,15 @@ type ruled struct {
 	Title string
 }
 
-var ruledTitle = velox.StringCol[ruled, string]{I: 2}
-
 var ruledMeta velox.MetaOnce[ruled]
 
 func (*ruled) VeloxMeta() *velox.Meta[ruled] { return ruledMeta.Load(ruledDescriptor) }
 
-func (*ruled) Policy() velox.Policy[ruled] {
-	return velox.Policy[ruled]{
-		Read: func(context.Context) (velox.Pred[ruled], error) { return ruledTitle.EQ("ok"), nil },
-		Insert: func(_ context.Context, x *ruled) error {
-			if x.Title == "banned" {
+func (*ruled) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(context.Context) (velox.Cond, error) { return velox.C("title").EQ("ok"), nil },
+		Insert: func(_ context.Context, r velox.Row) error {
+			if r.Value("title") == "banned" {
 				return errors.New("banned title")
 			}
 			return nil
@@ -87,41 +111,12 @@ func (*ruled) Policy() velox.Policy[ruled] {
 
 func ruledDescriptor() velox.Descriptor[ruled] {
 	return velox.Descriptor[ruled]{
-		Policy:     velox.BindPolicy(orgPolicy[ruled], (*ruled)(nil).Policy),
-		Hooks:      velox.BindHooks(orgHooks[ruled]),
+		Policy:     []func() velox.Policy{orgPolicy, (*ruled)(nil).Policy},
+		Hooks:      []func() []velox.Hook{orgHooks},
 		Table:      "notes",
 		Columns:    noteColumns,
 		PrimaryKey: []int{0},
 		FieldPtr: func(x *ruled, i int) any {
-			return [...]any{&x.ID, &x.OrgID, &x.Title}[i]
-		},
-	}
-}
-
-// wrong is note's shape whose policy names org_id under the column and type
-// the test sets.
-type wrong struct {
-	ID    int64
-	OrgID *int64
-	Title string
-}
-
-var wrongMeta velox.MetaOnce[wrong]
-
-func (*wrong) VeloxMeta() *velox.Meta[wrong] { return wrongMeta.Load(wrongDescriptor) }
-
-// wrongCols are wrong's columns, set by each case of TestByRefuses.
-var wrongCols []velox.ColumnDescriptor
-
-func wrongDescriptor() velox.Descriptor[wrong] {
-	return velox.Descriptor[wrong]{
-		Policy: velox.BindPolicy(func() velox.Policy[wrong] {
-			return scope.By[wrong](scope.NewKey[*int64]("org"), "org_id").Policy()
-		}),
-		Table:      "notes",
-		Columns:    wrongCols,
-		PrimaryKey: []int{0},
-		FieldPtr: func(x *wrong, i int) any {
 			return [...]any{&x.ID, &x.OrgID, &x.Title}[i]
 		},
 	}
@@ -160,6 +155,51 @@ func TestKey(t *testing.T) {
 	other := scope.NewKey[int64]("other")
 	if _, ok := other.From(ctx); ok {
 		t.Error("another key of the same type read org's value")
+	}
+}
+
+// TestKeyRequire: Require returns the context's value, and ErrNoScope,
+// naming the key, when it has none or the zero value.
+func TestKeyRequire(t *testing.T) {
+	if v, err := org.Require(org.With(context.Background(), 7)); err != nil || v != 7 {
+		t.Errorf("Require = %v, %v", v, err)
+	}
+	for name, ctx := range map[string]context.Context{
+		"no value":         context.Background(),
+		"zero value":       org.With(context.Background(), 0),
+		"another key's":    scope.NewKey[int64]("other").With(context.Background(), 7),
+		"after zero value": org.With(org.With(context.Background(), 7), 0),
+	} {
+		v, err := org.Require(ctx)
+		if !errors.Is(err, scope.ErrNoScope) || v != 0 {
+			t.Errorf("%s: Require = %v, %v; want ErrNoScope", name, v, err)
+			continue
+		}
+		if !strings.HasSuffix(err.Error(), ": org") {
+			t.Errorf("%s: %q does not name the key", name, err)
+		}
+	}
+}
+
+// TestKeyMatch: Match is nil for the context's value; ErrNoScope without
+// one; ErrMismatch for another value, nil, or a value of another type,
+// even one equal as a number.
+func TestKeyMatch(t *testing.T) {
+	ctx := org.With(context.Background(), 7)
+	if err := org.Match(ctx, int64(7)); err != nil {
+		t.Errorf("the context's value: %v", err)
+	}
+	for _, v := range []any{int64(8), int64(0), nil, 7, int32(7), "7"} {
+		err := org.Match(ctx, v)
+		if !errors.Is(err, scope.ErrMismatch) || errors.Is(err, scope.ErrNoScope) {
+			t.Errorf("Match(%#v) = %v; want ErrMismatch", v, err)
+		}
+	}
+	if err := org.Match(ctx, int64(8)); err == nil || !strings.Contains(err.Error(), "org is 8, the context's is 7") {
+		t.Errorf("the mismatch does not name the key and both values: %v", err)
+	}
+	if err := org.Match(context.Background(), int64(7)); !errors.Is(err, scope.ErrNoScope) {
+		t.Errorf("without a value: %v", err)
 	}
 }
 
@@ -269,64 +309,84 @@ func TestScopeANDsWithTheEntitysPolicy(t *testing.T) {
 	}
 }
 
-// TestByRefuses: By refuses a column that is missing, of another type,
-// mutable or nullable, as the entity's *SchemaError at its first use.
-func TestByRefuses(t *testing.T) {
-	for _, c := range []struct {
-		name string
-		cols []velox.ColumnDescriptor
-		want string
-	}{
-		{"TestByRefusesMutableColumn", []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Title", Name: "title"}},
-			`column "org_id" is mutable`},
-		{"TestByRefusesNullableColumn", []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Title", Name: "title"}},
-			`column "org_id" is nullable`},
-		{"TestByRefusesMissingColumn", []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org", Immutable: true}, {Field: "Title", Name: "title"}},
-			`no column is named "org_id"`},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			wrongCols = c.cols
-			wrongMeta = velox.MetaOnce[wrong]{}
-			err := velox.CheckEntity[wrong]()
-			var se *velox.SchemaError
-			if !errors.As(err, &se) || !strings.Contains(err.Error(), c.want) {
-				t.Errorf("CheckEntity = %v; want a *SchemaError naming %s", err, c.want)
-			}
-		})
-	}
-}
+// strOrg is a key of another type than note's org_id, an int64.
+var strOrg = scope.NewKey[string]("org")
 
-// TestByRefusesAnotherType: a key of another type than the column's field
-// is refused at the entity's first use.
-func TestByRefusesAnotherType(t *testing.T) {
-	err := velox.CheckEntity[typed]()
-	var se *velox.SchemaError
-	if !errors.As(err, &se) || !strings.Contains(err.Error(), "not string") {
-		t.Errorf("CheckEntity = %v; want a *SchemaError on the type", err)
-	}
-}
-
-// typed is note's shape whose scope's key is a string.
+// typed is note's shape whose scope's key is a string; missing is note's
+// shape whose scope names a column it does not have.
 type typed struct {
 	ID    int64
 	OrgID int64
 	Title string
 }
 
-var typedMeta velox.MetaOnce[typed]
+type missing struct {
+	ID    int64
+	OrgID int64
+	Title string
+}
+
+var (
+	typedMeta   velox.MetaOnce[typed]
+	missingMeta velox.MetaOnce[missing]
+)
 
 func (*typed) VeloxMeta() *velox.Meta[typed] {
 	return typedMeta.Load(func() velox.Descriptor[typed] {
 		return velox.Descriptor[typed]{
-			Policy: velox.BindPolicy(func() velox.Policy[typed] {
-				return scope.By[typed](scope.NewKey[string]("org"), "org_id").Policy()
-			}),
+			Policy:     []func() velox.Policy{func() velox.Policy { return keyPolicy(strOrg, "org_id") }},
+			Hooks:      []func() []velox.Hook{func() []velox.Hook { return keyHooks(strOrg, "org_id") }},
 			Table:      "notes",
 			Columns:    noteColumns,
 			PrimaryKey: []int{0},
-			FieldPtr: func(x *typed, i int) any {
-				return [...]any{&x.ID, &x.OrgID, &x.Title}[i]
-			},
+			FieldPtr:   func(x *typed, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Title}[i] },
 		}
 	})
+}
+
+func (*missing) VeloxMeta() *velox.Meta[missing] {
+	return missingMeta.Load(func() velox.Descriptor[missing] {
+		return velox.Descriptor[missing]{
+			Policy:     []func() velox.Policy{orgPolicy},
+			Hooks:      []func() []velox.Hook{orgHooks},
+			Table:      "notes",
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org", Immutable: true}, {Field: "Title", Name: "title"}},
+			PrimaryKey: []int{0},
+			FieldPtr:   func(x *missing, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Title}[i] },
+		}
+	})
+}
+
+// TestScopeKeyOfAnotherTypeFailsClosed: a key whose type is not the
+// column's fails every statement and write, naming both types, though the
+// entity's metadata builds: the column is checked where the condition
+// runs, and by scopetest.
+func TestScopeKeyOfAnotherTypeFailsClosed(t *testing.T) {
+	if err := velox.CheckEntity[typed](); err != nil {
+		t.Fatal(err)
+	}
+	db := openNotes(t)
+	ctx := strOrg.With(context.Background(), "a")
+	if _, err := db.Query[typed]().Count(ctx); err == nil || !strings.Contains(err.Error(), "int64") || errors.Is(err, scope.ErrNoScope) {
+		t.Errorf("read: %v; want a failure on the type", err)
+	}
+	if err := db.Insert(&typed{Title: "t"}).Exec(ctx); err == nil || !strings.Contains(err.Error(), `Fill("org_id", a)`) {
+		t.Errorf("insert: %v; want the hook's failure on the type", err)
+	}
+	if err := db.Insert(&typed{Title: "t"}).Exec(velox.WithoutPolicy(ctx, "test")); err == nil {
+		t.Error("insert without the policy: the hook's misuse did not fail it")
+	}
+}
+
+// TestScopeMissingColumnFailsClosed: a scope that names a column the
+// entity does not have fails its statements and writes, naming the column.
+func TestScopeMissingColumnFailsClosed(t *testing.T) {
+	db := openNotes(t)
+	ctx := org.With(context.Background(), 1)
+	if _, err := db.Query[missing]().Count(ctx); err == nil || !strings.Contains(err.Error(), `no column "org_id"`) {
+		t.Errorf("read: %v", err)
+	}
+	if err := db.Insert(&missing{Title: "t"}).Exec(ctx); err == nil || !strings.Contains(err.Error(), `no column "org_id"`) {
+		t.Errorf("insert: %v", err)
+	}
 }

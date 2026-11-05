@@ -21,24 +21,17 @@ func (InOrg) Fields() []schema.Field {
 	return []schema.Field{field.Int64("org_id").Immutable()}
 }
 
-func (InOrg) Policy[E any]() velox.Policy[E] {
-	org := velox.Field[E, int64]("org_id")
-	return velox.Policy[E]{Read: func(ctx context.Context) (velox.Pred[E], error) {
+func (InOrg) Policy() velox.Policy {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
 		v, _ := ctx.Value(orgKey{}).(int64)
-		return org.EQ(v), nil
+		return velox.C("org_id").EQ(v), nil
 	}}
 }
 
-func (InOrg) Hooks[E any]() []velox.Hook[E] {
-	org := velox.Field[E, int64]("org_id")
-	return []velox.Hook[E]{velox.On(func(next velox.Mutator[E]) velox.Mutator[E] {
-		return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
-			v, _ := ctx.Value(orgKey{}).(int64)
-			for _, x := range m.Rows() {
-				*org.Ptr(x) = v
-			}
-			return next.Mutate(ctx, m)
-		})
+func (InOrg) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		v, _ := ctx.Value(orgKey{}).(int64)
+		return m.Set("org_id", v)
 	}, velox.OpInsert)}
 }
 
@@ -49,10 +42,10 @@ type Audited struct {
 	By string
 }
 
-func (a *Audited) Hooks[E any]() []velox.Hook[E] {
+func (a *Audited) Hooks() []velox.Hook {
 	by := a.By
-	return []velox.Hook[E]{func(next velox.Mutator[E]) velox.Mutator[E] {
-		return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
+	return []velox.Hook{func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			_ = by
 			return next.Mutate(ctx, m)
 		})

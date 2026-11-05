@@ -61,7 +61,7 @@ func tagDescriptor() velox.Descriptor[Tag] {
 			{Columns: []int{tagColName}, Unique: true}, // name
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeThrough[PostTag, Post]("Posts", tagColID, postTagColTagID, postTagColPostID, postColID),
+			velox.EdgeThrough[PostTag, Post]("posts", tagColID, postTagColTagID, postTagColPostID, postColID),
 		},
 		FieldPtr: func(x *Tag, i int) any {
 			switch i {

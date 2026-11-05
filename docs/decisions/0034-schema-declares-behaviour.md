@@ -6,6 +6,9 @@ gen/entity, which the schema imports, and gen, which binds the schema.
 Revised again by 0037: gen holds every entity, and gen/runtime binds the
 schema, as here, when the schema imports gen. Revised by 0038: a mixin declares
 behaviour too, and tenancy is one; the generated scope of 0030 is gone.
+Superseded by 0039, except "the schema declares behaviour" and "gen is all
+generated": typing with gen, package runtime, failing closed by
+`veloxRuntime()` and the prune overlay are gone.
 
 ## Context
 

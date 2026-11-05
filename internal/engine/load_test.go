@@ -57,25 +57,26 @@ var ovNotes = struct {
 	Rank    velox.NumberCol[ovNote, int64]
 }{velox.NumberCol[ovNote, int64]{I: 0}, velox.NumberCol[ovNote, int64]{I: 1}, velox.NumberCol[ovNote, int64]{I: 2}}
 
-// ovKey's value, a []int64, is what ovNote's Read policy's In holds.
+// ovKey's value, a []any of int64s, is what ovNote's Read policy's In
+// holds.
 type ovKey struct{}
 
 // ovReading is a context under which ovNote's Read policy is an In of n
 // values, n parameters.
 func ovReading(n int) context.Context {
-	vs := make([]int64, n)
+	vs := make([]any, n)
 	for i := range vs {
 		vs[i] = int64(i)
 	}
 	return context.WithValue(context.Background(), ovKey{}, vs)
 }
 
-func (*ovNote) Policy() velox.Policy[ovNote] {
-	return velox.Policy[ovNote]{Read: func(ctx context.Context) (velox.Pred[ovNote], error) {
-		if vs, ok := ctx.Value(ovKey{}).([]int64); ok {
-			return ovNotes.Rank.In(vs...), nil
+func (*ovNote) Policy() velox.Policy {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
+		if vs, ok := ctx.Value(ovKey{}).([]any); ok {
+			return velox.C("rank").In(vs...), nil
 		}
-		return velox.Allow[ovNote](), nil
+		return velox.Allow(), nil
 	}}
 }
 
@@ -84,7 +85,7 @@ var ovNoteMeta velox.MetaOnce[ovNote]
 func (*ovNote) VeloxMeta() *velox.Meta[ovNote] {
 	return ovNoteMeta.Load(func() velox.Descriptor[ovNote] {
 		return velox.Descriptor[ovNote]{
-			Policy:     velox.BindPolicy((*ovNote)(nil).Policy),
+			Policy:     []func() velox.Policy{(*ovNote)(nil).Policy},
 			Table:      "ov_notes",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Rank", Name: "rank"}},
 			PrimaryKey: []int{0},

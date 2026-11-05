@@ -58,7 +58,7 @@ func authorDescriptor() velox.Descriptor[Author] {
 		},
 		PrimaryKey: []int{authorColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Post]("Posts", authorColID, postColAuthorID),
+			velox.EdgeTo[Post]("posts", authorColID, postColAuthorID),
 		},
 		FieldPtr: func(x *Author, i int) any {
 			switch i {

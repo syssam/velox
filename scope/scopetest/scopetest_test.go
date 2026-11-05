@@ -15,7 +15,6 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/testmodel"
-	_ "github.com/syssam/velox/internal/testmodel/runtime"
 	"github.com/syssam/velox/scope"
 
 	"github.com/syssam/velox/scope/scopetest"
@@ -74,11 +73,20 @@ func TestScopetestIsolates(t *testing.T) {
 		{"insert without a value", func() error { return check[insertWithoutValue](db) }, "an insert without a value"},
 		{"wrong column", func() error {
 			return scopetest.Check(bg, db, testmodel.Org, "orgid", 1, 2, newRow[full])
-		}, `no column is named "orgid"`},
+		}, `has no column "orgid"`},
+		{"key of another type", func() error {
+			return scopetest.Check(bg, db, scope.NewKey[string]("org"), "org_id", "a", "b", newRow[full])
+		}, `column "org_id" is a int64, not a string`},
 		{"failed insert", func() error {
 			return scopetest.Check(bg, db, testmodel.Org, "org_id", 1, 2, func() *full { return &full{Name: "banned"} })
 		}, "an insert under 1"},
 		{"no table", func() error { return check[noTable](db) }, "a count under"},
+		{"read hides the insert", func() error { return check[hidden](db) }, "rows after its insert, want"},
+		{"delete across scopes", func() error { return check[openWrite](db) }, "a delete under"},
+		{"bad descriptor", func() error { return check[badField](db) }, `scopetest: `},
+		{"row panics", func() error {
+			return scopetest.Check(bg, db, testmodel.Org, "org_id", 1, 2, func() *full { panic("no row") })
+		}, "scopetest: no row"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			err := c.check()
@@ -86,6 +94,31 @@ func TestScopetestIsolates(t *testing.T) {
 				t.Errorf("Check = %v; want an error naming %q", err, c.want)
 			}
 		})
+	}
+}
+
+// TestIsolatesRefusesMutableColumn: a scope's column that is not Immutable
+// fails Isolates, though the mixin's policy and hooks confine the entity:
+// an update could move a row to another scope.
+func TestIsolatesRefusesMutableColumn(t *testing.T) {
+	db := open(t)
+	rec := &recorder{TB: t}
+	scopetest.Isolates(rec, context.Background(), db, testmodel.Org, "org_id", 1, 2, newRow[mutable])
+	if want := `scopetest: scopetest_test.mutable: column "org_id" is mutable: make it Immutable`; !strings.Contains(rec.msg, want) {
+		t.Errorf("Isolates failed with %q, want %q", rec.msg, want)
+	}
+}
+
+// TestIsolatesRefusesNullableColumn: a scope's column that is nullable
+// fails Isolates: a row whose column is NULL is in no scope.
+func TestIsolatesRefusesNullableColumn(t *testing.T) {
+	db := open(t)
+	rec := &recorder{TB: t}
+	scopetest.Isolates(rec, context.Background(), db, testmodel.Org, "org_id", 1, 2, func() *nullable {
+		return &nullable{Name: fmt.Sprint("r-", next())}
+	})
+	if want := `scopetest: scopetest_test.nullable: column "org_id" is nullable`; !strings.Contains(rec.msg, want) {
+		t.Errorf("Isolates failed with %q, want %q", rec.msg, want)
 	}
 }
 
@@ -139,6 +172,10 @@ type (
 	noInsertCheck      struct{ row }
 	insertWithoutValue struct{ row }
 	noTable            struct{ row }
+	mutable            struct{ row }
+	hidden             struct{ row }
+	openWrite          struct{ row }
+	badField           struct{ row }
 )
 
 type row struct {
@@ -149,14 +186,17 @@ type row struct {
 
 func (r *row) set(name string) { r.Name = name }
 
+// rowColumns are the row entities' columns; org_id is Immutable.
+var rowColumns = []velox.ColumnDescriptor{
+	{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"},
+}
+
 // describe returns the descriptor of the row entity E, on table, with p and
 // h bound when not nil.
-func describe[E any](table string, p []func() velox.BoundPolicy, h []func() velox.BoundHooks) velox.Descriptor[E] {
+func describe[E any](table string, p []func() velox.Policy, h []func() []velox.Hook) velox.Descriptor[E] {
 	return velox.Descriptor[E]{
-		Table: table,
-		Columns: []velox.ColumnDescriptor{
-			{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"},
-		},
+		Table:      table,
+		Columns:    rowColumns,
 		PrimaryKey: []int{0},
 		FieldPtr: func(x *E, i int) any {
 			r := (*row)(unsafe.Pointer(x))
@@ -167,14 +207,21 @@ func describe[E any](table string, p []func() velox.BoundPolicy, h []func() velo
 	}
 }
 
+// orgPolicy and orgHooks list the scope's policy and hooks, as velox-gen
+// lists a mixin's.
+var (
+	orgPolicy = []func() velox.Policy{fixture.OrgPolicy}
+	orgHooks  = []func() []velox.Hook{fixture.OrgHooks}
+)
+
 // openReadPolicy is the scope's policy whose Read lets everything through
 // without a value.
-func openReadPolicy[E any]() velox.Policy[E] {
-	p := fixture.OrgPolicy[E]()
+func openReadPolicy() velox.Policy {
+	p := fixture.OrgPolicy()
 	read := p.Read
-	p.Read = func(ctx context.Context) (velox.Pred[E], error) {
+	p.Read = func(ctx context.Context) (velox.Cond, error) {
 		if _, ok := testmodel.Org.From(ctx); !ok {
-			return velox.Allow[E](), nil
+			return velox.Allow(), nil
 		}
 		return read(ctx)
 	}
@@ -183,9 +230,9 @@ func openReadPolicy[E any]() velox.Policy[E] {
 
 // noInsertPolicy is the scope's policy whose Insert checks only that the
 // context has a value, and not that the row is in it.
-func noInsertPolicy[E any]() velox.Policy[E] {
-	p := fixture.OrgPolicy[E]()
-	p.Insert = func(ctx context.Context, _ *E) error {
+func noInsertPolicy() velox.Policy {
+	p := fixture.OrgPolicy()
+	p.Insert = func(ctx context.Context, _ velox.Row) error {
 		if _, ok := testmodel.Org.From(ctx); !ok {
 			return scope.ErrNoScope
 		}
@@ -196,24 +243,26 @@ func noInsertPolicy[E any]() velox.Policy[E] {
 
 // insertWithoutValuePolicy is the scope's policy whose Insert lets a row
 // through without a value.
-func insertWithoutValuePolicy[E any]() velox.Policy[E] {
-	p := fixture.OrgPolicy[E]()
+func insertWithoutValuePolicy() velox.Policy {
+	p := fixture.OrgPolicy()
 	ins := p.Insert
-	p.Insert = func(ctx context.Context, x *E) error {
+	p.Insert = func(ctx context.Context, r velox.Row) error {
 		if _, ok := testmodel.Org.From(ctx); !ok {
 			return nil
 		}
-		return ins(ctx, x)
+		return ins(ctx, r)
 	}
 	return p
 }
 
 // banned refuses the name "banned".
-func banned(_ context.Context, x *full) error {
-	if x.Name == "banned" {
-		return velox.Deny("banned")
-	}
-	return nil
+func banned() velox.Policy {
+	return velox.Policy{Insert: func(_ context.Context, r velox.Row) error {
+		if r.Value("name") == "banned" {
+			return velox.Deny("banned")
+		}
+		return nil
+	}}
 }
 
 var (
@@ -224,13 +273,62 @@ var (
 	noInsertCheckMeta      velox.MetaOnce[noInsertCheck]
 	insertWithoutValueMeta velox.MetaOnce[insertWithoutValue]
 	noTableMeta            velox.MetaOnce[noTable]
+	mutableMeta            velox.MetaOnce[mutable]
+	nullableMeta           velox.MetaOnce[nullable]
+	hiddenMeta             velox.MetaOnce[hidden]
+	openWriteMeta          velox.MetaOnce[openWrite]
+	badFieldMeta           velox.MetaOnce[badField]
 )
+
+// hiddenPolicy is the scope's policy whose Read hides every row, so that
+// a's insert is not among a's rows.
+func hiddenPolicy() velox.Policy {
+	p := fixture.OrgPolicy()
+	read := p.Read
+	p.Read = func(ctx context.Context) (velox.Cond, error) {
+		if _, err := read(ctx); err != nil {
+			return velox.Cond{}, err
+		}
+		return velox.C("org_id").EQ(int64(-1)), nil
+	}
+	return p
+}
+
+// openWriteHooks are the scope's hooks and one that claims a delete
+// affected a row, as a hook that deletes across scopes would.
+func openWriteHooks() []velox.Hook {
+	return append(fixture.OrgHooks(), velox.On(func(velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(_ context.Context, m *velox.Mutation) error {
+			m.SetAffected(1)
+			return nil
+		})
+	}, velox.OpDelete))
+}
+
+func (*hidden) VeloxMeta() *velox.Meta[hidden] {
+	return hiddenMeta.Load(func() velox.Descriptor[hidden] {
+		return describe[hidden]("rows", []func() velox.Policy{hiddenPolicy}, orgHooks)
+	})
+}
+
+func (*openWrite) VeloxMeta() *velox.Meta[openWrite] {
+	return openWriteMeta.Load(func() velox.Descriptor[openWrite] {
+		return describe[openWrite]("rows", orgPolicy, []func() []velox.Hook{openWriteHooks})
+	})
+}
+
+// badField's descriptor has no primary key, so its metadata fails.
+func (*badField) VeloxMeta() *velox.Meta[badField] {
+	return badFieldMeta.Load(func() velox.Descriptor[badField] {
+		d := describe[badField]("rows", orgPolicy, orgHooks)
+		d.PrimaryKey = nil
+		return d
+	})
+}
 
 func (*full) VeloxMeta() *velox.Meta[full] {
 	return fullMeta.Load(func() velox.Descriptor[full] {
-		return describe[full]("rows", velox.BindPolicy(fixture.OrgPolicy[full], func() velox.Policy[full] {
-			return velox.Policy[full]{Insert: banned}
-		}), velox.BindHooks(fixture.OrgHooks[full]))
+		return describe[full]("rows", []func() velox.Policy{fixture.OrgPolicy, banned}, orgHooks)
 	})
 }
 
@@ -240,31 +338,60 @@ func (*unscoped) VeloxMeta() *velox.Meta[unscoped] {
 
 func (*fillOnly) VeloxMeta() *velox.Meta[fillOnly] {
 	return fillOnlyMeta.Load(func() velox.Descriptor[fillOnly] {
-		return describe[fillOnly]("rows", nil, velox.BindHooks(fixture.OrgHooks[fillOnly]))
+		return describe[fillOnly]("rows", nil, orgHooks)
 	})
 }
 
 func (*openRead) VeloxMeta() *velox.Meta[openRead] {
 	return openReadMeta.Load(func() velox.Descriptor[openRead] {
-		return describe[openRead]("rows", velox.BindPolicy(openReadPolicy[openRead]), velox.BindHooks(fixture.OrgHooks[openRead]))
+		return describe[openRead]("rows", []func() velox.Policy{openReadPolicy}, orgHooks)
 	})
 }
 
 func (*noInsertCheck) VeloxMeta() *velox.Meta[noInsertCheck] {
 	return noInsertCheckMeta.Load(func() velox.Descriptor[noInsertCheck] {
-		return describe[noInsertCheck]("rows", velox.BindPolicy(noInsertPolicy[noInsertCheck]), velox.BindHooks(fixture.OrgHooks[noInsertCheck]))
+		return describe[noInsertCheck]("rows", []func() velox.Policy{noInsertPolicy}, orgHooks)
 	})
 }
 
 func (*insertWithoutValue) VeloxMeta() *velox.Meta[insertWithoutValue] {
 	return insertWithoutValueMeta.Load(func() velox.Descriptor[insertWithoutValue] {
-		return describe[insertWithoutValue]("rows", velox.BindPolicy(insertWithoutValuePolicy[insertWithoutValue]),
-			velox.BindHooks(fixture.OrgHooks[insertWithoutValue]))
+		return describe[insertWithoutValue]("rows", []func() velox.Policy{insertWithoutValuePolicy}, orgHooks)
 	})
 }
 
 func (*noTable) VeloxMeta() *velox.Meta[noTable] {
 	return noTableMeta.Load(func() velox.Descriptor[noTable] {
-		return describe[noTable]("no_such_table", velox.BindPolicy(fixture.OrgPolicy[noTable]), velox.BindHooks(fixture.OrgHooks[noTable]))
+		return describe[noTable]("no_such_table", orgPolicy, orgHooks)
+	})
+}
+
+// mutable is confined by the scope, but its org_id is not Immutable.
+func (*mutable) VeloxMeta() *velox.Meta[mutable] {
+	return mutableMeta.Load(func() velox.Descriptor[mutable] {
+		d := describe[mutable]("rows", orgPolicy, orgHooks)
+		d.Columns = []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}}
+		return d
+	})
+}
+
+// nullable is confined by the scope, but its org_id, Immutable, is
+// nullable.
+type nullable struct {
+	ID    int64
+	OrgID *int64
+	Name  string
+}
+
+func (*nullable) VeloxMeta() *velox.Meta[nullable] {
+	return nullableMeta.Load(func() velox.Descriptor[nullable] {
+		return velox.Descriptor[nullable]{
+			Table:      "rows",
+			Columns:    rowColumns,
+			PrimaryKey: []int{0},
+			FieldPtr:   func(x *nullable, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Name}[i] },
+			Policy:     orgPolicy,
+			Hooks:      orgHooks,
+		}
 	})
 }

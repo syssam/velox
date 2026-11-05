@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/scope"
 )
@@ -96,7 +97,6 @@ var composeTrace []string
 // "hidden" and refuses to insert "banned"; the hooks, two, record the OrgID
 // they see.
 func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
-	name := velox.StringCol[E, string]{I: 2}
 	d := velox.Descriptor[E]{
 		Table: table,
 		Columns: []velox.ColumnDescriptor{
@@ -108,18 +108,18 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 			return [...]any{&r.ID, &r.OrgID, &r.Name}[i]
 		},
 	}
-	var policies []func() velox.Policy[E]
-	var hooks []func() []velox.Hook[E]
+	var policies []func() velox.Policy
+	var hooks []func() []velox.Hook
 	if table[1] == '1' { // a tenancy mixin's, first
-		policies = append(policies, func() velox.Policy[E] { return scope.By[E](composeOrg, "org_id").Policy() })
-		hooks = append(hooks, func() []velox.Hook[E] { return []velox.Hook[E]{scope.By[E](composeOrg, "org_id").Fill()} })
+		policies = append(policies, func() velox.Policy { return fixture.KeyPolicy(composeOrg, "org_id") })
+		hooks = append(hooks, func() []velox.Hook { return fixture.KeyHooks(composeOrg, "org_id") })
 	}
 	if table[2] == '1' {
-		policies = append(policies, func() velox.Policy[E] {
-			return velox.Policy[E]{
-				Read: func(context.Context) (velox.Pred[E], error) { return name.NEQ("hidden"), nil },
-				Insert: func(_ context.Context, x *E) error {
-					if row(x).Name == "banned" {
+		policies = append(policies, func() velox.Policy {
+			return velox.Policy{
+				Read: func(context.Context) (velox.Cond, error) { return velox.C("name").NEQ("hidden"), nil },
+				Insert: func(_ context.Context, r velox.Row) error {
+					if r.Value("name") == "banned" {
 						return errors.New("banned")
 					}
 					return nil
@@ -127,25 +127,21 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 			}
 		})
 	}
-	if len(policies) > 0 {
-		d.Policy = velox.BindPolicy(policies...)
-	}
+	d.Policy = policies
 	if table[3] == '1' {
-		hook := func(label string) velox.Hook[E] {
-			return func(next velox.Mutator[E]) velox.Mutator[E] {
-				return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
-					for _, x := range m.Rows() {
-						composeTrace = append(composeTrace, fmt.Sprintf("%s org=%d", label, row(x).OrgID))
+		hook := func(label string) velox.Hook {
+			return func(next velox.Mutator) velox.Mutator {
+				return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
+					for r := range m.Rows() {
+						composeTrace = append(composeTrace, fmt.Sprintf("%s org=%d", label, row(r.Entity().(*E)).OrgID))
 					}
 					return next.Mutate(ctx, m)
 				})
 			}
 		}
-		hooks = append(hooks, func() []velox.Hook[E] { return []velox.Hook[E]{hook("h1"), hook("h2")} })
+		hooks = append(hooks, func() []velox.Hook { return []velox.Hook{hook("h1"), hook("h2")} })
 	}
-	if len(hooks) > 0 {
-		d.Hooks = velox.BindHooks(hooks...)
-	}
+	d.Hooks = hooks
 	return d
 }
 

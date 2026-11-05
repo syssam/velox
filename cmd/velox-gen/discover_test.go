@@ -172,17 +172,16 @@ func (*Card) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("board", Board.Type).Ref("cards").Unique()}
 }
 `,
-		"schema/board_policy.go": "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen\"\n)\n\n" +
-			"func (*Board) Policy() velox.Policy[gen.Board] { return velox.Policy[gen.Board]{} }\n\n" +
-			"func (*Card) Hooks() []velox.Hook[gen.Card] { return nil }\n",
-		"cmd/app/main.go": linkRuntime["cmd/app/main.go"],
+		"schema/board_policy.go": "package schema\n\nimport \"github.com/syssam/velox\"\n\n" +
+			"func (*Board) Policy() velox.Policy { return velox.Policy{} }\n\n" +
+			"func (*Card) Hooks() []velox.Hook { return nil }\n",
 	}, tempModule)
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
 	board, _ := os.ReadFile(filepath.Join(dir, "gen", "board_velox.go"))
-	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "rt.BoardPolicy,"} {
-		if !strings.Contains(string(board), want) {
+	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "Policy: []func() velox.Policy{(&sch.Board{}).Policy},"} {
+		if !strings.Contains(squeeze(string(board)), want) {
 			t.Errorf("board_velox.go lacks %q:\n%s", want, board)
 		}
 	}
@@ -535,12 +534,12 @@ type Draft mixins.Base
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft_velox.go item_velox.go release_velox.go velox.go"; got != want {
 		t.Fatalf("plain: generated %s, want %s", got, want)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "item_policy.go"), "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen\"\n)\n\n"+
-		"func (Item) Policy() velox.Policy[gen.Item] { return velox.Policy[gen.Item]{} }\n")
+	writeFile(t, filepath.Join(dir, "schema", "item_policy.go"), "package schema\n\nimport \"github.com/syssam/velox\"\n\n"+
+		"func (Item) Policy() velox.Policy { return velox.Policy{} }\n")
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("with a Policy: %d %q", code, errs)
 	}
-	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft_velox.go item_velox.go release_velox.go runtime_velox.go velox.go"; got != want {
+	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft_velox.go item_velox.go release_velox.go velox.go"; got != want {
 		t.Errorf("with a Policy: generated %s, want %s", got, want)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {

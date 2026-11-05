@@ -41,7 +41,7 @@ func (*jOwner) VeloxMeta() *velox.Meta[jOwner] {
 			Table:        "j_owners",
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey:   []int{0},
-			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[fixture.JDoc]("Docs", 0, 1)},
+			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[fixture.JDoc]("docs", 0, 1)},
 			FieldPtr:     func(x *jOwner, i int) any { return &x.ID },
 			EdgeFieldPtr: func(x *jOwner, i int) any { return &x.Docs },
 		}

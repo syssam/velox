@@ -10,7 +10,6 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/hooks/auth"
 	"github.com/syssam/velox/examples/hooks/gen"
-	_ "github.com/syssam/velox/examples/hooks/gen/runtime" // binds the schema's hooks and policies
 	"github.com/syssam/velox/migrate"
 )
 
@@ -24,8 +23,9 @@ func TestUserFromContext(t *testing.T) {
 	}
 }
 
-// TestCreatedBy inserts through gen.Task, which lists the hook for inserts:
-// the context's user fills an empty column, and a column the caller set stays.
+// TestCreatedBy inserts through gen.Task, whose CreatedBy mixin fills
+// created_by on insert: the context's user fills an empty column, and a
+// column the caller set stays.
 func TestCreatedBy(t *testing.T) {
 	ctx := t.Context()
 	db, err := velox.Connect("sqlite", filepath.Join(t.TempDir(), "auth.db"))

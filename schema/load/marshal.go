@@ -168,12 +168,12 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 		if _, ok := reflect.PointerTo(vt).MethodByName(h); !ok {
 			continue
 		}
-		result := "velox.Policy[gen." + vt.Name() + "]"
+		result := "velox.Policy"
 		switch h {
 		case "Hooks":
-			result = "[]velox.Hook[gen." + vt.Name() + "]"
+			result = "[]velox.Hook"
 		case "Interceptors":
-			result = "[]velox.Interceptor[gen." + vt.Name() + "]"
+			result = "[]velox.Interceptor"
 		}
 		want := fmt.Sprintf("func (%s) %s() %s", vt.Name(), h, result)
 		article := "a"

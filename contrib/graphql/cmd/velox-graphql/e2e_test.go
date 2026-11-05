@@ -123,18 +123,34 @@ func (Secret) Annotations() []schema.Annotation { return []schema.Annotation{gra
 const e2eScope = `package schema
 
 import (
+	"context"
+
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
-
-	"example.com/app/gen"
 )
 
 var Org = scope.NewKey[int64]("org")
 
-func (User) Policy() velox.Policy[gen.User] { return scope.By[gen.User](Org, "org_id").Policy() }
+func (User) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := Org.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error { return Org.Match(ctx, r.Value("org_id")) },
+	}
+}
 
-func (User) Hooks() []velox.Hook[gen.User] {
-	return []velox.Hook[gen.User]{scope.By[gen.User](Org, "org_id").Fill()}
+func (User) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if org, ok := Org.From(ctx); ok {
+			return m.Fill("org_id", org)
+		}
+		return nil
+	}, velox.OpInsert)}
 }
 `
 
@@ -478,7 +494,6 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
-	_ "example.com/app/gen/runtime"
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -875,7 +890,6 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
-	_ "example.com/app/gen/runtime"
 	"example.com/app/ids"
 	"example.com/app/levels"
 	"example.com/app/schema"

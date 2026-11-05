@@ -3,7 +3,9 @@
 Status: accepted, 2026-11-04. Supersedes 0036's layout: gen/entity, the
 facade of re-exports and its plugin re-exports are gone. 0036's typed
 binds by name, `NotLinkedError` and MetaOnce's retry stay.
-Revised by 0038: the descriptor has no `Scope`.
+Revised by 0038: the descriptor has no `Scope`. Revised by 0039: every
+entity stays in gen, always; gen/runtime, its blank import and the runtime
+warning are gone; gen imports the schema.
 
 ## Context
 

@@ -461,8 +461,8 @@ func TestTableTypedConditions(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	for name, p := range map[string]velox.Pred[testmodel.Item]{
 		"the zero condition": {},
-		"Allow":              velox.Allow[testmodel.Item](),
-		"Not Allow":          velox.Not(velox.Allow[testmodel.Item]()),
+		"Allow":              velox.And[testmodel.Item](),
+		"Not Allow":          velox.Not(velox.And[testmodel.Item]()),
 		"EQ":                 It.SKU.EQ("a"),
 	} {
 		ws, wa, werr := db.Query[testmodel.Item]().Where(p).Limit(1).SQL(ctx)

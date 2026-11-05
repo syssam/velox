@@ -48,7 +48,6 @@ func (*Event) VeloxMeta() *velox.Meta[Event] { return eventMeta.Load(eventDescri
 
 // eventDescriptor describes Event to velox: its table, columns, edges and hooks.
 func eventDescriptor() velox.Descriptor[Event] {
-	veloxRuntime()
 	return velox.Descriptor[Event]{
 		Table: "events",
 		Columns: []velox.ColumnDescriptor{

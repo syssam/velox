@@ -66,7 +66,8 @@ func genModuleWith(t *testing.T, extra map[string]string, mk func(*testing.T, ma
 
 // withSchemaMethods makes the module of files with mk, but writes the files
 // that import the generated package after it: mk's go mod tidy cannot
-// resolve a package that velox-gen has not written yet.
+// resolve a package that velox-gen has not written yet. velox-gen refuses
+// such a schema; a test writes one to see the refusal.
 func withSchemaMethods(t *testing.T, files map[string]string, mk func(*testing.T, map[string]string) string) string {
 	t.Helper()
 	later := map[string]string{}
@@ -246,42 +247,36 @@ func TestCheckAndRewrite(t *testing.T) {
 	}
 }
 
-// schemaUserPolicy is a Policy for User, declared in the schema package.
-const schemaUserPolicy = "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen\"\n)\n\n" +
-	"func (User) Policy() velox.Policy[gen.User] { return velox.Policy[gen.User]{} }\n"
+// schemaUserPolicy is a Policy for User, declared in the schema package,
+// which does not import gen.
+const schemaUserPolicy = "package schema\n\nimport \"github.com/syssam/velox\"\n\n" +
+	"func (User) Policy() velox.Policy { return velox.Policy{} }\n"
 
-// linkRuntime is a program that links package runtime, as the application
-// does.
-var linkRuntime = map[string]string{"cmd/app/main.go": "package main\n\nimport _ \"example.com/app/gen/runtime\"\n\nfunc main() {}\n"}
-
-// The schema package's Policy, typed with gen, is bound by package runtime,
-// generated from nothing: the schema imports gen, which does not exist yet.
-// gen holds the entities and does not import the schema; gen/runtime binds
-// it. Removing the Policy removes gen/runtime, and gen reads the schema
-// itself again.
-func TestGenerateBindsSchemaMethods(t *testing.T) {
-	dir := genModule(t, withRuntimeLinked(map[string]string{"schema/user_policy.go": schemaUserPolicy}))
+// The schema package's Policy, which names no type of gen, is bound by the
+// entity's descriptor: gen imports the schema, as sch, and lists the method
+// value. No gen/runtime is written. Removing the Policy rewrites the
+// entity's file alone.
+func TestGenerateWithBehaviourWithoutGen(t *testing.T) {
+	dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
 	code, out, errs := runCLI(t, dir, "./schema")
-	if want := "gen/runtime/runtime.go\ngen/runtime_velox.go\ngen/tag_velox.go\ngen/user_velox.go\ngen/velox.go\n"; code != 0 || out != want || errs != "" {
+	if want := "gen/tag_velox.go\ngen/user_velox.go\ngen/velox.go\n"; code != 0 || out != want || errs != "" {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	if !strings.Contains(string(user), "rt := veloxRuntime()") || !strings.Contains(string(user), "rt.UserPolicy,") {
-		t.Errorf("user_velox.go does not bind the policy:\n%s", user)
+	for _, want := range []string{`sch "example.com/app/schema"`, "Policy: []func() velox.Policy{sch.User{}.Policy},"} {
+		if !strings.Contains(squeeze(string(user)), want) {
+			t.Errorf("user_velox.go lacks %q:\n%s", want, user)
+		}
 	}
-	if strings.Contains(string(user), "rt.UserHooks") {
+	if strings.Contains(string(user), "Hooks:") {
 		t.Errorf("user_velox.go binds hooks the user did not declare")
 	}
 	tag, _ := os.ReadFile(filepath.Join(dir, "gen", "tag_velox.go"))
-	if !strings.Contains(string(tag), "\tveloxRuntime()\n") || strings.Contains(string(tag), "rt.TagPolicy") {
-		t.Errorf("tag_velox.go does not check the runtime, or binds a policy:\n%s", tag)
+	if strings.Contains(string(tag), "example.com/app/schema") || strings.Contains(string(tag), "Policy:") {
+		t.Errorf("tag_velox.go imports the schema, or binds a policy:\n%s", tag)
 	}
-	rt, _ := os.ReadFile(filepath.Join(dir, "gen", "runtime", "runtime.go"))
-	for _, want := range []string{"package runtime\n", "UserPolicy: velox.BindPolicy[gen.User](sch.User{}.Policy),", `sch "example.com/app/schema"`, "\"example.com/app/gen\"\n",
-		"gen.SetVeloxRuntime(gen.VeloxRuntime{", `//	import _ "example.com/app/gen/runtime"`} {
-		if !strings.Contains(string(rt), want) {
-			t.Errorf("runtime.go lacks %q:\n%s", want, rt)
-		}
+	if _, err := os.Stat(filepath.Join(dir, "gen", "runtime")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("gen/runtime was written: %v", err)
 	}
 	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
 		t.Errorf("-check: %d %q %q", code, out, errs)
@@ -294,11 +289,8 @@ func TestGenerateBindsSchemaMethods(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs = runCLI(t, dir, "./schema")
-	if want := "gen/runtime/runtime.go\ngen/runtime_velox.go\ngen/tag_velox.go\ngen/user_velox.go\ngen/velox.go\n"; code != 0 || out != want || errs != "" {
+	if want := "gen/user_velox.go\n"; code != 0 || out != want || errs != "" {
 		t.Fatalf("without the policy: %d %q %q, want %q", code, out, errs, want)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "gen", "runtime")); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("gen/runtime is still there: %v", err)
 	}
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "tag_velox.go user_velox.go velox.go"; got != want {
 		t.Errorf("generated %s, want %s", got, want)
@@ -308,148 +300,84 @@ func TestGenerateBindsSchemaMethods(t *testing.T) {
 	}
 }
 
-// withRuntimeLinked is files with linkRuntime.
-func withRuntimeLinked(files map[string]string) map[string]string {
-	out := maps.Clone(files)
-	maps.Copy(out, linkRuntime)
-	return out
-}
-
-// velox-gen warns when gen/runtime exists and no package of the module, its
-// tests included, imports it; the warning names the line to add. A test that
-// imports it is enough.
-func TestGenerateWarnsWhenRuntimeIsNotLinked(t *testing.T) {
+// The gen/runtime package and runtime_velox.go an older velox-gen wrote
+// are velox-gen's files, so a run removes them; a file of the user's in
+// gen/runtime stays, and velox-gen names it.
+func TestSweepRemovesGenRuntime(t *testing.T) {
 	dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
-	code, _, errs := runCLI(t, dir, "./schema")
-	want := "velox-gen: warning: no package of the module in . imports \"example.com/app/gen/runtime\", which binds the schema's hooks, policies and defaults, " +
-		"and a statement on an entity fails without it: add import _ \"example.com/app/gen/runtime\" to the program's main package, and to each test package that uses the entities\n"
-	if code != 0 || errs != want {
-		t.Fatalf("%d %q, want %q", code, errs, want)
+	const h = "// Code generated by velox-gen. DO NOT EDIT.\n\n"
+	writeFile(t, filepath.Join(dir, "gen", "runtime", "runtime.go"), h+"// Package runtime binds the schema.\npackage runtime\n")
+	writeFile(t, filepath.Join(dir, "gen", "runtime_velox.go"), h+"package gen\n\n// VeloxRuntime is what package runtime sets.\ntype VeloxRuntime struct{}\n")
+	if code, _, errs := runCLI(t, dir, "-check", "./schema"); code != 3 || !strings.Contains(errs, "velox-gen: gen/runtime/runtime.go is out of date\n") ||
+		!strings.Contains(errs, "velox-gen: gen/runtime_velox.go is out of date\n") {
+		t.Errorf("-check: %d %q", code, errs)
 	}
-	if code, _, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || errs != want {
-		t.Errorf("-check: %d %q, want %q", code, errs, want)
-	}
-	// A comment that names the import is no import.
-	writeFile(t, filepath.Join(dir, "app", "doc.go"), "// Package app says import _ \"example.com/app/gen/runtime\".\npackage app\n")
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != want {
-		t.Errorf("with the comment: %d %q, want %q", code, errs, want)
-	}
-	writeFile(t, filepath.Join(dir, "app", "app_test.go"), "package app_test\n\nimport _ \"example.com/app/gen/runtime\"\n")
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
-		t.Errorf("linked by a test: %d %q", code, errs)
-	}
-}
-
-// A schema that imports gen with neither Policy nor Hooks, whose default is
-// a named function gen can call, needs no binding: velox-gen writes no
-// gen/runtime, and gen is as it was. A closure default needs one: gen/runtime
-// binds it.
-func TestGenerateNoRuntimeWhenNothingIsBound(t *testing.T) {
-	user := strings.Replace(strings.Replace(genUserSchema, `field.String("name")`, `field.String("name"), field.Time("created_at").Default(time.Now)`, 1),
-		"import (\n", "import (\n\t\"time\"\n\n", 1)
-	dir := genModule(t, map[string]string{"schema/user.go": user})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
-		t.Fatalf("generate: %d %q", code, errs)
-	}
-	writeFile(t, filepath.Join(dir, "schema", "use.go"), "package schema\n\nimport \"example.com/app/gen\"\n\n"+
-		"// Names is a helper typed with gen.\nfunc Names(us []gen.User) []string {\n\tvar out []string\n\tfor _, u := range us {\n\t\tout = append(out, u.Name)\n\t}\n\treturn out\n}\n")
-	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 || out != "" || errs != "" {
-		t.Fatalf("with the import of gen: %d %q %q", code, out, errs)
-	}
-	src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	if !strings.Contains(string(src), "return time.Now() }") || strings.Contains(string(src), "veloxRuntime") || strings.Contains(string(src), "example.com/app/schema") {
-		t.Errorf("user_velox.go does not call time.Now, checks a runtime or imports the schema:\n%s", src)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "gen", "runtime")); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("gen/runtime was written: %v", err)
-	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
-		t.Errorf("verify: %d %q %q", code, out, errs)
-	}
-	noVerifyDirs(t, dir)
-	writeFile(t, filepath.Join(dir, "schema", "user.go"), strings.Replace(user, "Default(time.Now)", "Default(func() time.Time { return time.Now() })", 1))
 	code, out, errs := runCLI(t, dir, "./schema")
-	if !strings.Contains(out, "gen/runtime/runtime.go\n") || code != 0 || !strings.Contains(errs, "warning: no package of the module") {
-		t.Fatalf("with a closure: %d %q %q", code, out, errs)
+	if code != 0 || errs != "" || !strings.Contains(out, "gen/runtime/runtime.go\n") || !strings.Contains(out, "gen/runtime_velox.go\n") {
+		t.Fatalf("%d %q %q", code, out, errs)
 	}
-	if rt, _ := os.ReadFile(filepath.Join(dir, "gen", "runtime", "runtime.go")); !strings.Contains(string(rt), "UserCreatedAtDefault: userCreatedAt.Default.(func() time.Time),") {
-		t.Errorf("runtime.go does not bind the closure:\n%s", rt)
-	}
-}
-
-// A plain gen with a closure default imports the schema. A first Policy,
-// typed with gen, makes a cycle with it, which velox-gen does not need to
-// compile: it generates, gen no longer imports the schema, and gen/runtime
-// binds the default and the Policy.
-func TestGenerateFirstPolicyOverAGenThatImportsTheSchema(t *testing.T) {
-	user := strings.Replace(strings.Replace(genUserSchema, `field.String("name")`, `field.String("name"), field.Time("created_at").Default(func() time.Time { return time.Now() })`, 1),
-		"import (\n", "import (\n\t\"time\"\n\n", 1)
-	dir := genModule(t, withRuntimeLinked(map[string]string{"schema/user.go": user}))
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
-		t.Fatalf("plain: %d %q", code, errs)
-	}
-	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(string(src), `sch "example.com/app/schema"`) {
-		t.Fatalf("the plain gen does not import the schema:\n%s", src)
-	}
-	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
-		t.Fatalf("with the Policy: %d %q", code, errs)
-	}
-	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); strings.Contains(string(src), "example.com/app/schema") {
-		t.Errorf("gen still imports the schema:\n%s", src)
-	}
-	rt, _ := os.ReadFile(filepath.Join(dir, "gen", "runtime", "runtime.go"))
-	for _, want := range []string{" velox.BindPolicy[gen.User](sch.User{}.Policy),\n", " userCreatedAt.Default.(func() time.Time),\n"} {
-		if !strings.Contains(string(rt), want) {
-			t.Errorf("runtime.go lacks %q:\n%s", want, rt)
+	for _, p := range []string{"runtime", "runtime_velox.go"} {
+		if _, err := os.Stat(filepath.Join(dir, "gen", p)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("gen/%s is still there: %v", p, err)
 		}
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
+	noVerifyDirs(t, dir)
+	writeFile(t, filepath.Join(dir, "gen", "runtime", "mine.go"), "package runtime\n\n// Hello greets.\nfunc Hello() string { return \"hi\" }\n")
+	code, _, errs = runCLI(t, dir, "./schema")
+	want := "velox-gen: warning: gen/runtime/mine.go is yours, and stays; velox-gen no longer writes package runtime: the generated package binds the schema itself, and no program imports gen/runtime: delete the file\n"
+	if code != 0 || errs != want {
+		t.Errorf("the user's file: %d %q, want %q", code, errs, want)
+	}
 }
 
-// A first Policy written with gen.User generates, even where the plain gen
-// already exists. The schema package may not import gen/runtime, which
-// imports it: directly, it is refused at the import, and through a helper,
-// with the chain. A helper that imports gen is fine.
-func TestGenerateRefusesSchemaImportingRuntime(t *testing.T) {
-	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+// A closure default binds in the entity's file, which imports the schema.
+// A schema package that imports gen is refused, with or without behaviour:
+// directly, at the import, and through a helper, with the chain. A first
+// Policy over that gen binds beside the default.
+func TestGenerateRefusesSchemaImportingGen(t *testing.T) {
+	user := strings.Replace(strings.Replace(genUserSchema, `field.String("name")`, `field.String("name"), field.Time("created_at").Default(func() time.Time { return time.Now() })`, 1),
+		"import (\n", "import (\n\t\"time\"\n\n", 1)
+	dir := genModule(t, map[string]string{"schema/user.go": user})
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
+	src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
+	if !strings.Contains(string(src), `sch "example.com/app/schema"`) || !strings.Contains(string(src), `schema.FieldDescriptor(&sch.User{}, "created_at")`) {
+		t.Fatalf("user_velox.go does not read the closure from the schema:\n%s", src)
+	}
 	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy)
-	writeFile(t, filepath.Join(dir, "app", "app_test.go"), "package app_test\n\nimport _ \"example.com/app/gen/runtime\"\n")
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
-		t.Fatalf("with gen.User: %d %q", code, errs)
+		t.Fatalf("with the Policy: %d %q", code, errs)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "link.go"), "package schema\n\nimport _ \"example.com/app/gen/runtime\"\n")
-	code, out, errs := runCLI(t, dir, "./schema")
-	want := "velox-gen: schema/link.go:3: the schema package imports \"example.com/app/gen/runtime\", which imports the schema package to bind its Hooks and Policy: " +
-		"import \"example.com/app/gen\" for the entities, and \"example.com/app/gen/runtime\" only in the program's main package and its tests\n"
-	if code != 1 || out != "" || errs != want {
-		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
-	}
-	if code, _, errs := runCLI(t, dir, "-check", "./schema"); code != 1 || errs != want {
-		t.Errorf("-check: %d %q, want %q", code, errs, want)
-	}
-	if err := os.Remove(filepath.Join(dir, "schema", "link.go")); err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\nimport _ \"example.com/app/gen/runtime\"\n")
-	writeFile(t, filepath.Join(dir, "schema", "use.go"), "package schema\n\nimport _ \"example.com/app/helper\"\n")
-	code, out, errs = runCLI(t, dir, "./schema")
-	want = "velox-gen: example.com/app/schema imports example.com/app/helper imports example.com/app/gen/runtime: package runtime imports the schema package to bind its Hooks and Policy, " +
-		"so no package the schema imports may import it; import \"example.com/app/gen\" for the entities\n"
-	if code != 1 || out != "" || errs != want {
-		t.Fatalf("helper: %d %q %q, want %q", code, out, errs, want)
-	}
-	writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\nimport \"example.com/app/gen\"\n\n// Users is gen.Users.\nvar Users = gen.Users\n")
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
-		t.Fatalf("helper of gen: %d %q", code, errs)
+	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(squeeze(string(src)), "Policy: []func() velox.Policy{sch.User{}.Policy},") {
+		t.Errorf("user_velox.go does not bind the policy:\n%s", src)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+	noVerifyDirs(t, dir)
+
+	const reason = "the schema declares behaviour by column name and does not use gen, which imports the schema; move the code that needs gen out of the schema package\n"
+	writeFile(t, filepath.Join(dir, "schema", "use.go"), "package schema\n\nimport \"example.com/app/gen\"\n\n// Users is gen.Users.\nvar Users = gen.Users\n")
+	want := "velox-gen: schema/use.go:3: the schema package imports example.com/app/gen: " + reason
+	for _, args := range [][]string{{"./schema"}, {"-check", "./schema"}} {
+		if code, out, errs := runCLI(t, dir, args...); code != 1 || out != "" || errs != want {
+			t.Errorf("%v: %d %q %q, want %q", args, code, out, errs, want)
+		}
+	}
+	if err := os.Remove(filepath.Join(dir, "schema", "use.go")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\nimport \"example.com/app/gen\"\n\n// Users is gen.Users.\nvar Users = gen.Users\n")
+	writeFile(t, filepath.Join(dir, "schema", "use.go"), "package schema\n\nimport _ \"example.com/app/helper\"\n")
+	want = "velox-gen: example.com/app/schema imports example.com/app/helper imports example.com/app/gen: " + reason
+	for _, args := range [][]string{{"./schema"}, {"-check", "./schema"}} {
+		if code, out, errs := runCLI(t, dir, args...); code != 1 || out != "" || errs != want {
+			t.Errorf("helper %v: %d %q %q, want %q", args, code, out, errs, want)
+		}
 	}
 }
 
@@ -458,7 +386,7 @@ func TestGenerateRefusesSchemaImportingRuntime(t *testing.T) {
 // names those files, and the next run removes them; a file of the user's
 // in gen/entity stays, and velox-gen names it.
 func TestGenerateSweepsTheOldEntityPackage(t *testing.T) {
-	dir := genModule(t, withRuntimeLinked(map[string]string{"schema/user_policy.go": schemaUserPolicy}))
+	dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
 	const h = "// Code generated by velox-gen. DO NOT EDIT.\n\n"
 	for name, src := range map[string]string{
 		"entity/entity.go":        h + "// Package entity holds the entities.\npackage entity\n",
@@ -530,17 +458,16 @@ func TestGeneratePackageDoc(t *testing.T) {
 }
 
 // A Policy and Hooks added to the schema after generation are not bound:
-// -check says gen's files are out of date, and gen/runtime's missing.
+// -check says the entity's file is out of date, and no other.
 func TestPolicyAddedAfterGenerationFailsCheck(t *testing.T) {
-	dir := genModule(t, linkRuntime)
+	dir := genModule(t, nil)
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
 	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy+
-		"\nfunc (User) Hooks() []velox.Hook[gen.User] { return nil }\n")
+		"\nfunc (User) Hooks() []velox.Hook { return nil }\n")
 	code, out, errs := runCLI(t, dir, "-check", "./schema")
-	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/user_velox.go is out of date\n") ||
-		!strings.Contains(errs, "velox-gen: gen/runtime_velox.go is out of date\n") || !strings.Contains(errs, "velox-gen: gen/runtime/runtime.go is out of date\n") || !strings.Contains(errs, "velox-gen: gen/tag_velox.go is out of date\n") {
+	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/user_velox.go is out of date\n") || strings.Contains(errs, "tag_velox.go") {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
 	// Regenerating binds both, and the check passes.
@@ -608,10 +535,12 @@ func TestGenerateRefusesARedeclaredType(t *testing.T) {
 // is written. So is one in the schema package of another shape.
 func TestGenerateRefusesMisplacedMethods(t *testing.T) {
 	for _, c := range []struct{ name, file, src, want string }{
-		{"in gen", "gen/user_policy.go", "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n",
-			"velox-gen: gen/user_policy.go:5: declares User.Policy in the generated package; declare it in the schema package, on User: func (User) Policy() velox.Policy[gen.User]\n"},
-		{"wrong shape", "schema/user_policy.go", "package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (User) Policy() *velox.Policy[User] { return nil }\n",
-			"velox-gen: schema/user_policy.go:5: User.Policy must take nothing and return velox.Policy[gen.User] (func (User) Policy() velox.Policy[gen.User])\n"},
+		{"in gen", "gen/user_policy.go", "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*User) Policy() velox.Policy { return velox.Policy{} }\n",
+			"velox-gen: gen/user_policy.go:5: declares User.Policy in the generated package; declare it in the schema package, on User: func (User) Policy() velox.Policy\n"},
+		{"wrong shape", "schema/user_policy.go", "package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (User) Policy() *velox.Policy { return nil }\n",
+			"velox-gen: schema/user_policy.go:5: User.Policy must take nothing and return velox.Policy: func (User) Policy() velox.Policy\n"},
+		{"typed", "schema/user_policy.go", "package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (User) Policy() velox.Policy[int] { return velox.Policy[int]{} }\n",
+			"velox-gen: schema/user_policy.go:5: User.Policy must take nothing and return velox.Policy: func (User) Policy() velox.Policy\n"},
 	} {
 		dir := genModule(t, map[string]string{c.file: c.src})
 		code, out, errs := runCLI(t, dir, "./schema")
@@ -648,13 +577,13 @@ func TestGenerateRefusesABidiJoinPolicy(t *testing.T) {
 	}
 	dir := withSchemaMethods(t, map[string]string{
 		"schema/schema.go": genFriendsSchema,
-		"schema/user_friend_policy.go": "package schema\n\nimport (\n\t\"context\"\n\n\t\"github.com/syssam/velox\"\n\n\t\"example.com/app/gen\"\n)\n\n" +
+		"schema/user_friend_policy.go": "package schema\n\nimport (\n\t\"context\"\n\n\t\"github.com/syssam/velox\"\n)\n\n" +
 			"// UserFriend is the join entity of User's friends, which has no schema.\ntype UserFriend struct{}\n\n" +
-			"func (UserFriend) Policy() velox.Policy[gen.UserFriend] {\n\treturn velox.Policy[gen.UserFriend]{\n\t\t" +
-			"Write: func(context.Context) (velox.Pred[gen.UserFriend], error) { return velox.Allow[gen.UserFriend](), nil },\n\t}\n}\n",
+			"func (UserFriend) Policy() velox.Policy {\n\treturn velox.Policy{\n\t\t" +
+			"Write: func(context.Context) (velox.Cond, error) { return velox.Allow(), nil },\n\t}\n}\n",
 	}, tempModule)
 	code, out, errs := runCLI(t, dir, "./schema")
-	want := "velox-gen: schema/user_friend_policy.go:16: UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
+	want := "velox-gen: schema/user_friend_policy.go:14: UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
 	if code != 1 || out != "" || errs != want {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
@@ -932,24 +861,24 @@ func TestVerifyGeneratedChecksRelations(t *testing.T) {
 		}
 	}
 	// A key column that does not exist: both entities build, the relation does not.
-	edit("user_velox.go", `velox.EdgeTo[Post]("Posts", userColID, postColAuthorID)`, `velox.EdgeTo[Post]("Posts", userColID, 9)`)
+	edit("user_velox.go", `velox.EdgeTo[Post]("posts", userColID, postColAuthorID)`, `velox.EdgeTo[Post]("posts", userColID, 9)`)
 	code, out, errs = runCLI(t, dir, "verify", "-out", "gen", "./schema")
-	if code != 1 || out != "velox-gen verify: 2 entities, 1 with errors\n" || !strings.Contains(errs, "User.Posts: its key names column 9") {
+	if code != 1 || out != "velox-gen verify: 2 entities, 1 with errors\n" || !strings.Contains(errs, "User.posts: its key names column 9") {
 		t.Errorf("a bad key: %d %q %q", code, out, errs)
 	}
-	edit("user_velox.go", `velox.EdgeTo[Post]("Posts", userColID, 9)`, `velox.EdgeTo[Post]("Posts", userColID, postColAuthorID)`)
+	edit("user_velox.go", `velox.EdgeTo[Post]("posts", userColID, 9)`, `velox.EdgeTo[Post]("posts", userColID, postColAuthorID)`)
 	// A handle that names another entity than the field holds: the target comes
 	// from the handle, so verify must compare it with the field.
 	edit("user_velox.go", "velox.Rel[User, Post]", "velox.Rel[User, User]")
 	code, out, errs = runCLI(t, dir, "verify", "-out", "gen", "./schema")
-	if code != 1 || !strings.Contains(errs, "User.Posts: the field is a velox.Many[") || !strings.Contains(errs, "but the Rel handle names") || !strings.Contains(out, "with errors") {
+	if code != 1 || !strings.Contains(errs, "User.posts: the field is a velox.Many[") || !strings.Contains(errs, "but the Rel handle names") || !strings.Contains(out, "with errors") {
 		t.Errorf("a mismatched handle: %d %q %q", code, out, errs)
 	}
 	edit("user_velox.go", "velox.Rel[User, User]", "velox.Rel[User, Post]")
 	// A target whose metadata is broken: the relation names it, and says so.
 	edit("post_velox.go", "PrimaryKey: []int{postColID},", "PrimaryKey: []int{9},")
 	code, out, errs = runCLI(t, dir, "verify", "-out", "gen", "./schema")
-	if code != 1 || !strings.Contains(errs, "User.Posts: its target") || !strings.Contains(errs, "the primary key names column 9") || !strings.Contains(out, "with errors") {
+	if code != 1 || !strings.Contains(errs, "User.posts: its target") || !strings.Contains(errs, "the primary key names column 9") || !strings.Contains(out, "with errors") {
 		t.Errorf("a broken target: %d %q %q", code, out, errs)
 	}
 	noVerifyDirs(t, dir)
@@ -1049,15 +978,15 @@ func TestVerifyGeneratedChecksThroughRelations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	re := regexp.MustCompile(`(velox\.EdgeThrough\[UserGroup, Group\]\("Groups", \w+, \w+, )\w+(, \w+\))`)
+	re := regexp.MustCompile(`(velox\.EdgeThrough\[UserGroup, Group\]\("groups", \w+, \w+, )\w+(, \w+\))`)
 	if !re.Match(b) {
-		t.Fatalf("no EdgeThrough for Groups in\n%s", b)
+		t.Fatalf("no EdgeThrough for groups in\n%s", b)
 	}
 	if err := os.WriteFile(p, re.ReplaceAll(b, []byte("${1}9${2}")), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema")
-	if code != 1 || !strings.Contains(errs, "User.Groups") || !strings.Contains(out, "with errors") {
+	if code != 1 || !strings.Contains(errs, "User.groups") || !strings.Contains(out, "with errors") {
 		t.Errorf("a broken through relation: %d %q %q", code, out, errs)
 	}
 	noVerifyDirs(t, dir)
@@ -1360,6 +1289,8 @@ type Order struct{ base }
 const genInOrgUserSchema = `package schema
 
 import (
+	"context"
+
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
@@ -1373,9 +1304,27 @@ type InOrg struct{ mixin.Schema }
 
 func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
 
-func (InOrg) Policy[E any]() velox.Policy[E] { return scope.By[E](OrgKey, "org_id").Policy() }
+func (InOrg) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := OrgKey.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error { return OrgKey.Match(ctx, r.Value("org_id")) },
+	}
+}
 
-func (InOrg) Hooks[E any]() []velox.Hook[E] { return []velox.Hook[E]{scope.By[E](OrgKey, "org_id").Fill()} }
+func (InOrg) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if org, ok := OrgKey.From(ctx); ok {
+			return m.Fill("org_id", org)
+		}
+		return nil
+	}, velox.OpInsert)}
+}
 
 type User struct{ schema.Schema }
 
@@ -1384,12 +1333,12 @@ func (User) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
 func (User) Fields() []schema.Field { return []schema.Field{field.String("name")} }
 `
 
-// A tenancy mixin over package scope is bound as any mixin is: package
-// runtime binds its Policy before the user's and its Hooks, user_velox.go
-// names the bound lists and no scope, no scope_velox.go is written, and
-// -check and verify, which builds the generated package, agree.
+// A tenancy mixin over package scope is bound as any mixin is: the entity's
+// descriptor lists its Policy before the user's, and its Hooks, and names no
+// scope; no scope_velox.go is written, and -check and verify, which builds
+// the generated package, agree.
 func TestGenerateTenancyMixin(t *testing.T) {
-	dir := genModule(t, withRuntimeLinked(map[string]string{"schema/user.go": genInOrgUserSchema, "schema/user_policy.go": schemaUserPolicy}))
+	dir := genModule(t, map[string]string{"schema/user.go": genInOrgUserSchema, "schema/user_policy.go": schemaUserPolicy})
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
@@ -1397,14 +1346,13 @@ func TestGenerateTenancyMixin(t *testing.T) {
 		t.Errorf("scope_velox.go is written: %v", err)
 	}
 	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
-	if strings.Contains(string(user), "Scope") || !strings.Contains(string(user), "rt.UserPolicy,") || !strings.Contains(string(user), "rt.UserHooks,") {
-		t.Errorf("user_velox.go does not name the bound policy and hooks alone:\n%s", user)
-	}
-	rt, _ := os.ReadFile(filepath.Join(dir, "gen", "runtime", "runtime.go"))
-	for _, want := range []string{"velox.BindPolicy[gen.User](sch.InOrg{}.Policy, sch.User{}.Policy)", "velox.BindHooks[gen.User](sch.InOrg{}.Hooks)"} {
-		if !strings.Contains(string(rt), want) {
-			t.Errorf("runtime.go lacks %s:\n%s", want, rt)
+	for _, want := range []string{"Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.User{}.Policy},", "Hooks: []func() []velox.Hook{sch.InOrg{}.Hooks},"} {
+		if !strings.Contains(squeeze(string(user)), want) {
+			t.Errorf("user_velox.go lacks %s:\n%s", want, user)
 		}
+	}
+	if strings.Contains(string(user), "Scope") {
+		t.Errorf("user_velox.go names a scope:\n%s", user)
 	}
 	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
 		t.Errorf("-check: %d %q %q", code, out, errs)
@@ -1448,10 +1396,10 @@ func TestGenerateKeepsAUserMethodOnAnEntity(t *testing.T) {
 	}
 }
 
-// A helper that imports gen/runtime and that the schema's structure reaches
+// A helper that imports gen and that the schema's structure reaches
 // (Fields calls it, or a blank import keeps it) makes an import cycle, since
-// gen/runtime imports the schema. velox-gen names the chain and the way
-// out, rather than go list's bare "import cycle not allowed".
+// gen imports the schema. velox-gen names the chain and the way out, rather
+// than go list's bare "import cycle not allowed".
 func TestGenerateNamesTheChainOfACycle(t *testing.T) {
 	for _, c := range []struct{ name, use string }{
 		{"fields", "package schema\n\nimport (\n\t\"github.com/syssam/velox/schema\"\n\t\"github.com/syssam/velox/schema/field\"\n\n\t\"example.com/app/helper\"\n)\n\n" +
@@ -1464,10 +1412,10 @@ func TestGenerateNamesTheChainOfACycle(t *testing.T) {
 			if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 				t.Fatalf("generate: %d %q", code, errs)
 			}
-			writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\nimport _ \"example.com/app/gen/runtime\"\n\n// Name is a field's name.\nfunc Name() string { return \"title\" }\n")
+			writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\nimport _ \"example.com/app/gen\"\n\n// Name is a field's name.\nfunc Name() string { return \"title\" }\n")
 			writeFile(t, filepath.Join(dir, "schema", "use.go"), c.use)
-			want := "velox-gen: example.com/app/schema imports example.com/app/helper imports example.com/app/gen/runtime: package runtime imports the schema package to bind its Hooks and Policy, " +
-				"so no package the schema imports may import it; import \"example.com/app/gen\" for the entities\n"
+			want := "velox-gen: example.com/app/schema imports example.com/app/helper imports example.com/app/gen: " +
+				"the schema declares behaviour by column name and does not use gen, which imports the schema; move the code that needs gen out of the schema package\n"
 			for _, args := range [][]string{{"./schema"}, {"-check", "./schema"}} {
 				if code, out, errs := runCLI(t, dir, args...); code != 1 || out != "" || errs != want {
 					t.Errorf("%v: %d %q %q, want %q", args, code, out, errs, want)
@@ -1484,14 +1432,13 @@ func TestGenerateCompileErrorInARewrittenFile(t *testing.T) {
 	dir := genModule(t, nil)
 	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy+"\nfunc init() { _ = undefinedName }\n")
 	code, out, errs := runCLI(t, dir, "./schema")
-	if code != 1 || out != "" || !strings.Contains(errs, "schema/user_policy.go:11:") || !strings.Contains(errs, "undefinedName") || strings.Contains(errs, ".velox-gen") || strings.Contains(errs, "overlay") {
-		t.Errorf("%d %q %q, want the error at schema/user_policy.go:11", code, out, errs)
+	if code != 1 || out != "" || !strings.Contains(errs, "schema/user_policy.go:7:") || !strings.Contains(errs, "undefinedName") || strings.Contains(errs, ".velox-gen") || strings.Contains(errs, "overlay") {
+		t.Errorf("%d %q %q, want the error at schema/user_policy.go:7", code, out, errs)
 	}
 }
 
-// genInOrg is a mixin, InOrg, whose Policy names its column with col, and
-// which User lists.
-func genInOrg(col string) map[string]string {
+// genInOrg is a mixin, InOrg, whose Policy is policy, and which User lists.
+func genInOrg(policy string) map[string]string {
 	return map[string]string{
 		"schema/inorg.go": `package schema
 
@@ -1502,68 +1449,55 @@ import (
 	"github.com/syssam/velox/schema/mixin"
 )
 
-const orgCol = "org_id"
-
 type InOrg struct{ mixin.Schema }
 
 func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id")} }
 
-func (InOrg) Policy[E any]() velox.Policy[E] {
-	_ = velox.Field[E, int64](` + col + `)
-	return velox.Policy[E]{}
-}
-`,
+` + policy,
 		"schema/user.go": strings.Replace(genUserSchema, "type User struct{ schema.Schema }\n",
 			"type User struct{ schema.Schema }\n\nfunc (User) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }\n", 1),
 	}
 }
 
-// A mixin's Policy binds in gen when the schema does not import gen, and in
-// package runtime, generated from nothing, when it does; a velox.Field name
-// velox-gen cannot read is a warning with its line, and a wrong one is
-// refused at its line, as is a mixin method of the wrong shape.
+// A mixin's Policy binds in the entity's descriptor, alone and before the
+// schema's own; a mixin method of the wrong shape, or generic, is refused
+// at its line.
 func TestGenerateMixinBehaviour(t *testing.T) {
-	dir := genModule(t, genInOrg(`"org_id"`))
+	const policy = "func (InOrg) Policy() velox.Policy {\n\t_ = velox.C(\"org_id\")\n\treturn velox.Policy{}\n}\n"
+	dir := genModule(t, genInOrg(policy))
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
-		t.Fatalf("plain: %d %q", code, errs)
+		t.Fatalf("mixin: %d %q", code, errs)
 	}
-	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(string(src), "velox.BindPolicy[User](sch.InOrg{}.Policy),") {
+	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(squeeze(string(src)), "Policy: []func() velox.Policy{sch.InOrg{}.Policy},") {
 		t.Errorf("gen does not bind the mixin:\n%s", src)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
+	noVerifyDirs(t, dir)
 
-	// The schema imports gen, which is gone: package runtime binds both.
-	if err := os.RemoveAll(filepath.Join(dir, "gen")); err != nil {
-		t.Fatal(err)
-	}
 	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy)
-	writeFile(t, filepath.Join(dir, "cmd", "app", "main.go"), linkRuntime["cmd/app/main.go"])
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
-		t.Fatalf("bootstrap: %d %q", code, errs)
+		t.Fatalf("with the schema's: %d %q", code, errs)
 	}
-	rt, _ := os.ReadFile(filepath.Join(dir, "gen", "runtime", "runtime.go"))
-	for _, want := range []string{"UserPolicy: velox.BindPolicy[gen.User](sch.InOrg{}.Policy, sch.User{}.Policy),", "//\tUser  Policy: InOrg, User\n"} {
-		if !strings.Contains(string(rt), want) {
-			t.Errorf("runtime.go lacks %q:\n%s", want, rt)
-		}
+	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go")); !strings.Contains(squeeze(string(src)), "Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.User{}.Policy},") {
+		t.Errorf("gen does not bind the mixin's before the schema's:\n%s", src)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
+	noVerifyDirs(t, dir)
 
-	writeFile(t, filepath.Join(dir, "schema", "inorg.go"), genInOrg("orgCol")["schema/inorg.go"])
-	want := "velox-gen: warning: schema/inorg.go:17: velox.Field[E, int64](orgCol) names its column with a value velox-gen cannot read; velox checks it when it builds each entity's metadata\n"
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != want {
-		t.Errorf("not a literal: %d %q, want %q", code, errs, want)
-	}
-	writeFile(t, filepath.Join(dir, "schema", "inorg.go"), genInOrg(`"org"`)["schema/inorg.go"])
-	if code, _, errs := runCLI(t, dir, "./schema"); code == 0 || !strings.Contains(errs, `schema/inorg.go:17: schema User: velox.Field[E, int64]("org"): User, which lists InOrg, has no column "org"`) {
-		t.Errorf("a wrong name: %d %q", code, errs)
-	}
-	writeFile(t, filepath.Join(dir, "schema", "inorg.go"), strings.Replace(genInOrg(`"org_id"`)["schema/inorg.go"], "Policy[E any]() velox.Policy[E]", "Policy[E any]() *velox.Policy[E]", 1))
-	if code, _, errs := runCLI(t, dir, "./schema"); code == 0 || !strings.Contains(errs, "schema/inorg.go:16: InOrg.Policy must return velox.Policy[E]") {
+	writeFile(t, filepath.Join(dir, "schema", "inorg.go"), genInOrg("func (InOrg) Policy() *velox.Policy { return nil }\n")["schema/inorg.go"])
+	if code, _, errs := runCLI(t, dir, "./schema"); code == 0 || !strings.Contains(errs, "schema/inorg.go:14: InOrg.Policy must take nothing and return velox.Policy;") {
 		t.Errorf("a wrong shape: %d %q", code, errs)
 	}
+	writeFile(t, filepath.Join(dir, "schema", "inorg.go"), genInOrg("func (InOrg) Policy[E any]() velox.Policy { return velox.Policy{} }\n")["schema/inorg.go"])
+	if code, _, errs := runCLI(t, dir, "./schema"); code == 0 || !strings.Contains(errs, "schema/inorg.go:14: InOrg.Policy: behaviour methods are not generic: func (InOrg) Policy() velox.Policy") {
+		t.Errorf("generic: %d %q", code, errs)
+	}
 }
+
+// squeeze is s with each run of spaces one space, so that a test does not
+// depend on gofmt's alignment.
+func squeeze(s string) string { return regexp.MustCompile(` +`).ReplaceAllString(s, " ") }

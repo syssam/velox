@@ -150,6 +150,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- **Breaking.** `GeneratedCodeIsVersion16`: regenerate. Behaviour declared in the schema
+  is untyped and names columns by name; gen imports the schema; gen/runtime is gone;
+  remove `import _ ".../gen/runtime"`. `velox.Policy`, `Hook`, `Mutator`, `MutateFunc`,
+  `Mutation` and `Interceptor` are not generic: a policy's `Read` returns a `velox.Cond`
+  built with `velox.C("org_id").EQ(v)`, a hook reads and sets columns with `m.Set`,
+  `m.Fill`, `m.Value` and `r.Value`, and a mixin's methods are plain. `velox.Before` runs
+  a function before the write, `velox.WithHooks[E]` adds a hook that names gen's types,
+  and `velox.Edge("doc").Has()` names a relation. `velox.Field`, `Named[E, V]`, the
+  `Bind*` functions and `Bound*` types, `Allow[E]` and the handles' `ValueIn` are gone.
+  `scope.By` and `scope.Scope` are gone: a mixin's policy calls `Key.Require` and
+  `Key.Match`. A schema package that imports gen is refused (ADR 0039).
 - **Breaking.** `scope.By[E](key, column)` finds the scope's column by its name, with
   `velox.Field`, so that a mixin's generic `Policy` and `Hooks` can call it. It refuses a
   column that is mutable or nullable, as the entity's `*SchemaError` at its first use.

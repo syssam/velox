@@ -249,18 +249,18 @@ func (*note) VeloxMeta() *velox.Meta[note] { return noteMeta.Load(noteDescriptor
 
 // Policy hides secret notes; fixture.OrgPolicy, bound before it, confines
 // notes to the context's org.
-func (*note) Policy() velox.Policy[note] {
-	return velox.Policy[note]{Read: func(context.Context) (velox.Pred[note], error) {
-		return velox.Col[note, bool]{I: 4}.EQ(false), nil
+func (*note) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Cond, error) {
+		return velox.C("secret").EQ(false), nil
 	}}
 }
 
-func (*note) Hooks() []velox.Hook[note] { return fixture.OrgHooks[note]() }
+func (*note) Hooks() []velox.Hook { return fixture.OrgHooks() }
 
 func noteDescriptor() velox.Descriptor[note] {
 	return velox.Descriptor[note]{
-		Policy: velox.BindPolicy(fixture.OrgPolicy[note], (*note)(nil).Policy),
-		Hooks:  velox.BindHooks((*note)(nil).Hooks),
+		Policy: []func() velox.Policy{fixture.OrgPolicy, (*note)(nil).Policy},
+		Hooks:  []func() []velox.Hook{(*note)(nil).Hooks},
 		Table:  "notes",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Pos", Name: "pos"}, {Field: "Secret", Name: "secret"}},

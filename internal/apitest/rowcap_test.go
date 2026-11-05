@@ -168,7 +168,7 @@ func TestRowCapCoversRelationLoads(t *testing.T) {
 	_, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx)
 	// The load's error names the owner once and keeps the item's error, without
 	// its own "velox: ".
-	const want = "velox: testmodel.Invoice: loading Items: testmodel.Item: read more rows than the cap: more than 2; raise it with the query's MaxRows"
+	const want = "velox: testmodel.Invoice: loading items: testmodel.Item: read more rows than the cap: more than 2; raise it with the query's MaxRows"
 	if !errors.Is(err, velox.ErrTooManyRows) || err.Error() != want {
 		t.Errorf("%v, want %q", err, want)
 	}
@@ -182,7 +182,7 @@ func TestRowCapCoversRelationLoads(t *testing.T) {
 }
 
 // TestRowCapAcrossNestedWith: the cap covers a load inside a load. The error
-// names the inner load only: the outer "loading Items" context is lost
+// names the inner load only: the outer "loading items" context is lost
 // (recorded for after 1.0). The statements' last arguments are the owner
 // query's own LIMIT 1, then each load's cap+1.
 func TestRowCapAcrossNestedWith(t *testing.T) {
@@ -206,7 +206,7 @@ func TestRowCapAcrossNestedWith(t *testing.T) {
 	e := &fakeconn.Exec{Results: results()}
 	db := openFake(velox.Postgres, e, velox.WithMaxRows(2))
 	_, err := query(db).All(ctx)
-	const want = "velox: testmodel.Item: loading Invoice: testmodel.Invoice: read more rows than the cap: more than 2; raise it with the query's MaxRows"
+	const want = "velox: testmodel.Item: loading invoice: testmodel.Invoice: read more rows than the cap: more than 2; raise it with the query's MaxRows"
 	if !errors.Is(err, velox.ErrTooManyRows) || err.Error() != want {
 		t.Errorf("%v, want %q", err, want)
 	}

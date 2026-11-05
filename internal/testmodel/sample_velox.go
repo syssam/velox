@@ -117,7 +117,6 @@ func (*Sample) VeloxMeta() *velox.Meta[Sample] { return sampleMeta.Load(sampleDe
 
 // sampleDescriptor describes Sample to velox: its table, columns, edges and hooks.
 func sampleDescriptor() velox.Descriptor[Sample] {
-	veloxRuntime()
 	return velox.Descriptor[Sample]{
 		Table: "samples",
 		Columns: []velox.ColumnDescriptor{
@@ -137,9 +136,9 @@ func sampleDescriptor() velox.Descriptor[Sample] {
 		},
 		PrimaryKey: []int{sampleColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Line]("Lines", sampleColID, lineColSampleID),
-			velox.EdgeTo[Sample]("Children", sampleColID, sampleColParentID),
-			velox.EdgeTo[Sample]("Parent", sampleColParentID, sampleColID),
+			velox.EdgeTo[Line]("lines", sampleColID, lineColSampleID),
+			velox.EdgeTo[Sample]("children", sampleColID, sampleColParentID),
+			velox.EdgeTo[Sample]("parent", sampleColParentID, sampleColID),
 		},
 		FieldPtr: func(x *Sample, i int) any {
 			switch i {

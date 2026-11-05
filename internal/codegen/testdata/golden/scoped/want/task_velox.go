@@ -5,6 +5,7 @@ package gen
 import (
 	"fmt"
 
+	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -46,7 +47,6 @@ func (*Task) VeloxMeta() *velox.Meta[Task] { return taskMeta.Load(taskDescriptor
 
 // taskDescriptor describes Task to velox: its table, columns, edges and hooks.
 func taskDescriptor() velox.Descriptor[Task] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Task]{
 		Table: "tasks",
 		Columns: []velox.ColumnDescriptor{
@@ -55,8 +55,8 @@ func taskDescriptor() velox.Descriptor[Task] {
 			{Field: "Title", Name: "title"},
 		},
 		PrimaryKey: []int{taskColID},
-		Policy:     rt.TaskPolicy,
-		Hooks:      rt.TaskHooks,
+		Policy:     []func() velox.Policy{sch.InOrg{}.Policy, sch.Task{}.Policy},
+		Hooks:      []func() []velox.Hook{sch.InOrg{}.Hooks, sch.Task{}.Hooks},
 		FieldPtr: func(x *Task, i int) any {
 			switch i {
 			case taskColID:

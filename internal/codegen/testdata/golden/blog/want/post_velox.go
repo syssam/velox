@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"time"
 
+	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema"
 )
 
 // Post is the entity of schema Post.
@@ -83,7 +85,8 @@ func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor
 
 // postDescriptor describes Post to velox: its table, columns, edges and hooks.
 func postDescriptor() velox.Descriptor[Post] {
-	rt := veloxRuntime()
+	f0 := schema.FieldDescriptor(&sch.Post{}, "slug")
+	d0 := f0.Validators[0].(func(string) error)
 	return velox.Descriptor[Post]{
 		Table: "posts",
 		Columns: []velox.ColumnDescriptor{
@@ -98,10 +101,10 @@ func postDescriptor() velox.Descriptor[Post] {
 		},
 		PrimaryKey: []int{postColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[User]("Author", postColAuthorID, userColID),
+			velox.EdgeTo[User]("author", postColAuthorID, userColID),
 		},
-		Policy:       rt.PostPolicy,
-		Interceptors: rt.PostInterceptors,
+		Policy:       []func() velox.Policy{sch.Post{}.Policy},
+		Interceptors: []func() []velox.Interceptor{sch.Post{}.Interceptors},
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postColID:
@@ -139,7 +142,7 @@ func postDescriptor() velox.Descriptor[Post] {
 				}
 			case postColSlug:
 				x := v.(string)
-				if err := rt.PostSlugValidator(x); err != nil {
+				if err := d0(x); err != nil {
 					return err
 				}
 			case postColStatus:

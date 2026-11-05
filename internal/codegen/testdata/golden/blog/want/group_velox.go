@@ -5,7 +5,9 @@ package gen
 import (
 	"fmt"
 
+	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema"
 )
 
 // Group is the entity of schema Group.
@@ -55,17 +57,18 @@ func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDescri
 
 // groupDescriptor describes Group to velox: its table, columns, edges and hooks.
 func groupDescriptor() velox.Descriptor[Group] {
-	rt := veloxRuntime()
+	f0 := schema.FieldDescriptor(&sch.Group{}, "token")
+	d0 := f0.DefaultFunc.(func() string)
 	return velox.Descriptor[Group]{
 		Table: "groups",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
-			{Field: "Token", Name: "token", DefaultFunc: func() any { return rt.GroupTokenDefault() }},
+			{Field: "Token", Name: "token", DefaultFunc: func() any { return d0() }},
 		},
 		PrimaryKey: []int{groupColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeThrough[UserGroup, User]("Users", groupColID, userGroupColGroupID, userGroupColUserID, userColID),
+			velox.EdgeThrough[UserGroup, User]("users", groupColID, userGroupColGroupID, userGroupColUserID, userColID),
 		},
 		FieldPtr: func(x *Group, i int) any {
 			switch i {

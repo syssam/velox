@@ -40,7 +40,7 @@ func eUserDescriptor() velox.Descriptor[eUser] {
 		Table:      "e_users",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[ePost]("Posts", 0, 1), velox.EdgeThrough[eLink, fixture.DTag]("Tags", 0, 1, 2, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[ePost]("posts", 0, 1), velox.EdgeThrough[eLink, fixture.DTag]("tags", 0, 1, 2, 0)},
 		FieldPtr:   func(x *eUser, i int) any { return [...]any{&x.ID, &x.Name}[i] },
 		EdgeFieldPtr: func(x *eUser, i int) any {
 			switch i {
@@ -96,13 +96,13 @@ var ePostMeta velox.MetaOnce[ePost]
 
 func (*ePost) VeloxMeta() *velox.Meta[ePost] { return ePostMeta.Load(ePostDescriptor) }
 
-func (*ePost) Policy() velox.Policy[ePost] {
-	return velox.Policy[ePost]{Read: func(context.Context) (velox.Pred[ePost], error) { return ePosts.Secret.EQ(false), nil }}
+func (*ePost) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.C("secret").EQ(false), nil }}
 }
 
 func ePostDescriptor() velox.Descriptor[ePost] {
 	return velox.Descriptor[ePost]{
-		Policy: velox.BindPolicy(fixture.OrgPolicy[ePost], (*ePost)(nil).Policy),
+		Policy: []func() velox.Policy{fixture.OrgPolicy, (*ePost)(nil).Policy},
 		Table:  "e_posts",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "UserID", Name: "user_id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Title", Name: "title"}, {Field: "Secret", Name: "secret"}},
@@ -297,8 +297,8 @@ func TestLimitEachCap(t *testing.T) {
 	}
 	// The relation's own cap wins over the bound.
 	_, err = q.With(I.Items.LimitEach(2).MaxRows(3)).All(ctx)
-	if !errors.Is(err, velox.ErrTooManyRows) || !strings.Contains(err.Error(), "loading Items") {
-		t.Errorf("MaxRows(3): %v, want ErrTooManyRows naming Items", err)
+	if !errors.Is(err, velox.ErrTooManyRows) || !strings.Contains(err.Error(), "loading items") {
+		t.Errorf("MaxRows(3): %v, want ErrTooManyRows naming items", err)
 	}
 	// And raises the owner's cap for a load without a per-owner limit.
 	if _, err := q.With(I.Items.MaxRows(8)).All(ctx); err != nil {
@@ -377,7 +377,7 @@ func TestRewriteMayNotChangeEach(t *testing.T) {
 			if !saw {
 				t.Fatal("the hook saw no Each")
 			}
-			if want := "velox: testmodel.Invoice: loading Items: testmodel.Item: a Rewrite hook changed the statement's Each"; err == nil || err.Error() != want {
+			if want := "velox: testmodel.Invoice: loading items: testmodel.Item: a Rewrite hook changed the statement's Each"; err == nil || err.Error() != want {
 				t.Errorf("%v, want %q", err, want)
 			}
 		})

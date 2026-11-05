@@ -527,7 +527,7 @@ func TestThroughLoadChunksByOwner(t *testing.T) {
 		{{int64(1), int64(1)}, {int64(1), int64(2)}, {int64(1), int64(3)}},
 	}}
 	_, err = openFake(velox.Postgres, e).Query[fixture.DBook]().With(fixture.DBooks.Tags).Limit(1).All(ctx)
-	if want := "velox: fixture.DBook: relation Tags: an owner has 3 related rows, more than one statement can load in order"; err == nil || err.Error() != want {
+	if want := "velox: fixture.DBook: relation tags: an owner has 3 related rows, more than one statement can load in order"; err == nil || err.Error() != want {
 		t.Errorf("got %v", err)
 	}
 	if len(e.Log) != 2 {

@@ -5,6 +5,7 @@ package gen
 import (
 	"fmt"
 
+	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -46,7 +47,6 @@ func (*Note) VeloxMeta() *velox.Meta[Note] { return noteMeta.Load(noteDescriptor
 
 // noteDescriptor describes Note to velox: its table, columns, edges and hooks.
 func noteDescriptor() velox.Descriptor[Note] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Note]{
 		Table: "notes",
 		Columns: []velox.ColumnDescriptor{
@@ -55,8 +55,8 @@ func noteDescriptor() velox.Descriptor[Note] {
 			{Field: "Title", Name: "title"},
 		},
 		PrimaryKey: []int{noteColID},
-		Policy:     rt.NotePolicy,
-		Hooks:      rt.NoteHooks,
+		Policy:     []func() velox.Policy{sch.InOrg{}.Policy},
+		Hooks:      []func() []velox.Hook{sch.InOrg{}.Hooks},
 		FieldPtr: func(x *Note, i int) any {
 			switch i {
 			case noteColID:

@@ -28,21 +28,14 @@ type Tenant struct{ mixin.Schema }
 
 func (Tenant) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
 
-func (Tenant) Policy[E any]() velox.Policy[E] {
-	org := velox.Field[E, int64]("org_id")
-	return velox.Policy[E]{Read: func(ctx context.Context) (velox.Pred[E], error) { return org.EQ(orgOf(ctx)), nil }}
+func (Tenant) Policy() velox.Policy {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) { return velox.C("org_id").EQ(orgOf(ctx)), nil }}
 }
 
-func (Tenant) Hooks[E any]() []velox.Hook[E] {
-	org := velox.Field[E, int64]("org_id")
-	return []velox.Hook[E]{velox.On(func(next velox.Mutator[E]) velox.Mutator[E] {
-		return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
-			Trace = append(Trace, "tenant")
-			for _, x := range m.Rows() {
-				*org.Ptr(x) = orgOf(ctx)
-			}
-			return next.Mutate(ctx, m)
-		})
+func (Tenant) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		Trace = append(Trace, "tenant")
+		return m.Set("org_id", orgOf(ctx))
 	}, velox.OpInsert)}
 }
 
@@ -51,9 +44,8 @@ type Hidden struct{ mixin.Schema }
 
 func (Hidden) Fields() []schema.Field { return []schema.Field{field.Bool("hidden").Default(false)} }
 
-func (Hidden) Interceptors[E any]() []velox.Interceptor[E] {
-	hidden := velox.Field[E, bool]("hidden")
-	return []velox.Interceptor[E]{{Filter: func(context.Context) (velox.Pred[E], error) { return hidden.EQ(false), nil }}}
+func (Hidden) Interceptors() []velox.Interceptor {
+	return []velox.Interceptor{{Filter: func(context.Context) (velox.Cond, error) { return velox.C("hidden").EQ(false), nil }}}
 }
 
 // Stamp records its Prefix: a configured mixin, which the generated code
@@ -63,13 +55,11 @@ type Stamp struct {
 	Prefix string
 }
 
-func (s *Stamp) Hooks[E any]() []velox.Hook[E] {
+func (s *Stamp) Hooks() []velox.Hook {
 	p := s.Prefix
-	return []velox.Hook[E]{velox.On(func(next velox.Mutator[E]) velox.Mutator[E] {
-		return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
-			Trace = append(Trace, p)
-			return next.Mutate(ctx, m)
-		})
+	return []velox.Hook{velox.Before(func(context.Context, *velox.Mutation) error {
+		Trace = append(Trace, p)
+		return nil
 	}, velox.OpInsert)}
 }
 

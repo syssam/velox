@@ -41,8 +41,8 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 		return files
 	}
 	dir := module(t, schemaFiles("schema"))
-	// The schemaDirs' files import gen, which does not exist yet: they join
-	// after module's go mod tidy, and Load reads the schema without them.
+	// The schemaDirs' files join after module's go mod tidy, and Load reads
+	// the schema without their behaviour methods.
 	for _, d := range schemaDirs {
 		for name, src := range schemaFiles(d) {
 			if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
@@ -110,15 +110,14 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 }
 
 // The generated code compiles, and works against the runtime on SQLite:
-// testdata/e2e/main_test.go runs beside the generated package, and links
-// package runtime. closed/closed_test.go links gen alone, which fails
-// closed.
+// testdata/e2e/main_test.go runs beside the generated package, which binds
+// the schema's behaviour itself.
 func TestGeneratedRunsOnSQLite(t *testing.T) {
-	dir := e2eModule(t, Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/tmp/gen", Bound: map[string]Bound{
+	dir := e2eModule(t, Config{Package: "gen", GenPath: "example.com/tmp/gen", Bound: map[string]Bound{
 		"Post": {Policy: true, Interceptors: true},
 		"User": {Hooks: true},
 		"Note": {Policy: true, Hooks: true},
-	}}, []string{"behaviour"}, []string{"user", "closed"}, "main_test.go")
+	}}, []string{"behaviour"}, []string{"user"}, "main_test.go")
 	if out, err := tempmod.Go(dir, "vet", "./..."); err != nil {
 		t.Fatalf("go vet:\n%v", out)
 	}
@@ -128,18 +127,18 @@ func TestGeneratedRunsOnSQLite(t *testing.T) {
 }
 
 // A schema's Policy method with another signature than the one velox binds,
-// which SchemaMethods would refuse, does not compile: package runtime
-// checks it in runtime.go.
+// which SchemaMethods would refuse, does not compile: the descriptor's list
+// of method values names it.
 func TestWrongPolicySignatureDoesNotCompile(t *testing.T) {
-	dir := e2eModule(t, Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/tmp/gen", Bound: map[string]Bound{"Post": {Policy: true}}}, []string{"wrongsig"}, nil, "")
+	dir := e2eModule(t, Config{Package: "gen", GenPath: "example.com/tmp/gen", Bound: map[string]Bound{"Post": {Policy: true}}}, []string{"wrongsig"}, nil, "")
 	out, err := tempmod.Go(dir, "vet", "./...")
 	if err == nil {
 		t.Fatal("go vet accepted a Policy method that returns a pointer")
 	}
-	if !strings.Contains(out, "sch.Post{}.Policy") || !strings.Contains(out, "*velox.Policy[gen.Post]") {
-		t.Errorf("the error does not name Post.Policy and the mismatched *velox.Policy[gen.Post]:\n%s", out)
+	if !strings.Contains(out, "sch.Post{}.Policy") || !strings.Contains(out, "*velox.Policy") {
+		t.Errorf("the error does not name Post.Policy and the mismatched *velox.Policy:\n%s", out)
 	}
-	if !strings.Contains(out, "gen/runtime/runtime.go") {
+	if !strings.Contains(out, "gen/post_velox.go") {
 		t.Errorf("the error is not in the generated file:\n%s", out)
 	}
 }
@@ -157,10 +156,10 @@ func TestUnboundMethodIsRefused(t *testing.T) {
 	}
 }
 
-// Mixins' Policy, Hooks and Interceptors, bound in package runtime, run end
-// to end on SQLite (testdata/e2e/mixintest).
+// Mixins' Policy, Hooks and Interceptors, bound by the generated code, run
+// end to end on SQLite (testdata/e2e/mixintest).
 func TestMixinBehaviourRunsOnSQLite(t *testing.T) {
-	dir := e2eModule(t, Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/tmp/gen", Bound: map[string]Bound{
+	dir := e2eModule(t, Config{Package: "gen", GenPath: "example.com/tmp/gen", Bound: map[string]Bound{
 		"Ticket": {Hooks: true},
 	}}, []string{"mixin"}, nil, "mixintest/main_test.go")
 	if out, err := tempmod.Go(dir, "test", "-count=1", "./gen/..."); err != nil {
@@ -169,16 +168,16 @@ func TestMixinBehaviourRunsOnSQLite(t *testing.T) {
 }
 
 // A mixin's method of another signature than velox binds, which
-// MixinBehaviour would refuse, does not compile: the line of package
-// runtime that binds it names the entity.
+// MixinBehaviour would refuse, does not compile: the line of the entity's
+// descriptor that binds it names it.
 func TestWrongMixinSignatureDoesNotCompile(t *testing.T) {
 	bad := map[string][]MixinBound{"Note": {{PkgPath: "example.com/tmp/schema", PkgName: "schema", Name: "Bad", Methods: map[string]bool{"Policy": false}}}}
-	dir := e2eModule(t, Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/tmp/gen", Mixins: bad}, []string{"wrongmixin"}, nil, "")
+	dir := e2eModule(t, Config{Package: "gen", GenPath: "example.com/tmp/gen", Mixins: bad}, []string{"wrongmixin"}, nil, "")
 	out, err := tempmod.Go(dir, "vet", "./...")
 	if err == nil {
 		t.Fatal("go vet accepted a mixin Policy method that returns a pointer")
 	}
-	if !strings.Contains(out, "gen/runtime/runtime.go") || !strings.Contains(out, "sch.Bad{}.Policy") {
-		t.Errorf("the error does not name the binding in package runtime:\n%s", out)
+	if !strings.Contains(out, "gen/note_velox.go") || !strings.Contains(out, "sch.Bad{}.Policy") {
+		t.Errorf("the error does not name the binding in the descriptor:\n%s", out)
 	}
 }

@@ -21,16 +21,6 @@ type Setter[E any] struct{ a Assignment }
 // assigns, which an UPDATE refuses to assign twice.
 func (s Setter[E]) Column[_ Lazy[E]]() int { return s.a.Column }
 
-// Allow is the condition that matches every row: what a policy's Read or
-// Write returns for a caller it does not restrict. In a policy it adds nothing
-// to the SQL; in a Where it is 1 = 1, which an Update or Delete's guard does
-// not count as a condition. A policy that returns the zero Pred[E] instead
-// fails the statement, so that no restriction is said, never implied.
-//
-// Allow composes as its meaning says: And drops it (And(Allow(), x) is x),
-// Or(Allow(), x) matches every row (see Or), and Not(Allow()) matches no row.
-func Allow[E any]() Pred[E] { return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpAllow})) }
-
 // And is true when every p is. And of nothing is true. An Allow among the ps
 // adds nothing: And of only Allows is Allow, and And(Allow(), x) is x.
 func And[E any](ps ...Pred[E]) Pred[E] {
@@ -45,7 +35,7 @@ func And[E any](ps ...Pred[E]) Pred[E] {
 	}
 	switch len(kept) {
 	case 0:
-		return Allow[E]()
+		return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpAllow}))
 	case 1:
 		return Pred[E](engine.NewPredicate(kept[0]))
 	}
@@ -58,7 +48,7 @@ func And[E any](ps ...Pred[E]) Pred[E] {
 // p, so the statement still fails on a bad one, and matches every row.
 func Or[E any](ps ...Pred[E]) Pred[E] {
 	if hasAllow(ps) && allSound(ps) {
-		return Allow[E]()
+		return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpAllow}))
 	}
 	return Pred[E](engine.NewPredicate(engine.Group(engine.OpOr, nodes(ps))))
 }

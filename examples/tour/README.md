@@ -18,10 +18,11 @@ go run ./tour
   `softdelete` mixin (`deleted_at`), a unique number per organization among the
   invoices that are not deleted, a `Lines` relation and a `status` enum. `line.go` declares `Line`.
   `invoice_behaviour.go` declares `Invoice`'s `Policy()` and `Hooks()`, and
-  `line_policy.go` `Line`'s `Policy()`, typed with the generated entities.
+  `line_policy.go` `Line`'s `Policy()`. They name columns by their schema
+  names (`velox.C("status")`, `r.Value("number")`) and do not import `gen`.
 - `gen/` is written entirely by `go tool velox-gen -out ./tour/gen ./tour/schema`.
-  The schema's `Policy` and `Hooks` are typed with `gen`, and `gen/runtime`,
-  which `main.go` imports for its effect, binds them after the mixins'.
+  Each entity's descriptor lists the mixins' `Policy` and `Hooks`, then the
+  entity's own.
 - `role/` holds the billing role a request acts with.
 - `migrations/` holds the tables, made by `go tool velox-gen migrate diff
   -dialect sqlite -dir ./tour/migrations ./tour/schema`; `main.go` applies it

@@ -126,11 +126,11 @@ type hFlex struct {
 	Stamp int64
 }
 
-var flexHook func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error
+var flexHook func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error
 
-func (*hFlex) Hooks() []velox.Hook[hFlex] {
-	return []velox.Hook[hFlex]{func(next velox.Mutator[hFlex]) velox.Mutator[hFlex] {
-		return velox.MutateFunc[hFlex](func(ctx context.Context, m *velox.Mutation[hFlex]) error {
+func (*hFlex) Hooks() []velox.Hook {
+	return []velox.Hook{func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			return flexHook(ctx, m, next)
 		})
 	}}
@@ -142,7 +142,7 @@ func (*hFlex) VeloxMeta() *velox.Meta[hFlex] { return hFlexMeta.Load(hFlexDescri
 
 func hFlexDescriptor() velox.Descriptor[hFlex] {
 	return velox.Descriptor[hFlex]{
-		Hooks: velox.BindHooks((*hFlex)(nil).Hooks),
+		Hooks: []func() []velox.Hook{(*hFlex)(nil).Hooks},
 		Table: "flex",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"},
 			{Field: "Stamp", Name: "stamp", UpdateDefault: func() any { return int64(9) }}},
@@ -162,28 +162,33 @@ func hFlexDescriptor() velox.Descriptor[hFlex] {
 var (
 	hfID    = velox.NumberCol[hFlex, int64]{I: 0}
 	hfTitle = velox.StringCol[hFlex, string]{I: 1}
-	hfStamp = velox.NumberCol[hFlex, int64]{I: 2}
 )
 
+// TestMutationMisuseOnAnInsert: Where on an insert is a misuse, and nothing
+// is sent.
 func TestMutationMisuseOnAnInsert(t *testing.T) {
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
-		if m.Rows() == nil {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
+		n := 0
+		for range m.Rows() {
+			n++
+		}
+		if n != 1 {
 			return errors.New("an insert has rows")
 		}
-		m.Set(hfTitle.Set("x"))
+		m.Where(velox.C("title").EQ("x"))
 		return next.Mutate(ctx, m)
 	}
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	err := db.Insert(&hFlex{ID: 1}).Exec(ctx)
-	if err == nil || err.Error() != "velox: apitest.hFlex: hook: Set and Where are for updates and deletes; change Rows" || e.Calls != 0 {
+	if err == nil || err.Error() != "velox: apitest.hFlex: hook: Where is for updates and deletes; an insert's rows are set with Set and Fill" || e.Calls != 0 {
 		t.Fatalf("%v, %d calls", err, e.Calls)
 	}
 }
 
-func TestMutationRowsIsNilForAnUpdate(t *testing.T) {
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
-		if m.Rows() != nil {
+func TestMutationRowsIsEmptyForAnUpdate(t *testing.T) {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
+		for range m.Rows() {
 			return errors.New("an update has no rows")
 		}
 		return next.Mutate(ctx, m)
@@ -195,7 +200,7 @@ func TestMutationRowsIsNilForAnUpdate(t *testing.T) {
 }
 
 func TestHookMayReplaceTheCoreError(t *testing.T) {
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 		if err := next.Mutate(ctx, m); err != nil {
 			return errors.Join(fixture.ErrRefused, err)
 		}
@@ -212,13 +217,13 @@ func TestHookMayReplaceTheCoreError(t *testing.T) {
 // hNil's Hooks lists a nil hook.
 type hNil struct{ ID int64 }
 
-func (*hNil) Hooks() []velox.Hook[hNil] { return []velox.Hook[hNil]{nil} }
+func (*hNil) Hooks() []velox.Hook { return []velox.Hook{nil} }
 
 var hNilMeta velox.MetaOnce[hNil]
 
 func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 	return hNilMeta.Load(func() velox.Descriptor[hNil] {
-		return velox.Descriptor[hNil]{Hooks: velox.BindHooks((*hNil)(nil).Hooks), Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNil]{Hooks: []func() []velox.Hook{(*hNil)(nil).Hooks}, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNil, i int) any { return &x.ID }}
 	})
 }
@@ -226,35 +231,35 @@ func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 // hNilAfter's Hooks lists a nil hook, and a mixin's binds a hook before it.
 type hNilAfter struct{ ID int64 }
 
-func (*hNilAfter) Hooks() []velox.Hook[hNilAfter] { return []velox.Hook[hNilAfter]{nil} }
+func (*hNilAfter) Hooks() []velox.Hook { return []velox.Hook{nil} }
 
 var hNilAfterMeta velox.MetaOnce[hNilAfter]
 
 func (*hNilAfter) VeloxMeta() *velox.Meta[hNilAfter] {
 	return hNilAfterMeta.Load(func() velox.Descriptor[hNilAfter] {
-		return velox.Descriptor[hNilAfter]{Hooks: velox.BindHooks(nilAfterMixin, (*hNilAfter)(nil).Hooks), Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNilAfter]{Hooks: []func() []velox.Hook{nilAfterMixin, (*hNilAfter)(nil).Hooks}, Table: "n", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNilAfter, i int) any { return &x.ID }}
 	})
 }
 
 // nilAfterMixin is a mixin's Hooks for hNilAfter: one hook that does nothing.
-func nilAfterMixin() []velox.Hook[hNilAfter] {
-	return []velox.Hook[hNilAfter]{func(next velox.Mutator[hNilAfter]) velox.Mutator[hNilAfter] { return next }}
+func nilAfterMixin() []velox.Hook {
+	return []velox.Hook{func(next velox.Mutator) velox.Mutator { return next }}
 }
 
 // hPanic's Policy reads its receiver, which is nil.
 type hPanic struct{ ID int64 }
 
-func (x *hPanic) Policy() velox.Policy[hPanic] {
+func (x *hPanic) Policy() velox.Policy {
 	_ = x.ID
-	return velox.Policy[hPanic]{}
+	return velox.Policy{}
 }
 
 var hPanicMeta velox.MetaOnce[hPanic]
 
 func (*hPanic) VeloxMeta() *velox.Meta[hPanic] {
 	return hPanicMeta.Load(func() velox.Descriptor[hPanic] {
-		return velox.Descriptor[hPanic]{Policy: velox.BindPolicy((*hPanic)(nil).Policy), Table: "p", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hPanic]{Policy: []func() velox.Policy{(*hPanic)(nil).Policy}, Table: "p", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hPanic, i int) any { return &x.ID }}
 	})
 }
@@ -379,7 +384,7 @@ func TestDescriptorInsertDefaultBudget(t *testing.T) {
 // write, whether the hook returns that error or drops it.
 func TestNextTwiceSendsOnce(t *testing.T) {
 	for _, keep := range []bool{true, false} {
-		flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 			if err := next.Mutate(ctx, m); err != nil {
 				return err
 			}
@@ -419,8 +424,8 @@ func TestValidatorsRunBeforeTheInsertPolicy(t *testing.T) {
 // TestMisuseWithoutNextIsReported: a hook that records a misuse and returns
 // nil without calling next fails the write, and nothing is sent.
 func TestMisuseWithoutNextIsReported(t *testing.T) {
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
-		m.Where(velox.Pred[hFlex]{})
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
+		m.Where(velox.Cond{})
 		return nil
 	}
 	e := &fakeconn.Exec{}
@@ -434,10 +439,10 @@ func TestMisuseWithoutNextIsReported(t *testing.T) {
 // TestHooksDoNotSeeUpdateDefaults: next adds them.
 func TestHooksDoNotSeeUpdateDefaults(t *testing.T) {
 	var before, after bool
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
-		_, before = hfStamp.ValueIn(m)
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
+		_, before = m.Value("stamp")
 		err := next.Mutate(ctx, m)
-		_, after = hfStamp.ValueIn(m)
+		_, after = m.Value("stamp")
 		return err
 	}
 	e := &fakeconn.Exec{Affected: 1}
@@ -453,15 +458,15 @@ func TestHooksDoNotSeeUpdateDefaults(t *testing.T) {
 // hNilMut's hook returns a nil Mutator.
 type hNilMut struct{ ID int64 }
 
-func (*hNilMut) Hooks() []velox.Hook[hNilMut] {
-	return []velox.Hook[hNilMut]{func(velox.Mutator[hNilMut]) velox.Mutator[hNilMut] { return nil }}
+func (*hNilMut) Hooks() []velox.Hook {
+	return []velox.Hook{func(velox.Mutator) velox.Mutator { return nil }}
 }
 
 var hNilMutMeta velox.MetaOnce[hNilMut]
 
 func (*hNilMut) VeloxMeta() *velox.Meta[hNilMut] {
 	return hNilMutMeta.Load(func() velox.Descriptor[hNilMut] {
-		return velox.Descriptor[hNilMut]{Hooks: velox.BindHooks((*hNilMut)(nil).Hooks), Table: "m", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hNilMut]{Hooks: []func() []velox.Hook{(*hNilMut)(nil).Hooks}, Table: "m", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hNilMut, i int) any { return &x.ID }}
 	})
 }
@@ -469,7 +474,7 @@ func (*hNilMut) VeloxMeta() *velox.Meta[hNilMut] {
 // hPanicHooks's Hooks reads its receiver, which is nil.
 type hPanicHooks struct{ ID int64 }
 
-func (x *hPanicHooks) Hooks() []velox.Hook[hPanicHooks] {
+func (x *hPanicHooks) Hooks() []velox.Hook {
 	_ = x.ID
 	return nil
 }
@@ -478,7 +483,7 @@ var hPanicHooksMeta velox.MetaOnce[hPanicHooks]
 
 func (*hPanicHooks) VeloxMeta() *velox.Meta[hPanicHooks] {
 	return hPanicHooksMeta.Load(func() velox.Descriptor[hPanicHooks] {
-		return velox.Descriptor[hPanicHooks]{Hooks: velox.BindHooks((*hPanicHooks)(nil).Hooks), Table: "ph", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
+		return velox.Descriptor[hPanicHooks]{Hooks: []func() []velox.Hook{(*hPanicHooks)(nil).Hooks}, Table: "ph", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hPanicHooks, i int) any { return &x.ID }}
 	})
 }
@@ -501,8 +506,8 @@ func TestNilMutatorAndPanickingHooks(t *testing.T) {
 // does not bind: stale generated code, which must not leave them unrun.
 type uPolicy struct{ ID int64 }
 
-func (*uPolicy) Policy() velox.Policy[uPolicy] {
-	return velox.Policy[uPolicy]{Insert: func(context.Context, *uPolicy) error { return velox.Deny("never") }}
+func (*uPolicy) Policy() velox.Policy {
+	return velox.Policy{Insert: func(context.Context, velox.Row) error { return velox.Deny("never") }}
 }
 
 var uPolicyMeta velox.MetaOnce[uPolicy]
@@ -516,7 +521,7 @@ func (*uPolicy) VeloxMeta() *velox.Meta[uPolicy] {
 
 type uHooks struct{ ID int64 }
 
-func (*uHooks) Hooks() []velox.Hook[uHooks] { return nil }
+func (*uHooks) Hooks() []velox.Hook { return nil }
 
 var uHooksMeta velox.MetaOnce[uHooks]
 
@@ -540,7 +545,7 @@ func (*uPlain) VeloxMeta() *velox.Meta[uPlain] {
 }
 
 // A Policy or Hooks method with the wrong signature needs no test here: the
-// BindPolicy or BindHooks call velox-gen writes into Descriptor.Policy or
+// method value velox-gen lists in Descriptor.Policy or
 // Descriptor.Hooks does not compile.
 func TestUnboundMethodsAreRefused(t *testing.T) {
 	e := &fakeconn.Exec{}
@@ -587,13 +592,13 @@ var hUps = struct {
 
 var hUpAffected int64 = -1
 
-func (*hUp) Policy() velox.Policy[hUp] {
-	return velox.Policy[hUp]{Read: func(context.Context) (velox.Pred[hUp], error) { return hUps.N.GT(0), nil }}
+func (*hUp) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.C("n").GT(0), nil }}
 }
 
-func (*hUp) Hooks() []velox.Hook[hUp] {
-	return []velox.Hook[hUp]{func(next velox.Mutator[hUp]) velox.Mutator[hUp] {
-		return velox.MutateFunc[hUp](func(ctx context.Context, m *velox.Mutation[hUp]) error {
+func (*hUp) Hooks() []velox.Hook {
+	return []velox.Hook{func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			err := next.Mutate(ctx, m)
 			hUpAffected = m.Affected()
 			return err
@@ -606,7 +611,7 @@ var hUpMeta velox.MetaOnce[hUp]
 func (*hUp) VeloxMeta() *velox.Meta[hUp] {
 	return hUpMeta.Load(func() velox.Descriptor[hUp] {
 		return velox.Descriptor[hUp]{
-			Policy: velox.BindPolicy((*hUp)(nil).Policy), Hooks: velox.BindHooks((*hUp)(nil).Hooks),
+			Policy: []func() velox.Policy{(*hUp)(nil).Policy}, Hooks: []func() []velox.Hook{(*hUp)(nil).Hooks},
 			Table: "ups", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "N", Name: "n"}}, PrimaryKey: []int{0},
 			FieldPtr: func(x *hUp, i int) any { return [...]any{&x.ID, &x.N}[i] },
 		}
@@ -619,7 +624,7 @@ func (*hUp) VeloxMeta() *velox.Meta[hUp] {
 // and reports none of the rows it affected.
 func TestMutationAffected(t *testing.T) {
 	var got int64 = -1
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 		if m.Affected() != 0 {
 			t.Errorf("before next Affected is %d", m.Affected())
 		}
@@ -654,7 +659,7 @@ func TestMutationAffected(t *testing.T) {
 	}
 }
 
-// hCond's first hook adds hcStamp.EQ(2) to an update or a delete; its second
+// hCond's first hook adds stamp = 2 to an update or a delete; its second
 // runs condsHook.
 type hCond struct{ ID, Stamp int64 }
 
@@ -663,20 +668,20 @@ var (
 	hcStamp = velox.NumberCol[hCond, int64]{I: 1}
 )
 
-var condsHook func(m *velox.Mutation[hCond])
+var condsHook func(m *velox.Mutation)
 
-func (*hCond) Hooks() []velox.Hook[hCond] {
-	return []velox.Hook[hCond]{
-		func(next velox.Mutator[hCond]) velox.Mutator[hCond] {
-			return velox.MutateFunc[hCond](func(ctx context.Context, m *velox.Mutation[hCond]) error {
+func (*hCond) Hooks() []velox.Hook {
+	return []velox.Hook{
+		func(next velox.Mutator) velox.Mutator {
+			return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 				if m.Op() != velox.OpInsert {
-					m.Where(hcStamp.EQ(2))
+					m.Where(velox.C("stamp").EQ(2))
 				}
 				return next.Mutate(ctx, m)
 			})
 		},
-		func(next velox.Mutator[hCond]) velox.Mutator[hCond] {
-			return velox.MutateFunc[hCond](func(ctx context.Context, m *velox.Mutation[hCond]) error {
+		func(next velox.Mutator) velox.Mutator {
+			return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 				condsHook(m)
 				return next.Mutate(ctx, m)
 			})
@@ -689,7 +694,7 @@ var hCondMeta velox.MetaOnce[hCond]
 func (*hCond) VeloxMeta() *velox.Meta[hCond] {
 	return hCondMeta.Load(func() velox.Descriptor[hCond] {
 		return velox.Descriptor[hCond]{
-			Hooks: velox.BindHooks((*hCond)(nil).Hooks),
+			Hooks: []func() []velox.Hook{(*hCond)(nil).Hooks},
 			Table: "conds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Stamp", Name: "stamp"}},
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *hCond, i int) any { return [...]any{&x.ID, &x.Stamp}[i] },
@@ -700,15 +705,15 @@ func (*hCond) VeloxMeta() *velox.Meta[hCond] {
 // TestConds: Conds is the caller's Where and the earlier hooks' conditions,
 // in order, as a copy; nil for an insert.
 func TestConds(t *testing.T) {
-	want := []velox.Pred[hCond]{hcID.EQ(1), hcStamp.GT(0), hcStamp.EQ(2)}
-	var got, again []velox.Pred[hCond]
-	condsHook = func(m *velox.Mutation[hCond]) {
+	want := []velox.Cond{velox.Cond(hcID.EQ(1)), velox.Cond(hcStamp.GT(0)), velox.C("stamp").EQ(2)}
+	var got, again []velox.Cond
+	condsHook = func(m *velox.Mutation) {
 		got = m.Conds()
 		if len(got) > 0 {
 			cs := m.Conds()
-			cs[0] = hcID.EQ(9)
-			_ = append(cs[:1], hcID.EQ(8))
-			_ = append(cs, hcID.EQ(7))
+			cs[0] = velox.C("id").EQ(9)
+			_ = append(cs[:1], velox.C("id").EQ(8))
+			_ = append(cs, velox.C("id").EQ(7))
 			again = m.Conds()
 		}
 	}
@@ -730,7 +735,7 @@ func TestConds(t *testing.T) {
 	if _, err := db.Delete[hCond]().All().Exec(ctx); err != nil || !reflect.DeepEqual(got, want[2:]) {
 		t.Errorf("on a delete of All: %v, Conds %v", err, got)
 	}
-	got = []velox.Pred[hCond]{}
+	got = []velox.Cond{}
 	if err := db.Insert(&hCond{ID: 1}).Exec(ctx); err != nil || got != nil {
 		t.Errorf("on an insert: %v, Conds %v", err, got)
 	}
@@ -750,21 +755,27 @@ var hSofts = struct {
 	Deleted   velox.Col[hSoft, bool]
 }{velox.NumberCol[hSoft, int64]{I: 0}, velox.NumberCol[hSoft, int64]{I: 1}, velox.Col[hSoft, bool]{I: 2}}
 
-func (*hSoft) Policy() velox.Policy[hSoft] {
-	return velox.Policy[hSoft]{Read: func(context.Context) (velox.Pred[hSoft], error) { return hSofts.ID.GT(0), nil }}
+func (*hSoft) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.C("id").GT(0), nil }}
 }
 
 type noCount struct{}
 
-var softConds []velox.Pred[hSoft]
+var softConds []velox.Cond
 
-func (*hSoft) Hooks() []velox.Hook[hSoft] {
-	return []velox.Hook[hSoft]{
-		velox.On(func(next velox.Mutator[hSoft]) velox.Mutator[hSoft] {
-			return velox.MutateFunc[hSoft](func(ctx context.Context, m *velox.Mutation[hSoft]) error {
-				q := m.DB().Update[hSoft]().Set(hSofts.Deleted.Set(true))
+func (*hSoft) Hooks() []velox.Hook {
+	return []velox.Hook{
+		velox.On(func(next velox.Mutator) velox.Mutator {
+			return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
+				t := m.Table()
+				col, _ := t.Info().Column("deleted")
+				set, err := t.Assign(col, true)
+				if err != nil {
+					return err
+				}
+				q := m.DB().UpdateTable(t).Assign(set)
 				if cs := m.Conds(); len(cs) > 0 {
-					q = q.Where(cs...)
+					q = q.Where(velox.Predicates(cs)...)
 				} else {
 					q = q.All()
 				}
@@ -775,8 +786,8 @@ func (*hSoft) Hooks() []velox.Hook[hSoft] {
 				return err
 			})
 		}, velox.OpDelete),
-		velox.On(func(next velox.Mutator[hSoft]) velox.Mutator[hSoft] {
-			return velox.MutateFunc[hSoft](func(ctx context.Context, m *velox.Mutation[hSoft]) error {
+		velox.On(func(next velox.Mutator) velox.Mutator {
+			return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 				err := next.Mutate(ctx, m)
 				softConds = m.Conds()
 				return err
@@ -790,8 +801,8 @@ var hSoftMeta velox.MetaOnce[hSoft]
 func (*hSoft) VeloxMeta() *velox.Meta[hSoft] {
 	return hSoftMeta.Load(func() velox.Descriptor[hSoft] {
 		return velox.Descriptor[hSoft]{
-			Policy: velox.BindPolicy(fixture.OrgPolicy[hSoft], (*hSoft)(nil).Policy),
-			Hooks:  velox.BindHooks((*hSoft)(nil).Hooks),
+			Policy: []func() velox.Policy{fixture.OrgPolicy, (*hSoft)(nil).Policy},
+			Hooks:  []func() []velox.Hook{(*hSoft)(nil).Hooks},
 			Table:  "softs",
 			Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true},
 				{Field: "Deleted", Name: "deleted"}},
@@ -819,7 +830,7 @@ func TestSoftDeleteThroughConds(t *testing.T) {
 		t.Errorf("SQL %s %v, want %s", e.SQL, e.Args, one)
 	}
 	// The update's hook, after next, saw the delete's conditions only.
-	if want := []velox.Pred[hSoft]{hSofts.ID.EQ(1)}; !reflect.DeepEqual(softConds, want) {
+	if want := []velox.Cond{velox.Cond(hSofts.ID.EQ(1))}; !reflect.DeepEqual(softConds, want) {
 		t.Errorf("Conds after next %v, want %v", softConds, want)
 	}
 	n, err = db.Delete[hSoft]().All().Exec(tctx)
@@ -857,7 +868,7 @@ func TestCondsAfterNext(t *testing.T) {
 	if _, err := db.Update[hSoft]().Set(hSofts.Deleted.Set(true)).Where(hSofts.ID.EQ(1), hSofts.ID.LT(9)).Exec(testmodel.Org.With(context.Background(), int64(7))); err != nil {
 		t.Fatal(err)
 	}
-	if want := []velox.Pred[hSoft]{hSofts.ID.EQ(1), hSofts.ID.LT(9)}; !reflect.DeepEqual(softConds, want) {
+	if want := []velox.Cond{velox.Cond(hSofts.ID.EQ(1)), velox.Cond(hSofts.ID.LT(9))}; !reflect.DeepEqual(softConds, want) {
 		t.Errorf("Conds after next %v, want %v", softConds, want)
 	}
 	if !strings.Contains(e.SQL, `"org_id" = `) || !strings.Contains(e.SQL, `"id" > `) || strings.Count(e.SQL, `"deleted" = `) != 2 {
@@ -872,7 +883,7 @@ func TestCondsAfterNext(t *testing.T) {
 func TestSetAffected(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 		m.SetAffected(5)
 		return nil
 	}
@@ -880,14 +891,14 @@ func TestSetAffected(t *testing.T) {
 		t.Errorf("own write: %v, %d rows, %d statements", err, n, e.Calls)
 	}
 	const both = "velox: apitest.hFlex: hook: SetAffected is for a hook that makes the write itself; it called next too"
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 		m.SetAffected(5)
 		return next.Mutate(ctx, m)
 	}
 	if n, err := db.Delete[hFlex]().All().Exec(ctx); err == nil || err.Error() != both || n != 0 || e.Calls != 0 {
 		t.Errorf("SetAffected, then next: %v, %d rows, %d statements", err, n, e.Calls)
 	}
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 		err := next.Mutate(ctx, m)
 		m.SetAffected(5)
 		return err
@@ -895,14 +906,14 @@ func TestSetAffected(t *testing.T) {
 	if n, err := db.Delete[hFlex]().All().Exec(ctx); err == nil || err.Error() != both || n != 0 {
 		t.Errorf("next, then SetAffected: %v, %d rows", err, n)
 	}
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 		m.SetAffected(-1)
 		return nil
 	}
 	if n, err := db.Delete[hFlex]().All().Exec(ctx); err != nil || n != -1 {
 		t.Errorf("unknown: %v, %d rows; want -1 and no error", err, n)
 	}
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 		m.SetAffected(-2)
 		return nil
 	}
@@ -916,7 +927,7 @@ func TestSetAffected(t *testing.T) {
 func TestSetAffectedOnAnInsert(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 		m.SetAffected(1)
 		return nil
 	}
@@ -935,8 +946,8 @@ func TestSaveWithAHooksOwnWrite(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
 	for _, n := range []int64{0, 1} {
-		flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
-			m.Set(hfTitle.Set("hooked"))
+		flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
+			_ = m.Set("title", "hooked")
 			m.SetAffected(n)
 			return nil
 		}
@@ -950,30 +961,48 @@ func TestSaveWithAHooksOwnWrite(t *testing.T) {
 	}
 }
 
-// TestValueInOfAnotherType: a value the handle's type cannot hold, here a
-// Rewrite hook's, fails the write once the hook returns, naming the column
-// and both types.
-func TestValueInOfAnotherType(t *testing.T) {
+// TestMutationSetOfAnotherKind: a value of another kind than the column's
+// fails the write, naming the column and both kinds, and nothing is sent;
+// Set returns the misuse too.
+func TestMutationSetOfAnotherKind(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1}
+	db := openFake(velox.Postgres, e)
+	var serr error
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
+		serr = m.Set("title", 5)
+		return next.Mutate(ctx, m)
+	}
+	_, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().Exec(ctx)
+	const text = `velox: apitest.hFlex: hook: Set("title", 5): title is a string, not an int`
+	if err == nil || err.Error() != text || serr == nil || e.Calls != 0 {
+		t.Errorf("got %v (Set: %v), %d sent; want %q", err, serr, e.Calls, text)
+	}
+}
+
+// TestMutationValueAfterRewrite: once next has returned, Value reports the
+// assignment the statement sent, a Rewrite hook's included.
+func TestMutationValueAfterRewrite(t *testing.T) {
 	rw := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		for i := range st.Set {
 			if st.Set[i].Column == 1 {
-				st.Set[i].Value = 5
+				st.Set[i].Value = "rewritten"
 			}
 		}
 		return nil
 	})
 	db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 1}, rw)
-	var v string
-	var ok bool
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+	var before, after any
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
+		before, _ = m.Value("title")
 		err := next.Mutate(ctx, m)
-		v, ok = hfTitle.ValueIn(m)
+		after, _ = m.Value("title")
 		return err
 	}
-	_, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().Exec(ctx)
-	const text = `velox: apitest.hFlex: hook: column "title" is assigned a value of type int, not string`
-	if err == nil || err.Error() != text || v != "" || ok {
-		t.Errorf("got %v, %q, %v; want %q", err, v, ok, text)
+	if _, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if before != "x" || after != "rewritten" {
+		t.Errorf("Value before next %v, after %v", before, after)
 	}
 }
 

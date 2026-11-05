@@ -45,9 +45,6 @@ func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// ValueIn returns the value m's update assigns to the column with Set, and whether it assigns one. A delete assigns none. Once next has run it also sees the UpdateDefault assignments. On an insert it records an error, as Mutation's Set does: read Rows. A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none. A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place.
-func (c Col[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool) { return valueIn[E, V](m, c.I) }
-
 // OrderedCol is the handle of an ordered column: time.Time and types registered as ordered. I is the column's index; velox-gen sets it.
 type OrderedCol[E, V any] struct{ I int32 }
 
@@ -114,9 +111,6 @@ func (c OrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// ValueIn returns the value m's update assigns to the column with Set, and whether it assigns one. A delete assigns none. Once next has run it also sees the UpdateDefault assignments. On an insert it records an error, as Mutation's Set does: read Rows. A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none. A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place.
-func (c OrderedCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool) { return valueIn[E, V](m, c.I) }
-
 // NumberCol is the handle of a numeric column. I is the column's index; velox-gen sets it.
 type NumberCol[E, V any] struct{ I int32 }
 
@@ -182,9 +176,6 @@ func (c NumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 func (c NumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
-
-// ValueIn returns the value m's update assigns to the column with Set, and whether it assigns one; an Add or Sub assigns no value. A delete assigns none. Once next has run it also sees the UpdateDefault assignments. On an insert it records an error, as Mutation's Set does: read Rows. A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none. A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place.
-func (c NumberCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool) { return valueIn[E, V](m, c.I) }
 
 // Add adds v to the column: column = column + v.
 func (c NumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E] {
@@ -287,9 +278,6 @@ func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// ValueIn returns the value m's update assigns to the column with Set, and whether it assigns one. A delete assigns none. Once next has run it also sees the UpdateDefault assignments. On an insert it records an error, as Mutation's Set does: read Rows. A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none. A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place.
-func (c StringCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool) { return valueIn[E, V](m, c.I) }
-
 // NullCol is Col for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
 type NullCol[E, V any] struct{ I int32 }
 
@@ -329,11 +317,6 @@ func (c NullCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V] { return GroupKey[E, *V]
 // Set sets the column to v.
 func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
-}
-
-// ValueIn returns a pointer to a copy of the value m's update assigns to the column with Set, nil for SetNull, and whether it assigns one. A delete assigns none. Once next has run it also sees the UpdateDefault assignments. On an insert it records an error, as Mutation's Set does: read Rows. A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none. A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place.
-func (c NullCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool) {
-	return nullValueIn[E, V](m, c.I)
 }
 
 // SetNull sets the column to NULL.
@@ -417,11 +400,6 @@ func (c NullOrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// ValueIn returns a pointer to a copy of the value m's update assigns to the column with Set, nil for SetNull, and whether it assigns one. A delete assigns none. Once next has run it also sees the UpdateDefault assignments. On an insert it records an error, as Mutation's Set does: read Rows. A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none. A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place.
-func (c NullOrderedCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool) {
-	return nullValueIn[E, V](m, c.I)
-}
-
 // SetNull sets the column to NULL.
 func (c NullOrderedCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}
@@ -501,11 +479,6 @@ func (c NullNumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 // Set sets the column to v.
 func (c NullNumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
-}
-
-// ValueIn returns a pointer to a copy of the value m's update assigns to the column with Set, nil for SetNull, and whether it assigns one; an Add or Sub assigns no value. A delete assigns none. Once next has run it also sees the UpdateDefault assignments. On an insert it records an error, as Mutation's Set does: read Rows. A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none. A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place.
-func (c NullNumberCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool) {
-	return nullValueIn[E, V](m, c.I)
 }
 
 // Add adds v to the column: column = column + v.
@@ -624,11 +597,6 @@ func (c NullStringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// ValueIn returns a pointer to a copy of the value m's update assigns to the column with Set, nil for SetNull, and whether it assigns one. A delete assigns none. Once next has run it also sees the UpdateDefault assignments. On an insert it records an error, as Mutation's Set does: read Rows. A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none. A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place.
-func (c NullStringCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool) {
-	return nullValueIn[E, V](m, c.I)
-}
-
 // SetNull sets the column to NULL.
 func (c NullStringCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}
@@ -654,9 +622,6 @@ func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// ValueIn returns the value m's update assigns to the column with Set, and whether it assigns one. A delete assigns none. Once next has run it also sees the UpdateDefault assignments. On an insert it records an error, as Mutation's Set does: read Rows. A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none. A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place.
-func (c JSONCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool) { return valueIn[E, V](m, c.I) }
-
 // NullJSONCol is JSONCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
 type NullJSONCol[E, V any] struct{ I int32 }
 
@@ -665,11 +630,6 @@ func (c NullJSONCol[E, V]) column(*E) int32 { return c.I }
 // Set sets the column to v.
 func (c NullJSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
-}
-
-// ValueIn returns a pointer to a copy of the value m's update assigns to the column with Set, nil for SetNull, and whether it assigns one. A delete assigns none. Once next has run it also sees the UpdateDefault assignments. On an insert it records an error, as Mutation's Set does: read Rows. A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none. A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place.
-func (c NullJSONCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool) {
-	return nullValueIn[E, V](m, c.I)
 }
 
 // SetNull sets the column to NULL.

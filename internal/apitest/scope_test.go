@@ -379,7 +379,7 @@ func TestWithLoadIsScoped(t *testing.T) {
 	e = &fakeconn.Exec{Results: [][][]any{{{int64(1), int64(1), "SKU", int64(2)}}, {invoiceRow(1)}}}
 	db = openFake(velox.Postgres, e)
 	_, err = db.Query[testmodel.Item]().With(It.Invoice).Limit(5).All(context.Background())
-	wantNoScope(t, err, "velox: testmodel.Item: loading Invoice: testmodel.Invoice: ")
+	wantNoScope(t, err, "velox: testmodel.Item: loading invoice: testmodel.Invoice: ")
 	if len(e.Log) != 1 {
 		t.Errorf("%d statements sent, want the item read alone", len(e.Log))
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
+	sch "github.com/syssam/velox/internal/testmodel/schema"
 )
 
 // Ticket is the entity of schema Ticket.
@@ -90,7 +91,6 @@ func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDe
 
 // ticketDescriptor describes Ticket to velox: its table, columns, edges and hooks.
 func ticketDescriptor() velox.Descriptor[Ticket] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Ticket]{
 		Table: "tickets",
 		Columns: []velox.ColumnDescriptor{
@@ -108,12 +108,12 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 			{Columns: []int{ticketColOrgID, ticketColTitle}, Unique: true}, // org_id, title
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Invoice]("Invoice", ticketColInvoiceID, invoiceColID),
-			velox.EdgeTo[Ticket]("Children", ticketColID, ticketColParentID),
-			velox.EdgeTo[Ticket]("Parent", ticketColParentID, ticketColID),
+			velox.EdgeTo[Invoice]("invoice", ticketColInvoiceID, invoiceColID),
+			velox.EdgeTo[Ticket]("children", ticketColID, ticketColParentID),
+			velox.EdgeTo[Ticket]("parent", ticketColParentID, ticketColID),
 		},
-		Policy: rt.TicketPolicy,
-		Hooks:  rt.TicketHooks,
+		Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.Ticket{}.Policy},
+		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks, sch.Ticket{}.Hooks},
 		FieldPtr: func(x *Ticket, i int) any {
 			switch i {
 			case ticketColID:

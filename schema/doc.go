@@ -48,55 +48,47 @@
 //
 // which writes the package ./gen. Nothing in a schema runs at program start.
 // A schema also declares its entity's behaviour, as ent's do: the methods
-// Policy, Hooks and Interceptors, typed with the generated entity and
-// handles of package gen:
+// Policy, Hooks and Interceptors. The schema package does not import gen,
+// which imports it, so they name columns by name, as the fields do:
 //
-//	func (User) Policy() velox.Policy[gen.User] {
-//		return velox.Policy[gen.User]{
-//			Read: func(ctx context.Context) (velox.Pred[gen.User], error) {
-//				return gen.Users.DeletedAt.IsNull(), nil
+//	func (User) Policy() velox.Policy {
+//		return velox.Policy{
+//			Read: func(ctx context.Context) (velox.Cond, error) {
+//				return velox.C("deleted_at").IsNull(), nil
 //			},
 //		}
 //	}
 //
-//	func (User) Hooks() []velox.Hook[gen.User] { ... }
+//	func (User) Hooks() []velox.Hook { ... }
 //
-//	func (User) Interceptors() []velox.Interceptor[gen.User] { ... }
+//	func (User) Interceptors() []velox.Interceptor { ... }
 //
-// The method takes nothing and returns velox.Policy[gen.E],
-// []velox.Hook[gen.E] or []velox.Interceptor[gen.E], E being the schema;
-// velox-gen refuses another shape. A many-to-many join entity has no schema: declare an empty struct
+// The method takes nothing and returns velox.Policy, []velox.Hook or
+// []velox.Interceptor; velox-gen refuses another shape, a generic method
+// and the typed shape of an older velox (velox.Policy[gen.User]) among
+// them. A many-to-many join entity has no schema: declare an empty struct
 // of its name, type UserFriend struct{}, and the methods on it.
 //
-// The schema package then imports gen, so gen does not import it.
-// velox-gen writes gen/runtime, which imports both and binds the methods,
-// and the defaults and validators gen cannot call by name, when the program
-// starts. A program imports it once, for its effect, in its main package
-// and in each test package that uses the entities, as
-// import _ "<module>/gen/runtime". A program that does not fails at its
-// first statement on an entity, rather than run without the policies. The
-// schema package may not import gen/runtime, directly or through another
-// package, as it imports the schema. velox-gen reads the schema without
-// these methods and what only they use, so it generates even when gen is
-// stale or missing.
+// gen imports the schema package, as sch, and each entity's descriptor
+// lists the method values, sch.User{}.Policy. velox-gen refuses a schema
+// package that imports gen, directly or through another package. A
+// relation that a behaviour method names with velox.Edge, by a constant,
+// is linked in the descriptor, so that its Has and HasWhere apply the
+// target's Read policy.
 //
 // A mixin declares behaviour too, for every entity that lists it, with the
-// same methods made generic over the entity. It names its columns by name,
-// with velox.Field:
+// same methods, which are not generic:
 //
-//	func (InOrg) Policy[E any]() velox.Policy[E] {
-//		org := velox.Field[E, int64]("org_id")
-//		return velox.Policy[E]{Read: func(ctx context.Context) (velox.Pred[E], error) {
-//			return org.EQ(orgOf(ctx)), nil
+//	func (InOrg) Policy() velox.Policy {
+//		return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
+//			return velox.C("org_id").EQ(orgOf(ctx)), nil
 //		}}
 //	}
 //
 // velox runs an entity's mixins' behaviour first, in Mixin order, then its
 // schema's: the policies are ANDed, the hooks run in that order, the first
 // outermost, and the interceptors' conditions are ANDed. velox-gen refuses
-// a method of another shape, and a literal column name that an entity
-// listing the mixin lacks, or of another type, each at its line. A mixin
-// that is not its type's zero value is read where the schema returns it,
-// with MixinAt. A schema that does not import gen and whose behaviour comes
-// from mixins alone needs no gen/runtime: gen binds it.
+// a method of another shape at its line. A column name an entity lacks
+// fails the statement that resolves it. A mixin that is not its type's
+// zero value is read where the schema returns it, with MixinAt.
 package schema

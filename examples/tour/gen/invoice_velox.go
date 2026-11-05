@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	sch "github.com/syssam/velox/examples/tour/schema"
+	"github.com/syssam/velox/schema/mixin/softdelete"
 )
 
 // Invoice is the entity of schema Invoice.
@@ -87,7 +89,6 @@ func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoi
 
 // invoiceDescriptor describes Invoice to velox: its table, columns, edges and hooks.
 func invoiceDescriptor() velox.Descriptor[Invoice] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Invoice]{
 		Table: "invoices",
 		Columns: []velox.ColumnDescriptor{
@@ -106,11 +107,11 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 			{Columns: []int{invoiceColOrgID, invoiceColNumber}}, // org_id, number
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Line]("Lines", invoiceColID, lineColInvoiceID),
+			velox.EdgeTo[Line]("lines", invoiceColID, lineColInvoiceID),
 		},
-		Policy:       rt.InvoicePolicy,
-		Hooks:        rt.InvoiceHooks,
-		Interceptors: rt.InvoiceInterceptors,
+		Policy:       []func() velox.Policy{sch.InOrg{}.Policy, sch.Invoice{}.Policy},
+		Hooks:        []func() []velox.Hook{sch.InOrg{}.Hooks, softdelete.Mixin{}.Hooks, sch.Invoice{}.Hooks},
+		Interceptors: []func() []velox.Interceptor{softdelete.Mixin{}.Interceptors},
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case invoiceColID:

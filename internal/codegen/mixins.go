@@ -14,9 +14,9 @@ import (
 	"github.com/syssam/velox/internal/codegen/loadjson"
 )
 
-// MixinBound is a mixin of an entity that declares behaviour: a generic
-// Policy, Hooks or Interceptors method, which the generated code
-// instantiates for the entity.
+// MixinBound is a mixin of an entity that declares behaviour: a Policy,
+// Hooks or Interceptors method, which the generated code binds for the
+// entity.
 type MixinBound struct {
 	Index   int    // the mixin's position in the schema's Mixin method
 	PkgPath string // the import path of the mixin's package
@@ -48,19 +48,19 @@ type MixinField struct {
 // mixins g's entities list, and returns, per entity name, the mixins that
 // declare any, in Mixin order. A mixin's methods are read from the source of
 // its package, which go list, run in the module that holds dir, finds; the
-// schema package is the one pattern names: generic methods are in no method set, so neither the
-// loader nor reflect sees them. A method a mixin has through an embedded
-// struct counts.
+// schema package is the one pattern names. The source gives the methods'
+// positions, which the errors name. A method a mixin has through an
+// embedded struct counts.
 //
-// A mixin's behaviour method has one type parameter and no other
-// parameter, and returns velox.Policy[E], []velox.Hook[E] or
-// []velox.Interceptor[E]:
+// A mixin's behaviour method takes nothing and returns velox.Policy,
+// []velox.Hook or []velox.Interceptor, as an entity's does:
 //
-//	func (InOrg) Policy[E any]() velox.Policy[E]
+//	func (InOrg) Policy() velox.Policy
 //
-// Another shape is a *FileError at its line, and so is a behaviour method
-// on a mixin that is itself a generic type, whose instance velox-gen could
-// not name. A mixin with behaviour listed twice by one entity is an *Error.
+// Another shape is a *FileError at its line, a generic method or the typed
+// shape of an older velox among them, and so is a behaviour method on a
+// mixin that is itself a generic type, whose instance velox-gen could not
+// name. A mixin with behaviour listed twice by one entity is an *Error.
 //
 // Each velox.Field call in a method's body whose name is a string literal
 // is checked against every entity that lists the mixin (see Lower); a
@@ -352,31 +352,19 @@ func importPath(f *ast.File, local string, r *mixinReader) string {
 	return ""
 }
 
-// mixinMethodShape checks that m, a behaviour method of mixin name, has one
-// type parameter, constrained by any, takes nothing and returns the
-// behaviour of its type parameter, and returns the velox.Field calls of its
-// body.
+// mixinMethodShape checks that m, a behaviour method of mixin name, takes
+// nothing and returns the behaviour of its kind, and returns the
+// velox.Field calls of its body.
 func mixinMethodShape(p *mixinPkg, m *mixinMethodDecl, name string) ([]fieldCall, error) {
 	k := m.fd.Name.Name
-	want := mixinResult(k)
-	fail := func(why string) error {
-		return &FileError{Path: m.path, Line: p.fset.Position(m.fd.Pos()).Line, Reason: fmt.Sprintf("%s.%s %s; a mixin serves every entity that lists it, so its method is generic over the entity: func (%[1]s) %[2]s[E any]() %[4]s", name, k, why, want)}
+	line := p.fset.Position(m.fd.Pos()).Line
+	if m.fd.Type.TypeParams != nil {
+		return nil, &FileError{Path: m.path, Line: line, Reason: notGeneric(name, k)}
 	}
-	t := m.fd.Type
-	if t.TypeParams == nil {
-		return nil, fail("is not generic")
-	}
-	if len(t.TypeParams.List) != 1 || len(t.TypeParams.List[0].Names) != 1 || !isAny(t.TypeParams.List[0].Type) {
-		return nil, fail("must have one type parameter, constrained by any")
-	}
-	e := t.TypeParams.List[0].Names[0].Name
-	if len(t.Params.List) != 0 {
-		return nil, fail("must take nothing")
+	if !behaviourSignature(m.fd.Type, k, localName(m.file, veloxPkg)) {
+		return nil, &FileError{Path: m.path, Line: line, Reason: fmt.Sprintf("%s.%s must take nothing and return %s; a mixin's method serves every entity that lists it: func (%[1]s) %[2]s() %[3]s", name, k, behaviourResult(k))}
 	}
 	velox := localName(m.file, veloxPkg)
-	if t.Results == nil || len(t.Results.List) != 1 || len(t.Results.List[0].Names) > 1 || !behaviourOf(t.Results.List[0].Type, k, velox, e) {
-		return nil, fail("must return " + strings.ReplaceAll(want, "[E]", "["+e+"]"))
-	}
 	var calls []fieldCall
 	if m.fd.Body == nil {
 		return nil, nil
@@ -412,17 +400,6 @@ func mixinMethodShape(p *mixinPkg, m *mixinMethodDecl, name string) ([]fieldCall
 	return calls, nil
 }
 
-// isAny reports whether x is any or interface{}.
-func isAny(x ast.Expr) bool {
-	switch x := x.(type) {
-	case *ast.Ident:
-		return x.Name == "any"
-	case *ast.InterfaceType:
-		return len(x.Methods.List) == 0
-	}
-	return false
-}
-
 // localName is the name f gives the package at path, "" when f does not
 // import it by a usable name.
 func localName(f *ast.File, path string) string {
@@ -438,33 +415,6 @@ func localName(f *ast.File, path string) string {
 		}
 	}
 	return ""
-}
-
-// behaviourOf reports whether x is velox.Policy[e], []velox.Hook[e] or
-// []velox.Interceptor[e], as kind k says, velox being velox's name in the
-// file.
-func behaviourOf(x ast.Expr, k, velox, e string) bool {
-	name := "Policy"
-	if k != "Policy" {
-		at, ok := x.(*ast.ArrayType)
-		if !ok || at.Len != nil {
-			return false
-		}
-		x, name = at.Elt, strings.TrimSuffix(k, "s")
-	}
-	ix, ok := x.(*ast.IndexExpr)
-	if !ok {
-		return false
-	}
-	sel, ok := ix.X.(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != name {
-		return false
-	}
-	if id, ok := sel.X.(*ast.Ident); !ok || id.Name != velox || velox == "" {
-		return false
-	}
-	id, ok := ix.Index.(*ast.Ident)
-	return ok && id.Name == e
 }
 
 // predeclared are Go's predeclared type names.

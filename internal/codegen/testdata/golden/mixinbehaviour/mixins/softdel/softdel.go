@@ -6,7 +6,6 @@ package softdel
 
 import (
 	"context"
-	"time"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema"
@@ -21,9 +20,8 @@ func (Mixin) Fields() []schema.Field {
 	return []schema.Field{field.Time("deleted_at").Optional().Nillable()}
 }
 
-func (Mixin) Interceptors[E any]() []velox.Interceptor[E] {
-	del := velox.Field[E, *time.Time]("deleted_at")
-	return []velox.Interceptor[E]{{Filter: func(context.Context) (velox.Pred[E], error) {
-		return del.IsNull(), nil
+func (Mixin) Interceptors() []velox.Interceptor {
+	return []velox.Interceptor{{Filter: func(context.Context) (velox.Cond, error) {
+		return velox.C("deleted_at").IsNull(), nil
 	}}}
 }

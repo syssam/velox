@@ -1,8 +1,9 @@
 # tenant
 
 `gen.Project` belongs to an organization. velox has no tenant concept: the
-scope is a `Policy` and a hook of the `scope` package, which the `InOrg` mixin
-declares, so that a soft delete or an owner rule is written the same way.
+scope is a `Policy` and a hook that the `InOrg` mixin declares, reading a
+`scope.Key` from the context, so that a soft delete or an owner rule is
+written the same way.
 
 ```sh
 cd examples
@@ -16,18 +17,41 @@ var OrgKey = scope.NewKey[int64]("org")
 type InOrg struct{ mixin.Schema }
 
 func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
-func (InOrg) Policy[E any]() velox.Policy[E] { return scope.By[E](OrgKey, "org_id").Policy() }
-func (InOrg) Hooks[E any]() []velox.Hook[E] {
-	return []velox.Hook[E]{scope.By[E](OrgKey, "org_id").Fill()}
+func (InOrg) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := OrgKey.Require(ctx) // scope.ErrNoScope without one
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error {
+			return OrgKey.Match(ctx, r.Value("org_id")) // scope.ErrMismatch
+		},
+	}
+}
+func (InOrg) Hooks() []velox.Hook {
+	return []velox.Hook{
+		velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+			if org, ok := OrgKey.From(ctx); ok {
+				return m.Fill("org_id", org) // each row that leaves it zero
+			}
+			return nil
+		}, velox.OpInsert),
+	}
 }
 
 // schema/project.go
 func (Project) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
 ```
 
-gen/runtime binds `InOrg`'s policy and fill hook before the `Policy` and `Hooks` a
-`Project` declares itself, if any. The policies are ANDed, so Project's own cannot
-lift the scope. `scope_test.go` checks it with `scopetest.Isolates`.
+The policy and the hook name the column by its schema name, `org_id`, so
+the schema does not import `gen`. velox-gen lists `InOrg`'s policy and hook
+in `gen.Project`'s descriptor, before the `Policy` and `Hooks` a `Project`
+declares itself, if any. The policies are ANDed, so Project's own cannot
+lift the scope. `scope_test.go` checks it with `scopetest.Isolates`, which
+also checks that `org_id` is `Immutable`, NOT NULL and an `int64`.
 
 ```go
 ctx = schema.OrgKey.With(ctx, acme)          // acme is an int64, the column's type

@@ -34,7 +34,7 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	l := &lowerer{
 		g: g, cfg: cfg,
 		out: &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc,
-			SchemaImportsGen: cfg.SchemaImportsGen || len(cfg.Bound) > 0, GenPath: cfg.GenPath},
+			GenPath: cfg.GenPath},
 		joins: map[string]*join{},
 	}
 	l.owned = map[string]string{
@@ -46,19 +46,8 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	l.mixinSources()
 	l.finish()
 	for _, e := range l.out.Entities {
-		ownSources(e)
-	}
-	if l.out.SchemaImportsGen {
-		owner := map[string]string{}
-		for _, e := range l.out.Entities {
-			e.Binds = slices.Concat(methodBinds(e, l.out.Package), e.Binds)
-			for _, b := range e.Binds {
-				if old, ok := owner[b.Field]; ok {
-					l.errs = append(l.errs, &Error{Schema: e.Name, Reason: fmt.Sprintf("velox-gen names a value of %s and one of %s %s in %s.VeloxRuntime; rename a field or a schema", old, e.Name, b.Field, l.out.Package)})
-				}
-				owner[b.Field] = e.Name
-				l.out.Runtime = true
-			}
+		if ownSources(e) {
+			l.out.NeedsSch = true
 		}
 	}
 	if len(l.errs) > 0 {
@@ -94,8 +83,9 @@ func (e *OutEntity) sources(k string) *[]OutSource {
 
 // ownSources appends to e's sources the Policy, Hooks and Interceptors
 // methods its schema declares: method values of a new value of the schema's
-// type, a pointer when the method has a pointer receiver.
-func ownSources(e *OutEntity) {
+// type, a pointer when the method has a pointer receiver. It reports
+// whether it appended one, which the file reads from the schema package.
+func ownSources(e *OutEntity) bool {
 	recv := func(ptr bool) string {
 		if ptr {
 			return "(&sch." + e.Name + "{})"
@@ -114,33 +104,11 @@ func ownSources(e *OutEntity) {
 	if e.Bound.Interceptors {
 		own("Interceptors", e.Bound.InterceptorsPtr)
 	}
-}
-
-// bindCall is the call that binds srcs, e's sources of kind k, where the
-// entity is named entity, such as
-// velox.BindPolicy[gen.Comment](sch.InOrg{}.Policy, sch.Comment{}.Policy).
-// Naming the entity checks each source's signature at that line, and
-// instantiates a mixin's generic method by inference.
-func bindCall(k, entity string, srcs []OutSource) string {
-	exprs := make([]string, len(srcs))
-	for i, s := range srcs {
-		exprs[i] = s.Expr
+	b := e.Bound
+	if b.Policy || b.Hooks || b.Interceptors {
+		e.NeedsSch = true
 	}
-	return "velox.Bind" + k + "[" + entity + "](" + strings.Join(exprs, ", ") + ")"
-}
-
-// methodBinds are the fields of VeloxRuntime that hold e's Policy, Hooks
-// and Interceptors, bound: package runtime sets each to the bindCall of its
-// sources, naming the entity in package pkg.
-func methodBinds(e *OutEntity, pkg string) []*OutBind {
-	var out []*OutBind
-	for _, k := range behaviourKinds {
-		if srcs := *e.sources(k); len(srcs) > 0 {
-			out = append(out, &OutBind{Field: e.Name + k, Type: "[]func() velox.Bound" + k,
-				Value: bindCall(k, pkg+"."+e.Name, srcs), Imports: map[string]string{"velox": veloxPkg}})
-		}
-	}
-	return out
+	return e.NeedsSch
 }
 
 // bidiPolicyError is the *FileError of the Policy of e, the join entity of a
@@ -561,11 +529,9 @@ func (s *entState) descriptor(e *Entity, f *Field) string {
 // schemaFunc returns the expression, of the type typ, of a function of f
 // that the schema holds: its descriptor's member (DefaultFunc, Validators[0]).
 // ref names the function. It is the function itself, pkg.Name, when ref
-// names one the generated package can import, of the type typ. Otherwise
-// it is, when the schema imports the generated package, the field of
-// VeloxRuntime named for e, f and suffix, which package runtime sets; else a
+// names one the generated package can import, of the type typ; else a
 // variable of the setup block that reads the descriptor once.
-func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member, typ, suffix, where string) string {
+func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member, typ, where string) string {
 	if ref != nil && ref.Pkg != "" && ref.Type == typ {
 		if p, ok := s.l.cfg.Funcs[ref.Pkg]; ok && p.Gen {
 			name := p.Name
@@ -580,28 +546,12 @@ func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member
 			}
 		}
 	}
-	if !s.l.out.SchemaImportsGen {
-		s.use(schemaPkg, "schema", where)
-		fd := s.descriptor(e, f)
-		v := "d" + strconv.Itoa(s.reads)
-		s.reads++
-		s.setup = append(s.setup, fmt.Sprintf("%s := %s.%s.(%s)", v, fd, member, typ))
-		return v
-	}
-	b := &OutBind{Field: e.Name + f.GoName + suffix, Type: typ, Imports: map[string]string{}}
-	for _, q := range qualifiers(typ) {
-		if p := s.paths[q]; p != "" {
-			b.Imports[q] = p
-		}
-	}
-	if ref != nil && ref.Pkg == s.l.out.SchemaPath && ref.Type == typ {
-		b.Value = "sch." + ref.Name // package runtime imports the schema package
-	} else {
-		b.Desc, b.DescVar = f.Name, camel(s.out.Label)+f.GoName
-		b.Value = fmt.Sprintf("%s.%s.(%s)", b.DescVar, member, typ)
-	}
-	s.out.Binds = append(s.out.Binds, b)
-	return "rt." + b.Field
+	s.use(schemaPkg, "schema", where)
+	fd := s.descriptor(e, f)
+	v := "d" + strconv.Itoa(s.reads)
+	s.reads++
+	s.setup = append(s.setup, fmt.Sprintf("%s := %s.%s.(%s)", v, fd, member, typ))
+	return v
 }
 
 // free reports whether the entity's file can import the package at p by
@@ -626,10 +576,10 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 			// A time default is a func() time.Time, which the builder let
 			// through only for a GoType that converts from time.Time.
 			s.use("time", "time", where)
-			d := s.schemaFunc(e, f, ref, member, "func() time.Time", suffix, where)
+			d := s.schemaFunc(e, f, ref, member, "func() time.Time", where)
 			return fmt.Sprintf("func() any { return %s(%s()) }", elem, d)
 		}
-		d := s.schemaFunc(e, f, ref, member, "func() "+elem, suffix, where)
+		d := s.schemaFunc(e, f, ref, member, "func() "+elem, where)
 		return fmt.Sprintf("func() any { return %s() }", d)
 	}
 	if len(f.Default) > 0 {
@@ -664,22 +614,15 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 }
 
 // schemaValue returns the expression of a value of f's descriptor, its
-// member, of type any, that is not a function: when the schema imports the
-// generated package, the field of VeloxRuntime that package runtime sets,
-// else a variable of the setup block.
+// member, of type any, that is not a function: a variable of the setup
+// block.
 func (s *entState) schemaValue(e *Entity, f *Field, member, where string) string {
-	if !s.l.out.SchemaImportsGen {
-		s.use(schemaPkg, "schema", where)
-		fd := s.descriptor(e, f)
-		v := "d" + strconv.Itoa(s.reads)
-		s.reads++
-		s.setup = append(s.setup, fmt.Sprintf("%s := %s.%s", v, fd, member))
-		return v
-	}
-	b := &OutBind{Field: e.Name + f.GoName + member, Type: "any", Desc: f.Name, DescVar: camel(s.out.Label) + f.GoName}
-	b.Value = b.DescVar + "." + member
-	s.out.Binds = append(s.out.Binds, b)
-	return "rt." + b.Field
+	s.use(schemaPkg, "schema", where)
+	fd := s.descriptor(e, f)
+	v := "d" + strconv.Itoa(s.reads)
+	s.reads++
+	s.setup = append(s.setup, fmt.Sprintf("%s := %s.%s", v, fd, member))
+	return v
 }
 
 // literal writes f's literal Default as a Go literal of the element type
@@ -1009,11 +952,7 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 		if j < len(f.ValidatorRefs) {
 			ref = &f.ValidatorRefs[j]
 		}
-		suffix := "Validator"
-		if f.Validators > 1 {
-			suffix += strconv.Itoa(j + 1)
-		}
-		fn := s.schemaFunc(e, f, ref, fmt.Sprintf("Validators[%d]", j), fmt.Sprintf("func(%s) error", v), suffix, where)
+		fn := s.schemaFunc(e, f, ref, fmt.Sprintf("Validators[%d]", j), fmt.Sprintf("func(%s) error", v), where)
 		line(1, "if err := %s(%s); err != nil {", fn, conv(v))
 		line(2, "return err")
 		line(1, "}")
@@ -1091,11 +1030,15 @@ func (l *lowerer) relations() {
 					continue
 				}
 				owner, target := colConst(s.out, ownerCol), colConst(l.state[t.Name].out, targetCol)
-				r.Desc = fmt.Sprintf("velox.EdgeTo[%s](%q, %s, %s)", t.Name, ed.GoName, owner, target)
+				r.Desc = fmt.Sprintf("velox.EdgeTo[%s](%q, %s, %s)", t.Name, ed.Name, owner, target)
 				if ed.Rel.Kind == "O2O" && ed.Bidi {
 					// Both rows hold the key: the core writes the partner's.
-					r.Desc = fmt.Sprintf("velox.EdgeBidi[%s](%q, %s, %s)", t.Name, ed.GoName, owner, target)
+					r.Desc = fmt.Sprintf("velox.EdgeBidi[%s](%q, %s, %s)", t.Name, ed.Name, owner, target)
 				}
+			}
+			if slices.Contains(l.cfg.Linked[e.Name], ed.Name) {
+				// The entity's behaviour names the relation with velox.Edge.
+				r.Desc = fmt.Sprintf("velox.Linked[%s](%s)", t.Name, r.Desc)
 			}
 			s.out.Rels = append(s.out.Rels, r)
 		}
@@ -1161,7 +1104,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 	if jo < 0 || jt < 0 {
 		jo, jt = 0, 1 // reported above
 	}
-	return fmt.Sprintf("velox.EdgeThrough[%s, %s](%q, %s, %s, %s, %s)", j.ent.Name, t.Name, ed.GoName,
+	return fmt.Sprintf("velox.EdgeThrough[%s, %s](%q, %s, %s, %s, %s)", j.ent.Name, t.Name, ed.Name,
 		colConst(s.out, 0), colConst(j.ent, jo), colConst(j.ent, jt), colConst(l.state[t.Name].out, 0))
 }
 

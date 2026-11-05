@@ -57,7 +57,6 @@ func (*Session) VeloxMeta() *velox.Meta[Session] { return sessionMeta.Load(sessi
 
 // sessionDescriptor describes Session to velox: its table, columns, edges and hooks.
 func sessionDescriptor() velox.Descriptor[Session] {
-	veloxRuntime()
 	return velox.Descriptor[Session]{
 		Table: "sessions",
 		Columns: []velox.ColumnDescriptor{

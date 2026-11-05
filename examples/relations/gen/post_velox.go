@@ -80,9 +80,9 @@ func postDescriptor() velox.Descriptor[Post] {
 		},
 		PrimaryKey: []int{postColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Author]("Author", postColAuthorID, authorColID),
-			velox.EdgeTo[Comment]("Comments", postColID, commentColPostID),
-			velox.EdgeThrough[PostTag, Tag]("Tags", postColID, postTagColPostID, postTagColTagID, tagColID),
+			velox.EdgeTo[Author]("author", postColAuthorID, authorColID),
+			velox.EdgeTo[Comment]("comments", postColID, commentColPostID),
+			velox.EdgeThrough[PostTag, Tag]("tags", postColID, postTagColPostID, postTagColTagID, tagColID),
 		},
 		FieldPtr: func(x *Post, i int) any {
 			switch i {

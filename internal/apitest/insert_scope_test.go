@@ -209,7 +209,7 @@ func TestUpsertDeniedRead(t *testing.T) {
 	// Ticket's Insert policy denies whoever its Read denies, so the fixture
 	// pnote, which has no Insert policy, shows Read's denial.
 	n := fixture.Pnote{Owner: "ann"}
-	err := db.Insert(&n).OnConflict(fixture.Pn.ID).Update(fixture.Pn.Owner).Exec(pnoteReading(velox.Pred[fixture.Pnote]{}, velox.Deny("no")))
+	err := db.Insert(&n).OnConflict(fixture.Pn.ID).Update(fixture.Pn.Owner).Exec(pnoteReading(velox.Cond{}, velox.Deny("no")))
 	wantPolicyError(t, err, velox.OpUpdate)
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)

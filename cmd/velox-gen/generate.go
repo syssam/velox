@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go/parser"
 	"go/token"
 	"io"
 	"io/fs"
@@ -15,10 +14,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -175,22 +172,22 @@ func loadModel(dir, pattern, out, pkg string, env []string) (*genModel, error) {
 
 // genConfig is the codegen.Config of the package at out, named pkg, for the
 // schema package at pattern: the import path of out, the Hooks and Policy
-// methods the schema package declares, and whether it imports out
-// (codegen.Behaviour), and the behaviour of the entities' mixins
-// (codegen.MixinBehaviour), whose warnings go to stderr. UserDoc is left
-// for the caller.
+// methods the schema package declares (codegen.Behaviour), the behaviour of
+// the entities' mixins (codegen.MixinBehaviour), whose warnings go to
+// stderr, and the relations that behaviour names (codegen.LinkedEdges).
+// UserDoc is left for the caller.
 func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr io.Writer) (codegen.Config, error) {
 	cfg := codegen.Config{Package: pkg, SchemaPath: gm.importPath}
 	genPath, err := dirImportPath(out, env)
 	if err != nil {
 		return cfg, err
 	}
-	bound, importsGen, err := codegen.Behaviour(dir, pattern, genPath, env, gm.names)
+	bound, err := codegen.Behaviour(dir, pattern, genPath, env, gm.names)
 	if err != nil {
 		return cfg, err
 	}
 	cfg.GenPath = genPath
-	cfg.Bound, cfg.SchemaImportsGen = bound, importsGen
+	cfg.Bound = bound
 	mixins, warnings, err := codegen.MixinBehaviour(dir, pattern, gm.graph, env)
 	if err != nil {
 		return cfg, relErrors(dir, err)
@@ -199,6 +196,9 @@ func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr
 		_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s\n", relWarning(dir, w))
 	}
 	cfg.Mixins = mixins
+	if cfg.Linked, err = codegen.LinkedEdges(dir, pattern, gm.graph, bound, mixins, env); err != nil {
+		return cfg, err
+	}
 	if cfg.Funcs, err = codegen.FuncPackages(dir, gm.graph, cfg, env); err != nil {
 		return cfg, err
 	}
@@ -207,11 +207,10 @@ func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr
 
 // output is what one run of velox-gen writes below out.
 type output struct {
-	cfg     codegen.Config
-	want    map[string][]byte // every file, velox-gen's and the plugins', by absolute path
-	plugin  map[string][]byte // the plugins' files, by absolute path
-	owners  map[string]string // the plugin that wrote each of plugin
-	runtime bool              // out/runtime binds the schema
+	cfg    codegen.Config
+	want   map[string][]byte // every file, velox-gen's and the plugins', by absolute path
+	plugin map[string][]byte // the plugins' files, by absolute path
+	owners map[string]string // the plugin that wrote each of plugin
 }
 
 // buildOutput generates the files of the package at out, named pkg, for the
@@ -236,7 +235,6 @@ func buildOutput(f genFlags, gm *genModel, pattern, dir, out, pkg string, env []
 	o := &output{cfg: cfg, want: make(map[string][]byte, len(files))}
 	for _, file := range files {
 		o.want[filepath.Join(out, filepath.FromSlash(file.Name))] = file.Data
-		o.runtime = o.runtime || path.Dir(file.Name) == codegen.RuntimeDir
 	}
 	// The plugins run after velox-gen's own files are built and before
 	// anything is written.
@@ -290,8 +288,15 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 				relPath(dir, p), relPath(dir, out), relPath(dir, ed), pkg)
 		}
 	}
-	if o.runtime {
-		warnRuntimeUnlinked(dir, out, o.cfg.GenPath, stderr)
+	// An older velox-gen wrote package runtime in out/runtime, which the
+	// sweep removes; the user's files stay, and are named.
+	rd := filepath.Join(out, "runtime")
+	matches, _ = filepath.Glob(filepath.Join(rd, "*.go"))
+	for _, p := range matches {
+		if !isGenerated(p) {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s is yours, and stays; velox-gen no longer writes package runtime: the generated package binds the schema itself, and no program imports %s: delete the file\n",
+				relPath(dir, p), relPath(dir, rd))
+		}
 	}
 	// Nothing is written before every path is known to be velox-gen's: a
 	// regular file with its header, below real directories.
@@ -633,9 +638,6 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	imports := [][2]string{{"g", outPath}}
-	if o.runtime {
-		imports = append(imports, [2]string{"_", outPath + "/" + codegen.RuntimeDir})
-	}
 	return runProgram(ctx, mod, checkProgram(imports, types, rels), env, stdout, stderr)
 }
 
@@ -656,72 +658,4 @@ func moduleDir(dir, pattern string, env []string) (string, error) {
 		return "", fmt.Errorf("%s is not in a module", pattern)
 	}
 	return mod, nil
-}
-
-// warnRuntimeUnlinked warns when no Go file of the module that holds out,
-// tests included, imports genPath/runtime, which binds the schema to the
-// generated package at out: a program that does not link it fails at its
-// first statement on an entity. It reads only the files' imports, and says
-// nothing when it finds no module.
-func warnRuntimeUnlinked(dir, out, genPath string, stderr io.Writer) {
-	mod := out
-	for {
-		if fi, err := os.Stat(filepath.Join(mod, "go.mod")); err == nil && !fi.IsDir() {
-			break
-		}
-		parent := filepath.Dir(mod)
-		if parent == mod {
-			return
-		}
-		mod = parent
-	}
-	rt := genPath + "/" + codegen.RuntimeDir
-	if importsPackage(mod, rt) {
-		return
-	}
-	_, _ = fmt.Fprintf(stderr, "velox-gen: warning: no package of the module in %s imports %q, which binds the schema's hooks, policies and defaults, and a statement on an entity fails without it: add %s to the program's main package, and to each test package that uses the entities\n",
-		relPath(dir, mod), rt, codegen.RuntimeImport(genPath))
-}
-
-// importsPackage reports whether a .go file below mod, the root of a module,
-// imports the package at p. It skips the directories go skips (those whose
-// name starts with "." or "_", and testdata), vendor, and those that hold
-// another module.
-func importsPackage(mod, p string) bool {
-	quoted := strconv.Quote(p)
-	fset := token.NewFileSet()
-	found := false
-	_ = filepath.WalkDir(mod, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // an unreadable directory imports nothing; the walk goes on
-		}
-		if d.IsDir() {
-			if path == mod {
-				return nil
-			}
-			n := d.Name()
-			if n[0] == '.' || n[0] == '_' || n == "testdata" || n == "vendor" {
-				return filepath.SkipDir
-			}
-			if fi, err := os.Stat(filepath.Join(path, "go.mod")); err == nil && !fi.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if filepath.Ext(path) != ".go" {
-			return nil
-		}
-		f, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
-		if err != nil {
-			return nil //nolint:nilerr // a file that does not parse imports nothing go builds
-		}
-		for _, im := range f.Imports {
-			if im.Path.Value == quoted {
-				found = true
-				return filepath.SkipAll
-			}
-		}
-		return nil
-	})
-	return found
 }

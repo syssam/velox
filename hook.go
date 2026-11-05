@@ -8,37 +8,35 @@ import (
 	"github.com/syssam/velox/internal/engine"
 )
 
-// Mutator applies a write of entity E.
-type Mutator[E any] interface {
-	Mutate(ctx context.Context, m *Mutation[E]) error
+// Mutator applies a write.
+type Mutator interface {
+	Mutate(ctx context.Context, m *Mutation) error
 }
 
 // MutateFunc adapts a function to a Mutator.
-type MutateFunc[E any] func(ctx context.Context, m *Mutation[E]) error
+type MutateFunc func(ctx context.Context, m *Mutation) error
 
-// Mutate calls f. It is an ordinary method, not a generic one, because
-// Mutator's method set needs it.
-func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { return f(ctx, m) }
+// Mutate calls f.
+func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error { return f(ctx, m) }
 
 // Hook is middleware over an entity's writes: it returns a Mutator that does
 // its work and calls next.Mutate exactly once, or not at all, to refuse or to
-// make the write itself (see Mutation.SetAffected).
+// make the write itself (see Mutation.SetAffected). It names columns by
+// name (Mutation.Set, Fill, Value, Rows), so a mixin's hook serves every
+// entity that lists it.
 //
 // A generated entity's hooks are declared in the schema package, on the
-// entity's schema (see package schema), and bound into the generated
-// metadata by velox-gen. An entity written by hand
+// entity's schema or on a mixin it lists (see package schema), and bound
+// into the generated metadata by velox-gen. An entity written by hand
 // declares them with a method on its pointer type,
-//
-//	func (*E) Hooks() []velox.Hook[E]
-//
-// which its Descriptor binds with BindHooks; a
-// method the metadata does not bind is refused at the entity's first use.
-// velox calls the method once, when it builds the entity's metadata: a hand
-// written one on a nil *E, so it must not read its receiver. Nor may its
-// body, outside the hooks it returns, read the entity's
-// own metadata (a query on it, say): that waits on the build in progress and
-// deadlocks. A Has or HasWhere reads none, so the body may build them: a
-// relation resolves when a statement holding the condition runs.
+// func (*E) Hooks() []velox.Hook, which its Descriptor lists; a method the
+// metadata does not bind is refused at the entity's first use. velox calls
+// the method once, when it builds the entity's metadata: a hand-written one
+// on a nil *E, so it must not read its receiver. Nor may its body, outside
+// the hooks it returns, read the entity's own metadata (a query on it, say):
+// that waits on the build in progress and deadlocks. A hook that must name
+// the generated types, to insert an audit row say, is the application's:
+// WithHooks adds it.
 //
 // The first hook listed is the outermost. Each hook function itself is
 // called on every write: velox builds the chain anew for each one, so a hook
@@ -54,25 +52,25 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 // The guard (ErrNoWhere and the like) runs on an update or delete as the
 // caller built it, before the hooks, and again inside next: a condition a
 // hook adds never stands in for the caller's Where. Hooks run before next
-// does any of its work: next fills an insert's defaults, adds an
-// update's UpdateDefault assignments, refuses an Immutable column, runs the
+// does any of its work: next fills an insert's defaults, adds an update's
+// UpdateDefault assignments, refuses an Immutable column, runs the
 // validators and the policy, and only then sends the statement. So
-// validators see what hooks set.
+// validators and Policy.Insert see what hooks set.
 //
 // An error that velox returns from next passes back through the hooks as is
 // when a hook returns it unchanged. Any other error a hook returns is wrapped
 // "velox: <Entity>: hook: <err>", and errors.Is and errors.As reach it.
-type Hook[E any] func(next Mutator[E]) Mutator[E]
+type Hook func(next Mutator) Mutator
 
 // On returns h applied only to the given kinds of write: OpInsert, OpUpdate,
 // OpDelete. Other writes skip it. On of a nil h is nil.
-func On[E any](h Hook[E], ops ...Op) Hook[E] {
+func On(h Hook, ops ...Op) Hook {
 	if h == nil {
 		return nil
 	}
-	return func(next Mutator[E]) Mutator[E] {
+	return func(next Mutator) Mutator {
 		wrapped := h(next)
-		return MutateFunc[E](func(ctx context.Context, m *Mutation[E]) error {
+		return MutateFunc(func(ctx context.Context, m *Mutation) error {
 			if slices.Contains(ops, m.Op()) {
 				return wrapped.Mutate(ctx, m)
 			}
@@ -81,72 +79,57 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 	}
 }
 
-// BindPolicy erases the entity type of the policy functions fs, for
-// Descriptor.Policy: one entry per function, in order. For generated code.
-// It does not call them: velox calls each once, when it builds the metadata.
-// Package runtime binds an entity's sources, its mixins' first, and an
-// entity written by hand binds its own method:
+// Before returns the hook that runs f, then next when f returned nil, on
+// the given kinds of write, as On applies a hook. With no op it runs on no
+// write. It is the hook that fills or checks a write before velox makes it:
 //
-//	Policy: velox.BindPolicy((*E)(nil).Policy),
+//	velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+//		return m.Fill("created_by", userFrom(ctx))
+//	}, velox.OpInsert)
 //
-// A function of another signature does not compile. A nil one stays nil,
-// which the metadata refuses.
-//
-//go:noinline
-func BindPolicy[E any](fs ...func() Policy[E]) []func() BoundPolicy {
-	// It is not inlined, nor are BindHooks and BindInterceptors: inlined,
-	// the loop and its closure are compiled again into each caller.
-	out := make([]func() BoundPolicy, len(fs))
-	for i, f := range fs {
-		if f != nil {
-			out[i] = func() BoundPolicy { return engine.NewBoundPolicy(policyOf(f())) }
-		}
+// Before of a nil f is nil.
+func Before(f MutateFunc, ops ...Op) Hook {
+	if f == nil {
+		return nil
 	}
-	return out
+	return On(func(next Mutator) Mutator {
+		return MutateFunc(func(ctx context.Context, m *Mutation) error {
+			if err := f(ctx, m); err != nil {
+				return err
+			}
+			return next.Mutate(ctx, m)
+		})
+	}, ops...)
 }
 
-// BindHooks erases the entity type of the hook functions fs, for
-// Descriptor.Hooks, as BindPolicy erases policies. For generated code. A
-// nil hook a function returns is refused, by its index, when the metadata
-// is built.
+// WithHooks adds hs to the hooks of entity E, for the DB and every Tx and
+// shard it opens, as ent's client.User.Use does. They run after the
+// entity's own hooks, the schema's, innermost: a mixin's Fill has run when
+// they see the rows, and they cannot skip it.
 //
-//go:noinline
-func BindHooks[E any](fs ...func() []Hook[E]) []func() BoundHooks {
-	out := make([]func() BoundHooks, len(fs))
-	for i, f := range fs {
-		if f != nil {
-			out[i] = func() BoundHooks { return bindHooks(f()) }
+// It is for a hook that must name the generated types, which the schema
+// cannot: one that inserts an audit row, or reads E's rows as *E with
+// Row.Entity. A rule that names columns only is the schema's.
+//
+//	db, err := velox.Connect("sqlite", dsn, velox.WithHooks[gen.Task](velox.On(audit, velox.OpUpdate)))
+//
+// A nil hook panics, as a nil Rewrite does. WithHooks builds E's metadata;
+// an E whose metadata failed fails its statements, and gets no hooks.
+func WithHooks[E any, PE Entity[E]](hs ...Hook) Option {
+	for _, h := range hs {
+		if h == nil {
+			panic("velox: WithHooks: a nil hook")
 		}
 	}
-	return out
-}
-
-// bindHooks erases hs's entity type.
-func bindHooks[E any](hs []Hook[E]) BoundHooks {
-	var b BoundHooks
-	for i, f := range hs {
-		if f == nil {
-			engine.SetBoundNil(&b, i)
-			return b
-		}
-		engine.AddBoundHook(&b, erase(f))
-	}
-	return b
+	return engine.WithEntityHooks(PE(nil).VeloxMeta().info, hookFns(hs))
 }
 
 // bind keeps in info the interceptors, policy and hooks that ps, hs and is
 // compose. It is not generic, so that Load, compiled for every entity,
-// instantiates nothing for them: BindPolicy, BindHooks and BindInterceptors
-// erase them where they are bound. The policies are ANDed in order, the
-// hooks run in order, the first outermost, and the interceptors' are ANDed
-// in order. retry says the failure is a NotLinkedError's, which Load does
-// not keep.
-func bind(info *EntityInfo, ps []func() BoundPolicy, hs []func() BoundHooks, is []func() BoundInterceptors) (retry bool, err error) {
-	return engine.Unlinked(bindAll(info, ps, hs, is))
-}
-
-// bindAll is bind, with a NotLinkedError's failure wrapped.
-func bindAll(info *EntityInfo, ps []func() BoundPolicy, hs []func() BoundHooks, is []func() BoundInterceptors) error {
+// instantiates nothing for them. The policies are ANDed in order, the hooks
+// run in order, the first outermost, and the interceptors' conditions are
+// ANDed in order.
+func bind(info *EntityInfo, ps []func() Policy, hs []func() []Hook, is []func() []Interceptor) error {
 	if len(is) > 0 {
 		err := engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
 			var fs []engine.FilterFn
@@ -154,7 +137,7 @@ func bindAll(info *EntityInfo, ps []func() BoundPolicy, hs []func() BoundHooks, 
 				if f == nil {
 					return nil, engine.NilBinding("Interceptors", i)
 				}
-				own, reason := engine.FiltersOf(f(), len(fs))
+				own, reason := engine.FiltersFor(f(), len(fs))
 				if reason != "" {
 					return nil, reason
 				}
@@ -173,7 +156,7 @@ func bindAll(info *EntityInfo, ps []func() BoundPolicy, hs []func() BoundHooks, 
 				if p == nil {
 					return nil, engine.NilBinding("Policy", i)
 				}
-				all[i] = engine.PolicyOf(p())
+				all[i] = engine.PolicyFor(info, p())
 			}
 			return engine.AndPolicies(all), ""
 		})
@@ -186,47 +169,41 @@ func bindAll(info *EntityInfo, ps []func() BoundPolicy, hs []func() BoundHooks, 
 	}
 	return engine.EraseHooks(info, func() ([]engine.HookFn, string) {
 		var all []engine.HookFn
-		base := 0
 		for i, h := range hs {
 			if h == nil {
 				return nil, engine.NilBinding("Hooks", i)
 			}
-			own, reason := engine.HooksOf(h(), base)
-			if reason != "" {
-				return nil, reason
+			own := h()
+			for j, x := range own {
+				if x == nil {
+					return nil, engine.NilHook(len(all) + j)
+				}
 			}
-			all = append(all, own...)
-			base += len(own)
+			all = append(all, hookFns(own)...)
 		}
 		return all, ""
 	})
 }
 
-// policyOf is p with E erased.
-func policyOf[E any](p Policy[E]) *engine.EntityPolicy {
-	pol := &engine.EntityPolicy{}
-	if r := p.Read; r != nil {
-		pol.Read = func(ctx context.Context) (Predicate, error) { q, err := r(ctx); return Predicate(q), err }
+// hookFns is hs as the engine runs them.
+func hookFns(hs []Hook) []engine.HookFn {
+	out := make([]engine.HookFn, len(hs))
+	for i, h := range hs {
+		out[i] = erase(h)
 	}
-	if w := p.Write; w != nil {
-		pol.Write = func(ctx context.Context) (Predicate, error) { q, err := w(ctx); return Predicate(q), err }
-	}
-	if ins := p.Insert; ins != nil {
-		pol.Insert = func(ctx context.Context, x unsafe.Pointer) error { return ins(ctx, (*E)(x)) }
-	}
-	return pol
+	return out
 }
 
-// erase returns h with E erased.
-func erase[E any](h Hook[E]) engine.HookFn {
+// erase returns h as the engine runs it.
+func erase(h Hook) engine.HookFn {
 	return func(next engine.MutateFn) engine.MutateFn {
-		typed := h(MutateFunc[E](func(ctx context.Context, m *Mutation[E]) error { return next(ctx, &m.mu) }))
+		m := h(MutateFunc(func(ctx context.Context, m *Mutation) error { return next(ctx, &m.mu) }))
 		return func(ctx context.Context, mu *engine.MutationState) error {
-			if typed == nil {
+			if m == nil {
 				return engine.ErrNilMutator
 			}
-			// A Mutation[E] is a mutation and nothing else, so mu is one.
-			return typed.Mutate(ctx, (*Mutation[E])(unsafe.Pointer(mu)))
+			// A Mutation is a mutation and nothing else, so mu is one.
+			return m.Mutate(ctx, (*Mutation)(unsafe.Pointer(mu)))
 		}
 	}
 }

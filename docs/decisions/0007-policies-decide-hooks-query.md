@@ -1,6 +1,8 @@
 # 0007. Policies decide, hooks query
 
-- Status: accepted, 2026-10-29
+- Status: accepted, 2026-10-29. Revised by 0039: a hook that must name gen's
+  types (to read or write another entity, typed) is a run-time hook,
+  `velox.WithHooks`.
 
 ## Context
 

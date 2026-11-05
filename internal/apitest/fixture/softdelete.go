@@ -40,8 +40,8 @@ func sOwnerDescriptor() velox.Descriptor[SOwner] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "PinnedID", Name: "pinned_id"}},
 		PrimaryKey: []int{0},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[SDoc]("Docs", 0, 2),
-			velox.EdgeTo[SDoc]("Pinned", 2, 0),
+			velox.EdgeTo[SDoc]("docs", 0, 2),
+			velox.EdgeTo[SDoc]("pinned", 2, 0),
 		},
 		FieldPtr: func(x *SOwner, i int) any {
 			return [...]any{&x.ID, &x.Name, &x.PinnedID}[i]
@@ -91,10 +91,10 @@ func sDocDescriptor() velox.Descriptor[SDoc] {
 		},
 		PrimaryKey:   []int{0},
 		Indexes:      []velox.IndexInfo{{Columns: []int{1, 3}, Unique: true}},
-		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[SOwner]("Owner", 2, 0)},
-		Policy:       velox.BindPolicy(OrgPolicy[SDoc]),
-		Hooks:        velox.BindHooks(OrgHooks[SDoc], softdelete.Mixin{}.Hooks[SDoc]),
-		Interceptors: velox.BindInterceptors(softdelete.Mixin{}.Interceptors[SDoc]),
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[SOwner]("owner", 2, 0)},
+		Policy:       []func() velox.Policy{OrgPolicy},
+		Hooks:        []func() []velox.Hook{OrgHooks, softdelete.Mixin{}.Hooks},
+		Interceptors: []func() []velox.Interceptor{softdelete.Mixin{}.Interceptors},
 		FieldPtr: func(x *SDoc, i int) any {
 			return [...]any{&x.ID, &x.OrgID, &x.OwnerID, &x.Title, &x.DeletedAt}[i]
 		},

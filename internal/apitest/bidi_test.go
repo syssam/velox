@@ -33,7 +33,7 @@ func (*bnode) VeloxMeta() *velox.Meta[bnode] {
 			Table:        "bnodes",
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey:   []int{0},
-			Edges:        []velox.EdgeDescriptor{velox.EdgeThrough[bnodeFriend, bnode]("Friends", 0, 0, 1, 0)},
+			Edges:        []velox.EdgeDescriptor{velox.EdgeThrough[bnodeFriend, bnode]("friends", 0, 0, 1, 0)},
 			FieldPtr:     func(x *bnode, i int) any { return &x.ID },
 			EdgeFieldPtr: func(x *bnode, i int) any { return &x.Friends },
 		}
@@ -82,18 +82,21 @@ var bidiSeen struct {
 	affected int64          // Mutation.Affected after next
 }
 
-func (*bnodeFriendP) Policy() velox.Policy[bnodeFriendP] {
-	return velox.Policy[bnodeFriendP]{Insert: func(_ context.Context, x *bnodeFriendP) error {
+func (*bnodeFriendP) Policy() velox.Policy {
+	return velox.Policy{Insert: func(_ context.Context, r velox.Row) error {
+		x := r.Entity().(*bnodeFriendP)
 		bidiSeen.inserted = append(bidiSeen.inserted, *x)
 		return nil
 	}}
 }
 
-func (*bnodeFriendP) Hooks() []velox.Hook[bnodeFriendP] {
-	return []velox.Hook[bnodeFriendP]{func(next velox.Mutator[bnodeFriendP]) velox.Mutator[bnodeFriendP] {
-		return velox.MutateFunc[bnodeFriendP](func(ctx context.Context, m *velox.Mutation[bnodeFriendP]) error {
+func (*bnodeFriendP) Hooks() []velox.Hook {
+	return []velox.Hook{func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			bidiSeen.calls++
-			bidiSeen.hookRows = len(m.Rows())
+			for range m.Rows() {
+				bidiSeen.hookRows++
+			}
 			err := next.Mutate(ctx, m)
 			bidiSeen.affected = m.Affected()
 			return err
@@ -106,8 +109,8 @@ var bnodeFriendPMeta velox.MetaOnce[bnodeFriendP]
 func (*bnodeFriendP) VeloxMeta() *velox.Meta[bnodeFriendP] {
 	return bnodeFriendPMeta.Load(func() velox.Descriptor[bnodeFriendP] {
 		return velox.Descriptor[bnodeFriendP]{
-			Policy:     velox.BindPolicy((*bnodeFriendP)(nil).Policy),
-			Hooks:      velox.BindHooks((*bnodeFriendP)(nil).Hooks),
+			Policy:     []func() velox.Policy{(*bnodeFriendP)(nil).Policy},
+			Hooks:      []func() []velox.Hook{(*bnodeFriendP)(nil).Hooks},
 			Table:      "bnode_friends",
 			Columns:    []velox.ColumnDescriptor{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
 			PrimaryKey: []int{0, 1},
@@ -279,7 +282,7 @@ func TestBidiLinks(t *testing.T) {
 }
 
 // The bidirectional one-to-one model: bspouse's Spouse, a self-referencing
-// unique edge with no inverse, keyed by its own SpouseID, written by hand as
+// unique edge with no inverse, keyed by its own spouseID, written by hand as
 // velox-gen writes a Descriptor. Its hook records Mutation.Affected.
 
 type bspouse struct {
@@ -296,9 +299,9 @@ var bspouses = struct {
 // bspouseAffected is what bspouse's hook read from Mutation.Affected.
 var bspouseAffected int64
 
-func (*bspouse) Hooks() []velox.Hook[bspouse] {
-	return []velox.Hook[bspouse]{func(next velox.Mutator[bspouse]) velox.Mutator[bspouse] {
-		return velox.MutateFunc[bspouse](func(ctx context.Context, m *velox.Mutation[bspouse]) error {
+func (*bspouse) Hooks() []velox.Hook {
+	return []velox.Hook{func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			err := next.Mutate(ctx, m)
 			bspouseAffected = m.Affected()
 			return err
@@ -311,12 +314,12 @@ var bspouseMeta velox.MetaOnce[bspouse]
 func (*bspouse) VeloxMeta() *velox.Meta[bspouse] {
 	return bspouseMeta.Load(func() velox.Descriptor[bspouse] {
 		return velox.Descriptor[bspouse]{
-			Hooks:      velox.BindHooks((*bspouse)(nil).Hooks),
+			Hooks:      []func() []velox.Hook{(*bspouse)(nil).Hooks},
 			Table:      "bspouses",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},
 			Indexes:    []velox.IndexInfo{{Columns: []int{1}, Unique: true}},
-			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[bspouse]("Spouse", 1, 0)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[bspouse]("spouse", 1, 0)},
 			FieldPtr: func(x *bspouse, i int) any {
 				if i == 0 {
 					return &x.ID
@@ -422,7 +425,7 @@ func TestBidiOne(t *testing.T) {
 		sent(t, e, append(slices.Clone(linked[:4]), stmt{probe, []any{int64(3), 1}}, stmt{"ROLLBACK", nil})...)
 	}
 	t.Run("taken partner", func(t *testing.T) {
-		taken(t, true, "velox: apitest.bspouse: unique constraint spouse_id violated: row 3 already has a Spouse; clear it first")
+		taken(t, true, "velox: apitest.bspouse: unique constraint spouse_id violated: row 3 already has a spouse; clear it first")
 	})
 	t.Run("hidden partner", func(t *testing.T) {
 		taken(t, false, "velox: apitest.bspouse: unique constraint spouse_id violated: row 3 cannot be linked")
@@ -512,7 +515,7 @@ func TestBidiOne(t *testing.T) {
 	t.Run("insert, the key not returned", func(t *testing.T) {
 		// RETURNING gave no row: the row's key is unknown, so its partner
 		// cannot be linked, and the insert is rolled back.
-		const want = "velox: apitest.bspouse: the insert did not return the row's key, so its Spouse cannot be linked"
+		const want = "velox: apitest.bspouse: the insert did not return the row's key, so its spouse cannot be linked"
 		db, e := open(nil)
 		if err := db.Insert(&bspouse{SpouseID: new(int64(1))}).Exec(ctx); err == nil || err.Error() != want {
 			t.Fatalf("err = %v, want %s", err, want)
@@ -549,7 +552,7 @@ func TestBidiOne(t *testing.T) {
 		db, e := open(nil)
 		e.Rows = [][]any{{int64(1)}} // RETURNING "id": 1, the partner given
 		err := db.Insert(&bspouse{SpouseID: new(int64(1))}).Exec(ctx)
-		if want := "velox: apitest.bspouse: SpouseID: a row cannot be its own Spouse"; err == nil || err.Error() != want {
+		if want := "velox: apitest.bspouse: SpouseID: a row cannot be its own spouse"; err == nil || err.Error() != want {
 			t.Fatalf("err = %v, want %s", err, want)
 		}
 		if w := []string{"BEGIN", insGen, "ROLLBACK"}; !slices.Equal(e.Log, w) {
@@ -581,7 +584,7 @@ func TestBidiOne(t *testing.T) {
 			return nil
 		}))
 		err := db.Insert(&bspouse{ID: 5, SpouseID: new(int64(1))}).Exec(ctx)
-		if want := "velox: apitest.bspouse: an upsert cannot set the key of the bidirectional edge Spouse; insert the row, then Save the key"; err == nil || err.Error() != want {
+		if want := "velox: apitest.bspouse: an upsert cannot set the key of the bidirectional edge spouse; insert the row, then Save the key"; err == nil || err.Error() != want {
 			t.Fatalf("err = %v, want %s", err, want)
 		}
 		if w := []string{"BEGIN", "ROLLBACK"}; !slices.Equal(e.Log, w) {
@@ -606,7 +609,7 @@ func TestBidiOne(t *testing.T) {
 		}
 	})
 	t.Run("a Rewrite hook may not change the key's value", func(t *testing.T) {
-		const want = "velox: apitest.bspouse: a Rewrite hook changed the value of SpouseID, the key of the bidirectional edge Spouse"
+		const want = "velox: apitest.bspouse: a Rewrite hook changed the value of SpouseID, the key of the bidirectional edge spouse"
 		for _, c := range []struct {
 			name   string
 			insert bool
@@ -723,8 +726,8 @@ func TestBidiOne(t *testing.T) {
 	t.Run("refused", func(t *testing.T) {
 		db, e := open(nil)
 		const (
-			self   = "velox: apitest.bspouse: SpouseID: a row cannot be its own Spouse"
-			oneRow = "velox: apitest.bspouse: an update that sets SpouseID, the key of the bidirectional edge Spouse, must name one row by its primary key (Where on ID.EQ), as velox re-points the other row too"
+			self   = "velox: apitest.bspouse: SpouseID: a row cannot be its own spouse"
+			oneRow = "velox: apitest.bspouse: an update that sets SpouseID, the key of the bidirectional edge spouse, must name one row by its primary key (Where on ID.EQ), as velox re-points the other row too"
 		)
 		_, errIn := db.Update[bspouse]().Set(S.SpouseID.Set(3)).Where(S.ID.In(1, 2)).Exec(ctx)
 		_, errAll := db.Update[bspouse]().Set(S.SpouseID.Set(3)).All().Exec(ctx)
@@ -753,11 +756,11 @@ func TestBidiOne(t *testing.T) {
 			{"insert self", db.Insert(&bspouse{ID: 1, SpouseID: new(int64(1))}).Exec(ctx), self},
 			{"update in", errIn, oneRow},
 			{"update all", errAll, oneRow},
-			{"update add", errAdd, "velox: apitest.bspouse: SpouseID, the key of the bidirectional edge Spouse, can only be set"},
+			{"update add", errAdd, "velox: apitest.bspouse: SpouseID, the key of the bidirectional edge spouse, can only be set"},
 			{"upsert", db.Insert(&bspouse{ID: 5, SpouseID: new(int64(1))}).OnConflict(S.ID).DoNothing().Exec(ctx),
-				"velox: apitest.bspouse: an upsert cannot set the key of the bidirectional edge Spouse; insert the row, then Save the key"},
+				"velox: apitest.bspouse: an upsert cannot set the key of the bidirectional edge spouse; insert the row, then Save the key"},
 			{"insert all", db.InsertAll([]bspouse{{ID: 5}, {ID: 6, SpouseID: new(int64(1))}}).Exec(ctx),
-				"velox: apitest.bspouse: InsertAll cannot set the key of the bidirectional edge Spouse; insert the rows, then Save each key"},
+				"velox: apitest.bspouse: InsertAll cannot set the key of the bidirectional edge spouse; insert the rows, then Save each key"},
 		} {
 			if c.err == nil || c.err.Error() != c.want {
 				t.Errorf("%s: %v,\nwant %s", c.name, c.err, c.want)
@@ -808,8 +811,8 @@ type btspouse struct {
 
 // Policy confines the model to the context's org and lets every write: the
 // clearing of the old partner bypasses it, and says so.
-func (*btspouse) Policy() velox.Policy[btspouse] {
-	return velox.Policy[btspouse]{Write: func(context.Context) (velox.Pred[btspouse], error) { return velox.Allow[btspouse](), nil }}
+func (*btspouse) Policy() velox.Policy {
+	return velox.Policy{Write: func(context.Context) (velox.Cond, error) { return velox.Allow(), nil }}
 }
 
 var btspouseMeta velox.MetaOnce[btspouse]
@@ -817,12 +820,12 @@ var btspouseMeta velox.MetaOnce[btspouse]
 func (*btspouse) VeloxMeta() *velox.Meta[btspouse] {
 	return btspouseMeta.Load(func() velox.Descriptor[btspouse] {
 		return velox.Descriptor[btspouse]{
-			Policy:     velox.BindPolicy(fixture.OrgPolicy[btspouse], (*btspouse)(nil).Policy),
+			Policy:     []func() velox.Policy{fixture.OrgPolicy, (*btspouse)(nil).Policy},
 			Table:      "btspouses",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "SpouseID", Name: "spouse_id"}},
 			PrimaryKey: []int{0},
 			Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
-			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[btspouse]("Spouse", 2, 0)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeBidi[btspouse]("spouse", 2, 0)},
 			FieldPtr: func(x *btspouse, i int) any {
 				return [...]any{&x.ID, &x.OrgID, &x.SpouseID}[i]
 			},

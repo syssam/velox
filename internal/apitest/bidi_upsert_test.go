@@ -14,7 +14,7 @@ import (
 // one row's key, and leave the old partner pointing at it.
 func TestBidiUpsertRefusesToUpdateTheKey(t *testing.T) {
 	S := bspouses
-	const want = "velox: apitest.bspouse: an upsert cannot update the key of the bidirectional edge Spouse"
+	const want = "velox: apitest.bspouse: an upsert cannot update the key of the bidirectional edge spouse"
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
 	for name, err := range map[string]error{

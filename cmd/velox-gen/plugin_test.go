@@ -79,7 +79,6 @@ func read(t *testing.T, path string) string {
 func TestPluginWritesIntoGenWithAPolicy(t *testing.T) {
 	dir := pluginModule(t)
 	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy)
-	writeFile(t, filepath.Join(dir, "app", "app_test.go"), "package app_test\n\nimport _ \"example.com/app/gen/runtime\"\n")
 	env := fakeEnv(filesEnv(t,
 		plugin.File{Path: "b_gql.go", Content: "package gen\n\n// B is b's.\nvar B = 2\n"},
 		plugin.File{Path: "a_gql.go", Content: "package gen\n\n// A is a's.\nconst A = 1\n\n// AT is a's type.\ntype AT int\n"},
@@ -87,7 +86,7 @@ func TestPluginWritesIntoGenWithAPolicy(t *testing.T) {
 	if code, _, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	if got := strings.Join(names(t, filepath.Join(dir, "gen")), " "); got != "a_gql.go b_gql.go runtime runtime_velox.go tag_velox.go user_velox.go velox.go" {
+	if got := strings.Join(names(t, filepath.Join(dir, "gen")), " "); got != "a_gql.go b_gql.go tag_velox.go user_velox.go velox.go" {
 		t.Errorf("gen holds %s", got)
 	}
 	if code, out, errs := veloxEnv(t, dir, env, "-check", "-plugin", "fakeplugin", "./schema"); code != 0 || out != "" || errs != "" {

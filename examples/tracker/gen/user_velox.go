@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
+	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
 // User is the entity of schema User.
@@ -62,7 +63,6 @@ func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor
 
 // userDescriptor describes User to velox: its table, columns, edges and hooks.
 func userDescriptor() velox.Descriptor[User] {
-	rt := veloxRuntime()
 	return velox.Descriptor[User]{
 		Table: "users",
 		Columns: []velox.ColumnDescriptor{
@@ -77,8 +77,8 @@ func userDescriptor() velox.Descriptor[User] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{userColOrgID, userColEmail}, Unique: true}, // org_id, email
 		},
-		Policy: rt.UserPolicy,
-		Hooks:  rt.UserHooks,
+		Policy: []func() velox.Policy{sch.InOrg{}.Policy},
+		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
 		FieldPtr: func(x *User, i int) any {
 			switch i {
 			case userColID:

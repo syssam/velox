@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"context"
+
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
@@ -15,7 +17,8 @@ var OrgKey = scope.NewKey[int64]("org")
 
 // InOrg confines an entity's rows to the context's organization: reads,
 // updates and deletes see only its rows, and an insert gets its id.
-// velox.WithoutPolicy lifts it, with a reason, as it lifts every policy.
+// velox.WithoutPolicy lifts the policy, with a reason, as it lifts every
+// policy.
 type InOrg struct{ mixin.Schema }
 
 // Fields returns org_id. It is Immutable, so that no update moves a row to
@@ -24,12 +27,32 @@ func (InOrg) Fields() []schema.Field {
 	return []schema.Field{field.Int64("org_id").Immutable()}
 }
 
-// Policy confines statements to the context's organization.
-func (InOrg) Policy[E any]() velox.Policy[E] {
-	return scope.By[E](OrgKey, "org_id").Policy()
+// Policy confines reads, updates and deletes to the context's organization,
+// and refuses an insert into another one.
+func (InOrg) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := OrgKey.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error {
+			return OrgKey.Match(ctx, r.Value("org_id"))
+		},
+	}
 }
 
-// Hooks fills org_id on insert.
-func (InOrg) Hooks[E any]() []velox.Hook[E] {
-	return []velox.Hook[E]{scope.By[E](OrgKey, "org_id").Fill()}
+// Hooks fills org_id on insert, in each row that leaves it zero. Without an
+// organization it does nothing, and the policy refuses the insert.
+func (InOrg) Hooks() []velox.Hook {
+	return []velox.Hook{
+		velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+			if org, ok := OrgKey.From(ctx); ok {
+				return m.Fill("org_id", org)
+			}
+			return nil
+		}, velox.OpInsert),
+	}
 }

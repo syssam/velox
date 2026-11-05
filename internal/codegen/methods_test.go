@@ -21,17 +21,17 @@ func methodsDir(t *testing.T, files map[string]string) string {
 }
 
 // SchemaMethods finds an entity's Hooks, Policy and Interceptors on the schema package's
-// type of its name, with a value or a pointer receiver: package runtime calls
-// them on a new *E.
+// type of its name, with a value or a pointer receiver: the generated code
+// binds them on a new E or *E.
 func TestSchemaMethodsFindsMethods(t *testing.T) {
 	dir := methodsDir(t, map[string]string{
-		"user_policy.go": "package schema\n\nfunc (User) Policy() velox.Policy[gen.User] { return velox.Policy[gen.User]{} }\n",
-		"post.go":        "package schema\n\nfunc (p *Post) Hooks() []velox.Hook[gen.Post] { return nil }\n\nfunc (p Post) Other() {}\n",
-		"both.go":        "package schema\n\nfunc (t Tag) Policy() velox.Policy[gen.Tag] { return velox.Policy[gen.Tag]{} }\nfunc (t Tag) Hooks() []vx.Hook[g.Tag] { return nil }\n",
+		"user_policy.go": "package schema\n\nfunc (User) Policy() velox.Policy { return velox.Policy{} }\n",
+		"post.go":        "package schema\n\nfunc (p *Post) Hooks() []velox.Hook { return nil }\n\nfunc (p Post) Other() {}\n",
+		"both.go":        "package schema\n\nfunc (t Tag) Policy() velox.Policy { return velox.Policy{} }\nfunc (t Tag) Hooks() []vx.Hook { return nil }\n",
 		"other.go":       "package schema\n\nfunc (Comment) Policies() {}\nfunc Policy() {}\n",
-		"note.go":        "package schema\n\nfunc (Note) Interceptors() []velox.Interceptor[gen.Note] { return nil }\nfunc (*Memo) Interceptors() []velox.Interceptor[gen.Memo] { return nil }\n",
+		"note.go":        "package schema\n\nfunc (Note) Interceptors() []velox.Interceptor { return nil }\nfunc (*Memo) Interceptors() []velox.Interceptor { return nil }\n",
 	})
-	got, err := SchemaMethods(dir, "", []string{"User", "Post", "Tag", "Comment", "Note", "Memo"})
+	got, err := SchemaMethods(dir, []string{"User", "Post", "Tag", "Comment", "Note", "Memo"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,31 +42,52 @@ func TestSchemaMethodsFindsMethods(t *testing.T) {
 	}
 }
 
-// A Hooks or Policy method of another shape than package runtime binds is
-// refused at its line, as is one on a type that is no entity's.
+// A Hooks or Policy method of another shape than velox-gen binds is refused
+// at its line: the typed shape of an older velox among them, and a generic
+// method on a type that is no entity's.
 func TestSchemaMethodsRefusesAWrongShape(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
-		{"policy result", "package schema\n\nfunc (User) Policy() int { return 0 }\n", "User.Policy must take nothing and return velox.Policy[gen.User] (func (User) Policy() velox.Policy[gen.User])"},
-		{"hooks result", "package schema\n\nfunc (u User) Hooks() velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
-		{"another entity", "package schema\n\nfunc (User) Hooks() []velox.Hook[gen.Post] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
-		{"unqualified", "package schema\n\nfunc (User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n", "User.Policy must take nothing and return velox.Policy[gen.User] (func (User) Policy() velox.Policy[gen.User])"},
-		{"a parameter", "package schema\n\nfunc (User) Hooks(int) []velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
-		{"an array", "package schema\n\nfunc (User) Hooks() [2]velox.Hook[gen.User] { return nil }\n", "User.Hooks must take nothing and return []velox.Hook[gen.User] (func (User) Hooks() []velox.Hook[gen.User])"},
-		{"interceptors result", "package schema\n\nfunc (User) Interceptors() []velox.Hook[gen.User] { return nil }\n", "User.Interceptors must take nothing and return []velox.Interceptor[gen.User] (func (User) Interceptors() []velox.Interceptor[gen.User])"},
-		{"one interceptor", "package schema\n\nfunc (User) Interceptors() velox.Interceptor[gen.User] { return velox.Interceptor[gen.User]{} }\n", "User.Interceptors must take nothing and return []velox.Interceptor[gen.User] (func (User) Interceptors() []velox.Interceptor[gen.User])"},
-		{"not an entity", "package schema\n\nfunc (Mixin) Hooks() []velox.Hook[gen.User] { return nil }\n", "Mixin.Hooks: Mixin is not an entity; Hooks, Policy and Interceptors are declared on an entity's schema, on a type named like a join entity, or, generic over the entity, on a mixin: func (Mixin) Hooks[E any]() []velox.Hook[E]"},
+		{"policy result", "package schema\n\nfunc (User) Policy() int { return 0 }\n", "User.Policy must take nothing and return velox.Policy: func (User) Policy() velox.Policy"},
+		{"hooks result", "package schema\n\nfunc (u User) Hooks() velox.Hook { return nil }\n", "User.Hooks must take nothing and return []velox.Hook: func (User) Hooks() []velox.Hook"},
+		{"a parameter", "package schema\n\nfunc (User) Hooks(int) []velox.Hook { return nil }\n", "User.Hooks must take nothing and return []velox.Hook: func (User) Hooks() []velox.Hook"},
+		{"an array", "package schema\n\nfunc (User) Hooks() [2]velox.Hook { return nil }\n", "User.Hooks must take nothing and return []velox.Hook: func (User) Hooks() []velox.Hook"},
+		{"interceptors result", "package schema\n\nfunc (User) Interceptors() []velox.Hook { return nil }\n", "User.Interceptors must take nothing and return []velox.Interceptor: func (User) Interceptors() []velox.Interceptor"},
+		{"one interceptor", "package schema\n\nfunc (User) Interceptors() velox.Interceptor { return velox.Interceptor{} }\n", "User.Interceptors must take nothing and return []velox.Interceptor: func (User) Interceptors() []velox.Interceptor"},
+		{"generic on an entity", "package schema\n\nfunc (User) Policy[E any]() velox.Policy { return velox.Policy{} }\n", "User.Policy must take nothing and return velox.Policy: func (User) Policy() velox.Policy"},
+		{"generic on a mixin", "package schema\n\nfunc (Mixin) Hooks[E any]() []velox.Hook[E] { return nil }\n", "Mixin.Hooks: behaviour methods are not generic: func (Mixin) Hooks() []velox.Hook"},
+		{"another package's Policy", "package schema\n\nimport \"github.com/syssam/velox\"\n\nvar _ velox.Op\n\nfunc (User) Policy() other.Policy { return other.Policy{} }\n", "User.Policy must take nothing and return velox.Policy: func (User) Policy() velox.Policy"},
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": c.src})
-		_, err := SchemaMethods(dir, "", []string{"User", "Post"})
+		_, err := SchemaMethods(dir, []string{"User", "Post"})
 		var fe *FileError
-		if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "mine.go") || fe.Line != 3 || fe.Reason != c.want {
-			t.Errorf("%s: err = %v; want a FileError at mine.go:3: %s", c.name, err, c.want)
+		line := strings.Count(c.src[:strings.Index(c.src, "func (")], "\n") + 1
+		if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "mine.go") || fe.Line != line || fe.Reason != c.want {
+			t.Errorf("%s: err = %v; want a FileError at mine.go:%d: %s", c.name, err, line, c.want)
 		}
 	}
-	// Generic, the method is a mixin's, which MixinBehaviour reads.
-	dir := methodsDir(t, map[string]string{"mine.go": "package schema\n\nfunc (Mixin) Hooks[E any]() []velox.Hook[E] { return nil }\n"})
-	if got, err := SchemaMethods(dir, "", []string{"User", "Post"}); err != nil || len(got) != 0 {
+	// Not generic, a method of another type is a mixin's, which
+	// MixinBehaviour reads.
+	dir := methodsDir(t, map[string]string{"mine.go": "package schema\n\nfunc (Mixin) Hooks() []velox.Hook { return nil }\n"})
+	if got, err := SchemaMethods(dir, []string{"User", "Post"}); err != nil || len(got) != 0 {
 		t.Errorf("a mixin's method: %v %v", got, err)
+	}
+}
+
+// The typed shape of an older velox, velox.Policy[gen.E], is refused with
+// the shape velox binds now.
+func TestSchemaMethodsRefusesTypedShape(t *testing.T) {
+	for m, src := range map[string]string{
+		"Policy":       "package schema\n\nfunc (User) Policy() velox.Policy[gen.User] { return velox.Policy[gen.User]{} }\n",
+		"Hooks":        "package schema\n\nfunc (User) Hooks() []velox.Hook[gen.User] { return nil }\n",
+		"Interceptors": "package schema\n\nfunc (User) Interceptors() []velox.Interceptor[gen.User] { return nil }\n",
+	} {
+		dir := methodsDir(t, map[string]string{"mine.go": src})
+		_, err := SchemaMethods(dir, []string{"User"})
+		want := "User." + m + " must take nothing and return " + behaviourResult(m) + ": func (User) " + m + "() " + behaviourResult(m)
+		var fe *FileError
+		if !errors.As(err, &fe) || fe.Line != 3 || fe.Reason != want {
+			t.Errorf("%s: err = %v; want %s", m, err, want)
+		}
 	}
 }
 
@@ -74,9 +95,9 @@ func TestSchemaMethodsRefusesAWrongShape(t *testing.T) {
 // Policy: velox-gen binds them from the schema package, and says so.
 func TestCheckUserFilesRefusesBehaviour(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
-		{"policy", "package gen\n\nfunc (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n", "declares User.Policy in the generated package; declare it in the schema package, on User: func (User) Policy() velox.Policy[gen.User]"},
-		{"hooks", "package gen\n\nfunc (u User) Hooks() []velox.Hook[User] { return nil }\n", "declares User.Hooks in the generated package; declare it in the schema package, on User: func (User) Hooks() []velox.Hook[gen.User]"},
-		{"interceptors", "package gen\n\nfunc (*User) Interceptors() []velox.Interceptor[User] { return nil }\n", "declares User.Interceptors in the generated package; declare it in the schema package, on User: func (User) Interceptors() []velox.Interceptor[gen.User]"},
+		{"policy", "package gen\n\nfunc (*User) Policy() velox.Policy { return velox.Policy{} }\n", "declares User.Policy in the generated package; declare it in the schema package, on User: func (User) Policy() velox.Policy"},
+		{"hooks", "package gen\n\nfunc (u User) Hooks() []velox.Hook { return nil }\n", "declares User.Hooks in the generated package; declare it in the schema package, on User: func (User) Hooks() []velox.Hook"},
+		{"interceptors", "package gen\n\nfunc (*User) Interceptors() []velox.Interceptor { return nil }\n", "declares User.Interceptors in the generated package; declare it in the schema package, on User: func (User) Interceptors() []velox.Interceptor"},
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": c.src})
 		err := CheckUserFiles(dir, []string{"User"})
@@ -101,7 +122,7 @@ func TestSchemaMethodsIgnoresTestAndGeneratedFiles(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "dir.go"), 0o755); err != nil { // a directory is not a file
 		t.Fatal(err)
 	}
-	got, err := SchemaMethods(dir, "", []string{"User", "Post"})
+	got, err := SchemaMethods(dir, []string{"User", "Post"})
 	if err != nil || len(got) != 0 {
 		t.Errorf("got %v, %v; want none", got, err)
 	}
@@ -126,7 +147,7 @@ func TestMissingDirIsNoFiles(t *testing.T) {
 	if err := CheckUserFiles(absent, []string{"User"}); err != nil {
 		t.Error(err)
 	}
-	got, err := SchemaMethods(absent, "", []string{"User"})
+	got, err := SchemaMethods(absent, []string{"User"})
 	if err != nil || len(got) != 0 {
 		t.Errorf("got %v, %v", got, err)
 	}
@@ -137,7 +158,7 @@ func TestReportsASyntaxError(t *testing.T) {
 	if err := CheckUserFiles(dir, []string{"User"}); err == nil || !strings.Contains(err.Error(), "bad.go") {
 		t.Errorf("CheckUserFiles: err = %v", err)
 	}
-	if _, err := SchemaMethods(dir, "", []string{"User"}); err == nil || !strings.Contains(err.Error(), "bad.go") {
+	if _, err := SchemaMethods(dir, []string{"User"}); err == nil || !strings.Contains(err.Error(), "bad.go") {
 		t.Errorf("SchemaMethods: err = %v", err)
 	}
 }
@@ -176,7 +197,7 @@ func TestHasPackageDoc(t *testing.T) {
 // A file go build leaves out is not in the package: its methods do not
 // bind, and its types do not clash with the generated ones.
 func TestSchemaMethodsSkipsIgnoredFiles(t *testing.T) {
-	const policy = "package schema\n\nfunc (User) Policy() velox.Policy[gen.User] { return velox.Policy[gen.User]{} }\n"
+	const policy = "package schema\n\nfunc (User) Policy() velox.Policy { return velox.Policy{} }\n"
 	for name, files := range map[string]map[string]string{
 		"go:build ignore":   {"policy.go": "//go:build ignore\n\n" + policy},
 		"never satisfied":   {"policy.go": "//go:build linux && !linux\n\n" + policy},
@@ -185,7 +206,7 @@ func TestSchemaMethodsSkipsIgnoredFiles(t *testing.T) {
 		"dot prefix":        {".policy.go": policy},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, err := SchemaMethods(methodsDir(t, files), "", []string{"User"})
+			got, err := SchemaMethods(methodsDir(t, files), []string{"User"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -204,7 +225,7 @@ func TestSchemaMethodsSkipsIgnoredFiles(t *testing.T) {
 // whatever system velox-gen runs on: generated on one and built on another,
 // the code would bind a method the package there does not have.
 func TestSchemaMethodsRefusesSystemFiles(t *testing.T) {
-	const policy = "package schema\n\nfunc (User) Policy() velox.Policy[gen.User] { return velox.Policy[gen.User]{} }\n"
+	const policy = "package schema\n\nfunc (User) Policy() velox.Policy { return velox.Policy{} }\n"
 	for _, c := range []struct {
 		name, file, src string
 		line            int
@@ -219,11 +240,11 @@ func TestSchemaMethodsRefusesSystemFiles(t *testing.T) {
 		{"goexperiment", "policy.go", "//go:build goexperiment.jsonv2\n\n" + policy, 1},
 		{"architecture level", "policy.go", "//go:build amd64.v3\n\n" + policy, 1},
 		{"go version above the module's", "policy.go", "//go:build go1.28\n\n" + policy, 1},
-		{"cgo", "policy.go", "package schema\n\nimport \"C\"\n\nfunc (User) Policy() velox.Policy[gen.User] { return velox.Policy[gen.User]{} }\n", 3},
+		{"cgo", "policy.go", "package schema\n\nimport \"C\"\n\nfunc (User) Policy() velox.Policy { return velox.Policy{} }\n", 3},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dir := methodsDir(t, map[string]string{c.file: c.src})
-			_, err := SchemaMethods(dir, "", []string{"User"})
+			_, err := SchemaMethods(dir, []string{"User"})
 			var fe *FileError
 			if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, c.file) || fe.Line != c.line ||
 				!strings.Contains(fe.Reason, "velox-gen reads hooks and policies only from files that every build includes") {
@@ -232,8 +253,8 @@ func TestSchemaMethodsRefusesSystemFiles(t *testing.T) {
 		})
 	}
 	// An ordinary file, and one whose constraint every system meets, bind.
-	dir := methodsDir(t, map[string]string{"go.mod": "module m\n\ngo 1.27.0\n", "policy.go": policy, "hooks.go": "//go:build go1.27 && (prod || !prod)\n\npackage schema\n\nfunc (User) Hooks() []velox.Hook[gen.User] { return nil }\n"})
-	got, err := SchemaMethods(dir, "", []string{"User"})
+	dir := methodsDir(t, map[string]string{"go.mod": "module m\n\ngo 1.27.0\n", "policy.go": policy, "hooks.go": "//go:build go1.27 && (prod || !prod)\n\npackage schema\n\nfunc (User) Hooks() []velox.Hook { return nil }\n"})
+	got, err := SchemaMethods(dir, []string{"User"})
 	if err != nil || !reflect.DeepEqual(got, map[string]Bound{"User": {Policy: true, Hooks: true}}) {
 		t.Fatalf("got %v, %v", got, err)
 	}
@@ -339,14 +360,14 @@ func TestModuleGoVersion(t *testing.T) {
 // Policy literal in its Policy method, where velox-gen can see it.
 func TestSchemaMethodsFindsPolicyConds(t *testing.T) {
 	dir := methodsDir(t, map[string]string{
-		// Read is nil, and Other's literal is another entity's: the Write
+		// Read is nil, and the other literal is another type's: the Write
 		// key is the first that counts.
-		"friend.go": "package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (UserFriend) Policy() velox.Policy[gen.UserFriend] {\n\t_ = velox.Policy[gen.Other]{Read: r}\n\treturn velox.Policy[gen.UserFriend]{\n\t\tInsert: ins,\n\t\tRead:   nil,\n\t\tWrite:  w,\n\t\tRead:   r,\n\t}\n}\n",
-		"group.go":  "package schema\n\nimport vx \"github.com/syssam/velox\"\n\nfunc (*UserGroup) Policy() vx.Policy[g.UserGroup] {\n\treturn vx.Policy[g.UserGroup]{Insert: ins, Write: nil}\n}\n",
+		"friend.go": "package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (UserFriend) Policy() velox.Policy {\n\t_ = other.Policy{Read: r}\n\treturn velox.Policy{\n\t\tInsert: ins,\n\t\tRead:   nil,\n\t\tWrite:  w,\n\t\tRead:   r,\n\t}\n}\n",
+		"group.go":  "package schema\n\nimport vx \"github.com/syssam/velox\"\n\nfunc (*UserGroup) Policy() vx.Policy {\n\treturn vx.Policy{Insert: ins, Write: nil}\n}\n",
 		// A positional literal is left to the runtime's check.
-		"pair.go": "package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (UserPair) Policy() velox.Policy[gen.UserPair] {\n\treturn velox.Policy[gen.UserPair]{r, w, nil}\n}\n",
+		"pair.go": "package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (UserPair) Policy() velox.Policy {\n\treturn velox.Policy{r, w, nil}\n}\n",
 	})
-	got, err := SchemaMethods(dir, "", []string{"UserFriend", "UserGroup", "UserPair"})
+	got, err := SchemaMethods(dir, []string{"UserFriend", "UserGroup", "UserPair"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,9 +385,9 @@ func TestSchemaMethodsFindsPolicyConds(t *testing.T) {
 // bidirectional edge, with a Policy that sets Write fails at its line.
 func TestGenerateRefusesABidiPolicy(t *testing.T) {
 	dir := methodsDir(t, map[string]string{
-		"friend.go": "package schema\n\nimport \"github.com/syssam/velox\"\n\ntype UserFriend struct{}\n\nfunc (UserFriend) Policy() velox.Policy[gen.UserFriend] {\n\treturn velox.Policy[gen.UserFriend]{Write: w}\n}\n",
+		"friend.go": "package schema\n\nimport \"github.com/syssam/velox\"\n\ntype UserFriend struct{}\n\nfunc (UserFriend) Policy() velox.Policy {\n\treturn velox.Policy{Write: w}\n}\n",
 	})
-	bound, err := SchemaMethods(dir, "", []string{"UserFriend"})
+	bound, err := SchemaMethods(dir, []string{"UserFriend"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,6 +5,7 @@ package gen
 import (
 	"fmt"
 
+	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -41,7 +42,6 @@ func (*Tag) VeloxMeta() *velox.Meta[Tag] { return tagMeta.Load(tagDescriptor) }
 
 // tagDescriptor describes Tag to velox: its table, columns, edges and hooks.
 func tagDescriptor() velox.Descriptor[Tag] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Tag]{
 		Table: "tags",
 		Columns: []velox.ColumnDescriptor{
@@ -49,8 +49,8 @@ func tagDescriptor() velox.Descriptor[Tag] {
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 		},
 		PrimaryKey: []int{tagColID},
-		Policy:     rt.TagPolicy,
-		Hooks:      rt.TagHooks,
+		Policy:     []func() velox.Policy{sch.InOrg{}.Policy},
+		Hooks:      []func() []velox.Hook{sch.InOrg{}.Hooks, sch.Tag{}.Hooks},
 		FieldPtr: func(x *Tag, i int) any {
 			switch i {
 			case tagColID:

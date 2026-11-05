@@ -5,6 +5,7 @@ package gen
 import (
 	"fmt"
 
+	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -46,7 +47,6 @@ func (*Label) VeloxMeta() *velox.Meta[Label] { return labelMeta.Load(labelDescri
 
 // labelDescriptor describes Label to velox: its table, columns, edges and hooks.
 func labelDescriptor() velox.Descriptor[Label] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Label]{
 		Table: "labels",
 		Columns: []velox.ColumnDescriptor{
@@ -55,8 +55,8 @@ func labelDescriptor() velox.Descriptor[Label] {
 			{Field: "Name", Name: "name"},
 		},
 		PrimaryKey: []int{labelColID},
-		Policy:     rt.LabelPolicy,
-		Hooks:      rt.LabelHooks,
+		Policy:     []func() velox.Policy{sch.InOrg{}.Policy},
+		Hooks:      []func() []velox.Hook{sch.InOrg{}.Hooks},
 		FieldPtr: func(x *Label, i int) any {
 			switch i {
 			case labelColID:

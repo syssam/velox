@@ -235,10 +235,10 @@ func TestLowerJSONFlag(t *testing.T) {
 func TestLowerRelationsAndJoin(t *testing.T) {
 	o := mustLower(t, Config{Package: "gen"}, LwUser{}, LwPost{}, LwGroup{})
 	u, p, j := o.entity("LwUser"), o.entity("LwPost"), o.entity("LwUserGroup")
-	if r := u.rel("posts"); r == nil || !r.Many || r.Target != "LwPost" || r.GoName != "Posts" || r.Desc != `velox.EdgeTo[LwPost]("Posts", lwUserColID, lwPostColAuthorID)` {
+	if r := u.rel("posts"); r == nil || !r.Many || r.Target != "LwPost" || r.GoName != "Posts" || r.Desc != `velox.EdgeTo[LwPost]("posts", lwUserColID, lwPostColAuthorID)` {
 		t.Fatalf("posts %+v", r)
 	}
-	if r := p.rel("author"); r == nil || r.Many || r.Desc != `velox.EdgeTo[LwUser]("Author", lwPostColAuthorID, lwUserColID)` {
+	if r := p.rel("author"); r == nil || r.Many || r.Desc != `velox.EdgeTo[LwUser]("author", lwPostColAuthorID, lwUserColID)` {
 		t.Fatalf("author %+v", r)
 	}
 	if j == nil || !j.Join || len(j.Fields) != 2 || j.Fields[0].GoName != "LwUserID" || j.Fields[1].GoName != "LwGroupID" ||
@@ -246,11 +246,11 @@ func TestLowerRelationsAndJoin(t *testing.T) {
 		j.Fields[0].Handle != "velox.NumberCol[LwUserGroup, int64]" || j.Handles != "LwUserGroups" {
 		t.Fatalf("join %+v", j)
 	}
-	if r := u.rel("groups"); r.Desc != `velox.EdgeThrough[LwUserGroup, LwGroup]("Groups", lwUserColID, lwUserGroupColLwUserID, lwUserGroupColLwGroupID, lwGroupColID)` || !r.Many {
+	if r := u.rel("groups"); r.Desc != `velox.EdgeThrough[LwUserGroup, LwGroup]("groups", lwUserColID, lwUserGroupColLwUserID, lwUserGroupColLwGroupID, lwGroupColID)` || !r.Many {
 		t.Fatalf("groups %s", r.Desc)
 	}
 	// The inverse sees the same join entity with its columns the other way round.
-	if r := o.entity("LwGroup").rel("users"); r.Desc != `velox.EdgeThrough[LwUserGroup, LwUser]("Users", lwGroupColID, lwUserGroupColLwGroupID, lwUserGroupColLwUserID, lwUserColID)` {
+	if r := o.entity("LwGroup").rel("users"); r.Desc != `velox.EdgeThrough[LwUserGroup, LwUser]("users", lwGroupColID, lwUserGroupColLwGroupID, lwUserGroupColLwUserID, lwUserColID)` {
 		t.Fatalf("users %s", r.Desc)
 	}
 	names := make([]string, len(o.Entities))
@@ -272,13 +272,13 @@ func (LwNode) Edges() []schema.Edge {
 func TestLowerSelfReference(t *testing.T) {
 	n := mustLower(t, Config{}, LwNode{}).entity("LwNode")
 	// Fields: id, then the implicit lw_node_children.
-	if r := n.rel("children"); r.Desc != `velox.EdgeTo[LwNode]("Children", lwNodeColID, lwNodeColLwNodeChildren)` || !r.Many {
+	if r := n.rel("children"); r.Desc != `velox.EdgeTo[LwNode]("children", lwNodeColID, lwNodeColLwNodeChildren)` || !r.Many {
 		t.Fatalf("children %+v", r)
 	}
-	if r := n.rel("parent"); r.Desc != `velox.EdgeTo[LwNode]("Parent", lwNodeColLwNodeChildren, lwNodeColID)` || r.Many {
+	if r := n.rel("parent"); r.Desc != `velox.EdgeTo[LwNode]("parent", lwNodeColLwNodeChildren, lwNodeColID)` || r.Many {
 		t.Fatalf("parent %+v", r)
 	}
-	if r := n.rel("friends"); r.Desc != `velox.EdgeThrough[LwNodeFriend, LwNode]("Friends", lwNodeColID, lwNodeFriendColLwNodeID, lwNodeFriendColFriendID, lwNodeColID)` {
+	if r := n.rel("friends"); r.Desc != `velox.EdgeThrough[LwNodeFriend, LwNode]("friends", lwNodeColID, lwNodeFriendColLwNodeID, lwNodeFriendColFriendID, lwNodeColID)` {
 		t.Fatalf("friends %+v", r)
 	}
 	if f := n.field("lw_node_children"); f == nil || f.GoType != "*int64" || f.Handle != "velox.NullNumberCol[LwNode, int64]" {
@@ -644,10 +644,10 @@ func TestLowerIndexGoTypes(t *testing.T) {
 	if j == nil || j.Fields[0].Column != "acct" || j.Fields[1].Column != "role" || j.Fields[0].ElemType != "string" {
 		t.Fatalf("join %+v", j)
 	}
-	if r := a.rel("roles"); r.Desc != `velox.EdgeThrough[AccountRoleLink, Role]("Roles", accountColID, accountRoleLinkColAcct, accountRoleLinkColRole, roleColID)` {
+	if r := a.rel("roles"); r.Desc != `velox.EdgeThrough[AccountRoleLink, Role]("roles", accountColID, accountRoleLinkColAcct, accountRoleLinkColRole, roleColID)` {
 		t.Errorf("roles %s", r.Desc)
 	}
-	if r := a.rel("profile"); r.Desc != `velox.EdgeTo[Profile]("Profile", accountColID, profileColAccountProfile)` {
+	if r := a.rel("profile"); r.Desc != `velox.EdgeTo[Profile]("profile", accountColID, profileColAccountProfile)` {
 		t.Errorf("profile %s", r.Desc)
 	}
 }
@@ -936,10 +936,10 @@ func TestLowerEnumDefault(t *testing.T) {
 
 func TestLowerOneToOneDescriptor(t *testing.T) {
 	o := mustLower(t, Config{}, Account{}, Profile{}, Role{}, Home{}, Person{})
-	if r := o.entity("Profile").rel("account"); r.Many || r.Desc != `velox.EdgeTo[Account]("Account", profileColAccountProfile, accountColID)` {
+	if r := o.entity("Profile").rel("account"); r.Many || r.Desc != `velox.EdgeTo[Account]("account", profileColAccountProfile, accountColID)` {
 		t.Errorf("inverse %+v", r) // the key is in Profile, the inverse's owner
 	}
-	if r := o.entity("Person").rel("spouse"); r.Many || r.Desc != `velox.EdgeBidi[Person]("Spouse", personColPersonSpouse, personColID)` {
+	if r := o.entity("Person").rel("spouse"); r.Many || r.Desc != `velox.EdgeBidi[Person]("spouse", personColPersonSpouse, personColID)` {
 		t.Errorf("bidi %+v", r)
 	}
 }

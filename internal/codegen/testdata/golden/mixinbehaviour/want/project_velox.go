@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"example.com/tmp/mixins/softdel"
+	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema"
 )
 
 // Project is the entity of schema Project.
@@ -62,7 +65,6 @@ func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(proje
 
 // projectDescriptor describes Project to velox: its table, columns, edges and hooks.
 func projectDescriptor() velox.Descriptor[Project] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Project]{
 		Table: "projects",
 		Columns: []velox.ColumnDescriptor{
@@ -74,9 +76,9 @@ func projectDescriptor() velox.Descriptor[Project] {
 			{Field: "Name", Name: "name"},
 		},
 		PrimaryKey:   []int{projectColID},
-		Policy:       rt.ProjectPolicy,
-		Hooks:        rt.ProjectHooks,
-		Interceptors: rt.ProjectInterceptors,
+		Policy:       []func() velox.Policy{sch.InOrg{}.Policy, sch.Project{}.Policy},
+		Hooks:        []func() []velox.Hook{sch.InOrg{}.Hooks, schema.MixinAt[sch.Audited](sch.Project{}, 2).Hooks},
+		Interceptors: []func() []velox.Interceptor{softdel.Mixin{}.Interceptors},
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
 			case projectColID:

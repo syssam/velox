@@ -333,7 +333,7 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 		err = engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
 			ps := make([]*engine.EntityPolicy, len(d.Policy))
 			for i, p := range d.Policy {
-				ps[i] = engine.PolicyOf(p())
+				ps[i] = engine.PolicyFor(info, p())
 			}
 			return engine.AndPolicies(ps), ""
 		})
@@ -342,11 +342,12 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 		err = engine.EraseHooks(info, func() ([]engine.HookFn, string) {
 			var hs []engine.HookFn
 			for _, h := range d.Hooks {
-				own, reason := engine.HooksOf(h(), len(hs))
-				if reason != "" {
-					return nil, reason
+				for _, x := range h() {
+					if x == nil {
+						return nil, engine.NilHook(len(hs))
+					}
+					hs = append(hs, eraseHook(x))
 				}
-				hs = append(hs, own...)
 			}
 			return hs, ""
 		})
@@ -355,7 +356,7 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 		err = engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
 			var fs []engine.FilterFn
 			for _, f := range d.Interceptors {
-				own, reason := engine.FiltersOf(f(), len(fs))
+				own, reason := engine.FiltersFor(f(), len(fs))
 				if reason != "" {
 					return nil, reason
 				}
@@ -381,6 +382,22 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 		}
 	}
 	return info, nil
+}
+
+// eraseHook is h as the engine runs it, as the root's binding erases it: a
+// velox.Mutation holds an engine.MutationState and nothing else.
+func eraseHook(h velox.Hook) engine.HookFn {
+	return func(next engine.MutateFn) engine.MutateFn {
+		m := h(velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
+			return next(ctx, (*engine.MutationState)(unsafe.Pointer(m)))
+		}))
+		return func(ctx context.Context, mu *engine.MutationState) error {
+			if m == nil {
+				return engine.ErrNilMutator
+			}
+			return m.Mutate(ctx, (*velox.Mutation)(unsafe.Pointer(mu)))
+		}
+	}
 }
 
 // render is RenderStmt for the tests that render statements that cannot fail.

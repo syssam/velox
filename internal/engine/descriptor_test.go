@@ -258,14 +258,14 @@ func TestBidiDescriptorRefused(t *testing.T) {
 	if want := "velox: engine_test.dBidiArray: the join entity of a bidirectional edge has columns of type [2]interface {}, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
 		t.Errorf("an array key of interfaces: %v, want %s", err, want)
 	}
-	allow := func(context.Context) (velox.Pred[dBidi], error) { return velox.Allow[dBidi](), nil }
+	allow := func(context.Context) (velox.Cond, error) { return velox.Allow(), nil }
 	if _, err := loadDescriptor(bidiDescriptor()); err != nil {
 		t.Fatalf("a valid Desc: %v", err)
 	}
 	ok := bidiDescriptor()
-	ok.Policy = velox.BindPolicy(func() velox.Policy[dBidi] {
-		return velox.Policy[dBidi]{Insert: func(context.Context, *dBidi) error { return nil }}
-	})
+	ok.Policy = []func() velox.Policy{func() velox.Policy {
+		return velox.Policy{Insert: func(context.Context, velox.Row) error { return nil }}
+	}}
 	if _, err := loadDescriptor(ok); err != nil {
 		t.Fatalf("a Policy with Insert only: %v", err)
 	}
@@ -283,10 +283,10 @@ func TestBidiDescriptorRefused(t *testing.T) {
 			d.FieldPtr = func(x *dBidi, i int) any { return [...]any{&x.A, &x.C}[i] }
 		}, "the join entity of a bidirectional edge has columns of two types, int64 and string"},
 		{"read policy", func(d *velox.Descriptor[dBidi]) {
-			d.Policy = velox.BindPolicy(func() velox.Policy[dBidi] { return velox.Policy[dBidi]{Read: allow} })
+			d.Policy = []func() velox.Policy{func() velox.Policy { return velox.Policy{Read: allow} }}
 		}, "the join entity of a bidirectional edge cannot have a Read or Write policy: its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"},
 		{"write policy", func(d *velox.Descriptor[dBidi]) {
-			d.Policy = velox.BindPolicy(func() velox.Policy[dBidi] { return velox.Policy[dBidi]{Write: allow} })
+			d.Policy = []func() velox.Policy{func() velox.Policy { return velox.Policy{Write: allow} }}
 		}, "the join entity of a bidirectional edge cannot have a Read or Write policy: its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

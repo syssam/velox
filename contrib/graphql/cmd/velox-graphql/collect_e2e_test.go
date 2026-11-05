@@ -86,14 +86,12 @@ import (
 	"context"
 
 	"github.com/syssam/velox"
-
-	"example.com/app/gen"
 )
 
 // Policy hides the withdrawn reviews, those of 0 stars.
-func (Review) Policy() velox.Policy[gen.Review] {
-	return velox.Policy[gen.Review]{
-		Read: func(context.Context) (velox.Pred[gen.Review], error) { return gen.Reviews.Stars.NEQ(0), nil },
+func (Review) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(context.Context) (velox.Cond, error) { return velox.C("stars").NEQ(0), nil },
 	}
 }
 `
@@ -103,20 +101,43 @@ func (Review) Policy() velox.Policy[gen.Review] {
 const e2eCollectScope = `package schema
 
 import (
+	"context"
+
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
-
-	"example.com/app/gen"
 )
 
 var Org = scope.NewKey[int64]("org")
 
-func orgOf[E any]() scope.Scope[E, int64] { return scope.By[E](Org, "org_id") }
+// orgPolicy confines reads, updates and deletes to the context's org, and
+// refuses an insert into another one.
+func orgPolicy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := Org.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error { return Org.Match(ctx, r.Value("org_id")) },
+	}
+}
 
-func (Author) Policy() velox.Policy[gen.Author] { return orgOf[gen.Author]().Policy() }
-func (Author) Hooks() []velox.Hook[gen.Author]  { return []velox.Hook[gen.Author]{orgOf[gen.Author]().Fill()} }
-func (Book) Policy() velox.Policy[gen.Book]     { return orgOf[gen.Book]().Policy() }
-func (Book) Hooks() []velox.Hook[gen.Book]      { return []velox.Hook[gen.Book]{orgOf[gen.Book]().Fill()} }
+// orgHooks fill org_id on insert from the context.
+func orgHooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if org, ok := Org.From(ctx); ok {
+			return m.Fill("org_id", org)
+		}
+		return nil
+	}, velox.OpInsert)}
+}
+
+func (Author) Policy() velox.Policy { return orgPolicy() }
+func (Author) Hooks() []velox.Hook  { return orgHooks() }
+func (Book) Policy() velox.Policy   { return orgPolicy() }
+func (Book) Hooks() []velox.Hook    { return orgHooks() }
 `
 
 // e2eCollectGqlgen is the application's gqlgen.yml.
@@ -236,7 +257,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
-	_ "example.com/app/gen/runtime"
 	"example.com/app/graph"
 	"example.com/app/schema"
 	"github.com/syssam/velox"
@@ -946,16 +966,20 @@ func TestCollectRun(t *testing.T) {
 		"graph/schema.resolvers.go": e2eCollectResolvers,
 		"collect_test.go":           e2eCollectRun,
 	}, true)
-	// The schema declares behaviour, so gen/runtime binds it; the plugin
-	// writes into gen beside the entities, and gqlgen binds gen's types.
+	// The schema declares behaviour, so gen imports the schema to bind it;
+	// the plugin writes into gen beside the entities, and gqlgen binds gen's
+	// types.
 	out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema")
 	if err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
-	for _, want := range []string{"gen/velox.graphql\n", "gen/node_gql.go\n", "gen/runtime/runtime.go\n", "gen/runtime_velox.go\n"} {
+	for _, want := range []string{"gen/velox.graphql\n", "gen/node_gql.go\n", "gen/review_velox.go\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("velox-gen wrote no %s", want)
 		}
+	}
+	if strings.Contains(out, "runtime") {
+		t.Errorf("velox-gen wrote a runtime file:\n%s", out)
 	}
 	if out, err := run("tool", "velox-gen", "-check", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil || out != "" {
 		t.Errorf("-check: %v\n%s", err, out)

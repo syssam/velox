@@ -147,20 +147,25 @@ An `Update` or `Delete` with neither a `Where` nor `All()` fails with
 `ErrNoWhere`. The names differ because they mean different things: `Unbounded`
 lifts a read's row limit, and `All` confirms a write to every row.
 
-Policies, hooks and interceptors are schema methods, as in ent, typed with
-the generated entity of package `gen`: `func (User) Policy() velox.Policy[gen.User]`,
-`func (User) Hooks() []velox.Hook[gen.User]` and
-`func (User) Interceptors() []velox.Interceptor[gen.User]`. A velox
-interceptor is a row filter, not ent's query middleware: its condition
-reaches every read and write of the entity, a relation's included, before
-the Read policy, and `WithoutPolicy` does not lift it.
+Policies, hooks and interceptors are schema methods, as in ent, and name
+columns by name, as ent's `ent.Policy`, `ent.Hook` and generic
+`ent.Mutation` (`Field`, `SetField`) do: `func (User) Policy() velox.Policy`,
+`func (User) Hooks() []velox.Hook` and
+`func (User) Interceptors() []velox.Interceptor` (decision 0039). A condition
+is `velox.C("org_id").EQ(org)` or `velox.Edge("doc").Has()`, a `velox.Cond`;
+a hook reads and writes a row with `m.Value`, `m.Set` and `m.Fill`, and a
+policy's `Insert` reads it with `r.Value`. A name the entity has no column
+of fails the statement. A velox interceptor is a row filter, not ent's query
+middleware: its condition reaches every read and write of the entity, a
+relation's included, before the Read policy, and `WithoutPolicy` does not
+lift it. A hook that must use the typed API of `gen` (another entity, say)
+is a run-time hook, `velox.WithHooks[gen.Task](...)`, a DB option.
 
-A mixin declares behaviour as ent's does, with generic methods:
-`func (InOrg) Policy[E any]() velox.Policy[E]`, `Hooks[E any]()` and
-`Interceptors[E any]()`. velox-gen binds them for every entity that lists the
-mixin, mixins first, in `Mixin()` order, then the entity's own. The policies
-are ANDed, so none lifts another. Tenancy is such a mixin, over package
-`scope` (decision 0038), as in ent's privacytenant example:
+A mixin declares behaviour as ent's does, with the same plain methods.
+velox-gen binds them for every entity that lists the mixin, mixins first,
+in `Mixin()` order, then the entity's own. The policies are ANDed, so none
+lifts another. Tenancy is such a mixin, over package `scope` (decisions
+0038 and 0039), as in ent's privacytenant example:
 
 ```go
 var OrgKey = scope.NewKey[int64]("org")
@@ -169,37 +174,42 @@ type InOrg struct{ mixin.Schema }
 
 func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
 
-func (InOrg) Policy[E any]() velox.Policy[E] { return scope.By[E](OrgKey, "org_id").Policy() }
+func (InOrg) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := OrgKey.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error { return OrgKey.Match(ctx, r.Value("org_id")) },
+	}
+}
 
-func (InOrg) Hooks[E any]() []velox.Hook[E] {
-	return []velox.Hook[E]{scope.By[E](OrgKey, "org_id").Fill()}
+func (InOrg) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if org, ok := OrgKey.From(ctx); ok {
+			return m.Fill("org_id", org)
+		}
+		return nil
+	}, velox.OpInsert)}
 }
 ```
 
 Soft delete is `softdelete.Mixin{}` from `schema/mixin/softdelete`: a delete
 sets `deleted_at`, and `softdelete.Skip(ctx)` shows deleted rows and makes a
 delete hard. `scopetest.Isolates` checks, in a test, that an entity is
-confined.
+confined, and that its column is immutable, NOT NULL and of the key's type.
 
-The layout is ent's (decision 0037):
-
-- `gen` holds every entity, handle and descriptor. When the schema package
-  imports `gen`, as it does for these methods, `gen` does not import it.
-- `gen/runtime` imports `gen` and the schema, and gives `gen` the schema's
-  methods, and the defaults and validators `gen` cannot call by name, in its
-  `init`. velox-gen writes it only when something needs binding: a schema
-  whose defaults are named functions, such as `time.Now`, and that has no
-  `Policy`, `Hooks` or `Interceptors`, gets none.
-
-As with `ent/runtime`, a program imports `gen/runtime` once, for its effect,
-in its main package and in each test package that uses the entities:
-`import _ "<module>/gen/runtime"`. A program that does not fails at its
-first statement on an entity, with an error that names that line, instead of
-running without the hooks. velox-gen warns when no file of the module imports
-it. A schema that imports `gen/runtime`, directly or through another package,
-is refused with the chain, since it imports the schema. velox-gen generates
-even when `gen` is stale or missing, so no `schema/snapshot` is needed.
-Plugins write into `gen` either way.
+The layout is ent's, with no runtime package (decisions 0037 and 0039):
+`gen` holds every entity, handle and descriptor, and imports the schema
+package, as `sch`, to bind its methods, defaults and validators:
+`Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.Issue{}.Policy}`.
+There is no `gen/runtime` and no blank import. The schema package may not
+import `gen`, directly or through another package: velox-gen refuses it,
+with the chain. A schema compiles before `gen` exists, so no
+`schema/snapshot` is needed. Plugins write into `gen`.
 
 On SQLite, `velox.Connect` turns foreign keys on for every connection. A
 `*sql.DB` you pass to `velox.Open` is used as it is, so put

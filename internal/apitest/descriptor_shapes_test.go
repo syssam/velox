@@ -7,11 +7,11 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 )
 
-func pnoteReading(p velox.Pred[fixture.Pnote], err error) context.Context {
+func pnoteReading(p velox.Cond, err error) context.Context {
 	return context.WithValue(context.Background(), fixture.PnoteKey{}, fixture.PnoteAnswer{P: p, Err: err})
 }
 
-func pnoteWriting(p velox.Pred[fixture.Pnote], err error) context.Context {
+func pnoteWriting(p velox.Cond, err error) context.Context {
 	return context.WithValue(context.Background(), fixture.PnoteWriteKey{}, fixture.PnoteAnswer{P: p, Err: err})
 }
 
@@ -30,7 +30,7 @@ func pboxDescriptor() velox.Descriptor[pbox] {
 		Table:      "pboxes",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.Pnote]("Note", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.Pnote]("note", 1, 0)},
 		FieldPtr: func(x *pbox, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -50,9 +50,9 @@ type pcomment struct {
 	Note   velox.One[fixture.Pnote]
 }
 
-func (*pcomment) Policy() velox.Policy[pcomment] {
-	return velox.Policy[pcomment]{
-		Read: func(context.Context) (velox.Pred[pcomment], error) { return pcommentNote.Has(), nil },
+func (*pcomment) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(context.Context) (velox.Cond, error) { return velox.Edge("note").Has(), nil },
 	}
 }
 
@@ -62,11 +62,11 @@ func (*pcomment) VeloxMeta() *velox.Meta[pcomment] { return pcommentMeta.Load(pc
 
 func pcommentDescriptor() velox.Descriptor[pcomment] {
 	return velox.Descriptor[pcomment]{
-		Policy:     velox.BindPolicy((*pcomment)(nil).Policy),
+		Policy:     []func() velox.Policy{(*pcomment)(nil).Policy},
 		Table:      "pcomments",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.Pnote]("Note", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.Linked[fixture.Pnote](velox.EdgeTo[fixture.Pnote]("note", 1, 0))},
 		FieldPtr: func(x *pcomment, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -93,17 +93,12 @@ type pcycB struct {
 	A   velox.One[pcycA]
 }
 
-var (
-	pcycAB = velox.Rel[pcycA, pcycB]{I: 0}
-	pcycBA = velox.Rel[pcycB, pcycA]{I: 0}
-)
-
-func (*pcycA) Policy() velox.Policy[pcycA] {
-	return velox.Policy[pcycA]{Read: func(context.Context) (velox.Pred[pcycA], error) { return pcycAB.Has(), nil }}
+func (*pcycA) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.Edge("b").Has(), nil }}
 }
 
-func (*pcycB) Policy() velox.Policy[pcycB] {
-	return velox.Policy[pcycB]{Read: func(context.Context) (velox.Pred[pcycB], error) { return pcycBA.Has(), nil }}
+func (*pcycB) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.Edge("a").Has(), nil }}
 }
 
 var (
@@ -117,11 +112,11 @@ func (*pcycB) VeloxMeta() *velox.Meta[pcycB] { return pcycBMeta.Load(pcycBDescri
 
 func pcycADescriptor() velox.Descriptor[pcycA] {
 	return velox.Descriptor[pcycA]{
-		Policy:     velox.BindPolicy((*pcycA)(nil).Policy),
+		Policy:     []func() velox.Policy{(*pcycA)(nil).Policy},
 		Table:      "pcyc_as",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BID", Name: "b_id"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pcycB]("B", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.Linked[pcycB](velox.EdgeTo[pcycB]("b", 1, 0))},
 		FieldPtr: func(x *pcycA, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -134,11 +129,11 @@ func pcycADescriptor() velox.Descriptor[pcycA] {
 
 func pcycBDescriptor() velox.Descriptor[pcycB] {
 	return velox.Descriptor[pcycB]{
-		Policy:     velox.BindPolicy((*pcycB)(nil).Policy),
+		Policy:     []func() velox.Policy{(*pcycB)(nil).Policy},
 		Table:      "pcyc_bs",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AID", Name: "a_id"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pcycA]("A", 1, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.Linked[pcycA](velox.EdgeTo[pcycA]("a", 1, 0))},
 		FieldPtr: func(x *pcycB, i int) any {
 			if i == 0 {
 				return &x.ID

@@ -56,7 +56,7 @@ func noteDescriptor() velox.Descriptor[Note] {
 			{Field: "Text", Name: "text"},
 		},
 		PrimaryKey:   []int{noteColID},
-		Interceptors: velox.BindInterceptors[Note](softdel.Mixin{}.Interceptors),
+		Interceptors: []func() []velox.Interceptor{softdel.Mixin{}.Interceptors},
 		FieldPtr: func(x *Note, i int) any {
 			switch i {
 			case noteColID:

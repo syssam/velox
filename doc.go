@@ -25,27 +25,24 @@
 //
 //	users, err := db.Query[gen.User]().Where(gen.Users.Name.EQ("ada")).Limit(10).All(ctx)
 //
-// Policies and hooks are declared in the schema, as ent's are, typed with the
-// generated entity and handles of package gen, which the schema imports:
+// Policies and hooks are declared in the schema, as ent's are. The schema
+// package does not import gen, which imports it, so they name columns by
+// name, as the schema's fields do:
 //
-//	func (User) Policy() velox.Policy[gen.User] {
-//		return velox.Policy[gen.User]{
-//			Read: func(ctx context.Context) (velox.Pred[gen.User], error) {
-//				return gen.Users.DeletedAt.IsNull(), nil
+//	func (User) Policy() velox.Policy {
+//		return velox.Policy{
+//			Read: func(ctx context.Context) (velox.Cond, error) {
+//				return velox.C("deleted_at").IsNull(), nil
 //			},
 //		}
 //	}
 //
-// Hooks are a method Hooks() []velox.Hook[gen.User] in the same way. gen then
-// does not import the schema: velox-gen writes gen/runtime, which imports
-// both and binds the methods when the program starts, as ent's ent/runtime
-// does. A program imports it once, for its effect, in its main package and
-// in each test package that uses the entities:
-//
-//	import _ "example.com/app/gen/runtime"
-//
-// A program that does not fails at its first statement on an entity, with
-// an error that names that line, rather than run without the policies.
+// Hooks() []velox.Hook and Interceptors() []velox.Interceptor are methods
+// in the same way, on the schema or on a mixin it lists. The entity's
+// descriptor in gen lists the method values, its mixins' first, and velox
+// calls them on the entity's first use. A condition by name is resolved
+// when its statement runs: a name the entity has no column of fails the
+// statement, as does a value of another kind.
 // Everything in ./gen is generated.
 //
 // # Reads
@@ -170,8 +167,9 @@
 // A Hook wraps an entity's writes and receives each as a Mutation. For an
 // update or a delete, Conds returns the conditions the caller and the
 // earlier hooks gave, and not the policy's; it is empty when
-// the statement said All. ValueIn, a method of each column handle, returns
-// the value an update assigns to the column, and whether it assigns one.
+// the statement said All. Value returns the value an update assigns to a
+// column, by name, and whether it assigns one; Set and Fill assign one.
+// WithHooks adds hooks at run time, for one DB, after the schema's.
 // Affected returns the rows the write changed once next has returned. A hook
 // that makes an update or delete itself, such as a soft delete, reports its
 // count with SetAffected. Mutation shows the pattern.
@@ -278,8 +276,8 @@
 //
 // velox-gen and its plugins write code that uses part of this package, and
 // nothing else should: Descriptor, ColumnDescriptor, EdgeDescriptor, EdgeTo, EdgeBidi,
-// EdgeThrough, Meta, MetaOnce, NotLinkedError, Show, BindPolicy, BindHooks, BindInterceptors,
-// BoundPolicy, BoundHooks, BoundInterceptors, Lazy, Validate, ValidateSet, the untyped surface (Table, TableOf,
+// EdgeThrough, Linked, Meta, MetaOnce, NotLinkedError, Show, Lazy, Validate,
+// ValidateSet, the untyped surface (Table, TableOf,
 // TableRows, RowsOf, PredOp and its operators PredEQ, PredNEQ, PredIn,
 // PredNotIn, PredGT, PredGTE, PredLT, PredLTE, PredContains, PredHasPrefix,
 // PredHasSuffix, PredIsNull and PredNotNull, TableQuery, DB.QueryTable,
@@ -287,9 +285,9 @@
 // TableUpdate, TableDelete, DB.InsertTable, DB.InsertRows, DB.UpdateTable,
 // DB.DeleteTable and Assignments: an entity's queries and writes with its
 // type erased, for runtimes compiled once for every entity) and
-// GeneratedCodeIsVersion15. Each
+// GeneratedCodeIsVersion16. Each
 // says "For generated code." in its documentation. They are not part of
-// velox's API: they change only when GeneratedCodeIsVersion15 is replaced by
+// velox's API: they change only when GeneratedCodeIsVersion16 is replaced by
 // the next version, which is outside semantic versioning. Run velox-gen
 // again after you update velox; code generated for another version fails to
 // compile.
@@ -297,11 +295,11 @@ package velox
 
 //go:generate go run ./internal/cmd/handlegen
 
-// GeneratedCodeIsVersion15 is referenced by every file velox-gen writes from a
+// GeneratedCodeIsVersion16 is referenced by every file velox-gen writes from a
 // schema package, so that generated code and this library fail to compile
 // together when they disagree. For generated code. It is replaced by
-// GeneratedCodeIsVersion15 when generated code must change.
-const GeneratedCodeIsVersion15 = true
+// GeneratedCodeIsVersion17 when generated code must change.
+const GeneratedCodeIsVersion16 = true
 
 // Lazy is the constraint of the type parameter that every method of a generic
 // velox type carries, and that callers never write. For generated code. A

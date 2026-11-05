@@ -10,8 +10,8 @@ responses of their servers instead).
 | [start](start) | Full CRUD on one entity: `Insert`, `InsertAll`, `Where`/`OrderBy`/`Limit`/`All`, `One` and `ErrNotFound`, `Count`, `Iter`, `Update`…`Set`…`Where`, `Save`, `Delete`…`Where`, and the `ErrUnbounded`/`ErrNoWhere` guards. **Start here.** | `go run ./start` |
 | [relations](relations) | One-to-many, belongs-to and many-to-many, declared with `edge.To` and `edge.From`; linking through the join entity; `With` eager loading, nested and filtered; `Has`/`HasWhere`; keyset pagination with `After` | `go run ./relations` |
 | [tenant](tenant) | The `scope` package: a context value confines reads, writes and inserts of an entity to an organization; `scope.ErrNoScope`, `scope.ErrMismatch`; `WithoutPolicy` with a reason; a tenant-safe upsert | `go run ./tenant` |
-| [policy](policy) | `Policy[E]` Read/Write/Insert by the user in the context; `ErrDenied` and `*PolicyError`; a child visible when its parent is, through `Has`; `WithoutPolicy`; `SQL(ctx)` | `go run ./policy` |
-| [hooks](hooks) | The typed `Hooks()` of an entity: an insert hook deriving a field, an update hook that reads and sets values through a `Mutation` and writes an audit row on the write's DB (`m.DB()`; inside `db.Tx` it commits or rolls back with the write), a delete hook narrowing with `Where`, `On`, a generic hook any entity can list, `Save` writing back, a dry run that refuses the hook's audit write | `go run ./hooks` |
+| [policy](policy) | `velox.Policy` Read/Write/Insert by the user in the context; `ErrDenied` and `*PolicyError`; a child visible when its parent is, through `Has`; `WithoutPolicy`; `SQL(ctx)` | `go run ./policy` |
+| [hooks](hooks) | The `Hooks()` of an entity and of a mixin: an insert hook deriving a field, an update hook that reads and sets values through a `Mutation`, a delete hook narrowing with `Where`, `Before` and `On`, `Save` writing back; a run-time hook (`velox.WithHooks`) that writes an audit row on the write's DB (`m.DB()`; inside `db.Tx` it commits or rolls back with the write), and a dry run that refuses that write | `go run ./hooks` |
 | [tx](tx) | `db.Tx` commit and rollback, a nested `Tx` savepoint, `ConstraintError`, `TxRetrySerializable`, `TxTimeout` and `WithDeadlines` | `go run ./tx` |
 | [routing](routing) | `OpenShards` with `WithShardFor` choosing a shard by organization, a read replica, `WithSession` pinning a request's reads to the primary after its write, `WithPrimaryReads`, `WithShard`, `ErrNoShard`, and `Statement.Route`. SQLite files, one per database | `go run ./routing` |
 | [otel](otel) | Tracing and metrics with `contrib/veloxotel` on an in-memory exporter: the span tree of a request and its transaction, fingerprints, call sites, the SQL comment sent, and the metric points | `go run ./otel` |
@@ -31,14 +31,14 @@ go run ./start
 - Entities are declared in `schema/` with the ent-style DSL: a struct that
   embeds `schema.Schema`, with `Fields`, `Edges`, `Indexes` and `Mixin`
   methods. As in ent, a schema also declares its entity's `Policy()` and
-  `Hooks()`, typed with the generated entity and handles
-  (`velox.Policy[gen.Doc]`, `gen.Docs.Owner.EQ(u)`).
+  `Hooks()`, and a mixin its own. They name columns and edges by their
+  schema names (`velox.C("owner").EQ(u)`, `velox.Edge("doc").Has()`,
+  `m.Fill("org_id", org)`), so the schema never imports `gen`.
 - `gen/` is written entirely by velox-gen from the schema; never edit it. It
-  holds every entity. When a schema declares `Policy()` or `Hooks()`, it
-  imports `gen` for the methods' types, and velox-gen writes `gen/runtime`,
-  which binds the schema to `gen`, as ent's `ent/runtime` does. `main.go`
-  then imports it once, `import _ ".../gen/runtime"`; without it, a statement
-  on an entity fails and names that line.
+  holds every entity. Each entity's descriptor lists the `Policy` and
+  `Hooks` methods of its mixins and of its schema, so `main.go` needs no
+  extra import. A hook that needs a `gen` type, such as the hooks example's
+  audit row, is a run-time hook, added with `velox.WithHooks[gen.Task]`.
   Context helpers the policies read (the request's user, role or
   principal) are small packages of their own, such as `policy/auth`.
 - Each example's tables come from its `migrations/` directory, made by

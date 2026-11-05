@@ -338,7 +338,7 @@ func TestWithNeedsTheKeyColumn(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	_, err := db.Query[testmodel.Item]().Omit(It.InvoiceID).With(It.Invoice).Limit(1).All(ctx)
-	if err == nil || !strings.HasPrefix(err.Error(), "velox: testmodel.Item: With(Invoice) needs the column invoice_id selected") || e.Calls != 0 {
+	if err == nil || !strings.HasPrefix(err.Error(), "velox: testmodel.Item: With(invoice) needs the column invoice_id selected") || e.Calls != 0 {
 		t.Errorf("%v, calls %d", err, e.Calls)
 	}
 	// A Many is keyed by the owner's primary key.
@@ -428,7 +428,7 @@ func TestWithRelationQueryErrorIsWrapped(t *testing.T) {
 	boom := errors.New("boom")
 	e := &fakeconn.Exec{Results: [][][]any{{invoiceRow(1)}}, Errs: []error{nil, boom}}
 	_, err := openFake(velox.Postgres, e).Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx)
-	if !errors.Is(err, boom) || !strings.HasPrefix(err.Error(), "velox: testmodel.Invoice: loading Items: ") {
+	if !errors.Is(err, boom) || !strings.HasPrefix(err.Error(), "velox: testmodel.Invoice: loading items: ") {
 		t.Errorf("%v", err)
 	}
 }

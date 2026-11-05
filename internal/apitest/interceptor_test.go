@@ -261,14 +261,14 @@ func TestInterceptorRunsBeforePolicy(t *testing.T) {
 	}
 }
 
-// TestInterceptorZeroPredFailsClosed: a Filter that returns the zero Pred
+// TestInterceptorZeroCondFailsClosed: a Filter that returns the zero Cond
 // fails the statement, naming the interceptor, and sends nothing.
-func TestInterceptorZeroPredFailsClosed(t *testing.T) {
+func TestInterceptorZeroCondFailsClosed(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	_, err := db.Query[fixture.INote]().Limit(1).All(fixture.WithFilterMode(context.Background(), fixture.FilterZero))
-	if err == nil || !strings.Contains(err.Error(), "interceptor [0] returned the zero Pred") || errors.Is(err, velox.ErrDenied) {
-		t.Errorf("zero Pred: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "interceptor [0] returned the zero Cond; return velox.Allow() for no restriction") || errors.Is(err, velox.ErrDenied) {
+		t.Errorf("zero Cond: %v", err)
 	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)

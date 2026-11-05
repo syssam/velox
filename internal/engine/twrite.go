@@ -168,7 +168,7 @@ func (q TableInsert) Exec(ctx context.Context) error {
 	if q.one == nil && q.many.n == 0 {
 		return nil
 	}
-	if len(InfoHooks(q.t.info)) > 0 {
+	if q.e.HasHooks(q.t.info) {
 		return Mutate(ctx, q.e, q.t.info, q.mutation(false), func(ctx context.Context, mu *MutationState) error { return q.send(ctx, mu) })
 	}
 	var mu MutationState
@@ -184,7 +184,7 @@ func (q TableInsert) SQL(ctx context.Context) (string, []any, error) {
 	if q.one == nil && q.many.n == 0 {
 		return "", nil, nil
 	}
-	if len(InfoHooks(q.t.info)) > 0 {
+	if q.e.HasHooks(q.t.info) {
 		mu := q.mutation(true)
 		if err := Mutate(ctx, q.e, q.t.info, mu, func(ctx context.Context, mu *MutationState) error { return q.render(ctx, mu) }); err != nil && !DryRefused(mu, err) {
 			return "", nil, err

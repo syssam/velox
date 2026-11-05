@@ -122,39 +122,32 @@ func Use(ctx context.Context, db *velox.DB, e *E) error {
 `
 
 // entityDescHooksSrc is entityDescUseSrc with a Policy and three hooks,
-// declared as methods and bound through the Descriptor's Policy and Hooks fields as
-// velox-gen binds them.
+// declared as methods that name columns by name, and bound through the
+// Descriptor's Policy and Hooks fields as velox-gen binds them.
 var entityDescHooksSrc = strings.Replace(entityDescUseSrc, `var (
-	eID `, `func (*E) Policy() velox.Policy[E] {
-	return velox.Policy[E]{
-		Read:   func(context.Context) (velox.Pred[E], error) { return eName.EQ("r"), nil },
-		Write:  func(context.Context) (velox.Pred[E], error) { return velox.Allow[E](), nil },
-		Insert: func(_ context.Context, x *E) error { return nil },
+	eID `, `func (*E) Policy() velox.Policy {
+	return velox.Policy{
+		Read:   func(context.Context) (velox.Cond, error) { return velox.C("name").EQ("r"), nil },
+		Write:  func(context.Context) (velox.Cond, error) { return velox.Allow(), nil },
+		Insert: func(_ context.Context, r velox.Row) error { _ = r.Value("name"); return nil },
 	}
 }
 
-func (*E) Hooks() []velox.Hook[E] {
-	return []velox.Hook[E]{
-		velox.On(func(next velox.Mutator[E]) velox.Mutator[E] {
-			return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
-				for _, x := range m.Rows() {
-					x.Name = "i"
+func (*E) Hooks() []velox.Hook {
+	return []velox.Hook{
+		velox.Before(func(_ context.Context, m *velox.Mutation) error { return m.Fill("name", "i") }, velox.OpInsert),
+		velox.On(func(next velox.Mutator) velox.Mutator {
+			return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
+				_ = m.DB()
+				if err := m.Set("name", "u"); err != nil {
+					return err
 				}
 				return next.Mutate(ctx, m)
 			})
-		}, velox.OpInsert),
-		velox.On(func(next velox.Mutator[E]) velox.Mutator[E] {
-			return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
-				m.Set(eName.Set("u"))
-				_ = m.DB()
-				return next.Mutate(ctx, m)
-			})
 		}, velox.OpUpdate),
-		velox.On(func(next velox.Mutator[E]) velox.Mutator[E] {
-			return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
-				m.Where(eID.EQ(1))
-				return next.Mutate(ctx, m)
-			})
+		velox.Before(func(_ context.Context, m *velox.Mutation) error {
+			m.Where(velox.C("id").EQ(1))
+			return nil
 		}, velox.OpDelete),
 	}
 }
@@ -166,48 +159,39 @@ var (
 // methods.
 var entityDescHooksBound = strings.Replace(entityDescHooksSrc, `		PrimaryKey: []int{0},
 		Edges:`, `		PrimaryKey: []int{0},
-		Policy:     velox.BindPolicy((*E)(nil).Policy),
-		Hooks:      velox.BindHooks((*E)(nil).Hooks),
+		Policy:     []func() velox.Policy{(*E)(nil).Policy},
+		Hooks:      []func() []velox.Hook{(*E)(nil).Hooks},
 		Edges:`, 1)
 
 // entityDescMixinSrc is entityDescUseSrc with entityDescHooksSrc's Policy
-// and three hooks declared by a mixin, generic over the entity, whose
-// columns are velox.Field handles, and bound as velox-gen binds a mixin's.
+// and three hooks declared by a mixin, and bound as velox-gen binds a
+// mixin's.
 var entityDescMixinSrc = strings.Replace(strings.Replace(entityDescUseSrc, `var (
 	eID `, `type M struct{}
 
-func (M) Policy[T any]() velox.Policy[T] {
-	name := velox.Field[T, string]("name")
-	return velox.Policy[T]{
-		Read:   func(context.Context) (velox.Pred[T], error) { return name.EQ("r"), nil },
-		Write:  func(context.Context) (velox.Pred[T], error) { return velox.Allow[T](), nil },
-		Insert: func(_ context.Context, x *T) error { return nil },
+func (M) Policy() velox.Policy {
+	return velox.Policy{
+		Read:   func(context.Context) (velox.Cond, error) { return velox.C("name").EQ("r"), nil },
+		Write:  func(context.Context) (velox.Cond, error) { return velox.Allow(), nil },
+		Insert: func(_ context.Context, r velox.Row) error { _ = r.Value("name"); return nil },
 	}
 }
 
-func (M) Hooks[T any]() []velox.Hook[T] {
-	id, name := velox.Field[T, int64]("id"), velox.Field[T, string]("name")
-	return []velox.Hook[T]{
-		velox.On(func(next velox.Mutator[T]) velox.Mutator[T] {
-			return velox.MutateFunc[T](func(ctx context.Context, m *velox.Mutation[T]) error {
-				for _, x := range m.Rows() {
-					*name.Ptr(x) = "i"
+func (M) Hooks() []velox.Hook {
+	return []velox.Hook{
+		velox.Before(func(_ context.Context, m *velox.Mutation) error { return m.Fill("name", "i") }, velox.OpInsert),
+		velox.On(func(next velox.Mutator) velox.Mutator {
+			return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
+				_ = m.DB()
+				if err := m.Set("name", "u"); err != nil {
+					return err
 				}
 				return next.Mutate(ctx, m)
 			})
-		}, velox.OpInsert),
-		velox.On(func(next velox.Mutator[T]) velox.Mutator[T] {
-			return velox.MutateFunc[T](func(ctx context.Context, m *velox.Mutation[T]) error {
-				m.Set(name.Set("u"))
-				_ = m.DB()
-				return next.Mutate(ctx, m)
-			})
 		}, velox.OpUpdate),
-		velox.On(func(next velox.Mutator[T]) velox.Mutator[T] {
-			return velox.MutateFunc[T](func(ctx context.Context, m *velox.Mutation[T]) error {
-				m.Where(id.EQ(1))
-				return next.Mutate(ctx, m)
-			})
+		velox.Before(func(_ context.Context, m *velox.Mutation) error {
+			m.Where(velox.C("id").EQ(1))
+			return nil
 		}, velox.OpDelete),
 	}
 }
@@ -215,8 +199,8 @@ func (M) Hooks[T any]() []velox.Hook[T] {
 var (
 	eID `, 1), `		PrimaryKey: []int{0},
 		Edges:`, `		PrimaryKey: []int{0},
-		Policy:     velox.BindPolicy[E](M{}.Policy),
-		Hooks:      velox.BindHooks[E](M{}.Hooks),
+		Policy:     []func() velox.Policy{M{}.Policy},
+		Hooks:      []func() []velox.Hook{M{}.Hooks},
 		Edges:`, 1)
 
 // genericObjects is one unexported variable of each exported generic type,
@@ -245,7 +229,6 @@ var genericObjects = []struct {
 	{"NullStringCol", "velox.NullStringCol[E, string]", "", 19456},  // measured 15228
 	{"JSONCol", "velox.JSONCol[E, []string]", "", 19456},            // measured 14814
 	{"NullJSONCol", "velox.NullJSONCol[E, []string]", "", 19456},    // measured 15142
-	{"Named", "velox.Named[E, int64]", "", 24576},                   // measured 19402
 	{"Pred", "velox.Pred[E]", "", 5120},                             // measured 1014
 	{"Order", "velox.Order[E]", "", 6144},                           // measured 1114
 	{"Setter", "velox.Setter[E]", "", 8192},                         // measured 3168
@@ -261,18 +244,29 @@ var genericObjects = []struct {
 	{"Statement", "velox.Statement", "", 5120},                      // measured 1124
 	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 1140
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
-	// The entity packages. entityDescriptor is the minimal entity velox-gen writes: Load
-	// takes no Policy or Hook generic, and the Descriptor's Policy and Hooks fields hold
-	// E-erased BoundPolicy and BoundHooks that BindPolicy and BindHooks make where the
-	// methods are bound (velox-gen's package runtime), so that only an entity that has
-	// behaviour instantiates those generics. entityDescUse adds a default, two relations and a
-	// Use function that queries, inserts, saves, updates and deletes. entityDescHooks
-	// is that with a Policy and three hooks bound through the fields; the generics it
-	// instantiates are the cost of having a policy and hooks (policyGrowthMax).
-	{"entityDescriptor", "", entityDescSrc, 153600}, // measured 141368
-	// entityDescUse and entityDescHooks are held tighter than the rule above, which
-	// would let them grow by 64 KiB unseen: each bound is the measurement plus about
-	// 1.2%, rounded up to the next KiB.
+	// The entity packages. entityDescriptor is the minimal entity velox-gen writes.
+	// The Descriptor's Policy, Hooks and Interceptors fields are lists of functions
+	// that return the untyped velox.Policy, []velox.Hook and []velox.Interceptor
+	// (GeneratedCodeIsVersion16), so an entity's behaviour instantiates no generic
+	// for it. entityDescUse adds a default, two relations and a Use function that
+	// queries, inserts, saves, updates and deletes. entityDescHooks is that with a
+	// Policy and three hooks bound through the fields (policyGrowthMax).
+	//
+	// The entity packages are held tighter than the rule above, which would let
+	// them grow by 64 KiB unseen: each bound is the measurement plus about 1.2%,
+	// rounded up to the next KiB.
+	//
+	// The untyped fields name velox.Hook, whose Mutation's DB method names *DB,
+	// so the export data of every entity package describes DB's methods:
+	// entityDescriptor, which used no DB, took 284684 bytes, up from 143458
+	// (GeneratedCodeIsVersion15). A package that uses a DB, as entityDescUse and
+	// every program's do, already describes them: entityDescUse grew from 767952
+	// to 772578 bytes, 0.6%. A Policy and three hooks, which instantiated
+	// Policy[E], Hook[E], Mutator[E] and Mutation[E] with their methods, now add
+	// 88788 bytes over entityDescUse, down from 287980: entityDescHooks took
+	// 861366 bytes, down from 1055932, and entityDescMixin, whose mixin's methods
+	// are no longer generic, 871618, down from 1130512.
+	{"entityDescriptor", "", entityDescSrc, 288768}, // measured 284684
 	//
 	// Sum, Avg, Min and Max stay functions: a method of Query whose signature names
 	// NumberCol[E, V] puts that in the export data of every package that uses a
@@ -303,25 +297,19 @@ var genericObjects = []struct {
 	// took entityDescriptor from 142268 to 141368 bytes, entityDescUse from
 	// 770560 to 769648, entityDescHooks from 1058404 to 1057508 and
 	// entityDescMixin from 1132944 to 1132078; the bounds were lowered.
-	{"entityDescUse", "", entityDescUseSrc, 779264},        // measured 769648
-	{"entityDescHooks", "", entityDescHooksBound, 1071104}, // measured 1057508
-	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
-	// generic over the entity, whose columns are velox.Field handles: 74540
-	// bytes, 7%, more than an entity's own methods, for the instances of the
-	// mixin's methods and of velox.Field and Named. An entity without mixin
-	// behaviour pays none of it.
-	{"entityDescMixin", "", entityDescMixinSrc, 1145856}, // measured 1132078
-	{"Policy", "velox.Policy[E]", "", 8192},              // measured 4050
-	{"Mutation", "velox.Mutation[E]", "", 7168},          // measured 2226
+	{"entityDescUse", "", entityDescUseSrc, 782336},       // measured 772578
+	{"entityDescHooks", "", entityDescHooksBound, 872448}, // measured 861366
+	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's:
+	// 10252 bytes more than an entity's own methods, for the mixin's type.
+	{"entityDescMixin", "", entityDescMixinSrc, 882688}, // measured 871618
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
 // package (entityDescHooks over entityDescUse): the measured growth plus
-// genericObjects' margin. Bodies barely count; the cost is
-// the generics velox instantiates for E (BindPolicy, BindHooks, On, the
-// Mutator and Mutation methods) and the export data of the types the
-// functions mention.
-const policyGrowthMax = 354304 // measured 287860
+// about 1.2%, rounded up to the next KiB. velox instantiates no generic for
+// them; the cost is the methods' bodies and closures, and the export data of
+// the types they mention.
+const policyGrowthMax = 90112 // measured 88788
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package

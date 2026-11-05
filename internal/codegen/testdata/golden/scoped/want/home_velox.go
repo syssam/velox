@@ -5,6 +5,7 @@ package gen
 import (
 	"fmt"
 
+	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -41,7 +42,6 @@ func (*Home) VeloxMeta() *velox.Meta[Home] { return homeMeta.Load(homeDescriptor
 
 // homeDescriptor describes Home to velox: its table, columns, edges and hooks.
 func homeDescriptor() velox.Descriptor[Home] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Home]{
 		Table: "homes",
 		Columns: []velox.ColumnDescriptor{
@@ -49,8 +49,8 @@ func homeDescriptor() velox.Descriptor[Home] {
 			{Field: "Region", Name: "region", Immutable: true},
 		},
 		PrimaryKey: []int{homeColID},
-		Policy:     rt.HomePolicy,
-		Hooks:      rt.HomeHooks,
+		Policy:     []func() velox.Policy{sch.InRegion{}.Policy},
+		Hooks:      []func() []velox.Hook{sch.InRegion{}.Hooks},
 		FieldPtr: func(x *Home, i int) any {
 			switch i {
 			case homeColID:

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
 // Project is the entity of schema Project.
@@ -67,7 +68,6 @@ func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(proje
 
 // projectDescriptor describes Project to velox: its table, columns, edges and hooks.
 func projectDescriptor() velox.Descriptor[Project] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Project]{
 		Table: "projects",
 		Columns: []velox.ColumnDescriptor{
@@ -82,10 +82,10 @@ func projectDescriptor() velox.Descriptor[Project] {
 			{Columns: []int{projectColOrgID, projectColName}, Unique: true}, // org_id, name
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Issue]("Issues", projectColID, issueColProjectID),
+			velox.EdgeTo[Issue]("issues", projectColID, issueColProjectID),
 		},
-		Policy: rt.ProjectPolicy,
-		Hooks:  rt.ProjectHooks,
+		Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.Project{}.Policy},
+		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
 			case projectColID:

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
+	sch "github.com/syssam/velox/examples/policy/schema"
 )
 
 // Comment is the entity of schema Comment.
@@ -55,7 +56,6 @@ func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(comme
 
 // commentDescriptor describes Comment to velox: its table, columns, edges and hooks.
 func commentDescriptor() velox.Descriptor[Comment] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Comment]{
 		Table: "comments",
 		Columns: []velox.ColumnDescriptor{
@@ -65,9 +65,9 @@ func commentDescriptor() velox.Descriptor[Comment] {
 		},
 		PrimaryKey: []int{commentColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Doc]("Doc", commentColDocID, docColID),
+			velox.Linked[Doc](velox.EdgeTo[Doc]("doc", commentColDocID, docColID)),
 		},
-		Policy: rt.CommentPolicy,
+		Policy: []func() velox.Policy{sch.Comment{}.Policy},
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case commentColID:

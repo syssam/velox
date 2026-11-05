@@ -3,6 +3,8 @@
 package schema
 
 import (
+	"context"
+
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
@@ -20,10 +22,10 @@ type InOrg struct{ mixin.Schema }
 
 func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
 
-func (InOrg) Policy[E any]() velox.Policy[E] { return scope.By[E](OrgKey, "org_id").Policy() }
+func (InOrg) Policy() velox.Policy { return keyPolicy(OrgKey, "org_id") }
 
-func (InOrg) Hooks[E any]() []velox.Hook[E] {
-	return []velox.Hook[E]{scope.By[E](OrgKey, "org_id").Fill()}
+func (InOrg) Hooks() []velox.Hook {
+	return []velox.Hook{keyFill(OrgKey, "org_id")}
 }
 
 // InRegion scopes an entity by a string, under another key.
@@ -31,10 +33,10 @@ type InRegion struct{ mixin.Schema }
 
 func (InRegion) Fields() []schema.Field { return []schema.Field{field.String("region").Immutable()} }
 
-func (InRegion) Policy[E any]() velox.Policy[E] { return scope.By[E](RegionKey, "region").Policy() }
+func (InRegion) Policy() velox.Policy { return keyPolicy(RegionKey, "region") }
 
-func (InRegion) Hooks[E any]() []velox.Hook[E] {
-	return []velox.Hook[E]{scope.By[E](RegionKey, "region").Fill()}
+func (InRegion) Hooks() []velox.Hook {
+	return []velox.Hook{keyFill(RegionKey, "region")}
 }
 
 // Note is scoped by org, and declares neither Policy nor Hooks.
@@ -68,3 +70,27 @@ func (Home) Mixin() []schema.Mixin { return []schema.Mixin{InRegion{}} }
 type Owner struct{ schema.Schema }
 
 func (Owner) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+
+// keyPolicy confines rows to key's value in the context, by column.
+func keyPolicy[V comparable](key *scope.Key[V], column string) velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			v, err := key.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C(column).EQ(v), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error { return key.Match(ctx, r.Value(column)) },
+	}
+}
+
+// keyFill fills column with key's value in the context on insert.
+func keyFill[V comparable](key *scope.Key[V], column string) velox.Hook {
+	return velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if v, ok := key.From(ctx); ok {
+			return m.Fill(column, v)
+		}
+		return nil
+	}, velox.OpInsert)
+}

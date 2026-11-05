@@ -64,8 +64,8 @@ func projectDescriptor() velox.Descriptor[Project] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{projectColOrgID, projectColName}, Unique: true}, // org_id, name
 		},
-		Policy: velox.BindPolicy[Project](sch.InOrg{}.Policy),
-		Hooks:  velox.BindHooks[Project](sch.InOrg{}.Hooks),
+		Policy: []func() velox.Policy{sch.InOrg{}.Policy},
+		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
 			case projectColID:

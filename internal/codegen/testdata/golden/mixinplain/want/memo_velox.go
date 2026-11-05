@@ -55,7 +55,7 @@ func memoDescriptor() velox.Descriptor[Memo] {
 			{Field: "Text", Name: "text"},
 		},
 		PrimaryKey: []int{memoColID},
-		Policy:     velox.BindPolicy[Memo](sch.InOrg{}.Policy),
+		Policy:     []func() velox.Policy{sch.InOrg{}.Policy},
 		FieldPtr: func(x *Memo, i int) any {
 			switch i {
 			case memoColID:

@@ -175,6 +175,9 @@ func InsertColumns(in *EntityInfo, skip int) []int {
 func InsertAllowed(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
 	if pol := in.policy; pol != nil && pol.Insert != nil && PolicyBypassReason(ctx) == "" {
 		if err := pol.Insert(ctx, p); err != nil {
+			if m, ok := err.(*rowMisuseError); ok {
+				return newStageError(in.Name, "policy", m.err)
+			}
 			return &PolicyError{Entity: in.Name, Op: OpInsert, Err: err}
 		}
 	}

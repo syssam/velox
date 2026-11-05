@@ -46,7 +46,6 @@ func (*Audit) VeloxMeta() *velox.Meta[Audit] { return auditMeta.Load(auditDescri
 
 // auditDescriptor describes Audit to velox: its table, columns, edges and hooks.
 func auditDescriptor() velox.Descriptor[Audit] {
-	veloxRuntime()
 	return velox.Descriptor[Audit]{
 		Table: "audits",
 		Columns: []velox.ColumnDescriptor{

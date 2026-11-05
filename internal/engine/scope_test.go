@@ -24,7 +24,7 @@ func TestScopeSkipsTreesWithoutExists(t *testing.T) {
 	if n := velox.Not(velox.Or(b, has)); !engine.PredNode(velox.Predicate(n)).Deep {
 		t.Error("Not(Or(b, Has())) is not deep")
 	}
-	if n := velox.And(velox.Allow[hnote](), a, has); !engine.PredNode(velox.Predicate(n)).Deep {
+	if n := velox.And(velox.And[hnote](), a, has); !engine.PredNode(velox.Predicate(n)).Deep {
 		t.Error("And(Allow(), a, Has()) is not deep")
 	}
 	leaves := make([]velox.Pred[hnote], 1000)

@@ -58,31 +58,27 @@ func TestMetaOnceRetriesNotLinked(t *testing.T) {
 	}
 }
 
-// A build whose Policy, Hooks or Interceptors panic with NotLinkedError, as
-// one that names an entity not linked yet does, is not kept either.
-func TestMetaOnceRetriesNotLinkedBinding(t *testing.T) {
+// A panic in a Descriptor's Policy, Hooks or Interceptors becomes the
+// entity's *SchemaError, and is kept: no package binds behaviour late, so
+// nothing is retried.
+func TestMetaOnceKeepsBindingPanic(t *testing.T) {
 	var o MetaOnce[other]
-	linked, calls := false, 0
+	calls := 0
 	desc := func() Descriptor[other] {
 		return Descriptor[other]{Table: "other", Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Policy: BindPolicy(func() Policy[other] {
+			Policy: []func() Policy{func() Policy {
 				calls++
-				if !linked {
-					panic(NotLinkedError("target: not linked: import the generated package"))
-				}
-				return Policy[other]{}
-			}),
+				panic("broken")
+			}},
 			FieldPtr: func(x *other, i int) any { return &x.ID }}
 	}
 	m := o.Load(desc)
 	var se *SchemaError
-	if !errors.As(m.err, &se) || !strings.Contains(m.err.Error(), "target: not linked") || m.info != nil {
-		t.Fatalf("before the link: %+v", m)
+	if !errors.As(m.err, &se) || !strings.Contains(m.err.Error(), "Policy() panicked: broken") || m.info != nil {
+		t.Fatalf("the first build: %v, info %v", m.err, m.info)
 	}
-	linked = true
-	a, b := o.Load(desc), o.Load(desc)
-	if calls != 2 || a != b || a.err != nil {
-		t.Fatalf("calls %d, same %v, meta %+v", calls, a == b, a)
+	if again := o.Load(desc); again != m || calls != 1 {
+		t.Fatalf("calls %d, same %v", calls, again == m)
 	}
 }
 

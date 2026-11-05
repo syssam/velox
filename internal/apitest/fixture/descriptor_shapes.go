@@ -31,28 +31,28 @@ var PnoteReads, PnoteWrites atomic.Int64
 type PnoteKey struct{}
 
 type PnoteAnswer struct {
-	P   velox.Pred[Pnote]
+	P   velox.Cond
 	Err error
 }
 
 // PnoteWriteKey's value, a pnoteAnswer, is what pnote's write policy returns.
 type PnoteWriteKey struct{}
 
-func (*Pnote) Policy() velox.Policy[Pnote] {
-	return velox.Policy[Pnote]{
-		Read: func(ctx context.Context) (velox.Pred[Pnote], error) {
+func (*Pnote) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
 			PnoteReads.Add(1)
 			if a, ok := ctx.Value(PnoteKey{}).(PnoteAnswer); ok {
 				return a.P, a.Err
 			}
-			return Pn.Owner.EQ("ann"), nil
+			return velox.C("owner").EQ("ann"), nil
 		},
-		Write: func(ctx context.Context) (velox.Pred[Pnote], error) {
+		Write: func(ctx context.Context) (velox.Cond, error) {
 			PnoteWrites.Add(1)
 			if a, ok := ctx.Value(PnoteWriteKey{}).(PnoteAnswer); ok {
 				return a.P, a.Err
 			}
-			return Pn.Locked.EQ(false), nil
+			return velox.C("locked").EQ(false), nil
 		},
 	}
 }
@@ -63,12 +63,12 @@ func (*Pnote) VeloxMeta() *velox.Meta[Pnote] { return PnoteMeta.Load(PnoteDescri
 
 func PnoteDescriptor() velox.Descriptor[Pnote] {
 	return velox.Descriptor[Pnote]{
-		Policy: velox.BindPolicy((*Pnote)(nil).Policy),
+		Policy: []func() velox.Policy{(*Pnote)(nil).Policy},
 		Table:  "pnotes",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}, {Field: "Locked", Name: "locked"},
 			{Field: "ParentID", Name: "parent_id"}, {Field: "InvoiceID", Name: "invoice_id"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[Pnote]("Parent", 3, 0), velox.EdgeTo[testmodel.Invoice]("Invoice", 4, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.Linked[Pnote](velox.EdgeTo[Pnote]("parent", 3, 0)), velox.Linked[testmodel.Invoice](velox.EdgeTo[testmodel.Invoice]("invoice", 4, 0))},
 		FieldPtr: func(x *Pnote, i int) any {
 			switch i {
 			case 0:
@@ -127,17 +127,17 @@ func NoteDryRun(ctx context.Context, hook string) {
 	}
 }
 
-func (*Dnote) Policy() velox.Policy[Dnote] {
-	return velox.Policy[Dnote]{
-		Read: func(ctx context.Context) (velox.Pred[Dnote], error) {
+func (*Dnote) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
 			NoteDryRun(ctx, "Read")
-			return velox.Allow[Dnote](), nil
+			return velox.Allow(), nil
 		},
-		Write: func(ctx context.Context) (velox.Pred[Dnote], error) {
+		Write: func(ctx context.Context) (velox.Cond, error) {
 			NoteDryRun(ctx, "Write")
-			return velox.Allow[Dnote](), nil
+			return velox.Allow(), nil
 		},
-		Insert: func(ctx context.Context, _ *Dnote) error {
+		Insert: func(ctx context.Context, _ velox.Row) error {
 			NoteDryRun(ctx, "Insert")
 			return nil
 		},
@@ -145,17 +145,17 @@ func (*Dnote) Policy() velox.Policy[Dnote] {
 }
 
 // DnoteHook is a hook that records that it ran under name and calls next.
-func DnoteHook(name string) velox.Hook[Dnote] {
-	return func(next velox.Mutator[Dnote]) velox.Mutator[Dnote] {
-		return velox.MutateFunc[Dnote](func(ctx context.Context, m *velox.Mutation[Dnote]) error {
+func DnoteHook(name string) velox.Hook {
+	return func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			NoteDryRun(ctx, name)
 			return next.Mutate(ctx, m)
 		})
 	}
 }
 
-func (*Dnote) Hooks() []velox.Hook[Dnote] {
-	return []velox.Hook[Dnote]{
+func (*Dnote) Hooks() []velox.Hook {
+	return []velox.Hook{
 		velox.On(DnoteHook("InsertHook"), velox.OpInsert),
 		velox.On(DnoteHook("UpdateHook"), velox.OpUpdate),
 		velox.On(DnoteHook("DeleteHook"), velox.OpDelete),
@@ -168,8 +168,8 @@ func (*Dnote) VeloxMeta() *velox.Meta[Dnote] { return DnoteMeta.Load(DnoteDescri
 
 func DnoteDescriptor() velox.Descriptor[Dnote] {
 	return velox.Descriptor[Dnote]{
-		Policy:     velox.BindPolicy((*Dnote)(nil).Policy),
-		Hooks:      velox.BindHooks((*Dnote)(nil).Hooks),
+		Policy:     []func() velox.Policy{(*Dnote)(nil).Policy},
+		Hooks:      []func() []velox.Hook{(*Dnote)(nil).Hooks},
 		Table:      "dnotes",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},

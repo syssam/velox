@@ -30,8 +30,8 @@ type auditRec struct {
 
 type auditKey struct{}
 
-func auditHook(next velox.Mutator[daudited]) velox.Mutator[daudited] {
-	return velox.MutateFunc[daudited](func(ctx context.Context, m *velox.Mutation[daudited]) error {
+func auditHook(next velox.Mutator) velox.Mutator {
+	return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 		if err := next.Mutate(ctx, m); err != nil {
 			return err
 		}
@@ -47,7 +47,7 @@ func auditHook(next velox.Mutator[daudited]) velox.Mutator[daudited] {
 	})
 }
 
-func (*daudited) Hooks() []velox.Hook[daudited] { return []velox.Hook[daudited]{auditHook} }
+func (*daudited) Hooks() []velox.Hook { return []velox.Hook{auditHook} }
 
 var dauditedMeta velox.MetaOnce[daudited]
 
@@ -55,7 +55,7 @@ func (*daudited) VeloxMeta() *velox.Meta[daudited] { return dauditedMeta.Load(da
 
 func dauditedDescriptor() velox.Descriptor[daudited] {
 	return velox.Descriptor[daudited]{
-		Hooks:      velox.BindHooks((*daudited)(nil).Hooks),
+		Hooks:      []func() []velox.Hook{(*daudited)(nil).Hooks},
 		Table:      "daudited",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
@@ -315,11 +315,11 @@ type dhooked struct {
 
 type dhookKey struct{}
 
-type dhookFunc func(ctx context.Context, m *velox.Mutation[dhooked], next velox.Mutator[dhooked]) error
+type dhookFunc func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error
 
-func (*dhooked) Hooks() []velox.Hook[dhooked] {
-	return []velox.Hook[dhooked]{func(next velox.Mutator[dhooked]) velox.Mutator[dhooked] {
-		return velox.MutateFunc[dhooked](func(ctx context.Context, m *velox.Mutation[dhooked]) error {
+func (*dhooked) Hooks() []velox.Hook {
+	return []velox.Hook{func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			return ctx.Value(dhookKey{}).(dhookFunc)(ctx, m, next)
 		})
 	}}
@@ -331,7 +331,7 @@ func (*dhooked) VeloxMeta() *velox.Meta[dhooked] { return dhookedMeta.Load(dhook
 
 func dhookedDescriptor() velox.Descriptor[dhooked] {
 	return velox.Descriptor[dhooked]{
-		Hooks:      velox.BindHooks((*dhooked)(nil).Hooks),
+		Hooks:      []func() []velox.Hook{(*dhooked)(nil).Hooks},
 		Table:      "dhooked",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 		PrimaryKey: []int{0},
@@ -350,7 +350,7 @@ func dhookedDescriptor() velox.Descriptor[dhooked] {
 // after next, and one that joins its own to ErrDryRun.
 func TestDryRunHookErrors(t *testing.T) {
 	boom := errors.New("boom")
-	audit := func(ctx context.Context, m *velox.Mutation[dhooked]) error {
+	audit := func(ctx context.Context, m *velox.Mutation) error {
 		return m.DB().Insert(&fixture.Dnote{Owner: "audit"}).Exec(ctx)
 	}
 	for _, c := range []struct {
@@ -358,25 +358,25 @@ func TestDryRunHookErrors(t *testing.T) {
 		hook dhookFunc
 		want error // nil: SQL(ctx) succeeds
 	}{
-		{"write after next", func(ctx context.Context, m *velox.Mutation[dhooked], next velox.Mutator[dhooked]) error {
+		{"write after next", func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 			if err := next.Mutate(ctx, m); err != nil {
 				return err
 			}
 			return audit(ctx, m)
 		}, nil},
-		{"write before next", func(ctx context.Context, m *velox.Mutation[dhooked], next velox.Mutator[dhooked]) error {
+		{"write before next", func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 			if err := audit(ctx, m); err != nil {
 				return err
 			}
 			return next.Mutate(ctx, m)
 		}, velox.ErrDryRun},
-		{"own error after next", func(ctx context.Context, m *velox.Mutation[dhooked], next velox.Mutator[dhooked]) error {
+		{"own error after next", func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 			if err := next.Mutate(ctx, m); err != nil {
 				return err
 			}
 			return boom
 		}, boom},
-		{"joined error after next", func(ctx context.Context, m *velox.Mutation[dhooked], next velox.Mutator[dhooked]) error {
+		{"joined error after next", func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 			if err := next.Mutate(ctx, m); err != nil {
 				return err
 			}

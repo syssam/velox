@@ -55,8 +55,8 @@ func noteDescriptor() velox.Descriptor[Note] {
 			{Field: "Body", Name: "body"},
 		},
 		PrimaryKey: []int{noteColID},
-		Policy:     velox.BindPolicy[Note](sch.InOrg{}.Policy),
-		Hooks:      velox.BindHooks[Note](sch.InOrg{}.Hooks),
+		Policy:     []func() velox.Policy{sch.InOrg{}.Policy},
+		Hooks:      []func() []velox.Hook{sch.InOrg{}.Hooks},
 		FieldPtr: func(x *Note, i int) any {
 			switch i {
 			case noteColID:

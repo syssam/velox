@@ -8,8 +8,8 @@ import (
 
 // mixinSources adds to each entity's sources the behaviour of its mixins
 // (Config.Mixins), before its schema's own, and checks the columns their
-// velox.Field calls name. When the schema does not import the generated
-// package, the entity's own file binds them, and imports their packages.
+// velox.Field calls name. The entity's own file binds them, and imports
+// their packages.
 func (l *lowerer) mixinSources() {
 	for _, ge := range l.g.Entities {
 		mbs := l.cfg.Mixins[ge.Name]
@@ -48,16 +48,14 @@ func (l *lowerer) mixinSources() {
 				}
 				*s.out.sources(k) = append(*s.out.sources(k), OutSource{Name: name, Expr: recv + "." + k, Imports: imports})
 			}
-			if !l.out.SchemaImportsGen {
-				s.sch = s.sch || q == "sch" || mb.NonZero
-				for n, p := range imports {
-					s.paths[n] = p
-					if n != "schema" && n != mb.PkgName {
-						if s.out.ImportAs == nil {
-							s.out.ImportAs = map[string]string{}
-						}
-						s.out.ImportAs[p] = n
+			s.sch = s.sch || q == "sch" || mb.NonZero
+			for n, p := range imports {
+				s.paths[n] = p
+				if n != "schema" && n != mb.PkgName {
+					if s.out.ImportAs == nil {
+						s.out.ImportAs = map[string]string{}
 					}
+					s.out.ImportAs[p] = n
 				}
 			}
 		}

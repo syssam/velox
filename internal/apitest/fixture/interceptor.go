@@ -16,7 +16,7 @@ const (
 	FilterHide FilterMode = iota // hide rows whose hidden is true: the default
 	FilterSkip                   // no restriction
 	FilterFail                   // return ErrFilter
-	FilterZero                   // return the zero Pred
+	FilterZero                   // return the zero Cond
 )
 
 // ErrFilter is the error of INote's interceptor under FilterFail.
@@ -66,9 +66,9 @@ func iOwnerDescriptor() velox.Descriptor[IOwner] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "PinnedID", Name: "pinned_id"}},
 		PrimaryKey: []int{0},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[INote]("Notes", 0, 1),
-			velox.EdgeTo[INote]("Pinned", 2, 0),
-			velox.EdgeThrough[IJoin, INote]("Tagged", 0, 0, 1, 0),
+			velox.EdgeTo[INote]("notes", 0, 1),
+			velox.EdgeTo[INote]("pinned", 2, 0),
+			velox.EdgeThrough[IJoin, INote]("tagged", 0, 0, 1, 0),
 		},
 		FieldPtr: func(x *IOwner, i int) any {
 			return [...]any{&x.ID, &x.Name, &x.PinnedID}[i]
@@ -108,28 +108,28 @@ func (*INote) VeloxMeta() *velox.Meta[INote] { return iNoteMeta.Load(iNoteDescri
 
 // Interceptors hides the rows whose hidden is true, as the context's mode
 // says.
-func (*INote) Interceptors() []velox.Interceptor[INote] {
-	return []velox.Interceptor[INote]{{Filter: func(ctx context.Context) (velox.Pred[INote], error) {
+func (*INote) Interceptors() []velox.Interceptor {
+	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Cond, error) {
 		FilterCalls++
 		m, _ := ctx.Value(filterModeKey{}).(FilterMode)
 		switch m {
 		case FilterSkip:
-			return velox.Allow[INote](), nil
+			return velox.Allow(), nil
 		case FilterFail:
-			return velox.Pred[INote]{}, ErrFilter
+			return velox.Cond{}, ErrFilter
 		case FilterZero:
-			return velox.Pred[INote]{}, nil
+			return velox.Cond{}, nil
 		}
-		return INotes.Hidden.EQ(false), nil
+		return velox.C("hidden").EQ(false), nil
 	}}}
 }
 
 // Policy hides the body "secret" from reads and the body "locked" from
 // writes.
-func (*INote) Policy() velox.Policy[INote] {
-	return velox.Policy[INote]{
-		Read:  func(context.Context) (velox.Pred[INote], error) { return INotes.Body.NEQ("secret"), nil },
-		Write: func(context.Context) (velox.Pred[INote], error) { return INotes.Body.NEQ("locked"), nil },
+func (*INote) Policy() velox.Policy {
+	return velox.Policy{
+		Read:  func(context.Context) (velox.Cond, error) { return velox.C("body").NEQ("secret"), nil },
+		Write: func(context.Context) (velox.Cond, error) { return velox.C("body").NEQ("locked"), nil },
 	}
 }
 
@@ -141,9 +141,9 @@ func iNoteDescriptor() velox.Descriptor[INote] {
 		},
 		PrimaryKey:   []int{0},
 		Indexes:      []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
-		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[IOwner]("Owner", 1, 0)},
-		Policy:       velox.BindPolicy((*INote)(nil).Policy),
-		Interceptors: velox.BindInterceptors((*INote)(nil).Interceptors),
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[IOwner]("owner", 1, 0)},
+		Policy:       []func() velox.Policy{(*INote)(nil).Policy},
+		Interceptors: []func() []velox.Interceptor{(*INote)(nil).Interceptors},
 		FieldPtr: func(x *INote, i int) any {
 			return [...]any{&x.ID, &x.OwnerID, &x.Body, &x.Hidden}[i]
 		},

@@ -11,11 +11,10 @@ import (
 	"github.com/syssam/velox"
 
 	"example.com/tmp/gen"
-	_ "example.com/tmp/gen/runtime" // binds the schema
 	"example.com/tmp/schema"
 )
 
-// A mixin's Policy, Hooks and Interceptors, bound by package runtime, run
+// A mixin's Policy, Hooks and Interceptors, bound by the generated code, run
 // for the entity that lists it: the hooks of the mixins first, in Mixin
 // order, the configured one with its value, then the entity's own; the
 // policy confines reads to the organization; the interceptor hides rows.

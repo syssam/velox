@@ -33,6 +33,8 @@ type config struct {
 	Backoff time.Duration
 	// shardFor is WithShardFor's; nil: none.
 	ShardFor func(ctx context.Context) (string, error)
+	// Hooks are WithEntityHooks's, by entity; nil: none.
+	Hooks map[*EntityInfo][]HookFn
 }
 
 // Option configures a DB's pipeline. The With functions make them; the zero

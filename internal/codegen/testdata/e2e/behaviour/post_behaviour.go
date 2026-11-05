@@ -6,8 +6,6 @@ import (
 	"context"
 
 	"github.com/syssam/velox"
-
-	"example.com/tmp/gen"
 )
 
 // viewerKey marks a context as a viewer's: such a context reads only
@@ -29,27 +27,27 @@ func WithArchived(ctx context.Context) context.Context {
 
 // Interceptors hides the post titled "archived", unless the context is
 // WithArchived's.
-func (Post) Interceptors() []velox.Interceptor[gen.Post] {
-	return []velox.Interceptor[gen.Post]{{Filter: func(ctx context.Context) (velox.Pred[gen.Post], error) {
+func (Post) Interceptors() []velox.Interceptor {
+	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Cond, error) {
 		if v, _ := ctx.Value(archiveKey{}).(bool); v {
-			return velox.Allow[gen.Post](), nil
+			return velox.Allow(), nil
 		}
-		return gen.Posts.Title.NEQ("archived"), nil
+		return velox.C("title").NEQ("archived"), nil
 	}}}
 }
 
 // Policy shows a viewer only published posts, and refuses a post titled
 // "forbidden".
-func (Post) Policy() velox.Policy[gen.Post] {
-	return velox.Policy[gen.Post]{
-		Read: func(ctx context.Context) (velox.Pred[gen.Post], error) {
+func (Post) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
 			if v, _ := ctx.Value(viewerKey{}).(bool); v {
-				return gen.Posts.Status.EQ(gen.PostStatusPublished), nil
+				return velox.C("status").EQ("published"), nil
 			}
-			return velox.Allow[gen.Post](), nil
+			return velox.Allow(), nil
 		},
-		Insert: func(ctx context.Context, x *gen.Post) error {
-			if x.Title == "forbidden" {
+		Insert: func(ctx context.Context, r velox.Row) error {
+			if r.Value("title") == "forbidden" {
 				return velox.Deny("that title is forbidden")
 			}
 			return nil

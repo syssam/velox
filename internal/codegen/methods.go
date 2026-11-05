@@ -56,9 +56,8 @@ func CheckUserFiles(dir string, entities []string) error {
 					continue
 				}
 				m := d.Name.Name
-				want := behaviourResult(m, f.Name.Name, e)
 				return &FileError{Path: path, Line: fset.Position(d.Pos()).Line, Reason: fmt.Sprintf(
-					"declares %s.%s in the generated package; declare it in the schema package, on %[1]s: func (%[1]s) %[2]s() %[3]s", e, m, want)}
+					"declares %s.%s in the generated package; declare it in the schema package, on %[1]s: func (%[1]s) %[2]s() %[3]s", e, m, behaviourResult(m))}
 			}
 		}
 		return nil
@@ -130,12 +129,12 @@ func userFiles(dir string, mode parser.Mode, fn func(fset *token.FileSet, path s
 }
 
 // policyConds returns the position of the first Read or Write key, with a
-// value other than nil, of a composite literal of type velox.Policy[gen.e] in
-// the body of d, the Policy method of entity e in file f, and token.NoPos when
+// value other than nil, of a composite literal of type velox.Policy in the
+// body of d, the Policy method of an entity in file f, and token.NoPos when
 // there is none. velox is the name f imports the module under. A Policy
 // built another way, by a positional literal, by assigning its fields or in
 // another function, is left to the runtime's check when the entity loads.
-func policyConds(f *ast.File, d *ast.FuncDecl, e string) token.Pos {
+func policyConds(f *ast.File, d *ast.FuncDecl) token.Pos {
 	name := ""
 	for _, im := range f.Imports {
 		if p, _ := strconv.Unquote(im.Path.Value); p == "github.com/syssam/velox" {
@@ -154,7 +153,7 @@ func policyConds(f *ast.File, d *ast.FuncDecl, e string) token.Pos {
 		if !ok || found.IsValid() {
 			return !found.IsValid()
 		}
-		if !isPolicyType(lit.Type, name, e) {
+		if !isPolicyType(lit.Type, name) {
 			return true
 		}
 		for _, el := range lit.Elts {
@@ -173,16 +172,9 @@ func policyConds(f *ast.File, d *ast.FuncDecl, e string) token.Pos {
 	return found
 }
 
-// isPolicyType reports whether t is <velox>.Policy[e] or <velox>.Policy[<gen>.e].
-func isPolicyType(t ast.Expr, velox, e string) bool {
-	ix, ok := t.(*ast.IndexExpr)
-	if !ok {
-		return false
-	}
-	if arg, ok := ix.Index.(*ast.Ident); (!ok || arg.Name != e) && !entityArg(ix.Index, e) {
-		return false
-	}
-	sel, ok := ix.X.(*ast.SelectorExpr)
+// isPolicyType reports whether t is <velox>.Policy.
+func isPolicyType(t ast.Expr, velox string) bool {
+	sel, ok := t.(*ast.SelectorExpr)
 	if !ok || sel.Sel.Name != "Policy" {
 		return false
 	}

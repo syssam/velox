@@ -28,16 +28,16 @@ type hnote struct {
 
 type hnoteKey struct{}
 
-func hnoteHook(ctx context.Context, m *Mutation[hnote]) error {
-	if f, ok := ctx.Value(hnoteKey{}).(func(*Mutation[hnote]) error); ok {
+func hnoteHook(ctx context.Context, m *Mutation) error {
+	if f, ok := ctx.Value(hnoteKey{}).(func(*Mutation) error); ok {
 		return f(m)
 	}
 	return nil
 }
 
-func (*hnote) Hooks() []Hook[hnote] {
-	return []Hook[hnote]{func(next Mutator[hnote]) Mutator[hnote] {
-		return MutateFunc[hnote](func(ctx context.Context, m *Mutation[hnote]) error {
+func (*hnote) Hooks() []Hook {
+	return []Hook{func(next Mutator) Mutator {
+		return MutateFunc(func(ctx context.Context, m *Mutation) error {
 			if err := hnoteHook(ctx, m); err != nil {
 				return err
 			}
@@ -52,7 +52,7 @@ func (*hnote) VeloxMeta() *Meta[hnote] { return hnoteMeta.Load(hnoteDescriptor) 
 
 func hnoteDescriptor() Descriptor[hnote] {
 	return Descriptor[hnote]{
-		Hooks: BindHooks((*hnote)(nil).Hooks),
+		Hooks: []func() []Hook{(*hnote)(nil).Hooks},
 		Table: "hnotes",
 		Columns: []ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
@@ -72,14 +72,6 @@ func hnoteDescriptor() Descriptor[hnote] {
 		},
 	}
 }
-
-var hn = struct {
-	ID    NumberCol[hnote, int64]
-	Title StringCol[hnote, string]
-	Note  StringCol[hnote, string]
-	N     NumberCol[hnote, int64]
-	Due   NullNumberCol[hnote, int64]
-}{NumberCol[hnote, int64]{I: 0}, StringCol[hnote, string]{I: 1}, StringCol[hnote, string]{I: 2}, NumberCol[hnote, int64]{I: 3}, NullNumberCol[hnote, int64]{I: 4}}
 
 type stampCols struct {
 	CreatedAt time.Time
@@ -127,41 +119,30 @@ type hooked struct {
 	Title string
 }
 
-var (
-	hookedTag   = Col[hooked, string]{I: 1}
-	hookedTitle = Col[hooked, string]{I: 2}
-)
-
-func (*hooked) Hooks() []Hook[hooked] {
-	return []Hook[hooked]{
-		On(func(next Mutator[hooked]) Mutator[hooked] {
-			return MutateFunc[hooked](func(ctx context.Context, m *Mutation[hooked]) error {
-				for _, x := range m.Rows() {
-					x.Tag += "entity;"
+func (*hooked) Hooks() []Hook {
+	return []Hook{
+		Before(func(_ context.Context, m *Mutation) error {
+			for r := range m.Rows() {
+				if err := r.Set("tag", r.Value("tag").(string)+"entity;"); err != nil {
+					return err
 				}
-				return next.Mutate(ctx, m)
-			})
+			}
+			return nil
 		}, OpInsert),
-		On(func(next Mutator[hooked]) Mutator[hooked] {
-			return MutateFunc[hooked](func(ctx context.Context, m *Mutation[hooked]) error {
-				m.Set(hookedTag.Set("updated"))
-				return next.Mutate(ctx, m)
-			})
+		Before(func(_ context.Context, m *Mutation) error {
+			return m.Set("tag", "updated")
 		}, OpUpdate),
-		On(func(next Mutator[hooked]) Mutator[hooked] {
-			return MutateFunc[hooked](func(ctx context.Context, m *Mutation[hooked]) error {
-				m.Set(hookedTag.Set("x"))
-				return next.Mutate(ctx, m)
-			})
+		Before(func(_ context.Context, m *Mutation) error {
+			return m.Set("tag", "x")
 		}, OpDelete),
 	}
 }
 
-func (*hooked) Policy() Policy[hooked] {
-	return Policy[hooked]{
-		Read: func(context.Context) (Pred[hooked], error) { return hookedTitle.EQ("r"), nil },
-		Insert: func(_ context.Context, x *hooked) error {
-			if x.Title == "" {
+func (*hooked) Policy() Policy {
+	return Policy{
+		Read: func(context.Context) (Cond, error) { return C("title").EQ("r"), nil },
+		Insert: func(_ context.Context, r Row) error {
+			if r.Value("title") == "" {
 				return Deny("no title")
 			}
 			return nil
@@ -175,8 +156,8 @@ func (*hooked) VeloxMeta() *Meta[hooked] { return hookedMeta.Load(hookedDescript
 
 func hookedDescriptor() Descriptor[hooked] {
 	return Descriptor[hooked]{
-		Policy:     BindPolicy((*hooked)(nil).Policy),
-		Hooks:      BindHooks((*hooked)(nil).Hooks),
+		Policy:     []func() Policy{(*hooked)(nil).Policy},
+		Hooks:      []func() []Hook{(*hooked)(nil).Hooks},
 		Table:      "hooked",
 		Columns:    []ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},

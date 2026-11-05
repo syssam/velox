@@ -14,51 +14,39 @@ import (
 )
 
 // behaviourMethods are the methods a schema package declares an entity's
-// behaviour with. The loader leaves them, and what only they use, out of the
-// program it compiles, and package runtime binds them.
+// behaviour with, on the entity's schema or on a mixin.
 var behaviourMethods = []string{"Hooks", "Interceptors", "Policy"}
 
-// behaviourResult is the result method m of entity e must return, in the
-// generated package genPkg: []velox.Hook[gen.E], velox.Policy[gen.E] or
-// []velox.Interceptor[gen.E].
-func behaviourResult(m, genPkg, e string) string {
+// behaviourResult is the result of a behaviour method m: velox.Policy,
+// []velox.Hook or []velox.Interceptor.
+func behaviourResult(m string) string {
 	switch m {
 	case "Policy":
-		return "velox.Policy[" + genPkg + "." + e + "]"
+		return "velox.Policy"
 	case "Interceptors":
-		return "[]velox.Interceptor[" + genPkg + "." + e + "]"
+		return "[]velox.Interceptor"
 	}
-	return "[]velox.Hook[" + genPkg + "." + e + "]"
-}
-
-// mixinResult is the result of a mixin's method m, generic over E.
-func mixinResult(m string) string {
-	return map[string]string{"Policy": "velox.Policy[E]", "Hooks": "[]velox.Hook[E]", "Interceptors": "[]velox.Interceptor[E]"}[m]
+	return "[]velox.Hook"
 }
 
 // SchemaMethods reads the schema package's files in dir, as userFiles does,
 // and reports which of entities have a Hooks, a Policy or an Interceptors
-// method there. An
-// entity's method is declared on the type of its name in the schema package:
-// a schema's on the schema, and a join entity's, which has no schema, on a
-// type the user declares for it, such as type UserFriend struct{}.
+// method there. An entity's method is declared on the type of its name in
+// the schema package: a schema's on the schema, and a join entity's, which
+// has no schema, on a type the user declares for it, such as
+// type UserFriend struct{}.
 //
-// The method takes nothing and returns []velox.Hook[gen.E],
-// velox.Policy[gen.E] or []velox.Interceptor[gen.E], gen being the generated
-// package and E the entity; another shape is a *FileError, and so is such a
-// method on a type that is not an entity's, unless it is generic: a mixin's
-// method, which MixinBehaviour reads. The receiver may be a value or a pointer: package
-// runtime binds the method of a new value, or a new pointer, of the schema
-// package's type.
+// The method takes nothing and returns velox.Policy, []velox.Hook or
+// []velox.Interceptor; another shape is a *FileError, the typed shape of an
+// older velox (velox.Policy[gen.E]) among them. The receiver may be a value
+// or a pointer: the generated code binds the method of a new value, or a
+// new pointer, of the schema package's type. A generic behaviour method on
+// another type is a *FileError too: behaviour methods are not generic. A
+// method that is not generic on another type is a mixin's, which
+// MixinBehaviour reads.
 //
 // The result holds only the entities that have at least one of the methods.
-//
-// genPkg is the name of the generated package, which the errors use; "" is
-// gen.
-func SchemaMethods(dir, genPkg string, entities []string) (map[string]Bound, error) {
-	if genPkg == "" {
-		genPkg = "gen"
-	}
+func SchemaMethods(dir string, entities []string) (map[string]Bound, error) {
 	out := map[string]Bound{}
 	err := userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
 		for _, d := range f.Decls {
@@ -74,19 +62,18 @@ func SchemaMethods(dir, genPkg string, entities []string) (map[string]Bound, err
 			line := fset.Position(fd.Pos()).Line
 			if !slices.Contains(entities, e) {
 				if fd.Type.TypeParams != nil {
-					continue // a mixin's, which MixinBehaviour reads
+					return &FileError{Path: path, Line: line, Reason: notGeneric(e, m)}
 				}
-				return &FileError{Path: path, Line: line, Reason: fmt.Sprintf("%[1]s.%[2]s: %[1]s is not an entity; Hooks, Policy and Interceptors are declared on an entity's schema, on a type named like a join entity, or, generic over the entity, on a mixin: func (%[1]s) %[2]s[E any]() %[3]s", e, m, mixinResult(m))}
+				continue // a mixin's, which MixinBehaviour reads
 			}
-			if !behaviourSignature(fd, e) {
-				want := behaviourResult(m, genPkg, e)
-				return &FileError{Path: path, Line: line, Reason: fmt.Sprintf("%s.%s must take nothing and return %s (func (%[1]s) %[2]s() %[3]s)", e, m, want)}
+			if !behaviourSignature(fd.Type, m, localName(f, veloxPkg)) {
+				return &FileError{Path: path, Line: line, Reason: fmt.Sprintf("%s.%s must take nothing and return %s: func (%[1]s) %[2]s() %[3]s", e, m, behaviourResult(m))}
 			}
 			b := out[e]
 			switch m {
 			case "Policy":
 				b.Policy, b.PolicyPtr = true, ptr
-				if pos := policyConds(f, fd, e); pos.IsValid() {
+				if pos := policyConds(f, fd); pos.IsValid() {
 					b.PolicyConds = fmt.Sprintf("%s:%d", path, fset.Position(pos).Line)
 				}
 			case "Interceptors":
@@ -104,119 +91,108 @@ func SchemaMethods(dir, genPkg string, entities []string) (map[string]Bound, err
 	return out, nil
 }
 
-// behaviourSignature reports whether fd, a Hooks, Policy or Interceptors
-// method of entity e, takes nothing and returns []<x>.Hook[<y>.e],
-// <x>.Policy[<y>.e] or []<x>.Interceptor[<y>.e]. It reads names only; the
-// compiler checks the packages when it builds package runtime.
-func behaviourSignature(fd *ast.FuncDecl, e string) bool {
-	t := fd.Type
+// notGeneric is the reason a generic behaviour method m of type t is
+// refused.
+func notGeneric(t, m string) string {
+	return fmt.Sprintf("%s.%s: behaviour methods are not generic: func (%[1]s) %[2]s() %[3]s", t, m, behaviourResult(m))
+}
+
+// behaviourSignature reports whether t, the type of a Hooks, Policy or
+// Interceptors method m, takes nothing, has no type parameters and returns
+// []<velox>.Hook, <velox>.Policy or []<velox>.Interceptor, velox being the
+// name the file imports velox under, or any name when it is "". It reads
+// names only; the compiler checks the types when it builds the generated
+// package.
+func behaviourSignature(t *ast.FuncType, m, velox string) bool {
 	if t.TypeParams != nil || len(t.Params.List) != 0 || t.Results == nil || len(t.Results.List) != 1 || len(t.Results.List[0].Names) > 1 {
 		return false
 	}
 	r := t.Results.List[0].Type
 	name := "Policy"
-	if m := fd.Name.Name; m != "Policy" {
+	if m != "Policy" {
 		at, ok := r.(*ast.ArrayType)
 		if !ok || at.Len != nil {
 			return false
 		}
 		r, name = at.Elt, strings.TrimSuffix(m, "s")
 	}
-	ix, ok := r.(*ast.IndexExpr)
-	if !ok {
+	sel, ok := r.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != name {
 		return false
 	}
-	if sel, ok := ix.X.(*ast.SelectorExpr); !ok || sel.Sel.Name != name {
-		return false
-	}
-	return entityArg(ix.Index, e)
-}
-
-// entityArg reports whether x names entity e of the generated package: <y>.e.
-func entityArg(x ast.Expr, e string) bool {
-	sel, ok := x.(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != e {
-		return false
-	}
-	_, ok = sel.X.(*ast.Ident)
-	return ok
+	id, ok := sel.X.(*ast.Ident)
+	return ok && (velox == "" || id.Name == velox)
 }
 
 // Behaviour reads the schema package that pattern names, from the module
-// that holds dir, and says how the package at genPath, the generated one, is
-// written. bound is SchemaMethods. importsGen is true when bound is not
-// empty, or when the schema package imports genPath, directly or through
-// other packages: the generated package then does not import the schema
-// package, and package runtime, below it, binds the schema
-// (Config.SchemaImportsGen).
+// that holds dir, and returns which of entities declare behaviour methods
+// there (SchemaMethods).
 //
-// The schema package never imports package runtime, which imports it. An
-// import of it, by a file of the schema package, is a *FileError at its
-// line; one through other packages is an error that names the chain of
-// imports. env is the environment of go list; nil means os.Environ().
-func Behaviour(dir, pattern, genPath string, env, entities []string) (bound map[string]Bound, importsGen bool, err error) {
-	pkgDir, importsGen, err := checkGenImports(dir, pattern, genPath, env)
+// The schema package declares behaviour by column name and does not import
+// the generated package at genPath, which imports it. An import of it, by
+// a file of the schema package, is a *FileError at its line; one through
+// other packages is an error that names the chain of imports. env is the
+// environment of go list; nil means os.Environ().
+func Behaviour(dir, pattern, genPath string, env, entities []string) (map[string]Bound, error) {
+	pkgDir, err := checkGenImports(dir, pattern, genPath, env)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	if bound, err = SchemaMethods(pkgDir, guessName(genPath), entities); err != nil {
-		return nil, false, err
-	}
-	return bound, len(bound) > 0 || importsGen, nil
+	return SchemaMethods(pkgDir, entities)
 }
 
 // CheckGenImports refuses a schema package, at pattern, that imports
-// genPath/runtime, directly or through other packages, as Behaviour does.
-// velox-gen runs it when the loader fails too, since go list reports such an
-// import cycle with no chain. env is the environment of go list.
+// genPath, directly or through other packages, as Behaviour does. velox-gen
+// runs it when the loader fails too, since go list reports such an import
+// cycle with no chain. env is the environment of go list.
 func CheckGenImports(dir, pattern, genPath string, env []string) error {
-	_, _, err := checkGenImports(dir, pattern, genPath, env)
+	_, err := checkGenImports(dir, pattern, genPath, env)
 	return err
 }
 
+// genImportReason is why the schema package may not import the generated
+// one.
+const genImportReason = "the schema declares behaviour by column name and does not use gen, which imports the schema; move the code that needs gen out of the schema package"
+
 // checkGenImports is CheckGenImports, which also returns the schema
-// package's directory and whether it imports genPath.
-func checkGenImports(dir, pattern, genPath string, env []string) (pkgDir string, importsGen bool, err error) {
+// package's directory.
+func checkGenImports(dir, pattern, genPath string, env []string) (string, error) {
 	pkg, err := list(dir, pattern, env)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
-	rtPath := genPath + "/" + RuntimeDir
 	err = userFiles(pkg.Dir, parser.ImportsOnly, func(fset *token.FileSet, path string, f *ast.File) error {
 		for _, im := range f.Imports {
-			if p, _ := strconv.Unquote(im.Path.Value); p == rtPath {
-				return &FileError{Path: path, Line: fset.Position(im.Pos()).Line, Reason: fmt.Sprintf(
-					"the schema package imports %s, which imports the schema package to bind its Hooks and Policy: "+
-						"import %s for the entities, and %s only in the program's main package and its tests", strconv.Quote(rtPath), strconv.Quote(genPath), strconv.Quote(rtPath))}
+			if p, _ := strconv.Unquote(im.Path.Value); p == genPath {
+				return &FileError{Path: path, Line: fset.Position(im.Pos()).Line, Reason: fmt.Sprintf("the schema package imports %s: %s", p, genImportReason)}
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
-	chain, importsGen, err := genImports(pkg.Dir, pkg.ImportPath, genPath, rtPath, env)
+	chain, err := genImports(dir, pkg.ImportPath, genPath, env)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	if len(chain) > 0 {
-		return "", false, fmt.Errorf("%s: package runtime imports the schema package to bind its Hooks and Policy, so no package the schema imports may import it; import %s for the entities",
-			strings.Join(chain, " imports "), strconv.Quote(genPath))
+		return "", fmt.Errorf("%s: %s", strings.Join(chain, " imports "), genImportReason)
 	}
-	return pkg.Dir, importsGen, nil
+	return pkg.Dir, nil
 }
 
 // genImports lists the packages the schema package at importPath imports,
 // directly and through others, with go list run in dir, and returns the
-// shortest chain of imports from it to rtPath, or nil, and whether it
-// reaches genPath. A package go list cannot find, such as a generated
-// package not written yet, is still a node of the graph. What genPath and
-// rtPath import is not followed: an older generated package may import the
-// schema package.
-func genImports(dir, importPath, genPath, rtPath string, env []string) (chain []string, importsGen bool, err error) {
+// shortest chain of imports from it to genPath, and nil when none reaches
+// it. A package go list cannot find, such as a
+// generated package not written yet, is still a node of the graph. What
+// the generated packages import is not followed: they import the schema
+// package.
+func genImports(dir, importPath, genPath string, env []string) ([]string, error) {
 	out, stderr, err := run(dir, env, "list", "-e", "-deps", "-json=ImportPath,Imports", importPath)
 	if err != nil {
-		return nil, false, fmt.Errorf("go list -deps %s: %w\n%s", importPath, err, strings.TrimSpace(stderr))
+		return nil, fmt.Errorf("go list -deps %s: %w\n%s", importPath, err, strings.TrimSpace(stderr))
 	}
 	imports := map[string][]string{}
 	dec := json.NewDecoder(strings.NewReader(out))
@@ -228,7 +204,7 @@ func genImports(dir, importPath, genPath, rtPath string, env []string) (chain []
 		if err := dec.Decode(&p); errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return nil, false, fmt.Errorf("reading go list output: %w", err)
+			return nil, fmt.Errorf("reading go list output: %w", err)
 		}
 		imports[p.ImportPath] = p.Imports
 	}
@@ -242,20 +218,15 @@ func genImports(dir, importPath, genPath, rtPath string, env []string) (chain []
 				continue
 			}
 			prev[q] = p
-			switch q {
-			case genPath:
-				importsGen = true
-				continue
-			case rtPath:
-				if chain == nil {
-					for x := q; x != ""; x = prev[x] {
-						chain = append([]string{x}, chain...)
-					}
+			if q == genPath {
+				var chain []string
+				for x := q; x != ""; x = prev[x] {
+					chain = append([]string{x}, chain...)
 				}
-				continue
+				return chain, nil
 			}
 			queue = append(queue, q)
 		}
 	}
-	return chain, importsGen, nil
+	return nil, nil
 }

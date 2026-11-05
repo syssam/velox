@@ -1,7 +1,6 @@
 package codegen
 
 import (
-	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,8 +29,7 @@ type FuncPkg struct {
 //
 // A package is importable from the generated package when Go's rule for
 // internal packages allows it and it does not import, directly or through
-// others, the generated package, nor, when the schema imports the generated
-// package, the schema package.
+// others, the generated package.
 func FuncPackages(dir string, g *Graph, cfg Config, env []string) (map[string]FuncPkg, error) {
 	seen := map[string]bool{}
 	for _, e := range g.Entities {
@@ -69,9 +67,6 @@ func FuncPackages(dir string, g *Graph, cfg Config, env []string) (map[string]Fu
 	}
 	genPath := cfg.GenPath
 	forbidden := map[string]bool{genPath: true}
-	if cfg.SchemaImportsGen || len(cfg.Bound) > 0 {
-		forbidden[cmp.Or(cfg.SchemaPath, g.Package)] = true
-	}
 	// reaches reports whether p imports a forbidden package, or is one.
 	memo := map[string]bool{}
 	var reaches func(p string) bool

@@ -11,16 +11,18 @@ import (
 )
 
 // withHook returns a context whose hnote hooks run f.
-func withHook(f func(*velox.Mutation[hnote]) error) context.Context {
+func withHook(f func(*velox.Mutation) error) context.Context {
 	return context.WithValue(context.Background(), hnoteKey{}, f)
 }
 
 func TestMutationSetReplacesAndAppends(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
-	ctx := withHook(func(m *velox.Mutation[hnote]) error {
-		m.Set(hn.Title.Set("T"), hn.Note.Set("n"))
-		return nil
+	ctx := withHook(func(m *velox.Mutation) error {
+		if err := m.Set("title", "T"); err != nil {
+			return err
+		}
+		return m.Set("note", "n")
 	})
 	x := hnote{ID: 1, Title: "t", Note: "old"}
 	if err := db.Save(&x, hn.Title).Exec(ctx); err != nil {
@@ -64,9 +66,11 @@ func TestSaveStoresWhatItSent(t *testing.T) {
 	db := openFake(velox.Postgres, e, rw)
 	five := int64(5)
 	x := hnote{ID: 1, Note: "old", Due: &five}
-	ctx := withHook(func(m *velox.Mutation[hnote]) error {
-		m.Set(hn.Note.Set("n"), hn.Due.SetNull())
-		return nil
+	ctx := withHook(func(m *velox.Mutation) error {
+		if err := m.Set("note", "n"); err != nil {
+			return err
+		}
+		return m.Set("due", nil)
 	})
 	if err := db.Save(&x, hn.Title).Exec(ctx); err != nil {
 		t.Fatal(err)
@@ -74,9 +78,8 @@ func TestSaveStoresWhatItSent(t *testing.T) {
 	if x.Note != "old" || x.Due != nil {
 		t.Errorf("Note %q, Due %v", x.Note, x.Due)
 	}
-	ctx = withHook(func(m *velox.Mutation[hnote]) error {
-		m.Set(hn.Due.Set(7))
-		return nil
+	ctx = withHook(func(m *velox.Mutation) error {
+		return m.Set("due", 7)
 	})
 	if err := db.Save(&x, hn.Title).Exec(ctx); err != nil {
 		t.Fatal(err)
@@ -89,12 +92,12 @@ func TestSaveStoresWhatItSent(t *testing.T) {
 func TestMutationSetOnADelete(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
-	ctx := withHook(func(m *velox.Mutation[hnote]) error {
-		m.Set(hn.Note.Set("n"))
+	ctx := withHook(func(m *velox.Mutation) error {
+		_ = m.Set("note", "n") // recorded, and fails the write
 		return nil
 	})
 	_, err := db.Delete[hnote]().Where(hn.ID.EQ(1)).Exec(ctx)
-	const text = "velox: engine_test.hnote: hook: a delete assigns no columns: Set is for updates"
+	const text = `velox: engine_test.hnote: hook: Set("note") on a delete: a delete assigns no columns`
 	if err == nil || err.Error() != text {
 		t.Errorf("got %v, want %q", err, text)
 	}
@@ -103,25 +106,24 @@ func TestMutationSetOnADelete(t *testing.T) {
 	}
 }
 
-// TestValueIn: a handle's ValueIn reads the value an update's Set assigns,
-// typed to the handle's value; an Add assigns none. A nullable handle gives a
-// copy: SetNull is (nil, true), and changing the pointee changes nothing sent.
-// On an insert ValueIn fails the write, as Set does.
-func TestValueIn(t *testing.T) {
+// TestMutationValue: Value reads the value an update's Set assigns; an Add
+// assigns none. A nullable column gives its value, not a pointer: SetNull is
+// (nil, true). On an insert Value fails the write.
+func TestMutationValue(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
 	type seen struct {
 		op            velox.Op
-		title, note   string
-		n             int64
+		title, note   any
+		n             any
 		okT, okN, okX bool
 	}
 	var s seen
-	ctx := withHook(func(m *velox.Mutation[hnote]) error {
+	ctx := withHook(func(m *velox.Mutation) error {
 		s.op = m.Op()
-		s.title, s.okT = hn.Title.ValueIn(m)
-		s.note, s.okN = hn.Note.ValueIn(m)
-		s.n, s.okX = hn.N.ValueIn(m) // an Add assigns no value
+		s.title, s.okT = m.Value("title")
+		s.note, s.okN = m.Value("note")
+		s.n, s.okX = m.Value("n") // an Add assigns no value
 		return nil
 	})
 	if _, err := db.Update[hnote]().Set(hn.Title.Set("t"), hn.N.Add(1)).Where(hn.ID.EQ(1)).Exec(ctx); err != nil {
@@ -137,30 +139,28 @@ func TestValueIn(t *testing.T) {
 		t.Errorf("on a delete the hook saw %+v", s)
 	}
 
-	// A nullable handle.
-	var due *int64
+	// A nullable column.
+	var due any
 	var ok bool
-	ctx = withHook(func(m *velox.Mutation[hnote]) error {
-		due, ok = hn.Due.ValueIn(m)
-		if due != nil {
-			*due = 8 // a copy: the statement still sends 7
-		}
+	ctx = withHook(func(m *velox.Mutation) error {
+		due, ok = m.Value("due")
 		return nil
 	})
 	if _, err := db.Update[hnote]().Set(hn.Due.SetNull()).Where(hn.ID.EQ(1)).Exec(ctx); err != nil || due != nil || !ok {
 		t.Errorf("SetNull: %v, %v, %v", err, due, ok)
 	}
-	if _, err := db.Update[hnote]().Set(hn.Due.Set(7)).Where(hn.ID.EQ(1)).Exec(ctx); err != nil || due == nil || !ok || e.Args[0] != int64(7) {
+	if _, err := db.Update[hnote]().Set(hn.Due.Set(7)).Where(hn.ID.EQ(1)).Exec(ctx); err != nil || due != int64(7) || !ok || e.Args[0] != int64(7) {
 		t.Errorf("Set(7): %v, %v, %v, args %v", err, due, ok, e.Args)
 	}
 	if _, err := db.Update[hnote]().Set(hn.Title.Set("t")).Where(hn.ID.EQ(1)).Exec(ctx); err != nil || due != nil || ok {
 		t.Errorf("no assignment: %v, %v, %v", err, due, ok)
 	}
-	// Save assigns the field's own value, a *int64 here.
+	// Save assigns the field's own value, a *int64 here; Value gives the
+	// value it points to.
 	seven := int64(7)
 	x := hnote{ID: 1, Due: &seven}
-	if err := db.Save(&x, hn.Due).Exec(ctx); err != nil || due == nil || !ok || seven != 7 || *x.Due != 7 {
-		t.Errorf("Save: %v, %v, %v, field %d", err, due, ok, seven)
+	if err := db.Save(&x, hn.Due).Exec(ctx); err != nil || due != int64(7) || !ok || *x.Due != 7 {
+		t.Errorf("Save: %v, %v, %v", err, due, ok)
 	}
 	x.Due = nil
 	if err := db.Save(&x, hn.Due).Exec(ctx); err != nil || due != nil || !ok {
@@ -169,23 +169,16 @@ func TestValueIn(t *testing.T) {
 
 	// On an insert.
 	calls := e.Calls
-	ctx = withHook(func(m *velox.Mutation[hnote]) error {
-		if v, ok := hn.Due.ValueIn(m); v != nil || ok {
+	ctx = withHook(func(m *velox.Mutation) error {
+		if v, ok := m.Value("due"); v != nil || ok {
 			t.Errorf("on an insert: %v, %v", v, ok)
 		}
 		return nil
 	})
 	err := db.Insert(&hnote{ID: 2}).Exec(ctx)
-	const text = "velox: engine_test.hnote: hook: Set and Where are for updates and deletes; change Rows"
+	const text = `velox: engine_test.hnote: hook: Value("due") on an insert: read an insert's values from its rows`
 	if err == nil || err.Error() != text || e.Calls != calls {
 		t.Errorf("got %v, want %q; %d statements sent", err, text, e.Calls-calls)
-	}
-	ctx = withHook(func(m *velox.Mutation[hnote]) error {
-		hn.Title.ValueIn(m)
-		return nil
-	})
-	if err := db.Insert(&hnote{ID: 2}).Exec(ctx); err == nil || err.Error() != text {
-		t.Errorf("got %v, want %q", err, text)
 	}
 }
 
@@ -196,17 +189,17 @@ func TestMutationErrors(t *testing.T) {
 	db := openFake(velox.Postgres, e)
 	bad := errors.New("bad")
 	cases := []struct {
-		f    func(*velox.Mutation[hnote]) error
+		f    func(*velox.Mutation) error
 		text string
 	}{
-		{func(*velox.Mutation[hnote]) error { return bad }, "velox: engine_test.hnote: hook: bad"},
-		{func(m *velox.Mutation[hnote]) error { m.Where(velox.Pred[hnote]{}); return nil },
+		{func(*velox.Mutation) error { return bad }, "velox: engine_test.hnote: hook: bad"},
+		{func(m *velox.Mutation) error { m.Where(velox.Cond{}); return nil },
 			"velox: engine_test.hnote: hook: a condition is the zero Predicate; make conditions with column handles, And, Or and Not"},
-		{func(m *velox.Mutation[hnote]) error {
-			m.Where(velox.Pred[hnote](engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: errors.Join(errors.New("velox: engine_test.hnote: has no relation 3"), bad)})))
+		{func(m *velox.Mutation) error {
+			m.Where(velox.Cond(engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: errors.Join(errors.New("velox: engine_test.hnote: has no relation 3"), bad)})))
 			return nil
 		}, "velox: engine_test.hnote: hook: has no relation 3\nbad"},
-		{func(*velox.Mutation[hnote]) error { return errors.Join(errors.New("velox: testmodel.Other: x"), bad) },
+		{func(*velox.Mutation) error { return errors.Join(errors.New("velox: testmodel.Other: x"), bad) },
 			"velox: engine_test.hnote: hook: velox: testmodel.Other: x\nbad"},
 	}
 	for _, c := range cases {
@@ -228,8 +221,8 @@ func TestMutationErrors(t *testing.T) {
 func TestSaveWhereIsTheStatementsWhere(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
-	ctx := withHook(func(m *velox.Mutation[hnote]) error {
-		m.Where(hn.Note.EQ("hook"))
+	ctx := withHook(func(m *velox.Mutation) error {
+		m.Where(velox.C("note").EQ("hook"))
 		return nil
 	})
 	x := hnote{ID: 1, Title: "t"}

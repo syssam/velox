@@ -4,11 +4,10 @@
 //	go build -o bin/velox-gen ./cmd/velox-gen && bin/velox-gen -out internal/testmodel -package testmodel ./internal/testmodel/schema
 //
 // Invoice and Ticket's Policy and Hooks are declared in the schema package,
-// typed with testmodel, which the schema therefore imports. Package
-// runtime binds them: a test package that uses the entities imports it for
-// its effect, import _ "github.com/syssam/velox/internal/testmodel/runtime".
-// Org, WithUser and UserFromContext (context.go) and the aliases below are
-// written by hand.
+// by column name, and the generated code binds them. The schema reads the
+// organization and the user from package actor; Org, WithUser and
+// UserFromContext (context.go) forward to it, and they and the aliases
+// below are written by hand.
 package testmodel
 
 import "github.com/syssam/velox/internal/testmodel/kind"

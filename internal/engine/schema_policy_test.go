@@ -41,8 +41,13 @@ func TestSchemaPolicyHooks(t *testing.T) {
 	if p == nil || p.Read == nil || p.Write != nil || p.Insert == nil {
 		t.Fatalf("policy %+v", p)
 	}
-	if pr, err := p.Read(ctx); err != nil || engine.PredNode(pr).Op != engine.OpEQ || engine.PredNode(pr).Col != 2 || engine.PredNode(pr).V != "r" {
-		t.Errorf("read: %+v, %v", pr, err)
+	// The Read policy's condition names title, which the statement resolves.
+	re := &fakeconn.Exec{}
+	if _, err := openFake(velox.Postgres, re).Query[hooked]().Limit(1).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(re.SQL, `WHERE "title" = $1`) || len(re.Args) == 0 || re.Args[0] != "r" {
+		t.Errorf("read: %s %v", re.SQL, re.Args)
 	}
 	x.Title = ""
 	if err := p.Insert(ctx, unsafe.Pointer(&x)); !errors.Is(err, velox.ErrDenied) {

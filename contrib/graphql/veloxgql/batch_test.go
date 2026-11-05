@@ -46,7 +46,7 @@ func keeperDescriptor() velox.Descriptor[keeper] {
 		Table:      "keepers",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pet]("Pets", 0, 1)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pet]("pets", 0, 1)},
 		FieldPtr:   func(x *keeper, i int) any { return [...]any{&x.ID, &x.Name}[i] },
 		EdgeFieldPtr: func(x *keeper, i int) any {
 			if i == 0 {
@@ -86,15 +86,34 @@ func petDescriptor() velox.Descriptor[pet] {
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "KeeperID", Name: "keeper_id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		FieldPtr:   func(x *pet, i int) any { return [...]any{&x.ID, &x.KeeperID, &x.OrgID, &x.Name}[i] },
-		Policy: velox.BindPolicy(func() velox.Policy[pet] { return scope.By[pet](petOrg, "org_id").Policy() }, func() velox.Policy[pet] {
-			return velox.Policy[pet]{Read: func(ctx context.Context) (velox.Pred[pet], error) {
-				if v, ok := ctx.Value(viewerKey{}).(int64); ok {
-					return pets.ID.LTE(v), nil
-				}
-				return velox.Allow[pet](), nil
-			}}
-		}),
+		Policy:     []func() velox.Policy{(*pet)(nil).OrgPolicy, (*pet)(nil).Policy},
 	}
+}
+
+// OrgPolicy confines pets to the context's org, as an InOrg mixin would.
+func (*pet) OrgPolicy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := petOrg.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error {
+			return petOrg.Match(ctx, r.Value("org_id"))
+		},
+	}
+}
+
+// Policy hides the pets above the viewer's id.
+func (*pet) Policy() velox.Policy {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
+		if v, ok := ctx.Value(viewerKey{}).(int64); ok {
+			return velox.C("id").LTE(v), nil
+		}
+		return velox.Allow(), nil
+	}}
 }
 
 // batchSDL is the schema of batching's tests: keepers are batched, loose

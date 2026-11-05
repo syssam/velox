@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
+	sch "github.com/syssam/velox/examples/policy/schema"
 )
 
 // Doc is the entity of schema Doc.
@@ -60,7 +61,6 @@ func (*Doc) VeloxMeta() *velox.Meta[Doc] { return docMeta.Load(docDescriptor) }
 
 // docDescriptor describes Doc to velox: its table, columns, edges and hooks.
 func docDescriptor() velox.Descriptor[Doc] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Doc]{
 		Table: "docs",
 		Columns: []velox.ColumnDescriptor{
@@ -71,9 +71,9 @@ func docDescriptor() velox.Descriptor[Doc] {
 		},
 		PrimaryKey: []int{docColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Comment]("Comments", docColID, commentColDocID),
+			velox.EdgeTo[Comment]("comments", docColID, commentColDocID),
 		},
-		Policy: rt.DocPolicy,
+		Policy: []func() velox.Policy{sch.Doc{}.Policy},
 		FieldPtr: func(x *Doc, i int) any {
 			switch i {
 			case docColID:

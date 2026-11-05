@@ -60,7 +60,6 @@ func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Load(itemDescriptor
 
 // itemDescriptor describes Item to velox: its table, columns, edges and hooks.
 func itemDescriptor() velox.Descriptor[Item] {
-	veloxRuntime()
 	return velox.Descriptor[Item]{
 		Table: "items",
 		Columns: []velox.ColumnDescriptor{
@@ -71,7 +70,7 @@ func itemDescriptor() velox.Descriptor[Item] {
 		},
 		PrimaryKey: []int{itemColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Invoice]("Invoice", itemColInvoiceID, invoiceColID),
+			velox.EdgeTo[Invoice]("invoice", itemColInvoiceID, invoiceColID),
 		},
 		FieldPtr: func(x *Item, i int) any {
 			switch i {

@@ -126,7 +126,7 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if q.one == nil && len(q.many) == 0 {
 		return nil
 	}
-	if len(engine.InfoHooks(q.meta.info)) > 0 {
+	if q.db.e.HasHooks(q.meta.info) {
 		return engine.Mutate(ctx, &q.db.e, q.meta.info, q.mutation(false), func(ctx context.Context, mu *engine.MutationState) error { return q.send(ctx, mu) })
 	}
 	var mu engine.MutationState
@@ -158,7 +158,7 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	if q.one == nil && len(q.many) == 0 {
 		return "", nil, nil
 	}
-	if len(engine.InfoHooks(q.meta.info)) > 0 {
+	if q.db.e.HasHooks(q.meta.info) {
 		mu := q.mutation(true)
 		if err := engine.Mutate(ctx, &q.db.e, q.meta.info, mu, func(ctx context.Context, mu *engine.MutationState) error { return q.render(ctx, mu) }); err != nil && !engine.DryRefused(mu, err) {
 			return "", nil, err

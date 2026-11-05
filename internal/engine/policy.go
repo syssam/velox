@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 )
 
@@ -125,8 +123,8 @@ func (d denial) Error() string { return string(d) }
 // Is makes a denial match ErrDenied.
 func (d denial) Is(target error) bool { return target == ErrDenied }
 
-// ErrInsertMutation is the misuse of ValueIn, Set or Where on an insert.
-var ErrInsertMutation = errors.New("Set and Where are for updates and deletes; change Rows")
+// ErrInsertMutation is the misuse of Where on an insert.
+var ErrInsertMutation = errors.New("Where is for updates and deletes; an insert's rows are set with Set and Fill")
 
 // SetAffected is SetAffected's work, not generic.
 func (mu *MutationState) SetAffected(n int64) {
@@ -154,17 +152,6 @@ func (mu *MutationState) Record(err error) {
 	if mu.Err == nil {
 		mu.Err = err
 	}
-}
-
-// WrongType records that column col is assigned got, which is not of the
-// type want points to. It is not generic, so that fmt and reflect are not
-// compiled into every package that calls ValueIn.
-func (mu *MutationState) WrongType(col int, got, want any) {
-	name := fmt.Sprintf("%d", col)
-	if in := mu.St.Entity; in != nil && col < len(in.Columns) {
-		name = strconv.Quote(in.Columns[col].Name)
-	}
-	mu.Record(fmt.Errorf("column %s is assigned a value of type %T, not %v", name, got, reflect.TypeOf(want).Elem()))
 }
 
 // Assigned returns the value st assigns to column col with AssignSet.

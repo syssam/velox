@@ -2,11 +2,7 @@
 
 package schema
 
-import (
-	"github.com/syssam/velox"
-
-	"example.com/tmp/gen"
-)
+import "github.com/syssam/velox"
 
 // Policy returns a pointer, which is not the signature velox binds.
-func (Post) Policy() *velox.Policy[gen.Post] { return &velox.Policy[gen.Post]{} }
+func (Post) Policy() *velox.Policy { return &velox.Policy{} }

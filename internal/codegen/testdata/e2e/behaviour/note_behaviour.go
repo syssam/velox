@@ -3,24 +3,36 @@
 package schema
 
 import (
+	"context"
+
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
-
-	"example.com/tmp/gen"
 )
 
 // Org carries the organisation a request acts for.
 var Org = scope.NewKey[int64]("org")
 
-// NoteEarly touches Note while the schema package initializes, before package
-// runtime binds the schema: the not-linked failure it sees is not kept, and Note
-// works once runtime has bound it.
-var NoteEarly = velox.CheckEntity[gen.Note]()
+// Policy confines notes to the context's organisation, and refuses a note
+// of another one.
+func (Note) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := Org.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error { return Org.Match(ctx, r.Value("org_id")) },
+	}
+}
 
-// Policy confines notes to the context's organisation.
-func (Note) Policy() velox.Policy[gen.Note] { return scope.By[gen.Note](Org, "org_id").Policy() }
-
-// Hooks stamps org_id on inserted notes.
-func (Note) Hooks() []velox.Hook[gen.Note] {
-	return []velox.Hook[gen.Note]{scope.By[gen.Note](Org, "org_id").Fill()}
+// Hooks stamps org_id on inserted notes that leave it zero.
+func (Note) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if org, ok := Org.From(ctx); ok {
+			return m.Fill("org_id", org)
+		}
+		return nil
+	}, velox.OpInsert)}
 }

@@ -1,23 +1,35 @@
 // Package schema declares the hooks example's entities: a Task, and the Audit
-// rows that its update hook writes. Task's hooks, in hooks.go, are typed with
-// the generated gen.Task and its handles, and gen/runtime binds them.
+// rows that its update writes. Task's hooks, in hooks.go, work by column
+// name; the schema does not import gen.
 package schema
 
 import (
+	"context"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/examples/hooks/auth"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/mixin"
 )
 
-// CreatedBy is a mixin: it adds a created_by column to each entity that lists
-// it. A mixin carries fields, edges, indexes and annotations, never
-// behaviour; what fills the column is a hook, auth.CreatedBy, that each entity
-// lists in its own Hooks.
+// CreatedBy adds created_by, and fills it on insert from the context's
+// user, in each row that leaves it empty.
 type CreatedBy struct{ mixin.Schema }
 
 // Fields returns created_by.
 func (CreatedBy) Fields() []schema.Field {
 	return []schema.Field{field.String("created_by")}
+}
+
+// Hooks fills created_by on insert.
+func (CreatedBy) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if u := auth.UserFromContext(ctx); u != "" {
+			return m.Fill("created_by", u)
+		}
+		return nil
+	}, velox.OpInsert)}
 }
 
 // Task is a to-do item. The hooks derive Slug from Title.
@@ -35,9 +47,9 @@ func (Task) Fields() []schema.Field {
 	}
 }
 
-// Audit is a row of the audit trail: who changed what. Task's update hook
-// inserts one on the write's DB: inside db.Tx it commits or rolls back with
-// the update.
+// Audit is a row of the audit trail: who changed what. main.go's run-time
+// hook inserts one when an update renames a task, on the write's DB: inside
+// db.Tx it commits or rolls back with the update.
 type Audit struct{ schema.Schema }
 
 // Fields returns the columns after the ID.

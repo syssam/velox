@@ -15,23 +15,13 @@ type Config struct {
 	// from the schema.
 	Funcs map[string]FuncPkg
 
-	// SchemaImportsGen says the schema package imports the generated
-	// package, as it does when it declares Hooks or Policy; a non-empty
-	// Bound implies it. The generated package then does not import the
-	// schema package: what its entities need from it, the schema's Hooks
-	// and Policy methods and the defaults and validators they cannot call
-	// by name, package runtime (RuntimeDir below the output directory)
-	// gives them when the program starts. It imports the generated package
-	// and the schema package, and a program imports it for its effect.
+	// Linked are, per entity name, the names of its relations whose target
+	// velox-gen links (velox.Linked): those its behaviour names with
+	// velox.Edge (see LinkedEdges).
+	Linked map[string][]string
 	// GenPath is the generated package's import path.
-	SchemaImportsGen bool
-	GenPath          string
+	GenPath string
 }
-
-// RuntimeDir is the directory, below the output directory, of package
-// runtime, which binds the schema when it imports the generated package, and
-// the package's name.
-const RuntimeDir = "runtime"
 
 // Bound says which of an entity's methods the schema package declares, so
 // that its Descriptor binds them.
@@ -55,13 +45,7 @@ type Out struct {
 	NeedsSch   bool         // some entity reads the schema package
 	SchemaPath string       // the schema package's import path
 	UserDoc    bool         // Config.UserDoc
-	// SchemaImportsGen is Config.SchemaImportsGen, or a non-empty
-	// Config.Bound: the generated package does not import the schema.
-	SchemaImportsGen bool
-	// Runtime says some entity reads a value of VeloxRuntime, which package
-	// runtime sets (OutEntity.Binds); only when SchemaImportsGen.
-	Runtime bool
-	GenPath string // Config.GenPath
+	GenPath    string       // Config.GenPath
 }
 
 // OutEntity is one generated entity: a schema's, or a many-to-many join entity.
@@ -89,12 +73,6 @@ type OutEntity struct {
 	// under a name other than the package's own: a mixin's package whose
 	// name another package of the file has.
 	ImportAs map[string]string
-
-	// Binds are what package runtime gives this entity when the schema
-	// imports the generated package, as fields of VeloxRuntime: its Policy,
-	// Hooks and Interceptors lists, and the defaults and validators the
-	// entity cannot call by name.
-	Binds []*OutBind
 
 	// Policy, Hooks and Interceptors are the sources of the entity's
 	// behaviour, in the order velox composes them: its mixins', in Mixin
@@ -125,32 +103,13 @@ type OutField struct {
 	UpdateDefaultCode    string // "" or "func() any { … }"
 }
 
-// OutBind is a field of the generated package's VeloxRuntime, which package
-// runtime sets.
-type OutBind struct {
-	Field string // e.g. "CommentPolicy", "GroupTokenDefault"
-	Type  string // its type, as the generated package writes it, e.g. "func() velox.Policy[Comment]"
-	// Value is the expression package runtime sets it to, e.g. "sch.Comment{}.Policy",
-	// or, when Desc is set, a read of the variable DescVar, e.g.
-	// "groupToken.DefaultFunc.(func() string)".
-	Value string
-	// Desc is the name of the schema's field whose descriptor Value reads,
-	// DescVar the variable package runtime holds it in; "" when Value reads none.
-	Desc, DescVar string
-	// Imports are the packages Value names, but sch, the schema DSL package
-	// and the generated package: import name → path.
-	Imports map[string]string
-}
-
 // OutSource is one source of an entity's Policy, Hooks or Interceptors: a
-// mixin's generic method or the schema's own.
+// mixin's method or the schema's own.
 type OutSource struct {
-	// Name is the source's type, as the behaviour header of package runtime
-	// lists it, e.g. "InOrg" or "Comment".
+	// Name is the source's type, e.g. "InOrg" or "Comment".
 	Name string
-	// Expr is the method value, as the file that binds it writes it, e.g.
-	// "sch.InOrg{}.Policy" or "(&sch.Comment{}).Hooks". A mixin's generic
-	// method is instantiated by inference: the Bind call names the entity.
+	// Expr is the method value, as the entity's file writes it, e.g.
+	// "sch.InOrg{}.Policy" or "(&sch.Comment{}).Hooks".
 	Expr string
 	// Imports are the packages Expr names, but sch: import name → path.
 	Imports map[string]string
@@ -176,6 +135,9 @@ type OutEnum struct {
 	Values []string // stored values, in declaration order
 }
 
+// veloxPkg is velox's import path.
+const veloxPkg = "github.com/syssam/velox"
+
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 15
+const GeneratedCodeVersion = 16

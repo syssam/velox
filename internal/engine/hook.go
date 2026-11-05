@@ -9,7 +9,7 @@ import (
 	"unsafe"
 )
 
-// MutationState is a write in flight, without E: what Mutation[E] holds. Its DB is an
+// MutationState is a write in flight: what Mutation holds. Its DB is an
 // any, a *DB that Mutation.DB converts: EntityInfo reaches mutation, and a *DB field
 // made every Descriptor entity's package 14 KiB larger (compilecost_test.go).
 type MutationState struct {
@@ -22,7 +22,7 @@ type MutationState struct {
 	Where    []Predicate      // st.Where when next was called, for Mutation.Conds
 	Own      bool             // the hook called SetAffected: it made the write itself
 	ownSet   bool             // st.Set is the mutation's own array, cloned once
-	Err      error            // a misuse recorded by ValueIn, Set, Where or SetAffected
+	Err      error            // a misuse recorded by Value, Set, Fill, Where or SetAffected
 	Core     error            // the error next returned, to pass through unwrapped
 	Called   bool             // next has been called
 	Dry      bool             // under SQL(ctx): the core renders and does not send
@@ -33,7 +33,7 @@ type MutationState struct {
 // MutateFn is the non-generic form of a mutation hook's next step.
 type MutateFn func(ctx context.Context, mu *MutationState) error
 
-// HookFn is a Hook[E] with E erased, made once when the metadata is built.
+// HookFn is a Hook as the engine runs it, made once when the metadata is built.
 type HookFn func(next MutateFn) MutateFn
 
 // identical reports whether err is core itself. An error whose type cannot be
@@ -56,44 +56,8 @@ var (
 	errOwnAndNext = errors.New("SetAffected is for a hook that makes the write itself; it called next too")
 )
 
-// BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
-// Descriptor.Policy. For generated code. Its fields are not exported: only
-// BindPolicy makes one.
-type BoundPolicy struct{ p *EntityPolicy }
-
-// BoundHooks is an entity's hooks with E erased, made by BindHooks for
-// Descriptor.Hooks. For generated code. Its fields are not exported: only
-// BindHooks makes one.
-type BoundHooks struct {
-	hs     []HookFn
-	nilAt1 int // 1 + the index of the first nil hook; 0 when none
-}
-
-// BoundInterceptors is an entity's interceptors with E erased, made by
-// BindInterceptors for Descriptor.Interceptors. For generated code. Its fields
-// are not exported: only BindInterceptors makes one.
-type BoundInterceptors struct {
-	fs     []FilterFn
-	nilAt1 int // 1 + the index of the first nil Filter; 0 when none
-}
-
-// FilterFn is an Interceptor's Filter with E erased.
+// FilterFn is an Interceptor's Filter as the engine runs it.
 type FilterFn func(ctx context.Context) (Predicate, error)
-
-// AddBoundFilter appends f to b's filters.
-func AddBoundFilter(b *BoundInterceptors, f FilterFn) { b.fs = append(b.fs, f) }
-
-// SetFilterNil records that interceptor i has a nil Filter.
-func SetFilterNil(b *BoundInterceptors, i int) { b.nilAt1 = i + 1 }
-
-// FiltersOf is b's filters, and the reason a nil Filter is refused when one
-// of them is: base is the index of b's first in the entity's list.
-func FiltersOf(b BoundInterceptors, base int) ([]FilterFn, string) {
-	if b.nilAt1 != 0 {
-		return nil, fmt.Sprintf("Interceptors()[%d] has a nil Filter", base+b.nilAt1-1)
-	}
-	return b.fs, ""
-}
 
 // EraseFilters calls f, which composes the Descriptor's Interceptors with E
 // erased, and keeps its filters in info. A panic in f is the entity's
@@ -195,27 +159,6 @@ func andConds(fs []func(ctx context.Context) (Predicate, error)) func(ctx contex
 	}
 }
 
-// NewBoundPolicy wraps p.
-func NewBoundPolicy(p *EntityPolicy) BoundPolicy { return BoundPolicy{p} }
-
-// PolicyOf is the policy b wraps; nil for the zero BoundPolicy.
-func PolicyOf(b BoundPolicy) *EntityPolicy { return b.p }
-
-// AddBoundHook appends h to b's hooks.
-func AddBoundHook(b *BoundHooks, h HookFn) { b.hs = append(b.hs, h) }
-
-// SetBoundNil records that hook i is nil.
-func SetBoundNil(b *BoundHooks, i int) { b.nilAt1 = i + 1 }
-
-// HooksOf is b's hooks, and NilHook's reason when one of them is nil: base
-// is the index of b's first in the entity's list.
-func HooksOf(b BoundHooks, base int) ([]HookFn, string) {
-	if b.nilAt1 != 0 {
-		return nil, NilHook(base + b.nilAt1 - 1)
-	}
-	return b.hs, ""
-}
-
 // ErasePolicy calls f, which composes the Descriptor's Policy with E erased,
 // and keeps its result in info. A panic in f is the entity's *SchemaError,
 // and so is the reason f returns when it refuses them, such as NilBinding's. On the join entity of a bidirectional edge (Descriptor.Bidi)
@@ -310,7 +253,7 @@ func Unlinked(err error) (bool, error) {
 // directly when in has no hooks, so that none of them pays for the closure
 // and the mutation this takes, or for setting mu.db.
 func Mutate(ctx context.Context, db *DB, in *EntityInfo, mu *MutationState, core MutateFn) error {
-	if len(InfoHooks(in)) == 0 {
+	if !db.HasHooks(in) {
 		return core(ctx, mu)
 	}
 	mu.DB, mu.In = db, in
@@ -341,7 +284,7 @@ func Mutate(ctx context.Context, db *DB, in *EntityInfo, mu *MutationState, core
 		mu.Core = core(ctx, mu)
 		return mu.Core
 	}
-	for _, h := range slices.Backward(InfoHooks(in)) {
+	for _, h := range slices.Backward(db.hooksOf(in)) {
 		next = h(next)
 	}
 	err := next(ctx, mu)

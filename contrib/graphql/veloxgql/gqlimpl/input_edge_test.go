@@ -81,12 +81,12 @@ func (*kid) VeloxMeta() *velox.Meta[kid] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AcctID", Name: "acct_id"}, {Field: "Title", Name: "title"}},
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *kid, i int) any { return [...]any{&x.ID, &x.AcctID, &x.Title}[i] },
-			Policy: velox.BindPolicy(func() velox.Policy[kid] {
-				return velox.Policy[kid]{
-					Read:  func(context.Context) (velox.Pred[kid], error) { return kids.Title.NEQ("hidden"), nil },
-					Write: func(context.Context) (velox.Pred[kid], error) { return kids.Title.NEQ("locked"), nil },
+			Policy: []func() velox.Policy{func() velox.Policy {
+				return velox.Policy{
+					Read:  func(context.Context) (velox.Cond, error) { return velox.C("title").NEQ("hidden"), nil },
+					Write: func(context.Context) (velox.Cond, error) { return velox.C("title").NEQ("locked"), nil },
 				}
-			}),
+			}},
 		}
 	})
 }
@@ -110,11 +110,11 @@ func (*lbl) VeloxMeta() *velox.Meta[lbl] {
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 			PrimaryKey: []int{0},
 			FieldPtr:   func(x *lbl, i int) any { return [...]any{&x.ID, &x.Name}[i] },
-			Policy: velox.BindPolicy(func() velox.Policy[lbl] {
-				return velox.Policy[lbl]{
-					Read: func(context.Context) (velox.Pred[lbl], error) { return lbls.Name.NEQ("hidden"), nil },
+			Policy: []func() velox.Policy{func() velox.Policy {
+				return velox.Policy{
+					Read: func(context.Context) (velox.Cond, error) { return velox.C("name").NEQ("hidden"), nil },
 				}
-			}),
+			}},
 		}
 	})
 }

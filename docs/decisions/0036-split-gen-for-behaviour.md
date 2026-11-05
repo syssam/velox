@@ -1,6 +1,6 @@
 # 36. A schema with behaviour splits gen into gen/entity and gen
 
-Status: layout superseded by [0037](0037-ent-layout.md), 2026-11-04; accepted 2026-11-04. Revises 0034's package runtime. The typed binds by name, `NotLinkedError` and MetaOnce's retry (both Reviews) stay under 0037.
+Status: layout superseded by [0037](0037-ent-layout.md), 2026-11-04; accepted 2026-11-04. Revises 0034's package runtime. The typed binds by name, `NotLinkedError` and MetaOnce's retry (both Reviews) stay under 0037. The typed binds are gone (0039); `NotLinkedError` and the retry go in 0039's Phase 4.
 
 ## Context
 

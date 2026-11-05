@@ -42,8 +42,8 @@ var ErrEmptyName = errors.New("must not be empty")
 
 func DAuthorDescriptor() velox.Descriptor[DAuthor] {
 	return velox.Descriptor[DAuthor]{
-		Policy: velox.BindPolicy(OrgPolicy[DAuthor], (*DAuthor)(nil).Policy),
-		Hooks:  velox.BindHooks(OrgHooks[DAuthor], (*DAuthor)(nil).Hooks),
+		Policy: []func() velox.Policy{OrgPolicy, (*DAuthor)(nil).Policy},
+		Hooks:  []func() []velox.Hook{OrgHooks, (*DAuthor)(nil).Hooks},
 		Table:  "authors",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
@@ -53,7 +53,7 @@ func DAuthorDescriptor() velox.Descriptor[DAuthor] {
 			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return time.Now() }, Immutable: true},
 		},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[DBook]("Books", 0, 1)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[DBook]("books", 0, 1)},
 		FieldPtr: func(x *DAuthor, i int) any {
 			switch i {
 			case 0:
@@ -125,14 +125,14 @@ func (*DBook) VeloxMeta() *velox.Meta[DBook] { return DBookMeta.Load(DBookDescri
 
 func DBookDescriptor() velox.Descriptor[DBook] {
 	return velox.Descriptor[DBook]{
-		Hooks:      velox.BindHooks((*DBook)(nil).Hooks),
+		Hooks:      []func() []velox.Hook{(*DBook)(nil).Hooks},
 		Table:      "books",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[DAuthor]("Author", 1, 0),
-			velox.EdgeThrough[DBookTag, DTag]("Tags", 0, 0, 1, 0),
-			velox.EdgeThrough[DPick, DTag]("Picks", 0, 0, 1, 0),
+			velox.EdgeTo[DAuthor]("author", 1, 0),
+			velox.EdgeThrough[DBookTag, DTag]("tags", 0, 0, 1, 0),
+			velox.EdgeThrough[DPick, DTag]("picks", 0, 0, 1, 0),
 		},
 		FieldPtr: func(x *DBook, i int) any {
 			switch i {
@@ -180,12 +180,12 @@ func (*DTag) VeloxMeta() *velox.Meta[DTag] { return DTagMeta.Load(DTagDescriptor
 
 func DTagDescriptor() velox.Descriptor[DTag] {
 	return velox.Descriptor[DTag]{
-		Policy:     velox.BindPolicy((*DTag)(nil).Policy),
-		Hooks:      velox.BindHooks((*DTag)(nil).Hooks),
+		Policy:     []func() velox.Policy{(*DTag)(nil).Policy},
+		Hooks:      []func() []velox.Hook{(*DTag)(nil).Hooks},
 		Table:      "tags",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[DBookTag, DBook]("Books", 0, 1, 0, 0)},
+		Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[DBookTag, DBook]("books", 0, 1, 0, 0)},
 		FieldPtr: func(x *DTag, i int) any {
 			switch i {
 			case 0:

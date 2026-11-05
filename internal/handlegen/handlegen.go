@@ -64,11 +64,7 @@ var (
 		{"Key", "is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.", "() GroupKey[E, *V]",
 			"return GroupKey[E, *V]{c.I}"},
 	}
-	valueIn          = []method{valueInMethod("")}
-	valueInArith     = []method{valueInMethod(addNote)}
-	nullValueIn      = []method{nullValueInMethod("")}
-	nullValueInArith = []method{nullValueInMethod(addNote)}
-	arith            = []method{
+	arith = []method{
 		{"Add", "adds v to the column: column = column + v.", "(v V) Setter[E]",
 			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignAdd, Value: v}}"},
 		{"Sub", "subtracts v from the column: column = column - v.", "(v V) Setter[E]",
@@ -82,40 +78,22 @@ var (
 	}
 )
 
-const (
-	addNote    = "; an Add or Sub assigns no value"
-	insertNote = ". A delete assigns none. Once next has run it also sees the UpdateDefault assignments." +
-		" On an insert it records an error, as Mutation's Set does: read Rows." +
-		" A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none." +
-		" A slice or map it returns is shared with the statement, and often with the caller: change the assignment with Mutation.Set, not in place."
-)
-
-func valueInMethod(add string) method {
-	return method{"ValueIn", "returns the value m's update assigns to the column with Set, and whether it assigns one" + add + insertNote,
-		"(m *Mutation[E]) (V, bool)", "return valueIn[E, V](m, c.I)"}
-}
-
-func nullValueInMethod(add string) method {
-	return method{"ValueIn", "returns a pointer to a copy of the value m's update assigns to the column with Set, nil for SetNull, and whether it assigns one" + add + insertNote,
-		"(m *Mutation[E]) (*V, bool)", "return nullValueIn[E, V](m, c.I)"}
-}
-
 type kind struct {
 	name, tparams, doc string
 	methods            [][]method
 }
 
 var kinds = []kind{
-	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither ordered nor text: bool, []byte and other types.", [][]method{base, key, set, valueIn}},
-	{"OrderedCol", "[E, V any]", "is the handle of an ordered column: time.Time and types registered as ordered.", [][]method{base, key, ordered, set, valueIn}},
-	{"NumberCol", "[E, V any]", "is the handle of a numeric column.", [][]method{base, key, ordered, set, valueInArith, arith}},
-	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, text, set, valueIn}},
-	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, set, nullValueIn, null}},
-	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, set, nullValueIn, null}},
-	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, set, nullValueInArith, arith, null}},
-	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, text, set, nullValueIn, null}},
-	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and neither compares nor orders by it, as equality and order of JSON differ by dialect.", [][]method{set, valueIn}},
-	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{set, nullValueIn, null}},
+	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither ordered nor text: bool, []byte and other types.", [][]method{base, key, set}},
+	{"OrderedCol", "[E, V any]", "is the handle of an ordered column: time.Time and types registered as ordered.", [][]method{base, key, ordered, set}},
+	{"NumberCol", "[E, V any]", "is the handle of a numeric column.", [][]method{base, key, ordered, set, arith}},
+	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, text, set}},
+	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, set, null}},
+	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, set, null}},
+	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, set, arith, null}},
+	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, text, set, null}},
+	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and neither compares nor orders by it, as equality and order of JSON differ by dialect.", [][]method{set}},
+	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{set, null}},
 }
 
 // Generate returns the source of handles.go.

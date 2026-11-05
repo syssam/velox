@@ -96,11 +96,11 @@ func postDescriptor() velox.Descriptor[Post] {
 		},
 		PrimaryKey: []int{postColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[User]("Author", postColAuthorID, userColID),
-			velox.EdgeThrough[PostTag, Tag]("Tags", postColID, postTagColPostID, postTagColTagID, tagColID),
+			velox.EdgeTo[User]("author", postColAuthorID, userColID),
+			velox.EdgeThrough[PostTag, Tag]("tags", postColID, postTagColPostID, postTagColTagID, tagColID),
 		},
-		Policy: velox.BindPolicy[Post](sch.InOrg{}.Policy),
-		Hooks:  velox.BindHooks[Post](sch.InOrg{}.Hooks),
+		Policy: []func() velox.Policy{sch.InOrg{}.Policy},
+		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postColID:

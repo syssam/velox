@@ -1,7 +1,7 @@
 //go:build ignore
 
-// The schema does not import gen, and its behaviour comes from mixins
-// alone: gen binds it, and there is no package runtime.
+// The schema's behaviour comes from mixins alone, one of them in a package
+// of its own: gen binds it.
 package schema
 
 import (
@@ -22,9 +22,8 @@ func (InOrg) Fields() []schema.Field {
 	return []schema.Field{field.Int64("org_id").Immutable()}
 }
 
-func (InOrg) Policy[E any]() velox.Policy[E] {
-	org := velox.Field[E, int64]("org_id")
-	return velox.Policy[E]{Read: func(context.Context) (velox.Pred[E], error) { return org.EQ(1), nil }}
+func (InOrg) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.C("org_id").EQ(1), nil }}
 }
 
 // Memo is in an organization.

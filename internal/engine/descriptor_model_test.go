@@ -22,16 +22,16 @@ type hnote struct {
 
 type hnoteKey struct{}
 
-func hnoteHook(ctx context.Context, m *velox.Mutation[hnote]) error {
-	if f, ok := ctx.Value(hnoteKey{}).(func(*velox.Mutation[hnote]) error); ok {
+func hnoteHook(ctx context.Context, m *velox.Mutation) error {
+	if f, ok := ctx.Value(hnoteKey{}).(func(*velox.Mutation) error); ok {
 		return f(m)
 	}
 	return nil
 }
 
-func (*hnote) Hooks() []velox.Hook[hnote] {
-	return []velox.Hook[hnote]{func(next velox.Mutator[hnote]) velox.Mutator[hnote] {
-		return velox.MutateFunc[hnote](func(ctx context.Context, m *velox.Mutation[hnote]) error {
+func (*hnote) Hooks() []velox.Hook {
+	return []velox.Hook{func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			if err := hnoteHook(ctx, m); err != nil {
 				return err
 			}
@@ -46,7 +46,7 @@ func (*hnote) VeloxMeta() *velox.Meta[hnote] { return hnoteMeta.Load(hnoteDescri
 
 func hnoteDescriptor() velox.Descriptor[hnote] {
 	return velox.Descriptor[hnote]{
-		Hooks: velox.BindHooks((*hnote)(nil).Hooks),
+		Hooks: []func() []velox.Hook{(*hnote)(nil).Hooks},
 		Table: "hnotes",
 		Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}, {Field: "Note", Name: "note"},
 			{Field: "N", Name: "n"}, {Field: "Due", Name: "due"}},
@@ -84,19 +84,25 @@ type moveOrg struct {
 
 var moveOrgKey = scope.NewKey[int64]("org")
 
-func (*moveOrg) Policy() velox.Policy[moveOrg] {
-	return scope.By[moveOrg](moveOrgKey, "org_id").Policy()
+func (*moveOrg) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := moveOrgKey.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error {
+			return moveOrgKey.Match(ctx, r.Value("org_id"))
+		},
+	}
 }
 
-func (*moveOrg) Hooks() []velox.Hook[moveOrg] {
-	return []velox.Hook[moveOrg]{func(next velox.Mutator[moveOrg]) velox.Mutator[moveOrg] {
-		return velox.MutateFunc[moveOrg](func(ctx context.Context, m *velox.Mutation[moveOrg]) error {
-			for _, x := range m.Rows() {
-				x.OrgID = 9
-			}
-			return next.Mutate(ctx, m)
-		})
-	}}
+func (*moveOrg) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(_ context.Context, m *velox.Mutation) error {
+		return m.Set("org_id", int64(9))
+	}, velox.OpInsert)}
 }
 
 var moveOrgMeta velox.MetaOnce[moveOrg]
@@ -105,8 +111,8 @@ func (*moveOrg) VeloxMeta() *velox.Meta[moveOrg] { return moveOrgMeta.Load(moveO
 
 func moveOrgDescriptor() velox.Descriptor[moveOrg] {
 	return velox.Descriptor[moveOrg]{
-		Policy:     velox.BindPolicy((*moveOrg)(nil).Policy),
-		Hooks:      velox.BindHooks((*moveOrg)(nil).Hooks),
+		Policy:     []func() velox.Policy{(*moveOrg)(nil).Policy},
+		Hooks:      []func() []velox.Hook{(*moveOrg)(nil).Hooks},
 		Table:      "move_org",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", Immutable: true}},
 		PrimaryKey: []int{0},
@@ -314,41 +320,33 @@ type hooked struct {
 	Title string
 }
 
-var (
-	hookedTag   = velox.Col[hooked, string]{I: 1}
-	hookedTitle = velox.Col[hooked, string]{I: 2}
-)
+var hookedTitle = velox.Col[hooked, string]{I: 2}
 
-func (*hooked) Hooks() []velox.Hook[hooked] {
-	return []velox.Hook[hooked]{
-		velox.On(func(next velox.Mutator[hooked]) velox.Mutator[hooked] {
-			return velox.MutateFunc[hooked](func(ctx context.Context, m *velox.Mutation[hooked]) error {
-				for _, x := range m.Rows() {
-					x.Tag += "entity;"
-				}
-				return next.Mutate(ctx, m)
-			})
+func (*hooked) Hooks() []velox.Hook {
+	return []velox.Hook{
+		velox.Before(func(_ context.Context, m *velox.Mutation) error {
+			for r := range m.Rows() {
+				x := r.Entity().(*hooked)
+				x.Tag += "entity;"
+			}
+			return nil
 		}, velox.OpInsert),
-		velox.On(func(next velox.Mutator[hooked]) velox.Mutator[hooked] {
-			return velox.MutateFunc[hooked](func(ctx context.Context, m *velox.Mutation[hooked]) error {
-				m.Set(hookedTag.Set("updated"))
-				return next.Mutate(ctx, m)
-			})
+		velox.Before(func(_ context.Context, m *velox.Mutation) error {
+			_ = m.Set("tag", "updated")
+			return nil
 		}, velox.OpUpdate),
-		velox.On(func(next velox.Mutator[hooked]) velox.Mutator[hooked] {
-			return velox.MutateFunc[hooked](func(ctx context.Context, m *velox.Mutation[hooked]) error {
-				m.Set(hookedTag.Set("x"))
-				return next.Mutate(ctx, m)
-			})
+		velox.Before(func(_ context.Context, m *velox.Mutation) error {
+			_ = m.Set("tag", "x") // a misuse on a delete, which fails the write
+			return nil
 		}, velox.OpDelete),
 	}
 }
 
-func (*hooked) Policy() velox.Policy[hooked] {
-	return velox.Policy[hooked]{
-		Read: func(context.Context) (velox.Pred[hooked], error) { return hookedTitle.EQ("r"), nil },
-		Insert: func(_ context.Context, x *hooked) error {
-			if x.Title == "" {
+func (*hooked) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(context.Context) (velox.Cond, error) { return velox.C("title").EQ("r"), nil },
+		Insert: func(_ context.Context, r velox.Row) error {
+			if r.Value("title") == "" {
 				return velox.Deny("no title")
 			}
 			return nil
@@ -362,8 +360,8 @@ func (*hooked) VeloxMeta() *velox.Meta[hooked] { return hookedMeta.Load(hookedDe
 
 func hookedDescriptor() velox.Descriptor[hooked] {
 	return velox.Descriptor[hooked]{
-		Policy:     velox.BindPolicy((*hooked)(nil).Policy),
-		Hooks:      velox.BindHooks((*hooked)(nil).Hooks),
+		Policy:     []func() velox.Policy{(*hooked)(nil).Policy},
+		Hooks:      []func() []velox.Hook{(*hooked)(nil).Hooks},
 		Table:      "hooked",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tag", Name: "tag"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},

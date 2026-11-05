@@ -22,16 +22,16 @@ var goldenCases = []struct {
 	cfg  Config
 }{
 	{"minimal", Config{Package: "gen"}},
-	{"blog", Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/blog/gen", Bound: map[string]Bound{
+	{"blog", Config{Package: "gen", GenPath: "example.com/blog/gen", Bound: map[string]Bound{
 		"Post": {Policy: true, Interceptors: true}, "Category": {Interceptors: true, InterceptorsPtr: true},
 	}}},
-	{"scoped", Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/scoped/gen", Bound: map[string]Bound{
+	{"scoped", Config{Package: "gen", GenPath: "example.com/scoped/gen", Bound: map[string]Bound{
 		"Task": {Policy: true, Hooks: true}, "Memo": {Policy: true}, "Tag": {Hooks: true},
 	}}},
-	// Mixins with behaviour, bound in package runtime (mixinbehaviour) and,
-	// for a schema that does not import gen, in gen (mixinplain). Config.Mixins
-	// is MixinBehaviour's.
-	{"mixinbehaviour", Config{Package: "gen", SchemaImportsGen: true, GenPath: "example.com/mixinbehaviour/gen", Bound: map[string]Bound{
+	// Mixins with behaviour, of the schema package and with the schema's own
+	// (mixinbehaviour), and of a package of their own alone (mixinplain).
+	// Config.Mixins is MixinBehaviour's.
+	{"mixinbehaviour", Config{Package: "gen", GenPath: "example.com/mixinbehaviour/gen", Bound: map[string]Bound{
 		"Project": {Policy: true},
 	}}},
 	{"mixinplain", Config{Package: "gen"}},
@@ -181,7 +181,7 @@ func TestGoldenBidi(t *testing.T) {
 		t.Error("user_group_velox.go's Descriptor says Bidi")
 	}
 	// The users' spouse edge is a bidirectional one-to-one relation.
-	if u := read("user_velox.go"); !strings.Contains(u, `velox.EdgeBidi[User]("Spouse", `) || strings.Contains(u, `EdgeTo[User]("Spouse"`) {
+	if u := read("user_velox.go"); !strings.Contains(u, `velox.EdgeBidi[User]("spouse", `) || strings.Contains(u, `EdgeTo[User]("spouse"`) {
 		t.Error(`user_velox.go's Descriptor does not relate Spouse with velox.EdgeBidi[User]`)
 	}
 }
@@ -320,45 +320,34 @@ func TestRenderPackageDoc(t *testing.T) {
 			t.Errorf("%s has a package comment beside the user's", f.Name)
 		}
 	}
-	// With package runtime, gen's doc names the import, and gives way to the
-	// user's own; runtime.go always has its own.
-	bound := map[string]Bound{"User": {Policy: true}}
-	for _, c := range []struct {
-		cfg  Config
-		want map[string]bool // file: has a package comment
-	}{
-		{Config{Bound: bound, GenPath: "m/gen"}, map[string]bool{"velox.go": true, "runtime/runtime.go": true}},
-		{Config{Bound: bound, GenPath: "m/gen", UserDoc: true}, map[string]bool{"velox.go": false, "runtime/runtime.go": true}},
-	} {
-		files, err := Generate(mustBuild(t, User{}, Post{}, Group{}), c.cfg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for name, want := range c.want {
-			if got := bytes.Contains(fileNamed(t, files, name), []byte("// Package")); got != want {
-				t.Errorf("%+v: %s has a package comment: %v, want %v", c.cfg, name, got, want)
-			}
+	// With behaviour bound, gen's doc says nothing of a runtime package, and
+	// no file of one is written.
+	files, err = Generate(mustBuild(t, User{}, Post{}, Group{}), Config{Bound: map[string]Bound{"User": {Policy: true}}, GenPath: "m/gen"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if strings.HasPrefix(f.Name, "runtime") || bytes.Contains(f.Data, []byte("runtime\"")) {
+			t.Errorf("%s: a runtime package", f.Name)
 		}
 	}
 }
 
-// TestRenderScopedBinding: a scope is a tenancy mixin's policy and hook, so
-// an entity's descriptor names the policies and hooks package runtime binds,
-// each by one line, whether the schema declares its own or only the mixin
-// does, and nothing else: velox composes them. runtime.go binds the mixin's
-// before the schema's. No scope_velox.go is written. The scoped golden schema
-// has each combination.
-func TestRenderScopedBinding(t *testing.T) {
+// TestRenderBindsMethodValues: an entity's descriptor lists the method
+// values of its policies and hooks, its mixins' before its own, each list
+// on one line, whether the schema declares its own or only the mixin does.
+// velox composes them. No scope_velox.go is written. The scoped golden
+// schema has each combination.
+func TestRenderBindsMethodValues(t *testing.T) {
 	files, err := goldenGenerate(t, "scoped", goldenCases[2].cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range files {
-		if f.Name == "scope_velox.go" {
-			t.Errorf("velox-gen wrote scope_velox.go")
+		if f.Name == "scope_velox.go" || strings.HasPrefix(f.Name, "runtime") {
+			t.Errorf("velox-gen wrote %s", f.Name)
 		}
 	}
-	rt := string(fileNamed(t, files, RuntimeDir+"/runtime.go"))
 	for _, c := range []struct {
 		file, entity, mixin string
 		policy, hook        bool // the schema's own
@@ -370,29 +359,23 @@ func TestRenderScopedBinding(t *testing.T) {
 		{"home_velox.go", "Home", "InRegion", false, false},
 		{"owner_velox.go", "Owner", "", false, false},
 	} {
-		got := string(fileNamed(t, files, c.file))
+		got := squeeze(string(fileNamed(t, files, c.file)))
 		scoped := c.mixin != ""
 		for _, l := range []struct {
-			field string
-			own   bool
-		}{{"Policy", c.policy}, {"Hooks", c.hook}} {
+			field, typ string
+			own        bool
+		}{{"Policy", "velox.Policy", c.policy}, {"Hooks", "[]velox.Hook", c.hook}} {
 			want := scoped || l.own
-			line := regexp.MustCompile(`\n\t\t` + l.field + `: +rt\.` + c.entity + l.field + `,\n`)
-			if line.MatchString(got) != want {
-				t.Errorf("%s: the line %s: rt.%s%s, is there: %v, want %v", c.file, l.field, c.entity, l.field, !want, want)
-			}
-			if n := strings.Count(got, "\t\t"+l.field+":"); n > 1 || (n == 1) != want {
-				t.Errorf("%s names %s %d times", c.file, l.field, n)
-			}
-			if !want {
-				continue
-			}
 			bind := "sch." + c.mixin + "{}." + l.field
 			if l.own {
 				bind += ", sch." + c.entity + "{}." + l.field
 			}
-			if !strings.Contains(rt, c.entity+l.field+": ") || !strings.Contains(rt, "["+"gen."+c.entity+"]("+bind+")") {
-				t.Errorf("runtime.go does not bind %s's %s as %s:\n%s", c.entity, l.field, bind, rt)
+			line := "\t\t" + l.field + ": []func() " + l.typ + "{" + bind + "},\n"
+			if strings.Contains(got, line) != want {
+				t.Errorf("%s: the line %q is there: %v, want %v", c.file, line, !want, want)
+			}
+			if n := strings.Count(got, "\t\t"+l.field+":"); n > 1 || (n == 1) != want {
+				t.Errorf("%s names %s %d times", c.file, l.field, n)
 			}
 		}
 		if strings.Contains(got, "Scope") || strings.Contains(got, "Bind") || strings.Contains(got, ".Fill(") {

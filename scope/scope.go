@@ -1,9 +1,7 @@
 // Package scope confines an entity's rows to a value the context carries: a
-// tenant, an owner, a region. It is built from Policy and Hooks, with nothing
-// in the engine.
-//
-// A scope is declared once, in a mixin of the schema package, and each entity
-// it confines lists the mixin:
+// tenant, an owner, a region. A scope is a Key, which a request sets, and a
+// mixin of the application's schema package, whose Policy and Hooks read it,
+// with nothing in the engine:
 //
 //	var OrgKey = scope.NewKey[int64]("org")
 //
@@ -13,12 +11,28 @@
 //		return []schema.Field{field.Int64("org_id").Immutable()}
 //	}
 //
-//	func (InOrg) Policy[E any]() velox.Policy[E] {
-//		return scope.By[E](OrgKey, "org_id").Policy()
+//	func (InOrg) Policy() velox.Policy {
+//		return velox.Policy{
+//			Read: func(ctx context.Context) (velox.Cond, error) {
+//				org, err := OrgKey.Require(ctx)
+//				if err != nil {
+//					return velox.Cond{}, err
+//				}
+//				return velox.C("org_id").EQ(org), nil
+//			},
+//			Insert: func(ctx context.Context, r velox.Row) error {
+//				return OrgKey.Match(ctx, r.Value("org_id"))
+//			},
+//		}
 //	}
 //
-//	func (InOrg) Hooks[E any]() []velox.Hook[E] {
-//		return []velox.Hook[E]{scope.By[E](OrgKey, "org_id").Fill()}
+//	func (InOrg) Hooks() []velox.Hook {
+//		return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+//			if org, ok := OrgKey.From(ctx); ok {
+//				return m.Fill("org_id", org)
+//			}
+//			return nil
+//		}, velox.OpInsert)}
 //	}
 //
 //	func (Project) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
@@ -29,16 +43,15 @@
 //
 // Reads, updates and deletes then see only rows whose column is 7; an insert
 // that leaves the column unset gets 7, and one that names another value is
-// refused; a statement whose context has no value fails with [ErrNoScope],
-// not with every row. velox.WithoutPolicy lifts the scope, with a reason, as
-// it lifts every other policy. The entity's own Policy is ANDed with the
-// mixin's, so it cannot lift the scope.
+// refused with [ErrMismatch]; a statement whose context has no value fails
+// with [ErrNoScope], not with every row. velox.WithoutPolicy lifts the
+// scope, with a reason, as it lifts every other policy. The entity's own
+// Policy is ANDed with the mixin's, so it cannot lift the scope.
 //
 // The column must be Immutable and not nullable, so that an update cannot
-// move a row to another scope and every row is in one. By refuses another
-// column when velox builds the entity's metadata, as the entity's
-// *velox.SchemaError at its first use. Package scopetest checks that an
-// entity is confined.
+// move a row to another scope and every row is in one. The mixin declares
+// it so, beside the code that filters on it. Package scopetest checks that
+// an entity is confined, and that its column is Immutable and NOT NULL.
 //
 // The scope does not reach rows it does not filter: an entity without it reads
 // every row, a foreign key may name a row of another scope, and the rows of a
@@ -88,75 +101,27 @@ func (k *Key[V]) From(ctx context.Context) (V, bool) {
 	return v, ok && v != zero
 }
 
-// Scope is the scope of entity E by one column of type V, made by By.
-type Scope[E any, V comparable] struct {
-	key *Key[V]
-	col velox.Named[E, V]
-}
-
-// By returns the scope of E by its column named column, whose Go field is
-// of type V. Call it in a mixin's Policy or Hooks method:
-//
-//	scope.By[E](OrgKey, "org_id").Policy()
-//
-// It panics when E has no such column, when the column's field is not a V,
-// or when the column is mutable or nullable. velox calls those methods while
-// it builds E's metadata, so the panic is E's *velox.SchemaError at its first
-// use.
-func By[E any, V comparable](key *Key[V], column string) Scope[E, V] {
-	col := velox.Field[E, V](column)
-	switch {
-	case !col.Immutable():
-		panic(fmt.Sprintf("velox/scope: %s: column %q is mutable: make it Immutable, so that no update moves a row to another scope", key.name, column))
-	case col.Nullable():
-		panic(fmt.Sprintf("velox/scope: %s: column %q is nullable: a scope's column holds a value in every row", key.name, column))
+// Require returns the key's value in ctx, or [ErrNoScope], wrapped with the
+// key's name, when From finds none. A policy's Read returns its error, so a
+// statement without a value fails and reads nothing.
+func (k *Key[V]) Require(ctx context.Context) (V, error) {
+	v, ok := k.From(ctx)
+	if !ok {
+		return v, fmt.Errorf("%w: %s", ErrNoScope, k.name)
 	}
-	return Scope[E, V]{key: key, col: col}
+	return v, nil
 }
 
-// Policy returns the policy that confines E's reads, updates and deletes to
-// the context's value, and checks that an insert is in it. velox ANDs it with
-// the entity's other policies.
-// The engine ANDs Read into every update and delete, so the scope reaches
-// those too.
-func (s Scope[E, V]) Policy() velox.Policy[E] {
-	return velox.Policy[E]{
-		Read: func(ctx context.Context) (velox.Pred[E], error) {
-			v, ok := s.key.From(ctx)
-			if !ok {
-				return velox.Pred[E]{}, fmt.Errorf("%w: %s", ErrNoScope, s.key.name)
-			}
-			return s.col.EQ(v), nil
-		},
-		Insert: func(ctx context.Context, x *E) error {
-			v, ok := s.key.From(ctx)
-			if !ok {
-				return fmt.Errorf("%w: %s", ErrNoScope, s.key.name)
-			}
-			if got := *s.col.Ptr(x); got != v {
-				return fmt.Errorf("%w: %s is %v, the context's is %v", ErrMismatch, s.key.name, got, v)
-			}
-			return nil
-		},
+// Match returns nil when v, a row's value of the scope's column, is the
+// key's value in ctx: [ErrNoScope] when ctx has none, and [ErrMismatch]
+// when v is another value, or not a V. A policy's Insert returns its error.
+func (k *Key[V]) Match(ctx context.Context, v any) error {
+	want, err := k.Require(ctx)
+	if err != nil {
+		return err
 	}
-}
-
-// Fill returns the hook that sets E's scope column to the context's value on
-// every inserted row that leaves it at the zero value, in the caller's structs
-// too. It does nothing when the context has no value: the policy refuses the
-// insert then. List it in the mixin's Hooks.
-func (s Scope[E, V]) Fill() velox.Hook[E] {
-	return velox.On(func(next velox.Mutator[E]) velox.Mutator[E] {
-		return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
-			if v, ok := s.key.From(ctx); ok {
-				var zero V
-				for _, x := range m.Rows() {
-					if p := s.col.Ptr(x); *p == zero {
-						*p = v
-					}
-				}
-			}
-			return next.Mutate(ctx, m)
-		})
-	}, velox.OpInsert)
+	if got, ok := v.(V); !ok || got != want {
+		return fmt.Errorf("%w: %s is %v, the context's is %v", ErrMismatch, k.name, v, want)
+	}
+	return nil
 }

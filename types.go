@@ -31,21 +31,6 @@ const (
 	SQLite   = veloxtype.SQLite
 )
 
-// BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
-// Descriptor.Policy. For generated code. Its fields are not exported: only BindPolicy
-// makes one.
-type BoundPolicy = engine.BoundPolicy
-
-// BoundHooks is an entity's hooks with E erased, made by BindHooks for
-// Descriptor.Hooks. For generated code. Its fields are not exported: only BindHooks
-// makes one.
-type BoundHooks = engine.BoundHooks
-
-// BoundInterceptors is an entity's interceptors with E erased, made by
-// BindInterceptors for Descriptor.Interceptors. For generated code. Its
-// fields are not exported: only BindInterceptors makes one.
-type BoundInterceptors = engine.BoundInterceptors
-
 // EntityInfo is what velox knows about an entity, built once on its first use.
 // It is the non-generic view that hooks see in a Statement, and the runtime
 // view of the generated Descriptor it is built from.

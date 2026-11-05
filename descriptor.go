@@ -51,28 +51,23 @@ type Descriptor[E any] struct {
 	// in order, the first outermost. The interceptors' conditions are ANDed,
 	// in order.
 	//
-	// velox-gen names the lists that the generated package runtime binds
-	// with BindPolicy, BindHooks and BindInterceptors, from the mixins'
-	// methods and the schema's:
+	// velox-gen lists the methods of the entity's mixins, in Mixin order,
+	// then the schema's own, as method values of the schema package:
 	//
-	//	Policy:       rt.CommentPolicy,
-	//	Hooks:        rt.CommentHooks,
-	//	Interceptors: rt.CommentInterceptors,
+	//	Policy: []func() velox.Policy{sch.InOrg{}.Policy, sch.Issue{}.Policy},
+	//	Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
 	//
-	// An entity written by hand binds its own methods,
+	// An entity written by hand lists its own methods,
 	//
-	//	Policy: velox.BindPolicy((*E)(nil).Policy),
+	//	Policy: []func() velox.Policy{(*E)(nil).Policy},
 	//
-	// A method with another signature does not compile, which is why no
-	// test checks it at run time. An entity whose pointer type has a
-	// Policy, Hooks or Interceptors method that its Descriptor does not bind
-	// is refused at first use with a *SchemaError. So a policy, a hook or
-	// an interceptor is never silently left out.
+	// An entity whose pointer type has a Policy, Hooks or Interceptors
+	// method that its Descriptor does not list is refused at first use with
+	// a *SchemaError. So a policy, a hook or an interceptor is never
+	// silently left out.
 	//
 	// None of the fields names E, and Load composes them in code that is
-	// not generic. So an entity without a policy, hooks or interceptors
-	// compiles none of their generics. BindPolicy, BindHooks and
-	// BindInterceptors instantiate them where a method is bound.
+	// not generic, so an entity's behaviour instantiates nothing for it.
 	//
 	// Load calls each function once, when it builds the metadata. A
 	// hand-written method runs on a nil *E, so it may not read its receiver.
@@ -80,13 +75,11 @@ type Descriptor[E any] struct {
 	// function, a nil hook or a nil Filter. None may read the entity's own
 	// metadata in its body, outside the functions it returns: anything that
 	// calls its VeloxMeta waits on the build in progress and deadlocks. A
-	// Has or HasWhere does not: it names its relation, and the statement
-	// that holds the condition resolves it, so the body may build them.
-	// Field does not either: Load records the entity's columns before it
-	// calls the functions, and Field reads them there.
-	Policy       []func() BoundPolicy
-	Hooks        []func() BoundHooks
-	Interceptors []func() BoundInterceptors
+	// Cond does not: it names its columns, and the statement that holds it
+	// resolves them.
+	Policy       []func() Policy
+	Hooks        []func() []Hook
+	Interceptors []func() []Interceptor
 }
 
 // Load returns the entity's Meta, building it from descriptor the first time. A
@@ -101,8 +94,7 @@ type Descriptor[E any] struct {
 //
 // A build that panics with a NotLinkedError is returned and not kept, so that an
 // entity used before its generated package's init works once the init has
-// run. So is one whose Policy, Hooks or Interceptors panic with one, as
-// Field does when the entity it names is not linked yet.
+// run.
 func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] {
 	var m *Meta[E]
 	o.once.Do(func() bool {
@@ -123,7 +115,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 		})
 		addr := d.FieldPtr
 		if err == nil && (len(d.Policy) > 0 || len(d.Hooks) > 0 || len(d.Interceptors) > 0) {
-			retry, err = bind(info, d.Policy, d.Hooks, d.Interceptors)
+			err = bind(info, d.Policy, d.Hooks, d.Interceptors)
 		}
 		if err != nil {
 			info, addr = nil, nil // an error Meta has no scan plan
@@ -133,7 +125,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 			return false
 		}
 		if info != nil {
-			m.nilCols = nilColumns(info)
+			m.nilCols = engine.NilColumns(info)
 			engine.SetInfoKit(info, kitOf(info, addr))
 			engine.SetInfoCheck(info, d.Check)
 		}
@@ -231,4 +223,21 @@ func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, jo
 		TargetCol: joinTarget,
 	})
 	return r
+}
+
+// Linked is e with its target T linked: the relation then names T's
+// metadata, so a program that links the owner links T. For generated code.
+// velox-gen wraps the relations that an entity's behaviour names with
+// velox.Edge, whose Has and HasWhere name no target type of their own:
+//
+//	velox.Linked[Doc](velox.EdgeTo[Doc]("doc", commentColDocID, docColID))
+//
+// A condition by the name of a relation that is not linked fails its
+// statement.
+func Linked[T any, PT Entity[T]](e EdgeDescriptor) EdgeDescriptor {
+	engine.SetEdgeTarget(&e, func() (*EntityInfo, error) {
+		m := PT(nil).VeloxMeta()
+		return m.info, m.err
+	})
+	return e
 }

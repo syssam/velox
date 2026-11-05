@@ -63,6 +63,7 @@ package softdelete
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/syssam/velox"
@@ -102,49 +103,47 @@ func Skipped(ctx context.Context) bool {
 
 // Interceptors returns the interceptor that hides rows whose deleted_at is
 // set, but under Skip.
-func (Mixin) Interceptors[E any]() []velox.Interceptor[E] {
-	del := velox.Field[E, *time.Time]("deleted_at") // a literal, which velox-gen checks
-	return []velox.Interceptor[E]{{Filter: func(ctx context.Context) (velox.Pred[E], error) {
+func (Mixin) Interceptors() []velox.Interceptor {
+	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Cond, error) {
 		if Skipped(ctx) {
-			return velox.Allow[E](), nil
+			return velox.Allow(), nil
 		}
-		return del.IsNull(), nil
+		return velox.C(Column).IsNull(), nil
 	}}}
 }
 
 // Hooks returns the hook that makes a delete an update that sets
 // deleted_at, but under Skip.
-func (Mixin) Hooks[E any]() []velox.Hook[E] {
-	del := velox.Field[E, *time.Time]("deleted_at") // a literal, which velox-gen checks
-	return []velox.Hook[E]{velox.On(func(next velox.Mutator[E]) velox.Mutator[E] {
-		return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
+func (Mixin) Hooks() []velox.Hook {
+	return []velox.Hook{velox.On(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			if Skipped(ctx) {
 				return next.Mutate(ctx, m)
 			}
-			n, err := softDelete(ctx, m.DB(), velox.TableOf[E](), velox.Assignments([]velox.Setter[E]{del.Set(new(time.Now()))}), conds(m.Conds()))
+			n, err := softDelete(ctx, m, time.Now())
 			m.SetAffected(n)
 			return err
 		})
 	}, velox.OpDelete)}
 }
 
-// conds returns cs untyped.
-func conds[E any](cs []velox.Pred[E]) []velox.Predicate {
-	out := make([]velox.Predicate, len(cs))
-	for i, c := range cs {
-		out[i] = velox.Predicate(c)
+// softDelete updates the rows the delete would remove to set deleted_at to
+// now, or every row when where is empty: an empty where is the delete's
+// All, as velox refused a delete with neither a Where nor All before the
+// hooks ran.
+func softDelete(ctx context.Context, m *velox.Mutation, now time.Time) (int64, error) {
+	t := m.Table()
+	col, ok := t.Info().Column(Column)
+	if !ok {
+		return 0, fmt.Errorf("velox/softdelete: %s has no column %s", t.Info().Name, Column)
 	}
-	return out
-}
-
-// softDelete makes the update of t's rows that match where, or of every row
-// when where is empty, with set. It is not generic, so that each entity
-// compiles only the thin hook above: an empty where is the delete's All, as
-// velox refused a delete with neither a Where nor All before the hooks ran.
-func softDelete(ctx context.Context, db *velox.DB, t velox.Table, set []velox.Assignment, where []velox.Predicate) (int64, error) {
-	u := db.UpdateTable(t).Assign(set...)
-	if len(where) > 0 {
-		u = u.Where(where...)
+	set, err := t.Assign(col, now)
+	if err != nil {
+		return 0, err
+	}
+	u := m.DB().UpdateTable(t).Assign(set)
+	if cs := m.Conds(); len(cs) > 0 {
+		u = u.Where(velox.Predicates(cs)...)
 	} else {
 		u = u.All()
 	}

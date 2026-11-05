@@ -49,16 +49,38 @@ var posts = struct {
 // tenantKey is the scope of posts: the tenant the context names.
 var tenantKey = scope.NewKey[string]("tenant")
 
-// postTenant is the scope of posts by their tenant column.
-func postTenant() scope.Scope[post, string] { return scope.By[post](tenantKey, "tenant") }
-
-func (*post) Policy() velox.Policy[post] {
-	return velox.Policy[post]{
-		Read: func(context.Context) (velox.Pred[post], error) { return posts.Title.NEQ("hidden"), nil },
+// TenantPolicy confines posts to the context's tenant, as a tenancy mixin
+// would.
+func (*post) TenantPolicy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			t, err := tenantKey.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("tenant").EQ(t), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error {
+			return tenantKey.Match(ctx, r.Value("tenant"))
+		},
 	}
 }
 
-func (*post) Hooks() []velox.Hook[post] { return []velox.Hook[post]{postTenant().Fill()} }
+func (*post) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(context.Context) (velox.Cond, error) { return velox.C("title").NEQ("hidden"), nil },
+	}
+}
+
+// Hooks fill the tenant of each inserted post from the context.
+func (*post) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if t, ok := tenantKey.From(ctx); ok {
+			return m.Fill("tenant", t)
+		}
+		return nil
+	}, velox.OpInsert)}
+}
 
 var postMeta velox.MetaOnce[post]
 
@@ -69,8 +91,8 @@ func postDescriptor() velox.Descriptor[post] {
 		Table:      "posts",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Tenant", Name: "tenant", Immutable: true}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
-		Policy:     velox.BindPolicy(func() velox.Policy[post] { return postTenant().Policy() }, (*post)(nil).Policy),
-		Hooks:      velox.BindHooks((*post)(nil).Hooks),
+		Policy:     []func() velox.Policy{(*post)(nil).TenantPolicy, (*post)(nil).Policy},
+		Hooks:      []func() []velox.Hook{(*post)(nil).Hooks},
 		FieldPtr: func(x *post, i int) any {
 			switch i {
 			case 0:

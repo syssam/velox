@@ -1,9 +1,7 @@
 package velox
 
 import (
-	"database/sql"
 	"fmt"
-	"reflect"
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
@@ -18,27 +16,6 @@ type Meta[E any] struct {
 	nilCols []bool
 	// tbl is the entity's Table, built by its first TableOf.
 	tbl tableState
-}
-
-// nilColumns are the columns of a slice or a map that database/sql cannot read a NULL
-// into, nil when there are none: it knows of []byte alone, and its error fails each
-// page holding the row. A pointer it reads, an encoded column and a type's own Scan
-// are told of NULL themselves.
-func nilColumns(info *EntityInfo) []bool {
-	var cols []bool
-	for i := range info.Columns {
-		c := &info.Columns[i]
-		t, _ := c.Type.(reflect.Type)
-		if t == nil || c.Codec || t.Kind() != reflect.Slice && t.Kind() != reflect.Map || t == reflect.TypeFor[[]byte]() ||
-			reflect.PointerTo(t).Implements(reflect.TypeFor[sql.Scanner]()) {
-			continue
-		}
-		if cols == nil {
-			cols = make([]bool, len(info.Columns))
-		}
-		cols[i] = true
-	}
-	return cols
 }
 
 // MetaOnce builds an entity's Meta on first use. For generated code. Its zero
@@ -97,7 +74,7 @@ func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool {
 
 // kitOf builds entity E's kit from its scan plan.
 func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *engine.Kit {
-	m := &Meta[E]{info: info, addr: addr, nilCols: nilColumns(info)}
+	m := &Meta[E]{info: info, addr: addr, nilCols: engine.NilColumns(info)}
 	typ := engine.ElemType((*E)(nil))
 	return &engine.Kit{
 		Value: func(p unsafe.Pointer, col int) any { return engine.Elem(addr((*E)(p), col)) },

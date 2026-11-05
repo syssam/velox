@@ -64,7 +64,7 @@ func commentDescriptor() velox.Descriptor[Comment] {
 		},
 		PrimaryKey: []int{commentColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Post]("Post", commentColPostID, postColID),
+			velox.EdgeTo[Post]("post", commentColPostID, postColID),
 		},
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {

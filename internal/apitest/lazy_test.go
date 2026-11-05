@@ -57,15 +57,15 @@ var lzTaskMeta velox.MetaOnce[lzTask]
 
 func (*lzTask) VeloxMeta() *velox.Meta[lzTask] { return lzTaskMeta.Load(lzTaskDescriptor) }
 
-func (*lzTask) Policy() velox.Policy[lzTask] {
-	open := lzTasks.Project.HasWhere(lzProjects.Done.EQ(false)) // built in the body
-	return velox.Policy[lzTask]{Read: func(context.Context) (velox.Pred[lzTask], error) { return open, nil }}
+func (*lzTask) Policy() velox.Policy {
+	open := velox.Edge("project").HasWhere(velox.C("done").EQ(false)) // built in the body
+	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return open, nil }}
 }
 
-func (*lzTask) Hooks() []velox.Hook[lzTask] {
-	hasProject := lzTasks.Project.Has() // built in the body
-	return []velox.Hook[lzTask]{velox.On(func(next velox.Mutator[lzTask]) velox.Mutator[lzTask] {
-		return velox.MutateFunc[lzTask](func(ctx context.Context, m *velox.Mutation[lzTask]) error {
+func (*lzTask) Hooks() []velox.Hook {
+	hasProject := velox.Edge("project").Has() // built in the body
+	return []velox.Hook{velox.On(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			m.Where(hasProject)
 			return next.Mutate(ctx, m)
 		})
@@ -74,12 +74,12 @@ func (*lzTask) Hooks() []velox.Hook[lzTask] {
 
 func lzTaskDescriptor() velox.Descriptor[lzTask] {
 	return velox.Descriptor[lzTask]{
-		Policy:       velox.BindPolicy((*lzTask)(nil).Policy),
-		Hooks:        velox.BindHooks((*lzTask)(nil).Hooks),
+		Policy:       []func() velox.Policy{(*lzTask)(nil).Policy},
+		Hooks:        []func() []velox.Hook{(*lzTask)(nil).Hooks},
 		Table:        "lz_tasks",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey:   []int{0},
-		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[lzProject]("Project", 1, 0)},
+		Edges:        []velox.EdgeDescriptor{velox.Linked[lzProject](velox.EdgeTo[lzProject]("project", 1, 0))},
 		FieldPtr:     func(x *lzTask, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
 		EdgeFieldPtr: func(x *lzTask, i int) any { return &x.Project },
 	}
@@ -140,21 +140,21 @@ var lzRaceMeta velox.MetaOnce[lzRace]
 
 func (*lzRace) VeloxMeta() *velox.Meta[lzRace] { return lzRaceMeta.Load(lzRaceDescriptor) }
 
-func (*lzRace) Policy() velox.Policy[lzRace] {
-	shared := lzRaces.Project.HasWhere(lzProjects.Done.EQ(false))
-	return velox.Policy[lzRace]{
-		Read:  func(context.Context) (velox.Pred[lzRace], error) { return shared, nil },
-		Write: func(context.Context) (velox.Pred[lzRace], error) { return shared, nil },
+func (*lzRace) Policy() velox.Policy {
+	shared := velox.Edge("project").HasWhere(velox.C("done").EQ(false))
+	return velox.Policy{
+		Read:  func(context.Context) (velox.Cond, error) { return shared, nil },
+		Write: func(context.Context) (velox.Cond, error) { return shared, nil },
 	}
 }
 
 func lzRaceDescriptor() velox.Descriptor[lzRace] {
 	return velox.Descriptor[lzRace]{
-		Policy:       velox.BindPolicy((*lzRace)(nil).Policy),
+		Policy:       []func() velox.Policy{(*lzRace)(nil).Policy},
 		Table:        "lz_races",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey:   []int{0},
-		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[lzProject]("Project", 1, 0)},
+		Edges:        []velox.EdgeDescriptor{velox.Linked[lzProject](velox.EdgeTo[lzProject]("project", 1, 0))},
 		FieldPtr:     func(x *lzRace, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
 		EdgeFieldPtr: func(x *lzRace, i int) any { return &x.Project },
 	}
@@ -231,7 +231,7 @@ func (*lzLate) VeloxMeta() *velox.Meta[lzLate] {
 			Table:        "lz_lates",
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey:   []int{0},
-			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[badDescriptor]("Bad", 0, 0)},
+			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[badDescriptor]("bad", 0, 0)},
 			FieldPtr:     func(x *lzLate, i int) any { return &x.ID },
 			EdgeFieldPtr: func(x *lzLate, i int) any { return &x.Bad },
 		}
@@ -251,7 +251,7 @@ func TestHasWhereErrorAtStatement(t *testing.T) {
 	if lzLateLoads != before {
 		t.Fatalf("HasWhere built the owner's metadata (%d loads, were %d)", lzLateLoads, before)
 	}
-	const lwant = "velox: apitest.lzLate.Bad: its target github.com/syssam/velox/internal/apitest.badDescriptor is invalid: apitest.badDescriptor: the primary key names column 3, of 1"
+	const lwant = "velox: apitest.lzLate.bad: its target github.com/syssam/velox/internal/apitest.badDescriptor is invalid: apitest.badDescriptor: the primary key names column 3, of 1"
 	if _, err := ldb.Query[lzLate]().Where(lp).Limit(1).All(ctx); err == nil || err.Error() != lwant {
 		t.Errorf("All: %v, want %s", err, lwant)
 	}
@@ -264,7 +264,7 @@ func TestHasWhereErrorAtStatement(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	p := dBadThroughs.BadJoin.HasWhere(fixture.DTags.Name.EQ("x"))
-	const want = "velox: apitest.dBadThrough.BadJoin: its join entity is invalid: apitest.badDescriptor: the primary key names column 3, of 1"
+	const want = "velox: apitest.dBadThrough.bad_join: its join entity is invalid: apitest.badDescriptor: the primary key names column 3, of 1"
 	q := db.Query[dBadThrough]().Where(p).Limit(1)
 	if _, err := q.All(ctx); err == nil || err.Error() != want {
 		t.Errorf("All: %v, want %s", err, want)
@@ -298,9 +298,9 @@ func (*lzNote) VeloxMeta() *velox.Meta[lzNote] { return lzNoteMeta.Load(lzNoteDe
 
 var lzSawDB []bool
 
-func (*lzNote) Hooks() []velox.Hook[lzNote] {
-	return []velox.Hook[lzNote]{func(next velox.Mutator[lzNote]) velox.Mutator[lzNote] {
-		return velox.MutateFunc[lzNote](func(ctx context.Context, m *velox.Mutation[lzNote]) error {
+func (*lzNote) Hooks() []velox.Hook {
+	return []velox.Hook{func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			if err := next.Mutate(ctx, m); err != nil {
 				return err
 			}
@@ -312,8 +312,9 @@ func (*lzNote) Hooks() []velox.Hook[lzNote] {
 			if hdb == nil {
 				return errors.New("Mutation.DB is nil in a hook")
 			}
-			for _, n := range m.Rows() {
-				if err := hdb.Insert(&lzAudit{Note: n.Title}).Exec(ctx); err != nil {
+			for r := range m.Rows() {
+				title, _ := r.Value("title").(string)
+				if err := hdb.Insert(&lzAudit{Note: title}).Exec(ctx); err != nil {
 					return err
 				}
 			}
@@ -324,7 +325,7 @@ func (*lzNote) Hooks() []velox.Hook[lzNote] {
 
 func lzNoteDescriptor() velox.Descriptor[lzNote] {
 	return velox.Descriptor[lzNote]{
-		Hooks:      velox.BindHooks((*lzNote)(nil).Hooks),
+		Hooks:      []func() []velox.Hook{(*lzNote)(nil).Hooks},
 		Table:      "lz_notes",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
@@ -405,7 +406,7 @@ func TestCheckRelation(t *testing.T) {
 	if err := velox.CheckRelation(lzTasks.Project); err != nil {
 		t.Errorf("a valid relation: %v", err)
 	}
-	const want = "velox: apitest.lzLate.Bad: its target github.com/syssam/velox/internal/apitest.badDescriptor is invalid: apitest.badDescriptor: the primary key names column 3, of 1"
+	const want = "velox: apitest.lzLate.bad: its target github.com/syssam/velox/internal/apitest.badDescriptor is invalid: apitest.badDescriptor: the primary key names column 3, of 1"
 	if err := velox.CheckRelation(lzLates.Bad); err == nil || err.Error() != want {
 		t.Errorf("an invalid target: %v, want %s", err, want)
 	}
@@ -475,7 +476,7 @@ func (*mmA) VeloxMeta() *velox.Meta[mmA] {
 	return mmAMeta.Load(func() velox.Descriptor[mmA] {
 		return velox.Descriptor[mmA]{
 			Table: "mm_as", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1)},
+			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("items", 0, 1)},
 			FieldPtr:     func(x *mmA, i int) any { return &x.ID },
 			EdgeFieldPtr: func(x *mmA, i int) any { return &x.Items },
 		}
@@ -486,7 +487,7 @@ func (*mmB) VeloxMeta() *velox.Meta[mmB] {
 	return mmBMeta.Load(func() velox.Descriptor[mmB] {
 		return velox.Descriptor[mmB]{
 			Table: "mm_bs", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1)},
+			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("items", 0, 1)},
 			FieldPtr:     func(x *mmB, i int) any { return &x.ID },
 			EdgeFieldPtr: func(x *mmB, i int) any { return &x.Items },
 		}
@@ -500,7 +501,7 @@ func TestHandleMustNameTheFieldsEntity(t *testing.T) {
 	if err := velox.CheckRelation(mmBs.Items); err != nil {
 		t.Fatalf("a matching handle: %v", err)
 	}
-	const want = "velox: apitest.mmA.Items: the field is a velox.Many[github.com/syssam/velox/internal/apitest.mmItem], but the Rel handle names github.com/syssam/velox/internal/apitest.mmOther; run go tool velox-gen"
+	const want = "velox: apitest.mmA.items: the field is a velox.Many[github.com/syssam/velox/internal/apitest.mmItem], but the Rel handle names github.com/syssam/velox/internal/apitest.mmOther; run go tool velox-gen"
 	err := velox.CheckRelation(mmAs.Items)
 	var se *velox.SchemaError
 	if !errors.As(err, &se) || err.Error() != want {
@@ -533,7 +534,7 @@ func (*mmE) VeloxMeta() *velox.Meta[mmE] {
 	return mmEMeta.Load(func() velox.Descriptor[mmE] {
 		return velox.Descriptor[mmE]{
 			Table: "mm_es", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("Items", 0, 1), velox.EdgeTo[mmItem]("More", 0, 1)},
+			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[mmItem]("items", 0, 1), velox.EdgeTo[mmItem]("more", 0, 1)},
 			FieldPtr: func(x *mmE, i int) any { return &x.ID },
 			EdgeFieldPtr: func(x *mmE, i int) any {
 				if i == 0 {

@@ -11,31 +11,33 @@ go run ./policy
 
 `schema/schema.go` declares the entities' structure, and
 `schema/doc_policy.go` and `schema/comment_policy.go` their policies, as ent's
-schema does, typed with the generated entity and handles of `gen`
-(`gen.Docs.Owner.EQ(u)`). `gen/runtime` binds the policies, and `main.go`
-imports it once, `import _ ".../policy/gen/runtime"`; a wrong signature is
-refused. The user
-a request acts as is in the small package `auth`:
+schema does. They name columns and edges by their schema names
+(`velox.C("owner").EQ(u)`, `velox.Edge("doc").Has()`), so the schema does not
+import `gen`. velox-gen lists each `Policy` in its entity's descriptor, and
+a name the entity does not have fails the statement. The user a request
+acts as is in the small package `auth`:
 
 ```go
-func (Doc) Policy() velox.Policy[gen.Doc] {
-	return velox.Policy[gen.Doc]{
-		Read:   func(ctx context.Context) (velox.Pred[gen.Doc], error) { … }, // ANDed into every read
-		Write:  func(ctx context.Context) (velox.Pred[gen.Doc], error) { … }, // ANDed into every update and delete
-		Insert: func(ctx context.Context, x *gen.Doc) error { … },            // checks each new row
+func (Doc) Policy() velox.Policy {
+	return velox.Policy{
+		Read:   func(ctx context.Context) (velox.Cond, error) { … }, // ANDed into every read
+		Write:  func(ctx context.Context) (velox.Cond, error) { … }, // ANDed into every update and delete
+		Insert: func(ctx context.Context, r velox.Row) error { … },  // checks each new row
 	}
 }
 ```
 
-- `velox.Allow[Doc]()` says "no restriction"; a zero `velox.Pred[Doc]{}` fails the
+- `velox.Allow()` says "no restriction"; a zero `velox.Cond{}` fails the
   statement, naming the entity, so a forgotten branch never lets anyone
   through. An error denies the statement
   with a `*velox.PolicyError` that matches `velox.ErrDenied`
   (`velox.Deny(reason)` makes one).
 - `Write` filters: a user's update of a doc they do not own changes no rows;
   it is not an error.
-- Inheritance through `Has`: `Comment`'s `Read` is `Comments.Doc.Has()`, and
-  velox applies `Doc`'s own `Read` inside that `EXISTS`.
+- Inheritance through `Has`: `Comment`'s `Read` is `velox.Edge("doc").Has()`,
+  and velox applies `Doc`'s own `Read` inside that `EXISTS`. velox-gen links
+  the `doc` edge in `gen.Comment`'s descriptor (`velox.Linked`), so the name
+  resolves.
 - `SQL(ctx)` prints the conditions the policy adds for that context.
 - `velox.WithoutPolicy(ctx, reason)` switches every policy off for one context,
   a scope (the `scope` package) among them.

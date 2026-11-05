@@ -5,6 +5,7 @@ package gen
 import (
 	"fmt"
 
+	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
 )
 
@@ -41,7 +42,6 @@ func (*Memo) VeloxMeta() *velox.Meta[Memo] { return memoMeta.Load(memoDescriptor
 
 // memoDescriptor describes Memo to velox: its table, columns, edges and hooks.
 func memoDescriptor() velox.Descriptor[Memo] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Memo]{
 		Table: "memos",
 		Columns: []velox.ColumnDescriptor{
@@ -49,8 +49,8 @@ func memoDescriptor() velox.Descriptor[Memo] {
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 		},
 		PrimaryKey: []int{memoColID},
-		Policy:     rt.MemoPolicy,
-		Hooks:      rt.MemoHooks,
+		Policy:     []func() velox.Policy{sch.InOrg{}.Policy, sch.Memo{}.Policy},
+		Hooks:      []func() []velox.Hook{sch.InOrg{}.Hooks},
 		FieldPtr: func(x *Memo, i int) any {
 			switch i {
 			case memoColID:

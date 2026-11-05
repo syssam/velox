@@ -8,7 +8,9 @@ import (
 	"regexp"
 	"time"
 
+	sch "example.com/tmp/schema"
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema"
 )
 
 // User is a person who writes posts.
@@ -129,7 +131,8 @@ func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor
 
 // userDescriptor describes User to velox: its table, columns, edges and hooks.
 func userDescriptor() velox.Descriptor[User] {
-	rt := veloxRuntime()
+	f0 := schema.FieldDescriptor(&sch.User{}, "created_by")
+	d0 := f0.Validators[0].(func(string) error)
 	re0 := regexp.MustCompile("^[^@]+@[^@]+$")
 	return velox.Descriptor[User]{
 		Table: "users",
@@ -156,10 +159,10 @@ func userDescriptor() velox.Descriptor[User] {
 			{Columns: []int{userColUserSpouse}, Unique: true},         // user_spouse
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Post]("Posts", userColID, postColAuthorID),
-			velox.EdgeThrough[UserGroup, Group]("Groups", userColID, userGroupColUserID, userGroupColGroupID, groupColID),
-			velox.EdgeThrough[UserFriend, User]("Friends", userColID, userFriendColUserID, userFriendColFriendID, userColID),
-			velox.EdgeBidi[User]("Spouse", userColUserSpouse, userColID),
+			velox.EdgeTo[Post]("posts", userColID, postColAuthorID),
+			velox.EdgeThrough[UserGroup, Group]("groups", userColID, userGroupColUserID, userGroupColGroupID, groupColID),
+			velox.EdgeThrough[UserFriend, User]("friends", userColID, userFriendColUserID, userFriendColFriendID, userColID),
+			velox.EdgeBidi[User]("spouse", userColUserSpouse, userColID),
 		},
 		FieldPtr: func(x *User, i int) any {
 			switch i {
@@ -214,7 +217,7 @@ func userDescriptor() velox.Descriptor[User] {
 				if len(x) < 2 {
 					return errors.New("length is less than 2")
 				}
-				if err := rt.UserCreatedByValidator(x); err != nil {
+				if err := d0(x); err != nil {
 					return err
 				}
 			case userColName:

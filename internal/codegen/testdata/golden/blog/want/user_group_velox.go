@@ -41,7 +41,6 @@ func (*UserGroup) VeloxMeta() *velox.Meta[UserGroup] { return userGroupMeta.Load
 
 // userGroupDescriptor describes UserGroup to velox: its table, columns, edges and hooks.
 func userGroupDescriptor() velox.Descriptor[UserGroup] {
-	veloxRuntime()
 	return velox.Descriptor[UserGroup]{
 		Table: "user_groups",
 		Columns: []velox.ColumnDescriptor{

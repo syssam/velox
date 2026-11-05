@@ -176,8 +176,11 @@ func FuzzScope(f *testing.F) {
 		owner := velox.Predicate(Tk.Owner.EQ("ann"))
 		ticketOrg := velox.ColumnEQ(int(Tk.OrgID.I), n)
 		invoiceOrg := velox.ColumnEQ(int(testmodel.Invoices.OrgID.I), n)
+		// A condition by name, resolved, carries its entity in W, which a
+		// typed one does not: the comparison leaves W out.
+		leaf := func(p velox.Predicate) engine.Node { n := engine.PredNode(p); n.W = nil; return n }
 		index := func(ps []velox.Predicate, p velox.Predicate) int {
-			return slices.IndexFunc(ps, func(q velox.Predicate) bool { return reflect.DeepEqual(q, p) })
+			return slices.IndexFunc(ps, func(q velox.Predicate) bool { return reflect.DeepEqual(leaf(q), leaf(p)) })
 		}
 		has := func(ps []velox.Predicate, p velox.Predicate) bool { return index(ps, p) >= 0 }
 		if !has(st.Where, ticketOrg) || !has(st.Where, owner) {

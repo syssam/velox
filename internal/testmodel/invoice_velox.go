@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	sch "github.com/syssam/velox/internal/testmodel/schema"
 )
 
 // Invoice is the entity of schema Invoice.
@@ -91,7 +92,6 @@ func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoi
 
 // invoiceDescriptor describes Invoice to velox: its table, columns, edges and hooks.
 func invoiceDescriptor() velox.Descriptor[Invoice] {
-	rt := veloxRuntime()
 	return velox.Descriptor[Invoice]{
 		Table: "invoices",
 		Columns: []velox.ColumnDescriptor{
@@ -111,10 +111,10 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 			{Columns: []int{invoiceColOrgID, invoiceColNumber}, Unique: true}, // org_id, number
 		},
 		Edges: []velox.EdgeDescriptor{
-			velox.EdgeTo[Item]("Items", invoiceColID, itemColInvoiceID),
+			velox.EdgeTo[Item]("items", invoiceColID, itemColInvoiceID),
 		},
-		Policy: rt.InvoicePolicy,
-		Hooks:  rt.InvoiceHooks,
+		Policy: []func() velox.Policy{sch.InOrg{}.Policy},
+		Hooks:  []func() []velox.Hook{sch.InOrg{}.Hooks},
 		FieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case invoiceColID:

@@ -17,7 +17,6 @@ import (
 	"github.com/syssam/velox/scope"
 
 	"example.com/tmp/gen"
-	_ "example.com/tmp/gen/runtime" // binds the schema
 	"example.com/tmp/schema"
 )
 
@@ -523,17 +522,6 @@ func TestCheckEntity(t *testing.T) {
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
-	}
-}
-
-// Note, touched while the schema package initialized, before gen bound
-// the schema, failed then, and works now.
-func TestEntityUsedBeforeGenInit(t *testing.T) {
-	if schema.NoteEarly == nil || !strings.Contains(schema.NoteEarly.Error(), "not linked") {
-		t.Fatalf("the early check got %v, want the not-linked error", schema.NoteEarly)
-	}
-	if err := velox.CheckEntity[gen.Note](); err != nil {
-		t.Fatalf("Note after gen's init: %v", err)
 	}
 }
 

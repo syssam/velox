@@ -268,13 +268,11 @@ import (
 	"context"
 
 	"github.com/syssam/velox"
-
-	"example.com/app/gen"
 )
 
-func (Member) Policy() velox.Policy[gen.Member] {
-	return velox.Policy[gen.Member]{Read: func(context.Context) (velox.Pred[gen.Member], error) {
-		return gen.Members.Name.NEQ("hidden"), nil
+func (Member) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Cond, error) {
+		return velox.C("name").NEQ("hidden"), nil
 	}}
 }
 `
@@ -284,22 +282,45 @@ func (Member) Policy() velox.Policy[gen.Member] {
 const e2eLimitsScope = `package schema
 
 import (
+	"context"
+
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
-
-	"example.com/app/gen"
 )
 
 var OrgKey = scope.NewKey[int64]("org")
 
-func orgOf[E any]() scope.Scope[E, int64] { return scope.By[E](OrgKey, "org_id") }
+// orgPolicy confines reads, updates and deletes to the context's org, and
+// refuses an insert into another one.
+func orgPolicy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := OrgKey.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error { return OrgKey.Match(ctx, r.Value("org_id")) },
+	}
+}
 
-func (Post) Policy() velox.Policy[gen.Post]     { return orgOf[gen.Post]().Policy() }
-func (Post) Hooks() []velox.Hook[gen.Post]      { return []velox.Hook[gen.Post]{orgOf[gen.Post]().Fill()} }
-func (Ticket) Policy() velox.Policy[gen.Ticket] { return orgOf[gen.Ticket]().Policy() }
-func (Ticket) Hooks() []velox.Hook[gen.Ticket]  { return []velox.Hook[gen.Ticket]{orgOf[gen.Ticket]().Fill()} }
-func (Remark) Policy() velox.Policy[gen.Remark] { return orgOf[gen.Remark]().Policy() }
-func (Remark) Hooks() []velox.Hook[gen.Remark]  { return []velox.Hook[gen.Remark]{orgOf[gen.Remark]().Fill()} }
+// orgHooks fill org_id on insert from the context.
+func orgHooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if org, ok := OrgKey.From(ctx); ok {
+			return m.Fill("org_id", org)
+		}
+		return nil
+	}, velox.OpInsert)}
+}
+
+func (Post) Policy() velox.Policy   { return orgPolicy() }
+func (Post) Hooks() []velox.Hook    { return orgHooks() }
+func (Ticket) Policy() velox.Policy { return orgPolicy() }
+func (Ticket) Hooks() []velox.Hook  { return orgHooks() }
+func (Remark) Policy() velox.Policy { return orgPolicy() }
+func (Remark) Hooks() []velox.Hook  { return orgHooks() }
 `
 
 // e2eLimitsResolvers are the resolvers TestLimitsServed uses, one line each;
@@ -476,7 +497,6 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	_ "modernc.org/sqlite"
 
-	_ "example.com/app/gen/runtime"
 	"example.com/app/graph"
 	"example.com/app/schema"
 	"github.com/syssam/velox"

@@ -143,21 +143,19 @@ import (
 	"errors"
 
 	"github.com/syssam/velox"
-
-	"example.com/app/gen"
 )
 
 // Policy refuses to insert an article titled "forbidden", and lets no
 // "locked" article change.
-func (Article) Policy() velox.Policy[gen.Article] {
-	return velox.Policy[gen.Article]{
-		Insert: func(_ context.Context, x *gen.Article) error {
-			if x.Title == "forbidden" {
+func (Article) Policy() velox.Policy {
+	return velox.Policy{
+		Insert: func(_ context.Context, r velox.Row) error {
+			if r.Value("title") == "forbidden" {
 				return errors.New("the title is forbidden")
 			}
 			return nil
 		},
-		Write: func(context.Context) (velox.Pred[gen.Article], error) { return gen.Articles.Title.NEQ("locked"), nil },
+		Write: func(context.Context) (velox.Cond, error) { return velox.C("title").NEQ("locked"), nil },
 	}
 }
 `
@@ -171,8 +169,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
-
-	"example.com/app/gen"
 )
 
 // Org is the organization a request acts for.
@@ -180,15 +176,28 @@ var Org = scope.NewKey[int64]("org")
 
 // Policy confines the writers to the context's org, and lets no "frozen"
 // writer change.
-func (Writer) Policy() velox.Policy[gen.Writer] {
-	p := scope.By[gen.Writer](Org, "org_id").Policy()
-	p.Write = func(context.Context) (velox.Pred[gen.Writer], error) { return gen.Writers.Name.NEQ("frozen"), nil }
-	return p
+func (Writer) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
+			org, err := Org.Require(ctx)
+			if err != nil {
+				return velox.Cond{}, err
+			}
+			return velox.C("org_id").EQ(org), nil
+		},
+		Write:  func(context.Context) (velox.Cond, error) { return velox.C("name").NEQ("frozen"), nil },
+		Insert: func(ctx context.Context, r velox.Row) error { return Org.Match(ctx, r.Value("org_id")) },
+	}
 }
 
 // Hooks fills org_id from the context.
-func (Writer) Hooks() []velox.Hook[gen.Writer] {
-	return []velox.Hook[gen.Writer]{scope.By[gen.Writer](Org, "org_id").Fill()}
+func (Writer) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		if org, ok := Org.From(ctx); ok {
+			return m.Fill("org_id", org)
+		}
+		return nil
+	}, velox.OpInsert)}
 }
 `
 
@@ -201,15 +210,13 @@ import (
 	"context"
 
 	"github.com/syssam/velox"
-
-	"example.com/app/gen"
 )
 
 // Policy hides the circle named "hidden", and lets no "frozen" circle change.
-func (Circle) Policy() velox.Policy[gen.Circle] {
-	return velox.Policy[gen.Circle]{
-		Read:  func(context.Context) (velox.Pred[gen.Circle], error) { return gen.Circles.Name.NEQ("hidden"), nil },
-		Write: func(context.Context) (velox.Pred[gen.Circle], error) { return gen.Circles.Name.NEQ("frozen"), nil },
+func (Circle) Policy() velox.Policy {
+	return velox.Policy{
+		Read:  func(context.Context) (velox.Cond, error) { return velox.C("name").NEQ("hidden"), nil },
+		Write: func(context.Context) (velox.Cond, error) { return velox.C("name").NEQ("frozen"), nil },
 	}
 }
 `
@@ -223,16 +230,14 @@ import (
 	"context"
 
 	"github.com/syssam/velox"
-
-	"example.com/app/gen"
 )
 
 // Policy hides the profile whose handle is "hidden", and lets no "frozen"
 // profile change.
-func (Profile) Policy() velox.Policy[gen.Profile] {
-	return velox.Policy[gen.Profile]{
-		Read:  func(context.Context) (velox.Pred[gen.Profile], error) { return gen.Profiles.Handle.NEQ("hidden"), nil },
-		Write: func(context.Context) (velox.Pred[gen.Profile], error) { return gen.Profiles.Handle.NEQ("frozen"), nil },
+func (Profile) Policy() velox.Policy {
+	return velox.Policy{
+		Read:  func(context.Context) (velox.Cond, error) { return velox.C("handle").NEQ("hidden"), nil },
+		Write: func(context.Context) (velox.Cond, error) { return velox.C("handle").NEQ("frozen"), nil },
 	}
 }
 `
@@ -361,7 +366,6 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
-	_ "example.com/app/gen/runtime"
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"

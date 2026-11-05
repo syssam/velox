@@ -11,6 +11,7 @@ ColumnInfo.RequiredEdge string
 ColumnInfo.Sensitive bool
 ColumnInfo.Type any
 ColumnInfo.UpdateDefault func() any
+Cond is Pred[anyEntity]
 ConflictClause.Columns []int
 ConflictClause.DoNothing bool
 ConflictClause.Update []int
@@ -29,13 +30,36 @@ EntityInfo.Name string
 EntityInfo.PrimaryKey []int
 EntityInfo.Schema string
 EntityInfo.Table string
+Interceptor.Filter func(ctx context.Context) (Cond, error)
 JoinClause.Left bool
 JoinClause.Link Link
 JoinClause.On []Predicate
 JoinClause.Ref RelRef
+Named.Contains(s string) Cond
+Named.EQ(v any) Cond
+Named.GT(v any) Cond
+Named.GTE(v any) Cond
+Named.HasPrefix(s string) Cond
+Named.HasSuffix(s string) Cond
+Named.In(vs ...any) Cond
+Named.IsNull() Cond
+Named.LT(v any) Cond
+Named.LTE(v any) Cond
+Named.NEQ(v any) Cond
+Named.NotIn(vs ...any) Cond
+Named.NotNull() Cond
+NamedEdge.Has() Cond
+NamedEdge.HasWhere(cs ...Cond) Cond
 NotLinkedError is string
 NotLinkedError.Error() string
+Policy.Insert func(ctx context.Context, r Row) error
+Policy.Read func(ctx context.Context) (Cond, error)
+Policy.Write func(ctx context.Context) (Cond, error)
 PredOp is uint8
+Row.Entity() any
+Row.IsZero(name string) bool
+Row.Set(name string, v any) error
+Row.Value(name string) any
 Shard.Primary Conn
 Shard.Replicas []Conn
 Statement.Aggregate Aggregate
@@ -144,7 +168,7 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
-const GeneratedCodeIsVersion15
+const GeneratedCodeIsVersion16
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -182,18 +206,7 @@ func (c Col[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
 func (c Col[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
 func (c Col[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E]
-func (c Col[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
 func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
-func (c JSONCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
-func (c Named[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
-func (c Named[E, V]) Immutable[_ Lazy[V]]() bool
-func (c Named[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
-func (c Named[E, V]) IsNull[_ Lazy[V]]() Pred[E]
-func (c Named[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
-func (c Named[E, V]) NotNull[_ Lazy[V]]() Pred[E]
-func (c Named[E, V]) Nullable[_ Lazy[V]]() bool
-func (c Named[E, V]) Ptr[_ Lazy[V]](x *E) *V
-func (c Named[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c NullCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
@@ -205,12 +218,10 @@ func (c NullCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
-func (c NullCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool)
 func (c NullJSONCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
 func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullJSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
-func (c NullJSONCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool)
 func (c NullNumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]
 func (c NullNumberCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullNumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
@@ -229,7 +240,6 @@ func (c NullNumberCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullNumberCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullNumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullNumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E]
-func (c NullNumberCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool)
 func (c NullOrderedCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullOrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c NullOrderedCol[E, V]) Desc[_ Lazy[V]]() Order[E]
@@ -246,7 +256,6 @@ func (c NullOrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullOrderedCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullOrderedCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullOrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
-func (c NullOrderedCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool)
 func (c NullStringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullStringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c NullStringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E]
@@ -268,7 +277,6 @@ func (c NullStringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullStringCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullStringCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullStringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
-func (c NullStringCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool)
 func (c NumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
@@ -284,7 +292,6 @@ func (c NumberCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
 func (c NumberCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E]
-func (c NumberCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
 func (c OrderedCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c OrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c OrderedCol[E, V]) Desc[_ Lazy[V]]() Order[E]
@@ -298,7 +305,6 @@ func (c OrderedCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
 func (c OrderedCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
 func (c OrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c OrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
-func (c OrderedCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
 func (c StringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c StringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c StringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E]
@@ -317,7 +323,6 @@ func (c StringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E]
 func (c StringCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
 func (c StringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
-func (c StringCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
 func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E]
 func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
@@ -338,16 +343,19 @@ func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) 
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
 func (db *DB) UpdateTable(t Table) TableUpdate
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
-func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error
+func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
-func (m *Mutation[E]) Affected[_ Lazy[E]]() int64
-func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E]
-func (m *Mutation[E]) DB[_ Lazy[E]]() *DB
-func (m *Mutation[E]) Op[_ Lazy[E]]() Op
-func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E
-func (m *Mutation[E]) SetAffected[_ Lazy[E]](n int64)
-func (m *Mutation[E]) Set[_ Lazy[E]](ss ...Setter[E])
-func (m *Mutation[E]) Where[_ Lazy[E]](ps ...Pred[E])
+func (m *Mutation) Affected() int64
+func (m *Mutation) Conds() []Cond
+func (m *Mutation) DB() *DB
+func (m *Mutation) Fill(name string, v any) error
+func (m *Mutation) Op() Op
+func (m *Mutation) Rows() iter.Seq[Row]
+func (m *Mutation) Set(name string, v any) error
+func (m *Mutation) SetAffected(n int64)
+func (m *Mutation) Table() Table
+func (m *Mutation) Value(name string) (any, bool)
+func (m *Mutation) Where(cs ...Cond)
 func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool)
 func (m Many[T]) MarshalJSON() ([]byte, error)
 func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E]
@@ -409,7 +417,7 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
-func Allow[E any]() Pred[E]
+func Allow() Cond
 func AndPredicates(ps ...Predicate) Predicate
 func And[E any](ps ...Pred[E]) Pred[E]
 func Assignments[E any](set []Setter[E]) []Assignment
@@ -417,9 +425,8 @@ func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K],
 func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, float64], error)
 func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
-func BindHooks[E any](fs ...func() []Hook[E]) []func() BoundHooks
-func BindInterceptors[E any](fs ...func() []Interceptor[E]) []func() BoundInterceptors
-func BindPolicy[E any](fs ...func() Policy[E]) []func() BoundPolicy
+func Before(f MutateFunc, ops ...Op) Hook
+func C(name string) Named
 func CheckEntity[E any, PE Entity[E]]() error
 func CheckRelation[E, T any](r Rel[E, T]) error
 func ColumnEQ(column int, v any) Predicate
@@ -428,13 +435,14 @@ func CountBy[E, K any](ctx context.Context, q Query[E], key GroupKey[E, K]) ([]G
 func CountEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([]int64, error)
 func Deny(reason string) error
 func DriverCode(err error) (string, bool)
+func Edge(name string) NamedEdge
 func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescriptor
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDescriptor
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescriptor
-func Field[E, V any](name string) Named[E, V]
 func GoType(c ColumnInfo) reflect.Type
 func IsDryRun(ctx context.Context) bool
 func IsNotFound(err error) bool
+func Linked[T any, PT Entity[T]](e EdgeDescriptor) EdgeDescriptor
 func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([][]T, error)
 func MaxByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func MaxBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
@@ -446,7 +454,7 @@ func MinNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (
 func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
 func NotPredicate(p Predicate) Predicate
 func Not[E any](p Pred[E]) Pred[E]
-func On[E any](h Hook[E], ops ...Op) Hook[E]
+func On(h Hook, ops ...Op) Hook
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB
 func OpenConn(d Dialect, c Conn, opts ...Option) *DB
 func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB
@@ -455,6 +463,7 @@ func Or[E any](ps ...Pred[E]) Pred[E]
 func PinUntil(ctx context.Context, t time.Time)
 func PinnedUntil(ctx context.Context) time.Time
 func Pool(db *DB) *sql.DB
+func Predicates(cs []Cond) []Predicate
 func RowScopeFromContext(ctx context.Context) RowScope
 func RowsOf[E any](r TableRows) []E
 func SQLConn(db *sql.DB) Conn
@@ -477,6 +486,7 @@ func WithAround(a Around) Option
 func WithCallerSkip(pkgPath ...string) Option
 func WithCallers() Option
 func WithDeadlines(d Deadlines) Option
+func WithHooks[E any, PE Entity[E]](hs ...Hook) Option
 func WithMaxLimit(n int) Option
 func WithMaxRows(n int) Option
 func WithPinWindow(d time.Duration) Option
@@ -497,14 +507,12 @@ type Aggregate = veloxtype.Aggregate
 type Around func(ctx context.Context, st *Statement, next func(context.Context) error) error
 type AssignOp = veloxtype.AssignOp
 type Assignment = veloxtype.Assignment
-type BoundHooks = engine.BoundHooks
-type BoundInterceptors = engine.BoundInterceptors
-type BoundPolicy = engine.BoundPolicy
 type Caller = veloxtype.Caller
 type Col[E, V any] struct { I int32 }
 type ColumnDescriptor = veloxtype.ColumnDescriptor
 type ColumnInfo = engine.ColumnInfo
 type Column[E any] interface{ column(*E) int32 }
+type Cond = engine.Cond
 type ConflictClause = engine.ConflictClause
 type Conn = engine.Conn
 type ConstraintError = veloxtype.ConstraintError
@@ -512,7 +520,7 @@ type ConstraintKind = veloxtype.ConstraintKind
 type DB struct { }
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Policy []func() BoundPolicy Hooks []func() BoundHooks Interceptors []func() BoundInterceptors }
+type Descriptor[E any] struct { Table string Schema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Policy []func() Policy Hooks []func() []Hook Interceptors []func() []Interceptor }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type EdgeDescriptor = engine.EdgeDescriptor
@@ -520,10 +528,10 @@ type EntityInfo = engine.EntityInfo
 type Entity[E any] interface { *E VeloxMeta() *Meta[E] }
 type GroupKey[E, K any] struct { }
 type Group[K, V any] struct { Key K Value V }
-type Hook[E any] func(next Mutator[E]) Mutator[E]
+type Hook func(next Mutator) Mutator
 type IndexInfo = veloxtype.IndexInfo
 type InsertQuery[E any] struct { }
-type Interceptor[E any] struct { Filter func(ctx context.Context) (Pred[E], error) }
+type Interceptor = engine.Interceptor
 type JSONCol[E, V any] struct { I int32 }
 type JoinClause = engine.JoinClause
 type Lazy[T any] interface{ *T }
@@ -532,10 +540,11 @@ type LockWait = veloxtype.LockWait
 type Many[T any] struct { }
 type MetaOnce[E any] struct { }
 type Meta[E any] struct { }
-type MutateFunc[E any] func(ctx context.Context, m *Mutation[E]) error
-type Mutation[E any] struct { }
-type Mutator[E any] interface { Mutate(ctx context.Context, m *Mutation[E]) error }
-type Named[E, V any] struct { }
+type MutateFunc func(ctx context.Context, m *Mutation) error
+type Mutation struct { }
+type Mutator interface { Mutate(ctx context.Context, m *Mutation) error }
+type Named = engine.Named
+type NamedEdge = engine.NamedEdge
 type NotLinkedError = engine.NotLinkedError
 type NullCol[E, V any] struct { I int32 }
 type NullJSONCol[E, V any] struct { I int32 }
@@ -549,8 +558,8 @@ type Option = engine.Option
 type OrderTerm = veloxtype.OrderTerm
 type Order[E any] struct { }
 type OrderedCol[E, V any] struct { I int32 }
+type Policy = engine.Policy
 type PolicyError = veloxtype.PolicyError
-type Policy[E any] struct { Read func(ctx context.Context) (Pred[E], error) Write func(ctx context.Context) (Pred[E], error) Insert func(ctx context.Context, x *E) error }
 type PredOp = engine.PredOp
 type Pred[E any] = engine.Pred[E]
 type Predicate = engine.Predicate
@@ -560,6 +569,7 @@ type Rel[E, T any] struct { I int32 }
 type Result = veloxtype.Result
 type Rewrite func(ctx context.Context, st *Statement) error
 type Route = veloxtype.Route
+type Row = engine.Row
 type RowScope = veloxtype.RowScope
 type SaveQuery[E any] struct { }
 type SchemaError = veloxtype.SchemaError
@@ -877,8 +887,8 @@ type UpdateTime struct { Schema }
 package schema/mixin/softdelete
 const Column
 func (Mixin) Fields() []schema.Field
-func (Mixin) Hooks[E any]() []velox.Hook[E]
-func (Mixin) Interceptors[E any]() []velox.Interceptor[E]
+func (Mixin) Hooks() []velox.Hook
+func (Mixin) Interceptors() []velox.Interceptor
 func Skip(ctx context.Context) context.Context
 func Skipped(ctx context.Context) bool
 type Mixin struct { mixin.Schema }
@@ -1010,13 +1020,11 @@ type Supports struct { Protocol, Model int }
 
 package scope
 func (k *Key[V]) From(ctx context.Context) (V, bool)
+func (k *Key[V]) Match(ctx context.Context, v any) error
+func (k *Key[V]) Require(ctx context.Context) (V, error)
 func (k *Key[V]) With(ctx context.Context, v V) context.Context
-func (s Scope[E, V]) Fill() velox.Hook[E]
-func (s Scope[E, V]) Policy() velox.Policy[E]
-func By[E any, V comparable](key *Key[V], column string) Scope[E, V]
 func NewKey[V comparable](name string) *Key[V]
 type Key[V comparable] struct { }
-type Scope[E any, V comparable] struct { }
 var ErrMismatch
 var ErrNoScope
 

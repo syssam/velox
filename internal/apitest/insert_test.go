@@ -61,7 +61,7 @@ func TestInsertFillsADefaultNotAnUpdateDefault(t *testing.T) {
 		t.Errorf("an updated_at the caller gave was replaced: %v, sent %v", inv.UpdatedAt, e.Args[2])
 	}
 
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 		return next.Mutate(ctx, m)
 	}
 	for _, stamp := range []int64{0, 4} {

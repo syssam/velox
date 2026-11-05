@@ -343,12 +343,12 @@ func (*dBadThrough) VeloxMeta() *velox.Meta[dBadThrough] {
 			Columns:    []velox.ColumnDescriptor{{Field: "Key", Name: "key"}, {Field: "ID", Name: "id"}},
 			PrimaryKey: []int{1},
 			Edges: []velox.EdgeDescriptor{
-				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("Mismatch", 0, 0, 1, 0),  // a string owner key, an int64 join key
-				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("JoinCol", 1, 2, 1, 0),   // the join has two columns
-				velox.EdgeThrough[fixture.DBookTag, fixture.DAuthor]("Target", 1, 0, 1, 2), // an int64 join key, a string target key
-				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("Single", 1, 0, 1, 0),    // a One
-				velox.EdgeThrough[badDescriptor, fixture.DTag]("BadJoin", 1, 0, 0, 0),      // the join entity is invalid
-				velox.EdgeThrough[dPolicyJoin, fixture.DTag]("PolicyJ", 1, 0, 1, 0),        // the join entity has a Read policy
+				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("mismatch", 0, 0, 1, 0),  // a string owner key, an int64 join key
+				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("join_col", 1, 2, 1, 0),  // the join has two columns
+				velox.EdgeThrough[fixture.DBookTag, fixture.DAuthor]("target", 1, 0, 1, 2), // an int64 join key, a string target key
+				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("single", 1, 0, 1, 0),    // a One
+				velox.EdgeThrough[badDescriptor, fixture.DTag]("bad_join", 1, 0, 0, 0),     // the join entity is invalid
+				velox.EdgeThrough[dPolicyJoin, fixture.DTag]("policy_j", 1, 0, 1, 0),       // the join entity has a Read policy
 			},
 			FieldPtr: func(x *dBadThrough, i int) any { return [...]any{&x.Key, &x.ID}[i] },
 			EdgeFieldPtr: func(x *dBadThrough, i int) any {
@@ -364,12 +364,12 @@ func TestThroughRefusals(t *testing.T) {
 		p    velox.Pred[dBadThrough]
 		want string
 	}{
-		{dBadThroughs.Mismatch.Has(), "velox: apitest.dBadThrough.Mismatch: the key types differ: apitest.dBadThrough.Key is string and fixture.DBookTag.BookID is int64"},
-		{dBadThroughs.JoinCol.Has(), "velox: apitest.dBadThrough.JoinCol: its key names column 2 of fixture.DBookTag, which has 2"},
-		{dBadThroughs.Target.Has(), "velox: apitest.dBadThrough.Target: the key types differ: fixture.DBookTag.TagID is int64 and fixture.DAuthor.Name is string"},
-		{dBadThroughs.Single.Has(), "velox: apitest.dBadThrough.Single: a many-to-many relation needs a Many field"},
-		{dBadThroughs.BadJoin.Has(), "velox: apitest.dBadThrough.BadJoin: its join entity is invalid: apitest.badDescriptor: the primary key names column 3, of 1"},
-		{dBadThroughs.PolicyJ.Has(), "velox: apitest.dBadThrough.PolicyJ: its join entity apitest.dPolicyJoin has a Read policy; a join entity is read through its two sides, whose Read policies apply, and cannot have one of its own"},
+		{dBadThroughs.Mismatch.Has(), "velox: apitest.dBadThrough.mismatch: the key types differ: apitest.dBadThrough.Key is string and fixture.DBookTag.BookID is int64"},
+		{dBadThroughs.JoinCol.Has(), "velox: apitest.dBadThrough.join_col: its key names column 2 of fixture.DBookTag, which has 2"},
+		{dBadThroughs.Target.Has(), "velox: apitest.dBadThrough.target: the key types differ: fixture.DBookTag.TagID is int64 and fixture.DAuthor.Name is string"},
+		{dBadThroughs.Single.Has(), "velox: apitest.dBadThrough.single: a many-to-many relation needs a Many field"},
+		{dBadThroughs.BadJoin.Has(), "velox: apitest.dBadThrough.bad_join: its join entity is invalid: apitest.badDescriptor: the primary key names column 3, of 1"},
+		{dBadThroughs.PolicyJ.Has(), "velox: apitest.dBadThrough.policy_j: its join entity apitest.dPolicyJoin has a Read policy; a join entity is read through its two sides, whose Read policies apply, and cannot have one of its own"},
 	} {
 		_, _, err := db.Query[dBadThrough]().Where(c.p).Limit(1).SQL(ctx)
 		var se *velox.SchemaError
@@ -388,7 +388,7 @@ var dPolicyJoinMeta velox.MetaOnce[dPolicyJoin]
 func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 	return dPolicyJoinMeta.Load(func() velox.Descriptor[dPolicyJoin] {
 		return velox.Descriptor[dPolicyJoin]{
-			Policy:     velox.BindPolicy((*dPolicyJoin)(nil).Policy),
+			Policy:     []func() velox.Policy{(*dPolicyJoin)(nil).Policy},
 			Table:      "policy_joins",
 			Columns:    []velox.ColumnDescriptor{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
@@ -405,8 +405,8 @@ func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 	})
 }
 
-func (*dPolicyJoin) Policy() velox.Policy[dPolicyJoin] {
-	return velox.Policy[dPolicyJoin]{Read: func(context.Context) (velox.Pred[dPolicyJoin], error) { return velox.Allow[dPolicyJoin](), nil }}
+func (*dPolicyJoin) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Cond, error) { return velox.Allow(), nil }}
 }
 
 // dLinker has tags through dLink, a join entity whose Insert policy checks a
@@ -429,7 +429,7 @@ func (*dLinker) VeloxMeta() *velox.Meta[dLinker] {
 			Table:        "linkers",
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey:   []int{0},
-			Edges:        []velox.EdgeDescriptor{velox.EdgeThrough[dLink, fixture.DTag]("Tags", 0, 0, 1, 0)},
+			Edges:        []velox.EdgeDescriptor{velox.EdgeThrough[dLink, fixture.DTag]("tags", 0, 0, 1, 0)},
 			FieldPtr:     func(x *dLinker, i int) any { return &x.ID },
 			EdgeFieldPtr: func(x *dLinker, i int) any { return &x.Tags },
 		}
@@ -443,7 +443,7 @@ var dLinkMeta velox.MetaOnce[dLink]
 func (*dLink) VeloxMeta() *velox.Meta[dLink] {
 	return dLinkMeta.Load(func() velox.Descriptor[dLink] {
 		return velox.Descriptor[dLink]{
-			Policy:     velox.BindPolicy((*dLink)(nil).Policy),
+			Policy:     []func() velox.Policy{(*dLink)(nil).Policy},
 			Table:      "links",
 			Columns:    []velox.ColumnDescriptor{{Field: "LinkerID", Name: "linker_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
@@ -462,15 +462,16 @@ func (*dLink) VeloxMeta() *velox.Meta[dLink] {
 
 // Policy refuses a link to tag 13, standing for an endpoint the caller may
 // not see.
-func (*dLink) Policy() velox.Policy[dLink] {
-	return velox.Policy[dLink]{
-		Insert: func(_ context.Context, l *dLink) error {
+func (*dLink) Policy() velox.Policy {
+	return velox.Policy{
+		Insert: func(_ context.Context, r velox.Row) error {
+			l := r.Entity().(*dLink)
 			if l.TagID == 13 {
 				return velox.Deny("not that tag")
 			}
 			return nil
 		},
-		Write: func(context.Context) (velox.Pred[dLink], error) { return velox.Allow[dLink](), nil },
+		Write: func(context.Context) (velox.Cond, error) { return velox.Allow(), nil },
 	}
 }
 
@@ -520,7 +521,7 @@ func TestThroughJoinRewriteKeepsKeys(t *testing.T) {
 		_, err := openFake(velox.Postgres, e, narrow).Query[fixture.DBook]().With(fixture.DBooks.Tags).Limit(1).All(ctx)
 		// The plain relation's error reads the same (TestWithRewriteNarrowsColumns).
 		want := "velox: fixture.DBookTag: a Rewrite hook left out the relation's key column " + missing
-		if err == nil || !strings.HasPrefix(err.Error(), "velox: fixture.DBook: loading Tags: ") || !strings.Contains(err.Error(), want) {
+		if err == nil || !strings.HasPrefix(err.Error(), "velox: fixture.DBook: loading tags: ") || !strings.Contains(err.Error(), want) {
 			t.Errorf("got  %v\nwant %s", err, want)
 		}
 	}
@@ -538,7 +539,7 @@ func TestThroughLoadMaxRows(t *testing.T) {
 	}
 	db := openFake(velox.Postgres, &fakeconn.Exec{Results: results()}, velox.WithMaxRows(2))
 	_, err := db.Query[fixture.DBook]().With(fixture.DBooks.Tags).Limit(1).All(ctx)
-	const want = "velox: fixture.DBook: loading Tags: fixture.DBookTag: read more rows than the cap: more than 2; raise it with the query's MaxRows"
+	const want = "velox: fixture.DBook: loading tags: fixture.DBookTag: read more rows than the cap: more than 2; raise it with the query's MaxRows"
 	if !errors.Is(err, velox.ErrTooManyRows) || err.Error() != want {
 		t.Errorf("got  %v\nwant %s", err, want)
 	}
@@ -568,7 +569,7 @@ func (*dNote) VeloxMeta() *velox.Meta[dNote] {
 			Table:      "notes",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BookID", Name: "book_id"}},
 			PrimaryKey: []int{0},
-			Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[fixture.DBookTag, dNote]("SameBook", 1, 0, 0, 1)},
+			Edges:      []velox.EdgeDescriptor{velox.EdgeThrough[fixture.DBookTag, dNote]("same_book", 1, 0, 0, 1)},
 			FieldPtr: func(x *dNote, i int) any {
 				switch i {
 				case 0:
@@ -638,13 +639,13 @@ var dPeerMeta velox.MetaOnce[dPeer]
 func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 	return dPeerMeta.Load(func() velox.Descriptor[dPeer] {
 		return velox.Descriptor[dPeer]{
-			Policy:     velox.BindPolicy((*dPeer)(nil).Policy),
+			Policy:     []func() velox.Policy{(*dPeer)(nil).Policy},
 			Table:      "peers",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Edges: []velox.EdgeDescriptor{
-				velox.EdgeThrough[dFriend, dPeer]("Friends", 0, 0, 1, 0),
-				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("Tags", 0, 0, 1, 0),
+				velox.Linked[dPeer](velox.EdgeThrough[dFriend, dPeer]("friends", 0, 0, 1, 0)),
+				velox.Linked[fixture.DTag](velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("tags", 0, 0, 1, 0)),
 			},
 			FieldPtr: func(x *dPeer, i int) any {
 				if i == 0 {
@@ -665,12 +666,12 @@ func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 	})
 }
 
-func (*dPeer) Policy() velox.Policy[dPeer] {
-	return velox.Policy[dPeer]{Read: func(ctx context.Context) (velox.Pred[dPeer], error) {
+func (*dPeer) Policy() velox.Policy {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
 		if ctx.Value(peerCycle{}) != nil {
-			return dPeers.Friends.HasWhere(dPeers.ID.GT(0)), nil
+			return velox.Edge("friends").HasWhere(velox.C("id").GT(0)), nil
 		}
-		return dPeers.Tags.HasWhere(fixture.DTags.Name.EQ("public")), nil
+		return velox.Edge("tags").HasWhere(velox.C("name").EQ("public")), nil
 	}}
 }
 

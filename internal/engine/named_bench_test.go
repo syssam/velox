@@ -37,24 +37,24 @@ func bnOrgOf(ctx context.Context) int64 { v, _ := ctx.Value(bnOrg{}).(int64); re
 
 func bnBadOf(ctx context.Context) string { v, _ := ctx.Value(bnBad{}).(string); return v }
 
-func (*bnIdx) Policy() velox.Policy[bnIdx] {
+// bnIdx's policy holds a typed handle's condition, which names the column
+// by its index, converted to a Cond: the statement does not resolve it.
+func (*bnIdx) Policy() velox.Policy {
 	org := velox.NumberCol[bnIdx, int64]{I: 1}
-	return velox.Policy[bnIdx]{Read: func(ctx context.Context) (velox.Pred[bnIdx], error) {
-		return org.EQ(bnOrgOf(ctx)), nil
+	return velox.Policy{Read: func(ctx context.Context) (velox.Cond, error) {
+		return velox.Cond(org.EQ(bnOrgOf(ctx))), nil
 	}}
 }
 
-func (*bnName) Policy() velox.Policy[bnName] {
-	return velox.Policy[bnName]{
-		Read: func(ctx context.Context) (velox.Pred[bnName], error) {
+func (*bnName) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Cond, error) {
 			if bnBadOf(ctx) == "policy" {
-				return velox.Pred[bnName](engine.C("orgg_id").EQ(1)), nil
+				return velox.C("orgg_id").EQ(1), nil
 			}
-			return velox.Pred[bnName](engine.C("org_id").EQ(bnOrgOf(ctx))), nil
+			return velox.C("org_id").EQ(bnOrgOf(ctx)), nil
 		},
-		Insert: func(ctx context.Context, x *bnName) error {
-			var rec error
-			r := engine.NewRow(infoOf[bnName](), unsafe.Pointer(x), &rec, true)
+		Insert: func(ctx context.Context, r velox.Row) error {
 			if r.Value("org_id") != bnOrgOf(ctx) {
 				return velox.Deny("another org")
 			}
@@ -63,30 +63,23 @@ func (*bnName) Policy() velox.Policy[bnName] {
 	}
 }
 
-func (*bnName) Interceptors() []velox.Interceptor[bnName] {
-	return []velox.Interceptor[bnName]{{Filter: func(ctx context.Context) (velox.Pred[bnName], error) {
+func (*bnName) Interceptors() []velox.Interceptor {
+	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Cond, error) {
 		if bnBadOf(ctx) == "interceptor" {
-			return velox.Pred[bnName](engine.C("titel").NEQ("")), nil
+			return velox.C("titel").NEQ(""), nil
 		}
-		return velox.Allow[bnName](), nil
+		return velox.Allow(), nil
 	}}}
 }
 
-// mutationOf is the state a typed Mutation holds, which is all it holds.
-func mutationOf[E any](m *velox.Mutation[E]) *engine.MutationState {
-	return (*engine.MutationState)(unsafe.Pointer(m))
-}
-
-func (*bnName) Hooks() []velox.Hook[bnName] {
-	return []velox.Hook[bnName]{velox.On(func(next velox.Mutator[bnName]) velox.Mutator[bnName] {
-		return velox.MutateFunc[bnName](func(ctx context.Context, m *velox.Mutation[bnName]) error {
-			name := "org_id"
-			if bnBadOf(ctx) == "hook" {
-				name = "orgid"
-			}
-			_ = mutationOf(m).FillByName(name, bnOrgOf(ctx))
-			return next.Mutate(ctx, m)
-		})
+func (*bnName) Hooks() []velox.Hook {
+	return []velox.Hook{velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+		name := "org_id"
+		if bnBadOf(ctx) == "hook" {
+			name = "orgid"
+		}
+		_ = m.Fill(name, bnOrgOf(ctx)) // a misuse is recorded, and fails the write
+		return nil
 	}, velox.OpInsert)}
 }
 
@@ -101,7 +94,7 @@ func (*bnIdx) VeloxMeta() *velox.Meta[bnIdx] {
 			Table:      "bn_idx",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Title", Name: "title"}},
 			PrimaryKey: []int{0},
-			Policy:     velox.BindPolicy((*bnIdx)(nil).Policy),
+			Policy:     []func() velox.Policy{(*bnIdx)(nil).Policy},
 			FieldPtr:   func(x *bnIdx, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Title}[i] },
 		}
 	})
@@ -113,9 +106,9 @@ func (*bnName) VeloxMeta() *velox.Meta[bnName] {
 			Table:        "bn_name",
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Title", Name: "title"}},
 			PrimaryKey:   []int{0},
-			Policy:       velox.BindPolicy((*bnName)(nil).Policy),
-			Hooks:        velox.BindHooks((*bnName)(nil).Hooks),
-			Interceptors: velox.BindInterceptors((*bnName)(nil).Interceptors),
+			Policy:       []func() velox.Policy{(*bnName)(nil).Policy},
+			Hooks:        []func() []velox.Hook{(*bnName)(nil).Hooks},
+			Interceptors: []func() []velox.Interceptor{(*bnName)(nil).Interceptors},
 			FieldPtr:     func(x *bnName, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Title}[i] },
 		}
 	})
