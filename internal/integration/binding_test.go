@@ -111,7 +111,7 @@ func fullBind() testbind.Bind {
 		Data: []byte{0, 1, 0xfe, 0xff, '\''}, ShortData: []byte("0123456789abcdef"),
 		At:   time.Date(2026, 1, 2, 3, 4, 5, 123456000, time.UTC),
 		UID:  bindtype.UUID{0x12, 0x3e, 0x45, 0x67, 0xe8, 0x9b, 0x12, 0xd3, 0xa4, 0x56, 0x42, 0x66, 0x14, 0x17, 0x40, 0x00},
-		Tags: []string{"x", "y"}, Doc: bindtype.Doc{Title: "t", Pages: 3, Tags: []string{"z"}}, Note: &note,
+		Tags: []string{"x", "y"}, Labels: []string{"a", "é"}, Counts: []int{-1, 0, 7}, Doc: bindtype.Doc{Title: "t", Pages: 3, Tags: []string{"z"}}, Note: &note,
 	}
 }
 
@@ -261,6 +261,27 @@ func TestBindingRoundTrip(t *testing.T) {
 				}
 				if got := readBind(t, tg, empty.ID); got.Tags == nil || len(got.Tags) != 0 {
 					t.Errorf("empty tags read back as %#v", got.Tags)
+				}
+			})
+
+			// A required field.Strings is a NOT NULL column: a nil slice
+			// stores the JSON null, where ent's create would refuse it
+			// unset, and reads back nil; the database refuses SQL NULL.
+			t.Run("required strings", func(t *testing.T) {
+				row := fullBind()
+				row.Labels = nil
+				if err := tg.db.Insert(&row).Exec(ctx); err != nil {
+					t.Fatal(err)
+				}
+				if text, null := rawText(t, tg, "labels", row.ID); null || strings.TrimSpace(text) != "null" {
+					t.Errorf("nil labels stored %q (NULL %v), want the JSON null", text, null)
+				}
+				if got := readBind(t, tg, row.ID); got.Labels != nil {
+					t.Errorf("nil labels read back as %#v", got.Labels)
+				}
+				q := rebind(tg.d, "UPDATE binds SET labels = NULL WHERE id = ?")
+				if _, err := tg.direct.ExecContext(ctx, q, row.ID); err == nil {
+					t.Error("labels = NULL was stored")
 				}
 			})
 		})

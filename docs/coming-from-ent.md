@@ -61,6 +61,16 @@ When `migrate diff` adds a column to a table that has rows, give the field a
 `Default` or make it `Optional`: a NOT NULL column with no default fails on
 those rows, and `-allow add-required-column=...` only helps on an empty table.
 
+**`field.Strings` is a JSON column, as in ent.** `field.Strings`, `field.Ints`
+and `field.Floats` are JSON fields of `[]string`, `[]int` and `[]float64`, and
+`field.JSON(name, T)` takes any other type. The column is `jsonb` on
+PostgreSQL, `json` on MySQL and `text` on SQLite, and `migrate diff` writes it
+on each. As said above, an `Optional` one is NULL-able, and a nil slice stores
+NULL. A required one is NOT NULL: a nil slice stores the JSON `null` and reads
+back nil, where ent's create refuses the field unset. Its handle, a
+`velox.JSONCol`, sets it and reads its assigned value in a hook; velox
+neither orders by a JSON column nor compares one.
+
 **IDs are int64.** The implicit `id` is `field.Int64`, where ent's is `int`. A
 foreign-key field must have its target's ID type: declare it `field.Int64`, or
 declare the target's ID with `field.Int("id")`.

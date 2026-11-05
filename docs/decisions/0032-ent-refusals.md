@@ -108,3 +108,9 @@ checks the columns of the lines it suggests.
 The same day, an `OrderVia` of a nullable field was allowed, and an
 ordering by a joined nullable column sorts NULL last on MySQL and SQLite
 too: see 0031's Review.
+
+`field.Strings` was never refused by velox-gen: it is a JSON column, as in
+ent, and 0032's JSON lists serve it in GraphQL. The binding model now holds
+a required `field.Strings` and `field.Ints` beside the Optional one, so
+`TestBindingRoundTrip` applies the planner's migration of a NOT NULL JSON
+list and round-trips it on SQLite, PostgreSQL and MySQL.

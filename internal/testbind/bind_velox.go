@@ -36,6 +36,8 @@ type Bind struct {
 	At        time.Time      `json:"at,omitzero"`
 	UID       bindtype.UUID  `json:"uid,omitzero"`
 	Tags      []string       `json:"tags,omitempty"`
+	Labels    []string       `json:"labels,omitempty"`
+	Counts    []int          `json:"counts,omitempty"`
 	Doc       bindtype.Doc   `json:"doc,omitzero"`
 	Note      *string        `json:"note,omitempty"`
 }
@@ -64,6 +66,8 @@ const (
 	bindColAt
 	bindColUID
 	bindColTags
+	bindColLabels
+	bindColCounts
 	bindColDoc
 	bindColNote
 )
@@ -114,6 +118,10 @@ type bindHandles struct {
 	UID velox.Col[Bind, bindtype.UUID]
 	// Tags is the column tags.
 	Tags velox.JSONCol[Bind, []string]
+	// Labels is the column labels.
+	Labels velox.JSONCol[Bind, []string]
+	// Counts is the column counts.
+	Counts velox.JSONCol[Bind, []int]
 	// Doc is the column doc.
 	Doc velox.JSONCol[Bind, bindtype.Doc]
 	// Note is the column note.
@@ -144,6 +152,8 @@ var Binds = bindHandles{
 	At:        velox.OrderedCol[Bind, time.Time]{I: bindColAt},
 	UID:       velox.Col[Bind, bindtype.UUID]{I: bindColUID},
 	Tags:      velox.JSONCol[Bind, []string]{I: bindColTags},
+	Labels:    velox.JSONCol[Bind, []string]{I: bindColLabels},
+	Counts:    velox.JSONCol[Bind, []int]{I: bindColCounts},
 	Doc:       velox.JSONCol[Bind, bindtype.Doc]{I: bindColDoc},
 	Note:      velox.NullStringCol[Bind, string]{I: bindColNote},
 }
@@ -180,6 +190,8 @@ func bindDescriptor() velox.Descriptor[Bind] {
 			{Field: "At", Name: "at"},
 			{Field: "UID", Name: "uid"},
 			{Field: "Tags", Name: "tags", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},
+			{Field: "Labels", Name: "labels", Encode: json.Marshal, Decode: json.Unmarshal},
+			{Field: "Counts", Name: "counts", Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Doc", Name: "doc", Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Note", Name: "note"},
 		},
@@ -230,6 +242,10 @@ func bindDescriptor() velox.Descriptor[Bind] {
 				return &x.UID
 			case bindColTags:
 				return &x.Tags
+			case bindColLabels:
+				return &x.Labels
+			case bindColCounts:
+				return &x.Counts
 			case bindColDoc:
 				return &x.Doc
 			case bindColNote:
@@ -269,7 +285,7 @@ func bindDescriptor() velox.Descriptor[Bind] {
 
 // String returns the entity's fields.
 func (x Bind) String() string {
-	return fmt.Sprintf("Bind(ID=%v, Flag=%v, I8=%v, I16=%v, I32=%v, I64=%v, U8=%v, U16=%v, U32=%v, U64=%v, F32=%v, F64=%v, Str=%v, Short=%v, Body=%v, Kind=%v, Level=%v, Data=<%d bytes>, ShortData=<%d bytes>, At=%v, UID=%v, Tags=%v, Doc=%v, Note=%v)", x.ID, x.Flag, x.I8, x.I16, x.I32, x.I64, x.U8, x.U16, x.U32, x.U64, x.F32, x.F64, x.Str, x.Short, x.Body, x.Kind, x.Level, len(x.Data), len(x.ShortData), x.At, x.UID, x.Tags, x.Doc, velox.Show(x.Note))
+	return fmt.Sprintf("Bind(ID=%v, Flag=%v, I8=%v, I16=%v, I32=%v, I64=%v, U8=%v, U16=%v, U32=%v, U64=%v, F32=%v, F64=%v, Str=%v, Short=%v, Body=%v, Kind=%v, Level=%v, Data=<%d bytes>, ShortData=<%d bytes>, At=%v, UID=%v, Tags=%v, Labels=%v, Counts=%v, Doc=%v, Note=%v)", x.ID, x.Flag, x.I8, x.I16, x.I32, x.I64, x.U8, x.U16, x.U32, x.U64, x.F32, x.F64, x.Str, x.Short, x.Body, x.Kind, x.Level, len(x.Data), len(x.ShortData), x.At, x.UID, x.Tags, x.Labels, x.Counts, x.Doc, velox.Show(x.Note))
 }
 
 // GoString is String, so that %#v prints the same text.

@@ -35,6 +35,9 @@ func (Bind) Fields() []schema.Field {
 		field.Time("at"),
 		field.UUID("uid", bindtype.UUID{}),
 		field.Strings("tags").Optional(),
+		// ent's field.Strings and field.Ints, required: a NOT NULL JSON column.
+		field.Strings("labels"),
+		field.Ints("counts"),
 		field.JSON("doc", bindtype.Doc{}),
 		field.String("note").Optional().Nillable(),
 	}
