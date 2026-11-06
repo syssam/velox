@@ -115,7 +115,8 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 //     Each link is checked by a read after the UPDATE. Remove sets NULL on
 //     the given children the owner holds, and Clear on all of them.
 //   - A one-to-one edge's Add, of one key, first lets go of the child the
-//     owner holds; one the caller may not change fails with ErrLinked.
+//     owner holds; one the caller may not change fails with ErrLinked, and
+//     one whose key is a Required edge's fails its validator.
 //   - Add of an edge whose foreign key the target holds fails for more than
 //     one owner at once, an InsertAll of several entities: a child has one
 //     owner.

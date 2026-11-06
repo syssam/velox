@@ -52,6 +52,7 @@ type sPost struct {
 	Tags     velox.Many[sTag]
 	Comments velox.Many[sComment]
 	Cover    velox.One[sCover]
+	Spine    velox.One[sSpine]
 }
 
 var sPosts = struct {
@@ -62,9 +63,11 @@ var sPosts = struct {
 	Tags     velox.Rel[sPost, sTag]
 	Comments velox.Rel[sPost, sComment]
 	Cover    velox.Rel[sPost, sCover]
+	Spine    velox.Rel[sPost, sSpine]
 }{
 	velox.NumberCol[sPost, int64]{I: 0}, velox.NumberCol[sPost, int64]{I: 1}, velox.StringCol[sPost, string]{I: 2},
 	velox.Rel[sPost, sUser]{I: 0}, velox.Rel[sPost, sTag]{I: 1}, velox.Rel[sPost, sComment]{I: 2}, velox.Rel[sPost, sCover]{I: 3},
+	velox.Rel[sPost, sSpine]{I: 4},
 }
 
 var sPostMeta velox.MetaOnce[sPost]
@@ -96,6 +99,7 @@ func sPostDescriptor() velox.Descriptor[sPost] {
 			velox.EdgeThrough[sPostTag, sTag]("tags", 0, 0, 1, 0),
 			velox.EdgeTo[sComment]("comments", 0, 1),
 			velox.EdgeTo[sCover]("cover", 0, 1),
+			velox.EdgeTo[sSpine]("spine", 0, 1),
 		},
 		FieldPtr: func(x *sPost, i int) any {
 			switch i {
@@ -114,8 +118,10 @@ func sPostDescriptor() velox.Descriptor[sPost] {
 				return &x.Tags
 			case 2:
 				return &x.Comments
+			case 3:
+				return &x.Cover
 			}
-			return &x.Cover
+			return &x.Spine
 		},
 	}
 }
@@ -239,6 +245,32 @@ func sCoverDescriptor() velox.Descriptor[sCover] {
 	}
 }
 
+// sSpine is the other side of sPost's one-to-one edge spine, whose
+// NULL-able key, post_id, is of the Required edge post: velox refuses it
+// set to NULL.
+type sSpine struct {
+	ID     int64
+	PostID *int64
+}
+
+var sSpineMeta velox.MetaOnce[sSpine]
+
+func (*sSpine) VeloxMeta() *velox.Meta[sSpine] { return sSpineMeta.Load(sSpineDescriptor) }
+
+func sSpineDescriptor() velox.Descriptor[sSpine] {
+	return velox.Descriptor[sSpine]{
+		Table:      "s_spines",
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "PostID", Name: "post_id", RequiredEdge: "post"}},
+		PrimaryKey: []int{0},
+		FieldPtr: func(x *sSpine, i int) any {
+			if i == 0 {
+				return &x.ID
+			}
+			return &x.PostID
+		},
+	}
+}
+
 // sHiddenPolicy hides a hidden row from Read and, when locks, a locked row
 // from Write.
 func sHiddenPolicy(locks bool) velox.Policy {
@@ -256,6 +288,7 @@ var sDDL = []string{
 	`CREATE TABLE s_post_tags (post_id integer NOT NULL REFERENCES s_posts (id), tag_id integer NOT NULL REFERENCES s_tags (id), PRIMARY KEY (post_id, tag_id))`,
 	`CREATE TABLE s_comments (id integer PRIMARY KEY, post_id integer REFERENCES s_posts (id), hidden boolean NOT NULL DEFAULT 0, locked boolean NOT NULL DEFAULT 0)`,
 	`CREATE TABLE s_covers (id integer PRIMARY KEY, post_id integer UNIQUE REFERENCES s_posts (id), hidden boolean NOT NULL DEFAULT 0, locked boolean NOT NULL DEFAULT 0)`,
+	`CREATE TABLE s_spines (id integer PRIMARY KEY, post_id integer UNIQUE REFERENCES s_posts (id))`,
 }
 
 // edgeDB opens a SQLite database with the tables of the edge setter tests,
@@ -537,6 +570,25 @@ func TestEdgeSetterChildren(t *testing.T) {
 		t.Fatal(err)
 	}
 	want64(t, "after clear", owners(t, raw, "s_comments"), -1, -1, -1, 100, -1, p.ID)
+}
+
+// TestEdgeSetterRequiredOneChild: a one-to-one edge whose key is of a
+// Required edge links a child no owner holds: with no child held, nothing
+// is let go, so the key is never set to NULL. Letting go of a held child is
+// refused, as it would leave the child's key NULL, and the link stays.
+func TestEdgeSetterRequiredOneChild(t *testing.T) {
+	db, raw := edgeDB(t)
+	exec(t, raw, "INSERT INTO s_spines (id, post_id) VALUES (1, NULL), (2, NULL)")
+	p := sPost{AuthorID: 1, Title: "p"}
+	if err := db.Insert(&p).Set(sPosts.Spine.Add(1)).Exec(user); err != nil {
+		t.Fatal(err)
+	}
+	want64(t, "after insert", owners(t, raw, "s_spines"), p.ID, -1)
+	_, err := db.Update[sPost]().Set(sPosts.Spine.Add(2)).Where(sPosts.ID.EQ(p.ID)).Exec(user)
+	if err == nil || !strings.Contains(err.Error(), `missing required edge "sSpine.post"`) {
+		t.Errorf("replace: %v", err)
+	}
+	want64(t, "after the refused replace", owners(t, raw, "s_spines"), p.ID, -1)
 }
 
 // TestEdgeSetterOneChild: a one-to-one edge's Add lets go of the child the

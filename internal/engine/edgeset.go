@@ -516,17 +516,28 @@ func (w *edgeWrite) writeChild(ctx context.Context, db *DB, owners []unsafe.Poin
 // error does not tell a hidden child from a missing one. The child the owner
 // holds now is let go first, as the key is unique, under the caller's scope:
 // one that stays linked is one the caller may not change, and fails with
-// ErrLinked.
+// ErrLinked. A key of a Required edge, which velox refuses to set NULL, is
+// let go of only when a child holds it: an owner that holds none, as a row
+// just inserted, links k at once.
 func (w *edgeWrite) replaceChild(ctx context.Context, db *DB, k, v any) error {
 	t, fk := w.target, w.link.TargetCol
 	if err := w.checkExists(ctx, db, []any{k}); err != nil {
 		return err
 	}
+	const reason = "velox: a hidden child of a one-to-one edge setter"
 	held, other := t.Pred(fk, PredEQ, v), t.Pred(w.key, PredNEQ, k)
+	if info := t.Info(); info != nil && info.Columns[fk].RequiredEdge != "" {
+		holds, err := QueryTable(db, nil, t).Where(held, other).Exists(WithoutPolicy(ctx, reason))
+		if err != nil {
+			return err
+		}
+		if !holds {
+			return w.relink(ctx, db, []any{k}, v)
+		}
+	}
 	if _, err := UpdateTable(db, t).SetNull(fk).Where(held, other).Exec(ctx); err != nil {
 		return err
 	}
-	const reason = "velox: a hidden child of a one-to-one edge setter"
 	still, err := QueryTable(db, nil, t).Where(held, other).Exists(WithoutPolicy(ctx, reason))
 	if err != nil {
 		return err
