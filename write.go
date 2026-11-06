@@ -15,7 +15,7 @@ type UpdateQuery[E any] struct {
 	meta  *Meta[E]
 	st    Statement
 	err   error             // a condition's error, as in Query
-	edges []*engine.EdgeSet // Set's edge setters
+	edges []*engine.EdgeSet // Set's edge setters; st.Set holds its assignments
 }
 
 // Update starts an UPDATE of entity E:
@@ -37,14 +37,8 @@ func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E] {
 // sends the UPDATE, then writes each edge for each row, as InsertQuery.Set
 // says. The entity's hooks see the UPDATE alone, without the edges.
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E] {
-	u.st.Set, u.edges = slices.Clip(u.st.Set), slices.Clip(u.edges)
-	for _, s := range ss {
-		if e := engine.EdgeOf(s.a); e != nil {
-			u.edges = append(u.edges, e)
-		} else {
-			u.st.Set = append(u.st.Set, s.a)
-		}
-	}
+	set := engine.Setters{Set: u.st.Set, Edges: u.edges}.Add(Assignments(ss))
+	u.st.Set, u.edges = set.Set, set.Edges
 	return u
 }
 
@@ -99,16 +93,7 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if len(u.edges) > 0 {
-		plan, err := engine.PlanEdges(u.meta.info, u.edges)
-		if err != nil {
-			return 0, err
-		}
-		st.Set = append(st.Set, plan.Set...)
-		return engine.UpdateEdges(ctx, &u.db.e, &st, plan)
-	}
-	n, _, _, err := engine.Write(ctx, &u.db.e, &st, false, false)
-	return n, err
+	return engine.Update(ctx, &u.db.e, &st, u.edges)
 }
 
 // SQL returns the statement and arguments Exec would send for ctx, or the
@@ -133,18 +118,7 @@ func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	if err != nil {
 		return "", nil, err
 	}
-	if len(u.edges) > 0 {
-		plan, err := engine.PlanEdges(u.meta.info, u.edges)
-		if err != nil {
-			return "", nil, err
-		}
-		st.Set = append(st.Set, plan.Set...)
-		if len(st.Set) == 0 {
-			return "", nil, engine.GuardUpdate(&u.db.e, &st)
-		}
-	}
-	_, q, args, err := engine.Write(ctx, &u.db.e, &st, true, false)
-	return q, args, err
+	return engine.UpdateSQL(ctx, &u.db.e, &st, u.edges)
 }
 
 // DeleteQuery is a DELETE of entity E, built by chaining and run by Exec.

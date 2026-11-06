@@ -3,7 +3,6 @@ package velox
 import (
 	"context"
 	"fmt"
-	"slices"
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
@@ -18,8 +17,7 @@ type InsertQuery[E any] struct {
 	single   bool // made by Insert, so a nil one is a mistake, not an empty InsertAll
 	many     []E
 	conflict *ConflictClause
-	set      []Assignment      // Set's column setters
-	edges    []*engine.EdgeSet // Set's edge setters
+	set      engine.Setters // Set's setters
 }
 
 // Insert starts an INSERT of the entity x points to:
@@ -130,14 +128,7 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // edge is written only when the insert affected a row: a hook that does not
 // call next writes none.
 func (q InsertQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E] {
-	q.set, q.edges = slices.Clip(q.set), slices.Clip(q.edges)
-	for _, s := range ss {
-		if e := engine.EdgeOf(s.a); e != nil {
-			q.edges = append(q.edges, e)
-		} else {
-			q.set = append(q.set, s.a)
-		}
-	}
+	q.set = q.set.Add(Assignments(ss))
 	return q
 }
 
@@ -180,61 +171,11 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if q.one == nil && len(q.many) == 0 {
 		return nil
 	}
-	if len(q.edges) == 0 {
-		q.apply()
-		_, err := q.run(ctx, &q.db.e)
-		return err
+	if q.set.Empty() && !q.db.e.HasHooks(q.meta.info) {
+		var mu engine.MutationState
+		return q.send(ctx, &q.db.e, &mu)
 	}
-	plan, err := q.plan()
-	if err != nil {
-		return err
-	}
-	q.set = append(slices.Clip(q.set), plan.Set...)
-	q.apply()
-	return engine.InsertEdges(ctx, &q.db.e, plan, q.mutation(false).Rows, q.run)
-}
-
-// run runs the insert on db, through the entity's hooks, and returns the
-// rows it affected.
-func (q InsertQuery[E]) run[_ Lazy[E]](ctx context.Context, db *engine.DB) (int64, error) {
-	if db.HasHooks(q.meta.info) {
-		mu := q.mutation(false)
-		err := engine.Mutate(ctx, db, q.meta.info, mu, func(ctx context.Context, mu *engine.MutationState) error { return q.send(ctx, db, mu) })
-		return mu.Affected, err
-	}
-	var mu engine.MutationState
-	err := q.send(ctx, db, &mu)
-	return mu.Affected, err
-}
-
-// apply stores the column setters' values in each entity.
-func (q InsertQuery[E]) apply[_ Lazy[E]]() {
-	if len(q.set) == 0 {
-		return
-	}
-	for _, p := range q.mutation(false).Rows {
-		for _, a := range q.set {
-			setField(q.meta, (*E)(p), a.Column, a.Value)
-		}
-	}
-}
-
-// plan is the edge setters, resolved and checked. A plan that writes edges
-// after the rows needs their keys and their rows; one of Set edge setters
-// alone sets the rows' own columns.
-func (q InsertQuery[E]) plan[_ Lazy[E]]() (engine.EdgePlan, error) {
-	p, err := engine.PlanEdges(q.meta.info, q.edges)
-	if err != nil || !p.Writes() {
-		return p, err
-	}
-	gen := false
-	for i := range q.many {
-		gen = gen || generatedKey(q.meta, &q.many[i]) >= 0
-	}
-	if err := engine.CheckEdgeInsert(q.meta.info, q.conflict != nil, q.one == nil, gen); err != nil {
-		return engine.EdgePlan{}, err
-	}
-	return p, nil
+	return engine.Insert(ctx, &q.db.e, q.meta.info, q.set, q.mutation(false).Rows, q.conflict != nil, q.one == nil, q.send)
 }
 
 // SQL returns the first statement and arguments Exec would send for ctx, or
@@ -265,14 +206,11 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	if q.one == nil && len(q.many) == 0 {
 		return "", nil, nil
 	}
-	if len(q.edges) > 0 {
-		plan, err := q.plan()
-		if err != nil {
+	if !q.set.Empty() {
+		if _, err := engine.PrepareInsert(q.meta.info, q.set, q.mutation(false).Rows, q.conflict != nil, q.one == nil); err != nil {
 			return "", nil, err
 		}
-		q.set = append(slices.Clip(q.set), plan.Set...)
 	}
-	q.apply()
 	if q.db.e.HasHooks(q.meta.info) {
 		mu := q.mutation(true)
 		if err := engine.Mutate(ctx, &q.db.e, q.meta.info, mu, func(ctx context.Context, mu *engine.MutationState) error { return q.render(ctx, mu) }); err != nil && !engine.DryRefused(mu, err) {
@@ -353,10 +291,8 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 	if q.single && q.one == nil {
 		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.meta.info.Name)
 	}
-	for _, a := range q.set {
-		if a.Op != AssignSet {
-			return fmt.Errorf("velox: %s: an insert's setter of %s is Add or Sub, which needs a row; use Set", q.meta.info.Name, q.meta.info.Columns[a.Column].Field)
-		}
+	if err := q.set.CheckInsert(q.meta.info); err != nil {
+		return err
 	}
 	if q.conflict != nil {
 		return engine.CheckConflict(q.meta.info, q.conflict, unsafe.Pointer(q.one))

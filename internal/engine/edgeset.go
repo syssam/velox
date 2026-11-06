@@ -719,7 +719,3 @@ func CheckEdgeInsert(in *EntityInfo, upsert, many, gen bool) error {
 	}
 	return nil
 }
-
-// GuardUpdate checks st, an update as the caller built it, as Write's
-// guard does: for an update of only edge setters, which Write does not see.
-func GuardUpdate(db *DB, st *Statement) error { return db.guard(st) }
