@@ -289,14 +289,14 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"enum PostOrderField {\n  TITLE\n  AUTHOR_NAME\n}\n",
 		"  displayNameHasSuffix: String\n  hasPosts: Boolean\n  hasPostsWith: [PostWhereInput!]\n  hasGroups: Boolean\n}\n",
 		"  or: [PostWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  authorID: ID\n  authorIDNEQ: ID\n  authorIDIn: [ID!]\n  authorIDNotIn: [ID!]\n  title: String\n",
-		"input CreatePostInput {\n  title: String!\n  authorID: ID!\n}\n",
-		"input UpdatePostInput {\n  title: String\n  authorID: ID\n}\n",
+		"input CreatePostInput {\n  title: String!\n  \"\"\"The ID of the Account the edge author leads to.\"\"\"\n  authorID: ID!\n}\n",
+		"input UpdatePostInput {\n  title: String\n  \"\"\"The ID of the Account the edge author leads to.\"\"\"\n  authorID: ID\n}\n",
 		// Category's self-edges, read through OwnsKey: parent, mentor and the
 		// bidirectional twin hold their immutable keys on the row, so they are
 		// set on create only; children and mentee would re-point other rows'
 		// immutable keys, so they have no input. An edge's directives reach
 		// its inputs.
-		"input CreateCategoryInput {\n  title: String!\n  parentID: ID\n  mentorID: ID\n  twinID: ID @deprecated(reason: \"Use mentor.\")\n}\n",
+		"input CreateCategoryInput {\n  title: String!\n  \"\"\"The ID of the Category the edge parent leads to.\"\"\"\n  parentID: ID\n  \"\"\"The ID of the Category the edge mentor leads to.\"\"\"\n  mentorID: ID\n  \"\"\"The ID of the Category the edge twin leads to.\"\"\"\n  twinID: ID @deprecated(reason: \"Use mentor.\")\n}\n",
 		"input UpdateCategoryInput {\n  title: String\n}\n",
 		// The key's where predicates are named after the edge that owns it.
 		"  or: [CategoryWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  mentorID: ID\n  mentorIDNEQ: ID\n  mentorIDIn: [ID!]\n  mentorIDNotIn: [ID!]\n}\n",

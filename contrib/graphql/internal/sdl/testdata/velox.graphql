@@ -55,9 +55,13 @@ type Query {
   node(id: ID!): Node
   """The nodes with these IDs, in their order; null for an ID with no node."""
   nodes(ids: [ID!]!): [Node]!
+  """The connection to the Category nodes, filtered by where, ordered by the key, and paged by the other arguments."""
   categories(after: Cursor, first: Int, before: Cursor, last: Int, where: CategoryWhereInput): CategoryConnection!
+  """The connection to the Group nodes, ordered by orderBy and then the key, and paged by the other arguments."""
   groups(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: GroupOrder): GroupConnection!
+  """The connection to the Post nodes, filtered by where, ordered by orderBy and then the key, and paged by the other arguments."""
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
+  """The connection to the Account nodes, filtered by where, ordered by the key, and paged by the other arguments."""
   accounts(after: Cursor, first: Int, before: Cursor, last: Int, where: AccountWhereInput): AccountConnection!
 }
 
@@ -110,17 +114,24 @@ input CategoryWhereInput {
 """The input that creates a Category."""
 input CreateCategoryInput {
   title: String!
+  """The IDs of the Category nodes the edge children leads to."""
   childIDs: [ID!]
+  """The ID of the Category the edge parent leads to."""
   parentID: ID
 }
 
 """The input that updates a Category: a field not given is left as it is."""
 input UpdateCategoryInput {
   title: String
+  """The IDs of Category nodes to add to the edge children."""
   addChildIDs: [ID!]
+  """The IDs of Category nodes to remove from the edge children; an ID the edge does not lead to is ignored."""
   removeChildIDs: [ID!]
+  """Removes every Category from the edge children, before the IDs to remove and to add."""
   clearChildren: Boolean
+  """The ID of the Category the edge parent leads to."""
   parentID: ID
+  """Unlinks the edge parent: it leads to no Category afterwards."""
   clearParent: Boolean
 }
 
@@ -197,7 +208,9 @@ type LikeEdge {
 input CreateLikeInput {
   weight: Int
   createdAt: Time
+  """The ID of the Account the edge user leads to."""
   userID: ID!
+  """The ID of the Post the edge post leads to."""
   postID: ID!
 }
 
@@ -317,8 +330,11 @@ input CreatePostInput {
   rating: Float
   """Who last edited the post; the update default fills it."""
   editedBy: String!
+  """The ID of the Account the edge author leads to."""
   writerID: ID!
+  """The IDs of the Post nodes the edge related leads to."""
   relatedIDs: [ID!]
+  """The IDs of the Post nodes the edge related_by leads to."""
   relatedByIDs: [ID!]
 }
 
@@ -327,17 +343,26 @@ input UpdatePostInput {
   title: String
   status: PostStatus
   publishedAt: Time
+  """Sets the field published_at to NULL."""
   clearPublishedAt: Boolean
   tags: [String!]
   views: Int
   rating: Float
+  """Sets the field rating to NULL."""
   clearRating: Boolean
+  """The ID of the Account the edge author leads to."""
   writerID: ID
+  """The IDs of Post nodes to add to the edge related."""
   addRelatedIDs: [ID!]
+  """The IDs of Post nodes to remove from the edge related; an ID the edge does not lead to is ignored."""
   removeRelatedIDs: [ID!]
+  """Removes every Post from the edge related, before the IDs to remove and to add."""
   clearRelated: Boolean
+  """The IDs of Post nodes to add to the edge related_by."""
   addRelatedByIDs: [ID!]
+  """The IDs of Post nodes to remove from the edge related_by; an ID the edge does not lead to is ignored."""
   removeRelatedByIDs: [ID!]
+  """Removes every Post from the edge related_by, before the IDs to remove and to add."""
   clearRelatedBy: Boolean
 }
 
@@ -436,6 +461,8 @@ input CreateAccountInput {
   quota: Uint64!
   active: Boolean
   settings: JSON
+  """The IDs of the Group nodes the edge groups leads to."""
   membershipIDs: [ID!]
+  """The ID of the Account the edge best_friend leads to."""
   bestFriendID: ID
 }

@@ -63,10 +63,10 @@ type Type struct {
 	fieldCol   map[string]int // Fields and Edges by name: a column, or -1
 }
 
-// Columns is the columns a selection of the type's fields reads (see
-// Narrow): Read, then the column of each field. It is nil, every column,
+// columns is the columns a selection of the type's fields reads (see
+// narrow): Read, then the column of each field. It is nil, every column,
 // when a field is none of Fields and Edges, such as an application's own.
-func (c *Type) Columns(fields []string) []int {
+func (c *Type) columns(fields []string) []int {
 	c.fieldsOnce.Do(func() {
 		c.fieldCol = make(map[string]int, len(c.Fields)+len(c.Edges))
 		for col, f := range c.Fields {
@@ -368,7 +368,7 @@ type Connection struct {
 // which the cursors hold: a q that does either wrong is refused with an
 // internal error. Its Offset is cleared and its Limit replaced, as the page
 // is the connection's. It reads only the columns the selection of the field
-// of ctx needs (Selected, Narrow, c.Columns): a column the selection does
+// of ctx needs (selected, narrow, c.columns): a column the selection does
 // not need is left zero in the nodes, except the key, the foreign keys and
 // the order columns, so an application's resolver must not read one it did
 // not ask for.
@@ -408,8 +408,8 @@ func connectionBase(ctx context.Context, q velox.TableQuery, c *Type, order []Or
 			return q, fmt.Errorf("veloxgql: %s: q does not select the column of %s, which orderBy names and the cursors hold", fn, o.Field)
 		}
 	}
-	if fields, ok := Selected(ctx, c.Name); ok {
-		q = Narrow(q, c.Columns(fields))
+	if fields, ok := selected(ctx, c.Name); ok {
+		q = narrow(q, c.columns(fields))
 	}
 	return q, nil
 }

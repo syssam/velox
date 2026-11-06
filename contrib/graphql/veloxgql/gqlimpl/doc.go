@@ -7,7 +7,8 @@
 //     paging (Paginate, Args, Order), and the Node lookups (NewNode);
 //   - the edges, which read in batches, the edge of every row of a page in
 //     one statement (EdgeConnection, EdgeOne and EdgeList);
-//   - the fields a selection reads (Selected and Narrow);
+//   - the fields a selection reads, which Paginate, the edges and the Node
+//     lookups narrow their queries to;
 //   - what the inputs' Setters methods call: DecodeID and DecodeIDs for the
 //     IDs an input gives, FromJSON for a JSON field, NotZero, and Checked,
 //     which runs the validators of the columns an input sets;

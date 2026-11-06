@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
-// Selected returns the names of the fields selected on the objects of the
+// selected returns the names of the fields selected on the objects of the
 // GraphQL type typ that the field of ctx returns: through edges and node for
 // a connection field, the field's own selection otherwise, with fragments
 // whose type is typ or Node, and without __typename. ok is false outside a
@@ -19,7 +19,7 @@ import (
 // it nor Node. The result is computed once per *ast.Field per operation.
 //
 // Fragments on every interface and union typ is a member of count, read
-// from the server's schema. ok is false too where Selected cannot see what
+// from the server's schema. ok is false too where selected cannot see what
 // the objects' resolvers read, so that the caller reads every column:
 //   - a field of the connection other than edges, pageInfo, totalCount and
 //     __typename, or of an edge other than node, cursor and __typename (an
@@ -30,7 +30,7 @@ import (
 // A field merged from several selections of one response key (a named
 // fragment spread where the field is also selected) is computed once per
 // merged selection. The result is shared: the caller must not change it.
-func Selected(ctx context.Context, typ string) (fields []string, ok bool) {
+func selected(ctx context.Context, typ string) (fields []string, ok bool) {
 	fc := graphql.GetFieldContext(ctx)
 	if fc == nil || fc.Field.Field == nil || fc.Field.Definition == nil || !graphql.HasOperationContext(ctx) {
 		return nil, false
@@ -38,12 +38,12 @@ func Selected(ctx context.Context, typ string) (fields []string, ok bool) {
 	oc := graphql.GetOperationContext(ctx)
 	f, t := fc.Field, gqlcore.TableFromContext(ctx)
 	return t.Selected(f.Field, f.Selections, typ, func() ([]string, bool) {
-		return selected(oc, t.Schema(), f, typ)
+		return computeSelected(oc, t.Schema(), f, typ)
 	})
 }
 
-// selected is Selected's result, computed; schema may be nil.
-func selected(oc *graphql.OperationContext, schema *ast.Schema, f graphql.CollectedField, typ string) ([]string, bool) {
+// computeSelected is selected's result, computed; schema may be nil.
+func computeSelected(oc *graphql.OperationContext, schema *ast.Schema, f graphql.CollectedField, typ string) ([]string, bool) {
 	var objs []ast.SelectionSet // the selections on the objects of typ
 	switch f.Definition.Type.Name() {
 	case typ, "Node":
@@ -157,12 +157,12 @@ func abstractFragment(oc *graphql.OperationContext, sels ast.SelectionSet, sat [
 	return false
 }
 
-// Narrow returns q reading only those of cols, column indexes, that q
+// narrow returns q reading only those of cols, column indexes, that q
 // selects; nil cols leave q as it is.
 //
 // It never adds a column q leaves out (TableQuery.Selects). When q selects
 // none of cols, q is left as it is too.
-func Narrow(q velox.TableQuery, cols []int) velox.TableQuery {
+func narrow(q velox.TableQuery, cols []int) velox.TableQuery {
 	if cols == nil {
 		return q
 	}

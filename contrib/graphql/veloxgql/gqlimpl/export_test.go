@@ -186,3 +186,11 @@ func basePtr(p any) any {
 	}
 	return p
 }
+
+// Selected, Narrow and Columns export the selection's columns to the tests.
+var (
+	Selected = selected
+	Narrow   = narrow
+)
+
+func (c *Type) Columns(fields []string) []int { return c.columns(fields) }

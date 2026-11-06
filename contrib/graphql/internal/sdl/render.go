@@ -308,6 +308,19 @@ func build(m *plugin.Model) (*graph, error) {
 		}
 	}
 	setArgs(g.query)
+	for i := range g.query {
+		// What PaginateXs's Go doc says of its connection.
+		o, how := g.query[i].conn, ""
+		if o.hasWhere {
+			how += ", filtered by where"
+		}
+		if orderArg(o) != "" {
+			how += ", ordered by orderBy and then the key"
+		} else {
+			how += ", ordered by the key"
+		}
+		g.query[i].desc = "The connection to the " + o.name + " nodes" + how + ", and paged by the other arguments."
+	}
 	for _, o := range g.objects {
 		setArgs(o.fields)
 	}

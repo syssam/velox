@@ -26,7 +26,7 @@ type NodeKind struct {
 // for generated code, which writes one for each Node type in a function, so
 // that nothing runs at start. An ID of the type decodes into a K
 // (veloxgql.DecodeID), the Go type of the key, c.Key's one column; a
-// selection of fields reads c.Columns (see Narrow).
+// selection of fields reads c.columns (see narrow).
 func NewNode[K any](c *Type) NodeKind {
 	return newNode(c, func(id string) (any, error) {
 		k, err := veloxgql.DecodeID[K](id, c.Name)
@@ -51,7 +51,7 @@ func newNode(c *Type, decode func(id string) (any, error)) NodeKind {
 	if len(c.Key) == 1 {
 		key = c.Key[0].Col
 	}
-	return NodeKind{typ: c.Name, table: c.table(), key: key, decode: decode, columns: c.Columns}
+	return NodeKind{typ: c.Name, table: c.table(), key: key, decode: decode, columns: c.columns}
 }
 
 // base is the query of the type's rows, reading only the columns the
@@ -62,8 +62,8 @@ func (n NodeKind) base(ctx context.Context) (velox.TableQuery, error) {
 		return velox.TableQuery{}, err
 	}
 	q := db.QueryTable(n.table)
-	if fields, ok := Selected(ctx, n.typ); ok {
-		q = Narrow(q, n.columns(fields))
+	if fields, ok := selected(ctx, n.typ); ok {
+		q = narrow(q, n.columns(fields))
 	}
 	return q, nil
 }

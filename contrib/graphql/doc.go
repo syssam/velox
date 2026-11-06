@@ -470,14 +470,26 @@
 // an application's resolver or directive has them zero: a resolver or a
 // directive that reads such a field must select it. A generated field with
 // @goField(forceResolver: true) is still a generated field: its selection
-// reads its own column only. Narrowing is turned off for a page, and every column
-// is read, when the selection holds a field the plugin did not write (an
-// application's own, in an extend type, whose resolver may read anything), or
-// one of a connection or an edge that gqlimpl.Selected cannot see through
-// (see its documentation). It never adds a column the application's query
-// left out (velox.Query.Selects), and a Paginate<GoPlural> whose query
-// drops the key or a column an orderBy names is refused with an internal
-// error. A mutation's returned row is not narrowed.
+// reads its own column only.
+//
+// The selection is the fields selected on the objects of the field's type:
+// through edges and node for a connection field, and the field's own
+// selection otherwise, with the fragments on the type, on Node and on every
+// interface and union the type is a member of. Narrowing is turned off, and
+// every column is read, when the selection cannot show what the objects'
+// resolvers read:
+//   - it holds a field the plugin did not write (an application's own, in
+//     an extend type, whose resolver may read anything);
+//   - a connection's selection holds a field other than edges, pageInfo,
+//     totalCount and __typename, or an edge's one other than node, cursor
+//     and __typename;
+//   - outside a gqlgen server, which gives the schema, it holds a fragment
+//     on an interface or a union other than Node.
+//
+// Narrowing never adds a column the application's query left out
+// (velox.Query.Selects), and a Paginate<GoPlural> whose query drops the key
+// or a column an orderBy names is refused with an internal error. A
+// mutation's returned row is not narrowed.
 //
 // # The cost limit
 //

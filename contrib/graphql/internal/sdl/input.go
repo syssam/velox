@@ -183,7 +183,7 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []I
 			GoType: v.typ, GoPkg: v.pkg, Required: strings.HasSuffix(t, "!"),
 		})
 		if !create && f.Nullable {
-			cl := gqlField{name: "clear" + upper(name), typ: "Boolean", dirs: dirs, where: where}
+			cl := gqlField{name: "clear" + upper(name), typ: "Boolean", desc: "Sets the field " + f.Name + " to NULL.", dirs: dirs, where: where}
 			if err := fs.add(cl); err != nil {
 				return nil, nil, err
 			}
@@ -291,9 +291,26 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 		one = upper(many)
 	}
 	var out []edgeInput
+	// The descriptions say what the Go docs of the input's fields say.
 	add := func(name, typ, goName string, kind InputKind) {
+		var desc string
+		switch kind {
+		case InputEdgeID:
+			desc = fmt.Sprintf("The ID of the %s the edge %s leads to.", t.name, ed.Name)
+		case InputEdgeIDs:
+			desc = fmt.Sprintf("The IDs of the %s nodes the edge %s leads to.", t.name, ed.Name)
+		case InputAddIDs:
+			desc = fmt.Sprintf("The IDs of %s nodes to add to the edge %s.", t.name, ed.Name)
+		case InputRemoveIDs:
+			desc = fmt.Sprintf("The IDs of %s nodes to remove from the edge %s; an ID the edge does not lead to is ignored.", t.name, ed.Name)
+		case InputClearEdge:
+			desc = fmt.Sprintf("Removes every %s from the edge %s, before the IDs to remove and to add.", t.name, ed.Name)
+			if ed.Unique {
+				desc = fmt.Sprintf("Unlinks the edge %s: it leads to no %s afterwards.", ed.Name, t.name)
+			}
+		}
 		out = append(out, edgeInput{
-			name: name, typ: typ, dirs: inputDirs(dirs, typ), where: where,
+			name: name, typ: typ, desc: desc, dirs: inputDirs(dirs, typ), where: where,
 			goField: InputField{Name: name, GoName: goName, Type: typ, Kind: kind, Field: -1, Edge: i, Target: t.name, Required: strings.HasSuffix(typ, "!")},
 		})
 	}

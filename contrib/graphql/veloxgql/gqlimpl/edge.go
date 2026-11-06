@@ -69,8 +69,8 @@ func EdgeConnection(ctx context.Context, c *Connection, owner *Type, x any, edge
 // through owner's relation edge, whose GraphQL field is field
 // ("Post.author"), as a *T of target's entity T in an any, or nil. It reads,
 // on the DB veloxgql.DBFromContext reads from ctx, only the columns the
-// field's selection of target's type needs (Selected, Narrow,
-// target.Columns): with the other rows of x's group in one statement
+// field's selection of target's type needs (selected, narrow,
+// target.columns): with the other rows of x's group in one statement
 // (LoadEach, of one per owner) when ctx is that field's, or alone. The node
 // read alone is a group of its own, and so are the nodes of a batch: their
 // edges batch.
@@ -115,8 +115,8 @@ func edgeQuery(ctx context.Context, target *Type) (velox.TableQuery, error) {
 		return velox.TableQuery{}, err
 	}
 	q := db.QueryTable(target.table())
-	if fields, ok := Selected(ctx, target.Name); ok {
-		q = Narrow(q, target.Columns(fields))
+	if fields, ok := selected(ctx, target.Name); ok {
+		q = narrow(q, target.columns(fields))
 	}
 	return q, nil
 }
