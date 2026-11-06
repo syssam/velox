@@ -220,7 +220,7 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			return out, nil
 		}
 	}
-	key := &gqlimpl.Conn{Type: "Pet", Key: []gqlimpl.Col{{Field: "id", Col: int(pets.ID.I)}}, Columns: func([]string) []int { return nil }}
+	key := &gqlimpl.Conn{Type: "Pet", Key: []gqlimpl.Col{{Field: "id", Col: int(pets.ID.I)}}}
 	petConn := func(edge string) resolver {
 		return func(ctx context.Context, _ map[string]any) (any, error) {
 			db, err := veloxgql.DBFromContext(ctx)

@@ -489,7 +489,7 @@ func TestGoTypes(t *testing.T) {
 		// The key's order term, and an order field of the application's enum.
 		// The connection's columns: gqlimpl converts their values to and from
 		// their base types.
-		"Key: []gqlimpl.Col{ {Field: \"id\", Col: eventColID}, },",
+		"Key: []gqlimpl.Col{{Field: \"id\", Col: eventColID}},",
 		"{Field: \"LEVEL\", Col: eventColLevel},",
 		// A JSON field binds through a getter.
 		"func (x *Event) TagsGQL() (veloxgql.JSON, error) { b, err := json.Marshal(x.Tags) return veloxgql.JSON(b), err }",
@@ -525,7 +525,7 @@ func TestGoTypes(t *testing.T) {
 		"func (x *Owner) EmailGQL() *string { if x.Email == nil { return nil } v := string(*x.Email) return &v }",
 		// The connection's columns: gqlimpl converts the key and an order
 		// field of the application's Go types to and from their base types.
-		"Key: []gqlimpl.Col{ {Field: \"id\", Col: ownerColID}, },",
+		"Key: []gqlimpl.Col{{Field: \"id\", Col: ownerColID}},",
 		"{Field: \"RANK\", Col: ownerColRank},",
 		// Its where predicates take the scalar's Go type, and Pred converts.
 		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
@@ -546,7 +546,7 @@ func TestGoTypes(t *testing.T) {
 		ev: {
 			` "github.com/google/uuid" `,
 			" Type: \"Event\", Table: velox.TableOf[Event], ",
-			" Columns: eventColumnsGQL, } ",
+			" Read: []int{eventColID, eventColOwnerID, eventColLevel}, ",
 		},
 		node: {
 			`case "Event": return gqlimpl.NewNodeAs[[16]byte, uuid.UUID](&eventConnGQL, gqlimpl.AsUUID[uuid.UUID, [16]byte]), true`,
@@ -679,11 +679,6 @@ func TestRenderErrors(t *testing.T) {
 			&plugin.Field{Name: "ab", GoName: "Ab", Type: "string", GoType: "string", ElemType: "string"},
 			&plugin.Field{Name: "other", GoName: "Other", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"field_name":"aB"}`)}}))}},
 			"schema Thing: the fields Ab and AB of CreateThingInput are one Go field to gqlgen"},
-		"the name function is velox-gen's": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{creatable(entity("Thing", "int64")), func() *plugin.Entity {
-			e := entity("Other", "int64")
-			e.Handles = "thingInputGQL"
-			return e
-		}()}}, "schema Thing: its Go name thingInputGQL is also velox-gen's handles of schema Other"},
 		"a where field named Pred": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "pred", GoName: "Pred", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
 			"schema Thing: the field pred of ThingWhereInput is the Go field Pred"},
@@ -721,7 +716,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion13\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion14\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1023,18 +1018,12 @@ func TestUpdateInputs(t *testing.T) {
 					t.Errorf("%s: %s, want %s", fn, sig, want)
 				}
 				base := strings.ToLower(ty.Entity.Name[:1]) + ty.Entity.Name[1:]
-				gql := base + "InputGQL"
-				if funcs[gql] == nil {
-					gql = base + "UpdateInputGQL"
-				}
-				if funcs[gql] == nil {
-					t.Errorf("no func %sInputGQL or %s, which %s names", base, gql, fn)
-				}
 				if src := funcSrc(t, files, fn); !strings.Contains(src, "(ctx, &"+base+"ConnGQL, id") {
 					t.Errorf("%s does not take %sConnGQL:\n%s", fn, base, src)
 				}
-				if src := strings.Join(strings.Fields(files[ty.Entity.Label+"_gql.go"]), " "); !strings.Contains(src, "UpdateField: "+gql+",") {
-					t.Errorf("%sConnGQL does not name %s", base, gql)
+				lit := connLit(t, files, base+"ConnGQL")
+				if len(lit["Inputs"]) == 0 && len(lit["UpdateInputs"]) == 0 {
+					t.Errorf("%sConnGQL names no field of %s", base, in)
 				}
 			}
 			if n == 0 {
@@ -1067,7 +1056,7 @@ func TestCreateConversions(t *testing.T) {
 		`gqlimpl.DecodeJSON[[]int32](c, "tags", in.Tags)`,
 		`gqlimpl.Exists(c, "ownerID", "Owner", velox.TableOf[Owner](), ownerColID, []idspkg.UserID{`,
 		`gqlimpl.NewCreate(ctx, &eventConnGQL, x`,
-		`case "Tags": return "tags"`,
+		`eventColTags: "tags"`,
 	} {
 		if !strings.Contains(ev, want) {
 			t.Errorf("no %q in\n%s", want, ev)
@@ -1201,9 +1190,11 @@ func TestUpdateLocksTheRow(t *testing.T) {
 	}
 }
 
-// colsLiteral is the elements of the cols literal of the function name in
-// files, as source: Posts.ID, Posts.AuthorID, ...; nil when it has none.
-func colsLiteral(t *testing.T, files map[string]string, name string) []string {
+// connLit is the fields of the Conn literal of the variable name in files:
+// each field's elements, printed, by the field's name ("Read": ["postColID",
+// …], "Fields": ["postColID: \"id\"", …]); nil when files have no such
+// variable.
+func connLit(t *testing.T, files map[string]string, name string) map[string][]string {
 	t.Helper()
 	fset := token.NewFileSet()
 	for fname, src := range files {
@@ -1212,29 +1203,33 @@ func colsLiteral(t *testing.T, files map[string]string, name string) []string {
 			t.Fatalf("%s: %v", fname, err)
 		}
 		for _, decl := range f.Decls {
-			fd, ok := decl.(*ast.FuncDecl)
-			if !ok || fd.Name.Name != name || fd.Recv != nil {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.VAR {
 				continue
 			}
-			for _, st := range fd.Body.List {
-				as, ok := st.(*ast.AssignStmt)
-				if !ok || len(as.Lhs) != 1 || len(as.Rhs) != 1 {
+			for _, sp := range gd.Specs {
+				vs := sp.(*ast.ValueSpec)
+				if len(vs.Names) != 1 || vs.Names[0].Name != name || len(vs.Values) != 1 {
 					continue
 				}
-				if id, ok := as.Lhs[0].(*ast.Ident); !ok || id.Name != "cols" {
-					continue
-				}
-				lit, ok := as.Rhs[0].(*ast.CompositeLit)
-				if !ok {
-					continue
-				}
-				var out []string
-				for _, el := range lit.Elts {
-					var b strings.Builder
-					if err := printer.Fprint(&b, fset, el); err != nil {
-						t.Fatal(err)
+				out := map[string][]string{}
+				for _, el := range vs.Values[0].(*ast.CompositeLit).Elts {
+					kv := el.(*ast.KeyValueExpr)
+					field := kv.Key.(*ast.Ident).Name
+					lit, ok := kv.Value.(*ast.CompositeLit)
+					if !ok {
+						out[field] = nil
+						continue
 					}
-					out = append(out, b.String())
+					var elems []string
+					for _, x := range lit.Elts {
+						var b strings.Builder
+						if err := printer.Fprint(&b, fset, x); err != nil {
+							t.Fatal(err)
+						}
+						elems = append(elems, b.String())
+					}
+					out[field] = elems
 				}
 				return out
 			}
@@ -1368,10 +1363,11 @@ func TestEdgesBatch(t *testing.T) {
 	}
 }
 
-// TestColumnsGQL: each type has <label>ColumnsGQL, whose switch lists every
-// field of its GraphQL type, getters and edges included, and whose columns
-// include no sensitive field's.
-func TestColumnsGQL(t *testing.T) {
+// TestConnSelection: each type's Conn names, in Fields and Edges, every
+// field of its GraphQL type, getters and edges included, and reads, in Read
+// and Fields, no sensitive field's column; Read is the key and then the
+// foreign keys.
+func TestConnSelection(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		sdlText, err := sdl.Render(m)
 		if err != nil {
@@ -1393,49 +1389,48 @@ func TestColumnsGQL(t *testing.T) {
 		sensitive := 0
 		for _, ty := range surf.Types {
 			e := ty.Entity
-			name := lowerFirst(e.Name) + "ColumnsGQL"
-			src := funcSrc(t, files, name)
-			if !strings.HasPrefix(src, "func "+name+"(fields []string) []int {") {
-				t.Errorf("%s: %s: no %s:\n%s", label, ty.Name, name, src)
+			lit := connLit(t, files, connVar(ty))
+			if lit == nil {
+				t.Errorf("%s: %s: no %s", label, ty.Name, connVar(ty))
 				continue
 			}
-			var cases []string
-			for _, c := range strings.Split(src, "case ")[1:] {
-				list, _, _ := strings.Cut(c, ":")
-				for q := range strings.SplitSeq(list, ", ") {
-					v, err := strconv.Unquote(q)
-					if err != nil {
-						t.Fatalf("%s: %s: a case %q", label, name, q)
-					}
-					cases = append(cases, v)
+			var names []string
+			cols := slices.Clone(lit["Read"])
+			for _, kv := range lit["Fields"] {
+				col, q, _ := strings.Cut(kv, ": ")
+				v, err := strconv.Unquote(q)
+				if err != nil {
+					t.Fatalf("%s: %s: a field %q", label, ty.Name, kv)
 				}
+				names = append(names, v)
+				cols = append(cols, col)
+			}
+			for _, q := range lit["Edges"] {
+				v, err := strconv.Unquote(q)
+				if err != nil {
+					t.Fatalf("%s: %s: an edge %q", label, ty.Name, q)
+				}
+				names = append(names, v)
 			}
 			var want []string
 			for _, f := range schema.Types[ty.Name].Fields {
 				want = append(want, f.Name)
 			}
-			slices.Sort(cases)
+			slices.Sort(names)
 			slices.Sort(want)
-			if !slices.Equal(cases, want) {
-				t.Errorf("%s: %s's cases %v, want the fields of %s %v", label, name, cases, ty.Name, want)
-			}
-			if !strings.Contains(src, "default: return nil") {
-				t.Errorf("%s: %s: another field does not read every column:\n%s", label, name, src)
-			}
-			cols := colsLiteral(t, files, name)
-			if len(cols) == 0 {
-				t.Errorf("%s: %s: no cols literal:\n%s", label, name, src)
+			if !slices.Equal(names, want) {
+				t.Errorf("%s: %s names %v, want the fields of %s %v", label, connVar(ty), names, ty.Name, want)
 			}
 			for _, k := range e.PrimaryKey {
-				if !slices.Contains(cols, colConst(e, e.Fields[k])) {
-					t.Errorf("%s: %s: cols %v lack the key %s", label, name, cols, e.Fields[k].Name)
+				if !slices.Contains(lit["Read"], colConst(e, e.Fields[k])) {
+					t.Errorf("%s: %s: Read %v lacks the key %s", label, connVar(ty), lit["Read"], e.Fields[k].Name)
 				}
 			}
 			for _, fd := range e.Fields {
 				if fd.Sensitive {
 					sensitive++
-					if slices.Contains(cols, colConst(e, fd)) || regexp.MustCompile(`\b`+colConst(e, fd)+`\b`).MatchString(src) {
-						t.Errorf("%s: %s reads the sensitive %s:\n%s", label, name, fd.Name, src)
+					if slices.Contains(cols, colConst(e, fd)) {
+						t.Errorf("%s: %s reads the sensitive %s", label, connVar(ty), fd.Name)
 					}
 				}
 			}
@@ -1446,9 +1441,9 @@ func TestColumnsGQL(t *testing.T) {
 	}
 	// The key, the foreign keys on the row and the order columns, always, in
 	// this order.
-	cols := colsLiteral(t, render(t, modeltest.Model(t)), "postColumnsGQL")
-	if len(cols) < 2 || cols[0] != "postColID" || cols[1] != "postColAuthorID" {
-		t.Errorf("postColumnsGQL's cols %v, want the key and then the foreign keys", cols)
+	read := connLit(t, render(t, modeltest.Model(t)), "postConnGQL")["Read"]
+	if len(read) < 2 || read[0] != "postColID" || read[1] != "postColAuthorID" {
+		t.Errorf("postConnGQL's Read %v, want the key and then the foreign keys", read)
 	}
 }
 

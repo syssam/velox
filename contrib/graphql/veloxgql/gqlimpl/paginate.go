@@ -46,17 +46,66 @@ type Conn struct {
 	Key []Col
 	// Order is the order fields: Field is the GraphQL enum value, "TITLE".
 	Order []Col
-	// Columns is the columns a selection of the type's fields reads (see
-	// Narrow): the key, every foreign key on the row, every order field's
-	// column, and the column of each field. It is nil, every column, for a
-	// field it does not know, such as an application's own.
-	Columns func(fields []string) []int
-	// CreateField and UpdateField give the field of the type's create and
-	// update input that sets an entity field, by the field's Go name, or ""
-	// for one the input does not set: a validator's error on such a field
-	// becomes BAD_USER_INPUT naming it (WriteError). Each is nil when the
-	// type has no such input.
-	CreateField, UpdateField func(goField string) string
+	// Read is the columns every selection of the type reads: the key, every
+	// foreign key on the row and every order field's column.
+	Read []int
+	// Fields is, by column, the type's field that reads the column, or "".
+	Fields []string
+	// Edges is the type's edge fields, which read no column but Read.
+	Edges []string
+	// Inputs is, by column, the field of the type's create and update inputs
+	// that sets the column, or "": a validator's error on such a column
+	// becomes BAD_USER_INPUT naming the field (WriteError). CreateInputs and
+	// UpdateInputs stand for it in one input when the two inputs differ.
+	Inputs, CreateInputs, UpdateInputs []string
+
+	fieldsOnce sync.Once
+	fieldCol   map[string]int // Fields and Edges by name: a column, or -1
+}
+
+// Columns is the columns a selection of the type's fields reads (see
+// Narrow): Read, then the column of each field. It is nil, every column,
+// when a field is none of Fields and Edges, such as an application's own.
+func (c *Conn) Columns(fields []string) []int {
+	c.fieldsOnce.Do(func() {
+		c.fieldCol = make(map[string]int, len(c.Fields)+len(c.Edges))
+		for col, f := range c.Fields {
+			if f != "" {
+				c.fieldCol[f] = col
+			}
+		}
+		for _, f := range c.Edges {
+			c.fieldCol[f] = -1
+		}
+	})
+	cols := slices.Clone(c.Read)
+	for _, f := range fields {
+		col, ok := c.fieldCol[f]
+		if !ok {
+			return nil
+		}
+		if col >= 0 && !slices.Contains(cols, col) {
+			cols = append(cols, col)
+		}
+	}
+	return cols
+}
+
+// inputNames is the function that names, by an entity field's Go name, the
+// field of the input that sets it: names by column, or "".
+func inputNames(t velox.Table, names []string) func(goField string) string {
+	return func(goField string) string {
+		info := t.Info()
+		if info == nil {
+			return ""
+		}
+		for col, c := range info.Columns {
+			if c.Field == goField && col < len(names) {
+				return names[col]
+			}
+		}
+		return ""
+	}
 }
 
 // table is the Table of c's entity: the zero Table, whose queries fail,

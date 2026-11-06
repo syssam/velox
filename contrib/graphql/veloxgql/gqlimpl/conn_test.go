@@ -14,10 +14,9 @@ import (
 
 // personConn is person's connections, as the generated code writes them.
 var personConn = gqlimpl.Conn{
-	Type:    "Person",
-	Key:     []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}},
-	Order:   []gqlimpl.Col{{Field: "NAME", Col: int(people.Name.I)}, {Field: "AGE", Col: int(people.Age.I)}},
-	Columns: func([]string) []int { return nil },
+	Type:  "Person",
+	Key:   []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}},
+	Order: []gqlimpl.Col{{Field: "NAME", Col: int(people.Name.I)}, {Field: "AGE", Col: int(people.Age.I)}},
 }
 
 // TestConnectionBase: a base query without the key, or without the column
@@ -125,10 +124,9 @@ func TestNamedTypeTerms(t *testing.T) {
 	db := velox.Open(velox.SQLite, sqlDB)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	conn := &gqlimpl.Conn{
-		Type:    "Gadget",
-		Key:     []gqlimpl.Col{{Field: "id", Col: int(gadgets.ID.I)}},
-		Order:   []gqlimpl.Col{{Field: "SCORE", Col: int(gadgets.Score.I)}},
-		Columns: func([]string) []int { return nil },
+		Type:  "Gadget",
+		Key:   []gqlimpl.Col{{Field: "id", Col: int(gadgets.ID.I)}},
+		Order: []gqlimpl.Col{{Field: "SCORE", Col: int(gadgets.Score.I)}},
 	}
 	order := []gqlimpl.Order{{Field: "SCORE", Direction: veloxgql.OrderDirectionDesc}}
 	page := func(args gqlimpl.Args) ([]gadgetID, *gqlimpl.Page) {
@@ -167,5 +165,34 @@ func TestNamedTypeTerms(t *testing.T) {
 	bad := veloxgql.Cursor{Type: "Gadget", Terms: []veloxgql.CursorTerm{{Field: "SCORE", Direction: veloxgql.OrderDirectionDesc, Value: "high"}}, Key: 1}
 	if _, err := gqlimpl.NewConnection(ctx, velox.Untyped(db.Query[gadget]()), conn, gqlimpl.Args{After: wire(t, bad)}, order); !errors.Is(err, veloxgql.ErrBadCursor) {
 		t.Errorf("a string score: %v, want ErrBadCursor", err)
+	}
+}
+
+// TestConnColumns: a selection reads Read and its fields' columns, each once,
+// an edge reads Read alone, and a field Conn does not know reads every
+// column.
+func TestConnColumns(t *testing.T) {
+	c := &gqlimpl.Conn{
+		Read:   []int{0, 1},
+		Fields: []string{0: "id", 1: "title", 3: "status"},
+		Edges:  []string{"author"},
+	}
+	for _, x := range []struct {
+		fields []string
+		want   []int
+	}{
+		{nil, []int{0, 1}},
+		{[]string{"id", "title"}, []int{0, 1}},
+		{[]string{"status", "author", "status"}, []int{0, 1, 3}},
+		{[]string{"status", "postCount"}, nil},
+	} {
+		if got := c.Columns(x.fields); !slices.Equal(got, x.want) {
+			t.Errorf("Columns(%q) = %v, want %v", x.fields, got, x.want)
+		}
+	}
+	// Columns returns a fresh slice: appending to it leaves Read as it is.
+	_ = append(c.Columns([]string{"status"}), 9)
+	if !slices.Equal(c.Read, []int{0, 1}) {
+		t.Errorf("Read is %v after a selection", c.Read)
 	}
 }

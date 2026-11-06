@@ -2,6 +2,7 @@ package gogen
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -130,6 +131,32 @@ func TestNonNodeOwnerM2M(t *testing.T) {
 	}
 }
 
+// TestInputNamesApart: when the create input sets a column the update input
+// does not, an immutable one, the Conn names each input's fields apart, in
+// CreateInputs and UpdateInputs; when the two set the same, in Inputs.
+func TestInputNamesApart(t *testing.T) {
+	thing := func(fs ...*plugin.Field) *plugin.Model {
+		return &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
+			Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{}, Annotations: mutable(`"create"`, `"update"`),
+			Fields: append([]*plugin.Field{
+				{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64", AutoID: true},
+				{Name: "x", GoName: "X", Type: "string", GoType: "string", ElemType: "string"},
+			}, fs...),
+		}}}
+	}
+	lit := connLit(t, render(t, thing(&plugin.Field{Name: "im", GoName: "Im", Type: "string", GoType: "string", ElemType: "string", Immutable: true})), "thingConnGQL")
+	if want := []string{`thingColX: "x"`, `thingColIm: "im"`}; !slices.Equal(lit["CreateInputs"], want) {
+		t.Errorf("CreateInputs %v, want %v", lit["CreateInputs"], want)
+	}
+	if want := []string{`thingColX: "x"`}; !slices.Equal(lit["UpdateInputs"], want) || lit["Inputs"] != nil {
+		t.Errorf("UpdateInputs %v and Inputs %v, want %v and none", lit["UpdateInputs"], lit["Inputs"], want)
+	}
+	lit = connLit(t, render(t, thing()), "thingConnGQL")
+	if want := []string{`thingColX: "x"`}; !slices.Equal(lit["Inputs"], want) || lit["CreateInputs"] != nil || lit["UpdateInputs"] != nil {
+		t.Errorf("Inputs %v, CreateInputs %v, UpdateInputs %v; want %v alone", lit["Inputs"], lit["CreateInputs"], lit["UpdateInputs"], want)
+	}
+}
+
 // TestInputRenderErrors: a mutation input the generated package cannot
 // declare, or whose field or key cannot be converted, fails the render,
 // naming the schema and the field or the Go name.
@@ -144,9 +171,6 @@ func TestInputRenderErrors(t *testing.T) {
 		}
 	}
 	handles := func(e *plugin.Entity, h string) *plugin.Entity { e.Handles = h; return e }
-	// immutable is a field the create input sets and the update input does
-	// not, so that the two name their fields apart.
-	immutable := &plugin.Field{Name: "im", GoName: "Im", Type: "string", GoType: "string", ElemType: "string", Immutable: true}
 	// withKids is e with the edge kids, whose key thing_kids, fk, a Kid holds.
 	withKids := func(e *plugin.Entity, kid *plugin.Entity, fk *plugin.Field) []*plugin.Entity {
 		e.Edges = []*plugin.Edge{{Name: "kids", GoName: "Kids", Target: "Kid", Kind: plugin.O2M, Field: "thing_kids", FieldOn: "Kid"}}
@@ -159,10 +183,6 @@ func TestInputRenderErrors(t *testing.T) {
 		es   []*plugin.Entity
 		want string
 	}{
-		"the create input's name function is taken": {[]*plugin.Entity{withField(ent("Thing", `"create"`, `"update"`), immutable), handles(ent("Other"), "thingCreateInputGQL")},
-			"schema Thing: its Go name thingCreateInputGQL is also velox-gen's handles of schema Other"},
-		"the update input's name function is taken": {[]*plugin.Entity{withField(ent("Thing", `"create"`, `"update"`), immutable), handles(ent("Other"), "thingUpdateInputGQL")},
-			"schema Thing: its Go name thingUpdateInputGQL is also velox-gen's handles of schema Other"},
 		"an edge's function is taken": {withKids(ent("Thing", `"create"`), handles(ent("Kid"), "thingKidsEdgeGQL"), kidsKey("*int64", "int64", "", "")),
 			"schema Thing, edge kids: its Go name thingKidsEdgeGQL is also velox-gen's handles of schema Kid"},
 		"a child's key that does not convert": {withKids(ent("Thing", `"create"`), ent("Kid"), kidsKey("*types.Tag", "types.Tag", "example.com/types", "string")),

@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion13
+const _ = veloxgql.GeneratedCodeIsVersion14
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -155,30 +155,17 @@ func GroupsConnectionOf(
 var groupConnGQL = gqlimpl.Conn{
 	Type:  "Group",
 	Table: velox.TableOf[Group],
-	Key: []gqlimpl.Col{
-		{Field: "id", Col: groupColID},
-	},
+	Key:   []gqlimpl.Col{{Field: "id", Col: groupColID}},
 	Order: []gqlimpl.Col{
 		{Field: "NAME", Col: groupColName},
 	},
-	Columns: groupColumnsGQL,
-}
-
-// groupColumnsGQL returns the columns a selection of the given Group fields
-// reads. It returns nil, every column, for a field that is not velox-graphql's;
-// see gqlimpl.Conn.
-func groupColumnsGQL(fields []string) []int {
-	cols := []int{groupColID, groupColName}
-	for _, f := range fields {
-		switch f {
-		case "id", "name", "users":
-		case "visibility":
-			cols = append(cols, groupColVisibility)
-		default:
-			return nil
-		}
-	}
-	return cols
+	Read: []int{groupColID, groupColName},
+	Fields: []string{
+		groupColID:         "id",
+		groupColName:       "name",
+		groupColVisibility: "visibility",
+	},
+	Edges: []string{"users"},
 }
 
 // GroupOrder is the GraphQL input GroupOrder, an order of connections to Group.

@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion13
+const _ = veloxgql.GeneratedCodeIsVersion14
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -142,32 +142,14 @@ func LabelsConnectionOf(
 var tagConnGQL = gqlimpl.Conn{
 	Type:  "Label",
 	Table: velox.TableOf[Tag],
-	Key: []gqlimpl.Col{
-		{Field: "id", Col: tagColID},
-	},
+	Key:   []gqlimpl.Col{{Field: "id", Col: tagColID}},
 	Order: []gqlimpl.Col{
 		{Field: "NAME", Col: tagColName},
 	},
-	Columns:     tagColumnsGQL,
-	CreateField: tagInputGQL,
-	UpdateField: tagInputGQL,
-}
-
-// tagColumnsGQL returns the columns a selection of the given Label fields
-// reads. It returns nil, every column, for a field that is not velox-graphql's;
-// see gqlimpl.Conn.
-func tagColumnsGQL(fields []string) []int {
-	cols := []int{tagColID, tagColName}
-	for _, f := range fields {
-		switch f {
-		case "id", "name", "posts":
-		case "rank":
-			cols = append(cols, tagColRank)
-		default:
-			return nil
-		}
-	}
-	return cols
+	Read:   []int{tagColID, tagColName},
+	Fields: []string{tagColID: "id", tagColName: "name", tagColRank: "rank"},
+	Edges:  []string{"posts"},
+	Inputs: []string{tagColName: "name", tagColRank: "rank"},
 }
 
 // LabelOrder is the GraphQL input LabelOrder, an order of connections to Label.
@@ -299,18 +281,6 @@ func (w *LabelWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, er
 		LTE:   w.RankLTE,
 	})
 	return f.Pred()
-}
-
-// tagInputGQL is the CreateLabelInput and UpdateLabelInput field that sets the
-// Tag field goField, or "". A validator's error names it.
-func tagInputGQL(goField string) string {
-	switch goField {
-	case "Name":
-		return "name"
-	case "Rank":
-		return "rank"
-	}
-	return ""
 }
 
 // tagPostsEdgeGQL is the many-to-many edge posts of Tag, through PostTag.

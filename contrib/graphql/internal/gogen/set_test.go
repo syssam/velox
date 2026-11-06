@@ -2,6 +2,7 @@ package gogen
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,8 +46,8 @@ func setModel(t *testing.T, skipSlug bool) *plugin.Model {
 // leaves out stored its zero value silently, and a validator's error on it named
 // CreateThingInput.slug, which the SDL has not. Create takes the row x then, whose
 // other fields the resolver sets before the validators run, and its doc names the
-// field; its errors name only the create input's fields, by thingCreateInputGQL,
-// apart from the update input's thingUpdateInputGQL, which names slug. Its doc
+// field; its errors name only the create input's fields, by the Conn's
+// CreateInputs, apart from the update input's UpdateInputs, which names slug. Its doc
 // does not name slug: a field the schema leaves out of the create input
 // explicitly is the application's or a hook's to set, as a tenancy mixin's
 // hook sets its column.
@@ -60,13 +61,10 @@ func TestCreateSetsSkipped(t *testing.T) {
 	if !strings.Contains(create, `gqlimpl.NewCreate(ctx, &thingConnGQL, x, thingColName)`) {
 		t.Errorf("Create does not take thingConnGQL:\n%s", create)
 	}
-	conn := strings.Join(strings.Fields(files["thing_gql.go"]), " ")
-	if !strings.Contains(conn, "CreateField: thingCreateInputGQL, UpdateField: thingUpdateInputGQL,") {
-		t.Errorf("thingConnGQL does not name each input's fields:\n%s", files["thing_gql.go"])
-	}
-	for fn, want := range map[string]bool{"thingCreateInputGQL": false, "thingUpdateInputGQL": true} {
-		if got := strings.Contains(funcSrc(t, files, fn), `case "Slug":`); got != want {
-			t.Errorf("%s names Slug: %v, want %v", fn, got, want)
+	lit := connLit(t, files, "thingConnGQL")
+	for field, want := range map[string]bool{"CreateInputs": false, "UpdateInputs": true} {
+		if got := slices.Contains(lit[field], `thingColSlug: "slug"`); got != want {
+			t.Errorf("thingConnGQL's %s names slug: %v, want %v (%v)", field, got, want, lit)
 		}
 	}
 	if !strings.Contains(funcSrc(t, files, "UpdateThingInput.Update"), `gqlimpl.NewUpdate[int64](ctx, &thingConnGQL, id)`) {

@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion13
+const _ = veloxgql.GeneratedCodeIsVersion14
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -202,54 +202,44 @@ func AccountsConnectionOf(
 var userConnGQL = gqlimpl.Conn{
 	Type:  "Account",
 	Table: velox.TableOf[User],
-	Key: []gqlimpl.Col{
-		{Field: "id", Col: userColID},
+	Key:   []gqlimpl.Col{{Field: "id", Col: userColID}},
+	Read:  []int{userColID, userColUserBestFriend},
+	Fields: []string{
+		userColID:         "id",
+		userColCreatedAt:  "createdAt",
+		userColUpdatedAt:  "updatedAt",
+		userColName:       "displayName",
+		userColEmail:      "email",
+		userColRole:       "role",
+		userColNickname:   "nickname",
+		userColBio:        "bio",
+		userColAge:        "age",
+		userColScore:      "score",
+		userColExternalID: "externalID",
+		userColAvatar:     "avatar",
+		userColQuota:      "quota",
+		userColActive:     "active",
+		userColSettings:   "settings",
 	},
-	Columns:     userColumnsGQL,
-	CreateField: userInputGQL,
-}
-
-// userColumnsGQL returns the columns a selection of the given Account fields
-// reads. It returns nil, every column, for a field that is not velox-graphql's;
-// see gqlimpl.Conn.
-func userColumnsGQL(fields []string) []int {
-	cols := []int{userColID, userColUserBestFriend}
-	for _, f := range fields {
-		switch f {
-		case "id", "posts", "memberships", "likes":
-		case "createdAt":
-			cols = append(cols, userColCreatedAt)
-		case "updatedAt":
-			cols = append(cols, userColUpdatedAt)
-		case "displayName":
-			cols = append(cols, userColName)
-		case "email":
-			cols = append(cols, userColEmail)
-		case "role":
-			cols = append(cols, userColRole)
-		case "nickname":
-			cols = append(cols, userColNickname)
-		case "bio":
-			cols = append(cols, userColBio)
-		case "age":
-			cols = append(cols, userColAge)
-		case "score":
-			cols = append(cols, userColScore)
-		case "externalID":
-			cols = append(cols, userColExternalID)
-		case "avatar":
-			cols = append(cols, userColAvatar)
-		case "quota":
-			cols = append(cols, userColQuota)
-		case "active":
-			cols = append(cols, userColActive)
-		case "settings":
-			cols = append(cols, userColSettings)
-		default:
-			return nil
-		}
-	}
-	return cols
+	Edges: []string{"posts", "memberships", "likes"},
+	Inputs: []string{
+		userColCreatedAt:      "createdAt",
+		userColUpdatedAt:      "updatedAt",
+		userColName:           "displayName",
+		userColEmail:          "email",
+		userColRole:           "role",
+		userColNickname:       "nickname",
+		userColBio:            "bio",
+		userColAge:            "age",
+		userColPasswordHash:   "passwordHash",
+		userColScore:          "score",
+		userColExternalID:     "externalID",
+		userColAvatar:         "avatar",
+		userColQuota:          "quota",
+		userColActive:         "active",
+		userColSettings:       "settings",
+		userColUserBestFriend: "bestFriendID",
+	},
 }
 
 // AccountWhereInput is the GraphQL input AccountWhereInput, a filter of Account
@@ -323,46 +313,6 @@ func (w *AccountWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, 
 	gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
 	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, userEdgePosts, velox.TableOf[Post]())
 	return f.Pred()
-}
-
-// userInputGQL is the CreateAccountInput field that sets the User field
-// goField, or "". A validator's error names it.
-func userInputGQL(goField string) string {
-	switch goField {
-	case "CreatedAt":
-		return "createdAt"
-	case "UpdatedAt":
-		return "updatedAt"
-	case "Name":
-		return "displayName"
-	case "Email":
-		return "email"
-	case "Role":
-		return "role"
-	case "Nickname":
-		return "nickname"
-	case "Bio":
-		return "bio"
-	case "Age":
-		return "age"
-	case "PasswordHash":
-		return "passwordHash"
-	case "Score":
-		return "score"
-	case "ExternalID":
-		return "externalID"
-	case "Avatar":
-		return "avatar"
-	case "Quota":
-		return "quota"
-	case "Active":
-		return "active"
-	case "Settings":
-		return "settings"
-	case "UserBestFriend":
-		return "bestFriendID"
-	}
-	return ""
 }
 
 // userGroupsEdgeGQL is the many-to-many edge groups of User, through UserGroup.

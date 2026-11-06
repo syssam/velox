@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion13
+const _ = veloxgql.GeneratedCodeIsVersion14
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -171,35 +171,26 @@ func PostsConnectionOf(
 var postConnGQL = gqlimpl.Conn{
 	Type:  "Post",
 	Table: velox.TableOf[Post],
-	Key: []gqlimpl.Col{
-		{Field: "id", Col: postColID},
-	},
+	Key:   []gqlimpl.Col{{Field: "id", Col: postColID}},
 	Order: []gqlimpl.Col{
 		{Field: "TITLE", Col: postColTitle},
 		{Field: "VIEWS", Col: postColViews},
 	},
-	Columns:     postColumnsGQL,
-	CreateField: postInputGQL,
-	UpdateField: postInputGQL,
-}
-
-// postColumnsGQL returns the columns a selection of the given Post fields
-// reads. It returns nil, every column, for a field that is not velox-graphql's;
-// see gqlimpl.Conn.
-func postColumnsGQL(fields []string) []int {
-	cols := []int{postColID, postColAuthorID, postColTitle, postColViews}
-	for _, f := range fields {
-		switch f {
-		case "id", "title", "views", "author", "tags":
-		case "status":
-			cols = append(cols, postColStatus)
-		case "publishedAt":
-			cols = append(cols, postColPublishedAt)
-		default:
-			return nil
-		}
-	}
-	return cols
+	Read: []int{postColID, postColAuthorID, postColTitle, postColViews},
+	Fields: []string{
+		postColID:          "id",
+		postColTitle:       "title",
+		postColStatus:      "status",
+		postColViews:       "views",
+		postColPublishedAt: "publishedAt",
+	},
+	Edges: []string{"author", "tags"},
+	Inputs: []string{
+		postColTitle:       "title",
+		postColStatus:      "status",
+		postColViews:       "views",
+		postColPublishedAt: "publishedAt",
+	},
 }
 
 // PostOrder is the GraphQL input PostOrder, an order of connections to Post.
@@ -369,22 +360,6 @@ func (w *PostWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 	gqlimpl.Has(f, "hasTags", w.HasTags, postEdgeTags, velox.TableOf[Tag]())
 	gqlimpl.HasWith(f, "hasTagsWith", w.HasTagsWith, postEdgeTags, velox.TableOf[Tag]())
 	return f.Pred()
-}
-
-// postInputGQL is the CreatePostInput and UpdatePostInput field that sets the
-// Post field goField, or "". A validator's error names it.
-func postInputGQL(goField string) string {
-	switch goField {
-	case "Title":
-		return "title"
-	case "Status":
-		return "status"
-	case "Views":
-		return "views"
-	case "PublishedAt":
-		return "publishedAt"
-	}
-	return ""
 }
 
 // postTagsEdgeGQL is the many-to-many edge tags of Post, through PostTag.

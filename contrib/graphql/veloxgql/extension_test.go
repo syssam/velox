@@ -303,7 +303,7 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 		if n, ok := args["first"].(int64); ok {
 			first = new(int(n))
 		}
-		key := &gqlimpl.Conn{Type: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}, Columns: func([]string) []int { return nil }}
+		key := &gqlimpl.Conn{Type: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}}
 		c, err := gqlimpl.NewConnection(ctx, db.QueryTable(velox.TableOf[person]()), key, gqlimpl.Args{First: first}, nil)
 		if err != nil {
 			return nil, err

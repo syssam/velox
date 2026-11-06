@@ -12,14 +12,10 @@ import (
 )
 
 // writeMutations writes t's mutation inputs: CreateXInput and its method
-// Create, UpdateXInput and its method Update, and the function that names
-// their fields.
+// Create, and UpdateXInput and its method Update.
 func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
 	if t.Create == nil && t.Update == nil {
 		return nil
-	}
-	if _, _, err := r.writeInputGQL(f, t); err != nil {
-		return err
 	}
 	if err := r.writeInputEdges(f, t); err != nil {
 		return err
@@ -171,81 +167,6 @@ func inputNames(e *plugin.Entity, fs []sdl.InputField) []inputName {
 		}
 	}
 	return out
-}
-
-// writeInputGQL writes the function that gives, by an entity field's Go name,
-// the GraphQL name of the input field that sets it, which a validator's error
-// carries; "" for a field the input does not set, so that an error names no
-// field of another input. It writes one, <entity>InputGQL, when t has one
-// input or both name the same fields alike, and else one for each,
-// <entity>CreateInputGQL and <entity>UpdateInputGQL. It returns the names of
-// the create input's and the update input's.
-func (r *renderer) writeInputGQL(f *file, t *sdl.Type) (create, update string, err error) {
-	e := t.Entity
-	cn, un := inputNames(e, t.Create), inputNames(e, t.Update)
-	create, update = inputFuncs(t)
-	if create == "" || update == "" || create == update {
-		names, in := cn, "Create"+t.Name+"Input"
-		switch {
-		case t.Create == nil:
-			names, in = un, "Update"+t.Name+"Input"
-		case t.Update != nil:
-			in += " and Update" + t.Name + "Input"
-		}
-		name := cmp.Or(create, update)
-		if err := r.writeNameFunc(f, t, name, in, names); err != nil {
-			return "", "", err
-		}
-		return create, update, nil
-	}
-	if err := r.writeNameFunc(f, t, create, "Create"+t.Name+"Input", cn); err != nil {
-		return "", "", err
-	}
-	if err := r.writeNameFunc(f, t, update, "Update"+t.Name+"Input", un); err != nil {
-		return "", "", err
-	}
-	return create, update, nil
-}
-
-// inputFuncs are the names of the functions writeInputGQL writes for t's
-// create and update inputs: one name for both when they name the same fields
-// alike, and "" for an input t does not have.
-func inputFuncs(t *sdl.Type) (create, update string) {
-	base := lowerFirst(t.Entity.Name)
-	switch {
-	case t.Create == nil && t.Update == nil:
-		return "", ""
-	case t.Create == nil:
-		return "", base + "InputGQL"
-	case t.Update == nil:
-		return base + "InputGQL", ""
-	case slices.Equal(inputNames(t.Entity, t.Create), inputNames(t.Entity, t.Update)):
-		return base + "InputGQL", base + "InputGQL"
-	}
-	return base + "CreateInputGQL", base + "UpdateInputGQL"
-}
-
-// writeNameFunc writes the function name of the input (or inputs) in, by
-// the fields names.
-func (r *renderer) writeNameFunc(f *file, t *sdl.Type, name, in string, names []inputName) error {
-	e := t.Entity
-	if err := r.declare(name, "schema "+e.Name); err != nil {
-		return err
-	}
-	f.p("")
-	f.doc("", fmt.Sprintf("%s is the %s field that sets the %s field goField, or \"\". A validator's error names it.", name, in, e.Name))
-	f.p("func %s(goField string) string {", name)
-	if len(names) > 0 {
-		f.p("\tswitch goField {")
-		for _, x := range names {
-			f.p("\tcase %q:", x.goName)
-			f.p("\t\treturn %q", x.gql)
-		}
-		f.p("\t}")
-	}
-	f.p("\treturn \"\"")
-	f.p("}")
-	return nil
 }
 
 // writeInput writes the Go type of the mutation input in, whose fields are

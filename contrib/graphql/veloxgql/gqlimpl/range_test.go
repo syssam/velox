@@ -38,12 +38,8 @@ func dialDescriptor() velox.Descriptor[dial] {
 	}
 }
 
-func dialInputGQL(goField string) string {
-	if goField == "Level" {
-		return "level"
-	}
-	return ""
-}
+// dialInputGQL is, by column, the inputs' fields.
+var dialInputGQL = []string{1: "level"}
 
 // TestOutOfRangeIsUserInput: a where value or an update value that the
 // column's Go type cannot hold is BAD_USER_INPUT naming the field, not a

@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion13
+const _ = veloxgql.GeneratedCodeIsVersion14
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -200,44 +200,44 @@ func PostsConnectionOf(
 var postConnGQL = gqlimpl.Conn{
 	Type:  "Post",
 	Table: velox.TableOf[Post],
-	Key: []gqlimpl.Col{
-		{Field: "id", Col: postColID},
-	},
+	Key:   []gqlimpl.Col{{Field: "id", Col: postColID}},
 	Order: []gqlimpl.Col{
 		{Field: "TITLE", Col: postColTitle},
 		{Field: "VIEWS", Col: postColViews},
 		{Field: "AUTHOR_NAME", Col: userColName, Edge: postEdgeAuthor + 1, Target: velox.TableOf[User]},
 	},
-	Columns:     postColumnsGQL,
-	CreateField: postCreateInputGQL,
-	UpdateField: postUpdateInputGQL,
-}
-
-// postColumnsGQL returns the columns a selection of the given Post fields
-// reads. It returns nil, every column, for a field that is not velox-graphql's;
-// see gqlimpl.Conn.
-func postColumnsGQL(fields []string) []int {
-	cols := []int{postColID, postColAuthorID, postColTitle, postColViews}
-	for _, f := range fields {
-		switch f {
-		case "id", "title", "views", "writer", "likes", "related", "relatedBy":
-		case "slug":
-			cols = append(cols, postColSlug)
-		case "status":
-			cols = append(cols, postColStatus)
-		case "publishedAt":
-			cols = append(cols, postColPublishedAt)
-		case "tags":
-			cols = append(cols, postColTags)
-		case "rating":
-			cols = append(cols, postColRating)
-		case "editedBy":
-			cols = append(cols, postColEditedBy)
-		default:
-			return nil
-		}
-	}
-	return cols
+	Read: []int{postColID, postColAuthorID, postColTitle, postColViews},
+	Fields: []string{
+		postColID:          "id",
+		postColTitle:       "title",
+		postColSlug:        "slug",
+		postColStatus:      "status",
+		postColPublishedAt: "publishedAt",
+		postColTags:        "tags",
+		postColViews:       "views",
+		postColRating:      "rating",
+		postColEditedBy:    "editedBy",
+	},
+	Edges: []string{"writer", "likes", "related", "relatedBy"},
+	CreateInputs: []string{
+		postColTitle:       "title",
+		postColSlug:        "slug",
+		postColStatus:      "status",
+		postColPublishedAt: "publishedAt",
+		postColTags:        "tags",
+		postColRating:      "rating",
+		postColEditedBy:    "editedBy",
+		postColAuthorID:    "writerID",
+	},
+	UpdateInputs: []string{
+		postColTitle:       "title",
+		postColStatus:      "status",
+		postColPublishedAt: "publishedAt",
+		postColTags:        "tags",
+		postColViews:       "views",
+		postColRating:      "rating",
+		postColAuthorID:    "writerID",
+	},
 }
 
 // PostOrder is the GraphQL input PostOrder, an order of connections to Post.
@@ -423,52 +423,6 @@ func (w *PostWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 	gqlimpl.Has(f, "hasWriter", w.HasWriter, postEdgeAuthor, velox.TableOf[User]())
 	gqlimpl.HasWith(f, "hasWriterWith", w.HasWriterWith, postEdgeAuthor, velox.TableOf[User]())
 	return f.Pred()
-}
-
-// postCreateInputGQL is the CreatePostInput field that sets the Post field
-// goField, or "". A validator's error names it.
-func postCreateInputGQL(goField string) string {
-	switch goField {
-	case "Title":
-		return "title"
-	case "Slug":
-		return "slug"
-	case "Status":
-		return "status"
-	case "PublishedAt":
-		return "publishedAt"
-	case "Tags":
-		return "tags"
-	case "Rating":
-		return "rating"
-	case "EditedBy":
-		return "editedBy"
-	case "AuthorID":
-		return "writerID"
-	}
-	return ""
-}
-
-// postUpdateInputGQL is the UpdatePostInput field that sets the Post field
-// goField, or "". A validator's error names it.
-func postUpdateInputGQL(goField string) string {
-	switch goField {
-	case "Title":
-		return "title"
-	case "Status":
-		return "status"
-	case "PublishedAt":
-		return "publishedAt"
-	case "Tags":
-		return "tags"
-	case "Views":
-		return "views"
-	case "Rating":
-		return "rating"
-	case "AuthorID":
-		return "writerID"
-	}
-	return ""
 }
 
 // postRelatedEdgeGQL is the many-to-many edge related of Post, through

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/syssam/velox/contrib/graphql/internal/english"
@@ -17,12 +18,11 @@ func lowerFirst(name string) string {
 	return strings.ToLower(name[:1]) + name[1:]
 }
 
-// The functions of t's connections: the exported one the application composes
-// a connection with, and the unexported table its connections are made of and
-// the columns its selections read.
+// The function and the table of t's connections: the exported function the
+// application composes a connection with, and the unexported table its
+// connections are made of.
 func connFunc(t *sdl.Type) string { return plugin.GoPlural(t.Name) + "ConnectionOf" }
 func connVar(t *sdl.Type) string  { return lowerFirst(t.Entity.Name) + "ConnGQL" }
-func colsFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "ColumnsGQL" }
 
 // labelCamel is an entity's label as velox-gen begins the names of its
 // constants: post_tag is postTag.
@@ -94,7 +94,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	e, n := t.Entity, t.Name
 	what := "schema " + e.Name
 	root := plugin.GoPlural(n) + "Connection"
-	for _, name := range []string{n + "Connection", n + "Edge", root, connFunc(t), connVar(t), colsFunc(t)} {
+	for _, name := range []string{n + "Connection", n + "Edge", root, connFunc(t), connVar(t)} {
 		if err := r.declare(name, what); err != nil {
 			return err
 		}
@@ -208,16 +208,16 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("var %s = %s.Conn{", connVar(t), impl)
 	f.p("\tType:  %q,", n)
 	f.p("\tTable: %s.TableOf[%s],", velox, e.Name)
-	f.p("\tKey: []%s.Col{", impl)
+	var keys []string
 	for _, i := range e.PrimaryKey {
 		fd := e.Fields[i]
 		// The key's Go type pages.
 		if err := r.checkTerm(e, fd); err != nil {
 			return err
 		}
-		f.p("\t\t{Field: %q, Col: %s},", fd.Name, colConst(e, fd))
+		keys = append(keys, fmt.Sprintf("{Field: %q, Col: %s}", fd.Name, colConst(e, fd)))
 	}
-	f.p("\t},")
+	f.p("\tKey: %s,", items("[]"+impl+".Col{", keys, "}"))
 	if t.Order != nil {
 		f.p("\tOrder: []%s.Col{", impl)
 		for _, v := range t.Order {
@@ -238,17 +238,82 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		}
 		f.p("\t},")
 	}
-	f.p("\tColumns: %s,", colsFunc(t))
-	create, update := inputFuncs(t)
-	if create != "" {
-		f.p("\tCreateField: %s,", create)
-	}
-	if update != "" {
-		f.p("\tUpdateField: %s,", update)
-	}
+	r.writeSelection(f, t)
+	writeInputNames(f, t)
 	f.p("}")
-	r.writeColumns(f, t)
 	return nil
+}
+
+// writeSelection writes the fields of t's Conn that give the columns a
+// selection reads: Read, the key, every foreign key on the row and every
+// order field's column; Fields, the column of each of t's fields; and
+// Edges, t's edges, which read no column of their own.
+func (r *renderer) writeSelection(f *file, t *sdl.Type) {
+	e := t.Entity
+	read := slices.Clone(e.PrimaryKey) // indexes in e.Fields
+	for i, fd := range e.Fields {
+		if !slices.Contains(read, i) && r.foreignKey(e, fd) {
+			read = append(read, i)
+		}
+	}
+	for _, v := range t.Order {
+		if v.Edge == 0 && !slices.Contains(read, v.Field) {
+			read = append(read, v.Field)
+		}
+	}
+	cols := make([]string, len(read))
+	for k, i := range read {
+		cols[k] = colConst(e, e.Fields[i])
+	}
+	f.p("\tRead: %s,", items("[]int{", cols, "}"))
+	var fields []string
+	for _, fd := range t.Fields {
+		fields = append(fields, fmt.Sprintf("%s: %q", colConst(e, e.Fields[fd.Field]), fd.Name))
+	}
+	if len(fields) > 0 {
+		f.p("\tFields: %s,", items("[]string{", fields, "}"))
+	}
+	var edges []string
+	for _, ed := range t.Edges {
+		edges = append(edges, strconv.Quote(ed.Name))
+	}
+	if len(edges) > 0 {
+		f.p("\tEdges: %s,", items("[]string{", edges, "}"))
+	}
+}
+
+// writeInputNames writes the fields of t's Conn that name, by column, the
+// field of an input that sets the column, which a validator's error names:
+// Inputs, when t's inputs name the same columns, else CreateInputs and
+// UpdateInputs.
+func writeInputNames(f *file, t *sdl.Type) {
+	e := t.Entity
+	list := func(names []inputName) []string {
+		var out []string
+		for _, x := range names {
+			for _, fd := range e.Fields {
+				if fd.GoName == x.goName {
+					out = append(out, fmt.Sprintf("%s: %q", colConst(e, fd), x.gql))
+				}
+			}
+		}
+		return out
+	}
+	write := func(field string, names []string) {
+		if len(names) > 0 {
+			f.p("\t%s: %s,", field, items("[]string{", names, "}"))
+		}
+	}
+	cn, un := list(inputNames(e, t.Create)), list(inputNames(e, t.Update))
+	switch {
+	case t.Create == nil:
+		write("Inputs", un)
+	case t.Update == nil || slices.Equal(cn, un):
+		write("Inputs", cn)
+	default:
+		write("CreateInputs", cn)
+		write("UpdateInputs", un)
+	}
 }
 
 // checkTerm checks that a connection can order by e's field fd: keyset paging
@@ -341,62 +406,6 @@ func (r *renderer) foreignKey(e *plugin.Entity, fd *plugin.Field) bool {
 		}
 	}
 	return false
-}
-
-// writeColumns writes <entity>ColumnsGQL, the columns a selection of t's
-// fields reads: the key, every foreign key on the
-// row (an edge, the application's With loads, and mutations' checks read
-// them) and every order field's column (a cursor holds them), always; and
-// each selected field's column. A field it does not know, an application's
-// own, may read any column: then all of them.
-func (r *renderer) writeColumns(f *file, t *sdl.Type) {
-	e := t.Entity
-	base := slices.Clone(e.PrimaryKey) // the indexes in e.Fields of the columns always read
-	in := func(i int) bool { return slices.Contains(base, i) }
-	for i, fd := range e.Fields {
-		if !in(i) && r.foreignKey(e, fd) {
-			base = append(base, i)
-		}
-	}
-	for _, v := range t.Order {
-		if v.Edge == 0 && !in(v.Field) {
-			base = append(base, v.Field)
-		}
-	}
-	cols := make([]string, len(base))
-	for k, i := range base {
-		cols[k] = colConst(e, e.Fields[i])
-	}
-	var none []string // the fields whose columns are read always, and the edges
-	for _, fd := range t.Fields {
-		if in(fd.Field) {
-			none = append(none, fd.Name)
-		}
-	}
-	for _, ed := range t.Edges {
-		none = append(none, ed.Name)
-	}
-	f.p("")
-	f.doc("", fmt.Sprintf("%s returns the columns a selection of the given %s fields reads. It returns nil, every column, for a field that is not velox-graphql's; see gqlimpl.Conn.", colsFunc(t), t.Name))
-	f.p("func %s(fields []string) []int {", colsFunc(t))
-	f.p("\tcols := []int{%s}", strings.Join(cols, ", "))
-	f.p("\tfor _, f := range fields {")
-	f.p("\t\tswitch f {")
-	if len(none) > 0 {
-		f.p("\t\tcase %s:", quoteList(none))
-	}
-	for _, fd := range t.Fields {
-		if !in(fd.Field) {
-			f.p("\t\tcase %q:", fd.Name)
-			f.p("\t\t\tcols = append(cols, %s)", colConst(e, e.Fields[fd.Field]))
-		}
-	}
-	f.p("\t\tdefault:")
-	f.p("\t\t\treturn nil")
-	f.p("\t\t}")
-	f.p("\t}")
-	f.p("\treturn cols")
-	f.p("}")
 }
 
 // writeEdges writes the methods gqlgen binds t's edge fields to.

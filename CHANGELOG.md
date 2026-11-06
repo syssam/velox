@@ -151,6 +151,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- A GraphQL type's columns and input names are data in its `gqlimpl.Conn`:
+  `Read`, `Fields` and `Edges` give the columns a selection reads, and
+  `Inputs` (or `CreateInputs` and `UpdateInputs`) the input field that sets
+  each column. The generated `<entity>ColumnsGQL` and `<entity>InputGQL`
+  switch functions are gone, and `Conn.Columns` is a method.
+  `veloxgql.GeneratedCodeIsVersion13` is now `GeneratedCodeIsVersion14`
+  (ADR 0033).
+
 - velox-graphql names an edge's method after the edge, `Post.Author(ctx)` and
   `Post.Tags(ctx, …)`, as entgql does, not `AuthorGQL` and `TagsGQL`, and the
   SDL drops the `@goField` gqlgen no longer needs; a Node's ID method is

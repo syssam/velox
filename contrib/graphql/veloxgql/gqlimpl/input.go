@@ -117,26 +117,27 @@ func (c *Create) state() *inputState { return &c.s }
 // NewCreate returns the Create of x, a *E of the entity E of c's Table, from
 // the create input of the GraphQL type "Create<Type>Input", Type being c's
 // type ("Post"), which a NOT_FOUND or "already linked" error names. A
-// validator's error on a field c.CreateField names becomes BAD_USER_INPUT
+// validator's error on a field c.Inputs (or c.CreateInputs) names becomes BAD_USER_INPUT
 // naming the input's field (WriteError). required are the columns of the
 // input's required fields, whose validators run before any statement; Given
 // adds those of the optional fields the input gives.
 func NewCreate(ctx context.Context, c *Conn, x any, required ...int) *Create {
-	return &Create{s: newState(ctx, "Create", c, c.CreateField), t: c.table(), x: rowOf(c, x), cols: required}
+	names := c.CreateInputs
+	if names == nil {
+		names = c.Inputs
+	}
+	return &Create{s: newState(ctx, "Create", c, names), t: c.table(), x: rowOf(c, x), cols: required}
 }
 
 // newState is the inputState of the input "<verb><Type>Input" of c's type,
 // whose field name gives.
-func newState(ctx context.Context, verb string, c *Conn, name func(goField string) string) inputState {
+func newState(ctx context.Context, verb string, c *Conn, names []string) inputState {
 	t := c.table()
 	entity := ""
 	if info := t.Info(); info != nil {
 		entity = info.Name
 	}
-	if name == nil {
-		name = func(string) string { return "" }
-	}
-	return inputState{ctx: ctx, input: verb + c.Type + "Input", typ: c.Type, entity: entity, name: name}
+	return inputState{ctx: ctx, input: verb + c.Type + "Input", typ: c.Type, entity: entity, name: inputNames(t, names)}
 }
 
 // Given adds col, the column of an optional field the input gives, to those
@@ -216,7 +217,7 @@ func (u *Update) state() *inputState { return &u.s }
 // is id, of c's GraphQL type ("Post"), whose key is c.Key's one column, from
 // the update input of the GraphQL type "Update<Type>Input", and the row's
 // key, of the Go type K, decoded from id. A validator's error on a field
-// c.UpdateField names becomes BAD_USER_INPUT naming the input's field. A
+// c.Inputs (or c.UpdateInputs) names becomes BAD_USER_INPUT naming the input's field. A
 // malformed id, or an ID of another type, is a decode error, the first: its
 // text names "id".
 func NewUpdate[K any](ctx context.Context, c *Conn, id string) (*Update, K) {
@@ -240,7 +241,11 @@ func newUpdate(ctx context.Context, c *Conn) *Update {
 	if len(c.Key) == 1 {
 		key = c.Key[0].Col
 	}
-	return &Update{s: newState(ctx, "Update", c, c.UpdateField), t: c.table(), key: key}
+	names := c.UpdateInputs
+	if names == nil {
+		names = c.Inputs
+	}
+	return &Update{s: newState(ctx, "Update", c, names), t: c.table(), key: key}
 }
 
 // assign is the assignment of v, converted as velox.Table.Convert does, to

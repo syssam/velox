@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion13
+const _ = veloxgql.GeneratedCodeIsVersion14
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -141,31 +141,16 @@ func CategoriesConnectionOf(
 // table, the key and the order columns of its connections, the columns its
 // selections read and the fields of its inputs.
 var categoryConnGQL = gqlimpl.Conn{
-	Type:  "Category",
-	Table: velox.TableOf[Category],
-	Key: []gqlimpl.Col{
-		{Field: "id", Col: categoryColID},
+	Type:   "Category",
+	Table:  velox.TableOf[Category],
+	Key:    []gqlimpl.Col{{Field: "id", Col: categoryColID}},
+	Read:   []int{categoryColID, categoryColCategoryChildren},
+	Fields: []string{categoryColID: "id", categoryColTitle: "title"},
+	Edges:  []string{"children", "parent"},
+	Inputs: []string{
+		categoryColTitle:            "title",
+		categoryColCategoryChildren: "parentID",
 	},
-	Columns:     categoryColumnsGQL,
-	CreateField: categoryInputGQL,
-	UpdateField: categoryInputGQL,
-}
-
-// categoryColumnsGQL returns the columns a selection of the given Category
-// fields reads. It returns nil, every column, for a field that is not
-// velox-graphql's; see gqlimpl.Conn.
-func categoryColumnsGQL(fields []string) []int {
-	cols := []int{categoryColID, categoryColCategoryChildren}
-	for _, f := range fields {
-		switch f {
-		case "id", "children", "parent":
-		case "title":
-			cols = append(cols, categoryColTitle)
-		default:
-			return nil
-		}
-	}
-	return cols
 }
 
 // CategoryWhereInput is the GraphQL input CategoryWhereInput, a filter of
@@ -221,18 +206,6 @@ func (w *CategoryWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate,
 	gqlimpl.Has(f, "hasParent", w.HasParent, categoryEdgeParent, velox.TableOf[Category]())
 	gqlimpl.HasWith(f, "hasParentWith", w.HasParentWith, categoryEdgeParent, velox.TableOf[Category]())
 	return f.Pred()
-}
-
-// categoryInputGQL is the CreateCategoryInput and UpdateCategoryInput field
-// that sets the Category field goField, or "". A validator's error names it.
-func categoryInputGQL(goField string) string {
-	switch goField {
-	case "Title":
-		return "title"
-	case "CategoryChildren":
-		return "parentID"
-	}
-	return ""
 }
 
 // categoryChildrenEdgeGQL is the edge children of Category, whose key

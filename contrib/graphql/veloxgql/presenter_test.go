@@ -86,7 +86,7 @@ func (w *leaky) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
 func TestErrorsAreCoded(t *testing.T) {
 	db, _ := handlerDB(t)
 	ctx := context.Background()
-	key := &gqlimpl.Conn{Type: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}, Columns: func([]string) []int { return nil }}
+	key := &gqlimpl.Conn{Type: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}}
 	conn := func(args gqlimpl.Args) error {
 		_, err := gqlimpl.NewConnection(ctx, db.QueryTable(velox.TableOf[person]()), key, args, nil)
 		return err

@@ -59,10 +59,12 @@ switches per entity.
   code builds the input, is no null; more than one refuses a null on a clearable
   field with BAD_USER_INPUT naming `clear<Field>`, since it cannot tell which one
   is this input's.
-- **One name function.** `<entity>InputGQL` names both inputs' fields in errors,
-  and `<entity>CreateInputGQL` and `<entity>UpdateInputGQL` are written only when
-  the two inputs have different fields, so that an error on a field one input
-  leaves out names none. `String` and `GoString`, which hide a
+- **Input names are data.** The type's `gqlimpl.Conn` names, by column, the
+  input field that sets each column: `Inputs` for both inputs, and
+  `CreateInputs` and `UpdateInputs` only when the two inputs have different
+  fields, so that an error on a field one input leaves out names none. Its
+  `Read`, `Fields` and `Edges` give the columns a selection reads in the same
+  way. Both were generated switch functions before `GeneratedCodeIsVersion14`. `String` and `GoString`, which hide a
   sensitive field, are written only for an input that has one.
 
 ## Consequences

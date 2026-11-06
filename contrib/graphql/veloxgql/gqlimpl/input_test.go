@@ -52,17 +52,8 @@ func itemDescriptor() velox.Descriptor[item] {
 	}
 }
 
-// itemInputGQL names the input fields of UpdateItemInput, which sets both
-// fields.
-func itemInputGQL(goField string) string {
-	switch goField {
-	case "Name":
-		return "name"
-	case "Age":
-		return "age"
-	}
-	return ""
-}
+// itemInputGQL is, by column, the inputs' fields.
+var itemInputGQL = []string{1: "name", 2: "age"}
 
 // updateItem is what an UpdateItemInput's generated Update does with the
 // fields name and age, when given, and the application's setters set.
@@ -124,5 +115,32 @@ func TestUpdateAppSetters(t *testing.T) {
 	x, err = db.Query[item]().Where(items.ID.EQ(1)).One(ctx)
 	if err != nil || x.Name != "server 2" || x.Age != 2 {
 		t.Fatalf("the row = %+v, %v; want server 2, 2: the failed updates wrote nothing", x, err)
+	}
+}
+
+// TestUpdateInputsStandsForInputs: UpdateInputs, when set, names the update
+// input's fields in place of Inputs.
+func TestUpdateInputsStandsForInputs(t *testing.T) {
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(`CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	db := velox.Open(velox.SQLite, sqlDB)
+	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
+	if err := db.Insert(&item{ID: 1, Name: "a", Age: 1}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	c := gqlimpl.InputConn[item]("Item", int(items.ID.I), itemInputGQL)
+	c.UpdateInputs = []string{2: "years"}
+	u, key := gqlimpl.NewUpdate[int64](ctx, c, veloxgql.EncodeID("Item", int64(1)))
+	u.Set(int(items.Age.I), int64(-1))
+	_, err = u.Exec(key, nil)
+	if want := "veloxgql: UpdateItemInput.years: invalid value: must not be negative"; err == nil || err.Error() != want {
+		t.Fatalf("update = %v, want %s", err, want)
 	}
 }

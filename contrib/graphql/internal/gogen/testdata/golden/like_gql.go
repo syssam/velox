@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion13
+const _ = veloxgql.GeneratedCodeIsVersion14
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the edge of every row read with x.
@@ -116,43 +116,15 @@ var likeConnGQL = gqlimpl.Conn{
 		{Field: "user_id", Col: likeColUserID},
 		{Field: "post_id", Col: likeColPostID},
 	},
-	Columns:     likeColumnsGQL,
-	CreateField: likeInputGQL,
-}
-
-// likeColumnsGQL returns the columns a selection of the given Like fields
-// reads. It returns nil, every column, for a field that is not velox-graphql's;
-// see gqlimpl.Conn.
-func likeColumnsGQL(fields []string) []int {
-	cols := []int{likeColUserID, likeColPostID}
-	for _, f := range fields {
-		switch f {
-		case "user", "post":
-		case "weight":
-			cols = append(cols, likeColWeight)
-		case "createdAt":
-			cols = append(cols, likeColCreatedAt)
-		default:
-			return nil
-		}
-	}
-	return cols
-}
-
-// likeInputGQL is the CreateLikeInput field that sets the Like field goField,
-// or "". A validator's error names it.
-func likeInputGQL(goField string) string {
-	switch goField {
-	case "Weight":
-		return "weight"
-	case "CreatedAt":
-		return "createdAt"
-	case "UserID":
-		return "userID"
-	case "PostID":
-		return "postID"
-	}
-	return ""
+	Read:   []int{likeColUserID, likeColPostID},
+	Fields: []string{likeColWeight: "weight", likeColCreatedAt: "createdAt"},
+	Edges:  []string{"user", "post"},
+	Inputs: []string{
+		likeColWeight:    "weight",
+		likeColCreatedAt: "createdAt",
+		likeColUserID:    "userID",
+		likeColPostID:    "postID",
+	},
 }
 
 // CreateLikeInput is the GraphQL input CreateLikeInput, which Create writes. A

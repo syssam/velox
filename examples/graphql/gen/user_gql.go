@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion13
+const _ = veloxgql.GeneratedCodeIsVersion14
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -163,35 +163,26 @@ func UsersConnectionOf(
 var userConnGQL = gqlimpl.Conn{
 	Type:  "User",
 	Table: velox.TableOf[User],
-	Key: []gqlimpl.Col{
-		{Field: "id", Col: userColID},
-	},
+	Key:   []gqlimpl.Col{{Field: "id", Col: userColID}},
 	Order: []gqlimpl.Col{
 		{Field: "NAME", Col: userColName},
 		{Field: "JOINED_AT", Col: userColJoinedAt},
 	},
-	Columns:     userColumnsGQL,
-	CreateField: userInputGQL,
-	UpdateField: userInputGQL,
-}
-
-// userColumnsGQL returns the columns a selection of the given User fields
-// reads. It returns nil, every column, for a field that is not velox-graphql's;
-// see gqlimpl.Conn.
-func userColumnsGQL(fields []string) []int {
-	cols := []int{userColID, userColName, userColJoinedAt}
-	for _, f := range fields {
-		switch f {
-		case "id", "name", "joinedAt", "posts":
-		case "email":
-			cols = append(cols, userColEmail)
-		case "role":
-			cols = append(cols, userColRole)
-		default:
-			return nil
-		}
-	}
-	return cols
+	Read: []int{userColID, userColName, userColJoinedAt},
+	Fields: []string{
+		userColID:       "id",
+		userColName:     "name",
+		userColEmail:    "email",
+		userColRole:     "role",
+		userColJoinedAt: "joinedAt",
+	},
+	Edges: []string{"posts"},
+	Inputs: []string{
+		userColName:     "name",
+		userColEmail:    "email",
+		userColRole:     "role",
+		userColJoinedAt: "joinedAt",
+	},
 }
 
 // UserOrder is the GraphQL input UserOrder, an order of connections to User.
@@ -343,22 +334,6 @@ func (w *UserWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 	gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
 	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, userEdgePosts, velox.TableOf[Post]())
 	return f.Pred()
-}
-
-// userInputGQL is the CreateUserInput and UpdateUserInput field that sets the
-// User field goField, or "". A validator's error names it.
-func userInputGQL(goField string) string {
-	switch goField {
-	case "Name":
-		return "name"
-	case "Email":
-		return "email"
-	case "Role":
-		return "role"
-	case "JoinedAt":
-		return "joinedAt"
-	}
-	return ""
 }
 
 // CreateUserInput is the GraphQL input CreateUserInput, which Create writes. A

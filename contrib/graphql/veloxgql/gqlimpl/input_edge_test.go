@@ -154,22 +154,11 @@ func acctLblsEdgeGQL() gqlimpl.M2M {
 		OwnerKey: int(accts.ID.I), TargetKey: int(lbls.ID.I), JoinOwner: int(acctLbls.AcctID.I), JoinTarget: int(acctLbls.LblID.I)}
 }
 
-func acctInputGQL(goField string) string {
-	switch goField {
-	case "Name":
-		return "name"
-	case "Age":
-		return "age"
-	}
-	return ""
-}
-
-func kidInputGQL(goField string) string {
-	if goField == "Title" {
-		return "title"
-	}
-	return ""
-}
+// acctInputGQL and kidInputGQL are, by column, the inputs' fields.
+var (
+	acctInputGQL = []string{1: "name", 2: "age"}
+	kidInputGQL  = []string{2: "title"}
+)
 
 // createAcctInput is CreateAcctInput, with the edges kids (Repoint) and lbls
 // (Join).

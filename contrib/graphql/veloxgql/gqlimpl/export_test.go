@@ -81,15 +81,15 @@ func NewConnectionOf[E any](ctx context.Context, q velox.Query[E], typ string, a
 // TableConn is a Conn of E's entity alone, as an edge's owner or target: a
 // selection reads every column.
 func TableConn[E any](typ string) *Conn {
-	return &Conn{Type: typ, Table: velox.TableOf[E], Columns: func([]string) []int { return nil }}
+	return &Conn{Type: typ, Table: velox.TableOf[E]}
 }
 
 // InputConn is a Conn of E's entity with inputs, whose key is the column key
-// and whose inputs' fields name gives.
-func InputConn[E any](typ string, key int, name func(goField string) string) *Conn {
+// and whose inputs' fields are names, by column.
+func InputConn[E any](typ string, key int, names []string) *Conn {
 	c := TableConn[E](typ)
 	c.Key = []Col{{Field: "id", Col: key}}
-	c.CreateField, c.UpdateField = name, name
+	c.Inputs = names
 	return c
 }
 
