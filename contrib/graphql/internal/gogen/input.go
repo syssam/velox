@@ -363,10 +363,16 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 
 	f.p("")
 	doc := fmt.Sprintf("Create inserts x, %s %s, with the input's fields and edges set; a nil x is a new one. It runs atomically on the DB in ctx, under the policies.", english.Article(t.Name), t.Name)
-	var names []string
+	var names, keys []string
 	for _, fd := range leftOut(t) {
+		// A key's zero value names no row: the foreign key refuses it.
+		if ed := ownedEdgeOf(e, fd.Name); ed != nil {
+			keys = append(keys, fmt.Sprintf(" %s leaves out %s, the key of the edge %s: set it on x, or in a velox.Hook; a zero key names no row, and the database's foreign key refuses the insert with a velox.ConstraintError.", in, fd.GoName, ed.Name))
+			continue
+		}
 		names = append(names, fd.GoName)
 	}
+	doc += strings.Join(keys, "")
 	if len(names) > 0 {
 		them, it := "them", "they are"
 		if len(names) == 1 {

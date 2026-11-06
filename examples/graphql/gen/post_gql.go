@@ -356,8 +356,9 @@ type CreatePostInput struct {
 
 // Create inserts x, a Post, with the input's fields and edges set; a nil x is a
 // new one. It runs atomically on the DB in ctx, under the policies.
-// CreatePostInput leaves out AuthorID, which an insert requires: set it on x,
-// or in a velox.Hook, or it is stored as the zero value.
+// CreatePostInput leaves out AuthorID, the key of the edge author: set it on x,
+// or in a velox.Hook; a zero key names no row, and the database's foreign key
+// refuses the insert with a velox.ConstraintError.
 //
 // See "Mutations" in the documentation of package
 // github.com/syssam/velox/contrib/graphql for what each input field does, what

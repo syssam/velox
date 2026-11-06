@@ -64,6 +64,17 @@ func leftOut(t *sdl.Type) []*plugin.Field {
 	return out
 }
 
+// ownedEdgeOf is the edge of e whose key is e's own field named name; nil
+// when the field is no edge's key.
+func ownedEdgeOf(e *plugin.Entity, name string) *plugin.Edge {
+	for _, ed := range e.Edges {
+		if ed.OwnsKey && ed.Field == name {
+			return ed
+		}
+	}
+	return nil
+}
+
 // fieldOf is e's field named name; nil when e has none.
 func fieldOf(e *plugin.Entity, name string) *plugin.Field {
 	for _, fd := range e.Fields {
