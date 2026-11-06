@@ -133,6 +133,12 @@ has `add<Edge>IDs` and `remove<Edge>IDs`.
 edge is a `velox.One[T]` or `velox.Many[T]` whose `Get()` returns the value
 and whether it was loaded, so there is no `AuthorOrErr`.
 
+**A required field is always in JSON.** ent tags every field
+`json:"name,omitempty"`, so a stored 0, false or "" is left out. velox leaves
+out only what can be absent: a required scalar is `json:"name"`; a pointer,
+an Optional field, a slice or a map is `omitempty`; a time, UUID or other
+struct is `omitzero`. A field's `StructTag` replaces the tag, as in ent.
+
 **Relations load only when asked.** `With(P.Author)` loads one with one more
 query, and `Get()` reports whether it was loaded. Nothing loads lazily, and
 there is no `QueryPosts()`: read the posts with `db.Query[gen.Post]()` and a
