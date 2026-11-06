@@ -28,7 +28,7 @@ type userGroupHandles struct {
 	GroupID velox.NumberCol[UserGroup, int64]
 }
 
-// UserGroups holds the typed handles of UserGroup's columns and relations.
+// UserGroups holds the typed handles of UserGroup's columns.
 var UserGroups = userGroupHandles{
 	UserID:  velox.NumberCol[UserGroup, int64]{I: userGroupColUserID},
 	GroupID: velox.NumberCol[UserGroup, int64]{I: userGroupColGroupID},

@@ -21,7 +21,7 @@ type Doc struct {
 
 // DocEdges holds the relations of Doc, filled by With.
 type DocEdges struct {
-	// Comments is the edge comments, to Comment.
+	// Comments holds the edge comments, to Comment, loaded by With(Docs.Comments).
 	Comments velox.Many[Comment] `json:"comments,omitzero"`
 }
 
@@ -48,7 +48,7 @@ type docHandles struct {
 	Title velox.StringCol[Doc, string]
 	// Shared is the column shared.
 	Shared velox.Col[Doc, bool]
-	// Comments is the edge comments, to Comment.
+	// Comments is the edge comments, to Comment: With loads it, Has and HasWhere test it.
 	Comments velox.Rel[Doc, Comment]
 }
 

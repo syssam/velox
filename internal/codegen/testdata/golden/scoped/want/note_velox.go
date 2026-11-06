@@ -33,7 +33,7 @@ type noteHandles struct {
 	Title velox.StringCol[Note, string]
 }
 
-// Notes holds the typed handles of Note's columns and relations.
+// Notes holds the typed handles of Note's columns.
 var Notes = noteHandles{
 	ID:    velox.NumberCol[Note, int64]{I: noteColID},
 	OrgID: velox.NumberCol[Note, int64]{I: noteColOrgID},

@@ -28,7 +28,7 @@ type Invoice struct {
 
 // InvoiceEdges holds the relations of Invoice, filled by With.
 type InvoiceEdges struct {
-	// Items is the edge items, to Item.
+	// Items holds the edge items, to Item, loaded by With(Invoices.Items).
 	Items velox.Many[Item] `json:"items,omitzero"`
 }
 
@@ -73,7 +73,7 @@ type invoiceHandles struct {
 	Note velox.StringCol[Invoice, string]
 	// Data is the column data.
 	Data velox.Col[Invoice, []byte]
-	// Items is the edge items, to Item.
+	// Items is the edge items, to Item: With loads it, Has and HasWhere test it.
 	Items velox.Rel[Invoice, Item]
 }
 

@@ -20,7 +20,7 @@ type Comment struct {
 
 // CommentEdges holds the relations of Comment, filled by With.
 type CommentEdges struct {
-	// Doc is the edge doc, to Doc.
+	// Doc holds the edge doc, to Doc, loaded by With(Comments.Doc).
 	Doc velox.One[Doc] `json:"doc,omitzero"`
 }
 
@@ -44,7 +44,7 @@ type commentHandles struct {
 	DocID velox.NumberCol[Comment, int64]
 	// Body is the column body.
 	Body velox.StringCol[Comment, string]
-	// Doc is the edge doc, to Doc.
+	// Doc is the edge doc, to Doc: With loads it, Has and HasWhere test it.
 	Doc velox.Rel[Comment, Doc]
 }
 

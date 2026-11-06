@@ -28,7 +28,7 @@ type issueLabelHandles struct {
 	LabelID velox.NumberCol[IssueLabel, int64]
 }
 
-// IssueLabels holds the typed handles of IssueLabel's columns and relations.
+// IssueLabels holds the typed handles of IssueLabel's columns.
 var IssueLabels = issueLabelHandles{
 	IssueID: velox.NumberCol[IssueLabel, int64]{I: issueLabelColIssueID},
 	LabelID: velox.NumberCol[IssueLabel, int64]{I: issueLabelColLabelID},

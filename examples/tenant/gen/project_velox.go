@@ -37,7 +37,7 @@ type projectHandles struct {
 	Status velox.StringCol[Project, string]
 }
 
-// Projects holds the typed handles of Project's columns and relations.
+// Projects holds the typed handles of Project's columns.
 var Projects = projectHandles{
 	ID:     velox.NumberCol[Project, int64]{I: projectColID},
 	OrgID:  velox.NumberCol[Project, int64]{I: projectColOrgID},

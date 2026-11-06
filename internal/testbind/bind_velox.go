@@ -128,7 +128,7 @@ type bindHandles struct {
 	Note velox.NullStringCol[Bind, string]
 }
 
-// Binds holds the typed handles of Bind's columns and relations.
+// Binds holds the typed handles of Bind's columns.
 var Binds = bindHandles{
 	ID:        velox.NumberCol[Bind, int64]{I: bindColID},
 	Flag:      velox.Col[Bind, bool]{I: bindColFlag},

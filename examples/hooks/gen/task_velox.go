@@ -41,7 +41,7 @@ type taskHandles struct {
 	Done velox.Col[Task, bool]
 }
 
-// Tasks holds the typed handles of Task's columns and relations.
+// Tasks holds the typed handles of Task's columns.
 var Tasks = taskHandles{
 	ID:        velox.NumberCol[Task, int64]{I: taskColID},
 	CreatedBy: velox.StringCol[Task, string]{I: taskColCreatedBy},

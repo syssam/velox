@@ -36,13 +36,13 @@ type User struct {
 
 // UserEdges holds the relations of User, filled by With.
 type UserEdges struct {
-	// Posts is the edge posts, to Post.
+	// Posts holds the edge posts, to Post, loaded by With(Users.Posts).
 	Posts velox.Many[Post] `json:"posts,omitzero"`
-	// Groups is the edge groups, to Group.
+	// Groups holds the edge groups, to Group, loaded by With(Users.Groups).
 	Groups velox.Many[Group] `json:"groups,omitzero"`
-	// Friends is the edge friends, to User.
+	// Friends holds the edge friends, to User, loaded by With(Users.Friends).
 	Friends velox.Many[User] `json:"friends,omitzero"`
-	// Spouse is the edge spouse, to User.
+	// Spouse holds the edge spouse, to User, loaded by With(Users.Spouse).
 	Spouse velox.One[User] `json:"spouse,omitzero"`
 }
 
@@ -102,13 +102,13 @@ type userHandles struct {
 	Score velox.NullNumberCol[User, float64]
 	// UserSpouse is the column user_spouse.
 	UserSpouse velox.NullNumberCol[User, int64]
-	// Posts is the edge posts, to Post.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWhere test it.
 	Posts velox.Rel[User, Post]
-	// Groups is the edge groups, to Group.
+	// Groups is the edge groups, to Group: With loads it, Has and HasWhere test it.
 	Groups velox.Rel[User, Group]
-	// Friends is the edge friends, to User.
+	// Friends is the edge friends, to User: With loads it, Has and HasWhere test it.
 	Friends velox.Rel[User, User]
-	// Spouse is the edge spouse, to User.
+	// Spouse is the edge spouse, to User: With loads it, Has and HasWhere test it.
 	Spouse velox.Rel[User, User]
 }
 

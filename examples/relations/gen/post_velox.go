@@ -20,11 +20,11 @@ type Post struct {
 
 // PostEdges holds the relations of Post, filled by With.
 type PostEdges struct {
-	// Author is the edge author, to Author.
+	// Author holds the edge author, to Author, loaded by With(Posts.Author).
 	Author velox.One[Author] `json:"author,omitzero"`
-	// Comments is the edge comments, to Comment.
+	// Comments holds the edge comments, to Comment, loaded by With(Posts.Comments).
 	Comments velox.Many[Comment] `json:"comments,omitzero"`
-	// Tags is the edge tags, to Tag.
+	// Tags holds the edge tags, to Tag, loaded by With(Posts.Tags).
 	Tags velox.Many[Tag] `json:"tags,omitzero"`
 }
 
@@ -53,11 +53,11 @@ type postHandles struct {
 	Title velox.StringCol[Post, string]
 	// Votes is the column votes.
 	Votes velox.NumberCol[Post, int64]
-	// Author is the edge author, to Author.
+	// Author is the edge author, to Author: With loads it, Has and HasWhere test it.
 	Author velox.Rel[Post, Author]
-	// Comments is the edge comments, to Comment.
+	// Comments is the edge comments, to Comment: With loads it, Has and HasWhere test it.
 	Comments velox.Rel[Post, Comment]
-	// Tags is the edge tags, to Tag.
+	// Tags is the edge tags, to Tag: With loads it, Has and HasWhere test it.
 	Tags velox.Rel[Post, Tag]
 }
 

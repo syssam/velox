@@ -26,9 +26,9 @@ type Post struct {
 
 // PostEdges holds the relations of Post, filled by With.
 type PostEdges struct {
-	// Author is the edge author, to User.
+	// Author holds the edge author, to User, loaded by With(Posts.Author).
 	Author velox.One[User] `json:"author,omitzero"`
-	// Tags is the edge tags, to Tag.
+	// Tags holds the edge tags, to Tag, loaded by With(Posts.Tags).
 	Tags velox.Many[Tag] `json:"tags,omitzero"`
 }
 
@@ -65,9 +65,9 @@ type postHandles struct {
 	Views velox.NumberCol[Post, int64]
 	// PublishedAt is the column published_at.
 	PublishedAt velox.NullOrderedCol[Post, time.Time]
-	// Author is the edge author, to User.
+	// Author is the edge author, to User: With loads it, Has and HasWhere test it.
 	Author velox.Rel[Post, User]
-	// Tags is the edge tags, to Tag.
+	// Tags is the edge tags, to Tag: With loads it, Has and HasWhere test it.
 	Tags velox.Rel[Post, Tag]
 }
 

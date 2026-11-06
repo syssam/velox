@@ -46,7 +46,7 @@ type projectHandles struct {
 	Name velox.StringCol[Project, string]
 }
 
-// Projects holds the typed handles of Project's columns and relations.
+// Projects holds the typed handles of Project's columns.
 var Projects = projectHandles{
 	ID:        velox.NumberCol[Project, int64]{I: projectColID},
 	CreatedAt: velox.OrderedCol[Project, time.Time]{I: projectColCreatedAt},

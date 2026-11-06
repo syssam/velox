@@ -18,7 +18,7 @@ type Author struct {
 
 // AuthorEdges holds the relations of Author, filled by With.
 type AuthorEdges struct {
-	// Posts is the edge posts, to Post.
+	// Posts holds the edge posts, to Post, loaded by With(Authors.Posts).
 	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 
@@ -39,7 +39,7 @@ type authorHandles struct {
 	ID velox.NumberCol[Author, int64]
 	// Name is the column name.
 	Name velox.StringCol[Author, string]
-	// Posts is the edge posts, to Post.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWhere test it.
 	Posts velox.Rel[Author, Post]
 }
 

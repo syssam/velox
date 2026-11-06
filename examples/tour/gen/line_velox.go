@@ -22,7 +22,7 @@ type Line struct {
 
 // LineEdges holds the relations of Line, filled by With.
 type LineEdges struct {
-	// Invoice is the edge invoice, to Invoice.
+	// Invoice holds the edge invoice, to Invoice, loaded by With(Lines.Invoice).
 	Invoice velox.One[Invoice] `json:"invoice,omitzero"`
 }
 
@@ -52,7 +52,7 @@ type lineHandles struct {
 	Description velox.StringCol[Line, string]
 	// AmountCents is the column amount_cents.
 	AmountCents velox.NumberCol[Line, int64]
-	// Invoice is the edge invoice, to Invoice.
+	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWhere test it.
 	Invoice velox.Rel[Line, Invoice]
 }
 

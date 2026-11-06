@@ -18,7 +18,7 @@ type Tag struct {
 
 // TagEdges holds the relations of Tag, filled by With.
 type TagEdges struct {
-	// Posts is the edge posts, to Post.
+	// Posts holds the edge posts, to Post, loaded by With(Tags.Posts).
 	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 
@@ -39,7 +39,7 @@ type tagHandles struct {
 	ID velox.NumberCol[Tag, int64]
 	// Name is the column name.
 	Name velox.StringCol[Tag, string]
-	// Posts is the edge posts, to Post.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWhere test it.
 	Posts velox.Rel[Tag, Post]
 }
 

@@ -34,7 +34,7 @@ type eventHandles struct {
 	MaybeAt velox.NullOrderedCol[Event, kind.Moment]
 }
 
-// Events holds the typed handles of Event's columns and relations.
+// Events holds the typed handles of Event's columns.
 var Events = eventHandles{
 	ID:      velox.NumberCol[Event, int64]{I: eventColID},
 	At:      velox.OrderedCol[Event, kind.Moment]{I: eventColAt},

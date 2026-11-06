@@ -21,7 +21,7 @@ type Label struct {
 
 // LabelEdges holds the relations of Label, filled by With.
 type LabelEdges struct {
-	// Issues is the edge issues, to Issue.
+	// Issues holds the edge issues, to Issue, loaded by With(Labels.Issues).
 	Issues velox.Many[Issue] `json:"issues,omitzero"`
 }
 
@@ -45,7 +45,7 @@ type labelHandles struct {
 	OrgID velox.NumberCol[Label, int64]
 	// Name is the column name.
 	Name velox.StringCol[Label, string]
-	// Issues is the edge issues, to Issue.
+	// Issues is the edge issues, to Issue: With loads it, Has and HasWhere test it.
 	Issues velox.Rel[Label, Issue]
 }
 

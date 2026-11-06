@@ -32,7 +32,7 @@ type accountHandles struct {
 	Balance velox.NumberCol[Account, int64]
 }
 
-// Accounts holds the typed handles of Account's columns and relations.
+// Accounts holds the typed handles of Account's columns.
 var Accounts = accountHandles{
 	ID:      velox.NumberCol[Account, int64]{I: accountColID},
 	Name:    velox.StringCol[Account, string]{I: accountColName},

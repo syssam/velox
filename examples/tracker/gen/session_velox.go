@@ -41,7 +41,7 @@ type sessionHandles struct {
 	ExpiresAt velox.OrderedCol[Session, time.Time]
 }
 
-// Sessions holds the typed handles of Session's columns and relations.
+// Sessions holds the typed handles of Session's columns.
 var Sessions = sessionHandles{
 	ID:        velox.NumberCol[Session, int64]{I: sessionColID},
 	TokenHash: velox.StringCol[Session, string]{I: sessionColTokenHash},

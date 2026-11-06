@@ -25,11 +25,11 @@ type Ticket struct {
 
 // TicketEdges holds the relations of Ticket, filled by With.
 type TicketEdges struct {
-	// Invoice is the edge invoice, to Invoice.
+	// Invoice holds the edge invoice, to Invoice, loaded by With(Tickets.Invoice).
 	Invoice velox.One[Invoice] `json:"invoice,omitzero"`
-	// Children is the edge children, to Ticket.
+	// Children holds the edge children, to Ticket, loaded by With(Tickets.Children).
 	Children velox.Many[Ticket] `json:"children,omitzero"`
-	// Parent is the edge parent, to Ticket.
+	// Parent holds the edge parent, to Ticket, loaded by With(Tickets.Parent).
 	Parent velox.One[Ticket] `json:"parent,omitzero"`
 }
 
@@ -70,11 +70,11 @@ type ticketHandles struct {
 	InvoiceID velox.NumberCol[Ticket, int64]
 	// ParentID is the column parent_id.
 	ParentID velox.NullNumberCol[Ticket, int64]
-	// Invoice is the edge invoice, to Invoice.
+	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWhere test it.
 	Invoice velox.Rel[Ticket, Invoice]
-	// Children is the edge children, to Ticket.
+	// Children is the edge children, to Ticket: With loads it, Has and HasWhere test it.
 	Children velox.Rel[Ticket, Ticket]
-	// Parent is the edge parent, to Ticket.
+	// Parent is the edge parent, to Ticket: With loads it, Has and HasWhere test it.
 	Parent velox.Rel[Ticket, Ticket]
 }
 

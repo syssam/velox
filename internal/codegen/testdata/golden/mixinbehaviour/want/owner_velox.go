@@ -37,7 +37,7 @@ type ownerHandles struct {
 	Name velox.StringCol[Owner, string]
 }
 
-// Owners holds the typed handles of Owner's columns and relations.
+// Owners holds the typed handles of Owner's columns.
 var Owners = ownerHandles{
 	ID:        velox.NumberCol[Owner, int64]{I: ownerColID},
 	CreatedAt: velox.OrderedCol[Owner, time.Time]{I: ownerColCreatedAt},

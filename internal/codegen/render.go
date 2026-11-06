@@ -237,7 +237,7 @@ func entityStruct(w *writer, e *OutEntity) {
 		if r.Comment != "" {
 			w.doc(r.Comment)
 		} else {
-			w.p("// %s is the edge %s, to %s.", r.GoName, r.Name, r.Target)
+			w.p("// %s holds the edge %s, to %s, loaded by With(%s.%[1]s).", r.GoName, r.Name, r.Target, e.Handles)
 		}
 		w.p("%s velox.%s[%s] `json:\"%s,omitzero\"`", r.GoName, kind, r.Target, r.Name)
 	}
@@ -287,12 +287,16 @@ func entityHandles(w *writer, e *OutEntity) {
 		w.p("%s %s", f.GoName, f.Handle)
 	}
 	for _, r := range e.Rels {
-		w.p("// %s is the edge %s, to %s.", r.GoName, r.Name, r.Target)
+		w.p("// %s is the edge %s, to %s: With loads it, Has and HasWhere test it.", r.GoName, r.Name, r.Target)
 		w.p("%s velox.Rel[%s, %s]", r.GoName, e.Name, r.Target)
 	}
 	w.p("}")
 	w.p("")
-	w.p("// %s holds the typed handles of %s's columns and relations.", e.Handles, e.Name)
+	what := "columns"
+	if len(e.Rels) > 0 {
+		what = "columns and relations"
+	}
+	w.p("// %s holds the typed handles of %s's %s.", e.Handles, e.Name, what)
 	w.p("var %s = %s{", e.Handles, typ)
 	for i, f := range e.Fields {
 		w.p("%s: %s{I: %s},", f.GoName, f.Handle, colConst(e, i))

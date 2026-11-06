@@ -33,7 +33,7 @@ type labelHandles struct {
 	Name velox.StringCol[Label, string]
 }
 
-// Labels holds the typed handles of Label's columns and relations.
+// Labels holds the typed handles of Label's columns.
 var Labels = labelHandles{
 	ID:    velox.NumberCol[Label, int64]{I: labelColID},
 	OrgID: velox.NumberCol[Label, int64]{I: labelColOrgID},

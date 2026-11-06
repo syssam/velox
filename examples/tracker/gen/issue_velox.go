@@ -29,15 +29,15 @@ type Issue struct {
 
 // IssueEdges holds the relations of Issue, filled by With.
 type IssueEdges struct {
-	// Project is the edge project, to Project.
+	// Project holds the edge project, to Project, loaded by With(Issues.Project).
 	Project velox.One[Project] `json:"project,omitzero"`
-	// Author is the edge author, to User.
+	// Author holds the edge author, to User, loaded by With(Issues.Author).
 	Author velox.One[User] `json:"author,omitzero"`
-	// Assignee is the edge assignee, to User.
+	// Assignee holds the edge assignee, to User, loaded by With(Issues.Assignee).
 	Assignee velox.One[User] `json:"assignee,omitzero"`
-	// Comments is the edge comments, to Comment.
+	// Comments holds the edge comments, to Comment, loaded by With(Issues.Comments).
 	Comments velox.Many[Comment] `json:"comments,omitzero"`
-	// Labels is the edge labels, to Label.
+	// Labels holds the edge labels, to Label, loaded by With(Issues.Labels).
 	Labels velox.Many[Label] `json:"labels,omitzero"`
 }
 
@@ -86,15 +86,15 @@ type issueHandles struct {
 	Body velox.StringCol[Issue, string]
 	// Status is the column status.
 	Status velox.StringCol[Issue, IssueStatus]
-	// Project is the edge project, to Project.
+	// Project is the edge project, to Project: With loads it, Has and HasWhere test it.
 	Project velox.Rel[Issue, Project]
-	// Author is the edge author, to User.
+	// Author is the edge author, to User: With loads it, Has and HasWhere test it.
 	Author velox.Rel[Issue, User]
-	// Assignee is the edge assignee, to User.
+	// Assignee is the edge assignee, to User: With loads it, Has and HasWhere test it.
 	Assignee velox.Rel[Issue, User]
-	// Comments is the edge comments, to Comment.
+	// Comments is the edge comments, to Comment: With loads it, Has and HasWhere test it.
 	Comments velox.Rel[Issue, Comment]
-	// Labels is the edge labels, to Label.
+	// Labels is the edge labels, to Label: With loads it, Has and HasWhere test it.
 	Labels velox.Rel[Issue, Label]
 }
 

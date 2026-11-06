@@ -29,7 +29,7 @@ type homeHandles struct {
 	Region velox.StringCol[Home, string]
 }
 
-// Homes holds the typed handles of Home's columns and relations.
+// Homes holds the typed handles of Home's columns.
 var Homes = homeHandles{
 	ID:     velox.NumberCol[Home, int64]{I: homeColID},
 	Region: velox.StringCol[Home, string]{I: homeColRegion},

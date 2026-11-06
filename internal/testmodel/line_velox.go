@@ -18,7 +18,7 @@ type Line struct {
 
 // LineEdges holds the relations of Line, filled by With.
 type LineEdges struct {
-	// Sample is the edge sample, to Sample.
+	// Sample holds the edge sample, to Sample, loaded by With(Lines.Sample).
 	Sample velox.One[Sample] `json:"sample,omitzero"`
 }
 
@@ -39,7 +39,7 @@ type lineHandles struct {
 	ID velox.NumberCol[Line, int64]
 	// SampleID is the column sample_id.
 	SampleID velox.NumberCol[Line, int64]
-	// Sample is the edge sample, to Sample.
+	// Sample is the edge sample, to Sample: With loads it, Has and HasWhere test it.
 	Sample velox.Rel[Line, Sample]
 }
 

@@ -68,7 +68,7 @@ type postHandles struct {
 	Tags velox.JSONCol[Post, []string]
 	// Views is the column views.
 	Views velox.NumberCol[Post, int]
-	// Author is the edge author, to User.
+	// Author is the edge author, to User: With loads it, Has and HasWhere test it.
 	Author velox.Rel[Post, User]
 }
 

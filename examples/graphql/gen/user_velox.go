@@ -24,7 +24,7 @@ type User struct {
 
 // UserEdges holds the relations of User, filled by With.
 type UserEdges struct {
-	// Posts is the edge posts, to Post.
+	// Posts holds the edge posts, to Post, loaded by With(Users.Posts).
 	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 
@@ -57,7 +57,7 @@ type userHandles struct {
 	JoinedAt velox.OrderedCol[User, time.Time]
 	// PasswordHash is the column password_hash.
 	PasswordHash velox.StringCol[User, string]
-	// Posts is the edge posts, to Post.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWhere test it.
 	Posts velox.Rel[User, Post]
 }
 

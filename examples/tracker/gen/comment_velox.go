@@ -26,9 +26,9 @@ type Comment struct {
 
 // CommentEdges holds the relations of Comment, filled by With.
 type CommentEdges struct {
-	// Issue is the edge issue, to Issue.
+	// Issue holds the edge issue, to Issue, loaded by With(Comments.Issue).
 	Issue velox.One[Issue] `json:"issue,omitzero"`
-	// Author is the edge author, to User.
+	// Author holds the edge author, to User, loaded by With(Comments.Author).
 	Author velox.One[User] `json:"author,omitzero"`
 }
 
@@ -65,9 +65,9 @@ type commentHandles struct {
 	AuthorID velox.NumberCol[Comment, int64]
 	// Body is the column body.
 	Body velox.StringCol[Comment, string]
-	// Issue is the edge issue, to Issue.
+	// Issue is the edge issue, to Issue: With loads it, Has and HasWhere test it.
 	Issue velox.Rel[Comment, Issue]
-	// Author is the edge author, to User.
+	// Author is the edge author, to User: With loads it, Has and HasWhere test it.
 	Author velox.Rel[Comment, User]
 }
 

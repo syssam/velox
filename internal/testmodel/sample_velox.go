@@ -31,11 +31,11 @@ type Sample struct {
 
 // SampleEdges holds the relations of Sample, filled by With.
 type SampleEdges struct {
-	// Lines is the edge lines, to Line.
+	// Lines holds the edge lines, to Line, loaded by With(Samples.Lines).
 	Lines velox.Many[Line] `json:"lines,omitzero"`
-	// Children is the edge children, to Sample.
+	// Children holds the edge children, to Sample, loaded by With(Samples.Children).
 	Children velox.Many[Sample] `json:"children,omitzero"`
-	// Parent is the edge parent, to Sample.
+	// Parent holds the edge parent, to Sample, loaded by With(Samples.Parent).
 	Parent velox.One[Sample] `json:"parent,omitzero"`
 }
 
@@ -91,11 +91,11 @@ type sampleHandles struct {
 	ParentID velox.NullNumberCol[Sample, int64]
 	// Score is the column score.
 	Score velox.NumberCol[Sample, kind.Score]
-	// Lines is the edge lines, to Line.
+	// Lines is the edge lines, to Line: With loads it, Has and HasWhere test it.
 	Lines velox.Rel[Sample, Line]
-	// Children is the edge children, to Sample.
+	// Children is the edge children, to Sample: With loads it, Has and HasWhere test it.
 	Children velox.Rel[Sample, Sample]
-	// Parent is the edge parent, to Sample.
+	// Parent is the edge parent, to Sample: With loads it, Has and HasWhere test it.
 	Parent velox.Rel[Sample, Sample]
 }
 

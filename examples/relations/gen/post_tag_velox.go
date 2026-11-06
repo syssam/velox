@@ -28,7 +28,7 @@ type postTagHandles struct {
 	TagID velox.NumberCol[PostTag, int64]
 }
 
-// PostTags holds the typed handles of PostTag's columns and relations.
+// PostTags holds the typed handles of PostTag's columns.
 var PostTags = postTagHandles{
 	PostID: velox.NumberCol[PostTag, int64]{I: postTagColPostID},
 	TagID:  velox.NumberCol[PostTag, int64]{I: postTagColTagID},

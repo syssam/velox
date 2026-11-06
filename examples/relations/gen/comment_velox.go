@@ -19,7 +19,7 @@ type Comment struct {
 
 // CommentEdges holds the relations of Comment, filled by With.
 type CommentEdges struct {
-	// Post is the edge post, to Post.
+	// Post holds the edge post, to Post, loaded by With(Comments.Post).
 	Post velox.One[Post] `json:"post,omitzero"`
 }
 
@@ -43,7 +43,7 @@ type commentHandles struct {
 	PostID velox.NumberCol[Comment, int64]
 	// Body is the column body.
 	Body velox.StringCol[Comment, string]
-	// Post is the edge post, to Post.
+	// Post is the edge post, to Post: With loads it, Has and HasWhere test it.
 	Post velox.Rel[Comment, Post]
 }
 

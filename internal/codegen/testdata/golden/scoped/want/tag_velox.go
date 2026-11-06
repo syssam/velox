@@ -29,7 +29,7 @@ type tagHandles struct {
 	OrgID velox.NumberCol[Tag, int64]
 }
 
-// Tags holds the typed handles of Tag's columns and relations.
+// Tags holds the typed handles of Tag's columns.
 var Tags = tagHandles{
 	ID:    velox.NumberCol[Tag, int64]{I: tagColID},
 	OrgID: velox.NumberCol[Tag, int64]{I: tagColOrgID},

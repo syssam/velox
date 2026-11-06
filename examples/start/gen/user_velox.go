@@ -36,7 +36,7 @@ type userHandles struct {
 	Age velox.NumberCol[User, int64]
 }
 
-// Users holds the typed handles of User's columns and relations.
+// Users holds the typed handles of User's columns.
 var Users = userHandles{
 	ID:    velox.NumberCol[User, int64]{I: userColID},
 	Name:  velox.StringCol[User, string]{I: userColName},

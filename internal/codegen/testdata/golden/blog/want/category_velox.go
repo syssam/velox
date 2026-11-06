@@ -20,9 +20,9 @@ type Category struct {
 
 // CategoryEdges holds the relations of Category, filled by With.
 type CategoryEdges struct {
-	// Children is the edge children, to Category.
+	// Children holds the edge children, to Category, loaded by With(Categories.Children).
 	Children velox.Many[Category] `json:"children,omitzero"`
-	// Parent is the edge parent, to Category.
+	// Parent holds the edge parent, to Category, loaded by With(Categories.Parent).
 	Parent velox.One[Category] `json:"parent,omitzero"`
 }
 
@@ -47,9 +47,9 @@ type categoryHandles struct {
 	Title velox.StringCol[Category, string]
 	// CategoryChildren is the column category_children.
 	CategoryChildren velox.NullNumberCol[Category, int64]
-	// Children is the edge children, to Category.
+	// Children is the edge children, to Category: With loads it, Has and HasWhere test it.
 	Children velox.Rel[Category, Category]
-	// Parent is the edge parent, to Category.
+	// Parent is the edge parent, to Category: With loads it, Has and HasWhere test it.
 	Parent velox.Rel[Category, Category]
 }
 

@@ -24,7 +24,7 @@ type Project struct {
 
 // ProjectEdges holds the relations of Project, filled by With.
 type ProjectEdges struct {
-	// Issues is the edge issues, to Issue.
+	// Issues holds the edge issues, to Issue, loaded by With(Projects.Issues).
 	Issues velox.Many[Issue] `json:"issues,omitzero"`
 }
 
@@ -54,7 +54,7 @@ type projectHandles struct {
 	OrgID velox.NumberCol[Project, int64]
 	// Name is the column name.
 	Name velox.StringCol[Project, string]
-	// Issues is the edge issues, to Issue.
+	// Issues is the edge issues, to Issue: With loads it, Has and HasWhere test it.
 	Issues velox.Rel[Project, Issue]
 }
 

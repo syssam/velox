@@ -34,7 +34,7 @@ type orgHandles struct {
 	Name velox.StringCol[Org, string]
 }
 
-// Orgs holds the typed handles of Org's columns and relations.
+// Orgs holds the typed handles of Org's columns.
 var Orgs = orgHandles{
 	ID:   velox.NumberCol[Org, int64]{I: orgColID},
 	Slug: velox.StringCol[Org, string]{I: orgColSlug},

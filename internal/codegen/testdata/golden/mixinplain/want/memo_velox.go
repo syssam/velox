@@ -33,7 +33,7 @@ type memoHandles struct {
 	Text velox.StringCol[Memo, string]
 }
 
-// Memos holds the typed handles of Memo's columns and relations.
+// Memos holds the typed handles of Memo's columns.
 var Memos = memoHandles{
 	ID:    velox.NumberCol[Memo, int64]{I: memoColID},
 	OrgID: velox.NumberCol[Memo, int64]{I: memoColOrgID},

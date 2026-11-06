@@ -32,7 +32,7 @@ type auditHandles struct {
 	Message velox.StringCol[Audit, string]
 }
 
-// Audits holds the typed handles of Audit's columns and relations.
+// Audits holds the typed handles of Audit's columns.
 var Audits = auditHandles{
 	ID:      velox.NumberCol[Audit, int64]{I: auditColID},
 	Actor:   velox.StringCol[Audit, string]{I: auditColActor},

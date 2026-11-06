@@ -32,7 +32,7 @@ type itemHandles struct {
 	Quantity velox.NumberCol[Item, int]
 }
 
-// Items holds the typed handles of Item's columns and relations.
+// Items holds the typed handles of Item's columns.
 var Items = itemHandles{
 	ID:       velox.NumberCol[Item, int64]{I: itemColID},
 	Name:     velox.StringCol[Item, string]{I: itemColName},

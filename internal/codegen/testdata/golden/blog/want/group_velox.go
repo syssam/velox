@@ -21,7 +21,7 @@ type Group struct {
 
 // GroupEdges holds the relations of Group, filled by With.
 type GroupEdges struct {
-	// Users is the edge users, to User.
+	// Users holds the edge users, to User, loaded by With(Groups.Users).
 	Users velox.Many[User] `json:"users,omitzero"`
 }
 
@@ -45,7 +45,7 @@ type groupHandles struct {
 	Name velox.StringCol[Group, string]
 	// Token is the column token.
 	Token velox.StringCol[Group, string]
-	// Users is the edge users, to User.
+	// Users is the edge users, to User: With loads it, Has and HasWhere test it.
 	Users velox.Rel[Group, User]
 }
 
