@@ -691,6 +691,9 @@ func TestEdgeSetterSetKey(t *testing.T) {
 	if _, err := db.Update[sPost]().Set(sPosts.Author.Set(1), sPosts.AuthorID.Set(2)).Where(both).Exec(user); err == nil || !strings.Contains(err.Error(), "assigned twice") {
 		t.Errorf("Set with its column's setter: %v", err)
 	}
+	if c, want := sPosts.Author.Set(1).Column(), sPosts.AuthorID.Set(1).Column(); c != want {
+		t.Errorf("Set's Column %d, want its key's, %d", c, want)
+	}
 	q, _, err := db.Update[sPost]().Set(sPosts.Author.Set(1)).Where(both).SQL(user)
 	if err != nil || !strings.Contains(q, `"author_id" = ?`) {
 		t.Errorf("SQL: %q, %v", q, err)

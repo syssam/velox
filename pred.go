@@ -17,11 +17,15 @@ type Column[E any] interface{ column(*E) int32 }
 type Setter[E any] struct{ a Assignment }
 
 // Column is the column s assigns, as Assignment.Column numbers it: two setters
-// of one column have the same Column. It is -1 for an edge setter. For
-// generated code: velox-graphql's Update drops its input's setter of a
-// column the application's own setter assigns, which an UPDATE refuses to
-// assign twice.
-func (s Setter[E]) Column[_ Lazy[E]]() int { return s.a.Column }
+// of one column have the same Column, which an UPDATE refuses to assign
+// twice. A relation handle's Set assigns its foreign key's column; it is -1
+// for any other edge setter.
+func (s Setter[E]) Column[_ Lazy[E]]() int {
+	if e := engine.EdgeOf(s.a); e != nil {
+		return e.Column()
+	}
+	return s.a.Column
+}
 
 // And is true when every p is. And of nothing is true. An Allow among the ps
 // adds nothing: And of only Allows is Allow, and And(Allow(), x) is x.

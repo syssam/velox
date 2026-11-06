@@ -47,6 +47,19 @@ func EdgeAssignment(ref RelRef, op EdgeOp, keys []any) Assignment {
 	return Assignment{Column: -1, Op: AssignEdge, Value: &EdgeSet{Ref: ref, Op: op, Keys: keys}}
 }
 
+// Column is the owner's column e assigns: the foreign key of a Set edge
+// setter whose edge resolves, else -1.
+func (e *EdgeSet) Column() int {
+	if e.Op != EdgeSetKey {
+		return -1
+	}
+	l, err := e.Ref.Link()
+	if err != nil {
+		return -1
+	}
+	return l.OwnerCol
+}
+
 // EdgeOf is the edge setter a holds, or nil for a column's assignment.
 func EdgeOf(a Assignment) *EdgeSet {
 	if a.Op != AssignEdge {
