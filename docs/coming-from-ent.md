@@ -269,6 +269,14 @@ a table rebuild on SQLite.
   As in entgql, a null in an input is a field not given; `clear<Field>:
   true` sets NULL. No delete is generated: a delete is the application's
   `db.Delete[T]()`.
+- **Paginate takes the query.** Where entgql's resolver calls
+  `client.Todo.Query().Paginate(ctx, after, first, before, last,
+  ent.WithTodoOrder(orderBy), ent.WithTodoFilter(where.Filter))`, velox's
+  calls `gen.PaginateTodos(ctx, db.Query[gen.Todo](), after, first, before,
+  last, orderBy, where)`, with `db` from `veloxgql.DBFromContext(ctx)`. The
+  query may carry the application's own filters; it must not be ordered.
+  A where input's `Pred(ctx)` is entgql's `P()`: a `velox.Pred[T]` for any
+  query.
 - **JSON lists are GraphQL lists.** A JSON field of `[]string`, `[]int`,
   `[]int64`, `[]float64` or `[]bool` (`field.Strings` and the like) is
   `[String!]` and so on, as in entgql, in the type and in the inputs. Other JSON

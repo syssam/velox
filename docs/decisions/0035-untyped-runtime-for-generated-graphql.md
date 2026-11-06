@@ -1,6 +1,7 @@
 # 35. Generated GraphQL code runs on an untyped runtime over the same engine
 
-Status: accepted, 2026-11-03. Builds on 0020 and 0033.
+Status: accepted, 2026-11-03. Builds on 0020 and 0033. Its generated read
+surface (`XsConnectionOf`, `PredicateGQL`) is revised by 0046.
 
 ## Context
 
