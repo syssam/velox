@@ -12,22 +12,15 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion12
+const _ = veloxgql.GeneratedCodeIsVersion13
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
 func (*Post) IsNode() {}
 
-// IDGQL is the global ID of the Post, the GraphQL field id.
-func (x *Post) IDGQL() string { return veloxgql.EncodeID("Post", x.ID) }
-
-// postNodeGQL is the Node type Post for Node and Nodes.
-func postNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[int64](&postConnGQL)
-}
-
-// postKeyGQL is the key of x, a Post.
-func postKeyGQL(x *Post) int64 { return x.ID }
+// GlobalID is the global ID of the Post, the GraphQL field id: its type and
+// key, opaque to the client.
+func (x *Post) GlobalID() string { return veloxgql.EncodeID("Post", x.ID) }
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -54,18 +47,18 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 	return nil
 }
 
-// AuthorGQL is the edge author: the User it leads to, or nil. It is read in one
+// Author is the edge author: the User it leads to, or nil. It is read in one
 // query with the edge of every row read with x.
-func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
+func (x *Post) Author(ctx context.Context) (*User, error) {
 	v, err := gqlimpl.EdgeOne(ctx, &userConnGQL, &postConnGQL, x, postEdgeAuthor, "Post.author")
 	n, _ := v.(*User)
 	return n, err
 }
 
-// TagsGQL is the edge tags: a connection to the Label nodes it leads to. Its
+// Tags is the edge tags: a connection to the Label nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *Post) TagsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
+func (x *Post) Tags(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	c, err := LabelsConnection(ctx, after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err

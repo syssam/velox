@@ -14,8 +14,8 @@ import (
 type Noder interface {
 	// IsNode marks the type as a Node.
 	IsNode()
-	// IDGQL is the node's ID, EncodeID of its GraphQL type and its key.
-	IDGQL() string
+	// GlobalID is the node's ID, EncodeID of its GraphQL type and its key.
+	GlobalID() string
 }
 
 // EncodeID returns the global ID of the row of the GraphQL type typ whose

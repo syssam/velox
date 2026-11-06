@@ -52,9 +52,9 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Label struct {
-		IDGQL    func(childComplexity int) int
+		GlobalID func(childComplexity int) int
 		Name     func(childComplexity int) int
-		PostsGQL func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
+		Posts    func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
 		Rank     func(childComplexity int) int
 	}
 
@@ -87,11 +87,11 @@ type ComplexityRoot struct {
 	}
 
 	Post struct {
-		AuthorGQL   func(childComplexity int) int
-		IDGQL       func(childComplexity int) int
+		Author      func(childComplexity int) int
+		GlobalID    func(childComplexity int) int
 		PublishedAt func(childComplexity int) int
 		Status      func(childComplexity int) int
-		TagsGQL     func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) int
+		Tags        func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) int
 		Title       func(childComplexity int) int
 		Views       func(childComplexity int) int
 	}
@@ -118,11 +118,11 @@ type ComplexityRoot struct {
 
 	User struct {
 		Email    func(childComplexity int) int
-		IDGQL    func(childComplexity int) int
+		GlobalID func(childComplexity int) int
 		Initials func(childComplexity int) int
 		JoinedAt func(childComplexity int) int
 		Name     func(childComplexity int) int
-		PostsGQL func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
+		Posts    func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
 		Role     func(childComplexity int) int
 	}
 
@@ -179,11 +179,11 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	switch typeName + "." + field {
 
 	case "Label.id":
-		if e.complexity.Label.IDGQL == nil {
+		if e.complexity.Label.GlobalID == nil {
 			break
 		}
 
-		return e.complexity.Label.IDGQL(childComplexity), true
+		return e.complexity.Label.GlobalID(childComplexity), true
 	case "Label.name":
 		if e.complexity.Label.Name == nil {
 			break
@@ -191,7 +191,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Label.Name(childComplexity), true
 	case "Label.posts":
-		if e.complexity.Label.PostsGQL == nil {
+		if e.complexity.Label.Posts == nil {
 			break
 		}
 
@@ -200,7 +200,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Label.PostsGQL(childComplexity, args["after"].(*veloxgql.Cursor), args["first"].(*int), args["before"].(*veloxgql.Cursor), args["last"].(*int), args["orderBy"].([]*gen.PostOrder), args["where"].(*gen.PostWhereInput)), true
+		return e.complexity.Label.Posts(childComplexity, args["after"].(*veloxgql.Cursor), args["first"].(*int), args["before"].(*veloxgql.Cursor), args["last"].(*int), args["orderBy"].([]*gen.PostOrder), args["where"].(*gen.PostWhereInput)), true
 	case "Label.rank":
 		if e.complexity.Label.Rank == nil {
 			break
@@ -344,17 +344,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		return e.complexity.PageInfo.StartCursor(childComplexity), true
 
 	case "Post.author":
-		if e.complexity.Post.AuthorGQL == nil {
+		if e.complexity.Post.Author == nil {
 			break
 		}
 
-		return e.complexity.Post.AuthorGQL(childComplexity), true
+		return e.complexity.Post.Author(childComplexity), true
 	case "Post.id":
-		if e.complexity.Post.IDGQL == nil {
+		if e.complexity.Post.GlobalID == nil {
 			break
 		}
 
-		return e.complexity.Post.IDGQL(childComplexity), true
+		return e.complexity.Post.GlobalID(childComplexity), true
 	case "Post.publishedAt":
 		if e.complexity.Post.PublishedAt == nil {
 			break
@@ -368,7 +368,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Post.Status(childComplexity), true
 	case "Post.tags":
-		if e.complexity.Post.TagsGQL == nil {
+		if e.complexity.Post.Tags == nil {
 			break
 		}
 
@@ -377,7 +377,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Post.TagsGQL(childComplexity, args["after"].(*veloxgql.Cursor), args["first"].(*int), args["before"].(*veloxgql.Cursor), args["last"].(*int), args["orderBy"].(*gen.LabelOrder), args["where"].(*gen.LabelWhereInput)), true
+		return e.complexity.Post.Tags(childComplexity, args["after"].(*veloxgql.Cursor), args["first"].(*int), args["before"].(*veloxgql.Cursor), args["last"].(*int), args["orderBy"].(*gen.LabelOrder), args["where"].(*gen.LabelWhereInput)), true
 	case "Post.title":
 		if e.complexity.Post.Title == nil {
 			break
@@ -497,11 +497,11 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.User.Email(childComplexity), true
 	case "User.id":
-		if e.complexity.User.IDGQL == nil {
+		if e.complexity.User.GlobalID == nil {
 			break
 		}
 
-		return e.complexity.User.IDGQL(childComplexity), true
+		return e.complexity.User.GlobalID(childComplexity), true
 	case "User.initials":
 		if e.complexity.User.Initials == nil {
 			break
@@ -521,7 +521,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.User.Name(childComplexity), true
 	case "User.posts":
-		if e.complexity.User.PostsGQL == nil {
+		if e.complexity.User.Posts == nil {
 			break
 		}
 
@@ -530,7 +530,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.User.PostsGQL(childComplexity, args["after"].(*veloxgql.Cursor), args["first"].(*int), args["before"].(*veloxgql.Cursor), args["last"].(*int), args["orderBy"].([]*gen.PostOrder), args["where"].(*gen.PostWhereInput)), true
+		return e.complexity.User.Posts(childComplexity, args["after"].(*veloxgql.Cursor), args["first"].(*int), args["before"].(*veloxgql.Cursor), args["last"].(*int), args["orderBy"].([]*gen.PostOrder), args["where"].(*gen.PostWhereInput)), true
 	case "User.role":
 		if e.complexity.User.Role == nil {
 			break
@@ -765,13 +765,13 @@ type Query {
 # Post
 
 type Post implements Node {
-  id: ID! @goField(name: "IDGQL")
+  id: ID! @goField(name: "GlobalID")
   title: String!
   status: PostStatus!
   views: Int!
   publishedAt: Time
-  author: User @goField(name: "AuthorGQL")
-  tags(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: LabelOrder, where: LabelWhereInput): LabelConnection! @goField(name: "TagsGQL")
+  author: User
+  tags(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: LabelOrder, where: LabelWhereInput): LabelConnection!
 }
 
 enum PostStatus {
@@ -877,10 +877,10 @@ input UpdatePostInput {
 # Tag, as the type Label
 
 type Label implements Node {
-  id: ID! @goField(name: "IDGQL")
+  id: ID! @goField(name: "GlobalID")
   name: String!
   rank: Int!
-  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "PostsGQL")
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
 }
 
 """A connection to a list of Label."""
@@ -963,12 +963,12 @@ input UpdateLabelInput {
 # User
 
 type User implements Node {
-  id: ID! @goField(name: "IDGQL")
+  id: ID! @goField(name: "GlobalID")
   name: String!
   email: String! @admin
   role: UserRole!
   joinedAt: Time!
-  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "PostsGQL")
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
 }
 
 enum UserRole {
@@ -1505,7 +1505,7 @@ func (ec *executionContext) _Label_id(ctx context.Context, field graphql.Collect
 		field,
 		ec.fieldContext_Label_id,
 		func(ctx context.Context) (any, error) {
-			return obj.IDGQL(), nil
+			return obj.GlobalID(), nil
 		},
 		nil,
 		ec.marshalNID2string,
@@ -1593,7 +1593,7 @@ func (ec *executionContext) _Label_posts(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Label_posts,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return obj.PostsGQL(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].([]*gen.PostOrder), fc.Args["where"].(*gen.PostWhereInput))
+			return obj.Posts(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].([]*gen.PostOrder), fc.Args["where"].(*gen.PostWhereInput))
 		},
 		nil,
 		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostConnection,
@@ -2299,7 +2299,7 @@ func (ec *executionContext) _Post_id(ctx context.Context, field graphql.Collecte
 		field,
 		ec.fieldContext_Post_id,
 		func(ctx context.Context) (any, error) {
-			return obj.IDGQL(), nil
+			return obj.GlobalID(), nil
 		},
 		nil,
 		ec.marshalNID2string,
@@ -2444,7 +2444,7 @@ func (ec *executionContext) _Post_author(ctx context.Context, field graphql.Coll
 		field,
 		ec.fieldContext_Post_author,
 		func(ctx context.Context) (any, error) {
-			return obj.AuthorGQL(ctx)
+			return obj.Author(ctx)
 		},
 		nil,
 		ec.marshalOUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser,
@@ -2490,7 +2490,7 @@ func (ec *executionContext) _Post_tags(ctx context.Context, field graphql.Collec
 		ec.fieldContext_Post_tags,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return obj.TagsGQL(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*gen.LabelOrder), fc.Args["where"].(*gen.LabelWhereInput))
+			return obj.Tags(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*gen.LabelOrder), fc.Args["where"].(*gen.LabelWhereInput))
 		},
 		nil,
 		ec.marshalNLabelConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelConnection,
@@ -3101,7 +3101,7 @@ func (ec *executionContext) _User_id(ctx context.Context, field graphql.Collecte
 		field,
 		ec.fieldContext_User_id,
 		func(ctx context.Context) (any, error) {
-			return obj.IDGQL(), nil
+			return obj.GlobalID(), nil
 		},
 		nil,
 		ec.marshalNID2string,
@@ -3260,7 +3260,7 @@ func (ec *executionContext) _User_posts(ctx context.Context, field graphql.Colle
 		ec.fieldContext_User_posts,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return obj.PostsGQL(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].([]*gen.PostOrder), fc.Args["where"].(*gen.PostWhereInput))
+			return obj.Posts(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].([]*gen.PostOrder), fc.Args["where"].(*gen.PostWhereInput))
 		},
 		nil,
 		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostConnection,

@@ -112,11 +112,11 @@ func TestSurfaceEdges(t *testing.T) {
 		}
 	}
 	want := map[string][]string{
-		"Account":  {"posts connection Post PostsGQL", "groups list Group GroupsGQL", "likes connection Like LikesGQL"},
-		"Post":     {"author unique Account AuthorGQL", "likes list Like LikesGQL", "related connection Post RelatedGQL", "related_by connection Post RelatedByGQL"},
-		"Category": {"children connection Category ChildrenGQL", "parent unique Category ParentGQL"},
-		"Group":    {"users connection Account UsersGQL"},
-		"Like":     {"user unique Account UserGQL", "post unique Post PostGQL"},
+		"Account":  {"posts connection Post Posts", "groups list Group Groups", "likes connection Like Likes"},
+		"Post":     {"author unique Account Author", "likes list Like Likes", "related connection Post Related", "related_by connection Post RelatedBy"},
+		"Category": {"children connection Category Children", "parent unique Category Parent"},
+		"Group":    {"users connection Account Users"},
+		"Like":     {"user unique Account User", "post unique Post Post"},
 	}
 	for name, w := range want {
 		if g := got[name]; !slices.Equal(g, w) {

@@ -131,8 +131,14 @@
 // WhereOps on the key chooses its predicates instead, and Skip(SkipWhereInput)
 // on it drops them. The key alone does not give an entity a where input.
 //
-// The SDL binds to Go by gqlgen's @goField directive (a node's id to IDGQL, an
-// edge to <Edge>GQL) and by enum names (velox-gen's Go enum types).
+// The SDL binds to Go by gqlgen's own matching of names, and by its @goField
+// directive where the names differ: a node's id to GlobalID, since the
+// struct's ID is the raw key, and a field whose Go type its scalar does not
+// bind to its <Field>GQL getter. An edge binds to the method of its Go
+// name, Author or Tags, as entgql's does: the relations are in the
+// struct's Edges field, so the name is free. An edge with graphql.MaxList
+// keeps @goField, which holds the limit. Enums bind by name (velox-gen's
+// Go enum types).
 // velox.graphql declares the directives @goField and @goModel itself, as
 // gqlgen documents them (gqlgen v0.17.86, docs/content/config.md), so the
 // application must not redeclare them: a second declaration fails gqlgen's
@@ -146,11 +152,11 @@
 // The plugin also writes the Go that gqlgen's autobind binds the SDL's types
 // to, in the generated package: gen/<label>_gql.go for each entity with a
 // type, and gen/node_gql.go with Node and Nodes. Each entity's file has:
-//   - IsNode and IDGQL on a Node, and the <Field>GQL getters;
+//   - IsNode and GlobalID on a Node, and the <Field>GQL getters;
 //   - the connection, edge, order and where types, each named after its
 //     GraphQL type, and the marshalers of velox-gen's enum types;
-//   - the <Edge>GQL edge methods: a connection, a list or the one node,
-//     each read for every row of its batch in one statement;
+//   - the edge methods, named after the edges: a connection, a list or the
+//     one node, each read for every row of its batch in one statement;
 //   - the root connection function <GoPlural>Connection, named after ent's
 //     plural of the GraphQL type (UsersConnection for User,
 //     StatusSliceConnection for Status, AccountsConnection for a User exposed
@@ -160,7 +166,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion12", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion13", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"

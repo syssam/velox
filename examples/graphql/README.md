@@ -126,8 +126,9 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    }
    ```
 
-   Every other field binds to `gen`'s methods: edges are `<Edge>GQL`
-   methods on the entities, connections are lazy (`totalCount` alone runs one
+   Every other field binds to `gen`'s methods: an edge is the method of its
+   name on the entity, `Post.Author(ctx)`, as entgql's is, and `id` is
+   `GlobalID()`; connections are lazy (`totalCount` alone runs one
    `COUNT`, and no page query).
 6. `main.go`: gqlgen's server with `veloxgql.NewExtension(db)` first, which
    puts the DB and the limits in each operation's context (and runs a

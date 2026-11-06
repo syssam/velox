@@ -9,22 +9,15 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion12
+const _ = veloxgql.GeneratedCodeIsVersion13
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
 func (*Group) IsNode() {}
 
-// IDGQL is the global ID of the Group, the GraphQL field id.
-func (x *Group) IDGQL() string { return veloxgql.EncodeID("Group", x.ID) }
-
-// groupNodeGQL is the Node type Group for Node and Nodes.
-func groupNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[int64](&groupConnGQL)
-}
-
-// groupKeyGQL is the key of x, a Group.
-func groupKeyGQL(x *Group) int64 { return x.ID }
+// GlobalID is the global ID of the Group, the GraphQL field id: its type and
+// key, opaque to the client.
+func (x *Group) GlobalID() string { return veloxgql.EncodeID("Group", x.ID) }
 
 // MarshalGQL writes e as a GraphQL String, its stored value: the field
 // visibility of Group is a String, as graphql.Skip(graphql.SkipEnumField) asks.
@@ -52,10 +45,10 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 	return nil
 }
 
-// UsersGQL is the edge users: a connection to the Account nodes it leads to.
-// Its queries batch with the edge of every row read with x; see
+// Users is the edge users: a connection to the Account nodes it leads to. Its
+// queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
+func (x *Group) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
 	c, err := AccountsConnection(ctx, after, first, before, last, where)
 	if err != nil {
 		return nil, err

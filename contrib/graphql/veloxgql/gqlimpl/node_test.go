@@ -14,7 +14,7 @@ import (
 
 func (*post) IsNode() {}
 
-func (x *post) IDGQL() string { return veloxgql.EncodeID("Post", x.ID) }
+func (x *post) GlobalID() string { return veloxgql.EncodeID("Post", x.ID) }
 
 // postKind is post as a Node type, as the generated code writes it.
 func postKind() gqlimpl.NodeKind {

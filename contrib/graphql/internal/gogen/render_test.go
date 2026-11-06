@@ -253,7 +253,7 @@ func TestNamesMatchSDL(t *testing.T) {
 //     the plugin or velox-gen, is listed here with the reason;
 //   - every @goField(name:) names a Go field or method of the bound type;
 //   - the types that implement Node in the SDL are those whose Go type has
-//     IsNode and IDGQL, and Node and Nodes are written.
+//     IsNode and GlobalID, and Node and Nodes are written.
 func checkNames(t *testing.T, m *plugin.Model, others ...string) {
 	t.Helper()
 	sdlText, err := sdl.Render(m)
@@ -346,9 +346,9 @@ func checkNames(t *testing.T, m *plugin.Model, others ...string) {
 			}
 			// Node in the SDL is a veloxgql.Noder in Go, both ways.
 			ms := methodsOf(e.Name)
-			goNode := slices.Contains(ms, "IsNode") && slices.Contains(ms, "IDGQL")
+			goNode := slices.Contains(ms, "IsNode") && slices.Contains(ms, "GlobalID")
 			if sdlNode := slices.Contains(def.Interfaces, "Node"); sdlNode != goNode {
-				t.Errorf("%s implements Node in the SDL: %v; %s has IsNode and IDGQL: %v", name, sdlNode, e.Name, goNode)
+				t.Errorf("%s implements Node in the SDL: %v; %s has IsNode and GlobalID: %v", name, sdlNode, e.Name, goNode)
 			}
 		}
 		gt := d.types[name]
@@ -476,7 +476,7 @@ func TestGoTypes(t *testing.T) {
 	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
 	ev, owner, node := squash(files["event_gql.go"]), squash(files["owner_gql.go"]), squash(files["node_gql.go"])
 	for _, want := range []string{
-		`func (x *Event) IDGQL() string { return veloxgql.EncodeID("Event", [16]byte(x.ID)) }`,
+		`func (x *Event) GlobalID() string { return veloxgql.EncodeID("Event", [16]byte(x.ID)) }`,
 		// The columns' own Go types, which bind through veloxgql's function
 		// marshalers and gqlgen's.
 		" ID *string ", " IDNEQ *string ", " IDIn []string ",
@@ -519,7 +519,7 @@ func TestGoTypes(t *testing.T) {
 		t.Errorf("a marshaler on the application's own enum type:\n%s", ev)
 	}
 	for _, want := range []string{
-		`func (x *Owner) IDGQL() string { return veloxgql.EncodeID("Owner", int64(x.ID)) }`,
+		`func (x *Owner) GlobalID() string { return veloxgql.EncodeID("Owner", int64(x.ID)) }`,
 		// A field of the application's own Go type binds through a getter.
 		"func (x *Owner) CodeGQL() string { return string(x.Code) }",
 		"func (x *Owner) EmailGQL() *string { if x.Email == nil { return nil } v := string(*x.Email) return &v }",
@@ -544,19 +544,13 @@ func TestGoTypes(t *testing.T) {
 	// decodes to and the Go type of the column.
 	for file, wants := range map[string][]string{
 		ev: {
-			"func eventNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNodeAs[[16]byte, uuid.UUID](&eventConnGQL, gqlimpl.AsUUID[uuid.UUID, [16]byte]) }",
-			"func eventKeyGQL(x *Event) uuid.UUID { return x.ID }",
 			` "github.com/google/uuid" `,
 			" Type: \"Event\", Table: velox.TableOf[Event], ",
 			" Columns: eventColumnsGQL, } ",
 		},
-		owner: {
-			"func ownerNodeGQL() gqlimpl.NodeKind { return gqlimpl.NewNodeAs[int64, idspkg.UserID](&ownerConnGQL, gqlimpl.AsInt[idspkg.UserID, int64]) }",
-			"func ownerKeyGQL(x *Owner) idspkg.UserID { return x.ID }",
-		},
 		node: {
-			`case "Event": return eventNodeGQL(), true`,
-			`case "Owner": return ownerNodeGQL(), true`,
+			`case "Event": return gqlimpl.NewNodeAs[[16]byte, uuid.UUID](&eventConnGQL, gqlimpl.AsUUID[uuid.UUID, [16]byte]), true`,
+			`case "Owner": return gqlimpl.NewNodeAs[int64, idspkg.UserID](&ownerConnGQL, gqlimpl.AsInt[idspkg.UserID, int64]), true`,
 			"return gqlimpl.NodeByID(ctx, id, nodeKindGQL)",
 			"return gqlimpl.NodesByID(ctx, ids, nodeKindGQL)",
 		},
@@ -635,12 +629,12 @@ func TestRenderErrors(t *testing.T) {
 		"a struct for a time": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Kind: "struct"})}},
 			"schema Thing, field at: velox-graphql converts a time field only from time.Time, and its Go type is types.Stamp"},
-		// A Node type writes thingNodeGQL, beside the names velox-gen declares.
-		"a handles variable named as a Node type's function": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
+		// A type writes thingConnGQL, beside the names velox-gen declares.
+		"a handles variable named as a type's connection variable": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Thing", "int64")
-			e.Handles = "thingNodeGQL"
+			e.Handles = "thingConnGQL"
 			return e
-		}()}}, "schema Thing: its Go name thingNodeGQL is also velox-gen's handles of schema Thing"},
+		}()}}, "its Go name thingConnGQL is also velox-gen's handles of schema Thing"},
 		"a handles variable named as node_gql.go's lookup": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Thing", "int64")
 			e.Handles = "nodeKindGQL"
@@ -727,7 +721,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion12\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion13\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1347,9 +1341,9 @@ func TestEdgesBatch(t *testing.T) {
 		}
 	}
 	// A key held in a pointer on the owner's row: a NULL sends no statement.
-	src := funcSrc(t, render(t, typesModel(t)), "Event.OwnerGQL")
+	src := funcSrc(t, render(t, typesModel(t)), "Event.Owner")
 	if i, j := strings.Index(src, "if x.OwnerID == nil { return nil, nil }"), strings.Index(src, "gqlimpl.EdgeOne("); i < 0 || j < i {
-		t.Errorf("Event.OwnerGQL does not return nil for a NULL key before EdgeOne:\n%s", src)
+		t.Errorf("Event.Owner does not return nil for a NULL key before EdgeOne:\n%s", src)
 	}
 }
 
@@ -1481,9 +1475,9 @@ func TestM2MWithoutInverse(t *testing.T) {
 	author := entity("Author")
 	author.Edges = []*plugin.Edge{{Name: "books", GoName: "Books", Target: "Book", Kind: plugin.M2M, Join: "AuthorBook"}}
 	files := render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{author, entity("Book")}})
-	src := funcSrc(t, files, "Author.BooksGQL")
+	src := funcSrc(t, files, "Author.Books")
 	if !strings.Contains(src, "gqlimpl.EdgeConnection(ctx, c.c, &authorConnGQL, x, authorEdgeBooks, \"Author.books\", []any{after, first, before, last") {
-		t.Errorf("Author.BooksGQL:\n%s", src)
+		t.Errorf("Author.Books:\n%s", src)
 	}
 }
 
@@ -1619,7 +1613,7 @@ func TestRepointO2OOrder(t *testing.T) {
 // TestMethodNameTaken: a field or an edge whose Go name is a method the plugin writes on
 // the row is refused here, naming it, where it failed in gqlgen's build.
 func TestMethodNameTaken(t *testing.T) {
-	for _, name := range []struct{ name, goName string }{{"is_node", "IsNode"}, {"id_gql", "IDGQL"}, {"title_gql", "TitleGQL"}} {
+	for _, name := range []struct{ name, goName string }{{"is_node", "IsNode"}, {"global_id", "GlobalID"}, {"title_gql", "TitleGQL"}} {
 		m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 			Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
 			Fields: []*plugin.Field{
@@ -1671,9 +1665,19 @@ func TestPackageNamedAsALocal(t *testing.T) {
 			Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
 			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", GoType: pkg + ".ID", ElemType: pkg + ".ID", PkgPath: "example.com/" + pkg, Kind: "int64"}},
 		}}}
-		src := render(t, m)["thing_gql.go"]
-		if want := pkg + `pkg "example.com/` + pkg + `"`; !strings.Contains(src, want) {
-			t.Errorf("package %s: no import %q in\n%s", pkg, want, src)
+		files := render(t, m)
+		want := pkg + `pkg "example.com/` + pkg + `"`
+		var n int
+		for name, src := range files {
+			if strings.Contains(src, `"example.com/`+pkg+`"`) {
+				n++
+				if !strings.Contains(src, want) {
+					t.Errorf("package %s: %s imports it, not as %q:\n%s", pkg, name, want, src)
+				}
+			}
+		}
+		if n == 0 {
+			t.Errorf("package %s: no file imports it", pkg)
 		}
 	}
 }

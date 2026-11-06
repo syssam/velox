@@ -275,7 +275,7 @@ func TestWhereCarriesDirectives(t *testing.T) {
 				t.Errorf("%s: %v, want [@admin]\n%s", name, d, sdl)
 			}
 		}
-		if d := dirsOf(s, "User", "posts"); !slices.Equal(d, []string{"@goField", "@admin"}) {
+		if d := dirsOf(s, "User", "posts"); !slices.Equal(d, []string{"@admin"}) {
 			t.Errorf("User.posts: %v", d)
 		}
 	})

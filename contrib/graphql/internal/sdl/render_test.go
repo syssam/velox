@@ -372,9 +372,9 @@ func TestTypeMapping(t *testing.T) {
 	if got := typeOf(s, "User", "id"); got != "ID!" {
 		t.Errorf("id: %s", got)
 	}
-	// The id is the opaque global ID, from the method IDGQL, not the raw key
+	// The id is the opaque global ID, from the method GlobalID, not the raw key
 	// in the struct's ID field.
-	if got := goField(s, "User", "id"); got != "IDGQL" {
+	if got := goField(s, "User", "id"); got != "GlobalID" {
 		t.Errorf("id binds to %q", got)
 	}
 	if got := s.Types["User"].Interfaces; !slices.Equal(got, []string{"Node"}) {
@@ -544,7 +544,8 @@ func TestTypeMapping(t *testing.T) {
 		if got := goField(s, "User", "createdAt"); got != "" {
 			t.Errorf("createdAt binds to %q", got)
 		}
-		if got := goField(s, "User", "articles"); got != "PostsGQL" {
+		// A renamed edge's field is not its method's name, so @goField names it.
+		if got := goField(s, "User", "articles"); got != "Posts" {
 			t.Errorf("articles binds to %q", got)
 		}
 	})
@@ -625,8 +626,8 @@ func TestEdgeMaxList(t *testing.T) {
 	m := model(entity("Group"), user)
 	_, got := load(t, m)
 	for _, want := range []string{
-		`friends: [Group!]! @goField(name: "FriendsGQL", maxList: 5)`,
-		`tags: [Group!]! @goField(name: "TagsGQL")`,
+		`friends: [Group!]! @goField(name: "Friends", maxList: 5)`,
+		"tags: [Group!]!\n",
 		`directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on`,
 	} {
 		if !strings.Contains(got, want) {
@@ -674,18 +675,20 @@ func TestEdges(t *testing.T) {
 	desk.Edges = []*plugin.Edge{dc}
 	s, _ := load(t, model(cat, entity("Group"), post, entity("Profile"), user, folder(t), chair, desk))
 
+	// gqlgen binds each edge to the method its name matches, so no
+	// @goField names one.
 	for _, c := range [][4]string{
-		{"Category", "parent", "Category", "ParentGQL"},
-		{"Category", "children", "CategoryConnection!", "ChildrenGQL"},
-		{"Post", "author", "User", "AuthorGQL"},
-		{"Folder", "parent", "Folder", "ParentGQL"},
-		{"Folder", "prev", "Folder", "PrevGQL"},
-		{"Folder", "next", "Folder", "NextGQL"},
-		{"Desk", "chair", "Chair", "ChairGQL"},
-		{"User", "posts", "PostConnection!", "PostsGQL"},
-		{"User", "groups", "GroupConnection!", "GroupsGQL"},
-		{"User", "profile", "Profile", "ProfileGQL"},
-		{"User", "tags", "[Group!]!", "TagsGQL"},
+		{"Category", "parent", "Category", ""},
+		{"Category", "children", "CategoryConnection!", ""},
+		{"Post", "author", "User", ""},
+		{"Folder", "parent", "Folder", ""},
+		{"Folder", "prev", "Folder", ""},
+		{"Folder", "next", "Folder", ""},
+		{"Desk", "chair", "Chair", ""},
+		{"User", "posts", "PostConnection!", ""},
+		{"User", "groups", "GroupConnection!", ""},
+		{"User", "profile", "Profile", ""},
+		{"User", "tags", "[Group!]!", ""},
 	} {
 		if got := typeOf(s, c[0], c[1]); got != c[2] {
 			t.Errorf("%s.%s: %q, want %q", c[0], c[1], got, c[2])
@@ -830,7 +833,7 @@ input Opts { a: Boolean, b: String }
 	if !strings.Contains(sdl, `@auth(any: [1, 2], n: null, off: false, opts: {a: true, b: "x"}, role: "a \"b\"\n\\c")`) {
 		t.Errorf("arguments are not in name order:\n%s", sdl)
 	}
-	if f := s.Types["User"].Fields.ForName("posts"); f.Directives.ForName("auth") == nil || f.Directives.ForName("goField") == nil {
+	if f := s.Types["User"].Fields.ForName("posts"); f.Directives.ForName("auth") == nil || f.Directives.ForName("goField") != nil {
 		t.Errorf("edge directives:\n%s", sdl)
 	}
 
@@ -870,7 +873,7 @@ func TestDirectiveValidation(t *testing.T) {
 	// Valid: @deprecated where it applies, and the application's own
 	// directives, which the plugin cannot check.
 	_, sdl := load(t, build(nil, dep(map[string]any{"reason": "old"}), []graphql.Directive{{Name: "cost"}}), "directive @cost on FIELD_DEFINITION")
-	if !strings.Contains(sdl, `name: String! @deprecated(reason: "old")`) || !strings.Contains(sdl, `@goField(name: "PostsGQL") @cost`) {
+	if !strings.Contains(sdl, `name: String! @deprecated(reason: "old")`) || !strings.Contains(sdl, `): UserConnection! @cost`) {
 		t.Errorf("directives:\n%s", sdl)
 	}
 }

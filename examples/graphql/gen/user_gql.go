@@ -13,22 +13,15 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion12
+const _ = veloxgql.GeneratedCodeIsVersion13
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
 func (*User) IsNode() {}
 
-// IDGQL is the global ID of the User, the GraphQL field id.
-func (x *User) IDGQL() string { return veloxgql.EncodeID("User", x.ID) }
-
-// userNodeGQL is the Node type User for Node and Nodes.
-func userNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[int64](&userConnGQL)
-}
-
-// userKeyGQL is the key of x, a User.
-func userKeyGQL(x *User) int64 { return x.ID }
+// GlobalID is the global ID of the User, the GraphQL field id: its type and
+// key, opaque to the client.
+func (x *User) GlobalID() string { return veloxgql.EncodeID("User", x.ID) }
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -55,10 +48,10 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 	return nil
 }
 
-// PostsGQL is the edge posts: a connection to the Post nodes it leads to. Its
+// Posts is the edge posts: a connection to the Post nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+func (x *User) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	c, err := PostsConnection(ctx, after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err

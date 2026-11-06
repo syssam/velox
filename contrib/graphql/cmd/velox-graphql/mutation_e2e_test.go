@@ -1972,11 +1972,11 @@ func TestRequiredSelfEdge(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if p, err := c.ParentGQL(e.ctx); p != nil || err != nil {
-			t.Errorf("c's ParentGQL after r's delete = %v, %v; want nil, nil", p, err)
+		if p, err := c.Parent(e.ctx); p != nil || err != nil {
+			t.Errorf("c's Parent after r's delete = %v, %v; want nil, nil", p, err)
 		}
-		if p, err := c.PrevGQL(e.ctx); p != nil || err != nil {
-			t.Errorf("c's PrevGQL after r's delete = %v, %v; want nil, nil", p, err)
+		if p, err := c.Prev(e.ctx); p != nil || err != nil {
+			t.Errorf("c's Prev after r's delete = %v, %v; want nil, nil", p, err)
 		}
 
 		// The owning side's update sets its prev: a free folder s takes it, and
@@ -2083,14 +2083,14 @@ func wantPeers(t *testing.T, e *env, when string, pairs ...[2]int64) {
 	}
 }
 
-// peersGQL are the IDs of the writers PeersGQL of writer id lists.
+// peersGQL are the IDs of the writers Peers of writer id lists.
 func peersGQL(t *testing.T, e *env, id int64) []int64 {
 	t.Helper()
 	w, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(id)).One(e.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := w.PeersGQL(e.ctx, nil, nil, nil, nil)
+	c, err := w.Peers(e.ctx, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2132,10 +2132,10 @@ func TestBidiPeers(t *testing.T) {
 		}
 		wantPeers(t, e, "a adds b", [2]int64{a.ID, b.ID}, [2]int64{b.ID, a.ID})
 		if got := peersGQL(t, e, b.ID); !slices.Equal(got, []int64{a.ID}) {
-			t.Errorf("b's PeersGQL: %v, want a %d", got, a.ID)
+			t.Errorf("b's Peers: %v, want a %d", got, a.ID)
 		}
 		if got := peersGQL(t, e, a.ID); !slices.Equal(got, []int64{b.ID}) {
-			t.Errorf("a's PeersGQL: %v, want b %d", got, b.ID)
+			t.Errorf("a's Peers: %v, want b %d", got, b.ID)
 		}
 
 		// Adding it again changes nothing.
@@ -2167,7 +2167,7 @@ func TestBidiPeers(t *testing.T) {
 		}
 		wantPeers(t, e, "c is created with a", [2]int64{a.ID, c.ID}, [2]int64{c.ID, a.ID})
 		if got := peersGQL(t, e, a.ID); !slices.Equal(got, []int64{c.ID}) {
-			t.Errorf("a's PeersGQL: %v, want c %d", got, c.ID)
+			t.Errorf("a's Peers: %v, want c %d", got, c.ID)
 		}
 	})
 }

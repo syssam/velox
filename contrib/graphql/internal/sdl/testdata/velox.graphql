@@ -65,11 +65,11 @@ type Query {
 
 """A category of posts, in a tree."""
 type Category implements Node {
-  id: ID! @goField(name: "IDGQL")
+  id: ID! @goField(name: "GlobalID")
   title: String!
   """The subcategories."""
-  children(after: Cursor, first: Int, before: Cursor, last: Int, where: CategoryWhereInput): CategoryConnection! @goField(name: "ChildrenGQL")
-  parent: Category @goField(name: "ParentGQL")
+  children(after: Cursor, first: Int, before: Cursor, last: Int, where: CategoryWhereInput): CategoryConnection!
+  parent: Category
 }
 
 """A connection to a list of Category."""
@@ -127,11 +127,11 @@ input UpdateCategoryInput {
 # Group
 
 type Group implements Node {
-  id: ID! @goField(name: "IDGQL")
+  id: ID! @goField(name: "GlobalID")
   name: String!
   """Who can see the group; a String, as its enum is skipped."""
   visibility: String!
-  users(after: Cursor, first: Int, before: Cursor, last: Int, where: AccountWhereInput): AccountConnection! @goField(name: "UsersGQL")
+  users(after: Cursor, first: Int, before: Cursor, last: Int, where: AccountWhereInput): AccountConnection!
 }
 
 """A connection to a list of Group."""
@@ -171,8 +171,8 @@ enum GroupOrderField {
 type Like {
   weight: Int!
   createdAt: Time!
-  user: Account @goField(name: "UserGQL")
-  post: Post @goField(name: "PostGQL")
+  user: Account
+  post: Post
 }
 
 """A connection to a list of Like."""
@@ -204,7 +204,7 @@ input CreateLikeInput {
 # Post
 
 type Post implements Node {
-  id: ID! @goField(name: "IDGQL")
+  id: ID! @goField(name: "GlobalID")
   title: String!
   slug: String!
   status: PostStatus!
@@ -215,11 +215,11 @@ type Post implements Node {
   """Who last edited the post; the update default fills it."""
   editedBy: String!
   """The user who wrote the post."""
-  writer: Account @goField(name: "AuthorGQL")
-  likes: [Like!]! @goField(name: "LikesGQL")
+  writer: Account @goField(name: "Author")
+  likes: [Like!]!
   """Posts this post links to; a join of Post to itself."""
-  related(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "RelatedGQL")
-  relatedBy(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "RelatedByGQL")
+  related(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
+  relatedBy(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
 }
 
 enum PostStatus {
@@ -348,7 +348,7 @@ User is a person who writes posts.
 Its GraphQL type is Account.
 """
 type Account implements Node {
-  id: ID! @goField(name: "IDGQL")
+  id: ID! @goField(name: "GlobalID")
   createdAt: Time!
   updatedAt: Time!
   """The display name."""
@@ -365,9 +365,9 @@ type Account implements Node {
   active: Boolean!
   settings: JSON @goField(name: "SettingsGQL")
   """The posts the user wrote."""
-  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "PostsGQL") @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
-  memberships: [Group!]! @goField(name: "GroupsGQL")
-  likes(after: Cursor, first: Int, before: Cursor, last: Int): LikeConnection! @goField(name: "LikesGQL")
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  memberships: [Group!]! @goField(name: "Groups")
+  likes(after: Cursor, first: Int, before: Cursor, last: Int): LikeConnection!
 }
 
 enum UserRole {

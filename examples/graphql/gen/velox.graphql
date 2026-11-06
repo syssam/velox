@@ -65,13 +65,13 @@ type Query {
 # Post
 
 type Post implements Node {
-  id: ID! @goField(name: "IDGQL")
+  id: ID! @goField(name: "GlobalID")
   title: String!
   status: PostStatus!
   views: Int!
   publishedAt: Time
-  author: User @goField(name: "AuthorGQL")
-  tags(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: LabelOrder, where: LabelWhereInput): LabelConnection! @goField(name: "TagsGQL")
+  author: User
+  tags(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: LabelOrder, where: LabelWhereInput): LabelConnection!
 }
 
 enum PostStatus {
@@ -177,10 +177,10 @@ input UpdatePostInput {
 # Tag, as the type Label
 
 type Label implements Node {
-  id: ID! @goField(name: "IDGQL")
+  id: ID! @goField(name: "GlobalID")
   name: String!
   rank: Int!
-  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "PostsGQL")
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
 }
 
 """A connection to a list of Label."""
@@ -263,12 +263,12 @@ input UpdateLabelInput {
 # User
 
 type User implements Node {
-  id: ID! @goField(name: "IDGQL")
+  id: ID! @goField(name: "GlobalID")
   name: String!
   email: String! @admin
   role: UserRole!
   joinedAt: Time!
-  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "PostsGQL")
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
 }
 
 enum UserRole {

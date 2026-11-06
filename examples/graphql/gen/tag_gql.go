@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion12
+const _ = veloxgql.GeneratedCodeIsVersion13
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -21,21 +21,14 @@ type Label = Tag
 // veloxgql.Noder.
 func (*Tag) IsNode() {}
 
-// IDGQL is the global ID of the Tag, the GraphQL field id.
-func (x *Tag) IDGQL() string { return veloxgql.EncodeID("Label", x.ID) }
+// GlobalID is the global ID of the Tag, the GraphQL field id: its type and key,
+// opaque to the client.
+func (x *Tag) GlobalID() string { return veloxgql.EncodeID("Label", x.ID) }
 
-// tagNodeGQL is the Node type Label for Node and Nodes.
-func tagNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[int64](&tagConnGQL)
-}
-
-// tagKeyGQL is the key of x, a Label.
-func tagKeyGQL(x *Tag) int64 { return x.ID }
-
-// PostsGQL is the edge posts: a connection to the Post nodes it leads to. Its
+// Posts is the edge posts: a connection to the Post nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *Tag) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+func (x *Tag) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	c, err := PostsConnection(ctx, after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err

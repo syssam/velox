@@ -145,7 +145,7 @@ func TestTagIDGT(t *testing.T) {
 		}
 	}
 	ctx := context.Background()
-	b := (&gen.Tag{ID: "b"}).IDGQL()
+	b := (&gen.Tag{ID: "b"}).GlobalID()
 	p, err := (&gen.TagWhereInput{IDGT: &b}).Pred(ctx)
 	if err != nil {
 		t.Fatal(err)

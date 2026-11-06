@@ -1086,7 +1086,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion12
+const GeneratedCodeIsVersion13
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string
@@ -1150,7 +1150,7 @@ type CursorTerm struct { Field string Direction OrderDirection Value any }
 type Extension struct { }
 type JSON json.RawMessage
 type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int MaxIntrospectionCost int MaxTokens int MaxFields int MaxFragments int MaxDepth int MaxNameBytes int MaxLiteralBytes int MaxVariableNodes int MaxErrors int MaxBodyBytes int MaxResponseBytes int Timeout time.Duration }
-type Noder interface { IsNode() IDGQL() string }
+type Noder interface { IsNode() GlobalID() string }
 type Option struct { }
 type OrderDirection string
 type PageInfo struct { HasNextPage bool HasPreviousPage bool StartCursor *Cursor EndCursor *Cursor }

@@ -111,7 +111,7 @@ type Edge struct {
 	Name   string // the GraphQL name of the field
 	Kind   EdgeKind
 	Target *Type  // the type of the edge's nodes
-	Method string // <GoName>GQL
+	Method string // the edge's Go name, the method gqlgen binds the field to
 	// MaxList is a list edge's graphql.MaxList; 0 when it has none.
 	MaxList int
 }
@@ -138,7 +138,7 @@ type Enum struct {
 // converts it to Returns.
 type Getter struct {
 	Field   int    // the index of the field in Entity.Fields
-	Method  string // <GoName>GQL
+	Method  string // <GoName>GQL: the struct has a field of the GoName
 	Returns string // the Go type it returns, as "veloxgql.Time" or "string"
 	Pkg     string // the import path of Returns' package; "" for a builtin type
 }
@@ -240,7 +240,7 @@ func Build(m *plugin.Model) (*Surface, error) {
 			}
 		}
 		for _, ef := range o.edges {
-			t.Edges = append(t.Edges, Edge{Edge: ef.edge, Name: ef.name, Kind: ef.kind, Target: types[ef.target], Method: o.ent.Edges[ef.edge].GoName + "GQL", MaxList: o.eanns[ef.edge].MaxList})
+			t.Edges = append(t.Edges, Edge{Edge: ef.edge, Name: ef.name, Kind: ef.kind, Target: types[ef.target], Method: o.ent.Edges[ef.edge].GoName, MaxList: o.eanns[ef.edge].MaxList})
 		}
 		s.Types = append(s.Types, t)
 	}

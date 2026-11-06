@@ -9,19 +9,19 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion12
+const _ = veloxgql.GeneratedCodeIsVersion13
 
-// UserGQL is the edge user: the Account it leads to, or nil. It is read in one
+// User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the edge of every row read with x.
-func (x *Like) UserGQL(ctx context.Context) (*User, error) {
+func (x *Like) User(ctx context.Context) (*User, error) {
 	v, err := gqlimpl.EdgeOne(ctx, &userConnGQL, &likeConnGQL, x, likeEdgeUser, "Like.user")
 	n, _ := v.(*User)
 	return n, err
 }
 
-// PostGQL is the edge post: the Post it leads to, or nil. It is read in one
-// query with the edge of every row read with x.
-func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
+// Post is the edge post: the Post it leads to, or nil. It is read in one query
+// with the edge of every row read with x.
+func (x *Like) Post(ctx context.Context) (*Post, error) {
 	v, err := gqlimpl.EdgeOne(ctx, &postConnGQL, &likeConnGQL, x, likeEdgePost, "Like.post")
 	n, _ := v.(*Post)
 	return n, err

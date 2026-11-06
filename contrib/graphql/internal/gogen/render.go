@@ -108,12 +108,17 @@ func (r *renderer) reserve() {
 	for _, e := range r.m.Entities {
 		r.names[e.Name] = "velox-gen's type of schema " + e.Name
 		r.names[e.Handles] = "velox-gen's handles of schema " + e.Name
-		// A method of the plugin's on a row may not take a name its struct holds.
+		// A method of the plugin's on a row may not take a name its struct
+		// holds, or a method velox-gen writes. The relations are in the
+		// struct's Edges field, which is there when the entity has one.
 		for _, f := range e.Fields {
 			r.names[e.Name+"."+f.GoName] = "velox-gen's field " + f.Name + " of schema " + e.Name
 		}
-		for _, ed := range e.Edges {
-			r.names[e.Name+"."+ed.GoName] = "velox-gen's edge " + ed.Name + " of schema " + e.Name
+		if len(e.Edges) > 0 {
+			r.names[e.Name+".Edges"] = "velox-gen's field Edges of schema " + e.Name
+		}
+		for _, m := range []string{"String", "GoString"} {
+			r.names[e.Name+"."+m] = "velox-gen's method " + m + " of schema " + e.Name
 		}
 	}
 	for _, en := range r.m.Enums {
@@ -212,7 +217,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion12\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion13\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -283,7 +288,7 @@ func (r *renderer) writeNode(f *file, t *sdl.Type) error {
 		}
 		v = t.Key + "(" + v + ")"
 	}
-	for _, m := range []string{"IsNode", "IDGQL"} {
+	for _, m := range []string{"IsNode", "GlobalID"} {
 		if err := r.declare(e.Name+"."+m, "schema "+e.Name+", the Node's method"); err != nil {
 			return err
 		}
@@ -291,59 +296,28 @@ func (r *renderer) writeNode(f *file, t *sdl.Type) error {
 	f.doc("", fmt.Sprintf("IsNode marks %s as a GraphQL Node: gqlgen binds the interface Node to veloxgql.Noder.", e.Name))
 	f.p("func (*%s) IsNode() {}", e.Name)
 	f.p("")
-	f.doc("", fmt.Sprintf("IDGQL is the global ID of the %s, the GraphQL field id.", e.Name))
-	f.p("func (x *%s) IDGQL() string { return %s.EncodeID(%q, %s) }", e.Name, f.veloxgql(), t.Name, v)
+	f.doc("", fmt.Sprintf("GlobalID is the global ID of the %s, the GraphQL field id: its type and key, opaque to the client.", e.Name))
+	f.p("func (x *%s) GlobalID() string { return %s.EncodeID(%q, %s) }", e.Name, f.veloxgql(), t.Name, v)
 	f.p("")
-	return r.writeNodeKind(f, t, k)
+	return nil
 }
 
 // nodeKindFunc is the function of node_gql.go that returns the Node type an
 // ID's type names.
 const nodeKindFunc = "nodeKindGQL"
 
-func nodeFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "NodeGQL" }
-
-// keyGetter is the function that reads a Node t's key from a row: the one
-// function of the key that the Node type, and the inputs' edges, take.
-func keyGetter(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "KeyGQL" }
-
-// nodeKeyType is the Go type of the key of the Node t, whose key field is k,
-// as the file names it.
-func (r *renderer) nodeKeyType(f *file, t *sdl.Type, k *plugin.Field) (string, error) {
-	return r.qualify(f, t.Entity, k, cmp.Or(k.ElemType, t.Key), k.PkgPath)
-}
-
-// writeNodeKind writes nodeFunc(t): what Node and Nodes need of t to look its
-// nodes up, which gqlimpl.NewNode makes.
-func (r *renderer) writeNodeKind(f *file, t *sdl.Type, k *plugin.Field) error {
-	e := t.Entity
-	for _, name := range []string{nodeFunc(t), keyGetter(t)} {
-		if err := r.declare(name, "schema "+e.Name); err != nil {
-			return err
-		}
-	}
-	key, err := r.nodeKeyType(f, t, k)
+// nodeKind is the expression of what Node and Nodes need of the Node t to
+// look its nodes up, which gqlimpl.NewNode makes, as f names it.
+func (r *renderer) nodeKind(f *file, t *sdl.Type) (string, error) {
+	self, err := r.idKeyOf(f, t.Entity, t)
 	if err != nil {
-		return err
-	}
-	self, err := r.idKeyOf(f, e, t)
-	if err != nil {
-		return err
+		return "", err
 	}
 	impl := f.gqlimpl()
-	f.doc("", fmt.Sprintf("%s is the Node type %s for Node and Nodes.", nodeFunc(t), t.Name))
-	f.p("func %s() %s.NodeKind {", nodeFunc(t), impl)
 	if self.conv != "" {
-		f.p("\treturn %s.NewNode%s(&%s%s)", impl, strings.TrimSuffix(self.args, "]")+", "+self.typ+"]", connVar(t), self.conv)
-	} else {
-		f.p("\treturn %s.NewNode[%s](&%s)", impl, self.typ, connVar(t))
+		return fmt.Sprintf("%s.NewNode%s(&%s%s)", impl, strings.TrimSuffix(self.args, "]")+", "+self.typ+"]", connVar(t), self.conv), nil
 	}
-	f.p("}")
-	f.p("")
-	f.doc("", fmt.Sprintf("%s is the key of x, %s %s.", keyGetter(t), english.Article(t.Name), t.Name))
-	f.p("func %s(x *%s) %s { return x.%s }", keyGetter(t), e.Name, key, k.GoName)
-	f.p("")
-	return nil
+	return fmt.Sprintf("%s.NewNode[%s](&%s)", impl, self.typ, connVar(t)), nil
 }
 
 // writeGetter writes g, which returns its field as the Go type the field's
@@ -723,9 +697,9 @@ func (r *renderer) whereType(f *file, t *sdl.Type, w sdl.WhereField) (string, er
 }
 
 // nodeFile is node_gql.go: Node and Nodes, which look up the nodes of the
-// Node types by their IDs. The lookups are gqlimpl's; each Node type's
-// <label>_gql.go writes what they need of it (nodeFunc), and this file only
-// names the type an ID's type leads to.
+// Node types by their IDs. The lookups are gqlimpl's; this file names the
+// Node type an ID's type leads to, and what the lookups need of it
+// (nodeKind).
 func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	for _, name := range []string{"Node", "Nodes", nodeKindFunc} {
 		if err := r.declare(name, "velox-graphql's "+name); err != nil {
@@ -756,8 +730,12 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 			f.p("\tswitch typ {")
 			cases = true
 		}
+		kind, err := r.nodeKind(f, t)
+		if err != nil {
+			return plugin.File{}, err
+		}
 		f.p("\tcase %q:", t.Name)
-		f.p("\t\treturn %s(), true", nodeFunc(t))
+		f.p("\t\treturn %s, true", kind)
 	}
 	if cases {
 		f.p("\t}")

@@ -345,10 +345,10 @@ func (g *graph) fill(o *object) error {
 	}
 	if o.node {
 		pk := e.Fields[e.PrimaryKey[0]]
-		// The key is the opaque global ID, which the method IDGQL returns: the
-		// struct's ID field is the raw key.
+		// The key is the opaque global ID, which the method GlobalID returns:
+		// the struct's ID field is the raw key, which gqlgen would bind.
 		where := "schema " + e.Name + ", field " + pk.Name
-		id := gqlField{name: "id", typ: "ID!", desc: pk.Comment, dirs: []directive{bindTo("IDGQL")}, where: where}
+		id := gqlField{name: "id", typ: "ID!", desc: pk.Comment, dirs: []directive{bindTo("GlobalID")}, where: where}
 		if err := add(id, where); err != nil {
 			return err
 		}
@@ -425,19 +425,24 @@ func (g *graph) fill(o *object) error {
 		default:
 			f.typ, f.conn, ef.kind = t.name+"Connection!", t, EdgeConnection
 		}
-		// The entity's struct has a field of the edge's name, so the edge's
-		// method is <Edge>GQL.
+		// The edge's method is its Go name, as entgql's is: the entity's
+		// relations are in its Edges field, so the name is free. gqlgen binds
+		// a field to the method its name matches, so @goField names the
+		// method only when the field's name does not.
 		ds, err := directives(a.Directives, where)
 		if err != nil {
 			return err
 		}
-		bind := bindTo(ed.GoName + "GQL")
-		if a.MaxList != 0 {
-			// In @goField, which gqlgen needs no configuration for and reads no further:
-			// a directive of its own would have to be skip_runtime in gqlgen.yml.
-			bind.text = strings.TrimSuffix(bind.text, ")") + ", maxList: " + strconv.Itoa(a.MaxList) + ")"
+		var bind []directive
+		if b := bindTo(ed.GoName); !gqlgenMatches(f.name, ed.GoName) || a.MaxList != 0 {
+			if a.MaxList != 0 {
+				// In @goField, which gqlgen needs no configuration for and reads no further:
+				// a directive of its own would have to be skip_runtime in gqlgen.yml.
+				b.text = strings.TrimSuffix(b.text, ")") + ", maxList: " + strconv.Itoa(a.MaxList) + ")"
+			}
+			bind = []directive{b}
 		}
-		f.dirs = append([]directive{bind}, ds...)
+		f.dirs = append(bind, ds...)
 		if err := add(f, where); err != nil {
 			return err
 		}
@@ -583,6 +588,10 @@ func enumValues(f *plugin.Field, a graphql.Annotation, where string) ([]string, 
 }
 
 // bindTo is the directive that binds a field to the Go field or method name.
+// gqlgenMatches reports whether gqlgen binds the GraphQL field name to the
+// Go method goName by itself: it compares a method's name ignoring case.
+func gqlgenMatches(name, goName string) bool { return strings.EqualFold(name, goName) }
+
 func bindTo(name string) directive {
 	return directive{name: "goField", text: "@goField(name: " + quote(name) + ")"}
 }

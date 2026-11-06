@@ -147,7 +147,7 @@ func linksOnlyItsEntities(t *testing.T, graphql bool) {
 	// about a type and do not link its code, so they are not counted.
 	sym := regexp.MustCompile(`(?m)^\s*\S+ [A-Za-z] example\.com/tmp/gen\.\(?\*?[Ee](\d+)(?:s|Meta|Descriptor)?(?:\.|$)`)
 	if graphql {
-		// Also the GraphQL code: E<k>sConnection, (*E<k>).NextGQL,
+		// Also the GraphQL code: E<k>sConnection, (*E<k>).Next,
 		// (*E<k>WhereInput).Pred, e<k>TermGQL and the like.
 		sym = regexp.MustCompile(`(?m)^\s*\S+ [A-Za-z] example\.com/tmp/gen\.\(?\*?[Ee](\d+)[A-Za-z]*\)?(?:\.|$)`)
 	}
@@ -188,7 +188,7 @@ func TestScaleHarnessSmallGraphQL(t *testing.T) {
 	if got := strings.Count(src, "Connection(ctx"); got != 5 {
 		t.Errorf("s0 calls %d root connection functions, want 5", got)
 	}
-	if got := strings.Count(src, ".NextGQL(ctx"); got != 5 {
+	if got := strings.Count(src, ".Next(ctx"); got != 5 {
 		t.Errorf("s0 calls %d edge methods, want 5", got)
 	}
 	if plain, _ := generate(20, 2, false); strings.Contains(plain[filepath.Join("schema", "e7.go")], "graphql") {

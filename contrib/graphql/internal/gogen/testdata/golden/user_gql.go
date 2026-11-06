@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion12
+const _ = veloxgql.GeneratedCodeIsVersion13
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -23,16 +23,9 @@ type Account = User
 // veloxgql.Noder.
 func (*User) IsNode() {}
 
-// IDGQL is the global ID of the User, the GraphQL field id.
-func (x *User) IDGQL() string { return veloxgql.EncodeID("Account", x.ID) }
-
-// userNodeGQL is the Node type Account for Node and Nodes.
-func userNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[int64](&userConnGQL)
-}
-
-// userKeyGQL is the key of x, an Account.
-func userKeyGQL(x *User) int64 { return x.ID }
+// GlobalID is the global ID of the User, the GraphQL field id: its type and
+// key, opaque to the client.
+func (x *User) GlobalID() string { return veloxgql.EncodeID("Account", x.ID) }
 
 // SettingsGQL is the field settings as JSON, the GraphQL scalar it is: gqlgen
 // binds the field to it.
@@ -70,10 +63,10 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 	return nil
 }
 
-// PostsGQL is the edge posts: a connection to the Post nodes it leads to. Its
+// Posts is the edge posts: a connection to the Post nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+func (x *User) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	c, err := PostsConnection(ctx, after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err
@@ -81,19 +74,19 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &userConnGQL, x, userEdgePosts, "Account.posts", []any{after, first, before, last, orderBy, where})}, nil
 }
 
-// GroupsGQL is the edge groups: the Group nodes it leads to, in key order. It
-// is read in one query with the edge of every row read with x, up to MaxList;
-// see gqlimpl.EdgeList.
-func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
+// Groups is the edge groups: the Group nodes it leads to, in key order. It is
+// read in one query with the edge of every row read with x, up to MaxList; see
+// gqlimpl.EdgeList.
+func (x *User) Groups(ctx context.Context) ([]*Group, error) {
 	v, err := gqlimpl.EdgeList(ctx, &groupConnGQL, &userConnGQL, x, userEdgeGroups, "Account.memberships", 0)
 	n, _ := v.([]*Group)
 	return n, err
 }
 
-// LikesGQL is the edge likes: a connection to the Like nodes it leads to. Its
+// Likes is the edge likes: a connection to the Like nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
+func (x *User) Likes(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
 	c, err := LikesConnection(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err

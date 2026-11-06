@@ -8,27 +8,20 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion12
+const _ = veloxgql.GeneratedCodeIsVersion13
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
 func (*Category) IsNode() {}
 
-// IDGQL is the global ID of the Category, the GraphQL field id.
-func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
+// GlobalID is the global ID of the Category, the GraphQL field id: its type and
+// key, opaque to the client.
+func (x *Category) GlobalID() string { return veloxgql.EncodeID("Category", x.ID) }
 
-// categoryNodeGQL is the Node type Category for Node and Nodes.
-func categoryNodeGQL() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[int64](&categoryConnGQL)
-}
-
-// categoryKeyGQL is the key of x, a Category.
-func categoryKeyGQL(x *Category) int64 { return x.ID }
-
-// ChildrenGQL is the edge children: a connection to the Category nodes it leads
+// Children is the edge children: a connection to the Category nodes it leads
 // to. Its queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
+func (x *Category) Children(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
 	c, err := CategoriesConnection(ctx, after, first, before, last, where)
 	if err != nil {
 		return nil, err
@@ -36,9 +29,9 @@ func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, firs
 	return &CategoryConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &categoryConnGQL, x, categoryEdgeChildren, "Category.children", []any{after, first, before, last, where})}, nil
 }
 
-// ParentGQL is the edge parent: the Category it leads to, or nil. It is read in
+// Parent is the edge parent: the Category it leads to, or nil. It is read in
 // one query with the edge of every row read with x.
-func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
+func (x *Category) Parent(ctx context.Context) (*Category, error) {
 	if x.CategoryChildren == nil {
 		return nil, nil
 	}

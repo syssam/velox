@@ -151,6 +151,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-graphql names an edge's method after the edge, `Post.Author(ctx)` and
+  `Post.Tags(ctx, …)`, as entgql does, not `AuthorGQL` and `TagsGQL`, and the
+  SDL drops the `@goField` gqlgen no longer needs; a Node's ID method is
+  `GlobalID`, was `IDGQL`, and `veloxgql.Noder` has it. The per-type `<entity>NodeGQL`
+  and the unused `<entity>KeyGQL` are gone: `node_gql.go` builds each Node type
+  itself. `veloxgql.GeneratedCodeIsVersion12` is now `GeneratedCodeIsVersion13`
+  (ADR 0043).
+
 - velox-gen writes an entity to `gen/<entity>.go`, as ent does, not
   `gen/<entity>_velox.go`; a name go build would leave out of a build, such as
   `ab_test.go`, or `velox.go`, keeps `_velox.go`. The next run removes the old

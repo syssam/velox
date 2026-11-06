@@ -273,13 +273,13 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 	for _, want := range []string{
 		"\"\"\"A person who writes posts.\"\"\"\ntype Account implements Node {\n",
 		"  displayName: String! @goField(name: \"Name\")\n",
-		"  id: ID! @goField(name: \"IDGQL\")\n",
+		"  id: ID! @goField(name: \"GlobalID\")\n",
 		"  role: UserRole!\n",
 		"  quota: Uint64!\n",
 		"  seenAt: Time\n",
-		"  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: PostOrder, where: PostWhereInput): PostConnection! @goField(name: \"PostsGQL\")\n",
-		"  groups: [Group!]! @goField(name: \"GroupsGQL\")\n",
-		"  author: Account @goField(name: \"AuthorGQL\")\n",
+		"  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: PostOrder, where: PostWhereInput): PostConnection!\n",
+		"  groups: [Group!]!\n",
+		"  author: Account\n",
 		"enum UserRole {\n  ADMIN\n  REVIEWING\n}\n",
 		"  accounts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: AccountOrder, where: AccountWhereInput): AccountConnection!\n",
 		"  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: PostOrder, where: PostWhereInput): PostConnection!\n",
@@ -658,7 +658,7 @@ func TestConnections(t *testing.T) {
 	}
 	// A connection edge, paged forward by title through a cursor off the wire.
 	byTitle := &gen.PostOrder{Direction: veloxgql.OrderDirectionAsc, Field: gen.PostOrderFieldTitle}
-	c, err := ann.PostsGQL(ctx, nil, intp(2), nil, nil, byTitle, nil)
+	c, err := ann.Posts(ctx, nil, intp(2), nil, nil, byTitle, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -675,14 +675,14 @@ func TestConnections(t *testing.T) {
 	} else if err := after.UnmarshalGQLContext(ctx, s); err != nil {
 		t.Fatal(err)
 	}
-	if c, err = ann.PostsGQL(ctx, &after, intp(2), nil, nil, byTitle, nil); err != nil {
+	if c, err = ann.Posts(ctx, &after, intp(2), nil, nil, byTitle, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, info := keys(t, ctx, c, c.Edges, post); !slices.Equal(got, []int64{1}) || info.HasNextPage {
 		t.Errorf("ann's posts by title after 4: %v %+v", got, info)
 	}
 	// The cursor under another order fails.
-	if _, err := ann.PostsGQL(ctx, &after, intp(2), nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "malformed cursor") {
+	if _, err := ann.Posts(ctx, &after, intp(2), nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "malformed cursor") {
 		t.Errorf("a title cursor under the key's order: %v", err)
 	}
 
@@ -691,7 +691,7 @@ func TestConnections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a, err := p3.AuthorGQL(ctx); err != nil || a == nil || a.ID != 2 {
+	if a, err := p3.Author(ctx); err != nil || a == nil || a.ID != 2 {
 		t.Errorf("post 3's author: %+v %v", a, err)
 	}
 	// Many-to-many, as a list and as a connection, through the join table.
@@ -701,17 +701,17 @@ func TestConnections(t *testing.T) {
 		}
 		return out
 	}
-	if gs, err := ann.GroupsGQL(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{1, 2}) {
+	if gs, err := ann.Groups(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{1, 2}) {
 		t.Errorf("ann's groups: %v %v", groupIDs(gs), err)
 	}
-	if gs, err := bob.GroupsGQL(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
+	if gs, err := bob.Groups(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
 		t.Errorf("bob's groups: %v %v", groupIDs(gs), err)
 	}
 	// A list edge reads at most MaxList rows, the DB's cap being none: more
 	// fail with ErrTooManyRows, and the error names the edge.
 	one := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1})).NewContext(ctx)
-	_, err = ann.GroupsGQL(one)
-	if gs, err2 := bob.GroupsGQL(one); err2 != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
+	_, err = ann.Groups(one)
+	if gs, err2 := bob.Groups(one); err2 != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
 		t.Errorf("bob's groups under MaxList 1: %v %v", groupIDs(gs), err2)
 	}
 	if !errors.Is(err, velox.ErrTooManyRows) || !strings.Contains(err.Error(), "veloxgql: Account.groups: ") {
@@ -721,7 +721,7 @@ func TestConnections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	members, err := g2.UsersGQL(ctx, nil, nil, nil, nil, nil, nil)
+	members, err := g2.Users(ctx, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -729,7 +729,7 @@ func TestConnections(t *testing.T) {
 		t.Errorf("g2's users: %v", got)
 	}
 	// Many-to-many with no inverse edge, through the join table.
-	peers, err := g2.PeersGQL(ctx, nil, intp(1), nil, nil)
+	peers, err := g2.Peers(ctx, nil, intp(1), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -750,22 +750,22 @@ func TestConnections(t *testing.T) {
 	}
 	root, kid := cat(1), cat(2)
 	ran.Store(0)
-	if p, err := root.ParentGQL(ctx); p != nil || err != nil || ran.Load() != 0 {
+	if p, err := root.Parent(ctx); p != nil || err != nil || ran.Load() != 0 {
 		t.Errorf("root's parent: %+v %v, %d statements", p, err, ran.Load())
 	}
-	if p, err := kid.ParentGQL(ctx); err != nil || p == nil || p.ID != 1 {
+	if p, err := kid.Parent(ctx); err != nil || p == nil || p.ID != 1 {
 		t.Errorf("kid's parent: %+v %v", p, err)
 	}
-	if m, err := kid.MentorGQL(ctx); err != nil || m == nil || m.ID != 1 {
+	if m, err := kid.Mentor(ctx); err != nil || m == nil || m.ID != 1 {
 		t.Errorf("kid's mentor: %+v %v", m, err)
 	}
-	if m, err := root.MenteeGQL(ctx); err != nil || m == nil || m.ID != 2 {
+	if m, err := root.Mentee(ctx); err != nil || m == nil || m.ID != 2 {
 		t.Errorf("root's mentee: %+v %v", m, err)
 	}
-	if m, err := kid.MenteeGQL(ctx); err != nil || m != nil {
+	if m, err := kid.Mentee(ctx); err != nil || m != nil {
 		t.Errorf("kid's mentee: %+v %v", m, err)
 	}
-	kids, err := root.ChildrenGQL(ctx, nil, nil, nil, nil, nil)
+	kids, err := root.Children(ctx, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -780,7 +780,7 @@ func TestConnections(t *testing.T) {
 		t.Fatal(err)
 	}
 	ran.Store(0)
-	c, err = loaded.PostsGQL(ctx, nil, nil, nil, nil, nil, nil)
+	c, err = loaded.Posts(ctx, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -790,7 +790,7 @@ func TestConnections(t *testing.T) {
 	if n, err := c.TotalCount(ctx); err != nil || n != 3 {
 		t.Errorf("ann's loaded posts: totalCount %d %v", n, err)
 	}
-	if gs, err := loaded.GroupsGQL(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{1, 2}) {
+	if gs, err := loaded.Groups(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{1, 2}) {
 		t.Errorf("ann's loaded groups: %v %v", groupIDs(gs), err)
 	}
 	if ran.Load() != 3 {
@@ -1242,7 +1242,7 @@ func TestHasEdge(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			c, err := ann.PostsGQL(ctx, nil, nil, nil, nil, nil, &gen.PostWhereInput{TitleContains: ptr("x")})
+			c, err := ann.Posts(ctx, nil, nil, nil, nil, nil, &gen.PostWhereInput{TitleContains: ptr("x")})
 			return page(ctx, c, err, func(e *gen.PostEdge) int64 { return e.Node.ID })
 		}, []int64{1}},
 	})
@@ -1510,7 +1510,7 @@ func TestNodesUnderTheRowCap(t *testing.T) {
 	for _, n := range nodes {
 		got = append(got, fmt.Sprintf("%v", n != nil))
 		if n != nil {
-			got[len(got)-1] = n.IDGQL()
+			got[len(got)-1] = n.GlobalID()
 		}
 	}
 	want := []string{ids[0], ids[1], ids[2], ids[3], "false", ids[5]}
