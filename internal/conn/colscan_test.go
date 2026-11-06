@@ -222,13 +222,20 @@ func TestColumnScanAllocsPerQuery(t *testing.T) {
 	w1, p1 := allocs(true, 1), allocs(false, 1)
 	w100, p100 := allocs(true, 100), allocs(false, 100)
 	t.Logf("1 row: wrapped %v, plain %v; 100 rows: wrapped %v, plain %v", w1, p1, w100, p100)
-	if w1-p1 > 3 {
-		t.Errorf("1 row: wrapped %v allocations, plain %v; want at most 3 more", w1, p1)
+	// Under the race detector a sync.Pool drops some of what is put back:
+	// encoding/json's, and the SQLite rows' slots, which cost 2 allocations
+	// when a query finds none, so a count there is off by up to 2 more.
+	slack := 0.0
+	if raceEnabled {
+		slack = 2
+	}
+	if w1-p1 > 3+slack {
+		t.Errorf("1 row: wrapped %v allocations, plain %v; want at most %v more", w1, p1, 3+slack)
 	}
 	d1, d100 := w1-p1, w100-p100
 	if raceEnabled {
-		if d100 < d1-1 || d100 > d1+1 {
-			t.Errorf("wrapped minus plain: %v for 1 row, %v for 100; want within 1", d1, d100)
+		if d100 < d1-1-slack || d100 > d1+1+slack {
+			t.Errorf("wrapped minus plain: %v for 1 row, %v for 100; want within %v", d1, d100, 1+slack)
 		}
 	} else if d100 != d1 {
 		t.Errorf("wrapped minus plain: %v for 1 row, %v for 100; want the same", d1, d100)
