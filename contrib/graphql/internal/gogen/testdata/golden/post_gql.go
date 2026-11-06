@@ -396,7 +396,12 @@ func (w *PostWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 		HasPrefix: w.TitleHasPrefix,
 		HasSuffix: w.TitleHasSuffix,
 	})
-	gqlimpl.Field(f, "slug", postColSlug, gqlimpl.Ops[string]{EQ: w.Slug, NEQ: w.SlugNEQ, In: w.SlugIn, NotIn: w.SlugNotIn})
+	gqlimpl.Field(f, "slug", postColSlug, gqlimpl.Ops[string]{
+		EQ:    w.Slug,
+		NEQ:   w.SlugNEQ,
+		In:    w.SlugIn,
+		NotIn: w.SlugNotIn,
+	})
 	gqlimpl.Field(f, "status", postColStatus, gqlimpl.Ops[PostStatus]{
 		EQ:    w.Status,
 		NEQ:   w.StatusNEQ,

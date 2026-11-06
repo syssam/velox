@@ -133,9 +133,9 @@ func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, 
 		}
 		if w.Edge >= 0 {
 			// A foreign key: its target's Read policy holds of it, as of the edge.
-			return fmt.Sprintf("%s.FKField[%s](f, %q, %s, %s, &%s, %s)", impl, tt.Key, base, col, edgeConst(e, e.Edges[w.Edge]), connVar(tt), items(impl+".Ops[string]{", ops, "}")), nil
+			return items(fmt.Sprintf("%s.FKField[%s](f, %q, %s, %s, &%s, %s.Ops[string]{", impl, tt.Key, base, col, edgeConst(e, e.Edges[w.Edge]), connVar(tt), impl), ops, "})"), nil
 		}
-		return fmt.Sprintf("%s.IDField[%s](f, %q, %s, %s)", impl, tt.Key, base, col, items(impl+".Ops[string]{", ops, "}")), nil
+		return items(fmt.Sprintf("%s.IDField[%s](f, %q, %s, %s.Ops[string]{", impl, tt.Key, base, col, impl), ops, "})"), nil
 	}
 	if w.Edge >= 0 {
 		return "", fmt.Errorf("schema %s, field %s: a foreign key's predicate that takes no IDs, which is a bug", e.Name, w.Name)
@@ -152,7 +152,7 @@ func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, 
 			return "", err
 		}
 	}
-	return fmt.Sprintf("%s.Field(f, %q, %s, %s)", impl, base, col, items(impl+".Ops["+typ+"]{", ops, "}")), nil
+	return items(fmt.Sprintf("%s.Field(f, %q, %s, %s.Ops[%s]{", impl, base, col, impl, typ), ops, "})"), nil
 }
 
 // whereConv checks that the where-input field w's values convert to the Go

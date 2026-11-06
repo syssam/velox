@@ -226,14 +226,18 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	return plugin.File{Path: name, Content: string(out)}, nil
 }
 
-// fitItems is the longest list items keeps on one line.
-const fitItems = 60
+// fitItems is the longest list items keeps on one line, and fitLine the
+// longest line it writes so, with what comes before and after the list.
+const (
+	fitItems = 60
+	fitLine  = 100
+)
 
 // items is the Go list xs between left and right: on one line when it is
 // short, else one element a line, with a trailing comma, which gofmt
 // indents.
 func items(left string, xs []string, right string) string {
-	if one := strings.Join(xs, ", "); len(one) <= fitItems {
+	if one := strings.Join(xs, ", "); len(one) <= fitItems && len(left)+len(one)+len(right) <= fitLine {
 		return left + one + right
 	}
 	return left + "\n" + strings.Join(xs, ",\n") + ",\n" + right

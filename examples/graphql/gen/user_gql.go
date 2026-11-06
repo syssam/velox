@@ -334,7 +334,12 @@ func (w *UserWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 		HasPrefix: w.EmailHasPrefix,
 		HasSuffix: w.EmailHasSuffix,
 	})
-	gqlimpl.Field(f, "role", userColRole, gqlimpl.Ops[UserRole]{EQ: w.Role, NEQ: w.RoleNEQ, In: w.RoleIn, NotIn: w.RoleNotIn})
+	gqlimpl.Field(f, "role", userColRole, gqlimpl.Ops[UserRole]{
+		EQ:    w.Role,
+		NEQ:   w.RoleNEQ,
+		In:    w.RoleIn,
+		NotIn: w.RoleNotIn,
+	})
 	gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
 	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, userEdgePosts, velox.TableOf[Post]())
 	return f.Pred()

@@ -498,7 +498,7 @@ func TestGoTypes(t *testing.T) {
 		// they hold; gqlimpl converts them to the column's Go type where
 		// they differ.
 		` f := gqlimpl.NewFilter(ctx, &eventConnGQL) `,
-		` gqlimpl.IDField[[16]byte](f, "id", eventColID, gqlimpl.Ops[string]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn}) `,
+		` gqlimpl.IDField[[16]byte](f, "id", eventColID, gqlimpl.Ops[string]{ EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, }) `,
 		` gqlimpl.Field(f, "level", eventColLevel, gqlimpl.Ops[levels.Level]{EQ: w.Level}) `,
 		` gqlimpl.Field(f, "size", eventColSize, gqlimpl.Ops[uint64]{GT: w.SizeGT}) `,
 		` gqlimpl.Field(f, "rank", eventColRank, gqlimpl.Ops[int8]{In: w.RankIn}) `,
