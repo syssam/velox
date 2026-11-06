@@ -3,8 +3,8 @@
 // velox's untyped Table, TableQuery and table writes:
 //   - the where filter and its helpers (Filter), and the conversions between
 //     a where input's Go types and a column's;
-//   - the connection with its paging (Conn, Col, Order, ConnectionBase and
-//     NewConnection), and the Node lookups (NewNode);
+//   - the description of a GraphQL type (Type, Col), the connection with its
+//     paging (Paginate, Args, Order), and the Node lookups (NewNode);
 //   - the edges, which read in batches, the edge of every row of a page in
 //     one statement (EdgeConnection, EdgeOne and EdgeList);
 //   - the fields a selection reads (Selected and Narrow);
@@ -15,7 +15,7 @@
 //
 // An application does not call this package.
 //
-// Compatibility is by veloxgql.GeneratedCodeIsVersion15, which every
+// Compatibility is by veloxgql.GeneratedCodeIsVersion16, which every
 // generated file references, and not by semantic versioning, as protobuf's
 // protoimpl is: a name here may change or go when the generated code
 // changes, and then the version constant is replaced, so that generated code

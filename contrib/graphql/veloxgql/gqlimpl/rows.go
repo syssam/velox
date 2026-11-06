@@ -16,7 +16,7 @@ import (
 // pointer; nil for a nil x. It panics on an x of another type, which only a
 // bug in the generated code passes. With an invalid Table, whose
 // statements fail, only x's kind is checked.
-func rowOf(c *Conn, x any) unsafe.Pointer {
+func rowOf(c *Type, x any) unsafe.Pointer {
 	if x == nil {
 		return nil
 	}
@@ -28,17 +28,17 @@ func rowOf(c *Conn, x any) unsafe.Pointer {
 		if w[0] == pw[0] {
 			return w[1]
 		}
-		panic(fmt.Sprintf("gqlimpl: %s: a %T is not a row of %s", c.Type, x, t.Info().Name))
+		panic(fmt.Sprintf("gqlimpl: %s: a %T is not a row of %s", c.Name, x, t.Info().Name))
 	}
 	v := reflect.ValueOf(x)
 	if v.Kind() != reflect.Pointer {
-		panic(fmt.Sprintf("gqlimpl: %s: a %T is not a row", c.Type, x))
+		panic(fmt.Sprintf("gqlimpl: %s: a %T is not a row", c.Name, x))
 	}
 	return v.UnsafePointer()
 }
 
 // nodeOf is p, a row of c's entity, as a *E in an any; nil for a nil p.
-func nodeOf(c *Conn, p unsafe.Pointer) any {
+func nodeOf(c *Type, p unsafe.Pointer) any {
 	if p == nil {
 		return nil
 	}
@@ -47,7 +47,7 @@ func nodeOf(c *Conn, p unsafe.Pointer) any {
 
 // nodesOf is ps, rows of c's entity, as a []*E in an any: the slice holds
 // the same pointers. A nil ps is an empty slice.
-func nodesOf(c *Conn, ps []unsafe.Pointer) any {
+func nodesOf(c *Type, ps []unsafe.Pointer) any {
 	elem := reflect.TypeOf(c.table().Ptr(nil))
 	out := reflect.MakeSlice(reflect.SliceOf(elem), len(ps), len(ps))
 	if len(ps) > 0 {

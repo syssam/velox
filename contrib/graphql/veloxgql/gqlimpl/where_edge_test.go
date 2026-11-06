@@ -17,8 +17,8 @@ type childWhere struct {
 	EditorIDNotNil *bool
 }
 
-func (w *childWhere) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[child]("Child"))
+func (w *childWhere) predicate(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[child]("Child"))
 	if w == nil {
 		return f.Pred()
 	}
@@ -33,7 +33,7 @@ func filtered[E any](t *testing.T, db *velox.DB, build func(f *gqlimpl.Filter)) 
 	t.Helper()
 	ctx := context.Background()
 	tbl := velox.TableOf[E]()
-	f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[E]("In"))
+	f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[E]("In"))
 	build(f)
 	p, err := f.Pred()
 	if err != nil {
@@ -66,19 +66,19 @@ func TestWhereRelations(t *testing.T) {
 		{"hasChildren false", func(f *gqlimpl.Filter) { gqlimpl.Has(f, "hasChildren", fls, edge, ct) }, []int64{3}},
 		{"hasChildren nil", func(f *gqlimpl.Filter) { gqlimpl.Has(f, "hasChildren", nil, edge, ct) }, []int64{1, 2, 3}},
 		{"hasChildrenWith a", func(f *gqlimpl.Filter) {
-			gqlimpl.HasWith(f, "hasChildrenWith", []*childWhere{{Title: new("a")}}, edge, ct)
+			gqlimpl.HasWith(f, "hasChildrenWith", []*childWhere{{Title: new("a")}}, (*childWhere).predicate, edge, ct)
 		}, []int64{1, 2}},
 		{"hasChildrenWith d", func(f *gqlimpl.Filter) {
-			gqlimpl.HasWith(f, "hasChildrenWith", []*childWhere{{Title: new("d")}}, edge, ct)
+			gqlimpl.HasWith(f, "hasChildrenWith", []*childWhere{{Title: new("d")}}, (*childWhere).predicate, edge, ct)
 		}, []int64{1}},
 		{"hasChildrenWith both, of one child", func(f *gqlimpl.Filter) {
-			gqlimpl.HasWith(f, "hasChildrenWith", []*childWhere{{Title: new("b")}, {EditorIDNotNil: tru}}, edge, ct)
+			gqlimpl.HasWith(f, "hasChildrenWith", []*childWhere{{Title: new("b")}, {EditorIDNotNil: tru}}, (*childWhere).predicate, edge, ct)
 		}, []int64{1, 2}},
 		{"hasChildrenWith nil", func(f *gqlimpl.Filter) {
-			gqlimpl.HasWith(f, "hasChildrenWith", []*childWhere(nil), edge, ct)
+			gqlimpl.HasWith(f, "hasChildrenWith", []*childWhere(nil), (*childWhere).predicate, edge, ct)
 		}, []int64{1, 2, 3}},
 		{"hasChildrenWith none", func(f *gqlimpl.Filter) {
-			gqlimpl.HasWith(f, "hasChildrenWith", []*childWhere{}, edge, ct)
+			gqlimpl.HasWith(f, "hasChildrenWith", []*childWhere{}, (*childWhere).predicate, edge, ct)
 		}, []int64{1, 2, 3}},
 	} {
 		got, err := filtered[owner](t, db, c.build)
@@ -96,7 +96,7 @@ func TestWhereRelations(t *testing.T) {
 		{"editorIDNotNil", &childWhere{EditorIDNotNil: tru}, []int64{1, 2, 3, 4, 5, 6}},
 		{"editorIDNotNil false", &childWhere{EditorIDNotNil: fls}, []int64{7}},
 	} {
-		got, err := filtered[child](t, db, func(f *gqlimpl.Filter) { gqlimpl.And(f, "and", []*childWhere{c.w}) })
+		got, err := filtered[child](t, db, func(f *gqlimpl.Filter) { gqlimpl.And(f, "and", []*childWhere{c.w}, (*childWhere).predicate) })
 		if err != nil || !slices.Equal(got, c.want) {
 			t.Errorf("%s: %v %v, want %v", c.name, got, err, c.want)
 		}

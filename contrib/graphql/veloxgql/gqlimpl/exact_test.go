@@ -226,7 +226,7 @@ func TestFKScoped(t *testing.T) {
 		{"guarded", velox.TableOf[guarded](), true},
 		{"intercepted", velox.TableOf[intercepted](), true},
 	} {
-		target := &gqlimpl.Conn{Type: "Owner", Table: func() velox.Table { return c.target }}
+		target := &gqlimpl.Type{Name: "Owner", Table: func() velox.Table { return c.target }}
 		for _, h := range []struct {
 			name string
 			add  func(f *gqlimpl.Filter)
@@ -242,7 +242,7 @@ func TestFKScoped(t *testing.T) {
 				gqlimpl.FKField[int64](f, "ownerID", 0, 0, target, gqlimpl.Ops[string]{NotNil: &yes})
 			}, "not nullable"},
 		} {
-			f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[person]("Person"))
+			f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[person]("Person"))
 			h.add(f)
 			p, err := f.Pred()
 			if err != nil {

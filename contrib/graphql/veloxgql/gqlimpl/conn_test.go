@@ -13,17 +13,16 @@ import (
 )
 
 // personConn is person's connections, as the generated code writes them.
-var personConn = gqlimpl.Conn{
-	Type:  "Person",
+var personConn = gqlimpl.Type{
+	Name:  "Person",
 	Key:   []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}},
 	Order: []gqlimpl.Col{{Field: "NAME", Col: int(people.Name.I)}, {Field: "AGE", Col: int(people.Age.I)}},
 }
 
-// TestConnectionBase: a base query without the key, or without the column
-// of an own order field, is refused with an internal error; an order field
-// the type does not have is left to NewConnection, which refuses it as the
-// client's.
-func TestConnectionBase(t *testing.T) {
+// TestPaginateBase: a q without the key, or without the column of an own
+// order field, is refused with an internal error that names PaginateXs; an
+// order field the type does not have is refused as the client's.
+func TestPaginateBase(t *testing.T) {
 	db, st := peopleDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := velox.Untyped(db.Query[person]())
@@ -34,26 +33,22 @@ func TestConnectionBase(t *testing.T) {
 		order []gqlimpl.Order
 		want  string
 	}{
-		{"no key", q.Columns(int(people.Name.I)), nil, "veloxgql: PersonsConnectionOf: the base query does not select the key, which the cursors hold"},
-		{"no order column", q.Columns(int(people.ID.I), int(people.Name.I)), age, "veloxgql: PersonsConnectionOf: the base query does not select the column of AGE, which orderBy names and the cursors hold"},
+		{"no key", q.Columns(int(people.Name.I)), nil, "veloxgql: PaginatePersons: q does not select the key, which the cursors hold"},
+		{"no order column", q.Columns(int(people.ID.I), int(people.Name.I)), age, "veloxgql: PaginatePersons: q does not select the column of AGE, which orderBy names and the cursors hold"},
 	} {
-		_, err := gqlimpl.ConnectionBase(ctx, c.q, &personConn, c.order)
+		_, err := gqlimpl.Paginate(ctx, c.q, &personConn, gqlimpl.Args{}, c.order)
 		var coded interface{ Extensions() map[string]any }
 		if err == nil || err.Error() != c.want || errors.As(err, &coded) {
 			t.Errorf("%s: %v, want the internal error %q", c.name, err, c.want)
 		}
 	}
 	unknown := []gqlimpl.Order{{Field: "HEIGHT"}}
-	b, err := gqlimpl.ConnectionBase(ctx, q, &personConn, unknown)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = gqlimpl.NewConnection(ctx, b, &personConn, gqlimpl.Args{}, unknown)
+	_, err := gqlimpl.Paginate(ctx, q, &personConn, gqlimpl.Args{}, unknown)
 	var coded interface{ Extensions() map[string]any }
 	if want := `veloxgql: PersonOrder: "HEIGHT" is not a value of PersonOrderField`; err == nil || err.Error() != want || !errors.As(err, &coded) {
 		t.Errorf("an unknown order field: %v, want the input error %q", err, want)
 	}
-	c, err := gqlimpl.NewConnection(ctx, b, &personConn, gqlimpl.Args{First: new(3)}, age)
+	c, err := gqlimpl.Paginate(ctx, q, &personConn, gqlimpl.Args{First: new(3)}, age)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,15 +118,15 @@ func TestNamedTypeTerms(t *testing.T) {
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	conn := &gqlimpl.Conn{
-		Type:  "Gadget",
+	conn := &gqlimpl.Type{
+		Name:  "Gadget",
 		Key:   []gqlimpl.Col{{Field: "id", Col: int(gadgets.ID.I)}},
 		Order: []gqlimpl.Col{{Field: "SCORE", Col: int(gadgets.Score.I)}},
 	}
 	order := []gqlimpl.Order{{Field: "SCORE", Direction: veloxgql.OrderDirectionDesc}}
 	page := func(args gqlimpl.Args) ([]gadgetID, *gqlimpl.Page) {
 		t.Helper()
-		c, err := gqlimpl.NewConnection(ctx, velox.Untyped(db.Query[gadget]()), conn, args, order)
+		c, err := gqlimpl.Paginate(ctx, velox.Untyped(db.Query[gadget]()), conn, args, order)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,7 +158,7 @@ func TestNamedTypeTerms(t *testing.T) {
 		}
 	}
 	bad := veloxgql.Cursor{Type: "Gadget", Terms: []veloxgql.CursorTerm{{Field: "SCORE", Direction: veloxgql.OrderDirectionDesc, Value: "high"}}, Key: 1}
-	if _, err := gqlimpl.NewConnection(ctx, velox.Untyped(db.Query[gadget]()), conn, gqlimpl.Args{After: wire(t, bad)}, order); !errors.Is(err, veloxgql.ErrBadCursor) {
+	if _, err := gqlimpl.Paginate(ctx, velox.Untyped(db.Query[gadget]()), conn, gqlimpl.Args{After: wire(t, bad)}, order); !errors.Is(err, veloxgql.ErrBadCursor) {
 		t.Errorf("a string score: %v, want ErrBadCursor", err)
 	}
 }
@@ -172,7 +167,7 @@ func TestNamedTypeTerms(t *testing.T) {
 // an edge reads Read alone, and a field Conn does not know reads every
 // column.
 func TestConnColumns(t *testing.T) {
-	c := &gqlimpl.Conn{
+	c := &gqlimpl.Type{
 		Read:   []int{0, 1},
 		Fields: []string{0: "id", 1: "title", 3: "status"},
 		Edges:  []string{"author"},

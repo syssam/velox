@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion15
+const _ = veloxgql.GeneratedCodeIsVersion16
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -64,52 +64,57 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 }
 
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
-// queries batch with the edge of every row read with x; see
-// gqlimpl.EdgeConnection.
+// queries batch with the edge of every row read with x.
 func (x *User) Posts(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	c, err := PostsConnection(ctx, after, first, before, last, orderBy, where)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c, err := PaginatePosts(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err
 	}
 	return &PostConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &userConnGQL, x, userEdgePosts, "Account.posts",
+		ctx, c.c, &userGQL, x, userEdgePosts, "Account.posts",
 		[]any{after, first, before, last, orderBy, where},
 	)}, nil
 }
 
 // Groups is the edge groups: the Group nodes it leads to, in key order. It is
-// read in one query with the edge of every row read with x, up to MaxList; see
-// gqlimpl.EdgeList.
+// read in one query with the edge of every row read with x, and fails on more
+// than MaxList nodes.
 func (x *User) Groups(ctx context.Context) ([]*Group, error) {
-	v, err := gqlimpl.EdgeList(ctx, &groupConnGQL, &userConnGQL, x, userEdgeGroups, "Account.memberships", 0)
+	v, err := gqlimpl.EdgeList(ctx, &groupGQL, &userGQL, x, userEdgeGroups, "Account.memberships", 0)
 	n, _ := v.([]*Group)
 	return n, err
 }
 
 // Likes is the edge likes: a connection to the Like nodes it leads to. Its
-// queries batch with the edge of every row read with x; see
-// gqlimpl.EdgeConnection.
+// queries batch with the edge of every row read with x.
 func (x *User) Likes(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 ) (*LikeConnection, error) {
-	c, err := LikesConnection(ctx, after, first, before, last)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c, err := PaginateLikes(ctx, db.Query[Like](), after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
 	return &LikeConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &userConnGQL, x, userEdgeLikes, "Account.likes",
+		ctx, c.c, &userGQL, x, userEdgeLikes, "Account.likes",
 		[]any{after, first, before, last},
 	)}, nil
 }
 
-// AccountConnection is the GraphQL type AccountConnection, a connection to a
-// list of Account. Its fields run their queries when gqlgen asks; see
-// gqlimpl.Connection.
+// AccountConnection is the GraphQL type AccountConnection. Its fields run their
+// queries when gqlgen resolves them.
 type AccountConnection struct {
 	c *gqlimpl.Connection
 }
@@ -142,51 +147,29 @@ func (c *AccountConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, e
 // on this page.
 func (c *AccountConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
-// AccountEdge is the GraphQL type AccountEdge, an edge in a connection to a
-// list of Account.
+// AccountEdge is the GraphQL type AccountEdge.
 type AccountEdge struct {
-	// Node is the Account at the end of the edge.
-	Node *User
-	// Cursor is the cursor of the edge, for paging.
+	Node   *User
 	Cursor veloxgql.Cursor
 }
 
-// AccountsConnection is the connection to every Account node, on the DB in ctx,
-// for a Query field's resolver. It is AccountsConnectionOf of the whole table.
-func AccountsConnection(
-	ctx context.Context,
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-	where *AccountWhereInput,
-) (*AccountConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return AccountsConnectionOf(ctx, db.Query[User](), after, first, before, last, where)
-}
-
-// AccountsConnectionOf is the connection to the Account nodes q returns,
-// filtered by where, ordered by the key, and paged by the other arguments. q
-// must not be ordered and must select the key and the order columns; see
-// gqlimpl.ConnectionBase and gqlimpl.NewConnection.
-func AccountsConnectionOf(
+// PaginateAccounts is the connection to the Account nodes q returns, filtered
+// by where, ordered by the key, and paged by the other arguments. q must not be
+// ordered, and must select the key.
+func PaginateAccounts(
 	ctx context.Context, q velox.Query[User],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *AccountWhereInput,
 ) (*AccountConnection, error) {
-	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &userConnGQL, nil)
-	if err != nil {
-		return nil, err
-	}
 	if where != nil {
-		p, err := where.PredicateGQL(ctx)
+		p, err := where.Pred(ctx)
 		if err != nil {
 			return nil, err
 		}
-		b = b.Where(p)
+		q = q.Where(p)
 	}
-	c, err := gqlimpl.NewConnection(
-		ctx, b, &userConnGQL,
+	c, err := gqlimpl.Paginate(
+		ctx, velox.Untyped(q), &userGQL,
 		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
 		nil,
 	)
@@ -196,11 +179,9 @@ func AccountsConnectionOf(
 	return &AccountConnection{c: c}, nil
 }
 
-// userConnGQL is what the runtime knows of the GraphQL type Account: its table,
-// the key and the order columns of its connections, the columns its selections
-// read and the fields of its inputs.
-var userConnGQL = gqlimpl.Conn{
-	Type:  "Account",
+// userGQL describes the GraphQL type Account to gqlimpl.
+var userGQL = gqlimpl.Type{
+	Name:  "Account",
 	Table: velox.TableOf[User],
 	Key:   []gqlimpl.Col{{Field: "id", Col: userColID}},
 	Read:  []int{userColID, userColUserBestFriend},
@@ -276,21 +257,22 @@ type AccountWhereInput struct {
 }
 
 // Pred is the condition w stands for on Account nodes, true for a nil or empty
-// w. Its errors are gqlimpl.NewFilter's.
+// w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx),
+// and on an ID that does not decode or is of another type.
 func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
-	p, err := w.PredicateGQL(ctx)
+	p, err := w.predicate(ctx)
 	return velox.Pred[User](p), err
 }
 
-// PredicateGQL is Pred, untyped, for velox-graphql's runtime.
-func (w *AccountWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, &userConnGQL)
+// predicate is Pred, untyped.
+func (w *AccountWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, &userGQL)
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not)
-	gqlimpl.And(f, "and", w.And)
-	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.Not(f, "not", w.Not, (*AccountWhereInput).predicate)
+	gqlimpl.And(f, "and", w.And, (*AccountWhereInput).predicate)
+	gqlimpl.Or(f, "or", w.Or, (*AccountWhereInput).predicate)
 	gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
@@ -311,13 +293,12 @@ func (w *AccountWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, 
 		HasSuffix: w.DisplayNameHasSuffix,
 	})
 	gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
-	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, userEdgePosts, velox.TableOf[Post]())
+	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
 	return f.Pred()
 }
 
-// CreateAccountInput is the GraphQL input CreateAccountInput, whose Setters
-// gives its fields as setters. A nil pointer or list is a field not given, and
-// so is a null.
+// CreateAccountInput is the GraphQL input CreateAccountInput. A nil pointer or
+// list is a field not given, and so is a null.
 type CreateAccountInput struct {
 	CreatedAt *time.Time
 	UpdatedAt *time.Time
@@ -362,15 +343,12 @@ func (in CreateAccountInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in CreateAccountInput) GoString() string { return in.String() }
 
-// Setters returns the setters of the input's fields and edges, for
-// db.Insert(x).Set: a field not given sets nothing, and x keeps its value or
-// the field's Default.
+// Setters returns the input's fields and edges as setters for db.Insert(x).Set.
+// A field not given sets nothing: x keeps its value, or the field's Default.
 //
 // It does no I/O. A value a validator refuses, or an ID that does not decode or
-// names another type, is BAD_USER_INPUT naming the input's field. See
-// "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each field does and what the
-// write checks.
+// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]
 	if v := in.CreatedAt; v != nil {
@@ -437,5 +415,5 @@ func (in *CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 		}
 		set = append(set, Users.BestFriend.Set(bestFriendID))
 	}
-	return gqlimpl.Checked("CreateAccountInput", &userConnGQL, set)
+	return gqlimpl.Checked("CreateAccountInput", &userGQL, set)
 }

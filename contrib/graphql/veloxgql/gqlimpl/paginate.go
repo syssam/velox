@@ -30,14 +30,14 @@ type Args struct {
 	First, Last   *int
 }
 
-// Conn is what the generated code knows of one GraphQL type, as a literal
-// table it writes once per type: the type, its entity's Table, the key's
+// Type is what the generated code knows of one GraphQL type, as a literal
+// it writes once per type: the type's name, its entity's Table, the key's
 // columns, the order fields and their columns, the columns a selection reads
 // and the fields of its inputs. The type's connections, Node lookups, edges,
 // where filters and inputs all take it.
-type Conn struct {
-	// Type is the GraphQL type of the nodes, "Post".
-	Type string
+type Type struct {
+	// Name is the GraphQL type's name, "Post".
+	Name string
 	// Table is the entity's Table, velox.TableOf of the entity. It is a
 	// function so that nothing runs at start.
 	Table func() velox.Table
@@ -54,8 +54,8 @@ type Conn struct {
 	// Edges is the type's edge fields, which read no column but Read.
 	Edges []string
 	// Inputs is, by column, the field of the type's create and update inputs
-	// that sets the column, or "": a validator's error on such a column
-	// becomes BAD_USER_INPUT naming the field (WriteError). CreateInputs and
+	// that sets the column, or "": Checked reports a validator's error on
+	// such a column as BAD_USER_INPUT naming the field. CreateInputs and
 	// UpdateInputs stand for it in one input when the two inputs differ.
 	Inputs, CreateInputs, UpdateInputs []string
 
@@ -66,7 +66,7 @@ type Conn struct {
 // Columns is the columns a selection of the type's fields reads (see
 // Narrow): Read, then the column of each field. It is nil, every column,
 // when a field is none of Fields and Edges, such as an application's own.
-func (c *Conn) Columns(fields []string) []int {
+func (c *Type) Columns(fields []string) []int {
 	c.fieldsOnce.Do(func() {
 		c.fieldCol = make(map[string]int, len(c.Fields)+len(c.Edges))
 		for col, f := range c.Fields {
@@ -110,7 +110,7 @@ func inputNames(t velox.Table, names []string) func(goField string) string {
 
 // table is the Table of c's entity: the zero Table, whose queries fail,
 // when c names none.
-func (c *Conn) table() velox.Table {
+func (c *Type) table() velox.Table {
 	if c.Table == nil {
 		return velox.Table{}
 	}
@@ -145,7 +145,7 @@ type Order struct {
 }
 
 // find is the order field named field; nil for none.
-func (c *Conn) find(field string) *Col {
+func (c *Type) find(field string) *Col {
 	for i := range c.Order {
 		if c.Order[i].Field == field {
 			return &c.Order[i]
@@ -336,7 +336,7 @@ func (p *Page) Node(i int) any { return p.t.Ptr(p.Rows[i]) }
 // is called, and TotalCount the COUNT, once too. So a GraphQL selection of
 // only totalCount runs no page query, and one without it no COUNT.
 //
-// A Connection is made by NewConnection, and must not be copied.
+// A Connection is made by Paginate, and must not be copied.
 type Connection struct {
 	query velox.TableQuery // the whole list, unordered
 	typ   string           // the GraphQL type of the nodes
@@ -357,45 +357,21 @@ type Connection struct {
 	countErr  error
 }
 
-// ConnectionBase checks q, the base query of XsConnectionOf, against c and
-// order, and returns it reading only the columns the selection of the field
-// of ctx needs (Selected, Narrow, c.Columns). q must select the key and the
-// columns of order's own fields, which the cursors hold: one that does not
-// is refused with an internal error. An order field c does not know is left
-// to NewConnection.
+// Paginate is the connection to the nodes of c's type that q returns, paged
+// by args, in the order order and then c's key, each column ASC. For
+// generated code: the body of PaginateXs. It checks q and the arguments,
+// decodes the cursor, and runs no query.
 //
 // q keeps its filters, its With loads and the scope the application gave
-// it. A column the selection does not need is left zero in the nodes, except
-// the key, the foreign keys and the order columns: an application's resolver
-// must not read one it did not ask for.
-func ConnectionBase(ctx context.Context, q velox.TableQuery, c *Conn, order []Order) (velox.TableQuery, error) {
-	fn := plugin.GoPlural(c.Type) + "ConnectionOf"
-	for _, k := range c.Key {
-		if !q.Selects(k.Col) {
-			return q, fmt.Errorf("veloxgql: %s: the base query does not select the key, which the cursors hold", fn)
-		}
-	}
-	for _, o := range order {
-		// The join reads the target's columns, and no column of the entity's.
-		if col := c.find(o.Field); col != nil && col.Edge == 0 && !q.Selects(col.Col) {
-			return q, fmt.Errorf("veloxgql: %s: the base query does not select the column of %s, which orderBy names and the cursors hold", fn, o.Field)
-		}
-	}
-	if fields, ok := Selected(ctx, c.Type); ok {
-		q = Narrow(q, c.Columns(fields))
-	}
-	return q, nil
-}
-
-// NewConnection is the connection to the nodes of c's type that q returns,
-// paged by args, in the order order and then c's key, each column ASC. q
-// holds the connection's filters and no order: the connection orders it, and
-// a q with an OrderBy is refused with an internal error, since its order
-// would come first and break the cursors. q must also select the key and the
-// order's columns (ConnectionBase checks them): a cursor is taken from the
-// rows. Its Offset is cleared and its Limit replaced, as the page is the
-// connection's. It checks the arguments and decodes the cursor, and runs no
-// query.
+// it. It must not be ordered, since its order would come first and break the
+// cursors, and it must select the key and the columns of order's own fields,
+// which the cursors hold: a q that does either wrong is refused with an
+// internal error. Its Offset is cleared and its Limit replaced, as the page
+// is the connection's. It reads only the columns the selection of the field
+// of ctx needs (Selected, Narrow, c.Columns): a column the selection does
+// not need is left zero in the nodes, except the key, the foreign keys and
+// the order columns, so an application's resolver must not read one it did
+// not ask for.
 //
 // It fails with an input error for an order field c does not know; with
 // ErrBadPagination for first and last together, either below 0, another
@@ -404,8 +380,43 @@ func ConnectionBase(ctx context.Context, q velox.TableQuery, c *Conn, order []Or
 // veloxgql.LimitsFromContext(ctx)); and with ErrBadCursor for a cursor of
 // another type (ErrWrongIDType too), taken under another order, or whose
 // values are not of the order's types.
-func NewConnection(ctx context.Context, q velox.TableQuery, c *Conn, args Args, order []Order) (*Connection, error) {
-	typ := c.Type
+func Paginate(ctx context.Context, q velox.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
+	q, err := connectionBase(ctx, q, c, order)
+	if err != nil {
+		return nil, err
+	}
+	return newConnection(ctx, q, c, args, order)
+}
+
+// paginateFunc is the generated function that pages c's nodes, as an
+// application's error names it: "PaginatePosts".
+func paginateFunc(c *Type) string { return "Paginate" + plugin.GoPlural(c.Name) }
+
+// connectionBase checks q, Paginate's query, against c and order, and
+// returns it reading only the columns the selection of the field of ctx
+// needs. An order field c does not know is left to newConnection.
+func connectionBase(ctx context.Context, q velox.TableQuery, c *Type, order []Order) (velox.TableQuery, error) {
+	fn := paginateFunc(c)
+	for _, k := range c.Key {
+		if !q.Selects(k.Col) {
+			return q, fmt.Errorf("veloxgql: %s: q does not select the key, which the cursors hold", fn)
+		}
+	}
+	for _, o := range order {
+		// The join reads the target's columns, and no column of the entity's.
+		if col := c.find(o.Field); col != nil && col.Edge == 0 && !q.Selects(col.Col) {
+			return q, fmt.Errorf("veloxgql: %s: q does not select the column of %s, which orderBy names and the cursors hold", fn, o.Field)
+		}
+	}
+	if fields, ok := Selected(ctx, c.Name); ok {
+		q = Narrow(q, c.Columns(fields))
+	}
+	return q, nil
+}
+
+// newConnection is Paginate of a q connectionBase checked.
+func newConnection(ctx context.Context, q velox.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
+	typ := c.Name
 	own := q.Table()
 	terms := make([]term, 0, len(order)+len(c.Key))
 	for _, o := range order {
@@ -421,7 +432,7 @@ func NewConnection(ctx context.Context, q velox.TableQuery, c *Conn, args Args, 
 	}
 	if q.Ordered() {
 		// The application's bug, not the client's: an uncoded error.
-		return nil, fmt.Errorf("veloxgql: %sConnectionOf: the base query has an OrderBy; the connection orders by its orderBy argument", plugin.GoPlural(typ))
+		return nil, fmt.Errorf("veloxgql: %s: q has an OrderBy; the connection orders by its orderBy argument", paginateFunc(c))
 	}
 	lim := veloxgql.LimitsFromContext(ctx)
 	n, back, err := pageSize(args, lim.MaxPage)

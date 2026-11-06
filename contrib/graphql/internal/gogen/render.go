@@ -1,8 +1,8 @@
-// Package gogen writes the Go code velox.graphql binds to: the Go types
+// Package gogen writes the Go code velox-graphql generates: the Go types
 // gqlgen's autobind finds in the generated package, named after the SDL types
 // they bind to, and the methods and functions their fields resolve through.
 // It writes <label>_gql.go for each entity with a GraphQL type (its types,
-// its edge methods, its root connection function, and its mutation inputs
+// its edge methods, its PaginateXs, and its mutation inputs
 // with their method Setters, which input.go writes), and
 // node_gql.go with Node and Nodes.
 //
@@ -120,6 +120,18 @@ func (r *renderer) reserve() {
 		for _, m := range []string{"String", "GoString"} {
 			r.names[e.Name+"."+m] = "velox-gen's method " + m + " of schema " + e.Name
 		}
+		// velox-gen's unexported names, which postGQL could be.
+		if e.Label != "" {
+			for _, s := range []string{"Descriptor", "Handles", "Meta"} {
+				r.names[labelCamel(e.Label)+s] = "velox-gen's " + labelCamel(e.Label) + s
+			}
+			for _, f := range e.Fields {
+				r.names[colConst(e, f)] = "velox-gen's column constant of field " + f.Name + " of schema " + e.Name
+			}
+			for _, ed := range e.Edges {
+				r.names[edgeConst(e, ed)] = "velox-gen's relation constant of edge " + ed.Name + " of schema " + e.Name
+			}
+		}
 	}
 	for _, en := range r.m.Enums {
 		r.names[en.Type] = "velox-gen's enum type " + en.Type
@@ -217,7 +229,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion15\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion16\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -372,7 +384,7 @@ func (r *renderer) writeNode(f *file, t *sdl.Type) error {
 
 // nodeKindFunc is the function of node_gql.go that returns the Node type an
 // ID's type names.
-const nodeKindFunc = "nodeKindGQL"
+const nodeKindFunc = "nodeType"
 
 // nodeKind is the expression of what Node and Nodes need of the Node t to
 // look its nodes up, which gqlimpl.NewNode makes, as f names it.
@@ -383,9 +395,9 @@ func (r *renderer) nodeKind(f *file, t *sdl.Type) (string, error) {
 	}
 	impl := f.gqlimpl()
 	if self.conv != "" {
-		return fmt.Sprintf("%s.NewNode%s(&%s%s)", impl, strings.TrimSuffix(self.args, "]")+", "+self.typ+"]", connVar(t), self.conv), nil
+		return fmt.Sprintf("%s.NewNode%s(&%s%s)", impl, strings.TrimSuffix(self.args, "]")+", "+self.typ+"]", typeVar(t), self.conv), nil
 	}
-	return fmt.Sprintf("%s.NewNode[%s](&%s)", impl, self.typ, connVar(t)), nil
+	return fmt.Sprintf("%s.NewNode[%s](&%s)", impl, self.typ, typeVar(t)), nil
 }
 
 // writeGetter writes g, which returns its field as the Go type the field's
@@ -690,7 +702,7 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 			return fmt.Errorf("schema %s: the fields %s and %s of %s are one Go field to gqlgen, which ignores case and underscores; rename one with graphql.FieldName", e.Name, prev, w.GoName, in)
 		}
 		seen[key] = w.GoName
-		if w.GoName == "Pred" || w.GoName == "PredicateGQL" {
+		if w.GoName == "Pred" {
 			return fmt.Errorf("schema %s: the field %s of %s is the Go field %s, which is the input's method; rename it with graphql.FieldName", e.Name, w.Name, in, w.GoName)
 		}
 		typ, err := r.whereType(f, t, w)
@@ -771,12 +783,12 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	f := newFile()
 	ctx, vgql, impl := f.use("context", "context"), f.veloxgql(), f.gqlimpl()
 
-	f.doc("", "Node returns the node with the global ID id, or nil when no row has its key. It reads only the columns the selection needs; see gqlimpl.NodeByID.")
+	f.doc("", "Node returns the node with the global ID id, or nil when no row has its key. It reads only the columns the selection needs.")
 	f.p("func Node(ctx %s.Context, id string) (%s.Noder, error) {", ctx, vgql)
 	f.p("\treturn %s.NodeByID(ctx, id, %s)", impl, nodeKindFunc)
 	f.p("}")
 	f.p("")
-	f.doc("", "Nodes returns the nodes with the global IDs ids, in their order, with nil for an ID no row has. It reads one query per type; see gqlimpl.NodesByID.")
+	f.doc("", "Nodes returns the nodes with the global IDs ids, in their order, with nil for an ID no row has. It reads one query per type.")
 	f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
 	f.p("\treturn %s.NodesByID(ctx, ids, %s)", impl, nodeKindFunc)
 	f.p("}")

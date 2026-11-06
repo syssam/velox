@@ -18,7 +18,7 @@ func (x *post) GlobalID() string { return veloxgql.EncodeID("Post", x.ID) }
 
 // postKind is post as a Node type, as the generated code writes it.
 func postKind() gqlimpl.NodeKind {
-	return gqlimpl.NewNode[int64](gqlimpl.InputConn[post]("Post", int(posts.ID.I), nil))
+	return gqlimpl.NewNode[int64](gqlimpl.InputType[post]("Post", int(posts.ID.I), nil))
 }
 
 func postKinds(typ string) (gqlimpl.NodeKind, bool) {

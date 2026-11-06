@@ -158,6 +158,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- **Breaking.** velox-graphql writes one connection function per type,
+  `Paginate<Plural>(ctx, q, after, first, before, last, orderBy, where)`, as
+  entgql's `Query().Paginate`: a query resolver passes
+  `db.Query[T]()`, with `db` from `veloxgql.DBFromContext(ctx)`, or its own
+  query. `<Plural>Connection` and `<Plural>ConnectionOf` are gone, and so is
+  a where input's exported `PredicateGQL`; `Pred(ctx)` stays. In gqlimpl,
+  `Conn` is `Type` (its field `Type` is `Name`), `Paginate` replaces
+  `ConnectionBase` and `NewConnection`, and `Not`, `And`, `Or` and `HasWith`
+  take the nested input's condition as a `Cond`. `veloxgql.GeneratedCodeIsVersion15`
+  is now `GeneratedCodeIsVersion16` (ADR 0046).
+
 - A velox-graphql input has one method, `Setters() ([]velox.Setter[T],
   error)`, plain Go that returns its fields and edges as setters and does no
   I/O; the resolver writes them with `db.Insert(x).Set(set...)` or

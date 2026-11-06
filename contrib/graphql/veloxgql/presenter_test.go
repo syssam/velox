@@ -43,17 +43,17 @@ type personName struct {
 }
 
 func (w *personName) Pred(ctx context.Context) (velox.Pred[person], error) {
-	p, err := w.PredicateGQL(ctx)
+	p, err := w.predicate(ctx)
 	return velox.Pred[person](p), err
 }
 
-func (w *personName) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, &gqlimpl.Conn{Type: "Person", Table: velox.TableOf[person]})
+func (w *personName) predicate(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, &gqlimpl.Type{Name: "Person", Table: velox.TableOf[person]})
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not)
-	gqlimpl.And(f, "and", w.And)
+	gqlimpl.Not(f, "not", w.Not, (*personName).predicate)
+	gqlimpl.And(f, "and", w.And, (*personName).predicate)
 	gqlimpl.Field(f, "name", 1, gqlimpl.Ops[string]{In: w.NameIn})
 	return f.Pred()
 }
@@ -66,17 +66,17 @@ type leaky struct {
 }
 
 func (w *leaky) Pred(ctx context.Context) (velox.Pred[person], error) {
-	p, err := w.PredicateGQL(ctx)
+	p, err := w.predicate(ctx)
 	return velox.Pred[person](p), err
 }
 
-func (w *leaky) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
+func (w *leaky) predicate(ctx context.Context) (velox.Predicate, error) {
 	if w != nil && w.Leak {
 		return velox.Predicate{}, fmt.Errorf("sqlite: secret: %w", gqlimpl.InputErrorf("bad name"))
 	}
-	f := gqlimpl.NewFilter(ctx, &gqlimpl.Conn{Type: "Leaky", Table: velox.TableOf[person]})
+	f := gqlimpl.NewFilter(ctx, &gqlimpl.Type{Name: "Leaky", Table: velox.TableOf[person]})
 	if w != nil {
-		gqlimpl.Not(f, "not", w.Not)
+		gqlimpl.Not(f, "not", w.Not, (*leaky).predicate)
 	}
 	return f.Pred()
 }
@@ -86,9 +86,9 @@ func (w *leaky) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
 func TestErrorsAreCoded(t *testing.T) {
 	db, _ := handlerDB(t)
 	ctx := context.Background()
-	key := &gqlimpl.Conn{Type: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}}
+	key := &gqlimpl.Type{Name: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}}
 	conn := func(args gqlimpl.Args) error {
-		_, err := gqlimpl.NewConnection(ctx, db.QueryTable(velox.TableOf[person]()), key, args, nil)
+		_, err := gqlimpl.Paginate(ctx, db.QueryTable(velox.TableOf[person]()), key, args, nil)
 		return err
 	}
 	pred := func(w *personName) error {

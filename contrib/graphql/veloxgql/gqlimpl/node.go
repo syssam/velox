@@ -21,24 +21,24 @@ type NodeKind struct {
 	columns func(fields []string) []int
 }
 
-// NewNode returns the Node type c.Type, the GraphQL type's name, the one an
+// NewNode returns the Node type c.Name, the GraphQL type's name, the one an
 // ID of the type holds, of the entity of c's Table, whose rows are Noders,
 // for generated code, which writes one for each Node type in a function, so
 // that nothing runs at start. An ID of the type decodes into a K
 // (veloxgql.DecodeID), the Go type of the key, c.Key's one column; a
 // selection of fields reads c.Columns (see Narrow).
-func NewNode[K any](c *Conn) NodeKind {
+func NewNode[K any](c *Type) NodeKind {
 	return newNode(c, func(id string) (any, error) {
-		k, err := veloxgql.DecodeID[K](id, c.Type)
+		k, err := veloxgql.DecodeID[K](id, c.Name)
 		return k, err
 	})
 }
 
 // NewNodeAs is NewNode of a key whose Go type V is a named type DecodeID
 // does not take: an ID decodes into a K, converted by conv.
-func NewNodeAs[K, V any](c *Conn, conv func(K) V) NodeKind {
+func NewNodeAs[K, V any](c *Type, conv func(K) V) NodeKind {
 	return newNode(c, func(id string) (any, error) {
-		k, err := veloxgql.DecodeID[K](id, c.Type)
+		k, err := veloxgql.DecodeID[K](id, c.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -46,12 +46,12 @@ func NewNodeAs[K, V any](c *Conn, conv func(K) V) NodeKind {
 	})
 }
 
-func newNode(c *Conn, decode func(id string) (any, error)) NodeKind {
+func newNode(c *Type, decode func(id string) (any, error)) NodeKind {
 	key := -1
 	if len(c.Key) == 1 {
 		key = c.Key[0].Col
 	}
-	return NodeKind{typ: c.Type, table: c.table(), key: key, decode: decode, columns: c.Columns}
+	return NodeKind{typ: c.Name, table: c.table(), key: key, decode: decode, columns: c.Columns}
 }
 
 // base is the query of the type's rows, reading only the columns the

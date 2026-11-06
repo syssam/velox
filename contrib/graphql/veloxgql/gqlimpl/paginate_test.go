@@ -168,7 +168,7 @@ func TestPaginate(t *testing.T) {
 			page := func(args gqlimpl.Args) *gqlimpl.PageOf[person] {
 				t.Helper()
 				st.take()
-				p, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", args, c.order(), personKey())
+				p, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", args, c.order(), personKey())
 				if err != nil {
 					t.Fatalf("%+v: %v", args, err)
 				}
@@ -255,20 +255,20 @@ func TestPaginateDefaultPage(t *testing.T) {
 	ctx := context.Background()
 	db, _ := peopleDB(t)
 	ctx = veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 4})).NewContext(ctx)
-	p, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{}, nil, personKey())
+	p, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{1, 2, 3, 4}) || !p.Info.HasNextPage {
 		t.Fatalf("%v %+v, want 1 to 4 and a next page", err, p)
 	}
-	p, err = gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{After: wire(t, p.Cursors[3])}, nil, personKey())
+	p, err = gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{After: wire(t, p.Cursors[3])}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{5, 6, 7, 8}) || !p.Info.HasNextPage {
 		t.Fatalf("after 4: %v %+v, want 5 to 8 and a next page", err, p)
 	}
 	// before alone pages backward, MaxPage rows.
-	p, err = gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{Before: wire(t, p.Cursors[3])}, nil, personKey())
+	p, err = gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{Before: wire(t, p.Cursors[3])}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{4, 5, 6, 7}) || !p.Info.HasPreviousPage || p.Info.HasNextPage {
 		t.Fatalf("before 8: %v %+v, want 4 to 7 and a previous page", err, p)
 	}
-	if _, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(5)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
+	if _, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(5)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("first 5 over MaxPage 4: %v, want ErrPageTooLarge", err)
 	}
 }
@@ -278,7 +278,7 @@ func TestPaginateRefuses(t *testing.T) {
 	ctx := context.Background()
 	db, st := peopleDB(t)
 	name := []gqlimpl.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionAsc)}
-	all, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(10)}, name, personKey())
+	all, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(10)}, name, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestPaginateRefuses(t *testing.T) {
 		{"a key of another type", gqlimpl.Args{After: badKey}, name, []error{veloxgql.ErrBadCursor}},
 		{"an invalid direction", gqlimpl.Args{}, []gqlimpl.OrderTerm[person]{nameTerm("UP")}, []error{veloxgql.ErrBadPagination}},
 	} {
-		_, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", c.args, c.order, personKey())
+		_, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", c.args, c.order, personKey())
 		for _, want := range c.want {
 			if !errors.Is(err, want) {
 				t.Errorf("%s: %v, want %v", c.name, err, want)
@@ -323,7 +323,7 @@ func TestPaginateRefuses(t *testing.T) {
 		}
 	}
 	// The zero direction is ASC, as the SDL's default.
-	p, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(2)}, []gqlimpl.OrderTerm[person]{nameTerm("")}, personKey())
+	p, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(2)}, []gqlimpl.OrderTerm[person]{nameTerm("")}, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{2, 4}) || p.Cursors[0].Terms[0].Direction != veloxgql.OrderDirectionAsc {
 		t.Errorf("the zero direction: %v %+v", err, p)
 	}
@@ -402,7 +402,7 @@ func TestPaginateUnderTheRowCap(t *testing.T) {
 		t.Fatalf("the cap: %v, want ErrTooManyRows", err)
 	}
 	for name, args := range map[string]gqlimpl.Args{"the default page": {}, "first 100": {First: new(100)}, "last 100": {Last: new(100)}} {
-		p, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", args, nil, personKey())
+		p, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", args, nil, personKey())
 		if err != nil {
 			t.Errorf("%s under WithMaxRows(100): %v", name, err)
 			continue
@@ -426,13 +426,13 @@ func TestPaginateOrderTerms(t *testing.T) {
 		return o
 	}
 	st.take()
-	if _, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{}, order(veloxgql.DefaultLimits().MaxOrderTerms+1), personKey()); !errors.Is(err, veloxgql.ErrBadPagination) {
+	if _, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{}, order(veloxgql.DefaultLimits().MaxOrderTerms+1), personKey()); !errors.Is(err, veloxgql.ErrBadPagination) {
 		t.Errorf("%d terms: %v, want ErrBadPagination", veloxgql.DefaultLimits().MaxOrderTerms+1, err)
 	}
 	if ran := st.take(); len(ran) > 0 {
 		t.Errorf("ran %v", ran)
 	}
-	if _, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{}, order(veloxgql.DefaultLimits().MaxOrderTerms), personKey()); err != nil {
+	if _, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{}, order(veloxgql.DefaultLimits().MaxOrderTerms), personKey()); err != nil {
 		t.Errorf("%d terms: %v", veloxgql.DefaultLimits().MaxOrderTerms, err)
 	}
 }
@@ -500,7 +500,7 @@ func TestConnectionRefusesOrderedQuery(t *testing.T) {
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().OrderBy(people.Age.Asc())
 	c, err := gqlimpl.NewConnectionOf(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
-	want := "veloxgql: PersonsConnectionOf: the base query has an OrderBy; the connection orders by its orderBy argument"
+	want := "veloxgql: PaginatePersons: q has an OrderBy; the connection orders by its orderBy argument"
 	if c.Connection != nil || err == nil || err.Error() != want {
 		t.Fatalf("%v %v, want no connection and %q", c, err, want)
 	}

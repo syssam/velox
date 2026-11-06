@@ -10,6 +10,10 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
+// predMethod is the unexported method of a where input that is its Pred,
+// untyped: the helpers that nest inputs take it as a method expression.
+const predMethod = "predicate"
+
 // predOps are, for each predicate, the field of gqlimpl.Ops that holds its
 // value and the suffix of its name, as sdl names it ("titleNEQ"); whether it
 // takes a Boolean, IsNil or NotNil, rather than a value of the field.
@@ -33,26 +37,26 @@ var predOps = map[graphql.WhereOp]struct {
 }
 
 // writePred writes the where input's methods Pred, which turns it into a
-// velox.Pred, and PredicateGQL, the same condition untyped: a
-// gqlimpl.Filter on the entity's velox.Table, and one call of a gqlimpl
-// helper for each not, and, or and edge of the input and for each field's
-// predicates together, which adds each predicate that is set. The helpers
-// take columns and relations by index, so that none is compiled once per
-// entity.
+// velox.Pred, and predicate, the same condition untyped: a gqlimpl.Filter
+// on the entity's velox.Table, and one call of a gqlimpl helper for each
+// not, and, or and edge of the input and for each field's predicates
+// together, which adds each predicate that is set. The helpers take columns
+// and relations by index, and a nested input's predicate as a method
+// expression, so that none is compiled once per entity.
 func (r *renderer) writePred(f *file, t *sdl.Type) error {
 	n, e := t.Name, t.Entity
 	in := n + "WhereInput"
 	ctx, velox, impl := f.use("context", "context"), f.velox(), f.gqlimpl()
 	f.p("")
-	f.doc("", fmt.Sprintf("Pred is the condition w stands for on %s nodes, true for a nil or empty w. Its errors are gqlimpl.NewFilter's.", n))
+	f.doc("", fmt.Sprintf("Pred is the condition w stands for on %s nodes, true for a nil or empty w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx), and on an ID that does not decode or is of another type.", n))
 	f.p("func (w *%s) Pred(ctx %s.Context) (%s.Pred[%s], error) {", in, ctx, velox, e.Name)
-	f.p("	p, err := w.PredicateGQL(ctx)")
+	f.p("	p, err := w.%s(ctx)", predMethod)
 	f.p("	return %s.Pred[%s](p), err", velox, e.Name)
 	f.p("}")
 	f.p("")
-	f.doc("", "PredicateGQL is Pred, untyped, for velox-graphql's runtime.")
-	f.p("func (w *%s) PredicateGQL(ctx %s.Context) (%s.Predicate, error) {", in, ctx, velox)
-	f.p("	f := %s.NewFilter(ctx, &%s)", impl, connVar(t))
+	f.doc("", predMethod+" is Pred, untyped.")
+	f.p("func (w *%s) %s(ctx %s.Context) (%s.Predicate, error) {", in, predMethod, ctx, velox)
+	f.p("	f := %s.NewFilter(ctx, &%s)", impl, typeVar(t))
 	f.p("	if w == nil {")
 	f.p("		return f.Pred()")
 	f.p("	}")
@@ -82,21 +86,22 @@ func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, 
 	w := ws[0]
 	e, impl, velox := t.Entity, f.gqlimpl(), f.velox()
 	field := fmt.Sprintf("%q, w.%s", w.Name, w.GoName) // the GraphQL name, for errors, and the value
+	cond := func(of string) string { return "(*" + of + "WhereInput)." + predMethod }
 	edge := func() string {
 		ed := e.Edges[w.Edge]
 		return fmt.Sprintf("%s, %s.TableOf[%s]()", edgeConst(e, ed), velox, ed.Target)
 	}
 	switch w.Kind {
 	case sdl.WhereNot:
-		return fmt.Sprintf("%s.Not(f, %s)", impl, field), nil
+		return fmt.Sprintf("%s.Not(f, %s, %s)", impl, field, cond(t.Name)), nil
 	case sdl.WhereAnd:
-		return fmt.Sprintf("%s.And(f, %s)", impl, field), nil
+		return fmt.Sprintf("%s.And(f, %s, %s)", impl, field, cond(t.Name)), nil
 	case sdl.WhereOr:
-		return fmt.Sprintf("%s.Or(f, %s)", impl, field), nil
+		return fmt.Sprintf("%s.Or(f, %s, %s)", impl, field, cond(t.Name)), nil
 	case sdl.WhereHas:
 		return fmt.Sprintf("%s.Has(f, %s, %s)", impl, field, edge()), nil
 	case sdl.WhereHasWith:
-		return fmt.Sprintf("%s.HasWith(f, %s, %s)", impl, field, edge()), nil
+		return fmt.Sprintf("%s.HasWith(f, %s, %s, %s)", impl, field, cond(w.Target), edge()), nil
 	}
 	// The field's predicates: the value of each in its field of gqlimpl.Ops,
 	// and the field's GraphQL name, which the predicates' names begin with.
@@ -133,7 +138,7 @@ func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, 
 		}
 		if w.Edge >= 0 {
 			// A foreign key: its target's Read policy holds of it, as of the edge.
-			return items(fmt.Sprintf("%s.FKField[%s](f, %q, %s, %s, &%s, %s.Ops[string]{", impl, tt.Key, base, col, edgeConst(e, e.Edges[w.Edge]), connVar(tt), impl), ops, "})"), nil
+			return items(fmt.Sprintf("%s.FKField[%s](f, %q, %s, %s, &%s, %s.Ops[string]{", impl, tt.Key, base, col, edgeConst(e, e.Edges[w.Edge]), typeVar(tt), impl), ops, "})"), nil
 		}
 		return items(fmt.Sprintf("%s.IDField[%s](f, %q, %s, %s.Ops[string]{", impl, tt.Key, base, col, impl), ops, "})"), nil
 	}

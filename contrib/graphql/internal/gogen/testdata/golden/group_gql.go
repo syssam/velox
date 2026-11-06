@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion15
+const _ = veloxgql.GeneratedCodeIsVersion16
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -46,26 +46,28 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 }
 
 // Users is the edge users: a connection to the Account nodes it leads to. Its
-// queries batch with the edge of every row read with x; see
-// gqlimpl.EdgeConnection.
+// queries batch with the edge of every row read with x.
 func (x *Group) Users(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *AccountWhereInput,
 ) (*AccountConnection, error) {
-	c, err := AccountsConnection(ctx, after, first, before, last, where)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c, err := PaginateAccounts(ctx, db.Query[User](), after, first, before, last, where)
 	if err != nil {
 		return nil, err
 	}
 	return &AccountConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &groupConnGQL, x, groupEdgeUsers, "Group.users",
+		ctx, c.c, &groupGQL, x, groupEdgeUsers, "Group.users",
 		[]any{after, first, before, last, where},
 	)}, nil
 }
 
-// GroupConnection is the GraphQL type GroupConnection, a connection to a list
-// of Group. Its fields run their queries when gqlgen asks; see
-// gqlimpl.Connection.
+// GroupConnection is the GraphQL type GroupConnection. Its fields run their
+// queries when gqlgen resolves them.
 type GroupConnection struct {
 	c *gqlimpl.Connection
 }
@@ -98,34 +100,16 @@ func (c *GroupConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, err
 // this page.
 func (c *GroupConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
-// GroupEdge is the GraphQL type GroupEdge, an edge in a connection to a list of
-// Group.
+// GroupEdge is the GraphQL type GroupEdge.
 type GroupEdge struct {
-	// Node is the Group at the end of the edge.
-	Node *Group
-	// Cursor is the cursor of the edge, for paging.
+	Node   *Group
 	Cursor veloxgql.Cursor
 }
 
-// GroupsConnection is the connection to every Group node, on the DB in ctx, for
-// a Query field's resolver. It is GroupsConnectionOf of the whole table.
-func GroupsConnection(
-	ctx context.Context,
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-	orderBy *GroupOrder,
-) (*GroupConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return GroupsConnectionOf(ctx, db.Query[Group](), after, first, before, last, orderBy)
-}
-
-// GroupsConnectionOf is the connection to the Group nodes q returns, ordered by
+// PaginateGroups is the connection to the Group nodes q returns, ordered by
 // orderBy and then the key, and paged by the other arguments. q must not be
-// ordered and must select the key and the order columns; see
-// gqlimpl.ConnectionBase and gqlimpl.NewConnection.
-func GroupsConnectionOf(
+// ordered, and must select the key and the order columns.
+func PaginateGroups(
 	ctx context.Context, q velox.Query[Group],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *GroupOrder,
@@ -134,12 +118,8 @@ func GroupsConnectionOf(
 	if o := orderBy; o != nil {
 		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
-	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &groupConnGQL, order)
-	if err != nil {
-		return nil, err
-	}
-	c, err := gqlimpl.NewConnection(
-		ctx, b, &groupConnGQL,
+	c, err := gqlimpl.Paginate(
+		ctx, velox.Untyped(q), &groupGQL,
 		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
 		order,
 	)
@@ -149,11 +129,9 @@ func GroupsConnectionOf(
 	return &GroupConnection{c: c}, nil
 }
 
-// groupConnGQL is what the runtime knows of the GraphQL type Group: its table,
-// the key and the order columns of its connections, the columns its selections
-// read and the fields of its inputs.
-var groupConnGQL = gqlimpl.Conn{
-	Type:  "Group",
+// groupGQL describes the GraphQL type Group to gqlimpl.
+var groupGQL = gqlimpl.Type{
+	Name:  "Group",
 	Table: velox.TableOf[Group],
 	Key:   []gqlimpl.Col{{Field: "id", Col: groupColID}},
 	Order: []gqlimpl.Col{

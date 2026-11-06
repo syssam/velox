@@ -347,7 +347,11 @@ func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Nod
 
 // Posts is the resolver for the posts field.
 func (r *queryResolver) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	return gen.PostsConnection(ctx, after, first, before, last, where)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PaginatePosts(ctx, db.Query[gen.Post](), after, first, before, last, where)
 }
 
 // CreatePost is the resolver for the createPost field.
@@ -362,7 +366,11 @@ func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.
 
 // Things is the resolver for the things field.
 func (r *queryResolver) Things(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.ThingConnection, error) {
-	return gen.ThingsConnection(ctx, after, first, before, last)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PaginateThings(ctx, db.Query[gen.Thing](), after, first, before, last)
 }
 
 // CreateThing is the resolver for the createThing field.
@@ -387,7 +395,11 @@ func (r *mutationResolver) UpdateAcct(ctx context.Context, id string, input gen.
 
 // Docs is the resolver for the docs field.
 func (r *queryResolver) Docs(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.DocWhereInput) (*gen.DocConnection, error) {
-	return gen.DocsConnection(ctx, after, first, before, last, where)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PaginateDocs(ctx, db.Query[gen.Doc](), after, first, before, last, where)
 }
 
 // UpdateDoc is the resolver for the updateDoc field.
@@ -397,17 +409,29 @@ func (r *mutationResolver) UpdateDoc(ctx context.Context, id string, input gen.U
 
 // Members is the resolver for the members field.
 func (r *queryResolver) Members(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.MemberConnection, error) {
-	return gen.MembersConnection(ctx, after, first, before, last)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PaginateMembers(ctx, db.Query[gen.Member](), after, first, before, last)
 }
 
 // Remarks is the resolver for the remarks field.
 func (r *queryResolver) Remarks(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.RemarkWhereInput) (*gen.RemarkConnection, error) {
-	return gen.RemarksConnection(ctx, after, first, before, last, where)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PaginateRemarks(ctx, db.Query[gen.Remark](), after, first, before, last, where)
 }
 
 // Items is the resolver for the items field.
 func (r *queryResolver) Items(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.ItemConnection, error) {
-	return gen.ItemsConnection(ctx, after, first, before, last)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PaginateItems(ctx, db.Query[gen.Item](), after, first, before, last)
 }
 
 // CreateItem is the resolver for the createItem field.
@@ -422,12 +446,20 @@ func (r *mutationResolver) UpdateItem(ctx context.Context, id string, input gen.
 
 // Flags is the resolver for the flags field.
 func (r *queryResolver) Flags(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.FlagOrder) (*gen.FlagConnection, error) {
-	return gen.FlagsConnection(ctx, after, first, before, last, orderBy)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PaginateFlags(ctx, db.Query[gen.Flag](), after, first, before, last, orderBy)
 }
 
 // Pins is the resolver for the pins field.
 func (r *queryResolver) Pins(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.PinOrder) (*gen.PinConnection, error) {
-	return gen.PinsConnection(ctx, after, first, before, last, orderBy)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PaginatePins(ctx, db.Query[gen.Pin](), after, first, before, last, orderBy)
 }
 
 // CreateFlag is the resolver for the createFlag field.

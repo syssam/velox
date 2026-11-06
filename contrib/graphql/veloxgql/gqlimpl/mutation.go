@@ -95,7 +95,7 @@ func NotZero[V any](at string, v V) error {
 // A validator's error on a column the input sets is BAD_USER_INPUT
 // "<input>.<field>: invalid value: <the validator's text>", wrapping the
 // *velox.ValidationError; any other error is returned as it is.
-func Checked[E any](input string, c *Conn, set []velox.Setter[E]) ([]velox.Setter[E], error) {
+func Checked[E any](input string, c *Type, set []velox.Setter[E]) ([]velox.Setter[E], error) {
 	if err := checked(input, c, velox.Assignments(set)); err != nil {
 		return nil, err
 	}
@@ -103,11 +103,11 @@ func Checked[E any](input string, c *Conn, set []velox.Setter[E]) ([]velox.Sette
 }
 
 // checked is Checked, without the entity's type.
-func checked(input string, c *Conn, set []velox.Assignment) error {
+func checked(input string, c *Type, set []velox.Assignment) error {
 	t := c.table()
 	info := t.Info()
 	if info == nil {
-		return fmt.Errorf("veloxgql: %s: the Conn of %s has no Table", input, c.Type)
+		return fmt.Errorf("veloxgql: %s: the Type %s has no Table", input, c.Name)
 	}
 	cols := make([]velox.Assignment, 0, len(set))
 	for _, a := range set {

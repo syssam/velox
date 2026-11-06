@@ -23,7 +23,7 @@ import (
 // A caller batches only from the edge's own field: the field of ctx
 // (graphql.GetFieldContext) must be the edge the generated code names
 // ("Post.likes": its object and its field's name). A call from any other
-// field, an application's resolver calling x.ChildrenGQL, reads alone: one
+// field, an application's resolver calling x.Children, reads alone: one
 // statement for its row, by its own arguments.
 //
 // A batch is keyed by its group, the edge's field (Field.Field, so two aliases
@@ -49,7 +49,7 @@ import (
 // has the request's. A batch's error is every row's.
 
 // EdgeConnection returns c, a connection over a query of every node of the
-// edge's target that XConnectionOf made with args, the edge's arguments as
+// edge's target that PaginateXs made with args, the edge's arguments as
 // one value, as the connection of the edge of x, a *E of owner's entity E,
 // through owner's relation edge, whose GraphQL field is field
 // ("User.posts"). When x is in a group and ctx is that field's, its page is
@@ -61,7 +61,7 @@ import (
 // Otherwise its queries are c's, filtered by the relation of x. A base query
 // with a lock (ForUpdate, ForShare) is refused when batched: a per-owner read
 // locks nothing.
-func EdgeConnection(ctx context.Context, c *Connection, owner *Conn, x any, edge int, field string, args any) *Connection {
+func EdgeConnection(ctx context.Context, c *Connection, owner *Type, x any, edge int, field string, args any) *Connection {
 	return edgeConnection(ctx, c, owner.table(), rowOf(owner, x), edge, field, args)
 }
 
@@ -74,7 +74,7 @@ func EdgeConnection(ctx context.Context, c *Connection, owner *Conn, x any, edge
 // (LoadEach, of one per owner) when ctx is that field's, or alone. The node
 // read alone is a group of its own, and so are the nodes of a batch: their
 // edges batch.
-func EdgeOne(ctx context.Context, target, owner *Conn, x any, edge int, field string) (any, error) {
+func EdgeOne(ctx context.Context, target, owner *Type, x any, edge int, field string) (any, error) {
 	q, err := edgeQuery(ctx, target)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func EdgeOne(ctx context.Context, target, owner *Conn, x any, edge int, field st
 // do not. MaxList is that of veloxgql.LimitsFromContext(ctx), or maxList, the
 // edge's graphql.MaxList, when that is lower and not 0. Read alone, x's nodes
 // are one LoadEach of x, a group of their own.
-func EdgeList(ctx context.Context, target, owner *Conn, x any, edge int, field string, maxList int) (any, error) {
+func EdgeList(ctx context.Context, target, owner *Type, x any, edge int, field string, maxList int) (any, error) {
 	q, err := edgeQuery(ctx, target)
 	if err != nil {
 		return nil, err
@@ -109,13 +109,13 @@ func EdgeList(ctx context.Context, target, owner *Conn, x any, edge int, field s
 
 // edgeQuery is the query of target's rows that an edge reads, on the DB in
 // ctx, reading only the columns the selection of the field in ctx needs.
-func edgeQuery(ctx context.Context, target *Conn) (velox.TableQuery, error) {
+func edgeQuery(ctx context.Context, target *Type) (velox.TableQuery, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return velox.TableQuery{}, err
 	}
 	q := db.QueryTable(target.table())
-	if fields, ok := Selected(ctx, target.Type); ok {
+	if fields, ok := Selected(ctx, target.Name); ok {
 		q = Narrow(q, target.Columns(fields))
 	}
 	return q, nil

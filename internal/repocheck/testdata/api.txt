@@ -1097,7 +1097,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion15
+const GeneratedCodeIsVersion16
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

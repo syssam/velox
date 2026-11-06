@@ -12,23 +12,23 @@ import (
 
 // Filter is a where input being turned into a condition on the entity of a
 // velox.Table: the conditions the helpers added, or the first error. A where
-// input's generated method PredicateGQL makes one, adds the predicates the
+// input's generated method predicate makes one, adds the predicates the
 // input sets with one helper call for each field, by column or relation
-// index, and returns Filter.Pred; its method Pred is PredicateGQL, typed:
+// index, and returns Filter.Pred; its method Pred is predicate, typed:
 //
-//	func (w *AccountWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-//		f := gqlimpl.NewFilter(ctx, &userConnGQL)
+//	func (w *AccountWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
+//		f := gqlimpl.NewFilter(ctx, &userGQL)
 //		if w == nil {
 //			return f.Pred()
 //		}
-//		gqlimpl.Not(f, "not", w.Not)
-//		gqlimpl.And(f, "and", w.And)
-//		gqlimpl.Or(f, "or", w.Or)
+//		gqlimpl.Not(f, "not", w.Not, (*AccountWhereInput).predicate)
+//		gqlimpl.And(f, "and", w.And, (*AccountWhereInput).predicate)
+//		gqlimpl.Or(f, "or", w.Or, (*AccountWhereInput).predicate)
 //		gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{EQ: w.ID, In: w.IDIn})
 //		gqlimpl.Field(f, "displayName", userColName, gqlimpl.Ops[string]{EQ: w.DisplayName, In: w.DisplayNameIn})
-//		gqlimpl.FKField[int64](f, "teamID", userColTeamID, userEdgeTeam, &teamConnGQL, gqlimpl.Ops[string]{EQ: w.TeamID})
+//		gqlimpl.FKField[int64](f, "teamID", userColTeamID, userEdgeTeam, &teamGQL, gqlimpl.Ops[string]{EQ: w.TeamID})
 //		gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
-//		gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, userEdgePosts, velox.TableOf[Post]())
+//		gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
 //		return f.Pred()
 //	}
 //
@@ -82,13 +82,13 @@ func (n name) String() string { return n.base + n.op }
 // (veloxgql.ErrFilterTooWide); and on a where argument of more than
 // MaxFilterNodes inputs, predicates and values in all
 // (veloxgql.ErrFilterTooLarge).
-func NewFilter(ctx context.Context, c *Conn) *Filter {
+func NewFilter(ctx context.Context, c *Type) *Filter {
 	st, ok := ctx.Value(stateKey{}).(*state)
 	if !ok {
 		lim := veloxgql.LimitsFromContext(ctx)
 		st = &state{budget: &budget{left: lim.MaxFilterNodes, limits: lim}}
 	}
-	f := &Filter{ctx: ctx, typ: c.Type, t: c.table(), depth: st.depth, budget: st.budget}
+	f := &Filter{ctx: ctx, typ: c.Name, t: c.table(), depth: st.depth, budget: st.budget}
 	if err := checkDepth(f.depth, f.budget.limits.MaxFilterDepth); err != nil {
 		f.refuse(name{}, err)
 		return f
@@ -182,25 +182,22 @@ func checkWidth(n, most int) error {
 	return nil
 }
 
-// Where is a where input of the GraphQL code: a pointer to a generated
-// struct, whose PredicateGQL is its condition, untyped. The helpers that
-// nest inputs are generic over it, a pointer, so that they are compiled once
-// for every input.
-type Where interface {
-	comparable
-	PredicateGQL(ctx context.Context) (velox.Predicate, error)
-}
+// Cond is the condition of a where input W, untyped: the generated method
+// expression (*XWhereInput).predicate, whose method Pred is it, typed. The
+// helpers that nest inputs take one. W is a pointer, so that they are
+// compiled once for every input.
+type Cond[W comparable] func(w W, ctx context.Context) (velox.Predicate, error)
 
 // nested is the condition of w, an input nested in f's at field, one level
-// deeper (in the context PredicateGQL is called with); a nil w is an input
-// that sets nothing, which holds for every row. ok is false when w fails, and
-// f has its error.
-func nested[W Where](f *Filter, field name, w W) (p velox.Predicate, ok bool) {
+// deeper (in the context cond is called with); a nil w is an input that sets
+// nothing, which holds for every row. ok is false when w fails, and f has its
+// error.
+func nested[W comparable](f *Filter, field name, w W, cond Cond[W]) (p velox.Predicate, ok bool) {
 	var none W
 	if w == none {
 		return velox.AndPredicates(), true
 	}
-	p, err := w.PredicateGQL(context.WithValue(f.ctx, stateKey{}, &state{depth: f.depth + 1, budget: f.budget}))
+	p, err := cond(w, context.WithValue(f.ctx, stateKey{}, &state{depth: f.depth + 1, budget: f.budget}))
 	if err != nil {
 		f.refuse(field, err)
 		return p, false
@@ -211,13 +208,13 @@ func nested[W Where](f *Filter, field name, w W) (p velox.Predicate, ok bool) {
 // list is the conditions of ws, the inputs nested in f's at field, after
 // checkWidth; ok is false when one fails, and f has its error, which names
 // the entry, as "or[3]".
-func list[W Where](f *Filter, field string, ws []W) (ps []velox.Predicate, ok bool) {
+func list[W comparable](f *Filter, field string, ws []W, cond Cond[W]) (ps []velox.Predicate, ok bool) {
 	if !f.width(name{base: field}, len(ws)) {
 		return nil, false
 	}
 	ps = make([]velox.Predicate, 0, len(ws))
 	for i, w := range ws {
-		p, ok := nested(f, name{base: field + "[" + strconv.Itoa(i) + "]"}, w)
+		p, ok := nested(f, name{base: field + "[" + strconv.Itoa(i) + "]"}, w, cond)
 		if !ok {
 			return nil, false
 		}
@@ -233,12 +230,12 @@ func list[W Where](f *Filter, field string, ws []W) (ps []velox.Predicate, ok bo
 
 // Not adds the negation of w, the input's not: a node matches when it does
 // not match w. A nil w adds nothing.
-func Not[W Where](f *Filter, field string, w W) {
+func Not[W comparable](f *Filter, field string, w W, cond Cond[W]) {
 	var none W
 	if f.err != nil || w == none {
 		return
 	}
-	if p, ok := nested(f, name{base: field}, w); ok {
+	if p, ok := nested(f, name{base: field}, w, cond); ok {
 		f.add(name{base: field}, 0, velox.NotPredicate(p))
 	}
 }
@@ -246,11 +243,11 @@ func Not[W Where](f *Filter, field string, w W) {
 // And adds ws, the input's and: a node matches when it matches each of ws.
 // An empty ws adds nothing. More than MaxFilterWidth fails with
 // ErrFilterTooWide.
-func And[W Where](f *Filter, field string, ws []W) {
+func And[W comparable](f *Filter, field string, ws []W, cond Cond[W]) {
 	if f.err != nil || ws == nil {
 		return
 	}
-	if ps, ok := list(f, field, ws); ok && f.charge(name{base: field}, 1) {
+	if ps, ok := list(f, field, ws, cond); ok && f.charge(name{base: field}, 1) {
 		f.ps = append(f.ps, ps...)
 	}
 }
@@ -258,11 +255,11 @@ func And[W Where](f *Filter, field string, ws []W) {
 // Or adds ws, the input's or: a node matches when it matches one of ws. An
 // empty ws matches no node, as an empty In does; a nil ws adds nothing. More
 // than MaxFilterWidth fails with ErrFilterTooWide.
-func Or[W Where](f *Filter, field string, ws []W) {
+func Or[W comparable](f *Filter, field string, ws []W, cond Cond[W]) {
 	if f.err != nil || ws == nil {
 		return
 	}
-	ps, ok := list(f, field, ws)
+	ps, ok := list(f, field, ws, cond)
 	switch {
 	case !ok:
 	case len(ps) == 1:
@@ -275,11 +272,11 @@ func Or[W Where](f *Filter, field string, ws []W) {
 // HasWith adds has<Edge>With: a node matches when a node of relation edge,
 // of target, matches each of ws. An empty ws adds nothing. More than
 // MaxFilterWidth fails with ErrFilterTooWide.
-func HasWith[W Where](f *Filter, field string, ws []W, edge int, target velox.Table) {
+func HasWith[W comparable](f *Filter, field string, ws []W, cond Cond[W], edge int, target velox.Table) {
 	if f.err != nil || len(ws) == 0 {
 		return
 	}
-	if ps, ok := list(f, field, ws); ok {
+	if ps, ok := list(f, field, ws, cond); ok {
 		f.add(name{base: field}, 0, f.t.Has(edge, target, ps...))
 	}
 }
@@ -432,9 +429,9 @@ func IDField[K any](f *Filter, field string, col int, o Ops[string]) {
 //
 // A WithRewrite in the application's own query is not known here, nor is it
 // to the edge's Has.
-func FKField[K any](f *Filter, field string, col, edge int, target *Conn, o Ops[string]) {
+func FKField[K any](f *Filter, field string, col, edge int, target *Type, o Ops[string]) {
 	fk := fkScope{edge: edge, target: target.table(), on: true}
-	ids[K](f, field, target.Type, col, o, fk)
+	ids[K](f, field, target.Name, col, o, fk)
 	f.fkNull(name{field, "IsNil"}, col, velox.PredIsNull, o.IsNil, fk)
 	f.fkNull(name{field, "NotNil"}, col, velox.PredNotNull, o.NotNil, fk)
 }

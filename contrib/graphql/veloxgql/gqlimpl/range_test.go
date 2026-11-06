@@ -44,7 +44,7 @@ func dialDescriptor() velox.Descriptor[dial] {
 func TestOutOfRangeIsUserInput(t *testing.T) {
 	ctx := context.Background()
 	filter := func(o gqlimpl.Ops[int64]) error {
-		f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[dial]("Dial"))
+		f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[dial]("Dial"))
 		gqlimpl.Field(f, "level", 1, o)
 		_, err := f.Pred()
 		return err
@@ -76,14 +76,14 @@ func TestOutOfRangeIsUserInput(t *testing.T) {
 // nothing.
 func TestFirstWhereErrorStays(t *testing.T) {
 	ctx := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxFilterNodes: 1})).NewContext(context.Background())
-	f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[dial]("Dial"))
+	f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[dial]("Dial"))
 	gqlimpl.Field(f, "level", 1, gqlimpl.Ops[int64]{EQ: new(int64(300))})
 	if _, err := f.Pred(); err == nil || !strings.Contains(err.Error(), "out of the field's range") {
 		t.Errorf("out of range and over the budget: %v, want the range's error", err)
 	}
-	f = gqlimpl.NewFilter(context.Background(), gqlimpl.TableConn[dial]("Dial"))
+	f = gqlimpl.NewFilter(context.Background(), gqlimpl.TableType[dial]("Dial"))
 	yes := true
-	gqlimpl.FKField[int64](f, "dialID", 0, 0, gqlimpl.TableConn[dial]("Dial"), gqlimpl.Ops[string]{EQ: new("bad"), NotNil: &yes})
+	gqlimpl.FKField[int64](f, "dialID", 0, 0, gqlimpl.TableType[dial]("Dial"), gqlimpl.Ops[string]{EQ: new("bad"), NotNil: &yes})
 	if _, err := f.Pred(); err == nil || !strings.Contains(err.Error(), "DialWhereInput.dialID:") {
 		t.Errorf("a bad ID, then NotNil: %v, want the ID's error", err)
 	}

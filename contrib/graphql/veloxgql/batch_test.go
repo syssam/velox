@@ -220,18 +220,18 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			return out, nil
 		}
 	}
-	key := &gqlimpl.Conn{Type: "Pet", Key: []gqlimpl.Col{{Field: "id", Col: int(pets.ID.I)}}}
+	key := &gqlimpl.Type{Name: "Pet", Key: []gqlimpl.Col{{Field: "id", Col: int(pets.ID.I)}}}
 	petConn := func(edge string) resolver {
 		return func(ctx context.Context, _ map[string]any) (any, error) {
 			db, err := veloxgql.DBFromContext(ctx)
 			if err != nil {
 				return nil, err
 			}
-			c, err := gqlimpl.NewConnection(ctx, db.QueryTable(velox.TableOf[pet]()), key, gqlimpl.Args{}, nil)
+			c, err := gqlimpl.Paginate(ctx, db.QueryTable(velox.TableOf[pet]()), key, gqlimpl.Args{}, nil)
 			if err != nil {
 				return nil, err
 			}
-			return gqlimpl.EdgeConnection(ctx, c, &gqlimpl.Conn{Type: "Keeper", Table: velox.TableOf[keeper]}, parent(ctx), int(keepers.Pets.I), edge, nil), nil
+			return gqlimpl.EdgeConnection(ctx, c, &gqlimpl.Type{Name: "Keeper", Table: velox.TableOf[keeper]}, parent(ctx), int(keepers.Pets.I), edge, nil), nil
 		}
 	}
 	return serveSchema(testSchemaOf(batchSDL, map[string]resolver{

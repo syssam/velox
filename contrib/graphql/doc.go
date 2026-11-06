@@ -157,16 +157,17 @@
 //     GraphQL type, and the marshalers of velox-gen's enum types;
 //   - the edge methods, named after the edges: a connection, a list or the
 //     one node, each read for every row of its batch in one statement;
-//   - the root connection function <GoPlural>Connection, named after ent's
-//     plural of the GraphQL type (UsersConnection for User,
-//     StatusSliceConnection for Status, AccountsConnection for a User exposed
-//     as Account), which a Query field's resolver returns;
+//   - Paginate<GoPlural>, which pages a query of the type's nodes, as ent's
+//     Paginate does: it is named after ent's plural of the GraphQL type
+//     (PaginateUsers for User, PaginateStatusSlice for Status,
+//     PaginateAccounts for a User exposed as Account), and a Query field's
+//     resolver returns it;
 //   - the where input's method Pred, which turns a where argument into a
 //     velox condition.
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion15", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion16", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -189,10 +190,22 @@
 // see "The cost limit" below. A mutation's transaction does not cover @defer
 // (see veloxgql.Extension): do not defer fields of a mutation.
 //
-// The application writes the root query's resolvers, one call each: Node
-// and Nodes for node and nodes, and the root connection function for each
-// QueryField. The example in examples/graphql in the velox repository is a
-// whole server: a schema, its gqlgen.yml and its resolvers.
+// The application writes the root query's resolvers: Node and Nodes for
+// node and nodes, and for each QueryField a Paginate<GoPlural> of a query on
+// the DB that veloxgql.DBFromContext reads:
+//
+//	func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
+//		db, err := veloxgql.DBFromContext(ctx)
+//		if err != nil {
+//			return nil, err
+//		}
+//		return gen.PaginateUsers(ctx, db.Query[gen.User](), after, first, before, last, orderBy, where)
+//	}
+//
+// The query may hold the application's own filters and With loads. It must
+// not be ordered, and must select the key and the order columns. The example
+// in examples/graphql in the velox repository is a whole server: a schema,
+// its gqlgen.yml and its resolvers.
 //
 // # Mutations
 //
@@ -421,7 +434,7 @@
 // two aliases, or with two sets of arguments, is two batches, each with its
 // own page, and a nested last, after and before batch too. An edge method
 // called from any other field (an application's resolver calling
-// x.ChildrenGQL, or two edges from one field) reads alone, one statement
+// x.Children, or two edges from one field) reads alone, one statement
 // for its row; so does a call whose arguments are not its batch's first
 // caller's (a forceResolver that computes them per row).
 //
@@ -462,7 +475,7 @@
 // application's own, in an extend type, whose resolver may read anything), or
 // one of a connection or an edge that gqlimpl.Selected cannot see through
 // (see its documentation). It never adds a column the application's query
-// left out (velox.Query.Selects), and a <GoPlural>ConnectionOf whose base query
+// left out (velox.Query.Selects), and a Paginate<GoPlural> whose query
 // drops the key or a column an orderBy names is refused with an internal
 // error. A mutation's returned row is not narrowed.
 //

@@ -125,7 +125,8 @@ func (r *renderer) inputType(f *file, t *sdl.Type, fi sdl.InputField) (string, e
 
 // idKey is how the generated code decodes the IDs of the type tt: the Go
 // type of the key (the key field's own), and the decode call's type
-// arguments and its conversion, as gqlimpl.Key's or KeyAs's.
+// arguments and its conversion, as gqlimpl.DecodeID's or DecodeIDAs's and
+// gqlimpl.NewNode's or NewNodeAs's take them.
 type idKey struct {
 	typ  string // the key's Go type, as the file names it
 	args string // the decode's type arguments: "[int64]", or "As[int64]"

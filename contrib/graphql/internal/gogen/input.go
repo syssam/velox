@@ -88,7 +88,7 @@ func (r *renderer) writeInput(f *file, t *sdl.Type, in string, fs []sdl.InputFie
 		types[i] = typ
 	}
 	f.p("")
-	doc := fmt.Sprintf("%s is the GraphQL input %[1]s, whose Setters gives its fields as setters. A nil pointer or list is a field not given, and so is a null.", in)
+	doc := fmt.Sprintf("%s is the GraphQL input %[1]s. A nil pointer or list is a field not given, and so is a null.", in)
 	if slices.ContainsFunc(fs, func(fi sdl.InputField) bool { return fi.Kind == sdl.InputClear || fi.Kind == sdl.InputClearEdge }) {
 		doc += " A true clear field clears its field or edge."
 	}
@@ -193,7 +193,7 @@ func (r *renderer) writeSetters(f *file, t *sdl.Type, in string, fs []sdl.InputF
 	f.p("")
 	if create {
 		var doc strings.Builder
-		doc.WriteString("Setters returns the setters of the input's fields and edges, for db.Insert(x).Set: a field not given sets nothing, and x keeps its value or the field's Default.")
+		doc.WriteString("Setters returns the input's fields and edges as setters for db.Insert(x).Set. A field not given sets nothing: x keeps its value, or the field's Default.")
 		for _, fd := range leftOut(t) {
 			// A key's zero value names no row: the foreign key refuses it.
 			if ed := ownedEdgeOf(e, fd.Name); ed != nil {
@@ -204,10 +204,10 @@ func (r *renderer) writeSetters(f *file, t *sdl.Type, in string, fs []sdl.InputF
 		}
 		f.doc("", doc.String())
 	} else {
-		f.doc("", fmt.Sprintf("Setters returns the setters of the input's fields and edges, for db.Update[%s]().Set: a field not given sets nothing, and a clear field wins over its field.", e.Name))
+		f.doc("", fmt.Sprintf("Setters returns the input's fields and edges as setters for db.Update[%s]().Set. A field not given sets nothing, and a clear field wins over its field.", e.Name))
 	}
 	f.p("//")
-	f.doc("", "It does no I/O. A value a validator refuses, or an ID that does not decode or names another type, is BAD_USER_INPUT naming the input's field. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each field does and what the write checks.")
+	f.doc("", "It does no I/O. A value a validator refuses, or an ID that does not decode or is of another type, is BAD_USER_INPUT naming the field. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql.")
 	f.p("func (in *%s) Setters() ([]%s.Setter[%s], error) {", in, vx, e.Name)
 	f.p("\tvar set []%s.Setter[%s]", vx, e.Name)
 	for i, fi := range fs {
@@ -234,7 +234,7 @@ func (r *renderer) writeSetters(f *file, t *sdl.Type, in string, fs []sdl.InputF
 			return err
 		}
 	}
-	f.p("\treturn %s.Checked(%q, &%s, set)", impl, in, connVar(t))
+	f.p("\treturn %s.Checked(%q, &%s, set)", impl, in, typeVar(t))
 	f.p("}")
 	return nil
 }

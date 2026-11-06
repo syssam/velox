@@ -16,7 +16,7 @@ import (
 // Table, whose statements fail, only its kind is checked. The rows come back
 // as *E and []*E of the entity, holding the same pointers.
 func TestRowsAreChecked(t *testing.T) {
-	people := gqlimpl.TableConn[person]("Person")
+	people := gqlimpl.TableType[person]("Person")
 	x := &person{ID: 7}
 	if p := gqlimpl.RowOf(people, x); p == nil || gqlimpl.NodeOf(people, p) != any(x) {
 		t.Errorf("RowOf, NodeOf of a person = %v", p)
@@ -24,7 +24,7 @@ func TestRowsAreChecked(t *testing.T) {
 	if gqlimpl.RowOf(people, nil) != nil || gqlimpl.NodeOf(people, nil) != nil {
 		t.Error("RowOf or NodeOf of nil is not nil")
 	}
-	panics := func(name string, c *gqlimpl.Conn, x any) {
+	panics := func(name string, c *gqlimpl.Type, x any) {
 		t.Helper()
 		defer func() {
 			if r := recover(); r == nil || !strings.Contains(r.(string), "is not a row") {
@@ -34,8 +34,8 @@ func TestRowsAreChecked(t *testing.T) {
 		gqlimpl.RowOf(c, x)
 	}
 	panics("another entity", people, &post{})
-	panics("no pointer", &gqlimpl.Conn{Type: "None"}, person{})
-	if p := gqlimpl.RowOf(&gqlimpl.Conn{Type: "None"}, x); p == nil {
+	panics("no pointer", &gqlimpl.Type{Name: "None"}, person{})
+	if p := gqlimpl.RowOf(&gqlimpl.Type{Name: "None"}, x); p == nil {
 		t.Error("RowOf with no Table: nil")
 	}
 	ps := gqlimpl.NodesOf(people, []any{gqlimpl.RowOf(people, x), gqlimpl.RowOf(people, x)})
@@ -60,11 +60,11 @@ func TestEdgeErrors(t *testing.T) {
 		t.Errorf("EdgeList with no DB: %v", err)
 	}
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	none := &gqlimpl.Conn{Type: "None"} // an owner with no Table
-	if v, err := gqlimpl.EdgeOne(ctx, gqlimpl.TableConn[owner]("Owner"), none, x, int(children.Owner.I), "Child.owner"); v != nil || err == nil {
+	none := &gqlimpl.Type{Name: "None"} // an owner with no Table
+	if v, err := gqlimpl.EdgeOne(ctx, gqlimpl.TableType[owner]("Owner"), none, x, int(children.Owner.I), "Child.owner"); v != nil || err == nil {
 		t.Errorf("EdgeOne of an owner with no Table = %v, %v", v, err)
 	}
-	if v, err := gqlimpl.EdgeList(ctx, gqlimpl.TableConn[tag]("Tag"), none, &owner{ID: 1}, int(owners.Tags.I), "Owner.tags", 0); v != nil || err == nil {
+	if v, err := gqlimpl.EdgeList(ctx, gqlimpl.TableType[tag]("Tag"), none, &owner{ID: 1}, int(owners.Tags.I), "Owner.tags", 0); v != nil || err == nil {
 		t.Errorf("EdgeList of an owner with no Table = %v, %v", v, err)
 	}
 }
@@ -96,7 +96,7 @@ func TestNodeAs(t *testing.T) {
 	seedPosts(ctx, t, db)
 	r.take()
 	kind := func(typ string) (gqlimpl.NodeKind, bool) {
-		return gqlimpl.NewNodeAs[int64, int64](gqlimpl.InputConn[post]("Post", int(posts.ID.I), nil), func(k int64) int64 { return k }), typ == "Post"
+		return gqlimpl.NewNodeAs[int64, int64](gqlimpl.InputType[post]("Post", int(posts.ID.I), nil), func(k int64) int64 { return k }), typ == "Post"
 	}
 	n, err := gqlimpl.NodeByID(ctx, veloxgql.EncodeID("Post", int64(2)), kind)
 	if p, ok := n.(*post); err != nil || !ok || p.ID != 2 {
@@ -110,7 +110,7 @@ func TestNodeAs(t *testing.T) {
 // TestInputWithoutTable: an input's setters checked against a Conn with no
 // Table fail, naming no field.
 func TestInputWithoutTable(t *testing.T) {
-	none := &gqlimpl.Conn{Type: "None"}
+	none := &gqlimpl.Type{Name: "None"}
 	set := []velox.Setter[item]{items.Name.Set("x")}
 	if _, err := gqlimpl.Checked("CreateNoneInput", none, set); err == nil {
 		t.Error("a create input with no Table: no error")

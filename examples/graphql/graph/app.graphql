@@ -35,7 +35,7 @@ type Mutation {
 extend type Query {
   """
   The published posts, composed by the application from its own query with
-  gen.PostsConnectionOf: paged, ordered and filtered as the posts connection
+  gen.PaginatePosts: paged, ordered and filtered as the posts connection
   is.
   """
   publishedPosts(

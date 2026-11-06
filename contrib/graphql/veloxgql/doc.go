@@ -3,7 +3,7 @@
 // the scalars, and the limits on what a client may ask for.
 //
 // What only generated code calls is in package gqlimpl, whose names are
-// stable by GeneratedCodeIsVersion15 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion16 and not by semantic versioning. Where a
 // name below belongs to gqlimpl it is written gqlimpl.Name.
 //
 // # IDs
@@ -52,9 +52,9 @@
 //
 // # Connections
 //
-// A gqlimpl.Connection (gqlimpl.NewConnection) holds a connection's query,
+// A gqlimpl.Connection (gqlimpl.Paginate) holds a connection's query,
 // its paging arguments (gqlimpl.Args) and its order (gqlimpl.Order, of the
-// columns of the type's gqlimpl.Conn), and runs nothing until asked: Page
+// columns of the type's gqlimpl.Type), and runs nothing until asked: Page
 // runs the page query once, whoever calls it first, and TotalCount the COUNT.
 // It is one non-generic runtime for every type, on velox's untyped
 // TableQuery, and the generated code only names the columns. The order always
@@ -81,14 +81,15 @@
 //
 // # Where
 //
-// A where input's generated method Pred turns it into a velox.Pred, and
-// PredicateGQL into the same condition untyped: a gqlimpl.Filter
-// (gqlimpl.NewFilter) on the entity's velox.Table, one helper call for each
-// not, and, or and edge of the input and for each field's predicates, and
-// Filter.Pred, the And of what the helpers added. The helpers take columns
-// and relations by index, and none is generic over the entity, so they are
-// compiled once for every where input. Each helper adds nothing for a field
-// the input does not set, and the first error stops the filter:
+// A where input's generated method Pred turns it into a velox.Pred, through
+// an unexported method that builds the same condition untyped: a
+// gqlimpl.Filter (gqlimpl.NewFilter) on the entity's velox.Table, one
+// helper call for each not, and, or and edge of the input and for each
+// field's predicates, and Filter.Pred, the And of what the helpers added.
+// The helpers take columns and relations by index, and a nested input's
+// condition as a method expression, and none is generic over the entity, so
+// they are compiled once for every where input. Each helper adds nothing
+// for a field the input does not set, and the first error stops the filter:
 //   - gqlimpl.Not, And and Or nest inputs one level deeper, and HasWith
 //     through an edge (velox.Table.Has); an empty and, or or has…With list
 //     adds nothing, and an input that sets nothing holds for every row;
@@ -207,8 +208,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion15 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion16 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
-// disagree. For generated code. It is replaced by GeneratedCodeIsVersion16 when
+// disagree. For generated code. It is replaced by GeneratedCodeIsVersion17 when
 // generated code must change.
-const GeneratedCodeIsVersion15 = true
+const GeneratedCodeIsVersion16 = true

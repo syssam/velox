@@ -28,10 +28,10 @@ func JoinedTermOf[E, T any](field string, dir veloxgql.OrderDirection, edge, col
 	return OrderTerm[E]{col: Col{Field: field, Col: col, Edge: edge + 1, Target: velox.TableOf[T]}, dir: dir}
 }
 
-// ConnOf is the Conn of the GraphQL type typ with the order terms order, then
+// TypeOf is the Conn of the GraphQL type typ with the order terms order, then
 // key, as the generated code writes it, and the connection's order.
-func ConnOf[E any](typ string, order, key []OrderTerm[E]) (*Conn, []Order) {
-	c := &Conn{Type: typ}
+func TypeOf[E any](typ string, order, key []OrderTerm[E]) (*Type, []Order) {
+	c := &Type{Name: typ}
 	var o []Order
 	for _, t := range order {
 		if c.find(t.col.Field) == nil {
@@ -70,24 +70,24 @@ func (c ConnectionOf[E]) Page(ctx context.Context) (*PageOf[E], error) {
 	return TypedPage[E](p), err
 }
 
-// NewConnectionOf is NewConnection on a typed query, with the Conn of typ,
+// NewConnectionOf is newConnection on a typed query, with the Type of typ,
 // order and key.
 func NewConnectionOf[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (ConnectionOf[E], error) {
-	conn, o := ConnOf(typ, order, key)
-	c, err := NewConnection(ctx, velox.Untyped(q), conn, args, o)
+	conn, o := TypeOf(typ, order, key)
+	c, err := newConnection(ctx, velox.Untyped(q), conn, args, o)
 	return ConnectionOf[E]{c}, err
 }
 
-// TableConn is a Conn of E's entity alone, as an edge's owner or target: a
+// TableType is a Conn of E's entity alone, as an edge's owner or target: a
 // selection reads every column.
-func TableConn[E any](typ string) *Conn {
-	return &Conn{Type: typ, Table: velox.TableOf[E]}
+func TableType[E any](typ string) *Type {
+	return &Type{Name: typ, Table: velox.TableOf[E]}
 }
 
-// InputConn is a Conn of E's entity with inputs, whose key is the column key
+// InputType is a Conn of E's entity with inputs, whose key is the column key
 // and whose inputs' fields are names, by column.
-func InputConn[E any](typ string, key int, names []string) *Conn {
-	c := TableConn[E](typ)
+func InputType[E any](typ string, key int, names []string) *Type {
+	c := TableType[E](typ)
 	c.Key = []Col{{Field: "id", Col: key}}
 	c.Inputs = names
 	return c
@@ -100,20 +100,20 @@ func As[P any](v any, err error) (P, error) {
 }
 
 // RowOf and NodeOf export the erasure of a row to the tests.
-func RowOf(c *Conn, x any) any {
+func RowOf(c *Type, x any) any {
 	if p := rowOf(c, x); p != nil {
 		return p
 	}
 	return nil
 }
 
-func NodeOf(c *Conn, p any) any {
+func NodeOf(c *Type, p any) any {
 	q, _ := p.(unsafe.Pointer)
 	return nodeOf(c, q)
 }
 
 // NodesOf is nodesOf of ps, each an unsafe.Pointer as RowOf returns it.
-func NodesOf(c *Conn, ps []any) any {
+func NodesOf(c *Type, ps []any) any {
 	var rows []unsafe.Pointer
 	for _, p := range ps {
 		rows = append(rows, p.(unsafe.Pointer))
@@ -122,29 +122,29 @@ func NodesOf(c *Conn, ps []any) any {
 }
 
 // NewNodeWith is NewNode with the decoder of IDs decode.
-func NewNodeWith(c *Conn, decode func(id string) (any, error)) NodeKind {
+func NewNodeWith(c *Type, decode func(id string) (any, error)) NodeKind {
 	return newNode(c, decode)
 }
 
 // EdgeConnectionOf is EdgeConnection of a ConnectionOf.
 func EdgeConnectionOf[E, T any](ctx context.Context, c ConnectionOf[T], x *E, r velox.Rel[E, T], field string, args any) ConnectionOf[T] {
-	return ConnectionOf[T]{EdgeConnection(ctx, c.Connection, TableConn[E]("Owner"), x, int(r.I), field, args)}
+	return ConnectionOf[T]{EdgeConnection(ctx, c.Connection, TableType[E]("Owner"), x, int(r.I), field, args)}
 }
 
 // EdgeOneOf is EdgeOne, typed, as the generated code calls it: the target's
 // type is the part of field after the dot's edge, which the selections do not
 // name.
 func EdgeOneOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field string) (*T, error) {
-	return As[*T](EdgeOne(ctx, TableConn[T]("Target"), TableConn[E]("Owner"), x, int(r.I), field))
+	return As[*T](EdgeOne(ctx, TableType[T]("Target"), TableType[E]("Owner"), x, int(r.I), field))
 }
 
 // EdgeListOf is EdgeList, typed, as the generated code calls it.
 func EdgeListOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field string, maxList int) ([]*T, error) {
-	return As[[]*T](EdgeList(ctx, TableConn[T]("Target"), TableConn[E]("Owner"), x, int(r.I), field, maxList))
+	return As[[]*T](EdgeList(ctx, TableType[T]("Target"), TableType[E]("Owner"), x, int(r.I), field, maxList))
 }
 
-// Paginate is NewConnectionOf and Page in one call.
-func Paginate[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*PageOf[E], error) {
+// PageWith is NewConnectionOf and Page in one call.
+func PageWith[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*PageOf[E], error) {
 	c, err := NewConnectionOf(ctx, q, typ, args, order, key)
 	if err != nil {
 		return nil, err

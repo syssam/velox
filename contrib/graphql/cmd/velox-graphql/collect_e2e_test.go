@@ -221,7 +221,11 @@ func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Nod
 
 // Authors is the resolver for the authors field.
 func (r *queryResolver) Authors(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.AuthorOrder) (*gen.AuthorConnection, error) {
-	return gen.AuthorsConnection(ctx, after, first, before, last, orderBy)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PaginateAuthors(ctx, db.Query[gen.Author](), after, first, before, last, orderBy)
 }
 
 // Query returns QueryResolver implementation.

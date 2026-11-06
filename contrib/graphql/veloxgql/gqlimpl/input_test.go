@@ -89,7 +89,7 @@ func itemDB(t *testing.T) (*velox.DB, context.Context) {
 // the setters that pass go to the insert.
 func TestCheckedCreate(t *testing.T) {
 	db, ctx := itemDB(t)
-	c := gqlimpl.InputConn[item]("Item", int(items.ID.I), itemInputGQL)
+	c := gqlimpl.InputType[item]("Item", int(items.ID.I), itemInputGQL)
 	set, err := gqlimpl.Checked("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("b"), items.Age.Set(2), items.Code.Set("d")})
 	if err != nil || len(set) != 3 {
 		t.Fatalf("Checked = %d setters, %v; want 3", len(set), err)
@@ -126,7 +126,7 @@ func TestCheckedCreate(t *testing.T) {
 // uncoded, as the server's bug.
 func TestCheckedUpdate(t *testing.T) {
 	db, ctx := itemDB(t)
-	c := gqlimpl.InputConn[item]("Item", int(items.ID.I), itemInputGQL)
+	c := gqlimpl.InputType[item]("Item", int(items.ID.I), itemInputGQL)
 	in := []velox.Setter[item]{items.Name.Set("client"), items.Age.Set(2)}
 	set, err := gqlimpl.Checked("UpdateItemInput", c, in)
 	if err != nil || !slices.Equal(velox.Assignments(set), velox.Assignments(in)) {

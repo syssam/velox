@@ -50,18 +50,18 @@ type personWhere struct {
 }
 
 func (w *personWhere) Pred(ctx context.Context) (velox.Pred[person], error) {
-	p, err := w.PredicateGQL(ctx)
+	p, err := w.predicate(ctx)
 	return velox.Pred[person](p), err
 }
 
-func (w *personWhere) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[person]("Person"))
+func (w *personWhere) predicate(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[person]("Person"))
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not)
-	gqlimpl.And(f, "and", w.And)
-	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.Not(f, "not", w.Not, (*personWhere).predicate)
+	gqlimpl.And(f, "and", w.And, (*personWhere).predicate)
+	gqlimpl.Or(f, "or", w.Or, (*personWhere).predicate)
 	gqlimpl.IDField[int64](f, "id", 0, gqlimpl.Ops[string]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT})
 	gqlimpl.Field(f, "name", 1, gqlimpl.Ops[string]{
 		EQ: w.Name, NEQ: w.NameNEQ, In: w.NameIn, NotIn: w.NameNotIn, GT: w.NameGT,
@@ -411,12 +411,12 @@ func TestWhereBudget(t *testing.T) {
 	// Each where argument has its own budget: a context the application
 	// holds starts one, and a nested input's context continues the one it
 	// came from.
-	f := gqlimpl.NewFilter(ctx, gqlimpl.TableConn[person]("Person"))
+	f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[person]("Person"))
 	for range 9 {
 		gqlimpl.Field(f, "age", 2, gqlimpl.Ops[int64]{In: in(100)}) // 909 of 1000
 	}
 	spy := &ctxSpy{}
-	gqlimpl.Not(f, "not", spy)
+	gqlimpl.Not(f, "not", spy, (*ctxSpy).predicate)
 	if _, err := f.Pred(); err != nil || spy.ctx == nil {
 		t.Fatalf("909: %v", err)
 	}
@@ -433,7 +433,7 @@ func TestWhereBudget(t *testing.T) {
 // its Pred is called with.
 type ctxSpy struct{ ctx context.Context }
 
-func (s *ctxSpy) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
+func (s *ctxSpy) predicate(ctx context.Context) (velox.Predicate, error) {
 	s.ctx = ctx
 	return velox.AndPredicates(), nil
 }
@@ -528,9 +528,9 @@ func TestFilterBudgetError(t *testing.T) {
 	if _, err := (&personWhere{NameIn: names(2), AgeIn: []int64{1, 2}}).Pred(small); !errors.Is(err, veloxgql.ErrFilterTooLarge) {
 		t.Errorf("7 nodes under MaxFilterNodes 5: %v, want ErrFilterTooLarge", err)
 	}
-	f := gqlimpl.NewFilter(small, gqlimpl.TableConn[person]("Person"))
+	f := gqlimpl.NewFilter(small, gqlimpl.TableType[person]("Person"))
 	spy := &ctxSpy{}
-	gqlimpl.Not(f, "not", spy)
+	gqlimpl.Not(f, "not", spy, (*ctxSpy).predicate)
 	if _, err := f.Pred(); err != nil {
 		t.Fatal(err)
 	}

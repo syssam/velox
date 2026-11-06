@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion15
+const _ = veloxgql.GeneratedCodeIsVersion16
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -48,25 +48,28 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 }
 
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
-// queries batch with the edge of every row read with x; see
-// gqlimpl.EdgeConnection.
+// queries batch with the edge of every row read with x.
 func (x *User) Posts(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	c, err := PostsConnection(ctx, after, first, before, last, orderBy, where)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c, err := PaginatePosts(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err
 	}
 	return &PostConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &userConnGQL, x, userEdgePosts, "User.posts",
+		ctx, c.c, &userGQL, x, userEdgePosts, "User.posts",
 		[]any{after, first, before, last, orderBy, where},
 	)}, nil
 }
 
-// UserConnection is the GraphQL type UserConnection, a connection to a list of
-// User. Its fields run their queries when gqlgen asks; see gqlimpl.Connection.
+// UserConnection is the GraphQL type UserConnection. Its fields run their
+// queries when gqlgen resolves them.
 type UserConnection struct {
 	c *gqlimpl.Connection
 }
@@ -99,34 +102,16 @@ func (c *UserConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, erro
 // this page.
 func (c *UserConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
-// UserEdge is the GraphQL type UserEdge, an edge in a connection to a list of
-// User.
+// UserEdge is the GraphQL type UserEdge.
 type UserEdge struct {
-	// Node is the User at the end of the edge.
-	Node *User
-	// Cursor is the cursor of the edge, for paging.
+	Node   *User
 	Cursor veloxgql.Cursor
 }
 
-// UsersConnection is the connection to every User node, on the DB in ctx, for a
-// Query field's resolver. It is UsersConnectionOf of the whole table.
-func UsersConnection(
-	ctx context.Context,
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-	orderBy *UserOrder, where *UserWhereInput,
-) (*UserConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return UsersConnectionOf(ctx, db.Query[User](), after, first, before, last, orderBy, where)
-}
-
-// UsersConnectionOf is the connection to the User nodes q returns, filtered by
+// PaginateUsers is the connection to the User nodes q returns, filtered by
 // where, ordered by orderBy and then the key, and paged by the other arguments.
-// q must not be ordered and must select the key and the order columns; see
-// gqlimpl.ConnectionBase and gqlimpl.NewConnection.
-func UsersConnectionOf(
+// q must not be ordered, and must select the key and the order columns.
+func PaginateUsers(
 	ctx context.Context, q velox.Query[User],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *UserOrder, where *UserWhereInput,
@@ -135,19 +120,15 @@ func UsersConnectionOf(
 	if o := orderBy; o != nil {
 		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
-	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &userConnGQL, order)
-	if err != nil {
-		return nil, err
-	}
 	if where != nil {
-		p, err := where.PredicateGQL(ctx)
+		p, err := where.Pred(ctx)
 		if err != nil {
 			return nil, err
 		}
-		b = b.Where(p)
+		q = q.Where(p)
 	}
-	c, err := gqlimpl.NewConnection(
-		ctx, b, &userConnGQL,
+	c, err := gqlimpl.Paginate(
+		ctx, velox.Untyped(q), &userGQL,
 		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
 		order,
 	)
@@ -157,11 +138,9 @@ func UsersConnectionOf(
 	return &UserConnection{c: c}, nil
 }
 
-// userConnGQL is what the runtime knows of the GraphQL type User: its table,
-// the key and the order columns of its connections, the columns its selections
-// read and the fields of its inputs.
-var userConnGQL = gqlimpl.Conn{
-	Type:  "User",
+// userGQL describes the GraphQL type User to gqlimpl.
+var userGQL = gqlimpl.Type{
+	Name:  "User",
 	Table: velox.TableOf[User],
 	Key:   []gqlimpl.Col{{Field: "id", Col: userColID}},
 	Order: []gqlimpl.Col{
@@ -282,21 +261,22 @@ type UserWhereInput struct {
 }
 
 // Pred is the condition w stands for on User nodes, true for a nil or empty w.
-// Its errors are gqlimpl.NewFilter's.
+// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx), and
+// on an ID that does not decode or is of another type.
 func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
-	p, err := w.PredicateGQL(ctx)
+	p, err := w.predicate(ctx)
 	return velox.Pred[User](p), err
 }
 
-// PredicateGQL is Pred, untyped, for velox-graphql's runtime.
-func (w *UserWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, &userConnGQL)
+// predicate is Pred, untyped.
+func (w *UserWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, &userGQL)
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not)
-	gqlimpl.And(f, "and", w.And)
-	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.Not(f, "not", w.Not, (*UserWhereInput).predicate)
+	gqlimpl.And(f, "and", w.And, (*UserWhereInput).predicate)
+	gqlimpl.Or(f, "or", w.Or, (*UserWhereInput).predicate)
 	gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
@@ -332,13 +312,12 @@ func (w *UserWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 		NotIn: w.RoleNotIn,
 	})
 	gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
-	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, userEdgePosts, velox.TableOf[Post]())
+	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
 	return f.Pred()
 }
 
-// CreateUserInput is the GraphQL input CreateUserInput, whose Setters gives its
-// fields as setters. A nil pointer or list is a field not given, and so is a
-// null.
+// CreateUserInput is the GraphQL input CreateUserInput. A nil pointer or list
+// is a field not given, and so is a null.
 type CreateUserInput struct {
 	// The name the user shows.
 	Name string
@@ -350,15 +329,12 @@ type CreateUserInput struct {
 	JoinedAt time.Time
 }
 
-// Setters returns the setters of the input's fields and edges, for
-// db.Insert(x).Set: a field not given sets nothing, and x keeps its value or
-// the field's Default.
+// Setters returns the input's fields and edges as setters for db.Insert(x).Set.
+// A field not given sets nothing: x keeps its value, or the field's Default.
 //
 // It does no I/O. A value a validator refuses, or an ID that does not decode or
-// names another type, is BAD_USER_INPUT naming the input's field. See
-// "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each field does and what the
-// write checks.
+// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreateUserInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]
 	set = append(set, Users.Name.Set(in.Name))
@@ -367,12 +343,11 @@ func (in *CreateUserInput) Setters() ([]velox.Setter[User], error) {
 		set = append(set, Users.Role.Set(*v))
 	}
 	set = append(set, Users.JoinedAt.Set(in.JoinedAt))
-	return gqlimpl.Checked("CreateUserInput", &userConnGQL, set)
+	return gqlimpl.Checked("CreateUserInput", &userGQL, set)
 }
 
-// UpdateUserInput is the GraphQL input UpdateUserInput, whose Setters gives its
-// fields as setters. A nil pointer or list is a field not given, and so is a
-// null.
+// UpdateUserInput is the GraphQL input UpdateUserInput. A nil pointer or list
+// is a field not given, and so is a null.
 type UpdateUserInput struct {
 	// The name the user shows.
 	Name *string
@@ -384,15 +359,13 @@ type UpdateUserInput struct {
 	JoinedAt *time.Time
 }
 
-// Setters returns the setters of the input's fields and edges, for
-// db.Update[User]().Set: a field not given sets nothing, and a clear field wins
+// Setters returns the input's fields and edges as setters for
+// db.Update[User]().Set. A field not given sets nothing, and a clear field wins
 // over its field.
 //
 // It does no I/O. A value a validator refuses, or an ID that does not decode or
-// names another type, is BAD_USER_INPUT naming the input's field. See
-// "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each field does and what the
-// write checks.
+// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *UpdateUserInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]
 	if v := in.Name; v != nil {
@@ -407,5 +380,5 @@ func (in *UpdateUserInput) Setters() ([]velox.Setter[User], error) {
 	if v := in.JoinedAt; v != nil {
 		set = append(set, Users.JoinedAt.Set(*v))
 	}
-	return gqlimpl.Checked("UpdateUserInput", &userConnGQL, set)
+	return gqlimpl.Checked("UpdateUserInput", &userGQL, set)
 }

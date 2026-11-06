@@ -14,7 +14,7 @@ import (
 // person declares no IsNode: the generated code never makes it.
 func personKinds(decodeErr error) func(string) (gqlimpl.NodeKind, bool) {
 	return func(typ string) (gqlimpl.NodeKind, bool) {
-		c := gqlimpl.InputConn[person]("Person", int(people.ID.I), nil)
+		c := gqlimpl.InputType[person]("Person", int(people.ID.I), nil)
 		if decodeErr != nil {
 			return gqlimpl.NewNodeWith(c, func(string) (any, error) { return nil, decodeErr }), typ == "Person"
 		}

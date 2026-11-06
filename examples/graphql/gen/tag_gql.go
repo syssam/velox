@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion15
+const _ = veloxgql.GeneratedCodeIsVersion16
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -26,26 +26,28 @@ func (*Tag) IsNode() {}
 func (x *Tag) GlobalID() string { return veloxgql.EncodeID("Label", x.ID) }
 
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
-// queries batch with the edge of every row read with x; see
-// gqlimpl.EdgeConnection.
+// queries batch with the edge of every row read with x.
 func (x *Tag) Posts(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	c, err := PostsConnection(ctx, after, first, before, last, orderBy, where)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c, err := PaginatePosts(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err
 	}
 	return &PostConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &tagConnGQL, x, tagEdgePosts, "Label.posts",
+		ctx, c.c, &tagGQL, x, tagEdgePosts, "Label.posts",
 		[]any{after, first, before, last, orderBy, where},
 	)}, nil
 }
 
-// LabelConnection is the GraphQL type LabelConnection, a connection to a list
-// of Label. Its fields run their queries when gqlgen asks; see
-// gqlimpl.Connection.
+// LabelConnection is the GraphQL type LabelConnection. Its fields run their
+// queries when gqlgen resolves them.
 type LabelConnection struct {
 	c *gqlimpl.Connection
 }
@@ -78,34 +80,16 @@ func (c *LabelConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, err
 // this page.
 func (c *LabelConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
-// LabelEdge is the GraphQL type LabelEdge, an edge in a connection to a list of
-// Label.
+// LabelEdge is the GraphQL type LabelEdge.
 type LabelEdge struct {
-	// Node is the Label at the end of the edge.
-	Node *Tag
-	// Cursor is the cursor of the edge, for paging.
+	Node   *Tag
 	Cursor veloxgql.Cursor
 }
 
-// LabelsConnection is the connection to every Label node, on the DB in ctx, for
-// a Query field's resolver. It is LabelsConnectionOf of the whole table.
-func LabelsConnection(
-	ctx context.Context,
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-	orderBy *LabelOrder, where *LabelWhereInput,
-) (*LabelConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return LabelsConnectionOf(ctx, db.Query[Tag](), after, first, before, last, orderBy, where)
-}
-
-// LabelsConnectionOf is the connection to the Label nodes q returns, filtered
-// by where, ordered by orderBy and then the key, and paged by the other
-// arguments. q must not be ordered and must select the key and the order
-// columns; see gqlimpl.ConnectionBase and gqlimpl.NewConnection.
-func LabelsConnectionOf(
+// PaginateLabels is the connection to the Label nodes q returns, filtered by
+// where, ordered by orderBy and then the key, and paged by the other arguments.
+// q must not be ordered, and must select the key and the order columns.
+func PaginateLabels(
 	ctx context.Context, q velox.Query[Tag],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *LabelOrder, where *LabelWhereInput,
@@ -114,19 +98,15 @@ func LabelsConnectionOf(
 	if o := orderBy; o != nil {
 		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
-	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &tagConnGQL, order)
-	if err != nil {
-		return nil, err
-	}
 	if where != nil {
-		p, err := where.PredicateGQL(ctx)
+		p, err := where.Pred(ctx)
 		if err != nil {
 			return nil, err
 		}
-		b = b.Where(p)
+		q = q.Where(p)
 	}
-	c, err := gqlimpl.NewConnection(
-		ctx, b, &tagConnGQL,
+	c, err := gqlimpl.Paginate(
+		ctx, velox.Untyped(q), &tagGQL,
 		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
 		order,
 	)
@@ -136,11 +116,9 @@ func LabelsConnectionOf(
 	return &LabelConnection{c: c}, nil
 }
 
-// tagConnGQL is what the runtime knows of the GraphQL type Label: its table,
-// the key and the order columns of its connections, the columns its selections
-// read and the fields of its inputs.
-var tagConnGQL = gqlimpl.Conn{
-	Type:  "Label",
+// tagGQL describes the GraphQL type Label to gqlimpl.
+var tagGQL = gqlimpl.Type{
+	Name:  "Label",
 	Table: velox.TableOf[Tag],
 	Key:   []gqlimpl.Col{{Field: "id", Col: tagColID}},
 	Order: []gqlimpl.Col{
@@ -236,21 +214,22 @@ type LabelWhereInput struct {
 }
 
 // Pred is the condition w stands for on Label nodes, true for a nil or empty w.
-// Its errors are gqlimpl.NewFilter's.
+// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx), and
+// on an ID that does not decode or is of another type.
 func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
-	p, err := w.PredicateGQL(ctx)
+	p, err := w.predicate(ctx)
 	return velox.Pred[Tag](p), err
 }
 
-// PredicateGQL is Pred, untyped, for velox-graphql's runtime.
-func (w *LabelWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, &tagConnGQL)
+// predicate is Pred, untyped.
+func (w *LabelWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
+	f := gqlimpl.NewFilter(ctx, &tagGQL)
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not)
-	gqlimpl.And(f, "and", w.And)
-	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.Not(f, "not", w.Not, (*LabelWhereInput).predicate)
+	gqlimpl.And(f, "and", w.And, (*LabelWhereInput).predicate)
+	gqlimpl.Or(f, "or", w.Or, (*LabelWhereInput).predicate)
 	gqlimpl.IDField[int64](f, "id", tagColID, gqlimpl.Ops[string]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
@@ -283,9 +262,8 @@ func (w *LabelWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, er
 	return f.Pred()
 }
 
-// CreateLabelInput is the GraphQL input CreateLabelInput, whose Setters gives
-// its fields as setters. A nil pointer or list is a field not given, and so is
-// a null.
+// CreateLabelInput is the GraphQL input CreateLabelInput. A nil pointer or list
+// is a field not given, and so is a null.
 type CreateLabelInput struct {
 	// The label's name, unique.
 	Name string
@@ -295,15 +273,12 @@ type CreateLabelInput struct {
 	PostIDs []string
 }
 
-// Setters returns the setters of the input's fields and edges, for
-// db.Insert(x).Set: a field not given sets nothing, and x keeps its value or
-// the field's Default.
+// Setters returns the input's fields and edges as setters for db.Insert(x).Set.
+// A field not given sets nothing: x keeps its value, or the field's Default.
 //
 // It does no I/O. A value a validator refuses, or an ID that does not decode or
-// names another type, is BAD_USER_INPUT naming the input's field. See
-// "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each field does and what the
-// write checks.
+// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 	var set []velox.Setter[Tag]
 	set = append(set, Tags.Name.Set(in.Name))
@@ -315,12 +290,12 @@ func (in *CreateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 		}
 		set = append(set, Tags.Posts.Add(postIDs...))
 	}
-	return gqlimpl.Checked("CreateLabelInput", &tagConnGQL, set)
+	return gqlimpl.Checked("CreateLabelInput", &tagGQL, set)
 }
 
-// UpdateLabelInput is the GraphQL input UpdateLabelInput, whose Setters gives
-// its fields as setters. A nil pointer or list is a field not given, and so is
-// a null. A true clear field clears its field or edge.
+// UpdateLabelInput is the GraphQL input UpdateLabelInput. A nil pointer or list
+// is a field not given, and so is a null. A true clear field clears its field
+// or edge.
 type UpdateLabelInput struct {
 	// The label's name, unique.
 	Name *string
@@ -336,15 +311,13 @@ type UpdateLabelInput struct {
 	ClearPosts bool
 }
 
-// Setters returns the setters of the input's fields and edges, for
-// db.Update[Tag]().Set: a field not given sets nothing, and a clear field wins
+// Setters returns the input's fields and edges as setters for
+// db.Update[Tag]().Set. A field not given sets nothing, and a clear field wins
 // over its field.
 //
 // It does no I/O. A value a validator refuses, or an ID that does not decode or
-// names another type, is BAD_USER_INPUT naming the input's field. See
-// "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each field does and what the
-// write checks.
+// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *UpdateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 	var set []velox.Setter[Tag]
 	if v := in.Name; v != nil {
@@ -370,5 +343,5 @@ func (in *UpdateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 		}
 		set = append(set, Tags.Posts.Add(addPostIDs...))
 	}
-	return gqlimpl.Checked("UpdateLabelInput", &tagConnGQL, set)
+	return gqlimpl.Checked("UpdateLabelInput", &tagGQL, set)
 }

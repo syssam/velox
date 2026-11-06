@@ -9,12 +9,12 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion15
+const _ = veloxgql.GeneratedCodeIsVersion16
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the edge of every row read with x.
 func (x *Like) User(ctx context.Context) (*User, error) {
-	v, err := gqlimpl.EdgeOne(ctx, &userConnGQL, &likeConnGQL, x, likeEdgeUser, "Like.user")
+	v, err := gqlimpl.EdgeOne(ctx, &userGQL, &likeGQL, x, likeEdgeUser, "Like.user")
 	n, _ := v.(*User)
 	return n, err
 }
@@ -22,13 +22,13 @@ func (x *Like) User(ctx context.Context) (*User, error) {
 // Post is the edge post: the Post it leads to, or nil. It is read in one query
 // with the edge of every row read with x.
 func (x *Like) Post(ctx context.Context) (*Post, error) {
-	v, err := gqlimpl.EdgeOne(ctx, &postConnGQL, &likeConnGQL, x, likeEdgePost, "Like.post")
+	v, err := gqlimpl.EdgeOne(ctx, &postGQL, &likeGQL, x, likeEdgePost, "Like.post")
 	n, _ := v.(*Post)
 	return n, err
 }
 
-// LikeConnection is the GraphQL type LikeConnection, a connection to a list of
-// Like. Its fields run their queries when gqlgen asks; see gqlimpl.Connection.
+// LikeConnection is the GraphQL type LikeConnection. Its fields run their
+// queries when gqlgen resolves them.
 type LikeConnection struct {
 	c *gqlimpl.Connection
 }
@@ -61,42 +61,21 @@ func (c *LikeConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, erro
 // this page.
 func (c *LikeConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
-// LikeEdge is the GraphQL type LikeEdge, an edge in a connection to a list of
-// Like.
+// LikeEdge is the GraphQL type LikeEdge.
 type LikeEdge struct {
-	// Node is the Like at the end of the edge.
-	Node *Like
-	// Cursor is the cursor of the edge, for paging.
+	Node   *Like
 	Cursor veloxgql.Cursor
 }
 
-// LikesConnection is the connection to every Like node, on the DB in ctx, for a
-// Query field's resolver. It is LikesConnectionOf of the whole table.
-func LikesConnection(
-	ctx context.Context,
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-) (*LikeConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return LikesConnectionOf(ctx, db.Query[Like](), after, first, before, last)
-}
-
-// LikesConnectionOf is the connection to the Like nodes q returns, ordered by
-// the key, and paged by the other arguments. q must not be ordered and must
-// select the key and the order columns; see gqlimpl.ConnectionBase and
-// gqlimpl.NewConnection.
-func LikesConnectionOf(
+// PaginateLikes is the connection to the Like nodes q returns, ordered by the
+// key, and paged by the other arguments. q must not be ordered, and must select
+// the key.
+func PaginateLikes(
 	ctx context.Context, q velox.Query[Like],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 ) (*LikeConnection, error) {
-	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &likeConnGQL, nil)
-	if err != nil {
-		return nil, err
-	}
-	c, err := gqlimpl.NewConnection(
-		ctx, b, &likeConnGQL,
+	c, err := gqlimpl.Paginate(
+		ctx, velox.Untyped(q), &likeGQL,
 		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
 		nil,
 	)
@@ -106,11 +85,9 @@ func LikesConnectionOf(
 	return &LikeConnection{c: c}, nil
 }
 
-// likeConnGQL is what the runtime knows of the GraphQL type Like: its table,
-// the key and the order columns of its connections, the columns its selections
-// read and the fields of its inputs.
-var likeConnGQL = gqlimpl.Conn{
-	Type:  "Like",
+// likeGQL describes the GraphQL type Like to gqlimpl.
+var likeGQL = gqlimpl.Type{
+	Name:  "Like",
 	Table: velox.TableOf[Like],
 	Key: []gqlimpl.Col{
 		{Field: "user_id", Col: likeColUserID},
@@ -127,9 +104,8 @@ var likeConnGQL = gqlimpl.Conn{
 	},
 }
 
-// CreateLikeInput is the GraphQL input CreateLikeInput, whose Setters gives its
-// fields as setters. A nil pointer or list is a field not given, and so is a
-// null.
+// CreateLikeInput is the GraphQL input CreateLikeInput. A nil pointer or list
+// is a field not given, and so is a null.
 type CreateLikeInput struct {
 	Weight    *int8
 	CreatedAt *time.Time
@@ -139,15 +115,12 @@ type CreateLikeInput struct {
 	PostID string
 }
 
-// Setters returns the setters of the input's fields and edges, for
-// db.Insert(x).Set: a field not given sets nothing, and x keeps its value or
-// the field's Default.
+// Setters returns the input's fields and edges as setters for db.Insert(x).Set.
+// A field not given sets nothing: x keeps its value, or the field's Default.
 //
 // It does no I/O. A value a validator refuses, or an ID that does not decode or
-// names another type, is BAD_USER_INPUT naming the input's field. See
-// "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each field does and what the
-// write checks.
+// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreateLikeInput) Setters() ([]velox.Setter[Like], error) {
 	var set []velox.Setter[Like]
 	if v := in.Weight; v != nil {
@@ -169,5 +142,5 @@ func (in *CreateLikeInput) Setters() ([]velox.Setter[Like], error) {
 		return nil, err
 	}
 	set = append(set, Likes.Post.Set(postID))
-	return gqlimpl.Checked("CreateLikeInput", &likeConnGQL, set)
+	return gqlimpl.Checked("CreateLikeInput", &likeGQL, set)
 }

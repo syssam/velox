@@ -62,7 +62,7 @@ func TestInputEdgeKinds(t *testing.T) {
 			`meta, err := gqlimpl.FromJSON[map[string]any]("CreateOwnerInput.meta", *v) if err != nil { return nil, err } set = append(set, Owners.Meta.Set(meta))`,
 			// A one-to-one edge whose key the target holds is the edge's Add.
 			`petID, err := gqlimpl.DecodeID[int64]("CreateOwnerInput.petID", *v, "Pet") if err != nil { return nil, err } set = append(set, Owners.Pet.Add(petID))`,
-			`return gqlimpl.Checked("CreateOwnerInput", &ownerConnGQL, set)`,
+			`return gqlimpl.Checked("CreateOwnerInput", &ownerGQL, set)`,
 		},
 		"UpdateOwnerInput.Setters": {
 			`if in.ClearNick { set = append(set, Owners.Nick.SetNull()) } else if v := in.Nick; v != nil {`,
@@ -142,14 +142,14 @@ func TestInputNamesApart(t *testing.T) {
 			}, fs...),
 		}}}
 	}
-	lit := connLit(t, render(t, thing(&plugin.Field{Name: "im", GoName: "Im", Type: "string", GoType: "string", ElemType: "string", Immutable: true})), "thingConnGQL")
+	lit := connLit(t, render(t, thing(&plugin.Field{Name: "im", GoName: "Im", Type: "string", GoType: "string", ElemType: "string", Immutable: true})), "thingGQL")
 	if want := []string{`thingColX: "x"`, `thingColIm: "im"`}; !slices.Equal(lit["CreateInputs"], want) {
 		t.Errorf("CreateInputs %v, want %v", lit["CreateInputs"], want)
 	}
 	if want := []string{`thingColX: "x"`}; !slices.Equal(lit["UpdateInputs"], want) || lit["Inputs"] != nil {
 		t.Errorf("UpdateInputs %v and Inputs %v, want %v and none", lit["UpdateInputs"], lit["Inputs"], want)
 	}
-	lit = connLit(t, render(t, thing()), "thingConnGQL")
+	lit = connLit(t, render(t, thing()), "thingGQL")
 	if want := []string{`thingColX: "x"`}; !slices.Equal(lit["Inputs"], want) || lit["CreateInputs"] != nil || lit["UpdateInputs"] != nil {
 		t.Errorf("Inputs %v, CreateInputs %v, UpdateInputs %v; want %v alone", lit["Inputs"], lit["CreateInputs"], lit["UpdateInputs"], want)
 	}

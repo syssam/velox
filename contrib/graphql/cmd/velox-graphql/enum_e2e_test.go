@@ -95,7 +95,11 @@ func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Nod
 
 // Alerts is the resolver for the alerts field.
 func (r *queryResolver) Alerts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.AlertConnection, error) {
-	return gen.AlertsConnection(ctx, after, first, before, last)
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PaginateAlerts(ctx, db.Query[gen.Alert](), after, first, before, last)
 }
 
 // Query returns QueryResolver implementation.
