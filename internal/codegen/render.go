@@ -212,11 +212,32 @@ func entityImports(w *writer, o *Out, e *OutEntity) {
 	w.p("")
 }
 
+// namesFirst reports whether the doc comment text starts with name, or
+// with an article and name, as Go's doc comments do.
+func namesFirst(text, name string) bool {
+	for _, lead := range []string{"", "A ", "An ", "The "} {
+		if rest, ok := strings.CutPrefix(text, lead+name); ok && (rest == "" || !isIdentRune(rest[0])) {
+			return true
+		}
+	}
+	return false
+}
+
+// isIdentRune reports whether b may continue an identifier.
+func isIdentRune(b byte) bool {
+	return b == '_' || '0' <= b && b <= '9' || 'a' <= b && b <= 'z' || 'A' <= b && b <= 'Z'
+}
+
 // entityStruct writes the struct of e, its fields and then its Edges, and the
 // struct of its relations, XEdges, when it has any.
 func entityStruct(w *writer, e *OutEntity) {
 	switch {
+	case e.Comment != "" && namesFirst(e.Comment, e.Name):
+		w.doc(e.Comment)
 	case e.Comment != "":
+		// Go's doc comments start with the name they document.
+		w.p("// %s is the entity of schema %[1]s.", e.Name)
+		w.p("//")
 		w.doc(e.Comment)
 	case e.Join:
 		w.p("// %s is the join entity of table %s.", e.Name, e.Table)
