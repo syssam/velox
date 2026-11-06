@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion14
+const _ = veloxgql.GeneratedCodeIsVersion15
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -362,21 +362,9 @@ func (w *PostWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 	return f.Pred()
 }
 
-// postTagsEdgeGQL is the many-to-many edge tags of Post, through PostTag.
-func postTagsEdgeGQL() gqlimpl.M2M {
-	return gqlimpl.M2M{
-		Owner:      velox.TableOf[Post](),
-		Target:     velox.TableOf[Tag](),
-		Join:       velox.TableOf[PostTag](),
-		OwnerKey:   postColID,
-		TargetKey:  tagColID,
-		JoinOwner:  postTagColPostID,
-		JoinTarget: postTagColTagID,
-	}
-}
-
-// CreatePostInput is the GraphQL input CreatePostInput, which Create writes. A
-// nil pointer or list is a field not given.
+// CreatePostInput is the GraphQL input CreatePostInput, whose Setters gives its
+// fields as setters. A nil pointer or list is a field not given, and so is a
+// null.
 type CreatePostInput struct {
 	// The post's title, never empty.
 	Title string
@@ -390,44 +378,42 @@ type CreatePostInput struct {
 	TagIDs []string
 }
 
-// Create inserts x, a Post, with the input's fields and edges set; a nil x is a
-// new one. It runs atomically on the DB in ctx, under the policies.
-// CreatePostInput leaves out AuthorID, the key of the edge author: set it on x,
-// or in a velox.Hook; a zero key names no row, and the database's foreign key
-// refuses the insert with a velox.ConstraintError.
+// Setters returns the setters of the input's fields and edges, for
+// db.Insert(x).Set: a field not given sets nothing, and x keeps its value or
+// the field's Default. CreatePostInput leaves out AuthorID, the key of the edge
+// author: set it on x, or in a velox.Hook; a zero key names no row, and the
+// database's foreign key refuses the insert with a velox.ConstraintError.
 //
-// See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
-func (in *CreatePostInput) Create(ctx context.Context, x *Post) (*Post, error) {
-	if x == nil {
-		x = new(Post)
+// It does no I/O. A value a validator refuses, or an ID that does not decode or
+// names another type, is BAD_USER_INPUT naming the input's field. See
+// "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each field does and what the
+// write checks.
+func (in *CreatePostInput) Setters() ([]velox.Setter[Post], error) {
+	var set []velox.Setter[Post]
+	set = append(set, Posts.Title.Set(in.Title))
+	if v := in.Status; v != nil {
+		set = append(set, Posts.Status.Set(*v))
 	}
-	c := gqlimpl.NewCreate(ctx, &postConnGQL, x, postColTitle)
-	x.Title = in.Title
-	if in.Status != nil {
-		x.Status = *in.Status
-		c.Given(postColStatus)
+	if v := in.Views; v != nil {
+		set = append(set, Posts.Views.Set(*v))
 	}
-	if in.Views != nil {
-		x.Views = *in.Views
-		c.Given(postColViews)
+	if v := in.PublishedAt; v != nil {
+		set = append(set, Posts.PublishedAt.Set(*v))
 	}
-	if in.PublishedAt != nil {
-		x.PublishedAt = in.PublishedAt
-		c.Given(postColPublishedAt)
+	if len(in.TagIDs) > 0 {
+		tagIDs, err := gqlimpl.DecodeIDs[int64]("CreatePostInput.tagIDs", in.TagIDs, "Label")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Posts.Tags.Add(tagIDs...))
 	}
-	tagIDsKeys := gqlimpl.Keys[int64](c, "tagIDs", in.TagIDs, "Label")
-	gqlimpl.Join(c, "tagIDs", "Label", postTagsEdgeGQL(), tagIDsKeys)
-	if err := c.Insert(); err != nil {
-		return nil, err
-	}
-	return x, nil
+	return gqlimpl.Checked("CreatePostInput", &postConnGQL, set)
 }
 
-// UpdatePostInput is the GraphQL input UpdatePostInput, which Update writes. A
-// nil pointer or list is a field not given. A true clear field clears its field
-// or edge.
+// UpdatePostInput is the GraphQL input UpdatePostInput, whose Setters gives its
+// fields as setters. A nil pointer or list is a field not given, and so is a
+// null. A true clear field clears its field or edge.
 type UpdatePostInput struct {
 	// The post's title, never empty.
 	Title *string
@@ -449,41 +435,47 @@ type UpdatePostInput struct {
 	ClearTags bool
 }
 
-// Update updates the Post with the ID id from the input and from set, and
-// returns the row as written. A setter of set wins over the input's for the
-// same column.
+// Setters returns the setters of the input's fields and edges, for
+// db.Update[Post]().Set: a field not given sets nothing, and a clear field wins
+// over its field.
 //
-// See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
-func (in *UpdatePostInput) Update(ctx context.Context, id string, set ...velox.Setter[Post]) (*Post, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, &postConnGQL, id)
-	if in.Title != nil {
-		u.Set(postColTitle, *in.Title)
+// It does no I/O. A value a validator refuses, or an ID that does not decode or
+// names another type, is BAD_USER_INPUT naming the input's field. See
+// "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each field does and what the
+// write checks.
+func (in *UpdatePostInput) Setters() ([]velox.Setter[Post], error) {
+	var set []velox.Setter[Post]
+	if v := in.Title; v != nil {
+		set = append(set, Posts.Title.Set(*v))
 	}
-	if in.Status != nil {
-		u.Set(postColStatus, *in.Status)
+	if v := in.Status; v != nil {
+		set = append(set, Posts.Status.Set(*v))
 	}
-	if in.Views != nil {
-		u.Set(postColViews, *in.Views)
+	if v := in.Views; v != nil {
+		set = append(set, Posts.Views.Set(*v))
 	}
-	if in.PublishedAt != nil {
-		u.Set(postColPublishedAt, *in.PublishedAt)
+	if in.ClearPublishedAt {
+		set = append(set, Posts.PublishedAt.SetNull())
+	} else if v := in.PublishedAt; v != nil {
+		set = append(set, Posts.PublishedAt.Set(*v))
 	}
-	if gqlimpl.Cleared(u, "publishedAt", in.PublishedAt != nil, "clearPublishedAt", in.ClearPublishedAt) {
-		u.SetNull(postColPublishedAt)
+	if in.ClearTags {
+		set = append(set, Posts.Tags.Clear())
 	}
-	addTagIDsKeys, removeTagIDsKeys := gqlimpl.AddRemove[int64](
-		u, "Label",
-		"addTagIDs", in.AddTagIDs,
-		"removeTagIDs", in.RemoveTagIDs,
-	)
-	gqlimpl.Through(u, "addTagIDs", "Label", gqlimpl.Edit{
-		Clear:  in.ClearTags,
-		Remove: removeTagIDsKeys,
-		Add:    addTagIDsKeys,
-	}, key, postTagsEdgeGQL())
-	v, err := u.Exec(key, velox.Assignments(set))
-	n, _ := v.(*Post)
-	return n, err
+	if len(in.RemoveTagIDs) > 0 {
+		removeTagIDs, err := gqlimpl.DecodeIDs[int64]("UpdatePostInput.removeTagIDs", in.RemoveTagIDs, "Label")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Posts.Tags.Remove(removeTagIDs...))
+	}
+	if len(in.AddTagIDs) > 0 {
+		addTagIDs, err := gqlimpl.DecodeIDs[int64]("UpdatePostInput.addTagIDs", in.AddTagIDs, "Label")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Posts.Tags.Add(addTagIDs...))
+	}
+	return gqlimpl.Checked("UpdatePostInput", &postConnGQL, set)
 }

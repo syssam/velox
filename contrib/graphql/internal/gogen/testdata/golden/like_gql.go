@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion14
+const _ = veloxgql.GeneratedCodeIsVersion15
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the edge of every row read with x.
@@ -127,8 +127,9 @@ var likeConnGQL = gqlimpl.Conn{
 	},
 }
 
-// CreateLikeInput is the GraphQL input CreateLikeInput, which Create writes. A
-// nil pointer or list is a field not given.
+// CreateLikeInput is the GraphQL input CreateLikeInput, whose Setters gives its
+// fields as setters. A nil pointer or list is a field not given, and so is a
+// null.
 type CreateLikeInput struct {
 	Weight    *int8
 	CreatedAt *time.Time
@@ -138,34 +139,35 @@ type CreateLikeInput struct {
 	PostID string
 }
 
-// Create inserts x, a Like, with the input's fields and edges set; a nil x is a
-// new one. It runs atomically on the DB in ctx, under the policies.
+// Setters returns the setters of the input's fields and edges, for
+// db.Insert(x).Set: a field not given sets nothing, and x keeps its value or
+// the field's Default.
 //
-// See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
-func (in *CreateLikeInput) Create(ctx context.Context, x *Like) (*Like, error) {
-	if x == nil {
-		x = new(Like)
+// It does no I/O. A value a validator refuses, or an ID that does not decode or
+// names another type, is BAD_USER_INPUT naming the input's field. See
+// "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each field does and what the
+// write checks.
+func (in *CreateLikeInput) Setters() ([]velox.Setter[Like], error) {
+	var set []velox.Setter[Like]
+	if v := in.Weight; v != nil {
+		set = append(set, Likes.Weight.Set(*v))
 	}
-	c := gqlimpl.NewCreate(ctx, &likeConnGQL, x)
-	if in.Weight != nil {
-		x.Weight = *in.Weight
-		c.Given(likeColWeight)
+	if v := in.CreatedAt; v != nil {
+		if err := gqlimpl.NotZero("CreateLikeInput.createdAt", *v); err != nil {
+			return nil, err
+		}
+		set = append(set, Likes.CreatedAt.Set(*v))
 	}
-	if in.CreatedAt != nil {
-		x.CreatedAt = *in.CreatedAt
-		gqlimpl.NotZero(c, "createdAt", x.CreatedAt)
-		c.Given(likeColCreatedAt)
-	}
-	userIDKey := gqlimpl.Key[int64](c, "userID", in.UserID, "Account")
-	gqlimpl.Exists(c, "userID", "Account", velox.TableOf[User](), userColID, []int64{userIDKey})
-	x.UserID = userIDKey
-	postIDKey := gqlimpl.Key[int64](c, "postID", in.PostID, "Post")
-	gqlimpl.Exists(c, "postID", "Post", velox.TableOf[Post](), postColID, []int64{postIDKey})
-	x.PostID = postIDKey
-	if err := c.Insert(); err != nil {
+	userID, err := gqlimpl.DecodeID[int64]("CreateLikeInput.userID", in.UserID, "Account")
+	if err != nil {
 		return nil, err
 	}
-	return x, nil
+	set = append(set, Likes.UserID.Set(userID))
+	postID, err := gqlimpl.DecodeID[int64]("CreateLikeInput.postID", in.PostID, "Post")
+	if err != nil {
+		return nil, err
+	}
+	set = append(set, Likes.PostID.Set(postID))
+	return gqlimpl.Checked("CreateLikeInput", &likeConnGQL, set)
 }

@@ -263,16 +263,12 @@ a table rebuild on SQLite.
   application declares its mutations in its own `.graphql` file and writes
   the resolvers. Where entgql's resolver calls
   `client.Todo.Create().SetInput(input).Save(ctx)`, velox's calls
-  `input.Create(ctx, x)`, with `x` the row the resolver has already set what
-  the client must not choose on (nil for a new one), and
-  `input.Update(ctx, id, setters...)`. No delete is generated: a delete is the
-  application's `db.Delete[T]()`.
-- **A null in an update input clears the field.** entgql ignores a null for an
-  optional field, so only `clear<Field>: true` sets NULL. In velox, a null given
-  to a nullable field sets it to NULL, as `clear<Field>` does, and a field left
-  out is left as it is. A field that cannot be NULL has no `clear<Field>`, and
-  a null given to it counts as left out. A null given to an edge's `<edge>ID`
-  is refused, with a message naming `clear<Edge>`.
+  `input.Setters()`, which returns velox setters, and writes them with
+  `db.Insert(x).Set(set...)`, `x` the row the resolver has already set what
+  the client must not choose on, or `db.Update[T]().Where(...).Set(set...)`.
+  As in entgql, a null in an input is a field not given; `clear<Field>:
+  true` sets NULL. No delete is generated: a delete is the application's
+  `db.Delete[T]()`.
 - **JSON lists are GraphQL lists.** A JSON field of `[]string`, `[]int`,
   `[]int64`, `[]float64` or `[]bool` (`field.Strings` and the like) is
   `[String!]` and so on, as in entgql, in the type and in the inputs. Other JSON

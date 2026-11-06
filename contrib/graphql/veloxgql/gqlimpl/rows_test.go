@@ -107,17 +107,15 @@ func TestNodeAs(t *testing.T) {
 	}
 }
 
-// TestInputWithoutTable: an input of a Conn with no Table or field names
-// fails when it writes, naming no field.
+// TestInputWithoutTable: an input's setters checked against a Conn with no
+// Table fail, naming no field.
 func TestInputWithoutTable(t *testing.T) {
-	db, _ := mutationDB(t)
-	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	none := &gqlimpl.Conn{Type: "None"}
-	if err := gqlimpl.NewCreate(ctx, none, nil).Insert(); err == nil {
-		t.Error("Create with no Table: no error")
+	set := []velox.Setter[item]{items.Name.Set("x")}
+	if _, err := gqlimpl.Checked("CreateNoneInput", none, set); err == nil {
+		t.Error("a create input with no Table: no error")
 	}
-	u, _ := gqlimpl.NewUpdate[int64](ctx, none, veloxgql.EncodeID("None", int64(1)))
-	if _, err := u.Exec(int64(1), []velox.Assignment(nil)); err == nil {
-		t.Error("Update with no Table: no error")
+	if _, err := gqlimpl.Checked("UpdateNoneInput", none, set); err == nil {
+		t.Error("an update input with no Table: no error")
 	}
 }

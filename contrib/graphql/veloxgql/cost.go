@@ -68,9 +68,11 @@ const stringUnit = 128
 //     whose subquery runs for each row it reads. The default MaxCost allows about
 //     70 of them;
 //   - on a mutation, an input object adds a statement for the row it reads back,
-//     two for a non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, one for an
-//     <edge>ID, and three for a clear<Edge>: true, a page of its links, the targets
-//     and the delete, a page being up to MaxPage. A delete<T>, which the
+//     two for a non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, five for an
+//     <edge>ID, a one-to-one edge's re-point, and three for a clear<Edge>: true,
+//     a page of its links, the targets and the delete, a page being
+//     velox.EdgePage links; and one more when it has any of these, the read of
+//     the rows an update writes the edges of. A delete<T>, which the
 //     application writes, of a type with connections or lists adds a statement
 //     for a check of its row and one for each, the links it deletes. Any
 //     mutation of the application's that names its fields so counts the same.
@@ -434,20 +436,26 @@ func (c *coster) writes(f *ast.Field, def *ast.FieldDefinition) int64 {
 			continue
 		}
 		n := int64(1) // the row read back
+		edges := int64(0)
 		for k, val := range m {
 			switch {
 			case strings.HasPrefix(k, "clear") && len(k) > 5:
 				// clear<Field> of a column is part of the UPDATE.
 				if val == true && d.Fields.ForName(strings.ToLower(k[5:6])+k[6:]) == nil {
-					n += 3
+					edges += 3
 				}
 			case strings.HasSuffix(k, "IDs"):
 				if list, ok := val.([]any); ok && len(list) > 0 {
-					n += 2
+					edges += 2
 				}
 			case strings.HasSuffix(k, "ID") && val != nil:
-				n++
+				// A one-to-one edge's re-point: the check of the child, the
+				// release of the one held, its check, the link and its check.
+				edges += 5
 			}
+		}
+		if edges > 0 {
+			n += edges + 1 // the read of the rows whose edges an update writes
 		}
 		sum = add(sum, mul(n, statementCost))
 	}

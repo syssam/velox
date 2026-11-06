@@ -129,38 +129,6 @@ func TestNodesByID(t *testing.T) {
 	}
 }
 
-// TestLockRow: LockRow finds the row of its query under the scope and the Read
-// policy, and a row it does not is NOT_FOUND, named by the mutation.
-func TestLockRow(t *testing.T) {
-	db, _ := mutationDB(t)
-	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	ann, bob := tenantKey.With(ctx, "ann"), tenantKey.With(ctx, "bob")
-	if err := db.Insert(&post{ID: 1, Title: "a"}).Exec(ann); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Insert(&post{ID: 2, Title: "hidden"}).Exec(ann); err != nil {
-		t.Fatal(err)
-	}
-	lock := func(c context.Context, id int64) error {
-		return gqlimpl.LockRow(c, db, velox.Untyped(db.Query[post]().Where(posts.ID.EQ(id))), "updatePost", "Post")
-	}
-	if err := lock(ann, 1); err != nil {
-		t.Errorf("ann's post: %v", err)
-	}
-	for name, c := range map[string]struct {
-		ctx context.Context
-		id  int64
-	}{"missing": {ann, 3}, "another scope's": {bob, 1}, "hidden by policy": {ann, 2}} {
-		err := lock(c.ctx, c.id)
-		if codeOf(err) != veloxgql.CodeNotFound || err == nil || err.Error() != "veloxgql: updatePost: no Post has this ID" {
-			t.Errorf("%s: %v, want NOT_FOUND", name, err)
-		}
-	}
-	if err := lock(ctx, 1); !errors.Is(err, scope.ErrNoScope) {
-		t.Errorf("no scope: %v, want ErrNoScope", err)
-	}
-}
-
 // TestShow: what an input's String prints for a pointer field.
 func TestShow(t *testing.T) {
 	s, j := "x", veloxgql.JSON(`{"a":1}`)

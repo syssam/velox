@@ -10,8 +10,8 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-// dial is a hand-written entity whose level is an int8, bound to a GraphQL
-// Int (an int64) by an input that does not check it.
+// dial is a hand-written entity whose level is an int8, filtered by a
+// GraphQL Int (an int64).
 type dial struct {
 	ID    int64
 	Level int8
@@ -38,12 +38,9 @@ func dialDescriptor() velox.Descriptor[dial] {
 	}
 }
 
-// dialInputGQL is, by column, the inputs' fields.
-var dialInputGQL = []string{1: "level"}
-
-// TestOutOfRangeIsUserInput: a where value or an update value that the
-// column's Go type cannot hold is BAD_USER_INPUT naming the field, not a
-// value wrapped round; one at the bound is taken.
+// TestOutOfRangeIsUserInput: a where value that the column's Go type cannot
+// hold is BAD_USER_INPUT naming the field, not a value wrapped round; one at
+// the bound is taken.
 func TestOutOfRangeIsUserInput(t *testing.T) {
 	ctx := context.Background()
 	filter := func(o gqlimpl.Ops[int64]) error {
@@ -70,13 +67,6 @@ func TestOutOfRangeIsUserInput(t *testing.T) {
 	}
 	if err := filter(gqlimpl.Ops[int64]{EQ: new(int64(-128))}); err != nil {
 		t.Errorf("-128: %v", err)
-	}
-
-	u, _ := gqlimpl.NewUpdate[int64](ctx, gqlimpl.InputConn[dial]("Dial", 0, dialInputGQL), veloxgql.EncodeID("Dial", int64(1)))
-	u.Set(1, int64(300))
-	_, err := u.Exec(int64(1), nil)
-	if codeOf(err) != "BAD_USER_INPUT" || !strings.Contains(err.Error(), "UpdateDialInput.level") {
-		t.Errorf("update with 300: %v (code %q), want BAD_USER_INPUT naming UpdateDialInput.level", err, codeOf(err))
 	}
 }
 

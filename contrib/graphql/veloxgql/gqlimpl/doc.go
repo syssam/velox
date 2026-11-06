@@ -8,19 +8,14 @@
 //   - the edges, which read in batches, the edge of every row of a page in
 //     one statement (EdgeConnection, EdgeOne and EdgeList);
 //   - the fields a selection reads (Selected and Narrow);
-//   - the runtime of the inputs' Create and Update methods: NewCreate and
-//     NewUpdate, whose Insert and Exec run one in Atomic, a savepoint inside
-//     the operation's transaction or a transaction of its own; the steps the
-//     generated methods give them (Key, Keys, AddRemove, DecodeJSON, NotZero,
-//     NotNull, Cleared, ClearEdge, Exists, Join, Repoint, Children, Child and
-//     Through, the last four with an edge's M2M or Owned); and what those run
-//     on (CheckExists, Repointed, StillLinked, Readable, UnlinkAll, NotFound,
-//     LockRow and WriteError);
+//   - what the inputs' Setters methods call: DecodeID and DecodeIDs for the
+//     IDs an input gives, FromJSON for a JSON field, NotZero, and Checked,
+//     which runs the validators of the columns an input sets;
 //   - InputErrorf, the coded error of a client's input.
 //
 // An application does not call this package.
 //
-// Compatibility is by veloxgql.GeneratedCodeIsVersion14, which every
+// Compatibility is by veloxgql.GeneratedCodeIsVersion15, which every
 // generated file references, and not by semantic versioning, as protobuf's
 // protoimpl is: a name here may change or go when the generated code
 // changes, and then the version constant is replaced, so that generated code

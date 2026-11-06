@@ -47,38 +47,40 @@ func petsModel() *plugin.Model {
 }
 
 // TestInputEdgeKinds: each kind of edge, and each field that needs more than
-// a plain assignment, is written with its gqlimpl helper, converting a key
-// between the owner's Go type and the type the target's rows hold it in.
+// a plain setter, becomes its setter: the key on the row its column's Set,
+// converted between the owner's Go type and the type the row holds it in;
+// an edge whose key the target holds its relation handle's Add, Remove or
+// Clear. A clear field wins over its field.
 func TestInputEdgeKinds(t *testing.T) {
 	files := render(t, petsModel())
 	for name, wants := range map[string][]string{
-		"CreateOwnerInput.Create": {
-			// A null for a Nillable field with a Default is refused, as the
-			// insert would store the Default.
-			`gqlimpl.NotNull(c, "nick", in.Nick != nil) if in.Nick != nil {`,
-			// A Nillable JSON field decodes, and the row takes its address.
-			`metaJSON := gqlimpl.DecodeJSON[map[string]any](c, "meta", *in.Meta) x.Meta = &metaJSON c.Given(ownerColMeta)`,
-			// A one-to-one edge whose key the target holds re-points one child.
-			`if in.PetID != nil { petIDKey := gqlimpl.Key[int64](c, "petID", *in.PetID, "Pet") gqlimpl.Repoint(c, "petID", "Pet", ownerPetEdgeGQL(), []int64{petIDKey}) }`,
+		"CreateOwnerInput.Setters": {
+			// A Nillable field with a Default is set when given; a null is a
+			// field not given.
+			`if v := in.Nick; v != nil { set = append(set, Owners.Nick.Set(*v)) }`,
+			// A Nillable JSON field decodes, and its handle takes the value.
+			`meta, err := gqlimpl.FromJSON[map[string]any]("CreateOwnerInput.meta", *v) if err != nil { return nil, err } set = append(set, Owners.Meta.Set(meta))`,
+			// A one-to-one edge whose key the target holds is the edge's Add.
+			`petID, err := gqlimpl.DecodeID[int64]("CreateOwnerInput.petID", *v, "Pet") if err != nil { return nil, err } set = append(set, Owners.Pet.Add(petID))`,
+			`return gqlimpl.Checked("CreateOwnerInput", &ownerConnGQL, set)`,
 		},
-		"UpdateOwnerInput.Update": {
-			`u, key := gqlimpl.NewUpdateAs[int64, types.OwnerID](ctx, &ownerConnGQL, id, gqlimpl.AsInt[types.OwnerID, int64])`,
-			// The Pet's rows hold the owner's key as an int64.
-			`gqlimpl.Child(u, "petID", "Pet", clearPet, petIDKey, int64(key), ownerPetEdgeGQL())`,
+		"UpdateOwnerInput.Setters": {
+			`if in.ClearNick { set = append(set, Owners.Nick.SetNull()) } else if v := in.Nick; v != nil {`,
+			`if in.ClearPet { set = append(set, Owners.Pet.Clear()) } else if v := in.PetID; v != nil {`,
 		},
-		"ownerPetEdgeGQL": {
-			`gqlimpl.Owned{Owner: velox.TableOf[Owner](), Target: velox.TableOf[Pet](), OwnerKey: ownerColID, TargetKey: petColID, FK: petColOwnerPet}`,
+		"CreatePetInput.Setters": {
+			`ownerID, err := gqlimpl.DecodeIDAs[int64]("CreatePetInput.ownerID", *v, "Owner", gqlimpl.AsInt[types.OwnerID, int64])`,
+			// The row holds the owner's key as an int64.
+			`set = append(set, Pets.OwnerPet.Set(int64(ownerID)))`,
+			`set = append(set, Pets.Kits.Add(kitIDs...))`,
+			// A required ID is always decoded.
+			`momID, err := gqlimpl.DecodeID[int64]("CreatePetInput.momID", in.MomID, "Pet") if err != nil { return nil, err } set = append(set, Pets.CatKits.Set(momID))`,
 		},
-		"CreatePetInput.Create": {
-			`ownerIDVal := int64(ownerIDKey) x.OwnerPet = &ownerIDVal`,
-			`momIDKey := gqlimpl.Key[int64](c, "momID", in.MomID, "Pet")`,
-		},
-		"UpdatePetInput.Update": {
-			`u.SetKey(petColOwnerPet, int64(ownerIDKey))`,
+		"UpdatePetInput.Setters": {
+			`if in.ClearOwner { set = append(set, Pets.OwnerPet.SetNull()) } else if v := in.OwnerID; v != nil {`,
 			// A Required edge's NULL-able key can only be added to: no remove
 			// or clear, which would leave a child with none.
-			`addKitIDsKeys := gqlimpl.Keys[int64](u, "addKitIDs", in.AddKitIDs, "Pet")`,
-			`gqlimpl.Children(u, "addKitIDs", "Pet", gqlimpl.Edit{Add: addKitIDsKeys}, key, petKitsEdgeGQL())`,
+			`addKitIDs, err := gqlimpl.DecodeIDs[int64]("UpdatePetInput.addKitIDs", in.AddKitIDs, "Pet") if err != nil { return nil, err } set = append(set, Pets.Kits.Add(addKitIDs...))`,
 		},
 	} {
 		src := funcSrc(t, files, name)
@@ -92,14 +94,14 @@ func TestInputEdgeKinds(t *testing.T) {
 			}
 		}
 	}
-	if src := funcSrc(t, files, "UpdatePetInput.Update"); strings.Contains(src, "RemoveKitIDs") || strings.Contains(src, "ClearKits") {
-		t.Errorf("UpdatePetInput.Update unlinks a kit:\n%s", src)
+	if src := funcSrc(t, files, "UpdatePetInput.Setters"); strings.Contains(src, "RemoveKitIDs") || strings.Contains(src, "ClearKits") {
+		t.Errorf("UpdatePetInput.Setters unlinks a kit:\n%s", src)
 	}
 }
 
 // TestNonNodeOwnerM2M: a create input of a type that is no Node (its key is
-// a float64) writes its many-to-many edge with a function literal for its
-// key, of the join entity's two key types.
+// a float64) writes its many-to-many edge with the edge's Add, which the
+// write runs with the row's key.
 func TestNonNodeOwnerM2M(t *testing.T) {
 	id := func(typ string) *plugin.Field {
 		return &plugin.Field{Name: "id", GoName: "ID", Type: typ, GoType: typ, ElemType: typ}
@@ -120,14 +122,9 @@ func TestNonNodeOwnerM2M(t *testing.T) {
 		},
 	}}
 	files := render(t, m)
-	for name, want := range map[string]string{
-		"thingTagsEdgeGQL": `gqlimpl.M2M{Owner: velox.TableOf[Thing](), Target: velox.TableOf[Tag](), Join: velox.TableOf[ThingTag](), ` +
-			`OwnerKey: thingColID, TargetKey: tagColID, JoinOwner: thingTagColThingID, JoinTarget: thingTagColTagID}`,
-		"CreateThingInput.Create": `gqlimpl.Join(c, "tagIDs", "Tag", thingTagsEdgeGQL(), tagIDsKeys)`,
-	} {
-		if src := funcSrc(t, files, name); !strings.Contains(src, want) {
-			t.Errorf("%s has no %s:\n%s", name, want, src)
-		}
+	want := `tagIDs, err := gqlimpl.DecodeIDs[int64]("CreateThingInput.tagIDs", in.TagIDs, "Tag") if err != nil { return nil, err } set = append(set, Things.Tags.Add(tagIDs...))`
+	if src := funcSrc(t, files, "CreateThingInput.Setters"); !strings.Contains(src, want) {
+		t.Errorf("CreateThingInput.Setters has no %s:\n%s", want, src)
 	}
 }
 
@@ -170,7 +167,6 @@ func TestInputRenderErrors(t *testing.T) {
 			},
 		}
 	}
-	handles := func(e *plugin.Entity, h string) *plugin.Entity { e.Handles = h; return e }
 	// withKids is e with the edge kids, whose key thing_kids, fk, a Kid holds.
 	withKids := func(e *plugin.Entity, kid *plugin.Entity, fk *plugin.Field) []*plugin.Entity {
 		e.Edges = []*plugin.Edge{{Name: "kids", GoName: "Kids", Target: "Kid", Kind: plugin.O2M, Field: "thing_kids", FieldOn: "Kid"}}
@@ -183,8 +179,6 @@ func TestInputRenderErrors(t *testing.T) {
 		es   []*plugin.Entity
 		want string
 	}{
-		"an edge's function is taken": {withKids(ent("Thing", `"create"`), handles(ent("Kid"), "thingKidsEdgeGQL"), kidsKey("*int64", "int64", "", "")),
-			"schema Thing, edge kids: its Go name thingKidsEdgeGQL is also velox-gen's handles of schema Kid"},
 		"a child's key that does not convert": {withKids(ent("Thing", `"create"`), ent("Kid"), kidsKey("*types.Tag", "types.Tag", "example.com/types", "string")),
 			"schema Kid, field thing_kids: velox-graphql converts its Go type types.Tag to int64, and a string does not convert"},
 		"a JSON field of no Go type, on create": {[]*plugin.Entity{withField(ent("Thing", `"create"`), &plugin.Field{Name: "j", GoName: "J", Type: "json"})},
@@ -200,6 +194,9 @@ func TestInputRenderErrors(t *testing.T) {
 		"a string of an int Go type, on update": {[]*plugin.Entity{withField(ent("Thing", `"update"`),
 			&plugin.Field{Name: "s", GoName: "S", Type: "string", GoType: "types.S", ElemType: "types.S", PkgPath: "example.com/types", Kind: "int"})},
 			"schema Thing, field s: velox-graphql converts its Go type types.S to string, and an int does not convert"},
+		"a nullable column whose Go type holds no nil": {[]*plugin.Entity{withField(ent("Thing", `"update"`),
+			&plugin.Field{Name: "n", GoName: "N", Type: "int64", GoType: "int64", ElemType: "int64", Kind: "int64", Nullable: true, Optional: true})},
+			"schema Thing, field n: the model says its column holds NULL, and its Go type int64 holds no nil; make the field Nillable"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Render(&plugin.Model{Version: plugin.ModelVersion, Entities: c.es}, outPath, "gen"); err == nil || !strings.Contains(err.Error(), c.want) {
@@ -221,11 +218,33 @@ func TestBytesOfANamedType(t *testing.T) {
 	}}}
 	files := render(t, m)
 	for name, want := range map[string]string{
-		"CreateThingInput.Create": "x.B = types.Blob(in.B)",
-		"UpdateThingInput.Update": "u.Set(thingColB, types.Blob(*in.B))",
+		"CreateThingInput.Setters": "set = append(set, Things.B.Set(types.Blob(in.B)))",
+		"UpdateThingInput.Setters": "set = append(set, Things.B.Set(types.Blob(*v)))",
 	} {
 		if src := funcSrc(t, files, name); !strings.Contains(src, want) {
 			t.Errorf("%s has no %s:\n%s", name, want, src)
+		}
+	}
+}
+
+// TestSetterLocals: a decoded field's local is named after the field, unless
+// that is a keyword, a predeclared name or a package the file imports, when
+// it ends in Val.
+func TestSetterLocals(t *testing.T) {
+	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
+		Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{}, Annotations: mutable(`"create"`),
+		Fields: []*plugin.Field{
+			{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64", AutoID: true},
+			{Name: "type", GoName: "Type", Type: "json", GoType: "map[string]any", ElemType: "map[string]any", Kind: "map"},
+			{Name: "len", GoName: "Len", Type: "json", GoType: "map[string]any", ElemType: "map[string]any", Kind: "map"},
+			{Name: "types", GoName: "Types", Type: "json", GoType: "types.Bag", ElemType: "types.Bag", PkgPath: "example.com/types", Kind: "map"},
+			{Name: "meta", GoName: "Meta", Type: "json", GoType: "map[string]any", ElemType: "map[string]any", Kind: "map"},
+		},
+	}}}
+	src := funcSrc(t, render(t, m), "CreateThingInput.Setters")
+	for _, want := range []string{"typeVal, err :=", "lenVal, err :=", "typesVal, err :=", "meta, err :="} {
+		if !strings.Contains(src, want) {
+			t.Errorf("CreateThingInput.Setters has no %s:\n%s", want, src)
 		}
 	}
 }

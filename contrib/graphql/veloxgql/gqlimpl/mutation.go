@@ -2,44 +2,26 @@ package gqlimpl
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
 
-	"github.com/99designs/gqlgen/graphql"
-	"github.com/vektah/gqlparser/v2/ast"
-
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/internal/english"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
-// Atomic runs fn in db.Tx(ctx, fn), on the DB veloxgql.DBFromContext(ctx)
-// reads. For generated code.
-//
-// In the transaction the Extension opened for a mutation operation, db.Tx
-// makes a savepoint, so fn's error rolls back fn's writes at once, and the
-// operation's when the resolver returns it; a resolver that swallows it keeps
-// the operation's other writes, and the operation commits. Outside one, fn
-// runs in a transaction of its own, so a mutation's writes are kept or
-// dropped together outside a server too.
-// Without a DB in ctx, Atomic fails with veloxgql.ErrNoDB and fn does not
-// run.
-func Atomic(ctx context.Context, fn func(ctx context.Context, db *velox.DB) error) error {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return err
-	}
-	return db.Tx(ctx, fn)
-}
+// MaxIDs is the most IDs one list field of an input may give: DecodeIDs
+// refuses more. The Extension's document limits bound a request's lists
+// only loosely (Limits.MaxVariableNodes is 100000), and an input's Setters
+// has no context to read the Limits from, so the bound is fixed here.
+const MaxIDs = 1000
 
 // DecodeID decodes id, an ID of the GraphQL type typ, for the input field at
-// ("CreatePostInput.authorID", or "id" for Update's id). For generated code. Its error
-// is BAD_USER_INPUT, names at, and wraps veloxgql.ErrBadID or ErrWrongIDType.
+// ("CreatePostInput.authorID"). For generated code. Its error is
+// BAD_USER_INPUT, names at, and wraps veloxgql.ErrBadID or ErrWrongIDType.
 func DecodeID[K any](at, id, typ string) (K, error) {
 	k, err := veloxgql.DecodeID[K](id, typ)
 	if err != nil {
@@ -59,15 +41,22 @@ func DecodeIDAs[K, V any](at, id, typ string, conv func(K) V) (V, error) {
 	return conv(k), nil
 }
 
-// DecodeIDs decodes ids as DecodeID does, keeps the first of each repeated key,
-// and refuses more than the MaxPage of veloxgql.LimitsFromContext(ctx) IDs with
-// BAD_USER_INPUT wrapping veloxgql.ErrPageTooLarge, before decoding any. For
-// generated code. An ID's error names its place in the list, as "<at>[2]".
-func DecodeIDs[K comparable](ctx context.Context, at string, ids []string, typ string) ([]K, error) {
-	if most := veloxgql.LimitsFromContext(ctx).MaxPage; len(ids) > most {
-		return nil, InputErrorf("%s: %w: %d IDs, and the most is %d", at, veloxgql.ErrPageTooLarge, len(ids), most)
+// DecodeIDs decodes ids as DecodeID does, keeps the first of each repeated
+// key, and returns the keys as a relation handle's Add and Remove take them.
+// For generated code. More than MaxIDs IDs is BAD_USER_INPUT wrapping
+// veloxgql.ErrPageTooLarge, before any is decoded. An ID's error names its
+// place in the list, as "<at>[2]".
+func DecodeIDs[K comparable](at string, ids []string, typ string) ([]any, error) {
+	return DecodeIDsAs(at, ids, typ, func(k K) K { return k })
+}
+
+// DecodeIDsAs is DecodeIDs of K keys, each converted to V by conv. For
+// generated code.
+func DecodeIDsAs[K comparable, V any](at string, ids []string, typ string, conv func(K) V) ([]any, error) {
+	if len(ids) > MaxIDs {
+		return nil, InputErrorf("%s: %w: %d IDs, and the most is %d", at, veloxgql.ErrPageTooLarge, len(ids), MaxIDs)
 	}
-	out := make([]K, 0, len(ids))
+	out := make([]any, 0, len(ids))
 	seen := make(map[K]struct{}, len(ids))
 	for i, id := range ids {
 		k, err := DecodeID[K](fmt.Sprintf("%s[%d]", at, i), id, typ)
@@ -78,206 +67,79 @@ func DecodeIDs[K comparable](ctx context.Context, at string, ids []string, typ s
 			continue
 		}
 		seen[k] = struct{}{}
-		out = append(out, k)
+		out = append(out, conv(k))
 	}
 	return out, nil
 }
 
-// DecodeIDsAs is DecodeIDs of K keys, each converted to V by conv. For
-// generated code.
-func DecodeIDsAs[K comparable, V any](ctx context.Context, at string, ids []string, typ string, conv func(K) V) ([]V, error) {
-	ks, err := DecodeIDs[K](ctx, at, ids, typ)
-	if err != nil {
+// NotZero refuses v, what the create input's field at gives a field that has
+// a Default, when it is the field's zero value: an insert would store the
+// Default in its place, as it does for a field left out. For generated
+// code. Its error is BAD_USER_INPUT.
+func NotZero[V any](at string, v V) error {
+	if reflect.ValueOf(&v).Elem().IsZero() {
+		return InputErrorf("%s: invalid value: the empty value cannot be stored on create, where it means the field's default; leave the field out, or set it with an update", at)
+	}
+	return nil
+}
+
+// Checked returns set, the setters an input of c's type gives, once the
+// validators of their columns pass. For generated code: the last step of an
+// input's Setters. input is the input's GraphQL type, "CreatePostInput" or
+// "UpdatePostInput", whose fields c's CreateInputs or UpdateInputs (else
+// Inputs) name by column.
+//
+// A create input's values are checked as an insert checks a row (Table's
+// Validate), an update input's as an update checks its setters (Table's
+// ValidateSet). Edge setters are not checked: the write checks their keys.
+// A validator's error on a column the input sets is BAD_USER_INPUT
+// "<input>.<field>: invalid value: <the validator's text>", wrapping the
+// *velox.ValidationError; any other error is returned as it is.
+func Checked[E any](input string, c *Conn, set []velox.Setter[E]) ([]velox.Setter[E], error) {
+	if err := checked(input, c, velox.Assignments(set)); err != nil {
 		return nil, err
 	}
-	out := make([]V, len(ks))
-	for i, k := range ks {
-		out[i] = conv(k)
-	}
-	return out, nil
+	return set, nil
 }
 
-// CheckExists fails with NOT_FOUND, naming at and typ, unless q counts n rows:
-// q selects the rows the IDs of at name, under the caller's Read
-// policy. For generated code. Its text is "veloxgql: <at>: <missing> of the <n>
-// IDs name no <typ>", or NotFound's for n 1, and echoes no ID. n is the number
-// of distinct IDs; for n 0, CheckExists runs no query. The query's own error is
-// returned as it is.
-func CheckExists(ctx context.Context, q velox.TableQuery, n int, at, typ string) error {
-	if n == 0 {
+// checked is Checked, without the entity's type.
+func checked(input string, c *Conn, set []velox.Assignment) error {
+	t := c.table()
+	info := t.Info()
+	if info == nil {
+		return fmt.Errorf("veloxgql: %s: the Conn of %s has no Table", input, c.Type)
+	}
+	cols := make([]velox.Assignment, 0, len(set))
+	for _, a := range set {
+		if a.Column >= 0 {
+			cols = append(cols, a)
+		}
+	}
+	names, create := c.UpdateInputs, strings.HasPrefix(input, "Create")
+	if create {
+		names = c.CreateInputs
+	}
+	if names == nil {
+		names = c.Inputs
+	}
+	var err error
+	if create {
+		p := t.New()
+		idx := make([]int, len(cols))
+		for i, a := range cols {
+			if err := t.SetField(p, a.Column, a.Value); err != nil {
+				return err
+			}
+			idx[i] = a.Column
+		}
+		err = t.Validate(p, idx...)
+	} else {
+		err = t.ValidateSet(cols...)
+	}
+	if err == nil {
 		return nil
 	}
-	got, err := q.Count(ctx)
-	if err != nil {
-		return err
-	}
-	return matched(got, n, at, typ)
-}
-
-// matched fails as CheckExists does unless got, the rows a statement counted or
-// changed, is n, the number of distinct IDs of at that it names. More rows
-// than IDs is an internal error: the IDs were not distinct keys. A count the
-// driver did not report (-1) is CountUnknown's internal error, not a short
-// count.
-func matched(got int64, n int, at, typ string) error {
-	switch {
-	case got < 0:
-		return CountUnknown(at)
-	case got < int64(n) && n == 1:
-		return NotFound(at, typ)
-	case got < int64(n):
-		return gqlcore.NotFoundf("%s: %d of the %d IDs name no %s", at, int64(n)-got, n, typ)
-	case got > int64(n):
-		return fmt.Errorf("veloxgql: %s: %d rows for %d IDs: the IDs are not distinct keys", at, got, n)
-	}
-	return nil
-}
-
-// Repointed checks an UPDATE that re-pointed the children the n distinct IDs of
-// at name to a new owner of the GraphQL type owner, and changed got rows: it
-// re-points only children that no owner holds, so a child another owner holds
-// is not taken from it. For generated code. When got is under n, linked counts
-// the children of those IDs the caller may read that an owner holds; one or
-// more is BAD_USER_INPUT "veloxgql: <at>: a <typ> is already linked to another
-// <owner>", which tells the caller nothing it may not read. Otherwise the error
-// is CheckExists's: NOT_FOUND for a child the caller may not change, or that
-// does not exist. The count's own error is returned as it is. A got of -1, a
-// count the driver did not report, is CountUnknown's error: the UPDATE's rows
-// cannot be told from the IDs that name no child.
-func Repointed(ctx context.Context, got int64, n int, linked velox.TableQuery, at, typ, owner string) error {
-	if got < 0 || got >= int64(n) {
-		return matched(got, n, at, typ)
-	}
-	c, err := linked.Count(ctx)
-	switch {
-	case err != nil:
-		return err
-	case c > 0:
-		return InputErrorf("%s: %s %s is already linked to another %s", at, english.Article(typ), typ, owner)
-	}
-	return matched(got, n, at, typ)
-}
-
-// StillLinked fails when q, run without the Read policy,
-// finds a row: a child of the GraphQL type typ that the owner of the type owner
-// still holds after the caller's scoped unlink, which the caller may not
-// change. For generated code. Its error is BAD_USER_INPUT "veloxgql: <at>: the
-// <owner> is already linked to a or an <typ>" (as Repointed writes the
-// article), which says nothing about the child. The query's own error is
-// returned as it is.
-func StillLinked(ctx context.Context, q velox.TableQuery, at, typ, owner string) error {
-	const reason = "graphql: a hidden child of a one-to-one re-point"
-	ok, err := q.Exists(velox.WithoutPolicy(ctx, reason))
-	switch {
-	case err != nil:
-		return err
-	case ok:
-		return InputErrorf("%s: the %s is already linked to %s %s", at, owner, english.Article(typ), typ)
-	}
-	return nil
-}
-
-// Readable returns the values of column col, a key, of the rows q selects:
-// q names at most n distinct keys, under the caller's Read policy, so its
-// rows are those of the keys the caller may read. For generated code. For n
-// 0, Readable runs no query. The query's own error is returned as it is.
-// remove<Edge>IDs and clear<Edge> of a many-to-many edge delete only the join
-// rows of these keys.
-func Readable(ctx context.Context, q velox.TableQuery, n, col int) ([]any, error) {
-	if n == 0 {
-		return nil, nil
-	}
-	rows, err := q.Limit(n).MaxRows(n).All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	t := q.Table()
-	ks := make([]any, rows.Len())
-	for i := range ks {
-		ks[i] = t.Value(rows.At(i), col)
-	}
-	return ks, nil
-}
-
-// UnlinkAll is clear<Edge> of a many-to-many edge. For generated code. links
-// selects the join rows of the row the mutation changes, ordered by their
-// primary key; UnlinkAll reads them the MaxPage of
-// veloxgql.LimitsFromContext(ctx) at a time, and gives unlink the target keys
-// of each page, the values of the join rows' column col. unlink deletes the
-// join rows of the keys whose target the caller may read (Readable), and
-// leaves the others: each page starts after the last row of the one before,
-// so a join row left is not read again. The first error is returned as it
-// is.
-func UnlinkAll(ctx context.Context, links velox.TableQuery, col int, unlink func(ks []any) error) error {
-	page := veloxgql.LimitsFromContext(ctx).MaxPage
-	q := links.Limit(page).MaxRows(page)
-	t := q.Table()
-	for {
-		js, err := q.All(ctx)
-		if err != nil || js.Len() == 0 {
-			return err
-		}
-		ks := make([]any, js.Len())
-		for i := range ks {
-			ks[i] = t.Value(js.At(i), col)
-		}
-		if err := unlink(ks); err != nil {
-			return err
-		}
-		if js.Len() < page {
-			return nil
-		}
-		q = q.After(js.At(js.Len() - 1))
-	}
-}
-
-// disjoint fails with BAD_USER_INPUT "veloxgql: <input>: an ID is in both <add>
-// and <remove>" when a key is in both a and b, the decoded IDs of the fields
-// add and remove of the input named input: the input has no single meaning. It
-// echoes no ID.
-func disjoint[K comparable](input, add, remove string, a, b []K) error {
-	if len(a) == 0 || len(b) == 0 {
-		return nil
-	}
-	in := make(map[K]struct{}, len(a))
-	for _, k := range a {
-		in[k] = struct{}{}
-	}
-	for _, k := range b {
-		if _, ok := in[k]; ok {
-			return InputErrorf("%s: an ID is in both %s and %s", input, add, remove)
-		}
-	}
-	return nil
-}
-
-// NotFound is the NOT_FOUND error of a mutation whose ID names no row of typ
-// the caller may change: "veloxgql: <at>: no <typ> has this ID". For generated
-// code.
-func NotFound(at, typ string) error {
-	return gqlcore.NotFoundf("%s: no %s has this ID", at, typ)
-}
-
-// LockRow checks that q, a query of the one row a mutation changes, finds a
-// row the caller may change: a Writable Exists, under the scope of the write,
-// which finds no row the caller may not change. Where the dialect has locking
-// reads (everywhere but SQLite) it locks the row with ForUpdate, so the row
-// stays the caller's until the transaction ends; SQLite has none, and its
-// transactions lock the database. A missing row is NotFound(at, typ). For
-// generated code, inside Atomic's transaction, with db the DB it passes.
-func LockRow(ctx context.Context, db *velox.DB, q velox.TableQuery, at, typ string) error {
-	q = q.Writable()
-	if db.Dialect() != velox.SQLite {
-		q = q.ForUpdate()
-	}
-	ok, err := q.Exists(ctx)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return NotFound(at, typ)
-	}
-	return nil
+	return writeError(err, input, info.Name, inputNames(t, names))
 }
 
 // Show is what a mutation input's String prints for p, a field that is a
@@ -297,146 +159,15 @@ func ShowJSON(p *veloxgql.JSON) any {
 	return string(*p)
 }
 
-// CountUnknown is the internal error of a write at whose driver did not report
-// the rows it changed (velox's count -1), when the count decides the result:
-// "veloxgql: <at>: row count unknown". For generated code. Returned inside the
-// mutation's transaction, it rolls the write back.
-func CountUnknown(at string) error {
-	return fmt.Errorf("veloxgql: %s: row count unknown", at)
-}
-
-// notZero refuses v, what the input field at gives a field that has a
-// Default, when it is the field's zero value: an insert would store the
-// Default in its place, as it does for a field left out. The client gets
-// BAD_USER_INPUT.
-func notZero[V any](at string, v V) error {
-	if reflect.ValueOf(&v).Elem().IsZero() {
-		return InputErrorf("%s: invalid value: the empty value cannot be stored on create, where it means the field's default; leave the field out, or set it with an update", at)
-	}
-	return nil
-}
-
-// nullsIn counts the values of the GraphQL input type input that the running
-// field's arguments hold, at any depth of input objects and lists, literals
-// and variables alike, and those of them that give the field name as null,
-// which an input's nil pointer cannot tell from a field left out. Outside a
-// gqlgen field it finds none. A value inside a variable is found below the
-// variable's own type only with the server's schema, which the Extension
-// keeps.
-func nullsIn(ctx context.Context, input, name string) (found, nulls int) {
-	fc := graphql.GetFieldContext(ctx)
-	if fc == nil || fc.Field.Field == nil || !graphql.HasOperationContext(ctx) {
-		return 0, 0
-	}
-	w := nullWalk{input: input, name: name, vars: graphql.GetOperationContext(ctx).Variables, schema: gqlcore.TableFromContext(ctx).Schema()}
-	for _, a := range fc.Field.Arguments {
-		w.value(a.Value)
-	}
-	return w.found, w.nulls
-}
-
-// nullWalk is nullsIn's search.
-type nullWalk struct {
-	input, name  string
-	vars         map[string]any
-	schema       *ast.Schema
-	found, nulls int
-}
-
-// value searches v, a literal or a variable, whose type the validator
-// recorded in its Definition.
-func (w *nullWalk) value(v *ast.Value) {
-	if v == nil {
-		return
-	}
-	switch v.Kind {
-	case ast.Variable:
-		if x, ok := w.vars[v.Raw]; ok {
-			w.any(x, v.Definition)
-		}
-	case ast.ObjectValue:
-		if v.Definition != nil && v.Definition.Name == w.input {
-			w.found++
-			if givenNull(v, w.name, w.vars) {
-				w.nulls++
-			}
-			return
-		}
-		for _, c := range v.Children {
-			w.value(c.Value)
-		}
-	case ast.ListValue:
-		for _, c := range v.Children {
-			w.value(c.Value)
-		}
-	}
-}
-
-// any searches x, a variable's value or a part of one, whose type is def (a
-// list's, its elements').
-func (w *nullWalk) any(x any, def *ast.Definition) {
-	if def == nil || def.Kind != ast.InputObject {
-		return
-	}
-	switch x := x.(type) {
-	case []any:
-		for _, e := range x {
-			w.any(e, def)
-		}
-	case map[string]any:
-		if def.Name == w.input {
-			w.found++
-			if v, ok := x[w.name]; ok && v == nil {
-				w.nulls++
-			}
-			return
-		}
-		if w.schema == nil {
-			return
-		}
-		for _, f := range def.Fields {
-			if v, ok := x[f.Name]; ok && v != nil {
-				w.any(v, w.schema.Types[f.Type.Name()])
-			}
-		}
-	}
-}
-
-// givenNull reports whether the input object v, a literal or a variable, gives
-// name as null: a variable left out gives nothing.
-func givenNull(v *ast.Value, name string, vars map[string]any) bool {
-	if v == nil {
-		return false
-	}
-	switch v.Kind {
-	case ast.Variable:
-		m, _ := vars[v.Raw].(map[string]any)
-		x, ok := m[name]
-		return ok && x == nil
-	case ast.ObjectValue:
-		c := v.Children.ForName(name)
-		switch {
-		case c == nil:
-			return false
-		case c.Kind == ast.NullValue:
-			return true
-		case c.Kind == ast.Variable:
-			x, ok := vars[c.Raw]
-			return ok && x == nil
-		}
-	}
-	return false
-}
-
-// WriteError is err from a write of entity (the name velox reports, as
-// "gen.Post") made from the input named input. For generated code. A
-// *velox.ValidationError of entity on a field name gives a GraphQL name for
-// becomes BAD_USER_INPUT "<input>.<name>: invalid value: <the validator's
-// text>", wrapping err. Every other error is returned as it is. So is a
-// validation error joined with another error (errors.Join): only err itself and
-// the chain of errors it wraps one by one are searched, so that ErrorPresenter
-// still logs an internal error joined with the validation error.
-func WriteError(err error, input, entity string, name func(goField string) string) error {
+// writeError is err, a validator's, from the input named input of entity
+// (the name velox reports, as "gen.Post"). A *velox.ValidationError of entity
+// on a field name gives a GraphQL name for becomes BAD_USER_INPUT
+// "<input>.<name>: invalid value: <the validator's text>", wrapping err.
+// Every other error is returned as it is. So is a validation error joined
+// with another error (errors.Join): only err itself and the chain of errors
+// it wraps one by one are searched, so that ErrorPresenter still logs an
+// internal error joined with the validation error.
+func writeError(err error, input, entity string, name func(goField string) string) error {
 	var v *velox.ValidationError
 	for e := err; e != nil && v == nil; {
 		switch x := e.(type) {

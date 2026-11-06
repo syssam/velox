@@ -61,7 +61,7 @@ var publicAPI = []string{
 	"Extension.MutateOperationParameters",
 	"Extension.NewContext",
 	"Extension.Validate",
-	"GeneratedCodeIsVersion14",
+	"GeneratedCodeIsVersion15",
 	"IDType",
 	"JSON",
 	"JSON.MarshalGQL",
@@ -194,21 +194,21 @@ func TestGqlimplIsForGeneratedCode(t *testing.T) {
 	if !strings.HasPrefix(d.Doc, "Package gqlimpl is for generated code.") {
 		t.Errorf("gqlimpl's doc starts %q", firstLine(d.Doc))
 	}
-	if !strings.Contains(d.Doc, "veloxgql.GeneratedCodeIsVersion14") {
-		t.Error("gqlimpl's doc does not name veloxgql.GeneratedCodeIsVersion14")
+	if !strings.Contains(d.Doc, "veloxgql.GeneratedCodeIsVersion15") {
+		t.Error("gqlimpl's doc does not name veloxgql.GeneratedCodeIsVersion15")
 	}
 
 	found := false
 	for _, v := range parseDoc(t, ".", "github.com/syssam/velox/contrib/graphql/veloxgql").Consts {
-		if slices.Contains(v.Names, "GeneratedCodeIsVersion14") {
+		if slices.Contains(v.Names, "GeneratedCodeIsVersion15") {
 			found = true
 			if _, rest, ok := strings.Cut(strings.Join(strings.Fields(v.Doc), " "), ". "); !ok || !strings.HasPrefix(rest, "For generated code.") {
-				t.Errorf("GeneratedCodeIsVersion14's doc %q does not say %q after its first sentence", firstLine(v.Doc), "For generated code.")
+				t.Errorf("GeneratedCodeIsVersion15's doc %q does not say %q after its first sentence", firstLine(v.Doc), "For generated code.")
 			}
 		}
 	}
 	if !found {
-		t.Error("veloxgql has no GeneratedCodeIsVersion14")
+		t.Error("veloxgql has no GeneratedCodeIsVersion15")
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/syssam/velox"
@@ -11,23 +12,26 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-// item is a hand-written entity, as velox-gen would write it, for Update's
-// tests: a key, a name its validator refuses empty and an age it refuses
-// below 0.
+// item is a hand-written entity, as velox-gen would write it, for Checked's
+// tests: a key, a name its validator refuses empty, an age it refuses below
+// 0 and an immutable code it refuses empty.
 type item struct {
 	ID   int64
 	Name string
 	Age  int64
+	Code string
 }
 
 var items = struct {
 	ID   velox.NumberCol[item, int64]
 	Name velox.StringCol[item, string]
 	Age  velox.NumberCol[item, int64]
+	Code velox.StringCol[item, string]
 }{
 	ID:   velox.NumberCol[item, int64]{I: 0},
 	Name: velox.StringCol[item, string]{I: 1},
 	Age:  velox.NumberCol[item, int64]{I: 2},
+	Code: velox.StringCol[item, string]{I: 3},
 }
 
 var itemMeta velox.MetaOnce[item]
@@ -36,13 +40,16 @@ func (*item) VeloxMeta() *velox.Meta[item] { return itemMeta.Load(itemDescriptor
 
 func itemDescriptor() velox.Descriptor[item] {
 	return velox.Descriptor[item]{
-		Table:      "items",
-		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "Age", Name: "age"}},
+		Table: "items",
+		Columns: []velox.ColumnDescriptor{
+			{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "Age", Name: "age"},
+			{Field: "Code", Name: "code", Immutable: true},
+		},
 		PrimaryKey: []int{0},
-		FieldPtr:   func(x *item, i int) any { return [...]any{&x.ID, &x.Name, &x.Age}[i] },
+		FieldPtr:   func(x *item, i int) any { return [...]any{&x.ID, &x.Name, &x.Age, &x.Code}[i] },
 		Check: func(col int, v any) error {
 			switch {
-			case col == 1 && v.(string) == "":
+			case (col == 1 || col == 3) && v.(string) == "":
 				return errors.New("must not be empty")
 			case col == 2 && v.(int64) < 0:
 				return errors.New("must not be negative")
@@ -53,94 +60,103 @@ func itemDescriptor() velox.Descriptor[item] {
 }
 
 // itemInputGQL is, by column, the inputs' fields.
-var itemInputGQL = []string{1: "name", 2: "age"}
+var itemInputGQL = []string{1: "name", 2: "age", 3: "code"}
 
-// updateItem is what an UpdateItemInput's generated Update does with the
-// fields name and age, when given, and the application's setters set.
-func updateItem(ctx context.Context, name *string, age *int64, set ...velox.Setter[item]) (*item, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, gqlimpl.InputConn[item]("Item", int(items.ID.I), itemInputGQL), veloxgql.EncodeID("Item", int64(1)))
-	if name != nil {
-		u.Set(int(items.Name.I), *name)
-	}
-	if age != nil {
-		u.Set(int(items.Age.I), *age)
-	}
-	p, err := u.Exec(key, velox.Assignments(set))
-	return gqlimpl.As[*item](p, err)
-}
-
-// TestUpdateAppSetters: an application's setter of a column the input sets
-// too wins, and the input's is dropped before it is validated; an
-// application's setter that its validator refuses fails with velox's own
-// error, uncoded, as the server's bug, while the input's own invalid field
-// is still BAD_USER_INPUT naming it.
-func TestUpdateAppSetters(t *testing.T) {
+// itemDB is an in-memory database with the items table and the item 1, and
+// a context of the Extension on it.
+func itemDB(t *testing.T) (*velox.DB, context.Context) {
+	t.Helper()
 	sqlDB, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	sqlDB.SetMaxOpenConns(1)
-	if _, err := sqlDB.Exec(`CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL, code TEXT NOT NULL)`); err != nil {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	if err := db.Insert(&item{ID: 1, Name: "a", Age: 1}).Exec(ctx); err != nil {
+	if err := db.Insert(&item{ID: 1, Name: "a", Age: 1, Code: "c"}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	ptr := func(s string) *string { return &s }
-	age := func(n int64) *int64 { return &n }
+	return db, ctx
+}
 
-	// The client's name, and the server's: the server's is written.
-	x, err := updateItem(ctx, ptr("client"), age(2), items.Name.Set("server"))
-	if err != nil || x.Name != "server" || x.Age != 2 {
-		t.Fatalf("update with the server's name = %+v, %v; want server, 2", x, err)
+// TestCheckedCreate: a create input's setters are checked as an insert
+// checks its row, so an immutable column may be set; a validator's error is
+// BAD_USER_INPUT naming the input's field, by CreateInputs when it is set;
+// the setters that pass go to the insert.
+func TestCheckedCreate(t *testing.T) {
+	db, ctx := itemDB(t)
+	c := gqlimpl.InputConn[item]("Item", int(items.ID.I), itemInputGQL)
+	set, err := gqlimpl.Checked("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("b"), items.Age.Set(2), items.Code.Set("d")})
+	if err != nil || len(set) != 3 {
+		t.Fatalf("Checked = %d setters, %v; want 3", len(set), err)
 	}
-	// The client's name is invalid, but dropped: the server's wins.
-	if x, err := updateItem(ctx, ptr(""), nil, items.Name.Set("server 2")); err != nil || x.Name != "server 2" {
-		t.Fatalf("update with an invalid client name the server's replaces = %+v, %v; want server 2", x, err)
+	x := &item{ID: 2}
+	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+		t.Fatal(err)
 	}
-	// The server's own setter is invalid: velox's error, as it is.
-	_, err = updateItem(ctx, ptr("ok"), nil, items.Age.Set(-1))
+	if got, err := db.Query[item]().Where(items.ID.EQ(2)).One(ctx); err != nil || *got != (item{ID: 2, Name: "b", Age: 2, Code: "d"}) {
+		t.Fatalf("the row = %+v, %v", got, err)
+	}
+
+	_, err = gqlimpl.Checked("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("ok"), items.Code.Set("")})
+	var ve *velox.ValidationError
+	if codeOf(err) != veloxgql.CodeBadUserInput || err.Error() != "veloxgql: CreateItemInput.code: invalid value: must not be empty" || !errors.As(err, &ve) {
+		t.Errorf("an empty code = %v (code %q); want BAD_USER_INPUT naming CreateItemInput.code", err, codeOf(err))
+	}
+	c.CreateInputs = []string{1: "title"}
+	_, err = gqlimpl.Checked("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("")})
+	if want := "veloxgql: CreateItemInput.title: invalid value: must not be empty"; err == nil || err.Error() != want {
+		t.Errorf("by CreateInputs = %v, want %s", err, want)
+	}
+	// A column the input does not name: velox's error, as it is.
+	_, err = gqlimpl.Checked("CreateItemInput", c, []velox.Setter[item]{items.Age.Set(-1)})
+	if !errors.As(err, &ve) || codeOf(err) != "" {
+		t.Errorf("an unnamed column = %v (code %q); want a *velox.ValidationError, uncoded", err, codeOf(err))
+	}
+}
+
+// TestCheckedUpdate: an update input's setters are checked as an update
+// checks its setters; a validator's error is BAD_USER_INPUT naming the
+// input's field, by UpdateInputs when it is set. A setter the application
+// adds after Checked is the write's to check: its error is velox's,
+// uncoded, as the server's bug.
+func TestCheckedUpdate(t *testing.T) {
+	db, ctx := itemDB(t)
+	c := gqlimpl.InputConn[item]("Item", int(items.ID.I), itemInputGQL)
+	in := []velox.Setter[item]{items.Name.Set("client"), items.Age.Set(2)}
+	set, err := gqlimpl.Checked("UpdateItemInput", c, in)
+	if err != nil || !slices.Equal(velox.Assignments(set), velox.Assignments(in)) {
+		t.Fatalf("Checked = %v, %v; want the setters", set, err)
+	}
+	if n, err := db.Update[item]().Where(items.ID.EQ(1)).Set(set...).Exec(ctx); err != nil || n != 1 {
+		t.Fatalf("update = %d, %v", n, err)
+	}
+
+	_, err = gqlimpl.Checked("UpdateItemInput", c, []velox.Setter[item]{items.Age.Set(-1)})
+	if codeOf(err) != veloxgql.CodeBadUserInput || err.Error() != "veloxgql: UpdateItemInput.age: invalid value: must not be negative" {
+		t.Errorf("an invalid age = %v (code %q); want BAD_USER_INPUT naming UpdateItemInput.age", err, codeOf(err))
+	}
+	c.UpdateInputs = []string{2: "years"}
+	_, err = gqlimpl.Checked("UpdateItemInput", c, []velox.Setter[item]{items.Age.Set(-1)})
+	if want := "veloxgql: UpdateItemInput.years: invalid value: must not be negative"; err == nil || err.Error() != want {
+		t.Errorf("by UpdateInputs = %v, want %s", err, want)
+	}
+
+	set, err = gqlimpl.Checked("UpdateItemInput", c, []velox.Setter[item]{items.Age.Set(3)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	set = append(set, items.Name.Set(""))
+	_, err = db.Update[item]().Where(items.ID.EQ(1)).Set(set...).Exec(ctx)
 	var ve *velox.ValidationError
 	if !errors.As(err, &ve) || codeOf(err) != "" {
-		t.Fatalf("update with an invalid server setter = %v (code %q); want a *velox.ValidationError, uncoded", err, codeOf(err))
+		t.Errorf("an invalid setter of the application's = %v (code %q); want a *velox.ValidationError, uncoded", err, codeOf(err))
 	}
-	// The client's invalid field, beside a valid server setter of another.
-	_, err = updateItem(ctx, nil, age(-1), items.Name.Set("fine"))
-	if codeOf(err) != veloxgql.CodeBadUserInput || err.Error() != "veloxgql: UpdateItemInput.age: invalid value: must not be negative" {
-		t.Fatalf("update with an invalid client age = %v (code %q); want BAD_USER_INPUT naming UpdateItemInput.age", err, codeOf(err))
-	}
-	x, err = db.Query[item]().Where(items.ID.EQ(1)).One(ctx)
-	if err != nil || x.Name != "server 2" || x.Age != 2 {
-		t.Fatalf("the row = %+v, %v; want server 2, 2: the failed updates wrote nothing", x, err)
-	}
-}
-
-// TestUpdateInputsStandsForInputs: UpdateInputs, when set, names the update
-// input's fields in place of Inputs.
-func TestUpdateInputsStandsForInputs(t *testing.T) {
-	sqlDB, err := sql.Open("sqlite", "file::memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	sqlDB.SetMaxOpenConns(1)
-	if _, err := sqlDB.Exec(`CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)`); err != nil {
-		t.Fatal(err)
-	}
-	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	if err := db.Insert(&item{ID: 1, Name: "a", Age: 1}).Exec(ctx); err != nil {
-		t.Fatal(err)
-	}
-	c := gqlimpl.InputConn[item]("Item", int(items.ID.I), itemInputGQL)
-	c.UpdateInputs = []string{2: "years"}
-	u, key := gqlimpl.NewUpdate[int64](ctx, c, veloxgql.EncodeID("Item", int64(1)))
-	u.Set(int(items.Age.I), int64(-1))
-	_, err = u.Exec(key, nil)
-	if want := "veloxgql: UpdateItemInput.years: invalid value: must not be negative"; err == nil || err.Error() != want {
-		t.Fatalf("update = %v, want %s", err, want)
+	if got, err := db.Query[item]().Where(items.ID.EQ(1)).One(ctx); err != nil || got.Name != "client" || got.Age != 2 {
+		t.Errorf("the row = %+v, %v; want client, 2: the failed update wrote nothing", got, err)
 	}
 }

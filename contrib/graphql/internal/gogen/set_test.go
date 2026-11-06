@@ -44,9 +44,9 @@ func setModel(t *testing.T, skipSlug bool) *plugin.Model {
 
 // TestCreateSetsSkipped: a required field with no Default that the create input
 // leaves out stored its zero value silently, and a validator's error on it named
-// CreateThingInput.slug, which the SDL has not. Create takes the row x then, whose
-// other fields the resolver sets before the validators run, and its doc names the
-// field; its errors name only the create input's fields, by the Conn's
+// CreateThingInput.slug, which the SDL has not. Setters's setters go to the
+// resolver's insert of x, whose other fields the resolver sets, and its doc
+// names the field; its errors name only the create input's fields, by the Conn's
 // CreateInputs, apart from the update input's UpdateInputs, which names slug. Its doc
 // does not name slug: a field the schema leaves out of the create input
 // explicitly is the application's or a hook's to set, as a tenancy mixin's
@@ -54,12 +54,12 @@ func setModel(t *testing.T, skipSlug bool) *plugin.Model {
 func TestCreateSetsSkipped(t *testing.T) {
 	files := render(t, setModel(t, true))
 	_, funcs, expr := mutationDecls(t, files)
-	if sig, want := expr(funcs["CreateThingInput.Create"].Type), "func(ctx context.Context, x *Thing) (*Thing, error)"; sig != want {
-		t.Errorf("CreateThingInput.Create: %s, want %s", sig, want)
+	if sig, want := expr(funcs["CreateThingInput.Setters"].Type), "func() ([]velox.Setter[Thing], error)"; sig != want {
+		t.Errorf("CreateThingInput.Setters: %s, want %s", sig, want)
 	}
-	create := funcSrc(t, files, "CreateThingInput.Create")
-	if !strings.Contains(create, `gqlimpl.NewCreate(ctx, &thingConnGQL, x, thingColName)`) {
-		t.Errorf("Create does not take thingConnGQL:\n%s", create)
+	create := funcSrc(t, files, "CreateThingInput.Setters")
+	if !strings.Contains(create, `return gqlimpl.Checked("CreateThingInput", &thingConnGQL, set)`) {
+		t.Errorf("Setters does not take thingConnGQL:\n%s", create)
 	}
 	lit := connLit(t, files, "thingConnGQL")
 	for field, want := range map[string]bool{"CreateInputs": false, "UpdateInputs": true} {
@@ -67,21 +67,21 @@ func TestCreateSetsSkipped(t *testing.T) {
 			t.Errorf("thingConnGQL's %s names slug: %v, want %v (%v)", field, got, want, lit)
 		}
 	}
-	if !strings.Contains(funcSrc(t, files, "UpdateThingInput.Update"), `gqlimpl.NewUpdate[int64](ctx, &thingConnGQL, id)`) {
-		t.Error("Update does not take thingConnGQL")
+	if !strings.Contains(funcSrc(t, files, "UpdateThingInput.Setters"), `return gqlimpl.Checked("UpdateThingInput", &thingConnGQL, set)`) {
+		t.Error("UpdateThingInput.Setters does not take thingConnGQL")
 	}
-	if doc := funcs["CreateThingInput.Create"].Doc.Text(); strings.Contains(doc, "leaves out") {
-		t.Errorf("Create's doc names slug, which the schema skips explicitly: %q", doc)
+	if doc := funcs["CreateThingInput.Setters"].Doc.Text(); strings.Contains(doc, "leaves out") {
+		t.Errorf("Setters's doc names slug, which the schema skips explicitly: %q", doc)
 	}
 
 	files = render(t, setModel(t, false))
 	_, funcs, _ = mutationDecls(t, files)
-	if doc := funcs["CreateThingInput.Create"].Doc.Text(); strings.Contains(doc, "leaves out") {
-		t.Errorf("with slug in the input, Create's doc names a field it leaves out: %q", doc)
+	if doc := funcs["CreateThingInput.Setters"].Doc.Text(); strings.Contains(doc, "leaves out") {
+		t.Errorf("with slug in the input, Setters's doc names a field it leaves out: %q", doc)
 	}
 }
 
-// TestCreateDocLeftOutKey: Create's doc said a key the create input leaves
+// TestCreateDocLeftOutKey: Create's doc, now Setters's, said a key the create input leaves
 // out "is stored as the zero value", but the zero key names no row, and the
 // database's foreign key refuses the insert. The doc names the edge and the
 // error.
@@ -104,12 +104,12 @@ func TestCreateDocLeftOutKey(t *testing.T) {
 		Edges:  []*plugin.Edge{{Name: "things", GoName: "Things", Target: "Thing", Ref: "owner", Kind: plugin.O2M, Field: "owner_id", FieldOn: "Thing"}},
 	})
 	_, funcs, _ := mutationDecls(t, render(t, m))
-	doc := strings.Join(strings.Fields(funcs["CreateThingInput.Create"].Doc.Text()), " ")
+	doc := strings.Join(strings.Fields(funcs["CreateThingInput.Setters"].Doc.Text()), " ")
 	for _, want := range []string{
 		"leaves out OwnerID, the key of the edge owner: set it on x, or in a velox.Hook; a zero key names no row, and the database's foreign key refuses the insert with a velox.ConstraintError.",
 	} {
 		if !strings.Contains(doc, want) {
-			t.Errorf("Create's doc does not say %q:\n%s", want, doc)
+			t.Errorf("Setters's doc does not say %q:\n%s", want, doc)
 		}
 	}
 }

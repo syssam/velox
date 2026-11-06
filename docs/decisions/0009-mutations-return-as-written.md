@@ -1,6 +1,6 @@
 # 0009. GraphQL mutations return the row as written; a link needs what it changes
 
-- Status: accepted, 2026-10-29
+- Status: accepted, 2026-10-29; the read-back is the resolver's since [0045](0045-graphql-input-setters.md)
 
 ## Context
 

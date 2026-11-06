@@ -34,7 +34,7 @@ func zeroDefault(fd *plugin.Field) bool {
 // them: not Optional, not nullable, with no Default, and neither the key nor
 // a field the schema leaves out of the create input explicitly, which the
 // application or a hook sets, as a tenancy mixin's hook sets its column. A
-// resolver sets them on the x it gives Create.
+// resolver sets them on the x it inserts.
 func leftOut(t *sdl.Type) []*plugin.Field {
 	e := t.Entity
 	set := map[int]bool{e.PrimaryKey[0]: true}
@@ -94,23 +94,6 @@ func fkOf(e *plugin.Entity, ed *plugin.Edge, on *plugin.Entity) (*plugin.Field, 
 		return nil, fmt.Errorf("schema %s, edge %s: its foreign key %s is no field of %s", e.Name, ed.Name, ed.Field, on.Name)
 	}
 	return fk, nil
-}
-
-// joinCols is the join entity of the M2M edge ed of e, and its two fields:
-// own holds e's key, and other the target's. An inverse edge's owner is the
-// join entity's second field. Its error names e and ed.
-func (r *renderer) joinCols(e *plugin.Entity, ed *plugin.Edge) (j *plugin.Entity, own, other *plugin.Field, err error) {
-	j = r.ents[ed.Join]
-	if j == nil || len(j.Fields) != 2 {
-		return nil, nil, nil, fmt.Errorf("schema %s, edge %s: the model has no join entity %s of two fields", e.Name, ed.Name, ed.Join)
-	}
-	// velox-gen's join entity holds the key of the edge declared with
-	// edge.To first: an inverse edge's owner is its second.
-	own, other = j.Fields[0], j.Fields[1]
-	if ed.Inverse {
-		own, other = other, own
-	}
-	return j, own, other, nil
 }
 
 // inputType is the Go type of the input field fi: its GoType for a value,
@@ -272,36 +255,4 @@ func (r *renderer) goType(f *file, e *plugin.Entity, fd *plugin.Field, typ strin
 		typ = typ[:edit.from] + edit.text + typ[edit.to:]
 	}
 	return typ, nil
-}
-
-// setKey writes dst = src, through the Go conversion conv when it is not "",
-// and, when ptr, through the variable tmp, whose address dst takes.
-func setKey(f *file, indent, dst, src, conv, tmp string, ptr bool) {
-	v := src
-	if conv != "" {
-		v = conv + "(" + src + ")"
-	}
-	switch {
-	case !ptr:
-		f.p("%s%s = %s", indent, dst, v)
-	case conv == "" && !strings.HasPrefix(src, "*"):
-		f.p("%s%s = &%s", indent, dst, src)
-	default:
-		f.p("%s%s := %s", indent, tmp, v)
-		f.p("%s%s = &%s", indent, dst, tmp)
-	}
-}
-
-// setNull is the call that clears the nullable field fd of e in an update,
-// u.SetNull of its column: a pointer field, or one whose Go type holds nil
-// (a slice, a map, a pointer or an interface), whose ColumnDescriptor says
-// Nullable, so the core binds the nil as SQL NULL. A field of another Go type
-// cannot be cleared: an error, which velox-gen's rule 48 keeps from its
-// models.
-func setNull(e *plugin.Entity, fd *plugin.Field) (string, error) {
-	switch {
-	case fd.Pointer, fd.Kind == "slice" || fd.Kind == "map" || fd.Kind == "ptr" || fd.Kind == "interface" || fd.Type == "bytes":
-		return "u.SetNull(" + colConst(e, fd) + ")", nil
-	}
-	return "", fmt.Errorf("schema %s, field %s: the model says its column holds NULL, and its Go type %s holds no nil; make the field Nillable", e.Name, fd.Name, cmp.Or(fd.ElemType, fd.GoType))
 }

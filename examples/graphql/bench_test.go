@@ -243,9 +243,9 @@ func TestNestedRequestBudget(t *testing.T) {
 }
 
 // budgetMutation is the request TestMutationBudget serves: an update of label
-// 1's rank, the generated Update alone (updatePost checks its author first,
-// a statement of the application's). Every run sends the same statements: an
-// UPDATE to an unchanged value is still sent.
+// 1's rank, the resolver's UPDATE alone (updatePost checks its author first,
+// a statement more). Every run sends the same statements: an UPDATE to an
+// unchanged value is still sent.
 const budgetMutation = `mutation { updateLabel(id: "` + label1 + `", input: {rank: 9}) { rank } }`
 
 // mutationStmts is the number of statements budgetMutation sends, as
@@ -263,14 +263,17 @@ const budgetMutation = `mutation { updateLabel(id: "` + label1 + `", input: {ran
 // Validator), so the figures are the wrapped path's, not the bare driver's.
 // On 2026-11-03 the request became updateLabel's, once updatePost checked its
 // author: 2 statements, 2 savepoint statements and 472 allocations; the
-// budget stays.
+// budget stays. On 2026-11-06 the resolver wrote the update itself, from the
+// input's Setters: an UPDATE of columns alone is one statement, atomic by
+// itself, so it runs in no savepoint of its own: 2 statements, 0 savepoint
+// statements and 440 allocations.
 const (
 	mutationStmts        = 2
 	mutationAllocsBudget = 550
 )
 
 // TestMutationBudget pins what one mutation costs: the statements it sends,
-// the savepoint it runs in (its SAVEPOINT and RELEASE), and its allocations.
+// none of them a savepoint's, and its allocations.
 func TestMutationBudget(t *testing.T) {
 	probe, err := sql.Open("sqlite", "")
 	if err != nil {
@@ -328,8 +331,8 @@ func TestMutationBudget(t *testing.T) {
 	if sent != mutationStmts {
 		t.Errorf("statements: %d, want %d", sent, mutationStmts)
 	}
-	if sps != 2 {
-		t.Errorf("savepoint statements: %d, want 2: the mutation's SAVEPOINT and RELEASE", sps)
+	if sps != 0 {
+		t.Errorf("savepoint statements: %d, want 0: an UPDATE of columns alone needs no savepoint", sps)
 	}
 	if !pinnedGqlgenBuilt() {
 		t.Skipf("the allocation budget is for gqlgen %s only", pinnedGqlgen)

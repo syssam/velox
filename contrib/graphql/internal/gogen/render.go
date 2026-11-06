@@ -3,7 +3,7 @@
 // they bind to, and the methods and functions their fields resolve through.
 // It writes <label>_gql.go for each entity with a GraphQL type (its types,
 // its edge methods, its root connection function, and its mutation inputs
-// with their methods Create and Update, which input.go writes), and
+// with their method Setters, which input.go writes), and
 // node_gql.go with Node and Nodes.
 //
 // Every name comes from sdl.Build, which the SDL is rendered from too, so the
@@ -217,7 +217,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion14\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion15\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -462,12 +462,6 @@ var locals = map[string]bool{
 // decoded JSON value; and <field>Val, the field's value converted for the row.
 var localSuffixes = []string{"Key", "Keys", "JSON", "Val"}
 
-// local is the name of a local of the generated code that holds a value of
-// the input field whose Go name is goName, ending in suffix, one of
-// localSuffixes: writerIDKey, tagsJSON. The Go names of an input's fields are
-// distinct, and the suffix keeps a local from every name in locals.
-func local(goName, suffix string) string { return camel(goName) + suffix }
-
 // camel is the Go name name with its leading capitals lower case, as Go
 // writes an unexported name: WriterID is writerID, and URLPath is urlPath.
 func camel(name string) string {
@@ -485,8 +479,8 @@ func camel(name string) string {
 }
 
 // indexedLocal reports whether name is one of the locals the generated code
-// names after an input field (local), or a clear<Edge>, whether an update
-// clears an edge.
+// may name after an input field, or a clear<Edge>, whether an update clears
+// an edge.
 func indexedLocal(name string) bool {
 	if rest, ok := strings.CutPrefix(name, "clear"); ok && rest != "" {
 		return true

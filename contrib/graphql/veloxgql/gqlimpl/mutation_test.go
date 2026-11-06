@@ -3,23 +3,12 @@ package gqlimpl_test
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/99designs/gqlgen/graphql"
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/handler/transport"
-	"github.com/vektah/gqlparser/v2"
-	"github.com/vektah/gqlparser/v2/ast"
-	"github.com/vektah/gqlparser/v2/gqlerror"
+	"time"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -163,21 +152,6 @@ func mutationDB(t *testing.T) (*velox.DB, *txRecord) {
 	return mutationDBOn(t, sqlDB)
 }
 
-// savepointDB is mutationDB through a savepointConn, whose record it returns
-// too.
-func savepointDB(t *testing.T) (*velox.DB, *txRecord, *savepointRec) {
-	t.Helper()
-	probe, err := sql.Open("sqlite", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	drv := probe.Driver()
-	_ = probe.Close()
-	sp := &savepointRec{}
-	db, r := mutationDBOn(t, sql.OpenDB(savepointConnector{drv, sp}))
-	return db, r, sp
-}
-
 // mutationDBOn is mutationDB on sqlDB, an in-memory database it closes when
 // the test ends.
 func mutationDBOn(t *testing.T, sqlDB *sql.DB) (*velox.DB, *txRecord) {
@@ -194,426 +168,6 @@ func mutationDBOn(t *testing.T, sqlDB *sql.DB) (*velox.DB, *txRecord) {
 	}
 	r := &txRecord{}
 	return velox.Open(velox.SQLite, sqlDB, velox.WithAround(r.around), velox.WithTxAround(r.txAround)), r
-}
-
-// savepointRec records the savepoint statements of a savepointConn: SAVEPOINT,
-// RELEASE and ROLLBACK TO, in the order they were sent. While failRollback is
-// set, a ROLLBACK TO fails with errRollbackTo and is not sent.
-type savepointRec struct {
-	mu           sync.Mutex
-	stmts        []string
-	failRollback bool
-}
-
-// take returns the statements recorded and forgets them.
-func (r *savepointRec) take() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	s := r.stmts
-	r.stmts = nil
-	return s
-}
-
-var errRollbackTo = errors.New("savepointConn: ROLLBACK TO refused")
-
-// savepointConnector opens in-memory SQLite connections of drv as
-// savepointConns that record into rec.
-type savepointConnector struct {
-	drv driver.Driver
-	rec *savepointRec
-}
-
-func (c savepointConnector) Connect(context.Context) (driver.Conn, error) {
-	conn, err := c.drv.Open("file::memory:")
-	if err != nil {
-		return nil, err
-	}
-	return savepointConn{conn.(savepointInner), c.rec}, nil
-}
-
-func (c savepointConnector) Driver() driver.Driver { return c.drv }
-
-// savepointInner is what the wrapped SQLite connection implements, and
-// savepointConn passes on.
-type savepointInner interface {
-	driver.Conn
-	driver.ExecerContext
-	driver.QueryerContext
-	driver.ConnBeginTx
-	driver.ConnPrepareContext
-}
-
-// savepointConn is a SQLite connection that records its savepoint statements
-// in rec.
-type savepointConn struct {
-	savepointInner
-	rec *savepointRec
-}
-
-func (c savepointConn) ExecContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Result, error) {
-	if strings.HasPrefix(q, "SAVEPOINT") || strings.HasPrefix(q, "RELEASE") || strings.HasPrefix(q, "ROLLBACK TO") {
-		c.rec.mu.Lock()
-		c.rec.stmts = append(c.rec.stmts, q)
-		fail := c.rec.failRollback && strings.HasPrefix(q, "ROLLBACK TO")
-		c.rec.mu.Unlock()
-		if fail {
-			return nil, errRollbackTo
-		}
-	}
-	return c.savepointInner.ExecContext(ctx, q, args)
-}
-
-// countPeople counts the people outside any transaction.
-func countPeople(t *testing.T, db *velox.DB) int64 {
-	t.Helper()
-	n, err := db.Query[person]().Count(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return n
-}
-
-var errAfterWrite = errors.New("failed after the first write")
-
-// insertThenFail is a mutation's body that writes and then fails.
-func insertThenFail(ctx context.Context, db *velox.DB) error {
-	if err := db.Insert(&person{ID: 1, Name: "p", Age: 1}).Exec(ctx); err != nil {
-		return err
-	}
-	return errAfterWrite
-}
-
-// mutationSDL is the schema of the served mutation: one field, run.
-const mutationSDL = `
-type Query { x: Int }
-type Mutation { run: Int }
-`
-
-// serveRun serves mutationSDL through ext; its run field calls run with the
-// operation's context, and fails with run's error.
-func serveRun(ext *veloxgql.Extension, run func(ctx context.Context) error) http.Handler {
-	schema := gqlparser.MustLoadSchema(&ast.Source{Input: mutationSDL})
-	srv := handler.New(&graphql.ExecutableSchemaMock{
-		SchemaFunc: func() *ast.Schema { return schema },
-		ComplexityFunc: func(context.Context, string, string, int, map[string]any) (int, bool) {
-			return 0, false
-		},
-		ExecFunc: func(context.Context) graphql.ResponseHandler {
-			done := false
-			return func(ctx context.Context) *graphql.Response {
-				if done {
-					return nil
-				}
-				done = true
-				if err := run(ctx); err != nil {
-					return &graphql.Response{Data: []byte(`{"run":null}`), Errors: gqlerror.List{gqlerror.Wrap(err)}}
-				}
-				return &graphql.Response{Data: []byte(`{"run":1}`)}
-			}
-		},
-	})
-	srv.AddTransport(transport.POST{})
-	srv.Use(ext)
-	return srv
-}
-
-// postMutation sends `mutation { run }` to srv and returns the body.
-func postMutation(t *testing.T, srv http.Handler) string {
-	t.Helper()
-	body, _ := json.Marshal(map[string]string{"query": "mutation { run }"})
-	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
-	r.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, r)
-	return w.Body.String()
-}
-
-// TestAtomic is Review Focus 4: a mutation's writes are kept or dropped
-// together, in the extension's transaction when there is one and in one of
-// Atomic's own otherwise, and Atomic never opens a transaction inside the
-// extension's.
-func TestAtomic(t *testing.T) {
-	t.Run("outside a server", func(t *testing.T) {
-		db, r := mutationDB(t)
-		ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-		var got *velox.DB
-		err := gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
-			got = tx
-			return insertThenFail(ctx, tx)
-		})
-		if !errors.Is(err, errAfterWrite) {
-			t.Fatalf("Atomic = %v, want fn's error", err)
-		}
-		if got == db {
-			t.Error("fn got the extension's DB, not a transaction's")
-		}
-		if txs, stmts := r.take(); !slices.Equal(txs, []string{"rollback"}) || !slices.Equal(stmts, []string{"insert in tx"}) {
-			t.Errorf("transactions %q, statements %q; want one insert in one rolled back transaction", txs, stmts)
-		}
-		if n := countPeople(t, db); n != 0 {
-			t.Errorf("%d people kept, want 0", n)
-		}
-
-		// A fn that succeeds commits.
-		if err := gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
-			return tx.Insert(&person{ID: 2, Name: "q", Age: 1}).Exec(ctx)
-		}); err != nil {
-			t.Fatal(err)
-		}
-		if n := countPeople(t, db); n != 1 {
-			t.Errorf("%d people kept, want 1", n)
-		}
-	})
-
-	t.Run("in the extension's transaction", func(t *testing.T) {
-		db, r := mutationDB(t)
-		var opDB, fnDB *velox.DB
-		srv := serveRun(veloxgql.NewExtension(db), func(ctx context.Context) error {
-			var err error
-			if opDB, err = veloxgql.DBFromContext(ctx); err != nil {
-				return err
-			}
-			return gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
-				fnDB = tx
-				return tx.Insert(&person{ID: 1, Name: "p", Age: 1}).Exec(ctx)
-			})
-		})
-		if got, want := postMutation(t, srv), `{"data":{"run":1}}`; got != want {
-			t.Fatalf("got %s, want %s", got, want)
-		}
-		if fnDB == nil || fnDB == opDB {
-			t.Error("fn did not get a savepoint's DB: it got the operation's, or none")
-		}
-		if txs, stmts := r.take(); !slices.Equal(txs, []string{"commit"}) || !slices.Equal(stmts, []string{"insert in tx"}) {
-			t.Errorf("transactions %q, statements %q; want one insert in the operation's one transaction", txs, stmts)
-		}
-
-		// fn's failure fails the operation, whose transaction drops the write.
-		srv = serveRun(veloxgql.NewExtension(db), func(ctx context.Context) error {
-			return gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
-				if err := tx.Insert(&person{ID: 2, Name: "q", Age: 1}).Exec(ctx); err != nil {
-					return err
-				}
-				return errAfterWrite
-			})
-		})
-		if got := postMutation(t, srv); !strings.Contains(got, `"data":null`) {
-			t.Errorf("got %s, want data null", got)
-		}
-		if txs, _ := r.take(); !slices.Equal(txs, []string{"rollback"}) {
-			t.Errorf("transactions %q, want one rolled back", txs)
-		}
-		if n := countPeople(t, db); n != 1 {
-			t.Errorf("%d people kept, want 1", n)
-		}
-	})
-
-	t.Run("left out by WithTxFilter", func(t *testing.T) {
-		db, r := mutationDB(t)
-		ext := veloxgql.NewExtension(db, veloxgql.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false }))
-		var fnDB *velox.DB
-		srv := serveRun(ext, func(ctx context.Context) error {
-			return gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
-				fnDB = tx
-				return insertThenFail(ctx, tx)
-			})
-		})
-		if got := postMutation(t, srv); !strings.Contains(got, errAfterWrite.Error()) {
-			t.Errorf("got %s, want fn's error", got)
-		}
-		if fnDB == nil || fnDB == db {
-			t.Error("fn did not get a transaction's DB")
-		}
-		if txs, stmts := r.take(); !slices.Equal(txs, []string{"rollback"}) || !slices.Equal(stmts, []string{"insert in tx"}) {
-			t.Errorf("transactions %q, statements %q; want one insert in Atomic's rolled back transaction", txs, stmts)
-		}
-		if n := countPeople(t, db); n != 0 {
-			t.Errorf("%d people kept, want 0", n)
-		}
-	})
-
-	t.Run("no DB", func(t *testing.T) {
-		err := gqlimpl.Atomic(context.Background(), func(context.Context, *velox.DB) error {
-			t.Error("fn ran with no DB")
-			return nil
-		})
-		if !errors.Is(err, veloxgql.ErrNoDB) {
-			t.Errorf("Atomic = %v, want ErrNoDB", err)
-		}
-	})
-}
-
-// TestAtomicSavepoint is Review Focus 1 and 7: in the extension's
-// transaction, Atomic runs fn in a savepoint, so a resolver that swallows fn's
-// error drops fn's writes only, and the operation commits its other writes;
-// a savepoint that does not roll back fails the operation, which keeps
-// nothing; fn's panic undoes the savepoint and carries on, and the operation
-// keeps nothing. Outside a server no savepoint is made.
-func TestAtomicSavepoint(t *testing.T) {
-	t.Run("in the extension's transaction, fn succeeds", func(t *testing.T) {
-		db, r, sp := savepointDB(t)
-		var opDB, fnDB *velox.DB
-		srv := serveRun(veloxgql.NewExtension(db), func(ctx context.Context) error {
-			var err error
-			if opDB, err = veloxgql.DBFromContext(ctx); err != nil {
-				return err
-			}
-			return gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
-				fnDB = tx
-				return tx.Insert(&person{ID: 1, Name: "p", Age: 1}).Exec(ctx)
-			})
-		})
-		if got, want := postMutation(t, srv), `{"data":{"run":1}}`; got != want {
-			t.Fatalf("got %s, want %s", got, want)
-		}
-		if got, want := sp.take(), []string{"SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1"}; !slices.Equal(got, want) {
-			t.Errorf("savepoint statements %q, want %q", got, want)
-		}
-		if txs, _ := r.take(); !slices.Equal(txs, []string{"commit"}) {
-			t.Errorf("transactions %q, want one committed", txs)
-		}
-		if fnDB == nil || fnDB == opDB {
-			t.Error("fn got the operation's DB, not a savepoint's")
-		}
-		if n := countPeople(t, db); n != 1 {
-			t.Errorf("%d people kept, want 1", n)
-		}
-	})
-
-	t.Run("two mutations in one operation", func(t *testing.T) {
-		db, r, sp := savepointDB(t)
-		srv := serveRun(veloxgql.NewExtension(db), func(ctx context.Context) error {
-			for id := int64(1); id <= 2; id++ {
-				if err := gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
-					return tx.Insert(&person{ID: id, Name: "p", Age: 1}).Exec(ctx)
-				}); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if got, want := postMutation(t, srv), `{"data":{"run":1}}`; got != want {
-			t.Fatalf("got %s, want %s", got, want)
-		}
-		want := []string{"SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1", "SAVEPOINT velox_2", "RELEASE SAVEPOINT velox_2"}
-		if got := sp.take(); !slices.Equal(got, want) {
-			t.Errorf("savepoint statements %q, want %q: one name per savepoint of the transaction", got, want)
-		}
-		if txs, _ := r.take(); !slices.Equal(txs, []string{"commit"}) {
-			t.Errorf("transactions %q, want one committed", txs)
-		}
-	})
-
-	// swallow is a resolver that swallows the error of a mutation that
-	// writes person 1 and fails, then writes person 2 and returns nil; ignore
-	// says whether it swallows the second write's error too.
-	swallow := func(ignore bool) func(ctx context.Context) error {
-		return func(ctx context.Context) error {
-			_ = gqlimpl.Atomic(ctx, insertThenFail)
-			db, err := veloxgql.DBFromContext(ctx)
-			if err != nil {
-				return err
-			}
-			if err := db.Insert(&person{ID: 2, Name: "q", Age: 1}).Exec(ctx); err != nil && !ignore {
-				return err
-			}
-			return nil
-		}
-	}
-
-	t.Run("swallowing", func(t *testing.T) {
-		db, r, sp := savepointDB(t)
-		srv := serveRun(veloxgql.NewExtension(db), swallow(false))
-		if got, want := postMutation(t, srv), `{"data":{"run":1}}`; got != want {
-			t.Fatalf("got %s, want %s", got, want)
-		}
-		want := []string{"SAVEPOINT velox_1", "ROLLBACK TO SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1"}
-		if got := sp.take(); !slices.Equal(got, want) {
-			t.Errorf("savepoint statements %q, want %q", got, want)
-		}
-		if txs, _ := r.take(); !slices.Equal(txs, []string{"commit"}) {
-			t.Errorf("transactions %q, want one committed", txs)
-		}
-		if n := countPeople(t, db); n != 1 {
-			t.Errorf("%d people kept, want 1", n)
-		}
-		if ok, err := db.Query[person]().Where(people.ID.EQ(1)).Exists(context.Background()); err != nil || ok {
-			t.Errorf("person 1 kept: %v, %v; want the swallowed mutation's write gone", ok, err)
-		}
-	})
-
-	t.Run("swallowing, and ROLLBACK TO fails", func(t *testing.T) {
-		db, r, sp := savepointDB(t)
-		sp.failRollback = true
-		srv := serveRun(veloxgql.NewExtension(db), swallow(true))
-		if got := postMutation(t, srv); !strings.Contains(got, `"data":null`) || !strings.Contains(got, "a savepoint did not roll back") {
-			t.Errorf("got %s, want data null and the broken transaction's error: it must not commit", got)
-		}
-		want := []string{"SAVEPOINT velox_1", "ROLLBACK TO SAVEPOINT velox_1"}
-		if got := sp.take(); !slices.Equal(got, want) {
-			t.Errorf("savepoint statements %q, want %q", got, want)
-		}
-		// The commit is refused and the transaction rolled back: TxInfo
-		// reports a refused commit as TxError.
-		if txs, _ := r.take(); !slices.Equal(txs, []string{"error"}) {
-			t.Errorf("transactions %q, want one whose commit was refused", txs)
-		}
-		sp.failRollback = false
-		if n := countPeople(t, db); n != 0 {
-			t.Errorf("%d people kept, want 0", n)
-		}
-	})
-
-	t.Run("fn panics", func(t *testing.T) {
-		db, r, sp := savepointDB(t)
-		var carried any
-		srv := serveRun(veloxgql.NewExtension(db), func(ctx context.Context) error {
-			defer func() {
-				carried = recover()
-				panic(carried)
-			}()
-			return gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
-				if err := tx.Insert(&person{ID: 1, Name: "p", Age: 1}).Exec(ctx); err != nil {
-					return err
-				}
-				panic("boom")
-			})
-		})
-		srv.(*handler.Server).SetRecoverFunc(func(context.Context, any) error { return gqlerror.Errorf("internal system error") })
-		if got := postMutation(t, srv); !strings.Contains(got, `"data":null`) || !strings.Contains(got, "internal system error") {
-			t.Errorf("got %s, want data null and the recovered panic's error", got)
-		}
-		if carried != "boom" {
-			t.Errorf("Atomic's panic %v, want fn's panic carried on", carried)
-		}
-		want := []string{"SAVEPOINT velox_1", "ROLLBACK TO SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1"}
-		if got := sp.take(); !slices.Equal(got, want) {
-			t.Errorf("savepoint statements %q, want %q: the savepoint undone", got, want)
-		}
-		if txs, _ := r.take(); !slices.Equal(txs, []string{"rollback"}) {
-			t.Errorf("transactions %q, want one rolled back", txs)
-		}
-		if n := countPeople(t, db); n != 0 {
-			t.Errorf("%d people kept, want 0", n)
-		}
-	})
-
-	t.Run("outside a server", func(t *testing.T) {
-		db, r, sp := savepointDB(t)
-		ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-		if err := gqlimpl.Atomic(ctx, insertThenFail); !errors.Is(err, errAfterWrite) {
-			t.Fatalf("Atomic = %v, want fn's error", err)
-		}
-		if got := sp.take(); len(got) != 0 {
-			t.Errorf("savepoint statements %q, want none", got)
-		}
-		if txs, _ := r.take(); !slices.Equal(txs, []string{"rollback"}) {
-			t.Errorf("transactions %q, want one rolled back", txs)
-		}
-		if n := countPeople(t, db); n != 0 {
-			t.Errorf("%d people kept, want 0", n)
-		}
-	})
 }
 
 // codeOf is the code err carries for veloxgql.ErrorPresenter, "" for none.
@@ -668,313 +222,77 @@ func encodeUsers(n int) []string {
 	return ids
 }
 
-// TestDecodeIDsCap is Review Focus 5: an ID list is capped by MaxPage, as
-// nodes(ids:) is, before any ID is decoded.
+// TestDecodeIDsCap: an ID list is capped by MaxIDs, before any ID is
+// decoded.
 func TestDecodeIDsCap(t *testing.T) {
 	const at = "UpdatePostInput.addTagIDs"
-	ctx := context.Background()
-	if k, err := gqlimpl.DecodeIDs[int64](ctx, at, encodeUsers(100), "User"); err != nil || len(k) != 100 {
-		t.Errorf("100 IDs: %d keys, %v; want 100", len(k), err)
+	if k, err := gqlimpl.DecodeIDs[int64](at, encodeUsers(gqlimpl.MaxIDs), "User"); err != nil || len(k) != gqlimpl.MaxIDs {
+		t.Errorf("MaxIDs IDs: %d keys, %v; want %d", len(k), err, gqlimpl.MaxIDs)
 	}
-	// 101 IDs, the last malformed: the cap is checked first.
-	over := append(encodeUsers(100), "!")
+	// One over, the last malformed: the cap is checked first.
+	over := append(encodeUsers(gqlimpl.MaxIDs), "!")
 	for name, err := range map[string]error{
-		"DecodeIDs": func() error { _, err := gqlimpl.DecodeIDs[int64](ctx, at, over, "User"); return err }(),
+		"DecodeIDs": func() error { _, err := gqlimpl.DecodeIDs[int64](at, over, "User"); return err }(),
 		"DecodeIDsAs": func() error {
-			_, err := gqlimpl.DecodeIDsAs(ctx, at, over, "User", func(k int64) int64 { return k })
+			_, err := gqlimpl.DecodeIDsAs(at, over, "User", func(k int64) int64 { return k })
 			return err
 		}(),
 	} {
 		if !errors.Is(err, veloxgql.ErrPageTooLarge) || errors.Is(err, veloxgql.ErrBadID) {
-			t.Errorf("%s of 101 IDs: %v, want ErrPageTooLarge alone", name, err)
+			t.Errorf("%s of MaxIDs+1 IDs: %v, want ErrPageTooLarge alone", name, err)
 		}
 		if code := codeOf(err); code != veloxgql.CodeBadUserInput {
-			t.Errorf("%s of 101 IDs: code %q, want BAD_USER_INPUT", name, code)
+			t.Errorf("%s of MaxIDs+1 IDs: code %q, want BAD_USER_INPUT", name, code)
 		}
 		if err != nil && !strings.HasPrefix(err.Error(), "veloxgql: "+at+": ") {
 			t.Errorf("%s: %q does not start with the input field", name, err)
 		}
 	}
 
-	db, _ := mutationDB(t)
-	small := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(ctx)
-	if _, err := gqlimpl.DecodeIDs[int64](small, at, encodeUsers(2), "User"); err != nil {
-		t.Errorf("2 IDs under MaxPage 2: %v", err)
-	}
-	if _, err := gqlimpl.DecodeIDs[int64](small, at, encodeUsers(3), "User"); !errors.Is(err, veloxgql.ErrPageTooLarge) {
-		t.Errorf("3 IDs under MaxPage 2: %v, want ErrPageTooLarge", err)
-	}
-
-	// A bad ID in a list names the list.
-	_, err := gqlimpl.DecodeIDs[int64](ctx, at, []string{encodeUsers(1)[0], "!"}, "User")
-	if !errors.Is(err, veloxgql.ErrBadID) || codeOf(err) != veloxgql.CodeBadUserInput || !strings.HasPrefix(err.Error(), "veloxgql: "+at) {
-		t.Errorf("a malformed ID in the list: %v, want BAD_USER_INPUT ErrBadID naming %s", err, at)
+	// A bad ID in a list names its place in the list.
+	_, err := gqlimpl.DecodeIDs[int64](at, []string{encodeUsers(1)[0], "!"}, "User")
+	if !errors.Is(err, veloxgql.ErrBadID) || codeOf(err) != veloxgql.CodeBadUserInput || !strings.HasPrefix(err.Error(), "veloxgql: "+at+"[1]: ") {
+		t.Errorf("a malformed ID in the list: %v, want BAD_USER_INPUT ErrBadID naming %s[1]", err, at)
 	}
 }
 
+// TestDecodeIDsRepeats: a repeated ID is kept once, in the order of its
+// first place; the keys are what a relation handle's Add takes.
 func TestDecodeIDsRepeats(t *testing.T) {
 	a, b := veloxgql.EncodeID("User", int64(1)), veloxgql.EncodeID("User", int64(2))
-	ctx := context.Background()
-	k, err := gqlimpl.DecodeIDs[int64](ctx, "x", []string{a, b, a}, "User")
-	if err != nil || !slices.Equal(k, []int64{1, 2}) {
+	k, err := gqlimpl.DecodeIDs[int64]("x", []string{a, b, a}, "User")
+	if err != nil || !slices.Equal(k, []any{int64(1), int64(2)}) {
 		t.Errorf("DecodeIDs = %v, %v; want [1 2]", k, err)
 	}
 	type userID int64
-	v, err := gqlimpl.DecodeIDsAs(ctx, "x", []string{b, a, b, b}, "User", func(k int64) userID { return userID(k) })
-	if err != nil || !slices.Equal(v, []userID{2, 1}) {
+	v, err := gqlimpl.DecodeIDsAs("x", []string{b, a, b, b}, "User", func(k int64) userID { return userID(k) })
+	if err != nil || !slices.Equal(v, []any{userID(2), userID(1)}) {
 		t.Errorf("DecodeIDsAs = %v, %v; want [2 1]", v, err)
 	}
+	if k, err := gqlimpl.DecodeIDs[int64]("x", nil, "User"); err != nil || len(k) != 0 {
+		t.Errorf("DecodeIDs of none = %v, %v; want none", k, err)
+	}
 }
 
-func TestExist(t *testing.T) {
-	db, _ := mutationDB(t)
-	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	ann, bob := tenantKey.With(ctx, "ann"), tenantKey.With(ctx, "bob")
-	for _, p := range []struct {
-		ctx context.Context
-		p   post
-	}{{ann, post{ID: 1, Title: "a"}}, {bob, post{ID: 2, Title: "b"}}, {ann, post{ID: 4, Title: "hidden"}}} {
-		if err := db.Insert(&p.p).Exec(p.ctx); err != nil {
-			t.Fatal(err)
-		}
-	}
-	const at = "CreateUserInput.postIDs"
-	if err := gqlimpl.CheckExists(ann, velox.Untyped(db.Query[post]().Where(posts.ID.In(1))), 1, at, "Post"); err != nil {
-		t.Errorf("one ID of ann's post: %v", err)
-	}
+// TestNotZero: only the field's zero value is refused, with BAD_USER_INPUT
+// naming the input's field.
+func TestNotZero(t *testing.T) {
 	for name, c := range map[string]struct {
-		ctx context.Context
-		ids []int64
+		err  error
+		code string
 	}{
-		"missing":          {ann, []int64{1, 3}},
-		"another scope's":  {ann, []int64{1, 2}},
-		"hidden by policy": {ann, []int64{1, 4}},
+		`""`:        {gqlimpl.NotZero("In.x", ""), "BAD_USER_INPUT"},
+		"0":         {gqlimpl.NotZero("In.x", 0), "BAD_USER_INPUT"},
+		"zero time": {gqlimpl.NotZero("In.x", time.Time{}), "BAD_USER_INPUT"},
+		`"a"`:       {gqlimpl.NotZero("In.x", "a"), ""},
+		"1":         {gqlimpl.NotZero("In.x", 1), ""},
 	} {
-		err := gqlimpl.CheckExists(c.ctx, velox.Untyped(db.Query[post]().Where(posts.ID.In(c.ids...))), len(c.ids), at, "Post")
-		if codeOf(err) != veloxgql.CodeNotFound {
-			t.Errorf("%s: %v, want NOT_FOUND", name, err)
-		}
-		if want := "veloxgql: " + at + ": 1 of the 2 IDs name no Post"; err == nil || err.Error() != want {
-			t.Errorf("%s: %v, want %q", name, err, want)
+		if got := codeOf(c.err); got != c.code {
+			t.Errorf("NotZero(%s): code %q, want %q", name, got, c.code)
 		}
 	}
-	// One ID that names no row reads as NotFound does.
-	for name, id := range map[string]int64{"missing": 3, "another scope's": 2, "hidden by policy": 4} {
-		err := gqlimpl.CheckExists(ann, velox.Untyped(db.Query[post]().Where(posts.ID.In(id))), 1, at, "Post")
-		if codeOf(err) != veloxgql.CodeNotFound {
-			t.Errorf("one ID, %s: %v, want NOT_FOUND", name, err)
-		}
-		if want := "veloxgql: " + at + ": no Post has this ID"; err == nil || err.Error() != want {
-			t.Errorf("one ID, %s: %v, want %q", name, err, want)
-		}
-	}
-	// The query's own error is returned as it is.
-	if err := gqlimpl.CheckExists(ctx, velox.Untyped(db.Query[post]().Where(posts.ID.In(1))), 1, at, "Post"); !errors.Is(err, scope.ErrNoScope) {
-		t.Errorf("no scope: %v, want ErrNoScope", err)
-	}
-}
-
-func TestNotFound(t *testing.T) {
-	err := gqlimpl.NotFound("updatePost", "Post")
-	if codeOf(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: updatePost: no Post has this ID" {
-		t.Errorf("NotFound = %v (code %q)", err, codeOf(err))
-	}
-}
-
-// TestReadable: Readable returns the keys of the rows its query selects
-// under the scope and the Read policy, and runs no query for no keys.
-func TestReadable(t *testing.T) {
-	db, r := mutationDB(t)
-	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	ann, bob := tenantKey.With(ctx, "ann"), tenantKey.With(ctx, "bob")
-	for _, p := range []struct {
-		ctx context.Context
-		p   post
-	}{{ann, post{ID: 1, Title: "a"}}, {bob, post{ID: 2, Title: "b"}}, {ann, post{ID: 3, Title: "c"}}, {ann, post{ID: 4, Title: "hidden"}}} {
-		if err := db.Insert(&p.p).Exec(p.ctx); err != nil {
-			t.Fatal(err)
-		}
-	}
-	id := int(posts.ID.I)
-	ids := []int64{1, 2, 3, 4, 5}
-	got, err := gqlimpl.Readable(ann, velox.Untyped(db.Query[post]().Where(posts.ID.In(ids...)).Columns(posts.ID).OrderBy(posts.ID.Asc())), len(ids), id)
-	if err != nil || fmt.Sprint(got) != "[1 3]" {
-		t.Errorf("Readable = %v, %v: want 1 and 3, without bob's and the hidden one", got, err)
-	}
-	r.take()
-	if got, err := gqlimpl.Readable(ann, velox.Untyped(db.Query[post]().Where(posts.ID.In())), 0, id); err != nil || len(got) != 0 {
-		t.Errorf("Readable of no keys = %v, %v", got, err)
-	}
-	if _, stmts := r.take(); len(stmts) != 0 {
-		t.Errorf("Readable of no keys sent %v", stmts)
-	}
-	if _, err := gqlimpl.Readable(ctx, velox.Untyped(db.Query[post]().Where(posts.ID.In(1))), 1, id); !errors.Is(err, scope.ErrNoScope) {
-		t.Errorf("no scope: %v, want ErrNoScope", err)
-	}
-}
-
-// TestUnlinkAll: UnlinkAll pages through its links MaxPage rows at a time,
-// after the last row of each page, so that a link unlink leaves is not read
-// again, and stops at a short page; unlink's error stops it.
-func TestUnlinkAll(t *testing.T) {
-	db, _ := mutationDB(t)
-	ctx := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())
-	for i := int64(1); i <= 5; i++ {
-		if err := db.Insert(&person{ID: i, Name: "p", Age: i}).Exec(ctx); err != nil {
-			t.Fatal(err)
-		}
-	}
-	links := velox.Untyped(db.Query[person]().OrderBy(people.ID.Asc()))
-	age := int(people.Age.I)
-	var pages [][]int64
-	// unlink deletes the odd ones, and leaves the even ones.
-	unlink := func(ks []any) error {
-		page := make([]int64, len(ks))
-		for i, k := range ks {
-			page[i] = k.(int64)
-		}
-		pages = append(pages, page)
-		for _, k := range page {
-			if k%2 == 1 {
-				if _, err := db.Delete[person]().Where(people.ID.EQ(k)).Exec(ctx); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-	if err := gqlimpl.UnlinkAll(ctx, links, age, unlink); err != nil {
-		t.Fatal(err)
-	}
-	if fmt.Sprint(pages) != "[[1 2] [3 4] [5]]" {
-		t.Errorf("pages %v, want [[1 2] [3 4] [5]]", pages)
-	}
-	if n := countPeople(t, db); n != 2 {
-		t.Errorf("%d people left, want 2", n)
-	}
-	// A full last page reads one more, empty, page.
-	pages = nil
-	if err := gqlimpl.UnlinkAll(ctx, links, age, unlink); err != nil || fmt.Sprint(pages) != "[[2 4]]" {
-		t.Errorf("pages %v, %v: want [[2 4]]", pages, err)
-	}
-	errStop := errors.New("stop")
-	if err := gqlimpl.UnlinkAll(ctx, links, age, func([]any) error { return errStop }); !errors.Is(err, errStop) {
-		t.Errorf("unlink's error: %v", err)
-	}
-}
-
-// TestRepointed: an UPDATE that re-pointed fewer children than its IDs fails
-// with BAD_USER_INPUT when linked counts a child another owner holds, and as
-// CheckExists does otherwise; one that re-pointed them all runs no query. A
-// count the driver did not report (-1) is an internal error.
-func TestRepointed(t *testing.T) {
-	db, _ := mutationDB(t)
-	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	ann := tenantKey.With(ctx, "ann")
-	if err := db.Insert(&post{ID: 1, Title: "linked"}).Exec(ann); err != nil {
-		t.Fatal(err)
-	}
-	const at = "CreateAccountInput.postIDs"
-	linked, none := velox.Untyped(db.Query[post]().Where(posts.ID.In(1))), velox.Untyped(db.Query[post]().Where(posts.ID.In(2)))
-	// No scope value: the query would fail, so none runs.
-	if err := gqlimpl.Repointed(ctx, 2, 2, linked, at, "Post", "Account"); err != nil {
-		t.Errorf("all re-pointed: %v", err)
-	}
-	for _, c := range []struct {
-		got        int64
-		n          int
-		q          velox.TableQuery
-		typ, owner string
-		code, want string
-	}{
-		{0, 2, linked, "Post", "Account", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": a Post is already linked to another Account"},
-		{0, 1, linked, "Article", "Writer", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": an Article is already linked to another Writer"},
-		{0, 1, linked, "User", "Writer", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": a User is already linked to another Writer"},
-		{0, 1, linked, "Umbrella", "Writer", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": an Umbrella is already linked to another Writer"},
-		{1, 2, none, "Post", "Account", veloxgql.CodeNotFound, "veloxgql: " + at + ": 1 of the 2 IDs name no Post"},
-		{0, 1, none, "Post", "Account", veloxgql.CodeNotFound, "veloxgql: " + at + ": no Post has this ID"},
-		// A count the driver did not report is not a short one: an internal
-		// error, not NOT_FOUND.
-		{-1, 1, none, "Post", "Account", "", "veloxgql: " + at + ": row count unknown"},
-		{-1, 2, linked, "Post", "Account", "", "veloxgql: " + at + ": row count unknown"},
-	} {
-		err := gqlimpl.Repointed(ann, c.got, c.n, c.q, at, c.typ, c.owner)
-		if err == nil || err.Error() != c.want || codeOf(err) != c.code {
-			t.Errorf("Repointed(%d, %d) = %v (code %q), want %q, %s", c.got, c.n, err, codeOf(err), c.want, c.code)
-		}
-	}
-	if err := gqlimpl.Repointed(ctx, 0, 1, linked, at, "Post", "Account"); !errors.Is(err, scope.ErrNoScope) {
-		t.Errorf("the count's error: %v, want ErrNoScope", err)
-	}
-}
-
-// TestStillLinked: a row q finds, though the caller's scope hides it,
-// fails with BAD_USER_INPUT naming only the two types; no row is not an error.
-func TestStillLinked(t *testing.T) {
-	db, _ := mutationDB(t)
-	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	if err := db.Insert(&post{ID: 1, Title: "held"}).Exec(tenantKey.With(ctx, "b")); err != nil {
-		t.Fatal(err)
-	}
-	a := tenantKey.With(ctx, "a")
-	const at = "UpdateXInput.yID"
-	held, none := velox.Untyped(db.Query[post]().Where(posts.ID.EQ(1))), velox.Untyped(db.Query[post]().Where(posts.ID.EQ(2)))
-	for _, c := range []struct{ typ, want string }{
-		{"Y", "veloxgql: " + at + ": the X is already linked to a Y"},
-		{"Account", "veloxgql: " + at + ": the X is already linked to an Account"},
-	} {
-		err := gqlimpl.StillLinked(a, held, at, c.typ, "X")
-		if err == nil || err.Error() != c.want || codeOf(err) != veloxgql.CodeBadUserInput {
-			t.Errorf("StillLinked(%s) = %v (code %q), want %q", c.typ, err, codeOf(err), c.want)
-		}
-	}
-	if err := gqlimpl.StillLinked(a, none, at, "Y", "X"); err != nil {
-		t.Errorf("no row: %v", err)
-	}
-}
-
-func TestWriteError(t *testing.T) {
-	name := func(goField string) string {
-		if goField == "Title" {
-			return "title"
-		}
-		return ""
-	}
-	ve := &velox.ValidationError{Entity: "gen.Post", Field: "Title", Err: errors.New("must not be empty")}
-	err := gqlimpl.WriteError(ve, "CreatePostInput", "gen.Post", name)
-	if codeOf(err) != veloxgql.CodeBadUserInput {
-		t.Errorf("code %q, want BAD_USER_INPUT", codeOf(err))
-	}
-	if want := "veloxgql: CreatePostInput.title: invalid value: must not be empty"; err == nil || err.Error() != want {
-		t.Errorf("WriteError = %v, want %q", err, want)
-	}
-	var got *velox.ValidationError
-	if !errors.As(err, &got) || got != ve {
-		t.Error("errors.As does not find the *velox.ValidationError")
-	}
-
-	// Wrapped directly, as by fmt.Errorf("...: %w", ve).
-	if err := gqlimpl.WriteError(fmt.Errorf("insert: %w", ve), "CreatePostInput", "gen.Post", name); codeOf(err) != veloxgql.CodeBadUserInput {
-		t.Errorf("a wrapped validation error: %v, want BAD_USER_INPUT", err)
-	}
-	// Joined with an internal error, it is returned as it is, so that the
-	// presenter still logs the internal part.
-	joined := errors.Join(errors.New("driver: connection reset"), ve)
-	if got := gqlimpl.WriteError(joined, "CreatePostInput", "gen.Post", name); got != joined {
-		t.Errorf("a validation error joined with an internal one: %v, want it unchanged", got)
-	}
-
-	for label, e := range map[string]error{
-		"another entity": &velox.ValidationError{Entity: "gen.User", Field: "Title", Err: errors.New("must not be empty")},
-		"unnamed field":  &velox.ValidationError{Entity: "gen.Post", Field: "Secret", Err: errors.New("must not be empty")},
-		"constraint":     &velox.ConstraintError{Entity: "gen.Post", Kind: velox.ConstraintUnique, Constraint: "posts_title_key"},
-	} {
-		if got := gqlimpl.WriteError(e, "CreatePostInput", "gen.Post", name); got != e {
-			t.Errorf("%s: %v, want the error unchanged", label, got)
-		}
-	}
-	if gqlimpl.WriteError(nil, "CreatePostInput", "gen.Post", name) != nil {
-		t.Error("WriteError(nil) is not nil")
+	if err := gqlimpl.NotZero("In.x", ""); err == nil || !strings.HasPrefix(err.Error(), "veloxgql: In.x: invalid value: ") {
+		t.Errorf("NotZero names %v, want In.x", err)
 	}
 }
 

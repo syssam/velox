@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion14
+const _ = veloxgql.GeneratedCodeIsVersion15
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -315,21 +315,9 @@ func (w *AccountWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, 
 	return f.Pred()
 }
 
-// userGroupsEdgeGQL is the many-to-many edge groups of User, through UserGroup.
-func userGroupsEdgeGQL() gqlimpl.M2M {
-	return gqlimpl.M2M{
-		Owner:      velox.TableOf[User](),
-		Target:     velox.TableOf[Group](),
-		Join:       velox.TableOf[UserGroup](),
-		OwnerKey:   userColID,
-		TargetKey:  groupColID,
-		JoinOwner:  userGroupColUserID,
-		JoinTarget: userGroupColGroupID,
-	}
-}
-
-// CreateAccountInput is the GraphQL input CreateAccountInput, which Create
-// writes. A nil pointer or list is a field not given.
+// CreateAccountInput is the GraphQL input CreateAccountInput, whose Setters
+// gives its fields as setters. A nil pointer or list is a field not given, and
+// so is a null.
 type CreateAccountInput struct {
 	CreatedAt *time.Time
 	UpdatedAt *time.Time
@@ -374,78 +362,80 @@ func (in CreateAccountInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in CreateAccountInput) GoString() string { return in.String() }
 
-// Create inserts x, an Account, with the input's fields and edges set; a nil x
-// is a new one. It runs atomically on the DB in ctx, under the policies.
+// Setters returns the setters of the input's fields and edges, for
+// db.Insert(x).Set: a field not given sets nothing, and x keeps its value or
+// the field's Default.
 //
-// See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
-func (in *CreateAccountInput) Create(ctx context.Context, x *User) (*User, error) {
-	if x == nil {
-		x = new(User)
+// It does no I/O. A value a validator refuses, or an ID that does not decode or
+// names another type, is BAD_USER_INPUT naming the input's field. See
+// "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each field does and what the
+// write checks.
+func (in *CreateAccountInput) Setters() ([]velox.Setter[User], error) {
+	var set []velox.Setter[User]
+	if v := in.CreatedAt; v != nil {
+		if err := gqlimpl.NotZero("CreateAccountInput.createdAt", *v); err != nil {
+			return nil, err
+		}
+		set = append(set, Users.CreatedAt.Set(*v))
 	}
-	c := gqlimpl.NewCreate(ctx, &userConnGQL, x, userColName, userColEmail, userColPasswordHash, userColQuota)
-	if in.CreatedAt != nil {
-		x.CreatedAt = *in.CreatedAt
-		gqlimpl.NotZero(c, "createdAt", x.CreatedAt)
-		c.Given(userColCreatedAt)
+	if v := in.UpdatedAt; v != nil {
+		if err := gqlimpl.NotZero("CreateAccountInput.updatedAt", *v); err != nil {
+			return nil, err
+		}
+		set = append(set, Users.UpdatedAt.Set(*v))
 	}
-	if in.UpdatedAt != nil {
-		x.UpdatedAt = *in.UpdatedAt
-		gqlimpl.NotZero(c, "updatedAt", x.UpdatedAt)
-		c.Given(userColUpdatedAt)
+	set = append(set, Users.Name.Set(in.DisplayName))
+	set = append(set, Users.Email.Set(in.Email))
+	if v := in.Role; v != nil {
+		set = append(set, Users.Role.Set(*v))
 	}
-	x.Name = in.DisplayName
-	x.Email = in.Email
-	if in.Role != nil {
-		x.Role = *in.Role
-		c.Given(userColRole)
+	if v := in.Nickname; v != nil {
+		set = append(set, Users.Nickname.Set(*v))
 	}
-	if in.Nickname != nil {
-		x.Nickname = in.Nickname
-		c.Given(userColNickname)
+	if v := in.Bio; v != nil {
+		set = append(set, Users.Bio.Set(*v))
 	}
-	if in.Bio != nil {
-		x.Bio = in.Bio
-		c.Given(userColBio)
+	if v := in.Age; v != nil {
+		set = append(set, Users.Age.Set(*v))
 	}
-	if in.Age != nil {
-		x.Age = in.Age
-		c.Given(userColAge)
+	set = append(set, Users.PasswordHash.Set(in.PasswordHash))
+	if v := in.Score; v != nil {
+		set = append(set, Users.Score.Set(*v))
 	}
-	x.PasswordHash = in.PasswordHash
-	if in.Score != nil {
-		x.Score = *in.Score
-		c.Given(userColScore)
+	if v := in.ExternalID; v != nil {
+		if err := gqlimpl.NotZero("CreateAccountInput.externalID", *v); err != nil {
+			return nil, err
+		}
+		set = append(set, Users.ExternalID.Set(*v))
 	}
-	if in.ExternalID != nil {
-		x.ExternalID = *in.ExternalID
-		gqlimpl.NotZero(c, "externalID", x.ExternalID)
-		c.Given(userColExternalID)
+	if v := in.Avatar; v != nil {
+		set = append(set, Users.Avatar.Set(*v))
 	}
-	if in.Avatar != nil {
-		x.Avatar = *in.Avatar
-		c.Given(userColAvatar)
+	set = append(set, Users.Quota.Set(in.Quota))
+	if v := in.Active; v != nil {
+		set = append(set, Users.Active.Set(*v))
 	}
-	x.Quota = in.Quota
-	if in.Active != nil {
-		x.Active = *in.Active
-		c.Given(userColActive)
+	if v := in.Settings; v != nil {
+		settings, err := gqlimpl.FromJSON[map[string]any]("CreateAccountInput.settings", *v)
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Users.Settings.Set(settings))
 	}
-	if in.Settings != nil {
-		settingsJSON := gqlimpl.DecodeJSON[map[string]any](c, "settings", *in.Settings)
-		x.Settings = settingsJSON
-		c.Given(userColSettings)
+	if len(in.MembershipIDs) > 0 {
+		membershipIDs, err := gqlimpl.DecodeIDs[int64]("CreateAccountInput.membershipIDs", in.MembershipIDs, "Group")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Users.Groups.Add(membershipIDs...))
 	}
-	membershipIDsKeys := gqlimpl.Keys[int64](c, "membershipIDs", in.MembershipIDs, "Group")
-	gqlimpl.Join(c, "membershipIDs", "Group", userGroupsEdgeGQL(), membershipIDsKeys)
-	if in.BestFriendID != nil {
-		bestFriendIDKey := gqlimpl.Key[int64](c, "bestFriendID", *in.BestFriendID, "Account")
-		gqlimpl.Exists(c, "bestFriendID", "Account", velox.TableOf[User](), userColID, []int64{bestFriendIDKey})
-		x.UserBestFriend = &bestFriendIDKey
+	if v := in.BestFriendID; v != nil {
+		bestFriendID, err := gqlimpl.DecodeID[int64]("CreateAccountInput.bestFriendID", *v, "Account")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Users.UserBestFriend.Set(bestFriendID))
 	}
-	if err := c.Insert(); err != nil {
-		return nil, err
-	}
-	return x, nil
+	return gqlimpl.Checked("CreateAccountInput", &userConnGQL, set)
 }

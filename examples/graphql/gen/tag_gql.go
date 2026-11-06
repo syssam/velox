@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion14
+const _ = veloxgql.GeneratedCodeIsVersion15
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -283,21 +283,9 @@ func (w *LabelWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, er
 	return f.Pred()
 }
 
-// tagPostsEdgeGQL is the many-to-many edge posts of Tag, through PostTag.
-func tagPostsEdgeGQL() gqlimpl.M2M {
-	return gqlimpl.M2M{
-		Owner:      velox.TableOf[Tag](),
-		Target:     velox.TableOf[Post](),
-		Join:       velox.TableOf[PostTag](),
-		OwnerKey:   tagColID,
-		TargetKey:  postColID,
-		JoinOwner:  postTagColTagID,
-		JoinTarget: postTagColPostID,
-	}
-}
-
-// CreateLabelInput is the GraphQL input CreateLabelInput, which Create writes.
-// A nil pointer or list is a field not given.
+// CreateLabelInput is the GraphQL input CreateLabelInput, whose Setters gives
+// its fields as setters. A nil pointer or list is a field not given, and so is
+// a null.
 type CreateLabelInput struct {
 	// The label's name, unique.
 	Name string
@@ -307,30 +295,32 @@ type CreateLabelInput struct {
 	PostIDs []string
 }
 
-// Create inserts x, a Label, with the input's fields and edges set; a nil x is
-// a new one. It runs atomically on the DB in ctx, under the policies.
+// Setters returns the setters of the input's fields and edges, for
+// db.Insert(x).Set: a field not given sets nothing, and x keeps its value or
+// the field's Default.
 //
-// See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
-func (in *CreateLabelInput) Create(ctx context.Context, x *Tag) (*Tag, error) {
-	if x == nil {
-		x = new(Tag)
+// It does no I/O. A value a validator refuses, or an ID that does not decode or
+// names another type, is BAD_USER_INPUT naming the input's field. See
+// "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each field does and what the
+// write checks.
+func (in *CreateLabelInput) Setters() ([]velox.Setter[Tag], error) {
+	var set []velox.Setter[Tag]
+	set = append(set, Tags.Name.Set(in.Name))
+	set = append(set, Tags.Rank.Set(in.Rank))
+	if len(in.PostIDs) > 0 {
+		postIDs, err := gqlimpl.DecodeIDs[int64]("CreateLabelInput.postIDs", in.PostIDs, "Post")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Tags.Posts.Add(postIDs...))
 	}
-	c := gqlimpl.NewCreate(ctx, &tagConnGQL, x, tagColName, tagColRank)
-	x.Name = in.Name
-	x.Rank = in.Rank
-	postIDsKeys := gqlimpl.Keys[int64](c, "postIDs", in.PostIDs, "Post")
-	gqlimpl.Join(c, "postIDs", "Post", tagPostsEdgeGQL(), postIDsKeys)
-	if err := c.Insert(); err != nil {
-		return nil, err
-	}
-	return x, nil
+	return gqlimpl.Checked("CreateLabelInput", &tagConnGQL, set)
 }
 
-// UpdateLabelInput is the GraphQL input UpdateLabelInput, which Update writes.
-// A nil pointer or list is a field not given. A true clear field clears its
-// field or edge.
+// UpdateLabelInput is the GraphQL input UpdateLabelInput, whose Setters gives
+// its fields as setters. A nil pointer or list is a field not given, and so is
+// a null. A true clear field clears its field or edge.
 type UpdateLabelInput struct {
 	// The label's name, unique.
 	Name *string
@@ -346,32 +336,39 @@ type UpdateLabelInput struct {
 	ClearPosts bool
 }
 
-// Update updates the Label with the ID id from the input and from set, and
-// returns the row as written. A setter of set wins over the input's for the
-// same column.
+// Setters returns the setters of the input's fields and edges, for
+// db.Update[Tag]().Set: a field not given sets nothing, and a clear field wins
+// over its field.
 //
-// See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
-func (in *UpdateLabelInput) Update(ctx context.Context, id string, set ...velox.Setter[Tag]) (*Tag, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, &tagConnGQL, id)
-	if in.Name != nil {
-		u.Set(tagColName, *in.Name)
+// It does no I/O. A value a validator refuses, or an ID that does not decode or
+// names another type, is BAD_USER_INPUT naming the input's field. See
+// "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each field does and what the
+// write checks.
+func (in *UpdateLabelInput) Setters() ([]velox.Setter[Tag], error) {
+	var set []velox.Setter[Tag]
+	if v := in.Name; v != nil {
+		set = append(set, Tags.Name.Set(*v))
 	}
-	if in.Rank != nil {
-		u.Set(tagColRank, *in.Rank)
+	if v := in.Rank; v != nil {
+		set = append(set, Tags.Rank.Set(*v))
 	}
-	addPostIDsKeys, removePostIDsKeys := gqlimpl.AddRemove[int64](
-		u, "Post",
-		"addPostIDs", in.AddPostIDs,
-		"removePostIDs", in.RemovePostIDs,
-	)
-	gqlimpl.Through(u, "addPostIDs", "Post", gqlimpl.Edit{
-		Clear:  in.ClearPosts,
-		Remove: removePostIDsKeys,
-		Add:    addPostIDsKeys,
-	}, key, tagPostsEdgeGQL())
-	v, err := u.Exec(key, velox.Assignments(set))
-	n, _ := v.(*Tag)
-	return n, err
+	if in.ClearPosts {
+		set = append(set, Tags.Posts.Clear())
+	}
+	if len(in.RemovePostIDs) > 0 {
+		removePostIDs, err := gqlimpl.DecodeIDs[int64]("UpdateLabelInput.removePostIDs", in.RemovePostIDs, "Post")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Tags.Posts.Remove(removePostIDs...))
+	}
+	if len(in.AddPostIDs) > 0 {
+		addPostIDs, err := gqlimpl.DecodeIDs[int64]("UpdateLabelInput.addPostIDs", in.AddPostIDs, "Post")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Tags.Posts.Add(addPostIDs...))
+	}
+	return gqlimpl.Checked("UpdateLabelInput", &tagConnGQL, set)
 }

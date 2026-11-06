@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion14
+const _ = veloxgql.GeneratedCodeIsVersion15
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -336,8 +336,9 @@ func (w *UserWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 	return f.Pred()
 }
 
-// CreateUserInput is the GraphQL input CreateUserInput, which Create writes. A
-// nil pointer or list is a field not given.
+// CreateUserInput is the GraphQL input CreateUserInput, whose Setters gives its
+// fields as setters. A nil pointer or list is a field not given, and so is a
+// null.
 type CreateUserInput struct {
 	// The name the user shows.
 	Name string
@@ -349,32 +350,29 @@ type CreateUserInput struct {
 	JoinedAt time.Time
 }
 
-// Create inserts x, a User, with the input's fields and edges set; a nil x is a
-// new one. It runs atomically on the DB in ctx, under the policies.
+// Setters returns the setters of the input's fields and edges, for
+// db.Insert(x).Set: a field not given sets nothing, and x keeps its value or
+// the field's Default.
 //
-// See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
-func (in *CreateUserInput) Create(ctx context.Context, x *User) (*User, error) {
-	if x == nil {
-		x = new(User)
+// It does no I/O. A value a validator refuses, or an ID that does not decode or
+// names another type, is BAD_USER_INPUT naming the input's field. See
+// "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each field does and what the
+// write checks.
+func (in *CreateUserInput) Setters() ([]velox.Setter[User], error) {
+	var set []velox.Setter[User]
+	set = append(set, Users.Name.Set(in.Name))
+	set = append(set, Users.Email.Set(in.Email))
+	if v := in.Role; v != nil {
+		set = append(set, Users.Role.Set(*v))
 	}
-	c := gqlimpl.NewCreate(ctx, &userConnGQL, x, userColName, userColEmail, userColJoinedAt)
-	x.Name = in.Name
-	x.Email = in.Email
-	if in.Role != nil {
-		x.Role = *in.Role
-		c.Given(userColRole)
-	}
-	x.JoinedAt = in.JoinedAt
-	if err := c.Insert(); err != nil {
-		return nil, err
-	}
-	return x, nil
+	set = append(set, Users.JoinedAt.Set(in.JoinedAt))
+	return gqlimpl.Checked("CreateUserInput", &userConnGQL, set)
 }
 
-// UpdateUserInput is the GraphQL input UpdateUserInput, which Update writes. A
-// nil pointer or list is a field not given.
+// UpdateUserInput is the GraphQL input UpdateUserInput, whose Setters gives its
+// fields as setters. A nil pointer or list is a field not given, and so is a
+// null.
 type UpdateUserInput struct {
 	// The name the user shows.
 	Name *string
@@ -386,28 +384,28 @@ type UpdateUserInput struct {
 	JoinedAt *time.Time
 }
 
-// Update updates the User with the ID id from the input and from set, and
-// returns the row as written. A setter of set wins over the input's for the
-// same column.
+// Setters returns the setters of the input's fields and edges, for
+// db.Update[User]().Set: a field not given sets nothing, and a clear field wins
+// over its field.
 //
-// See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
-func (in *UpdateUserInput) Update(ctx context.Context, id string, set ...velox.Setter[User]) (*User, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, &userConnGQL, id)
-	if in.Name != nil {
-		u.Set(userColName, *in.Name)
+// It does no I/O. A value a validator refuses, or an ID that does not decode or
+// names another type, is BAD_USER_INPUT naming the input's field. See
+// "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each field does and what the
+// write checks.
+func (in *UpdateUserInput) Setters() ([]velox.Setter[User], error) {
+	var set []velox.Setter[User]
+	if v := in.Name; v != nil {
+		set = append(set, Users.Name.Set(*v))
 	}
-	if in.Email != nil {
-		u.Set(userColEmail, *in.Email)
+	if v := in.Email; v != nil {
+		set = append(set, Users.Email.Set(*v))
 	}
-	if in.Role != nil {
-		u.Set(userColRole, *in.Role)
+	if v := in.Role; v != nil {
+		set = append(set, Users.Role.Set(*v))
 	}
-	if in.JoinedAt != nil {
-		u.Set(userColJoinedAt, *in.JoinedAt)
+	if v := in.JoinedAt; v != nil {
+		set = append(set, Users.JoinedAt.Set(*v))
 	}
-	v, err := u.Exec(key, velox.Assignments(set))
-	n, _ := v.(*User)
-	return n, err
+	return gqlimpl.Checked("UpdateUserInput", &userConnGQL, set)
 }

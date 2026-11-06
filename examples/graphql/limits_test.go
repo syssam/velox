@@ -210,9 +210,9 @@ func TestIntrospectionAtItsLimit(t *testing.T) {
 
 // TestMutationStatementsCounted: what a mutation's input makes it send counts in
 // its cost, as an upper bound: 30 updateLabel with clearPosts and addPostIDs cost
-// what they send, not one statement each. They are the generated Update alone:
-// updatePost's resolver checks the post's author first, a statement of the
-// application's, which the cost does not see.
+// what they send, not one statement each. They are the resolver's update
+// alone: updatePost's resolver checks the post's author first, a statement of
+// the application's, which the cost does not see.
 func TestMutationStatementsCounted(t *testing.T) {
 	s := newServer(t)
 	schema := graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}, Directives: graph.DirectiveRoot{Admin: admin}}).Schema()

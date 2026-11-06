@@ -320,16 +320,35 @@ func TestErrorPresenter(t *testing.T) {
 	}
 }
 
-// TestNotFoundPresented: a mutation's NOT_FOUND reaches the client with its
-// code and its text, and is not logged.
-func TestNotFoundPresented(t *testing.T) {
-	l := &logged{}
-	got := veloxgql.ErrorPresenter(l.log)(context.Background(), fmt.Errorf("resolver: %w", gqlimpl.NotFound("updatePost", "Post")))
-	if got.Message != "updatePost: no Post has this ID" || got.Extensions["code"] != veloxgql.CodeNotFound {
-		t.Errorf("got %q %v, want NOT_FOUND and the message", got.Message, got.Extensions)
+// TestEdgeErrorPresented: an edge setter's *velox.EdgeError, which a
+// resolver returns from its write, reaches the client named by its edge:
+// ErrNotFound as NOT_FOUND, ErrLinked as BAD_USER_INPUT. It names no key and
+// no entity, and is not logged. One of another Err is an internal error.
+func TestEdgeErrorPresented(t *testing.T) {
+	for _, c := range []struct {
+		err        *velox.EdgeError
+		code, want string
+	}{
+		{&velox.EdgeError{Entity: "gen.Post", Edge: "tags", Keys: []any{int64(7)}, Err: velox.ErrNotFound}, veloxgql.CodeNotFound, "edge tags: no node has this ID"},
+		{&velox.EdgeError{Entity: "gen.Post", Edge: "tags", Keys: []any{int64(7), int64(8)}, Err: velox.ErrNotFound}, veloxgql.CodeNotFound, "edge tags: an ID names no node"},
+		{&velox.EdgeError{Entity: "gen.User", Edge: "pet", Keys: []any{int64(7)}, Err: velox.ErrLinked}, veloxgql.CodeBadUserInput, "edge pet: already linked to another owner"},
+	} {
+		l := &logged{}
+		got := veloxgql.ErrorPresenter(l.log)(context.Background(), fmt.Errorf("resolver: %w", c.err))
+		if got.Message != c.want || got.Extensions["code"] != c.code {
+			t.Errorf("%v: got %q %v, want %s %q", c.err, got.Message, got.Extensions, c.code, c.want)
+		}
+		if errs := l.take(); len(errs) != 0 {
+			t.Errorf("%v: logged %v, want nothing", c.err, errs)
+		}
 	}
-	if errs := l.take(); len(errs) != 0 {
-		t.Errorf("logged %v, want nothing", errs)
+	l := &logged{}
+	other := &velox.EdgeError{Entity: "gen.Post", Edge: "tags", Err: errors.New("disk full")}
+	if got := veloxgql.ErrorPresenter(l.log)(context.Background(), other); got.Message != "internal error" || got.Extensions["code"] != veloxgql.CodeInternal {
+		t.Errorf("an EdgeError of another Err: got %q %v", got.Message, got.Extensions)
+	}
+	if errs := l.take(); len(errs) != 1 {
+		t.Errorf("an EdgeError of another Err: logged %v, want it", errs)
 	}
 }
 

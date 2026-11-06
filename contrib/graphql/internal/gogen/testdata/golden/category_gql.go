@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion14
+const _ = veloxgql.GeneratedCodeIsVersion15
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -208,20 +208,9 @@ func (w *CategoryWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate,
 	return f.Pred()
 }
 
-// categoryChildrenEdgeGQL is the edge children of Category, whose key
-// Category's rows hold.
-func categoryChildrenEdgeGQL() gqlimpl.Owned {
-	return gqlimpl.Owned{
-		Owner:     velox.TableOf[Category](),
-		Target:    velox.TableOf[Category](),
-		OwnerKey:  categoryColID,
-		TargetKey: categoryColID,
-		FK:        categoryColCategoryChildren,
-	}
-}
-
-// CreateCategoryInput is the GraphQL input CreateCategoryInput, which Create
-// writes. A nil pointer or list is a field not given.
+// CreateCategoryInput is the GraphQL input CreateCategoryInput, whose Setters
+// gives its fields as setters. A nil pointer or list is a field not given, and
+// so is a null.
 type CreateCategoryInput struct {
 	Title string
 	// ChildIDs are the IDs of the Category nodes the edge children leads to.
@@ -230,34 +219,38 @@ type CreateCategoryInput struct {
 	ParentID *string
 }
 
-// Create inserts x, a Category, with the input's fields and edges set; a nil x
-// is a new one. It runs atomically on the DB in ctx, under the policies.
+// Setters returns the setters of the input's fields and edges, for
+// db.Insert(x).Set: a field not given sets nothing, and x keeps its value or
+// the field's Default.
 //
-// See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
-func (in *CreateCategoryInput) Create(ctx context.Context, x *Category) (*Category, error) {
-	if x == nil {
-		x = new(Category)
+// It does no I/O. A value a validator refuses, or an ID that does not decode or
+// names another type, is BAD_USER_INPUT naming the input's field. See
+// "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each field does and what the
+// write checks.
+func (in *CreateCategoryInput) Setters() ([]velox.Setter[Category], error) {
+	var set []velox.Setter[Category]
+	set = append(set, Categories.Title.Set(in.Title))
+	if len(in.ChildIDs) > 0 {
+		childIDs, err := gqlimpl.DecodeIDs[int64]("CreateCategoryInput.childIDs", in.ChildIDs, "Category")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Categories.Children.Add(childIDs...))
 	}
-	c := gqlimpl.NewCreate(ctx, &categoryConnGQL, x, categoryColTitle)
-	x.Title = in.Title
-	childIDsKeys := gqlimpl.Keys[int64](c, "childIDs", in.ChildIDs, "Category")
-	gqlimpl.Repoint(c, "childIDs", "Category", categoryChildrenEdgeGQL(), childIDsKeys)
-	if in.ParentID != nil {
-		parentIDKey := gqlimpl.Key[int64](c, "parentID", *in.ParentID, "Category")
-		gqlimpl.Exists(c, "parentID", "Category", velox.TableOf[Category](), categoryColID, []int64{parentIDKey})
-		x.CategoryChildren = &parentIDKey
+	if v := in.ParentID; v != nil {
+		parentID, err := gqlimpl.DecodeID[int64]("CreateCategoryInput.parentID", *v, "Category")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Categories.CategoryChildren.Set(parentID))
 	}
-	if err := c.Insert(); err != nil {
-		return nil, err
-	}
-	return x, nil
+	return gqlimpl.Checked("CreateCategoryInput", &categoryConnGQL, set)
 }
 
-// UpdateCategoryInput is the GraphQL input UpdateCategoryInput, which Update
-// writes. A nil pointer or list is a field not given. A true clear field clears
-// its field or edge.
+// UpdateCategoryInput is the GraphQL input UpdateCategoryInput, whose Setters
+// gives its fields as setters. A nil pointer or list is a field not given, and
+// so is a null. A true clear field clears its field or edge.
 type UpdateCategoryInput struct {
 	Title *string
 	// AddChildIDs are the IDs of Category nodes to add to the edge children.
@@ -274,37 +267,45 @@ type UpdateCategoryInput struct {
 	ClearParent bool
 }
 
-// Update updates the Category with the ID id from the input and from set, and
-// returns the row as written. A setter of set wins over the input's for the
-// same column.
+// Setters returns the setters of the input's fields and edges, for
+// db.Update[Category]().Set: a field not given sets nothing, and a clear field
+// wins over its field.
 //
-// See "Mutations" in the documentation of package
-// github.com/syssam/velox/contrib/graphql for what each input field does, what
-// the caller may link and change, and the errors.
-func (in *UpdateCategoryInput) Update(ctx context.Context, id string, set ...velox.Setter[Category]) (*Category, error) {
-	u, key := gqlimpl.NewUpdate[int64](ctx, &categoryConnGQL, id)
-	if in.Title != nil {
-		u.Set(categoryColTitle, *in.Title)
+// It does no I/O. A value a validator refuses, or an ID that does not decode or
+// names another type, is BAD_USER_INPUT naming the input's field. See
+// "Mutations" in the documentation of package
+// github.com/syssam/velox/contrib/graphql for what each field does and what the
+// write checks.
+func (in *UpdateCategoryInput) Setters() ([]velox.Setter[Category], error) {
+	var set []velox.Setter[Category]
+	if v := in.Title; v != nil {
+		set = append(set, Categories.Title.Set(*v))
 	}
-	addChildIDsKeys, removeChildIDsKeys := gqlimpl.AddRemove[int64](
-		u, "Category",
-		"addChildIDs", in.AddChildIDs,
-		"removeChildIDs", in.RemoveChildIDs,
-	)
-	if in.ParentID != nil {
-		parentIDKey := gqlimpl.Key[int64](u, "parentID", *in.ParentID, "Category")
-		gqlimpl.Exists(u, "parentID", "Category", velox.TableOf[Category](), categoryColID, []int64{parentIDKey})
-		u.SetKey(categoryColCategoryChildren, parentIDKey)
+	if in.ClearChildren {
+		set = append(set, Categories.Children.Clear())
 	}
-	if gqlimpl.ClearEdge(u, "parentID", in.ParentID != nil, "clearParent", in.ClearParent) {
-		u.SetKey(categoryColCategoryChildren, nil)
+	if len(in.RemoveChildIDs) > 0 {
+		removeChildIDs, err := gqlimpl.DecodeIDs[int64]("UpdateCategoryInput.removeChildIDs", in.RemoveChildIDs, "Category")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Categories.Children.Remove(removeChildIDs...))
 	}
-	gqlimpl.Children(u, "addChildIDs", "Category", gqlimpl.Edit{
-		Clear:  in.ClearChildren,
-		Remove: removeChildIDsKeys,
-		Add:    addChildIDsKeys,
-	}, key, categoryChildrenEdgeGQL())
-	v, err := u.Exec(key, velox.Assignments(set))
-	n, _ := v.(*Category)
-	return n, err
+	if len(in.AddChildIDs) > 0 {
+		addChildIDs, err := gqlimpl.DecodeIDs[int64]("UpdateCategoryInput.addChildIDs", in.AddChildIDs, "Category")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Categories.Children.Add(addChildIDs...))
+	}
+	if in.ClearParent {
+		set = append(set, Categories.CategoryChildren.SetNull())
+	} else if v := in.ParentID; v != nil {
+		parentID, err := gqlimpl.DecodeID[int64]("UpdateCategoryInput.parentID", *v, "Category")
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, Categories.CategoryChildren.Set(parentID))
+	}
+	return gqlimpl.Checked("UpdateCategoryInput", &categoryConnGQL, set)
 }

@@ -424,7 +424,7 @@ func TestExtensionPutsTheDB(t *testing.T) {
 
 // TestExtensionGivesMutationsItsTx: DBFromContext gives a mutation the
 // extension runs in a transaction that transaction's DB, where
-// gqlimpl.Atomic makes its savepoints; a query, a mutation WithTxFilter
+// a write with edge setters makes its savepoints; a query, a mutation WithTxFilter
 // leaves out and NewContext get db itself.
 func TestExtensionGivesMutationsItsTx(t *testing.T) {
 	db, _ := handlerDB(t)

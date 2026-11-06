@@ -158,6 +158,18 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- A velox-graphql input has one method, `Setters() ([]velox.Setter[T],
+  error)`, plain Go that returns its fields and edges as setters and does no
+  I/O; the resolver writes them with `db.Insert(x).Set(set...)` or
+  `db.Update[T]().Where(...).Set(set...)` and reads the row back. `Create`,
+  `Update`, the per-edge functions and gqlimpl's write helpers (`Atomic`,
+  `NewCreate`, `NewUpdate`, `LockRow`, …) are gone. An explicit null is a
+  field not given, as in entgql: send `clear<Field>: true` to clear. A list
+  of more than `gqlimpl.MaxIDs` (1000) IDs is refused. `ErrorPresenter`
+  presents a `*velox.EdgeError`: NOT_FOUND, or BAD_USER_INPUT "already
+  linked to another owner". `veloxgql.GeneratedCodeIsVersion14` is now
+  `GeneratedCodeIsVersion15` (ADR 0045).
+
 - A GraphQL type's columns and input names are data in its `gqlimpl.Conn`:
   `Read`, `Fields` and `Edges` give the columns a selection reads, and
   `Inputs` (or `CreateInputs` and `UpdateInputs`) the input field that sets

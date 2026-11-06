@@ -20,7 +20,6 @@ import (
 	gqlast "github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox/contrib/graphql"
-	"github.com/syssam/velox/contrib/graphql/internal/english"
 	"github.com/syssam/velox/contrib/graphql/internal/modeltest"
 	"github.com/syssam/velox/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox/plugin"
@@ -668,9 +667,9 @@ func TestRenderErrors(t *testing.T) {
 		"a where on a time of another Go type": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
 			"schema Thing, field at: velox-graphql converts a time field only from time.Time, and its Go type is types.Stamp"},
-		"a create-input field named Create": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{creatable(withField(entity("Thing", "int64"),
-			&plugin.Field{Name: "text", GoName: "Text", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"field_name":"create"}`)}}))}},
-			"schema Thing: the field create of CreateThingInput is the Go field Create, which is the input's method"},
+		"a create-input field named Setters": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{creatable(withField(entity("Thing", "int64"),
+			&plugin.Field{Name: "text", GoName: "Text", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"field_name":"setters"}`)}}))}},
+			"schema Thing: the field setters of CreateThingInput is the Go field Setters, which is the input's method"},
 		"a create-input field named String beside a sensitive one": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{creatable(withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "secret", GoName: "Secret", Type: "string", GoType: "string", ElemType: "string", Sensitive: true},
 			&plugin.Field{Name: "text", GoName: "Text", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"field_name":"string"}`)}}))}},
@@ -716,7 +715,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion14\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion15\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -836,8 +835,8 @@ func TestCreateInputs(t *testing.T) {
 				in := "Create" + ty.Name + "Input"
 				st := structs[in]
 				if ty.Create == nil {
-					if st != nil || funcs[in+".Create"] != nil {
-						t.Errorf("%s has no create input, and %s or its Create is declared", ty.Name, in)
+					if st != nil || funcs[in+".Setters"] != nil {
+						t.Errorf("%s has no create input, and %s or its Setters is declared", ty.Name, in)
 					}
 					continue
 				}
@@ -868,19 +867,19 @@ func TestCreateInputs(t *testing.T) {
 				if !slices.Equal(got, want) {
 					t.Errorf("%s: fields\n %v\nwant\n %v", in, got, want)
 				}
-				fn := funcs[in+".Create"]
+				fn := funcs[in+".Setters"]
 				if fn == nil {
-					t.Errorf("no method %s.Create", in)
+					t.Errorf("no method %s.Setters", in)
 					continue
 				}
-				if want := "func(ctx context.Context, x *" + ty.Entity.Name + ") (*" + ty.Entity.Name + ", error)"; expr(fn.Type) != want {
-					t.Errorf("%s.Create: %s, want %s", in, expr(fn.Type), want)
+				if want := "func() ([]velox.Setter[" + ty.Entity.Name + "], error)"; expr(fn.Type) != want {
+					t.Errorf("%s.Setters: %s, want %s", in, expr(fn.Type), want)
 				}
 				// The fields the input leaves out and an insert requires are
 				// named in its doc: the resolver sets them on x.
 				for _, fd := range leftOut(ty) {
 					if !strings.Contains(fn.Doc.Text(), fd.GoName) {
-						t.Errorf("%s.Create's doc does not name %s, which it leaves out", in, fd.GoName)
+						t.Errorf("%s.Setters's doc does not name %s, which it leaves out", in, fd.GoName)
 					}
 				}
 			}
@@ -954,9 +953,8 @@ func updateOnlyModel(t *testing.T) *plugin.Model {
 // TestUpdateInputs: each type with an update input has Update<T>Input, with
 // one Go field for each of the Surface's InputFields, in order: a pointer for
 // a value or a unique edge's ID, a []string for an ID list and a bool for a
-// clear; and its method Update, which takes the ID and the application's
-// setters and returns the entity, and names its fields by <entity>InputGQL,
-// or <entity>UpdateInputGQL when the create input names them otherwise.
+// clear; and its method Setters, which returns the entity's setters through
+// gqlimpl.Checked with the type's Conn, which names the input's fields.
 func TestUpdateInputs(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "update-only": updateOnlyModel(t)} {
 		t.Run(label, func(t *testing.T) {
@@ -969,7 +967,7 @@ func TestUpdateInputs(t *testing.T) {
 			n := 0
 			for _, ty := range surf.Types {
 				in := "Update" + ty.Name + "Input"
-				fn := in + ".Update"
+				fn := in + ".Setters"
 				st := structs[in]
 				if ty.Update == nil {
 					if st != nil || funcs[fn] != nil {
@@ -1014,11 +1012,11 @@ func TestUpdateInputs(t *testing.T) {
 					t.Errorf("no func %s", fn)
 					continue
 				}
-				if sig, want := expr(d.Type), "func(ctx context.Context, id string, set ...velox.Setter["+ty.Entity.Name+"]) (*"+ty.Entity.Name+", error)"; sig != want {
+				if sig, want := expr(d.Type), "func() ([]velox.Setter["+ty.Entity.Name+"], error)"; sig != want {
 					t.Errorf("%s: %s, want %s", fn, sig, want)
 				}
 				base := strings.ToLower(ty.Entity.Name[:1]) + ty.Entity.Name[1:]
-				if src := funcSrc(t, files, fn); !strings.Contains(src, "(ctx, &"+base+"ConnGQL, id") {
+				if src := funcSrc(t, files, fn); !strings.Contains(src, "return gqlimpl.Checked(\""+in+"\", &"+base+"ConnGQL, set)") {
 					t.Errorf("%s does not take %sConnGQL:\n%s", fn, base, src)
 				}
 				lit := connLit(t, files, base+"ConnGQL")
@@ -1041,10 +1039,10 @@ func ptrUnless(required bool, typ string) string {
 	return "*" + typ
 }
 
-// TestCreateConversions pins how Create turns its input into the entity
-// for mutationsModel's Go types: IDs decoded as the target's key and
-// converted to the application's key type, JSON decoded before any
-// statement, the application's own Go types converted from the scalar's.
+// TestCreateConversions pins how Setters turns its input into setters for
+// mutationsModel's Go types: IDs decoded as the target's key and converted
+// to the application's key type, JSON decoded before any statement, the
+// application's own Go types converted from the scalar's.
 func TestCreateConversions(t *testing.T) {
 	files := render(t, mutationsModel(t))
 	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
@@ -1052,10 +1050,10 @@ func TestCreateConversions(t *testing.T) {
 	for _, want := range []string{
 		` OwnerID *string `,
 		` Tags veloxgql.JSON `,
-		`gqlimpl.KeyAs[int64](c, "ownerID", *in.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
-		`gqlimpl.DecodeJSON[[]int32](c, "tags", in.Tags)`,
-		`gqlimpl.Exists(c, "ownerID", "Owner", velox.TableOf[Owner](), ownerColID, []idspkg.UserID{`,
-		`gqlimpl.NewCreate(ctx, &eventConnGQL, x`,
+		`ownerID, err := gqlimpl.DecodeIDAs[int64]("CreateEventInput.ownerID", *v, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
+		`set = append(set, Events.OwnerID.Set(ownerID))`,
+		`tags, err := gqlimpl.FromJSON[[]int32]("CreateEventInput.tags", in.Tags)`,
+		`return gqlimpl.Checked("CreateEventInput", &eventConnGQL, set)`,
 		`eventColTags: "tags"`,
 	} {
 		if !strings.Contains(ev, want) {
@@ -1064,10 +1062,10 @@ func TestCreateConversions(t *testing.T) {
 	}
 	for _, want := range []string{
 		` Email *string `, ` Code string `, ` Rank int32 `,
-		`x.Code = idspkg.Code(in.Code)`,
-		`emailVal := idspkg.Email(*in.Email) x.Email = &emailVal`,
-		`x.Rank = idspkg.Rank(in.Rank)`,
-		`x.Ref = idspkg.Ref(in.Ref)`,
+		`set = append(set, Owners.Code.Set(idspkg.Code(in.Code)))`,
+		`if v := in.Email; v != nil { set = append(set, Owners.Email.Set(idspkg.Email(*v))) }`,
+		`set = append(set, Owners.Rank.Set(idspkg.Rank(in.Rank)))`,
+		`set = append(set, Owners.Ref.Set(idspkg.Ref(in.Ref)))`,
 	} {
 		if !strings.Contains(owner, want) {
 			t.Errorf("no %q in\n%s", want, owner)
@@ -1140,7 +1138,7 @@ func setMutations(t *testing.T, e *plugin.Entity, kinds ...string) {
 	e.Annotations["graphql"] = b
 }
 
-// TestUpdateEdgeToRenamedType: Update writes the edges of an M2M edge
+// TestUpdateEdgeToRenamedType: Setters writes the edges of an M2M edge
 // whose target's GraphQL type is renamed (Group.users to User, the type
 // Account), finding the target by its entity, not by its type's name.
 func TestUpdateEdgeToRenamedType(t *testing.T) {
@@ -1152,41 +1150,16 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 	}
 	src := flat(render(t, m)["group_gql.go"])
 	for _, w := range []string{
-		`func (in *UpdateGroupInput) Update(ctx context.Context, id string, set ...velox.Setter[Group]) (*Group, error) {`,
-		`addUserIDsKeys, removeUserIDsKeys := gqlimpl.AddRemove[int64](u, "Account", "addUserIDs", in.AddUserIDs, "removeUserIDs", in.RemoveUserIDs)`,
-		`gqlimpl.Through(u, "addUserIDs", "Account", gqlimpl.Edit{Clear: in.ClearUsers, Remove: removeUserIDsKeys, Add: addUserIDsKeys}, key, groupUsersEdgeGQL())`,
-		`func groupUsersEdgeGQL() gqlimpl.M2M { return gqlimpl.M2M{Owner: velox.TableOf[Group](), Target: velox.TableOf[User](), Join: velox.TableOf[UserGroup](),`,
+		`func (in *UpdateGroupInput) Setters() ([]velox.Setter[Group], error) {`,
+		`if in.ClearUsers { set = append(set, Groups.Users.Clear()) }`,
+		`removeUserIDs, err := gqlimpl.DecodeIDs[int64]("UpdateGroupInput.removeUserIDs", in.RemoveUserIDs, "Account")`,
+		`set = append(set, Groups.Users.Remove(removeUserIDs...))`,
+		`addUserIDs, err := gqlimpl.DecodeIDs[int64]("UpdateGroupInput.addUserIDs", in.AddUserIDs, "Account")`,
+		`set = append(set, Groups.Users.Add(addUserIDs...))`,
 	} {
 		if !strings.Contains(src, w) {
 			t.Errorf("group_gql.go: no %q in\n%s", w, src)
 		}
-	}
-}
-
-// TestUpdateLocksTheRow: an Update checks its row, when it sets nothing,
-// with a Writable Exists, locked with ForUpdate unless the dialect is
-// SQLite, and no longer with a Count, which cannot lock: Update's generated
-// method ends in gqlimpl's Exec, whose source calls LockRow, which does.
-func TestUpdateLocksTheRow(t *testing.T) {
-	m := modeltest.Model(t)
-	for _, e := range m.Entities {
-		if e.Name == "Group" {
-			setMutations(t, e, "update")
-		}
-	}
-	src := funcSrc(t, render(t, m), "UpdateGroupInput.Update")
-	if !strings.Contains(src, "v, err := u.Exec(key, velox.Assignments(set)) n, _ := v.(*Group) return n, err") {
-		t.Errorf("UpdateGroupInput.Update does not end in Exec:\n%s", src)
-	}
-	impl := readFile(t, filepath.Join("..", "..", "veloxgql", "gqlimpl", "input.go"))
-	_, exec, _ := strings.Cut(impl, ") Exec(key any, set []velox.Assignment) (")
-	exec, _, _ = strings.Cut(exec, "\n}\n")
-	if !strings.Contains(exec, "LockRow(ctx, db, db.QueryTable(u.t).Where(row)") || strings.Contains(exec, "Writable().Count") {
-		t.Errorf("Exec does not lock its row before its edges:\n%s", exec)
-	}
-	mut := readFile(t, filepath.Join("..", "..", "veloxgql", "gqlimpl", "mutation.go"))
-	if _, lock, _ := strings.Cut(mut, "func LockRow("); !strings.Contains(lock, "q.ForUpdate()") || !strings.Contains(lock, "q.Writable()") {
-		t.Errorf("LockRow does not lock a Writable query:\n%s", lock)
 	}
 }
 
@@ -1497,22 +1470,24 @@ func TestM2MWithoutInverse(t *testing.T) {
 	}
 }
 
-// TestMutationGodocPoints: the godoc of Create and Update is short and
-// points to "Mutations" in the package documentation, which holds what they
-// promise; it does not repeat it. The comment is read with its whitespace
-// normalised, since f.doc wraps it. Create names the type with its article
-// ("an Account", "a Post").
+// TestMutationGodocPoints: the godoc of an input's Setters is short and
+// points to "Mutations" in the package documentation, which holds what it
+// promises; it does not repeat it. The comment is read with its whitespace
+// normalised, since f.doc wraps it. It names the write the setters are for.
 func TestMutationGodocPoints(t *testing.T) {
 	const pointer = `See "Mutations" in the documentation of package github.com/syssam/velox/contrib/graphql`
 	seen := map[string]int{}
-	article := map[string]string{}
 	models := map[string]*plugin.Model{"testdata": modeltest.Model(t), "update-only": updateOnlyModel(t), "mutations": mutationsModel(t)}
 	for label, m := range models {
 		_, funcs, _ := mutationDecls(t, render(t, m))
 		for name, fn := range funcs {
 			in, kind, ok := strings.Cut(name, ".")
-			if !ok || kind != "Create" && kind != "Update" {
+			if !ok || kind != "Setters" {
 				continue
+			}
+			kind = "Update"
+			if strings.HasPrefix(in, "Create") {
+				kind = "Create"
 			}
 			seen[kind]++
 			doc := strings.Join(strings.Fields(fn.Doc.Text()), " ")
@@ -1528,28 +1503,18 @@ func TestMutationGodocPoints(t *testing.T) {
 					t.Errorf("%s: %q is the package doc's", who, gone)
 				}
 			}
-			if kind == "Create" {
-				typ := strings.TrimSuffix(strings.TrimPrefix(in, "Create"), "Input")
-				rest, _ := strings.CutPrefix(doc, "Create inserts x, ")
-				article[who] = strings.TrimSuffix(strings.Join(strings.Fields(rest)[:2], " "), ",")
-				if want := "Create inserts x, " + english.Article(typ) + " " + typ + ","; !strings.HasPrefix(doc, want) {
-					t.Errorf("%s: doc does not start with %q: %q", who, want, doc)
-				}
+			want := "Setters returns the setters of the input's fields and edges, for db.Insert(x).Set:"
+			if kind == "Update" {
+				want = "Setters returns the setters of the input's fields and edges, for db.Update["
+			}
+			if !strings.HasPrefix(doc, want) {
+				t.Errorf("%s: doc does not start with %q: %q", who, want, doc)
 			}
 		}
 	}
 	for _, kind := range []string{"Create", "Update"} {
 		if seen[kind] == 0 {
 			t.Errorf("no %s method rendered", kind)
-		}
-	}
-	// The articles themselves, spelled out: a vowel-initial type takes "an".
-	for who, want := range map[string]string{
-		"testdata CreateAccountInput": "an Account", "testdata CreatePostInput": "a Post",
-		"mutations CreateEventInput": "an Event", "mutations CreateOwnerInput": "an Owner",
-	} {
-		if article[who] != want {
-			t.Errorf("%s: article and type %q, want %q", who, article[who], want)
 		}
 	}
 }
@@ -1559,70 +1524,7 @@ func TestMutationGodocPoints(t *testing.T) {
 func TestMutationsHeading(t *testing.T) {
 	doc := readFile(t, filepath.Join("..", "..", "doc.go"))
 	if !strings.Contains(doc, "\n// # Mutations\n") {
-		t.Error(`contrib/graphql/doc.go has no "// # Mutations" heading, which the generated godoc of Create and Update points to`)
-	}
-}
-
-// TestSingleOwnerKeyEQ: the existence check of one owner key is EQ, and only
-// a list of keys is In.
-func TestSingleOwnerKeyEQ(t *testing.T) {
-	files := render(t, modeltest.Model(t))
-	in := regexp.MustCompile(`, 1, \w+\.\w+\.In\(`)
-	for name, src := range files {
-		if in.MatchString(src) {
-			t.Errorf("%s checks one owner key with In", name)
-		}
-	}
-	const want = `gqlimpl.Exists(c, "writerID", "Account", velox.TableOf[User](), userColID, []int64{writerIDKey})`
-	if !strings.Contains(files["post_gql.go"], want) {
-		t.Errorf("post_gql.go lacks %s", want)
-	}
-}
-
-// TestRepointO2OOrder: re-pointing a one-to-one edge from the owner, whose
-// key the target holds, checks the new child first (CheckExists), then lets
-// the current child go, then refuses the re-point when a child the caller may
-// not change still holds the key (StillLinked), and only then links the new
-// child.
-func TestRepointO2OOrder(t *testing.T) {
-	idField := func() *plugin.Field {
-		return &plugin.Field{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64", AutoID: true}
-	}
-	owner := &plugin.Entity{
-		Name: "Owner", Label: "owner", Handles: "Owners", PrimaryKey: []int{0},
-		Fields:      []*plugin.Field{idField()},
-		Edges:       []*plugin.Edge{{Name: "pet", GoName: "Pet", Target: "Pet", Ref: "owner", Kind: plugin.O2O, Unique: true, Field: "owner_pet", FieldOn: "Pet"}},
-		Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"mutations":["update"]}`)},
-	}
-	pet := &plugin.Entity{
-		Name: "Pet", Label: "pet", Handles: "Pets", PrimaryKey: []int{0},
-		Fields: []*plugin.Field{idField(),
-			{Name: "owner_pet", GoName: "OwnerPet", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Nullable: true, Optional: true, Implicit: "pet"}},
-		Edges: []*plugin.Edge{{Name: "owner", GoName: "Owner", Target: "Owner", Ref: "pet", Kind: plugin.O2O, Unique: true, Inverse: true, Field: "owner_pet", FieldOn: "Pet", OwnsKey: true}},
-	}
-	gen := funcSrc(t, render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{owner, pet}}), "UpdateOwnerInput.Update")
-	if want := `gqlimpl.Child(u, "petID", "Pet", clearPet, petIDKey, key, ownerPetEdgeGQL())`; !strings.Contains(gen, want) {
-		t.Errorf("UpdateOwnerInput.Update has no %s:\n%s", want, gen)
-	}
-	// gqlimpl.Child, which runs the re-point, in its steps' order.
-	_, src, _ := strings.Cut(readFile(t, filepath.Join("..", "..", "veloxgql", "gqlimpl", "input.go")), "\nfunc Child(")
-	src, _, _ = strings.Cut(src, "\n}\n")
-	steps := []string{
-		`CheckExists(ctx, db.QueryTable(t).Where(id), 1, at, typ)`,
-		`db.UpdateTable(t).SetNull(fk).Where(held, other)`,
-		`StillLinked(ctx, db.QueryTable(t).Where(held, other), at, typ, owner)`,
-		`relink(ctx, db, o, id, 1, v, at, typ, owner)`,
-	}
-	at := -1
-	for _, s := range steps {
-		i := strings.Index(src, s)
-		if i < 0 {
-			t.Fatalf("Child has no %s:\n%s", s, src)
-		}
-		if i < at {
-			t.Errorf("Child: %s comes before the step ahead of it:\n%s", s, src)
-		}
-		at = i
+		t.Error(`contrib/graphql/doc.go has no "// # Mutations" heading, which the generated godoc of Setters points to`)
 	}
 }
 
@@ -1716,7 +1618,7 @@ func TestNullableOrderTerm(t *testing.T) {
 
 // TestZeroDefaultNotRefused: a create input that gives a field with a zero
 // Default (false, 0, "") its zero value stores what the Default would, so
-// Create does not refuse it; a non-zero Default's zero is still refused.
+// Setters does not refuse it; a non-zero Default's zero is still refused.
 // A field with graphql.CreateDefault is a value, always set.
 func TestZeroDefaultNotRefused(t *testing.T) {
 	def := func(name, typ, d string) *plugin.Field {
@@ -1743,11 +1645,11 @@ func TestZeroDefaultNotRefused(t *testing.T) {
 	}}}
 	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
 	for _, f := range []string{"Off", "Views", "Score", "S"} {
-		if strings.Contains(got, "gqlimpl.NotZero(c, \""+strings.ToLower(f[:1])+f[1:]+"\"") {
+		if strings.Contains(got, "gqlimpl.NotZero(\"CreateThingInput."+strings.ToLower(f[:1])+f[1:]+"\"") {
 			t.Errorf("%s: a zero Default's zero refused:\n%s", f, got)
 		}
 	}
-	for _, want := range []string{`gqlimpl.NotZero(c, "handle"`, "Active bool", "x.Active = in.Active", ", thingColActive)"} {
+	for _, want := range []string{`gqlimpl.NotZero("CreateThingInput.handle", *v)`, "Active bool", "set = append(set, Things.Active.Set(in.Active))"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in:\n%s", want, got)
 		}

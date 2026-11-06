@@ -279,27 +279,27 @@ type Mutation { create(input: PostInput!): Post! ping(id: ID): Post! }
 		{"a column", `{ title: "x" }`, 2, 1},
 		{"clear a column", `{ clearTitle: true }`, 2, 1},
 		{"clear false", `{ clearTags: false }`, 2, 1},
-		{"clear an edge", `{ clearTags: true }`, 2, 4},
-		{"add", `{ addTagIDs: ["1"] }`, 2, 3},
+		{"clear an edge", `{ clearTags: true }`, 2, 5},
+		{"add", `{ addTagIDs: ["1"] }`, 2, 4},
 		{"add none", `{ addTagIDs: [] }`, 1, 1},
-		{"remove", `{ removeTagIDs: ["1", "2"] }`, 3, 3},
-		{"an edge's IDs", `{ tagIDs: ["1"] }`, 2, 3},
-		{"an edge's ID", `{ authorID: "1" }`, 2, 2},
+		{"remove", `{ removeTagIDs: ["1", "2"] }`, 3, 4},
+		{"an edge's IDs", `{ tagIDs: ["1"] }`, 2, 4},
+		{"an edge's ID", `{ authorID: "1" }`, 2, 7},
 		{"null ID", `{ authorID: null }`, 2, 1},
-		{"all", `{ title: "x", clearTags: true, addTagIDs: ["1"], removeTagIDs: ["2"] }`, 5, 8},
+		{"all", `{ title: "x", clearTags: true, addTagIDs: ["1"], removeTagIDs: ["2"] }`, 5, 9},
 	} {
 		if got, want := base(`mutation { create(input: `+c.input+`) { id } }`, nil), cost(c.size, c.statements); got != want {
 			t.Errorf("%s: cost %d, want %d", c.name, got, want)
 		}
 	}
 	const byVar = `mutation ($i: PostInput!) { create(input: $i) { id } }`
-	if got, want := base(byVar, map[string]any{"i": map[string]any{"clearTags": true, "addTagIDs": []any{"1"}}}), cost(3, 6); got != want {
+	if got, want := base(byVar, map[string]any{"i": map[string]any{"clearTags": true, "addTagIDs": []any{"1"}}}), cost(3, 7); got != want {
 		t.Errorf("by a variable: cost %d, want %d", got, want)
 	}
 	if got, want := base(`mutation { ping(id: "1") { id } }`, nil), 2+100; got != want {
 		t.Errorf("no input object: cost %d, want %d", got, want)
 	}
-	if got, want := base(`mutation { a: create(input: { clearTags: true }) { id } b: create(input: { clearTags: true }) { id } }`, nil), 2*cost(2, 4); got != want {
+	if got, want := base(`mutation { a: create(input: { clearTags: true }) { id } b: create(input: { clearTags: true }) { id } }`, nil), 2*cost(2, 5); got != want {
 		t.Errorf("twice: cost %d, want %d", got, want)
 	}
 }

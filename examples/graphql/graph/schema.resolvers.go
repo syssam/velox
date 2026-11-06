@@ -19,14 +19,26 @@ import (
 
 // CreatePost is the resolver for the createPost field: the post's author is
 // the viewer, a user the request may read, which CreatePostInput leaves out,
-// so a client cannot post as another user. Create trusts what x holds, the
-// author's key among it, so the resolver checks it.
+// so a client cannot post as another user. The insert trusts what x holds,
+// the author's key among it, so the resolver checks it.
 func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
 	viewer, err := Author(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return input.Create(ctx, &gen.Post{AuthorID: viewer})
+	set, err := input.Setters()
+	if err != nil {
+		return nil, err
+	}
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &gen.Post{AuthorID: viewer}
+	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
 // UpdatePost is the resolver for the updatePost field: only the post's
@@ -37,10 +49,15 @@ func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.
 	if err != nil {
 		return nil, err
 	}
-	if _, err := OwnPost(ctx, db, id); err != nil {
+	key, err := OwnPost(ctx, db, id)
+	if err != nil {
 		return nil, err
 	}
-	return input.Update(ctx, id)
+	set, err := input.Setters()
+	if err != nil {
+		return nil, err
+	}
+	return update(ctx, gen.Posts.ID, key, "Post", set)
 }
 
 // DeletePost is the resolver for the deletePost field, which the application
@@ -66,7 +83,7 @@ func (r *mutationResolver) DeletePost(ctx context.Context, id string) (string, e
 		case err != nil:
 			return err
 		case n == 0:
-			return NotFound(ctx)
+			return NotFound(ctx, "Post")
 		case n < 0:
 			return errors.New("deletePost: the driver did not report the rows it deleted")
 		}
@@ -80,35 +97,76 @@ func (r *mutationResolver) DeletePost(ctx context.Context, id string) (string, e
 
 // CreateLabel is the resolver for the createLabel field.
 func (r *mutationResolver) CreateLabel(ctx context.Context, input gen.CreateLabelInput) (*gen.Tag, error) {
-	return input.Create(ctx, nil)
+	set, err := input.Setters()
+	if err != nil {
+		return nil, err
+	}
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := new(gen.Tag)
+	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
 // UpdateLabel is the resolver for the updateLabel field.
 func (r *mutationResolver) UpdateLabel(ctx context.Context, id string, input gen.UpdateLabelInput) (*gen.Tag, error) {
-	return input.Update(ctx, id)
+	set, err := input.Setters()
+	if err != nil {
+		return nil, err
+	}
+	key, err := veloxgql.DecodeID[int64](id, "Label")
+	if err != nil {
+		return nil, err
+	}
+	return update(ctx, gen.Tags.ID, key, "Label", set)
 }
 
 // CreateUser is the resolver for the createUser field: the user's password
-// hash is the server's hash of password, set on the row Create inserts.
+// hash is the server's hash of password, set on the row it inserts.
 func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserInput, password string) (*gen.User, error) {
+	set, err := input.Setters()
+	if err != nil {
+		return nil, err
+	}
 	hash, err := hashPassword(ctx, password)
 	if err != nil {
 		return nil, err
 	}
-	return input.Create(ctx, &gen.User{PasswordHash: hash})
-}
-
-// UpdateUser is the resolver for the updateUser field: a password given
-// replaces the hash, in the same UPDATE as the input's fields.
-func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input gen.UpdateUserInput, password *string) (*gen.User, error) {
-	if password == nil {
-		return input.Update(ctx, id)
-	}
-	hash, err := hashPassword(ctx, *password)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return input.Update(ctx, id, gen.Users.PasswordHash.Set(hash))
+	x := &gen.User{PasswordHash: hash}
+	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// UpdateUser is the resolver for the updateUser field: a password given
+// replaces the hash, a setter of the resolver's beside the input's, in the
+// same UPDATE.
+func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input gen.UpdateUserInput, password *string) (*gen.User, error) {
+	set, err := input.Setters()
+	if err != nil {
+		return nil, err
+	}
+	if password != nil {
+		hash, err := hashPassword(ctx, *password)
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, gen.Users.PasswordHash.Set(hash))
+	}
+	key, err := veloxgql.DecodeID[int64](id, "User")
+	if err != nil {
+		return nil, err
+	}
+	return update(ctx, gen.Users.ID, key, "User", set)
 }
 
 // Node is the resolver for the node field.

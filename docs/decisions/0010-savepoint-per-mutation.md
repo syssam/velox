@@ -1,6 +1,6 @@
 # 0010. A savepoint per GraphQL mutation
 
-- Status: accepted, 2026-10-29
+- Status: accepted, 2026-10-29, superseded by [0045](0045-graphql-input-setters.md)
 
 ## Context
 

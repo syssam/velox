@@ -27,8 +27,8 @@ const (
 	CodeForbidden = "FORBIDDEN"
 	// CodeUnauthenticated: the request has no scope value (scope.ErrNoScope).
 	CodeUnauthenticated = "UNAUTHENTICATED"
-	// CodeNotFound: the generated inputs' Create and Update return it for an
-	// ID that names no row the caller may see or change.
+	// CodeNotFound: an edge setter's key names no row the caller may see or
+	// change (a *velox.EdgeError of velox.ErrNotFound).
 	CodeNotFound = gqlcore.CodeNotFound
 	// CodeTooCostly: the request costs more than Limits.MaxCost allows
 	// (ErrTooCostly). It is not a bad argument: the client can ask for less.
@@ -71,6 +71,12 @@ const (
 //   - velox.ErrDenied, or a *velox.PolicyError: FORBIDDEN, "forbidden".
 //   - scope.ErrMismatch, a write of a row in another scope: FORBIDDEN,
 //     "forbidden". It names no scope or column.
+//   - A *velox.EdgeError of velox.ErrNotFound, an edge setter's key that
+//     names no row the caller may read or change: NOT_FOUND, "edge <edge>:
+//     no node has this ID", or "edge <edge>: an ID names no node" for more
+//     than one key. Of velox.ErrLinked, a child another owner holds:
+//     BAD_USER_INPUT, "edge <edge>: already linked to another owner". The
+//     edge is the schema's name, as "tags"; no key is named.
 //   - A *velox.ValidationError: BAD_USER_INPUT, "invalid value: " and the
 //     validator's text.
 //   - A *velox.ConstraintError: BAD_USER_INPUT, "<kind> constraint
@@ -88,8 +94,8 @@ const (
 // driverErr) does, shows the client the first, and is logged as well, for
 // the second. So is an application's coded error that wraps one the client
 // may not see: the client sees the coded error's text, and log gets the
-// whole. What veloxgql's own coded errors and velox's policy, validation and
-// constraint errors wrap is not searched: it is never shown.
+// whole. What veloxgql's own coded errors and velox's policy, validation,
+// constraint and edge errors wrap is not searched: it is never shown.
 //
 // So no entity, constraint, scope or driver text reaches a client. A
 // *gqlerror.Error that wraps an error is presented as its error is, with its
@@ -228,7 +234,7 @@ func logAttrs(ctx context.Context, err error) []any {
 // logged. The tree is not searched below an error whose wrapped errors are
 // known and never shown: one of veloxgql's coded errors (what it wraps, as
 // the join of ErrBadCursor and ErrWrongIDType, is there for errors.Is), and
-// velox's policy, validation and constraint errors. An application's coded
+// velox's policy, validation, constraint and edge errors. An application's coded
 // error is searched, so one that wraps a driver's error is logged.
 func internalLeaves(err error, out []error) []error {
 	if err == nil || gqlcore.NilPointer(err) {
@@ -241,7 +247,7 @@ func internalLeaves(err error, out []error) []error {
 		if e.Code != "" {
 			return out
 		}
-	case *velox.PolicyError, *velox.ValidationError, *velox.ConstraintError:
+	case *velox.PolicyError, *velox.ValidationError, *velox.ConstraintError, *velox.EdgeError:
 		return out
 	}
 	switch u := err.(type) {
@@ -296,6 +302,17 @@ func present(err error) (code, msg string) {
 		return CodeUnauthenticated, "unauthenticated"
 	case gqlcore.Is(err, velox.ErrDenied), gqlcore.Is(err, scope.ErrMismatch):
 		return CodeForbidden, "forbidden"
+	}
+	if edge, ok := gqlcore.As[*velox.EdgeError](err); ok {
+		switch {
+		case gqlcore.Is(edge.Err, velox.ErrLinked):
+			return CodeBadUserInput, "edge " + edge.Edge + ": already linked to another owner"
+		case !gqlcore.Is(edge.Err, velox.ErrNotFound):
+		case len(edge.Keys) == 1:
+			return CodeNotFound, "edge " + edge.Edge + ": no node has this ID"
+		default:
+			return CodeNotFound, "edge " + edge.Edge + ": an ID names no node"
+		}
 	}
 	if validation, ok := gqlcore.As[*velox.ValidationError](err); ok {
 		if validation.Err == nil {

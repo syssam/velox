@@ -38,7 +38,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    create resolver sets the author to the viewer, and no update gives a post
    to another author. The `org_id`
    column is `graphql.Skip()`ped: it is in no type or input. `title` is `NotEmpty()`, a validator the
-   mutations run before any statement, and the tag's `name` is `Unique()`.
+   inputs' `Setters` run before any statement, and the tag's `name` is `Unique()`.
    `views` is `Optional()`: `CreatePostInput` may leave it out, and it is then 0,
    its zero value. `published_at` is `Optional().Nillable()`: `Optional`
    makes it optional on create, and `Nillable` makes its column NULL-able and
@@ -51,7 +51,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
 2. velox-gen with the plugin, which writes `gen/`: the entities, the GraphQL
    schema `gen/velox.graphql`, and the `*_gql.go` files it binds to (IDs,
    connections, edges, orders, where inputs, mutation inputs with their
-   `Create` and `Update` methods, `Node` and `Nodes`):
+   `Setters` method, `Node` and `Nodes`):
 
    ```sh
    go tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema
@@ -85,7 +85,19 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    	if err != nil {
    		return nil, err
    	}
-   	return input.Create(ctx, &gen.Post{AuthorID: viewer})
+   	set, err := input.Setters()
+   	if err != nil {
+   		return nil, err
+   	}
+   	db, err := veloxgql.DBFromContext(ctx)
+   	if err != nil {
+   		return nil, err
+   	}
+   	x := &gen.Post{AuthorID: viewer}
+   	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+   		return nil, err
+   	}
+   	return x, nil
    }
 
    func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
@@ -93,18 +105,27 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    	if err != nil {
    		return nil, err
    	}
-   	if _, err := OwnPost(ctx, db, id); err != nil {
+   	key, err := OwnPost(ctx, db, id)
+   	if err != nil {
    		return nil, err
    	}
-   	return input.Update(ctx, id)
+   	set, err := input.Setters()
+   	if err != nil {
+   		return nil, err
+   	}
+   	return update(ctx, gen.Posts.ID, key, "Post", set)
    }
    ```
 
-   `Create` takes the row to insert, with what the client must not choose
-   already on it (the author). It trusts that row's own fields, foreign keys
-   included, so `Author` checks first that the viewer is a user. `Update`
-   takes the application's own setters after the ID; `OwnPost` lets only a
-   post's author change it (`FORBIDDEN` otherwise). velox-graphql generates no
+   An input's `Setters` turns its fields and edges into setters, and does no
+   I/O; the resolver writes them. The insert takes the row with what the
+   client must not choose already on it (the author). It trusts that row's
+   own fields, foreign keys included, so `Author` checks first that the
+   viewer is a user. `update` (`graph/resolver.go`) runs
+   `db.Update[gen.Post]().Set(set...)` on the row and reads it back;
+   `updateUser` appends a setter of its own, the password's hash, to the
+   input's. `OwnPost` lets only a post's author change it (`FORBIDDEN`
+   otherwise). velox-graphql generates no
    delete: `DeletePost` is the application's, `OwnPost` and a scoped
    `db.Delete[gen.Post]()`, in a savepoint, `NOT_FOUND` when it deleted no
    row and an internal error when the driver reports no count. The post's
@@ -142,11 +163,11 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
 
 ### Mutations
 
-`createX(input:)`, through `Create`, inserts a row and links the edges its
-input names (`tagIDs`). `updateX(id:, input:)`, through `Update`, changes
-only the fields given: a field left out is unchanged, `clearPublishedAt: true`
-or `publishedAt: null` sets a NULL-able column to NULL, and an edge is cleared,
-then has its `remove…IDs` removed, then its `add…IDs` added. `deletePost(id:)`
+`createX(input:)` inserts a row with its input's setters and links the edges
+its input names (`tagIDs`). `updateX(id:, input:)` changes only the fields
+given: a field left out, or given as `null`, is unchanged;
+`clearPublishedAt: true` sets a NULL-able column to NULL; and an edge is
+cleared, then has its `remove…IDs` removed, then its `add…IDs` added. `deletePost(id:)`
 deletes the row, and with it its join rows, and returns its ID. Only a
 post's author, the `X-User`, may update or delete it. Repeated IDs count
 once, and adding a link that exists changes nothing.
@@ -163,35 +184,37 @@ stay linked. `deletePost` of another organization's post is `NOT_FOUND`, as
 its check of the author is scoped to the organization, and its join rows
 are left alone.
 
-The validators (`title`'s `NotEmpty()`) run on the fields an input sets
-before any statement: `createPost` with an empty title is `BAD_USER_INPUT`,
-naming `title`, whatever its IDs name.
+The validators (`title`'s `NotEmpty()`) run on the fields an input sets in
+its `Setters`, before any statement: `createPost` with an empty title is
+`BAD_USER_INPUT`, naming `title`, whatever its IDs name. An ID that names no
+row the caller may read fails the write with a `*velox.EdgeError`, which
+`veloxgql.ErrorPresenter` shows as `NOT_FOUND` naming the edge.
 
 **One transaction per operation.** `veloxgql.NewExtension` runs a mutation
 operation in one transaction, and rolls it back when the response has any
 error. In `mutation { a: createLabel(…) b: createLabel(…) }`, when `b` fails
 (its name is taken), `a`'s row is rolled back too, and `data` is `null`.
-Inside that transaction each `Create` and `Update` runs in a savepoint, so
-its error rolls back its own writes at once. A resolver that returns the error,
-as this example's do, fails the operation, and the transaction rolls back
-all of it; a resolver that swallows the error keeps the operation's other
-writes, and the operation commits. A `Create` or `Update` called outside a
-server, or in an operation `WithTxFilter` leaves out, runs in a transaction
+Inside that transaction an insert or an update with edge setters runs in a
+savepoint, so an edge's error rolls back its row at once; one of columns
+alone is one statement. A resolver that returns the error, as this
+example's do, fails the operation, and the transaction rolls back all of
+it; a resolver that swallows the error keeps the operation's other writes,
+and the operation commits. Outside a server, or in an operation
+`WithTxFilter` leaves out, a write with edge setters runs in a transaction
 of its own, so it is never half-written either.
 
-**The row returned.** `Create` returns the row as written. `Update`
-reads its row back by its key without the policies, the organization scope
-among them: the
-caller just wrote it, so an update that moves the row out of the caller's
-Read view still returns it.
+**The row returned.** `createX` returns the row as written. `update` reads
+its row back by its key without the policies, the organization scope among
+them: the caller just wrote it, so an update that moves the row out of the
+caller's Read view still returns it.
 
 **Write permission.** An update that changes only edges (`addTagIDs` and
-nothing else) still needs permission to write the row: it is checked under
-the same scope as an `UPDATE` of it, the organization and the Read and Write
-policies, so no edge changes on a row the caller cannot write.
+nothing else) still needs permission to write the row: velox reads the rows
+it matches under the organization and the Read and Write policies before it
+writes their edges, so no edge changes on a row the caller cannot write.
 
 **MySQL** needs `clientFoundRows=true` in its DSN
-(`user:pass@tcp(host)/db?parseTime=true&clientFoundRows=true`). `updateX`
+(`user:pass@tcp(host)/db?parseTime=true&clientFoundRows=true`). `update`
 checks the `UPDATE`'s row count, and without it MySQL counts only the rows
 whose values changed, so an update that sets a field to its current value
 would read as `NOT_FOUND`.

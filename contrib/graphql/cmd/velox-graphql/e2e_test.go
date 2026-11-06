@@ -1455,16 +1455,21 @@ func TestOwnerTags(t *testing.T) {
 
 // TestCategoryTwin: Category.twin is a bidirectional self-edge, a O2O with no
 // inverse whose key, category_twin, is on the row. CreateCategory with a
-// twinID sets the new row's key to the twin, and the twin's to the new row:
-// the mirror velox writes, which the where inputs then see on both rows.
+// twinID, whose Setters sets the key's column, sets the new row's key to the
+// twin, and the twin's to the new row: the mirror velox writes, which the
+// where inputs then see on both rows.
 func TestCategoryTwin(t *testing.T) {
 	ctx, db := open(t)
 	c1 := &gen.Category{Title: "c1"}
 	if err := db.Insert(c1).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	c2, err := (&gen.CreateCategoryInput{Title: "c2", TwinID: ptr(catID(c1.ID))}).Create(ctx, nil)
+	set, err := (&gen.CreateCategoryInput{Title: "c2", TwinID: ptr(catID(c1.ID))}).Setters()
 	if err != nil {
+		t.Fatal(err)
+	}
+	c2 := new(gen.Category)
+	if err := db.Insert(c2).Set(set...).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	twin := func(id int64) string {

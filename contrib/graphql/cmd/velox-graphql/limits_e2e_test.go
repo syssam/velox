@@ -323,8 +323,8 @@ func (Remark) Policy() velox.Policy { return orgPolicy() }
 func (Remark) Hooks() []velox.Hook  { return orgHooks() }
 `
 
-// e2eLimitsResolvers are the resolvers TestLimitsServed uses, one line each;
-// gqlgen stubs the others.
+// e2eLimitsResolvers are the resolvers TestLimitsServed uses, one line each,
+// on e2eLimitsWrite's create and update; gqlgen stubs the others.
 const e2eLimitsResolvers = `package graph
 
 import (
@@ -352,12 +352,12 @@ func (r *queryResolver) Posts(ctx context.Context, after *veloxgql.Cursor, first
 
 // CreatePost is the resolver for the createPost field.
 func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
-	return input.Create(ctx, nil)
+	return create(ctx, new(gen.Post), input.Setters)
 }
 
 // UpdatePost is the resolver for the updatePost field.
 func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
-	return input.Update(ctx, id)
+	return update(ctx, id, "Post", gen.Posts.ID, input.Setters)
 }
 
 // Things is the resolver for the things field.
@@ -367,22 +367,22 @@ func (r *queryResolver) Things(ctx context.Context, after *veloxgql.Cursor, firs
 
 // CreateThing is the resolver for the createThing field.
 func (r *mutationResolver) CreateThing(ctx context.Context, input gen.CreateThingInput) (*gen.Thing, error) {
-	return input.Create(ctx, nil)
+	return create(ctx, new(gen.Thing), input.Setters)
 }
 
 // UpdateThing is the resolver for the updateThing field.
 func (r *mutationResolver) UpdateThing(ctx context.Context, id string, input gen.UpdateThingInput) (*gen.Thing, error) {
-	return input.Update(ctx, id)
+	return update(ctx, id, "Thing", gen.Things.ID, input.Setters)
 }
 
 // CreateAcct is the resolver for the createAcct field.
 func (r *mutationResolver) CreateAcct(ctx context.Context, input gen.CreateAcctInput) (*gen.Acct, error) {
-	return input.Create(ctx, nil)
+	return create(ctx, new(gen.Acct), input.Setters)
 }
 
 // UpdateAcct is the resolver for the updateAcct field.
 func (r *mutationResolver) UpdateAcct(ctx context.Context, id string, input gen.UpdateAcctInput) (*gen.Acct, error) {
-	return input.Update(ctx, id)
+	return update(ctx, id, "Acct", gen.Accts.ID, input.Setters)
 }
 
 // Docs is the resolver for the docs field.
@@ -392,7 +392,7 @@ func (r *queryResolver) Docs(ctx context.Context, after *veloxgql.Cursor, first 
 
 // UpdateDoc is the resolver for the updateDoc field.
 func (r *mutationResolver) UpdateDoc(ctx context.Context, id string, input gen.UpdateDocInput) (*gen.Doc, error) {
-	return input.Update(ctx, id)
+	return update(ctx, id, "Doc", gen.Docs.ID, input.Setters)
 }
 
 // Members is the resolver for the members field.
@@ -412,12 +412,12 @@ func (r *queryResolver) Items(ctx context.Context, after *veloxgql.Cursor, first
 
 // CreateItem is the resolver for the createItem field.
 func (r *mutationResolver) CreateItem(ctx context.Context, input gen.CreateItemInput) (*gen.Item, error) {
-	return input.Create(ctx, nil)
+	return create(ctx, new(gen.Item), input.Setters)
 }
 
 // UpdateItem is the resolver for the updateItem field.
 func (r *mutationResolver) UpdateItem(ctx context.Context, id string, input gen.UpdateItemInput) (*gen.Item, error) {
-	return input.Update(ctx, id)
+	return update(ctx, id, "Item", gen.Items.ID, input.Setters)
 }
 
 // Flags is the resolver for the flags field.
@@ -432,23 +432,23 @@ func (r *queryResolver) Pins(ctx context.Context, after *veloxgql.Cursor, first 
 
 // CreateFlag is the resolver for the createFlag field.
 func (r *mutationResolver) CreateFlag(ctx context.Context, input gen.CreateFlagInput) (*gen.Flag, error) {
-	return input.Create(ctx, nil)
+	return create(ctx, new(gen.Flag), input.Setters)
 }
 
 // UpdateFlag is the resolver for the updateFlag field.
 func (r *mutationResolver) UpdateFlag(ctx context.Context, id string, input gen.UpdateFlagInput) (*gen.Flag, error) {
-	return input.Update(ctx, id)
+	return update(ctx, id, "Flag", gen.Flags.ID, input.Setters)
 }
 
 // CreatePage is the resolver for the createPage field: it sets the slug the
 // input leaves out.
 func (r *mutationResolver) CreatePage(ctx context.Context, input gen.CreatePageInput) (*gen.Page, error) {
-	return input.Create(ctx, &gen.Page{Slug: strings.ToLower(input.Title)})
+	return create(ctx, &gen.Page{Slug: strings.ToLower(input.Title)}, input.Setters)
 }
 
 // UpdatePage is the resolver for the updatePage field.
 func (r *mutationResolver) UpdatePage(ctx context.Context, id string, input gen.UpdatePageInput) (*gen.Page, error) {
-	return input.Update(ctx, id)
+	return update(ctx, id, "Page", gen.Pages.ID, input.Setters)
 }
 
 // Mutation returns MutationResolver implementation.
@@ -461,9 +461,82 @@ type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
 `
 
+// e2eLimitsWrite is the application's create and update, which its mutation
+// resolvers call with their inputs' Setters, in a file gqlgen leaves alone.
+const e2eLimitsWrite = `package graph
+
+import (
+	"context"
+
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/vektah/gqlparser/v2/gqlerror"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+)
+
+// create inserts x with the setters an input gives, on the DB in ctx, in
+// the mutation's transaction, and returns it as inserted.
+func create[E any, PE velox.Entity[E]](ctx context.Context, x PE, setters func() ([]velox.Setter[E], error)) (PE, error) {
+	set, err := setters()
+	if err != nil {
+		return nil, err
+	}
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// update writes the setters an input gives to the row of E whose ID is id, a
+// node of the GraphQL type typ, and returns the row as written, read without
+// the Read policy. The UPDATE is under E's policies: a row it does not change
+// is NOT_FOUND. With nothing to set, the row is read under the Read policy.
+func update[E any, PE velox.Entity[E]](ctx context.Context, id, typ string, key velox.NumberCol[E, int64], setters func() ([]velox.Setter[E], error)) (*E, error) {
+	set, err := setters()
+	if err != nil {
+		return nil, err
+	}
+	k, err := veloxgql.DecodeID[int64](id, typ)
+	if err != nil {
+		return nil, err
+	}
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	read := ctx
+	if len(set) > 0 {
+		n, err := db.Update[E, PE]().Where(key.EQ(k)).Set(set...).Exec(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			return nil, notFound(ctx, typ)
+		}
+		read = velox.WithoutPolicy(ctx, "graphql: the row this update wrote")
+	}
+	x, err := db.Query[E, PE]().Where(key.EQ(k)).One(read)
+	if velox.IsNotFound(err) {
+		return nil, notFound(ctx, typ)
+	}
+	return x, err
+}
+
+// notFound is the NOT_FOUND error of an ID that names no node of the
+// GraphQL type typ the request may change.
+func notFound(ctx context.Context, typ string) error {
+	return &gqlerror.Error{Path: graphql.GetPath(ctx), Message: "no " + typ + " has this ID", Extensions: map[string]any{"code": veloxgql.CodeNotFound}}
+}
+`
+
 // e2eLimitsSDL is the application's own schema: the mutations it serves,
-// which velox-graphql leaves to it, each a resolver calling its input's
-// Create or Update.
+// which velox-graphql leaves to it, each a resolver writing its input's
+// Setters.
 const e2eLimitsSDL = `type Mutation {
   createPost(input: CreatePostInput!): Post!
   updatePost(id: ID!, input: UpdatePostInput!): Post!
@@ -599,10 +672,14 @@ func TestRequiredEdgeHidden(t *testing.T) {
 	if err := s.db.QueryRow("SELECT title FROM posts WHERE id = 2").Scan(&title); err != nil || title != "new" {
 		t.Errorf("the update did not commit: %q %v", title, err)
 	}
-	// A hidden member cannot be named on create.
+	// memberID is the key on the post's row, a column's value: a hidden
+	// member is set, and no policy checks it; the foreign key checks it
+	// exists. The post reads its member as null.
 	hidden := veloxgql.EncodeID("Member", 2)
-	if got := s.do(fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q}) { title } }", "x", hidden)); !strings.Contains(got, "NOT_FOUND") {
-		t.Errorf("a hidden member on create: %s", got)
+	s.want("a hidden member on create", fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q}) { title member { name } } }", "x", hidden),
+		'{"data":{"createPost":{"title":"x","member":null}}}')
+	if got := s.do(fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q}) { title } }", "y", veloxgql.EncodeID("Member", 9))); !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "foreign key constraint violated") {
+		t.Errorf("a missing member on create: %s", got)
 	}
 }
 
@@ -685,24 +762,22 @@ func TestEmptyJSONLiteral(t *testing.T) {
 	}
 }
 
-// TestExplicitNullRefused: a create that gives a Nillable field with a Default
-// null is refused, not silently given the Default, literal or variable; left out,
-// it has the Default; an update stores NULL by clear<Field>.
-func TestExplicitNullRefused(t *testing.T) {
+// TestExplicitNullDefault: a null is a field not given, as in entgql: a
+// create that gives a Nillable field with a Default null, literal or
+// variable, has the Default, as one that leaves it out; an update stores
+// NULL by clear<Field>.
+func TestExplicitNullDefault(t *testing.T) {
 	s := serve(t)
 	const q = 'mutation ($i: CreateThingInput!) { createThing(input: $i) { n } }'
 	const qn = 'mutation ($n: Int) { createThing(input: {b: "", j: [], n: $n}) { n } }'
 	for name, got := range map[string]string{
-		"literal":         s.do('mutation { createThing(input: {b: "", j: [], n: null}) { n } }'),
-		"whole variable":  s.doVars(q, map[string]any{"i": map[string]any{"b": "", "j": []any{}, "n": nil}}),
-		"one variable":    s.doVars(qn, map[string]any{"n": nil}),
+		"literal":        s.do('mutation { createThing(input: {b: "", j: [], n: null}) { n } }'),
+		"whole variable": s.doVars(q, map[string]any{"i": map[string]any{"b": "", "j": []any{}, "n": nil}}),
+		"one variable":   s.doVars(qn, map[string]any{"n": nil}),
 	} {
-		if !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "CreateThingInput.n: invalid value: null") {
+		if got != '{"data":{"createThing":{"n":7}}}' {
 			t.Errorf("%s: %s", name, got)
 		}
-	}
-	if n := s.count("things"); n != 0 {
-		t.Errorf("%d rows after the refusals", n)
 	}
 	s.want("left out", 'mutation { createThing(input: {b: "", j: []}) { n } }', '{"data":{"createThing":{"n":7}}}')
 	if got := s.doVars(qn, nil); got != '{"data":{"createThing":{"n":7}}}' {
@@ -752,9 +827,11 @@ func TestForeignKeyFilterHidden(t *testing.T) {
 		'{"data":{"docs":{"edges":[{"node":{"title":"d1","member":{"name":"seen"}}},{"node":{"title":"d4","member":null}},{"node":{"title":"d5","member":null}}]}}}')
 }
 
-// TestUpdateNullClears: an update that gives null to a nullable field clears it, literal
-// or variable, as a client means by it; clear<Field> stays. Left out, it keeps it.
-func TestUpdateNullClears(t *testing.T) {
+// TestUpdateNullKeeps: an update that gives null to a nullable field, literal
+// or variable, keeps it, as one that leaves it out does: a null is a field not
+// given, as in entgql. clear<Field> clears it, and wins over a value given
+// with it.
+func TestUpdateNullKeeps(t *testing.T) {
 	s := serve(t)
 	const q = 'mutation ($id: ID!, $i: UpdateItemInput!) { updateItem(id: $id, input: $i) { sNil } }'
 	const qn = 'mutation ($id: ID!, $n: String) { updateItem(id: $id, input: {sNil: $n}) { sNil } }'
@@ -767,51 +844,48 @@ func TestUpdateNullClears(t *testing.T) {
 	}
 	s.want("create", 'mutation { createItem(input: {sNil: "a"}) { sNil } }', '{"data":{"createItem":{"sNil":"a"}}}')
 	const cleared = '{"data":{"updateItem":{"sNil":null}}}'
-	s.want("left out", fmt.Sprintf("mutation { updateItem(id: %q, input: {}) { sNil } }", id), '{"data":{"updateItem":{"sNil":"a"}}}')
-	if got := s.doVars(qn, map[string]any{"id": id}); got != '{"data":{"updateItem":{"sNil":"a"}}}' {
+	const kept = '{"data":{"updateItem":{"sNil":"a"}}}'
+	s.want("left out", fmt.Sprintf("mutation { updateItem(id: %q, input: {}) { sNil } }", id), kept)
+	if got := s.doVars(qn, map[string]any{"id": id}); got != kept {
 		t.Errorf("a variable left out: %s", got)
 	}
-	s.want("literal", fmt.Sprintf("mutation { updateItem(id: %q, input: {sNil: null}) { sNil } }", id), cleared)
-	set()
-	if got := s.doVars(q, map[string]any{"id": id, "i": map[string]any{"sNil": nil}}); got != cleared {
+	s.want("literal", fmt.Sprintf("mutation { updateItem(id: %q, input: {sNil: null}) { sNil } }", id), kept)
+	if got := s.doVars(q, map[string]any{"id": id, "i": map[string]any{"sNil": nil}}); got != kept {
 		t.Errorf("whole variable: %s", got)
 	}
-	set()
-	if got := s.doVars(qn, map[string]any{"id": id, "n": nil}); got != cleared {
+	if got := s.doVars(qn, map[string]any{"id": id, "n": nil}); got != kept {
 		t.Errorf("one variable: %s", got)
 	}
-	set()
 	s.want("clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {clearSNil: true}) { sNil } }", id), cleared)
 	set()
 	s.want("null with clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {sNil: null, clearSNil: true}) { sNil } }", id), cleared)
 	set()
-	if got := s.do(fmt.Sprintf('mutation { updateItem(id: %q, input: {sNil: "b", clearSNil: true}) { sNil } }', id)); !strings.Contains(got, "BAD_USER_INPUT") {
-		t.Errorf("a value with clear: %s", got)
-	}
+	s.want("a value with clear", fmt.Sprintf('mutation { updateItem(id: %q, input: {sNil: "b", clearSNil: true}) { sNil } }', id), cleared)
 	// clear<Field> is not a required field's: its null is a field not given.
 	thing := veloxgql.EncodeID("Thing", 1)
 	s.want("the thing", 'mutation { createThing(input: {b: "QQ==", j: []}) { b } }', '{"data":{"createThing":{"b":"QQ=="}}}')
 	s.want("a required field", fmt.Sprintf("mutation { updateThing(id: %q, input: {b: null}) { b } }", thing), '{"data":{"updateThing":{"b":"QQ=="}}}')
 }
 
-// TestUpdateNullEdgeRefused: a null given to an edge's <edge>ID is refused, naming
-// clear<Edge>, literal or variable: clearing an edge unlinks a row, so it is said.
-func TestUpdateNullEdgeRefused(t *testing.T) {
+// TestUpdateNullEdgeKeeps: a null given to an edge's <edge>ID keeps the edge,
+// as a field not given; clear<Edge> unlinks it.
+func TestUpdateNullEdgeKeeps(t *testing.T) {
 	s := serve(t)
 	doc := veloxgql.EncodeID("Doc", 1)
-	if got := s.do(fmt.Sprintf("mutation { updateDoc(id: %q, input: {memberID: null}) { title } }", doc)); !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "clearMember") {
-		t.Errorf("an edge: %s", got)
-	}
+	s.want("null", fmt.Sprintf("mutation { updateDoc(id: %q, input: {memberID: null}) { member { name } } }", doc), '{"data":{"updateDoc":{"member":{"name":"seen"}}}}')
+	s.want("clear", fmt.Sprintf("mutation { updateDoc(id: %q, input: {clearMember: true}) { member { name } } }", doc), '{"data":{"updateDoc":{"member":null}}}')
 }
 
 // TestNullBytesGoType: a Bytes field of a named Go type reads NULL as null, and the page
-// holding the row keeps its data; a value reads as written.
+// holding the row keeps its data; a value reads as written, and clearIp
+// clears it.
 func TestNullBytesGoType(t *testing.T) {
 	s := serve(t)
 	s.want("null", 'mutation { createItem(input: {sNil: "a"}) { ip } }', '{"data":{"createItem":{"ip":null}}}')
 	s.want("value", 'mutation { createItem(input: {ip: "AQIDBA=="}) { ip } }', '{"data":{"createItem":{"ip":"AQIDBA=="}}}')
 	s.want("the page", "{ items { edges { node { ip } } } }", '{"data":{"items":{"edges":[{"node":{"ip":null}},{"node":{"ip":"AQIDBA=="}}]}}}')
-	s.want("clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {ip: null}) { ip } }", veloxgql.EncodeID("Item", 2)), '{"data":{"updateItem":{"ip":null}}}')
+	s.want("null keeps", fmt.Sprintf("mutation { updateItem(id: %q, input: {ip: null}) { ip } }", veloxgql.EncodeID("Item", 2)), '{"data":{"updateItem":{"ip":"AQIDBA=="}}}')
+	s.want("clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {clearIp: true}) { ip } }", veloxgql.EncodeID("Item", 2)), '{"data":{"updateItem":{"ip":null}}}')
 }
 
 // TestForeignKeyFilterOtherScope: a foreign key to a row of another org reads as
@@ -972,7 +1046,8 @@ func TestCreateDefaultServed(t *testing.T) {
 }
 
 // TestJSONListsServed: a JSON field of []string, []int, []float64 or []bool is
-// a list of the scalar, both ways; an empty list stores empty, and a clear NULL.
+// a list of the scalar, both ways; an empty list stores empty, a clear NULL,
+// and a null nothing.
 func TestJSONListsServed(t *testing.T) {
 	s := serve(t)
 	s.want("create", 'mutation { createFlag(input: {tags: ["a", "b"], nums: [1, 2], fs: [1.5], bs: [true, false]}) { tags nums fs bs } }',
@@ -981,7 +1056,7 @@ func TestJSONListsServed(t *testing.T) {
 	id := veloxgql.EncodeID("Flag", 1)
 	s.want("update to empty", fmt.Sprintf('mutation { updateFlag(id: %q, input: {tags: [], nums: [3]}) { tags nums } }', id), '{"data":{"updateFlag":{"tags":[],"nums":[3]}}}')
 	s.want("clear", fmt.Sprintf('mutation { updateFlag(id: %q, input: {clearTags: true}) { tags } }', id), '{"data":{"updateFlag":{"tags":null}}}')
-	s.want("null clears", fmt.Sprintf('mutation { updateFlag(id: %q, input: {fs: null}) { fs } }', id), '{"data":{"updateFlag":{"fs":null}}}')
+	s.want("null keeps", fmt.Sprintf('mutation { updateFlag(id: %q, input: {fs: null}) { fs } }', id), '{"data":{"updateFlag":{"fs":[1.5]}}}')
 	got := s.do('{ __type(name: "Flag") { fields { name type { kind ofType { kind ofType { kind ofType { name } } } } } } }')
 	for _, want := range []string{'{"name":"tags","type":{"kind":"LIST","ofType":{"kind":"NON_NULL","ofType":{"kind":"SCALAR","ofType":null}}}}', '{"name":"nums","type":{"kind":"NON_NULL","ofType":{"kind":"LIST","ofType":{"kind":"NON_NULL","ofType":{"name":"Int"}}}}}'} {
 		if !strings.Contains(got, want) {
@@ -1159,6 +1234,7 @@ func TestLimitsServed(t *testing.T) {
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/app.graphql":         e2eLimitsSDL,
 		"graph/schema.resolvers.go": e2eLimitsResolvers,
+		"graph/write.go":            e2eLimitsWrite,
 		"limits_test.go":            strings.NewReplacer("'", "`", "~", "'", "_ context,", "_ context.Context,", `"database/sql"`, "\"context\"\n\t\"database/sql\"").Replace(e2eLimitsRun),
 	}, true)
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
@@ -1177,7 +1253,7 @@ func TestLimitsServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestRequiredEdgeHidden", "TestScopeKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullClears", "TestUpdateNullEdgeRefused", "TestNullBytesGoType", "TestForeignKeyFilterOtherScope", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit", "TestCreateDefaultServed", "TestJSONListsServed", "TestNullableOrderServed", "TestNullableViaServed", "TestSkippedFieldSetByResolver"} {
+	for _, name := range []string{"TestRequiredEdgeHidden", "TestScopeKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullDefault", "TestForeignKeyFilterHidden", "TestUpdateNullKeeps", "TestUpdateNullEdgeKeeps", "TestNullBytesGoType", "TestForeignKeyFilterOtherScope", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit", "TestCreateDefaultServed", "TestJSONListsServed", "TestNullableOrderServed", "TestNullableViaServed", "TestSkippedFieldSetByResolver"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

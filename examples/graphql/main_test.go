@@ -511,8 +511,8 @@ func TestBatchInMutation(t *testing.T) {
 		]}}}}}`,
 		stmts: []string{
 			viewerCheck + ` [1 1]`,
-			`SELECT COUNT(*) FROM "tags" WHERE "id" IN (?) [1]`,
 			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at") VALUES (?, ?, ?, ?, ?, ?) RETURNING "id" [1 1 Zeta draft 0 <nil>]`,
+			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT ? [1 1]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1]`,
 			// The author, the returned row's edge, alone; then its posts and
 			// their tags, a batch each.
@@ -892,10 +892,10 @@ func captureLog(t *testing.T) *bytes.Buffer {
 
 // TestCreatePost creates an acme post with an author and two tags, one of
 // them named twice, which links once. The resolver checks that the viewer,
-// the author, is a user, as Create trusts x's own fields; each ID is checked
-// against what the caller may read before anything is written: one COUNT per
-// edge. status takes its Default, views, Optional, its zero value, and the
-// post is returned as written.
+// the author, is a user, as the insert trusts x's own fields; the tags' IDs
+// are checked against what the caller may read after the insert, in its
+// savepoint, before the join rows. status takes its Default, views,
+// Optional, its zero value, and the post is returned as written.
 func TestCreatePost(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
@@ -907,8 +907,8 @@ func TestCreatePost(t *testing.T) {
 		want: `{"data": {"createPost": {"title": "Epsilon", "status": "DRAFT", "author": {"name": "Brian"}, "tags": {"totalCount": 2}}}}`,
 		stmts: []string{
 			viewerCheck + ` [2 1]`,
-			`SELECT COUNT(*) FROM "tags" WHERE "id" IN (?, ?) [1 2]`,
 			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at") VALUES (?, ?, ?, ?, ?, ?) RETURNING "id" [1 2 Epsilon draft 0 <nil>]`,
+			`SELECT "id" FROM "tags" WHERE "id" IN (?, ?) LIMIT ? [1 2 2]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?), (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1 6 2]`,
 			// The selection, of the returned row alone: the author, and the
 			// tags' count, through the join table.
@@ -916,7 +916,7 @@ func TestCreatePost(t *testing.T) {
 			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?)) [6]`,
 		},
 	})
-	// Without a viewer, the resolver refuses before Create; and the input has
+	// Without a viewer, the resolver refuses before the insert; and the input has
 	// no authorID, so a client cannot name another author.
 	s.do(t, request{
 		org:   "1",
@@ -924,7 +924,7 @@ func TestCreatePost(t *testing.T) {
 		want: `{"errors": [{"message": "a viewer is required: the X-User header", "path": ["createPost"], "extensions": {"code": "UNAUTHENTICATED"}}],
 			"data": null}`,
 	})
-	// A viewer that names no user is refused before Create, which would
+	// A viewer that names no user is refused before the insert, which would
 	// insert the key as it is.
 	s.do(t, request{
 		org:   "1",
@@ -946,7 +946,7 @@ func TestCreatePost(t *testing.T) {
 // TestUpdatePost: Ada, post 1's author, clears its publishedAt and removes
 // one of its two tags, which she may read, once the resolver has checked
 // that she wrote it. An empty title fails Post's NotEmpty validator, named by
-// its input field, before any statement of Update.
+// its input field, in Setters, before any write.
 func TestUpdatePost(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
@@ -956,6 +956,8 @@ func TestUpdatePost(t *testing.T) {
 		want:  `{"data": {"updatePost": {"title": "Alpha", "publishedAt": null, "tags": {"edges": [{"node": {"name": "graphql"}}]}}}}`,
 		stmts: []string{
 			authorCheck + ` [1 1 2]`,
+			// The keys of the rows the update writes the edges of.
+			`SELECT "id" FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`,
 			`UPDATE "posts" SET "published_at" = ? WHERE "id" = ? AND "org_id" = ? [<nil> 1 1]`,
 			// The tags to remove the caller may read, then their join rows.
 			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT ? [1 1]`,
@@ -1052,7 +1054,7 @@ func TestUnlinkOtherOrg(t *testing.T) {
 		query: `mutation { updateLabel(id: "` + label1 + `", input: {removePostIDs: ["` + post5 + `"]}) { name } }`,
 		want:  `{"data": {"updateLabel": {"name": "go"}}}`,
 		stmts: []string{
-			`SELECT 1 FROM "tags" WHERE "id" = ? LIMIT ? [1 1]`,
+			`SELECT "id" FROM "tags" WHERE "id" = ? [1]`,
 			// Post 5 is not acme's: no join row is deleted.
 			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT ? [5 1 1]`,
 			selTags + ` WHERE "id" = ? LIMIT ? [1 2]`,
@@ -1063,11 +1065,11 @@ func TestUnlinkOtherOrg(t *testing.T) {
 		query: `mutation { updateLabel(id: "` + label1 + `", input: {clearPosts: true}) { name } }`,
 		want:  `{"data": {"updateLabel": {"name": "go"}}}`,
 		stmts: []string{
-			`SELECT 1 FROM "tags" WHERE "id" = ? LIMIT ? [1 1]`,
+			`SELECT "id" FROM "tags" WHERE "id" = ? [1]`,
 			// The label's join rows a page at a time, the posts of them
 			// acme may read (the join table has no scope of its own, so
 			// post 5's row is among them), and only their join rows.
-			`SELECT "post_id", "tag_id" FROM "post_tags" WHERE "tag_id" = ? ORDER BY "tag_id", "post_id" LIMIT ? [1 100]`,
+			`SELECT "post_id", "tag_id" FROM "post_tags" WHERE "tag_id" = ? ORDER BY "tag_id", "post_id" LIMIT ? [1 500]`,
 			`SELECT "id" FROM "posts" WHERE "id" IN (?, ?) AND "org_id" = ? LIMIT ? [1 5 1 2]`,
 			`DELETE FROM "post_tags" WHERE "tag_id" = ? AND "post_id" IN (?) [1 1]`,
 			selTags + ` WHERE "id" = ? LIMIT ? [1 2]`,
@@ -1090,6 +1092,31 @@ func TestUnlinkOtherOrg(t *testing.T) {
 			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
 			tagsOf("?") + ` [1 101]`,
 		},
+	})
+}
+
+// TestLinkOtherOrg: acme cannot link a new label to globex's post 5, which it
+// cannot read: the insert's edge fails with a *velox.EdgeError, which the
+// presenter shows as NOT_FOUND naming the edge, and the label inserted
+// before it is rolled back with it.
+func TestLinkOtherOrg(t *testing.T) {
+	s := newServer(t)
+	s.do(t, request{
+		org:   "1",
+		query: `mutation { createLabel(input: {name: "rust", rank: 4, postIDs: ["` + post5 + `"]}) { id } }`,
+		want: `{"errors": [{"message": "edge posts: no node has this ID", "path": ["createLabel"], "extensions": {"code": "NOT_FOUND"}}],
+			"data": null}`,
+		stmts: []string{
+			`INSERT INTO "tags" ("name", "rank") VALUES (?, ?) RETURNING "id" [rust 4]`,
+			// Post 5 is not acme's: no join row is inserted.
+			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT ? [5 1 1]`,
+		},
+	})
+	s.do(t, request{
+		org:   "1",
+		query: `{ labels(first: 10, where: {name: "rust"}) { totalCount } }`,
+		want:  `{"data": {"labels": {"totalCount": 0}}}`,
+		stmts: []string{`SELECT COUNT(*) FROM "tags" WHERE "name" = ? [rust]`},
 	})
 }
 
@@ -1206,8 +1233,9 @@ func TestCreateUserDirective(t *testing.T) {
 // field as the GraphQL spec has it: a variable's by its path, an inline
 // literal's by its locations. Only velox's own validation errors name the
 // input field in their message, with BAD_USER_INPUT. Neither runs a
-// statement of Create: velox's validators run before any, so an empty title
-// is the validator's error after only the resolver's check of the viewer.
+// statement of the insert: the input's Setters runs velox's validators before
+// any, so an empty title is the validator's error after only the resolver's
+// check of the viewer.
 // (gqlgen accepts a number for a String variable, as "3": its leniency.)
 func TestMutationInputShape(t *testing.T) {
 	s := newServer(t)

@@ -166,7 +166,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion14", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion15", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -198,18 +198,19 @@
 //
 // velox-graphql writes inputs, as entgql does, not mutations: the application
 // declares its Mutation type in a schema file of its own, beside velox.graphql,
-// and each resolver calls the generated input's method. For an entity with
-// graphql.MutationCreate, its file has the input type Create<T>Input, in the
-// SDL and in Go, and its method
+// and each resolver writes the row with velox, from the setters the generated
+// input gives. For an entity with graphql.MutationCreate, its file has the
+// input type Create<T>Input, in the SDL and in Go, and with
+// graphql.MutationUpdate, Update<T>Input; each has one method:
 //
-//	func (in *Create<T>Input) Create(ctx context.Context, x *<T>) (*<T>, error)
+//	func (in *Create<T>Input) Setters() ([]velox.Setter[<T>], error)
+//	func (in *Update<T>Input) Setters() ([]velox.Setter[<T>], error)
 //
-// and with graphql.MutationUpdate, Update<T>Input and
-//
-//	func (in *Update<T>Input) Update(ctx context.Context, id string, set ...velox.Setter[<T>]) (*<T>, error)
-//
-// The application names its mutations, their arguments and their result, and
-// writes the resolvers:
+// Setters is plain generated Go, as entgql's Mutate is: one column setter
+// for each field given, one relation handle's Add, Remove or Clear for each
+// edge field given, and a last call to gqlimpl.Checked, which runs the
+// columns' validators. It does no I/O. The application names its
+// mutations, their arguments and their result, and writes the resolvers:
 //
 //	type Mutation {
 //	  createPost(input: CreatePostInput!): Post!
@@ -218,25 +219,49 @@
 //	}
 //
 //	func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
-//		return input.Create(ctx, &gen.Post{AuthorID: viewer(ctx)})
+//		set, err := input.Setters()
+//		if err != nil {
+//			return nil, err
+//		}
+//		db, err := veloxgql.DBFromContext(ctx)
+//		if err != nil {
+//			return nil, err
+//		}
+//		x := &gen.Post{AuthorID: viewer(ctx)}
+//		if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+//			return nil, err
+//		}
+//		return x, nil
 //	}
 //
 //	func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
-//		return input.Update(ctx, id)
+//		key, err := veloxgql.DecodeID[int64](id, "Post")
+//		...
+//		set, err := input.Setters()
+//		...
+//		n, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(key)).Set(set...).Exec(ctx)
+//		...
+//		return db.Query[gen.Post]().Where(gen.Posts.ID.EQ(key)).One(velox.WithoutPolicy(ctx, "the row this update wrote"))
 //	}
+//
+// examples/graphql's update helper is the whole of it: n 0 is NOT_FOUND, a
+// row the caller may not change or that does not exist, and an input that
+// sets nothing reads the row under the Read policy instead. The re-read
+// without the policies returns the row as written, even when the update
+// took it out of what the caller may read; its UPDATE was scoped by the
+// Read policy, so the caller could read the row before it wrote it. On
+// MySQL the DSN needs clientFoundRows=true for n: without it MySQL counts
+// only changed rows, and an UPDATE that changes nothing counts 0.
 //
 // A Sensitive field is in the inputs, write-only: no type, where input or
 // order has it, and the input's String and GoString leave it out, so a
 // logged input does not show it. Where the client should not choose its
 // value, as a password's hash, graphql.Skip(SkipMutationCreateInput,
-// SkipMutationUpdateInput) leaves it out, and the resolver sets it, as
-// examples/graphql's createUser does from a password argument:
+// SkipMutationUpdateInput) leaves it out, and the resolver sets it, on the
+// row to insert or as a setter of its own, as examples/graphql's createUser
+// and updateUser do from a password argument:
 //
-//	hash, err := hashPassword(ctx, password)
-//	if err != nil {
-//		return nil, err
-//	}
-//	return input.Create(ctx, &gen.User{PasswordHash: hash})
+//	set = append(set, gen.Users.PasswordHash.Set(hash))
 //
 // No delete is generated: deleting a row is one velox statement, which the
 // application writes with the checks it wants (examples/graphql's deletePost):
@@ -253,36 +278,37 @@
 // column, so both are deleted; the cascade covers both where each column's
 // foreign key has it.
 //
-// Create sets the input's fields on x, a nil x being a new row, and inserts
-// it: the fields the input does not set are inserted as the resolver set them
-// on x. A field the input sets overwrites x's, whatever the resolver set
-// there: to own a field server-side, leave it out of the input with
+// In a Go input a required field is a value, an optional one a pointer, an
+// ID a string, a list of IDs a []string and a clear field a bool. A nil
+// pointer or list is a field not given, and Setters gives it no setter. A
+// null is a field not given too, as in entgql: only clear<Field> or
+// clear<Edge> sets NULL or unlinks. A clear field wins over its field: with
+// both, the field is cleared. A create input's required fields are always
+// set. An Immutable field is only in the create input.
+//
+// A create's setters are stored in x, the row the resolver passes to
+// db.Insert, before the insert, so a field the input gives overwrites x's:
+// to own a field server-side, leave it out of the input with
 // graphql.Skip(graphql.SkipMutationCreateInput) (SkipMutationUpdateInput for
-// an update), or set it in a velox.Hook. x's own fields, its foreign keys
-// included, are trusted: Create checks the input's IDs against what the
-// caller may read, and not x's, which the resolver checks if it must. A field
+// an update), or set it in a velox.Hook. A field the input does not give
+// keeps x's value, or takes the field's Default. x's own fields, its foreign
+// keys included, are trusted: the resolver checks them if it must. A field
 // the create input leaves out that the schema requires, not Optional, not
 // Nillable and with no Default, would be inserted as its zero value, "" in a
 // NOT NULL column, so the resolver, which is where entgql users set it, sets
 // it on x:
 //
-//	return input.Create(ctx, &gen.Page{Slug: slugify(input.Title)})
+//	x := &gen.Page{Slug: slugify(input.Title)}
 //
 // A velox.Hook, which runs before the insert's validators, may set it instead,
 // as a tenancy mixin's hook sets its column; with neither, the zero value is
-// stored. Create's godoc names such a field unless the schema leaves it out
-// explicitly, with Skip(SkipMutationCreateInput) or CreateInput(false): that
-// says the application or a hook sets it. A foreign key whose edge's create
-// input is skipped is named. A validator's error on such a field is
-// the resolver's, not the client's: it names no input field. Create changes x
-// even when it fails. Update applies the input's fields and set, the
-// resolver's own setters, such as an updated_by the client must not choose. A
-// setter of set wins over the input's field, or edge key, that sets the same
-// column: the input's setter is dropped, as an UPDATE sets a column once. The
-// validators run on both, apart, before any statement: an error on the input's
-// fields is BAD_USER_INPUT, named as the input names the field, and one on a
-// setter of set is velox's *velox.ValidationError as it is, the resolver's
-// error, not the client's.
+// stored. The create input's Setters godoc names such a field unless the
+// schema leaves it out explicitly, with Skip(SkipMutationCreateInput) or
+// CreateInput(false): that says the application or a hook sets it. A foreign
+// key whose edge's create input is skipped is named. An update's resolver
+// appends its own setters to the input's, such as an updated_by the client
+// must not choose; where both set a column, the UPDATE fails, so the
+// resolver drops the input's setter of that column first.
 //
 // A field with a Default, or a bool or number with
 // graphql.CreateDefault, is optional in the create input and stays non-null in
@@ -290,54 +316,33 @@
 // number that is not Nillable, as a Go struct's false could not be told from
 // unset, so CreateDefault(true) gives the create input active: Boolean! = true,
 // which gqlgen fills when the client leaves it out, and the column no Default.
-// A create input that gives a field with a Default
-// its zero value ("" or the zero time) is refused with BAD_USER_INPUT, unless the
-// Default is that zero value, since an
-// insert would store the Default in its place; an update stores it. So is a null
-// given to a Nillable field with a Default, literal or variable: leave it out
-// for the Default, or clear it with an update, as an insert
-// does not store NULL there. In an update input a field not given is left as
-// it is, and clear<Field> or a null given sets a nullable one to NULL:
-// updatePost(input: {publishedAt: null}) clears publishedAt, where entgql
-// ignores the null. A client that sends every field of a form, null for those
-// the user did not touch, clears them; it leaves them out instead. A null given to an
-// edge's <edge>ID is refused with BAD_USER_INPUT, naming clear<Edge>; a Required field
-// has no clear input, and its null is a field not given. Create and Update find
-// the null, which the Go input cannot hold, in the arguments of the field that
-// runs them, by the input's GraphQL type, through input objects and lists,
-// literals and variables alike: where the arguments give the input type once,
-// as a mutation's input argument does, its null is read; where they give it
-// more than once, in a list or in two arguments, a null on such a field is
-// refused with BAD_USER_INPUT naming clear<Field>, since it cannot tell which
-// one is this input's; where they give it not at all, as when Go code builds
-// the input, no field is null. Two cases remain: Go code that builds an input
-// of that type, in a field whose arguments hold one, reads the client's
-// explicit nulls of that one; and a value nested in a variable of another
-// input type is found only with the server's schema, which the Extension
-// keeps, so without it its nulls are not seen.
-// An edge is cleared, then
-// its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
-// its clear, or an ID both to add and to remove, is refused with
-// BAD_USER_INPUT; an ID to remove that the edge does not lead to is ignored,
-// and one to add that it already leads to is kept. An update with no field to
-// set sends no UPDATE, and checks its row with an Exists under the same scope
-// as one with fields (Writable): the Read and Write policies. Clearing or
-// removing children unlinks only those the caller may change; one the
-// child's Read or Write policy hides stays linked. Clearing a many-to-many
-// edge, or removing from it, deletes only the join rows to targets the caller
-// may read, under the target's Read policy; a link to one it hides stays.
+// A create input that gives a field with a Default its zero value ("" or the
+// zero time) is refused with BAD_USER_INPUT, unless the Default is that zero
+// value, since an insert would store the Default in its place; an update
+// stores it.
 //
 // An edge's inputs follow its foreign key. A required key that a hook fills,
 // such as a scope column (package scope: Fill), has its create input left out
 // with graphql.Skip(graphql.SkipMutationCreateInput) on the edge; the edge
-// stays in the type. A key on the entity's own row is set by <edge>ID. A key on the target's rows is re-pointed from the owner
-// by <edge>ID, <edge>IDs or add<Edge>IDs, but only a key that is nullable
-// and mutable: one that is never NULL always holds an owner, and one that is
-// immutable cannot move, so the owner's inputs have no such field, and the
-// child is linked from its own side, by its <edge>ID. Create and
-// Update re-point only a child no owner holds, or one the row already
-// holds: one that another owner holds is refused with BAD_USER_INPUT,
-// "already linked", and not taken from it.
+// stays in the type. A key on the entity's own row is set by <edge>ID, and
+// cleared by clear<Edge>: Setters gives that column's setter, and the
+// database's foreign key, not velox, checks that it names a row. A key on
+// the target's rows is re-pointed from the owner by <edge>ID, <edge>IDs or
+// add<Edge>IDs, but only a key that is nullable and mutable: one that is
+// never NULL always holds an owner, and one that is immutable cannot move,
+// so the owner's inputs have no such field, and the child is linked from its
+// own side, by its <edge>ID. Those, and a many-to-many edge's IDs, are the
+// relation handle's Add, Remove and Clear, which velox.InsertQuery.Set
+// describes: an edge is cleared, then its remove<Edge>IDs removed, then its
+// add<Edge>IDs added; an ID to add is checked against what the caller may
+// read; a child another owner holds is refused, not taken from it; and
+// clearing or removing unlinks only the targets the caller may read, or
+// change for a key on the target's rows. An ID to remove that the edge does
+// not lead to is ignored, and one to add that it already leads to is kept.
+// An update with edge setters reads the rows it matches under the Read and
+// Write policies, locked wherever the dialect can, before it writes their
+// edges, so no edge changes on a row the caller cannot write; one with no
+// column to set sends no UPDATE.
 //
 // A Required one-to-one or many-to-one edge is nullable in the SDL, author: T,
 // where entgql gives T!. Required says a row is written with its key; it does
@@ -353,119 +358,46 @@
 // refuses the key nil on every write (velox.ColumnDescriptor.RequiredEdge), but the
 // database's ON DELETE SET NULL clears it when the target is deleted. On the
 // other side velox does not refuse it: no child need hold the row. Create<T>Input
-// still requires a Required edge's <edge>ID, which must name a row the caller may
-// read. When the owning side's key is one velox
+// still requires a Required edge's <edge>ID. When the owning side's key is one velox
 // refuses nil, an update on the other side only adds: a one-to-many edge has
 // add<Edge>IDs but no remove<Edge>IDs or clear<Edge>, and a one-to-one edge has
 // neither <edge>ID nor clear<Edge>, since each would unlink a child and leave
 // its key NULL. A child moves by its own <edge>ID, and the create inputs, which
 // only link a child whose key is NULL, stay.
 //
-// A link to a target needs what the write changes. A many-to-many link inserts
-// a join row and changes no target row, so the target must be one the caller
-// may read: the target's Read policy. A one-to-many or
-// one-to-one link from the owner sets the target's foreign key, so the target
-// must be one the caller may change: its Read and Write policies. A link by a key on the entity's own row, <edge>ID, changes no
-// target row, so the target must be one the caller may read; a bidirectional
-// one-to-one key is the exception, since its link writes the partner's row
-// too (see the limits below). Unlinking follows the same rule, but for the
-// bidirectional key, whose clear writes the old partner with no scope.
+// A write with edge setters is atomic: velox runs the insert or update and
+// its edges in a db.Tx, a savepoint inside the transaction the Extension
+// opened for the operation, so an edge's error undoes the row at once. One
+// with column setters alone is one statement. A resolver that returns the
+// error fails the operation, and the Extension rolls all of it back; a
+// resolver that swallows it keeps the operation's other writes, and the
+// operation commits.
 //
-// Re-pointing a one-to-one edge from the owner checks the new child first: one
-// the caller may not read is NOT_FOUND, as an ID that names no row is. Then,
-// when the current child is one the caller may not change, hidden by a
-// policy, the re-point fails with BAD_USER_INPUT "already
-// linked", and the child stays linked. The error names only the two types, no
-// ID or column, and the hidden child's own ID is NOT_FOUND like any
-// other the caller may not read, so the error does not confirm a guess of it.
-// Clearing such an edge, when its current child is one the caller may not
-// change, is a silent no-op, not an error: an error would tell the caller that
-// a child it may not change is linked there.
+// Errors are coded before the presenter sees them. Setters refuses, before
+// any statement, with BAD_USER_INPUT naming the input field: a malformed or
+// mistyped ID or JSON value ("CreatePostInput.tagIDs[1]: ..."); a list of
+// more than gqlimpl.MaxIDs IDs, wrapping veloxgql.ErrPageTooLarge; and a
+// validator's refusal ("UpdatePostInput.title: invalid value: ..."), even
+// when an ID with it names no row. The write's errors are velox's, as they
+// are, and ErrorPresenter maps them as it does elsewhere; an edge's
+// *velox.EdgeError is NOT_FOUND, "edge <edge>: no node has this ID", for an
+// ID that names no row the caller may read or change, whether the row is
+// missing, in another scope or hidden by a policy, so that a client cannot
+// tell, and BAD_USER_INPUT, "edge <edge>: already linked to another owner",
+// for a child another owner holds. gqlgen's own validation errors (a
+// variable of the wrong shape) are left as gqlgen writes them,
+// GRAPHQL_VALIDATION_FAILED with a path or locations.
 //
-// Create and Update return the row as written. Create returns the row it
-// inserted. Update reads it back without the Read policy: its UPDATE is scoped by the Read policy too, so the caller could read
-// the row before it wrote it. A mutation that takes the row out of what the
-// caller may read still returns it. This is a contract, and will not change.
-//
-// The rows a write counts decide its result. The UPDATE of Update that
-// matched 0 rows is NOT_FOUND, "veloxgql: Update<T>Input: no <T> has this ID",
-// and a count the driver did not report (-1) falls back to the locking
-// existence check of an update with no field to set; an update that sets a
-// bidirectional key fails first instead, with the core's internal error for a
-// link whose count is unknown. The UPDATE that links the children whose key is
-// on their own rows gives the internal error "veloxgql: <Input>.<field>: row
-// count unknown" (gqlimpl.CountUnknown) for an unknown count, so that the write
-// fails and rolls back.
-//
-// Create and Update read the DB from the context, as the root query's
-// functions do (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in a
-// savepoint inside the transaction the Extension opened for the operation, or
-// in a db.Tx of its own where there is none (outside a server, with
-// Extension.NewContext, or in an operation WithTxFilter leaves out). A
-// failed Create or Update rolls back its own writes at once, and the operation's when
-// the resolver returns it; a resolver that swallows it keeps the operation's
-// other writes, and the operation commits. In a Go input a required field is a
-// value, an optional one a pointer (nil means not given), an ID a string, a
-// list of IDs a []string and a clear field a bool.
-//
-// Errors are coded before the presenter sees them. A malformed or mistyped ID
-// or JSON value, a conflicting input (a field given with its clear, an ID both
-// to add and to remove), too many IDs (more than veloxgql.Limits.MaxPage,
-// veloxgql.ErrPageTooLarge) and a child another owner holds are BAD_USER_INPUT,
-// naming the input field, "CreatePostInput.tagIDs: ..."; the first three are
-// refused before any statement. Update's id, malformed or of another type, is
-// named "id". A
-// validator's refusal is BAD_USER_INPUT too, "UpdatePostInput.title: invalid
-// value: ..."; the validators of the fields an input sets run before any
-// statement, so an invalid field is refused even when an ID with it names no
-// row. An ID that names no row the caller may read, or change, is NOT_FOUND
-// (veloxgql.CodeNotFound), whether the row is missing, in another scope or
-// hidden by a policy, so that a client cannot tell; the write keeps nothing. Other errors of velox are returned
-// as they are, and ErrorPresenter maps them as it does elsewhere. gqlgen's own
-// validation errors (a variable of the wrong shape) are left as gqlgen writes
-// them, GRAPHQL_VALIDATION_FAILED with a path or locations.
-//
-// Limits of Create and Update:
-//   - An update that sets no field checks its row before it writes its edges
-//     or join rows, with a locking read (FOR UPDATE) wherever
-//     the dialect has one: the row stays the caller's for the rest of the
-//     mutation's transaction, so there is no time-of-check race. SQLite has
-//     no locking reads, and its transactions lock the database.
-//   - On MySQL the DSN needs clientFoundRows=true: Update counts the rows
-//     its UPDATE matched, and MySQL counts only changed rows without it, so
-//     an UPDATE that changes nothing counts 0 and fails with a false
-//     NOT_FOUND.
-//   - A bidirectional self-edge (a self-referencing edge with no inverse) is
-//     written both ways, as in ent: a many-to-many one writes and removes both
-//     join rows, and a one-to-one one keeps both rows' keys pointing at each
-//     other. A self-edge with an inverse is written one way. A one-to-one
-//     one's link writes the new partner's row under the caller's Write scope,
-//     so a partner the caller may read but not change fails the link, with
-//     BAD_USER_INPUT "unique constraint violated". Its re-point, and its
-//     clear, set the old partner's key NULL without the
-//     policies, as the core's bidirectional update does, for the symmetric
-//     edge's integrity: no row is left pointing at one that does not point
-//     back. That is unlike a key on the target's rows, whose hidden child
-//     stays linked and fails the re-point (gqlimpl.StillLinked, above). A
-//     partner that already has one is refused by the unique key, with
-//     BAD_USER_INPUT "unique constraint violated", and a row named as its own
-//     partner is refused as an invalid value of <edge>ID, with BAD_USER_INPUT
-//     "<Input>.<edge>ID: invalid value: a row cannot be its own <edge>".
-//   - Not written: a key the caller supplies in a create input and JSON append.
+// Not written: a key the caller supplies in a create input and JSON append.
 //
 // # Differences from entgql
 //
 // What an entgql client or resolver relies on that velox-graphql does otherwise,
 // each described above:
-//   - An explicit null on a nullable field of an update input clears it, as
-//     clear<Field>: true does. entgql treats null as not given. A client that
-//     sends null for fields it means to keep must leave them out.
-//   - The inputs' methods are Create(ctx, x) and Update(ctx, id, set...),
-//     where entgql's are Mutate(builder) on the builder the resolver made. A
-//     field the create input leaves out is set on x, which entgql's resolver
-//     does with the builder's SetX.
+//   - The inputs' method is Setters(), which returns velox setters, where
+//     entgql's is Mutate(builder) on the builder the resolver made. The
+//     resolver writes them with db.Insert(x).Set or db.Update[T]().Set.
 //   - A Required one-to-one or many-to-one edge is T, not T!, in the type.
-//   - A null on an update's <edge>ID is refused, naming clear<Edge>.
 //   - A field.Strings and the other JSON lists of scalars are [String!], as in
 //     entgql; any other JSON is the JSON scalar.
 //

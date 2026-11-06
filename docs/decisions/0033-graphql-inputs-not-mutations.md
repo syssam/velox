@@ -1,6 +1,7 @@
 # 33. velox-graphql generates inputs, not mutations
 
-Status: accepted, 2026-11-03.
+Status: accepted, 2026-11-03. Its two methods, generic runtime and explicit
+nulls by type are superseded by [0045](0045-graphql-input-setters.md).
 
 ## Context
 
@@ -52,7 +53,8 @@ switches per entity.
   (`gqlimpl.M2M` from `NewM2M`, `gqlimpl.Owned` from `NewOwned`), which Create and
   Update both take. Every semantic of the generated mutations is kept, and
   `cmd/velox-graphql`'s mutation tests, ported to the methods, are the contract.
-- **Explicit nulls by type.** An explicit null was found in the field's argument
+- **Explicit nulls by type.** Superseded by 0045: an explicit null is a field
+  not given, as in entgql. An explicit null was found in the field's argument
   named `input`, which the application now names. Create and Update find it by the
   input's GraphQL type instead: in the running field's arguments, literals and
   variables, through input objects and lists. One occurrence behaves as before; none, as when Go
