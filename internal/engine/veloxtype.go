@@ -11,6 +11,7 @@ type (
 	ColumnDescriptor = veloxtype.ColumnDescriptor
 	ConstraintError  = veloxtype.ConstraintError
 	ConstraintKind   = veloxtype.ConstraintKind
+	EdgeError        = veloxtype.EdgeError
 	Deadlines        = veloxtype.Deadlines
 	Dialect          = veloxtype.Dialect
 	IndexInfo        = veloxtype.IndexInfo

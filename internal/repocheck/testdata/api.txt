@@ -150,6 +150,7 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
+const EdgePage
 const GeneratedCodeIsVersion18
 const LockForShare
 const LockForUpdate
@@ -347,6 +348,7 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E]
 func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
 func (q InsertQuery[E]) OnConflict[_ Lazy[E]](cols ...Column[E]) InsertQuery[E]
 func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
+func (q InsertQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E]
 func (q InsertQuery[E]) Update[_ Lazy[E]](cols ...Column[E]) InsertQuery[E]
 func (q Query[E]) After[_ Lazy[E]](x *E) Query[E]
 func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
@@ -378,7 +380,9 @@ func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
 func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error]
 func (q RawQuery[E]) MaxRows[_ Lazy[E]](n int) RawQuery[E]
 func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
+func (r Rel[E, T]) Add[_ Lazy[T]](keys ...any) Setter[E]
 func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E]
+func (r Rel[E, T]) Clear[_ Lazy[T]]() Setter[E]
 func (r Rel[E, T]) Fill[_ Lazy[T]](owner *E, t *T) error
 func (r Rel[E, T]) Filled[_ Lazy[T]](owner *E) (*T, bool)
 func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E]
@@ -388,6 +392,7 @@ func (r Rel[E, T]) LimitEach[_ Lazy[T]](n int) Rel[E, T]
 func (r Rel[E, T]) MaxRows[_ Lazy[T]](n int) Rel[E, T]
 func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T]
 func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T]
+func (r Rel[E, T]) Remove[_ Lazy[T]](keys ...any) Setter[E]
 func (r Rel[E, T]) Where[_ Lazy[T]](ps ...Pred[T]) Rel[E, T]
 func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T]
 func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
@@ -518,6 +523,7 @@ type Descriptor[E any] struct { Table string TableSchema string Columns []Column
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type EdgeDescriptor = engine.EdgeDescriptor
+type EdgeError = veloxtype.EdgeError
 type EntityInfo = engine.EntityInfo
 type Entity[E any] interface { *E VeloxMeta() *Meta[E] }
 type GroupKey[E, K any] struct { }
@@ -586,6 +592,7 @@ var ErrDenied
 var ErrDryRun
 var ErrImmutable
 var ErrLimitTooLarge
+var ErrLinked
 var ErrLocked
 var ErrNoShard
 var ErrNoWhere
@@ -630,6 +637,8 @@ const TxRollback
 func (d Dialect) String() string
 func (e *ConstraintError) Error() string
 func (e *ConstraintError) Unwrap() error
+func (e *EdgeError) Error() string
+func (e *EdgeError) Unwrap() error
 func (e *PolicyError) Error() string
 func (e *PolicyError) Is(target error) bool
 func (e *PolicyError) Unwrap() error
@@ -650,6 +659,7 @@ type ConstraintError struct { Entity string Kind ConstraintKind Constraint strin
 type ConstraintKind uint8
 type Deadlines struct { Statement time.Duration MaxStatement time.Duration Tx time.Duration MaxTx time.Duration }
 type Dialect uint8
+type EdgeError struct { Entity string Edge string Keys []any Err error }
 type IndexInfo struct { Columns []int Unique bool }
 type Lock uint8
 type LockWait uint8

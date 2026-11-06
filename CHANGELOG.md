@@ -21,6 +21,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A relation handle's `Add(keys...)`, `Remove(keys...)` and `Clear()` are setters:
+  `db.Insert(&p).Set(gen.Posts.Tags.Add(1, 2))` and `db.Update[gen.Post]().Set(...)`
+  write a many-to-many edge's join rows, or re-point the children of an edge whose key
+  the target holds, after the row and in one transaction. `InsertQuery.Set` also takes
+  column setters. A key that names no row the caller may read or change fails with a
+  `*velox.EdgeError` of `ErrNotFound`, and a child another owner holds with `ErrLinked`
+  (ADR 0044).
 - velox-gen checks the names a schema's behaviour gives: each constant name passed to
   a `velox.Field*` function, `velox.HasEdge`, `velox.HasEdgeWith`, `m.Set`, `m.Fill`, `m.Value`, `r.Value`, `r.IsZero` and
   `r.Set`, in a Policy, Hooks or Interceptors method or a mixin's, or in a function of

@@ -14,6 +14,10 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrNotSingular is returned by One when it finds more than one row.
 	ErrNotSingular = errors.New("more than one row")
+	// ErrLinked is returned, as the Err of an EdgeError, by an edge setter's
+	// Add whose child, one the caller may read, has another owner, or whose
+	// owner holds a one-to-one child the caller may not change.
+	ErrLinked = errors.New("already linked to another owner")
 	// ErrUnbounded is returned by a query that has no Limit and did not say
 	// Unbounded, when it runs.
 	ErrUnbounded = errors.New("query has no Limit")

@@ -219,3 +219,42 @@ func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T] {
 	ps := unsafe.Slice((*unsafe.Pointer)(unsafe.Pointer(unsafe.SliceData(owners))), len(owners))
 	return Pred[T](engine.NewPredicate(engine.OfNode(engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}, r.where, r.err, ps)))
 }
+
+// Add is the setter that links the owner to the rows of T whose keys are
+// keys, for Insert's and Update's Set:
+//
+//	db.Update[gen.Post]().Set(gen.Posts.Tags.Add(1, 2)).Where(gen.Posts.ID.EQ(id)).Exec(ctx)
+//
+// A key is a value of the target's key column, converted to its Go type as
+// Table.Convert converts; repeated keys count once. r's Where, OrderBy and
+// With do not apply. Add applies to a many-to-many edge (EdgeThrough) and to
+// an edge whose foreign key the target holds; an edge whose key is on the
+// owner's row is set by that column's handle, and its Add fails the
+// statement. InsertQuery.Set says when and how the edge is written.
+func (r Rel[E, T]) Add[_ Lazy[T]](keys ...any) Setter[E] {
+	return r.edgeSetter(engine.EdgeAdd, keys)
+}
+
+// Remove is the setter that unlinks the rows of T whose keys are keys from
+// the owner, as Add links them: it applies to the same edges, and a key that
+// is not linked is left alone.
+func (r Rel[E, T]) Remove[_ Lazy[T]](keys ...any) Setter[E] {
+	return r.edgeSetter(engine.EdgeRemove, keys)
+}
+
+// Clear is the setter that unlinks every row of T from the owner that the
+// caller may read, or may change for an edge whose foreign key the target
+// holds. It applies to the edges Add does.
+func (r Rel[E, T]) Clear[_ Lazy[T]]() Setter[E] {
+	return r.edgeSetter(engine.EdgeClear, nil)
+}
+
+// edgeSetter is the setter of op on r of keys, copied.
+func (r Rel[E, T]) edgeSetter[_ Lazy[T]](op engine.EdgeOp, keys []any) Setter[E] {
+	ref := engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}
+	return Setter[E]{a: engine.EdgeAssignment(ref, op, slices.Clone(keys))}
+}
+
+// EdgePage is the most links of a many-to-many edge that a Clear setter
+// reads in one statement.
+const EdgePage = engine.EdgePage

@@ -30,6 +30,10 @@ var (
 	ErrNotFound = engine.ErrNotFound
 	// ErrNotSingular is returned by One when it finds more than one row.
 	ErrNotSingular = engine.ErrNotSingular
+	// ErrLinked is returned, as the Err of an *EdgeError, by an edge setter's
+	// Add whose child, one the caller may read, has another owner, or whose
+	// owner holds a one-to-one child the caller may not change.
+	ErrLinked = engine.ErrLinked
 	// ErrUnbounded is returned by a query that has no Limit and did not say
 	// Unbounded, when it runs.
 	ErrUnbounded = engine.ErrUnbounded
@@ -124,3 +128,7 @@ func Deny(reason string) error { return engine.Deny(reason) }
 
 // ValidationError is a value a column's validators refused; nothing was sent.
 type ValidationError = veloxtype.ValidationError
+
+// EdgeError is an edge setter's write that failed on its keys; find it with
+// errors.As. Its Err wraps ErrNotFound or ErrLinked.
+type EdgeError = veloxtype.EdgeError

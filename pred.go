@@ -11,14 +11,16 @@ type Order[E any] struct{ t OrderTerm }
 // Column is any column handle of entity E, for Columns and Omit.
 type Column[E any] interface{ column(*E) int32 }
 
-// Setter is an assignment to a column of entity E, made by a handle's Set,
-// SetNull, Add or Sub.
+// Setter is an assignment to a column of entity E, made by a column handle's
+// Set, SetNull, Add or Sub, or an edge setter, made by a relation handle's
+// Add, Remove or Clear.
 type Setter[E any] struct{ a Assignment }
 
 // Column is the column s assigns, as Assignment.Column numbers it: two setters
-// of one column have the same Column. For generated code: velox-graphql's
-// Update drops its input's setter of a column the application's own setter
-// assigns, which an UPDATE refuses to assign twice.
+// of one column have the same Column. It is -1 for an edge setter. For
+// generated code: velox-graphql's Update drops its input's setter of a
+// column the application's own setter assigns, which an UPDATE refuses to
+// assign twice.
 func (s Setter[E]) Column[_ Lazy[E]]() int { return s.a.Column }
 
 // And is true when every p is. And of nothing is true. An Allow among the ps

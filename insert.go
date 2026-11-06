@@ -3,6 +3,7 @@ package velox
 import (
 	"context"
 	"fmt"
+	"slices"
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
@@ -17,6 +18,8 @@ type InsertQuery[E any] struct {
 	single   bool // made by Insert, so a nil one is a mistake, not an empty InsertAll
 	many     []E
 	conflict *ConflictClause
+	set      []Assignment      // Set's column setters
+	edges    []*engine.EdgeSet // Set's edge setters
 }
 
 // Insert starts an INSERT of the entity x points to:
@@ -87,6 +90,52 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 	return q
 }
 
+// Set adds setters. A column setter, a column handle's Set or SetNull,
+// stores its value in each entity before the insert, so it wins over the
+// field; Add and Sub fail the insert. An edge setter, a relation handle's
+// Add, Remove or Clear, is written after the insert, with each entity's key:
+//
+//	err := db.Insert(&post).Set(gen.Posts.Tags.Add(1, 2)).Exec(ctx)
+//
+// Then the insert and its edges run in one transaction, a savepoint inside
+// one, and an edge's error undoes the insert. For each entity, an edge is
+// cleared, then its keys to remove are unlinked, then those to add linked.
+// Its rows are written through the untyped Table API, so the target's and
+// the join entity's policies and hooks apply:
+//
+//   - A many-to-many edge's Add fails with an *EdgeError of ErrNotFound
+//     unless every key names a row of the target the caller may read, and
+//     inserts the join rows ON CONFLICT DO NOTHING. Remove and Clear delete
+//     only the links to targets the caller may read; Clear reads them
+//     EdgePage at a time.
+//   - An edge whose foreign key the target holds, which must be nullable,
+//     re-points on Add the children whose key is NULL: one another owner
+//     holds fails with an *EdgeError of ErrLinked when the caller may read
+//     it, and one the caller may not change, or read, with ErrNotFound.
+//     Each link is checked by a read after the UPDATE. Remove sets NULL on
+//     the given children the owner holds, and Clear on all of them.
+//   - A one-to-one edge's Add, of one key, first lets go of the child the
+//     owner holds; one the caller may not change fails with ErrLinked.
+//   - Add of an edge whose foreign key the target holds fails for more than
+//     one owner at once, an InsertAll of several entities: a child has one
+//     owner.
+//
+// Edge setters fail an upsert, whose row may be one it did not insert, and
+// an InsertAll whose keys the database assigns, as it reads none back. An
+// edge is written only when the insert affected a row: a hook that does not
+// call next writes none.
+func (q InsertQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E] {
+	q.set, q.edges = slices.Clip(q.set), slices.Clip(q.edges)
+	for _, s := range ss {
+		if e := engine.EdgeOf(s.a); e != nil {
+			q.edges = append(q.edges, e)
+		} else {
+			q.set = append(q.set, s.a)
+		}
+	}
+	return q
+}
+
 // Exec runs the insert.
 //
 // The entity's hooks (Hooks) run first, around all that follows; their next
@@ -126,11 +175,53 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if q.one == nil && len(q.many) == 0 {
 		return nil
 	}
-	if q.db.e.HasHooks(q.meta.info) {
-		return engine.Mutate(ctx, &q.db.e, q.meta.info, q.mutation(false), func(ctx context.Context, mu *engine.MutationState) error { return q.send(ctx, mu) })
+	q.apply()
+	if len(q.edges) == 0 {
+		_, err := q.run(ctx, &q.db.e)
+		return err
+	}
+	plan, err := q.plan()
+	if err != nil {
+		return err
+	}
+	return engine.InsertEdges(ctx, &q.db.e, plan, q.mutation(false).Rows, q.run)
+}
+
+// run runs the insert on db, through the entity's hooks, and returns the
+// rows it affected.
+func (q InsertQuery[E]) run[_ Lazy[E]](ctx context.Context, db *engine.DB) (int64, error) {
+	if db.HasHooks(q.meta.info) {
+		mu := q.mutation(false)
+		err := engine.Mutate(ctx, db, q.meta.info, mu, func(ctx context.Context, mu *engine.MutationState) error { return q.send(ctx, db, mu) })
+		return mu.Affected, err
 	}
 	var mu engine.MutationState
-	return q.send(ctx, &mu)
+	err := q.send(ctx, db, &mu)
+	return mu.Affected, err
+}
+
+// apply stores the column setters' values in each entity.
+func (q InsertQuery[E]) apply[_ Lazy[E]]() {
+	if len(q.set) == 0 {
+		return
+	}
+	for _, p := range q.mutation(false).Rows {
+		for _, a := range q.set {
+			setField(q.meta, (*E)(p), a.Column, a.Value)
+		}
+	}
+}
+
+// plan is the edge setters, resolved and checked.
+func (q InsertQuery[E]) plan[_ Lazy[E]]() (engine.EdgePlan, error) {
+	gen := false
+	for i := range q.many {
+		gen = gen || generatedKey(q.meta, &q.many[i]) >= 0
+	}
+	if err := engine.CheckEdgeInsert(q.meta.info, q.conflict != nil, q.one == nil, gen); err != nil {
+		return engine.EdgePlan{}, err
+	}
+	return engine.PlanEdges(q.meta.info, q.edges)
 }
 
 // SQL returns the first statement and arguments Exec would send for ctx, or
@@ -149,7 +240,10 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // transaction: inside one, for an InsertAll too large for one statement, for
 // one whose update branch gets the policy's conditions, and for an Insert
 // that sets the key of a bidirectional one-to-one edge (EdgeBidi), whose
-// partner Exec then links.
+// partner Exec then links. Set's column setters are stored in the entities,
+// as Exec stores them. An insert with edge setters renders the INSERT alone:
+// the edges' statements depend on what it inserts, and are not rendered;
+// the setters are checked as Exec checks them.
 func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = engine.DryRunContext(ctx) // first, so that every hook sees it
 	if err := q.check(); err != nil {
@@ -157,6 +251,12 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	}
 	if q.one == nil && len(q.many) == 0 {
 		return "", nil, nil
+	}
+	q.apply()
+	if len(q.edges) > 0 {
+		if _, err := q.plan(); err != nil {
+			return "", nil, err
+		}
 	}
 	if q.db.e.HasHooks(q.meta.info) {
 		mu := q.mutation(true)
@@ -191,13 +291,13 @@ func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *engine.MutationState {
 // policy's Insert) and sends the statements. It sets mu.affected only when
 // they all succeeded, so that Mutation.Affected is 0 after an error whatever
 // order insertOne sets Affected and checks an upsert in.
-func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, mu *engine.MutationState) error {
+func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, db *engine.DB, mu *engine.MutationState) error {
 	var res Result
 	var err error
 	if q.one != nil {
-		err = insertOne(ctx, &q.db.e, q.meta, q.one, q.conflict, &res)
+		err = insertOne(ctx, db, q.meta, q.one, q.conflict, &res)
 	} else {
-		err = insertMany(ctx, &q.db.e, q.meta, q.many, q.conflict, &res)
+		err = insertMany(ctx, db, q.meta, q.many, q.conflict, &res)
 	}
 	if err == nil {
 		mu.Affected = res.Affected
@@ -228,14 +328,20 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 }
 
 // check refuses an insert that cannot be built: invalid metadata, Insert of
-// a nil pointer, an upsert without OnConflict's columns, and an upsert that
-// sets the key of a bidirectional one-to-one edge (EdgeBidi).
+// a nil pointer, a column setter that is not Set or SetNull, an upsert
+// without OnConflict's columns, and an upsert that sets the key of a
+// bidirectional one-to-one edge (EdgeBidi).
 func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 	if q.meta.err != nil {
 		return q.meta.err
 	}
 	if q.single && q.one == nil {
 		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.meta.info.Name)
+	}
+	for _, a := range q.set {
+		if a.Op != AssignSet {
+			return fmt.Errorf("velox: %s: an insert's setter of %s is Add or Sub, which needs a row; use Set", q.meta.info.Name, q.meta.info.Columns[a.Column].Field)
+		}
 	}
 	if q.conflict != nil {
 		return engine.CheckConflict(q.meta.info, q.conflict, unsafe.Pointer(q.one))

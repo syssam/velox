@@ -11,10 +11,11 @@ import (
 // UpdateQuery is an UPDATE of entity E, built by chaining and run by Exec.
 // Like Query it is a value: extending it leaves it as it was.
 type UpdateQuery[E any] struct {
-	db   *DB
-	meta *Meta[E]
-	st   Statement
-	err  error // a condition's error, as in Query
+	db    *DB
+	meta  *Meta[E]
+	st    Statement
+	err   error             // a condition's error, as in Query
+	edges []*engine.EdgeSet // Set's edge setters
 }
 
 // Update starts an UPDATE of entity E:
@@ -25,11 +26,24 @@ func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E] {
 	return UpdateQuery[E]{db: db, meta: m, st: Statement{Op: OpUpdate, Entity: m.info, InTx: db.e.InTx}}
 }
 
-// Set adds assignments, made by the handles' Set, SetNull, Add and Sub.
+// Set adds setters: assignments, made by the column handles' Set, SetNull,
+// Add and Sub, and edge setters, made by the relation handles' Add, Remove
+// and Clear. An update of only edge setters sends no UPDATE.
+//
+// The edges are written for each row the update matches, in one
+// transaction with the UPDATE, a savepoint inside one: the update first
+// reads the keys of the rows its conditions match that the Read and Write
+// policies let the caller change, locking them where the dialect can, then
+// sends the UPDATE, then writes each edge for each row, as InsertQuery.Set
+// says. The entity's hooks see the UPDATE alone, without the edges.
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E] {
-	u.st.Set = slices.Clip(u.st.Set)
+	u.st.Set, u.edges = slices.Clip(u.st.Set), slices.Clip(u.edges)
 	for _, s := range ss {
-		u.st.Set = append(u.st.Set, s.a)
+		if e := engine.EdgeOf(s.a); e != nil {
+			u.edges = append(u.edges, e)
+		} else {
+			u.st.Set = append(u.st.Set, s.a)
+		}
 	}
 	return u
 }
@@ -64,7 +78,7 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if u.err != nil {
 		return Statement{}, u.err
 	}
-	if len(u.st.Set) == 0 {
+	if len(u.st.Set) == 0 && len(u.edges) == 0 {
 		return Statement{}, fmt.Errorf("velox: %s: Update has no Set", u.meta.info.Name)
 	}
 	return engine.CloneStatement(&u.st), nil
@@ -72,7 +86,8 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 
 // Exec runs the update and returns the number of rows it matched (on MySQL,
 // with clientFoundRows=true; without it, the rows whose values changed), or
-// -1 when the driver could not report its count.
+// -1 when the driver could not report its count. An update of only edge
+// setters returns the number of rows whose edges it wrote.
 //
 // The guard runs first, on the statement as built, then the entity's hooks
 // (Hooks). Then Exec adds an assignment for every column with an
@@ -83,6 +98,13 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	st, err := u.statement()
 	if err != nil {
 		return 0, err
+	}
+	if len(u.edges) > 0 {
+		plan, err := engine.PlanEdges(u.meta.info, u.edges)
+		if err != nil {
+			return 0, err
+		}
+		return engine.UpdateEdges(ctx, &u.db.e, &st, plan)
 	}
 	n, _, _, err := engine.Write(ctx, &u.db.e, &st, false, false)
 	return n, err
@@ -101,12 +123,22 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // statement; one that returns it before next, SQL(ctx) fails with it. An
 // update that sets the key of a bidirectional one-to-one edge (EdgeBidi)
 // renders as the caller's UPDATE alone, without the statements that re-point
-// the partners.
+// the partners. So does an update with edge setters, without the read of the
+// rows it matches and the edges' statements; one of only edge setters
+// renders "". The edge setters are checked as Exec checks them.
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = engine.DryRunContext(ctx) // first, so that every hook sees it
 	st, err := u.statement()
 	if err != nil {
 		return "", nil, err
+	}
+	if len(u.edges) > 0 {
+		if _, err := engine.PlanEdges(u.meta.info, u.edges); err != nil {
+			return "", nil, err
+		}
+		if len(st.Set) == 0 {
+			return "", nil, engine.GuardUpdate(&u.db.e, &st)
+		}
 	}
 	_, q, args, err := engine.Write(ctx, &u.db.e, &st, true, false)
 	return q, args, err

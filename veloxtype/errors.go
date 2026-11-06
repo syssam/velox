@@ -139,3 +139,22 @@ func (e *ValidationError) Error() string {
 
 // Unwrap is Err.
 func (e *ValidationError) Unwrap() error { return e.Err }
+
+// EdgeError is an edge setter's write that failed on its keys: a key that
+// names no row of the target the caller may read or change (Err wraps
+// velox.ErrNotFound), or a child that another owner holds (velox.ErrLinked).
+// Find it with errors.As. Its text names the edge, not the keys.
+type EdgeError struct {
+	Entity string // the owner's Go type, e.g. "gen.Post"
+	Edge   string // the edge as the schema names it, e.g. "tags"
+	Keys   []any  // the keys the write failed on
+	Err    error  // velox.ErrNotFound or velox.ErrLinked, wrapped
+}
+
+// Error is "velox: <Entity>: edge <Edge>: <Err>".
+func (e *EdgeError) Error() string {
+	return "velox: " + e.Entity + ": edge " + e.Edge + ": " + e.Err.Error()
+}
+
+// Unwrap is Err.
+func (e *EdgeError) Unwrap() error { return e.Err }

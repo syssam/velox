@@ -276,7 +276,8 @@ func (db *DB) UpdateTable(t Table) TableUpdate { return engine.UpdateTable(&db.e
 func (db *DB) DeleteTable(t Table) TableDelete { return engine.DeleteTable(&db.e, t) }
 
 // Assignments returns the assignments of set, sharing its memory: what
-// TableUpdate.Assign takes. For generated code.
+// TableUpdate.Assign takes. For generated code. An edge setter's assignment
+// has Column -1, which a TableUpdate refuses.
 func Assignments[E any](set []Setter[E]) []Assignment {
 	return unsafe.Slice((*Assignment)(unsafe.Pointer(unsafe.SliceData(set))), len(set))
 }
