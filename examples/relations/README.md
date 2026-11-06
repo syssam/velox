@@ -1,8 +1,9 @@
 # relations
 
 An `Author` has many `Post`s, a `Post` belongs to its `Author` and has many
-`Comment`s, and `Post`s and `Tag`s are many-to-many. Relations are `velox.Many[T]` and `velox.One[T]` fields that
-velox-gen writes into the entities, never columns, and never loaded lazily.
+`Comment`s, and `Post`s and `Tag`s are many-to-many. Relations are `velox.Many[T]` and `velox.One[T]` fields
+of each entity's `Edges` struct (`author.Edges.Posts`), never columns, and never
+loaded lazily.
 
 ```sh
 cd examples
@@ -39,7 +40,7 @@ Reading:
 db.Query[gen.Author]().With(A.Posts).Limit(10).All(ctx)          // one more query: IN (...)
 A.Posts.Where(P.Votes.GTE(10)).OrderBy(P.Votes.Desc()).With(P.Comments) // filtered, ordered, nested
 db.Query[gen.Post]().With(P.Author)                              // belongs-to
-posts, loaded := author.Posts.Get()
+posts, loaded := author.Edges.Posts.Get()
 
 A.Posts.Has()                       // EXISTS
 A.Posts.HasWhere(P.Votes.GT(20))    // EXISTS with a condition

@@ -128,6 +128,11 @@ The core API has no `AddTagIDs` or `RemoveTagIDs`; the GraphQL update input
 has `add<Edge>IDs` and `remove<Edge>IDs`.
 [examples/relations](../examples/relations/README.md#many-to-many) shows how.
 
+**Relations are in an Edges struct, as in ent.** A post's author is
+`post.Edges.Author`, of `PostEdges`, tagged `json:"edges,omitzero"`. Each
+edge is a `velox.One[T]` or `velox.Many[T]` whose `Get()` returns the value
+and whether it was loaded, so there is no `AuthorOrErr`.
+
 **Relations load only when asked.** `With(P.Author)` loads one with one more
 query, and `Get()` reports whether it was loaded. Nothing loads lazily, and
 there is no `QueryPosts()`: read the posts with `db.Query[gen.Post]()` and a
