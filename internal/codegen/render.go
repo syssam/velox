@@ -485,11 +485,7 @@ func entityString(w *writer, e *OutEntity) {
 		}
 		args = append(args, "velox.Show(x."+f.GoName+")")
 	}
-	call := strconv.Quote(e.Name + "(" + strings.Join(verbs, ", ") + ")")
-	if len(args) > 0 {
-		call += ", " + strings.Join(args, ", ")
-	}
-	w.p("return fmt.Sprintf(%s)", call)
+	w.p("return %s", sprintfCall(e.Name, verbs, args))
 	w.p("}")
 	w.p("")
 	if hidden {
@@ -498,4 +494,58 @@ func entityString(w *writer, e *OutEntity) {
 		w.p("// GoString is String, so that %%#v prints the same text.")
 	}
 	w.p("func (x %s) GoString() string { return x.String() }", e.Name)
+}
+
+// lineWidth is the most bytes sprintfCall keeps on one line.
+const lineWidth = 60
+
+// sprintfCall is the call fmt.Sprintf of the format head(verbs...) and
+// args: on one line when it is short, else the format in "…"+ pieces and
+// the arguments a few a line, each piece at most lineWidth bytes.
+func sprintfCall(head string, verbs, args []string) string {
+	format := head + "(" + strings.Join(verbs, ", ") + ")"
+	one := "fmt.Sprintf(" + strconv.Quote(format)
+	if len(args) > 0 {
+		one += ", " + strings.Join(args, ", ")
+	}
+	if one += ")"; len(one) <= 2*lineWidth {
+		return one
+	}
+	var b strings.Builder
+	b.WriteString("fmt.Sprintf(" + strconv.Quote(head+"(") + "+\n")
+	lines := runs(verbs, ", ")
+	for i, l := range lines {
+		if i < len(lines)-1 {
+			b.WriteString(strconv.Quote(l+", ") + "+\n")
+		} else {
+			b.WriteString(strconv.Quote(l+")") + ",\n")
+		}
+	}
+	for _, l := range runs(args, ", ") {
+		b.WriteString(l + ",\n")
+	}
+	b.WriteString(")")
+	return b.String()
+}
+
+// runs are xs joined by sep into runs of at most lineWidth bytes; an
+// element longer than that is a run of its own.
+func runs(xs []string, sep string) []string {
+	var out []string
+	cur := ""
+	for _, x := range xs {
+		switch {
+		case cur == "":
+			cur = x
+		case len(cur)+len(sep)+len(x) <= lineWidth:
+			cur += sep + x
+		default:
+			out = append(out, cur)
+			cur = x
+		}
+	}
+	if cur != "" {
+		out = append(out, cur)
+	}
+	return out
 }

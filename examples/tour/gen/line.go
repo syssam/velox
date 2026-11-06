@@ -114,7 +114,11 @@ func lineDescriptor() velox.Descriptor[Line] {
 
 // String returns the entity's fields.
 func (x Line) String() string {
-	return fmt.Sprintf("Line(ID=%v, OrgID=%v, InvoiceID=%v, Description=%v, AmountCents=%v)", x.ID, x.OrgID, x.InvoiceID, x.Description, x.AmountCents)
+	return fmt.Sprintf("Line("+
+		"ID=%v, OrgID=%v, InvoiceID=%v, Description=%v, "+
+		"AmountCents=%v)",
+		x.ID, x.OrgID, x.InvoiceID, x.Description, x.AmountCents,
+	)
 }
 
 // GoString is String, so that %#v prints the same text.

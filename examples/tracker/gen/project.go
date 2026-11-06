@@ -132,7 +132,10 @@ func projectDescriptor() velox.Descriptor[Project] {
 
 // String returns the entity's fields.
 func (x Project) String() string {
-	return fmt.Sprintf("Project(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Name=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Name)
+	return fmt.Sprintf("Project("+
+		"ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Name=%v)",
+		x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Name,
+	)
 }
 
 // GoString is String, so that %#v prints the same text.

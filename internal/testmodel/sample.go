@@ -196,7 +196,15 @@ func sampleDescriptor() velox.Descriptor[Sample] {
 
 // String returns the entity's fields.
 func (x Sample) String() string {
-	return fmt.Sprintf("Sample(ID=%v, Name=%v, Status=%v, Prev=%v, Price=%v, Ratio=%v, Flag=%v, MaybeFlag=%v, When=%v, MaybeWhen=%v, Blob=<%d bytes>, ParentID=%v, Score=%v)", x.ID, x.Name, x.Status, velox.Show(x.Prev), x.Price, velox.Show(x.Ratio), x.Flag, velox.Show(x.MaybeFlag), x.When, velox.Show(x.MaybeWhen), len(x.Blob), velox.Show(x.ParentID), x.Score)
+	return fmt.Sprintf("Sample("+
+		"ID=%v, Name=%v, Status=%v, Prev=%v, Price=%v, Ratio=%v, "+
+		"Flag=%v, MaybeFlag=%v, When=%v, MaybeWhen=%v, "+
+		"Blob=<%d bytes>, ParentID=%v, Score=%v)",
+		x.ID, x.Name, x.Status, velox.Show(x.Prev), x.Price,
+		velox.Show(x.Ratio), x.Flag, velox.Show(x.MaybeFlag), x.When,
+		velox.Show(x.MaybeWhen), len(x.Blob), velox.Show(x.ParentID),
+		x.Score,
+	)
 }
 
 // GoString is String, so that %#v prints the same text.

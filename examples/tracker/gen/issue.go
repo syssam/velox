@@ -213,7 +213,13 @@ func issueDescriptor() velox.Descriptor[Issue] {
 
 // String returns the entity's fields.
 func (x Issue) String() string {
-	return fmt.Sprintf("Issue(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, ProjectID=%v, AuthorID=%v, AssigneeID=%v, Title=%v, Body=%v, Status=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.ProjectID, x.AuthorID, velox.Show(x.AssigneeID), x.Title, x.Body, x.Status)
+	return fmt.Sprintf("Issue("+
+		"ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, ProjectID=%v, "+
+		"AuthorID=%v, AssigneeID=%v, Title=%v, Body=%v, Status=%v)",
+		x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.ProjectID,
+		x.AuthorID, velox.Show(x.AssigneeID), x.Title, x.Body,
+		x.Status,
+	)
 }
 
 // GoString is String, so that %#v prints the same text.

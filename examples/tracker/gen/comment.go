@@ -151,7 +151,12 @@ func commentDescriptor() velox.Descriptor[Comment] {
 
 // String returns the entity's fields.
 func (x Comment) String() string {
-	return fmt.Sprintf("Comment(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, IssueID=%v, AuthorID=%v, Body=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.IssueID, x.AuthorID, x.Body)
+	return fmt.Sprintf("Comment("+
+		"ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, IssueID=%v, "+
+		"AuthorID=%v, Body=%v)",
+		x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.IssueID,
+		x.AuthorID, x.Body,
+	)
 }
 
 // GoString is String, so that %#v prints the same text.
