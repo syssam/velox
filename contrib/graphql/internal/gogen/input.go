@@ -108,8 +108,15 @@ func (r *renderer) writeInputEdges(f *file, t *sdl.Type) error {
 			}
 			f.doc("", fmt.Sprintf("%s is the many-to-many edge %s of %s, through %s.", name, ed.Name, e.Name, j.Name))
 			f.p("func %s() %s.M2M {", name, impl)
-			f.p("\treturn %s.M2M{Owner: %s.TableOf[%s](), Target: %s.TableOf[%s](), Join: %s.TableOf[%s](),", impl, vx, e.Name, vx, tgt.Name, vx, j.Name)
-			f.p("\t\tOwnerKey: %s, TargetKey: %s, JoinOwner: %s, JoinTarget: %s}", colConst(e, ok), colConst(tgt, tk.fd), colConst(j, own), colConst(j, other))
+			f.p("\treturn %s", items(impl+".M2M{", []string{
+				"Owner: " + vx + ".TableOf[" + e.Name + "]()",
+				"Target: " + vx + ".TableOf[" + tgt.Name + "]()",
+				"Join: " + vx + ".TableOf[" + j.Name + "]()",
+				"OwnerKey: " + colConst(e, ok),
+				"TargetKey: " + colConst(tgt, tk.fd),
+				"JoinOwner: " + colConst(j, own),
+				"JoinTarget: " + colConst(j, other),
+			}, "}"))
 			f.p("}")
 			continue
 		}
@@ -127,7 +134,13 @@ func (r *renderer) writeInputEdges(f *file, t *sdl.Type) error {
 		}
 		f.doc("", fmt.Sprintf("%s is the edge %s of %s, whose key %s's rows hold.", name, ed.Name, e.Name, tgt.Name))
 		f.p("func %s() %s.Owned {", name, impl)
-		f.p("\treturn %s.Owned{Owner: %s.TableOf[%s](), Target: %s.TableOf[%s](), OwnerKey: %s, TargetKey: %s, FK: %s}", impl, vx, e.Name, vx, tgt.Name, colConst(e, ok), colConst(tgt, tk.fd), colConst(tgt, tfk))
+		f.p("\treturn %s", items(impl+".Owned{", []string{
+			"Owner: " + vx + ".TableOf[" + e.Name + "]()",
+			"Target: " + vx + ".TableOf[" + tgt.Name + "]()",
+			"OwnerKey: " + colConst(e, ok),
+			"TargetKey: " + colConst(tgt, tk.fd),
+			"FK: " + colConst(tgt, tfk),
+		}, "}"))
 		f.p("}")
 	}
 	return nil
@@ -325,7 +338,7 @@ func (r *renderer) writeInput(f *file, t *sdl.Type, in string, fs []sdl.InputFie
 		names = append(names, fi.GoName+"=%v")
 		args = append(args, v)
 	}
-	f.p("\treturn %s.Sprintf(%q%s)", f.use("fmt", "fmt"), in+"("+strings.Join(names, ", ")+")", strings.Join(slices.Insert(args, 0, ""), ", "))
+	f.p("\treturn %s", sprintf(f.use("fmt", "fmt"), in, names, args))
 	f.p("}")
 	f.p("")
 	f.p("// GoString is String, so that %%#v does not print the sensitive fields either.")
@@ -665,7 +678,11 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			}
 			rm := fs[pair]
 			vars[pair] = local(rm.GoName, "Keys")
-			f.p("\t%s, %s := %s.AddRemove%s(u, %q, %q, in.%s, %q, in.%s%s)", v, vars[pair], impl, k.args, fi.Target, fi.Name, fi.GoName, rm.Name, rm.GoName, k.conv)
+			f.p("\t%s, %s := %s", v, vars[pair], items(impl+".AddRemove"+k.args+"(", []string{
+				fmt.Sprintf("u, %q", fi.Target),
+				fmt.Sprintf("%q, in.%s", fi.Name, fi.GoName),
+				fmt.Sprintf("%q, in.%s%s", rm.Name, rm.GoName, k.conv),
+			}, ")"))
 		}
 	}
 
@@ -719,7 +736,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 				parts = append(parts, x.name+": "+vars[x.i])
 			}
 		}
-		edit := fmt.Sprintf("%s.Edit{%s}", impl, strings.Join(parts, ", "))
+		edit := items(impl+".Edit{", parts, "}")
 
 		if ed.Kind == plugin.M2M {
 			f.p("\t%s.Through(u, %q, %q, %s, key, %s())", impl, field(add), tt.Name, edit, edgeFunc(t, ed))

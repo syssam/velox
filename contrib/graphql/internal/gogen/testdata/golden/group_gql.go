@@ -48,12 +48,19 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 // Users is the edge users: a connection to the Account nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *Group) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
+func (x *Group) Users(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	where *AccountWhereInput,
+) (*AccountConnection, error) {
 	c, err := AccountsConnection(ctx, after, first, before, last, where)
 	if err != nil {
 		return nil, err
 	}
-	return &AccountConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &groupConnGQL, x, groupEdgeUsers, "Group.users", []any{after, first, before, last, where})}, nil
+	return &AccountConnection{c: gqlimpl.EdgeConnection(
+		ctx, c.c, &groupConnGQL, x, groupEdgeUsers, "Group.users",
+		[]any{after, first, before, last, where},
+	)}, nil
 }
 
 // GroupConnection is the GraphQL type GroupConnection, a connection to a list
@@ -102,7 +109,11 @@ type GroupEdge struct {
 
 // GroupsConnection is the connection to every Group node, on the DB in ctx, for
 // a Query field's resolver. It is GroupsConnectionOf of the whole table.
-func GroupsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
+func GroupsConnection(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy *GroupOrder,
+) (*GroupConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -114,7 +125,11 @@ func GroupsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 // orderBy and then the key, and paged by the other arguments. q must not be
 // ordered and must select the key and the order columns; see
 // gqlimpl.ConnectionBase and gqlimpl.NewConnection.
-func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
+func GroupsConnectionOf(
+	ctx context.Context, q velox.Query[Group],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy *GroupOrder,
+) (*GroupConnection, error) {
 	var order []gqlimpl.Order
 	if o := orderBy; o != nil {
 		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
@@ -123,7 +138,11 @@ func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxg
 	if err != nil {
 		return nil, err
 	}
-	c, err := gqlimpl.NewConnection(ctx, b, &groupConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order)
+	c, err := gqlimpl.NewConnection(
+		ctx, b, &groupConnGQL,
+		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
+		order,
+	)
 	if err != nil {
 		return nil, err
 	}

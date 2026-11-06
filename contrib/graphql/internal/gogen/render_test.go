@@ -504,7 +504,7 @@ func TestGoTypes(t *testing.T) {
 		` gqlimpl.Field(f, "rank", eventColRank, gqlimpl.Ops[int8]{In: w.RankIn}) `,
 		` gqlimpl.Field(f, "at", eventColAt, gqlimpl.Ops[time.Time]{LT: w.AtLT, IsNil: w.AtIsNil}) `,
 		` gqlimpl.Field(f, "ref", eventColRef, gqlimpl.Ops[uuid.UUID]{NEQ: w.RefNEQ}) `,
-		` gqlimpl.FKField[int64](f, "ownerID", eventColOwnerID, eventEdgeOwner, &ownerConnGQL, gqlimpl.Ops[string]{EQ: w.OwnerID, NEQ: w.OwnerIDNEQ, In: w.OwnerIDIn, NotIn: w.OwnerIDNotIn, IsNil: w.OwnerIDIsNil, NotNil: w.OwnerIDNotNil}) `,
+		` gqlimpl.FKField[int64](f, "ownerID", eventColOwnerID, eventEdgeOwner, &ownerConnGQL, gqlimpl.Ops[string]{ EQ: w.OwnerID, NEQ: w.OwnerIDNEQ, In: w.OwnerIDIn, NotIn: w.OwnerIDNotIn, IsNil: w.OwnerIDIsNil, NotNil: w.OwnerIDNotNil, }) `,
 		` gqlimpl.Has(f, "hasOwner", w.HasOwner, eventEdgeOwner, velox.TableOf[Owner]()) `,
 		` gqlimpl.HasWith(f, "hasOwnerWith", w.HasOwnerWith, eventEdgeOwner, velox.TableOf[Owner]()) `,
 	} {
@@ -782,7 +782,7 @@ func TestEnumWithoutConsts(t *testing.T) {
 // TestConnectionOfEveryNode: every Node entity's file declares its
 // <Plural>ConnectionOf, and no file declares or calls a ConnectionGQL.
 func TestConnectionOfEveryNode(t *testing.T) {
-	const decl = "ConnectionOf(ctx context.Context, q velox.Query["
+	const decl = "ConnectionOf(\n\tctx context.Context, q velox.Query["
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		files := render(t, m)
 		total := 0
@@ -1161,7 +1161,7 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 			setMutations(t, e, "update")
 		}
 	}
-	src := strings.Join(strings.Fields(render(t, m)["group_gql.go"]), " ")
+	src := flat(render(t, m)["group_gql.go"])
 	for _, w := range []string{
 		`func (in *UpdateGroupInput) Update(ctx context.Context, id string, set ...velox.Setter[Group]) (*Group, error) {`,
 		`addUserIDsKeys, removeUserIDsKeys := gqlimpl.AddRemove[int64](u, "Account", "addUserIDs", in.AddUserIDs, "removeUserIDs", in.RemoveUserIDs)`,
@@ -1271,11 +1271,32 @@ func funcSrc(t *testing.T, files map[string]string, name string) string {
 				if err := printer.Fprint(&b, fset, fd); err != nil {
 					t.Fatal(err)
 				}
-				return strings.Join(strings.Fields(b.String()), " ")
+				return flat(b.String())
 			}
 		}
 	}
 	return ""
+}
+
+// unwrap are the line breaks and alignment that items writes in a long
+// list, which flat takes out.
+var unwrap = []struct {
+	re *regexp.Regexp
+	to string
+}{
+	{regexp.MustCompile(`,\s*\n\s*([)}])`), "$1"},
+	{regexp.MustCompile(`(\(|[\w\]]\{)\s*\n\s*`), "$1"}, // a call's or a literal's, not a block's
+	{regexp.MustCompile(`,\s*\n\s*`), ", "},
+	{regexp.MustCompile(`(\w):\s{2,}`), "$1: "},
+}
+
+// flat is src on one line, as if each list were: its fields joined by single
+// spaces, a wrapped list unwrapped and its alignment dropped.
+func flat(src string) string {
+	for _, u := range unwrap {
+		src = u.re.ReplaceAllString(src, u.to)
+	}
+	return strings.Join(strings.Fields(src), " ")
 }
 
 // TestNoPointerCasts: the generated code imports no unsafe and converts no

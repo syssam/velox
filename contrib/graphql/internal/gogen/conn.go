@@ -47,21 +47,31 @@ func edgeConst(e *plugin.Entity, ed *plugin.Edge) string {
 }
 
 // connParams are the parameters of a connection to t's nodes, in the SDL's
-// argument order (sdl's connArgs): paging, and orderBy and where when t has
-// an order and a where input.
-func connParams(f *file, t *sdl.Type) string {
+// argument order (sdl's connArgs), in groups for a signature: paging, then
+// orderBy and where when t has an order or a where input.
+func connParams(f *file, t *sdl.Type) []string {
 	vgql := f.veloxgql()
-	ps := "after *" + vgql + ".Cursor, first *int, before *" + vgql + ".Cursor, last *int"
+	ps := []string{"after *" + vgql + ".Cursor, first *int, before *" + vgql + ".Cursor, last *int"}
+	var rest []string
 	switch {
 	case t.Order != nil && t.MultiOrder:
-		ps += ", orderBy []*" + t.Name + "Order"
+		rest = append(rest, "orderBy []*"+t.Name+"Order")
 	case t.Order != nil:
-		ps += ", orderBy *" + t.Name + "Order"
+		rest = append(rest, "orderBy *"+t.Name+"Order")
 	}
 	if t.Where != nil {
-		ps += ", where *" + t.Name + "WhereInput"
+		rest = append(rest, "where *"+t.Name+"WhereInput")
+	}
+	if len(rest) > 0 {
+		ps = append(ps, strings.Join(rest, ", "))
 	}
 	return ps
+}
+
+// signature is the line that opens the function name, whose parameters are
+// first then connParams, with results: one line, or one group a line.
+func signature(name, first string, params []string, results string) string {
+	return items(name+"(", append([]string{first}, params...), ") "+results+" {")
 }
 
 // connArgs are the names of connParams, for a call.
@@ -133,7 +143,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("")
 
 	f.doc("", fmt.Sprintf("%s is the connection to every %s node, on the DB in ctx, for a Query field's resolver. It is %s of the whole table.", root, n, connFunc(t)))
-	f.p("func %s(ctx %s.Context, %s) (*%sConnection, error) {", root, ctx, connParams(f, t), n)
+	f.p("%s", signature("func "+root, "ctx "+ctx+".Context", connParams(f, t), "(*"+n+"Connection, error)"))
 	f.p("\tdb, err := %s.DBFromContext(ctx)", vgql)
 	f.p("\tif err != nil {")
 	f.p("\t\treturn nil, err")
@@ -152,7 +162,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		how = append(how, "ordered by the key")
 	}
 	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q must not be ordered and must select the key and the order columns; see gqlimpl.ConnectionBase and gqlimpl.NewConnection.", connFunc(t), n, strings.Join(how, ", ")))
-	f.p("func %s(ctx %s.Context, q %s.Query[%s], %s) (*%sConnection, error) {", connFunc(t), ctx, velox, e.Name, connParams(f, t), n)
+	f.p("%s", signature("func "+connFunc(t), "ctx "+ctx+".Context, q "+velox+".Query["+e.Name+"]", connParams(f, t), "(*"+n+"Connection, error)"))
 	order := "nil"
 	if t.Order != nil {
 		order = "order"
@@ -182,7 +192,11 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		f.p("\t\tb = b.Where(p)")
 		f.p("\t}")
 	}
-	f.p("\tc, err := %s.NewConnection(ctx, b, &%s, %s.Args{After: after, First: first, Before: before, Last: last}, %s)", impl, connVar(t), impl, order)
+	f.p("\tc, err := %s", items(impl+".NewConnection(", []string{
+		"ctx, b, &" + connVar(t),
+		impl + ".Args{After: after, First: first, Before: before, Last: last}",
+		order,
+	}, ")"))
 	f.p("\tif err != nil {")
 	f.p("\t\treturn nil, err")
 	f.p("\t}")
@@ -476,12 +490,12 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		f.p("}")
 	case sdl.EdgeConnection:
 		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to. Its queries batch with the edge of every row read with x; see gqlimpl.EdgeConnection.", ed.Method, pe.Name, tt.Name))
-		f.p("func (x *%s) %s(ctx %s.Context, %s) (*%sConnection, error) {", e.Name, ed.Method, ctx, connParams(f, tt), tt.Name)
+		f.p("%s", signature("func (x *"+e.Name+") "+ed.Method, "ctx "+ctx+".Context", connParams(f, tt), "(*"+tt.Name+"Connection, error)"))
 		f.p("\tc, err := %sConnection(ctx, %s)", plugin.GoPlural(tt.Name), connArgs(tt))
 		f.p("\tif err != nil {")
 		f.p("\t\treturn nil, err")
 		f.p("\t}")
-		f.p("\treturn &%sConnection{c: %s.EdgeConnection(ctx, c.c, %s, []any{%s})}, nil", tt.Name, impl, rel, connArgs(tt))
+		f.p("\treturn &%sConnection{c: %s}, nil", tt.Name, items(impl+".EdgeConnection(", []string{"ctx, c.c, " + rel, "[]any{" + connArgs(tt) + "}"}, ")"))
 		f.p("}")
 	}
 	f.p("")

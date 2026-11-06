@@ -50,12 +50,19 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *User) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+func (x *User) Posts(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy []*PostOrder, where *PostWhereInput,
+) (*PostConnection, error) {
 	c, err := PostsConnection(ctx, after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &userConnGQL, x, userEdgePosts, "User.posts", []any{after, first, before, last, orderBy, where})}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(
+		ctx, c.c, &userConnGQL, x, userEdgePosts, "User.posts",
+		[]any{after, first, before, last, orderBy, where},
+	)}, nil
 }
 
 // UserConnection is the GraphQL type UserConnection, a connection to a list of
@@ -103,7 +110,11 @@ type UserEdge struct {
 
 // UsersConnection is the connection to every User node, on the DB in ctx, for a
 // Query field's resolver. It is UsersConnectionOf of the whole table.
-func UsersConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *UserOrder, where *UserWhereInput) (*UserConnection, error) {
+func UsersConnection(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy *UserOrder, where *UserWhereInput,
+) (*UserConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -115,7 +126,11 @@ func UsersConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // where, ordered by orderBy and then the key, and paged by the other arguments.
 // q must not be ordered and must select the key and the order columns; see
 // gqlimpl.ConnectionBase and gqlimpl.NewConnection.
-func UsersConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *UserOrder, where *UserWhereInput) (*UserConnection, error) {
+func UsersConnectionOf(
+	ctx context.Context, q velox.Query[User],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy *UserOrder, where *UserWhereInput,
+) (*UserConnection, error) {
 	var order []gqlimpl.Order
 	if o := orderBy; o != nil {
 		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
@@ -131,7 +146,11 @@ func UsersConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql
 		}
 		b = b.Where(p)
 	}
-	c, err := gqlimpl.NewConnection(ctx, b, &userConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order)
+	c, err := gqlimpl.NewConnection(
+		ctx, b, &userConnGQL,
+		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
+		order,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -287,9 +306,34 @@ func (w *UserWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
-	gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT, GTE: w.IDGTE, LT: w.IDLT, LTE: w.IDLTE})
-	gqlimpl.Field(f, "name", userColName, gqlimpl.Ops[string]{EQ: w.Name, NEQ: w.NameNEQ, In: w.NameIn, NotIn: w.NameNotIn, Contains: w.NameContains, HasPrefix: w.NameHasPrefix, HasSuffix: w.NameHasSuffix})
-	gqlimpl.Field(f, "email", userColEmail, gqlimpl.Ops[string]{EQ: w.Email, NEQ: w.EmailNEQ, In: w.EmailIn, NotIn: w.EmailNotIn, Contains: w.EmailContains, HasPrefix: w.EmailHasPrefix, HasSuffix: w.EmailHasSuffix})
+	gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{
+		EQ:    w.ID,
+		NEQ:   w.IDNEQ,
+		In:    w.IDIn,
+		NotIn: w.IDNotIn,
+		GT:    w.IDGT,
+		GTE:   w.IDGTE,
+		LT:    w.IDLT,
+		LTE:   w.IDLTE,
+	})
+	gqlimpl.Field(f, "name", userColName, gqlimpl.Ops[string]{
+		EQ:        w.Name,
+		NEQ:       w.NameNEQ,
+		In:        w.NameIn,
+		NotIn:     w.NameNotIn,
+		Contains:  w.NameContains,
+		HasPrefix: w.NameHasPrefix,
+		HasSuffix: w.NameHasSuffix,
+	})
+	gqlimpl.Field(f, "email", userColEmail, gqlimpl.Ops[string]{
+		EQ:        w.Email,
+		NEQ:       w.EmailNEQ,
+		In:        w.EmailIn,
+		NotIn:     w.EmailNotIn,
+		Contains:  w.EmailContains,
+		HasPrefix: w.EmailHasPrefix,
+		HasSuffix: w.EmailHasSuffix,
+	})
 	gqlimpl.Field(f, "role", userColRole, gqlimpl.Ops[UserRole]{EQ: w.Role, NEQ: w.RoleNEQ, In: w.RoleIn, NotIn: w.RoleNotIn})
 	gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
 	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, userEdgePosts, velox.TableOf[Post]())

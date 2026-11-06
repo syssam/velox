@@ -58,12 +58,19 @@ func (x *Post) Author(ctx context.Context) (*User, error) {
 // Tags is the edge tags: a connection to the Label nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *Post) Tags(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
+func (x *Post) Tags(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy *LabelOrder, where *LabelWhereInput,
+) (*LabelConnection, error) {
 	c, err := LabelsConnection(ctx, after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err
 	}
-	return &LabelConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &postConnGQL, x, postEdgeTags, "Post.tags", []any{after, first, before, last, orderBy, where})}, nil
+	return &LabelConnection{c: gqlimpl.EdgeConnection(
+		ctx, c.c, &postConnGQL, x, postEdgeTags, "Post.tags",
+		[]any{after, first, before, last, orderBy, where},
+	)}, nil
 }
 
 // PostConnection is the GraphQL type PostConnection, a connection to a list of
@@ -111,7 +118,11 @@ type PostEdge struct {
 
 // PostsConnection is the connection to every Post node, on the DB in ctx, for a
 // Query field's resolver. It is PostsConnectionOf of the whole table.
-func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+func PostsConnection(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy []*PostOrder, where *PostWhereInput,
+) (*PostConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -123,7 +134,11 @@ func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // where, ordered by orderBy and then the key, and paged by the other arguments.
 // q must not be ordered and must select the key and the order columns; see
 // gqlimpl.ConnectionBase and gqlimpl.NewConnection.
-func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+func PostsConnectionOf(
+	ctx context.Context, q velox.Query[Post],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy []*PostOrder, where *PostWhereInput,
+) (*PostConnection, error) {
 	order := make([]gqlimpl.Order, len(orderBy))
 	for i, o := range orderBy {
 		order[i] = gqlimpl.Order{Field: string(o.Field), Direction: o.Direction}
@@ -139,7 +154,11 @@ func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql
 		}
 		b = b.Where(p)
 	}
-	c, err := gqlimpl.NewConnection(ctx, b, &postConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order)
+	c, err := gqlimpl.NewConnection(
+		ctx, b, &postConnGQL,
+		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
+		order,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -304,11 +323,49 @@ func (w *PostWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, err
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
-	gqlimpl.IDField[int64](f, "id", postColID, gqlimpl.Ops[string]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT, GTE: w.IDGTE, LT: w.IDLT, LTE: w.IDLTE})
-	gqlimpl.FKField[int64](f, "authorID", postColAuthorID, postEdgeAuthor, &userConnGQL, gqlimpl.Ops[string]{EQ: w.AuthorID, NEQ: w.AuthorIDNEQ, In: w.AuthorIDIn, NotIn: w.AuthorIDNotIn})
-	gqlimpl.Field(f, "title", postColTitle, gqlimpl.Ops[string]{EQ: w.Title, NEQ: w.TitleNEQ, In: w.TitleIn, NotIn: w.TitleNotIn, Contains: w.TitleContains, HasPrefix: w.TitleHasPrefix, HasSuffix: w.TitleHasSuffix})
-	gqlimpl.Field(f, "status", postColStatus, gqlimpl.Ops[PostStatus]{EQ: w.Status, NEQ: w.StatusNEQ, In: w.StatusIn, NotIn: w.StatusNotIn})
-	gqlimpl.Field(f, "publishedAt", postColPublishedAt, gqlimpl.Ops[time.Time]{EQ: w.PublishedAt, NEQ: w.PublishedAtNEQ, In: w.PublishedAtIn, NotIn: w.PublishedAtNotIn, GT: w.PublishedAtGT, GTE: w.PublishedAtGTE, LT: w.PublishedAtLT, LTE: w.PublishedAtLTE, IsNil: w.PublishedAtIsNil, NotNil: w.PublishedAtNotNil})
+	gqlimpl.IDField[int64](f, "id", postColID, gqlimpl.Ops[string]{
+		EQ:    w.ID,
+		NEQ:   w.IDNEQ,
+		In:    w.IDIn,
+		NotIn: w.IDNotIn,
+		GT:    w.IDGT,
+		GTE:   w.IDGTE,
+		LT:    w.IDLT,
+		LTE:   w.IDLTE,
+	})
+	gqlimpl.FKField[int64](f, "authorID", postColAuthorID, postEdgeAuthor, &userConnGQL, gqlimpl.Ops[string]{
+		EQ:    w.AuthorID,
+		NEQ:   w.AuthorIDNEQ,
+		In:    w.AuthorIDIn,
+		NotIn: w.AuthorIDNotIn,
+	})
+	gqlimpl.Field(f, "title", postColTitle, gqlimpl.Ops[string]{
+		EQ:        w.Title,
+		NEQ:       w.TitleNEQ,
+		In:        w.TitleIn,
+		NotIn:     w.TitleNotIn,
+		Contains:  w.TitleContains,
+		HasPrefix: w.TitleHasPrefix,
+		HasSuffix: w.TitleHasSuffix,
+	})
+	gqlimpl.Field(f, "status", postColStatus, gqlimpl.Ops[PostStatus]{
+		EQ:    w.Status,
+		NEQ:   w.StatusNEQ,
+		In:    w.StatusIn,
+		NotIn: w.StatusNotIn,
+	})
+	gqlimpl.Field(f, "publishedAt", postColPublishedAt, gqlimpl.Ops[time.Time]{
+		EQ:     w.PublishedAt,
+		NEQ:    w.PublishedAtNEQ,
+		In:     w.PublishedAtIn,
+		NotIn:  w.PublishedAtNotIn,
+		GT:     w.PublishedAtGT,
+		GTE:    w.PublishedAtGTE,
+		LT:     w.PublishedAtLT,
+		LTE:    w.PublishedAtLTE,
+		IsNil:  w.PublishedAtIsNil,
+		NotNil: w.PublishedAtNotNil,
+	})
 	gqlimpl.Has(f, "hasTags", w.HasTags, postEdgeTags, velox.TableOf[Tag]())
 	gqlimpl.HasWith(f, "hasTagsWith", w.HasTagsWith, postEdgeTags, velox.TableOf[Tag]())
 	return f.Pred()
@@ -332,8 +389,15 @@ func postInputGQL(goField string) string {
 
 // postTagsEdgeGQL is the many-to-many edge tags of Post, through PostTag.
 func postTagsEdgeGQL() gqlimpl.M2M {
-	return gqlimpl.M2M{Owner: velox.TableOf[Post](), Target: velox.TableOf[Tag](), Join: velox.TableOf[PostTag](),
-		OwnerKey: postColID, TargetKey: tagColID, JoinOwner: postTagColPostID, JoinTarget: postTagColTagID}
+	return gqlimpl.M2M{
+		Owner:      velox.TableOf[Post](),
+		Target:     velox.TableOf[Tag](),
+		Join:       velox.TableOf[PostTag](),
+		OwnerKey:   postColID,
+		TargetKey:  tagColID,
+		JoinOwner:  postTagColPostID,
+		JoinTarget: postTagColTagID,
+	}
 }
 
 // CreatePostInput is the GraphQL input CreatePostInput, which Create writes. A
@@ -434,8 +498,16 @@ func (in *UpdatePostInput) Update(ctx context.Context, id string, set ...velox.S
 	if gqlimpl.Cleared(u, "publishedAt", in.PublishedAt != nil, "clearPublishedAt", in.ClearPublishedAt) {
 		u.SetNull(postColPublishedAt)
 	}
-	addTagIDsKeys, removeTagIDsKeys := gqlimpl.AddRemove[int64](u, "Label", "addTagIDs", in.AddTagIDs, "removeTagIDs", in.RemoveTagIDs)
-	gqlimpl.Through(u, "addTagIDs", "Label", gqlimpl.Edit{Clear: in.ClearTags, Remove: removeTagIDsKeys, Add: addTagIDsKeys}, key, postTagsEdgeGQL())
+	addTagIDsKeys, removeTagIDsKeys := gqlimpl.AddRemove[int64](
+		u, "Label",
+		"addTagIDs", in.AddTagIDs,
+		"removeTagIDs", in.RemoveTagIDs,
+	)
+	gqlimpl.Through(u, "addTagIDs", "Label", gqlimpl.Edit{
+		Clear:  in.ClearTags,
+		Remove: removeTagIDsKeys,
+		Add:    addTagIDsKeys,
+	}, key, postTagsEdgeGQL())
 	v, err := u.Exec(key, velox.Assignments(set))
 	n, _ := v.(*Post)
 	return n, err

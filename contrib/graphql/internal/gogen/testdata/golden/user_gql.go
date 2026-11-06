@@ -66,12 +66,19 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *User) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+func (x *User) Posts(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy []*PostOrder, where *PostWhereInput,
+) (*PostConnection, error) {
 	c, err := PostsConnection(ctx, after, first, before, last, orderBy, where)
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &userConnGQL, x, userEdgePosts, "Account.posts", []any{after, first, before, last, orderBy, where})}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(
+		ctx, c.c, &userConnGQL, x, userEdgePosts, "Account.posts",
+		[]any{after, first, before, last, orderBy, where},
+	)}, nil
 }
 
 // Groups is the edge groups: the Group nodes it leads to, in key order. It is
@@ -86,12 +93,18 @@ func (x *User) Groups(ctx context.Context) ([]*Group, error) {
 // Likes is the edge likes: a connection to the Like nodes it leads to. Its
 // queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *User) Likes(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
+func (x *User) Likes(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+) (*LikeConnection, error) {
 	c, err := LikesConnection(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return &LikeConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &userConnGQL, x, userEdgeLikes, "Account.likes", []any{after, first, before, last})}, nil
+	return &LikeConnection{c: gqlimpl.EdgeConnection(
+		ctx, c.c, &userConnGQL, x, userEdgeLikes, "Account.likes",
+		[]any{after, first, before, last},
+	)}, nil
 }
 
 // AccountConnection is the GraphQL type AccountConnection, a connection to a
@@ -140,7 +153,11 @@ type AccountEdge struct {
 
 // AccountsConnection is the connection to every Account node, on the DB in ctx,
 // for a Query field's resolver. It is AccountsConnectionOf of the whole table.
-func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
+func AccountsConnection(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	where *AccountWhereInput,
+) (*AccountConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -152,7 +169,11 @@ func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int,
 // filtered by where, ordered by the key, and paged by the other arguments. q
 // must not be ordered and must select the key and the order columns; see
 // gqlimpl.ConnectionBase and gqlimpl.NewConnection.
-func AccountsConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
+func AccountsConnectionOf(
+	ctx context.Context, q velox.Query[User],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	where *AccountWhereInput,
+) (*AccountConnection, error) {
 	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &userConnGQL, nil)
 	if err != nil {
 		return nil, err
@@ -164,7 +185,11 @@ func AccountsConnectionOf(ctx context.Context, q velox.Query[User], after *velox
 		}
 		b = b.Where(p)
 	}
-	c, err := gqlimpl.NewConnection(ctx, b, &userConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil)
+	c, err := gqlimpl.NewConnection(
+		ctx, b, &userConnGQL,
+		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -276,8 +301,25 @@ func (w *AccountWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate, 
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
-	gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT, GTE: w.IDGTE, LT: w.IDLT, LTE: w.IDLTE})
-	gqlimpl.Field(f, "displayName", userColName, gqlimpl.Ops[string]{EQ: w.DisplayName, NEQ: w.DisplayNameNEQ, In: w.DisplayNameIn, NotIn: w.DisplayNameNotIn, Contains: w.DisplayNameContains, HasPrefix: w.DisplayNameHasPrefix, HasSuffix: w.DisplayNameHasSuffix})
+	gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{
+		EQ:    w.ID,
+		NEQ:   w.IDNEQ,
+		In:    w.IDIn,
+		NotIn: w.IDNotIn,
+		GT:    w.IDGT,
+		GTE:   w.IDGTE,
+		LT:    w.IDLT,
+		LTE:   w.IDLTE,
+	})
+	gqlimpl.Field(f, "displayName", userColName, gqlimpl.Ops[string]{
+		EQ:        w.DisplayName,
+		NEQ:       w.DisplayNameNEQ,
+		In:        w.DisplayNameIn,
+		NotIn:     w.DisplayNameNotIn,
+		Contains:  w.DisplayNameContains,
+		HasPrefix: w.DisplayNameHasPrefix,
+		HasSuffix: w.DisplayNameHasSuffix,
+	})
 	gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
 	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, userEdgePosts, velox.TableOf[Post]())
 	return f.Pred()
@@ -325,8 +367,15 @@ func userInputGQL(goField string) string {
 
 // userGroupsEdgeGQL is the many-to-many edge groups of User, through UserGroup.
 func userGroupsEdgeGQL() gqlimpl.M2M {
-	return gqlimpl.M2M{Owner: velox.TableOf[User](), Target: velox.TableOf[Group](), Join: velox.TableOf[UserGroup](),
-		OwnerKey: userColID, TargetKey: groupColID, JoinOwner: userGroupColUserID, JoinTarget: userGroupColGroupID}
+	return gqlimpl.M2M{
+		Owner:      velox.TableOf[User](),
+		Target:     velox.TableOf[Group](),
+		Join:       velox.TableOf[UserGroup](),
+		OwnerKey:   userColID,
+		TargetKey:  groupColID,
+		JoinOwner:  userGroupColUserID,
+		JoinTarget: userGroupColGroupID,
+	}
 }
 
 // CreateAccountInput is the GraphQL input CreateAccountInput, which Create
@@ -356,7 +405,20 @@ type CreateAccountInput struct {
 
 // String returns the input's fields except its sensitive ones.
 func (in CreateAccountInput) String() string {
-	return fmt.Sprintf("CreateAccountInput(CreatedAt=%v, UpdatedAt=%v, DisplayName=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v, ExternalID=%v, Avatar=%v, Quota=%v, Active=%v, Settings=%v, MembershipIDs=%v, BestFriendID=%v)", gqlimpl.Show(in.CreatedAt), gqlimpl.Show(in.UpdatedAt), in.DisplayName, in.Email, gqlimpl.Show(in.Role), gqlimpl.Show(in.Nickname), gqlimpl.Show(in.Bio), gqlimpl.Show(in.Age), gqlimpl.Show(in.Score), gqlimpl.Show(in.ExternalID), gqlimpl.Show(in.Avatar), in.Quota, gqlimpl.Show(in.Active), gqlimpl.ShowJSON(in.Settings), in.MembershipIDs, gqlimpl.Show(in.BestFriendID))
+	return fmt.Sprintf("CreateAccountInput("+
+		"CreatedAt=%v, UpdatedAt=%v, DisplayName=%v, Email=%v, "+
+		"Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v, "+
+		"ExternalID=%v, Avatar=%v, Quota=%v, Active=%v, Settings=%v, "+
+		"MembershipIDs=%v, BestFriendID=%v)",
+		gqlimpl.Show(in.CreatedAt), gqlimpl.Show(in.UpdatedAt),
+		in.DisplayName, in.Email, gqlimpl.Show(in.Role),
+		gqlimpl.Show(in.Nickname), gqlimpl.Show(in.Bio),
+		gqlimpl.Show(in.Age), gqlimpl.Show(in.Score),
+		gqlimpl.Show(in.ExternalID), gqlimpl.Show(in.Avatar),
+		in.Quota, gqlimpl.Show(in.Active),
+		gqlimpl.ShowJSON(in.Settings), in.MembershipIDs,
+		gqlimpl.Show(in.BestFriendID),
+	)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.

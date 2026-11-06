@@ -226,6 +226,70 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	return plugin.File{Path: name, Content: string(out)}, nil
 }
 
+// fitItems is the longest list items keeps on one line.
+const fitItems = 60
+
+// items is the Go list xs between left and right: on one line when it is
+// short, else one element a line, with a trailing comma, which gofmt
+// indents.
+func items(left string, xs []string, right string) string {
+	if one := strings.Join(xs, ", "); len(one) <= fitItems {
+		return left + one + right
+	}
+	return left + "\n" + strings.Join(xs, ",\n") + ",\n" + right
+}
+
+// sprintf is the call fmtPkg.Sprintf of the format head(names...) and args:
+// on one line when it is short, else the format in pieces, each "…"+, then
+// the arguments, a few a line.
+func sprintf(fmtPkg, head string, names, args []string) string {
+	format := head + "(" + strings.Join(names, ", ") + ")"
+	if one := fmt.Sprintf("%s.Sprintf(%q, %s)", fmtPkg, format, strings.Join(args, ", ")); len(one) <= 2*fitItems+20 {
+		return one
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s.Sprintf(%q+\n", fmtPkg, head+"(")
+	lines := runs(names, ", ")
+	for i, l := range lines {
+		end := ", "
+		if i == len(lines)-1 {
+			end = ")"
+		}
+		sep := "+\n"
+		if i == len(lines)-1 {
+			sep = ",\n"
+		}
+		fmt.Fprintf(&b, "%q%s", l+end, sep)
+	}
+	for _, l := range runs(args, ", ") {
+		b.WriteString(l + ",\n")
+	}
+	b.WriteString(")")
+	return b.String()
+}
+
+// runs are xs joined by sep into runs of at most fitItems bytes, one
+// element a run when it is longer.
+func runs(xs []string, sep string) []string {
+	var out []string
+	cur := ""
+	for _, x := range xs {
+		switch {
+		case cur == "":
+			cur = x
+		case len(cur)+len(sep)+len(x) <= fitItems:
+			cur += sep + x
+		default:
+			out = append(out, cur)
+			cur = x
+		}
+	}
+	if cur != "" {
+		out = append(out, cur)
+	}
+	return out
+}
+
 // typeFile is <label>_gql.go, t's Go types.
 func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 	e := t.Entity

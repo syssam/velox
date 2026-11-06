@@ -72,7 +72,10 @@ type LikeEdge struct {
 
 // LikesConnection is the connection to every Like node, on the DB in ctx, for a
 // Query field's resolver. It is LikesConnectionOf of the whole table.
-func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
+func LikesConnection(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+) (*LikeConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -84,12 +87,19 @@ func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // the key, and paged by the other arguments. q must not be ordered and must
 // select the key and the order columns; see gqlimpl.ConnectionBase and
 // gqlimpl.NewConnection.
-func LikesConnectionOf(ctx context.Context, q velox.Query[Like], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
+func LikesConnectionOf(
+	ctx context.Context, q velox.Query[Like],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+) (*LikeConnection, error) {
 	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &likeConnGQL, nil)
 	if err != nil {
 		return nil, err
 	}
-	c, err := gqlimpl.NewConnection(ctx, b, &likeConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil)
+	c, err := gqlimpl.NewConnection(
+		ctx, b, &likeConnGQL,
+		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}

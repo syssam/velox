@@ -86,8 +86,9 @@ func (E%[1]d) Annotations() []schema.Annotation {
 
 var (
 	// connFunc matches an entity's root connection function in the Go the
-	// plugin writes: its parameters, and the connection it returns.
-	connFunc = regexp.MustCompile(`(?m)^func (E\d+)sConnection\(ctx context\.Context, ([^)]*)\) \(\*(E\d+Connection), error\) \{`)
+	// plugin writes: its parameters, and the connection it returns. A long
+	// signature is wrapped one group a line, with a trailing comma.
+	connFunc = regexp.MustCompile(`(?m)^func (E\d+)sConnection\(\s*ctx context\.Context,\s*([^)]*?),?\s*\) \(\*(E\d+Connection), error\) \{`)
 	// tableOf matches the table a generated entity reads.
 	tableOf = regexp.MustCompile(`Table:\s+"([a-z0-9_]+)"`)
 	// genType is a type of the generated package in a parameter list.
@@ -129,6 +130,7 @@ func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Nod
 		if m == nil {
 			t.Fatalf("no E%dsConnection in gen/e%d_gql.go", i, i)
 		}
+		m[2] = strings.Join(strings.Fields(strings.ReplaceAll(m[2], ",\n", ", ")), " ")
 		var args []string
 		for p := range strings.SplitSeq(m[2], ", ") {
 			args = append(args, strings.Fields(p)[0])

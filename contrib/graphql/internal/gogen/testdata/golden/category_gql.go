@@ -21,12 +21,19 @@ func (x *Category) GlobalID() string { return veloxgql.EncodeID("Category", x.ID
 // Children is the edge children: a connection to the Category nodes it leads
 // to. Its queries batch with the edge of every row read with x; see
 // gqlimpl.EdgeConnection.
-func (x *Category) Children(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
+func (x *Category) Children(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	where *CategoryWhereInput,
+) (*CategoryConnection, error) {
 	c, err := CategoriesConnection(ctx, after, first, before, last, where)
 	if err != nil {
 		return nil, err
 	}
-	return &CategoryConnection{c: gqlimpl.EdgeConnection(ctx, c.c, &categoryConnGQL, x, categoryEdgeChildren, "Category.children", []any{after, first, before, last, where})}, nil
+	return &CategoryConnection{c: gqlimpl.EdgeConnection(
+		ctx, c.c, &categoryConnGQL, x, categoryEdgeChildren, "Category.children",
+		[]any{after, first, before, last, where},
+	)}, nil
 }
 
 // Parent is the edge parent: the Category it leads to, or nil. It is read in
@@ -87,7 +94,11 @@ type CategoryEdge struct {
 // CategoriesConnection is the connection to every Category node, on the DB in
 // ctx, for a Query field's resolver. It is CategoriesConnectionOf of the whole
 // table.
-func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
+func CategoriesConnection(
+	ctx context.Context,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	where *CategoryWhereInput,
+) (*CategoryConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -99,7 +110,11 @@ func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *in
 // filtered by where, ordered by the key, and paged by the other arguments. q
 // must not be ordered and must select the key and the order columns; see
 // gqlimpl.ConnectionBase and gqlimpl.NewConnection.
-func CategoriesConnectionOf(ctx context.Context, q velox.Query[Category], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
+func CategoriesConnectionOf(
+	ctx context.Context, q velox.Query[Category],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	where *CategoryWhereInput,
+) (*CategoryConnection, error) {
 	b, err := gqlimpl.ConnectionBase(ctx, velox.Untyped(q), &categoryConnGQL, nil)
 	if err != nil {
 		return nil, err
@@ -111,7 +126,11 @@ func CategoriesConnectionOf(ctx context.Context, q velox.Query[Category], after 
 		}
 		b = b.Where(p)
 	}
-	c, err := gqlimpl.NewConnection(ctx, b, &categoryConnGQL, gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil)
+	c, err := gqlimpl.NewConnection(
+		ctx, b, &categoryConnGQL,
+		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +208,16 @@ func (w *CategoryWhereInput) PredicateGQL(ctx context.Context) (velox.Predicate,
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
-	gqlimpl.IDField[int64](f, "id", categoryColID, gqlimpl.Ops[string]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT, GTE: w.IDGTE, LT: w.IDLT, LTE: w.IDLTE})
+	gqlimpl.IDField[int64](f, "id", categoryColID, gqlimpl.Ops[string]{
+		EQ:    w.ID,
+		NEQ:   w.IDNEQ,
+		In:    w.IDIn,
+		NotIn: w.IDNotIn,
+		GT:    w.IDGT,
+		GTE:   w.IDGTE,
+		LT:    w.IDLT,
+		LTE:   w.IDLTE,
+	})
 	gqlimpl.Has(f, "hasParent", w.HasParent, categoryEdgeParent, velox.TableOf[Category]())
 	gqlimpl.HasWith(f, "hasParentWith", w.HasParentWith, categoryEdgeParent, velox.TableOf[Category]())
 	return f.Pred()
@@ -210,7 +238,13 @@ func categoryInputGQL(goField string) string {
 // categoryChildrenEdgeGQL is the edge children of Category, whose key
 // Category's rows hold.
 func categoryChildrenEdgeGQL() gqlimpl.Owned {
-	return gqlimpl.Owned{Owner: velox.TableOf[Category](), Target: velox.TableOf[Category](), OwnerKey: categoryColID, TargetKey: categoryColID, FK: categoryColCategoryChildren}
+	return gqlimpl.Owned{
+		Owner:     velox.TableOf[Category](),
+		Target:    velox.TableOf[Category](),
+		OwnerKey:  categoryColID,
+		TargetKey: categoryColID,
+		FK:        categoryColCategoryChildren,
+	}
 }
 
 // CreateCategoryInput is the GraphQL input CreateCategoryInput, which Create
@@ -279,7 +313,11 @@ func (in *UpdateCategoryInput) Update(ctx context.Context, id string, set ...vel
 	if in.Title != nil {
 		u.Set(categoryColTitle, *in.Title)
 	}
-	addChildIDsKeys, removeChildIDsKeys := gqlimpl.AddRemove[int64](u, "Category", "addChildIDs", in.AddChildIDs, "removeChildIDs", in.RemoveChildIDs)
+	addChildIDsKeys, removeChildIDsKeys := gqlimpl.AddRemove[int64](
+		u, "Category",
+		"addChildIDs", in.AddChildIDs,
+		"removeChildIDs", in.RemoveChildIDs,
+	)
 	if in.ParentID != nil {
 		parentIDKey := gqlimpl.Key[int64](u, "parentID", *in.ParentID, "Category")
 		gqlimpl.Exists(u, "parentID", "Category", velox.TableOf[Category](), categoryColID, []int64{parentIDKey})
@@ -288,7 +326,11 @@ func (in *UpdateCategoryInput) Update(ctx context.Context, id string, set ...vel
 	if gqlimpl.ClearEdge(u, "parentID", in.ParentID != nil, "clearParent", in.ClearParent) {
 		u.SetKey(categoryColCategoryChildren, nil)
 	}
-	gqlimpl.Children(u, "addChildIDs", "Category", gqlimpl.Edit{Clear: in.ClearChildren, Remove: removeChildIDsKeys, Add: addChildIDsKeys}, key, categoryChildrenEdgeGQL())
+	gqlimpl.Children(u, "addChildIDs", "Category", gqlimpl.Edit{
+		Clear:  in.ClearChildren,
+		Remove: removeChildIDsKeys,
+		Add:    addChildIDsKeys,
+	}, key, categoryChildrenEdgeGQL())
 	v, err := u.Exec(key, velox.Assignments(set))
 	n, _ := v.(*Category)
 	return n, err
