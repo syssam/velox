@@ -379,7 +379,7 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 		if f.JSON {
 			parts = append(parts, "Encode: json.Marshal", "Decode: json.Unmarshal")
 		}
-		w.p("{%s},", strings.Join(parts, ", "))
+		w.p("%s,", literal(parts))
 	}
 	w.p("},")
 	w.p("PrimaryKey: %s,", cols(e, e.PrimaryKey))
@@ -494,6 +494,15 @@ func entityString(w *writer, e *OutEntity) {
 		w.p("// GoString is String, so that %%#v prints the same text.")
 	}
 	w.p("func (x %s) GoString() string { return x.String() }", e.Name)
+}
+
+// literal is the composite literal of the fields xs, its type elided: on
+// one line when it fits in 2*lineWidth bytes, else a field a line.
+func literal(xs []string) string {
+	if one := "{" + strings.Join(xs, ", ") + "}"; len(one) <= 2*lineWidth-20 {
+		return one
+	}
+	return "{\n" + strings.Join(xs, ",\n") + ",\n}"
 }
 
 // lineWidth is the most bytes sprintfCall keeps on one line.

@@ -95,8 +95,18 @@ func commentDescriptor() velox.Descriptor[Comment] {
 		Table: "comments",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return time.Now() }, Immutable: true},
-			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return time.Now() }, UpdateDefault: func() any { return time.Now() }},
+			{
+				Field:       "CreatedAt",
+				Name:        "created_at",
+				DefaultFunc: func() any { return time.Now() },
+				Immutable:   true,
+			},
+			{
+				Field:         "UpdatedAt",
+				Name:          "updated_at",
+				DefaultFunc:   func() any { return time.Now() },
+				UpdateDefault: func() any { return time.Now() },
+			},
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "IssueID", Name: "issue_id"},
 			{Field: "AuthorID", Name: "author_id"},

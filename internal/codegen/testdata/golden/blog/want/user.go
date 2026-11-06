@@ -148,8 +148,18 @@ func userDescriptor() velox.Descriptor[User] {
 		Table: "users",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return time.Now() }, Immutable: true},
-			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return time.Now() }, UpdateDefault: func() any { return time.Now() }},
+			{
+				Field:       "CreatedAt",
+				Name:        "created_at",
+				DefaultFunc: func() any { return time.Now() },
+				Immutable:   true,
+			},
+			{
+				Field:         "UpdatedAt",
+				Name:          "updated_at",
+				DefaultFunc:   func() any { return time.Now() },
+				UpdateDefault: func() any { return time.Now() },
+			},
 			{Field: "CreatedBy", Name: "created_by"},
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 			{Field: "Name", Name: "name"},
