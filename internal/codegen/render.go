@@ -103,7 +103,7 @@ func renderPackage(o *Out) string {
 	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
 	for _, en := range o.Enums {
 		w.p("")
-		w.p("// %s is an enum of the model.", en.Type)
+		w.p("// %s is the type of %s.", en.Type, en.Of)
 		w.p("type %s string", en.Type)
 		w.p("")
 		w.p("// The values of %s.", en.Type)

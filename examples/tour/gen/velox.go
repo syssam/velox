@@ -7,7 +7,7 @@ import "github.com/syssam/velox"
 
 const _ = velox.GeneratedCodeIsVersion17
 
-// InvoiceStatus is an enum of the model.
+// InvoiceStatus is the type of Invoice's status field.
 type InvoiceStatus string
 
 // The values of InvoiceStatus.

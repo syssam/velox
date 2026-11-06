@@ -7,7 +7,7 @@ import "github.com/syssam/velox"
 
 const _ = velox.GeneratedCodeIsVersion17
 
-// IssueStatus is an enum of the model.
+// IssueStatus is the type of Issue's status field.
 type IssueStatus string
 
 // The values of IssueStatus.
@@ -31,7 +31,7 @@ func (e IssueStatus) IsValid() bool {
 	return false
 }
 
-// UserRole is an enum of the model.
+// UserRole is the type of User's role field.
 type UserRole string
 
 // The values of UserRole.

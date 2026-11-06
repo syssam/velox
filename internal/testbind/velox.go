@@ -6,7 +6,7 @@ import "github.com/syssam/velox"
 
 const _ = velox.GeneratedCodeIsVersion17
 
-// BindKind is an enum of the model.
+// BindKind is the type of Bind's kind field.
 type BindKind string
 
 // The values of BindKind.

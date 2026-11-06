@@ -122,6 +122,7 @@ type OutEnum struct {
 	Type   string   // e.g. "UserRole"
 	Consts []string // e.g. "UserRoleViewer"
 	Values []string // stored values, in declaration order
+	Of     string   // the field that declares it, e.g. "User's role field"
 }
 
 // veloxPkg is velox's import path.

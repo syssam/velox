@@ -449,7 +449,7 @@ func (s *entState) elemType(f *Field, where string) (elem, kind string) {
 		return "time.Time", "struct"
 	case f.Type == "enum":
 		t := s.name + f.GoName
-		en := &OutEnum{Type: t}
+		en := &OutEnum{Type: t, Of: s.name + "'s " + f.Name + " field"}
 		for _, v := range f.Enums {
 			en.Consts = append(en.Consts, t+plugin.GoName(v.Name))
 			en.Values = append(en.Values, v.Value)
