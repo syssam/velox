@@ -174,15 +174,15 @@ func TestGoldenBidi(t *testing.T) {
 		}
 		return string(b)
 	}
-	if !regexp.MustCompile(`\n\t\tBidi: +true,\n`).MatchString(read("user_friend_velox.go")) {
-		t.Error("user_friend_velox.go's Descriptor has no Bidi: true")
+	if !regexp.MustCompile(`\n\t\tBidi: +true,\n`).MatchString(read("user_friend.go")) {
+		t.Error("user_friend.go's Descriptor has no Bidi: true")
 	}
-	if strings.Contains(read("user_group_velox.go"), "Bidi:") {
-		t.Error("user_group_velox.go's Descriptor says Bidi")
+	if strings.Contains(read("user_group.go"), "Bidi:") {
+		t.Error("user_group.go's Descriptor says Bidi")
 	}
 	// The users' spouse edge is a bidirectional one-to-one relation.
-	if u := read("user_velox.go"); !strings.Contains(u, `velox.EdgeBidi[User]("spouse", `) || strings.Contains(u, `EdgeTo[User]("spouse"`) {
-		t.Error(`user_velox.go's Descriptor does not relate Spouse with velox.EdgeBidi[User]`)
+	if u := read("user.go"); !strings.Contains(u, `velox.EdgeBidi[User]("spouse", `) || strings.Contains(u, `EdgeTo[User]("spouse"`) {
+		t.Error(`user.go's Descriptor does not relate Spouse with velox.EdgeBidi[User]`)
 	}
 }
 
@@ -274,7 +274,7 @@ func TestRenderFiles(t *testing.T) {
 			t.Errorf("%s is not gofmt-clean: %v", f.Name, err)
 		}
 	}
-	want := []string{"group_velox.go", "post_velox.go", "user_group_velox.go", "user_velox.go", "velox.go"}
+	want := []string{"group.go", "post.go", "user.go", "user_group.go", "velox.go"}
 	slices.Sort(names)
 	if !slices.Equal(names, want) {
 		t.Fatalf("files %v, want %v", names, want)
@@ -352,12 +352,12 @@ func TestRenderNamesSchema(t *testing.T) {
 		file, entity string
 		named        bool // the schema or a mixin it lists declares behaviour
 	}{
-		{"note_velox.go", "Note", true},
-		{"task_velox.go", "Task", true},
-		{"memo_velox.go", "Memo", true},
-		{"tag_velox.go", "Tag", true},
-		{"home_velox.go", "Home", true},
-		{"owner_velox.go", "Owner", false},
+		{"note.go", "Note", true},
+		{"task.go", "Task", true},
+		{"memo.go", "Memo", true},
+		{"tag.go", "Tag", true},
+		{"home.go", "Home", true},
+		{"owner.go", "Owner", false},
 	} {
 		got := squeeze(string(fileNamed(t, files, c.file)))
 		line := "\t\tSchema: schema." + c.entity + "{},\n"

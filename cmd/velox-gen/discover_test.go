@@ -98,14 +98,14 @@ func (Own) Annotations() []schema.Annotation { return nil }
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	if got, want := strings.Join(generatedFiles(t, dir), " "), "build_velox.go own_velox.go release_velox.go velox.go"; got != want {
+	if got, want := strings.Join(generatedFiles(t, dir), " "), "build.go own.go release.go velox.go"; got != want {
 		t.Fatalf("generated %s, want %s", got, want)
 	}
-	release, _ := os.ReadFile(filepath.Join(dir, "gen", "release_velox.go"))
+	release, _ := os.ReadFile(filepath.Join(dir, "gen", "release.go"))
 	if !strings.Contains(string(release), "CreatedAt") || !strings.Contains(string(release), "Tag ") {
 		t.Errorf("Release lacks the base's mixin or its own field:\n%s", release)
 	}
-	build, _ := os.ReadFile(filepath.Join(dir, "gen", "build_velox.go"))
+	build, _ := os.ReadFile(filepath.Join(dir, "gen", "build.go"))
 	if !strings.Contains(string(build), "CreatedAt") || !strings.Contains(string(build), "Number ") {
 		t.Errorf("Build lacks the base's mixin or its own field:\n%s", build)
 	}
@@ -179,10 +179,10 @@ func (*Card) Edges() []schema.Edge {
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	board, _ := os.ReadFile(filepath.Join(dir, "gen", "board_velox.go"))
+	board, _ := os.ReadFile(filepath.Join(dir, "gen", "board.go"))
 	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "Schema: &schema.Board{},"} {
 		if !strings.Contains(squeeze(string(board)), want) {
-			t.Errorf("board_velox.go lacks %q:\n%s", want, board)
+			t.Errorf("board.go lacks %q:\n%s", want, board)
 		}
 	}
 	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
@@ -293,7 +293,7 @@ func (Book) Fields() []schema.Field { return []schema.Field{field.String("title"
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	if got, want := strings.Join(generatedFiles(t, dir), " "), "author_velox.go book_velox.go velox.go"; got != want {
+	if got, want := strings.Join(generatedFiles(t, dir), " "), "author.go book.go velox.go"; got != want {
 		t.Fatalf("generated %s, want %s", got, want)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
@@ -372,13 +372,13 @@ func (Doc) Fields() []schema.Field { return []schema.Field{field.String("body")}
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	doc, _ := os.ReadFile(filepath.Join(dir, "gen", "doc_velox.go"))
+	doc, _ := os.ReadFile(filepath.Join(dir, "gen", "doc.go"))
 	for _, want := range []string{"CreatedAt", "ChangedBy ", "Reason ", "Body "} {
 		if !strings.Contains(string(doc), want) {
-			t.Errorf("doc_velox.go lacks %q:\n%s", want, doc)
+			t.Errorf("doc.go lacks %q:\n%s", want, doc)
 		}
 	}
-	if got, want := strings.Join(generatedFiles(t, dir), " "), "doc_velox.go velox.go"; got != want {
+	if got, want := strings.Join(generatedFiles(t, dir), " "), "doc.go velox.go"; got != want {
 		t.Errorf("generated %s, want %s", got, want)
 	}
 }
@@ -401,7 +401,7 @@ func TestDiscoverJoinEntityName(t *testing.T) {
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("with the empty struct: %d %q", code, errs)
 	}
-	if got, want := strings.Join(generatedFiles(t, dir), " "), "user_friend_velox.go user_velox.go velox.go"; got != want {
+	if got, want := strings.Join(generatedFiles(t, dir), " "), "user.go user_friend.go velox.go"; got != want {
 		t.Errorf("generated %s, want %s", got, want)
 	}
 }
@@ -434,7 +434,7 @@ func (Note) Fields() []schema.Field { return []schema.Field{field.String("text")
 func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("notes", Note.Type)} }
 `)
 	code, out, errs := runCLI(t, dir, "-check", "./schema")
-	for _, want := range []string{"gen/tag_velox.go is out of date", "gen/label_velox.go is out of date", "gen/note_velox.go is out of date", "gen/user_velox.go is out of date"} {
+	for _, want := range []string{"gen/tag.go is out of date", "gen/label.go is out of date", "gen/note.go is out of date", "gen/user.go is out of date"} {
 		if !strings.Contains(errs, want) {
 			t.Errorf("-check lacks %q: %d %q %q", want, code, out, errs)
 		}
@@ -443,10 +443,10 @@ func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("notes", Note.T
 		t.Errorf("-check: %d", code)
 	}
 	code, out, errs = runCLI(t, dir, "./schema")
-	if want := "gen/label_velox.go\ngen/note_velox.go\ngen/tag_velox.go\ngen/user_velox.go\n"; code != 0 || out != want {
+	if want := "gen/label.go\ngen/note.go\ngen/tag.go\ngen/user.go\n"; code != 0 || out != want {
 		t.Fatalf("regenerate: %d %q %q, want %q", code, out, errs, want)
 	}
-	if got, want := strings.Join(generatedFiles(t, dir), " "), "label_velox.go note_velox.go user_velox.go velox.go"; got != want {
+	if got, want := strings.Join(generatedFiles(t, dir), " "), "label.go note.go user.go velox.go"; got != want {
 		t.Fatalf("generated %s, want %s", got, want)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
@@ -456,7 +456,7 @@ func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("notes", Note.T
 	if err := os.Remove(filepath.Join(dir, "schema", "note.go")); err != nil {
 		t.Fatal(err)
 	}
-	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 || out != "gen/note_velox.go\ngen/user_velox.go\n" {
+	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 || out != "gen/note.go\ngen/user.go\n" {
 		t.Fatalf("after deleting Note: %d %q %q", code, out, errs)
 	}
 	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
@@ -530,7 +530,7 @@ type Draft mixins.Base
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("plain: %d %q", code, errs)
 	}
-	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft_velox.go item_velox.go release_velox.go velox.go"; got != want {
+	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft.go item.go release.go velox.go"; got != want {
 		t.Fatalf("plain: generated %s, want %s", got, want)
 	}
 	writeFile(t, filepath.Join(dir, "schema", "item_policy.go"), "package schema\n\nimport \"github.com/syssam/velox\"\n\n"+
@@ -538,7 +538,7 @@ type Draft mixins.Base
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("with a Policy: %d %q", code, errs)
 	}
-	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft_velox.go item_velox.go release_velox.go velox.go"; got != want {
+	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft.go item.go release.go velox.go"; got != want {
 		t.Errorf("with a Policy: generated %s, want %s", got, want)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {

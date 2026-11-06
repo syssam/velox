@@ -215,12 +215,12 @@ func TestLowerJSONFlag(t *testing.T) {
 	for _, f := range files {
 		imports := strings.Contains(string(f.Data), `"encoding/json"`)
 		switch f.Name {
-		case "lw_user_velox.go":
+		case "lw_user.go":
 			seen++
 			if !imports {
 				t.Errorf("%s does not import encoding/json", f.Name)
 			}
-		case "lw_post_velox.go":
+		case "lw_post.go":
 			seen++
 			if imports {
 				t.Errorf("%s imports encoding/json", f.Name)

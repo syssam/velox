@@ -115,9 +115,9 @@ func TestCheckUserFilesRefusesBehaviour(t *testing.T) {
 
 func TestSchemaMethodsIgnoresTestAndGeneratedFiles(t *testing.T) {
 	dir := methodsDir(t, map[string]string{
-		"user_test.go":  "package schema\n\nfunc (User) Policy() int { return 0 }\n",
-		"user_velox.go": header + "package schema\n\nfunc (User) Hooks() {}\n",
-		"notes.txt":     "func (User) Policy()",
+		"user_test.go": "package schema\n\nfunc (User) Policy() int { return 0 }\n",
+		"user.go":      header + "package schema\n\nfunc (User) Hooks() {}\n",
+		"notes.txt":    "func (User) Policy()",
 	})
 	if err := os.Mkdir(filepath.Join(dir, "dir.go"), 0o755); err != nil { // a directory is not a file
 		t.Fatal(err)

@@ -100,14 +100,14 @@ func visible() velox.Predicate { return velox.HasEdgeWith(docEdge, velox.HasEdge
 		t.Fatal(err)
 	}
 	for file, want := range map[string]string{
-		"comment_velox.go": `velox.Linked[Doc](velox.EdgeTo[Doc]("doc", `,
-		"doc_velox.go":     `velox.Linked[User](velox.EdgeTo[User]("owner", `,
+		"comment.go": `velox.Linked[Doc](velox.EdgeTo[Doc]("doc", `,
+		"doc.go":     `velox.Linked[User](velox.EdgeTo[User]("owner", `,
 	} {
 		if src := fileText(t, files, file); !strings.Contains(src, want) {
 			t.Errorf("%s lacks %s:\n%s", file, want, src)
 		}
 	}
-	for _, file := range []string{"user_velox.go", "doc_velox.go"} {
+	for _, file := range []string{"user.go", "doc.go"} {
 		if src := fileText(t, files, file); strings.Contains(src, `Linked[Comment]`) || strings.Contains(src, `Linked[Doc]`) {
 			t.Errorf("%s links a relation no behaviour names:\n%s", file, src)
 		}

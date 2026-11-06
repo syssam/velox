@@ -152,13 +152,13 @@ func scaleDDL(t *testing.T, dir string, n int) string {
 	var b strings.Builder
 	b.WriteString("package app_test\n\n// ddl creates the tables.\nvar ddl = []string{\n")
 	for i := range n {
-		src, err := os.ReadFile(filepath.Join(dir, "gen", fmt.Sprintf("e%d_velox.go", i)))
+		src, err := os.ReadFile(filepath.Join(dir, "gen", fmt.Sprintf("e%d.go", i)))
 		if err != nil {
 			t.Fatal(err)
 		}
 		m := tableOf.FindStringSubmatch(string(src))
 		if m == nil {
-			t.Fatalf("no Table in gen/e%d_velox.go", i)
+			t.Fatalf("no Table in gen/e%d.go", i)
 		}
 		prev := ""
 		if i%10 != 0 {

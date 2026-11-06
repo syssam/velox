@@ -465,8 +465,8 @@ func sqlOpen(t *testing.T, driver, dsn string) *sql.DB {
 
 // The tables of gen: writer_circles is Writer.circles' join table,
 // writer_friends Writer.friends' and writer_peers Writer.peers', as
-// gen/writer_circle_velox.go, gen/writer_friend_velox.go and
-// gen/writer_peer_velox.go name them; writers' writer_partner is the key of
+// gen/writer_circle.go, gen/writer_friend.go and
+// gen/writer_peer.go name them; writers' writer_partner is the key of
 // Writer.partner.
 var sqliteDDL = []string{
 	"CREATE TABLE writers (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, name TEXT NOT NULL, bio TEXT, nick TEXT NOT NULL, score INTEGER NOT NULL, password TEXT NOT NULL, meta TEXT, mentor_id INTEGER, writer_partner INTEGER UNIQUE)",

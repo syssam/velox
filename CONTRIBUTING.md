@@ -35,8 +35,10 @@ each.
 plans and reviews that built it, as written. It is a historical record: nothing
 depends on it, and it is not kept up to date.
 
-Generated Go files end `_velox.go`, or `_gql.go` for velox-graphql, so that no
-entity's name can make the file a test or tie it to one operating system.
+velox-gen writes an entity to `<entity>.go`, as ent does, and velox-graphql
+to `<entity>_gql.go`. When go build would read `<entity>.go` as a test or as
+one system's, such as `ab_test.go` or `server_linux.go`, or it is `velox.go`,
+velox-gen writes `<entity>_velox.go` instead (decision 0042).
 
 ## The public API
 
@@ -239,7 +241,7 @@ CI fails when a generated file is stale.
   Do the last line for each example directory. `examples/graphql` also needs
   `-plugin velox-graphql` and `go -C graphql tool gqlgen generate`. The commands
   CI runs to check them are in `scripts/ci-local.sh`.
-- velox-gen writes one package, gen: `velox.go` and an `<entity>_velox.go`
+- velox-gen writes one package, gen: `velox.go` and an `<entity>.go`
   per entity. gen imports the schema package by its own name when a
   descriptor names a schema's value, `Schema: schema.Issue{}`, because the
   schema or a mixin it lists declares behaviour, or reads a closure

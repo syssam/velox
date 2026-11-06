@@ -308,14 +308,14 @@ func (Note) Mixin() []schema.Mixin { return []schema.Mixin{tenancy.InOrg{}} }
 	if err != nil {
 		t.Fatal(err)
 	}
-	note := fileText(t, files, "note_velox.go")
+	note := fileText(t, files, "note.go")
 	for _, want := range []string{"\"example.com/tmp/schema\"\n", "Schema: schema.Note{},"} {
 		if !strings.Contains(squeeze(note), want) {
-			t.Errorf("note_velox.go lacks %q:\n%s", want, note)
+			t.Errorf("note.go lacks %q:\n%s", want, note)
 		}
 	}
 	if strings.Contains(note, "tenancy") {
-		t.Errorf("note_velox.go names the mixin's package:\n%s", note)
+		t.Errorf("note.go names the mixin's package:\n%s", note)
 	}
 }
 
@@ -353,10 +353,10 @@ func TestMixinBoundInEntityFile(t *testing.T) {
 			t.Errorf("wrote %s", f.Name)
 		}
 	}
-	p := fileText(t, files, "project_velox.go")
+	p := fileText(t, files, "project.go")
 	for _, want := range []string{"\"example.com/tmp/schema\"\n", "Schema: schema.Project{},"} {
 		if !strings.Contains(squeeze(p), want) {
-			t.Errorf("project_velox.go lacks %q", want)
+			t.Errorf("project.go lacks %q", want)
 		}
 	}
 }
@@ -604,8 +604,8 @@ func TestSchemaPackageNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p := fileText(t, files, "project_velox.go"); !strings.Contains(p, "models \"example.com/tmp/schema\"") {
-		t.Errorf("project_velox.go:\n%s", p)
+	if p := fileText(t, files, "project.go"); !strings.Contains(p, "models \"example.com/tmp/schema\"") {
+		t.Errorf("project.go:\n%s", p)
 	}
 }
 

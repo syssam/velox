@@ -222,7 +222,7 @@ func TestGenerateCompiles(t *testing.T) {
 			for i := range n {
 				// velox generates a file per entity, the others a package.
 				name := "e" + strconv.Itoa(i)
-				if _, err := os.Stat(filepath.Join(app, o.GenDir, name+"_velox.go")); err != nil {
+				if _, err := os.Stat(filepath.Join(app, o.GenDir, name+".go")); err != nil {
 					if fi, err := os.Stat(filepath.Join(app, o.GenDir, name)); err != nil || !fi.IsDir() {
 						t.Errorf("nothing generated for E%d under %s", i, o.GenDir)
 					}

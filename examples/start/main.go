@@ -55,7 +55,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
-	// U holds the typed column handles velox-gen wrote in gen/user_velox.go.
+	// U holds the typed column handles velox-gen wrote in gen/user.go.
 	U := gen.Users
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 

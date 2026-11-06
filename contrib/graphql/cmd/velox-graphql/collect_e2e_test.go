@@ -973,7 +973,7 @@ func TestCollectRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
-	for _, want := range []string{"gen/velox.graphql\n", "gen/node_gql.go\n", "gen/review_velox.go\n"} {
+	for _, want := range []string{"gen/velox.graphql\n", "gen/node_gql.go\n", "gen/review.go\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("velox-gen wrote no %s", want)
 		}

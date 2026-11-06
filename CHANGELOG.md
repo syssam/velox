@@ -151,6 +151,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-gen writes an entity to `gen/<entity>.go`, as ent does, not
+  `gen/<entity>_velox.go`; a name go build would leave out of a build, such as
+  `ab_test.go`, or `velox.go`, keeps `_velox.go`. The next run removes the old
+  files. A hand-written `gen/<entity>.go` must be renamed (ADR 0042).
+
 - On SQLite a time column is `datetime(9)`, was `datetime`. The modernc.org/sqlite
   driver hands its text over, and velox parses velox's form itself with no allocation,
   where the driver's parse of a `datetime` cell failed once and allocated on every

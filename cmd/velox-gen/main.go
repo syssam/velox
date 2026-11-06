@@ -4,9 +4,11 @@
 // struct type of the package that implements schema.Interface, directly or
 // through embedding at any depth, by value or through a pointer, as ent's
 // rule has it; what looks like a schema and is not one is refused at its
-// line. It writes the gen package: one file, <entity>_velox.go, for every entity and
-// for every join entity of a many-to-many relation, and velox.go, which holds
-// the enums.
+// line. It writes the gen package: one file, <entity>.go, for every entity
+// and for every join entity of a many-to-many relation, and velox.go, which
+// holds the enums. An entity whose <entity>.go go build would leave out of
+// some builds, such as ab_test.go or server_linux.go, or that is velox.go,
+// gets <entity>_velox.go instead.
 //
 // Install it as a tool of your module and run it from the module root:
 //

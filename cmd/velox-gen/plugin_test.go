@@ -86,7 +86,7 @@ func TestPluginWritesIntoGenWithAPolicy(t *testing.T) {
 	if code, _, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	if got := strings.Join(names(t, filepath.Join(dir, "gen")), " "); got != "a_gql.go b_gql.go tag_velox.go user_velox.go velox.go" {
+	if got := strings.Join(names(t, filepath.Join(dir, "gen")), " "); got != "a_gql.go b_gql.go tag.go user.go velox.go" {
 		t.Errorf("gen holds %s", got)
 	}
 	if code, out, errs := veloxEnv(t, dir, env, "-check", "-plugin", "fakeplugin", "./schema"); code != 0 || out != "" || errs != "" {
@@ -179,9 +179,9 @@ func TestVerifyRefusesAPluginPathOfVeloxGen(t *testing.T) {
 	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	env := fakeEnv(filesEnv(t, plugin.File{Path: "User_velox.go", Content: "package gen\n"}))
+	env := fakeEnv(filesEnv(t, plugin.File{Path: "User.go", Content: "package gen\n"}))
 	code, out, errs := veloxEnv(t, dir, env, "verify", "-plugin", "fakeplugin", "./schema")
-	if want := "velox-gen verify: plugin fakeplugin: gen/User_velox.go collides with gen/user_velox.go, which velox-gen writes\n"; code != 1 || out != "" || errs != want {
+	if want := "velox-gen verify: plugin fakeplugin: gen/User.go collides with gen/user.go, which velox-gen writes\n"; code != 1 || out != "" || errs != want {
 		t.Errorf("%d %q %q", code, out, errs)
 	}
 }
@@ -212,10 +212,10 @@ func TestPluginPathsAreChecked(t *testing.T) {
 		{"dot directory", ".git/x.go"},
 		{"underscore directory", "pb/_x/x.go"},
 		{"velox-gen's file as a directory", "velox.go/x.go"},
-		{"velox-gen's file as a directory in another case", "User_Velox.go/x.go"},
-		{"velox-gen's own file", "user_velox.go"},
+		{"velox-gen's file as a directory in another case", "User.go/x.go"},
+		{"velox-gen's own file", "user.go"},
 		{"velox-gen's package file", "velox.go"},
-		{"velox-gen's own file in another case", "User_velox.go"},
+		{"velox-gen's own file in another case", "User.go"},
 		{"velox-gen's package file in another case", "Velox.go"},
 		{"velox.go below, the mark of another run's output", "pb/velox.go"},
 		{"velox.go below in another case", "pb/Velox.go"},
@@ -228,7 +228,7 @@ func TestPluginPathsAreChecked(t *testing.T) {
 			if strings.HasPrefix(c.path, "pb/") && strings.EqualFold(path.Base(c.path), "velox.go") {
 				want += `invalid path "` + c.path + `": a velox.go below the output directory`
 			}
-			if !strings.Contains(c.path, "/") && strings.HasSuffix(strings.ToLower(c.path), "velox.go") { // a collision, found after the plugins ran
+			if !strings.Contains(c.path, "/") && slices.Contains([]string{"user.go", "velox.go"}, strings.ToLower(c.path)) { // a collision, found after the plugins ran
 				want += "gen/" + c.path + " collides with gen/" + strings.ToLower(c.path) + ", which velox-gen writes"
 			}
 			if code != 1 || out != "" || !strings.HasPrefix(errs, want) {
