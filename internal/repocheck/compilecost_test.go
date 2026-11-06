@@ -362,7 +362,9 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 	}
 	size := func(t *testing.T, pkg string) int64 {
 		out := filepath.Join(t.TempDir(), pkg+".a") // a package may be built by two subtests at once
-		if _, err := tempmod.Go(dir, "build", "-o", out, "./"+pkg); err != nil {
+		// -trimpath: without it the archive holds the checkout's path, so a
+		// size depends on where the repository is.
+		if _, err := tempmod.Go(dir, "build", "-trimpath", "-o", out, "./"+pkg); err != nil {
 			t.Fatal(err)
 		}
 		fi, err := os.Stat(out)
