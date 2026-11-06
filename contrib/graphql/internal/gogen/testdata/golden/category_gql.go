@@ -243,7 +243,7 @@ func (in *CreateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 		if err != nil {
 			return nil, err
 		}
-		set = append(set, Categories.CategoryChildren.Set(parentID))
+		set = append(set, Categories.Parent.Set(parentID))
 	}
 	return gqlimpl.Checked("CreateCategoryInput", &categoryConnGQL, set)
 }
@@ -305,7 +305,7 @@ func (in *UpdateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 		if err != nil {
 			return nil, err
 		}
-		set = append(set, Categories.CategoryChildren.Set(parentID))
+		set = append(set, Categories.Parent.Set(parentID))
 	}
 	return gqlimpl.Checked("UpdateCategoryInput", &categoryConnGQL, set)
 }

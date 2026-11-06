@@ -897,8 +897,8 @@ func TestRepeatedIDs(t *testing.T) {
 }
 
 // TestEdgeScope: an edge setter's ID of a row the caller may not see, or
-// change, is NOT_FOUND, and nothing is written. An ID an edge's key on the
-// row holds is a column's value: no policy checks it.
+// change, is NOT_FOUND, and nothing is written; so is an ID of a key on the
+// row, which the edge's Set checks under the target's Read policy.
 func TestEdgeScope(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
 		other := &gen.Writer{Name: "other", Password: "x"}
@@ -906,15 +906,12 @@ func TestEdgeScope(t *testing.T) {
 		locked := &gen.Article{Title: "locked"}
 		insert(t, e.ctx, e.db, locked)
 
-		// Article.writer's key is on the article: org 8's writer is set, as
-		// a column's value is, though the caller may not read it. Only a
-		// foreign key, which these tables lack, would check it exists.
-		a, err := createArticle(e.ctx, gen.CreateArticleInput{Title: "t", WriterID: ptr(writerID(other.ID))})
-		if err != nil || !is(a.WriterID, other.ID) {
-			t.Errorf("org 8's writer as an article's: %v, %v; want it set", a, err)
-		}
-		if _, err := e.raw.Exec(fmt.Sprintf("DELETE FROM articles WHERE id = %d", a.ID)); err != nil {
-			t.Fatal(err)
+		// Article.writer's key is on the article: org 8's writer, which the
+		// caller may not read, is NOT_FOUND, and no article is inserted.
+		_, err := createArticle(e.ctx, gen.CreateArticleInput{Title: "t", WriterID: ptr(writerID(other.ID))})
+		wantEdgeErr(t, e.ctx, "org 8's writer as an article's", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "writer"))
+		if n := count(t, e.ctx, e.db.Query[gen.Article]().Where(gen.Articles.Title.EQ("t"))); n != 0 {
+			t.Errorf("%d articles t, want 0", n)
 		}
 
 		_, err = createCircle(e.ctx, gen.CreateCircleInput{Name: "c", WriterIDs: []string{writerID(other.ID)}})
@@ -1008,12 +1005,12 @@ func TestEdgeScope(t *testing.T) {
 		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]()); n != 0 {
 			t.Errorf("%d join rows, want 0", n)
 		}
-		// Writer.mentor's key is on the row: org 8's writer is set.
-		if _, err := updateWriter(e.ctx, writerID(w7.ID), gen.UpdateWriterInput{MentorID: ptr(writerID(other.ID))}); err != nil {
-			t.Errorf("org 8's writer as w7's mentor: %v", err)
-		}
-		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w7.ID)).One(e.ctx); err != nil || !is(got.MentorID, other.ID) {
-			t.Errorf("w7: %v, %v: want org 8's writer as its mentor", got, err)
+		// Writer.mentor's key is on the row: org 8's writer is NOT_FOUND,
+		// and w7 is unchanged, its name too.
+		_, err = updateWriter(e.ctx, writerID(w7.ID), gen.UpdateWriterInput{Name: ptr("w7x"), MentorID: ptr(writerID(other.ID))})
+		wantEdgeErr(t, e.ctx, "org 8's writer as w7's mentor", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "mentor"))
+		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w7.ID)).One(e.ctx); err != nil || got.MentorID != nil || got.Name != "w7" {
+			t.Errorf("w7: %v, %v: want it unchanged", got, err)
 		}
 	})
 }
@@ -2347,16 +2344,12 @@ func TestBidiPartner(t *testing.T) {
 		}
 		wantPartners(t, e, "c fails to take a", a.ID, d.ID, d.ID, a.ID, c.ID, 0)
 
-		// A partner of another org: partnerID is the key's column, which no
-		// read checks, but the link of the partner's key, under the org,
-		// matches no row and finds it unreachable, as for the frozen writer
-		// below. Nothing is kept.
+		// A partner of another org: the edge's Set reads it under the org
+		// scope, finds none, and is NOT_FOUND. Nothing is kept.
 		h := &gen.Writer{Name: "h", Password: "x"}
 		insert(t, schema.Org.With(e.ctx, int64(8)), e.db, h)
 		_, err = updateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(h.ID))})
-		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique {
-			t.Errorf("c takes h, of org 8: %v, want a unique ConstraintError", err)
-		}
+		wantEdgeErr(t, e.ctx, "c takes h, of org 8", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "partner"))
 		wantPartners(t, e, "c fails to take h", c.ID, 0, a.ID, d.ID, d.ID, a.ID)
 		if hw, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(h.ID)).One(schema.Org.With(e.ctx, int64(8))); err != nil {
 			t.Fatal(err)

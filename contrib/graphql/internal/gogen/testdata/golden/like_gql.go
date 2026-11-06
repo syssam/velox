@@ -163,11 +163,11 @@ func (in *CreateLikeInput) Setters() ([]velox.Setter[Like], error) {
 	if err != nil {
 		return nil, err
 	}
-	set = append(set, Likes.UserID.Set(userID))
+	set = append(set, Likes.User.Set(userID))
 	postID, err := gqlimpl.DecodeID[int64]("CreateLikeInput.postID", in.PostID, "Post")
 	if err != nil {
 		return nil, err
 	}
-	set = append(set, Likes.PostID.Set(postID))
+	set = append(set, Likes.Post.Set(postID))
 	return gqlimpl.Checked("CreateLikeInput", &likeConnGQL, set)
 }

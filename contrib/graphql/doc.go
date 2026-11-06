@@ -325,8 +325,9 @@
 // such as a scope column (package scope: Fill), has its create input left out
 // with graphql.Skip(graphql.SkipMutationCreateInput) on the edge; the edge
 // stays in the type. A key on the entity's own row is set by <edge>ID, and
-// cleared by clear<Edge>: Setters gives that column's setter, and the
-// database's foreign key, not velox, checks that it names a row. A key on
+// cleared by clear<Edge>: Setters gives the edge's velox.Rel.Set, which
+// checks that the ID names a row the caller may read before the write sets
+// the column, and the column's SetNull. A key on
 // the target's rows is re-pointed from the owner by <edge>ID, <edge>IDs or
 // add<Edge>IDs, but only a key that is nullable and mutable: one that is
 // never NULL always holds an owner, and one that is immutable cannot move,

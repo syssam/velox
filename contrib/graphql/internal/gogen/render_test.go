@@ -1051,7 +1051,7 @@ func TestCreateConversions(t *testing.T) {
 		` OwnerID *string `,
 		` Tags veloxgql.JSON `,
 		`ownerID, err := gqlimpl.DecodeIDAs[int64]("CreateEventInput.ownerID", *v, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
-		`set = append(set, Events.OwnerID.Set(ownerID))`,
+		`set = append(set, Events.Owner.Set(ownerID))`,
 		`tags, err := gqlimpl.FromJSON[[]int32]("CreateEventInput.tags", in.Tags)`,
 		`return gqlimpl.Checked("CreateEventInput", &eventConnGQL, set)`,
 		`eventColTags: "tags"`,

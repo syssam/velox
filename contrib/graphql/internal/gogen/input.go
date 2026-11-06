@@ -426,12 +426,13 @@ func (s *setters) edge(ei int) error {
 	}
 
 	if ed.OwnsKey && ed.Kind != plugin.M2M {
-		// The key is on the row: its column's setter.
+		// The key is on the row: the edge's Set, which checks the key under
+		// the target's Read policy and sets the column; the column's
+		// SetNull clears it.
 		fk, err := fkOf(e, ed, e)
 		if err != nil {
 			return err
 		}
-		col := s.h + "." + fk.GoName
 		clr := idx(sdl.InputClearEdge)
 		var null string
 		if clr >= 0 {
@@ -439,16 +440,15 @@ func (s *setters) edge(ei int) error {
 				return err
 			}
 		}
-		conv, err := s.r.keyConv(f, e, fk, k.fd, tt.Key)
-		if err != nil {
-			return err
+		// Set converts the key to the column's Go type, which must take it.
+		if !sameGoType(fk, k.fd) {
+			if err := s.r.converts(e, fk, tt.Key); err != nil {
+				return err
+			}
 		}
 		if i := idx(sdl.InputEdgeID); i >= 0 {
 			one(i, clr, null, func(indent, key string) {
-				if conv != "" {
-					key = conv + "(" + key + ")"
-				}
-				s.add(indent, col+".Set("+key+")")
+				s.add(indent, s.h+"."+ed.GoName+".Set("+key+")")
 			})
 		} else if clr >= 0 {
 			f.p("\tif in.%s {", s.fs[clr].GoName)

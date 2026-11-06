@@ -435,7 +435,7 @@ func (in *CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 		if err != nil {
 			return nil, err
 		}
-		set = append(set, Users.UserBestFriend.Set(bestFriendID))
+		set = append(set, Users.BestFriend.Set(bestFriendID))
 	}
 	return gqlimpl.Checked("CreateAccountInput", &userConnGQL, set)
 }

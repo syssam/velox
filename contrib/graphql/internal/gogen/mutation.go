@@ -169,19 +169,6 @@ func sameGoType(a, b *plugin.Field) bool {
 	return a.ElemType == "" || b.ElemType == "" || a.ElemType == b.ElemType && a.PkgPath == b.PkgPath
 }
 
-// keyConv is the Go conversion of a key held by from to the Go type of the
-// field to, which holds it too ("idspkg.UserID"); "" when both hold the
-// same Go type. base is the key's base type, as veloxgql decodes it.
-func (r *renderer) keyConv(f *file, toEnt *plugin.Entity, to, from *plugin.Field, base string) (string, error) {
-	if sameGoType(to, from) {
-		return "", nil
-	}
-	if err := r.converts(toEnt, to, base); err != nil {
-		return "", err
-	}
-	return r.qualify(f, toEnt, to, to.ElemType, to.PkgPath)
-}
-
 // valueConv is the Go conversion of the input field fi's value to the Go
 // type of fd, its field ("idspkg.Code"): "" when the input holds fd's own
 // Go type.

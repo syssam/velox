@@ -28,9 +28,10 @@ not tell two inputs of a type apart.
 - The resolver writes: `db.Insert(x).Set(set...)` and
   `db.Update[T]().Where(...).Set(set...)`, then reads the row back.
   `examples/graphql`'s `update` helper is the pattern.
-- An edge whose key is on the row is that key column's setter. Setters
-  does not check that the key names a row the caller may read; the
-  database's foreign key checks that it names a row.
+- An edge whose key is on the row is the edge's `Rel.Set(id)` (0044),
+  which checks the key under the target's Read policy in the write's
+  transaction, so a client cannot link a row it may not read, or probe a
+  hidden ID; its clear is the column's `SetNull`.
 - A create input's required fields are always set; an Immutable field is
   only in the create input; a JSON field is decoded with an error return;
   a zero value given to a field with a Default is refused with an error

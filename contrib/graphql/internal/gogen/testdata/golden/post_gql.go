@@ -475,7 +475,7 @@ func (in *CreatePostInput) Setters() ([]velox.Setter[Post], error) {
 	if err != nil {
 		return nil, err
 	}
-	set = append(set, Posts.AuthorID.Set(writerID))
+	set = append(set, Posts.Author.Set(writerID))
 	if len(in.RelatedIDs) > 0 {
 		relatedIDs, err := gqlimpl.DecodeIDs[int64]("CreatePostInput.relatedIDs", in.RelatedIDs, "Post")
 		if err != nil {
@@ -565,7 +565,7 @@ func (in *UpdatePostInput) Setters() ([]velox.Setter[Post], error) {
 		if err != nil {
 			return nil, err
 		}
-		set = append(set, Posts.AuthorID.Set(writerID))
+		set = append(set, Posts.Author.Set(writerID))
 	}
 	if in.ClearRelated {
 		set = append(set, Posts.Related.Clear())

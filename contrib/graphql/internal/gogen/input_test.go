@@ -47,8 +47,8 @@ func petsModel() *plugin.Model {
 }
 
 // TestInputEdgeKinds: each kind of edge, and each field that needs more than
-// a plain setter, becomes its setter: the key on the row its column's Set,
-// converted between the owner's Go type and the type the row holds it in;
+// a plain setter, becomes its setter: the key on the row the edge's Set, and
+// its clear the column's SetNull;
 // an edge whose key the target holds its relation handle's Add, Remove or
 // Clear. A clear field wins over its field.
 func TestInputEdgeKinds(t *testing.T) {
@@ -70,11 +70,12 @@ func TestInputEdgeKinds(t *testing.T) {
 		},
 		"CreatePetInput.Setters": {
 			`ownerID, err := gqlimpl.DecodeIDAs[int64]("CreatePetInput.ownerID", *v, "Owner", gqlimpl.AsInt[types.OwnerID, int64])`,
-			// The row holds the owner's key as an int64.
-			`set = append(set, Pets.OwnerPet.Set(int64(ownerID)))`,
+			// A key on the row is the edge's Set, which checks it and converts
+			// it to the int64 the row holds it in.
+			`set = append(set, Pets.Owner.Set(ownerID))`,
 			`set = append(set, Pets.Kits.Add(kitIDs...))`,
 			// A required ID is always decoded.
-			`momID, err := gqlimpl.DecodeID[int64]("CreatePetInput.momID", in.MomID, "Pet") if err != nil { return nil, err } set = append(set, Pets.CatKits.Set(momID))`,
+			`momID, err := gqlimpl.DecodeID[int64]("CreatePetInput.momID", in.MomID, "Pet") if err != nil { return nil, err } set = append(set, Pets.Mom.Set(momID))`,
 		},
 		"UpdatePetInput.Setters": {
 			`if in.ClearOwner { set = append(set, Pets.OwnerPet.SetNull()) } else if v := in.OwnerID; v != nil {`,

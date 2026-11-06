@@ -672,14 +672,18 @@ func TestRequiredEdgeHidden(t *testing.T) {
 	if err := s.db.QueryRow("SELECT title FROM posts WHERE id = 2").Scan(&title); err != nil || title != "new" {
 		t.Errorf("the update did not commit: %q %v", title, err)
 	}
-	// memberID is the key on the post's row, a column's value: a hidden
-	// member is set, and no policy checks it; the foreign key checks it
-	// exists. The post reads its member as null.
-	hidden := veloxgql.EncodeID("Member", 2)
-	s.want("a hidden member on create", fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q}) { title member { name } } }", "x", hidden),
-		'{"data":{"createPost":{"title":"x","member":null}}}')
-	if got := s.do(fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q}) { title } }", "y", veloxgql.EncodeID("Member", 9))); !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "foreign key constraint violated") {
-		t.Errorf("a missing member on create: %s", got)
+	// memberID is the key on the post's row: the edge's Set checks it
+	// under Member's Read policy, so a hidden member is NOT_FOUND, as a
+	// missing one is, and a client cannot tell them apart.
+	posts := s.count("posts")
+	for _, key := range []int64{2, 9} {
+		got := s.do(fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q}) { title } }", "x", veloxgql.EncodeID("Member", key)))
+		if !strings.Contains(got, "NOT_FOUND") || !strings.Contains(got, "edge member: no node has this ID") {
+			t.Errorf("member %d on create: %s", key, got)
+		}
+	}
+	if n := s.count("posts"); n != posts {
+		t.Errorf("%d posts, want %d", n, posts)
 	}
 }
 
