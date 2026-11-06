@@ -158,6 +158,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- **Breaking.** velox-graphql's edge methods are one line: a connection edge
+  calls the target's unexported `paginate<Plural>(ctx, from, …)` with
+  `postGQL.Edge(x, postEdgeTags)`, and `Paginate<Plural>` calls it with
+  `gqlimpl.Query(q)`; a to-one or list edge passes the Edge to `EdgeOne` or
+  `EdgeList`. The type literal's `Edges` is indexed by relation and names the
+  edge's GraphQL field. In gqlimpl, `Paginate` takes a `Source`,
+  `EdgeConnection` is gone, and `Args` holds the where input and its
+  condition, so a batch keeps the same arguments as before. Edge methods no
+  longer read the DB themselves. `veloxgql.GeneratedCodeIsVersion16` is now
+  `GeneratedCodeIsVersion17` (ADR 0047).
+
 - **Breaking.** velox-graphql writes one connection function per type,
   `Paginate<Plural>(ctx, q, after, first, before, last, orderBy, where)`, as
   entgql's `Query().Paginate`: a query resolver passes

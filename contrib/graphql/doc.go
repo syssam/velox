@@ -156,7 +156,10 @@
 //   - the connection, edge, order and where types, each named after its
 //     GraphQL type, and the marshalers of velox-gen's enum types;
 //   - the edge methods, named after the edges: a connection, a list or the
-//     one node, each read for every row of its batch in one statement;
+//     one node, each read for every row of its batch in one statement, on
+//     the DB veloxgql.DBFromContext reads; a connection is the target's
+//     paginate<GoPlural> of the edge, the function Paginate<GoPlural>
+//     calls with its query;
 //   - Paginate<GoPlural>, which pages a query of the type's nodes, as ent's
 //     Paginate does: it is named after ent's plural of the GraphQL type
 //     (PaginateUsers for User, PaginateStatusSlice for Status,
@@ -167,7 +170,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion16", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion17", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -430,7 +433,9 @@
 // reads; its error is every row's.
 //
 // A call joins a batch only when it is the same read: the same edge, called
-// from the edge's own field, with the same arguments. So the same edge under
+// from the edge's own field, with the same arguments, those the edge method
+// was given, compared by value (a variable and the same literal are equal).
+// So the same edge under
 // two aliases, or with two sets of arguments, is two batches, each with its
 // own page, and a nested last, after and before batch too. An edge method
 // called from any other field (an application's resolver calling

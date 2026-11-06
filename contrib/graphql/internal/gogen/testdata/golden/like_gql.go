@@ -9,12 +9,12 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion16
+const _ = veloxgql.GeneratedCodeIsVersion17
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the edge of every row read with x.
 func (x *Like) User(ctx context.Context) (*User, error) {
-	v, err := gqlimpl.EdgeOne(ctx, &userGQL, &likeGQL, x, likeEdgeUser, "Like.user")
+	v, err := gqlimpl.EdgeOne(ctx, &userGQL, likeGQL.Edge(x, likeEdgeUser))
 	n, _ := v.(*User)
 	return n, err
 }
@@ -22,7 +22,7 @@ func (x *Like) User(ctx context.Context) (*User, error) {
 // Post is the edge post: the Post it leads to, or nil. It is read in one query
 // with the edge of every row read with x.
 func (x *Like) Post(ctx context.Context) (*Post, error) {
-	v, err := gqlimpl.EdgeOne(ctx, &postGQL, &likeGQL, x, likeEdgePost, "Like.post")
+	v, err := gqlimpl.EdgeOne(ctx, &postGQL, likeGQL.Edge(x, likeEdgePost))
 	n, _ := v.(*Post)
 	return n, err
 }
@@ -74,8 +74,17 @@ func PaginateLikes(
 	ctx context.Context, q velox.Query[Like],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 ) (*LikeConnection, error) {
+	return paginateLikes(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last)
+}
+
+// paginateLikes is PaginateLikes of the nodes from leads to: a query's, or an
+// edge's, whose queries batch.
+func paginateLikes(
+	ctx context.Context, from gqlimpl.Source,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+) (*LikeConnection, error) {
 	c, err := gqlimpl.Paginate(
-		ctx, velox.Untyped(q), &likeGQL,
+		ctx, from, &likeGQL,
 		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
 		nil,
 	)
@@ -95,7 +104,7 @@ var likeGQL = gqlimpl.Type{
 	},
 	Read:   []int{likeColUserID, likeColPostID},
 	Fields: []string{likeColWeight: "weight", likeColCreatedAt: "createdAt"},
-	Edges:  []string{"user", "post"},
+	Edges:  []string{likeEdgeUser: "user", likeEdgePost: "post"},
 	Inputs: []string{
 		likeColWeight:    "weight",
 		likeColCreatedAt: "createdAt",

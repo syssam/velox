@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion16
+const _ = veloxgql.GeneratedCodeIsVersion17
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -25,18 +25,7 @@ func (x *Category) Children(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *CategoryWhereInput,
 ) (*CategoryConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := PaginateCategories(ctx, db.Query[Category](), after, first, before, last, where)
-	if err != nil {
-		return nil, err
-	}
-	return &CategoryConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &categoryGQL, x, categoryEdgeChildren, "Category.children",
-		[]any{after, first, before, last, where},
-	)}, nil
+	return paginateCategories(ctx, categoryGQL.Edge(x, categoryEdgeChildren), after, first, before, last, where)
 }
 
 // Parent is the edge parent: the Category it leads to, or nil. It is read in
@@ -45,7 +34,7 @@ func (x *Category) Parent(ctx context.Context) (*Category, error) {
 	if x.CategoryChildren == nil {
 		return nil, nil
 	}
-	v, err := gqlimpl.EdgeOne(ctx, &categoryGQL, &categoryGQL, x, categoryEdgeParent, "Category.parent")
+	v, err := gqlimpl.EdgeOne(ctx, &categoryGQL, categoryGQL.Edge(x, categoryEdgeParent))
 	n, _ := v.(*Category)
 	return n, err
 }
@@ -98,18 +87,25 @@ func PaginateCategories(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *CategoryWhereInput,
 ) (*CategoryConnection, error) {
+	return paginateCategories(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, where)
+}
+
+// paginateCategories is PaginateCategories of the nodes from leads to: a
+// query's, or an edge's, whose queries batch.
+func paginateCategories(
+	ctx context.Context, from gqlimpl.Source,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	where *CategoryWhereInput,
+) (*CategoryConnection, error) {
+	args := gqlimpl.Args{After: after, First: first, Before: before, Last: last}
 	if where != nil {
-		p, err := where.Pred(ctx)
+		p, err := where.predicate(ctx)
 		if err != nil {
 			return nil, err
 		}
-		q = q.Where(p)
+		args.Where, args.Pred = where, p
 	}
-	c, err := gqlimpl.Paginate(
-		ctx, velox.Untyped(q), &categoryGQL,
-		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
-		nil,
-	)
+	c, err := gqlimpl.Paginate(ctx, from, &categoryGQL, args, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +119,10 @@ var categoryGQL = gqlimpl.Type{
 	Key:    []gqlimpl.Col{{Field: "id", Col: categoryColID}},
 	Read:   []int{categoryColID, categoryColCategoryChildren},
 	Fields: []string{categoryColID: "id", categoryColTitle: "title"},
-	Edges:  []string{"children", "parent"},
+	Edges: []string{
+		categoryEdgeChildren: "children",
+		categoryEdgeParent:   "parent",
+	},
 	Inputs: []string{
 		categoryColTitle:            "title",
 		categoryColCategoryChildren: "parentID",

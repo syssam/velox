@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion16
+const _ = veloxgql.GeneratedCodeIsVersion17
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -70,25 +70,14 @@ func (x *User) Posts(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := PaginatePosts(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
-	if err != nil {
-		return nil, err
-	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &userGQL, x, userEdgePosts, "Account.posts",
-		[]any{after, first, before, last, orderBy, where},
-	)}, nil
+	return paginatePosts(ctx, userGQL.Edge(x, userEdgePosts), after, first, before, last, orderBy, where)
 }
 
 // Groups is the edge groups: the Group nodes it leads to, in key order. It is
 // read in one query with the edge of every row read with x, and fails on more
 // than MaxList nodes.
 func (x *User) Groups(ctx context.Context) ([]*Group, error) {
-	v, err := gqlimpl.EdgeList(ctx, &groupGQL, &userGQL, x, userEdgeGroups, "Account.memberships", 0)
+	v, err := gqlimpl.EdgeList(ctx, &groupGQL, userGQL.Edge(x, userEdgeGroups), 0)
 	n, _ := v.([]*Group)
 	return n, err
 }
@@ -99,18 +88,7 @@ func (x *User) Likes(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 ) (*LikeConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := PaginateLikes(ctx, db.Query[Like](), after, first, before, last)
-	if err != nil {
-		return nil, err
-	}
-	return &LikeConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &userGQL, x, userEdgeLikes, "Account.likes",
-		[]any{after, first, before, last},
-	)}, nil
+	return paginateLikes(ctx, userGQL.Edge(x, userEdgeLikes), after, first, before, last)
 }
 
 // AccountConnection is the GraphQL type AccountConnection. Its fields run their
@@ -161,18 +139,25 @@ func PaginateAccounts(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *AccountWhereInput,
 ) (*AccountConnection, error) {
+	return paginateAccounts(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, where)
+}
+
+// paginateAccounts is PaginateAccounts of the nodes from leads to: a query's,
+// or an edge's, whose queries batch.
+func paginateAccounts(
+	ctx context.Context, from gqlimpl.Source,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	where *AccountWhereInput,
+) (*AccountConnection, error) {
+	args := gqlimpl.Args{After: after, First: first, Before: before, Last: last}
 	if where != nil {
-		p, err := where.Pred(ctx)
+		p, err := where.predicate(ctx)
 		if err != nil {
 			return nil, err
 		}
-		q = q.Where(p)
+		args.Where, args.Pred = where, p
 	}
-	c, err := gqlimpl.Paginate(
-		ctx, velox.Untyped(q), &userGQL,
-		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
-		nil,
-	)
+	c, err := gqlimpl.Paginate(ctx, from, &userGQL, args, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +187,11 @@ var userGQL = gqlimpl.Type{
 		userColActive:     "active",
 		userColSettings:   "settings",
 	},
-	Edges: []string{"posts", "memberships", "likes"},
+	Edges: []string{
+		userEdgePosts:  "posts",
+		userEdgeGroups: "memberships",
+		userEdgeLikes:  "likes",
+	},
 	Inputs: []string{
 		userColCreatedAt:      "createdAt",
 		userColUpdatedAt:      "updatedAt",

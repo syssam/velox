@@ -23,6 +23,10 @@ func lowerFirst(name string) string {
 func paginateFunc(t *sdl.Type) string { return "Paginate" + plugin.GoPlural(t.Name) }
 func typeVar(t *sdl.Type) string      { return lowerFirst(t.Entity.Name) + "GQL" }
 
+// paginateImpl is the unexported function PaginateXs and the edge methods to
+// t's nodes call, paginatePosts: it pages a gqlimpl.Source.
+func paginateImpl(t *sdl.Type) string { return "paginate" + plugin.GoPlural(t.Name) }
+
 // labelCamel is an entity's label as velox-gen begins the names of its
 // constants: post_tag is postTag.
 func labelCamel(label string) string {
@@ -86,11 +90,13 @@ func connArgs(t *sdl.Type) string {
 }
 
 // writeConnection writes XConnection and XEdge, PaginateXs, which pages a
-// query of t's nodes, and the variable that describes t to gqlimpl.
+// query of t's nodes, paginateXs, which pages a query or an edge for
+// PaginateXs and the edge methods, and the variable that describes t to
+// gqlimpl.
 func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	e, n := t.Entity, t.Name
 	what := "schema " + e.Name
-	for _, name := range []string{n + "Connection", n + "Edge", paginateFunc(t), typeVar(t)} {
+	for _, name := range []string{n + "Connection", n + "Edge", paginateFunc(t), paginateImpl(t), typeVar(t)} {
 		if err := r.declare(name, what); err != nil {
 			return err
 		}
@@ -151,6 +157,17 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	}
 	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q must not be ordered, and must select %s.", paginateFunc(t), n, strings.Join(how, ", "), selects))
 	f.p("%s", signature("func "+paginateFunc(t), "ctx "+ctx+".Context, q "+velox+".Query["+e.Name+"]", connParams(f, t), "(*"+n+"Connection, error)"))
+	f.p("\treturn %s(ctx, %s.Query(%s.Untyped(q)), %s)", paginateImpl(t), impl, velox, connArgs(t))
+	f.p("}")
+	f.p("")
+
+	f.doc("", fmt.Sprintf("%s is %s of the nodes from leads to: a query's, or an edge's, whose queries batch.", paginateImpl(t), paginateFunc(t)))
+	f.p("%s", signature("func "+paginateImpl(t), "ctx "+ctx+".Context, from "+impl+".Source", connParams(f, t), "(*"+n+"Connection, error)"))
+	args := impl + ".Args{After: after, First: first, Before: before, Last: last}"
+	if t.Where != nil {
+		f.p("\targs := %s", args)
+		args = "args"
+	}
 	order := "nil"
 	if t.Order != nil {
 		order = "order"
@@ -169,18 +186,14 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	}
 	if t.Where != nil {
 		f.p("\tif where != nil {")
-		f.p("\t\tp, err := where.Pred(ctx)")
+		f.p("\t\tp, err := where.predicate(ctx)")
 		f.p("\t\tif err != nil {")
 		f.p("\t\t\treturn nil, err")
 		f.p("\t\t}")
-		f.p("\t\tq = q.Where(p)")
+		f.p("\t\targs.Where, args.Pred = where, p")
 		f.p("\t}")
 	}
-	f.p("\tc, err := %s", items(impl+".Paginate(", []string{
-		"ctx, " + velox + ".Untyped(q), &" + typeVar(t),
-		impl + ".Args{After: after, First: first, Before: before, Last: last}",
-		order,
-	}, ")"))
+	f.p("\tc, err := %s", items(impl+".Paginate(", []string{"ctx, from, &" + typeVar(t), args, order}, ")"))
 	f.p("\tif err != nil {")
 	f.p("\t\treturn nil, err")
 	f.p("\t}")
@@ -231,7 +244,8 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 // writeSelection writes the fields of t's gqlimpl.Type that give the columns a
 // selection reads: Read, the key, every foreign key on the row and every
 // order field's column; Fields, the column of each of t's fields; and
-// Edges, t's edges, which read no column of their own.
+// Edges, t's edge fields by relation, which read no column of their own and
+// name an edge's field for gqlimpl's batches.
 func (r *renderer) writeSelection(f *file, t *sdl.Type) {
 	e := t.Entity
 	read := slices.Clone(e.PrimaryKey) // indexes in e.Fields
@@ -259,7 +273,7 @@ func (r *renderer) writeSelection(f *file, t *sdl.Type) {
 	}
 	var edges []string
 	for _, ed := range t.Edges {
-		edges = append(edges, strconv.Quote(ed.Name))
+		edges = append(edges, edgeConst(e, e.Edges[ed.Edge])+": "+strconv.Quote(ed.Name))
 	}
 	if len(edges) > 0 {
 		f.p("\tEdges: %s,", items("[]string{", edges, "}"))
@@ -438,10 +452,11 @@ func (r *renderer) nilKey(e *plugin.Entity, ed *plugin.Edge, tgt *plugin.Entity)
 }
 
 // writeEdge writes the method of the edge field ed of t: the edge's node or
-// nodes, read through gqlimpl's batches (EdgeConnection, EdgeOne, EdgeList)
-// on the DB veloxgql.DBFromContext reads from ctx. Each gets the edge's GraphQL
-// field ("Post.likes"), which alone batches it, and a connection its
-// arguments, which its batch keeps. It never reads the relation's field: an
+// nodes, read through gqlimpl's batches (EdgeOne, EdgeList, or Paginate of
+// the edge in the target's paginate) on the DB veloxgql.DBFromContext reads
+// from ctx. Each gets the edge, x's relation, whose field t's gqlimpl.Type
+// names in its Edges; that field alone batches it, and a connection's batch
+// keeps its arguments. It never reads the relation's field: an
 // application's With may have loaded it filtered or limited.
 func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 	e, pe := t.Entity, t.Entity.Edges[ed.Edge]
@@ -457,10 +472,10 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		return fmt.Errorf("schema %s, edge %s: a to-many edge whose key is on the owner's row, which velox-gen does not write", e.Name, pe.Name)
 	}
 	ctx, impl := f.use("context", "context"), f.gqlimpl()
-	// The owner's table, x and the relation's index: the batches are
+	// The owner's type, x and the relation's index: the batches are
 	// compiled once, on velox.Table, and gqlimpl takes and gives the rows
 	// as *E in an any.
-	rel := fmt.Sprintf("&%s, x, %s, %q", typeVar(t), edgeConst(e, pe), t.Name+"."+ed.Name)
+	edge := fmt.Sprintf("%s.Edge(x, %s)", typeVar(t), edgeConst(e, pe))
 	switch ed.Kind {
 	case sdl.EdgeUnique:
 		f.doc("", fmt.Sprintf("%s is the edge %s: the %s it leads to, or nil. It is read in one query with the edge of every row read with x.", ed.Method, pe.Name, tt.Name))
@@ -470,29 +485,21 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 			f.p("\t\treturn nil, nil")
 			f.p("\t}")
 		}
-		f.p("\tv, err := %s.EdgeOne(ctx, &%s, %s)", impl, typeVar(tt), rel)
+		f.p("\tv, err := %s.EdgeOne(ctx, &%s, %s)", impl, typeVar(tt), edge)
 		f.p("\tn, _ := v.(*%s)", tgt.Name)
 		f.p("\treturn n, err")
 		f.p("}")
 	case sdl.EdgeList:
 		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is read in one query with the edge of every row read with x, and fails on more than MaxList nodes.", ed.Method, pe.Name, tt.Name))
 		f.p("func (x *%s) %s(ctx %s.Context) ([]*%s, error) {", e.Name, ed.Method, ctx, tgt.Name)
-		f.p("\tv, err := %s.EdgeList(ctx, &%s, %s, %d)", impl, typeVar(tt), rel, ed.MaxList)
+		f.p("\tv, err := %s.EdgeList(ctx, &%s, %s, %d)", impl, typeVar(tt), edge, ed.MaxList)
 		f.p("\tn, _ := v.([]*%s)", tgt.Name)
 		f.p("\treturn n, err")
 		f.p("}")
 	case sdl.EdgeConnection:
 		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to. Its queries batch with the edge of every row read with x.", ed.Method, pe.Name, tt.Name))
 		f.p("%s", signature("func (x *"+e.Name+") "+ed.Method, "ctx "+ctx+".Context", connParams(f, tt), "(*"+tt.Name+"Connection, error)"))
-		f.p("\tdb, err := %s.DBFromContext(ctx)", f.veloxgql())
-		f.p("\tif err != nil {")
-		f.p("\t\treturn nil, err")
-		f.p("\t}")
-		f.p("\tc, err := %s(ctx, db.Query[%s](), %s)", paginateFunc(tt), tgt.Name, connArgs(tt))
-		f.p("\tif err != nil {")
-		f.p("\t\treturn nil, err")
-		f.p("\t}")
-		f.p("\treturn &%sConnection{c: %s}, nil", tt.Name, items(impl+".EdgeConnection(", []string{"ctx, c.c, " + rel, "[]any{" + connArgs(tt) + "}"}, ")"))
+		f.p("\treturn %s(ctx, %s, %s)", paginateImpl(tt), edge, connArgs(tt))
 		f.p("}")
 	}
 	f.p("")

@@ -720,7 +720,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion16\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion17\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1313,10 +1313,10 @@ func TestNoPointerCasts(t *testing.T) {
 }
 
 // TestEdgesBatch: every edge method reads its edge through gqlimpl's
-// batching (EdgeConnection, EdgeOne or EdgeList, by its kind, with the
-// owner's table, the row and the relation's index), and none reads the
-// relation's field, which an application's With may have loaded filtered or
-// limited.
+// batching (EdgeOne, EdgeList or the target's paginate, by its kind, of
+// the owner type's Edge of the row and the relation's index), none reads
+// the DB itself, and none reads the relation's field, which an
+// application's With may have loaded filtered or limited.
 func TestEdgesBatch(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		surf, err := sdl.Build(m)
@@ -1331,18 +1331,21 @@ func TestEdgesBatch(t *testing.T) {
 				n++
 				pe := e.Edges[ed.Edge]
 				src := funcSrc(t, files, e.Name+"."+ed.Method)
-				// The edge's GraphQL field, which batches it, and a
-				// connection's arguments, which its batch keeps.
-				field := "\"" + ty.Name + "." + ed.Name + "\""
-				rel := "&" + typeVar(ty) + ", x, " + edgeConst(e, pe)
-				// The target's table, which reads only the columns its
-				// selection needs, and the typed result.
+				// The edge: the owner's type, whose Edges name its
+				// field (TestConnSelection), x and the relation.
+				edge := typeVar(ty) + ".Edge(x, " + edgeConst(e, pe) + ")"
+				// The target's type, which reads only the columns its
+				// selection needs, and the typed result; a connection is
+				// the target's paginate of the edge, with its arguments.
 				tt := ed.Target
 				want := map[sdl.EdgeKind]string{
-					sdl.EdgeConnection: "gqlimpl.EdgeConnection(ctx, c.c, " + rel + ", " + field + ", []any{" + connArgs(ed.Target) + "})",
-					sdl.EdgeUnique:     "v, err := gqlimpl.EdgeOne(ctx, &" + typeVar(tt) + ", " + rel + ", " + field + ") n, _ := v.(*" + tt.Entity.Name + ") return n, err",
-					sdl.EdgeList:       "v, err := gqlimpl.EdgeList(ctx, &" + typeVar(tt) + ", " + rel + ", " + field + ", 0) n, _ := v.([]*" + tt.Entity.Name + ") return n, err",
+					sdl.EdgeConnection: "return " + paginateImpl(tt) + "(ctx, " + edge + ", " + connArgs(tt) + ")",
+					sdl.EdgeUnique:     "v, err := gqlimpl.EdgeOne(ctx, &" + typeVar(tt) + ", " + edge + ") n, _ := v.(*" + tt.Entity.Name + ") return n, err",
+					sdl.EdgeList:       "v, err := gqlimpl.EdgeList(ctx, &" + typeVar(tt) + ", " + edge + ", 0) n, _ := v.([]*" + tt.Entity.Name + ") return n, err",
 				}[ed.Kind]
+				if strings.Contains(src, "DBFromContext") {
+					t.Errorf("%s: %s.%s reads the DB itself:\n%s", label, e.Name, ed.Method, src)
+				}
 				if !strings.Contains(src, want) {
 					t.Errorf("%s: %s.%s: no %q in\n%s", label, e.Name, ed.Method, want, src)
 				}
@@ -1407,10 +1410,16 @@ func TestConnSelection(t *testing.T) {
 				names = append(names, v)
 				cols = append(cols, col)
 			}
-			for _, q := range lit["Edges"] {
+			// Edges is by relation: an edge's field, which batches it.
+			byRel := map[string]string{}
+			for _, ed := range ty.Edges {
+				byRel[edgeConst(e, e.Edges[ed.Edge])] = ed.Name
+			}
+			for _, kv := range lit["Edges"] {
+				rel, q, _ := strings.Cut(kv, ": ")
 				v, err := strconv.Unquote(q)
-				if err != nil {
-					t.Fatalf("%s: %s: an edge %q", label, ty.Name, q)
+				if err != nil || byRel[rel] != v {
+					t.Fatalf("%s: %s: an edge %q, want one of %v", label, ty.Name, kv, byRel)
 				}
 				names = append(names, v)
 			}
@@ -1449,8 +1458,9 @@ func TestConnSelection(t *testing.T) {
 	}
 }
 
-// TestPaginateFilters: PaginateXs filters q by where's Pred and hands it to
-// gqlimpl.Paginate, which checks it and pages it.
+// TestPaginateFilters: PaginateXs is paginateXs of q, which hands its
+// source to gqlimpl.Paginate with the where input and its condition in
+// Args, and Paginate checks the query, filters it and pages it.
 func TestPaginateFilters(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		surf, err := sdl.Build(m)
@@ -1460,12 +1470,16 @@ func TestPaginateFilters(t *testing.T) {
 		files := render(t, m)
 		for _, ty := range surf.Types {
 			src := funcSrc(t, files, paginateFunc(ty))
-			page := strings.Index(src, "gqlimpl.Paginate(ctx, velox.Untyped(q), &"+typeVar(ty)+",")
-			if page < 0 {
-				t.Errorf("%s: %s does not call gqlimpl.Paginate:\n%s", label, paginateFunc(ty), src)
+			if want := "return " + paginateImpl(ty) + "(ctx, gqlimpl.Query(velox.Untyped(q)), " + connArgs(ty) + ")"; !strings.Contains(src, want) {
+				t.Errorf("%s: %s is not %q:\n%s", label, paginateFunc(ty), want, src)
 			}
-			if w := strings.Index(src, "q = q.Where(p)"); (w >= 0) != (ty.Where != nil) || w > page {
-				t.Errorf("%s: %s: the where input not before Paginate:\n%s", label, paginateFunc(ty), src)
+			src = funcSrc(t, files, paginateImpl(ty))
+			page := strings.Index(src, "gqlimpl.Paginate(ctx, from, &"+typeVar(ty)+",")
+			if page < 0 {
+				t.Errorf("%s: %s does not call gqlimpl.Paginate:\n%s", label, paginateImpl(ty), src)
+			}
+			if w := strings.Index(src, "args.Where, args.Pred = where, p"); (w >= 0) != (ty.Where != nil) || w > page {
+				t.Errorf("%s: %s: the where input not before Paginate:\n%s", label, paginateImpl(ty), src)
 			}
 		}
 	}
@@ -1487,7 +1501,7 @@ func TestM2MWithoutInverse(t *testing.T) {
 	author.Edges = []*plugin.Edge{{Name: "books", GoName: "Books", Target: "Book", Kind: plugin.M2M, Join: "AuthorBook"}}
 	files := render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{author, entity("Book")}})
 	src := funcSrc(t, files, "Author.Books")
-	if !strings.Contains(src, "gqlimpl.EdgeConnection(ctx, c.c, &authorGQL, x, authorEdgeBooks, \"Author.books\", []any{after, first, before, last") {
+	if !strings.Contains(src, "return paginateBooks(ctx, authorGQL.Edge(x, authorEdgeBooks), after, first, before, last") {
 		t.Errorf("Author.Books:\n%s", src)
 	}
 }

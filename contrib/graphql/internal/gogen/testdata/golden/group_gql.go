@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion16
+const _ = veloxgql.GeneratedCodeIsVersion17
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -52,18 +52,7 @@ func (x *Group) Users(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *AccountWhereInput,
 ) (*AccountConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := PaginateAccounts(ctx, db.Query[User](), after, first, before, last, where)
-	if err != nil {
-		return nil, err
-	}
-	return &AccountConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &groupGQL, x, groupEdgeUsers, "Group.users",
-		[]any{after, first, before, last, where},
-	)}, nil
+	return paginateAccounts(ctx, groupGQL.Edge(x, groupEdgeUsers), after, first, before, last, where)
 }
 
 // GroupConnection is the GraphQL type GroupConnection. Its fields run their
@@ -114,12 +103,22 @@ func PaginateGroups(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *GroupOrder,
 ) (*GroupConnection, error) {
+	return paginateGroups(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, orderBy)
+}
+
+// paginateGroups is PaginateGroups of the nodes from leads to: a query's, or an
+// edge's, whose queries batch.
+func paginateGroups(
+	ctx context.Context, from gqlimpl.Source,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy *GroupOrder,
+) (*GroupConnection, error) {
 	var order []gqlimpl.Order
 	if o := orderBy; o != nil {
 		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
 	c, err := gqlimpl.Paginate(
-		ctx, velox.Untyped(q), &groupGQL,
+		ctx, from, &groupGQL,
 		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
 		order,
 	)
@@ -143,7 +142,7 @@ var groupGQL = gqlimpl.Type{
 		groupColName:       "name",
 		groupColVisibility: "visibility",
 	},
-	Edges: []string{"users"},
+	Edges: []string{groupEdgeUsers: "users"},
 }
 
 // GroupOrder is the GraphQL input GroupOrder, an order of connections to Group.

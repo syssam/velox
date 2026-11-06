@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion16
+const _ = veloxgql.GeneratedCodeIsVersion17
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -32,18 +32,7 @@ func (x *Tag) Posts(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := PaginatePosts(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
-	if err != nil {
-		return nil, err
-	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &tagGQL, x, tagEdgePosts, "Label.posts",
-		[]any{after, first, before, last, orderBy, where},
-	)}, nil
+	return paginatePosts(ctx, tagGQL.Edge(x, tagEdgePosts), after, first, before, last, orderBy, where)
 }
 
 // LabelConnection is the GraphQL type LabelConnection. Its fields run their
@@ -94,22 +83,29 @@ func PaginateLabels(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *LabelOrder, where *LabelWhereInput,
 ) (*LabelConnection, error) {
+	return paginateLabels(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
+}
+
+// paginateLabels is PaginateLabels of the nodes from leads to: a query's, or an
+// edge's, whose queries batch.
+func paginateLabels(
+	ctx context.Context, from gqlimpl.Source,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy *LabelOrder, where *LabelWhereInput,
+) (*LabelConnection, error) {
+	args := gqlimpl.Args{After: after, First: first, Before: before, Last: last}
 	var order []gqlimpl.Order
 	if o := orderBy; o != nil {
 		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
 	if where != nil {
-		p, err := where.Pred(ctx)
+		p, err := where.predicate(ctx)
 		if err != nil {
 			return nil, err
 		}
-		q = q.Where(p)
+		args.Where, args.Pred = where, p
 	}
-	c, err := gqlimpl.Paginate(
-		ctx, velox.Untyped(q), &tagGQL,
-		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
-		order,
-	)
+	c, err := gqlimpl.Paginate(ctx, from, &tagGQL, args, order)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +122,7 @@ var tagGQL = gqlimpl.Type{
 	},
 	Read:   []int{tagColID, tagColName},
 	Fields: []string{tagColID: "id", tagColName: "name", tagColRank: "rank"},
-	Edges:  []string{"posts"},
+	Edges:  []string{tagEdgePosts: "posts"},
 	Inputs: []string{tagColName: "name", tagColRank: "rank"},
 }
 

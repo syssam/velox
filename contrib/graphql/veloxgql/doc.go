@@ -3,7 +3,7 @@
 // the scalars, and the limits on what a client may ask for.
 //
 // What only generated code calls is in package gqlimpl, whose names are
-// stable by GeneratedCodeIsVersion16 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion17 and not by semantic versioning. Where a
 // name below belongs to gqlimpl it is written gqlimpl.Name.
 //
 // # IDs
@@ -208,8 +208,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion16 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion17 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
-// disagree. For generated code. It is replaced by GeneratedCodeIsVersion17 when
+// disagree. For generated code. It is replaced by GeneratedCodeIsVersion18 when
 // generated code must change.
-const GeneratedCodeIsVersion16 = true
+const GeneratedCodeIsVersion17 = true

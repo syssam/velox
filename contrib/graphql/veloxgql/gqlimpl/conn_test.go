@@ -36,19 +36,19 @@ func TestPaginateBase(t *testing.T) {
 		{"no key", q.Columns(int(people.Name.I)), nil, "veloxgql: PaginatePersons: q does not select the key, which the cursors hold"},
 		{"no order column", q.Columns(int(people.ID.I), int(people.Name.I)), age, "veloxgql: PaginatePersons: q does not select the column of AGE, which orderBy names and the cursors hold"},
 	} {
-		_, err := gqlimpl.Paginate(ctx, c.q, &personConn, gqlimpl.Args{}, c.order)
+		_, err := gqlimpl.Paginate(ctx, gqlimpl.Query(c.q), &personConn, gqlimpl.Args{}, c.order)
 		var coded interface{ Extensions() map[string]any }
 		if err == nil || err.Error() != c.want || errors.As(err, &coded) {
 			t.Errorf("%s: %v, want the internal error %q", c.name, err, c.want)
 		}
 	}
 	unknown := []gqlimpl.Order{{Field: "HEIGHT"}}
-	_, err := gqlimpl.Paginate(ctx, q, &personConn, gqlimpl.Args{}, unknown)
+	_, err := gqlimpl.Paginate(ctx, gqlimpl.Query(q), &personConn, gqlimpl.Args{}, unknown)
 	var coded interface{ Extensions() map[string]any }
 	if want := `veloxgql: PersonOrder: "HEIGHT" is not a value of PersonOrderField`; err == nil || err.Error() != want || !errors.As(err, &coded) {
 		t.Errorf("an unknown order field: %v, want the input error %q", err, want)
 	}
-	c, err := gqlimpl.Paginate(ctx, q, &personConn, gqlimpl.Args{First: new(3)}, age)
+	c, err := gqlimpl.Paginate(ctx, gqlimpl.Query(q), &personConn, gqlimpl.Args{First: new(3)}, age)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestNamedTypeTerms(t *testing.T) {
 	order := []gqlimpl.Order{{Field: "SCORE", Direction: veloxgql.OrderDirectionDesc}}
 	page := func(args gqlimpl.Args) ([]gadgetID, *gqlimpl.Page) {
 		t.Helper()
-		c, err := gqlimpl.Paginate(ctx, velox.Untyped(db.Query[gadget]()), conn, args, order)
+		c, err := gqlimpl.Paginate(ctx, gqlimpl.Query(velox.Untyped(db.Query[gadget]())), conn, args, order)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -158,7 +158,7 @@ func TestNamedTypeTerms(t *testing.T) {
 		}
 	}
 	bad := veloxgql.Cursor{Type: "Gadget", Terms: []veloxgql.CursorTerm{{Field: "SCORE", Direction: veloxgql.OrderDirectionDesc, Value: "high"}}, Key: 1}
-	if _, err := gqlimpl.Paginate(ctx, velox.Untyped(db.Query[gadget]()), conn, gqlimpl.Args{After: wire(t, bad)}, order); !errors.Is(err, veloxgql.ErrBadCursor) {
+	if _, err := gqlimpl.Paginate(ctx, gqlimpl.Query(velox.Untyped(db.Query[gadget]())), conn, gqlimpl.Args{After: wire(t, bad)}, order); !errors.Is(err, veloxgql.ErrBadCursor) {
 		t.Errorf("a string score: %v, want ErrBadCursor", err)
 	}
 }

@@ -220,18 +220,13 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			return out, nil
 		}
 	}
-	key := &gqlimpl.Type{Name: "Pet", Key: []gqlimpl.Col{{Field: "id", Col: int(pets.ID.I)}}}
-	petConn := func(edge string) resolver {
+	key := &gqlimpl.Type{Name: "Pet", Table: velox.TableOf[pet], Key: []gqlimpl.Col{{Field: "id", Col: int(pets.ID.I)}}}
+	petConn := func(field string) resolver {
+		edges := make([]string, keepers.Pets.I+1)
+		edges[keepers.Pets.I] = strings.TrimPrefix(field, "Keeper.")
+		owner := &gqlimpl.Type{Name: "Keeper", Table: velox.TableOf[keeper], Edges: edges}
 		return func(ctx context.Context, _ map[string]any) (any, error) {
-			db, err := veloxgql.DBFromContext(ctx)
-			if err != nil {
-				return nil, err
-			}
-			c, err := gqlimpl.Paginate(ctx, db.QueryTable(velox.TableOf[pet]()), key, gqlimpl.Args{}, nil)
-			if err != nil {
-				return nil, err
-			}
-			return gqlimpl.EdgeConnection(ctx, c, &gqlimpl.Type{Name: "Keeper", Table: velox.TableOf[keeper]}, parent(ctx), int(keepers.Pets.I), edge, nil), nil
+			return gqlimpl.Paginate(ctx, owner.Edge(parent(ctx), int(keepers.Pets.I)), key, gqlimpl.Args{}, nil)
 		}
 	}
 	return serveSchema(testSchemaOf(batchSDL, map[string]resolver{

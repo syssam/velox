@@ -59,12 +59,16 @@ func TestEdgeErrors(t *testing.T) {
 	if _, err := gqlimpl.EdgeListOf(noDB, &owner{ID: 1}, owners.Tags, "Owner.tags", 0); !errors.Is(err, veloxgql.ErrNoDB) {
 		t.Errorf("EdgeList with no DB: %v", err)
 	}
+	kids := gqlimpl.EdgeOf(&owner{ID: 1}, owners.Children, "Owner.children")
+	if c, err := gqlimpl.Paginate(noDB, kids, gqlimpl.TableType[child]("Child"), gqlimpl.Args{}, nil); c != nil || !errors.Is(err, veloxgql.ErrNoDB) {
+		t.Errorf("Paginate of an edge with no DB = %v, %v", c, err)
+	}
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	none := &gqlimpl.Type{Name: "None"} // an owner with no Table
-	if v, err := gqlimpl.EdgeOne(ctx, gqlimpl.TableType[owner]("Owner"), none, x, int(children.Owner.I), "Child.owner"); v != nil || err == nil {
+	if v, err := gqlimpl.EdgeOne(ctx, gqlimpl.TableType[owner]("Owner"), none.Edge(x, int(children.Owner.I))); v != nil || err == nil {
 		t.Errorf("EdgeOne of an owner with no Table = %v, %v", v, err)
 	}
-	if v, err := gqlimpl.EdgeList(ctx, gqlimpl.TableType[tag]("Tag"), none, &owner{ID: 1}, int(owners.Tags.I), "Owner.tags", 0); v != nil || err == nil {
+	if v, err := gqlimpl.EdgeList(ctx, gqlimpl.TableType[tag]("Tag"), none.Edge(&owner{ID: 1}, int(owners.Tags.I)), 0); v != nil || err == nil {
 		t.Errorf("EdgeList of an owner with no Table = %v, %v", v, err)
 	}
 }

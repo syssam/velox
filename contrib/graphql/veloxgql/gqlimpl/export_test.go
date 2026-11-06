@@ -2,6 +2,7 @@ package gqlimpl
 
 import (
 	"context"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -126,21 +127,39 @@ func NewNodeWith(c *Type, decode func(id string) (any, error)) NodeKind {
 	return newNode(c, decode)
 }
 
-// EdgeConnectionOf is EdgeConnection of a ConnectionOf.
+// OwnerType is the Type of E's entity alone, as an edge's owner, whose
+// relation rel is the edge field field ("Owner.children"): its Name is the
+// part before the dot.
+func OwnerType[E any](field string, rel int) *Type {
+	typ, name, _ := strings.Cut(field, ".")
+	c := TableType[E](typ)
+	c.Edges = make([]string, rel+1)
+	c.Edges[rel] = name
+	return c
+}
+
+// EdgeOf is the Edge of x through r, whose GraphQL field is field.
+func EdgeOf[E, T any](x *E, r velox.Rel[E, T], field string) Edge {
+	return OwnerType[E](field, int(r.I)).Edge(x, int(r.I))
+}
+
+// EdgeConnectionOf is the connection c of the edge of x through r, whose
+// GraphQL field is field, read with the arguments args: what Paginate of an
+// Edge does with the connection it makes, on any c.
 func EdgeConnectionOf[E, T any](ctx context.Context, c ConnectionOf[T], x *E, r velox.Rel[E, T], field string, args any) ConnectionOf[T] {
-	return ConnectionOf[T]{EdgeConnection(ctx, c.Connection, TableType[E]("Owner"), x, int(r.I), field, args)}
+	return ConnectionOf[T]{edgeConnection(ctx, c.Connection, EdgeOf(x, r, field), args)}
 }
 
 // EdgeOneOf is EdgeOne, typed, as the generated code calls it: the target's
 // type is the part of field after the dot's edge, which the selections do not
 // name.
 func EdgeOneOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field string) (*T, error) {
-	return As[*T](EdgeOne(ctx, TableType[T]("Target"), TableType[E]("Owner"), x, int(r.I), field))
+	return As[*T](EdgeOne(ctx, TableType[T]("Target"), EdgeOf(x, r, field)))
 }
 
 // EdgeListOf is EdgeList, typed, as the generated code calls it.
 func EdgeListOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field string, maxList int) ([]*T, error) {
-	return As[[]*T](EdgeList(ctx, TableType[T]("Target"), TableType[E]("Owner"), x, int(r.I), field, maxList))
+	return As[[]*T](EdgeList(ctx, TableType[T]("Target"), EdgeOf(x, r, field), maxList))
 }
 
 // PageWith is NewConnectionOf and Page in one call.

@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion16
+const _ = veloxgql.GeneratedCodeIsVersion17
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -54,18 +54,7 @@ func (x *User) Posts(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := PaginatePosts(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
-	if err != nil {
-		return nil, err
-	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &userGQL, x, userEdgePosts, "User.posts",
-		[]any{after, first, before, last, orderBy, where},
-	)}, nil
+	return paginatePosts(ctx, userGQL.Edge(x, userEdgePosts), after, first, before, last, orderBy, where)
 }
 
 // UserConnection is the GraphQL type UserConnection. Its fields run their
@@ -116,22 +105,29 @@ func PaginateUsers(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *UserOrder, where *UserWhereInput,
 ) (*UserConnection, error) {
+	return paginateUsers(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
+}
+
+// paginateUsers is PaginateUsers of the nodes from leads to: a query's, or an
+// edge's, whose queries batch.
+func paginateUsers(
+	ctx context.Context, from gqlimpl.Source,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy *UserOrder, where *UserWhereInput,
+) (*UserConnection, error) {
+	args := gqlimpl.Args{After: after, First: first, Before: before, Last: last}
 	var order []gqlimpl.Order
 	if o := orderBy; o != nil {
 		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
 	if where != nil {
-		p, err := where.Pred(ctx)
+		p, err := where.predicate(ctx)
 		if err != nil {
 			return nil, err
 		}
-		q = q.Where(p)
+		args.Where, args.Pred = where, p
 	}
-	c, err := gqlimpl.Paginate(
-		ctx, velox.Untyped(q), &userGQL,
-		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
-		order,
-	)
+	c, err := gqlimpl.Paginate(ctx, from, &userGQL, args, order)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +151,7 @@ var userGQL = gqlimpl.Type{
 		userColRole:     "role",
 		userColJoinedAt: "joinedAt",
 	},
-	Edges: []string{"posts"},
+	Edges: []string{userEdgePosts: "posts"},
 	Inputs: []string{
 		userColName:     "name",
 		userColEmail:    "email",

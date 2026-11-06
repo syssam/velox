@@ -716,6 +716,57 @@ func TestEdgePerRowArguments(t *testing.T) {
 	}
 }
 
+// TestPaginateEdgeWhere: Paginate of an Edge batches the rows whose
+// arguments are equal, Args.Where among them, and not Args.Pred, which may
+// hold a function (Table.Has does) that reflect.DeepEqual never finds equal:
+// the owners whose where is the same are one load, each with its own page.
+// A row whose Where differs (a resolver that computes it per row) reads
+// alone, and gets its own page.
+func TestPaginateEdgeWhere(t *testing.T) {
+	db, _, log := edgeDB(t)
+	typ, order := gqlimpl.TypeOf("Child", titleOrder(), childKey())
+	typ.Table = velox.TableOf[child]
+	pred := func(not string) velox.Predicate {
+		return velox.AndPredicates(velox.Predicate(children.Title.NEQ(not)), velox.TableOf[child]().Has(int(children.Owner.I), velox.TableOf[owner]()))
+	}
+	for _, c := range []struct {
+		name  string
+		where func(x *owner) string
+		loads int
+	}{
+		{"one where", func(*owner) string { return "b" }, 1},
+		{"a where per row", func(x *owner) string { return x.Name }, 3},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := operation(t, db, childrenQuery)
+			xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+			ectx := field(t, ctx, "owners", "edges", "node", "children")
+			log.take("")
+			loads := 0
+			for _, x := range xs {
+				w := c.where(x)
+				args := gqlimpl.Args{First: new(2), Where: w, Pred: pred(w)}
+				conn, err := gqlimpl.Paginate(ectx, gqlimpl.EdgeOf(x, owners.Children, "Owner.children"), typ, args, order)
+				if err != nil {
+					t.Fatal(err)
+				}
+				p, err := conn.Page(ectx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				loads += len(log.take("children"))
+				q := db.Query[child]().Where(children.Title.NEQ(w), children.Owner.Has())
+				want, _ := ownPage(t, db, x, q, gqlimpl.Args{First: new(2)}, titleOrder())
+				log.take("")
+				samePage(t, x.Name+" "+w, gqlimpl.TypedPage[child](p), want)
+			}
+			if len(xs) != 3 || loads != c.loads {
+				t.Errorf("%d owners, %d loads, want 3 and %d", len(xs), loads, c.loads)
+			}
+		})
+	}
+}
+
 // TestEdgeOneBatches: the owners of a page of children are one statement,
 // keyed by the owners' key with no window; a child of no owner has none;
 // a group whose children have no owner sends no statement; and a child in no

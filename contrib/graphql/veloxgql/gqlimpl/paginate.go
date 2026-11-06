@@ -25,9 +25,31 @@ import (
 // before is given. first and last together, after and before together, first
 // with before and last with after all fail with ErrBadPagination: keyset paging
 // bounds a page on one side only.
+//
+// Where is the where argument as the client gave it, nil for none, and Pred
+// its condition, which filters the nodes when Where is not nil. The callers
+// of an edge's batch share Where (reflect.DeepEqual), not Pred.
 type Args struct {
 	After, Before *veloxgql.Cursor
 	First, Last   *int
+	Where         any
+	Pred          velox.Predicate
+}
+
+// A Source is where a connection's nodes come from: a query (Query) or an
+// edge of a row (Type.Edge), whose connections batch.
+type Source interface {
+	paginate(ctx context.Context, c *Type, args Args, order []Order) (*Connection, error)
+}
+
+// Query is the source of the nodes q returns, for Paginate.
+func Query(q velox.TableQuery) Source { return query{q} }
+
+// query is Query's Source.
+type query struct{ q velox.TableQuery }
+
+func (s query) paginate(ctx context.Context, c *Type, args Args, order []Order) (*Connection, error) {
+	return paginate(ctx, s.q, c, args, order)
 }
 
 // Type is what the generated code knows of one GraphQL type, as a literal
@@ -51,7 +73,9 @@ type Type struct {
 	Read []int
 	// Fields is, by column, the type's field that reads the column, or "".
 	Fields []string
-	// Edges is the type's edge fields, which read no column but Read.
+	// Edges is, by relation, the type's edge field that reads the
+	// relation, or "": an edge reads no column but Read, and its field
+	// alone batches it (Type.Edge).
 	Edges []string
 	// Inputs is, by column, the field of the type's create and update inputs
 	// that sets the column, or "": Checked reports a validator's error on
@@ -75,7 +99,9 @@ func (c *Type) columns(fields []string) []int {
 			}
 		}
 		for _, f := range c.Edges {
-			c.fieldCol[f] = -1
+			if f != "" {
+				c.fieldCol[f] = -1
+			}
 		}
 	})
 	cols := slices.Clone(c.Read)
@@ -345,7 +371,7 @@ type Connection struct {
 	terms []term           // the order's terms, then the key's columns
 	key   int              // the index in terms of the key's first column
 	after unsafe.Pointer   // the row the page starts after, in the paging direction
-	// edge is set by EdgeConnection when the connection is its part of a
+	// edge is set by edgeConnection when the connection is its part of a
 	// batch.
 	edge *edgeMode
 
@@ -357,12 +383,15 @@ type Connection struct {
 	countErr  error
 }
 
-// Paginate is the connection to the nodes of c's type that q returns, paged
-// by args, in the order order and then c's key, each column ASC. For
-// generated code: the body of PaginateXs. It checks q and the arguments,
-// decodes the cursor, and runs no query.
+// Paginate is the connection to the nodes of c's type that from leads to,
+// filtered by args.Pred when args.Where is set, paged by args, in the order
+// order and then c's key, each column ASC. For generated code: the body of
+// a type's paginate, which PaginateXs calls with a Query and an edge method
+// with an Edge. It checks the query and the arguments, decodes the cursor,
+// and runs no query. An Edge's connection batches (see Edge's paginate),
+// and it fails as veloxgql.DBFromContext does without a DB in ctx.
 //
-// q keeps its filters, its With loads and the scope the application gave
+// A Query's q keeps its filters, its With loads and the scope the application gave
 // it. It must not be ordered, since its order would come first and break the
 // cursors, and it must select the key and the columns of order's own fields,
 // which the cursors hold: a q that does either wrong is refused with an
@@ -380,7 +409,15 @@ type Connection struct {
 // veloxgql.LimitsFromContext(ctx)); and with ErrBadCursor for a cursor of
 // another type (ErrWrongIDType too), taken under another order, or whose
 // values are not of the order's types.
-func Paginate(ctx context.Context, q velox.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
+func Paginate(ctx context.Context, from Source, c *Type, args Args, order []Order) (*Connection, error) {
+	return from.paginate(ctx, c, args, order)
+}
+
+// paginate is Paginate of a query q.
+func paginate(ctx context.Context, q velox.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
+	if args.Where != nil {
+		q = q.Where(args.Pred)
+	}
 	q, err := connectionBase(ctx, q, c, order)
 	if err != nil {
 		return nil, err
@@ -495,7 +532,7 @@ func newConnection(ctx context.Context, q velox.TableQuery, c *Type, args Args, 
 // MaxPage of veloxgql.LimitsFromContext(ctx) bounds it. The base query's With
 // loads share that cap of n+1 rows, unless they have Rel.MaxRows or
 // Rel.LimitEach. The page's rows become a group of the operation, whose edges
-// batch (see EdgeConnection); in the connection of an edge (EdgeConnection) the
+// batch (see Edge); in the connection of an edge (Type.Edge) the
 // page is the connection's part of the batch, which may return n+1 rows per
 // owner.
 func (c *Connection) Page(ctx context.Context) (*Page, error) {

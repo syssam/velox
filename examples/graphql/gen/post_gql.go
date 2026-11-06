@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion16
+const _ = veloxgql.GeneratedCodeIsVersion17
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -50,7 +50,7 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 // Author is the edge author: the User it leads to, or nil. It is read in one
 // query with the edge of every row read with x.
 func (x *Post) Author(ctx context.Context) (*User, error) {
-	v, err := gqlimpl.EdgeOne(ctx, &userGQL, &postGQL, x, postEdgeAuthor, "Post.author")
+	v, err := gqlimpl.EdgeOne(ctx, &userGQL, postGQL.Edge(x, postEdgeAuthor))
 	n, _ := v.(*User)
 	return n, err
 }
@@ -62,18 +62,7 @@ func (x *Post) Tags(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *LabelOrder, where *LabelWhereInput,
 ) (*LabelConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := PaginateLabels(ctx, db.Query[Tag](), after, first, before, last, orderBy, where)
-	if err != nil {
-		return nil, err
-	}
-	return &LabelConnection{c: gqlimpl.EdgeConnection(
-		ctx, c.c, &postGQL, x, postEdgeTags, "Post.tags",
-		[]any{after, first, before, last, orderBy, where},
-	)}, nil
+	return paginateLabels(ctx, postGQL.Edge(x, postEdgeTags), after, first, before, last, orderBy, where)
 }
 
 // PostConnection is the GraphQL type PostConnection. Its fields run their
@@ -124,22 +113,29 @@ func PaginatePosts(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
+	return paginatePosts(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
+}
+
+// paginatePosts is PaginatePosts of the nodes from leads to: a query's, or an
+// edge's, whose queries batch.
+func paginatePosts(
+	ctx context.Context, from gqlimpl.Source,
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	orderBy []*PostOrder, where *PostWhereInput,
+) (*PostConnection, error) {
+	args := gqlimpl.Args{After: after, First: first, Before: before, Last: last}
 	order := make([]gqlimpl.Order, len(orderBy))
 	for i, o := range orderBy {
 		order[i] = gqlimpl.Order{Field: string(o.Field), Direction: o.Direction}
 	}
 	if where != nil {
-		p, err := where.Pred(ctx)
+		p, err := where.predicate(ctx)
 		if err != nil {
 			return nil, err
 		}
-		q = q.Where(p)
+		args.Where, args.Pred = where, p
 	}
-	c, err := gqlimpl.Paginate(
-		ctx, velox.Untyped(q), &postGQL,
-		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
-		order,
-	)
+	c, err := gqlimpl.Paginate(ctx, from, &postGQL, args, order)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +159,7 @@ var postGQL = gqlimpl.Type{
 		postColViews:       "views",
 		postColPublishedAt: "publishedAt",
 	},
-	Edges: []string{"author", "tags"},
+	Edges: []string{postEdgeAuthor: "author", postEdgeTags: "tags"},
 	Inputs: []string{
 		postColTitle:       "title",
 		postColStatus:      "status",

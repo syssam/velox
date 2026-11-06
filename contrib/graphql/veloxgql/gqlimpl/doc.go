@@ -6,7 +6,7 @@
 //   - the description of a GraphQL type (Type, Col), the connection with its
 //     paging (Paginate, Args, Order), and the Node lookups (NewNode);
 //   - the edges, which read in batches, the edge of every row of a page in
-//     one statement (EdgeConnection, EdgeOne and EdgeList);
+//     one statement (Edge, EdgeOne, EdgeList and Paginate of an Edge);
 //   - the fields a selection reads, which Paginate, the edges and the Node
 //     lookups narrow their queries to;
 //   - what the inputs' Setters methods call: DecodeID and DecodeIDs for the
@@ -16,7 +16,7 @@
 //
 // An application does not call this package.
 //
-// Compatibility is by veloxgql.GeneratedCodeIsVersion16, which every
+// Compatibility is by veloxgql.GeneratedCodeIsVersion17, which every
 // generated file references, and not by semantic versioning, as protobuf's
 // protoimpl is: a name here may change or go when the generated code
 // changes, and then the version constant is replaced, so that generated code

@@ -843,6 +843,46 @@ func TestAliasesNested(t *testing.T) {
 	})
 }
 
+// TestEdgeArgumentsBatch: an edge's batch keeps the arguments its method
+// passes on, as the client gave them, whether as literals or as variables.
+// Each alias batches the edge of every row (one statement, not one per
+// author), and two aliases are two batches, with equal arguments as with
+// different ones; a variable gets the page of the same literal.
+func TestEdgeArgumentsBatch(t *testing.T) {
+	type aliased struct {
+		Name string
+		A, B bookPage
+	}
+	const page = "{ edges { node { title } } }"
+	first := map[string][2][]string{"Ann": {{"Beta"}, {"Beta"}}, "Bob": {{"Dup"}, {"Dup"}}, "Cy": {{"Cat"}, {"Cat"}}}
+	beta := map[string][2][]string{"Ann": {{"Beta"}, {"Beta"}}, "Bob": {{}, {}}, "Cy": {{}, {}}}
+	cases := []struct {
+		name, vars, a, b string
+		values           map[string]any
+		want             map[string][2][]string
+	}{
+		{"literals", "", "first: 1", "first: 1", nil, first},
+		{"variables", "($n: Int, $m: Int)", "first: $n", "first: $m", map[string]any{"n": 1, "m": 1}, first},
+		{"a literal and a variable", "($n: Int)", "first: 1", "first: $n", map[string]any{"n": 1}, first},
+		{"where, a literal and a variable", "($w: BookWhereInput)", "where: {title: \"Beta\"}", "where: $w", map[string]any{"w": map[string]any{"title": "Beta"}}, beta},
+	}
+	each(t, func(t *testing.T, e *env) {
+		for _, c := range cases {
+			q := "query" + c.vars + " { authors(first: 6) { edges { node { name a: books(" + c.a + ") " + page + " b: books(" + c.b + ") " + page + " } } } }"
+			var data authorsOf[aliased]
+			_, stmts := e.do(t, 1, q, c.values, &data)
+			if len(stmts) != 3 {
+				t.Errorf("%s: %d statements, want 3 (the authors, a, b):\n%s", c.name, len(stmts), strings.Join(stmts, "\n"))
+			}
+			got := map[string][2][]string{}
+			for _, ae := range data.Authors.Edges {
+				got[ae.Node.Name] = [2][]string{pageTitles(ae.Node.A), pageTitles(ae.Node.B)}
+			}
+			equal(t, c.name, got, c.want)
+		}
+	})
+}
+
 // TestOrgInsideWindow: a book another organization owns takes no rank in
 // a window, and is not counted: ann's first book by title overall is
 // globex's "Aardvark", and her page under acme starts at "Alpha".
@@ -1009,7 +1049,7 @@ func TestCollectRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestNestedPerLevel", "TestBackwardAndCursorNested", "TestAliasesNested", "TestOrgInsideWindow", "TestPolicyHidden", "TestCostRefused", "TestListEdgeCap"} {
+	for _, name := range []string{"TestNestedPerLevel", "TestBackwardAndCursorNested", "TestAliasesNested", "TestEdgeArgumentsBatch", "TestOrgInsideWindow", "TestPolicyHidden", "TestCostRefused", "TestListEdgeCap"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

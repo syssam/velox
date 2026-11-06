@@ -88,7 +88,7 @@ func TestErrorsAreCoded(t *testing.T) {
 	ctx := context.Background()
 	key := &gqlimpl.Type{Name: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}}
 	conn := func(args gqlimpl.Args) error {
-		_, err := gqlimpl.Paginate(ctx, db.QueryTable(velox.TableOf[person]()), key, args, nil)
+		_, err := gqlimpl.Paginate(ctx, gqlimpl.Query(db.QueryTable(velox.TableOf[person]())), key, args, nil)
 		return err
 	}
 	pred := func(w *personName) error {
