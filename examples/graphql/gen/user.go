@@ -11,11 +11,17 @@ import (
 )
 
 // User is the entity of schema User.
+//
+// A user, who writes posts.
 type User struct {
-	ID           int64     `json:"id"`
-	Name         string    `json:"name"`
-	Email        string    `json:"email"`
-	Role         UserRole  `json:"role"`
+	ID int64 `json:"id"`
+	// The name the user shows.
+	Name string `json:"name"`
+	// The address the user signs in with; admins only.
+	Email string `json:"email"`
+	// What the user may do.
+	Role UserRole `json:"role"`
+	// When the user joined.
 	JoinedAt     time.Time `json:"joined_at,omitzero"`
 	PasswordHash string    `json:"-"`
 	// Edges holds User's relations, filled by With.
@@ -24,7 +30,7 @@ type User struct {
 
 // UserEdges holds the relations of User, filled by With.
 type UserEdges struct {
-	// Posts holds the edge posts, to Post, loaded by With(Users.Posts).
+	// The posts the user wrote.
 	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 

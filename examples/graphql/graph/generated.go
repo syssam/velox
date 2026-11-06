@@ -72,11 +72,11 @@ type ComplexityRoot struct {
 	Mutation struct {
 		CreateLabel func(childComplexity int, input gen.CreateLabelInput) int
 		CreatePost  func(childComplexity int, input gen.CreatePostInput) int
-		CreateUser  func(childComplexity int, input gen.CreateUserInput) int
+		CreateUser  func(childComplexity int, input gen.CreateUserInput, password string) int
 		DeletePost  func(childComplexity int, id string) int
 		UpdateLabel func(childComplexity int, id string, input gen.UpdateLabelInput) int
 		UpdatePost  func(childComplexity int, id string, input gen.UpdatePostInput) int
-		UpdateUser  func(childComplexity int, id string, input gen.UpdateUserInput) int
+		UpdateUser  func(childComplexity int, id string, input gen.UpdateUserInput, password *string) int
 	}
 
 	PageInfo struct {
@@ -144,8 +144,8 @@ type MutationResolver interface {
 	DeletePost(ctx context.Context, id string) (string, error)
 	CreateLabel(ctx context.Context, input gen.CreateLabelInput) (*gen.Tag, error)
 	UpdateLabel(ctx context.Context, id string, input gen.UpdateLabelInput) (*gen.Tag, error)
-	CreateUser(ctx context.Context, input gen.CreateUserInput) (*gen.User, error)
-	UpdateUser(ctx context.Context, id string, input gen.UpdateUserInput) (*gen.User, error)
+	CreateUser(ctx context.Context, input gen.CreateUserInput, password string) (*gen.User, error)
+	UpdateUser(ctx context.Context, id string, input gen.UpdateUserInput, password *string) (*gen.User, error)
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id string) (veloxgql.Noder, error)
@@ -272,7 +272,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateUser(childComplexity, args["input"].(gen.CreateUserInput)), true
+		return e.complexity.Mutation.CreateUser(childComplexity, args["input"].(gen.CreateUserInput), args["password"].(string)), true
 	case "Mutation.deletePost":
 		if e.complexity.Mutation.DeletePost == nil {
 			break
@@ -316,7 +316,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateUser(childComplexity, args["id"].(string), args["input"].(gen.UpdateUserInput)), true
+		return e.complexity.Mutation.UpdateUser(childComplexity, args["id"].(string), args["input"].(gen.UpdateUserInput), args["password"].(*string)), true
 
 	case "PageInfo.endCursor":
 		if e.complexity.PageInfo.EndCursor == nil {
@@ -764,13 +764,20 @@ type Query {
 
 # Post
 
+"""A post, in an organization, by its author."""
 type Post implements Node {
   id: ID! @goField(name: "GlobalID")
+  """The post's title, never empty."""
   title: String!
+  """Whether the post is a draft or published."""
   status: PostStatus!
+  """How many times the post was read."""
   views: Int!
+  """When the post was published; null for a draft."""
   publishedAt: Time
+  """The user who wrote the post."""
   author: User
+  """The labels on the post."""
   tags(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: LabelOrder, where: LabelWhereInput): LabelConnection!
 }
 
@@ -855,18 +862,26 @@ input PostWhereInput {
 
 """The input that creates a Post."""
 input CreatePostInput {
+  """The post's title, never empty."""
   title: String!
+  """Whether the post is a draft or published."""
   status: PostStatus
+  """How many times the post was read."""
   views: Int
+  """When the post was published; null for a draft."""
   publishedAt: Time
   tagIDs: [ID!]
 }
 
 """The input that updates a Post: a field not given is left as it is."""
 input UpdatePostInput {
+  """The post's title, never empty."""
   title: String
+  """Whether the post is a draft or published."""
   status: PostStatus
+  """How many times the post was read."""
   views: Int
+  """When the post was published; null for a draft."""
   publishedAt: Time
   clearPublishedAt: Boolean
   addTagIDs: [ID!]
@@ -876,10 +891,14 @@ input UpdatePostInput {
 
 # Tag, as the type Label
 
+"""A label on posts."""
 type Label implements Node {
   id: ID! @goField(name: "GlobalID")
+  """The label's name, unique."""
   name: String!
+  """Where the label sorts among labels."""
   rank: Int!
+  """The posts with the label."""
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
 }
 
@@ -946,14 +965,18 @@ input LabelWhereInput {
 
 """The input that creates a Label."""
 input CreateLabelInput {
+  """The label's name, unique."""
   name: String!
+  """Where the label sorts among labels."""
   rank: Int!
   postIDs: [ID!]
 }
 
 """The input that updates a Label: a field not given is left as it is."""
 input UpdateLabelInput {
+  """The label's name, unique."""
   name: String
+  """Where the label sorts among labels."""
   rank: Int
   addPostIDs: [ID!]
   removePostIDs: [ID!]
@@ -962,12 +985,18 @@ input UpdateLabelInput {
 
 # User
 
+"""A user, who writes posts."""
 type User implements Node {
   id: ID! @goField(name: "GlobalID")
+  """The name the user shows."""
   name: String!
+  """The address the user signs in with; admins only."""
   email: String! @admin
+  """What the user may do."""
   role: UserRole!
+  """When the user joined."""
   joinedAt: Time!
+  """The posts the user wrote."""
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
 }
 
@@ -1045,20 +1074,26 @@ input UserWhereInput {
 
 """The input that creates a User."""
 input CreateUserInput {
+  """The name the user shows."""
   name: String!
+  """The address the user signs in with; admins only."""
   email: String! @admin
+  """What the user may do."""
   role: UserRole
+  """When the user joined."""
   joinedAt: Time!
-  passwordHash: String!
 }
 
 """The input that updates a User: a field not given is left as it is."""
 input UpdateUserInput {
+  """The name the user shows."""
   name: String
+  """The address the user signs in with; admins only."""
   email: String @admin
+  """What the user may do."""
   role: UserRole
+  """When the user joined."""
   joinedAt: Time
-  passwordHash: String
 }
 `, BuiltIn: false},
 	{Name: "app.graphql", Input: sourceData("app.graphql"), BuiltIn: false},
@@ -1135,6 +1170,11 @@ func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, 
 		return nil, err
 	}
 	args["input"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "password", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["password"] = arg1
 	return args, nil
 }
 
@@ -1194,6 +1234,11 @@ func (ec *executionContext) field_Mutation_updateUser_args(ctx context.Context, 
 		return nil, err
 	}
 	args["input"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "password", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["password"] = arg2
 	return args, nil
 }
 
@@ -2070,7 +2115,7 @@ func (ec *executionContext) _Mutation_createUser(ctx context.Context, field grap
 		ec.fieldContext_Mutation_createUser,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateUser(ctx, fc.Args["input"].(gen.CreateUserInput))
+			return ec.resolvers.Mutation().CreateUser(ctx, fc.Args["input"].(gen.CreateUserInput), fc.Args["password"].(string))
 		},
 		nil,
 		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser,
@@ -2127,7 +2172,7 @@ func (ec *executionContext) _Mutation_updateUser(ctx context.Context, field grap
 		ec.fieldContext_Mutation_updateUser,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateUser(ctx, fc.Args["id"].(string), fc.Args["input"].(gen.UpdateUserInput))
+			return ec.resolvers.Mutation().UpdateUser(ctx, fc.Args["id"].(string), fc.Args["input"].(gen.UpdateUserInput), fc.Args["password"].(*string))
 		},
 		nil,
 		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser,
@@ -5056,7 +5101,7 @@ func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "email", "role", "joinedAt", "passwordHash"}
+	fieldsInOrder := [...]string{"name", "email", "role", "joinedAt"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -5106,13 +5151,6 @@ func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, o
 				return it, err
 			}
 			it.JoinedAt = data
-		case "passwordHash":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("passwordHash"))
-			data, err := ec.unmarshalNString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.PasswordHash = data
 		}
 	}
 
@@ -5821,7 +5859,7 @@ func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "email", "role", "joinedAt", "passwordHash"}
+	fieldsInOrder := [...]string{"name", "email", "role", "joinedAt"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -5873,13 +5911,6 @@ func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, o
 				return it, err
 			}
 			it.JoinedAt = data
-		case "passwordHash":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("passwordHash"))
-			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.PasswordHash = data
 		}
 	}
 

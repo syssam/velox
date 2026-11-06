@@ -88,14 +88,27 @@ func (r *mutationResolver) UpdateLabel(ctx context.Context, id string, input gen
 	return input.Update(ctx, id)
 }
 
-// CreateUser is the resolver for the createUser field.
-func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserInput) (*gen.User, error) {
-	return input.Create(ctx, nil)
+// CreateUser is the resolver for the createUser field: the user's password
+// hash is the server's hash of password, set on the row Create inserts.
+func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserInput, password string) (*gen.User, error) {
+	hash, err := hashPassword(ctx, password)
+	if err != nil {
+		return nil, err
+	}
+	return input.Create(ctx, &gen.User{PasswordHash: hash})
 }
 
-// UpdateUser is the resolver for the updateUser field.
-func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input gen.UpdateUserInput) (*gen.User, error) {
-	return input.Update(ctx, id)
+// UpdateUser is the resolver for the updateUser field: a password given
+// replaces the hash, in the same UPDATE as the input's fields.
+func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input gen.UpdateUserInput, password *string) (*gen.User, error) {
+	if password == nil {
+		return input.Update(ctx, id)
+	}
+	hash, err := hashPassword(ctx, *password)
+	if err != nil {
+		return nil, err
+	}
+	return input.Update(ctx, id, gen.Users.PasswordHash.Set(hash))
 }
 
 // Node is the resolver for the node field.

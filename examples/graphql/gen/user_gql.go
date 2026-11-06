@@ -4,7 +4,6 @@ package gen
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -309,8 +308,6 @@ func userInputGQL(goField string) string {
 		return "role"
 	case "JoinedAt":
 		return "joinedAt"
-	case "PasswordHash":
-		return "passwordHash"
 	}
 	return ""
 }
@@ -318,20 +315,15 @@ func userInputGQL(goField string) string {
 // CreateUserInput is the GraphQL input CreateUserInput, which Create writes. A
 // nil pointer or list is a field not given.
 type CreateUserInput struct {
-	Name         string
-	Email        string
-	Role         *UserRole
-	JoinedAt     time.Time
-	PasswordHash string
+	// The name the user shows.
+	Name string
+	// The address the user signs in with; admins only.
+	Email string
+	// What the user may do.
+	Role *UserRole
+	// When the user joined.
+	JoinedAt time.Time
 }
-
-// String returns the input's fields except its sensitive ones.
-func (in CreateUserInput) String() string {
-	return fmt.Sprintf("CreateUserInput(Name=%v, Email=%v, Role=%v, JoinedAt=%v)", in.Name, in.Email, gqlimpl.Show(in.Role), in.JoinedAt)
-}
-
-// GoString is String, so that %#v does not print the sensitive fields either.
-func (in CreateUserInput) GoString() string { return in.String() }
 
 // Create inserts x, a User, with the input's fields and edges set; a nil x is a
 // new one. It runs atomically on the DB in ctx, under the policies.
@@ -343,7 +335,7 @@ func (in *CreateUserInput) Create(ctx context.Context, x *User) (*User, error) {
 	if x == nil {
 		x = new(User)
 	}
-	c := gqlimpl.NewCreate(ctx, &userConnGQL, x, userColName, userColEmail, userColJoinedAt, userColPasswordHash)
+	c := gqlimpl.NewCreate(ctx, &userConnGQL, x, userColName, userColEmail, userColJoinedAt)
 	x.Name = in.Name
 	x.Email = in.Email
 	if in.Role != nil {
@@ -351,7 +343,6 @@ func (in *CreateUserInput) Create(ctx context.Context, x *User) (*User, error) {
 		c.Given(userColRole)
 	}
 	x.JoinedAt = in.JoinedAt
-	x.PasswordHash = in.PasswordHash
 	if err := c.Insert(); err != nil {
 		return nil, err
 	}
@@ -361,20 +352,15 @@ func (in *CreateUserInput) Create(ctx context.Context, x *User) (*User, error) {
 // UpdateUserInput is the GraphQL input UpdateUserInput, which Update writes. A
 // nil pointer or list is a field not given.
 type UpdateUserInput struct {
-	Name         *string
-	Email        *string
-	Role         *UserRole
-	JoinedAt     *time.Time
-	PasswordHash *string
+	// The name the user shows.
+	Name *string
+	// The address the user signs in with; admins only.
+	Email *string
+	// What the user may do.
+	Role *UserRole
+	// When the user joined.
+	JoinedAt *time.Time
 }
-
-// String returns the input's fields except its sensitive ones.
-func (in UpdateUserInput) String() string {
-	return fmt.Sprintf("UpdateUserInput(Name=%v, Email=%v, Role=%v, JoinedAt=%v)", gqlimpl.Show(in.Name), gqlimpl.Show(in.Email), gqlimpl.Show(in.Role), gqlimpl.Show(in.JoinedAt))
-}
-
-// GoString is String, so that %#v does not print the sensitive fields either.
-func (in UpdateUserInput) GoString() string { return in.String() }
 
 // Update updates the User with the ID id from the input and from set, and
 // returns the row as written. A setter of set wins over the input's for the
@@ -396,9 +382,6 @@ func (in *UpdateUserInput) Update(ctx context.Context, id string, set ...velox.S
 	}
 	if in.JoinedAt != nil {
 		u.Set(userColJoinedAt, *in.JoinedAt)
-	}
-	if in.PasswordHash != nil {
-		u.Set(userColPasswordHash, *in.PasswordHash)
 	}
 	v, err := u.Exec(key, velox.Assignments(set))
 	n, _ := v.(*User)

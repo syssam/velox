@@ -23,10 +23,13 @@ type Mutation {
   createLabel(input: CreateLabelInput!): Label!
   "Updates the label with this ID: only the fields given change."
   updateLabel(id: ID!, input: UpdateLabelInput!): Label!
-  "Creates a user."
-  createUser(input: CreateUserInput!): User!
-  "Updates the user with this ID: only the fields given change."
-  updateUser(id: ID!, input: UpdateUserInput!): User!
+  "Creates a user with this password, which the server hashes."
+  createUser(input: CreateUserInput!, password: String!): User!
+  """
+  Updates the user with this ID: only the fields given change, the password
+  too when it is given.
+  """
+  updateUser(id: ID!, input: UpdateUserInput!, password: String): User!
 }
 
 extend type Query {

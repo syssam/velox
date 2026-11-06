@@ -339,9 +339,13 @@ func postTagsEdgeGQL() gqlimpl.M2M {
 // CreatePostInput is the GraphQL input CreatePostInput, which Create writes. A
 // nil pointer or list is a field not given.
 type CreatePostInput struct {
-	Title       string
-	Status      *PostStatus
-	Views       *int64
+	// The post's title, never empty.
+	Title string
+	// Whether the post is a draft or published.
+	Status *PostStatus
+	// How many times the post was read.
+	Views *int64
+	// When the post was published; null for a draft.
 	PublishedAt *time.Time
 	// TagIDs are the IDs of the Label nodes the edge tags leads to.
 	TagIDs []string
@@ -386,9 +390,13 @@ func (in *CreatePostInput) Create(ctx context.Context, x *Post) (*Post, error) {
 // nil pointer or list is a field not given. A true clear field clears its field
 // or edge.
 type UpdatePostInput struct {
-	Title       *string
-	Status      *PostStatus
-	Views       *int64
+	// The post's title, never empty.
+	Title *string
+	// Whether the post is a draft or published.
+	Status *PostStatus
+	// How many times the post was read.
+	Views *int64
+	// When the post was published; null for a draft.
 	PublishedAt *time.Time
 	// ClearPublishedAt sets the field published_at to NULL.
 	ClearPublishedAt bool

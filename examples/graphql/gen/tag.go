@@ -9,17 +9,21 @@ import (
 )
 
 // Tag is the entity of schema Tag.
+//
+// A label on posts.
 type Tag struct {
-	ID   int64  `json:"id"`
+	ID int64 `json:"id"`
+	// The label's name, unique.
 	Name string `json:"name"`
-	Rank int8   `json:"rank"`
+	// Where the label sorts among labels.
+	Rank int8 `json:"rank"`
 	// Edges holds Tag's relations, filled by With.
 	Edges TagEdges `json:"edges,omitzero"`
 }
 
 // TagEdges holds the relations of Tag, filled by With.
 type TagEdges struct {
-	// Posts holds the edge posts, to Post, loaded by With(Tags.Posts).
+	// The posts with the label.
 	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 

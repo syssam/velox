@@ -64,13 +64,20 @@ type Query {
 
 # Post
 
+"""A post, in an organization, by its author."""
 type Post implements Node {
   id: ID! @goField(name: "GlobalID")
+  """The post's title, never empty."""
   title: String!
+  """Whether the post is a draft or published."""
   status: PostStatus!
+  """How many times the post was read."""
   views: Int!
+  """When the post was published; null for a draft."""
   publishedAt: Time
+  """The user who wrote the post."""
   author: User
+  """The labels on the post."""
   tags(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: LabelOrder, where: LabelWhereInput): LabelConnection!
 }
 
@@ -155,18 +162,26 @@ input PostWhereInput {
 
 """The input that creates a Post."""
 input CreatePostInput {
+  """The post's title, never empty."""
   title: String!
+  """Whether the post is a draft or published."""
   status: PostStatus
+  """How many times the post was read."""
   views: Int
+  """When the post was published; null for a draft."""
   publishedAt: Time
   tagIDs: [ID!]
 }
 
 """The input that updates a Post: a field not given is left as it is."""
 input UpdatePostInput {
+  """The post's title, never empty."""
   title: String
+  """Whether the post is a draft or published."""
   status: PostStatus
+  """How many times the post was read."""
   views: Int
+  """When the post was published; null for a draft."""
   publishedAt: Time
   clearPublishedAt: Boolean
   addTagIDs: [ID!]
@@ -176,10 +191,14 @@ input UpdatePostInput {
 
 # Tag, as the type Label
 
+"""A label on posts."""
 type Label implements Node {
   id: ID! @goField(name: "GlobalID")
+  """The label's name, unique."""
   name: String!
+  """Where the label sorts among labels."""
   rank: Int!
+  """The posts with the label."""
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
 }
 
@@ -246,14 +265,18 @@ input LabelWhereInput {
 
 """The input that creates a Label."""
 input CreateLabelInput {
+  """The label's name, unique."""
   name: String!
+  """Where the label sorts among labels."""
   rank: Int!
   postIDs: [ID!]
 }
 
 """The input that updates a Label: a field not given is left as it is."""
 input UpdateLabelInput {
+  """The label's name, unique."""
   name: String
+  """Where the label sorts among labels."""
   rank: Int
   addPostIDs: [ID!]
   removePostIDs: [ID!]
@@ -262,12 +285,18 @@ input UpdateLabelInput {
 
 # User
 
+"""A user, who writes posts."""
 type User implements Node {
   id: ID! @goField(name: "GlobalID")
+  """The name the user shows."""
   name: String!
+  """The address the user signs in with; admins only."""
   email: String! @admin
+  """What the user may do."""
   role: UserRole!
+  """When the user joined."""
   joinedAt: Time!
+  """The posts the user wrote."""
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
 }
 
@@ -345,18 +374,24 @@ input UserWhereInput {
 
 """The input that creates a User."""
 input CreateUserInput {
+  """The name the user shows."""
   name: String!
+  """The address the user signs in with; admins only."""
   email: String! @admin
+  """What the user may do."""
   role: UserRole
+  """When the user joined."""
   joinedAt: Time!
-  passwordHash: String!
 }
 
 """The input that updates a User: a field not given is left as it is."""
 input UpdateUserInput {
+  """The name the user shows."""
   name: String
+  """The address the user signs in with; admins only."""
   email: String @admin
+  """What the user may do."""
   role: UserRole
+  """When the user joined."""
   joinedAt: Time
-  passwordHash: String
 }

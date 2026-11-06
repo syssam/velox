@@ -277,7 +277,9 @@ func tagPostsEdgeGQL() gqlimpl.M2M {
 // CreateLabelInput is the GraphQL input CreateLabelInput, which Create writes.
 // A nil pointer or list is a field not given.
 type CreateLabelInput struct {
+	// The label's name, unique.
 	Name string
+	// Where the label sorts among labels.
 	Rank int8
 	// PostIDs are the IDs of the Post nodes the edge posts leads to.
 	PostIDs []string
@@ -308,7 +310,9 @@ func (in *CreateLabelInput) Create(ctx context.Context, x *Tag) (*Tag, error) {
 // A nil pointer or list is a field not given. A true clear field clears its
 // field or edge.
 type UpdateLabelInput struct {
+	// The label's name, unique.
 	Name *string
+	// Where the label sorts among labels.
 	Rank *int8
 	// AddPostIDs are the IDs of Post nodes to add to the edge posts.
 	AddPostIDs []string

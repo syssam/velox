@@ -22,7 +22,7 @@
 //			field.Time("created_at").Default(time.Now).Annotations(
 //				graphql.OrderField("CREATED_AT"),
 //			),
-//			field.String("password_hash").Sensitive(), // in no type or input
+//			field.String("password_hash").Sensitive(), // in no type, where or order
 //		}
 //	}
 //
@@ -224,6 +224,19 @@
 //	func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
 //		return input.Update(ctx, id)
 //	}
+//
+// A Sensitive field is in the inputs, write-only: no type, where input or
+// order has it, and the input's String and GoString leave it out, so a
+// logged input does not show it. Where the client should not choose its
+// value, as a password's hash, graphql.Skip(SkipMutationCreateInput,
+// SkipMutationUpdateInput) leaves it out, and the resolver sets it, as
+// examples/graphql's createUser does from a password argument:
+//
+//	hash, err := hashPassword(ctx, password)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return input.Create(ctx, &gen.User{PasswordHash: hash})
 //
 // No delete is generated: deleting a row is one velox statement, which the
 // application writes with the checks it wants (examples/graphql's deletePost):

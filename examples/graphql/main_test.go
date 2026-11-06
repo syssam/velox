@@ -145,12 +145,18 @@ func (s *testServer) do(t *testing.T, r request) string {
 	s.mu.Lock()
 	stmts := slices.Sorted(slices.Values(s.stmts))
 	s.mu.Unlock()
+	for i := range stmts { // a password's hash is salted afresh each time
+		stmts[i] = storedHash.ReplaceAllString(stmts[i], "<hash>")
+	}
 	want := slices.Sorted(slices.Values(r.stmts))
 	if !slices.Equal(stmts, want) {
 		t.Errorf("%s\nstatements:\n got  %s\n want %s", r.query, strings.Join(stmts, "\n      "), strings.Join(want, "\n      "))
 	}
 	return string(got)
 }
+
+// storedHash matches a password's hash, as graph's hashPassword writes it.
+var storedHash = regexp.MustCompile(`pbkdf2-sha256\$[0-9]+\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+`)
 
 // canon is s, a response's JSON, compacted, with its object keys sorted and
 // its errors sorted by their JSON. An error's "locations" are gqlgen's, and
@@ -1172,11 +1178,11 @@ func TestMutationTransaction(t *testing.T) {
 
 // TestCreateUserDirective: email is @admin, and the directive guards its
 // input field as it guards the field: without X-Role: admin, a createUser
-// that sets it is FORBIDDEN, and nothing is written. passwordHash, Sensitive,
-// is an input only: no query can select it.
+// that sets it is FORBIDDEN, and nothing is written. No query can select
+// passwordHash, which is Sensitive.
 func TestCreateUserDirective(t *testing.T) {
 	s := newServer(t)
-	const create = `mutation { createUser(input: {name: "Dana", email: "dana@example.com", joinedAt: "2026-07-01T09:00:00Z", passwordHash: "y"}) { name role } }`
+	const create = `mutation { createUser(input: {name: "Dana", email: "dana@example.com", joinedAt: "2026-07-01T09:00:00Z"}, password: "correct horse") { name role } }`
 	s.do(t, request{
 		query: create,
 		want: `{"errors": [{"message": "the admin role is required", "path": ["createUser", "input", "email"], "extensions": {"code": "FORBIDDEN"}}],
@@ -1186,7 +1192,7 @@ func TestCreateUserDirective(t *testing.T) {
 		role:  "admin",
 		query: create,
 		want:  `{"data": {"createUser": {"name": "Dana", "role": "MEMBER"}}}`,
-		stmts: []string{`INSERT INTO "users" ("name", "email", "role", "joined_at", "password_hash") VALUES (?, ?, ?, ?, ?) RETURNING "id" [Dana dana@example.com member 2026-07-01 09:00:00 +0000 UTC y]`},
+		stmts: []string{`INSERT INTO "users" ("name", "email", "role", "joined_at", "password_hash") VALUES (?, ?, ?, ?, ?) RETURNING "id" [Dana dana@example.com member 2026-07-01 09:00:00 +0000 UTC <hash>]`},
 	})
 	s.do(t, request{
 		role:  "admin",

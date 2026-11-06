@@ -27,8 +27,12 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    `Mutations` the mutation inputs (`CreatePostInput`, `UpdatePostInput`,
    `CreateLabelInput`, `UpdateLabelInput`, `CreateUserInput`,
    `UpdateUserInput`), which the application's own mutations take. A `Sensitive`
-   field (`password_hash`) is in no type, where input or order: it is an
-   input only, `passwordHash` in `CreateUserInput` and `UpdateUserInput`.
+   field (`password_hash`) is in no type, where input or order. velox-graphql
+   would still put it in the inputs, write-only, and hidden from their
+   `String`; here `graphql.Skip` leaves it out, so a client never sends a hash
+   it chose. `createUser` and `updateUser` take a `password` instead, which
+   the resolver hashes (`graph/password.go`, PBKDF2-HMAC-SHA256 from the
+   standard library) and sets on the row.
    The author edge has `graphql.Skip(graphql.SkipMutationCreateInput,
    graphql.SkipMutationUpdateInput)`: neither post input has `authorID`, the
    create resolver sets the author to the viewer, and no update gives a post

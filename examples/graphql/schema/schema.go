@@ -18,18 +18,19 @@ import (
 type User struct{ schema.Schema }
 
 // Fields returns the columns after the ID. PasswordHash is Sensitive, so it
-// is in no GraphQL type, where input or order: it is an input only, of
-// CreateUserInput and UpdateUserInput, and never output. Email is for admins only: the
+// is in no GraphQL type, where input or order, and Skip leaves it out of the
+// inputs too: a client sends a password, which the createUser and updateUser
+// resolvers hash, and never a hash it chose. Email is for admins only: the
 // application's directive @admin guards the field and, since velox-graphql
 // copies it onto them, its where predicates, by which a client could
 // otherwise find an email a prefix at a time.
 func (User) Fields() []schema.Field {
 	return []schema.Field{
-		field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
-		field.String("email").Annotations(graphql.WhereOps(), graphql.Directives(graphql.Directive{Name: "admin"})),
-		field.Enum("role").Values("admin", "member").Default("member").Annotations(graphql.WhereOps()),
-		field.Time("joined_at").Annotations(graphql.OrderField("JOINED_AT")),
-		field.String("password_hash").Sensitive(),
+		field.String("name").Comment("The name the user shows.").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
+		field.String("email").Comment("The address the user signs in with; admins only.").Annotations(graphql.WhereOps(), graphql.Directives(graphql.Directive{Name: "admin"})),
+		field.Enum("role").Values("admin", "member").Default("member").Comment("What the user may do.").Annotations(graphql.WhereOps()),
+		field.Time("joined_at").Comment("When the user joined.").Annotations(graphql.OrderField("JOINED_AT")),
+		field.String("password_hash").Sensitive().Annotations(graphql.Skip(graphql.SkipMutationCreateInput, graphql.SkipMutationUpdateInput)),
 	}
 }
 
@@ -37,13 +38,13 @@ func (User) Fields() []schema.Field {
 // input hasPosts and hasPostsWith.
 func (User) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.To("posts", Post.Type).Annotations(graphql.WhereEdge()),
+		edge.To("posts", Post.Type).Comment("The posts the user wrote.").Annotations(graphql.WhereEdge()),
 	}
 }
 
 // Annotations names the root query field.
 func (User) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("users"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+	return []schema.Annotation{schema.Comment("A user, who writes posts."), graphql.QueryField("users"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
 // Post belongs to an organization, and to its author.
@@ -58,10 +59,10 @@ func (Post) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
 func (Post) Fields() []schema.Field {
 	return []schema.Field{
 		field.Int64("author_id").Annotations(graphql.WhereOps(graphql.OpsEquality)),
-		field.String("title").NotEmpty().Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
-		field.Enum("status").Values("draft", "published").Default("draft").Annotations(graphql.WhereOps()),
-		field.Int64("views").Optional().Annotations(graphql.OrderField("VIEWS")),
-		field.Time("published_at").Optional().Nillable().Annotations(graphql.WhereOps()),
+		field.String("title").NotEmpty().Comment("The post's title, never empty.").Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
+		field.Enum("status").Values("draft", "published").Default("draft").Comment("Whether the post is a draft or published.").Annotations(graphql.WhereOps()),
+		field.Int64("views").Optional().Comment("How many times the post was read.").Annotations(graphql.OrderField("VIEWS")),
+		field.Time("published_at").Optional().Nillable().Comment("When the post was published; null for a draft.").Annotations(graphql.WhereOps()),
 	}
 }
 
@@ -71,14 +72,15 @@ func (Post) Fields() []schema.Field {
 // update re-assigns a post to another author.
 func (Post) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id").Annotations(graphql.Skip(graphql.SkipMutationCreateInput, graphql.SkipMutationUpdateInput)),
-		edge.To("tags", Tag.Type).Annotations(graphql.WhereEdge()),
+		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id").Comment("The user who wrote the post.").Annotations(graphql.Skip(graphql.SkipMutationCreateInput, graphql.SkipMutationUpdateInput)),
+		edge.To("tags", Tag.Type).Comment("The labels on the post.").Annotations(graphql.WhereEdge()),
 	}
 }
 
 // Annotations names the root query field. MultiOrder makes orderBy a list.
 func (Post) Annotations() []schema.Annotation {
 	return []schema.Annotation{
+		schema.Comment("A post, in an organization, by its author."),
 		graphql.QueryField("posts"),
 		graphql.MultiOrder(),
 		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate),
@@ -95,17 +97,17 @@ type Tag struct{ schema.Schema }
 // refused as its input, with BAD_USER_INPUT.
 func (Tag) Fields() []schema.Field {
 	return []schema.Field{
-		field.String("name").Unique().Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
-		field.Int8("rank").Annotations(graphql.WhereOps()),
+		field.String("name").Unique().Comment("The label's name, unique.").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
+		field.Int8("rank").Comment("Where the label sorts among labels.").Annotations(graphql.WhereOps()),
 	}
 }
 
 // Edges returns Posts, the inverse of Post.Tags.
 func (Tag) Edges() []schema.Edge {
-	return []schema.Edge{edge.From("posts", Post.Type).Ref("tags")}
+	return []schema.Edge{edge.From("posts", Post.Type).Ref("tags").Comment("The posts with the label.")}
 }
 
 // Annotations names the GraphQL type and the root query field.
 func (Tag) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Type("Label"), graphql.QueryField("labels"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+	return []schema.Annotation{schema.Comment("A label on posts."), graphql.Type("Label"), graphql.QueryField("labels"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }

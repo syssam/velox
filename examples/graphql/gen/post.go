@@ -12,13 +12,19 @@ import (
 )
 
 // Post is the entity of schema Post.
+//
+// A post, in an organization, by its author.
 type Post struct {
-	ID          int64      `json:"id"`
-	OrgID       int64      `json:"org_id"`
-	AuthorID    int64      `json:"author_id"`
-	Title       string     `json:"title"`
-	Status      PostStatus `json:"status"`
-	Views       int64      `json:"views,omitempty"`
+	ID       int64 `json:"id"`
+	OrgID    int64 `json:"org_id"`
+	AuthorID int64 `json:"author_id"`
+	// The post's title, never empty.
+	Title string `json:"title"`
+	// Whether the post is a draft or published.
+	Status PostStatus `json:"status"`
+	// How many times the post was read.
+	Views int64 `json:"views,omitempty"`
+	// When the post was published; null for a draft.
 	PublishedAt *time.Time `json:"published_at,omitempty"`
 	// Edges holds Post's relations, filled by With.
 	Edges PostEdges `json:"edges,omitzero"`
@@ -26,9 +32,9 @@ type Post struct {
 
 // PostEdges holds the relations of Post, filled by With.
 type PostEdges struct {
-	// Author holds the edge author, to User, loaded by With(Posts.Author).
+	// The user who wrote the post.
 	Author velox.One[User] `json:"author,omitzero"`
-	// Tags holds the edge tags, to Tag, loaded by With(Posts.Tags).
+	// The labels on the post.
 	Tags velox.Many[Tag] `json:"tags,omitzero"`
 }
 
