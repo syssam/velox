@@ -159,6 +159,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   whose file drops `type=datetime`; until then the column reads as before. A
   `sql.Scanner` or `*any` destination of a `datetime(9)` column receives a `time.Time`,
   as from a `datetime` one; a `*string` receives the stored text.
+- **Breaking.** `GeneratedCodeIsVersion18`: regenerate. An entity's relations are in
+  an ent-style struct, `Edges IssueEdges`, after its columns: `x.Project.Get()` is
+  `x.Edges.Project.Get()`, and JSON nests the loaded relations under `"edges"`, left
+  out when none was loaded (ADR 0041). An entity without relations has no `Edges`. A
+  schema named `IssueEdges` beside an `Issue` with relations is refused.
 - **Breaking.** `GeneratedCodeIsVersion17`: regenerate. A descriptor names its schema's
   value, `Schema: schema.Issue{}`, and velox reads the behaviour from it when it builds
   the metadata: each `Mixin()` value's Policy, Hooks and Interceptors, in order, then the

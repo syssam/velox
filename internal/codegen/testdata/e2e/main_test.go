@@ -251,7 +251,7 @@ func TestWith(t *testing.T) {
 	wantStrings(t, "users", names(us), []string{"ada", "bob", "carol"})
 	got := map[string][]string{}
 	for _, u := range us {
-		ps, ok := u.Posts.Get()
+		ps, ok := u.Edges.Posts.Get()
 		if !ok {
 			t.Fatalf("%s: posts not loaded", u.Name)
 		}
@@ -270,7 +270,7 @@ func TestWith(t *testing.T) {
 	}
 	var authors []string
 	for _, p := range ps {
-		a, ok := p.Author.Get()
+		a, ok := p.Edges.Author.Get()
 		if !ok || a == nil {
 			t.Fatalf("%s: author not loaded", p.Title)
 		}
@@ -288,7 +288,7 @@ func TestWith(t *testing.T) {
 	}
 	gs := map[string][]string{}
 	for _, u := range us {
-		groups, ok := u.Groups.Get()
+		groups, ok := u.Edges.Groups.Get()
 		if !ok {
 			t.Fatalf("%s: groups not loaded", u.Name)
 		}
@@ -307,7 +307,7 @@ func TestWith(t *testing.T) {
 	}
 	members := map[string][]string{}
 	for _, g := range groups {
-		us, ok := g.Users.Get()
+		us, ok := g.Edges.Users.Get()
 		if !ok {
 			t.Fatalf("%s: users not loaded", g.Name)
 		}
@@ -384,7 +384,7 @@ func TestInterceptors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ps, _ := u.Posts.Get()
+	ps, _ := u.Edges.Posts.Get()
 	wantStrings(t, "ada's posts", titles(ps), []string{"a1", "a2"})
 	if n, err := db.Update[gen.Post]().Set(gen.Posts.Views.Set(9)).All().Exec(ctx); err != nil || n != 3 {
 		t.Errorf("Update all: %d, %v; want 3", n, err)

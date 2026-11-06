@@ -13,15 +13,23 @@ import (
 
 // Comment is the entity of schema Comment.
 type Comment struct {
-	ID        int64            `json:"id"`
-	CreatedAt time.Time        `json:"created_at,omitzero"`
-	UpdatedAt time.Time        `json:"updated_at,omitzero"`
-	OrgID     int64            `json:"org_id"`
-	IssueID   int64            `json:"issue_id"`
-	AuthorID  int64            `json:"author_id"`
-	Body      string           `json:"body"`
-	Issue     velox.One[Issue] `json:"issue,omitzero"`
-	Author    velox.One[User]  `json:"author,omitzero"`
+	ID        int64     `json:"id"`
+	CreatedAt time.Time `json:"created_at,omitzero"`
+	UpdatedAt time.Time `json:"updated_at,omitzero"`
+	OrgID     int64     `json:"org_id"`
+	IssueID   int64     `json:"issue_id"`
+	AuthorID  int64     `json:"author_id"`
+	Body      string    `json:"body"`
+	// Edges holds Comment's relations, filled by With.
+	Edges CommentEdges `json:"edges,omitzero"`
+}
+
+// CommentEdges holds the relations of Comment, filled by With.
+type CommentEdges struct {
+	// Issue is the edge issue, to Issue.
+	Issue velox.One[Issue] `json:"issue,omitzero"`
+	// Author is the edge author, to User.
+	Author velox.One[User] `json:"author,omitzero"`
 }
 
 // The positions of Comment's columns, in the order of its table.
@@ -122,9 +130,9 @@ func commentDescriptor() velox.Descriptor[Comment] {
 		EdgeFieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case commentEdgeIssue:
-				return &x.Issue
+				return &x.Edges.Issue
 			case commentEdgeAuthor:
-				return &x.Author
+				return &x.Edges.Author
 			}
 			return nil
 		},

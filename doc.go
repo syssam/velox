@@ -295,9 +295,9 @@
 // TableUpdate, TableDelete, DB.InsertTable, DB.InsertRows, DB.UpdateTable,
 // DB.DeleteTable and Assignments: an entity's queries and writes with its
 // type erased, for runtimes compiled once for every entity) and
-// GeneratedCodeIsVersion17. Each
+// GeneratedCodeIsVersion18. Each
 // says "For generated code." in its documentation. They are not part of
-// velox's API: they change only when GeneratedCodeIsVersion17 is replaced by
+// velox's API: they change only when GeneratedCodeIsVersion18 is replaced by
 // the next version, which is outside semantic versioning. Run velox-gen
 // again after you update velox; code generated for another version fails to
 // compile.
@@ -305,11 +305,11 @@ package velox
 
 //go:generate go run ./internal/cmd/handlegen
 
-// GeneratedCodeIsVersion17 is referenced by every file velox-gen writes from a
+// GeneratedCodeIsVersion18 is referenced by every file velox-gen writes from a
 // schema package, so that generated code and this library fail to compile
 // together when they disagree. For generated code. It is replaced by
-// GeneratedCodeIsVersion18 when generated code must change.
-const GeneratedCodeIsVersion17 = true
+// GeneratedCodeIsVersion19 when generated code must change.
+const GeneratedCodeIsVersion18 = true
 
 // Lazy is the constraint of the type parameter that every method of a generic
 // velox type carries, and that callers never write. For generated code. A

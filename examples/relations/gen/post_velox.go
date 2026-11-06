@@ -10,13 +10,22 @@ import (
 
 // Post is the entity of schema Post.
 type Post struct {
-	ID       int64               `json:"id"`
-	AuthorID int64               `json:"author_id"`
-	Title    string              `json:"title"`
-	Votes    int64               `json:"votes"`
-	Author   velox.One[Author]   `json:"author,omitzero"`
+	ID       int64  `json:"id"`
+	AuthorID int64  `json:"author_id"`
+	Title    string `json:"title"`
+	Votes    int64  `json:"votes"`
+	// Edges holds Post's relations, filled by With.
+	Edges PostEdges `json:"edges,omitzero"`
+}
+
+// PostEdges holds the relations of Post, filled by With.
+type PostEdges struct {
+	// Author is the edge author, to Author.
+	Author velox.One[Author] `json:"author,omitzero"`
+	// Comments is the edge comments, to Comment.
 	Comments velox.Many[Comment] `json:"comments,omitzero"`
-	Tags     velox.Many[Tag]     `json:"tags,omitzero"`
+	// Tags is the edge tags, to Tag.
+	Tags velox.Many[Tag] `json:"tags,omitzero"`
 }
 
 // The positions of Post's columns, in the order of its table.
@@ -100,11 +109,11 @@ func postDescriptor() velox.Descriptor[Post] {
 		EdgeFieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postEdgeAuthor:
-				return &x.Author
+				return &x.Edges.Author
 			case postEdgeComments:
-				return &x.Comments
+				return &x.Edges.Comments
 			case postEdgeTags:
-				return &x.Tags
+				return &x.Edges.Tags
 			}
 			return nil
 		},

@@ -174,7 +174,7 @@ func (a *app) eager(ctx context.Context) (parents []int64, children int, err err
 	parents = make([]int64, len(ps))
 	for i, p := range ps {
 		parents[i] = p.ID
-		next, ok := p.Next.Get()
+		next, ok := p.Edges.Next.Get()
 		if !ok {
 			return nil, 0, fmt.Errorf("E0 %d: next is not loaded", p.ID)
 		}

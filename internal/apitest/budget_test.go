@@ -335,7 +335,7 @@ func TestWithLoadOnReplicasAllocations(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, loaded := ss[0].Parent.Get(); !loaded {
+			if _, loaded := ss[0].Edges.Parent.Get(); !loaded {
 				t.Fatal("the parent is not loaded")
 			}
 		}

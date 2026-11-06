@@ -74,7 +74,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	for _, a := range authors {
-		posts, loaded := a.Posts.Get()
+		posts, loaded := a.Edges.Posts.Get()
 		say("With: %s wrote %s (loaded=%t)", a.Name, titles(posts), loaded)
 	}
 
@@ -88,9 +88,9 @@ func run(ctx context.Context, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	posts, _ := authors[0].Posts.Get()
+	posts, _ := authors[0].Edges.Posts.Get()
 	for _, p := range posts {
-		comments, _ := p.Comments.Get()
+		comments, _ := p.Edges.Comments.Get()
 		say("nested With: %s / %s, %d votes, comments=%d", authors[0].Name, p.Title, p.Votes, len(comments))
 	}
 
@@ -101,7 +101,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	for _, p := range top {
-		a, _ := p.Author.Get()
+		a, _ := p.Edges.Author.Get()
 		say("belongs-to: %s by %s", p.Title, a.Name)
 	}
 
@@ -193,14 +193,14 @@ func manyToMany(ctx context.Context, db *velox.DB, say func(string, ...any)) err
 		return err
 	}
 	for _, p := range tagged {
-		ts, _ := p.Tags.Get()
+		ts, _ := p.Edges.Tags.Get()
 		say("many-to-many: %s tagged %s", p.Title, tagNames(ts))
 	}
 	langs, err := db.Query[gen.Tag]().Where(T.Name.EQ("languages")).With(T.Posts.OrderBy(P.Title.Asc())).One(ctx)
 	if err != nil {
 		return err
 	}
-	ps, _ := langs.Posts.Get()
+	ps, _ := langs.Edges.Posts.Get()
 	say("many-to-many, the other way: %s tags %s", langs.Name, titles(ps))
 
 	// Unlink: delete the join row.

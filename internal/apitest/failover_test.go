@@ -76,7 +76,7 @@ func TestLoadsFollowAFallback(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if items, ok := invs[1].Items.Get(); !ok || len(items) != 1 || items[0].SKU != "B" {
+		if items, ok := invs[1].Edges.Items.Get(); !ok || len(items) != 1 || items[0].SKU != "B" {
 			t.Fatalf("items %v, loaded %v", items, ok)
 		}
 		s.check(t, hooked, [3]int{2, 1, 0}, fellOver, onPrimary)

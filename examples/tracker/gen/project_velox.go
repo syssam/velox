@@ -13,12 +13,19 @@ import (
 
 // Project is the entity of schema Project.
 type Project struct {
-	ID        int64             `json:"id"`
-	CreatedAt time.Time         `json:"created_at,omitzero"`
-	UpdatedAt time.Time         `json:"updated_at,omitzero"`
-	OrgID     int64             `json:"org_id"`
-	Name      string            `json:"name"`
-	Issues    velox.Many[Issue] `json:"issues,omitzero"`
+	ID        int64     `json:"id"`
+	CreatedAt time.Time `json:"created_at,omitzero"`
+	UpdatedAt time.Time `json:"updated_at,omitzero"`
+	OrgID     int64     `json:"org_id"`
+	Name      string    `json:"name"`
+	// Edges holds Project's relations, filled by With.
+	Edges ProjectEdges `json:"edges,omitzero"`
+}
+
+// ProjectEdges holds the relations of Project, filled by With.
+type ProjectEdges struct {
+	// Issues is the edge issues, to Issue.
+	Issues velox.Many[Issue] `json:"issues,omitzero"`
 }
 
 // The positions of Project's columns, in the order of its table.
@@ -103,7 +110,7 @@ func projectDescriptor() velox.Descriptor[Project] {
 		EdgeFieldPtr: func(x *Project, i int) any {
 			switch i {
 			case projectEdgeIssues:
-				return &x.Issues
+				return &x.Edges.Issues
 			}
 			return nil
 		},

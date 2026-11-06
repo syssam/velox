@@ -10,8 +10,15 @@ import (
 
 // Author is the entity of schema Author.
 type Author struct {
-	ID    int64            `json:"id"`
-	Name  string           `json:"name"`
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	// Edges holds Author's relations, filled by With.
+	Edges AuthorEdges `json:"edges,omitzero"`
+}
+
+// AuthorEdges holds the relations of Author, filled by With.
+type AuthorEdges struct {
+	// Posts is the edge posts, to Post.
 	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 
@@ -72,7 +79,7 @@ func authorDescriptor() velox.Descriptor[Author] {
 		EdgeFieldPtr: func(x *Author, i int) any {
 			switch i {
 			case authorEdgePosts:
-				return &x.Posts
+				return &x.Edges.Posts
 			}
 			return nil
 		},

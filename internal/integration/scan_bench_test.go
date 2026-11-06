@@ -40,7 +40,7 @@ func BenchmarkScan(b *testing.B) {
 					}
 					items := 0
 					for i := range rows {
-						xs, _ := rows[i].Items.Get()
+						xs, _ := rows[i].Edges.Items.Get()
 						items += len(xs)
 					}
 					if items != 500 {

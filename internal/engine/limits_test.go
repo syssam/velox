@@ -149,7 +149,7 @@ func TestLoadsSkipAReplicaThatFailed(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if c, _ := invs[2].Items.Get(); len(c) != 1 || c[0].SKU != "C" {
+		if c, _ := invs[2].Edges.Items.Get(); len(c) != 1 || c[0].SKU != "C" {
 			t.Fatalf("invoice 3's items %v", c)
 		}
 		s.check(t, hooked, [3]int{2, 2, 0}, onR0, fellOver, fellOver)
@@ -237,7 +237,7 @@ func TestWithChunksUnderTheParameterLimit(t *testing.T) {
 	}
 	var got []string
 	for _, inv := range invs {
-		items, _ := inv.Items.Get()
+		items, _ := inv.Edges.Items.Get()
 		for _, it := range items {
 			got = append(got, it.SKU)
 		}

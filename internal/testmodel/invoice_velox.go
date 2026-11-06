@@ -12,17 +12,24 @@ import (
 
 // Invoice is the entity of schema Invoice.
 type Invoice struct {
-	ID        int64            `json:"id"`
-	CreatedAt time.Time        `json:"created_at,omitzero"`
-	UpdatedAt time.Time        `json:"updated_at,omitzero"`
-	OrgID     int64            `json:"org_id"`
-	Number    string           `json:"number"`
-	Total     float64          `json:"total"`
-	Paid      bool             `json:"paid"`
-	PaidAt    *time.Time       `json:"paid_at,omitempty"`
-	Note      string           `json:"note,omitempty"`
-	Data      []byte           `json:"data,omitempty"`
-	Items     velox.Many[Item] `json:"items,omitzero"`
+	ID        int64      `json:"id"`
+	CreatedAt time.Time  `json:"created_at,omitzero"`
+	UpdatedAt time.Time  `json:"updated_at,omitzero"`
+	OrgID     int64      `json:"org_id"`
+	Number    string     `json:"number"`
+	Total     float64    `json:"total"`
+	Paid      bool       `json:"paid"`
+	PaidAt    *time.Time `json:"paid_at,omitempty"`
+	Note      string     `json:"note,omitempty"`
+	Data      []byte     `json:"data,omitempty"`
+	// Edges holds Invoice's relations, filled by With.
+	Edges InvoiceEdges `json:"edges,omitzero"`
+}
+
+// InvoiceEdges holds the relations of Invoice, filled by With.
+type InvoiceEdges struct {
+	// Items is the edge items, to Item.
+	Items velox.Many[Item] `json:"items,omitzero"`
 }
 
 // The positions of Invoice's columns, in the order of its table.
@@ -142,7 +149,7 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 		EdgeFieldPtr: func(x *Invoice, i int) any {
 			switch i {
 			case invoiceEdgeItems:
-				return &x.Items
+				return &x.Edges.Items
 			}
 			return nil
 		},

@@ -26,14 +26,14 @@ func TestWith(t *testing.T) {
 		// The filter drops item B (qty 0).
 		want := map[int64][]string{1: {"A"}, 2: {"C"}, 3: nil, 4: nil, 5: nil}
 		for _, inv := range invs {
-			items, loaded := inv.Items.Get()
+			items, loaded := inv.Edges.Items.Get()
 			if !loaded || items == nil {
 				t.Fatalf("invoice %d: loaded %v %v", inv.ID, loaded, items)
 			}
 			var skus []string
 			for _, it := range items {
 				skus = append(skus, it.SKU)
-				back, ok := it.Invoice.Get()
+				back, ok := it.Edges.Invoice.Get()
 				if !ok || back == nil || back.ID != inv.ID {
 					t.Errorf("item %d: its invoice %v %v", it.ID, back, ok)
 				}
@@ -379,14 +379,14 @@ func TestLimitEachOnRealDatabases(t *testing.T) {
 		}
 		want := map[int64][]string{1: {"A"}, 2: {"C"}, 3: nil, 4: nil, 5: nil}
 		for _, inv := range invs {
-			items, ok := inv.Items.Get()
+			items, ok := inv.Edges.Items.Get()
 			if !ok {
 				t.Fatalf("invoice %d: items not loaded", inv.ID)
 			}
 			var skus []string
 			for _, it := range items {
 				skus = append(skus, it.SKU)
-				if back, ok := it.Invoice.Get(); !ok || back == nil || back.ID != inv.ID {
+				if back, ok := it.Edges.Invoice.Get(); !ok || back == nil || back.ID != inv.ID {
 					t.Errorf("item %d: its invoice %v %v", it.ID, back, ok)
 				}
 			}

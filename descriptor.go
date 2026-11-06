@@ -37,7 +37,7 @@ type Descriptor[E any] struct {
 	Indexes      []IndexInfo
 	Edges        []EdgeDescriptor      // in the order of the generated relation handles
 	FieldPtr     func(x *E, i int) any // &x.<field of column i>
-	EdgeFieldPtr func(x *E, i int) any // &x.<field of edge i>: a *One[T] or *Many[T]
+	EdgeFieldPtr func(x *E, i int) any // &x.Edges.<field of edge i> in generated code: a *One[T] or *Many[T]
 
 	// Check runs the validators of column col on its value v, and is nil
 	// when no column has any. For a pointer field, v is the value the

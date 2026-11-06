@@ -31,6 +31,7 @@ func (Post) Fields() []schema.Field {
 
 func (Post) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id"),
+		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id").
+			Comment("Author is the user who wrote the post."),
 	}
 }

@@ -246,7 +246,8 @@
           "inverse": true,
           "field": "author_id",
           "field_on": "Post",
-          "owns_key": true
+          "owns_key": true,
+          "comment": "Author is the user who wrote the post."
         }
       ],
       "indexes": [],

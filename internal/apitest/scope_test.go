@@ -365,7 +365,7 @@ func TestWithLoadIsScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p, ok := got[0].Parent.Get(); !ok || p == nil || p.ID != 1 {
+	if p, ok := got[0].Edges.Parent.Get(); !ok || p == nil || p.ID != 1 {
 		t.Fatalf("parent %v, %v", p, ok)
 	}
 	if len(e.Log) != 2 {

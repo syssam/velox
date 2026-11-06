@@ -26,7 +26,7 @@ func TestJoinReadsTheTargetThroughItsPolicy(t *testing.T) {
 		}
 		got := map[int64]int64{}
 		for _, x := range xs {
-			p, loaded := x.Parent.Get()
+			p, loaded := x.Edges.Parent.Get()
 			if !loaded {
 				t.Fatalf("ticket %d: parent not loaded", x.ID)
 			}
@@ -45,7 +45,7 @@ func TestJoinReadsTheTargetThroughItsPolicy(t *testing.T) {
 		}
 		wantIDs(t, ticketIDs(inner), hasParent[c.name])
 		for _, x := range inner {
-			if p, loaded := x.Parent.Get(); !loaded || p == nil {
+			if p, loaded := x.Edges.Parent.Get(); !loaded || p == nil {
 				t.Errorf("Join(Parent): ticket %d has parent %v, loaded %v", x.ID, p, loaded)
 			}
 		}
@@ -77,7 +77,7 @@ func TestJoinFiltersAndOrdersByTheJoinedColumns(t *testing.T) {
 		}
 		wantOrder(t, ticketIDs(xs), []int64{5, 4})
 		for _, x := range xs {
-			if p, ok := x.Parent.Get(); !ok || p == nil || p.ID != 3 || p.Title != "B1" {
+			if p, ok := x.Edges.Parent.Get(); !ok || p == nil || p.ID != 3 || p.Title != "B1" {
 				t.Errorf("ticket %d: parent %+v, loaded %v", x.ID, p, ok)
 			}
 		}
@@ -90,7 +90,7 @@ func TestJoinFiltersAndOrdersByTheJoinedColumns(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, x := range all {
-			if p, _ := x.Parent.Get(); p != nil && p.Owner == x.Owner {
+			if p, _ := x.Edges.Parent.Get(); p != nil && p.Owner == x.Owner {
 				sameOwner = append(sameOwner, x.ID)
 			}
 		}
@@ -108,7 +108,7 @@ func TestJoinAgreesWithWith(t *testing.T) {
 		view := func(xs []testmodel.Ticket) string {
 			var out []string
 			for _, x := range xs {
-				p, ploaded := x.Parent.Get()
+				p, ploaded := x.Edges.Parent.Get()
 				s := fmt.Sprintf("%d:", x.ID)
 				if !ploaded {
 					out = append(out, s+"parent not loaded")
@@ -118,7 +118,7 @@ func TestJoinAgreesWithWith(t *testing.T) {
 					out = append(out, s+"no parent")
 					continue
 				}
-				inv, iloaded := p.Invoice.Get()
+				inv, iloaded := p.Edges.Invoice.Get()
 				if !iloaded {
 					out = append(out, s+fmt.Sprintf("parent %d, invoice not loaded", p.ID))
 					continue
@@ -212,7 +212,7 @@ func TestJoinInAPerOwnerRead(t *testing.T) {
 		for i, kids := range plain {
 			want[i] = []int64{}
 			for _, k := range kids {
-				if inv, _ := k.Invoice.Get(); inv != nil {
+				if inv, _ := k.Edges.Invoice.Get(); inv != nil {
 					want[i] = append(want[i], k.ID)
 					wantInvoice[k.ID] = inv.ID
 				}
@@ -231,7 +231,7 @@ func TestJoinInAPerOwnerRead(t *testing.T) {
 				gotIDs := []int64{}
 				for _, k := range kids {
 					gotIDs = append(gotIDs, k.ID)
-					if inv, loaded := k.Invoice.Get(); !loaded || inv == nil || inv.ID != wantInvoice[k.ID] {
+					if inv, loaded := k.Edges.Invoice.Get(); !loaded || inv == nil || inv.ID != wantInvoice[k.ID] {
 						t.Errorf("%s: ticket %d: invoice %+v, loaded %v, want %d", name, k.ID, inv, loaded, wantInvoice[k.ID])
 					}
 				}
@@ -267,8 +267,8 @@ func TestJoinInAPerOwnerRead(t *testing.T) {
 				t.Errorf("by invoice: owner %d has %d children, want %d", owners[i].ID, len(kids), len(want[i]))
 			}
 			for k := 1; k < len(kids); k++ {
-				a, _ := kids[k-1].Invoice.Get()
-				b, _ := kids[k].Invoice.Get()
+				a, _ := kids[k-1].Edges.Invoice.Get()
+				b, _ := kids[k].Edges.Invoice.Get()
 				if rank[a.ID] > rank[b.ID] {
 					t.Errorf("by invoice: owner %d: %s before %s", owners[i].ID, a.Number, b.Number)
 				}

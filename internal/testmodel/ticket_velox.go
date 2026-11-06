@@ -11,17 +11,26 @@ import (
 
 // Ticket is the entity of schema Ticket.
 type Ticket struct {
-	ID        int64              `json:"id"`
-	CreatedBy string             `json:"created_by"`
-	OrgID     int64              `json:"org_id"`
-	Owner     string             `json:"owner"`
-	Title     string             `json:"title"`
-	Done      bool               `json:"done"`
-	InvoiceID int64              `json:"invoice_id"`
-	ParentID  *int64             `json:"parent_id,omitempty"`
-	Invoice   velox.One[Invoice] `json:"invoice,omitzero"`
-	Children  velox.Many[Ticket] `json:"children,omitzero"`
-	Parent    velox.One[Ticket]  `json:"parent,omitzero"`
+	ID        int64  `json:"id"`
+	CreatedBy string `json:"created_by"`
+	OrgID     int64  `json:"org_id"`
+	Owner     string `json:"owner"`
+	Title     string `json:"title"`
+	Done      bool   `json:"done"`
+	InvoiceID int64  `json:"invoice_id"`
+	ParentID  *int64 `json:"parent_id,omitempty"`
+	// Edges holds Ticket's relations, filled by With.
+	Edges TicketEdges `json:"edges,omitzero"`
+}
+
+// TicketEdges holds the relations of Ticket, filled by With.
+type TicketEdges struct {
+	// Invoice is the edge invoice, to Invoice.
+	Invoice velox.One[Invoice] `json:"invoice,omitzero"`
+	// Children is the edge children, to Ticket.
+	Children velox.Many[Ticket] `json:"children,omitzero"`
+	// Parent is the edge parent, to Ticket.
+	Parent velox.One[Ticket] `json:"parent,omitzero"`
 }
 
 // The positions of Ticket's columns, in the order of its table.
@@ -137,11 +146,11 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 		EdgeFieldPtr: func(x *Ticket, i int) any {
 			switch i {
 			case ticketEdgeInvoice:
-				return &x.Invoice
+				return &x.Edges.Invoice
 			case ticketEdgeChildren:
-				return &x.Children
+				return &x.Edges.Children
 			case ticketEdgeParent:
-				return &x.Parent
+				return &x.Edges.Parent
 			}
 			return nil
 		},

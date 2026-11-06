@@ -42,7 +42,7 @@ func TestWithAttachesToOwners(t *testing.T) {
 		t.Errorf("\n got %s\nwant %s", e.Log[1], want)
 	}
 	skus := func(i int) []string {
-		items, loaded := invs[i].Items.Get()
+		items, loaded := invs[i].Edges.Items.Get()
 		if !loaded || items == nil {
 			t.Fatalf("invoice %d: loaded %v, items %v", i, loaded, items)
 		}
@@ -67,8 +67,8 @@ func TestWithBelongsToSharesAndSkipsNil(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, okA := items[0].Invoice.Get()
-	b, okB := items[1].Invoice.Get()
+	a, okA := items[0].Edges.Invoice.Get()
+	b, okB := items[1].Edges.Invoice.Get()
 	if !okA || !okB || a == nil || a != b || a.ID != 1 {
 		t.Errorf("%v %v %v %v", a, b, okA, okB)
 	}
@@ -86,7 +86,7 @@ func TestWithNullableKeyLoadsNothing(t *testing.T) {
 	if err != nil || e.Calls != 1 {
 		t.Fatalf("%v, calls %d (a nil key must send nothing)", err, e.Calls)
 	}
-	if p, loaded := ss[0].Parent.Get(); !loaded || p != nil {
+	if p, loaded := ss[0].Edges.Parent.Get(); !loaded || p != nil {
 		t.Errorf("%v %v", p, loaded)
 	}
 }
@@ -103,8 +103,8 @@ func TestWithNestedLoopsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, _ := invs[0].Items.Get()
-	back, loaded := items[0].Invoice.Get()
+	items, _ := invs[0].Edges.Items.Get()
+	back, loaded := items[0].Edges.Invoice.Get()
 	if !loaded || back == nil || back.ID != 1 {
 		t.Errorf("%v %v", back, loaded)
 	}
@@ -134,8 +134,8 @@ func TestWithManyOwnersDoNotShareRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, _ := invs[0].Items.Get()
-	second, _ := invs[1].Items.Get()
+	first, _ := invs[0].Edges.Items.Get()
+	second, _ := invs[1].Edges.Items.Get()
 	if len(first) != 1 || cap(first) != 1 {
 		t.Fatalf("len %d cap %d, want 1 and 1", len(first), cap(first))
 	}
@@ -161,7 +161,7 @@ func TestWithManyRowsAcrossBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _ := invs[0].Items.Get()
+	got, _ := invs[0].Edges.Items.Get()
 	if len(got) != n {
 		t.Fatalf("%d rows, want %d", len(got), n)
 	}
@@ -189,7 +189,7 @@ func TestWithOneAcrossBlocks(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, it := range got {
-		inv, ok := it.Invoice.Get()
+		inv, ok := it.Edges.Invoice.Get()
 		if !ok || inv == nil || inv.ID != it.InvoiceID || inv.Number != fmt.Sprintf("INV-%d", it.InvoiceID) {
 			t.Fatalf("item %d: invoice %+v, loaded %v", i, inv, ok)
 		}
@@ -230,7 +230,7 @@ func TestWithManyOwnersAcrossBlocks(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, inv := range got {
-				xs, _ := inv.Items.Get()
+				xs, _ := inv.Edges.Items.Get()
 				var ids []int64
 				for _, it := range xs {
 					if it.InvoiceID != inv.ID || it.SKU != fmt.Sprintf("%d-%d", inv.ID, it.ID) {
@@ -291,12 +291,42 @@ func TestRelationsInJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err = json.Marshal(out{Items: invs[0].Items})
+	b, err = json.Marshal(out{Items: invs[0].Edges.Items})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(b) != `{"Items":[{"id":10,"invoice_id":1,"SKU":"A","qty":2}]}` {
 		t.Errorf("loaded: %s", b)
+	}
+}
+
+// TestEdgesJSON: an entity's Edges is "edges", left out while no relation is
+// loaded, and holding only the loaded ones; a loaded to-one relation with no
+// row is null.
+func TestEdgesJSON(t *testing.T) {
+	e := &fakeconn.Exec{Results: [][][]any{{invoiceRow(1)}, {itemRow(10, 1, "A", 2)}}}
+	db := openFake(velox.Postgres, e)
+	invs, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, err := json.Marshal(testmodel.Invoice{ID: 1}); err != nil || strings.Contains(string(b), "edges") {
+		t.Errorf("not loaded: %s, %v", b, err)
+	}
+	b, err := json.Marshal(invs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `"edges":{"items":[{"id":10,"invoice_id":1,"SKU":"A","qty":2}]}}`; !strings.HasSuffix(string(b), want) {
+		t.Errorf("loaded: %s, want the suffix %s", b, want)
+	}
+	e = &fakeconn.Exec{Results: [][][]any{{sampleRow(1, nil)}}}
+	ss, err := openFake(velox.Postgres, e).Query[testmodel.Sample]().With(testmodel.Samples.Parent).Limit(1).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, err := json.Marshal(ss[0]); err != nil || !strings.HasSuffix(string(b), `"edges":{"parent":null}}`) {
+		t.Errorf("loaded, no row: %s, %v", b, err)
 	}
 }
 
@@ -306,7 +336,7 @@ func TestWithManyWithoutRowsIsLoadedAndEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if items, loaded := invs[0].Items.Get(); !loaded || items == nil || len(items) != 0 {
+	if items, loaded := invs[0].Edges.Items.Get(); !loaded || items == nil || len(items) != 0 {
 		t.Errorf("%#v %v", items, loaded)
 	}
 }
@@ -324,10 +354,10 @@ func TestWithMixedNilKeys(t *testing.T) {
 	if !strings.Contains(e.Log[1], `WHERE "id" IN ($1)`) || !reflect.DeepEqual(e.Args, []any{int64(1)}) {
 		t.Errorf("one key expected: %s %v", e.Log[1], e.Args)
 	}
-	if p, loaded := ss[0].Parent.Get(); !loaded || p != nil {
+	if p, loaded := ss[0].Edges.Parent.Get(); !loaded || p != nil {
 		t.Errorf("nil key: %v %v", p, loaded)
 	}
-	if p, loaded := ss[1].Parent.Get(); !loaded || p == nil || p.ID != 1 {
+	if p, loaded := ss[1].Edges.Parent.Get(); !loaded || p == nil || p.ID != 1 {
 		t.Errorf("key 1: %v %v", p, loaded)
 	}
 }
@@ -347,7 +377,7 @@ func TestWithNeedsTheKeyColumn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if items, loaded := invs[0].Items.Get(); !loaded || len(items) != 1 || invs[0].Number != "" {
+	if items, loaded := invs[0].Edges.Items.Get(); !loaded || len(items) != 1 || invs[0].Number != "" {
 		t.Errorf("%v %v %+v", items, loaded, invs[0])
 	}
 }
@@ -418,7 +448,7 @@ func TestWithRewriteNarrowsColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, _ := invs[0].Items.Get()
+	items, _ := invs[0].Edges.Items.Get()
 	if len(items) != 1 || items[0].SKU != "A" || items[0].InvoiceID != 1 || items[0].ID != 0 || items[0].Qty != 0 {
 		t.Errorf("%+v", items)
 	}
@@ -502,7 +532,7 @@ func TestOneLoadsNothingWhenNotSingular(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if items, loaded := inv.Items.Get(); !loaded || len(items) != 1 || len(e.Log) != 2 {
+	if items, loaded := inv.Edges.Items.Get(); !loaded || len(items) != 1 || len(e.Log) != 2 {
 		t.Errorf("items %v loaded %v, %d statements", items, loaded, len(e.Log))
 	}
 }
@@ -523,7 +553,7 @@ func TestWithLoadPinSurvivesARewrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, loaded := ss[0].Parent.Get(); !loaded {
+	if _, loaded := ss[0].Edges.Parent.Get(); !loaded {
 		t.Error("the parent is not loaded")
 	}
 	if r0.Calls != 2 || r1.Calls != 0 {

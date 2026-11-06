@@ -212,7 +212,7 @@ func TestScopeRelations(t *testing.T) {
 		}
 		got := map[int64]int64{}
 		for _, x := range xs {
-			p, loaded := x.Parent.Get()
+			p, loaded := x.Edges.Parent.Get()
 			if !loaded {
 				t.Fatalf("ticket %d: parent not loaded", x.ID)
 			}
@@ -255,7 +255,7 @@ func TestScopeCrossOrgParent(t *testing.T) {
 		}
 		got := map[int64]int64{}
 		for _, x := range xs {
-			p, loaded := x.Parent.Get()
+			p, loaded := x.Edges.Parent.Get()
 			if !loaded {
 				t.Fatalf("ticket %d: parent not loaded", x.ID)
 			}

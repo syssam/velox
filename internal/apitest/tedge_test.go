@@ -165,7 +165,7 @@ func TestTableQueryLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantItems, _ := want.Items.Get()
+	wantItems, _ := want.Edges.Items.Get()
 	if len(wantItems) == 0 {
 		t.Fatal("the first invoice has no items: the case is not covered")
 	}
@@ -175,7 +175,7 @@ func TestTableQueryLoads(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		items, ok := (*testmodel.Invoice)(p).Items.Get()
+		items, ok := (*testmodel.Invoice)(p).Edges.Items.Get()
 		if !ok || len(items) != len(wantItems) {
 			t.Errorf("%s: %d items %v, want %d", name, len(items), ok, len(wantItems))
 		}

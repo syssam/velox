@@ -11,12 +11,19 @@ import (
 
 // Line is the entity of schema Line.
 type Line struct {
-	ID          int64              `json:"id"`
-	OrgID       int64              `json:"org_id"`
-	InvoiceID   int64              `json:"invoice_id"`
-	Description string             `json:"description"`
-	AmountCents int64              `json:"amount_cents"`
-	Invoice     velox.One[Invoice] `json:"invoice,omitzero"`
+	ID          int64  `json:"id"`
+	OrgID       int64  `json:"org_id"`
+	InvoiceID   int64  `json:"invoice_id"`
+	Description string `json:"description"`
+	AmountCents int64  `json:"amount_cents"`
+	// Edges holds Line's relations, filled by With.
+	Edges LineEdges `json:"edges,omitzero"`
+}
+
+// LineEdges holds the relations of Line, filled by With.
+type LineEdges struct {
+	// Invoice is the edge invoice, to Invoice.
+	Invoice velox.One[Invoice] `json:"invoice,omitzero"`
 }
 
 // The positions of Line's columns, in the order of its table.
@@ -98,7 +105,7 @@ func lineDescriptor() velox.Descriptor[Line] {
 		EdgeFieldPtr: func(x *Line, i int) any {
 			switch i {
 			case lineEdgeInvoice:
-				return &x.Invoice
+				return &x.Edges.Invoice
 			}
 			return nil
 		},

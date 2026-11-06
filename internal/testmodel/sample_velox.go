@@ -12,22 +12,31 @@ import (
 
 // Sample is the entity of schema Sample.
 type Sample struct {
-	ID        int64              `json:"id"`
-	Name      string             `json:"name"`
-	Status    kind.Status        `json:"status"`
-	Prev      *kind.Status       `json:"prev,omitempty"`
-	Price     kind.Cents         `json:"price"`
-	Ratio     *float64           `json:"ratio,omitempty"`
-	Flag      bool               `json:"flag"`
-	MaybeFlag *bool              `json:"maybe_flag,omitempty"`
-	When      time.Time          `json:"when,omitzero"`
-	MaybeWhen *time.Time         `json:"maybe_when,omitempty"`
-	Blob      []byte             `json:"blob,omitempty"`
-	ParentID  *int64             `json:"parent_id,omitempty"`
-	Score     kind.Score         `json:"score"`
-	Lines     velox.Many[Line]   `json:"lines,omitzero"`
-	Children  velox.Many[Sample] `json:"children,omitzero"`
-	Parent    velox.One[Sample]  `json:"parent,omitzero"`
+	ID        int64        `json:"id"`
+	Name      string       `json:"name"`
+	Status    kind.Status  `json:"status"`
+	Prev      *kind.Status `json:"prev,omitempty"`
+	Price     kind.Cents   `json:"price"`
+	Ratio     *float64     `json:"ratio,omitempty"`
+	Flag      bool         `json:"flag"`
+	MaybeFlag *bool        `json:"maybe_flag,omitempty"`
+	When      time.Time    `json:"when,omitzero"`
+	MaybeWhen *time.Time   `json:"maybe_when,omitempty"`
+	Blob      []byte       `json:"blob,omitempty"`
+	ParentID  *int64       `json:"parent_id,omitempty"`
+	Score     kind.Score   `json:"score"`
+	// Edges holds Sample's relations, filled by With.
+	Edges SampleEdges `json:"edges,omitzero"`
+}
+
+// SampleEdges holds the relations of Sample, filled by With.
+type SampleEdges struct {
+	// Lines is the edge lines, to Line.
+	Lines velox.Many[Line] `json:"lines,omitzero"`
+	// Children is the edge children, to Sample.
+	Children velox.Many[Sample] `json:"children,omitzero"`
+	// Parent is the edge parent, to Sample.
+	Parent velox.One[Sample] `json:"parent,omitzero"`
 }
 
 // The positions of Sample's columns, in the order of its table.
@@ -174,11 +183,11 @@ func sampleDescriptor() velox.Descriptor[Sample] {
 		EdgeFieldPtr: func(x *Sample, i int) any {
 			switch i {
 			case sampleEdgeLines:
-				return &x.Lines
+				return &x.Edges.Lines
 			case sampleEdgeChildren:
-				return &x.Children
+				return &x.Edges.Children
 			case sampleEdgeParent:
-				return &x.Parent
+				return &x.Edges.Parent
 			}
 			return nil
 		},

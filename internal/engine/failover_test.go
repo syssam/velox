@@ -360,8 +360,8 @@ func TestRowsErrorFallsOver(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			a, _ := invs[0].Items.Get()
-			b, _ := invs[1].Items.Get()
+			a, _ := invs[0].Edges.Items.Get()
+			b, _ := invs[1].Edges.Items.Get()
 			if len(a) != 1 || len(b) != 1 || b[0].SKU != "B" {
 				t.Fatalf("items %v and %v, want the primary's one each", a, b)
 			}
@@ -417,7 +417,7 @@ func TestPinnedLoadFallsOver(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if items, ok := invs[1].Items.Get(); !ok || len(items) != 1 || items[0].SKU != "B" {
+		if items, ok := invs[1].Edges.Items.Get(); !ok || len(items) != 1 || items[0].SKU != "B" {
 			t.Fatalf("items %v, loaded %v", items, ok)
 		}
 		// The query reads replica 0; its load fails there and falls over.

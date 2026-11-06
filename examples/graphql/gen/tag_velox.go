@@ -10,9 +10,16 @@ import (
 
 // Tag is the entity of schema Tag.
 type Tag struct {
-	ID    int64            `json:"id"`
-	Name  string           `json:"name"`
-	Rank  int8             `json:"rank"`
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Rank int8   `json:"rank"`
+	// Edges holds Tag's relations, filled by With.
+	Edges TagEdges `json:"edges,omitzero"`
+}
+
+// TagEdges holds the relations of Tag, filled by With.
+type TagEdges struct {
+	// Posts is the edge posts, to Post.
 	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 
@@ -83,7 +90,7 @@ func tagDescriptor() velox.Descriptor[Tag] {
 		EdgeFieldPtr: func(x *Tag, i int) any {
 			switch i {
 			case tagEdgePosts:
-				return &x.Posts
+				return &x.Edges.Posts
 			}
 			return nil
 		},

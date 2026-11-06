@@ -20,7 +20,7 @@ func BenchmarkJoin(b *testing.B) {
 				if len(rows) != 100 {
 					b.Fatalf("got %d rows, want 100", len(rows))
 				}
-				if inv, _ := rows[0].Invoice.Get(); wantInvoice && inv == nil {
+				if inv, _ := rows[0].Edges.Invoice.Get(); wantInvoice && inv == nil {
 					b.Fatal("no invoice")
 				}
 			}

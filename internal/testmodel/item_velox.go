@@ -10,11 +10,18 @@ import (
 
 // Item is the entity of schema Item.
 type Item struct {
-	ID        int64              `json:"id"`
-	InvoiceID int64              `json:"invoice_id"`
-	SKU       string             `json:"SKU"`
-	Qty       int64              `json:"qty"`
-	Invoice   velox.One[Invoice] `json:"invoice,omitzero"`
+	ID        int64  `json:"id"`
+	InvoiceID int64  `json:"invoice_id"`
+	SKU       string `json:"SKU"`
+	Qty       int64  `json:"qty"`
+	// Edges holds Item's relations, filled by With.
+	Edges ItemEdges `json:"edges,omitzero"`
+}
+
+// ItemEdges holds the relations of Item, filled by With.
+type ItemEdges struct {
+	// Invoice is the edge invoice, to Invoice.
+	Invoice velox.One[Invoice] `json:"invoice,omitzero"`
 }
 
 // The positions of Item's columns, in the order of its table.
@@ -88,7 +95,7 @@ func itemDescriptor() velox.Descriptor[Item] {
 		EdgeFieldPtr: func(x *Item, i int) any {
 			switch i {
 			case itemEdgeInvoice:
-				return &x.Invoice
+				return &x.Edges.Invoice
 			}
 			return nil
 		},

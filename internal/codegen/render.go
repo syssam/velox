@@ -200,7 +200,8 @@ func entityImports(w *writer, o *Out, e *OutEntity) {
 	w.p("")
 }
 
-// entityStruct writes the struct of e: its fields, then its edges.
+// entityStruct writes the struct of e, its fields and then its Edges, and the
+// struct of its relations, XEdges, when it has any.
 func entityStruct(w *writer, e *OutEntity) {
 	switch {
 	case e.Comment != "":
@@ -217,10 +218,26 @@ func entityStruct(w *writer, e *OutEntity) {
 		}
 		w.p("%s %s %s", f.GoName, f.GoType, f.Tag)
 	}
+	if len(e.Rels) > 0 {
+		w.p("// Edges holds %s's relations, filled by With.", e.Name)
+		w.p("Edges %sEdges `json:\"edges,omitzero\"`", e.Name)
+	}
+	w.p("}")
+	if len(e.Rels) == 0 {
+		return
+	}
+	w.p("")
+	w.p("// %sEdges holds the relations of %[1]s, filled by With.", e.Name)
+	w.p("type %sEdges struct {", e.Name)
 	for _, r := range e.Rels {
 		kind := "One"
 		if r.Many {
 			kind = "Many"
+		}
+		if r.Comment != "" {
+			w.doc(r.Comment)
+		} else {
+			w.p("// %s is the edge %s, to %s.", r.GoName, r.Name, r.Target)
 		}
 		w.p("%s velox.%s[%s] `json:\"%s,omitzero\"`", r.GoName, kind, r.Target, r.Name)
 	}
@@ -373,7 +390,7 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 		w.p("switch i {")
 		for i, r := range e.Rels {
 			w.p("case %s:", edgeConst(e, i))
-			w.p("return &x.%s", r.GoName)
+			w.p("return &x.Edges.%s", r.GoName)
 		}
 		w.p("}")
 		w.p("return nil")

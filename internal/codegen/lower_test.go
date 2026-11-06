@@ -539,6 +539,9 @@ func (ClJoin) Annotations() []schema.Annotation {
 	return []schema.Annotation{schema.Table("cl_join_rows")}
 }
 
+// ClTagEdges has the name of the struct of ClTag's relations.
+type ClTagEdges struct{ schema.Schema }
+
 type ClReserved struct{ schema.Schema }
 
 func (ClReserved) Fields() []schema.Field { return []schema.Field{field.String("string")} }
@@ -559,6 +562,7 @@ func TestLowerCollisions(t *testing.T) {
 		{"handles", []schema.Interface{ClBox{}, ClBoxes{}}, []string{`schema ClBox: handles variable ClBoxes collides with schema ClBoxes`}},
 		{"enum", []schema.Interface{ClUser{}, ClUserRole{}}, []string{`schema ClUser: field "role": enum type ClUserRole collides with schema ClUserRole`}},
 		{"join", []schema.Interface{ClTag{}, ClItem{}, ClJoin{}}, []string{`schema ClTag: edge "links": join entity ClJoin collides with schema ClJoin`}},
+		{"edges", []schema.Interface{ClTag{}, ClItem{}, ClTagEdges{}}, []string{`schema ClTag: edges type ClTagEdges collides with schema ClTagEdges`}},
 		{"reserved", []schema.Interface{ClReserved{}, ClBox{}}, []string{
 			`schema ClReserved: field "string": its Go name String is reserved`,
 			`schema ClReserved: edge "hooks": its Go name Hooks is reserved`,

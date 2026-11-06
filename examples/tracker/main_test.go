@@ -325,10 +325,12 @@ func TestOrgIsolation(t *testing.T) {
 		globexProject := globex.project("Tagged")
 		globexIssue := globex.issue(globexProject, "Tagged too", "shared")
 		type labelled struct {
-			ID     int64 `json:"id"`
-			Labels []struct {
-				ID int64 `json:"id"`
-			} `json:"labels"`
+			ID    int64 `json:"id"`
+			Edges struct {
+				Labels []struct {
+					ID int64 `json:"id"`
+				} `json:"labels"`
+			} `json:"edges"`
 		}
 		var a, g pageBody[labelled]
 		acme.do("GET", fmt.Sprintf("/projects/%d/issues?label=shared", project), 200, nil, &a)
@@ -336,8 +338,9 @@ func TestOrgIsolation(t *testing.T) {
 		if len(a.Items) != 1 || len(g.Items) != 1 || g.Items[0].ID != globexIssue {
 			t.Fatalf("issues labelled shared: acme %+v, globex %+v", a.Items, g.Items)
 		}
-		if len(a.Items[0].Labels) != 1 || len(g.Items[0].Labels) != 1 || a.Items[0].Labels[0].ID == g.Items[0].Labels[0].ID {
-			t.Errorf("the orgs' labels: acme %+v, globex %+v; want one each, different", a.Items[0].Labels, g.Items[0].Labels)
+		al, gl := a.Items[0].Edges.Labels, g.Items[0].Edges.Labels
+		if len(al) != 1 || len(gl) != 1 || al[0].ID == gl[0].ID {
+			t.Errorf("the orgs' labels: acme %+v, globex %+v; want one each, different", al, gl)
 		}
 
 		// A count covers the org's own issues.
@@ -442,52 +445,53 @@ func TestIssueDetail(t *testing.T) {
 		ann.do("POST", path+"/comments", 422, obj{"body": ""}, nil)
 		admin.do("PATCH", path, 200, obj{"assignee_id": annID}, nil)
 
+		type person struct {
+			Name string `json:"name"`
+		}
 		var x struct {
-			Title  string `json:"title"`
-			Author struct {
-				Name string `json:"name"`
-			} `json:"author"`
-			Assignee struct {
-				Name string `json:"name"`
-			} `json:"assignee"`
-			Labels []struct {
-				Name string `json:"name"`
-			} `json:"labels"`
-			Comments []struct {
-				Body   string `json:"body"`
-				Author struct {
+			Title string `json:"title"`
+			Edges struct {
+				Author   person `json:"author"`
+				Assignee person `json:"assignee"`
+				Labels   []struct {
 					Name string `json:"name"`
-				} `json:"author"`
-			} `json:"comments"`
+				} `json:"labels"`
+				Comments []struct {
+					Body  string `json:"body"`
+					Edges struct {
+						Author person `json:"author"`
+					} `json:"edges"`
+				} `json:"comments"`
+			} `json:"edges"`
 		}
 		ann.do("GET", path, 200, nil, &x)
-		if x.Title != "Fuel leak" || x.Author.Name != "ann" || x.Assignee.Name != "ann" {
+		xe := x.Edges
+		if x.Title != "Fuel leak" || xe.Author.Name != "ann" || xe.Assignee.Name != "ann" {
 			t.Errorf("issue: %+v", x)
 		}
-		if len(x.Labels) != 2 || x.Labels[0].Name != "bug" || x.Labels[1].Name != "urgent" {
-			t.Errorf("labels: %+v", x.Labels)
+		if len(xe.Labels) != 2 || xe.Labels[0].Name != "bug" || xe.Labels[1].Name != "urgent" {
+			t.Errorf("labels: %+v", xe.Labels)
 		}
-		if len(x.Comments) != 2 || x.Comments[0].Body != "first" || x.Comments[0].Author.Name != "Admin" || x.Comments[1].Author.Name != "ann" {
-			t.Errorf("comments: %+v", x.Comments)
+		if len(xe.Comments) != 2 || xe.Comments[0].Body != "first" || xe.Comments[0].Edges.Author.Name != "Admin" || xe.Comments[1].Edges.Author.Name != "ann" {
+			t.Errorf("comments: %+v", xe.Comments)
 		}
-		var o struct {
-			Labels []struct {
-				ID   int64  `json:"id"`
-				Name string `json:"name"`
-			} `json:"labels"`
+		type labels struct {
+			Edges struct {
+				Labels []struct {
+					ID   int64  `json:"id"`
+					Name string `json:"name"`
+				} `json:"labels"`
+			} `json:"edges"`
 		}
+		var o, issue1 labels
 		ann.do("GET", fmt.Sprintf("/issues/%d", other), 200, nil, &o)
-		if len(o.Labels) != 2 || o.Labels[0].Name != "bug" || o.Labels[1].Name != "valve" {
-			t.Errorf("the other issue's labels: %+v", o.Labels)
-		}
-		var issue1 struct {
-			Labels []struct {
-				ID int64 `json:"id"`
-			} `json:"labels"`
+		ol := o.Edges.Labels
+		if len(ol) != 2 || ol[0].Name != "bug" || ol[1].Name != "valve" {
+			t.Errorf("the other issue's labels: %+v", ol)
 		}
 		ann.do("GET", path, 200, nil, &issue1)
-		if issue1.Labels[0].ID != o.Labels[0].ID {
-			t.Errorf("bug has ids %d and %d: not reused", issue1.Labels[0].ID, o.Labels[0].ID)
+		if il := issue1.Edges.Labels; len(il) == 0 || len(ol) == 0 || il[0].ID != ol[0].ID {
+			t.Errorf("bug has ids %+v and %+v: not reused", il, ol)
 		}
 	})
 }

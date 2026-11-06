@@ -679,7 +679,7 @@ func circlesOf(t *testing.T, e *env, id int64) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cs, _ := w.Circles.Get()
+	cs, _ := w.Edges.Circles.Get()
 	var out []string
 	for _, c := range cs {
 		out = append(out, c.Name)
@@ -1733,7 +1733,7 @@ func friendsOf(t *testing.T, e *env, id int64) []int64 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fs, _ := w.Friends.Get()
+	fs, _ := w.Edges.Friends.Get()
 	var out []int64
 	for _, f := range fs {
 		out = append(out, f.ID)

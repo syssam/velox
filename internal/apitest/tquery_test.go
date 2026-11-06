@@ -181,7 +181,7 @@ func TestTableQueryRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, it := range velox.RowsOf[testmodel.Item](joined) {
-		if inv, ok := it.Invoice.Get(); !ok || inv == nil || inv.ID != it.InvoiceID {
+		if inv, ok := it.Edges.Invoice.Get(); !ok || inv == nil || inv.ID != it.InvoiceID {
 			t.Errorf("join: item %d: %v %v", it.ID, inv, ok)
 		}
 	}
@@ -192,7 +192,7 @@ func TestTableQueryRows(t *testing.T) {
 	}
 	loaded := 0
 	for i := range invs {
-		items, _ := invs[i].Items.Get()
+		items, _ := invs[i].Edges.Items.Get()
 		loaded += len(items)
 		for _, target := range []velox.Table{itTable, invTable} {
 			if r, ok := invTable.Filled(unsafe.Pointer(&invs[i]), int(I.Items.I), target); ok || r != nil {
@@ -311,7 +311,7 @@ func TestTableRows(t *testing.T) {
 	if got, ok := tkTable.Filled(p, int(Tk.Invoice.I), invTable); !ok || got != inv {
 		t.Errorf("Filled: %v %v", got, ok)
 	}
-	if v, ok := x.Invoice.Get(); !ok || unsafe.Pointer(v) != inv {
+	if v, ok := x.Edges.Invoice.Get(); !ok || unsafe.Pointer(v) != inv {
 		t.Errorf("Get after Fill: %v %v", v, ok)
 	}
 	if err := tkTable.Fill(p, int(Tk.Invoice.I), tkTable, inv); err == nil {

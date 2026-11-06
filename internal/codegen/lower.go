@@ -1034,7 +1034,7 @@ func (l *lowerer) relations() {
 				s.fail(where, "type %s is not a schema of this package", ed.Target)
 				continue
 			}
-			r := &OutRel{GoName: ed.GoName, Name: ed.Name, Target: ed.Target, Many: ed.Rel.Kind == "O2M" || ed.Rel.Kind == "M2M"}
+			r := &OutRel{GoName: ed.GoName, Name: ed.Name, Target: ed.Target, Many: ed.Rel.Kind == "O2M" || ed.Rel.Kind == "M2M", Comment: ed.Comment}
 			if ed.Rel.Kind == "M2M" {
 				r.Desc = l.through(s, e, t, ed)
 			} else {
@@ -1174,6 +1174,12 @@ func (l *lowerer) finish() {
 			if enumOK[i] {
 				add(c, "enum constant", d.schema, d.where)
 			}
+		}
+	}
+	// An entity with relations declares XEdges, the struct that holds them.
+	for _, e := range l.g.Entities {
+		if len(l.state[e.Name].out.Rels) > 0 {
+			add(e.Name+"Edges", "edges type", e.Name, "")
 		}
 	}
 	for _, e := range l.g.Entities {

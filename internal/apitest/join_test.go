@@ -48,7 +48,7 @@ func TestJoinToOneFillsTheRelationInOneStatement(t *testing.T) {
 		t.Fatalf("items: %+v", items)
 	}
 	for i, wantNumber := range []string{"INV-1", "INV-2"} {
-		inv, loaded := items[i].Invoice.Get()
+		inv, loaded := items[i].Edges.Invoice.Get()
 		if !loaded || inv == nil || inv.Number != wantNumber {
 			t.Errorf("item %d: loaded %v, invoice %+v", i, loaded, inv)
 		}
@@ -68,11 +68,11 @@ func TestLeftJoinKeepsARowWithoutARelatedRow(t *testing.T) {
 	if !strings.Contains(e.Log[0], ` LEFT JOIN "invoices" AS "vxj1" ON "vxj1"."id" = "items"."invoice_id"`) {
 		t.Errorf("no left join in %s", e.Log[0])
 	}
-	if inv, loaded := items[0].Invoice.Get(); !loaded || inv == nil || inv.Number != "INV-1" {
+	if inv, loaded := items[0].Edges.Invoice.Get(); !loaded || inv == nil || inv.Number != "INV-1" {
 		t.Errorf("item 0: loaded %v, invoice %+v", loaded, inv)
 	}
 	// Loaded, and nothing there: a nil, as With leaves one with no row.
-	if inv, loaded := items[1].Invoice.Get(); !loaded || inv != nil {
+	if inv, loaded := items[1].Edges.Invoice.Get(); !loaded || inv != nil {
 		t.Errorf("item 1: loaded %v, invoice %+v", loaded, inv)
 	}
 }
@@ -151,7 +151,7 @@ func TestJoinIterYieldsJoinedRows(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		inv, loaded := it.Invoice.Get()
+		inv, loaded := it.Edges.Invoice.Get()
 		if !loaded || inv == nil {
 			t.Fatalf("item %d: invoice not loaded", it.ID)
 		}
@@ -173,7 +173,7 @@ func TestJoinColumnsNarrowTheEntityOnly(t *testing.T) {
 	if !strings.HasPrefix(e.Log[0], `SELECT "items"."id", "items"."sku", "vxj1"."id", `) {
 		t.Errorf("SQL %s", e.Log[0])
 	}
-	if inv, _ := items[0].Invoice.Get(); items[0].SKU != "A" || inv == nil || inv.Number != "INV-1" {
+	if inv, _ := items[0].Edges.Invoice.Get(); items[0].SKU != "A" || inv == nil || inv.Number != "INV-1" {
 		t.Errorf("item %+v, invoice %+v", items[0], inv)
 	}
 }
@@ -232,7 +232,7 @@ func TestJoinRewriteMayNotChangeJoins(t *testing.T) {
 	if err != nil || seen != 1 {
 		t.Fatalf("seen %d, %v", seen, err)
 	}
-	if inv, _ := items[0].Invoice.Get(); inv == nil || inv.ID != 1 {
+	if inv, _ := items[0].Edges.Invoice.Get(); inv == nil || inv.ID != 1 {
 		t.Errorf("invoice %+v", inv)
 	}
 }
@@ -261,8 +261,8 @@ func TestJoinLoadsTheJoinedEntitiesRelations(t *testing.T) {
 		t.Errorf("\n got %s\nwant %s", e.Log[1], want)
 	}
 	skus := func(i int) (out []string) {
-		inv, _ := items[i].Invoice.Get()
-		xs, loaded := inv.Items.Get()
+		inv, _ := items[i].Edges.Invoice.Get()
+		xs, loaded := inv.Edges.Items.Get()
 		if !loaded {
 			t.Fatalf("item %d: its invoice's items are not loaded", i)
 		}
@@ -351,7 +351,7 @@ func TestJoinFillBuildsTheRowAfterPagesFrom(t *testing.T) {
 	if got := fmt.Sprint(e.ArgLog[0]); got != "[INV-2 INV-2 11 2]" {
 		t.Errorf("args %s", got)
 	}
-	if v, loaded := after.Invoice.Get(); !loaded || v.Number != "INV-2" {
+	if v, loaded := after.Edges.Invoice.Get(); !loaded || v.Number != "INV-2" {
 		t.Errorf("the field holds %v, %v", v, loaded)
 	}
 	if v, ok := It.Invoice.Filled(after); !ok || v.Number != "INV-2" {

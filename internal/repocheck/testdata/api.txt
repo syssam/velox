@@ -150,7 +150,7 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
-const GeneratedCodeIsVersion17
+const GeneratedCodeIsVersion18
 const LockForShare
 const LockForUpdate
 const LockNoWait

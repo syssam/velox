@@ -11,10 +11,17 @@ import (
 
 // Doc is the entity of schema Doc.
 type Doc struct {
-	ID       int64               `json:"id"`
-	Owner    string              `json:"owner"`
-	Title    string              `json:"title"`
-	Shared   bool                `json:"shared"`
+	ID     int64  `json:"id"`
+	Owner  string `json:"owner"`
+	Title  string `json:"title"`
+	Shared bool   `json:"shared"`
+	// Edges holds Doc's relations, filled by With.
+	Edges DocEdges `json:"edges,omitzero"`
+}
+
+// DocEdges holds the relations of Doc, filled by With.
+type DocEdges struct {
+	// Comments is the edge comments, to Comment.
 	Comments velox.Many[Comment] `json:"comments,omitzero"`
 }
 
@@ -90,7 +97,7 @@ func docDescriptor() velox.Descriptor[Doc] {
 		EdgeFieldPtr: func(x *Doc, i int) any {
 			switch i {
 			case docEdgeComments:
-				return &x.Comments
+				return &x.Edges.Comments
 			}
 			return nil
 		},

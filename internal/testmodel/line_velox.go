@@ -10,9 +10,16 @@ import (
 
 // Line is the entity of schema Line.
 type Line struct {
-	ID       int64             `json:"id"`
-	SampleID int64             `json:"sample_id"`
-	Sample   velox.One[Sample] `json:"sample,omitzero"`
+	ID       int64 `json:"id"`
+	SampleID int64 `json:"sample_id"`
+	// Edges holds Line's relations, filled by With.
+	Edges LineEdges `json:"edges,omitzero"`
+}
+
+// LineEdges holds the relations of Line, filled by With.
+type LineEdges struct {
+	// Sample is the edge sample, to Sample.
+	Sample velox.One[Sample] `json:"sample,omitzero"`
 }
 
 // The positions of Line's columns, in the order of its table.
@@ -72,7 +79,7 @@ func lineDescriptor() velox.Descriptor[Line] {
 		EdgeFieldPtr: func(x *Line, i int) any {
 			switch i {
 			case lineEdgeSample:
-				return &x.Sample
+				return &x.Edges.Sample
 			}
 			return nil
 		},

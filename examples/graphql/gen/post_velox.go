@@ -13,15 +13,23 @@ import (
 
 // Post is the entity of schema Post.
 type Post struct {
-	ID          int64           `json:"id"`
-	OrgID       int64           `json:"org_id"`
-	AuthorID    int64           `json:"author_id"`
-	Title       string          `json:"title"`
-	Status      PostStatus      `json:"status"`
-	Views       int64           `json:"views,omitempty"`
-	PublishedAt *time.Time      `json:"published_at,omitempty"`
-	Author      velox.One[User] `json:"author,omitzero"`
-	Tags        velox.Many[Tag] `json:"tags,omitzero"`
+	ID          int64      `json:"id"`
+	OrgID       int64      `json:"org_id"`
+	AuthorID    int64      `json:"author_id"`
+	Title       string     `json:"title"`
+	Status      PostStatus `json:"status"`
+	Views       int64      `json:"views,omitempty"`
+	PublishedAt *time.Time `json:"published_at,omitempty"`
+	// Edges holds Post's relations, filled by With.
+	Edges PostEdges `json:"edges,omitzero"`
+}
+
+// PostEdges holds the relations of Post, filled by With.
+type PostEdges struct {
+	// Author is the edge author, to User.
+	Author velox.One[User] `json:"author,omitzero"`
+	// Tags is the edge tags, to Tag.
+	Tags velox.Many[Tag] `json:"tags,omitzero"`
 }
 
 // The positions of Post's columns, in the order of its table.
@@ -122,9 +130,9 @@ func postDescriptor() velox.Descriptor[Post] {
 		EdgeFieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postEdgeAuthor:
-				return &x.Author
+				return &x.Edges.Author
 			case postEdgeTags:
-				return &x.Tags
+				return &x.Edges.Tags
 			}
 			return nil
 		},

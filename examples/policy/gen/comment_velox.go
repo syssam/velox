@@ -11,10 +11,17 @@ import (
 
 // Comment is the entity of schema Comment.
 type Comment struct {
-	ID    int64          `json:"id"`
-	DocID int64          `json:"doc_id"`
-	Body  string         `json:"body"`
-	Doc   velox.One[Doc] `json:"doc,omitzero"`
+	ID    int64  `json:"id"`
+	DocID int64  `json:"doc_id"`
+	Body  string `json:"body"`
+	// Edges holds Comment's relations, filled by With.
+	Edges CommentEdges `json:"edges,omitzero"`
+}
+
+// CommentEdges holds the relations of Comment, filled by With.
+type CommentEdges struct {
+	// Doc is the edge doc, to Doc.
+	Doc velox.One[Doc] `json:"doc,omitzero"`
 }
 
 // The positions of Comment's columns, in the order of its table.
@@ -82,7 +89,7 @@ func commentDescriptor() velox.Descriptor[Comment] {
 		EdgeFieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case commentEdgeDoc:
-				return &x.Doc
+				return &x.Edges.Doc
 			}
 			return nil
 		},

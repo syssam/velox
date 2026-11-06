@@ -209,7 +209,7 @@ func invoiceSKUs(t *testing.T, invs []testmodel.Invoice) map[int64][]string {
 	t.Helper()
 	got := map[int64][]string{}
 	for _, inv := range invs {
-		items, ok := inv.Items.Get()
+		items, ok := inv.Edges.Items.Get()
 		if !ok || items == nil {
 			t.Fatalf("invoice %d: items not loaded", inv.ID)
 		}
@@ -234,9 +234,9 @@ func TestLimitEachWith(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	for _, inv := range invs {
-		items, _ := inv.Items.Get()
+		items, _ := inv.Edges.Items.Get()
 		for _, it := range items {
-			if back, ok := it.Invoice.Get(); !ok || back == nil || back.ID != inv.ID {
+			if back, ok := it.Edges.Invoice.Get(); !ok || back == nil || back.ID != inv.ID {
 				t.Errorf("item %d: its invoice %v %v", it.ID, back, ok)
 			}
 		}
@@ -526,7 +526,7 @@ func TestLoadEach(t *testing.T) {
 		}
 		for i, items := range got {
 			for _, it := range items {
-				if back, ok := it.Invoice.Get(); !ok || back == nil || back.ID != owners[i].ID {
+				if back, ok := it.Edges.Invoice.Get(); !ok || back == nil || back.ID != owners[i].ID {
 					t.Errorf("%s With: item %d: its invoice %v %v", name, it.ID, back, ok)
 				}
 			}
@@ -835,7 +835,7 @@ func TestLoadEachJoin(t *testing.T) {
 		for _, items := range lists {
 			ns := []string{}
 			for _, it := range items {
-				inv, ok := it.Invoice.Get()
+				inv, ok := it.Edges.Invoice.Get()
 				if !ok || inv == nil {
 					t.Fatalf("item %s: invoice not joined", it.SKU)
 				}
@@ -891,8 +891,8 @@ func TestLoadEachJoin(t *testing.T) {
 	if got, err = velox.LoadEach(ctx, with, I.Items.LimitEach(1), owners[:1]); err != nil {
 		t.Fatal(err)
 	}
-	inv, _ := got[0][0].Invoice.Get()
-	if items, ok := inv.Items.Get(); !ok || len(items) != 1 || items[0].SKU != "D" {
+	inv, _ := got[0][0].Edges.Invoice.Get()
+	if items, ok := inv.Edges.Items.Get(); !ok || len(items) != 1 || items[0].SKU != "D" {
 		t.Errorf("the joined invoice's items: %v %v", items, ok)
 	}
 }

@@ -109,6 +109,7 @@ type OutRel struct {
 	GoName, Name, Target string
 	Many                 bool   // Many[T] (O2M, M2M) or One[T] (O2O, M2O)
 	Desc                 string // the velox.EdgeTo or velox.EdgeThrough expression
+	Comment              string // the edge's documentation, from the schema
 }
 
 // OutIndex is an index, by the indexes of its columns in the entity's fields.
@@ -130,4 +131,4 @@ const veloxPkg = "github.com/syssam/velox"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 17
+const GeneratedCodeVersion = 18

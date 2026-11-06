@@ -11,11 +11,19 @@ import (
 
 // Category is the entity of schema Category.
 type Category struct {
-	ID               int64                `json:"id"`
-	Title            string               `json:"title"`
-	CategoryChildren *int64               `json:"-"`
-	Children         velox.Many[Category] `json:"children,omitzero"`
-	Parent           velox.One[Category]  `json:"parent,omitzero"`
+	ID               int64  `json:"id"`
+	Title            string `json:"title"`
+	CategoryChildren *int64 `json:"-"`
+	// Edges holds Category's relations, filled by With.
+	Edges CategoryEdges `json:"edges,omitzero"`
+}
+
+// CategoryEdges holds the relations of Category, filled by With.
+type CategoryEdges struct {
+	// Children is the edge children, to Category.
+	Children velox.Many[Category] `json:"children,omitzero"`
+	// Parent is the edge parent, to Category.
+	Parent velox.One[Category] `json:"parent,omitzero"`
 }
 
 // The positions of Category's columns, in the order of its table.
@@ -92,9 +100,9 @@ func categoryDescriptor() velox.Descriptor[Category] {
 		EdgeFieldPtr: func(x *Category, i int) any {
 			switch i {
 			case categoryEdgeChildren:
-				return &x.Children
+				return &x.Edges.Children
 			case categoryEdgeParent:
-				return &x.Parent
+				return &x.Edges.Parent
 			}
 			return nil
 		},

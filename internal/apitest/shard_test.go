@@ -137,7 +137,7 @@ func TestShardWithLoads(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if items, ok := invs[0].Items.Get(); !ok || len(items) != 1 {
+		if items, ok := invs[0].Edges.Items.Get(); !ok || len(items) != 1 {
 			t.Errorf("items %v, loaded %v", items, ok)
 		}
 		s.check(t, hooked, [3]int{0, 2, 0}, euR0, euR0)

@@ -12,13 +12,20 @@ import (
 
 // User is the entity of schema User.
 type User struct {
-	ID           int64            `json:"id"`
-	Name         string           `json:"name"`
-	Email        string           `json:"email"`
-	Role         UserRole         `json:"role"`
-	JoinedAt     time.Time        `json:"joined_at,omitzero"`
-	PasswordHash string           `json:"-"`
-	Posts        velox.Many[Post] `json:"posts,omitzero"`
+	ID           int64     `json:"id"`
+	Name         string    `json:"name"`
+	Email        string    `json:"email"`
+	Role         UserRole  `json:"role"`
+	JoinedAt     time.Time `json:"joined_at,omitzero"`
+	PasswordHash string    `json:"-"`
+	// Edges holds User's relations, filled by With.
+	Edges UserEdges `json:"edges,omitzero"`
+}
+
+// UserEdges holds the relations of User, filled by With.
+type UserEdges struct {
+	// Posts is the edge posts, to Post.
+	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 
 // The positions of User's columns, in the order of its table.
@@ -106,7 +113,7 @@ func userDescriptor() velox.Descriptor[User] {
 		EdgeFieldPtr: func(x *User, i int) any {
 			switch i {
 			case userEdgePosts:
-				return &x.Posts
+				return &x.Edges.Posts
 			}
 			return nil
 		},

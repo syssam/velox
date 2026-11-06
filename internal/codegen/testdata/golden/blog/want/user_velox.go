@@ -21,19 +21,29 @@ type User struct {
 	CreatedBy string    `json:"created_by"`
 	OrgID     int64     `json:"org_id"`
 	// The display name.
-	Name         string            `json:"name"`
-	Email        string            `json:"email"`
-	Role         UserRole          `json:"role"`
-	Nickname     string            `json:"nickname,omitempty"`
-	Bio          *string           `json:"bio,omitempty"`
-	Age          int               `json:"age,omitempty"`
-	PasswordHash string            `json:"-"`
-	Score        *float64          `json:"score,omitempty"`
-	UserSpouse   *int64            `json:"-"`
-	Posts        velox.Many[Post]  `json:"posts,omitzero"`
-	Groups       velox.Many[Group] `json:"groups,omitzero"`
-	Friends      velox.Many[User]  `json:"friends,omitzero"`
-	Spouse       velox.One[User]   `json:"spouse,omitzero"`
+	Name         string   `json:"name"`
+	Email        string   `json:"email"`
+	Role         UserRole `json:"role"`
+	Nickname     string   `json:"nickname,omitempty"`
+	Bio          *string  `json:"bio,omitempty"`
+	Age          int      `json:"age,omitempty"`
+	PasswordHash string   `json:"-"`
+	Score        *float64 `json:"score,omitempty"`
+	UserSpouse   *int64   `json:"-"`
+	// Edges holds User's relations, filled by With.
+	Edges UserEdges `json:"edges,omitzero"`
+}
+
+// UserEdges holds the relations of User, filled by With.
+type UserEdges struct {
+	// Posts is the edge posts, to Post.
+	Posts velox.Many[Post] `json:"posts,omitzero"`
+	// Groups is the edge groups, to Group.
+	Groups velox.Many[Group] `json:"groups,omitzero"`
+	// Friends is the edge friends, to User.
+	Friends velox.Many[User] `json:"friends,omitzero"`
+	// Spouse is the edge spouse, to User.
+	Spouse velox.One[User] `json:"spouse,omitzero"`
 }
 
 // The positions of User's columns, in the order of its table.
@@ -200,13 +210,13 @@ func userDescriptor() velox.Descriptor[User] {
 		EdgeFieldPtr: func(x *User, i int) any {
 			switch i {
 			case userEdgePosts:
-				return &x.Posts
+				return &x.Edges.Posts
 			case userEdgeGroups:
-				return &x.Groups
+				return &x.Edges.Groups
 			case userEdgeFriends:
-				return &x.Friends
+				return &x.Edges.Friends
 			case userEdgeSpouse:
-				return &x.Spouse
+				return &x.Edges.Spouse
 			}
 			return nil
 		},

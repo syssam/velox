@@ -12,9 +12,16 @@ import (
 
 // Label is the entity of schema Label.
 type Label struct {
-	ID     int64             `json:"id"`
-	OrgID  int64             `json:"org_id"`
-	Name   string            `json:"name"`
+	ID    int64  `json:"id"`
+	OrgID int64  `json:"org_id"`
+	Name  string `json:"name"`
+	// Edges holds Label's relations, filled by With.
+	Edges LabelEdges `json:"edges,omitzero"`
+}
+
+// LabelEdges holds the relations of Label, filled by With.
+type LabelEdges struct {
+	// Issues is the edge issues, to Issue.
 	Issues velox.Many[Issue] `json:"issues,omitzero"`
 }
 
@@ -86,7 +93,7 @@ func labelDescriptor() velox.Descriptor[Label] {
 		EdgeFieldPtr: func(x *Label, i int) any {
 			switch i {
 			case labelEdgeIssues:
-				return &x.Issues
+				return &x.Edges.Issues
 			}
 			return nil
 		},

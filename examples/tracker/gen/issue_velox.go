@@ -13,21 +13,32 @@ import (
 
 // Issue is the entity of schema Issue.
 type Issue struct {
-	ID         int64               `json:"id"`
-	CreatedAt  time.Time           `json:"created_at,omitzero"`
-	UpdatedAt  time.Time           `json:"updated_at,omitzero"`
-	OrgID      int64               `json:"org_id"`
-	ProjectID  int64               `json:"project_id"`
-	AuthorID   int64               `json:"author_id"`
-	AssigneeID *int64              `json:"assignee_id,omitempty"`
-	Title      string              `json:"title"`
-	Body       string              `json:"body"`
-	Status     IssueStatus         `json:"status"`
-	Project    velox.One[Project]  `json:"project,omitzero"`
-	Author     velox.One[User]     `json:"author,omitzero"`
-	Assignee   velox.One[User]     `json:"assignee,omitzero"`
-	Comments   velox.Many[Comment] `json:"comments,omitzero"`
-	Labels     velox.Many[Label]   `json:"labels,omitzero"`
+	ID         int64       `json:"id"`
+	CreatedAt  time.Time   `json:"created_at,omitzero"`
+	UpdatedAt  time.Time   `json:"updated_at,omitzero"`
+	OrgID      int64       `json:"org_id"`
+	ProjectID  int64       `json:"project_id"`
+	AuthorID   int64       `json:"author_id"`
+	AssigneeID *int64      `json:"assignee_id,omitempty"`
+	Title      string      `json:"title"`
+	Body       string      `json:"body"`
+	Status     IssueStatus `json:"status"`
+	// Edges holds Issue's relations, filled by With.
+	Edges IssueEdges `json:"edges,omitzero"`
+}
+
+// IssueEdges holds the relations of Issue, filled by With.
+type IssueEdges struct {
+	// Project is the edge project, to Project.
+	Project velox.One[Project] `json:"project,omitzero"`
+	// Author is the edge author, to User.
+	Author velox.One[User] `json:"author,omitzero"`
+	// Assignee is the edge assignee, to User.
+	Assignee velox.One[User] `json:"assignee,omitzero"`
+	// Comments is the edge comments, to Comment.
+	Comments velox.Many[Comment] `json:"comments,omitzero"`
+	// Labels is the edge labels, to Label.
+	Labels velox.Many[Label] `json:"labels,omitzero"`
 }
 
 // The positions of Issue's columns, in the order of its table.
@@ -167,15 +178,15 @@ func issueDescriptor() velox.Descriptor[Issue] {
 		EdgeFieldPtr: func(x *Issue, i int) any {
 			switch i {
 			case issueEdgeProject:
-				return &x.Project
+				return &x.Edges.Project
 			case issueEdgeAuthor:
-				return &x.Author
+				return &x.Edges.Author
 			case issueEdgeAssignee:
-				return &x.Assignee
+				return &x.Edges.Assignee
 			case issueEdgeComments:
-				return &x.Comments
+				return &x.Edges.Comments
 			case issueEdgeLabels:
-				return &x.Labels
+				return &x.Edges.Labels
 			}
 			return nil
 		},

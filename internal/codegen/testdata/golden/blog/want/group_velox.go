@@ -12,9 +12,16 @@ import (
 
 // Group is the entity of schema Group.
 type Group struct {
-	ID    int64            `json:"id"`
-	Name  string           `json:"name"`
-	Token string           `json:"token"`
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Token string `json:"token"`
+	// Edges holds Group's relations, filled by With.
+	Edges GroupEdges `json:"edges,omitzero"`
+}
+
+// GroupEdges holds the relations of Group, filled by With.
+type GroupEdges struct {
+	// Users is the edge users, to User.
 	Users velox.Many[User] `json:"users,omitzero"`
 }
 
@@ -84,7 +91,7 @@ func groupDescriptor() velox.Descriptor[Group] {
 		EdgeFieldPtr: func(x *Group, i int) any {
 			switch i {
 			case groupEdgeUsers:
-				return &x.Users
+				return &x.Edges.Users
 			}
 			return nil
 		},

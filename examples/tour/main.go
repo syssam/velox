@@ -168,7 +168,7 @@ func run(ctx context.Context, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	loaded, _ := first.Lines.Get()
+	loaded, _ := first.Edges.Lines.Get()
 	for _, l := range loaded {
 		say("With: %s line %q %s", first.Number, l.Description, money(l.AmountCents))
 	}

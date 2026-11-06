@@ -414,7 +414,7 @@ func TestFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if items, loaded := inv.Items.Get(); !loaded || len(items) != 1 || len(le.Log) != 2 {
+	if items, loaded := inv.Edges.Items.Get(); !loaded || len(items) != 1 || len(le.Log) != 2 {
 		t.Errorf("items %v loaded %v, %d statements", items, loaded, len(le.Log))
 	}
 }

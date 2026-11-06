@@ -135,7 +135,7 @@ func ExampleQuery_With() {
 		fmt.Println(err)
 		return
 	}
-	items, loaded := got.Items.Get()
+	items, loaded := got.Edges.Items.Get()
 	fmt.Println(loaded, len(items))
 	for _, it := range items {
 		fmt.Println(it.SKU, it.Qty)
