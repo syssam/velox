@@ -235,7 +235,9 @@ func TestSQLiteQueryReusesItsSlots(t *testing.T) {
 		r.Close()
 	}
 	query()
-	if n := testing.AllocsPerRun(100, query); n > 1 {
+	// The race detector's sync.Pool drops some of what is put back, and a
+	// collection empties it, so the count holds only without the detector.
+	if n := testing.AllocsPerRun(100, query); n > 1 && !raceDetector {
 		t.Errorf("a query allocates %v times, want 1", n)
 	}
 	r, _ := ex.Query(context.Background(), "", nil)
