@@ -12,7 +12,7 @@ import (
 // Session is the entity of schema Session.
 type Session struct {
 	ID        int64     `json:"id"`
-	TokenHash string    `json:"token_hash"`
+	TokenHash string    `json:"-"`
 	OrgID     int64     `json:"org_id"`
 	UserID    int64     `json:"user_id"`
 	ExpiresAt time.Time `json:"expires_at,omitzero"`
@@ -61,7 +61,7 @@ func sessionDescriptor() velox.Descriptor[Session] {
 		Table: "sessions",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "TokenHash", Name: "token_hash"},
+			{Field: "TokenHash", Name: "token_hash", Sensitive: true},
 			{Field: "OrgID", Name: "org_id"},
 			{Field: "UserID", Name: "user_id"},
 			{Field: "ExpiresAt", Name: "expires_at"},
@@ -88,10 +88,10 @@ func sessionDescriptor() velox.Descriptor[Session] {
 	}
 }
 
-// String returns the entity's fields.
+// String returns the entity's fields except the sensitive ones and the foreign keys velox added.
 func (x Session) String() string {
-	return fmt.Sprintf("Session(ID=%v, TokenHash=%v, OrgID=%v, UserID=%v, ExpiresAt=%v)", x.ID, x.TokenHash, x.OrgID, x.UserID, x.ExpiresAt)
+	return fmt.Sprintf("Session(ID=%v, OrgID=%v, UserID=%v, ExpiresAt=%v)", x.ID, x.OrgID, x.UserID, x.ExpiresAt)
 }
 
-// GoString is String, so that %#v prints the same text.
+// GoString is String, so that %#v does not print them either.
 func (x Session) GoString() string { return x.String() }

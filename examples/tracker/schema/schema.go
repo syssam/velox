@@ -59,7 +59,7 @@ type Session struct{ schema.Schema }
 // Fields returns the columns after the ID.
 func (Session) Fields() []schema.Field {
 	return []schema.Field{
-		field.String("token_hash").Unique(),
+		field.String("token_hash").Unique().Sensitive(),
 		field.Int64("org_id"),
 		field.Int64("user_id"),
 		field.Time("expires_at"),
