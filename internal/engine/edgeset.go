@@ -8,9 +8,10 @@ import (
 	"unsafe"
 )
 
-// This file is the edge setters' (velox.Rel's Add, Remove and Clear): what
-// an Insert or an Update writes of an edge whose rows are not the owner's
-// own, after the owner's row. Every statement goes through the untyped
+// This file is the edge setters' (velox.Rel's Set, Add, Remove and Clear):
+// what an Insert or an Update writes of an edge whose rows are not the
+// owner's own, after the owner's row, and the key Set checks before it
+// sets the owner's own foreign key. Every statement goes through the untyped
 // Table API, so the target's and the join entity's policies and hooks run.
 
 // EdgeOp is what an edge setter does.
@@ -21,6 +22,7 @@ const (
 	EdgeAdd    EdgeOp = iota + 1 // link the keys
 	EdgeRemove                   // unlink the keys
 	EdgeClear                    // unlink every row
+	EdgeSetKey                   // set the owner's own foreign key to the one key
 )
 
 // AssignEdge is the Op of an Assignment that holds an edge setter: its
@@ -78,17 +80,104 @@ type edgeWrite struct {
 
 // EdgePlan is an insert's or an update's edge setters, resolved and grouped
 // by relation, ready to write.
-type EdgePlan struct{ w []edgeWrite }
+type EdgePlan struct {
+	w      []edgeWrite
+	checks []keyCheck
+	// Set are the owner's column assignments of the Set edge setters, which
+	// the write makes as it makes the caller's own.
+	Set []Assignment
+}
+
+// keyCheck is a Set edge setter's key, which must name a row of the target
+// the caller may read.
+type keyCheck struct {
+	owner, edge string
+	target      Table
+	col         int
+	key         any
+}
+
+// Writes reports whether the plan writes any edge after the owner's row:
+// a plan of Set edge setters alone writes none.
+func (p EdgePlan) Writes() bool { return len(p.w) > 0 }
+
+// check fails with an *EdgeError of ErrNotFound unless each Set edge
+// setter's key names a row of its target the caller may read.
+func (p EdgePlan) check(ctx context.Context, db *DB) error {
+	for _, c := range p.checks {
+		ok, err := QueryTable(db, nil, c.target).Where(c.target.Pred(c.col, PredEQ, c.key)).Exists(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return &EdgeError{Entity: c.owner, Edge: c.edge, Keys: []any{c.key}, Err: ErrNotFound}
+		}
+	}
+	return nil
+}
+
+// planSetKey resolves e, a Set edge setter of owner: the assignment of the
+// owner's foreign key, and the check of its key. Set applies only to an
+// edge whose foreign key is on the owner's row and names the target's
+// single-column primary key; its key must not be nil.
+func planSetKey(owner *EntityInfo, e *EdgeSet) (Assignment, keyCheck, error) {
+	l, err := e.Ref.Link()
+	if err != nil {
+		return Assignment{}, keyCheck{}, err
+	}
+	in, err := e.Ref.Owner()
+	if err != nil {
+		return Assignment{}, keyCheck{}, err
+	}
+	if in != owner {
+		return Assignment{}, keyCheck{}, fmt.Errorf("velox: %s: an edge setter of %s", owner.Name, in.Name)
+	}
+	fail := func(format string, args ...any) (Assignment, keyCheck, error) {
+		return Assignment{}, keyCheck{}, fmt.Errorf("velox: %s: edge %s: "+format, append([]any{owner.Name, l.Name}, args...)...)
+	}
+	t := l.Target
+	ownKey := len(owner.PrimaryKey) == 1 && owner.PrimaryKey[0] == l.OwnerCol
+	if l.Join != nil || ownKey || len(t.PrimaryKey) != 1 || t.PrimaryKey[0] != l.TargetCol {
+		return fail("Set applies to an edge whose key is on the %s row; link this one with Add, Remove and Clear", owner.Name)
+	}
+	if len(e.Keys) != 1 {
+		return fail("Set takes one key, not %d", len(e.Keys))
+	}
+	v, ok := plain(e.Keys[0])
+	if !ok {
+		return fail("a nil key; clear the edge with its key column's SetNull")
+	}
+	tt := InfoTable(t)
+	k, err := tt.Convert(l.TargetCol, v)
+	if err != nil {
+		return Assignment{}, keyCheck{}, err
+	}
+	fk, err := InfoTable(owner).Convert(l.OwnerCol, v)
+	if err != nil {
+		return Assignment{}, keyCheck{}, err
+	}
+	return Assignment{Column: l.OwnerCol, Op: AssignSet, Value: fk}, keyCheck{owner: owner.Name, edge: l.Name, target: tt, col: l.TargetCol, key: k}, nil
+}
 
 // PlanEdges resolves the edge setters of a write of owner and checks them:
-// an edge whose key is on the owner's row, a bidirectional one-to-one edge,
-// a foreign key that is not nullable, and an Add of more than one key to a
-// one-to-one edge are refused. Keys are converted to the target's key
-// column's Go type, as Table.Convert converts, and made distinct.
+// Add, Remove or Clear of an edge whose key is on the owner's row or of a
+// bidirectional one-to-one edge, Set of any other, a foreign key that is not
+// nullable, and an Add of more than one key to a one-to-one edge are
+// refused. Keys are converted to the target's key column's Go type, as
+// Table.Convert converts, and made distinct. A Set gives the plan the
+// assignment of the owner's foreign key, in Set, and a check of its key.
 func PlanEdges(owner *EntityInfo, edges []*EdgeSet) (EdgePlan, error) {
 	var p EdgePlan
 	at := map[int32]int{}
 	for _, e := range edges {
+		if e.Op == EdgeSetKey {
+			a, c, err := planSetKey(owner, e)
+			if err != nil {
+				return EdgePlan{}, err
+			}
+			p.Set, p.checks = append(p.Set, a), append(p.checks, c)
+			continue
+		}
 		i, ok := at[e.Ref.I]
 		if !ok {
 			w, err := resolveEdge(owner, e.Ref)
@@ -148,13 +237,13 @@ func resolveEdge(owner *EntityInfo, ref RelRef) (edgeWrite, error) {
 	}
 	for _, bk := range owner.bidiKeys {
 		if bk.Col == l.OwnerCol {
-			return fail("a bidirectional one-to-one edge is set by its key's column handle, %s, not by Add, Remove or Clear", owner.Columns[l.OwnerCol].Field)
+			return fail("a bidirectional one-to-one edge is set by Set, or its key's column handle, %s, not by Add, Remove or Clear", owner.Columns[l.OwnerCol].Field)
 		}
 	}
 	t := l.Target
 	ownKey := len(owner.PrimaryKey) == 1 && owner.PrimaryKey[0] == l.OwnerCol
 	if !ownKey || len(t.PrimaryKey) != 1 || t.PrimaryKey[0] == l.TargetCol {
-		return fail("its key is on the %s row, %s: set it with that column's handle, not Add, Remove or Clear", owner.Name, owner.Columns[l.OwnerCol].Field)
+		return fail("its key is on the %s row, %s: set it with Set, or that column's handle, not Add, Remove or Clear", owner.Name, owner.Columns[l.OwnerCol].Field)
 	}
 	if !t.Columns[l.TargetCol].Nullable {
 		return fail("its key %s.%s is not nullable, so a %s always has an owner: set that column instead", t.Name, t.Columns[l.TargetCol].Field, t.Name)
@@ -229,12 +318,15 @@ func (p EdgePlan) OwnerCols() []int {
 	return cols
 }
 
-// InsertEdges runs insert, an insert of the rows at owners, and writes the
-// plan's edges for each of them after it, in one transaction on db (a
-// savepoint inside one). insert returns the rows it affected: 0, as when a
-// hook did not call next, writes no edge.
+// InsertEdges checks the plan's Set keys, runs insert, an insert of the rows
+// at owners, and writes the plan's edges for each of them after it, in one
+// transaction on db (a savepoint inside one). insert returns the rows it
+// affected: 0, as when a hook did not call next, writes no edge.
 func InsertEdges(ctx context.Context, db *DB, p EdgePlan, owners []unsafe.Pointer, insert func(ctx context.Context, tx *DB) (int64, error)) error {
 	return db.Tx(ctx, func(ctx context.Context, tx *DB) error {
+		if err := p.check(ctx, tx); err != nil {
+			return err
+		}
 		n, err := insert(ctx, tx)
 		if err != nil || n == 0 {
 			return err
@@ -248,12 +340,29 @@ func InsertEdges(ctx context.Context, db *DB, p EdgePlan, owners []unsafe.Pointe
 // reads the matched rows' keys, under st's conditions and the Read and Write
 // policies, locked where the dialect can; an st with no assignment is not
 // sent. It returns the UPDATE's count, or with no assignment the rows read.
+// The plan's Set keys are checked first, once, and its Set assignments are
+// st's; a plan of Set edge setters alone reads no keys and sends st.
 func UpdateEdges(ctx context.Context, db *DB, st *Statement, p EdgePlan) (int64, error) {
 	if err := db.guard(st); err != nil {
 		return 0, err
 	}
 	var n int64
+	if !p.Writes() {
+		err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {
+			if err := p.check(ctx, tx); err != nil {
+				return err
+			}
+			st.InTx = true
+			var err error
+			n, _, _, err = Write(ctx, tx, st, false, false)
+			return err
+		})
+		return n, err
+	}
 	err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {
+		if err := p.check(ctx, tx); err != nil {
+			return err
+		}
 		q := QueryTable(tx, nil, InfoTable(st.Entity)).Where(st.Where...).Columns(p.OwnerCols()...).Unbounded().Writable()
 		if tx.D != SQLite {
 			q = q.ForUpdate()

@@ -220,6 +220,24 @@ func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T] {
 	return Pred[T](engine.NewPredicate(engine.OfNode(engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}, r.where, r.err, ps)))
 }
 
+// Set is the setter that links the owner to the row of T whose key is key,
+// for Insert's and Update's Set, through an edge whose foreign key is on
+// the owner's row (a many-to-one edge, or the side of a one-to-one edge
+// that holds the key):
+//
+//	db.Insert(&post).Set(gen.Posts.Author.Set(id)).Exec(ctx)
+//
+// The write first checks, in its transaction, that key names a row of T the
+// caller may read, under T's Read policy; one it does not fails with an
+// *EdgeError of ErrNotFound, and nothing is written. Then it sets the
+// foreign key, as that column's handle's Set does: the column counts as
+// assigned, once. An update checks the key once, for every row it matches.
+// key is converted as Add converts its keys. Set of any other edge, or of a
+// nil key, fails the statement; the key column's SetNull clears the edge.
+func (r Rel[E, T]) Set[_ Lazy[T]](key any) Setter[E] {
+	return r.edgeSetter(engine.EdgeSetKey, []any{key})
+}
+
 // Add is the setter that links the owner to the rows of T whose keys are
 // keys, for Insert's and Update's Set:
 //
@@ -229,7 +247,7 @@ func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T] {
 // Table.Convert converts; repeated keys count once. r's Where, OrderBy and
 // With do not apply. Add applies to a many-to-many edge (EdgeThrough) and to
 // an edge whose foreign key the target holds; an edge whose key is on the
-// owner's row is set by that column's handle, and its Add fails the
+// owner's row is set by Set, or that column's handle, and its Add fails the
 // statement. InsertQuery.Set says when and how the edge is written.
 func (r Rel[E, T]) Add[_ Lazy[T]](keys ...any) Setter[E] {
 	return r.edgeSetter(engine.EdgeAdd, keys)

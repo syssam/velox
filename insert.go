@@ -120,9 +120,13 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 //   - Add of an edge whose foreign key the target holds fails for more than
 //     one owner at once, an InsertAll of several entities: a child has one
 //     owner.
+//   - Set, of an edge whose foreign key is on the owner's row, checks its
+//     key under the target's Read policy before the insert, in its
+//     transaction, and stores it in each entity's key field.
 //
-// Edge setters fail an upsert, whose row may be one it did not insert, and
-// an InsertAll whose keys the database assigns, as it reads none back. An
+// Add, Remove and Clear fail an upsert, whose row may be one it did not
+// insert, and an InsertAll whose keys the database assigns, as it reads
+// none back. An
 // edge is written only when the insert affected a row: a hook that does not
 // call next writes none.
 func (q InsertQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E] {
@@ -176,8 +180,8 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if q.one == nil && len(q.many) == 0 {
 		return nil
 	}
-	q.apply()
 	if len(q.edges) == 0 {
+		q.apply()
 		_, err := q.run(ctx, &q.db.e)
 		return err
 	}
@@ -185,6 +189,8 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	q.set = append(slices.Clip(q.set), plan.Set...)
+	q.apply()
 	return engine.InsertEdges(ctx, &q.db.e, plan, q.mutation(false).Rows, q.run)
 }
 
@@ -213,8 +219,14 @@ func (q InsertQuery[E]) apply[_ Lazy[E]]() {
 	}
 }
 
-// plan is the edge setters, resolved and checked.
+// plan is the edge setters, resolved and checked. A plan that writes edges
+// after the rows needs their keys and their rows; one of Set edge setters
+// alone sets the rows' own columns.
 func (q InsertQuery[E]) plan[_ Lazy[E]]() (engine.EdgePlan, error) {
+	p, err := engine.PlanEdges(q.meta.info, q.edges)
+	if err != nil || !p.Writes() {
+		return p, err
+	}
 	gen := false
 	for i := range q.many {
 		gen = gen || generatedKey(q.meta, &q.many[i]) >= 0
@@ -222,7 +234,7 @@ func (q InsertQuery[E]) plan[_ Lazy[E]]() (engine.EdgePlan, error) {
 	if err := engine.CheckEdgeInsert(q.meta.info, q.conflict != nil, q.one == nil, gen); err != nil {
 		return engine.EdgePlan{}, err
 	}
-	return engine.PlanEdges(q.meta.info, q.edges)
+	return p, nil
 }
 
 // SQL returns the first statement and arguments Exec would send for ctx, or
@@ -253,12 +265,14 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	if q.one == nil && len(q.many) == 0 {
 		return "", nil, nil
 	}
-	q.apply()
 	if len(q.edges) > 0 {
-		if _, err := q.plan(); err != nil {
+		plan, err := q.plan()
+		if err != nil {
 			return "", nil, err
 		}
+		q.set = append(slices.Clip(q.set), plan.Set...)
 	}
+	q.apply()
 	if q.db.e.HasHooks(q.meta.info) {
 		mu := q.mutation(true)
 		if err := engine.Mutate(ctx, &q.db.e, q.meta.info, mu, func(ctx context.Context, mu *engine.MutationState) error { return q.render(ctx, mu) }); err != nil && !engine.DryRefused(mu, err) {

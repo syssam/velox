@@ -104,6 +104,7 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
+		st.Set = append(st.Set, plan.Set...)
 		return engine.UpdateEdges(ctx, &u.db.e, &st, plan)
 	}
 	n, _, _, err := engine.Write(ctx, &u.db.e, &st, false, false)
@@ -133,9 +134,11 @@ func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 		return "", nil, err
 	}
 	if len(u.edges) > 0 {
-		if _, err := engine.PlanEdges(u.meta.info, u.edges); err != nil {
+		plan, err := engine.PlanEdges(u.meta.info, u.edges)
+		if err != nil {
 			return "", nil, err
 		}
+		st.Set = append(st.Set, plan.Set...)
 		if len(st.Set) == 0 {
 			return "", nil, engine.GuardUpdate(&u.db.e, &st)
 		}

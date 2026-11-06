@@ -393,6 +393,7 @@ func (r Rel[E, T]) MaxRows[_ Lazy[T]](n int) Rel[E, T]
 func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T]
 func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T]
 func (r Rel[E, T]) Remove[_ Lazy[T]](keys ...any) Setter[E]
+func (r Rel[E, T]) Set[_ Lazy[T]](key any) Setter[E]
 func (r Rel[E, T]) Where[_ Lazy[T]](ps ...Pred[T]) Rel[E, T]
 func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T]
 func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error

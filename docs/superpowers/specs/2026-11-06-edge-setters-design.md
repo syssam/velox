@@ -28,7 +28,10 @@ The keys are T's primary-key values, converted as a predicate's value is.
 They apply to an edge whose rows are not the owner's own: a many-to-many edge
 (`EdgeThrough`) or one whose foreign key the target holds (`EdgeTo` with the
 owner's key as the owner column). An edge whose key is on the owner's row is
-set by its column handle; its Add fails the statement.
+set by `gen.Posts.Author.Set(id)`, which checks the key under T's Read
+policy in the write's transaction (an `*EdgeError` of `ErrNotFound`
+otherwise) and then sets the column, or by its column handle; its Add fails
+the statement.
 
 `Setter.Column()` of an edge setter is -1.
 

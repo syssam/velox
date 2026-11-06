@@ -37,8 +37,13 @@ mutation (`AddTagIDs`, `RemoveTagIDs`, `ClearTags`, then `Save`).
 - Every statement goes through the untyped Table API, so the target's and
   the join entity's policies and hooks run.
 - An edge whose key is on the owner's row, and a bidirectional one-to-one
-  edge, are set by the key's column handle: their edge setters fail the
-  statement. So do a foreign key that is not nullable, Add of more than one
+  edge, are set by `Rel.Set(key)`, or the key's column handle: Add, Remove
+  and Clear of them fail the statement. `Set` first checks, in the write's
+  transaction and once for an update, that the key names a row the caller
+  may read, under the target's Read policy (an `*EdgeError` of
+  `ErrNotFound` otherwise, with nothing written), then assigns the column
+  as its handle's `Set` does. Set of another edge, or a nil key, fails the
+  statement; the column's `SetNull` clears the edge. So do a foreign key that is not nullable, Add of more than one
   key to a one-to-one edge, Add for several owners of an edge whose key is
   on the target, an upsert, and an InsertAll whose keys the database
   assigns.

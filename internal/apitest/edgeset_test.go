@@ -30,8 +30,14 @@ var sUserMeta velox.MetaOnce[sUser]
 
 func (*sUser) VeloxMeta() *velox.Meta[sUser] { return sUserMeta.Load(sUserDescriptor) }
 
+// Policy hides the user named "hidden" from Read.
+func (*sUser) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("name", "hidden"), nil }}
+}
+
 func sUserDescriptor() velox.Descriptor[sUser] {
 	return velox.Descriptor[sUser]{
+		Schema:     (*sUser)(nil),
 		Table:      "s_users",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
@@ -634,6 +640,71 @@ func TestEdgeSetterOneChild(t *testing.T) {
 	want64(t, "after remove", owners(t, raw, "s_covers"), -1, -1, -1, -1)
 }
 
+// TestEdgeSetterSetKey: Set of an edge whose key is on the owner's row sets
+// that key once its target is one the caller may read, on insert and on
+// update, for every row the update matches; a hidden or missing target is an
+// *EdgeError of ErrNotFound, and nothing is written. Set of another edge, or
+// of a nil key, fails before anything is sent, and Set with its column's own
+// setter on update assigns the column twice.
+func TestEdgeSetterSetKey(t *testing.T) {
+	db, raw := edgeDB(t)
+	exec(t, raw, "INSERT INTO s_users (id, name) VALUES (1, 'ann'), (2, 'bob'), (3, 'hidden')")
+	p := sPost{Title: "p"}
+	if err := db.Insert(&p).Set(sPosts.Author.Set(2)).Exec(user); err != nil {
+		t.Fatal(err)
+	}
+	if p.AuthorID != 2 {
+		t.Errorf("AuthorID %d, want 2", p.AuthorID)
+	}
+	want64(t, "after insert", int64s(t, raw, "SELECT author_id FROM s_posts"), 2)
+	edgeErr(t, db.Insert(&sPost{Title: "q"}).Set(sPosts.Author.Set(int32(3))).Exec(user), "author", velox.ErrNotFound, int64(3))
+	edgeErr(t, db.Insert(&sPost{Title: "q"}).Set(sPosts.Author.Set(9)).Exec(user), "author", velox.ErrNotFound, int64(9))
+	want64(t, "after the refused inserts", int64s(t, raw, "SELECT COUNT(*) FROM s_posts"), 1)
+
+	exec(t, raw, "INSERT INTO s_posts (id, author_id, title) VALUES (10, 2, 'r')")
+	both := sPosts.ID.In(p.ID, 10)
+	n, err := db.Update[sPost]().Set(sPosts.Author.Set(1)).Where(both).Exec(user)
+	if err != nil || n != 2 {
+		t.Fatalf("update: %d, %v", n, err)
+	}
+	want64(t, "after update", int64s(t, raw, "SELECT author_id FROM s_posts ORDER BY id"), 1, 1)
+	_, err = db.Update[sPost]().Set(sPosts.Title.Set("x"), sPosts.Author.Set(3)).Where(both).Exec(user)
+	edgeErr(t, err, "author", velox.ErrNotFound, int64(3))
+	want64(t, "after the refused update", int64s(t, raw, "SELECT author_id FROM s_posts ORDER BY id"), 1, 1)
+	if titles := int64s(t, raw, "SELECT COUNT(*) FROM s_posts WHERE title = 'x'"); titles[0] != 0 {
+		t.Errorf("the refused update wrote %d titles", titles[0])
+	}
+
+	for name, s := range map[string]velox.Setter[sPost]{
+		"a many-to-many edge":                sPosts.Tags.Set(1),
+		"an edge whose key the target holds": sPosts.Cover.Set(1),
+		"a nil key":                          sPosts.Author.Set(nil),
+		"a nil pointer":                      sPosts.Author.Set((*int64)(nil)),
+	} {
+		if err := db.Insert(&sPost{Title: "s"}).Set(s).Exec(user); err == nil {
+			t.Errorf("Set of %s: nil", name)
+		}
+		if _, err := db.Update[sPost]().Set(s).Where(both).Exec(user); err == nil {
+			t.Errorf("update with Set of %s: nil", name)
+		}
+	}
+	if _, err := db.Update[sPost]().Set(sPosts.Author.Set(1), sPosts.AuthorID.Set(2)).Where(both).Exec(user); err == nil || !strings.Contains(err.Error(), "assigned twice") {
+		t.Errorf("Set with its column's setter: %v", err)
+	}
+	q, _, err := db.Update[sPost]().Set(sPosts.Author.Set(1)).Where(both).SQL(user)
+	if err != nil || !strings.Contains(q, `"author_id" = ?`) {
+		t.Errorf("SQL: %q, %v", q, err)
+	}
+	want64(t, "at the end", int64s(t, raw, "SELECT author_id FROM s_posts ORDER BY id"), 1, 1)
+
+	// Set writes nothing after the rows, so an InsertAll of generated keys
+	// takes it, as Add would not.
+	if err := db.InsertAll([]sPost{{Title: "a"}, {Title: "b"}}).Set(sPosts.Author.Set(2)).Exec(user); err != nil {
+		t.Fatal(err)
+	}
+	want64(t, "after InsertAll", int64s(t, raw, "SELECT author_id FROM s_posts ORDER BY id"), 1, 1, 2, 2)
+}
+
 // TestEdgeSetterRefused: an insert's Add or Sub, an edge whose key is on the
 // owner's row, an upsert or an InsertAll of generated keys with edge
 // setters, fail before anything is sent.
@@ -647,7 +718,7 @@ func TestEdgeSetterRefused(t *testing.T) {
 		"Add": sPosts.Author.Add(1), "Remove": sPosts.Author.Remove(1), "Clear": sPosts.Author.Clear(),
 	} {
 		err := db.Insert(&p).Set(s).Exec(user)
-		if err == nil || !strings.Contains(err.Error(), "set it with that column's handle") {
+		if err == nil || !strings.Contains(err.Error(), "set it with Set, or that column's handle") {
 			t.Errorf("%s of a key on the row: %v", name, err)
 		}
 		if _, _, err := db.Insert(&p).Set(s).SQL(user); err == nil {
