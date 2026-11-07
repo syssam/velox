@@ -563,7 +563,6 @@ type roundKey struct {
 // missingResults lists what the run should have produced and did not. It
 // fills in c.Runs and c.BenchCount when they are 0, as the highest number found.
 func missingResults(c *config, haveBuild map[buildKey]bool, haveRounds map[roundKey]map[string]map[string]bool) []string {
-	missing := []string{}
 	if c.Runs == 0 {
 		for k := range haveBuild {
 			c.Runs = max(c.Runs, k.run)
@@ -574,39 +573,59 @@ func missingResults(c *config, haveBuild map[buildKey]bool, haveRounds map[round
 			c.BenchCount = max(c.BenchCount, k.round)
 		}
 	}
+	missing := []string{}
 	if !c.runtimeOnly() {
-		for _, n := range c.Sizes {
-			for _, o := range orms {
-				for r := 1; r <= c.Runs; r++ {
-					if !haveBuild[buildKey{o.Name, n, r}] {
-						missing = append(missing, fmt.Sprintf("build %s n=%d run %d", o.Name, n, r))
-					}
+		missing = missingBuilds(missing, c, haveBuild)
+	}
+	for _, d := range benchDialects {
+		for _, o := range benchORMs(c, d) {
+			for i := 1; i <= max(c.BenchCount, 1); i++ {
+				missing = missingRound(missing, roundKey{d, o, i}, haveRounds)
+			}
+		}
+	}
+	return missing
+}
+
+// missingBuilds appends to missing each build JSON of c that haveBuild
+// lacks, and returns the result.
+func missingBuilds(missing []string, c *config, haveBuild map[buildKey]bool) []string {
+	for _, n := range c.Sizes {
+		for _, o := range orms {
+			for r := 1; r <= c.Runs; r++ {
+				if !haveBuild[buildKey{o.Name, n, r}] {
+					missing = append(missing, fmt.Sprintf("build %s n=%d run %d", o.Name, n, r))
 				}
 			}
 		}
 	}
-	for _, d := range benchDialects {
-		var names []string
-		for _, o := range orms {
-			names = append(names, o.Name)
-		}
-		if d == "postgres" {
-			names = append(names, c.Variants...)
-		}
-		for _, o := range names {
-			for i := 1; i <= max(c.BenchCount, 1); i++ {
-				got, ok := haveRounds[roundKey{d, o, i}]
-				if !ok {
-					missing = append(missing, fmt.Sprintf("bench %s %s round %d", d, o, i))
-					continue
-				}
-				for _, name := range benchNames {
-					for _, u := range runtimeUnits {
-						if !got[name][u] {
-							missing = append(missing, fmt.Sprintf("bench %s %s round %d: %s %s", d, o, i, name, u))
-						}
-					}
-				}
+	return missing
+}
+
+// benchORMs returns the names of what is benchmarked on dialect d: every
+// ORM, and on PostgreSQL c's variants too.
+func benchORMs(c *config, d string) []string {
+	var names []string
+	for _, o := range orms {
+		names = append(names, o.Name)
+	}
+	if d == "postgres" {
+		names = append(names, c.Variants...)
+	}
+	return names
+}
+
+// missingRound appends to missing the bench round k when haveRounds lacks
+// it, else each benchmark and unit it lacks, and returns the result.
+func missingRound(missing []string, k roundKey, haveRounds map[roundKey]map[string]map[string]bool) []string {
+	got, ok := haveRounds[k]
+	if !ok {
+		return append(missing, fmt.Sprintf("bench %s %s round %d", k.dialect, k.orm, k.round))
+	}
+	for _, name := range benchNames {
+		for _, u := range runtimeUnits {
+			if !got[name][u] {
+				missing = append(missing, fmt.Sprintf("bench %s %s round %d: %s %s", k.dialect, k.orm, k.round, name, u))
 			}
 		}
 	}

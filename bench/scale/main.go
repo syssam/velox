@@ -117,6 +117,7 @@ func repo() (string, error) {
 	return filepath.Abs(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
+// run builds the application that c describes and returns its build costs.
 func run(c config) (report, error) {
 	r := report{N: c.n, Services: c.services}
 	if c.n < 10 || c.n%10 != 0 || c.services < 1 {
@@ -180,14 +181,8 @@ func run(c config) (report, error) {
 	if _, err := velox(); err != nil {
 		return r, err
 	}
-	for name, src := range services {
-		p := filepath.Join(app, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			return r, err
-		}
-		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
-			return r, err
-		}
+	if err := writeFiles(app, services); err != nil {
+		return r, err
 	}
 	memFile := filepath.Join(tools, "linkmem.txt")
 	build := func() (cpu float64, err error) {
@@ -215,16 +210,7 @@ func run(c config) (report, error) {
 
 	// The schema edit: a new field on the last schema. The edit itself is not
 	// timed; the regeneration and the rebuild of every service are.
-	p := filepath.Join(app, "schema", fmt.Sprintf("e%d.go", c.n-1))
-	src, err := os.ReadFile(p)
-	if err != nil {
-		return r, err
-	}
-	changed := strings.Replace(string(src), noteField, noteField+fmt.Sprintf("\n\t\tfield.Int64(\"extra_%d\"),", time.Now().UnixNano()), 1)
-	if changed == string(src) {
-		return r, fmt.Errorf("cannot edit %s", p)
-	}
-	if err := os.WriteFile(p, []byte(changed), 0o644); err != nil {
+	if err := editSchema(app, c.n); err != nil {
 		return r, err
 	}
 	start = time.Now()
@@ -255,6 +241,36 @@ func run(c config) (report, error) {
 	}
 	r.LinkPeakMB, err = buildcost.PeakMB(memFile)
 	return r, err
+}
+
+// writeFiles writes files (path → source) under dir, making their
+// directories.
+func writeFiles(dir string, files map[string]string) error {
+	for name, src := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// editSchema adds a new field after noteField in the last of the n schemas
+// of the application at app.
+func editSchema(app string, n int) error {
+	p := filepath.Join(app, "schema", fmt.Sprintf("e%d.go", n-1))
+	src, err := os.ReadFile(p)
+	if err != nil {
+		return err
+	}
+	changed := strings.Replace(string(src), noteField, noteField+fmt.Sprintf("\n\t\tfield.Int64(\"extra_%d\"),", time.Now().UnixNano()), 1)
+	if changed == string(src) {
+		return fmt.Errorf("cannot edit %s", p)
+	}
+	return os.WriteFile(p, []byte(changed), 0o644)
 }
 
 // noteField is the line of every schema that the edit appends a field after.

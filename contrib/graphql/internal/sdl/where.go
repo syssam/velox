@@ -151,128 +151,172 @@ func (g *graph) whereOf(o *object) error {
 		fs.own(gqlField{name: n.name, typ: n.typ})
 		o.whereGo = append(o.whereGo, WhereField{Name: n.name, GoName: n.goName, Type: n.typ, Kind: n.kind, Field: -1, Edge: -1, Target: o.name, On: o.name})
 	}
-	for i, f := range e.Fields {
-		a := o.fanns[i]
-		key := o.node && i == e.PrimaryKey[0]
-		if key && a.WhereOps == 0 {
-			// The node key filters by default; an explicit WhereOps wins.
-			a.WhereOps = graphql.OpsDefault
-		}
-		if a.WhereOps == 0 || a.Skip&graphql.SkipWhereInput != 0 {
-			continue
-		}
-		where := "schema " + e.Name + ", field " + f.Name
-		var name, typ, kind, goBase, target string
-		edge, v := -1, goValue{typ: "string"} // an ID is a string
-		// The predicates carry the field's directives, and a foreign key's
-		// its edge's too, so that what guards the field guards its filters.
-		dirs, err := directives(a.Directives, where)
-		if err != nil {
+	for i := range e.Fields {
+		if err := g.wherePredicates(o, fs, i); err != nil {
 			return err
-		}
-		switch {
-		case key:
-			// Only an enum or a uuid key is unordered.
-			kind = "orderedID"
-			if f.Type == "enum" || f.Type == "uuid" {
-				kind = "ID"
-			}
-			name, typ, goBase, target = "id", "ID", "ID", o.name
-		case o.fks[f.Name] || f.Implicit != "":
-			// A foreign key is never a raw scalar: its edge names it, and it
-			// takes the IDs of the edge's target.
-			j := g.keyEdge(o, f)
-			if j < 0 {
-				return fmt.Errorf("%s: graphql.WhereOps on a foreign key whose edge is not in GraphQL: an edge's ID names a foreign key's predicates", where)
-			}
-			en, err := o.edgeName(j)
-			if err != nil {
-				return err
-			}
-			ed := e.Edges[j]
-			name, typ, kind, goBase, target, edge = en+"ID", "ID", "ID", goOf(en, ed.GoName)+"ID", g.byName[ed.Target].name, j
-			eds, err := directives(o.eanns[j].Directives, "schema "+e.Name+", edge "+ed.Name)
-			if err != nil {
-				return err
-			}
-			dirs = unite(dirs, eds)
-		default:
-			n, err := o.fieldName(i)
-			if err != nil {
-				return err
-			}
-			t, err := g.fieldType(o, f, a, where)
-			if err != nil {
-				return err
-			}
-			name, typ, kind, goBase, v = n, t, f.Type, goOf(n, f.GoName), g.goValue(f, a)
-		}
-		on := name
-		if edge >= 0 {
-			on = strings.TrimSuffix(name, "ID")
-		}
-		// IsNil and NotNil are the handle's IsNull and NotNull, which only a
-		// nullable field's Null* handle has: a Nillable field's. An Optional
-		// JSON field's column holds NULL too, but JSON has no predicates.
-		ops, err := resolveOps(a.WhereOps, kind, f.Nullable, where)
-		if err != nil {
-			return err
-		}
-		for _, p := range predicates {
-			if ops&p.op == 0 {
-				continue
-			}
-			pf := gqlField{name: name + p.suffix, typ: typ, dirs: dirs, where: where}
-			switch p.takes {
-			case takesList:
-				pf.typ = "[" + typ + "!]"
-			case takesBool:
-				pf.typ = "Boolean"
-			}
-			if err := fs.add(pf); err != nil {
-				return err
-			}
-			wf := WhereField{
-				Name: pf.name, GoName: goBase + p.suffix, Type: pf.typ, Kind: WherePred, Op: p.op, Field: i, Edge: edge, Target: target, On: on,
-				GoType: v.typ, GoPkg: v.pkg,
-			}
-			if p.takes == takesBool {
-				wf.GoType, wf.GoPkg = "bool", ""
-			}
-			o.whereGo = append(o.whereGo, wf)
 		}
 	}
-	for i, ed := range e.Edges {
-		a, t := o.eanns[i], g.byName[ed.Target]
-		if !a.WhereEdge || a.Skip&graphql.SkipWhereInput != 0 || t == nil {
-			continue
-		}
-		where := "schema " + e.Name + ", edge " + ed.Name
-		name, err := o.edgeName(i)
-		if err != nil {
+	for i := range e.Edges {
+		if err := g.whereEdge(o, fs, i); err != nil {
 			return err
-		}
-		dirs, err := directives(a.Directives, where)
-		if err != nil {
-			return err
-		}
-		has := gqlField{name: "has" + upper(name), typ: "Boolean", dirs: dirs, where: where}
-		if err := fs.add(has); err != nil {
-			return err
-		}
-		goHas := "Has" + goOf(name, ed.GoName)
-		o.whereGo = append(o.whereGo, WhereField{Name: has.name, GoName: goHas, Type: has.typ, Kind: WhereHas, Field: -1, Edge: i, Target: t.name, On: name, GoType: "bool"})
-		// hasWith takes the target's where input; a target without one
-		// offers has alone.
-		if t.hasWhere {
-			with := gqlField{name: "has" + upper(name) + "With", typ: "[" + t.name + "WhereInput!]", dirs: dirs, where: where}
-			if err := fs.add(with); err != nil {
-				return err
-			}
-			o.whereGo = append(o.whereGo, WhereField{Name: with.name, GoName: goHas + "With", Type: with.typ, Kind: WhereHasWith, Field: -1, Edge: i, Target: t.name, On: name})
 		}
 	}
 	o.where = fs.list
+	return nil
+}
+
+// whereSubject is what a field's predicates in a where input filter: the
+// field itself, the node key, or a foreign key named by its edge.
+type whereSubject struct {
+	name   string // the GraphQL name the predicates' names start with
+	typ    string // the GraphQL type a predicate takes
+	kind   string // the kind of field resolveOps checks the predicates for
+	goBase string // the Go name the predicates' Go names start with
+	target string // the type the predicates filter
+	edge   int    // the index of the foreign key's edge; -1 for none
+	v      goValue
+	dirs   []directive // the directives the predicates carry
+}
+
+// wherePredicates adds to fs, o's where input, the predicates of o's field
+// i that its WhereOps asks for, if any.
+func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
+	e, f, a := o.ent, o.ent.Fields[i], o.fanns[i]
+	key := o.node && i == e.PrimaryKey[0]
+	if key && a.WhereOps == 0 {
+		// The node key filters by default; an explicit WhereOps wins.
+		a.WhereOps = graphql.OpsDefault
+	}
+	if a.WhereOps == 0 || a.Skip&graphql.SkipWhereInput != 0 {
+		return nil
+	}
+	where := "schema " + e.Name + ", field " + f.Name
+	s, err := g.whereSubjectOf(o, i, a, key, where)
+	if err != nil {
+		return err
+	}
+	on := s.name
+	if s.edge >= 0 {
+		on = strings.TrimSuffix(s.name, "ID")
+	}
+	// IsNil and NotNil are the handle's IsNull and NotNull, which only a
+	// nullable field's Null* handle has: a Nillable field's. An Optional
+	// JSON field's column holds NULL too, but JSON has no predicates.
+	ops, err := resolveOps(a.WhereOps, s.kind, f.Nullable, where)
+	if err != nil {
+		return err
+	}
+	for _, p := range predicates {
+		if ops&p.op == 0 {
+			continue
+		}
+		pf := gqlField{name: s.name + p.suffix, typ: s.typ, dirs: s.dirs, where: where}
+		switch p.takes {
+		case takesList:
+			pf.typ = "[" + s.typ + "!]"
+		case takesBool:
+			pf.typ = "Boolean"
+		}
+		if err := fs.add(pf); err != nil {
+			return err
+		}
+		wf := WhereField{
+			Name: pf.name, GoName: s.goBase + p.suffix, Type: pf.typ, Kind: WherePred, Op: p.op, Field: i, Edge: s.edge, Target: s.target, On: on,
+			GoType: s.v.typ, GoPkg: s.v.pkg,
+		}
+		if p.takes == takesBool {
+			wf.GoType, wf.GoPkg = "bool", ""
+		}
+		o.whereGo = append(o.whereGo, wf)
+	}
+	return nil
+}
+
+// whereSubjectOf returns what the predicates of o's field i, annotated a,
+// filter. key says whether the field is the node key.
+func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool, where string) (whereSubject, error) {
+	e, f := o.ent, o.ent.Fields[i]
+	s := whereSubject{edge: -1, v: goValue{typ: "string"}} // an ID is a string
+	// The predicates carry the field's directives, and a foreign key's
+	// its edge's too, so that what guards the field guards its filters.
+	dirs, err := directives(a.Directives, where)
+	if err != nil {
+		return s, err
+	}
+	s.dirs = dirs
+	switch {
+	case key:
+		// Only an enum or a uuid key is unordered.
+		s.kind = "orderedID"
+		if f.Type == "enum" || f.Type == "uuid" {
+			s.kind = "ID"
+		}
+		s.name, s.typ, s.goBase, s.target = "id", "ID", "ID", o.name
+	case o.fks[f.Name] || f.Implicit != "":
+		// A foreign key is never a raw scalar: its edge names it, and it
+		// takes the IDs of the edge's target.
+		j := g.keyEdge(o, f)
+		if j < 0 {
+			return s, fmt.Errorf("%s: graphql.WhereOps on a foreign key whose edge is not in GraphQL: an edge's ID names a foreign key's predicates", where)
+		}
+		en, err := o.edgeName(j)
+		if err != nil {
+			return s, err
+		}
+		ed := e.Edges[j]
+		s.name, s.typ, s.kind, s.goBase, s.target, s.edge = en+"ID", "ID", "ID", goOf(en, ed.GoName)+"ID", g.byName[ed.Target].name, j
+		eds, err := directives(o.eanns[j].Directives, "schema "+e.Name+", edge "+ed.Name)
+		if err != nil {
+			return s, err
+		}
+		s.dirs = unite(dirs, eds)
+	default:
+		n, err := o.fieldName(i)
+		if err != nil {
+			return s, err
+		}
+		t, err := g.fieldType(o, f, a, where)
+		if err != nil {
+			return s, err
+		}
+		s.name, s.typ, s.kind, s.goBase, s.v = n, t, f.Type, goOf(n, f.GoName), g.goValue(f, a)
+	}
+	return s, nil
+}
+
+// whereEdge adds to fs, o's where input, the has and hasWith fields of o's
+// edge i when its WhereEdge asks for them.
+func (g *graph) whereEdge(o *object, fs *inputFields, i int) error {
+	e, ed := o.ent, o.ent.Edges[i]
+	a, t := o.eanns[i], g.byName[ed.Target]
+	if !a.WhereEdge || a.Skip&graphql.SkipWhereInput != 0 || t == nil {
+		return nil
+	}
+	where := "schema " + e.Name + ", edge " + ed.Name
+	name, err := o.edgeName(i)
+	if err != nil {
+		return err
+	}
+	dirs, err := directives(a.Directives, where)
+	if err != nil {
+		return err
+	}
+	has := gqlField{name: "has" + upper(name), typ: "Boolean", dirs: dirs, where: where}
+	if err := fs.add(has); err != nil {
+		return err
+	}
+	goHas := "Has" + goOf(name, ed.GoName)
+	o.whereGo = append(o.whereGo, WhereField{Name: has.name, GoName: goHas, Type: has.typ, Kind: WhereHas, Field: -1, Edge: i, Target: t.name, On: name, GoType: "bool"})
+	// hasWith takes the target's where input; a target without one
+	// offers has alone.
+	if !t.hasWhere {
+		return nil
+	}
+	with := gqlField{name: "has" + upper(name) + "With", typ: "[" + t.name + "WhereInput!]", dirs: dirs, where: where}
+	if err := fs.add(with); err != nil {
+		return err
+	}
+	o.whereGo = append(o.whereGo, WhereField{Name: with.name, GoName: goHas + "With", Type: with.typ, Kind: WhereHasWith, Field: -1, Edge: i, Target: t.name, On: name})
 	return nil
 }
 

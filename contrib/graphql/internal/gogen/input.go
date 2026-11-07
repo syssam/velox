@@ -377,135 +377,176 @@ func (s *setters) setNull(e *plugin.Entity, fd *plugin.Field) (string, error) {
 // on the row for an edge that owns it, else the edge's Clear, Remove and
 // Add, in that order, which is the order the write runs them in.
 func (s *setters) edge(ei int) error {
-	f, e := s.f, s.t.Entity
+	e := s.t.Entity
 	ed := e.Edges[ei]
 	tt := s.r.typeOf[ed.Target]
 	if tt == nil {
 		return fmt.Errorf("schema %s, edge %s: its target %s has no GraphQL type, which is a bug", e.Name, ed.Name, ed.Target)
 	}
-	k, err := s.r.idKeyOf(f, e, tt)
+	k, err := s.r.idKeyOf(s.f, e, tt)
 	if err != nil {
 		return err
 	}
-	field := map[sdl.InputKind]int{}
+	es := &edgeSetters{setters: s, ed: ed, tt: tt, k: k, field: map[sdl.InputKind]int{}}
 	for i, fi := range s.fs {
 		if fi.Edge == ei && fi.Kind != sdl.InputValue && fi.Kind != sdl.InputClear {
-			field[fi.Kind] = i
+			es.field[fi.Kind] = i
 			s.done[i] = true
 		}
 	}
-	idx := func(kind sdl.InputKind) int {
-		if i, ok := field[kind]; ok {
-			return i
-		}
-		return -1
-	}
-	impl := f.gqlgraph()
-	decodeOne := func(indent string, fi sdl.InputField, src string) string {
-		v := s.local(fi)
-		f.p("%s%s, err := %s.DecodeID%s(%s, %s, %q%s)", indent, v, impl, k.args, s.at(fi), src, fi.Target, k.conv)
-		s.fail(indent)
-		return v
-	}
-	// one writes the input field i, an <edge>ID, cleared first by the field
-	// clr when it is not -1; set writes its setter of the decoded key.
-	one := func(i, clr int, null string, set func(indent, key string)) {
-		fi := s.fs[i]
-		var indent, src string
-		var end func()
-		if clr >= 0 {
-			f.p("\tif in.%s {", s.fs[clr].GoName)
-			s.add("\t\t", null)
-			f.p("\t} else if v := in.%s; v != nil {", fi.GoName)
-			indent, src, end = "\t\t", "*v", func() { f.p("\t}") }
-		} else {
-			indent, src, end = s.open(fi)
-		}
-		set(indent, decodeOne(indent, fi, src))
-		end()
-	}
-
 	if ed.OwnsKey && ed.Kind != plugin.M2M {
-		// The key is on the row: the edge's Set, which checks the key under
-		// the target's Read policy and sets the column; the column's
-		// SetNull clears it.
-		fk, err := fkOf(e, ed, e)
-		if err != nil {
-			return err
-		}
-		clr := idx(sdl.InputClearEdge)
-		var null string
-		if clr >= 0 {
-			if null, err = s.setNull(e, fk); err != nil {
-				return err
-			}
-		}
-		// Set converts the key to the column's Go type, which must take it.
-		if !sameGoType(fk, k.fd) {
-			if err := s.r.converts(e, fk, tt.Key); err != nil {
-				return err
-			}
-		}
-		if i := idx(sdl.InputEdgeID); i >= 0 {
-			one(i, clr, null, func(indent, key string) {
-				s.add(indent, s.h+"."+ed.GoName+".Set("+key+")")
-			})
-		} else if clr >= 0 {
-			f.p("\tif in.%s {", s.fs[clr].GoName)
-			s.add("\t\t", null)
-			f.p("\t}")
-		}
-		return nil
+		return es.ownedKey()
 	}
+	return es.relation()
+}
 
-	// A many-to-many edge's join rows, or the target's rows that hold the
-	// key: the edge's setters, with the row's key.
-	if len(e.PrimaryKey) != 1 {
-		return fmt.Errorf("schema %s, edge %s: velox-graphql writes it by the key of %s, which is %d columns; skip its inputs with graphql.Skip(graphql.SkipMutationCreateInput, graphql.SkipMutationUpdateInput)", e.Name, ed.Name, e.Name, len(e.PrimaryKey))
+// edgeSetters writes the setters of one edge's input fields.
+type edgeSetters struct {
+	*setters
+	ed    *plugin.Edge
+	tt    *sdl.Type             // the target's type
+	k     idKey                 // how the target's IDs decode
+	field map[sdl.InputKind]int // the index in fs of the edge's input of each kind
+}
+
+// idx returns the index in fs of the edge's input of the given kind, or -1
+// for none.
+func (es *edgeSetters) idx(kind sdl.InputKind) int {
+	if i, ok := es.field[kind]; ok {
+		return i
 	}
-	if ed.Kind != plugin.M2M {
-		// sdl gives a key that is never NULL no input that re-points it: it
-		// is an owner's on every row.
-		tfk, err := fkOf(e, ed, tt.Entity)
-		if err != nil {
+	return -1
+}
+
+// decodeOne writes the decoding of src, the ID of the input field fi, and
+// returns the local variable that holds the key.
+func (es *edgeSetters) decodeOne(indent string, fi sdl.InputField, src string) string {
+	v := es.local(fi)
+	es.f.p("%s%s, err := %s.DecodeID%s(%s, %s, %q%s)", indent, v, es.f.gqlgraph(), es.k.args, es.at(fi), src, fi.Target, es.k.conv)
+	es.fail(indent)
+	return v
+}
+
+// one writes the input field i, an <edge>ID, cleared first by the field clr
+// with the setter null when clr is not -1; set writes its setter of the
+// decoded key.
+func (es *edgeSetters) one(i, clr int, null string, set func(indent, key string)) {
+	f, fi := es.f, es.fs[i]
+	var indent, src string
+	var end func()
+	if clr >= 0 {
+		f.p("\tif in.%s {", es.fs[clr].GoName)
+		es.add("\t\t", null)
+		f.p("\t} else if v := in.%s; v != nil {", fi.GoName)
+		indent, src, end = "\t\t", "*v", func() { f.p("\t}") }
+	} else {
+		indent, src, end = es.open(fi)
+	}
+	set(indent, es.decodeOne(indent, fi, src))
+	end()
+}
+
+// clearOnly writes the clear field clr, with the setter null, of an edge
+// that has no <edge>ID input.
+func (es *edgeSetters) clearOnly(clr int, null string) {
+	es.f.p("\tif in.%s {", es.fs[clr].GoName)
+	es.add("\t\t", null)
+	es.f.p("\t}")
+}
+
+// ownedKey writes the setters of an edge whose key is on the row.
+//
+// The key is on the row: the edge's Set, which checks the key under the
+// target's Read policy and sets the column; the column's SetNull clears
+// it.
+func (es *edgeSetters) ownedKey() error {
+	e, ed := es.t.Entity, es.ed
+	fk, err := fkOf(e, ed, e)
+	if err != nil {
+		return err
+	}
+	clr := es.idx(sdl.InputClearEdge)
+	var null string
+	if clr >= 0 {
+		if null, err = es.setNull(e, fk); err != nil {
 			return err
 		}
-		if !tfk.Nullable {
-			return fmt.Errorf("schema %s, edge %s: an input re-points %s's rows, whose key %s is never NULL, which is a bug", e.Name, ed.Name, tt.Entity.Name, tfk.Name)
-		}
-		// The write sets the row's key on the target's rows, converted.
-		if ok := e.Fields[e.PrimaryKey[0]]; !sameGoType(tfk, ok) {
-			if err := s.r.converts(tt.Entity, tfk, cmp.Or(s.t.Key, tfk.Type)); err != nil {
-				return err
-			}
+	}
+	// Set converts the key to the column's Go type, which must take it.
+	if !sameGoType(fk, es.k.fd) {
+		if err := es.r.converts(e, fk, es.tt.Key); err != nil {
+			return err
 		}
 	}
-	rel := s.h + "." + ed.GoName
-	clr := idx(sdl.InputClearEdge)
-	if i := idx(sdl.InputEdgeID); i >= 0 {
-		one(i, clr, rel+".Clear()", func(indent, key string) { s.add(indent, rel+".Add("+key+")") })
+	if i := es.idx(sdl.InputEdgeID); i >= 0 {
+		es.one(i, clr, null, func(indent, key string) {
+			es.add(indent, es.h+"."+ed.GoName+".Set("+key+")")
+		})
+	} else if clr >= 0 {
+		es.clearOnly(clr, null)
+	}
+	return nil
+}
+
+// relation writes the setters of a many-to-many edge's join rows, or of
+// the target's rows that hold the key: the edge's setters, with the row's
+// key.
+func (es *edgeSetters) relation() error {
+	if err := es.checkRelationKey(); err != nil {
+		return err
+	}
+	f := es.f
+	rel := es.h + "." + es.ed.GoName
+	clr := es.idx(sdl.InputClearEdge)
+	if i := es.idx(sdl.InputEdgeID); i >= 0 {
+		es.one(i, clr, rel+".Clear()", func(indent, key string) { es.add(indent, rel+".Add("+key+")") })
 		return nil
 	}
 	if clr >= 0 {
-		f.p("\tif in.%s {", s.fs[clr].GoName)
-		s.add("\t\t", rel+".Clear()")
-		f.p("\t}")
+		es.clearOnly(clr, rel+".Clear()")
 	}
 	for _, x := range []struct {
 		kind sdl.InputKind
 		op   string
 	}{{sdl.InputRemoveIDs, "Remove"}, {sdl.InputAddIDs, "Add"}, {sdl.InputEdgeIDs, "Add"}} {
-		i := idx(x.kind)
+		i := es.idx(x.kind)
 		if i < 0 {
 			continue
 		}
-		fi := s.fs[i]
-		v := s.local(fi)
+		fi := es.fs[i]
+		v := es.local(fi)
 		f.p("\tif len(in.%s) > 0 {", fi.GoName)
-		f.p("\t\t%s, err := %s.DecodeIDs%s(%s, in.%s, %q%s)", v, impl, k.args, s.at(fi), fi.GoName, fi.Target, k.conv)
-		s.fail("\t\t")
-		s.add("\t\t", rel+"."+x.op+"("+v+"...)")
+		f.p("\t\t%s, err := %s.DecodeIDs%s(%s, in.%s, %q%s)", v, f.gqlgraph(), es.k.args, es.at(fi), fi.GoName, fi.Target, es.k.conv)
+		es.fail("\t\t")
+		es.add("\t\t", rel+"."+x.op+"("+v+"...)")
 		f.p("\t}")
+	}
+	return nil
+}
+
+// checkRelationKey refuses a relation edge that velox-graphql cannot write:
+// the row's key is more than one column, or the key on the target's rows
+// is never NULL or cannot take the row's key.
+func (es *edgeSetters) checkRelationKey() error {
+	e, ed, tt := es.t.Entity, es.ed, es.tt
+	if len(e.PrimaryKey) != 1 {
+		return fmt.Errorf("schema %s, edge %s: velox-graphql writes it by the key of %s, which is %d columns; skip its inputs with graphql.Skip(graphql.SkipMutationCreateInput, graphql.SkipMutationUpdateInput)", e.Name, ed.Name, e.Name, len(e.PrimaryKey))
+	}
+	if ed.Kind == plugin.M2M {
+		return nil
+	}
+	// sdl gives a key that is never NULL no input that re-points it: it
+	// is an owner's on every row.
+	tfk, err := fkOf(e, ed, tt.Entity)
+	if err != nil {
+		return err
+	}
+	if !tfk.Nullable {
+		return fmt.Errorf("schema %s, edge %s: an input re-points %s's rows, whose key %s is never NULL, which is a bug", e.Name, ed.Name, tt.Entity.Name, tfk.Name)
+	}
+	// The write sets the row's key on the target's rows, converted.
+	if ok := e.Fields[e.PrimaryKey[0]]; !sameGoType(tfk, ok) {
+		return es.r.converts(tt.Entity, tfk, cmp.Or(es.t.Key, tfk.Type))
 	}
 	return nil
 }

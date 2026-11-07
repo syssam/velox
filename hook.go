@@ -133,6 +133,29 @@ func WithHooks[E any, PE Entity[E]](hs ...Hook) Option {
 // order, the first outermost, and the interceptors' conditions are ANDed in
 // order.
 func bind(info *EntityInfo, s any) error {
+	srcs, err := behaviourSources(info, s)
+	if err != nil {
+		return err
+	}
+	b, err := declaredBehaviour(info, srcs)
+	if err != nil {
+		return err
+	}
+	if len(b.policies) == 0 && len(b.hooks) == 0 && len(b.interceptors) == 0 {
+		return engine.NoBehaviour(info, s)
+	}
+	if err := bindInterceptors(info, b.interceptors); err != nil {
+		return err
+	}
+	if err := bindPolicies(info, b.policies); err != nil {
+		return err
+	}
+	return bindHooks(info, b.hooks)
+}
+
+// behaviourSources returns the values that may declare s's behaviour: each
+// non-nil value its Mixin method returns, in order, then s.
+func behaviourSources(info *EntityInfo, s any) ([]any, error) {
 	var srcs []any
 	err := engine.Recover(info, "Mixin()", func() {
 		if m, ok := s.(interface{ Mixin() []schema.Mixin }); ok {
@@ -144,62 +167,76 @@ func bind(info *EntityInfo, s any) error {
 		}
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	srcs = append(srcs, engine.Addr(s))
-	var (
-		ps []interface{ Policy() Policy }
-		hs []interface{ Hooks() []Hook }
-		is []interface{ Interceptors() []Interceptor }
-	)
+	return append(srcs, engine.Addr(s)), nil
+}
+
+// behaviour is what a schema and its mixins declare, in order.
+type behaviour struct {
+	policies     []interface{ Policy() Policy }
+	hooks        []interface{ Hooks() []Hook }
+	interceptors []interface{ Interceptors() []Interceptor }
+}
+
+// declaredBehaviour returns the behaviour that srcs declare. It refuses a
+// source with a Policy, Hooks or Interceptors method of the wrong type.
+func declaredBehaviour(info *EntityInfo, srcs []any) (behaviour, error) {
+	var b behaviour
 	for _, x := range srcs {
 		if v, ok := x.(interface{ Policy() Policy }); ok {
-			ps = append(ps, v)
+			b.policies = append(b.policies, v)
 		} else if err := engine.WrongBehaviour(info, x, "Policy", "func() velox.Policy"); err != nil {
-			return err
+			return behaviour{}, err
 		}
 		if v, ok := x.(interface{ Hooks() []Hook }); ok {
-			hs = append(hs, v)
+			b.hooks = append(b.hooks, v)
 		} else if err := engine.WrongBehaviour(info, x, "Hooks", "func() []velox.Hook"); err != nil {
-			return err
+			return behaviour{}, err
 		}
 		if v, ok := x.(interface{ Interceptors() []Interceptor }); ok {
-			is = append(is, v)
+			b.interceptors = append(b.interceptors, v)
 		} else if err := engine.WrongBehaviour(info, x, "Interceptors", "func() []velox.Interceptor"); err != nil {
-			return err
+			return behaviour{}, err
 		}
 	}
-	if len(ps) == 0 && len(hs) == 0 && len(is) == 0 {
-		return engine.NoBehaviour(info, s)
+	return b, nil
+}
+
+// bindInterceptors keeps in info the conditions of is, ANDed in order.
+func bindInterceptors(info *EntityInfo, is []interface{ Interceptors() []Interceptor }) error {
+	if len(is) == 0 {
+		return nil
 	}
-	if len(is) > 0 {
-		err := engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
-			var fs []engine.FilterFn
-			for _, x := range is {
-				own, reason := engine.FiltersFor(x.Interceptors(), len(fs))
-				if reason != "" {
-					return nil, reason
-				}
-				fs = append(fs, own...)
+	return engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
+		var fs []engine.FilterFn
+		for _, x := range is {
+			own, reason := engine.FiltersFor(x.Interceptors(), len(fs))
+			if reason != "" {
+				return nil, reason
 			}
-			return fs, ""
-		})
-		if err != nil {
-			return err
+			fs = append(fs, own...)
 		}
+		return fs, ""
+	})
+}
+
+// bindPolicies keeps in info the policies of ps, ANDed in order.
+func bindPolicies(info *EntityInfo, ps []interface{ Policy() Policy }) error {
+	if len(ps) == 0 {
+		return nil
 	}
-	if len(ps) > 0 {
-		err := engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
-			all := make([]*engine.EntityPolicy, len(ps))
-			for i, x := range ps {
-				all[i] = engine.PolicyFor(info, x.Policy())
-			}
-			return engine.AndPolicies(all), ""
-		})
-		if err != nil {
-			return err
+	return engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
+		all := make([]*engine.EntityPolicy, len(ps))
+		for i, x := range ps {
+			all[i] = engine.PolicyFor(info, x.Policy())
 		}
-	}
+		return engine.AndPolicies(all), ""
+	})
+}
+
+// bindHooks keeps in info the hooks of hs, in order, the first outermost.
+func bindHooks(info *EntityInfo, hs []interface{ Hooks() []Hook }) error {
 	if len(hs) == 0 {
 		return nil
 	}

@@ -26,8 +26,22 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 	if len(st.OrderBy) == 0 {
 		return fmt.Errorf("velox: %s: After needs an OrderBy", in.Name)
 	}
-	// Each term's entity and the row to read its value from: the statement's
-	// own, or a joined one.
+	srcs, ordered, err := afterSources(st, in, after)
+	if err != nil {
+		return err
+	}
+	if !orderIsTotal(in, ordered) {
+		return fmt.Errorf("velox: %s: After needs an OrderBy that includes the primary key or a unique index", in.Name)
+	}
+	st.Where = append(st.Where, NewPredicate(afterCondition(st, srcs)))
+	return nil
+}
+
+// afterSources returns each OrderBy term's entity and the row to read its
+// value from: the statement's own, or a joined one. It also returns the
+// set of the statement's own columns that the order names, and refuses a
+// term that After cannot page over.
+func afterSources(st *Statement, in *EntityInfo, after unsafe.Pointer) ([]afterSource, map[int]bool, error) {
 	srcs := make([]afterSource, len(st.OrderBy))
 	ordered := make(map[int]bool, len(st.OrderBy))
 	for i, o := range st.OrderBy {
@@ -35,20 +49,20 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 		if o.Rel != 0 {
 			var err error
 			if src, err = joinedSource(st, in, after, o); err != nil {
-				return err
+				return nil, nil, err
 			}
 		}
 		srcs[i] = src
 		if o.Column < 0 || o.Column >= len(src.info.Columns) {
-			return fmt.Errorf("velox: %s: an ordering names column %d of %s, which has %d", in.Name, o.Column, src.info.Name, len(src.info.Columns))
+			return nil, nil, fmt.Errorf("velox: %s: an ordering names column %d of %s, which has %d", in.Name, o.Column, src.info.Name, len(src.info.Columns))
 		}
 		col := src.info.Columns[o.Column]
 		if col.Codec {
-			return errCodecOrder(src.info, o.Column)
+			return nil, nil, errCodecOrder(src.info, o.Column)
 		}
 		// A nil slice or map is stored as NULL, which no comparison matches.
 		if sliceOrMap(col.Type) {
-			return fmt.Errorf("velox: %s: After cannot page over the column %s, which can be NULL", src.info.Name, col.Name)
+			return nil, nil, fmt.Errorf("velox: %s: After cannot page over the column %s, which can be NULL", src.info.Name, col.Name)
 		}
 		if o.Rel != 0 {
 			continue // a joined row is read whole
@@ -56,12 +70,18 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 		// A row this query returns holds the zero value of a column it did not
 		// select, which the comparison would page from.
 		if st.Columns != nil && !slices.Contains(st.Columns, o.Column) {
-			return fmt.Errorf("velox: %s: After needs the order column %s selected; add it to Columns", in.Name, col.Name)
+			return nil, nil, fmt.Errorf("velox: %s: After needs the order column %s selected; add it to Columns", in.Name, col.Name)
 		}
 		ordered[o.Column] = true
 	}
-	// Ties are broken by the statement's own key: a joined column is not unique
-	// for the rows that share its row.
+	return srcs, ordered, nil
+}
+
+// orderIsTotal reports whether the columns of in that ordered holds cover
+// its primary key or a unique index of non-nullable columns. Ties are broken
+// by the statement's own key: a joined column is not unique for the rows
+// that share its row.
+func orderIsTotal(in *EntityInfo, ordered map[int]bool) bool {
 	covers := func(cols []int) bool {
 		for _, c := range cols {
 			if !ordered[c] {
@@ -70,53 +90,57 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 		}
 		return len(cols) > 0
 	}
-	unique := covers(in.PrimaryKey)
+	if covers(in.PrimaryKey) {
+		return true
+	}
 	for _, ix := range in.Indexes {
 		// NULLs do not collide, so a unique index of a nullable column does
 		// not make the order total.
-		unique = unique || (ix.Unique && covers(ix.Columns) && !slices.ContainsFunc(ix.Columns, func(c int) bool { return in.Columns[c].Nullable }))
-	}
-	if !unique {
-		return fmt.Errorf("velox: %s: After needs an OrderBy that includes the primary key or a unique index", in.Name)
-	}
-	// term is the condition on o's column against v, on the joined row when o is.
-	wrap := func(o OrderTerm, n Node) Node {
-		if o.Rel != 0 {
-			return JoinedNode(o.Rel-1, []Node{n})
+		if ix.Unique && covers(ix.Columns) && !slices.ContainsFunc(ix.Columns, func(c int) bool { return in.Columns[c].Nullable }) {
+			return true
 		}
-		return n
 	}
-	term := func(o OrderTerm, op op, v any) Node { return wrap(o, Node{Op: op, Col: int32(o.Column), V: v}) }
+	return false
+}
+
+// onOrderRow returns n, the condition on o's column, on the joined row when
+// o is on a joined relation.
+func onOrderRow(o OrderTerm, n Node) Node {
+	if o.Rel != 0 {
+		return JoinedNode(o.Rel-1, []Node{n})
+	}
+	return n
+}
+
+// orderTerm returns the condition op on o's column against v, on the joined
+// row when o is.
+func orderTerm(o OrderTerm, op op, v any) Node {
+	return onOrderRow(o, Node{Op: op, Col: int32(o.Column), V: v})
+}
+
+// afterCondition returns the condition that holds for the rows past the
+// row srcs read from in st's OrderBy.
+//
+// It is (o1 > v1) OR (o1 = v1 AND o2 > v2) OR …, with < for descending
+// columns. NULL sorts after every value (the order puts it there, orderBy),
+// so past a value ascending is > v OR IS NULL, past NULL ascending is
+// nothing, and past NULL descending is IS NOT NULL; NULL equals NULL.
+func afterCondition(st *Statement, srcs []afterSource) Node {
 	value := func(i int) any { return srcs[i].info.kit.Value(srcs[i].row, st.OrderBy[i].Column) }
-	// (o1 > v1) OR (o1 = v1 AND o2 > v2) OR …, with < for descending columns.
-	// NULL sorts after every value (the order puts it there, orderBy), so
-	// past a value ascending is > v OR IS NULL, past NULL ascending is
-	// nothing, and past NULL descending is IS NOT NULL; NULL equals NULL.
 	var or []Node
 	for i, o := range st.OrderBy {
 		var and []Node
 		for k, prev := range st.OrderBy[:i] {
 			v := value(k)
 			if srcs[k].info.Columns[prev.Column].Nullable && nullValue(v) {
-				and = append(and, term(prev, OpIsNull, nil))
+				and = append(and, orderTerm(prev, OpIsNull, nil))
 			} else {
-				and = append(and, term(prev, OpEQ, v))
+				and = append(and, orderTerm(prev, OpEQ, v))
 			}
 		}
-		v := value(i)
-		past := term(o, OpGT, v)
-		if o.Desc {
-			past = term(o, OpLT, v)
-		}
-		if srcs[i].info.Columns[o.Column].Nullable {
-			switch null := nullValue(v); {
-			case null && !o.Desc:
-				continue // no row is past NULL
-			case null:
-				past = term(o, OpNotNull, nil)
-			case !o.Desc:
-				past = wrap(o, Group(OpOr, []Node{{Op: OpGT, Col: int32(o.Column), V: v}, {Op: OpIsNull, Col: int32(o.Column)}}))
-			}
+		past, ok := pastValue(o, value(i), srcs[i].info.Columns[o.Column].Nullable)
+		if !ok {
+			continue // no row is past NULL
 		}
 		switch {
 		case len(and) > 0:
@@ -127,8 +151,29 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 			or = append(or, past)
 		}
 	}
-	st.Where = append(st.Where, NewPredicate(Group(OpOr, or)))
-	return nil
+	return Group(OpOr, or)
+}
+
+// pastValue returns the condition on o's column for the rows past the
+// value v, and false when no row is past it: v is NULL and o ascends.
+// nullable says whether the column can be NULL.
+func pastValue(o OrderTerm, v any, nullable bool) (Node, bool) {
+	past := orderTerm(o, OpGT, v)
+	if o.Desc {
+		past = orderTerm(o, OpLT, v)
+	}
+	if !nullable {
+		return past, true
+	}
+	switch null := nullValue(v); {
+	case null && !o.Desc:
+		return Node{}, false
+	case null:
+		past = orderTerm(o, OpNotNull, nil)
+	case !o.Desc:
+		past = onOrderRow(o, Group(OpOr, []Node{{Op: OpGT, Col: int32(o.Column), V: v}, {Op: OpIsNull, Col: int32(o.Column)}}))
+	}
+	return past, true
 }
 
 // afterSource is the row After reads one ordered column from, and the entity it is

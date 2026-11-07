@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"slices"
 	"sync/atomic"
 	"time"
 )
@@ -111,118 +110,151 @@ func CheckColumns(st *Statement) error { return checkColumns(st, "a Rewrite hook
 // checkColumns is CheckColumns, whose errors say who names a column: "a
 // Rewrite hook set".
 func checkColumns(st *Statement, who string) error {
-	n := len(st.Entity.Columns)
-	bad := func(c int) error {
-		if c < 0 || c >= n {
-			return fmt.Errorf("velox: %s: %s column %d, the entity has %d columns", st.Entity.Name, who, c, n)
-		}
-		return nil
+	if err := checkClauseColumns(st, who); err != nil {
+		return err
 	}
-	for _, c := range st.Columns {
-		if err := bad(c); err != nil {
-			return err
-		}
-	}
-	for _, o := range st.OrderBy {
-		if o.Rel != 0 {
-			continue // a column of the joined target: render checks it
-		}
-		if err := bad(o.Column); err != nil {
-			return err
-		}
-	}
-	for _, a := range st.Set {
-		if err := bad(a.Column); err != nil {
-			return err
-		}
-	}
-	for _, c := range st.Returning {
-		if err := bad(c); err != nil {
-			return err
-		}
-	}
-	if cf := st.Conflict; cf != nil {
-		if len(cf.Columns) == 0 {
-			return fmt.Errorf("velox: %s: a Rewrite hook left an upsert with no conflict columns", st.Entity.Name)
-		}
-		for _, c := range append(slices.Clip(cf.Columns), cf.Update...) {
-			if err := bad(c); err != nil {
-				return err
-			}
-		}
+	if err := checkConflict(st, who); err != nil {
+		return err
 	}
 	for _, r := range st.Rows {
 		if len(r) != len(st.Columns) {
 			return fmt.Errorf("velox: %s: a Rewrite hook made a row of %d values for %d columns", st.Entity.Name, len(r), len(st.Columns))
 		}
 	}
-	var walk func(nd Node) error
-	walk = func(nd Node) error {
-		switch nd.Op {
-		case OpAnd, OpOr, OpNot:
-			for _, k := range nd.Kids {
-				if err := walk(k); err != nil {
-					return err
-				}
-			}
-			return nil
-		case OpExists:
-			// A backstop: a hook can put another entity's relation here
-			// through a Predicate conversion, and an owner column out of this
-			// entity's range would make rendering panic. Only the owner's
-			// column is the statement's entity's; the kids are conditions on
-			// the target, made by HasWith. A Rewrite hook may have added one
-			// whose relation is not resolved yet.
-			l, err := existsLink(nd)
-			if err != nil {
-				return err
-			}
-			return bad(l.OwnerCol)
-		case OpInvalid:
-			return nd.V.(error)
-		case opNamed, opNamedEdge:
-			return nil // resolved against the statement's entity when it runs
-		case OpAllow:
-			return nil // it names no column
-		case OpThrough:
-			// col is the statement's entity's; the join column and the
-			// kids' columns are the join entity's.
-			j := nd.V.(*EntityInfo)
-			bad := func(c int) error {
-				if c < 0 || c >= len(j.Columns) {
-					return fmt.Errorf("velox: %s: a condition names column %d of %s, which has %d", st.Entity.Name, c, j.Name, len(j.Columns))
-				}
-				return nil
-			}
-			if err := bad(nd.W.(int)); err != nil {
-				return err
-			}
-			for _, k := range nd.Kids {
-				if err := bad(int(k.Col)); err != nil {
-					return err
-				}
-			}
-		}
-		return bad(int(nd.Col))
+	if err := checkConds(st, who, st.Where); err != nil {
+		return err
 	}
-	conds := func(ps []Predicate) error {
-		for _, p := range ps {
-			// walk does not enter an EXISTS's kids, so look for the zero
-			// Predicate first.
-			if hasZero(p.n) {
-				return errZeroPredicate(st.Entity.Name)
-			}
-			if err := walk(p.n); err != nil {
+	if st.Conflict != nil {
+		return checkConds(st, who, st.Conflict.Where)
+	}
+	return nil
+}
+
+// badColumn returns an error when c is not a column index of st's entity.
+func badColumn(st *Statement, who string, c int) error {
+	if n := len(st.Entity.Columns); c < 0 || c >= n {
+		return fmt.Errorf("velox: %s: %s column %d, the entity has %d columns", st.Entity.Name, who, c, n)
+	}
+	return nil
+}
+
+// badColumns returns badColumn's error for the first bad index in cs.
+func badColumns(st *Statement, who string, cs []int) error {
+	for _, c := range cs {
+		if err := badColumn(st, who, c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkClauseColumns checks the column indexes of st's column list, order,
+// assignments and RETURNING list.
+func checkClauseColumns(st *Statement, who string) error {
+	if err := badColumns(st, who, st.Columns); err != nil {
+		return err
+	}
+	for _, o := range st.OrderBy {
+		if o.Rel != 0 {
+			continue // a column of the joined target: render checks it
+		}
+		if err := badColumn(st, who, o.Column); err != nil {
+			return err
+		}
+	}
+	for _, a := range st.Set {
+		if err := badColumn(st, who, a.Column); err != nil {
+			return err
+		}
+	}
+	return badColumns(st, who, st.Returning)
+}
+
+// checkConflict checks the conflict and update columns of st's upsert.
+func checkConflict(st *Statement, who string) error {
+	cf := st.Conflict
+	if cf == nil {
+		return nil
+	}
+	if len(cf.Columns) == 0 {
+		return fmt.Errorf("velox: %s: a Rewrite hook left an upsert with no conflict columns", st.Entity.Name)
+	}
+	if err := badColumns(st, who, cf.Columns); err != nil {
+		return err
+	}
+	return badColumns(st, who, cf.Update)
+}
+
+// checkConds checks the conditions ps of st: none is the zero Predicate and
+// each names only columns its entity has.
+func checkConds(st *Statement, who string, ps []Predicate) error {
+	for _, p := range ps {
+		// checkNode does not enter an EXISTS's kids, so look for the zero
+		// Predicate first.
+		if hasZero(p.n) {
+			return errZeroPredicate(st.Entity.Name)
+		}
+		if err := checkNode(st, who, p.n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkNode checks the column indexes of the condition nd and its kids.
+func checkNode(st *Statement, who string, nd Node) error {
+	switch nd.Op {
+	case OpAnd, OpOr, OpNot:
+		for _, k := range nd.Kids {
+			if err := checkNode(st, who, k); err != nil {
 				return err
 			}
 		}
 		return nil
+	case OpExists:
+		// A backstop: a hook can put another entity's relation here
+		// through a Predicate conversion, and an owner column out of this
+		// entity's range would make rendering panic. Only the owner's
+		// column is the statement's entity's; the kids are conditions on
+		// the target, made by HasWith. A Rewrite hook may have added one
+		// whose relation is not resolved yet.
+		l, err := existsLink(nd)
+		if err != nil {
+			return err
+		}
+		return badColumn(st, who, l.OwnerCol)
+	case OpInvalid:
+		return nd.V.(error)
+	case opNamed, opNamedEdge:
+		return nil // resolved against the statement's entity when it runs
+	case OpAllow:
+		return nil // it names no column
+	case OpThrough:
+		if err := checkThrough(st, nd); err != nil {
+			return err
+		}
 	}
-	if err := conds(st.Where); err != nil {
+	return badColumn(st, who, int(nd.Col))
+}
+
+// checkThrough checks the join entity's columns that the OpThrough nd
+// names: its join column and its kids' columns. nd's own column is the
+// statement's entity's, which checkNode checks.
+func checkThrough(st *Statement, nd Node) error {
+	j := nd.V.(*EntityInfo)
+	bad := func(c int) error {
+		if c < 0 || c >= len(j.Columns) {
+			return fmt.Errorf("velox: %s: a condition names column %d of %s, which has %d", st.Entity.Name, c, j.Name, len(j.Columns))
+		}
+		return nil
+	}
+	if err := bad(nd.W.(int)); err != nil {
 		return err
 	}
-	if st.Conflict != nil {
-		return conds(st.Conflict.Where)
+	for _, k := range nd.Kids {
+		if err := bad(int(k.Col)); err != nil {
+			return err
+		}
 	}
 	return nil
 }

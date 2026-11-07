@@ -161,100 +161,23 @@ func connArgs(t *object) string {
 	return "(after: Cursor, first: Int, before: Cursor, last: Int" + orderArg(t) + whereArg(t) + ")"
 }
 
+// build returns the GraphQL surface of m.
 func build(m *plugin.Model) (*graph, error) {
 	if m == nil {
 		return nil, errors.New("no model")
 	}
-	g := &graph{byName: map[string]*object{}, goEnums: map[string]bool{}, types: newTypeNames(), ents: map[string]*plugin.Entity{}}
-	for _, e := range m.Entities {
-		g.ents[e.Name] = e
-	}
-	for _, en := range m.Enums {
-		g.goEnums[en.Type] = true
-	}
-	g.reserveGoNames(m)
+	g := newGraph(m)
 	ents := slices.SortedStableFunc(slices.Values(m.Entities), func(a, b *plugin.Entity) int { return cmp.Compare(a.Name, b.Name) })
-
-	// A foreign-key field bound to an edge is in no type and no input: the
-	// edge stands for it. An edge names its field on whichever entity holds
-	// it.
-	fks := map[string]map[string]bool{}
-	for _, e := range m.Entities {
-		for _, ed := range e.Edges {
-			if ed.Field != "" && ed.FieldOn != "" {
-				if fks[ed.FieldOn] == nil {
-					fks[ed.FieldOn] = map[string]bool{}
-				}
-				fks[ed.FieldOn][ed.Field] = true
-			}
-		}
-	}
+	fks := foreignKeys(m)
 
 	// The types first, so that edges know their targets' names.
 	for _, e := range ents {
-		where := "schema " + e.Name
-		a, err := decode(e.Annotations, where)
+		o, err := g.objectOf(e, fks[e.Name])
 		if err != nil {
 			return nil, err
 		}
-		if err := checkSchema(e, a, where); err != nil {
-			return nil, err
-		}
-		if e.Join || a.Skip&graphql.SkipType != 0 {
-			// No SDL field comes of the entity's fields and edges, but
-			// velox-graphql's own directives are refused on them as on
-			// every element (ownDirective).
-			if err := ownDirectives(e, where); err != nil {
-				return nil, err
-			}
+		if o == nil {
 			continue
-		}
-		o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks[e.Name]}
-		o.node = o.key != ""
-		switch {
-		case a.Type != "" && !validName(a.Type):
-			return nil, fmt.Errorf("%s: graphql.Type(%q) is not a GraphQL name", where, a.Type)
-		case a.Type != "":
-			o.name = a.Type
-		case !validName(e.Name):
-			return nil, fmt.Errorf("%s: %q is not a GraphQL name; name the type with graphql.Type", where, e.Name)
-		}
-		for i, n := range []string{o.name, o.name + "Connection", o.name + "Edge"} {
-			add := g.types.add
-			if i == 0 && o.name == e.Name {
-				add = g.types.addGo // the schema's own Go type
-			}
-			if err := add(n, where); err != nil {
-				return nil, err
-			}
-		}
-		if o.dirs, err = directives(a.Directives, where); err != nil {
-			return nil, err
-		}
-		for i, f := range e.Fields {
-			fw := where + ", field " + f.Name
-			fa, err := decode(f.Annotations, fw)
-			if err != nil {
-				return nil, err
-			}
-			if err := checkField(e, i, fa, o.fks[f.Name], fw); err != nil {
-				return nil, err
-			}
-			o.fanns = append(o.fanns, fa)
-		}
-		for _, ed := range e.Edges {
-			ew := where + ", edge " + ed.Name
-			ea, err := decode(ed.Annotations, ew)
-			if err != nil {
-				return nil, err
-			}
-			if err := ownDirective(ea.Directives, ew); err != nil {
-				return nil, err
-			}
-			if err := misplaced(ea, onEdge, ew); err != nil {
-				return nil, err
-			}
-			o.eanns = append(o.eanns, ea)
 		}
 		g.objects = append(g.objects, o)
 		g.byName[e.Name] = o
@@ -265,20 +188,8 @@ func build(m *plugin.Model) (*graph, error) {
 		if err := g.fill(o); err != nil {
 			return nil, err
 		}
-		if q := o.ann.QueryField; q != "" {
-			where := "schema " + o.ent.Name
-			if !validName(q) {
-				return nil, fmt.Errorf("%s: graphql.QueryField(%q) is not a GraphQL name", where, q)
-			}
-			switch prev := queryBy[q]; prev {
-			case "":
-			case builtin:
-				return nil, fmt.Errorf("%s: the Query field %s is one velox-graphql declares itself", where, q)
-			default:
-				return nil, fmt.Errorf("%s and %s both declare the Query field %s", prev, where, q)
-			}
-			queryBy[q] = where
-			g.query = append(g.query, gqlField{name: q, typ: o.name + "Connection!", where: where, conn: o})
+		if err := g.addQueryField(o, queryBy); err != nil {
+			return nil, err
 		}
 	}
 
@@ -300,31 +211,201 @@ func build(m *plugin.Model) (*graph, error) {
 			return nil, err
 		}
 	}
-	setArgs := func(fs []gqlField) {
-		for i := range fs {
-			if fs[i].conn != nil {
-				fs[i].args = connArgs(fs[i].conn)
-			}
-		}
-	}
-	setArgs(g.query)
+	setConnArgs(g.query)
 	for i := range g.query {
-		// What NewXConnection's Go doc says of its connection.
-		o, how := g.query[i].conn, ""
-		if o.hasWhere {
-			how += ", filtered by where"
-		}
-		if orderArg(o) != "" {
-			how += ", ordered by orderBy and then the key"
-		} else {
-			how += ", ordered by the key"
-		}
-		g.query[i].desc = "The connection to the " + o.name + " nodes" + how + ", and paged by the other arguments."
+		g.query[i].desc = queryDesc(g.query[i].conn)
 	}
 	for _, o := range g.objects {
-		setArgs(o.fields)
+		setConnArgs(o.fields)
 	}
 	return g, nil
+}
+
+// newGraph returns the graph of m with no objects yet: its entities and Go
+// enum types indexed, and the Go names velox-gen declares reserved.
+func newGraph(m *plugin.Model) *graph {
+	g := &graph{byName: map[string]*object{}, goEnums: map[string]bool{}, types: newTypeNames(), ents: map[string]*plugin.Entity{}}
+	for _, e := range m.Entities {
+		g.ents[e.Name] = e
+	}
+	for _, en := range m.Enums {
+		g.goEnums[en.Type] = true
+	}
+	g.reserveGoNames(m)
+	return g
+}
+
+// foreignKeys returns, by entity name, the names of its foreign-key fields
+// that an edge is bound to.
+//
+// A foreign-key field bound to an edge is in no type and no input: the
+// edge stands for it. An edge names its field on whichever entity holds
+// it.
+func foreignKeys(m *plugin.Model) map[string]map[string]bool {
+	fks := map[string]map[string]bool{}
+	for _, e := range m.Entities {
+		for _, ed := range e.Edges {
+			if ed.Field == "" || ed.FieldOn == "" {
+				continue
+			}
+			if fks[ed.FieldOn] == nil {
+				fks[ed.FieldOn] = map[string]bool{}
+			}
+			fks[ed.FieldOn][ed.Field] = true
+		}
+	}
+	return fks
+}
+
+// objectOf returns e's type, whose foreign-key fields are fks, with its
+// name, directives and annotations, and reserves its type names. It
+// returns nil for a join entity or a skipped type.
+func (g *graph) objectOf(e *plugin.Entity, fks map[string]bool) (*object, error) {
+	where := "schema " + e.Name
+	a, err := decode(e.Annotations, where)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkSchema(e, a, where); err != nil {
+		return nil, err
+	}
+	if e.Join || a.Skip&graphql.SkipType != 0 {
+		// No SDL field comes of the entity's fields and edges, but
+		// velox-graphql's own directives are refused on them as on
+		// every element (ownDirective).
+		return nil, ownDirectives(e, where)
+	}
+	o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks}
+	o.node = o.key != ""
+	if o.name, err = typeName(e, a, where); err != nil {
+		return nil, err
+	}
+	if err := g.addTypeNames(o, where); err != nil {
+		return nil, err
+	}
+	if o.dirs, err = directives(a.Directives, where); err != nil {
+		return nil, err
+	}
+	if o.fanns, err = fieldAnnotations(o, where); err != nil {
+		return nil, err
+	}
+	if o.eanns, err = edgeAnnotations(e, where); err != nil {
+		return nil, err
+	}
+	return o, nil
+}
+
+// typeName returns the GraphQL name of e's type, which a names: the
+// graphql.Type annotation's, or else e's name.
+func typeName(e *plugin.Entity, a graphql.Annotation, where string) (string, error) {
+	switch {
+	case a.Type != "" && !validName(a.Type):
+		return "", fmt.Errorf("%s: graphql.Type(%q) is not a GraphQL name", where, a.Type)
+	case a.Type != "":
+		return a.Type, nil
+	case !validName(e.Name):
+		return "", fmt.Errorf("%s: %q is not a GraphQL name; name the type with graphql.Type", where, e.Name)
+	}
+	return e.Name, nil
+}
+
+// addTypeNames reserves the names of o's type, connection and edge types.
+func (g *graph) addTypeNames(o *object, where string) error {
+	for i, n := range []string{o.name, o.name + "Connection", o.name + "Edge"} {
+		add := g.types.add
+		if i == 0 && o.name == o.ent.Name {
+			add = g.types.addGo // the schema's own Go type
+		}
+		if err := add(n, where); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// fieldAnnotations returns the checked annotations of o's entity's fields,
+// by index.
+func fieldAnnotations(o *object, where string) ([]graphql.Annotation, error) {
+	var anns []graphql.Annotation
+	for i, f := range o.ent.Fields {
+		fw := where + ", field " + f.Name
+		fa, err := decode(f.Annotations, fw)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkField(o.ent, i, fa, o.fks[f.Name], fw); err != nil {
+			return nil, err
+		}
+		anns = append(anns, fa)
+	}
+	return anns, nil
+}
+
+// edgeAnnotations returns the checked annotations of e's edges, by index.
+func edgeAnnotations(e *plugin.Entity, where string) ([]graphql.Annotation, error) {
+	var anns []graphql.Annotation
+	for _, ed := range e.Edges {
+		ew := where + ", edge " + ed.Name
+		ea, err := decode(ed.Annotations, ew)
+		if err != nil {
+			return nil, err
+		}
+		if err := ownDirective(ea.Directives, ew); err != nil {
+			return nil, err
+		}
+		if err := misplaced(ea, onEdge, ew); err != nil {
+			return nil, err
+		}
+		anns = append(anns, ea)
+	}
+	return anns, nil
+}
+
+// addQueryField adds o's QueryField, if it has one, to the root Query.
+// queryBy holds the element that declares each Query field so far.
+func (g *graph) addQueryField(o *object, queryBy map[string]string) error {
+	q := o.ann.QueryField
+	if q == "" {
+		return nil
+	}
+	where := "schema " + o.ent.Name
+	if !validName(q) {
+		return fmt.Errorf("%s: graphql.QueryField(%q) is not a GraphQL name", where, q)
+	}
+	switch prev := queryBy[q]; prev {
+	case "":
+	case builtin:
+		return fmt.Errorf("%s: the Query field %s is one velox-graphql declares itself", where, q)
+	default:
+		return fmt.Errorf("%s and %s both declare the Query field %s", prev, where, q)
+	}
+	queryBy[q] = where
+	g.query = append(g.query, gqlField{name: q, typ: o.name + "Connection!", where: where, conn: o})
+	return nil
+}
+
+// setConnArgs sets the arguments of each connection among fs.
+func setConnArgs(fs []gqlField) {
+	for i := range fs {
+		if fs[i].conn != nil {
+			fs[i].args = connArgs(fs[i].conn)
+		}
+	}
+}
+
+// queryDesc returns the description of a Query field that is the
+// connection to o's nodes: what NewXConnection's Go doc says of it.
+func queryDesc(o *object) string {
+	how := ""
+	if o.hasWhere {
+		how += ", filtered by where"
+	}
+	if orderArg(o) != "" {
+		how += ", ordered by orderBy and then the key"
+	} else {
+		how += ", ordered by the key"
+	}
+	return "The connection to the " + o.name + " nodes" + how + ", and paged by the other arguments."
 }
 
 // decode is the graphql annotation among an element's annotations.
@@ -367,96 +448,28 @@ func (g *graph) fill(o *object) error {
 		}
 		o.plain = append(o.plain, Field{Name: "id", Field: e.PrimaryKey[0]})
 	}
-	for i, f := range e.Fields {
-		a := o.fanns[i]
-		switch {
-		case o.node && i == e.PrimaryKey[0], f.Sensitive, f.Implicit != "", o.fks[f.Name], a.Skip&graphql.SkipType != 0:
+	for i := range e.Fields {
+		f, ok, err := g.plainField(o, i)
+		if err != nil {
+			return err
+		}
+		if !ok {
 			continue
 		}
-		where := "schema " + e.Name + ", field " + f.Name
-		name, err := o.fieldName(i)
-		if err != nil {
+		if err := add(f, f.where); err != nil {
 			return err
 		}
-		typ, err := g.fieldType(o, f, a, where)
-		if err != nil {
-			return err
-		}
-		if !f.Nullable {
-			typ += "!"
-		}
-		var dirs []directive
-		switch v := g.goValue(f, a); {
-		case !v.own || f.Type == "bytes" && !f.Nullable:
-			// gqlgen binds a field only to the Go type of its scalar: a getter
-			// converts the field's own. An empty blob of a Bytes! needs one too:
-			// modernc.org/sqlite reads it as nil, which gqlgen refuses in a T!.
-			gt := Getter{Field: i, Method: f.GoName + "GQL", Returns: v.getter, Pkg: v.getterPkg}
-			o.getters = append(o.getters, gt)
-			dirs = append(dirs, bindTo(gt.Method))
-		case !strings.EqualFold(name, f.GoName):
-			// gqlgen binds a field to the Go field of its name, ignoring case.
-			dirs = append(dirs, bindTo(f.GoName))
-		}
-		ds, err := directives(a.Directives, where)
-		if err != nil {
-			return err
-		}
-		if err := add(gqlField{name: name, typ: typ, desc: f.Comment, dirs: append(dirs, ds...), where: where}, where); err != nil {
-			return err
-		}
-		o.plain = append(o.plain, Field{Name: name, Field: i})
+		o.plain = append(o.plain, Field{Name: f.name, Field: i})
 	}
-	for i, ed := range e.Edges {
-		a := o.eanns[i]
-		t := g.byName[ed.Target]
-		if a.Skip&graphql.SkipType != 0 || t == nil { // skipped, or its target is
+	for i := range e.Edges {
+		f, ef, ok, err := g.edgeFieldOf(o, i)
+		if err != nil {
+			return err
+		}
+		if !ok {
 			continue
 		}
-		where := "schema " + e.Name + ", edge " + ed.Name
-		name, err := o.edgeName(i)
-		if err != nil {
-			return err
-		}
-		f := gqlField{name: name, desc: ed.Comment, where: where}
-		ef := edgeField{edge: i, name: name, target: t}
-		switch {
-		case a.MaxList < 0:
-			return fmt.Errorf("%s: graphql.MaxList(%d): a list reads at least one row", where, a.MaxList)
-		case a.MaxList != 0 && (ed.Unique || a.Connection == nil || *a.Connection):
-			return fmt.Errorf("%s: graphql.MaxList on an edge that is no list, which first and last bound; add graphql.Connection(false) to a to-many edge", where)
-		}
-		switch {
-		case ed.Unique:
-			// Nullable even when Required: a row reads the edge's target in a
-			// statement of its own, which a policy, a hook, a replica's
-			// lag or a delete may leave empty, and a non-null field that read
-			// null would null the page around it.
-			f.typ, ef.kind = t.name, EdgeUnique
-		case a.Connection != nil && !*a.Connection:
-			f.typ, ef.kind = "["+t.name+"!]!", EdgeList
-		default:
-			f.typ, f.conn, ef.kind = t.name+"Connection!", t, EdgeConnection
-		}
-		// The edge's method is its Go name, as entgql's is: the entity's
-		// relations are in its Edges field, so the name is free. gqlgen binds
-		// a field to the method its name matches, so @goField names the
-		// method only when the field's name does not.
-		ds, err := directives(a.Directives, where)
-		if err != nil {
-			return err
-		}
-		var bind []directive
-		if b := bindTo(ed.GoName); !gqlgenMatches(f.name, ed.GoName) || a.MaxList != 0 {
-			if a.MaxList != 0 {
-				// In @goField, which gqlgen needs no configuration for and reads no further:
-				// a directive of its own would have to be skip_runtime in gqlgen.yml.
-				b.text = strings.TrimSuffix(b.text, ")") + ", maxList: " + strconv.Itoa(a.MaxList) + ")"
-			}
-			bind = []directive{b}
-		}
-		f.dirs = append(bind, ds...)
-		if err := add(f, where); err != nil {
+		if err := add(f, f.where); err != nil {
 			return err
 		}
 		o.edges = append(o.edges, ef)
@@ -465,6 +478,109 @@ func (g *graph) fill(o *object) error {
 		return fmt.Errorf("schema %s: its type would have no fields: each field is skipped, sensitive or a foreign key, and each edge is skipped or leads to a skipped schema; skip the schema with graphql.Skip()", e.Name)
 	}
 	return nil
+}
+
+// plainField returns the GraphQL field of o's field i, and false when the
+// type does not show it. It adds the getter the field binds to, if any, to
+// o.
+func (g *graph) plainField(o *object, i int) (gqlField, bool, error) {
+	e, f, a := o.ent, o.ent.Fields[i], o.fanns[i]
+	switch {
+	case o.node && i == e.PrimaryKey[0], f.Sensitive, f.Implicit != "", o.fks[f.Name], a.Skip&graphql.SkipType != 0:
+		return gqlField{}, false, nil
+	}
+	where := "schema " + e.Name + ", field " + f.Name
+	name, err := o.fieldName(i)
+	if err != nil {
+		return gqlField{}, false, err
+	}
+	typ, err := g.fieldType(o, f, a, where)
+	if err != nil {
+		return gqlField{}, false, err
+	}
+	if !f.Nullable {
+		typ += "!"
+	}
+	var dirs []directive
+	switch v := g.goValue(f, a); {
+	case !v.own || f.Type == "bytes" && !f.Nullable:
+		// gqlgen binds a field only to the Go type of its scalar: a getter
+		// converts the field's own. An empty blob of a Bytes! needs one too:
+		// modernc.org/sqlite reads it as nil, which gqlgen refuses in a T!.
+		gt := Getter{Field: i, Method: f.GoName + "GQL", Returns: v.getter, Pkg: v.getterPkg}
+		o.getters = append(o.getters, gt)
+		dirs = append(dirs, bindTo(gt.Method))
+	case !strings.EqualFold(name, f.GoName):
+		// gqlgen binds a field to the Go field of its name, ignoring case.
+		dirs = append(dirs, bindTo(f.GoName))
+	}
+	ds, err := directives(a.Directives, where)
+	if err != nil {
+		return gqlField{}, false, err
+	}
+	return gqlField{name: name, typ: typ, desc: f.Comment, dirs: append(dirs, ds...), where: where}, true, nil
+}
+
+// edgeFieldOf returns the GraphQL field of o's edge i and its edgeField,
+// and false when the type does not show it: the edge or its target is
+// skipped.
+func (g *graph) edgeFieldOf(o *object, i int) (gqlField, edgeField, bool, error) {
+	e, ed, a := o.ent, o.ent.Edges[i], o.eanns[i]
+	t := g.byName[ed.Target]
+	if a.Skip&graphql.SkipType != 0 || t == nil { // skipped, or its target is
+		return gqlField{}, edgeField{}, false, nil
+	}
+	where := "schema " + e.Name + ", edge " + ed.Name
+	name, err := o.edgeName(i)
+	if err != nil {
+		return gqlField{}, edgeField{}, false, err
+	}
+	f := gqlField{name: name, desc: ed.Comment, where: where}
+	ef := edgeField{edge: i, name: name, target: t}
+	switch {
+	case a.MaxList < 0:
+		return gqlField{}, edgeField{}, false, fmt.Errorf("%s: graphql.MaxList(%d): a list reads at least one row", where, a.MaxList)
+	case a.MaxList != 0 && (ed.Unique || a.Connection == nil || *a.Connection):
+		return gqlField{}, edgeField{}, false, fmt.Errorf("%s: graphql.MaxList on an edge that is no list, which first and last bound; add graphql.Connection(false) to a to-many edge", where)
+	}
+	switch {
+	case ed.Unique:
+		// Nullable even when Required: a row reads the edge's target in a
+		// statement of its own, which a policy, a hook, a replica's
+		// lag or a delete may leave empty, and a non-null field that read
+		// null would null the page around it.
+		f.typ, ef.kind = t.name, EdgeUnique
+	case a.Connection != nil && !*a.Connection:
+		f.typ, ef.kind = "["+t.name+"!]!", EdgeList
+	default:
+		f.typ, f.conn, ef.kind = t.name+"Connection!", t, EdgeConnection
+	}
+	// The edge's method is its Go name, as entgql's is: the entity's
+	// relations are in its Edges field, so the name is free. gqlgen binds
+	// a field to the method its name matches, so @goField names the
+	// method only when the field's name does not.
+	ds, err := directives(a.Directives, where)
+	if err != nil {
+		return gqlField{}, edgeField{}, false, err
+	}
+	f.dirs = append(edgeBind(f.name, ed.GoName, a.MaxList), ds...)
+	return f, ef, true, nil
+}
+
+// edgeBind returns the @goField directive that binds the edge field name to
+// its method goName, with maxList when it is not 0. It returns nil when
+// gqlgen binds the field by its name alone.
+func edgeBind(name, goName string, maxList int) []directive {
+	if gqlgenMatches(name, goName) && maxList == 0 {
+		return nil
+	}
+	b := bindTo(goName)
+	if maxList != 0 {
+		// In @goField, which gqlgen needs no configuration for and reads no further:
+		// a directive of its own would have to be skip_runtime in gqlgen.yml.
+		b.text = strings.TrimSuffix(b.text, ")") + ", maxList: " + strconv.Itoa(maxList) + ")"
+	}
+	return []directive{b}
 }
 
 // fieldName is the GraphQL name of o's field i.
