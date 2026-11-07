@@ -31,6 +31,7 @@ var publicAPI = []string{
 	"Cursor.MarshalGQLContext",
 	"Cursor.UnmarshalGQLContext",
 	"CursorTerm",
+	"DB",
 	"DBFromContext",
 	"DecodeCursor",
 	"DecodeID",

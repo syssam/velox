@@ -266,9 +266,11 @@ const budgetMutation = `mutation { updateLabel(id: "` + label1 + `", input: {ran
 // budget stays. On 2026-11-06 the resolver wrote the update itself, from the
 // input's Setters: an UPDATE of columns alone is one statement, atomic by
 // itself, so it runs in no savepoint of its own: 2 statements, 0 savepoint
-// statements and 440 allocations.
+// statements and 440 allocations. On 2026-11-07 the resolver's update
+// became UpdateQuery.One, which reads the row's key first: 3 statements, 0
+// savepoint statements and 484 allocations.
 const (
-	mutationStmts        = 2
+	mutationStmts        = 3
 	mutationAllocsBudget = 550
 )
 

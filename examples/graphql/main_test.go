@@ -957,7 +957,7 @@ func TestUpdatePost(t *testing.T) {
 		stmts: []string{
 			authorCheck + ` [1 1 2]`,
 			// The keys of the rows the update writes the edges of.
-			`SELECT "id" FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`,
+			`SELECT "id" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
 			`UPDATE "posts" SET "published_at" = ? WHERE "id" = ? AND "org_id" = ? [<nil> 1 1]`,
 			// The tags to remove the caller may read, then their join rows.
 			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT ? [1 1]`,
@@ -1054,7 +1054,7 @@ func TestUnlinkOtherOrg(t *testing.T) {
 		query: `mutation { updateLabel(id: "` + label1 + `", input: {removePostIDs: ["` + post5 + `"]}) { name } }`,
 		want:  `{"data": {"updateLabel": {"name": "go"}}}`,
 		stmts: []string{
-			`SELECT "id" FROM "tags" WHERE "id" = ? [1]`,
+			`SELECT "id" FROM "tags" WHERE "id" = ? LIMIT ? [1 2]`,
 			// Post 5 is not acme's: no join row is deleted.
 			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT ? [5 1 1]`,
 			selTags + ` WHERE "id" = ? LIMIT ? [1 2]`,
@@ -1065,7 +1065,7 @@ func TestUnlinkOtherOrg(t *testing.T) {
 		query: `mutation { updateLabel(id: "` + label1 + `", input: {clearPosts: true}) { name } }`,
 		want:  `{"data": {"updateLabel": {"name": "go"}}}`,
 		stmts: []string{
-			`SELECT "id" FROM "tags" WHERE "id" = ? [1]`,
+			`SELECT "id" FROM "tags" WHERE "id" = ? LIMIT ? [1 2]`,
 			// The label's join rows a page at a time, the posts of them
 			// acme may read (the join table has no scope of its own, so
 			// post 5's row is among them), and only their join rows.

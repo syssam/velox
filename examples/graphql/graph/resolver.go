@@ -7,7 +7,6 @@ package graph
 
 import (
 	"context"
-	"errors"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
@@ -47,11 +46,7 @@ func Author(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return 0, err
-	}
-	ok, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(viewer)).Exists(ctx)
+	ok, err := veloxgql.DB(ctx).Query[gen.User]().Where(gen.Users.ID.EQ(viewer)).Exists(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -91,41 +86,6 @@ func OwnPost(ctx context.Context, db *velox.DB, id string) (int64, error) {
 // GraphQL type typ the request may read or change.
 func NotFound(ctx context.Context, typ string) error {
 	return codedError(ctx, "no "+typ+" has this ID", veloxgql.CodeNotFound)
-}
-
-// update writes set, an update input's setters and the resolver's own, to
-// the row of E whose key column id holds key, and returns the row as
-// written. It runs on the DB in ctx, in the mutation's transaction, so an
-// edge's error rolls the row back. The UPDATE is under E's policies: a row
-// it does not change is NOT_FOUND, named typ. The row is read back without
-// the Read policy, so an update that moves it out of the request's view
-// still returns it. An input that sets nothing changes nothing: the row is
-// read under the Read policy.
-func update[E any, PE velox.Entity[E]](ctx context.Context, id velox.NumberCol[E, int64], key int64, typ string, set []velox.Setter[E]) (*E, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	read := ctx
-	if len(set) > 0 {
-		n, err := db.Update[E, PE]().Where(id.EQ(key)).Set(set...).Exec(ctx)
-		if err != nil {
-			return nil, err
-		}
-		switch {
-		case n == 0:
-			return nil, NotFound(ctx, typ)
-		case n < 0:
-			// A row the Write policy hides would read as written.
-			return nil, errors.New("update: the driver did not report the rows it updated")
-		}
-		read = velox.WithoutPolicy(ctx, "graphql: the row this update wrote")
-	}
-	x, err := db.Query[E, PE]().Where(id.EQ(key)).One(read)
-	if velox.IsNotFound(err) {
-		return nil, NotFound(ctx, typ)
-	}
-	return x, err
 }
 
 // codedError is the error message with the code code, which

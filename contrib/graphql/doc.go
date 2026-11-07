@@ -195,14 +195,10 @@
 //
 // The application writes the root query's resolvers: Node and Nodes for
 // node and nodes, and for each QueryField a Paginate<GoPlural> of a query on
-// the DB that veloxgql.DBFromContext reads:
+// the request's DB, veloxgql.DB(ctx):
 //
 //	func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
-//		db, err := veloxgql.DBFromContext(ctx)
-//		if err != nil {
-//			return nil, err
-//		}
-//		return gen.PaginateUsers(ctx, db.Query[gen.User](), after, first, before, last, orderBy, where)
+//		return gen.PaginateUsers(ctx, veloxgql.DB(ctx).Query[gen.User](), after, first, before, last, orderBy, where)
 //	}
 //
 // The query may hold the application's own filters and With loads. It must
@@ -239,12 +235,8 @@
 //		if err != nil {
 //			return nil, err
 //		}
-//		db, err := veloxgql.DBFromContext(ctx)
-//		if err != nil {
-//			return nil, err
-//		}
 //		x := &gen.Post{AuthorID: viewer(ctx)}
-//		if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+//		if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
 //			return nil, err
 //		}
 //		return x, nil
@@ -255,19 +247,19 @@
 //		...
 //		set, err := input.Setters()
 //		...
-//		n, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(key)).Set(set...).Exec(ctx)
-//		...
-//		return db.Query[gen.Post]().Where(gen.Posts.ID.EQ(key)).One(velox.WithoutPolicy(ctx, "the row this update wrote"))
+//		x, err := veloxgql.DB(ctx).Update[gen.Post]().Where(gen.Posts.ID.EQ(key)).Set(set...).One(ctx)
+//		if velox.IsNotFound(err) {
+//			return nil, notFound(ctx, "Post")
+//		}
+//		return x, err
 //	}
 //
-// examples/graphql's update helper is the whole of it: n 0 is NOT_FOUND, a
-// row the caller may not change or that does not exist, and an input that
-// sets nothing reads the row under the Read policy instead. The re-read
-// without the policies returns the row as written, even when the update
-// took it out of what the caller may read; its UPDATE was scoped by the
-// Read policy, so the caller could read the row before it wrote it. On
-// MySQL the DSN needs clientFoundRows=true for n: without it MySQL counts
-// only changed rows, and an UPDATE that changes nothing counts 0.
+// UpdateQuery.One is ent's UpdateOne: it writes the one row its conditions
+// match and returns it as written, read back by its key without the
+// policies, so even an update that took the row out of what the caller may
+// read returns it. A row the caller may not read or change, or that does
+// not exist, is velox.ErrNotFound, which the resolver shows as NOT_FOUND;
+// an input that sets nothing returns the row as it is.
 //
 // A Sensitive field is in the inputs, write-only: no type, where input or
 // order has it, and the input's String and GoString leave it out, so a
@@ -522,9 +514,10 @@
 // are refused, and the default allows about 70 such filters, while a page that
 // filters on two or three costs about 10000. Cost cannot see which columns
 // are indexed: a predicate on a column with no index scans the table too, and
-// a server with large tables lowers MaxCost. On a mutation, an input object adds a
-// statement for the row it reads back, two for a non-empty <edge>IDs, add<Edge>IDs
-// or remove<Edge>IDs, one for an <edge>ID and three for a clear<Edge>: true, a page
+// a server with large tables lowers MaxCost. On a mutation, an input object adds
+// two statements, for the read of the row's key (UpdateQuery.One's) and the row
+// it reads back; two more for a non-empty <edge>IDs, add<Edge>IDs or
+// remove<Edge>IDs, five for an <edge>ID and three for a clear<Edge>: true, a page
 // of links, which a longer edge repeats.
 //
 // Every alias counts, and so does every branch of a fragment (an upper bound),

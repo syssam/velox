@@ -151,6 +151,7 @@ condition, or use `A.Posts.Has()` and `HasWhere` in a `Where`.
 | `client.User.Create().SetName("a").Save(ctx)` | `db.Insert(&gen.User{Name: "a"}).Exec(ctx)` |
 | `client.User.Query().All(ctx)` | `db.Query[gen.User]().Unbounded().All(ctx)`, or with a `Limit` |
 | `client.User.Update().Where(...).SetAge(3).Save(ctx)` | `db.Update[gen.User]().Where(...).Set(U.Age.Set(3)).Exec(ctx)` |
+| `client.User.UpdateOneID(id).SetAge(3).Save(ctx)` | `db.Update[gen.User]().Where(U.ID.EQ(id)).Set(U.Age.Set(3)).One(ctx)`, the row as written |
 | `client.User.Delete().Exec(ctx)` (every row) | `db.Delete[gen.User]().All().Exec(ctx)` |
 
 A `Query` with neither a `Limit` nor `Unbounded()` fails with `ErrUnbounded`.
@@ -265,7 +266,8 @@ a table rebuild on SQLite.
   `client.Todo.Create().SetInput(input).Save(ctx)`, velox's calls
   `input.Setters()`, which returns velox setters, and writes them with
   `db.Insert(x).Set(set...)`, `x` the row the resolver has already set what
-  the client must not choose on, or `db.Update[T]().Where(...).Set(set...)`.
+  the client must not choose on, or
+  `db.Update[T]().Where(...).Set(set...).One(ctx)`, ent's `UpdateOne`.
   As in entgql, a null in an input is a field not given; `clear<Field>:
   true` sets NULL. No delete is generated: a delete is the application's
   `db.Delete[T]()`.
@@ -273,7 +275,7 @@ a table rebuild on SQLite.
   `client.Todo.Query().Paginate(ctx, after, first, before, last,
   ent.WithTodoOrder(orderBy), ent.WithTodoFilter(where.Filter))`, velox's
   calls `gen.PaginateTodos(ctx, db.Query[gen.Todo](), after, first, before,
-  last, orderBy, where)`, with `db` from `veloxgql.DBFromContext(ctx)`. The
+  last, orderBy, where)`, with `db` from `veloxgql.DB(ctx)`, as entgql's `ent.FromContext(ctx)`. The
   query may carry the application's own filters; it must not be ordered.
   A where input's `Pred(ctx)` is entgql's `P()`: a `velox.Pred[T]` for any
   query.

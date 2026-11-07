@@ -30,12 +30,8 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostI
 	if err != nil {
 		return nil, err
 	}
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
 	x := &gen.Post{AuthorID: viewer}
-	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+	if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -45,10 +41,7 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostI
 // author may change it, and UpdatePostInput has no authorID, so a post stays
 // its author's.
 func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
+	db := veloxgql.DB(ctx)
 	key, err := OwnPost(ctx, db, id)
 	if err != nil {
 		return nil, err
@@ -57,7 +50,11 @@ func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.
 	if err != nil {
 		return nil, err
 	}
-	return update(ctx, gen.Posts.ID, key, "Post", set)
+	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(key)).Set(set...).One(ctx)
+	if velox.IsNotFound(err) {
+		return nil, NotFound(ctx, "Post")
+	}
+	return x, err
 }
 
 // DeletePost is the resolver for the deletePost field, which the application
@@ -69,11 +66,7 @@ func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.
 // is rolled back, not reported done. It runs in the operation's transaction,
 // in a savepoint of its own.
 func (r *mutationResolver) DeletePost(ctx context.Context, id string) (string, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return "", err
-	}
-	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+	err := veloxgql.DB(ctx).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		key, err := OwnPost(ctx, tx, id)
 		if err != nil {
 			return err
@@ -101,12 +94,8 @@ func (r *mutationResolver) CreateLabel(ctx context.Context, input gen.CreateLabe
 	if err != nil {
 		return nil, err
 	}
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
 	x := new(gen.Tag)
-	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+	if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -122,7 +111,11 @@ func (r *mutationResolver) UpdateLabel(ctx context.Context, id string, input gen
 	if err != nil {
 		return nil, err
 	}
-	return update(ctx, gen.Tags.ID, key, "Label", set)
+	x, err := veloxgql.DB(ctx).Update[gen.Tag]().Where(gen.Tags.ID.EQ(key)).Set(set...).One(ctx)
+	if velox.IsNotFound(err) {
+		return nil, NotFound(ctx, "Label")
+	}
+	return x, err
 }
 
 // CreateUser is the resolver for the createUser field: the user's password
@@ -136,12 +129,8 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserI
 	if err != nil {
 		return nil, err
 	}
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
 	x := &gen.User{PasswordHash: hash}
-	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+	if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -166,7 +155,11 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input gen.
 	if err != nil {
 		return nil, err
 	}
-	return update(ctx, gen.Users.ID, key, "User", set)
+	x, err := veloxgql.DB(ctx).Update[gen.User]().Where(gen.Users.ID.EQ(key)).Set(set...).One(ctx)
+	if velox.IsNotFound(err) {
+		return nil, NotFound(ctx, "User")
+	}
+	return x, err
 }
 
 // Node is the resolver for the node field.
@@ -181,38 +174,22 @@ func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Nod
 
 // Posts is the resolver for the posts field.
 func (r *queryResolver) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return gen.PaginatePosts(ctx, db.Query[gen.Post](), after, first, before, last, orderBy, where)
+	return gen.PaginatePosts(ctx, veloxgql.DB(ctx).Query[gen.Post](), after, first, before, last, orderBy, where)
 }
 
 // Labels is the resolver for the labels field.
 func (r *queryResolver) Labels(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) (*gen.LabelConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return gen.PaginateLabels(ctx, db.Query[gen.Tag](), after, first, before, last, orderBy, where)
+	return gen.PaginateLabels(ctx, veloxgql.DB(ctx).Query[gen.Tag](), after, first, before, last, orderBy, where)
 }
 
 // Users is the resolver for the users field.
 func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return gen.PaginateUsers(ctx, db.Query[gen.User](), after, first, before, last, orderBy, where)
+	return gen.PaginateUsers(ctx, veloxgql.DB(ctx).Query[gen.User](), after, first, before, last, orderBy, where)
 }
 
 // PublishedPosts is the resolver for the publishedPosts field.
 func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return gen.PaginatePosts(ctx, db.Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
+	return gen.PaginatePosts(ctx, veloxgql.DB(ctx).Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
 }
 
 // Initials is the resolver for the initials field: the first letter of each

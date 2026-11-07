@@ -67,12 +67,13 @@ const stringUnit = 128
 //     given, as a LIKE reads the whole table, and each non-empty has<Edge>With,
 //     whose subquery runs for each row it reads. The default MaxCost allows about
 //     70 of them;
-//   - on a mutation, an input object adds a statement for the row it reads back,
-//     two for a non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, five for an
-//     <edge>ID, a one-to-one edge's re-point, and three for a clear<Edge>: true,
-//     a page of its links, the targets and the delete, a page being
-//     velox.EdgePage links; and one more when it has any of these, the read of
-//     the rows an update writes the edges of. A delete<T>, which the
+//   - on a mutation, an input object adds two statements, for the row it reads
+//     back and for the read of the row's key that an update's
+//     UpdateQuery.One, or an update with edges, sends first; two more for a
+//     non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, five for an
+//     <edge>ID, a one-to-one edge's re-point, and three for a clear<Edge>:
+//     true, a page of its links, the targets and the delete, a page being
+//     velox.EdgePage links. A delete<T>, which the
 //     application writes, of a type with connections or lists adds a statement
 //     for a check of its row and one for each, the links it deletes. Any
 //     mutation of the application's that names its fields so counts the same.
@@ -435,7 +436,9 @@ func (c *coster) writes(f *ast.Field, def *ast.FieldDefinition) int64 {
 		if err != nil || !ok {
 			continue
 		}
-		n := int64(1) // the row read back
+		// The row read back, and the read of its key and its lock, an
+		// update's UpdateQuery.One, which an update with edges sends as well.
+		n := int64(2)
 		edges := int64(0)
 		for k, val := range m {
 			switch {
@@ -454,10 +457,7 @@ func (c *coster) writes(f *ast.Field, def *ast.FieldDefinition) int64 {
 				edges += 5
 			}
 		}
-		if edges > 0 {
-			n += edges + 1 // the read of the rows whose edges an update writes
-		}
-		sum = add(sum, mul(n, statementCost))
+		sum = add(sum, mul(n+edges, statementCost))
 	}
 	return sum
 }

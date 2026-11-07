@@ -276,16 +276,16 @@ type Mutation { create(input: PostInput!): Post! ping(id: ID): Post! }
 		size        int
 		statements  int
 	}{
-		{"a column", `{ title: "x" }`, 2, 1},
-		{"clear a column", `{ clearTitle: true }`, 2, 1},
-		{"clear false", `{ clearTags: false }`, 2, 1},
+		{"a column", `{ title: "x" }`, 2, 2},
+		{"clear a column", `{ clearTitle: true }`, 2, 2},
+		{"clear false", `{ clearTags: false }`, 2, 2},
 		{"clear an edge", `{ clearTags: true }`, 2, 5},
 		{"add", `{ addTagIDs: ["1"] }`, 2, 4},
-		{"add none", `{ addTagIDs: [] }`, 1, 1},
+		{"add none", `{ addTagIDs: [] }`, 1, 2},
 		{"remove", `{ removeTagIDs: ["1", "2"] }`, 3, 4},
 		{"an edge's IDs", `{ tagIDs: ["1"] }`, 2, 4},
 		{"an edge's ID", `{ authorID: "1" }`, 2, 7},
-		{"null ID", `{ authorID: null }`, 2, 1},
+		{"null ID", `{ authorID: null }`, 2, 2},
 		{"all", `{ title: "x", clearTags: true, addTagIDs: ["1"], removeTagIDs: ["2"] }`, 5, 9},
 	} {
 		if got, want := base(`mutation { create(input: `+c.input+`) { id } }`, nil), cost(c.size, c.statements); got != want {

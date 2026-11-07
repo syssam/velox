@@ -1128,6 +1128,7 @@ func (u UUID) String() string
 func (u Uint64) MarshalGQL(w io.Writer)
 func Batch[E any](ctx context.Context, rows []*E)
 func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) int
+func DB(ctx context.Context) *velox.DB
 func DBFromContext(ctx context.Context) (*velox.DB, error)
 func DecodeCursor(s string) (Cursor, error)
 func DecodeID[K any](id, typ string) (K, error)

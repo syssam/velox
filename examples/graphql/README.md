@@ -77,11 +77,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    }
 
    func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
-   	db, err := veloxgql.DBFromContext(ctx)
-   	if err != nil {
-   		return nil, err
-   	}
-   	return gen.PaginateUsers(ctx, db.Query[gen.User](), after, first, before, last, orderBy, where)
+   	return gen.PaginateUsers(ctx, veloxgql.DB(ctx).Query[gen.User](), after, first, before, last, orderBy, where)
    }
 
    func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
@@ -93,22 +89,15 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    	if err != nil {
    		return nil, err
    	}
-   	db, err := veloxgql.DBFromContext(ctx)
-   	if err != nil {
-   		return nil, err
-   	}
    	x := &gen.Post{AuthorID: viewer}
-   	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+   	if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
    		return nil, err
    	}
    	return x, nil
    }
 
    func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
-   	db, err := veloxgql.DBFromContext(ctx)
-   	if err != nil {
-   		return nil, err
-   	}
+   	db := veloxgql.DB(ctx)
    	key, err := OwnPost(ctx, db, id)
    	if err != nil {
    		return nil, err
@@ -117,7 +106,11 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    	if err != nil {
    		return nil, err
    	}
-   	return update(ctx, gen.Posts.ID, key, "Post", set)
+   	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(key)).Set(set...).One(ctx)
+   	if velox.IsNotFound(err) {
+   		return nil, NotFound(ctx, "Post")
+   	}
+   	return x, err
    }
    ```
 
@@ -125,9 +118,11 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    I/O; the resolver writes them. The insert takes the row with what the
    client must not choose already on it (the author). It trusts that row's
    own fields, foreign keys included, so `Author` checks first that the
-   viewer is a user. `update` (`graph/resolver.go`) runs
-   `db.Update[gen.Post]().Set(set...)` on the row and reads it back;
-   `updateUser` appends a setter of its own, the password's hash, to the
+   viewer is a user. `veloxgql.DB(ctx)` is the request's DB, which the
+   extension puts there, in the mutation's transaction. The update's
+   `One` writes the one row and returns it as written, `velox.ErrNotFound`
+   when it names none the request may change, which the resolver shows as
+   `NOT_FOUND`; `updateUser` appends a setter of its own, the password's hash, to the
    input's. `OwnPost` lets only a post's author change it (`FORBIDDEN`
    otherwise). velox-graphql generates no
    delete: `DeletePost` is the application's, `OwnPost` and a scoped
@@ -207,21 +202,15 @@ and the operation commits. Outside a server, or in an operation
 `WithTxFilter` leaves out, a write with edge setters runs in a transaction
 of its own, so it is never half-written either.
 
-**The row returned.** `createX` returns the row as written. `update` reads
-its row back by its key without the policies, the organization scope among
-them: the caller just wrote it, so an update that moves the row out of the
-caller's Read view still returns it.
+**The row returned.** `createX` returns the row as written.
+`UpdateQuery.One` reads its row back by its key without the policies, the
+organization scope among them: the caller just wrote it, so an update that
+moves the row out of the caller's Read view still returns it.
 
 **Write permission.** An update that changes only edges (`addTagIDs` and
 nothing else) still needs permission to write the row: velox reads the rows
 it matches under the organization and the Read and Write policies before it
 writes their edges, so no edge changes on a row the caller cannot write.
-
-**MySQL** needs `clientFoundRows=true` in its DSN
-(`user:pass@tcp(host)/db?parseTime=true&clientFoundRows=true`). `update`
-checks the `UPDATE`'s row count, and without it MySQL counts only the rows
-whose values changed, so an update that sets a field to its current value
-would read as `NOT_FOUND`.
 
 ### The organization comes from a header only in this demo
 
@@ -421,11 +410,7 @@ pages every post:
 
 ```go
 func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return gen.PaginatePosts(ctx, db.Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
+	return gen.PaginatePosts(ctx, veloxgql.DB(ctx).Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
 }
 ```
 
