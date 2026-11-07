@@ -118,77 +118,18 @@ func (g *graph) mutationsOf(o *object) error {
 // It returns the fields for the SDL and, in the same order, for the Go code.
 func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []InputField, error) {
 	e := o.ent
-	skip, explicit := graphql.SkipMutationUpdateInput, func(a graphql.Annotation) *bool { return a.UpdateInput }
+	skip := graphql.SkipMutationUpdateInput
 	if create {
-		skip, explicit = graphql.SkipMutationCreateInput, func(a graphql.Annotation) *bool { return a.CreateInput }
+		skip = graphql.SkipMutationCreateInput
 	}
 	fs := newInputFields(typ)
 	var gos []InputField
-	for i, f := range e.Fields {
-		a := o.fanns[i]
-		if create && a.CreateDefault != nil && a.Skip&skip != 0 {
-			return nil, nil, fmt.Errorf("schema %s, field %s: graphql.CreateDefault on a field the create input leaves out", e.Name, f.Name)
-		}
-		switch {
-		case o.node && i == e.PrimaryKey[0], f.Implicit != "", o.fks[f.Name], a.Skip&skip != 0, !create && f.Immutable:
-			continue
-		}
-		// An UpdateDefault fills the field on update only: on create it is
-		// left out, unless nothing else fills it, which is a field that is
-		// not nullable and has no Default.
-		required := !f.Optional && !f.Nullable
-		in := !f.UpdateDefault || f.HasDefault || create && required
-		if p := explicit(a); p != nil {
-			in = *p
-		}
-		where := "schema " + e.Name + ", field " + f.Name
-		if !in {
-			if create && a.CreateDefault != nil {
-				return nil, nil, fmt.Errorf("%s: graphql.CreateDefault on a field the create input leaves out", where)
-			}
-			continue
-		}
-		name, err := o.fieldName(i)
+	for i := range e.Fields {
+		add, err := g.fieldInputs(o, fs, i, create, skip)
 		if err != nil {
 			return nil, nil, err
 		}
-		t, err := g.fieldType(o, f, a, where)
-		if err != nil {
-			return nil, nil, err
-		}
-		var def string
-		if create && a.CreateDefault != nil {
-			if def, err = createDefault(f, a.CreateDefault, where); err != nil {
-				return nil, nil, err
-			}
-			t += "!" // a value in Go: the default fills it
-		}
-		if create && required && !f.HasDefault && def == "" {
-			t += "!"
-		}
-		dirs, err := directives(a.Directives, where)
-		if err != nil {
-			return nil, nil, err
-		}
-		if err := fs.add(gqlField{name: name, typ: t, def: def, desc: f.Comment, dirs: inputDirs(dirs, t), where: where}); err != nil {
-			return nil, nil, err
-		}
-		v := g.goValue(f, a)
-		if f.Type == "json" && !v.own {
-			v.typ, v.pkg = v.getter, v.getterPkg
-		}
-		goName := goOf(name, f.GoName)
-		gos = append(gos, InputField{
-			Name: name, GoName: goName, Type: t, Kind: InputValue, Field: i, Edge: -1,
-			GoType: v.typ, GoPkg: v.pkg, Required: strings.HasSuffix(t, "!"),
-		})
-		if !create && f.Nullable {
-			cl := gqlField{name: "clear" + upper(name), typ: "Boolean", desc: "Sets the field " + f.Name + " to NULL.", dirs: dirs, where: where}
-			if err := fs.add(cl); err != nil {
-				return nil, nil, err
-			}
-			gos = append(gos, InputField{Name: cl.name, GoName: "Clear" + goName, Type: cl.typ, Kind: InputClear, Field: i, Edge: -1})
-		}
+		gos = append(gos, add...)
 	}
 	for i := range e.Edges {
 		if o.eanns[i].Skip&skip != 0 {
@@ -206,6 +147,102 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []I
 		}
 	}
 	return fs.list, gos, nil
+}
+
+// fieldInputs adds to fs the input fields of o's field i, on create or on
+// update, and returns them for the Go code. skip is the Skip flag that
+// leaves a field out of this input.
+func (g *graph) fieldInputs(o *object, fs *inputFields, i int, create bool, skip graphql.SkipMode) ([]InputField, error) {
+	e, f, a := o.ent, o.ent.Fields[i], o.fanns[i]
+	if create && a.CreateDefault != nil && a.Skip&skip != 0 {
+		return nil, fmt.Errorf("schema %s, field %s: graphql.CreateDefault on a field the create input leaves out", e.Name, f.Name)
+	}
+	switch {
+	case o.node && i == e.PrimaryKey[0], f.Implicit != "", o.fks[f.Name], a.Skip&skip != 0, !create && f.Immutable:
+		return nil, nil
+	}
+	where := "schema " + e.Name + ", field " + f.Name
+	if !inInput(f, a, create) {
+		if create && a.CreateDefault != nil {
+			return nil, fmt.Errorf("%s: graphql.CreateDefault on a field the create input leaves out", where)
+		}
+		return nil, nil
+	}
+	name, err := o.fieldName(i)
+	if err != nil {
+		return nil, err
+	}
+	t, def, err := g.inputType(o, i, create, where)
+	if err != nil {
+		return nil, err
+	}
+	dirs, err := directives(a.Directives, where)
+	if err != nil {
+		return nil, err
+	}
+	if err := fs.add(gqlField{name: name, typ: t, def: def, desc: f.Comment, dirs: inputDirs(dirs, t), where: where}); err != nil {
+		return nil, err
+	}
+	v := g.goValue(f, a)
+	if f.Type == "json" && !v.own {
+		v.typ, v.pkg = v.getter, v.getterPkg
+	}
+	goName := goOf(name, f.GoName)
+	gos := []InputField{{
+		Name: name, GoName: goName, Type: t, Kind: InputValue, Field: i, Edge: -1,
+		GoType: v.typ, GoPkg: v.pkg, Required: strings.HasSuffix(t, "!"),
+	}}
+	if create || !f.Nullable {
+		return gos, nil
+	}
+	cl := gqlField{name: "clear" + upper(name), typ: "Boolean", desc: "Sets the field " + f.Name + " to NULL.", dirs: dirs, where: where}
+	if err := fs.add(cl); err != nil {
+		return nil, err
+	}
+	return append(gos, InputField{Name: cl.name, GoName: "Clear" + goName, Type: cl.typ, Kind: InputClear, Field: i, Edge: -1}), nil
+}
+
+// inInput reports whether the field f, annotated a, is in the create or
+// the update input. CreateInput or UpdateInput decides when it is set.
+//
+// An UpdateDefault fills the field on update only: on create it is left
+// out, unless nothing else fills it, which is a field that is not nullable
+// and has no Default.
+func inInput(f *plugin.Field, a graphql.Annotation, create bool) bool {
+	explicit := a.UpdateInput
+	if create {
+		explicit = a.CreateInput
+	}
+	if explicit != nil {
+		return *explicit
+	}
+	required := !f.Optional && !f.Nullable
+	return !f.UpdateDefault || f.HasDefault || create && required
+}
+
+// inputType returns the GraphQL type of o's field i in the create or the
+// update input, and its default, as " = true", or "" for none.
+func (g *graph) inputType(o *object, i int, create bool, where string) (string, string, error) {
+	f, a := o.ent.Fields[i], o.fanns[i]
+	t, err := g.fieldType(o, f, a, where)
+	if err != nil {
+		return "", "", err
+	}
+	if !create {
+		return t, "", nil
+	}
+	var def string
+	if a.CreateDefault != nil {
+		if def, err = createDefault(f, a.CreateDefault, where); err != nil {
+			return "", "", err
+		}
+		t += "!" // a value in Go: the default fills it
+	}
+	required := !f.Optional && !f.Nullable
+	if required && !f.HasDefault && def == "" {
+		t += "!"
+	}
+	return t, def, nil
 }
 
 // edgeInput is an input field of an edge, for the SDL and for the Go code.
@@ -243,16 +280,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	t := g.byName[ed.Target]
 	where := "schema " + o.ent.Name + ", edge " + ed.Name
 	if t == nil || !t.node {
-		// A required key on o's own row that the create input could never
-		// set. When the target's row holds the key, it writes none of its own.
-		if create && ed.Unique && ed.Required && ed.OwnsKey {
-			why := "is skipped"
-			if t != nil {
-				why = "is not a Node"
-			}
-			return nil, fmt.Errorf("%s: a required edge whose target %s %s: Create%sInput could never set it; skip the edge's create input with graphql.Skip(graphql.SkipMutationCreateInput), and set its key on the x the resolver gives Create%[4]sInput.Create, or in a hook", where, ed.Target, why, o.name)
-		}
-		return nil, nil
+		return nil, unsettableEdge(o, ed, t, create, where)
 	}
 	name, err := o.edgeName(i)
 	if err != nil {
@@ -261,56 +289,16 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	fk := g.keyField(ed)
 	immutable := ed.Immutable || fk != nil && fk.Immutable
 	nullable := fk == nil || fk.Nullable
-	dirs, err := directives(o.eanns[i].Directives, where)
+	dirs, err := edgeInputDirs(o, i, where)
 	if err != nil {
 		return nil, err
 	}
-	// A key on o's row brings its own directives first, as to its where
-	// predicates.
-	if ed.OwnsKey && ed.FieldOn == o.ent.Name {
-		if k := slices.IndexFunc(o.ent.Fields, func(f *plugin.Field) bool { return f.Name == ed.Field }); k >= 0 {
-			kds, err := directives(o.fanns[k].Directives, "schema "+o.ent.Name+", field "+ed.Field)
-			if err != nil {
-				return nil, err
-			}
-			dirs = unite(kds, dirs)
-		}
-	}
-	// The Go names follow the GraphQL names' parts: the edge's Go name, when
-	// the GraphQL name was made from it, and its singular. The singular is
-	// ent's (MutationAdd), of the lowercase name, never of a capitalised one:
-	// the edge name's for an edge the GraphQL name was made from, so children
-	// gives childIDs and ChildIDs; a renamed edge's GraphQL name's, so a
-	// rename to people gives addPersonIDs and AddPersonIDs.
 	goEdge := goOf(name, ed.GoName)
-	one, many := upper(plugin.Singular(name)), plugin.Singular(name)
-	goOne := one
-	if camel(ed.GoName) == name {
-		goOne = plugin.GoName(plugin.Singular(ed.Name))
-		many = camel(goOne)
-		one = upper(many)
-	}
+	one, many, goOne := edgeInputNames(name, ed)
 	var out []edgeInput
-	// The descriptions say what the Go docs of the input's fields say.
 	add := func(name, typ, goName string, kind InputKind) {
-		var desc string
-		switch kind {
-		case InputEdgeID:
-			desc = fmt.Sprintf("The ID of the %s the edge %s leads to.", t.name, ed.Name)
-		case InputEdgeIDs:
-			desc = fmt.Sprintf("The IDs of the %s nodes the edge %s leads to.", t.name, ed.Name)
-		case InputAddIDs:
-			desc = fmt.Sprintf("The IDs of %s nodes to add to the edge %s.", t.name, ed.Name)
-		case InputRemoveIDs:
-			desc = fmt.Sprintf("The IDs of %s nodes to remove from the edge %s; an ID the edge does not lead to is ignored.", t.name, ed.Name)
-		case InputClearEdge:
-			desc = fmt.Sprintf("Removes every %s from the edge %s, before the IDs to remove and to add.", t.name, ed.Name)
-			if ed.Unique {
-				desc = fmt.Sprintf("Unlinks the edge %s: it leads to no %s afterwards.", ed.Name, t.name)
-			}
-		}
 		out = append(out, edgeInput{
-			name: name, typ: typ, desc: desc, dirs: inputDirs(dirs, typ), where: where,
+			name: name, typ: typ, desc: edgeInputDesc(kind, ed, t), dirs: inputDirs(dirs, typ), where: where,
 			goField: InputField{Name: name, GoName: goName, Type: typ, Kind: kind, Field: -1, Edge: i, Target: t.name, Required: strings.HasSuffix(typ, "!")},
 		})
 	}
@@ -372,6 +360,88 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 		clearEdge()
 	}
 	return out, nil
+}
+
+// unsettableEdge returns the error of a required edge ed of o whose key is
+// on o's row and whose target t is skipped (nil) or not a Node, on create.
+// It returns nil for any other such edge, which has no input.
+func unsettableEdge(o *object, ed *plugin.Edge, t *object, create bool, where string) error {
+	// A required key on o's own row that the create input could never
+	// set. When the target's row holds the key, it writes none of its own.
+	if !create || !ed.Unique || !ed.Required || !ed.OwnsKey {
+		return nil
+	}
+	why := "is skipped"
+	if t != nil {
+		why = "is not a Node"
+	}
+	return fmt.Errorf("%s: a required edge whose target %s %s: Create%sInput could never set it; skip the edge's create input with graphql.Skip(graphql.SkipMutationCreateInput), and set its key on the x the resolver gives Create%[4]sInput.Create, or in a hook", where, ed.Target, why, o.name)
+}
+
+// edgeInputDirs returns the directives the inputs of o's edge i carry: its
+// key's, when the key is on o's row, then the edge's own.
+func edgeInputDirs(o *object, i int, where string) ([]directive, error) {
+	ed := o.ent.Edges[i]
+	dirs, err := directives(o.eanns[i].Directives, where)
+	if err != nil {
+		return nil, err
+	}
+	// A key on o's row brings its own directives first, as to its where
+	// predicates.
+	if !ed.OwnsKey || ed.FieldOn != o.ent.Name {
+		return dirs, nil
+	}
+	k := slices.IndexFunc(o.ent.Fields, func(f *plugin.Field) bool { return f.Name == ed.Field })
+	if k < 0 {
+		return dirs, nil
+	}
+	kds, err := directives(o.fanns[k].Directives, "schema "+o.ent.Name+", field "+ed.Field)
+	if err != nil {
+		return nil, err
+	}
+	return unite(kds, dirs), nil
+}
+
+// edgeInputNames returns the parts of the input names of the edge ed, whose
+// GraphQL name is name: the singular for an add or remove input (one), for
+// a create input (many), and for their Go names (goOne).
+//
+// The Go names follow the GraphQL names' parts: the edge's Go name, when
+// the GraphQL name was made from it, and its singular. The singular is
+// ent's (MutationAdd), of the lowercase name, never of a capitalised one:
+// the edge name's for an edge the GraphQL name was made from, so children
+// gives childIDs and ChildIDs; a renamed edge's GraphQL name's, so a
+// rename to people gives addPersonIDs and AddPersonIDs.
+func edgeInputNames(name string, ed *plugin.Edge) (one, many, goOne string) {
+	one, many = upper(plugin.Singular(name)), plugin.Singular(name)
+	goOne = one
+	if camel(ed.GoName) == name {
+		goOne = plugin.GoName(plugin.Singular(ed.Name))
+		many = camel(goOne)
+		one = upper(many)
+	}
+	return one, many, goOne
+}
+
+// edgeInputDesc returns the description of an input of the edge ed to t of
+// the given kind. It says what the Go doc of the input's field says.
+func edgeInputDesc(kind InputKind, ed *plugin.Edge, t *object) string {
+	switch kind {
+	case InputEdgeID:
+		return fmt.Sprintf("The ID of the %s the edge %s leads to.", t.name, ed.Name)
+	case InputEdgeIDs:
+		return fmt.Sprintf("The IDs of the %s nodes the edge %s leads to.", t.name, ed.Name)
+	case InputAddIDs:
+		return fmt.Sprintf("The IDs of %s nodes to add to the edge %s.", t.name, ed.Name)
+	case InputRemoveIDs:
+		return fmt.Sprintf("The IDs of %s nodes to remove from the edge %s; an ID the edge does not lead to is ignored.", t.name, ed.Name)
+	case InputClearEdge:
+		if ed.Unique {
+			return fmt.Sprintf("Unlinks the edge %s: it leads to no %s afterwards.", ed.Name, t.name)
+		}
+		return fmt.Sprintf("Removes every %s from the edge %s, before the IDs to remove and to add.", t.name, ed.Name)
+	}
+	return ""
 }
 
 // requiredKey reports whether a Required edge of t that owns its key holds
