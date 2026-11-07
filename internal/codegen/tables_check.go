@@ -181,41 +181,53 @@ func (t *tabler) checkColumn(e *Entity, i int, f *Field, c *migrate.Column) {
 	}
 	switch t.d {
 	case velox.Postgres:
-		if f.Type == "enum" && st != "" && !ddl.StringType(t.d, st) {
-			switch {
-			case !pgIdent.MatchString(st):
-				t.fail(at, "SchemaType %s is not a lower-case identifier", st)
-			case pgBuiltin[st]:
-				t.fail(at, "SchemaType %s is a built-in PostgreSQL type, not an enum type name", st)
-			}
-		}
-		if _, native := enumType(e, f); f.Type == "enum" && native {
-			for _, v := range f.Enums {
-				if n := len(v.Value); n > pgEnumBytes {
-					t.fail(at, "enum value %s is %d bytes, over PostgreSQL's %d", enumValueName(v), n, pgEnumBytes)
-				}
-			}
-		}
-		if hasNUL(f) {
-			t.fail(at, "PostgreSQL text cannot hold a NUL byte")
-		}
+		t.checkPostgresColumn(e, f, at, st)
 	case velox.MySQL:
-		if f.Type == "enum" {
-			for _, v := range f.Enums {
-				if n := utf8.RuneCountInString(v.Value); n > mysqlEnumChars {
-					t.fail(at, "enum value %s is %d characters on MySQL, over its %d", enumValueName(v), n, mysqlEnumChars)
-				}
-			}
-			if st != "" && !ddl.StringType(t.d, st) {
-				t.fail(at, "its MySQL SchemaType %s is not a string type; drop it to get an enum(…) column, or give a string type to get a CHECK constraint", st)
+		t.checkMySQLColumn(e, f, c, at, st)
+	}
+}
+
+// checkPostgresColumn records what f's column, at at with the PostgreSQL
+// SchemaType st, holds that PostgreSQL cannot.
+func (t *tabler) checkPostgresColumn(e *Entity, f *Field, at place, st string) {
+	if f.Type == "enum" && st != "" && !ddl.StringType(t.d, st) {
+		switch {
+		case !pgIdent.MatchString(st):
+			t.fail(at, "SchemaType %s is not a lower-case identifier", st)
+		case pgBuiltin[st]:
+			t.fail(at, "SchemaType %s is a built-in PostgreSQL type, not an enum type name", st)
+		}
+	}
+	if _, native := enumType(e, f); f.Type == "enum" && native {
+		for _, v := range f.Enums {
+			if n := len(v.Value); n > pgEnumBytes {
+				t.fail(at, "enum value %s is %d bytes, over PostgreSQL's %d", enumValueName(v), n, pgEnumBytes)
 			}
 		}
-		if n := utf8.RuneCountInString(c.Comment); n > mysqlColumnComment {
-			if fk, ok := t.fks[[3]string{e.TableSchema, e.Table, f.Column}]; ok && f.Implicit != "" {
-				at = edgePlace(fk.Owner, fk.Edge) // the comment is its edge's
+	}
+	if hasNUL(f) {
+		t.fail(at, "PostgreSQL text cannot hold a NUL byte")
+	}
+}
+
+// checkMySQLColumn records what f's column c, at at with the MySQL
+// SchemaType st, holds that MySQL cannot.
+func (t *tabler) checkMySQLColumn(e *Entity, f *Field, c *migrate.Column, at place, st string) {
+	if f.Type == "enum" {
+		for _, v := range f.Enums {
+			if n := utf8.RuneCountInString(v.Value); n > mysqlEnumChars {
+				t.fail(at, "enum value %s is %d characters on MySQL, over its %d", enumValueName(v), n, mysqlEnumChars)
 			}
-			t.fail(at, "its comment is %d characters on MySQL, over its %d", n, mysqlColumnComment)
 		}
+		if st != "" && !ddl.StringType(t.d, st) {
+			t.fail(at, "its MySQL SchemaType %s is not a string type; drop it to get an enum(…) column, or give a string type to get a CHECK constraint", st)
+		}
+	}
+	if n := utf8.RuneCountInString(c.Comment); n > mysqlColumnComment {
+		if fk, ok := t.fks[[3]string{e.TableSchema, e.Table, f.Column}]; ok && f.Implicit != "" {
+			at = edgePlace(fk.Owner, fk.Edge) // the comment is its edge's
+		}
+		t.fail(at, "its comment is %d characters on MySQL, over its %d", n, mysqlColumnComment)
 	}
 }
 

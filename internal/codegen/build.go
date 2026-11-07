@@ -653,74 +653,89 @@ func (b *builder) names() {
 // every enum type a SchemaType names. A derived name's error says which
 // option names it.
 func (b *builder) nameLengths() {
-	long := func(schema string, at loc, what, name, hint string) {
-		if len(name) > ddl.MaxName {
-			b.fail(50, schema, at, "%s %q is %d bytes; a database name has at most %d%s", what, name, len(name), ddl.MaxName, hint)
-		}
-	}
 	for _, n := range b.nodes {
 		e := n.ent
 		hint := ""
 		if e.Table == tableName(e.Name) {
 			hint = "; name it with schema.Table"
 		}
-		long(e.Name, tableLoc(e), "table name", e.Table, hint)
+		b.long(e.Name, tableLoc(e), "table name", e.Table, hint)
 		for _, f := range e.Fields {
-			switch s := b.implicits[f]; {
-			case s != nil:
-				hint := ""
-				if s.column == "" {
-					hint = "; name it with edge.Column"
-				}
-				long(s.owner.ent.Name, edgeLoc(s.ed), "column name", f.Column, hint)
-			case isDeclared(f):
-				hint := ""
-				if f.StorageKey == "" {
-					hint = "; name it with StorageKey"
-				}
-				long(e.Name, fieldLoc(f), "column name", f.Column, hint)
-				if st := f.SchemaType[velox.Postgres.String()]; f.Type == "enum" && st != "" && !ddl.StringType(velox.Postgres, st) {
-					long(e.Name, fieldLoc(f), "enum type name", st, "")
-				}
-			}
+			b.columnLength(e, f)
 		}
 		for i, li := range n.schema.Indexes {
-			long(e.Name, indexLoc(i, e.Indexes[i]), "index name", li.StorageKey, "")
+			b.long(e.Name, indexLoc(i, e.Indexes[i]), "index name", li.StorageKey, "")
 		}
 		// A bad annotation is declaredChecks's error.
 		declared, _ := checksOf(e)
 		for _, c := range declared {
-			long(e.Name, tableLoc(e), "check name", c.Name, "")
+			b.long(e.Name, tableLoc(e), "check name", c.Name, "")
 		}
 		for _, s := range n.edges {
 			for _, sym := range s.le.Symbols {
-				long(e.Name, edgeLoc(s.ed), "symbol", sym, "")
+				b.long(e.Name, edgeLoc(s.ed), "symbol", sym, "")
 			}
 			if s.ed.Rel.Kind != "M2M" || s.le.Inverse {
 				continue
 			}
-			// The join table's names are the assoc edge's, unless its
-			// inverse gives them.
-			by, hint := s, "; name it with edge.Table"
-			if p := s.pair; s.le.Table == "" && p != nil && p.le.Table != "" {
-				by = p
-			}
-			if by.le.Table != "" {
-				hint = ""
-			}
-			long(by.owner.ent.Name, edgeLoc(by.ed), "join table name", s.ed.Rel.Table, hint)
-			by, hint = s, "; name them with edge.Columns"
-			if p := s.pair; len(s.le.Columns) == 0 && p != nil && len(p.le.Columns) > 0 {
-				by = p
-			}
-			if len(by.le.Columns) > 0 {
-				hint = ""
-			}
-			for i, c := range s.ed.Rel.Columns {
-				if i == 0 || c != s.ed.Rel.Columns[0] { // rule 35
-					long(by.owner.ent.Name, edgeLoc(by.ed), "join table column name", c, hint)
-				}
-			}
+			b.joinLengths(s)
+		}
+	}
+}
+
+// long reports rule 50 when name is longer than ddl.MaxName; hint says
+// which option names it.
+func (b *builder) long(schema string, at loc, what, name, hint string) {
+	if len(name) > ddl.MaxName {
+		b.fail(50, schema, at, "%s %q is %d bytes; a database name has at most %d%s", what, name, len(name), ddl.MaxName, hint)
+	}
+}
+
+// columnLength checks rule 50 on the column of f, of e, and on the enum type
+// its PostgreSQL SchemaType names.
+func (b *builder) columnLength(e *Entity, f *Field) {
+	switch s := b.implicits[f]; {
+	case s != nil:
+		hint := ""
+		if s.column == "" {
+			hint = "; name it with edge.Column"
+		}
+		b.long(s.owner.ent.Name, edgeLoc(s.ed), "column name", f.Column, hint)
+	case isDeclared(f):
+		hint := ""
+		if f.StorageKey == "" {
+			hint = "; name it with StorageKey"
+		}
+		b.long(e.Name, fieldLoc(f), "column name", f.Column, hint)
+		if st := f.SchemaType[velox.Postgres.String()]; f.Type == "enum" && st != "" && !ddl.StringType(velox.Postgres, st) {
+			b.long(e.Name, fieldLoc(f), "enum type name", st, "")
+		}
+	}
+}
+
+// joinLengths checks rule 50 on the join table and join columns of the
+// assoc M2M edge s.
+func (b *builder) joinLengths(s *edgeState) {
+	// The join table's names are the assoc edge's, unless its
+	// inverse gives them.
+	by, hint := s, "; name it with edge.Table"
+	if p := s.pair; s.le.Table == "" && p != nil && p.le.Table != "" {
+		by = p
+	}
+	if by.le.Table != "" {
+		hint = ""
+	}
+	b.long(by.owner.ent.Name, edgeLoc(by.ed), "join table name", s.ed.Rel.Table, hint)
+	by, hint = s, "; name them with edge.Columns"
+	if p := s.pair; len(s.le.Columns) == 0 && p != nil && len(p.le.Columns) > 0 {
+		by = p
+	}
+	if len(by.le.Columns) > 0 {
+		hint = ""
+	}
+	for i, c := range s.ed.Rel.Columns {
+		if i == 0 || c != s.ed.Rel.Columns[0] { // rule 35
+			b.long(by.owner.ent.Name, edgeLoc(by.ed), "join table column name", c, hint)
 		}
 	}
 }
@@ -843,6 +858,13 @@ func (b *builder) validateNames(e *Entity) {
 			b.fail(56, e.Name, edgeLoc(ed), "its name is not ASCII, and velox derives column and Go names from it: rename it")
 		}
 	}
+	b.goNames(e)
+	b.enumGoNames(e)
+}
+
+// goNames checks that each field's and edge's Go name is an identifier,
+// unique among the fields and among the edges (rule 30).
+func (b *builder) goNames(e *Entity) {
 	for i, f := range e.Fields {
 		if !ident(f.GoName) {
 			b.fail(30, e.Name, fieldLoc(f), "its Go name %s is not a Go identifier", shown(f.GoName))
@@ -867,6 +889,11 @@ func (b *builder) validateNames(e *Entity) {
 			}
 		}
 	}
+}
+
+// enumGoNames checks that each enum value's Go name is unique within its
+// field (rule 30).
+func (b *builder) enumGoNames(e *Entity) {
 	for _, f := range e.Fields {
 		if f.Type != "enum" {
 			continue
@@ -912,7 +939,19 @@ var optionalNeeds = []struct {
 	{"time", "time field", 40, true},   // unset, a time is the zero time, which MySQL's strict mode refuses
 }
 
+// validateFields checks the fields of e: their names and columns, the rules
+// of each field, and those of a declared ID.
 func (b *builder) validateFields(e *Entity) {
+	b.uniqueFields(e)
+	for _, f := range e.Fields {
+		b.validateField(e, f)
+	}
+	b.validateID(e)
+}
+
+// uniqueFields checks that no field is declared twice (rule 1) and that no
+// two fields share a column (rule 2).
+func (b *builder) uniqueFields(e *Entity) {
 	seen := map[string]bool{}
 	for _, f := range e.Fields {
 		if !isDeclared(f) {
@@ -940,66 +979,84 @@ func (b *builder) validateFields(e *Entity) {
 		}
 		b.fail(2, e.Name, fieldLoc(f), "%s", reason)
 	}
-	for _, f := range e.Fields {
-		// An insert fills a Default or DefaultFunc into a zero field, so on a
-		// bool or number that is not a pointer it could never store false or
-		// 0. A Default that is the zero value stores what unset does.
-		if (len(f.Default) > 0 && !zeroDefault(f) || f.DefaultFunc) && !f.Nillable && (f.Type == "bool" || numeric[f.Type]) {
-			b.fail(36, e.Name, fieldLoc(f), "%s", defaultWayOut(f))
-		}
-		if b.keyEdges[f] == nil && uniqueUnset(e, f) { // a bound key is rule 38's
-			b.fail(54, e.Name, fieldLoc(f), "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide, or give it a DefaultFunc that a value a hook fills can stand in for, as velox-gen cannot see a hook")
-		}
-		for _, r := range optionalNeeds {
-			if f.Type == r.typ && f.Optional && !f.Nillable && len(f.Default) == 0 && (!r.funcOK || !f.DefaultFunc) {
-				b.fail(r.rule, e.Name, fieldLoc(f), "an Optional %s needs a Default or Nillable", r.noun)
-			}
-		}
-		// encoding/json cannot write an interface, func, chan or unsafe
-		// pointer, nor a complex number without its own encoding. A func or
-		// chan with a MarshalJSON stays refused: its nil is no pointer, slice
-		// or map, so the core could not take it as NULL.
-		unwritable := false
-		if f.Type == "json" && f.GoType != nil {
-			if noun, ok := unencodable[f.GoType.Kind]; ok && (!f.GoType.Marshaler || !complexKind[f.GoType.Kind]) {
-				unwritable = true
-				hint := ""
-				if complexKind[f.GoType.Kind] {
-					hint = "; give the type a MarshalJSON or MarshalText method"
-				}
-				b.fail(49, e.Name, fieldLoc(f), "its Go type %s is %s, which a JSON column cannot hold%s", f.GoType.Ident, noun, hint)
-			}
-		}
-		// An Optional JSON field's column holds NULL, so its Go field must
-		// hold nil: a slice, a map or a pointer, or a pointer that Nillable
-		// makes. A type no codec can write gets only the error above: adding
-		// Nillable would not help it.
-		if f.Type == "json" && f.Optional && !f.Nillable && f.GoType != nil && !unwritable && !nilKinds[f.GoType.Kind] {
-			b.fail(48, e.Name, fieldLoc(f), "an Optional JSON field of a non-nil-able type needs Nillable")
-		}
-		// No index covers a JSON column (rule 42 is a declared index's).
-		if f.Type == "json" && f.Unique {
-			b.fail(41, e.Name, fieldLoc(f), "a JSON field cannot be Unique")
-		}
-		switch f.Type {
-		case "enum":
-			b.validateEnum(e, f)
-		case "other":
-			if len(f.SchemaType) == 0 {
-				b.fail(26, e.Name, fieldLoc(f), "an Other field needs SchemaType")
-			}
+}
+
+// validateField checks the rules of one field f of e on its defaults,
+// uniqueness, JSON type, enum values and SchemaType.
+func (b *builder) validateField(e *Entity, f *Field) {
+	// An insert fills a Default or DefaultFunc into a zero field, so on a
+	// bool or number that is not a pointer it could never store false or
+	// 0. A Default that is the zero value stores what unset does.
+	if (len(f.Default) > 0 && !zeroDefault(f) || f.DefaultFunc) && !f.Nillable && (f.Type == "bool" || numeric[f.Type]) {
+		b.fail(36, e.Name, fieldLoc(f), "%s", defaultWayOut(f))
+	}
+	if b.keyEdges[f] == nil && uniqueUnset(e, f) { // a bound key is rule 38's
+		b.fail(54, e.Name, fieldLoc(f), "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide, or give it a DefaultFunc that a value a hook fills can stand in for, as velox-gen cannot see a hook")
+	}
+	for _, r := range optionalNeeds {
+		if f.Type == r.typ && f.Optional && !f.Nillable && len(f.Default) == 0 && (!r.funcOK || !f.DefaultFunc) {
+			b.fail(r.rule, e.Name, fieldLoc(f), "an Optional %s needs a Default or Nillable", r.noun)
 		}
 	}
-	if id := e.Fields[0]; !id.AutoID {
-		if id.Optional || id.Nillable || id.UpdateDefault {
-			b.fail(21, e.Name, fieldLoc(id), "the ID must be required, not Nillable, and have no UpdateDefault")
+	unwritable := b.unwritableJSON(e, f)
+	// An Optional JSON field's column holds NULL, so its Go field must
+	// hold nil: a slice, a map or a pointer, or a pointer that Nillable
+	// makes. A type no codec can write gets only the error above: adding
+	// Nillable would not help it.
+	if f.Type == "json" && f.Optional && !f.Nillable && f.GoType != nil && !unwritable && !nilKinds[f.GoType.Kind] {
+		b.fail(48, e.Name, fieldLoc(f), "an Optional JSON field of a non-nil-able type needs Nillable")
+	}
+	// No index covers a JSON column (rule 42 is a declared index's).
+	if f.Type == "json" && f.Unique {
+		b.fail(41, e.Name, fieldLoc(f), "a JSON field cannot be Unique")
+	}
+	switch f.Type {
+	case "enum":
+		b.validateEnum(e, f)
+	case "other":
+		if len(f.SchemaType) == 0 {
+			b.fail(26, e.Name, fieldLoc(f), "an Other field needs SchemaType")
 		}
-		if integer(id.Type) && len(id.SchemaDefault) > 0 {
-			b.fail(21, e.Name, fieldLoc(id), "an integer ID is assigned by the database and cannot have a SchemaDefault")
-		}
-		if !idTypes[id.Type] {
-			b.fail(22, e.Name, fieldLoc(id), "the ID cannot be of type %s", id.Type)
-		}
+	}
+}
+
+// unwritableJSON reports rule 49 for a JSON field f whose Go type
+// encoding/json cannot write, and returns whether it did.
+func (b *builder) unwritableJSON(e *Entity, f *Field) bool {
+	// encoding/json cannot write an interface, func, chan or unsafe
+	// pointer, nor a complex number without its own encoding. A func or
+	// chan with a MarshalJSON stays refused: its nil is no pointer, slice
+	// or map, so the core could not take it as NULL.
+	if f.Type != "json" || f.GoType == nil {
+		return false
+	}
+	noun, ok := unencodable[f.GoType.Kind]
+	if !ok || f.GoType.Marshaler && complexKind[f.GoType.Kind] {
+		return false
+	}
+	hint := ""
+	if complexKind[f.GoType.Kind] {
+		hint = "; give the type a MarshalJSON or MarshalText method"
+	}
+	b.fail(49, e.Name, fieldLoc(f), "its Go type %s is %s, which a JSON column cannot hold%s", f.GoType.Ident, noun, hint)
+	return true
+}
+
+// validateID checks the rules of an ID that the schema declares (rules 21
+// and 22).
+func (b *builder) validateID(e *Entity) {
+	id := e.Fields[0]
+	if id.AutoID {
+		return
+	}
+	if id.Optional || id.Nillable || id.UpdateDefault {
+		b.fail(21, e.Name, fieldLoc(id), "the ID must be required, not Nillable, and have no UpdateDefault")
+	}
+	if integer(id.Type) && len(id.SchemaDefault) > 0 {
+		b.fail(21, e.Name, fieldLoc(id), "an integer ID is assigned by the database and cannot have a SchemaDefault")
+	}
+	if !idTypes[id.Type] {
+		b.fail(22, e.Name, fieldLoc(id), "the ID cannot be of type %s", id.Type)
 	}
 }
 

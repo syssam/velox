@@ -359,16 +359,11 @@ func tableLoc(e *Entity) loc {
 // objects, then the foreign keys and their indexes. A column two fields share
 // (rule 2) and an enum type fields share give their objects once.
 func objects(g *Graph, refused map[*Index]bool) []object {
-	var out []object
-	var jts []joinTable
-	for _, jt := range joinTables(g) {
-		if !slices.ContainsFunc(jts, func(j joinTable) bool { return j.Owner == jt.Owner && j.Edge.Name == jt.Edge.Name }) {
-			jts = append(jts, jt) // an edge declared twice is rule 3's
-		}
-	}
+	jts := distinctJoinTables(g)
+	ol := &objectLister{tables: map[tableKey]*tableKeys{}, oldEnums: map[[2]string]bool{}}
 	for _, e := range g.Entities {
 		at := tableLoc(e)
-		out = append(out,
+		ol.out = append(ol.out,
 			object{space: spaceRelations, schema: e.TableSchema, name: e.Table, owner: e.Name, at: at, what: "table", table: e.Table},
 			object{space: spaceTypes, schema: e.TableSchema, name: e.Table, owner: e.Name, at: at, what: "table", table: e.Table},
 			object{space: spaceRelations, schema: e.TableSchema, name: ddl.Rebuild(e.Table), owner: e.Name, at: at, what: "rebuild table", table: e.Table},
@@ -376,96 +371,150 @@ func objects(g *Graph, refused map[*Index]bool) []object {
 	}
 	for _, jt := range jts {
 		at := edgeLoc(jt.Edge)
-		out = append(out,
+		ol.out = append(ol.out,
 			object{space: spaceRelations, schema: jt.Schema, name: jt.Table, owner: jt.Owner.Name, at: at, what: "join table", table: jt.Table},
 			object{space: spaceTypes, schema: jt.Schema, name: jt.Table, owner: jt.Owner.Name, at: at, what: "join table", table: jt.Table},
 			object{space: spaceRelations, schema: jt.Schema, name: ddl.Rebuild(jt.Table), owner: jt.Owner.Name, at: at, what: "rebuild table of join table " + jt.Table, table: jt.Table},
 		)
 	}
-
-	type tableKey struct{ schema, table string }
-	type keys struct {
-		pk      []string
-		indexes [][]string
-	}
-	tables := map[tableKey]*keys{} // the leading columns of each table's keys, for fkIndexed
-	oldEnums := map[[2]string]bool{}
 	for _, e := range g.Entities {
-		add := func(space nameSpace, name, what string, at loc) {
-			out = append(out, object{space: space, schema: e.TableSchema, name: name, owner: e.Name, at: at, what: what, table: e.Table})
-		}
-		addHelper := func(index, what string, at loc) {
-			out = append(out, object{space: spaceRelations, schema: e.TableSchema, name: ddl.NewIndex(index), owner: e.Name, at: at, what: "new-index helper of " + what, table: e.Table, helper: true})
-		}
-		id := e.Fields[0]
-		k := &keys{pk: []string{id.Column}}
-		tables[tableKey{e.TableSchema, e.Table}] = k
-		add(spaceRelations, pkName(e.Table), "primary key", tableLoc(e))
-		if integer(id.Type) {
-			add(spaceRelations, seqName(e.Table, id.Column), "identity sequence", fieldLoc(id))
-		}
-		for i, ix := range e.Indexes {
-			if refused[ix] {
-				continue
-			}
-			add(spaceRelations, ix.Name, indexAt(i), indexLoc(i, ix))
-			addHelper(ix.Name, indexAt(i), indexLoc(i, ix))
-			if ix.Where == "" {
-				k.indexes = append(k.indexes, ix.Columns)
-			}
-		}
-		ixs, fs := fieldIndexes(e, refused, velox.Postgres)
-		for i, ix := range ixs {
-			add(spaceRelations, ix.Name, "unique index of "+fieldAt(fs[i].Name), fieldLoc(fs[i]))
-			addHelper(ix.Name, "the unique index of "+fieldAt(fs[i].Name), fieldLoc(fs[i]))
-			k.indexes = append(k.indexes, ix.Columns)
-		}
-		seen := map[string]bool{}
-		for _, f := range e.Fields {
-			if seen[f.Column] {
-				continue // rules 1 and 2
-			}
-			seen[f.Column] = true
-			of := fieldAt(f.Name)
-			if f.Type == "enum" {
-				if name, native := enumType(e, f); native {
-					values := make([]string, len(f.Enums))
-					for i, v := range f.Enums {
-						values[i] = v.Value
-					}
-					out = append(out, object{space: spaceTypes, schema: e.TableSchema, name: name, owner: e.Name, at: fieldLoc(f), what: "enum type of " + of, values: values, table: e.Table})
-					if ok := [2]string{strings.ToLower(e.TableSchema), strings.ToLower(name)}; !oldEnums[ok] {
-						oldEnums[ok] = true
-						add(spaceTypes, ddl.OldEnum(name), "old enum type of "+of, fieldLoc(f))
-					}
-				}
-				add(spaceConstraints, checkName(e.Table, f.Column), "check of "+of, fieldLoc(f))
-			}
-			if !nullable(f) {
-				add(spaceConstraints, ddl.NotNull(e.Table, f.Column), "not-null check of "+of, fieldLoc(f))
-			}
-		}
-		// A bad annotation is declaredChecks's error.
-		declared, _ := checksOf(e)
-		for i, c := range declared { // sorted; a repeated name is declaredChecks's error
-			if i == 0 || declared[i-1].Name != c.Name {
-				add(spaceConstraints, c.Name, "check of table "+e.Table, tableLoc(e))
-			}
-		}
+		ol.entity(e, refused)
 	}
 	for _, jt := range jts {
-		tables[tableKey{jt.Schema, jt.Table}] = &keys{pk: jt.Columns[:]}
-		at := edgeLoc(jt.Edge)
-		add := func(space nameSpace, name, what string) {
-			out = append(out, object{space: space, schema: jt.Schema, name: name, owner: jt.Owner.Name, at: at, what: what + " of join table " + jt.Table, table: jt.Table})
-		}
-		add(spaceRelations, pkName(jt.Table), "primary key")
-		for i, c := range jt.Columns {
-			if i == 0 || c != jt.Columns[0] { // rule 35
-				add(spaceConstraints, ddl.NotNull(jt.Table, c), "not-null check of column "+c)
-			}
+		ol.joinTable(jt)
+	}
+	ol.foreignKeyObjects(g)
+	return ol.out
+}
+
+// distinctJoinTables returns the join tables of g, each edge's once.
+func distinctJoinTables(g *Graph) []joinTable {
+	var jts []joinTable
+	for _, jt := range joinTables(g) {
+		if !slices.ContainsFunc(jts, func(j joinTable) bool { return j.Owner == jt.Owner && j.Edge.Name == jt.Edge.Name }) {
+			jts = append(jts, jt) // an edge declared twice is rule 3's
 		}
 	}
+	return jts
+}
+
+// tableKey is a table, by database schema and name.
+type tableKey struct{ schema, table string }
+
+// tableKeys is the leading columns of one table's keys.
+type tableKeys struct {
+	pk      []string
+	indexes [][]string
+}
+
+// objectLister collects the objects that objects returns.
+type objectLister struct {
+	out      []object
+	tables   map[tableKey]*tableKeys // the leading columns of each table's keys, for fkIndexed
+	oldEnums map[[2]string]bool
+}
+
+// add appends an object of e's table.
+func (ol *objectLister) add(e *Entity, space nameSpace, name, what string, at loc) {
+	ol.out = append(ol.out, object{space: space, schema: e.TableSchema, name: name, owner: e.Name, at: at, what: what, table: e.Table})
+}
+
+// addHelper appends the new-index helper of the index of e's table.
+func (ol *objectLister) addHelper(e *Entity, index, what string, at loc) {
+	ol.out = append(ol.out, object{space: spaceRelations, schema: e.TableSchema, name: ddl.NewIndex(index), owner: e.Name, at: at, what: "new-index helper of " + what, table: e.Table, helper: true})
+}
+
+// entity appends the objects of e's table other than the table itself, and
+// records the leading columns of its keys.
+func (ol *objectLister) entity(e *Entity, refused map[*Index]bool) {
+	id := e.Fields[0]
+	k := &tableKeys{pk: []string{id.Column}}
+	ol.tables[tableKey{e.TableSchema, e.Table}] = k
+	ol.add(e, spaceRelations, pkName(e.Table), "primary key", tableLoc(e))
+	if integer(id.Type) {
+		ol.add(e, spaceRelations, seqName(e.Table, id.Column), "identity sequence", fieldLoc(id))
+	}
+	ol.indexes(e, refused, k)
+	seen := map[string]bool{}
+	for _, f := range e.Fields {
+		if seen[f.Column] {
+			continue // rules 1 and 2
+		}
+		seen[f.Column] = true
+		ol.column(e, f)
+	}
+	// A bad annotation is declaredChecks's error.
+	declared, _ := checksOf(e)
+	for i, c := range declared { // sorted; a repeated name is declaredChecks's error
+		if i == 0 || declared[i-1].Name != c.Name {
+			ol.add(e, spaceConstraints, c.Name, "check of table "+e.Table, tableLoc(e))
+		}
+	}
+}
+
+// indexes appends e's declared and unique-field indexes, but those in
+// refused, with their helpers, and adds their columns to k.
+func (ol *objectLister) indexes(e *Entity, refused map[*Index]bool, k *tableKeys) {
+	for i, ix := range e.Indexes {
+		if refused[ix] {
+			continue
+		}
+		ol.add(e, spaceRelations, ix.Name, indexAt(i), indexLoc(i, ix))
+		ol.addHelper(e, ix.Name, indexAt(i), indexLoc(i, ix))
+		if ix.Where == "" {
+			k.indexes = append(k.indexes, ix.Columns)
+		}
+	}
+	ixs, fs := fieldIndexes(e, refused, velox.Postgres)
+	for i, ix := range ixs {
+		ol.add(e, spaceRelations, ix.Name, "unique index of "+fieldAt(fs[i].Name), fieldLoc(fs[i]))
+		ol.addHelper(e, ix.Name, "the unique index of "+fieldAt(fs[i].Name), fieldLoc(fs[i]))
+		k.indexes = append(k.indexes, ix.Columns)
+	}
+}
+
+// column appends the objects of f's column: an enum's type, old type and
+// check, and a NOT NULL column's not-null check.
+func (ol *objectLister) column(e *Entity, f *Field) {
+	of := fieldAt(f.Name)
+	if f.Type == "enum" {
+		if name, native := enumType(e, f); native {
+			values := make([]string, len(f.Enums))
+			for i, v := range f.Enums {
+				values[i] = v.Value
+			}
+			ol.out = append(ol.out, object{space: spaceTypes, schema: e.TableSchema, name: name, owner: e.Name, at: fieldLoc(f), what: "enum type of " + of, values: values, table: e.Table})
+			if ok := [2]string{strings.ToLower(e.TableSchema), strings.ToLower(name)}; !ol.oldEnums[ok] {
+				ol.oldEnums[ok] = true
+				ol.add(e, spaceTypes, ddl.OldEnum(name), "old enum type of "+of, fieldLoc(f))
+			}
+		}
+		ol.add(e, spaceConstraints, checkName(e.Table, f.Column), "check of "+of, fieldLoc(f))
+	}
+	if !nullable(f) {
+		ol.add(e, spaceConstraints, ddl.NotNull(e.Table, f.Column), "not-null check of "+of, fieldLoc(f))
+	}
+}
+
+// joinTable appends the primary key and not-null checks of jt, and records
+// its key's columns.
+func (ol *objectLister) joinTable(jt joinTable) {
+	ol.tables[tableKey{jt.Schema, jt.Table}] = &tableKeys{pk: jt.Columns[:]}
+	at := edgeLoc(jt.Edge)
+	add := func(space nameSpace, name, what string) {
+		ol.out = append(ol.out, object{space: space, schema: jt.Schema, name: name, owner: jt.Owner.Name, at: at, what: what + " of join table " + jt.Table, table: jt.Table})
+	}
+	add(spaceRelations, pkName(jt.Table), "primary key")
+	for i, c := range jt.Columns {
+		if i == 0 || c != jt.Columns[0] { // rule 35
+			add(spaceConstraints, ddl.NotNull(jt.Table, c), "not-null check of column "+c)
+		}
+	}
+}
+
+// foreignKeyObjects appends the foreign keys of g, and the index and helper of
+// each one no key of its table leads with.
+func (ol *objectLister) foreignKeyObjects(g *Graph) {
 	seen := map[[3]string]bool{}
 	for _, fk := range foreignKeys(g) {
 		c := [3]string{fk.Schema, fk.Table, fk.Column}
@@ -475,15 +524,14 @@ func objects(g *Graph, refused map[*Index]bool) []object {
 		seen[c] = true
 		at, of := edgeLoc(fk.Edge), edgeAt(fk.Edge.Name)
 		obj := object{schema: fk.Schema, owner: fk.Owner.Name, at: at, table: fk.Table}
-		if k := tables[tableKey{fk.Schema, fk.Table}]; k == nil || !fkIndexed(k.pk, k.indexes, fk.Column) {
+		if k := ol.tables[tableKey{fk.Schema, fk.Table}]; k == nil || !fkIndexed(k.pk, k.indexes, fk.Column) {
 			ix := obj
 			ix.space, ix.name, ix.what = spaceRelations, fkIndexName(fk.Table, fk.Column), "foreign-key index of "+of
 			helper := ix
 			helper.name, helper.what, helper.helper = ddl.NewIndex(ix.name), "new-index helper of the foreign-key index of "+of, true
-			out = append(out, ix, helper)
+			ol.out = append(ol.out, ix, helper)
 		}
 		obj.space, obj.name, obj.what = spaceConstraints, fk.Name, "foreign key of "+of
-		out = append(out, obj)
+		ol.out = append(ol.out, obj)
 	}
-	return out
 }
