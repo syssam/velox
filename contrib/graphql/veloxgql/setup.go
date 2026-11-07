@@ -169,20 +169,21 @@ type wsLimitWriter struct {
 	most int64
 }
 
-// Hijack implements http.Hijacker. A client must wait for the upgrade's answer, so what it
-// sent before that, which the server has read past the
-// connection given here, is refused.
+// Hijack implements http.Hijacker. What the server read past the upgrade's
+// request is the client's first frames: coder/websocket, gqlgen's default
+// at v0.17.95 and v0.17.98, sends the 101 before it hijacks, so a client
+// that answers at once may have sent them. They pass the limit as any others do.
 func (w *wsLimitWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	rc := http.NewResponseController(w.ResponseWriter)
 	conn, brw, err := rc.Hijack()
 	if err != nil {
 		return nil, nil, err
 	}
-	if brw.Reader.Buffered() > 0 {
-		_ = conn.Close()
-		return nil, nil, errWebsocketEarly
-	}
 	c := &wsLimitConn{Conn: conn, most: w.most}
+	if n := brw.Reader.Buffered(); n > 0 {
+		b, _ := brw.Peek(n)
+		c.early = bytes.Clone(b)
+	}
 	brw.Reader.Reset(c)
 	return c, brw, nil
 }
@@ -190,10 +191,7 @@ func (w *wsLimitWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 // Unwrap is for http.ResponseController.
 func (w *wsLimitWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-var (
-	errWebsocketTooLarge = errors.New("veloxgql: a websocket message over Limits.MaxBodyBytes")
-	errWebsocketEarly    = errors.New("veloxgql: a websocket client sent frames before the upgrade's answer")
-)
+var errWebsocketTooLarge = errors.New("veloxgql: a websocket message over Limits.MaxBodyBytes")
 
 // wsLimitConn reads a client's websocket frames as they pass, and
 // closes the connection when a message's payload passes most.
@@ -209,11 +207,21 @@ type wsLimitConn struct {
 	headerN int
 	skip    uint64
 	message uint64
+	// early is what the server read past the upgrade's request, which Read
+	// returns first.
+	early []byte
 }
 
 // Read implements net.Conn.
 func (c *wsLimitConn) Read(p []byte) (int, error) {
-	n, err := c.Conn.Read(p)
+	var n int
+	var err error
+	if len(c.early) > 0 {
+		n = copy(p, c.early)
+		c.early = c.early[n:]
+	} else {
+		n, err = c.Conn.Read(p)
+	}
 	if !c.read(p[:n]) {
 		// 1009, message too big: a client told 1006, an abnormal close, retries the
 		// same message.

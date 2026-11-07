@@ -1,6 +1,7 @@
 package veloxgql_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -190,5 +191,64 @@ func TestSetupKeepsOtherTransports(t *testing.T) {
 	h.ServeHTTP(w, r) // no Hijacker, no transport: gqlgen says so, and nothing panics
 	if w.Code == http.StatusOK {
 		t.Errorf("an upgrade it cannot make: %d %s", w.Code, w.Body)
+	}
+}
+
+// TestWebsocketFramesWithTheUpgrade: frames the server has read with the
+// upgrade's request are held to the limit as any others, not refused.
+// gqlgen's default websocket library at v0.17.95 and v0.17.98,
+// coder/websocket, sends its 101 before it hijacks the connection, so a client that
+// answers it at once has its first frame read with the request.
+func TestWebsocketFramesWithTheUpgrade(t *testing.T) {
+	db, _ := handlerDB(t)
+	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"text": nil}))
+	const most = 4096
+	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
+	srv.AddTransport(transport.Websocket{})
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+
+	dial := func(frame []byte) (net.Conn, *bufio.Reader) {
+		c, err := net.Dial("tcp", strings.TrimPrefix(ts.URL, "http://"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.Close() })
+		_ = c.SetDeadline(time.Now().Add(20 * time.Second))
+		req := "GET / HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n" +
+			"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Protocol: graphql-transport-ws\r\n\r\n"
+		if _, err := c.Write(append([]byte(req), frame...)); err != nil {
+			t.Fatal(err)
+		}
+		r := bufio.NewReader(c)
+		resp, err := http.ReadResponse(r, nil)
+		if err != nil {
+			t.Fatalf("the upgrade: %v", err)
+		}
+		_ = resp.Body.Close() // a 101's body is empty; the connection stays open
+		if resp.StatusCode != http.StatusSwitchingProtocols {
+			t.Fatalf("the upgrade: %s", resp.Status)
+		}
+		return c, r
+	}
+	frame := func(r *bufio.Reader) []byte {
+		h := make([]byte, 2)
+		if _, err := io.ReadFull(r, h); err != nil {
+			return nil
+		}
+		p := make([]byte, h[1]&0x7f)
+		if _, err := io.ReadFull(r, p); err != nil {
+			return nil
+		}
+		return append(h, p...)
+	}
+
+	_, r := dial(wsFrame(0x1, true, `{"type":"connection_init"}`))
+	if got := frame(r); !strings.Contains(string(got), "connection_ack") {
+		t.Errorf("a connection_init sent with the upgrade: %q, want connection_ack", got)
+	}
+	_, r = dial(wsFrame(0x1, true, `{"type":"connection_init","payload":{"x":"`+strings.Repeat("x", 2*most)+`"}}`))
+	if got := frame(r); len(got) < 4 || got[0] != 0x88 || binary.BigEndian.Uint16(got[2:]) != 1009 {
+		t.Errorf("a message over the limit sent with the upgrade: %q, want a close of 1009", got)
 	}
 }

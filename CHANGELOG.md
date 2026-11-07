@@ -615,6 +615,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- `veloxgql.Setup`'s websocket limit no longer drops a client whose first frame the
+  server read with the upgrade's request. With gqlgen's default websocket library at
+  v0.17.95 and v0.17.98, which answers the upgrade before it hijacks, a client that sent
+  `connection_init` at once was cut off without a close frame, more often under load.
 - A statement, `BEGIN`, `SAVEPOINT`, `RELEASE` or `COMMIT` that fails once its context
   has ended matches the context's error (`context.DeadlineExceeded` or
   `context.Canceled`), or `ErrTimeout` for velox's deadline, whatever the driver

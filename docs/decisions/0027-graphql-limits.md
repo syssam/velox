@@ -201,8 +201,11 @@ and no field compiles at both, and no extension runs before a message is decoded
 handler wraps the hijacked connection, reads each client frame's header as it passes, adds
 up the message's payload across its fragments and closes the connection before an over
 one is read, whichever gqlgen. It removes `Sec-WebSocket-Extensions` from the upgrade, so
-that a compressed message cannot be small on the wire. A client that sends frames
-before the upgrade's answer, which RFC 6455 forbids, is refused. A POST that names an
+that a compressed message cannot be small on the wire. Frames the server read with the
+upgrade's request pass the limit as any others: coder/websocket, gqlgen's default at
+v0.17.95 and v0.17.98, sends the 101 before it hijacks, so a client that answers at once
+has its first frame read with the request (amended 2026-11-07: such frames were refused,
+which dropped those clients without a close frame). A POST that names an
 upgrade keeps the body's limit. How many connections and messages a client sends stays outside the
 bound: a rate limit in front has that.
 
