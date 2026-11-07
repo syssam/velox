@@ -63,23 +63,14 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 	if d != velox.Postgres && d != velox.MySQL && d != velox.SQLite {
 		return File{}, &Error{Code: "dialect", Pos: path, Reason: fmt.Sprintf("ParseFile has no dialect %s", d)}
 	}
-	m := fileName.FindStringSubmatch(path)
-	var version uint64
-	ok := m != nil
-	if ok {
-		v, err := strconv.ParseUint(m[1], 10, 64)
-		version, ok = v, err == nil
-	}
-	if !ok {
-		return File{}, &Error{Code: "file", Pos: path, Reason: "the name is not <version>_<name>.sql, with a version of at least four digits and a name of a-z, 0-9 and _"}
+	version, name, err := parseFileName(path)
+	if err != nil {
+		return File{}, err
 	}
 	data = asText(data)
-	f := File{Version: version, Name: m[2], Path: path}
+	f := File{Version: version, Name: name, Path: path}
 	f.generated = strings.HasPrefix(string(data), generatedPrefix)
 	s := splitter{d: d, src: string(data)}
-	refuse := func(line int, format string, args ...any) error {
-		return &Error{Code: "file", Pos: path + ":" + strconv.Itoa(line), Reason: fmt.Sprintf(format, args...)}
-	}
 	if err := s.run(); err != nil {
 		e := err.(*Error)
 		e.Pos = path + ":" + e.Pos
@@ -87,110 +78,165 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 	}
 	f.backslash, f.dquote = s.backslash, s.dquote
 	f.Sum = historySum(data, s.out)
-	seen := map[string]bool{}
-	unitLine := 0     // the first unit line
-	unitNext := false // a unit line since the last statement
-	inUnit := false   // a unit line came before
-	var starts []int  // the statements that start a unit
-	for _, p := range s.out {
-		if p.SQL != "" {
-			if unitNext || !inUnit {
-				starts = append(starts, len(f.Statements))
-			}
-			unitNext = false
-			f.Statements = append(f.Statements, p.SQL)
-			f.lines = append(f.lines, p.Line)
+	p := &fileParse{d: d, f: &f, seen: map[string]bool{}}
+	for _, pc := range s.out {
+		if pc.SQL != "" {
+			p.statement(pc)
 			continue
 		}
-		fields := strings.Fields(p.Directive)
-		word := ""
-		if len(fields) > 0 {
-			word = fields[0]
-		}
-		malformed := func(how string) error { return refuse(p.Line, "malformed directive %q: %s", p.Directive, how) }
-		switch word {
-		case "no-transaction", "foreign-keys", "lock-timeout", "allow", "drops", "unit":
-		default:
-			return File{}, refuse(p.Line, "unknown directive %q", word)
-		}
-		if word != "unit" {
-			if len(f.Statements) > 0 {
-				return File{}, refuse(p.Line, "%s comes after a statement; only unit can", word)
-			}
-			if word != "allow" && word != "drops" && seen[word] {
-				return File{}, refuse(p.Line, "%s is given twice", word)
-			}
-			seen[word] = true
-		}
-		dd := &f.Directives
-		switch word {
-		case "no-transaction":
-			if len(fields) != 1 {
-				return File{}, malformed("no-transaction takes no argument")
-			}
-			if d == velox.SQLite {
-				return File{}, refuse(p.Line, "no-transaction is refused on SQLite: a file outside a transaction would run unlocked")
-			}
-			dd.NoTransaction = true
-		case "foreign-keys":
-			if len(fields) != 2 || fields[1] != "off" {
-				return File{}, malformed("write foreign-keys off")
-			}
-			if d != velox.SQLite {
-				return File{}, refuse(p.Line, "foreign-keys off is SQLite's only")
-			}
-			dd.ForeignKeysOff = true
-		case "lock-timeout":
-			if len(fields) != 2 {
-				return File{}, malformed("write lock-timeout <duration>, as 5s")
-			}
-			t, err := time.ParseDuration(fields[1])
-			switch {
-			case err != nil:
-				return File{}, malformed(err.Error())
-			case t < 0:
-				return File{}, malformed("the duration is negative")
-			case d == velox.SQLite:
-				return File{}, refuse(p.Line, "lock-timeout is refused on SQLite, whose lock wait is the runner's")
-			}
-			dd.LockTimeout, dd.LockTimeoutSet = t, true
-		case "allow":
-			code, target, ok := allowParts(p.Directive)
-			if !ok {
-				return File{}, malformed("write allow <code> [<target>]")
-			}
-			as, err := ParseAllow(code)
-			switch {
-			case err != nil:
-				return File{}, malformed(err.(*Error).Reason)
-			case len(as) != 1 || as[0].Code != code:
-				return File{}, malformed("write allow <code> [<target>]")
-			}
-			dd.Allow = append(dd.Allow, Allow{Code: code, Target: target})
-		case "drops":
-			target, ok := dropsTarget(p.Directive)
-			if !ok {
-				return File{}, malformed("write drops <target>")
-			}
-			dd.Drops = append(dd.Drops, target)
-		case "unit":
-			if len(fields) != 1 {
-				return File{}, malformed("unit takes no argument")
-			}
-			if unitLine == 0 {
-				unitLine = p.Line
-			}
-			unitNext, inUnit = true, true
+		if err := p.directive(pc); err != nil {
+			return File{}, err
 		}
 	}
 	byStatement := d == velox.MySQL || f.Directives.NoTransaction
-	if unitLine > 0 && !byStatement {
-		return File{}, refuse(unitLine, "unit is only for a file run statement by statement: a MySQL file, or a no-transaction one")
+	if p.unitLine > 0 && !byStatement {
+		return File{}, refuseLine(path, p.unitLine, "unit is only for a file run statement by statement: a MySQL file, or a no-transaction one")
 	}
 	if byStatement {
-		f.Units = starts
+		f.Units = p.starts
 	}
 	return f, nil
+}
+
+// parseFileName is the version and name of the file at path, or the
+// *Error of a bad name.
+func parseFileName(path string) (uint64, string, error) {
+	m := fileName.FindStringSubmatch(path)
+	if m != nil {
+		if v, err := strconv.ParseUint(m[1], 10, 64); err == nil {
+			return v, m[2], nil
+		}
+	}
+	return 0, "", &Error{Code: "file", Pos: path, Reason: "the name is not <version>_<name>.sql, with a version of at least four digits and a name of a-z, 0-9 and _"}
+}
+
+// refuseLine is ParseFile's *Error at line of path.
+func refuseLine(path string, line int, format string, args ...any) error {
+	return &Error{Code: "file", Pos: path + ":" + strconv.Itoa(line), Reason: fmt.Sprintf(format, args...)}
+}
+
+// fileParse is ParseFile's state as it reads a file's pieces.
+type fileParse struct {
+	d        velox.Dialect
+	f        *File
+	seen     map[string]bool // the directives given
+	unitLine int             // the first unit line
+	unitNext bool            // a unit line since the last statement
+	inUnit   bool            // a unit line came before
+	starts   []int           // the statements that start a unit
+}
+
+// statement adds the statement of p to the file.
+func (p *fileParse) statement(pc piece) {
+	if p.unitNext || !p.inUnit {
+		p.starts = append(p.starts, len(p.f.Statements))
+	}
+	p.unitNext = false
+	p.f.Statements = append(p.f.Statements, pc.SQL)
+	p.f.lines = append(p.f.lines, pc.Line)
+}
+
+// directive reads the directive of pc into the file, or refuses it.
+func (p *fileParse) directive(pc piece) error {
+	fields := strings.Fields(pc.Directive)
+	word := ""
+	if len(fields) > 0 {
+		word = fields[0]
+	}
+	switch word {
+	case "no-transaction", "foreign-keys", "lock-timeout", "allow", "drops", "unit":
+	default:
+		return refuseLine(p.f.Path, pc.Line, "unknown directive %q", word)
+	}
+	if word != "unit" {
+		if len(p.f.Statements) > 0 {
+			return refuseLine(p.f.Path, pc.Line, "%s comes after a statement; only unit can", word)
+		}
+		if word != "allow" && word != "drops" && p.seen[word] {
+			return refuseLine(p.f.Path, pc.Line, "%s is given twice", word)
+		}
+		p.seen[word] = true
+	}
+	if word == "unit" {
+		if len(fields) != 1 {
+			return p.malformed(pc, "unit takes no argument")
+		}
+		if p.unitLine == 0 {
+			p.unitLine = pc.Line
+		}
+		p.unitNext, p.inUnit = true, true
+		return nil
+	}
+	return p.setDirective(pc, word, fields)
+}
+
+// malformed is the refusal of pc's directive, as how says.
+func (p *fileParse) malformed(pc piece, how string) error {
+	return refuseLine(p.f.Path, pc.Line, "malformed directive %q: %s", pc.Directive, how)
+}
+
+// setDirective sets in the file's Directives what pc's directive word,
+// of fields, says; unit is directive's.
+func (p *fileParse) setDirective(pc piece, word string, fields []string) error {
+	dd := &p.f.Directives
+	switch word {
+	case "no-transaction":
+		if len(fields) != 1 {
+			return p.malformed(pc, "no-transaction takes no argument")
+		}
+		if p.d == velox.SQLite {
+			return refuseLine(p.f.Path, pc.Line, "no-transaction is refused on SQLite: a file outside a transaction would run unlocked")
+		}
+		dd.NoTransaction = true
+	case "foreign-keys":
+		if len(fields) != 2 || fields[1] != "off" {
+			return p.malformed(pc, "write foreign-keys off")
+		}
+		if p.d != velox.SQLite {
+			return refuseLine(p.f.Path, pc.Line, "foreign-keys off is SQLite's only")
+		}
+		dd.ForeignKeysOff = true
+	case "lock-timeout":
+		return p.lockTimeout(pc, fields)
+	case "allow":
+		code, target, ok := allowParts(pc.Directive)
+		if !ok {
+			return p.malformed(pc, "write allow <code> [<target>]")
+		}
+		as, err := ParseAllow(code)
+		switch {
+		case err != nil:
+			return p.malformed(pc, err.(*Error).Reason)
+		case len(as) != 1 || as[0].Code != code:
+			return p.malformed(pc, "write allow <code> [<target>]")
+		}
+		dd.Allow = append(dd.Allow, Allow{Code: code, Target: target})
+	case "drops":
+		target, ok := dropsTarget(pc.Directive)
+		if !ok {
+			return p.malformed(pc, "write drops <target>")
+		}
+		dd.Drops = append(dd.Drops, target)
+	}
+	return nil
+}
+
+// lockTimeout sets the file's lock timeout from pc's directive, of fields.
+func (p *fileParse) lockTimeout(pc piece, fields []string) error {
+	if len(fields) != 2 {
+		return p.malformed(pc, "write lock-timeout <duration>, as 5s")
+	}
+	t, err := time.ParseDuration(fields[1])
+	switch {
+	case err != nil:
+		return p.malformed(pc, err.Error())
+	case t < 0:
+		return p.malformed(pc, "the duration is negative")
+	case p.d == velox.SQLite:
+		return refuseLine(p.f.Path, pc.Line, "lock-timeout is refused on SQLite, whose lock wait is the runner's")
+	}
+	p.f.Directives.LockTimeout, p.f.Directives.LockTimeoutSet = t, true
+	return nil
 }
 
 // historySum is what the history records of a file and compares it with: sum of

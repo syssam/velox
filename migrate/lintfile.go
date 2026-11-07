@@ -51,45 +51,15 @@ import (
 // DO block or a function, gives no finding: it cannot see everything a
 // hand-written file does.
 func LintFile(d velox.Dialect, f File) ([]Finding, error) {
-	var errs []error
 	var out []Finding
-	inTx := d == velox.SQLite || d == velox.Postgres && !f.Directives.NoTransaction
-	rebuilt := map[string]bool{} // the tables a rebuild of f drops and makes again
-	if d == velox.SQLite {
-		for _, r := range fileRebuilds(d, f) {
-			if f.generated {
-				rebuilt[r.table.String()] = true
-			}
-			if !f.Directives.ForeignKeysOff {
-				pos := f.Path
-				if r.start < len(f.lines) {
-					pos += ":" + strconv.Itoa(f.lines[r.start])
-				}
-				errs = append(errs, &Error{Code: "file", Pos: pos, Reason: fmt.Sprintf("the rebuild of %s has no -- velox:foreign-keys off; its DROP TABLE deletes the rows of the tables that reference it", r.table)})
-			}
-		}
-	}
+	rebuilt, errs := lintRebuilds(d, f)
 	for i, sql := range f.Statements {
 		pos := f.Path
 		if i < len(f.lines) {
 			pos += ":" + strconv.Itoa(f.lines[i])
 		}
 		l := &fileLinter{d: d, ws: lex(d, sql), pos: pos, change: i}
-		refuse := func(format string, args ...any) {
-			errs = append(errs, &Error{Code: "file", Pos: pos, Reason: fmt.Sprintf(format, args...)})
-		}
-		lead := l.upper(0)
-		if inTx && txControl(d, l) {
-			refuse(txControlReason, lead)
-		}
-		if d == velox.Postgres && !f.Directives.NoTransaction {
-			if l.concurrently() {
-				refuse("CONCURRENTLY cannot run in a transaction; put the statement in a file with -- velox:no-transaction")
-			}
-			if lead == "ALTER" && l.upper(1) == "TYPE" && l.has("ADD", "VALUE") {
-				refuse("ALTER TYPE … ADD VALUE in a transaction leaves the value unusable until it commits; put the statement in a file with -- velox:no-transaction")
-			}
-		}
+		errs = append(errs, lintTx(d, f, l)...)
 		l.classify()
 		for _, fd := range l.out {
 			rendered := fd.Code == "alter-type" || fd.Code == "drop-table" && rebuilt[fd.Target] ||
@@ -100,6 +70,55 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 		}
 	}
 	return out, errors.Join(errs...)
+}
+
+// lintRebuilds reads f's SQLite rebuilds. It returns the tables a rebuild of
+// a generated f drops and makes again, and the refusal of each rebuild
+// without -- velox:foreign-keys off.
+func lintRebuilds(d velox.Dialect, f File) (map[string]bool, []error) {
+	var errs []error
+	rebuilt := map[string]bool{}
+	if d != velox.SQLite {
+		return rebuilt, nil
+	}
+	for _, r := range fileRebuilds(d, f) {
+		if f.generated {
+			rebuilt[r.table.String()] = true
+		}
+		if f.Directives.ForeignKeysOff {
+			continue
+		}
+		pos := f.Path
+		if r.start < len(f.lines) {
+			pos += ":" + strconv.Itoa(f.lines[r.start])
+		}
+		errs = append(errs, &Error{Code: "file", Pos: pos, Reason: fmt.Sprintf("the rebuild of %s has no -- velox:foreign-keys off; its DROP TABLE deletes the rows of the tables that reference it", r.table)})
+	}
+	return rebuilt, errs
+}
+
+// lintTx is the refusals of l's statement, of f, that cannot run in f's
+// transaction: one that begins or ends one, and on PostgreSQL CONCURRENTLY
+// and ALTER TYPE … ADD VALUE.
+func lintTx(d velox.Dialect, f File, l *fileLinter) []error {
+	var errs []error
+	refuse := func(format string, args ...any) {
+		errs = append(errs, &Error{Code: "file", Pos: l.pos, Reason: fmt.Sprintf(format, args...)})
+	}
+	inTx := d == velox.SQLite || d == velox.Postgres && !f.Directives.NoTransaction
+	lead := l.upper(0)
+	if inTx && txControl(d, l) {
+		refuse(txControlReason, lead)
+	}
+	if d == velox.Postgres && !f.Directives.NoTransaction {
+		if l.concurrently() {
+			refuse("CONCURRENTLY cannot run in a transaction; put the statement in a file with -- velox:no-transaction")
+		}
+		if lead == "ALTER" && l.upper(1) == "TYPE" && l.has("ADD", "VALUE") {
+			refuse("ALTER TYPE … ADD VALUE in a transaction leaves the value unusable until it commits; put the statement in a file with -- velox:no-transaction")
+		}
+	}
+	return errs
 }
 
 // txControlReason is the refusal of a statement led by BEGIN, COMMIT and
@@ -319,17 +338,15 @@ func (l *fileLinter) names(i int, code, format string) {
 	}
 }
 
+// The findings of a statement that deletes or updates every row of a table.
+const (
+	deleteRowsFinding = "deletes every row of %s"
+	updateRowsFinding = "updates every row of %s"
+)
+
 // classify adds the statement's destructive findings. A WITH clause before
 // a DELETE or UPDATE is passed over.
 func (l *fileLinter) classify() {
-	const (
-		dropTable  = "drops table %s and its rows"
-		dropSchema = "drops schema %s and everything in it"
-		dropDB     = "drops database %s and everything in it"
-		dropType   = "drops %s; with CASCADE, the columns of that type and their data go too"
-		deleteRows = "deletes every row of %s"
-		updateRows = "updates every row of %s"
-	)
 	b := 0
 	if l.upper(0) == "WITH" {
 		b = l.afterWith()
@@ -337,88 +354,117 @@ func (l *fileLinter) classify() {
 	}
 	switch l.upper(b) {
 	case "DROP":
-		if b != 0 {
-			return
-		}
-		switch l.upper(1) {
-		case "TABLE":
-			l.names(l.skip(2, "IF", "EXISTS"), "drop-table", dropTable)
-		case "SCHEMA":
-			l.names(l.skip(2, "IF", "EXISTS"), "drop-schema", dropSchema)
-		case "DATABASE":
-			l.names(l.skip(2, "IF", "EXISTS"), "drop-database", dropDB)
-		case "DOMAIN", "TYPE":
-			l.names(l.skip(2, "IF", "EXISTS"), "drop-"+strings.ToLower(l.upper(1)), dropType)
-		case "COLLATION":
-			l.names(l.skip(2, "IF", "EXISTS"), "drop-collation", "drops collation %s; with CASCADE, the columns that use it and their data go too")
+		if b == 0 {
+			l.classifyDrop()
 		}
 	case "TRUNCATE":
 		if b == 0 {
-			l.names(l.skip(1, "TABLE"), "delete-rows", deleteRows)
+			l.names(l.skip(1, "TABLE"), "delete-rows", deleteRowsFinding)
 		}
 	case "DELETE":
-		if l.topWhere(b) {
-			return
-		}
-		i := b + 1
-		for slices.Contains([]string{"LOW_PRIORITY", "QUICK", "IGNORE"}, l.upper(i)) {
-			i++
-		}
-		if l.upper(i) == "FROM" {
-			// DELETE FROM t, or MySQL's DELETE FROM t1, t2 USING ….
-			l.names(i+1, "delete-rows", deleteRows)
-			return
-		}
-		// MySQL's DELETE t1[, t2] FROM …: the tables, or their aliases, come
-		// before FROM.
-		for _, n := range l.nameList(i) {
-			l.add("delete-rows", l.unalias(n, i), deleteRows)
-		}
+		l.classifyDelete(b)
 	case "UPDATE":
-		if l.topWhere(b) {
-			return
-		}
-		i := b + 1
-		for slices.Contains([]string{"LOW_PRIORITY", "IGNORE"}, l.upper(i)) {
-			i++
-		}
-		if l.upper(i) == "OR" { // SQLite's UPDATE OR REPLACE t
-			i += 2
-		}
-		// UPDATE t [alias] [JOIN …], or MySQL's UPDATE t1 [a1], t2 [a2] SET ….
-		for j := i; ; {
-			j = l.skip(j, "ONLY")
-			n, k := l.name(j)
-			if n == "" {
-				return
-			}
-			l.add("update-rows", n, updateRows)
-			if l.upper(k) == "AS" {
-				k++
-			}
-			if k < len(l.ws) && l.isName(k) && !slices.Contains([]string{"SET", "JOIN", "INNER", "LEFT", "RIGHT", "CROSS", "STRAIGHT_JOIN", "NATURAL"}, l.upper(k)) {
-				k++ // an alias
-			}
-			if !l.punct(k, ",") {
-				return
-			}
-			j = k + 1
-		}
+		l.classifyUpdate(b)
 	case "MERGE":
-		n, _ := l.name(l.skip(l.skip(b+1, "INTO"), "ONLY"))
-		if n == "" {
-			return
-		}
-		if l.has("THEN", "DELETE") {
-			l.add("delete-rows", n, "merges into %s, and can delete any row its ON matches")
-		}
-		if l.has("THEN", "UPDATE") {
-			l.add("update-rows", n, "merges into %s, and can update any row its ON matches")
-		}
+		l.classifyMerge(b)
 	case "ALTER":
 		if b == 0 && l.upper(1) == "TABLE" {
 			l.alterTable()
 		}
+	}
+}
+
+// classifyDrop adds the findings of a DROP of a table, schema, database,
+// domain, type or collation.
+func (l *fileLinter) classifyDrop() {
+	const (
+		dropTable  = "drops table %s and its rows"
+		dropSchema = "drops schema %s and everything in it"
+		dropDB     = "drops database %s and everything in it"
+		dropType   = "drops %s; with CASCADE, the columns of that type and their data go too"
+	)
+	switch l.upper(1) {
+	case "TABLE":
+		l.names(l.skip(2, "IF", "EXISTS"), "drop-table", dropTable)
+	case "SCHEMA":
+		l.names(l.skip(2, "IF", "EXISTS"), "drop-schema", dropSchema)
+	case "DATABASE":
+		l.names(l.skip(2, "IF", "EXISTS"), "drop-database", dropDB)
+	case "DOMAIN", "TYPE":
+		l.names(l.skip(2, "IF", "EXISTS"), "drop-"+strings.ToLower(l.upper(1)), dropType)
+	case "COLLATION":
+		l.names(l.skip(2, "IF", "EXISTS"), "drop-collation", "drops collation %s; with CASCADE, the columns that use it and their data go too")
+	}
+}
+
+// classifyDelete adds the findings of the DELETE at word b with no WHERE
+// that can leave a row out.
+func (l *fileLinter) classifyDelete(b int) {
+	if l.topWhere(b) {
+		return
+	}
+	i := b + 1
+	for slices.Contains([]string{"LOW_PRIORITY", "QUICK", "IGNORE"}, l.upper(i)) {
+		i++
+	}
+	if l.upper(i) == "FROM" {
+		// DELETE FROM t, or MySQL's DELETE FROM t1, t2 USING ….
+		l.names(i+1, "delete-rows", deleteRowsFinding)
+		return
+	}
+	// MySQL's DELETE t1[, t2] FROM …: the tables, or their aliases, come
+	// before FROM.
+	for _, n := range l.nameList(i) {
+		l.add("delete-rows", l.unalias(n, i), deleteRowsFinding)
+	}
+}
+
+// classifyUpdate adds the findings of the UPDATE at word b with no WHERE
+// that can leave a row out.
+func (l *fileLinter) classifyUpdate(b int) {
+	if l.topWhere(b) {
+		return
+	}
+	i := b + 1
+	for slices.Contains([]string{"LOW_PRIORITY", "IGNORE"}, l.upper(i)) {
+		i++
+	}
+	if l.upper(i) == "OR" { // SQLite's UPDATE OR REPLACE t
+		i += 2
+	}
+	// UPDATE t [alias] [JOIN …], or MySQL's UPDATE t1 [a1], t2 [a2] SET ….
+	for j := i; ; {
+		j = l.skip(j, "ONLY")
+		n, k := l.name(j)
+		if n == "" {
+			return
+		}
+		l.add("update-rows", n, updateRowsFinding)
+		if l.upper(k) == "AS" {
+			k++
+		}
+		if k < len(l.ws) && l.isName(k) && !slices.Contains([]string{"SET", "JOIN", "INNER", "LEFT", "RIGHT", "CROSS", "STRAIGHT_JOIN", "NATURAL"}, l.upper(k)) {
+			k++ // an alias
+		}
+		if !l.punct(k, ",") {
+			return
+		}
+		j = k + 1
+	}
+}
+
+// classifyMerge adds the findings of the MERGE at word b, by its WHEN
+// clauses.
+func (l *fileLinter) classifyMerge(b int) {
+	n, _ := l.name(l.skip(l.skip(b+1, "INTO"), "ONLY"))
+	if n == "" {
+		return
+	}
+	if l.has("THEN", "DELETE") {
+		l.add("delete-rows", n, "merges into %s, and can delete any row its ON matches")
+	}
+	if l.has("THEN", "UPDATE") {
+		l.add("update-rows", n, "merges into %s, and can update any row its ON matches")
 	}
 }
 

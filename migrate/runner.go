@@ -295,7 +295,16 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		}
 		return r, nil
 	}
-	var todo, past []File // past: pending beyond the target, which the guard still reads
+	todo, past := toApply(st, resumed, o)
+	if err := s.checkToApply(todo, o); err != nil {
+		return nil, err
+	}
+	return r, s.applyFiles(ctx, r, todo, past, resumed, st.Dirty, o)
+}
+
+// toApply is the files Up applies, the resumed one first, and past, the
+// pending files beyond the target, which the guard still reads.
+func toApply(st *State, resumed *File, o options) (todo, past []File) {
 	if resumed != nil {
 		todo = append(todo, *resumed)
 	}
@@ -306,21 +315,34 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		}
 		todo = append(todo, f)
 	}
+	return todo, past
+}
+
+// checkToApply is the refusal of todo before any file of it runs: a mode
+// the session refuses, or a file run in a transaction that begins or ends
+// one.
+func (s *session) checkToApply(todo []File, o options) error {
 	if err := s.checkModes(todo); err != nil {
-		return nil, err
+		return err
 	}
 	for _, f := range todo {
 		if o.noTxCheck || s.stepwise(f) {
 			continue
 		}
 		if err := checkTxControl(s.d, f); err != nil {
-			return nil, err
+			return err
 		}
 	}
+	return nil
+}
+
+// applyFiles applies todo in order, adding each file applied to r, and
+// stops at the first error. resumed, when not nil, resumes from dirty.
+func (s *session) applyFiles(ctx context.Context, r *Report, todo, past []File, resumed *File, dirty *Applied, o options) error {
 	for i, f := range todo {
 		if i > 0 {
 			if err := s.reset(ctx, todo[i:]); err != nil {
-				return r, wrap(ctx, "resetting the session after "+todo[i-1].Path, err)
+				return wrap(ctx, "resetting the session after "+todo[i-1].Path, err)
 			}
 		}
 		s.later = slices.Concat(todo[i+1:], past)
@@ -328,7 +350,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		var err error
 		switch {
 		case resumed != nil && f.Version == resumed.Version:
-			a, err = s.applyStepwise(ctx, f, st.Dirty, o)
+			a, err = s.applyStepwise(ctx, f, dirty, o)
 		case s.stepwise(f):
 			a, err = s.applyStepwise(ctx, f, nil, o)
 		default:
@@ -338,11 +360,11 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 			continue
 		}
 		if err != nil {
-			return r, err
+			return err
 		}
 		r.Applied = append(r.Applied, a)
 	}
-	return r, nil
+	return nil
 }
 
 // checkBaseline is WithBaseline's refusals that need no database.
