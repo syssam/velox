@@ -19,7 +19,7 @@ func (*Category) IsNode() {}
 func (c *Category) GlobalID() string { return veloxgql.EncodeID("Category", c.ID) }
 
 // Children is the edge children: a connection to the Category nodes it leads
-// to. Its queries batch with the edge of every row read with c.
+// to. Its queries batch with the same edge of every row on c's page.
 func (c *Category) Children(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
@@ -29,7 +29,7 @@ func (c *Category) Children(
 }
 
 // Parent is the edge parent: the Category it leads to, or nil. It is read in
-// one query with the edge of every row read with c.
+// one query with the same edge of every row on c's page.
 func (c *Category) Parent(ctx context.Context) (*Category, error) {
 	if c.CategoryChildren == nil {
 		return nil, nil

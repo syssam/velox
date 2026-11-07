@@ -33,18 +33,18 @@ const (
 	tagEdgePosts = iota
 )
 
-// tagHandles is the type of Tags.
-type tagHandles struct {
+// TagHandles is the type of Tags, the typed handles of Tag's columns and relations.
+type TagHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Tag, int64]
 	// Name is the column name.
 	Name velox.StringCol[Tag, string]
-	// Posts is the edge posts, to Post: With loads it, Has and HasWhere test it.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it.
 	Posts velox.Rel[Tag, Post]
 }
 
 // Tags holds the typed handles of Tag's columns and relations.
-var Tags = tagHandles{
+var Tags = TagHandles{
 	ID:    velox.NumberCol[Tag, int64]{I: tagColID},
 	Name:  velox.StringCol[Tag, string]{I: tagColName},
 	Posts: velox.Rel[Tag, Post]{I: tagEdgePosts},

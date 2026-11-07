@@ -35,20 +35,20 @@ const (
 	commentEdgePost = iota
 )
 
-// commentHandles is the type of Comments.
-type commentHandles struct {
+// CommentHandles is the type of Comments, the typed handles of Comment's columns and relations.
+type CommentHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Comment, int64]
 	// PostID is the column post_id.
 	PostID velox.NumberCol[Comment, int64]
 	// Body is the column body.
 	Body velox.StringCol[Comment, string]
-	// Post is the edge post, to Post: With loads it, Has and HasWhere test it.
+	// Post is the edge post, to Post: With loads it, Has and HasWith test it.
 	Post velox.Rel[Comment, Post]
 }
 
 // Comments holds the typed handles of Comment's columns and relations.
-var Comments = commentHandles{
+var Comments = CommentHandles{
 	ID:     velox.NumberCol[Comment, int64]{I: commentColID},
 	PostID: velox.NumberCol[Comment, int64]{I: commentColPostID},
 	Body:   velox.StringCol[Comment, string]{I: commentColBody},

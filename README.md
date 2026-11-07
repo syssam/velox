@@ -152,7 +152,7 @@ it to you. On PostgreSQL, `veloxpgx.Open` takes a pgx pool and is faster.
 ## What velox doesn't do
 
 - No joins API, `DISTINCT`, `UNION` or `HAVING`, and no subqueries beyond the
-  `EXISTS` of `Has`, `HasWhere` and `Of`. `GROUP BY` is one key (`CountBy`,
+  `EXISTS` of `Has`, `HasWith` and `Of`. `GROUP BY` is one key (`CountBy`,
   `SumBy` and the like).
 - `Raw` scans only into entities. For a report, run your own SQL on
   `velox.Pool(db)`, the `*sql.DB` under a DB. It is nil on a transaction's DB and

@@ -1,5 +1,5 @@
 // Command relations shows one-to-many, belongs-to and many-to-many relations:
-// eager loading with With, EXISTS conditions with Has and HasWhere, linking
+// eager loading with With, EXISTS conditions with Has and HasWith, linking
 // and unlinking through a join entity, and keyset pagination with After.
 package main
 
@@ -105,14 +105,14 @@ func run(ctx context.Context, w io.Writer) error {
 		say("belongs-to: %s by %s", p.Title, a.Name)
 	}
 
-	// Has and HasWhere are EXISTS subqueries; Not(Has()) finds the authors
+	// Has and HasWith are EXISTS subqueries; Not(Has()) finds the authors
 	// with no posts.
 	for _, c := range []struct {
 		name string
 		pred velox.Pred[gen.Author]
 	}{
 		{"Has", A.Posts.Has()},
-		{"HasWhere votes > 20", A.Posts.HasWhere(P.Votes.GT(20))},
+		{"HasWith votes > 20", A.Posts.HasWith(P.Votes.GT(20))},
 		{"Not Has", velox.Not(A.Posts.Has())},
 	} {
 		got, err := db.Query[gen.Author]().Where(c.pred).OrderBy(A.Name.Asc()).Limit(10).All(ctx)
@@ -121,7 +121,7 @@ func run(ctx context.Context, w io.Writer) error {
 		}
 		say("%s: %s", c.name, names(got))
 	}
-	text, _, err := db.Query[gen.Author]().Where(A.Posts.HasWhere(P.Votes.GT(20))).Limit(10).SQL(ctx)
+	text, _, err := db.Query[gen.Author]().Where(A.Posts.HasWith(P.Votes.GT(20))).Limit(10).SQL(ctx)
 	if err != nil {
 		return err
 	}
@@ -210,7 +210,7 @@ func manyToMany(ctx context.Context, db *velox.DB, say func(string, ...any)) err
 	if err != nil {
 		return err
 	}
-	history, err := db.Query[gen.Post]().Where(P.Tags.HasWhere(T.Name.EQ("history"))).OrderBy(P.Title.Asc()).Limit(10).All(ctx)
+	history, err := db.Query[gen.Post]().Where(P.Tags.HasWith(T.Name.EQ("history"))).OrderBy(P.Title.Asc()).Limit(10).All(ctx)
 	if err != nil {
 		return err
 	}

@@ -329,9 +329,9 @@ func TestHas(t *testing.T) {
 		return names(us)
 	}
 	wantStrings(t, "Groups.Has", q(gen.Users.Groups.Has()), []string{"ada", "bob"})
-	wantStrings(t, "Groups.HasWhere", q(gen.Users.Groups.HasWhere(gen.Groups.Name.EQ("devs"))), []string{"ada"})
+	wantStrings(t, "Groups.HasWith", q(gen.Users.Groups.HasWith(gen.Groups.Name.EQ("devs"))), []string{"ada"})
 	wantStrings(t, "not Groups.Has", q(velox.Not(gen.Users.Groups.Has())), []string{"carol"})
-	wantStrings(t, "Posts.HasWhere", q(gen.Users.Posts.HasWhere(gen.Posts.Title.EQ("b1"))), []string{"bob"})
+	wantStrings(t, "Posts.HasWith", q(gen.Users.Posts.HasWith(gen.Posts.Title.EQ("b1"))), []string{"bob"})
 }
 
 func TestPolicy(t *testing.T) {

@@ -467,7 +467,7 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 	edge := fmt.Sprintf("%s.Edge(%s, %s)", typeVar(t), x, edgeConst(e, pe))
 	switch ed.Kind {
 	case sdl.EdgeUnique:
-		f.doc("", fmt.Sprintf("%s is the edge %s: the %s it leads to, or nil. It is read in one query with the edge of every row read with %s.", ed.Method, pe.Name, tt.Name, x))
+		f.doc("", fmt.Sprintf("%s is the edge %s: the %s it leads to, or nil. It is read in one query with the same edge of every row on %s's page.", ed.Method, pe.Name, tt.Name, x))
 		f.p("func (%s *%s) %s(ctx %s.Context) (*%s, error) {", x, e.Name, ed.Method, ctx, tgt.Name)
 		if nilKey != "" {
 			f.p("\tif %s {", nilKey)
@@ -479,14 +479,14 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		f.p("\treturn n, err")
 		f.p("}")
 	case sdl.EdgeList:
-		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is read in one query with the edge of every row read with %s, and fails on more than MaxList nodes.", ed.Method, pe.Name, tt.Name, x))
+		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is read in one query with the same edge of every row on %s's page, and fails on more than MaxList nodes.", ed.Method, pe.Name, tt.Name, x))
 		f.p("func (%s *%s) %s(ctx %s.Context) ([]*%s, error) {", x, e.Name, ed.Method, ctx, tgt.Name)
 		f.p("\tv, err := %s.EdgeList(ctx, &%s, %s, %d)", impl, typeVar(tt), edge, ed.MaxList)
 		f.p("\tn, _ := v.([]*%s)", tgt.Name)
 		f.p("\treturn n, err")
 		f.p("}")
 	case sdl.EdgeConnection:
-		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to. Its queries batch with the edge of every row read with %s.", ed.Method, pe.Name, tt.Name, x))
+		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to. Its queries batch with the same edge of every row on %s's page.", ed.Method, pe.Name, tt.Name, x))
 		f.p("%s", signature("func ("+x+" *"+e.Name+") "+ed.Method, "ctx "+ctx+".Context", connParams(f, tt), "(*"+tt.Name+"Connection, error)"))
 		f.p("\treturn %s(ctx, %s, %s)", newConnImpl(tt), edge, connArgs(tt))
 		f.p("}")

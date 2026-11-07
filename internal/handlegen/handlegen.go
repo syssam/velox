@@ -84,7 +84,7 @@ type kind struct {
 }
 
 var kinds = []kind{
-	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither ordered nor text: bool, []byte and other types.", [][]method{base, key, set}},
+	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types.", [][]method{base, key, set}},
 	{"OrderedCol", "[E, V any]", "is the handle of an ordered column: time.Time and types registered as ordered.", [][]method{base, key, ordered, set}},
 	{"NumberCol", "[E, V any]", "is the handle of a numeric column.", [][]method{base, key, ordered, set, arith}},
 	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, text, set}},

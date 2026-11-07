@@ -49,8 +49,8 @@ const (
 	userEdgePosts = iota
 )
 
-// userHandles is the type of Users.
-type userHandles struct {
+// UserHandles is the type of Users, the typed handles of User's columns and relations.
+type UserHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[User, int64]
 	// Name is the column name.
@@ -58,21 +58,21 @@ type userHandles struct {
 	// Email is the column email.
 	Email velox.StringCol[User, string]
 	// Role is the column role.
-	Role velox.StringCol[User, UserRole]
+	Role velox.Col[User, UserRole]
 	// JoinedAt is the column joined_at.
 	JoinedAt velox.OrderedCol[User, time.Time]
 	// PasswordHash is the column password_hash.
 	PasswordHash velox.StringCol[User, string]
-	// Posts is the edge posts, to Post: With loads it, Has and HasWhere test it.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it.
 	Posts velox.Rel[User, Post]
 }
 
 // Users holds the typed handles of User's columns and relations.
-var Users = userHandles{
+var Users = UserHandles{
 	ID:           velox.NumberCol[User, int64]{I: userColID},
 	Name:         velox.StringCol[User, string]{I: userColName},
 	Email:        velox.StringCol[User, string]{I: userColEmail},
-	Role:         velox.StringCol[User, UserRole]{I: userColRole},
+	Role:         velox.Col[User, UserRole]{I: userColRole},
 	JoinedAt:     velox.OrderedCol[User, time.Time]{I: userColJoinedAt},
 	PasswordHash: velox.StringCol[User, string]{I: userColPasswordHash},
 	Posts:        velox.Rel[User, Post]{I: userEdgePosts},

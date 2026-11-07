@@ -12,7 +12,7 @@ import (
 const _ = veloxgql.GeneratedCodeIsVersion18
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
-// query with the edge of every row read with l.
+// query with the same edge of every row on l's page.
 func (l *Like) User(ctx context.Context) (*User, error) {
 	v, err := gqlgraph.EdgeOne(ctx, &userType, likeType.Edge(l, likeEdgeUser))
 	n, _ := v.(*User)
@@ -20,7 +20,7 @@ func (l *Like) User(ctx context.Context) (*User, error) {
 }
 
 // Post is the edge post: the Post it leads to, or nil. It is read in one query
-// with the edge of every row read with l.
+// with the same edge of every row on l's page.
 func (l *Like) Post(ctx context.Context) (*Post, error) {
 	v, err := gqlgraph.EdgeOne(ctx, &postType, likeType.Edge(l, likeEdgePost))
 	n, _ := v.(*Post)

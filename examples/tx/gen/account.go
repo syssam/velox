@@ -22,8 +22,8 @@ const (
 	accountColBalance
 )
 
-// accountHandles is the type of Accounts.
-type accountHandles struct {
+// AccountHandles is the type of Accounts, the typed handles of Account's columns.
+type AccountHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Account, int64]
 	// Name is the column name.
@@ -33,7 +33,7 @@ type accountHandles struct {
 }
 
 // Accounts holds the typed handles of Account's columns.
-var Accounts = accountHandles{
+var Accounts = AccountHandles{
 	ID:      velox.NumberCol[Account, int64]{I: accountColID},
 	Name:    velox.StringCol[Account, string]{I: accountColName},
 	Balance: velox.NumberCol[Account, int64]{I: accountColBalance},

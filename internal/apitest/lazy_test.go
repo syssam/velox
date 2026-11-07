@@ -16,9 +16,9 @@ import (
 )
 
 // lzProject and lzTask: a task belongs to a project. lzTask's Policy and
-// Hooks build a HasWhere on the task's own relation in their bodies, outside
+// Hooks build a HasWith on the task's own relation in their bodies, outside
 // the functions they return, which ran inside the task's metadata build and
-// deadlocked on its once before HasWhere was lazy.
+// deadlocked on its once before HasWith was lazy.
 type lzProject struct {
 	ID   int64
 	Done bool
@@ -122,9 +122,9 @@ func TestPolicyBodyMayBuildHas(t *testing.T) {
 	})
 }
 
-// lzRace is first used by TestSharedHasWherePreds, so that its metadata and
+// lzRace is first used by TestSharedHasWithPreds, so that its metadata and
 // relation are resolved by the goroutines of that test. Its Policy returns
-// one Pred, with a HasWhere, to every statement.
+// one Pred, with a HasWith, to every statement.
 type lzRace struct {
 	ID        int64
 	ProjectID int64
@@ -160,13 +160,13 @@ func lzRaceDescriptor() velox.Descriptor[lzRace] {
 	}
 }
 
-// TestSharedHasWherePreds: goroutines run one query value whose Where holds a
-// shared HasWhere Pred, and the policy of the entity returns another shared
+// TestSharedHasWithPreds: goroutines run one query value whose Where holds a
+// shared HasWith Pred, and the policy of the entity returns another shared
 // one, so that resolving, which copies on write, is raced on both. Run under
 // go test -race.
-func TestSharedHasWherePreds(t *testing.T) {
+func TestSharedHasWithPreds(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	hasDone := lzRaces.Project.HasWhere(lzProjects.Done.EQ(true))
+	hasDone := lzRaces.Project.HasWith(lzProjects.Done.EQ(true))
 	q := db.Query[lzRace]().Where(hasDone, lzRaces.ID.EQ(1)).Limit(1)
 	var want string
 	const goroutines = 16
@@ -238,18 +238,18 @@ func (*lzLate) VeloxMeta() *velox.Meta[lzLate] {
 	})
 }
 
-func TestHasWhereErrorAtStatement(t *testing.T) {
+func TestHasWithErrorAtStatement(t *testing.T) {
 	// Building the predicate reads no metadata; the statement reports the
 	// relation's error and sends nothing.
 	le := &fakeconn.Exec{}
 	ldb := openFake(velox.Postgres, le)
 	// lzLateMeta is package-level and loads once per process, so this check
 	// means something on the process's first load only; on a later run, or
-	// after another test loaded it, it still pins that HasWhere loads nothing.
+	// after another test loaded it, it still pins that HasWith loads nothing.
 	before := lzLateLoads
-	lp := lzLates.Bad.HasWhere()
+	lp := lzLates.Bad.HasWith()
 	if lzLateLoads != before {
-		t.Fatalf("HasWhere built the owner's metadata (%d loads, were %d)", lzLateLoads, before)
+		t.Fatalf("HasWith built the owner's metadata (%d loads, were %d)", lzLateLoads, before)
 	}
 	const lwant = "velox: apitest.lzLate.bad: its target github.com/syssam/velox/internal/apitest.badDescriptor is invalid: apitest.badDescriptor: the primary key names column 3, of 1"
 	if _, err := ldb.Query[lzLate]().Where(lp).Limit(1).All(ctx); err == nil || err.Error() != lwant {
@@ -263,7 +263,7 @@ func TestHasWhereErrorAtStatement(t *testing.T) {
 	// without an error and the statement reports it, sending nothing.
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
-	p := dBadThroughs.BadJoin.HasWhere(fixture.DTags.Name.EQ("x"))
+	p := dBadThroughs.BadJoin.HasWith(fixture.DTags.Name.EQ("x"))
 	const want = "velox: apitest.dBadThrough.bad_join: its join entity is invalid: apitest.badDescriptor: the primary key names column 3, of 1"
 	q := db.Query[dBadThrough]().Where(p).Limit(1)
 	if _, err := q.All(ctx); err == nil || err.Error() != want {
@@ -496,7 +496,7 @@ func (*mmB) VeloxMeta() *velox.Meta[mmB] {
 
 // TestHandleMustNameTheFieldsEntity: the target comes from the handle, so
 // every resolution checks that it is the entity the field holds, and every
-// use (CheckRelation, With, HasWhere) reports the same SchemaError.
+// use (CheckRelation, With, HasWith) reports the same SchemaError.
 func TestHandleMustNameTheFieldsEntity(t *testing.T) {
 	if err := velox.CheckRelation(mmBs.Items); err != nil {
 		t.Fatalf("a matching handle: %v", err)
@@ -557,13 +557,13 @@ func uses(i int32, good bool) map[string]error {
 		out["CheckRelation"] = velox.CheckRelation(h)
 		_, out["With"] = db.Query[mmE]().With(h).Limit(1).All(ctx)
 		_, out["Has"] = db.Query[mmE]().Where(h.Has()).Limit(1).All(ctx)
-		_, out["HasWhere"] = db.Query[mmE]().Where(h.HasWhere(mmItemIDs.EQ(1))).Limit(1).All(ctx)
+		_, out["HasWith"] = db.Query[mmE]().Where(h.HasWith(mmItemIDs.EQ(1))).Limit(1).All(ctx)
 	} else {
 		h := velox.Rel[mmE, mmOther]{I: i}
 		out["CheckRelation"] = velox.CheckRelation(h)
 		_, out["With"] = db.Query[mmE]().With(h).Limit(1).All(ctx)
 		_, out["Has"] = db.Query[mmE]().Where(h.Has()).Limit(1).All(ctx)
-		_, out["HasWhere"] = db.Query[mmE]().Where(h.HasWhere(mmOtherIDs.EQ(1))).Limit(1).All(ctx)
+		_, out["HasWith"] = db.Query[mmE]().Where(h.HasWith(mmOtherIDs.EQ(1))).Limit(1).All(ctx)
 	}
 	return out
 }

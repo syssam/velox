@@ -25,7 +25,7 @@ import (
 //
 // A relation that can hold several rows (Many) is refused: a join would read an
 // owner once for each, and Limit, Count and After would count joined rows.
-// Load it with With, or test it with Has or HasWhere. A join reads all of the
+// Load it with With, or test it with Has or HasWith. A join reads all of the
 // target's columns; Columns and Omit act on the entity's own. The target's
 // Read policy is in the join's ON clause. A query joins a relation once, and
 // a locking read, an aggregate and a per-owner read through a join table cannot join. After pages over a joined column
@@ -55,7 +55,7 @@ func (q Query[E]) join[T any](r Rel[E, T], left bool) Query[E] {
 		return fail(err)
 	}
 	if l.Many || l.Join != nil {
-		return fail(fmt.Errorf("velox: %s: %s is a to-many relation, and Join reads a to-one relation; load it with With, or test it with Has or HasWhere", q.meta.info.Name, l.Name))
+		return fail(fmt.Errorf("velox: %s: %s is a to-many relation, and Join reads a to-one relation; load it with With, or test it with Has or HasWith", q.meta.info.Name, l.Name))
 	}
 	// The handle says how to join, not how to load: only its With applies.
 	if r.err != nil {
@@ -121,7 +121,7 @@ func (q Query[E]) join[T any](r Rel[E, T], left bool) Query[E] {
 
 // Is is true when the related entity of a joined relation meets every
 // condition. The query must Join or LeftJoin r; a statement without the join
-// fails. It is the condition on the joined row, not an EXISTS: use HasWhere
+// fails. It is the condition on the joined row, not an EXISTS: use HasWith
 // for a relation that is not joined.
 func (r Rel[E, T]) Is[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 	for _, p := range ps {

@@ -24,8 +24,8 @@ const (
 	noteColText
 )
 
-// noteHandles is the type of Notes.
-type noteHandles struct {
+// NoteHandles is the type of Notes, the typed handles of Note's columns.
+type NoteHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Note, int64]
 	// DeletedAt is the column deleted_at.
@@ -35,7 +35,7 @@ type noteHandles struct {
 }
 
 // Notes holds the typed handles of Note's columns.
-var Notes = noteHandles{
+var Notes = NoteHandles{
 	ID:        velox.NumberCol[Note, int64]{I: noteColID},
 	DeletedAt: velox.NullOrderedCol[Note, time.Time]{I: noteColDeletedAt},
 	Text:      velox.StringCol[Note, string]{I: noteColText},

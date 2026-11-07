@@ -24,8 +24,8 @@ const (
 	eventColMaybeAt
 )
 
-// eventHandles is the type of Events.
-type eventHandles struct {
+// EventHandles is the type of Events, the typed handles of Event's columns.
+type EventHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Event, int64]
 	// At is the column at.
@@ -35,7 +35,7 @@ type eventHandles struct {
 }
 
 // Events holds the typed handles of Event's columns.
-var Events = eventHandles{
+var Events = EventHandles{
 	ID:      velox.NumberCol[Event, int64]{I: eventColID},
 	At:      velox.OrderedCol[Event, kind.Moment]{I: eventColAt},
 	MaybeAt: velox.NullOrderedCol[Event, kind.Moment]{I: eventColMaybeAt},

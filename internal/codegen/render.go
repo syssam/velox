@@ -309,26 +309,26 @@ func entityPositions(w *writer, e *OutEntity) {
 }
 
 // entityHandles writes the variable of the typed handles of e's columns and
-// relations, in the layout of internal/testmodel/ticket.go: a named
-// type, so that a hover shows its name, and the variable.
+// relations, and its type, XHandles: exported, so that go doc lists the
+// handles with their comments.
 func entityHandles(w *writer, e *OutEntity) {
-	typ := camel(e.Label) + "Handles"
-	w.p("// %s is the type of %s.", typ, e.Handles)
+	typ := e.Name + "Handles"
+	what := "columns"
+	if len(e.Rels) > 0 {
+		what = "columns and relations"
+	}
+	w.p("// %s is the type of %s, the typed handles of %s's %s.", typ, e.Handles, e.Name, what)
 	w.p("type %s struct {", typ)
 	for _, f := range e.Fields {
 		w.p("// %s is the column %s.", f.GoName, f.Column)
 		w.p("%s %s", f.GoName, f.Handle)
 	}
 	for _, r := range e.Rels {
-		w.p("// %s is the edge %s, to %s: With loads it, Has and HasWhere test it.", r.GoName, r.Name, r.Target)
+		w.p("// %s is the edge %s, to %s: With loads it, Has and HasWith test it.", r.GoName, r.Name, r.Target)
 		w.p("%s velox.Rel[%s, %s]", r.GoName, e.Name, r.Target)
 	}
 	w.p("}")
 	w.p("")
-	what := "columns"
-	if len(e.Rels) > 0 {
-		what = "columns and relations"
-	}
 	w.p("// %s holds the typed handles of %s's %s.", e.Handles, e.Name, what)
 	w.p("var %s = %s{", e.Handles, typ)
 	for i, f := range e.Fields {

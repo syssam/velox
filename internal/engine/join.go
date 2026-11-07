@@ -47,7 +47,7 @@ func resolveJoins(st *Statement) error {
 			return err
 		}
 		if l.Many || l.Join != nil {
-			return fmt.Errorf("velox: %s: %s is a to-many relation, and Join reads a to-one relation; load it with With, or test it with Has or HasWhere", st.Entity.Name, l.Name)
+			return fmt.Errorf("velox: %s: %s is a to-many relation, and Join reads a to-one relation; load it with With, or test it with Has or HasWith", st.Entity.Name, l.Name)
 		}
 		joins[i].Link = l
 	}

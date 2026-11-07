@@ -8,7 +8,7 @@ responses of their servers instead).
 | Example | What it shows | Run |
 |---|---|---|
 | [start](start) | Full CRUD on one entity: `Insert`, `InsertAll`, `Where`/`OrderBy`/`Limit`/`All`, `One` and `ErrNotFound`, `Count`, `Iter`, `Update`…`Set`…`Where`, `Save`, `Delete`…`Where`, and the `ErrUnbounded`/`ErrNoWhere` guards. **Start here.** | `go run ./start` |
-| [relations](relations) | One-to-many, belongs-to and many-to-many, declared with `edge.To` and `edge.From`; linking through the join entity; `With` eager loading, nested and filtered; `Has`/`HasWhere`; keyset pagination with `After` | `go run ./relations` |
+| [relations](relations) | One-to-many, belongs-to and many-to-many, declared with `edge.To` and `edge.From`; linking through the join entity; `With` eager loading, nested and filtered; `Has`/`HasWith`; keyset pagination with `After` | `go run ./relations` |
 | [tenant](tenant) | The `scope` package: a context value confines reads, writes and inserts of an entity to an organization; `scope.ErrNoScope`, `scope.ErrMismatch`; `WithoutPolicy` with a reason; a tenant-safe upsert | `go run ./tenant` |
 | [policy](policy) | `velox.Policy` Read/Write/Insert by the user in the context; `ErrDenied` and `*PolicyError`; a child visible when its parent is, through `Has`; `WithoutPolicy`; `SQL(ctx)` | `go run ./policy` |
 | [hooks](hooks) | The `Hooks()` of an entity and of a mixin: an insert hook deriving a field, an update hook that reads and sets values through a `Mutation`, a delete hook narrowing with `Where`, `Before` and `On`, `Save` writing back; a run-time hook (`velox.WithHooks`) that writes an audit row on the write's DB (`m.DB()`; inside `db.Tx` it commits or rolls back with the write), and a dry run that refuses that write | `go run ./hooks` |

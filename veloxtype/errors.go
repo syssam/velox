@@ -91,7 +91,7 @@ func (e *ConstraintError) Unwrap() error { return e.Err }
 type PolicyError struct {
 	Entity string // the Go type, e.g. "billing.Invoice"
 	// Op is the kind of statement denied: the statement's own, or, for a
-	// denial of the target of an EXISTS (a Has or HasWhere, in the statement
+	// denial of the target of an EXISTS (a Has or HasWith, in the statement
 	// or in a policy's condition), OpSelect, since the EXISTS reads its target
 	// whatever the statement does. An upsert's update branch is OpUpdate.
 	Op  Op

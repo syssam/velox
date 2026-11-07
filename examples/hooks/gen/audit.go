@@ -22,8 +22,8 @@ const (
 	auditColMessage
 )
 
-// auditHandles is the type of Audits.
-type auditHandles struct {
+// AuditHandles is the type of Audits, the typed handles of Audit's columns.
+type AuditHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Audit, int64]
 	// Actor is the column actor.
@@ -33,7 +33,7 @@ type auditHandles struct {
 }
 
 // Audits holds the typed handles of Audit's columns.
-var Audits = auditHandles{
+var Audits = AuditHandles{
 	ID:      velox.NumberCol[Audit, int64]{I: auditColID},
 	Actor:   velox.StringCol[Audit, string]{I: auditColActor},
 	Message: velox.StringCol[Audit, string]{I: auditColMessage},

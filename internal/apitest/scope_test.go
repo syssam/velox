@@ -224,7 +224,7 @@ func TestHasOnAScopedTargetFromAnUnscopedEntity(t *testing.T) {
 		seen = *st
 		return next(ctx)
 	}))
-	q := db.Query[testmodel.Item]().Where(It.Qty.GT(0), velox.Not(It.Invoice.HasWhere(I.Paid.EQ(true)))).Limit(1)
+	q := db.Query[testmodel.Item]().Where(It.Qty.GT(0), velox.Not(It.Invoice.HasWith(I.Paid.EQ(true)))).Limit(1)
 	if _, err := q.All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
@@ -247,12 +247,12 @@ func TestHasOnAScopedTargetFromAnUnscopedEntity(t *testing.T) {
 	}
 }
 
-// TestNestedHasIsScopedAtEveryLevel: a HasWhere inside a HasWhere scopes
+// TestNestedHasIsScopedAtEveryLevel: a HasWith inside a HasWith scopes
 // each target.
 func TestNestedHasIsScopedAtEveryLevel(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
-	q := db.Query[testmodel.Ticket]().Where(Tk.Parent.HasWhere(Tk.Invoice.Has())).Limit(1)
+	q := db.Query[testmodel.Ticket]().Where(Tk.Parent.HasWith(Tk.Invoice.Has())).Limit(1)
 	if _, err := q.All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func TestNestedHasIsScopedAtEveryLevel(t *testing.T) {
 // conditions it changes, so a query and its predicates can be run under many
 // orgs at once.
 func TestScopeNeverChangesASharedQuery(t *testing.T) {
-	has := Tk.Invoice.HasWhere(I.Paid.EQ(true))
+	has := Tk.Invoice.HasWith(I.Paid.EQ(true))
 	cond := velox.Or(Tk.Done.EQ(true), velox.And(Tk.Title.NEQ(""), has))
 
 	e0 := &fakeconn.Exec{}

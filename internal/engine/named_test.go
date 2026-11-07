@@ -235,7 +235,7 @@ func TestResolveEdgeNeedsLink(t *testing.T) {
 	if !strings.Contains(sql, `EXISTS (SELECT 1 FROM "nm_orgs"`) || !strings.Contains(sql, `"name" = $1`) || fmt.Sprint(args[:1]) != "[acme]" {
 		t.Errorf("SQL %s %v", sql, args)
 	}
-	typed, _, err := nmSQL(t, velox.Predicate(velox.Rel[nmDoc, nmOrg]{I: 0}.HasWhere(velox.Pred[nmOrg](velox.TableOf[nmOrg]().Pred(1, velox.PredEQ, "acme")))))
+	typed, _, err := nmSQL(t, velox.Predicate(velox.Rel[nmDoc, nmOrg]{I: 0}.HasWith(velox.Pred[nmOrg](velox.TableOf[nmOrg]().Pred(1, velox.PredEQ, "acme")))))
 	if err != nil {
 		t.Fatal(err)
 	}

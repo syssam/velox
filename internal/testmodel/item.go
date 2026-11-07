@@ -37,8 +37,8 @@ const (
 	itemEdgeInvoice = iota
 )
 
-// itemHandles is the type of Items.
-type itemHandles struct {
+// ItemHandles is the type of Items, the typed handles of Item's columns and relations.
+type ItemHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Item, int64]
 	// InvoiceID is the column invoice_id.
@@ -47,12 +47,12 @@ type itemHandles struct {
 	SKU velox.StringCol[Item, string]
 	// Qty is the column qty.
 	Qty velox.NumberCol[Item, int64]
-	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWhere test it.
+	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWith test it.
 	Invoice velox.Rel[Item, Invoice]
 }
 
 // Items holds the typed handles of Item's columns and relations.
-var Items = itemHandles{
+var Items = ItemHandles{
 	ID:        velox.NumberCol[Item, int64]{I: itemColID},
 	InvoiceID: velox.NumberCol[Item, int64]{I: itemColInvoiceID},
 	SKU:       velox.StringCol[Item, string]{I: itemColSKU},

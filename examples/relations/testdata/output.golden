@@ -7,7 +7,7 @@ belongs-to: Compilers by Grace
 belongs-to: COBOL by Grace
 belongs-to: Engines by Ada
 Has: [Ada, Grace]
-HasWhere votes > 20: [Grace]
+HasWith votes > 20: [Grace]
 Not Has: [Linus]
 SQL: SELECT "id", "name" FROM "authors" WHERE EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "authors"."id" AND "votes" > ?) LIMIT ?
 page 1: [Compilers, COBOL]

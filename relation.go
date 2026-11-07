@@ -178,17 +178,17 @@ func CheckRelation[E, T any](r Rel[E, T]) error {
 // Has is true when the relation holds at least one entity. On MySQL, an UPDATE
 // or DELETE whose condition's EXISTS reads the table being changed (a relation
 // of an entity to itself) fails with error 1093.
-func (r Rel[E, T]) Has[_ Lazy[T]]() Pred[E] { return r.HasWhere() }
+func (r Rel[E, T]) Has[_ Lazy[T]]() Pred[E] { return r.HasWith() }
 
-// HasWhere is true when at least one related entity meets every condition:
+// HasWith is true when at least one related entity meets every condition:
 // EXISTS (SELECT 1 FROM target WHERE key = owner's key AND ps…). On MySQL, an
 // UPDATE or DELETE whose condition's EXISTS reads the table being changed (a
 // relation of an entity to itself) fails with error 1093.
 //
-// HasWhere reads no metadata, so it may be called anywhere, an entity's
+// HasWith reads no metadata, so it may be called anywhere, an entity's
 // Policy and Hooks bodies included. A relation that cannot be resolved fails
-// the statement that holds the condition, not HasWhere.
-func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
+// the statement that holds the condition, not HasWith.
+func (r Rel[E, T]) HasWith[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 	for _, p := range ps {
 		if err := engine.PredErr(engine.PredNode(Predicate(p))); err != nil {
 			return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: err}))
@@ -208,7 +208,7 @@ func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 //
 // Of reads the owners' keys when it is called, so later changes to them do
 // not change the condition. It reads E's and T's metadata: inside a Policy
-// or Hooks body, outside the functions it returns, use HasWhere. A nil
+// or Hooks body, outside the functions it returns, use HasWith. A nil
 // owner fails the statement that holds the condition; an owner whose key is
 // NULL relates to nothing; with no owners Of is false. Each owner is one
 // parameter, under the dialect's limit: a statement with more owners than

@@ -9,7 +9,7 @@ import (
 // BenchmarkJoin compares ways to read 100 items of one org's invoices, one item for
 // each invoice as a feed holds one row for each post, each with its invoice, ordered as a feed is: by the related row's column and then by the item's.
 // Join is one statement. With is two: the items, then their invoices by IN; its
-// ordering is by the item's own column, as it cannot order by the invoice's. HasWhere
+// ordering is by the item's own column, as it cannot order by the invoice's. HasWith
 // tests the invoice without reading it, as an EXISTS.
 func BenchmarkJoin(b *testing.B) {
 	for _, tg := range targets(b, nil) {
@@ -52,7 +52,7 @@ func BenchmarkJoin(b *testing.B) {
 				b.ReportAllocs()
 				for b.Loop() {
 					rows, err := tg.db.Query[testmodel.Item]().With(It.Invoice).
-						Where(It.SKU.EQ("SKU-0"), It.Invoice.HasWhere(I.OrgID.EQ(7))).
+						Where(It.SKU.EQ("SKU-0"), It.Invoice.HasWith(I.OrgID.EQ(7))).
 						OrderBy(It.ID.Asc()).Limit(100).All(ctx)
 					if err != nil {
 						b.Fatal(err)
@@ -60,11 +60,11 @@ func BenchmarkJoin(b *testing.B) {
 					check(b, rows, true)
 				}
 			})
-			b.Run("HasWhere100", func(b *testing.B) {
+			b.Run("HasWith100", func(b *testing.B) {
 				b.ReportAllocs()
 				for b.Loop() {
 					rows, err := tg.db.Query[testmodel.Item]().
-						Where(It.SKU.EQ("SKU-0"), It.Invoice.HasWhere(I.OrgID.EQ(7))).
+						Where(It.SKU.EQ("SKU-0"), It.Invoice.HasWith(I.OrgID.EQ(7))).
 						OrderBy(It.ID.Asc()).Limit(100).All(ctx)
 					if err != nil {
 						b.Fatal(err)

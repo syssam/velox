@@ -164,6 +164,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `Rel.HasWhere` is `Rel.HasWith`, as ent's `HasXWith` and velox's own
+  `HasEdgeWith`. Generated code: the handles' type is exported (`PostHandles`),
+  and an enum field's handle is `velox.Col`, without `Contains`, `HasPrefix` or
+  `Like`. Regenerate: `velox.GeneratedCodeIsVersion19` replaces Version18
+  (ADR 0050).
 - velox-graphql: a type's connection is `gen.NewPostConnection(ctx, q, …)`, which
   was `gen.PaginatePosts`; it sends nothing until gqlgen resolves its fields. The
   package generated code imports is `veloxgql/gqlgraph`, which was

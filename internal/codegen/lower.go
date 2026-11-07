@@ -379,6 +379,10 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 		h = "OrderedCol"
 	case numeric[kind]:
 		h = "NumberCol"
+	case f.Type == "enum":
+		// An enum compares by equality and orders, as ent's predicates; it
+		// has no Contains or Like, which no value of it would need.
+		h = "Col"
 	case kind == "string":
 		h = "StringCol"
 	default:
@@ -1188,6 +1192,15 @@ func (l *lowerer) finish() {
 	for i, j := range joins {
 		if joinOK[i] {
 			add(j.ent.Handles, "handles variable", j.owner, j.where)
+		}
+	}
+	// Each handles variable has a type of its own, XHandles.
+	for _, e := range l.g.Entities {
+		add(e.Name+"Handles", "handles type", e.Name, "")
+	}
+	for i, j := range joins {
+		if joinOK[i] {
+			add(j.ent.Name+"Handles", "handles type", j.owner, j.where)
 		}
 	}
 	// A join table is not an entity's table, and the generated functions of an

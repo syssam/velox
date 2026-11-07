@@ -54,7 +54,7 @@ func TestTableQueryParity(t *testing.T) {
 			}},
 		{"relation, order, columns, after",
 			func(db *velox.DB) velox.Query[testmodel.Ticket] {
-				return db.Query[testmodel.Ticket]().Where(Tk.Children.HasWhere(Tk.Done.EQ(true)), Tk.Invoice.Has()).
+				return db.Query[testmodel.Ticket]().Where(Tk.Children.HasWith(Tk.Done.EQ(true)), Tk.Invoice.Has()).
 					OrderBy(Tk.Title.Desc(), Tk.ID.Asc()).Columns(Tk.ID, Tk.Title).After(&after).Limit(5).Offset(2).MaxRows(7)
 			},
 			func(db *velox.DB) velox.TableQuery {

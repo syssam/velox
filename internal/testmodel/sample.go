@@ -63,8 +63,8 @@ const (
 	sampleEdgeParent
 )
 
-// sampleHandles is the type of Samples.
-type sampleHandles struct {
+// SampleHandles is the type of Samples, the typed handles of Sample's columns and relations.
+type SampleHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Sample, int64]
 	// Name is the column name.
@@ -91,16 +91,16 @@ type sampleHandles struct {
 	ParentID velox.NullNumberCol[Sample, int64]
 	// Score is the column score.
 	Score velox.NumberCol[Sample, kind.Score]
-	// Lines is the edge lines, to Line: With loads it, Has and HasWhere test it.
+	// Lines is the edge lines, to Line: With loads it, Has and HasWith test it.
 	Lines velox.Rel[Sample, Line]
-	// Children is the edge children, to Sample: With loads it, Has and HasWhere test it.
+	// Children is the edge children, to Sample: With loads it, Has and HasWith test it.
 	Children velox.Rel[Sample, Sample]
-	// Parent is the edge parent, to Sample: With loads it, Has and HasWhere test it.
+	// Parent is the edge parent, to Sample: With loads it, Has and HasWith test it.
 	Parent velox.Rel[Sample, Sample]
 }
 
 // Samples holds the typed handles of Sample's columns and relations.
-var Samples = sampleHandles{
+var Samples = SampleHandles{
 	ID:        velox.NumberCol[Sample, int64]{I: sampleColID},
 	Name:      velox.StringCol[Sample, string]{I: sampleColName},
 	Status:    velox.StringCol[Sample, kind.Status]{I: sampleColStatus},

@@ -151,7 +151,7 @@ const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
 const EdgePage
-const GeneratedCodeIsVersion18
+const GeneratedCodeIsVersion19
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -385,7 +385,7 @@ func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E]
 func (r Rel[E, T]) Clear[_ Lazy[T]]() Setter[E]
 func (r Rel[E, T]) Fill[_ Lazy[T]](owner *E, t *T) error
 func (r Rel[E, T]) Filled[_ Lazy[T]](owner *E) (*T, bool)
-func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E]
+func (r Rel[E, T]) HasWith[_ Lazy[T]](ps ...Pred[T]) Pred[E]
 func (r Rel[E, T]) Has[_ Lazy[T]]() Pred[E]
 func (r Rel[E, T]) Is[_ Lazy[T]](ps ...Pred[T]) Pred[E]
 func (r Rel[E, T]) LimitEach[_ Lazy[T]](n int) Rel[E, T]

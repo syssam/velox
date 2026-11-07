@@ -22,8 +22,8 @@ const (
 	itemColQuantity
 )
 
-// itemHandles is the type of Items.
-type itemHandles struct {
+// ItemHandles is the type of Items, the typed handles of Item's columns.
+type ItemHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Item, int64]
 	// Name is the column name.
@@ -33,7 +33,7 @@ type itemHandles struct {
 }
 
 // Items holds the typed handles of Item's columns.
-var Items = itemHandles{
+var Items = ItemHandles{
 	ID:       velox.NumberCol[Item, int64]{I: itemColID},
 	Name:     velox.StringCol[Item, string]{I: itemColName},
 	Quantity: velox.NumberCol[Item, int]{I: itemColQuantity},

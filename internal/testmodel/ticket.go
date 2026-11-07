@@ -52,8 +52,8 @@ const (
 	ticketEdgeParent
 )
 
-// ticketHandles is the type of Tickets.
-type ticketHandles struct {
+// TicketHandles is the type of Tickets, the typed handles of Ticket's columns and relations.
+type TicketHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Ticket, int64]
 	// CreatedBy is the column created_by.
@@ -70,16 +70,16 @@ type ticketHandles struct {
 	InvoiceID velox.NumberCol[Ticket, int64]
 	// ParentID is the column parent_id.
 	ParentID velox.NullNumberCol[Ticket, int64]
-	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWhere test it.
+	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWith test it.
 	Invoice velox.Rel[Ticket, Invoice]
-	// Children is the edge children, to Ticket: With loads it, Has and HasWhere test it.
+	// Children is the edge children, to Ticket: With loads it, Has and HasWith test it.
 	Children velox.Rel[Ticket, Ticket]
-	// Parent is the edge parent, to Ticket: With loads it, Has and HasWhere test it.
+	// Parent is the edge parent, to Ticket: With loads it, Has and HasWith test it.
 	Parent velox.Rel[Ticket, Ticket]
 }
 
 // Tickets holds the typed handles of Ticket's columns and relations.
-var Tickets = ticketHandles{
+var Tickets = TicketHandles{
 	ID:        velox.NumberCol[Ticket, int64]{I: ticketColID},
 	CreatedBy: velox.StringCol[Ticket, string]{I: ticketColCreatedBy},
 	OrgID:     velox.NumberCol[Ticket, int64]{I: ticketColOrgID},

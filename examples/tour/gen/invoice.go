@@ -50,8 +50,8 @@ const (
 	invoiceEdgeLines = iota
 )
 
-// invoiceHandles is the type of Invoices.
-type invoiceHandles struct {
+// InvoiceHandles is the type of Invoices, the typed handles of Invoice's columns and relations.
+type InvoiceHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Invoice, int64]
 	// CreatedAt is the column created_at.
@@ -67,15 +67,15 @@ type invoiceHandles struct {
 	// Customer is the column customer.
 	Customer velox.StringCol[Invoice, string]
 	// Status is the column status.
-	Status velox.StringCol[Invoice, InvoiceStatus]
+	Status velox.Col[Invoice, InvoiceStatus]
 	// TotalCents is the column total_cents.
 	TotalCents velox.NumberCol[Invoice, int64]
-	// Lines is the edge lines, to Line: With loads it, Has and HasWhere test it.
+	// Lines is the edge lines, to Line: With loads it, Has and HasWith test it.
 	Lines velox.Rel[Invoice, Line]
 }
 
 // Invoices holds the typed handles of Invoice's columns and relations.
-var Invoices = invoiceHandles{
+var Invoices = InvoiceHandles{
 	ID:         velox.NumberCol[Invoice, int64]{I: invoiceColID},
 	CreatedAt:  velox.OrderedCol[Invoice, time.Time]{I: invoiceColCreatedAt},
 	UpdatedAt:  velox.OrderedCol[Invoice, time.Time]{I: invoiceColUpdatedAt},
@@ -83,7 +83,7 @@ var Invoices = invoiceHandles{
 	DeletedAt:  velox.NullOrderedCol[Invoice, time.Time]{I: invoiceColDeletedAt},
 	Number:     velox.StringCol[Invoice, string]{I: invoiceColNumber},
 	Customer:   velox.StringCol[Invoice, string]{I: invoiceColCustomer},
-	Status:     velox.StringCol[Invoice, InvoiceStatus]{I: invoiceColStatus},
+	Status:     velox.Col[Invoice, InvoiceStatus]{I: invoiceColStatus},
 	TotalCents: velox.NumberCol[Invoice, int64]{I: invoiceColTotalCents},
 	Lines:      velox.Rel[Invoice, Line]{I: invoiceEdgeLines},
 }

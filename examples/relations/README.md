@@ -43,7 +43,7 @@ db.Query[gen.Post]().With(P.Author)                              // belongs-to
 posts, loaded := author.Edges.Posts.Get()
 
 A.Posts.Has()                       // EXISTS
-A.Posts.HasWhere(P.Votes.GT(20))    // EXISTS with a condition
+A.Posts.HasWith(P.Votes.GT(20))    // EXISTS with a condition
 velox.Not(A.Posts.Has())            // authors with no posts
 
 page = page.After(&last)            // keyset pagination; OrderBy includes the key
@@ -65,7 +65,7 @@ db.Insert(&gen.PostTag{PostID: cobol, TagID: history}).OnConflict(PT.PostID, PT.
 db.Delete[gen.PostTag]().Where(PT.PostID.EQ(cobol), PT.TagID.EQ(history)).Exec(ctx)               // unlink
 
 db.Query[gen.Post]().Where(P.Tags.Has()).With(P.Tags.OrderBy(T.Name.Asc())) // through post_tags
-P.Tags.HasWhere(T.Name.EQ("history"))
+P.Tags.HasWith(T.Name.EQ("history"))
 ```
 
 Linking a pair twice without `OnConflict` fails on the primary key. Deleting

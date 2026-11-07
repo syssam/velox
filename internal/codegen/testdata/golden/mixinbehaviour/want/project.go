@@ -30,8 +30,8 @@ const (
 	projectColName
 )
 
-// projectHandles is the type of Projects.
-type projectHandles struct {
+// ProjectHandles is the type of Projects, the typed handles of Project's columns.
+type ProjectHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Project, int64]
 	// CreatedAt is the column created_at.
@@ -47,7 +47,7 @@ type projectHandles struct {
 }
 
 // Projects holds the typed handles of Project's columns.
-var Projects = projectHandles{
+var Projects = ProjectHandles{
 	ID:        velox.NumberCol[Project, int64]{I: projectColID},
 	CreatedAt: velox.OrderedCol[Project, time.Time]{I: projectColCreatedAt},
 	UpdatedAt: velox.OrderedCol[Project, time.Time]{I: projectColUpdatedAt},

@@ -156,12 +156,12 @@ func TestThroughHasRenders(t *testing.T) {
 		p    velox.Pred[fixture.DBook]
 		want string
 	}{
-		{fixture.DBooks.Tags.HasWhere(fixture.DTags.Name.EQ("go")),
+		{fixture.DBooks.Tags.HasWith(fixture.DTags.Name.EQ("go")),
 			`SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND "name" = $1)) LIMIT $2`},
 		{fixture.DBooks.Tags.Has(),
 			`SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id")) LIMIT $1`},
 		// Nested: the tag's books correlate with the innermost alias, vx2.
-		{fixture.DBooks.Tags.HasWhere(fixture.DTags.Books.HasWhere(fixture.DBooks.Title.EQ("dune"))),
+		{fixture.DBooks.Tags.HasWith(fixture.DTags.Books.HasWith(fixture.DBooks.Title.EQ("dune"))),
 			`SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "book_tags" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND EXISTS (SELECT 1 FROM "books" AS "vx4" WHERE "vx4"."id" = "vx3"."book_id" AND "title" = $1)))) LIMIT $2`},
 		// After a many-to-many EXISTS, the outer table's conditions are its own again.
 		{velox.And(fixture.DBooks.Tags.Has(), fixture.DBooks.Title.EQ("dune")),
@@ -183,7 +183,7 @@ func TestThroughHasRenders(t *testing.T) {
 // lands inside the inner EXISTS, on the target, not on the join or the owner.
 func TestThroughHasScopesTarget(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	got, args, err := db.Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWhere(fixture.DTags.Name.EQ("go"))).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(7)))
+	got, args, err := db.Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWith(fixture.DTags.Name.EQ("go"))).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(7)))
 	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND "name" = $1 AND "org_id" = $2)) LIMIT $3`
 	if err != nil || got != want {
 		t.Fatalf("got  %s, %v\nwant %s", got, err, want)
@@ -211,7 +211,7 @@ func TestThroughCacheKey(t *testing.T) {
 
 // TestOfThroughRenders: Of on a many-to-many relation is an EXISTS on the join
 // entity, correlated with the target, holding the owners' keys; nested in a
-// HasWhere, the correlation names the outer alias.
+// HasWith, the correlation names the outer alias.
 func TestOfThroughRenders(t *testing.T) {
 	b1, b2 := fixture.DBook{ID: 1}, fixture.DBook{ID: 2}
 	for _, c := range []struct {
@@ -242,7 +242,7 @@ func TestOfThroughRenders(t *testing.T) {
 	if err != nil || got != want || !reflect.DeepEqual(args, []any{"go", int64(1), int64(3), 1}) {
 		t.Errorf("org:\n got %s %v, %v\nwant %s", got, args, err, want)
 	}
-	got, _, err = openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWhere(fixture.DBooks.Picks.Of(&b2))).Limit(1).SQL(ctx)
+	got, _, err = openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWith(fixture.DBooks.Picks.Of(&b2))).Limit(1).SQL(ctx)
 	want = `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "picks" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND "book_id" IN ($1)))) LIMIT $2`
 	if err != nil || got != want {
 		t.Errorf("nested:\n got %s, %v\nwant %s", got, err, want)
@@ -617,7 +617,7 @@ func TestThroughNullableKeys(t *testing.T) {
 	}
 }
 
-// dPeer's Read policy uses a many-to-many HasWhere: through dBookTag to tags
+// dPeer's Read policy uses a many-to-many HasWith: through dBookTag to tags
 // (the peer's id standing in for a book's), or, under peerCycle, through
 // dFriend back to dPeer, which is a cycle.
 type dPeer struct {
@@ -700,7 +700,7 @@ func (*dFriend) VeloxMeta() *velox.Meta[dFriend] {
 }
 
 // TestThroughTargetPolicy: the target's Read policy, itself a many-to-many
-// HasWhere, lands inside the inner EXISTS; a Read policy that reaches its own
+// HasWith, lands inside the inner EXISTS; a Read policy that reaches its own
 // Read back through a join is refused as a cycle.
 func TestThroughTargetPolicy(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})

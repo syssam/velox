@@ -219,8 +219,8 @@ func TestReadsHideDeleted(t *testing.T) {
 	if n, err := db.Query[fixture.SOwner]().Where(O.Pinned.Has()).Count(ctx); err != nil || n != 0 {
 		t.Errorf("Pinned.Has: %d, %v; want 0: owner 1's pin is deleted and owner 2's is in org 2", n, err)
 	}
-	if n, err := db.Query[fixture.SOwner]().Where(O.Docs.HasWhere(D.Title.EQ("b"))).Count(ctx); err != nil || n != 0 {
-		t.Errorf("Docs.HasWhere(b): %d, %v; want 0", n, err)
+	if n, err := db.Query[fixture.SOwner]().Where(O.Docs.HasWith(D.Title.EQ("b"))).Count(ctx); err != nil || n != 0 {
+		t.Errorf("Docs.HasWith(b): %d, %v; want 0", n, err)
 	}
 	joined, err := db.Query[fixture.SOwner]().Join(O.Pinned).Unbounded().All(ctx)
 	if err != nil || len(joined) != 0 {

@@ -25,8 +25,8 @@ const (
 	projectColStatus
 )
 
-// projectHandles is the type of Projects.
-type projectHandles struct {
+// ProjectHandles is the type of Projects, the typed handles of Project's columns.
+type ProjectHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Project, int64]
 	// OrgID is the column org_id.
@@ -38,7 +38,7 @@ type projectHandles struct {
 }
 
 // Projects holds the typed handles of Project's columns.
-var Projects = projectHandles{
+var Projects = ProjectHandles{
 	ID:     velox.NumberCol[Project, int64]{I: projectColID},
 	OrgID:  velox.NumberCol[Project, int64]{I: projectColOrgID},
 	Name:   velox.StringCol[Project, string]{I: projectColName},

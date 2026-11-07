@@ -72,8 +72,8 @@ const (
 	bindColNote
 )
 
-// bindHandles is the type of Binds.
-type bindHandles struct {
+// BindHandles is the type of Binds, the typed handles of Bind's columns.
+type BindHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Bind, int64]
 	// Flag is the column flag.
@@ -105,9 +105,9 @@ type bindHandles struct {
 	// Body is the column body.
 	Body velox.StringCol[Bind, string]
 	// Kind is the column kind.
-	Kind velox.StringCol[Bind, BindKind]
+	Kind velox.Col[Bind, BindKind]
 	// Level is the column level.
-	Level velox.StringCol[Bind, bindtype.Level]
+	Level velox.Col[Bind, bindtype.Level]
 	// Data is the column data.
 	Data velox.Col[Bind, []byte]
 	// ShortData is the column short_data.
@@ -129,7 +129,7 @@ type bindHandles struct {
 }
 
 // Binds holds the typed handles of Bind's columns.
-var Binds = bindHandles{
+var Binds = BindHandles{
 	ID:        velox.NumberCol[Bind, int64]{I: bindColID},
 	Flag:      velox.Col[Bind, bool]{I: bindColFlag},
 	I8:        velox.NumberCol[Bind, int8]{I: bindColI8},
@@ -145,8 +145,8 @@ var Binds = bindHandles{
 	Str:       velox.StringCol[Bind, string]{I: bindColStr},
 	Short:     velox.StringCol[Bind, string]{I: bindColShort},
 	Body:      velox.StringCol[Bind, string]{I: bindColBody},
-	Kind:      velox.StringCol[Bind, BindKind]{I: bindColKind},
-	Level:     velox.StringCol[Bind, bindtype.Level]{I: bindColLevel},
+	Kind:      velox.Col[Bind, BindKind]{I: bindColKind},
+	Level:     velox.Col[Bind, bindtype.Level]{I: bindColLevel},
 	Data:      velox.Col[Bind, []byte]{I: bindColData},
 	ShortData: velox.Col[Bind, []byte]{I: bindColShortData},
 	At:        velox.OrderedCol[Bind, time.Time]{I: bindColAt},

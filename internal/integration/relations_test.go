@@ -57,9 +57,9 @@ func TestHas(t *testing.T) {
 			return out
 		}
 		wantIDs(t, ids(I.Items.Has()), []int64{1, 2})
-		wantIDs(t, ids(I.Items.HasWhere(It.Qty.GT(3))), []int64{2})
+		wantIDs(t, ids(I.Items.HasWith(It.Qty.GT(3))), []int64{2})
 		wantIDs(t, ids(velox.Not(I.Items.Has())), []int64{3, 4, 5})
-		wantIDs(t, ids(I.Items.HasWhere(It.Invoice.HasWhere(I.Number.EQ("INV-2")))), []int64{2})
+		wantIDs(t, ids(I.Items.HasWith(It.Invoice.HasWith(I.Number.EQ("INV-2")))), []int64{2})
 		// Invoices 3 and 5 already have no note ("") and updated_at t0, so they
 		// match without changing: 3 rows needs clientFoundRows on MySQL.
 		n, err := tg.db.Update[testmodel.Invoice]().Set(I.Note.Set(""), I.UpdatedAt.Set(t0)).Where(velox.Not(I.Items.Has())).Exec(ctx)

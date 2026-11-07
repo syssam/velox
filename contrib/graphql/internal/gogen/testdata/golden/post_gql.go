@@ -50,7 +50,7 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 }
 
 // Author is the edge author: the Account it leads to, or nil. It is read in one
-// query with the edge of every row read with p.
+// query with the same edge of every row on p's page.
 func (p *Post) Author(ctx context.Context) (*User, error) {
 	v, err := gqlgraph.EdgeOne(ctx, &userType, postType.Edge(p, postEdgeAuthor))
 	n, _ := v.(*User)
@@ -58,8 +58,8 @@ func (p *Post) Author(ctx context.Context) (*User, error) {
 }
 
 // Likes is the edge likes: the Like nodes it leads to, in key order. It is read
-// in one query with the edge of every row read with p, and fails on more than
-// MaxList nodes.
+// in one query with the same edge of every row on p's page, and fails on more
+// than MaxList nodes.
 func (p *Post) Likes(ctx context.Context) ([]*Like, error) {
 	v, err := gqlgraph.EdgeList(ctx, &likeType, postType.Edge(p, postEdgeLikes), 0)
 	n, _ := v.([]*Like)
@@ -67,7 +67,7 @@ func (p *Post) Likes(ctx context.Context) ([]*Like, error) {
 }
 
 // Related is the edge related: a connection to the Post nodes it leads to. Its
-// queries batch with the edge of every row read with p.
+// queries batch with the same edge of every row on p's page.
 func (p *Post) Related(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
@@ -77,7 +77,7 @@ func (p *Post) Related(
 }
 
 // RelatedBy is the edge related_by: a connection to the Post nodes it leads to.
-// Its queries batch with the edge of every row read with p.
+// Its queries batch with the same edge of every row on p's page.
 func (p *Post) RelatedBy(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

@@ -20,8 +20,8 @@ const (
 	userGroupColGroupID
 )
 
-// userGroupHandles is the type of UserGroups.
-type userGroupHandles struct {
+// UserGroupHandles is the type of UserGroups, the typed handles of UserGroup's columns.
+type UserGroupHandles struct {
 	// UserID is the column user_id.
 	UserID velox.NumberCol[UserGroup, int64]
 	// GroupID is the column group_id.
@@ -29,7 +29,7 @@ type userGroupHandles struct {
 }
 
 // UserGroups holds the typed handles of UserGroup's columns.
-var UserGroups = userGroupHandles{
+var UserGroups = UserGroupHandles{
 	UserID:  velox.NumberCol[UserGroup, int64]{I: userGroupColUserID},
 	GroupID: velox.NumberCol[UserGroup, int64]{I: userGroupColGroupID},
 }

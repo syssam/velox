@@ -55,8 +55,8 @@ const (
 	postEdgeTags
 )
 
-// postHandles is the type of Posts.
-type postHandles struct {
+// PostHandles is the type of Posts, the typed handles of Post's columns and relations.
+type PostHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Post, int64]
 	// OrgID is the column org_id.
@@ -66,24 +66,24 @@ type postHandles struct {
 	// Title is the column title.
 	Title velox.StringCol[Post, string]
 	// Status is the column status.
-	Status velox.StringCol[Post, PostStatus]
+	Status velox.Col[Post, PostStatus]
 	// Views is the column views.
 	Views velox.NumberCol[Post, int64]
 	// PublishedAt is the column published_at.
 	PublishedAt velox.NullOrderedCol[Post, time.Time]
-	// Author is the edge author, to User: With loads it, Has and HasWhere test it.
+	// Author is the edge author, to User: With loads it, Has and HasWith test it.
 	Author velox.Rel[Post, User]
-	// Tags is the edge tags, to Tag: With loads it, Has and HasWhere test it.
+	// Tags is the edge tags, to Tag: With loads it, Has and HasWith test it.
 	Tags velox.Rel[Post, Tag]
 }
 
 // Posts holds the typed handles of Post's columns and relations.
-var Posts = postHandles{
+var Posts = PostHandles{
 	ID:          velox.NumberCol[Post, int64]{I: postColID},
 	OrgID:       velox.NumberCol[Post, int64]{I: postColOrgID},
 	AuthorID:    velox.NumberCol[Post, int64]{I: postColAuthorID},
 	Title:       velox.StringCol[Post, string]{I: postColTitle},
-	Status:      velox.StringCol[Post, PostStatus]{I: postColStatus},
+	Status:      velox.Col[Post, PostStatus]{I: postColStatus},
 	Views:       velox.NumberCol[Post, int64]{I: postColViews},
 	PublishedAt: velox.NullOrderedCol[Post, time.Time]{I: postColPublishedAt},
 	Author:      velox.Rel[Post, User]{I: postEdgeAuthor},

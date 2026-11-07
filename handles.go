@@ -4,7 +4,7 @@ package velox
 
 import "github.com/syssam/velox/internal/engine"
 
-// Col is the handle of a column of entity E whose values, of type V, are neither ordered nor text: bool, []byte and other types. I is the column's index; velox-gen sets it.
+// Col is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types. I is the column's index; velox-gen sets it.
 type Col[E, V any] struct{ I int32 }
 
 func (c Col[E, V]) column(*E) int32 { return c.I }

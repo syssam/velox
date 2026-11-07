@@ -27,8 +27,8 @@ const (
 	invoiceColTotalCents
 )
 
-// invoiceHandles is the type of Invoices.
-type invoiceHandles struct {
+// InvoiceHandles is the type of Invoices, the typed handles of Invoice's columns.
+type InvoiceHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Invoice, int64]
 	// Number is the column number.
@@ -36,17 +36,17 @@ type invoiceHandles struct {
 	// Customer is the column customer.
 	Customer velox.StringCol[Invoice, string]
 	// Status is the column status.
-	Status velox.StringCol[Invoice, InvoiceStatus]
+	Status velox.Col[Invoice, InvoiceStatus]
 	// TotalCents is the column total_cents.
 	TotalCents velox.NumberCol[Invoice, int64]
 }
 
 // Invoices holds the typed handles of Invoice's columns.
-var Invoices = invoiceHandles{
+var Invoices = InvoiceHandles{
 	ID:         velox.NumberCol[Invoice, int64]{I: invoiceColID},
 	Number:     velox.StringCol[Invoice, string]{I: invoiceColNumber},
 	Customer:   velox.StringCol[Invoice, string]{I: invoiceColCustomer},
-	Status:     velox.StringCol[Invoice, InvoiceStatus]{I: invoiceColStatus},
+	Status:     velox.Col[Invoice, InvoiceStatus]{I: invoiceColStatus},
 	TotalCents: velox.NumberCol[Invoice, int64]{I: invoiceColTotalCents},
 }
 

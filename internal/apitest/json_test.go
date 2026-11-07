@@ -180,8 +180,8 @@ func TestJSONPredicatesRefused(t *testing.T) {
 	}))
 	_, err = hooked.Query[fixture.JDoc]().Limit(1).All(ctx)
 	refused("a Rewrite hook's ColumnEQ", err)
-	_, err = db.Query[jOwner]().Where(jOwners.Docs.HasWhere(jDocCols.Tags.EQ([]string{"a"}))).Limit(1).All(ctx)
-	refused("EQ under HasWhere", err)
+	_, err = db.Query[jOwner]().Where(jOwners.Docs.HasWith(jDocCols.Tags.EQ([]string{"a"}))).Limit(1).All(ctx)
+	refused("EQ under HasWith", err)
 
 	e.Rows = nil
 	if _, err := db.Query[fixture.JDoc]().Where(fixture.JDocs.Nums.IsNull()).Limit(1).All(ctx); err != nil {

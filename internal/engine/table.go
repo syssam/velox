@@ -389,8 +389,8 @@ func (t Table) HasRowFilter() bool {
 }
 
 // Has is true when relation edge holds at least one entity of target that
-// meets every condition of ps: Rel.HasWhere, untyped. ps
-// are conditions on target. Like HasWhere it reads no metadata: a relation
+// meets every condition of ps: Rel.HasWith, untyped. ps
+// are conditions on target. Like HasWith it reads no metadata: a relation
 // that does not resolve, or whose target is not target, fails the statement
 // that holds the condition.
 func (t Table) Has(edge int, target Table, ps ...Predicate) Predicate {

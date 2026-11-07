@@ -31,7 +31,7 @@ func (g *scopeGen) next() byte {
 }
 
 // pred returns a condition at depth: EQ, In, Has(Parent) or Has(Invoice),
-// or, at a depth under 3, And, Or, Not or HasWhere(Parent, …) of deeper ones.
+// or, at a depth under 3, And, Or, Not or HasWith(Parent, …) of deeper ones.
 func (g *scopeGen) pred(depth int) velox.Pred[testmodel.Ticket] {
 	c := g.next()
 	k := c % 8
@@ -54,7 +54,7 @@ func (g *scopeGen) pred(depth int) velox.Pred[testmodel.Ticket] {
 	case 6:
 		return velox.Not(g.pred(depth + 1))
 	default:
-		return Tk.Parent.HasWhere(g.preds(depth + 1)...)
+		return Tk.Parent.HasWith(g.preds(depth + 1)...)
 	}
 }
 
@@ -118,7 +118,7 @@ func scopeCase(ops []byte, s string) (*velox.Statement, []velox.Option) {
 	}
 	if hooks&4 != 0 { // add an EXISTS of the hook's own
 		opts = append(opts, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
-			st.Where = append(st.Where, velox.Predicate(Tk.Parent.HasWhere(Tk.Title.EQ("p"), Tk.Parent.Has())))
+			st.Where = append(st.Where, velox.Predicate(Tk.Parent.HasWith(Tk.Title.EQ("p"), Tk.Parent.Has())))
 			return nil
 		}))
 	}
@@ -145,8 +145,8 @@ func scopeCase(ops []byte, s string) (*velox.Statement, []velox.Option) {
 func FuzzScope(f *testing.F) {
 	f.Add(int64(7), []byte{}, "")
 	f.Add(int64(7), []byte{0, 3, 2, 3, 0}, "a")                    // select: Has(Parent), Has(Invoice), Title
-	f.Add(int64(-1), []byte{1, 1, 7, 2, 7, 1, 2, 3}, "b")          // count: HasWhere(Parent, HasWhere(Parent, Has(Parent)), Has(Invoice))
-	f.Add(int64(3), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "")   // update: And(Not(HasWhere(Parent, Has(Parent))), Or(Has(Invoice))), Title
+	f.Add(int64(-1), []byte{1, 1, 7, 2, 7, 1, 2, 3}, "b")          // count: HasWith(Parent, HasWith(Parent, Has(Parent)), Has(Invoice))
+	f.Add(int64(3), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "")   // update: And(Not(HasWith(Parent, Has(Parent))), Or(Has(Invoice))), Title
 	f.Add(int64(0), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "")   // the same under the zero org, which is refused
 	f.Add(int64(9), []byte{3 | 15<<2, 2, 7, 1, 7, 1, 2, 1}, "c")   // delete with every hook: three EXISTS deep
 	f.Add(int64(7), []byte{0, 0x80 | 3, 2, 3, 0}, "a")             // select with an interceptor: Has(Parent), Has(Invoice), Title

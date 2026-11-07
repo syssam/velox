@@ -20,8 +20,8 @@ const (
 	postTagColTagID
 )
 
-// postTagHandles is the type of PostTags.
-type postTagHandles struct {
+// PostTagHandles is the type of PostTags, the typed handles of PostTag's columns.
+type PostTagHandles struct {
 	// PostID is the column post_id.
 	PostID velox.NumberCol[PostTag, int64]
 	// TagID is the column tag_id.
@@ -29,7 +29,7 @@ type postTagHandles struct {
 }
 
 // PostTags holds the typed handles of PostTag's columns.
-var PostTags = postTagHandles{
+var PostTags = PostTagHandles{
 	PostID: velox.NumberCol[PostTag, int64]{I: postTagColPostID},
 	TagID:  velox.NumberCol[PostTag, int64]{I: postTagColTagID},
 }

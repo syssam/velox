@@ -23,8 +23,8 @@ const (
 	labelColName
 )
 
-// labelHandles is the type of Labels.
-type labelHandles struct {
+// LabelHandles is the type of Labels, the typed handles of Label's columns.
+type LabelHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Label, int64]
 	// OrgID is the column org_id.
@@ -34,7 +34,7 @@ type labelHandles struct {
 }
 
 // Labels holds the typed handles of Label's columns.
-var Labels = labelHandles{
+var Labels = LabelHandles{
 	ID:    velox.NumberCol[Label, int64]{I: labelColID},
 	OrgID: velox.NumberCol[Label, int64]{I: labelColOrgID},
 	Name:  velox.StringCol[Label, string]{I: labelColName},

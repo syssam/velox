@@ -131,4 +131,4 @@ const veloxPkg = "github.com/syssam/velox"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 18
+const GeneratedCodeVersion = 19

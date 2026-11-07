@@ -42,8 +42,8 @@ const (
 	projectEdgeIssues = iota
 )
 
-// projectHandles is the type of Projects.
-type projectHandles struct {
+// ProjectHandles is the type of Projects, the typed handles of Project's columns and relations.
+type ProjectHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Project, int64]
 	// CreatedAt is the column created_at.
@@ -54,12 +54,12 @@ type projectHandles struct {
 	OrgID velox.NumberCol[Project, int64]
 	// Name is the column name.
 	Name velox.StringCol[Project, string]
-	// Issues is the edge issues, to Issue: With loads it, Has and HasWhere test it.
+	// Issues is the edge issues, to Issue: With loads it, Has and HasWith test it.
 	Issues velox.Rel[Project, Issue]
 }
 
 // Projects holds the typed handles of Project's columns and relations.
-var Projects = projectHandles{
+var Projects = ProjectHandles{
 	ID:        velox.NumberCol[Project, int64]{I: projectColID},
 	CreatedAt: velox.OrderedCol[Project, time.Time]{I: projectColCreatedAt},
 	UpdatedAt: velox.OrderedCol[Project, time.Time]{I: projectColUpdatedAt},

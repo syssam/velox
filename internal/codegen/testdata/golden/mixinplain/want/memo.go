@@ -23,8 +23,8 @@ const (
 	memoColText
 )
 
-// memoHandles is the type of Memos.
-type memoHandles struct {
+// MemoHandles is the type of Memos, the typed handles of Memo's columns.
+type MemoHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Memo, int64]
 	// OrgID is the column org_id.
@@ -34,7 +34,7 @@ type memoHandles struct {
 }
 
 // Memos holds the typed handles of Memo's columns.
-var Memos = memoHandles{
+var Memos = MemoHandles{
 	ID:    velox.NumberCol[Memo, int64]{I: memoColID},
 	OrgID: velox.NumberCol[Memo, int64]{I: memoColOrgID},
 	Text:  velox.StringCol[Memo, string]{I: memoColText},

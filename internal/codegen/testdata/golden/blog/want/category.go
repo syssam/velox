@@ -39,22 +39,22 @@ const (
 	categoryEdgeParent
 )
 
-// categoryHandles is the type of Categories.
-type categoryHandles struct {
+// CategoryHandles is the type of Categories, the typed handles of Category's columns and relations.
+type CategoryHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Category, int64]
 	// Title is the column title.
 	Title velox.StringCol[Category, string]
 	// CategoryChildren is the column category_children.
 	CategoryChildren velox.NullNumberCol[Category, int64]
-	// Children is the edge children, to Category: With loads it, Has and HasWhere test it.
+	// Children is the edge children, to Category: With loads it, Has and HasWith test it.
 	Children velox.Rel[Category, Category]
-	// Parent is the edge parent, to Category: With loads it, Has and HasWhere test it.
+	// Parent is the edge parent, to Category: With loads it, Has and HasWith test it.
 	Parent velox.Rel[Category, Category]
 }
 
 // Categories holds the typed handles of Category's columns and relations.
-var Categories = categoryHandles{
+var Categories = CategoryHandles{
 	ID:               velox.NumberCol[Category, int64]{I: categoryColID},
 	Title:            velox.StringCol[Category, string]{I: categoryColTitle},
 	CategoryChildren: velox.NullNumberCol[Category, int64]{I: categoryColCategoryChildren},

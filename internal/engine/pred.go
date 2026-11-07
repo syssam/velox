@@ -123,7 +123,7 @@ func PredErr(n Node) error {
 	if n.Op == OpExists {
 		// An unresolved RelRef is valid: the statement resolves it, and
 		// fails with the relation's error. Its kids were checked when
-		// HasWhere made it.
+		// HasWith made it.
 		return nil
 	}
 	for _, k := range n.Kids {

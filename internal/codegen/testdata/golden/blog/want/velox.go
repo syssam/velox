@@ -5,7 +5,7 @@ package gen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion18
+const _ = velox.GeneratedCodeIsVersion19
 
 // PostStatus is the type of Post's status field.
 type PostStatus string

@@ -314,7 +314,7 @@ func TestCheckColumnsIsNullOnNotNull(t *testing.T) {
 }
 
 // The conditions of a HasEdgeWith name the columns of its target.
-func TestCheckColumnsHasWhereTarget(t *testing.T) {
+func TestCheckColumnsHasWithTarget(t *testing.T) {
 	c := newCheckEnv(t)
 	c.refuses(t, []checkRefusal{
 		{"target", read("Comment", `velox.HasEdgeWith("doc", velox.FieldEQ("name", "x"))`), `"doc"`, `velox.FieldEQ("name", "x"): Doc, the target of Comment's relation doc, has no column "name" (Comment.Policy)`},

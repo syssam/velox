@@ -198,7 +198,7 @@ func (q TableQuery) join(edge int, target Table, left bool) TableQuery {
 		return q.fail(err)
 	}
 	if l.Many || l.Join != nil {
-		return q.fail(fmt.Errorf("velox: %s: %s is a to-many relation, and Join reads a to-one relation; load it with With, or test it with Has or HasWhere", q.t.info.Name, l.Name))
+		return q.fail(fmt.Errorf("velox: %s: %s is a to-many relation, and Join reads a to-one relation; load it with With, or test it with Has or HasWith", q.t.info.Name, l.Name))
 	}
 	if slices.ContainsFunc(q.st.Joins, func(j JoinClause) bool { return j.Ref.I == int32(edge) }) {
 		return q.fail(fmt.Errorf("velox: %s: the query joins %s twice", q.t.info.Name, l.Name))

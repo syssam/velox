@@ -44,7 +44,7 @@ import (
 // Mutation.DB, on the write's DB, and returns the error that refuses the
 // write. This is ent's split: privacy rules decide, hooks query.
 //
-// Read is ANDed into every SELECT, Count, With load and Has/HasWhere
+// Read is ANDed into every SELECT, Count, With load and Has/HasWith
 // subquery on the entity, into every UPDATE, DELETE and Save, and into the
 // update branch of an upsert, on the existing row. Write is ANDed into
 // every UPDATE, DELETE and Save, and into an upsert's update branch, with
@@ -209,7 +209,7 @@ func (m *Mutation) SetAffected(n int64) { m.mu.SetAffected(n) }
 // Interceptor filters an entity's rows for the application. Filter's
 // condition is ANDed into every statement that reads or changes the rows:
 // SELECT, Count, the aggregates, Each and Iter, a With load, an EXISTS on
-// the entity (Has, HasWhere), a join, UPDATE, DELETE, Save and an upsert's
+// the entity (Has, HasWith), a join, UPDATE, DELETE, Save and an upsert's
 // update branch. Raw SQL is not filtered.
 //
 // The interceptors' conditions come before the Read policy's in the WHERE.

@@ -128,7 +128,7 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 		q = q.Where(I.Status.EQ(st))
 	}
 	if v := r.URL.Query().Get("label"); v != "" {
-		q = q.Where(I.Labels.HasWhere(L.Name.EQ(v)))
+		q = q.Where(I.Labels.HasWith(L.Name.EQ(v)))
 	}
 	rows, err := q.With(I.Labels.OrderBy(L.Name.Asc())).With(I.Author).OrderBy(I.ID.Asc()).Limit(limit + 1).All(ctx)
 	if err != nil {

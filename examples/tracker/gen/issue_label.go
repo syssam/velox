@@ -20,8 +20,8 @@ const (
 	issueLabelColLabelID
 )
 
-// issueLabelHandles is the type of IssueLabels.
-type issueLabelHandles struct {
+// IssueLabelHandles is the type of IssueLabels, the typed handles of IssueLabel's columns.
+type IssueLabelHandles struct {
 	// IssueID is the column issue_id.
 	IssueID velox.NumberCol[IssueLabel, int64]
 	// LabelID is the column label_id.
@@ -29,7 +29,7 @@ type issueLabelHandles struct {
 }
 
 // IssueLabels holds the typed handles of IssueLabel's columns.
-var IssueLabels = issueLabelHandles{
+var IssueLabels = IssueLabelHandles{
 	IssueID: velox.NumberCol[IssueLabel, int64]{I: issueLabelColIssueID},
 	LabelID: velox.NumberCol[IssueLabel, int64]{I: issueLabelColLabelID},
 }

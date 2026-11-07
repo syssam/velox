@@ -153,7 +153,7 @@ func TestPolicyInsideHasOfAnEntityWithout(t *testing.T) {
 		seen = *st
 		return next(ctx)
 	}))
-	q := db.Query[pbox]().Where(velox.Not(pboxNote.HasWhere(fixture.Pn.Locked.EQ(true)))).Limit(1)
+	q := db.Query[pbox]().Where(velox.Not(pboxNote.HasWith(fixture.Pn.Locked.EQ(true)))).Limit(1)
 	if _, err := q.All(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestPolicyCalledOncePerStatement(t *testing.T) {
 			t.Errorf("%s: Read called %d times, Write %d; want %d and %d", name, r, w, reads, writes)
 		}
 	}
-	nested := fixture.Pn.Parent.HasWhere(fixture.Pn.Parent.Has())
+	nested := fixture.Pn.Parent.HasWith(fixture.Pn.Parent.Has())
 	count("select", 1, 0, func() error {
 		_, err := db.Query[fixture.Pnote]().Where(nested, velox.Or(fixture.Pn.Parent.Has(), fixture.Pn.ID.EQ(1))).Limit(1).All(bg)
 		return err
@@ -219,7 +219,7 @@ func TestPolicyCalledOncePerStatement(t *testing.T) {
 		t.Errorf("update: %s", e.SQL)
 	}
 	count("EXISTS alone", 1, 0, func() error {
-		_, err := db.Query[pbox]().Where(pboxNote.Has(), pboxNote.HasWhere(nested)).Limit(1).All(bg)
+		_, err := db.Query[pbox]().Where(pboxNote.Has(), pboxNote.HasWith(nested)).Limit(1).All(bg)
 		return err
 	})
 	count("skipped", 0, 0, func() error {
@@ -349,7 +349,7 @@ func TestPolicyIsInherited(t *testing.T) {
 	db := openFake(velox.Postgres, e)
 	bg := context.Background()
 	fixture.PnoteReads.Store(0)
-	if _, err := db.Query[pcomment]().Where(pcommentNote.HasWhere(fixture.Pn.Locked.EQ(true))).Limit(1).All(bg); err != nil {
+	if _, err := db.Query[pcomment]().Where(pcommentNote.HasWith(fixture.Pn.Locked.EQ(true))).Limit(1).All(bg); err != nil {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "locked" = $1 AND "owner" = $2) AND EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "owner" = $3) LIMIT $4`,
@@ -730,7 +730,7 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 // names both targets, from the outermost in.
 func TestExistsErrorNamesThePath(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	_, err := db.Query[pbox]().Where(pboxNote.HasWhere(fixture.Pn.Invoice.Has())).Limit(1).All(context.Background())
+	_, err := db.Query[pbox]().Where(pboxNote.HasWith(fixture.Pn.Invoice.Has())).Limit(1).All(context.Background())
 	wantNoScope(t, err, "velox: apitest.pbox: in the EXISTS on fixture.Pnote, then on testmodel.Invoice: ")
 }
 

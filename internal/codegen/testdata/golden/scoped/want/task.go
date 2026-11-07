@@ -23,8 +23,8 @@ const (
 	taskColTitle
 )
 
-// taskHandles is the type of Tasks.
-type taskHandles struct {
+// TaskHandles is the type of Tasks, the typed handles of Task's columns.
+type TaskHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Task, int64]
 	// OrgID is the column org_id.
@@ -34,7 +34,7 @@ type taskHandles struct {
 }
 
 // Tasks holds the typed handles of Task's columns.
-var Tasks = taskHandles{
+var Tasks = TaskHandles{
 	ID:    velox.NumberCol[Task, int64]{I: taskColID},
 	OrgID: velox.NumberCol[Task, int64]{I: taskColOrgID},
 	Title: velox.StringCol[Task, string]{I: taskColTitle},

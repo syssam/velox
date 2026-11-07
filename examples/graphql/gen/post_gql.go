@@ -48,7 +48,7 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 }
 
 // Author is the edge author: the User it leads to, or nil. It is read in one
-// query with the edge of every row read with p.
+// query with the same edge of every row on p's page.
 func (p *Post) Author(ctx context.Context) (*User, error) {
 	v, err := gqlgraph.EdgeOne(ctx, &userType, postType.Edge(p, postEdgeAuthor))
 	n, _ := v.(*User)
@@ -56,7 +56,7 @@ func (p *Post) Author(ctx context.Context) (*User, error) {
 }
 
 // Tags is the edge tags: a connection to the Label nodes it leads to. Its
-// queries batch with the edge of every row read with p.
+// queries batch with the same edge of every row on p's page.
 func (p *Post) Tags(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

@@ -26,7 +26,7 @@ func (*Tag) IsNode() {}
 func (t *Tag) GlobalID() string { return veloxgql.EncodeID("Label", t.ID) }
 
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
-// queries batch with the edge of every row read with t.
+// queries batch with the same edge of every row on t's page.
 func (t *Tag) Posts(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

@@ -127,9 +127,9 @@ func TestThroughHas(t *testing.T) {
 		}{
 			{"has", Books.Tags.Has(), nil, 3},
 			{"has, org 1", Books.Tags.Has(), []int64{1}, 2},
-			{"has db", Books.Tags.HasWhere(Tags.Name.EQ("db")), nil, 2},
+			{"has db", Books.Tags.HasWith(Tags.Name.EQ("db")), nil, 2},
 			{"has none", velox.Not(Books.Tags.Has()), nil, 1},
-			{"has a tag of book 2's", Books.Tags.HasWhere(Tags.Books.HasWhere(Books.ID.EQ(2))), nil, 2},
+			{"has a tag of book 2's", Books.Tags.HasWith(Tags.Books.HasWith(Books.ID.EQ(2))), nil, 2},
 		} {
 			if got := count(c.p, c.org...); got != c.want {
 				t.Errorf("%s: %d, want %d", c.name, got, c.want)

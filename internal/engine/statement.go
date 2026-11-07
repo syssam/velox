@@ -167,10 +167,10 @@ type Statement struct {
 // hooks see it.
 //
 // A hook that points st.Entity at another table changes the statement's own
-// table only: the tables in an EXISTS that Has or HasWhere adds keep their
+// table only: the tables in an EXISTS that Has or HasWith adds keep their
 // names. The target's own Read policy, a scope included, applies inside the
 // EXISTS, but a hook that moves tables cannot reach it. With a table per
-// scope value, avoid Has and HasWhere, or load the relation with With, which goes
+// scope value, avoid Has and HasWith, or load the relation with With, which goes
 // through the hooks.
 type Rewrite func(ctx context.Context, st *Statement) error
 

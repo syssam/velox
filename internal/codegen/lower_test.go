@@ -121,7 +121,7 @@ func TestLowerTypes(t *testing.T) {
 		{"name", "string", "velox.StringCol[LwUser, string]"},
 		{"nick", "string", "velox.StringCol[LwUser, string]"},             // Optional alone is a value on a NOT NULL column
 		{"active", "*bool", "velox.NullCol[LwUser, bool]"},                // Nillable, with a Default that does not change the type
-		{"role", "LwUserRole", "velox.StringCol[LwUser, LwUserRole]"},     // the generated enum type
+		{"role", "LwUserRole", "velox.Col[LwUser, LwUserRole]"},           // an enum: equality and order, no Contains
 		{"seen", "*time.Time", "velox.NullOrderedCol[LwUser, time.Time]"}, //
 		{"tags", "[]string", "velox.JSONCol[LwUser, []string]"},           // a JSON slice is never a pointer
 	} {
@@ -542,6 +542,9 @@ func (ClJoin) Annotations() []schema.Annotation {
 // ClTagEdges has the name of the struct of ClTag's relations.
 type ClTagEdges struct{ schema.Schema }
 
+// ClBoxHandles has the name of the type of ClBox's handles.
+type ClBoxHandles struct{ schema.Schema }
+
 type ClReserved struct{ schema.Schema }
 
 func (ClReserved) Fields() []schema.Field { return []schema.Field{field.String("string")} }
@@ -563,6 +566,7 @@ func TestLowerCollisions(t *testing.T) {
 		{"enum", []schema.Interface{ClUser{}, ClUserRole{}}, []string{`schema ClUser: field "role": enum type ClUserRole collides with schema ClUserRole`}},
 		{"join", []schema.Interface{ClTag{}, ClItem{}, ClJoin{}}, []string{`schema ClTag: edge "links": join entity ClJoin collides with schema ClJoin`}},
 		{"edges", []schema.Interface{ClTag{}, ClItem{}, ClTagEdges{}}, []string{`schema ClTag: edges type ClTagEdges collides with schema ClTagEdges`}},
+		{"handles type", []schema.Interface{ClBox{}, ClBoxHandles{}}, []string{`schema ClBox: handles type ClBoxHandles collides with schema ClBoxHandles`}},
 		{"reserved", []schema.Interface{ClReserved{}, ClBox{}}, []string{
 			`schema ClReserved: field "string": its Go name String is reserved`,
 			`schema ClReserved: edge "hooks": its Go name Hooks is reserved`,

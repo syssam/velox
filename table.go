@@ -33,7 +33,7 @@ import (
 //	Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Pointer) error // Rel.Fill
 //	Filled(owner unsafe.Pointer, edge int, target Table) (unsafe.Pointer, bool) // Rel.Filled
 //	Pred(col int, op PredOp, v any) Predicate // a condition on column col
-//	Has(edge int, target Table, ps ...Predicate) Predicate // Rel.HasWhere
+//	Has(edge int, target Table, ps ...Predicate) Predicate // Rel.HasWith
 //	Of(edge int, target Table, owners ...unsafe.Pointer) Predicate // Rel.Of
 //	HasRowFilter() bool // Meta.HasRowFilter
 //	Convert(col int, v any) (any, error) // v as column col's Go type, from one of the same kind

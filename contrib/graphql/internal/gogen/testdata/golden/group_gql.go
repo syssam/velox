@@ -46,7 +46,7 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 }
 
 // Users is the edge users: a connection to the Account nodes it leads to. Its
-// queries batch with the edge of every row read with g.
+// queries batch with the same edge of every row on g's page.
 func (g *Group) Users(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

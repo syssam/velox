@@ -64,7 +64,7 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 }
 
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
-// queries batch with the edge of every row read with u.
+// queries batch with the same edge of every row on u's page.
 func (u *User) Posts(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
@@ -74,8 +74,8 @@ func (u *User) Posts(
 }
 
 // Groups is the edge groups: the Group nodes it leads to, in key order. It is
-// read in one query with the edge of every row read with u, and fails on more
-// than MaxList nodes.
+// read in one query with the same edge of every row on u's page, and fails on
+// more than MaxList nodes.
 func (u *User) Groups(ctx context.Context) ([]*Group, error) {
 	v, err := gqlgraph.EdgeList(ctx, &groupType, userType.Edge(u, userEdgeGroups), 0)
 	n, _ := v.([]*Group)
@@ -83,7 +83,7 @@ func (u *User) Groups(ctx context.Context) ([]*Group, error) {
 }
 
 // Likes is the edge likes: a connection to the Like nodes it leads to. Its
-// queries batch with the edge of every row read with u.
+// queries batch with the same edge of every row on u's page.
 func (u *User) Likes(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

@@ -72,8 +72,8 @@ const (
 	userEdgeSpouse
 )
 
-// userHandles is the type of Users.
-type userHandles struct {
+// UserHandles is the type of Users, the typed handles of User's columns and relations.
+type UserHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[User, int64]
 	// CreatedAt is the column created_at.
@@ -89,7 +89,7 @@ type userHandles struct {
 	// Email is the column email.
 	Email velox.StringCol[User, string]
 	// Role is the column role.
-	Role velox.StringCol[User, UserRole]
+	Role velox.Col[User, UserRole]
 	// Nickname is the column nickname.
 	Nickname velox.StringCol[User, string]
 	// Bio is the column bio.
@@ -102,18 +102,18 @@ type userHandles struct {
 	Score velox.NullNumberCol[User, float64]
 	// UserSpouse is the column user_spouse.
 	UserSpouse velox.NullNumberCol[User, int64]
-	// Posts is the edge posts, to Post: With loads it, Has and HasWhere test it.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it.
 	Posts velox.Rel[User, Post]
-	// Groups is the edge groups, to Group: With loads it, Has and HasWhere test it.
+	// Groups is the edge groups, to Group: With loads it, Has and HasWith test it.
 	Groups velox.Rel[User, Group]
-	// Friends is the edge friends, to User: With loads it, Has and HasWhere test it.
+	// Friends is the edge friends, to User: With loads it, Has and HasWith test it.
 	Friends velox.Rel[User, User]
-	// Spouse is the edge spouse, to User: With loads it, Has and HasWhere test it.
+	// Spouse is the edge spouse, to User: With loads it, Has and HasWith test it.
 	Spouse velox.Rel[User, User]
 }
 
 // Users holds the typed handles of User's columns and relations.
-var Users = userHandles{
+var Users = UserHandles{
 	ID:           velox.NumberCol[User, int64]{I: userColID},
 	CreatedAt:    velox.OrderedCol[User, time.Time]{I: userColCreatedAt},
 	UpdatedAt:    velox.OrderedCol[User, time.Time]{I: userColUpdatedAt},
@@ -121,7 +121,7 @@ var Users = userHandles{
 	OrgID:        velox.NumberCol[User, int64]{I: userColOrgID},
 	Name:         velox.StringCol[User, string]{I: userColName},
 	Email:        velox.StringCol[User, string]{I: userColEmail},
-	Role:         velox.StringCol[User, UserRole]{I: userColRole},
+	Role:         velox.Col[User, UserRole]{I: userColRole},
 	Nickname:     velox.StringCol[User, string]{I: userColNickname},
 	Bio:          velox.NullStringCol[User, string]{I: userColBio},
 	Age:          velox.NumberCol[User, int]{I: userColAge},

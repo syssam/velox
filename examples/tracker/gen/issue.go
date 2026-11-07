@@ -64,8 +64,8 @@ const (
 	issueEdgeLabels
 )
 
-// issueHandles is the type of Issues.
-type issueHandles struct {
+// IssueHandles is the type of Issues, the typed handles of Issue's columns and relations.
+type IssueHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Issue, int64]
 	// CreatedAt is the column created_at.
@@ -85,21 +85,21 @@ type issueHandles struct {
 	// Body is the column body.
 	Body velox.StringCol[Issue, string]
 	// Status is the column status.
-	Status velox.StringCol[Issue, IssueStatus]
-	// Project is the edge project, to Project: With loads it, Has and HasWhere test it.
+	Status velox.Col[Issue, IssueStatus]
+	// Project is the edge project, to Project: With loads it, Has and HasWith test it.
 	Project velox.Rel[Issue, Project]
-	// Author is the edge author, to User: With loads it, Has and HasWhere test it.
+	// Author is the edge author, to User: With loads it, Has and HasWith test it.
 	Author velox.Rel[Issue, User]
-	// Assignee is the edge assignee, to User: With loads it, Has and HasWhere test it.
+	// Assignee is the edge assignee, to User: With loads it, Has and HasWith test it.
 	Assignee velox.Rel[Issue, User]
-	// Comments is the edge comments, to Comment: With loads it, Has and HasWhere test it.
+	// Comments is the edge comments, to Comment: With loads it, Has and HasWith test it.
 	Comments velox.Rel[Issue, Comment]
-	// Labels is the edge labels, to Label: With loads it, Has and HasWhere test it.
+	// Labels is the edge labels, to Label: With loads it, Has and HasWith test it.
 	Labels velox.Rel[Issue, Label]
 }
 
 // Issues holds the typed handles of Issue's columns and relations.
-var Issues = issueHandles{
+var Issues = IssueHandles{
 	ID:         velox.NumberCol[Issue, int64]{I: issueColID},
 	CreatedAt:  velox.OrderedCol[Issue, time.Time]{I: issueColCreatedAt},
 	UpdatedAt:  velox.OrderedCol[Issue, time.Time]{I: issueColUpdatedAt},
@@ -109,7 +109,7 @@ var Issues = issueHandles{
 	AssigneeID: velox.NullNumberCol[Issue, int64]{I: issueColAssigneeID},
 	Title:      velox.StringCol[Issue, string]{I: issueColTitle},
 	Body:       velox.StringCol[Issue, string]{I: issueColBody},
-	Status:     velox.StringCol[Issue, IssueStatus]{I: issueColStatus},
+	Status:     velox.Col[Issue, IssueStatus]{I: issueColStatus},
 	Project:    velox.Rel[Issue, Project]{I: issueEdgeProject},
 	Author:     velox.Rel[Issue, User]{I: issueEdgeAuthor},
 	Assignee:   velox.Rel[Issue, User]{I: issueEdgeAssignee},

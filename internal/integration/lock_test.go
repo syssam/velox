@@ -141,7 +141,7 @@ func TestLockWithScopeOnRealDatabases(t *testing.T) {
 		Tk := testmodel.Tickets
 		// ann's tickets in org 1 whose invoice is paid: ticket 1 (invoice 1).
 		mine := func(tx *velox.DB) velox.Query[testmodel.Ticket] {
-			return tx.Query[testmodel.Ticket]().Where(Tk.Invoice.HasWhere(I.Paid.EQ(true))).OrderBy(Tk.ID.Asc()).Limit(10)
+			return tx.Query[testmodel.Ticket]().Where(Tk.Invoice.HasWith(I.Paid.EQ(true))).OrderBy(Tk.ID.Asc()).Limit(10)
 		}
 		asAnn := func(ctx context.Context) context.Context {
 			return testmodel.WithUser(testmodel.Org.With(context.Background(), int64(1)), "ann")

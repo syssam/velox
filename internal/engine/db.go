@@ -171,7 +171,7 @@ func checkColumns(st *Statement, who string) error {
 			// through a Predicate conversion, and an owner column out of this
 			// entity's range would make rendering panic. Only the owner's
 			// column is the statement's entity's; the kids are conditions on
-			// the target, made by HasWhere. A Rewrite hook may have added one
+			// the target, made by HasWith. A Rewrite hook may have added one
 			// whose relation is not resolved yet.
 			l, err := existsLink(nd)
 			if err != nil {

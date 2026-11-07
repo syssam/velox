@@ -346,7 +346,7 @@ func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res
 
 // prepare takes a statement through every stage before execution, for run
 // and for SQL(ctx): the transaction check (outsideTx), resolving the
-// relations in its conditions (HasWhere leaves them to the statement), guard,
+// relations in its conditions (HasWith leaves them to the statement), guard,
 // observe, rewrite hooks and their checks, scope, the row cap, and rendering
 // into st.SQL (comment included) and st.Args. Raw SQL takes only the
 // transaction check, in a transaction refuseTxEnd, and prepareRaw.

@@ -303,7 +303,7 @@ func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
 func TestHasThroughTheAPI(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
-	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Items.HasWhere(It.Qty.GT(2)), velox.Not(I.Items.Has())).Limit(5).SQL(ctx))
+	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Items.HasWith(It.Qty.GT(2)), velox.Not(I.Items.Has())).Limit(5).SQL(ctx))
 	want := `SELECT ` + allCols + ` FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" > $1) AND NOT (EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id")) LIMIT $2`
 	if text != want || len(args) != 2 {
 		t.Errorf("\n got %s\nwant %s", text, want)
@@ -331,7 +331,7 @@ func TestABrokenRelationIsAnError(t *testing.T) {
 	for name, p := range map[string]velox.Pred[testmodel.Invoice]{
 		"direct":            bad.Has(),
 		"inside Not":        velox.Not(bad.Has()),
-		"inside HasWhere":   I.Items.HasWhere(badItem.Has()),
+		"inside HasWith":    I.Items.HasWith(badItem.Has()),
 		"inside And and Or": velox.Or(I.Paid.EQ(true), velox.And(bad.Has())),
 	} {
 		q := db.Query[testmodel.Invoice]().Where(p).Limit(1)

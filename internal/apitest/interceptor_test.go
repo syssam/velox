@@ -117,7 +117,7 @@ func TestInterceptorFiltersEveryRead(t *testing.T) {
 }
 
 // TestInterceptorReachesRelations: a With load, to-one, to-many and through
-// a join entity, Has and HasWhere, a Join's ON, LoadEach and CountEach see
+// a join entity, Has and HasWith, a Join's ON, LoadEach and CountEach see
 // the target's rows as a query on it does.
 func TestInterceptorReachesRelations(t *testing.T) {
 	db := interceptorDB(t)
@@ -151,7 +151,7 @@ func TestInterceptorReachesRelations(t *testing.T) {
 		return ownerIDs(os)
 	}
 	wantIDs(t, "Notes.Has", where(fixture.IOwners.Notes.Has()), 1, 2)
-	wantIDs(t, "Notes.HasWhere(b)", where(fixture.IOwners.Notes.HasWhere(fixture.INotes.Body.EQ("b"))))
+	wantIDs(t, "Notes.HasWith(b)", where(fixture.IOwners.Notes.HasWith(fixture.INotes.Body.EQ("b"))))
 	wantIDs(t, "Tagged.Has", where(fixture.IOwners.Tagged.Has()), 1)
 
 	joined, err := db.Query[fixture.IOwner]().Join(fixture.IOwners.Pinned).OrderBy(fixture.IOwners.ID.Asc()).Unbounded().All(ctx)

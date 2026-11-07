@@ -38,8 +38,8 @@ const (
 	docEdgeComments = iota
 )
 
-// docHandles is the type of Docs.
-type docHandles struct {
+// DocHandles is the type of Docs, the typed handles of Doc's columns and relations.
+type DocHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Doc, int64]
 	// Owner is the column owner.
@@ -48,12 +48,12 @@ type docHandles struct {
 	Title velox.StringCol[Doc, string]
 	// Shared is the column shared.
 	Shared velox.Col[Doc, bool]
-	// Comments is the edge comments, to Comment: With loads it, Has and HasWhere test it.
+	// Comments is the edge comments, to Comment: With loads it, Has and HasWith test it.
 	Comments velox.Rel[Doc, Comment]
 }
 
 // Docs holds the typed handles of Doc's columns and relations.
-var Docs = docHandles{
+var Docs = DocHandles{
 	ID:       velox.NumberCol[Doc, int64]{I: docColID},
 	Owner:    velox.StringCol[Doc, string]{I: docColOwner},
 	Title:    velox.StringCol[Doc, string]{I: docColTitle},

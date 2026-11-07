@@ -30,8 +30,8 @@ const (
 	userColRole
 )
 
-// userHandles is the type of Users.
-type userHandles struct {
+// UserHandles is the type of Users, the typed handles of User's columns.
+type UserHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[User, int64]
 	// OrgID is the column org_id.
@@ -43,17 +43,17 @@ type userHandles struct {
 	// PasswordHash is the column password_hash.
 	PasswordHash velox.StringCol[User, string]
 	// Role is the column role.
-	Role velox.StringCol[User, UserRole]
+	Role velox.Col[User, UserRole]
 }
 
 // Users holds the typed handles of User's columns.
-var Users = userHandles{
+var Users = UserHandles{
 	ID:           velox.NumberCol[User, int64]{I: userColID},
 	OrgID:        velox.NumberCol[User, int64]{I: userColOrgID},
 	Email:        velox.StringCol[User, string]{I: userColEmail},
 	Name:         velox.StringCol[User, string]{I: userColName},
 	PasswordHash: velox.StringCol[User, string]{I: userColPasswordHash},
-	Role:         velox.StringCol[User, UserRole]{I: userColRole},
+	Role:         velox.Col[User, UserRole]{I: userColRole},
 }
 
 var userMeta velox.MetaOnce[User]

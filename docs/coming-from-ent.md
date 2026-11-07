@@ -142,7 +142,7 @@ struct is `omitzero`. A field's `StructTag` replaces the tag, as in ent.
 **Relations load only when asked.** `With(P.Author)` loads one with one more
 query, and `Get()` reports whether it was loaded. Nothing loads lazily, and
 there is no `QueryPosts()`: read the posts with `db.Query[gen.Post]()` and a
-condition, or use `A.Posts.Has()` and `HasWhere` in a `Where`.
+condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 
 ## Queries and writes
 

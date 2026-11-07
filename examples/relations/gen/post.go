@@ -43,8 +43,8 @@ const (
 	postEdgeTags
 )
 
-// postHandles is the type of Posts.
-type postHandles struct {
+// PostHandles is the type of Posts, the typed handles of Post's columns and relations.
+type PostHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Post, int64]
 	// AuthorID is the column author_id.
@@ -53,16 +53,16 @@ type postHandles struct {
 	Title velox.StringCol[Post, string]
 	// Votes is the column votes.
 	Votes velox.NumberCol[Post, int64]
-	// Author is the edge author, to Author: With loads it, Has and HasWhere test it.
+	// Author is the edge author, to Author: With loads it, Has and HasWith test it.
 	Author velox.Rel[Post, Author]
-	// Comments is the edge comments, to Comment: With loads it, Has and HasWhere test it.
+	// Comments is the edge comments, to Comment: With loads it, Has and HasWith test it.
 	Comments velox.Rel[Post, Comment]
-	// Tags is the edge tags, to Tag: With loads it, Has and HasWhere test it.
+	// Tags is the edge tags, to Tag: With loads it, Has and HasWith test it.
 	Tags velox.Rel[Post, Tag]
 }
 
 // Posts holds the typed handles of Post's columns and relations.
-var Posts = postHandles{
+var Posts = PostHandles{
 	ID:       velox.NumberCol[Post, int64]{I: postColID},
 	AuthorID: velox.NumberCol[Post, int64]{I: postColAuthorID},
 	Title:    velox.StringCol[Post, string]{I: postColTitle},

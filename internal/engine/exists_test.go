@@ -99,7 +99,7 @@ func TestCachedExistsRendersLikeRender(t *testing.T) {
 }
 
 // TestRewriteHookMayAddAnUnresolvedRelation: a Rewrite hook's condition made
-// by HasWhere is a RelRef, which CheckColumns and the scope resolve; the
+// by HasWith is a RelRef, which CheckColumns and the scope resolve; the
 // caller's own conditions were resolved before the hooks ran.
 func TestRewriteHookMayAddAnUnresolvedRelation(t *testing.T) {
 	co := infoOf[company]()
