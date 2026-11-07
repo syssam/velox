@@ -22,8 +22,8 @@ const maxLockWaitTimeout = 31536000
 // Resolve's ResolveStatements said otherwise, recording after each unit the
 // statements of the completed ones; on PostgreSQL a unit of one statement
 // that runs in a transaction block (atomicUnit) runs in one with its count.
-// On success the row is clean, with the duration and applied_at now. The row is written though ctx is gone, and
-// ctx is checked before each unit, so a cancel keeps the count exact; a
+// On success the row is clean, with the duration and applied_at now. The
+// row is written though ctx is gone, and ctx is checked before each unit, so a cancel keeps the count exact; a
 // count or clean row the session cannot write because its connection is
 // lost is never written through another, and the error says so. A
 // failing statement, a cancel, or a file that leaves a transaction open
@@ -33,19 +33,16 @@ const maxLockWaitTimeout = 31536000
 // yet recorded takes its row away, an *Error of Code "retry", and a lock's
 // at the head of a unit leaves a row Up goes on from by itself.
 func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o options) (Applied, error) {
-	n := len(f.Statements)
-	units := f.Units // ParseFile gives every file with statements a unit at 0
 	from := 0
 	if row != nil {
-		from = min(row.Statements, n)
+		from = min(row.Statements, len(f.Statements))
 	}
 	if err := s.checkRecreates(ctx, f, from); err != nil {
 		return Applied{}, err
 	}
 	if row == nil {
-		a := Applied{Version: f.Version, Name: f.Name, Sum: f.Sum, AppliedAt: time.Now().UTC().Truncate(time.Microsecond), Dirty: true}
-		if err := s.record(ctx, a); err != nil {
-			return Applied{}, wrap(ctx, fmt.Sprintf("%s: recording version %d in %s", f.Path, f.Version, s.cfg.Table), err)
+		if err := s.recordDirty(ctx, f); err != nil {
+			return Applied{}, err
 		}
 	}
 	start := time.Now()
@@ -54,109 +51,212 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 		return Applied{}, s.failed(ctx, f, from, fmt.Errorf("setting the lock timeout: %w", err), o)
 	}
 	defer restore()
-	timeouts := s.statementTimeouts(f)
-	table := s.historyTable()
-	last := from // the first statement of the last unit run
+	r := &stepRun{s: s, f: f, row: row, o: o, from: from, last: from, timeouts: s.statementTimeouts(f), table: s.historyTable()}
+	if err := r.runUnits(ctx); err != nil {
+		return Applied{}, err
+	}
+	if err := r.closed(ctx); err != nil {
+		return Applied{}, err
+	}
+	return r.finish(ctx, start)
+}
+
+// recordDirty inserts f's history row dirty, with no statements.
+func (s *session) recordDirty(ctx context.Context, f File) error {
+	a := Applied{Version: f.Version, Name: f.Name, Sum: f.Sum, AppliedAt: time.Now().UTC().Truncate(time.Microsecond), Dirty: true}
+	if err := s.record(ctx, a); err != nil {
+		return wrap(ctx, fmt.Sprintf("%s: recording version %d in %s", f.Path, f.Version, s.cfg.Table), err)
+	}
+	return nil
+}
+
+// stepRun is the state of one applyStepwise run of a file.
+type stepRun struct {
+	s        *session
+	f        File
+	row      *Applied // the dirty row resumed, or nil
+	o        options
+	from     int // the first statement to run
+	last     int // the first statement of the last unit run
+	timeouts *stmtTimeouts
+	table    string // the history table
+}
+
+// runUnits runs the file's units from the statement after those the row
+// counts. ctx is checked before each unit.
+func (r *stepRun) runUnits(ctx context.Context) error {
+	n := len(r.f.Statements)
+	units := r.f.Units // ParseFile gives every file with statements a unit at 0
 	for u, first := range units {
 		end := n
 		if u+1 < len(units) {
 			end = units[u+1]
 		}
-		if end <= from {
+		if end <= r.from {
 			continue
 		}
-		first = max(first, from)
+		first = max(first, r.from)
 		if err := ctx.Err(); err != nil {
-			return Applied{}, s.failed(ctx, f, first, err, o)
+			return r.s.failed(ctx, r.f, first, err, r.o)
 		}
-		atomic := atomicUnit(s.d, f, first, end)
-		for i := first; i < end; i++ {
-			if err := timeouts.before(ctx, f.Statements[i]); err != nil {
-				return Applied{}, s.failed(ctx, f, i, fmt.Errorf("setting the lock timeout: %w", err), o)
-			}
-			if atomic {
-				if _, err := s.conn.ExecContext(ctx, "BEGIN"); err != nil {
-					return Applied{}, s.failed(ctx, f, i, fmt.Errorf("BEGIN: %w", err), o)
-				}
-			}
-			if _, err := s.conn.ExecContext(ctx, f.Statements[i]); err != nil {
-				if atomic {
-					// The statement and the block are rolled back: what follows reads
-					// the failure as that of the statement alone.
-					s.undo(ctx, "ROLLBACK")
-					if ctx.Err() == nil && txFallback(err) {
-						atomic = false
-						if _, err = s.conn.ExecContext(ctx, f.Statements[i]); err == nil {
-							continue
-						}
-					}
-				}
-				if !atomic {
-					switch {
-					case ctx.Err() != nil:
-						err = &unknownError{cancelMessage(i), err}
-					case s.lostConn(ctx):
-						err = &unknownError{lostMessage(i, i+1), err}
-					}
-				}
-				if s.d == velox.Postgres && ctx.Err() == nil && i == first && pgLockFailure(err) {
-					// A statement that failed on a lock changed nothing; at a unit's
-					// head the whole unit is still to run.
-					if open, oerr := s.inTransaction(ctx); !open && oerr == nil {
-						err = &retryError{err}
-					}
-				}
-				if s.d == velox.MySQL && ctx.Err() == nil {
-					if row == nil && i == 0 && nothingChanged(f.Statements[0], err) {
-						if refused := s.notRecorded(ctx, f, err); refused != nil {
-							return Applied{}, refused
-						}
-					}
-					if open, oerr := s.inTransaction(ctx); i == first && lockFailure(err) && !open && oerr == nil {
-						err = &retryError{err}
-					}
-				}
-				return Applied{}, s.failed(ctx, f, i, err, o)
-			}
+		if err := r.runUnit(ctx, first, end); err != nil {
+			return err
 		}
-		if o.unitDone != nil {
-			o.unitDone(f.Version, end)
-		}
-		q := fmt.Sprintf("UPDATE %s SET %s = %s WHERE %s = %s", table, s.q("statements"), s.ph(1), s.q("version"), s.ph(2))
-		if atomic {
-			// The count commits with the statement: a run killed before the COMMIT
-			// leaves neither, as the server rolls the block back with the session.
-			err := s.write(ctx, q, end, int64(f.Version))
-			if err == nil {
-				err = s.write(ctx, "COMMIT")
-			}
-			if err != nil {
-				s.undo(ctx, "ROLLBACK")
-				if s.lostConn(ctx) {
-					err = fmt.Errorf("the connection was lost as statement %d committed with its count, which the history shows: %w", first+1, err)
-				}
-				return Applied{}, s.failed(ctx, f, first, err, o)
-			}
-			last = first
-			continue
-		}
-		if err := s.write(ctx, q, end, int64(f.Version)); err != nil {
-			if s.lostConn(ctx) {
-				return Applied{}, s.lost(ctx, f, first, end, o)
-			}
-			err = fmt.Errorf("migrate: %s: statements 1 to %d ran, but recording them in %s: %w", f.Path, end, s.cfg.Table, err)
-			s.recordError(ctx, f, err, o)
-			return Applied{}, err
-		}
-		last = first
 	}
-	if open, err := s.inTransaction(ctx); open {
-		if err == nil {
-			err = errors.New("the file leaves a transaction open")
+	return nil
+}
+
+// runUnit runs statements first to end (end exclusive) and records their
+// count.
+func (r *stepRun) runUnit(ctx context.Context, first, end int) error {
+	atomic := atomicUnit(r.s.d, r.f, first, end)
+	for i := first; i < end; i++ {
+		var err error
+		if atomic, err = r.runStatement(ctx, i, first, atomic); err != nil {
+			return err
 		}
+	}
+	if r.o.unitDone != nil {
+		r.o.unitDone(r.f.Version, end)
+	}
+	if atomic {
+		return r.commitUnit(ctx, first, end)
+	}
+	return r.recordUnit(ctx, first, end)
+}
+
+// runStatement runs statement i of the unit that starts at first, in a
+// transaction block when atomic. It returns atomic, false once the statement
+// falls back to running alone, and the run's error.
+func (r *stepRun) runStatement(ctx context.Context, i, first int, atomic bool) (bool, error) {
+	s, f := r.s, r.f
+	if err := r.timeouts.before(ctx, f.Statements[i]); err != nil {
+		return atomic, s.failed(ctx, f, i, fmt.Errorf("setting the lock timeout: %w", err), r.o)
+	}
+	if atomic {
+		if _, err := s.conn.ExecContext(ctx, "BEGIN"); err != nil {
+			return atomic, s.failed(ctx, f, i, fmt.Errorf("BEGIN: %w", err), r.o)
+		}
+	}
+	_, err := s.conn.ExecContext(ctx, f.Statements[i])
+	if err == nil {
+		return atomic, nil
+	}
+	if atomic {
+		// The statement and the block are rolled back: what follows reads
+		// the failure as that of the statement alone.
 		s.undo(ctx, "ROLLBACK")
-		return Applied{}, s.failed(ctx, f, s.completed(ctx, f.Version, from), err, o)
+		if ctx.Err() == nil && txFallback(err) {
+			atomic = false
+			if _, err = s.conn.ExecContext(ctx, f.Statements[i]); err == nil {
+				return atomic, nil
+			}
+		}
 	}
+	return atomic, r.statementFailed(ctx, i, first, atomic, err)
+}
+
+// statementFailed is the error of statement i, of the unit that starts at
+// first, which failed with err: a *DirtyError, or on MySQL the refusal of a
+// first statement that changed nothing.
+func (r *stepRun) statementFailed(ctx context.Context, i, first int, atomic bool, err error) error {
+	s, f := r.s, r.f
+	if !atomic {
+		err = s.unknownOutcome(ctx, i, err)
+	}
+	if s.d == velox.Postgres && ctx.Err() == nil && i == first && pgLockFailure(err) {
+		// A statement that failed on a lock changed nothing; at a unit's
+		// head the whole unit is still to run.
+		if open, oerr := s.inTransaction(ctx); !open && oerr == nil {
+			err = &retryError{err}
+		}
+	}
+	if s.d == velox.MySQL && ctx.Err() == nil {
+		if r.row == nil && i == 0 && nothingChanged(f.Statements[0], err) {
+			if refused := s.notRecorded(ctx, f, err); refused != nil {
+				return refused
+			}
+		}
+		if open, oerr := s.inTransaction(ctx); i == first && lockFailure(err) && !open && oerr == nil {
+			err = &retryError{err}
+		}
+	}
+	return s.failed(ctx, f, i, err, r.o)
+}
+
+// unknownOutcome is err, the failure of statement i run alone, as an
+// *unknownError when the run was cancelled or the connection was lost.
+func (s *session) unknownOutcome(ctx context.Context, i int, err error) error {
+	switch {
+	case ctx.Err() != nil:
+		return &unknownError{cancelMessage(i), err}
+	case s.lostConn(ctx):
+		return &unknownError{lostMessage(i, i+1), err}
+	}
+	return err
+}
+
+// countQuery is the UPDATE that sets the history row's statement count.
+func (r *stepRun) countQuery() string {
+	s := r.s
+	return fmt.Sprintf("UPDATE %s SET %s = %s WHERE %s = %s", r.table, s.q("statements"), s.ph(1), s.q("version"), s.ph(2))
+}
+
+// commitUnit writes the count end in the transaction block of the unit
+// that starts at first, and commits it.
+func (r *stepRun) commitUnit(ctx context.Context, first, end int) error {
+	s := r.s
+	// The count commits with the statement: a run killed before the COMMIT
+	// leaves neither, as the server rolls the block back with the session.
+	err := s.write(ctx, r.countQuery(), end, int64(r.f.Version))
+	if err == nil {
+		err = s.write(ctx, "COMMIT")
+	}
+	if err != nil {
+		s.undo(ctx, "ROLLBACK")
+		if s.lostConn(ctx) {
+			err = fmt.Errorf("the connection was lost as statement %d committed with its count, which the history shows: %w", first+1, err)
+		}
+		return s.failed(ctx, r.f, first, err, r.o)
+	}
+	r.last = first
+	return nil
+}
+
+// recordUnit writes the count end after the unit that starts at first ran.
+func (r *stepRun) recordUnit(ctx context.Context, first, end int) error {
+	s, f := r.s, r.f
+	if err := s.write(ctx, r.countQuery(), end, int64(f.Version)); err != nil {
+		if s.lostConn(ctx) {
+			return s.lost(ctx, f, first, end, r.o)
+		}
+		err = fmt.Errorf("migrate: %s: statements 1 to %d ran, but recording them in %s: %w", f.Path, end, s.cfg.Table, err)
+		s.recordError(ctx, f, err, r.o)
+		return err
+	}
+	r.last = first
+	return nil
+}
+
+// closed is the *DirtyError of a file that leaves a transaction open, which
+// it rolls back first; nil when none is.
+func (r *stepRun) closed(ctx context.Context) error {
+	s := r.s
+	open, err := s.inTransaction(ctx)
+	if !open {
+		return nil
+	}
+	if err == nil {
+		err = errors.New("the file leaves a transaction open")
+	}
+	s.undo(ctx, "ROLLBACK")
+	return s.failed(ctx, r.f, s.completed(ctx, r.f.Version, r.from), err, r.o)
+}
+
+// finish writes the row clean, with the duration since start and applied_at
+// now, and is the row.
+func (r *stepRun) finish(ctx context.Context, start time.Time) (Applied, error) {
+	s, f, n := r.s, r.f, len(r.f.Statements)
 	a := Applied{
 		Version:    f.Version,
 		Name:       f.Name,
@@ -165,17 +265,17 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 		Duration:   time.Since(start),
 		Statements: n,
 	}
-	q := fmt.Sprintf("UPDATE %s SET %s = %s, %s = %s, %s = %s, %s = %s, %s = %s WHERE %s = %s", table,
+	q := fmt.Sprintf("UPDATE %s SET %s = %s, %s = %s, %s = %s, %s = %s, %s = %s WHERE %s = %s", r.table,
 		s.q("applied_at"), s.ph(1), s.q("duration_ms"), s.ph(2), s.q("dirty"), s.ph(3), s.q("statements"), s.ph(4), s.q("error"), s.ph(5),
 		s.q("version"), s.ph(6))
 	if err := s.write(ctx, q, s.at(a.AppliedAt), a.Duration.Milliseconds(), false, n, "", int64(f.Version)); err != nil {
 		if s.lostConn(ctx) {
-			return Applied{}, s.lost(ctx, f, last, n, o)
+			return Applied{}, s.lost(ctx, f, r.last, n, r.o)
 		}
 		return Applied{}, fmt.Errorf("migrate: %s: every statement ran, but recording version %d clean in %s; it is dirty still: %w", f.Path, f.Version, s.cfg.Table, err)
 	}
-	if o.logger != nil {
-		o.logger.InfoContext(ctx, "migrate: applied", "version", a.Version, "path", f.Path, "duration", a.Duration)
+	if r.o.logger != nil {
+		r.o.logger.InfoContext(ctx, "migrate: applied", "version", a.Version, "path", f.Path, "duration", a.Duration)
 	}
 	return a, nil
 }
