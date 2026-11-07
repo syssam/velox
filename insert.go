@@ -213,7 +213,7 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	}
 	if q.db.e.HasHooks(q.meta.Info) {
 		mu := q.mutation(true)
-		if err := engine.Mutate(ctx, &q.db.e, q.meta.Info, mu, func(ctx context.Context, mu *engine.MutationState) error { return q.render(ctx, mu) }); err != nil && !engine.DryRefused(mu, err) {
+		if err := engine.Mutate(ctx, &q.db.e, q.meta.Info, mu, q.render); err != nil && !engine.DryRefused(mu, err) {
 			return "", nil, err
 		}
 		return mu.SQL, mu.Args, nil

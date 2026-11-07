@@ -20,16 +20,6 @@ func joinOf(joins []JoinClause, rel int32) (int, bool) {
 	return 0, false
 }
 
-// JoinWidth is how many columns st's joins add to each row: the columns of
-// every target.
-func JoinWidth(st *Statement) int {
-	n := 0
-	for i := range st.Joins {
-		n += len(st.Joins[i].Link.Target.Columns)
-	}
-	return n
-}
-
 // resolveJoins resolves the relation of each of st's joins, on a copy of the
 // joins: the query's are shared with its other runs. A relation that holds
 // several rows cannot be joined, as every owner would be read once for each.

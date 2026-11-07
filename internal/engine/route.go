@@ -309,8 +309,8 @@ func (rt *router) ShardOf(ctx context.Context, rc routeCtx) (*shardConn, error) 
 }
 
 // noShard is the error, wrapping ErrNoShard, of a statement or Tx whose
-// context ctx names no shard, outside a transaction.
-func noShard(ctx context.Context) error {
+// context names no shard, outside a transaction.
+func noShard() error {
 	return fmt.Errorf("%w: the context has no WithShard, and WithShardFor named none", ErrNoShard)
 }
 
@@ -529,7 +529,7 @@ func (db *DB) ctxShard(ctx context.Context) (*shardConn, error) {
 	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	sh, err := db.Rt.ShardOf(ctx, rc)
 	if err == nil && sh == nil {
-		err = noShard(ctx)
+		err = noShard()
 	}
 	return sh, err
 }
@@ -569,7 +569,7 @@ func (db *DB) route(ctx context.Context, st *Statement) (Target, error) {
 		rc, _ = ctx.Value(routeKey{}).(routeCtx)
 		var err error
 		if sh, err = db.Rt.ShardOf(ctx, rc); err == nil && sh == nil {
-			err = noShard(ctx)
+			err = noShard()
 		}
 		if err != nil {
 			return Target{}, stmtErr(st, err)

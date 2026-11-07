@@ -51,7 +51,7 @@ func CheckUserFiles(dir string, entities []string) error {
 					}
 				}
 			case *ast.FuncDecl:
-				e, _ := receiver(d)
+				e := receiver(d)
 				if e == "" || !slices.Contains(entities, e) || !slices.Contains(behaviourMethods, d.Name.Name) {
 					continue
 				}
@@ -182,18 +182,18 @@ func isPolicyType(t ast.Expr, velox string) bool {
 	return ok && id.Name == velox
 }
 
-// receiver is the type name of d's receiver, E for (E) and (*E), and whether it
-// is a pointer. The name is "" for a function or a receiver of another shape.
-func receiver(d *ast.FuncDecl) (name string, ptr bool) {
+// receiver is the type name of d's receiver, E for (E) and (*E). It is ""
+// for a function or a receiver of another shape.
+func receiver(d *ast.FuncDecl) string {
 	if d.Recv == nil || len(d.Recv.List) != 1 {
-		return "", false
+		return ""
 	}
 	t := d.Recv.List[0].Type
 	if star, ok := t.(*ast.StarExpr); ok {
-		t, ptr = star.X, true
+		t = star.X
 	}
 	if id, ok := t.(*ast.Ident); ok {
-		return id.Name, ptr
+		return id.Name
 	}
-	return "", false
+	return ""
 }

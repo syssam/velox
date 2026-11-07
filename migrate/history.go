@@ -101,10 +101,10 @@ func (s *session) hasHistory(ctx context.Context) (bool, error) {
 	return ok, err
 }
 
-// history is the table's rows by version; exists is false when there is no table.
-func (s *session) history(ctx context.Context) (rows []Applied, exists bool, err error) {
-	rows, exists, err = s.readHistory(ctx)
-	return rows, exists, wrap(ctx, "reading the history table "+s.cfg.Table, err)
+// history is the table's rows by version, none when there is no table.
+func (s *session) history(ctx context.Context) ([]Applied, error) {
+	rows, _, err := s.readHistory(ctx)
+	return rows, wrap(ctx, "reading the history table "+s.cfg.Table, err)
 }
 
 // readHistory is history, its errors unwrapped. The columns are qualified

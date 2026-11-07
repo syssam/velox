@@ -415,7 +415,7 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 		o.Tag = quoteTag(fmt.Sprintf(`json:"%s,omitempty"`, f.Name))
 	}
 	s.defaults(e, f, o, where)
-	s.checks(e, i, f, o, where)
+	s.checks(e, f, o, where)
 	return o
 }
 
@@ -595,7 +595,7 @@ func (s *entState) free(p, name string) bool {
 func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 	elem := o.ElemType
 	// call returns the column's closure, which calls the function member.
-	call := func(member, suffix string, ref *loadjson.FuncRef) string {
+	call := func(member string, ref *loadjson.FuncRef) string {
 		if f.Type == "time" && elem != "time.Time" {
 			// A time default is a func() time.Time, which the builder let
 			// through only for a GoType that converts from time.Time.
@@ -627,13 +627,13 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 	}
 	if f.DefaultFunc {
 		if f.Type == "time" || f.Type == "uuid" {
-			o.DefaultFuncCode = call("Default", "Default", f.DefaultRef) // their Default takes a func
+			o.DefaultFuncCode = call("Default", f.DefaultRef) // their Default takes a func
 		} else {
-			o.DefaultFuncCode = call("DefaultFunc", "Default", f.DefaultRef)
+			o.DefaultFuncCode = call("DefaultFunc", f.DefaultRef)
 		}
 	}
 	if f.UpdateDefault {
-		o.UpdateDefaultCode = call("UpdateDefault", "UpdateDefault", f.UpdateDefaultRef)
+		o.UpdateDefaultCode = call("UpdateDefault", f.UpdateDefaultRef)
 	}
 }
 
@@ -803,9 +803,9 @@ func unset(f *Field, elem string) string {
 	return ""
 }
 
-// checks writes the case of Check's switch for column col, when f
-// has checks, an enum or validators.
-func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where string) {
+// checks writes the case of Check's switch for f's column, when f has
+// checks, an enum or validators.
+func (s *entState) checks(e *Entity, f *Field, o *OutField, where string) {
 	if len(f.Checks) == 0 && f.Type != "enum" && f.Validators == 0 {
 		return
 	}

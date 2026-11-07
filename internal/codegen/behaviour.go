@@ -54,7 +54,7 @@ func SchemaMethods(dir string, entities []string) (map[string]Bound, error) {
 			if !ok || fd.Recv == nil || !slices.Contains(behaviourMethods, fd.Name.Name) {
 				continue
 			}
-			e, _ := receiver(fd)
+			e := receiver(fd)
 			if e == "" {
 				continue
 			}

@@ -169,7 +169,7 @@ func renderEntity(o *Out, e *OutEntity) string {
 	w.p("// VeloxMeta is called by velox, not by applications.")
 	w.p("func (*%s) VeloxMeta() *velox.Meta[%[1]s] { return %sMeta.Load(%[2]sDescriptor) }", e.Name, id)
 	w.p("")
-	entityDescriptor(&w, o, e)
+	entityDescriptor(&w, e)
 	w.p("")
 	entityString(&w, e)
 	return w.String()
@@ -341,7 +341,7 @@ func entityHandles(w *writer, e *OutEntity) {
 }
 
 // entityDescriptor writes the function that returns e's Descriptor.
-func entityDescriptor(w *writer, o *Out, e *OutEntity) {
+func entityDescriptor(w *writer, e *OutEntity) {
 	w.p("// %sDescriptor describes %s to velox: its table, columns, edges and hooks.", camel(e.Label), e.Name)
 	w.p("func %sDescriptor() velox.Descriptor[%s] {", camel(e.Label), e.Name)
 	if e.CheckSetup != "" {

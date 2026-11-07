@@ -464,7 +464,7 @@ func Status(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*State,
 		}
 		defer restore()
 	}
-	rows, _, err := s.history(ctx)
+	rows, err := s.history(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +483,7 @@ func (s *session) prepare(ctx context.Context) ([]Applied, error) {
 	err := s.createHistory(ctx)
 	var rows []Applied
 	if err == nil {
-		rows, _, err = s.history(ctx)
+		rows, err = s.history(ctx)
 	}
 	if s.d == velox.SQLite {
 		if err == nil {
@@ -844,7 +844,7 @@ func (s *session) keyChecks(ctx context.Context, f File, triggers map[string]boo
 	if !known {
 		return whole, nil
 	}
-	lower := func(name string) string { return strings.ToLower(name) }
+	lower := strings.ToLower
 	now, err := s.triggered(ctx)
 	if err != nil {
 		return nil, err

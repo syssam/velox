@@ -177,7 +177,7 @@ func (q TableInsert) Exec(ctx context.Context) error {
 		return nil
 	}
 	if q.e.HasHooks(q.t.info) {
-		return Mutate(ctx, q.e, q.t.info, q.mutation(false), func(ctx context.Context, mu *MutationState) error { return q.send(ctx, mu) })
+		return Mutate(ctx, q.e, q.t.info, q.mutation(false), q.send)
 	}
 	var mu MutationState
 	return q.send(ctx, &mu)
@@ -194,7 +194,7 @@ func (q TableInsert) SQL(ctx context.Context) (string, []any, error) {
 	}
 	if q.e.HasHooks(q.t.info) {
 		mu := q.mutation(true)
-		if err := Mutate(ctx, q.e, q.t.info, mu, func(ctx context.Context, mu *MutationState) error { return q.render(ctx, mu) }); err != nil && !DryRefused(mu, err) {
+		if err := Mutate(ctx, q.e, q.t.info, mu, q.render); err != nil && !DryRefused(mu, err) {
 			return "", nil, err
 		}
 		return mu.SQL, mu.Args, nil

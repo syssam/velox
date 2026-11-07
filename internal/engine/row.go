@@ -233,7 +233,7 @@ func zeroColumn(c *ColumnInfo, row unsafe.Pointer) bool {
 	case fastFloat64:
 		return *(*float64)(p) == 0
 	case fastTime:
-		return (*(*time.Time)(p)).IsZero()
+		return (*time.Time)(p).IsZero()
 	}
 	return reflect.NewAt(GoType(*c), p).Elem().IsZero()
 }

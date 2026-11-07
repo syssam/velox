@@ -169,7 +169,7 @@ func History(ctx context.Context, db *sql.DB, dir fs.FS) ([]Applied, error) {
 		return nil, err
 	}
 	defer s.close()
-	rows, _, err := s.history(ctx)
+	rows, err := s.history(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func History(ctx context.Context, db *sql.DB, dir fs.FS) ([]Applied, error) {
 // resolve is Resolve's read and write of the history; fsys is dir's files.
 func (s *session) resolve(ctx context.Context, fsys fs.FS, dir *Dir, version uint64, r Resolution, o options) error {
 	what := fmt.Sprintf("resolving version %d in %s", version, s.cfg.Table)
-	rows, _, err := s.history(ctx)
+	rows, err := s.history(ctx)
 	if err != nil {
 		return err
 	}

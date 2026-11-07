@@ -532,3 +532,48 @@ func TestTableHasByName(t *testing.T) {
 		t.Error("no relation 5: no error")
 	}
 }
+
+// TestFieldConditionsRenderAsTyped: each of the root's conditions by name
+// renders as the typed condition of the same operator. FieldEqualFold has
+// no typed operator; it renders LOWER on both sides.
+func TestFieldConditionsRenderAsTyped(t *testing.T) {
+	tbl := untyped.TableOf[nmDoc]()
+	pairs := []struct {
+		name         string
+		named, typed velox.Predicate
+	}{
+		{"FieldEQ", velox.FieldEQ("rank", int8(1)), tbl.Pred(nmRank, untyped.PredEQ, int8(1))},
+		{"FieldNEQ", velox.FieldNEQ("rank", int8(1)), tbl.Pred(nmRank, untyped.PredNEQ, int8(1))},
+		{"FieldGT", velox.FieldGT("rank", int8(1)), tbl.Pred(nmRank, untyped.PredGT, int8(1))},
+		{"FieldGTE", velox.FieldGTE("rank", int8(1)), tbl.Pred(nmRank, untyped.PredGTE, int8(1))},
+		{"FieldLT", velox.FieldLT("rank", int8(1)), tbl.Pred(nmRank, untyped.PredLT, int8(1))},
+		{"FieldLTE", velox.FieldLTE("rank", int8(1)), tbl.Pred(nmRank, untyped.PredLTE, int8(1))},
+		{"FieldIn", velox.FieldIn("rank", int8(1), int8(2)), tbl.Pred(nmRank, untyped.PredIn, []any{int8(1), int8(2)})},
+		{"FieldNotIn", velox.FieldNotIn("rank", int8(1), int8(2)), tbl.Pred(nmRank, untyped.PredNotIn, []any{int8(1), int8(2)})},
+		{"FieldContains", velox.FieldContains("title", "a%b"), tbl.Pred(nmTitle, untyped.PredContains, "a%b")},
+		{"FieldHasPrefix", velox.FieldHasPrefix("title", "x"), tbl.Pred(nmTitle, untyped.PredHasPrefix, "x")},
+		{"FieldHasSuffix", velox.FieldHasSuffix("title", "x"), tbl.Pred(nmTitle, untyped.PredHasSuffix, "x")},
+		{"FieldIsNull", velox.FieldIsNull("note"), tbl.Pred(nmNote, untyped.PredIsNull, nil)},
+		{"FieldNotNull", velox.FieldNotNull("note"), tbl.Pred(nmNote, untyped.PredNotNull, nil)},
+	}
+	for _, p := range pairs {
+		ns, na, err := nmSQL(t, p.named)
+		if err != nil {
+			t.Fatalf("%s: %v", p.name, err)
+		}
+		ts, ta, err := nmSQL(t, p.typed)
+		if err != nil {
+			t.Fatalf("%s typed: %v", p.name, err)
+		}
+		if ns != ts || fmt.Sprint(na) != fmt.Sprint(ta) {
+			t.Errorf("%s: by name %s %v, typed %s %v", p.name, ns, na, ts, ta)
+		}
+	}
+	s, args, err := nmSQL(t, velox.FieldEqualFold("title", "Ab"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, `LOWER("title") = LOWER(`) || len(args) == 0 || args[0] != "Ab" {
+		t.Errorf("FieldEqualFold renders %s %v", s, args)
+	}
+}

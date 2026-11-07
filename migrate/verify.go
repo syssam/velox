@@ -134,7 +134,7 @@ func verifyEmpty(ctx context.Context, db *sql.DB, cfg Config, need string) error
 	if found != "" {
 		return refuse(found)
 	}
-	rows, _, err := s.history(ctx)
+	rows, err := s.history(ctx)
 	if err != nil {
 		return err
 	}
