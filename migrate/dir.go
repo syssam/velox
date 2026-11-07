@@ -513,25 +513,62 @@ func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error) {
 // clone; from and to are not changed.
 func carryConstraints(from, to *Schema, changes []Change) *Schema {
 	out := to.clone()
-	stated := func(t, was *Table) {
-		if to.Dialect != velox.MySQL || t.Collation != "" {
-			return
-		}
-		t.Collation = defaultMySQLCollation
-		if was != nil && was.Collation != "" {
-			t.Collation = was.Collation
-		}
-	}
 	if from == nil {
 		for i := range out.Tables {
-			stated(&out.Tables[i], nil)
+			statedCollation(to.Dialect, &out.Tables[i], nil)
 		}
 		return out
 	}
-	tables := map[TableRef]TableRef{}           // from's name of a table, by to's
-	created := map[TableRef]bool{}              // the tables changes create
-	indexes := map[TableRef]map[string]string{} // from's name of an index, by its table and name in to
-	columns := map[TableRef]map[string]string{} // to's name of a column, by its table in to and name in from
+	r := renamesOf(changes)
+	for i := range out.Tables {
+		t := &out.Tables[i]
+		ref := t.Ref()
+		if r.created[ref] {
+			statedCollation(to.Dialect, t, nil)
+			continue
+		}
+		oref := ref
+		if o, ok := r.tables[ref]; ok {
+			oref = o
+		}
+		ft := from.table(oref)
+		statedCollation(to.Dialect, t, ft)
+		if ft != nil {
+			r.carryIndexes(t, ft)
+		}
+	}
+	return out
+}
+
+// statedCollation gives t, a table of d, the collation of was, or a new
+// one's, when d is MySQL and t states none.
+func statedCollation(d velox.Dialect, t, was *Table) {
+	if d != velox.MySQL || t.Collation != "" {
+		return
+	}
+	t.Collation = defaultMySQLCollation
+	if was != nil && was.Collation != "" {
+		t.Collation = was.Collation
+	}
+}
+
+// schemaRenames is what carryConstraints reads of changes.
+type schemaRenames struct {
+	tables  map[TableRef]TableRef          // from's name of a table, by to's
+	created map[TableRef]bool              // the tables changes create
+	indexes map[TableRef]map[string]string // from's name of an index, by its table and name in to
+	columns map[TableRef]map[string]string // to's name of a column, by its table in to and name in from
+}
+
+// renamesOf is the tables, indexes and columns changes rename, and the
+// tables they create.
+func renamesOf(changes []Change) schemaRenames {
+	r := schemaRenames{
+		tables:  map[TableRef]TableRef{},
+		created: map[TableRef]bool{},
+		indexes: map[TableRef]map[string]string{},
+		columns: map[TableRef]map[string]string{},
+	}
 	put := func(m map[TableRef]map[string]string, ref TableRef, k, v string) {
 		if m[ref] == nil {
 			m[ref] = map[string]string{}
@@ -541,53 +578,42 @@ func carryConstraints(from, to *Schema, changes []Change) *Schema {
 	for _, c := range changes {
 		switch c := c.(type) {
 		case renameTable:
-			tables[c.To] = c.From
+			r.tables[c.To] = c.From
 		case createTable:
-			created[c.Table.Ref()] = true
+			r.created[c.Table.Ref()] = true
 		case renameIndex:
-			put(indexes, c.Table, c.To, c.From)
+			put(r.indexes, c.Table, c.To, c.From)
 		case renameColumn:
-			put(columns, c.Table, c.From, c.To)
+			put(r.columns, c.Table, c.From, c.To)
 		}
 	}
-	for i := range out.Tables {
-		t := &out.Tables[i]
-		ref := t.Ref()
-		if created[ref] {
-			stated(t, nil)
+	return r
+}
+
+// carryIndexes sets Constraint on each plain index of t whose index in ft,
+// t's table in the snapshot, is the same constraint.
+func (r schemaRenames) carryIndexes(t, ft *Table) {
+	ref := t.Ref()
+	for j := range t.Indexes {
+		ix := &t.Indexes[j]
+		if ix.Constraint || ix.Name == "" || ix.Where != "" {
 			continue
 		}
-		oref := ref
-		if r, ok := tables[ref]; ok {
-			oref = r
+		name := ix.Name
+		if n, ok := r.indexes[ref][ix.Name]; ok {
+			name = n
 		}
-		ft := from.table(oref)
-		stated(t, ft)
-		if ft == nil {
+		fi := ft.index(name)
+		if fi == nil || !fi.Constraint || fi.Unique != ix.Unique || len(fi.Columns) != len(ix.Columns) {
 			continue
 		}
-		for j := range t.Indexes {
-			ix := &t.Indexes[j]
-			if ix.Constraint || ix.Name == "" || ix.Where != "" {
-				continue
+		same := true
+		for k, col := range fi.Columns {
+			if n, ok := r.columns[ref][col]; ok {
+				col = n
 			}
-			name := ix.Name
-			if n, ok := indexes[ref][ix.Name]; ok {
-				name = n
-			}
-			fi := ft.index(name)
-			if fi == nil || !fi.Constraint || fi.Unique != ix.Unique || len(fi.Columns) != len(ix.Columns) {
-				continue
-			}
-			same := true
-			for k, col := range fi.Columns {
-				if n, ok := columns[ref][col]; ok {
-					col = n
-				}
-				same = same && col == ix.Columns[k]
-			}
-			ix.Constraint = same
+			same = same && col == ix.Columns[k]
 		}
+		ix.Constraint = same
 	}
-	return out
 }
