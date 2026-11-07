@@ -45,18 +45,17 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 	return buildDescriptor(t, base, load)
 }
 
+// buildDescriptor is BuildDescriptor for the entity type t, without its
+// recover.
 func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() DescriptorView) (*EntityInfo, error) {
 	name := t.String()
 	v := load()
 	d := v.D
-	fail := func(field, format string, args ...any) (*EntityInfo, error) {
-		return nil, &SchemaError{Entity: name, Field: field, Reason: fmt.Sprintf(format, args...)}
-	}
 	if v.FieldPtr == nil {
-		return fail("", "the generated metadata has no FieldPtr; run go tool velox-gen")
+		return nil, schemaError(name, "", "the generated metadata has no FieldPtr; run go tool velox-gen")
 	}
 	if d.Table == "" {
-		return fail("", "the generated metadata has no Table; run go tool velox-gen")
+		return nil, schemaError(name, "", "the generated metadata has no Table; run go tool velox-gen")
 	}
 	if err := unboundMethods(t, name, d); err != nil {
 		return nil, err
@@ -64,92 +63,25 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 	cols := make([]ColumnInfo, len(d.Columns))
 	anyImmutable, anyRequired := false, false
 	for i, c := range d.Columns {
-		off, ft, ok := fieldOf(v.FieldPtr(i), base, t.Size())
-		if !ok {
-			// The column's offset and type are read from this pointer, and
-			// every scan writes through it: anything else is no column.
-			return fail(c.Field, "FieldPtr does not return a pointer into the entity for column %d", i)
-		}
-		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable,
-			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
-			Immutable: c.Immutable, Sensitive: c.Sensitive, RequiredEdge: c.RequiredEdge, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
-		ci.val, ci.fast = valType(ft), fastOf(ft)
-		if (c.Encode == nil) != (c.Decode == nil) {
-			return fail(c.Field, "column %s has one of Encode and Decode; a codec needs both", c.Name)
-		}
-		if k := ft.Kind(); c.Nullable && k != reflect.Pointer && k != reflect.Slice && k != reflect.Map {
-			return fail(c.Field, "column %s says Nullable, and its field is a %v, which cannot be nil: make it a pointer", c.Name, ft)
-		}
-		if c.RequiredEdge != "" && !ci.Nullable {
-			return fail(c.Field, "column %s has a RequiredEdge, and cannot be NULL: the database refuses it unset", c.Name)
-		}
-		if c.Immutable && c.UpdateDefault != nil {
-			return fail(c.Field, "Immutable column %s has an UpdateDefault; every update would be refused", c.Field)
-		}
-		if c.Default != nil {
-			if ci.Default, ok = defaultOf(c.Default, ft); !ok {
-				// FillDefault sets the field to it: a value of another type
-				// would panic on the first insert instead of failing here.
-				return fail(c.Field, "Default is a %T, not a %v", c.Default, ft)
-			}
-			if boolOrNumber(ft) && !zeroNumber(reflect.ValueOf(ci.Default)) {
-				// A bool or numeric field cannot have a Default: its zero value is also a
-				// real value, and the insert would overwrite an explicit false or 0.
-				// The zero value itself stores what unset does.
-				return fail(c.Field, "Default on bool/numeric field %s would overwrite an explicit false or 0 on insert; make the field a pointer (nil uses the default)", c.Field)
-			}
-			ci.copyDefault = holdsRefs(reflect.TypeOf(ci.Default))
+		ci, err := columnInfo(t, base, v.FieldPtr(i), i, c)
+		if err != nil {
+			return nil, err
 		}
 		cols[i] = ci
 		anyImmutable = anyImmutable || c.Immutable
 		anyRequired = anyRequired || c.RequiredEdge != ""
 	}
-	inRange := func(i int) bool { return i >= 0 && i < len(cols) }
-	for _, k := range d.PrimaryKey {
-		if !inRange(k) {
-			return fail("", "the primary key names column %d, of %d", k, len(cols))
-		}
-	}
-	for _, ix := range d.Indexes {
-		for _, k := range ix.Columns {
-			if !inRange(k) {
-				return fail("", "an index names column %d, of %d", k, len(cols))
-			}
-		}
+	if err := checkKeyColumns(name, d, len(cols)); err != nil {
+		return nil, err
 	}
 	if d.Bidi {
 		if err := checkBidi(name, d, cols); err != nil {
 			return nil, err
 		}
 	}
-	rels := make([]*relation, len(d.Relations))
-	var bidiKeys []bidiKey
-	if len(rels) > 0 && v.EdgeFieldPtr == nil {
-		return fail("", "the generated metadata has relations but no EdgeFieldPtr; run go tool velox-gen")
-	}
-	for i, r := range d.Relations {
-		if !r.explicit {
-			// Only EdgeTo and EdgeThrough say which columns key the
-			// relation; the key must be explicit.
-			return fail(r.name, "relation %d was not made by EdgeTo or EdgeThrough; run go tool velox-gen", i)
-		}
-		off, rt, ok := fieldOf(v.EdgeFieldPtr(i), base, t.Size())
-		if !ok || !IsRelation(rt) {
-			return fail(r.name, "EdgeFieldPtr does not return a *One[T] or *Many[T] in the entity for relation %d", i)
-		}
-		if rt != r.holders[0] && rt != r.holders[1] {
-			// The field holds another entity's relation: loading would fill
-			// it with the wrong type.
-			return fail(r.name, "relation %s is a %v, not a One or Many of %s", r.name, rt, targetName(rtype(r.holders[0])))
-		}
-		if r.bidi != nil {
-			bk, err := checkEdgeBidi(name, t, d, cols, &r, rt)
-			if err != nil {
-				return nil, err
-			}
-			bidiKeys = append(bidiKeys, bk)
-		}
-		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through, target: r.target}
+	rels, bidiKeys, err := relationFields(t, base, v, cols)
+	if err != nil {
+		return nil, err
 	}
 	info := &EntityInfo{Name: name, Table: d.Table, Schema: d.TableSchema, Columns: cols, PrimaryKey: d.PrimaryKey,
 		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
@@ -158,6 +90,115 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 	}
 	info.names = nameIndex(cols)
 	return info, nil
+}
+
+// schemaError returns the *SchemaError of entity's field whose reason is
+// format applied to args.
+func schemaError(entity, field, format string, args ...any) error {
+	return &SchemaError{Entity: entity, Field: field, Reason: fmt.Sprintf(format, args...)}
+}
+
+// columnInfo returns the metadata of column i of the entity t at base, from
+// its descriptor c and the pointer ptr that FieldPtr returns for it.
+func columnInfo(t reflect.Type, base unsafe.Pointer, ptr any, i int, c ColumnDescriptor) (ColumnInfo, error) {
+	name := t.String()
+	fail := func(format string, args ...any) (ColumnInfo, error) {
+		return ColumnInfo{}, schemaError(name, c.Field, format, args...)
+	}
+	off, ft, ok := fieldOf(ptr, base, t.Size())
+	if !ok {
+		// The column's offset and type are read from this pointer, and
+		// every scan writes through it: anything else is no column.
+		return fail("FieldPtr does not return a pointer into the entity for column %d", i)
+	}
+	ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable,
+		HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
+		Immutable: c.Immutable, Sensitive: c.Sensitive, RequiredEdge: c.RequiredEdge, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
+	ci.val, ci.fast = valType(ft), fastOf(ft)
+	if (c.Encode == nil) != (c.Decode == nil) {
+		return fail("column %s has one of Encode and Decode; a codec needs both", c.Name)
+	}
+	if k := ft.Kind(); c.Nullable && k != reflect.Pointer && k != reflect.Slice && k != reflect.Map {
+		return fail("column %s says Nullable, and its field is a %v, which cannot be nil: make it a pointer", c.Name, ft)
+	}
+	if c.RequiredEdge != "" && !ci.Nullable {
+		return fail("column %s has a RequiredEdge, and cannot be NULL: the database refuses it unset", c.Name)
+	}
+	if c.Immutable && c.UpdateDefault != nil {
+		return fail("Immutable column %s has an UpdateDefault; every update would be refused", c.Field)
+	}
+	if c.Default == nil {
+		return ci, nil
+	}
+	if ci.Default, ok = defaultOf(c.Default, ft); !ok {
+		// FillDefault sets the field to it: a value of another type
+		// would panic on the first insert instead of failing here.
+		return fail("Default is a %T, not a %v", c.Default, ft)
+	}
+	if boolOrNumber(ft) && !zeroNumber(reflect.ValueOf(ci.Default)) {
+		// A bool or numeric field cannot have a Default: its zero value is also a
+		// real value, and the insert would overwrite an explicit false or 0.
+		// The zero value itself stores what unset does.
+		return fail("Default on bool/numeric field %s would overwrite an explicit false or 0 on insert; make the field a pointer (nil uses the default)", c.Field)
+	}
+	ci.copyDefault = holdsRefs(reflect.TypeOf(ci.Default))
+	return ci, nil
+}
+
+// checkKeyColumns refuses a primary key or an index of d that names a
+// column outside the n columns of the entity name.
+func checkKeyColumns(name string, d *DescriptorFields, n int) error {
+	inRange := func(i int) bool { return i >= 0 && i < n }
+	for _, k := range d.PrimaryKey {
+		if !inRange(k) {
+			return schemaError(name, "", "the primary key names column %d, of %d", k, n)
+		}
+	}
+	for _, ix := range d.Indexes {
+		for _, k := range ix.Columns {
+			if !inRange(k) {
+				return schemaError(name, "", "an index names column %d, of %d", k, n)
+			}
+		}
+	}
+	return nil
+}
+
+// relationFields returns the relation fields of the entity t at base, which v
+// describes and whose columns are cols, and the keys of its bidirectional
+// edges.
+func relationFields(t reflect.Type, base unsafe.Pointer, v DescriptorView, cols []ColumnInfo) ([]*relation, []bidiKey, error) {
+	name, d := t.String(), v.D
+	rels := make([]*relation, len(d.Relations))
+	var bidiKeys []bidiKey
+	if len(rels) > 0 && v.EdgeFieldPtr == nil {
+		return nil, nil, schemaError(name, "", "the generated metadata has relations but no EdgeFieldPtr; run go tool velox-gen")
+	}
+	for i, r := range d.Relations {
+		if !r.explicit {
+			// Only EdgeTo and EdgeThrough say which columns key the
+			// relation; the key must be explicit.
+			return nil, nil, schemaError(name, r.name, "relation %d was not made by EdgeTo or EdgeThrough; run go tool velox-gen", i)
+		}
+		off, rt, ok := fieldOf(v.EdgeFieldPtr(i), base, t.Size())
+		if !ok || !IsRelation(rt) {
+			return nil, nil, schemaError(name, r.name, "EdgeFieldPtr does not return a *One[T] or *Many[T] in the entity for relation %d", i)
+		}
+		if rt != r.holders[0] && rt != r.holders[1] {
+			// The field holds another entity's relation: loading would fill
+			// it with the wrong type.
+			return nil, nil, schemaError(name, r.name, "relation %s is a %v, not a One or Many of %s", r.name, rt, targetName(rtype(r.holders[0])))
+		}
+		if r.bidi != nil {
+			bk, err := checkEdgeBidi(name, t, d, cols, &r, rt)
+			if err != nil {
+				return nil, nil, err
+			}
+			bidiKeys = append(bidiKeys, bk)
+		}
+		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through, target: r.target}
+	}
+	return rels, bidiKeys, nil
 }
 
 // checkBidi refuses the Descriptor of a bidirectional edge's join entity unless its
