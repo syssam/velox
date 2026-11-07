@@ -167,9 +167,6 @@ func writeBuild(b *strings.Builder, s summary, sizes []int) {
 			dir = "higher is better"
 		}
 		fmt.Fprintf(b, "### %s\n\n%s.\n\n", m.Key, dir)
-		if m.Doc != "" {
-			fmt.Fprintf(b, "%s\n\n", m.Doc)
-		}
 		writeTableHead(b, "size", otherORMs)
 		for _, n := range sizes {
 			k := strconv.Itoa(n)

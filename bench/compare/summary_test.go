@@ -71,10 +71,12 @@ func TestSummarizeFixture(t *testing.T) {
 	if got := s.Build["ent"]["100"]["cold_cpu_s"]; got.Median != 10 || got.Worst != 11.25 || len(got.Runs) != 2 {
 		t.Errorf("ent cold_cpu_s %+v, want median 10, worst 11.25, 2 runs", got)
 	}
-	// rebuild_cached counts packages, not a faster rebuild: it is not a metric,
-	// and the share that reran, rerun ÷ (rerun + cached), replaces it.
-	if got := s.Build["veloxe"]["100"]["rebuild_rerun_share"]; math.Abs(got.Median-40.0/130) > 1e-9 || math.Abs(got.Worst-40.0/130) > 1e-9 {
-		t.Errorf("veloxe rebuild_rerun_share %+v, want 40/130", got)
+	// rebuild_cached counts packages, not a faster rebuild: neither it nor a
+	// share derived from it is a metric.
+	for _, k := range []string{"rebuild_cached", "rebuild_rerun_share"} {
+		if _, ok := s.Build["veloxe"]["100"][k]; ok {
+			t.Errorf("%s is a metric", k)
+		}
 	}
 	if got := s.Build["veloxe"]["100"]["rebuild_rerun"]; got.Median != 40 {
 		t.Errorf("veloxe rebuild_rerun %+v, want 40", got)
@@ -159,22 +161,6 @@ func TestSummarizeErrors(t *testing.T) {
 		_, err := summarize(dir, map[string]any{})
 		if err == nil || !strings.Contains(err.Error(), "cold_cpu_s") {
 			t.Errorf("got %v, want an error naming cold_cpu_s", err)
-		}
-	})
-	t.Run("an input of a derived metric missing", func(t *testing.T) {
-		dir := copyFixture(t)
-		p := filepath.Join(dir, "raw", "build-ent-n100-r1.json")
-		b, _ := os.ReadFile(p)
-		var m map[string]any
-		_ = json.Unmarshal(b, &m)
-		delete(m, "rebuild_cached")
-		b, _ = json.Marshal(m)
-		if err := os.WriteFile(p, b, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		_, err := summarize(dir, map[string]any{})
-		if err == nil || !strings.Contains(err.Error(), "rebuild_cached") {
-			t.Errorf("got %v, want an error naming rebuild_cached", err)
 		}
 	})
 	t.Run("services differ from the config", func(t *testing.T) {
@@ -480,12 +466,11 @@ func TestLosses(t *testing.T) {
 		t.Errorf("got %+v", l)
 	}
 
-	// ent rerunning a smaller share of the rebuild is a loss; more packages
-	// cached (rebuild_cached) is not a metric, so it is none.
-	s.Build["ent"]["100"]["rebuild_rerun_share"] = newStat([]float64{0.1}, true)
+	// ent rerunning fewer of the rebuild's actions is a loss.
+	s.Build["ent"]["100"]["rebuild_rerun"] = newStat([]float64{10}, true)
 	got = losses(s)
-	if len(got) != 2 || got[1].Metric != "rebuild_rerun_share" || got[1].Winner != "ent" || math.Abs(got[1].Ratio-0.6) > 1e-9 {
-		t.Errorf("rebuild_rerun_share case: got %+v", got)
+	if len(got) != 2 || got[1].Metric != "rebuild_rerun" || got[1].Winner != "ent" {
+		t.Errorf("rebuild_rerun case: got %+v", got)
 	}
 
 	// A runtime loss: sec/op, B/op and allocs/op are lower-is-better.

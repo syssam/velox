@@ -258,14 +258,10 @@ func TestReportShowsEnv(t *testing.T) {
 	}
 }
 
-func TestReportRerunShare(t *testing.T) {
+func TestReportNoCachedTable(t *testing.T) {
 	rep := fixtureReport(t, fixtureSummary(t))
-	sec := section(rep, "### rebuild_rerun_share")
-	if !strings.HasPrefix(sec, "\n\nlower is better.") || !strings.Contains(sec, "not a metric") {
-		t.Errorf("rebuild_rerun_share has no direction or explanation:\n%s", sec)
-	}
-	if strings.Contains(rep, "### rebuild_cached") || strings.Contains(rep, "higher is better.") {
-		t.Error("rebuild_cached has a table, or a table is higher-is-better")
+	if strings.Contains(rep, "### rebuild_cached") || strings.Contains(rep, "### rebuild_rerun_share") || strings.Contains(rep, "higher is better.") {
+		t.Error("rebuild_cached or a share of it has a table, or a table is higher-is-better")
 	}
 }
 

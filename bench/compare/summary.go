@@ -52,16 +52,10 @@ func newStat(runs []float64, lowerIsBetter bool) stat {
 	return s
 }
 
-// metric is one build metric: its key and its direction. A metric with a
-// Derive is computed from the build JSON keys in From; any other is a key of
-// the build JSON. Doc, if set, is the one line the report prints under the
-// metric's table.
+// metric is one build metric: its key in the build JSON and its direction.
 type metric struct {
 	Key           string
 	LowerIsBetter bool
-	From          []string
-	Derive        func(raw map[string]float64) float64
-	Doc           string
 }
 
 // buildMetrics are the build metrics, in table order. orm, n, services, run
@@ -70,8 +64,10 @@ type metric struct {
 // The build JSON also holds rebuild_cached, the count of actions the rebuild
 // served from the cache. It is not a metric: it counts every package the edit
 // did not touch, the standard library included, so an ORM that generates more
-// packages "caches more" without a faster rebuild. rebuild_rerun_share, the
-// fraction that reran, replaces it; rebuild_cpu_s and edit_x are the cost.
+// packages "caches more" without a faster rebuild. A share that reran, rerun ÷
+// (rerun + cached), has the same flaw in its denominator: an ORM with fewer
+// packages reruns a larger share of fewer actions. rebuild_rerun counts the
+// actions; rebuild_cpu_s and edit_x are the cost.
 var buildMetrics = []metric{
 	{Key: "codegen_x", LowerIsBetter: true}, {Key: "cold_x", LowerIsBetter: true}, {Key: "edit_x", LowerIsBetter: true},
 	{Key: "codegen_cpu_s", LowerIsBetter: true}, {Key: "codegen_wall_s", LowerIsBetter: true},
@@ -80,24 +76,9 @@ var buildMetrics = []metric{
 	{Key: "regen_cpu_s", LowerIsBetter: true}, {Key: "regen_wall_s", LowerIsBetter: true},
 	{Key: "rebuild_cpu_s", LowerIsBetter: true}, {Key: "rebuild_wall_s", LowerIsBetter: true},
 	{Key: "rebuild_rerun", LowerIsBetter: true},
-	{
-		Key: "rebuild_rerun_share", LowerIsBetter: true,
-		From:   []string{"rebuild_rerun", "rebuild_cached"},
-		Derive: rerunShare,
-		Doc:    "rebuild_rerun ÷ (rebuild_rerun + rebuild_cached): the fraction of the build's actions that the edit reran. The count of cached actions is not a metric, because it grows with the number of packages, not with a faster rebuild.",
-	},
 	{Key: "rebuild_relinks", LowerIsBetter: true},
 	{Key: "gen_lines", LowerIsBetter: true}, {Key: "gen_bytes", LowerIsBetter: true},
 	{Key: "service_binary_mb", LowerIsBetter: true}, {Key: "link_peak_mb", LowerIsBetter: true},
-}
-
-// rerunShare is rerun ÷ (rerun + cached), or 0 when there were no actions.
-func rerunShare(raw map[string]float64) float64 {
-	rerun, cached := raw["rebuild_rerun"], raw["rebuild_cached"]
-	if rerun+cached == 0 {
-		return 0
-	}
-	return rerun / (rerun + cached)
 }
 
 // rawKeys are the keys of a build JSON that summarize reads: the reference
@@ -105,11 +86,7 @@ func rerunShare(raw map[string]float64) float64 {
 func rawKeys() []string {
 	keys := []string{refMetric}
 	for _, m := range buildMetrics {
-		if m.Derive != nil {
-			keys = append(keys, m.From...)
-		} else {
-			keys = append(keys, m.Key)
-		}
+		keys = append(keys, m.Key)
 	}
 	return slices.Compact(slices.Sorted(slices.Values(keys)))
 }
@@ -723,12 +700,7 @@ func summarizeBuild(s *summary, raw string, services int, runtimeOnly bool) ([]i
 		}
 		s.Build[k.orm][n] = map[string]stat{}
 		for _, mt := range buildMetrics {
-			s.Build[k.orm][n][mt.Key] = newStat(column(ss, func(x sample) float64 {
-				if mt.Derive != nil {
-					return mt.Derive(x.vals)
-				}
-				return x.vals[mt.Key]
-			}), mt.LowerIsBetter)
+			s.Build[k.orm][n][mt.Key] = newStat(column(ss, func(x sample) float64 { return x.vals[mt.Key] }), mt.LowerIsBetter)
 		}
 		s.Reference[k.orm][n] = newStat(column(ss, func(x sample) float64 { return x.vals[refMetric] }), true)
 		if !slices.Contains(sizes, k.n) {
