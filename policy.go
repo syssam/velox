@@ -101,6 +101,10 @@ type Row = engine.Row
 // no DELETE to render.
 type Mutation struct{ mu engine.MutationState }
 
+// Mutation is the size of its engine.MutationState, which a *Mutation is cast
+// from (erase in hook.go).
+var _ [unsafe.Sizeof(Mutation{}) - unsafe.Sizeof(engine.MutationState{})]struct{} = [0]struct{}{}
+
 // Op returns the write's kind: OpInsert, OpUpdate or OpDelete.
 func (m *Mutation) Op() Op {
 	if m.mu.Op != 0 {
