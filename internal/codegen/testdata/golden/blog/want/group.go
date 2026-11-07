@@ -99,9 +99,9 @@ func groupDescriptor() velox.Descriptor[Group] {
 }
 
 // String returns the entity's fields.
-func (x Group) String() string {
-	return fmt.Sprintf("Group(ID=%v, Name=%v, Token=%v)", x.ID, x.Name, x.Token)
+func (g Group) String() string {
+	return fmt.Sprintf("Group(ID=%v, Name=%v, Token=%v)", g.ID, g.Name, g.Token)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Group) GoString() string { return x.String() }
+func (g Group) GoString() string { return g.String() }

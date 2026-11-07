@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // personWhere is a where input of person, as velox-graphql writes one: a
@@ -55,20 +55,20 @@ func (w *personWhere) Pred(ctx context.Context) (velox.Pred[person], error) {
 }
 
 func (w *personWhere) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[person]("Person"))
+	f := gqlgraph.NewFilter(ctx, gqlgraph.TableType[person]("Person"))
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not, (*personWhere).predicate)
-	gqlimpl.And(f, "and", w.And, (*personWhere).predicate)
-	gqlimpl.Or(f, "or", w.Or, (*personWhere).predicate)
-	gqlimpl.IDField[int64](f, "id", 0, gqlimpl.Ops[string]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT})
-	gqlimpl.Field(f, "name", 1, gqlimpl.Ops[string]{
+	gqlgraph.Not(f, "not", w.Not, (*personWhere).predicate)
+	gqlgraph.And(f, "and", w.And, (*personWhere).predicate)
+	gqlgraph.Or(f, "or", w.Or, (*personWhere).predicate)
+	gqlgraph.IDField[int64](f, "id", 0, gqlgraph.Ops[string]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT})
+	gqlgraph.Field(f, "name", 1, gqlgraph.Ops[string]{
 		EQ: w.Name, NEQ: w.NameNEQ, In: w.NameIn, NotIn: w.NameNotIn, GT: w.NameGT,
 		Contains: w.NameContains, HasPrefix: w.NameHasPrefix, HasSuffix: w.NameHasSuffix,
 	})
-	gqlimpl.Field(f, "label", 1, gqlimpl.Ops[string]{EQ: w.Label, NotIn: w.LabelNotIn})
-	gqlimpl.Field(f, "age", 2, gqlimpl.Ops[int64]{
+	gqlgraph.Field(f, "label", 1, gqlgraph.Ops[string]{EQ: w.Label, NotIn: w.LabelNotIn})
+	gqlgraph.Field(f, "age", 2, gqlgraph.Ops[int64]{
 		EQ: w.Age, NEQ: w.AgeNEQ, In: w.AgeIn, NotIn: w.AgeNotIn,
 		GT: w.AgeGT, GTE: w.AgeGTE, LT: w.AgeLT, LTE: w.AgeLTE,
 	})
@@ -323,19 +323,19 @@ func TestWhereConversions(t *testing.T) {
 		flag  bool
 		ref   [16]byte
 	)
-	if got := gqlimpl.AsString[code]("x"); got != code("x") {
+	if got := gqlgraph.AsString[code]("x"); got != code("x") {
 		t.Errorf("AsString: %v", got)
 	}
-	if got := gqlimpl.AsInt[small](int64(7)); got != small(7) {
+	if got := gqlgraph.AsInt[small](int64(7)); got != small(7) {
 		t.Errorf("AsInt: %v", got)
 	}
-	if got := gqlimpl.AsFloat[ratio](float32(1.5)); got != ratio(1.5) {
+	if got := gqlgraph.AsFloat[ratio](float32(1.5)); got != ratio(1.5) {
 		t.Errorf("AsFloat: %v", got)
 	}
-	if got := gqlimpl.AsBool[flag](true); got != flag(true) {
+	if got := gqlgraph.AsBool[flag](true); got != flag(true) {
 		t.Errorf("AsBool: %v", got)
 	}
-	if got := gqlimpl.AsUUID[ref]([16]byte{1, 2}); got != (ref{1, 2}) {
+	if got := gqlgraph.AsUUID[ref]([16]byte{1, 2}); got != (ref{1, 2}) {
 		t.Errorf("AsUUID: %v", got)
 	}
 }
@@ -411,12 +411,12 @@ func TestWhereBudget(t *testing.T) {
 	// Each where argument has its own budget: a context the application
 	// holds starts one, and a nested input's context continues the one it
 	// came from.
-	f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[person]("Person"))
+	f := gqlgraph.NewFilter(ctx, gqlgraph.TableType[person]("Person"))
 	for range 9 {
-		gqlimpl.Field(f, "age", 2, gqlimpl.Ops[int64]{In: in(100)}) // 909 of 1000
+		gqlgraph.Field(f, "age", 2, gqlgraph.Ops[int64]{In: in(100)}) // 909 of 1000
 	}
 	spy := &ctxSpy{}
-	gqlimpl.Not(f, "not", spy, (*ctxSpy).predicate)
+	gqlgraph.Not(f, "not", spy, (*ctxSpy).predicate)
 	if _, err := f.Pred(); err != nil || spy.ctx == nil {
 		t.Fatalf("909: %v", err)
 	}
@@ -528,9 +528,9 @@ func TestFilterBudgetError(t *testing.T) {
 	if _, err := (&personWhere{NameIn: names(2), AgeIn: []int64{1, 2}}).Pred(small); !errors.Is(err, veloxgql.ErrFilterTooLarge) {
 		t.Errorf("7 nodes under MaxFilterNodes 5: %v, want ErrFilterTooLarge", err)
 	}
-	f := gqlimpl.NewFilter(small, gqlimpl.TableType[person]("Person"))
+	f := gqlgraph.NewFilter(small, gqlgraph.TableType[person]("Person"))
 	spy := &ctxSpy{}
-	gqlimpl.Not(f, "not", spy, (*ctxSpy).predicate)
+	gqlgraph.Not(f, "not", spy, (*ctxSpy).predicate)
 	if _, err := f.Pred(); err != nil {
 		t.Fatal(err)
 	}

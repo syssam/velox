@@ -138,9 +138,9 @@ func (r *renderer) writeInput(f *file, t *sdl.Type, in string, fs []sdl.InputFie
 		json := fi.Kind == sdl.InputValue && fi.GoType == "veloxgql.JSON"
 		switch {
 		case strings.HasPrefix(types[i], "*") && json:
-			v = f.gqlimpl() + ".ShowJSON(" + v + ")"
+			v = f.gqlgraph() + ".ShowJSON(" + v + ")"
 		case strings.HasPrefix(types[i], "*"):
-			v = f.gqlimpl() + ".Show(" + v + ")"
+			v = f.gqlgraph() + ".Show(" + v + ")"
 		case json:
 			v = "string(" + v + ")"
 		}
@@ -184,10 +184,10 @@ type setters struct {
 
 // writeSetters writes the method Setters of the input in, whose fields are
 // fs: plain Go that turns each field given into a column's or an edge's
-// setter, and ends with gqlimpl.Checked, which runs the columns' validators.
+// setter, and ends with gqlgraph.Validate, which runs the columns' validators.
 func (r *renderer) writeSetters(f *file, t *sdl.Type, in string, fs []sdl.InputField, create bool) error {
 	e := t.Entity
-	vx, impl := f.velox(), f.gqlimpl()
+	vx, impl := f.velox(), f.gqlgraph()
 	s := &setters{r: r, f: f, t: t, in: in, fs: fs, create: create, h: cmp.Or(e.Handles, plugin.GoPlural(e.Name)), done: map[int]bool{}}
 
 	f.p("")
@@ -234,7 +234,7 @@ func (r *renderer) writeSetters(f *file, t *sdl.Type, in string, fs []sdl.InputF
 			return err
 		}
 	}
-	f.p("\treturn %s.Checked(%q, &%s, set)", impl, in, typeVar(t))
+	f.p("\treturn %s.Validate(%q, &%s, set)", impl, in, typeVar(t))
 	f.p("}")
 	return nil
 }
@@ -329,7 +329,7 @@ func (s *setters) value(i int) error {
 	}
 	if jt != "" {
 		v := s.local(fi)
-		f.p("%s%s, err := %s.FromJSON[%s](%s, %s)", indent, v, f.gqlimpl(), jt, s.at(fi), src)
+		f.p("%s%s, err := %s.FromJSON[%s](%s, %s)", indent, v, f.gqlgraph(), jt, s.at(fi), src)
 		s.fail(indent)
 		s.add(indent, col+".Set("+v+")")
 		end()
@@ -347,7 +347,7 @@ func (s *setters) value(i int) error {
 	// zero time would not be what it stores. An enum's input is never "",
 	// a zero Default stores the zero, and a list given is never nil.
 	if s.create && fd.HasDefault && !fd.Pointer && fd.Type != "enum" && fd.Type != "json" && !zeroDefault(fd) {
-		f.p("%sif err := %s.NotZero(%s, %s); err != nil {", indent, f.gqlimpl(), s.at(fi), src)
+		f.p("%sif err := %s.NotZero(%s, %s); err != nil {", indent, f.gqlgraph(), s.at(fi), src)
 		f.p("%s\treturn nil, err", indent)
 		f.p("%s}", indent)
 	}
@@ -400,7 +400,7 @@ func (s *setters) edge(ei int) error {
 		}
 		return -1
 	}
-	impl := f.gqlimpl()
+	impl := f.gqlgraph()
 	decodeOne := func(indent string, fi sdl.InputField, src string) string {
 		v := s.local(fi)
 		f.p("%s%s, err := %s.DecodeID%s(%s, %s, %q%s)", indent, v, impl, k.args, s.at(fi), src, fi.Target, k.conv)

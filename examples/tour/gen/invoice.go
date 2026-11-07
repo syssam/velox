@@ -170,15 +170,15 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 }
 
 // String returns the entity's fields.
-func (x Invoice) String() string {
+func (i Invoice) String() string {
 	return fmt.Sprintf("Invoice("+
 		"ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, DeletedAt=%v, "+
 		"Number=%v, Customer=%v, Status=%v, TotalCents=%v)",
-		x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID,
-		velox.Show(x.DeletedAt), x.Number, x.Customer, x.Status,
-		x.TotalCents,
+		i.ID, i.CreatedAt, i.UpdatedAt, i.OrgID,
+		velox.Show(i.DeletedAt), i.Number, i.Customer, i.Status,
+		i.TotalCents,
 	)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Invoice) GoString() string { return x.String() }
+func (i Invoice) GoString() string { return i.String() }

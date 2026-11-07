@@ -185,7 +185,7 @@ func TestScaleHarnessSmallGraphQL(t *testing.T) {
 		}
 	}
 	src := services[filepath.Join("s0", "main.go")]
-	if got := strings.Count(src, "gen.PaginateE"); got != 5 {
+	if got := strings.Count(src, "gen.NewE"); got != 5 {
 		t.Errorf("s0 calls %d Paginate functions, want 5", got)
 	}
 	if got := strings.Count(src, ".Next(ctx"); got != 5 {

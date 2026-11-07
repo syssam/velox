@@ -69,9 +69,9 @@ func auditDescriptor() velox.Descriptor[Audit] {
 }
 
 // String returns the entity's fields.
-func (x Audit) String() string {
-	return fmt.Sprintf("Audit(ID=%v, Actor=%v, Message=%v)", x.ID, x.Actor, x.Message)
+func (a Audit) String() string {
+	return fmt.Sprintf("Audit(ID=%v, Actor=%v, Message=%v)", a.ID, a.Actor, a.Message)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Audit) GoString() string { return x.String() }
+func (a Audit) GoString() string { return a.String() }

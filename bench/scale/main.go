@@ -346,7 +346,7 @@ func (E%[1]d) Edges() []schema.Edge {
 			e := 10*((s*7+m)%groups) + m
 			fmt.Fprintf(&use, "\tsink(db.Query[gen.E%d]().Where(gen.E%ds.ID.EQ(1)).Limit(1).SQL(ctx))\n", e, e)
 			if graphql {
-				fmt.Fprintf(&use, "\tgqlSink(gen.PaginateE%[1]ds(ctx, db.Query[gen.E%[1]d](), nil, nil, nil, nil, nil, nil))\n\tgqlSink((&gen.E%[1]d{}).Next(ctx, nil, nil, nil, nil, nil, nil))\n", e)
+				fmt.Fprintf(&use, "\tgqlSink(gen.NewE%[1]dConnection(ctx, db.Query[gen.E%[1]d](), nil, nil, nil, nil, nil, nil))\n\tgqlSink((&gen.E%[1]d{}).Next(ctx, nil, nil, nil, nil, nil, nil))\n", e)
 			}
 		}
 		helper := ""

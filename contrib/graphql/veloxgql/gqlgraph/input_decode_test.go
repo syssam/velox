@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/mixin"
 	"github.com/syssam/velox/scope"
@@ -183,11 +183,11 @@ func codeOf(err error) string {
 func TestDecodeID(t *testing.T) {
 	const at = "CreatePostInput.authorID"
 	user := veloxgql.EncodeID("User", int64(7))
-	if k, err := gqlimpl.DecodeID[int64](at, user, "User"); err != nil || k != 7 {
+	if k, err := gqlgraph.DecodeID[int64](at, user, "User"); err != nil || k != 7 {
 		t.Errorf("DecodeID = %v, %v; want 7", k, err)
 	}
 	type userID int64
-	if k, err := gqlimpl.DecodeIDAs(at, user, "User", func(k int64) userID { return userID(k) }); err != nil || k != 7 {
+	if k, err := gqlgraph.DecodeIDAs(at, user, "User", func(k int64) userID { return userID(k) }); err != nil || k != 7 {
 		t.Errorf("DecodeIDAs = %v, %v; want 7", k, err)
 	}
 	for _, c := range []struct {
@@ -197,8 +197,8 @@ func TestDecodeID(t *testing.T) {
 		{"malformed", "!", veloxgql.ErrBadID},
 		{"another type", veloxgql.EncodeID("Post", int64(7)), veloxgql.ErrWrongIDType},
 	} {
-		_, err := gqlimpl.DecodeID[int64](at, c.id, "User")
-		_, errAs := gqlimpl.DecodeIDAs(at, c.id, "User", func(k int64) userID { return userID(k) })
+		_, err := gqlgraph.DecodeID[int64](at, c.id, "User")
+		_, errAs := gqlgraph.DecodeIDAs(at, c.id, "User", func(k int64) userID { return userID(k) })
 		for _, err := range []error{err, errAs} {
 			if !errors.Is(err, c.want) {
 				t.Errorf("%s: %v, want %v", c.name, err, c.want)
@@ -226,15 +226,15 @@ func encodeUsers(n int) []string {
 // decoded.
 func TestDecodeIDsCap(t *testing.T) {
 	const at = "UpdatePostInput.addTagIDs"
-	if k, err := gqlimpl.DecodeIDs[int64](at, encodeUsers(gqlimpl.MaxIDs), "User"); err != nil || len(k) != gqlimpl.MaxIDs {
-		t.Errorf("MaxIDs IDs: %d keys, %v; want %d", len(k), err, gqlimpl.MaxIDs)
+	if k, err := gqlgraph.DecodeIDs[int64](at, encodeUsers(gqlgraph.MaxIDs), "User"); err != nil || len(k) != gqlgraph.MaxIDs {
+		t.Errorf("MaxIDs IDs: %d keys, %v; want %d", len(k), err, gqlgraph.MaxIDs)
 	}
 	// One over, the last malformed: the cap is checked first.
-	over := append(encodeUsers(gqlimpl.MaxIDs), "!")
+	over := append(encodeUsers(gqlgraph.MaxIDs), "!")
 	for name, err := range map[string]error{
-		"DecodeIDs": func() error { _, err := gqlimpl.DecodeIDs[int64](at, over, "User"); return err }(),
+		"DecodeIDs": func() error { _, err := gqlgraph.DecodeIDs[int64](at, over, "User"); return err }(),
 		"DecodeIDsAs": func() error {
-			_, err := gqlimpl.DecodeIDsAs(at, over, "User", func(k int64) int64 { return k })
+			_, err := gqlgraph.DecodeIDsAs(at, over, "User", func(k int64) int64 { return k })
 			return err
 		}(),
 	} {
@@ -250,7 +250,7 @@ func TestDecodeIDsCap(t *testing.T) {
 	}
 
 	// A bad ID in a list names its place in the list.
-	_, err := gqlimpl.DecodeIDs[int64](at, []string{encodeUsers(1)[0], "!"}, "User")
+	_, err := gqlgraph.DecodeIDs[int64](at, []string{encodeUsers(1)[0], "!"}, "User")
 	if !errors.Is(err, veloxgql.ErrBadID) || codeOf(err) != veloxgql.CodeBadUserInput || !strings.HasPrefix(err.Error(), "veloxgql: "+at+"[1]: ") {
 		t.Errorf("a malformed ID in the list: %v, want BAD_USER_INPUT ErrBadID naming %s[1]", err, at)
 	}
@@ -260,16 +260,16 @@ func TestDecodeIDsCap(t *testing.T) {
 // first place; the keys are what a relation handle's Add takes.
 func TestDecodeIDsRepeats(t *testing.T) {
 	a, b := veloxgql.EncodeID("User", int64(1)), veloxgql.EncodeID("User", int64(2))
-	k, err := gqlimpl.DecodeIDs[int64]("x", []string{a, b, a}, "User")
+	k, err := gqlgraph.DecodeIDs[int64]("x", []string{a, b, a}, "User")
 	if err != nil || !slices.Equal(k, []any{int64(1), int64(2)}) {
 		t.Errorf("DecodeIDs = %v, %v; want [1 2]", k, err)
 	}
 	type userID int64
-	v, err := gqlimpl.DecodeIDsAs("x", []string{b, a, b, b}, "User", func(k int64) userID { return userID(k) })
+	v, err := gqlgraph.DecodeIDsAs("x", []string{b, a, b, b}, "User", func(k int64) userID { return userID(k) })
 	if err != nil || !slices.Equal(v, []any{userID(2), userID(1)}) {
 		t.Errorf("DecodeIDsAs = %v, %v; want [2 1]", v, err)
 	}
-	if k, err := gqlimpl.DecodeIDs[int64]("x", nil, "User"); err != nil || len(k) != 0 {
+	if k, err := gqlgraph.DecodeIDs[int64]("x", nil, "User"); err != nil || len(k) != 0 {
 		t.Errorf("DecodeIDs of none = %v, %v; want none", k, err)
 	}
 }
@@ -281,32 +281,32 @@ func TestNotZero(t *testing.T) {
 		err  error
 		code string
 	}{
-		`""`:        {gqlimpl.NotZero("In.x", ""), "BAD_USER_INPUT"},
-		"0":         {gqlimpl.NotZero("In.x", 0), "BAD_USER_INPUT"},
-		"zero time": {gqlimpl.NotZero("In.x", time.Time{}), "BAD_USER_INPUT"},
-		`"a"`:       {gqlimpl.NotZero("In.x", "a"), ""},
-		"1":         {gqlimpl.NotZero("In.x", 1), ""},
+		`""`:        {gqlgraph.NotZero("In.x", ""), "BAD_USER_INPUT"},
+		"0":         {gqlgraph.NotZero("In.x", 0), "BAD_USER_INPUT"},
+		"zero time": {gqlgraph.NotZero("In.x", time.Time{}), "BAD_USER_INPUT"},
+		`"a"`:       {gqlgraph.NotZero("In.x", "a"), ""},
+		"1":         {gqlgraph.NotZero("In.x", 1), ""},
 	} {
 		if got := codeOf(c.err); got != c.code {
 			t.Errorf("NotZero(%s): code %q, want %q", name, got, c.code)
 		}
 	}
-	if err := gqlimpl.NotZero("In.x", ""); err == nil || !strings.HasPrefix(err.Error(), "veloxgql: In.x: invalid value: ") {
+	if err := gqlgraph.NotZero("In.x", ""); err == nil || !strings.HasPrefix(err.Error(), "veloxgql: In.x: invalid value: ") {
 		t.Errorf("NotZero names %v, want In.x", err)
 	}
 }
 
 func TestFromJSON(t *testing.T) {
 	type meta struct{ Tags []string }
-	got, err := gqlimpl.FromJSON[meta]("CreatePostInput.meta", veloxgql.JSON(`{"Tags":["a"]}`))
+	got, err := gqlgraph.FromJSON[meta]("CreatePostInput.meta", veloxgql.JSON(`{"Tags":["a"]}`))
 	if err != nil || !slices.Equal(got.Tags, []string{"a"}) {
 		t.Errorf("FromJSON = %v, %v", got, err)
 	}
-	_, err = gqlimpl.FromJSON[meta]("CreatePostInput.meta", veloxgql.JSON(`{"Tags":1}`))
+	_, err = gqlgraph.FromJSON[meta]("CreatePostInput.meta", veloxgql.JSON(`{"Tags":1}`))
 	if codeOf(err) != veloxgql.CodeBadUserInput || !strings.HasPrefix(err.Error(), "veloxgql: CreatePostInput.meta: ") {
 		t.Errorf("a JSON of another shape: %v, want BAD_USER_INPUT naming the field", err)
 	}
-	if strings.Contains(err.Error(), "gqlimpl_test") || strings.Contains(err.Error(), "meta.Tags") {
+	if strings.Contains(err.Error(), "gqlgraph_test") || strings.Contains(err.Error(), "meta.Tags") {
 		t.Errorf("%q names a Go type", err)
 	}
 }

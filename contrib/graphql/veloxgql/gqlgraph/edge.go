@@ -1,4 +1,4 @@
-package gqlimpl
+package gqlgraph
 
 import (
 	"context"
@@ -96,12 +96,12 @@ func (e Edge) paginate(ctx context.Context, c *Type, args Args, order []Order) (
 	if err != nil {
 		return nil, err
 	}
-	return edgeConnection(ctx, conn, e, edgeArgs{args.After, args.Before, args.First, args.Last, args.Where, order}), nil
+	return edgeConnection(ctx, conn, e, edgeArgs{args.After, args.Before, args.First, args.Last, args.Where.input, order}), nil
 }
 
 // edgeArgs are the arguments of an edge's connection, which the callers of
-// its batch share: Args but Pred, a condition, which may hold a function
-// that reflect.DeepEqual never finds equal, and the order.
+// its batch share: Args, with the where input but not its condition, which
+// may hold a function that reflect.DeepEqual never finds equal.
 type edgeArgs struct {
 	after, before *veloxgql.Cursor
 	first, last   *int

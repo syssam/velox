@@ -1,4 +1,4 @@
-package gqlimpl
+package gqlgraph
 
 import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"

@@ -7,7 +7,7 @@ import (
 )
 
 // person is a hand-written entity, as velox-gen would write it, for the
-// handler's tests: a key, a name and an age. gqlimpl's paginate_test.go
+// handler's tests: a key, a name and an age. gqlgraph's paginate_test.go
 // declares the same entity; the two test packages are separate and cannot
 // share a declaration without a non-test package only tests would import.
 type person struct {

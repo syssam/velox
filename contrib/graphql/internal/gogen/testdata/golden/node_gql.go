@@ -4,35 +4,35 @@ import (
 	"context"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion17
+const _ = veloxgql.GeneratedCodeIsVersion18
 
 // Node returns the node with the global ID id, or nil when no row has its key.
 // It reads only the columns the selection needs.
 func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
-	return gqlimpl.NodeByID(ctx, id, nodeType)
+	return gqlgraph.NodeByID(ctx, id, nodeKind)
 }
 
 // Nodes returns the nodes with the global IDs ids, in their order, with nil for
 // an ID no row has. It reads one query per type.
 func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
-	return gqlimpl.NodesByID(ctx, ids, nodeType)
+	return gqlgraph.NodesByID(ctx, ids, nodeKind)
 }
 
-// nodeType is the Node type the ID type typ names, and false when it names
+// nodeKind is the Node type the ID type typ names, and false when it names
 // none.
-func nodeType(typ string) (gqlimpl.NodeKind, bool) {
+func nodeKind(typ string) (gqlgraph.NodeKind, bool) {
 	switch typ {
 	case "Category":
-		return gqlimpl.NewNode[int64](&categoryGQL), true
+		return gqlgraph.NewNode[int64](&categoryType), true
 	case "Group":
-		return gqlimpl.NewNode[int64](&groupGQL), true
+		return gqlgraph.NewNode[int64](&groupType), true
 	case "Post":
-		return gqlimpl.NewNode[int64](&postGQL), true
+		return gqlgraph.NewNode[int64](&postType), true
 	case "Account":
-		return gqlimpl.NewNode[int64](&userGQL), true
+		return gqlgraph.NewNode[int64](&userType), true
 	}
-	return gqlimpl.NodeKind{}, false
+	return gqlgraph.NodeKind{}, false
 }

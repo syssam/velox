@@ -309,7 +309,7 @@ func build(m *plugin.Model) (*graph, error) {
 	}
 	setArgs(g.query)
 	for i := range g.query {
-		// What PaginateXs's Go doc says of its connection.
+		// What NewXConnection's Go doc says of its connection.
 		o, how := g.query[i].conn, ""
 		if o.hasWhere {
 			how += ", filtered by where"

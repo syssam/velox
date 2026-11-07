@@ -141,12 +141,12 @@ func projectDescriptor() velox.Descriptor[Project] {
 }
 
 // String returns the entity's fields.
-func (x Project) String() string {
+func (p Project) String() string {
 	return fmt.Sprintf("Project("+
 		"ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Name=%v)",
-		x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Name,
+		p.ID, p.CreatedAt, p.UpdatedAt, p.OrgID, p.Name,
 	)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Project) GoString() string { return x.String() }
+func (p Project) GoString() string { return p.String() }

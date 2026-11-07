@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // pet is a hand-written entity with a nullable rank, many of them NULL and
@@ -44,12 +44,12 @@ func petDescriptor() velox.Descriptor[pet] {
 	}
 }
 
-func rankTerm(dir veloxgql.OrderDirection) gqlimpl.OrderTerm[pet] {
-	return gqlimpl.TermOf[pet]("RANK", dir, int(pets.Rank.I))
+func rankTerm(dir veloxgql.OrderDirection) gqlgraph.OrderTerm[pet] {
+	return gqlgraph.TermOf[pet]("RANK", dir, int(pets.Rank.I))
 }
 
-func petKey(dir veloxgql.OrderDirection) []gqlimpl.OrderTerm[pet] {
-	return []gqlimpl.OrderTerm[pet]{gqlimpl.TermOf[pet]("id", dir, int(pets.ID.I))}
+func petKey(dir veloxgql.OrderDirection) []gqlgraph.OrderTerm[pet] {
+	return []gqlgraph.OrderTerm[pet]{gqlgraph.TermOf[pet]("id", dir, int(pets.ID.I))}
 }
 
 // The ranks of pets 1 to 12: six NULLs, and three ties of 1 and of 2.
@@ -84,9 +84,9 @@ func TestPaginateNullable(t *testing.T) {
 		{veloxgql.OrderDirectionDesc, veloxgql.OrderDirectionAsc, []int64{1, 3, 5, 7, 10, 12, 2, 6, 9, 4, 8, 11}},
 	} {
 		t.Run(string(c.rank)+" "+string(c.key), func(t *testing.T) {
-			page := func(args gqlimpl.Args) *gqlimpl.PageOf[pet] {
+			page := func(args gqlgraph.Args) *gqlgraph.PageOf[pet] {
 				t.Helper()
-				conn, err := gqlimpl.NewConnectionOf(ctx, db.Query[pet](), "Pet", args, []gqlimpl.OrderTerm[pet]{rankTerm(c.rank)}, petKey(c.key))
+				conn, err := gqlgraph.NewConnectionOf(ctx, db.Query[pet](), "Pet", args, []gqlgraph.OrderTerm[pet]{rankTerm(c.rank)}, petKey(c.key))
 				if err != nil {
 					t.Fatalf("%+v: %v", args, err)
 				}
@@ -103,7 +103,7 @@ func TestPaginateNullable(t *testing.T) {
 				}
 				return out
 			}
-			all := page(gqlimpl.Args{First: new(len(c.want))})
+			all := page(gqlgraph.Args{First: new(len(c.want))})
 			if got := petIDs(all.Rows); !slices.Equal(got, c.want) {
 				t.Fatalf("all: %v, want %v", got, c.want)
 			}
@@ -113,12 +113,12 @@ func TestPaginateNullable(t *testing.T) {
 					t.Fatalf("cursor of %d: %+v", c.want[i], cur)
 				}
 				for n := 1; n <= 4; n++ {
-					after := page(gqlimpl.Args{First: new(n), After: cur})
+					after := page(gqlgraph.Args{First: new(n), After: cur})
 					end := min(i+1+n, len(c.want))
 					if got := petIDs(after.Rows); !slices.Equal(got, c.want[i+1:end]) || after.Info.HasNextPage != (end < len(c.want)) {
 						t.Errorf("first %d after %d: %v next %v, want %v", n, c.want[i], got, after.Info.HasNextPage, c.want[i+1:end])
 					}
-					before := page(gqlimpl.Args{Last: new(n), Before: cur})
+					before := page(gqlgraph.Args{Last: new(n), Before: cur})
 					start := max(i-n, 0)
 					if got := petIDs(before.Rows); !slices.Equal(got, c.want[start:i]) || before.Info.HasPreviousPage != (start > 0) {
 						t.Errorf("last %d before %d: %v prev %v, want %v", n, c.want[i], got, before.Info.HasPreviousPage, c.want[start:i])

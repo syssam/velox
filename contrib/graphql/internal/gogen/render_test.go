@@ -475,7 +475,7 @@ func TestGoTypes(t *testing.T) {
 	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
 	ev, owner, node := squash(files["event_gql.go"]), squash(files["owner_gql.go"]), squash(files["node_gql.go"])
 	for _, want := range []string{
-		`func (x *Event) GlobalID() string { return veloxgql.EncodeID("Event", [16]byte(x.ID)) }`,
+		`func (e *Event) GlobalID() string { return veloxgql.EncodeID("Event", [16]byte(e.ID)) }`,
 		// The columns' own Go types, which bind through veloxgql's function
 		// marshalers and gqlgen's.
 		" ID *string ", " IDNEQ *string ", " IDIn []string ",
@@ -486,26 +486,26 @@ func TestGoTypes(t *testing.T) {
 		" RefNEQ *uuid.UUID ",
 		` levels "example.com/app/types/v2" `, ` "time" `, ` "github.com/google/uuid" `,
 		// The key's order term, and an order field of the application's enum.
-		// The connection's columns: gqlimpl converts their values to and from
+		// The connection's columns: gqlgraph converts their values to and from
 		// their base types.
-		"Key: []gqlimpl.Col{{Field: \"id\", Col: eventColID}},",
-		"{Field: \"LEVEL\", Col: eventColLevel},",
+		"Key: []gqlgraph.Column{{Name: \"id\", Index: eventColID}},",
+		"{Name: \"LEVEL\", Index: eventColLevel},",
 		// A JSON field binds through a getter.
-		"func (x *Event) TagsGQL() (veloxgql.JSON, error) { b, err := json.Marshal(x.Tags) return veloxgql.JSON(b), err }",
+		"func (e *Event) TagsGQL() (veloxgql.JSON, error) { b, err := json.Marshal(e.Tags) return veloxgql.JSON(b), err }",
 		// Pred: one helper call for each field's predicates, by column
-		// index, with the input's values in a gqlimpl.Ops of the Go type
-		// they hold; gqlimpl converts them to the column's Go type where
+		// index, with the input's values in a gqlgraph.Ops of the Go type
+		// they hold; gqlgraph converts them to the column's Go type where
 		// they differ.
-		` f := gqlimpl.NewFilter(ctx, &eventGQL) `,
-		` gqlimpl.IDField[[16]byte](f, "id", eventColID, gqlimpl.Ops[string]{ EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, }) `,
-		` gqlimpl.Field(f, "level", eventColLevel, gqlimpl.Ops[levels.Level]{EQ: w.Level}) `,
-		` gqlimpl.Field(f, "size", eventColSize, gqlimpl.Ops[uint64]{GT: w.SizeGT}) `,
-		` gqlimpl.Field(f, "rank", eventColRank, gqlimpl.Ops[int8]{In: w.RankIn}) `,
-		` gqlimpl.Field(f, "at", eventColAt, gqlimpl.Ops[time.Time]{LT: w.AtLT, IsNil: w.AtIsNil}) `,
-		` gqlimpl.Field(f, "ref", eventColRef, gqlimpl.Ops[uuid.UUID]{NEQ: w.RefNEQ}) `,
-		` gqlimpl.FKField[int64](f, "ownerID", eventColOwnerID, eventEdgeOwner, &ownerGQL, gqlimpl.Ops[string]{ EQ: w.OwnerID, NEQ: w.OwnerIDNEQ, In: w.OwnerIDIn, NotIn: w.OwnerIDNotIn, IsNil: w.OwnerIDIsNil, NotNil: w.OwnerIDNotNil, }) `,
-		` gqlimpl.Has(f, "hasOwner", w.HasOwner, eventEdgeOwner, velox.TableOf[Owner]()) `,
-		` gqlimpl.HasWith(f, "hasOwnerWith", w.HasOwnerWith, (*OwnerWhereInput).predicate, eventEdgeOwner, velox.TableOf[Owner]()) `,
+		` f := gqlgraph.NewFilter(ctx, &eventType) `,
+		` gqlgraph.IDField[[16]byte](f, "id", eventColID, gqlgraph.Ops[string]{ EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, }) `,
+		` gqlgraph.Field(f, "level", eventColLevel, gqlgraph.Ops[levels.Level]{EQ: w.Level}) `,
+		` gqlgraph.Field(f, "size", eventColSize, gqlgraph.Ops[uint64]{GT: w.SizeGT}) `,
+		` gqlgraph.Field(f, "rank", eventColRank, gqlgraph.Ops[int8]{In: w.RankIn}) `,
+		` gqlgraph.Field(f, "at", eventColAt, gqlgraph.Ops[time.Time]{LT: w.AtLT, IsNil: w.AtIsNil}) `,
+		` gqlgraph.Field(f, "ref", eventColRef, gqlgraph.Ops[uuid.UUID]{NEQ: w.RefNEQ}) `,
+		` gqlgraph.EdgeIDField[int64](f, "ownerID", eventColOwnerID, eventEdgeOwner, &ownerType, gqlgraph.Ops[string]{ EQ: w.OwnerID, NEQ: w.OwnerIDNEQ, In: w.OwnerIDIn, NotIn: w.OwnerIDNotIn, IsNil: w.OwnerIDIsNil, NotNil: w.OwnerIDNotNil, }) `,
+		` gqlgraph.Has(f, "hasOwner", w.HasOwner, eventEdgeOwner, velox.TableOf[Owner]()) `,
+		` gqlgraph.HasWith(f, "hasOwnerWith", w.HasOwnerWith, (*OwnerWhereInput).predicate, eventEdgeOwner, velox.TableOf[Owner]()) `,
 	} {
 		if !strings.Contains(ev, want) {
 			t.Errorf("no %q in\n%s", want, ev)
@@ -518,22 +518,22 @@ func TestGoTypes(t *testing.T) {
 		t.Errorf("a marshaler on the application's own enum type:\n%s", ev)
 	}
 	for _, want := range []string{
-		`func (x *Owner) GlobalID() string { return veloxgql.EncodeID("Owner", int64(x.ID)) }`,
+		`func (o *Owner) GlobalID() string { return veloxgql.EncodeID("Owner", int64(o.ID)) }`,
 		// A field of the application's own Go type binds through a getter.
-		"func (x *Owner) CodeGQL() string { return string(x.Code) }",
-		"func (x *Owner) EmailGQL() *string { if x.Email == nil { return nil } v := string(*x.Email) return &v }",
-		// The connection's columns: gqlimpl converts the key and an order
+		"func (o *Owner) CodeGQL() string { return string(o.Code) }",
+		"func (o *Owner) EmailGQL() *string { if o.Email == nil { return nil } v := string(*o.Email) return &v }",
+		// The connection's columns: gqlgraph converts the key and an order
 		// field of the application's Go types to and from their base types.
-		"Key: []gqlimpl.Col{{Field: \"id\", Col: ownerColID}},",
-		"{Field: \"RANK\", Col: ownerColRank},",
+		"Key: []gqlgraph.Column{{Name: \"id\", Index: ownerColID}},",
+		"{Name: \"RANK\", Index: ownerColRank},",
 		// Its where predicates take the scalar's Go type, and Pred converts.
 		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
-		` gqlimpl.IDField[int64](f, "id", ownerColID, gqlimpl.Ops[string]{EQ: w.ID}) `,
-		` gqlimpl.Field(f, "email", ownerColEmail, gqlimpl.Ops[string]{EQ: w.Email}) `,
-		` gqlimpl.Field(f, "rank", ownerColRank, gqlimpl.Ops[int32]{In: w.RankIn}) `,
-		` gqlimpl.Field(f, "ref", ownerColRef, gqlimpl.Ops[uuid.UUID]{EQ: w.Ref}) `,
-		` gqlimpl.Field(f, "ratio", ownerColRatio, gqlimpl.Ops[float64]{GT: w.RatioGT}) `,
-		` gqlimpl.Field(f, "on", ownerColOn, gqlimpl.Ops[bool]{EQ: w.On}) `,
+		` gqlgraph.IDField[int64](f, "id", ownerColID, gqlgraph.Ops[string]{EQ: w.ID}) `,
+		` gqlgraph.Field(f, "email", ownerColEmail, gqlgraph.Ops[string]{EQ: w.Email}) `,
+		` gqlgraph.Field(f, "rank", ownerColRank, gqlgraph.Ops[int32]{In: w.RankIn}) `,
+		` gqlgraph.Field(f, "ref", ownerColRef, gqlgraph.Ops[uuid.UUID]{EQ: w.Ref}) `,
+		` gqlgraph.Field(f, "ratio", ownerColRatio, gqlgraph.Ops[float64]{GT: w.RatioGT}) `,
+		` gqlgraph.Field(f, "on", ownerColOn, gqlgraph.Ops[bool]{EQ: w.On}) `,
 	} {
 		if !strings.Contains(owner, want) {
 			t.Errorf("no %q in\n%s", want, owner)
@@ -545,13 +545,13 @@ func TestGoTypes(t *testing.T) {
 		ev: {
 			` "github.com/google/uuid" `,
 			" Name: \"Event\", Table: velox.TableOf[Event], ",
-			" Read: []int{eventColID, eventColOwnerID, eventColLevel}, ",
+			" AlwaysRead: []int{eventColID, eventColOwnerID, eventColLevel}, ",
 		},
 		node: {
-			`case "Event": return gqlimpl.NewNodeAs[[16]byte, uuid.UUID](&eventGQL, gqlimpl.AsUUID[uuid.UUID, [16]byte]), true`,
-			`case "Owner": return gqlimpl.NewNodeAs[int64, idspkg.UserID](&ownerGQL, gqlimpl.AsInt[idspkg.UserID, int64]), true`,
-			"return gqlimpl.NodeByID(ctx, id, nodeType)",
-			"return gqlimpl.NodesByID(ctx, ids, nodeType)",
+			`case "Event": return gqlgraph.NewNodeAs[[16]byte, uuid.UUID](&eventType, gqlgraph.AsUUID[uuid.UUID, [16]byte]), true`,
+			`case "Owner": return gqlgraph.NewNodeAs[int64, idspkg.UserID](&ownerType, gqlgraph.AsInt[idspkg.UserID, int64]), true`,
+			"return gqlgraph.NodeByID(ctx, id, nodeKind)",
+			"return gqlgraph.NodesByID(ctx, ids, nodeKind)",
 		},
 	} {
 		for _, want := range wants {
@@ -573,7 +573,7 @@ func TestNoNodes(t *testing.T) {
 		},
 	}}}
 	node := render(t, m)["node_gql.go"]
-	if !strings.Contains(node, "func nodeType(typ string) (gqlimpl.NodeKind, bool) {") || strings.Contains(node, "switch") {
+	if !strings.Contains(node, "func nodeKind(typ string) (gqlgraph.NodeKind, bool) {") || strings.Contains(node, "switch") {
 		t.Errorf("node_gql.go:\n%s", node)
 	}
 }
@@ -628,25 +628,25 @@ func TestRenderErrors(t *testing.T) {
 		"a struct for a time": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Kind: "struct"})}},
 			"schema Thing, field at: velox-graphql converts a time field only from time.Time, and its Go type is types.Stamp"},
-		// A type writes thingGQL, beside the names velox-gen declares.
+		// A type writes thingType, beside the names velox-gen declares.
 		"a handles variable named as a type's connection variable": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Thing", "int64")
-			e.Handles = "thingGQL"
+			e.Handles = "thingType"
 			return e
-		}()}}, "its Go name thingGQL is also velox-gen's handles of schema Thing"},
+		}()}}, "its Go name thingType is also velox-gen's handles of schema Thing"},
 		"a column constant named as a type's variable": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{
-			withField(entity("Thing", "int64"), &plugin.Field{Name: "gql", GoName: "GQL", Type: "string", GoType: "string", ElemType: "string"}),
+			withField(entity("Thing", "int64"), &plugin.Field{Name: "type", GoName: "Type", Type: "string", GoType: "string", ElemType: "string"}),
 			func() *plugin.Entity {
 				e := entity("ThingCol", "int64")
 				e.Label, e.Handles = "thing_col", "ThingCols"
 				return e
 			}(),
-		}}, "its Go name thingColGQL is also velox-gen's column constant of field gql of schema Thing"},
+		}}, "its Go name thingColType is also velox-gen's column constant of field type of schema Thing"},
 		"a handles variable named as node_gql.go's lookup": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Thing", "int64")
-			e.Handles = "nodeType"
+			e.Handles = "nodeKind"
 			return e
-		}()}}, "velox-graphql's nodeType: its Go name nodeType is also velox-gen's handles of schema Thing"},
+		}()}}, "velox-graphql's nodeKind: its Go name nodeKind is also velox-gen's handles of schema Thing"},
 		"a key of a Go type it cannot name": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Thing", "int64")
 			e.Fields[0].ElemType, e.Fields[0].PkgPath, e.Fields[0].Kind = "[]types.ID", "example.com/types", "int64"
@@ -720,7 +720,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion17\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion18\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -731,7 +731,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 }
 
 // TestEnumErrorPercent: a stored enum value with a % in it is text in the
-// generated error, never a format verb of gqlimpl.InputErrorf, whose one
+// generated error, never a format verb of gqlgraph.InputErrorf, whose one
 // verb is the value given.
 func TestEnumErrorPercent(t *testing.T) {
 	m := modeltest.Model(t)
@@ -748,9 +748,9 @@ func TestEnumErrorPercent(t *testing.T) {
 		}
 	}
 	src := render(t, m)["group_gql.go"]
-	_, rest, ok := strings.Cut(src, "gqlimpl.InputErrorf(")
+	_, rest, ok := strings.Cut(src, "gqlgraph.InputErrorf(")
 	if !ok {
-		t.Fatalf("group_gql.go calls no gqlimpl.InputErrorf:\n%s", src)
+		t.Fatalf("group_gql.go calls no gqlgraph.InputErrorf:\n%s", src)
 	}
 	lit, _, _ := strings.Cut(rest, ", v)\n")
 	format, err := strconv.Unquote(lit)
@@ -778,10 +778,10 @@ func TestEnumWithoutConsts(t *testing.T) {
 	}
 }
 
-// TestPaginateEveryNode: every Node entity's file declares its
-// Paginate<Plural>, which takes the query, and no file declares an exported
+// TestNewConnectionEveryNode: every Node entity's file declares its
+// New<Type>Connection, which takes the query, and no file declares an exported
 // name that ends in GQL but the methods gqlgen binds to.
-func TestPaginateEveryNode(t *testing.T) {
+func TestNewConnectionEveryNode(t *testing.T) {
 	const decl = "(\n\tctx context.Context, q velox.Query["
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		files := render(t, m)
@@ -789,8 +789,8 @@ func TestPaginateEveryNode(t *testing.T) {
 		for name, src := range files {
 			n, of := strings.Count(src, "Connection struct {"), strings.Count(src, decl)
 			total += of
-			if n != of || n != strings.Count(src, "\nfunc Paginate") {
-				t.Errorf("%s: %s has %d connections and %d Paginate functions", label, name, n, of)
+			if n != of || n != strings.Count(src, "\nfunc New") {
+				t.Errorf("%s: %s has %d connections and %d NewXConnection functions", label, name, n, of)
 			}
 			for l := range strings.SplitSeq(src, "\n") {
 				if fn, ok := exportedGQL(l); ok && !strings.HasSuffix(fn, "arshalGQL") && !strings.HasSuffix(fn, "GQL()") {
@@ -983,7 +983,7 @@ func updateOnlyModel(t *testing.T) *plugin.Model {
 // one Go field for each of the Surface's InputFields, in order: a pointer for
 // a value or a unique edge's ID, a []string for an ID list and a bool for a
 // clear; and its method Setters, which returns the entity's setters through
-// gqlimpl.Checked with the type's Conn, which names the input's fields.
+// gqlgraph.Checked with the type's Conn, which names the input's fields.
 func TestUpdateInputs(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "update-only": updateOnlyModel(t)} {
 		t.Run(label, func(t *testing.T) {
@@ -1045,12 +1045,12 @@ func TestUpdateInputs(t *testing.T) {
 					t.Errorf("%s: %s, want %s", fn, sig, want)
 				}
 				base := strings.ToLower(ty.Entity.Name[:1]) + ty.Entity.Name[1:]
-				if src := funcSrc(t, files, fn); !strings.Contains(src, "return gqlimpl.Checked(\""+in+"\", &"+base+"GQL, set)") {
-					t.Errorf("%s does not take %sGQL:\n%s", fn, base, src)
+				if src := funcSrc(t, files, fn); !strings.Contains(src, "return gqlgraph.Validate(\""+in+"\", &"+base+"Type, set)") {
+					t.Errorf("%s does not take %sType:\n%s", fn, base, src)
 				}
-				lit := connLit(t, files, base+"GQL")
+				lit := connLit(t, files, base+"Type")
 				if len(lit["Inputs"]) == 0 && len(lit["UpdateInputs"]) == 0 {
-					t.Errorf("%sGQL names no field of %s", base, in)
+					t.Errorf("%sType names no field of %s", base, in)
 				}
 			}
 			if n == 0 {
@@ -1079,10 +1079,10 @@ func TestCreateConversions(t *testing.T) {
 	for _, want := range []string{
 		` OwnerID *string `,
 		` Tags veloxgql.JSON `,
-		`ownerID, err := gqlimpl.DecodeIDAs[int64]("CreateEventInput.ownerID", *v, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
+		`ownerID, err := gqlgraph.DecodeIDAs[int64]("CreateEventInput.ownerID", *v, "Owner", gqlgraph.AsInt[idspkg.UserID, int64])`,
 		`set = append(set, Events.Owner.Set(ownerID))`,
-		`tags, err := gqlimpl.FromJSON[[]int32]("CreateEventInput.tags", in.Tags)`,
-		`return gqlimpl.Checked("CreateEventInput", &eventGQL, set)`,
+		`tags, err := gqlgraph.FromJSON[[]int32]("CreateEventInput.tags", in.Tags)`,
+		`return gqlgraph.Validate("CreateEventInput", &eventType, set)`,
 		`eventColTags: "tags"`,
 	} {
 		if !strings.Contains(ev, want) {
@@ -1181,9 +1181,9 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 	for _, w := range []string{
 		`func (in *UpdateGroupInput) Setters() ([]velox.Setter[Group], error) {`,
 		`if in.ClearUsers { set = append(set, Groups.Users.Clear()) }`,
-		`removeUserIDs, err := gqlimpl.DecodeIDs[int64]("UpdateGroupInput.removeUserIDs", in.RemoveUserIDs, "Account")`,
+		`removeUserIDs, err := gqlgraph.DecodeIDs[int64]("UpdateGroupInput.removeUserIDs", in.RemoveUserIDs, "Account")`,
 		`set = append(set, Groups.Users.Remove(removeUserIDs...))`,
-		`addUserIDs, err := gqlimpl.DecodeIDs[int64]("UpdateGroupInput.addUserIDs", in.AddUserIDs, "Account")`,
+		`addUserIDs, err := gqlgraph.DecodeIDs[int64]("UpdateGroupInput.addUserIDs", in.AddUserIDs, "Account")`,
 		`set = append(set, Groups.Users.Add(addUserIDs...))`,
 	} {
 		if !strings.Contains(src, w) {
@@ -1297,7 +1297,7 @@ func flat(src string) string {
 }
 
 // TestNoPointerCasts: the generated code imports no unsafe and converts no
-// pointer: gqlimpl takes and gives its rows as *E in an any.
+// pointer: gqlgraph takes and gives its rows as *E in an any.
 func TestNoPointerCasts(t *testing.T) {
 	cast := regexp.MustCompile(`\(\*[A-Z]\w*\)\(\w+\)`)
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
@@ -1312,7 +1312,7 @@ func TestNoPointerCasts(t *testing.T) {
 	}
 }
 
-// TestEdgesBatch: every edge method reads its edge through gqlimpl's
+// TestEdgesBatch: every edge method reads its edge through gqlgraph's
 // batching (EdgeOne, EdgeList or the target's paginate, by its kind, of
 // the owner type's Edge of the row and the relation's index), none reads
 // the DB itself, and none reads the relation's field, which an
@@ -1332,16 +1332,16 @@ func TestEdgesBatch(t *testing.T) {
 				pe := e.Edges[ed.Edge]
 				src := funcSrc(t, files, e.Name+"."+ed.Method)
 				// The edge: the owner's type, whose Edges name its
-				// field (TestConnSelection), x and the relation.
-				edge := typeVar(ty) + ".Edge(x, " + edgeConst(e, pe) + ")"
+				// field (TestConnSelection), the receiver and the relation.
+				edge := typeVar(ty) + ".Edge(" + recv(e) + ", " + edgeConst(e, pe) + ")"
 				// The target's type, which reads only the columns its
 				// selection needs, and the typed result; a connection is
 				// the target's paginate of the edge, with its arguments.
 				tt := ed.Target
 				want := map[sdl.EdgeKind]string{
-					sdl.EdgeConnection: "return " + paginateImpl(tt) + "(ctx, " + edge + ", " + connArgs(tt) + ")",
-					sdl.EdgeUnique:     "v, err := gqlimpl.EdgeOne(ctx, &" + typeVar(tt) + ", " + edge + ") n, _ := v.(*" + tt.Entity.Name + ") return n, err",
-					sdl.EdgeList:       "v, err := gqlimpl.EdgeList(ctx, &" + typeVar(tt) + ", " + edge + ", 0) n, _ := v.([]*" + tt.Entity.Name + ") return n, err",
+					sdl.EdgeConnection: "return " + newConnImpl(tt) + "(ctx, " + edge + ", " + connArgs(tt) + ")",
+					sdl.EdgeUnique:     "v, err := gqlgraph.EdgeOne(ctx, &" + typeVar(tt) + ", " + edge + ") n, _ := v.(*" + tt.Entity.Name + ") return n, err",
+					sdl.EdgeList:       "v, err := gqlgraph.EdgeList(ctx, &" + typeVar(tt) + ", " + edge + ", 0) n, _ := v.([]*" + tt.Entity.Name + ") return n, err",
 				}[ed.Kind]
 				if strings.Contains(src, "DBFromContext") {
 					t.Errorf("%s: %s.%s reads the DB itself:\n%s", label, e.Name, ed.Method, src)
@@ -1363,14 +1363,14 @@ func TestEdgesBatch(t *testing.T) {
 	}
 	// A key held in a pointer on the owner's row: a NULL sends no statement.
 	src := funcSrc(t, render(t, typesModel(t)), "Event.Owner")
-	if i, j := strings.Index(src, "if x.OwnerID == nil { return nil, nil }"), strings.Index(src, "gqlimpl.EdgeOne("); i < 0 || j < i {
+	if i, j := strings.Index(src, "if e.OwnerID == nil { return nil, nil }"), strings.Index(src, "gqlgraph.EdgeOne("); i < 0 || j < i {
 		t.Errorf("Event.Owner does not return nil for a NULL key before EdgeOne:\n%s", src)
 	}
 }
 
 // TestConnSelection: each type's Conn names, in Fields and Edges, every
-// field of its GraphQL type, getters and edges included, and reads, in Read
-// and Fields, no sensitive field's column; Read is the key and then the
+// field of its GraphQL type, getters and edges included, and reads, in AlwaysRead
+// and Fields, no sensitive field's column; AlwaysRead is the key and then the
 // foreign keys.
 func TestConnSelection(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
@@ -1400,7 +1400,7 @@ func TestConnSelection(t *testing.T) {
 				continue
 			}
 			var names []string
-			cols := slices.Clone(lit["Read"])
+			cols := slices.Clone(lit["AlwaysRead"])
 			for _, kv := range lit["Fields"] {
 				col, q, _ := strings.Cut(kv, ": ")
 				v, err := strconv.Unquote(q)
@@ -1433,8 +1433,8 @@ func TestConnSelection(t *testing.T) {
 				t.Errorf("%s: %s names %v, want the fields of %s %v", label, typeVar(ty), names, ty.Name, want)
 			}
 			for _, k := range e.PrimaryKey {
-				if !slices.Contains(lit["Read"], colConst(e, e.Fields[k])) {
-					t.Errorf("%s: %s: Read %v lacks the key %s", label, typeVar(ty), lit["Read"], e.Fields[k].Name)
+				if !slices.Contains(lit["AlwaysRead"], colConst(e, e.Fields[k])) {
+					t.Errorf("%s: %s: AlwaysRead %v lacks the key %s", label, typeVar(ty), lit["AlwaysRead"], e.Fields[k].Name)
 				}
 			}
 			for _, fd := range e.Fields {
@@ -1452,16 +1452,17 @@ func TestConnSelection(t *testing.T) {
 	}
 	// The key, the foreign keys on the row and the order columns, always, in
 	// this order.
-	read := connLit(t, render(t, modeltest.Model(t)), "postGQL")["Read"]
+	read := connLit(t, render(t, modeltest.Model(t)), "postType")["AlwaysRead"]
 	if len(read) < 2 || read[0] != "postColID" || read[1] != "postColAuthorID" {
-		t.Errorf("postGQL's Read %v, want the key and then the foreign keys", read)
+		t.Errorf("postType's AlwaysRead %v, want the key and then the foreign keys", read)
 	}
 }
 
-// TestPaginateFilters: PaginateXs is paginateXs of q, which hands its
-// source to gqlimpl.Paginate with the where input and its condition in
-// Args, and Paginate checks the query, filters it and pages it.
-func TestPaginateFilters(t *testing.T) {
+// TestNewConnectionFilters: NewXConnection is newXConnection of q, which
+// hands its source to gqlgraph.Paginate with the where input in Args
+// (gqlgraph.WhereOf), and Paginate checks the query, filters it and pages
+// it.
+func TestNewConnectionFilters(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		surf, err := sdl.Build(m)
 		if err != nil {
@@ -1469,17 +1470,17 @@ func TestPaginateFilters(t *testing.T) {
 		}
 		files := render(t, m)
 		for _, ty := range surf.Types {
-			src := funcSrc(t, files, paginateFunc(ty))
-			if want := "return " + paginateImpl(ty) + "(ctx, gqlimpl.Query(velox.Untyped(q)), " + connArgs(ty) + ")"; !strings.Contains(src, want) {
-				t.Errorf("%s: %s is not %q:\n%s", label, paginateFunc(ty), want, src)
+			src := funcSrc(t, files, newConnFunc(ty))
+			if want := "return " + newConnImpl(ty) + "(ctx, gqlgraph.Query(velox.Untyped(q)), " + connArgs(ty) + ")"; !strings.Contains(src, want) {
+				t.Errorf("%s: %s is not %q:\n%s", label, newConnFunc(ty), want, src)
 			}
-			src = funcSrc(t, files, paginateImpl(ty))
-			page := strings.Index(src, "gqlimpl.Paginate(ctx, from, &"+typeVar(ty)+",")
+			src = funcSrc(t, files, newConnImpl(ty))
+			page := strings.Index(src, "gqlgraph.Paginate(ctx, from, &"+typeVar(ty)+",")
 			if page < 0 {
-				t.Errorf("%s: %s does not call gqlimpl.Paginate:\n%s", label, paginateImpl(ty), src)
+				t.Errorf("%s: %s does not call gqlgraph.Paginate:\n%s", label, newConnImpl(ty), src)
 			}
-			if w := strings.Index(src, "args.Where, args.Pred = where, p"); (w >= 0) != (ty.Where != nil) || w > page {
-				t.Errorf("%s: %s: the where input not before Paginate:\n%s", label, paginateImpl(ty), src)
+			if w := strings.Index(src, "Where: gqlgraph.WhereOf(where, (*"+ty.Name+"WhereInput).predicate)"); (w >= 0) != (ty.Where != nil) || w > page {
+				t.Errorf("%s: %s: the where input not before Paginate:\n%s", label, newConnImpl(ty), src)
 			}
 		}
 	}
@@ -1501,7 +1502,7 @@ func TestM2MWithoutInverse(t *testing.T) {
 	author.Edges = []*plugin.Edge{{Name: "books", GoName: "Books", Target: "Book", Kind: plugin.M2M, Join: "AuthorBook"}}
 	files := render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{author, entity("Book")}})
 	src := funcSrc(t, files, "Author.Books")
-	if !strings.Contains(src, "return paginateBooks(ctx, authorGQL.Edge(x, authorEdgeBooks), after, first, before, last") {
+	if !strings.Contains(src, "return newBookConnection(ctx, authorType.Edge(a, authorEdgeBooks), after, first, before, last") {
 		t.Errorf("Author.Books:\n%s", src)
 	}
 }
@@ -1599,7 +1600,7 @@ func TestBytesGetter(t *testing.T) {
 		},
 	}}}
 	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
-	for _, want := range []string{"if x.Data == nil {", "return veloxgql.Bytes{}"} {
+	for _, want := range []string{"if t.Data == nil {", "return veloxgql.Bytes{}"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in:\n%s", want, got)
 		}
@@ -1637,7 +1638,7 @@ func TestPackageNamedAsALocal(t *testing.T) {
 }
 
 // TestNullableOrderTerm: a Nillable order field of another Go type is a
-// column of the connection like any other: gqlimpl reads its pointer, NULL
+// column of the connection like any other: gqlgraph reads its pointer, NULL
 // for nil, and converts its value.
 func TestNullableOrderTerm(t *testing.T) {
 	thing := &plugin.Entity{Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
@@ -1646,7 +1647,7 @@ func TestNullableOrderTerm(t *testing.T) {
 		&plugin.Field{Name: "n", GoName: "N", Type: "int64", GoType: "*types.N", ElemType: "types.N", PkgPath: "example.com/types", Kind: "int64", Pointer: true, Nullable: true, Optional: true,
 			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"order_field":"N"}`)}})}}
 	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
-	want := `Order: []gqlimpl.Col{ {Field: "N", Col: thingColN}, },`
+	want := `Order: []gqlgraph.Column{ {Name: "N", Index: thingColN}, },`
 	if !strings.Contains(got, want) {
 		t.Errorf("no %q in:\n%s", want, got)
 	}
@@ -1681,11 +1682,11 @@ func TestZeroDefaultNotRefused(t *testing.T) {
 	}}}
 	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
 	for _, f := range []string{"Off", "Views", "Score", "S"} {
-		if strings.Contains(got, "gqlimpl.NotZero(\"CreateThingInput."+strings.ToLower(f[:1])+f[1:]+"\"") {
+		if strings.Contains(got, "gqlgraph.NotZero(\"CreateThingInput."+strings.ToLower(f[:1])+f[1:]+"\"") {
 			t.Errorf("%s: a zero Default's zero refused:\n%s", f, got)
 		}
 	}
-	for _, want := range []string{`gqlimpl.NotZero("CreateThingInput.handle", *v)`, "Active bool", "set = append(set, Things.Active.Set(in.Active))"} {
+	for _, want := range []string{`gqlgraph.NotZero("CreateThingInput.handle", *v)`, "Active bool", "set = append(set, Things.Active.Set(in.Active))"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in:\n%s", want, got)
 		}

@@ -105,9 +105,9 @@ func docDescriptor() velox.Descriptor[Doc] {
 }
 
 // String returns the entity's fields.
-func (x Doc) String() string {
-	return fmt.Sprintf("Doc(ID=%v, Owner=%v, Title=%v, Shared=%v)", x.ID, x.Owner, x.Title, x.Shared)
+func (d Doc) String() string {
+	return fmt.Sprintf("Doc(ID=%v, Owner=%v, Title=%v, Shared=%v)", d.ID, d.Owner, d.Title, d.Shared)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Doc) GoString() string { return x.String() }
+func (d Doc) GoString() string { return d.String() }

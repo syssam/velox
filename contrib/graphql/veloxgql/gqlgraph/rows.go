@@ -1,4 +1,4 @@
-package gqlimpl
+package gqlgraph
 
 import (
 	"fmt"
@@ -28,11 +28,11 @@ func rowOf(c *Type, x any) unsafe.Pointer {
 		if w[0] == pw[0] {
 			return w[1]
 		}
-		panic(fmt.Sprintf("gqlimpl: %s: a %T is not a row of %s", c.Name, x, t.Info().Name))
+		panic(fmt.Sprintf("gqlgraph: %s: a %T is not a row of %s", c.Name, x, t.Info().Name))
 	}
 	v := reflect.ValueOf(x)
 	if v.Kind() != reflect.Pointer {
-		panic(fmt.Sprintf("gqlimpl: %s: a %T is not a row", c.Name, x))
+		panic(fmt.Sprintf("gqlgraph: %s: a %T is not a row", c.Name, x))
 	}
 	return v.UnsafePointer()
 }

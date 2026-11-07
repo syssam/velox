@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // toy belongs to a pet, whose nullable rank orders the toys: an OrderVia of a
@@ -72,7 +72,7 @@ func TestPaginateNullableVia(t *testing.T) {
 		}
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	key := []gqlimpl.OrderTerm[toy]{gqlimpl.TermOf[toy]("id", veloxgql.OrderDirectionAsc, int(toys.ID.I))}
+	key := []gqlgraph.OrderTerm[toy]{gqlgraph.TermOf[toy]("id", veloxgql.OrderDirectionAsc, int(toys.ID.I))}
 	for _, c := range []struct {
 		rank veloxgql.OrderDirection
 		want []int64
@@ -81,10 +81,10 @@ func TestPaginateNullableVia(t *testing.T) {
 		{veloxgql.OrderDirectionDesc, []int64{1, 3, 5, 7, 10, 12, 2, 6, 9, 4, 8, 11}},
 	} {
 		t.Run(string(c.rank), func(t *testing.T) {
-			order := []gqlimpl.OrderTerm[toy]{gqlimpl.JoinedTermOf[toy, pet]("PET_RANK", c.rank, int(toys.Pet.I), int(pets.Rank.I))}
-			page := func(args gqlimpl.Args) *gqlimpl.PageOf[toy] {
+			order := []gqlgraph.OrderTerm[toy]{gqlgraph.JoinedTermOf[toy, pet]("PET_RANK", c.rank, int(toys.Pet.I), int(pets.Rank.I))}
+			page := func(args gqlgraph.Args) *gqlgraph.PageOf[toy] {
 				t.Helper()
-				conn, err := gqlimpl.NewConnectionOf(ctx, db.Query[toy](), "Toy", args, order, key)
+				conn, err := gqlgraph.NewConnectionOf(ctx, db.Query[toy](), "Toy", args, order, key)
 				if err != nil {
 					t.Fatalf("%+v: %v", args, err)
 				}
@@ -101,7 +101,7 @@ func TestPaginateNullableVia(t *testing.T) {
 				}
 				return out
 			}
-			all := page(gqlimpl.Args{First: new(len(c.want))})
+			all := page(gqlgraph.Args{First: new(len(c.want))})
 			if got := toyIDs(all.Rows); !slices.Equal(got, c.want) {
 				t.Fatalf("all: %v, want %v", got, c.want)
 			}
@@ -111,12 +111,12 @@ func TestPaginateNullableVia(t *testing.T) {
 					t.Fatalf("cursor of %d: %+v", c.want[i], cur)
 				}
 				for n := 1; n <= 4; n++ {
-					after := page(gqlimpl.Args{First: new(n), After: cur})
+					after := page(gqlgraph.Args{First: new(n), After: cur})
 					end := min(i+1+n, len(c.want))
 					if got := toyIDs(after.Rows); !slices.Equal(got, c.want[i+1:end]) || after.Info.HasNextPage != (end < len(c.want)) {
 						t.Errorf("first %d after %d: %v next %v, want %v", n, c.want[i], got, after.Info.HasNextPage, c.want[i+1:end])
 					}
-					before := page(gqlimpl.Args{Last: new(n), Before: cur})
+					before := page(gqlgraph.Args{Last: new(n), Before: cur})
 					start := max(i-n, 0)
 					if got := toyIDs(before.Rows); !slices.Equal(got, c.want[start:i]) || before.Info.HasPreviousPage != (start > 0) {
 						t.Errorf("last %d before %d: %v prev %v, want %v", n, c.want[i], got, before.Info.HasPreviousPage, c.want[start:i])

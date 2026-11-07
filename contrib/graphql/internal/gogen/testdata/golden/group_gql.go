@@ -6,10 +6,10 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion17
+const _ = veloxgql.GeneratedCodeIsVersion18
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -17,7 +17,7 @@ func (*Group) IsNode() {}
 
 // GlobalID is the global ID of the Group, the GraphQL field id: its type and
 // key, opaque to the client.
-func (x *Group) GlobalID() string { return veloxgql.EncodeID("Group", x.ID) }
+func (g *Group) GlobalID() string { return veloxgql.EncodeID("Group", g.ID) }
 
 // MarshalGQL writes e as a GraphQL String, its stored value: the field
 // visibility of Group is a String, as graphql.Skip(graphql.SkipEnumField) asks.
@@ -28,7 +28,7 @@ func (e GroupVisibility) MarshalGQL(w io.Writer) {
 	case GroupVisibilityPrivate:
 		_, _ = io.WriteString(w, `"private"`)
 	default: // not a value of the enum
-		gqlimpl.WriteString(w, string(e))
+		gqlgraph.WriteString(w, string(e))
 	}
 }
 
@@ -40,25 +40,25 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 	case "private":
 		*e = GroupVisibilityPrivate
 	default:
-		return gqlimpl.InputErrorf("GroupVisibility must be public or private, not %v", v)
+		return gqlgraph.InputErrorf("GroupVisibility must be public or private, not %v", v)
 	}
 	return nil
 }
 
 // Users is the edge users: a connection to the Account nodes it leads to. Its
-// queries batch with the edge of every row read with x.
-func (x *Group) Users(
+// queries batch with the edge of every row read with g.
+func (g *Group) Users(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *AccountWhereInput,
 ) (*AccountConnection, error) {
-	return paginateAccounts(ctx, groupGQL.Edge(x, groupEdgeUsers), after, first, before, last, where)
+	return newAccountConnection(ctx, groupType.Edge(g, groupEdgeUsers), after, first, before, last, where)
 }
 
 // GroupConnection is the GraphQL type GroupConnection. Its fields run their
 // queries when gqlgen resolves them.
 type GroupConnection struct {
-	c *gqlimpl.Connection
+	c *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
@@ -95,48 +95,44 @@ type GroupEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// PaginateGroups is the connection to the Group nodes q returns, ordered by
+// NewGroupConnection is the connection to the Group nodes q returns, ordered by
 // orderBy and then the key, and paged by the other arguments. q must not be
 // ordered, and must select the key and the order columns.
-func PaginateGroups(
+func NewGroupConnection(
 	ctx context.Context, q velox.Query[Group],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *GroupOrder,
 ) (*GroupConnection, error) {
-	return paginateGroups(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, orderBy)
+	return newGroupConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, orderBy)
 }
 
-// paginateGroups is PaginateGroups of the nodes from leads to: a query's, or an
-// edge's, whose queries batch.
-func paginateGroups(
-	ctx context.Context, from gqlimpl.Source,
+// newGroupConnection is NewGroupConnection of the nodes from leads to: a
+// query's, or an edge's, whose queries batch.
+func newGroupConnection(
+	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *GroupOrder,
 ) (*GroupConnection, error) {
-	var order []gqlimpl.Order
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last}
 	if o := orderBy; o != nil {
-		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
+		args.Order = []gqlgraph.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
-	c, err := gqlimpl.Paginate(
-		ctx, from, &groupGQL,
-		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
-		order,
-	)
+	c, err := gqlgraph.Paginate(ctx, from, &groupType, args)
 	if err != nil {
 		return nil, err
 	}
 	return &GroupConnection{c: c}, nil
 }
 
-// groupGQL describes the GraphQL type Group to gqlimpl.
-var groupGQL = gqlimpl.Type{
+// groupType describes the GraphQL type Group to gqlgraph.
+var groupType = gqlgraph.Type{
 	Name:  "Group",
 	Table: velox.TableOf[Group],
-	Key:   []gqlimpl.Col{{Field: "id", Col: groupColID}},
-	Order: []gqlimpl.Col{
-		{Field: "NAME", Col: groupColName},
+	Key:   []gqlgraph.Column{{Name: "id", Index: groupColID}},
+	Order: []gqlgraph.Column{
+		{Name: "NAME", Index: groupColName},
 	},
-	Read: []int{groupColID, groupColName},
+	AlwaysRead: []int{groupColID, groupColName},
 	Fields: []string{
 		groupColID:         "id",
 		groupColName:       "name",
@@ -176,7 +172,7 @@ func (o GroupOrderField) IsValid() bool {
 func (o GroupOrderField) String() string { return string(o) }
 
 // MarshalGQL writes o as a value of the GraphQL enum GroupOrderField.
-func (o GroupOrderField) MarshalGQL(w io.Writer) { gqlimpl.WriteString(w, string(o)) }
+func (o GroupOrderField) MarshalGQL(w io.Writer) { gqlgraph.WriteString(w, string(o)) }
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum GroupOrderField.
 func (o *GroupOrderField) UnmarshalGQL(v any) error {
@@ -184,7 +180,7 @@ func (o *GroupOrderField) UnmarshalGQL(v any) error {
 	case "NAME":
 		*o = GroupOrderFieldName
 	default:
-		return gqlimpl.InputErrorf("GroupOrderField must be NAME, not %v", v)
+		return gqlgraph.InputErrorf("GroupOrderField must be NAME, not %v", v)
 	}
 	return nil
 }

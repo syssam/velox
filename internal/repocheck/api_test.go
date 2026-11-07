@@ -18,7 +18,7 @@ import (
 var updateAPI = flag.Bool("update-api", false, "rewrite testdata/api.txt from the source")
 
 // apiPackages are the packages whose exported names are the API that 1.0 keeps,
-// relative to the repository. gqlimpl, schema/load and everything under an
+// relative to the repository. gqlgraph, schema/load and everything under an
 // internal directory are not in it: the first two are for generated code only,
 // and say so.
 var apiPackages = []string{

@@ -1,4 +1,4 @@
-// Package gqlcore holds what veloxgql and gqlimpl both need and neither can
+// Package gqlcore holds what veloxgql and gqlgraph both need and neither can
 // import from the other: the per-response batch table, coded errors and their
 // walk, and the conversions between a Go value and the JSON value of a cursor
 // or the text of an ID. The conversions know base types only (time.Time,

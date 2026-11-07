@@ -9,10 +9,10 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion17
+const _ = veloxgql.GeneratedCodeIsVersion18
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -20,7 +20,7 @@ func (*Post) IsNode() {}
 
 // GlobalID is the global ID of the Post, the GraphQL field id: its type and
 // key, opaque to the client.
-func (x *Post) GlobalID() string { return veloxgql.EncodeID("Post", x.ID) }
+func (p *Post) GlobalID() string { return veloxgql.EncodeID("Post", p.ID) }
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -30,7 +30,7 @@ func (e PostStatus) MarshalGQL(w io.Writer) {
 	case PostStatusPublished:
 		_, _ = io.WriteString(w, `"PUBLISHED"`)
 	default: // not a value of the enum
-		gqlimpl.WriteString(w, string(e))
+		gqlgraph.WriteString(w, string(e))
 	}
 }
 
@@ -42,33 +42,33 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 	case "PUBLISHED":
 		*e = PostStatusPublished
 	default:
-		return gqlimpl.InputErrorf("PostStatus must be DRAFT or PUBLISHED, not %v", v)
+		return gqlgraph.InputErrorf("PostStatus must be DRAFT or PUBLISHED, not %v", v)
 	}
 	return nil
 }
 
 // Author is the edge author: the User it leads to, or nil. It is read in one
-// query with the edge of every row read with x.
-func (x *Post) Author(ctx context.Context) (*User, error) {
-	v, err := gqlimpl.EdgeOne(ctx, &userGQL, postGQL.Edge(x, postEdgeAuthor))
+// query with the edge of every row read with p.
+func (p *Post) Author(ctx context.Context) (*User, error) {
+	v, err := gqlgraph.EdgeOne(ctx, &userType, postType.Edge(p, postEdgeAuthor))
 	n, _ := v.(*User)
 	return n, err
 }
 
 // Tags is the edge tags: a connection to the Label nodes it leads to. Its
-// queries batch with the edge of every row read with x.
-func (x *Post) Tags(
+// queries batch with the edge of every row read with p.
+func (p *Post) Tags(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *LabelOrder, where *LabelWhereInput,
 ) (*LabelConnection, error) {
-	return paginateLabels(ctx, postGQL.Edge(x, postEdgeTags), after, first, before, last, orderBy, where)
+	return newLabelConnection(ctx, postType.Edge(p, postEdgeTags), after, first, before, last, orderBy, where)
 }
 
 // PostConnection is the GraphQL type PostConnection. Its fields run their
 // queries when gqlgen resolves them.
 type PostConnection struct {
-	c *gqlimpl.Connection
+	c *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
@@ -105,53 +105,45 @@ type PostEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// PaginatePosts is the connection to the Post nodes q returns, filtered by
+// NewPostConnection is the connection to the Post nodes q returns, filtered by
 // where, ordered by orderBy and then the key, and paged by the other arguments.
 // q must not be ordered, and must select the key and the order columns.
-func PaginatePosts(
+func NewPostConnection(
 	ctx context.Context, q velox.Query[Post],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	return paginatePosts(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
+	return newPostConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
 }
 
-// paginatePosts is PaginatePosts of the nodes from leads to: a query's, or an
-// edge's, whose queries batch.
-func paginatePosts(
-	ctx context.Context, from gqlimpl.Source,
+// newPostConnection is NewPostConnection of the nodes from leads to: a query's,
+// or an edge's, whose queries batch.
+func newPostConnection(
+	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	args := gqlimpl.Args{After: after, First: first, Before: before, Last: last}
-	order := make([]gqlimpl.Order, len(orderBy))
-	for i, o := range orderBy {
-		order[i] = gqlimpl.Order{Field: string(o.Field), Direction: o.Direction}
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*PostWhereInput).predicate)}
+	for _, o := range orderBy {
+		args.Order = append(args.Order, gqlgraph.Order{Field: string(o.Field), Direction: o.Direction})
 	}
-	if where != nil {
-		p, err := where.predicate(ctx)
-		if err != nil {
-			return nil, err
-		}
-		args.Where, args.Pred = where, p
-	}
-	c, err := gqlimpl.Paginate(ctx, from, &postGQL, args, order)
+	c, err := gqlgraph.Paginate(ctx, from, &postType, args)
 	if err != nil {
 		return nil, err
 	}
 	return &PostConnection{c: c}, nil
 }
 
-// postGQL describes the GraphQL type Post to gqlimpl.
-var postGQL = gqlimpl.Type{
+// postType describes the GraphQL type Post to gqlgraph.
+var postType = gqlgraph.Type{
 	Name:  "Post",
 	Table: velox.TableOf[Post],
-	Key:   []gqlimpl.Col{{Field: "id", Col: postColID}},
-	Order: []gqlimpl.Col{
-		{Field: "TITLE", Col: postColTitle},
-		{Field: "VIEWS", Col: postColViews},
+	Key:   []gqlgraph.Column{{Name: "id", Index: postColID}},
+	Order: []gqlgraph.Column{
+		{Name: "TITLE", Index: postColTitle},
+		{Name: "VIEWS", Index: postColViews},
 	},
-	Read: []int{postColID, postColAuthorID, postColTitle, postColViews},
+	AlwaysRead: []int{postColID, postColAuthorID, postColTitle, postColViews},
 	Fields: []string{
 		postColID:          "id",
 		postColTitle:       "title",
@@ -201,7 +193,7 @@ func (o PostOrderField) IsValid() bool {
 func (o PostOrderField) String() string { return string(o) }
 
 // MarshalGQL writes o as a value of the GraphQL enum PostOrderField.
-func (o PostOrderField) MarshalGQL(w io.Writer) { gqlimpl.WriteString(w, string(o)) }
+func (o PostOrderField) MarshalGQL(w io.Writer) { gqlgraph.WriteString(w, string(o)) }
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum PostOrderField.
 func (o *PostOrderField) UnmarshalGQL(v any) error {
@@ -211,7 +203,7 @@ func (o *PostOrderField) UnmarshalGQL(v any) error {
 	case "VIEWS":
 		*o = PostOrderFieldViews
 	default:
-		return gqlimpl.InputErrorf("PostOrderField must be TITLE or VIEWS, not %v", v)
+		return gqlgraph.InputErrorf("PostOrderField must be TITLE or VIEWS, not %v", v)
 	}
 	return nil
 }
@@ -283,14 +275,14 @@ func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 
 // predicate is Pred, untyped.
 func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, &postGQL)
+	f := gqlgraph.NewFilter(ctx, &postType)
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not, (*PostWhereInput).predicate)
-	gqlimpl.And(f, "and", w.And, (*PostWhereInput).predicate)
-	gqlimpl.Or(f, "or", w.Or, (*PostWhereInput).predicate)
-	gqlimpl.IDField[int64](f, "id", postColID, gqlimpl.Ops[string]{
+	gqlgraph.Not(f, "not", w.Not, (*PostWhereInput).predicate)
+	gqlgraph.And(f, "and", w.And, (*PostWhereInput).predicate)
+	gqlgraph.Or(f, "or", w.Or, (*PostWhereInput).predicate)
+	gqlgraph.IDField[int64](f, "id", postColID, gqlgraph.Ops[string]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -300,13 +292,13 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		LT:    w.IDLT,
 		LTE:   w.IDLTE,
 	})
-	gqlimpl.FKField[int64](f, "authorID", postColAuthorID, postEdgeAuthor, &userGQL, gqlimpl.Ops[string]{
+	gqlgraph.EdgeIDField[int64](f, "authorID", postColAuthorID, postEdgeAuthor, &userType, gqlgraph.Ops[string]{
 		EQ:    w.AuthorID,
 		NEQ:   w.AuthorIDNEQ,
 		In:    w.AuthorIDIn,
 		NotIn: w.AuthorIDNotIn,
 	})
-	gqlimpl.Field(f, "title", postColTitle, gqlimpl.Ops[string]{
+	gqlgraph.Field(f, "title", postColTitle, gqlgraph.Ops[string]{
 		EQ:        w.Title,
 		NEQ:       w.TitleNEQ,
 		In:        w.TitleIn,
@@ -315,13 +307,13 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		HasPrefix: w.TitleHasPrefix,
 		HasSuffix: w.TitleHasSuffix,
 	})
-	gqlimpl.Field(f, "status", postColStatus, gqlimpl.Ops[PostStatus]{
+	gqlgraph.Field(f, "status", postColStatus, gqlgraph.Ops[PostStatus]{
 		EQ:    w.Status,
 		NEQ:   w.StatusNEQ,
 		In:    w.StatusIn,
 		NotIn: w.StatusNotIn,
 	})
-	gqlimpl.Field(f, "publishedAt", postColPublishedAt, gqlimpl.Ops[time.Time]{
+	gqlgraph.Field(f, "publishedAt", postColPublishedAt, gqlgraph.Ops[time.Time]{
 		EQ:     w.PublishedAt,
 		NEQ:    w.PublishedAtNEQ,
 		In:     w.PublishedAtIn,
@@ -333,8 +325,8 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		IsNil:  w.PublishedAtIsNil,
 		NotNil: w.PublishedAtNotNil,
 	})
-	gqlimpl.Has(f, "hasTags", w.HasTags, postEdgeTags, velox.TableOf[Tag]())
-	gqlimpl.HasWith(f, "hasTagsWith", w.HasTagsWith, (*LabelWhereInput).predicate, postEdgeTags, velox.TableOf[Tag]())
+	gqlgraph.Has(f, "hasTags", w.HasTags, postEdgeTags, velox.TableOf[Tag]())
+	gqlgraph.HasWith(f, "hasTagsWith", w.HasTagsWith, (*LabelWhereInput).predicate, postEdgeTags, velox.TableOf[Tag]())
 	return f.Pred()
 }
 
@@ -375,13 +367,13 @@ func (in *CreatePostInput) Setters() ([]velox.Setter[Post], error) {
 		set = append(set, Posts.PublishedAt.Set(*v))
 	}
 	if len(in.TagIDs) > 0 {
-		tagIDs, err := gqlimpl.DecodeIDs[int64]("CreatePostInput.tagIDs", in.TagIDs, "Label")
+		tagIDs, err := gqlgraph.DecodeIDs[int64]("CreatePostInput.tagIDs", in.TagIDs, "Label")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Posts.Tags.Add(tagIDs...))
 	}
-	return gqlimpl.Checked("CreatePostInput", &postGQL, set)
+	return gqlgraph.Validate("CreatePostInput", &postType, set)
 }
 
 // UpdatePostInput is the GraphQL input UpdatePostInput. A nil pointer or list
@@ -435,18 +427,18 @@ func (in *UpdatePostInput) Setters() ([]velox.Setter[Post], error) {
 		set = append(set, Posts.Tags.Clear())
 	}
 	if len(in.RemoveTagIDs) > 0 {
-		removeTagIDs, err := gqlimpl.DecodeIDs[int64]("UpdatePostInput.removeTagIDs", in.RemoveTagIDs, "Label")
+		removeTagIDs, err := gqlgraph.DecodeIDs[int64]("UpdatePostInput.removeTagIDs", in.RemoveTagIDs, "Label")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Posts.Tags.Remove(removeTagIDs...))
 	}
 	if len(in.AddTagIDs) > 0 {
-		addTagIDs, err := gqlimpl.DecodeIDs[int64]("UpdatePostInput.addTagIDs", in.AddTagIDs, "Label")
+		addTagIDs, err := gqlgraph.DecodeIDs[int64]("UpdatePostInput.addTagIDs", in.AddTagIDs, "Label")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Posts.Tags.Add(addTagIDs...))
 	}
-	return gqlimpl.Checked("UpdatePostInput", &postGQL, set)
+	return gqlgraph.Validate("UpdatePostInput", &postType, set)
 }

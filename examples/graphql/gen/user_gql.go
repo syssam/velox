@@ -9,10 +9,10 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion17
+const _ = veloxgql.GeneratedCodeIsVersion18
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -20,7 +20,7 @@ func (*User) IsNode() {}
 
 // GlobalID is the global ID of the User, the GraphQL field id: its type and
 // key, opaque to the client.
-func (x *User) GlobalID() string { return veloxgql.EncodeID("User", x.ID) }
+func (u *User) GlobalID() string { return veloxgql.EncodeID("User", u.ID) }
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -30,7 +30,7 @@ func (e UserRole) MarshalGQL(w io.Writer) {
 	case UserRoleMember:
 		_, _ = io.WriteString(w, `"MEMBER"`)
 	default: // not a value of the enum
-		gqlimpl.WriteString(w, string(e))
+		gqlgraph.WriteString(w, string(e))
 	}
 }
 
@@ -42,25 +42,25 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 	case "MEMBER":
 		*e = UserRoleMember
 	default:
-		return gqlimpl.InputErrorf("UserRole must be ADMIN or MEMBER, not %v", v)
+		return gqlgraph.InputErrorf("UserRole must be ADMIN or MEMBER, not %v", v)
 	}
 	return nil
 }
 
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
-// queries batch with the edge of every row read with x.
-func (x *User) Posts(
+// queries batch with the edge of every row read with u.
+func (u *User) Posts(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	return paginatePosts(ctx, userGQL.Edge(x, userEdgePosts), after, first, before, last, orderBy, where)
+	return newPostConnection(ctx, userType.Edge(u, userEdgePosts), after, first, before, last, orderBy, where)
 }
 
 // UserConnection is the GraphQL type UserConnection. Its fields run their
 // queries when gqlgen resolves them.
 type UserConnection struct {
-	c *gqlimpl.Connection
+	c *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
@@ -97,53 +97,45 @@ type UserEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// PaginateUsers is the connection to the User nodes q returns, filtered by
+// NewUserConnection is the connection to the User nodes q returns, filtered by
 // where, ordered by orderBy and then the key, and paged by the other arguments.
 // q must not be ordered, and must select the key and the order columns.
-func PaginateUsers(
+func NewUserConnection(
 	ctx context.Context, q velox.Query[User],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *UserOrder, where *UserWhereInput,
 ) (*UserConnection, error) {
-	return paginateUsers(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
+	return newUserConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
 }
 
-// paginateUsers is PaginateUsers of the nodes from leads to: a query's, or an
-// edge's, whose queries batch.
-func paginateUsers(
-	ctx context.Context, from gqlimpl.Source,
+// newUserConnection is NewUserConnection of the nodes from leads to: a query's,
+// or an edge's, whose queries batch.
+func newUserConnection(
+	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *UserOrder, where *UserWhereInput,
 ) (*UserConnection, error) {
-	args := gqlimpl.Args{After: after, First: first, Before: before, Last: last}
-	var order []gqlimpl.Order
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*UserWhereInput).predicate)}
 	if o := orderBy; o != nil {
-		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
+		args.Order = []gqlgraph.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
-	if where != nil {
-		p, err := where.predicate(ctx)
-		if err != nil {
-			return nil, err
-		}
-		args.Where, args.Pred = where, p
-	}
-	c, err := gqlimpl.Paginate(ctx, from, &userGQL, args, order)
+	c, err := gqlgraph.Paginate(ctx, from, &userType, args)
 	if err != nil {
 		return nil, err
 	}
 	return &UserConnection{c: c}, nil
 }
 
-// userGQL describes the GraphQL type User to gqlimpl.
-var userGQL = gqlimpl.Type{
+// userType describes the GraphQL type User to gqlgraph.
+var userType = gqlgraph.Type{
 	Name:  "User",
 	Table: velox.TableOf[User],
-	Key:   []gqlimpl.Col{{Field: "id", Col: userColID}},
-	Order: []gqlimpl.Col{
-		{Field: "NAME", Col: userColName},
-		{Field: "JOINED_AT", Col: userColJoinedAt},
+	Key:   []gqlgraph.Column{{Name: "id", Index: userColID}},
+	Order: []gqlgraph.Column{
+		{Name: "NAME", Index: userColName},
+		{Name: "JOINED_AT", Index: userColJoinedAt},
 	},
-	Read: []int{userColID, userColName, userColJoinedAt},
+	AlwaysRead: []int{userColID, userColName, userColJoinedAt},
 	Fields: []string{
 		userColID:       "id",
 		userColName:     "name",
@@ -193,7 +185,7 @@ func (o UserOrderField) IsValid() bool {
 func (o UserOrderField) String() string { return string(o) }
 
 // MarshalGQL writes o as a value of the GraphQL enum UserOrderField.
-func (o UserOrderField) MarshalGQL(w io.Writer) { gqlimpl.WriteString(w, string(o)) }
+func (o UserOrderField) MarshalGQL(w io.Writer) { gqlgraph.WriteString(w, string(o)) }
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum UserOrderField.
 func (o *UserOrderField) UnmarshalGQL(v any) error {
@@ -203,7 +195,7 @@ func (o *UserOrderField) UnmarshalGQL(v any) error {
 	case "JOINED_AT":
 		*o = UserOrderFieldJoinedAt
 	default:
-		return gqlimpl.InputErrorf("UserOrderField must be NAME or JOINED_AT, not %v", v)
+		return gqlgraph.InputErrorf("UserOrderField must be NAME or JOINED_AT, not %v", v)
 	}
 	return nil
 }
@@ -266,14 +258,14 @@ func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 
 // predicate is Pred, untyped.
 func (w *UserWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, &userGQL)
+	f := gqlgraph.NewFilter(ctx, &userType)
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not, (*UserWhereInput).predicate)
-	gqlimpl.And(f, "and", w.And, (*UserWhereInput).predicate)
-	gqlimpl.Or(f, "or", w.Or, (*UserWhereInput).predicate)
-	gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{
+	gqlgraph.Not(f, "not", w.Not, (*UserWhereInput).predicate)
+	gqlgraph.And(f, "and", w.And, (*UserWhereInput).predicate)
+	gqlgraph.Or(f, "or", w.Or, (*UserWhereInput).predicate)
+	gqlgraph.IDField[int64](f, "id", userColID, gqlgraph.Ops[string]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -283,7 +275,7 @@ func (w *UserWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		LT:    w.IDLT,
 		LTE:   w.IDLTE,
 	})
-	gqlimpl.Field(f, "name", userColName, gqlimpl.Ops[string]{
+	gqlgraph.Field(f, "name", userColName, gqlgraph.Ops[string]{
 		EQ:        w.Name,
 		NEQ:       w.NameNEQ,
 		In:        w.NameIn,
@@ -292,7 +284,7 @@ func (w *UserWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		HasPrefix: w.NameHasPrefix,
 		HasSuffix: w.NameHasSuffix,
 	})
-	gqlimpl.Field(f, "email", userColEmail, gqlimpl.Ops[string]{
+	gqlgraph.Field(f, "email", userColEmail, gqlgraph.Ops[string]{
 		EQ:        w.Email,
 		NEQ:       w.EmailNEQ,
 		In:        w.EmailIn,
@@ -301,14 +293,14 @@ func (w *UserWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		HasPrefix: w.EmailHasPrefix,
 		HasSuffix: w.EmailHasSuffix,
 	})
-	gqlimpl.Field(f, "role", userColRole, gqlimpl.Ops[UserRole]{
+	gqlgraph.Field(f, "role", userColRole, gqlgraph.Ops[UserRole]{
 		EQ:    w.Role,
 		NEQ:   w.RoleNEQ,
 		In:    w.RoleIn,
 		NotIn: w.RoleNotIn,
 	})
-	gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
-	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
+	gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
+	gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
 	return f.Pred()
 }
 
@@ -339,7 +331,7 @@ func (in *CreateUserInput) Setters() ([]velox.Setter[User], error) {
 		set = append(set, Users.Role.Set(*v))
 	}
 	set = append(set, Users.JoinedAt.Set(in.JoinedAt))
-	return gqlimpl.Checked("CreateUserInput", &userGQL, set)
+	return gqlgraph.Validate("CreateUserInput", &userType, set)
 }
 
 // UpdateUserInput is the GraphQL input UpdateUserInput. A nil pointer or list
@@ -376,5 +368,5 @@ func (in *UpdateUserInput) Setters() ([]velox.Setter[User], error) {
 	if v := in.JoinedAt; v != nil {
 		set = append(set, Users.JoinedAt.Set(*v))
 	}
-	return gqlimpl.Checked("UpdateUserInput", &userGQL, set)
+	return gqlgraph.Validate("UpdateUserInput", &userType, set)
 }

@@ -467,7 +467,10 @@ func entityString(w *writer, e *OutEntity) {
 	} else {
 		w.p("// String returns the entity's fields.")
 	}
-	w.p("func (x %s) String() string {", e.Name)
+	// The receiver is the first letter of the type's name, as Go names one;
+	// the body names no other one-letter identifier.
+	x := strings.ToLower(e.Name[:1])
+	w.p("func (%s %s) String() string {", x, e.Name)
 	for _, f := range e.Fields {
 		if f.Sensitive || f.Implicit {
 			continue
@@ -475,15 +478,15 @@ func entityString(w *writer, e *OutEntity) {
 		if f.ElemType == "[]byte" && !f.Pointer {
 			// A blob can be megabytes: String says how long it is.
 			verbs = append(verbs, f.GoName+"=<%d bytes>")
-			args = append(args, "len(x."+f.GoName+")")
+			args = append(args, "len("+x+"."+f.GoName+")")
 			continue
 		}
 		verbs = append(verbs, f.GoName+"=%v")
 		if !f.Pointer {
-			args = append(args, "x."+f.GoName)
+			args = append(args, x+"."+f.GoName)
 			continue
 		}
-		args = append(args, "velox.Show(x."+f.GoName+")")
+		args = append(args, "velox.Show("+x+"."+f.GoName+")")
 	}
 	w.p("return %s", sprintfCall(e.Name, verbs, args))
 	w.p("}")
@@ -493,7 +496,7 @@ func entityString(w *writer, e *OutEntity) {
 	} else {
 		w.p("// GoString is String, so that %%#v prints the same text.")
 	}
-	w.p("func (x %s) GoString() string { return x.String() }", e.Name)
+	w.p("func (%s %s) GoString() string { return %[1]s.String() }", x, e.Name)
 }
 
 // literal is the composite literal of the fields xs, its type elided: on

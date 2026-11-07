@@ -174,14 +174,14 @@ func postDescriptor() velox.Descriptor[Post] {
 }
 
 // String returns the entity's fields.
-func (x Post) String() string {
+func (p Post) String() string {
 	return fmt.Sprintf("Post("+
 		"ID=%v, AuthorID=%v, Title=%v, Slug=%v, Status=%v, "+
 		"PublishedAt=%v, Tags=%v, Views=%v)",
-		x.ID, x.AuthorID, x.Title, x.Slug, x.Status,
-		velox.Show(x.PublishedAt), x.Tags, x.Views,
+		p.ID, p.AuthorID, p.Title, p.Slug, p.Status,
+		velox.Show(p.PublishedAt), p.Tags, p.Views,
 	)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Post) GoString() string { return x.String() }
+func (p Post) GoString() string { return p.String() }

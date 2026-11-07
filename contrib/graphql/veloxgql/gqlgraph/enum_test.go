@@ -1,11 +1,11 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // TestWriteString: WriteString writes what encoding/json writes for a
@@ -14,7 +14,7 @@ import (
 func TestWriteString(t *testing.T) {
 	for _, s := range []string{"", "draft", `a"b\c`, "\x00\x01\x1f\n\r\t", "<&>", "  ", "é日本", "\xff\xfe", "a\xc3", "\x7f"} {
 		var b strings.Builder
-		gqlimpl.WriteString(&b, s)
+		gqlgraph.WriteString(&b, s)
 		want, _ := json.Marshal(s)
 		if b.String() != string(want) {
 			t.Errorf("WriteString(%q) = %s, want %s", s, b.String(), want)

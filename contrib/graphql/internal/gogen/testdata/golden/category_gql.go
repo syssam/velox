@@ -5,10 +5,10 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion17
+const _ = veloxgql.GeneratedCodeIsVersion18
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -16,25 +16,25 @@ func (*Category) IsNode() {}
 
 // GlobalID is the global ID of the Category, the GraphQL field id: its type and
 // key, opaque to the client.
-func (x *Category) GlobalID() string { return veloxgql.EncodeID("Category", x.ID) }
+func (c *Category) GlobalID() string { return veloxgql.EncodeID("Category", c.ID) }
 
 // Children is the edge children: a connection to the Category nodes it leads
-// to. Its queries batch with the edge of every row read with x.
-func (x *Category) Children(
+// to. Its queries batch with the edge of every row read with c.
+func (c *Category) Children(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *CategoryWhereInput,
 ) (*CategoryConnection, error) {
-	return paginateCategories(ctx, categoryGQL.Edge(x, categoryEdgeChildren), after, first, before, last, where)
+	return newCategoryConnection(ctx, categoryType.Edge(c, categoryEdgeChildren), after, first, before, last, where)
 }
 
 // Parent is the edge parent: the Category it leads to, or nil. It is read in
-// one query with the edge of every row read with x.
-func (x *Category) Parent(ctx context.Context) (*Category, error) {
-	if x.CategoryChildren == nil {
+// one query with the edge of every row read with c.
+func (c *Category) Parent(ctx context.Context) (*Category, error) {
+	if c.CategoryChildren == nil {
 		return nil, nil
 	}
-	v, err := gqlimpl.EdgeOne(ctx, &categoryGQL, categoryGQL.Edge(x, categoryEdgeParent))
+	v, err := gqlgraph.EdgeOne(ctx, &categoryType, categoryType.Edge(c, categoryEdgeParent))
 	n, _ := v.(*Category)
 	return n, err
 }
@@ -42,7 +42,7 @@ func (x *Category) Parent(ctx context.Context) (*Category, error) {
 // CategoryConnection is the GraphQL type CategoryConnection. Its fields run
 // their queries when gqlgen resolves them.
 type CategoryConnection struct {
-	c *gqlimpl.Connection
+	c *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
@@ -79,46 +79,39 @@ type CategoryEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// PaginateCategories is the connection to the Category nodes q returns,
+// NewCategoryConnection is the connection to the Category nodes q returns,
 // filtered by where, ordered by the key, and paged by the other arguments. q
 // must not be ordered, and must select the key.
-func PaginateCategories(
+func NewCategoryConnection(
 	ctx context.Context, q velox.Query[Category],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *CategoryWhereInput,
 ) (*CategoryConnection, error) {
-	return paginateCategories(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, where)
+	return newCategoryConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, where)
 }
 
-// paginateCategories is PaginateCategories of the nodes from leads to: a
+// newCategoryConnection is NewCategoryConnection of the nodes from leads to: a
 // query's, or an edge's, whose queries batch.
-func paginateCategories(
-	ctx context.Context, from gqlimpl.Source,
+func newCategoryConnection(
+	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *CategoryWhereInput,
 ) (*CategoryConnection, error) {
-	args := gqlimpl.Args{After: after, First: first, Before: before, Last: last}
-	if where != nil {
-		p, err := where.predicate(ctx)
-		if err != nil {
-			return nil, err
-		}
-		args.Where, args.Pred = where, p
-	}
-	c, err := gqlimpl.Paginate(ctx, from, &categoryGQL, args, nil)
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*CategoryWhereInput).predicate)}
+	c, err := gqlgraph.Paginate(ctx, from, &categoryType, args)
 	if err != nil {
 		return nil, err
 	}
 	return &CategoryConnection{c: c}, nil
 }
 
-// categoryGQL describes the GraphQL type Category to gqlimpl.
-var categoryGQL = gqlimpl.Type{
-	Name:   "Category",
-	Table:  velox.TableOf[Category],
-	Key:    []gqlimpl.Col{{Field: "id", Col: categoryColID}},
-	Read:   []int{categoryColID, categoryColCategoryChildren},
-	Fields: []string{categoryColID: "id", categoryColTitle: "title"},
+// categoryType describes the GraphQL type Category to gqlgraph.
+var categoryType = gqlgraph.Type{
+	Name:       "Category",
+	Table:      velox.TableOf[Category],
+	Key:        []gqlgraph.Column{{Name: "id", Index: categoryColID}},
+	AlwaysRead: []int{categoryColID, categoryColCategoryChildren},
+	Fields:     []string{categoryColID: "id", categoryColTitle: "title"},
 	Edges: []string{
 		categoryEdgeChildren: "children",
 		categoryEdgeParent:   "parent",
@@ -163,14 +156,14 @@ func (w *CategoryWhereInput) Pred(ctx context.Context) (velox.Pred[Category], er
 
 // predicate is Pred, untyped.
 func (w *CategoryWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, &categoryGQL)
+	f := gqlgraph.NewFilter(ctx, &categoryType)
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not, (*CategoryWhereInput).predicate)
-	gqlimpl.And(f, "and", w.And, (*CategoryWhereInput).predicate)
-	gqlimpl.Or(f, "or", w.Or, (*CategoryWhereInput).predicate)
-	gqlimpl.IDField[int64](f, "id", categoryColID, gqlimpl.Ops[string]{
+	gqlgraph.Not(f, "not", w.Not, (*CategoryWhereInput).predicate)
+	gqlgraph.And(f, "and", w.And, (*CategoryWhereInput).predicate)
+	gqlgraph.Or(f, "or", w.Or, (*CategoryWhereInput).predicate)
+	gqlgraph.IDField[int64](f, "id", categoryColID, gqlgraph.Ops[string]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -180,8 +173,8 @@ func (w *CategoryWhereInput) predicate(ctx context.Context) (velox.Predicate, er
 		LT:    w.IDLT,
 		LTE:   w.IDLTE,
 	})
-	gqlimpl.Has(f, "hasParent", w.HasParent, categoryEdgeParent, velox.TableOf[Category]())
-	gqlimpl.HasWith(f, "hasParentWith", w.HasParentWith, (*CategoryWhereInput).predicate, categoryEdgeParent, velox.TableOf[Category]())
+	gqlgraph.Has(f, "hasParent", w.HasParent, categoryEdgeParent, velox.TableOf[Category]())
+	gqlgraph.HasWith(f, "hasParentWith", w.HasParentWith, (*CategoryWhereInput).predicate, categoryEdgeParent, velox.TableOf[Category]())
 	return f.Pred()
 }
 
@@ -205,20 +198,20 @@ func (in *CreateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 	var set []velox.Setter[Category]
 	set = append(set, Categories.Title.Set(in.Title))
 	if len(in.ChildIDs) > 0 {
-		childIDs, err := gqlimpl.DecodeIDs[int64]("CreateCategoryInput.childIDs", in.ChildIDs, "Category")
+		childIDs, err := gqlgraph.DecodeIDs[int64]("CreateCategoryInput.childIDs", in.ChildIDs, "Category")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Categories.Children.Add(childIDs...))
 	}
 	if v := in.ParentID; v != nil {
-		parentID, err := gqlimpl.DecodeID[int64]("CreateCategoryInput.parentID", *v, "Category")
+		parentID, err := gqlgraph.DecodeID[int64]("CreateCategoryInput.parentID", *v, "Category")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Categories.Parent.Set(parentID))
 	}
-	return gqlimpl.Checked("CreateCategoryInput", &categoryGQL, set)
+	return gqlgraph.Validate("CreateCategoryInput", &categoryType, set)
 }
 
 // UpdateCategoryInput is the GraphQL input UpdateCategoryInput. A nil pointer
@@ -256,14 +249,14 @@ func (in *UpdateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 		set = append(set, Categories.Children.Clear())
 	}
 	if len(in.RemoveChildIDs) > 0 {
-		removeChildIDs, err := gqlimpl.DecodeIDs[int64]("UpdateCategoryInput.removeChildIDs", in.RemoveChildIDs, "Category")
+		removeChildIDs, err := gqlgraph.DecodeIDs[int64]("UpdateCategoryInput.removeChildIDs", in.RemoveChildIDs, "Category")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Categories.Children.Remove(removeChildIDs...))
 	}
 	if len(in.AddChildIDs) > 0 {
-		addChildIDs, err := gqlimpl.DecodeIDs[int64]("UpdateCategoryInput.addChildIDs", in.AddChildIDs, "Category")
+		addChildIDs, err := gqlgraph.DecodeIDs[int64]("UpdateCategoryInput.addChildIDs", in.AddChildIDs, "Category")
 		if err != nil {
 			return nil, err
 		}
@@ -272,11 +265,11 @@ func (in *UpdateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 	if in.ClearParent {
 		set = append(set, Categories.CategoryChildren.SetNull())
 	} else if v := in.ParentID; v != nil {
-		parentID, err := gqlimpl.DecodeID[int64]("UpdateCategoryInput.parentID", *v, "Category")
+		parentID, err := gqlgraph.DecodeID[int64]("UpdateCategoryInput.parentID", *v, "Category")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Categories.Parent.Set(parentID))
 	}
-	return gqlimpl.Checked("UpdateCategoryInput", &categoryGQL, set)
+	return gqlgraph.Validate("UpdateCategoryInput", &categoryType, set)
 }

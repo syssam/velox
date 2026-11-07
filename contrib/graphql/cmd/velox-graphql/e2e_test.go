@@ -458,7 +458,7 @@ func TestGoCompiles(t *testing.T) {
 		if !strings.Contains(string(sdlText), "  "+field+" @goField(name: \""+method+"\")\n") {
 			t.Errorf("no %s bound to %s in\n%s", field, method, sdlText)
 		}
-		if !strings.Contains(string(owner), "func (x *Owner) "+getter+" {") {
+		if !strings.Contains(string(owner), "func (o *Owner) "+getter+" {") {
 			t.Errorf("no getter %s in\n%s", getter, owner)
 		}
 	}
@@ -558,7 +558,7 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 		return &gen.PostOrder{Direction: d, Field: gen.PostOrderFieldAuthorName}
 	}
 	// ann's posts 1, 2 and 4, then bob's 3; post 5 is cid's, in org 8.
-	ps, err := gen.PaginatePosts(ctx, db.Query[gen.Post](), nil, intp(2), nil, nil, by(veloxgql.OrderDirectionAsc), nil)
+	ps, err := gen.NewPostConnection(ctx, db.Query[gen.Post](), nil, intp(2), nil, nil, by(veloxgql.OrderDirectionAsc), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -575,25 +575,25 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 	} else if err := after.UnmarshalGQLContext(ctx, s); err != nil {
 		t.Fatal(err)
 	}
-	if ps, err = gen.PaginatePosts(ctx, db.Query[gen.Post](), &after, intp(2), nil, nil, by(veloxgql.OrderDirectionAsc), nil); err != nil {
+	if ps, err = gen.NewPostConnection(ctx, db.Query[gen.Post](), &after, intp(2), nil, nil, by(veloxgql.OrderDirectionAsc), nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, info := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{4, 3}) || info.HasNextPage {
 		t.Errorf("by author ASC after 2: %v %+v", got, info)
 	}
 	// Descending, and backward from the end.
-	if ps, err = gen.PaginatePosts(ctx, db.Query[gen.Post](), nil, nil, nil, intp(2), by(veloxgql.OrderDirectionDesc), nil); err != nil {
+	if ps, err = gen.NewPostConnection(ctx, db.Query[gen.Post](), nil, nil, nil, intp(2), by(veloxgql.OrderDirectionDesc), nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, info := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{2, 4}) || !info.HasPreviousPage {
 		t.Errorf("by author DESC, last 2: %v %+v", got, info)
 	}
 	// A cursor of this order is refused under the key's.
-	if _, err := gen.PaginatePosts(ctx, db.Query[gen.Post](), &after, intp(2), nil, nil, nil, nil); err == nil {
+	if _, err := gen.NewPostConnection(ctx, db.Query[gen.Post](), &after, intp(2), nil, nil, nil, nil); err == nil {
 		t.Error("an author cursor was accepted under the key's order")
 	}
 	// Without the order, no join: post 5 is there.
-	if ps, err = gen.PaginatePosts(ctx, db.Query[gen.Post](), nil, nil, nil, nil, nil, nil); err != nil {
+	if ps, err = gen.NewPostConnection(ctx, db.Query[gen.Post](), nil, nil, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{1, 2, 3, 4, 5}) {
@@ -622,7 +622,7 @@ func TestConnections(t *testing.T) {
 
 	// The root connection, in the org: ann and bob, not cid.
 	byName := &gen.AccountOrder{Direction: veloxgql.OrderDirectionDesc, Field: gen.AccountOrderFieldName}
-	us, err := gen.PaginateAccounts(ctx, db.Query[gen.Account](), nil, intp(1), nil, nil, byName, nil)
+	us, err := gen.NewAccountConnection(ctx, db.Query[gen.Account](), nil, intp(1), nil, nil, byName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -633,7 +633,7 @@ func TestConnections(t *testing.T) {
 		t.Errorf("users: totalCount %d %v", n, err)
 	}
 	// The last post, by key.
-	ps, err := gen.PaginatePosts(ctx, db.Query[gen.Post](), nil, nil, nil, intp(1), nil, nil)
+	ps, err := gen.NewPostConnection(ctx, db.Query[gen.Post](), nil, nil, nil, intp(1), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -641,7 +641,7 @@ func TestConnections(t *testing.T) {
 		t.Errorf("posts, last 1: %v %+v", got, info)
 	}
 	// A where that sets nothing is no condition.
-	if ps, err = gen.PaginatePosts(ctx, db.Query[gen.Post](), nil, nil, nil, nil, nil, &gen.PostWhereInput{}); err != nil {
+	if ps, err = gen.NewPostConnection(ctx, db.Query[gen.Post](), nil, nil, nil, nil, nil, &gen.PostWhereInput{}); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{1, 2, 3, 4, 5}) {
@@ -813,7 +813,7 @@ func TestPaginateQuery(t *testing.T) {
 	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
-	c, err := gen.PaginatePosts(ctx, db.Query[gen.Post]().Where(gen.Posts.Title.EQ("a")), nil, nil, nil, nil, nil, nil)
+	c, err := gen.NewPostConnection(ctx, db.Query[gen.Post]().Where(gen.Posts.Title.EQ("a")), nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -845,7 +845,7 @@ func TestPaginateLimitOffset(t *testing.T) {
 	var all []int64
 	var after *veloxgql.Cursor
 	for range 5 {
-		c, err := gen.PaginatePosts(ctx, db.Query[gen.Post]().Limit(1).Offset(1), after, intp(2), nil, nil, nil, nil)
+		c, err := gen.NewPostConnection(ctx, db.Query[gen.Post]().Limit(1).Offset(1), after, intp(2), nil, nil, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -992,7 +992,7 @@ func events(ctx context.Context, w *gen.EventWhereInput) ([]int64, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := gen.PaginateEvents(ctx, db.Query[gen.Event](), nil, nil, nil, nil, &gen.EventOrder{Field: gen.EventOrderFieldRank}, w)
+	c, err := gen.NewEventConnection(ctx, db.Query[gen.Event](), nil, nil, nil, nil, &gen.EventOrder{Field: gen.EventOrderFieldRank}, w)
 	ks, err := page(ctx, c, err, func(e *gen.EventEdge) int64 { return int64(e.Node.ID[15]) })
 	slices.Sort(ks)
 	return ks, err
@@ -1003,7 +1003,7 @@ func owners(ctx context.Context, w *gen.OwnerWhereInput) ([]int64, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := gen.PaginateOwners(ctx, db.Query[gen.Owner](), nil, nil, nil, nil, w)
+	c, err := gen.NewOwnerConnection(ctx, db.Query[gen.Owner](), nil, nil, nil, nil, w)
 	return page(ctx, c, err, func(e *gen.OwnerEdge) int64 { return int64(e.Node.ID) })
 }
 
@@ -1012,7 +1012,7 @@ func accounts(ctx context.Context, w *gen.AccountWhereInput) ([]int64, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := gen.PaginateAccounts(ctx, db.Query[gen.Account](), nil, nil, nil, nil, nil, w)
+	c, err := gen.NewAccountConnection(ctx, db.Query[gen.Account](), nil, nil, nil, nil, nil, w)
 	return page(ctx, c, err, func(e *gen.AccountEdge) int64 { return e.Node.ID })
 }
 
@@ -1021,7 +1021,7 @@ func posts(ctx context.Context, w *gen.PostWhereInput) ([]int64, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := gen.PaginatePosts(ctx, db.Query[gen.Post](), nil, nil, nil, nil, nil, w)
+	c, err := gen.NewPostConnection(ctx, db.Query[gen.Post](), nil, nil, nil, nil, nil, w)
 	return page(ctx, c, err, func(e *gen.PostEdge) int64 { return e.Node.ID })
 }
 
@@ -1030,7 +1030,7 @@ func categories(ctx context.Context, w *gen.CategoryWhereInput) ([]int64, error)
 	if err != nil {
 		return nil, err
 	}
-	c, err := gen.PaginateCategories(ctx, db.Query[gen.Category](), nil, nil, nil, nil, w)
+	c, err := gen.NewCategoryConnection(ctx, db.Query[gen.Category](), nil, nil, nil, nil, w)
 	return page(ctx, c, err, func(e *gen.CategoryEdge) int64 { return e.Node.ID })
 }
 

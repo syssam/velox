@@ -125,12 +125,12 @@ func (r *renderer) inputType(f *file, t *sdl.Type, fi sdl.InputField) (string, e
 
 // idKey is how the generated code decodes the IDs of the type tt: the Go
 // type of the key (the key field's own), and the decode call's type
-// arguments and its conversion, as gqlimpl.DecodeID's or DecodeIDAs's and
-// gqlimpl.NewNode's or NewNodeAs's take them.
+// arguments and its conversion, as gqlgraph.DecodeID's or DecodeIDAs's and
+// gqlgraph.NewNode's or NewNodeAs's take them.
 type idKey struct {
 	typ  string // the key's Go type, as the file names it
 	args string // the decode's type arguments: "[int64]", or "As[int64]"
-	conv string // ", gqlimpl.AsInt[idspkg.UserID, int64]" for an As decode; else ""
+	conv string // ", gqlgraph.AsInt[idspkg.UserID, int64]" for an As decode; else ""
 	fd   *plugin.Field
 }
 
@@ -161,7 +161,7 @@ func (r *renderer) idKeyOf(f *file, e *plugin.Entity, tt *sdl.Type) (idKey, erro
 	default:
 		as = "AsInt"
 	}
-	return idKey{typ: typ, args: "As[" + tt.Key + "]", conv: fmt.Sprintf(", %s.%s[%s, %s]", f.gqlimpl(), as, typ, tt.Key), fd: tk}, nil
+	return idKey{typ: typ, args: "As[" + tt.Key + "]", conv: fmt.Sprintf(", %s.%s[%s, %s]", f.gqlgraph(), as, typ, tt.Key), fd: tk}, nil
 }
 
 // sameGoType reports whether the fields a and b hold the same Go type; a

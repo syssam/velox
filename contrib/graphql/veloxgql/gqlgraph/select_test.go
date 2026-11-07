@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // TestSelectedConnection: through a connection, the fields selected on its
@@ -23,11 +23,11 @@ func TestSelectedConnection(t *testing.T) {
 	} }
 	fragment F on Owner { age }`)
 	ctx = field(t, ctx, "owners")
-	got, ok := gqlimpl.Selected(ctx, "Owner")
+	got, ok := gqlgraph.Selected(ctx, "Owner")
 	if want := []string{"name", "age", "id"}; !ok || !reflect.DeepEqual(got, want) {
 		t.Fatalf("Selected: %q, %v; want %q", got, ok, want)
 	}
-	again, _ := gqlimpl.Selected(ctx, "Owner")
+	again, _ := gqlgraph.Selected(ctx, "Owner")
 	if &again[0] != &got[0] {
 		t.Error("Selected computed the field's fields again")
 	}
@@ -52,7 +52,7 @@ func TestSelectedObject(t *testing.T) {
 		{"nodes", "Child", []string{"title"}},
 		{"nodes", "Owner", []string{}},
 	} {
-		got, ok := gqlimpl.Selected(field(t, ctx, c.field), c.typ)
+		got, ok := gqlgraph.Selected(field(t, ctx, c.field), c.typ)
 		if !ok || !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s as %s: %q, %v; want %q", c.field, c.typ, got, ok, c.want)
 		}
@@ -75,7 +75,7 @@ func TestSelectedNotOurs(t *testing.T) {
 		{"no field", ctx, "Owner"},
 		{"no operation", context.Background(), "Owner"},
 	} {
-		if got, ok := gqlimpl.Selected(c.ctx, c.typ); ok {
+		if got, ok := gqlgraph.Selected(c.ctx, c.typ); ok {
 			t.Errorf("%s: %q, ok; want not ok", c.name, got)
 		}
 	}
@@ -94,7 +94,7 @@ func TestSelectedAppFields(t *testing.T) {
 		{`{ owners { nodes { name } } }`, nil},
 		{`{ owners { edges { extra node { name } } } }`, nil},
 	} {
-		got, ok := gqlimpl.Selected(field(t, operation(t, db, c.query), "owners"), "Owner")
+		got, ok := gqlgraph.Selected(field(t, operation(t, db, c.query), "owners"), "Owner")
 		if ok != (c.want != nil) || (ok && !reflect.DeepEqual(got, c.want)) {
 			t.Errorf("%s: %q, %v; want %q", c.query, got, ok, c.want)
 		}
@@ -122,7 +122,7 @@ func TestSelectedInterfaces(t *testing.T) {
 			schema *ast.Schema
 			want   []string
 		}{{"with the schema", edgeSchema, c.withSchema}, {"without", nil, c.without}} {
-			got, ok := gqlimpl.Selected(field(t, operationIn(t, db, c.query, s.schema), c.field), "Owner")
+			got, ok := gqlgraph.Selected(field(t, operationIn(t, db, c.query, s.schema), c.field), "Owner")
 			if ok != (s.want != nil) || (ok && !reflect.DeepEqual(got, s.want)) {
 				t.Errorf("%s %s: %q, %v; want %q", c.query, s.name, got, ok, s.want)
 			}
@@ -141,10 +141,10 @@ func TestNarrow(t *testing.T) {
 		q    velox.TableQuery
 		want string
 	}{
-		{"every column", gqlimpl.Narrow(q, nil), `SELECT "id", "name", "age" FROM "owners"`},
-		{"two", gqlimpl.Narrow(q, idName), `SELECT "id", "name" FROM "owners"`},
-		{"never added", gqlimpl.Narrow(q.Columns(int(owners.ID.I), int(owners.Age.I)), idName), `SELECT "id" FROM "owners"`},
-		{"none selected", gqlimpl.Narrow(q.Columns(int(owners.ID.I)), []int{int(owners.Age.I)}), `SELECT "id" FROM "owners"`},
+		{"every column", gqlgraph.Narrow(q, nil), `SELECT "id", "name", "age" FROM "owners"`},
+		{"two", gqlgraph.Narrow(q, idName), `SELECT "id", "name" FROM "owners"`},
+		{"never added", gqlgraph.Narrow(q.Columns(int(owners.ID.I), int(owners.Age.I)), idName), `SELECT "id" FROM "owners"`},
+		{"none selected", gqlgraph.Narrow(q.Columns(int(owners.ID.I)), []int{int(owners.Age.I)}), `SELECT "id" FROM "owners"`},
 	} {
 		log.take("")
 		if _, err := c.q.All(context.Background()); err != nil {

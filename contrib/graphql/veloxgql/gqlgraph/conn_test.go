@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"context"
@@ -9,46 +9,46 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // personConn is person's connections, as the generated code writes them.
-var personConn = gqlimpl.Type{
+var personConn = gqlgraph.Type{
 	Name:  "Person",
-	Key:   []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}},
-	Order: []gqlimpl.Col{{Field: "NAME", Col: int(people.Name.I)}, {Field: "AGE", Col: int(people.Age.I)}},
+	Key:   []gqlgraph.Column{{Name: "id", Index: int(people.ID.I)}},
+	Order: []gqlgraph.Column{{Name: "NAME", Index: int(people.Name.I)}, {Name: "AGE", Index: int(people.Age.I)}},
 }
 
 // TestPaginateBase: a q without the key, or without the column of an own
-// order field, is refused with an internal error that names PaginateXs; an
+// order field, is refused with an internal error that names NewXConnection; an
 // order field the type does not have is refused as the client's.
 func TestPaginateBase(t *testing.T) {
 	db, st := peopleDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := velox.Untyped(db.Query[person]())
-	age := []gqlimpl.Order{{Field: "AGE"}}
+	age := []gqlgraph.Order{{Field: "AGE"}}
 	for _, c := range []struct {
 		name  string
 		q     velox.TableQuery
-		order []gqlimpl.Order
+		order []gqlgraph.Order
 		want  string
 	}{
-		{"no key", q.Columns(int(people.Name.I)), nil, "veloxgql: PaginatePersons: q does not select the key, which the cursors hold"},
-		{"no order column", q.Columns(int(people.ID.I), int(people.Name.I)), age, "veloxgql: PaginatePersons: q does not select the column of AGE, which orderBy names and the cursors hold"},
+		{"no key", q.Columns(int(people.Name.I)), nil, "veloxgql: NewPersonConnection: q does not select the key, which the cursors hold"},
+		{"no order column", q.Columns(int(people.ID.I), int(people.Name.I)), age, "veloxgql: NewPersonConnection: q does not select the column of AGE, which orderBy names and the cursors hold"},
 	} {
-		_, err := gqlimpl.Paginate(ctx, gqlimpl.Query(c.q), &personConn, gqlimpl.Args{}, c.order)
+		_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(c.q), &personConn, gqlgraph.Args{Order: c.order})
 		var coded interface{ Extensions() map[string]any }
 		if err == nil || err.Error() != c.want || errors.As(err, &coded) {
 			t.Errorf("%s: %v, want the internal error %q", c.name, err, c.want)
 		}
 	}
-	unknown := []gqlimpl.Order{{Field: "HEIGHT"}}
-	_, err := gqlimpl.Paginate(ctx, gqlimpl.Query(q), &personConn, gqlimpl.Args{}, unknown)
+	unknown := []gqlgraph.Order{{Field: "HEIGHT"}}
+	_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(q), &personConn, gqlgraph.Args{Order: unknown})
 	var coded interface{ Extensions() map[string]any }
 	if want := `veloxgql: PersonOrder: "HEIGHT" is not a value of PersonOrderField`; err == nil || err.Error() != want || !errors.As(err, &coded) {
 		t.Errorf("an unknown order field: %v, want the input error %q", err, want)
 	}
-	c, err := gqlimpl.Paginate(ctx, gqlimpl.Query(q), &personConn, gqlimpl.Args{First: new(3)}, age)
+	c, err := gqlgraph.Paginate(ctx, gqlgraph.Query(q), &personConn, gqlgraph.Args{First: new(3), Order: age})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,15 +118,16 @@ func TestNamedTypeTerms(t *testing.T) {
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	conn := &gqlimpl.Type{
+	conn := &gqlgraph.Type{
 		Name:  "Gadget",
-		Key:   []gqlimpl.Col{{Field: "id", Col: int(gadgets.ID.I)}},
-		Order: []gqlimpl.Col{{Field: "SCORE", Col: int(gadgets.Score.I)}},
+		Key:   []gqlgraph.Column{{Name: "id", Index: int(gadgets.ID.I)}},
+		Order: []gqlgraph.Column{{Name: "SCORE", Index: int(gadgets.Score.I)}},
 	}
-	order := []gqlimpl.Order{{Field: "SCORE", Direction: veloxgql.OrderDirectionDesc}}
-	page := func(args gqlimpl.Args) ([]gadgetID, *gqlimpl.Page) {
+	order := []gqlgraph.Order{{Field: "SCORE", Direction: veloxgql.OrderDirectionDesc}}
+	page := func(args gqlgraph.Args) ([]gadgetID, *gqlgraph.Page) {
 		t.Helper()
-		c, err := gqlimpl.Paginate(ctx, gqlimpl.Query(velox.Untyped(db.Query[gadget]())), conn, args, order)
+		args.Order = order
+		c, err := gqlgraph.Paginate(ctx, gqlgraph.Query(velox.Untyped(db.Query[gadget]())), conn, args)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,7 +141,7 @@ func TestNamedTypeTerms(t *testing.T) {
 		}
 		return out, p
 	}
-	all, p := page(gqlimpl.Args{First: new(6)})
+	all, p := page(gqlgraph.Args{First: new(6)})
 	// NULL sorts as the largest value, so first descending.
 	want := []gadgetID{2, 5, 1, 4, 6, 3}
 	if !slices.Equal(all, want) {
@@ -148,17 +149,17 @@ func TestNamedTypeTerms(t *testing.T) {
 	}
 	for i := range want {
 		cur := wire(t, p.Cursors[i])
-		next, _ := page(gqlimpl.Args{First: new(6), After: cur})
+		next, _ := page(gqlgraph.Args{First: new(6), After: cur})
 		if !slices.Equal(next, want[i+1:]) {
 			t.Errorf("after %d: %v, want %v", want[i], next, want[i+1:])
 		}
-		prev, _ := page(gqlimpl.Args{Last: new(6), Before: cur})
+		prev, _ := page(gqlgraph.Args{Last: new(6), Before: cur})
 		if !slices.Equal(prev, want[:i]) {
 			t.Errorf("before %d: %v, want %v", want[i], prev, want[:i])
 		}
 	}
 	bad := veloxgql.Cursor{Type: "Gadget", Terms: []veloxgql.CursorTerm{{Field: "SCORE", Direction: veloxgql.OrderDirectionDesc, Value: "high"}}, Key: 1}
-	if _, err := gqlimpl.Paginate(ctx, gqlimpl.Query(velox.Untyped(db.Query[gadget]())), conn, gqlimpl.Args{After: wire(t, bad)}, order); !errors.Is(err, veloxgql.ErrBadCursor) {
+	if _, err := gqlgraph.Paginate(ctx, gqlgraph.Query(velox.Untyped(db.Query[gadget]())), conn, gqlgraph.Args{After: wire(t, bad), Order: order}); !errors.Is(err, veloxgql.ErrBadCursor) {
 		t.Errorf("a string score: %v, want ErrBadCursor", err)
 	}
 }
@@ -167,10 +168,10 @@ func TestNamedTypeTerms(t *testing.T) {
 // an edge reads Read alone, and a field Conn does not know reads every
 // column.
 func TestConnColumns(t *testing.T) {
-	c := &gqlimpl.Type{
-		Read:   []int{0, 1},
-		Fields: []string{0: "id", 1: "title", 3: "status"},
-		Edges:  []string{"author"},
+	c := &gqlgraph.Type{
+		AlwaysRead: []int{0, 1},
+		Fields:     []string{0: "id", 1: "title", 3: "status"},
+		Edges:      []string{"author"},
 	}
 	for _, x := range []struct {
 		fields []string
@@ -187,7 +188,7 @@ func TestConnColumns(t *testing.T) {
 	}
 	// Columns returns a fresh slice: appending to it leaves Read as it is.
 	_ = append(c.Columns([]string{"status"}), 9)
-	if !slices.Equal(c.Read, []int{0, 1}) {
-		t.Errorf("Read is %v after a selection", c.Read)
+	if !slices.Equal(c.AlwaysRead, []int{0, 1}) {
+		t.Errorf("Read is %v after a selection", c.AlwaysRead)
 	}
 }

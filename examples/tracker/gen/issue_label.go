@@ -63,9 +63,9 @@ func issueLabelDescriptor() velox.Descriptor[IssueLabel] {
 }
 
 // String returns the entity's fields.
-func (x IssueLabel) String() string {
-	return fmt.Sprintf("IssueLabel(IssueID=%v, LabelID=%v)", x.IssueID, x.LabelID)
+func (i IssueLabel) String() string {
+	return fmt.Sprintf("IssueLabel(IssueID=%v, LabelID=%v)", i.IssueID, i.LabelID)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x IssueLabel) GoString() string { return x.String() }
+func (i IssueLabel) GoString() string { return i.String() }

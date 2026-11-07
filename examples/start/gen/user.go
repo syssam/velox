@@ -80,9 +80,9 @@ func userDescriptor() velox.Descriptor[User] {
 }
 
 // String returns the entity's fields.
-func (x User) String() string {
-	return fmt.Sprintf("User(ID=%v, Name=%v, Email=%v, Age=%v)", x.ID, x.Name, x.Email, x.Age)
+func (u User) String() string {
+	return fmt.Sprintf("User(ID=%v, Name=%v, Email=%v, Age=%v)", u.ID, u.Name, u.Email, u.Age)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x User) GoString() string { return x.String() }
+func (u User) GoString() string { return u.String() }

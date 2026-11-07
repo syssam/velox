@@ -103,9 +103,9 @@ func itemDescriptor() velox.Descriptor[Item] {
 }
 
 // String returns the entity's fields.
-func (x Item) String() string {
-	return fmt.Sprintf("Item(ID=%v, InvoiceID=%v, SKU=%v, Qty=%v)", x.ID, x.InvoiceID, x.SKU, x.Qty)
+func (i Item) String() string {
+	return fmt.Sprintf("Item(ID=%v, InvoiceID=%v, SKU=%v, Qty=%v)", i.ID, i.InvoiceID, i.SKU, i.Qty)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Item) GoString() string { return x.String() }
+func (i Item) GoString() string { return i.String() }

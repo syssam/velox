@@ -1,4 +1,4 @@
-package gqlimpl
+package gqlgraph
 
 import (
 	"bytes"
@@ -83,7 +83,7 @@ func NotZero[V any](at string, v V) error {
 	return nil
 }
 
-// Checked returns set, the setters an input of c's type gives, once the
+// Validate returns set, the setters an input of c's type gives, once the
 // validators of their columns pass. For generated code: the last step of an
 // input's Setters. input is the input's GraphQL type, "CreatePostInput" or
 // "UpdatePostInput", whose fields c's CreateInputs or UpdateInputs (else
@@ -95,15 +95,15 @@ func NotZero[V any](at string, v V) error {
 // A validator's error on a column the input sets is BAD_USER_INPUT
 // "<input>.<field>: invalid value: <the validator's text>", wrapping the
 // *velox.ValidationError; any other error is returned as it is.
-func Checked[E any](input string, c *Type, set []velox.Setter[E]) ([]velox.Setter[E], error) {
-	if err := checked(input, c, velox.Assignments(set)); err != nil {
+func Validate[E any](input string, c *Type, set []velox.Setter[E]) ([]velox.Setter[E], error) {
+	if err := validate(input, c, velox.Assignments(set)); err != nil {
 		return nil, err
 	}
 	return set, nil
 }
 
-// checked is Checked, without the entity's type.
-func checked(input string, c *Type, set []velox.Assignment) error {
+// validate is Validate, without the entity's type.
+func validate(input string, c *Type, set []velox.Assignment) error {
 	t := c.table()
 	info := t.Info()
 	if info == nil {

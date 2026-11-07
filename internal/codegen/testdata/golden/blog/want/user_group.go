@@ -61,9 +61,9 @@ func userGroupDescriptor() velox.Descriptor[UserGroup] {
 }
 
 // String returns the entity's fields.
-func (x UserGroup) String() string {
-	return fmt.Sprintf("UserGroup(UserID=%v, GroupID=%v)", x.UserID, x.GroupID)
+func (u UserGroup) String() string {
+	return fmt.Sprintf("UserGroup(UserID=%v, GroupID=%v)", u.UserID, u.GroupID)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x UserGroup) GoString() string { return x.String() }
+func (u UserGroup) GoString() string { return u.String() }

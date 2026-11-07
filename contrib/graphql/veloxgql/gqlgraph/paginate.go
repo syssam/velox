@@ -1,4 +1,4 @@
-package gqlimpl
+package gqlgraph
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	"github.com/syssam/velox/contrib/graphql/internal/english"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
-	"github.com/syssam/velox/plugin"
 )
 
 // Args are a connection's paging arguments, as the client gave them.
@@ -26,14 +25,33 @@ import (
 // with before and last with after all fail with ErrBadPagination: keyset paging
 // bounds a page on one side only.
 //
-// Where is the where argument as the client gave it, nil for none, and Pred
-// its condition, which filters the nodes when Where is not nil. The callers
-// of an edge's batch share Where (reflect.DeepEqual), not Pred.
+// Order is the orderBy argument, the order of the nodes before c's key.
+// Where is the where argument, WhereOf's.
 type Args struct {
 	After, Before *veloxgql.Cursor
 	First, Last   *int
-	Where         any
-	Pred          velox.Predicate
+	Order         []Order
+	Where         Where
+}
+
+// Where is a connection's where argument: the generated where input, and
+// its condition. The callers of an edge's batch share the input
+// (reflect.DeepEqual), not the condition, which may hold a function that
+// reflect.DeepEqual never finds equal. The zero Where filters nothing.
+type Where struct {
+	input any
+	pred  func(context.Context) (velox.Predicate, error)
+}
+
+// WhereOf is the Where of w, a generated where input, whose condition is
+// pred(w, ctx), its predicate method; a nil w filters nothing:
+//
+//	gqlgraph.WhereOf(where, (*PostWhereInput).predicate)
+func WhereOf[W any](w *W, pred func(*W, context.Context) (velox.Predicate, error)) Where {
+	if w == nil {
+		return Where{}
+	}
+	return Where{input: w, pred: func(ctx context.Context) (velox.Predicate, error) { return pred(w, ctx) }}
 }
 
 // A Source is where a connection's nodes come from: a query (Query) or an
@@ -63,22 +81,22 @@ type Type struct {
 	// Table is the entity's Table, velox.TableOf of the entity. It is a
 	// function so that nothing runs at start.
 	Table func() velox.Table
-	// Key is the primary key's columns, each ASC: Field is the column's
+	// Key is the primary key's columns, each ASC: Name is the column's
 	// name, which a cursor's terms name "key:<column>".
-	Key []Col
-	// Order is the order fields: Field is the GraphQL enum value, "TITLE".
-	Order []Col
-	// Read is the columns every selection of the type reads: the key, every
-	// foreign key on the row and every order field's column.
-	Read []int
+	Key []Column
+	// Order is the order fields: Name is the GraphQL enum value, "TITLE".
+	Order []Column
+	// AlwaysRead is the columns every selection of the type reads: the key,
+	// every foreign key on the row and every order field's column.
+	AlwaysRead []int
 	// Fields is, by column, the type's field that reads the column, or "".
 	Fields []string
 	// Edges is, by relation, the type's edge field that reads the
-	// relation, or "": an edge reads no column but Read, and its field
+	// relation, or "": an edge reads no column but AlwaysRead, and its field
 	// alone batches it (Type.Edge).
 	Edges []string
 	// Inputs is, by column, the field of the type's create and update inputs
-	// that sets the column, or "": Checked reports a validator's error on
+	// that sets the column, or "": Validate reports a validator's error on
 	// such a column as BAD_USER_INPUT naming the field. CreateInputs and
 	// UpdateInputs stand for it in one input when the two inputs differ.
 	Inputs, CreateInputs, UpdateInputs []string
@@ -104,7 +122,7 @@ func (c *Type) columns(fields []string) []int {
 			}
 		}
 	})
-	cols := slices.Clone(c.Read)
+	cols := slices.Clone(c.AlwaysRead)
 	for _, f := range fields {
 		col, ok := c.fieldCol[f]
 		if !ok {
@@ -143,13 +161,13 @@ func (c *Type) table() velox.Table {
 	return c.Table()
 }
 
-// Col is a column of a connection's key or of an order field.
-type Col struct {
-	// Field is the order field, or the key column's name.
-	Field string
-	// Col is the column's index in its entity: the node's, or the target's
+// Column is a column of a connection's key or of an order field.
+type Column struct {
+	// Name is the order field, or the key column's name.
+	Name string
+	// Index is the column's index in its entity: the node's, or the target's
 	// of Edge.
-	Col int
+	Index int
 	// Edge is, for a column of the entity that a to-one relation of the node
 	// leads to, the relation's index plus one; 0 for the node's own column.
 	// A connection ordered by it reads the relation with an inner JOIN, in
@@ -171,9 +189,9 @@ type Order struct {
 }
 
 // find is the order field named field; nil for none.
-func (c *Type) find(field string) *Col {
+func (c *Type) find(field string) *Column {
 	for i := range c.Order {
-		if c.Order[i].Field == field {
+		if c.Order[i].Name == field {
 			return &c.Order[i]
 		}
 	}
@@ -193,8 +211,8 @@ type term struct {
 }
 
 // newTerm is the term of c, in direction dir, on the connection's entity t.
-func newTerm(t velox.Table, c *Col, dir veloxgql.OrderDirection) (term, error) {
-	tm := term{field: c.Field, dir: dir, col: c.Col, edge: c.Edge, tbl: t}
+func newTerm(t velox.Table, c *Column, dir veloxgql.OrderDirection) (term, error) {
+	tm := term{field: c.Name, dir: dir, col: c.Index, edge: c.Edge, tbl: t}
 	if c.Edge != 0 {
 		tm.tbl = c.Target()
 	}
@@ -202,16 +220,16 @@ func newTerm(t velox.Table, c *Col, dir veloxgql.OrderDirection) (term, error) {
 		return tm, err
 	}
 	info := tm.tbl.Info()
-	if c.Col < 0 || c.Col >= len(info.Columns) {
-		return tm, fmt.Errorf("veloxgql: %s has no column %d; run go tool velox-gen", info.Name, c.Col)
+	if c.Index < 0 || c.Index >= len(info.Columns) {
+		return tm, fmt.Errorf("veloxgql: %s has no column %d; run go tool velox-gen", info.Name, c.Index)
 	}
-	ft := velox.GoType(info.Columns[c.Col])
+	ft := velox.GoType(info.Columns[c.Index])
 	if ft.Kind() == reflect.Pointer {
 		ft, tm.null = ft.Elem(), true
 	}
 	tm.base = baseType(ft)
 	if tm.base == nil {
-		return tm, fmt.Errorf("veloxgql: %s.%s: keyset paging cannot continue after a %v", info.Name, info.Columns[c.Col].Field, ft)
+		return tm, fmt.Errorf("veloxgql: %s.%s: keyset paging cannot continue after a %v", info.Name, info.Columns[c.Index].Field, ft)
 	}
 	return tm, nil
 }
@@ -384,10 +402,10 @@ type Connection struct {
 }
 
 // Paginate is the connection to the nodes of c's type that from leads to,
-// filtered by args.Pred when args.Where is set, paged by args, in the order
-// order and then c's key, each column ASC. For generated code: the body of
-// a type's paginate, which PaginateXs calls with a Query and an edge method
-// with an Edge. It checks the query and the arguments, decodes the cursor,
+// filtered by args.Where, paged by args, in the order args.Order and then
+// c's key, each column ASC. For generated code: the body of a type's
+// newXConnection, which NewXConnection calls with a Query and an edge
+// method with an Edge. It checks the query and the arguments, decodes the cursor,
 // and runs no query. An Edge's connection batches (see Edge's paginate),
 // and it fails as veloxgql.DBFromContext does without a DB in ctx.
 //
@@ -402,21 +420,26 @@ type Connection struct {
 // the order columns, so an application's resolver must not read one it did
 // not ask for.
 //
-// It fails with an input error for an order field c does not know; with
+// It fails with the where input's error; with an input error for an order
+// field c does not know; with
 // ErrBadPagination for first and last together, either below 0, another
 // combination Args refuses, or an order of more than MaxOrderTerms terms;
 // with ErrPageTooLarge for either over MaxPage (both the limits of
 // veloxgql.LimitsFromContext(ctx)); and with ErrBadCursor for a cursor of
 // another type (ErrWrongIDType too), taken under another order, or whose
 // values are not of the order's types.
-func Paginate(ctx context.Context, from Source, c *Type, args Args, order []Order) (*Connection, error) {
-	return from.paginate(ctx, c, args, order)
+func Paginate(ctx context.Context, from Source, c *Type, args Args) (*Connection, error) {
+	return from.paginate(ctx, c, args, args.Order)
 }
 
 // paginate is Paginate of a query q.
 func paginate(ctx context.Context, q velox.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
-	if args.Where != nil {
-		q = q.Where(args.Pred)
+	if args.Where.pred != nil {
+		p, err := args.Where.pred(ctx)
+		if err != nil {
+			return nil, err
+		}
+		q = q.Where(p)
 	}
 	q, err := connectionBase(ctx, q, c, order)
 	if err != nil {
@@ -425,23 +448,23 @@ func paginate(ctx context.Context, q velox.TableQuery, c *Type, args Args, order
 	return newConnection(ctx, q, c, args, order)
 }
 
-// paginateFunc is the generated function that pages c's nodes, as an
-// application's error names it: "PaginatePosts".
-func paginateFunc(c *Type) string { return "Paginate" + plugin.GoPlural(c.Name) }
+// newConnFunc is the generated function that pages c's nodes, as an
+// application's error names it: "NewPostConnection".
+func newConnFunc(c *Type) string { return "New" + c.Name + "Connection" }
 
 // connectionBase checks q, Paginate's query, against c and order, and
 // returns it reading only the columns the selection of the field of ctx
 // needs. An order field c does not know is left to newConnection.
 func connectionBase(ctx context.Context, q velox.TableQuery, c *Type, order []Order) (velox.TableQuery, error) {
-	fn := paginateFunc(c)
+	fn := newConnFunc(c)
 	for _, k := range c.Key {
-		if !q.Selects(k.Col) {
+		if !q.Selects(k.Index) {
 			return q, fmt.Errorf("veloxgql: %s: q does not select the key, which the cursors hold", fn)
 		}
 	}
 	for _, o := range order {
 		// The join reads the target's columns, and no column of the entity's.
-		if col := c.find(o.Field); col != nil && col.Edge == 0 && !q.Selects(col.Col) {
+		if col := c.find(o.Field); col != nil && col.Edge == 0 && !q.Selects(col.Index) {
 			return q, fmt.Errorf("veloxgql: %s: q does not select the column of %s, which orderBy names and the cursors hold", fn, o.Field)
 		}
 	}
@@ -469,7 +492,7 @@ func newConnection(ctx context.Context, q velox.TableQuery, c *Type, args Args, 
 	}
 	if q.Ordered() {
 		// The application's bug, not the client's: an uncoded error.
-		return nil, fmt.Errorf("veloxgql: %s: q has an OrderBy; the connection orders by its orderBy argument", paginateFunc(c))
+		return nil, fmt.Errorf("veloxgql: %s: q has an OrderBy; the connection orders by its orderBy argument", newConnFunc(c))
 	}
 	lim := veloxgql.LimitsFromContext(ctx)
 	n, back, err := pageSize(args, lim.MaxPage)

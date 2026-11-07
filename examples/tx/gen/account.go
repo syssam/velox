@@ -72,9 +72,9 @@ func accountDescriptor() velox.Descriptor[Account] {
 }
 
 // String returns the entity's fields.
-func (x Account) String() string {
-	return fmt.Sprintf("Account(ID=%v, Name=%v, Balance=%v)", x.ID, x.Name, x.Balance)
+func (a Account) String() string {
+	return fmt.Sprintf("Account(ID=%v, Name=%v, Balance=%v)", a.ID, a.Name, a.Balance)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Account) GoString() string { return x.String() }
+func (a Account) GoString() string { return a.String() }

@@ -77,7 +77,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    }
 
    func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
-   	return gen.PaginateUsers(ctx, veloxgql.DB(ctx).Query[gen.User](), after, first, before, last, orderBy, where)
+   	return gen.NewUserConnection(ctx, veloxgql.DB(ctx).Query[gen.User](), after, first, before, last, orderBy, where)
    }
 
    func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
@@ -131,9 +131,11 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    join rows go with it by `post_tags`' `ON DELETE CASCADE`: `main.go` opens
    SQLite with foreign keys on (`_pragma=foreign_keys(1)`).
 
-   `PaginateX` is named after the plural of the GraphQL type, as every
-   name `gen` declares is: `gen.PaginateLabels` for the `labels` field of
-   the type `Label` (the entity `Tag`), on `db.Query[gen.Tag]()`.
+   `NewXConnection` is named after the GraphQL type, as every name `gen`
+   declares is: `gen.NewLabelConnection` for the `labels` field of the type
+   `Label` (the entity `Tag`), on `db.Query[gen.Tag]()`. The connection is
+   lazy: it sends nothing until gqlgen resolves its edges, pageInfo or
+   totalCount.
 
    And `User.initials`, the application's own field (`graph/app.graphql`
    extends `User`), from the name. velox-graphql cannot see what its
@@ -405,18 +407,18 @@ gqlgen only).
 ### A connection over the application's own query
 
 `graph/app.graphql` extends `Query` with `publishedPosts`. Its resolver
-pages a query it writes with `gen.PaginatePosts`, as the `posts` field
+pages a query it writes with `gen.NewPostConnection`, as the `posts` field
 pages every post:
 
 ```go
 func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	return gen.PaginatePosts(ctx, veloxgql.DB(ctx).Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
+	return gen.NewPostConnection(ctx, veloxgql.DB(ctx).Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
 }
 ```
 
 The query keeps its filters, its `With` loads and the organization scope. Its
 `Offset` is cleared and its `Limit` replaced: the page is the
-connection's. It must have no `OrderBy`, which `PaginatePosts` refuses with
+connection's. It must have no `OrderBy`, which `NewPostConnection` refuses with
 an internal error (`velox.Query.Ordered`), since the connection orders it.
 It must also select the key and the columns `orderBy` names, which the
 cursors hold: a `Columns` or `Omit` that drops one is refused with an

@@ -31,7 +31,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // handlerSDL is the schema of the extension's tests.
@@ -303,8 +303,8 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 		if n, ok := args["first"].(int64); ok {
 			first = new(int(n))
 		}
-		key := &gqlimpl.Type{Name: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}}
-		c, err := gqlimpl.Paginate(ctx, gqlimpl.Query(db.QueryTable(velox.TableOf[person]())), key, gqlimpl.Args{First: first}, nil)
+		key := &gqlgraph.Type{Name: "Person", Key: []gqlgraph.Column{{Name: "id", Index: int(people.ID.I)}}}
+		c, err := gqlgraph.Paginate(ctx, gqlgraph.Query(db.QueryTable(velox.TableOf[person]())), key, gqlgraph.Args{First: first})
 		if err != nil {
 			return nil, err
 		}

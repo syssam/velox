@@ -63,9 +63,9 @@ func homeDescriptor() velox.Descriptor[Home] {
 }
 
 // String returns the entity's fields.
-func (x Home) String() string {
-	return fmt.Sprintf("Home(ID=%v, Region=%v)", x.ID, x.Region)
+func (h Home) String() string {
+	return fmt.Sprintf("Home(ID=%v, Region=%v)", h.ID, h.Region)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Home) GoString() string { return x.String() }
+func (h Home) GoString() string { return h.String() }

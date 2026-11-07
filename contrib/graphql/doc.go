@@ -158,19 +158,19 @@
 //   - the edge methods, named after the edges: a connection, a list or the
 //     one node, each read for every row of its batch in one statement, on
 //     the DB veloxgql.DBFromContext reads; a connection is the target's
-//     paginate<GoPlural> of the edge, the function Paginate<GoPlural>
+//     new<Type>Connection of the edge, the function New<Type>Connection
 //     calls with its query;
-//   - Paginate<GoPlural>, which pages a query of the type's nodes, as ent's
-//     Paginate does: it is named after ent's plural of the GraphQL type
-//     (PaginateUsers for User, PaginateStatusSlice for Status,
-//     PaginateAccounts for a User exposed as Account), and a Query field's
-//     resolver returns it;
+//   - New<Type>Connection, the connection to a query of the type's nodes, as
+//     ent's Paginate is: it is named after the GraphQL type
+//     (NewUserConnection for User, NewAccountConnection for a User exposed
+//     as Account), it sends nothing until gqlgen resolves the connection's
+//     fields, and a Query field's resolver returns it;
 //   - the where input's method Pred, which turns a where argument into a
 //     velox condition.
 //
-// They use the runtime package veloxgql, and its package gqlimpl for what
+// They use the runtime package veloxgql, and its package gqlgraph for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion17", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion18", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -178,7 +178,7 @@
 // OrderVia of a to-one edge's target, may be on a nullable field: NULL sorts
 // after every value ascending and before them descending, on every dialect,
 // and a cursor holds it as null. A where
-// argument's Pred is one gqlimpl helper call for each predicate the input
+// argument's Pred is one gqlgraph helper call for each predicate the input
 // sets; it decodes IDs as their type's, and refuses an ID of another type,
 // and a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth
 // or larger in all than MaxFilterNodes, before any query runs. A list edge
@@ -194,11 +194,11 @@
 // (see veloxgql.Extension): do not defer fields of a mutation.
 //
 // The application writes the root query's resolvers: Node and Nodes for
-// node and nodes, and for each QueryField a Paginate<GoPlural> of a query on
+// node and nodes, and for each QueryField a New<Type>Connection of a query on
 // the request's DB, veloxgql.DB(ctx):
 //
 //	func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
-//		return gen.PaginateUsers(ctx, veloxgql.DB(ctx).Query[gen.User](), after, first, before, last, orderBy, where)
+//		return gen.NewUserConnection(ctx, veloxgql.DB(ctx).Query[gen.User](), after, first, before, last, orderBy, where)
 //	}
 //
 // The query may hold the application's own filters and With loads. It must
@@ -220,7 +220,7 @@
 //
 // Setters is plain generated Go, as entgql's Mutate is: one column setter
 // for each field given, one relation handle's Add, Remove or Clear for each
-// edge field given, and a last call to gqlimpl.Checked, which runs the
+// edge field given, and a last call to gqlgraph.Validate, which runs the
 // columns' validators. It does no I/O. The application names its
 // mutations, their arguments and their result, and writes the resolvers:
 //
@@ -385,7 +385,7 @@
 // Errors are coded before the presenter sees them. Setters refuses, before
 // any statement, with BAD_USER_INPUT naming the input field: a malformed or
 // mistyped ID or JSON value ("CreatePostInput.tagIDs[1]: ..."); a list of
-// more than gqlimpl.MaxIDs IDs, wrapping veloxgql.ErrPageTooLarge; and a
+// more than gqlgraph.MaxIDs IDs, wrapping veloxgql.ErrPageTooLarge; and a
 // validator's refusal ("UpdatePostInput.title: invalid value: ..."), even
 // when an ID with it names no row. The write's errors are velox's, as they
 // are, and ErrorPresenter maps them as it does elsewhere; an edge's
@@ -484,7 +484,7 @@
 //     on an interface or a union other than Node.
 //
 // Narrowing never adds a column the application's query left out
-// (velox.Query.Selects), and a Paginate<GoPlural> whose query drops the key
+// (velox.Query.Selects), and a New<Type>Connection whose query drops the key
 // or a column an orderBy names is refused with an internal error. A
 // mutation's returned row is not narrowed.
 //

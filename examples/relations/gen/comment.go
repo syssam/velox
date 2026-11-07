@@ -95,9 +95,9 @@ func commentDescriptor() velox.Descriptor[Comment] {
 }
 
 // String returns the entity's fields.
-func (x Comment) String() string {
-	return fmt.Sprintf("Comment(ID=%v, PostID=%v, Body=%v)", x.ID, x.PostID, x.Body)
+func (c Comment) String() string {
+	return fmt.Sprintf("Comment(ID=%v, PostID=%v, Body=%v)", c.ID, c.PostID, c.Body)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Comment) GoString() string { return x.String() }
+func (c Comment) GoString() string { return c.String() }

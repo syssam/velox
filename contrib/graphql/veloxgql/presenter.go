@@ -58,7 +58,7 @@ const (
 // What a client sees, by the first that applies:
 //   - An error that holds a coded error (one with a method Extensions()
 //     map[string]any whose map has a string code, as veloxgql's errors
-//     for a client's input and gqlimpl.InputErrorf's have): that code, and
+//     for a client's input and gqlgraph.InputErrorf's have): that code, and
 //     the coded error's own text, without "veloxgql: ". Whatever wraps it
 //     is not shown, nor what it is joined with.
 //   - A *gqlerror.Error that wraps no error, gqlgen's own (a parse or

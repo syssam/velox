@@ -90,9 +90,9 @@ func tagDescriptor() velox.Descriptor[Tag] {
 }
 
 // String returns the entity's fields.
-func (x Tag) String() string {
-	return fmt.Sprintf("Tag(ID=%v, Name=%v)", x.ID, x.Name)
+func (t Tag) String() string {
+	return fmt.Sprintf("Tag(ID=%v, Name=%v)", t.ID, t.Name)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Tag) GoString() string { return x.String() }
+func (t Tag) GoString() string { return t.String() }

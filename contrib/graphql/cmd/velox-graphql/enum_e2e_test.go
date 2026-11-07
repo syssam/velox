@@ -99,7 +99,7 @@ func (r *queryResolver) Alerts(ctx context.Context, after *veloxgql.Cursor, firs
 	if err != nil {
 		return nil, err
 	}
-	return gen.PaginateAlerts(ctx, db.Query[gen.Alert](), after, first, before, last)
+	return gen.NewAlertConnection(ctx, db.Query[gen.Alert](), after, first, before, last)
 }
 
 // Query returns QueryResolver implementation.

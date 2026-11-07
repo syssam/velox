@@ -1,4 +1,4 @@
-package gqlimpl
+package gqlgraph
 
 import (
 	"context"
@@ -17,18 +17,18 @@ import (
 // index, and returns Filter.Pred; its method Pred is predicate, typed:
 //
 //	func (w *AccountWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
-//		f := gqlimpl.NewFilter(ctx, &userGQL)
+//		f := gqlgraph.NewFilter(ctx, &userType)
 //		if w == nil {
 //			return f.Pred()
 //		}
-//		gqlimpl.Not(f, "not", w.Not, (*AccountWhereInput).predicate)
-//		gqlimpl.And(f, "and", w.And, (*AccountWhereInput).predicate)
-//		gqlimpl.Or(f, "or", w.Or, (*AccountWhereInput).predicate)
-//		gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{EQ: w.ID, In: w.IDIn})
-//		gqlimpl.Field(f, "displayName", userColName, gqlimpl.Ops[string]{EQ: w.DisplayName, In: w.DisplayNameIn})
-//		gqlimpl.FKField[int64](f, "teamID", userColTeamID, userEdgeTeam, &teamGQL, gqlimpl.Ops[string]{EQ: w.TeamID})
-//		gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
-//		gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
+//		gqlgraph.Not(f, "not", w.Not, (*AccountWhereInput).predicate)
+//		gqlgraph.And(f, "and", w.And, (*AccountWhereInput).predicate)
+//		gqlgraph.Or(f, "or", w.Or, (*AccountWhereInput).predicate)
+//		gqlgraph.IDField[int64](f, "id", userColID, gqlgraph.Ops[string]{EQ: w.ID, In: w.IDIn})
+//		gqlgraph.Field(f, "displayName", userColName, gqlgraph.Ops[string]{EQ: w.DisplayName, In: w.DisplayNameIn})
+//		gqlgraph.EdgeIDField[int64](f, "teamID", userColTeamID, userEdgeTeam, &teamType, gqlgraph.Ops[string]{EQ: w.TeamID})
+//		gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
+//		gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
 //		return f.Pred()
 //	}
 //
@@ -298,7 +298,7 @@ func (f *Filter) is(field name, b bool, p velox.Predicate) {
 }
 
 // Ops are the values of the predicates a where input offers on one field, as
-// the generated code gives them to Field, IDField and FKField: each a field
+// the generated code gives them to Field, IDField and EdgeIDField: each a field
 // of the input, nil when the client does not set it or the input does not
 // offer it. The GraphQL name of each is the field's name with the
 // predicate's suffix, which is the name of the field of Ops ("titleNEQ"), but
@@ -417,7 +417,7 @@ func IDField[K any](f *Filter, field string, col int, o Ops[string]) {
 	ids[K](f, field, f.typ, col, o, fkScope{})
 }
 
-// FKField is IDField of a foreign key, on column col, which holds the keys
+// EdgeIDField is IDField of a foreign key, on column col, which holds the keys
 // of target's type, through the relation edge, and its IsNil and NotNil. Its
 // predicates are scoped to what the relation lets the reader see, the
 // target's interceptors and Read policy: a row they hide reads as null, to
@@ -429,7 +429,7 @@ func IDField[K any](f *Filter, field string, col int, o Ops[string]) {
 //
 // A WithRewrite in the application's own query is not known here, nor is it
 // to the edge's Has.
-func FKField[K any](f *Filter, field string, col, edge int, target *Type, o Ops[string]) {
+func EdgeIDField[K any](f *Filter, field string, col, edge int, target *Type, o Ops[string]) {
 	fk := fkScope{edge: edge, target: target.table(), on: true}
 	ids[K](f, field, target.Name, col, o, fk)
 	f.fkNull(name{field, "IsNil"}, col, velox.PredIsNull, o.IsNil, fk)

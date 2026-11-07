@@ -276,16 +276,16 @@ func userDescriptor() velox.Descriptor[User] {
 }
 
 // String returns the entity's fields except the sensitive ones and the foreign keys velox added.
-func (x User) String() string {
+func (u User) String() string {
 	return fmt.Sprintf("User("+
 		"ID=%v, CreatedAt=%v, UpdatedAt=%v, CreatedBy=%v, OrgID=%v, "+
 		"Name=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, "+
 		"Score=%v)",
-		x.ID, x.CreatedAt, x.UpdatedAt, x.CreatedBy, x.OrgID, x.Name,
-		x.Email, x.Role, x.Nickname, velox.Show(x.Bio), x.Age,
-		velox.Show(x.Score),
+		u.ID, u.CreatedAt, u.UpdatedAt, u.CreatedBy, u.OrgID, u.Name,
+		u.Email, u.Role, u.Nickname, velox.Show(u.Bio), u.Age,
+		velox.Show(u.Score),
 	)
 }
 
 // GoString is String, so that %#v does not print them either.
-func (x User) GoString() string { return x.String() }
+func (u User) GoString() string { return u.String() }

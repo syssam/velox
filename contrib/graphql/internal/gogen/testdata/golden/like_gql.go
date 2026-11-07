@@ -6,23 +6,23 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion17
+const _ = veloxgql.GeneratedCodeIsVersion18
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
-// query with the edge of every row read with x.
-func (x *Like) User(ctx context.Context) (*User, error) {
-	v, err := gqlimpl.EdgeOne(ctx, &userGQL, likeGQL.Edge(x, likeEdgeUser))
+// query with the edge of every row read with l.
+func (l *Like) User(ctx context.Context) (*User, error) {
+	v, err := gqlgraph.EdgeOne(ctx, &userType, likeType.Edge(l, likeEdgeUser))
 	n, _ := v.(*User)
 	return n, err
 }
 
 // Post is the edge post: the Post it leads to, or nil. It is read in one query
-// with the edge of every row read with x.
-func (x *Like) Post(ctx context.Context) (*Post, error) {
-	v, err := gqlimpl.EdgeOne(ctx, &postGQL, likeGQL.Edge(x, likeEdgePost))
+// with the edge of every row read with l.
+func (l *Like) Post(ctx context.Context) (*Post, error) {
+	v, err := gqlgraph.EdgeOne(ctx, &postType, likeType.Edge(l, likeEdgePost))
 	n, _ := v.(*Post)
 	return n, err
 }
@@ -30,7 +30,7 @@ func (x *Like) Post(ctx context.Context) (*Post, error) {
 // LikeConnection is the GraphQL type LikeConnection. Its fields run their
 // queries when gqlgen resolves them.
 type LikeConnection struct {
-	c *gqlimpl.Connection
+	c *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
@@ -67,44 +67,41 @@ type LikeEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// PaginateLikes is the connection to the Like nodes q returns, ordered by the
-// key, and paged by the other arguments. q must not be ordered, and must select
-// the key.
-func PaginateLikes(
+// NewLikeConnection is the connection to the Like nodes q returns, ordered by
+// the key, and paged by the other arguments. q must not be ordered, and must
+// select the key.
+func NewLikeConnection(
 	ctx context.Context, q velox.Query[Like],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 ) (*LikeConnection, error) {
-	return paginateLikes(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last)
+	return newLikeConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last)
 }
 
-// paginateLikes is PaginateLikes of the nodes from leads to: a query's, or an
-// edge's, whose queries batch.
-func paginateLikes(
-	ctx context.Context, from gqlimpl.Source,
+// newLikeConnection is NewLikeConnection of the nodes from leads to: a query's,
+// or an edge's, whose queries batch.
+func newLikeConnection(
+	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 ) (*LikeConnection, error) {
-	c, err := gqlimpl.Paginate(
-		ctx, from, &likeGQL,
-		gqlimpl.Args{After: after, First: first, Before: before, Last: last},
-		nil,
-	)
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last}
+	c, err := gqlgraph.Paginate(ctx, from, &likeType, args)
 	if err != nil {
 		return nil, err
 	}
 	return &LikeConnection{c: c}, nil
 }
 
-// likeGQL describes the GraphQL type Like to gqlimpl.
-var likeGQL = gqlimpl.Type{
+// likeType describes the GraphQL type Like to gqlgraph.
+var likeType = gqlgraph.Type{
 	Name:  "Like",
 	Table: velox.TableOf[Like],
-	Key: []gqlimpl.Col{
-		{Field: "user_id", Col: likeColUserID},
-		{Field: "post_id", Col: likeColPostID},
+	Key: []gqlgraph.Column{
+		{Name: "user_id", Index: likeColUserID},
+		{Name: "post_id", Index: likeColPostID},
 	},
-	Read:   []int{likeColUserID, likeColPostID},
-	Fields: []string{likeColWeight: "weight", likeColCreatedAt: "createdAt"},
-	Edges:  []string{likeEdgeUser: "user", likeEdgePost: "post"},
+	AlwaysRead: []int{likeColUserID, likeColPostID},
+	Fields:     []string{likeColWeight: "weight", likeColCreatedAt: "createdAt"},
+	Edges:      []string{likeEdgeUser: "user", likeEdgePost: "post"},
 	Inputs: []string{
 		likeColWeight:    "weight",
 		likeColCreatedAt: "createdAt",
@@ -136,20 +133,20 @@ func (in *CreateLikeInput) Setters() ([]velox.Setter[Like], error) {
 		set = append(set, Likes.Weight.Set(*v))
 	}
 	if v := in.CreatedAt; v != nil {
-		if err := gqlimpl.NotZero("CreateLikeInput.createdAt", *v); err != nil {
+		if err := gqlgraph.NotZero("CreateLikeInput.createdAt", *v); err != nil {
 			return nil, err
 		}
 		set = append(set, Likes.CreatedAt.Set(*v))
 	}
-	userID, err := gqlimpl.DecodeID[int64]("CreateLikeInput.userID", in.UserID, "Account")
+	userID, err := gqlgraph.DecodeID[int64]("CreateLikeInput.userID", in.UserID, "Account")
 	if err != nil {
 		return nil, err
 	}
 	set = append(set, Likes.User.Set(userID))
-	postID, err := gqlimpl.DecodeID[int64]("CreateLikeInput.postID", in.PostID, "Post")
+	postID, err := gqlgraph.DecodeID[int64]("CreateLikeInput.postID", in.PostID, "Post")
 	if err != nil {
 		return nil, err
 	}
 	set = append(set, Likes.Post.Set(postID))
-	return gqlimpl.Checked("CreateLikeInput", &likeGQL, set)
+	return gqlgraph.Validate("CreateLikeInput", &likeType, set)
 }

@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/internal/apitest/fixture"
 )
 
@@ -32,12 +32,12 @@ func TestFromJSONNumbers(t *testing.T) {
 		`1e400`:                  json.Number("1e400"),
 		`1e-400`:                 json.Number("1e-400"),
 	} {
-		got, err := gqlimpl.FromJSON[any](at, veloxgql.JSON(raw))
+		got, err := gqlgraph.FromJSON[any](at, veloxgql.JSON(raw))
 		if err != nil || got != want {
 			t.Errorf("%s: %T %v, %v; want %T %v", raw, got, got, err, want, want)
 		}
 	}
-	m, err := gqlimpl.FromJSON[map[string]any](at, veloxgql.JSON(`{"age":30,"big":9007199254740993,"list":[1.5,[2]],"deep":{"n":3}}`))
+	m, err := gqlgraph.FromJSON[map[string]any](at, veloxgql.JSON(`{"age":30,"big":9007199254740993,"list":[1.5,[2]],"deep":{"n":3}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestFromJSONNumbers(t *testing.T) {
 		Num    json.Number
 		PtrMap *map[string][]any
 	}
-	h, err := gqlimpl.FromJSON[holds](at, veloxgql.JSON(`{"Any":1,"Ptr":2,"List":[3],"Keyed":{"k":4},"Nested":{"Any":5},"Arr":[6],"Int":7,"Num":8,"PtrMap":{"k":[9]}}`))
+	h, err := gqlgraph.FromJSON[holds](at, veloxgql.JSON(`{"Any":1,"Ptr":2,"List":[3],"Keyed":{"k":4},"Nested":{"Any":5},"Arr":[6],"Int":7,"Num":8,"PtrMap":{"k":[9]}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,22 +83,22 @@ func TestFromJSONArrayLength(t *testing.T) {
 		json string
 		fail func() error
 	}{
-		{`[1,2]`, func() error { _, err := gqlimpl.FromJSON[[3]int](at, veloxgql.JSON(`[1,2]`)); return err }},
-		{`[1,2,3,4]`, func() error { _, err := gqlimpl.FromJSON[[3]int](at, veloxgql.JSON(`[1,2,3,4]`)); return err }},
-		{`[]`, func() error { _, err := gqlimpl.FromJSON[*[3]int](at, veloxgql.JSON(`[]`)); return err }},
-		{`[[1]]`, func() error { _, err := gqlimpl.FromJSON[[][2]int](at, veloxgql.JSON(`[[1]]`)); return err }},
-		{`{"T":["a"]}`, func() error { _, err := gqlimpl.FromJSON[inner](at, veloxgql.JSON(`{"T":["a"]}`)); return err }},
+		{`[1,2]`, func() error { _, err := gqlgraph.FromJSON[[3]int](at, veloxgql.JSON(`[1,2]`)); return err }},
+		{`[1,2,3,4]`, func() error { _, err := gqlgraph.FromJSON[[3]int](at, veloxgql.JSON(`[1,2,3,4]`)); return err }},
+		{`[]`, func() error { _, err := gqlgraph.FromJSON[*[3]int](at, veloxgql.JSON(`[]`)); return err }},
+		{`[[1]]`, func() error { _, err := gqlgraph.FromJSON[[][2]int](at, veloxgql.JSON(`[[1]]`)); return err }},
+		{`{"T":["a"]}`, func() error { _, err := gqlgraph.FromJSON[inner](at, veloxgql.JSON(`{"T":["a"]}`)); return err }},
 		{`{"k":[1]}`, func() error {
-			_, err := gqlimpl.FromJSON[map[string][2]int](at, veloxgql.JSON(`{"k":[1]}`))
+			_, err := gqlgraph.FromJSON[map[string][2]int](at, veloxgql.JSON(`{"k":[1]}`))
 			return err
 		}},
 	} {
 		err := c.fail()
-		if codeOf(err) != veloxgql.CodeBadUserInput || !strings.Contains(err.Error(), "In.j: invalid value: a list of") || strings.Contains(err.Error(), "gqlimpl_test") {
+		if codeOf(err) != veloxgql.CodeBadUserInput || !strings.Contains(err.Error(), "In.j: invalid value: a list of") || strings.Contains(err.Error(), "gqlgraph_test") {
 			t.Errorf("%s: %v", c.json, err)
 		}
 	}
-	got, err := gqlimpl.FromJSON[[3]int](at, veloxgql.JSON(`[1,2,3]`))
+	got, err := gqlgraph.FromJSON[[3]int](at, veloxgql.JSON(`[1,2,3]`))
 	if err != nil || got != [3]int{1, 2, 3} {
 		t.Errorf("the length: %v, %v", got, err)
 	}
@@ -108,7 +108,7 @@ func TestFromJSONArrayLength(t *testing.T) {
 // cannot hold and a key it has not, naming the field and no Go type.
 func TestFromJSONExact(t *testing.T) {
 	const at = "In.j"
-	m, err := gqlimpl.FromJSON[map[string]any](at, veloxgql.JSON(`{"n":9007199254740993,"s":[1.5],"z":null}`))
+	m, err := gqlgraph.FromJSON[map[string]any](at, veloxgql.JSON(`{"n":9007199254740993,"s":[1.5],"z":null}`))
 	if err != nil || m["n"] != json.Number("9007199254740993") || m["z"] != nil {
 		t.Errorf("a number in an any: %v, %v", m, err)
 	}
@@ -129,26 +129,26 @@ func TestFromJSONExact(t *testing.T) {
 		`{"name":"a"}`, `{"NAME":"a"}`, `{"opt":null}`, `{"Innerp":null}`, `{"Own":null}`, `{"Any":null}`, `{"Tags":null}`, `{"ByKey":null}`,
 		`{"Tags":["null"]}`, `{"Innerp":{"A":"x"}}`, `{"name":"null"}`,
 	} {
-		if _, err := gqlimpl.FromJSON[tagged](at, veloxgql.JSON(ok)); err != nil {
+		if _, err := gqlgraph.FromJSON[tagged](at, veloxgql.JSON(ok)); err != nil {
 			t.Errorf("%s: %v", ok, err)
 		}
 	}
 	for _, bad := range []string{
 		`{"name":null}`, `{"NAME":null}`, `{"Inner":null}`, `{"Inner":{"A":null}}`, `{"Innerp":{"A":null}}`, `{"Tags":["a",null]}`, `{"ByKey":{"a":null}}`, `{"Arr":null}`,
 	} {
-		_, err := gqlimpl.FromJSON[tagged](at, veloxgql.JSON(bad))
+		_, err := gqlgraph.FromJSON[tagged](at, veloxgql.JSON(bad))
 		if codeOf(err) != veloxgql.CodeBadUserInput || !strings.Contains(err.Error(), "In.j: invalid value: null") {
 			t.Errorf("%s: %v", bad, err)
 		}
 	}
-	if _, err := gqlimpl.FromJSON[[]string](at, veloxgql.JSON(`null`)); err != nil {
+	if _, err := gqlgraph.FromJSON[[]string](at, veloxgql.JSON(`null`)); err != nil {
 		t.Errorf("a null list: %v", err)
 	}
-	if _, err := gqlimpl.FromJSON[string](at, veloxgql.JSON(`null`)); codeOf(err) != veloxgql.CodeBadUserInput {
+	if _, err := gqlgraph.FromJSON[string](at, veloxgql.JSON(`null`)); codeOf(err) != veloxgql.CodeBadUserInput {
 		t.Errorf("a null string: %v", err)
 	}
-	_, err = gqlimpl.FromJSON[tagged](at, veloxgql.JSON(`{"nope":1}`))
-	if codeOf(err) != veloxgql.CodeBadUserInput || !strings.Contains(err.Error(), `the key "nope"`) || strings.Contains(err.Error(), "gqlimpl_test") {
+	_, err = gqlgraph.FromJSON[tagged](at, veloxgql.JSON(`{"nope":1}`))
+	if codeOf(err) != veloxgql.CodeBadUserInput || !strings.Contains(err.Error(), `the key "nope"`) || strings.Contains(err.Error(), "gqlgraph_test") {
 		t.Errorf("an unknown key: %v", err)
 	}
 }
@@ -156,7 +156,7 @@ func TestFromJSONExact(t *testing.T) {
 // open has no Read policy, guarded's metadata has one, and intercepted's has
 // an interceptor and no policy, for TestFKScoped. A Policy method alone is
 // not enough: generated entities have none, as the schema declares it, so
-// gqlimpl reads the policy from the metadata.
+// gqlgraph reads the policy from the metadata.
 type (
 	open        struct{ ID int64 }
 	guarded     struct{ ID int64 }
@@ -226,23 +226,23 @@ func TestFKScoped(t *testing.T) {
 		{"guarded", velox.TableOf[guarded](), true},
 		{"intercepted", velox.TableOf[intercepted](), true},
 	} {
-		target := &gqlimpl.Type{Name: "Owner", Table: func() velox.Table { return c.target }}
+		target := &gqlgraph.Type{Name: "Owner", Table: func() velox.Table { return c.target }}
 		for _, h := range []struct {
 			name string
-			add  func(f *gqlimpl.Filter)
+			add  func(f *gqlgraph.Filter)
 			col  string // the error of the column's predicate alone; "" for none
 		}{
-			{"EQ", func(f *gqlimpl.Filter) {
-				gqlimpl.FKField[int64](f, "ownerID", 0, 0, target, gqlimpl.Ops[string]{EQ: &id})
+			{"EQ", func(f *gqlgraph.Filter) {
+				gqlgraph.EdgeIDField[int64](f, "ownerID", 0, 0, target, gqlgraph.Ops[string]{EQ: &id})
 			}, ""},
-			{"In", func(f *gqlimpl.Filter) {
-				gqlimpl.FKField[int64](f, "ownerID", 0, 0, target, gqlimpl.Ops[string]{In: []string{id}})
+			{"In", func(f *gqlgraph.Filter) {
+				gqlgraph.EdgeIDField[int64](f, "ownerID", 0, 0, target, gqlgraph.Ops[string]{In: []string{id}})
 			}, ""},
-			{"NotNil", func(f *gqlimpl.Filter) {
-				gqlimpl.FKField[int64](f, "ownerID", 0, 0, target, gqlimpl.Ops[string]{NotNil: &yes})
+			{"NotNil", func(f *gqlgraph.Filter) {
+				gqlgraph.EdgeIDField[int64](f, "ownerID", 0, 0, target, gqlgraph.Ops[string]{NotNil: &yes})
 			}, "not nullable"},
 		} {
-			f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[person]("Person"))
+			f := gqlgraph.NewFilter(ctx, gqlgraph.TableType[person]("Person"))
 			h.add(f)
 			p, err := f.Pred()
 			if err != nil {

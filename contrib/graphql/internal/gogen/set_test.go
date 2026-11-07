@@ -58,17 +58,17 @@ func TestCreateSetsSkipped(t *testing.T) {
 		t.Errorf("CreateThingInput.Setters: %s, want %s", sig, want)
 	}
 	create := funcSrc(t, files, "CreateThingInput.Setters")
-	if !strings.Contains(create, `return gqlimpl.Checked("CreateThingInput", &thingGQL, set)`) {
-		t.Errorf("Setters does not take thingGQL:\n%s", create)
+	if !strings.Contains(create, `return gqlgraph.Validate("CreateThingInput", &thingType, set)`) {
+		t.Errorf("Setters does not take thingType:\n%s", create)
 	}
-	lit := connLit(t, files, "thingGQL")
+	lit := connLit(t, files, "thingType")
 	for field, want := range map[string]bool{"CreateInputs": false, "UpdateInputs": true} {
 		if got := slices.Contains(lit[field], `thingColSlug: "slug"`); got != want {
-			t.Errorf("thingGQL's %s names slug: %v, want %v (%v)", field, got, want, lit)
+			t.Errorf("thingType's %s names slug: %v, want %v (%v)", field, got, want, lit)
 		}
 	}
-	if !strings.Contains(funcSrc(t, files, "UpdateThingInput.Setters"), `return gqlimpl.Checked("UpdateThingInput", &thingGQL, set)`) {
-		t.Error("UpdateThingInput.Setters does not take thingGQL")
+	if !strings.Contains(funcSrc(t, files, "UpdateThingInput.Setters"), `return gqlgraph.Validate("UpdateThingInput", &thingType, set)`) {
+		t.Error("UpdateThingInput.Setters does not take thingType")
 	}
 	if doc := funcs["CreateThingInput.Setters"].Doc.Text(); strings.Contains(doc, "leaves out") {
 		t.Errorf("Setters's doc names slug, which the schema skips explicitly: %q", doc)

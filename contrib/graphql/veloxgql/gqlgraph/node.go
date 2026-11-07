@@ -1,4 +1,4 @@
-package gqlimpl
+package gqlgraph
 
 import (
 	"context"
@@ -49,7 +49,7 @@ func NewNodeAs[K, V any](c *Type, conv func(K) V) NodeKind {
 func newNode(c *Type, decode func(id string) (any, error)) NodeKind {
 	key := -1
 	if len(c.Key) == 1 {
-		key = c.Key[0].Col
+		key = c.Key[0].Index
 	}
 	return NodeKind{typ: c.Name, table: c.table(), key: key, decode: decode, columns: c.columns}
 }

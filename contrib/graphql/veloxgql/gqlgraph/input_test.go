@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // item is a hand-written entity, as velox-gen would write it, for Checked's
@@ -89,8 +89,8 @@ func itemDB(t *testing.T) (*velox.DB, context.Context) {
 // the setters that pass go to the insert.
 func TestCheckedCreate(t *testing.T) {
 	db, ctx := itemDB(t)
-	c := gqlimpl.InputType[item]("Item", int(items.ID.I), itemInputGQL)
-	set, err := gqlimpl.Checked("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("b"), items.Age.Set(2), items.Code.Set("d")})
+	c := gqlgraph.InputType[item]("Item", int(items.ID.I), itemInputGQL)
+	set, err := gqlgraph.Validate("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("b"), items.Age.Set(2), items.Code.Set("d")})
 	if err != nil || len(set) != 3 {
 		t.Fatalf("Checked = %d setters, %v; want 3", len(set), err)
 	}
@@ -102,18 +102,18 @@ func TestCheckedCreate(t *testing.T) {
 		t.Fatalf("the row = %+v, %v", got, err)
 	}
 
-	_, err = gqlimpl.Checked("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("ok"), items.Code.Set("")})
+	_, err = gqlgraph.Validate("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("ok"), items.Code.Set("")})
 	var ve *velox.ValidationError
 	if codeOf(err) != veloxgql.CodeBadUserInput || err.Error() != "veloxgql: CreateItemInput.code: invalid value: must not be empty" || !errors.As(err, &ve) {
 		t.Errorf("an empty code = %v (code %q); want BAD_USER_INPUT naming CreateItemInput.code", err, codeOf(err))
 	}
 	c.CreateInputs = []string{1: "title"}
-	_, err = gqlimpl.Checked("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("")})
+	_, err = gqlgraph.Validate("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("")})
 	if want := "veloxgql: CreateItemInput.title: invalid value: must not be empty"; err == nil || err.Error() != want {
 		t.Errorf("by CreateInputs = %v, want %s", err, want)
 	}
 	// A column the input does not name: velox's error, as it is.
-	_, err = gqlimpl.Checked("CreateItemInput", c, []velox.Setter[item]{items.Age.Set(-1)})
+	_, err = gqlgraph.Validate("CreateItemInput", c, []velox.Setter[item]{items.Age.Set(-1)})
 	if !errors.As(err, &ve) || codeOf(err) != "" {
 		t.Errorf("an unnamed column = %v (code %q); want a *velox.ValidationError, uncoded", err, codeOf(err))
 	}
@@ -126,9 +126,9 @@ func TestCheckedCreate(t *testing.T) {
 // uncoded, as the server's bug.
 func TestCheckedUpdate(t *testing.T) {
 	db, ctx := itemDB(t)
-	c := gqlimpl.InputType[item]("Item", int(items.ID.I), itemInputGQL)
+	c := gqlgraph.InputType[item]("Item", int(items.ID.I), itemInputGQL)
 	in := []velox.Setter[item]{items.Name.Set("client"), items.Age.Set(2)}
-	set, err := gqlimpl.Checked("UpdateItemInput", c, in)
+	set, err := gqlgraph.Validate("UpdateItemInput", c, in)
 	if err != nil || !slices.Equal(velox.Assignments(set), velox.Assignments(in)) {
 		t.Fatalf("Checked = %v, %v; want the setters", set, err)
 	}
@@ -136,17 +136,17 @@ func TestCheckedUpdate(t *testing.T) {
 		t.Fatalf("update = %d, %v", n, err)
 	}
 
-	_, err = gqlimpl.Checked("UpdateItemInput", c, []velox.Setter[item]{items.Age.Set(-1)})
+	_, err = gqlgraph.Validate("UpdateItemInput", c, []velox.Setter[item]{items.Age.Set(-1)})
 	if codeOf(err) != veloxgql.CodeBadUserInput || err.Error() != "veloxgql: UpdateItemInput.age: invalid value: must not be negative" {
 		t.Errorf("an invalid age = %v (code %q); want BAD_USER_INPUT naming UpdateItemInput.age", err, codeOf(err))
 	}
 	c.UpdateInputs = []string{2: "years"}
-	_, err = gqlimpl.Checked("UpdateItemInput", c, []velox.Setter[item]{items.Age.Set(-1)})
+	_, err = gqlgraph.Validate("UpdateItemInput", c, []velox.Setter[item]{items.Age.Set(-1)})
 	if want := "veloxgql: UpdateItemInput.years: invalid value: must not be negative"; err == nil || err.Error() != want {
 		t.Errorf("by UpdateInputs = %v, want %s", err, want)
 	}
 
-	set, err = gqlimpl.Checked("UpdateItemInput", c, []velox.Setter[item]{items.Age.Set(3)})
+	set, err = gqlgraph.Validate("UpdateItemInput", c, []velox.Setter[item]{items.Age.Set(3)})
 	if err != nil {
 		t.Fatal(err)
 	}

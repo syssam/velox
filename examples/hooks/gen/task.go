@@ -87,9 +87,9 @@ func taskDescriptor() velox.Descriptor[Task] {
 }
 
 // String returns the entity's fields.
-func (x Task) String() string {
-	return fmt.Sprintf("Task(ID=%v, CreatedBy=%v, Title=%v, Slug=%v, Done=%v)", x.ID, x.CreatedBy, x.Title, x.Slug, x.Done)
+func (t Task) String() string {
+	return fmt.Sprintf("Task(ID=%v, CreatedBy=%v, Title=%v, Slug=%v, Done=%v)", t.ID, t.CreatedBy, t.Title, t.Slug, t.Done)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Task) GoString() string { return x.String() }
+func (t Task) GoString() string { return t.String() }

@@ -1,4 +1,4 @@
-package gqlimpl
+package gqlgraph
 
 import (
 	"context"
@@ -14,19 +14,19 @@ import (
 // OrderTerm is an order term or a key column of E, for the tests: the
 // column a Conn names, and the term's direction.
 type OrderTerm[E any] struct {
-	col Col
+	col Column
 	dir veloxgql.OrderDirection
 }
 
 // TermOf is the term field, in direction dir, of E's column col.
 func TermOf[E any](field string, dir veloxgql.OrderDirection, col int) OrderTerm[E] {
-	return OrderTerm[E]{col: Col{Field: field, Col: col}, dir: dir}
+	return OrderTerm[E]{col: Column{Name: field, Index: col}, dir: dir}
 }
 
 // JoinedTermOf is the term field, in direction dir, of column col of T, the
 // target of E's to-one relation edge.
 func JoinedTermOf[E, T any](field string, dir veloxgql.OrderDirection, edge, col int) OrderTerm[E] {
-	return OrderTerm[E]{col: Col{Field: field, Col: col, Edge: edge + 1, Target: velox.TableOf[T]}, dir: dir}
+	return OrderTerm[E]{col: Column{Name: field, Index: col, Edge: edge + 1, Target: velox.TableOf[T]}, dir: dir}
 }
 
 // TypeOf is the Conn of the GraphQL type typ with the order terms order, then
@@ -35,10 +35,10 @@ func TypeOf[E any](typ string, order, key []OrderTerm[E]) (*Type, []Order) {
 	c := &Type{Name: typ}
 	var o []Order
 	for _, t := range order {
-		if c.find(t.col.Field) == nil {
+		if c.find(t.col.Name) == nil {
 			c.Order = append(c.Order, t.col)
 		}
-		o = append(o, Order{Field: t.col.Field, Direction: t.dir})
+		o = append(o, Order{Field: t.col.Name, Direction: t.dir})
 	}
 	for _, t := range key {
 		c.Key = append(c.Key, t.col)
@@ -89,7 +89,7 @@ func TableType[E any](typ string) *Type {
 // and whose inputs' fields are names, by column.
 func InputType[E any](typ string, key int, names []string) *Type {
 	c := TableType[E](typ)
-	c.Key = []Col{{Field: "id", Col: key}}
+	c.Key = []Column{{Name: "id", Index: key}}
 	c.Inputs = names
 	return c
 }

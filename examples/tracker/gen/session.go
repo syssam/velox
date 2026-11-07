@@ -89,9 +89,9 @@ func sessionDescriptor() velox.Descriptor[Session] {
 }
 
 // String returns the entity's fields except the sensitive ones and the foreign keys velox added.
-func (x Session) String() string {
-	return fmt.Sprintf("Session(ID=%v, OrgID=%v, UserID=%v, ExpiresAt=%v)", x.ID, x.OrgID, x.UserID, x.ExpiresAt)
+func (s Session) String() string {
+	return fmt.Sprintf("Session(ID=%v, OrgID=%v, UserID=%v, ExpiresAt=%v)", s.ID, s.OrgID, s.UserID, s.ExpiresAt)
 }
 
 // GoString is String, so that %#v does not print them either.
-func (x Session) GoString() string { return x.String() }
+func (s Session) GoString() string { return s.String() }

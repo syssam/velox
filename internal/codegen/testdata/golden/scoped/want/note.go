@@ -71,9 +71,9 @@ func noteDescriptor() velox.Descriptor[Note] {
 }
 
 // String returns the entity's fields.
-func (x Note) String() string {
-	return fmt.Sprintf("Note(ID=%v, OrgID=%v, Title=%v)", x.ID, x.OrgID, x.Title)
+func (n Note) String() string {
+	return fmt.Sprintf("Note(ID=%v, OrgID=%v, Title=%v)", n.ID, n.OrgID, n.Title)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Note) GoString() string { return x.String() }
+func (n Note) GoString() string { return n.String() }

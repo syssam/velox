@@ -59,29 +59,29 @@ func TestInputEdgeKinds(t *testing.T) {
 			// field not given.
 			`if v := in.Nick; v != nil { set = append(set, Owners.Nick.Set(*v)) }`,
 			// A Nillable JSON field decodes, and its handle takes the value.
-			`meta, err := gqlimpl.FromJSON[map[string]any]("CreateOwnerInput.meta", *v) if err != nil { return nil, err } set = append(set, Owners.Meta.Set(meta))`,
+			`meta, err := gqlgraph.FromJSON[map[string]any]("CreateOwnerInput.meta", *v) if err != nil { return nil, err } set = append(set, Owners.Meta.Set(meta))`,
 			// A one-to-one edge whose key the target holds is the edge's Add.
-			`petID, err := gqlimpl.DecodeID[int64]("CreateOwnerInput.petID", *v, "Pet") if err != nil { return nil, err } set = append(set, Owners.Pet.Add(petID))`,
-			`return gqlimpl.Checked("CreateOwnerInput", &ownerGQL, set)`,
+			`petID, err := gqlgraph.DecodeID[int64]("CreateOwnerInput.petID", *v, "Pet") if err != nil { return nil, err } set = append(set, Owners.Pet.Add(petID))`,
+			`return gqlgraph.Validate("CreateOwnerInput", &ownerType, set)`,
 		},
 		"UpdateOwnerInput.Setters": {
 			`if in.ClearNick { set = append(set, Owners.Nick.SetNull()) } else if v := in.Nick; v != nil {`,
 			`if in.ClearPet { set = append(set, Owners.Pet.Clear()) } else if v := in.PetID; v != nil {`,
 		},
 		"CreatePetInput.Setters": {
-			`ownerID, err := gqlimpl.DecodeIDAs[int64]("CreatePetInput.ownerID", *v, "Owner", gqlimpl.AsInt[types.OwnerID, int64])`,
+			`ownerID, err := gqlgraph.DecodeIDAs[int64]("CreatePetInput.ownerID", *v, "Owner", gqlgraph.AsInt[types.OwnerID, int64])`,
 			// A key on the row is the edge's Set, which checks it and converts
 			// it to the int64 the row holds it in.
 			`set = append(set, Pets.Owner.Set(ownerID))`,
 			`set = append(set, Pets.Kits.Add(kitIDs...))`,
 			// A required ID is always decoded.
-			`momID, err := gqlimpl.DecodeID[int64]("CreatePetInput.momID", in.MomID, "Pet") if err != nil { return nil, err } set = append(set, Pets.Mom.Set(momID))`,
+			`momID, err := gqlgraph.DecodeID[int64]("CreatePetInput.momID", in.MomID, "Pet") if err != nil { return nil, err } set = append(set, Pets.Mom.Set(momID))`,
 		},
 		"UpdatePetInput.Setters": {
 			`if in.ClearOwner { set = append(set, Pets.OwnerPet.SetNull()) } else if v := in.OwnerID; v != nil {`,
 			// A Required edge's NULL-able key can only be added to: no remove
 			// or clear, which would leave a child with none.
-			`addKitIDs, err := gqlimpl.DecodeIDs[int64]("UpdatePetInput.addKitIDs", in.AddKitIDs, "Pet") if err != nil { return nil, err } set = append(set, Pets.Kits.Add(addKitIDs...))`,
+			`addKitIDs, err := gqlgraph.DecodeIDs[int64]("UpdatePetInput.addKitIDs", in.AddKitIDs, "Pet") if err != nil { return nil, err } set = append(set, Pets.Kits.Add(addKitIDs...))`,
 		},
 	} {
 		src := funcSrc(t, files, name)
@@ -123,7 +123,7 @@ func TestNonNodeOwnerM2M(t *testing.T) {
 		},
 	}}
 	files := render(t, m)
-	want := `tagIDs, err := gqlimpl.DecodeIDs[int64]("CreateThingInput.tagIDs", in.TagIDs, "Tag") if err != nil { return nil, err } set = append(set, Things.Tags.Add(tagIDs...))`
+	want := `tagIDs, err := gqlgraph.DecodeIDs[int64]("CreateThingInput.tagIDs", in.TagIDs, "Tag") if err != nil { return nil, err } set = append(set, Things.Tags.Add(tagIDs...))`
 	if src := funcSrc(t, files, "CreateThingInput.Setters"); !strings.Contains(src, want) {
 		t.Errorf("CreateThingInput.Setters has no %s:\n%s", want, src)
 	}
@@ -142,14 +142,14 @@ func TestInputNamesApart(t *testing.T) {
 			}, fs...),
 		}}}
 	}
-	lit := connLit(t, render(t, thing(&plugin.Field{Name: "im", GoName: "Im", Type: "string", GoType: "string", ElemType: "string", Immutable: true})), "thingGQL")
+	lit := connLit(t, render(t, thing(&plugin.Field{Name: "im", GoName: "Im", Type: "string", GoType: "string", ElemType: "string", Immutable: true})), "thingType")
 	if want := []string{`thingColX: "x"`, `thingColIm: "im"`}; !slices.Equal(lit["CreateInputs"], want) {
 		t.Errorf("CreateInputs %v, want %v", lit["CreateInputs"], want)
 	}
 	if want := []string{`thingColX: "x"`}; !slices.Equal(lit["UpdateInputs"], want) || lit["Inputs"] != nil {
 		t.Errorf("UpdateInputs %v and Inputs %v, want %v and none", lit["UpdateInputs"], lit["Inputs"], want)
 	}
-	lit = connLit(t, render(t, thing()), "thingGQL")
+	lit = connLit(t, render(t, thing()), "thingType")
 	if want := []string{`thingColX: "x"`}; !slices.Equal(lit["Inputs"], want) || lit["CreateInputs"] != nil || lit["UpdateInputs"] != nil {
 		t.Errorf("Inputs %v, CreateInputs %v, UpdateInputs %v; want %v alone", lit["Inputs"], lit["CreateInputs"], lit["UpdateInputs"], want)
 	}

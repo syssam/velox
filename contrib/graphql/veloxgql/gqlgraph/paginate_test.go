@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // person is a hand-written entity, as velox-gen would write it, for the
@@ -59,16 +59,16 @@ func personDescriptor() velox.Descriptor[person] {
 }
 
 // The order terms of person, as the generated code makes them.
-func nameTerm(dir veloxgql.OrderDirection) gqlimpl.OrderTerm[person] {
-	return gqlimpl.TermOf[person]("NAME", dir, int(people.Name.I))
+func nameTerm(dir veloxgql.OrderDirection) gqlgraph.OrderTerm[person] {
+	return gqlgraph.TermOf[person]("NAME", dir, int(people.Name.I))
 }
 
-func ageTerm(dir veloxgql.OrderDirection) gqlimpl.OrderTerm[person] {
-	return gqlimpl.TermOf[person]("AGE", dir, int(people.Age.I))
+func ageTerm(dir veloxgql.OrderDirection) gqlgraph.OrderTerm[person] {
+	return gqlgraph.TermOf[person]("AGE", dir, int(people.Age.I))
 }
 
-func personKey() []gqlimpl.OrderTerm[person] {
-	return []gqlimpl.OrderTerm[person]{gqlimpl.TermOf[person]("id", veloxgql.OrderDirectionAsc, int(people.ID.I))}
+func personKey() []gqlgraph.OrderTerm[person] {
+	return []gqlgraph.OrderTerm[person]{gqlgraph.TermOf[person]("id", veloxgql.OrderDirectionAsc, int(people.ID.I))}
 }
 
 // The ten people. Names tie: two a, three b, two d.
@@ -149,26 +149,26 @@ func TestPaginate(t *testing.T) {
 	db, st := peopleDB(t)
 	for _, c := range []struct {
 		name  string
-		order func() []gqlimpl.OrderTerm[person]
+		order func() []gqlgraph.OrderTerm[person]
 		want  []int64 // every row, in the order
 	}{
-		{"key", func() []gqlimpl.OrderTerm[person] { return nil }, []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
-		{"name ASC", func() []gqlimpl.OrderTerm[person] {
-			return []gqlimpl.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionAsc)}
+		{"key", func() []gqlgraph.OrderTerm[person] { return nil }, []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
+		{"name ASC", func() []gqlgraph.OrderTerm[person] {
+			return []gqlgraph.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionAsc)}
 		},
 			[]int64{2, 4, 3, 6, 8, 1, 5, 9, 7, 10}},
-		{"name DESC", func() []gqlimpl.OrderTerm[person] {
-			return []gqlimpl.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc)}
+		{"name DESC", func() []gqlgraph.OrderTerm[person] {
+			return []gqlgraph.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc)}
 		}, []int64{10, 7, 5, 9, 1, 3, 6, 8, 2, 4}},
-		{"name DESC, age ASC", func() []gqlimpl.OrderTerm[person] {
-			return []gqlimpl.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc), ageTerm(veloxgql.OrderDirectionAsc)}
+		{"name DESC, age ASC", func() []gqlgraph.OrderTerm[person] {
+			return []gqlgraph.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc), ageTerm(veloxgql.OrderDirectionAsc)}
 		}, []int64{10, 7, 9, 5, 1, 8, 6, 3, 4, 2}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			page := func(args gqlimpl.Args) *gqlimpl.PageOf[person] {
+			page := func(args gqlgraph.Args) *gqlgraph.PageOf[person] {
 				t.Helper()
 				st.take()
-				p, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", args, c.order(), personKey())
+				p, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", args, c.order(), personKey())
 				if err != nil {
 					t.Fatalf("%+v: %v", args, err)
 				}
@@ -191,36 +191,36 @@ func TestPaginate(t *testing.T) {
 				}
 				return p
 			}
-			check := func(what string, p *gqlimpl.PageOf[person], want []int64, next, prev bool) {
+			check := func(what string, p *gqlgraph.PageOf[person], want []int64, next, prev bool) {
 				t.Helper()
 				if got := ids(p.Rows); !slices.Equal(got, want) || p.Info.HasNextPage != next || p.Info.HasPreviousPage != prev {
 					t.Errorf("%s: %v next %v prev %v, want %v next %v prev %v", what, got, p.Info.HasNextPage, p.Info.HasPreviousPage, want, next, prev)
 				}
 			}
-			all := page(gqlimpl.Args{First: new(10)})
+			all := page(gqlgraph.Args{First: new(10)})
 			check("first 10", all, c.want, false, false)
-			check("first 11", page(gqlimpl.Args{First: new(11)}), c.want, false, false)
-			check("first 0", page(gqlimpl.Args{First: new(0)}), []int64{}, true, false)
-			check("first 3", page(gqlimpl.Args{First: new(3)}), c.want[:3], true, false)
-			check("last 3", page(gqlimpl.Args{Last: new(3)}), c.want[7:], false, true)
-			check("last 10", page(gqlimpl.Args{Last: new(10)}), c.want, false, false)
-			check("last 0", page(gqlimpl.Args{Last: new(0)}), []int64{}, false, true)
+			check("first 11", page(gqlgraph.Args{First: new(11)}), c.want, false, false)
+			check("first 0", page(gqlgraph.Args{First: new(0)}), []int64{}, true, false)
+			check("first 3", page(gqlgraph.Args{First: new(3)}), c.want[:3], true, false)
+			check("last 3", page(gqlgraph.Args{Last: new(3)}), c.want[7:], false, true)
+			check("last 10", page(gqlgraph.Args{Last: new(10)}), c.want, false, false)
+			check("last 0", page(gqlgraph.Args{Last: new(0)}), []int64{}, false, true)
 
 			for i := range c.want {
 				cur := wire(t, all.Cursors[i])
 				// first 3 after each cursor.
 				end := min(i+4, len(c.want))
-				check("first 3 after "+names[c.want[i]], page(gqlimpl.Args{First: new(3), After: cur}), c.want[i+1:end], end < len(c.want), false)
+				check("first 3 after "+names[c.want[i]], page(gqlgraph.Args{First: new(3), After: cur}), c.want[i+1:end], end < len(c.want), false)
 				// last 3 before each cursor: last 2 before the first row is
 				// empty, with no page before it.
 				start := max(i-3, 0)
-				check("last 3 before "+names[c.want[i]], page(gqlimpl.Args{Last: new(3), Before: cur}), c.want[start:i], false, start > 0)
-				check("last 2 before", page(gqlimpl.Args{Last: new(2), Before: cur}), c.want[max(i-2, 0):i], false, i > 2)
+				check("last 3 before "+names[c.want[i]], page(gqlgraph.Args{Last: new(3), Before: cur}), c.want[start:i], false, start > 0)
+				check("last 2 before", page(gqlgraph.Args{Last: new(2), Before: cur}), c.want[max(i-2, 0):i], false, i > 2)
 			}
 
 			// Walking the pages forward, then backward, gives every row once.
 			var walk []int64
-			args := gqlimpl.Args{First: new(3)}
+			args := gqlgraph.Args{First: new(3)}
 			for {
 				p := page(args)
 				walk = append(walk, ids(p.Rows)...)
@@ -233,7 +233,7 @@ func TestPaginate(t *testing.T) {
 				t.Errorf("forward walk %v, want %v", walk, c.want)
 			}
 			walk = nil
-			args = gqlimpl.Args{Last: new(4)}
+			args = gqlgraph.Args{Last: new(4)}
 			for {
 				p := page(args)
 				walk = append(ids(p.Rows), walk...)
@@ -255,20 +255,20 @@ func TestPaginateDefaultPage(t *testing.T) {
 	ctx := context.Background()
 	db, _ := peopleDB(t)
 	ctx = veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 4})).NewContext(ctx)
-	p, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{}, nil, personKey())
+	p, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{1, 2, 3, 4}) || !p.Info.HasNextPage {
 		t.Fatalf("%v %+v, want 1 to 4 and a next page", err, p)
 	}
-	p, err = gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{After: wire(t, p.Cursors[3])}, nil, personKey())
+	p, err = gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{After: wire(t, p.Cursors[3])}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{5, 6, 7, 8}) || !p.Info.HasNextPage {
 		t.Fatalf("after 4: %v %+v, want 5 to 8 and a next page", err, p)
 	}
 	// before alone pages backward, MaxPage rows.
-	p, err = gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{Before: wire(t, p.Cursors[3])}, nil, personKey())
+	p, err = gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{Before: wire(t, p.Cursors[3])}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{4, 5, 6, 7}) || !p.Info.HasPreviousPage || p.Info.HasNextPage {
 		t.Fatalf("before 8: %v %+v, want 4 to 7 and a previous page", err, p)
 	}
-	if _, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(5)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
+	if _, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{First: new(5)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("first 5 over MaxPage 4: %v, want ErrPageTooLarge", err)
 	}
 }
@@ -277,8 +277,8 @@ func TestPaginateDefaultPage(t *testing.T) {
 func TestPaginateRefuses(t *testing.T) {
 	ctx := context.Background()
 	db, st := peopleDB(t)
-	name := []gqlimpl.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionAsc)}
-	all, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(10)}, name, personKey())
+	name := []gqlgraph.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionAsc)}
+	all, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{First: new(10)}, name, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,27 +289,27 @@ func TestPaginateRefuses(t *testing.T) {
 	st.take()
 	for _, c := range []struct {
 		name  string
-		args  gqlimpl.Args
-		order []gqlimpl.OrderTerm[person]
+		args  gqlgraph.Args
+		order []gqlgraph.OrderTerm[person]
 		want  []error
 	}{
-		{"first and last", gqlimpl.Args{First: new(1), Last: new(1)}, name, []error{veloxgql.ErrBadPagination}},
-		{"first 101", gqlimpl.Args{First: new(101)}, name, []error{veloxgql.ErrPageTooLarge}},
-		{"last 101", gqlimpl.Args{Last: new(101)}, name, []error{veloxgql.ErrPageTooLarge}},
-		{"first -1", gqlimpl.Args{First: new(-1)}, name, []error{veloxgql.ErrBadPagination}},
-		{"last -1", gqlimpl.Args{Last: new(-1)}, name, []error{veloxgql.ErrBadPagination}},
-		{"after and before", gqlimpl.Args{After: byName, Before: byName}, name, []error{veloxgql.ErrBadPagination}},
-		{"first and before", gqlimpl.Args{First: new(1), Before: byName}, name, []error{veloxgql.ErrBadPagination}},
-		{"last and after", gqlimpl.Args{Last: new(1), After: byName}, name, []error{veloxgql.ErrBadPagination}},
-		{"name cursor under age", gqlimpl.Args{After: byName}, []gqlimpl.OrderTerm[person]{ageTerm(veloxgql.OrderDirectionAsc)}, []error{veloxgql.ErrBadCursor}},
-		{"name ASC cursor under name DESC", gqlimpl.Args{Before: byName}, []gqlimpl.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc)}, []error{veloxgql.ErrBadCursor}},
-		{"name cursor under the key", gqlimpl.Args{After: byName}, nil, []error{veloxgql.ErrBadCursor}},
-		{"another type's cursor", gqlimpl.Args{After: other}, name, []error{veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType}},
-		{"a value of another type", gqlimpl.Args{After: badValue}, name, []error{veloxgql.ErrBadCursor}},
-		{"a key of another type", gqlimpl.Args{After: badKey}, name, []error{veloxgql.ErrBadCursor}},
-		{"an invalid direction", gqlimpl.Args{}, []gqlimpl.OrderTerm[person]{nameTerm("UP")}, []error{veloxgql.ErrBadPagination}},
+		{"first and last", gqlgraph.Args{First: new(1), Last: new(1)}, name, []error{veloxgql.ErrBadPagination}},
+		{"first 101", gqlgraph.Args{First: new(101)}, name, []error{veloxgql.ErrPageTooLarge}},
+		{"last 101", gqlgraph.Args{Last: new(101)}, name, []error{veloxgql.ErrPageTooLarge}},
+		{"first -1", gqlgraph.Args{First: new(-1)}, name, []error{veloxgql.ErrBadPagination}},
+		{"last -1", gqlgraph.Args{Last: new(-1)}, name, []error{veloxgql.ErrBadPagination}},
+		{"after and before", gqlgraph.Args{After: byName, Before: byName}, name, []error{veloxgql.ErrBadPagination}},
+		{"first and before", gqlgraph.Args{First: new(1), Before: byName}, name, []error{veloxgql.ErrBadPagination}},
+		{"last and after", gqlgraph.Args{Last: new(1), After: byName}, name, []error{veloxgql.ErrBadPagination}},
+		{"name cursor under age", gqlgraph.Args{After: byName}, []gqlgraph.OrderTerm[person]{ageTerm(veloxgql.OrderDirectionAsc)}, []error{veloxgql.ErrBadCursor}},
+		{"name ASC cursor under name DESC", gqlgraph.Args{Before: byName}, []gqlgraph.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc)}, []error{veloxgql.ErrBadCursor}},
+		{"name cursor under the key", gqlgraph.Args{After: byName}, nil, []error{veloxgql.ErrBadCursor}},
+		{"another type's cursor", gqlgraph.Args{After: other}, name, []error{veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType}},
+		{"a value of another type", gqlgraph.Args{After: badValue}, name, []error{veloxgql.ErrBadCursor}},
+		{"a key of another type", gqlgraph.Args{After: badKey}, name, []error{veloxgql.ErrBadCursor}},
+		{"an invalid direction", gqlgraph.Args{}, []gqlgraph.OrderTerm[person]{nameTerm("UP")}, []error{veloxgql.ErrBadPagination}},
 	} {
-		_, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", c.args, c.order, personKey())
+		_, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", c.args, c.order, personKey())
 		for _, want := range c.want {
 			if !errors.Is(err, want) {
 				t.Errorf("%s: %v, want %v", c.name, err, want)
@@ -323,7 +323,7 @@ func TestPaginateRefuses(t *testing.T) {
 		}
 	}
 	// The zero direction is ASC, as the SDL's default.
-	p, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(2)}, []gqlimpl.OrderTerm[person]{nameTerm("")}, personKey())
+	p, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{First: new(2)}, []gqlgraph.OrderTerm[person]{nameTerm("")}, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{2, 4}) || p.Cursors[0].Terms[0].Direction != veloxgql.OrderDirectionAsc {
 		t.Errorf("the zero direction: %v %+v", err, p)
 	}
@@ -335,7 +335,7 @@ func TestConnectionIsLazy(t *testing.T) {
 	ctx := context.Background()
 	db, st := peopleDB(t)
 	q := db.Query[person]().Where(people.Name.NEQ("b"))
-	c, err := gqlimpl.NewConnectionOf(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
+	c, err := gqlgraph.NewConnectionOf(ctx, q, "Person", gqlgraph.Args{First: new(2)}, nil, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +351,7 @@ func TestConnectionIsLazy(t *testing.T) {
 	}
 	// Edges and PageInfo, called at once as gqlgen may: one page query.
 	var wg sync.WaitGroup
-	pages := make([]*gqlimpl.PageOf[person], 4)
+	pages := make([]*gqlgraph.PageOf[person], 4)
 	for i := range pages {
 		wg.Go(func() {
 			p, err := c.Page(ctx)
@@ -401,8 +401,8 @@ func TestPaginateUnderTheRowCap(t *testing.T) {
 	if _, err := db.Query[person]().Unbounded().All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
 		t.Fatalf("the cap: %v, want ErrTooManyRows", err)
 	}
-	for name, args := range map[string]gqlimpl.Args{"the default page": {}, "first 100": {First: new(100)}, "last 100": {Last: new(100)}} {
-		p, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", args, nil, personKey())
+	for name, args := range map[string]gqlgraph.Args{"the default page": {}, "first 100": {First: new(100)}, "last 100": {Last: new(100)}} {
+		p, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", args, nil, personKey())
 		if err != nil {
 			t.Errorf("%s under WithMaxRows(100): %v", name, err)
 			continue
@@ -418,21 +418,21 @@ func TestPaginateUnderTheRowCap(t *testing.T) {
 func TestPaginateOrderTerms(t *testing.T) {
 	ctx := context.Background()
 	db, st := peopleDB(t)
-	order := func(n int) []gqlimpl.OrderTerm[person] {
-		var o []gqlimpl.OrderTerm[person]
+	order := func(n int) []gqlgraph.OrderTerm[person] {
+		var o []gqlgraph.OrderTerm[person]
 		for range n {
 			o = append(o, nameTerm(veloxgql.OrderDirectionAsc))
 		}
 		return o
 	}
 	st.take()
-	if _, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{}, order(veloxgql.DefaultLimits().MaxOrderTerms+1), personKey()); !errors.Is(err, veloxgql.ErrBadPagination) {
+	if _, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{}, order(veloxgql.DefaultLimits().MaxOrderTerms+1), personKey()); !errors.Is(err, veloxgql.ErrBadPagination) {
 		t.Errorf("%d terms: %v, want ErrBadPagination", veloxgql.DefaultLimits().MaxOrderTerms+1, err)
 	}
 	if ran := st.take(); len(ran) > 0 {
 		t.Errorf("ran %v", ran)
 	}
-	if _, err := gqlimpl.PageWith(ctx, db.Query[person](), "Person", gqlimpl.Args{}, order(veloxgql.DefaultLimits().MaxOrderTerms), personKey()); err != nil {
+	if _, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{}, order(veloxgql.DefaultLimits().MaxOrderTerms), personKey()); err != nil {
 		t.Errorf("%d terms: %v", veloxgql.DefaultLimits().MaxOrderTerms, err)
 	}
 }
@@ -458,7 +458,7 @@ func TestConnectionWithoutExtension(t *testing.T) {
 		}
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	c, err := gqlimpl.NewConnectionOf(ctx, db.Query[person](), "Person", gqlimpl.Args{}, nil, personKey())
+	c, err := gqlgraph.NewConnectionOf(ctx, db.Query[person](), "Person", gqlgraph.Args{}, nil, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +466,7 @@ func TestConnectionWithoutExtension(t *testing.T) {
 	if err != nil || len(p.Rows) != 100 || !p.Info.HasNextPage {
 		t.Fatalf("NewConnection under context.Background(): %v, %d rows, %+v; want 100 and a next page", err, len(p.Rows), p.Info)
 	}
-	if _, err := gqlimpl.NewConnectionOf(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(101)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
+	if _, err := gqlgraph.NewConnectionOf(ctx, db.Query[person](), "Person", gqlgraph.Args{First: new(101)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("first 101 under context.Background(): %v, want ErrPageTooLarge", err)
 	}
 
@@ -478,7 +478,7 @@ func TestPaginateClearsOffset(t *testing.T) {
 	db, _ := peopleDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().Limit(1).Offset(3)
-	c, err := gqlimpl.NewConnectionOf(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
+	c, err := gqlgraph.NewConnectionOf(ctx, q, "Person", gqlgraph.Args{First: new(2)}, nil, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -499,8 +499,8 @@ func TestConnectionRefusesOrderedQuery(t *testing.T) {
 	db, st := peopleDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().OrderBy(people.Age.Asc())
-	c, err := gqlimpl.NewConnectionOf(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
-	want := "veloxgql: PaginatePersons: q has an OrderBy; the connection orders by its orderBy argument"
+	c, err := gqlgraph.NewConnectionOf(ctx, q, "Person", gqlgraph.Args{First: new(2)}, nil, personKey())
+	want := "veloxgql: NewPersonConnection: q has an OrderBy; the connection orders by its orderBy argument"
 	if c.Connection != nil || err == nil || err.Error() != want {
 		t.Fatalf("%v %v, want no connection and %q", c, err, want)
 	}
@@ -514,8 +514,8 @@ func TestConnectionRefusesOrderedQuery(t *testing.T) {
 }
 
 // ownerNameOrder orders children by their owner's name: a joined term.
-func ownerNameOrder(dir veloxgql.OrderDirection) []gqlimpl.OrderTerm[child] {
-	return []gqlimpl.OrderTerm[child]{gqlimpl.JoinedTermOf[child, owner]("OWNER_NAME", dir, int(children.Owner.I), int(owners.Name.I))}
+func ownerNameOrder(dir veloxgql.OrderDirection) []gqlgraph.OrderTerm[child] {
+	return []gqlgraph.OrderTerm[child]{gqlgraph.JoinedTermOf[child, owner]("OWNER_NAME", dir, int(children.Owner.I), int(owners.Name.I))}
 }
 
 // A joined term orders by the related row's column, pages by cursors that hold
@@ -523,9 +523,9 @@ func ownerNameOrder(dir veloxgql.OrderDirection) []gqlimpl.OrderTerm[child] {
 func TestJoinedTermPages(t *testing.T) {
 	db, _, _ := edgeDB(t)
 	ctx := context.Background()
-	page := func(args gqlimpl.Args, dir veloxgql.OrderDirection) (*gqlimpl.PageOf[child], int) {
+	page := func(args gqlgraph.Args, dir veloxgql.OrderDirection) (*gqlgraph.PageOf[child], int) {
 		t.Helper()
-		c, err := gqlimpl.NewConnectionOf(ctx, db.Query[child](), "Child", args, ownerNameOrder(dir), childKey())
+		c, err := gqlgraph.NewConnectionOf(ctx, db.Query[child](), "Child", args, ownerNameOrder(dir), childKey())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -542,17 +542,17 @@ func TestJoinedTermPages(t *testing.T) {
 	asc, desc := veloxgql.OrderDirectionAsc, veloxgql.OrderDirectionDesc
 
 	// Children 1-4 are owner a's, 5 and 6 owner b's; 7 has no owner.
-	all, n := page(gqlimpl.Args{}, asc)
+	all, n := page(gqlgraph.Args{}, asc)
 	if got := childIDs(all.Rows); !reflect.DeepEqual(got, []int64{1, 2, 3, 4, 5, 6}) || n != 6 {
 		t.Errorf("ascending: %v, totalCount %d", got, n)
 	}
-	if all, _ = page(gqlimpl.Args{}, desc); !reflect.DeepEqual(childIDs(all.Rows), []int64{5, 6, 1, 2, 3, 4}) {
+	if all, _ = page(gqlgraph.Args{}, desc); !reflect.DeepEqual(childIDs(all.Rows), []int64{5, 6, 1, 2, 3, 4}) {
 		t.Errorf("descending: %v", childIDs(all.Rows))
 	}
 
 	// Forward by twos, each page after the last cursor of the one before.
 	var got []int64
-	args := gqlimpl.Args{First: new(2)}
+	args := gqlgraph.Args{First: new(2)}
 	for range 4 {
 		p, _ := page(args, desc)
 		got = append(got, childIDs(p.Rows)...)
@@ -572,7 +572,7 @@ func TestJoinedTermPages(t *testing.T) {
 	}
 
 	// Backward from the end, through a cursor that crossed the wire as JSON.
-	last, _ := page(gqlimpl.Args{Last: new(2)}, asc)
+	last, _ := page(gqlgraph.Args{Last: new(2)}, asc)
 	if got := childIDs(last.Rows); !reflect.DeepEqual(got, []int64{5, 6}) || !last.Info.HasPreviousPage {
 		t.Errorf("last 2: %v %+v", got, last.Info)
 	}
@@ -584,13 +584,13 @@ func TestJoinedTermPages(t *testing.T) {
 	if err := wire.UnmarshalGQLContext(ctx, enc); err != nil {
 		t.Fatal(err)
 	}
-	if p, _ := page(gqlimpl.Args{Last: new(2), Before: &wire}, asc); !reflect.DeepEqual(childIDs(p.Rows), []int64{3, 4}) {
+	if p, _ := page(gqlgraph.Args{Last: new(2), Before: &wire}, asc); !reflect.DeepEqual(childIDs(p.Rows), []int64{3, 4}) {
 		t.Errorf("last 2 before 5: %v", childIDs(p.Rows))
 	}
 
 	// The same relation named by two terms is joined once.
-	two := append(ownerNameOrder(asc), gqlimpl.JoinedTermOf[child, owner]("OWNER_AGE", asc, int(children.Owner.I), int(owners.Age.I)))
-	c, err := gqlimpl.NewConnectionOf(ctx, db.Query[child](), "Child", gqlimpl.Args{}, two, childKey())
+	two := append(ownerNameOrder(asc), gqlgraph.JoinedTermOf[child, owner]("OWNER_AGE", asc, int(children.Owner.I), int(owners.Age.I)))
+	c, err := gqlgraph.NewConnectionOf(ctx, db.Query[child](), "Child", gqlgraph.Args{}, two, childKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -604,10 +604,10 @@ func TestJoinedTermPages(t *testing.T) {
 func TestJoinedTermInABatchedEdgeConnection(t *testing.T) {
 	db, _, log := edgeDB(t)
 	ctx := operation(t, db, childrenQuery)
-	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 	log.take("owners")
 	ectx := field(t, ctx, "owners", "edges", "node", "children")
-	args := gqlimpl.Args{First: new(2)}
+	args := gqlgraph.Args{First: new(2)}
 	order := ownerNameOrder(veloxgql.OrderDirectionDesc)
 	var loads, counts []string
 	for _, x := range xs {

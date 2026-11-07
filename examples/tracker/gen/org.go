@@ -95,9 +95,9 @@ func orgDescriptor() velox.Descriptor[Org] {
 }
 
 // String returns the entity's fields.
-func (x Org) String() string {
-	return fmt.Sprintf("Org(ID=%v, Slug=%v, Name=%v)", x.ID, x.Slug, x.Name)
+func (o Org) String() string {
+	return fmt.Sprintf("Org(ID=%v, Slug=%v, Name=%v)", o.ID, o.Slug, o.Name)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Org) GoString() string { return x.String() }
+func (o Org) GoString() string { return o.String() }

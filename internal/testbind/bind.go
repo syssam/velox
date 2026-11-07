@@ -284,19 +284,19 @@ func bindDescriptor() velox.Descriptor[Bind] {
 }
 
 // String returns the entity's fields.
-func (x Bind) String() string {
+func (b Bind) String() string {
 	return fmt.Sprintf("Bind("+
 		"ID=%v, Flag=%v, I8=%v, I16=%v, I32=%v, I64=%v, U8=%v, U16=%v, "+
 		"U32=%v, U64=%v, F32=%v, F64=%v, Str=%v, Short=%v, Body=%v, "+
 		"Kind=%v, Level=%v, Data=<%d bytes>, ShortData=<%d bytes>, "+
 		"At=%v, UID=%v, Tags=%v, Labels=%v, Counts=%v, Doc=%v, "+
 		"Note=%v)",
-		x.ID, x.Flag, x.I8, x.I16, x.I32, x.I64, x.U8, x.U16, x.U32,
-		x.U64, x.F32, x.F64, x.Str, x.Short, x.Body, x.Kind, x.Level,
-		len(x.Data), len(x.ShortData), x.At, x.UID, x.Tags, x.Labels,
-		x.Counts, x.Doc, velox.Show(x.Note),
+		b.ID, b.Flag, b.I8, b.I16, b.I32, b.I64, b.U8, b.U16, b.U32,
+		b.U64, b.F32, b.F64, b.Str, b.Short, b.Body, b.Kind, b.Level,
+		len(b.Data), len(b.ShortData), b.At, b.UID, b.Tags, b.Labels,
+		b.Counts, b.Doc, velox.Show(b.Note),
 	)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Bind) GoString() string { return x.String() }
+func (b Bind) GoString() string { return b.String() }

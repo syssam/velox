@@ -8,10 +8,10 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion17
+const _ = veloxgql.GeneratedCodeIsVersion18
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -23,22 +23,22 @@ func (*Tag) IsNode() {}
 
 // GlobalID is the global ID of the Tag, the GraphQL field id: its type and key,
 // opaque to the client.
-func (x *Tag) GlobalID() string { return veloxgql.EncodeID("Label", x.ID) }
+func (t *Tag) GlobalID() string { return veloxgql.EncodeID("Label", t.ID) }
 
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
-// queries batch with the edge of every row read with x.
-func (x *Tag) Posts(
+// queries batch with the edge of every row read with t.
+func (t *Tag) Posts(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	return paginatePosts(ctx, tagGQL.Edge(x, tagEdgePosts), after, first, before, last, orderBy, where)
+	return newPostConnection(ctx, tagType.Edge(t, tagEdgePosts), after, first, before, last, orderBy, where)
 }
 
 // LabelConnection is the GraphQL type LabelConnection. Its fields run their
 // queries when gqlgen resolves them.
 type LabelConnection struct {
-	c *gqlimpl.Connection
+	c *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
@@ -75,55 +75,48 @@ type LabelEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// PaginateLabels is the connection to the Label nodes q returns, filtered by
-// where, ordered by orderBy and then the key, and paged by the other arguments.
-// q must not be ordered, and must select the key and the order columns.
-func PaginateLabels(
+// NewLabelConnection is the connection to the Label nodes q returns, filtered
+// by where, ordered by orderBy and then the key, and paged by the other
+// arguments. q must not be ordered, and must select the key and the order
+// columns.
+func NewLabelConnection(
 	ctx context.Context, q velox.Query[Tag],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *LabelOrder, where *LabelWhereInput,
 ) (*LabelConnection, error) {
-	return paginateLabels(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
+	return newLabelConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
 }
 
-// paginateLabels is PaginateLabels of the nodes from leads to: a query's, or an
-// edge's, whose queries batch.
-func paginateLabels(
-	ctx context.Context, from gqlimpl.Source,
+// newLabelConnection is NewLabelConnection of the nodes from leads to: a
+// query's, or an edge's, whose queries batch.
+func newLabelConnection(
+	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *LabelOrder, where *LabelWhereInput,
 ) (*LabelConnection, error) {
-	args := gqlimpl.Args{After: after, First: first, Before: before, Last: last}
-	var order []gqlimpl.Order
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*LabelWhereInput).predicate)}
 	if o := orderBy; o != nil {
-		order = []gqlimpl.Order{{Field: string(o.Field), Direction: o.Direction}}
+		args.Order = []gqlgraph.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
-	if where != nil {
-		p, err := where.predicate(ctx)
-		if err != nil {
-			return nil, err
-		}
-		args.Where, args.Pred = where, p
-	}
-	c, err := gqlimpl.Paginate(ctx, from, &tagGQL, args, order)
+	c, err := gqlgraph.Paginate(ctx, from, &tagType, args)
 	if err != nil {
 		return nil, err
 	}
 	return &LabelConnection{c: c}, nil
 }
 
-// tagGQL describes the GraphQL type Label to gqlimpl.
-var tagGQL = gqlimpl.Type{
+// tagType describes the GraphQL type Label to gqlgraph.
+var tagType = gqlgraph.Type{
 	Name:  "Label",
 	Table: velox.TableOf[Tag],
-	Key:   []gqlimpl.Col{{Field: "id", Col: tagColID}},
-	Order: []gqlimpl.Col{
-		{Field: "NAME", Col: tagColName},
+	Key:   []gqlgraph.Column{{Name: "id", Index: tagColID}},
+	Order: []gqlgraph.Column{
+		{Name: "NAME", Index: tagColName},
 	},
-	Read:   []int{tagColID, tagColName},
-	Fields: []string{tagColID: "id", tagColName: "name", tagColRank: "rank"},
-	Edges:  []string{tagEdgePosts: "posts"},
-	Inputs: []string{tagColName: "name", tagColRank: "rank"},
+	AlwaysRead: []int{tagColID, tagColName},
+	Fields:     []string{tagColID: "id", tagColName: "name", tagColRank: "rank"},
+	Edges:      []string{tagEdgePosts: "posts"},
+	Inputs:     []string{tagColName: "name", tagColRank: "rank"},
 }
 
 // LabelOrder is the GraphQL input LabelOrder, an order of connections to Label.
@@ -157,7 +150,7 @@ func (o LabelOrderField) IsValid() bool {
 func (o LabelOrderField) String() string { return string(o) }
 
 // MarshalGQL writes o as a value of the GraphQL enum LabelOrderField.
-func (o LabelOrderField) MarshalGQL(w io.Writer) { gqlimpl.WriteString(w, string(o)) }
+func (o LabelOrderField) MarshalGQL(w io.Writer) { gqlgraph.WriteString(w, string(o)) }
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum LabelOrderField.
 func (o *LabelOrderField) UnmarshalGQL(v any) error {
@@ -165,7 +158,7 @@ func (o *LabelOrderField) UnmarshalGQL(v any) error {
 	case "NAME":
 		*o = LabelOrderFieldName
 	default:
-		return gqlimpl.InputErrorf("LabelOrderField must be NAME, not %v", v)
+		return gqlgraph.InputErrorf("LabelOrderField must be NAME, not %v", v)
 	}
 	return nil
 }
@@ -219,14 +212,14 @@ func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
 
 // predicate is Pred, untyped.
 func (w *LabelWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, &tagGQL)
+	f := gqlgraph.NewFilter(ctx, &tagType)
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not, (*LabelWhereInput).predicate)
-	gqlimpl.And(f, "and", w.And, (*LabelWhereInput).predicate)
-	gqlimpl.Or(f, "or", w.Or, (*LabelWhereInput).predicate)
-	gqlimpl.IDField[int64](f, "id", tagColID, gqlimpl.Ops[string]{
+	gqlgraph.Not(f, "not", w.Not, (*LabelWhereInput).predicate)
+	gqlgraph.And(f, "and", w.And, (*LabelWhereInput).predicate)
+	gqlgraph.Or(f, "or", w.Or, (*LabelWhereInput).predicate)
+	gqlgraph.IDField[int64](f, "id", tagColID, gqlgraph.Ops[string]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -236,7 +229,7 @@ func (w *LabelWhereInput) predicate(ctx context.Context) (velox.Predicate, error
 		LT:    w.IDLT,
 		LTE:   w.IDLTE,
 	})
-	gqlimpl.Field(f, "name", tagColName, gqlimpl.Ops[string]{
+	gqlgraph.Field(f, "name", tagColName, gqlgraph.Ops[string]{
 		EQ:        w.Name,
 		NEQ:       w.NameNEQ,
 		In:        w.NameIn,
@@ -245,7 +238,7 @@ func (w *LabelWhereInput) predicate(ctx context.Context) (velox.Predicate, error
 		HasPrefix: w.NameHasPrefix,
 		HasSuffix: w.NameHasSuffix,
 	})
-	gqlimpl.Field(f, "rank", tagColRank, gqlimpl.Ops[int8]{
+	gqlgraph.Field(f, "rank", tagColRank, gqlgraph.Ops[int8]{
 		EQ:    w.Rank,
 		NEQ:   w.RankNEQ,
 		In:    w.RankIn,
@@ -280,13 +273,13 @@ func (in *CreateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 	set = append(set, Tags.Name.Set(in.Name))
 	set = append(set, Tags.Rank.Set(in.Rank))
 	if len(in.PostIDs) > 0 {
-		postIDs, err := gqlimpl.DecodeIDs[int64]("CreateLabelInput.postIDs", in.PostIDs, "Post")
+		postIDs, err := gqlgraph.DecodeIDs[int64]("CreateLabelInput.postIDs", in.PostIDs, "Post")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Tags.Posts.Add(postIDs...))
 	}
-	return gqlimpl.Checked("CreateLabelInput", &tagGQL, set)
+	return gqlgraph.Validate("CreateLabelInput", &tagType, set)
 }
 
 // UpdateLabelInput is the GraphQL input UpdateLabelInput. A nil pointer or list
@@ -326,18 +319,18 @@ func (in *UpdateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 		set = append(set, Tags.Posts.Clear())
 	}
 	if len(in.RemovePostIDs) > 0 {
-		removePostIDs, err := gqlimpl.DecodeIDs[int64]("UpdateLabelInput.removePostIDs", in.RemovePostIDs, "Post")
+		removePostIDs, err := gqlgraph.DecodeIDs[int64]("UpdateLabelInput.removePostIDs", in.RemovePostIDs, "Post")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Tags.Posts.Remove(removePostIDs...))
 	}
 	if len(in.AddPostIDs) > 0 {
-		addPostIDs, err := gqlimpl.DecodeIDs[int64]("UpdateLabelInput.addPostIDs", in.AddPostIDs, "Post")
+		addPostIDs, err := gqlgraph.DecodeIDs[int64]("UpdateLabelInput.addPostIDs", in.AddPostIDs, "Post")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Tags.Posts.Add(addPostIDs...))
 	}
-	return gqlimpl.Checked("UpdateLabelInput", &tagGQL, set)
+	return gqlgraph.Validate("UpdateLabelInput", &tagType, set)
 }

@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // dial is a hand-written entity whose level is an int8, filtered by a
@@ -43,29 +43,29 @@ func dialDescriptor() velox.Descriptor[dial] {
 // the bound is taken.
 func TestOutOfRangeIsUserInput(t *testing.T) {
 	ctx := context.Background()
-	filter := func(o gqlimpl.Ops[int64]) error {
-		f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[dial]("Dial"))
-		gqlimpl.Field(f, "level", 1, o)
+	filter := func(o gqlgraph.Ops[int64]) error {
+		f := gqlgraph.NewFilter(ctx, gqlgraph.TableType[dial]("Dial"))
+		gqlgraph.Field(f, "level", 1, o)
 		_, err := f.Pred()
 		return err
 	}
 	for name, c := range map[string]struct {
 		field string
-		o     gqlimpl.Ops[int64]
+		o     gqlgraph.Ops[int64]
 	}{
-		"over":      {"level", gqlimpl.Ops[int64]{EQ: new(int64(128))}},
-		"under":     {"level", gqlimpl.Ops[int64]{EQ: new(int64(-129))}},
-		"in a list": {"levelIn", gqlimpl.Ops[int64]{In: []int64{1, 300}}},
+		"over":      {"level", gqlgraph.Ops[int64]{EQ: new(int64(128))}},
+		"under":     {"level", gqlgraph.Ops[int64]{EQ: new(int64(-129))}},
+		"in a list": {"levelIn", gqlgraph.Ops[int64]{In: []int64{1, 300}}},
 	} {
 		err := filter(c.o)
 		if codeOf(err) != "BAD_USER_INPUT" || !strings.Contains(err.Error(), "DialWhereInput."+c.field) {
 			t.Errorf("%s: %v (code %q), want BAD_USER_INPUT naming DialWhereInput.%s", name, err, codeOf(err), c.field)
 		}
 	}
-	if err := filter(gqlimpl.Ops[int64]{EQ: new(int64(127))}); err != nil {
+	if err := filter(gqlgraph.Ops[int64]{EQ: new(int64(127))}); err != nil {
 		t.Errorf("127: %v", err)
 	}
-	if err := filter(gqlimpl.Ops[int64]{EQ: new(int64(-128))}); err != nil {
+	if err := filter(gqlgraph.Ops[int64]{EQ: new(int64(-128))}); err != nil {
 		t.Errorf("-128: %v", err)
 	}
 }
@@ -76,14 +76,14 @@ func TestOutOfRangeIsUserInput(t *testing.T) {
 // nothing.
 func TestFirstWhereErrorStays(t *testing.T) {
 	ctx := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxFilterNodes: 1})).NewContext(context.Background())
-	f := gqlimpl.NewFilter(ctx, gqlimpl.TableType[dial]("Dial"))
-	gqlimpl.Field(f, "level", 1, gqlimpl.Ops[int64]{EQ: new(int64(300))})
+	f := gqlgraph.NewFilter(ctx, gqlgraph.TableType[dial]("Dial"))
+	gqlgraph.Field(f, "level", 1, gqlgraph.Ops[int64]{EQ: new(int64(300))})
 	if _, err := f.Pred(); err == nil || !strings.Contains(err.Error(), "out of the field's range") {
 		t.Errorf("out of range and over the budget: %v, want the range's error", err)
 	}
-	f = gqlimpl.NewFilter(context.Background(), gqlimpl.TableType[dial]("Dial"))
+	f = gqlgraph.NewFilter(context.Background(), gqlgraph.TableType[dial]("Dial"))
 	yes := true
-	gqlimpl.FKField[int64](f, "dialID", 0, 0, gqlimpl.TableType[dial]("Dial"), gqlimpl.Ops[string]{EQ: new("bad"), NotNil: &yes})
+	gqlgraph.EdgeIDField[int64](f, "dialID", 0, 0, gqlgraph.TableType[dial]("Dial"), gqlgraph.Ops[string]{EQ: new("bad"), NotNil: &yes})
 	if _, err := f.Pred(); err == nil || !strings.Contains(err.Error(), "DialWhereInput.dialID:") {
 		t.Errorf("a bad ID, then NotNil: %v, want the ID's error", err)
 	}

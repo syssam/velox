@@ -1,4 +1,4 @@
-package gqlimpl_test
+package gqlgraph_test
 
 import (
 	"bytes"
@@ -14,13 +14,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // expect converts the decoded cursor value v to the type of want.
 func expect[T comparable](t *testing.T, v any, want T) {
 	t.Helper()
-	got, err := gqlimpl.CursorValue[T](v)
+	got, err := gqlgraph.CursorValue[T](v)
 	if err != nil || got != want {
 		t.Errorf("CursorValue[%T](%#v) = %v, %v, want %v", want, v, got, err, want)
 	}
@@ -47,7 +47,7 @@ func TestCursorValues(t *testing.T) {
 	}
 	expect(t, v[0], "ann")
 	expect(t, v[1], big)
-	gotTime, err := gqlimpl.CursorValue[time.Time](v[2])
+	gotTime, err := gqlgraph.CursorValue[time.Time](v[2])
 	if err != nil || !gotTime.Equal(when) || gotTime.Nanosecond() != 123456789 {
 		t.Errorf("time = %v, %v, want %v", gotTime, err, when)
 	}
@@ -62,10 +62,10 @@ func TestCursorValues(t *testing.T) {
 	expect(t, v[6], uint64(math.MaxUint64))
 	expect(t, v[6], veloxgql.Uint64(math.MaxUint64))
 	expect(t, v[7], veloxgql.Time(when.UTC()))
-	if got, err := gqlimpl.CursorValue[[]byte](v[8]); err != nil || !bytes.Equal(got, []byte{0, 0xff}) {
+	if got, err := gqlgraph.CursorValue[[]byte](v[8]); err != nil || !bytes.Equal(got, []byte{0, 0xff}) {
 		t.Errorf("bytes = %v, %v", got, err)
 	}
-	if got, err := gqlimpl.CursorValue[veloxgql.Bytes](v[8]); err != nil || !bytes.Equal(got, []byte{0, 0xff}) {
+	if got, err := gqlgraph.CursorValue[veloxgql.Bytes](v[8]); err != nil || !bytes.Equal(got, []byte{0, 0xff}) {
 		t.Errorf("Bytes = %v, %v", got, err)
 	}
 	expect(t, d.Key, u)
@@ -83,7 +83,7 @@ func TestCursorValues(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := gqlimpl.CursorValue[float64](d.Terms[0].Value)
+		got, err := gqlgraph.CursorValue[float64](d.Terms[0].Value)
 		if err != nil || !(got == f || math.IsNaN(got) && math.IsNaN(f)) {
 			t.Errorf("float %v round-tripped to %v, %v", f, got, err)
 		}
@@ -94,18 +94,18 @@ func TestCursorValues(t *testing.T) {
 // ErrBadCursor, and a type that is not supported is another error.
 func TestCursorValueMismatch(t *testing.T) {
 	for name, f := range map[string]func() error{
-		"string as int64":   func() error { _, err := gqlimpl.CursorValue[int64]("ann"); return err },
-		"number as string":  func() error { _, err := gqlimpl.CursorValue[string](json.Number("1")); return err },
-		"fraction as int64": func() error { _, err := gqlimpl.CursorValue[int64](json.Number("1.5")); return err },
-		"int8 overflow":     func() error { _, err := gqlimpl.CursorValue[int8](json.Number("300")); return err },
-		"negative uint":     func() error { _, err := gqlimpl.CursorValue[uint64](json.Number("-1")); return err },
-		"string as time":    func() error { _, err := gqlimpl.CursorValue[time.Time]("yesterday"); return err },
-		"number as time":    func() error { _, err := gqlimpl.CursorValue[time.Time](json.Number("1")); return err },
-		"string as bool":    func() error { _, err := gqlimpl.CursorValue[bool]("true"); return err },
-		"bad UUID":          func() error { _, err := gqlimpl.CursorValue[uuid.UUID]("x"); return err },
-		"bad bare UUID":     func() error { _, err := gqlimpl.CursorValue[[16]byte]("x"); return err },
-		"null as int64":     func() error { _, err := gqlimpl.CursorValue[int64](nil); return err },
-		"string as float":   func() error { _, err := gqlimpl.CursorValue[float64]("1.5"); return err },
+		"string as int64":   func() error { _, err := gqlgraph.CursorValue[int64]("ann"); return err },
+		"number as string":  func() error { _, err := gqlgraph.CursorValue[string](json.Number("1")); return err },
+		"fraction as int64": func() error { _, err := gqlgraph.CursorValue[int64](json.Number("1.5")); return err },
+		"int8 overflow":     func() error { _, err := gqlgraph.CursorValue[int8](json.Number("300")); return err },
+		"negative uint":     func() error { _, err := gqlgraph.CursorValue[uint64](json.Number("-1")); return err },
+		"string as time":    func() error { _, err := gqlgraph.CursorValue[time.Time]("yesterday"); return err },
+		"number as time":    func() error { _, err := gqlgraph.CursorValue[time.Time](json.Number("1")); return err },
+		"string as bool":    func() error { _, err := gqlgraph.CursorValue[bool]("true"); return err },
+		"bad UUID":          func() error { _, err := gqlgraph.CursorValue[uuid.UUID]("x"); return err },
+		"bad bare UUID":     func() error { _, err := gqlgraph.CursorValue[[16]byte]("x"); return err },
+		"null as int64":     func() error { _, err := gqlgraph.CursorValue[int64](nil); return err },
+		"string as float":   func() error { _, err := gqlgraph.CursorValue[float64]("1.5"); return err },
 	} {
 		if err := f(); !errors.Is(err, veloxgql.ErrBadCursor) {
 			t.Errorf("%s: %v, want ErrBadCursor", name, err)
@@ -116,20 +116,20 @@ func TestCursorValueMismatch(t *testing.T) {
 		err  error
 		want string
 	}{
-		{func() error { _, err := gqlimpl.CursorValue[int64]("ann"); return err }(), "a value is not an int64"},
-		{func() error { _, err := gqlimpl.CursorValue[uint64](json.Number("-1")); return err }(), "a value is not a uint64"},
-		{func() error { _, err := gqlimpl.CursorValue[string](json.Number("1")); return err }(), "a value is not a string"},
+		{func() error { _, err := gqlgraph.CursorValue[int64]("ann"); return err }(), "a value is not an int64"},
+		{func() error { _, err := gqlgraph.CursorValue[uint64](json.Number("-1")); return err }(), "a value is not a uint64"},
+		{func() error { _, err := gqlgraph.CursorValue[string](json.Number("1")); return err }(), "a value is not a string"},
 	} {
 		if c.err == nil || !strings.HasSuffix(c.err.Error(), ": "+c.want) {
 			t.Errorf("%v, want it to end %q", c.err, c.want)
 		}
 	}
-	_, err := gqlimpl.CursorValue[struct{}]("x")
+	_, err := gqlgraph.CursorValue[struct{}]("x")
 	if err == nil || errors.Is(err, veloxgql.ErrBadCursor) {
 		t.Errorf("CursorValue[struct{}] = %v, want an unsupported-type error", err)
 	}
 	// An interface type is named, not printed as <nil>.
-	_, err = gqlimpl.CursorValue[io.Reader]("x")
+	_, err = gqlgraph.CursorValue[io.Reader]("x")
 	if err == nil || !strings.Contains(err.Error(), "io.Reader") {
 		t.Errorf("CursorValue[io.Reader] = %v, want an error naming io.Reader", err)
 	}
@@ -138,7 +138,7 @@ func TestCursorValueMismatch(t *testing.T) {
 // Review Focus 1 and 2: a cursor is refused on another type and under
 // another order, before any query runs.
 func TestCursorCheck(t *testing.T) {
-	name := gqlimpl.CursorOrder{Field: "NAME", Direction: veloxgql.OrderDirectionAsc}
+	name := gqlgraph.CursorOrder{Field: "NAME", Direction: veloxgql.OrderDirectionAsc}
 	c := veloxgql.Cursor{
 		Type:  "User",
 		Terms: []veloxgql.CursorTerm{{Field: "NAME", Direction: veloxgql.OrderDirectionAsc, Value: "ann"}},
@@ -148,11 +148,11 @@ func TestCursorCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := gqlimpl.CheckCursor(d, "User", []gqlimpl.CursorOrder{name}); err != nil {
+	if err := gqlgraph.CheckCursor(d, "User", []gqlgraph.CursorOrder{name}); err != nil {
 		t.Errorf("the cursor's own type and order: %v", err)
 	}
 	key := veloxgql.Cursor{Type: "User", Key: int64(1)}
-	if err := gqlimpl.CheckCursor(key, "User", nil); err != nil {
+	if err := gqlgraph.CheckCursor(key, "User", nil); err != nil {
 		t.Errorf("a key-only cursor under the key order: %v", err)
 	}
 
@@ -163,7 +163,7 @@ func TestCursorCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = gqlimpl.CheckCursor(d, "User", []gqlimpl.CursorOrder{name})
+	err = gqlgraph.CheckCursor(d, "User", []gqlgraph.CursorOrder{name})
 	if !errors.Is(err, veloxgql.ErrBadCursor) || !errors.Is(err, veloxgql.ErrWrongIDType) {
 		t.Errorf("a Post cursor on User: %v, want ErrBadCursor and ErrWrongIDType", err)
 	}
@@ -171,7 +171,7 @@ func TestCursorCheck(t *testing.T) {
 		t.Errorf("%q does not name only the expected type", err)
 	}
 
-	for label, order := range map[string][]gqlimpl.CursorOrder{
+	for label, order := range map[string][]gqlgraph.CursorOrder{
 		"NAME vs EMAIL":  {{Field: "EMAIL", Direction: veloxgql.OrderDirectionAsc}},
 		"ASC vs DESC":    {{Field: "NAME", Direction: veloxgql.OrderDirectionDesc}},
 		"fewer terms":    nil,
@@ -182,7 +182,7 @@ func TestCursorCheck(t *testing.T) {
 		if label == "terms reversed" {
 			cur.Terms = []veloxgql.CursorTerm{c.Terms[0], {Field: "AGE", Direction: veloxgql.OrderDirectionAsc, Value: 1}}
 		}
-		err := gqlimpl.CheckCursor(cur, "User", order)
+		err := gqlgraph.CheckCursor(cur, "User", order)
 		if !errors.Is(err, veloxgql.ErrBadCursor) || errors.Is(err, veloxgql.ErrWrongIDType) {
 			t.Errorf("%s: %v, want ErrBadCursor alone", label, err)
 		}

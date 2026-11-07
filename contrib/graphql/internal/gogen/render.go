@@ -2,7 +2,7 @@
 // gqlgen's autobind finds in the generated package, named after the SDL types
 // they bind to, and the methods and functions their fields resolve through.
 // It writes <label>_gql.go for each entity with a GraphQL type (its types,
-// its edge methods, its PaginateXs, and its mutation inputs
+// its edge methods, its NewXConnection, and its mutation inputs
 // with their method Setters, which input.go writes), and
 // node_gql.go with Node and Nodes.
 //
@@ -31,7 +31,7 @@ import (
 const (
 	veloxPath    = "github.com/syssam/velox"
 	veloxgqlPath = "github.com/syssam/velox/contrib/graphql/veloxgql"
-	gqlimplPath  = "github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	gqlgraphPath = "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
 // Render returns the Go files of m's GraphQL types, for the generated
@@ -188,7 +188,7 @@ func (f *file) use(path, name string) string {
 
 func (f *file) velox() string    { return f.use(veloxPath, "velox") }
 func (f *file) veloxgql() string { return f.use(veloxgqlPath, "veloxgql") }
-func (f *file) gqlimpl() string  { return f.use(gqlimplPath, "gqlimpl") }
+func (f *file) gqlgraph() string { return f.use(gqlgraphPath, "gqlgraph") }
 
 // finish is the file's Go source, gofmt'd: the package clause, the imports
 // in two groups (the standard library, then the rest), the version guard
@@ -229,7 +229,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion17\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion18\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -361,7 +361,7 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 func (r *renderer) writeNode(f *file, t *sdl.Type) error {
 	e := t.Entity
 	k := e.Fields[e.PrimaryKey[0]]
-	v := "x." + k.GoName
+	v := recv(e) + "." + k.GoName
 	if elem := cmp.Or(k.ElemType, t.Key); elem != t.Key {
 		if err := r.converts(e, k, t.Key); err != nil {
 			return err
@@ -377,23 +377,23 @@ func (r *renderer) writeNode(f *file, t *sdl.Type) error {
 	f.p("func (*%s) IsNode() {}", e.Name)
 	f.p("")
 	f.doc("", fmt.Sprintf("GlobalID is the global ID of the %s, the GraphQL field id: its type and key, opaque to the client.", e.Name))
-	f.p("func (x *%s) GlobalID() string { return %s.EncodeID(%q, %s) }", e.Name, f.veloxgql(), t.Name, v)
+	f.p("func (%s *%s) GlobalID() string { return %s.EncodeID(%q, %s) }", recv(e), e.Name, f.veloxgql(), t.Name, v)
 	f.p("")
 	return nil
 }
 
 // nodeKindFunc is the function of node_gql.go that returns the Node type an
 // ID's type names.
-const nodeKindFunc = "nodeType"
+const nodeKindFunc = "nodeKind"
 
 // nodeKind is the expression of what Node and Nodes need of the Node t to
-// look its nodes up, which gqlimpl.NewNode makes, as f names it.
+// look its nodes up, which gqlgraph.NewNode makes, as f names it.
 func (r *renderer) nodeKind(f *file, t *sdl.Type) (string, error) {
 	self, err := r.idKeyOf(f, t.Entity, t)
 	if err != nil {
 		return "", err
 	}
-	impl := f.gqlimpl()
+	impl := f.gqlgraph()
 	if self.conv != "" {
 		return fmt.Sprintf("%s.NewNode%s(&%s%s)", impl, strings.TrimSuffix(self.args, "]")+", "+self.typ+"]", typeVar(t), self.conv), nil
 	}
@@ -407,7 +407,7 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 	if err := r.declare(e.Name+"."+g.Method, "schema "+e.Name+", the getter of field "+e.Fields[g.Field].Name); err != nil {
 		return err
 	}
-	fd := e.Fields[g.Field]
+	fd, x := e.Fields[g.Field], recv(e)
 	ret, err := r.qualify(f, e, fd, g.Returns, g.Pkg)
 	if err != nil {
 		return err
@@ -419,8 +419,8 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 	}
 	if g.JSON() {
 		f.doc("", fmt.Sprintf("%s is the field %s as JSON, the GraphQL scalar it is: gqlgen binds the field to it.", g.Method, fd.Name))
-		f.p("func (x *%s) %s() (%s, error) {", e.Name, g.Method, ret)
-		f.p("	b, err := %s.Marshal(x.%s)", f.use("encoding/json", "json"), fd.GoName)
+		f.p("func (%s *%s) %s() (%s, error) {", x, e.Name, g.Method, ret)
+		f.p("	b, err := %s.Marshal(%s.%s)", f.use("encoding/json", "json"), x, fd.GoName)
 		f.p("	return %s(b), err", ret)
 		f.p("}")
 		f.p("")
@@ -430,29 +430,43 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 	if fd.Type == "bytes" && !fd.Nullable {
 		// Its column is NOT NULL, so nil is an empty blob, which gqlgen would
 		// refuse in a Bytes! as a null.
-		f.p("func (x *%s) %s() %s {", e.Name, g.Method, ret)
-		f.p("	if x.%s == nil {", fd.GoName)
+		f.p("func (%s *%s) %s() %s {", x, e.Name, g.Method, ret)
+		f.p("	if %s.%s == nil {", x, fd.GoName)
 		f.p("		return %s{}", ret)
 		f.p("	}")
-		f.p("	return %s(x.%s)", ret, fd.GoName)
+		f.p("	return %s(%s.%s)", ret, x, fd.GoName)
 		f.p("}")
 		f.p("")
 		return nil
 	}
 	if !fd.Pointer {
-		f.p("func (x *%s) %s() %s { return %s(x.%s) }", e.Name, g.Method, ret, ret, fd.GoName)
+		f.p("func (%s *%s) %s() %s { return %s(%s.%s) }", x, e.Name, g.Method, ret, ret, x, fd.GoName)
 		f.p("")
 		return nil
 	}
-	f.p("func (x *%s) %s() *%s {", e.Name, g.Method, ret)
-	f.p("	if x.%s == nil {", fd.GoName)
+	f.p("func (%s *%s) %s() *%s {", x, e.Name, g.Method, ret)
+	f.p("	if %s.%s == nil {", x, fd.GoName)
 	f.p("		return nil")
 	f.p("	}")
-	f.p("	v := %s(*x.%s)", ret, fd.GoName)
+	f.p("	v := %s(*%s.%s)", ret, x, fd.GoName)
 	f.p("	return &v")
 	f.p("}")
 	f.p("")
 	return nil
+}
+
+// recv is the receiver of e's methods: the first letter of e's name in lower
+// case, as Go names a receiver, or its first two when the methods' bodies
+// declare the letter (v, n, b).
+func recv(e *plugin.Entity) string {
+	r := strings.ToLower(e.Name[:1])
+	if r == "v" || r == "n" || r == "b" {
+		if len(e.Name) > 1 {
+			return strings.ToLower(e.Name[:2])
+		}
+		return r + r
+	}
+	return r
 }
 
 // locals are the names the generated code declares inside its functions,
@@ -463,9 +477,11 @@ var locals = map[string]bool{
 	"ctx": true, "id": true, "ids": true, "typ": true, "err": true, "k": true, "db": true, "x": true, "input": true, "in": true,
 	"rows": true, "by": true, "u": true, "key": true, "set": true, "i": true, "j": true, "out": true, "c": true, "n": true, "e": true,
 	"s": true, "b": true, "w": true, "v": true, "o": true, "f": true, "q": true, "ok": true, "fields": true, "cols": true, "batch": true,
-	"context": true, "json": true, "errors": true, "fmt": true, "io": true, "velox": true, "veloxgql": true, "gqlimpl": true,
+	"context": true, "json": true, "errors": true, "fmt": true, "io": true, "velox": true, "veloxgql": true, "gqlgraph": true,
 	"any": true, "bool": true, "string": true, "int": true, "len": true, "make": true, "append": true,
 	"nil": true, "error": true, "true": true, "false": true,
+	// Every letter, for a receiver (recv).
+	"a": true, "d": true, "g": true, "h": true, "l": true, "m": true, "p": true, "r": true, "t": true, "y": true, "z": true,
 }
 
 // localSuffixes end the locals the generated code names after an input field:
@@ -535,7 +551,7 @@ func (r *renderer) qualify(f *file, e *plugin.Entity, fd *plugin.Field, typ, pkg
 	if prev, ok := f.imports[pkg]; ok {
 		return prev + "." + name, nil
 	}
-	if (locals[q] || indexedLocal(q)) && pkg != veloxPath && pkg != veloxgqlPath && pkg != gqlimplPath && !slices.Contains([]string{"context", "encoding/json", "errors", "fmt", "io"}, pkg) {
+	if (locals[q] || indexedLocal(q)) && pkg != veloxPath && pkg != veloxgqlPath && pkg != gqlgraphPath && !slices.Contains([]string{"context", "encoding/json", "errors", "fmt", "io"}, pkg) {
 		q += "pkg"
 	}
 	return f.use(pkg, q) + "." + name, nil
@@ -579,7 +595,7 @@ func (r *renderer) writeEnum(f *file, t *sdl.Type, en sdl.Enum) error {
 		f.p("\t\t_, _ = %s.WriteString(w, %s)", io, jsonLiteral(gql[i]))
 	}
 	f.p("\tdefault: // not a value of the enum")
-	f.p("\t\t%s.WriteString(w, string(e))", f.gqlimpl())
+	f.p("\t\t%s.WriteString(w, string(e))", f.gqlgraph())
 	f.p("\t}")
 	f.p("}")
 	f.p("")
@@ -595,7 +611,7 @@ func (r *renderer) writeEnum(f *file, t *sdl.Type, en sdl.Enum) error {
 		f.p("\t\t*e = %s", c)
 	}
 	f.p("\tdefault:")
-	f.p("\t\treturn %s.InputErrorf(%q, v)", f.gqlimpl(), strings.ReplaceAll(typ+" must be "+orList(gql), "%", "%%")+", not %v")
+	f.p("\t\treturn %s.InputErrorf(%q, v)", f.gqlgraph(), strings.ReplaceAll(typ+" must be "+orList(gql), "%", "%%")+", not %v")
 	f.p("\t}")
 	f.p("\treturn nil")
 	f.p("}")
@@ -667,7 +683,7 @@ func (r *renderer) writeOrder(f *file, t *sdl.Type) error {
 	f.p("func (o %sOrderField) String() string { return string(o) }", n)
 	f.p("")
 	f.p("// MarshalGQL writes o as a value of the GraphQL enum %sOrderField.", n)
-	f.p("func (o %sOrderField) MarshalGQL(w %s.Writer) { %s.WriteString(w, string(o)) }", n, f.use("io", "io"), f.gqlimpl())
+	f.p("func (o %sOrderField) MarshalGQL(w %s.Writer) { %s.WriteString(w, string(o)) }", n, f.use("io", "io"), f.gqlgraph())
 	f.p("")
 	f.p("// UnmarshalGQL sets o from v, a value of the GraphQL enum %sOrderField.", n)
 	f.p("func (o *%sOrderField) UnmarshalGQL(v any) error {", n)
@@ -678,7 +694,7 @@ func (r *renderer) writeOrder(f *file, t *sdl.Type) error {
 		f.p("\t\t*o = %sOrderField%s%s", n, via, fd.GoName)
 	}
 	f.p("\tdefault:")
-	f.p("\t\treturn %s.InputErrorf(%q, v)", f.gqlimpl(), strings.ReplaceAll(n+"OrderField must be "+orList(values), "%", "%%")+", not %v")
+	f.p("\t\treturn %s.InputErrorf(%q, v)", f.gqlgraph(), strings.ReplaceAll(n+"OrderField must be "+orList(values), "%", "%%")+", not %v")
 	f.p("\t}")
 	f.p("\treturn nil")
 	f.p("}")
@@ -771,7 +787,7 @@ func (r *renderer) whereType(f *file, t *sdl.Type, w sdl.WhereField) (string, er
 }
 
 // nodeFile is node_gql.go: Node and Nodes, which look up the nodes of the
-// Node types by their IDs. The lookups are gqlimpl's; this file names the
+// Node types by their IDs. The lookups are gqlgraph's; this file names the
 // Node type an ID's type leads to, and what the lookups need of it
 // (nodeKind).
 func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
@@ -781,7 +797,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		}
 	}
 	f := newFile()
-	ctx, vgql, impl := f.use("context", "context"), f.veloxgql(), f.gqlimpl()
+	ctx, vgql, impl := f.use("context", "context"), f.veloxgql(), f.gqlgraph()
 
 	f.doc("", "Node returns the node with the global ID id, or nil when no row has its key. It reads only the columns the selection needs.")
 	f.p("func Node(ctx %s.Context, id string) (%s.Noder, error) {", ctx, vgql)

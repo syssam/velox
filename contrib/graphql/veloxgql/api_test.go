@@ -13,7 +13,7 @@ import (
 
 // publicAPI is the exported API of package veloxgql, sorted. Every change to
 // the API edits this list: a name that generated code alone calls lives in
-// package gqlimpl.
+// package gqlgraph.
 var publicAPI = []string{
 	"Batch",
 	"Bytes",
@@ -62,7 +62,7 @@ var publicAPI = []string{
 	"Extension.MutateOperationParameters",
 	"Extension.NewContext",
 	"Extension.Validate",
-	"GeneratedCodeIsVersion17",
+	"GeneratedCodeIsVersion18",
 	"IDType",
 	"JSON",
 	"JSON.MarshalGQL",
@@ -169,7 +169,7 @@ func exportedNames(t *testing.T, dir string) []string {
 }
 
 // TestPublicAPI pins the exported API of package veloxgql. Whatever only
-// generated code calls is in package gqlimpl.
+// generated code calls is in package gqlgraph.
 func TestPublicAPI(t *testing.T) {
 	got := exportedNames(t, ".")
 	want := slices.Sorted(slices.Values(publicAPI))
@@ -187,29 +187,29 @@ func TestPublicAPI(t *testing.T) {
 	}
 }
 
-// TestGqlimplIsForGeneratedCode: package gqlimpl says it is for generated
+// TestGqlgraphIsForGeneratedCode: package gqlgraph says it is for generated
 // code, and what guards the pair; the version constant says so too, just
 // after its first sentence.
-func TestGqlimplIsForGeneratedCode(t *testing.T) {
-	d := parseDoc(t, "gqlimpl", "github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl")
-	if !strings.HasPrefix(d.Doc, "Package gqlimpl is for generated code.") {
-		t.Errorf("gqlimpl's doc starts %q", firstLine(d.Doc))
+func TestGqlgraphIsForGeneratedCode(t *testing.T) {
+	d := parseDoc(t, "gqlgraph", "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph")
+	if !strings.HasPrefix(d.Doc, "Package gqlgraph is for generated code.") {
+		t.Errorf("gqlgraph's doc starts %q", firstLine(d.Doc))
 	}
-	if !strings.Contains(d.Doc, "veloxgql.GeneratedCodeIsVersion17") {
-		t.Error("gqlimpl's doc does not name veloxgql.GeneratedCodeIsVersion17")
+	if !strings.Contains(d.Doc, "veloxgql.GeneratedCodeIsVersion18") {
+		t.Error("gqlgraph's doc does not name veloxgql.GeneratedCodeIsVersion18")
 	}
 
 	found := false
 	for _, v := range parseDoc(t, ".", "github.com/syssam/velox/contrib/graphql/veloxgql").Consts {
-		if slices.Contains(v.Names, "GeneratedCodeIsVersion17") {
+		if slices.Contains(v.Names, "GeneratedCodeIsVersion18") {
 			found = true
 			if _, rest, ok := strings.Cut(strings.Join(strings.Fields(v.Doc), " "), ". "); !ok || !strings.HasPrefix(rest, "For generated code.") {
-				t.Errorf("GeneratedCodeIsVersion17's doc %q does not say %q after its first sentence", firstLine(v.Doc), "For generated code.")
+				t.Errorf("GeneratedCodeIsVersion18's doc %q does not say %q after its first sentence", firstLine(v.Doc), "For generated code.")
 			}
 		}
 	}
 	if !found {
-		t.Error("veloxgql has no GeneratedCodeIsVersion17")
+		t.Error("veloxgql has no GeneratedCodeIsVersion18")
 	}
 }
 

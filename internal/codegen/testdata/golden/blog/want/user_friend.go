@@ -64,9 +64,9 @@ func userFriendDescriptor() velox.Descriptor[UserFriend] {
 }
 
 // String returns the entity's fields.
-func (x UserFriend) String() string {
-	return fmt.Sprintf("UserFriend(UserID=%v, FriendID=%v)", x.UserID, x.FriendID)
+func (u UserFriend) String() string {
+	return fmt.Sprintf("UserFriend(UserID=%v, FriendID=%v)", u.UserID, u.FriendID)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x UserFriend) GoString() string { return x.String() }
+func (u UserFriend) GoString() string { return u.String() }

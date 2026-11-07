@@ -110,9 +110,9 @@ func categoryDescriptor() velox.Descriptor[Category] {
 }
 
 // String returns the entity's fields except the sensitive ones and the foreign keys velox added.
-func (x Category) String() string {
-	return fmt.Sprintf("Category(ID=%v, Title=%v)", x.ID, x.Title)
+func (c Category) String() string {
+	return fmt.Sprintf("Category(ID=%v, Title=%v)", c.ID, c.Title)
 }
 
 // GoString is String, so that %#v does not print them either.
-func (x Category) GoString() string { return x.String() }
+func (c Category) GoString() string { return c.String() }

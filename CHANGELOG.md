@@ -164,6 +164,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-graphql: a type's connection is `gen.NewPostConnection(ctx, q, …)`, which
+  was `gen.PaginatePosts`; it sends nothing until gqlgen resolves its fields. The
+  package generated code imports is `veloxgql/gqlgraph`, which was
+  `veloxgql/gqlimpl`. Generated receivers are named after their type, `p *Post`.
+  Regenerate: `veloxgql.GeneratedCodeIsVersion18` replaces Version17 (ADR 0049).
 - **Breaking.** velox-graphql's edge methods are one line: a connection edge
   calls the target's unexported `paginate<Plural>(ctx, from, …)` with
   `postGQL.Edge(x, postEdgeTags)`, and `Paginate<Plural>` calls it with

@@ -31,7 +31,7 @@ var (
 	// LimitsFromContext(ctx).
 	ErrPageTooLarge = errors.New("page is over the maximum")
 	// ErrBadPagination: first or last below 0, both given, another
-	// combination gqlimpl.Args refuses, or an orderBy over the MaxOrderTerms
+	// combination gqlgraph.Args refuses, or an orderBy over the MaxOrderTerms
 	// of LimitsFromContext(ctx).
 	ErrBadPagination = errors.New("bad pagination arguments")
 	// ErrFilterTooDeep: a where input nested deeper than the MaxFilterDepth

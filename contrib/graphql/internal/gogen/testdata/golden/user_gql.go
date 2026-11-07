@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion17
+const _ = veloxgql.GeneratedCodeIsVersion18
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -25,12 +25,12 @@ func (*User) IsNode() {}
 
 // GlobalID is the global ID of the User, the GraphQL field id: its type and
 // key, opaque to the client.
-func (x *User) GlobalID() string { return veloxgql.EncodeID("Account", x.ID) }
+func (u *User) GlobalID() string { return veloxgql.EncodeID("Account", u.ID) }
 
 // SettingsGQL is the field settings as JSON, the GraphQL scalar it is: gqlgen
 // binds the field to it.
-func (x *User) SettingsGQL() (veloxgql.JSON, error) {
-	b, err := json.Marshal(x.Settings)
+func (u *User) SettingsGQL() (veloxgql.JSON, error) {
+	b, err := json.Marshal(u.Settings)
 	return veloxgql.JSON(b), err
 }
 
@@ -44,7 +44,7 @@ func (e UserRole) MarshalGQL(w io.Writer) {
 	case UserRoleViewer:
 		_, _ = io.WriteString(w, `"VIEWER"`)
 	default: // not a value of the enum
-		gqlimpl.WriteString(w, string(e))
+		gqlgraph.WriteString(w, string(e))
 	}
 }
 
@@ -58,43 +58,43 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 	case "VIEWER":
 		*e = UserRoleViewer
 	default:
-		return gqlimpl.InputErrorf("UserRole must be ADMIN, EDITOR or VIEWER, not %v", v)
+		return gqlgraph.InputErrorf("UserRole must be ADMIN, EDITOR or VIEWER, not %v", v)
 	}
 	return nil
 }
 
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
-// queries batch with the edge of every row read with x.
-func (x *User) Posts(
+// queries batch with the edge of every row read with u.
+func (u *User) Posts(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	return paginatePosts(ctx, userGQL.Edge(x, userEdgePosts), after, first, before, last, orderBy, where)
+	return newPostConnection(ctx, userType.Edge(u, userEdgePosts), after, first, before, last, orderBy, where)
 }
 
 // Groups is the edge groups: the Group nodes it leads to, in key order. It is
-// read in one query with the edge of every row read with x, and fails on more
+// read in one query with the edge of every row read with u, and fails on more
 // than MaxList nodes.
-func (x *User) Groups(ctx context.Context) ([]*Group, error) {
-	v, err := gqlimpl.EdgeList(ctx, &groupGQL, userGQL.Edge(x, userEdgeGroups), 0)
+func (u *User) Groups(ctx context.Context) ([]*Group, error) {
+	v, err := gqlgraph.EdgeList(ctx, &groupType, userType.Edge(u, userEdgeGroups), 0)
 	n, _ := v.([]*Group)
 	return n, err
 }
 
 // Likes is the edge likes: a connection to the Like nodes it leads to. Its
-// queries batch with the edge of every row read with x.
-func (x *User) Likes(
+// queries batch with the edge of every row read with u.
+func (u *User) Likes(
 	ctx context.Context,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 ) (*LikeConnection, error) {
-	return paginateLikes(ctx, userGQL.Edge(x, userEdgeLikes), after, first, before, last)
+	return newLikeConnection(ctx, userType.Edge(u, userEdgeLikes), after, first, before, last)
 }
 
 // AccountConnection is the GraphQL type AccountConnection. Its fields run their
 // queries when gqlgen resolves them.
 type AccountConnection struct {
-	c *gqlimpl.Connection
+	c *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
@@ -131,45 +131,38 @@ type AccountEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// PaginateAccounts is the connection to the Account nodes q returns, filtered
-// by where, ordered by the key, and paged by the other arguments. q must not be
-// ordered, and must select the key.
-func PaginateAccounts(
+// NewAccountConnection is the connection to the Account nodes q returns,
+// filtered by where, ordered by the key, and paged by the other arguments. q
+// must not be ordered, and must select the key.
+func NewAccountConnection(
 	ctx context.Context, q velox.Query[User],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *AccountWhereInput,
 ) (*AccountConnection, error) {
-	return paginateAccounts(ctx, gqlimpl.Query(velox.Untyped(q)), after, first, before, last, where)
+	return newAccountConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, where)
 }
 
-// paginateAccounts is PaginateAccounts of the nodes from leads to: a query's,
-// or an edge's, whose queries batch.
-func paginateAccounts(
-	ctx context.Context, from gqlimpl.Source,
+// newAccountConnection is NewAccountConnection of the nodes from leads to: a
+// query's, or an edge's, whose queries batch.
+func newAccountConnection(
+	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *AccountWhereInput,
 ) (*AccountConnection, error) {
-	args := gqlimpl.Args{After: after, First: first, Before: before, Last: last}
-	if where != nil {
-		p, err := where.predicate(ctx)
-		if err != nil {
-			return nil, err
-		}
-		args.Where, args.Pred = where, p
-	}
-	c, err := gqlimpl.Paginate(ctx, from, &userGQL, args, nil)
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*AccountWhereInput).predicate)}
+	c, err := gqlgraph.Paginate(ctx, from, &userType, args)
 	if err != nil {
 		return nil, err
 	}
 	return &AccountConnection{c: c}, nil
 }
 
-// userGQL describes the GraphQL type Account to gqlimpl.
-var userGQL = gqlimpl.Type{
-	Name:  "Account",
-	Table: velox.TableOf[User],
-	Key:   []gqlimpl.Col{{Field: "id", Col: userColID}},
-	Read:  []int{userColID, userColUserBestFriend},
+// userType describes the GraphQL type Account to gqlgraph.
+var userType = gqlgraph.Type{
+	Name:       "Account",
+	Table:      velox.TableOf[User],
+	Key:        []gqlgraph.Column{{Name: "id", Index: userColID}},
+	AlwaysRead: []int{userColID, userColUserBestFriend},
 	Fields: []string{
 		userColID:         "id",
 		userColCreatedAt:  "createdAt",
@@ -255,14 +248,14 @@ func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) 
 
 // predicate is Pred, untyped.
 func (w *AccountWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, &userGQL)
+	f := gqlgraph.NewFilter(ctx, &userType)
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not, (*AccountWhereInput).predicate)
-	gqlimpl.And(f, "and", w.And, (*AccountWhereInput).predicate)
-	gqlimpl.Or(f, "or", w.Or, (*AccountWhereInput).predicate)
-	gqlimpl.IDField[int64](f, "id", userColID, gqlimpl.Ops[string]{
+	gqlgraph.Not(f, "not", w.Not, (*AccountWhereInput).predicate)
+	gqlgraph.And(f, "and", w.And, (*AccountWhereInput).predicate)
+	gqlgraph.Or(f, "or", w.Or, (*AccountWhereInput).predicate)
+	gqlgraph.IDField[int64](f, "id", userColID, gqlgraph.Ops[string]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -272,7 +265,7 @@ func (w *AccountWhereInput) predicate(ctx context.Context) (velox.Predicate, err
 		LT:    w.IDLT,
 		LTE:   w.IDLTE,
 	})
-	gqlimpl.Field(f, "displayName", userColName, gqlimpl.Ops[string]{
+	gqlgraph.Field(f, "displayName", userColName, gqlgraph.Ops[string]{
 		EQ:        w.DisplayName,
 		NEQ:       w.DisplayNameNEQ,
 		In:        w.DisplayNameIn,
@@ -281,8 +274,8 @@ func (w *AccountWhereInput) predicate(ctx context.Context) (velox.Predicate, err
 		HasPrefix: w.DisplayNameHasPrefix,
 		HasSuffix: w.DisplayNameHasSuffix,
 	})
-	gqlimpl.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
-	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
+	gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
+	gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
 	return f.Pred()
 }
 
@@ -318,14 +311,14 @@ func (in CreateAccountInput) String() string {
 		"Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v, "+
 		"ExternalID=%v, Avatar=%v, Quota=%v, Active=%v, Settings=%v, "+
 		"MembershipIDs=%v, BestFriendID=%v)",
-		gqlimpl.Show(in.CreatedAt), gqlimpl.Show(in.UpdatedAt),
-		in.DisplayName, in.Email, gqlimpl.Show(in.Role),
-		gqlimpl.Show(in.Nickname), gqlimpl.Show(in.Bio),
-		gqlimpl.Show(in.Age), gqlimpl.Show(in.Score),
-		gqlimpl.Show(in.ExternalID), gqlimpl.Show(in.Avatar),
-		in.Quota, gqlimpl.Show(in.Active),
-		gqlimpl.ShowJSON(in.Settings), in.MembershipIDs,
-		gqlimpl.Show(in.BestFriendID),
+		gqlgraph.Show(in.CreatedAt), gqlgraph.Show(in.UpdatedAt),
+		in.DisplayName, in.Email, gqlgraph.Show(in.Role),
+		gqlgraph.Show(in.Nickname), gqlgraph.Show(in.Bio),
+		gqlgraph.Show(in.Age), gqlgraph.Show(in.Score),
+		gqlgraph.Show(in.ExternalID), gqlgraph.Show(in.Avatar),
+		in.Quota, gqlgraph.Show(in.Active),
+		gqlgraph.ShowJSON(in.Settings), in.MembershipIDs,
+		gqlgraph.Show(in.BestFriendID),
 	)
 }
 
@@ -341,13 +334,13 @@ func (in CreateAccountInput) GoString() string { return in.String() }
 func (in *CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]
 	if v := in.CreatedAt; v != nil {
-		if err := gqlimpl.NotZero("CreateAccountInput.createdAt", *v); err != nil {
+		if err := gqlgraph.NotZero("CreateAccountInput.createdAt", *v); err != nil {
 			return nil, err
 		}
 		set = append(set, Users.CreatedAt.Set(*v))
 	}
 	if v := in.UpdatedAt; v != nil {
-		if err := gqlimpl.NotZero("CreateAccountInput.updatedAt", *v); err != nil {
+		if err := gqlgraph.NotZero("CreateAccountInput.updatedAt", *v); err != nil {
 			return nil, err
 		}
 		set = append(set, Users.UpdatedAt.Set(*v))
@@ -371,7 +364,7 @@ func (in *CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 		set = append(set, Users.Score.Set(*v))
 	}
 	if v := in.ExternalID; v != nil {
-		if err := gqlimpl.NotZero("CreateAccountInput.externalID", *v); err != nil {
+		if err := gqlgraph.NotZero("CreateAccountInput.externalID", *v); err != nil {
 			return nil, err
 		}
 		set = append(set, Users.ExternalID.Set(*v))
@@ -384,25 +377,25 @@ func (in *CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 		set = append(set, Users.Active.Set(*v))
 	}
 	if v := in.Settings; v != nil {
-		settings, err := gqlimpl.FromJSON[map[string]any]("CreateAccountInput.settings", *v)
+		settings, err := gqlgraph.FromJSON[map[string]any]("CreateAccountInput.settings", *v)
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Users.Settings.Set(settings))
 	}
 	if len(in.MembershipIDs) > 0 {
-		membershipIDs, err := gqlimpl.DecodeIDs[int64]("CreateAccountInput.membershipIDs", in.MembershipIDs, "Group")
+		membershipIDs, err := gqlgraph.DecodeIDs[int64]("CreateAccountInput.membershipIDs", in.MembershipIDs, "Group")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Users.Groups.Add(membershipIDs...))
 	}
 	if v := in.BestFriendID; v != nil {
-		bestFriendID, err := gqlimpl.DecodeID[int64]("CreateAccountInput.bestFriendID", *v, "Account")
+		bestFriendID, err := gqlgraph.DecodeID[int64]("CreateAccountInput.bestFriendID", *v, "Account")
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Users.BestFriend.Set(bestFriendID))
 	}
-	return gqlimpl.Checked("CreateAccountInput", &userGQL, set)
+	return gqlgraph.Validate("CreateAccountInput", &userType, set)
 }

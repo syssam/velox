@@ -71,9 +71,9 @@ func memoDescriptor() velox.Descriptor[Memo] {
 }
 
 // String returns the entity's fields.
-func (x Memo) String() string {
-	return fmt.Sprintf("Memo(ID=%v, OrgID=%v, Text=%v)", x.ID, x.OrgID, x.Text)
+func (m Memo) String() string {
+	return fmt.Sprintf("Memo(ID=%v, OrgID=%v, Text=%v)", m.ID, m.OrgID, m.Text)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Memo) GoString() string { return x.String() }
+func (m Memo) GoString() string { return m.String() }

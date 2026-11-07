@@ -226,7 +226,7 @@ func TestExportedMethodsHaveDocs(t *testing.T) {
 	add("schema", true)
 	add("contrib/graphql", false)
 	add("contrib/graphql/veloxgql", false)
-	add("contrib/graphql/veloxgql/gqlimpl", false)
+	add("contrib/graphql/veloxgql/gqlgraph", false)
 	add("contrib/veloxotel", false)
 	if len(files) < 80 {
 		t.Fatalf("scanned only %d files: %v", len(files), files)

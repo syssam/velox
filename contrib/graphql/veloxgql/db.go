@@ -36,7 +36,7 @@ func DBFromContext(ctx context.Context) (*velox.DB, error) {
 
 // DB returns the DB the extension put in ctx, for a resolver:
 //
-//	return gen.PaginatePosts(ctx, veloxgql.DB(ctx).Query[gen.Post](), after, first, before, last, orderBy, where)
+//	return gen.NewPostConnection(ctx, veloxgql.DB(ctx).Query[gen.Post](), after, first, before, last, orderBy, where)
 //
 // It panics where DBFromContext fails, with DBFromContext's error: only a
 // schema served without veloxgql.NewExtension has no DB, a mistake in the

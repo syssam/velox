@@ -18,7 +18,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/mixin"
@@ -184,7 +184,7 @@ func batchDB(t *testing.T) (*velox.DB, *txLog) {
 
 // batchServer serves batchSDL on db. keepers passes its rows to
 // veloxgql.Batch, and loose does not; a keeper's pets is
-// gqlimpl.EdgeConnection, as the generated code's edges are, and orgPets
+// gqlgraph.EdgeConnection, as the generated code's edges are, and orgPets
 // too under an org of its own, as a directive could set, and viewerPets
 // under a viewer of its own. The keepers subscription's events each read
 // the keepers, and call seen, if set, with the event's context and its rows.
@@ -220,13 +220,13 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			return out, nil
 		}
 	}
-	key := &gqlimpl.Type{Name: "Pet", Table: velox.TableOf[pet], Key: []gqlimpl.Col{{Field: "id", Col: int(pets.ID.I)}}}
+	key := &gqlgraph.Type{Name: "Pet", Table: velox.TableOf[pet], Key: []gqlgraph.Column{{Name: "id", Index: int(pets.ID.I)}}}
 	petConn := func(field string) resolver {
 		edges := make([]string, keepers.Pets.I+1)
 		edges[keepers.Pets.I] = strings.TrimPrefix(field, "Keeper.")
-		owner := &gqlimpl.Type{Name: "Keeper", Table: velox.TableOf[keeper], Edges: edges}
+		owner := &gqlgraph.Type{Name: "Keeper", Table: velox.TableOf[keeper], Edges: edges}
 		return func(ctx context.Context, _ map[string]any) (any, error) {
-			return gqlimpl.Paginate(ctx, owner.Edge(parent(ctx), int(keepers.Pets.I)), key, gqlimpl.Args{}, nil)
+			return gqlgraph.Paginate(ctx, owner.Edge(parent(ctx), int(keepers.Pets.I)), key, gqlgraph.Args{})
 		}
 	}
 	return serveSchema(testSchemaOf(batchSDL, map[string]resolver{
@@ -252,10 +252,10 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			return petConn("Keeper.viewerPets")(context.WithValue(ctx, viewerKey{}, 3-2*(parent(ctx).(*keeper).ID%2)), args)
 		},
 		"PetConnection.totalCount": func(ctx context.Context, _ map[string]any) (any, error) {
-			return parent(ctx).(*gqlimpl.Connection).TotalCount(ctx)
+			return parent(ctx).(*gqlgraph.Connection).TotalCount(ctx)
 		},
 		"PetConnection.nodes": func(ctx context.Context, _ map[string]any) (any, error) {
-			p, err := parent(ctx).(*gqlimpl.Connection).Page(ctx)
+			p, err := parent(ctx).(*gqlgraph.Connection).Page(ctx)
 			if err != nil {
 				return nil, err
 			}

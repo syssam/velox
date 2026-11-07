@@ -61,9 +61,9 @@ func postTagDescriptor() velox.Descriptor[PostTag] {
 }
 
 // String returns the entity's fields.
-func (x PostTag) String() string {
-	return fmt.Sprintf("PostTag(PostID=%v, TagID=%v)", x.PostID, x.TagID)
+func (p PostTag) String() string {
+	return fmt.Sprintf("PostTag(PostID=%v, TagID=%v)", p.PostID, p.TagID)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x PostTag) GoString() string { return x.String() }
+func (p PostTag) GoString() string { return p.String() }

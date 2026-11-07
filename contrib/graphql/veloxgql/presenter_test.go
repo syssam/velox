@@ -20,7 +20,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/scope"
 )
 
@@ -48,13 +48,13 @@ func (w *personName) Pred(ctx context.Context) (velox.Pred[person], error) {
 }
 
 func (w *personName) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlimpl.NewFilter(ctx, &gqlimpl.Type{Name: "Person", Table: velox.TableOf[person]})
+	f := gqlgraph.NewFilter(ctx, &gqlgraph.Type{Name: "Person", Table: velox.TableOf[person]})
 	if w == nil {
 		return f.Pred()
 	}
-	gqlimpl.Not(f, "not", w.Not, (*personName).predicate)
-	gqlimpl.And(f, "and", w.And, (*personName).predicate)
-	gqlimpl.Field(f, "name", 1, gqlimpl.Ops[string]{In: w.NameIn})
+	gqlgraph.Not(f, "not", w.Not, (*personName).predicate)
+	gqlgraph.And(f, "and", w.And, (*personName).predicate)
+	gqlgraph.Field(f, "name", 1, gqlgraph.Ops[string]{In: w.NameIn})
 	return f.Pred()
 }
 
@@ -72,23 +72,23 @@ func (w *leaky) Pred(ctx context.Context) (velox.Pred[person], error) {
 
 func (w *leaky) predicate(ctx context.Context) (velox.Predicate, error) {
 	if w != nil && w.Leak {
-		return velox.Predicate{}, fmt.Errorf("sqlite: secret: %w", gqlimpl.InputErrorf("bad name"))
+		return velox.Predicate{}, fmt.Errorf("sqlite: secret: %w", gqlgraph.InputErrorf("bad name"))
 	}
-	f := gqlimpl.NewFilter(ctx, &gqlimpl.Type{Name: "Leaky", Table: velox.TableOf[person]})
+	f := gqlgraph.NewFilter(ctx, &gqlgraph.Type{Name: "Leaky", Table: velox.TableOf[person]})
 	if w != nil {
-		gqlimpl.Not(f, "not", w.Not, (*leaky).predicate)
+		gqlgraph.Not(f, "not", w.Not, (*leaky).predicate)
 	}
 	return f.Pred()
 }
 
-// TestErrorsAreCoded: every error veloxgql and gqlimpl return for a client's
+// TestErrorsAreCoded: every error veloxgql and gqlgraph return for a client's
 // input is coded BAD_USER_INPUT, and errors.Is still finds its sentinel.
 func TestErrorsAreCoded(t *testing.T) {
 	db, _ := handlerDB(t)
 	ctx := context.Background()
-	key := &gqlimpl.Type{Name: "Person", Key: []gqlimpl.Col{{Field: "id", Col: int(people.ID.I)}}}
-	conn := func(args gqlimpl.Args) error {
-		_, err := gqlimpl.Paginate(ctx, gqlimpl.Query(db.QueryTable(velox.TableOf[person]())), key, args, nil)
+	key := &gqlgraph.Type{Name: "Person", Key: []gqlgraph.Column{{Name: "id", Index: int(people.ID.I)}}}
+	conn := func(args gqlgraph.Args) error {
+		_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(db.QueryTable(velox.TableOf[person]())), key, args)
 		return err
 	}
 	pred := func(w *personName) error {
@@ -120,10 +120,10 @@ func TestErrorsAreCoded(t *testing.T) {
 		{"IDType", func() error { _, err := veloxgql.IDType("!"); return err }(), veloxgql.ErrBadID},
 		{"DecodeCursor", func() error { _, err := veloxgql.DecodeCursor("!"); return err }(), veloxgql.ErrBadCursor},
 		{"Cursor.UnmarshalGQLContext", new(veloxgql.Cursor).UnmarshalGQLContext(context.Background(), 1), veloxgql.ErrBadCursor},
-		{"cursor of another type", conn(gqlimpl.Args{After: &veloxgql.Cursor{Type: "Post", Key: int64(1)}}), veloxgql.ErrWrongIDType},
-		{"cursor value", conn(gqlimpl.Args{After: &badKey}), veloxgql.ErrBadCursor},
-		{"over MaxPage", conn(gqlimpl.Args{First: &over}), veloxgql.ErrPageTooLarge},
-		{"first with last", conn(gqlimpl.Args{First: &one, Last: &two}), veloxgql.ErrBadPagination},
+		{"cursor of another type", conn(gqlgraph.Args{After: &veloxgql.Cursor{Type: "Post", Key: int64(1)}}), veloxgql.ErrWrongIDType},
+		{"cursor value", conn(gqlgraph.Args{After: &badKey}), veloxgql.ErrBadCursor},
+		{"over MaxPage", conn(gqlgraph.Args{First: &over}), veloxgql.ErrPageTooLarge},
+		{"first with last", conn(gqlgraph.Args{First: &one, Last: &two}), veloxgql.ErrBadPagination},
 		{"filter too deep", pred(deep), veloxgql.ErrFilterTooDeep},
 		{"filter too wide", pred(wide), veloxgql.ErrFilterTooWide},
 		{"filter too large", pred(large), veloxgql.ErrFilterTooLarge},
@@ -134,7 +134,7 @@ func TestErrorsAreCoded(t *testing.T) {
 		{"Bytes", new(veloxgql.Bytes).UnmarshalGQL(1), nil},
 		{"JSON", new(veloxgql.JSON).UnmarshalGQL(func() {}), nil},
 		{"OrderDirection", new(veloxgql.OrderDirection).UnmarshalGQL("UP"), nil},
-		{"InputErrorf", gqlimpl.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadID), veloxgql.ErrBadID},
+		{"InputErrorf", gqlgraph.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadID), veloxgql.ErrBadID},
 	} {
 		switch {
 		case c.err == nil:
@@ -147,7 +147,7 @@ func TestErrorsAreCoded(t *testing.T) {
 			t.Errorf("%s: the text %q does not start veloxgql: once", c.name, c.err)
 		}
 	}
-	if got := gqlimpl.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadID).Error(); got != "veloxgql: X must be Y: malformed ID" {
+	if got := gqlgraph.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadID).Error(); got != "veloxgql: X must be Y: malformed ID" {
 		t.Errorf("InputErrorf's text is %q", got)
 	}
 	if err := veloxgql.ErrNoDB; codeOf(err) != "" {
@@ -245,7 +245,7 @@ func TestErrorPresenter(t *testing.T) {
 		{"an application's coded error over a driver error", gqlerror.WrapPath(path, &appCodedError{msg: "app says no", err: driverErr}), "APP", "app says no", `["posts",0,"author"]`, true},
 		{"a gqlerror with an application code over a driver error", &gqlerror.Error{Message: "app says no", Path: path, Extensions: map[string]any{"code": "APP"}, Err: driverErr}, "INTERNAL_SERVER_ERROR", "internal error", `["posts",0,"author"]`, true},
 		{"an application's coded error alone", &appCodedError{msg: "app says no"}, "APP", "app says no", `["node"]`, false},
-		{"coded over two sentinels", gqlerror.WrapPath(path, gqlimpl.InputErrorf("User cursor: %w: the key is an %w", veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType)), "BAD_USER_INPUT", "User cursor: malformed cursor: the key is an ID of another type", `["posts",0,"author"]`, false},
+		{"coded over two sentinels", gqlerror.WrapPath(path, gqlgraph.InputErrorf("User cursor: %w: the key is an %w", veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType)), "BAD_USER_INPUT", "User cursor: malformed cursor: the key is an ID of another type", `["posts",0,"author"]`, false},
 		{"int8 overflow", gqlerror.WrapPath(path, int8Err), "BAD_USER_INPUT", "300 overflows signed 8-bit integer", `["posts",0,"author"]`, false},
 		{"uint16 overflow", uint16Err, "BAD_USER_INPUT", "70000 overflows unsigned 16-bit integer", `["node"]`, false},
 		{"negative uint32", fmt.Errorf("input: %w", uintSignErr), "BAD_USER_INPUT", "-1 is an invalid unsigned integer: includes sign", `["node"]`, false},
@@ -443,7 +443,7 @@ func TestErrorPresenterCanceled(t *testing.T) {
 	// The recover function's error for a panic, as an application writes
 	// one (serve's returns a gqlerror without Err, which is not logged).
 	panicErr := fmt.Errorf("panic: %v", "boom")
-	coded := gqlimpl.InputErrorf("User cursor: %w", veloxgql.ErrBadCursor)
+	coded := gqlgraph.InputErrorf("User cursor: %w", veloxgql.ErrBadCursor)
 	l := &logged{}
 	for _, c := range []struct {
 		name   string

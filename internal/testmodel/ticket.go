@@ -158,14 +158,14 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 }
 
 // String returns the entity's fields.
-func (x Ticket) String() string {
+func (t Ticket) String() string {
 	return fmt.Sprintf("Ticket("+
 		"ID=%v, CreatedBy=%v, OrgID=%v, Owner=%v, Title=%v, Done=%v, "+
 		"InvoiceID=%v, ParentID=%v)",
-		x.ID, x.CreatedBy, x.OrgID, x.Owner, x.Title, x.Done,
-		x.InvoiceID, velox.Show(x.ParentID),
+		t.ID, t.CreatedBy, t.OrgID, t.Owner, t.Title, t.Done,
+		t.InvoiceID, velox.Show(t.ParentID),
 	)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Ticket) GoString() string { return x.String() }
+func (t Ticket) GoString() string { return t.String() }

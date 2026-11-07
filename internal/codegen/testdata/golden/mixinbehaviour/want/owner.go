@@ -88,9 +88,9 @@ func ownerDescriptor() velox.Descriptor[Owner] {
 }
 
 // String returns the entity's fields.
-func (x Owner) String() string {
-	return fmt.Sprintf("Owner(ID=%v, CreatedAt=%v, UpdatedAt=%v, Name=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.Name)
+func (o Owner) String() string {
+	return fmt.Sprintf("Owner(ID=%v, CreatedAt=%v, UpdatedAt=%v, Name=%v)", o.ID, o.CreatedAt, o.UpdatedAt, o.Name)
 }
 
 // GoString is String, so that %#v prints the same text.
-func (x Owner) GoString() string { return x.String() }
+func (o Owner) GoString() string { return o.String() }
