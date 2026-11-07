@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"github.com/syssam/velox/internal/dberr"
 	"io"
 	"math"
 	"net"
@@ -416,7 +417,7 @@ func mysqlConnectError(n int) bool {
 // mysqlInvalidConn reports whether err's tree holds go-sql-driver/mysql's
 // ErrInvalidConn, which the driver returns for a connection that broke. velox
 // does not import the driver (see constraint).
-func mysqlInvalidConn(err error) bool { return driverSentinel(err, "invalid connection") }
+func mysqlInvalidConn(err error) bool { return dberr.DriverSentinel(err, "invalid connection") }
 
 // ConnExec is c's executor.
 func ConnExec(c Conn) executor { return c.ex }
@@ -438,44 +439,44 @@ func NewConn(ex executor, only Dialect) Conn { return Conn{ex: ex, only: only} }
 // refusing or ending the connection counts (mysqlConnectError), as a pgx
 // ConnectError does.
 func failoverable(err error) bool {
-	if is(err, context.Canceled) || is(err, context.DeadlineExceeded) {
+	if dberr.Is(err, context.Canceled) || dberr.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	if is(err, driver.ErrBadConn) ||
-		is(err, sql.ErrConnDone) ||
-		is(err, net.ErrClosed) ||
-		is(err, io.EOF) ||
-		is(err, io.ErrUnexpectedEOF) ||
-		driverSentinel(err, pgConnClosed) ||
+	if dberr.Is(err, driver.ErrBadConn) ||
+		dberr.Is(err, sql.ErrConnDone) ||
+		dberr.Is(err, net.ErrClosed) ||
+		dberr.Is(err, io.EOF) ||
+		dberr.Is(err, io.ErrUnexpectedEOF) ||
+		dberr.DriverSentinel(err, dberr.PgConnClosed) ||
 		safeToRetry(err) ||
 		mysqlInvalidConn(err) {
 		return true
 	}
-	if pgConnectError(err) {
+	if dberr.PgConnectError(err) {
 		// Whatever the server said while connecting, such as too many
 		// connections (53300) or a failed login: pgx wraps its PgError in
 		// the ConnectError, so this comes before the PgError check.
 		return true
 	}
-	if pg, ok := pgErrorOf(err); ok {
+	if pg, ok := dberr.PgErrorOf(err); ok {
 		// admin_shutdown, crash_shutdown, cannot_connect_now
 		return pg.Code == "57P01" || pg.Code == "57P02" || pg.Code == "57P03"
 	}
-	if n, _, ok := mysqlError(err); ok {
+	if n, _, ok := dberr.MySQLError(err); ok {
 		return mysqlConnectError(n)
 	}
-	ne, ok := as[net.Error](err)
+	ne, ok := dberr.As[net.Error](err)
 	if !ok {
 		return false
 	}
-	op, ok := as[*net.OpError](err)
+	op, ok := dberr.As[*net.OpError](err)
 	return !ne.Timeout() || ok && op.Op == "dial"
 }
 
 // safeToRetry is pgx's pgconn.SafeToRetry over as, so that a nil pointer in err's
 // tree cannot panic it.
 func safeToRetry(err error) bool {
-	r, ok := as[interface {
+	r, ok := dberr.As[interface {
 		error
 		SafeToRetry() bool
 	}](err)

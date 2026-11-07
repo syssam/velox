@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/syssam/velox/internal/dberr"
 	"io"
 	"maps"
 	"math"
@@ -746,7 +747,7 @@ func (db *DB) send(ctx context.Context, st *Statement, t Target, read func(Rows)
 				r = counted
 			}
 			again, againRows := readRows(r, read)
-			if is(again, ErrIterAgain) {
+			if dberr.Is(again, ErrIterAgain) {
 				return dbErr(st.Entity, rowsErr) // the replica's error
 			}
 			rerr, rowsErr = again, againRows

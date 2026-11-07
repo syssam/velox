@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"github.com/syssam/velox/internal/dberr"
 	"strings"
 	"testing"
 	"time"
@@ -39,7 +40,7 @@ func TestRetryBacksOff(t *testing.T) {
 		}
 		return dead
 	}, TxRetrySerializable(retries))
-	if !is(err, dead) {
+	if !dberr.Is(err, dead) {
 		t.Fatalf("%v", err)
 	}
 	if calls != retries+1 || len(*waits) != retries {
@@ -84,7 +85,7 @@ func TestRetryWaitEndsWithContext(t *testing.T) {
 		time.AfterFunc(time.Millisecond, cancel)
 		return dead
 	}, TxRetrySerializable(3))
-	if !is(err, dead) || calls != 1 {
+	if !dberr.Is(err, dead) || calls != 1 {
 		t.Errorf("%v after %d attempts", err, calls)
 	}
 	if d := time.Since(start); d > 10*time.Second {
@@ -112,7 +113,7 @@ func TestRetryWaitStopsAtTheTimeout(t *testing.T) {
 	db := newDB(MySQL, &fakeconn.Exec{}, nil)
 	calls := 0
 	err := db.Tx(context.Background(), func(context.Context, *DB) error { calls++; return dead }, TxRetrySerializable(3), TxTimeout(5*time.Millisecond))
-	if !is(err, dead) || !is(err, ErrTimeout) || calls != 1 {
+	if !dberr.Is(err, dead) || !dberr.Is(err, ErrTimeout) || calls != 1 {
 		t.Errorf("%v after %d attempts", err, calls)
 	}
 }
@@ -169,15 +170,15 @@ func TestRetryEndedMatchesTheContext(t *testing.T) {
 				c.fn(cancel)
 				return dead
 			}, TxRetrySerializable(3))
-			if calls != 1 || !is(err, dead) {
+			if calls != 1 || !dberr.Is(err, dead) {
 				t.Errorf("%v after %d attempts", err, calls)
 			}
 			for _, w := range c.want {
-				if !is(err, w) {
+				if !dberr.Is(err, w) {
 					t.Errorf("%v does not match %v", err, w)
 				}
 			}
-			if is(err, ErrTimeout) {
+			if dberr.Is(err, ErrTimeout) {
 				t.Errorf("%v matches ErrTimeout", err)
 			}
 		})
@@ -200,7 +201,7 @@ func TestRetryEndedThroughATxAround(t *testing.T) {
 		time.AfterFunc(time.Millisecond, cancel)
 		return dead
 	}, TxRetrySerializable(3))
-	if !is(err, dead) || !is(err, context.Canceled) {
+	if !dberr.Is(err, dead) || !dberr.Is(err, context.Canceled) {
 		t.Errorf("%v", err)
 	}
 }
@@ -214,7 +215,7 @@ func TestRetryEndedAtTheTimeoutBeforeTheWait(t *testing.T) {
 		<-ctx.Done()
 		return dead
 	}, TxRetrySerializable(3), TxTimeout(time.Millisecond))
-	if !is(err, dead) || !is(err, ErrTimeout) || strings.Count(err.Error(), ErrTimeout.Error()) != 1 {
+	if !dberr.Is(err, dead) || !dberr.Is(err, ErrTimeout) || strings.Count(err.Error(), ErrTimeout.Error()) != 1 {
 		t.Errorf("%v", err)
 	}
 }

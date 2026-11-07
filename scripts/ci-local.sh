@@ -188,7 +188,7 @@ lane_fuzz() {
   go test -run XXX -fuzz '^FuzzLiteral$' -fuzztime 10s ./internal/ddl
   go test -run XXX -fuzz '^FuzzSplit$' -fuzztime 10s ./migrate
   go test -run XXX -fuzz '^FuzzRenderWrite$' -fuzztime 10s ./internal/engine
-  go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s ./internal/engine
+  go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s ./internal/dberr
   go test -run XXX -fuzz '^FuzzDiff$' -fuzztime 10s ./migrate
   go test -run XXX -fuzz '^FuzzColumnScan$' -fuzztime 10s ./internal/conn
 }

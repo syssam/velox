@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/syssam/velox/internal/dberr"
 	"math/rand/v2"
 	"strconv"
 	"strings"
@@ -71,7 +72,7 @@ func TxRetries(opts ...TxOption) int {
 // ended reports whether err says the driver already ended the transaction,
 // as it does after a canceled context; rolling back then has nothing to do.
 func ended(err error) bool {
-	return is(err, sql.ErrTxDone) || driverSentinel(err, pgTxClosed)
+	return dberr.Is(err, sql.ErrTxDone) || dberr.DriverSentinel(err, dberr.PgTxClosed)
 }
 
 // rollback rolls the transaction ctl controls back on rollbackContext. Its
@@ -327,10 +328,10 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 			// reached the database: it pins too.
 			db.pinSession(tctx) // the context given to Tx, not a TxAround hook's
 		}
-		if err != nil && cause != nil && timedOut(tctx) && !is(err, ErrTimeout) {
+		if err != nil && cause != nil && timedOut(tctx) && !dberr.Is(err, ErrTimeout) {
 			err = errors.Join(timeoutError("transaction"), err)
 		}
-		if err == nil || attempt > o.Retries || !retryable(err) {
+		if err == nil || attempt > o.Retries || !dberr.Retryable(err) {
 			return err
 		}
 		if ctx.Err() != nil || tctx.Err() != nil || !retryWait(ctx, tctx, retryDelay(attempt)) {
@@ -348,7 +349,7 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 func retryEnded(ctx, tctx context.Context, cause, err error) error {
 	switch {
 	case cause != nil && timedOut(tctx):
-		if is(err, ErrTimeout) {
+		if dberr.Is(err, ErrTimeout) {
 			return err
 		}
 		return errors.Join(timeoutError("transaction"), err)
@@ -459,7 +460,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		if rerr := rollback(ctx, ctl); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
 			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
-		if cause != nil && past(deadline) && !is(err, ErrTimeout) {
+		if cause != nil && past(deadline) && !dberr.Is(err, ErrTimeout) {
 			// velox's deadline passed, whatever context fn's statements ran
 			// on: say so without waiting for the deadline's timer.
 			return false, errors.Join(timeoutError("transaction"), err)
@@ -498,7 +499,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		endTx(info, TxError)
 		// A deferred constraint is checked here: it is a *ConstraintError,
 		// with no entity, as the commit is no one statement's.
-		if ce := constraint("", err); ce != nil {
+		if ce := dberr.Constraint("", err); ce != nil {
 			err = ce
 		}
 		return true, endedErr(ctx, "transaction", fmt.Errorf("velox: commit: %w", err))
@@ -605,7 +606,7 @@ func (db *DB) noteServerRollback(ctx context.Context, err error) {
 	gone := false
 	switch db.D {
 	case MySQL:
-		n, _, ok := mysqlError(err)
+		n, _, ok := dberr.MySQLError(err)
 		gone = ok && (n == 1213 || n == 1205 && db.rollsBackOnTimeout(ctx))
 	case SQLite:
 		gone = db.sqliteRolledBack(ctx)

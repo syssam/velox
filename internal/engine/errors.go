@@ -2,7 +2,10 @@ package engine
 
 import (
 	"errors"
+	"fmt"
 	"strings"
+
+	"github.com/syssam/velox/internal/dberr"
 )
 
 // Errors velox returns. Each is returned wrapped, in an error whose text starts
@@ -81,7 +84,7 @@ var (
 // IsNotFound reports whether err is, or wraps, ErrNotFound. It walks err's
 // tree as errors.Is does, but skips a nil error in it: a typed-nil error that a
 // driver wraps does not panic. ent's IsNotFound is the precedent.
-func IsNotFound(err error) bool { return is(err, ErrNotFound) }
+func IsNotFound(err error) bool { return dberr.Is(err, ErrNotFound) }
 
 // stageError is the error of a hook stage: "velox: <Entity>: <stage>: <err>",
 // stage "hook" or "rewrite"; an err whose text starts "velox: <Entity>: " does
@@ -104,4 +107,20 @@ func (e *stageError) Unwrap() error { return e.err }
 // newStageError returns the error of a stage of entity's statement.
 func newStageError(entity, stage string, err error) *stageError {
 	return &stageError{entity, stage, err}
+}
+
+// dbErr names the entity in an error from the database or the driver, turns
+// a violated constraint into a *ConstraintError, and wraps a lock that could
+// not be taken with ErrLocked.
+func dbErr(info *EntityInfo, err error) error {
+	if _, ok := dberr.As[*ConstraintError](err); ok {
+		return err // already classified
+	}
+	if ce := dberr.Constraint(info.Name, err); ce != nil {
+		return ce
+	}
+	if dberr.Locked(err) {
+		return fmt.Errorf("velox: %s: %w: %w", info.Name, ErrLocked, err)
+	}
+	return fmt.Errorf("velox: %s: %w", info.Name, err)
 }

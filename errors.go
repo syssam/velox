@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"github.com/syssam/velox/internal/dberr"
 	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/veloxtype"
 )
@@ -19,7 +20,7 @@ import (
 // message an end user sees. velox reads the errors of pgx (natively or
 // through database/sql), github.com/go-sql-driver/mysql and
 // modernc.org/sqlite; another driver's error has no code here.
-func DriverCode(err error) (string, bool) { return engine.DriverCode(err) }
+func DriverCode(err error) (string, bool) { return dberr.DriverCode(err) }
 
 // Errors velox returns. Each is returned wrapped, in an error whose text starts
 // "velox: <Entity>: ", so a sentinel's own text is a bare phrase; test for them

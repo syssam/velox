@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"github.com/syssam/velox/internal/dberr"
 	"reflect"
 	"slices"
 	"strings"
@@ -619,7 +620,7 @@ plan:
 		}
 		for _, c := range chunks {
 			part, _, err := fetchPart(ctx, db, pin, t, []int{l.TargetCol}, sp, order, c.Keys, maxRows, nil)
-			if pe, ok := as[*paramsError](err); ok && per > 1 {
+			if pe, ok := dberr.As[*paramsError](err); ok && per > 1 {
 				per = max(1, min(per, len(c.Keys))-(pe.N-pe.Max))
 				shrunk = pe
 				rest = rest[slices.Index(rest, c.Owners[0]):]
@@ -729,7 +730,7 @@ func byChunks(n, per int, read func(lo, hi int) error) error {
 	for lo := 0; lo < n; {
 		hi := min(lo+per, n)
 		err := read(lo, hi)
-		if pe, ok := as[*paramsError](err); ok && hi-lo > 1 {
+		if pe, ok := dberr.As[*paramsError](err); ok && hi-lo > 1 {
 			per = max(1, hi-lo-(pe.N-pe.Max))
 			continue
 		}

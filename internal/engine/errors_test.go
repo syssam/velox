@@ -73,7 +73,7 @@ func TestSentinelDocs(t *testing.T) {
 
 // TestIsNotFound: IsNotFound is errors.Is(err, ErrNotFound) that skips a nil
 // pointer in err's tree, where errors.Is would call Unwrap on it and panic
-// (the typed nils of errclass_test.go's TestTypedNilDriverErrors).
+// (the typed nils of errors_internal_test.go's TestTypedNilDriverErrors).
 func TestIsNotFound(t *testing.T) {
 	for _, c := range []struct {
 		name string
