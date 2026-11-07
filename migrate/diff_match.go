@@ -231,69 +231,102 @@ func (d *differ) renameObjects() {
 		if t == nil {
 			continue
 		}
-		ref := u.Ref()
-		if t.PrimaryKeyName != u.PrimaryKeyName && t.PrimaryKeyName != "" && u.PrimaryKeyName != "" {
-			d.add(renameConstraint{Table: ref, From: t.PrimaryKeyName, To: u.PrimaryKeyName}, 2, 4, ref, 0, t.PrimaryKeyName)
-			t.PrimaryKeyName = u.PrimaryKeyName
-		}
-		for j, uc := range u.Columns {
-			tc := t.column(uc.Name)
-			if tc != nil && tc.Identity == uc.Identity && tc.Sequence != "" && uc.Sequence != "" && tc.Sequence != uc.Sequence {
-				d.add(renameSequence{Table: ref, Column: uc.Name, From: tc.Sequence, To: uc.Sequence}, 2, 1, ref, j, "")
-				tc.Sequence = uc.Sequence
-			}
-		}
+		d.renamePrimaryKey(t, u)
+		d.renameSequences(t, u)
 		// What pairs by name, or unnamed by definition, keeps its name; the
 		// rest of t is renamed to the first unpaired one of u, named, of its
 		// definition.
-		tu, ut := pairIndexes(t.Indexes, u.Indexes)
-		for j := range t.Indexes {
-			ti := &t.Indexes[j]
-			if tu[j] >= 0 {
-				continue
-			}
-			for k, ui := range u.Indexes {
-				if ut[k] < 0 && ui.Name != "" && sameIndex(*ti, ui) {
-					d.add(renameIndex{Table: ref, From: ti.Name, To: ui.Name, def: indexLabel(Index{Columns: ti.Columns})}, 2, 3, ref, 0, ti.Name)
-					ti.Name, ut[k] = ui.Name, j
-					break
-				}
+		d.renameIndexes(t, u)
+		d.renameForeignKeys(t, u)
+		d.renameChecks(t, u)
+	}
+}
+
+// renamePrimaryKey renames t's primary key to u's when both are named and
+// the names differ.
+func (d *differ) renamePrimaryKey(t, u *Table) {
+	if t.PrimaryKeyName == u.PrimaryKeyName || t.PrimaryKeyName == "" || u.PrimaryKeyName == "" {
+		return
+	}
+	ref := u.Ref()
+	d.add(renameConstraint{Table: ref, From: t.PrimaryKeyName, To: u.PrimaryKeyName}, 2, 4, ref, 0, t.PrimaryKeyName)
+	t.PrimaryKeyName = u.PrimaryKeyName
+}
+
+// renameSequences renames the sequence of each column of t whose identity
+// is unchanged and whose named sequence differs from u's.
+func (d *differ) renameSequences(t, u *Table) {
+	ref := u.Ref()
+	for j, uc := range u.Columns {
+		tc := t.column(uc.Name)
+		if tc != nil && tc.Identity == uc.Identity && tc.Sequence != "" && uc.Sequence != "" && tc.Sequence != uc.Sequence {
+			d.add(renameSequence{Table: ref, Column: uc.Name, From: tc.Sequence, To: uc.Sequence}, 2, 1, ref, j, "")
+			tc.Sequence = uc.Sequence
+		}
+	}
+}
+
+// renameIndexes renames each unpaired index of t to the first unpaired,
+// named index of u with its definition.
+func (d *differ) renameIndexes(t, u *Table) {
+	ref := u.Ref()
+	tu, ut := pairIndexes(t.Indexes, u.Indexes)
+	for j := range t.Indexes {
+		ti := &t.Indexes[j]
+		if tu[j] >= 0 {
+			continue
+		}
+		for k, ui := range u.Indexes {
+			if ut[k] < 0 && ui.Name != "" && sameIndex(*ti, ui) {
+				d.add(renameIndex{Table: ref, From: ti.Name, To: ui.Name, def: indexLabel(Index{Columns: ti.Columns})}, 2, 3, ref, 0, ti.Name)
+				ti.Name, ut[k] = ui.Name, j
+				break
 			}
 		}
-		tu, ut = pairKeys(t.ForeignKeys, u.ForeignKeys)
-		for j := range t.ForeignKeys {
-			tf := &t.ForeignKeys[j]
-			if tu[j] >= 0 {
-				continue
-			}
-			for k, uf := range u.ForeignKeys {
-				// A key dropped around a type change is not renamed.
-				if ut[k] < 0 && uf.Name != "" && sameForeignKey(*tf, uf) && !d.keyRetyped(ref, uf) {
-					if d.to.Dialect == velox.SQLite {
-						// SQLite cannot rename a constraint and never uses
-						// its name: a key that differs only in it is no
-						// change.
-						tf.Name, ut[k] = uf.Name, j
-						break
-					}
-					d.out = append(d.out, planned{c: renameConstraint{Table: ref, From: tf.Name, To: uf.Name, def: keyLabel(ForeignKey{Columns: tf.Columns})}, step: 2, sub: 4, ref: ref, name: tf.Name, keyRename: true})
-					tf.Name, ut[k] = uf.Name, j
-					break
-				}
-			}
+	}
+}
+
+// renameForeignKeys renames each unpaired foreign key of t to the first
+// unpaired, named key of u with its definition.
+func (d *differ) renameForeignKeys(t, u *Table) {
+	ref := u.Ref()
+	tu, ut := pairKeys(t.ForeignKeys, u.ForeignKeys)
+	for j := range t.ForeignKeys {
+		tf := &t.ForeignKeys[j]
+		if tu[j] >= 0 {
+			continue
 		}
-		tu, ut = pairChecks(t.Checks, u.Checks)
-		for j := range t.Checks {
-			tc := &t.Checks[j]
-			if tu[j] >= 0 {
+		for k, uf := range u.ForeignKeys {
+			// A key dropped around a type change is not renamed.
+			if ut[k] >= 0 || uf.Name == "" || !sameForeignKey(*tf, uf) || d.keyRetyped(ref, uf) {
 				continue
 			}
-			for k, uc := range u.Checks {
-				if ut[k] < 0 && uc.Name != "" && tc.Expr == uc.Expr {
-					d.add(renameConstraint{Table: ref, From: tc.Name, To: uc.Name, def: checkLabel(Check{Expr: tc.Expr})}, 2, 4, ref, 0, tc.Name)
-					tc.Name, ut[k] = uc.Name, j
-					break
-				}
+			if d.to.Dialect != velox.SQLite {
+				d.out = append(d.out, planned{c: renameConstraint{Table: ref, From: tf.Name, To: uf.Name, def: keyLabel(ForeignKey{Columns: tf.Columns})}, step: 2, sub: 4, ref: ref, name: tf.Name, keyRename: true})
+			}
+			// SQLite cannot rename a constraint and never uses its name: a
+			// key that differs only in it is no change.
+			tf.Name, ut[k] = uf.Name, j
+			break
+		}
+	}
+}
+
+// renameChecks renames each unpaired check of t to the first unpaired,
+// named check of u with its expression.
+func (d *differ) renameChecks(t, u *Table) {
+	ref := u.Ref()
+	tu, ut := pairChecks(t.Checks, u.Checks)
+	for j := range t.Checks {
+		tc := &t.Checks[j]
+		if tu[j] >= 0 {
+			continue
+		}
+		for k, uc := range u.Checks {
+			if ut[k] < 0 && uc.Name != "" && tc.Expr == uc.Expr {
+				d.add(renameConstraint{Table: ref, From: tc.Name, To: uc.Name, def: checkLabel(Check{Expr: tc.Expr})}, 2, 4, ref, 0, tc.Name)
+				tc.Name, ut[k] = uc.Name, j
+				break
 			}
 		}
 	}

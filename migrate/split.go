@@ -74,20 +74,9 @@ func (s *splitter) run() error {
 			i++
 			continue
 		case s.lineComment(i):
-			j := strings.IndexByte(src[i:], '\n')
-			if j < 0 {
-				j = len(src)
-			} else {
-				j += i
-			}
-			if text, ok := strings.CutPrefix(src[i:j], directivePrefix); ok {
-				if !lineStart(src, i) {
-					return fileErr(line, "a directive must start its line")
-				}
-				if start >= 0 {
-					return fileErr(line, "a directive inside a statement")
-				}
-				s.out = append(s.out, piece{Directive: strings.TrimRight(text, " \t\r\f\v"), Line: line})
+			j, err := s.skipLineComment(i, line, start >= 0)
+			if err != nil {
+				return err
 			}
 			i = j
 			continue
@@ -104,11 +93,7 @@ func (s *splitter) run() error {
 			// A literal, a quoted name or a comment was skipped above or in
 			// token, so this backslash is a psql meta-command's: one that
 			// starts its line or, after a ";" on the same line, a statement.
-			j := i + 1
-			for j < len(src) && wordByte(src[j]) {
-				j++
-			}
-			return fileErr(line, "a psql meta-command ("+src[i:j]+") is not SQL; remove it")
+			return s.metaCommand(i, line)
 		}
 		j, reason := s.token(i)
 		if reason != "" {
@@ -121,6 +106,41 @@ func (s *splitter) run() error {
 		i, end = j, j
 	}
 	return flush()
+}
+
+// skipLineComment returns the index after the line comment at s.src[i],
+// on line line, and adds it to s.out when it is a directive; inStmt
+// reports that a statement has begun, where a directive is an error.
+func (s *splitter) skipLineComment(i, line int, inStmt bool) (int, error) {
+	src := s.src
+	j := strings.IndexByte(src[i:], '\n')
+	if j < 0 {
+		j = len(src)
+	} else {
+		j += i
+	}
+	text, ok := strings.CutPrefix(src[i:j], directivePrefix)
+	if !ok {
+		return j, nil
+	}
+	if !lineStart(src, i) {
+		return 0, fileErr(line, "a directive must start its line")
+	}
+	if inStmt {
+		return 0, fileErr(line, "a directive inside a statement")
+	}
+	s.out = append(s.out, piece{Directive: strings.TrimRight(text, " \t\r\f\v"), Line: line})
+	return j, nil
+}
+
+// metaCommand is the error for the psql meta-command whose backslash is
+// s.src[i], on line line.
+func (s *splitter) metaCommand(i, line int) error {
+	j := i + 1
+	for j < len(s.src) && wordByte(s.src[j]) {
+		j++
+	}
+	return fileErr(line, "a psql meta-command ("+s.src[i:j]+") is not SQL; remove it")
 }
 
 // refusal is the reason a statement is refused, or "". On SQLite and MySQL it

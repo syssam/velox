@@ -129,16 +129,7 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 	case dropTable:
 		return pgParts{stmts: []string{"DROP TABLE " + r.table(c.Table.Ref())}}, nil
 	case renameTable:
-		var stmts []string
-		at := c.From
-		if c.From.Name != c.To.Name {
-			stmts = append(stmts, "ALTER TABLE "+r.table(c.From)+" RENAME TO "+r.ident(c.To.Name))
-			at.Name = c.To.Name
-		}
-		if c.From.Schema != c.To.Schema {
-			stmts = append(stmts, "ALTER TABLE "+r.table(at)+" SET SCHEMA "+r.ident(schemaName(c.To.Schema)))
-		}
-		return pgParts{stmts: stmts}, nil
+		return pgParts{stmts: r.pgMove("ALTER TABLE ", c.From, c.To)}, nil
 	case addColumn:
 		pc := pgParts{table: r.table(c.Table), phase: phaseColumn, actions: []string{"ADD COLUMN " + r.pgColumn(c.Column)}}
 		if c.Column.Comment != "" {
@@ -152,57 +143,15 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 	case alterColumn:
 		pc, err := r.pgAlterColumn(c)
 		if len(pc.units) > 0 && (len(pc.actions) > 0 || len(pc.stmts) > 0) {
-			// SET NOT NULL is the online unit, and the main script's statement of
-			// the change does not make the column NOT NULL: the review that says
-			// so goes on the unit.
-			var keep, later []Finding
-			for _, f := range r.findings[i] {
-				if f.Code == "set-not-null" {
-					later = append(later, f)
-				} else {
-					keep = append(keep, f)
-				}
-			}
-			if len(later) > 0 {
-				r.findings[i] = keep
-				if r.unitFindings == nil {
-					r.unitFindings = map[int][]Finding{}
-				}
-				r.unitFindings[i] = later
-			}
+			r.moveNotNullReview(i)
 		}
 		return pc, err
 	case renameSequence:
 		return pgParts{stmts: []string{"ALTER SEQUENCE " + r.indexName(c.Table, c.From) + " RENAME TO " + r.ident(c.To)}}, nil
 	case addIndex:
-		if r.builtBeside[i] {
-			return pgParts{}, nil
-		}
-		if c.Index.Constraint {
-			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " ADD CONSTRAINT " + r.ident(c.Index.Name) + " UNIQUE (" + r.idents(c.Index.Columns) + ")"}}, nil
-		}
-		if r.l.existing(c.Table) {
-			r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(c.Table, c.Index.Name), r.pgIndex(c.Table, c.Index, true))
-			return pgParts{}, nil
-		}
-		return pgParts{stmts: []string{r.pgIndex(c.Table, c.Index, false)}}, nil
+		return r.pgAddIndex(i, c), nil
 	case dropIndex:
-		if j, ok := r.replacedUnique(i, c); ok {
-			r.buildBesideConstraint(i, j, c)
-			return pgParts{}, nil
-		}
-		if r.dropOnline(c) {
-			if j, ok := r.replacedOnline(i, c); ok {
-				r.buildBeside(i, j, c)
-				return pgParts{}, nil
-			}
-			r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(r.afterRename(c.Table), c.Index.Name))
-			return pgParts{}, nil
-		}
-		if c.Index.Constraint {
-			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " DROP CONSTRAINT " + r.ident(c.Index.Name)}}, nil
-		}
-		return pgParts{stmts: []string{"DROP INDEX " + r.indexName(c.Table, c.Index.Name)}}, nil
+		return r.pgDropIndex(i, c), nil
 	case renameIndex:
 		if r.renamesConstraint(c) {
 			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " RENAME CONSTRAINT " + r.ident(c.From) + " TO " + r.ident(c.To)}}, nil
@@ -223,16 +172,7 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 	case createEnum:
 		return pgParts{stmts: []string{r.createType(c.Enum.ref(), c.Enum.Values)}}, nil
 	case renameEnum:
-		var stmts []string
-		at := c.From
-		if c.From.Name != c.To.Name {
-			stmts = append(stmts, "ALTER TYPE "+r.table(c.From)+" RENAME TO "+r.ident(c.To.Name))
-			at.Name = c.To.Name
-		}
-		if c.From.Schema != c.To.Schema {
-			stmts = append(stmts, "ALTER TYPE "+r.table(at)+" SET SCHEMA "+r.ident(schemaName(c.To.Schema)))
-		}
-		return pgParts{stmts: stmts}, nil
+		return pgParts{stmts: r.pgMove("ALTER TYPE ", c.From, c.To)}, nil
 	case alterEnum:
 		if added, ok := addedValues(c.From.Values, c.To.Values); ok {
 			r.addValues(i, c, added)
@@ -244,6 +184,84 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 		return pgParts{stmts: []string{"DROP TYPE " + r.table(c.Enum.ref())}}, nil
 	}
 	return pgParts{}, r.refuse(i, fmt.Sprintf("PostgreSQL has no %s", c.Kind()))
+}
+
+// pgMove returns the statements, each starting with alter, that rename
+// the table or type from to to's name and move it to to's schema.
+func (r *renderer) pgMove(alter string, from, to TableRef) []string {
+	var stmts []string
+	at := from
+	if from.Name != to.Name {
+		stmts = append(stmts, alter+r.table(from)+" RENAME TO "+r.ident(to.Name))
+		at.Name = to.Name
+	}
+	if from.Schema != to.Schema {
+		stmts = append(stmts, alter+r.table(at)+" SET SCHEMA "+r.ident(schemaName(to.Schema)))
+	}
+	return stmts
+}
+
+// moveNotNullReview moves change i's set-not-null findings from the main
+// script's statement to its online unit.
+func (r *renderer) moveNotNullReview(i int) {
+	// SET NOT NULL is the online unit, and the main script's statement of
+	// the change does not make the column NOT NULL: the review that says
+	// so goes on the unit.
+	var keep, later []Finding
+	for _, f := range r.findings[i] {
+		if f.Code == "set-not-null" {
+			later = append(later, f)
+		} else {
+			keep = append(keep, f)
+		}
+	}
+	if len(later) == 0 {
+		return
+	}
+	r.findings[i] = keep
+	if r.unitFindings == nil {
+		r.unitFindings = map[int][]Finding{}
+	}
+	r.unitFindings[i] = later
+}
+
+// pgAddIndex renders change i, the addition of an index: a unique
+// constraint in the main script, an online unit on an existing table, and
+// a plain CREATE INDEX on a table the plan creates.
+func (r *renderer) pgAddIndex(i int, c addIndex) pgParts {
+	if r.builtBeside[i] {
+		return pgParts{}
+	}
+	if c.Index.Constraint {
+		return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " ADD CONSTRAINT " + r.ident(c.Index.Name) + " UNIQUE (" + r.idents(c.Index.Columns) + ")"}}
+	}
+	if r.l.existing(c.Table) {
+		r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(c.Table, c.Index.Name), r.pgIndex(c.Table, c.Index, true))
+		return pgParts{}
+	}
+	return pgParts{stmts: []string{r.pgIndex(c.Table, c.Index, false)}}
+}
+
+// pgDropIndex renders change i, the drop of an index: beside its
+// replacement or as an online unit when it can be, and otherwise in the
+// main script.
+func (r *renderer) pgDropIndex(i int, c dropIndex) pgParts {
+	if j, ok := r.replacedUnique(i, c); ok {
+		r.buildBesideConstraint(i, j, c)
+		return pgParts{}
+	}
+	if r.dropOnline(c) {
+		if j, ok := r.replacedOnline(i, c); ok {
+			r.buildBeside(i, j, c)
+			return pgParts{}
+		}
+		r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(r.afterRename(c.Table), c.Index.Name))
+		return pgParts{}
+	}
+	if c.Index.Constraint {
+		return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " DROP CONSTRAINT " + r.ident(c.Index.Name)}}
+	}
+	return pgParts{stmts: []string{"DROP INDEX " + r.indexName(c.Table, c.Index.Name)}}
 }
 
 // schemaName is the name of the database schema s: "" is public.
@@ -465,61 +483,77 @@ func (r *renderer) pgAlterColumn(c alterColumn) (pgParts, error) {
 		}
 	}
 	if c.What&columnIdentity != 0 {
-		switch {
-		case identity:
-			// A serial's default is dropped above; its sequence lets go of
-			// the column and gives up its name before the identity takes
-			// it, and is dropped once the identity goes on from where it
-			// was: an ID it handed out, of a row deleted since, is not
-			// handed out again. One from does not name is read from the
-			// default.
-			next := fmt.Sprintf("coalesce(max(%s), 0) + 1", col)
-			var old string
-			if strings.HasPrefix(c.From.Default, "nextval(") {
-				ref := TableRef{Schema: c.Table.Schema, Name: c.From.Sequence}
-				if c.From.Sequence == "" {
-					var ok bool
-					if ref, ok = nextvalSequence(c.From.Default); !ok {
-						return pgParts{}, unnamedSequence(c)
-					}
-				}
-				seq := r.table(ref)
-				ref.Name = ddl.OldSequence(ref.Name)
-				old = r.table(ref)
-				pc.stmts = append(pc.stmts,
-					"ALTER SEQUENCE "+seq+" OWNED BY NONE",
-					"ALTER SEQUENCE "+seq+" RENAME TO "+r.ident(ref.Name))
-				next = fmt.Sprintf("greatest(%s, (SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END FROM %s))", next, old)
-			}
-			pc.stmts = append(pc.stmts,
-				"ALTER TABLE "+pc.table+" ALTER COLUMN "+col+" ADD "+r.identity(c.To),
-				fmt.Sprintf("SELECT setval(pg_get_serial_sequence(%s, %s), %s, false) FROM %s",
-					ddl.Literal(r.d, pc.table), ddl.Literal(r.d, c.To.Name), next, pc.table))
-			if old != "" {
-				pc.stmts = append(pc.stmts, "DROP SEQUENCE "+old)
-			}
-		case c.From.Identity && !c.To.Identity:
-			// DROP IDENTITY drops the identity's sequence, which a
-			// serial's default would name: the file could only roll
-			// back, so it is not written.
-			if strings.HasPrefix(c.To.Default, "nextval(") {
-				return pgParts{}, &Error{Object: colTarget(c.Table, c.To.Name), Code: "render",
-					Reason: "an identity is not turned back into a serial: DROP IDENTITY drops the sequence the serial's default names; keep the identity, or write the change by hand"}
-			}
-			act("DROP IDENTITY")
-		case c.From.Identity && c.To.Sequence != "":
-			// The identity stays; only its sequence's name changes, which
-			// takes from's name for it.
-			if c.From.Sequence == "" {
-				return pgParts{}, unnamedSequence(c)
-			}
-			pc.stmts = append(pc.stmts, "ALTER SEQUENCE "+r.indexName(c.Table, c.From.Sequence)+" RENAME TO "+r.ident(c.To.Sequence))
+		if err := r.pgAlterIdentity(c, &pc, col, identity); err != nil {
+			return pgParts{}, err
 		}
 	}
 	if c.What&columnComment != 0 {
 		pc.stmts = append(pc.stmts, r.columnComment(c.Table, c.To))
 	}
 	return pc, nil
+}
+
+// pgAlterIdentity adds to pc the change of c's column's identity, col its
+// quoted name; identity reports that the column becomes one.
+func (r *renderer) pgAlterIdentity(c alterColumn, pc *pgParts, col string, identity bool) error {
+	switch {
+	case identity:
+		return r.pgAddIdentity(c, pc, col)
+	case c.From.Identity && !c.To.Identity:
+		// DROP IDENTITY drops the identity's sequence, which a
+		// serial's default would name: the file could only roll
+		// back, so it is not written.
+		if strings.HasPrefix(c.To.Default, "nextval(") {
+			return &Error{Object: colTarget(c.Table, c.To.Name), Code: "render",
+				Reason: "an identity is not turned back into a serial: DROP IDENTITY drops the sequence the serial's default names; keep the identity, or write the change by hand"}
+		}
+		pc.actions = append(pc.actions, "ALTER COLUMN "+col+" DROP IDENTITY")
+	case c.From.Identity && c.To.Sequence != "":
+		// The identity stays; only its sequence's name changes, which
+		// takes from's name for it.
+		if c.From.Sequence == "" {
+			return unnamedSequence(c)
+		}
+		pc.stmts = append(pc.stmts, "ALTER SEQUENCE "+r.indexName(c.Table, c.From.Sequence)+" RENAME TO "+r.ident(c.To.Sequence))
+	}
+	return nil
+}
+
+// pgAddIdentity adds to pc the statements that make c's column, col its
+// quoted name, an identity that goes on from its serial's sequence.
+func (r *renderer) pgAddIdentity(c alterColumn, pc *pgParts, col string) error {
+	// A serial's default is dropped above; its sequence lets go of
+	// the column and gives up its name before the identity takes
+	// it, and is dropped once the identity goes on from where it
+	// was: an ID it handed out, of a row deleted since, is not
+	// handed out again. One from does not name is read from the
+	// default.
+	next := fmt.Sprintf("coalesce(max(%s), 0) + 1", col)
+	var old string
+	if strings.HasPrefix(c.From.Default, "nextval(") {
+		ref := TableRef{Schema: c.Table.Schema, Name: c.From.Sequence}
+		if c.From.Sequence == "" {
+			var ok bool
+			if ref, ok = nextvalSequence(c.From.Default); !ok {
+				return unnamedSequence(c)
+			}
+		}
+		seq := r.table(ref)
+		ref.Name = ddl.OldSequence(ref.Name)
+		old = r.table(ref)
+		pc.stmts = append(pc.stmts,
+			"ALTER SEQUENCE "+seq+" OWNED BY NONE",
+			"ALTER SEQUENCE "+seq+" RENAME TO "+r.ident(ref.Name))
+		next = fmt.Sprintf("greatest(%s, (SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END FROM %s))", next, old)
+	}
+	pc.stmts = append(pc.stmts,
+		"ALTER TABLE "+pc.table+" ALTER COLUMN "+col+" ADD "+r.identity(c.To),
+		fmt.Sprintf("SELECT setval(pg_get_serial_sequence(%s, %s), %s, false) FROM %s",
+			ddl.Literal(r.d, pc.table), ddl.Literal(r.d, c.To.Name), next, pc.table))
+	if old != "" {
+		pc.stmts = append(pc.stmts, "DROP SEQUENCE "+old)
+	}
+	return nil
 }
 
 // serialSequence is the sequence of c's column, retyped to an integer type,

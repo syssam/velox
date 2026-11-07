@@ -16,18 +16,50 @@ import (
 // rename of a column another table's foreign key references, which only
 // ALTER TABLE carries to that key.
 func (r *renderer) sqlite() error {
-	last := map[TableRef]int{}      // a rebuilt table's last change, by its name in from
-	name := map[TableRef]TableRef{} // a rebuilt table's name after its rename
-	folds := func(c Change) (TableRef, bool) {
-		switch c.(type) {
-		case createTable, dropTable:
-			return TableRef{}, false
-		}
-		k := r.l.canon(c.Target())
-		return k, r.l.rebuilt[k]
-	}
+	last, name := r.sqliteRebuilds()
+	r.fkOff = len(last) > 0 || r.dropsCycle()
 	for i, c := range r.cs {
-		k, ok := folds(c)
+		k, ok := r.folds(c)
+		if !ok {
+			if err := r.sqliteChange(i, c); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := r.sqliteFolded(i, k, c); err != nil {
+			return err
+		}
+		if last[k] != i {
+			continue
+		}
+		ref := k
+		if n, ok := name[k]; ok {
+			ref = n
+		}
+		if err := r.rebuild(i, k, ref); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// folds returns the name in from of change c's table, and reports whether
+// the change folds into that table's rebuild.
+func (r *renderer) folds(c Change) (TableRef, bool) {
+	switch c.(type) {
+	case createTable, dropTable:
+		return TableRef{}, false
+	}
+	k := r.l.canon(c.Target())
+	return k, r.l.rebuilt[k]
+}
+
+// sqliteRebuilds returns each rebuilt table's last change and its name
+// after its rename, by its name in from.
+func (r *renderer) sqliteRebuilds() (last map[TableRef]int, name map[TableRef]TableRef) {
+	last, name = map[TableRef]int{}, map[TableRef]TableRef{}
+	for i, c := range r.cs {
+		k, ok := r.folds(c)
 		if !ok {
 			continue
 		}
@@ -36,46 +68,28 @@ func (r *renderer) sqlite() error {
 			name[k] = rt.To
 		}
 	}
-	r.fkOff = len(last) > 0 || r.dropsCycle()
-	for i, c := range r.cs {
-		k, ok := folds(c)
-		if !ok {
-			if err := r.sqliteChange(i, c); err != nil {
-				return err
-			}
-			continue
-		}
+	return last, name
+}
+
+// sqliteFolded writes what change i, of the rebuilt table k, writes before
+// the rebuild: its rename, an index drop or rename, or the rename of a
+// column another table's key references.
+func (r *renderer) sqliteFolded(i int, k TableRef, c Change) error {
+	switch c := c.(type) {
+	case renameTable:
+		return r.sqliteChange(i, c)
+	case dropIndex:
 		// A UNIQUE constraint's index goes with the old table.
-		switch c := c.(type) {
-		case renameTable:
-			if err := r.sqliteChange(i, c); err != nil {
-				return err
-			}
-		case dropIndex:
-			if !tableUnique(c.Index) {
-				if err := r.sqliteChange(i, c); err != nil {
-					return err
-				}
-			}
-		case renameIndex:
-			if c.From != "" {
-				r.emit("DROP INDEX "+r.indexName(c.Table, c.From), i)
-			}
-		case renameColumn:
-			if r.referenced(k, c.From) {
-				if err := r.sqliteChange(i, c); err != nil {
-					return err
-				}
-			}
+		if !tableUnique(c.Index) {
+			return r.sqliteChange(i, c)
 		}
-		if last[k] == i {
-			ref := k
-			if n, ok := name[k]; ok {
-				ref = n
-			}
-			if err := r.rebuild(i, k, ref); err != nil {
-				return err
-			}
+	case renameIndex:
+		if c.From != "" {
+			r.emit("DROP INDEX "+r.indexName(c.Table, c.From), i)
+		}
+	case renameColumn:
+		if r.referenced(k, c.From) {
+			return r.sqliteChange(i, c)
 		}
 	}
 	return nil
