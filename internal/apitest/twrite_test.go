@@ -8,6 +8,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/untyped"
 )
 
 // TestTableWriteParity: an untyped insert, update and delete sends the
@@ -32,9 +33,9 @@ func TestTableWriteParity(t *testing.T) {
 				x := newTicket()
 				return func() (string, []any, error) {
 						x := newTicket()
-						return db.InsertTable(tkTable, &x).SQL(ctx)
+						return untyped.Insert(db, tkTable, &x).SQL(ctx)
 					},
-					func() error { return db.InsertTable(tkTable, &x).Exec(ctx) }
+					func() error { return untyped.Insert(db, tkTable, &x).Exec(ctx) }
 			}},
 		{"insert rows, on conflict",
 			func(db *velox.DB) (func() (string, []any, error), func() error) {
@@ -45,12 +46,12 @@ func TestTableWriteParity(t *testing.T) {
 				return func() (string, []any, error) { return q().SQL(ctx) }, func() error { return q().Exec(ctx) }
 			},
 			func(db *velox.DB) (func() (string, []any, error), func() error) {
-				q := func() velox.TableInsert {
+				q := func() untyped.TableInsert {
 					rows := tkTable.NewRows(2)
 					for i := range rows.Len() {
 						*rows.At(i).(*testmodel.Ticket) = newTicket()
 					}
-					return db.InsertRows(tkTable, rows).OnConflict(col(Tk.ID)).Update(col(Tk.Title))
+					return untyped.InsertRows(db, tkTable, rows).OnConflict(col(Tk.ID)).Update(col(Tk.Title))
 				}
 				return func() (string, []any, error) { return q().SQL(ctx) }, func() error { return q().Exec(ctx) }
 			}},
@@ -62,10 +63,10 @@ func TestTableWriteParity(t *testing.T) {
 				return func() (string, []any, error) { return q().SQL(ctx) }, func() error { _, err := q().Exec(ctx); return err }
 			},
 			func(db *velox.DB) (func() (string, []any, error), func() error) {
-				q := func() velox.TableUpdate {
-					return db.UpdateTable(tkTable).Set(col(Tk.Title), "u").SetNull(col(Tk.ParentID)).
-						Assign(velox.Assignments([]velox.Setter[testmodel.Ticket]{Tk.Done.Set(true)})...).
-						Where(tkTable.Pred(col(Tk.ID), velox.PredEQ, int64(4)))
+				q := func() untyped.TableUpdate {
+					return untyped.Update(db, tkTable).Set(col(Tk.Title), "u").SetNull(col(Tk.ParentID)).
+						Assign(untyped.Assignments([]velox.Setter[testmodel.Ticket]{Tk.Done.Set(true)})...).
+						Where(tkTable.Pred(col(Tk.ID), untyped.PredEQ, int64(4)))
 				}
 				return func() (string, []any, error) { return q().SQL(ctx) }, func() error { _, err := q().Exec(ctx); return err }
 			}},
@@ -77,8 +78,8 @@ func TestTableWriteParity(t *testing.T) {
 				return func() (string, []any, error) { return q().SQL(ctx) }, func() error { _, err := q().Exec(ctx); return err }
 			},
 			func(db *velox.DB) (func() (string, []any, error), func() error) {
-				q := func() velox.TableDelete {
-					return db.DeleteTable(tkTable).Where(tkTable.Pred(col(Tk.Done), velox.PredEQ, true), tkTable.Has(int(Tk.Invoice.I), invTable))
+				q := func() untyped.TableDelete {
+					return untyped.Delete(db, tkTable).Where(tkTable.Pred(col(Tk.Done), untyped.PredEQ, true), tkTable.Has(int(Tk.Invoice.I), invTable))
 				}
 				return func() (string, []any, error) { return q().SQL(ctx) }, func() error { _, err := q().Exec(ctx); return err }
 			}},
@@ -128,37 +129,40 @@ func TestTableWriteRefuses(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	ctx := annIn7()
 	for name, f := range map[string]func() error{
-		"Set of another type":  func() error { _, err := db.UpdateTable(tkTable).Set(col(Tk.Title), 1).All().Exec(ctx); return err },
-		"SetNull not nullable": func() error { _, err := db.UpdateTable(tkTable).SetNull(col(Tk.Title)).All().Exec(ctx); return err },
-		"Set out of range":     func() error { _, err := db.UpdateTable(tkTable).Set(99, "x").All().Exec(ctx); return err },
-		"no Set":               func() error { _, err := db.UpdateTable(tkTable).All().Exec(ctx); return err },
-		"update with no Where": func() error { _, err := db.UpdateTable(tkTable).Set(col(Tk.Title), "x").Exec(ctx); return err },
+		"Set of another type":  func() error { _, err := untyped.Update(db, tkTable).Set(col(Tk.Title), 1).All().Exec(ctx); return err },
+		"SetNull not nullable": func() error { _, err := untyped.Update(db, tkTable).SetNull(col(Tk.Title)).All().Exec(ctx); return err },
+		"Set out of range":     func() error { _, err := untyped.Update(db, tkTable).Set(99, "x").All().Exec(ctx); return err },
+		"no Set":               func() error { _, err := untyped.Update(db, tkTable).All().Exec(ctx); return err },
+		"update with no Where": func() error { _, err := untyped.Update(db, tkTable).Set(col(Tk.Title), "x").Exec(ctx); return err },
 		"update of an invalid row": func() error {
-			_, err := db.UpdateTable(tkTable).Set(col(Tk.Title), "x").Where(tkTable.Pred(col(Tk.ID), velox.PredEQ, 1)).Exec(ctx)
+			_, err := untyped.Update(db, tkTable).Set(col(Tk.Title), "x").Where(tkTable.Pred(col(Tk.ID), untyped.PredEQ, 1)).Exec(ctx)
 			return err
 		},
-		"delete with no Where": func() error { _, err := db.DeleteTable(tkTable).Exec(ctx); return err },
+		"delete with no Where": func() error { _, err := untyped.Delete(db, tkTable).Exec(ctx); return err },
 		"delete of an invalid row": func() error {
-			_, err := db.DeleteTable(tkTable).Where(tkTable.Pred(col(Tk.ID), velox.PredEQ, 1)).Exec(ctx)
+			_, err := untyped.Delete(db, tkTable).Where(tkTable.Pred(col(Tk.ID), untyped.PredEQ, 1)).Exec(ctx)
 			return err
 		},
-		"insert of nil": func() error { return db.InsertTable(tkTable, nil).Exec(ctx) },
+		"insert of nil": func() error { return untyped.Insert(db, tkTable, nil).Exec(ctx) },
 		"insert of a zero Table": func() error {
 			x := testmodel.Ticket{}
-			return db.InsertTable(velox.Table{}, &x).Exec(ctx)
+			return untyped.Insert(db, untyped.Table{}, &x).Exec(ctx)
 		},
 		"insert the policy denies": func() error {
 			x := testmodel.Ticket{Owner: "bob", Title: "t"}
-			return db.InsertTable(tkTable, &x).Exec(ctx)
+			return untyped.Insert(db, tkTable, &x).Exec(ctx)
 		},
-		"update of a zero Table": func() error { _, err := db.UpdateTable(velox.Table{}).Set(0, int64(1)).All().Exec(ctx); return err },
-		"delete of a zero Table": func() error { _, err := db.DeleteTable(velox.Table{}).All().Exec(ctx); return err },
+		"update of a zero Table": func() error {
+			_, err := untyped.Update(db, untyped.Table{}).Set(0, int64(1)).All().Exec(ctx)
+			return err
+		},
+		"delete of a zero Table": func() error { _, err := untyped.Delete(db, untyped.Table{}).All().Exec(ctx); return err },
 	} {
 		if err := f(); err == nil {
 			t.Errorf("%s: no error", name)
 		}
 	}
-	if s, _, err := db.InsertRows(tkTable, velox.TableRows{}).SQL(ctx); s != "" || err != nil {
+	if s, _, err := untyped.InsertRows(db, tkTable, untyped.Rows{}).SQL(ctx); s != "" || err != nil {
 		t.Errorf("InsertRows of nothing: %q %v", s, err)
 	}
 }
@@ -172,13 +176,13 @@ func TestTableWriteRows(t *testing.T) {
 	in7 := testmodel.Org.With(context.Background(), int64(7))
 	in8 := testmodel.Org.With(context.Background(), int64(8))
 	x := testmodel.Invoice{Number: "n7", Data: []byte{}}
-	if err := db.InsertTable(invTable, &x).Exec(in7); err != nil {
+	if err := untyped.Insert(db, invTable, &x).Exec(in7); err != nil {
 		t.Fatal(err)
 	}
 	if x.ID == 0 || x.OrgID != 7 {
 		t.Fatalf("inserted %+v", x)
 	}
-	id := invTable.Pred(col(I.ID), velox.PredEQ, x.ID)
+	id := invTable.Pred(col(I.ID), untyped.PredEQ, x.ID)
 	for _, c := range []struct {
 		name  string
 		ctx   context.Context
@@ -191,19 +195,19 @@ func TestTableWriteRows(t *testing.T) {
 				return db.Update[testmodel.Invoice]().Set(I.Note.Set("x")).Where(I.ID.EQ(x.ID)).Exec(ctx)
 			},
 			func(ctx context.Context) (int64, error) {
-				return db.UpdateTable(invTable).Set(col(I.Note), "x").Where(id).Exec(ctx)
+				return untyped.Update(db, invTable).Set(col(I.Note), "x").Where(id).Exec(ctx)
 			}},
 		{"delete, hidden", in8, 0,
 			func(ctx context.Context) (int64, error) {
 				return db.Delete[testmodel.Invoice]().Where(I.ID.EQ(x.ID)).Exec(ctx)
 			},
-			func(ctx context.Context) (int64, error) { return db.DeleteTable(invTable).Where(id).Exec(ctx) }},
+			func(ctx context.Context) (int64, error) { return untyped.Delete(db, invTable).Where(id).Exec(ctx) }},
 		{"update, seen", in7, 1,
 			func(ctx context.Context) (int64, error) {
 				return db.Update[testmodel.Invoice]().Set(I.Note.Set("x")).Where(I.ID.EQ(x.ID)).Exec(ctx)
 			},
 			func(ctx context.Context) (int64, error) {
-				return db.UpdateTable(invTable).Set(col(I.Note), "y").Where(id).Exec(ctx)
+				return untyped.Update(db, invTable).Set(col(I.Note), "y").Where(id).Exec(ctx)
 			}},
 	} {
 		tn, terr := c.typed(c.ctx)
@@ -216,7 +220,7 @@ func TestTableWriteRows(t *testing.T) {
 	if err != nil || got.Note != "y" {
 		t.Errorf("after the updates: %+v %v", got, err)
 	}
-	if n, err := db.DeleteTable(invTable).Where(id).Exec(in7); n != 1 || err != nil {
+	if n, err := untyped.Delete(db, invTable).Where(id).Exec(in7); n != 1 || err != nil {
 		t.Errorf("delete, seen: %d %v", n, err)
 	}
 	// InsertRows of rows NewRows made, their fields set by SetField.
@@ -229,7 +233,7 @@ func TestTableWriteRows(t *testing.T) {
 			}
 		}
 	}
-	if err := db.InsertRows(invTable, rows).Exec(in7); err != nil {
+	if err := untyped.InsertRows(db, invTable, rows).Exec(in7); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := db.Query[testmodel.Invoice]().Where(I.Number.EQ("r"), I.OrgID.EQ(7)).Count(in7); n != 2 || err != nil {
@@ -242,7 +246,7 @@ func TestTableWriteRows(t *testing.T) {
 	if err := invTable.SetField(rows.At(0), col(I.PaidAt), x.CreatedAt); err != nil || rows.At(0).(*testmodel.Invoice).PaidAt == nil {
 		t.Errorf("SetField of a nullable field: %v", err)
 	}
-	if invTable.NewRows(0).Len() != 0 || (velox.Table{}).NewRows(2).Len() != 0 {
+	if invTable.NewRows(0).Len() != 0 || (untyped.Table{}).NewRows(2).Len() != 0 {
 		t.Error("NewRows of none")
 	}
 	// Validate and ValidateSet, untyped, are the typed ones'.
@@ -254,7 +258,7 @@ func TestTableWriteRows(t *testing.T) {
 	if err != nil || (tkTable.ValidateSet(a) == nil) != (velox.ValidateSet[testmodel.Ticket](Tk.Title.Set("")) == nil) {
 		t.Errorf("ValidateSet differs: %v", err)
 	}
-	if (velox.Table{}).Validate(nil) == nil || (velox.Table{}).ValidateSet() == nil {
+	if (untyped.Table{}).Validate(nil) == nil || (untyped.Table{}).ValidateSet() == nil {
 		t.Error("the zero Table validates")
 	}
 }

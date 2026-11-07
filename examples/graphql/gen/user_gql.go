@@ -10,9 +10,10 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion18
+const _ = veloxgql.GeneratedCodeIsVersion19
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -105,7 +106,7 @@ func NewUserConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *UserOrder, where *UserWhereInput,
 ) (*UserConnection, error) {
-	return newUserConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
+	return newUserConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, orderBy, where)
 }
 
 // newUserConnection is NewUserConnection of the nodes from leads to: a query's,
@@ -129,7 +130,7 @@ func newUserConnection(
 // userType describes the GraphQL type User to gqlgraph.
 var userType = gqlgraph.Type{
 	Name:  "User",
-	Table: velox.TableOf[User],
+	Table: untyped.TableOf[User],
 	Key:   []gqlgraph.Column{{Name: "id", Index: userColID}},
 	Order: []gqlgraph.Column{
 		{Name: "NAME", Index: userColName},
@@ -299,8 +300,8 @@ func (w *UserWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		In:    w.RoleIn,
 		NotIn: w.RoleNotIn,
 	})
-	gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
-	gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
+	gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, untyped.TableOf[Post]())
+	gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, untyped.TableOf[Post]())
 	return f.Pred()
 }
 

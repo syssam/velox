@@ -82,11 +82,11 @@ type Row = engine.Row
 // reports the update's count with SetAffected, which the delete's Exec then
 // returns:
 //
-//	t := m.Table()
+//	t := untyped.MutationTable(m)
 //	col, _ := t.Info().Column("deleted_at")
 //	set, err := t.Assign(col, now)
 //	...
-//	u := m.DB().UpdateTable(t).Assign(set)
+//	u := untyped.Update(m.DB(), t).Assign(set)
 //	if cs := m.Predicates(); len(cs) > 0 {
 //		u = u.Where(cs...)
 //	} else {
@@ -186,10 +186,6 @@ func (m *Mutation) DB() *DB {
 	db, _ := m.mu.DB.(*engine.DB)
 	return (*DB)(unsafe.Pointer(db))
 }
-
-// Table returns the entity's Table, for a hook that makes the write
-// itself, such as a soft delete's update (see Mutation).
-func (m *Mutation) Table() Table { return engine.MutationTable(&m.mu) }
 
 // Affected returns the rows the write inserted, matched or deleted, once
 // next has returned, or the count the hook gave SetAffected. It is 0

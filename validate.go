@@ -13,15 +13,15 @@ import (
 // error are Insert's (see ValidationError); Insert validates again after its
 // defaults and hooks.
 func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error {
-	m := x.VeloxMeta()
-	if m.err != nil {
-		return m.err
+	m := stateOf(x.VeloxMeta())
+	if m.Err != nil {
+		return m.Err
 	}
 	cols := make([]int, len(cs))
 	for i, c := range cs {
 		cols[i] = int(c.column(nil))
 	}
-	return engine.ValidateRow(m.info, unsafe.Pointer(x), cols)
+	return engine.ValidateRow(m.Info, unsafe.Pointer(x), cols)
 }
 
 // ValidateSet runs the validators of the Set values of set, and refuses an
@@ -30,13 +30,13 @@ func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error {
 // fields its input sets this way. For generated code. The checks and the error
 // are Update's (see ValidationError); Update validates again after its hooks.
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error {
-	m := PE(nil).VeloxMeta()
-	if m.err != nil {
-		return m.err
+	m := stateOf(PE(nil).VeloxMeta())
+	if m.Err != nil {
+		return m.Err
 	}
 	as := make([]Assignment, len(set))
 	for i, s := range set {
 		as[i] = s.a
 	}
-	return engine.ValidateSetters(m.info, as)
+	return engine.ValidateSetters(m.Info, as)
 }

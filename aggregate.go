@@ -23,26 +23,26 @@ func readAggregate[T any](a *aggRun[T], r engine.Rows) error {
 // aggregate runs fn over column c of q's rows and scans it into a *T; nil
 // means no row, or only NULLs.
 func aggregate[E, T any](ctx context.Context, q Query[E], fn Aggregate, c int32) (*T, error) {
-	if q.meta.err != nil {
-		return nil, q.meta.err
+	if q.meta.Err != nil {
+		return nil, q.meta.Err
 	}
-	if q.err != nil {
-		return nil, q.err
+	if q.s.Err != nil {
+		return nil, q.s.Err
 	}
-	q.st.Columns = nil // as in Count
+	q.s.St.Columns = nil // as in Count
 	st, err := q.prepare()
 	if err != nil {
 		return nil, err
 	}
 	st.Aggregate, st.Columns, st.OrderBy, st.Limit, st.Offset = fn, []int{int(c)}, nil, 0, 0
 	var v *T
-	if q.db.e.Hooked() {
+	if q.s.DB.Hooked() {
 		a := &aggRun[T]{st: st}
-		err = q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readAggregate(a, r) }, nil)
+		err = q.s.DB.Run(ctx, &a.st, func(r engine.Rows) error { return readAggregate(a, r) }, nil)
 		v = a.v
 	} else {
 		a := aggRun[T]{st: st}
-		err = q.db.e.Plain(ctx, &a.st, func(r engine.Rows) error { return readAggregate(&a, r) }, nil)
+		err = q.s.DB.Plain(ctx, &a.st, func(r engine.Rows) error { return readAggregate(&a, r) }, nil)
 		v = a.v
 	}
 	if err != nil {
@@ -168,13 +168,13 @@ func readGroups[K, V any](g *groupRun[K, V], r engine.Rows) error {
 // grouped runs fn, or COUNT(*) with fn 0, over column c of q's rows per value
 // of key, in the order of the key.
 func grouped[E, K, V any](ctx context.Context, q Query[E], fn Aggregate, key GroupKey[E, K], c int32) ([]Group[K, V], error) {
-	if q.meta.err != nil {
-		return nil, q.meta.err
+	if q.meta.Err != nil {
+		return nil, q.meta.Err
 	}
-	if q.err != nil {
-		return nil, q.err
+	if q.s.Err != nil {
+		return nil, q.s.Err
 	}
-	q.st.Columns = nil // as in Count
+	q.s.St.Columns = nil // as in Count
 	st, err := q.prepare()
 	if err != nil {
 		return nil, err
@@ -188,10 +188,10 @@ func grouped[E, K, V any](ctx context.Context, q Query[E], fn Aggregate, key Gro
 	}
 	g := &groupRun[K, V]{st: st, sum: fn == AggregateSum}
 	read := func(r engine.Rows) error { return readGroups(g, r) }
-	if q.db.e.Hooked() {
-		err = q.db.e.Run(ctx, &g.st, read, nil)
+	if q.s.DB.Hooked() {
+		err = q.s.DB.Run(ctx, &g.st, read, nil)
 	} else {
-		err = q.db.e.Plain(ctx, &g.st, read, nil)
+		err = q.s.DB.Plain(ctx, &g.st, read, nil)
 	}
 	if err != nil {
 		return nil, err

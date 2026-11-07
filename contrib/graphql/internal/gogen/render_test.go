@@ -504,8 +504,8 @@ func TestGoTypes(t *testing.T) {
 		` gqlgraph.Field(f, "at", eventColAt, gqlgraph.Ops[time.Time]{LT: w.AtLT, IsNil: w.AtIsNil}) `,
 		` gqlgraph.Field(f, "ref", eventColRef, gqlgraph.Ops[uuid.UUID]{NEQ: w.RefNEQ}) `,
 		` gqlgraph.EdgeIDField[int64](f, "ownerID", eventColOwnerID, eventEdgeOwner, &ownerType, gqlgraph.Ops[string]{ EQ: w.OwnerID, NEQ: w.OwnerIDNEQ, In: w.OwnerIDIn, NotIn: w.OwnerIDNotIn, IsNil: w.OwnerIDIsNil, NotNil: w.OwnerIDNotNil, }) `,
-		` gqlgraph.Has(f, "hasOwner", w.HasOwner, eventEdgeOwner, velox.TableOf[Owner]()) `,
-		` gqlgraph.HasWith(f, "hasOwnerWith", w.HasOwnerWith, (*OwnerWhereInput).predicate, eventEdgeOwner, velox.TableOf[Owner]()) `,
+		` gqlgraph.Has(f, "hasOwner", w.HasOwner, eventEdgeOwner, untyped.TableOf[Owner]()) `,
+		` gqlgraph.HasWith(f, "hasOwnerWith", w.HasOwnerWith, (*OwnerWhereInput).predicate, eventEdgeOwner, untyped.TableOf[Owner]()) `,
 	} {
 		if !strings.Contains(ev, want) {
 			t.Errorf("no %q in\n%s", want, ev)
@@ -544,7 +544,7 @@ func TestGoTypes(t *testing.T) {
 	for file, wants := range map[string][]string{
 		ev: {
 			` "github.com/google/uuid" `,
-			" Name: \"Event\", Table: velox.TableOf[Event], ",
+			" Name: \"Event\", Table: untyped.TableOf[Event], ",
 			" AlwaysRead: []int{eventColID, eventColOwnerID, eventColLevel}, ",
 		},
 		node: {
@@ -720,7 +720,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion18\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion19\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1471,7 +1471,7 @@ func TestNewConnectionFilters(t *testing.T) {
 		files := render(t, m)
 		for _, ty := range surf.Types {
 			src := funcSrc(t, files, newConnFunc(ty))
-			if want := "return " + newConnImpl(ty) + "(ctx, gqlgraph.Query(velox.Untyped(q)), " + connArgs(ty) + ")"; !strings.Contains(src, want) {
+			if want := "return " + newConnImpl(ty) + "(ctx, gqlgraph.Query(untyped.FromQuery(q)), " + connArgs(ty) + ")"; !strings.Contains(src, want) {
 				t.Errorf("%s: %s is not %q:\n%s", label, newConnFunc(ty), want, src)
 			}
 			src = funcSrc(t, files, newConnImpl(ty))

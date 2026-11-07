@@ -13,6 +13,7 @@ import (
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/mixin"
+	"github.com/syssam/velox/untyped"
 )
 
 func TestHookOrderAndRows(t *testing.T) {
@@ -857,13 +858,13 @@ func (*hSoft) Hooks() []velox.Hook {
 	return []velox.Hook{
 		velox.On(func(next velox.Mutator) velox.Mutator {
 			return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
-				t := m.Table()
+				t := untyped.MutationTable(m)
 				col, _ := t.Info().Column("deleted")
 				set, err := t.Assign(col, true)
 				if err != nil {
 					return err
 				}
-				q := m.DB().UpdateTable(t).Assign(set)
+				q := untyped.Update(m.DB(), t).Assign(set)
 				if cs := m.Predicates(); len(cs) > 0 {
 					q = q.Where(cs...)
 				} else {

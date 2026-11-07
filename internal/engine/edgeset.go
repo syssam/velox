@@ -118,7 +118,7 @@ func (p EdgePlan) Writes() bool { return len(p.w) > 0 }
 // setter's key names a row of its target the caller may read.
 func (p EdgePlan) check(ctx context.Context, db *DB) error {
 	for _, c := range p.checks {
-		ok, err := QueryTable(db, nil, c.target).Where(c.target.Pred(c.col, PredEQ, c.key)).Exists(ctx)
+		ok, err := QueryTable(db, c.target).Where(c.target.Pred(c.col, PredEQ, c.key)).Exists(ctx)
 		if err != nil {
 			return err
 		}
@@ -313,7 +313,7 @@ func plain(v any) (any, bool) {
 }
 
 // InfoTable is the Table of the entity in, built from its metadata: what
-// velox's TableOf builds from the entity's Meta, but for no relation's use.
+// untyped.TableOf builds from the entity's Meta, but for no relation's use.
 func InfoTable(in *EntityInfo) Table {
 	addr := func(p unsafe.Pointer, col int) any { return fieldAddr(in, p, col) }
 	typ := reflect.TypeOf(in.kit.Ptr(nil)).Elem()
@@ -376,7 +376,7 @@ func UpdateEdges(ctx context.Context, db *DB, st *Statement, p EdgePlan) (int64,
 		if err := p.check(ctx, tx); err != nil {
 			return err
 		}
-		q := QueryTable(tx, nil, InfoTable(st.Entity)).Where(st.Where...).Columns(p.OwnerCols()...).Unbounded().Writable()
+		q := QueryTable(tx, InfoTable(st.Entity)).Where(st.Where...).Columns(p.OwnerCols()...).Unbounded().Writable()
 		if tx.D != SQLite {
 			q = q.ForUpdate()
 		}
@@ -461,7 +461,7 @@ func (w *edgeWrite) readable(ctx context.Context, db *DB, ks []any, more ...Pred
 		return nil, nil
 	}
 	t := w.target
-	rows, err := QueryTable(db, nil, t).Where(in(t, w.key, ks)).Where(more...).Columns(w.key).Limit(len(ks)).MaxRows(len(ks)).All(ctx)
+	rows, err := QueryTable(db, t).Where(in(t, w.key, ks)).Where(more...).Columns(w.key).Limit(len(ks)).MaxRows(len(ks)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -567,7 +567,7 @@ func (w *edgeWrite) writeThrough(ctx context.Context, db *DB, owners []unsafe.Po
 // unlink leaves is not read again.
 func (w *edgeWrite) unlinkAll(ctx context.Context, db *DB, o any, unlink func(o any, ks []any) error) error {
 	j, l := w.join, w.link
-	q := QueryTable(db, nil, j).Where(j.Pred(l.JoinOwner, PredEQ, o)).
+	q := QueryTable(db, j).Where(j.Pred(l.JoinOwner, PredEQ, o)).
 		OrderBy(OrderTerm{Column: l.JoinOwner}, OrderTerm{Column: l.JoinTarget}).Limit(EdgePage).MaxRows(EdgePage)
 	for {
 		rows, err := q.All(ctx)
@@ -649,7 +649,7 @@ func (w *edgeWrite) replaceChild(ctx context.Context, db *DB, k, v any) error {
 	const reason = "velox: a hidden child of a one-to-one edge setter"
 	held, other := t.Pred(fk, PredEQ, v), t.Pred(w.key, PredNEQ, k)
 	if info := t.Info(); info != nil && info.Columns[fk].RequiredEdge != "" {
-		holds, err := QueryTable(db, nil, t).Where(held, other).Exists(WithoutPolicy(ctx, reason))
+		holds, err := QueryTable(db, t).Where(held, other).Exists(WithoutPolicy(ctx, reason))
 		if err != nil {
 			return err
 		}
@@ -660,7 +660,7 @@ func (w *edgeWrite) replaceChild(ctx context.Context, db *DB, k, v any) error {
 	if _, err := UpdateTable(db, t).SetNull(fk).Where(held, other).Exec(ctx); err != nil {
 		return err
 	}
-	still, err := QueryTable(db, nil, t).Where(held, other).Exists(WithoutPolicy(ctx, reason))
+	still, err := QueryTable(db, t).Where(held, other).Exists(WithoutPolicy(ctx, reason))
 	if err != nil {
 		return err
 	}
@@ -691,7 +691,7 @@ func (w *edgeWrite) relink(ctx context.Context, db *DB, ks []any, v any) error {
 		return nil
 	}
 	bad := missing(ks, got)
-	linked, err := QueryTable(db, nil, t).Where(in(t, w.key, bad), t.Pred(fk, PredNotNull, nil), t.Pred(fk, PredNEQ, v)).Exists(ctx)
+	linked, err := QueryTable(db, t).Where(in(t, w.key, bad), t.Pred(fk, PredNotNull, nil), t.Pred(fk, PredNEQ, v)).Exists(ctx)
 	if err != nil {
 		return err
 	}

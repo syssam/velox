@@ -9,14 +9,18 @@ import (
 )
 
 // Meta is an entity's metadata and scan plan. For generated code.
-type Meta[E any] struct {
-	info *EntityInfo
-	addr func(*E, int) any
-	err  error
-	// nilCols marks the columns engine.NilScanner reads; nil when there are none.
-	nilCols []bool
-	// tbl is the entity's Table, built by its first TableOf.
-	tbl tableState
+type Meta[E any] struct{ d metaState[E] }
+
+// metaState is a Meta's state. Meta holds it as its only field, so that
+// package untyped reaches it by a pointer conversion.
+type metaState[E any] = engine.MetaState[E]
+
+// stateOf is m's state, nil for a nil m.
+func stateOf[E any](m *Meta[E]) *metaState[E] {
+	if m == nil {
+		return nil
+	}
+	return &m.d
 }
 
 // MetaOnce builds an entity's Meta on first use. For generated code. Its zero
@@ -51,7 +55,7 @@ type Entity[E any] interface {
 // leaves the relations unchecked). velox-gen verify calls CheckEntity for
 // every entity and CheckRelation for every relation.
 func CheckEntity[E any, PE Entity[E]]() error {
-	return PE(nil).VeloxMeta().err
+	return PE(nil).VeloxMeta().d.Err
 }
 
 // HasRowFilter reports whether entity E's rows are filtered for reads: by an
@@ -60,15 +64,15 @@ func CheckEntity[E any, PE Entity[E]]() error {
 // hidden as null. It is false when E's metadata failed to build; the
 // entity's first statement reports why.
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool {
-	if m == nil || m.info == nil {
+	if m == nil || m.d.Info == nil {
 		return false
 	}
-	return engine.HasRowFilter(m.info)
+	return engine.HasRowFilter(m.d.Info)
 }
 
 // kitOf builds entity E's kit from its scan plan.
 func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *engine.Kit {
-	m := &Meta[E]{info: info, addr: addr, nilCols: engine.NilColumns(info)}
+	m := &metaState[E]{Info: info, Addr: addr, NilCols: engine.NilColumns(info)}
 	typ := engine.ElemType((*E)(nil))
 	return &engine.Kit{
 		Value: func(p unsafe.Pointer, col int) any { return engine.Elem(addr((*E)(p), col)) },
@@ -121,11 +125,11 @@ func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *engine.Kit {
 
 // metaOf returns entity E's Meta, for generic code that cannot name E's
 // pointer type in its constraints (a method of Rel[E, T]).
-func metaOf[E any]() (*Meta[E], error) {
+func metaOf[E any]() (*metaState[E], error) {
 	p, ok := any((*E)(nil)).(interface{ VeloxMeta() *Meta[E] })
 	if !ok {
 		return nil, fmt.Errorf("velox: %v is not an entity: run go tool velox-gen", engine.ElemType((*E)(nil)))
 	}
-	m := p.VeloxMeta()
-	return m, m.err
+	m := &p.VeloxMeta().d
+	return m, m.Err
 }

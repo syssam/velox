@@ -37,7 +37,6 @@ JoinClause.Ref RelRef
 Policy.Insert func(ctx context.Context, r Row) error
 Policy.Read func(ctx context.Context) (Predicate, error)
 Policy.Write func(ctx context.Context) (Predicate, error)
-PredOp is uint8
 Row.Entity() any
 Row.IsZero(name string) bool
 Row.Set(name string, v any) error
@@ -79,65 +78,6 @@ Statement.Tx *TxInfo
 Statement.Unbounded bool
 Statement.Where []Predicate
 Statement.Writable bool
-Table.Assign(col int, v any) (Assignment, error)
-Table.Convert(col int, v any) (any, error)
-Table.Err() error
-Table.Field(row any, col int) any
-Table.Fill(owner any, edge int, target Table, row any) error
-Table.Filled(owner any, edge int, target Table) (any, bool)
-Table.Has(edge int, target Table, ps ...Predicate) Predicate
-Table.HasRowFilter() bool
-Table.Info() *EntityInfo
-Table.New() any
-Table.NewRows(n int) TableRows
-Table.Of(edge int, target Table, owners ...any) Predicate
-Table.Pred(col int, op PredOp, v any) Predicate
-Table.SetField(row any, col int, v any) error
-Table.Validate(row any, cols ...int) error
-Table.ValidateSet(set ...Assignment) error
-Table.Value(row any, col int) any
-TableDelete.All() TableDelete
-TableDelete.Exec(ctx context.Context) (int64, error)
-TableDelete.SQL(ctx context.Context) (string, []any, error)
-TableDelete.Where(ps ...Predicate) TableDelete
-TableInsert.DoNothing() TableInsert
-TableInsert.Exec(ctx context.Context) error
-TableInsert.OnConflict(cols ...int) TableInsert
-TableInsert.SQL(ctx context.Context) (string, []any, error)
-TableInsert.Update(cols ...int) TableInsert
-TableQuery.After(row any) TableQuery
-TableQuery.All(ctx context.Context) (TableRows, error)
-TableQuery.Columns(cs ...int) TableQuery
-TableQuery.Count(ctx context.Context) (int64, error)
-TableQuery.CountEach(ctx context.Context, owner Table, edge int, owners []any) ([]int64, error)
-TableQuery.Exists(ctx context.Context) (bool, error)
-TableQuery.First(ctx context.Context) (any, error)
-TableQuery.ForShare() TableQuery
-TableQuery.ForUpdate() TableQuery
-TableQuery.Join(edge int, target Table) TableQuery
-TableQuery.LeftJoin(edge int, target Table) TableQuery
-TableQuery.Limit(n int) TableQuery
-TableQuery.LoadEach(ctx context.Context, owner Table, edge, each int, owners []any) ([]TableRows, error)
-TableQuery.MaxRows(n int) TableQuery
-TableQuery.Offset(n int) TableQuery
-TableQuery.One(ctx context.Context) (any, error)
-TableQuery.OrderBy(os ...OrderTerm) TableQuery
-TableQuery.Ordered() bool
-TableQuery.SQL(ctx context.Context) (string, []any, error)
-TableQuery.Selects(cs ...int) bool
-TableQuery.Table() Table
-TableQuery.Unbounded() TableQuery
-TableQuery.Where(ps ...Predicate) TableQuery
-TableQuery.Writable() TableQuery
-TableRows.At(i int) any
-TableRows.Len() int
-TableUpdate.All() TableUpdate
-TableUpdate.Assign(as ...Assignment) TableUpdate
-TableUpdate.Exec(ctx context.Context) (int64, error)
-TableUpdate.SQL(ctx context.Context) (string, []any, error)
-TableUpdate.Set(col int, v any) TableUpdate
-TableUpdate.SetNull(col int) TableUpdate
-TableUpdate.Where(ps ...Predicate) TableUpdate
 const AggregateAvg
 const AggregateMax
 const AggregateMin
@@ -163,19 +103,6 @@ const OpRawQuery
 const OpSelect
 const OpUpdate
 const Postgres
-const PredContains
-const PredEQ
-const PredGT
-const PredGTE
-const PredHasPrefix
-const PredHasSuffix
-const PredIn
-const PredIsNull
-const PredLT
-const PredLTE
-const PredNEQ
-const PredNotIn
-const PredNotNull
 const SQLite
 const TxCommit
 const TxError
@@ -310,20 +237,15 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (d DeleteQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) DeleteQuery[E]
 func (db *DB) Close() error
-func (db *DB) DeleteTable(t Table) TableDelete
 func (db *DB) Delete[E any, PE Entity[E]]() DeleteQuery[E]
 func (db *DB) Dialect() Dialect
 func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error)
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E]
-func (db *DB) InsertRows(t Table, rows TableRows) TableInsert
-func (db *DB) InsertTable(t Table, row any) TableInsert
 func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E]
-func (db *DB) QueryTable(t Table) TableQuery
 func (db *DB) Query[E any, PE Entity[E]]() Query[E]
 func (db *DB) Raw[E any, PE Entity[E]](reason, query string, args ...any) RawQuery[E]
 func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) SaveQuery[E]
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
-func (db *DB) UpdateTable(t Table) TableUpdate
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
 func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
@@ -335,7 +257,6 @@ func (m *Mutation) Predicates() []Predicate
 func (m *Mutation) Rows() iter.Seq[Row]
 func (m *Mutation) Set(name string, v any) error
 func (m *Mutation) SetAffected(n int64)
-func (m *Mutation) Table() Table
 func (m *Mutation) Value(name string) (any, bool)
 func (m *Mutation) Where(ps ...Predicate)
 func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool)
@@ -406,9 +327,7 @@ func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
 func Allow() Predicate
-func AndPredicates(ps ...Predicate) Predicate
 func And[E any](ps ...Pred[E]) Pred[E]
-func Assignments[E any](set []Setter[E]) []Assignment
 func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, float64], error)
 func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, float64], error)
 func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
@@ -454,33 +373,27 @@ func MinByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K],
 func MinBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
 func MinNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
 func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
-func NotPredicate(p Predicate) Predicate
 func Not[E any](p Pred[E]) Pred[E]
 func On(h Hook, ops ...Op) Hook
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB
 func OpenConn(d Dialect, c Conn, opts ...Option) *DB
 func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB
-func OrPredicates(ps ...Predicate) Predicate
 func Or[E any](ps ...Pred[E]) Pred[E]
 func PinUntil(ctx context.Context, t time.Time)
 func PinnedUntil(ctx context.Context) time.Time
 func Pool(db *DB) *sql.DB
 func RowScopeFromContext(ctx context.Context) RowScope
-func RowsOf[E any](r TableRows) []E
 func SQLConn(db *sql.DB) Conn
 func Show[T any](p *T) any
 func SumByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func SumBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
 func SumNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, error)
 func Sum[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, error)
-func TableOf[E any]() Table
 func TxIsolation(level sql.IsolationLevel) TxOption
 func TxReadOnly() TxOption
 func TxRetries(opts ...TxOption) int
 func TxRetrySerializable(n int) TxOption
 func TxTimeout(d time.Duration) TxOption
-func Typed[E any](q TableQuery) Query[E]
-func Untyped[E any](q Query[E]) TableQuery
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error
 func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error
 func WithAround(a Around) Option
@@ -558,7 +471,6 @@ type Order[E any] struct { }
 type OrderedCol[E, V any] struct { I int32 }
 type Policy = engine.Policy
 type PolicyError = veloxtype.PolicyError
-type PredOp = engine.PredOp
 type Pred[E any] = engine.Pred[E]
 type Predicate = Pred[anyEntity]
 type Query[E any] struct { }
@@ -575,12 +487,6 @@ type Setter[E any] struct { }
 type Shard = engine.Shard
 type Statement = engine.Statement
 type StringCol[E any, V ~string] struct { I int32 }
-type Table = engine.Table
-type TableDelete = engine.TableDelete
-type TableInsert = engine.TableInsert
-type TableQuery = engine.TableQuery
-type TableRows = engine.TableRows
-type TableUpdate = engine.TableUpdate
 type Tag = veloxtype.Tag
 type TxAround = veloxtype.TxAround
 type TxInfo = veloxtype.TxInfo
@@ -1097,7 +1003,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion18
+const GeneratedCodeIsVersion19
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

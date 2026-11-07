@@ -11,9 +11,10 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion18
+const _ = veloxgql.GeneratedCodeIsVersion19
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -139,7 +140,7 @@ func NewAccountConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *AccountWhereInput,
 ) (*AccountConnection, error) {
-	return newAccountConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, where)
+	return newAccountConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, where)
 }
 
 // newAccountConnection is NewAccountConnection of the nodes from leads to: a
@@ -160,7 +161,7 @@ func newAccountConnection(
 // userType describes the GraphQL type Account to gqlgraph.
 var userType = gqlgraph.Type{
 	Name:       "Account",
-	Table:      velox.TableOf[User],
+	Table:      untyped.TableOf[User],
 	Key:        []gqlgraph.Column{{Name: "id", Index: userColID}},
 	AlwaysRead: []int{userColID, userColUserBestFriend},
 	Fields: []string{
@@ -274,8 +275,8 @@ func (w *AccountWhereInput) predicate(ctx context.Context) (velox.Predicate, err
 		HasPrefix: w.DisplayNameHasPrefix,
 		HasSuffix: w.DisplayNameHasSuffix,
 	})
-	gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, velox.TableOf[Post]())
-	gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, velox.TableOf[Post]())
+	gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, untyped.TableOf[Post]())
+	gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, untyped.TableOf[Post]())
 	return f.Pred()
 }
 

@@ -32,6 +32,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
 // handlerSDL is the schema of the extension's tests.
@@ -304,7 +305,7 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 			first = new(int(n))
 		}
 		key := &gqlgraph.Type{Name: "Person", Key: []gqlgraph.Column{{Name: "id", Index: int(people.ID.I)}}}
-		c, err := gqlgraph.Paginate(ctx, gqlgraph.Query(db.QueryTable(velox.TableOf[person]())), key, gqlgraph.Args{First: first})
+		c, err := gqlgraph.Paginate(ctx, gqlgraph.Query(untyped.Query(db, untyped.TableOf[person]())), key, gqlgraph.Args{First: first})
 		if err != nil {
 			return nil, err
 		}

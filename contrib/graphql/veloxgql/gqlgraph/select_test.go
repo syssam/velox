@@ -7,8 +7,8 @@ import (
 
 	"github.com/vektah/gqlparser/v2/ast"
 
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
 // TestSelectedConnection: through a connection, the fields selected on its
@@ -134,11 +134,11 @@ func TestSelectedInterfaces(t *testing.T) {
 // keep the query.
 func TestNarrow(t *testing.T) {
 	db, _, log := edgeDB(t)
-	q := db.QueryTable(velox.TableOf[owner]()).Unbounded()
+	q := untyped.Query(db, untyped.TableOf[owner]()).Unbounded()
 	idName := []int{int(owners.ID.I), int(owners.Name.I)}
 	for _, c := range []struct {
 		name string
-		q    velox.TableQuery
+		q    untyped.TableQuery
 		want string
 	}{
 		{"every column", gqlgraph.Narrow(q, nil), `SELECT "id", "name", "age" FROM "owners"`},

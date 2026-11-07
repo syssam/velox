@@ -22,6 +22,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/scope"
+	"github.com/syssam/velox/untyped"
 )
 
 // codeOf is the code err carries for ErrorPresenter, "" for none.
@@ -48,7 +49,7 @@ func (w *personName) Pred(ctx context.Context) (velox.Pred[person], error) {
 }
 
 func (w *personName) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlgraph.NewFilter(ctx, &gqlgraph.Type{Name: "Person", Table: velox.TableOf[person]})
+	f := gqlgraph.NewFilter(ctx, &gqlgraph.Type{Name: "Person", Table: untyped.TableOf[person]})
 	if w == nil {
 		return f.Pred()
 	}
@@ -74,7 +75,7 @@ func (w *leaky) predicate(ctx context.Context) (velox.Predicate, error) {
 	if w != nil && w.Leak {
 		return velox.Predicate{}, fmt.Errorf("sqlite: secret: %w", gqlgraph.InputErrorf("bad name"))
 	}
-	f := gqlgraph.NewFilter(ctx, &gqlgraph.Type{Name: "Leaky", Table: velox.TableOf[person]})
+	f := gqlgraph.NewFilter(ctx, &gqlgraph.Type{Name: "Leaky", Table: untyped.TableOf[person]})
 	if w != nil {
 		gqlgraph.Not(f, "not", w.Not, (*leaky).predicate)
 	}
@@ -88,7 +89,7 @@ func TestErrorsAreCoded(t *testing.T) {
 	ctx := context.Background()
 	key := &gqlgraph.Type{Name: "Person", Key: []gqlgraph.Column{{Name: "id", Index: int(people.ID.I)}}}
 	conn := func(args gqlgraph.Args) error {
-		_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(db.QueryTable(velox.TableOf[person]())), key, args)
+		_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(untyped.Query(db, untyped.TableOf[person]())), key, args)
 		return err
 	}
 	pred := func(w *personName) error {

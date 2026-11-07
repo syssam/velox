@@ -10,6 +10,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
 // item is a hand-written entity, as velox-gen would write it, for Checked's
@@ -129,7 +130,7 @@ func TestCheckedUpdate(t *testing.T) {
 	c := gqlgraph.InputType[item]("Item", int(items.ID.I), itemInputGQL)
 	in := []velox.Setter[item]{items.Name.Set("client"), items.Age.Set(2)}
 	set, err := gqlgraph.Validate("UpdateItemInput", c, in)
-	if err != nil || !slices.Equal(velox.Assignments(set), velox.Assignments(in)) {
+	if err != nil || !slices.Equal(untyped.Assignments(set), untyped.Assignments(in)) {
 		t.Fatalf("Checked = %v, %v; want the setters", set, err)
 	}
 	if n, err := db.Update[item]().Where(items.ID.EQ(1)).Set(set...).Exec(ctx); err != nil || n != 1 {

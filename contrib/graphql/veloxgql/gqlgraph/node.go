@@ -7,6 +7,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/untyped"
 )
 
 // NodeKind is one Node type, as generated code hands it to NodeByID and
@@ -14,7 +15,7 @@ import (
 // For generated code.
 type NodeKind struct {
 	typ     string
-	table   velox.Table
+	table   untyped.Table
 	key     int
 	decode  func(id string) (any, error)
 	columns func(fields []string) []int
@@ -55,12 +56,12 @@ func newNode(c *Type, decode func(id string) (any, error)) NodeKind {
 
 // base is the query of the type's rows, reading only the columns the
 // selection of the field in ctx needs.
-func (n NodeKind) base(ctx context.Context) (velox.TableQuery, error) {
+func (n NodeKind) base(ctx context.Context) (untyped.TableQuery, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
-		return velox.TableQuery{}, err
+		return untyped.TableQuery{}, err
 	}
-	q := db.QueryTable(n.table)
+	q := untyped.Query(db, n.table)
 	if fields, ok := selected(ctx, n.typ); ok {
 		q = narrow(q, n.columns(fields))
 	}
@@ -85,7 +86,7 @@ func (n NodeKind) one(ctx context.Context, id string) (veloxgql.Noder, error) {
 	if err != nil {
 		return nil, err
 	}
-	p, err := q.Where(n.table.Pred(n.key, velox.PredEQ, k)).One(ctx)
+	p, err := q.Where(n.table.Pred(n.key, untyped.PredEQ, k)).One(ctx)
 	switch {
 	case velox.IsNotFound(err):
 		return nil, nil
@@ -121,7 +122,7 @@ func (s *nodeSet) load(ctx context.Context, out []veloxgql.Noder) error {
 	if err != nil {
 		return err
 	}
-	rows, err := q.Where(s.n.table.Pred(s.n.key, velox.PredIn, s.keys)).Unbounded().MaxRows(len(s.keys)).All(ctx)
+	rows, err := q.Where(s.n.table.Pred(s.n.key, untyped.PredIn, s.keys)).Unbounded().MaxRows(len(s.keys)).All(ctx)
 	if err != nil {
 		return err
 	}

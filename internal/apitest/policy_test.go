@@ -13,6 +13,7 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/untyped"
 )
 
 // asUser returns a context scoped to org 1, acting as user ("" for none).
@@ -559,14 +560,14 @@ func TestAllowRendersNothing(t *testing.T) {
 func TestAllowComposes(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
-	pn := velox.TableOf[fixture.Pnote]()
+	pn := untyped.TableOf[fixture.Pnote]()
 	allow := velox.Allow()
 	x := velox.FieldEQ("owner", "ann")
 	y := velox.FieldEQ("locked", true)
 	skip := velox.WithoutPolicy(context.Background(), "test")
 
 	query := func(c velox.Predicate) (string, []any, error) {
-		return db.QueryTable(pn).Where([]velox.Predicate{c}...).Limit(1).SQL(skip)
+		return untyped.Query(db, pn).Where([]velox.Predicate{c}...).Limit(1).SQL(skip)
 	}
 	sql := func(c velox.Predicate) (string, []any) {
 		t.Helper()
@@ -577,7 +578,7 @@ func TestAllowComposes(t *testing.T) {
 		return s, args
 	}
 	del := func(c velox.Predicate) error {
-		_, err := db.DeleteTable(pn).Where([]velox.Predicate{c}...).Exec(skip)
+		_, err := untyped.Delete(db, pn).Where([]velox.Predicate{c}...).Exec(skip)
 		return err
 	}
 	same := func(name string, got, want velox.Predicate) {

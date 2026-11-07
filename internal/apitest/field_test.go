@@ -10,6 +10,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/untyped"
 )
 
 // orgMixin is behaviour written once for any entity with an org_id column
@@ -92,7 +93,7 @@ func TestMixinByName(t *testing.T) {
 // fNoteWhere returns the SQL of a query of fNote under cs, through the
 // untyped surface.
 func fNoteWhere(db *velox.DB, cs ...velox.Predicate) (string, []any, error) {
-	return db.QueryTable(velox.TableOf[fNote]()).Where(cs...).Limit(1).SQL(context.Background())
+	return untyped.Query(db, untyped.TableOf[fNote]()).Where(cs...).Limit(1).SQL(context.Background())
 }
 
 // TestCondNullable: IsNull and NotNull on a nullable column are IS NULL and

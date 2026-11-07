@@ -120,9 +120,9 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 		if err != nil {
 			info, addr = nil, nil // an error Meta has no scan plan
 		}
-		m := &Meta[E]{info: info, addr: addr, err: err}
+		m := &Meta[E]{d: metaState[E]{Info: info, Addr: addr, Err: err}}
 		if info != nil {
-			m.nilCols = engine.NilColumns(info)
+			m.d.NilCols = engine.NilColumns(info)
 			engine.SetInfoKit(info, kitOf(info, addr))
 			engine.SetInfoCheck(info, d.Check)
 		}
@@ -209,8 +209,8 @@ func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, jo
 	r := EdgeTo[T, PT](name, ownerCol, targetCol)
 	engine.SetEdgeThrough(&r, &engine.Through{
 		Join: func() (*EntityInfo, error) {
-			m := PJ(nil).VeloxMeta()
-			return m.info, m.err
+			m := stateOf(PJ(nil).VeloxMeta())
+			return m.Info, m.Err
 		},
 		OwnerCol:  joinOwner,
 		TargetCol: joinTarget,
@@ -229,8 +229,8 @@ func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, jo
 // statement.
 func Linked[T any, PT Entity[T]](e EdgeDescriptor) EdgeDescriptor {
 	engine.SetEdgeTarget(&e, func() (*EntityInfo, error) {
-		m := PT(nil).VeloxMeta()
-		return m.info, m.err
+		m := stateOf(PT(nil).VeloxMeta())
+		return m.Info, m.Err
 	})
 	return e
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/untyped"
 )
 
 // The edges batch: the first edge field gqlgen resolves on any row of a
@@ -91,7 +92,7 @@ func (e Edge) paginate(ctx context.Context, c *Type, args Args, order []Order) (
 	if err != nil {
 		return nil, err
 	}
-	conn, err := paginate(ctx, db.QueryTable(c.table()), c, args, order)
+	conn, err := paginate(ctx, untyped.Query(db, c.table()), c, args, order)
 	if err != nil {
 		return nil, err
 	}
@@ -149,12 +150,12 @@ func EdgeList(ctx context.Context, target *Type, e Edge, maxList int) (any, erro
 
 // edgeQuery is the query of target's rows that an edge reads, on the DB in
 // ctx, reading only the columns the selection of the field in ctx needs.
-func edgeQuery(ctx context.Context, target *Type) (velox.TableQuery, error) {
+func edgeQuery(ctx context.Context, target *Type) (untyped.TableQuery, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
-		return velox.TableQuery{}, err
+		return untyped.TableQuery{}, err
 	}
-	q := db.QueryTable(target.table())
+	q := untyped.Query(db, target.table())
 	if fields, ok := selected(ctx, target.Name); ok {
 		q = narrow(q, target.columns(fields))
 	}
@@ -177,16 +178,16 @@ func edgeConnection(ctx context.Context, c *Connection, e Edge, args any) *Conne
 	// keys it.
 	n := c.n
 	c.edge = &edgeMode{
-		rows: func(q velox.TableQuery) (velox.TableRows, error) {
+		rows: func(q untyped.TableQuery) (untyped.Rows, error) {
 			// The page size and the cursor are the batch's arguments: the
 			// same in the connection of every caller of the batch.
-			parts, err := loadBatch(ctx, b, q.Limit(0).MaxRows(0), owner, e.rel, n+1, ptrs, func(r velox.TableRows) int { return min(r.Len(), n) })
+			parts, err := loadBatch(ctx, b, q.Limit(0).MaxRows(0), owner, e.rel, n+1, ptrs, func(r untyped.Rows) int { return min(r.Len(), n) })
 			if err != nil {
-				return velox.TableRows{}, err
+				return untyped.Rows{}, err
 			}
 			return parts[i], nil
 		},
-		count: func(q velox.TableQuery) (int, error) {
+		count: func(q untyped.TableQuery) (int, error) {
 			counts, err := b.Counts(func() ([]int64, error) { return q.Limit(0).CountEach(ctx, owner, e.rel, ptrs) })
 			if err != nil {
 				return 0, err
@@ -205,7 +206,7 @@ func edgeConnection(ctx context.Context, c *Connection, e Edge, args any) *Conne
 //
 // The node read alone is a group of its own, and so are the nodes of a
 // batch: their edges batch.
-func edgeOne(ctx context.Context, q velox.TableQuery, e Edge) (any, error) {
+func edgeOne(ctx context.Context, q untyped.TableQuery, e Edge) (any, error) {
 	owner := e.owner.table()
 	b, owners, i := batchOf(ctx, q.Table(), e, 0, nil)
 	if b == nil {
@@ -219,7 +220,7 @@ func edgeOne(ctx context.Context, q velox.TableQuery, e Edge) (any, error) {
 		gqlcore.Add(ctx, []any{v})
 		return v, nil
 	}
-	parts, err := loadBatch(ctx, b, q, owner, e.rel, 1, owners, velox.TableRows.Len)
+	parts, err := loadBatch(ctx, b, q, owner, e.rel, 1, owners, untyped.Rows.Len)
 	if err != nil {
 		return nil, err
 	}
@@ -238,12 +239,12 @@ func edgeOne(ctx context.Context, q velox.TableQuery, e Edge) (any, error) {
 // MaxList is that of veloxgql.LimitsFromContext(ctx), or maxList, the edge's
 // graphql.MaxList, when that is lower and not 0. Read alone, the row's nodes
 // are one LoadEach of it, a group of their own.
-func edgeList(ctx context.Context, q velox.TableQuery, e Edge, maxList int) ([]any, error) {
+func edgeList(ctx context.Context, q untyped.TableQuery, e Edge, maxList int) ([]any, error) {
 	most := veloxgql.LimitsFromContext(ctx).MaxList
 	if maxList > 0 {
 		most = min(most, maxList)
 	}
-	keep := func(rows velox.TableRows) int {
+	keep := func(rows untyped.Rows) int {
 		if rows.Len() > most {
 			return 0
 		}
@@ -273,9 +274,9 @@ func edgeList(ctx context.Context, q velox.TableQuery, e Edge, maxList int) ([]a
 type edgeMode struct {
 	// rows returns the connection's rows, q being its query in its order,
 	// after its cursor.
-	rows func(q velox.TableQuery) (velox.TableRows, error)
+	rows func(q untyped.TableQuery) (untyped.Rows, error)
 	// count returns the connection's totalCount, q being its query.
-	count func(q velox.TableQuery) (int, error)
+	count func(q untyped.TableQuery) (int, error)
 }
 
 // batchKey is what the callers of a batch share, besides its group, its
@@ -296,7 +297,7 @@ type batchKey struct {
 // nil, and the row reads alone, when ctx is in no gqlgen field or not in
 // e's, when the row is in no group of ctx's table, when the key cannot be
 // compared, or when the batch was made with other arguments.
-func batchOf(ctx context.Context, target velox.Table, e Edge, most int, args any) (*gqlcore.Batch, []any, int) {
+func batchOf(ctx context.Context, target untyped.Table, e Edge, most int, args any) (*gqlcore.Batch, []any, int) {
 	fc := graphql.GetFieldContext(ctx)
 	if fc == nil || fc.Field.Field == nil {
 		return nil, nil, 0
@@ -343,7 +344,7 @@ func canCompare(v any) bool {
 // loadBatch returns b's rows: each owner's, rows of owner, read by
 // q.LoadEach(ctx, owner, edge, each, owners) on the first call. The first
 // keep(rows) rows of each owner become one group.
-func loadBatch(ctx context.Context, b *gqlcore.Batch, q velox.TableQuery, owner velox.Table, edge, each int, owners []any, keep func(velox.TableRows) int) ([]velox.TableRows, error) {
+func loadBatch(ctx context.Context, b *gqlcore.Batch, q untyped.TableQuery, owner untyped.Table, edge, each int, owners []any, keep func(untyped.Rows) int) ([]untyped.Rows, error) {
 	v, err := b.Rows(func() (any, error) {
 		parts, err := q.LoadEach(ctx, owner, edge, each, owners)
 		if err != nil {
@@ -366,5 +367,5 @@ func loadBatch(ctx context.Context, b *gqlcore.Batch, q velox.TableQuery, owner 
 	if err != nil {
 		return nil, err
 	}
-	return v.([]velox.TableRows), nil
+	return v.([]untyped.Rows), nil
 }

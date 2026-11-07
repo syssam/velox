@@ -19,6 +19,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
+	"github.com/syssam/velox/untyped"
 )
 
 // Isolates fails t with Check's error, when it returns one.
@@ -53,7 +54,7 @@ func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Ke
 			err = fmt.Errorf("scopetest: %v", p)
 		}
 	}()
-	t := velox.TableOf[E]()
+	t := untyped.TableOf[E]()
 	if err := t.Err(); err != nil {
 		return fmt.Errorf("scopetest: %w", err)
 	}
@@ -74,9 +75,9 @@ func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Ke
 	// The column's type is V, checked above, so SetField cannot fail.
 	set := func(x *E, v V) { _ = t.SetField(x, ci, v) }
 	inA, inB := key.With(ctx, a), key.With(ctx, b)
-	ofA := t.Pred(ci, velox.PredEQ, a)
+	ofA := t.Pred(ci, untyped.PredEQ, a)
 	count := func(ctx context.Context, where ...velox.Predicate) (int64, error) {
-		return db.QueryTable(t).Where(where...).Count(ctx)
+		return untyped.Query(db, t).Where(where...).Count(ctx)
 	}
 	before, err := count(inA)
 	if err != nil {
@@ -86,7 +87,7 @@ func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Ke
 	var zero V
 	x := row()
 	set(x, zero)
-	if err := db.InsertTable(t, x).Exec(inA); err != nil {
+	if err := untyped.Insert(db, t, x).Exec(inA); err != nil {
 		return fmt.Errorf("scopetest: %s: an insert under %v: %w", name, a, err)
 	}
 	if got := get(x); got != a {
@@ -98,19 +99,19 @@ func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Ke
 	if n, err := count(inB, ofA); err != nil || n != 0 {
 		return fmt.Errorf("scopetest: %s: %v sees %d of %v's rows, want 0 (%v): no policy confines reads (list the mixin's Policy)", name, b, n, a, err)
 	}
-	if n, err := db.DeleteTable(t).Where(ofA).Exec(inB); err != nil || n != 0 {
+	if n, err := untyped.Delete(db, t).Where(ofA).Exec(inB); err != nil || n != 0 {
 		return fmt.Errorf("scopetest: %s: a delete under %v of %v's rows affected %d, want 0 (%v)", name, b, a, n, err)
 	}
 
 	if _, err := count(ctx); !errors.Is(err, scope.ErrNoScope) {
 		return fmt.Errorf("scopetest: %s: a read without a value gave %v, want scope.ErrNoScope", name, err)
 	}
-	if err := db.InsertTable(t, row()).Exec(ctx); !errors.Is(err, scope.ErrNoScope) {
+	if err := untyped.Insert(db, t, row()).Exec(ctx); !errors.Is(err, scope.ErrNoScope) {
 		return fmt.Errorf("scopetest: %s: an insert without a value gave %v, want scope.ErrNoScope", name, err)
 	}
 	y := row()
 	set(y, b)
-	if err := db.InsertTable(t, y).Exec(inA); !errors.Is(err, scope.ErrMismatch) {
+	if err := untyped.Insert(db, t, y).Exec(inA); !errors.Is(err, scope.ErrMismatch) {
 		return fmt.Errorf("scopetest: %s: an insert under %v of a row of %v gave %v, want scope.ErrMismatch", name, a, b, err)
 	}
 	return nil

@@ -10,9 +10,10 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion18
+const _ = veloxgql.GeneratedCodeIsVersion19
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -113,7 +114,7 @@ func NewPostConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	return newPostConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
+	return newPostConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, orderBy, where)
 }
 
 // newPostConnection is NewPostConnection of the nodes from leads to: a query's,
@@ -137,7 +138,7 @@ func newPostConnection(
 // postType describes the GraphQL type Post to gqlgraph.
 var postType = gqlgraph.Type{
 	Name:  "Post",
-	Table: velox.TableOf[Post],
+	Table: untyped.TableOf[Post],
 	Key:   []gqlgraph.Column{{Name: "id", Index: postColID}},
 	Order: []gqlgraph.Column{
 		{Name: "TITLE", Index: postColTitle},
@@ -325,8 +326,8 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		IsNil:  w.PublishedAtIsNil,
 		NotNil: w.PublishedAtNotNil,
 	})
-	gqlgraph.Has(f, "hasTags", w.HasTags, postEdgeTags, velox.TableOf[Tag]())
-	gqlgraph.HasWith(f, "hasTagsWith", w.HasTagsWith, (*LabelWhereInput).predicate, postEdgeTags, velox.TableOf[Tag]())
+	gqlgraph.Has(f, "hasTags", w.HasTags, postEdgeTags, untyped.TableOf[Tag]())
+	gqlgraph.HasWith(f, "hasTagsWith", w.HasTagsWith, (*LabelWhereInput).predicate, postEdgeTags, untyped.TableOf[Tag]())
 	return f.Pred()
 }
 

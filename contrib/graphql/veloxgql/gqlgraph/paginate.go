@@ -13,6 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/internal/english"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/untyped"
 )
 
 // Args are a connection's paging arguments, as the client gave them.
@@ -60,10 +61,10 @@ type Source interface {
 }
 
 // Query is the source of the nodes q returns, for Paginate.
-func Query(q velox.TableQuery) Source { return query{q} }
+func Query(q untyped.TableQuery) Source { return query{q} }
 
 // query is Query's Source.
-type query struct{ q velox.TableQuery }
+type query struct{ q untyped.TableQuery }
 
 func (s query) paginate(ctx context.Context, c *Type, args Args, order []Order) (*Connection, error) {
 	return paginate(ctx, s.q, c, args, order)
@@ -79,7 +80,7 @@ type Type struct {
 	Name string
 	// Table is the entity's Table, velox.TableOf of the entity. It is a
 	// function so that nothing runs at start.
-	Table func() velox.Table
+	Table func() untyped.Table
 	// Key is the primary key's columns, each ASC: Name is the column's
 	// name, which a cursor's terms name "key:<column>".
 	Key []Column
@@ -136,7 +137,7 @@ func (c *Type) columns(fields []string) []int {
 
 // inputNames is the function that names, by an entity field's Go name, the
 // field of the input that sets it: names by column, or "".
-func inputNames(t velox.Table, names []string) func(goField string) string {
+func inputNames(t untyped.Table, names []string) func(goField string) string {
 	return func(goField string) string {
 		info := t.Info()
 		if info == nil {
@@ -153,9 +154,9 @@ func inputNames(t velox.Table, names []string) func(goField string) string {
 
 // table is the Table of c's entity: the zero Table, whose queries fail,
 // when c names none.
-func (c *Type) table() velox.Table {
+func (c *Type) table() untyped.Table {
 	if c.Table == nil {
-		return velox.Table{}
+		return untyped.Table{}
 	}
 	return c.Table()
 }
@@ -176,7 +177,7 @@ type Column struct {
 	// term's value set.
 	Edge int
 	// Target is the relation's target, for an Edge.
-	Target func() velox.Table
+	Target func() untyped.Table
 }
 
 // Order is one term of a connection's order, as the client gave it: the
@@ -203,14 +204,14 @@ type term struct {
 	field string
 	dir   veloxgql.OrderDirection
 	col   int
-	edge  int         // the relation's index plus one; 0 for the node's own column
-	tbl   velox.Table // the column's entity: the node's, or the relation's target
+	edge  int           // the relation's index plus one; 0 for the node's own column
+	tbl   untyped.Table // the column's entity: the node's, or the relation's target
 	base  reflect.Type
 	null  bool // the field is a pointer: nil is NULL, which a cursor holds as null
 }
 
 // newTerm is the term of c, in direction dir, on the connection's entity t.
-func newTerm(t velox.Table, c *Column, dir veloxgql.OrderDirection) (term, error) {
+func newTerm(t untyped.Table, c *Column, dir veloxgql.OrderDirection) (term, error) {
 	tm := term{field: c.Name, dir: dir, col: c.Index, edge: c.Edge, tbl: t}
 	if c.Edge != 0 {
 		tm.tbl = c.Target()
@@ -268,7 +269,7 @@ func (t *term) order(desc bool) velox.OrderTerm {
 
 // row is the row of the term's column in the connection's row p: p, or its
 // related entity; nil when a joined row has none.
-func (t *term) row(p any, own velox.Table) any {
+func (t *term) row(p any, own untyped.Table) any {
 	if t.edge == 0 {
 		return p
 	}
@@ -278,7 +279,7 @@ func (t *term) row(p any, own velox.Table) any {
 
 // get returns the term's value in the connection's row p as the base type,
 // nil for NULL.
-func (t *term) get(p any, own velox.Table) any {
+func (t *term) get(p any, own untyped.Table) any {
 	r := t.row(p, own)
 	if r == nil {
 		// A row read without the join: the zero value, which no cursor of
@@ -317,7 +318,7 @@ func (t *term) get(p any, own velox.Table) any {
 // set sets the term's column in the connection's row p from v, a cursor's
 // value: of the base type in a cursor from a page, a JSON value in one from
 // the wire, nil for NULL.
-func (t *term) set(p any, own velox.Table, v any) error {
+func (t *term) set(p any, own untyped.Table, v any) error {
 	r := t.row(p, own)
 	if r == nil {
 		r = t.tbl.New()
@@ -366,7 +367,7 @@ type Page struct {
 	// Info is the page info. Its StartCursor and EndCursor point into
 	// Cursors.
 	Info veloxgql.PageInfo
-	t    velox.Table // the rows' entity
+	t    untyped.Table // the rows' entity
 }
 
 // Node returns row i as a *E of the node's entity E, in an any. It panics
@@ -381,13 +382,13 @@ func (p *Page) Node(i int) any { return p.Rows[i] }
 //
 // A Connection is made by Paginate, and must not be copied.
 type Connection struct {
-	query velox.TableQuery // the whole list, unordered
-	typ   string           // the GraphQL type of the nodes
-	n     int              // the page size
-	back  bool             // paging backward: last, or before
-	terms []term           // the order's terms, then the key's columns
-	key   int              // the index in terms of the key's first column
-	after any              // the row the page starts after, in the paging direction
+	query untyped.TableQuery // the whole list, unordered
+	typ   string             // the GraphQL type of the nodes
+	n     int                // the page size
+	back  bool               // paging backward: last, or before
+	terms []term             // the order's terms, then the key's columns
+	key   int                // the index in terms of the key's first column
+	after any                // the row the page starts after, in the paging direction
 	// edge is set by edgeConnection when the connection is its part of a
 	// batch.
 	edge *edgeMode
@@ -432,7 +433,7 @@ func Paginate(ctx context.Context, from Source, c *Type, args Args) (*Connection
 }
 
 // paginate is Paginate of a query q.
-func paginate(ctx context.Context, q velox.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
+func paginate(ctx context.Context, q untyped.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
 	if args.Where.pred != nil {
 		p, err := args.Where.pred(ctx)
 		if err != nil {
@@ -454,7 +455,7 @@ func newConnFunc(c *Type) string { return "New" + c.Name + "Connection" }
 // connectionBase checks q, Paginate's query, against c and order, and
 // returns it reading only the columns the selection of the field of ctx
 // needs. An order field c does not know is left to newConnection.
-func connectionBase(ctx context.Context, q velox.TableQuery, c *Type, order []Order) (velox.TableQuery, error) {
+func connectionBase(ctx context.Context, q untyped.TableQuery, c *Type, order []Order) (untyped.TableQuery, error) {
 	fn := newConnFunc(c)
 	for _, k := range c.Key {
 		if !q.Selects(k.Index) {
@@ -474,7 +475,7 @@ func connectionBase(ctx context.Context, q velox.TableQuery, c *Type, order []Or
 }
 
 // newConnection is Paginate of a q connectionBase checked.
-func newConnection(ctx context.Context, q velox.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
+func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
 	typ := c.Name
 	own := q.Table()
 	terms := make([]term, 0, len(order)+len(c.Key))
@@ -590,7 +591,7 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 	if c.after != nil {
 		q = q.After(c.after)
 	}
-	var rows velox.TableRows
+	var rows untyped.Rows
 	var err error
 	if c.edge != nil {
 		rows, err = c.edge.rows(q)
@@ -637,7 +638,7 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 // cursor is x's cursor: the order's terms with x's values, the key's columns
 // but the last as terms named "key:<column>", and the last column as the key.
 // terms is its room for the terms, of the length of the order's but the last.
-func (c *Connection) cursor(own velox.Table, x any, terms []veloxgql.CursorTerm) veloxgql.Cursor {
+func (c *Connection) cursor(own untyped.Table, x any, terms []veloxgql.CursorTerm) veloxgql.Cursor {
 	last := len(c.terms) - 1
 	for i := range c.terms[:last] {
 		terms[i] = veloxgql.CursorTerm{Field: c.field(i), Direction: c.terms[i].dir, Value: c.terms[i].get(x, own)}

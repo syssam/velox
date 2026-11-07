@@ -11,6 +11,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/untyped"
 )
 
 // The entities of the conditions and mutations by name: nmOrg, and nmDoc,
@@ -108,7 +109,7 @@ func nmDocDescriptor() velox.Descriptor[nmDoc] {
 func nmSQL(t *testing.T, ps ...velox.Predicate) (string, []any, error) {
 	t.Helper()
 	db := velox.OpenConn(velox.Postgres, fakeConn(nil))
-	return db.QueryTable(velox.TableOf[nmDoc]()).Where(ps...).Limit(1).SQL(ctx)
+	return untyped.Query(db, untyped.TableOf[nmDoc]()).Where(ps...).Limit(1).SQL(ctx)
 }
 
 // cond is c as the untyped surface's Predicate.
@@ -188,12 +189,12 @@ func TestResolveOutOfRangeIs(t *testing.T) {
 // TestResolveRendersAsTyped: a condition by name renders the SQL, the
 // arguments and the render cache's key of the same condition by index.
 func TestResolveRendersAsTyped(t *testing.T) {
-	tbl := velox.TableOf[nmDoc]()
+	tbl := untyped.TableOf[nmDoc]()
 	pairs := []struct{ named, typed velox.Predicate }{
-		{cond(engine.FieldEQ("org_id", int64(3))), tbl.Pred(nmOrgID, velox.PredEQ, int64(3))},
-		{cond(engine.FieldHasPrefix("title", "x")), tbl.Pred(nmTitle, velox.PredHasPrefix, "x")},
-		{cond(engine.FieldIsNull("note")), tbl.Pred(nmNote, velox.PredIsNull, nil)},
-		{cond(engine.FieldIn("rank", int8(1), int8(2))), tbl.Pred(nmRank, velox.PredIn, []any{int8(1), int8(2)})},
+		{cond(engine.FieldEQ("org_id", int64(3))), tbl.Pred(nmOrgID, untyped.PredEQ, int64(3))},
+		{cond(engine.FieldHasPrefix("title", "x")), tbl.Pred(nmTitle, untyped.PredHasPrefix, "x")},
+		{cond(engine.FieldIsNull("note")), tbl.Pred(nmNote, untyped.PredIsNull, nil)},
+		{cond(engine.FieldIn("rank", int8(1), int8(2))), tbl.Pred(nmRank, untyped.PredIn, []any{int8(1), int8(2)})},
 	}
 	db := velox.OpenConn(velox.Postgres, fakeConn(nil))
 	for _, p := range pairs {
@@ -210,7 +211,7 @@ func TestResolveRendersAsTyped(t *testing.T) {
 		}
 		// One shape in the cache for both.
 		before := cacheSize(db)
-		q := db.QueryTable(tbl).Limit(1)
+		q := untyped.Query(db, tbl).Limit(1)
 		if _, _, err := q.Where(p.typed).SQL(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -235,7 +236,7 @@ func TestResolveEdgeNeedsLink(t *testing.T) {
 	if !strings.Contains(sql, `EXISTS (SELECT 1 FROM "nm_orgs"`) || !strings.Contains(sql, `"name" = $1`) || fmt.Sprint(args[:1]) != "[acme]" {
 		t.Errorf("SQL %s %v", sql, args)
 	}
-	typed, _, err := nmSQL(t, velox.Predicate(velox.Rel[nmDoc, nmOrg]{I: 0}.HasWith(velox.Pred[nmOrg](velox.TableOf[nmOrg]().Pred(1, velox.PredEQ, "acme")))))
+	typed, _, err := nmSQL(t, velox.Predicate(velox.Rel[nmDoc, nmOrg]{I: 0}.HasWith(velox.Pred[nmOrg](untyped.TableOf[nmOrg]().Pred(1, untyped.PredEQ, "acme")))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,19 +508,19 @@ func TestRewriteByName(t *testing.T) {
 		})
 	}
 	db := velox.OpenConn(velox.Postgres, fakeConn(nil), add(engine.FieldEQ("title", "x")))
-	sql, args, err := db.QueryTable(velox.TableOf[nmDoc]()).Limit(1).SQL(ctx)
+	sql, args, err := untyped.Query(db, untyped.TableOf[nmDoc]()).Limit(1).SQL(ctx)
 	if err != nil || !strings.Contains(sql, `WHERE "title" = $1`) || args[0] != "x" {
 		t.Errorf("%s %v %v", sql, args, err)
 	}
 	db = velox.OpenConn(velox.Postgres, fakeConn(nil), add(engine.FieldEQ("nope", "x")))
-	if _, _, err := db.QueryTable(velox.TableOf[nmDoc]()).Limit(1).SQL(ctx); err == nil || !strings.Contains(err.Error(), `no column "nope"`) {
+	if _, _, err := untyped.Query(db, untyped.TableOf[nmDoc]()).Limit(1).SQL(ctx); err == nil || !strings.Contains(err.Error(), `no column "nope"`) {
 		t.Errorf("err %v", err)
 	}
 }
 
 // TestTableHasByName: Table.Has takes conditions by name on its target.
 func TestTableHasByName(t *testing.T) {
-	docs, orgs := velox.TableOf[nmDoc](), velox.TableOf[nmOrg]()
+	docs, orgs := untyped.TableOf[nmDoc](), untyped.TableOf[nmOrg]()
 	sql, args, err := nmSQL(t, docs.Has(0, orgs, cond(engine.FieldEQ("name", "acme"))))
 	if err != nil || !strings.Contains(sql, `"name" = $1`) || args[0] != "acme" {
 		t.Errorf("%s %v %v", sql, args, err)

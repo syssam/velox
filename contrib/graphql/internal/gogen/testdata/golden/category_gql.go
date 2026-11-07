@@ -6,9 +6,10 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion18
+const _ = veloxgql.GeneratedCodeIsVersion19
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -87,7 +88,7 @@ func NewCategoryConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *CategoryWhereInput,
 ) (*CategoryConnection, error) {
-	return newCategoryConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, where)
+	return newCategoryConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, where)
 }
 
 // newCategoryConnection is NewCategoryConnection of the nodes from leads to: a
@@ -108,7 +109,7 @@ func newCategoryConnection(
 // categoryType describes the GraphQL type Category to gqlgraph.
 var categoryType = gqlgraph.Type{
 	Name:       "Category",
-	Table:      velox.TableOf[Category],
+	Table:      untyped.TableOf[Category],
 	Key:        []gqlgraph.Column{{Name: "id", Index: categoryColID}},
 	AlwaysRead: []int{categoryColID, categoryColCategoryChildren},
 	Fields:     []string{categoryColID: "id", categoryColTitle: "title"},
@@ -173,8 +174,8 @@ func (w *CategoryWhereInput) predicate(ctx context.Context) (velox.Predicate, er
 		LT:    w.IDLT,
 		LTE:   w.IDLTE,
 	})
-	gqlgraph.Has(f, "hasParent", w.HasParent, categoryEdgeParent, velox.TableOf[Category]())
-	gqlgraph.HasWith(f, "hasParentWith", w.HasParentWith, (*CategoryWhereInput).predicate, categoryEdgeParent, velox.TableOf[Category]())
+	gqlgraph.Has(f, "hasParent", w.HasParent, categoryEdgeParent, untyped.TableOf[Category]())
+	gqlgraph.HasWith(f, "hasParentWith", w.HasParentWith, (*CategoryWhereInput).predicate, categoryEdgeParent, untyped.TableOf[Category]())
 	return f.Pred()
 }
 

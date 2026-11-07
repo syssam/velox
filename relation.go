@@ -162,7 +162,7 @@ func ownerOf[E any]() (*EntityInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return m.info, nil
+	return m.Info, nil
 }
 
 // CheckRelation resolves the relation that r names and returns what is wrong

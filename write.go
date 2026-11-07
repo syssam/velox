@@ -12,7 +12,7 @@ import (
 // Like Query it is a value: extending it leaves it as it was.
 type UpdateQuery[E any] struct {
 	db    *DB
-	meta  *Meta[E]
+	meta  *metaState[E]
 	st    Statement
 	err   error             // a condition's error, as in Query
 	edges []*engine.EdgeSet // Set's edge setters; st.Set holds its assignments
@@ -22,8 +22,8 @@ type UpdateQuery[E any] struct {
 //
 //	db.Update[billing.Invoice]().Set(I.PaidAt.Set(now)).Where(I.ID.EQ(id)).Exec(ctx)
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E] {
-	m := PE(nil).VeloxMeta()
-	return UpdateQuery[E]{db: db, meta: m, st: Statement{Op: OpUpdate, Entity: m.info, InTx: db.e.InTx}}
+	m := stateOf(PE(nil).VeloxMeta())
+	return UpdateQuery[E]{db: db, meta: m, st: Statement{Op: OpUpdate, Entity: m.Info, InTx: db.e.InTx}}
 }
 
 // Set adds setters: assignments, made by the column handles' Set, SetNull,
@@ -37,7 +37,7 @@ func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E] {
 // sends the UPDATE, then writes each edge for each row, as InsertQuery.Set
 // says. The entity's hooks see the UPDATE alone, without the edges.
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E] {
-	set := engine.Setters{Set: u.st.Set, Edges: u.edges}.Add(Assignments(ss))
+	set := engine.Setters{Set: u.st.Set, Edges: u.edges}.Add(assignments(ss))
 	u.st.Set, u.edges = set.Set, set.Edges
 	return u
 }
@@ -66,14 +66,14 @@ func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E] {
 // statement is the UPDATE Exec and SQL give the hooks: Set's assignments.
 // The core adds the UpdateDefault ones and checks them all (writeCore).
 func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
-	if u.meta.err != nil {
-		return Statement{}, u.meta.err
+	if u.meta.Err != nil {
+		return Statement{}, u.meta.Err
 	}
 	if u.err != nil {
 		return Statement{}, u.err
 	}
 	if len(u.st.Set) == 0 && len(u.edges) == 0 {
-		return Statement{}, fmt.Errorf("velox: %s: Update has no Set", u.meta.info.Name)
+		return Statement{}, fmt.Errorf("velox: %s: Update has no Set", u.meta.Info.Name)
 	}
 	return engine.CloneStatement(&u.st), nil
 }
@@ -111,8 +111,8 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // So it sends one statement more than Exec, the read of the key. An update
 // with no setter sends nothing and returns the row read under the policies.
 func (u UpdateQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
-	if u.meta.err != nil {
-		return nil, u.meta.err
+	if u.meta.Err != nil {
+		return nil, u.meta.Err
 	}
 	if u.err != nil {
 		return nil, u.err
@@ -153,15 +153,15 @@ func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 // DeleteQuery is a DELETE of entity E, built by chaining and run by Exec.
 type DeleteQuery[E any] struct {
 	db   *DB
-	meta *Meta[E]
+	meta *metaState[E]
 	st   Statement
 	err  error // a condition's error, as in Query
 }
 
 // Delete starts a DELETE of entity E.
 func (db *DB) Delete[E any, PE Entity[E]]() DeleteQuery[E] {
-	m := PE(nil).VeloxMeta()
-	return DeleteQuery[E]{db: db, meta: m, st: Statement{Op: OpDelete, Entity: m.info, InTx: db.e.InTx}}
+	m := stateOf(PE(nil).VeloxMeta())
+	return DeleteQuery[E]{db: db, meta: m, st: Statement{Op: OpDelete, Entity: m.Info, InTx: db.e.InTx}}
 }
 
 // Where adds conditions; all of them must hold.
@@ -188,8 +188,8 @@ func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E] {
 // Exec runs the delete and returns the number of rows it removed, or -1 when
 // the driver could not report its count.
 func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
-	if d.meta.err != nil {
-		return 0, d.meta.err
+	if d.meta.Err != nil {
+		return 0, d.meta.Err
 	}
 	if d.err != nil {
 		return 0, d.err
@@ -210,8 +210,8 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // UpdateQuery.SQL.
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = engine.DryRunContext(ctx) // first, so that every hook sees it
-	if d.meta.err != nil {
-		return "", nil, d.meta.err
+	if d.meta.Err != nil {
+		return "", nil, d.meta.Err
 	}
 	if d.err != nil {
 		return "", nil, d.err
@@ -227,7 +227,7 @@ func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 // after Exec it holds what was written, the UpdateDefault values included.
 type SaveQuery[E any] struct {
 	db    *DB
-	meta  *Meta[E]
+	meta  *metaState[E]
 	x     *E
 	cols  []Column[E]
 	where []Pred[E]
@@ -246,7 +246,7 @@ func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) 
 	cols := make([]Column[E], 1+len(more))
 	cols[0] = col
 	copy(cols[1:], more)
-	return SaveQuery[E]{db: db, meta: x.VeloxMeta(), x: (*E)(x), cols: cols} // VeloxMeta works on a nil x
+	return SaveQuery[E]{db: db, meta: stateOf(x.VeloxMeta()), x: (*E)(x), cols: cols} // VeloxMeta works on a nil x
 }
 
 // Where adds conditions to the key's: the row is written only if all of them
@@ -265,10 +265,10 @@ func (s SaveQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) SaveQuery[E] {
 // statement is the UPDATE Exec and SQL give the hooks: the named columns of
 // *x, where the key and the conditions hold.
 func (s SaveQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
-	if s.meta.err != nil {
-		return Statement{}, s.meta.err
+	if s.meta.Err != nil {
+		return Statement{}, s.meta.Err
 	}
-	in := s.meta.info
+	in := s.meta.Info
 	if s.x == nil {
 		return Statement{}, fmt.Errorf("velox: %s: Save of a nil pointer", in.Name)
 	}
@@ -343,7 +343,7 @@ func (s SaveQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 }
 
 // fieldValue is the value of column i's field in *p.
-func fieldValue[E any](m *Meta[E], p *E, i int) any { return engine.Elem(m.addr(p, i)) }
+func fieldValue[E any](m *metaState[E], p *E, i int) any { return engine.Elem(m.Addr(p, i)) }
 
 // setField stores v in column i's field in *p, as SetElem does.
-func setField[E any](m *Meta[E], p *E, i int, v any) { engine.SetElem(m.addr(p, i), v) }
+func setField[E any](m *metaState[E], p *E, i int, v any) { engine.SetElem(m.Addr(p, i), v) }

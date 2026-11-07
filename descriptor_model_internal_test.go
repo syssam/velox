@@ -13,7 +13,7 @@ import (
 func loadDescriptor[E any](d Descriptor[E]) (*EntityInfo, error) {
 	var o MetaOnce[E]
 	m := o.Load(func() Descriptor[E] { return d })
-	return m.info, m.err
+	return m.d.Info, m.d.Err
 }
 
 // hnote's hooks, for every write, run the function in the context

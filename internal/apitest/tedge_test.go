@@ -8,6 +8,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/untyped"
 )
 
 // passAround is an Around hook that only runs the statement, so that the
@@ -22,8 +23,8 @@ func TestTableQueryDriverError(t *testing.T) {
 	boom := errors.New("boom")
 	for name, opts := range map[string][]velox.Option{"plain": nil, "hooked": {velox.WithAround(passAround)}} {
 		db := openFake(velox.Postgres, &fakeconn.Exec{Err: boom}, opts...)
-		q := db.QueryTable(itTable).Limit(5)
-		each := db.QueryTable(itTable)
+		q := untyped.Query(db, itTable).Limit(5)
+		each := untyped.Query(db, itTable)
 		runs := map[string]func() error{
 			"All":   func() error { _, err := q.All(ctx); return err },
 			"One":   func() error { _, err := q.One(ctx); return err },
@@ -43,14 +44,14 @@ func TestTableQueryDriverError(t *testing.T) {
 			},
 			"InsertTable": func() error {
 				x := testmodel.Item{InvoiceID: 1, SKU: "s"}
-				return db.InsertTable(itTable, &x).Exec(ctx)
+				return untyped.Insert(db, itTable, &x).Exec(ctx)
 			},
 			"InsertRows": func() error {
 				rows := itTable.NewRows(2)
 				for i := range 2 {
 					rows.At(i).(*testmodel.Item).SKU = "s"
 				}
-				return db.InsertRows(itTable, rows).Exec(ctx)
+				return untyped.InsertRows(db, itTable, rows).Exec(ctx)
 			},
 		}
 		for run, f := range runs {
@@ -68,7 +69,7 @@ func TestTableQueryRefusals(t *testing.T) {
 	exec := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, exec)
 	inv := []any{&testmodel.Invoice{ID: 1}}
-	runAll := func(name string, q velox.TableQuery) {
+	runAll := func(name string, q untyped.TableQuery) {
 		t.Helper()
 		for run, f := range map[string]func() error{
 			"All":       func() error { _, err := q.All(ctx); return err },
@@ -85,23 +86,23 @@ func TestTableQueryRefusals(t *testing.T) {
 			}
 		}
 	}
-	zero := db.QueryTable(velox.Table{}).Limit(1)
+	zero := untyped.Query(db, untyped.Table{}).Limit(1)
 	runAll("the zero Table", zero)
 	runAll("the zero Table, after After", zero.After(&testmodel.Item{}))
 	runAll("the zero Table, after Join", zero.Join(int(It.Invoice.I), invTable))
-	q := db.QueryTable(itTable).Limit(1)
+	q := untyped.Query(db, itTable).Limit(1)
 	runAll("a column out of range", q.Columns(99))
 	runAll("After of nil", q.After(nil))
-	runAll("Join of a to-many relation", db.QueryTable(invTable).Limit(1).Join(int(I.Items.I), itTable))
+	runAll("Join of a to-many relation", untyped.Query(db, invTable).Limit(1).Join(int(I.Items.I), itTable))
 	runAll("Join twice", q.Join(int(It.Invoice.I), invTable).LeftJoin(int(It.Invoice.I), invTable))
-	runAll("Join of the zero Table", q.Join(int(It.Invoice.I), velox.Table{}))
+	runAll("Join of the zero Table", q.Join(int(It.Invoice.I), untyped.Table{}))
 	runAll("Join of no relation", q.Join(9, invTable))
 	runAll("Join of another target", q.Join(int(It.Invoice.I), tkTable))
 	// A locking read loads no relations, and a relation load needs the
 	// owner's key selected: the reads of rows refuse them.
-	for name, q := range map[string]velox.TableQuery{
-		"a locking read with a load": velox.Untyped(db.Query[testmodel.Invoice]().With(I.Items).ForUpdate().Limit(1)),
-		"a load without the key":     velox.Untyped(db.Query[testmodel.Invoice]().With(I.Items).Columns(I.Number).Limit(1)),
+	for name, q := range map[string]untyped.TableQuery{
+		"a locking read with a load": untyped.FromQuery(db.Query[testmodel.Invoice]().With(I.Items).ForUpdate().Limit(1)),
+		"a load without the key":     untyped.FromQuery(db.Query[testmodel.Invoice]().With(I.Items).Columns(I.Number).Limit(1)),
 	} {
 		for run, f := range map[string]func() error{
 			"All":   func() error { _, err := q.All(ctx); return err },
@@ -123,7 +124,7 @@ func TestTableQueryRefusals(t *testing.T) {
 // do what Query's do, to the SQL.
 func TestTableQueryBuilders(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	q := db.QueryTable(itTable).Limit(1)
+	q := untyped.Query(db, itTable).Limit(1)
 	if !q.Selects(col(It.SKU)) || q.Ordered() {
 		t.Error("a new query selects every column and has no order")
 	}
@@ -134,7 +135,7 @@ func TestTableQueryBuilders(t *testing.T) {
 	if !nq.Columns().Selects(col(It.Qty)) {
 		t.Error("Columns() selects every column again")
 	}
-	same := func(name string, typed velox.Query[testmodel.Item], untyped velox.TableQuery) {
+	same := func(name string, typed velox.Query[testmodel.Item], untyped untyped.TableQuery) {
 		t.Helper()
 		ws, wa, werr := typed.SQL(ctx)
 		gs, ga, gerr := untyped.SQL(ctx)
@@ -145,7 +146,7 @@ func TestTableQueryBuilders(t *testing.T) {
 	same("Offset MaxRows", db.Query[testmodel.Item]().Limit(1).Offset(2).MaxRows(3), q.Offset(2).MaxRows(3))
 	// A locking read runs only inside a transaction.
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-		tq, q := tx.Query[testmodel.Item]().Limit(1), tx.QueryTable(itTable).Limit(1)
+		tq, q := tx.Query[testmodel.Item]().Limit(1), untyped.Query(tx, itTable).Limit(1)
 		same("ForShare", tq.ForShare(), q.ForShare())
 		same("ForUpdate Writable", tq.ForUpdate().Writable(), q.ForUpdate().Writable())
 		return nil
@@ -168,7 +169,7 @@ func TestTableQueryLoads(t *testing.T) {
 	if len(wantItems) == 0 {
 		t.Fatal("the first invoice has no items: the case is not covered")
 	}
-	q := velox.Untyped(tq)
+	q := untyped.FromQuery(tq)
 	check := func(name string, p any, err error) {
 		t.Helper()
 		if err != nil {
@@ -181,7 +182,7 @@ func TestTableQueryLoads(t *testing.T) {
 	}
 	p, err := q.First(ctx)
 	check("First", p, err)
-	p, err = q.Where(invTable.Pred(col(I.ID), velox.PredEQ, want.ID)).One(ctx)
+	p, err = q.Where(invTable.Pred(col(I.ID), untyped.PredEQ, want.ID)).One(ctx)
 	check("One", p, err)
 	rows, err := q.All(ctx)
 	if err != nil || rows.Len() != 1 {
@@ -191,7 +192,7 @@ func TestTableQueryLoads(t *testing.T) {
 	if s, _, err := q.SQL(ctx); err != nil || s == "" {
 		t.Errorf("SQL: %q %v", s, err)
 	}
-	if _, err := q.Where(invTable.Pred(col(I.ID), velox.PredEQ, int64(-1))).First(ctx); !velox.IsNotFound(err) {
+	if _, err := q.Where(invTable.Pred(col(I.ID), untyped.PredEQ, int64(-1))).First(ctx); !velox.IsNotFound(err) {
 		t.Errorf("First of none: %v", err)
 	}
 }
@@ -205,26 +206,26 @@ func TestTableOfAndFill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs, ga, err := db.QueryTable(itTable).Where(invTable.Of(int(I.Items.I), itTable, owners[0], owners[1])).Limit(5).SQL(ctx)
+	gs, ga, err := untyped.Query(db, itTable).Where(invTable.Of(int(I.Items.I), itTable, owners[0], owners[1])).Limit(5).SQL(ctx)
 	if err != nil || gs != ws || len(ga) != len(wa) {
 		t.Errorf("Of: %q %v %v, want %q %v", gs, ga, err, ws, wa)
 	}
 	for name, p := range map[string]velox.Predicate{
-		"Of of the zero Table":  velox.Table{}.Of(0, itTable),
-		"Of to the zero Table":  invTable.Of(int(I.Items.I), velox.Table{}),
-		"Has of the zero Table": velox.Table{}.Has(0, itTable),
+		"Of of the zero Table":  untyped.Table{}.Of(0, itTable),
+		"Of to the zero Table":  invTable.Of(int(I.Items.I), untyped.Table{}),
+		"Has of the zero Table": untyped.Table{}.Has(0, itTable),
 		"Has of a bad condition": invTable.Has(int(I.Items.I), itTable,
-			itTable.Pred(col(It.SKU), velox.PredEQ, 3)),
+			itTable.Pred(col(It.SKU), untyped.PredEQ, 3)),
 	} {
-		if _, _, err := db.QueryTable(itTable).Where(p).Limit(1).SQL(ctx); err == nil {
+		if _, _, err := untyped.Query(db, itTable).Where(p).Limit(1).SQL(ctx); err == nil {
 			t.Errorf("%s: no error", name)
 		}
 	}
 	it, inv := new(testmodel.Item), new(testmodel.Invoice)
 	edge := int(It.Invoice.I)
 	for name, err := range map[string]error{
-		"Fill of the zero Table": velox.Table{}.Fill(it, edge, invTable, inv),
-		"Fill to the zero Table": itTable.Fill(it, edge, velox.Table{}, inv),
+		"Fill of the zero Table": untyped.Table{}.Fill(it, edge, invTable, inv),
+		"Fill to the zero Table": itTable.Fill(it, edge, untyped.Table{}, inv),
 		"Fill of another target": itTable.Fill(it, edge, tkTable, inv),
 		"Fill of no relation":    itTable.Fill(it, 9, invTable, inv),
 	} {
@@ -233,7 +234,7 @@ func TestTableOfAndFill(t *testing.T) {
 		}
 	}
 	for name, ok := range map[string]bool{
-		"Filled of the zero Table": func() bool { _, ok := velox.Table{}.Filled(it, edge, invTable); return ok }(),
+		"Filled of the zero Table": func() bool { _, ok := untyped.Table{}.Filled(it, edge, invTable); return ok }(),
 		"Filled of no relation":    func() bool { _, ok := itTable.Filled(it, 9, invTable); return ok }(),
 	} {
 		if ok {
@@ -248,10 +249,10 @@ func TestTableOfAndFill(t *testing.T) {
 func TestTableWriteEdges(t *testing.T) {
 	exec := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, exec)
-	if r := (velox.Table{}).NewRows(2); r.Len() != 0 {
+	if r := (untyped.Table{}).NewRows(2); r.Len() != 0 {
 		t.Errorf("NewRows of the zero Table: %d rows", r.Len())
 	}
-	if err := (velox.Table{}).SetField(new(testmodel.Item), 0, int64(1)); err == nil {
+	if err := (untyped.Table{}).SetField(new(testmodel.Item), 0, int64(1)); err == nil {
 		t.Error("SetField of the zero Table: no error")
 	}
 	tk := testmodel.Ticket{Owner: "ann", Title: "t", InvoiceID: 3}
@@ -269,10 +270,10 @@ func TestTableWriteEdges(t *testing.T) {
 	}
 
 	// No rows: nothing runs.
-	if err := db.InsertRows(itTable, itTable.NewRows(0)).Exec(ctx); err != nil {
+	if err := untyped.InsertRows(db, itTable, itTable.NewRows(0)).Exec(ctx); err != nil {
 		t.Errorf("InsertRows of none: %v", err)
 	}
-	if s, _, err := db.InsertRows(itTable, velox.TableRows{}).SQL(ctx); err != nil || s != "" {
+	if s, _, err := untyped.InsertRows(db, itTable, untyped.Rows{}).SQL(ctx); err != nil || s != "" {
 		t.Errorf("SQL of InsertRows of none: %q %v", s, err)
 	}
 	// Every key set, or none.
@@ -281,7 +282,7 @@ func TestTableWriteEdges(t *testing.T) {
 	for i := range 2 {
 		rows.At(i).(*testmodel.Item).SKU, rows.At(i).(*testmodel.Item).InvoiceID = "s", 1
 	}
-	if err := db.InsertRows(itTable, rows).Exec(ctx); err == nil {
+	if err := untyped.InsertRows(db, itTable, rows).Exec(ctx); err == nil {
 		t.Error("InsertRows with one key set: no error")
 	}
 	if exec.Calls != 0 {
@@ -295,40 +296,40 @@ func TestTableWriteEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs, ga, err := db.InsertTable(itTable, &x).Update(col(It.Qty)).OnConflict(col(It.SKU)).SQL(ctx)
+	gs, ga, err := untyped.Insert(db, itTable, &x).Update(col(It.Qty)).OnConflict(col(It.SKU)).SQL(ctx)
 	if err != nil || gs != ws || len(ga) != len(wa) {
 		t.Errorf("upsert: %q %v %v, want %q %v", gs, ga, err, ws, wa)
 	}
 	exec.Rows = [][]any{{int64(9)}}
-	if err := db.InsertTable(itTable, &x).Exec(ctx); err != nil || x.ID != 9 {
+	if err := untyped.Insert(db, itTable, &x).Exec(ctx); err != nil || x.ID != 9 {
 		t.Errorf("InsertTable: id %d, %v", x.ID, err)
 	}
 
 	// A delete's refusals, before anything is sent.
 	exec.Calls = 0
-	bad := itTable.Pred(col(It.SKU), velox.PredEQ, 3)
-	other := tkTable.Pred(col(Tk.Title), velox.PredEQ, "t")
+	bad := itTable.Pred(col(It.SKU), untyped.PredEQ, 3)
+	other := tkTable.Pred(col(Tk.Title), untyped.PredEQ, "t")
 	for name, f := range map[string]func() error{
-		"Delete of the zero Table, SQL": func() error { _, _, err := db.DeleteTable(velox.Table{}).All().SQL(ctx); return err },
-		"Delete of the zero Table":      func() error { _, err := db.DeleteTable(velox.Table{}).All().Exec(ctx); return err },
+		"Delete of the zero Table, SQL": func() error { _, _, err := untyped.Delete(db, untyped.Table{}).All().SQL(ctx); return err },
+		"Delete of the zero Table":      func() error { _, err := untyped.Delete(db, untyped.Table{}).All().Exec(ctx); return err },
 		"Delete of a bad condition, SQL": func() error {
-			_, _, err := db.DeleteTable(itTable).Where(bad).SQL(ctx)
+			_, _, err := untyped.Delete(db, itTable).Where(bad).SQL(ctx)
 			return err
 		},
-		"Delete of a bad condition": func() error { _, err := db.DeleteTable(itTable).Where(bad).Exec(ctx); return err },
+		"Delete of a bad condition": func() error { _, err := untyped.Delete(db, itTable).Where(bad).Exec(ctx); return err },
 		"Delete of another entity's condition": func() error {
-			_, err := db.DeleteTable(itTable).Where(other).Exec(ctx)
+			_, err := untyped.Delete(db, itTable).Where(other).Exec(ctx)
 			return err
 		},
 		"Update of another entity's condition": func() error {
-			_, err := db.UpdateTable(itTable).Set(col(It.Qty), int64(1)).Where(other).Exec(ctx)
+			_, err := untyped.Update(db, itTable).Set(col(It.Qty), int64(1)).Where(other).Exec(ctx)
 			return err
 		},
 		"Update of the zero Table": func() error {
-			_, err := db.UpdateTable(velox.Table{}).All().Exec(ctx)
+			_, err := untyped.Update(db, untyped.Table{}).All().Exec(ctx)
 			return err
 		},
-		"Update with no Set": func() error { _, err := db.UpdateTable(itTable).All().Exec(ctx); return err },
+		"Update with no Set": func() error { _, err := untyped.Update(db, itTable).All().Exec(ctx); return err },
 	} {
 		if err := f(); err == nil {
 			t.Errorf("%s: no error", name)
@@ -359,7 +360,7 @@ func TestTableJoinRows(t *testing.T) {
 	}
 	full[col(I.ID)], full[col(I.Number)] = int64(3), "n3"
 	exec.Rows = [][]any{row([]any{int64(1), int64(3), "a", int64(1)}, full), row([]any{int64(2), int64(4), "b", int64(1)}, nil)}
-	q := db.QueryTable(itTable).LeftJoin(int(It.Invoice.I), invTable).Limit(5)
+	q := untyped.Query(db, itTable).LeftJoin(int(It.Invoice.I), invTable).Limit(5)
 	rows, err := q.All(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -374,7 +375,7 @@ func TestTableJoinRows(t *testing.T) {
 	if _, err := q.All(ctx); err == nil {
 		t.Error("a joined row that does not scan: no error")
 	}
-	if _, err := db.QueryTable(itTable).Limit(5).All(ctx); err == nil {
+	if _, err := untyped.Query(db, itTable).Limit(5).All(ctx); err == nil {
 		t.Error("a row that does not scan: no error")
 	}
 	exec.Rows = nil
@@ -383,7 +384,7 @@ func TestTableJoinRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs, ga, err := db.QueryTable(tkTable).Join(int(Tk.Invoice.I), invTable).LeftJoin(int(Tk.Parent.I), tkTable).Limit(1).SQL(ctx)
+	gs, ga, err := untyped.Query(db, tkTable).Join(int(Tk.Invoice.I), invTable).LeftJoin(int(Tk.Parent.I), tkTable).Limit(1).SQL(ctx)
 	if err != nil || gs != ws || len(ga) != len(wa) {
 		t.Errorf("two joins: %q %v %v, want %q %v", gs, ga, err, ws, wa)
 	}
@@ -400,7 +401,7 @@ func TestTableQueryLoadFails(t *testing.T) {
 		}
 		return next(ctx)
 	}))
-	q := velox.Untyped(db.Query[testmodel.Invoice]().With(I.Items).OrderBy(I.ID.Asc()).Limit(1))
+	q := untyped.FromQuery(db.Query[testmodel.Invoice]().With(I.Items).OrderBy(I.ID.Asc()).Limit(1))
 	for run, f := range map[string]func() error{
 		"All":   func() error { _, err := q.All(ctx); return err },
 		"First": func() error { _, err := q.First(ctx); return err },
@@ -409,7 +410,7 @@ func TestTableQueryLoadFails(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = q.Where(invTable.Pred(col(I.ID), velox.PredEQ, inv.ID)).One(ctx)
+			_, err = q.Where(invTable.Pred(col(I.ID), untyped.PredEQ, inv.ID)).One(ctx)
 			return err
 		},
 	} {
@@ -417,10 +418,10 @@ func TestTableQueryLoadFails(t *testing.T) {
 			t.Errorf("%s: %v, want the load's error", run, err)
 		}
 	}
-	other := tkTable.Pred(col(Tk.Title), velox.PredEQ, "t")
+	other := tkTable.Pred(col(Tk.Title), untyped.PredEQ, "t")
 	for run, f := range map[string]func() error{
-		"Count":  func() error { _, err := db.QueryTable(invTable).Where(other).Count(ctx); return err },
-		"Exists": func() error { _, err := db.QueryTable(invTable).Where(other).Exists(ctx); return err },
+		"Count":  func() error { _, err := untyped.Query(db, invTable).Where(other).Count(ctx); return err },
+		"Exists": func() error { _, err := untyped.Query(db, invTable).Where(other).Exists(ctx); return err },
 	} {
 		if err := f(); err == nil {
 			t.Errorf("%s of another entity's condition: no error", run)
@@ -441,8 +442,8 @@ func TestTableInsertPolicy(t *testing.T) {
 	}
 	rows.At(1).(*testmodel.Ticket).Owner = "bob"
 	for name, f := range map[string]func() error{
-		"InsertTable": func() error { return db.InsertTable(tkTable, &bob).Exec(in) },
-		"InsertRows":  func() error { return db.InsertRows(tkTable, rows).Exec(in) },
+		"InsertTable": func() error { return untyped.Insert(db, tkTable, &bob).Exec(in) },
+		"InsertRows":  func() error { return untyped.InsertRows(db, tkTable, rows).Exec(in) },
 	} {
 		if err := f(); !errors.Is(err, velox.ErrDenied) {
 			t.Errorf("%s of bob's ticket: %v, want ErrDenied", name, err)
@@ -465,7 +466,7 @@ func TestTableTypedConditions(t *testing.T) {
 		"EQ":                 It.SKU.EQ("a"),
 	} {
 		ws, wa, werr := db.Query[testmodel.Item]().Where(p).Limit(1).SQL(ctx)
-		gs, ga, gerr := db.QueryTable(itTable).Where(velox.Predicate(p)).Limit(1).SQL(ctx)
+		gs, ga, gerr := untyped.Query(db, itTable).Where(velox.Predicate(p)).Limit(1).SQL(ctx)
 		if gs != ws || len(ga) != len(wa) || (gerr == nil) != (werr == nil) {
 			t.Errorf("%s: %q %v %v, want %q %v %v", name, gs, ga, gerr, ws, wa, werr)
 		}

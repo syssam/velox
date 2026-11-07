@@ -123,7 +123,7 @@ func WithHooks[E any, PE Entity[E]](hs ...Hook) Option {
 			panic("velox: WithHooks: a nil hook")
 		}
 	}
-	return engine.WithEntityHooks(PE(nil).VeloxMeta().info, hookFns(hs))
+	return engine.WithEntityHooks(stateOf(PE(nil).VeloxMeta()).Info, hookFns(hs))
 }
 
 // bind keeps in info the interceptors, policy and hooks that s declares:

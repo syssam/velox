@@ -31,7 +31,7 @@ func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int6
 // change it.
 type RawQuery[E any] struct {
 	db      *DB
-	meta    *Meta[E]
+	meta    *metaState[E]
 	reason  string
 	query   string
 	args    []any
@@ -81,7 +81,7 @@ type RawQuery[E any] struct {
 // names, as every statement does: WithShard's, else the one WithShardFor gives
 // for the context. With neither they fail with ErrNoShard, before anything is sent.
 func (db *DB) Raw[E any, PE Entity[E]](reason, query string, args ...any) RawQuery[E] {
-	return RawQuery[E]{db: db, meta: PE(nil).VeloxMeta(), reason: reason, query: query, args: args}
+	return RawQuery[E]{db: db, meta: stateOf(PE(nil).VeloxMeta()), reason: reason, query: query, args: args}
 }
 
 // MaxRows returns the query allowed to return up to n rows, in place of the
@@ -95,13 +95,13 @@ func (q RawQuery[E]) MaxRows[_ Lazy[E]](n int) RawQuery[E] {
 
 // statement is the statement one run of the query sends, or why it cannot.
 func (q RawQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
-	if q.meta.err != nil {
-		return Statement{}, q.meta.err
+	if q.meta.Err != nil {
+		return Statement{}, q.meta.Err
 	}
 	if engine.NoReason(q.reason) {
-		return Statement{}, engine.ErrNoReason(q.meta.info.Name)
+		return Statement{}, engine.ErrNoReason(q.meta.Info.Name)
 	}
-	return Statement{Op: OpRawQuery, Entity: q.meta.info, SQL: q.query, Args: q.args, MaxRows: q.maxRows,
+	return Statement{Op: OpRawQuery, Entity: q.meta.Info, SQL: q.query, Args: q.args, MaxRows: q.maxRows,
 		PolicyBypass: q.reason, InTx: q.db.e.InTx}, nil
 }
 
@@ -109,7 +109,7 @@ func (q RawQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 // out, Iter's to yield.
 type rawRun[E any] struct {
 	st      Statement
-	m       *Meta[E]
+	m       *metaState[E]
 	limit   int // One's: stop after this many rows; 0: read them all
 	out     []E
 	yield   func(E, error) bool // Iter's; nil for All and One
@@ -123,7 +123,7 @@ func readRaw[E any](a *rawRun[E], r engine.Rows) error {
 	if a.yield != nil && (a.yielded || a.stopped) {
 		return engine.ErrIterAgain
 	}
-	cols, err := engine.RawColumns(a.m.info, r)
+	cols, err := engine.RawColumns(a.m.Info, r)
 	if err != nil {
 		return err
 	}
@@ -181,11 +181,11 @@ func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 	}
 	switch len(a.out) {
 	case 0:
-		return nil, fmt.Errorf("velox: %s: %w", q.meta.info.Name, ErrNotFound)
+		return nil, fmt.Errorf("velox: %s: %w", q.meta.Info.Name, ErrNotFound)
 	case 1:
 		return &a.out[0], nil
 	}
-	return nil, fmt.Errorf("velox: %s: %w", q.meta.info.Name, ErrNotSingular)
+	return nil, fmt.Errorf("velox: %s: %w", q.meta.Info.Name, ErrNotSingular)
 }
 
 // Iter runs the query and yields one row at a time; only the current row is

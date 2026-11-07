@@ -38,7 +38,7 @@ var predOps = map[graphql.WhereOp]struct {
 
 // writePred writes the where input's methods Pred, which turns it into a
 // velox.Pred, and predicate, the same condition untyped: a gqlgraph.Filter
-// on the entity's velox.Table, and one call of a gqlgraph helper for each
+// on the entity's untyped.Table, and one call of a gqlgraph helper for each
 // not, and, or and edge of the input and for each field's predicates
 // together, which adds each predicate that is set. The helpers take columns
 // and relations by index, and a nested input's predicate as a method
@@ -84,12 +84,12 @@ func (r *renderer) writePred(f *file, t *sdl.Type) error {
 // one field, together.
 func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, error) {
 	w := ws[0]
-	e, impl, velox := t.Entity, f.gqlgraph(), f.velox()
+	e, impl := t.Entity, f.gqlgraph()
 	field := fmt.Sprintf("%q, w.%s", w.Name, w.GoName) // the GraphQL name, for errors, and the value
 	cond := func(of string) string { return "(*" + of + "WhereInput)." + predMethod }
 	edge := func() string {
 		ed := e.Edges[w.Edge]
-		return fmt.Sprintf("%s, %s.TableOf[%s]()", edgeConst(e, ed), velox, ed.Target)
+		return fmt.Sprintf("%s, %s.TableOf[%s]()", edgeConst(e, ed), f.untyped(), ed.Target)
 	}
 	switch w.Kind {
 	case sdl.WhereNot:
@@ -161,7 +161,7 @@ func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, 
 }
 
 // whereConv checks that the where-input field w's values convert to the Go
-// type of fd, its column, as velox.Table.Convert converts them: w holds
+// type of fd, its column, as untyped.Table.Convert converts them: w holds
 // fd's own Go type, as when the field binds to its scalar as it is, or the
 // base type the scalar binds to of a field of the application's own Go type.
 func (r *renderer) whereConv(e *plugin.Entity, fd *plugin.Field, w sdl.WhereField) error {

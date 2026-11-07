@@ -22,6 +22,7 @@ import (
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/mixin"
 	"github.com/syssam/velox/scope"
+	"github.com/syssam/velox/untyped"
 )
 
 // keeper and pet are hand-written entities, as velox-gen would write them,
@@ -219,11 +220,11 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			return out, nil
 		}
 	}
-	key := &gqlgraph.Type{Name: "Pet", Table: velox.TableOf[pet], Key: []gqlgraph.Column{{Name: "id", Index: int(pets.ID.I)}}}
+	key := &gqlgraph.Type{Name: "Pet", Table: untyped.TableOf[pet], Key: []gqlgraph.Column{{Name: "id", Index: int(pets.ID.I)}}}
 	petConn := func(field string) resolver {
 		edges := make([]string, keepers.Pets.I+1)
 		edges[keepers.Pets.I] = strings.TrimPrefix(field, "Keeper.")
-		owner := &gqlgraph.Type{Name: "Keeper", Table: velox.TableOf[keeper], Edges: edges}
+		owner := &gqlgraph.Type{Name: "Keeper", Table: untyped.TableOf[keeper], Edges: edges}
 		return func(ctx context.Context, _ map[string]any) (any, error) {
 			return gqlgraph.Paginate(ctx, owner.Edge(parent(ctx), int(keepers.Pets.I)), key, gqlgraph.Args{})
 		}

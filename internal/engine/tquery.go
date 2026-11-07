@@ -18,16 +18,14 @@ const (
 	RowGrowth = 8
 )
 
-// TableQuery is a SELECT on the entity of a Table, Query with the entity's
-// type erased. For generated code. It builds the Statement a Query builds,
-// through the same pipeline, so the policies, a scope, the hooks, routing and
-// the errors are the same; DB.QueryTable starts one, Untyped makes one of a
-// Query and Typed a Query of one. Like a Query it is a value: each chaining
-// method returns a new TableQuery. Its rows are unsafe.Pointers to the
-// entity, and its columns and relations are indexes, as Statement numbers
+// TableQuery is a SELECT on the entity of a Table, velox's Query with the
+// entity's type erased: package untyped's TableQuery. It builds the
+// Statement a Query builds, through the same pipeline, so the policies, a
+// scope, the hooks, routing and the errors are the same. Like a Query it is
+// a value: each chaining method returns a new TableQuery. Its rows are a *E
+// in an any, and its columns and relations are indexes, as Statement numbers
 // them.
 type TableQuery struct {
-	owner any // the *velox.DB the query is of, for velox's Typed
 	e     *DB
 	t     *table
 	st    Statement
@@ -37,22 +35,15 @@ type TableQuery struct {
 	joins *JoinSet
 }
 
-// QueryTable starts a query on t's entity through e, the DB of owner, a
-// *velox.DB: velox's DB.QueryTable.
-func QueryTable(e *DB, owner any, t Table) TableQuery {
+// QueryTable starts a query on t's entity through e: untyped.Query.
+func QueryTable(e *DB, t Table) TableQuery {
 	s := t.state()
-	return TableQuery{owner: owner, e: e, t: s, st: Statement{Op: OpSelect, Entity: s.info, InTx: e.InTx}}
+	return TableQuery{e: e, t: s, st: Statement{Op: OpSelect, Entity: s.info, InTx: e.InTx}}
 }
 
-// TableQueryOf is the TableQuery of a typed query's parts: velox's Untyped.
-func TableQueryOf(owner any, e *DB, t Table, st Statement, err error, loads []LoadSpec, after unsafe.Pointer, joins *JoinSet) TableQuery {
-	return TableQuery{owner: owner, e: e, t: t.state(), st: st, err: err, loads: loads, after: after, joins: joins}
-}
-
-// TableQueryParts is q's parts, for velox's Typed: the parts TableQueryOf
-// takes, but the Table, with the error last.
-func TableQueryParts(q TableQuery) (owner any, e *DB, st Statement, loads []LoadSpec, after unsafe.Pointer, joins *JoinSet, err error) {
-	return q.owner, q.e, q.st, q.loads, q.after, q.joins, q.err
+// TableQueryOf is the TableQuery of a typed query's parts: untyped.FromQuery.
+func TableQueryOf(e *DB, t Table, st Statement, err error, loads []LoadSpec, after unsafe.Pointer, joins *JoinSet) TableQuery {
+	return TableQuery{e: e, t: t.state(), st: st, err: err, loads: loads, after: after, joins: joins}
 }
 
 // Table returns the query's Table.

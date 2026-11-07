@@ -7,9 +7,10 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion18
+const _ = veloxgql.GeneratedCodeIsVersion19
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -103,7 +104,7 @@ func NewGroupConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *GroupOrder,
 ) (*GroupConnection, error) {
-	return newGroupConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, orderBy)
+	return newGroupConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, orderBy)
 }
 
 // newGroupConnection is NewGroupConnection of the nodes from leads to: a
@@ -127,7 +128,7 @@ func newGroupConnection(
 // groupType describes the GraphQL type Group to gqlgraph.
 var groupType = gqlgraph.Type{
 	Name:  "Group",
-	Table: velox.TableOf[Group],
+	Table: untyped.TableOf[Group],
 	Key:   []gqlgraph.Column{{Name: "id", Index: groupColID}},
 	Order: []gqlgraph.Column{
 		{Name: "NAME", Index: groupColName},

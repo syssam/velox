@@ -12,7 +12,7 @@ import (
 // run by Exec. Like Query it is a value: extending it leaves it as it was.
 type InsertQuery[E any] struct {
 	db       *DB
-	meta     *Meta[E]
+	meta     *metaState[E]
 	one      *E
 	single   bool // made by Insert, so a nil one is a mistake, not an empty InsertAll
 	many     []E
@@ -28,7 +28,7 @@ type InsertQuery[E any] struct {
 // defaults and reads the generated key back, and it leaves those changes in place even when the
 // insert then fails.
 func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E] {
-	return InsertQuery[E]{db: db, meta: x.VeloxMeta(), one: (*E)(x), single: true}
+	return InsertQuery[E]{db: db, meta: stateOf(x.VeloxMeta()), one: (*E)(x), single: true}
 }
 
 // InsertAll starts an INSERT of every entity in xs, in as few statements as
@@ -36,7 +36,7 @@ func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E] {
 // over all of xs. Exec fills defaults into xs[i], the caller's
 // own slice elements, and leaves those changes in place even when the insert then fails.
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E] {
-	return InsertQuery[E]{db: db, meta: PE(nil).VeloxMeta(), many: xs}
+	return InsertQuery[E]{db: db, meta: stateOf(PE(nil).VeloxMeta()), many: xs}
 }
 
 func columnIndexes[E any](cs []Column[E]) []int {
@@ -128,7 +128,7 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // edge is written only when the insert affected a row: a hook that does not
 // call next writes none.
 func (q InsertQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E] {
-	q.set = q.set.Add(Assignments(ss))
+	q.set = q.set.Add(assignments(ss))
 	return q
 }
 
@@ -171,11 +171,11 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if q.one == nil && len(q.many) == 0 {
 		return nil
 	}
-	if q.set.Empty() && !q.db.e.HasHooks(q.meta.info) {
+	if q.set.Empty() && !q.db.e.HasHooks(q.meta.Info) {
 		var mu engine.MutationState
 		return q.send(ctx, &q.db.e, &mu)
 	}
-	return engine.Insert(ctx, &q.db.e, q.meta.info, q.set, q.mutation(false).Rows, q.conflict != nil, q.one == nil, q.send)
+	return engine.Insert(ctx, &q.db.e, q.meta.Info, q.set, q.mutation(false).Rows, q.conflict != nil, q.one == nil, q.send)
 }
 
 // SQL returns the first statement and arguments Exec would send for ctx, or
@@ -207,13 +207,13 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 		return "", nil, nil
 	}
 	if !q.set.Empty() {
-		if _, err := engine.PrepareInsert(q.meta.info, q.set, q.mutation(false).Rows, q.conflict != nil, q.one == nil); err != nil {
+		if _, err := engine.PrepareInsert(q.meta.Info, q.set, q.mutation(false).Rows, q.conflict != nil, q.one == nil); err != nil {
 			return "", nil, err
 		}
 	}
-	if q.db.e.HasHooks(q.meta.info) {
+	if q.db.e.HasHooks(q.meta.Info) {
 		mu := q.mutation(true)
-		if err := engine.Mutate(ctx, &q.db.e, q.meta.info, mu, func(ctx context.Context, mu *engine.MutationState) error { return q.render(ctx, mu) }); err != nil && !engine.DryRefused(mu, err) {
+		if err := engine.Mutate(ctx, &q.db.e, q.meta.Info, mu, func(ctx context.Context, mu *engine.MutationState) error { return q.render(ctx, mu) }); err != nil && !engine.DryRefused(mu, err) {
 			return "", nil, err
 		}
 		return mu.SQL, mu.Args, nil
@@ -272,7 +272,7 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 		if err != nil {
 			return err
 		}
-		inTx := q.db.e.InTx || len(q.many) > per || engine.ConditionedUpsert(ctx, &q.db.e, q.meta.info, q.conflict, len(q.many))
+		inTx := q.db.e.InTx || len(q.many) > per || engine.ConditionedUpsert(ctx, &q.db.e, q.meta.Info, q.conflict, len(q.many))
 		st = batch(q.meta, q.many[:min(per, len(q.many))], cols, q.conflict, inTx)
 	}
 	var err error
@@ -285,17 +285,17 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 // without OnConflict's columns, and an upsert that sets the key of a
 // bidirectional one-to-one edge (EdgeBidi).
 func (q InsertQuery[E]) check[_ Lazy[E]]() error {
-	if q.meta.err != nil {
-		return q.meta.err
+	if q.meta.Err != nil {
+		return q.meta.Err
 	}
 	if q.single && q.one == nil {
-		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.meta.info.Name)
+		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.meta.Info.Name)
 	}
-	if err := q.set.CheckInsert(q.meta.info); err != nil {
+	if err := q.set.CheckInsert(q.meta.Info); err != nil {
 		return err
 	}
 	if q.conflict != nil {
-		return engine.CheckConflict(q.meta.info, q.conflict, unsafe.Pointer(q.one))
+		return engine.CheckConflict(q.meta.Info, q.conflict, unsafe.Pointer(q.one))
 	}
 	return nil
 }
@@ -308,26 +308,26 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 // one, it is the zero value itself: a string with a Default can never store
 // "", which is why velox-gen refuses a Default or DefaultFunc on a bool or
 // number that is not Nillable, unless the Default is the zero value.
-func fillDefaults[E any](m *Meta[E], p *E) {
-	for i := range m.info.Columns {
-		engine.FillDefault(&m.info.Columns[i], m.addr(p, i))
+func fillDefaults[E any](m *metaState[E], p *E) {
+	for i := range m.Info.Columns {
+		engine.FillDefault(&m.Info.Columns[i], m.Addr(p, i))
 	}
 }
 
 // generatedKey is the index of a single integer primary key column holding
 // zero in *p, which the database assigns; -1 when there is none.
-func generatedKey[E any](m *Meta[E], p *E) int {
-	if len(m.info.PrimaryKey) != 1 {
+func generatedKey[E any](m *metaState[E], p *E) int {
+	if len(m.Info.PrimaryKey) != 1 {
 		return -1
 	}
-	k := m.info.PrimaryKey[0]
-	if engine.ZeroInt(m.addr(p, k)) {
+	k := m.Info.PrimaryKey[0]
+	if engine.ZeroInt(m.Addr(p, k)) {
 		return k
 	}
 	return -1
 }
 
-func rowValues[E any](m *Meta[E], p *E, cols []int) []any {
+func rowValues[E any](m *metaState[E], p *E, cols []int) []any {
 	vals := make([]any, len(cols))
 	for j, c := range cols {
 		vals[j] = fieldValue(m, p, c)
@@ -338,21 +338,21 @@ func rowValues[E any](m *Meta[E], p *E, cols []int) []any {
 // oneStatement prepares the entity at p, as Insert's Exec does, and returns
 // the statement that inserts it and its generated key column, -1 for none. On
 // PostgreSQL and SQLite the statement reads that key back with RETURNING.
-func oneStatement[E any](ctx context.Context, db *engine.DB, m *Meta[E], p *E, cf *ConflictClause) (Statement, int, error) {
+func oneStatement[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E, cf *ConflictClause) (Statement, int, error) {
 	fillDefaults(m, p)
 	gen := generatedKey(m, p)
-	cols := engine.InsertColumns(m.info, gen)
+	cols := engine.InsertColumns(m.Info, gen)
 	if len(cols) == 0 {
-		return Statement{}, -1, engine.ErrNothingToInsert(m.info)
+		return Statement{}, -1, engine.ErrNothingToInsert(m.Info)
 	}
-	if err := engine.ValidateRow(m.info, unsafe.Pointer(p), cols); err != nil {
+	if err := engine.ValidateRow(m.Info, unsafe.Pointer(p), cols); err != nil {
 		return Statement{}, -1, err
 	}
-	if err := engine.InsertAllowed(ctx, m.info, unsafe.Pointer(p)); err != nil {
+	if err := engine.InsertAllowed(ctx, m.Info, unsafe.Pointer(p)); err != nil {
 		return Statement{}, -1, err
 	}
-	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.InTx}
-	if engine.InfoBidi(m.info) {
+	st := Statement{Op: OpInsert, Entity: m.Info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.InTx}
+	if engine.InfoBidi(m.Info) {
 		engine.MirrorRows(&st)
 	}
 	if gen >= 0 && db.D != MySQL {
@@ -363,7 +363,7 @@ func oneStatement[E any](ctx context.Context, db *engine.DB, m *Meta[E], p *E, c
 }
 
 // insertOne inserts the entity at p and sets out.Affected.
-func insertOne[E any](ctx context.Context, db *engine.DB, m *Meta[E], p *E, cf *ConflictClause, out *Result) error {
+func insertOne[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E, cf *ConflictClause, out *Result) error {
 	st, gen, err := oneStatement(ctx, db, m, p, cf)
 	if err != nil {
 		return err
@@ -373,50 +373,50 @@ func insertOne[E any](ctx context.Context, db *engine.DB, m *Meta[E], p *E, cf *
 
 // prepareMany prepares every entity in xs, as InsertAll's Exec does, and
 // returns the columns to insert and the most rows one statement holds.
-func prepareMany[E any](ctx context.Context, db *engine.DB, m *Meta[E], xs []E) (cols []int, per int, err error) {
+func prepareMany[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs []E) (cols []int, per int, err error) {
 	for i := range xs {
 		fillDefaults(m, &xs[i])
 	}
-	if err := engine.RefuseBidiRows(m.info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs)); err != nil {
+	if err := engine.RefuseBidiRows(m.Info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs)); err != nil {
 		return nil, 0, err
 	}
 	gen := generatedKey(m, &xs[0])
 	for i := range xs {
 		if (generatedKey(m, &xs[i]) >= 0) != (gen >= 0) {
-			return nil, 0, fmt.Errorf("velox: %s: InsertAll needs every entity's key set, or every key left at zero", m.info.Name)
+			return nil, 0, fmt.Errorf("velox: %s: InsertAll needs every entity's key set, or every key left at zero", m.Info.Name)
 		}
 	}
-	cols = engine.InsertColumns(m.info, gen)
+	cols = engine.InsertColumns(m.Info, gen)
 	if len(cols) == 0 {
-		return nil, 0, engine.ErrNothingToInsert(m.info)
+		return nil, 0, engine.ErrNothingToInsert(m.Info)
 	}
 	for i := range xs {
-		if err := engine.ValidateRow(m.info, unsafe.Pointer(&xs[i]), cols); err != nil {
+		if err := engine.ValidateRow(m.Info, unsafe.Pointer(&xs[i]), cols); err != nil {
 			return nil, 0, err
 		}
 	}
 	for i := range xs {
-		if err := engine.InsertAllowed(ctx, m.info, unsafe.Pointer(&xs[i])); err != nil {
+		if err := engine.InsertAllowed(ctx, m.Info, unsafe.Pointer(&xs[i])); err != nil {
 			return nil, 0, err
 		}
 	}
-	return cols, engine.PerStatement(db.D, m.info, len(cols)), nil
+	return cols, engine.PerStatement(db.D, m.Info, len(cols)), nil
 }
 
 // batch is the statement that inserts xs, prepared, in one statement.
-func batch[E any](m *Meta[E], xs []E, cols []int, cf *ConflictClause, inTx bool) Statement {
-	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Conflict: cf, InTx: inTx, Rows: make([][]any, 0, len(xs))}
+func batch[E any](m *metaState[E], xs []E, cols []int, cf *ConflictClause, inTx bool) Statement {
+	st := Statement{Op: OpInsert, Entity: m.Info, Columns: cols, Conflict: cf, InTx: inTx, Rows: make([][]any, 0, len(xs))}
 	for i := range xs {
 		st.Rows = append(st.Rows, rowValues(m, &xs[i], cols))
 	}
-	if engine.InfoBidi(m.info) {
+	if engine.InfoBidi(m.Info) {
 		engine.MirrorRows(&st)
 	}
 	return st
 }
 
 // insertMany inserts every entity in xs and sets out.Affected.
-func insertMany[E any](ctx context.Context, db *engine.DB, m *Meta[E], xs []E, cf *ConflictClause, out *Result) error {
+func insertMany[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs []E, cf *ConflictClause, out *Result) error {
 	if len(xs) == 0 {
 		return nil
 	}
@@ -424,16 +424,16 @@ func insertMany[E any](ctx context.Context, db *engine.DB, m *Meta[E], xs []E, c
 	// error names the entity on every path. The dry run first, as run and
 	// plain check it.
 	if IsDryRun(ctx) {
-		return fmt.Errorf("velox: %s: %w", m.info.Name, ErrDryRun)
+		return fmt.Errorf("velox: %s: %w", m.Info.Name, ErrDryRun)
 	}
 	if db.Foreign(ctx) {
-		return fmt.Errorf("velox: %s: %w", m.info.Name, ErrOutsideTx)
+		return fmt.Errorf("velox: %s: %w", m.Info.Name, ErrOutsideTx)
 	}
 	cols, per, err := prepareMany(ctx, db, m, xs)
 	if err != nil {
 		return err
 	}
-	if len(xs) <= per && !engine.ConditionedUpsert(ctx, db, m.info, cf, len(xs)) {
+	if len(xs) <= per && !engine.ConditionedUpsert(ctx, db, m.Info, cf, len(xs)) {
 		n, err := insertBatches(ctx, db, m, xs, cols, per, cf)
 		if err == nil {
 			out.Affected = n
@@ -454,7 +454,7 @@ func insertMany[E any](ctx context.Context, db *engine.DB, m *Meta[E], xs []E, c
 
 // insertBatches sends xs, prepared, in statements of at most per rows, and
 // returns the rows they affected: -1 when a batch's count is unknown.
-func insertBatches[E any](ctx context.Context, db *engine.DB, m *Meta[E], xs []E, cols []int, per int, cf *ConflictClause) (int64, error) {
+func insertBatches[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs []E, cols []int, per int, cf *ConflictClause) (int64, error) {
 	var affected int64
 	unknown := false
 	for start := 0; start < len(xs); start += per {

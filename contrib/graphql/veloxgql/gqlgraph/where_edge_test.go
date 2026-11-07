@@ -7,6 +7,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
 // childWhere is a where input of child, as velox-gen would write it, with
@@ -32,14 +33,14 @@ func (w *childWhere) predicate(ctx context.Context) (velox.Predicate, error) {
 func filtered[E any](t *testing.T, db *velox.DB, build func(f *gqlgraph.Filter)) ([]int64, error) {
 	t.Helper()
 	ctx := context.Background()
-	tbl := velox.TableOf[E]()
+	tbl := untyped.TableOf[E]()
 	f := gqlgraph.NewFilter(ctx, gqlgraph.TableType[E]("In"))
 	build(f)
 	p, err := f.Pred()
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryTable(tbl).Where(p).OrderBy(velox.OrderTerm{Column: 0}).Unbounded().All(ctx)
+	rows, err := untyped.Query(db, tbl).Where(p).OrderBy(velox.OrderTerm{Column: 0}).Unbounded().All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +57,7 @@ func filtered[E any](t *testing.T, db *velox.DB, build func(f *gqlgraph.Filter))
 func TestWhereRelations(t *testing.T) {
 	db, _, _ := edgeDB(t)
 	tru, fls := new(true), new(false)
-	edge, ct := int(owners.Children.I), velox.TableOf[child]()
+	edge, ct := int(owners.Children.I), untyped.TableOf[child]()
 	for _, c := range []struct {
 		name  string
 		build func(f *gqlgraph.Filter)

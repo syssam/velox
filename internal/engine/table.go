@@ -9,7 +9,7 @@ import (
 )
 
 // Table is an entity's metadata and scan plan with the entity's type erased:
-// what an untyped query (DB.QueryTable) reads, and what the untyped
+// what an untyped query (untyped.Query) reads, and what the untyped
 // conditions are made with, keyed by column and relation indexes. For
 // generated code. Code that handles every entity alike, such as
 // velox-graphql's runtime, is compiled once on it, where the typed API would
@@ -45,12 +45,12 @@ type table struct {
 }
 
 // errNoTable is the error of the zero Table's queries.
-var errNoTable = errors.New("velox: a zero Table: use TableOf")
+var errNoTable = errors.New("velox: a zero Table: use untyped.TableOf")
 
 // NewTable returns the Table of an entity: its metadata info (or its error
 // err, info nil), its field addresses (addr), the columns NilScanner reads
 // (nilCols), its reflect.Type typ (as any), and target, which names it as a
-// relation's target. velox's TableOf calls it once per entity.
+// relation's target. untyped.TableOf calls it once per entity.
 func NewTable(info *EntityInfo, err error, addr func(p unsafe.Pointer, col int) any, nilCols []bool, typ any, target RelTarget) Table {
 	t := &table{info: info, err: err, target: target}
 	if err == nil {
@@ -233,7 +233,7 @@ func (r TableRows) at(i int) unsafe.Pointer {
 }
 
 // RowsData is r's first row, nil for none, its length, its row size and its
-// entity: for velox's RowsOf.
+// entity: for untyped.RowsOf.
 func RowsData(r TableRows) (unsafe.Pointer, int, uintptr, *EntityInfo) {
 	return r.p, r.n, r.size, r.info
 }

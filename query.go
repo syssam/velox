@@ -17,21 +17,19 @@ import (
 // in several ways, from several goroutines. Running a query does not change
 // it either, so it can run again.
 type Query[E any] struct {
-	db    *DB
-	meta  *Meta[E]
-	st    Statement
-	err   error             // a condition's error, returned by every way of running the query
-	loads []engine.LoadSpec // the relations All loads
-	after *E                // After's row, copied
-	joins *engine.JoinSet   // how to read the joined relations, in the order of st.Joins; nil without Join
+	s    engine.QueryState // first: package untyped reads it
+	meta *metaState[E]
 }
+
+// pub is e as the *DB that holds it: a DB's only field is its engine.DB.
+func pub(e *engine.DB) *DB { return (*DB)(unsafe.Pointer(e)) }
 
 // Query starts a query on entity E:
 //
 //	db.Query[billing.Invoice]().Where(billing.Invoices.Paid.EQ(false)).Limit(50).All(ctx)
 func (db *DB) Query[E any, PE Entity[E]]() Query[E] {
-	m := PE(nil).VeloxMeta()
-	return Query[E]{db: db, meta: m, st: Statement{Op: OpSelect, Entity: m.info, InTx: db.e.InTx}}
+	m := &PE(nil).VeloxMeta().d
+	return Query[E]{s: engine.QueryState{DB: &db.e, St: Statement{Op: OpSelect, Entity: m.Info, InTx: db.e.InTx}}, meta: m}
 }
 
 // Where returns the query with conditions added. All of a query's conditions
@@ -39,12 +37,12 @@ func (db *DB) Query[E any, PE Entity[E]]() Query[E] {
 func (q Query[E]) Where[_ Lazy[E]](ps ...Pred[E]) Query[E] {
 	// Clipped, so that appending copies: another query extended from the
 	// same one shares its backing array.
-	q.st.Where = slices.Clip(q.st.Where)
+	q.s.St.Where = slices.Clip(q.s.St.Where)
 	for _, p := range ps {
-		q.st.Where = append(q.st.Where, Predicate(p))
-		if q.err == nil {
+		q.s.St.Where = append(q.s.St.Where, Predicate(p))
+		if q.s.Err == nil {
 			if err := engine.PredErr(engine.PredNode(Predicate(p))); err != nil {
-				q.err = err
+				q.s.Err = err
 			}
 		}
 	}
@@ -61,10 +59,10 @@ func (q Query[E]) Where[_ Lazy[E]](ps ...Pred[E]) Query[E] {
 // shared by every owner with the same key: changing one changes it for all.
 func (q Query[E]) With[T any](r Rel[E, T]) Query[E] {
 	sp := r.spec()
-	if q.err == nil {
-		q.err = engine.SpecErr(sp)
+	if q.s.Err == nil {
+		q.s.Err = engine.SpecErr(sp)
 	}
-	q.loads = append(slices.Clip(q.loads), sp)
+	q.s.Loads = append(slices.Clip(q.s.Loads), sp)
 	return q
 }
 
@@ -74,9 +72,9 @@ func (q Query[E]) With[T any](r Rel[E, T]) Query[E] {
 // a term "col IS NULL" goes before the column's, which an index on it does not
 // serve.
 func (q Query[E]) OrderBy[_ Lazy[E]](os ...Order[E]) Query[E] {
-	q.st.OrderBy = slices.Clip(q.st.OrderBy) // as in Where
+	q.s.St.OrderBy = slices.Clip(q.s.St.OrderBy) // as in Where
 	for _, o := range os {
-		q.st.OrderBy = append(q.st.OrderBy, o.t)
+		q.s.St.OrderBy = append(q.s.St.OrderBy, o.t)
 	}
 	return q
 }
@@ -84,26 +82,26 @@ func (q Query[E]) OrderBy[_ Lazy[E]](os ...Order[E]) Query[E] {
 // Ordered reports whether OrderBy was called on the query with at least one
 // ordering. A caller that must order the query itself, such as a paginator,
 // uses it to refuse a query already ordered.
-func (q Query[E]) Ordered[_ Lazy[E]]() bool { return len(q.st.OrderBy) > 0 }
+func (q Query[E]) Ordered[_ Lazy[E]]() bool { return len(q.s.St.OrderBy) > 0 }
 
 // Limit returns the query returning at most n rows. n <= 0 removes the limit;
 // a query with no limit fails with ErrUnbounded unless it says Unbounded.
 func (q Query[E]) Limit[_ Lazy[E]](n int) Query[E] {
-	q.st.Limit = max(n, 0)
+	q.s.St.Limit = max(n, 0)
 	return q
 }
 
 // Offset returns the query skipping its first n rows. n <= 0 removes the
 // offset.
 func (q Query[E]) Offset[_ Lazy[E]](n int) Query[E] {
-	q.st.Offset = max(n, 0)
+	q.s.St.Offset = max(n, 0)
 	return q
 }
 
 // Unbounded returns the query declared to have no Limit on purpose. A query
 // with neither a Limit nor Unbounded fails with ErrUnbounded.
 func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E] {
-	q.st.Unbounded = true
+	q.s.St.Unbounded = true
 	return q
 }
 
@@ -115,7 +113,7 @@ func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E] {
 // policy's denial is a select's, and WithoutPolicy skips it as it skips Read.
 // It does not reach the queries of a With load.
 func (q Query[E]) Writable[_ Lazy[E]]() Query[E] {
-	q.st.Writable = true
+	q.s.St.Writable = true
 	return q
 }
 
@@ -130,7 +128,7 @@ func (q Query[E]) Writable[_ Lazy[E]]() Query[E] {
 // the table. One with ForUpdate locks up to 2 rows, the two it reads to tell
 // a single row from several.
 func (q Query[E]) ForUpdate[_ Lazy[E]]() Query[E] {
-	q.st.Lock = LockForUpdate
+	q.s.St.Lock = LockForUpdate
 	return q
 }
 
@@ -138,7 +136,7 @@ func (q Query[E]) ForUpdate[_ Lazy[E]]() Query[E] {
 // SELECT … FOR SHARE: other transactions may read and share-lock them, but
 // not change them. The rules of ForUpdate apply.
 func (q Query[E]) ForShare[_ Lazy[E]]() Query[E] {
-	q.st.Lock = LockForShare
+	q.s.St.Lock = LockForShare
 	return q
 }
 
@@ -147,7 +145,7 @@ func (q Query[E]) ForShare[_ Lazy[E]]() Query[E] {
 // no other worker holds. It needs ForUpdate or ForShare. On MySQL the
 // rows the read scans are locked, so the filter wants an index here too.
 func (q Query[E]) SkipLocked[_ Lazy[E]]() Query[E] {
-	q.st.LockWait = LockSkipLocked
+	q.s.St.LockWait = LockSkipLocked
 	return q
 }
 
@@ -156,7 +154,7 @@ func (q Query[E]) SkipLocked[_ Lazy[E]]() Query[E] {
 // code: PostgreSQL's 55P03, MySQL's 3572. On PostgreSQL and MySQL the error
 // matches ErrLocked. It needs ForUpdate or ForShare.
 func (q Query[E]) NoWait[_ Lazy[E]]() Query[E] {
-	q.st.LockWait = LockNoWait
+	q.s.St.LockWait = LockNoWait
 	return q
 }
 
@@ -168,7 +166,7 @@ func (q Query[E]) NoWait[_ Lazy[E]]() Query[E] {
 // written. One reads up to 2 rows, so under MaxRows(1) a second matching row
 // fails One with ErrTooManyRows rather than ErrNotSingular.
 func (q Query[E]) MaxRows[_ Lazy[E]](n int) Query[E] {
-	q.st.MaxRows = max(n, 0)
+	q.s.St.MaxRows = max(n, 0)
 	return q
 }
 
@@ -176,13 +174,13 @@ func (q Query[E]) MaxRows[_ Lazy[E]](n int) Query[E] {
 // fields keep their zero values. With no columns it selects every column.
 func (q Query[E]) Columns[_ Lazy[E]](cs ...Column[E]) Query[E] {
 	if len(cs) == 0 {
-		q.st.Columns = nil
+		q.s.St.Columns = nil
 		return q
 	}
 	// A new slice, never the old one's array: no clip needed.
-	q.st.Columns = make([]int, len(cs))
+	q.s.St.Columns = make([]int, len(cs))
 	for i, c := range cs {
-		q.st.Columns[i] = int(c.column(nil))
+		q.s.St.Columns[i] = int(c.column(nil))
 	}
 	return q
 }
@@ -190,11 +188,11 @@ func (q Query[E]) Columns[_ Lazy[E]](cs ...Column[E]) Query[E] {
 // Selects reports whether the query reads every one of cs: true for a query
 // with no Columns or Omit.
 func (q Query[E]) Selects[_ Lazy[E]](cs ...Column[E]) bool {
-	if q.st.Columns == nil {
+	if q.s.St.Columns == nil {
 		return true
 	}
 	for _, c := range cs {
-		if !slices.Contains(q.st.Columns, int(c.column(nil))) {
+		if !slices.Contains(q.s.St.Columns, int(c.column(nil))) {
 			return false
 		}
 	}
@@ -203,17 +201,17 @@ func (q Query[E]) Selects[_ Lazy[E]](cs ...Column[E]) bool {
 
 // Omit returns the query selecting every column except the given ones.
 func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E] {
-	if q.meta.err != nil {
+	if q.meta.Err != nil {
 		return q
 	}
 	skip := make(map[int32]bool, len(cs))
 	for _, c := range cs {
 		skip[c.column(nil)] = true
 	}
-	q.st.Columns = make([]int, 0, len(q.meta.info.Columns)) // a new slice, as in Columns
-	for i := range q.meta.info.Columns {
+	q.s.St.Columns = make([]int, 0, len(q.meta.Info.Columns)) // a new slice, as in Columns
+	for i := range q.meta.Info.Columns {
 		if !skip[int32(i)] {
-			q.st.Columns = append(q.st.Columns, i)
+			q.s.St.Columns = append(q.s.St.Columns, i)
 		}
 	}
 	return q
@@ -235,34 +233,34 @@ func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E] {
 // Count applies After's condition too.
 func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
 	if x == nil {
-		if q.err == nil && q.meta.err == nil {
-			q.err = fmt.Errorf("velox: %s: After was given a nil row", q.meta.info.Name)
+		if q.s.Err == nil && q.meta.Err == nil {
+			q.s.Err = fmt.Errorf("velox: %s: After was given a nil row", q.meta.Info.Name)
 		}
 		return q
 	}
 	c := *x
-	q.after = &c
+	q.s.After = unsafe.Pointer(&c)
 	return q
 }
 
 // prepare is the statement a run sends: the query's, with After's condition.
 func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
-	return engine.PrepareStmt(&q.st, q.meta.info, unsafe.Pointer(q.after))
+	return engine.PrepareStmt(&q.s.St, q.meta.Info, q.s.After)
 }
 
 // scanRow scans the current row into p through the entity's scan plan; a
 // JSON column through a decoder (ScanDst), and one of nilColumns through engine.NilScanner.
-func scanRow[E any](r engine.Rows, m *Meta[E], cols []int, dst []any, p *E) error {
+func scanRow[E any](r engine.Rows, m *metaState[E], cols []int, dst []any, p *E) error {
 	for i := range dst {
 		c := i
 		if cols != nil {
 			c = cols[i]
 		}
-		if m.nilCols != nil && m.nilCols[c] {
-			dst[i] = &engine.NilScanner{Dst: m.addr(p, c)}
+		if m.NilCols != nil && m.NilCols[c] {
+			dst[i] = &engine.NilScanner{Dst: m.Addr(p, c)}
 			continue
 		}
-		dst[i] = engine.ScanDst(m.info, c, m.addr(p, c))
+		dst[i] = engine.ScanDst(m.Info, c, m.Addr(p, c))
 	}
 	return r.Scan(dst...)
 }
@@ -283,7 +281,7 @@ const (
 // allRun is the state of one All.
 type allRun[E any] struct {
 	st    Statement
-	m     *Meta[E]
+	m     *metaState[E]
 	joins *engine.JoinSet
 	out   []E
 }
@@ -323,17 +321,17 @@ func readAll[E any](a *allRun[E], r engine.Rows) error {
 // returns the rows, the columns the statement ran with, as the hooks left
 // them, and the connection it ran on.
 func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at engine.Target, err error) {
-	if q.meta.err != nil {
-		return nil, nil, at, q.meta.err
+	if q.meta.Err != nil {
+		return nil, nil, at, q.meta.Err
 	}
-	if q.err != nil {
-		return nil, nil, at, q.err
+	if q.s.Err != nil {
+		return nil, nil, at, q.s.Err
 	}
-	if len(q.loads) > 0 {
+	if len(q.s.Loads) > 0 {
 		if err := q.lockedLoads(); err != nil {
 			return nil, nil, at, err
 		}
-		if err := engine.CheckLoads(q.meta.info, q.st.Columns, q.loads); err != nil {
+		if err := engine.CheckLoads(q.meta.Info, q.s.St.Columns, q.s.Loads); err != nil {
 			return nil, nil, at, err
 		}
 	}
@@ -341,13 +339,13 @@ func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at e
 	if err != nil {
 		return nil, nil, at, err
 	}
-	if q.db.e.Hooked() {
-		a := &allRun[E]{st: st, m: q.meta, joins: q.joins}
-		err = q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readAll(a, r) }, nil)
+	if q.s.DB.Hooked() {
+		a := &allRun[E]{st: st, m: q.meta, joins: q.s.Joins}
+		err = q.s.DB.Run(ctx, &a.st, func(r engine.Rows) error { return readAll(a, r) }, nil)
 		out, ran, at = a.out, a.st.Columns, engine.StmtRan(&a.st)
 	} else {
-		a := allRun[E]{st: st, m: q.meta, joins: q.joins}
-		err = q.db.e.Plain(ctx, &a.st, func(r engine.Rows) error { return readAll(&a, r) }, nil)
+		a := allRun[E]{st: st, m: q.meta, joins: q.s.Joins}
+		err = q.s.DB.Plain(ctx, &a.st, func(r engine.Rows) error { return readAll(&a, r) }, nil)
 		out, ran, at = a.out, a.st.Columns, engine.StmtRan(&a.st)
 	}
 	if err != nil {
@@ -359,8 +357,8 @@ func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at e
 // lockedLoads refuses a locking query with With: the loads' rows would not
 // be locked.
 func (q Query[E]) lockedLoads[_ Lazy[E]]() error {
-	if q.st.Lock != 0 {
-		return fmt.Errorf("velox: %s: a locking read loads no relations; load them in another query", q.meta.info.Name)
+	if q.s.St.Lock != 0 {
+		return fmt.Errorf("velox: %s: a locking read loads no relations; load them in another query", q.meta.Info.Name)
 	}
 	return nil
 }
@@ -368,12 +366,12 @@ func (q Query[E]) lockedLoads[_ Lazy[E]]() error {
 // load loads the query's relations for rows, which ran on at with the columns
 // ran.
 func (q Query[E]) load[_ Lazy[E]](ctx context.Context, rows []E, ran []int, at engine.Target) error {
-	if len(q.loads) == 0 || len(rows) == 0 {
+	if len(q.s.Loads) == 0 || len(rows) == 0 {
 		return nil
 	}
 	// A Rewrite hook may have narrowed the columns after the loads were checked.
 	if ran != nil {
-		if err := engine.CheckLoads(q.meta.info, ran, q.loads); err != nil {
+		if err := engine.CheckLoads(q.meta.Info, ran, q.s.Loads); err != nil {
 			return err
 		}
 	}
@@ -381,7 +379,7 @@ func (q Query[E]) load[_ Lazy[E]](ctx context.Context, rows []E, ran []int, at e
 	for i := range rows {
 		ptrs[i] = unsafe.Pointer(&rows[i])
 	}
-	return engine.LoadRelations(ctx, &q.db.e, q.db.e.LoadPin(at), q.meta.info, ptrs, q.loads, q.st.MaxRows)
+	return engine.LoadRelations(ctx, q.s.DB, q.s.DB.LoadPin(at), q.meta.Info, ptrs, q.s.Loads, q.s.St.MaxRows)
 }
 
 // All runs the query and returns every row.
@@ -400,34 +398,34 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 // row matches and ErrNotSingular when more than one does; it loads the
 // query's relations only for a single row.
 func (q Query[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
-	q.st.Limit = 2
+	q.s.St.Limit = 2
 	out, ran, at, err := q.read(ctx)
 	if err != nil {
 		return nil, err
 	}
 	switch len(out) {
 	case 0:
-		return nil, fmt.Errorf("velox: %s: %w", q.meta.info.Name, ErrNotFound)
+		return nil, fmt.Errorf("velox: %s: %w", q.meta.Info.Name, ErrNotFound)
 	case 1:
 		if err := q.load(ctx, out, ran, at); err != nil {
 			return nil, err
 		}
 		return &out[0], nil
 	}
-	return nil, fmt.Errorf("velox: %s: %w", q.meta.info.Name, ErrNotSingular)
+	return nil, fmt.Errorf("velox: %s: %w", q.meta.Info.Name, ErrNotSingular)
 }
 
 // First runs the query for its first row, in the query's order: a query
 // without OrderBy returns any row that matches. It loads the query's
 // relations for that row. Its error wraps ErrNotFound when no row matches.
 func (q Query[E]) First[_ Lazy[E]](ctx context.Context) (*E, error) {
-	q.st.Limit = 1
+	q.s.St.Limit = 1
 	out, ran, at, err := q.read(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("velox: %s: %w", q.meta.info.Name, ErrNotFound)
+		return nil, fmt.Errorf("velox: %s: %w", q.meta.Info.Name, ErrNotFound)
 	}
 	if err := q.load(ctx, out, ran, at); err != nil {
 		return nil, err
@@ -438,7 +436,7 @@ func (q Query[E]) First[_ Lazy[E]](ctx context.Context) (*E, error) {
 // iterRun is the state of one Iter.
 type iterRun[E any] struct {
 	st      Statement
-	m       *Meta[E]
+	m       *metaState[E]
 	joins   *engine.JoinSet
 	yield   func(E, error) bool
 	timed   bool // the DB has an Around hook: time the loop body
@@ -506,16 +504,16 @@ func yieldRow[E any](yield func(E, error) bool, e E, timed bool, body *time.Dura
 func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 	return func(yield func(E, error) bool) {
 		var zero E
-		if q.meta.err != nil {
-			yield(zero, q.meta.err)
+		if q.meta.Err != nil {
+			yield(zero, q.meta.Err)
 			return
 		}
-		if q.err != nil {
-			yield(zero, q.err)
+		if q.s.Err != nil {
+			yield(zero, q.s.Err)
 			return
 		}
-		if len(q.loads) > 0 {
-			yield(zero, fmt.Errorf("velox: %s: Iter does not load relations; use All", q.meta.info.Name))
+		if len(q.s.Loads) > 0 {
+			yield(zero, fmt.Errorf("velox: %s: Iter does not load relations; use All", q.meta.Info.Name))
 			return
 		}
 		st, err := q.prepare()
@@ -525,13 +523,13 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 		}
 		engine.SetStmtIter(&st)
 		var stopped bool
-		if q.db.e.Hooked() {
-			it := &iterRun[E]{st: st, m: q.meta, joins: q.joins, yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
-			err = q.db.e.Run(ctx, &it.st, func(r engine.Rows) error { return readIter(it, r) }, nil)
+		if q.s.DB.Hooked() {
+			it := &iterRun[E]{st: st, m: q.meta, joins: q.s.Joins, yield: yield, timed: len(q.s.DB.Cfg.Arounds) > 0}
+			err = q.s.DB.Run(ctx, &it.st, func(r engine.Rows) error { return readIter(it, r) }, nil)
 			stopped = it.stopped
 		} else {
-			it := iterRun[E]{st: st, m: q.meta, joins: q.joins, yield: yield}
-			err = q.db.e.Plain(ctx, &it.st, func(r engine.Rows) error { return readIter(&it, r) }, nil)
+			it := iterRun[E]{st: st, m: q.meta, joins: q.s.Joins, yield: yield}
+			err = q.s.DB.Plain(ctx, &it.st, func(r engine.Rows) error { return readIter(&it, r) }, nil)
 			stopped = it.stopped
 		}
 		if err != nil && !stopped {
@@ -544,36 +542,36 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 // among them (so After's rules for the ordering apply, though the ordering is
 // then ignored); the query's ordering, limit, offset and columns are ignored.
 func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
-	if q.meta.err != nil {
-		return 0, q.meta.err
+	if q.meta.Err != nil {
+		return 0, q.meta.Err
 	}
-	if q.err != nil {
-		return 0, q.err
+	if q.s.Err != nil {
+		return 0, q.s.Err
 	}
-	q.st.Columns = nil // ignored, so After does not need its order columns in them
+	q.s.St.Columns = nil // ignored, so After does not need its order columns in them
 	st, err := q.prepare()
 	if err != nil {
 		return 0, err
 	}
-	return engine.CountStmt(ctx, &q.db.e, st)
+	return engine.CountStmt(ctx, q.s.DB, st)
 }
 
 // Exists reports whether a row matches the query's conditions, After's
 // among them, with SELECT 1 … LIMIT 1. Like Count it ignores the query's
 // ordering, limit, offset, columns and relations.
 func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error) {
-	if q.meta.err != nil {
-		return false, q.meta.err
+	if q.meta.Err != nil {
+		return false, q.meta.Err
 	}
-	if q.err != nil {
-		return false, q.err
+	if q.s.Err != nil {
+		return false, q.s.Err
 	}
-	q.st.Columns = nil // as in Count
+	q.s.St.Columns = nil // as in Count
 	st, err := q.prepare()
 	if err != nil {
 		return false, err
 	}
-	return engine.ExistsStmt(ctx, &q.db.e, st)
+	return engine.ExistsStmt(ctx, q.s.DB, st)
 }
 
 // SQL returns the statement and arguments All would send for ctx, or the
@@ -585,17 +583,17 @@ func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error) {
 // wrap execution, do not run.
 func (q Query[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = engine.DryRunContext(ctx) // first, so that every hook sees it
-	if q.meta.err != nil {
-		return "", nil, q.meta.err
+	if q.meta.Err != nil {
+		return "", nil, q.meta.Err
 	}
-	if q.err != nil {
-		return "", nil, q.err
+	if q.s.Err != nil {
+		return "", nil, q.s.Err
 	}
-	if len(q.loads) > 0 {
+	if len(q.s.Loads) > 0 {
 		if err := q.lockedLoads(); err != nil {
 			return "", nil, err
 		}
-		if err := engine.CheckLoads(q.meta.info, q.st.Columns, q.loads); err != nil {
+		if err := engine.CheckLoads(q.meta.Info, q.s.St.Columns, q.s.Loads); err != nil {
 			return "", nil, err
 		}
 	}
@@ -603,13 +601,13 @@ func (q Query[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	text, args, err := q.db.e.DryRun(ctx, &st)
+	text, args, err := q.s.DB.DryRun(ctx, &st)
 	if err != nil {
 		return "", nil, err
 	}
 	// As in All: a Rewrite hook may have narrowed the columns.
-	if len(q.loads) > 0 && st.Columns != nil {
-		if err := engine.CheckLoads(q.meta.info, st.Columns, q.loads); err != nil {
+	if len(q.s.Loads) > 0 && st.Columns != nil {
+		if err := engine.CheckLoads(q.meta.Info, st.Columns, q.s.Loads); err != nil {
 			return "", nil, err
 		}
 	}

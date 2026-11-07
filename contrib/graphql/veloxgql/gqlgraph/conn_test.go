@@ -10,6 +10,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
 // personConn is person's connections, as the generated code writes them.
@@ -25,11 +26,11 @@ var personConn = gqlgraph.Type{
 func TestPaginateBase(t *testing.T) {
 	db, st := peopleDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
-	q := velox.Untyped(db.Query[person]())
+	q := untyped.FromQuery(db.Query[person]())
 	age := []gqlgraph.Order{{Field: "AGE"}}
 	for _, c := range []struct {
 		name  string
-		q     velox.TableQuery
+		q     untyped.TableQuery
 		order []gqlgraph.Order
 		want  string
 	}{
@@ -127,7 +128,7 @@ func TestNamedTypeTerms(t *testing.T) {
 	page := func(args gqlgraph.Args) ([]gadgetID, *gqlgraph.Page) {
 		t.Helper()
 		args.Order = order
-		c, err := gqlgraph.Paginate(ctx, gqlgraph.Query(velox.Untyped(db.Query[gadget]())), conn, args)
+		c, err := gqlgraph.Paginate(ctx, gqlgraph.Query(untyped.FromQuery(db.Query[gadget]())), conn, args)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -159,7 +160,7 @@ func TestNamedTypeTerms(t *testing.T) {
 		}
 	}
 	bad := veloxgql.Cursor{Type: "Gadget", Terms: []veloxgql.CursorTerm{{Field: "SCORE", Direction: veloxgql.OrderDirectionDesc, Value: "high"}}, Key: 1}
-	if _, err := gqlgraph.Paginate(ctx, gqlgraph.Query(velox.Untyped(db.Query[gadget]())), conn, gqlgraph.Args{After: wire(t, bad), Order: order}); !errors.Is(err, veloxgql.ErrBadCursor) {
+	if _, err := gqlgraph.Paginate(ctx, gqlgraph.Query(untyped.FromQuery(db.Query[gadget]())), conn, gqlgraph.Args{After: wire(t, bad), Order: order}); !errors.Is(err, veloxgql.ErrBadCursor) {
 		t.Errorf("a string score: %v, want ErrBadCursor", err)
 	}
 }

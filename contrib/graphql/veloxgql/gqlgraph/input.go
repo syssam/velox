@@ -11,6 +11,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/untyped"
 )
 
 // MaxIDs is the most IDs one list field of an input may give: DecodeIDs
@@ -96,7 +97,7 @@ func NotZero[V any](at string, v V) error {
 // "<input>.<field>: invalid value: <the validator's text>", wrapping the
 // *velox.ValidationError; any other error is returned as it is.
 func Validate[E any](input string, c *Type, set []velox.Setter[E]) ([]velox.Setter[E], error) {
-	if err := validate(input, c, velox.Assignments(set)); err != nil {
+	if err := validate(input, c, untyped.Assignments(set)); err != nil {
 		return nil, err
 	}
 	return set, nil

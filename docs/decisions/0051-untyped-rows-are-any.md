@@ -1,7 +1,7 @@
 # 51. The untyped surface passes rows as a checked *E in an any
 
 Status: accepted, 2026-11-07. Revises 0035 (its untyped row type). Keeps
-0022's aggregates as functions.
+0022's aggregates as functions. Its names moved to package untyped in 0052.
 
 ## Context
 

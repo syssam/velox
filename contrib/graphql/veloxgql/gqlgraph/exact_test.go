@@ -12,6 +12,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/untyped"
 )
 
 // TestFromJSONNumbers: a number in an any is the float64 a hook expects when that says
@@ -219,14 +220,14 @@ func TestFKScoped(t *testing.T) {
 	yes := true
 	for _, c := range []struct {
 		name   string
-		target velox.Table
+		target untyped.Table
 		exists bool
 	}{
-		{"open", velox.TableOf[open](), false},
-		{"guarded", velox.TableOf[guarded](), true},
-		{"intercepted", velox.TableOf[intercepted](), true},
+		{"open", untyped.TableOf[open](), false},
+		{"guarded", untyped.TableOf[guarded](), true},
+		{"intercepted", untyped.TableOf[intercepted](), true},
 	} {
-		target := &gqlgraph.Type{Name: "Owner", Table: func() velox.Table { return c.target }}
+		target := &gqlgraph.Type{Name: "Owner", Table: func() untyped.Table { return c.target }}
 		for _, h := range []struct {
 			name string
 			add  func(f *gqlgraph.Filter)
@@ -248,7 +249,7 @@ func TestFKScoped(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s %s: %v", c.name, h.name, err)
 			}
-			_, _, err = db.QueryTable(velox.TableOf[person]()).Where(p).Limit(1).SQL(ctx)
+			_, _, err = untyped.Query(db, untyped.TableOf[person]()).Where(p).Limit(1).SQL(ctx)
 			switch {
 			case c.exists && (err == nil || h.col != "" && strings.Contains(err.Error(), h.col)):
 				t.Errorf("%s %s: %v, want the EXISTS's error", c.name, h.name, err)

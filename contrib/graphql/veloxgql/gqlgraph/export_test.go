@@ -8,6 +8,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/untyped"
 )
 
 // OrderTerm is an order term or a key column of E, for the tests: the
@@ -25,7 +26,7 @@ func TermOf[E any](field string, dir veloxgql.OrderDirection, col int) OrderTerm
 // JoinedTermOf is the term field, in direction dir, of column col of T, the
 // target of E's to-one relation edge.
 func JoinedTermOf[E, T any](field string, dir veloxgql.OrderDirection, edge, col int) OrderTerm[E] {
-	return OrderTerm[E]{col: Column{Name: field, Index: col, Edge: edge + 1, Target: velox.TableOf[T]}, dir: dir}
+	return OrderTerm[E]{col: Column{Name: field, Index: col, Edge: edge + 1, Target: untyped.TableOf[T]}, dir: dir}
 }
 
 // TypeOf is the Conn of the GraphQL type typ with the order terms order, then
@@ -78,14 +79,14 @@ func (c ConnectionOf[E]) Page(ctx context.Context) (*PageOf[E], error) {
 // order and key.
 func NewConnectionOf[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (ConnectionOf[E], error) {
 	conn, o := TypeOf(typ, order, key)
-	c, err := newConnection(ctx, velox.Untyped(q), conn, args, o)
+	c, err := newConnection(ctx, untyped.FromQuery(q), conn, args, o)
 	return ConnectionOf[E]{c}, err
 }
 
 // TableType is a Conn of E's entity alone, as an edge's owner or target: a
 // selection reads every column.
 func TableType[E any](typ string) *Type {
-	return &Type{Name: typ, Table: velox.TableOf[E]}
+	return &Type{Name: typ, Table: untyped.TableOf[E]}
 }
 
 // InputType is a Conn of E's entity with inputs, whose key is the column key

@@ -3,7 +3,7 @@
 // the scalars, and the limits on what a client may ask for.
 //
 // What only generated code calls is in package gqlgraph, whose names are
-// stable by GeneratedCodeIsVersion18 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion19 and not by semantic versioning. Where a
 // name below belongs to gqlgraph it is written gqlgraph.Name.
 //
 // # IDs
@@ -83,7 +83,7 @@
 //
 // A where input's generated method Pred turns it into a velox.Pred, through
 // an unexported method that builds the same condition untyped: a
-// gqlgraph.Filter (gqlgraph.NewFilter) on the entity's velox.Table, one
+// gqlgraph.Filter (gqlgraph.NewFilter) on the entity's untyped.Table, one
 // helper call for each not, and, or and edge of the input and for each
 // field's predicates, and Filter.Pred, the And of what the helpers added.
 // The helpers take columns and relations by index, and a nested input's
@@ -91,11 +91,11 @@
 // they are compiled once for every where input. Each helper adds nothing
 // for a field the input does not set, and the first error stops the filter:
 //   - gqlgraph.Not, And and Or nest inputs one level deeper, and HasWith
-//     through an edge (velox.Table.Has); an empty and, or or has…With list
+//     through an edge (untyped.Table.Has); an empty and, or or has…With list
 //     adds nothing, and an input that sets nothing holds for every row;
 //   - gqlgraph.Field adds the predicates a gqlgraph.Ops sets on a column (EQ,
-//     In, Contains…, IsNil, velox.Table.Pred), converting the input's values
-//     to the column's Go type where they differ (velox.Table.Convert);
+//     In, Contains…, IsNil, untyped.Table.Pred), converting the input's values
+//     to the column's Go type where they differ (untyped.Table.Convert);
 //   - gqlgraph.IDField decodes IDs with DecodeID, so an ID of another type
 //     fails with ErrWrongIDType, and Has adds has<Edge>;
 //   - gqlgraph.EdgeIDField is IDField of a foreign key, with its IsNil and
@@ -208,8 +208,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion18 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion19 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
-// disagree. For generated code. It is replaced by GeneratedCodeIsVersion19 when
+// disagree. For generated code. It is replaced by GeneratedCodeIsVersion20 when
 // generated code must change.
-const GeneratedCodeIsVersion18 = true
+const GeneratedCodeIsVersion19 = true

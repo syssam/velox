@@ -11,6 +11,7 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/untyped"
 )
 
 // lAnd lists two policies, two hook lists and two interceptor lists, as a
@@ -335,7 +336,7 @@ func TestMetaHasRowFilter(t *testing.T) {
 	if (*lUnbound)(nil).VeloxMeta().HasRowFilter() {
 		t.Error("lUnbound, whose metadata failed: a row filter")
 	}
-	if !velox.TableOf[lJoin]().HasRowFilter() {
+	if !untyped.TableOf[lJoin]().HasRowFilter() {
 		t.Error("lJoin, with an interceptor only: no row filter")
 	}
 }

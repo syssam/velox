@@ -33,6 +33,7 @@ github.com/syssam/velox 88.0
 github.com/syssam/velox/bench/scale 70.6
 github.com/syssam/velox/cmd/velox-gen 89.5
 github.com/syssam/velox/veloxtype 89.5
+github.com/syssam/velox/untyped 96.2
 github.com/syssam/velox/examples/tracker 77.3
 github.com/syssam/velox/examples/tracker/gen 0.0
 github.com/syssam/velox/examples/tracker/schema 0.0

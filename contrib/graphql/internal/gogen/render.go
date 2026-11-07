@@ -32,6 +32,7 @@ const (
 	veloxPath    = "github.com/syssam/velox"
 	veloxgqlPath = "github.com/syssam/velox/contrib/graphql/veloxgql"
 	gqlgraphPath = "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	untypedPath  = "github.com/syssam/velox/untyped"
 )
 
 // Render returns the Go files of m's GraphQL types, for the generated
@@ -189,6 +190,7 @@ func (f *file) use(path, name string) string {
 func (f *file) velox() string    { return f.use(veloxPath, "velox") }
 func (f *file) veloxgql() string { return f.use(veloxgqlPath, "veloxgql") }
 func (f *file) gqlgraph() string { return f.use(gqlgraphPath, "gqlgraph") }
+func (f *file) untyped() string  { return f.use(untypedPath, "untyped") }
 
 // finish is the file's Go source, gofmt'd: the package clause, the imports
 // in two groups (the standard library, then the rest), the version guard
@@ -229,7 +231,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion18\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion19\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -551,7 +553,7 @@ func (r *renderer) qualify(f *file, e *plugin.Entity, fd *plugin.Field, typ, pkg
 	if prev, ok := f.imports[pkg]; ok {
 		return prev + "." + name, nil
 	}
-	if (locals[q] || indexedLocal(q)) && pkg != veloxPath && pkg != veloxgqlPath && pkg != gqlgraphPath && !slices.Contains([]string{"context", "encoding/json", "errors", "fmt", "io"}, pkg) {
+	if (locals[q] || indexedLocal(q)) && pkg != veloxPath && pkg != veloxgqlPath && pkg != gqlgraphPath && pkg != untypedPath && !slices.Contains([]string{"context", "encoding/json", "errors", "fmt", "io"}, pkg) {
 		q += "pkg"
 	}
 	return f.use(pkg, q) + "." + name, nil

@@ -7,8 +7,8 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
 
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/untyped"
 )
 
 // selected returns the names of the fields selected on the objects of the
@@ -162,7 +162,7 @@ func abstractFragment(oc *graphql.OperationContext, sels ast.SelectionSet, sat [
 //
 // It never adds a column q leaves out (TableQuery.Selects). When q selects
 // none of cols, q is left as it is too.
-func narrow(q velox.TableQuery, cols []int) velox.TableQuery {
+func narrow(q untyped.TableQuery, cols []int) untyped.TableQuery {
 	if cols == nil {
 		return q
 	}

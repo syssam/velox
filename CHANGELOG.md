@@ -164,6 +164,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- The untyped surface is package `github.com/syssam/velox/untyped`:
+  `velox.TableOf` is `untyped.TableOf`, `velox.Untyped` is `untyped.FromQuery`,
+  `db.QueryTable(t)` is `untyped.Query(db, t)` (and `InsertTable`,
+  `InsertRows`, `UpdateTable`, `DeleteTable` are `untyped.Insert`,
+  `InsertRows`, `Update`, `Delete`), `m.Table()` is `untyped.MutationTable(m)`,
+  `velox.TableRows` is `untyped.Rows`, `velox.AndPredicates` is `untyped.And`,
+  and `PredOp`, its operators and the `Table*` types moved as they are.
+  `velox.Typed` is gone. Generated GraphQL code imports untyped:
+  `veloxgql.GeneratedCodeIsVersion18` is `GeneratedCodeIsVersion19`
+  (ADR 0052).
+
 - The untyped surface for generated code takes and returns a row as a *E in
   an any, checked against the Table's entity, where it took an
   `unsafe.Pointer`: `Table.Field`, `Value`, `New`, `Fill`, `Filled`, `Of`,

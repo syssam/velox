@@ -9,9 +9,10 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion18
+const _ = veloxgql.GeneratedCodeIsVersion19
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -84,7 +85,7 @@ func NewLabelConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *LabelOrder, where *LabelWhereInput,
 ) (*LabelConnection, error) {
-	return newLabelConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
+	return newLabelConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, orderBy, where)
 }
 
 // newLabelConnection is NewLabelConnection of the nodes from leads to: a
@@ -108,7 +109,7 @@ func newLabelConnection(
 // tagType describes the GraphQL type Label to gqlgraph.
 var tagType = gqlgraph.Type{
 	Name:  "Label",
-	Table: velox.TableOf[Tag],
+	Table: untyped.TableOf[Tag],
 	Key:   []gqlgraph.Column{{Name: "id", Index: tagColID}},
 	Order: []gqlgraph.Column{
 		{Name: "NAME", Index: tagColName},

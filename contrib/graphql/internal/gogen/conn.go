@@ -158,7 +158,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	}
 	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q must not be ordered, and must select %s.", newConnFunc(t), n, strings.Join(how, ", "), selects))
 	f.p("%s", signature("func "+newConnFunc(t), "ctx "+ctx+".Context, q "+velox+".Query["+e.Name+"]", connParams(f, t), "(*"+n+"Connection, error)"))
-	f.p("\treturn %s(ctx, %s.Query(%s.Untyped(q)), %s)", newConnImpl(t), impl, velox, connArgs(t))
+	f.p("\treturn %s(ctx, %s.Query(%s.FromQuery(q)), %s)", newConnImpl(t), impl, f.untyped(), connArgs(t))
 	f.p("}")
 	f.p("")
 
@@ -192,7 +192,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.doc("", fmt.Sprintf("%s describes the GraphQL type %s to gqlgraph.", typeVar(t), n))
 	f.p("var %s = %s.Type{", typeVar(t), impl)
 	f.p("\tName:  %q,", n)
-	f.p("\tTable: %s.TableOf[%s],", velox, e.Name)
+	f.p("\tTable: %s.TableOf[%s],", f.untyped(), e.Name)
 	var keys []string
 	for _, i := range e.PrimaryKey {
 		fd := e.Fields[i]
@@ -219,7 +219,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 			if err := r.checkTerm(v.Target, fd); err != nil {
 				return err
 			}
-			f.p("\t\t{Name: %q, Index: %s, Edge: %s + 1, Target: %s.TableOf[%s]},", v.Value, colConst(v.Target, fd), edgeConst(e, e.Edges[v.Edge-1]), velox, v.Target.Name)
+			f.p("\t\t{Name: %q, Index: %s, Edge: %s + 1, Target: %s.TableOf[%s]},", v.Value, colConst(v.Target, fd), edgeConst(e, e.Edges[v.Edge-1]), f.untyped(), v.Target.Name)
 		}
 		f.p("\t},")
 	}
@@ -461,7 +461,7 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 	}
 	ctx, impl := f.use("context", "context"), f.gqlgraph()
 	// The owner's type, the row and the relation's index: the batches are
-	// compiled once, on velox.Table, and gqlgraph takes and gives the rows
+	// compiled once, on untyped.Table, and gqlgraph takes and gives the rows
 	// as *E in an any.
 	x := recv(e)
 	edge := fmt.Sprintf("%s.Edge(%s, %s)", typeVar(t), x, edgeConst(e, pe))

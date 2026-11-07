@@ -17,6 +17,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	gqlcore "github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/untyped"
 )
 
 // owner, child, tag and ownerTag are hand-written entities, as velox-gen
@@ -724,9 +725,9 @@ func TestEdgePerRowArguments(t *testing.T) {
 func TestPaginateEdgeWhere(t *testing.T) {
 	db, _, log := edgeDB(t)
 	typ, order := gqlgraph.TypeOf("Child", titleOrder(), childKey())
-	typ.Table = velox.TableOf[child]
+	typ.Table = untyped.TableOf[child]
 	pred := func(not *string, _ context.Context) (velox.Predicate, error) {
-		return velox.AndPredicates(velox.Predicate(children.Title.NEQ(*not)), velox.TableOf[child]().Has(int(children.Owner.I), velox.TableOf[owner]())), nil
+		return untyped.And(velox.Predicate(children.Title.NEQ(*not)), untyped.TableOf[child]().Has(int(children.Owner.I), untyped.TableOf[owner]())), nil
 	}
 	for _, c := range []struct {
 		name  string

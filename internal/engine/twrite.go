@@ -119,7 +119,7 @@ type TableInsert struct {
 }
 
 // InsertTable starts an INSERT of row, a *E of t's entity, through e:
-// velox's DB.InsertTable. Another row fails the insert.
+// untyped.Insert. Another row fails the insert.
 func InsertTable(e *DB, t Table, row any) TableInsert {
 	s := t.state()
 	p, err := s.rowOf(row)
@@ -130,7 +130,7 @@ func InsertTable(e *DB, t Table, row any) TableInsert {
 }
 
 // InsertRows starts an INSERT of every row of rows, of t's entity, through
-// e: velox's DB.InsertRows.
+// e: untyped.InsertRows.
 func InsertRows(e *DB, t Table, rows TableRows) TableInsert {
 	return TableInsert{e: e, t: t.state(), many: rows}
 }
@@ -440,8 +440,8 @@ type TableUpdate struct {
 	err error // an assignment's or a condition's error
 }
 
-// UpdateTable starts an UPDATE of t's entity through e: velox's
-// DB.UpdateTable.
+// UpdateTable starts an UPDATE of t's entity through e:
+// untyped.Update.
 func UpdateTable(e *DB, t Table) TableUpdate {
 	s := t.state()
 	return TableUpdate{e: e, t: s, st: Statement{Op: OpUpdate, Entity: s.info, InTx: e.InTx}}
@@ -528,8 +528,8 @@ type TableDelete struct {
 	err error
 }
 
-// DeleteTable starts a DELETE of t's entity through e: velox's
-// DB.DeleteTable.
+// DeleteTable starts a DELETE of t's entity through e:
+// untyped.Delete.
 func DeleteTable(e *DB, t Table) TableDelete {
 	s := t.state()
 	return TableDelete{e: e, t: s, st: Statement{Op: OpDelete, Entity: s.info, InTx: e.InTx}}

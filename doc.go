@@ -287,20 +287,16 @@
 // velox-gen and its plugins write code that uses part of this package, and
 // nothing else should: Descriptor, ColumnDescriptor, EdgeDescriptor, EdgeTo, EdgeBidi,
 // EdgeThrough, Linked, Meta, MetaOnce, Show, Lazy, Validate,
-// ValidateSet, the untyped surface (Table, TableOf,
-// TableRows, RowsOf, PredOp and its operators PredEQ, PredNEQ, PredIn,
-// PredNotIn, PredGT, PredGTE, PredLT, PredLTE, PredContains, PredHasPrefix,
-// PredHasSuffix, PredIsNull and PredNotNull, TableQuery, DB.QueryTable,
-// Untyped, Typed, AndPredicates, OrPredicates, NotPredicate, TableInsert,
-// TableUpdate, TableDelete, DB.InsertTable, DB.InsertRows, DB.UpdateTable,
-// DB.DeleteTable and Assignments: an entity's queries and writes with its
-// type erased, for runtimes compiled once for every entity) and
-// GeneratedCodeIsVersion19. Each
+// ValidateSet and GeneratedCodeIsVersion19. Each
 // says "For generated code." in its documentation. They are not part of
 // velox's API: they change only when GeneratedCodeIsVersion19 is replaced by
 // the next version, which is outside semantic versioning. Run velox-gen
 // again after you update velox; code generated for another version fails to
 // compile.
+//
+// Package github.com/syssam/velox/untyped is an entity's queries and writes
+// with its type erased, for code compiled once for every entity: velox-graphql's
+// runtime, and a hook that writes rows itself, as package softdelete's does.
 package velox
 
 //go:generate go run ./internal/cmd/handlegen

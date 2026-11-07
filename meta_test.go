@@ -19,7 +19,7 @@ func TestMetaOnceBuildsOnce(t *testing.T) {
 			FieldPtr: func(x *other, i int) any { return &x.ID }}
 	}
 	a, b := o.Load(desc), o.Load(desc)
-	if calls != 1 || a != b || a.err != nil || a.info.Table != "other" {
+	if calls != 1 || a != b || a.d.Err != nil || a.d.Info.Table != "other" {
 		t.Fatalf("calls %d, same %v, meta %+v", calls, a == b, a)
 	}
 }
@@ -31,7 +31,7 @@ func TestMetaOnceKeepsFailure(t *testing.T) {
 	n := 0
 	fail := func() Descriptor[other] { n++; panic("broken") }
 	c, d := bad.Load(fail), bad.Load(fail)
-	if c != d || n != 1 || c.err == nil || !strings.Contains(c.err.Error(), "broken") || c.info != nil {
+	if c != d || n != 1 || c.d.Err == nil || !strings.Contains(c.d.Err.Error(), "broken") || c.d.Info != nil {
 		t.Fatalf("built %d times, same %v, meta %+v", n, c == d, c)
 	}
 }
@@ -56,8 +56,8 @@ func TestMetaOnceKeepsBindingPanic(t *testing.T) {
 	}
 	m := o.Load(desc)
 	var se *SchemaError
-	if !errors.As(m.err, &se) || !strings.Contains(m.err.Error(), "Policy() panicked: broken") || m.info != nil {
-		t.Fatalf("the first build: %v, info %v", m.err, m.info)
+	if !errors.As(m.d.Err, &se) || !strings.Contains(m.d.Err.Error(), "Policy() panicked: broken") || m.d.Info != nil {
+		t.Fatalf("the first build: %v, info %v", m.d.Err, m.d.Info)
 	}
 	if again := o.Load(desc); again != m || calls != 1 {
 		t.Fatalf("calls %d, same %v", calls, again == m)

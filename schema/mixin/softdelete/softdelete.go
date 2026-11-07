@@ -70,6 +70,7 @@ import (
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/mixin"
+	"github.com/syssam/velox/untyped"
 )
 
 // Column is the name of the column the mixin adds.
@@ -132,7 +133,7 @@ func (Mixin) Hooks() []velox.Hook {
 // All, as velox refused a delete with neither a Where nor All before the
 // hooks ran.
 func softDelete(ctx context.Context, m *velox.Mutation, now time.Time) (int64, error) {
-	t := m.Table()
+	t := untyped.MutationTable(m)
 	col, ok := t.Info().Column(Column)
 	if !ok {
 		return 0, fmt.Errorf("velox/softdelete: %s has no column %s", t.Info().Name, Column)
@@ -141,7 +142,7 @@ func softDelete(ctx context.Context, m *velox.Mutation, now time.Time) (int64, e
 	if err != nil {
 		return 0, err
 	}
-	u := m.DB().UpdateTable(t).Assign(set)
+	u := untyped.Update(m.DB(), t).Assign(set)
 	if cs := m.Predicates(); len(cs) > 0 {
 		u = u.Where(cs...)
 	} else {

@@ -8,9 +8,10 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion18
+const _ = veloxgql.GeneratedCodeIsVersion19
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -134,7 +135,7 @@ func NewPostConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	return newPostConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last, orderBy, where)
+	return newPostConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, orderBy, where)
 }
 
 // newPostConnection is NewPostConnection of the nodes from leads to: a query's,
@@ -158,12 +159,12 @@ func newPostConnection(
 // postType describes the GraphQL type Post to gqlgraph.
 var postType = gqlgraph.Type{
 	Name:  "Post",
-	Table: velox.TableOf[Post],
+	Table: untyped.TableOf[Post],
 	Key:   []gqlgraph.Column{{Name: "id", Index: postColID}},
 	Order: []gqlgraph.Column{
 		{Name: "TITLE", Index: postColTitle},
 		{Name: "VIEWS", Index: postColViews},
-		{Name: "AUTHOR_NAME", Index: userColName, Edge: postEdgeAuthor + 1, Target: velox.TableOf[User]},
+		{Name: "AUTHOR_NAME", Index: userColName, Edge: postEdgeAuthor + 1, Target: untyped.TableOf[User]},
 	},
 	AlwaysRead: []int{postColID, postColAuthorID, postColTitle, postColViews},
 	Fields: []string{
@@ -385,8 +386,8 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		IsNil:  w.PublishedAtIsNil,
 		NotNil: w.PublishedAtNotNil,
 	})
-	gqlgraph.Has(f, "hasWriter", w.HasWriter, postEdgeAuthor, velox.TableOf[User]())
-	gqlgraph.HasWith(f, "hasWriterWith", w.HasWriterWith, (*AccountWhereInput).predicate, postEdgeAuthor, velox.TableOf[User]())
+	gqlgraph.Has(f, "hasWriter", w.HasWriter, postEdgeAuthor, untyped.TableOf[User]())
+	gqlgraph.HasWith(f, "hasWriterWith", w.HasWriterWith, (*AccountWhereInput).predicate, postEdgeAuthor, untyped.TableOf[User]())
 	return f.Pred()
 }
 

@@ -7,9 +7,10 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion18
+const _ = veloxgql.GeneratedCodeIsVersion19
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the same edge of every row on l's page.
@@ -74,7 +75,7 @@ func NewLikeConnection(
 	ctx context.Context, q velox.Query[Like],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 ) (*LikeConnection, error) {
-	return newLikeConnection(ctx, gqlgraph.Query(velox.Untyped(q)), after, first, before, last)
+	return newLikeConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last)
 }
 
 // newLikeConnection is NewLikeConnection of the nodes from leads to: a query's,
@@ -94,7 +95,7 @@ func newLikeConnection(
 // likeType describes the GraphQL type Like to gqlgraph.
 var likeType = gqlgraph.Type{
 	Name:  "Like",
-	Table: velox.TableOf[Like],
+	Table: untyped.TableOf[Like],
 	Key: []gqlgraph.Column{
 		{Name: "user_id", Index: likeColUserID},
 		{Name: "post_id", Index: likeColPostID},

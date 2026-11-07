@@ -11,6 +11,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/untyped"
 )
 
 // personWhere is a where input of person, as velox-graphql writes one: a
@@ -435,7 +436,7 @@ type ctxSpy struct{ ctx context.Context }
 
 func (s *ctxSpy) predicate(ctx context.Context) (velox.Predicate, error) {
 	s.ctx = ctx
-	return velox.AndPredicates(), nil
+	return untyped.And(), nil
 }
 
 // TestWhereValueLists: an In or a NotIn list of more than MaxFilterWidth

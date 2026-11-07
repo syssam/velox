@@ -40,12 +40,12 @@ func (q Query[E]) Join[T any](r Rel[E, T]) Query[E] { return q.join(r, false) }
 func (q Query[E]) LeftJoin[T any](r Rel[E, T]) Query[E] { return q.join(r, true) }
 
 func (q Query[E]) join[T any](r Rel[E, T], left bool) Query[E] {
-	if q.meta.err != nil {
+	if q.meta.Err != nil {
 		return q
 	}
 	fail := func(err error) Query[E] {
-		if q.err == nil {
-			q.err = err
+		if q.s.Err == nil {
+			q.s.Err = err
 		}
 		return q
 	}
@@ -55,19 +55,19 @@ func (q Query[E]) join[T any](r Rel[E, T], left bool) Query[E] {
 		return fail(err)
 	}
 	if l.Many || l.Join != nil {
-		return fail(fmt.Errorf("velox: %s: %s is a to-many relation, and Join reads a to-one relation; load it with With, or test it with Has or HasWith", q.meta.info.Name, l.Name))
+		return fail(fmt.Errorf("velox: %s: %s is a to-many relation, and Join reads a to-one relation; load it with With, or test it with Has or HasWith", q.meta.Info.Name, l.Name))
 	}
 	// The handle says how to join, not how to load: only its With applies.
 	if r.err != nil {
 		return fail(r.err)
 	}
 	if r.where != nil || r.order != nil || r.each != 0 || r.maxRows != 0 {
-		return fail(fmt.Errorf("velox: %s: Join takes %s with only With: its Where, OrderBy, LimitEach and MaxRows say how to load, and a join is one statement; make the condition with %s.Is, the ordering with %s.By", q.meta.info.Name, l.Name, l.Name, l.Name))
+		return fail(fmt.Errorf("velox: %s: Join takes %s with only With: its Where, OrderBy, LimitEach and MaxRows say how to load, and a join is one statement; make the condition with %s.Is, the ordering with %s.By", q.meta.Info.Name, l.Name, l.Name, l.Name))
 	}
-	if slices.ContainsFunc(q.st.Joins, func(j engine.JoinClause) bool { return j.Ref.I == r.I }) {
-		return fail(fmt.Errorf("velox: %s: the query joins %s twice", q.meta.info.Name, l.Name))
+	if slices.ContainsFunc(q.s.St.Joins, func(j engine.JoinClause) bool { return j.Ref.I == r.I }) {
+		return fail(fmt.Errorf("velox: %s: the query joins %s twice", q.meta.Info.Name, l.Name))
 	}
-	off, err := engine.RelOffset(q.meta.info, r.I)
+	off, err := engine.RelOffset(q.meta.Info, r.I)
 	if err != nil {
 		return fail(err)
 	}
@@ -76,25 +76,25 @@ func (q Query[E]) join[T any](r Rel[E, T], left bool) Query[E] {
 		return fail(err)
 	}
 	if len(r.with) > 0 {
-		if err := engine.CheckLoads(mt.info, nil, r.with); err != nil {
+		if err := engine.CheckLoads(mt.Info, nil, r.with); err != nil {
 			return fail(err)
 		}
 	}
-	q.st.Joins = append(slices.Clip(q.st.Joins), engine.JoinClause{Ref: ref, Left: left})
-	n := len(mt.info.Columns)
+	q.s.St.Joins = append(slices.Clip(q.s.St.Joins), engine.JoinClause{Ref: ref, Left: left})
+	n := len(mt.Info.Columns)
 	set := engine.JoinSet{BindOwner: func(cols []int, dst []any, owner unsafe.Pointer) { bindRow(q.meta, cols, dst, (*E)(owner)) }}
-	if q.joins != nil {
-		set.Fills = slices.Clip(q.joins.Fills)
+	if q.s.Joins != nil {
+		set.Fills = slices.Clip(q.s.Joins.Fills)
 	}
 	set.Fills = append(set.Fills, engine.JoinFill{Width: n, Bind: func(dst []any) func(unsafe.Pointer) {
 		t := new(T)
 		nulls := 0
 		for c := range n {
 			var d any
-			if mt.nilCols != nil && mt.nilCols[c] {
-				d = &engine.NilScanner{Dst: mt.addr(t, c)}
+			if mt.NilCols != nil && mt.NilCols[c] {
+				d = &engine.NilScanner{Dst: mt.Addr(t, c)}
 			} else {
-				d = engine.ScanDst(mt.info, c, mt.addr(t, c))
+				d = engine.ScanDst(mt.Info, c, mt.Addr(t, c))
 			}
 			if left {
 				d = &engine.NullProbe{Dst: d, Nulls: &nulls}
@@ -111,10 +111,10 @@ func (q Query[E]) join[T any](r Rel[E, T], left bool) Query[E] {
 			h.V = t
 		}
 	}})
-	q.joins = &set
+	q.s.Joins = &set
 	if len(r.with) > 0 {
 		// The joined rows are read; their relations load as a With's nested ones do.
-		q.loads = append(slices.Clip(q.loads), engine.LoadSpec{Rel: r.I, Target: targetOf[T](), Joined: true, With: r.with})
+		q.s.Loads = append(slices.Clip(q.s.Loads), engine.LoadSpec{Rel: r.I, Target: targetOf[T](), Joined: true, With: r.with})
 	}
 	return q
 }
@@ -152,7 +152,7 @@ func (r Rel[E, T]) Fill[_ Lazy[T]](owner *E, t *T) error {
 	if err != nil {
 		return err
 	}
-	off, err := engine.RelOffset(m.info, r.I)
+	off, err := engine.RelOffset(m.Info, r.I)
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func (r Rel[E, T]) Filled[_ Lazy[T]](owner *E) (*T, bool) {
 	if err != nil {
 		return nil, false
 	}
-	off, err := engine.RelOffset(m.info, r.I)
+	off, err := engine.RelOffset(m.Info, r.I)
 	if err != nil {
 		return nil, false
 	}
@@ -181,16 +181,16 @@ func (r Rel[E, T]) Filled[_ Lazy[T]](owner *E) (*T, bool) {
 // bindRow points dst at the fields of the entity at p that cols (all, for
 // nil) name: a JSON column through a decoder (ScanDst), and one of nilColumns
 // through engine.NilScanner.
-func bindRow[E any](m *Meta[E], cols []int, dst []any, p *E) {
+func bindRow[E any](m *metaState[E], cols []int, dst []any, p *E) {
 	for i := range dst {
 		c := i
 		if cols != nil {
 			c = cols[i]
 		}
-		if m.nilCols != nil && m.nilCols[c] {
-			dst[i] = &engine.NilScanner{Dst: m.addr(p, c)}
+		if m.NilCols != nil && m.NilCols[c] {
+			dst[i] = &engine.NilScanner{Dst: m.Addr(p, c)}
 			continue
 		}
-		dst[i] = engine.ScanDst(m.info, c, m.addr(p, c))
+		dst[i] = engine.ScanDst(m.Info, c, m.Addr(p, c))
 	}
 }

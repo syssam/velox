@@ -2,7 +2,7 @@ package gqlgraph
 
 import "reflect"
 
-// A row is a *E in an any, as velox.Table takes and returns it: the
+// A row is a *E in an any, as untyped.Table takes and returns it: the
 // generated code hands one to this package so, and gets one back so. velox
 // checks it is of the Table's entity wherever it is used. The generated code
 // types a result with a type assertion: a generic helper to do it would be

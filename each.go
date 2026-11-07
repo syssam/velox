@@ -60,14 +60,14 @@ func CountEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []
 
 // eachOf is what LoadEach and CountEach read of q, without its type.
 func eachOf[T any](q Query[T]) engine.EachQuery {
-	e := engine.EachQuery{St: q.st, After: unsafe.Pointer(q.after), Loads: q.loads, Err: q.err, Joins: q.joins.Scanner()}
-	if q.db != nil {
-		e.DB = &q.db.e
+	e := engine.EachQuery{St: q.s.St, After: q.s.After, Loads: q.s.Loads, Err: q.s.Err, Joins: q.s.Joins.Scanner()}
+	if pub(q.s.DB) != nil {
+		e.DB = q.s.DB
 	}
 	if q.meta != nil {
-		e.In = q.meta.info
-		if q.meta.err != nil {
-			e.Err = q.meta.err
+		e.In = q.meta.Info
+		if q.meta.Err != nil {
+			e.Err = q.meta.Err
 		}
 	}
 	return e
