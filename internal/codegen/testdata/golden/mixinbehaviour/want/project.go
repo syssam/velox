@@ -13,8 +13,8 @@ import (
 // Project is the entity of schema Project.
 type Project struct {
 	ID        int64      `json:"id"`
-	CreatedAt time.Time  `json:"created_at,omitzero"`
-	UpdatedAt time.Time  `json:"updated_at,omitzero"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 	OrgID     int64      `json:"org_id"`
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 	Name      string     `json:"name"`

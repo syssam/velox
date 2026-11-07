@@ -22,7 +22,7 @@ type User struct {
 	// What the user may do.
 	Role UserRole `json:"role"`
 	// When the user joined.
-	JoinedAt     time.Time `json:"joined_at,omitzero"`
+	JoinedAt     time.Time `json:"joined_at"`
 	PasswordHash string    `json:"-"`
 	// Edges holds User's relations, filled by With.
 	Edges UserEdges `json:"edges,omitzero"`

@@ -13,8 +13,8 @@ import (
 // Invoice is the entity of schema Invoice.
 type Invoice struct {
 	ID        int64      `json:"id"`
-	CreatedAt time.Time  `json:"created_at,omitzero"`
-	UpdatedAt time.Time  `json:"updated_at,omitzero"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 	OrgID     int64      `json:"org_id"`
 	Number    string     `json:"number"`
 	Total     float64    `json:"total"`

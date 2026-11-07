@@ -13,7 +13,7 @@ import (
 // Event is the entity of schema Event.
 type Event struct {
 	ID      int64        `json:"id"`
-	At      kind.Moment  `json:"at,omitzero"`
+	At      kind.Moment  `json:"at"`
 	MaybeAt *kind.Moment `json:"maybe_at,omitempty"`
 }
 

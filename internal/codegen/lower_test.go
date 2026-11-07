@@ -717,6 +717,7 @@ type LwTagged struct{ schema.Schema }
 func (LwTagged) Fields() []schema.Field {
 	return []schema.Field{
 		field.Time("at"),
+		field.Time("since").Optional().Default(time.Now),
 		field.Time("seen").Optional().Nillable(),
 		field.UUID("u", UUIDValue{}),
 		field.JSON("p", LwPoint{}),
@@ -730,22 +731,24 @@ func (LwTagged) Fields() []schema.Field {
 	}
 }
 
-// TestJSONTags: a struct or an array that is not a pointer is omitzero, as
-// omitempty never omits it; a required bool, number, string or enum has no
-// omitempty, as its zero is a value; every other field is omitempty, and a
-// Sensitive field is never in JSON.
+// TestJSONTags: a required field that is no pointer, slice or map (a bool,
+// number, string, enum, time, UUID, struct or array) is always in JSON, as
+// its zero is a value; an optional struct or array is omitzero, as omitempty
+// never omits one; every other field is omitempty, and a Sensitive field is
+// never in JSON.
 func TestJSONTags(t *testing.T) {
 	e := mustLower(t, Config{}, LwTagged{}).entity("LwTagged")
 	for name, want := range map[string]string{
-		"at":    "`json:\"at,omitzero\"`",
+		"at":    "`json:\"at\"`",
+		"since": "`json:\"since,omitzero\"`",
 		"seen":  "`json:\"seen,omitempty\"`",
-		"u":     "`json:\"u,omitzero\"`",
-		"p":     "`json:\"p,omitzero\"`",
+		"u":     "`json:\"u\"`",
+		"p":     "`json:\"p\"`",
 		"m":     "`json:\"m,omitempty\"`",
 		"tags":  "`json:\"tags,omitempty\"`",
 		"attrs": "`json:\"attrs,omitempty\"`",
 		"pp":    "`json:\"pp,omitempty\"`",
-		"arr":   "`json:\"arr,omitzero\"`",
+		"arr":   "`json:\"arr\"`",
 		"s":     "`json:\"s\"`",
 		"pw":    "`json:\"-\"`",
 	} {

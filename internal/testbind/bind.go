@@ -33,12 +33,12 @@ type Bind struct {
 	Level     bindtype.Level `json:"level"`
 	Data      []byte         `json:"data,omitempty"`
 	ShortData []byte         `json:"short_data,omitempty"`
-	At        time.Time      `json:"at,omitzero"`
-	UID       bindtype.UUID  `json:"uid,omitzero"`
+	At        time.Time      `json:"at"`
+	UID       bindtype.UUID  `json:"uid"`
 	Tags      []string       `json:"tags,omitempty"`
 	Labels    []string       `json:"labels,omitempty"`
 	Counts    []int          `json:"counts,omitempty"`
-	Doc       bindtype.Doc   `json:"doc,omitzero"`
+	Doc       bindtype.Doc   `json:"doc"`
 	Note      *string        `json:"note,omitempty"`
 }
 

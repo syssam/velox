@@ -15,7 +15,7 @@ type Session struct {
 	TokenHash string    `json:"-"`
 	OrgID     int64     `json:"org_id"`
 	UserID    int64     `json:"user_id"`
-	ExpiresAt time.Time `json:"expires_at,omitzero"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 // The positions of Session's columns, in the order of its table.

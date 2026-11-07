@@ -402,14 +402,15 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 		// An implicit key is ent's unexported field: the edge is how JSON
 		// and String show it.
 		o.Tag = quoteTag(`json:"-"`)
-	case !o.Pointer && (kind == "struct" || kind == "array"):
-		// omitempty never omits a struct or an array; omitzero omits its zero
-		// value, such as a zero time.Time or UUID.
-		o.Tag = quoteTag(fmt.Sprintf(`json:"%s,omitzero"`, f.Name))
-	case !o.Pointer && !f.Optional && scalar(f, kind):
+	case !o.Pointer && !f.Optional && (scalar(f, kind) || kind == "struct" || kind == "array"):
 		// A required value is always there: omitempty would drop a stored 0,
-		// false or "", and a client could not tell it from a missing field.
+		// false or "", omitzero a zero time, and a client could not tell it
+		// from a missing field.
 		o.Tag = quoteTag(fmt.Sprintf(`json:"%s"`, f.Name))
+	case !o.Pointer && (kind == "struct" || kind == "array"):
+		// An optional struct or array: omitempty never omits one, and
+		// omitzero omits its zero value, such as a zero time.Time or UUID.
+		o.Tag = quoteTag(fmt.Sprintf(`json:"%s,omitzero"`, f.Name))
 	default:
 		o.Tag = quoteTag(fmt.Sprintf(`json:"%s,omitempty"`, f.Name))
 	}

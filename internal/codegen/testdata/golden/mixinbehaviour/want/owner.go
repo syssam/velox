@@ -12,8 +12,8 @@ import (
 // Owner is the entity of schema Owner.
 type Owner struct {
 	ID        int64     `json:"id"`
-	CreatedAt time.Time `json:"created_at,omitzero"`
-	UpdatedAt time.Time `json:"updated_at,omitzero"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 	Name      string    `json:"name"`
 }
 

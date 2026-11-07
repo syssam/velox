@@ -16,8 +16,8 @@ import (
 // User is a person who writes posts.
 type User struct {
 	ID        int64     `json:"id"`
-	CreatedAt time.Time `json:"created_at,omitzero"`
-	UpdatedAt time.Time `json:"updated_at,omitzero"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 	CreatedBy string    `json:"created_by"`
 	OrgID     int64     `json:"org_id"`
 	// The display name.

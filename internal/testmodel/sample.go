@@ -20,7 +20,7 @@ type Sample struct {
 	Ratio     *float64     `json:"ratio,omitempty"`
 	Flag      bool         `json:"flag"`
 	MaybeFlag *bool        `json:"maybe_flag,omitempty"`
-	When      time.Time    `json:"when,omitzero"`
+	When      time.Time    `json:"when"`
 	MaybeWhen *time.Time   `json:"maybe_when,omitempty"`
 	Blob      []byte       `json:"blob,omitempty"`
 	ParentID  *int64       `json:"parent_id,omitempty"`

@@ -14,8 +14,8 @@ import (
 // Comment is the entity of schema Comment.
 type Comment struct {
 	ID        int64     `json:"id"`
-	CreatedAt time.Time `json:"created_at,omitzero"`
-	UpdatedAt time.Time `json:"updated_at,omitzero"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 	OrgID     int64     `json:"org_id"`
 	IssueID   int64     `json:"issue_id"`
 	AuthorID  int64     `json:"author_id"`
