@@ -21,6 +21,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `UpdateQuery.One(ctx)` writes the one row its conditions match and returns it
+  as written, as ent's `UpdateOne`: `ErrNotFound` for no row the Read and Write
+  policies let the caller change, `ErrNotSingular` for more than one, read back
+  by its key without the Read policy (ADR 0048).
 - A relation handle's `Add(keys...)`, `Remove(keys...)` and `Clear()` are setters:
   `db.Insert(&p).Set(gen.Posts.Tags.Add(1, 2))` and `db.Update[gen.Post]().Set(...)`
   write a many-to-many edge's join rows, or re-point the children of an edge whose key

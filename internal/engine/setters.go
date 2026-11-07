@@ -135,3 +135,86 @@ func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (st
 	_, q, args, err := Write(ctx, db, st, true, false)
 	return q, args, err
 }
+
+// UpdateOne is UpdateQuery.One's work for st with the edge setters edges:
+// it updates the one row st's conditions match and returns it as written.
+// It runs in one transaction on db: a savepoint inside one, unless it
+// writes no edge, as Exec. It reads the row's key under st's conditions
+// and the Read and Write policies, locked where the dialect can, failing
+// with ErrNotFound when no row matches and ErrNotSingular when more than
+// one does. It then sends st with that key as its only condition, writes
+// the edges for the row, and reads the row back by its key without the
+// Read policy, so a row the update moves out of the caller's view is
+// returned too. An st with no assignment sends no UPDATE; with no setter
+// at all, the row is read back under the policies.
+func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (unsafe.Pointer, error) {
+	in := st.Entity
+	if len(in.PrimaryKey) == 0 {
+		return nil, fmt.Errorf("velox: %s: One needs a primary key to read the row back", in.Name)
+	}
+	var p EdgePlan
+	if len(edges) > 0 {
+		var err error
+		if p, err = PlanEdges(in, edges); err != nil {
+			return nil, err
+		}
+		st.Set = append(st.Set, p.Set...)
+	}
+	if err := db.guard(st); err != nil {
+		return nil, err
+	}
+	t := InfoTable(in)
+	cols := slices.Clone(in.PrimaryKey)
+	for _, c := range p.OwnerCols() {
+		if !slices.Contains(cols, c) {
+			cols = append(cols, c)
+		}
+	}
+	var out unsafe.Pointer
+	run := func(ctx context.Context, tx *DB) error {
+		if err := p.check(ctx, tx); err != nil {
+			return err
+		}
+		q := QueryTable(tx, nil, t).Where(st.Where...).Columns(cols...).Writable()
+		if tx.D != SQLite {
+			q = q.ForUpdate()
+		}
+		row, err := q.One(ctx)
+		if err != nil {
+			return err
+		}
+		key := make([]Predicate, 0, len(in.PrimaryKey))
+		for _, k := range in.PrimaryKey {
+			v, _ := plain(in.kit.Value(row, k))
+			key = append(key, t.Pred(k, PredEQ, v))
+		}
+		read := ctx
+		if len(st.Set) > 0 {
+			st.InTx = true
+			st.Where = key // the row read, locked, matches st's conditions
+			if _, _, _, err := Write(ctx, tx, st, false, false); err != nil {
+				return err
+			}
+			read = WithoutPolicy(ctx, "velox: the row UpdateQuery.One wrote")
+		}
+		if p.Writes() {
+			if err := p.write(ctx, tx, []unsafe.Pointer{row}); err != nil {
+				return err
+			}
+			read = WithoutPolicy(ctx, "velox: the row UpdateQuery.One wrote")
+		}
+		out, err = QueryTable(tx, nil, t).Where(key...).One(read)
+		return err
+	}
+	var err error
+	if db.InTx && !p.Writes() {
+		// One UPDATE, in the caller's transaction: no savepoint, as Exec.
+		err = run(ctx, db)
+	} else {
+		err = db.Tx(ctx, run)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}

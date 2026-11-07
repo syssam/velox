@@ -402,6 +402,7 @@ func (s SaveQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) SaveQuery[E]
 func (s Setter[E]) Column[_ Lazy[E]]() int
 func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E]
 func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
+func (u UpdateQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]

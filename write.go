@@ -96,6 +96,35 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	return engine.Update(ctx, &u.db.e, &st, u.edges)
 }
 
+// One runs the update on the one row it matches and returns that row as
+// written, as ent's UpdateOne does. Its error wraps ErrNotFound when the
+// conditions match no row the Read and Write policies let the caller
+// change, and ErrNotSingular when they match more than one; then nothing
+// is written.
+//
+// It runs in one transaction, a savepoint inside one unless it writes no
+// edge. It reads the row's key, locked where the dialect can, then sends
+// the UPDATE with that key as its only condition, through the hooks as
+// Exec does, then writes the edge setters' edges, then reads the whole row
+// back by its key without the Read policy, so a row the update moves out
+// of the caller's view is still returned; an Interceptor still filters it.
+// So it sends one statement more than Exec, the read of the key. An update
+// with no setter sends nothing and returns the row read under the policies.
+func (u UpdateQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
+	if u.meta.err != nil {
+		return nil, u.meta.err
+	}
+	if u.err != nil {
+		return nil, u.err
+	}
+	st := engine.CloneStatement(&u.st)
+	p, err := engine.UpdateOne(ctx, &u.db.e, &st, u.edges)
+	if err != nil {
+		return nil, err
+	}
+	return (*E)(p), nil
+}
+
 // SQL returns the statement and arguments Exec would send for ctx, or the
 // error Exec would fail with before sending it; it sends nothing. It runs
 // every stage Exec runs before execution: the guard, the entity's hooks, the
