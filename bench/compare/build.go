@@ -60,7 +60,7 @@ type actionCounts struct {
 // and the reruns among them. AppS and DepS sum CmdUser + CmdSys over the
 // build actions of the packages under appPrefix and over the others; a cached
 // action ran no command and adds nothing.
-func countActions(path, appPrefix string) (actionCounts, error) {
+func countActions(path string) (actionCounts, error) {
 	as, err := readActions(path)
 	if err != nil {
 		return actionCounts{}, err
@@ -259,7 +259,7 @@ func measureBuild(c buildConfig) (r buildReport, err error) {
 	if r.ColdCPUS, r.ColdWallS, err = build("cold"); err != nil {
 		return r, err
 	}
-	cold, err := countActions(graph("cold"), appPrefix)
+	cold, err := countActions(graph("cold"))
 	if err != nil {
 		return r, err
 	}
@@ -278,7 +278,7 @@ func measureBuild(c buildConfig) (r buildReport, err error) {
 	if r.RebuildCPUS, r.RebuildWallS, err = build("edit"); err != nil {
 		return r, err
 	}
-	edit, err := countActions(graph("edit"), appPrefix)
+	edit, err := countActions(graph("edit"))
 	if err != nil {
 		return r, err
 	}

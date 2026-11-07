@@ -1,13 +1,22 @@
 version: "2"
 linters:
   default: standard
-  enable: [revive, errname, modernize, intrange, wastedassign, misspell, nilerr, unconvert, usestdlibvars, bodyclose]
+  enable: [revive, errname, modernize, intrange, wastedassign, misspell, nilerr, unconvert, usestdlibvars, bodyclose, gocognit, unparam]
   exclusions:
     generated: disable
     rules:
       # gqlgen's output, which velox does not write and CI regenerates and diffs.
       - path: ^examples/graphql/graph/generated\.go$
-        linters: [staticcheck, modernize]
+        linters: [staticcheck, modernize, gocognit]
+      # A test reads top to bottom, and a test helper may take a parameter
+      # every caller happens to pass alike.
+      - path: _test\.go$
+        linters: [gocognit, unparam]
+      # The SQL lexers are state machines: one switch over the next byte,
+      # which splitting would scatter.
+      - path: ^migrate/(split|predicate|inspect_sqlite_create)\.go$
+        linters: [gocognit]
+        text: "func `(lex|lexPredicate|lexSQL)`"
       # The engine's exports are for the root package; its public types are documented
       # on their aliases in the root, which TestAliasDocsListMembers checks, or in veloxtype.
       # Each of these is documented where it is declared, in veloxtype. Revive checks a
@@ -28,6 +37,9 @@ linters:
         linters: [staticcheck]
         text: ST102
   settings:
+    gocognit:
+      # A function over this is split into helpers that each do one job.
+      min-complexity: 40
     misspell:
       # velox-gen's did-you-mean tests spell it wrong on purpose.
       ignore-rules: [nmae]

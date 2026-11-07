@@ -416,7 +416,7 @@ func (s *session) baselining(ctx context.Context, d *Dir, rows []Applied, o opti
 		}
 	}()
 	if s.d == velox.SQLite { // another runner may have recorded since prepare
-		rows, _, err := s.readHistory(ctx)
+		rows, err := s.readHistory(ctx)
 		if err != nil {
 			return nil, wrap(ctx, "baselining", err)
 		}
@@ -715,7 +715,7 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		}
 	}()
 	if s.d == velox.SQLite {
-		rows, _, err := s.readHistory(ctx)
+		rows, err := s.readHistory(ctx)
 		if err != nil {
 			return Applied{}, rolledBack("reading the history table %s: %w", s.cfg.Table, err)
 		}

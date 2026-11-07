@@ -103,16 +103,16 @@ func (s *session) hasHistory(ctx context.Context) (bool, error) {
 
 // history is the table's rows by version, none when there is no table.
 func (s *session) history(ctx context.Context) ([]Applied, error) {
-	rows, _, err := s.readHistory(ctx)
+	rows, err := s.readHistory(ctx)
 	return rows, wrap(ctx, "reading the history table "+s.cfg.Table, err)
 }
 
 // readHistory is history, its errors unwrapped. The columns are qualified
 // by the table, so a column missing from a table of another shape is an
-// error on SQLite too, not a string.
-func (s *session) readHistory(ctx context.Context) (rows []Applied, exists bool, err error) {
-	if exists, err = s.hasHistory(ctx); err != nil || !exists {
-		return nil, exists, err
+// error on SQLite too, not a string. With no table there are no rows.
+func (s *session) readHistory(ctx context.Context) ([]Applied, error) {
+	if exists, err := s.hasHistory(ctx); err != nil || !exists {
+		return nil, err
 	}
 	col := func(name string) string { return s.q(s.cfg.Table) + "." + s.q(name) }
 	at := col("applied_at")
@@ -126,9 +126,10 @@ func (s *session) readHistory(ctx context.Context) (rows []Applied, exists bool,
 		col("version"), col("name"), col("checksum"), at, col("duration_ms"), col("dirty"), col("statements"), col("error"), s.historyTable())
 	rs, err := s.conn.QueryContext(ctx, q)
 	if err != nil {
-		return nil, true, err
+		return nil, err
 	}
 	defer func() { _ = rs.Close() }()
+	var rows []Applied
 	for rs.Next() {
 		var (
 			a        Applied
@@ -137,15 +138,15 @@ func (s *session) readHistory(ctx context.Context) (rows []Applied, exists bool,
 			ms       int64
 		)
 		if err := rs.Scan(&version, &a.Name, &a.Sum, &appliedS, &ms, &a.Dirty, &a.Statements, &a.Error); err != nil {
-			return nil, true, err
+			return nil, err
 		}
 		a.Version, a.Duration = uint64(version), time.Duration(ms)*time.Millisecond
 		if a.AppliedAt, err = time.Parse(appliedLayout, appliedS); err != nil {
-			return nil, true, &Error{Code: "history", Reason: fmt.Sprintf("version %d: applied_at %q is not %s", version, appliedS, appliedLayout)}
+			return nil, &Error{Code: "history", Reason: fmt.Sprintf("version %d: applied_at %q is not %s", version, appliedS, appliedLayout)}
 		}
 		rows = append(rows, a)
 	}
-	return rows, true, rs.Err()
+	return rows, rs.Err()
 }
 
 // at is t as applied_at is written.

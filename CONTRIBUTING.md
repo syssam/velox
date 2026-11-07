@@ -14,7 +14,7 @@ each.
   scale check. `scripts/` holds CI's scripts and their configuration. Under
   `internal/`:
   - The product: the non-generic runtime (`engine`), the executors (`conn`), the
-    generator (`codegen`), the DDL writer (`ddl`), the writer of the root's
+    generator (`codegen`), the DDL writer (`ddl`), the reader of the drivers' errors (`dberr`), the writer of the root's
     `handles.go` (`handlegen`) and the name of the module a program is built from (`buildinfo`).
   - The tests: of the public API (`apitest`), against real databases
     (`integration`) and of the repository itself (`repocheck`).
@@ -57,6 +57,11 @@ levels:
 bash scripts/ci-local.sh          # the merge gate: run it before a local merge
 bash scripts/ci-local.sh --full   # everything: run it before any push
 ```
+
+golangci-lint's `gocognit` refuses a function whose cognitive complexity is
+over 40, outside tests and the SQL lexers. Split such a function into helpers
+that each do one job. `unparam` refuses a parameter or result no caller
+needs, outside tests.
 
 The merge gate is about the ORM. It always runs the root module's gofmt,
 tidiness, vet, govulncheck and golangci-lint, the root's tests with `-race`

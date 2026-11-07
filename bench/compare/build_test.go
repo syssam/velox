@@ -24,7 +24,7 @@ func TestCountActions(t *testing.T) {
 		// cached actions add none of their wall time.
 		{"edit.json", actionCounts{Build: 3, BuildRerun: 1, Link: 1, LinkRerun: 1, AppS: 0.375, DepS: 0}},
 	} {
-		got, err := countActions(filepath.Join("testdata", "actiongraph", tc.file), "example.com/tmp")
+		got, err := countActions(filepath.Join("testdata", "actiongraph", tc.file))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -48,7 +48,7 @@ func TestCountActions(t *testing.T) {
 			t.Errorf("reranUnder(%s, %q, %q) = %d, %v; want %d", tc.file, tc.prefix, tc.exclude, reran, err, tc.want)
 		}
 	}
-	if _, err := countActions(filepath.Join("testdata", "actiongraph", "missing.json"), "example.com/tmp"); err == nil {
+	if _, err := countActions(filepath.Join("testdata", "actiongraph", "missing.json")); err == nil {
 		t.Error("countActions of a missing file: no error")
 	}
 }
