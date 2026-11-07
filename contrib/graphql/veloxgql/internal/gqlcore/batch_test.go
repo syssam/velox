@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"unsafe"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -29,25 +28,25 @@ func TestTable(t *testing.T) {
 		t.Error("a table without a scope")
 	}
 	a, b := new(int), new(int)
-	pa, pb := unsafe.Pointer(a), unsafe.Pointer(b)
-	Add(ctx, []unsafe.Pointer{pa}) // in no field: nothing
+	pa, pb := any(a), any(b)
+	Add(ctx, []any{pa}) // in no field: nothing
 	if _, _, _, ok := Find(tbl, pa); ok {
 		t.Error("Add outside a field grouped a row")
 	}
 	fctx := graphql.WithFieldContext(ctx, &graphql.FieldContext{})
-	Add(fctx, []unsafe.Pointer{nil})
-	Add(fctx, []unsafe.Pointer{pa, nil, pb})
+	Add(fctx, []any{nil, (*int)(nil)})
+	Add(fctx, []any{pa, nil, pb})
 	if g, rows, i, ok := Find(tbl, pb); !ok || g == nil || len(rows) != 2 || i != 1 {
 		t.Errorf("Find: %v %v %d %v", g, rows, i, ok)
 	}
-	Add(fctx, []unsafe.Pointer{pb})
+	Add(fctx, []any{pb})
 	if _, rows, i, ok := Find(tbl, pb); !ok || len(rows) != 1 || i != 0 {
 		t.Errorf("a row moves to its new group: %v %d %v", rows, i, ok)
 	}
 	for _, c := range []struct {
 		t *Table
-		p unsafe.Pointer
-	}{{nil, pa}, {tbl, nil}, {tbl, unsafe.Pointer(new(int))}} {
+		p any
+	}{{nil, pa}, {tbl, nil}, {tbl, any(new(int))}, {tbl, (*int)(nil)}} {
 		if _, _, _, ok := Find(c.t, c.p); ok {
 			t.Errorf("Find(%v, %v) is ok", c.t, c.p)
 		}

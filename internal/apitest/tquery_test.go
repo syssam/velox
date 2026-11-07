@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
@@ -60,7 +59,7 @@ func TestTableQueryParity(t *testing.T) {
 			func(db *velox.DB) velox.TableQuery {
 				return db.QueryTable(tkTable).Where(tkTable.Has(int(Tk.Children.I), tkTable, tkTable.Pred(col(Tk.Done), velox.PredEQ, true)), tkTable.Has(int(Tk.Invoice.I), invTable)).
 					OrderBy(velox.OrderTerm{Column: col(Tk.Title), Desc: true}, velox.OrderTerm{Column: col(Tk.ID)}).Columns(col(Tk.ID), col(Tk.Title)).
-					After(unsafe.Pointer(&after)).Limit(5).Offset(2).MaxRows(7)
+					After(&after).Limit(5).Offset(2).MaxRows(7)
 			}},
 		{"join",
 			func(db *velox.DB) velox.Query[testmodel.Ticket] {
@@ -166,7 +165,7 @@ func TestTableQueryRows(t *testing.T) {
 		t.Errorf("All: got %v, want %v", rows, want)
 	}
 	for i := range got.Len() {
-		if (*testmodel.Item)(got.At(i)).ID != want[i].ID {
+		if got.At(i).(*testmodel.Item).ID != want[i].ID {
 			t.Errorf("At(%d)", i)
 		}
 	}
@@ -195,7 +194,7 @@ func TestTableQueryRows(t *testing.T) {
 		items, _ := invs[i].Edges.Items.Get()
 		loaded += len(items)
 		for _, target := range []velox.Table{itTable, invTable} {
-			if r, ok := invTable.Filled(unsafe.Pointer(&invs[i]), int(I.Items.I), target); ok || r != nil {
+			if r, ok := invTable.Filled(&invs[i], int(I.Items.I), target); ok || r != nil {
 				t.Errorf("Filled of the loaded to-many Items: %v %v", r, ok)
 			}
 		}
@@ -203,11 +202,11 @@ func TestTableQueryRows(t *testing.T) {
 	if loaded == 0 {
 		t.Error("no invoice has items: the case is not covered")
 	}
-	if r, ok := invTable.Filled(unsafe.Pointer(&testmodel.Invoice{}), int(I.Items.I), itTable); ok || r != nil {
+	if r, ok := invTable.Filled(&testmodel.Invoice{}, int(I.Items.I), itTable); ok || r != nil {
 		t.Errorf("Filled of an empty to-many Items: %v %v", r, ok)
 	}
 	p, err := uq.First(ctx)
-	if err != nil || (*testmodel.Item)(p).ID != want[0].ID {
+	if err != nil || p.(*testmodel.Item).ID != want[0].ID {
 		t.Errorf("First: %v %v", p, err)
 	}
 	if _, err := uq.One(ctx); !errors.Is(err, velox.ErrNotSingular) {
@@ -224,9 +223,9 @@ func TestTableQueryRows(t *testing.T) {
 	}
 	// LoadEach and CountEach, untyped, read what the typed ones read.
 	owners := eachInvoices(t, db, 2, 1, 3, 1)
-	ptrs := make([]unsafe.Pointer, len(owners))
+	ptrs := make([]any, len(owners))
 	for i, o := range owners {
-		ptrs[i] = unsafe.Pointer(o)
+		ptrs[i] = o
 	}
 	wantEach, err := velox.LoadEach(ctx, db.Query[testmodel.Item]().OrderBy(It.SKU.Asc()), I.Items.LimitEach(2), owners)
 	if err != nil {
@@ -292,17 +291,43 @@ func TestTablePredRefuses(t *testing.T) {
 	}
 }
 
-// TestTableRows covers the row helpers: Field, Value, Ptr, New, Fill and
-// Filled.
+// TestTableRows covers the row helpers: Field, Value, New, Fill and Filled.
+// Each refuses a row of another entity, a non-pointer and a nil *E.
 func TestTableRows(t *testing.T) {
 	p := tkTable.New()
-	x := (*testmodel.Ticket)(p)
+	x := p.(*testmodel.Ticket)
+	db, ctx := openFake(velox.Postgres, &fakeconn.Exec{}), annIn7()
 	*tkTable.Field(p, col(Tk.Title)).(*string) = "t"
 	if x.Title != "t" || tkTable.Value(p, col(Tk.Title)) != "t" {
 		t.Errorf("Field and Value: %v", x)
 	}
-	if tkTable.Ptr(p).(*testmodel.Ticket) != x {
-		t.Error("Ptr")
+	for name, bad := range map[string]any{
+		"another entity": &testmodel.Invoice{},
+		"a value":        testmodel.Ticket{},
+		"a nil *E":       (*testmodel.Ticket)(nil),
+		"nil":            nil,
+	} {
+		if tkTable.Field(bad, col(Tk.Title)) != nil || tkTable.Value(bad, col(Tk.Title)) != nil {
+			t.Errorf("Field or Value of %s: not nil", name)
+		}
+		if err := tkTable.SetField(bad, col(Tk.Title), "t"); err == nil {
+			t.Errorf("SetField of %s: no error", name)
+		}
+		if err := tkTable.Validate(bad); err == nil {
+			t.Errorf("Validate of %s: no error", name)
+		}
+		if err := db.InsertTable(tkTable, bad).Exec(ctx); err == nil {
+			t.Errorf("InsertTable of %s: no error", name)
+		}
+		if _, _, err := db.QueryTable(tkTable).After(bad).Limit(1).SQL(ctx); err == nil {
+			t.Errorf("After of %s: no error", name)
+		}
+		if _, _, err := db.QueryTable(tkTable).Where(tkTable.Of(int(Tk.Parent.I), tkTable, bad)).Limit(1).SQL(ctx); err == nil {
+			t.Errorf("Of of %s: no error", name)
+		}
+	}
+	if tkTable.Field(p, -1) != nil || tkTable.Value(p, 99) != nil {
+		t.Error("Field or Value of no column: not nil")
 	}
 	inv := invTable.New()
 	if err := tkTable.Fill(p, int(Tk.Invoice.I), invTable, inv); err != nil {
@@ -311,7 +336,7 @@ func TestTableRows(t *testing.T) {
 	if got, ok := tkTable.Filled(p, int(Tk.Invoice.I), invTable); !ok || got != inv {
 		t.Errorf("Filled: %v %v", got, ok)
 	}
-	if v, ok := x.Edges.Invoice.Get(); !ok || unsafe.Pointer(v) != inv {
+	if v, ok := x.Edges.Invoice.Get(); !ok || any(v) != inv {
 		t.Errorf("Get after Fill: %v %v", v, ok)
 	}
 	if err := tkTable.Fill(p, int(Tk.Invoice.I), tkTable, inv); err == nil {

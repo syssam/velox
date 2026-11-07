@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"time"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -59,7 +58,11 @@ func TypedPage[E any](p *Page) *PageOf[E] {
 	if p == nil {
 		return nil
 	}
-	return &PageOf[E]{Rows: unsafe.Slice((**E)(unsafe.Pointer(unsafe.SliceData(p.Rows))), len(p.Rows)), Cursors: p.Cursors, Info: p.Info}
+	rows := make([]*E, len(p.Rows))
+	for i, r := range p.Rows {
+		rows[i] = r.(*E)
+	}
+	return &PageOf[E]{Rows: rows, Cursors: p.Cursors, Info: p.Info}
 }
 
 // ConnectionOf is a Connection whose Page is typed.
@@ -100,27 +103,11 @@ func As[P any](v any, err error) (P, error) {
 	return p, err
 }
 
-// RowOf and NodeOf export the erasure of a row to the tests.
-func RowOf(c *Type, x any) any {
-	if p := rowOf(c, x); p != nil {
-		return p
-	}
-	return nil
-}
+// RowOf exports rowOf to the tests.
+func RowOf(x any) any { return rowOf(x) }
 
-func NodeOf(c *Type, p any) any {
-	q, _ := p.(unsafe.Pointer)
-	return nodeOf(c, q)
-}
-
-// NodesOf is nodesOf of ps, each an unsafe.Pointer as RowOf returns it.
-func NodesOf(c *Type, ps []any) any {
-	var rows []unsafe.Pointer
-	for _, p := range ps {
-		rows = append(rows, p.(unsafe.Pointer))
-	}
-	return nodesOf(c, rows)
-}
+// NodesOf exports nodesOf to the tests.
+func NodesOf(c *Type, ps []any) any { return nodesOf(c, ps) }
 
 // NewNodeWith is NewNode with the decoder of IDs decode.
 func NewNodeWith(c *Type, decode func(id string) (any, error)) NodeKind {

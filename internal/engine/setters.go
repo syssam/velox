@@ -179,7 +179,7 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 		if tx.D != SQLite {
 			q = q.ForUpdate()
 		}
-		row, err := q.One(ctx)
+		row, err := q.one(ctx)
 		if err != nil {
 			return err
 		}
@@ -203,7 +203,7 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 			}
 			read = WithoutPolicy(ctx, "velox: the row UpdateQuery.One wrote")
 		}
-		out, err = QueryTable(tx, nil, t).Where(key...).One(read)
+		out, err = QueryTable(tx, nil, t).Where(key...).one(read)
 		return err
 	}
 	var err error

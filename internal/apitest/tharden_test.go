@@ -3,7 +3,6 @@ package apitest
 import (
 	"fmt"
 	"testing"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
@@ -70,7 +69,7 @@ func TestTableRefusesMismatches(t *testing.T) {
 	})
 	run("OnConflict out of range", func() error {
 		x := testmodel.Invoice{Number: "n"}
-		return sql(db.InsertTable(invTable, unsafe.Pointer(&x)).OnConflict(999).DoNothing().SQL(ctx))
+		return sql(db.InsertTable(invTable, &x).OnConflict(999).DoNothing().SQL(ctx))
 	})
 	run("Ticket rows into Invoice", func() error {
 		return sql(db.InsertRows(invTable, tkTable.NewRows(2)).SQL(ctx))

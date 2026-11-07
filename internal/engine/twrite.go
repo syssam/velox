@@ -26,13 +26,14 @@ func (t Table) NewRows(n int) TableRows {
 	return TableRows{p: v.UnsafePointer(), size: s.size, n: n, info: s.info}
 }
 
-// SetField sets column col's field of the row at p to v, converted as
-// Convert converts; for a nullable column a nil v is NULL, and another v is
-// the value its pointer points to.
-func (t Table) SetField(p unsafe.Pointer, col int, v any) error {
+// SetField sets column col's field of row to v, converted as Convert
+// converts; for a nullable column a nil v is NULL, and another v is the value
+// its pointer points to.
+func (t Table) SetField(row any, col int, v any) error {
 	s := t.state()
-	if s.err != nil {
-		return s.err
+	p, err := s.rowOf(row)
+	if err != nil {
+		return err
 	}
 	if col < 0 || col >= len(s.info.Columns) {
 		return fmt.Errorf("velox: %s: a field of column %d, of %d", s.info.Name, col, len(s.info.Columns))
@@ -84,12 +85,13 @@ func (t Table) Assign(col int, v any) (Assignment, error) {
 	return Assignment{Column: col, Op: AssignSet, Value: v}, nil
 }
 
-// Validate runs the validators of the columns cols of the row at p on the
-// values it holds now: velox's Validate, untyped.
-func (t Table) Validate(p unsafe.Pointer, cols ...int) error {
+// Validate runs the validators of the columns cols of row on the values it
+// holds now: velox's Validate, untyped.
+func (t Table) Validate(row any, cols ...int) error {
 	s := t.state()
-	if s.err != nil {
-		return s.err
+	p, err := s.rowOf(row)
+	if err != nil {
+		return err
 	}
 	return ValidateRow(s.info, p, cols)
 }
@@ -111,14 +113,20 @@ type TableInsert struct {
 	t        *table
 	one      unsafe.Pointer
 	single   bool
+	err      error // the row's: not one of t's entity
 	many     TableRows
 	conflict *ConflictClause
 }
 
-// InsertTable starts an INSERT of the row at p, of t's entity, through e:
-// velox's DB.InsertTable.
-func InsertTable(e *DB, t Table, p unsafe.Pointer) TableInsert {
-	return TableInsert{e: e, t: t.state(), one: p, single: true}
+// InsertTable starts an INSERT of row, a *E of t's entity, through e:
+// velox's DB.InsertTable. Another row fails the insert.
+func InsertTable(e *DB, t Table, row any) TableInsert {
+	s := t.state()
+	p, err := s.rowOf(row)
+	if s.err != nil {
+		err = nil // the insert reports the Table's error
+	}
+	return TableInsert{e: e, t: s, one: p, single: true, err: err}
 }
 
 // InsertRows starts an INSERT of every row of rows, of t's entity, through
@@ -204,7 +212,7 @@ func (q TableInsert) rows() []unsafe.Pointer {
 	}
 	out := make([]unsafe.Pointer, q.many.n)
 	for i := range out {
-		out[i] = q.many.At(i)
+		out[i] = q.many.at(i)
 	}
 	return out
 }
@@ -251,8 +259,8 @@ func (q TableInsert) check() error {
 	if q.t.err != nil {
 		return q.t.err
 	}
-	if q.single && q.one == nil {
-		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.t.info.Name)
+	if q.err != nil {
+		return fmt.Errorf("velox: %s: Insert: %w", q.t.info.Name, q.err)
 	}
 	if err := q.t.checkRows(q.many); err != nil {
 		return err
@@ -327,14 +335,14 @@ func (t *table) insertOne(ctx context.Context, db *DB, p unsafe.Pointer, cf *Con
 
 func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows) (cols []int, per int, err error) {
 	for i := range xs.n {
-		t.fillDefaults(xs.At(i))
+		t.fillDefaults(xs.at(i))
 	}
 	if err := RefuseBidiRows(t.info, xs.p, xs.size, xs.n); err != nil {
 		return nil, 0, err
 	}
-	gen := t.generatedKey(xs.At(0))
+	gen := t.generatedKey(xs.at(0))
 	for i := range xs.n {
-		if (t.generatedKey(xs.At(i)) >= 0) != (gen >= 0) {
+		if (t.generatedKey(xs.at(i)) >= 0) != (gen >= 0) {
 			return nil, 0, fmt.Errorf("velox: %s: InsertAll needs every entity's key set, or every key left at zero", t.info.Name)
 		}
 	}
@@ -343,12 +351,12 @@ func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows) (cols []i
 		return nil, 0, ErrNothingToInsert(t.info)
 	}
 	for i := range xs.n {
-		if err := ValidateRow(t.info, xs.At(i), cols); err != nil {
+		if err := ValidateRow(t.info, xs.at(i), cols); err != nil {
 			return nil, 0, err
 		}
 	}
 	for i := range xs.n {
-		if err := InsertAllowed(ctx, t.info, xs.At(i)); err != nil {
+		if err := InsertAllowed(ctx, t.info, xs.at(i)); err != nil {
 			return nil, 0, err
 		}
 	}
@@ -359,7 +367,7 @@ func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows) (cols []i
 func (t *table) batch(xs TableRows, from, to int, cols []int, cf *ConflictClause, inTx bool) Statement {
 	st := Statement{Op: OpInsert, Entity: t.info, Columns: cols, Conflict: cf, InTx: inTx, Rows: make([][]any, 0, to-from)}
 	for i := from; i < to; i++ {
-		st.Rows = append(st.Rows, t.rowValues(xs.At(i), cols))
+		st.Rows = append(st.Rows, t.rowValues(xs.at(i), cols))
 	}
 	if InfoBidi(t.info) {
 		MirrorRows(&st)

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"unsafe"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2"
@@ -1008,12 +1007,12 @@ func TestNoFieldNoGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), unsafe.Pointer(p.Rows[0])); ok {
+	if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), any(p.Rows[0])); ok {
 		t.Error("a page outside a field is a group")
 	}
 	if xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{}); len(xs) == 0 {
 		t.Fatal("no owners")
-	} else if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), unsafe.Pointer(xs[0])); !ok {
+	} else if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), any(xs[0])); !ok {
 		t.Error("a page in a field is no group")
 	}
 }

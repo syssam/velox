@@ -4,7 +4,6 @@ import (
 	"context"
 	"reflect"
 	"testing"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
@@ -33,9 +32,9 @@ func TestTableWriteParity(t *testing.T) {
 				x := newTicket()
 				return func() (string, []any, error) {
 						x := newTicket()
-						return db.InsertTable(tkTable, unsafe.Pointer(&x)).SQL(ctx)
+						return db.InsertTable(tkTable, &x).SQL(ctx)
 					},
-					func() error { return db.InsertTable(tkTable, unsafe.Pointer(&x)).Exec(ctx) }
+					func() error { return db.InsertTable(tkTable, &x).Exec(ctx) }
 			}},
 		{"insert rows, on conflict",
 			func(db *velox.DB) (func() (string, []any, error), func() error) {
@@ -49,7 +48,7 @@ func TestTableWriteParity(t *testing.T) {
 				q := func() velox.TableInsert {
 					rows := tkTable.NewRows(2)
 					for i := range rows.Len() {
-						*(*testmodel.Ticket)(rows.At(i)) = newTicket()
+						*rows.At(i).(*testmodel.Ticket) = newTicket()
 					}
 					return db.InsertRows(tkTable, rows).OnConflict(col(Tk.ID)).Update(col(Tk.Title))
 				}
@@ -146,11 +145,11 @@ func TestTableWriteRefuses(t *testing.T) {
 		"insert of nil": func() error { return db.InsertTable(tkTable, nil).Exec(ctx) },
 		"insert of a zero Table": func() error {
 			x := testmodel.Ticket{}
-			return db.InsertTable(velox.Table{}, unsafe.Pointer(&x)).Exec(ctx)
+			return db.InsertTable(velox.Table{}, &x).Exec(ctx)
 		},
 		"insert the policy denies": func() error {
 			x := testmodel.Ticket{Owner: "bob", Title: "t"}
-			return db.InsertTable(tkTable, unsafe.Pointer(&x)).Exec(ctx)
+			return db.InsertTable(tkTable, &x).Exec(ctx)
 		},
 		"update of a zero Table": func() error { _, err := db.UpdateTable(velox.Table{}).Set(0, int64(1)).All().Exec(ctx); return err },
 		"delete of a zero Table": func() error { _, err := db.DeleteTable(velox.Table{}).All().Exec(ctx); return err },
@@ -173,7 +172,7 @@ func TestTableWriteRows(t *testing.T) {
 	in7 := testmodel.Org.With(context.Background(), int64(7))
 	in8 := testmodel.Org.With(context.Background(), int64(8))
 	x := testmodel.Invoice{Number: "n7", Data: []byte{}}
-	if err := db.InsertTable(invTable, unsafe.Pointer(&x)).Exec(in7); err != nil {
+	if err := db.InsertTable(invTable, &x).Exec(in7); err != nil {
 		t.Fatal(err)
 	}
 	if x.ID == 0 || x.OrgID != 7 {
@@ -240,7 +239,7 @@ func TestTableWriteRows(t *testing.T) {
 		invTable.SetField(rows.At(0), 99, "x") == nil {
 		t.Error("SetField of a wrong value: no error")
 	}
-	if err := invTable.SetField(rows.At(0), col(I.PaidAt), x.CreatedAt); err != nil || (*testmodel.Invoice)(rows.At(0)).PaidAt == nil {
+	if err := invTable.SetField(rows.At(0), col(I.PaidAt), x.CreatedAt); err != nil || rows.At(0).(*testmodel.Invoice).PaidAt == nil {
 		t.Errorf("SetField of a nullable field: %v", err)
 	}
 	if invTable.NewRows(0).Len() != 0 || (velox.Table{}).NewRows(2).Len() != 0 {
@@ -248,7 +247,7 @@ func TestTableWriteRows(t *testing.T) {
 	}
 	// Validate and ValidateSet, untyped, are the typed ones'.
 	tx := testmodel.Ticket{}
-	if (tkTable.Validate(unsafe.Pointer(&tx), col(Tk.Title)) == nil) != (velox.Validate(&tx, Tk.Title) == nil) {
+	if (tkTable.Validate(&tx, col(Tk.Title)) == nil) != (velox.Validate(&tx, Tk.Title) == nil) {
 		t.Error("Validate differs")
 	}
 	a, err := tkTable.Assign(col(Tk.Title), "")

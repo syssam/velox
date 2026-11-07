@@ -386,7 +386,7 @@ func UpdateEdges(ctx context.Context, db *DB, st *Statement, p EdgePlan) (int64,
 		}
 		owners := make([]unsafe.Pointer, rows.Len())
 		for i := range owners {
-			owners[i] = rows.At(i)
+			owners[i] = rows.at(i)
 		}
 		n = int64(len(owners))
 		if len(st.Set) > 0 {

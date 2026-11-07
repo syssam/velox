@@ -137,7 +137,7 @@ func TestNamedTypeTerms(t *testing.T) {
 		}
 		var out []gadgetID
 		for _, r := range p.Rows {
-			out = append(out, (*gadget)(r).ID)
+			out = append(out, r.(*gadget).ID)
 		}
 		return out, p
 	}

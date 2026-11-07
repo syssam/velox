@@ -2,7 +2,6 @@ package veloxgql
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
@@ -29,6 +28,9 @@ import (
 // WithBatchScope: a directive or a field middleware that varies the context per
 // parent row needs it.
 func Batch[E any](ctx context.Context, rows []*E) {
-	// A []*E has the layout of a []unsafe.Pointer.
-	gqlcore.Add(ctx, unsafe.Slice((*unsafe.Pointer)(unsafe.Pointer(unsafe.SliceData(rows))), len(rows)))
+	xs := make([]any, len(rows))
+	for i, r := range rows {
+		xs[i] = r
+	}
+	gqlcore.Add(ctx, xs)
 }

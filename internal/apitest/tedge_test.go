@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
@@ -35,21 +34,21 @@ func TestTableQueryDriverError(t *testing.T) {
 				return err
 			},
 			"LoadEach": func() error {
-				_, err := each.LoadEach(ctx, invTable, int(I.Items.I), 0, []unsafe.Pointer{unsafe.Pointer(&testmodel.Invoice{ID: 1})})
+				_, err := each.LoadEach(ctx, invTable, int(I.Items.I), 0, []any{&testmodel.Invoice{ID: 1}})
 				return err
 			},
 			"CountEach": func() error {
-				_, err := each.CountEach(ctx, invTable, int(I.Items.I), []unsafe.Pointer{unsafe.Pointer(&testmodel.Invoice{ID: 1})})
+				_, err := each.CountEach(ctx, invTable, int(I.Items.I), []any{&testmodel.Invoice{ID: 1}})
 				return err
 			},
 			"InsertTable": func() error {
 				x := testmodel.Item{InvoiceID: 1, SKU: "s"}
-				return db.InsertTable(itTable, unsafe.Pointer(&x)).Exec(ctx)
+				return db.InsertTable(itTable, &x).Exec(ctx)
 			},
 			"InsertRows": func() error {
 				rows := itTable.NewRows(2)
 				for i := range 2 {
-					(*testmodel.Item)(rows.At(i)).SKU = "s"
+					rows.At(i).(*testmodel.Item).SKU = "s"
 				}
 				return db.InsertRows(itTable, rows).Exec(ctx)
 			},
@@ -68,7 +67,7 @@ func TestTableQueryDriverError(t *testing.T) {
 func TestTableQueryRefusals(t *testing.T) {
 	exec := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, exec)
-	inv := []unsafe.Pointer{unsafe.Pointer(&testmodel.Invoice{ID: 1})}
+	inv := []any{&testmodel.Invoice{ID: 1}}
 	runAll := func(name string, q velox.TableQuery) {
 		t.Helper()
 		for run, f := range map[string]func() error{
@@ -88,7 +87,7 @@ func TestTableQueryRefusals(t *testing.T) {
 	}
 	zero := db.QueryTable(velox.Table{}).Limit(1)
 	runAll("the zero Table", zero)
-	runAll("the zero Table, after After", zero.After(unsafe.Pointer(&testmodel.Item{})))
+	runAll("the zero Table, after After", zero.After(&testmodel.Item{}))
 	runAll("the zero Table, after Join", zero.Join(int(It.Invoice.I), invTable))
 	q := db.QueryTable(itTable).Limit(1)
 	runAll("a column out of range", q.Columns(99))
@@ -170,12 +169,12 @@ func TestTableQueryLoads(t *testing.T) {
 		t.Fatal("the first invoice has no items: the case is not covered")
 	}
 	q := velox.Untyped(tq)
-	check := func(name string, p unsafe.Pointer, err error) {
+	check := func(name string, p any, err error) {
 		t.Helper()
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		items, ok := (*testmodel.Invoice)(p).Edges.Items.Get()
+		items, ok := p.(*testmodel.Invoice).Edges.Items.Get()
 		if !ok || len(items) != len(wantItems) {
 			t.Errorf("%s: %d items %v, want %d", name, len(items), ok, len(wantItems))
 		}
@@ -206,7 +205,7 @@ func TestTableOfAndFill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs, ga, err := db.QueryTable(itTable).Where(invTable.Of(int(I.Items.I), itTable, unsafe.Pointer(owners[0]), unsafe.Pointer(owners[1]))).Limit(5).SQL(ctx)
+	gs, ga, err := db.QueryTable(itTable).Where(invTable.Of(int(I.Items.I), itTable, owners[0], owners[1])).Limit(5).SQL(ctx)
 	if err != nil || gs != ws || len(ga) != len(wa) {
 		t.Errorf("Of: %q %v %v, want %q %v", gs, ga, err, ws, wa)
 	}
@@ -224,18 +223,18 @@ func TestTableOfAndFill(t *testing.T) {
 	it, inv := new(testmodel.Item), new(testmodel.Invoice)
 	edge := int(It.Invoice.I)
 	for name, err := range map[string]error{
-		"Fill of the zero Table": velox.Table{}.Fill(unsafe.Pointer(it), edge, invTable, unsafe.Pointer(inv)),
-		"Fill to the zero Table": itTable.Fill(unsafe.Pointer(it), edge, velox.Table{}, unsafe.Pointer(inv)),
-		"Fill of another target": itTable.Fill(unsafe.Pointer(it), edge, tkTable, unsafe.Pointer(inv)),
-		"Fill of no relation":    itTable.Fill(unsafe.Pointer(it), 9, invTable, unsafe.Pointer(inv)),
+		"Fill of the zero Table": velox.Table{}.Fill(it, edge, invTable, inv),
+		"Fill to the zero Table": itTable.Fill(it, edge, velox.Table{}, inv),
+		"Fill of another target": itTable.Fill(it, edge, tkTable, inv),
+		"Fill of no relation":    itTable.Fill(it, 9, invTable, inv),
 	} {
 		if err == nil {
 			t.Errorf("%s: no error", name)
 		}
 	}
 	for name, ok := range map[string]bool{
-		"Filled of the zero Table": func() bool { _, ok := velox.Table{}.Filled(unsafe.Pointer(it), edge, invTable); return ok }(),
-		"Filled of no relation":    func() bool { _, ok := itTable.Filled(unsafe.Pointer(it), 9, invTable); return ok }(),
+		"Filled of the zero Table": func() bool { _, ok := velox.Table{}.Filled(it, edge, invTable); return ok }(),
+		"Filled of no relation":    func() bool { _, ok := itTable.Filled(it, 9, invTable); return ok }(),
 	} {
 		if ok {
 			t.Errorf("%s: holds a row", name)
@@ -252,20 +251,20 @@ func TestTableWriteEdges(t *testing.T) {
 	if r := (velox.Table{}).NewRows(2); r.Len() != 0 {
 		t.Errorf("NewRows of the zero Table: %d rows", r.Len())
 	}
-	if err := (velox.Table{}).SetField(unsafe.Pointer(new(testmodel.Item)), 0, int64(1)); err == nil {
+	if err := (velox.Table{}).SetField(new(testmodel.Item), 0, int64(1)); err == nil {
 		t.Error("SetField of the zero Table: no error")
 	}
 	tk := testmodel.Ticket{Owner: "ann", Title: "t", InvoiceID: 3}
-	if err := tkTable.SetField(unsafe.Pointer(&tk), col(Tk.Title), nil); err == nil {
+	if err := tkTable.SetField(&tk, col(Tk.Title), nil); err == nil {
 		t.Error("SetField nil of a NOT NULL column: no error")
 	}
-	if err := tkTable.SetField(unsafe.Pointer(&tk), col(Tk.ParentID), int32(4)); err != nil || tk.ParentID == nil || *tk.ParentID != 4 {
+	if err := tkTable.SetField(&tk, col(Tk.ParentID), int32(4)); err != nil || tk.ParentID == nil || *tk.ParentID != 4 {
 		t.Errorf("SetField of a nullable column: %v %v", tk.ParentID, err)
 	}
-	if err := tkTable.SetField(unsafe.Pointer(&tk), col(Tk.ParentID), nil); err != nil || tk.ParentID != nil {
+	if err := tkTable.SetField(&tk, col(Tk.ParentID), nil); err != nil || tk.ParentID != nil {
 		t.Errorf("SetField nil of a nullable column: %v %v", tk.ParentID, err)
 	}
-	if err := tkTable.SetField(unsafe.Pointer(&tk), col(Tk.ParentID), "x"); err == nil {
+	if err := tkTable.SetField(&tk, col(Tk.ParentID), "x"); err == nil {
 		t.Error("SetField of a value of another kind: no error")
 	}
 
@@ -278,9 +277,9 @@ func TestTableWriteEdges(t *testing.T) {
 	}
 	// Every key set, or none.
 	rows := itTable.NewRows(2)
-	(*testmodel.Item)(rows.At(0)).ID = 5
+	rows.At(0).(*testmodel.Item).ID = 5
 	for i := range 2 {
-		(*testmodel.Item)(rows.At(i)).SKU, (*testmodel.Item)(rows.At(i)).InvoiceID = "s", 1
+		rows.At(i).(*testmodel.Item).SKU, rows.At(i).(*testmodel.Item).InvoiceID = "s", 1
 	}
 	if err := db.InsertRows(itTable, rows).Exec(ctx); err == nil {
 		t.Error("InsertRows with one key set: no error")
@@ -296,12 +295,12 @@ func TestTableWriteEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs, ga, err := db.InsertTable(itTable, unsafe.Pointer(&x)).Update(col(It.Qty)).OnConflict(col(It.SKU)).SQL(ctx)
+	gs, ga, err := db.InsertTable(itTable, &x).Update(col(It.Qty)).OnConflict(col(It.SKU)).SQL(ctx)
 	if err != nil || gs != ws || len(ga) != len(wa) {
 		t.Errorf("upsert: %q %v %v, want %q %v", gs, ga, err, ws, wa)
 	}
 	exec.Rows = [][]any{{int64(9)}}
-	if err := db.InsertTable(itTable, unsafe.Pointer(&x)).Exec(ctx); err != nil || x.ID != 9 {
+	if err := db.InsertTable(itTable, &x).Exec(ctx); err != nil || x.ID != 9 {
 		t.Errorf("InsertTable: id %d, %v", x.ID, err)
 	}
 
@@ -365,7 +364,7 @@ func TestTableJoinRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p, ok := itTable.Filled(rows.At(0), int(It.Invoice.I), invTable); !ok || (*testmodel.Invoice)(p).Number != "n3" {
+	if p, ok := itTable.Filled(rows.At(0), int(It.Invoice.I), invTable); !ok || p.(*testmodel.Invoice).Number != "n3" {
 		t.Errorf("the matched row: %v %v", p, ok)
 	}
 	if p, ok := itTable.Filled(rows.At(1), int(It.Invoice.I), invTable); ok || p != nil {
@@ -438,11 +437,11 @@ func TestTableInsertPolicy(t *testing.T) {
 	bob := testmodel.Ticket{Owner: "bob", Title: "t", InvoiceID: 3}
 	rows := tkTable.NewRows(2)
 	for i := range 2 {
-		*(*testmodel.Ticket)(rows.At(i)) = testmodel.Ticket{Owner: "ann", Title: "t", InvoiceID: 3}
+		*rows.At(i).(*testmodel.Ticket) = testmodel.Ticket{Owner: "ann", Title: "t", InvoiceID: 3}
 	}
-	(*testmodel.Ticket)(rows.At(1)).Owner = "bob"
+	rows.At(1).(*testmodel.Ticket).Owner = "bob"
 	for name, f := range map[string]func() error{
-		"InsertTable": func() error { return db.InsertTable(tkTable, unsafe.Pointer(&bob)).Exec(in) },
+		"InsertTable": func() error { return db.InsertTable(tkTable, &bob).Exec(in) },
 		"InsertRows":  func() error { return db.InsertRows(tkTable, rows).Exec(in) },
 	} {
 		if err := f(); !errors.Is(err, velox.ErrDenied) {

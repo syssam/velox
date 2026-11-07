@@ -164,6 +164,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- The untyped surface for generated code takes and returns a row as a *E in
+  an any, checked against the Table's entity, where it took an
+  `unsafe.Pointer`: `Table.Field`, `Value`, `New`, `Fill`, `Filled`, `Of`,
+  `SetField`, `Validate`, `TableRows.At`, `TableQuery.After`, `One`, `First`,
+  `LoadEach`, `CountEach` and `DB.InsertTable`. A row of another entity is an
+  error. `Table.Ptr` is gone (ADR 0051).
+- velox-gen tags a required time, UUID, struct or array field `json:"name"`,
+  as it tags a required number or string, where it was `omitzero`: a zero
+  value is a value. An optional one stays `omitzero`.
+
 - `Rel.HasWhere` is `Rel.HasWith`, as ent's `HasXWith` and velox's own
   `HasEdgeWith`. Generated code: the handles' type is exported (`PostHandles`),
   and an enum field's handle is `velox.Col`, without `Contains`, `HasPrefix` or

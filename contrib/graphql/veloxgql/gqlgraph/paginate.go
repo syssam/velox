@@ -8,7 +8,6 @@ import (
 	"slices"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/internal/english"
@@ -269,7 +268,7 @@ func (t *term) order(desc bool) velox.OrderTerm {
 
 // row is the row of the term's column in the connection's row p: p, or its
 // related entity; nil when a joined row has none.
-func (t *term) row(p unsafe.Pointer, own velox.Table) unsafe.Pointer {
+func (t *term) row(p any, own velox.Table) any {
 	if t.edge == 0 {
 		return p
 	}
@@ -279,7 +278,7 @@ func (t *term) row(p unsafe.Pointer, own velox.Table) unsafe.Pointer {
 
 // get returns the term's value in the connection's row p as the base type,
 // nil for NULL.
-func (t *term) get(p unsafe.Pointer, own velox.Table) any {
+func (t *term) get(p any, own velox.Table) any {
 	r := t.row(p, own)
 	if r == nil {
 		// A row read without the join: the zero value, which no cursor of
@@ -318,7 +317,7 @@ func (t *term) get(p unsafe.Pointer, own velox.Table) any {
 // set sets the term's column in the connection's row p from v, a cursor's
 // value: of the base type in a cursor from a page, a JSON value in one from
 // the wire, nil for NULL.
-func (t *term) set(p unsafe.Pointer, own velox.Table, v any) error {
+func (t *term) set(p any, own velox.Table, v any) error {
 	r := t.row(p, own)
 	if r == nil {
 		r = t.tbl.New()
@@ -362,7 +361,7 @@ func cursorSet(p, v any, name string) error {
 // Page is a page of a connection: its rows in the connection's order, each
 // row's cursor, and the page info. A row is a pointer to the node's entity.
 type Page struct {
-	Rows    []unsafe.Pointer
+	Rows    []any
 	Cursors []veloxgql.Cursor
 	// Info is the page info. Its StartCursor and EndCursor point into
 	// Cursors.
@@ -372,7 +371,7 @@ type Page struct {
 
 // Node returns row i as a *E of the node's entity E, in an any. It panics
 // when i is out of range.
-func (p *Page) Node(i int) any { return p.t.Ptr(p.Rows[i]) }
+func (p *Page) Node(i int) any { return p.Rows[i] }
 
 // Connection is a connection to a list of nodes: the query of the whole list
 // and what one page of it is. It runs nothing until it is asked: Page runs
@@ -388,7 +387,7 @@ type Connection struct {
 	back  bool             // paging backward: last, or before
 	terms []term           // the order's terms, then the key's columns
 	key   int              // the index in terms of the key's first column
-	after unsafe.Pointer   // the row the page starts after, in the paging direction
+	after any              // the row the page starts after, in the paging direction
 	// edge is set by edgeConnection when the connection is its part of a
 	// batch.
 	edge *edgeMode
@@ -605,7 +604,7 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 	}
 	n := min(rows.Len(), c.n)
 	more := rows.Len() > c.n
-	p := &Page{Rows: make([]unsafe.Pointer, n), Cursors: make([]veloxgql.Cursor, n), t: c.query.Table()}
+	p := &Page{Rows: make([]any, n), Cursors: make([]veloxgql.Cursor, n), t: c.query.Table()}
 	for i := range n {
 		p.Rows[i] = rows.At(i)
 	}
@@ -638,7 +637,7 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 // cursor is x's cursor: the order's terms with x's values, the key's columns
 // but the last as terms named "key:<column>", and the last column as the key.
 // terms is its room for the terms, of the length of the order's but the last.
-func (c *Connection) cursor(own velox.Table, x unsafe.Pointer, terms []veloxgql.CursorTerm) veloxgql.Cursor {
+func (c *Connection) cursor(own velox.Table, x any, terms []veloxgql.CursorTerm) veloxgql.Cursor {
 	last := len(c.terms) - 1
 	for i := range c.terms[:last] {
 		terms[i] = veloxgql.CursorTerm{Field: c.field(i), Direction: c.terms[i].dir, Value: c.terms[i].get(x, own)}
@@ -657,7 +656,7 @@ func (c *Connection) field(i int) string {
 // row checks cur against the connection's type and order, and returns the
 // row it stands for: a zero row with the order's and the key's columns set
 // from it, for Query.After.
-func (c *Connection) row(cur veloxgql.Cursor) (unsafe.Pointer, error) {
+func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
 	last := len(c.terms) - 1
 	order := make([]cursorOrder, last)
 	for i := range c.terms[:last] {

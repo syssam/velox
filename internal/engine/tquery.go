@@ -164,14 +164,15 @@ func (q TableQuery) Selects(cs ...int) bool {
 	return true
 }
 
-// After returns the query continuing after the row at p, as Query.After: the
-// row is copied.
-func (q TableQuery) After(p unsafe.Pointer) TableQuery {
+// After returns the query continuing after row, a *E of its entity, as
+// Query.After: the row is copied. Another row fails the query.
+func (q TableQuery) After(row any) TableQuery {
 	if q.t.err != nil {
 		return q
 	}
-	if p == nil {
-		return q.fail(fmt.Errorf("velox: %s: After was given a nil row", q.t.info.Name))
+	p, err := q.t.rowOf(row)
+	if err != nil {
+		return q.fail(fmt.Errorf("velox: %s: After: %w", q.t.info.Name, err))
 	}
 	q.after = q.t.copyRow(p)
 	return q
@@ -215,7 +216,7 @@ func (q TableQuery) join(edge int, target Table, left bool) TableQuery {
 	}
 	n := len(ts.info.Columns)
 	set.Fills = append(set.Fills, JoinFill{Width: n, Bind: func(dst []any) func(unsafe.Pointer) {
-		row := target.New()
+		row := ts.newRow()
 		nulls := 0
 		for c := range n {
 			var d any
@@ -365,7 +366,7 @@ func (q TableQuery) load(ctx context.Context, rows TableRows, ran []int, at Targ
 	}
 	ptrs := make([]unsafe.Pointer, rows.n)
 	for i := range ptrs {
-		ptrs[i] = rows.At(i)
+		ptrs[i] = rows.at(i)
 	}
 	return LoadRelations(ctx, q.e, q.e.LoadPin(at), q.t.info, ptrs, q.loads, q.st.MaxRows)
 }
@@ -384,7 +385,16 @@ func (q TableQuery) All(ctx context.Context) (TableRows, error) {
 
 // One runs the query for exactly one row, as Query.One: its error wraps
 // ErrNotFound when no row matches and ErrNotSingular when more than one does.
-func (q TableQuery) One(ctx context.Context) (unsafe.Pointer, error) {
+func (q TableQuery) One(ctx context.Context) (any, error) {
+	p, err := q.one(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return q.t.kit.Ptr(p), nil
+}
+
+// one is One's row.
+func (q TableQuery) one(ctx context.Context) (unsafe.Pointer, error) {
 	q.st.Limit = 2
 	out, ran, at, err := q.read(ctx)
 	if err != nil {
@@ -397,14 +407,14 @@ func (q TableQuery) One(ctx context.Context) (unsafe.Pointer, error) {
 		if err := q.load(ctx, out, ran, at); err != nil {
 			return nil, err
 		}
-		return out.At(0), nil
+		return out.at(0), nil
 	}
 	return nil, fmt.Errorf("velox: %s: %w", q.t.info.Name, ErrNotSingular)
 }
 
 // First runs the query for its first row, as Query.First: its error wraps
 // ErrNotFound when no row matches.
-func (q TableQuery) First(ctx context.Context) (unsafe.Pointer, error) {
+func (q TableQuery) First(ctx context.Context) (any, error) {
 	q.st.Limit = 1
 	out, ran, at, err := q.read(ctx)
 	if err != nil {
@@ -484,13 +494,17 @@ func (q TableQuery) each() EachQuery {
 	return e
 }
 
-// LoadEach is the package's LoadEach, untyped: for each row at owners, rows
-// of owner's entity, its rows of q related through owner's relation edge,
-// whose target is q's entity, with at most each per owner (Rel.LimitEach; 0
-// for no limit).
-func (q TableQuery) LoadEach(ctx context.Context, owner Table, edge, each int, owners []unsafe.Pointer) ([]TableRows, error) {
+// LoadEach is the package's LoadEach, untyped: for each of owners, rows of
+// owner's entity (each a *E in an any), its rows of q related through
+// owner's relation edge, whose target is q's entity, with at most each per
+// owner (Rel.LimitEach; 0 for no limit).
+func (q TableQuery) LoadEach(ctx context.Context, owner Table, edge, each int, owners []any) ([]TableRows, error) {
 	os := owner.state()
-	parts, err := LoadEach(ctx, q.each(), os.info, os.err, LoadSpec{Rel: int32(edge), Target: q.t.target, Each: max(each, 0)}, owners)
+	ps, err := tableOwners(os, owners)
+	if err != nil {
+		return nil, err
+	}
+	parts, err := LoadEach(ctx, q.each(), os.info, os.err, LoadSpec{Rel: int32(edge), Target: q.t.target, Each: max(each, 0)}, ps)
 	if err != nil {
 		return nil, err
 	}
@@ -502,9 +516,19 @@ func (q TableQuery) LoadEach(ctx context.Context, owner Table, edge, each int, o
 }
 
 // CountEach is the package's CountEach, untyped, as LoadEach is LoadEach.
-func (q TableQuery) CountEach(ctx context.Context, owner Table, edge int, owners []unsafe.Pointer) ([]int64, error) {
+func (q TableQuery) CountEach(ctx context.Context, owner Table, edge int, owners []any) ([]int64, error) {
 	os := owner.state()
-	return CountEach(ctx, q.each(), os.info, os.err, LoadSpec{Rel: int32(edge), Target: q.t.target}, owners)
+	ps, err := tableOwners(os, owners)
+	if err != nil {
+		return nil, err
+	}
+	return CountEach(ctx, q.each(), os.info, os.err, LoadSpec{Rel: int32(edge), Target: q.t.target}, ps)
+}
+
+// tableOwners is os.rowsOf(owners): the owner Table's error when it is
+// invalid, as LoadEach and CountEach report it.
+func tableOwners(os *table, owners []any) ([]unsafe.Pointer, error) {
+	return os.rowsOf(owners)
 }
 
 // prepare is the statement a run of q sends, checked as the untyped entry

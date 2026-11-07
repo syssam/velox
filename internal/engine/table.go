@@ -13,8 +13,9 @@ import (
 // conditions are made with, keyed by column and relation indexes. For
 // generated code. Code that handles every entity alike, such as
 // velox-graphql's runtime, is compiled once on it, where the typed API would
-// be compiled once per entity. TableOf returns an entity's. A row is an
-// unsafe.Pointer to an E; TableRows is a run of them.
+// be compiled once per entity. TableOf returns an entity's. A row is a *E
+// in an any, which each method checks is of the Table's entity; TableRows
+// is a run of them.
 //
 // The zero Table is no entity: its queries fail.
 type Table struct{ t *table }
@@ -32,6 +33,8 @@ type table struct {
 	typ   any     // E
 	slice any     // []E
 	size  uintptr // E's size
+	// ptrw is *E's type word: an any whose type word it is holds a row.
+	ptrw unsafe.Pointer
 	// vals is, for each column, the Go type of a value a condition on it
 	// compares with (its field's type, without the pointer of a nullable one),
 	//
@@ -54,6 +57,7 @@ func NewTable(info *EntityInfo, err error, addr func(p unsafe.Pointer, col int) 
 		rt := typ.(reflect.Type)
 		t.kit, t.addr, t.nilCols, t.typ = info.kit, addr, nilCols, rt
 		t.slice, t.size = reflect.SliceOf(rt), rt.Size()
+		t.ptrw = typeWord(info.kit.Ptr(nil))
 		t.vals = make([]any, len(info.Columns))
 		for i := range info.Columns {
 			t.vals[i] = info.Columns[i].val
@@ -77,21 +81,69 @@ func (t Table) Info() *EntityInfo { return t.state().info }
 // Err returns what is wrong with the entity's metadata, or nil.
 func (t Table) Err() error { return t.state().err }
 
-// Field returns a pointer to the field of column col of the row at p, as any:
-// a *V for a field of type V. The Table must be valid
-// (Err nil) and col one of its columns.
-func (t Table) Field(p unsafe.Pointer, col int) any { return t.t.addr(p, col) }
+// typeWord is the type word of v.
+func typeWord(v any) unsafe.Pointer { return (*[2]unsafe.Pointer)(unsafe.Pointer(&v))[0] }
 
-// Value returns the value of column col of the row at p.
-// The Table must be valid and col one of its columns.
-func (t Table) Value(p unsafe.Pointer, col int) any { return t.t.kit.Value(p, col) }
+// rowOf is the row row holds: a non-nil *E of t's entity. Another value is an
+// error, as is an invalid Table.
+func (t *table) rowOf(row any) (unsafe.Pointer, error) {
+	if t.err != nil {
+		return nil, t.err
+	}
+	w := (*[2]unsafe.Pointer)(unsafe.Pointer(&row))
+	if w[0] != t.ptrw || w[1] == nil {
+		return nil, fmt.Errorf("velox: %s: a row is a non-nil *%v, not %T", t.info.Name, t.typ, row)
+	}
+	return w[1], nil
+}
 
-// Ptr returns the row at p as a *E, in an any. The Table
-// must be valid.
-func (t Table) Ptr(p unsafe.Pointer) any { return t.t.kit.Ptr(p) }
+// rowsOf is rowOf of each of rows.
+func (t *table) rowsOf(rows []any) ([]unsafe.Pointer, error) {
+	out := make([]unsafe.Pointer, len(rows))
+	for i, r := range rows {
+		p, err := t.rowOf(r)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = p
+	}
+	return out, nil
+}
 
-// New returns a new zero row. The Table must be valid.
-func (t Table) New() unsafe.Pointer { return reflect.New(t.t.typ.(reflect.Type)).UnsafePointer() }
+// Field returns a pointer to the field of column col of row, as any: a *V
+// for a field of type V. It is nil when row is not a non-nil *E of the
+// Table's entity, the Table is invalid, or col is not one of its columns.
+func (t Table) Field(row any, col int) any {
+	s := t.state()
+	p, err := s.rowOf(row)
+	if err != nil || col < 0 || col >= len(s.info.Columns) {
+		return nil
+	}
+	return s.addr(p, col)
+}
+
+// Value returns the value of column col of row. It is nil when Field is.
+func (t Table) Value(row any, col int) any {
+	s := t.state()
+	p, err := s.rowOf(row)
+	if err != nil || col < 0 || col >= len(s.info.Columns) {
+		return nil
+	}
+	return s.kit.Value(p, col)
+}
+
+// New returns a new zero row, a *E in an any. It is nil when the Table is
+// invalid.
+func (t Table) New() any {
+	s := t.state()
+	if s.err != nil {
+		return nil
+	}
+	return reflect.New(s.typ.(reflect.Type)).Interface()
+}
+
+// newRow returns a new zero row.
+func (t *table) newRow() unsafe.Pointer { return reflect.New(t.typ.(reflect.Type)).UnsafePointer() }
 
 // copyRow returns a new row holding what the row at p holds.
 func (t *table) copyRow(p unsafe.Pointer) unsafe.Pointer {
@@ -103,15 +155,17 @@ func (t *table) copyRow(p unsafe.Pointer) unsafe.Pointer {
 
 // Fill stores row, a row of target, as the entity of relation edge's field in
 // the row at owner, loaded, as a Join does when it reads a row: Rel.Fill,
-// untyped. It fails when edge is no relation held in a
-// field, or target is not the relation's target.
-func (t Table) Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Pointer) error {
+// untyped. It fails when edge is no relation held in a field, target is not
+// the relation's target, or owner or row is not a row of its entity.
+func (t Table) Fill(owner any, edge int, target Table, row any) error {
 	s, ts := t.state(), target.state()
-	if s.err != nil {
-		return s.err
+	op, err := s.rowOf(owner)
+	if err != nil {
+		return err
 	}
-	if ts.err != nil {
-		return ts.err
+	rp, err := ts.rowOf(row)
+	if err != nil {
+		return err
 	}
 	if _, err := (RelRef{Owner: s.target.Get, Target: ts.target, I: int32(edge)}).Link(); err != nil {
 		return err
@@ -120,36 +174,37 @@ func (t Table) Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Poi
 	if err != nil {
 		return err
 	}
-	h := (*Holder)(unsafe.Add(owner, off))
-	h.Loaded, h.V = true, ts.kit.Ptr(row)
+	h := (*Holder)(unsafe.Add(op, off))
+	h.Loaded, h.V = true, ts.kit.Ptr(rp)
 	return nil
 }
 
 // Filled returns the entity of relation edge's field in the row at owner, a
-// row of target, and whether it holds one: Rel.Filled, untyped. A field that
-// holds no *T of target's entity, such as a to-many relation's slice, holds
-// none.
-func (t Table) Filled(owner unsafe.Pointer, edge int, target Table) (unsafe.Pointer, bool) {
+// row of target, as a *T in an any, and whether it holds one: Rel.Filled,
+// untyped. A field that holds no *T of target's entity, such as a to-many
+// relation's slice, holds none, as does an owner that is not a row of the
+// Table's entity.
+func (t Table) Filled(owner any, edge int, target Table) (any, bool) {
 	s, ts := t.state(), target.state()
-	if s.err != nil || ts.err != nil {
+	if ts.err != nil {
+		return nil, false
+	}
+	op, err := s.rowOf(owner)
+	if err != nil {
 		return nil, false
 	}
 	off, err := RelOffset(s.info, int32(edge))
 	if err != nil {
 		return nil, false
 	}
-	h := (*Holder)(unsafe.Add(owner, off))
-	if h.V == nil {
+	h := (*Holder)(unsafe.Add(op, off))
+	if typeWord(h.V) != ts.ptrw {
 		return nil, false
 	}
-	// V holds a *T, which an interface keeps in its data word, with *T's
-	// type in its type word.
-	probe := ts.kit.Ptr(nil)
-	w, pw := (*[2]unsafe.Pointer)(unsafe.Pointer(&h.V)), (*[2]unsafe.Pointer)(unsafe.Pointer(&probe))
-	if w[0] != pw[0] {
-		return nil, false
+	if _, err := ts.rowOf(h.V); err != nil {
+		return nil, false // a nil *T
 	}
-	return w[1], w[1] != nil
+	return h.V, true
 }
 
 // TableRows is a run of rows of one entity, one after another in memory: what an
@@ -165,8 +220,12 @@ type TableRows struct {
 // Len returns the number of rows.
 func (r TableRows) Len() int { return r.n }
 
-// At returns a pointer to row i. It panics when i is out of range.
-func (r TableRows) At(i int) unsafe.Pointer {
+// At returns row i, a *E in an any, pointing into the rows. It panics when i
+// is out of range.
+func (r TableRows) At(i int) any { return r.info.kit.Ptr(r.at(i)) }
+
+// at is a pointer to row i. It panics when i is out of range.
+func (r TableRows) at(i int) unsafe.Pointer {
 	if i < 0 || i >= r.n {
 		panic(fmt.Sprintf("velox: TableRows.At(%d) of %d rows", i, r.n))
 	}
@@ -416,12 +475,16 @@ func (t Table) Has(edge int, target Table, ps ...Predicate) Predicate {
 // owners, rows of the entity: Rel.Of, untyped, of the relation as its handle
 // declares it, without a Where. A relation that does not resolve, or whose
 // target is not target, is an invalid condition.
-func (t Table) Of(edge int, target Table, owners ...unsafe.Pointer) Predicate {
+func (t Table) Of(edge int, target Table, owners ...any) Predicate {
 	s, ts := t.state(), target.state()
 	for _, err := range []error{s.err, ts.err} {
 		if err != nil {
 			return NewPredicate(Node{Op: OpInvalid, V: err})
 		}
 	}
-	return NewPredicate(OfNode(RelRef{Owner: s.target.Get, Target: ts.target, I: int32(edge)}, nil, nil, owners))
+	ps, err := s.rowsOf(owners)
+	if err != nil {
+		return NewPredicate(Node{Op: OpInvalid, V: err})
+	}
+	return NewPredicate(OfNode(RelRef{Owner: s.target.Get, Target: ts.target, I: int32(edge)}, nil, nil, ps))
 }

@@ -3,7 +3,6 @@ package gqlgraph
 import (
 	"context"
 	"fmt"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -69,8 +68,8 @@ func (n NodeKind) base(ctx context.Context) (velox.TableQuery, error) {
 }
 
 // noder is the row at p as a Noder.
-func (n NodeKind) noder(p unsafe.Pointer) (veloxgql.Noder, error) {
-	x, ok := n.table.Ptr(p).(veloxgql.Noder)
+func (n NodeKind) noder(p any) (veloxgql.Noder, error) {
+	x, ok := p.(veloxgql.Noder)
 	if !ok {
 		return nil, fmt.Errorf("veloxgql: %s: the entity %s is no Node; run go tool velox-gen", n.typ, n.table.Info().Name)
 	}
@@ -93,7 +92,7 @@ func (n NodeKind) one(ctx context.Context, id string) (veloxgql.Noder, error) {
 	case err != nil:
 		return nil, err
 	}
-	gqlcore.Add(ctx, []unsafe.Pointer{p})
+	gqlcore.Add(ctx, []any{p})
 	return n.noder(p)
 }
 
@@ -126,8 +125,8 @@ func (s *nodeSet) load(ctx context.Context, out []veloxgql.Noder) error {
 	if err != nil {
 		return err
 	}
-	by := make(map[any]unsafe.Pointer, rows.Len())
-	batch := make([]unsafe.Pointer, rows.Len())
+	by := make(map[any]any, rows.Len())
+	batch := make([]any, rows.Len())
 	for i := range batch {
 		p := rows.At(i)
 		by[s.n.table.Value(p, s.n.key)] = p

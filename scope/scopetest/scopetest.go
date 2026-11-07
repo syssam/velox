@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/scope"
@@ -71,9 +70,9 @@ func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Ke
 	case velox.GoType(c) != reflect.TypeFor[V]():
 		return fmt.Errorf("scopetest: %s: column %q is a %v, not a %v", name, column, velox.GoType(c), reflect.TypeFor[V]())
 	}
-	get := func(x *E) V { return t.Value(unsafe.Pointer(x), ci).(V) }
+	get := func(x *E) V { return t.Value(x, ci).(V) }
 	// The column's type is V, checked above, so SetField cannot fail.
-	set := func(x *E, v V) { _ = t.SetField(unsafe.Pointer(x), ci, v) }
+	set := func(x *E, v V) { _ = t.SetField(x, ci, v) }
 	inA, inB := key.With(ctx, a), key.With(ctx, b)
 	ofA := t.Pred(ci, velox.PredEQ, a)
 	count := func(ctx context.Context, where ...velox.Predicate) (int64, error) {
@@ -87,7 +86,7 @@ func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Ke
 	var zero V
 	x := row()
 	set(x, zero)
-	if err := db.InsertTable(t, unsafe.Pointer(x)).Exec(inA); err != nil {
+	if err := db.InsertTable(t, x).Exec(inA); err != nil {
 		return fmt.Errorf("scopetest: %s: an insert under %v: %w", name, a, err)
 	}
 	if got := get(x); got != a {
@@ -106,12 +105,12 @@ func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Ke
 	if _, err := count(ctx); !errors.Is(err, scope.ErrNoScope) {
 		return fmt.Errorf("scopetest: %s: a read without a value gave %v, want scope.ErrNoScope", name, err)
 	}
-	if err := db.InsertTable(t, unsafe.Pointer(row())).Exec(ctx); !errors.Is(err, scope.ErrNoScope) {
+	if err := db.InsertTable(t, row()).Exec(ctx); !errors.Is(err, scope.ErrNoScope) {
 		return fmt.Errorf("scopetest: %s: an insert without a value gave %v, want scope.ErrNoScope", name, err)
 	}
 	y := row()
 	set(y, b)
-	if err := db.InsertTable(t, unsafe.Pointer(y)).Exec(inA); !errors.Is(err, scope.ErrMismatch) {
+	if err := db.InsertTable(t, y).Exec(inA); !errors.Is(err, scope.ErrMismatch) {
 		return fmt.Errorf("scopetest: %s: an insert under %v of a row of %v gave %v, want scope.ErrMismatch", name, a, b, err)
 	}
 	return nil

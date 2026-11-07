@@ -12,7 +12,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/99designs/gqlgen/graphql"
 
@@ -261,7 +260,7 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			}
 			out := make([]any, len(p.Rows))
 			for i, r := range p.Rows {
-				out[i] = (*pet)(r)
+				out[i] = r.(*pet)
 			}
 			return out, nil
 		},
@@ -416,10 +415,10 @@ func TestSubscriptionEventsLetGo(t *testing.T) {
 	var events [][]*keeper
 	var found []bool // per event: whether its own rows, then the event before's, are in its table
 	srv := batchServer(db, func(ctx context.Context, rows []*keeper) {
-		_, _, _, own := gqlcore.Find(gqlcore.TableFromContext(ctx), unsafe.Pointer(rows[0]))
+		_, _, _, own := gqlcore.Find(gqlcore.TableFromContext(ctx), any(rows[0]))
 		found = append(found, own)
 		if len(events) > 0 {
-			_, _, _, old := gqlcore.Find(gqlcore.TableFromContext(ctx), unsafe.Pointer(events[len(events)-1][0]))
+			_, _, _, old := gqlcore.Find(gqlcore.TableFromContext(ctx), any(events[len(events)-1][0]))
 			found = append(found, old)
 		}
 		events = append(events, rows)

@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"slices"
 	"sync"
-	"unsafe"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -35,11 +34,10 @@ type Table struct {
 	scope func(context.Context) any
 
 	mu sync.Mutex
-	// rows maps a row's pointer to its group and its place in the group's
-	// rows. A row is keyed by its address alone: two rows of different
-	// entities never share one while either is held here, as the map keeps
-	// them alive, and no entity is the first field of another.
-	rows map[unsafe.Pointer]member
+	// rows maps a row, a *E in an any, to its group and its place in the
+	// group's rows. The key compares the pointer and its type, so rows of
+	// two entities never share one.
+	rows map[any]member
 	// selected are Selected's results, per field.
 	selected map[*ast.Field][]*selection
 }
@@ -62,7 +60,7 @@ type selection struct {
 // Group is a set of rows that one statement read: pointers to its rows, of
 // one entity.
 type Group struct {
-	rows []unsafe.Pointer
+	rows []any
 	mu   sync.Mutex
 	// batches are the group's batches, per edge field: one per field and
 	// selection, since two aliases are two fields.
@@ -127,12 +125,12 @@ func TableFromContext(ctx context.Context) *Table {
 // already in a group moves to this one. Add does nothing when ctx has no
 // table, or is in no gqlgen field: there nothing batches, and a context kept
 // long must not keep its rows.
-func Add(ctx context.Context, rows []unsafe.Pointer) {
+func Add(ctx context.Context, rows []any) {
 	t := TableFromContext(ctx)
 	if t == nil || len(rows) == 0 || graphql.GetFieldContext(ctx) == nil {
 		return
 	}
-	rows = slices.DeleteFunc(slices.Clone(rows), func(x unsafe.Pointer) bool { return x == nil })
+	rows = slices.DeleteFunc(slices.Clone(rows), nilRow)
 	if len(rows) == 0 {
 		return
 	}
@@ -140,16 +138,25 @@ func Add(ctx context.Context, rows []unsafe.Pointer) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.rows == nil {
-		t.rows = make(map[unsafe.Pointer]member, len(rows))
+		t.rows = make(map[any]member, len(rows))
 	}
 	for i, x := range rows {
 		t.rows[x] = member{g, i}
 	}
 }
 
+// nilRow reports whether x is no row: nil, or a nil pointer.
+func nilRow(x any) bool {
+	if x == nil {
+		return true
+	}
+	v := reflect.ValueOf(x)
+	return v.Kind() == reflect.Pointer && v.IsNil()
+}
+
 // Find returns x's group, the group's rows and x's index in them; ok is
 // false when t is nil or x is in no group.
-func Find(t *Table, x unsafe.Pointer) (g *Group, rows []unsafe.Pointer, i int, ok bool) {
+func Find(t *Table, x any) (g *Group, rows []any, i int, ok bool) {
 	if t == nil || x == nil {
 		return nil, nil, 0, false
 	}

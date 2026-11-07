@@ -17,8 +17,9 @@ import (
 // conditions are made with, keyed by column and relation indexes. For
 // generated code. Code that handles every entity alike, such as
 // velox-graphql's runtime, is compiled once on it, where the typed API would
-// be compiled once per entity. TableOf returns an entity's. A row is an
-// unsafe.Pointer to an E; TableRows is a run of them.
+// be compiled once per entity. TableOf returns an entity's. A row is a *E
+// in an any, and every method that takes one checks it is of the Table's
+// entity; TableRows is a run of them.
 //
 // The zero Table is no entity: its queries fail.
 //
@@ -26,21 +27,20 @@ import (
 //
 //	Info() *EntityInfo // the entity's metadata; nil with Err
 //	Err() error // the metadata's error
-//	Field(p unsafe.Pointer, col int) any // a pointer to column col's field of the row at p
-//	Value(p unsafe.Pointer, col int) any // that field's value
-//	Ptr(p unsafe.Pointer) any // the row at p as an *E
-//	New() unsafe.Pointer // a new zero row
-//	Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Pointer) error // Rel.Fill
-//	Filled(owner unsafe.Pointer, edge int, target Table) (unsafe.Pointer, bool) // Rel.Filled
+//	Field(row any, col int) any // a pointer to column col's field of row; nil for another row
+//	Value(row any, col int) any // that field's value
+//	New() any // a new zero row, a *E
+//	Fill(owner any, edge int, target Table, row any) error // Rel.Fill
+//	Filled(owner any, edge int, target Table) (any, bool) // Rel.Filled
 //	Pred(col int, op PredOp, v any) Predicate // a condition on column col
 //	Has(edge int, target Table, ps ...Predicate) Predicate // Rel.HasWith
-//	Of(edge int, target Table, owners ...unsafe.Pointer) Predicate // Rel.Of
+//	Of(edge int, target Table, owners ...any) Predicate // Rel.Of
 //	HasRowFilter() bool // Meta.HasRowFilter
 //	Convert(col int, v any) (any, error) // v as column col's Go type, from one of the same kind
 //	NewRows(n int) TableRows // n new zero rows, for InsertRows
-//	SetField(p unsafe.Pointer, col int, v any) error // sets a field, v converted as Convert does
+//	SetField(row any, col int, v any) error // sets a field, v converted as Convert does
 //	Assign(col int, v any) (Assignment, error) // a handle's Set, untyped; nil is SetNull
-//	Validate(p unsafe.Pointer, cols ...int) error // Validate
+//	Validate(row any, cols ...int) error // Validate
 //	ValidateSet(set ...Assignment) error // ValidateSet
 type Table = engine.Table
 
@@ -51,7 +51,7 @@ type Table = engine.Table
 // Its methods:
 //
 //	Len() int // the number of rows
-//	At(i int) unsafe.Pointer // row i; it panics out of range
+//	At(i int) any // row i, a *E into the rows; it panics out of range
 type TableRows = engine.TableRows
 
 // PredOp is the operator of an untyped condition on a column (Table.Pred).
@@ -81,12 +81,11 @@ const (
 // through the same pipeline, so the policies, a scope, the hooks, routing and
 // the errors are the same; DB.QueryTable starts one, Untyped makes one of a
 // Query and Typed a Query of one. Like a Query it is a value: each chaining
-// method returns a new TableQuery. Its rows are unsafe.Pointers to the
-// entity, and its columns and relations are indexes, as Statement numbers
-// them.
+// method returns a new TableQuery. Its rows are *E in an any, and its
+// columns and relations are indexes, as Statement numbers them.
 //
 // Its methods are Query's of the same names, with columns and relations by
-// index and rows as unsafe.Pointers:
+// index and rows as *E in an any:
 //
 //	Table() Table
 //	Where(ps ...Predicate) TableQuery
@@ -101,17 +100,17 @@ const (
 //	Writable() TableQuery
 //	Columns(cs ...int) TableQuery
 //	Selects(cs ...int) bool
-//	After(p unsafe.Pointer) TableQuery
+//	After(row any) TableQuery
 //	Join(edge int, target Table) TableQuery
 //	LeftJoin(edge int, target Table) TableQuery
 //	All(ctx context.Context) (TableRows, error)
-//	One(ctx context.Context) (unsafe.Pointer, error)
-//	First(ctx context.Context) (unsafe.Pointer, error)
+//	One(ctx context.Context) (any, error)
+//	First(ctx context.Context) (any, error)
 //	Count(ctx context.Context) (int64, error)
 //	Exists(ctx context.Context) (bool, error)
 //	SQL(ctx context.Context) (string, []any, error)
-//	LoadEach(ctx context.Context, owner Table, edge, each int, owners []unsafe.Pointer) ([]TableRows, error)
-//	CountEach(ctx context.Context, owner Table, edge int, owners []unsafe.Pointer) ([]int64, error)
+//	LoadEach(ctx context.Context, owner Table, edge, each int, owners []any) ([]TableRows, error)
+//	CountEach(ctx context.Context, owner Table, edge int, owners []any) ([]int64, error)
 type TableQuery = engine.TableQuery
 
 // tableState is the part of a Meta that holds its Table, built on the first
@@ -254,10 +253,10 @@ type TableUpdate = engine.TableUpdate
 //	SQL(ctx context.Context) (string, []any, error)
 type TableDelete = engine.TableDelete
 
-// InsertTable starts an INSERT of the row at p, of t's entity: Insert,
-// untyped. For generated code. See TableInsert.
-func (db *DB) InsertTable(t Table, p unsafe.Pointer) TableInsert {
-	return engine.InsertTable(&db.e, t, p)
+// InsertTable starts an INSERT of row, a *E of t's entity: Insert, untyped.
+// For generated code. Another row fails the insert. See TableInsert.
+func (db *DB) InsertTable(t Table, row any) TableInsert {
+	return engine.InsertTable(&db.e, t, row)
 }
 
 // InsertRows starts an INSERT of every row of rows, of t's entity: InsertAll,

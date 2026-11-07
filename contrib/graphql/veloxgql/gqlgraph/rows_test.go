@@ -11,39 +11,24 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
-// TestRowsAreChecked: a row passes into the untyped runtime as its pointer
-// only when it is a row of the Conn's entity; another type panics. With no
-// Table, whose statements fail, only its kind is checked. The rows come back
-// as *E and []*E of the entity, holding the same pointers.
+// TestRowsAreChecked: a row passes through the untyped runtime as a *E in an
+// any, and a nil pointer is no row. The rows come back as []*E of the
+// entity, holding the same pointers; with no Table there is no slice.
 func TestRowsAreChecked(t *testing.T) {
 	people := gqlgraph.TableType[person]("Person")
 	x := &person{ID: 7}
-	if p := gqlgraph.RowOf(people, x); p == nil || gqlgraph.NodeOf(people, p) != any(x) {
-		t.Errorf("RowOf, NodeOf of a person = %v", p)
+	if gqlgraph.RowOf(x) != any(x) || gqlgraph.RowOf(nil) != nil || gqlgraph.RowOf((*person)(nil)) != nil {
+		t.Error("RowOf")
 	}
-	if gqlgraph.RowOf(people, nil) != nil || gqlgraph.NodeOf(people, nil) != nil {
-		t.Error("RowOf or NodeOf of nil is not nil")
-	}
-	panics := func(name string, c *gqlgraph.Type, x any) {
-		t.Helper()
-		defer func() {
-			if r := recover(); r == nil || !strings.Contains(r.(string), "is not a row") {
-				t.Errorf("%s: recovered %v", name, r)
-			}
-		}()
-		gqlgraph.RowOf(c, x)
-	}
-	panics("another entity", people, &post{})
-	panics("no pointer", &gqlgraph.Type{Name: "None"}, person{})
-	if p := gqlgraph.RowOf(&gqlgraph.Type{Name: "None"}, x); p == nil {
-		t.Error("RowOf with no Table: nil")
-	}
-	ps := gqlgraph.NodesOf(people, []any{gqlgraph.RowOf(people, x), gqlgraph.RowOf(people, x)})
+	ps := gqlgraph.NodesOf(people, []any{x, x})
 	if rows, ok := ps.([]*person); !ok || len(rows) != 2 || rows[0] != x || rows[1] != x {
 		t.Errorf("NodesOf = %#v", ps)
 	}
 	if rows, ok := gqlgraph.NodesOf(people, nil).([]*person); !ok || rows == nil || len(rows) != 0 {
 		t.Errorf("NodesOf of none = %#v", rows)
+	}
+	if v := gqlgraph.NodesOf(&gqlgraph.Type{Name: "None"}, nil); v != nil {
+		t.Errorf("NodesOf of none with no Table = %#v", v)
 	}
 }
 
@@ -64,6 +49,12 @@ func TestEdgeErrors(t *testing.T) {
 		t.Errorf("Paginate of an edge with no DB = %v, %v", c, err)
 	}
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
+	// A row of another entity than the owner's fails the edge's read, with
+	// an error and no panic.
+	wrong := gqlgraph.TableType[child]("Child").Edge(&owner{ID: 1}, int(children.Owner.I))
+	if v, err := gqlgraph.EdgeOne(ctx, gqlgraph.TableType[owner]("Owner"), wrong); v != nil || err == nil || !strings.Contains(err.Error(), "a row is a non-nil") {
+		t.Errorf("EdgeOne of a row of another entity = %v, %v", v, err)
+	}
 	none := &gqlgraph.Type{Name: "None"} // an owner with no Table
 	if v, err := gqlgraph.EdgeOne(ctx, gqlgraph.TableType[owner]("Owner"), none.Edge(x, int(children.Owner.I))); v != nil || err == nil {
 		t.Errorf("EdgeOne of an owner with no Table = %v, %v", v, err)

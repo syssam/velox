@@ -82,21 +82,20 @@ Statement.Writable bool
 Table.Assign(col int, v any) (Assignment, error)
 Table.Convert(col int, v any) (any, error)
 Table.Err() error
-Table.Field(p unsafe.Pointer, col int) any
-Table.Fill(owner unsafe.Pointer, edge int, target Table, row unsafe.Pointer) error
-Table.Filled(owner unsafe.Pointer, edge int, target Table) (unsafe.Pointer, bool)
+Table.Field(row any, col int) any
+Table.Fill(owner any, edge int, target Table, row any) error
+Table.Filled(owner any, edge int, target Table) (any, bool)
 Table.Has(edge int, target Table, ps ...Predicate) Predicate
 Table.HasRowFilter() bool
 Table.Info() *EntityInfo
-Table.New() unsafe.Pointer
+Table.New() any
 Table.NewRows(n int) TableRows
-Table.Of(edge int, target Table, owners ...unsafe.Pointer) Predicate
+Table.Of(edge int, target Table, owners ...any) Predicate
 Table.Pred(col int, op PredOp, v any) Predicate
-Table.Ptr(p unsafe.Pointer) any
-Table.SetField(p unsafe.Pointer, col int, v any) error
-Table.Validate(p unsafe.Pointer, cols ...int) error
+Table.SetField(row any, col int, v any) error
+Table.Validate(row any, cols ...int) error
 Table.ValidateSet(set ...Assignment) error
-Table.Value(p unsafe.Pointer, col int) any
+Table.Value(row any, col int) any
 TableDelete.All() TableDelete
 TableDelete.Exec(ctx context.Context) (int64, error)
 TableDelete.SQL(ctx context.Context) (string, []any, error)
@@ -106,22 +105,22 @@ TableInsert.Exec(ctx context.Context) error
 TableInsert.OnConflict(cols ...int) TableInsert
 TableInsert.SQL(ctx context.Context) (string, []any, error)
 TableInsert.Update(cols ...int) TableInsert
-TableQuery.After(p unsafe.Pointer) TableQuery
+TableQuery.After(row any) TableQuery
 TableQuery.All(ctx context.Context) (TableRows, error)
 TableQuery.Columns(cs ...int) TableQuery
 TableQuery.Count(ctx context.Context) (int64, error)
-TableQuery.CountEach(ctx context.Context, owner Table, edge int, owners []unsafe.Pointer) ([]int64, error)
+TableQuery.CountEach(ctx context.Context, owner Table, edge int, owners []any) ([]int64, error)
 TableQuery.Exists(ctx context.Context) (bool, error)
-TableQuery.First(ctx context.Context) (unsafe.Pointer, error)
+TableQuery.First(ctx context.Context) (any, error)
 TableQuery.ForShare() TableQuery
 TableQuery.ForUpdate() TableQuery
 TableQuery.Join(edge int, target Table) TableQuery
 TableQuery.LeftJoin(edge int, target Table) TableQuery
 TableQuery.Limit(n int) TableQuery
-TableQuery.LoadEach(ctx context.Context, owner Table, edge, each int, owners []unsafe.Pointer) ([]TableRows, error)
+TableQuery.LoadEach(ctx context.Context, owner Table, edge, each int, owners []any) ([]TableRows, error)
 TableQuery.MaxRows(n int) TableQuery
 TableQuery.Offset(n int) TableQuery
-TableQuery.One(ctx context.Context) (unsafe.Pointer, error)
+TableQuery.One(ctx context.Context) (any, error)
 TableQuery.OrderBy(os ...OrderTerm) TableQuery
 TableQuery.Ordered() bool
 TableQuery.SQL(ctx context.Context) (string, []any, error)
@@ -130,7 +129,7 @@ TableQuery.Table() Table
 TableQuery.Unbounded() TableQuery
 TableQuery.Where(ps ...Predicate) TableQuery
 TableQuery.Writable() TableQuery
-TableRows.At(i int) unsafe.Pointer
+TableRows.At(i int) any
 TableRows.Len() int
 TableUpdate.All() TableUpdate
 TableUpdate.Assign(as ...Assignment) TableUpdate
@@ -317,7 +316,7 @@ func (db *DB) Dialect() Dialect
 func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error)
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E]
 func (db *DB) InsertRows(t Table, rows TableRows) TableInsert
-func (db *DB) InsertTable(t Table, p unsafe.Pointer) TableInsert
+func (db *DB) InsertTable(t Table, row any) TableInsert
 func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E]
 func (db *DB) QueryTable(t Table) TableQuery
 func (db *DB) Query[E any, PE Entity[E]]() Query[E]
