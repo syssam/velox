@@ -33,36 +33,15 @@ func renameIdent(d velox.Dialect, expr, from, to string) string {
 	var b strings.Builder
 	for i := 0; i < len(expr); {
 		c := expr[i]
+		if j := stringAt(d, expr, i); j > 0 {
+			b.WriteString(expr[i:j])
+			i = j
+			continue
+		}
 		switch {
-		case c == '\'' || c == '"' && d == velox.MySQL: // a string literal
-			j := stringEnd(expr, i, d == velox.MySQL)
-			b.WriteString(expr[i:j])
-			i = j
-		case d == velox.Postgres && (c == 'E' || c == 'e') && i+1 < len(expr) && expr[i+1] == '\'' &&
-			(i == 0 || !wordByte(expr[i-1])): // an escape string
-			j := stringEnd(expr, i+1, true)
-			b.WriteString(expr[i:j])
-			i = j
-		case d == velox.Postgres && c == '$' && dollarEnd(expr, i) > 0: // a dollar-quoted string
-			j := dollarEnd(expr, i)
-			b.WriteString(expr[i:j])
-			i = j
 		case c == '"' || c == '`' && d != velox.Postgres: // a quoted identifier
-			j, name := i+1, strings.Builder{}
-			for j < len(expr) {
-				if expr[j] == c {
-					if j+1 < len(expr) && expr[j+1] == c {
-						name.WriteByte(c)
-						j += 2
-						continue
-					}
-					break
-				}
-				name.WriteByte(expr[j])
-				j++
-			}
-			j = min(j+1, len(expr))
-			if same(name.String(), true) {
+			j, name := quotedIdent(expr, i)
+			if same(name, true) {
 				b.WriteString(ddl.Ident(d, to))
 			} else {
 				b.WriteString(expr[i:j])
@@ -74,13 +53,8 @@ func renameIdent(d velox.Dialect, expr, from, to string) string {
 				j++
 			}
 			word := expr[i:j]
-			k := j
-			for k < len(expr) && expr[k] == ' ' {
-				k++
-			}
-			isCall := k < len(expr) && expr[k] == '('
 			switch {
-			case c >= '0' && c <= '9', isCall, !same(word, false):
+			case c >= '0' && c <= '9', callAt(expr, j), !same(word, false):
 				b.WriteString(word)
 			case plainName(to):
 				b.WriteString(to)
@@ -94,6 +68,54 @@ func renameIdent(d velox.Dialect, expr, from, to string) string {
 		}
 	}
 	return b.String()
+}
+
+// stringAt is the index after the string literal that starts at expr[i],
+// or 0 when none does: a quoted string, a MySQL double-quoted one, and a
+// PostgreSQL escape or dollar-quoted one.
+func stringAt(d velox.Dialect, expr string, i int) int {
+	c := expr[i]
+	switch {
+	case c == '\'' || c == '"' && d == velox.MySQL: // a string literal
+		return stringEnd(expr, i, d == velox.MySQL)
+	case d != velox.Postgres:
+		return 0
+	case (c == 'E' || c == 'e') && i+1 < len(expr) && expr[i+1] == '\'' &&
+		(i == 0 || !wordByte(expr[i-1])): // an escape string
+		return stringEnd(expr, i+1, true)
+	case c == '$': // a dollar-quoted string
+		return dollarEnd(expr, i)
+	}
+	return 0
+}
+
+// quotedIdent reads the identifier quoted by expr[i]'s quote, a doubled
+// quote standing for one, and returns the index after it and its name.
+func quotedIdent(expr string, i int) (int, string) {
+	c := expr[i]
+	j, name := i+1, strings.Builder{}
+	for j < len(expr) {
+		if expr[j] == c {
+			if j+1 < len(expr) && expr[j+1] == c {
+				name.WriteByte(c)
+				j += 2
+				continue
+			}
+			break
+		}
+		name.WriteByte(expr[j])
+		j++
+	}
+	return min(j+1, len(expr)), name.String()
+}
+
+// callAt reports whether a '(' follows expr[j], past spaces: the word that
+// ends at j names a function.
+func callAt(expr string, j int) bool {
+	for j < len(expr) && expr[j] == ' ' {
+		j++
+	}
+	return j < len(expr) && expr[j] == '('
 }
 
 // stringEnd is the index after the string literal that starts with the quote

@@ -223,57 +223,93 @@ func (d *differ) keepKeysIndexed() {
 		if t == nil {
 			continue
 		}
-		ref, oref := u.Ref(), u.Ref()
-		if r, ok := d.fromRef[ref]; ok {
-			oref = r
-		}
-		dropped, late, keys := map[string]bool{}, map[string]bool{}, map[string]bool{}
-		for _, p := range d.out {
-			switch c := p.c.(type) {
-			case dropIndex:
-				if p.step == 1 && c.Table == oref {
-					dropped[c.Index.Name] = true
-				}
-				if p.step == 8 && c.Table == ref {
-					late[c.Index.Name] = true
-				}
-			case dropForeignKey:
-				if p.step == 1 && c.Table == oref {
-					keys[c.ForeignKey.Name] = true
-				}
-			}
-		}
+		ref := u.Ref()
+		oref := d.origRef(ref)
+		drops := d.plannedDrops(ref, oref)
 		for _, fk := range t.ForeignKeys {
-			name := fk.Name
-			rename := d.keyRename(ref, fk.Name)
-			if rename != nil {
-				name = rename.c.(renameConstraint).From
-			}
-			leads := func(cols []string) bool {
-				return len(cols) >= len(fk.Columns) && slices.Equal(cols[:len(fk.Columns)], fk.Columns)
-			}
-			if keys[name] || leads(t.PrimaryKey) || slices.ContainsFunc(t.Indexes, func(ix Index) bool {
-				return !dropped[ix.Name] && !late[ix.Name] && leads(ix.Columns)
-			}) {
-				continue
-			}
-			if !slices.ContainsFunc(t.Indexes, func(ix Index) bool { return dropped[ix.Name] && leads(ix.Columns) }) &&
-				slices.ContainsFunc(u.Indexes, func(ix Index) bool { return leads(ix.Columns) }) {
-				continue // the new index is made before the old one goes
-			}
-			if !slices.ContainsFunc(u.Indexes, func(ix Index) bool { return leads(ix.Columns) }) {
-				d.dropEarly(ref, oref, leads)
-			}
-			if rename != nil {
-				rename.c = nil
-			}
-			d.add(dropForeignKey{Table: oref, ForeignKey: *d.orig.table(oref).foreignKey(name)}, 1, 0, oref, 0, name)
-			if uf := u.foreignKey(fk.Name); uf != nil {
-				d.add(addForeignKey{Table: ref, ForeignKey: *uf}, 7, 2, ref, 0, uf.Name)
-			}
+			d.keepKeyIndexed(t, u, fk, oref, drops)
 		}
 	}
 	d.out = slices.DeleteFunc(d.out, func(p planned) bool { return p.c == nil })
+}
+
+// tableDrops holds, by name, what the plan drops of one table.
+type tableDrops struct {
+	early map[string]bool // indexes dropped in step 1
+	late  map[string]bool // indexes dropped in step 8
+	keys  map[string]bool // foreign keys dropped in step 1
+}
+
+// plannedDrops returns the indexes the plan drops in step 1 from table
+// oref and in step 8 from table ref, and the foreign keys it drops in step
+// 1 from oref.
+func (d *differ) plannedDrops(ref, oref TableRef) tableDrops {
+	dr := tableDrops{early: map[string]bool{}, late: map[string]bool{}, keys: map[string]bool{}}
+	for _, p := range d.out {
+		switch c := p.c.(type) {
+		case dropIndex:
+			if p.step == 1 && c.Table == oref {
+				dr.early[c.Index.Name] = true
+			}
+			if p.step == 8 && c.Table == ref {
+				dr.late[c.Index.Name] = true
+			}
+		case dropForeignKey:
+			if p.step == 1 && c.Table == oref {
+				dr.keys[c.ForeignKey.Name] = true
+			}
+		}
+	}
+	return dr
+}
+
+// keepKeyIndexed drops fk, a foreign key of t, in step 1 and adds u's key
+// of its name back in step 7 when the plan drops every index that covers
+// it; oref is t's name in from.
+func (d *differ) keepKeyIndexed(t, u *Table, fk ForeignKey, oref TableRef, dr tableDrops) {
+	ref := u.Ref()
+	name := fk.Name
+	rename := d.keyRename(ref, fk.Name)
+	if rename != nil {
+		name = rename.c.(renameConstraint).From
+	}
+	leads := func(cols []string) bool {
+		return len(cols) >= len(fk.Columns) && slices.Equal(cols[:len(fk.Columns)], fk.Columns)
+	}
+	if dr.keys[name] || keyStaysIndexed(t, u, leads, dr) {
+		return
+	}
+	if !slices.ContainsFunc(u.Indexes, func(ix Index) bool { return leads(ix.Columns) }) {
+		d.dropEarly(ref, oref, leads)
+	}
+	if rename != nil {
+		rename.c = nil
+	}
+	d.add(dropForeignKey{Table: oref, ForeignKey: *d.orig.table(oref).foreignKey(name)}, 1, 0, oref, 0, name)
+	if uf := u.foreignKey(fk.Name); uf != nil {
+		d.add(addForeignKey{Table: ref, ForeignKey: *uf}, 7, 2, ref, 0, uf.Name)
+	}
+}
+
+// keyStaysIndexed reports whether a key whose columns lead an index, as
+// leads reports, keeps one through the plan: t's primary key, an index of t
+// the plan keeps, or a new index of u made before the old one goes.
+func keyStaysIndexed(t, u *Table, leads func([]string) bool, dr tableDrops) bool {
+	if leads(t.PrimaryKey) || slices.ContainsFunc(t.Indexes, func(ix Index) bool {
+		return !dr.early[ix.Name] && !dr.late[ix.Name] && leads(ix.Columns)
+	}) {
+		return true
+	}
+	return !slices.ContainsFunc(t.Indexes, func(ix Index) bool { return dr.early[ix.Name] && leads(ix.Columns) }) &&
+		slices.ContainsFunc(u.Indexes, func(ix Index) bool { return leads(ix.Columns) })
+}
+
+// origRef returns the name in from of the table named ref in to.
+func (d *differ) origRef(ref TableRef) TableRef {
+	if r, ok := d.fromRef[ref]; ok {
+		return r
+	}
+	return ref
 }
 
 // dropEarly moves to step 1 the step 8 drops of table ref's indexes whose
@@ -366,14 +402,34 @@ func (d *differ) toHas(schema string, has func(*Table) bool) bool {
 // object as from does.
 func (d *differ) alterTable(t, u *Table) {
 	ref := u.Ref()
-	oref := ref
-	if r, ok := d.fromRef[ref]; ok {
-		oref = r
-	}
 	// ot holds from's names for the drops of step 1. An object renamed by
 	// definition is never dropped in step 1, so every object those drops
 	// name has its from name in mid, and ot has it.
-	ot := d.orig.table(oref)
+	a := tableAlter{ref: ref, oref: d.origRef(ref)}
+	a.ot = d.orig.table(a.oref)
+	gone := d.alterColumns(t, u)
+	if t.Comment != u.Comment {
+		d.add(setTableComment{Table: ref, From: t.Comment, To: u.Comment}, 5, 2, ref, 0, "")
+	}
+	if u.Collation != "" && t.Collation != u.Collation { // none stated: what is there stays
+		d.add(setTableCollation{Table: ref, From: t.Collation, To: u.Collation}, 5, 3, ref, 0, "")
+	}
+	d.alterIndexes(t, u, a, gone)
+	d.alterForeignKeys(t, u, a)
+	d.alterChecks(t, u, a)
+}
+
+// tableAlter names the table alterTable changes.
+type tableAlter struct {
+	ref  TableRef // its name in to
+	oref TableRef // its name in from
+	ot   *Table   // the table in from
+}
+
+// alterColumns adds, alters and drops t's columns to match u's, and
+// returns the names of those it drops.
+func (d *differ) alterColumns(t, u *Table) map[string]bool {
+	ref := u.Ref()
 	gone := map[string]bool{}
 	for i, uc := range u.Columns {
 		tc := t.column(uc.Name)
@@ -391,18 +447,18 @@ func (d *differ) alterTable(t, u *Table) {
 			d.add(dropColumn{Table: ref, Column: tc}, 6, 0, ref, i, "")
 		}
 	}
-	if t.Comment != u.Comment {
-		d.add(setTableComment{Table: ref, From: t.Comment, To: u.Comment}, 5, 2, ref, 0, "")
-	}
-	if u.Collation != "" && t.Collation != u.Collation { // none stated: what is there stays
-		d.add(setTableCollation{Table: ref, From: t.Collation, To: u.Collation}, 5, 3, ref, 0, "")
-	}
+	return gone
+}
 
+// alterIndexes adds, replaces and drops t's indexes to match u's; gone
+// names the columns the plan drops.
+func (d *differ) alterIndexes(t, u *Table, a tableAlter, gone map[string]bool) {
+	ref, oref := a.ref, a.oref
 	tu, ut := pairIndexes(t.Indexes, u.Indexes)
 	for j, ui := range u.Indexes {
 		ti := at(t.Indexes, ut[j])
 		if ti != nil && !sameIndex(*ti, ui) {
-			d.add(dropIndex{Table: oref, Index: d.origIndex(ref, ot, *ti)}, 1, 2, oref, 0, ti.Name)
+			d.add(dropIndex{Table: oref, Index: d.origIndex(ref, a.ot, *ti)}, 1, 2, oref, 0, ti.Name)
 		}
 		if ti == nil || !sameIndex(*ti, ui) {
 			d.add(addIndex{Table: ref, Index: ui}, 7, 0, ref, 0, ui.Name)
@@ -412,29 +468,40 @@ func (d *differ) alterTable(t, u *Table) {
 		if tu[k] >= 0 {
 			continue
 		}
-		// An index on a dropped column goes before it, and one whose name
-		// another table's index takes goes before that one is made; the
-		// others go after the adds, so a replacement exists first. MySQL
-		// drops an index with its last column, and shrinks one that keeps
-		// others, which then goes after the adds.
-		// A unique one it would keep unique over the others, so that goes
-		// first too.
-		onGone := slices.ContainsFunc(ti.Columns, func(c string) bool { return gone[c] })
-		if d.to.Dialect == velox.MySQL && !ti.Unique {
-			onGone = !slices.ContainsFunc(ti.Columns, func(c string) bool { return !gone[c] })
-		}
-		if onGone || d.nameTaken(ref, ti.Name) {
-			d.add(dropIndex{Table: oref, Index: d.origIndex(ref, ot, ti)}, 1, 2, oref, 0, ti.Name)
+		if d.dropIndexEarly(ref, ti, gone) {
+			d.add(dropIndex{Table: oref, Index: d.origIndex(ref, a.ot, ti)}, 1, 2, oref, 0, ti.Name)
 		} else {
 			d.add(dropIndex{Table: ref, Index: ti}, 8, 0, ref, 0, ti.Name)
 		}
 	}
+}
 
-	tu, ut = pairKeys(t.ForeignKeys, u.ForeignKeys)
+// dropIndexEarly reports whether ti, an index of table ref that to does not
+// have, is dropped in step 1 rather than step 8; gone names the columns the
+// plan drops.
+func (d *differ) dropIndexEarly(ref TableRef, ti Index, gone map[string]bool) bool {
+	// An index on a dropped column goes before it, and one whose name
+	// another table's index takes goes before that one is made; the
+	// others go after the adds, so a replacement exists first. MySQL
+	// drops an index with its last column, and shrinks one that keeps
+	// others, which then goes after the adds.
+	// A unique one it would keep unique over the others, so that goes
+	// first too.
+	onGone := slices.ContainsFunc(ti.Columns, func(c string) bool { return gone[c] })
+	if d.to.Dialect == velox.MySQL && !ti.Unique {
+		onGone = !slices.ContainsFunc(ti.Columns, func(c string) bool { return !gone[c] })
+	}
+	return onGone || d.nameTaken(ref, ti.Name)
+}
+
+// alterForeignKeys adds, replaces and drops t's foreign keys to match u's.
+func (d *differ) alterForeignKeys(t, u *Table, a tableAlter) {
+	ref, oref := a.ref, a.oref
+	tu, ut := pairKeys(t.ForeignKeys, u.ForeignKeys)
 	for j, uf := range u.ForeignKeys {
 		tf := at(t.ForeignKeys, ut[j])
 		if tf != nil && (!sameForeignKey(*tf, uf) || d.keyRetyped(ref, uf)) {
-			d.add(dropForeignKey{Table: oref, ForeignKey: d.origKey(ref, ot, *tf)}, 1, 0, oref, 0, tf.Name)
+			d.add(dropForeignKey{Table: oref, ForeignKey: d.origKey(ref, a.ot, *tf)}, 1, 0, oref, 0, tf.Name)
 			tf = nil
 		}
 		if tf == nil {
@@ -443,15 +510,19 @@ func (d *differ) alterTable(t, u *Table) {
 	}
 	for k, tf := range t.ForeignKeys {
 		if tu[k] < 0 {
-			d.add(dropForeignKey{Table: oref, ForeignKey: d.origKey(ref, ot, tf)}, 1, 0, oref, 0, tf.Name)
+			d.add(dropForeignKey{Table: oref, ForeignKey: d.origKey(ref, a.ot, tf)}, 1, 0, oref, 0, tf.Name)
 		}
 	}
+}
 
-	tu, ut = pairChecks(t.Checks, u.Checks)
+// alterChecks adds, replaces and drops t's checks to match u's.
+func (d *differ) alterChecks(t, u *Table, a tableAlter) {
+	ref, oref := a.ref, a.oref
+	tu, ut := pairChecks(t.Checks, u.Checks)
 	for j, uc := range u.Checks {
 		tc := at(t.Checks, ut[j])
 		if tc != nil && tc.Expr != uc.Expr {
-			d.add(dropCheck{Table: oref, Check: d.origCheck(ref, ot, *tc)}, 1, 1, oref, 0, tc.Name)
+			d.add(dropCheck{Table: oref, Check: d.origCheck(ref, a.ot, *tc)}, 1, 1, oref, 0, tc.Name)
 		}
 		if tc == nil || tc.Expr != uc.Expr {
 			d.add(addCheck{Table: ref, Check: uc}, 7, 1, ref, 0, uc.Name)
@@ -459,7 +530,7 @@ func (d *differ) alterTable(t, u *Table) {
 	}
 	for k, tc := range t.Checks {
 		if tu[k] < 0 {
-			d.add(dropCheck{Table: oref, Check: d.origCheck(ref, ot, tc)}, 1, 1, oref, 0, tc.Name)
+			d.add(dropCheck{Table: oref, Check: d.origCheck(ref, a.ot, tc)}, 1, 1, oref, 0, tc.Name)
 		}
 	}
 }
@@ -586,9 +657,7 @@ func (d *differ) origKey(ref TableRef, ot *Table, tf ForeignKey) ForeignKey {
 		return *ot.foreignKey(tf.Name)
 	}
 	tf.Columns, tf.RefColumns = d.fromCols(ref, tf.Columns), d.fromCols(tf.RefTable, tf.RefColumns)
-	if r, ok := d.fromRef[tf.RefTable]; ok {
-		tf.RefTable = r
-	}
+	tf.RefTable = d.origRef(tf.RefTable)
 	if i := slices.IndexFunc(ot.ForeignKeys, func(o ForeignKey) bool { return o.Name == "" && sameForeignKey(o, tf) }); i >= 0 {
 		return ot.ForeignKeys[i]
 	}

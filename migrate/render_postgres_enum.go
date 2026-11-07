@@ -65,13 +65,8 @@ func (r *renderer) addValues(i int, c alterEnum, added []string) {
 func (r *renderer) swapEnum(e Enum) ([]string, error) {
 	ref := e.ref()
 	typ := enumTypeName(ref)
-	for _, t := range r.to.Tables {
-		for _, c := range t.Columns {
-			if ct := pgTypeOf(c.Type); ct.array && ct.base == typ {
-				return nil, &Error{Object: colTarget(t.Ref(), c.Name), Code: "render",
-					Reason: "the column holds an array of the enum type " + ref.String() + ", and moving or removing a value replaces the type, which the array blocks; change the column to text[] in a plan before this one and back in one after, or only add values"}
-			}
-		}
+	if err := r.enumArrays(ref); err != nil {
+		return nil, err
 	}
 	old := TableRef{Schema: ref.Schema, Name: ddl.OldEnum(ref.Name)}
 	out := []string{
@@ -80,52 +75,86 @@ func (r *renderer) swapEnum(e Enum) ([]string, error) {
 	}
 	var alters, remake []string
 	for _, t := range r.to.Tables {
-		tref, tbl := t.Ref(), r.table(t.Ref())
-		var cols, actions []string
-		for _, c := range t.Columns {
-			if c.Type != typ {
-				continue
-			}
-			cols = append(cols, c.Name)
-			col := r.ident(c.Name)
-			if c.Default != "" {
-				actions = append(actions, "ALTER COLUMN "+col+" DROP DEFAULT")
-			}
-			actions = append(actions, "ALTER COLUMN "+col+" TYPE "+typ+" USING "+col+"::text::"+typ)
-			if c.Default != "" {
-				actions = append(actions, "ALTER COLUMN "+col+" SET DEFAULT "+c.Default)
-			}
+		cols, alter := r.enumColumns(t, typ)
+		if alter != "" {
+			alters = append(alters, alter)
 		}
-		if len(actions) > 0 {
-			alters = append(alters, "ALTER TABLE "+tbl+" "+strings.Join(actions, ", "))
-		}
-		casts := func(expr string) bool {
-			return expr != "" && (namesColumn(r.d, expr, ref.Name) || slices.ContainsFunc(cols, func(c string) bool { return namesColumn(r.d, expr, c) }))
-		}
-		for _, ck := range t.Checks {
-			if casts(ck.Expr) && !r.addsOnline(tref, ck.Name) {
-				out = append(out, "ALTER TABLE "+tbl+" DROP CONSTRAINT "+r.ident(ck.Name))
-				remake = append(remake, "ALTER TABLE "+tbl+" ADD CONSTRAINT "+r.ident(ck.Name)+" CHECK ("+ck.Expr+")")
-			}
-		}
-		var made []string
-		for _, ix := range t.Indexes {
-			if casts(ix.Where) && !r.addsOnline(tref, ix.Name) {
-				out = append(out, "DROP INDEX "+r.indexName(tref, ix.Name))
-				made = append(made, r.pgIndex(tref, ix, false))
-			}
-		}
-		// An index the online script drops later still stands here.
-		for _, c := range r.cs {
-			if d, ok := c.(dropIndex); ok && r.afterRename(d.Table) == tref && casts(d.Index.Where) && r.dropOnline(d) {
-				out = append(out, "DROP INDEX "+r.indexName(tref, d.Index.Name))
-			}
-		}
+		drops, checks, made := r.enumCasts(t, ref, cols)
+		out = append(out, drops...)
+		remake = append(remake, checks...)
 		remake = append(made, remake...)
 	}
 	out = append(out, alters...)
 	out = append(out, remake...)
 	return append(out, "DROP TYPE "+r.table(old)), nil
+}
+
+// enumArrays refuses the enum type ref when a column of to holds an array
+// of it.
+func (r *renderer) enumArrays(ref TableRef) error {
+	typ := enumTypeName(ref)
+	for _, t := range r.to.Tables {
+		for _, c := range t.Columns {
+			if ct := pgTypeOf(c.Type); ct.array && ct.base == typ {
+				return &Error{Object: colTarget(t.Ref(), c.Name), Code: "render",
+					Reason: "the column holds an array of the enum type " + ref.String() + ", and moving or removing a value replaces the type, which the array blocks; change the column to text[] in a plan before this one and back in one after, or only add values"}
+			}
+		}
+	}
+	return nil
+}
+
+// enumColumns returns the names of t's columns of the enum type typ, and
+// the ALTER TABLE that moves them to the new type, or "" when t has none.
+func (r *renderer) enumColumns(t Table, typ string) ([]string, string) {
+	var cols, actions []string
+	for _, c := range t.Columns {
+		if c.Type != typ {
+			continue
+		}
+		cols = append(cols, c.Name)
+		col := r.ident(c.Name)
+		if c.Default != "" {
+			actions = append(actions, "ALTER COLUMN "+col+" DROP DEFAULT")
+		}
+		actions = append(actions, "ALTER COLUMN "+col+" TYPE "+typ+" USING "+col+"::text::"+typ)
+		if c.Default != "" {
+			actions = append(actions, "ALTER COLUMN "+col+" SET DEFAULT "+c.Default)
+		}
+	}
+	if len(actions) == 0 {
+		return cols, ""
+	}
+	return cols, "ALTER TABLE " + r.table(t.Ref()) + " " + strings.Join(actions, ", ")
+}
+
+// enumCasts returns the statements that drop t's checks and partial
+// indexes that name the enum type ref or one of cols, and those that make
+// the checks and the indexes again.
+func (r *renderer) enumCasts(t Table, ref TableRef, cols []string) (drops, checks, made []string) {
+	tref, tbl := t.Ref(), r.table(t.Ref())
+	casts := func(expr string) bool {
+		return expr != "" && (namesColumn(r.d, expr, ref.Name) || slices.ContainsFunc(cols, func(c string) bool { return namesColumn(r.d, expr, c) }))
+	}
+	for _, ck := range t.Checks {
+		if casts(ck.Expr) && !r.addsOnline(tref, ck.Name) {
+			drops = append(drops, "ALTER TABLE "+tbl+" DROP CONSTRAINT "+r.ident(ck.Name))
+			checks = append(checks, "ALTER TABLE "+tbl+" ADD CONSTRAINT "+r.ident(ck.Name)+" CHECK ("+ck.Expr+")")
+		}
+	}
+	for _, ix := range t.Indexes {
+		if casts(ix.Where) && !r.addsOnline(tref, ix.Name) {
+			drops = append(drops, "DROP INDEX "+r.indexName(tref, ix.Name))
+			made = append(made, r.pgIndex(tref, ix, false))
+		}
+	}
+	// An index the online script drops later still stands here.
+	for _, c := range r.cs {
+		if d, ok := c.(dropIndex); ok && r.afterRename(d.Table) == tref && casts(d.Index.Where) && r.dropOnline(d) {
+			drops = append(drops, "DROP INDEX "+r.indexName(tref, d.Index.Name))
+		}
+	}
+	return drops, checks, made
 }
 
 // addsOnline reports whether the online script adds the index or check

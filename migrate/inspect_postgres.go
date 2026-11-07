@@ -269,97 +269,128 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 	names := map[int]string{}
 	err := r.each(pgColumnsQuery, []any{pt.oid}, func(rows *sql.Rows) error {
 		var (
-			num                                       int
-			c                                         Column
-			typ, typtype, tnsp, tname, def            string
-			identity, generated, seqNsp, seqName, reg string
-			collation, ext, over, domain              string
-			storage, compression, notValid            string
-			typOID, start, increment                  int64
-			notNull                                   bool
+			a       pgAttr
+			num     int
+			c       Column
+			notNull bool
 		)
-		if err := rows.Scan(&num, &c.Name, &typ, &typtype, &typOID, &tnsp, &tname, &notNull, &def,
-			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg, &start, &increment, &collation, &ext, &over, &domain, &storage, &compression, &notValid); err != nil {
+		if err := rows.Scan(&num, &c.Name, &a.typ, &a.typtype, &a.typOID, &a.tnsp, &a.tname, &notNull, &a.def,
+			&a.identity, &a.generated, &c.Comment, &a.seqNsp, &a.seqName, &a.reg, &a.start, &a.increment,
+			&a.collation, &a.ext, &a.over, &a.domain, &a.storage, &a.compression, &a.notValid); err != nil {
 			return err
 		}
-		if collation != "" {
-			r.note(pt, c.Name, "the column has COLLATE "+collation+", which the model cannot hold; it is compared without")
-			r.notes[len(r.notes)-1].keeps = []keep{{"COLLATE " + collation, []string{"COLLATE"}}}
-		}
-		if name := pgStorages[storage]; name != "" {
-			r.note(pt, c.Name, "the column has STORAGE "+name+", which the model cannot hold; it is compared without")
-			r.notes[len(r.notes)-1].keeps = []keep{{"STORAGE " + name, []string{"STORAGE"}}}
-		}
-		if name := pgCompressions[compression]; name != "" {
-			r.note(pt, c.Name, "the column has COMPRESSION "+name+", which the model cannot hold; it is compared without")
-			r.notes[len(r.notes)-1].keeps = []keep{{"COMPRESSION " + name, []string{"COMPRESSION"}}}
-		}
+		r.unheldNotes(pt, c.Name, a)
 		names[num] = c.Name
 		c.Nullable = !notNull
-		if notValid != "" {
+		if a.notValid != "" {
 			// attnotnull is set, but the rows from before the constraint
 			// may hold NULL.
 			c.Nullable = true
-			r.note(pt, c.Name, "the column's NOT NULL is the constraint "+notValid+", which is NOT VALID: the rows from before it are not checked, so the column is read as nullable; VALIDATE CONSTRAINT checks them")
+			r.note(pt, c.Name, "the column's NOT NULL is the constraint "+a.notValid+", which is NOT VALID: the rows from before it are not checked, so the column is read as nullable; VALIDATE CONSTRAINT checks them")
 		}
-		c.Type = ddl.NormalizeType(velox.Postgres, typ)
-		if typtype == "e" {
-			ref := TableRef{Schema: r.schema(tnsp), Name: tname}
-			c.Type = ddl.EnumType(ref.Schema, ref.Name)
-			r.enums[typOID] = ref
-			if pt.enums == nil {
-				pt.enums = map[string]string{}
-			}
-			pt.enums[c.Name] = typ
+		c.Type = r.columnType(pt, c.Name, a)
+		r.columnDefault(pt, &c, a)
+		if c.Sequence != "" && (a.start != 1 || a.increment != 1) {
+			r.baselineNote(pt, c.Name, "the sequence "+c.Sequence+" starts at "+strconv.FormatInt(a.start, 10)+
+				" and increments by "+strconv.FormatInt(a.increment, 10)+"; 0001_baseline.sql creates it with the defaults")
 		}
-		seq := seqName
-		if seqNsp != pt.schema {
-			seq = seqNsp + "." + seqName
-		}
-		switch {
-		case identity != "":
-			c.Identity = true
-			c.Sequence = seq
-			if identity == "a" {
-				r.note(pt, c.Name, "the column is GENERATED ALWAYS AS IDENTITY, which the model holds as BY DEFAULT: a value given on insert is refused")
-			}
-		case generated != "":
-			r.note(pt, c.Name, "the column is generated from an expression, which the model cannot hold")
-		default:
-			c.Default = normalizeDefault(velox.Postgres, def)
-			// A serial: the default is nextval of the sequence it owns.
-			if seqName != "" && c.Default == "nextval("+ddl.Literal(velox.Postgres, reg)+")" {
-				c.Sequence = seq
-			}
-		}
-		if c.Sequence != "" && (start != 1 || increment != 1) {
-			r.baselineNote(pt, c.Name, "the sequence "+c.Sequence+" starts at "+strconv.FormatInt(start, 10)+
-				" and increments by "+strconv.FormatInt(increment, 10)+"; 0001_baseline.sql creates it with the defaults")
-		}
-		if ext != "" && !pt.exts[ext] {
-			if pt.exts == nil {
-				pt.exts = map[string]bool{}
-			}
-			pt.exts[ext] = true
-			from := " comes from the extension " + ext
-			if over != "" {
-				from = " is over " + over + ", from the extension " + ext
-			}
-			r.baselineNote(pt, "", "the type "+c.Type+from+"; add CREATE EXTENSION "+ext+
-				" to 0001_baseline.sql before the tables, then run migrate hash")
-		}
-		if domain != "" && !pt.domains[domain] {
-			if pt.domains == nil {
-				pt.domains = map[string]bool{}
-			}
-			pt.domains[domain] = true
-			r.baselineNote(pt, "", "the type "+domain+" is a domain, which 0001_baseline.sql does not create; add its CREATE DOMAIN"+
-				" before the tables, then run migrate hash")
-		}
+		r.typeNotes(pt, c.Type, a)
 		pt.t.Columns = append(pt.t.Columns, c)
 		return nil
 	})
 	return names, err
+}
+
+// pgAttr holds what pgColumnsQuery reads of a column beyond the Column
+// fields it scans straight into.
+type pgAttr struct {
+	typ, typtype, tnsp, tname, def            string
+	identity, generated, seqNsp, seqName, reg string
+	collation, ext, over, domain              string
+	storage, compression, notValid            string
+	typOID, start, increment                  int64
+}
+
+// unheldNotes notes the collation, storage and compression of the column
+// col that the model cannot hold.
+func (r *pgReader) unheldNotes(pt *pgTable, col string, a pgAttr) {
+	if a.collation != "" {
+		r.note(pt, col, "the column has COLLATE "+a.collation+", which the model cannot hold; it is compared without")
+		r.notes[len(r.notes)-1].keeps = []keep{{"COLLATE " + a.collation, []string{"COLLATE"}}}
+	}
+	if name := pgStorages[a.storage]; name != "" {
+		r.note(pt, col, "the column has STORAGE "+name+", which the model cannot hold; it is compared without")
+		r.notes[len(r.notes)-1].keeps = []keep{{"STORAGE " + name, []string{"STORAGE"}}}
+	}
+	if name := pgCompressions[a.compression]; name != "" {
+		r.note(pt, col, "the column has COMPRESSION "+name+", which the model cannot hold; it is compared without")
+		r.notes[len(r.notes)-1].keeps = []keep{{"COMPRESSION " + name, []string{"COMPRESSION"}}}
+	}
+}
+
+// columnType returns the model's type of the column col, and records an
+// enum type it uses.
+func (r *pgReader) columnType(pt *pgTable, col string, a pgAttr) string {
+	if a.typtype != "e" {
+		return ddl.NormalizeType(velox.Postgres, a.typ)
+	}
+	ref := TableRef{Schema: r.schema(a.tnsp), Name: a.tname}
+	r.enums[a.typOID] = ref
+	if pt.enums == nil {
+		pt.enums = map[string]string{}
+	}
+	pt.enums[col] = a.typ
+	return ddl.EnumType(ref.Schema, ref.Name)
+}
+
+// columnDefault sets c's identity, default and sequence, and notes an
+// identity or generation the model cannot hold.
+func (r *pgReader) columnDefault(pt *pgTable, c *Column, a pgAttr) {
+	seq := a.seqName
+	if a.seqNsp != pt.schema {
+		seq = a.seqNsp + "." + a.seqName
+	}
+	switch {
+	case a.identity != "":
+		c.Identity = true
+		c.Sequence = seq
+		if a.identity == "a" {
+			r.note(pt, c.Name, "the column is GENERATED ALWAYS AS IDENTITY, which the model holds as BY DEFAULT: a value given on insert is refused")
+		}
+	case a.generated != "":
+		r.note(pt, c.Name, "the column is generated from an expression, which the model cannot hold")
+	default:
+		c.Default = normalizeDefault(velox.Postgres, a.def)
+		// A serial: the default is nextval of the sequence it owns.
+		if a.seqName != "" && c.Default == "nextval("+ddl.Literal(velox.Postgres, a.reg)+")" {
+			c.Sequence = seq
+		}
+	}
+}
+
+// typeNotes adds a baseline note for an extension's type, typ, once per
+// extension, and for a domain, once per domain.
+func (r *pgReader) typeNotes(pt *pgTable, typ string, a pgAttr) {
+	if a.ext != "" && !pt.exts[a.ext] {
+		if pt.exts == nil {
+			pt.exts = map[string]bool{}
+		}
+		pt.exts[a.ext] = true
+		from := " comes from the extension " + a.ext
+		if a.over != "" {
+			from = " is over " + a.over + ", from the extension " + a.ext
+		}
+		r.baselineNote(pt, "", "the type "+typ+from+"; add CREATE EXTENSION "+a.ext+
+			" to 0001_baseline.sql before the tables, then run migrate hash")
+	}
+	if a.domain != "" && !pt.domains[a.domain] {
+		if pt.domains == nil {
+			pt.domains = map[string]bool{}
+		}
+		pt.domains[a.domain] = true
+		r.baselineNote(pt, "", "the type "+a.domain+" is a domain, which 0001_baseline.sql does not create; add its CREATE DOMAIN"+
+			" before the tables, then run migrate hash")
+	}
 }
 
 // The indexes but those of exclusion constraints. The primary key's is read

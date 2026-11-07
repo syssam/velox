@@ -434,84 +434,94 @@ func (p *ctParser) definition() bool {
 		return false
 	}
 	p.cols = append(p.cols, col)
-	// The type: names, then perhaps (n) or (n, m).
-	for t := p.peek(); (t.kind == 'w' || t.kind == 'q' || t.kind == 's') && !columnKeyword(t); t = p.peek() {
-		p.i++
-	}
-	if p.peek().is("(") {
-		if _, _, ok := p.group(); !ok {
-			return false
-		}
+	if !p.columnType() {
+		return false
 	}
 	name := ""
 	for t := p.peek(); !t.is(",") && !t.is(")"); t = p.peek() {
 		if p.done() {
 			return false
 		}
-		named := name
-		name = ""
-		switch {
-		case p.word("CONSTRAINT"):
-			if name, ok = p.name(); !ok {
-				return false
-			}
-		case p.word("PRIMARY"):
-			if !p.word("KEY") {
-				return false
-			}
-			if p.word("DESC") {
-				p.ct.keyDesc = true
-			} else {
-				p.word("ASC")
-			}
-			if !p.conflict() {
-				return false
-			}
-			if p.word("AUTOINCREMENT") {
-				p.ct.autoincrement = true
-			}
-		case p.word("NOT"):
-			if !p.word("NULL") || !p.conflict() {
-				return false
-			}
-		case p.word("NULL"), p.word("UNIQUE"):
-			if !p.conflict() {
-				return false
-			}
-		case p.word("CHECK"):
-			from, to, ok := p.group()
-			if !ok {
-				return false
-			}
-			p.checks = append(p.checks, textCheck{named, from, to})
-		case p.word("DEFAULT"):
-			from := p.i
-			if !p.defaultValue() {
-				return false
-			}
-			p.defaults[col] = [2]int{from, p.i}
-		case p.word("COLLATE"):
-			coll, ok := p.name()
-			if !ok {
-				return false
-			}
-			p.ct.collations[col] = coll
-		case p.word("REFERENCES"):
-			if !p.references([]string{col}, named) {
-				return false
-			}
-		case p.word("GENERATED"):
-			if !p.word("ALWAYS") || !p.peek().word("AS") {
-				return false
-			}
-		case p.word("AS"):
-			if _, _, ok := p.group(); !ok {
-				return false
-			}
-			p.word("STORED", "VIRTUAL")
-		default:
+		if name, ok = p.columnConstraint(col, name); !ok {
 			return false
 		}
+	}
+	return true
+}
+
+// columnType takes a column's type: names, then perhaps (n) or (n, m).
+func (p *ctParser) columnType() bool {
+	for t := p.peek(); (t.kind == 'w' || t.kind == 'q' || t.kind == 's') && !columnKeyword(t); t = p.peek() {
+		p.i++
+	}
+	if !p.peek().is("(") {
+		return true
+	}
+	_, _, ok := p.group()
+	return ok
+}
+
+// columnConstraint takes one constraint of the column col, or the
+// CONSTRAINT name that comes before one; named is the name taken just
+// before it. It returns the name it takes, or "".
+func (p *ctParser) columnConstraint(col, named string) (string, bool) {
+	switch {
+	case p.word("CONSTRAINT"):
+		return p.name()
+	case p.word("PRIMARY"):
+		return "", p.columnKey()
+	case p.word("NOT"):
+		return "", p.word("NULL") && p.conflict()
+	case p.word("NULL"), p.word("UNIQUE"):
+		return "", p.conflict()
+	case p.word("CHECK"):
+		from, to, ok := p.group()
+		if ok {
+			p.checks = append(p.checks, textCheck{named, from, to})
+		}
+		return "", ok
+	case p.word("DEFAULT"):
+		from := p.i
+		if !p.defaultValue() {
+			return "", false
+		}
+		p.defaults[col] = [2]int{from, p.i}
+		return "", true
+	case p.word("COLLATE"):
+		coll, ok := p.name()
+		if ok {
+			p.ct.collations[col] = coll
+		}
+		return "", ok
+	case p.word("REFERENCES"):
+		return "", p.references([]string{col}, named)
+	case p.word("GENERATED"):
+		return "", p.word("ALWAYS") && p.peek().word("AS")
+	case p.word("AS"):
+		if _, _, ok := p.group(); !ok {
+			return "", false
+		}
+		p.word("STORED", "VIRTUAL")
+		return "", true
+	}
+	return "", false
+}
+
+// columnKey takes the rest of a column's PRIMARY KEY, after PRIMARY.
+func (p *ctParser) columnKey() bool {
+	if !p.word("KEY") {
+		return false
+	}
+	if p.word("DESC") {
+		p.ct.keyDesc = true
+	} else {
+		p.word("ASC")
+	}
+	if !p.conflict() {
+		return false
+	}
+	if p.word("AUTOINCREMENT") {
+		p.ct.autoincrement = true
 	}
 	return true
 }
