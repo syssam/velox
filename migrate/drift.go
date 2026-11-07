@@ -179,9 +179,30 @@ func (c *drifter) warn(object, format string, args ...any) {
 // table gives t, a table of the copy, u's spellings where they differ only
 // in spelling.
 func (c *drifter) table(t, u *Table) {
-	ref := t.Ref().String()
 	c.names(t, u)
+	c.primaryKey(t, u)
+	for i := range t.Columns {
+		c.columnDefault(t, &t.Columns[i], u.column(t.Columns[i].Name))
+	}
+	ti, _ := pair(t.Indexes, u.Indexes, indexName, func(a, b Index) bool {
+		return a.Unique == b.Unique && slices.Equal(a.Columns, b.Columns) && c.sameText(a.Where, b.Where)
+	})
+	for i := range t.Indexes {
+		c.index(t, u, &t.Indexes[i], at(u.Indexes, ti[i]))
+	}
+	tc, _ := pair(t.Checks, u.Checks, checkName, func(a, b Check) bool { return c.sameCheck(a.Expr, b.Expr) })
+	for i := range t.Checks {
+		c.check(t, &t.Checks[i], at(u.Checks, tc[i]))
+	}
+	if c.d == velox.MySQL {
+		c.mysqlForeignKeys(t, u)
+	}
+}
 
+// primaryKey warns of a primary key, or its name, that differs from u's, and
+// gives t u's unless the drifter adopts the database's.
+func (c *drifter) primaryKey(t, u *Table) {
+	ref := t.Ref().String()
 	if !slices.Equal(t.PrimaryKey, u.PrimaryKey) {
 		c.warn(ref, "the database has %s and %s %s; change it by hand", keyText(t.PrimaryKey), c.other, keyText(u.PrimaryKey))
 		if !c.adopt {
@@ -199,131 +220,132 @@ func (c *drifter) table(t, u *Table) {
 			t.PrimaryKeyName = u.PrimaryKeyName
 		}
 	}
+}
 
-	for i := range t.Columns {
-		tc := &t.Columns[i]
-		uc := u.column(tc.Name)
-		if uc != nil && c.d == velox.MySQL && mysqlBinaryType(tc.Type) && mysqlBinaryType(uc.Type) &&
-			mysqlBinaryLiteral(tc.Default) && mysqlBinaryLiteral(uc.Default) {
-			// A binary literal default is its bytes, both sides decoded
-			// alike: the same bytes, or a change; one not decoded is compared
-			// as written. An expression is compared below.
-			a, aok := mysqlBinaryBytes(tc.Type, tc.Default)
-			b, bok := mysqlBinaryBytes(uc.Type, uc.Default)
-			if aok && bok && bytes.Equal(a, b) {
-				tc.Default = uc.Default
-			}
-			continue
+// columnDefault gives tc, a column of t, uc's default where the two differ
+// only in spelling, and warns of one that differs in value. uc is nil when
+// u has no such column.
+func (c *drifter) columnDefault(t *Table, tc, uc *Column) {
+	ref := t.Ref().String()
+	if uc != nil && c.d == velox.MySQL && mysqlBinaryType(tc.Type) && mysqlBinaryType(uc.Type) &&
+		mysqlBinaryLiteral(tc.Default) && mysqlBinaryLiteral(uc.Default) {
+		// A binary literal default is its bytes, both sides decoded
+		// alike: the same bytes, or a change; one not decoded is compared
+		// as written. An expression is compared below.
+		a, aok := mysqlBinaryBytes(tc.Type, tc.Default)
+		b, bok := mysqlBinaryBytes(uc.Type, uc.Default)
+		if aok && bok && bytes.Equal(a, b) {
+			tc.Default = uc.Default
 		}
-		if uc != nil && tc.Default != uc.Default && numberType(c.d, uc.Type) && sameNumber(tc.Default, uc.Default) {
-			tc.Default = uc.Default // 0.00 is 0
-		}
-		if uc != nil && tc.Default != uc.Default && c.d == velox.MySQL {
-			// A time literal as MySQL prints it, padded: one value, or a change.
-			if same, ok := mysqlSameTime(uc.Type, tc.Default, uc.Default); same && ok {
-				tc.Default = uc.Default
-			}
-		}
-		if uc != nil && tc.Default != uc.Default && castLiteral(tc.Default) && literalDefault(c.d, uc.Default) {
-			// A time literal as PostgreSQL prints it: one value, or a change.
-			if same, ok := c.same(tc.Default, uc.Default); same && ok {
-				tc.Default = uc.Default
-			}
-			continue
-		}
-		if uc == nil || tc.Default == uc.Default || tc.Default == "" || uc.Default == "" ||
-			literalDefault(c.d, tc.Default) || literalDefault(c.d, uc.Default) {
-			continue
-		}
-		if same, _ := c.same(tc.Default, uc.Default); !same {
-			c.warn(ref+"."+tc.Name, "the default is %s in the database and %s in %s", tc.Default, uc.Default, c.other)
-			if c.adopt {
-				continue
-			}
-		}
-		tc.Default = uc.Default
+		return
 	}
-
-	tu, _ := pair(t.Indexes, u.Indexes, indexName, func(a, b Index) bool {
-		return a.Unique == b.Unique && slices.Equal(a.Columns, b.Columns) && c.sameText(a.Where, b.Where)
-	})
-	for i := range t.Indexes {
-		ti := &t.Indexes[i]
-		ui := at(u.Indexes, tu[i])
-		if ui == nil && c.adopt {
-			c.adoptWhere(ti, u)
-			continue
-		}
-		// Diff ignores Constraint, but a drop renders from the snapshot's:
-		// DROP INDEX of a constraint's index, or DROP CONSTRAINT of a plain
-		// index, fails on this database.
-		if ui != nil && !c.adopt && c.d == velox.Postgres && ti.Constraint != ui.Constraint {
-			inDB, inSnap, drop := "a UNIQUE constraint", "an index", "DROP INDEX"
-			if ui.Constraint {
-				inDB, inSnap, drop = inSnap, inDB, "DROP CONSTRAINT"
-			}
-			c.warn(indexObject(t.Ref(), *ti), "the database has it as %s and %s as %s; a drop renders %s, which fails", inDB, c.other, inSnap, drop)
-		}
-		if ui == nil || ti.Where == ui.Where || ti.Where == "" || ui.Where == "" ||
-			ti.Unique != ui.Unique || !slices.Equal(ti.Columns, ui.Columns) {
-			continue
-		}
-		same, parsed := c.same(ti.Where, ui.Where)
-		switch {
-		case !parsed && !same:
-			c.warn(indexObject(t.Ref(), *ti), "the predicate is %s in the database and %s in %s; one cannot be parsed, so they are not compared", ti.Where, ui.Where, c.other)
-			if c.adopt {
-				continue
-			}
-		case !same:
-			continue // another predicate: Diff rebuilds the index
-		}
-		ti.Where = ui.Where
+	if uc != nil && tc.Default != uc.Default && numberType(c.d, uc.Type) && sameNumber(tc.Default, uc.Default) {
+		tc.Default = uc.Default // 0.00 is 0
 	}
-
-	tu, _ = pair(t.Checks, u.Checks, checkName, func(a, b Check) bool { return c.sameCheck(a.Expr, b.Expr) })
-	for i := range t.Checks {
-		tc := &t.Checks[i]
-		uc := at(u.Checks, tu[i])
-		if uc == nil || tc.Expr == uc.Expr {
-			continue
+	if uc != nil && tc.Default != uc.Default && c.d == velox.MySQL {
+		// A time literal as MySQL prints it, padded: one value, or a change.
+		if same, ok := mysqlSameTime(uc.Type, tc.Default, uc.Default); same && ok {
+			tc.Default = uc.Default
 		}
-		col, vs, ok := ddl.ParseEnumCheck(c.d, tc.Expr)
-		ucol, uvs, uok := ddl.ParseEnumCheck(c.d, uc.Expr)
-		if ok && uok {
-			if col == ucol && slices.Equal(vs, uvs) {
-				tc.Expr = uc.Expr
-			}
-			continue
-		}
-		same, parsed := c.same(tc.Expr, uc.Expr)
-		switch {
-		case same:
-		case !parsed:
-			c.warn(colTarget(t.Ref(), tc.Name), "the check is %s in the database and %s in %s; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr, c.other)
-			if c.adopt {
-				continue
-			}
-		default:
-			continue // another check: Diff drops and adds it
-		}
-		tc.Expr = uc.Expr
 	}
-
-	if c.d == velox.MySQL {
-		// The index MySQL makes for a foreign key no index covers, its name
-		// and columns the key's: the snapshot is compared as if it had it.
-		for _, ix := range t.Indexes {
-			if fk := t.foreignKey(ix.Name); fk != nil && !ix.Unique && ix.Where == "" &&
-				slices.Equal(ix.Columns, fk.Columns) && u.index(ix.Name) == nil && u.foreignKey(ix.Name) != nil {
-				c.implicit = append(c.implicit, implicitIndex{t.Ref(), ix})
-			}
+	if uc != nil && tc.Default != uc.Default && castLiteral(tc.Default) && literalDefault(c.d, uc.Default) {
+		// A time literal as PostgreSQL prints it: one value, or a change.
+		if same, ok := c.same(tc.Default, uc.Default); same && ok {
+			tc.Default = uc.Default
 		}
-		for i := range t.ForeignKeys {
-			tf := &t.ForeignKeys[i]
-			if uf := u.foreignKey(tf.Name); uf != nil && restricts(tf.OnDelete) && restricts(uf.OnDelete) {
-				tf.OnDelete = uf.OnDelete
-			}
+		return
+	}
+	if uc == nil || tc.Default == uc.Default || tc.Default == "" || uc.Default == "" ||
+		literalDefault(c.d, tc.Default) || literalDefault(c.d, uc.Default) {
+		return
+	}
+	if same, _ := c.same(tc.Default, uc.Default); !same {
+		c.warn(ref+"."+tc.Name, "the default is %s in the database and %s in %s", tc.Default, uc.Default, c.other)
+		if c.adopt {
+			return
+		}
+	}
+	tc.Default = uc.Default
+}
+
+// index gives ti, an index of t, ui's predicate where the two differ only in
+// spelling. ui is u's index paired with it, or nil.
+func (c *drifter) index(t, u *Table, ti, ui *Index) {
+	if ui == nil && c.adopt {
+		c.adoptWhere(ti, u)
+		return
+	}
+	// Diff ignores Constraint, but a drop renders from the snapshot's:
+	// DROP INDEX of a constraint's index, or DROP CONSTRAINT of a plain
+	// index, fails on this database.
+	if ui != nil && !c.adopt && c.d == velox.Postgres && ti.Constraint != ui.Constraint {
+		inDB, inSnap, drop := "a UNIQUE constraint", "an index", "DROP INDEX"
+		if ui.Constraint {
+			inDB, inSnap, drop = inSnap, inDB, "DROP CONSTRAINT"
+		}
+		c.warn(indexObject(t.Ref(), *ti), "the database has it as %s and %s as %s; a drop renders %s, which fails", inDB, c.other, inSnap, drop)
+	}
+	if ui == nil || ti.Where == ui.Where || ti.Where == "" || ui.Where == "" ||
+		ti.Unique != ui.Unique || !slices.Equal(ti.Columns, ui.Columns) {
+		return
+	}
+	same, parsed := c.same(ti.Where, ui.Where)
+	switch {
+	case !parsed && !same:
+		c.warn(indexObject(t.Ref(), *ti), "the predicate is %s in the database and %s in %s; one cannot be parsed, so they are not compared", ti.Where, ui.Where, c.other)
+		if c.adopt {
+			return
+		}
+	case !same:
+		return // another predicate: Diff rebuilds the index
+	}
+	ti.Where = ui.Where
+}
+
+// check gives tc, a check of t, uc's expression where the two differ only in
+// spelling. uc is u's check paired with it, or nil.
+func (c *drifter) check(t *Table, tc, uc *Check) {
+	if uc == nil || tc.Expr == uc.Expr {
+		return
+	}
+	col, vs, ok := ddl.ParseEnumCheck(c.d, tc.Expr)
+	ucol, uvs, uok := ddl.ParseEnumCheck(c.d, uc.Expr)
+	if ok && uok {
+		if col == ucol && slices.Equal(vs, uvs) {
+			tc.Expr = uc.Expr
+		}
+		return
+	}
+	same, parsed := c.same(tc.Expr, uc.Expr)
+	switch {
+	case same:
+	case !parsed:
+		c.warn(colTarget(t.Ref(), tc.Name), "the check is %s in the database and %s in %s; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr, c.other)
+		if c.adopt {
+			return
+		}
+	default:
+		return // another check: Diff drops and adds it
+	}
+	tc.Expr = uc.Expr
+}
+
+// mysqlForeignKeys compares t as if it had the index MySQL makes for a
+// foreign key no index covers, and gives t's foreign keys u's spelling of a
+// restricting ON DELETE.
+func (c *drifter) mysqlForeignKeys(t, u *Table) {
+	// The index MySQL makes for a foreign key no index covers, its name
+	// and columns the key's: the snapshot is compared as if it had it.
+	for _, ix := range t.Indexes {
+		if fk := t.foreignKey(ix.Name); fk != nil && !ix.Unique && ix.Where == "" &&
+			slices.Equal(ix.Columns, fk.Columns) && u.index(ix.Name) == nil && u.foreignKey(ix.Name) != nil {
+			c.implicit = append(c.implicit, implicitIndex{t.Ref(), ix})
+		}
+	}
+	for i := range t.ForeignKeys {
+		tf := &t.ForeignKeys[i]
+		if uf := u.foreignKey(tf.Name); uf != nil && restricts(tf.OnDelete) && restricts(uf.OnDelete) {
+			tf.OnDelete = uf.OnDelete
 		}
 	}
 }
