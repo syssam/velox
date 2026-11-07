@@ -269,53 +269,9 @@ func (w *recreates) statement(l *fileLinter) error {
 		if l.upper(1) != "TABLE" {
 			return nil
 		}
-		for i := 2; ; {
-			a, j, ok := w.tableAt(l, i)
-			if !ok || l.upper(j) != "TO" {
-				return w.opaque(l)
-			}
-			b, k, ok := w.tableAt(l, j+1)
-			if !ok {
-				return w.opaque(l)
-			}
-			if err := w.breaks(w.state(a), a, ""); err != nil {
-				return err
-			}
-			w.rename(a, b)
-			if !l.punct(k, ",") {
-				return nil
-			}
-			i = k + 1
-		}
+		return w.renameTables(l)
 	case "CREATE":
-		i := 1
-		for slices.Contains([]string{"TEMPORARY", "TEMP", "UNLOGGED", "GLOBAL", "LOCAL"}, l.upper(i)) {
-			i++
-		}
-		if l.upper(i) == "TABLE" && l.upper(i+1) != "IF" {
-			if raw, j, ok := l.tableRef(i + 1); ok && !l.punct(j, ".") { // made where the first schema is, not resolved
-				ref := TableRef{Name: w.word(l, j-1)}
-				if raw.Schema != "" {
-					ref.Schema = w.word(l, i+1)
-				}
-				w.put(w.norm(ref), nil)
-			}
-		}
-		if err := w.partitionedCreate(l); err != nil {
-			return err
-		}
-		if w.s.d == velox.MySQL && !w.quiet && (l.upper(1) == "INDEX" || slices.Contains([]string{"UNIQUE", "FULLTEXT", "SPATIAL"}, l.upper(1))) {
-			j := 1
-			for j < len(l.ws) && l.upper(j) != "ON" {
-				j++
-			}
-			if ref, _, ok := w.tableAt(l, j+1); ok {
-				if err := w.myisamOnline(l, w.state(ref), ref); err != nil {
-					return err
-				}
-			}
-		}
-		w.createIndex(l)
+		return w.create(l)
 	case "DROP":
 		if l.upper(1) == "INDEX" {
 			return w.dropIndex(l)
@@ -323,23 +279,7 @@ func (w *recreates) statement(l *fileLinter) error {
 		if l.upper(1) != "TABLE" {
 			return nil
 		}
-		for i := l.skip(2, "IF", "EXISTS"); ; {
-			ref, j, ok := w.tableAt(l, i)
-			if !ok {
-				return nil
-			}
-			if err := w.breaks(w.state(ref), ref, ""); err != nil {
-				return err
-			}
-			if err := w.pgTableBreaks(w.state(ref), ref, true); err != nil {
-				return err
-			}
-			w.put(ref, nil)
-			if !l.punct(j, ",") {
-				return nil
-			}
-			i = j + 1
-		}
+		return w.dropTables(l)
 	case "ALTER":
 		if l.upper(1) == "TABLE" {
 			return w.alter(l)
@@ -357,6 +297,90 @@ func (w *recreates) statement(l *fileLinter) error {
 		}
 	}
 	return nil
+}
+
+// renameTables walks RENAME TABLE a TO b[, …].
+func (w *recreates) renameTables(l *fileLinter) error {
+	for i := 2; ; {
+		a, j, ok := w.tableAt(l, i)
+		if !ok || l.upper(j) != "TO" {
+			return w.opaque(l)
+		}
+		b, k, ok := w.tableAt(l, j+1)
+		if !ok {
+			return w.opaque(l)
+		}
+		if err := w.breaks(w.state(a), a, ""); err != nil {
+			return err
+		}
+		w.rename(a, b)
+		if !l.punct(k, ",") {
+			return nil
+		}
+		i = k + 1
+	}
+}
+
+// create walks a CREATE statement: a table it makes, a partitioned one, and
+// an index.
+func (w *recreates) create(l *fileLinter) error {
+	i := 1
+	for slices.Contains([]string{"TEMPORARY", "TEMP", "UNLOGGED", "GLOBAL", "LOCAL"}, l.upper(i)) {
+		i++
+	}
+	if l.upper(i) == "TABLE" && l.upper(i+1) != "IF" {
+		if raw, j, ok := l.tableRef(i + 1); ok && !l.punct(j, ".") { // made where the first schema is, not resolved
+			ref := TableRef{Name: w.word(l, j-1)}
+			if raw.Schema != "" {
+				ref.Schema = w.word(l, i+1)
+			}
+			w.put(w.norm(ref), nil)
+		}
+	}
+	if err := w.partitionedCreate(l); err != nil {
+		return err
+	}
+	if err := w.myisamCreateIndex(l); err != nil {
+		return err
+	}
+	w.createIndex(l)
+	return nil
+}
+
+// myisamCreateIndex checks a MySQL CREATE INDEX against the table it is on.
+func (w *recreates) myisamCreateIndex(l *fileLinter) error {
+	if w.s.d != velox.MySQL || w.quiet || (l.upper(1) != "INDEX" && !slices.Contains([]string{"UNIQUE", "FULLTEXT", "SPATIAL"}, l.upper(1))) {
+		return nil
+	}
+	j := 1
+	for j < len(l.ws) && l.upper(j) != "ON" {
+		j++
+	}
+	if ref, _, ok := w.tableAt(l, j+1); ok {
+		return w.myisamOnline(l, w.state(ref), ref)
+	}
+	return nil
+}
+
+// dropTables walks DROP TABLE [IF EXISTS] a[, …].
+func (w *recreates) dropTables(l *fileLinter) error {
+	for i := l.skip(2, "IF", "EXISTS"); ; {
+		ref, j, ok := w.tableAt(l, i)
+		if !ok {
+			return nil
+		}
+		if err := w.breaks(w.state(ref), ref, ""); err != nil {
+			return err
+		}
+		if err := w.pgTableBreaks(w.state(ref), ref, true); err != nil {
+			return err
+		}
+		w.put(ref, nil)
+		if !l.punct(j, ",") {
+			return nil
+		}
+		i = j + 1
+	}
 }
 
 // wordAt is the i-th word's text.
@@ -604,127 +628,15 @@ func (w *recreates) added(l *fileLinter, st *tableState, ref TableRef, i, end in
 func (w *recreates) mysqlAction(l *fileLinter, st *tableState, ref TableRef, view map[string]string, i, end int) (*tableState, TableRef, error) {
 	switch act := l.upper(i); act {
 	case "MODIFY", "CHANGE":
-		col, k, ok := w.columnAt(l, l.skip(i+1, "COLUMN"))
-		if !ok {
-			return st, ref, w.unknown(l, st, ref)
-		}
-		name, origin := col, w.origin(view, col)
-		if act == "CHANGE" {
-			if k >= end || !l.isName(k) {
-				return st, ref, w.unknown(l, st, ref)
-			}
-			name = w.word(l, k)
-			k++
-			st.cols[w.key(col)] = ""
-			st.cols[w.key(name)] = origin
-			if w.key(col) != w.key(name) {
-				if err := w.breaks(st, ref, origin); err != nil {
-					return st, ref, err
-				}
-			}
-		}
-		return st, ref, w.replaces(l, st, ref, origin, name, k, end)
+		return st, ref, w.mysqlModify(l, st, ref, view, i, end)
 	case "RENAME":
-		switch l.upper(i + 1) {
-		case "COLUMN":
-			a, j, ok := w.columnAt(l, i+2)
-			if !ok || l.upper(j) != "TO" {
-				return st, ref, w.unknown(l, st, ref)
-			}
-			b, _, ok := w.columnAt(l, j+1)
-			if !ok {
-				return st, ref, w.unknown(l, st, ref)
-			}
-			origin := w.origin(view, a)
-			st.cols[w.key(a)] = ""
-			st.cols[w.key(b)] = origin
-			if err := w.breaks(st, ref, origin); err != nil {
-				return st, ref, err
-			}
-		case "INDEX", "KEY":
-		default:
-			j := i + 1
-			if l.upper(j) == "TO" || l.upper(j) == "AS" {
-				j++
-			}
-			b, _, ok := w.tableAt(l, j)
-			if !ok {
-				return st, ref, w.unknown(l, st, ref)
-			}
-			if err := w.breaks(st, ref, ""); err != nil {
-				return st, ref, err
-			}
-			w.rename(ref, b)
-			return w.state(b), b, nil
-		}
+		return w.mysqlRename(l, st, ref, view, i)
 	case "ADD":
-		switch l.upper(i + 1) {
-		case "PARTITION":
-		case "INDEX", "KEY", "FULLTEXT", "SPATIAL":
-			w.mysqlIndexAdd(l, st, ref, i+1, end)
-		case "CONSTRAINT", "UNIQUE", "PRIMARY", "FOREIGN", "CHECK":
-			w.added(l, st, ref, i+1, end)
-			w.mysqlIndexAdd(l, st, ref, i+1, end)
-		default:
-			j := l.skip(i+1, "COLUMN")
-			if l.punct(j, "(") {
-				depth := 0
-				for k := j; k < end; k++ {
-					switch {
-					case l.punct(k, "("):
-						depth++
-					case l.punct(k, ")"):
-						depth--
-					case depth == 1 && (k == j+1 || l.punct(k-1, ",")) && l.isName(k):
-						st.cols[w.key(w.word(l, k))] = ""
-					}
-				}
-			} else if col, _, ok := w.columnAt(l, j); ok {
-				st.cols[w.key(col)] = ""
-			}
-		}
+		w.mysqlAdd(l, st, ref, i, end)
 	case "DROP":
-		switch l.upper(i + 1) {
-		case "INDEX", "KEY", "PRIMARY", "PARTITION":
-		case "FOREIGN":
-			if l.upper(i+2) == "KEY" && i+3 < end {
-				return st, ref, w.droppedAt(st, w.word(l, i+3))
-			}
-		case "CONSTRAINT", "CHECK":
-			if i+2 < end {
-				return st, ref, w.droppedAt(st, w.word(l, i+2))
-			}
-		default:
-			if col, _, ok := w.columnAt(l, l.skip(i+1, "COLUMN")); ok {
-				origin := w.origin(view, col)
-				st.cols[w.key(col)] = ""
-				if err := w.breaks(st, ref, origin); err != nil {
-					return st, ref, err
-				}
-				if err := w.shrunk(l, st, ref, origin); err != nil {
-					return st, ref, err
-				}
-			}
-		}
+		return st, ref, w.mysqlDrop(l, st, ref, view, i, end)
 	case "CONVERT":
-		if w.quiet {
-			return st, ref, nil
-		}
-		if err := w.load(st); err != nil {
-			return st, ref, err
-		}
-		for _, n := range st.notes {
-			origin := w.key(st.notePart(n))
-			if gone, ok := view[origin]; n.constraint || ok && gone == "" {
-				continue
-			}
-			target := colTarget(ref, st.notePart(n))
-			for _, k := range n.keeps {
-				if slices.Contains(k.words, "COLLATE") {
-					w.lost(ref, []string{n.object}, target, target+": "+k.what)
-				}
-			}
-		}
+		return st, ref, w.mysqlConvert(st, ref, view)
 	case "ALTER", "ALGORITHM", "LOCK", "COMMENT", "ENGINE", "AUTO_INCREMENT", "DEFAULT", "CHARACTER", "CHARSET", "COLLATE",
 		"FORCE", "ORDER", "ROW_FORMAT", "KEY_BLOCK_SIZE", "STATS_PERSISTENT", "STATS_AUTO_RECALC", "STATS_SAMPLE_PAGES",
 		"PACK_KEYS", "CHECKSUM", "MIN_ROWS", "MAX_ROWS", "AVG_ROW_LENGTH", "COMPRESSION", "ENCRYPTION", "ENABLE", "DISABLE",
@@ -735,62 +647,161 @@ func (w *recreates) mysqlAction(l *fileLinter, st *tableState, ref TableRef, vie
 	return st, ref, nil
 }
 
+// mysqlModify walks a MODIFY or CHANGE of a column at i, to end.
+func (w *recreates) mysqlModify(l *fileLinter, st *tableState, ref TableRef, view map[string]string, i, end int) error {
+	col, k, ok := w.columnAt(l, l.skip(i+1, "COLUMN"))
+	if !ok {
+		return w.unknown(l, st, ref)
+	}
+	name, origin := col, w.origin(view, col)
+	if l.upper(i) == "CHANGE" {
+		if k >= end || !l.isName(k) {
+			return w.unknown(l, st, ref)
+		}
+		name = w.word(l, k)
+		k++
+		st.cols[w.key(col)] = ""
+		st.cols[w.key(name)] = origin
+		if w.key(col) != w.key(name) {
+			if err := w.breaks(st, ref, origin); err != nil {
+				return err
+			}
+		}
+	}
+	return w.replaces(l, st, ref, origin, name, k, end)
+}
+
+// mysqlRename walks a RENAME at i of a column, an index or the table, and
+// returns the table as it is after.
+func (w *recreates) mysqlRename(l *fileLinter, st *tableState, ref TableRef, view map[string]string, i int) (*tableState, TableRef, error) {
+	switch l.upper(i + 1) {
+	case "COLUMN":
+		a, j, ok := w.columnAt(l, i+2)
+		if !ok || l.upper(j) != "TO" {
+			return st, ref, w.unknown(l, st, ref)
+		}
+		b, _, ok := w.columnAt(l, j+1)
+		if !ok {
+			return st, ref, w.unknown(l, st, ref)
+		}
+		origin := w.origin(view, a)
+		st.cols[w.key(a)] = ""
+		st.cols[w.key(b)] = origin
+		return st, ref, w.breaks(st, ref, origin)
+	case "INDEX", "KEY":
+		return st, ref, nil
+	}
+	j := i + 1
+	if l.upper(j) == "TO" || l.upper(j) == "AS" {
+		j++
+	}
+	b, _, ok := w.tableAt(l, j)
+	if !ok {
+		return st, ref, w.unknown(l, st, ref)
+	}
+	if err := w.breaks(st, ref, ""); err != nil {
+		return st, ref, err
+	}
+	w.rename(ref, b)
+	return w.state(b), b, nil
+}
+
+// mysqlAdd walks an ADD at i, to end, of an index, a constraint or columns.
+func (w *recreates) mysqlAdd(l *fileLinter, st *tableState, ref TableRef, i, end int) {
+	switch l.upper(i + 1) {
+	case "PARTITION":
+	case "INDEX", "KEY", "FULLTEXT", "SPATIAL":
+		w.mysqlIndexAdd(l, st, ref, i+1, end)
+	case "CONSTRAINT", "UNIQUE", "PRIMARY", "FOREIGN", "CHECK":
+		w.added(l, st, ref, i+1, end)
+		w.mysqlIndexAdd(l, st, ref, i+1, end)
+	default:
+		w.mysqlAddColumns(l, st, l.skip(i+1, "COLUMN"), end)
+	}
+}
+
+// mysqlAddColumns marks as new the column at j, or each of the
+// parenthesised list at j, to end.
+func (w *recreates) mysqlAddColumns(l *fileLinter, st *tableState, j, end int) {
+	if !l.punct(j, "(") {
+		if col, _, ok := w.columnAt(l, j); ok {
+			st.cols[w.key(col)] = ""
+		}
+		return
+	}
+	depth := 0
+	for k := j; k < end; k++ {
+		switch {
+		case l.punct(k, "("):
+			depth++
+		case l.punct(k, ")"):
+			depth--
+		case depth == 1 && (k == j+1 || l.punct(k-1, ",")) && l.isName(k):
+			st.cols[w.key(w.word(l, k))] = ""
+		}
+	}
+}
+
+// mysqlDrop walks a DROP at i, to end, of a key, a constraint or a column.
+func (w *recreates) mysqlDrop(l *fileLinter, st *tableState, ref TableRef, view map[string]string, i, end int) error {
+	switch l.upper(i + 1) {
+	case "INDEX", "KEY", "PRIMARY", "PARTITION":
+		return nil
+	case "FOREIGN":
+		if l.upper(i+2) == "KEY" && i+3 < end {
+			return w.droppedAt(st, w.word(l, i+3))
+		}
+		return nil
+	case "CONSTRAINT", "CHECK":
+		if i+2 < end {
+			return w.droppedAt(st, w.word(l, i+2))
+		}
+		return nil
+	}
+	col, _, ok := w.columnAt(l, l.skip(i+1, "COLUMN"))
+	if !ok {
+		return nil
+	}
+	origin := w.origin(view, col)
+	st.cols[w.key(col)] = ""
+	if err := w.breaks(st, ref, origin); err != nil {
+		return err
+	}
+	return w.shrunk(l, st, ref, origin)
+}
+
+// mysqlConvert walks a CONVERT TO: each column's collation the database
+// holds and the model cannot is lost.
+func (w *recreates) mysqlConvert(st *tableState, ref TableRef, view map[string]string) error {
+	if w.quiet {
+		return nil
+	}
+	if err := w.load(st); err != nil {
+		return err
+	}
+	for _, n := range st.notes {
+		origin := w.key(st.notePart(n))
+		if gone, ok := view[origin]; n.constraint || ok && gone == "" {
+			continue
+		}
+		target := colTarget(ref, st.notePart(n))
+		for _, k := range n.keeps {
+			if slices.Contains(k.words, "COLLATE") {
+				w.lost(ref, []string{n.object}, target, target+": "+k.what)
+			}
+		}
+	}
+	return nil
+}
+
 // postgresAction walks the action of [i, end), and returns the table as it is
 // after.
 func (w *recreates) postgresAction(l *fileLinter, st *tableState, ref TableRef, view map[string]string, i, end int) (*tableState, TableRef, error) {
 	switch l.upper(i) {
 	case "ALTER":
-		col, k, ok := w.columnAt(l, l.skip(i+1, "COLUMN"))
-		if !ok {
-			return st, ref, w.unknown(l, st, ref)
-		}
-		if l.upper(k) == "SET" && l.upper(k+1) == "DATA" {
-			k += 2
-		}
-		if l.upper(k) != "TYPE" {
-			return st, ref, nil
-		}
-		to := end
-		for m, depth := k+1, 0; m < end; m++ { // USING's COLLATE is not the column's
-			if l.punct(m, "(") {
-				depth++
-			} else if l.punct(m, ")") {
-				depth--
-			} else if depth == 0 && l.upper(m) == "USING" {
-				to = m
-				break
-			}
-		}
-		return st, ref, w.replaces(l, st, ref, w.origin(view, col), col, k+1, to)
+		return st, ref, w.pgAlterColumn(l, st, ref, view, i, end)
 	case "RENAME":
-		switch l.upper(i + 1) {
-		case "CONSTRAINT":
-		case "TO":
-			if i+2 >= end {
-				return st, ref, w.unknown(l, st, ref)
-			}
-			b := TableRef{Schema: ref.Schema, Name: w.word(l, i+2)}
-			if err := w.pgTableBreaks(st, ref, false); err != nil {
-				return st, ref, err
-			}
-			w.rename(ref, b)
-			return w.state(b), b, nil
-		default:
-			a, j, ok := w.columnAt(l, l.skip(i+1, "COLUMN"))
-			if !ok || l.upper(j) != "TO" {
-				return st, ref, w.unknown(l, st, ref)
-			}
-			b, _, ok := w.columnAt(l, j+1)
-			if !ok {
-				return st, ref, w.unknown(l, st, ref)
-			}
-			origin := w.origin(view, a)
-			if err := w.pgFunctionsBreak(st, ref, origin); err != nil {
-				return st, ref, err
-			}
-			st.cols[w.key(a)] = ""
-			st.cols[w.key(b)] = origin
-		}
+		return w.pgRename(l, st, ref, view, i, end)
 	case "SET":
 		if l.upper(i+1) == "SCHEMA" && i+2 < end {
 			b := w.norm(TableRef{Schema: w.word(l, i+2), Name: ref.Name})
@@ -811,23 +822,92 @@ func (w *recreates) postgresAction(l *fileLinter, st *tableState, ref TableRef, 
 			}
 		}
 	case "DROP":
-		if l.upper(i+1) == "CONSTRAINT" {
-			j := l.skip(i+2, "IF", "EXISTS")
-			if j < end {
-				return st, ref, w.droppedAt(st, w.word(l, j))
-			}
-			return st, ref, nil
-		}
-		j := l.skip(l.skip(i+1, "COLUMN"), "IF", "EXISTS")
-		if col, _, ok := w.columnAt(l, j); ok {
-			if err := w.pgFunctionsBreak(st, ref, w.origin(view, col)); err != nil {
-				return st, ref, err
-			}
-			st.cols[w.key(col)] = ""
-		}
+		return st, ref, w.pgDrop(l, st, ref, view, i, end)
 	case "VALIDATE", "RESET", "OWNER", "ENABLE", "DISABLE", "CLUSTER", "INHERIT", "NO", "OF", "NOT", "REPLICA", "FORCE", "ATTACH", "DETACH":
 	default:
 		return st, ref, w.unknown(l, st, ref)
 	}
 	return st, ref, nil
+}
+
+// pgAlterColumn walks an ALTER [COLUMN] at i, to end: a retype replaces the
+// column.
+func (w *recreates) pgAlterColumn(l *fileLinter, st *tableState, ref TableRef, view map[string]string, i, end int) error {
+	col, k, ok := w.columnAt(l, l.skip(i+1, "COLUMN"))
+	if !ok {
+		return w.unknown(l, st, ref)
+	}
+	if l.upper(k) == "SET" && l.upper(k+1) == "DATA" {
+		k += 2
+	}
+	if l.upper(k) != "TYPE" {
+		return nil
+	}
+	to := end
+	for m, depth := k+1, 0; m < end; m++ { // USING's COLLATE is not the column's
+		if l.punct(m, "(") {
+			depth++
+		} else if l.punct(m, ")") {
+			depth--
+		} else if depth == 0 && l.upper(m) == "USING" {
+			to = m
+			break
+		}
+	}
+	return w.replaces(l, st, ref, w.origin(view, col), col, k+1, to)
+}
+
+// pgRename walks a RENAME at i, to end, of a constraint, the table or a
+// column, and returns the table as it is after.
+func (w *recreates) pgRename(l *fileLinter, st *tableState, ref TableRef, view map[string]string, i, end int) (*tableState, TableRef, error) {
+	switch l.upper(i + 1) {
+	case "CONSTRAINT":
+		return st, ref, nil
+	case "TO":
+		if i+2 >= end {
+			return st, ref, w.unknown(l, st, ref)
+		}
+		b := TableRef{Schema: ref.Schema, Name: w.word(l, i+2)}
+		if err := w.pgTableBreaks(st, ref, false); err != nil {
+			return st, ref, err
+		}
+		w.rename(ref, b)
+		return w.state(b), b, nil
+	}
+	a, j, ok := w.columnAt(l, l.skip(i+1, "COLUMN"))
+	if !ok || l.upper(j) != "TO" {
+		return st, ref, w.unknown(l, st, ref)
+	}
+	b, _, ok := w.columnAt(l, j+1)
+	if !ok {
+		return st, ref, w.unknown(l, st, ref)
+	}
+	origin := w.origin(view, a)
+	if err := w.pgFunctionsBreak(st, ref, origin); err != nil {
+		return st, ref, err
+	}
+	st.cols[w.key(a)] = ""
+	st.cols[w.key(b)] = origin
+	return st, ref, nil
+}
+
+// pgDrop walks a DROP at i, to end, of a constraint or a column.
+func (w *recreates) pgDrop(l *fileLinter, st *tableState, ref TableRef, view map[string]string, i, end int) error {
+	if l.upper(i+1) == "CONSTRAINT" {
+		j := l.skip(i+2, "IF", "EXISTS")
+		if j < end {
+			return w.droppedAt(st, w.word(l, j))
+		}
+		return nil
+	}
+	j := l.skip(l.skip(i+1, "COLUMN"), "IF", "EXISTS")
+	col, _, ok := w.columnAt(l, j)
+	if !ok {
+		return nil
+	}
+	if err := w.pgFunctionsBreak(st, ref, w.origin(view, col)); err != nil {
+		return err
+	}
+	st.cols[w.key(col)] = ""
+	return nil
 }

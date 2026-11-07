@@ -424,33 +424,10 @@ func (l *fileLinter) insertInto(tmp TableRef, c *rowCopy) {
 // What is over a column that goes, goes with it.
 func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost func(object, line string)) error {
 	t := seen.table
-	gone := map[string]bool{}
-	for _, col := range seen.had.Columns {
-		if c.all || c.kept[strings.ToLower(col.Name)] {
-			continue
-		}
-		gone[col.Name] = true
-		if !lossAllowed(g.f, colTarget(t, col.Name)) {
-			lost(colTarget(t, col.Name), colTarget(t, col.Name)+": the column is in the database, and its rebuild's INSERT does not copy it")
-		}
-	}
-	had := (&Schema{Tables: []Table{seen.had}}).clone().Tables[0]
-	for from, to := range c.renamed {
-		i := slices.IndexFunc(had.Columns, func(col Column) bool { return strings.EqualFold(col.Name, from) })
-		if i >= 0 && now.column(to) != nil && had.column(to) == nil {
-			renameColumnIn(&had, had.Columns[i].Name, to)
-		}
-	}
-	had.Columns = slices.DeleteFunc(had.Columns, func(col Column) bool { return gone[col.Name] })
-	over := func(cols []string, exprs ...string) bool {
-		for name := range gone {
-			if slices.Contains(cols, name) || slices.ContainsFunc(exprs, func(e string) bool { return e != "" && namesColumn(velox.SQLite, e, name) }) {
-				return true
-			}
-		}
-		return false
-	}
-	if !over(had.PrimaryKey) && !slices.Equal(had.PrimaryKey, now.PrimaryKey) && !lossAllowed(g.f, t.String()) {
+	k := &rebuildCheck{f: g.f, t: t, gone: map[string]bool{}, lost: lost}
+	k.goneColumns(seen.had, c)
+	had := k.kept(seen.had, c, now)
+	if !k.over(had.PrimaryKey) && !slices.Equal(had.PrimaryKey, now.PrimaryKey) && !lossAllowed(g.f, t.String()) {
 		lost(t.String(), t.String()+": the table has "+keyText(had.PrimaryKey)+", and its rebuild writes "+keyText(now.PrimaryKey))
 	}
 	cmpr, err := compare(&Schema{Dialect: velox.SQLite, Tables: []Table{had}}, nil, &Schema{Dialect: velox.SQLite, Tables: []Table{now}}, false)
@@ -461,67 +438,143 @@ func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost 
 	if err != nil {
 		return err
 	}
-	attr := func(col Column, name, what string) {
-		object := colTarget(t, col.Name)
-		switch want, ok := expected(g.f, object+":"+name); {
-		case lossAllowed(g.f, object+":"+name) || lossAllowed(g.f, object):
-		case !ok:
-			lost(object+":"+name, object+": "+what)
-		case !sameColumnValue(velox.SQLite, col, name, want):
-			lost(object+":"+name, object+":"+name+": the plan expects "+orNone(want)+", and the database holds "+orNone(columnValue(col, name)))
-		}
-	}
-	object := func(object, what string) {
-		if !lossAllowed(g.f, object) {
-			lost(object, object+": "+what+" is in the database, and its rebuild does not make it")
-		}
-	}
 	for _, ch := range changes {
-		switch ch := ch.(type) {
-		case alterColumn:
-			from, to := ch.From, ch.To
-			if ch.What&columnType != 0 {
-				attr(from, "type", "the column is "+from.Type+", and its rebuild makes it "+to.Type)
-			}
-			if ch.What&columnNullable != 0 && !from.Nullable {
-				attr(from, "not-null", "the column is NOT NULL, and its rebuild makes it nullable")
-			}
-			if ch.What&columnDefault != 0 && from.Default != "" {
-				attr(from, "default", "the column has the default "+from.Default+", and its rebuild does not keep it")
-			}
-			if ch.What&columnIdentity != 0 && from.Identity {
-				attr(from, "identity", "the column is AUTOINCREMENT, and its rebuild does not keep it")
-			}
-		case dropIndex:
-			if !over(ch.Index.Columns, ch.Index.Where) {
-				object(indexObject(t, ch.Index), "the index")
-			}
-		case dropForeignKey:
-			fk := ch.ForeignKey
-			again := slices.ContainsFunc(changes, func(o Change) bool {
-				a, ok := o.(addForeignKey)
-				return ok && sameForeignKey(a.ForeignKey, fk)
-			})
-			if again || over(fk.Columns) {
-				continue
-			}
-			key := keyObject(t, fk)
-			to := addedKey(changes, fk)
-			if to == nil {
-				object(key, "the foreign key")
-				continue
-			}
-			for _, attr := range keyChanges(*to, fk) {
-				if !lossAllowed(g.f, key+":"+attr) && !lossAllowed(g.f, key) {
-					lost(key+":"+attr, key+": the key's "+attr+" is in the database as it was, and its rebuild changes it")
-				}
-			}
-		case dropCheck:
-			if !over(nil, ch.Check.Expr) {
-				object(checkObject(t, ch.Check), "the check")
-			}
+		k.change(ch, changes)
+	}
+	k.defaults(cmpr, had, now)
+	return nil
+}
+
+// rebuildCheck is rebuildLoss's state: f, the file, t, the table rebuilt,
+// gone, the columns its INSERT does not copy, and lost, where a loss goes.
+type rebuildCheck struct {
+	f    File
+	t    TableRef
+	gone map[string]bool
+	lost func(object, line string)
+}
+
+// goneColumns puts in gone each column of had that c does not copy, and
+// calls lost for it unless f allows it.
+func (k *rebuildCheck) goneColumns(had Table, c rowCopy) {
+	for _, col := range had.Columns {
+		if c.all || c.kept[strings.ToLower(col.Name)] {
+			continue
+		}
+		k.gone[col.Name] = true
+		if !lossAllowed(k.f, colTarget(k.t, col.Name)) {
+			k.lost(colTarget(k.t, col.Name), colTarget(k.t, col.Name)+": the column is in the database, and its rebuild's INSERT does not copy it")
 		}
 	}
+}
+
+// kept is a clone of had with the columns c renames under their names in
+// now, and without the columns that go.
+func (k *rebuildCheck) kept(had Table, c rowCopy, now Table) Table {
+	out := (&Schema{Tables: []Table{had}}).clone().Tables[0]
+	for from, to := range c.renamed {
+		i := slices.IndexFunc(out.Columns, func(col Column) bool { return strings.EqualFold(col.Name, from) })
+		if i >= 0 && now.column(to) != nil && out.column(to) == nil {
+			renameColumnIn(&out, out.Columns[i].Name, to)
+		}
+	}
+	out.Columns = slices.DeleteFunc(out.Columns, func(col Column) bool { return k.gone[col.Name] })
+	return out
+}
+
+// over reports whether cols, or one of exprs, names a column that goes.
+func (k *rebuildCheck) over(cols []string, exprs ...string) bool {
+	for name := range k.gone {
+		if slices.Contains(cols, name) || slices.ContainsFunc(exprs, func(e string) bool { return e != "" && namesColumn(velox.SQLite, e, name) }) {
+			return true
+		}
+	}
+	return false
+}
+
+// attr calls lost for the attribute name of col, which the rebuild changes
+// as what says, unless f allows it or expects the value col has.
+func (k *rebuildCheck) attr(col Column, name, what string) {
+	object := colTarget(k.t, col.Name)
+	switch want, ok := expected(k.f, object+":"+name); {
+	case lossAllowed(k.f, object+":"+name) || lossAllowed(k.f, object):
+	case !ok:
+		k.lost(object+":"+name, object+": "+what)
+	case !sameColumnValue(velox.SQLite, col, name, want):
+		k.lost(object+":"+name, object+":"+name+": the plan expects "+orNone(want)+", and the database holds "+orNone(columnValue(col, name)))
+	}
+}
+
+// missing calls lost for object, what the rebuild does not make, unless f
+// allows it.
+func (k *rebuildCheck) missing(object, what string) {
+	if !lossAllowed(k.f, object) {
+		k.lost(object, object+": "+what+" is in the database, and its rebuild does not make it")
+	}
+}
+
+// change calls lost for what ch, one of changes, takes away.
+func (k *rebuildCheck) change(ch Change, changes []Change) {
+	switch ch := ch.(type) {
+	case alterColumn:
+		k.alterColumn(ch)
+	case dropIndex:
+		if !k.over(ch.Index.Columns, ch.Index.Where) {
+			k.missing(indexObject(k.t, ch.Index), "the index")
+		}
+	case dropForeignKey:
+		k.dropForeignKey(ch.ForeignKey, changes)
+	case dropCheck:
+		if !k.over(nil, ch.Check.Expr) {
+			k.missing(checkObject(k.t, ch.Check), "the check")
+		}
+	}
+}
+
+// alterColumn calls lost for each attribute ch takes from its column.
+func (k *rebuildCheck) alterColumn(ch alterColumn) {
+	from, to := ch.From, ch.To
+	if ch.What&columnType != 0 {
+		k.attr(from, "type", "the column is "+from.Type+", and its rebuild makes it "+to.Type)
+	}
+	if ch.What&columnNullable != 0 && !from.Nullable {
+		k.attr(from, "not-null", "the column is NOT NULL, and its rebuild makes it nullable")
+	}
+	if ch.What&columnDefault != 0 && from.Default != "" {
+		k.attr(from, "default", "the column has the default "+from.Default+", and its rebuild does not keep it")
+	}
+	if ch.What&columnIdentity != 0 && from.Identity {
+		k.attr(from, "identity", "the column is AUTOINCREMENT, and its rebuild does not keep it")
+	}
+}
+
+// dropForeignKey calls lost for fk, which changes drop, unless they add it
+// again as it was or it is over a column that goes: the key, or each
+// attribute the key added in its place changes.
+func (k *rebuildCheck) dropForeignKey(fk ForeignKey, changes []Change) {
+	again := slices.ContainsFunc(changes, func(o Change) bool {
+		a, ok := o.(addForeignKey)
+		return ok && sameForeignKey(a.ForeignKey, fk)
+	})
+	if again || k.over(fk.Columns) {
+		return
+	}
+	key := keyObject(k.t, fk)
+	to := addedKey(changes, fk)
+	if to == nil {
+		k.missing(key, "the foreign key")
+		return
+	}
+	for _, attr := range keyChanges(*to, fk) {
+		if !lossAllowed(k.f, key+":"+attr) && !lossAllowed(k.f, key) {
+			k.lost(key+":"+attr, key+": the key's "+attr+" is in the database as it was, and its rebuild changes it")
+		}
+	}
+}
+
+// defaults calls lost for an expression default of had that now's column
+// does not read the same.
+func (k *rebuildCheck) defaults(cmpr *drifter, had, now Table) {
 	// Drift's comparison takes one expression default for another with a
 	// warning; here they are one only when they read the same.
 	for _, col := range had.Columns {
@@ -530,10 +583,9 @@ func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost 
 			continue
 		}
 		if same, _ := cmpr.same(col.Default, u.Default); !same {
-			attr(col, "default", "the column has the default "+col.Default+", and its rebuild does not keep it")
+			k.attr(col, "default", "the column has the default "+col.Default+", and its rebuild does not keep it")
 		}
 	}
-	return nil
 }
 
 // addedKey is the foreign key changes add in the place of fk, the same by its name
