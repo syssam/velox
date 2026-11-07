@@ -46,6 +46,23 @@ func NoSchemas(importPath string) error {
 // Only the files of the package's build are read: a _test.go file is not, and
 // a file that only some builds include is refused (see inspect).
 
+// candSpec is what candidates records of one type declaration.
+type candSpec struct {
+	ts     *ast.TypeSpec
+	pos    token.Position
+	schema bool     // embeds schema.Schema directly
+	embeds []string // the package's types it embeds, by name
+	named  bool     // a defined type of another named type: type Release Item
+}
+
+// candDecls is the schema package's type declarations, by name, and the
+// names of the types with a method named Type.
+type candDecls struct {
+	specs      map[string]*candSpec
+	order      []string
+	typeMethod map[string]bool
+}
+
 // candidates returns, from the schema package's files, the types that may be
 // schemas, sorted: those of a struct with an embedded field, the aliases,
 // the defined types of another named type, and those with a method named
@@ -53,108 +70,29 @@ func NoSchemas(importPath string) error {
 // struct that embeds schema.Schema, directly or through other unexported
 // structs of the package, when no type of the package embeds it.
 func candidates(files map[string][]byte) ([]string, error) {
-	type spec struct {
-		ts     *ast.TypeSpec
-		pos    token.Position
-		schema bool     // embeds schema.Schema directly
-		embeds []string // the package's types it embeds, by name
-		named  bool     // a defined type of another named type: type Release Item
-	}
-	fset := token.NewFileSet()
-	specs := map[string]*spec{}
-	var order []string
-	typeMethod := map[string]bool{}
-	for _, fname := range slices.Sorted(maps.Keys(files)) {
-		f, err := parser.ParseFile(fset, fname, files[fname], parser.SkipObjectResolution)
-		if err != nil {
-			return nil, err
-		}
-		local := schemaName(f)
-		for _, d := range f.Decls {
-			switch d := d.(type) {
-			case *ast.FuncDecl:
-				if d.Name.Name == "Type" {
-					if t := recvType(d); t != "" {
-						typeMethod[t] = true
-					}
-				}
-			case *ast.GenDecl:
-				if d.Tok != token.TYPE {
-					continue
-				}
-				for _, sp := range d.Specs {
-					ts := sp.(*ast.TypeSpec)
-					s := &spec{ts: ts, pos: fset.Position(ts.Pos())}
-					switch ts.Type.(type) {
-					case *ast.Ident, *ast.SelectorExpr, *ast.IndexExpr, *ast.IndexListExpr, *ast.ParenExpr:
-						s.named = true
-					}
-					if st, ok := ts.Type.(*ast.StructType); ok {
-						s.schema = embedsSchema(st, local, false) || embedsSchema(st, local, true)
-						for _, fld := range st.Fields.List {
-							if len(fld.Names) != 0 {
-								continue
-							}
-							t := fld.Type
-							if star, ok := t.(*ast.StarExpr); ok {
-								t = star.X
-							}
-							if ix, ok := t.(*ast.IndexExpr); ok {
-								t = ix.X
-							}
-							if id, ok := t.(*ast.Ident); ok {
-								s.embeds = append(s.embeds, id.Name)
-							} else {
-								s.embeds = append(s.embeds, "")
-							}
-						}
-					}
-					if _, dup := specs[ts.Name.Name]; !dup {
-						order = append(order, ts.Name.Name)
-					}
-					specs[ts.Name.Name] = s
-				}
-			}
-		}
+	d, err := readCandDecls(files)
+	if err != nil {
+		return nil, err
 	}
 	embedded := map[string]bool{}
-	for _, s := range specs {
+	for _, s := range d.specs {
 		for _, e := range s.embeds {
 			embedded[e] = true
 		}
 	}
-	// reaches reports whether the type n embeds schema.Schema, directly or
-	// through the package's unexported structs.
-	var reaches func(n string, seen map[string]bool) bool
-	reaches = func(n string, seen map[string]bool) bool {
-		s := specs[n]
-		if s == nil || seen[n] {
-			return false
-		}
-		seen[n] = true
-		if s.schema {
-			return true
-		}
-		for _, e := range s.embeds {
-			if e != "" && !ast.IsExported(e) && reaches(e, seen) {
-				return true
-			}
-		}
-		return false
-	}
 	var out []string
 	var errs []error
-	for _, n := range order {
-		s := specs[n]
+	for _, n := range d.order {
+		s := d.specs[n]
 		if !ast.IsExported(n) {
-			if reaches(n, map[string]bool{}) && !embedded[n] {
+			if d.reaches(n, map[string]bool{}) && !embedded[n] {
 				errs = append(errs, &Error{Pos: posString(s.pos), Reason: fmt.Sprintf("type %s embeds schema.Schema and is unexported: a schema must be exported, and a shared base is embedded by one", n)})
 			}
 			continue
 		}
 		// A defined type of another named type has its underlying struct's
 		// promoted methods, so it may be a schema too: classify decides.
-		if s.ts.Assign.IsValid() || len(s.embeds) > 0 || typeMethod[n] || s.named {
+		if s.ts.Assign.IsValid() || len(s.embeds) > 0 || d.typeMethod[n] || s.named {
 			out = append(out, n)
 		}
 	}
@@ -163,6 +101,106 @@ func candidates(files map[string][]byte) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// readCandDecls parses the files, in name order, and returns their type
+// declarations and the receivers of their methods named Type.
+func readCandDecls(files map[string][]byte) (*candDecls, error) {
+	d := &candDecls{specs: map[string]*candSpec{}, typeMethod: map[string]bool{}}
+	fset := token.NewFileSet()
+	for _, fname := range slices.Sorted(maps.Keys(files)) {
+		f, err := parser.ParseFile(fset, fname, files[fname], parser.SkipObjectResolution)
+		if err != nil {
+			return nil, err
+		}
+		d.addFile(fset, f)
+	}
+	return d, nil
+}
+
+// addFile records the type declarations of f and its methods named Type.
+func (d *candDecls) addFile(fset *token.FileSet, f *ast.File) {
+	local := schemaName(f)
+	for _, decl := range f.Decls {
+		switch decl := decl.(type) {
+		case *ast.FuncDecl:
+			if decl.Name.Name != "Type" {
+				continue
+			}
+			if t := recvType(decl); t != "" {
+				d.typeMethod[t] = true
+			}
+		case *ast.GenDecl:
+			if decl.Tok != token.TYPE {
+				continue
+			}
+			for _, sp := range decl.Specs {
+				ts := sp.(*ast.TypeSpec)
+				if _, dup := d.specs[ts.Name.Name]; !dup {
+					d.order = append(d.order, ts.Name.Name)
+				}
+				d.specs[ts.Name.Name] = newCandSpec(ts, fset.Position(ts.Pos()), local)
+			}
+		}
+	}
+}
+
+// newCandSpec returns the candSpec of ts, whose file names the schema
+// package local.
+func newCandSpec(ts *ast.TypeSpec, pos token.Position, local string) *candSpec {
+	s := &candSpec{ts: ts, pos: pos}
+	switch ts.Type.(type) {
+	case *ast.Ident, *ast.SelectorExpr, *ast.IndexExpr, *ast.IndexListExpr, *ast.ParenExpr:
+		s.named = true
+	}
+	if st, ok := ts.Type.(*ast.StructType); ok {
+		s.schema = embedsSchema(st, local, false) || embedsSchema(st, local, true)
+		s.embeds = embeddedNames(st)
+	}
+	return s
+}
+
+// embeddedNames returns the name of each embedded field of st, without a
+// pointer or type arguments; one not of a local type is "".
+func embeddedNames(st *ast.StructType) []string {
+	var names []string
+	for _, fld := range st.Fields.List {
+		if len(fld.Names) != 0 {
+			continue
+		}
+		t := fld.Type
+		if star, ok := t.(*ast.StarExpr); ok {
+			t = star.X
+		}
+		if ix, ok := t.(*ast.IndexExpr); ok {
+			t = ix.X
+		}
+		if id, ok := t.(*ast.Ident); ok {
+			names = append(names, id.Name)
+		} else {
+			names = append(names, "")
+		}
+	}
+	return names
+}
+
+// reaches reports whether the type n embeds schema.Schema, directly or
+// through the package's unexported structs.
+func (d *candDecls) reaches(n string, seen map[string]bool) bool {
+	s := d.specs[n]
+	if s == nil || seen[n] {
+		return false
+	}
+	seen[n] = true
+	if s.schema {
+		return true
+	}
+	for _, e := range s.embeds {
+		if e != "" && !ast.IsExported(e) && d.reaches(e, seen) {
+			return true
+		}
+	}
+	return false
 }
 
 // compileError is the compiler's message as go list reports it, without the

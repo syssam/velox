@@ -301,54 +301,12 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		return failFile(err)
 	}
 	want, owners := o.want, o.owners
-	// An older velox-gen wrote the entities in out/entity: the sweep removes
-	// its files there, and the user's files stay, and are named.
-	ed := filepath.Join(out, "entity")
-	matches, _ := filepath.Glob(filepath.Join(ed, "*.go"))
-	for _, p := range matches {
-		if !isGenerated(p) {
-			_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s is yours, and stays; velox-gen writes every entity in %s and does not build %s: move the file to %[2]s, as package %[4]s, or delete it\n",
-				relPath(dir, p), relPath(dir, out), relPath(dir, ed), pkg)
-		}
-	}
-	// An older velox-gen wrote package runtime in out/runtime, which the
-	// sweep removes; the user's files stay, and are named.
-	rd := filepath.Join(out, "runtime")
-	matches, _ = filepath.Glob(filepath.Join(rd, "*.go"))
-	for _, p := range matches {
-		if !isGenerated(p) {
-			_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s is yours, and stays; velox-gen no longer writes package runtime: the generated package binds the schema itself, and no program imports %s: delete the file\n",
-				relPath(dir, p), relPath(dir, rd))
-		}
-	}
-	// Nothing is written before every path is known to be velox-gen's: a
-	// regular file with its header, below real directories.
-	for _, p := range slices.Sorted(maps.Keys(want)) {
-		for d := filepath.Dir(p); d != out && within(out, d); d = filepath.Dir(d) {
-			if err := checkEntry(dir, d, true); err != nil {
-				return fail(err)
-			}
-		}
-		if err := checkEntry(dir, p, false); err != nil {
-			return fail(err)
-		}
-		if _, err := os.Lstat(p); err == nil && !isGenerated(p) {
-			return fail(fmt.Errorf("%s was not written by velox-gen; move it", relPath(dir, p)))
-		}
+	warnOldDirs(dir, out, pkg, stderr)
+	if err := checkWantPaths(dir, out, want); err != nil {
+		return fail(err)
 	}
 	sw, err := staleFiles(out, want, owners, !f.check)
-	for _, s := range sw.swept {
-		switch {
-		case s.restored != "":
-			_, _ = fmt.Fprintf(stderr, "velox-gen: restored %s from %s, which an interrupted run left\n", relPath(dir, s.restored), relPath(dir, s.path))
-		case len(s.kept) > 0:
-			for _, k := range s.kept {
-				_, _ = fmt.Fprintf(stderr, "velox-gen: kept %s, which is not velox-gen's, in %s, which an interrupted run left; move it\n", relPath(dir, k), relPath(dir, s.path))
-			}
-		default:
-			_, _ = fmt.Fprintf(stderr, "velox-gen: removed %s, which an interrupted run left\n", relPath(dir, s.path))
-		}
-	}
+	reportSwept(dir, sw.swept, stderr)
 	if err != nil {
 		return fail(err)
 	}
@@ -356,17 +314,7 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	changed := append(slices.Clone(stale), remove...)
 	slices.Sort(changed)
 	if f.check {
-		for _, p := range changed {
-			_, _ = fmt.Fprintf(stderr, "velox-gen: %s is out of date\n", relPath(dir, p))
-		}
-		for _, p := range sw.leftovers {
-			_, _ = fmt.Fprintf(stderr, "velox-gen: %s is left over from an interrupted run\n", relPath(dir, p))
-		}
-		if len(changed)+len(sw.leftovers) > 0 {
-			_, _ = fmt.Fprintf(stderr, "velox-gen: run %s\n", rerunCommand(f.rerun))
-			return 3
-		}
-		return 0
+		return reportCheck(dir, changed, sw.leftovers, f.rerun, stderr)
 	}
 	// writeAll sets the removals aside before it writes: on a
 	// case-insensitive file system a file or directory whose name changed
@@ -399,6 +347,84 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		return interruptedCode
 	}
 	return code
+}
+
+// warnOldDirs warns of each file of the user's in out/entity or out/runtime,
+// where an older velox-gen wrote.
+func warnOldDirs(dir, out, pkg string, stderr io.Writer) {
+	// An older velox-gen wrote the entities in out/entity: the sweep removes
+	// its files there, and the user's files stay, and are named.
+	ed := filepath.Join(out, "entity")
+	matches, _ := filepath.Glob(filepath.Join(ed, "*.go"))
+	for _, p := range matches {
+		if !isGenerated(p) {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s is yours, and stays; velox-gen writes every entity in %s and does not build %s: move the file to %[2]s, as package %[4]s, or delete it\n",
+				relPath(dir, p), relPath(dir, out), relPath(dir, ed), pkg)
+		}
+	}
+	// An older velox-gen wrote package runtime in out/runtime, which the
+	// sweep removes; the user's files stay, and are named.
+	rd := filepath.Join(out, "runtime")
+	matches, _ = filepath.Glob(filepath.Join(rd, "*.go"))
+	for _, p := range matches {
+		if !isGenerated(p) {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s is yours, and stays; velox-gen no longer writes package runtime: the generated package binds the schema itself, and no program imports %s: delete the file\n",
+				relPath(dir, p), relPath(dir, rd))
+		}
+	}
+}
+
+// checkWantPaths refuses a path of want, in order, that is not velox-gen's.
+func checkWantPaths(dir, out string, want map[string][]byte) error {
+	// Nothing is written before every path is known to be velox-gen's: a
+	// regular file with its header, below real directories.
+	for _, p := range slices.Sorted(maps.Keys(want)) {
+		for d := filepath.Dir(p); d != out && within(out, d); d = filepath.Dir(d) {
+			if err := checkEntry(dir, d, true); err != nil {
+				return err
+			}
+		}
+		if err := checkEntry(dir, p, false); err != nil {
+			return err
+		}
+		if _, err := os.Lstat(p); err == nil && !isGenerated(p) {
+			return fmt.Errorf("%s was not written by velox-gen; move it", relPath(dir, p))
+		}
+	}
+	return nil
+}
+
+// reportSwept tells stderr what the sweep did with each entry an
+// interrupted run left.
+func reportSwept(dir string, swept []swept, stderr io.Writer) {
+	for _, s := range swept {
+		switch {
+		case s.restored != "":
+			_, _ = fmt.Fprintf(stderr, "velox-gen: restored %s from %s, which an interrupted run left\n", relPath(dir, s.restored), relPath(dir, s.path))
+		case len(s.kept) > 0:
+			for _, k := range s.kept {
+				_, _ = fmt.Fprintf(stderr, "velox-gen: kept %s, which is not velox-gen's, in %s, which an interrupted run left; move it\n", relPath(dir, k), relPath(dir, s.path))
+			}
+		default:
+			_, _ = fmt.Fprintf(stderr, "velox-gen: removed %s, which an interrupted run left\n", relPath(dir, s.path))
+		}
+	}
+}
+
+// reportCheck names, for -check, each changed file and each leftover of an
+// interrupted run, and returns the exit code: 3 when there is any, else 0.
+func reportCheck(dir string, changed, leftovers, rerun []string, stderr io.Writer) int {
+	for _, p := range changed {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %s is out of date\n", relPath(dir, p))
+	}
+	for _, p := range leftovers {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %s is left over from an interrupted run\n", relPath(dir, p))
+	}
+	if len(changed)+len(leftovers) > 0 {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: run %s\n", rerunCommand(rerun))
+		return 3
+	}
+	return 0
 }
 
 // checkEntry refuses what is at p, when anything is, unless it is a directory
@@ -457,98 +483,37 @@ type sweep struct {
 // it, as for -check, those entries stay, and sw.leftovers lists them. Either
 // way they are never counted as a directory's entries.
 func staleFiles(out string, want map[string][]byte, owners map[string]string, tidy bool) (sweep, error) {
-	var sw sweep
-	write := map[string]bool{}
-	wantFold := make(map[string]string, len(want)) // folded path → the path of want
+	w := &staleWalk{
+		out: out, want: want, tidy: tidy,
+		write:    map[string]bool{},
+		wantFold: make(map[string]string, len(want)),
+		held:     map[string]int{},
+		gone:     map[string]int{},
+	}
 	for p := range want {
-		wantFold[fold(p)] = p
+		w.wantFold[fold(p)] = p
 	}
-	keep := map[string]string{}   // folded directory a file of want goes into → its spelling
-	keepBy := map[string]string{} // folded directory → the first path of want in it
-	for _, p := range slices.Sorted(maps.Keys(want)) {
-		for d := filepath.Dir(p); within(out, d) && d != out; d = filepath.Dir(d) {
-			if _, ok := keep[fold(d)]; !ok {
-				keep[fold(d)], keepBy[fold(d)] = d, p
-			}
-		}
-	}
-	// held counts each directory's entries, gone those that go.
-	held, gone := map[string]int{}, map[string]int{}
-	var dirs []string
-	// walk lists the directory d, which it reads through a symlink only when
-	// it is out itself, as os.ReadDir does.
-	var walk func(d string) error
-	walk = func(d string) error {
-		des, err := os.ReadDir(d)
-		if err != nil {
-			if d == out && errors.Is(err, os.ErrNotExist) {
-				return nil
-			}
-			return err
-		}
-		if tidy {
-			done, err := sweepLeftovers(d, des)
-			sw.swept = append(sw.swept, done...)
-			if err != nil {
-				return err
-			}
-			if len(done) > 0 {
-				if des, err = os.ReadDir(d); err != nil {
-					return err
-				}
-			}
-		}
-		for _, de := range des {
-			p := filepath.Join(d, de.Name())
-			if leftover.MatchString(de.Name()) {
-				if !tidy {
-					sw.leftovers = append(sw.leftovers, p)
-				}
-				continue // -check leaves them; they never hold a directory
-			}
-			held[d]++
-			switch {
-			case de.IsDir():
-				if n := de.Name(); n[0] == '.' || n[0] == '_' || ownRoot(p) {
-					continue
-				}
-				dirs = append(dirs, p)
-				if err := walk(p); err != nil {
-					return err
-				}
-			case de.Type().IsRegular():
-				if _, ok := want[p]; ok || headerFor(p) == "" || !isGenerated(p) {
-					continue
-				}
-				sw.remove = append(sw.remove, p)
-				gone[d]++
-				if q, ok := wantFold[fold(p)]; ok && sameEntry(p, q) {
-					write[q] = true
-				}
-			}
-		}
-		return nil
-	}
-	if err := walk(out); err != nil {
-		return sweep{swept: sw.swept}, err
+	keep, keepBy := wantDirs(out, want)
+	if err := w.walk(out); err != nil {
+		return sweep{swept: w.sw.swept}, err
 	}
 	// After the walk, which may put back a file set aside.
 	for p, data := range want {
 		if got, err := os.ReadFile(p); err != nil || !bytes.Equal(got, data) {
-			write[p] = true
+			w.write[p] = true
 		}
 	}
 	// Deepest first, so that a directory's emptied children count as gone.
-	slices.SortFunc(dirs, func(a, b string) int {
+	slices.SortFunc(w.dirs, func(a, b string) int {
 		return cmp.Or(cmp.Compare(strings.Count(b, string(filepath.Separator)), strings.Count(a, string(filepath.Separator))), cmp.Compare(a, b))
 	})
-	for _, d := range dirs {
+	for _, d := range w.dirs {
 		k, kept := keep[fold(d)]
 		exact := kept && k == d
 		switch {
-		case !exact && held[d] > 0 && gone[d] == held[d]:
-			sw.emptied = append(sw.emptied, d)
-			gone[filepath.Dir(d)]++
+		case !exact && w.held[d] > 0 && w.gone[d] == w.held[d]:
+			w.sw.emptied = append(w.sw.emptied, d)
+			w.gone[filepath.Dir(d)]++
 		case kept && !exact:
 			p := keepBy[fold(d)]
 			rel := func(q string) string {
@@ -558,9 +523,107 @@ func staleFiles(out string, want map[string][]byte, owners map[string]string, ti
 			return sweep{}, fmt.Errorf("plugin %s: path %q: the directory %q differs only in case; rename it", owners[p], rel(p), rel(d))
 		}
 	}
-	sw.write = slices.Sorted(maps.Keys(write))
-	slices.Sort(sw.remove)
-	return sw, nil
+	w.sw.write = slices.Sorted(maps.Keys(w.write))
+	slices.Sort(w.sw.remove)
+	return w.sw, nil
+}
+
+// wantDirs returns, by folded path, each directory below out that a file of
+// want goes into: its spelling, and the first path of want in it.
+func wantDirs(out string, want map[string][]byte) (keep, keepBy map[string]string) {
+	keep = map[string]string{}   // folded directory a file of want goes into → its spelling
+	keepBy = map[string]string{} // folded directory → the first path of want in it
+	for _, p := range slices.Sorted(maps.Keys(want)) {
+		for d := filepath.Dir(p); within(out, d) && d != out; d = filepath.Dir(d) {
+			if _, ok := keep[fold(d)]; !ok {
+				keep[fold(d)], keepBy[fold(d)] = d, p
+			}
+		}
+	}
+	return keep, keepBy
+}
+
+// staleWalk is the state of staleFiles's walk of out.
+type staleWalk struct {
+	out      string
+	want     map[string][]byte
+	tidy     bool
+	sw       sweep
+	write    map[string]bool
+	wantFold map[string]string // folded path → the path of want
+	// held counts each directory's entries, gone those that go.
+	held, gone map[string]int
+	dirs       []string
+}
+
+// walk lists the directory d, which it reads through a symlink only when
+// it is out itself, as os.ReadDir does.
+func (w *staleWalk) walk(d string) error {
+	des, err := w.readDir(d)
+	if err != nil {
+		return err
+	}
+	for _, de := range des {
+		if err := w.entry(d, de); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// readDir returns the entries of d, a missing out having none. With tidy,
+// it first sweeps what an interrupted run left in d.
+func (w *staleWalk) readDir(d string) ([]fs.DirEntry, error) {
+	des, err := os.ReadDir(d)
+	if err != nil {
+		if d == w.out && errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !w.tidy {
+		return des, nil
+	}
+	done, err := sweepLeftovers(d, des)
+	w.sw.swept = append(w.sw.swept, done...)
+	if err != nil {
+		return nil, err
+	}
+	if len(done) > 0 {
+		return os.ReadDir(d)
+	}
+	return des, nil
+}
+
+// entry counts the entry de of d, walks it when it is a directory, and
+// marks it for removal when it is a generated file nothing produces now.
+func (w *staleWalk) entry(d string, de fs.DirEntry) error {
+	p := filepath.Join(d, de.Name())
+	if leftover.MatchString(de.Name()) {
+		if !w.tidy {
+			w.sw.leftovers = append(w.sw.leftovers, p)
+		}
+		return nil // -check leaves them; they never hold a directory
+	}
+	w.held[d]++
+	switch {
+	case de.IsDir():
+		if n := de.Name(); n[0] == '.' || n[0] == '_' || ownRoot(p) {
+			return nil
+		}
+		w.dirs = append(w.dirs, p)
+		return w.walk(p)
+	case de.Type().IsRegular():
+		if _, ok := w.want[p]; ok || headerFor(p) == "" || !isGenerated(p) {
+			return nil
+		}
+		w.sw.remove = append(w.sw.remove, p)
+		w.gone[d]++
+		if q, ok := w.wantFold[fold(p)]; ok && sameEntry(p, q) {
+			w.write[q] = true
+		}
+	}
+	return nil
 }
 
 // ownRoot reports whether the directory d is the root of output the sweep

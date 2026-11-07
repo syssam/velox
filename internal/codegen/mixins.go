@@ -212,71 +212,95 @@ func (r *mixinReader) pkg(path string) (*mixinPkg, error) {
 // path, its own and those it has through embedded structs, by kind; a
 // method of a shape velox-gen does not bind is a *FileError.
 func (r *mixinReader) methods(path, name string) (map[string]foundMethod, error) {
-	found := map[string]foundMethod{}
-	depth := map[string]int{}
-	var walk func(path, name string, d int, seen map[string]bool) error
-	walk = func(path, name string, d int, seen map[string]bool) error {
-		key := path + "." + name
-		if seen[key] || noBehaviour[path] {
-			return nil
+	w := &methodWalk{r: r, found: map[string]foundMethod{}, depth: map[string]int{}, seen: map[string]bool{}}
+	if err := w.walk(path, name, 0); err != nil {
+		return nil, err
+	}
+	return w.found, nil
+}
+
+// methodWalk is the state of one methods call.
+type methodWalk struct {
+	r     *mixinReader
+	found map[string]foundMethod
+	depth map[string]int // the embedding depth each found method is at
+	seen  map[string]bool
+}
+
+// walk adds the methods of the type name of the package at path, at
+// embedding depth d, and those of the structs it embeds.
+func (w *methodWalk) walk(path, name string, d int) error {
+	key := path + "." + name
+	if w.seen[key] || noBehaviour[path] {
+		return nil
+	}
+	w.seen[key] = true
+	p, err := w.r.pkg(path)
+	if err != nil {
+		return err
+	}
+	t := p.types[name]
+	if err := w.own(p, t, name, d); err != nil {
+		return err
+	}
+	if t == nil {
+		return nil
+	}
+	st, ok := t.spec.Type.(*ast.StructType)
+	if !ok {
+		return nil
+	}
+	for _, f := range st.Fields.List {
+		if len(f.Names) != 0 {
+			continue
 		}
-		seen[key] = true
-		p, err := r.pkg(path)
-		if err != nil {
+		if err := w.embedded(path, t, f.Type, d); err != nil {
 			return err
 		}
-		t := p.types[name]
-		for _, m := range p.methods[name] {
-			k := m.fd.Name.Name
-			if old, ok := depth[k]; ok && old <= d {
-				continue
-			}
-			pos := p.fset.Position(m.fd.Pos())
-			if t != nil && t.spec.TypeParams != nil {
-				return &FileError{Path: m.path, Line: pos.Line, Reason: fmt.Sprintf("%s.%s: %s is a generic type, whose instance velox-gen cannot name; declare the behaviour on a mixin that is not generic", name, k, name)}
-			}
-			if err := mixinMethodShape(p, m, name); err != nil {
-				return err
-			}
-			found[k] = foundMethod{ptr: recvPtr(m.fd)}
-			depth[k] = d
+	}
+	return nil
+}
+
+// own adds the methods the type name, t, declares, but those found at a
+// lesser or equal depth already.
+func (w *methodWalk) own(p *mixinPkg, t *mixinType, name string, d int) error {
+	for _, m := range p.methods[name] {
+		k := m.fd.Name.Name
+		if old, ok := w.depth[k]; ok && old <= d {
+			continue
 		}
-		if t == nil {
-			return nil
+		pos := p.fset.Position(m.fd.Pos())
+		if t != nil && t.spec.TypeParams != nil {
+			return &FileError{Path: m.path, Line: pos.Line, Reason: fmt.Sprintf("%s.%s: %s is a generic type, whose instance velox-gen cannot name; declare the behaviour on a mixin that is not generic", name, k, name)}
 		}
-		st, ok := t.spec.Type.(*ast.StructType)
+		if err := mixinMethodShape(p, m, name); err != nil {
+			return err
+		}
+		w.found[k] = foundMethod{ptr: recvPtr(m.fd)}
+		w.depth[k] = d
+	}
+	return nil
+}
+
+// embedded walks the type ft that t, of the package at path, embeds at
+// depth d.
+func (w *methodWalk) embedded(path string, t *mixinType, ft ast.Expr, d int) error {
+	if s, ok := ft.(*ast.StarExpr); ok {
+		ft = s.X
+	}
+	switch x := ft.(type) {
+	case *ast.Ident:
+		return w.walk(path, x.Name, d+1)
+	case *ast.SelectorExpr:
+		id, ok := x.X.(*ast.Ident)
 		if !ok {
 			return nil
 		}
-		for _, f := range st.Fields.List {
-			if len(f.Names) != 0 {
-				continue
-			}
-			ft := f.Type
-			if s, ok := ft.(*ast.StarExpr); ok {
-				ft = s.X
-			}
-			switch x := ft.(type) {
-			case *ast.Ident:
-				if err := walk(path, x.Name, d+1, seen); err != nil {
-					return err
-				}
-			case *ast.SelectorExpr:
-				if id, ok := x.X.(*ast.Ident); ok {
-					if ip := importPath(t.file, id.Name, r); ip != "" {
-						if err := walk(ip, x.Sel.Name, d+1, seen); err != nil {
-							return err
-						}
-					}
-				}
-			}
+		if ip := importPath(t.file, id.Name, w.r); ip != "" {
+			return w.walk(ip, x.Sel.Name, d+1)
 		}
-		return nil
 	}
-	if err := walk(path, name, 0, map[string]bool{}); err != nil {
-		return nil, err
-	}
-	return found, nil
+	return nil
 }
 
 // recvPtr reports whether fd's receiver is a pointer.

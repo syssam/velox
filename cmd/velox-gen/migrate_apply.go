@@ -173,109 +173,159 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	if len(rest) > 0 {
 		return c.noArgs()
 	}
-	toSet := given(c.fs, "to") // -to 0 is a version: 0000 is a valid file
-	if baselineSet {
-		misuse := ""
-		switch {
-		case *resume:
-			misuse = "-baseline and -resume cannot be combined"
-		case *dryRun:
-			misuse = "-baseline and -dry-run cannot be combined"
-		case toSet && *to < baseline:
-			misuse = fmt.Sprintf("-to %d is below -baseline %d", *to, baseline)
-		}
-		if misuse != "" {
-			_, _ = fmt.Fprintf(stderr, "velox-gen: migrate apply: %s\n", misuse)
-			c.fs.Usage()
-			return 2
-		}
+	a := &applyRun{
+		c: c, stdout: stdout,
+		to: *to, resume: *resume, lockWait: *lockWait, dryRun: *dryRun,
+		baseline: baseline, baselineSet: baselineSet,
+		toSet: given(c.fs, "to"), // -to 0 is a version: 0000 is a valid file
 	}
-	fsys := os.DirFS(c.abs(dir))
-	show := func(files []migrate.File) int {
-		for _, f := range files {
-			if toSet && f.Version > *to {
-				break
-			}
-			data, err := fs.ReadFile(fsys, f.Path)
-			if err != nil {
-				return c.fail(1, err)
-			}
-			_, _ = fmt.Fprintf(stdout, "== %s\n%s", c.path(f.Path), data)
-		}
-		return 0
+	if misuse := a.misuse(); misuse != "" {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: migrate apply: %s\n", misuse)
+		c.fs.Usage()
+		return 2
 	}
-	if *dryRun {
-		// A SQLite file not made yet is an empty database: every file is
-		// pending, and nothing is opened.
-		dsn, src, ok := c.dsn(env)
-		if !ok {
-			return 2
-		}
-		d, code, ok := c.readDir(dir, 1)
-		if !ok {
+	a.fsys = os.DirFS(c.abs(dir))
+	if a.dryRun {
+		if code, done := a.unmadeDryRun(dir, env); done {
 			return code
-		}
-		if d.Config.Dialect == velox.SQLite && dsnForm(d.Config.Dialect, dsn, src, c.dialectOf()) == nil {
-			if _, err := os.Stat(sqlitePath(dsn)); errors.Is(err, fs.ErrNotExist) {
-				return show(d.Files)
-			}
 		}
 	}
 	// A dry run makes no database, and a baseline adopts one already there.
-	d, db, code, ok := c.connect(dir, env, 1, *dryRun || baselineSet)
+	d, db, code, ok := c.connect(dir, env, 1, a.dryRun || a.baselineSet)
 	if !ok {
 		return code
 	}
 	defer func() { _ = db.Close() }()
 	ctx, stop := signalContext()
 	defer stop()
-	ahead := func(rows []migrate.Applied) int {
-		_, _ = fmt.Fprintf(stdout, "the database is ahead of the directory (%s); nothing applied\n", versions(rows))
-		return 0
-	}
 
-	if *dryRun {
-		st, err := migrate.Status(ctx, db, fsys, migrate.WithLockWait(*lockWait))
+	if a.dryRun {
+		st, err := migrate.Status(ctx, db, a.fsys, migrate.WithLockWait(a.lockWait))
 		if err != nil {
 			return c.fail(1, err)
 		}
 		if len(st.Ahead) > 0 {
-			return ahead(st.Ahead)
+			return a.ahead(st.Ahead)
 		}
-		return show(st.Pending)
+		return a.show(st.Pending)
 	}
 
-	opts := []migrate.Option{migrate.WithLockWait(*lockWait)}
-	if toSet {
-		opts = append(opts, migrate.WithTarget(*to))
-	}
-	if *resume {
-		opts = append(opts, migrate.WithResume())
-	}
-	if baselineSet {
-		opts = append(opts, migrate.WithBaseline(baseline))
-	}
-	opts = append(opts, migrate.WithNotes(func(n string) { _, _ = fmt.Fprintf(stderr, "velox-gen: note: %s\n", c.text(n)) }))
-	r, err := migrate.Up(ctx, db, fsys, opts...)
+	r, err := migrate.Up(ctx, db, a.fsys, a.options(stderr)...)
 	if r != nil {
-		for _, v := range r.Baselined {
-			_, _ = fmt.Fprintf(stdout, "baselined %s\n", c.path(d.PathOf(v, "")))
-		}
-		for _, a := range r.Applied {
-			_, _ = fmt.Fprintf(stdout, "applied %s in %s\n", c.path(filePath(d, a)), a.Duration.Round(time.Microsecond))
-		}
+		a.report(d, r)
 	}
 	if err != nil {
 		return c.fail(1, err)
 	}
 	if r.Ahead {
-		st, err := migrate.Status(ctx, db, fsys) // the versions, which Up does not report
+		st, err := migrate.Status(ctx, db, a.fsys) // the versions, which Up does not report
 		if err != nil {
 			return c.fail(1, err)
 		}
-		return ahead(st.Ahead)
+		return a.ahead(st.Ahead)
 	}
 	return 0
+}
+
+// applyRun is one run of migrate apply, with its flags.
+type applyRun struct {
+	c           *dbCmd
+	stdout      io.Writer
+	fsys        fs.FS
+	to          uint64
+	toSet       bool
+	resume      bool
+	lockWait    time.Duration
+	dryRun      bool
+	baseline    uint64
+	baselineSet bool
+}
+
+// misuse returns why the flags cannot be combined with -baseline, or "".
+func (a *applyRun) misuse() string {
+	if !a.baselineSet {
+		return ""
+	}
+	switch {
+	case a.resume:
+		return "-baseline and -resume cannot be combined"
+	case a.dryRun:
+		return "-baseline and -dry-run cannot be combined"
+	case a.toSet && a.to < a.baseline:
+		return fmt.Sprintf("-to %d is below -baseline %d", a.to, a.baseline)
+	}
+	return ""
+}
+
+// show prints each of files up to -to, and returns the exit code.
+func (a *applyRun) show(files []migrate.File) int {
+	for _, f := range files {
+		if a.toSet && f.Version > a.to {
+			break
+		}
+		data, err := fs.ReadFile(a.fsys, f.Path)
+		if err != nil {
+			return a.c.fail(1, err)
+		}
+		_, _ = fmt.Fprintf(a.stdout, "== %s\n%s", a.c.path(f.Path), data)
+	}
+	return 0
+}
+
+// unmadeDryRun handles a dry run on a SQLite file not made yet, and a
+// missing DSN or unreadable directory. It reports the exit code, and
+// whether the run is done.
+func (a *applyRun) unmadeDryRun(dir string, env []string) (int, bool) {
+	c := a.c
+	// A SQLite file not made yet is an empty database: every file is
+	// pending, and nothing is opened.
+	dsn, src, ok := c.dsn(env)
+	if !ok {
+		return 2, true
+	}
+	d, code, ok := c.readDir(dir, 1)
+	if !ok {
+		return code, true
+	}
+	if d.Config.Dialect == velox.SQLite && dsnForm(d.Config.Dialect, dsn, src, c.dialectOf()) == nil {
+		if _, err := os.Stat(sqlitePath(dsn)); errors.Is(err, fs.ErrNotExist) {
+			return a.show(d.Files), true
+		}
+	}
+	return 0, false
+}
+
+// ahead prints that the database is ahead of the directory, by rows, and
+// returns the exit code.
+func (a *applyRun) ahead(rows []migrate.Applied) int {
+	_, _ = fmt.Fprintf(a.stdout, "the database is ahead of the directory (%s); nothing applied\n", versions(rows))
+	return 0
+}
+
+// options returns the options of migrate.Up for the flags; its notes go to
+// stderr.
+func (a *applyRun) options(stderr io.Writer) []migrate.Option {
+	opts := []migrate.Option{migrate.WithLockWait(a.lockWait)}
+	if a.toSet {
+		opts = append(opts, migrate.WithTarget(a.to))
+	}
+	if a.resume {
+		opts = append(opts, migrate.WithResume())
+	}
+	if a.baselineSet {
+		opts = append(opts, migrate.WithBaseline(a.baseline))
+	}
+	return append(opts, migrate.WithNotes(func(n string) { _, _ = fmt.Fprintf(stderr, "velox-gen: note: %s\n", a.c.text(n)) }))
+}
+
+// report prints each file of d that r baselined, then each it applied.
+func (a *applyRun) report(d *migrate.Dir, r *migrate.Report) {
+	for _, v := range r.Baselined {
+		_, _ = fmt.Fprintf(a.stdout, "baselined %s\n", a.c.path(d.PathOf(v, "")))
+	}
+	for _, ap := range r.Applied {
+		_, _ = fmt.Fprintf(a.stdout, "applied %s in %s\n", a.c.path(filePath(d, ap)), ap.Duration.Round(time.Microsecond))
+	}
 }
 
 // appliedJSON is a version of the history in status -json.

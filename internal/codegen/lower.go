@@ -803,188 +803,249 @@ func unset(f *Field, elem string) string {
 	return ""
 }
 
+// checkWriter writes one field's case of Check's switch.
+type checkWriter struct {
+	s     *entState
+	f     *Field
+	o     *OutField
+	where string
+	b     strings.Builder
+}
+
+// line writes one line of the case, indented by depth tabs.
+func (w *checkWriter) line(depth int, format string, args ...any) {
+	w.b.WriteString(strings.Repeat("\t", depth))
+	fmt.Fprintf(&w.b, format, args...)
+	w.b.WriteByte('\n')
+}
+
+// fail writes the return of a check that fails with msg.
+func (w *checkWriter) fail(msg string) {
+	w.s.useStd("errors", w.where)
+	w.line(2, "return errors.New(%s)", strconv.Quote(msg))
+}
+
+// conv returns x as the type t, when its type is another.
+func (w *checkWriter) conv(t string) string {
+	if w.o.ElemType == t {
+		return "x"
+	}
+	return t + "(x)"
+}
+
 // checks writes the case of Check's switch for f's column, when f has
 // checks, an enum or validators.
 func (s *entState) checks(e *Entity, f *Field, o *OutField, where string) {
 	if len(f.Checks) == 0 && f.Type != "enum" && f.Validators == 0 {
 		return
 	}
-	var b strings.Builder
-	line := func(depth int, format string, args ...any) {
-		b.WriteString(strings.Repeat("\t", depth))
-		fmt.Fprintf(&b, format, args...)
-		b.WriteByte('\n')
-	}
-	fail := func(msg string) {
-		s.useStd("errors", where)
-		line(2, "return errors.New(%s)", strconv.Quote(msg))
-	}
-	line(0, "case %sCol%s:", camel(s.out.Label), o.GoName)
-	line(1, "x := v.(%s)", o.ElemType)
+	w := &checkWriter{s: s, f: f, o: o, where: where}
+	w.line(0, "case %sCol%s:", camel(s.out.Label), o.GoName)
+	w.line(1, "x := v.(%s)", o.ElemType)
 	if o.Unset != "" {
 		// Optional: the zero value means unset, and unset is valid.
-		line(1, "if %s {", o.Unset)
-		line(2, "return nil")
-		line(1, "}")
+		w.line(1, "if %s {", o.Unset)
+		w.line(2, "return nil")
+		w.line(1, "}")
 	}
-	header := b.Len() // what is written past here is a check that can fail
+	header := w.b.Len() // what is written past here is a check that can fail
 	if f.Type == "enum" {
-		vals := make([]string, len(f.Enums))
-		plain := make([]string, len(f.Enums))
-		for i, en := range f.Enums {
-			vals[i] = strconv.Quote(en.Value)
-			plain[i] = en.Value
-		}
-		msg := strconv.Quote("is not one of " + strings.Join(plain, ", "))
-		if f.GoType == nil {
-			// The enum type is generated, and has IsValid.
-			line(1, "if !x.IsValid() {")
-			line(2, "return errors.New(%s)", msg)
-			line(1, "}")
-		} else {
-			line(1, "switch x {")
-			line(1, "case %s:", strings.Join(vals, ", "))
-			line(1, "default:")
-			line(1, "\treturn errors.New(%s)", msg)
-			line(1, "}")
-		}
-		s.useStd("errors", where)
-	}
-	// conv is x as the type t, when its type is another.
-	conv := func(t string) string {
-		if o.ElemType == t {
-			return "x"
-		}
-		return t + "(x)"
+		w.enum()
 	}
 	for _, c := range f.Checks {
-		args := make([]string, len(c.Args))
-		for i, a := range c.Args {
-			args[i] = strings.TrimSpace(string(a))
-		}
-		// num is the argument i as a literal of the element type, and as written.
-		num := func(i int) (lit, text string, ok bool) {
-			if i >= len(args) {
-				s.fail(where, "check %s needs an argument", c.Kind)
-				return "", "", false
-			}
-			if !fits(f.Type, args[i]) {
-				s.fail(where, "check %s: %s is not a %s", c.Kind, args[i], f.Type)
-				return "", "", false
-			}
-			if o.ElemType == f.Type {
-				return args[i], args[i], true // an untyped constant is already of the type
-			}
-			return o.ElemType + "(" + args[i] + ")", args[i], true
-		}
-		switch c.Kind {
-		case "NotEmpty":
-			if o.Unset != "" {
-				continue // "" is unset and passes: the check could never fail
-			}
-			switch f.Type {
-			case "string":
-				line(1, `if x == "" {`)
-			case "bytes":
-				line(1, "if len(x) == 0 {")
-			default:
-				s.fail(where, "check NotEmpty is for string and bytes fields, not %s", f.Type)
-				continue
-			}
-			fail("must not be empty")
-			line(1, "}")
-		case "MinLen", "MaxLen":
-			if f.Type != "string" && f.Type != "bytes" {
-				s.fail(where, "check %s is for string and bytes fields, not %s", c.Kind, f.Type)
-				continue
-			}
-			if len(args) != 1 {
-				s.fail(where, "check %s needs one argument", c.Kind)
-				continue
-			}
-			n, err := strconv.Atoi(args[0])
-			if err != nil {
-				s.fail(where, "check %s: %s is not a length", c.Kind, args[0])
-				continue
-			}
-			if c.Kind == "MinLen" && n <= 1 && o.Unset != "" {
-				continue // only "" is shorter, and "" is unset
-			}
-			if c.Kind == "MinLen" {
-				line(1, "if len(x) < %s {", args[0])
-				fail("length is less than " + args[0])
-			} else {
-				line(1, "if len(x) > %s {", args[0])
-				fail("length is more than " + args[0])
-			}
-			line(1, "}")
-		case "MinRuneLen", "MaxRuneLen":
-			if f.Type != "string" {
-				s.fail(where, "check %s is for string fields, not %s", c.Kind, f.Type)
-				continue
-			}
-			if len(args) != 1 {
-				s.fail(where, "check %s needs one argument", c.Kind)
-				continue
-			}
-			n, err := strconv.Atoi(args[0])
-			if err != nil {
-				s.fail(where, "check %s: %s is not a length", c.Kind, args[0])
-				continue
-			}
-			if c.Kind == "MinRuneLen" && n <= 1 && o.Unset != "" {
-				continue // only "" has fewer characters, and "" is unset
-			}
-			s.useStd("unicode/utf8", where)
-			if c.Kind == "MinRuneLen" {
-				line(1, "if utf8.RuneCountInString(%s) < %s {", conv("string"), args[0])
-				fail("length in characters is less than " + args[0])
-			} else {
-				line(1, "if utf8.RuneCountInString(%s) > %s {", conv("string"), args[0])
-				fail("length in characters is more than " + args[0])
-			}
-			line(1, "}")
-		case "Match":
-			var pat string
-			if f.Type != "string" || len(args) != 1 || json.Unmarshal(c.Args[0], &pat) != nil {
-				s.fail(where, "check Match is for string fields, with a pattern")
-				continue
-			}
-			s.useStd("regexp", where)
-			s.setup = append(s.setup, fmt.Sprintf("re%d := regexp.MustCompile(%s)", s.regexps, strconv.Quote(pat)))
-			line(1, "if !re%d.MatchString(%s) {", s.regexps, conv("string"))
-			s.regexps++
-			fail("does not match " + pat)
-			line(1, "}")
-		case "Range", "Min", "Max", "Positive", "Negative", "NonNegative":
-			if !numeric[f.Type] {
-				s.fail(where, "check %s is for number fields, not %s", c.Kind, f.Type)
-				continue
-			}
-			s.numberCheck(c.Kind, num, line, fail)
-		default:
-			s.fail(where, "unknown check %s", c.Kind)
-		}
+		w.check(c)
 	}
+	w.validators(e)
+	if w.b.Len() == header {
+		return // every check was one that cannot fail on a value that is set
+	}
+	s.cases = append(s.cases, w.b.String())
+}
+
+// enum writes the check that an enum's value is one of its values.
+func (w *checkWriter) enum() {
+	f := w.f
+	vals := make([]string, len(f.Enums))
+	plain := make([]string, len(f.Enums))
+	for i, en := range f.Enums {
+		vals[i] = strconv.Quote(en.Value)
+		plain[i] = en.Value
+	}
+	msg := strconv.Quote("is not one of " + strings.Join(plain, ", "))
+	if f.GoType == nil {
+		// The enum type is generated, and has IsValid.
+		w.line(1, "if !x.IsValid() {")
+		w.line(2, "return errors.New(%s)", msg)
+		w.line(1, "}")
+	} else {
+		w.line(1, "switch x {")
+		w.line(1, "case %s:", strings.Join(vals, ", "))
+		w.line(1, "default:")
+		w.line(1, "\treturn errors.New(%s)", msg)
+		w.line(1, "}")
+	}
+	w.s.useStd("errors", w.where)
+}
+
+// check writes the comparison of the check c, or reports why it cannot.
+func (w *checkWriter) check(c loadjson.Check) {
+	s, f, where := w.s, w.f, w.where
+	args := make([]string, len(c.Args))
+	for i, a := range c.Args {
+		args[i] = strings.TrimSpace(string(a))
+	}
+	switch c.Kind {
+	case "NotEmpty":
+		w.notEmpty()
+	case "MinLen", "MaxLen":
+		w.byteLen(c.Kind, args)
+	case "MinRuneLen", "MaxRuneLen":
+		w.runeLen(c.Kind, args)
+	case "Match":
+		w.match(c, args)
+	case "Range", "Min", "Max", "Positive", "Negative", "NonNegative":
+		if !numeric[f.Type] {
+			s.fail(where, "check %s is for number fields, not %s", c.Kind, f.Type)
+			return
+		}
+		num := func(i int) (lit, text string, ok bool) { return w.num(c.Kind, args, i) }
+		s.numberCheck(c.Kind, num, w.line, w.fail)
+	default:
+		s.fail(where, "unknown check %s", c.Kind)
+	}
+}
+
+// num returns the argument i of the check kind as a literal of the element
+// type, and as written; it reports a missing or ill-typed argument.
+func (w *checkWriter) num(kind string, args []string, i int) (lit, text string, ok bool) {
+	if i >= len(args) {
+		w.s.fail(w.where, "check %s needs an argument", kind)
+		return "", "", false
+	}
+	if !fits(w.f.Type, args[i]) {
+		w.s.fail(w.where, "check %s: %s is not a %s", kind, args[i], w.f.Type)
+		return "", "", false
+	}
+	if w.o.ElemType == w.f.Type {
+		return args[i], args[i], true // an untyped constant is already of the type
+	}
+	return w.o.ElemType + "(" + args[i] + ")", args[i], true
+}
+
+// notEmpty writes the NotEmpty check.
+func (w *checkWriter) notEmpty() {
+	if w.o.Unset != "" {
+		return // "" is unset and passes: the check could never fail
+	}
+	switch w.f.Type {
+	case "string":
+		w.line(1, `if x == "" {`)
+	case "bytes":
+		w.line(1, "if len(x) == 0 {")
+	default:
+		w.s.fail(w.where, "check NotEmpty is for string and bytes fields, not %s", w.f.Type)
+		return
+	}
+	w.fail("must not be empty")
+	w.line(1, "}")
+}
+
+// length returns the one argument of the length check kind, and whether it
+// is one; it reports why it is not.
+func (w *checkWriter) length(kind string, args []string) (int, bool) {
+	if len(args) != 1 {
+		w.s.fail(w.where, "check %s needs one argument", kind)
+		return 0, false
+	}
+	n, err := strconv.Atoi(args[0])
+	if err != nil {
+		w.s.fail(w.where, "check %s: %s is not a length", kind, args[0])
+		return 0, false
+	}
+	return n, true
+}
+
+// byteLen writes the MinLen or MaxLen check.
+func (w *checkWriter) byteLen(kind string, args []string) {
+	if w.f.Type != "string" && w.f.Type != "bytes" {
+		w.s.fail(w.where, "check %s is for string and bytes fields, not %s", kind, w.f.Type)
+		return
+	}
+	n, ok := w.length(kind, args)
+	if !ok {
+		return
+	}
+	if kind == "MinLen" && n <= 1 && w.o.Unset != "" {
+		return // only "" is shorter, and "" is unset
+	}
+	if kind == "MinLen" {
+		w.line(1, "if len(x) < %s {", args[0])
+		w.fail("length is less than " + args[0])
+	} else {
+		w.line(1, "if len(x) > %s {", args[0])
+		w.fail("length is more than " + args[0])
+	}
+	w.line(1, "}")
+}
+
+// runeLen writes the MinRuneLen or MaxRuneLen check.
+func (w *checkWriter) runeLen(kind string, args []string) {
+	if w.f.Type != "string" {
+		w.s.fail(w.where, "check %s is for string fields, not %s", kind, w.f.Type)
+		return
+	}
+	n, ok := w.length(kind, args)
+	if !ok {
+		return
+	}
+	if kind == "MinRuneLen" && n <= 1 && w.o.Unset != "" {
+		return // only "" has fewer characters, and "" is unset
+	}
+	w.s.useStd("unicode/utf8", w.where)
+	if kind == "MinRuneLen" {
+		w.line(1, "if utf8.RuneCountInString(%s) < %s {", w.conv("string"), args[0])
+		w.fail("length in characters is less than " + args[0])
+	} else {
+		w.line(1, "if utf8.RuneCountInString(%s) > %s {", w.conv("string"), args[0])
+		w.fail("length in characters is more than " + args[0])
+	}
+	w.line(1, "}")
+}
+
+// match writes the Match check, whose regexp is compiled once in setup.
+func (w *checkWriter) match(c loadjson.Check, args []string) {
+	s := w.s
+	var pat string
+	if w.f.Type != "string" || len(args) != 1 || json.Unmarshal(c.Args[0], &pat) != nil {
+		s.fail(w.where, "check Match is for string fields, with a pattern")
+		return
+	}
+	s.useStd("regexp", w.where)
+	s.setup = append(s.setup, fmt.Sprintf("re%d := regexp.MustCompile(%s)", s.regexps, strconv.Quote(pat)))
+	w.line(1, "if !re%d.MatchString(%s) {", s.regexps, w.conv("string"))
+	s.regexps++
+	w.fail("does not match " + pat)
+	w.line(1, "}")
+}
+
+// validators writes the call of each of the field's Validate functions.
+func (w *checkWriter) validators(e *Entity) {
+	f := w.f
 	for j := range f.Validators {
 		v := base(f)
 		if v == "" {
-			s.fail(where, "Validate is not allowed on a field of type %s", f.Type)
+			w.s.fail(w.where, "Validate is not allowed on a field of type %s", f.Type)
 			break
 		}
 		var ref *loadjson.FuncRef
 		if j < len(f.ValidatorRefs) {
 			ref = &f.ValidatorRefs[j]
 		}
-		fn := s.schemaFunc(e, f, ref, fmt.Sprintf("Validators[%d]", j), fmt.Sprintf("func(%s) error", v), where)
-		line(1, "if err := %s(%s); err != nil {", fn, conv(v))
-		line(2, "return err")
-		line(1, "}")
+		fn := w.s.schemaFunc(e, f, ref, fmt.Sprintf("Validators[%d]", j), fmt.Sprintf("func(%s) error", v), w.where)
+		w.line(1, "if err := %s(%s); err != nil {", fn, w.conv(v))
+		w.line(2, "return err")
+		w.line(1, "}")
 	}
-	if b.Len() == header {
-		return // every check was one that cannot fail on a value that is set
-	}
-	s.cases = append(s.cases, b.String())
 }
 
 // numberCheck writes the comparison of a number check.
@@ -1151,7 +1212,14 @@ func (l *lowerer) finish() {
 	for _, d := range l.enums {
 		l.out.Enums = append(l.out.Enums, d.enum)
 	}
+	l.checkDeclared(joins)
+	l.checkJoinTables(joins)
+	l.checkLabels()
+}
 
+// checkDeclared reports each name the package declares at its top level
+// that collides with another.
+func (l *lowerer) checkDeclared(joins []*join) {
 	// Every name the package declares at its top level.
 	declared := map[string]string{}
 	add := func(name, kind, schema, where string) bool {
@@ -1204,8 +1272,11 @@ func (l *lowerer) finish() {
 			add(j.ent.Name+"Handles", "handles type", j.owner, j.where)
 		}
 	}
-	// A join table is not an entity's table, and the generated functions of an
-	// entity are named by its label, so no two entities share one.
+}
+
+// checkJoinTables reports a join table that is also an entity's table.
+func (l *lowerer) checkJoinTables(joins []*join) {
+	// A join table is not an entity's table.
 	for _, j := range joins {
 		for _, e := range l.g.Entities {
 			if e.Table == j.ent.Table && e.TableSchema == j.ent.TableSchema {
@@ -1213,6 +1284,12 @@ func (l *lowerer) finish() {
 			}
 		}
 	}
+}
+
+// checkLabels reports two entities that share a label.
+func (l *lowerer) checkLabels() {
+	// The generated functions of an entity are named by its label, so no two
+	// entities share one.
 	labels := map[string]string{}
 	for _, o := range l.out.Entities {
 		if old, ok := labels[o.Label]; ok && old != o.Name { // one name is reported as a collision already

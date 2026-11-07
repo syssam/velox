@@ -218,36 +218,9 @@ func objKey(obj types.Object) string {
 // checkSources type-checks the packages at paths from source. schemaPath is
 // the import path of the schema package, which pattern names in dir.
 func checkSources(dir, schemaPath, pattern string, paths []string, env []string) (*sources, error) {
-	args := []string{"list", "-e", "-export", "-deps", "-json=ImportPath,Export,Dir,GoFiles,Error"}
-	targets := []string{pattern}
-	for _, p := range paths {
-		if p != schemaPath {
-			targets = append(targets, p)
-		}
-	}
-	out, stderr, err := run(dir, env, append(args, targets...)...)
+	all, exp, err := listSources(dir, schemaPath, pattern, paths, env)
 	if err != nil {
-		return nil, fmt.Errorf("go list -export %s: %w\n%s", strings.Join(targets, " "), err, strings.TrimSpace(stderr))
-	}
-	type listed struct {
-		ImportPath, Export, Dir string
-		GoFiles                 []string
-		Error                   *struct{ Err string }
-	}
-	exp := map[string]string{}
-	all := map[string]*listed{}
-	dec := json.NewDecoder(strings.NewReader(out))
-	for {
-		var p listed
-		if err := dec.Decode(&p); errors.Is(err, io.EOF) {
-			break
-		} else if err != nil {
-			return nil, fmt.Errorf("reading go list output: %w", err)
-		}
-		all[p.ImportPath] = &p
-		if p.Export != "" {
-			exp[p.ImportPath] = p.Export
-		}
+		return nil, err
 	}
 	sc := &sources{
 		fset: token.NewFileSet(),
@@ -275,43 +248,98 @@ func checkSources(dir, schemaPath, pattern string, paths []string, env []string)
 		if p.Error != nil {
 			return nil, errors.New(compileError(p.Error.Err))
 		}
-		var files []*ast.File
-		for _, name := range p.GoFiles {
-			f, err := parser.ParseFile(sc.fset, filepath.Join(p.Dir, name), nil, parser.SkipObjectResolution)
-			if err != nil {
-				return nil, err
-			}
-			files = append(files, f)
+		if err := sc.check(imp, path, p); err != nil {
+			return nil, err
 		}
-		tp, err := (&types.Config{Importer: imp}).Check(path, sc.fset, files, sc.info)
+	}
+	return sc, nil
+}
+
+// listedSource is a package as go list -json reports it to checkSources.
+type listedSource struct {
+	ImportPath, Export, Dir string
+	GoFiles                 []string
+	Error                   *struct{ Err string }
+}
+
+// listSources runs go list -export on pattern and the paths but schemaPath,
+// and their dependencies. It returns each listed package, and the export
+// data file of each, by import path.
+func listSources(dir, schemaPath, pattern string, paths []string, env []string) (map[string]*listedSource, map[string]string, error) {
+	args := []string{"list", "-e", "-export", "-deps", "-json=ImportPath,Export,Dir,GoFiles,Error"}
+	targets := []string{pattern}
+	for _, p := range paths {
+		if p != schemaPath {
+			targets = append(targets, p)
+		}
+	}
+	out, stderr, err := run(dir, env, append(args, targets...)...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("go list -export %s: %w\n%s", strings.Join(targets, " "), err, strings.TrimSpace(stderr))
+	}
+	exp := map[string]string{}
+	all := map[string]*listedSource{}
+	dec := json.NewDecoder(strings.NewReader(out))
+	for {
+		var p listedSource
+		if err := dec.Decode(&p); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return nil, nil, fmt.Errorf("reading go list output: %w", err)
+		}
+		all[p.ImportPath] = &p
+		if p.Export != "" {
+			exp[p.ImportPath] = p.Export
+		}
+	}
+	return all, exp, nil
+}
+
+// check parses and type-checks the package p at path, and records its
+// declarations.
+func (sc *sources) check(imp types.Importer, path string, p *listedSource) error {
+	var files []*ast.File
+	for _, name := range p.GoFiles {
+		f, err := parser.ParseFile(sc.fset, filepath.Join(p.Dir, name), nil, parser.SkipObjectResolution)
 		if err != nil {
-			return nil, fmt.Errorf("type-checking %s: %w", path, err)
+			return err
 		}
-		sc.pkgs[path] = tp
-		for _, f := range files {
-			for _, d := range f.Decls {
-				switch d := d.(type) {
-				case *ast.FuncDecl:
-					if k := objKey(sc.info.Defs[d.Name]); k != "" && d.Body != nil {
-						sc.decls[k] = d.Body
-					}
-				case *ast.GenDecl:
-					for _, s := range d.Specs {
-						vs, ok := s.(*ast.ValueSpec)
-						if !ok {
-							continue
-						}
-						for _, n := range vs.Names {
-							if k := objKey(sc.info.Defs[n]); k != "" {
-								sc.decls[k] = vs
-							}
-						}
-					}
+		files = append(files, f)
+	}
+	tp, err := (&types.Config{Importer: imp}).Check(path, sc.fset, files, sc.info)
+	if err != nil {
+		return fmt.Errorf("type-checking %s: %w", path, err)
+	}
+	sc.pkgs[path] = tp
+	for _, f := range files {
+		for _, d := range f.Decls {
+			sc.recordDecl(d)
+		}
+	}
+	return nil
+}
+
+// recordDecl records, by objKey, the body of the function d declares, or
+// the spec of each variable or constant it declares.
+func (sc *sources) recordDecl(d ast.Decl) {
+	switch d := d.(type) {
+	case *ast.FuncDecl:
+		if k := objKey(sc.info.Defs[d.Name]); k != "" && d.Body != nil {
+			sc.decls[k] = d.Body
+		}
+	case *ast.GenDecl:
+		for _, s := range d.Specs {
+			vs, ok := s.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for _, n := range vs.Names {
+				if k := objKey(sc.info.Defs[n]); k != "" {
+					sc.decls[k] = vs
 				}
 			}
 		}
 	}
-	return sc, nil
 }
 
 // methodKey is the objKey of r's method, which r's type may have through
