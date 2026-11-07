@@ -15,7 +15,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/syssam/velox/internal/conn"
 )
@@ -371,149 +370,37 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		return err
 	}
 	db.observe(ctx, st)
-	// The query's own Columns: the hooks get a copy of them.
-	cols := st.Columns
-	was := st.Each
-	joins := st.Joins
+	snap := takeRewriteSnapshot(st)
 	if db.Hooked() {
 		// Hooks may edit the statement in place; give them copies so that
 		// the query the statement came from stays as it was. With no hooks
 		// nothing is copied.
-		st.Where = slices.Clone(st.Where)
-		st.OrderBy = slices.Clone(st.OrderBy)
-		st.Columns = slices.Clone(st.Columns)
-		st.Set = slices.Clone(st.Set)
-		st.Returning = slices.Clone(st.Returning)
-		st.Joins = slices.Clone(st.Joins)
-		st.Tags = slices.Clone(st.Tags)
-		if st.Rows != nil {
-			rows := make([][]any, len(st.Rows))
-			for i, r := range st.Rows {
-				rows[i] = slices.Clone(r)
-			}
-			st.Rows = rows
-		}
-		if st.Conflict != nil {
-			cf := *st.Conflict
-			cf.Columns, cf.Update, cf.Where = slices.Clone(cf.Columns), slices.Clone(cf.Update), slices.Clone(cf.Where)
-			st.Conflict = &cf
-		}
-		if st.Each != nil {
-			ec := *st.Each
-			ec.Keys = slices.Clone(ec.Keys)
-			st.Each = &ec
-		}
+		cloneForHooks(st)
 	}
-	entity, op, writable, count, exists, agg, group, lock, wait, inTx := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.GroupBy, st.Lock, st.LockWait, st.InTx
-	// velox's own marks, which no hook can set: a hook that replaces the
-	// whole struct (*st = Statement{…}) zeroes them, and they are restored.
-	bidi, pin, iter, loaded := stmtBidi(st), stmtPin(st), st.iter, st.loaded
-	// each is the Each the hooks get, a copy of velox's (was) when there are
-	// hooks: a hook may not replace it or change it.
-	each := st.Each
-	returning := len(st.Returning) > 0
+	// The Each the hooks get: a copy of velox's when there are hooks. A hook
+	// may not replace it or change it.
+	snap.each = st.Each
 	for _, rw := range db.Cfg.Rewrites {
 		if err := rw(ctx, st); err != nil {
-			return newStageError(entity.Name, "rewrite", err)
+			return newStageError(snap.entity.Name, "rewrite", err)
 		}
 	}
-	setStmtBidi(st, bidi)
-	setStmtPin(st, pin)
-	st.iter, st.loaded = iter, loaded
-	if st.Op != op {
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's kind", entity.Name)
-	}
-	if st.Writable != writable {
-		// The scope reads it: without it, a Writable query drops the
-		// Write policy.
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Writable", entity.Name)
-	}
-	if st.InTx != inTx {
-		// scopeInsert reads it: a hook that claimed a transaction would send
-		// a policy-conditioned InsertAll without one.
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's InTx", entity.Name)
-	}
-	if st.Count != count {
-		// The scan depends on it, and it renders before Exists and an
-		// aggregate: a flip would read a count as a column, or the reverse.
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Count", entity.Name)
-	}
-	if st.Exists != exists {
-		// The scan depends on it: Exists reads no column.
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Exists", entity.Name)
-	}
-	if st.Aggregate != agg {
-		return errAggregateChanged(entity.Name)
-	}
-	if st.GroupBy != group {
-		// The scan depends on it: a key, then a value.
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's GroupBy", entity.Name)
-	}
-	if (count || exists || agg != 0) && !slices.Equal(st.Columns, cols) {
-		// The scan depends on them: one value, of the column's type.
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Columns", entity.Name)
-	}
-	if st.Lock != lock || st.LockWait != wait {
-		// The guard checked them.
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's lock", entity.Name)
-	}
-	if st.Each != each || (each != nil && !sameEach(each, was)) {
-		// The load reads the rows by it: each owner's, in its order.
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Each", entity.Name)
-	}
-	if !sameJoins(st.Joins, joins) {
-		// The scan reads the joined columns after the entity's own, by them.
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Joins", entity.Name)
-	}
-	switch {
-	case st.Entity == nil:
-		return fmt.Errorf("velox: %s: a Rewrite hook set the statement's Entity to nil", entity.Name)
-	case st.Entity != entity && (infoKit(st.Entity) != infoKit(entity) || len(st.Entity.Columns) != len(entity.Columns)):
-		// A copy (info := *st.Entity) keeps the scan plan; anything else
-		// would scan rows into the wrong fields.
-		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with %s, which is not a copy of it", entity.Name, st.Entity.Name)
-	case InfoPolicy(st.Entity) != InfoPolicy(entity):
-		// The scope reads the policy from the statement's Entity: a copy without
-		// it would unscope the statement.
-		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with a copy whose policy differs", entity.Name)
-	case len(st.Entity.filters) != len(entity.filters) || unsafe.SliceData(st.Entity.filters) != unsafe.SliceData(entity.filters):
-		// The scope reads the interceptors from the statement's Entity too.
-		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with a copy whose interceptors differ", entity.Name)
+	if err := snap.restoreAndCheck(st); err != nil {
+		return err
 	}
 	if len(db.Cfg.Rewrites) > 0 {
-		// A Rewrite hook may add conditions by name.
-		if err := resolveStatementNames(st); err != nil {
+		if err := db.checkRewritten(st, snap); err != nil {
 			return err
-		}
-		if err := CheckColumns(st); err != nil {
-			return err
-		}
-		if err := checkBidiRewrite(st, bidi); err != nil {
-			return err
-		}
-		if cf := st.Conflict; cf != nil {
-			if err := refuseBidiUpsert(st.Entity, cf); err != nil {
-				return err
-			}
-		}
-		if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
-			switch {
-			case db.D == MySQL:
-				return fmt.Errorf("velox: %s: a Rewrite hook gave the upsert a condition; MySQL's ON DUPLICATE KEY UPDATE takes none", entity.Name)
-			case cf.DoNothing || len(cf.Update) == 0:
-				// Rendering would drop it: there is no update branch.
-				return fmt.Errorf("velox: %s: a Rewrite hook gave the upsert a condition, but the upsert keeps the existing row and has no update branch to apply it to", entity.Name)
-			}
 		}
 	}
 	if err := db.scope(ctx, st); err != nil {
 		return err
 	}
-	if returning && len(st.Returning) == 0 && stmtUpsertPolicy(st) {
-		return fmt.Errorf("velox: %s: a Rewrite hook dropped the RETURNING of an upsert whose update branch the policy conditions; velox reads the row back to find a row the policy hides", entity.Name)
+	if snap.returning && len(st.Returning) == 0 && stmtUpsertPolicy(st) {
+		return fmt.Errorf("velox: %s: a Rewrite hook dropped the RETURNING of an upsert whose update branch the policy conditions; velox reads the row back to find a row the policy hides", snap.entity.Name)
 	}
 	db.capLimit(st)
-	if st.Entity == entity {
+	if st.Entity == snap.entity {
 		e, args, err := db.Cfg.Cache.Get(db.D, st)
 		if err != nil {
 			return err
