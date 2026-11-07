@@ -71,64 +71,94 @@ func writeAll(dir string, files map[string][]byte, remove []string) error {
 	if i := slices.Index(paths, "velox.sum"); i >= 0 {
 		paths = append(append(paths[:i:i], paths[i+1:]...), "velox.sum")
 	}
-	type swapped struct{ target, aside string } // aside "": the target was new
-	type setAside struct{ rel, target, aside string }
-	var (
-		gone    []setAside        // what remove names, set aside
-		unmake  []func() []string // each removes the directories one makeDirs made
-		temps   = map[string]string{}
-		done    []swapped
-		stray   []string // what a failed step left beside its target
-		removed = map[string]bool{}
-	)
-	undo := func(err error) error {
-		left := slices.Clone(stray)
-		for _, t := range temps {
-			if rerr := os.Remove(t); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-				left = append(left, t)
-			}
-		}
-		for _, s := range slices.Backward(done) {
-
-			if s.aside == "" {
-				if rerr := os.Remove(s.target); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-					left = append(left, s.target)
-				}
-			} else if rerr := renameFile(s.aside, s.target); rerr != nil {
-				left = append(left, s.target+" (what it held is in "+s.aside+")")
-			}
-		}
-		for _, u := range slices.Backward(unmake) {
-			left = append(left, u()...)
-		}
-		for _, s := range slices.Backward(gone) {
-
-			if rerr := renameFile(s.aside, s.target); rerr != nil {
-				left = append(left, s.target+" (what it held is in "+s.aside+")")
-			}
-		}
-		if len(left) > 0 {
-			slices.Sort(left)
-			return fmt.Errorf("%w; undoing the write failed, which left %s", err, strings.Join(left, ", "))
-		}
-		return err
+	w := &allWriter{dir: dir, files: files, remove: remove, temps: map[string]string{}}
+	if err := w.setAside(); err != nil {
+		return w.undo(err)
 	}
-	// aside is a new name beside target, which nothing holds.
-	aside := func(target, kind string) (string, error) {
-		a, err := writeTemp(filepath.Dir(target), "."+filepath.Base(target)+"."+kind+"-velox-*", nil) // a name of its own
-		if err != nil {
-			return "", err
-		}
-		if err := os.Remove(a); err != nil {
-			stray = append(stray, a)
-			return "", err
-		}
-		return a, nil
+	if err := w.writeTemps(paths); err != nil {
+		return w.undo(err)
 	}
-	for _, r := range remove {
+	for _, p := range paths {
+		if err := w.swap(p); err != nil {
+			return w.undo(err)
+		}
+	}
+	return w.commit()
+}
+
+// swapped is a file writeAll put in place; aside "" means the target was
+// new.
+type swapped struct{ target, aside string }
+
+// setAsideEntry is a path rel of remove, at target, that writeAll set aside.
+type setAsideEntry struct{ rel, target, aside string }
+
+// allWriter is the state of one writeAll call, which undo reverts.
+type allWriter struct {
+	dir    string
+	files  map[string][]byte
+	remove []string
+	gone   []setAsideEntry   // what remove names, set aside
+	unmake []func() []string // each removes the directories one makeDirs made
+	temps  map[string]string
+	done   []swapped
+	stray  []string // what a failed step left beside its target
+}
+
+// undo removes what w wrote and the directories it made, and renames back
+// what it set aside. It returns err, with what it could not undo.
+func (w *allWriter) undo(err error) error {
+	left := slices.Clone(w.stray)
+	for _, t := range w.temps {
+		if rerr := os.Remove(t); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+			left = append(left, t)
+		}
+	}
+	for _, s := range slices.Backward(w.done) {
+		if s.aside == "" {
+			if rerr := os.Remove(s.target); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+				left = append(left, s.target)
+			}
+		} else if rerr := renameFile(s.aside, s.target); rerr != nil {
+			left = append(left, s.target+" (what it held is in "+s.aside+")")
+		}
+	}
+	for _, u := range slices.Backward(w.unmake) {
+		left = append(left, u()...)
+	}
+	for _, s := range slices.Backward(w.gone) {
+		if rerr := renameFile(s.aside, s.target); rerr != nil {
+			left = append(left, s.target+" (what it held is in "+s.aside+")")
+		}
+	}
+	if len(left) > 0 {
+		slices.Sort(left)
+		return fmt.Errorf("%w; undoing the write failed, which left %s", err, strings.Join(left, ", "))
+	}
+	return err
+}
+
+// aside returns a new name beside target, which nothing holds.
+func (w *allWriter) aside(target, kind string) (string, error) {
+	a, err := writeTemp(filepath.Dir(target), "."+filepath.Base(target)+"."+kind+"-velox-*", nil) // a name of its own
+	if err != nil {
+		return "", err
+	}
+	if err := os.Remove(a); err != nil {
+		w.stray = append(w.stray, a)
+		return "", err
+	}
+	return a, nil
+}
+
+// setAside renames aside each path of remove, in order, but those under a
+// directory of remove, which go with it.
+func (w *allWriter) setAside() error {
+	removed := map[string]bool{}
+	for _, r := range w.remove {
 		removed[r] = true
 	}
-	for _, r := range slices.Sorted(slices.Values(remove)) {
+	for _, r := range slices.Sorted(slices.Values(w.remove)) {
 		under := false
 		for d := path.Dir(r); d != "." && d != "/" && !under; d = path.Dir(d) {
 			under = removed[d] // it goes with its directory
@@ -136,85 +166,102 @@ func writeAll(dir string, files map[string][]byte, remove []string) error {
 		if under {
 			continue
 		}
-		s := setAside{rel: r, target: filepath.Join(dir, filepath.FromSlash(r))}
-		a, err := aside(s.target, "gone")
+		s := setAsideEntry{rel: r, target: filepath.Join(w.dir, filepath.FromSlash(r))}
+		a, err := w.aside(s.target, "gone")
 		if err != nil {
-			return undo(err)
+			return err
 		}
 		if err := renameFile(s.target, a); err != nil {
-			return undo(err)
+			return err
 		}
 		s.aside = a
-		gone = append(gone, s)
+		w.gone = append(w.gone, s)
 	}
+	return nil
+}
+
+// writeTemps writes each file of paths under a temporary name in its own
+// directory, making the directories it lacks.
+func (w *allWriter) writeTemps(paths []string) error {
 	for _, p := range paths {
-		target := filepath.Join(dir, filepath.FromSlash(p))
+		target := filepath.Join(w.dir, filepath.FromSlash(p))
 		rm, err := makeDirs(filepath.Dir(target))
 		if err != nil {
-			return undo(err)
+			return err
 		}
-		unmake = append(unmake, rm)
-		t, err := writeTemp(filepath.Dir(target), "."+filepath.Base(target)+".tmp-velox-*", files[p])
+		w.unmake = append(w.unmake, rm)
+		t, err := writeTemp(filepath.Dir(target), "."+filepath.Base(target)+".tmp-velox-*", w.files[p])
 		if err != nil {
-			return undo(err)
+			return err
 		}
-		temps[p] = t
+		w.temps[p] = t
 	}
-	for _, p := range paths {
-		s := swapped{target: filepath.Join(dir, filepath.FromSlash(p))}
-		linked := false
-		if fi, err := os.Lstat(s.target); err == nil {
-			a, err := aside(s.target, "old")
-			if err != nil {
-				return undo(err)
-			}
-			// A hard link keeps a regular file at its path until the rename
-			// replaces it; a symbolic link, or where links fail, is renamed
-			// aside.
-			linked = fi.Mode().IsRegular() && linkFile(s.target, a) == nil
-			if !linked {
-				if err := renameFile(s.target, a); err != nil {
-					return undo(err)
-				}
-			}
-			s.aside = a
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return undo(err)
-		}
-		if err := renameFile(temps[p], s.target); err != nil {
-			if !linked {
-				done = append(done, s)
-			} else if rerr := os.Remove(s.aside); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-				stray = append(stray, s.aside) // the original is at its path still
-			}
-			return undo(err)
-		}
-		done = append(done, s)
-		delete(temps, p)
+	return nil
+}
+
+// swap renames the temporary file of p into place, keeping aside first the
+// file it replaces.
+func (w *allWriter) swap(p string) error {
+	s := swapped{target: filepath.Join(w.dir, filepath.FromSlash(p))}
+	linked, err := w.keepOld(&s)
+	if err != nil {
+		return err
 	}
+	if err := renameFile(w.temps[p], s.target); err != nil {
+		if !linked {
+			w.done = append(w.done, s)
+		} else if rerr := os.Remove(s.aside); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+			w.stray = append(w.stray, s.aside) // the original is at its path still
+		}
+		return err
+	}
+	w.done = append(w.done, s)
+	delete(w.temps, p)
+	return nil
+}
+
+// keepOld keeps aside the entry at s.target, when there is one, and sets
+// s.aside to where. It reports whether it kept it by a hard link.
+func (w *allWriter) keepOld(s *swapped) (linked bool, err error) {
+	fi, err := os.Lstat(s.target)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	a, err := w.aside(s.target, "old")
+	if err != nil {
+		return false, err
+	}
+	// A hard link keeps a regular file at its path until the rename
+	// replaces it; a symbolic link, or where links fail, is renamed
+	// aside.
+	linked = fi.Mode().IsRegular() && linkFile(s.target, a) == nil
+	if !linked {
+		if err := renameFile(s.target, a); err != nil {
+			return false, err
+		}
+	}
+	s.aside = a
+	return linked, nil
+}
+
+// commit deletes what w set aside once every file is in place: the files it
+// replaced, then the paths of remove, then each directory of them when it is
+// empty. It returns an error that names what it could not delete.
+func (w *allWriter) commit() error {
 	var left []string
-	for _, s := range done {
+	for _, s := range w.done {
 		if s.aside != "" {
 			if err := os.Remove(s.aside); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				left = append(left, s.aside)
 			}
 		}
 	}
-	// where is the path at which the path r of remove is now.
-	where := func(r string) string {
-		for _, s := range gone {
-			if r == s.rel {
-				return s.aside
-			}
-			if rest, ok := strings.CutPrefix(r, s.rel+"/"); ok {
-				return filepath.Join(s.aside, filepath.FromSlash(rest))
-			}
-		}
-		return filepath.Join(dir, filepath.FromSlash(r))
-	}
 	var dirs []string
-	for _, r := range slices.Sorted(slices.Values(remove)) {
-		p := where(r)
+	for _, r := range slices.Sorted(slices.Values(w.remove)) {
+		p := w.where(r)
 		fi, err := os.Lstat(p)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
@@ -240,6 +287,19 @@ func writeAll(dir string, files map[string][]byte, remove []string) error {
 		return fmt.Errorf("the files are written, but removing the old ones failed, which left %s", strings.Join(left, ", "))
 	}
 	return nil
+}
+
+// where returns the path at which the path r of remove is now.
+func (w *allWriter) where(r string) string {
+	for _, s := range w.gone {
+		if r == s.rel {
+			return s.aside
+		}
+		if rest, ok := strings.CutPrefix(r, s.rel+"/"); ok {
+			return filepath.Join(s.aside, filepath.FromSlash(rest))
+		}
+	}
+	return filepath.Join(w.dir, filepath.FromSlash(r))
 }
 
 // holdSignals holds SIGINT and SIGTERM until release. A write that holds

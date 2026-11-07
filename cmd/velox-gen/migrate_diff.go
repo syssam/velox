@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/codegen"
 	"github.com/syssam/velox/migrate"
 )
@@ -177,36 +178,9 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 
 	// The directory, or a new one of -dialect.
 	abs := c.abs(dir)
-	var d *migrate.Dir
-	state, err := dirState(abs)
-	if err != nil {
-		return c.fail(1, err)
-	}
-	if state != migrationDir {
-		if dialect.d == 0 {
-			how := "does not exist"
-			if state == otherDir {
-				how = "is not a migration directory yet"
-			}
-			_, _ = fmt.Fprintf(stderr, "velox-gen: migrate diff: %s %s; name its dialect with -dialect to start it\n", filepath.Clean(*c.dir), how)
-			return 2
-		}
-		if d, err = migrate.NewDir(migrate.Config{Dialect: dialect.d}); err != nil {
-			return c.fail(1, err)
-		}
-	} else {
-		staleCode := 1
-		if *check {
-			staleCode = 3
-		}
-		var ok bool
-		if d, code, ok = c.readDir(dir, staleCode); !ok {
-			return code
-		}
-		if dialect.d != 0 && dialect.d != d.Config.Dialect {
-			_, _ = fmt.Fprintf(stderr, "velox-gen: migrate diff: -dialect %s disagrees with %s, which says %s\n", dialect.d, c.path("velox.json"), d.Config.Dialect)
-			return 2
-		}
+	d, state, code, ok := c.diffDir(dir, abs, dialect.d, *check)
+	if !ok {
+		return code
 	}
 	opts, err := renameOptions(d.Snapshot, renames)
 	if err != nil {
@@ -225,38 +199,14 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
 		return 1
 	}
-	to, err := func() (*migrate.Schema, error) {
-		m, err := codegen.Load(dir, pattern, env)
-		if err != nil {
-			return nil, err
-		}
-		g, err := codegen.Build(m)
-		if err != nil {
-			return nil, err
-		}
-		return codegen.Tables(g, d.Config.Dialect)
-	}()
+	to, err := schemaTables(dir, pattern, env, d.Config.Dialect)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", relErrors(dir, err))
 		return 1
 	}
 
 	if *check {
-		changes, err := migrate.Diff(d.Snapshot, to, opts)
-		if err != nil {
-			return c.fail(1, relMigrate(dir, err))
-		}
-		if len(changes) == 0 {
-			return 0
-		}
-		var b strings.Builder
-		fmt.Fprintf(&b, "velox-gen: migrate diff: %s is out of date:\n", c.path("schema.json"))
-		for _, ch := range changes {
-			fmt.Fprintf(&b, "  %s\n", ch)
-		}
-		b.WriteString("velox-gen: run velox-gen migrate diff\n")
-		_, _ = io.WriteString(stderr, b.String())
-		return 3
+		return c.checkDiff(dir, d, to, opts)
 	}
 
 	timeout := d.Config.LockTimeout
@@ -290,6 +240,78 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 		_, _ = fmt.Fprintln(stdout, c.path(p))
 	}
 	return c.stopped(interrupted, 0)
+}
+
+// diffDir returns the migration directory at abs, or a new one of
+// dialect, and dirState's state of abs. On a failure it reports the exit
+// code and false; a stale directory is staleCode 3 with check.
+func (c *migrateCmd) diffDir(dir, abs string, dialect velox.Dialect, check bool) (*migrate.Dir, int, int, bool) {
+	state, err := dirState(abs)
+	if err != nil {
+		return nil, 0, c.fail(1, err), false
+	}
+	if state != migrationDir {
+		if dialect == 0 {
+			how := "does not exist"
+			if state == otherDir {
+				how = "is not a migration directory yet"
+			}
+			_, _ = fmt.Fprintf(c.stderr, "velox-gen: migrate diff: %s %s; name its dialect with -dialect to start it\n", filepath.Clean(*c.dir), how)
+			return nil, 0, 2, false
+		}
+		d, err := migrate.NewDir(migrate.Config{Dialect: dialect})
+		if err != nil {
+			return nil, 0, c.fail(1, err), false
+		}
+		return d, state, 0, true
+	}
+	staleCode := 1
+	if check {
+		staleCode = 3
+	}
+	d, code, ok := c.readDir(dir, staleCode)
+	if !ok {
+		return nil, 0, code, false
+	}
+	if dialect != 0 && dialect != d.Config.Dialect {
+		_, _ = fmt.Fprintf(c.stderr, "velox-gen: migrate diff: -dialect %s disagrees with %s, which says %s\n", dialect, c.path("velox.json"), d.Config.Dialect)
+		return nil, 0, 2, false
+	}
+	return d, state, 0, true
+}
+
+// schemaTables loads and builds the schema package at pattern and returns
+// its tables, as dialect sees them.
+func schemaTables(dir, pattern string, env []string, dialect velox.Dialect) (*migrate.Schema, error) {
+	m, err := codegen.Load(dir, pattern, env)
+	if err != nil {
+		return nil, err
+	}
+	g, err := codegen.Build(m)
+	if err != nil {
+		return nil, err
+	}
+	return codegen.Tables(g, dialect)
+}
+
+// checkDiff is diff -check: it names each change from d's snapshot to to,
+// and returns 3 when there is any, else 0.
+func (c *migrateCmd) checkDiff(dir string, d *migrate.Dir, to *migrate.Schema, opts migrate.DiffOptions) int {
+	changes, err := migrate.Diff(d.Snapshot, to, opts)
+	if err != nil {
+		return c.fail(1, relMigrate(dir, err))
+	}
+	if len(changes) == 0 {
+		return 0
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "velox-gen: migrate diff: %s is out of date:\n", c.path("schema.json"))
+	for _, ch := range changes {
+		fmt.Fprintf(&b, "  %s\n", ch)
+	}
+	b.WriteString("velox-gen: run velox-gen migrate diff\n")
+	_, _ = io.WriteString(c.stderr, b.String())
+	return 3
 }
 
 // renameOptions is Diff's options for the renames, each checked against the
