@@ -1,6 +1,6 @@
 # 0020: the root package is the generic API, internal/engine is the rest
 
-Date: 2026-10-30
+Date: 2026-10-30. Amended by 0053: the drivers' errors are internal/dberr.
 
 ## Context
 
