@@ -815,6 +815,15 @@ func TestWriteFiltersAffectZero(t *testing.T) {
 	if n != 0 || err != nil {
 		t.Errorf("delete as ann: %d, %v", n, err)
 	}
+	// The guide's recipe tells forbidden from missing: the same condition,
+	// read past the policies, finds the hidden row and not a missing one.
+	tell := db.WithoutPolicy("tell forbidden from missing")
+	if found, err := tell.Query[testmodel.Ticket]().Where(Tk.ID.EQ(tk.ID)).Exists(ann); !found || err != nil {
+		t.Errorf("the hidden row: %v, %v", found, err)
+	}
+	if found, err := tell.Query[testmodel.Ticket]().Where(Tk.ID.EQ(tk.ID + 100)).Exists(ann); found || err != nil {
+		t.Errorf("a missing row: %v, %v", found, err)
+	}
 	got, err := sdb.Query[testmodel.Ticket]().Where(Tk.ID.EQ(tk.ID)).One(seed)
 	if err != nil || got.Title != "T-1" {
 		t.Fatalf("under WithoutPolicy: %+v, %v", got, err)

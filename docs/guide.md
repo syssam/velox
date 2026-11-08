@@ -116,6 +116,24 @@ Two options work differently from ent, so they are worth learning early
 - `Nillable()` makes the column nullable. The Go field becomes a pointer, and
   its handle gains `IsNull`, `NotNull` and `SetNull`.
 
+An insert takes a struct, so a field's zero value and "not set" are the same
+thing. That decides what a `Default` can do:
+
+| Field | Unset (zero) on insert stores | Can store the zero value? |
+| --- | --- | --- |
+| `field.Bool("active")` | `false` | yes |
+| `field.Bool("active").Default(true)` | refused by velox-gen: `false` could not be stored | — |
+| `field.Bool("active").Nillable().Default(true)` | `true`, when the `*bool` is nil | yes: `new(false)` |
+| `field.Int("seats").Default(0)` | `0` | yes |
+| `field.String("plan").Default("free")` | `"free"` | no: `""` becomes `"free"` |
+| `field.String("plan").Optional().Nillable()` | `NULL` | yes |
+
+For a bool that should default to `true`, use `Nillable().Default(true)`,
+or name the field so that its zero is the default (`disabled`, not
+`enabled`). `SchemaDefault` sets only the column's `DEFAULT`, for rows written
+outside velox. [Coming from ent](coming-from-ent.md) ("Defaults on a NOT NULL column")
+has the whole list.
+
 `field.Enum("status").Values(...)` generates a Go type, `gen.InvoiceStatus`,
 with a constant per value, such as `gen.InvoiceStatusPaid`.
 
@@ -738,6 +756,28 @@ One behaviour is worth knowing in advance: a `Write` condition filters rather
 than errors. An update aimed only at rows the caller may not change affects 0
 rows, as with SQL row-level security
 ([ADR 0008](decisions/0008-write-policies-filter.md)).
+Check the count. Where 0 must say "forbidden" or "not found", ask past the
+policies with the same condition; interceptors such as soft delete still
+apply, so a deleted row stays not found:
+
+```go
+n, err := db.Update[gen.Invoice]().Set(I.Status.Set(gen.InvoiceStatusPaid)).
+	Where(I.ID.EQ(id)).Exec(ctx)
+if err == nil && n == 0 {
+	hidden, err := db.WithoutPolicy("tell forbidden from missing").
+		Query[gen.Invoice]().Where(I.ID.EQ(id)).Exists(ctx)
+	switch {
+	case err != nil:
+		return err
+	case hidden:
+		return errForbidden // your own error
+	}
+	return velox.ErrNotFound
+}
+```
+
+The second query tells the caller that a row it may not change exists, so
+use it only where that is not a secret.
 
 `db.WithoutPolicy("monthly revenue report")` returns a DB that skips every
 policy, for admin jobs and reports. It needs a reason, which hooks can see,
@@ -837,8 +877,8 @@ A soft delete does not trigger `ON DELETE CASCADE`.
 
 ## Raw SQL
 
-Raw SQL is the escape hatch for what the builder cannot express. Both calls
-take a reason, because velox applies no policy or scope to raw SQL; filtering
+Raw SQL is the escape hatch for what the builder cannot express. Each call
+takes a reason, because velox applies no policy or scope to raw SQL; filtering
 by tenant is up to you.
 
 ```go
@@ -850,8 +890,24 @@ totals, err := db.Raw[gen.Invoice]("revenue report",
 ```
 
 `Raw` scans columns into an entity's fields by name, so alias computed
-columns to a column name. For a result that is not an entity, run your own
-SQL on `velox.Pool(db)`.
+columns to a column name. For a result that is not an entity, range over
+`Rows` and scan each row in column order:
+
+```go
+for row, err := range db.Rows(ctx, "revenue report",
+	"SELECT org_id, SUM(total_cents) FROM invoices GROUP BY org_id") {
+	if err != nil {
+		return err
+	}
+	var org, total int64
+	if err := row.Scan(&org, &total); err != nil {
+		return err
+	}
+}
+```
+
+All three run on the connection the DB uses, so in a `Tx` they see the
+transaction's own writes. `velox.Pool(db)` is nil on a transaction's DB.
 
 ## Row locks
 

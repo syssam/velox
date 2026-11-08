@@ -17,13 +17,17 @@ values.
 ## Consequences
 
 An application that must tell "forbidden" from "missing" checks the count, or
-reads the row first. A caller learns nothing about a row it may not change
+reads the row first. On 2026-11-08 a review asked for an opt-in error instead;
+it was declined: the engine would run a second, policy-free query after every
+write of 0 rows, and the guide's recipe (the same condition under
+`WithoutPolicy`, then `Exists`) does that where the application chooses, and
+`TestWriteFiltersAffectZero` checks it. A caller learns nothing about a row it may not change
 beyond that the write changed nothing.
 
 ## Evidence
 
 - `Policy.Write`'s doc, policy.go.
-- `TestWritePolicyFiltersToZeroRows` (policy_test.go:773): an update and a
+- `TestWriteFiltersAffectZero` (internal/apitest/policy_test.go): an update and a
   delete as a caller the policy refuses affect 0 rows with no error; the
   owner's delete affects 1. On a pnote, whose Read allows the row and whose
   Write hides it, the update and the delete affect 0 rows, the row is
