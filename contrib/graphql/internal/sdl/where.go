@@ -166,7 +166,7 @@ func (g *graph) whereOf(o *object) error {
 }
 
 // whereSubject is what a field's predicates in a where input filter: the
-// field itself, the node key, or a foreign key named by its edge.
+// field itself, the key, or a foreign key named by its edge.
 type whereSubject struct {
 	name   string // the GraphQL name the predicates' names start with
 	typ    string // the GraphQL type a predicate takes
@@ -182,9 +182,9 @@ type whereSubject struct {
 // i that its WhereOps asks for, if any.
 func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 	e, f, a := o.ent, o.ent.Fields[i], o.fanns[i]
-	key := o.node && i == e.PrimaryKey[0]
+	key := o.hasID && i == e.PrimaryKey[0]
 	if key && a.WhereOps == 0 {
-		// The node key filters by default; an explicit WhereOps wins.
+		// The key filters by default; an explicit WhereOps wins.
 		a.WhereOps = graphql.OpsDefault
 	}
 	if a.WhereOps == 0 || a.Skip&graphql.SkipWhereInput != 0 {
@@ -233,10 +233,10 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 }
 
 // whereSubjectOf returns what the predicates of o's field i, annotated a,
-// filter. key says whether the field is the node key.
+// filter. key says whether the field is the key, the type's ID.
 func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool, where string) (whereSubject, error) {
 	e, f := o.ent, o.ent.Fields[i]
-	s := whereSubject{edge: -1, v: goValue{typ: "string"}} // an ID is a string
+	s := whereSubject{edge: -1}
 	// The predicates carry the field's directives, and a foreign key's
 	// its edge's too, so that what guards the field guards its filters.
 	dirs, err := directives(a.Directives, where)
@@ -252,6 +252,7 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 			s.kind = "ID"
 		}
 		s.name, s.typ, s.goBase, s.target = "id", "ID", "ID", o.name
+		s.v = goValue{typ: o.keyTyp, pkg: o.keyPkg, own: true}
 	case o.fks[f.Name] || f.Implicit != "":
 		// A foreign key is never a raw scalar: its edge names it, and it
 		// takes the IDs of the edge's target.
@@ -264,7 +265,10 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 			return s, err
 		}
 		ed := e.Edges[j]
-		s.name, s.typ, s.kind, s.goBase, s.target, s.edge = en+"ID", "ID", "ID", goOf(en, ed.GoName)+"ID", g.byName[ed.Target].name, j
+		t := g.byName[ed.Target]
+		s.name, s.typ, s.kind, s.goBase, s.target, s.edge = en+"ID", "ID", "ID", goOf(en, ed.GoName)+"ID", t.name, j
+		// The foreign key's IDs are its target's keys, in their Go type.
+		s.v = goValue{typ: t.keyTyp, pkg: t.keyPkg, own: true}
 		eds, err := directives(o.eanns[j].Directives, "schema "+e.Name+", edge "+ed.Name)
 		if err != nil {
 			return s, err
@@ -341,7 +345,7 @@ func unite(ds, more []directive) []directive {
 func (g *graph) keyEdge(o *object, f *plugin.Field) int {
 	for i, ed := range o.ent.Edges {
 		t := g.byName[ed.Target]
-		if ed.Unique && ed.OwnsKey && ed.Field == f.Name && t != nil && t.node && o.eanns[i].Skip&graphql.SkipWhereInput == 0 {
+		if ed.Unique && ed.OwnsKey && ed.Field == f.Name && t != nil && t.hasID && o.eanns[i].Skip&graphql.SkipWhereInput == 0 {
 			return i
 		}
 	}

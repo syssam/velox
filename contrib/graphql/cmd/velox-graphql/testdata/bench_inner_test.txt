@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -92,15 +93,15 @@ func BenchmarkWhere(b *testing.B) {
 	run(b, `{ e3s(first: 20, where: {or: [{nameContains: "r1"}, {nameHasPrefix: "e3-r2"}], not: {nameIn: ["e3-r1","e3-r2"]}}) { edges { node { id name } } } }`, nil)
 }
 
-func BenchmarkNode(b *testing.B) {
-	run(b, `query($id: ID!) { node(id: $id) { ... on E4 { id name amount } } }`, map[string]any{"id": veloxgql.EncodeID("E4", int64(7))})
+func BenchmarkByID(b *testing.B) {
+	run(b, `query($id: ID!) { e4s(where: {id: $id}) { edges { node { id name amount } } } }`, map[string]any{"id": "7"})
 }
 
-func BenchmarkNodes20(b *testing.B) {
+func BenchmarkByIDs20(b *testing.B) {
 	ids := make([]string, 20)
 	for i := range ids {
-		ids[i] = veloxgql.EncodeID("E4", int64(i+1))
+		ids[i] = strconv.Itoa(i + 1)
 	}
-	run(b, `query($ids: [ID!]!) { nodes(ids: $ids) { ... on E4 { id name amount } } }`, map[string]any{"ids": ids})
+	run(b, `query($ids: [ID!]!) { e4s(first: 20, where: {idIn: $ids}) { edges { node { id name amount } } } }`, map[string]any{"ids": ids})
 }
 

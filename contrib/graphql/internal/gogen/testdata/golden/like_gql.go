@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion20
+const _ = veloxgql.GeneratedCodeIsVersion21
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the same edge of every row on l's page.
@@ -122,16 +122,16 @@ type CreateLikeInput struct {
 	Weight    *int8
 	CreatedAt *time.Time
 	// UserID is the ID of the Account the edge user leads to.
-	UserID string
+	UserID int64
 	// PostID is the ID of the Post the edge post leads to.
-	PostID string
+	PostID int64
 }
 
 // Setters returns the input's fields and edges as setters for db.Insert(x).Set.
 // A field not given sets nothing: x keeps its value, or the field's Default.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreateLikeInput) Setters() ([]velox.Setter[Like], error) {
 	var set []velox.Setter[Like]
@@ -144,15 +144,7 @@ func (in *CreateLikeInput) Setters() ([]velox.Setter[Like], error) {
 		}
 		set = append(set, Likes.CreatedAt.Set(*v))
 	}
-	userID, err := gqlgraph.DecodeID[int64]("CreateLikeInput.userID", in.UserID, "Account")
-	if err != nil {
-		return nil, err
-	}
-	set = append(set, Likes.User.Set(userID))
-	postID, err := gqlgraph.DecodeID[int64]("CreateLikeInput.postID", in.PostID, "Post")
-	if err != nil {
-		return nil, err
-	}
-	set = append(set, Likes.Post.Set(postID))
+	set = append(set, Likes.User.Set(in.UserID))
+	set = append(set, Likes.Post.Set(in.PostID))
 	return gqlgraph.Validate("CreateLikeInput", &likeType, set)
 }

@@ -17,7 +17,7 @@ var benchInner string
 
 // TestGeneratedBench generates ten entities' application, as TestLargeSchemaServed
 // does, and runs its benchmarks, logging their results: the time and the
-// allocations of a list, a nested list, a where filter and node lookups. It
+// allocations of a list, a nested list, a where filter and lookups by ID. It
 // runs only with VELOX_GQL_BENCH=1, as it measures and asserts nothing:
 //
 //	VELOX_GQL_BENCH=1 go test -run TestGeneratedBench -v ./cmd/velox-graphql

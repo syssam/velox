@@ -197,18 +197,3 @@ func base(v any) any {
 	}
 	return v
 }
-
-// basePtr is base for a pointer to set.
-func basePtr(p any) any {
-	switch x := p.(type) {
-	case *Time:
-		return (*time.Time)(x)
-	case *UUID:
-		return (*[16]byte)(x)
-	case *Uint64:
-		return (*uint64)(x)
-	case *Bytes:
-		return (*[]byte)(x)
-	}
-	return p
-}

@@ -151,7 +151,7 @@ func TestRequestBounded(t *testing.T) {
 		{name: "or: [] of 1600, at each of 20 uses", query: `query($w: PostWhereInput) { ` + repeat(20, func(i int) string { return fmt.Sprintf("a%d: posts(where: $w) { totalCount }", i) }) + ` }`, vars: map[string]any{"w": map[string]any{"or": listOf(1600, map[string]any{})}}, want: "BAD_USER_INPUT", mb: 300},
 		{name: "95000 strings", query: `query($v: [String!]!) { posts(where: {titleIn: $v}) { totalCount } }`, vars: map[string]any{"v": listOf(95000, "t")}, want: "BAD_USER_INPUT", mb: 300},
 		{name: "99000 unused strings", query: `query($v: [String!]!) { posts { totalCount } a: posts(where: {titleIn: $v}, first: 1) { totalCount } }`, vars: map[string]any{"v": listOf(99000, "")}, want: "BAD_USER_INPUT", mb: 300},
-		{name: "24000 IDs", query: `query($v: [ID!]!) { nodes(ids: $v) { id } }`, vars: map[string]any{"v": listOf(24000, post1)}, want: "BAD_USER_INPUT", mb: 50},
+		{name: "24000 IDs", query: `query($v: [ID!]!) { posts(where: {idIn: $v}) { totalCount } }`, vars: map[string]any{"v": listOf(24000, post1)}, want: "BAD_USER_INPUT", mb: 50},
 		{name: "a string of 1 MB at each use", query: `query($v: String!) { ` + repeat(30, func(i int) string { return fmt.Sprintf("a%d: posts(where: {title: $v}) { totalCount }", i) }) + ` }`, vars: map[string]any{"v": strings.Repeat("s", 1<<20-5000)}, want: "COST_LIMIT_EXCEEDED", mb: 100},
 
 		{name: "two levels of pages", query: `{ users(first: 100) { edges { node { ` + field + ` posts(first: 100) { edges { node { id title status views publishedAt } } } } } } }`, want: `"data":{"users"`, mb: 300},
@@ -193,9 +193,8 @@ func (s *testServer) seedLargeTitle(t *testing.T, n int) {
 func TestLargeValuesBounded(t *testing.T) {
 	s := newServer(t)
 	s.seedLargeTitle(t, 900<<10)
-	id := veloxgql.EncodeID("Post", int64(900001))
 	query := `{ ` + repeat(300, func(i int) string {
-		return fmt.Sprintf("a%d: posts(first: 1, where: {id: %q}) { edges { node { title } } }", i, id)
+		return fmt.Sprintf("a%d: posts(first: 1, where: {id: 900001}) { edges { node { title } } }", i)
 	}) + ` }`
 	var got string
 	n, d := allocated(func() { got = s.postQuery(t, query) })

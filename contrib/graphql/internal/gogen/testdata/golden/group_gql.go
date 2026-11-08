@@ -10,15 +10,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion20
-
-// IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
-// veloxgql.Noder.
-func (*Group) IsNode() {}
-
-// GlobalID is the global ID of the Group, the GraphQL field id: its type and
-// key, opaque to the client.
-func (g *Group) GlobalID() string { return veloxgql.EncodeID("Group", g.ID) }
+const _ = veloxgql.GeneratedCodeIsVersion21
 
 // MarshalGQL writes e as a GraphQL String, its stored value: the field
 // visibility of Group is a String, as graphql.Skip(graphql.SkipEnumField) asks.

@@ -21,11 +21,11 @@ type personWhere struct {
 	And []*personWhere
 	Or  []*personWhere
 
-	ID      *string
-	IDNEQ   *string
-	IDIn    []string
-	IDNotIn []string
-	IDGT    *string
+	ID      *int64
+	IDNEQ   *int64
+	IDIn    []int64
+	IDNotIn []int64
+	IDGT    *int64
 
 	Name          *string
 	NameNEQ       *string
@@ -63,7 +63,7 @@ func (w *personWhere) predicate(ctx context.Context) (velox.Predicate, error) {
 	gqlgraph.Not(f, "not", w.Not, (*personWhere).predicate)
 	gqlgraph.And(f, "and", w.And, (*personWhere).predicate)
 	gqlgraph.Or(f, "or", w.Or, (*personWhere).predicate)
-	gqlgraph.IDField[int64](f, "id", 0, gqlgraph.Ops[string]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT})
+	gqlgraph.IDField(f, "id", 0, gqlgraph.Ops[int64]{EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT})
 	gqlgraph.Field(f, "name", 1, gqlgraph.Ops[string]{
 		EQ: w.Name, NEQ: w.NameNEQ, In: w.NameIn, NotIn: w.NameNotIn, GT: w.NameGT,
 		Contains: w.NameContains, HasPrefix: w.NameHasPrefix, HasSuffix: w.NameHasSuffix,
@@ -77,8 +77,6 @@ func (w *personWhere) predicate(ctx context.Context) (velox.Predicate, error) {
 }
 
 func i64p(n int64) *int64 { return new(n) }
-
-func personID64(id int64) string { return veloxgql.EncodeID("Person", id) }
 
 // where returns the keys of the people w selects, in key order, and fails
 // the test on an error.
@@ -116,10 +114,10 @@ func TestWhereOps(t *testing.T) {
 		w    *personWhere
 		want []int64
 	}{
-		{"ID", &personWhere{ID: new(personID64(3))}, []int64{3}},
-		{"IDNEQ", &personWhere{IDNEQ: new(personID64(3))}, except(3)},
-		{"IDIn", &personWhere{IDIn: []string{personID64(3), personID64(5)}}, []int64{3, 5}},
-		{"IDNotIn", &personWhere{IDNotIn: []string{personID64(3), personID64(5)}}, except(3, 5)},
+		{"ID", &personWhere{ID: new(int64(3))}, []int64{3}},
+		{"IDNEQ", &personWhere{IDNEQ: new(int64(3))}, except(3)},
+		{"IDIn", &personWhere{IDIn: []int64{3, 5}}, []int64{3, 5}},
+		{"IDNotIn", &personWhere{IDNotIn: []int64{3, 5}}, except(3, 5)},
 		{"Name", &personWhere{Name: new("b")}, []int64{3, 6, 8}},
 		{"NameNEQ", &personWhere{NameNEQ: new("b")}, except(3, 6, 8)},
 		{"NameIn", &personWhere{NameIn: []string{"a", "f"}}, []int64{2, 4, 10}},
@@ -144,9 +142,9 @@ func TestWhereOps(t *testing.T) {
 		// An empty list is a list with nothing in it, not an absent one.
 		{"NameIn []", &personWhere{NameIn: []string{}}, nil},
 		{"NameNotIn []", &personWhere{NameNotIn: []string{}}, all},
-		{"IDIn []", &personWhere{IDIn: []string{}}, nil},
+		{"IDIn []", &personWhere{IDIn: []int64{}}, nil},
 		// Every predicate given holds.
-		{"several", &personWhere{NameIn: []string{"b", "d"}, AgeLT: i64p(95), IDNEQ: new(personID64(8))}, []int64{6, 9}},
+		{"several", &personWhere{NameIn: []string{"b", "d"}, AgeLT: i64p(95), IDNEQ: new(int64(8))}, []int64{6, 9}},
 	} {
 		if got := where(t, db, c.w); !slices.Equal(got, c.want) {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
@@ -261,55 +259,14 @@ func TestWhereDepthAndWidth(t *testing.T) {
 	}
 }
 
-// TestWhereIDs is Review Focus 1 for where: an ID of another type, in any
-// ID predicate, fails with ErrWrongIDType; a malformed one with ErrBadID.
-// Neither runs a statement, and neither error holds the key.
-func TestWhereIDs(t *testing.T) {
-	_, st := peopleDB(t)
-	ctx := context.Background()
-	post := veloxgql.EncodeID("Post", int64(3))
-	for name, w := range map[string]*personWhere{
-		"ID":            {ID: &post},
-		"IDNEQ":         {IDNEQ: &post},
-		"IDIn":          {IDIn: []string{personID64(1), post}},
-		"IDNotIn":       {IDNotIn: []string{post}},
-		"IDGT":          {IDGT: &post},
-		"nested":        {Or: []*personWhere{{Name: new("a")}, {ID: &post}}},
-		"under a not":   {Not: &personWhere{IDIn: []string{post}}},
-		"after a field": {Name: new("a"), IDNotIn: []string{personID64(2), post}},
-	} {
-		_, err := w.Pred(ctx)
-		if !errors.Is(err, veloxgql.ErrWrongIDType) {
-			t.Errorf("%s: %v, want ErrWrongIDType", name, err)
-		}
-		if err != nil && strings.Contains(err.Error(), "3") {
-			t.Errorf("%s: the error holds the key: %v", name, err)
-		}
-	}
-	bad := "not an ID"
-	for name, w := range map[string]*personWhere{
-		"ID":     {ID: &bad},
-		"IDIn":   {IDIn: []string{bad}},
-		"IDGT":   {IDGT: &bad},
-		"string": {ID: new(veloxgql.EncodeID("Person", "x"))},
-	} {
-		if _, err := w.Pred(ctx); !errors.Is(err, veloxgql.ErrBadID) {
-			t.Errorf("%s: %v, want ErrBadID", name, err)
-		}
-	}
-	if ran := st.take(); len(ran) != 0 {
-		t.Errorf("the refused IDs ran %v", ran)
-	}
-}
-
 // TestWhereKeyOps: the key's ordered predicate compares keys, and an empty
 // idIn, a list given with no ID, selects no row, as an empty In does.
 func TestWhereKeyOps(t *testing.T) {
 	db, _ := peopleDB(t)
-	if got := where(t, db, &personWhere{IDGT: new(personID64(7))}); !slices.Equal(got, []int64{8, 9, 10}) {
+	if got := where(t, db, &personWhere{IDGT: new(int64(7))}); !slices.Equal(got, []int64{8, 9, 10}) {
 		t.Errorf("idGT 7: %v, want [8 9 10]", got)
 	}
-	if got := where(t, db, &personWhere{IDIn: []string{}}); len(got) != 0 {
+	if got := where(t, db, &personWhere{IDIn: []int64{}}); len(got) != 0 {
 		t.Errorf("an empty idIn: %v, want no row", got)
 	}
 }
@@ -446,8 +403,9 @@ func TestWhereValueLists(t *testing.T) {
 	ctx := context.Background()
 	st.take()
 	many := make([]string, veloxgql.DefaultLimits().MaxFilterWidth+1)
-	for i := range many {
-		many[i] = personID64(int64(i + 1))
+	keys := make([]int64, len(many))
+	for i := range keys {
+		keys[i] = int64(i + 1)
 	}
 	ages := make([]int64, veloxgql.DefaultLimits().MaxFilterWidth+1)
 	for name, c := range map[string]struct {
@@ -457,8 +415,8 @@ func TestWhereValueLists(t *testing.T) {
 		"nameIn":     {&personWhere{NameIn: many}, "nameIn"},
 		"ageNotIn":   {&personWhere{AgeNotIn: ages}, "ageNotIn"},
 		"labelNotIn": {&personWhere{LabelNotIn: many}, "labelNotIn"},
-		"idIn":       {&personWhere{IDIn: many}, "idIn"},
-		"idNotIn":    {&personWhere{IDNotIn: many}, "idNotIn"},
+		"idIn":       {&personWhere{IDIn: keys}, "idIn"},
+		"idNotIn":    {&personWhere{IDNotIn: keys}, "idNotIn"},
 	} {
 		_, err := c.w.Pred(ctx)
 		if !errors.Is(err, veloxgql.ErrFilterTooWide) || !strings.HasPrefix(err.Error(), "veloxgql: PersonWhereInput."+c.field+": ") {
@@ -469,7 +427,7 @@ func TestWhereValueLists(t *testing.T) {
 		t.Errorf("the refused lists ran %v", ran)
 	}
 	// 100 is the most.
-	if _, err := (&personWhere{IDIn: many[:veloxgql.DefaultLimits().MaxFilterWidth]}).Pred(ctx); err != nil {
+	if _, err := (&personWhere{IDIn: keys[:veloxgql.DefaultLimits().MaxFilterWidth]}).Pred(ctx); err != nil {
 		t.Errorf("100 IDs: %v", err)
 	}
 }
@@ -478,14 +436,13 @@ func TestWhereValueLists(t *testing.T) {
 // its cause, and never the key.
 func TestWhereErrorsNameTheField(t *testing.T) {
 	ctx := context.Background()
-	post := veloxgql.EncodeID("Post", int64(3))
+	wide := make([]int64, veloxgql.DefaultLimits().MaxFilterWidth+1)
 	for _, c := range []struct {
 		w    *personWhere
 		want string
 	}{
-		{&personWhere{ID: &post}, "veloxgql: PersonWhereInput.id: Person ID: ID of another type"},
-		{&personWhere{Or: []*personWhere{{}, {IDNotIn: []string{post}}}}, "veloxgql: PersonWhereInput.or[1]: PersonWhereInput.idNotIn: Person ID: ID of another type"},
-		{&personWhere{Not: &personWhere{And: []*personWhere{{IDNEQ: new("x")}}}}, "veloxgql: PersonWhereInput.not: PersonWhereInput.and[0]: PersonWhereInput.idNEQ: Person ID: malformed ID: not canonical base64url without padding"},
+		{&personWhere{IDIn: wide}, "veloxgql: PersonWhereInput.idIn: filter list is too long: it has 101 entries, and the most is 100"},
+		{&personWhere{Or: []*personWhere{{}, {IDNotIn: wide}}}, "veloxgql: PersonWhereInput.or[1]: PersonWhereInput.idNotIn: filter list is too long: it has 101 entries, and the most is 100"},
 		{nest(&personWhere{}, veloxgql.DefaultLimits().MaxFilterDepth+1, "not"), "veloxgql: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput: filter is nested too deep: it is nested 6 deep, and the most is 5"},
 	} {
 		if _, err := c.w.Pred(ctx); err == nil || err.Error() != c.want {
@@ -598,10 +555,10 @@ func TestPredTwiceOnOneContext(t *testing.T) {
 
 // TestPredErrorPath: an error of a nested input names the path to it.
 func TestPredErrorPath(t *testing.T) {
-	post := veloxgql.EncodeID("Post", int64(3))
-	w := &personWhere{Or: []*personWhere{{}, {Not: &personWhere{IDIn: []string{post}}}}}
+	wide := make([]int64, veloxgql.DefaultLimits().MaxFilterWidth+1)
+	w := &personWhere{Or: []*personWhere{{}, {Not: &personWhere{IDIn: wide}}}}
 	_, err := w.Pred(context.Background())
-	want := "veloxgql: PersonWhereInput.or[1]: PersonWhereInput.not: PersonWhereInput.idIn: Person ID: ID of another type"
+	want := "veloxgql: PersonWhereInput.or[1]: PersonWhereInput.not: PersonWhereInput.idIn: filter list is too long: it has 101 entries, and the most is 100"
 	if err == nil || err.Error() != want {
 		t.Errorf("%v, want %q", err, want)
 	}

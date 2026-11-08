@@ -1,7 +1,6 @@
 package gogen
 
 import (
-	"cmp"
 	"fmt"
 	"strings"
 
@@ -48,7 +47,7 @@ func (r *renderer) writePred(f *file, t *sdl.Type) error {
 	in := n + "WhereInput"
 	ctx, velox, impl := f.use("context", "context"), f.velox(), f.gqlgraph()
 	f.p("")
-	f.doc("", fmt.Sprintf("Pred is the condition w stands for on %s nodes, true for a nil or empty w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx), and on an ID that does not decode or is of another type.", n))
+	f.doc("", fmt.Sprintf("Pred is the condition w stands for on %s nodes, true for a nil or empty w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).", n))
 	f.p("func (w *%s) Pred(ctx %s.Context) (%s.Pred[%s], error) {", in, ctx, velox, e.Name)
 	f.p("	p, err := w.%s(ctx)", predMethod)
 	f.p("	return %s.Pred[%s](p), err", velox, e.Name)
@@ -124,23 +123,24 @@ func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, 
 	col := colConst(e, fd)
 	if w.IDs() {
 		// IDs: of t's key, or of the foreign key fd, which holds the keys of
-		// the edge's target. Each ID is decoded with veloxgql.DecodeID as the
-		// target's Key, which the helper converts to fd's Go type when that
-		// is not the Key.
+		// the edge's target. They are keys in the target's key Go type, which
+		// gqlgen decoded; the helper converts them to fd's Go type when that
+		// differs.
 		tt := r.types[w.Target]
-		if tt == nil || !tt.Node {
-			return "", fmt.Errorf("schema %s, field %s: its predicates take IDs of %s, which is not a Node, which is a bug", e.Name, w.Name, w.Target)
+		k, err := r.idKeyOf(f, e, tt)
+		if err != nil {
+			return "", fmt.Errorf("schema %s, field %s: its predicates take IDs of %s: %w", e.Name, w.Name, w.Target, err)
 		}
-		if elem := cmp.Or(fd.ElemType, tt.Key); elem != tt.Key {
+		if !sameGoType(fd, k.fd) {
 			if err := r.converts(e, fd, tt.Key); err != nil {
 				return "", err
 			}
 		}
 		if w.Edge >= 0 {
 			// A foreign key: its target's Read policy holds of it, as of the edge.
-			return items(fmt.Sprintf("%s.EdgeIDField[%s](f, %q, %s, %s, &%s, %s.Ops[string]{", impl, tt.Key, base, col, edgeConst(e, e.Edges[w.Edge]), typeVar(tt), impl), ops, "})"), nil
+			return items(fmt.Sprintf("%s.EdgeIDField(f, %q, %s, %s, &%s, %s.Ops[%s]{", impl, base, col, edgeConst(e, e.Edges[w.Edge]), typeVar(tt), impl, k.typ), ops, "})"), nil
 		}
-		return items(fmt.Sprintf("%s.IDField[%s](f, %q, %s, %s.Ops[string]{", impl, tt.Key, base, col, impl), ops, "})"), nil
+		return items(fmt.Sprintf("%s.IDField(f, %q, %s, %s.Ops[%s]{", impl, base, col, impl, k.typ), ops, "})"), nil
 	}
 	if w.Edge >= 0 {
 		return "", fmt.Errorf("schema %s, field %s: a foreign key's predicate that takes no IDs, which is a bug", e.Name, w.Name)

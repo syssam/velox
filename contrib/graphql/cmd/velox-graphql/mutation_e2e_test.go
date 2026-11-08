@@ -325,15 +325,15 @@ func TestUnknownRowCount(t *testing.T) {
 	a := &gen.Article{Title: "a"}
 	insert(t, ctx, db, a)
 
-	if _, err := updateWriter(ctx, writerID(w.ID), gen.UpdateWriterInput{Name: ptr("w2")}); err != nil {
+	if _, err := updateWriter(ctx, w.ID, gen.UpdateWriterInput{Name: ptr("w2")}); err != nil {
 		t.Errorf("updateWriter of a writer: %v", err)
 	}
-	_, err := updateWriter(ctx, writerID(w.ID+100), gen.UpdateWriterInput{Name: ptr("w3")})
+	_, err := updateWriter(ctx, w.ID+100, gen.UpdateWriterInput{Name: ptr("w3")})
 	if code(err) != veloxgql.CodeNotFound || err.Error() != "no Writer has this ID" {
 		t.Errorf("updateWriter of no writer: %v (code %q), want NOT_FOUND", err, code(err))
 	}
 
-	nw, err := createWriter(ctx, gen.CreateWriterInput{Name: "new", Password: "x", ArticleIDs: []string{articleID(a.ID)}}, nil)
+	nw, err := createWriter(ctx, gen.CreateWriterInput{Name: "new", Password: "x", ArticleIDs: []int64{a.ID}}, nil)
 	if err != nil {
 		t.Fatalf("createWriter re-pointing an article: %v", err)
 	}
@@ -631,16 +631,16 @@ func createCircle(ctx context.Context, in gen.CreateCircleInput) (*gen.Circle, e
 func createFolder(ctx context.Context, in gen.CreateFolderInput) (*gen.Folder, error) {
 	return create(ctx, new(gen.Folder), in.Setters)
 }
-func updateWriter(ctx context.Context, id string, in gen.UpdateWriterInput) (*gen.Writer, error) {
+func updateWriter(ctx context.Context, id int64, in gen.UpdateWriterInput) (*gen.Writer, error) {
 	return update(ctx, id, "Writer", gen.Writers.ID, in.Setters)
 }
-func updateArticle(ctx context.Context, id string, in gen.UpdateArticleInput) (*gen.Article, error) {
+func updateArticle(ctx context.Context, id int64, in gen.UpdateArticleInput) (*gen.Article, error) {
 	return update(ctx, id, "Article", gen.Articles.ID, in.Setters)
 }
-func updateCircle(ctx context.Context, id string, in gen.UpdateCircleInput) (*gen.Circle, error) {
+func updateCircle(ctx context.Context, id int64, in gen.UpdateCircleInput) (*gen.Circle, error) {
 	return update(ctx, id, "Circle", gen.Circles.ID, in.Setters)
 }
-func updateFolder(ctx context.Context, id string, in gen.UpdateFolderInput) (*gen.Folder, error) {
+func updateFolder(ctx context.Context, id int64, in gen.UpdateFolderInput) (*gen.Folder, error) {
 	return update(ctx, id, "Folder", gen.Folders.ID, in.Setters)
 }
 
@@ -662,12 +662,12 @@ func create[E any, PE velox.Entity[E]](ctx context.Context, x PE, setters func()
 }
 
 // update writes the setters an input gives, and app, the resolver's own,
-// to the row of E whose ID is id, a node of the GraphQL type typ, on the DB
-// in ctx. A setter of app wins over the input's of the same column. The
+// to the row of E whose key is k, the ID gqlgen decoded, of the GraphQL type
+// typ, on the DB in ctx. A setter of app wins over the input's of the same column. The
 // UPDATE is under E's policies: a row it does not change is NOT_FOUND. The
 // row is read back without the Read policy, as written (ADR 0009). With
 // nothing to set, the row is read under the Read policy.
-func update[E any, PE velox.Entity[E]](ctx context.Context, id, typ string, key velox.NumberCol[E, int64], setters func() ([]velox.Setter[E], error), app ...velox.Setter[E]) (*E, error) {
+func update[E any, PE velox.Entity[E]](ctx context.Context, k int64, typ string, key velox.NumberCol[E, int64], setters func() ([]velox.Setter[E], error), app ...velox.Setter[E]) (*E, error) {
 	set, err := setters()
 	if err != nil {
 		return nil, err
@@ -676,10 +676,6 @@ func update[E any, PE velox.Entity[E]](ctx context.Context, id, typ string, key 
 		set = slices.DeleteFunc(set, func(s velox.Setter[E]) bool { return s.Column() == a.Column() })
 	}
 	set = append(set, app...)
-	k, err := veloxgql.DecodeID[int64](id, typ)
-	if err != nil {
-		return nil, err
-	}
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -714,12 +710,6 @@ func (e *codedError) Extensions() map[string]any { return map[string]any{"code":
 func notFound(typ string) error {
 	return &codedError{msg: "no " + typ + " has this ID", code: veloxgql.CodeNotFound}
 }
-
-func writerID(id int64) string  { return veloxgql.EncodeID("Writer", id) }
-func articleID(id int64) string { return veloxgql.EncodeID("Article", id) }
-func circleID(id int64) string  { return veloxgql.EncodeID("Circle", id) }
-func profileID(id int64) string { return veloxgql.EncodeID("Profile", id) }
-func folderID(id int64) string  { return veloxgql.EncodeID("Folder", id) }
 
 // code is the GraphQL code of err: of the first error in its chain that has
 // one.
@@ -798,7 +788,7 @@ func TestCreate(t *testing.T) {
 		insert(t, e.ctx, e.db, p1)
 		input := gen.CreateWriterInput{
 			Name: "ann", Password: "s3cret", Meta: ptr(veloxgql.JSON(` + "`" + `{"k":"v"}` + "`" + `)),
-			CircleIDs: []string{circleID(c1.ID), circleID(c2.ID)}, ArticleIDs: []string{articleID(a1.ID)}, ProfileID: ptr(profileID(p1.ID)),
+			CircleIDs: []int64{c1.ID, c2.ID}, ArticleIDs: []int64{a1.ID}, ProfileID: ptr(p1.ID),
 		}
 		w, err := createWriter(e.ctx, input, nil)
 		if err != nil {
@@ -837,7 +827,7 @@ func TestCreateM2MBothSides(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
 		w1 := &gen.Writer{Name: "w1", Password: "x"}
 		insert(t, e.ctx, e.db, w1)
-		c, err := createCircle(e.ctx, gen.CreateCircleInput{Name: "from-circle", WriterIDs: []string{writerID(w1.ID)}})
+		c, err := createCircle(e.ctx, gen.CreateCircleInput{Name: "from-circle", WriterIDs: []int64{w1.ID}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -846,7 +836,7 @@ func TestCreateM2MBothSides(t *testing.T) {
 		}
 		c2 := &gen.Circle{Name: "c2"}
 		insert(t, e.ctx, e.db, c2)
-		w, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w2", Password: "x", CircleIDs: []string{circleID(c.ID), circleID(c2.ID)}}, nil)
+		w, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w2", Password: "x", CircleIDs: []int64{c.ID, c2.ID}}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -864,7 +854,7 @@ func TestRepeatedIDs(t *testing.T) {
 		insert(t, e.ctx, e.db, c)
 		insert(t, e.ctx, e.db, a)
 		w, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x",
-			CircleIDs: []string{circleID(c.ID), circleID(c.ID)}, ArticleIDs: []string{articleID(a.ID), articleID(a.ID)}}, nil)
+			CircleIDs: []int64{c.ID, c.ID}, ArticleIDs: []int64{a.ID, a.ID}}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -880,10 +870,10 @@ func TestRepeatedIDs(t *testing.T) {
 		// UPDATE matches no row, and the read after it finds the article
 		// the writer's.
 		for _, in := range []gen.UpdateWriterInput{
-			{AddCircleIDs: []string{circleID(c.ID)}, AddArticleIDs: []string{articleID(a.ID)}},
-			{AddCircleIDs: []string{circleID(c.ID), circleID(c.ID)}, AddArticleIDs: []string{articleID(a.ID), articleID(a.ID)}},
+			{AddCircleIDs: []int64{c.ID}, AddArticleIDs: []int64{a.ID}},
+			{AddCircleIDs: []int64{c.ID, c.ID}, AddArticleIDs: []int64{a.ID, a.ID}},
 		} {
-			if _, err := updateWriter(e.ctx, writerID(w.ID), in); err != nil {
+			if _, err := updateWriter(e.ctx, w.ID, in); err != nil {
 				t.Errorf("%v: %v", in, err)
 			}
 			if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(w.ID))); n != 1 {
@@ -908,13 +898,13 @@ func TestEdgeScope(t *testing.T) {
 
 		// Article.writer's key is on the article: org 8's writer, which the
 		// caller may not read, is NOT_FOUND, and no article is inserted.
-		_, err := createArticle(e.ctx, gen.CreateArticleInput{Title: "t", WriterID: ptr(writerID(other.ID))})
+		_, err := createArticle(e.ctx, gen.CreateArticleInput{Title: "t", WriterID: ptr(other.ID)})
 		wantEdgeErr(t, e.ctx, "org 8's writer as an article's", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "writer"))
 		if n := count(t, e.ctx, e.db.Query[gen.Article]().Where(gen.Articles.Title.EQ("t"))); n != 0 {
 			t.Errorf("%d articles t, want 0", n)
 		}
 
-		_, err = createCircle(e.ctx, gen.CreateCircleInput{Name: "c", WriterIDs: []string{writerID(other.ID)}})
+		_, err = createCircle(e.ctx, gen.CreateCircleInput{Name: "c", WriterIDs: []int64{other.ID}})
 		wantEdgeErr(t, e.ctx, "a circle of org 8's writer", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "writers"))
 		if n := count(t, e.ctx, e.db.Query[gen.Circle]()); n != 0 {
 			t.Errorf("%d circles, want 0", n)
@@ -925,7 +915,7 @@ func TestEdgeScope(t *testing.T) {
 
 		// The Write policy hides the locked article from the UPDATE that
 		// re-points it.
-		_, err = createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", ArticleIDs: []string{articleID(locked.ID)}}, nil)
+		_, err = createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", ArticleIDs: []int64{locked.ID}}, nil)
 		wantEdgeErr(t, e.ctx, "the locked article", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "articles"))
 		if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 0 {
 			t.Errorf("%d writers of org 7, want 0", n)
@@ -935,7 +925,7 @@ func TestEdgeScope(t *testing.T) {
 		// M2M's IDs.
 		hidden := &gen.Circle{Name: "hidden"}
 		insert(t, e.ctx, e.db, hidden)
-		_, err = createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", CircleIDs: []string{circleID(hidden.ID)}}, nil)
+		_, err = createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", CircleIDs: []int64{hidden.ID}}, nil)
 		wantEdgeErr(t, e.ctx, "the hidden circle", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "circles"))
 		if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 0 {
 			t.Errorf("%d writers of org 7, want 0", n)
@@ -953,7 +943,7 @@ func TestEdgeScope(t *testing.T) {
 		mentee8 := &gen.Writer{Name: "mentee8", Password: "x", MentorID: ptr(mentor8.ID)}
 		insert(t, ctx8, e.db, mentee8)
 		for _, id := range []int64{other.ID, mentee8.ID} {
-			_, err = createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", MenteeIDs: []string{writerID(id)}}, nil)
+			_, err = createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", MenteeIDs: []int64{id}}, nil)
 			wantEdgeErr(t, e.ctx, fmt.Sprintf("org 8's writer %d as a mentee", id), err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "mentees"))
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 0 {
@@ -973,8 +963,8 @@ func TestEdgeScope(t *testing.T) {
 		// hides from the UPDATE that adds it. Nothing moves.
 		visible := &gen.Circle{Name: "visible"}
 		insert(t, e.ctx, e.db, visible)
-		for _, in := range []gen.UpdateWriterInput{{Name: ptr("x")}, {}, {AddCircleIDs: []string{circleID(visible.ID)}}} {
-			_, err = updateWriter(e.ctx, writerID(other.ID), in)
+		for _, in := range []gen.UpdateWriterInput{{Name: ptr("x")}, {}, {AddCircleIDs: []int64{visible.ID}}} {
+			_, err = updateWriter(e.ctx, other.ID, in)
 			if code(err) != veloxgql.CodeNotFound || err.Error() != "no Writer has this ID" {
 				t.Errorf("updating org 8's writer with %v: %v (code %q), want NOT_FOUND", in, err, code(err))
 			}
@@ -988,12 +978,12 @@ func TestEdgeScope(t *testing.T) {
 			in   gen.UpdateWriterInput
 			edge string
 		}{
-			{gen.UpdateWriterInput{AddMenteeIDs: []string{writerID(mentee8.ID)}}, "mentees"},
-			{gen.UpdateWriterInput{AddMenteeIDs: []string{writerID(other.ID)}}, "mentees"},
-			{gen.UpdateWriterInput{AddArticleIDs: []string{articleID(locked.ID)}}, "articles"},
-			{gen.UpdateWriterInput{AddCircleIDs: []string{circleID(hidden.ID)}}, "circles"},
+			{gen.UpdateWriterInput{AddMenteeIDs: []int64{mentee8.ID}}, "mentees"},
+			{gen.UpdateWriterInput{AddMenteeIDs: []int64{other.ID}}, "mentees"},
+			{gen.UpdateWriterInput{AddArticleIDs: []int64{locked.ID}}, "articles"},
+			{gen.UpdateWriterInput{AddCircleIDs: []int64{hidden.ID}}, "circles"},
 		} {
-			_, err = updateWriter(e.ctx, writerID(w7.ID), c.in)
+			_, err = updateWriter(e.ctx, w7.ID, c.in)
 			wantEdgeErr(t, e.ctx, fmt.Sprint(c.in), err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, c.edge))
 		}
 		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(mentee8.ID)).One(ctx8); err != nil || got.MentorID == nil || *got.MentorID != mentor8.ID {
@@ -1007,7 +997,7 @@ func TestEdgeScope(t *testing.T) {
 		}
 		// Writer.mentor's key is on the row: org 8's writer is NOT_FOUND,
 		// and w7 is unchanged, its name too.
-		_, err = updateWriter(e.ctx, writerID(w7.ID), gen.UpdateWriterInput{Name: ptr("w7x"), MentorID: ptr(writerID(other.ID))})
+		_, err = updateWriter(e.ctx, w7.ID, gen.UpdateWriterInput{Name: ptr("w7x"), MentorID: ptr(other.ID)})
 		wantEdgeErr(t, e.ctx, "org 8's writer as w7's mentor", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "mentor"))
 		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w7.ID)).One(e.ctx); err != nil || got.MentorID != nil || got.Name != "w7" {
 			t.Errorf("w7: %v, %v: want it unchanged", got, err)
@@ -1024,7 +1014,7 @@ func TestM2MLinkNeedsReadOnly(t *testing.T) {
 		frozen := &gen.Circle{Name: "frozen"}
 		insert(t, e.ctx, e.db, frozen)
 
-		w, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", CircleIDs: []string{circleID(frozen.ID)}}, nil)
+		w, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", CircleIDs: []int64{frozen.ID}}, nil)
 		if err != nil {
 			t.Fatalf("CreateWriter with the frozen circle: %v", err)
 		}
@@ -1034,7 +1024,7 @@ func TestM2MLinkNeedsReadOnly(t *testing.T) {
 
 		w2 := &gen.Writer{Name: "w2", Password: "x"}
 		insert(t, e.ctx, e.db, w2)
-		if _, err := updateWriter(e.ctx, writerID(w2.ID), gen.UpdateWriterInput{AddCircleIDs: []string{circleID(frozen.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, w2.ID, gen.UpdateWriterInput{AddCircleIDs: []int64{frozen.ID}}); err != nil {
 			t.Fatalf("UpdateWriter adding the frozen circle: %v", err)
 		}
 		if got := circlesOf(t, e, w2.ID); !reflect.DeepEqual(got, []string{"frozen"}) {
@@ -1048,7 +1038,7 @@ func TestM2MLinkNeedsReadOnly(t *testing.T) {
 		if err != nil || c.Name != "frozen" {
 			t.Errorf("the frozen circle: %+v, %v", c, err)
 		}
-		_, err = updateCircle(e.ctx, circleID(frozen.ID), gen.UpdateCircleInput{Name: ptr("thawed")})
+		_, err = updateCircle(e.ctx, frozen.ID, gen.UpdateCircleInput{Name: ptr("thawed")})
 		if code(err) != veloxgql.CodeNotFound || err.Error() != "no Circle has this ID" {
 			t.Errorf("updating the frozen circle: %v (code %q), want NOT_FOUND", err, code(err))
 		}
@@ -1083,15 +1073,15 @@ func TestRepoint(t *testing.T) {
 			code string
 			want string
 		}{
-			{"an article another writer holds", gen.CreateWriterInput{ArticleIDs: []string{articleID(free.ID), articleID(held.ID)}},
+			{"an article another writer holds", gen.CreateWriterInput{ArticleIDs: []int64{free.ID, held.ID}},
 				veloxgql.CodeBadUserInput, fmt.Sprintf(linked, "articles")},
-			{"a profile another writer holds", gen.CreateWriterInput{ProfileID: ptr(profileID(heldP.ID))},
+			{"a profile another writer holds", gen.CreateWriterInput{ProfileID: ptr(heldP.ID)},
 				veloxgql.CodeBadUserInput, fmt.Sprintf(linked, "profile")},
-			{"a missing profile", gen.CreateWriterInput{ProfileID: ptr(profileID(999))},
+			{"a missing profile", gen.CreateWriterInput{ProfileID: ptr(int64(999))},
 				veloxgql.CodeNotFound, fmt.Sprintf(noNode, "profile")},
-			{"a missing article", gen.CreateWriterInput{ArticleIDs: []string{articleID(free.ID), articleID(999)}},
+			{"a missing article", gen.CreateWriterInput{ArticleIDs: []int64{free.ID, 999}},
 				veloxgql.CodeNotFound, fmt.Sprintf(noNode, "articles")},
-			{"two missing articles", gen.CreateWriterInput{ArticleIDs: []string{articleID(998), articleID(free.ID), articleID(999)}},
+			{"two missing articles", gen.CreateWriterInput{ArticleIDs: []int64{998, free.ID, 999}},
 				veloxgql.CodeNotFound, "edge articles: an ID names no node"},
 		} {
 			c.in.Name, c.in.Password = "w", "x"
@@ -1111,7 +1101,7 @@ func TestRepoint(t *testing.T) {
 			}
 		}
 
-		w, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", ArticleIDs: []string{articleID(free.ID)}, ProfileID: ptr(profileID(freeP.ID))}, nil)
+		w, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", ArticleIDs: []int64{free.ID}, ProfileID: ptr(freeP.ID)}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1129,12 +1119,12 @@ func TestRepoint(t *testing.T) {
 			in   gen.UpdateWriterInput
 			want string
 		}{
-			{"an article w0 holds", gen.UpdateWriterInput{Bio: ptr("b"), AddArticleIDs: []string{articleID(free.ID), articleID(held.ID)}},
+			{"an article w0 holds", gen.UpdateWriterInput{Bio: ptr("b"), AddArticleIDs: []int64{free.ID, held.ID}},
 				fmt.Sprintf(linked, "articles")},
-			{"a profile w0 holds", gen.UpdateWriterInput{Bio: ptr("b"), ProfileID: ptr(profileID(heldP.ID))},
+			{"a profile w0 holds", gen.UpdateWriterInput{Bio: ptr("b"), ProfileID: ptr(heldP.ID)},
 				fmt.Sprintf(linked, "profile")},
 		} {
-			_, err := updateWriter(e.ctx, writerID(w.ID), c.in)
+			_, err := updateWriter(e.ctx, w.ID, c.in)
 			wantEdgeErr(t, e.ctx, c.name, err, veloxgql.CodeBadUserInput, c.want)
 			if w := writerOf(held.ID); w == nil || *w != w0.ID {
 				t.Errorf("%s: the held article's writer is %v, want w0", c.name, w)
@@ -1150,7 +1140,7 @@ func TestRepoint(t *testing.T) {
 			}
 		}
 		// w's own profile, and its own article, again: nothing changes.
-		if _, err := updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{ProfileID: ptr(profileID(freeP.ID)), AddArticleIDs: []string{articleID(free.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{ProfileID: ptr(freeP.ID), AddArticleIDs: []int64{free.ID}}); err != nil {
 			t.Errorf("w's own profile and article: %v", err)
 		}
 		if got := writerOf(free.ID); got == nil || *got != w.ID {
@@ -1186,9 +1176,9 @@ func TestRepointHiddenChild(t *testing.T) {
 			}
 			return p.WriterID
 		}
-		in := gen.UpdateWriterInput{Name: ptr("renamed"), ProfileID: ptr(profileID(p2.ID))}
+		in := gen.UpdateWriterInput{Name: ptr("renamed"), ProfileID: ptr(p2.ID)}
 
-		_, err := updateWriter(e.ctx, writerID(w.ID), in)
+		_, err := updateWriter(e.ctx, w.ID, in)
 		wantEdgeErr(t, e.ctx, "over a hidden profile", err, veloxgql.CodeBadUserInput, fmt.Sprintf(linked, "profile"))
 		if !errors.Is(err, velox.ErrLinked) {
 			t.Errorf("over a hidden profile: %v, want velox.ErrLinked", err)
@@ -1198,9 +1188,9 @@ func TestRepointHiddenChild(t *testing.T) {
 		}
 		// The hidden profile's own ID, and one that names no profile: the
 		// same error.
-		_, missing := updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{ProfileID: ptr(profileID(999))})
+		_, missing := updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{ProfileID: ptr(int64(999))})
 		wantEdgeErr(t, e.ctx, "a missing profile", missing, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "profile"))
-		_, own := updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{ProfileID: ptr(profileID(p1.ID))})
+		_, own := updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{ProfileID: ptr(p1.ID)})
 		wantEdgeErr(t, e.ctx, "the hidden profile's own ID", own, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "profile"))
 		if fmt.Sprint(own) != fmt.Sprint(missing) {
 			t.Errorf("the hidden profile's own ID: %v, want %v", own, missing)
@@ -1215,7 +1205,7 @@ func TestRepointHiddenChild(t *testing.T) {
 		if _, err := e.raw.Exec(fmt.Sprintf("UPDATE profiles SET handle = 'seen' WHERE id = %d", p1.ID)); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := updateWriter(e.ctx, writerID(w.ID), in); err != nil {
+		if _, err := updateWriter(e.ctx, w.ID, in); err != nil {
 			t.Fatalf("over a profile the caller sees: %v", err)
 		}
 		if got := writerOf(p2.ID); got == nil || *got != w.ID {
@@ -1250,12 +1240,12 @@ func TestWriteHiddenProfile(t *testing.T) {
 
 		// Create and update, linking the frozen profile: NOT_FOUND.
 		notFound := fmt.Sprintf(noNode, "profile")
-		_, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "new", Password: "x", ProfileID: ptr(profileID(frozen.ID))}, nil)
+		_, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "new", Password: "x", ProfileID: ptr(frozen.ID)}, nil)
 		wantEdgeErr(t, e.ctx, "createWriter linking the frozen profile", err, veloxgql.CodeNotFound, notFound)
 		if n := count(t, e.ctx, e.db.Query[gen.Writer]().Where(gen.Writers.Name.EQ("new"))); n != 0 {
 			t.Errorf("%d writers new after the refused create, want 0", n)
 		}
-		_, err = updateWriter(e.ctx, writerID(other.ID), gen.UpdateWriterInput{ProfileID: ptr(profileID(frozen.ID))})
+		_, err = updateWriter(e.ctx, other.ID, gen.UpdateWriterInput{ProfileID: ptr(frozen.ID)})
 		wantEdgeErr(t, e.ctx, "updateWriter linking the frozen profile", err, veloxgql.CodeNotFound, notFound)
 		if p := writerOfProfile(t, e, frozen.ID); p != nil {
 			t.Errorf("the frozen profile's writer is %d, want none", *p)
@@ -1268,7 +1258,7 @@ func TestWriteHiddenProfile(t *testing.T) {
 		}
 
 		// Re-pointing: the unlink of the frozen profile matches no row.
-		_, err = updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{Name: ptr("renamed"), ProfileID: ptr(profileID(free.ID))})
+		_, err = updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{Name: ptr("renamed"), ProfileID: ptr(free.ID)})
 		wantEdgeErr(t, e.ctx, "re-pointing over the frozen profile", err, veloxgql.CodeBadUserInput, fmt.Sprintf(linked, "profile"))
 		check := func(when string) {
 			t.Helper()
@@ -1285,7 +1275,7 @@ func TestWriteHiddenProfile(t *testing.T) {
 		check("after the refused re-point")
 
 		// clearProfile: no error, and the link stays.
-		if _, err := updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{ClearProfile: true}); err != nil {
+		if _, err := updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{ClearProfile: true}); err != nil {
 			t.Errorf("clearProfile over the frozen profile: %v, want none", err)
 		}
 		check("after clearProfile")
@@ -1303,11 +1293,11 @@ func TestAtomic(t *testing.T) {
 		a := &gen.Article{Title: "a"}
 		insert(t, e.ctx, e.db, c)
 		insert(t, e.ctx, e.db, a)
-		_, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", CircleIDs: []string{circleID(c.ID), circleID(999)}}, nil)
+		_, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", CircleIDs: []int64{c.ID, 999}}, nil)
 		wantEdgeErr(t, e.ctx, "a missing circle", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "circles"))
 		// The second article is missing: the writer is inserted, and a
 		// re-pointed, before the read that checks them fails the create.
-		_, err = createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", ArticleIDs: []string{articleID(a.ID), articleID(999)}}, nil)
+		_, err = createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", ArticleIDs: []int64{a.ID, 999}}, nil)
 		wantEdgeErr(t, e.ctx, "a missing article", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "articles"))
 		if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 0 {
 			t.Errorf("%d writers, want 0", n)
@@ -1330,9 +1320,9 @@ func TestAtomic(t *testing.T) {
 			if err := tx.Insert(&gen.Circle{Name: "kept"}).Exec(ctx); err != nil {
 				return err
 			}
-			_, err := createWriter(ctx, gen.CreateWriterInput{Name: "new", Password: "x", ArticleIDs: []string{articleID(a.ID), articleID(999)}}, nil)
+			_, err := createWriter(ctx, gen.CreateWriterInput{Name: "new", Password: "x", ArticleIDs: []int64{a.ID, 999}}, nil)
 			wantEdgeErr(t, ctx, "in a transaction, a missing article", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "articles"))
-			_, err = updateWriter(ctx, writerID(w.ID), gen.UpdateWriterInput{Name: ptr("renamed"), AddCircleIDs: []string{circleID(c.ID), circleID(999)}})
+			_, err = updateWriter(ctx, w.ID, gen.UpdateWriterInput{Name: ptr("renamed"), AddCircleIDs: []int64{c.ID, 999}})
 			wantEdgeErr(t, ctx, "in a transaction, a missing circle", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "circles"))
 			if n := count(t, ctx, tx.Query[gen.Writer]()); n != 1 {
 				t.Errorf("in the transaction: %d writers, want 1: w", n)
@@ -1391,17 +1381,9 @@ func TestCreateErrors(t *testing.T) {
 				t.Errorf("meta %s: %v (code %q)", bad, err, code(err))
 			}
 		}
-		_, err = createWriter(e.ctx, gen.CreateWriterInput{Name: "m", Password: "x", CircleIDs: []string{writerID(w.ID)}}, nil)
-		if code(err) != veloxgql.CodeBadUserInput || !errors.Is(err, veloxgql.ErrWrongIDType) || !strings.Contains(err.Error(), "CreateWriterInput.circleIDs[0]") {
-			t.Errorf("a writer's ID for a circle: %v (code %q)", err, code(err))
-		}
-		_, err = createArticle(e.ctx, gen.CreateArticleInput{Title: "t", WriterID: ptr("not an ID")})
-		if code(err) != veloxgql.CodeBadUserInput || !errors.Is(err, veloxgql.ErrBadID) {
-			t.Errorf("a malformed ID: %v (code %q)", err, code(err))
-		}
-		many := make([]string, 10000)
+		many := make([]int64, 10000)
 		for i := range many {
-			many[i] = circleID(int64(i + 1))
+			many[i] = int64(i + 1)
 		}
 		_, err = createWriter(e.ctx, gen.CreateWriterInput{Name: "m", Password: "x", CircleIDs: many}, nil)
 		if code(err) != veloxgql.CodeBadUserInput || !errors.Is(err, veloxgql.ErrPageTooLarge) || !strings.Contains(err.Error(), "CreateWriterInput.circleIDs") {
@@ -1462,7 +1444,7 @@ func TestUpdate(t *testing.T) {
 		insert(t, e.ctx, e.db, p1)
 		insert(t, e.ctx, e.db, p2)
 		insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: w.ID, CircleID: c1.ID})
-		id := writerID(w.ID)
+		id := w.ID
 
 		// A value the row already holds: the UPDATE matches the row, and
 		// changes nothing. MySQL counts it only with clientFoundRows=true,
@@ -1502,7 +1484,7 @@ func TestUpdate(t *testing.T) {
 		}
 
 		// A unique edge whose key is on the row: set, then cleared.
-		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{MentorID: ptr(writerID(mentor.ID))}); err != nil {
+		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{MentorID: ptr(mentor.ID)}); err != nil {
 			t.Fatal(err)
 		}
 		if st := writer(t, e, w.ID); !is(st.MentorID, mentor.ID) {
@@ -1517,13 +1499,13 @@ func TestUpdate(t *testing.T) {
 
 		// O2M: remove and add move the articles' writer_id; clear then add
 		// replaces the set.
-		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{AddArticleIDs: []string{articleID(a2.ID)}, RemoveArticleIDs: []string{articleID(a1.ID), articleID(a3.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{AddArticleIDs: []int64{a2.ID}, RemoveArticleIDs: []int64{a1.ID, a3.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		if a, b, c := writerOfArticle(t, e, a1.ID), writerOfArticle(t, e, a2.ID), writerOfArticle(t, e, a3.ID); a != nil || !is(b, w.ID) || c != nil {
 			t.Errorf("articles' writers %v %v %v, want none, %d, none", a, b, c, w.ID)
 		}
-		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{ClearArticles: true, AddArticleIDs: []string{articleID(a3.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{ClearArticles: true, AddArticleIDs: []int64{a3.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		if a, b, c := writerOfArticle(t, e, a1.ID), writerOfArticle(t, e, a2.ID), writerOfArticle(t, e, a3.ID); a != nil || b != nil || !is(c, w.ID) {
@@ -1537,20 +1519,20 @@ func TestUpdate(t *testing.T) {
 		}
 
 		// M2M: add and remove change the join rows; clear removes them.
-		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{AddCircleIDs: []string{circleID(c2.ID)}, RemoveCircleIDs: []string{circleID(c1.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{AddCircleIDs: []int64{c2.ID}, RemoveCircleIDs: []int64{c1.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		if got := circlesOf(t, e, w.ID); len(got) != 1 || got[0] != "c2" {
 			t.Errorf("circles %v, want [c2]", got)
 		}
-		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{ClearCircles: true, AddCircleIDs: []string{circleID(c1.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{ClearCircles: true, AddCircleIDs: []int64{c1.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		if got := circlesOf(t, e, w.ID); len(got) != 1 || got[0] != "c1" {
 			t.Errorf("circles %v, want [c1]", got)
 		}
 		// From the M2M's other side.
-		if _, err := updateCircle(e.ctx, circleID(c2.ID), gen.UpdateCircleInput{AddWriterIDs: []string{id}}); err != nil {
+		if _, err := updateCircle(e.ctx, c2.ID, gen.UpdateCircleInput{AddWriterIDs: []int64{id}}); err != nil {
 			t.Fatal(err)
 		}
 		if got := circlesOf(t, e, w.ID); len(got) != 2 {
@@ -1565,7 +1547,7 @@ func TestUpdate(t *testing.T) {
 
 		// O2O whose key the profile holds: profileID moves it and clears the
 		// one before; clearProfile clears it.
-		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{ProfileID: ptr(profileID(p2.ID))}); err != nil {
+		if _, err := updateWriter(e.ctx, id, gen.UpdateWriterInput{ProfileID: ptr(p2.ID)}); err != nil {
 			t.Fatal(err)
 		}
 		if a, b := writerOfProfile(t, e, p1.ID), writerOfProfile(t, e, p2.ID); a != nil || !is(b, w.ID) {
@@ -1596,11 +1578,11 @@ func TestUpdateClearWins(t *testing.T) {
 		insert(t, e.ctx, e.db, c)
 		in := gen.UpdateWriterInput{
 			Bio: ptr("b"), ClearBio: true,
-			MentorID: ptr(writerID(m.ID)), ClearMentor: true,
-			ProfileID: ptr(profileID(p.ID)), ClearProfile: true,
-			AddCircleIDs: []string{circleID(c.ID)}, RemoveCircleIDs: []string{circleID(c.ID)},
+			MentorID: ptr(m.ID), ClearMentor: true,
+			ProfileID: ptr(p.ID), ClearProfile: true,
+			AddCircleIDs: []int64{c.ID}, RemoveCircleIDs: []int64{c.ID},
 		}
-		got, err := updateWriter(e.ctx, writerID(w.ID), in)
+		got, err := updateWriter(e.ctx, w.ID, in)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1623,14 +1605,14 @@ func TestUpdatePolicy(t *testing.T) {
 		locked, open := &gen.Article{Title: "locked"}, &gen.Article{Title: "open"}
 		insert(t, e.ctx, e.db, locked)
 		insert(t, e.ctx, e.db, open)
-		_, err := updateArticle(e.ctx, articleID(locked.ID), gen.UpdateArticleInput{Title: ptr("free")})
+		_, err := updateArticle(e.ctx, locked.ID, gen.UpdateArticleInput{Title: ptr("free")})
 		if code(err) != veloxgql.CodeNotFound || err.Error() != "no Article has this ID" {
 			t.Errorf("the locked article: %v (code %q), want NOT_FOUND", err, code(err))
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.Article]().Where(gen.Articles.Title.EQ("locked"))); n != 1 {
 			t.Errorf("%d locked articles, want 1", n)
 		}
-		got, err := updateArticle(e.ctx, articleID(open.ID), gen.UpdateArticleInput{Title: ptr("renamed")})
+		got, err := updateArticle(e.ctx, open.ID, gen.UpdateArticleInput{Title: ptr("renamed")})
 		if err != nil || got.Title != "renamed" || got.ID != open.ID {
 			t.Errorf("UpdateArticle = %v, %v: want it renamed", got, err)
 		}
@@ -1653,17 +1635,17 @@ func TestUpdateWriteScope(t *testing.T) {
 		insert(t, e.ctx, e.db, c)
 		const want = "no Writer has this ID"
 		for _, in := range []gen.UpdateWriterInput{
-			{AddCircleIDs: []string{circleID(c.ID)}},
-			{AddArticleIDs: []string{articleID(a.ID)}},
+			{AddCircleIDs: []int64{c.ID}},
+			{AddArticleIDs: []int64{a.ID}},
 			{ClearProfile: true},
 			{Name: ptr("thawed")},
 		} {
-			_, err := updateWriter(e.ctx, writerID(frozen.ID), in)
+			_, err := updateWriter(e.ctx, frozen.ID, in)
 			if code(err) != veloxgql.CodeNotFound || err.Error() != want {
 				t.Errorf("%v: %v (code %q), want %q", in, err, code(err), want)
 			}
 		}
-		if got, err := updateWriter(e.ctx, writerID(frozen.ID), gen.UpdateWriterInput{}); err != nil || got.ID != frozen.ID || got.Name != "frozen" {
+		if got, err := updateWriter(e.ctx, frozen.ID, gen.UpdateWriterInput{}); err != nil || got.ID != frozen.ID || got.Name != "frozen" {
 			t.Errorf("an update with no setters: %v, %v; want the frozen writer", got, err)
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]()); n != 0 {
@@ -1688,7 +1670,7 @@ func TestUpdateReadBack(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
 		c := &gen.Circle{Name: "c"}
 		insert(t, e.ctx, e.db, c)
-		got, err := updateCircle(e.ctx, circleID(c.ID), gen.UpdateCircleInput{Name: ptr("hidden")})
+		got, err := updateCircle(e.ctx, c.ID, gen.UpdateCircleInput{Name: ptr("hidden")})
 		if err != nil || got == nil || got.ID != c.ID || got.Name != "hidden" {
 			t.Fatalf("UpdateCircle = %v, %v: want the circle, named hidden", got, err)
 		}
@@ -1696,7 +1678,7 @@ func TestUpdateReadBack(t *testing.T) {
 			t.Errorf("%d circles the caller may read, want 0", n)
 		}
 		// Hidden now, it is NOT_FOUND to the next update.
-		_, err = updateCircle(e.ctx, circleID(c.ID), gen.UpdateCircleInput{Name: ptr("back")})
+		_, err = updateCircle(e.ctx, c.ID, gen.UpdateCircleInput{Name: ptr("back")})
 		if code(err) != veloxgql.CodeNotFound || err.Error() != "no Circle has this ID" {
 			t.Errorf("updating the hidden circle: %v (code %q), want NOT_FOUND", err, code(err))
 		}
@@ -1710,7 +1692,7 @@ func TestUpdateEmpty(t *testing.T) {
 		w := &gen.Writer{Name: "w", Password: "x", Bio: ptr("b")}
 		insert(t, e.ctx, e.db, w)
 		e.reset()
-		got, err := updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{})
+		got, err := updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{})
 		if err != nil || got.ID != w.ID || got.Name != "w" || got.Bio == nil || *got.Bio != "b" {
 			t.Errorf("UpdateWriter = %v, %v: want w unchanged", got, err)
 		}
@@ -1718,7 +1700,7 @@ func TestUpdateEmpty(t *testing.T) {
 		if len(s) != 1 || !strings.HasPrefix(s[0], "SELECT ") || !strings.Contains(s[0], "org_id") {
 			t.Errorf("sent %q, want one SELECT, under the org", s)
 		}
-		_, err = updateWriter(e.ctx, writerID(999), gen.UpdateWriterInput{})
+		_, err = updateWriter(e.ctx, 999, gen.UpdateWriterInput{})
 		if code(err) != veloxgql.CodeNotFound || err.Error() != "no Writer has this ID" {
 			t.Errorf("an unknown writer: %v (code %q), want NOT_FOUND", err, code(err))
 		}
@@ -1742,11 +1724,11 @@ func TestMutationWaitsOnTheLock(t *testing.T) {
 			mutate func() error
 		}{
 			{"a column's update", func() error {
-				_, err := updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{Bio: ptr("b")})
+				_, err := updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{Bio: ptr("b")})
 				return err
 			}},
 			{"an edge's update", func() error {
-				_, err := updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{ClearCircles: true})
+				_, err := updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{ClearCircles: true})
 				return err
 			}},
 		} {
@@ -1791,19 +1773,15 @@ func TestUpdateErrors(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
 		w := &gen.Writer{Name: "w", Password: "x"}
 		insert(t, e.ctx, e.db, w)
-		_, err := updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{Name: ptr("")})
+		_, err := updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{Name: ptr("")})
 		var ve *velox.ValidationError
 		if code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: UpdateWriterInput.name: invalid value: ") || !errors.As(err, &ve) {
 			t.Errorf("an empty name: %v (code %q)", err, code(err))
 		}
 		e.reset()
-		_, err = updateWriter(e.ctx, circleID(w.ID), gen.UpdateWriterInput{})
-		if code(err) != veloxgql.CodeBadUserInput || !errors.Is(err, veloxgql.ErrWrongIDType) || !strings.HasPrefix(err.Error(), "veloxgql: Writer ID: ") {
-			t.Errorf("a circle's ID for a writer: %v (code %q)", err, code(err))
-		}
-		_, err = updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{RemoveCircleIDs: []string{"not an ID"}})
-		if code(err) != veloxgql.CodeBadUserInput || !errors.Is(err, veloxgql.ErrBadID) || !strings.Contains(err.Error(), "UpdateWriterInput.removeCircleIDs[0]") {
-			t.Errorf("a malformed ID: %v (code %q)", err, code(err))
+		_, err = updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{RemoveCircleIDs: make([]int64, 10000)})
+		if code(err) != veloxgql.CodeBadUserInput || !errors.Is(err, veloxgql.ErrPageTooLarge) || !strings.Contains(err.Error(), "UpdateWriterInput.removeCircleIDs") {
+			t.Errorf("10000 circle IDs: %v (code %q)", err, code(err))
 		}
 		if s := e.stmts(); len(s) != 0 {
 			t.Errorf("input errors sent %v", s)
@@ -1823,8 +1801,8 @@ func TestUpdateAppSetters(t *testing.T) {
 		insert(t, e.ctx, e.db, m1)
 		insert(t, e.ctx, e.db, m2)
 		insert(t, e.ctx, e.db, w)
-		in := gen.UpdateWriterInput{Name: ptr("client"), Bio: ptr("bio"), MentorID: ptr(writerID(m1.ID))}
-		got, err := update(e.ctx, writerID(w.ID), "Writer", gen.Writers.ID, in.Setters, gen.Writers.Name.Set("server"), gen.Writers.MentorID.Set(m2.ID))
+		in := gen.UpdateWriterInput{Name: ptr("client"), Bio: ptr("bio"), MentorID: ptr(m1.ID)}
+		got, err := update(e.ctx, w.ID, "Writer", gen.Writers.ID, in.Setters, gen.Writers.Name.Set("server"), gen.Writers.MentorID.Set(m2.ID))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1833,7 +1811,7 @@ func TestUpdateAppSetters(t *testing.T) {
 		}
 		e.reset()
 		other := gen.UpdateWriterInput{Bio: ptr("other")}
-		_, err = update(e.ctx, writerID(w.ID), "Writer", gen.Writers.ID, other.Setters, gen.Writers.Name.Set(""))
+		_, err = update(e.ctx, w.ID, "Writer", gen.Writers.ID, other.Setters, gen.Writers.Name.Set(""))
 		var ve *velox.ValidationError
 		if !errors.As(err, &ve) || code(err) != "" || strings.Contains(err.Error(), "UpdateWriterInput") {
 			t.Errorf("an invalid server setter: %v (code %q), want velox's *velox.ValidationError, uncoded", err, code(err))
@@ -1871,18 +1849,18 @@ func TestSelfM2M(t *testing.T) {
 			insert(t, e.ctx, e.db, w)
 		}
 		insert(t, e.ctx, e.db, &gen.WriterFriend{WriterID: w1.ID, FriendID: w2.ID})
-		w, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", FriendIDs: []string{writerID(w1.ID), writerID(w2.ID), writerID(w1.ID)}}, nil)
+		w, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", FriendIDs: []int64{w1.ID, w2.ID, w1.ID}}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got := friendsOf(t, e, w.ID); !slices.Equal(got, []int64{w1.ID, w2.ID}) {
 			t.Errorf("w's friends: %v, want %d and %d", got, w1.ID, w2.ID)
 		}
-		if _, err := updateWriter(e.ctx, writerID(w3.ID), gen.UpdateWriterInput{AddFriendIDs: []string{writerID(w.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, w3.ID, gen.UpdateWriterInput{AddFriendIDs: []int64{w.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		// Already linked: succeeds, and changes nothing.
-		if _, err := updateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{AddFriendIDs: []string{writerID(w1.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{AddFriendIDs: []int64{w1.ID}}); err != nil {
 			t.Errorf("adding w1 again: %v", err)
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.WriterFriend]()); n != 4 {
@@ -1922,14 +1900,14 @@ func TestUnlinkScope(t *testing.T) {
 		insert(t, ctx8, e.db, other)
 		link(mine.ID, c.ID)
 		linkIn(ctx8, other.ID, c.ID)
-		if _, err := updateCircle(e.ctx, circleID(c.ID), gen.UpdateCircleInput{RemoveWriterIDs: []string{writerID(other.ID), writerID(mine.ID)}}); err != nil {
+		if _, err := updateCircle(e.ctx, c.ID, gen.UpdateCircleInput{RemoveWriterIDs: []int64{other.ID, mine.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		if linked(mine.ID, c.ID) || !linked(other.ID, c.ID) {
 			t.Errorf("after removeWriterIDs: mine linked %v, org 8's %v; want false, true", linked(mine.ID, c.ID), linked(other.ID, c.ID))
 		}
 		link(mine.ID, c.ID)
-		if _, err := updateCircle(e.ctx, circleID(c.ID), gen.UpdateCircleInput{ClearWriters: true}); err != nil {
+		if _, err := updateCircle(e.ctx, c.ID, gen.UpdateCircleInput{ClearWriters: true}); err != nil {
 			t.Fatal(err)
 		}
 		if linked(mine.ID, c.ID) || !linked(other.ID, c.ID) {
@@ -1942,14 +1920,14 @@ func TestUnlinkScope(t *testing.T) {
 		insert(t, e.ctx, e.db, visible)
 		link(mine.ID, hidden.ID)
 		link(mine.ID, visible.ID)
-		if _, err := updateWriter(e.ctx, writerID(mine.ID), gen.UpdateWriterInput{RemoveCircleIDs: []string{circleID(hidden.ID), circleID(visible.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, mine.ID, gen.UpdateWriterInput{RemoveCircleIDs: []int64{hidden.ID, visible.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		if !linked(mine.ID, hidden.ID) || linked(mine.ID, visible.ID) {
 			t.Errorf("after removeCircleIDs: hidden linked %v, visible %v; want true, false", linked(mine.ID, hidden.ID), linked(mine.ID, visible.ID))
 		}
 		link(mine.ID, visible.ID)
-		if _, err := updateWriter(e.ctx, writerID(mine.ID), gen.UpdateWriterInput{ClearCircles: true}); err != nil {
+		if _, err := updateWriter(e.ctx, mine.ID, gen.UpdateWriterInput{ClearCircles: true}); err != nil {
 			t.Fatal(err)
 		}
 		if !linked(mine.ID, hidden.ID) || linked(mine.ID, visible.ID) {
@@ -1966,16 +1944,16 @@ func TestValidateFirst(t *testing.T) {
 		w := &gen.Writer{Name: "w", Password: "x"}
 		insert(t, e.ctx, e.db, w)
 		e.reset()
-		bogus := writerID(999)
+		bogus := int64(999)
 		var ve *velox.ValidationError
-		_, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "", Password: "x", MentorID: &bogus, CircleIDs: []string{circleID(999)}}, nil)
+		_, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "", Password: "x", MentorID: &bogus, CircleIDs: []int64{999}}, nil)
 		if code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: CreateWriterInput.name: invalid value: ") || !errors.As(err, &ve) {
 			t.Errorf("create, an empty name and a bogus mentor: %v (code %q)", err, code(err))
 		}
-		for _, id := range []string{writerID(w.ID), writerID(998)} {
-			_, err = updateWriter(e.ctx, id, gen.UpdateWriterInput{Name: ptr(""), MentorID: &bogus, AddCircleIDs: []string{circleID(999)}})
+		for _, id := range []int64{w.ID, 998} {
+			_, err = updateWriter(e.ctx, id, gen.UpdateWriterInput{Name: ptr(""), MentorID: &bogus, AddCircleIDs: []int64{999}})
 			if code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: UpdateWriterInput.name: invalid value: ") || !errors.As(err, &ve) {
-				t.Errorf("update %s, an empty name and a bogus mentor: %v (code %q)", id, err, code(err))
+				t.Errorf("update %d, an empty name and a bogus mentor: %v (code %q)", id, err, code(err))
 			}
 		}
 		if s := e.stmts(); len(s) != 0 {
@@ -2018,7 +1996,7 @@ func TestRequiredSelfEdge(t *testing.T) {
 		is := func(p *int64, id int64) bool { return p != nil && *p == id }
 
 		r := rawFolder("r")
-		c, err := createFolder(e.ctx, gen.CreateFolderInput{Name: "c", ParentID: folderID(r.ID), PrevID: folderID(r.ID)})
+		c, err := createFolder(e.ctx, gen.CreateFolderInput{Name: "c", ParentID: r.ID, PrevID: r.ID})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2040,11 +2018,11 @@ func TestRequiredSelfEdge(t *testing.T) {
 		}
 
 		// The owning side re-parents.
-		c2, err := createFolder(e.ctx, gen.CreateFolderInput{Name: "c2", ParentID: folderID(r.ID), PrevID: folderID(c.ID)})
+		c2, err := createFolder(e.ctx, gen.CreateFolderInput{Name: "c2", ParentID: r.ID, PrevID: c.ID})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := updateFolder(e.ctx, folderID(c2.ID), gen.UpdateFolderInput{ParentID: ptr(folderID(c.ID))}); err != nil {
+		if _, err := updateFolder(e.ctx, c2.ID, gen.UpdateFolderInput{ParentID: ptr(c.ID)}); err != nil {
 			t.Fatal(err)
 		}
 		if ch, _ := keys(c2.ID); !is(ch, c.ID) {
@@ -2053,7 +2031,7 @@ func TestRequiredSelfEdge(t *testing.T) {
 
 		// The other side adds a child whose key is NULL.
 		d := rawFolder("d")
-		if _, err := updateFolder(e.ctx, folderID(r.ID), gen.UpdateFolderInput{AddChildIDs: []string{folderID(d.ID)}}); err != nil {
+		if _, err := updateFolder(e.ctx, r.ID, gen.UpdateFolderInput{AddChildIDs: []int64{d.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		if ch, _ := keys(d.ID); !is(ch, r.ID) {
@@ -2078,7 +2056,7 @@ func TestRequiredSelfEdge(t *testing.T) {
 		// The owning side's update sets its prev: a free folder s takes it, and
 		// c's children are not touched.
 		s := rawFolder("s")
-		if _, err := updateFolder(e.ctx, folderID(c.ID), gen.UpdateFolderInput{PrevID: ptr(folderID(s.ID))}); err != nil {
+		if _, err := updateFolder(e.ctx, c.ID, gen.UpdateFolderInput{PrevID: ptr(s.ID)}); err != nil {
 			t.Fatalf("UpdateFolder of c, prev s: %v", err)
 		}
 		if ch, nx := keys(c.ID); ch != nil || !is(nx, s.ID) {
@@ -2094,11 +2072,11 @@ func TestRequiredSelfEdge(t *testing.T) {
 		// database names the constraint its own way, so only SQLite's text is
 		// compared.
 		y := rawFolder("y")
-		z, err := createFolder(e.ctx, gen.CreateFolderInput{Name: "z", ParentID: folderID(s.ID), PrevID: folderID(y.ID)})
+		z, err := createFolder(e.ctx, gen.CreateFolderInput{Name: "z", ParentID: s.ID, PrevID: y.ID})
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = updateFolder(e.ctx, folderID(c.ID), gen.UpdateFolderInput{PrevID: ptr(folderID(y.ID))})
+		_, err = updateFolder(e.ctx, c.ID, gen.UpdateFolderInput{PrevID: ptr(y.ID)})
 		var ce *velox.ConstraintError
 		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique {
 			t.Fatalf("UpdateFolder of c, prev y held by z: %v, want a unique ConstraintError", err)
@@ -2119,7 +2097,7 @@ func TestRequiredSelfEdge(t *testing.T) {
 
 		// A create takes d as a child and as its next: d's keys are both the
 		// new folder.
-		n, err := createFolder(e.ctx, gen.CreateFolderInput{Name: "n", ParentID: folderID(s.ID), PrevID: folderID(c2.ID), ChildIDs: []string{folderID(d.ID)}, NextID: ptr(folderID(d.ID))})
+		n, err := createFolder(e.ctx, gen.CreateFolderInput{Name: "n", ParentID: s.ID, PrevID: c2.ID, ChildIDs: []int64{d.ID}, NextID: ptr(d.ID)})
 		if err != nil {
 			t.Fatalf("CreateFolder with childIDs and nextID d: %v", err)
 		}
@@ -2130,7 +2108,7 @@ func TestRequiredSelfEdge(t *testing.T) {
 		// A next that already has a prev, z of y, is BAD_USER_INPUT on a create;
 		// nothing is created.
 		f := rawFolder("f")
-		_, err = createFolder(e.ctx, gen.CreateFolderInput{Name: "m", ParentID: folderID(s.ID), PrevID: folderID(f.ID), NextID: ptr(folderID(z.ID))})
+		_, err = createFolder(e.ctx, gen.CreateFolderInput{Name: "m", ParentID: s.ID, PrevID: f.ID, NextID: ptr(z.ID)})
 		wantEdgeErr(t, e.ctx, "CreateFolder with the held next z", err, veloxgql.CodeBadUserInput, fmt.Sprintf(linked, "next"))
 		if k := count(t, e.ctx, e.db.Query[gen.Folder]().Where(gen.Folders.Name.EQ("m"))); k != 0 {
 			t.Errorf("%d folders m after the refusal, want 0", k)
@@ -2211,7 +2189,7 @@ func TestBidiPeers(t *testing.T) {
 
 		// Linking a to b writes (a, b) and its mirror (b, a), in one INSERT.
 		e.reset()
-		if _, err := updateWriter(e.ctx, writerID(a.ID), gen.UpdateWriterInput{AddPeerIDs: []string{writerID(b.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, a.ID, gen.UpdateWriterInput{AddPeerIDs: []int64{b.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		n := 0
@@ -2232,29 +2210,29 @@ func TestBidiPeers(t *testing.T) {
 		}
 
 		// Adding it again changes nothing.
-		if _, err := updateWriter(e.ctx, writerID(b.ID), gen.UpdateWriterInput{AddPeerIDs: []string{writerID(a.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, b.ID, gen.UpdateWriterInput{AddPeerIDs: []int64{a.ID}}); err != nil {
 			t.Errorf("b adds a, already its peer: %v", err)
 		}
 		wantPeers(t, e, "b adds a", [2]int64{a.ID, b.ID}, [2]int64{b.ID, a.ID})
 
 		// Removing b from a's peers removes both rows.
-		if _, err := updateWriter(e.ctx, writerID(a.ID), gen.UpdateWriterInput{RemovePeerIDs: []string{writerID(b.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, a.ID, gen.UpdateWriterInput{RemovePeerIDs: []int64{b.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		wantPeers(t, e, "a removes b")
 
 		// Clearing b's peers, which a added, removes both rows.
-		if _, err := updateWriter(e.ctx, writerID(a.ID), gen.UpdateWriterInput{AddPeerIDs: []string{writerID(b.ID)}}); err != nil {
+		if _, err := updateWriter(e.ctx, a.ID, gen.UpdateWriterInput{AddPeerIDs: []int64{b.ID}}); err != nil {
 			t.Fatal(err)
 		}
 		wantPeers(t, e, "a adds b again", [2]int64{a.ID, b.ID}, [2]int64{b.ID, a.ID})
-		if _, err := updateWriter(e.ctx, writerID(b.ID), gen.UpdateWriterInput{ClearPeers: true}); err != nil {
+		if _, err := updateWriter(e.ctx, b.ID, gen.UpdateWriterInput{ClearPeers: true}); err != nil {
 			t.Fatal(err)
 		}
 		wantPeers(t, e, "b clears its peers")
 
 		// A create with peerIDs writes both rows.
-		c, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "c", Password: "x", PeerIDs: []string{writerID(a.ID)}}, nil)
+		c, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "c", Password: "x", PeerIDs: []int64{a.ID}}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2302,26 +2280,26 @@ func TestBidiPartner(t *testing.T) {
 		}
 
 		// A create with a partnerID links both rows.
-		c, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "c", Password: "x", PartnerID: ptr(writerID(a.ID))}, nil)
+		c, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "c", Password: "x", PartnerID: ptr(a.ID)}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		wantPartners(t, e, "c is created with a", c.ID, a.ID, a.ID, c.ID, b.ID, 0, d.ID, 0)
 
 		// Re-pointing c to b frees a.
-		if _, err := updateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(b.ID))}); err != nil {
+		if _, err := updateWriter(e.ctx, c.ID, gen.UpdateWriterInput{PartnerID: ptr(b.ID)}); err != nil {
 			t.Fatal(err)
 		}
 		wantPartners(t, e, "c is re-pointed to b", c.ID, b.ID, b.ID, c.ID, a.ID, 0, d.ID, 0)
 
 		// Setting the partner it has changes nothing.
-		if _, err := updateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(b.ID))}); err != nil {
+		if _, err := updateWriter(e.ctx, c.ID, gen.UpdateWriterInput{PartnerID: ptr(b.ID)}); err != nil {
 			t.Errorf("c's partner b again: %v", err)
 		}
 		wantPartners(t, e, "c's partner b again", c.ID, b.ID, b.ID, c.ID)
 
 		// Clearing b's partner frees c too, though c's row was not named.
-		if _, err := updateWriter(e.ctx, writerID(b.ID), gen.UpdateWriterInput{ClearPartner: true}); err != nil {
+		if _, err := updateWriter(e.ctx, b.ID, gen.UpdateWriterInput{ClearPartner: true}); err != nil {
 			t.Fatal(err)
 		}
 		wantPartners(t, e, "b clears its partner", b.ID, 0, c.ID, 0, a.ID, 0, d.ID, 0)
@@ -2329,11 +2307,11 @@ func TestBidiPartner(t *testing.T) {
 		// A partner that has one: a is d's, and d's key holds a, so c cannot
 		// take a. The unique index refuses it, whatever the partner's own
 		// key says, and a, c and d are as they were.
-		if _, err := updateWriter(e.ctx, writerID(a.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(d.ID))}); err != nil {
+		if _, err := updateWriter(e.ctx, a.ID, gen.UpdateWriterInput{PartnerID: ptr(d.ID)}); err != nil {
 			t.Fatal(err)
 		}
 		wantPartners(t, e, "a is linked to d", a.ID, d.ID, d.ID, a.ID, c.ID, 0)
-		_, err = updateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(a.ID))})
+		_, err = updateWriter(e.ctx, c.ID, gen.UpdateWriterInput{PartnerID: ptr(a.ID)})
 		var ce *velox.ConstraintError
 		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique {
 			t.Fatalf("c takes a, d's partner: %v, want a unique ConstraintError", err)
@@ -2348,7 +2326,7 @@ func TestBidiPartner(t *testing.T) {
 		// scope, finds none, and is NOT_FOUND. Nothing is kept.
 		h := &gen.Writer{Name: "h", Password: "x"}
 		insert(t, schema.Org.With(e.ctx, int64(8)), e.db, h)
-		_, err = updateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(h.ID))})
+		_, err = updateWriter(e.ctx, c.ID, gen.UpdateWriterInput{PartnerID: ptr(h.ID)})
 		wantEdgeErr(t, e.ctx, "c takes h, of org 8", err, veloxgql.CodeNotFound, fmt.Sprintf(noNode, "partner"))
 		wantPartners(t, e, "c fails to take h", c.ID, 0, a.ID, d.ID, d.ID, a.ID)
 		if hw, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(h.ID)).One(schema.Org.With(e.ctx, int64(8))); err != nil {
@@ -2363,7 +2341,7 @@ func TestBidiPartner(t *testing.T) {
 		// one transaction, so c's own key, set before the link, is rolled back.
 		f := &gen.Writer{Name: "frozen", Password: "x"}
 		insert(t, e.ctx, e.db, f)
-		_, err = updateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(f.ID))})
+		_, err = updateWriter(e.ctx, c.ID, gen.UpdateWriterInput{PartnerID: ptr(f.ID)})
 		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique {
 			t.Fatalf("c takes the frozen f: %v, want a unique ConstraintError", err)
 		}
@@ -2375,7 +2353,7 @@ func TestBidiPartner(t *testing.T) {
 		// A writer cannot be its own partner: the write's validation error
 		// on the key's field, presented as BAD_USER_INPUT, and nothing is
 		// written.
-		_, err = updateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(c.ID))})
+		_, err = updateWriter(e.ctx, c.ID, gen.UpdateWriterInput{PartnerID: ptr(c.ID)})
 		var ve *velox.ValidationError
 		if !errors.As(err, &ve) || ve.Field != "WriterPartner" {
 			t.Errorf("c as its own partner: %v, want a *velox.ValidationError of WriterPartner", err)
@@ -2467,24 +2445,21 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// Node is the resolver for the node field.
-func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
-	return gen.Node(ctx, id)
-}
-
-// Nodes is the resolver for the nodes field.
-func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
-	return gen.Nodes(ctx, ids)
-}
-
-// UpdateFolder is the resolver for the updateFolder field: it writes the
-// input's setters, and reads the folder back as written.
-func (r *mutationResolver) UpdateFolder(ctx context.Context, id string, input gen.UpdateFolderInput) (*gen.Folder, error) {
-	set, err := input.Setters()
+// Folder is the resolver for the folder field: id is the folder's key,
+// which gqlgen decoded.
+func (r *queryResolver) Folder(ctx context.Context, id int64) (*gen.Folder, error) {
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	key, err := veloxgql.DecodeID[int64](id, "Folder")
+	return db.Query[gen.Folder]().Where(gen.Folders.ID.EQ(id)).One(ctx)
+}
+
+// UpdateFolder is the resolver for the updateFolder field: it writes the
+// input's setters to the folder whose key is id, and reads it back as
+// written.
+func (r *mutationResolver) UpdateFolder(ctx context.Context, id int64, input gen.UpdateFolderInput) (*gen.Folder, error) {
+	set, err := input.Setters()
 	if err != nil {
 		return nil, err
 	}
@@ -2492,10 +2467,10 @@ func (r *mutationResolver) UpdateFolder(ctx context.Context, id string, input ge
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Update[gen.Folder]().Where(gen.Folders.ID.EQ(key)).Set(set...).Exec(ctx); err != nil {
+	if _, err := db.Update[gen.Folder]().Where(gen.Folders.ID.EQ(id)).Set(set...).Exec(ctx); err != nil {
 		return nil, err
 	}
-	return db.WithoutPolicy("the folder as written").Query[gen.Folder]().Where(gen.Folders.ID.EQ(key)).One(ctx)
+	return db.WithoutPolicy("the folder as written").Query[gen.Folder]().Where(gen.Folders.ID.EQ(id)).One(ctx)
 }
 
 // Mutation returns MutationResolver implementation.
@@ -2514,6 +2489,7 @@ type queryResolver struct{ *Resolver }
 const e2eMutServeRun = `package app_test
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http/httptest"
@@ -2550,6 +2526,7 @@ func TestFolderServed(t *testing.T) {
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
 	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.SetErrorPresenter(veloxgql.ErrorPresenter(func(_ context.Context, err error) { t.Logf("internal: %v", err) }))
 	srv.AddTransport(transport.POST{})
 	do := func(query string) string {
 		t.Helper()
@@ -2560,17 +2537,17 @@ func TestFolderServed(t *testing.T) {
 		srv.ServeHTTP(w, req)
 		return w.Body.String()
 	}
-	c := veloxgql.EncodeID("Folder", 3)
-	o := veloxgql.EncodeID("Folder", 2)
-	read := fmt.Sprintf("{ node(id: %q) { ... on Folder { name parent { name } prev { name } } } }", c)
+	// An ID is the folder's key: the client sends it as an integer or as a
+	// string of one, and reads it as a string.
+	read := "{ folder(id: 3) { id name parent { name } prev { name } } }"
 	for _, step := range []struct {
 		name, query, want string
 		before         string
 	}{
-		{"read", read, ` + "`" + `{"data":{"node":{"name":"c","parent":{"name":"r"},"prev":{"name":"r"}}}}` + "`" + `, ""},
-		{"read after r is deleted", read, ` + "`" + `{"data":{"node":{"name":"c","parent":null,"prev":null}}}` + "`" + `, "DELETE FROM folders WHERE id = 1"},
-		{"update", fmt.Sprintf("mutation { updateFolder(id: %q, input: {parentID: %q, prevID: %q}) { name parent { name } prev { name } } }", c, o, o),
-			` + "`" + `{"data":{"updateFolder":{"name":"c","parent":{"name":"o"},"prev":{"name":"o"}}}}` + "`" + `, ""},
+		{"read", read, ` + "`" + `{"data":{"folder":{"id":"3","name":"c","parent":{"name":"r"},"prev":{"name":"r"}}}}` + "`" + `, ""},
+		{"read after r is deleted", read, ` + "`" + `{"data":{"folder":{"id":"3","name":"c","parent":null,"prev":null}}}` + "`" + `, "DELETE FROM folders WHERE id = 1"},
+		{"update", ` + "`" + `mutation { updateFolder(id: 3, input: {parentID: "2", prevID: 2}) { id name parent { id name } prev { name } } }` + "`" + `,
+			` + "`" + `{"data":{"updateFolder":{"id":"3","name":"c","parent":{"id":"2","name":"o"},"prev":{"name":"o"}}}}` + "`" + `, ""},
 	} {
 		if step.before != "" {
 			if _, err := db.Exec(step.before); err != nil {
@@ -2581,21 +2558,29 @@ func TestFolderServed(t *testing.T) {
 			t.Errorf("%s:\ngot  %s\nwant %s", step.name, got, step.want)
 		}
 	}
+	// An ID that is no integer is the client's error.
+	if got := do(` + "`" + `mutation { updateFolder(id: "c", input: {}) { id } }` + "`" + `); !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "64-bit integer") {
+		t.Errorf("an ID that is no integer: %s", got)
+	}
 }
 `
 
-// e2eMutServeSDL is the application's own schema: the mutation it serves,
-// which velox-graphql leaves to it.
-const e2eMutServeSDL = `type Mutation {
+// e2eMutServeSDL is the application's own schema: the query and the
+// mutation it serves, which velox-graphql leaves to it.
+const e2eMutServeSDL = `type Query {
+  folder(id: ID!): Folder
+}
+
+type Mutation {
   updateFolder(id: ID!, input: UpdateFolderInput!): Folder!
 }
 `
 
 // TestMutationSchemaServes generates the mutation schema's application with
-// velox-gen and the plugin, then gqlgen over it, with resolvers for node,
-// nodes and updateFolder, which the application's own schema declares, and
-// runs a test through gqlgen's handler: the schema's input types, with their
-// Required self edges, bind and serve. It
+// velox-gen and the plugin, then gqlgen over it, with resolvers for folder
+// and updateFolder, which the application's own schema declares, and runs a
+// test through gqlgen's handler: the schema's input types, with their
+// Required self edges, bind and serve, and an ID argument is an int64 key. It
 // needs no database but SQLite.
 func TestMutationSchemaServes(t *testing.T) {
 	t.Parallel() // its own module, in its own directory

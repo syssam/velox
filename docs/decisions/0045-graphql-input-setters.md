@@ -2,7 +2,9 @@
 
 Status: accepted, 2026-11-06. Supersedes 0033's two methods, generic runtime
 and explicit nulls by type, and 0010; moves 0009's read-back to the
-application.
+application. Its `DecodeID` and `DecodeIDs` are gone since
+[0061](0061-graphql-plain-ids.md): gqlgen decodes an ID to the key, and
+`gqlgraph.IDs` caps and dedupes a list.
 
 ## Context
 

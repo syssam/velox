@@ -1,111 +1,57 @@
 package veloxgql
 
 import (
-	"encoding/base64"
-	"errors"
-	"fmt"
-	"strings"
+	"encoding/json"
+	"io"
+	"strconv"
+
+	"github.com/99designs/gqlgen/graphql"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
-// Noder is the Go type of the GraphQL Node interface: gqlgen binds Node to
-// it, and every entity that is a Node implements it in velox-gen's output.
-type Noder interface {
-	// IsNode marks the type as a Node.
-	IsNode()
-	// GlobalID is the node's ID, EncodeID of its GraphQL type and its key.
-	GlobalID() string
+// A GraphQL ID is the entity's own key, in its own Go type, as in entgql.
+// gqlgen binds every ID argument to the first model gqlgen.yml lists for ID,
+// so the keys of a schema's GraphQL types are of one Go type, and the model
+// is the one that marshals it: Int64ID for int64 keys, UUID for UUID keys,
+// gqlgen's graphql.ID for string keys. The package documentation of
+// contrib/graphql lists them.
+
+// MarshalInt64ID writes id, an int64 key, as the ID scalar: a JSON string of
+// its decimal digits, as the GraphQL specification serializes an ID and
+// gqlgen's graphql.IntID does. The model veloxgql.Int64ID in gqlgen.yml binds
+// ID to it.
+func MarshalInt64ID(id int64) graphql.Marshaler {
+	return graphql.WriterFunc(func(w io.Writer) {
+		_, _ = io.WriteString(w, `"`+strconv.FormatInt(id, 10)+`"`)
+	})
 }
 
-// EncodeID returns the global ID of the row of the GraphQL type typ whose
-// primary key is key: base64url without padding of "<typ>:<key>", the key in
-// its canonical text.
-//
-// The key is a Go integer (decimal), a string (as it is), a UUID (a [16]byte,
-// the UUID scalar, or a type with MarshalText such as uuid.UUID: the
-// lower-case hyphenated form), or another type with MarshalText (its text). A
-// UUID and its string form give the same ID. Any other key type is a mistake
-// in the generated code, and EncodeID panics.
-func EncodeID(typ string, key any) string {
-	k, ok := keyText(key)
-	if !ok {
-		panic(fmt.Sprintf("veloxgql: EncodeID: %T is not a supported key type", key))
+// UnmarshalInt64ID reads the ID scalar into an int64 key. It takes a string
+// of decimal digits, as MarshalInt64ID writes, or an integer, as the
+// specification lets a client send an ID. Anything else, or a number that is
+// no int64, is BAD_USER_INPUT.
+func UnmarshalInt64ID(v any) (int64, error) {
+	switch x := v.(type) {
+	case string:
+		return parseInt64ID(x)
+	case json.Number:
+		return parseInt64ID(string(x))
+	case int64:
+		return x, nil
+	case int:
+		return int64(x), nil
+	case int32:
+		return int64(x), nil
 	}
-	return base64.RawURLEncoding.EncodeToString([]byte(typ + ":" + k))
+	return 0, gqlcore.InputErrorf("ID must be a string of an integer, or an integer")
 }
 
-// DecodeID returns the key of id, which must be an ID of the GraphQL type
-// typ whose key is of type K. It fails with ErrWrongIDType when id is a
-// well-formed ID of another type, and with ErrBadID when id is not exactly
-// what EncodeID writes for some key: canonical base64url without padding (no
-// line breaks, no stray trailing bits) of "<Type>:<key>", the key the
-// canonical text of a K. So each row has one ID. Neither error's text holds
-// the key.
-//
-// K is a Go integer, a string, [16]byte, UUID, or a type with MarshalText
-// whose pointer has UnmarshalText, such as uuid.UUID. A named type without
-// those methods, such as type UserID int64 or a [16]byte UUID type without
-// text methods, is not supported: generated code decodes the underlying type
-// and converts it.
-func DecodeID[K any](id, typ string) (K, error) {
-	var zero K
-	b, ok := decodeBase64(id)
-	if !ok {
-		return zero, badID(typ, "not canonical base64url without padding")
+// parseInt64ID is s, the decimal digits of an int64, as an int64.
+func parseInt64ID(s string) (int64, error) {
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, gqlcore.InputErrorf("ID must be the decimal digits of a 64-bit integer")
 	}
-	t, key, ok := strings.Cut(string(b), ":")
-	switch {
-	case !ok:
-		return zero, badID(typ, "no type")
-	case t == "":
-		return zero, badID(typ, "an empty type")
-	case t != typ:
-		return zero, gqlcore.InputErrorf("%s ID: %w", typ, ErrWrongIDType)
-	}
-	var k K
-	switch err := gqlcore.SetValue(basePtr(&k), gqlcore.Text(key)); {
-	case errors.Is(err, gqlcore.ErrUnsupported):
-		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", gqlcore.TypeName[K]())
-	case err != nil:
-		return zero, badID(typ, "the key does not parse")
-	}
-	canon, ok := keyText(k)
-	switch {
-	case !ok:
-		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", gqlcore.TypeName[K]())
-	case canon != key:
-		return zero, badID(typ, "the key is not in its canonical form")
-	}
-	return k, nil
-}
-
-// IDType returns the GraphQL type of id, so that generated code can tell
-// which entity to look it up in before DecodeID decodes its key. It fails
-// with ErrBadID when id is not canonical base64url without padding of
-// "<Type>:<key>" with a non-empty Type. It does not check the key, which is
-// DecodeID's to check, and its error holds neither the type nor the key.
-func IDType(id string) (string, error) {
-	b, ok := decodeBase64(id)
-	if !ok {
-		return "", gqlcore.InputErrorf("ID: %w: not canonical base64url without padding", ErrBadID)
-	}
-	t, _, ok := strings.Cut(string(b), ":")
-	if !ok || t == "" {
-		return "", gqlcore.InputErrorf("ID: %w: no type", ErrBadID)
-	}
-	return t, nil
-}
-
-func badID(typ, why string) error {
-	return gqlcore.InputErrorf("%s ID: %w: %s", typ, ErrBadID, why)
-}
-
-// keyText is gqlcore.KeyText of key, a UUID unwrapped to its [16]byte: the one
-// scalar of this package that is a key type.
-func keyText(key any) (string, bool) {
-	if u, ok := key.(UUID); ok {
-		key = [16]byte(u)
-	}
-	return gqlcore.KeyText(key)
+	return n, nil
 }

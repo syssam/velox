@@ -10,27 +10,6 @@ import (
 	"time"
 )
 
-// TestKeyText: each key type's text, and false for another type.
-func TestKeyText(t *testing.T) {
-	u := [16]byte{0xab, 1}
-	addr := netip.MustParseAddr("10.0.0.1")
-	for _, c := range []struct {
-		key  any
-		want string
-	}{
-		{int(-1), "-1"}, {int8(-8), "-8"}, {int16(16), "16"}, {int32(32), "32"}, {int64(math.MinInt64), "-9223372036854775808"},
-		{uint(1), "1"}, {uint8(8), "8"}, {uint16(16), "16"}, {uint32(32), "32"}, {uint64(math.MaxUint64), "18446744073709551615"},
-		{"s", "s"}, {u, FormatUUID(u)}, {addr, "10.0.0.1"},
-	} {
-		if got, ok := KeyText(c.key); !ok || got != c.want {
-			t.Errorf("KeyText(%T %v) = %q %v, want %q", c.key, c.key, got, ok, c.want)
-		}
-	}
-	if _, ok := KeyText(1.5); ok {
-		t.Error("KeyText of a float")
-	}
-}
-
 // TestJSONValue: times, UUIDs and the floats with no JSON number become
 // strings; other values stay as they are.
 func TestJSONValue(t *testing.T) {
@@ -74,10 +53,10 @@ func TestSetValue(t *testing.T) {
 	ok := []struct {
 		p, v any
 	}{
-		{&i, json.Number("-1")}, {&i8, Text("127")}, {&i16, json.Number("16")}, {&i32, json.Number("32")}, {&i64, json.Number("64")},
-		{&u, json.Number("1")}, {&u8, Text("255")}, {&u16, json.Number("16")}, {&u32, json.Number("32")}, {&u64, json.Number("18446744073709551615")},
+		{&i, json.Number("-1")}, {&i8, json.Number("127")}, {&i16, json.Number("16")}, {&i32, json.Number("32")}, {&i64, json.Number("64")},
+		{&u, json.Number("1")}, {&u8, json.Number("255")}, {&u16, json.Number("16")}, {&u32, json.Number("32")}, {&u64, json.Number("18446744073709551615")},
 		{&f64, json.Number("1.5")}, {&f32, "NaN"}, {&f64, "-Inf"},
-		{&s, "x"}, {&s, Text("y")}, {&b, true},
+		{&s, "x"}, {&s, "y"}, {&b, true},
 		{&tm, "2026-01-02T03:04:05Z"}, {&id, "000000ab-0000-0000-0000-000000000001"}, {&bs, "AAE="},
 		{&ad, "10.0.0.1"},
 	}

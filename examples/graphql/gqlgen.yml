@@ -28,12 +28,14 @@ resolver:
 autobind:
   - github.com/syssam/velox/examples/graphql/gen
 
-# Node and the scalars bind to veloxgql. A scalar lists one model for each Go
-# type velox entities hold, since gqlgen binds a field only to a model of its
-# own Go type (contrib/graphql's package documentation).
+# ID and the scalars bind to veloxgql. An ID is the entity's key, an int64
+# here: gqlgen binds every ID argument to ID's first model, and Int64ID reads
+# an integer or a string of one and writes a string. A scalar lists one model
+# for each Go type velox entities hold, since gqlgen binds a field only to a
+# model of its own Go type (contrib/graphql's package documentation).
 models:
-  Node:
-    model: github.com/syssam/velox/contrib/graphql/veloxgql.Noder
+  ID:
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID
   Int:
     model:
       - github.com/99designs/gqlgen/graphql.Int

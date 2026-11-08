@@ -372,12 +372,12 @@ func TestTypeMapping(t *testing.T) {
 	if got := typeOf(s, "User", "id"); got != "ID!" {
 		t.Errorf("id: %s", got)
 	}
-	// The id is the opaque global ID, from the method GlobalID, not the raw key
-	// in the struct's ID field.
-	if got := goField(s, "User", "id"); got != "GlobalID" {
+	// The id is the key, which gqlgen binds to the struct's ID field by its
+	// name; the type implements nothing.
+	if got := goField(s, "User", "id"); got != "" {
 		t.Errorf("id binds to %q", got)
 	}
-	if got := s.Types["User"].Interfaces; !slices.Equal(got, []string{"Node"}) {
+	if got := s.Types["User"].Interfaces; len(got) != 0 {
 		t.Errorf("User implements %v", got)
 	}
 	for _, c := range cases {
@@ -577,7 +577,7 @@ func TestSkip(t *testing.T) {
 		if strings.Contains(sdl, "User") {
 			t.Errorf("User is referenced:\n%s", sdl)
 		}
-		if typeOf(s, "Post", "author") != "" || typeOf(s, "Group", "users") != "" || typeOf(s, "Query", "users") != "" {
+		if typeOf(s, "Post", "author") != "" || typeOf(s, "Group", "users") != "" || s.Types["Query"] != nil && typeOf(s, "Query", "users") != "" {
 			t.Error("an edge or the query field to User is left")
 		}
 		if s.Types["Post"] == nil || s.Types["Group"] == nil {
@@ -902,12 +902,11 @@ func TestQuery(t *testing.T) {
 			got = append(got, f.Name+": "+f.Type.String())
 		}
 	}
-	want := []string{"node: Node", "nodes: [Node]!", "alphas: AlphaConnection!", "betas: BetaConnection!"}
+	want := []string{"alphas: AlphaConnection!", "betas: BetaConnection!"}
 	if !slices.Equal(got, want) {
 		t.Errorf("Query: %v, want %v", got, want)
 	}
-	if !strings.Contains(sdl, "  node(id: ID!): Node\n") || !strings.Contains(sdl, "  nodes(ids: [ID!]!): [Node]!\n") ||
-		!strings.Contains(sdl, "  alphas(after: Cursor, first: Int, before: Cursor, last: Int): AlphaConnection!\n") {
+	if !strings.Contains(sdl, "  alphas(after: Cursor, first: Int, before: Cursor, last: Int): AlphaConnection!\n") {
 		t.Errorf("Query:\n%s", sdl)
 	}
 	if strings.Index(sdl, "# Alpha") > strings.Index(sdl, "# Beta") {
@@ -916,8 +915,6 @@ func TestQuery(t *testing.T) {
 
 	b.Annotations = ann(t, graphql.QueryField("alphas"))
 	renderErr(t, model(a, b), "Alpha", "Beta", "alphas")
-	b.Annotations = ann(t, graphql.QueryField("node"))
-	renderErr(t, model(b), "Beta", "node")
 }
 
 // The vocabulary every later plan binds Go to.
@@ -927,11 +924,22 @@ func TestVocabulary(t *testing.T) {
 		"scalar Time\n", "scalar UUID\n", "scalar Bytes\n", "scalar JSON\n", "scalar Uint64\n", "scalar Cursor\n",
 		"directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION\n",
 		"directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION\n",
-		"interface Node {\n", "  id: ID!\n",
 		"type PageInfo {\n", "  hasNextPage: Boolean!\n", "  hasPreviousPage: Boolean!\n", "  startCursor: Cursor\n", "  endCursor: Cursor\n",
 		"enum OrderDirection {\n  ASC\n  DESC\n}\n",
-		"type User implements Node {\n",
+		"type User {\n", "  id: ID!\n",
 	} {
+		if !strings.Contains(sdl, want) {
+			t.Errorf("no %q in\n%s", want, sdl)
+		}
+	}
+	// velox has no Node interface and no node or nodes query, as ent without
+	// global unique IDs.
+	for _, not := range []string{"Node", "node(", "nodes(", "implements", "GlobalID"} {
+		if strings.Contains(sdl, not) {
+			t.Errorf("%q in\n%s", not, sdl)
+		}
+	}
+	for _, want := range []string{} {
 		if !strings.Contains(sdl, want) {
 			t.Errorf("no %q in\n%s", want, sdl)
 		}

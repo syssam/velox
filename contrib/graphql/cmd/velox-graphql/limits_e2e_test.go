@@ -226,6 +226,10 @@ func (Type) Fields() []schema.Field {
 	return []schema.Field{field.String("name"), field.Enum("kind").Values("a", "b")}
 }
 
+func (Type) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField("types")}
+}
+
 type Field struct{ schema.Schema }
 
 func (Field) Fields() []schema.Field { return []schema.Field{field.String("name")} }
@@ -335,14 +339,13 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// Node is the resolver for the node field.
-func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
-	return gen.Node(ctx, id)
-}
-
-// Nodes is the resolver for the nodes field.
-func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
-	return gen.Nodes(ctx, ids)
+// Types is the resolver for the types field.
+func (r *queryResolver) Types(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.TypeConnection, error) {
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return db.Query[gen.Type]().Paginate(ctx, after, first, before, last)
 }
 
 // Posts is the resolver for the posts field.
@@ -360,7 +363,7 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostI
 }
 
 // UpdatePost is the resolver for the updatePost field.
-func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
+func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error) {
 	return update(ctx, id, "Post", gen.Posts.ID, input.Setters)
 }
 
@@ -379,7 +382,7 @@ func (r *mutationResolver) CreateThing(ctx context.Context, input gen.CreateThin
 }
 
 // UpdateThing is the resolver for the updateThing field.
-func (r *mutationResolver) UpdateThing(ctx context.Context, id string, input gen.UpdateThingInput) (*gen.Thing, error) {
+func (r *mutationResolver) UpdateThing(ctx context.Context, id int64, input gen.UpdateThingInput) (*gen.Thing, error) {
 	return update(ctx, id, "Thing", gen.Things.ID, input.Setters)
 }
 
@@ -389,7 +392,7 @@ func (r *mutationResolver) CreateAcct(ctx context.Context, input gen.CreateAcctI
 }
 
 // UpdateAcct is the resolver for the updateAcct field.
-func (r *mutationResolver) UpdateAcct(ctx context.Context, id string, input gen.UpdateAcctInput) (*gen.Acct, error) {
+func (r *mutationResolver) UpdateAcct(ctx context.Context, id int64, input gen.UpdateAcctInput) (*gen.Acct, error) {
 	return update(ctx, id, "Acct", gen.Accts.ID, input.Setters)
 }
 
@@ -403,7 +406,7 @@ func (r *queryResolver) Docs(ctx context.Context, after *veloxgql.Cursor, first 
 }
 
 // UpdateDoc is the resolver for the updateDoc field.
-func (r *mutationResolver) UpdateDoc(ctx context.Context, id string, input gen.UpdateDocInput) (*gen.Doc, error) {
+func (r *mutationResolver) UpdateDoc(ctx context.Context, id int64, input gen.UpdateDocInput) (*gen.Doc, error) {
 	return update(ctx, id, "Doc", gen.Docs.ID, input.Setters)
 }
 
@@ -440,7 +443,7 @@ func (r *mutationResolver) CreateItem(ctx context.Context, input gen.CreateItemI
 }
 
 // UpdateItem is the resolver for the updateItem field.
-func (r *mutationResolver) UpdateItem(ctx context.Context, id string, input gen.UpdateItemInput) (*gen.Item, error) {
+func (r *mutationResolver) UpdateItem(ctx context.Context, id int64, input gen.UpdateItemInput) (*gen.Item, error) {
 	return update(ctx, id, "Item", gen.Items.ID, input.Setters)
 }
 
@@ -468,7 +471,7 @@ func (r *mutationResolver) CreateFlag(ctx context.Context, input gen.CreateFlagI
 }
 
 // UpdateFlag is the resolver for the updateFlag field.
-func (r *mutationResolver) UpdateFlag(ctx context.Context, id string, input gen.UpdateFlagInput) (*gen.Flag, error) {
+func (r *mutationResolver) UpdateFlag(ctx context.Context, id int64, input gen.UpdateFlagInput) (*gen.Flag, error) {
 	return update(ctx, id, "Flag", gen.Flags.ID, input.Setters)
 }
 
@@ -479,7 +482,7 @@ func (r *mutationResolver) CreatePage(ctx context.Context, input gen.CreatePageI
 }
 
 // UpdatePage is the resolver for the updatePage field.
-func (r *mutationResolver) UpdatePage(ctx context.Context, id string, input gen.UpdatePageInput) (*gen.Page, error) {
+func (r *mutationResolver) UpdatePage(ctx context.Context, id int64, input gen.UpdatePageInput) (*gen.Page, error) {
 	return update(ctx, id, "Page", gen.Pages.ID, input.Setters)
 }
 
@@ -524,16 +527,12 @@ func create[E any, PE velox.Entity[E]](ctx context.Context, x PE, setters func()
 	return x, nil
 }
 
-// update writes the setters an input gives to the row of E whose ID is id, a
-// node of the GraphQL type typ, and returns the row as written, read without
-// the Read policy. The UPDATE is under E's policies: a row it does not change
+// update writes the setters an input gives to the row of E whose key is id,
+// the ID gqlgen decoded, of the GraphQL type typ, and returns the row as
+// written, read without the Read policy. The UPDATE is under E's policies: a row it does not change
 // is NOT_FOUND. With nothing to set, the row is read under the Read policy.
-func update[E any, PE velox.Entity[E]](ctx context.Context, id, typ string, key velox.NumberCol[E, int64], setters func() ([]velox.Setter[E], error)) (*E, error) {
+func update[E any, PE velox.Entity[E]](ctx context.Context, k int64, typ string, key velox.NumberCol[E, int64], setters func() ([]velox.Setter[E], error)) (*E, error) {
 	set, err := setters()
-	if err != nil {
-		return nil, err
-	}
-	k, err := veloxgql.DecodeID[int64](id, typ)
 	if err != nil {
 		return nil, err
 	}
@@ -697,7 +696,7 @@ func TestRequiredEdgeHidden(t *testing.T) {
 	s := serve(t)
 	s.want("the page", "{ posts { edges { node { title member { name } } } } }",
 		'{"data":{"posts":{"edges":[{"node":{"title":"p1","member":{"name":"seen"}}},{"node":{"title":"p2","member":null}}]}}}')
-	id := veloxgql.EncodeID("Post", 2)
+	id := "2"
 	s.want("the update", fmt.Sprintf("mutation { updatePost(id: %q, input: {title: %q}) { title member { name } } }", id, "new"),
 		'{"data":{"updatePost":{"title":"new","member":null}}}')
 	var title string
@@ -709,7 +708,7 @@ func TestRequiredEdgeHidden(t *testing.T) {
 	// missing one is, and a client cannot tell them apart.
 	posts := s.count("posts")
 	for _, key := range []int64{2, 9} {
-		got := s.do(fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q}) { title } }", "x", veloxgql.EncodeID("Member", key)))
+		got := s.do(fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q}) { title } }", "x", fmt.Sprint(key)))
 		if !strings.Contains(got, "NOT_FOUND") || !strings.Contains(got, "edge member: no node has this ID") {
 			t.Errorf("member %d on create: %s", key, got)
 		}
@@ -723,10 +722,10 @@ func TestRequiredEdgeHidden(t *testing.T) {
 // the context's value fills it.
 func TestScopeKeyFilled(t *testing.T) {
 	s := serve(t)
-	seen := veloxgql.EncodeID("Member", 1)
+	seen := "1"
 	s.want("create", fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q}) { title org { name } } }", "n", seen),
 		'{"data":{"createPost":{"title":"n","org":{"name":"o1"}}}}')
-	if got := s.do(fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q, orgID: %q}) { title } }", "n", seen, veloxgql.EncodeID("Org", 2))); !strings.Contains(got, "GRAPHQL_VALIDATION_FAILED") {
+	if got := s.do(fmt.Sprintf("mutation { createPost(input: {title: %q, memberID: %q, orgID: %q}) { title } }", "n", seen, "2")); !strings.Contains(got, "GRAPHQL_VALIDATION_FAILED") {
 		t.Errorf("orgID on create: %s", got)
 	}
 }
@@ -746,7 +745,7 @@ func TestExplicitZeroRefused(t *testing.T) {
 	}
 	s.want("left out", "mutation { createAcct(input: {}) { handle } }", '{"data":{"createAcct":{"handle":"anon"}}}')
 	s.want("given", 'mutation { createAcct(input: {handle: "x"}) { handle } }', '{"data":{"createAcct":{"handle":"x"}}}')
-	id := veloxgql.EncodeID("Acct", 2)
+	id := "2"
 	s.want("update", fmt.Sprintf("mutation { updateAcct(id: %q, input: {handle: %q}) { handle } }", id, ""), '{"data":{"updateAcct":{"handle":""}}}')
 }
 
@@ -763,7 +762,7 @@ func TestSkippedFieldSetByResolver(t *testing.T) {
 	if n := s.count("pages"); n != 1 {
 		t.Errorf("%d pages, want 1", n)
 	}
-	id := veloxgql.EncodeID("Page", 1)
+	id := "1"
 	if got := s.do(fmt.Sprintf('mutation { updatePage(id: %q, input: {slug: ""}) { slug } }', id)); !strings.Contains(got, "UpdatePageInput.slug") {
 		t.Errorf("an empty slug on update: %s", got)
 	}
@@ -776,7 +775,7 @@ func TestEmptyBytes(t *testing.T) {
 	s.want("create", 'mutation { createThing(input: {b: "", j: []}) { b maybe } }', '{"data":{"createThing":{"b":"","maybe":null}}}')
 	s.want("create, not empty", 'mutation { createThing(input: {b: "QQ==", j: []}) { b } }', '{"data":{"createThing":{"b":"QQ=="}}}')
 	s.want("the page", "{ things { edges { node { b } } } }", '{"data":{"things":{"edges":[{"node":{"b":""}},{"node":{"b":"QQ=="}}]}}}')
-	id := veloxgql.EncodeID("Thing", 2)
+	id := "2"
 	s.want("update", fmt.Sprintf("mutation { updateThing(id: %q, input: {b: %q}) { b } }", id, ""), '{"data":{"updateThing":{"b":""}}}')
 	var n int
 	if err := s.db.QueryRow("SELECT COUNT(*) FROM things WHERE b = x~~").Scan(&n); err != nil || n != 2 {
@@ -790,7 +789,7 @@ func TestEmptyJSONLiteral(t *testing.T) {
 	s := serve(t)
 	s.want("create", 'mutation { createThing(input: {b: "QQ==", j: []}) { j } }', '{"data":{"createThing":{"j":[]}}}')
 	s.want("create, not empty", 'mutation { createThing(input: {b: "QQ==", j: ["a"]}) { j } }', '{"data":{"createThing":{"j":["a"]}}}')
-	id := veloxgql.EncodeID("Thing", 2)
+	id := "2"
 	s.want("update", fmt.Sprintf("mutation { updateThing(id: %q, input: {j: []}) { j } }", id), '{"data":{"updateThing":{"j":[]}}}')
 	var j string
 	if err := s.db.QueryRow("SELECT j FROM things WHERE id = 2").Scan(&j); err != nil || j != "[]" {
@@ -820,7 +819,7 @@ func TestExplicitNullDefault(t *testing.T) {
 		t.Errorf("a variable left out: %s", got)
 	}
 	s.want("given", 'mutation { createThing(input: {b: "", j: [], n: 3}) { n } }', '{"data":{"createThing":{"n":3}}}')
-	id := veloxgql.EncodeID("Thing", 1)
+	id := "1"
 	s.want("clear", fmt.Sprintf("mutation { updateThing(id: %q, input: {clearN: true}) { n } }", id), '{"data":{"updateThing":{"n":null}}}')
 }
 
@@ -829,7 +828,7 @@ func TestExplicitNullDefault(t *testing.T) {
 // linked, or which row it is.
 func TestForeignKeyFilterHidden(t *testing.T) {
 	s := serve(t)
-	seen, hidden := veloxgql.EncodeID("Member", 1), veloxgql.EncodeID("Member", 2)
+	seen, hidden := "1", "2"
 	titles := func(where string) string {
 		got := s.do("{ docs(where: {" + where + "}) { edges { node { title } } } }")
 		if strings.Contains(got, "errors") {
@@ -871,7 +870,7 @@ func TestUpdateNullKeeps(t *testing.T) {
 	s := serve(t)
 	const q = 'mutation ($id: ID!, $i: UpdateItemInput!) { updateItem(id: $id, input: $i) { sNil } }'
 	const qn = 'mutation ($id: ID!, $n: String) { updateItem(id: $id, input: {sNil: $n}) { sNil } }'
-	id := veloxgql.EncodeID("Item", 1)
+	id := "1"
 	set := func() {
 		t.Helper()
 		if got := s.do(fmt.Sprintf('mutation { updateItem(id: %q, input: {sNil: "a"}) { sNil } }', id)); got != '{"data":{"updateItem":{"sNil":"a"}}}' {
@@ -898,7 +897,7 @@ func TestUpdateNullKeeps(t *testing.T) {
 	set()
 	s.want("a value with clear", fmt.Sprintf('mutation { updateItem(id: %q, input: {sNil: "b", clearSNil: true}) { sNil } }', id), cleared)
 	// clear<Field> is not a required field's: its null is a field not given.
-	thing := veloxgql.EncodeID("Thing", 1)
+	thing := "1"
 	s.want("the thing", 'mutation { createThing(input: {b: "QQ==", j: []}) { b } }', '{"data":{"createThing":{"b":"QQ=="}}}')
 	s.want("a required field", fmt.Sprintf("mutation { updateThing(id: %q, input: {b: null}) { b } }", thing), '{"data":{"updateThing":{"b":"QQ=="}}}')
 }
@@ -907,7 +906,7 @@ func TestUpdateNullKeeps(t *testing.T) {
 // as a field not given; clear<Edge> unlinks it.
 func TestUpdateNullEdgeKeeps(t *testing.T) {
 	s := serve(t)
-	doc := veloxgql.EncodeID("Doc", 1)
+	doc := "1"
 	s.want("null", fmt.Sprintf("mutation { updateDoc(id: %q, input: {memberID: null}) { member { name } } }", doc), '{"data":{"updateDoc":{"member":{"name":"seen"}}}}')
 	s.want("clear", fmt.Sprintf("mutation { updateDoc(id: %q, input: {clearMember: true}) { member { name } } }", doc), '{"data":{"updateDoc":{"member":null}}}')
 }
@@ -920,15 +919,15 @@ func TestNullBytesGoType(t *testing.T) {
 	s.want("null", 'mutation { createItem(input: {sNil: "a"}) { ip } }', '{"data":{"createItem":{"ip":null}}}')
 	s.want("value", 'mutation { createItem(input: {ip: "AQIDBA=="}) { ip } }', '{"data":{"createItem":{"ip":"AQIDBA=="}}}')
 	s.want("the page", "{ items { edges { node { ip } } } }", '{"data":{"items":{"edges":[{"node":{"ip":null}},{"node":{"ip":"AQIDBA=="}}]}}}')
-	s.want("null keeps", fmt.Sprintf("mutation { updateItem(id: %q, input: {ip: null}) { ip } }", veloxgql.EncodeID("Item", 2)), '{"data":{"updateItem":{"ip":"AQIDBA=="}}}')
-	s.want("clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {clearIp: true}) { ip } }", veloxgql.EncodeID("Item", 2)), '{"data":{"updateItem":{"ip":null}}}')
+	s.want("null keeps", fmt.Sprintf("mutation { updateItem(id: %q, input: {ip: null}) { ip } }", "2"), '{"data":{"updateItem":{"ip":"AQIDBA=="}}}')
+	s.want("clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {clearIp: true}) { ip } }", "2"), '{"data":{"updateItem":{"ip":null}}}')
 }
 
 // TestForeignKeyFilterOtherScope: a foreign key to a row of another org reads as
 // null to every predicate on it, as the edge does: the same hides as a policy hides.
 func TestForeignKeyFilterOtherScope(t *testing.T) {
 	s := serve(t)
-	mine, theirs := veloxgql.EncodeID("Ticket", 1), veloxgql.EncodeID("Ticket", 2)
+	mine, theirs := "1", "2"
 	for _, c := range []struct{ where, want string }{
 		{fmt.Sprintf("ticketID: %q", mine), "r1"},
 		{fmt.Sprintf("ticketID: %q", theirs), ""},
@@ -1049,8 +1048,8 @@ func TestOrEmptyMatchesNone(t *testing.T) {
 // serve, and so does introspection.
 func TestIntrospectionTypeNames(t *testing.T) {
 	s := serve(t)
-	s.want("the entity", fmt.Sprintf("{ node(id: %q) { ... on Type { name kind } } }", veloxgql.EncodeID("Type", 1)),
-		'{"data":{"node":{"name":"t","kind":"A"}}}')
+	s.want("the entity", "{ types { edges { node { id name kind } } } }",
+		'{"data":{"types":{"edges":[{"node":{"id":"1","name":"t","kind":"A"}}]}}}')
 	got := s.do('{ __type(name: "Type") { name kind fields { name type { kind ofType { name } } } } __schema { queryType { name } directives { name locations } } }')
 	for _, want := range []string{'"name":"Type"', '"kind":"OBJECT"', '"queryType":{"name":"Query"}', '"locations":["FIELD_DEFINITION"'} {
 		if !strings.Contains(got, want) {
@@ -1089,7 +1088,7 @@ func TestJSONListsServed(t *testing.T) {
 	s.want("create", 'mutation { createFlag(input: {tags: ["a", "b"], nums: [1, 2], fs: [1.5], bs: [true, false]}) { tags nums fs bs } }',
 		'{"data":{"createFlag":{"tags":["a","b"],"nums":[1,2],"fs":[1.5],"bs":[true,false]}}}')
 	s.want("left out", "mutation { createFlag(input: {nums: []}) { tags nums fs bs } }", '{"data":{"createFlag":{"tags":null,"nums":[],"fs":null,"bs":null}}}')
-	id := veloxgql.EncodeID("Flag", 1)
+	id := "1"
 	s.want("update to empty", fmt.Sprintf('mutation { updateFlag(id: %q, input: {tags: [], nums: [3]}) { tags nums } }', id), '{"data":{"updateFlag":{"tags":[],"nums":[3]}}}')
 	s.want("clear", fmt.Sprintf('mutation { updateFlag(id: %q, input: {clearTags: true}) { tags } }', id), '{"data":{"updateFlag":{"tags":null}}}')
 	s.want("null keeps", fmt.Sprintf('mutation { updateFlag(id: %q, input: {fs: null}) { fs } }', id), '{"data":{"updateFlag":{"fs":[1.5]}}}')

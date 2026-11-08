@@ -1,6 +1,8 @@
 # 43. velox-graphql's methods are named as entgql's
 
-Status: accepted, 2026-11-06.
+Status: accepted, 2026-11-06. Its Node type, `GlobalID` and `node_gql.go`
+are superseded by [0061](0061-graphql-plain-ids.md): an ID is the key, and
+there is no Node.
 
 ## Context
 

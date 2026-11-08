@@ -23,8 +23,8 @@ import (
 //
 // Each entity that is neither skipped nor a join entity becomes a type with
 // its connection and edge types, its enums, and as its annotations ask, its
-// order, its where input and its mutation inputs; the root Query has node,
-// nodes and each entity's QueryField. It has no root Mutation: the
+// order, its where input and its mutation inputs; the root Query has each
+// entity's QueryField. It has no root Mutation: the
 // application declares its mutations, which take the inputs, in its own
 // schema. The output depends only on m: entities come in
 // name order, fields and edges in the model's order.
@@ -75,8 +75,10 @@ type object struct {
 	fanns  []graphql.Annotation // the annotations of ent.Fields, by index
 	eanns  []graphql.Annotation // the annotations of ent.Edges, by index
 	name   string               // the GraphQL type name
-	node   bool                 // a Node: its key is one column, of a type an ID holds
-	key    string               // the Go type veloxgql encodes the key of a Node as; "" for none
+	hasID  bool                 // its key is one column, of a type an ID holds: the field id
+	key    string               // the base Go type of the key, for conversions; "" for no ID
+	keyTyp string               // the key's own Go type, the Go type of its IDs; "" for no ID
+	keyPkg string               // the import path keyTyp names; "" for none
 	dirs   []directive          // the type's directives
 	fields []gqlField           // fields, then edges
 	plain  []Field              // the fields that are not edges, for the Go code
@@ -183,7 +185,11 @@ func build(m *plugin.Model) (*graph, error) {
 		g.byName[e.Name] = o
 	}
 
-	queryBy := map[string]string{"node": builtin, "nodes": builtin}
+	if err := g.oneKeyType(); err != nil {
+		return nil, err
+	}
+
+	queryBy := map[string]string{}
 	for _, o := range g.objects {
 		if err := g.fill(o); err != nil {
 			return nil, err
@@ -276,7 +282,10 @@ func (g *graph) objectOf(e *plugin.Entity, fks map[string]bool) (*object, error)
 		return nil, ownDirectives(e, where)
 	}
 	o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks}
-	o.node = o.key != ""
+	o.hasID = o.key != ""
+	if o.hasID {
+		o.keyTyp, o.keyPkg = keyGo(e)
+	}
 	if o.name, err = typeName(e, a, where); err != nil {
 		return nil, err
 	}
@@ -437,12 +446,15 @@ func (g *graph) fill(o *object) error {
 		o.fields = append(o.fields, f)
 		return nil
 	}
-	if o.node {
+	if o.hasID {
 		pk := e.Fields[e.PrimaryKey[0]]
-		// The key is the opaque global ID, which the method GlobalID returns:
-		// the struct's ID field is the raw key, which gqlgen would bind.
+		// The ID is the key, in its own Go type: gqlgen binds id to the
+		// struct's key field, by its name when it is not ID.
 		where := "schema " + e.Name + ", field " + pk.Name
-		id := gqlField{name: "id", typ: "ID!", desc: pk.Comment, dirs: []directive{bindTo("GlobalID")}, where: where}
+		id := gqlField{name: "id", typ: "ID!", desc: pk.Comment, where: where}
+		if !strings.EqualFold(pk.GoName, "id") {
+			id.dirs = []directive{bindTo(pk.GoName)}
+		}
 		if err := add(id, where); err != nil {
 			return err
 		}
@@ -486,7 +498,7 @@ func (g *graph) fill(o *object) error {
 func (g *graph) plainField(o *object, i int) (gqlField, bool, error) {
 	e, f, a := o.ent, o.ent.Fields[i], o.fanns[i]
 	switch {
-	case o.node && i == e.PrimaryKey[0], f.Sensitive, f.Implicit != "", o.fks[f.Name], a.Skip&graphql.SkipType != 0:
+	case o.hasID && i == e.PrimaryKey[0], f.Sensitive, f.Implicit != "", o.fks[f.Name], a.Skip&graphql.SkipType != 0:
 		return gqlField{}, false, nil
 	}
 	where := "schema " + e.Name + ", field " + f.Name
@@ -947,7 +959,7 @@ func (w *writer) field(f gqlField) {
 	w.at = at
 }
 
-const vocabulary = `# The vocabulary of velox's GraphQL types: the scalars, Node, PageInfo and
+const vocabulary = `# The vocabulary of velox's GraphQL types: the scalars, PageInfo and
 # OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
 # and @goModel, as gqlgen documents them.
 
@@ -973,12 +985,6 @@ directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, typ
 
 directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
 
-"""An object with a global ID."""
-interface Node {
-  """The global ID of the object."""
-  id: ID!
-}
-
 """Information about a page of a connection."""
 type PageInfo {
   """Whether there are more nodes after this page."""
@@ -1003,18 +1009,18 @@ func (g *graph) write(w *writer) {
 		w.line(l)
 	}
 
-	w.line()
-	w.line("# The root query.")
-	w.line()
-	w.line("type Query {")
-	w.line(`  """The node with this ID, or null."""`)
-	w.line("  node(id: ID!): Node")
-	w.line(`  """The nodes with these IDs, in their order; null for an ID with no node."""`)
-	w.line("  nodes(ids: [ID!]!): [Node]!")
-	for _, f := range g.query {
-		w.field(f)
+	// The root query holds the QueryFields; with none, the application
+	// declares Query itself, as GraphQL has no empty type.
+	if len(g.query) > 0 {
+		w.line()
+		w.line("# The root query.")
+		w.line()
+		w.line("type Query {")
+		for _, f := range g.query {
+			w.field(f)
+		}
+		w.line("}")
 	}
-	w.line("}")
 
 	for _, o := range g.objects {
 		g.writeObject(w, o)
@@ -1041,11 +1047,7 @@ func (g *graph) writeObject(w *writer, o *object) {
 	w.line()
 	w.at = "schema " + o.ent.Name
 	w.desc("", o.ent.Comment)
-	head := "type " + o.name
-	if o.node {
-		head += " implements Node"
-	}
-	w.line(head, w.dirs(o.dirs), " {")
+	w.line("type "+o.name, w.dirs(o.dirs), " {")
 	for _, f := range o.fields {
 		w.field(f)
 	}

@@ -45,7 +45,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	profile := edge("profile", plugin.O2O, "Profile")
 	categories := edge("categories", plugin.M2M, "Group")
 	categories.Annotations = ann(t, graphql.Skip(graphql.SkipMutationCreateInput))
-	likes := edge("likes", plugin.O2M, "Like") // to an entity that is not a Node
+	likes := edge("likes", plugin.O2M, "Like") // to an entity that has no ID
 	likes.Field, likes.FieldOn = "user_id", "Like"
 	bf := edge("best_friend", plugin.O2O, "User")
 	bf.Field, bf.FieldOn, bf.OwnsKey = "user_best_friend", "User", true // bidirectional

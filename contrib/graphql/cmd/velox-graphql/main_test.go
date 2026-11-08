@@ -56,9 +56,9 @@ func TestRun(t *testing.T) {
 			t.Errorf("%s has the generated-file header, which velox-gen adds", f.Path)
 		}
 	}
-	if resp.Error != "" || len(resp.Warnings) != 0 || strings.Join(paths, " ") != "velox.graphql node_gql.go user_gql.go" ||
-		!strings.Contains(resp.Files[0].Content, "type User implements Node {\n") ||
-		!strings.HasPrefix(resp.Files[2].Content, "package gen\n") || !strings.Contains(resp.Files[2].Content, "type UserConnection struct {") {
+	if resp.Error != "" || len(resp.Warnings) != 0 || strings.Join(paths, " ") != "velox.graphql user_gql.go" ||
+		!strings.Contains(resp.Files[0].Content, "type User {\n  id: ID!\n") ||
+		!strings.HasPrefix(resp.Files[1].Content, "package gen\n") || !strings.Contains(resp.Files[1].Content, "type UserConnection struct {") {
 		t.Errorf("%+v", resp)
 	}
 
@@ -73,10 +73,9 @@ func TestRun(t *testing.T) {
 			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "other"}},
 		}}}}), "User"},
 		"go": {request(t, plugin.Request{Protocol: 2, OutPackage: "gen", Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
-			Name: "Node", Label: "node", Handles: "Nodes", PrimaryKey: []int{0},
-			Fields:      []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "string"}},
-			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"type":"Vertex"}`)},
-		}}}}), "node_gql.go"},
+			Name: "Thing", PrimaryKey: []int{0},
+			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "string"}},
+		}}}}), "schema Thing: the model gives it no label or no handles"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			resp := respond(t, c.in)

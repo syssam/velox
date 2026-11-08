@@ -304,7 +304,7 @@ func TestPaginateRefuses(t *testing.T) {
 		{"name cursor under age", gqlgraph.Args{After: byName}, []gqlgraph.OrderTerm[person]{ageTerm(veloxgql.OrderDirectionAsc)}, []error{veloxgql.ErrBadCursor}},
 		{"name ASC cursor under name DESC", gqlgraph.Args{Before: byName}, []gqlgraph.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc)}, []error{veloxgql.ErrBadCursor}},
 		{"name cursor under the key", gqlgraph.Args{After: byName}, nil, []error{veloxgql.ErrBadCursor}},
-		{"another type's cursor", gqlgraph.Args{After: other}, name, []error{veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType}},
+		{"another type's cursor", gqlgraph.Args{After: other}, name, []error{veloxgql.ErrBadCursor}},
 		{"a value of another type", gqlgraph.Args{After: badValue}, name, []error{veloxgql.ErrBadCursor}},
 		{"a key of another type", gqlgraph.Args{After: badKey}, name, []error{veloxgql.ErrBadCursor}},
 		{"an invalid direction", gqlgraph.Args{}, []gqlgraph.OrderTerm[person]{nameTerm("UP")}, []error{veloxgql.ErrBadPagination}},

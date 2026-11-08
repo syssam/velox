@@ -50,9 +50,10 @@
 // Directives. One on an element it does not apply to makes the generator
 // fail, naming the schema and the element.
 //
-// An ID and a cursor hold the type's name, so renaming the type with Type
-// changes every ID and cursor that clients hold. veloxgql.DecodeID refuses an
-// ID of the old name with veloxgql.ErrWrongIDType.
+// A cursor holds the type's name, so renaming the type with Type changes
+// every cursor that clients hold, and a connection refuses a cursor of the
+// old name with veloxgql.ErrBadCursor. An ID is the key alone, as in entgql,
+// and does not change.
 //
 // # Directives
 //
@@ -74,9 +75,9 @@
 // A key field takes GraphQL's own directives only (@deprecated…). A foreign
 // key is in no type: its edge stands for it, so a directive that guards it
 // goes on the edge, which carries it to the edge's field, its has and
-// hasWith filters and the key's predicates. A Node's id is readable through
-// node, nodes and the cursors, so a directive on the primary key would guard
-// nothing. The plugin refuses an application directive on either.
+// hasWith filters and the key's predicates. A type's id is readable through
+// the cursors and every edge to the type, so a directive on the primary key
+// would guard nothing. The plugin refuses an application directive on either.
 //
 // An entity takes GraphQL's own directives only, too. gqlgen runs a type's
 // directives on the fields that return the type, so one on an entity would
@@ -116,25 +117,25 @@
 //	go tool velox-gen -out gen -plugin velox-graphql ./schema
 //
 // That writes the entities, as velox-gen always does, and gen/velox.graphql,
-// the GraphQL schema: a type for each entity, the Node interface, connections,
-// ordering, where inputs and mutation inputs. velox-gen owns the file like
+// the GraphQL schema: a type for each entity, connections, ordering, where
+// inputs and mutation inputs. It has no Node interface and no node or nodes
+// query; see "IDs" below. velox-gen owns the file like
 // its own: -check fails when the schema changed, and dropping -plugin
 // velox-graphql removes the file on the next run.
 //
 // An entity that has a where input, by a WhereOps field or a WhereEdge edge,
-// has the predicates of its node key in it, before the fields': the node key
-// has id, idNEQ, idIn, idNotIn, and for an ordered key (an integer or a
-// string) idGT, idGTE, idLT and idLTE, typed ID and decoded with the type
-// check, so that an ID of another type fails as any other does. A string
+// has the predicates of its key in it, before the fields': the key has id,
+// idNEQ, idIn, idNotIn, and for an ordered key (an integer or a string)
+// idGT, idGTE, idLT and idLTE, typed ID and of the key's Go type. A string
 // key's idGT, idGTE, idLT and idLTE compare by the database's collation, as
 // any string column's do. A uuid or an enum key has the four of equality.
 // WhereOps on the key chooses its predicates instead, and Skip(SkipWhereInput)
 // on it drops them. The key alone does not give an entity a where input.
 //
 // The SDL binds to Go by gqlgen's own matching of names, and by its @goField
-// directive where the names differ: a node's id to GlobalID, since the
-// struct's ID is the raw key, and a field whose Go type its scalar does not
-// bind to its <Field>GQL getter. An edge binds to the method of its Go
+// directive where the names differ: a key field whose Go name is not ID, and
+// a field whose Go type its scalar does not bind to its <Field>GQL getter.
+// The id field binds to the key itself. An edge binds to the method of its Go
 // name, Author or Tags, as entgql's does: the relations are in the
 // struct's Edges field, so the name is free. An edge with graphql.MaxList
 // keeps @goField, which holds the limit. Enums bind by name (velox-gen's
@@ -151,8 +152,8 @@
 //
 // The plugin also writes the Go that gqlgen's autobind binds the SDL's types
 // to, in the generated package: gen/<label>_gql.go for each entity with a
-// type, and gen/node_gql.go with Node and Nodes. Each entity's file has:
-//   - IsNode and GlobalID on a Node, and the <Field>GQL getters;
+// type. Each entity's file has:
+//   - the <Field>GQL getters;
 //   - the connection, edge, order and where types, each named after its
 //     GraphQL type, and the marshalers of velox-gen's enum types;
 //   - the edge methods, named after the edges: a connection, a list or the
@@ -171,7 +172,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlgraph for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion20", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion21", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -180,8 +181,7 @@
 // after every value ascending and before them descending, on every dialect,
 // and a cursor holds it as null. A where
 // argument's Pred is one gqlgraph helper call for each predicate the input
-// sets; it decodes IDs as their type's, and refuses an ID of another type,
-// and a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth
+// sets; it refuses a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth
 // or larger in all than MaxFilterNodes, before any query runs. A list edge
 // (graphql.Connection(false)) reads at most MaxList rows and fails with
 // velox.ErrTooManyRows beyond them, whatever the DB's cap; graphql.MaxList(n), which an
@@ -194,9 +194,8 @@
 // see "The cost limit" below. A mutation's transaction does not cover @defer
 // (see veloxgql.Extension): do not defer fields of a mutation.
 //
-// The application writes the root query's resolvers: Node and Nodes for
-// node and nodes, and for each QueryField a New<Type>Connection of a query on
-// the request's DB, veloxgql.DB(ctx):
+// The application writes the root query's resolvers: for each QueryField a
+// query's Paginate on the request's DB, veloxgql.DB(ctx):
 //
 //	func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
 //		return veloxgql.DB(ctx).Query[gen.User]().Paginate(ctx, after, first, before, last, gen.WithUserOrder(orderBy), gen.WithUserFilter(where))
@@ -243,12 +242,10 @@
 //		return x, nil
 //	}
 //
-//	func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
-//		key, err := veloxgql.DecodeID[int64](id, "Post")
-//		...
+//	func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error) {
 //		set, err := input.Setters()
 //		...
-//		x, err := veloxgql.DB(ctx).Update[gen.Post]().Where(gen.Posts.ID.EQ(key)).Set(set...).One(ctx)
+//		x, err := veloxgql.DB(ctx).Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).Set(set...).One(ctx)
 //		if velox.IsNotFound(err) {
 //			return nil, notFound(ctx, "Post")
 //		}
@@ -275,7 +272,7 @@
 // No delete is generated: deleting a row is one velox statement, which the
 // application writes with the checks it wants (examples/graphql's deletePost):
 //
-//	n, err := tx.Delete[gen.Post]().Where(gen.Posts.ID.EQ(key)).Exec(ctx)
+//	n, err := tx.Delete[gen.Post]().Where(gen.Posts.ID.EQ(id)).Exec(ctx)
 //
 // n 0 is a row the caller may not delete, missing, in another scope or hidden
 // by a policy: NOT_FOUND. n below 0 is a driver that did not report the rows
@@ -288,7 +285,8 @@
 // foreign key has it.
 //
 // In a Go input a required field is a value, an optional one a pointer, an
-// ID a string, a list of IDs a []string and a clear field a bool. A nil
+// ID the target's key in its Go type, a list of IDs a slice of keys and a
+// clear field a bool. A nil
 // pointer or list is a field not given, and Setters gives it no setter. A
 // null is a field not given too, as in entgql: only clear<Field> or
 // clear<Edge> sets NULL or unlinks. A clear field wins over its field: with
@@ -384,9 +382,9 @@
 // operation commits.
 //
 // Errors are coded before the presenter sees them. Setters refuses, before
-// any statement, with BAD_USER_INPUT naming the input field: a malformed or
-// mistyped ID or JSON value ("CreatePostInput.tagIDs[1]: ..."); a list of
-// more than gqlgraph.MaxIDs IDs, wrapping veloxgql.ErrPageTooLarge; and a
+// any statement, with BAD_USER_INPUT naming the input field: a malformed
+// JSON value ("CreatePostInput.meta: ..."); a list of more than
+// gqlgraph.MaxIDs IDs, wrapping veloxgql.ErrPageTooLarge; and a
 // validator's refusal ("UpdatePostInput.title: invalid value: ..."), even
 // when an ID with it names no row. The write's errors are velox's, as they
 // are, and ErrorPresenter maps them as it does elsewhere; an edge's
@@ -396,7 +394,9 @@
 // tell, and BAD_USER_INPUT, "edge <edge>: already linked to another owner",
 // for a child another owner holds. gqlgen's own validation errors (a
 // variable of the wrong shape) are left as gqlgen writes them,
-// GRAPHQL_VALIDATION_FAILED with a path or locations.
+// GRAPHQL_VALIDATION_FAILED with a path or locations. An ID that is no key,
+// as "abc" for an int64 key, fails in its marshaler, before any resolver, and
+// veloxgql.ErrorPresenter shows it as BAD_USER_INPUT.
 //
 // Not written: a key the caller supplies in a create input and JSON append.
 //
@@ -410,11 +410,16 @@
 //   - A Required one-to-one or many-to-one edge is T, not T!, in the type.
 //   - A field.Strings and the other JSON lists of scalars are [String!], as in
 //     entgql; any other JSON is the JSON scalar.
+//   - There is no Node interface, and no node or nodes query; a type does not
+//     implement Node. An ID is the entity's key, in its own Go type, as in
+//     entgql, and every key of a schema is of one Go type (see "IDs"). An
+//     application finds a row by its ID through a where input's id or idIn,
+//     or a query field of its own.
 //
 // # Loading
 //
-// The rows one statement reads are a batch: a page's rows, the nodes of node
-// and nodes, and the rows an edge read. The first edge field gqlgen resolves
+// The rows one statement reads are a batch: a page's rows and the rows an
+// edge read. The first edge field gqlgen resolves
 // on any row of a batch reads that edge for every row of it, in one
 // statement, and the rows read become a batch in their turn. So a nested
 // query sends one statement per edge per level, whatever its rows: a page
@@ -460,8 +465,7 @@
 // an application's With may hold a page its own query chose, which is not the
 // edge. A With is not needed for batching, and the edge methods ignore it.
 //
-// A page, a node and an edge's nodes read only the columns their selection
-// needs: the selected fields', the key, every foreign key on the row and
+// A page and an edge's rows read only the columns their selection needs: the selected fields', the key, every foreign key on the row and
 // the columns of the order fields. The foreign keys let an
 // edge or an application's With work; the order columns keep every cursor
 // valid. The columns of the other fields are left unread, so a row handed to
@@ -472,8 +476,8 @@
 //
 // The selection is the fields selected on the objects of the field's type:
 // through edges and node for a connection field, and the field's own
-// selection otherwise, with the fragments on the type, on Node and on every
-// interface and union the type is a member of. Narrowing is turned off, and
+// selection otherwise, with the fragments on the type and on every interface
+// and union the type is a member of. Narrowing is turned off, and
 // every column is read, when the selection cannot show what the objects'
 // resolvers read:
 //   - it holds a field the plugin did not write (an application's own, in
@@ -482,7 +486,7 @@
 //     totalCount and __typename, or an edge's one other than node, cursor
 //     and __typename;
 //   - outside a gqlgen server, which gives the schema, it holds a fragment
-//     on an interface or a union other than Node.
+//     on an interface or a union.
 //
 // Narrowing never adds a column the application's query left out
 // (velox.Query.Selects), and a New<Type>Connection whose query drops the key
@@ -500,8 +504,7 @@
 //
 // A cost has two parts, added. The rows: a field costs 1 plus its children's cost
 // times its multiplier. A connection's edges multiply by its first or last, or
-// by MaxPage when it has neither; nodes by the number of its ids; any other list
-// of objects by MaxList. The statements: a field that runs a statement adds 100,
+// by MaxPage when it has neither; any other list of objects by MaxList. The statements: a field that runs a statement adds 100,
 // with no multiplier, as a batch reads all its parents in one statement. Those
 // are a root field, a connection, its totalCount and any other field of an object
 // or a list of objects, so first: 0 and an alias still count, and the default
@@ -614,8 +617,8 @@
 //	autobind:
 //	  - <module>/gen
 //	models:
-//	  Node:
-//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.Noder
+//	  ID:
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID
 //	  Int:
 //	    model:
 //	      - github.com/99designs/gqlgen/graphql.Int
@@ -657,13 +660,50 @@
 // read the GraphQL value the SDL names): the plugin writes them only for
 // velox-gen's own enum types.
 //
-// String, Boolean and ID keep gqlgen's own models. veloxgql.Time,
+// String and Boolean keep gqlgen's own models; ID's is the key's, below.
+// veloxgql.Time,
 // veloxgql.UUID, veloxgql.Bytes and veloxgql.Uint64 resolve to the function
 // marshalers of those names, which bind time.Time, uuid.UUID, []byte and
 // uint64; veloxgql.Uint and veloxgql.Float32 to MarshalUint and
 // MarshalFloat32. gqlgen's narrow integers refuse an Int their Go type
 // cannot hold (300 for an int8), and veloxgql.ErrorPresenter shows the
 // client gqlgen's text with BAD_USER_INPUT.
+//
+// # IDs
+//
+// A GraphQL ID is the entity's key, in the key's own Go type: id on a type,
+// an <edge>ID or <edge>IDs in an input, and the ID predicates of a where
+// input are keys, which gqlgen decodes before any resolver runs. A resolver's
+// id argument is the key, with no decoding of its own:
+//
+//	func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error)
+//
+// gqlgen binds every ID argument to one Go type, the first model gqlgen.yml
+// lists for ID, so every schema with a GraphQL type has keys of one Go type,
+// and velox-graphql refuses a schema whose keys differ, naming two of them.
+// A schema whose key has another Go type is left out of GraphQL with
+// graphql.Skip(). The ID model is that Go type's:
+//
+//	key's Go type              ID: model:
+//	int64 (velox's default)    github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID
+//	uuid.UUID                  github.com/syssam/velox/contrib/graphql/veloxgql.UUID
+//	string                     github.com/99designs/gqlgen/graphql.ID
+//	int                        github.com/99designs/gqlgen/graphql.IntID
+//	another, or a named type   the application's own marshalers
+//
+// veloxgql.Int64ID writes the key as a JSON string, as GraphQL's ID is, and
+// reads a string of decimal digits or an integer; anything else is
+// BAD_USER_INPUT. veloxgql.UUID writes and reads the UUID's text. gqlgen
+// casts only named types whose base is string, so a key of a named integer
+// type, as type UserID int64, needs the application's own model.
+//
+// An ID is not opaque and holds no type: the ID 7 of a Post and of a User
+// are the same value, and an ID of one type given for another names the row
+// of that key, if any. There is no node or nodes query to look a row up by
+// its ID alone. A cursor stays opaque, holds its type's name, and a
+// connection refuses one of another type with veloxgql.ErrBadCursor. What a
+// caller may read or change by an ID is the entity's policy's to decide, as
+// for any key.
 //
 // # Supported gqlgen versions
 //

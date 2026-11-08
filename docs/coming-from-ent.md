@@ -291,6 +291,15 @@ a table rebuild on SQLite.
   until gqlgen resolves its fields. The query may carry the
   application's own filters; it must not be ordered. A where input's
   `Pred(ctx)` is entgql's `P()`: a `velox.Pred[T]` for any query.
+- **No Node, and an ID is the key.** velox-graphql writes no `Node`
+  interface, no `node` or `nodes` query and no `Noder`. An ID is the
+  entity's key in its own Go type, which gqlgen decodes: a resolver takes
+  `id int64`, and an input's `authorID` is an `int64`. Every key of a
+  schema's GraphQL types has one Go type, since gqlgen binds every ID
+  argument to the first model `gqlgen.yml` lists for `ID`: `veloxgql.Int64ID`
+  for int64, `veloxgql.UUID` for UUID, gqlgen's `graphql.ID` for string.
+  velox-graphql refuses a schema whose keys differ. An application that
+  needs `node(id:)` declares and resolves it itself (ADR 0061).
 - **JSON lists are GraphQL lists.** A JSON field of `[]string`, `[]int`,
   `[]int64`, `[]float64` or `[]bool` (`field.Strings` and the like) is
   `[String!]` and so on, as in entgql, in the type and in the inputs. Other JSON

@@ -13,15 +13,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion20
-
-// IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
-// veloxgql.Noder.
-func (*Post) IsNode() {}
-
-// GlobalID is the global ID of the Post, the GraphQL field id: its type and
-// key, opaque to the client.
-func (p *Post) GlobalID() string { return veloxgql.EncodeID("Post", p.ID) }
+const _ = veloxgql.GeneratedCodeIsVersion21
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -247,20 +239,20 @@ type PostWhereInput struct {
 	Or  []*PostWhereInput
 
 	// Predicates on the ID.
-	ID      *string
-	IDNEQ   *string
-	IDIn    []string
-	IDNotIn []string
-	IDGT    *string
-	IDGTE   *string
-	IDLT    *string
-	IDLTE   *string
+	ID      *int64
+	IDNEQ   *int64
+	IDIn    []int64
+	IDNotIn []int64
+	IDGT    *int64
+	IDGTE   *int64
+	IDLT    *int64
+	IDLTE   *int64
 
 	// Predicates on the edge author, by the ID of its node.
-	AuthorID      *string
-	AuthorIDNEQ   *string
-	AuthorIDIn    []string
-	AuthorIDNotIn []string
+	AuthorID      *int64
+	AuthorIDNEQ   *int64
+	AuthorIDIn    []int64
+	AuthorIDNotIn []int64
 
 	// Predicates on the field title.
 	Title          *string
@@ -295,8 +287,7 @@ type PostWhereInput struct {
 }
 
 // Pred is the condition w stands for on Post nodes, true for a nil or empty w.
-// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx), and
-// on an ID that does not decode or is of another type.
+// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
 func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	p, err := w.predicate(ctx)
 	return velox.Pred[Post](p), err
@@ -311,7 +302,7 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 	gqlgraph.Not(f, "not", w.Not, (*PostWhereInput).predicate)
 	gqlgraph.And(f, "and", w.And, (*PostWhereInput).predicate)
 	gqlgraph.Or(f, "or", w.Or, (*PostWhereInput).predicate)
-	gqlgraph.IDField[int64](f, "id", postColID, gqlgraph.Ops[string]{
+	gqlgraph.IDField(f, "id", postColID, gqlgraph.Ops[int64]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -321,7 +312,7 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		LT:    w.IDLT,
 		LTE:   w.IDLTE,
 	})
-	gqlgraph.EdgeIDField[int64](f, "authorID", postColAuthorID, postEdgeAuthor, &userType, gqlgraph.Ops[string]{
+	gqlgraph.EdgeIDField(f, "authorID", postColAuthorID, postEdgeAuthor, &userType, gqlgraph.Ops[int64]{
 		EQ:    w.AuthorID,
 		NEQ:   w.AuthorIDNEQ,
 		In:    w.AuthorIDIn,
@@ -371,7 +362,7 @@ type CreatePostInput struct {
 	// When the post was published; null for a draft.
 	PublishedAt *time.Time
 	// TagIDs are the IDs of the Label nodes the edge tags leads to.
-	TagIDs []string
+	TagIDs []int64
 }
 
 // Setters returns the input's fields and edges as setters for db.Insert(x).Set.
@@ -380,8 +371,8 @@ type CreatePostInput struct {
 // or in a velox.Hook; a zero key names no row, and the database's foreign key
 // refuses the insert with a velox.ConstraintError.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreatePostInput) Setters() ([]velox.Setter[Post], error) {
 	var set []velox.Setter[Post]
@@ -396,7 +387,7 @@ func (in *CreatePostInput) Setters() ([]velox.Setter[Post], error) {
 		set = append(set, Posts.PublishedAt.Set(*v))
 	}
 	if len(in.TagIDs) > 0 {
-		tagIDs, err := gqlgraph.DecodeIDs[int64]("CreatePostInput.tagIDs", in.TagIDs, "Label")
+		tagIDs, err := gqlgraph.IDs("CreatePostInput.tagIDs", in.TagIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -420,10 +411,10 @@ type UpdatePostInput struct {
 	// ClearPublishedAt sets the field published_at to NULL.
 	ClearPublishedAt bool
 	// AddTagIDs are the IDs of Label nodes to add to the edge tags.
-	AddTagIDs []string
+	AddTagIDs []int64
 	// RemoveTagIDs are the IDs of Label nodes to remove from the edge tags; an
 	// ID the edge does not lead to is ignored.
-	RemoveTagIDs []string
+	RemoveTagIDs []int64
 	// ClearTags removes every Label from the edge tags, before the IDs to
 	// remove and to add.
 	ClearTags bool
@@ -433,8 +424,8 @@ type UpdatePostInput struct {
 // db.Update[Post]().Set. A field not given sets nothing, and a clear field wins
 // over its field.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *UpdatePostInput) Setters() ([]velox.Setter[Post], error) {
 	var set []velox.Setter[Post]
@@ -456,14 +447,14 @@ func (in *UpdatePostInput) Setters() ([]velox.Setter[Post], error) {
 		set = append(set, Posts.Tags.Clear())
 	}
 	if len(in.RemoveTagIDs) > 0 {
-		removeTagIDs, err := gqlgraph.DecodeIDs[int64]("UpdatePostInput.removeTagIDs", in.RemoveTagIDs, "Label")
+		removeTagIDs, err := gqlgraph.IDs("UpdatePostInput.removeTagIDs", in.RemoveTagIDs)
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Posts.Tags.Remove(removeTagIDs...))
 	}
 	if len(in.AddTagIDs) > 0 {
-		addTagIDs, err := gqlgraph.DecodeIDs[int64]("UpdatePostInput.addTagIDs", in.AddTagIDs, "Label")
+		addTagIDs, err := gqlgraph.IDs("UpdatePostInput.addTagIDs", in.AddTagIDs)
 		if err != nil {
 			return nil, err
 		}

@@ -1,7 +1,7 @@
 // Package gqlcore holds what veloxgql and gqlgraph both need and neither can
 // import from the other: the per-response batch table, coded errors and their
-// walk, and the conversions between a Go value and the JSON value of a cursor
-// or the text of an ID. The conversions know base types only (time.Time,
+// walk, and the conversions between a Go value and the JSON value of a
+// cursor. The conversions know base types only (time.Time,
 // [16]byte, uint64, []byte): the callers unwrap veloxgql's scalars first. It is
 // not part of the API.
 package gqlcore
@@ -23,46 +23,6 @@ var (
 	ErrUnsupported = errors.New("unsupported type")
 	ErrMismatch    = errors.New("value of another type")
 )
-
-// Text is the key of an ID: text that stands for a number or a string, as the
-// key's Go type needs. A JSON value stands for a number only as a
-// json.Number, and for a string only as a string.
-type Text string
-
-// KeyText is key in its canonical text, the text of an ID; false when key's
-// type is not a key type.
-func KeyText(key any) (string, bool) {
-	switch k := key.(type) {
-	case int:
-		return strconv.FormatInt(int64(k), 10), true
-	case int8:
-		return strconv.FormatInt(int64(k), 10), true
-	case int16:
-		return strconv.FormatInt(int64(k), 10), true
-	case int32:
-		return strconv.FormatInt(int64(k), 10), true
-	case int64:
-		return strconv.FormatInt(k, 10), true
-	case uint:
-		return strconv.FormatUint(uint64(k), 10), true
-	case uint8:
-		return strconv.FormatUint(uint64(k), 10), true
-	case uint16:
-		return strconv.FormatUint(uint64(k), 10), true
-	case uint32:
-		return strconv.FormatUint(uint64(k), 10), true
-	case uint64:
-		return strconv.FormatUint(k, 10), true
-	case string:
-		return k, true
-	case [16]byte:
-		return FormatUUID(k), true
-	case encoding.TextMarshaler:
-		b, err := k.MarshalText()
-		return string(b), err == nil
-	}
-	return "", false
-}
 
 // JSONValue is v as a cursor holds it in JSON: integers stay numbers, so
 // that json.Marshal writes every digit; times are RFC 3339 with nanoseconds
@@ -87,7 +47,7 @@ func JSONValue(v any) any {
 }
 
 // SetValue sets *p from v, a value of a decoded cursor (a json.Number, a
-// string, a bool or nil) or the text of an ID's key. It fails with
+// string, a bool or nil). It fails with
 // ErrMismatch when v is not of *p's type, and ErrUnsupported when p's type is
 // none SetValue knows.
 func SetValue(p, v any) error {
@@ -152,8 +112,6 @@ func numberOf(v any) (string, bool) {
 	switch v := v.(type) {
 	case json.Number:
 		return string(v), true
-	case Text:
-		return string(v), true
 	}
 	return "", false
 }
@@ -163,8 +121,6 @@ func stringOf(v any) (string, bool) {
 	switch v := v.(type) {
 	case string:
 		return v, true
-	case Text:
-		return string(v), true
 	}
 	return "", false
 }

@@ -54,7 +54,7 @@ func validEnumValue(s string) bool {
 // entity may take.
 var builtins = []string{
 	"Query", "Mutation", "Subscription",
-	"Node", "PageInfo", "OrderDirection",
+	"PageInfo", "OrderDirection",
 	"Time", "UUID", "Bytes", "JSON", "Uint64", "Cursor",
 	"ID", "Int", "Float", "String", "Boolean",
 }

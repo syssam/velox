@@ -12,19 +12,11 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion20
+const _ = veloxgql.GeneratedCodeIsVersion21
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
 type Label = Tag
-
-// IsNode marks Tag as a GraphQL Node: gqlgen binds the interface Node to
-// veloxgql.Noder.
-func (*Tag) IsNode() {}
-
-// GlobalID is the global ID of the Tag, the GraphQL field id: its type and key,
-// opaque to the client.
-func (t *Tag) GlobalID() string { return veloxgql.EncodeID("Label", t.ID) }
 
 // Posts is the edge posts: a connection to the Post nodes it leads to. Its
 // queries batch with the same edge of every row on t's page.
@@ -201,14 +193,14 @@ type LabelWhereInput struct {
 	Or  []*LabelWhereInput
 
 	// Predicates on the ID.
-	ID      *string
-	IDNEQ   *string
-	IDIn    []string
-	IDNotIn []string
-	IDGT    *string
-	IDGTE   *string
-	IDLT    *string
-	IDLTE   *string
+	ID      *int64
+	IDNEQ   *int64
+	IDIn    []int64
+	IDNotIn []int64
+	IDGT    *int64
+	IDGTE   *int64
+	IDLT    *int64
+	IDLTE   *int64
 
 	// Predicates on the field name.
 	Name          *string
@@ -231,8 +223,7 @@ type LabelWhereInput struct {
 }
 
 // Pred is the condition w stands for on Label nodes, true for a nil or empty w.
-// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx), and
-// on an ID that does not decode or is of another type.
+// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
 func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
 	p, err := w.predicate(ctx)
 	return velox.Pred[Tag](p), err
@@ -247,7 +238,7 @@ func (w *LabelWhereInput) predicate(ctx context.Context) (velox.Predicate, error
 	gqlgraph.Not(f, "not", w.Not, (*LabelWhereInput).predicate)
 	gqlgraph.And(f, "and", w.And, (*LabelWhereInput).predicate)
 	gqlgraph.Or(f, "or", w.Or, (*LabelWhereInput).predicate)
-	gqlgraph.IDField[int64](f, "id", tagColID, gqlgraph.Ops[string]{
+	gqlgraph.IDField(f, "id", tagColID, gqlgraph.Ops[int64]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -287,21 +278,21 @@ type CreateLabelInput struct {
 	// Where the label sorts among labels.
 	Rank int8
 	// PostIDs are the IDs of the Post nodes the edge posts leads to.
-	PostIDs []string
+	PostIDs []int64
 }
 
 // Setters returns the input's fields and edges as setters for db.Insert(x).Set.
 // A field not given sets nothing: x keeps its value, or the field's Default.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 	var set []velox.Setter[Tag]
 	set = append(set, Tags.Name.Set(in.Name))
 	set = append(set, Tags.Rank.Set(in.Rank))
 	if len(in.PostIDs) > 0 {
-		postIDs, err := gqlgraph.DecodeIDs[int64]("CreateLabelInput.postIDs", in.PostIDs, "Post")
+		postIDs, err := gqlgraph.IDs("CreateLabelInput.postIDs", in.PostIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -319,10 +310,10 @@ type UpdateLabelInput struct {
 	// Where the label sorts among labels.
 	Rank *int8
 	// AddPostIDs are the IDs of Post nodes to add to the edge posts.
-	AddPostIDs []string
+	AddPostIDs []int64
 	// RemovePostIDs are the IDs of Post nodes to remove from the edge posts; an
 	// ID the edge does not lead to is ignored.
-	RemovePostIDs []string
+	RemovePostIDs []int64
 	// ClearPosts removes every Post from the edge posts, before the IDs to
 	// remove and to add.
 	ClearPosts bool
@@ -332,8 +323,8 @@ type UpdateLabelInput struct {
 // db.Update[Tag]().Set. A field not given sets nothing, and a clear field wins
 // over its field.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *UpdateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 	var set []velox.Setter[Tag]
@@ -347,14 +338,14 @@ func (in *UpdateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 		set = append(set, Tags.Posts.Clear())
 	}
 	if len(in.RemovePostIDs) > 0 {
-		removePostIDs, err := gqlgraph.DecodeIDs[int64]("UpdateLabelInput.removePostIDs", in.RemovePostIDs, "Post")
+		removePostIDs, err := gqlgraph.IDs("UpdateLabelInput.removePostIDs", in.RemovePostIDs)
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Tags.Posts.Remove(removePostIDs...))
 	}
 	if len(in.AddPostIDs) > 0 {
-		addPostIDs, err := gqlgraph.DecodeIDs[int64]("UpdateLabelInput.addPostIDs", in.AddPostIDs, "Post")
+		addPostIDs, err := gqlgraph.IDs("UpdateLabelInput.addPostIDs", in.AddPostIDs)
 		if err != nil {
 			return nil, err
 		}

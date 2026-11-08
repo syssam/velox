@@ -161,32 +161,30 @@ func titleOrder() []gqlgraph.OrderTerm[child] {
 
 // edgeSDL is the schema the edges' operations are parsed against.
 const edgeSDL = `
-interface Node { id: ID! }
+interface Keyed { id: ID! }
 interface Named { name: String! }
 union Thing = Owner | Tag
 type Query {
 	owners(first: Int): OwnerConnection!
 	owner: Owner
 	children: ChildConnection!
-	node(id: ID!): Node
-	nodes(ids: [ID!]!): [Node]!
 	things: [Thing!]!
 	other: Other
 }
-type Owner implements Node & Named {
+type Owner implements Keyed & Named {
 	id: ID!
 	name: String!
 	age: Int!
 	children(first: Int, last: Int, after: String, before: String, title: String): ChildConnection!
 	tags: [Tag!]!
 }
-type Child implements Node {
+type Child implements Keyed {
 	id: ID!
 	title: String!
 	owner: Owner
 	editor: Owner
 }
-type Tag implements Node {
+type Tag implements Keyed {
 	id: ID!
 	name: String!
 }

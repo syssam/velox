@@ -11,15 +11,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion20
-
-// IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
-// veloxgql.Noder.
-func (*Post) IsNode() {}
-
-// GlobalID is the global ID of the Post, the GraphQL field id: its type and
-// key, opaque to the client.
-func (p *Post) GlobalID() string { return veloxgql.EncodeID("Post", p.ID) }
+const _ = veloxgql.GeneratedCodeIsVersion21
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -295,20 +287,20 @@ type PostWhereInput struct {
 	Or  []*PostWhereInput
 
 	// Predicates on the ID.
-	ID      *string
-	IDNEQ   *string
-	IDIn    []string
-	IDNotIn []string
-	IDGT    *string
-	IDGTE   *string
-	IDLT    *string
-	IDLTE   *string
+	ID      *int64
+	IDNEQ   *int64
+	IDIn    []int64
+	IDNotIn []int64
+	IDGT    *int64
+	IDGTE   *int64
+	IDLT    *int64
+	IDLTE   *int64
 
 	// Predicates on the edge author (writer), by the ID of its node.
-	WriterID      *string
-	WriterIDNEQ   *string
-	WriterIDIn    []string
-	WriterIDNotIn []string
+	WriterID      *int64
+	WriterIDNEQ   *int64
+	WriterIDIn    []int64
+	WriterIDNotIn []int64
 
 	// Predicates on the field title.
 	Title          *string
@@ -349,8 +341,7 @@ type PostWhereInput struct {
 }
 
 // Pred is the condition w stands for on Post nodes, true for a nil or empty w.
-// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx), and
-// on an ID that does not decode or is of another type.
+// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
 func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	p, err := w.predicate(ctx)
 	return velox.Pred[Post](p), err
@@ -365,7 +356,7 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 	gqlgraph.Not(f, "not", w.Not, (*PostWhereInput).predicate)
 	gqlgraph.And(f, "and", w.And, (*PostWhereInput).predicate)
 	gqlgraph.Or(f, "or", w.Or, (*PostWhereInput).predicate)
-	gqlgraph.IDField[int64](f, "id", postColID, gqlgraph.Ops[string]{
+	gqlgraph.IDField(f, "id", postColID, gqlgraph.Ops[int64]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -375,7 +366,7 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		LT:    w.IDLT,
 		LTE:   w.IDLTE,
 	})
-	gqlgraph.EdgeIDField[int64](f, "writerID", postColAuthorID, postEdgeAuthor, &userType, gqlgraph.Ops[string]{
+	gqlgraph.EdgeIDField(f, "writerID", postColAuthorID, postEdgeAuthor, &userType, gqlgraph.Ops[int64]{
 		EQ:    w.WriterID,
 		NEQ:   w.WriterIDNEQ,
 		In:    w.WriterIDIn,
@@ -431,18 +422,18 @@ type CreatePostInput struct {
 	// Who last edited the post; the update default fills it.
 	EditedBy string
 	// WriterID is the ID of the Account the edge author leads to.
-	WriterID string
+	WriterID int64
 	// RelatedIDs are the IDs of the Post nodes the edge related leads to.
-	RelatedIDs []string
+	RelatedIDs []int64
 	// RelatedByIDs are the IDs of the Post nodes the edge related_by leads to.
-	RelatedByIDs []string
+	RelatedByIDs []int64
 }
 
 // Setters returns the input's fields and edges as setters for db.Insert(x).Set.
 // A field not given sets nothing: x keeps its value, or the field's Default.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreatePostInput) Setters() ([]velox.Setter[Post], error) {
 	var set []velox.Setter[Post]
@@ -461,20 +452,16 @@ func (in *CreatePostInput) Setters() ([]velox.Setter[Post], error) {
 		set = append(set, Posts.Rating.Set(*v))
 	}
 	set = append(set, Posts.EditedBy.Set(in.EditedBy))
-	writerID, err := gqlgraph.DecodeID[int64]("CreatePostInput.writerID", in.WriterID, "Account")
-	if err != nil {
-		return nil, err
-	}
-	set = append(set, Posts.Author.Set(writerID))
+	set = append(set, Posts.Author.Set(in.WriterID))
 	if len(in.RelatedIDs) > 0 {
-		relatedIDs, err := gqlgraph.DecodeIDs[int64]("CreatePostInput.relatedIDs", in.RelatedIDs, "Post")
+		relatedIDs, err := gqlgraph.IDs("CreatePostInput.relatedIDs", in.RelatedIDs)
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Posts.Related.Add(relatedIDs...))
 	}
 	if len(in.RelatedByIDs) > 0 {
-		relatedByIDs, err := gqlgraph.DecodeIDs[int64]("CreatePostInput.relatedByIDs", in.RelatedByIDs, "Post")
+		relatedByIDs, err := gqlgraph.IDs("CreatePostInput.relatedByIDs", in.RelatedByIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -498,20 +485,20 @@ type UpdatePostInput struct {
 	// ClearRating sets the field rating to NULL.
 	ClearRating bool
 	// WriterID is the ID of the Account the edge author leads to.
-	WriterID *string
+	WriterID *int64
 	// AddRelatedIDs are the IDs of Post nodes to add to the edge related.
-	AddRelatedIDs []string
+	AddRelatedIDs []int64
 	// RemoveRelatedIDs are the IDs of Post nodes to remove from the edge
 	// related; an ID the edge does not lead to is ignored.
-	RemoveRelatedIDs []string
+	RemoveRelatedIDs []int64
 	// ClearRelated removes every Post from the edge related, before the IDs to
 	// remove and to add.
 	ClearRelated bool
 	// AddRelatedByIDs are the IDs of Post nodes to add to the edge related_by.
-	AddRelatedByIDs []string
+	AddRelatedByIDs []int64
 	// RemoveRelatedByIDs are the IDs of Post nodes to remove from the edge
 	// related_by; an ID the edge does not lead to is ignored.
-	RemoveRelatedByIDs []string
+	RemoveRelatedByIDs []int64
 	// ClearRelatedBy removes every Post from the edge related_by, before the
 	// IDs to remove and to add.
 	ClearRelatedBy bool
@@ -521,8 +508,8 @@ type UpdatePostInput struct {
 // db.Update[Post]().Set. A field not given sets nothing, and a clear field wins
 // over its field.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *UpdatePostInput) Setters() ([]velox.Setter[Post], error) {
 	var set []velox.Setter[Post]
@@ -549,24 +536,20 @@ func (in *UpdatePostInput) Setters() ([]velox.Setter[Post], error) {
 		set = append(set, Posts.Rating.Set(*v))
 	}
 	if v := in.WriterID; v != nil {
-		writerID, err := gqlgraph.DecodeID[int64]("UpdatePostInput.writerID", *v, "Account")
-		if err != nil {
-			return nil, err
-		}
-		set = append(set, Posts.Author.Set(writerID))
+		set = append(set, Posts.Author.Set(*v))
 	}
 	if in.ClearRelated {
 		set = append(set, Posts.Related.Clear())
 	}
 	if len(in.RemoveRelatedIDs) > 0 {
-		removeRelatedIDs, err := gqlgraph.DecodeIDs[int64]("UpdatePostInput.removeRelatedIDs", in.RemoveRelatedIDs, "Post")
+		removeRelatedIDs, err := gqlgraph.IDs("UpdatePostInput.removeRelatedIDs", in.RemoveRelatedIDs)
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Posts.Related.Remove(removeRelatedIDs...))
 	}
 	if len(in.AddRelatedIDs) > 0 {
-		addRelatedIDs, err := gqlgraph.DecodeIDs[int64]("UpdatePostInput.addRelatedIDs", in.AddRelatedIDs, "Post")
+		addRelatedIDs, err := gqlgraph.IDs("UpdatePostInput.addRelatedIDs", in.AddRelatedIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -576,14 +559,14 @@ func (in *UpdatePostInput) Setters() ([]velox.Setter[Post], error) {
 		set = append(set, Posts.RelatedBy.Clear())
 	}
 	if len(in.RemoveRelatedByIDs) > 0 {
-		removeRelatedByIDs, err := gqlgraph.DecodeIDs[int64]("UpdatePostInput.removeRelatedByIDs", in.RemoveRelatedByIDs, "Post")
+		removeRelatedByIDs, err := gqlgraph.IDs("UpdatePostInput.removeRelatedByIDs", in.RemoveRelatedByIDs)
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Posts.RelatedBy.Remove(removeRelatedByIDs...))
 	}
 	if len(in.AddRelatedByIDs) > 0 {
-		addRelatedByIDs, err := gqlgraph.DecodeIDs[int64]("UpdatePostInput.addRelatedByIDs", in.AddRelatedByIDs, "Post")
+		addRelatedByIDs, err := gqlgraph.IDs("UpdatePostInput.addRelatedByIDs", in.AddRelatedByIDs)
 		if err != nil {
 			return nil, err
 		}

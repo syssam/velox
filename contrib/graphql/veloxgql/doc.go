@@ -1,21 +1,26 @@
 // Package veloxgql is the runtime the GraphQL code velox-graphql generates
-// binds to, through gqlgen: global IDs, connection cursors, where filters,
+// binds to, through gqlgen: the ID scalar, connection cursors, where filters,
 // the scalars, and the limits on what a client may ask for.
 //
 // What only generated code calls is in package gqlgraph, whose names are
-// stable by GeneratedCodeIsVersion20 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion21 and not by semantic versioning. Where a
 // name below belongs to gqlgraph it is written gqlgraph.Name.
 //
 // # IDs
 //
-// Every GraphQL ID is opaque and global: base64url without padding of
-// "<Type>:<key>", where Type is the GraphQL type name and key the primary
-// key's canonical text (EncodeID). In Go an ID is a string, gqlgen's built-in
-// ID. Generated code decodes one with DecodeID[K](id, "<Type>"), which
-// returns the typed key, and fails with ErrWrongIDType for an ID of another
-// type, before anything is looked up. IDType reads an ID's type, for a
-// lookup that does not know it, as Node's. Every Node entity implements
-// Noder.
+// A GraphQL ID is the entity's primary key, in the key's own Go type, as in
+// entgql. gqlgen binds the field id to the entity's key field, and an ID
+// argument or input field to the key's Go type, so a resolver takes the key
+// as it is. gqlgen binds every ID argument to the first model gqlgen.yml
+// lists for ID, so the keys of a schema's GraphQL types are of one Go type.
+// MarshalInt64ID and UnmarshalInt64ID are the ID scalar of an int64 key: a
+// JSON string of the decimal digits out, a string or an integer in. A UUID
+// key binds to UUID's marshalers and a string key to gqlgen's graphql.ID.
+//
+// An ID names a row of its type only where its type is known: the key 7 is
+// both Post 7 and User 7. There is no Node interface and no node query. A
+// client may send any key, so a policy or a scope decides what it may read
+// or change, not the ID.
 //
 // # The DB
 //
@@ -66,8 +71,8 @@
 //
 // The rows one statement reads are a batch, and the first edge field gqlgen
 // resolves on any of them reads that edge for all of them in one statement,
-// so a nested query sends one statement per edge per level. Generated pages,
-// node and nodes make their rows a batch; Batch does so for the rows an
+// so a nested query sends one statement per edge per level. Generated pages
+// make their rows a batch; Batch does so for the rows an
 // application's own resolver returns. A batch is per response, per field and
 // per edge, so each alias of an edge is its own batch; a call joins it only
 // from the edge's own field and with its first caller's arguments, and
@@ -96,8 +101,8 @@
 //   - gqlgraph.Field adds the predicates a gqlgraph.Ops sets on a column (EQ,
 //     In, Contains…, IsNil, untyped.Table.Pred), converting the input's values
 //     to the column's Go type where they differ (untyped.Table.Convert);
-//   - gqlgraph.IDField decodes IDs with DecodeID, so an ID of another type
-//     fails with ErrWrongIDType, and Has adds has<Edge>;
+//   - gqlgraph.IDField is Field of the key's predicates, on keys gqlgen
+//     decoded, and Has adds has<Edge>;
 //   - gqlgraph.EdgeIDField is IDField of a foreign key, with its IsNil and
 //     NotNil, which with a Read policy on the edge's target also hold the
 //     edge's EXISTS.
@@ -109,8 +114,8 @@
 // MaxFilterNodes inputs, predicates and values in all with ErrFilterTooLarge.
 // None of it runs a query, so a refused filter fails before any statement is
 // built. An error names the field that held its cause, through the nesting:
-// "veloxgql: OwnerWhereInput.hasEventsWith[0]: EventWhereInput.ownerID: Owner
-// ID: ID of another type".
+// "veloxgql: OwnerWhereInput.hasEventsWith[0]: EventWhereInput.titleIn: filter
+// list is too long".
 //
 // The predicates are SQL's, with its three-valued logic, as entgql's are:
 // on a nullable column, NEQ and NotIn leave out the rows whose column is
@@ -175,8 +180,7 @@
 // client writes it. MaxCost bounds the request. Cost computes what an
 // operation costs, as gqlgen's complexity recipe does: a field costs 1 plus
 // its children's cost times its multiplier, which is first or last for a
-// connection's edges, the number of ids for nodes and MaxList for another list
-// of objects. On top of that, with no multiplier, a field that runs a statement
+// connection's edges and MaxList for another list of objects. On top of that, with no multiplier, a field that runs a statement
 // adds 100, so first: 0 and aliases count, and an input object adds its size at
 // each use. A where predicate no index serves adds 2000 at each use: a
 // <field>Contains, <field>HasPrefix or <field>HasSuffix, which reads the whole
@@ -208,8 +212,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion20 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion21 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
-// disagree. For generated code. It is replaced by GeneratedCodeIsVersion20 when
+// disagree. For generated code. It is replaced by GeneratedCodeIsVersion22 when
 // generated code must change.
-const GeneratedCodeIsVersion20 = true
+const GeneratedCodeIsVersion21 = true

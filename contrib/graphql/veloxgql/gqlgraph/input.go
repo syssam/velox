@@ -14,61 +14,28 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-// MaxIDs is the most IDs one list field of an input may give: DecodeIDs
-// refuses more. The Extension's document limits bound a request's lists
-// only loosely (Limits.MaxVariableNodes is 100000), and an input's Setters
-// has no context to read the Limits from, so the bound is fixed here.
+// MaxIDs is the most IDs one list field of an input may give: IDs refuses
+// more. The Extension's document limits bound a request's lists only
+// loosely (Limits.MaxVariableNodes is 100000), and an input's Setters has no
+// context to read the Limits from, so the bound is fixed here.
 const MaxIDs = 1000
 
-// DecodeID decodes id, an ID of the GraphQL type typ, for the input field at
-// ("CreatePostInput.authorID"). For generated code. Its error is
-// BAD_USER_INPUT, names at, and wraps veloxgql.ErrBadID or ErrWrongIDType.
-func DecodeID[K any](at, id, typ string) (K, error) {
-	k, err := veloxgql.DecodeID[K](id, typ)
-	if err != nil {
-		return k, gqlcore.Within(at, err)
-	}
-	return k, nil
-}
-
-// DecodeIDAs is DecodeID of a K, converted to V by conv: for a key field whose
-// Go type is a named type DecodeID does not take. For generated code.
-func DecodeIDAs[K, V any](at, id, typ string, conv func(K) V) (V, error) {
-	k, err := DecodeID[K](at, id, typ)
-	if err != nil {
-		var zero V
-		return zero, err
-	}
-	return conv(k), nil
-}
-
-// DecodeIDs decodes ids as DecodeID does, keeps the first of each repeated
-// key, and returns the keys as a relation handle's Add and Remove take them.
-// For generated code. More than MaxIDs IDs is BAD_USER_INPUT wrapping
-// veloxgql.ErrPageTooLarge, before any is decoded. An ID's error names its
-// place in the list, as "<at>[2]".
-func DecodeIDs[K comparable](at string, ids []string, typ string) ([]any, error) {
-	return DecodeIDsAs(at, ids, typ, func(k K) K { return k })
-}
-
-// DecodeIDsAs is DecodeIDs of K keys, each converted to V by conv. For
-// generated code.
-func DecodeIDsAs[K comparable, V any](at string, ids []string, typ string, conv func(K) V) ([]any, error) {
+// IDs returns ids, the keys a list field of an input gives (at, as
+// "CreatePostInput.tagIDs"), as a relation handle's Add and Remove take
+// them: the first of each repeated key, in their order. For generated code.
+// More than MaxIDs keys is BAD_USER_INPUT wrapping veloxgql.ErrPageTooLarge.
+func IDs[K comparable](at string, ids []K) ([]any, error) {
 	if len(ids) > MaxIDs {
 		return nil, InputErrorf("%s: %w: %d IDs, and the most is %d", at, veloxgql.ErrPageTooLarge, len(ids), MaxIDs)
 	}
 	out := make([]any, 0, len(ids))
 	seen := make(map[K]struct{}, len(ids))
-	for i, id := range ids {
-		k, err := DecodeID[K](fmt.Sprintf("%s[%d]", at, i), id, typ)
-		if err != nil {
-			return nil, err
-		}
+	for _, k := range ids {
 		if _, ok := seen[k]; ok {
 			continue
 		}
 		seen[k] = struct{}{}
-		out = append(out, conv(k))
+		out = append(out, k)
 	}
 	return out, nil
 }

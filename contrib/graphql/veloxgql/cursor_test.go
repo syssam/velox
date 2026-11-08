@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -235,4 +236,12 @@ func encode(t *testing.T, c veloxgql.Cursor) string {
 		t.Fatal(err)
 	}
 	return s
+}
+
+// trailingBits is s with other unused bits in its last character, which
+// a lenient decoder decodes to the same bytes.
+func trailingBits(s string) string {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	i := strings.IndexByte(alphabet, s[len(s)-1])
+	return s[:len(s)-1] + string(alphabet[i^1])
 }

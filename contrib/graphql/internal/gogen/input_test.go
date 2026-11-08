@@ -15,8 +15,9 @@ func mutable(muts ...string) map[string]json.RawMessage {
 	return map[string]json.RawMessage{"graphql": json.RawMessage(`{"mutations":[` + strings.Join(muts, ",") + `]}`)}
 }
 
-// petsModel is an Owner, whose key is of the application's Go type, with a
-// one-to-one edge pet whose key the Pet holds as a plain int64, a Nillable
+// petsModel is an Owner, whose key is of the application's Go type, as the
+// Pet's is, with a one-to-one edge pet whose key the Pet holds as a plain
+// int64, a Nillable
 // field with a Default and a Nillable JSON field; and a Pet with a Required
 // edge mom to its own type, whose key is NULL-able, and its inverse kits. Both
 // have create and update inputs.
@@ -24,7 +25,7 @@ func petsModel() *plugin.Model {
 	owner := &plugin.Entity{
 		Name: "Owner", Label: "owner", Handles: "Owners", PrimaryKey: []int{0}, Annotations: mutable(`"create"`, `"update"`),
 		Fields: []*plugin.Field{
-			{Name: "id", GoName: "ID", Type: "int64", GoType: "types.OwnerID", ElemType: "types.OwnerID", PkgPath: "example.com/types", Kind: "int64", AutoID: true},
+			{Name: "id", GoName: "ID", Type: "int64", GoType: "types.ID", ElemType: "types.ID", PkgPath: "example.com/types", Kind: "int64", AutoID: true},
 			{Name: "nick", GoName: "Nick", Type: "string", GoType: "*string", ElemType: "string", Pointer: true, Nullable: true, Optional: true, HasDefault: true, Default: json.RawMessage(`"x"`)},
 			{Name: "meta", GoName: "Meta", Type: "json", GoType: "*map[string]any", ElemType: "map[string]any", Pointer: true, Nullable: true, Optional: true},
 		},
@@ -33,7 +34,7 @@ func petsModel() *plugin.Model {
 	pet := &plugin.Entity{
 		Name: "Pet", Label: "pet", Handles: "Pets", PrimaryKey: []int{0}, Annotations: mutable(`"create"`, `"update"`),
 		Fields: []*plugin.Field{
-			{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64", AutoID: true},
+			{Name: "id", GoName: "ID", Type: "int64", GoType: "types.ID", ElemType: "types.ID", PkgPath: "example.com/types", Kind: "int64", AutoID: true},
 			{Name: "owner_pet", GoName: "OwnerPet", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Nullable: true, Optional: true, Implicit: "pet"},
 			{Name: "cat_kits", GoName: "CatKits", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Nullable: true, Optional: true, Implicit: "kits"},
 		},
@@ -61,7 +62,8 @@ func TestInputEdgeKinds(t *testing.T) {
 			// A Nillable JSON field decodes, and its handle takes the value.
 			`meta, err := gqlgraph.FromJSON[map[string]any]("CreateOwnerInput.meta", *v) if err != nil { return nil, err } set = append(set, Owners.Meta.Set(meta))`,
 			// A one-to-one edge whose key the target holds is the edge's Add.
-			`petID, err := gqlgraph.DecodeID[int64]("CreateOwnerInput.petID", *v, "Pet") if err != nil { return nil, err } set = append(set, Owners.Pet.Add(petID))`,
+			// Its ID is the key gqlgen decoded, as it is.
+			`if v := in.PetID; v != nil { set = append(set, Owners.Pet.Add(*v)) }`,
 			`return gqlgraph.Validate("CreateOwnerInput", &ownerType, set)`,
 		},
 		"UpdateOwnerInput.Setters": {
@@ -69,19 +71,18 @@ func TestInputEdgeKinds(t *testing.T) {
 			`if in.ClearPet { set = append(set, Owners.Pet.Clear()) } else if v := in.PetID; v != nil {`,
 		},
 		"CreatePetInput.Setters": {
-			`ownerID, err := gqlgraph.DecodeIDAs[int64]("CreatePetInput.ownerID", *v, "Owner", gqlgraph.AsInt[types.OwnerID, int64])`,
 			// A key on the row is the edge's Set, which checks it and converts
 			// it to the int64 the row holds it in.
-			`set = append(set, Pets.Owner.Set(ownerID))`,
-			`set = append(set, Pets.Kits.Add(kitIDs...))`,
-			// A required ID is always decoded.
-			`momID, err := gqlgraph.DecodeID[int64]("CreatePetInput.momID", in.MomID, "Pet") if err != nil { return nil, err } set = append(set, Pets.Mom.Set(momID))`,
+			`if v := in.OwnerID; v != nil { set = append(set, Pets.Owner.Set(*v)) }`,
+			`kitIDs, err := gqlgraph.IDs("CreatePetInput.kitIDs", in.KitIDs) if err != nil { return nil, err } set = append(set, Pets.Kits.Add(kitIDs...))`,
+			// A required ID is always set.
+			`set = append(set, Pets.Mom.Set(in.MomID))`,
 		},
 		"UpdatePetInput.Setters": {
 			`if in.ClearOwner { set = append(set, Pets.OwnerPet.SetNull()) } else if v := in.OwnerID; v != nil {`,
 			// A Required edge's NULL-able key can only be added to: no remove
 			// or clear, which would leave a child with none.
-			`addKitIDs, err := gqlgraph.DecodeIDs[int64]("UpdatePetInput.addKitIDs", in.AddKitIDs, "Pet") if err != nil { return nil, err } set = append(set, Pets.Kits.Add(addKitIDs...))`,
+			`addKitIDs, err := gqlgraph.IDs("UpdatePetInput.addKitIDs", in.AddKitIDs) if err != nil { return nil, err } set = append(set, Pets.Kits.Add(addKitIDs...))`,
 		},
 	} {
 		src := funcSrc(t, files, name)
@@ -98,12 +99,19 @@ func TestInputEdgeKinds(t *testing.T) {
 	if src := funcSrc(t, files, "UpdatePetInput.Setters"); strings.Contains(src, "RemoveKitIDs") || strings.Contains(src, "ClearKits") {
 		t.Errorf("UpdatePetInput.Setters unlinks a kit:\n%s", src)
 	}
+	// The input's edge IDs are keys of the key's Go type, which gqlgen fills.
+	pet := strings.Join(strings.Fields(files["pet_gql.go"]), " ")
+	for _, want := range []string{"OwnerID *types.ID", "KitIDs []types.ID", "MomID types.ID", "AddKitIDs []types.ID"} {
+		if !strings.Contains(pet, want) {
+			t.Errorf("pet_gql.go has no %s:\n%s", want, pet)
+		}
+	}
 }
 
-// TestNonNodeOwnerM2M: a create input of a type that is no Node (its key is
-// a float64) writes its many-to-many edge with the edge's Add, which the
+// TestNoIDOwnerM2M: a create input of a type that has no ID (its key is a
+// float64) writes its many-to-many edge with the edge's Add, which the
 // write runs with the row's key.
-func TestNonNodeOwnerM2M(t *testing.T) {
+func TestNoIDOwnerM2M(t *testing.T) {
 	id := func(typ string) *plugin.Field {
 		return &plugin.Field{Name: "id", GoName: "ID", Type: typ, GoType: typ, ElemType: typ}
 	}
@@ -123,7 +131,7 @@ func TestNonNodeOwnerM2M(t *testing.T) {
 		},
 	}}
 	files := render(t, m)
-	want := `tagIDs, err := gqlgraph.DecodeIDs[int64]("CreateThingInput.tagIDs", in.TagIDs, "Tag") if err != nil { return nil, err } set = append(set, Things.Tags.Add(tagIDs...))`
+	want := `tagIDs, err := gqlgraph.IDs("CreateThingInput.tagIDs", in.TagIDs) if err != nil { return nil, err } set = append(set, Things.Tags.Add(tagIDs...))`
 	if src := funcSrc(t, files, "CreateThingInput.Setters"); !strings.Contains(src, want) {
 		t.Errorf("CreateThingInput.Setters has no %s:\n%s", want, src)
 	}

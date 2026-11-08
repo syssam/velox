@@ -9,6 +9,7 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -251,8 +252,8 @@ func TestNamesMatchSDL(t *testing.T) {
 //   - every SDL object, input and enum without a Go type of its name, from
 //     the plugin or velox-gen, is listed here with the reason;
 //   - every @goField(name:) names a Go field or method of the bound type;
-//   - the types that implement Node in the SDL are those whose Go type has
-//     IsNode and GlobalID, and Node and Nodes are written.
+//   - no type implements an interface, no Go type has IsNode or GlobalID,
+//     and neither Node nor Nodes is written.
 func checkNames(t *testing.T, m *plugin.Model, others ...string) {
 	t.Helper()
 	sdlText, err := sdl.Render(m)
@@ -343,11 +344,10 @@ func checkNames(t *testing.T, m *plugin.Model, others ...string) {
 					t.Errorf("%s.%s binds to %s, which %s does not have", name, f.Name, target, e.Name)
 				}
 			}
-			// Node in the SDL is a veloxgql.Noder in Go, both ways.
+			// velox has no Node interface: an ID is the key.
 			ms := methodsOf(e.Name)
-			goNode := slices.Contains(ms, "IsNode") && slices.Contains(ms, "GlobalID")
-			if sdlNode := slices.Contains(def.Interfaces, "Node"); sdlNode != goNode {
-				t.Errorf("%s implements Node in the SDL: %v; %s has IsNode and GlobalID: %v", name, sdlNode, e.Name, goNode)
+			if len(def.Interfaces) != 0 || slices.Contains(ms, "IsNode") || slices.Contains(ms, "GlobalID") {
+				t.Errorf("%s implements %v in the SDL; %s has methods %v", name, def.Interfaces, e.Name, ms)
 			}
 		}
 		gt := d.types[name]
@@ -420,14 +420,14 @@ func checkNames(t *testing.T, m *plugin.Model, others ...string) {
 			t.Errorf("the Go type %s binds to no SDL type", name)
 		}
 	}
-	if !d.funcs["Node"] || !d.funcs["Nodes"] {
-		t.Errorf("funcs %v: want Node and Nodes", d.funcs)
+	if d.funcs["Node"] || d.funcs["Nodes"] {
+		t.Errorf("funcs %v: want no Node and Nodes", d.funcs)
 	}
 }
 
-// typesModel has what the testdata model has not: a UUID key; a key of the
-// application's own type, from a package named ids, as one of the generated
-// code's locals is; the application's own enum type and string type; a JSON
+// typesModel has what the testdata model has not: keys of the application's
+// own type, from a package named ids, as one of the generated code's locals
+// is, one Go type for every key; the application's own enum type and string type; a JSON
 // field; and predicates on the scalars veloxgql binds.
 func typesModel(t *testing.T) *plugin.Model {
 	t.Helper()
@@ -444,7 +444,7 @@ func typesModel(t *testing.T) *plugin.Model {
 			Name: "Event", Label: "event", Handles: "Events", PrimaryKey: []int{0},
 			Edges: []*plugin.Edge{{Name: "owner", GoName: "Owner", Target: "Owner", Kind: plugin.M2O, Unique: true, Field: "owner_id", FieldOn: "Event", OwnsKey: true, Annotations: ann(graphql.Annotation{WhereEdge: true})}},
 			Fields: []*plugin.Field{
-				{Name: "id", GoName: "ID", Type: "uuid", GoType: "uuid.UUID", ElemType: "uuid.UUID", PkgPath: "github.com/google/uuid", Kind: "array", Annotations: where(graphql.OpsDefault)},
+				{Name: "id", GoName: "ID", Type: "int64", GoType: "ids.UserID", ElemType: "ids.UserID", PkgPath: "example.com/app/ids", Kind: "int64", Annotations: where(graphql.OpsDefault)},
 				{Name: "level", GoName: "Level", Type: "enum", GoType: "levels.Level", ElemType: "levels.Level", PkgPath: "example.com/app/types/v2", Kind: "string", Enum: "Level", EnumValues: []string{"low", "high"}, Annotations: ann(graphql.Annotation{WhereOps: graphql.OpEQ, OrderField: "LEVEL"})},
 				{Name: "size", GoName: "Size", Type: "uint64", GoType: "uint64", ElemType: "uint64", Annotations: where(graphql.OpGT)},
 				{Name: "rank", GoName: "Rank", Type: "int8", GoType: "int8", ElemType: "int8", Annotations: where(graphql.OpIn)},
@@ -476,12 +476,14 @@ func TestGoTypes(t *testing.T) {
 	files := render(t, typesModel(t))
 	// Compared with the spaces squashed, as gofmt aligns them.
 	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
-	ev, owner, node := squash(files["event_gql.go"]), squash(files["owner_gql.go"]), squash(files["node_gql.go"])
+	ev, owner := squash(files["event_gql.go"]), squash(files["owner_gql.go"])
+	if _, ok := files["node_gql.go"]; ok {
+		t.Error("velox-graphql wrote node_gql.go")
+	}
 	for _, want := range []string{
-		`func (e *Event) GlobalID() string { return veloxgql.EncodeID("Event", [16]byte(e.ID)) }`,
 		// The columns' own Go types, which bind through veloxgql's function
-		// marshalers and gqlgen's.
-		" ID *string ", " IDNEQ *string ", " IDIn []string ",
+		// marshalers and gqlgen's; the IDs are the keys, in their Go type.
+		" ID *idspkg.UserID ", " IDNEQ *idspkg.UserID ", " IDIn []idspkg.UserID ", " OwnerIDIn []idspkg.UserID ",
 		" Level *levels.Level ",
 		" SizeGT *uint64 ",
 		" RankIn []int8 ",
@@ -500,13 +502,13 @@ func TestGoTypes(t *testing.T) {
 		// they hold; gqlgraph converts them to the column's Go type where
 		// they differ.
 		` f := gqlgraph.NewFilter(ctx, &eventType) `,
-		` gqlgraph.IDField[[16]byte](f, "id", eventColID, gqlgraph.Ops[string]{ EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, }) `,
+		` gqlgraph.IDField(f, "id", eventColID, gqlgraph.Ops[idspkg.UserID]{ EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT, GTE: w.IDGTE, LT: w.IDLT, LTE: w.IDLTE, }) `,
 		` gqlgraph.Field(f, "level", eventColLevel, gqlgraph.Ops[levels.Level]{EQ: w.Level}) `,
 		` gqlgraph.Field(f, "size", eventColSize, gqlgraph.Ops[uint64]{GT: w.SizeGT}) `,
 		` gqlgraph.Field(f, "rank", eventColRank, gqlgraph.Ops[int8]{In: w.RankIn}) `,
 		` gqlgraph.Field(f, "at", eventColAt, gqlgraph.Ops[time.Time]{LT: w.AtLT, IsNil: w.AtIsNil}) `,
 		` gqlgraph.Field(f, "ref", eventColRef, gqlgraph.Ops[uuid.UUID]{NEQ: w.RefNEQ}) `,
-		` gqlgraph.EdgeIDField[int64](f, "ownerID", eventColOwnerID, eventEdgeOwner, &ownerType, gqlgraph.Ops[string]{ EQ: w.OwnerID, NEQ: w.OwnerIDNEQ, In: w.OwnerIDIn, NotIn: w.OwnerIDNotIn, IsNil: w.OwnerIDIsNil, NotNil: w.OwnerIDNotNil, }) `,
+		` gqlgraph.EdgeIDField(f, "ownerID", eventColOwnerID, eventEdgeOwner, &ownerType, gqlgraph.Ops[idspkg.UserID]{ EQ: w.OwnerID, NEQ: w.OwnerIDNEQ, In: w.OwnerIDIn, NotIn: w.OwnerIDNotIn, IsNil: w.OwnerIDIsNil, NotNil: w.OwnerIDNotNil, }) `,
 		` gqlgraph.Has(f, "hasOwner", w.HasOwner, eventEdgeOwner, untyped.TableOf[Owner]()) `,
 		` gqlgraph.HasWith(f, "hasOwnerWith", w.HasOwnerWith, (*OwnerWhereInput).predicate, eventEdgeOwner, untyped.TableOf[Owner]()) `,
 	} {
@@ -521,7 +523,6 @@ func TestGoTypes(t *testing.T) {
 		t.Errorf("a marshaler on the application's own enum type:\n%s", ev)
 	}
 	for _, want := range []string{
-		`func (o *Owner) GlobalID() string { return veloxgql.EncodeID("Owner", int64(o.ID)) }`,
 		// A field of the application's own Go type binds through a getter.
 		"func (o *Owner) CodeGQL() string { return string(o.Code) }",
 		"func (o *Owner) EmailGQL() *string { if o.Email == nil { return nil } v := string(*o.Email) return &v }",
@@ -531,7 +532,7 @@ func TestGoTypes(t *testing.T) {
 		"{Name: \"RANK\", Index: ownerColRank},",
 		// Its where predicates take the scalar's Go type, and Pred converts.
 		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
-		` gqlgraph.IDField[int64](f, "id", ownerColID, gqlgraph.Ops[string]{EQ: w.ID}) `,
+		` gqlgraph.IDField(f, "id", ownerColID, gqlgraph.Ops[idspkg.UserID]{EQ: w.ID}) `,
 		` gqlgraph.Field(f, "email", ownerColEmail, gqlgraph.Ops[string]{EQ: w.Email}) `,
 		` gqlgraph.Field(f, "rank", ownerColRank, gqlgraph.Ops[int32]{In: w.RankIn}) `,
 		` gqlgraph.Field(f, "ref", ownerColRef, gqlgraph.Ops[uuid.UUID]{EQ: w.Ref}) `,
@@ -542,32 +543,54 @@ func TestGoTypes(t *testing.T) {
 			t.Errorf("no %q in\n%s", want, owner)
 		}
 	}
-	// A Node type's lookup converts its key between the base type an ID
-	// decodes to and the Go type of the column.
-	for file, wants := range map[string][]string{
-		ev: {
-			` "github.com/google/uuid" `,
-			" Name: \"Event\", Table: untyped.TableOf[Event], ",
-			" AlwaysRead: []int{eventColID, eventColOwnerID, eventColLevel}, ",
-		},
-		node: {
-			`case "Event": return gqlgraph.NewNodeAs[[16]byte, uuid.UUID](&eventType, gqlgraph.AsUUID[uuid.UUID, [16]byte]), true`,
-			`case "Owner": return gqlgraph.NewNodeAs[int64, idspkg.UserID](&ownerType, gqlgraph.AsInt[idspkg.UserID, int64]), true`,
-			"return gqlgraph.NodeByID(ctx, id, nodeKind)",
-			"return gqlgraph.NodesByID(ctx, ids, nodeKind)",
-		},
+	for _, want := range []string{
+		` "github.com/google/uuid" `,
+		" Name: \"Event\", Table: untyped.TableOf[Event], ",
+		" AlwaysRead: []int{eventColID, eventColOwnerID, eventColLevel}, ",
 	} {
-		for _, want := range wants {
-			if !strings.Contains(file, want) {
-				t.Errorf("no %q in\n%s", want, file)
-			}
+		if !strings.Contains(ev, want) {
+			t.Errorf("no %q in\n%s", want, ev)
+		}
+	}
+	for _, not := range []string{"GlobalID", "IsNode", "EncodeID", "DecodeID"} {
+		if strings.Contains(ev+owner, not) {
+			t.Errorf("%s in the generated code:\n%s%s", not, ev, owner)
 		}
 	}
 }
 
-// TestNoNodes renders a model whose only type is not a Node: Node and Nodes
-// still exist, for the root query, and refuse every ID.
-func TestNoNodes(t *testing.T) {
+// TestUUIDKeyIDs: the IDs of a UUID key are uuid.UUID, the key's Go type,
+// in the where input and in an input's edge IDs.
+func TestUUIDKeyIDs(t *testing.T) {
+	key := func() *plugin.Field {
+		return &plugin.Field{Name: "id", GoName: "ID", Type: "uuid", GoType: "uuid.UUID", ElemType: "uuid.UUID", PkgPath: "github.com/google/uuid", Kind: "array", AutoID: true}
+	}
+	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{
+		{
+			Name: "Doc", Label: "doc", Handles: "Docs", PrimaryKey: []int{0},
+			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"mutations":["create","update"]}`)},
+			Edges:       []*plugin.Edge{{Name: "tags", GoName: "Tags", Target: "Tag", Kind: plugin.M2M}},
+			Fields: []*plugin.Field{key(), {Name: "title", GoName: "Title", Type: "string", GoType: "string", ElemType: "string",
+				Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}}},
+		},
+		{Name: "Tag", Label: "tag", Handles: "Tags", PrimaryKey: []int{0}, Edges: []*plugin.Edge{}, Fields: []*plugin.Field{key(), {Name: "name", GoName: "Name", Type: "string", GoType: "string", ElemType: "string"}}},
+	}}
+	doc := strings.Join(strings.Fields(render(t, m)["doc_gql.go"]), " ")
+	for _, want := range []string{
+		"ID *uuid.UUID", "IDIn []uuid.UUID",
+		`gqlgraph.IDField(f, "id", docColID, gqlgraph.Ops[uuid.UUID]{`,
+		"TagIDs []uuid.UUID", "AddTagIDs []uuid.UUID",
+		`tagIDs, err := gqlgraph.IDs("CreateDocInput.tagIDs", in.TagIDs)`,
+	} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("no %q in\n%s", want, doc)
+		}
+	}
+}
+
+// TestNoIDs renders a model whose only type has no ID: it writes the type's
+// file alone.
+func TestNoIDs(t *testing.T) {
 	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 		Name: "Pair", Label: "pair", Handles: "Pairs", PrimaryKey: []int{0, 1}, Edges: []*plugin.Edge{},
 		Fields: []*plugin.Field{
@@ -575,9 +598,9 @@ func TestNoNodes(t *testing.T) {
 			{Name: "b", GoName: "B", Type: "int64", GoType: "int64", ElemType: "int64"},
 		},
 	}}}
-	node := render(t, m)["node_gql.go"]
-	if !strings.Contains(node, "func nodeKind(typ string) (gqlgraph.NodeKind, bool) {") || strings.Contains(node, "switch") {
-		t.Errorf("node_gql.go:\n%s", node)
+	files := render(t, m)
+	if len(files) != 1 || files["pair_gql.go"] == "" {
+		t.Errorf("files %v, want pair_gql.go alone", slices.Collect(maps.Keys(files)))
 	}
 }
 
@@ -595,11 +618,6 @@ func TestRenderErrors(t *testing.T) {
 		m    *plugin.Model
 		want string
 	}{
-		"node file": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
-			e := entity("Node", "int64")
-			e.Annotations = map[string]json.RawMessage{"graphql": json.RawMessage(`{"type":"Vertex"}`)}
-			return e
-		}()}}, "schema Node: its Go file would be node_gql.go"},
 		"sdl": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{entity("Query", "int64")}}, "Query"},
 		"an edge to a key of two columns": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Author", "int64")
@@ -645,19 +663,16 @@ func TestRenderErrors(t *testing.T) {
 				return e
 			}(),
 		}}, "its Go name thingColType is also velox-gen's column constant of field type of schema Thing"},
-		"a handles variable named as node_gql.go's lookup": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
-			e := entity("Thing", "int64")
-			e.Handles = "nodeKind"
-			return e
-		}()}}, "velox-graphql's nodeKind: its Go name nodeKind is also velox-gen's handles of schema Thing"},
 		"a key of a Go type it cannot name": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Thing", "int64")
 			e.Fields[0].ElemType, e.Fields[0].PkgPath, e.Fields[0].Kind = "[]types.ID", "example.com/types", "int64"
+			e.Fields[0].Annotations = map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}
 			return e
 		}()}}, "schema Thing, field id: velox-graphql cannot name the Go type []types.ID"},
 		"a key of a Go type with no package": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Thing", "int64")
 			e.Fields[0].ElemType, e.Fields[0].Kind = "types.ID", "int64"
+			e.Fields[0].Annotations = map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}
 			return e
 		}()}}, "schema Thing, field id: the model gives no package for the Go type types.ID"},
 		"a struct for a UUID key": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
@@ -723,7 +738,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion20\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion21\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -841,9 +856,7 @@ func mutationsModel(t *testing.T) *plugin.Model {
 	for _, e := range m.Entities {
 		e.Annotations = map[string]json.RawMessage{"graphql": b}
 		switch e.Name {
-		case "Event":
-			e.Fields[0].HasDefault = true
-		case "Owner":
+		case "Event", "Owner":
 			e.Fields[0].AutoID = true
 		}
 	}
@@ -887,13 +900,13 @@ func TestCreateInputs(t *testing.T) {
 				for _, f := range ty.Create {
 					switch f.Kind {
 					case sdl.InputEdgeIDs:
-						want = append(want, f.GoName+" []string")
-					case sdl.InputEdgeID:
-						want = append(want, f.GoName+" "+ptrUnless(f.Required, "string"))
+						want = append(want, f.GoName+" []"+idsPkg(f.GoType))
 					default:
-						// No GoType of these models names a package imported
-						// under another name, or the generated one.
-						want = append(want, f.GoName+" "+ptrUnless(f.Required, f.GoType))
+						// An ID is its target's key, in the key's Go type. No
+						// GoType of these models names a package imported under
+						// another name, or the generated one, but ids, the
+						// package of typesModel's keys.
+						want = append(want, f.GoName+" "+ptrUnless(f.Required, idsPkg(f.GoType)))
 					}
 				}
 				if !slices.Equal(got, want) {
@@ -1022,11 +1035,11 @@ func TestUpdateInputs(t *testing.T) {
 				for _, f := range ty.Update {
 					switch f.Kind {
 					case sdl.InputAddIDs, sdl.InputRemoveIDs:
-						want = append(want, f.GoName+" []string")
+						want = append(want, f.GoName+" []"+idsPkg(f.GoType))
 					case sdl.InputClear, sdl.InputClearEdge:
 						want = append(want, f.GoName+" bool")
 					case sdl.InputEdgeID:
-						want = append(want, f.GoName+" *string")
+						want = append(want, f.GoName+" *"+idsPkg(f.GoType))
 					case sdl.InputValue:
 						if f.Required {
 							t.Errorf("%s.%s is required", in, f.Name)
@@ -1071,19 +1084,22 @@ func ptrUnless(required bool, typ string) string {
 	return "*" + typ
 }
 
+// idsPkg is typ as the generated code names it: the package ids, a local's
+// name, is imported as idspkg.
+func idsPkg(typ string) string { return strings.Replace(typ, "ids.", "idspkg.", 1) }
+
 // TestCreateConversions pins how Setters turns its input into setters for
-// mutationsModel's Go types: IDs decoded as the target's key and converted
-// to the application's key type, JSON decoded before any statement, the
+// mutationsModel's Go types: IDs that are keys of the application's key type,
+// which gqlgen decoded, JSON decoded before any statement, the
 // application's own Go types converted from the scalar's.
 func TestCreateConversions(t *testing.T) {
 	files := render(t, mutationsModel(t))
 	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
 	ev, owner := squash(files["event_gql.go"]), squash(files["owner_gql.go"])
 	for _, want := range []string{
-		` OwnerID *string `,
+		` OwnerID *idspkg.UserID `,
 		` Tags veloxgql.JSON `,
-		`ownerID, err := gqlgraph.DecodeIDAs[int64]("CreateEventInput.ownerID", *v, "Owner", gqlgraph.AsInt[idspkg.UserID, int64])`,
-		`set = append(set, Events.Owner.Set(ownerID))`,
+		`if v := in.OwnerID; v != nil { set = append(set, Events.Owner.Set(*v)) }`,
 		`tags, err := gqlgraph.FromJSON[[]int32]("CreateEventInput.tags", in.Tags)`,
 		`return gqlgraph.Validate("CreateEventInput", &eventType, set)`,
 		`eventColTags: "tags"`,
@@ -1184,9 +1200,9 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 	for _, w := range []string{
 		`func (in *UpdateGroupInput) Setters() ([]velox.Setter[Group], error) {`,
 		`if in.ClearUsers { set = append(set, Groups.Users.Clear()) }`,
-		`removeUserIDs, err := gqlgraph.DecodeIDs[int64]("UpdateGroupInput.removeUserIDs", in.RemoveUserIDs, "Account")`,
+		`removeUserIDs, err := gqlgraph.IDs("UpdateGroupInput.removeUserIDs", in.RemoveUserIDs)`,
 		`set = append(set, Groups.Users.Remove(removeUserIDs...))`,
-		`addUserIDs, err := gqlgraph.DecodeIDs[int64]("UpdateGroupInput.addUserIDs", in.AddUserIDs, "Account")`,
+		`addUserIDs, err := gqlgraph.IDs("UpdateGroupInput.addUserIDs", in.AddUserIDs)`,
 		`set = append(set, Groups.Users.Add(addUserIDs...))`,
 	} {
 		if !strings.Contains(src, w) {
@@ -1573,7 +1589,7 @@ func TestMutationsHeading(t *testing.T) {
 // TestMethodNameTaken: a field or an edge whose Go name is a method the plugin writes on
 // the row is refused here, naming it, where it failed in gqlgen's build.
 func TestMethodNameTaken(t *testing.T) {
-	for _, name := range []struct{ name, goName string }{{"is_node", "IsNode"}, {"global_id", "GlobalID"}, {"title_gql", "TitleGQL"}} {
+	for _, name := range []struct{ name, goName string }{{"title_gql", "TitleGQL"}} {
 		m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 			Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
 			Fields: []*plugin.Field{
@@ -1623,7 +1639,7 @@ func TestPackageNamedAsALocal(t *testing.T) {
 	for _, pkg := range []string{"writerKey", "ctx", "tagsJSON", "emailVal", "clearRelated", "idsKeys", "key", "u"} {
 		m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 			Name: "Thing", Label: "thing", Handles: "Things", PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
-			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", GoType: pkg + ".ID", ElemType: pkg + ".ID", PkgPath: "example.com/" + pkg, Kind: "int64"}},
+			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", GoType: pkg + ".ID", ElemType: pkg + ".ID", PkgPath: "example.com/" + pkg, Kind: "int64", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}}},
 		}}}
 		files := render(t, m)
 		want := pkg + `pkg "example.com/` + pkg + `"`

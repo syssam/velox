@@ -162,8 +162,8 @@ resolver:
 autobind:
   - example.com/app/gen
 models:
-  Node:
-    model: github.com/syssam/velox/contrib/graphql/veloxgql.Noder
+  ID:
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID
   Int:
     model:
       - github.com/99designs/gqlgen/graphql.Int
@@ -198,6 +198,13 @@ models:
     model: github.com/syssam/velox/contrib/graphql/veloxgql.PageInfo
 `
 
+// e2eCollectBooks is the application's own query of books by their IDs: an
+// ID is the book's key, and gqlgen binds it to an int64.
+const e2eCollectBooks = `extend type Query {
+  books(ids: [ID!]!): [Book]!
+}
+`
+
 // e2eCollectResolvers are the root query's resolvers, one line each; gqlgen
 // keeps them when it generates.
 const e2eCollectResolvers = `package graph
@@ -209,14 +216,28 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// Node is the resolver for the node field.
-func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
-	return gen.Node(ctx, id)
-}
-
-// Nodes is the resolver for the nodes field.
-func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
-	return gen.Nodes(ctx, ids)
+// Books is the resolver for the books field: the books of ids, which gqlgen
+// decoded to their int64 keys, in their order, and null for one the reader
+// cannot see. Batch makes them one batch, whose edges each read once.
+func (r *queryResolver) Books(ctx context.Context, ids []int64) ([]*gen.Book, error) {
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bs, err := db.Query[gen.Book]().Where(gen.Books.ID.In(ids...)).Limit(len(ids)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]*gen.Book, len(bs))
+	for i := range bs {
+		byID[bs[i].ID] = &bs[i]
+	}
+	out := make([]*gen.Book, len(ids))
+	for i, id := range ids {
+		out[i] = byID[id]
+	}
+	veloxgql.Batch(ctx, out)
+	return out, nil
 }
 
 // Authors is the resolver for the authors field.
@@ -588,8 +609,6 @@ func (e *env) do(t *testing.T, org int, query string, vars map[string]any, data 
 	return r, stmts
 }
 
-func bookID(id int64) string { return veloxgql.EncodeID("Book", id) }
-
 // The shapes of the responses.
 type (
 	genrePage struct {
@@ -917,14 +936,16 @@ func TestOrgInsideWindow(t *testing.T) {
 
 // TestPolicyHidden: a review Review's policy hides is on no list, and takes
 // no place in a window: book 5 has three reviews and a withdrawn one before
-// them, book 10 one and a withdrawn one.
+// them, book 10 one and a withdrawn one. The books are read by their IDs,
+// integers and strings of them, which gqlgen decodes to int64 keys; MaxList
+// bounds the cost of the application's books, a list of lists.
 func TestPolicyHidden(t *testing.T) {
 	type bookReviews struct{ Reviews reviewList }
 	each(t, func(t *testing.T, e *env) {
-		var data struct{ Nodes []bookReviews }
-		_, stmts := e.do(t, 1, "query($ids: [ID!]!) { nodes(ids: $ids) { ... on Book { reviews { stars } } } }", map[string]any{"ids": []string{bookID(5), bookID(10), bookID(1)}}, &data)
+		var data struct{ Books []bookReviews }
+		_, stmts := e.do(t, 1, "query($ids: [ID!]!) { books(ids: $ids) { reviews { stars } } }", map[string]any{"ids": []any{5, "10", 1}}, &data)
 		var got [][]int
-		for _, b := range data.Nodes {
+		for _, b := range data.Books {
 			var s []int
 			for _, r := range b.Reviews {
 				s = append(s, r.Stars)
@@ -935,7 +956,7 @@ func TestPolicyHidden(t *testing.T) {
 		if len(stmts) != 2 {
 			t.Errorf("%d statements, want 2 (the books, their reviews):\n%s", len(stmts), strings.Join(stmts, "\n"))
 		}
-	})
+	}, veloxgql.WithLimits(veloxgql.Limits{MaxList: 10}))
 }
 
 // TestCostRefused: three levels of full pages cost more than the default
@@ -967,19 +988,19 @@ func TestListEdgeCap(t *testing.T) {
 		Reviews reviewList
 	}
 	each(t, func(t *testing.T, e *env) {
-		var data struct{ Nodes []*bookReviews }
-		r, _ := e.do(t, 1, "query($ids: [ID!]!) { nodes(ids: $ids) { ... on Book { title reviews { stars } } } }", map[string]any{"ids": []string{bookID(1), bookID(5), bookID(2)}}, nil)
+		var data struct{ Books []*bookReviews }
+		r, _ := e.do(t, 1, "query($ids: [ID!]!) { books(ids: $ids) { title reviews { stars } } }", map[string]any{"ids": []string{"1", "5", "2"}}, nil)
 		if err := json.Unmarshal(r.Data, &data); err != nil {
 			t.Fatal(err)
 		}
-		if len(data.Nodes) != 3 || data.Nodes[0] == nil || data.Nodes[1] != nil || data.Nodes[2] == nil {
-			t.Fatalf("nodes: %s", r.Data)
+		if len(data.Books) != 3 || data.Books[0] == nil || data.Books[1] != nil || data.Books[2] == nil {
+			t.Fatalf("books: %s", r.Data)
 		}
-		equal(t, "book 1", fmt.Sprintf("%s %v", data.Nodes[0].Title, data.Nodes[0].Reviews), "Beta [{2}]")
-		equal(t, "book 2", fmt.Sprintf("%s %v", data.Nodes[2].Title, data.Nodes[2].Reviews), "Alpha [{3} {4}]")
+		equal(t, "book 1", fmt.Sprintf("%s %v", data.Books[0].Title, data.Books[0].Reviews), "Beta [{2}]")
+		equal(t, "book 2", fmt.Sprintf("%s %v", data.Books[2].Title, data.Books[2].Reviews), "Alpha [{3} {4}]")
 		// The client sees an internal error at the field; the log names the edge.
-		if len(r.Errors) != 1 || fmt.Sprint(r.Errors[0].Path) != "[nodes 1 reviews]" {
-			t.Errorf("errors: %+v, want one at nodes.1.reviews", r.Errors)
+		if len(r.Errors) != 1 || fmt.Sprint(r.Errors[0].Path) != "[books 1 reviews]" {
+			t.Errorf("errors: %+v, want one at books.1.reviews", r.Errors)
 		}
 		e.mu.Lock()
 		logged := strings.Join(e.log, "\n")
@@ -1007,6 +1028,7 @@ func TestCollectRun(t *testing.T) {
 		"schema/review_policy.go":   e2eCollectPolicy,
 		"schema/scope.go":           e2eCollectScope,
 		"gqlgen.yml":                e2eCollectGqlgen,
+		"graph/books.graphql":       e2eCollectBooks,
 		"graph/schema.resolvers.go": e2eCollectResolvers,
 		"collect_test.go":           e2eCollectRun,
 	}, true)
@@ -1017,7 +1039,7 @@ func TestCollectRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
-	for _, want := range []string{"gen/velox.graphql\n", "gen/node_gql.go\n", "gen/review.go\n"} {
+	for _, want := range []string{"gen/velox.graphql\n", "gen/book_gql.go\n", "gen/review.go\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("velox-gen wrote no %s", want)
 		}

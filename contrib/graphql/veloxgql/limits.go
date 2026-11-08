@@ -15,7 +15,7 @@ import (
 type Limits struct {
 	// MaxPage is the largest first or last a connection takes, and the page
 	// size when neither is given. More is ErrPageTooLarge, not a shorter
-	// page. It bounds the IDs of the root field nodes too.
+	// page.
 	MaxPage int
 
 	// MaxList is the most rows a list edge (graphql.Connection(false))

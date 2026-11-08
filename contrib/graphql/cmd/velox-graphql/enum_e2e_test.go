@@ -9,8 +9,9 @@ import (
 
 // e2eEnumSchema is the schema of the enum e2e app: an entity renamed in
 // GraphQL (Alarm is the type Alert) with a field of the application's own
-// enum type, and Tag, a Node with a string key, whose where input has the
-// key's ordered predicates.
+// enum type, and Tag, whose where input has the key's ordered predicates.
+// Both keys are strings, as a schema's keys are of one Go type, so ID binds
+// to gqlgen's graphql.ID.
 const e2eEnumSchema = `package schema
 
 import (
@@ -23,7 +24,7 @@ import (
 type Alarm struct{ schema.Schema }
 
 func (Alarm) Fields() []schema.Field {
-	return []schema.Field{field.Enum("level").GoType(levels.Level(""))}
+	return []schema.Field{field.String("id"), field.Enum("level").GoType(levels.Level(""))}
 }
 
 func (Alarm) Annotations() []schema.Annotation {
@@ -83,16 +84,6 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// Node is the resolver for the node field.
-func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
-	return gen.Node(ctx, id)
-}
-
-// Nodes is the resolver for the nodes field.
-func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
-	return gen.Nodes(ctx, ids)
-}
-
 // Alerts is the resolver for the alerts field.
 func (r *queryResolver) Alerts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.AlertConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
@@ -110,7 +101,7 @@ type queryResolver struct{ *Resolver }
 
 // e2eEnumRun is the application's test: an alarm of level high is served as
 // the GraphQL value HIGH, through the enum that @goModel binds to the
-// application's type.
+// application's type, and its ID is its key, the string a1.
 const e2eEnumRun = `package app_test
 
 import (
@@ -149,7 +140,7 @@ func TestTagIDGT(t *testing.T) {
 		}
 	}
 	ctx := context.Background()
-	b := (&gen.Tag{ID: "b"}).GlobalID()
+	b := "b"
 	p, err := (&gen.TagWhereInput{IDGT: &b}).Pred(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -175,8 +166,8 @@ func TestAlertLevel(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	db.SetMaxOpenConns(1)
 	for _, s := range []string{
-		"CREATE TABLE alarms (id INTEGER PRIMARY KEY, level TEXT NOT NULL)",
-		"INSERT INTO alarms (id, level) VALUES (1, 'high')",
+		"CREATE TABLE alarms (id TEXT PRIMARY KEY, level TEXT NOT NULL)",
+		"INSERT INTO alarms (id, level) VALUES ('a1', 'high')",
 	} {
 		if _, err := db.Exec(s); err != nil {
 			t.Fatalf("%s: %v", s, err)
@@ -185,15 +176,19 @@ func TestAlertLevel(t *testing.T) {
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
 	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
 	srv.AddTransport(transport.POST{})
-	req := httptest.NewRequest("POST", "/", strings.NewReader(` + "`" + `{"query":"{ alerts { edges { node { level } } } }"}` + "`" + `))
+	req := httptest.NewRequest("POST", "/", strings.NewReader(` + "`" + `{"query":"{ alerts { edges { node { id level } } } }"}` + "`" + `))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
-	if got := w.Body.String(); !strings.Contains(got, ` + "`" + `"level":"HIGH"` + "`" + `) || strings.Contains(got, "errors") {
+	if got := w.Body.String(); !strings.Contains(got, ` + "`" + `"id":"a1","level":"HIGH"` + "`" + `) || strings.Contains(got, "errors") {
 		t.Errorf("response %d: %s", w.Code, got)
 	}
 }
 `
+
+// e2eStringIDGqlgen is e2eCollectGqlgen with ID bound to gqlgen's
+// graphql.ID, the model of a schema whose keys are strings.
+var e2eStringIDGqlgen = strings.Replace(e2eCollectGqlgen, "github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID", "github.com/99designs/gqlgen/graphql.ID", 1)
 
 // TestAppEnumRenamed generates an application whose renamed entity has a
 // field of its own enum type, then runs gqlgen over it with no models entry
@@ -207,7 +202,7 @@ func TestAppEnumRenamed(t *testing.T) {
 	dir, run := app(t, map[string]string{
 		"schema/schema.go":          e2eEnumSchema,
 		"levels/levels.go":          e2eLevelsGQL,
-		"gqlgen.yml":                e2eCollectGqlgen,
+		"gqlgen.yml":                e2eStringIDGqlgen,
 		"graph/schema.resolvers.go": e2eEnumResolvers,
 		"enum_test.go":              e2eEnumRun,
 	}, true)

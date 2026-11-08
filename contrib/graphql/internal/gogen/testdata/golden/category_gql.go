@@ -9,15 +9,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion20
-
-// IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
-// veloxgql.Noder.
-func (*Category) IsNode() {}
-
-// GlobalID is the global ID of the Category, the GraphQL field id: its type and
-// key, opaque to the client.
-func (c *Category) GlobalID() string { return veloxgql.EncodeID("Category", c.ID) }
+const _ = veloxgql.GeneratedCodeIsVersion21
 
 // Children is the edge children: a connection to the Category nodes it leads
 // to. Its queries batch with the same edge of every row on c's page.
@@ -150,14 +142,14 @@ type CategoryWhereInput struct {
 	Or  []*CategoryWhereInput
 
 	// Predicates on the ID.
-	ID      *string
-	IDNEQ   *string
-	IDIn    []string
-	IDNotIn []string
-	IDGT    *string
-	IDGTE   *string
-	IDLT    *string
-	IDLTE   *string
+	ID      *int64
+	IDNEQ   *int64
+	IDIn    []int64
+	IDNotIn []int64
+	IDGT    *int64
+	IDGTE   *int64
+	IDLT    *int64
+	IDLTE   *int64
 
 	// The edge parent: whether it has a node, or one that matches.
 	HasParent     *bool
@@ -165,8 +157,7 @@ type CategoryWhereInput struct {
 }
 
 // Pred is the condition w stands for on Category nodes, true for a nil or empty
-// w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx),
-// and on an ID that does not decode or is of another type.
+// w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
 func (w *CategoryWhereInput) Pred(ctx context.Context) (velox.Pred[Category], error) {
 	p, err := w.predicate(ctx)
 	return velox.Pred[Category](p), err
@@ -181,7 +172,7 @@ func (w *CategoryWhereInput) predicate(ctx context.Context) (velox.Predicate, er
 	gqlgraph.Not(f, "not", w.Not, (*CategoryWhereInput).predicate)
 	gqlgraph.And(f, "and", w.And, (*CategoryWhereInput).predicate)
 	gqlgraph.Or(f, "or", w.Or, (*CategoryWhereInput).predicate)
-	gqlgraph.IDField[int64](f, "id", categoryColID, gqlgraph.Ops[string]{
+	gqlgraph.IDField(f, "id", categoryColID, gqlgraph.Ops[int64]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -201,33 +192,29 @@ func (w *CategoryWhereInput) predicate(ctx context.Context) (velox.Predicate, er
 type CreateCategoryInput struct {
 	Title string
 	// ChildIDs are the IDs of the Category nodes the edge children leads to.
-	ChildIDs []string
+	ChildIDs []int64
 	// ParentID is the ID of the Category the edge parent leads to.
-	ParentID *string
+	ParentID *int64
 }
 
 // Setters returns the input's fields and edges as setters for db.Insert(x).Set.
 // A field not given sets nothing: x keeps its value, or the field's Default.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 	var set []velox.Setter[Category]
 	set = append(set, Categories.Title.Set(in.Title))
 	if len(in.ChildIDs) > 0 {
-		childIDs, err := gqlgraph.DecodeIDs[int64]("CreateCategoryInput.childIDs", in.ChildIDs, "Category")
+		childIDs, err := gqlgraph.IDs("CreateCategoryInput.childIDs", in.ChildIDs)
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Categories.Children.Add(childIDs...))
 	}
 	if v := in.ParentID; v != nil {
-		parentID, err := gqlgraph.DecodeID[int64]("CreateCategoryInput.parentID", *v, "Category")
-		if err != nil {
-			return nil, err
-		}
-		set = append(set, Categories.Parent.Set(parentID))
+		set = append(set, Categories.Parent.Set(*v))
 	}
 	return gqlgraph.Validate("CreateCategoryInput", &categoryType, set)
 }
@@ -238,15 +225,15 @@ func (in *CreateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 type UpdateCategoryInput struct {
 	Title *string
 	// AddChildIDs are the IDs of Category nodes to add to the edge children.
-	AddChildIDs []string
+	AddChildIDs []int64
 	// RemoveChildIDs are the IDs of Category nodes to remove from the edge
 	// children; an ID the edge does not lead to is ignored.
-	RemoveChildIDs []string
+	RemoveChildIDs []int64
 	// ClearChildren removes every Category from the edge children, before the
 	// IDs to remove and to add.
 	ClearChildren bool
 	// ParentID is the ID of the Category the edge parent leads to.
-	ParentID *string
+	ParentID *int64
 	// ClearParent unlinks the edge parent: it leads to no Category afterwards.
 	ClearParent bool
 }
@@ -255,8 +242,8 @@ type UpdateCategoryInput struct {
 // db.Update[Category]().Set. A field not given sets nothing, and a clear field
 // wins over its field.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *UpdateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 	var set []velox.Setter[Category]
@@ -267,14 +254,14 @@ func (in *UpdateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 		set = append(set, Categories.Children.Clear())
 	}
 	if len(in.RemoveChildIDs) > 0 {
-		removeChildIDs, err := gqlgraph.DecodeIDs[int64]("UpdateCategoryInput.removeChildIDs", in.RemoveChildIDs, "Category")
+		removeChildIDs, err := gqlgraph.IDs("UpdateCategoryInput.removeChildIDs", in.RemoveChildIDs)
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Categories.Children.Remove(removeChildIDs...))
 	}
 	if len(in.AddChildIDs) > 0 {
-		addChildIDs, err := gqlgraph.DecodeIDs[int64]("UpdateCategoryInput.addChildIDs", in.AddChildIDs, "Category")
+		addChildIDs, err := gqlgraph.IDs("UpdateCategoryInput.addChildIDs", in.AddChildIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -283,11 +270,7 @@ func (in *UpdateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 	if in.ClearParent {
 		set = append(set, Categories.CategoryChildren.SetNull())
 	} else if v := in.ParentID; v != nil {
-		parentID, err := gqlgraph.DecodeID[int64]("UpdateCategoryInput.parentID", *v, "Category")
-		if err != nil {
-			return nil, err
-		}
-		set = append(set, Categories.Parent.Set(parentID))
+		set = append(set, Categories.Parent.Set(*v))
 	}
 	return gqlgraph.Validate("UpdateCategoryInput", &categoryType, set)
 }

@@ -113,15 +113,11 @@ func TestErrorsAreCoded(t *testing.T) {
 		err  error
 		is   error
 	}{
-		{"DecodeID malformed", func() error { _, err := veloxgql.DecodeID[int64]("!", "Person"); return err }(), veloxgql.ErrBadID},
-		{"DecodeID of another type", func() error {
-			_, err := veloxgql.DecodeID[int64](veloxgql.EncodeID("Post", 1), "Person")
-			return err
-		}(), veloxgql.ErrWrongIDType},
-		{"IDType", func() error { _, err := veloxgql.IDType("!"); return err }(), veloxgql.ErrBadID},
+		{"UnmarshalInt64ID", func() error { _, err := veloxgql.UnmarshalInt64ID(1.5); return err }(), nil},
+		{"UnmarshalInt64ID text", func() error { _, err := veloxgql.UnmarshalInt64ID("x"); return err }(), nil},
 		{"DecodeCursor", func() error { _, err := veloxgql.DecodeCursor("!"); return err }(), veloxgql.ErrBadCursor},
 		{"Cursor.UnmarshalGQLContext", new(veloxgql.Cursor).UnmarshalGQLContext(context.Background(), 1), veloxgql.ErrBadCursor},
-		{"cursor of another type", conn(gqlgraph.Args{After: &veloxgql.Cursor{Type: "Post", Key: int64(1)}}), veloxgql.ErrWrongIDType},
+		{"cursor of another type", conn(gqlgraph.Args{After: &veloxgql.Cursor{Type: "Post", Key: int64(1)}}), veloxgql.ErrBadCursor},
 		{"cursor value", conn(gqlgraph.Args{After: &badKey}), veloxgql.ErrBadCursor},
 		{"over MaxPage", conn(gqlgraph.Args{First: &over}), veloxgql.ErrPageTooLarge},
 		{"first with last", conn(gqlgraph.Args{First: &one, Last: &two}), veloxgql.ErrBadPagination},
@@ -135,7 +131,7 @@ func TestErrorsAreCoded(t *testing.T) {
 		{"Bytes", new(veloxgql.Bytes).UnmarshalGQL(1), nil},
 		{"JSON", new(veloxgql.JSON).UnmarshalGQL(func() {}), nil},
 		{"OrderDirection", new(veloxgql.OrderDirection).UnmarshalGQL("UP"), nil},
-		{"InputErrorf", gqlgraph.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadID), veloxgql.ErrBadID},
+		{"InputErrorf", gqlgraph.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadCursor), veloxgql.ErrBadCursor},
 	} {
 		switch {
 		case c.err == nil:
@@ -148,7 +144,7 @@ func TestErrorsAreCoded(t *testing.T) {
 			t.Errorf("%s: the text %q does not start veloxgql: once", c.name, c.err)
 		}
 	}
-	if got := gqlgraph.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadID).Error(); got != "veloxgql: X must be Y: malformed ID" {
+	if got := gqlgraph.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadCursor).Error(); got != "veloxgql: X must be Y: malformed cursor" {
 		t.Errorf("InputErrorf's text is %q", got)
 	}
 	if err := veloxgql.ErrNoDB; codeOf(err) != "" {
@@ -202,7 +198,7 @@ func (l *logged) take() []error {
 // which is logged; never the text of a driver, an entity or a constraint.
 func TestErrorPresenter(t *testing.T) {
 	driverErr := errors.New(`sqlite: no such table: posts (users_email_key, tenant 7, /srv/app/db.go)`)
-	_, codedBadID := veloxgql.DecodeID[int64]("!", "User")
+	_, codedBadID := veloxgql.UnmarshalInt64ID(true)
 	path := ast.Path{ast.PathName("posts"), ast.PathIndex(0), ast.PathName("author")}
 	fieldCtx := graphql.WithFieldContext(context.Background(), &graphql.FieldContext{
 		Field: graphql.CollectedField{Field: &ast.Field{Alias: "node"}},
@@ -223,7 +219,7 @@ func TestErrorPresenter(t *testing.T) {
 		path   string // the path's JSON
 		logged bool
 	}{
-		{"wrapped ErrBadID", fmt.Errorf("resolver: %w", codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, false},
+		{"wrapped bad ID", fmt.Errorf("resolver: %w", codedBadID), "BAD_USER_INPUT", "ID must be a string of an integer, or an integer", `["node"]`, false},
 		{"no scope", fmt.Errorf("velox: gen.Post: %w", scope.ErrNoScope), "UNAUTHENTICATED", "unauthenticated", `["node"]`, false},
 		{"denied", fmt.Errorf("velox: gen.Post: %w", velox.ErrDenied), "FORBIDDEN", "forbidden", `["node"]`, false},
 		{"scope mismatch", fmt.Errorf("velox: gen.Post: %w: a row's org_id is 2, the context's is 1", scope.ErrMismatch), "FORBIDDEN", "forbidden", `["node"]`, false},
@@ -240,13 +236,13 @@ func TestErrorPresenter(t *testing.T) {
 		{"no DB", fmt.Errorf("veloxgql: %w", veloxgql.ErrNoDB), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
 		{"too many rows", fmt.Errorf("veloxgql: Post.likes: %w", velox.ErrTooManyRows), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
 		{"gqlerror over a driver error", &gqlerror.Error{Message: driverErr.Error(), Path: path, Err: driverErr}, "INTERNAL_SERVER_ERROR", "internal error", `["posts",0,"author"]`, true},
-		{"gqlerror over a coded error", gqlerror.WrapPath(path, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["posts",0,"author"]`, false},
-		{"join", errors.Join(codedBadID, driverErr), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, true},
-		{"join, driver first", errors.Join(driverErr, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, true},
+		{"gqlerror over a coded error", gqlerror.WrapPath(path, codedBadID), "BAD_USER_INPUT", "ID must be a string of an integer, or an integer", `["posts",0,"author"]`, false},
+		{"join", errors.Join(codedBadID, driverErr), "BAD_USER_INPUT", "ID must be a string of an integer, or an integer", `["node"]`, true},
+		{"join, driver first", errors.Join(driverErr, codedBadID), "BAD_USER_INPUT", "ID must be a string of an integer, or an integer", `["node"]`, true},
 		{"an application's coded error over a driver error", gqlerror.WrapPath(path, &appCodedError{msg: "app says no", err: driverErr}), "APP", "app says no", `["posts",0,"author"]`, true},
 		{"a gqlerror with an application code over a driver error", &gqlerror.Error{Message: "app says no", Path: path, Extensions: map[string]any{"code": "APP"}, Err: driverErr}, "INTERNAL_SERVER_ERROR", "internal error", `["posts",0,"author"]`, true},
 		{"an application's coded error alone", &appCodedError{msg: "app says no"}, "APP", "app says no", `["node"]`, false},
-		{"coded over two sentinels", gqlerror.WrapPath(path, gqlgraph.InputErrorf("User cursor: %w: the key is an %w", veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType)), "BAD_USER_INPUT", "User cursor: malformed cursor: the key is an ID of another type", `["posts",0,"author"]`, false},
+		{"coded over two sentinels", gqlerror.WrapPath(path, gqlgraph.InputErrorf("User cursor: %w: %w", veloxgql.ErrBadCursor, veloxgql.ErrPageTooLarge)), "BAD_USER_INPUT", "User cursor: malformed cursor: page is over the maximum", `["posts",0,"author"]`, false},
 		{"int8 overflow", gqlerror.WrapPath(path, int8Err), "BAD_USER_INPUT", "300 overflows signed 8-bit integer", `["posts",0,"author"]`, false},
 		{"uint16 overflow", uint16Err, "BAD_USER_INPUT", "70000 overflows unsigned 16-bit integer", `["node"]`, false},
 		{"negative uint32", fmt.Errorf("input: %w", uintSignErr), "BAD_USER_INPUT", "-1 is an invalid unsigned integer: includes sign", `["node"]`, false},

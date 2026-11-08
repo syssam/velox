@@ -246,14 +246,9 @@ func TestMutationStatementsCounted(t *testing.T) {
 			t.Errorf("%s: sent %d statements, and cost %d", in, sent, cost)
 		}
 	}
-	// nodes sends one for each type among its IDs, and the example's delete of a
-	// Post two, the check of its author and its DELETE, whose links the
-	// database's cascade deletes: when they counted as one each, a review
-	// measured 960 nodes fitting the limit, which sent 2880.
+	// The example's delete of a Post sends two, the check of its author and
+	// its DELETE, whose links the database's cascade deletes.
 	for name, query := range map[string]string{
-		"nodes of three types": `{ ` + repeat(30, func(i int) string {
-			return fmt.Sprintf(`a%d: nodes(ids: ["%s", "%s", "%s"]) { id }`, i, user1, post1, label1)
-		}) + ` }`,
 		"deletePost": `mutation { ` + repeat(1, func(i int) string { return fmt.Sprintf(`a%d: deletePost(id: "%s")`, i, post1) }) + ` }`,
 	} {
 		doc, errs := gqlparser.LoadQueryWithRules(schema, query, nil)

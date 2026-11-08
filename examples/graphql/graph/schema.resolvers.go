@@ -40,17 +40,16 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostI
 // UpdatePost is the resolver for the updatePost field: only the post's
 // author may change it, and UpdatePostInput has no authorID, so a post stays
 // its author's.
-func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
+func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error) {
 	db := veloxgql.DB(ctx)
-	key, err := OwnPost(ctx, db, id)
-	if err != nil {
+	if err := OwnPost(ctx, db, id); err != nil {
 		return nil, err
 	}
 	set, err := input.Setters()
 	if err != nil {
 		return nil, err
 	}
-	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(key)).Set(set...).One(ctx)
+	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).Set(set...).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, NotFound(ctx, "Post")
 	}
@@ -65,13 +64,12 @@ func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.
 // rows. A count the driver did not report is an internal error: the delete
 // is rolled back, not reported done. It runs in the operation's transaction,
 // in a savepoint of its own.
-func (r *mutationResolver) DeletePost(ctx context.Context, id string) (string, error) {
+func (r *mutationResolver) DeletePost(ctx context.Context, id int64) (int64, error) {
 	err := veloxgql.DB(ctx).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-		key, err := OwnPost(ctx, tx, id)
-		if err != nil {
+		if err := OwnPost(ctx, tx, id); err != nil {
 			return err
 		}
-		n, err := tx.Delete[gen.Post]().Where(gen.Posts.ID.EQ(key)).Exec(ctx)
+		n, err := tx.Delete[gen.Post]().Where(gen.Posts.ID.EQ(id)).Exec(ctx)
 		switch {
 		case err != nil:
 			return err
@@ -83,7 +81,7 @@ func (r *mutationResolver) DeletePost(ctx context.Context, id string) (string, e
 		return nil
 	})
 	if err != nil {
-		return "", err
+		return 0, err
 	}
 	return id, nil
 }
@@ -102,16 +100,12 @@ func (r *mutationResolver) CreateLabel(ctx context.Context, input gen.CreateLabe
 }
 
 // UpdateLabel is the resolver for the updateLabel field.
-func (r *mutationResolver) UpdateLabel(ctx context.Context, id string, input gen.UpdateLabelInput) (*gen.Tag, error) {
+func (r *mutationResolver) UpdateLabel(ctx context.Context, id int64, input gen.UpdateLabelInput) (*gen.Tag, error) {
 	set, err := input.Setters()
 	if err != nil {
 		return nil, err
 	}
-	key, err := veloxgql.DecodeID[int64](id, "Label")
-	if err != nil {
-		return nil, err
-	}
-	x, err := veloxgql.DB(ctx).Update[gen.Tag]().Where(gen.Tags.ID.EQ(key)).Set(set...).One(ctx)
+	x, err := veloxgql.DB(ctx).Update[gen.Tag]().Where(gen.Tags.ID.EQ(id)).Set(set...).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, NotFound(ctx, "Label")
 	}
@@ -139,7 +133,7 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserI
 // UpdateUser is the resolver for the updateUser field: a password given
 // replaces the hash, a setter of the resolver's beside the input's, in the
 // same UPDATE.
-func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input gen.UpdateUserInput, password *string) (*gen.User, error) {
+func (r *mutationResolver) UpdateUser(ctx context.Context, id int64, input gen.UpdateUserInput, password *string) (*gen.User, error) {
 	set, err := input.Setters()
 	if err != nil {
 		return nil, err
@@ -151,25 +145,11 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input gen.
 		}
 		set = append(set, gen.Users.PasswordHash.Set(hash))
 	}
-	key, err := veloxgql.DecodeID[int64](id, "User")
-	if err != nil {
-		return nil, err
-	}
-	x, err := veloxgql.DB(ctx).Update[gen.User]().Where(gen.Users.ID.EQ(key)).Set(set...).One(ctx)
+	x, err := veloxgql.DB(ctx).Update[gen.User]().Where(gen.Users.ID.EQ(id)).Set(set...).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, NotFound(ctx, "User")
 	}
 	return x, err
-}
-
-// Node is the resolver for the node field.
-func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
-	return gen.Node(ctx, id)
-}
-
-// Nodes is the resolver for the nodes field.
-func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
-	return gen.Nodes(ctx, ids)
 }
 
 // Posts is the resolver for the posts field.

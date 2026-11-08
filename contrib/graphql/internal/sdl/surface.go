@@ -3,6 +3,7 @@ package sdl
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox/plugin"
@@ -22,21 +23,24 @@ type Type struct {
 	// Name is the GraphQL type name. XConnection, XEdge, XOrder, XOrderField
 	// and XWhereInput are named after it.
 	Name string
-	// Node reports whether the type implements Node: its key is one column,
-	// of a type an ID holds (an integer, a string, a UUID or an enum), whose
-	// ID is the field id.
-	Node bool
-	// Key is, for a Node, the Go type veloxgql encodes and decodes its key as:
-	// the key field's builtin type ("int64", "string"), or "[16]byte" for a
-	// UUID. A key of another Go type converts to and from it.
+	// HasID reports whether the type has the field id: its key is one
+	// column, of a type an ID holds (an integer, a string, a UUID or an
+	// enum). The ID is the key, in the key's own Go type.
+	HasID bool
+	// Key is, for a type with an ID, the base type of its key: the key
+	// field's builtin type ("int64", "string"), or "[16]byte" for a UUID. A
+	// column of another Go type that holds the key converts from it.
 	Key string
+	// KeyType is, for a type with an ID, the Go type of its IDs: the key
+	// field's own ("int64", "uuid.UUID"), of the package KeyPkg.
+	KeyType, KeyPkg string
 	// Getters are the methods gqlgen binds fields to whose own Go type does
 	// not bind to their scalar, in the model's field order.
 	Getters []Getter
 	// Enums are the enum fields in GraphQL, in the model's field order.
 	Enums []Enum
 	// Fields are the type's fields that are not edges, in the SDL's order:
-	// id first for a Node, then the entity's fields in the model's order.
+	// id first for a type with an ID, then the entity's fields in the model's order.
 	Fields []Field
 	// Order are the values of XOrderField, in the model's field order; nil
 	// when the type has no order. With MultiOrder, orderBy takes a list.
@@ -79,7 +83,8 @@ type InputField struct {
 	Edge   int    // the edge kinds: the index in Entity.Edges; else -1
 	Target string // the edge kinds: the GraphQL type of the IDs; else ""
 	// GoType is an InputValue's Go type, as WhereField.GoType gives it, and
-	// "veloxgql.JSON" for a JSON field; "" for the other kinds.
+	// "veloxgql.JSON" for a JSON field; for the ID kinds, the Go type of
+	// Target's IDs (Type.KeyType); "" for the other kinds.
 	GoType   string
 	GoPkg    string // the import path GoType names; "" for none
 	Required bool   // non-null in GraphQL: a value in Go, not a pointer
@@ -202,8 +207,8 @@ type WhereField struct {
 	// package names it once GoPkg is imported: the field's own Go type when
 	// it binds to the scalar ("time.Time", "int8", "PostStatus"), else the
 	// one the scalar binds to ("string" for a string field of the
-	// application's own Go type); "string" for IDs, and "bool" for IsNil,
-	// NotNil and has<Edge>.
+	// application's own Go type); the Go type of Target's IDs for IDs
+	// (Type.KeyType), and "bool" for IsNil, NotNil and has<Edge>.
 	GoType string
 	GoPkg  string // the import path GoType names; "" for none
 }
@@ -225,7 +230,7 @@ func Build(m *plugin.Model) (*Surface, error) {
 	}
 	for _, o := range g.objects {
 		t := types[o]
-		*t = Type{Entity: o.ent, Name: o.name, Node: o.node, Key: o.key, Getters: o.getters, MultiOrder: o.ann.MultiOrder, Where: o.whereGo,
+		*t = Type{Entity: o.ent, Name: o.name, HasID: o.hasID, Key: o.key, KeyType: o.keyTyp, KeyPkg: o.keyPkg, Getters: o.getters, MultiOrder: o.ann.MultiOrder, Where: o.whereGo,
 			Create: o.createGo, Update: o.updateGo, Fields: o.plain}
 		for _, en := range o.enums {
 			i := slices.IndexFunc(o.ent.Fields, func(f *plugin.Field) bool { return f.Name == en.field })
@@ -264,9 +269,9 @@ const (
 	uuidPath     = "github.com/google/uuid"
 )
 
-// keyBase is the Go type veloxgql encodes the key of e as, when e can be a
-// Node: its key is one column, of an integer, a string, a UUID or an enum
-// type; "" when it cannot.
+// keyBase is the base Go type of the key of e, when e has an ID: its key is
+// one column, of an integer, a string, a UUID or an enum type; "" when it
+// has none.
 func keyBase(e *plugin.Entity) string {
 	if len(e.PrimaryKey) != 1 {
 		return ""
@@ -282,8 +287,55 @@ func keyBase(e *plugin.Entity) string {
 	return ""
 }
 
-// notNode says why e is not a Node.
-func notNode(e *plugin.Entity) string {
+// keyGo is the Go type of the key of e, which has an ID, and the import path
+// it names: the key field's own Go type, which gqlgen binds its IDs to.
+func keyGo(e *plugin.Entity) (typ, pkg string) {
+	k := e.Fields[e.PrimaryKey[0]]
+	switch {
+	case k.ElemType != "":
+		return k.ElemType, k.PkgPath
+	case k.Type == "uuid":
+		return "uuid.UUID", uuidPath
+	case k.Type == "enum":
+		return k.Enum, ""
+	}
+	return k.Type, ""
+}
+
+// oneKeyType refuses a model whose types with an ID have keys of more than
+// one Go type. An ID is the key in its own Go type, and gqlgen builds every
+// argument of type ID from the first model gqlgen.yml lists for ID, so one
+// Go type serves them all. An edge's IDs are its target's, a type with an
+// ID, so the types cover them.
+func (g *graph) oneKeyType() error {
+	var first *object
+	for _, o := range g.objects {
+		if !o.hasID {
+			continue
+		}
+		if first == nil {
+			first = o
+			continue
+		}
+		if o.keyTyp != first.keyTyp || o.keyPkg != first.keyPkg {
+			return fmt.Errorf("schema %s's key is %s and schema %s's is %s: a GraphQL ID is the entity's key in its own Go type, and gqlgen binds every ID argument to one Go type, the first model gqlgen.yml lists for ID; give every schema with a GraphQL type keys of one Go type, or leave one out of GraphQL with graphql.Skip()",
+				first.ent.Name, keyName(first), o.ent.Name, keyName(o))
+		}
+	}
+	return nil
+}
+
+// keyName is the Go type of o's key, with its import path.
+func keyName(o *object) string {
+	if o.keyPkg == "" {
+		return o.keyTyp
+	}
+	_, name, _ := strings.Cut(o.keyTyp, ".")
+	return o.keyPkg + "." + name
+}
+
+// noID says why e has no ID.
+func noID(e *plugin.Entity) string {
 	if len(e.PrimaryKey) != 1 {
 		return fmt.Sprintf("its key is %d columns", len(e.PrimaryKey))
 	}

@@ -23,16 +23,16 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// The global IDs of the seed's rows: base64url of "<Type>:<key>".
+// The IDs of the seed's rows: an ID is the row's key, which the server
+// writes as a string.
 const (
-	user1  = "VXNlcjox"   // User:1, Ada
-	user2  = "VXNlcjoy"   // User:2, Brian
-	user3  = "VXNlcjoz"   // User:3, Chen
-	user9  = "VXNlcjo5"   // User:9, no such user
-	post1  = "UG9zdDox"   // Post:1, acme's Alpha
-	post5  = "UG9zdDo1"   // Post:5, globex's Globex plans
-	label1 = "TGFiZWw6MQ" // Label:1, the Tag go
-	label2 = "TGFiZWw6Mg" // Label:2, the Tag sql
+	user1  = "1" // Ada
+	user2  = "2" // Brian
+	user3  = "3" // Chen
+	post1  = "1" // acme's Alpha
+	post5  = "5" // globex's Globex plans
+	label1 = "1" // the Tag go
+	label2 = "2" // the Tag sql
 )
 
 // userCursor is the cursor of the user with this key in a connection to User
@@ -221,72 +221,49 @@ func tagsOf(in string) string {
 	return `SELECT "id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."name", "vx_j"."post_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."post_id" ORDER BY "tags"."id") AS "vx_rn" FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (` + in + `)) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
 }
 
-// TestNode looks up one node of each type by its global ID: one query on its
-// entity each, reading the columns selected, and the post's author edge one
-// more, a batch of the one post.
-func TestNode(t *testing.T) {
+// TestByID looks up rows by their IDs, which are their keys, through a where
+// input's id and idIn: an ID is an integer or a string of one. User 9 does
+// not exist, and acme cannot see globex's post 5: neither matches.
+func TestByID(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
-		org:  "1",
-		role: "admin", // email is @admin
+		org: "1",
 		query: `{
-			u: node(id: "` + user1 + `") { id ... on User { name email role joinedAt } }
-			p: node(id: "` + post1 + `") { id ... on Post { title status views publishedAt author { name } } }
-			l: node(id: "` + label1 + `") { id ... on Label { name } }
+			u: users(where: {idIn: [1, "9", "` + user3 + `"]}) { edges { node { id name } } }
+			p: posts(where: {id: ` + post1 + `}) { edges { node { id title author { name } } } }
+			hidden: posts(where: {id: "` + post5 + `"}) { totalCount }
 		}`,
 		want: `{"data": {
-			"u": {"id": "` + user1 + `", "name": "Ada", "email": "ada@example.com", "role": "ADMIN", "joinedAt": "2026-01-05T09:00:00Z"},
-			"p": {"id": "` + post1 + `", "title": "Alpha", "status": "PUBLISHED", "views": 10, "publishedAt": "2026-04-01T09:00:00Z", "author": {"name": "Ada"}},
-			"l": {"id": "` + label1 + `", "name": "go"}
+			"u": {"edges": [{"node": {"id": "1", "name": "Ada"}}, {"node": {"id": "3", "name": "Chen"}}]},
+			"p": {"edges": [{"node": {"id": "1", "title": "Alpha", "author": {"name": "Ada"}}}]},
+			"hidden": {"totalCount": 0}
 		}}`,
 		stmts: []string{
-			`SELECT "id", "name", "joined_at", "email", "role" FROM "users" WHERE "id" = ? LIMIT ? [1 2]`,
-			`SELECT "id", "author_id", "title", "views", "status", "published_at" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
+			users + ` WHERE "id" IN (?, ?, ?) ORDER BY "id" LIMIT ? [1 9 3 101]`,
+			posts + ` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
 			users + ` WHERE "id" IN (?) ORDER BY "id" [1]`, // the author
-			tags + ` WHERE "id" = ? LIMIT ? [1 2]`,
+			`SELECT COUNT(*) FROM "posts" WHERE "id" = ? AND "org_id" = ? [5 1]`,
 		},
 	})
 }
 
-// TestNodes looks up several nodes: one query per type, in the input's order,
-// with null for an ID with no node, and for globex's post, which acme cannot
-// see.
-func TestNodes(t *testing.T) {
-	s := newServer(t)
-	s.do(t, request{
-		org:   "1",
-		query: `{ nodes(ids: ["` + user1 + `", "` + user9 + `", "` + post5 + `", "` + label2 + `", "` + user3 + `"]) { id } }`,
-		want:  `{"data": {"nodes": [{"id": "` + user1 + `"}, null, null, {"id": "` + label2 + `"}, {"id": "` + user3 + `"}]}}`,
-		stmts: []string{
-			users + ` WHERE "id" IN (?, ?, ?) LIMIT ? [1 9 3 4]`,
-			posts + ` WHERE "id" IN (?) AND "org_id" = ? LIMIT ? [5 1 2]`,
-			tags + ` WHERE "id" IN (?) LIMIT ? [2 2]`,
-		},
-	})
-}
-
-// TestBadIDs: an ID of another type where a User ID is expected, a
-// malformed ID, and a cursor taken on another type each fail before any
-// query runs. They are the client's errors, and none is logged.
+// TestBadIDs: an ID that is no integer, and a cursor taken on another type,
+// each fail before any query runs. They are the client's errors, and none is
+// logged.
 func TestBadIDs(t *testing.T) {
 	logged := captureLog(t)
 	s := newServer(t)
 	s.do(t, request{
 		org:   "1",
-		query: `{ posts(where: {authorID: "` + post1 + `"}) { totalCount } }`,
-		want: `{"errors": [{"message": "PostWhereInput.authorID: User ID: ID of another type", "path": ["posts"], "extensions": {"code": "BAD_USER_INPUT"}}],
+		query: `{ posts(where: {authorID: "Ada"}) { totalCount } }`,
+		want: `{"errors": [{"message": "ID must be the decimal digits of a 64-bit integer", "path": ["posts", "where", "authorID"], "extensions": {"code": "BAD_USER_INPUT"}}],
 			"data": null}`,
-	})
-	s.do(t, request{
-		query: `{ node(id: "VXNlcjox!") { id } }`,
-		want: `{"errors": [{"message": "ID: malformed ID: not canonical base64url without padding", "path": ["node"], "extensions": {"code": "BAD_USER_INPUT"}}],
-			"data": {"node": null}}`,
 	})
 	postCursor := cursorOf("Post", 1)
 	s.do(t, request{
 		query: `query($c: Cursor) { users(first: 1, after: $c) { totalCount } }`,
 		vars:  map[string]any{"c": postCursor},
-		want:  `{"errors": [{"message": "User cursor: malformed cursor: the key is an ID of another type", "path": ["users"], "extensions": {"code": "BAD_USER_INPUT"}}], "data": null}`,
+		want:  `{"errors": [{"message": "User cursor: malformed cursor: taken on another type", "path": ["users"], "extensions": {"code": "BAD_USER_INPUT"}}], "data": null}`,
 	})
 	if logged.Len() != 0 {
 		t.Errorf("logged:\n%s", logged)
@@ -524,21 +501,6 @@ func TestBatchInMutation(t *testing.T) {
 	})
 }
 
-// TestNodeEdgesBatch: the nodes nodes returns are one batch: their posts are
-// counted in one statement.
-func TestNodeEdgesBatch(t *testing.T) {
-	s := newServer(t)
-	s.do(t, request{
-		org:   "1",
-		query: `{ nodes(ids: ["` + user1 + `", "` + user2 + `", "` + user3 + `"]) { ... on User { posts { totalCount } } } }`,
-		want:  `{"data": {"nodes": [{"posts": {"totalCount": 2}}, {"posts": {"totalCount": 1}}, {"posts": {"totalCount": 1}}]}}`,
-		stmts: []string{
-			users + ` WHERE "id" IN (?, ?, ?) LIMIT ? [1 2 3 4]`,
-			`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "org_id" = ? GROUP BY "author_id" [1 2 3 1]`,
-		},
-	})
-}
-
 // TestTotalCountOnly selects only totalCount: one COUNT, and no page query.
 func TestTotalCountOnly(t *testing.T) {
 	s := newServer(t)
@@ -550,14 +512,14 @@ func TestTotalCountOnly(t *testing.T) {
 	})
 }
 
-// TestOrgIsolation reads the org-scoped Post through node, a root
+// TestOrgIsolation reads the org-scoped Post by its ID, through a root
 // connection, a where input and the edges of User and Label: with acme's
 // org, globex's post is never returned, and with globex's it is the only
 // one. Without a org each fails with scope.ErrNoScope.
 func TestOrgIsolation(t *testing.T) {
 	s := newServer(t)
 	const q = `{
-		node(id: "` + post5 + `") { id }
+		p5: posts(where: {id: ` + post5 + `}) { edges { node { id } } }
 		posts { edges { node { title } } }
 		globex: users(where: {hasPostsWith: [{title: "Globex plans"}]}) { totalCount }
 		users(where: {name: "Ada"}) { edges { node { posts { edges { node { title } } } } } }
@@ -565,7 +527,7 @@ func TestOrgIsolation(t *testing.T) {
 	}`
 	stmts := func(org int64) []string {
 		return []string{
-			fmt.Sprintf(posts+` WHERE "id" = ? AND "org_id" = ? LIMIT ? [5 %d 2]`, org),
+			fmt.Sprintf(posts+` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 %d 101]`, org),
 			fmt.Sprintf(posts+` WHERE "org_id" = ? ORDER BY "id" LIMIT ? [%d 101]`, org),
 			fmt.Sprintf(`SELECT COUNT(*) FROM "users" WHERE EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" = ? AND "org_id" = ?) [Globex plans %d]`, org),
 			users + ` WHERE "name" = ? ORDER BY "id" LIMIT ? [Ada 101]`,
@@ -580,7 +542,7 @@ func TestOrgIsolation(t *testing.T) {
 		org:   "1",
 		query: q,
 		want: `{"data": {
-			"node": null,
+			"p5": {"edges": []},
 			"posts": {"edges": [{"node": {"title": "Alpha"}}, {"node": {"title": "Beta"}}, {"node": {"title": "Gamma"}}, {"node": {"title": "Delta"}}]},
 			"globex": {"totalCount": 0},
 			"users": {"edges": [{"node": {"posts": {"edges": [{"node": {"title": "Alpha"}}, {"node": {"title": "Beta"}}]}}}]},
@@ -592,7 +554,7 @@ func TestOrgIsolation(t *testing.T) {
 		org:   "2",
 		query: q,
 		want: `{"data": {
-			"node": {"id": "` + post5 + `"},
+			"p5": {"edges": [{"node": {"id": "` + post5 + `"}}]},
 			"posts": {"edges": [{"node": {"title": "Globex plans"}}]},
 			"globex": {"totalCount": 1},
 			"users": {"edges": [{"node": {"posts": {"edges": [{"node": {"title": "Globex plans"}}]}}}]},
@@ -606,7 +568,6 @@ func TestOrgIsolation(t *testing.T) {
 	// gen.Post).
 	const noOrg = `"message": "unauthenticated", "path": %s, "extensions": {"code": "UNAUTHENTICATED"}`
 	for _, c := range []struct{ query, want string }{
-		{`{ node(id: "` + post1 + `") { id } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["node"]`) + `}], "data": {"node": null}}`},
 		{`{ posts { edges { node { title } } } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["posts", "edges"]`) + `}], "data": null}`},
 		{`{ labels(where: {name: "go"}) { edges { node { posts { totalCount } } } } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["labels", "edges", 0, "node", "posts", "totalCount"]`) + `}], "data": null}`},
 	} {
@@ -1034,10 +995,10 @@ func TestOnlyAuthorWrites(t *testing.T) {
 	})
 	s.do(t, request{
 		org:   "1",
-		query: `{ node(id: "` + post1 + `") { ... on Post { title author { name } } } }`,
-		want:  `{"data": {"node": {"title": "Alpha", "author": {"name": "Ada"}}}}`,
+		query: `{ posts(where: {id: ` + post1 + `}) { edges { node { title author { name } } } } }`,
+		want:  `{"data": {"posts": {"edges": [{"node": {"title": "Alpha", "author": {"name": "Ada"}}}]}}}`,
 		stmts: []string{
-			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
+			posts + ` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
 			users + ` WHERE "id" IN (?) ORDER BY "id" [1]`,
 		},
 	})
@@ -1077,19 +1038,19 @@ func TestUnlinkOtherOrg(t *testing.T) {
 	})
 	s.do(t, request{
 		org:   "2",
-		query: `{ node(id: "` + post5 + `") { ... on Post { tags { edges { node { name } } } } } }`,
-		want:  `{"data": {"node": {"tags": {"edges": [{"node": {"name": "go"}}]}}}}`,
+		query: `{ posts(where: {id: ` + post5 + `}) { edges { node { tags { edges { node { name } } } } } } }`,
+		want:  `{"data": {"posts": {"edges": [{"node": {"tags": {"edges": [{"node": {"name": "go"}}]}}}]}}}`,
 		stmts: []string{
-			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [5 2 2]`,
+			posts + ` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 2 101]`,
 			tagsOf("?") + ` [5 101]`,
 		},
 	})
 	s.do(t, request{
 		org:   "1",
-		query: `{ node(id: "` + post1 + `") { ... on Post { tags { edges { node { name } } } } } }`,
-		want:  `{"data": {"node": {"tags": {"edges": [{"node": {"name": "graphql"}}]}}}}`,
+		query: `{ posts(where: {id: ` + post1 + `}) { edges { node { tags { edges { node { name } } } } } } }`,
+		want:  `{"data": {"posts": {"edges": [{"node": {"tags": {"edges": [{"node": {"name": "graphql"}}]}}}]}}}`,
 		stmts: []string{
-			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
+			posts + ` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
 			tagsOf("?") + ` [1 101]`,
 		},
 	})
@@ -1136,10 +1097,10 @@ func TestDeleteOtherOrg(t *testing.T) {
 	})
 	s.do(t, request{
 		org:   "2",
-		query: `{ node(id: "` + post5 + `") { ... on Post { title tags { edges { node { name } } } } } }`,
-		want:  `{"data": {"node": {"title": "Globex plans", "tags": {"edges": [{"node": {"name": "go"}}]}}}}`,
+		query: `{ posts(where: {id: ` + post5 + `}) { edges { node { title tags { edges { node { name } } } } } } }`,
+		want:  `{"data": {"posts": {"edges": [{"node": {"title": "Globex plans", "tags": {"edges": [{"node": {"name": "go"}}]}}}]}}}`,
 		stmts: []string{
-			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [5 2 2]`,
+			posts + ` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 2 101]`,
 			tagsOf("?") + ` [5 101]`,
 		},
 	})
@@ -1176,9 +1137,9 @@ func TestDeletePost(t *testing.T) {
 	}
 	s.do(t, request{
 		org:   "1",
-		query: `{ node(id: "` + post1 + `") { id } }`,
-		want:  `{"data": {"node": null}}`,
-		stmts: []string{posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`},
+		query: `{ posts(where: {id: ` + post1 + `}) { totalCount } }`,
+		want:  `{"data": {"posts": {"totalCount": 0}}}`,
+		stmts: []string{`SELECT COUNT(*) FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`},
 	})
 }
 

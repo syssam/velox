@@ -23,7 +23,7 @@ const stmt = 100
 // saturated is the most Cost returns: 1<<62, clamped to the platform's int.
 var saturated = int(min(int64(1)<<62, int64(math.MaxInt)))
 
-// costSDL is a schema of connections, a list and the Node interface.
+// costSDL is a schema of connections, a list and an interface.
 const costSDL = `
 interface Node { id: ID! }
 type PageInfo { hasNextPage: Boolean! endCursor: String }
@@ -313,9 +313,7 @@ func TestCostNodesAndLists(t *testing.T) {
 		vars  map[string]any
 		want  int
 	}{
-		{"nodes by its ids", `{ nodes(ids: ["a", "b", "c"]) { id } }`, nil, stmt + 1 + 3*1},
-		{"nodes by variable ids", `query ($ids: [ID!]!) { nodes(ids: $ids) { id } }`, map[string]any{"ids": []any{"a", "b"}}, stmt + 1 + 2*1},
-		{"nodes in a fragment", `{ ...F } fragment F on Query { nodes(ids: ["a"]) { id } }`, nil, stmt + 1 + 1},
+		{"a root list of an interface", `{ nodes(ids: ["a", "b", "c"]) { id } }`, nil, stmt + 1 + 20*1},
 		{"a list of objects", `{ users(first: 1) { edges { node { friends { name } } } } }`, nil, 2*stmt + 1 + 1 + 1*(1+(1+20*1))},
 		{"a to-one object", `{ node(id: "x") { ... on Post { author { name } } } }`, nil, 2*stmt + 1 + (1 + 1)},
 		{"a list of scalars", `{ users(first: 1) { edges { node { tags } } } }`, nil, stmt + 1 + 1 + 1*(1+1)},
@@ -781,53 +779,6 @@ extend type Query { filtered(where: Wide): UserConnection! }`})
 	}
 	if got, most := cost(`query ($w: Wide) { `+uses.String()+` }`, map[string]any{"w": map[string]any{"name": long}}), veloxgql.DefaultLimits().MaxCost; got < most {
 		t.Errorf("a string of 1 MB at 30 places: cost %d, under %d", got, most)
-	}
-}
-
-// TestCostNodesByType: nodes sends one statement for each type among its IDs: an ID
-// not well formed fails before any, and costs none, and no ID still counts the field.
-func TestCostNodesByType(t *testing.T) {
-	schema := gqlparser.MustLoadSchema(&ast.Source{Input: `
-interface Node { id: ID! }
-type User implements Node { id: ID! }
-type Query { nodes(ids: [ID!]!): [Node]! node(id: ID!): Node }`})
-	id := func(typ string) string { return veloxgql.EncodeID(typ, 1) }
-	cost := func(query string, vars map[string]any) int {
-		t.Helper()
-		doc, errs := gqlparser.LoadQueryWithRules(schema, query, nil)
-		if len(errs) > 0 {
-			t.Fatalf("%s: %v", query, errs)
-		}
-		return veloxgql.Cost(schema, doc.Operations[0], vars, veloxgql.DefaultLimits())
-	}
-	base := cost(`{ nodes(ids: []) { id } }`, nil)
-	for _, c := range []struct {
-		name string
-		ids  []string
-		want int
-	}{
-		{"one type", []string{id("User")}, 0},
-		{"one type twice", []string{id("User"), id("User")}, 0},
-		{"three types", []string{id("User"), id("Post"), id("Label")}, 200},
-		{"not an ID", []string{"!", id("User")}, 0},
-	} {
-		vars := make([]any, len(c.ids))
-		lit := make([]string, len(c.ids))
-		for i, s := range c.ids {
-			vars[i], lit[i] = s, fmt.Sprintf("%q", s)
-		}
-		// The rows part follows the IDs: one row costs 1 and its id 1.
-		rows := len(c.ids)
-		if got := cost(`{ nodes(ids: [`+strings.Join(lit, ",")+`]) { id } }`, nil) - base; got != c.want+rows {
-			t.Errorf("%s, a literal: %d, want %d", c.name, got, c.want+rows)
-		}
-		if got := cost(`query ($v: [ID!]!) { nodes(ids: $v) { id } }`, map[string]any{"v": vars}) - base; got != c.want+rows {
-			t.Errorf("%s, a variable: %d, want %d", c.name, got, c.want+rows)
-		}
-	}
-	// A single ID, as a list of one coerces.
-	if got, want := cost(`query ($v: [ID!]!) { nodes(ids: $v) { id } }`, map[string]any{"v": id("User")}), base+1; got < want-1 {
-		t.Errorf("one ID, not in a list: %d, want %d", got, want)
 	}
 }
 

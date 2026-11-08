@@ -56,33 +56,29 @@ func Author(ctx context.Context) (int64, error) {
 	return viewer, nil
 }
 
-// OwnPost checks, on db, that the viewer wrote the post whose ID is id, and
-// returns the post's key. Without a viewer it is UNAUTHENTICATED (Viewer);
-// an ID that names no post the request may read is NOT_FOUND, as one of
-// another organization is; a post by another user is FORBIDDEN.
-func OwnPost(ctx context.Context, db *velox.DB, id string) (int64, error) {
+// OwnPost checks, on db, that the viewer wrote the post whose key is id, the
+// ID gqlgen decoded. Without a viewer it is UNAUTHENTICATED (Viewer); an ID
+// that names no post the request may read is NOT_FOUND, as one of another
+// organization is; a post by another user is FORBIDDEN.
+func OwnPost(ctx context.Context, db *velox.DB, id int64) error {
 	viewer, err := Viewer(ctx)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	key, err := veloxgql.DecodeID[int64](id, "Post")
-	if err != nil {
-		return 0, err
-	}
-	p, err := db.Query[gen.Post]().Where(gen.Posts.ID.EQ(key)).Columns(gen.Posts.AuthorID).One(ctx)
+	p, err := db.Query[gen.Post]().Where(gen.Posts.ID.EQ(id)).Columns(gen.Posts.AuthorID).One(ctx)
 	if velox.IsNotFound(err) {
-		return 0, NotFound(ctx, "Post")
+		return NotFound(ctx, "Post")
 	}
 	if err != nil {
-		return 0, err
+		return err
 	}
 	if p.AuthorID != viewer {
-		return 0, codedError(ctx, "only the post's author may change it", veloxgql.CodeForbidden)
+		return codedError(ctx, "only the post's author may change it", veloxgql.CodeForbidden)
 	}
-	return key, nil
+	return nil
 }
 
-// NotFound is the NOT_FOUND error of an ID that names no node of the
+// NotFound is the NOT_FOUND error of an ID that names no row of the
 // GraphQL type typ the request may read or change.
 func NotFound(ctx context.Context, typ string) error {
 	return codedError(ctx, "no "+typ+" has this ID", veloxgql.CodeNotFound)

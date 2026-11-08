@@ -3,8 +3,7 @@
 // they bind to, and the methods and functions their fields resolve through.
 // It writes <label>_gql.go for each entity with a GraphQL type (its types,
 // its edge methods, its PaginateQuery and Paginate options, and its mutation inputs
-// with their method Setters, which input.go writes), and
-// node_gql.go with Node and Nodes.
+// with their method Setters, which input.go writes).
 //
 // Every name comes from sdl.Build, which the SDL is rendered from too, so the
 // Go and the SDL cannot drift.
@@ -41,7 +40,7 @@ const (
 //
 // It fails on a model sdl.Build refuses, an import of the application's Go
 // types it cannot name, and a Go name it writes that velox-gen also declares
-// in the package. Which types are Nodes, the Go types of where predicates
+// in the package. Which types have an ID, the Go types of where predicates
 // and which fields bind to getters are sdl.Build's to decide.
 func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 	if outPkg == "" {
@@ -63,14 +62,11 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 		r.veloxEnums[en.Type] = en
 	}
 	r.reserve()
-	files := make([]plugin.File, 0, len(s.Types)+1)
+	files := make([]plugin.File, 0, len(s.Types))
 	for _, t := range s.Types {
 		e := t.Entity
 		if e.Label == "" || e.Handles == "" {
 			return nil, fmt.Errorf("schema %s: the model gives it no label or no handles, which velox-gen names its Go after", e.Name)
-		}
-		if e.Label == "node" {
-			return nil, fmt.Errorf("schema %s: its Go file would be node_gql.go, which holds Node and Nodes; rename the schema", e.Name)
 		}
 		f, err := r.typeFile(t)
 		if err != nil {
@@ -78,11 +74,6 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 		}
 		files = append(files, f)
 	}
-	f, err := r.nodeFile(s)
-	if err != nil {
-		return nil, err
-	}
-	files = append(files, f)
 	slices.SortFunc(files, func(a, b plugin.File) int { return cmp.Compare(a.Path, b.Path) })
 	return files, nil
 }
@@ -231,7 +222,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion20\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion21\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -323,11 +314,6 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 		f.p("type %s = %s", n, e.Name)
 		f.p("")
 	}
-	if t.Node {
-		if err := r.writeNode(f, t); err != nil {
-			return plugin.File{}, err
-		}
-	}
 	for _, g := range t.Getters {
 		if err := r.writeGetter(f, t, g); err != nil {
 			return plugin.File{}, err
@@ -358,48 +344,6 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 		return plugin.File{}, err
 	}
 	return f.finish(e.Label+"_gql.go", r.outPkg)
-}
-
-func (r *renderer) writeNode(f *file, t *sdl.Type) error {
-	e := t.Entity
-	k := e.Fields[e.PrimaryKey[0]]
-	v := recv(e) + "." + k.GoName
-	if elem := cmp.Or(k.ElemType, t.Key); elem != t.Key {
-		if err := r.converts(e, k, t.Key); err != nil {
-			return err
-		}
-		v = t.Key + "(" + v + ")"
-	}
-	for _, m := range []string{"IsNode", "GlobalID"} {
-		if err := r.declare(e.Name+"."+m, "schema "+e.Name+", the Node's method"); err != nil {
-			return err
-		}
-	}
-	f.doc("", fmt.Sprintf("IsNode marks %s as a GraphQL Node: gqlgen binds the interface Node to veloxgql.Noder.", e.Name))
-	f.p("func (*%s) IsNode() {}", e.Name)
-	f.p("")
-	f.doc("", fmt.Sprintf("GlobalID is the global ID of the %s, the GraphQL field id: its type and key, opaque to the client.", e.Name))
-	f.p("func (%s *%s) GlobalID() string { return %s.EncodeID(%q, %s) }", recv(e), e.Name, f.veloxgql(), t.Name, v)
-	f.p("")
-	return nil
-}
-
-// nodeKindFunc is the function of node_gql.go that returns the Node type an
-// ID's type names.
-const nodeKindFunc = "nodeKind"
-
-// nodeKind is the expression of what Node and Nodes need of the Node t to
-// look its nodes up, which gqlgraph.NewNode makes, as f names it.
-func (r *renderer) nodeKind(f *file, t *sdl.Type) (string, error) {
-	self, err := r.idKeyOf(f, t.Entity, t)
-	if err != nil {
-		return "", err
-	}
-	impl := f.gqlgraph()
-	if self.conv != "" {
-		return fmt.Sprintf("%s.NewNode%s(&%s%s)", impl, strings.TrimSuffix(self.args, "]")+", "+self.typ+"]", typeVar(t), self.conv), nil
-	}
-	return fmt.Sprintf("%s.NewNode[%s](&%s)", impl, self.typ, typeVar(t)), nil
 }
 
 // writeGetter writes g, which returns its field as the Go type the field's
@@ -786,55 +730,6 @@ func (r *renderer) whereType(f *file, t *sdl.Type, w sdl.WhereField) (string, er
 		return "[]" + elem, nil
 	}
 	return "*" + elem, nil
-}
-
-// nodeFile is node_gql.go: Node and Nodes, which look up the nodes of the
-// Node types by their IDs. The lookups are gqlgraph's; this file names the
-// Node type an ID's type leads to, and what the lookups need of it
-// (nodeKind).
-func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
-	for _, name := range []string{"Node", "Nodes", nodeKindFunc} {
-		if err := r.declare(name, "velox-graphql's "+name); err != nil {
-			return plugin.File{}, err
-		}
-	}
-	f := newFile()
-	ctx, vgql, impl := f.use("context", "context"), f.veloxgql(), f.gqlgraph()
-
-	f.doc("", "Node returns the node with the global ID id, or nil when no row has its key. It reads only the columns the selection needs.")
-	f.p("func Node(ctx %s.Context, id string) (%s.Noder, error) {", ctx, vgql)
-	f.p("\treturn %s.NodeByID(ctx, id, %s)", impl, nodeKindFunc)
-	f.p("}")
-	f.p("")
-	f.doc("", "Nodes returns the nodes with the global IDs ids, in their order, with nil for an ID no row has. It reads one query per type.")
-	f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
-	f.p("\treturn %s.NodesByID(ctx, ids, %s)", impl, nodeKindFunc)
-	f.p("}")
-	f.p("")
-	f.doc("", nodeKindFunc+" is the Node type the ID type typ names, and false when it names none.")
-	f.p("func %s(typ string) (%s.NodeKind, bool) {", nodeKindFunc, impl)
-	var cases bool
-	for _, t := range s.Types {
-		if !t.Node {
-			continue
-		}
-		if !cases {
-			f.p("\tswitch typ {")
-			cases = true
-		}
-		kind, err := r.nodeKind(f, t)
-		if err != nil {
-			return plugin.File{}, err
-		}
-		f.p("\tcase %q:", t.Name)
-		f.p("\t\treturn %s, true", kind)
-	}
-	if cases {
-		f.p("\t}")
-	}
-	f.p("\treturn %s.NodeKind{}, false", impl)
-	f.p("}")
-	return f.finish("node_gql.go", r.outPkg)
 }
 
 // quoteList is vs as Go string literals, separated by commas.

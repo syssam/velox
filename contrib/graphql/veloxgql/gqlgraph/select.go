@@ -14,9 +14,8 @@ import (
 // selected returns the names of the fields selected on the objects of the
 // GraphQL type typ that the field of ctx returns: through edges and node for
 // a connection field, the field's own selection otherwise, with fragments
-// whose type is typ or Node, and without __typename. ok is false outside a
-// gqlgen field, and when the field returns neither typ nor a connection to
-// it nor Node. The result is computed once per *ast.Field per operation.
+// whose type is typ, and without __typename. ok is false outside a gqlgen
+// field, and when the field returns neither typ nor a connection to it. The result is computed once per *ast.Field per operation.
 //
 // Fragments on every interface and union typ is a member of count, read
 // from the server's schema. ok is false too where selected cannot see what
@@ -25,7 +24,7 @@ import (
 //     __typename, or of an edge other than node, cursor and __typename (an
 //     application's own, which may resolve from the nodes);
 //   - without the server's schema (a context outside a gqlgen server), a
-//     fragment on an interface or a union other than Node.
+//     fragment on an interface or a union.
 //
 // A field merged from several selections of one response key (a named
 // fragment spread where the field is also selected) is computed once per
@@ -46,7 +45,7 @@ func selected(ctx context.Context, typ string) (fields []string, ok bool) {
 func computeSelected(oc *graphql.OperationContext, schema *ast.Schema, f graphql.CollectedField, typ string) ([]string, bool) {
 	var objs []ast.SelectionSet // the selections on the objects of typ
 	switch f.Definition.Type.Name() {
-	case typ, "Node":
+	case typ:
 		objs = []ast.SelectionSet{f.Selections}
 	case typ + "Connection":
 		conn, ok := collect(oc, schema, f.Selections, typ+"Connection")
@@ -94,10 +93,10 @@ func computeSelected(oc *graphql.OperationContext, schema *ast.Schema, f graphql
 
 // collect is the fields sels selects on an object of the type typ, through
 // its fragments on typ and on each interface and union typ is a member of,
-// as schema says. Without a schema, those are typ and Node, and a fragment on
-// another interface or union fails it.
+// as schema says. Without a schema, that is typ alone, and a fragment on an
+// interface or a union fails it.
 func collect(oc *graphql.OperationContext, schema *ast.Schema, sels ast.SelectionSet, typ string) ([]graphql.CollectedField, bool) {
-	sat := []string{typ, "Node"}
+	sat := []string{typ}
 	if d := schemaType(schema, typ); d != nil {
 		sat = []string{typ}
 		for _, i := range schema.GetImplements(d) {

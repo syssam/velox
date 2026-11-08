@@ -49,9 +49,9 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    `email` has `graphql.Directives(graphql.Directive{Name: "admin"})`: see
    below.
 2. velox-gen with the plugin, which writes `gen/`: the entities, the GraphQL
-   schema `gen/velox.graphql`, and the `*_gql.go` files it binds to (IDs,
-   connections, edges, orders, where inputs, mutation inputs with their
-   `Setters` method, `Node` and `Nodes`):
+   schema `gen/velox.graphql`, and the `*_gql.go` files it binds to
+   (connections, edges, orders, where inputs, and mutation inputs with their
+   `Setters` method):
 
    ```sh
    go tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema
@@ -60,8 +60,11 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    with `createPost`, `updatePost`, `deletePost`, `createLabel`,
    `updateLabel`, `createUser` and `updateUser`, which velox-graphql leaves to
    it, as entgql does; and its own query and field (below). `gqlgen.yml`:
-   the schema files, `autobind` to `gen`, and `models` binding `Node` and the
-   scalars to `veloxgql`.
+   the schema files, `autobind` to `gen`, and `models` binding `ID` and the
+   scalars to `veloxgql`. An ID is the entity's key, an `int64` here, so `ID`
+   binds to `veloxgql.Int64ID`: a resolver's `id` argument is an `int64`,
+   which the client sends as an integer or a string of one, and reads as a
+   string.
 4. gqlgen, which writes `graph/generated.go` and `graph/models_gen.go`, and
    the resolver stubs once:
 
@@ -72,10 +75,6 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    most of them one call each:
 
    ```go
-   func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
-   	return gen.Node(ctx, id)
-   }
-
    func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
    	return veloxgql.DB(ctx).Query[gen.User]().Paginate(ctx, after, first, before, last, gen.WithUserOrder(orderBy), gen.WithUserFilter(where))
    }
@@ -96,17 +95,16 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    	return x, nil
    }
 
-   func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
+   func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error) {
    	db := veloxgql.DB(ctx)
-   	key, err := OwnPost(ctx, db, id)
-   	if err != nil {
+   	if err := OwnPost(ctx, db, id); err != nil {
    		return nil, err
    	}
    	set, err := input.Setters()
    	if err != nil {
    		return nil, err
    	}
-   	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(key)).Set(set...).One(ctx)
+   	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).Set(set...).One(ctx)
    	if velox.IsNotFound(err) {
    		return nil, NotFound(ctx, "Post")
    	}
@@ -154,8 +152,8 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    ```
 
    Every other field binds to `gen`'s methods: an edge is the method of its
-   name on the entity, `Post.Author(ctx)`, as entgql's is, and `id` is
-   `GlobalID()`; connections are lazy (`totalCount` alone runs one
+   name on the entity, `Post.Author(ctx)`, as entgql's is, and `id` is the
+   `ID` field, the key; connections are lazy (`totalCount` alone runs one
    `COUNT`, and no page query).
 6. `main.go`: gqlgen's server with `veloxgql.NewExtension(db)` first, which
    puts the DB and the limits in each operation's context (and runs a
@@ -270,7 +268,7 @@ organization, a client would read `velox: gen.Post: select denied by policy: vel
 
 | The error | `extensions.code` | `message` |
 |---|---|---|
-| a bad ID, cursor, paging argument, filter or scalar | `BAD_USER_INPUT` | what was expected, as `ID: malformed ID: not canonical base64url without padding` |
+| a bad ID, cursor, paging argument, filter or scalar | `BAD_USER_INPUT` | what was expected, as `ID must be the decimal digits of a 64-bit integer` |
 | an ID in a mutation that names no row the caller may see or change | `NOT_FOUND` | `UpdatePostInput: no Post has this ID`; `deletePost`'s own `no Post has this ID` |
 | a conflicting update input (`publishedAt` with `clearPublishedAt`), too many IDs | `BAD_USER_INPUT` | naming the input field |
 | no organization (`scope.ErrNoScope`) | `UNAUTHENTICATED` | `unauthenticated` |
@@ -303,8 +301,7 @@ as often as the client writes it. So `Limits.MaxCost` (150000 by default)
 bounds the whole request. The extension computes the request's cost before
 any resolver runs: a field costs 1 plus its children's cost times its
 multiplier, which is `first` or `last` for a connection's `edges` (`MaxPage`
-when neither is given), the number of ids for `nodes`, and `MaxList` for another
-list of objects. On top of that, with no multiplier, a field that runs a
+when neither is given), and `MaxList` for another list of objects. On top of that, with no multiplier, a field that runs a
 statement adds 100, so `first: 0` and aliases count and the default allows 1500
 statements, and an input object such as a `where` adds its size at each use.
 Every alias and every branch of a fragment counts, except a
@@ -385,8 +382,8 @@ gqlgen only).
 
 | Request | Result |
 |---|---|
-| `node(id:)`, `nodes(ids:)` | one query per type, of the columns selected; `null` for an ID with no row, or a row of another organization |
-| an ID of another type (a `Post` ID in `authorID`) | a `BAD_USER_INPUT` error naming the expected type, and no query |
+| `posts(where: {id: 1})`, `users(where: {idIn: [1, "3"]})` | an ID is the row's key, an integer or a string of one; no row for an ID of another organization's post |
+| an ID that is no integer (`authorID: "Ada"`) | a `BAD_USER_INPUT` error, and no query |
 | `first`/`after`, `last`/`before` | keyset pages, `n+1` rows read for `hasNextPage`/`hasPreviousPage` |
 | `orderBy`, `where` (`and`/`or`/`not`, `hasPostsWith`) | `ORDER BY … "id"`, `WHERE …`, `EXISTS (…)` |
 | nested edges, `Post.tags` many-to-many | one statement per edge per level, whatever the parents: a `ROW_NUMBER()` window for the pages, a `GROUP BY` for `totalCount` |

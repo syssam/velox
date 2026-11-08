@@ -221,10 +221,10 @@ func TestLargeSchemaQueries(t *testing.T) {
 		`{"data":{"e0s":{"edges":[{"node":{"name":"e0-r1","next":{"edges":[{"node":{"name":"e1-r1","next":{"edges":[{"node":{"name":"e2-r1"}}]}}}]}}}]}}}`)
 	s.want("up a chain", `{ e9s(first: 1) { edges { node { name prev { name prev { name } } } } } }`,
 		`{"data":{"e9s":{"edges":[{"node":{"name":"e9-r1","prev":{"name":"e8-r1","prev":{"name":"e7-r1"}}}}]}}}`)
-	s.want("node", fmt.Sprintf(`{ node(id: %q) { ... on E%d { name } } }`, veloxgql.EncodeID(fmt.Sprintf("E%d", mid), 2), mid),
-		fmt.Sprintf(`{"data":{"node":{"name":"e%d-r2"}}}`, mid))
-	s.want("nodes", fmt.Sprintf(`{ nodes(ids: [%q, %q]) { ... on E0 { name } ... on E%d { name } } }`, veloxgql.EncodeID("E0", 1), veloxgql.EncodeID(fmt.Sprintf("E%d", last), 3), last),
-		fmt.Sprintf(`{"data":{"nodes":[{"name":"e0-r1"},{"name":"e%d-r3"}]}}`, last))
+	s.want("by ID", fmt.Sprintf(`{ e%ds(where: {id: 2}) { edges { node { id name } } } }`, mid),
+		fmt.Sprintf(`{"data":{"e%ds":{"edges":[{"node":{"id":"2","name":"e%d-r2"}}]}}}`, mid, mid))
+	s.want("by IDs", fmt.Sprintf(`{ e%ds(where: {idIn: [1, "3"]}) { edges { node { name } } } }`, last),
+		fmt.Sprintf(`{"data":{"e%ds":{"edges":[{"node":{"name":"e%d-r1"}},{"node":{"name":"e%d-r3"}}]}}}`, last, last, last))
 }
 
 // TestLargeSchemaCostLimits: the limits that do not depend on the schema's size

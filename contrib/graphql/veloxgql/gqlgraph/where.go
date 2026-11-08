@@ -25,9 +25,9 @@ import (
 //		gqlgraph.Not(f, "not", w.Not, (*AccountWhereInput).predicate)
 //		gqlgraph.And(f, "and", w.And, (*AccountWhereInput).predicate)
 //		gqlgraph.Or(f, "or", w.Or, (*AccountWhereInput).predicate)
-//		gqlgraph.IDField[int64](f, "id", userColID, gqlgraph.Ops[string]{EQ: w.ID, In: w.IDIn})
+//		gqlgraph.IDField(f, "id", userColID, gqlgraph.Ops[int64]{EQ: w.ID, In: w.IDIn})
 //		gqlgraph.Field(f, "displayName", userColName, gqlgraph.Ops[string]{EQ: w.DisplayName, In: w.DisplayNameIn})
-//		gqlgraph.EdgeIDField[int64](f, "teamID", userColTeamID, userEdgeTeam, &teamType, gqlgraph.Ops[string]{EQ: w.TeamID})
+//		gqlgraph.EdgeIDField(f, "teamID", userColTeamID, userEdgeTeam, &teamType, gqlgraph.Ops[int64]{EQ: w.TeamID})
 //		gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, untyped.TableOf[Post]())
 //		gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, untyped.TableOf[Post]())
 //		return f.Pred()
@@ -76,9 +76,8 @@ func (n name) String() string { return n.base + n.op }
 // input many times over, as a GraphQL variable used at many places does. One
 // where argument's Pred calls run on one goroutine.
 //
-// The filter fails, before any query runs, on an ID of another type
-// (veloxgql.ErrWrongIDType) or a malformed one (veloxgql.ErrBadID); on a
-// nesting deeper than MaxFilterDepth (veloxgql.ErrFilterTooDeep); on an and, an
+// The filter fails, before any query runs, on a key the column cannot hold;
+// on a nesting deeper than MaxFilterDepth (veloxgql.ErrFilterTooDeep); on an and, an
 // or, a has…With, an In or a NotIn of more than MaxFilterWidth entries
 // (veloxgql.ErrFilterTooWide); and on a where argument of more than
 // MaxFilterNodes inputs, predicates and values in all
@@ -409,13 +408,12 @@ func (f *Filter) width(field name, n int) bool {
 	return true
 }
 
-// IDField is Field of IDs of the filter's own type, on column col, its key:
-// each ID is decoded with DecodeID[K] and its key converted to the column's
-// Go type as Field's values are. An ID of another type fails with
-// ErrWrongIDType, and a malformed one with ErrBadID. The predicates on IDs
-// are EQ, NEQ, In, NotIn, GT, GTE, LT and LTE; the others of o are ignored.
-func IDField[K any](f *Filter, field string, col int, o Ops[string]) {
-	ids[K](f, field, f.typ, col, o, fkScope{})
+// IDField is Field of the filter's own type's key, on column col: the
+// values are keys, in the key's Go type, which gqlgen decodes from the
+// client's IDs. The predicates on IDs are EQ, NEQ, In, NotIn, GT, GTE, LT
+// and LTE; the others of o are ignored.
+func IDField[V any](f *Filter, field string, col int, o Ops[V]) {
+	ids(f, field, col, o, fkScope{})
 }
 
 // EdgeIDField is IDField of a foreign key, on column col, which holds the keys
@@ -430,9 +428,9 @@ func IDField[K any](f *Filter, field string, col int, o Ops[string]) {
 //
 // A WithRewrite in the application's own query is not known here, nor is it
 // to the edge's Has.
-func EdgeIDField[K any](f *Filter, field string, col, edge int, target *Type, o Ops[string]) {
+func EdgeIDField[V any](f *Filter, field string, col, edge int, target *Type, o Ops[V]) {
 	fk := fkScope{edge: edge, target: target.table(), on: true}
-	ids[K](f, field, target.Name, col, o, fk)
+	ids(f, field, col, o, fk)
 	f.fkNull(name{field, "IsNil"}, col, untyped.PredIsNull, o.IsNil, fk)
 	f.fkNull(name{field, "NotNil"}, col, untyped.PredNotNull, o.NotNil, fk)
 }
@@ -444,63 +442,36 @@ type fkScope struct {
 	on     bool
 }
 
-// ids adds the predicates on IDs of typ that o sets on column col, scoped
-// by fk.
-func ids[K any](f *Filter, field, typ string, col int, o Ops[string], fk fkScope) {
-	id[K](f, name{field, ""}, typ, col, untyped.PredEQ, o.EQ, fk)
-	id[K](f, name{field, "NEQ"}, typ, col, untyped.PredNEQ, o.NEQ, fk)
-	idList[K](f, name{field, "In"}, typ, col, untyped.PredIn, o.In, fk)
-	idList[K](f, name{field, "NotIn"}, typ, col, untyped.PredNotIn, o.NotIn, fk)
-	id[K](f, name{field, "GT"}, typ, col, untyped.PredGT, o.GT, fk)
-	id[K](f, name{field, "GTE"}, typ, col, untyped.PredGTE, o.GTE, fk)
-	id[K](f, name{field, "LT"}, typ, col, untyped.PredLT, o.LT, fk)
-	id[K](f, name{field, "LTE"}, typ, col, untyped.PredLTE, o.LTE, fk)
+// ids adds the predicates on keys that o sets on column col, scoped by fk.
+func ids[V any](f *Filter, field string, col int, o Ops[V], fk fkScope) {
+	id(f, name{field, ""}, col, untyped.PredEQ, o.EQ, fk)
+	id(f, name{field, "NEQ"}, col, untyped.PredNEQ, o.NEQ, fk)
+	idList(f, name{field, "In"}, col, untyped.PredIn, o.In, fk)
+	idList(f, name{field, "NotIn"}, col, untyped.PredNotIn, o.NotIn, fk)
+	id(f, name{field, "GT"}, col, untyped.PredGT, o.GT, fk)
+	id(f, name{field, "GTE"}, col, untyped.PredGTE, o.GTE, fk)
+	id(f, name{field, "LT"}, col, untyped.PredLT, o.LT, fk)
+	id(f, name{field, "LTE"}, col, untyped.PredLTE, o.LTE, fk)
 }
 
-// id adds op on column col with the key of *v, an ID of typ, unless v is
-// nil.
-func id[K any](f *Filter, field name, typ string, col int, op untyped.PredOp, v *string, fk fkScope) {
-	if f.err != nil || v == nil {
-		return
-	}
-	if k, ok := decode[K](f, field, *v, typ); ok {
-		f.add(field, 0, f.scoped(f.pred(field, col, op, k), fk))
+// id adds op on column col with the key *v, unless v is nil.
+func id[V any](f *Filter, field name, col int, op untyped.PredOp, v *V, fk fkScope) {
+	if f.err == nil && v != nil {
+		f.add(field, 0, f.scoped(f.pred(field, col, op, *v), fk))
 	}
 }
 
-// idList adds op, In or NotIn, on column col with the keys of vs, IDs of
-// typ, unless vs is nil. One ID of another type, or malformed, fails the
-// filter, and so do more than MaxFilterWidth IDs.
-func idList[K any](f *Filter, field name, typ string, col int, op untyped.PredOp, vs []string, fk fkScope) {
+// idList adds op, In or NotIn, on column col with the keys vs, unless vs is
+// nil. More than MaxFilterWidth keys fail the filter.
+func idList[V any](f *Filter, field name, col int, op untyped.PredOp, vs []V, fk fkScope) {
 	if f.err != nil || vs == nil || !f.width(field, len(vs)) {
 		return
 	}
-	if ks, ok := decodeAll[K](f, field, vs, typ); ok {
-		f.add(field, len(ks), f.scoped(f.pred(field, col, op, ks), fk))
+	ks := make([]any, len(vs))
+	for i, v := range vs {
+		ks[i] = v
 	}
-}
-
-// decode is DecodeID[K](id, typ), with its error recorded in f as field's.
-func decode[K any](f *Filter, field name, id, typ string) (K, bool) {
-	k, err := veloxgql.DecodeID[K](id, typ)
-	if err != nil {
-		f.refuse(field, err)
-		return k, false
-	}
-	return k, true
-}
-
-// decodeAll is the keys of ids, as a []any.
-func decodeAll[K any](f *Filter, field name, ids []string, typ string) ([]any, bool) {
-	out := make([]any, len(ids))
-	for i, id := range ids {
-		k, ok := decode[K](f, field, id, typ)
-		if !ok {
-			return nil, false
-		}
-		out[i] = k
-	}
-	return out, true
+	f.add(field, len(ks), f.scoped(f.pred(field, col, op, ks), fk))
 }
 
 // fkNull is null of a foreign key: with a row filter on fk's target (an

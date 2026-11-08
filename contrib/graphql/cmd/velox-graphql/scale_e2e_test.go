@@ -98,8 +98,8 @@ var (
 	genType = regexp.MustCompile(`(\*|\[\]\*)(E\d+[A-Za-z]*)`)
 )
 
-// scaleResolvers is graph/schema.resolvers.go: Node, Nodes and the root
-// connection of each of the n entities. The parameters of PaginateQuery
+// scaleResolvers is graph/schema.resolvers.go: the root connection of each
+// of the n entities. The parameters of PaginateQuery
 // and its options (an orderBy that is a slice or a pointer) are read from
 // the Go the plugin wrote, so the test follows the plugin and does not restate it.
 func scaleResolvers(t *testing.T, dir string, n int) string {
@@ -114,15 +114,6 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// Node is the resolver for the node field.
-func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
-	return gen.Node(ctx, id)
-}
-
-// Nodes is the resolver for the nodes field.
-func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
-	return gen.Nodes(ctx, ids)
-}
 `)
 	for i := range n {
 		src, err := os.ReadFile(filepath.Join(dir, "gen", fmt.Sprintf("e%d_gql.go", i)))

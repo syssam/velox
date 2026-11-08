@@ -72,7 +72,7 @@ func TestOutOfRangeIsUserInput(t *testing.T) {
 
 // TestFirstWhereErrorStays: a filter keeps its first error. A value out of
 // the column's range that also spends the last of the budget is the
-// range's error, and a foreign key's NotNil after a refused ID adds
+// range's error, and a foreign key's NotNil after a refused ID list adds
 // nothing.
 func TestFirstWhereErrorStays(t *testing.T) {
 	ctx := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxFilterNodes: 1})).NewContext(context.Background())
@@ -83,8 +83,8 @@ func TestFirstWhereErrorStays(t *testing.T) {
 	}
 	f = gqlgraph.NewFilter(context.Background(), gqlgraph.TableType[dial]("Dial"))
 	yes := true
-	gqlgraph.EdgeIDField[int64](f, "dialID", 0, 0, gqlgraph.TableType[dial]("Dial"), gqlgraph.Ops[string]{EQ: new("bad"), NotNil: &yes})
-	if _, err := f.Pred(); err == nil || !strings.Contains(err.Error(), "DialWhereInput.dialID:") {
-		t.Errorf("a bad ID, then NotNil: %v, want the ID's error", err)
+	gqlgraph.EdgeIDField(f, "dialID", 0, 0, gqlgraph.TableType[dial]("Dial"), gqlgraph.Ops[int64]{In: make([]int64, veloxgql.DefaultLimits().MaxFilterWidth+1), NotNil: &yes})
+	if _, err := f.Pred(); err == nil || !strings.Contains(err.Error(), "DialWhereInput.dialIDIn:") {
+		t.Errorf("a refused ID list, then NotNil: %v, want the list's error", err)
 	}
 }

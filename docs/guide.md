@@ -1026,9 +1026,10 @@ conditions included.
 ## GraphQL
 
 `contrib/graphql` is a velox-gen plugin that generates a GraphQL schema and
-Go code for [gqlgen](https://gqlgen.com): node lookup by global ID, Relay
-connections with `orderBy` and `where` inputs, edges, and create and update
-inputs. You annotate the schema:
+Go code for [gqlgen](https://gqlgen.com): Relay connections with `orderBy`
+and `where` inputs, edges, and create and update inputs. An ID is the
+entity's key, so a resolver takes `id int64`; `gqlgen.yml` binds `ID` to
+`veloxgql.Int64ID` for int64 keys. You annotate the schema:
 
 ```go
 field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),

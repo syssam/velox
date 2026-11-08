@@ -13,15 +13,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion20
-
-// IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
-// veloxgql.Noder.
-func (*User) IsNode() {}
-
-// GlobalID is the global ID of the User, the GraphQL field id: its type and
-// key, opaque to the client.
-func (u *User) GlobalID() string { return veloxgql.EncodeID("User", u.ID) }
+const _ = veloxgql.GeneratedCodeIsVersion21
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -239,14 +231,14 @@ type UserWhereInput struct {
 	Or  []*UserWhereInput
 
 	// Predicates on the ID.
-	ID      *string
-	IDNEQ   *string
-	IDIn    []string
-	IDNotIn []string
-	IDGT    *string
-	IDGTE   *string
-	IDLT    *string
-	IDLTE   *string
+	ID      *int64
+	IDNEQ   *int64
+	IDIn    []int64
+	IDNotIn []int64
+	IDGT    *int64
+	IDGTE   *int64
+	IDLT    *int64
+	IDLTE   *int64
 
 	// Predicates on the field name.
 	Name          *string
@@ -278,8 +270,7 @@ type UserWhereInput struct {
 }
 
 // Pred is the condition w stands for on User nodes, true for a nil or empty w.
-// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx), and
-// on an ID that does not decode or is of another type.
+// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
 func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	p, err := w.predicate(ctx)
 	return velox.Pred[User](p), err
@@ -294,7 +285,7 @@ func (w *UserWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 	gqlgraph.Not(f, "not", w.Not, (*UserWhereInput).predicate)
 	gqlgraph.And(f, "and", w.And, (*UserWhereInput).predicate)
 	gqlgraph.Or(f, "or", w.Or, (*UserWhereInput).predicate)
-	gqlgraph.IDField[int64](f, "id", userColID, gqlgraph.Ops[string]{
+	gqlgraph.IDField(f, "id", userColID, gqlgraph.Ops[int64]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -349,8 +340,8 @@ type CreateUserInput struct {
 // Setters returns the input's fields and edges as setters for db.Insert(x).Set.
 // A field not given sets nothing: x keeps its value, or the field's Default.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreateUserInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]
@@ -380,8 +371,8 @@ type UpdateUserInput struct {
 // db.Update[User]().Set. A field not given sets nothing, and a clear field wins
 // over its field.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *UpdateUserInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]

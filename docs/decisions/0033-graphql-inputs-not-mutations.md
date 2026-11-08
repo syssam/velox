@@ -1,7 +1,9 @@
 # 33. velox-graphql generates inputs, not mutations
 
 Status: accepted, 2026-11-03. Its two methods, generic runtime and explicit
-nulls by type are superseded by [0045](0045-graphql-input-setters.md).
+nulls by type are superseded by [0045](0045-graphql-input-setters.md). Its
+global IDs, which the inputs decode, are superseded by
+[0061](0061-graphql-plain-ids.md): an input's ID is the target's key.
 
 ## Context
 

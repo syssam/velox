@@ -1,8 +1,9 @@
 package veloxgql_test
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -10,23 +11,23 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// An ID names its GraphQL type, so DecodeID refuses an ID of another
-// type before anything is looked up. Renaming a type with graphql.Type
-// changes every ID and cursor that clients hold.
-func ExampleDecodeID() {
-	id := veloxgql.EncodeID("User", int64(42))
-	fmt.Println(id)
-	typ, _ := veloxgql.IDType(id)
-	fmt.Println(typ)
-	key, err := veloxgql.DecodeID[int64](id, "User")
+// An ID is the entity's key. A client may send it as a string or as an
+// integer, and gets it back as a string, as the GraphQL specification says.
+func ExampleUnmarshalInt64ID() {
+	key, err := veloxgql.UnmarshalInt64ID("42")
 	fmt.Println(key, err)
-	_, err = veloxgql.DecodeID[int64](id, "Account")
-	fmt.Println(errors.Is(err, veloxgql.ErrWrongIDType))
+	key, err = veloxgql.UnmarshalInt64ID(json.Number("42"))
+	fmt.Println(key, err)
+	_, err = veloxgql.UnmarshalInt64ID(4.2)
+	fmt.Println(err)
+	var b strings.Builder
+	veloxgql.MarshalInt64ID(42).MarshalGQL(&b)
+	fmt.Println(b.String())
 	// Output:
-	// VXNlcjo0Mg
-	// User
 	// 42 <nil>
-	// true
+	// 42 <nil>
+	// veloxgql: ID must be a string of an integer, or an integer
+	// "42"
 }
 
 const exampleSDL = `

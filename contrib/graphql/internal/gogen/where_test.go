@@ -26,10 +26,10 @@ func TestPredCallRefusesBugs(t *testing.T) {
 		ws   []sdl.WhereField
 		want string
 	}{
-		"an unknown op":   {[]sdl.WhereField{pred("title", 0)}, "no predicate WhereOp(0x0)"},
-		"another field":   {[]sdl.WhereField{pred("title", graphql.OpEQ), pred("nameNEQ", graphql.OpNEQ)}, "nameNEQ is not titleNEQ"},
-		"not a Node's ID": {[]sdl.WhereField{func() sdl.WhereField { w := pred("id", graphql.OpEQ); w.Target = "Thing"; return w }()}, "which is not a Node"},
-		"an FK's value":   {[]sdl.WhereField{func() sdl.WhereField { w := pred("ownerID", graphql.OpEQ); w.Edge = 0; return w }()}, "takes no IDs"},
+		"an unknown op": {[]sdl.WhereField{pred("title", 0)}, "no predicate WhereOp(0x0)"},
+		"another field": {[]sdl.WhereField{pred("title", graphql.OpEQ), pred("nameNEQ", graphql.OpNEQ)}, "nameNEQ is not titleNEQ"},
+		"IDs of no ID":  {[]sdl.WhereField{func() sdl.WhereField { w := pred("id", graphql.OpEQ); w.Target = "Thing"; return w }()}, "a type that has none, which is a bug"},
+		"an FK's value": {[]sdl.WhereField{func() sdl.WhereField { w := pred("ownerID", graphql.OpEQ); w.Edge = 0; return w }()}, "takes no IDs"},
 	} {
 		if _, err := r.predCall(newFile(), typ, c.ws); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, want %q", name, err, c.want)

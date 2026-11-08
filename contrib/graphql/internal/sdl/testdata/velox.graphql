@@ -1,4 +1,4 @@
-# The vocabulary of velox's GraphQL types: the scalars, Node, PageInfo and
+# The vocabulary of velox's GraphQL types: the scalars, PageInfo and
 # OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
 # and @goModel, as gqlgen documents them.
 
@@ -24,12 +24,6 @@ directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, typ
 
 directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
 
-"""An object with a global ID."""
-interface Node {
-  """The global ID of the object."""
-  id: ID!
-}
-
 """Information about a page of a connection."""
 type PageInfo {
   """Whether there are more nodes after this page."""
@@ -51,10 +45,6 @@ enum OrderDirection {
 # The root query.
 
 type Query {
-  """The node with this ID, or null."""
-  node(id: ID!): Node
-  """The nodes with these IDs, in their order; null for an ID with no node."""
-  nodes(ids: [ID!]!): [Node]!
   """The connection to the Category nodes, filtered by where, ordered by the key, and paged by the other arguments."""
   categories(after: Cursor, first: Int, before: Cursor, last: Int, where: CategoryWhereInput): CategoryConnection!
   """The connection to the Group nodes, ordered by orderBy and then the key, and paged by the other arguments."""
@@ -68,8 +58,8 @@ type Query {
 # Category
 
 """A category of posts, in a tree."""
-type Category implements Node {
-  id: ID! @goField(name: "GlobalID")
+type Category {
+  id: ID!
   title: String!
   """The subcategories."""
   children(after: Cursor, first: Int, before: Cursor, last: Int, where: CategoryWhereInput): CategoryConnection!
@@ -137,8 +127,8 @@ input UpdateCategoryInput {
 
 # Group
 
-type Group implements Node {
-  id: ID! @goField(name: "GlobalID")
+type Group {
+  id: ID!
   name: String!
   """Who can see the group; a String, as its enum is skipped."""
   visibility: String!
@@ -178,7 +168,7 @@ enum GroupOrderField {
 
 # Like
 
-"""A user's like of a post. Its key is two columns, so it is not a Node."""
+"""A user's like of a post. Its key is two columns, so it has no ID."""
 type Like {
   weight: Int!
   createdAt: Time!
@@ -216,8 +206,8 @@ input CreateLikeInput {
 
 # Post
 
-type Post implements Node {
-  id: ID! @goField(name: "GlobalID")
+type Post {
+  id: ID!
   title: String!
   slug: String!
   status: PostStatus!
@@ -372,8 +362,8 @@ input UpdatePostInput {
 User is a person who writes posts.
 Its GraphQL type is Account.
 """
-type Account implements Node {
-  id: ID! @goField(name: "GlobalID")
+type Account {
+  id: ID!
   createdAt: Time!
   updatedAt: Time!
   """The display name."""

@@ -14,10 +14,10 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
-// A key of a type an ID does not hold makes no Node: the type implements
-// nothing and shows its key as a field, and update and delete, which take an
-// ID, are refused.
-func TestNodeKeyTypes(t *testing.T) {
+// A key of a type an ID does not hold makes no ID: the type shows its key as
+// a field, and update, which takes an ID, is refused. A key an ID holds is
+// the ID, in the key's own Go type.
+func TestKeyTypes(t *testing.T) {
 	for typ, key := range map[string]string{"int64": "int64", "uint8": "uint8", "string": "string", "enum": "string", "uuid": "[16]byte", "float64": "", "time": ""} {
 		id := &plugin.Field{Name: "id", GoName: "ID", Type: typ}
 		if typ == "enum" {
@@ -28,8 +28,8 @@ func TestNodeKeyTypes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", typ, err)
 		}
-		if got := s.Types[0]; got.Key != key || got.Node != (key != "") {
-			t.Errorf("a %s key: Node %v, Key %q, want %q", typ, got.Node, got.Key, key)
+		if got := s.Types[0]; got.Key != key || got.HasID != (key != "") {
+			t.Errorf("a %s key: HasID %v, Key %q, want %q", typ, got.HasID, got.Key, key)
 		}
 	}
 	id := &plugin.Field{Name: "id", GoName: "ID", Type: "float64"}
@@ -40,6 +40,46 @@ func TestNodeKeyTypes(t *testing.T) {
 	}
 	clock.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate))
 	renderErr(t, model(clock), "schema Clock", "update", "of type float64, which an ID does not hold")
+}
+
+// TestOneKeyType: the types with an ID have keys of one Go type, since gqlgen
+// binds every ID argument to one; a model whose keys differ is refused,
+// naming two schemas and their key types. A type without an ID, or a skipped
+// one, does not count.
+func TestOneKeyType(t *testing.T) {
+	uuidKey := func(name string) *plugin.Entity {
+		e := entity(name)
+		e.Fields[0] = &plugin.Field{Name: "id", GoName: "ID", Column: "id", Type: "uuid", ElemType: "uuid.UUID", PkgPath: "github.com/google/uuid"}
+		return e
+	}
+	renderErr(t, model(entity("Post"), uuidKey("Tag")),
+		"schema Post's key is int64 and schema Tag's is github.com/google/uuid.UUID",
+		"gqlgen binds every ID argument to one Go type")
+	named := entity("User")
+	named.Fields[0].ElemType, named.Fields[0].PkgPath = "ids.UserID", "example.com/ids"
+	renderErr(t, model(entity("Post"), named), "schema Post's key is int64 and schema User's is example.com/ids.UserID")
+
+	// One key type, a skipped type of another, a type with no ID.
+	skipped := uuidKey("Tag")
+	skipped.Annotations = ann(t, graphql.Skip())
+	clock := entity("Clock")
+	clock.Fields[0] = &plugin.Field{Name: "id", GoName: "ID", Type: "float64"}
+	s, err := Build(model(entity("Post"), entity("User"), skipped, clock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ty := range s.Types {
+		if ty.HasID && (ty.KeyType != "int64" || ty.KeyPkg != "") {
+			t.Errorf("%s's IDs are %s (%s), want int64", ty.Name, ty.KeyType, ty.KeyPkg)
+		}
+	}
+	u, err := Build(model(uuidKey("Tag")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ty := u.Types[0]; ty.KeyType != "uuid.UUID" || ty.KeyPkg != "github.com/google/uuid" {
+		t.Errorf("a UUID key's IDs are %s (%s)", ty.KeyType, ty.KeyPkg)
+	}
 }
 
 // A field whose Go type is the application's own binds to a getter, which
@@ -223,13 +263,13 @@ func TestSurfaceInputs(t *testing.T) {
 		"Views: views value field views int",
 		"Rating: rating value field rating float64",
 		"ClearRating: clearRating clear field rating",
-		"WriterID: writerID edgeID edge author Account",
+		"WriterID: writerID edgeID edge author Account int64",
 		// An M2M to its own type, from both sides.
-		"AddRelatedIDs: addRelatedIDs add edge related Post",
-		"RemoveRelatedIDs: removeRelatedIDs remove edge related Post",
+		"AddRelatedIDs: addRelatedIDs add edge related Post int64",
+		"RemoveRelatedIDs: removeRelatedIDs remove edge related Post int64",
 		"ClearRelated: clearRelated clearEdge edge related Post",
-		"AddRelatedByIDs: addRelatedByIDs add edge related_by Post",
-		"RemoveRelatedByIDs: removeRelatedByIDs remove edge related_by Post",
+		"AddRelatedByIDs: addRelatedByIDs add edge related_by Post int64",
+		"RemoveRelatedByIDs: removeRelatedByIDs remove edge related_by Post int64",
 		"ClearRelatedBy: clearRelatedBy clearEdge edge related_by Post",
 	}; !slices.Equal(got, want) {
 		t.Errorf("UpdatePostInput:\n got %q\nwant %q", got, want)
@@ -237,17 +277,17 @@ func TestSurfaceInputs(t *testing.T) {
 	cat := typeNamed(t, s, "Category")
 	if got, want := describe(cat, cat.Create), []string{
 		"Title: title value field title string",
-		"ChildIDs: childIDs edgeIDs edge children Category",
-		"ParentID: parentID edgeID edge parent Category",
+		"ChildIDs: childIDs edgeIDs edge children Category int64",
+		"ParentID: parentID edgeID edge parent Category int64",
 	}; !slices.Equal(got, want) {
 		t.Errorf("CreateCategoryInput:\n got %q\nwant %q", got, want)
 	}
 	if got, want := describe(cat, cat.Update), []string{
 		"Title: title value field title string",
-		"AddChildIDs: addChildIDs add edge children Category",
-		"RemoveChildIDs: removeChildIDs remove edge children Category",
+		"AddChildIDs: addChildIDs add edge children Category int64",
+		"RemoveChildIDs: removeChildIDs remove edge children Category int64",
 		"ClearChildren: clearChildren clearEdge edge children Category",
-		"ParentID: parentID edgeID edge parent Category",
+		"ParentID: parentID edgeID edge parent Category int64",
 		"ClearParent: clearParent clearEdge edge parent Category",
 	}; !slices.Equal(got, want) {
 		t.Errorf("UpdateCategoryInput:\n got %q\nwant %q", got, want)
@@ -266,9 +306,9 @@ func TestSurfaceInputs(t *testing.T) {
 		}
 	}
 	if want := []string{
-		"MembershipIDs: membershipIDs edgeIDs edge groups Group",
-		"AddMembershipIDs: addMembershipIDs add edge groups Group",
-		"RemoveMembershipIDs: removeMembershipIDs remove edge groups Group",
+		"MembershipIDs: membershipIDs edgeIDs edge groups Group int64",
+		"AddMembershipIDs: addMembershipIDs add edge groups Group int64",
+		"RemoveMembershipIDs: removeMembershipIDs remove edge groups Group int64",
 		"ClearMemberships: clearMemberships clearEdge edge groups Group",
 	}; !slices.Equal(got, want) {
 		t.Errorf("User's groups:\n got %q\nwant %q", got, want)

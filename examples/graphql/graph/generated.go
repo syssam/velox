@@ -52,10 +52,10 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Label struct {
-		GlobalID func(childComplexity int) int
-		Name     func(childComplexity int) int
-		Posts    func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
-		Rank     func(childComplexity int) int
+		ID    func(childComplexity int) int
+		Name  func(childComplexity int) int
+		Posts func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
+		Rank  func(childComplexity int) int
 	}
 
 	LabelConnection struct {
@@ -73,10 +73,10 @@ type ComplexityRoot struct {
 		CreateLabel func(childComplexity int, input gen.CreateLabelInput) int
 		CreatePost  func(childComplexity int, input gen.CreatePostInput) int
 		CreateUser  func(childComplexity int, input gen.CreateUserInput, password string) int
-		DeletePost  func(childComplexity int, id string) int
-		UpdateLabel func(childComplexity int, id string, input gen.UpdateLabelInput) int
-		UpdatePost  func(childComplexity int, id string, input gen.UpdatePostInput) int
-		UpdateUser  func(childComplexity int, id string, input gen.UpdateUserInput, password *string) int
+		DeletePost  func(childComplexity int, id int64) int
+		UpdateLabel func(childComplexity int, id int64, input gen.UpdateLabelInput) int
+		UpdatePost  func(childComplexity int, id int64, input gen.UpdatePostInput) int
+		UpdateUser  func(childComplexity int, id int64, input gen.UpdateUserInput, password *string) int
 	}
 
 	PageInfo struct {
@@ -88,7 +88,7 @@ type ComplexityRoot struct {
 
 	Post struct {
 		Author      func(childComplexity int) int
-		GlobalID    func(childComplexity int) int
+		ID          func(childComplexity int) int
 		PublishedAt func(childComplexity int) int
 		Status      func(childComplexity int) int
 		Tags        func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) int
@@ -109,8 +109,6 @@ type ComplexityRoot struct {
 
 	Query struct {
 		Labels         func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) int
-		Node           func(childComplexity int, id string) int
-		Nodes          func(childComplexity int, ids []string) int
 		Posts          func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
 		PublishedPosts func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
 		Users          func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) int
@@ -118,7 +116,7 @@ type ComplexityRoot struct {
 
 	User struct {
 		Email    func(childComplexity int) int
-		GlobalID func(childComplexity int) int
+		ID       func(childComplexity int) int
 		Initials func(childComplexity int) int
 		JoinedAt func(childComplexity int) int
 		Name     func(childComplexity int) int
@@ -140,16 +138,14 @@ type ComplexityRoot struct {
 
 type MutationResolver interface {
 	CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error)
-	UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error)
-	DeletePost(ctx context.Context, id string) (string, error)
+	UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error)
+	DeletePost(ctx context.Context, id int64) (int64, error)
 	CreateLabel(ctx context.Context, input gen.CreateLabelInput) (*gen.Tag, error)
-	UpdateLabel(ctx context.Context, id string, input gen.UpdateLabelInput) (*gen.Tag, error)
+	UpdateLabel(ctx context.Context, id int64, input gen.UpdateLabelInput) (*gen.Tag, error)
 	CreateUser(ctx context.Context, input gen.CreateUserInput, password string) (*gen.User, error)
-	UpdateUser(ctx context.Context, id string, input gen.UpdateUserInput, password *string) (*gen.User, error)
+	UpdateUser(ctx context.Context, id int64, input gen.UpdateUserInput, password *string) (*gen.User, error)
 }
 type QueryResolver interface {
-	Node(ctx context.Context, id string) (veloxgql.Noder, error)
-	Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error)
 	Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error)
 	Labels(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) (*gen.LabelConnection, error)
 	Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error)
@@ -179,11 +175,11 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	switch typeName + "." + field {
 
 	case "Label.id":
-		if e.complexity.Label.GlobalID == nil {
+		if e.complexity.Label.ID == nil {
 			break
 		}
 
-		return e.complexity.Label.GlobalID(childComplexity), true
+		return e.complexity.Label.ID(childComplexity), true
 	case "Label.name":
 		if e.complexity.Label.Name == nil {
 			break
@@ -283,7 +279,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.DeletePost(childComplexity, args["id"].(string)), true
+		return e.complexity.Mutation.DeletePost(childComplexity, args["id"].(int64)), true
 	case "Mutation.updateLabel":
 		if e.complexity.Mutation.UpdateLabel == nil {
 			break
@@ -294,7 +290,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateLabel(childComplexity, args["id"].(string), args["input"].(gen.UpdateLabelInput)), true
+		return e.complexity.Mutation.UpdateLabel(childComplexity, args["id"].(int64), args["input"].(gen.UpdateLabelInput)), true
 	case "Mutation.updatePost":
 		if e.complexity.Mutation.UpdatePost == nil {
 			break
@@ -305,7 +301,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdatePost(childComplexity, args["id"].(string), args["input"].(gen.UpdatePostInput)), true
+		return e.complexity.Mutation.UpdatePost(childComplexity, args["id"].(int64), args["input"].(gen.UpdatePostInput)), true
 	case "Mutation.updateUser":
 		if e.complexity.Mutation.UpdateUser == nil {
 			break
@@ -316,7 +312,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateUser(childComplexity, args["id"].(string), args["input"].(gen.UpdateUserInput), args["password"].(*string)), true
+		return e.complexity.Mutation.UpdateUser(childComplexity, args["id"].(int64), args["input"].(gen.UpdateUserInput), args["password"].(*string)), true
 
 	case "PageInfo.endCursor":
 		if e.complexity.PageInfo.EndCursor == nil {
@@ -350,11 +346,11 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Post.Author(childComplexity), true
 	case "Post.id":
-		if e.complexity.Post.GlobalID == nil {
+		if e.complexity.Post.ID == nil {
 			break
 		}
 
-		return e.complexity.Post.GlobalID(childComplexity), true
+		return e.complexity.Post.ID(childComplexity), true
 	case "Post.publishedAt":
 		if e.complexity.Post.PublishedAt == nil {
 			break
@@ -434,28 +430,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Labels(childComplexity, args["after"].(*veloxgql.Cursor), args["first"].(*int), args["before"].(*veloxgql.Cursor), args["last"].(*int), args["orderBy"].(*gen.LabelOrder), args["where"].(*gen.LabelWhereInput)), true
-	case "Query.node":
-		if e.complexity.Query.Node == nil {
-			break
-		}
-
-		args, err := ec.field_Query_node_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.Node(childComplexity, args["id"].(string)), true
-	case "Query.nodes":
-		if e.complexity.Query.Nodes == nil {
-			break
-		}
-
-		args, err := ec.field_Query_nodes_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.Nodes(childComplexity, args["ids"].([]string)), true
 	case "Query.posts":
 		if e.complexity.Query.Posts == nil {
 			break
@@ -497,11 +471,11 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.User.Email(childComplexity), true
 	case "User.id":
-		if e.complexity.User.GlobalID == nil {
+		if e.complexity.User.ID == nil {
 			break
 		}
 
-		return e.complexity.User.GlobalID(childComplexity), true
+		return e.complexity.User.ID(childComplexity), true
 	case "User.initials":
 		if e.complexity.User.Initials == nil {
 			break
@@ -700,7 +674,7 @@ func sourceData(filename string) string {
 var sources = []*ast.Source{
 	{Name: "../gen/velox.graphql", Input: `# Code generated by velox-gen. DO NOT EDIT.
 
-# The vocabulary of velox's GraphQL types: the scalars, Node, PageInfo and
+# The vocabulary of velox's GraphQL types: the scalars, PageInfo and
 # OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
 # and @goModel, as gqlgen documents them.
 
@@ -726,12 +700,6 @@ directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, typ
 
 directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
 
-"""An object with a global ID."""
-interface Node {
-  """The global ID of the object."""
-  id: ID!
-}
-
 """Information about a page of a connection."""
 type PageInfo {
   """Whether there are more nodes after this page."""
@@ -753,10 +721,6 @@ enum OrderDirection {
 # The root query.
 
 type Query {
-  """The node with this ID, or null."""
-  node(id: ID!): Node
-  """The nodes with these IDs, in their order; null for an ID with no node."""
-  nodes(ids: [ID!]!): [Node]!
   """The connection to the Post nodes, filtered by where, ordered by orderBy and then the key, and paged by the other arguments."""
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
   """The connection to the Label nodes, filtered by where, ordered by orderBy and then the key, and paged by the other arguments."""
@@ -768,8 +732,8 @@ type Query {
 # Post
 
 """A post, in an organization, by its author."""
-type Post implements Node {
-  id: ID! @goField(name: "GlobalID")
+type Post {
+  id: ID!
   """The post's title, never empty."""
   title: String!
   """Whether the post is a draft or published."""
@@ -900,8 +864,8 @@ input UpdatePostInput {
 # Tag, as the type Label
 
 """A label on posts."""
-type Label implements Node {
-  id: ID! @goField(name: "GlobalID")
+type Label {
+  id: ID!
   """The label's name, unique."""
   name: String!
   """Where the label sorts among labels."""
@@ -998,8 +962,8 @@ input UpdateLabelInput {
 # User
 
 """A user, who writes posts."""
-type User implements Node {
-  id: ID! @goField(name: "GlobalID")
+type User {
+  id: ID!
   """The name the user shows."""
   name: String!
   """The address the user signs in with; admins only."""
@@ -1193,7 +1157,7 @@ func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, 
 func (ec *executionContext) field_Mutation_deletePost_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int64)
 	if err != nil {
 		return nil, err
 	}
@@ -1204,7 +1168,7 @@ func (ec *executionContext) field_Mutation_deletePost_args(ctx context.Context, 
 func (ec *executionContext) field_Mutation_updateLabel_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int64)
 	if err != nil {
 		return nil, err
 	}
@@ -1220,7 +1184,7 @@ func (ec *executionContext) field_Mutation_updateLabel_args(ctx context.Context,
 func (ec *executionContext) field_Mutation_updatePost_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int64)
 	if err != nil {
 		return nil, err
 	}
@@ -1236,7 +1200,7 @@ func (ec *executionContext) field_Mutation_updatePost_args(ctx context.Context, 
 func (ec *executionContext) field_Mutation_updateUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int64)
 	if err != nil {
 		return nil, err
 	}
@@ -1334,28 +1298,6 @@ func (ec *executionContext) field_Query_labels_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["where"] = arg5
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_node_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_nodes_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids", ec.unmarshalNID2ᚕstringᚄ)
-	if err != nil {
-		return nil, err
-	}
-	args["ids"] = arg0
 	return args, nil
 }
 
@@ -1562,10 +1504,10 @@ func (ec *executionContext) _Label_id(ctx context.Context, field graphql.Collect
 		field,
 		ec.fieldContext_Label_id,
 		func(ctx context.Context) (any, error) {
-			return obj.GlobalID(), nil
+			return obj.ID, nil
 		},
 		nil,
-		ec.marshalNID2string,
+		ec.marshalNID2int64,
 		true,
 		true,
 	)
@@ -1575,7 +1517,7 @@ func (ec *executionContext) fieldContext_Label_id(_ context.Context, field graph
 	fc = &graphql.FieldContext{
 		Object:     "Label",
 		Field:      field,
-		IsMethod:   true,
+		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
@@ -1927,7 +1869,7 @@ func (ec *executionContext) _Mutation_updatePost(ctx context.Context, field grap
 		ec.fieldContext_Mutation_updatePost,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdatePost(ctx, fc.Args["id"].(string), fc.Args["input"].(gen.UpdatePostInput))
+			return ec.resolvers.Mutation().UpdatePost(ctx, fc.Args["id"].(int64), fc.Args["input"].(gen.UpdatePostInput))
 		},
 		nil,
 		ec.marshalNPost2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPost,
@@ -1984,10 +1926,10 @@ func (ec *executionContext) _Mutation_deletePost(ctx context.Context, field grap
 		ec.fieldContext_Mutation_deletePost,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().DeletePost(ctx, fc.Args["id"].(string))
+			return ec.resolvers.Mutation().DeletePost(ctx, fc.Args["id"].(int64))
 		},
 		nil,
-		ec.marshalNID2string,
+		ec.marshalNID2int64,
 		true,
 		true,
 	)
@@ -2076,7 +2018,7 @@ func (ec *executionContext) _Mutation_updateLabel(ctx context.Context, field gra
 		ec.fieldContext_Mutation_updateLabel,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateLabel(ctx, fc.Args["id"].(string), fc.Args["input"].(gen.UpdateLabelInput))
+			return ec.resolvers.Mutation().UpdateLabel(ctx, fc.Args["id"].(int64), fc.Args["input"].(gen.UpdateLabelInput))
 		},
 		nil,
 		ec.marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐTag,
@@ -2184,7 +2126,7 @@ func (ec *executionContext) _Mutation_updateUser(ctx context.Context, field grap
 		ec.fieldContext_Mutation_updateUser,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateUser(ctx, fc.Args["id"].(string), fc.Args["input"].(gen.UpdateUserInput), fc.Args["password"].(*string))
+			return ec.resolvers.Mutation().UpdateUser(ctx, fc.Args["id"].(int64), fc.Args["input"].(gen.UpdateUserInput), fc.Args["password"].(*string))
 		},
 		nil,
 		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser,
@@ -2356,10 +2298,10 @@ func (ec *executionContext) _Post_id(ctx context.Context, field graphql.Collecte
 		field,
 		ec.fieldContext_Post_id,
 		func(ctx context.Context) (any, error) {
-			return obj.GlobalID(), nil
+			return obj.ID, nil
 		},
 		nil,
-		ec.marshalNID2string,
+		ec.marshalNID2int64,
 		true,
 		true,
 	)
@@ -2369,7 +2311,7 @@ func (ec *executionContext) fieldContext_Post_id(_ context.Context, field graphq
 	fc = &graphql.FieldContext{
 		Object:     "Post",
 		Field:      field,
-		IsMethod:   true,
+		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
@@ -2765,88 +2707,6 @@ func (ec *executionContext) fieldContext_PostEdge_cursor(_ context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_node(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_node,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Node(ctx, fc.Args["id"].(string))
-		},
-		nil,
-		ec.marshalONode2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐNoder,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_node(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("FieldContext.Child cannot be called on type INTERFACE")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_node_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Query_nodes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_nodes,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Nodes(ctx, fc.Args["ids"].([]string))
-		},
-		nil,
-		ec.marshalNNode2ᚕgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐNoder,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_nodes(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("FieldContext.Child cannot be called on type INTERFACE")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_nodes_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Query_posts(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3158,10 +3018,10 @@ func (ec *executionContext) _User_id(ctx context.Context, field graphql.Collecte
 		field,
 		ec.fieldContext_User_id,
 		func(ctx context.Context) (any, error) {
-			return obj.GlobalID(), nil
+			return obj.ID, nil
 		},
 		nil,
-		ec.marshalNID2string,
+		ec.marshalNID2int64,
 		true,
 		true,
 	)
@@ -3171,7 +3031,7 @@ func (ec *executionContext) fieldContext_User_id(_ context.Context, field graphq
 	fc = &graphql.FieldContext{
 		Object:     "User",
 		Field:      field,
-		IsMethod:   true,
+		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
@@ -5040,7 +4900,7 @@ func (ec *executionContext) unmarshalInputCreateLabelInput(ctx context.Context, 
 			it.Rank = data
 		case "postIDs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("postIDs"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5095,7 +4955,7 @@ func (ec *executionContext) unmarshalInputCreatePostInput(ctx context.Context, o
 			it.PublishedAt = data
 		case "tagIDs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tagIDs"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5244,56 +5104,56 @@ func (ec *executionContext) unmarshalInputLabelWhereInput(ctx context.Context, o
 			it.Or = data
 		case "id":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.ID = data
 		case "idNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idNEQ"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDNEQ = data
 		case "idIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idIn"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDIn = data
 		case "idNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idNotIn"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDNotIn = data
 		case "idGT":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idGT"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDGT = data
 		case "idGTE":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idGTE"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDGTE = data
 		case "idLT":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idLT"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDLT = data
 		case "idLTE":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idLTE"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5484,84 +5344,84 @@ func (ec *executionContext) unmarshalInputPostWhereInput(ctx context.Context, ob
 			it.Or = data
 		case "id":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.ID = data
 		case "idNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idNEQ"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDNEQ = data
 		case "idIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idIn"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDIn = data
 		case "idNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idNotIn"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDNotIn = data
 		case "idGT":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idGT"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDGT = data
 		case "idGTE":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idGTE"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDGTE = data
 		case "idLT":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idLT"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDLT = data
 		case "idLTE":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idLTE"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDLTE = data
 		case "authorID":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("authorID"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.AuthorID = data
 		case "authorIDNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("authorIDNEQ"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.AuthorIDNEQ = data
 		case "authorIDIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("authorIDIn"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.AuthorIDIn = data
 		case "authorIDNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("authorIDNotIn"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5763,14 +5623,14 @@ func (ec *executionContext) unmarshalInputUpdateLabelInput(ctx context.Context, 
 			it.Rank = data
 		case "addPostIDs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("addPostIDs"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.AddPostIDs = data
 		case "removePostIDs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("removePostIDs"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5839,14 +5699,14 @@ func (ec *executionContext) unmarshalInputUpdatePostInput(ctx context.Context, o
 			it.ClearPublishedAt = data
 		case "addTagIDs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("addTagIDs"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.AddTagIDs = data
 		case "removeTagIDs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("removeTagIDs"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -6004,56 +5864,56 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 			it.Or = data
 		case "id":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.ID = data
 		case "idNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idNEQ"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDNEQ = data
 		case "idIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idIn"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDIn = data
 		case "idNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idNotIn"))
-			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDNotIn = data
 		case "idGT":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idGT"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDGT = data
 		case "idGTE":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idGTE"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDGTE = data
 		case "idLT":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idLT"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.IDLT = data
 		case "idLTE":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idLTE"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOID2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -6327,39 +6187,11 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 
 // region    ************************** interface.gotpl ***************************
 
-func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj veloxgql.Noder) graphql.Marshaler {
-	switch obj := (obj).(type) {
-	case nil:
-		return graphql.Null
-	case *gen.User:
-		if obj == nil {
-			return graphql.Null
-		}
-		return ec._User(ctx, sel, obj)
-	case *gen.Post:
-		if obj == nil {
-			return graphql.Null
-		}
-		return ec._Post(ctx, sel, obj)
-	case *gen.Tag:
-		if obj == nil {
-			return graphql.Null
-		}
-		return ec._Label(ctx, sel, obj)
-	default:
-		if typedObj, ok := obj.(graphql.Marshaler); ok {
-			return typedObj
-		} else {
-			panic(fmt.Errorf("unexpected type %T; non-generated variants of Node must implement graphql.Marshaler", obj))
-		}
-	}
-}
-
 // endregion ************************** interface.gotpl ***************************
 
 // region    **************************** object.gotpl ****************************
 
-var labelImplementors = []string{"Label", "Node"}
+var labelImplementors = []string{"Label"}
 
 func (ec *executionContext) _Label(ctx context.Context, sel ast.SelectionSet, obj *gen.Tag) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, labelImplementors)
@@ -6769,7 +6601,7 @@ func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
-var postImplementors = []string{"Post", "Node"}
+var postImplementors = []string{"Post"}
 
 func (ec *executionContext) _Post(ctx context.Context, sel ast.SelectionSet, obj *gen.Post) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, postImplementors)
@@ -7099,47 +6931,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Query")
-		case "node":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_node(ctx, field)
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "nodes":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_nodes(ctx, field)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "posts":
 			field := field
 
@@ -7259,7 +7050,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 	return out
 }
 
-var userImplementors = []string{"User", "Node"}
+var userImplementors = []string{"User"}
 
 func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj *gen.User) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, userImplementors)
@@ -7952,50 +7743,20 @@ func (ec *executionContext) marshalNCursor2githubᚗcomᚋsyssamᚋveloxᚋcontr
 	return graphql.WrapContextMarshaler(ctx, v)
 }
 
-func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {
-	res, err := graphql.UnmarshalID(v)
+func (ec *executionContext) unmarshalNID2int64(ctx context.Context, v any) (int64, error) {
+	res, err := veloxgql.UnmarshalInt64ID(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
+func (ec *executionContext) marshalNID2int64(ctx context.Context, sel ast.SelectionSet, v int64) graphql.Marshaler {
 	_ = sel
-	res := graphql.MarshalID(v)
+	res := veloxgql.MarshalInt64ID(v)
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
 		}
 	}
 	return res
-}
-
-func (ec *executionContext) unmarshalNID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
-	var vSlice []any
-	vSlice = graphql.CoerceList(v)
-	var err error
-	res := make([]string, len(vSlice))
-	for i := range vSlice {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
-func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	for i := range v {
-		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
-	}
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
 }
 
 func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v any) (int, error) {
@@ -8141,44 +7902,6 @@ func (ec *executionContext) marshalNLabelOrderField2githubᚗcomᚋsyssamᚋvelo
 func (ec *executionContext) unmarshalNLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput(ctx context.Context, v any) (*gen.LabelWhereInput, error) {
 	res, err := ec.unmarshalInputLabelWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNNode2ᚕgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐNoder(ctx context.Context, sel ast.SelectionSet, v []veloxgql.Noder) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	var wg sync.WaitGroup
-	isLen1 := len(v) == 1
-	if !isLen1 {
-		wg.Add(len(v))
-	}
-	for i := range v {
-		i := i
-		fc := &graphql.FieldContext{
-			Index:  &i,
-			Result: &v[i],
-		}
-		ctx := graphql.WithFieldContext(ctx, fc)
-		f := func(i int) {
-			defer func() {
-				if r := recover(); r != nil {
-					ec.Error(ctx, ec.Recover(ctx, r))
-					ret = nil
-				}
-			}()
-			if !isLen1 {
-				defer wg.Done()
-			}
-			ret[i] = ec.marshalONode2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐNoder(ctx, sel, v[i])
-		}
-		if isLen1 {
-			f(i)
-		} else {
-			go f(i)
-		}
-
-	}
-	wg.Wait()
-
-	return ret
 }
 
 func (ec *executionContext) unmarshalNOrderDirection2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx context.Context, v any) (veloxgql.OrderDirection, error) {
@@ -8766,17 +8489,17 @@ func (ec *executionContext) marshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋco
 	return graphql.WrapContextMarshaler(ctx, v)
 }
 
-func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+func (ec *executionContext) unmarshalOID2ᚕint64ᚄ(ctx context.Context, v any) ([]int64, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
 	var err error
-	res := make([]string, len(vSlice))
+	res := make([]int64, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNID2int64(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -8784,13 +8507,13 @@ func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any
 	return res, nil
 }
 
-func (ec *executionContext) marshalOID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+func (ec *executionContext) marshalOID2ᚕint64ᚄ(ctx context.Context, sel ast.SelectionSet, v []int64) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	ret := make(graphql.Array, len(v))
 	for i := range v {
-		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
+		ret[i] = ec.marshalNID2int64(ctx, sel, v[i])
 	}
 
 	for _, e := range ret {
@@ -8802,21 +8525,21 @@ func (ec *executionContext) marshalOID2ᚕstringᚄ(ctx context.Context, sel ast
 	return ret
 }
 
-func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v any) (*string, error) {
+func (ec *executionContext) unmarshalOID2ᚖint64(ctx context.Context, v any) (*int64, error) {
 	if v == nil {
 		return nil, nil
 	}
-	res, err := graphql.UnmarshalID(v)
+	res, err := veloxgql.UnmarshalInt64ID(v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
+func (ec *executionContext) marshalOID2ᚖint64(ctx context.Context, sel ast.SelectionSet, v *int64) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	_ = sel
 	_ = ctx
-	res := graphql.MarshalID(*v)
+	res := veloxgql.MarshalInt64ID(*v)
 	return res
 }
 
@@ -8942,13 +8665,6 @@ func (ec *executionContext) unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssam�
 	}
 	res, err := ec.unmarshalInputLabelWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalONode2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐNoder(ctx context.Context, sel ast.SelectionSet, v veloxgql.Noder) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	return ec._Node(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ(ctx context.Context, v any) ([]*gen.PostOrder, error) {

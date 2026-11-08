@@ -1069,7 +1069,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion20
+const GeneratedCodeIsVersion21
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string
@@ -1102,15 +1102,13 @@ func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, 
 func DB(ctx context.Context) *velox.DB
 func DBFromContext(ctx context.Context) (*velox.DB, error)
 func DecodeCursor(s string) (Cursor, error)
-func DecodeID[K any](id, typ string) (K, error)
 func DefaultLimits() Limits
 func EncodeCursor(c Cursor) (string, error)
-func EncodeID(typ string, key any) string
 func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterOption) graphql.ErrorPresenterFunc
-func IDType(id string) (string, error)
 func LimitsFromContext(ctx context.Context) Limits
 func MarshalBytes(b []byte) graphql.Marshaler
 func MarshalFloat32(f float32) graphql.Marshaler
+func MarshalInt64ID(id int64) graphql.Marshaler
 func MarshalTime(t time.Time) graphql.Marshaler
 func MarshalUUID(u uuid.UUID) graphql.Marshaler
 func MarshalUint(u uint) graphql.Marshaler
@@ -1120,6 +1118,7 @@ func OnCanceled(f func(ctx context.Context, err error)) PresenterOption
 func Setup(srv Server, db *velox.DB, opts ...Option) http.Handler
 func UnmarshalBytes(v any) ([]byte, error)
 func UnmarshalFloat32(v any) (float32, error)
+func UnmarshalInt64ID(v any) (int64, error)
 func UnmarshalTime(v any) (time.Time, error)
 func UnmarshalUUID(v any) (uuid.UUID, error)
 func UnmarshalUint(v any) (uint, error)
@@ -1134,7 +1133,6 @@ type CursorTerm struct { Field string Direction OrderDirection Value any }
 type Extension struct { }
 type JSON json.RawMessage
 type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int MaxIntrospectionCost int MaxTokens int MaxFields int MaxFragments int MaxDepth int MaxNameBytes int MaxLiteralBytes int MaxVariableNodes int MaxErrors int MaxBodyBytes int MaxResponseBytes int Timeout time.Duration }
-type Noder interface { IsNode() GlobalID() string }
 type Option struct { }
 type OrderDirection string
 type PageInfo struct { HasNextPage bool HasPreviousPage bool StartCursor *Cursor EndCursor *Cursor }
@@ -1144,7 +1142,6 @@ type Time time.Time
 type UUID [16]byte
 type Uint64 uint64
 var ErrBadCursor
-var ErrBadID
 var ErrBadPagination
 var ErrFilterTooDeep
 var ErrFilterTooLarge
@@ -1156,7 +1153,6 @@ var ErrResponseTooLarge
 var ErrTimeout
 var ErrTooCostly
 var ErrTooManyErrors
-var ErrWrongIDType
 
 package contrib/veloxotel
 func Options(cfg Config) []velox.Option

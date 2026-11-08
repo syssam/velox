@@ -14,19 +14,11 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion20
+const _ = veloxgql.GeneratedCodeIsVersion21
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
 type Account = User
-
-// IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
-// veloxgql.Noder.
-func (*User) IsNode() {}
-
-// GlobalID is the global ID of the User, the GraphQL field id: its type and
-// key, opaque to the client.
-func (u *User) GlobalID() string { return veloxgql.EncodeID("Account", u.ID) }
 
 // SettingsGQL is the field settings as JSON, the GraphQL scalar it is: gqlgen
 // binds the field to it.
@@ -233,14 +225,14 @@ type AccountWhereInput struct {
 	Or  []*AccountWhereInput
 
 	// Predicates on the ID.
-	ID      *string
-	IDNEQ   *string
-	IDIn    []string
-	IDNotIn []string
-	IDGT    *string
-	IDGTE   *string
-	IDLT    *string
-	IDLTE   *string
+	ID      *int64
+	IDNEQ   *int64
+	IDIn    []int64
+	IDNotIn []int64
+	IDGT    *int64
+	IDGTE   *int64
+	IDLT    *int64
+	IDLTE   *int64
 
 	// Predicates on the field name (displayName).
 	DisplayName          *string
@@ -257,8 +249,7 @@ type AccountWhereInput struct {
 }
 
 // Pred is the condition w stands for on Account nodes, true for a nil or empty
-// w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx),
-// and on an ID that does not decode or is of another type.
+// w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
 func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	p, err := w.predicate(ctx)
 	return velox.Pred[User](p), err
@@ -273,7 +264,7 @@ func (w *AccountWhereInput) predicate(ctx context.Context) (velox.Predicate, err
 	gqlgraph.Not(f, "not", w.Not, (*AccountWhereInput).predicate)
 	gqlgraph.And(f, "and", w.And, (*AccountWhereInput).predicate)
 	gqlgraph.Or(f, "or", w.Or, (*AccountWhereInput).predicate)
-	gqlgraph.IDField[int64](f, "id", userColID, gqlgraph.Ops[string]{
+	gqlgraph.IDField(f, "id", userColID, gqlgraph.Ops[int64]{
 		EQ:    w.ID,
 		NEQ:   w.IDNEQ,
 		In:    w.IDIn,
@@ -317,9 +308,9 @@ type CreateAccountInput struct {
 	Active       *bool
 	Settings     *veloxgql.JSON
 	// MembershipIDs are the IDs of the Group nodes the edge groups leads to.
-	MembershipIDs []string
+	MembershipIDs []int64
 	// BestFriendID is the ID of the Account the edge best_friend leads to.
-	BestFriendID *string
+	BestFriendID *int64
 }
 
 // String returns the input's fields except its sensitive ones.
@@ -346,8 +337,8 @@ func (in CreateAccountInput) GoString() string { return in.String() }
 // Setters returns the input's fields and edges as setters for db.Insert(x).Set.
 // A field not given sets nothing: x keeps its value, or the field's Default.
 //
-// It does no I/O. A value a validator refuses, or an ID that does not decode or
-// is of another type, is BAD_USER_INPUT naming the field. See "Mutations" in
+// It does no I/O. A value a validator refuses, or a list of more than
+// gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
 func (in *CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]
@@ -402,18 +393,14 @@ func (in *CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 		set = append(set, Users.Settings.Set(settings))
 	}
 	if len(in.MembershipIDs) > 0 {
-		membershipIDs, err := gqlgraph.DecodeIDs[int64]("CreateAccountInput.membershipIDs", in.MembershipIDs, "Group")
+		membershipIDs, err := gqlgraph.IDs("CreateAccountInput.membershipIDs", in.MembershipIDs)
 		if err != nil {
 			return nil, err
 		}
 		set = append(set, Users.Groups.Add(membershipIDs...))
 	}
 	if v := in.BestFriendID; v != nil {
-		bestFriendID, err := gqlgraph.DecodeID[int64]("CreateAccountInput.bestFriendID", *v, "Account")
-		if err != nil {
-			return nil, err
-		}
-		set = append(set, Users.BestFriend.Set(bestFriendID))
+		set = append(set, Users.BestFriend.Set(*v))
 	}
 	return gqlgraph.Validate("CreateAccountInput", &userType, set)
 }

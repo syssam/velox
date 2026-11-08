@@ -2,7 +2,8 @@
 
 Status: accepted, 2026-11-03. Builds on 0020 and 0033. Its generated read
 surface (`XsConnectionOf`, `PredicateGQL`) is revised by 0046. Its rows are a
-*E in an any since 0051, and it is package untyped since 0052.
+*E in an any since 0051, and it is package untyped since 0052. Its Node
+lookups are gone since [0061](0061-graphql-plain-ids.md).
 
 ## Context
 

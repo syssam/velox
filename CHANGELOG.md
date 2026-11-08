@@ -21,6 +21,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `veloxgql.MarshalInt64ID` and `UnmarshalInt64ID`, the `ID` model
+  `veloxgql.Int64ID` of an int64 key: a JSON string out, a string of digits
+  or an integer in, anything else BAD_USER_INPUT (decision 0061).
+
 - `db.Rows(ctx, reason, sql, args...)` ranges over raw SQL whose rows are no
   entity's, scanned in column order, on the DB's connection, a
   transaction's included (decision 0060). `go.mod` retracts `v0.1.0` to
@@ -187,6 +191,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   gqlimpl's where filters and update inputs report it as `BAD_USER_INPUT` naming the field.
 
 ### Changed
+
+- A GraphQL ID is the entity's key in its own Go type, which gqlgen decodes:
+  a resolver takes `id int64`, an input's `<edge>ID` and `<edge>IDs` and a
+  where input's ID predicates are keys, and velox-graphql refuses a schema
+  whose GraphQL types have keys of different Go types. Bind `ID` in
+  `gqlgen.yml` to `veloxgql.Int64ID` (int64), `veloxgql.UUID` (UUID) or
+  gqlgen's `graphql.ID` (string). Without a `QueryField`, `velox.graphql` has
+  no `type Query`. Regenerate: `veloxgql.GeneratedCodeIsVersion21` replaces
+  Version20 (decision 0061).
 
 - `velox.WithoutPolicy(ctx, reason)` is `db.WithoutPolicy(reason)`, which
   returns a DB whose statements, transactions and write hooks skip the
@@ -647,6 +660,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `Open` and `OpenShards` panic on an unknown dialect. `Connect` returns an error.
 
 ### Removed
+
+- velox-graphql's Node: the `Node` interface, the `node` and `nodes` queries,
+  `gen.Node`, `gen.Nodes`, `IsNode`, `GlobalID` and `node_gql.go`; and
+  `veloxgql.Noder`, `EncodeID`, `DecodeID`, `IDType`, `ErrBadID` and
+  `ErrWrongIDType`. Drop the `Node` model and the `Node` and `Nodes`
+  resolvers (decision 0061).
 
 - `velox.NotLinkedError` and `MetaOnce`'s retry of a build that panicked with one: no
   package binds gen late (ADR 0039). A failed build is the entity's error on every use.

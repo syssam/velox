@@ -138,7 +138,7 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 	case (fk || f.Implicit != "") && appDirective(a) != "":
 		return fmt.Errorf("%s: graphql.Directives with the directive @%s on a foreign key, which its edge stands for in GraphQL; put the directive on the edge, which guards the edge's field, its has and hasWith filters and the key's predicates", where, appDirective(a))
 	case pk && keyBase(e) != "" && appDirective(a) != "":
-		return fmt.Errorf("%s: graphql.Directives with the directive @%s on the primary key: the id is readable through node, nodes and the cursors, so the directive would guard nothing", where, appDirective(a))
+		return fmt.Errorf("%s: graphql.Directives with the directive @%s on the primary key: the id is readable through the cursors and every edge to the type, so the directive would guard nothing", where, appDirective(a))
 	case a.WhereOps != 0 && f.Sensitive:
 		return fmt.Errorf("%s: graphql.WhereOps on a sensitive field: a filter would reveal its values", where)
 	case a.WhereOps != 0 && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipWhereInput == 0:

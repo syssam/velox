@@ -73,8 +73,8 @@ func (s query) paginate(ctx context.Context, c *Type, args Args, order []Order) 
 // Type is what the generated code knows of one GraphQL type, as a literal
 // it writes once per type: the type's name, its entity's Table, the key's
 // columns, the order fields and their columns, the columns a selection reads
-// and the fields of its inputs. The type's connections, Node lookups, edges,
-// where filters and inputs all take it.
+// and the fields of its inputs. The type's connections, edges, where filters
+// and inputs all take it.
 type Type struct {
 	// Name is the GraphQL type's name, "Post".
 	Name string
@@ -426,7 +426,7 @@ type Connection struct {
 // combination Args refuses, or an order of more than MaxOrderTerms terms;
 // with ErrPageTooLarge for either over MaxPage (both the limits of
 // veloxgql.LimitsFromContext(ctx)); and with ErrBadCursor for a cursor of
-// another type (ErrWrongIDType too), taken under another order, or whose
+// another type, taken under another order, or whose
 // values are not of the order's types.
 func Paginate(ctx context.Context, from Source, c *Type, args Args) (*Connection, error) {
 	return from.paginate(ctx, c, args, args.Order)

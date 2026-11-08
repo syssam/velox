@@ -207,7 +207,7 @@ func (r *renderer) writeSetters(f *file, t *sdl.Type, in string, fs []sdl.InputF
 		f.doc("", fmt.Sprintf("Setters returns the input's fields and edges as setters for db.Update[%s]().Set. A field not given sets nothing, and a clear field wins over its field.", e.Name))
 	}
 	f.p("//")
-	f.doc("", "It does no I/O. A value a validator refuses, or an ID that does not decode or is of another type, is BAD_USER_INPUT naming the field. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql.")
+	f.doc("", "It does no I/O. A value a validator refuses, or a list of more than gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql.")
 	f.p("func (in *%s) Setters() ([]%s.Setter[%s], error) {", in, vx, e.Name)
 	f.p("\tvar set []%s.Setter[%s]", vx, e.Name)
 	for i, fi := range fs {
@@ -405,7 +405,7 @@ type edgeSetters struct {
 	*setters
 	ed    *plugin.Edge
 	tt    *sdl.Type             // the target's type
-	k     idKey                 // how the target's IDs decode
+	k     idKey                 // the Go type of the target's IDs
 	field map[sdl.InputKind]int // the index in fs of the edge's input of each kind
 }
 
@@ -418,18 +418,9 @@ func (es *edgeSetters) idx(kind sdl.InputKind) int {
 	return -1
 }
 
-// decodeOne writes the decoding of src, the ID of the input field fi, and
-// returns the local variable that holds the key.
-func (es *edgeSetters) decodeOne(indent string, fi sdl.InputField, src string) string {
-	v := es.local(fi)
-	es.f.p("%s%s, err := %s.DecodeID%s(%s, %s, %q%s)", indent, v, es.f.gqlgraph(), es.k.args, es.at(fi), src, fi.Target, es.k.conv)
-	es.fail(indent)
-	return v
-}
-
 // one writes the input field i, an <edge>ID, cleared first by the field clr
 // with the setter null when clr is not -1; set writes its setter of the
-// decoded key.
+// key, which gqlgen decoded.
 func (es *edgeSetters) one(i, clr int, null string, set func(indent, key string)) {
 	f, fi := es.f, es.fs[i]
 	var indent, src string
@@ -442,7 +433,7 @@ func (es *edgeSetters) one(i, clr int, null string, set func(indent, key string)
 	} else {
 		indent, src, end = es.open(fi)
 	}
-	set(indent, es.decodeOne(indent, fi, src))
+	set(indent, src)
 	end()
 }
 
@@ -516,7 +507,7 @@ func (es *edgeSetters) relation() error {
 		fi := es.fs[i]
 		v := es.local(fi)
 		f.p("\tif len(in.%s) > 0 {", fi.GoName)
-		f.p("\t\t%s, err := %s.DecodeIDs%s(%s, in.%s, %q%s)", v, f.gqlgraph(), es.k.args, es.at(fi), fi.GoName, fi.Target, es.k.conv)
+		f.p("\t\t%s, err := %s.IDs(%s, in.%s)", v, f.gqlgraph(), es.at(fi), fi.GoName)
 		es.fail("\t\t")
 		es.add("\t\t", rel+"."+x.op+"("+v+"...)")
 		f.p("\t}")

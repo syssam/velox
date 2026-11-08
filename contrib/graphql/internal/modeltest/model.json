@@ -46,7 +46,7 @@
       "label": "like",
       "handles": "Likes",
       "table": "likes",
-      "comment": "A user's like of a post. Its key is two columns, so it is not a Node.",
+      "comment": "A user's like of a post. Its key is two columns, so it has no ID.",
       "fields": [
         {"name": "user_id", "go_name": "UserID", "column": "user_id", "type": "int64", "go_type": "int64", "elem_type": "int64", "immutable": true},
         {"name": "post_id", "go_name": "PostID", "column": "post_id", "type": "int64", "go_type": "int64", "elem_type": "int64", "immutable": true},

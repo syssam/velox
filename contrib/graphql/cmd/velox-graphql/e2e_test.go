@@ -271,9 +271,9 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		t.Errorf("velox.graphql does not load: %v\n%s", err, got)
 	}
 	for _, want := range []string{
-		"\"\"\"A person who writes posts.\"\"\"\ntype Account implements Node {\n",
+		"\"\"\"A person who writes posts.\"\"\"\ntype Account {\n",
 		"  displayName: String! @goField(name: \"Name\")\n",
-		"  id: ID! @goField(name: \"GlobalID\")\n",
+		"  id: ID!\n",
 		"  role: UserRole!\n",
 		"  quota: Uint64!\n",
 		"  seenAt: Time\n",
@@ -305,7 +305,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 			t.Errorf("no %q in\n%s", want, got)
 		}
 	}
-	for _, absent := range []string{"orgID", "passwordHash", "authorID: Int", "menteeID", "mentorID: Int", "draft", "Secret", "UserGroup", "type User", "AccountRole", "type Mutation", "createPost", "deletePost"} {
+	for _, absent := range []string{"orgID", "passwordHash", "authorID: Int", "menteeID", "mentorID: Int", "draft", "Secret", "Node", "node(", "nodes(", "implements", "GlobalID", "UserGroup", "type User", "AccountRole", "type Mutation", "createPost", "deletePost"} {
 		if strings.Contains(got, absent) {
 			t.Errorf("%q is in\n%s", absent, got)
 		}
@@ -316,8 +316,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 	}
 }
 
-// e2eEvent adds what e2eSchema has not to the Go the plugin writes: a UUID
-// key, an enum of the application's own Go type, a String enum, a where
+// e2eEvent adds what e2eSchema has not to the Go the plugin writes: an enum of the application's own Go type, a String enum, a where
 // predicate on each scalar veloxgql binds, and createEvent, whose input
 // converts to the application's own Go types.
 const e2eEvent = `package schema
@@ -337,7 +336,6 @@ type Event struct{ schema.Schema }
 
 func (Event) Fields() []schema.Field {
 	return []schema.Field{
-		field.UUID("id", uuid.UUID{}).Default(uuid.New).Annotations(graphql.WhereOps()),
 		field.Enum("kind").Values("start", "in_flight").Annotations(graphql.WhereOps()),
 		field.Enum("level").GoType(levels.Level("")).Annotations(graphql.WhereOps()),
 		field.Enum("state").Values("on", "off").Default("on").Annotations(graphql.Skip(graphql.SkipEnumField), graphql.WhereOps()),
@@ -349,7 +347,7 @@ func (Event) Fields() []schema.Field {
 		field.UUID("ref", uuid.UUID{}).Annotations(graphql.WhereOps()),
 		field.String("name").Annotations(graphql.WhereOps(graphql.OpsAll)),
 		field.String("code").GoType(ids.Code("")).Optional().Nillable().Annotations(graphql.WhereOps(graphql.OpsAll)),
-		field.Int64("owner_id").GoType(ids.UserID(0)).Optional().Nillable().Annotations(graphql.WhereOps()),
+		field.Int64("owner_id").Optional().Nillable().Annotations(graphql.WhereOps()),
 	}
 }
 
@@ -363,14 +361,14 @@ func (Event) Annotations() []schema.Annotation {
 	return []schema.Annotation{graphql.QueryField("events"), graphql.Mutations(graphql.MutationCreate)}
 }
 
-// Owner's key is of a type from a package named ids, as Nodes's parameter
-// is; its other fields' Go types are the application's own, or JSON, and
-// bind through getters.
+// Owner's key is an int64, as every key of a schema is of one Go type; its
+// other fields' Go types are the application's own, from a package named
+// ids, or JSON, and bind through getters.
 type Owner struct{ schema.Schema }
 
 func (Owner) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("id").GoType(ids.UserID(0)).Annotations(graphql.WhereOps()),
+		field.Int64("id").Annotations(graphql.WhereOps()),
 		field.String("email").GoType(ids.Email("")).Optional().Nillable().Annotations(graphql.WhereOps(graphql.OpEQ)),
 		field.String("code").GoType(ids.Code("")),
 		field.Strings("tags"),
@@ -423,7 +421,7 @@ func TestGoCompiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
-	for _, name := range []string{"node_gql.go", "user_gql.go", "post_gql.go", "group_gql.go", "category_gql.go", "event_gql.go", "owner_gql.go"} {
+	for _, name := range []string{"user_gql.go", "post_gql.go", "group_gql.go", "category_gql.go", "event_gql.go", "owner_gql.go"} {
 		if !strings.Contains(out, "gen/"+name+"\n") {
 			t.Errorf("no gen/%s in\n%s", name, out)
 		}
@@ -880,7 +878,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -906,7 +903,7 @@ CREATE TABLE user_groups (user_id INTEGER NOT NULL, group_id INTEGER NOT NULL, P
 CREATE TABLE categories (id INTEGER PRIMARY KEY, title TEXT NOT NULL, mentor_id INTEGER, category_children INTEGER, category_twin INTEGER);
 CREATE TABLE owners (id INTEGER PRIMARY KEY, email TEXT, code TEXT NOT NULL, tags TEXT NOT NULL, blob BLOB, ratio REAL NOT NULL,
 	tier TEXT NOT NULL, rank INTEGER NOT NULL);
-CREATE TABLE events (id TEXT PRIMARY KEY, kind TEXT NOT NULL, level TEXT NOT NULL, state TEXT NOT NULL, rank INTEGER NOT NULL,
+CREATE TABLE events (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, level TEXT NOT NULL, state TEXT NOT NULL, rank INTEGER NOT NULL,
 	size INTEGER NOT NULL, at DATETIME, done BOOLEAN NOT NULL, score REAL NOT NULL, ref TEXT NOT NULL, name TEXT NOT NULL,
 	code TEXT, owner_id INTEGER);
 INSERT INTO users VALUES (1, 7, 'ann', 'admin', '', 0, NULL), (2, 7, 'bob', 'admin', '', 0, NULL), (3, 8, 'cid', 'admin', '', 0, NULL),
@@ -941,11 +938,10 @@ func open(t *testing.T, opts ...velox.Option) (context.Context, *velox.DB) {
 	return ctx, db
 }
 
-// The events' times, keys and refs: event n's key ends in n.
+// The events' times and refs.
 var (
 	t0     = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	hour   = func(n int) time.Time { return t0.Add(time.Duration(n) * time.Hour) }
-	evKey  = func(n byte) uuid.UUID { return uuid.UUID{15: n} }
 	r1, r2 = uuid.UUID{0: 1}, uuid.UUID{0: 2}
 )
 
@@ -956,11 +952,11 @@ func ptr[T any](v T) *T { return &v }
 func seed(t *testing.T, ctx context.Context, db *velox.DB) {
 	t.Helper()
 	events := []gen.Event{
-		{ID: evKey(1), Kind: gen.EventKindStart, Level: "low", State: gen.EventStateOn, Rank: 1, Size: 10, At: ptr(hour(1)), Done: true, Score: 0.5, Ref: r1, Name: "alpha", Code: ptr(ids.Code("A1")), OwnerID: ptr(ids.UserID(1))},
-		{ID: evKey(2), Kind: gen.EventKindInFlight, Level: "high", State: gen.EventStateOff, Rank: 2, Size: 20, At: ptr(hour(2)), Done: false, Score: 1.5, Ref: r2, Name: "beta", OwnerID: ptr(ids.UserID(1))},
-		{ID: evKey(3), Kind: gen.EventKindStart, Level: "high", State: gen.EventStateOn, Rank: 3, Size: 30, Done: true, Score: 2.5, Ref: r1, Name: "gamma", Code: ptr(ids.Code("B2")), OwnerID: ptr(ids.UserID(2))},
-		{ID: evKey(4), Kind: gen.EventKindInFlight, Level: "low", State: gen.EventStateOff, Rank: -4, Size: 40, At: ptr(hour(4)), Done: false, Score: 3.5, Ref: r2, Name: "alphabet", Code: ptr(ids.Code("A3"))},
-		{ID: evKey(5), Kind: gen.EventKindStart, Level: "low", State: gen.EventStateOn, Rank: 5, Size: 50, At: ptr(hour(5)), Done: true, Score: 4.5, Ref: r1, Name: "delta", Code: ptr(ids.Code("C_%"))},
+		{ID: 1, Kind: gen.EventKindStart, Level: "low", State: gen.EventStateOn, Rank: 1, Size: 10, At: ptr(hour(1)), Done: true, Score: 0.5, Ref: r1, Name: "alpha", Code: ptr(ids.Code("A1")), OwnerID: ptr(int64(1))},
+		{ID: 2, Kind: gen.EventKindInFlight, Level: "high", State: gen.EventStateOff, Rank: 2, Size: 20, At: ptr(hour(2)), Done: false, Score: 1.5, Ref: r2, Name: "beta", OwnerID: ptr(int64(1))},
+		{ID: 3, Kind: gen.EventKindStart, Level: "high", State: gen.EventStateOn, Rank: 3, Size: 30, Done: true, Score: 2.5, Ref: r1, Name: "gamma", Code: ptr(ids.Code("B2")), OwnerID: ptr(int64(2))},
+		{ID: 4, Kind: gen.EventKindInFlight, Level: "low", State: gen.EventStateOff, Rank: -4, Size: 40, At: ptr(hour(4)), Done: false, Score: 3.5, Ref: r2, Name: "alphabet", Code: ptr(ids.Code("A3"))},
+		{ID: 5, Kind: gen.EventKindStart, Level: "low", State: gen.EventStateOn, Rank: 5, Size: 50, At: ptr(hour(5)), Done: true, Score: 4.5, Ref: r1, Name: "delta", Code: ptr(ids.Code("C_%"))},
 	}
 	for i := range events {
 		if err := db.Insert(&events[i]).Exec(ctx); err != nil {
@@ -993,7 +989,7 @@ func events(ctx context.Context, w *gen.EventWhereInput) ([]int64, error) {
 		return nil, err
 	}
 	c, err := db.Query[gen.Event]().Paginate(ctx, nil, nil, nil, nil, gen.WithEventOrder(&gen.EventOrder{Field: gen.EventOrderFieldRank}), gen.WithEventFilter(w))
-	ks, err := page(ctx, c, err, func(e *gen.EventEdge) int64 { return int64(e.Node.ID[15]) })
+	ks, err := page(ctx, c, err, func(e *gen.EventEdge) int64 { return e.Node.ID })
 	slices.Sort(ks)
 	return ks, err
 }
@@ -1034,11 +1030,6 @@ func categories(ctx context.Context, w *gen.CategoryWhereInput) ([]int64, error)
 	return page(ctx, c, err, func(e *gen.CategoryEdge) int64 { return e.Node.ID })
 }
 
-// The global IDs of the rows.
-func eventID(n byte) string  { return veloxgql.EncodeID("Event", [16]byte(evKey(n))) }
-func ownerID(n int64) string { return veloxgql.EncodeID("Owner", n) }
-func userID(n int64) string  { return veloxgql.EncodeID("Account", n) }
-func catID(n int64) string   { return veloxgql.EncodeID("Category", n) }
 
 type whereCase struct {
 	name string
@@ -1087,11 +1078,11 @@ func TestWhereOps(t *testing.T) {
 	seed(t, ctx, db)
 	low, high := levels.Level("low"), levels.Level("high")
 	check(t, ctx, []whereCase{
-		// The key, a UUID.
-		ev("id", &gen.EventWhereInput{ID: ptr(eventID(3))}, 3),
-		ev("idNEQ", &gen.EventWhereInput{IDNEQ: ptr(eventID(3))}, 1, 2, 4, 5),
-		ev("idIn", &gen.EventWhereInput{IDIn: []string{eventID(1), eventID(5)}}, 1, 5),
-		ev("idNotIn", &gen.EventWhereInput{IDNotIn: []string{eventID(1), eventID(5)}}, 2, 3, 4),
+		// The key, an ID that is the key as it is.
+		ev("id", &gen.EventWhereInput{ID: ptr(int64(3))}, 3),
+		ev("idNEQ", &gen.EventWhereInput{IDNEQ: ptr(int64(3))}, 1, 2, 4, 5),
+		ev("idIn", &gen.EventWhereInput{IDIn: []int64{1, 5}}, 1, 5),
+		ev("idNotIn", &gen.EventWhereInput{IDNotIn: []int64{1, 5}}, 2, 3, 4),
 		// velox-gen's enum.
 		ev("kind", &gen.EventWhereInput{Kind: ptr(gen.EventKindStart)}, 1, 3, 5),
 		ev("kindNEQ", &gen.EventWhereInput{KindNEQ: ptr(gen.EventKindStart)}, 2, 4),
@@ -1182,19 +1173,19 @@ func TestWhereOps(t *testing.T) {
 		ev("codeHasPrefix _", &gen.EventWhereInput{CodeHasPrefix: ptr("_")}),
 		ev("codeIsNil", &gen.EventWhereInput{CodeIsNil: ptr(true)}, 2),
 		ev("codeNotNil", &gen.EventWhereInput{CodeNotNil: ptr(true)}, 1, 3, 4, 5),
-		// An optional foreign key of the application's own Go type, by the
-		// IDs of its edge's node.
-		ev("ownerID", &gen.EventWhereInput{OwnerID: ptr(ownerID(1))}, 1, 2),
-		ev("ownerIDNEQ", &gen.EventWhereInput{OwnerIDNEQ: ptr(ownerID(1))}, 3),
-		ev("ownerIDIn", &gen.EventWhereInput{OwnerIDIn: []string{ownerID(1), ownerID(2)}}, 1, 2, 3),
-		ev("ownerIDNotIn", &gen.EventWhereInput{OwnerIDNotIn: []string{ownerID(2)}}, 1, 2),
+		// An optional foreign key, by the
+		// IDs of its edge's target, which are its key's int64s.
+		ev("ownerID", &gen.EventWhereInput{OwnerID: ptr(int64(1))}, 1, 2),
+		ev("ownerIDNEQ", &gen.EventWhereInput{OwnerIDNEQ: ptr(int64(1))}, 3),
+		ev("ownerIDIn", &gen.EventWhereInput{OwnerIDIn: []int64{1, 2}}, 1, 2, 3),
+		ev("ownerIDNotIn", &gen.EventWhereInput{OwnerIDNotIn: []int64{2}}, 1, 2),
 		ev("ownerIDIsNil", &gen.EventWhereInput{OwnerIDIsNil: ptr(true)}, 4, 5),
 		ev("ownerIDNotNil", &gen.EventWhereInput{OwnerIDNotNil: ptr(true)}, 1, 2, 3),
-		// A key of the application's own Go type.
-		ow("id", &gen.OwnerWhereInput{ID: ptr(ownerID(2))}, 2),
-		ow("idNEQ", &gen.OwnerWhereInput{IDNEQ: ptr(ownerID(1))}, 2, 3),
-		ow("idIn", &gen.OwnerWhereInput{IDIn: []string{ownerID(1), ownerID(3)}}, 1, 3),
-		ow("idNotIn", &gen.OwnerWhereInput{IDNotIn: []string{ownerID(1)}}, 2, 3),
+		// Owner's key.
+		ow("id", &gen.OwnerWhereInput{ID: ptr(int64(2))}, 2),
+		ow("idNEQ", &gen.OwnerWhereInput{IDNEQ: ptr(int64(1))}, 2, 3),
+		ow("idIn", &gen.OwnerWhereInput{IDIn: []int64{1, 3}}, 1, 3),
+		ow("idNotIn", &gen.OwnerWhereInput{IDNotIn: []int64{1}}, 2, 3),
 		ow("email", &gen.OwnerWhereInput{Email: ptr("a@x")}, 1),
 		// The application's enum as a String, converted.
 		ow("tier", &gen.OwnerWhereInput{Tier: ptr("low")}, 1, 3),
@@ -1220,17 +1211,17 @@ func TestWhereOps(t *testing.T) {
 		ac("displayNameHasPrefix", &gen.AccountWhereInput{DisplayNameHasPrefix: ptr("b")}, 2),
 		ac("displayNameHasSuffix", &gen.AccountWhereInput{DisplayNameHasSuffix: ptr("n")}, 1, 4),
 		// A required foreign key, by the IDs of its edge's node.
-		po("authorID", &gen.PostWhereInput{AuthorID: ptr(userID(1))}, 1, 2),
-		po("authorIDNEQ", &gen.PostWhereInput{AuthorIDNEQ: ptr(userID(1))}, 3), // 4's author is in another org: it reads as null, as a policy's hidden row does
-		po("authorIDIn", &gen.PostWhereInput{AuthorIDIn: []string{userID(1), userID(2)}}, 1, 2, 3),
-		po("authorIDNotIn", &gen.PostWhereInput{AuthorIDNotIn: []string{userID(1)}}, 3),
+		po("authorID", &gen.PostWhereInput{AuthorID: ptr(int64(1))}, 1, 2),
+		po("authorIDNEQ", &gen.PostWhereInput{AuthorIDNEQ: ptr(int64(1))}, 3), // 4's author is in another org: it reads as null, as a policy's hidden row does
+		po("authorIDIn", &gen.PostWhereInput{AuthorIDIn: []int64{1, 2}}, 1, 2, 3),
+		po("authorIDNotIn", &gen.PostWhereInput{AuthorIDNotIn: []int64{1}}, 3),
 		po("title", &gen.PostWhereInput{Title: ptr("b")}, 2),
 		po("titleContains", &gen.PostWhereInput{TitleContains: ptr("x")}, 1, 4),
 		// An optional foreign key to the entity itself.
-		ca("mentorID", &gen.CategoryWhereInput{MentorID: ptr(catID(1))}, 2),
-		ca("mentorIDNEQ", &gen.CategoryWhereInput{MentorIDNEQ: ptr(catID(1))}, 4),
-		ca("mentorIDIn", &gen.CategoryWhereInput{MentorIDIn: []string{catID(1), catID(2)}}, 2, 4),
-		ca("mentorIDNotIn", &gen.CategoryWhereInput{MentorIDNotIn: []string{catID(1)}}, 4),
+		ca("mentorID", &gen.CategoryWhereInput{MentorID: ptr(int64(1))}, 2),
+		ca("mentorIDNEQ", &gen.CategoryWhereInput{MentorIDNEQ: ptr(int64(1))}, 4),
+		ca("mentorIDIn", &gen.CategoryWhereInput{MentorIDIn: []int64{1, 2}}, 2, 4),
+		ca("mentorIDNotIn", &gen.CategoryWhereInput{MentorIDNotIn: []int64{1}}, 4),
 	})
 }
 
@@ -1361,7 +1352,7 @@ func TestWhereDepthAndWidth(t *testing.T) {
 	}
 	for name, w := range map[string]*gen.EventWhereInput{
 		"rankIn of 101":  {RankIn: make([]int8, 101)},
-		"idNotIn of 101":         {IDNotIn: make([]string, 101)},
+		"idNotIn of 101":         {IDNotIn: make([]int64, 101)},
 		"or of 101":              {Or: many(101)},
 		"and of 101":             {And: many(101)},
 		"hasOwnerWith of 101": {HasOwnerWith: func() []*gen.OwnerWhereInput {
@@ -1382,66 +1373,25 @@ func TestWhereDepthAndWidth(t *testing.T) {
 	check(t, ctx, []whereCase{ev("or of 100", &gen.EventWhereInput{Or: many(100)}, 1, 2, 3, 5)})
 }
 
-// TestWhereIDs is Review Focus 1 for where: an ID of another type in a
-// where ID predicate, of a key or of a foreign key, fails with
-// veloxgql.ErrWrongIDType, and a malformed one with veloxgql.ErrBadID,
-// before any statement runs.
+// TestWhereIDs: an ID in a where input is the key, in its own Go type, and
+// an integer key has the ordered predicates too.
 func TestWhereIDs(t *testing.T) {
 	ctx, db := open(t)
 	seed(t, ctx, db)
-	statements.Store(0)
-	post := veloxgql.EncodeID("Post", int64(1))
-	for name, run := range map[string]func() error{
-		"Owner.id":              func() error { _, err := owners(ctx, &gen.OwnerWhereInput{ID: &post}); return err },
-		"Owner.idIn":            func() error { _, err := owners(ctx, &gen.OwnerWhereInput{IDIn: []string{ownerID(1), post}}); return err },
-		"Event.id":              func() error { _, err := events(ctx, &gen.EventWhereInput{ID: ptr(ownerID(1))}); return err },
-		"Owner.idIn of Event":   func() error { _, err := owners(ctx, &gen.OwnerWhereInput{IDIn: []string{eventID(1)}}); return err },
-		"Owner.idGT":            func() error { _, err := owners(ctx, &gen.OwnerWhereInput{IDGT: &post}); return err },
-		"Category.idLTE":        func() error { _, err := categories(ctx, &gen.CategoryWhereInput{IDLTE: ptr(userID(1))}); return err },
-		"Event.ownerIDNotIn":    func() error { _, err := events(ctx, &gen.EventWhereInput{OwnerIDNotIn: []string{post}}); return err },
-		"Post.authorID":         func() error { _, err := posts(ctx, &gen.PostWhereInput{AuthorID: &post}); return err },
-		"Category.mentorID":     func() error { _, err := categories(ctx, &gen.CategoryWhereInput{MentorID: ptr(userID(1))}); return err },
-		"in an or":              func() error { _, err := posts(ctx, &gen.PostWhereInput{Or: []*gen.PostWhereInput{{}, {AuthorIDNEQ: &post}}}); return err },
-		"in a hasPostsWith":     func() error { _, err := accounts(ctx, &gen.AccountWhereInput{HasPostsWith: []*gen.PostWhereInput{{AuthorID: &post}}}); return err },
-	} {
-		if err := run(); !errors.Is(err, veloxgql.ErrWrongIDType) {
-			t.Errorf("%s: %v, want ErrWrongIDType", name, err)
-		}
-	}
-	// The error names the fields that held the ID.
-	if _, err := owners(ctx, &gen.OwnerWhereInput{HasEventsWith: []*gen.EventWhereInput{{OwnerID: &post}}}); err == nil ||
-		err.Error() != "veloxgql: OwnerWhereInput.hasEventsWith[0]: EventWhereInput.ownerID: Owner ID: ID of another type" {
-		t.Errorf("the error of a nested ID: %v", err)
-	}
-	if _, err := owners(ctx, &gen.OwnerWhereInput{ID: ptr("not an ID")}); !errors.Is(err, veloxgql.ErrBadID) {
-		t.Errorf("a malformed ID: %v, want ErrBadID", err)
-	}
-	if _, err := events(ctx, &gen.EventWhereInput{ID: ptr(veloxgql.EncodeID("Event", "x"))}); !errors.Is(err, veloxgql.ErrBadID) {
-		t.Errorf("an Event ID whose key is no UUID: %v, want ErrBadID", err)
-	}
-	if n := statements.Load(); n != 0 {
-		t.Errorf("the refused IDs ran %d statements", n)
-	}
-
-	// The node key's predicates: a uuid key has the four of equality, and
-	// an integer key the ordered ones too, through IDAs when its Go type is
-	// the application's own (Owner's ids.UserID) and as it is when not.
-	for _, op := range []string{"IDGT", "IDGTE", "IDLT", "IDLTE"} {
-		if _, ok := reflect.TypeFor[gen.EventWhereInput]().FieldByName(op); ok {
-			t.Errorf("EventWhereInput has %s: a UUID key is not ordered", op)
-		}
-	}
 	check(t, ctx, []whereCase{
-		ev("id of 4", &gen.EventWhereInput{ID: ptr(eventID(4))}, 4),
-		ow("idGT", &gen.OwnerWhereInput{IDGT: ptr(ownerID(2))}, 3),
-		ow("idGTE", &gen.OwnerWhereInput{IDGTE: ptr(ownerID(2))}, 2, 3),
-		ow("idLT", &gen.OwnerWhereInput{IDLT: ptr(ownerID(2))}, 1),
-		ow("idLTE", &gen.OwnerWhereInput{IDLTE: ptr(ownerID(2))}, 1, 2),
+		ev("idGT", &gen.EventWhereInput{IDGT: ptr(int64(3))}, 4, 5),
+		ow("idGT", &gen.OwnerWhereInput{IDGT: ptr(int64(2))}, 3),
+		ow("idGTE", &gen.OwnerWhereInput{IDGTE: ptr(int64(2))}, 2, 3),
+		ow("idLT", &gen.OwnerWhereInput{IDLT: ptr(int64(2))}, 1),
+		ow("idLTE", &gen.OwnerWhereInput{IDLTE: ptr(int64(2))}, 1, 2),
 		// A key with no annotation of its own.
-		ca("idGT", &gen.CategoryWhereInput{IDGT: ptr(catID(2))}, 3, 4),
-		ca("idLTE", &gen.CategoryWhereInput{IDLTE: ptr(catID(2))}, 1, 2),
-		ca("idIn", &gen.CategoryWhereInput{IDIn: []string{catID(1), catID(4)}}, 1, 4),
-		ca("idNotIn", &gen.CategoryWhereInput{IDNotIn: []string{catID(1), catID(4)}}, 2, 3),
+		ca("idGT", &gen.CategoryWhereInput{IDGT: ptr(int64(2))}, 3, 4),
+		ca("idLTE", &gen.CategoryWhereInput{IDLTE: ptr(int64(2))}, 1, 2),
+		ca("idIn", &gen.CategoryWhereInput{IDIn: []int64{1, 4}}, 1, 4),
+		ca("idNotIn", &gen.CategoryWhereInput{IDNotIn: []int64{1, 4}}, 2, 3),
+		// An edge's ID is its target's key.
+		po("authorID", &gen.PostWhereInput{AuthorIDIn: []int64{1, 2}}, 1, 2, 3),
+		ca("mentorID", &gen.CategoryWhereInput{MentorID: ptr(int64(2))}, 4),
 	})
 }
 
@@ -1450,7 +1400,7 @@ func TestWhereIDs(t *testing.T) {
 // JSON null for a nil slice) and one velox wrote.
 func TestOwnerTags(t *testing.T) {
 	ctx, db := open(t)
-	tags := func(id ids.UserID) (veloxgql.JSON, error) {
+	tags := func(id int64) (veloxgql.JSON, error) {
 		o, err := db.Query[gen.Owner]().Where(gen.Owners.ID.EQ(id)).One(ctx)
 		if err != nil {
 			return nil, err
@@ -1458,7 +1408,7 @@ func TestOwnerTags(t *testing.T) {
 		b, err := json.Marshal(o.Tags)
 		return veloxgql.JSON(b), err
 	}
-	for id, want := range map[ids.UserID]string{1: ` + "`" + `["x","y"]` + "`" + `, 2: ` + "`" + `[]` + "`" + `, 3: ` + "`" + `null` + "`" + `} {
+	for id, want := range map[int64]string{1: ` + "`" + `["x","y"]` + "`" + `, 2: ` + "`" + `[]` + "`" + `, 3: ` + "`" + `null` + "`" + `} {
 		got, err := tags(id)
 		if err != nil || string(got) != want {
 			t.Errorf("owner %d: TagsGQL %q, %v, want %s", id, got, err, want)
@@ -1484,7 +1434,7 @@ func TestCategoryTwin(t *testing.T) {
 	if err := db.Insert(c1).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	set, err := (&gen.CreateCategoryInput{Title: "c2", TwinID: ptr(catID(c1.ID))}).Setters()
+	set, err := (&gen.CreateCategoryInput{Title: "c2", TwinID: ptr(c1.ID)}).Setters()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1515,41 +1465,13 @@ func TestCategoryTwin(t *testing.T) {
 		}
 	}
 }
-
-// TestNodesUnderTheRowCap: Nodes reads one row for each ID it has, even
-// when that is more than the DB's WithMaxRows cap.
-func TestNodesUnderTheRowCap(t *testing.T) {
-	ctx, db := open(t, velox.WithMaxRows(2))
-	if _, err := db.Query[gen.Post]().Unbounded().All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
-		t.Fatalf("four posts under a cap of 2: %v, want ErrTooManyRows", err)
-	}
-	ids := []string{
-		veloxgql.EncodeID("Post", int64(1)), veloxgql.EncodeID("Post", int64(2)), veloxgql.EncodeID("Post", int64(3)),
-		veloxgql.EncodeID("Post", int64(2)), veloxgql.EncodeID("Post", int64(9)), userID(1),
-	}
-	nodes, err := gen.Nodes(ctx, ids)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, n := range nodes {
-		got = append(got, fmt.Sprintf("%v", n != nil))
-		if n != nil {
-			got[len(got)-1] = n.GlobalID()
-		}
-	}
-	want := []string{ids[0], ids[1], ids[2], ids[3], "false", ids[5]}
-	if !slices.Equal(got, want) {
-		t.Errorf("Nodes: %v, want %v", got, want)
-	}
-}
 `
 
 // TestWhereRun runs every predicate of the where inputs through their
 // generated Pred on SQLite (TestWhereOps), with not, and and or
 // (TestWhereLogic), has<Edge> and has<Edge>With (TestHasEdge), the depth and
-// width limits (TestWhereDepthAndWidth) and IDs of the wrong type
-// (TestWhereIDs); Nodes under a DB's row cap; and CreateCategory's twinID,
+// width limits (TestWhereDepthAndWidth) and the keys' ordered predicates
+// (TestWhereIDs); and CreateCategory's twinID,
 // which sets the key of a bidirectional self-edge on both rows
 // (TestCategoryTwin).
 func TestWhereRun(t *testing.T) {
@@ -1568,7 +1490,7 @@ func TestWhereRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestWhereOps", "TestHasEdge", "TestWhereLogic", "TestWhereDepthAndWidth", "TestWhereIDs", "TestNodesUnderTheRowCap", "TestOwnerTags", "TestCategoryTwin"} {
+	for _, name := range []string{"TestWhereOps", "TestHasEdge", "TestWhereLogic", "TestWhereDepthAndWidth", "TestWhereIDs", "TestOwnerTags", "TestCategoryTwin"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

@@ -83,25 +83,6 @@ func TestPageNode(t *testing.T) {
 	}
 }
 
-// TestNodeAs: a Node type whose key is a named type decodes an ID into the
-// base type and converts it.
-func TestNodeAs(t *testing.T) {
-	db, r := mutationDB(t)
-	ctx := tenantKey.With(veloxgql.NewExtension(db).NewContext(context.Background()), "ann")
-	seedPosts(ctx, t, db)
-	r.take()
-	kind := func(typ string) (gqlgraph.NodeKind, bool) {
-		return gqlgraph.NewNodeAs[int64, int64](gqlgraph.InputType[post]("Post", int(posts.ID.I), nil), func(k int64) int64 { return k }), typ == "Post"
-	}
-	n, err := gqlgraph.NodeByID(ctx, veloxgql.EncodeID("Post", int64(2)), kind)
-	if p, ok := n.(*post); err != nil || !ok || p.ID != 2 {
-		t.Errorf("Node(2) = %v, %v", n, err)
-	}
-	if _, err := gqlgraph.NodeByID(ctx, veloxgql.EncodeID("Post", "x"), kind); !errors.Is(err, veloxgql.ErrBadID) {
-		t.Errorf("a bad key: %v", err)
-	}
-}
-
 // TestInputWithoutTable: an input's setters checked against a Conn with no
 // Table fail, naming no field.
 func TestInputWithoutTable(t *testing.T) {

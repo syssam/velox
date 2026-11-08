@@ -233,7 +233,7 @@ func logAttrs(ctx context.Context, err error) []any {
 // alone would be internal errors. A client is not shown them, so they are
 // logged. The tree is not searched below an error whose wrapped errors are
 // known and never shown: one of veloxgql's coded errors (what it wraps, as
-// the join of ErrBadCursor and ErrWrongIDType, is there for errors.Is), and
+// ErrBadCursor, is there for errors.Is), and
 // velox's policy, validation, constraint and edge errors. An application's coded
 // error is searched, so one that wraps a driver's error is logged.
 func internalLeaves(err error, out []error) []error {

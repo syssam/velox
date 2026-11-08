@@ -43,8 +43,8 @@ func (g *graph) mutationsOf(o *object) error {
 			return fmt.Errorf("%s: graphql.Mutations lists %s, and graphql.Skip(%s) leaves out its input", where, c.kind, c.name)
 		}
 	}
-	if update && !o.node {
-		return fmt.Errorf("%s: graphql.Mutations lists update, which takes an ID, and %s: it is not a Node", where, notNode(e))
+	if update && !o.hasID {
+		return fmt.Errorf("%s: graphql.Mutations lists update, which takes an ID, and %s: it has no ID", where, noID(e))
 	}
 
 	if !create {
@@ -54,7 +54,7 @@ func (g *graph) mutationsOf(o *object) error {
 			}
 		}
 	}
-	if create && o.node {
+	if create && o.hasID {
 		pk := e.Fields[e.PrimaryKey[0]]
 		if !pk.AutoID && !pk.HasDefault {
 			return fmt.Errorf("%s: graphql.Mutations lists create, and its key %s is supplied by the caller (no auto ID, no default): velox-graphql writes no create input for such a schema, as the key is never an input", where, pk.Name)
@@ -108,7 +108,7 @@ func (g *graph) mutationsOf(o *object) error {
 //     a unique edge's ID is required when the edge is;
 //   - on update, every field is optional, and a nullable field, whose column
 //     holds NULL, can be cleared;
-//   - an edge to a type that is not a Node has no ID and is in neither;
+//   - an edge to a type that has no ID is in neither;
 //   - an edge's inputs follow its foreign key's flags, on whichever entity
 //     holds it (see edgeInputs);
 //   - a field's inputs carry its directives, and an edge's its directives,
@@ -158,7 +158,7 @@ func (g *graph) fieldInputs(o *object, fs *inputFields, i int, create bool, skip
 		return nil, fmt.Errorf("schema %s, field %s: graphql.CreateDefault on a field the create input leaves out", e.Name, f.Name)
 	}
 	switch {
-	case o.node && i == e.PrimaryKey[0], f.Implicit != "", o.fks[f.Name], a.Skip&skip != 0, f.Version, !create && f.Immutable:
+	case o.hasID && i == e.PrimaryKey[0], f.Implicit != "", o.fks[f.Name], a.Skip&skip != 0, f.Version, !create && f.Immutable:
 		return nil, nil
 	}
 	where := "schema " + e.Name + ", field " + f.Name
@@ -269,7 +269,7 @@ type edgeInput struct {
 //     O2O nothing; create keeps its inputs, which only link;
 //   - an immutable key on o's row is set on create only;
 //   - an M2M edge writes join rows: <edge>IDs, add/remove/clear;
-//   - an edge to a type that is not a Node has no ID and no input. When that
+//   - an edge to a type that has no ID has no input. When that
 //     edge is required and holds its key on o's row, the create input could never
 //     succeed: an error.
 //
@@ -279,7 +279,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	ed := o.ent.Edges[i]
 	t := g.byName[ed.Target]
 	where := "schema " + o.ent.Name + ", edge " + ed.Name
-	if t == nil || !t.node {
+	if t == nil || !t.hasID {
 		return nil, unsettableEdge(o, ed, t, create, where)
 	}
 	name, err := o.edgeName(i)
@@ -297,9 +297,14 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	one, many, goOne := edgeInputNames(name, ed)
 	var out []edgeInput
 	add := func(name, typ, goName string, kind InputKind) {
+		goType, goPkg := t.keyTyp, t.keyPkg
+		if kind == InputClearEdge {
+			goType, goPkg = "", ""
+		}
 		out = append(out, edgeInput{
 			name: name, typ: typ, desc: edgeInputDesc(kind, ed, t), dirs: inputDirs(dirs, typ), where: where,
-			goField: InputField{Name: name, GoName: goName, Type: typ, Kind: kind, Field: -1, Edge: i, Target: t.name, Required: strings.HasSuffix(typ, "!")},
+			goField: InputField{Name: name, GoName: goName, Type: typ, Kind: kind, Field: -1, Edge: i, Target: t.name, Required: strings.HasSuffix(typ, "!"),
+				GoType: goType, GoPkg: goPkg},
 		})
 	}
 	edgeID := func(typ string) { add(name+"ID", typ, goEdge+"ID", InputEdgeID) }
@@ -363,7 +368,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 }
 
 // unsettableEdge returns the error of a required edge ed of o whose key is
-// on o's row and whose target t is skipped (nil) or not a Node, on create.
+// on o's row and whose target t is skipped (nil) or has no ID, on create.
 // It returns nil for any other such edge, which has no input.
 func unsettableEdge(o *object, ed *plugin.Edge, t *object, create bool, where string) error {
 	// A required key on o's own row that the create input could never
@@ -373,7 +378,7 @@ func unsettableEdge(o *object, ed *plugin.Edge, t *object, create bool, where st
 	}
 	why := "is skipped"
 	if t != nil {
-		why = "is not a Node"
+		why = "has no ID"
 	}
 	return fmt.Errorf("%s: a required edge whose target %s %s: Create%sInput could never set it; skip the edge's create input with graphql.Skip(graphql.SkipMutationCreateInput), and set its key on the x the resolver gives Create%[4]sInput.Create, or in a hook", where, ed.Target, why, o.name)
 }

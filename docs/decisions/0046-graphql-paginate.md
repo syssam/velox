@@ -1,7 +1,8 @@
 # 46. A connection is Paginate of a query; gqlimpl.Type describes a type
 
 Status: accepted, 2026-11-07. Revises 0035's generated read surface. 0047
-revises its edge methods.
+revises its edge methods. Its node_gql.go lookup is gone since
+[0061](0061-graphql-plain-ids.md).
 
 ## Context
 

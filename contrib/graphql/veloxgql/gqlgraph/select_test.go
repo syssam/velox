@@ -19,7 +19,7 @@ func TestSelectedConnection(t *testing.T) {
 	ctx := operation(t, db, `{ owners {
 		totalCount
 		edges { cursor node { name ...F } }
-		more: edges { node { id __typename ... on Node { id } } }
+		more: edges { node { id __typename ... on Keyed { id } } }
 	} }
 	fragment F on Owner { age }`)
 	ctx = field(t, ctx, "owners")
@@ -33,24 +33,18 @@ func TestSelectedConnection(t *testing.T) {
 	}
 }
 
-// TestSelectedObject: a field of the type itself, or of Node, gives its own
-// selection, with the fragments on the type or on Node.
+// TestSelectedObject: a field of the type itself gives its own selection,
+// with the fragments on the type.
 func TestSelectedObject(t *testing.T) {
 	db, _, _ := edgeDB(t)
 	ctx := operation(t, db, `{
 		owner { name ... on Owner { age } __typename tags { name } children { totalCount } }
-		node(id: "1") { id ... on Owner { name } ... on Child { title } ... on Node { id } }
-		nodes(ids: ["1"]) { ... on Child { title } }
 	}`)
 	for _, c := range []struct {
 		field, typ string
 		want       []string
 	}{
 		{"owner", "Owner", []string{"name", "age", "tags", "children"}},
-		{"node", "Owner", []string{"id", "name"}},
-		{"node", "Child", []string{"id", "title"}},
-		{"nodes", "Child", []string{"title"}},
-		{"nodes", "Owner", []string{}},
 	} {
 		got, ok := gqlgraph.Selected(field(t, ctx, c.field), c.typ)
 		if !ok || !reflect.DeepEqual(got, c.want) {
@@ -103,7 +97,7 @@ func TestSelectedAppFields(t *testing.T) {
 
 // TestSelectedInterfaces: fragments on every interface and union of the
 // type count, read from the server's schema; without the schema, a
-// fragment on an interface or a union other than Node gives ok false.
+// fragment on an interface or a union gives ok false.
 func TestSelectedInterfaces(t *testing.T) {
 	db, _, _ := edgeDB(t)
 	for _, c := range []struct {
@@ -114,8 +108,8 @@ func TestSelectedInterfaces(t *testing.T) {
 		{`{ owner { ... on Named { name } } }`, "owner", []string{"name"}, nil},
 		{`{ owners { edges { node { ... on Named { name } } } } }`, "owners", []string{"name"}, nil},
 		{`{ owner { ...T } } fragment T on Thing { ... on Owner { age } }`, "owner", []string{"age"}, nil},
-		{`{ owner { id ... on Node { id } } }`, "owner", []string{"id"}, []string{"id"}},
-		{`{ node(id: "1") { ... on Child { title } ... on Owner { name } } }`, "node", []string{"name"}, []string{"name"}},
+		{`{ owner { id ... on Keyed { id } } }`, "owner", []string{"id"}, nil},
+		{`{ owner { ... on Owner { name } } }`, "owner", []string{"name"}, []string{"name"}},
 	} {
 		for _, s := range []struct {
 			name   string

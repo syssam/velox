@@ -164,8 +164,8 @@ func TestCursorCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = gqlgraph.CheckCursor(d, "User", []gqlgraph.CursorOrder{name})
-	if !errors.Is(err, veloxgql.ErrBadCursor) || !errors.Is(err, veloxgql.ErrWrongIDType) {
-		t.Errorf("a Post cursor on User: %v, want ErrBadCursor and ErrWrongIDType", err)
+	if !errors.Is(err, veloxgql.ErrBadCursor) {
+		t.Errorf("a Post cursor on User: %v, want ErrBadCursor", err)
 	}
 	if err != nil && (!strings.Contains(err.Error(), "User") || strings.Contains(err.Error(), "Post")) {
 		t.Errorf("%q does not name only the expected type", err)
@@ -183,8 +183,8 @@ func TestCursorCheck(t *testing.T) {
 			cur.Terms = []veloxgql.CursorTerm{c.Terms[0], {Field: "AGE", Direction: veloxgql.OrderDirectionAsc, Value: 1}}
 		}
 		err := gqlgraph.CheckCursor(cur, "User", order)
-		if !errors.Is(err, veloxgql.ErrBadCursor) || errors.Is(err, veloxgql.ErrWrongIDType) {
-			t.Errorf("%s: %v, want ErrBadCursor alone", label, err)
+		if !errors.Is(err, veloxgql.ErrBadCursor) {
+			t.Errorf("%s: %v, want ErrBadCursor", label, err)
 		}
 		if err != nil && (strings.Contains(err.Error(), "NAME") || strings.Contains(err.Error(), "EMAIL")) {
 			t.Errorf("%s: %q echoes the fields", label, err)

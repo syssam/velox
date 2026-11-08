@@ -1,7 +1,6 @@
 package gogen
 
 import (
-	"cmp"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -97,8 +96,9 @@ func fkOf(e *plugin.Entity, ed *plugin.Edge, on *plugin.Entity) (*plugin.Field, 
 }
 
 // inputType is the Go type of the input field fi: its GoType for a value,
-// a string for an ID, a []string for a list of IDs and a bool for a clear;
-// a pointer when it is not Required, but for a list or a bool.
+// the key's Go type of the edge's target for an ID, a slice of it for a list
+// of IDs and a bool for a clear; a pointer when it is not Required, but for
+// a list or a bool.
 func (r *renderer) inputType(f *file, t *sdl.Type, fi sdl.InputField) (string, error) {
 	var typ string
 	switch fi.Kind {
@@ -108,10 +108,15 @@ func (r *renderer) inputType(f *file, t *sdl.Type, fi sdl.InputField) (string, e
 		if typ, err = r.qualify(f, t.Entity, fd, fi.GoType, fi.GoPkg); err != nil {
 			return "", err
 		}
-	case sdl.InputEdgeID:
-		typ = "string"
-	case sdl.InputEdgeIDs, sdl.InputAddIDs, sdl.InputRemoveIDs:
-		return "[]string", nil
+	case sdl.InputEdgeID, sdl.InputEdgeIDs, sdl.InputAddIDs, sdl.InputRemoveIDs:
+		k, err := r.idKeyOf(f, t.Entity, r.types[fi.Target])
+		if err != nil {
+			return "", err
+		}
+		if fi.Kind != sdl.InputEdgeID {
+			return "[]" + k.typ, nil
+		}
+		typ = k.typ
 	case sdl.InputClear, sdl.InputClearEdge:
 		return "bool", nil
 	default:
@@ -123,45 +128,24 @@ func (r *renderer) inputType(f *file, t *sdl.Type, fi sdl.InputField) (string, e
 	return typ, nil
 }
 
-// idKey is how the generated code decodes the IDs of the type tt: the Go
-// type of the key (the key field's own), and the decode call's type
-// arguments and its conversion, as gqlgraph.DecodeID's or DecodeIDAs's and
-// gqlgraph.NewNode's or NewNodeAs's take them.
+// idKey is the Go type of the IDs of a type: its key field's own, which
+// gqlgen binds the IDs to.
 type idKey struct {
-	typ  string // the key's Go type, as the file names it
-	args string // the decode's type arguments: "[int64]", or "As[int64]"
-	conv string // ", gqlgraph.AsInt[idspkg.UserID, int64]" for an As decode; else ""
-	fd   *plugin.Field
+	typ string // the key's Go type, as the file names it
+	fd  *plugin.Field
 }
 
-// idKeyOf is the idKey of the Node type tt, the target of an edge of e.
+// idKeyOf is the idKey of tt, a type with an ID, the target of an edge of e.
 func (r *renderer) idKeyOf(f *file, e *plugin.Entity, tt *sdl.Type) (idKey, error) {
-	if tt == nil || !tt.Node {
-		return idKey{}, fmt.Errorf("schema %s: an input takes IDs of a type that is not a Node, which is a bug", e.Name)
+	if tt == nil || !tt.HasID {
+		return idKey{}, fmt.Errorf("schema %s: an input takes IDs of a type that has none, which is a bug", e.Name)
 	}
-	tgt := tt.Entity
-	tk := tgt.Fields[tgt.PrimaryKey[0]]
-	elem := cmp.Or(tk.ElemType, tt.Key)
-	if elem == tt.Key {
-		return idKey{typ: tt.Key, args: "[" + tt.Key + "]", fd: tk}, nil
-	}
-	if err := r.converts(tgt, tk, tt.Key); err != nil {
-		return idKey{}, err
-	}
-	typ, err := r.qualify(f, tgt, tk, elem, tk.PkgPath)
+	tk := tt.Entity.Fields[tt.Entity.PrimaryKey[0]]
+	typ, err := r.qualify(f, tt.Entity, tk, tt.KeyType, tt.KeyPkg)
 	if err != nil {
 		return idKey{}, err
 	}
-	var as string
-	switch tt.Key {
-	case "string":
-		as = "AsString"
-	case "[16]byte":
-		as = "AsUUID"
-	default:
-		as = "AsInt"
-	}
-	return idKey{typ: typ, args: "As[" + tt.Key + "]", conv: fmt.Sprintf(", %s.%s[%s, %s]", f.gqlgraph(), as, typ, tt.Key), fd: tk}, nil
+	return idKey{typ: typ, fd: tk}, nil
 }
 
 // sameGoType reports whether the fields a and b hold the same Go type; a

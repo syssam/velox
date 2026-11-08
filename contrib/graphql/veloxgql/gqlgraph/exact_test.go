@@ -216,7 +216,7 @@ func (*guarded) VeloxMeta() *velox.Meta[guarded] {
 func TestFKScoped(t *testing.T) {
 	db, _ := peopleDB(t)
 	ctx := context.Background()
-	id := veloxgql.EncodeID("Owner", int64(1))
+	id := int64(1)
 	yes := true
 	for _, c := range []struct {
 		name   string
@@ -234,13 +234,13 @@ func TestFKScoped(t *testing.T) {
 			col  string // the error of the column's predicate alone; "" for none
 		}{
 			{"EQ", func(f *gqlgraph.Filter) {
-				gqlgraph.EdgeIDField[int64](f, "ownerID", 0, 0, target, gqlgraph.Ops[string]{EQ: &id})
+				gqlgraph.EdgeIDField(f, "ownerID", 0, 0, target, gqlgraph.Ops[int64]{EQ: &id})
 			}, ""},
 			{"In", func(f *gqlgraph.Filter) {
-				gqlgraph.EdgeIDField[int64](f, "ownerID", 0, 0, target, gqlgraph.Ops[string]{In: []string{id}})
+				gqlgraph.EdgeIDField(f, "ownerID", 0, 0, target, gqlgraph.Ops[int64]{In: []int64{id}})
 			}, ""},
 			{"NotNil", func(f *gqlgraph.Filter) {
-				gqlgraph.EdgeIDField[int64](f, "ownerID", 0, 0, target, gqlgraph.Ops[string]{NotNil: &yes})
+				gqlgraph.EdgeIDField(f, "ownerID", 0, 0, target, gqlgraph.Ops[int64]{NotNil: &yes})
 			}, "not nullable"},
 		} {
 			f := gqlgraph.NewFilter(ctx, gqlgraph.TableType[person]("Person"))

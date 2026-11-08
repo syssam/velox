@@ -247,10 +247,10 @@ func Skip(modes ...SkipMode) Annotation {
 	return Annotation{Skip: m}
 }
 
-// Type names the entity's GraphQL type. An ID and a cursor hold the type's
-// name, so renaming the type changes every ID and cursor that clients hold.
-// veloxgql.DecodeID refuses an ID of the old name with
-// veloxgql.ErrWrongIDType.
+// Type names the entity's GraphQL type. A cursor holds the type's name, so
+// renaming the type changes every cursor that clients hold, and a
+// connection refuses a cursor of the old name with veloxgql.ErrBadCursor.
+// An ID is the key alone, and does not change.
 func Type(name string) Annotation { return Annotation{Type: name} }
 
 // QueryField adds a root Query field, with this name, that returns the

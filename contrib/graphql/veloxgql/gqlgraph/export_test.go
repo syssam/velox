@@ -110,11 +110,6 @@ func RowOf(x any) any { return rowOf(x) }
 // NodesOf exports nodesOf to the tests.
 func NodesOf(c *Type, ps []any) any { return nodesOf(c, ps) }
 
-// NewNodeWith is NewNode with the decoder of IDs decode.
-func NewNodeWith(c *Type, decode func(id string) (any, error)) NodeKind {
-	return newNode(c, decode)
-}
-
 // OwnerType is the Type of E's entity alone, as an edge's owner, whose
 // relation rel is the edge field field ("Owner.children"): its Name is the
 // part before the dot.

@@ -105,7 +105,7 @@ func TestAnnotationMisuse(t *testing.T) {
 	})
 
 	t.Run("a required edge create cannot set", func(t *testing.T) {
-		// Its target is skipped, or is not a Node: createPost could never
+		// Its target is skipped, or has no ID: createPost could never
 		// give the key.
 		for _, target := range []*plugin.Entity{
 			func() *plugin.Entity { u := entity("User"); u.Annotations = ann(t, graphql.Skip()); return u }(),
@@ -250,7 +250,7 @@ func TestNameCollisions(t *testing.T) {
 	}
 	// A type and an enum take their own Go names.
 	_, sdl := load(t, withEnum(model(handled(entity("User", role()), "Users"), join)))
-	if !strings.Contains(sdl, "enum UserRole {") || !strings.Contains(sdl, "type User implements Node {") {
+	if !strings.Contains(sdl, "enum UserRole {") || !strings.Contains(sdl, "type User {") {
 		t.Errorf("own Go names:\n%s", sdl)
 	}
 
@@ -309,8 +309,8 @@ func TestOrderFieldUnderDirective(t *testing.T) {
 }
 
 // An application directive on a key field would guard nothing: a foreign
-// key's edge stands for it, and a Node's id is readable through node, nodes
-// and the cursors. GraphQL's own directives are allowed on both.
+// key's edge stands for it, and a type's id is readable through the cursors
+// and every edge to the type. GraphQL's own directives are allowed on both.
 func TestDirectiveOnKey(t *testing.T) {
 	admin := graphql.Directives(graphql.Directive{Name: "admin"})
 	dep := graphql.Directives(graphql.Directive{Name: "deprecated"})
@@ -336,7 +336,7 @@ func TestDirectiveOnKey(t *testing.T) {
 		return model(u)
 	}
 	_, err = Render(user(admin))
-	want = "schema User, field id: graphql.Directives with the directive @admin on the primary key: the id is readable through node, nodes and the cursors, so the directive would guard nothing"
+	want = "schema User, field id: graphql.Directives with the directive @admin on the primary key: the id is readable through the cursors and every edge to the type, so the directive would guard nothing"
 	if err == nil || err.Error() != want {
 		t.Errorf("primary key:\n got  %v\nwant %s", err, want)
 	}

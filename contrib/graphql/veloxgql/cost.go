@@ -36,7 +36,6 @@ const stringUnit = 128
 //     multiply by its first or last, or by l.MaxPage when neither is given or
 //     the field has no such arguments, the safer count; its totalCount and
 //     pageInfo are read once;
-//   - the root field nodes multiplies by the number of its ids;
 //   - any other field of a list of objects multiplies by l.MaxList, or by the
 //     edge's graphql.MaxList when that is lower;
 //   - every branch of a fragment counts, but a selection that @skip(if: true)
@@ -55,8 +54,7 @@ const stringUnit = 128
 // the rows of a batch share one statement however many parents they have:
 //   - a field that runs a statement adds 100: a root field, a connection, its
 //     totalCount (a COUNT of its own) and any other field of an object or a list
-//     of objects. first: 0 still counts: a COUNT or a filter still runs. The root
-//     field nodes adds 100 for each type among its IDs;
+//     of objects. first: 0 still counts: a COUNT or a filter still runs;
 //   - an input object argument (a where, an orderBy, a mutation's input) adds
 //     its size at each use: one for each value in it, nested inputs and lists
 //     included, read from the variables; a string one more for each 128 of its
@@ -265,34 +263,7 @@ func (c *coster) field(f *ast.Field, parent *ast.Definition, page int64) cost {
 	if parent != nil && parent == c.schema.Mutation {
 		n.statements = add(n.statements, add(c.writes(f, def), c.deletes(f)))
 	}
-	if parent != nil && parent == c.schema.Query && f.Name == "nodes" {
-		n.statements = add(n.statements, c.nodesByType(f))
-	}
 	return n
-}
-
-// nodesByType is what f, the root field nodes, sends beyond its one statement: one
-// for each other type among its IDs. An ID that is not well formed fails it, before
-// any statement.
-func (c *coster) nodesByType(f *ast.Field) int64 {
-	a := f.Arguments.ForName("ids")
-	if a == nil || a.Value == nil {
-		return 0
-	}
-	v, err := a.Value.Value(c.vars)
-	ids, ok := v.([]any)
-	if err != nil || !ok {
-		return 0
-	}
-	types := map[string]bool{}
-	for _, id := range ids {
-		if s, ok := id.(string); ok {
-			if t, err := IDType(s); err == nil {
-				types[t] = true
-			}
-		}
-	}
-	return mul(max(int64(len(types))-1, 0), statementCost)
 }
 
 // deletes is what f, a mutation's field, sends beyond its one statement when it is
@@ -340,14 +311,6 @@ func (c *coster) multiplier(f *ast.Field, def *ast.FieldDefinition, parent, chil
 		return 1 // its edges multiply by the page, and its totalCount does not
 	case f.Name == "edges" && isConnection(parent):
 		return page
-	case parent == c.schema.Query && f.Name == "nodes" && def.Arguments.ForName("ids") != nil:
-		if a := f.Arguments.ForName("ids"); a != nil {
-			if v, err := a.Value.Value(c.vars); err == nil && v != nil {
-				if rv := reflect.ValueOf(v); rv.Kind() == reflect.Slice {
-					return int64(rv.Len())
-				}
-			}
-		}
 	}
 	n := int64(1)
 	for t := def.Type; t != nil && isObjectKind(child); t = t.Elem {
