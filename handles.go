@@ -29,6 +29,15 @@ func (c Col[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
+// Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
+func (c Col[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] { return selectOf[E, V](c.I, ps) }
+
+// InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
+func (c Col[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+
+// NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
+func (c Col[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return Not(inSelect[E](c.I, s)) }
+
 // Asc orders by the column, ascending.
 func (c Col[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{Column: int(c.I)}} }
 
@@ -68,6 +77,19 @@ func (c OrderedCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c OrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
+}
+
+// Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
+func (c OrderedCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] {
+	return selectOf[E, V](c.I, ps)
+}
+
+// InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
+func (c OrderedCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+
+// NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
+func (c OrderedCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
+	return Not(inSelect[E](c.I, s))
 }
 
 // Asc orders by the column, ascending.
@@ -134,6 +156,17 @@ func (c NumberCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c NumberCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
+}
+
+// Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
+func (c NumberCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] { return selectOf[E, V](c.I, ps) }
+
+// InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
+func (c NumberCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+
+// NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
+func (c NumberCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
+	return Not(inSelect[E](c.I, s))
 }
 
 // Asc orders by the column, ascending.
@@ -210,6 +243,17 @@ func (c StringCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c StringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
+}
+
+// Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
+func (c StringCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] { return selectOf[E, V](c.I, ps) }
+
+// InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
+func (c StringCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+
+// NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
+func (c StringCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
+	return Not(inSelect[E](c.I, s))
 }
 
 // Asc orders by the column, ascending.
@@ -303,6 +347,15 @@ func (c NullCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
+// Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
+func (c NullCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] { return selectOf[E, V](c.I, ps) }
+
+// InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
+func (c NullCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+
+// NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
+func (c NullCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return Not(inSelect[E](c.I, s)) }
+
 // Asc orders by the column, ascending.
 func (c NullCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{Column: int(c.I)}} }
 
@@ -357,6 +410,19 @@ func (c NullOrderedCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c NullOrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
+}
+
+// Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
+func (c NullOrderedCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] {
+	return selectOf[E, V](c.I, ps)
+}
+
+// InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
+func (c NullOrderedCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+
+// NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
+func (c NullOrderedCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
+	return Not(inSelect[E](c.I, s))
 }
 
 // Asc orders by the column, ascending.
@@ -438,6 +504,19 @@ func (c NullNumberCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c NullNumberCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
+}
+
+// Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
+func (c NullNumberCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] {
+	return selectOf[E, V](c.I, ps)
+}
+
+// InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
+func (c NullNumberCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+
+// NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
+func (c NullNumberCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
+	return Not(inSelect[E](c.I, s))
 }
 
 // Asc orders by the column, ascending.
@@ -529,6 +608,19 @@ func (c NullStringCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c NullStringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
+}
+
+// Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
+func (c NullStringCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] {
+	return selectOf[E, V](c.I, ps)
+}
+
+// InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
+func (c NullStringCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+
+// NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
+func (c NullStringCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
+	return Not(inSelect[E](c.I, s))
 }
 
 // Asc orders by the column, ascending.

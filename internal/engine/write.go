@@ -65,7 +65,9 @@ func swapCols(n Node) Node {
 		m := n
 		m.Kids = kids
 		return m
-	case OpExists, OpThrough, OpAllow, OpInvalid:
+	case OpExists:
+		return swapExists(n)
+	case OpThrough, OpAllow, OpInvalid:
 		return n
 	}
 	m := n
@@ -76,6 +78,36 @@ func swapCols(n Node) Node {
 		m.Col = 0
 	}
 	return m
+}
+
+// swapExists is swapCols of an EXISTS. A relation's is kept as it is. A
+// ColRef's (col -1) correlates the join entity's own column with the
+// target's, so that column is swapped as swapCols swaps a leaf's.
+func swapExists(n Node) Node {
+	if n.Col >= 0 {
+		return n
+	}
+	m := n
+	switch r := n.V.(type) {
+	case ColRef:
+		r.OwnerCol = swapped(r.OwnerCol)
+		m.V = r
+	case Link:
+		r.OwnerCol = int(swapped(int32(r.OwnerCol)))
+		m.V = r
+	}
+	return m
+}
+
+// swapped exchanges column 0 and column 1, and keeps any other.
+func swapped(c int32) int32 {
+	switch c {
+	case 0:
+		return 1
+	case 1:
+		return 0
+	}
+	return c
 }
 
 // checkAssignedOnce refuses a column assigned twice: PostgreSQL rejects it

@@ -60,8 +60,8 @@ func checkTags(n Node, in *EntityInfo) error {
 	case OpAllow, opZero:
 		return nil
 	case OpExists:
-		if r, ok := n.V.(RelRef); ok {
-			if owner, err := r.Owner(); err == nil && owner != in {
+		if r, ok := n.V.(linkRef); ok {
+			if owner, err := r.owner(); err == nil && owner != in {
 				return fmt.Errorf("velox: %s: a condition on a relation of %s", in.Name, owner.Name)
 			}
 		}

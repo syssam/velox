@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A column handle's `Select(ps...)` makes a `velox.Subquery[V]`, and another
+  handle's `InSelect(s)` and `NotInSelect(s)` test a column of the same type
+  against it: `I.ID.InSelect(It.InvoiceID.Select(It.Qty.GTE(100)))`. The
+  subquery's entity gets its own Read policy and interceptors. `NotInSelect`
+  is `NOT EXISTS`, so a NULL in the subquery does not empty it (ADR 0057).
 - `field.Int64("version").Version()` makes a field an entity's optimistic-locking
   version. Every update adds 1 to it, an upsert's update branch included. `Save`
   writes only where the row still holds the version `*x` read, and fails with

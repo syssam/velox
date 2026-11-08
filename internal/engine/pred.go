@@ -28,7 +28,7 @@ const (
 	OpOr
 	OpNot
 	OpAllow   // matches every row and renders to nothing in a policy
-	OpExists  // col is the relation index, v its RelRef, or its link once resolved, kids the target's conditions
+	OpExists  // col is the relation index (-1 for a ColRef), v its RelRef or ColRef, or its link once resolved, kids the target's conditions
 	OpInvalid // v is the error
 	OpThrough // col is the target's column, v the join *EntityInfo, w the join's column equal to it, kids the join's conditions
 	OpJoined  // col is the relation index, kids the conditions on the target of the join Query.Join made for it
@@ -121,7 +121,7 @@ func PredErr(n Node) error {
 		return n.V.(error)
 	}
 	if n.Op == OpExists {
-		// An unresolved RelRef is valid: the statement resolves it, and
+		// An unresolved RelRef or ColRef is valid: the statement resolves it, and
 		// fails with the relation's error. Its kids were checked when
 		// HasWith made it.
 		return nil
@@ -135,9 +135,9 @@ func PredErr(n Node) error {
 }
 
 // existsLink returns the link of the OpExists node n: its own once resolved,
-// else the RelRef's, which resolves the relation.
+// else the RelRef's or ColRef's, which resolves it.
 func existsLink(n Node) (Link, error) {
-	if r, ok := n.V.(RelRef); ok {
+	if r, ok := n.V.(linkRef); ok {
 		return r.Link()
 	}
 	return n.V.(Link), nil
@@ -172,7 +172,7 @@ func ResolveNode(n Node) (Node, bool, error) {
 		kids[i] = nk
 	}
 	changed := kids != nil
-	if r, ok := n.V.(RelRef); ok && n.Op == OpExists {
+	if r, ok := n.V.(linkRef); ok && n.Op == OpExists {
 		l, err := r.Link()
 		if err != nil {
 			return n, false, err
@@ -188,7 +188,7 @@ func ResolveNode(n Node) (Node, bool, error) {
 // ResolveErr returns the error resolving n would fail with, without
 // allocating.
 func ResolveErr(n Node) error {
-	if r, ok := n.V.(RelRef); ok && n.Op == OpExists {
+	if r, ok := n.V.(linkRef); ok && n.Op == OpExists {
 		if _, err := r.Link(); err != nil {
 			return err
 		}

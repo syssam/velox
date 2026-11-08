@@ -113,6 +113,26 @@ func ExampleQuery_SQL() {
 	// [100 false 7 10] <nil>
 }
 
+// Select makes a subquery of one column, and InSelect tests another column
+// of the same type against it. The subquery's entity gets its own Read
+// policy and interceptors, as a query on it would.
+func ExampleNumberCol_InSelect() {
+	db := velox.Open(velox.Postgres, nil)
+	ctx := testmodel.Org.With(context.Background(), 7)
+	I, It := testmodel.Invoices, testmodel.Items
+	bigOrders := It.InvoiceID.Select(It.Qty.GTE(100))
+	text, args, err := db.Query[testmodel.Invoice]().
+		Columns(I.ID).
+		Where(I.ID.InSelect(bigOrders)).
+		Limit(10).
+		SQL(ctx)
+	fmt.Println(text)
+	fmt.Println(args, err)
+	// Output:
+	// SELECT "id" FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" >= $1) AND "org_id" = $2 LIMIT $3
+	// [100 7 10] <nil>
+}
+
 // With loads a relation for every row the query returns, in one more query.
 func ExampleQuery_With() {
 	db := exampleDB()

@@ -60,6 +60,11 @@ func TestHas(t *testing.T) {
 		wantIDs(t, ids(I.Items.HasWith(It.Qty.GT(3))), []int64{2})
 		wantIDs(t, ids(velox.Not(I.Items.Has())), []int64{3, 4, 5})
 		wantIDs(t, ids(I.Items.HasWith(It.Invoice.HasWith(I.Number.EQ("INV-2")))), []int64{2})
+		// A column's subquery: the same rows as the relation's EXISTS, and
+		// one on a column that is not a key.
+		wantIDs(t, ids(I.ID.InSelect(It.InvoiceID.Select(It.Qty.GT(3)))), []int64{2})
+		wantIDs(t, ids(I.ID.NotInSelect(It.InvoiceID.Select())), []int64{3, 4, 5})
+		wantIDs(t, ids(I.ID.InSelect(It.Qty.Select())), []int64{2, 5}) // qtys 2, 0, 5
 		// Invoices 3 and 5 already have no note ("") and updated_at t0, so they
 		// match without changing: 3 rows needs clientFoundRows on MySQL.
 		n, err := tg.db.Update[testmodel.Invoice]().Set(I.Note.Set(""), I.UpdatedAt.Set(t0)).Where(velox.Not(I.Items.Has())).Exec(ctx)

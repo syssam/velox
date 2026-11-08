@@ -215,9 +215,10 @@ func appendInts(k []byte, xs []int) []byte {
 	return k
 }
 
-// nodeKey encodes a condition. For OpExists, op, col (the relation index) and
-// the kids are enough: the outer entity keys the map, and the relation index
-// then fixes the target. An OpThrough names its join entity, which the outer
+// nodeKey encodes a condition. For a relation's OpExists, op, col (the
+// relation index) and the kids are enough: the outer entity keys the map, and
+// the relation index then fixes the target. A ColRef's (col -1) keys its
+// target and both columns. An OpThrough names its join entity, which the outer
 // entity does not fix: two relations to one target may go through different
 // joins. The entity's Name is its Go type without the package path, so its
 // schema and table are keyed too.
@@ -229,6 +230,21 @@ func nodeKey(k []byte, n Node) []byte {
 		k = append(k, bit(isNilArg(n.V)))
 	case OpIn, OpNotIn:
 		k = binary.AppendUvarint(k, uint64(len(n.V.([]any))))
+	case OpExists:
+		if n.Col < 0 {
+			// A ColRef's EXISTS: the outer entity does not fix its target
+			// or columns, so they are keyed. It is resolved before
+			// rendering, so the link has no error here.
+			l, _ := existsLink(n)
+			if t := l.Target; t != nil {
+				for _, s := range [...]string{t.Name, t.Schema, t.Table} {
+					k = binary.AppendUvarint(k, uint64(len(s)))
+					k = append(k, s...)
+				}
+			}
+			k = binary.AppendUvarint(k, uint64(l.OwnerCol))
+			k = binary.AppendUvarint(k, uint64(l.TargetCol))
+		}
 	case OpThrough:
 		j := n.V.(*EntityInfo)
 		for _, s := range [...]string{j.Name, j.Schema, j.Table} {

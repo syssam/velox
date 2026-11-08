@@ -248,6 +248,47 @@ func (r RelRef) Link() (Link, error) {
 	return in.rels[r.I].Resolve(in, r.Target)
 }
 
+// ColRef is the correlation of a subquery made by a column handle's Select
+// and InSelect: the owner's column OwnerCol equals the target's column
+// TargetCol. Like RelRef it reads no metadata until the statement that holds
+// it runs. Its EXISTS node has Col -1, so render's cache keys tell it from a
+// relation's.
+type ColRef struct {
+	Owner, Target       func() (*EntityInfo, error)
+	OwnerCol, TargetCol int32
+}
+
+// Link resolves the correlation to a link with no join.
+func (r ColRef) Link() (Link, error) {
+	owner, err := r.Owner()
+	if err != nil {
+		return Link{}, err
+	}
+	target, err := r.Target()
+	if err != nil {
+		return Link{}, err
+	}
+	if r.OwnerCol < 0 || int(r.OwnerCol) >= len(owner.Columns) {
+		return Link{}, fmt.Errorf("velox: %s: has no column %d; run go tool velox-gen", owner.Name, r.OwnerCol)
+	}
+	if r.TargetCol < 0 || int(r.TargetCol) >= len(target.Columns) {
+		return Link{}, fmt.Errorf("velox: %s: has no column %d; run go tool velox-gen", target.Name, r.TargetCol)
+	}
+	return Link{Target: target, OwnerCol: int(r.OwnerCol), TargetCol: int(r.TargetCol)}, nil
+}
+
+// owner is the entity whose column the correlation names.
+func (r ColRef) owner() (*EntityInfo, error) { return r.Owner() }
+
+// owner is the entity whose relation r names.
+func (r RelRef) owner() (*EntityInfo, error) { return r.Owner() }
+
+// linkRef is an EXISTS's correlation not yet resolved: a RelRef or a ColRef.
+type linkRef interface {
+	Link() (Link, error)
+	owner() (*EntityInfo, error)
+}
+
 // OfNode is Rel.Of's condition for the relation ref names, with its Where
 // conditions where and their error err, for the owners at ps.
 func OfNode(ref RelRef, where []Predicate, err error, ps []unsafe.Pointer) Node {

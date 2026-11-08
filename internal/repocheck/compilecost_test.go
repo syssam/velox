@@ -317,7 +317,11 @@ var genericObjects = []struct {
 	// took entityDescriptor from 142268 to 141368 bytes, entityDescUse from
 	// 770560 to 769648, entityDescHooks from 1058404 to 1057508 and
 	// entityDescMixin from 1132944 to 1132078; the bounds were lowered.
-	{"entityDescUse", "", entityDescUseSrc, 773120},       // measured 763846
+	//
+	// A column handle's Select, InSelect and NotInSelect (ADR 0057) took
+	// entityDescUse from 773116 to 773212 bytes: a generic method costs a
+	// package that names its type only its declaration.
+	{"entityDescUse", "", entityDescUseSrc, 782336},       // measured 773212
 	{"entityDescHooks", "", entityDescHooksBound, 858112}, // measured 847422
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name

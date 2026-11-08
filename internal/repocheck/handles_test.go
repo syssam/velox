@@ -35,14 +35,14 @@ func TestHandlesFileIsCurrent(t *testing.T) {
 func TestHandleMethodSets(t *testing.T) {
 	t.Parallel()
 	want := map[string]string{
-		"Col":            "Asc Desc EQ In Key NEQ NotIn Set column",
-		"OrderedCol":     "Asc Between Desc EQ GT GTE In Key LT LTE NEQ NotIn Set column",
-		"NumberCol":      "Add Asc Between Desc EQ GT GTE In Key LT LTE NEQ NotIn Set Sub column",
-		"StringCol":      "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In Key LT LTE Like NEQ NotIn Set column",
-		"NullCol":        "Asc Desc EQ In IsNull Key NEQ NotIn NotNull Set SetNull column",
-		"NullOrderedCol": "Asc Between Desc EQ GT GTE In IsNull Key LT LTE NEQ NotIn NotNull Set SetNull column",
-		"NullNumberCol":  "Add Asc Between Desc EQ GT GTE In IsNull Key LT LTE NEQ NotIn NotNull Set SetNull Sub column",
-		"NullStringCol":  "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In IsNull Key LT LTE Like NEQ NotIn NotNull Set SetNull column",
+		"Col":            "Asc Desc EQ In InSelect Key NEQ NotIn NotInSelect Select Set column",
+		"OrderedCol":     "Asc Between Desc EQ GT GTE In InSelect Key LT LTE NEQ NotIn NotInSelect Select Set column",
+		"NumberCol":      "Add Asc Between Desc EQ GT GTE In InSelect Key LT LTE NEQ NotIn NotInSelect Select Set Sub column",
+		"StringCol":      "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect Key LT LTE Like NEQ NotIn NotInSelect Select Set column",
+		"NullCol":        "Asc Desc EQ In InSelect IsNull Key NEQ NotIn NotInSelect NotNull Select Set SetNull column",
+		"NullOrderedCol": "Asc Between Desc EQ GT GTE In InSelect IsNull Key LT LTE NEQ NotIn NotInSelect NotNull Select Set SetNull column",
+		"NullNumberCol":  "Add Asc Between Desc EQ GT GTE In InSelect IsNull Key LT LTE NEQ NotIn NotInSelect NotNull Select Set SetNull Sub column",
+		"NullStringCol":  "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect IsNull Key LT LTE Like NEQ NotIn NotInSelect NotNull Select Set SetNull column",
 		"JSONCol":        "Set column",
 		"NullJSONCol":    "IsNull NotNull Set SetNull column",
 	}

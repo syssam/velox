@@ -304,7 +304,7 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 	if n.Op == OpExists {
 		// A relation is resolved here when the condition came from a policy
 		// or a Rewrite hook: the statement's own were resolved by prepare.
-		if _, lazy := n.V.(RelRef); lazy {
+		if _, lazy := n.V.(linkRef); lazy {
 			n.V, resolved = l, true // n is a copy
 		}
 		read, err := sc.target(t)
