@@ -315,5 +315,7 @@ const GeneratedCodeIsVersion19 = true
 // Lazy is the constraint of the type parameter that every method of a generic
 // velox type carries, and that callers never write. For generated code. A
 // generic method is compiled only where it is called; an ordinary method of a
-// generic type is compiled into every package that uses the type.
+// generic type is compiled into every package that uses the type. Without
+// it, one Query[E] adds 76 times the bytes to the package that names it, and
+// an entity's package is 3.1 times larger (ADR 0055).
 type Lazy[T any] interface{ *T }
