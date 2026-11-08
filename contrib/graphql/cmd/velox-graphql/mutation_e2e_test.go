@@ -655,7 +655,7 @@ func create[E any, PE velox.Entity[E]](ctx context.Context, x PE, setters func()
 	if err != nil {
 		return nil, err
 	}
-	if err := db.Insert(x).SetInput(input).Exec(ctx); err != nil {
+	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -682,7 +682,7 @@ func update[E any, PE velox.Entity[E]](ctx context.Context, k int64, typ string,
 	}
 	read := db
 	if len(set) > 0 {
-		n, err := db.Update[E, PE]().Where(key.EQ(k)).SetInput(input).Exec(ctx)
+		n, err := db.Update[E, PE]().Where(key.EQ(k)).Set(set...).Exec(ctx)
 		if err != nil {
 			return nil, err
 		}
