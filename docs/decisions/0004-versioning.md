@@ -20,7 +20,7 @@ files a migration directory holds. Each needs a rule a user can plan around.
   constant is not kept beside the new one: a bump means old generated code
   could not run correctly.
 - The plugin protocol (`plugin.ProtocolVersion`, 2) and model
-  (`plugin.ModelVersion`, 2) follow the same rule. velox-gen and a plugin of
+  (`plugin.ModelVersion`, 3) follow the same rule. velox-gen and a plugin of
   different protocols refuse each other; the model's number changes only when
   a field is removed or changes meaning.
 - `schema.json` and `velox.json` are both version 1. A newer velox reads every
@@ -34,7 +34,7 @@ for it. A migration directory written by an older velox stays readable.
 
 ## Evidence
 
-- `GeneratedCodeIsVersion7` (doc.go) and `GeneratedCodeIsVersion7`
+- `GeneratedCodeIsVersion19` (doc.go) and `GeneratedCodeIsVersion19`
   (contrib/graphql/veloxgql/doc.go); each doc names its replacement.
 - `TestVersions` (plugin/main_test.go:47), `TestRunChecksLiterals`
   (plugin/main_test.go), and velox-gen's refusal in cmd/velox-gen/plugin.go.

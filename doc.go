@@ -285,7 +285,8 @@
 // # Errors
 //
 // Errors are returned wrapped, in an error whose text starts
-// "velox: <Entity>: " (raw SQL's DB.Exec names its statement "Exec"), or for
+// "velox: <Entity>: ", the Go type with its package name, such as
+// "velox: gen.Invoice: " (raw SQL's DB.Exec names its statement "Exec"), or for
 // a transaction "velox: transaction: " ("velox: begin: ", "velox: commit: "
 // and "velox: savepoint: " likewise). Test for a row not found with
 // IsNotFound: errors.Is(err, ErrNotFound) that a driver's typed-nil error in

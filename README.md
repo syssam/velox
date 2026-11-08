@@ -113,7 +113,9 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    ```
 
 5. Use it, in `main.go`. The handles are typed, so a wrong column name or
-   value type is a compile error:
+   value type is a compile error. A read needs `Limit` (or `Unbounded()`),
+   and an update or delete needs `Where` (or `All()`); without one it fails
+   before reaching the database:
 
    ```go
    // main.go
