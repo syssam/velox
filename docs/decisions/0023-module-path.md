@@ -19,6 +19,11 @@ earlier project, which its owner has renamed on GitHub to `syssam/veloxe`.
 - `bench/compare` still measures veloxe, whose `go.mod` declares this same path. One
   `go.mod` cannot hold both, so `bench/compare/veloxe` is a small module that pins it. The
   harness tests keep the versions the two share equal, so the comparison stays fair.
+- `go.mod` retracts `[v0.1.0, v0.3.0]` (added 2026-11-08). It takes effect once a
+  version that carries it is published: `go get` and `go list -m -u` then warn a
+  module that requires one, and no version query resolves to one. A build that
+  names one explicitly still gets it; `bench/compare/veloxe` pins a
+  pseudo-version after `v0.3.0`, outside the range.
 
 ## Consequences
 

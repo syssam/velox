@@ -4,6 +4,9 @@ go 1.27.0
 
 toolchain go1.27.3
 
+// Another project's code (veloxe), not this module's: see decision 0023.
+retract [v0.1.0, v0.3.0]
+
 require (
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/jackc/pgx/v5 v5.11.0

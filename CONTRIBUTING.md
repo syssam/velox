@@ -381,7 +381,9 @@ go run golang.org/x/exp/cmd/gorelease@latest -base=none -version=v1.0.0
 
 Nothing is released yet. The first tag is `v1.0.0`. Never tag `v0.1.0`, `v0.2.0`,
 `v0.2.1` or `v0.3.0`: the Go checksum database holds another project's contents for
-those versions at this path (`docs/decisions/0023-module-path.md`).
+those versions at this path (`docs/decisions/0023-module-path.md`). `go.mod`
+retracts them, so `go get` warns a module that requires one once `v1.0.0`
+is published.
 
 For the first release, the repository must first be published as `syssam/velox`,
 with private vulnerability reporting turned on. Then remove the "Not released yet"
