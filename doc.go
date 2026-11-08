@@ -79,6 +79,18 @@
 //
 //	db.Query[gen.Post]().Where(gen.Users.Posts.Of(&ada)).All(ctx)
 //
+// A relation handle's Has and HasWith test for related rows. A column
+// handle's Select makes a subquery of that column, which InSelect and
+// NotInSelect test another column of the same type against. The subquery's
+// entity gets its own Read policy and interceptors:
+//
+//	big := gen.Items.InvoiceID.Select(gen.Items.Qty.GTE(100))
+//	db.Query[gen.Invoice]().Where(gen.Invoices.ID.InSelect(big)).Limit(10).All(ctx)
+//
+// Every method of a generic velox type has a type parameter [_ Lazy[T]],
+// which callers never write and Go infers: it makes Go compile a method
+// only where it is called. See Lazy.
+//
 // ForUpdate and ForShare lock the rows a query reads, until the transaction
 // ends, and SkipLocked and NoWait change what the query does with a row that
 // another transaction holds. A locking read runs inside Tx only, on
