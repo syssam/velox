@@ -28,6 +28,9 @@ type writer struct {
 	// target's conditions are being written, "" outside it.
 	joins     []JoinClause
 	joinAlias string
+	// path is the JSON path of the OpJSON whose kid is being written: its
+	// column is then the value at the path. nil outside one.
+	path *JSONPath
 	// err is the first error writing found: a JSON value that does not
 	// encode, or a condition comparing a JSON column. The text and
 	// arguments are then not used.
@@ -56,6 +59,16 @@ func (w *writer) col(i int32) { w.ident(w.in.Columns[i].Name) }
 
 // predCol writes a condition's column, qualified when w.qualify says so.
 func (w *writer) predCol(i int32) {
+	if w.path != nil {
+		w.jsonValue(i, *w.path)
+		return
+	}
+	w.colRef(i)
+}
+
+// colRef writes column i of a condition, qualified as the condition's place
+// needs.
+func (w *writer) colRef(i int32) {
 	switch {
 	case w.joinAlias != "" && w.depth == 0:
 		w.ident(w.joinAlias)
@@ -643,7 +656,11 @@ func isNilArg(v any) bool {
 }
 
 func (w *writer) pred(n Node) {
-	if n.Op >= OpEQ && n.Op <= OpFold && w.in.Columns[n.Col].Codec {
+	if n.Op == OpJSON {
+		w.json(n)
+		return
+	}
+	if n.Op >= OpEQ && n.Op <= OpFold && w.in.Columns[n.Col].Codec && w.path == nil {
 		// Every condition that holds a value; IsNull and NotNull hold none.
 		w.fail(errCodecCondition(w.in, int(n.Col)))
 	}

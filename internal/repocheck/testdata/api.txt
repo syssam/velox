@@ -120,7 +120,10 @@ func (c Col[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c Col[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c Col[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c JSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E]
+func (c JSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c JSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E]
 func (c NullCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c NullCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
@@ -135,10 +138,13 @@ func (c NullCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullJSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E]
 func (c NullJSONCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
 func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
+func (c NullJSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullJSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullJSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E]
 func (c NullNumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]
 func (c NullNumberCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullNumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
@@ -289,6 +295,15 @@ func (m *Mutation) Value(name string) (any, bool)
 func (m *Mutation) Where(ps ...Predicate)
 func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool)
 func (m Many[T]) MarshalJSON() ([]byte, error)
+func (n JSONNumber[E]) Between[_ Lazy[E]](lo, hi float64) Pred[E]
+func (n JSONNumber[E]) EQ[_ Lazy[E]](v float64) Pred[E]
+func (n JSONNumber[E]) GTE[_ Lazy[E]](v float64) Pred[E]
+func (n JSONNumber[E]) GT[_ Lazy[E]](v float64) Pred[E]
+func (n JSONNumber[E]) IsNull[_ Lazy[E]]() Pred[E]
+func (n JSONNumber[E]) LTE[_ Lazy[E]](v float64) Pred[E]
+func (n JSONNumber[E]) LT[_ Lazy[E]](v float64) Pred[E]
+func (n JSONNumber[E]) NEQ[_ Lazy[E]](v float64) Pred[E]
+func (n JSONNumber[E]) NotNull[_ Lazy[E]]() Pred[E]
 func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E]
 func (o One[T]) Get[_ Lazy[T]]() (*T, bool)
 func (o One[T]) MarshalJSON() ([]byte, error)
@@ -348,6 +363,12 @@ func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
 func (s SaveQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (s SaveQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) SaveQuery[E]
 func (s Setter[E]) Column[_ Lazy[E]]() int
+func (t JSONText[E]) EQ[_ Lazy[E]](v string) Pred[E]
+func (t JSONText[E]) In[_ Lazy[E]](vs ...string) Pred[E]
+func (t JSONText[E]) IsNull[_ Lazy[E]]() Pred[E]
+func (t JSONText[E]) NEQ[_ Lazy[E]](v string) Pred[E]
+func (t JSONText[E]) NotIn[_ Lazy[E]](vs ...string) Pred[E]
+func (t JSONText[E]) NotNull[_ Lazy[E]]() Pred[E]
 func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E]
 func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (u UpdateQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
@@ -474,6 +495,8 @@ type IndexInfo = veloxtype.IndexInfo
 type InsertQuery[E any] struct { }
 type Interceptor = engine.Interceptor
 type JSONCol[E, V any] struct { I int32 }
+type JSONNumber[E any] struct { }
+type JSONText[E any] struct { }
 type JoinClause = engine.JoinClause
 type Lazy[T any] interface{ *T }
 type Lock = veloxtype.Lock

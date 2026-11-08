@@ -407,6 +407,26 @@ db.Query[gen.Author]().Where(A.Posts.HasWith(P.Votes.GT(20)))   // ... with a po
 db.Query[gen.Author]().Where(velox.Not(A.Posts.Has()))          // authors with none
 ```
 
+### Inside a JSON column: Text, Number and HasKey
+
+A JSON field's handle can test a value inside the document, at a path of
+object keys. Here `Account` stands for any entity with a
+`field.JSON("attrs", map[string]any{})`:
+
+```go
+A := gen.Accounts
+db.Query[gen.Account]().Where(A.Attrs.Text("plan", "tier").EQ("pro"))  // a string
+db.Query[gen.Account]().Where(A.Attrs.Number("plan", "seats").GT(10))  // a number
+db.Query[gen.Account]().Where(A.Attrs.HasKey("trial"))                 // a key is there
+```
+
+`Text` is NULL where the path is missing or holds something other than a
+string, so the number `5` is never the string `"5"`, and strings compare with
+case. `Number` is the same for numbers. The results are the same on
+PostgreSQL, MySQL and SQLite: velox writes each dialect's JSON functions and
+passes the keys as arguments. A key can't be empty or contain `"`, `\` or a
+control character. See [ADR 0058](decisions/0058-json-paths.md).
+
 ### Subqueries on a column: Select and InSelect
 
 When no edge links the two columns, or you want to say which columns are

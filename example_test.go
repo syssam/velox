@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/scope"
 	_ "modernc.org/sqlite"
@@ -131,6 +132,24 @@ func ExampleNumberCol_InSelect() {
 	// Output:
 	// SELECT "id" FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" >= $1) AND "org_id" = $2 LIMIT $3
 	// [100 7 10] <nil>
+}
+
+// Text, Number and HasKey test a value inside a JSON column, at a path of
+// object keys. A value of another kind is NULL, so the same rows match on
+// every dialect; the keys are arguments.
+func ExampleJSONCol_Text() {
+	db := velox.Open(velox.SQLite, nil)
+	D := fixture.JDocs
+	text, args, err := db.Query[fixture.JDoc]().
+		Columns(D.ID).
+		Where(D.Attrs.Text("plan", "tier").EQ("pro")).
+		Limit(10).
+		SQL(context.Background())
+	fmt.Println(text)
+	fmt.Println(args, err)
+	// Output:
+	// SELECT "id" FROM "j_docs" WHERE CASE WHEN json_type("attrs", ?) = 'text' THEN json_extract("attrs", ?) END = ? LIMIT ?
+	// [$."plan"."tier" $."plan"."tier" pro 10] <nil>
 }
 
 // With loads a relation for every row the query returns, in one more query.

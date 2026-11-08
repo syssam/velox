@@ -704,7 +704,7 @@ func (c NullStringCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
-// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and neither compares nor orders by it, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it.
+// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number and HasKey test a value inside it; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it.
 type JSONCol[E, V any] struct{ I int32 }
 
 func (c JSONCol[E, V]) column(*E) int32 { return c.I }
@@ -713,6 +713,19 @@ func (c JSONCol[E, V]) column(*E) int32 { return c.I }
 func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
+
+// Text is the string at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no string. A key may not be empty or hold a double quote, a backslash or a control character.
+func (c JSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E] {
+	return JSONText[E]{c.I, jsonPath(engine.JSONKindText, keys)}
+}
+
+// Number is the number at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no number.
+func (c JSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E] {
+	return JSONNumber[E]{c.I, jsonPath(engine.JSONKindNumber, keys)}
+}
+
+// HasKey is true where the path of object keys is in the column's document, whatever its value, a JSON null included.
+func (c JSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E] { return hasKey[E](c.I, keys) }
 
 // NullJSONCol is JSONCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
 type NullJSONCol[E, V any] struct{ I int32 }
@@ -723,6 +736,19 @@ func (c NullJSONCol[E, V]) column(*E) int32 { return c.I }
 func (c NullJSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
+
+// Text is the string at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no string. A key may not be empty or hold a double quote, a backslash or a control character.
+func (c NullJSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E] {
+	return JSONText[E]{c.I, jsonPath(engine.JSONKindText, keys)}
+}
+
+// Number is the number at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no number.
+func (c NullJSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E] {
+	return JSONNumber[E]{c.I, jsonPath(engine.JSONKindNumber, keys)}
+}
+
+// HasKey is true where the path of object keys is in the column's document, whatever its value, a JSON null included.
+func (c NullJSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E] { return hasKey[E](c.I, keys) }
 
 // SetNull sets the column to NULL.
 func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {

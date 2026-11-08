@@ -230,6 +230,11 @@ func nodeKey(k []byte, n Node) []byte {
 		k = append(k, bit(isNilArg(n.V)))
 	case OpIn, OpNotIn:
 		k = binary.AppendUvarint(k, uint64(len(n.V.([]any))))
+	case OpJSON:
+		// The keys are arguments; the kind and their number shape the text.
+		p := n.V.(JSONPath)
+		k = append(k, byte(p.Kind))
+		k = binary.AppendUvarint(k, uint64(len(p.Keys)))
 	case OpExists:
 		if n.Col < 0 {
 			// A ColRef's EXISTS: the outer entity does not fix its target

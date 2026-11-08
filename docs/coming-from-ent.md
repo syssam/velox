@@ -68,8 +68,12 @@ PostgreSQL, `json` on MySQL and `text` on SQLite, and `migrate diff` writes it
 on each. As said above, an `Optional` one is NULL-able, and a nil slice stores
 NULL. A required one is NOT NULL: a nil slice stores the JSON `null` and reads
 back nil, where ent's create refuses the field unset. Its handle, a
-`velox.JSONCol`, sets it and reads its assigned value in a hook; velox
-neither orders by a JSON column nor compares one.
+`velox.JSONCol`, sets it and reads its assigned value in a hook. velox
+neither orders by a whole JSON document nor compares one. Where ent writes
+`sqljson.ValueEQ(user.FieldAttrs, "pro", sqljson.Path("plan", "tier"))`,
+velox writes `gen.Users.Attrs.Text("plan", "tier").EQ("pro")`; `Number`
+reads a number and `HasKey` tests that a key is there
+([0058](decisions/0058-json-paths.md)).
 
 **The implicit ID is int64.** The implicit `id` is `field.Int64`, where
 ent's is `int`. A foreign-key field must have its target's ID type: declare it

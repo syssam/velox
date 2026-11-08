@@ -41,6 +41,10 @@ const (
 	// resolved: w and col are the name, as opNamed's, kids the conditions on
 	// its target, by name.
 	opNamedEdge
+	// OpJSON is a condition on a value inside a JSON column: col is the
+	// column, v its JSONPath, and its one kid the operator and values, whose
+	// own column is ignored. JSONNode makes it.
+	OpJSON
 )
 
 // Node is a condition, typed by nothing: the generic API wraps it.

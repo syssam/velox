@@ -103,7 +103,7 @@ func (s *codecScanner) Scan(src any) error {
 // column col of in: equality of encoded values differs by dialect (jsonb
 // normalises JSON, TEXT does not), so only IsNull and NotNull are allowed.
 func errCodecCondition(in *EntityInfo, col int) error {
-	return fmt.Errorf("velox: %s: column %s is an encoded column (JSON in velox-gen), which a condition cannot compare: equality of encoded values differs by dialect; only IsNull and NotNull apply to it", in.Name, in.Columns[col].Name)
+	return fmt.Errorf("velox: %s: column %s is an encoded column (JSON in velox-gen), which a condition cannot compare: equality of encoded values differs by dialect; only IsNull and NotNull apply to it, and a JSON handle's Text, Number and HasKey to a value inside it", in.Name, in.Columns[col].Name)
 }
 
 // errCodecOrderBy is the error for ordering by the encoded column col of in:

@@ -76,6 +76,14 @@ var (
 		{"Sub", "subtracts v from the column: column = column - v.", "(v V) Setter[E]",
 			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignSub, Value: v}}"},
 	}
+	jsonPaths = []method{
+		{"Text", "is the string at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no string. A key may not be empty or hold a double quote, a backslash or a control character.", "(keys ...string) JSONText[E]",
+			"return JSONText[E]{c.I, jsonPath(engine.JSONKindText, keys)}"},
+		{"Number", "is the number at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no number.", "(keys ...string) JSONNumber[E]",
+			"return JSONNumber[E]{c.I, jsonPath(engine.JSONKindNumber, keys)}"},
+		{"HasKey", "is true where the path of object keys is in the column's document, whatever its value, a JSON null included.", "(keys ...string) Pred[E]",
+			"return hasKey[E](c.I, keys)"},
+	}
 	null = []method{
 		{"SetNull", "sets the column to NULL.", "() Setter[E]",
 			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}"},
@@ -98,8 +106,8 @@ var kinds = []kind{
 	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, set, null}},
 	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, set, arith, null}},
 	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, text, set, null}},
-	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and neither compares nor orders by it, as equality and order of JSON differ by dialect.", [][]method{set}},
-	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{set, null}},
+	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number and HasKey test a value inside it; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", [][]method{set, jsonPaths}},
+	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{set, jsonPaths, null}},
 }
 
 // Generate returns the source of handles.go.
