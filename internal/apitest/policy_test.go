@@ -776,7 +776,7 @@ var policyDDL = []string{
 
 // policyDB opens a SQLite database in a temporary file, with the invoices,
 // tickets and pnotes tables.
-func policyDB(t *testing.T) *velox.DB {
+func policyDB(t *testing.T, opts ...velox.Option) *velox.DB {
 	t.Helper()
 	raw, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "policy.db"))
 	if err != nil {
@@ -789,7 +789,7 @@ func policyDB(t *testing.T) *velox.DB {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	return velox.Open(velox.SQLite, raw)
+	return velox.Open(velox.SQLite, raw, opts...)
 }
 
 // TestWriteFiltersAffectZero: a row Write hides is left alone, and the
@@ -884,10 +884,35 @@ func TestEqualFoldIsASCIIOnSQLite(t *testing.T) {
 // it, a write's hooks see it through Mutation.DB, and Close on it leaves the
 // pool open.
 func TestWithoutPolicyIsTheDBs(t *testing.T) {
-	db := policyDB(t)
+	type sight struct {
+		bypass string
+		err    error
+	}
+	var seen []sight // per write: m.DB()'s bypass, and its read's error
+	hook := func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
+			_, err := m.DB().Query[testmodel.Invoice]().Count(context.Background())
+			seen = append(seen, sight{m.DB().PolicyBypass(), err})
+			return next.Mutate(ctx, m)
+		})
+	}
+	db := policyDB(t, velox.WithHooks[testmodel.Invoice](hook))
 	free := db.WithoutPolicy("audit")
 	seed := testmodel.Invoice{OrgID: 1, Number: "N1", Data: []byte("d")}
 	if err := free.Insert(&seed).Exec(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	scoped := testmodel.Invoice{OrgID: 1, Number: "N2", Data: []byte("d")}
+	if err := db.Insert(&scoped).Exec(testmodel.Org.With(context.Background(), int64(1))); err != nil {
+		t.Fatal(err)
+	}
+	// The bypassing write's hook reads through m.DB() without a scope; the
+	// scoped write's does not bypass.
+	if len(seen) != 2 || seen[0].bypass != "audit" || seen[0].err != nil ||
+		seen[1].bypass != "" || !errors.Is(seen[1].err, scope.ErrNoScope) {
+		t.Errorf("the hooks saw %+v", seen)
+	}
+	if _, err := free.Delete[testmodel.Invoice]().Where(I.Number.EQ("N2")).Exec(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	bg := context.Background()

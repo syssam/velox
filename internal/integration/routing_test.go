@@ -175,10 +175,14 @@ func (r routingDriver) handle(t *testing.T, db, addr string) handle {
 			t.Fatal(err)
 		}
 		t.Cleanup(pool.Close)
-		return handle{veloxpgx.Conn(pool), func(opts ...velox.Option) *velox.DB { return veloxpgx.Open(pool, opts...) }}
+		return handle{veloxpgx.Conn(pool), func(opts ...velox.Option) *velox.DB {
+			return veloxpgx.Open(pool, opts...).WithoutPolicy("routing test")
+		}}
 	}
 	sdb := r.open(t, dsn)
-	return handle{velox.SQLConn(sdb), func(opts ...velox.Option) *velox.DB { return velox.Open(r.d, sdb, opts...) }}
+	return handle{velox.SQLConn(sdb), func(opts ...velox.Option) *velox.DB {
+		return velox.Open(r.d, sdb, opts...).WithoutPolicy("routing test")
+	}}
 }
 
 // databases drops and makes velox_replica and velox_shard2, gives each, and
@@ -419,14 +423,15 @@ func TestRoutingShardsByOrg(t *testing.T) {
 		wantNumbers(t, "org 1's read", readNumbers(t, t1, db), []string{"ORG-1"})
 		wantNumbers(t, "org 2's read", readNumbers(t, t2, db), []string{"ORG-2"})
 		wantRoute(t, "org 2's read", log.last(t), velox.Route{Shard: "two", Replica: -1})
-		wantNumbers(t, "WithShard", readNumbers(t, velox.WithShard(ctx, "two"), db), []string{"ORG-2"})
+		free := db.WithoutPolicy("routing test")
+		wantNumbers(t, "WithShard", readNumbers(t, velox.WithShard(ctx, "two"), free), []string{"ORG-2"})
 
-		_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+		_, err := free.Query[testmodel.Invoice]().Unbounded().All(ctx)
 		if !errors.Is(err, velox.ErrNoShard) {
 			t.Errorf("a read under WithoutPolicy without WithShard: %v, want ErrNoShard", err)
 		}
 		refused := newInvoice(1, "REFUSED")
-		if err := db.Insert(&refused).Exec(ctx); !errors.Is(err, velox.ErrNoShard) {
+		if err := free.Insert(&refused).Exec(ctx); !errors.Is(err, velox.ErrNoShard) {
 			t.Errorf("a write under WithoutPolicy without WithShard: %v, want ErrNoShard", err)
 		}
 		wantNumbers(t, "shard one after the refusal", invoiceNumbers(t, one), []string{"ORG-1"})

@@ -2,6 +2,9 @@ package engine
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"testing"
 
 	"github.com/syssam/velox/internal/fakeconn"
@@ -55,5 +58,73 @@ func TestConnHoldOwns(t *testing.T) {
 	iter := &connHold{caller: uncomparableCtx{given, nil}}
 	if iter.owns(uncomparableCtx{given, nil}) {
 		t.Error("an uncomparable context is owned")
+	}
+}
+
+// nopConnector opens no connection; a pool on it is only counted.
+type nopConnector struct{}
+
+func (nopConnector) Connect(context.Context) (driver.Conn, error) { return nil, driver.ErrBadConn }
+func (nopConnector) Driver() driver.Driver                        { return nil }
+
+// TestWaitsForConn: a statement under the context that holds the pool's one
+// connection fails at once with the holder's error; once the statement's
+// context, or the context of the Tx that holds the connection, has ended,
+// the error says so and matches the context's error; any other context, a
+// transaction's statement and a pool of more than one wait.
+func TestWaitsForConn(t *testing.T) {
+	pool := sql.OpenDB(nopConnector{})
+	t.Cleanup(func() { _ = pool.Close() })
+	pool.SetMaxOpenConns(1)
+	db := Open(SQLite, pool, nil)
+
+	given := t.Context()
+	txCtxOf := func(c context.Context) *txFrame {
+		f := &txFrame{}
+		f.ctx = txCtx{Context: c, root: f}
+		return f
+	}
+	hold := func(h *connHold) { db.Cfg.connHold.Store(h) }
+
+	hold(&connHold{caller: given})
+	if err := waitsForConn(given, &db); !errors.Is(err, errIterConn) {
+		t.Errorf("under an Iter's context: %v", err)
+	}
+	if err := waitsForConn(context.Background(), &db); err != nil {
+		t.Errorf("under another context: %v", err)
+	}
+	ended, cancel := context.WithCancel(context.Background())
+	cancel()
+	hold(&connHold{caller: ended})
+	if err := waitsForConn(ended, &db); !errors.Is(err, context.Canceled) || errors.Is(err, errIterConn) {
+		t.Errorf("under an Iter's ended context: %v", err)
+	}
+
+	hold(&connHold{caller: given, tx: txCtxOf(given)})
+	if err := waitsForConn(given, &db); !errors.Is(err, errTxConn) {
+		t.Errorf("under a Tx's given context: %v", err)
+	}
+	// The Tx's own context, under a deadline of its own, has ended while the
+	// context it was given has not.
+	txEnded, cancelTx := context.WithCancel(given)
+	cancelTx()
+	hold(&connHold{caller: given, tx: txCtxOf(txEnded)})
+	err := waitsForConn(given, &db)
+	if !errors.Is(err, context.Canceled) || errors.Is(err, errTxConn) {
+		t.Errorf("after the Tx's context ended: %v", err)
+	}
+	if want := "the context of the Tx whose fn this is ended: context canceled"; err == nil || err.Error() != want {
+		t.Errorf("after the Tx's context ended: %v, want %q", err, want)
+	}
+
+	hold(&connHold{caller: given, tx: txCtxOf(given)})
+	inTx := db
+	inTx.InTx = true
+	if err := waitsForConn(given, &inTx); err != nil {
+		t.Errorf("a transaction's statement: %v", err)
+	}
+	pool.SetMaxOpenConns(2)
+	if err := waitsForConn(given, &db); err != nil {
+		t.Errorf("on a pool of two: %v", err)
 	}
 }

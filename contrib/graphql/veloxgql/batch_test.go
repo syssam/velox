@@ -409,6 +409,23 @@ func TestBatchScopeOption(t *testing.T) {
 	}
 }
 
+// TestBatchReadThatFailsReadsAlone: a caller whose read fails, here because
+// its context names no org, joins no batch: each keeper's pets fails with
+// the policy's error, and no statement reads pets.
+func TestBatchReadThatFailsReadsAlone(t *testing.T) {
+	db, log := batchDB(t)
+	got := post(t, context.Background(), batchServer(db), `{ keepers { name pets { totalCount } } }`)
+	const denied = "velox: veloxgql_test.pet: select denied by policy: velox/scope: the context has no scope value: org"
+	for i := range 3 {
+		if want := fmt.Sprintf(`{"message":%q,"path":["keepers",%d,"pets","totalCount"]}`, denied, i); !strings.Contains(got, want) {
+			t.Errorf("keeper %d's error is missing:\n%s", i, got)
+		}
+	}
+	if stmts, _ := log.take(); len(stmts) != 1 {
+		t.Errorf("%d statements, want only the keepers': %q", len(stmts), stmts)
+	}
+}
+
 // TestSubscriptionEventsLetGo: each event of a subscription is a response
 // with a table of its own: the second event's rows batch, and the first
 // event's are no longer in the table.

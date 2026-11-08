@@ -352,10 +352,7 @@ func readOf(ctx context.Context, db *velox.DB, target untyped.Table) (string, bo
 	if err != nil {
 		return "", false
 	}
-	if len(args) == 0 {
-		return text, true
-	}
-	var b strings.Builder
+	var b strings.Builder // LIMIT is a parameter, so args is never empty
 	b.WriteString(text)
 	for _, a := range args {
 		fmt.Fprintf(&b, "\x00%T:%v", a, a)
