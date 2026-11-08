@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion19
+const _ = veloxgql.GeneratedCodeIsVersion20
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -76,20 +76,47 @@ type LabelEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// NewLabelConnection is the connection to the Label nodes q returns, filtered
-// by where, ordered by orderBy and then the key, and paged by the other
-// arguments. q must not be ordered, and must select the key and the order
-// columns.
-func NewLabelConnection(
-	ctx context.Context, q velox.Query[Tag],
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-	orderBy *LabelOrder, where *LabelWhereInput,
-) (*LabelConnection, error) {
-	return newLabelConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, orderBy, where)
+// LabelPaginateOption is an option of a query's Paginate to Label nodes:
+// WithLabelOrder or WithLabelFilter. Of two options that set the same thing,
+// the later wins.
+type LabelPaginateOption struct {
+	orderBy *LabelOrder
+	where   *LabelWhereInput
 }
 
-// newLabelConnection is NewLabelConnection of the nodes from leads to: a
-// query's, or an edge's, whose queries batch.
+// WithLabelOrder orders the connection by orderBy and then the key.
+func WithLabelOrder(orderBy *LabelOrder) LabelPaginateOption {
+	return LabelPaginateOption{orderBy: orderBy}
+}
+
+// WithLabelFilter filters the connection by where.
+func WithLabelFilter(where *LabelWhereInput) LabelPaginateOption {
+	return LabelPaginateOption{where: where}
+}
+
+// PaginateQuery is the connection to the Label nodes q returns, filtered by
+// where, ordered by orderBy and then the key, and paged by the other arguments:
+// velox.Query's Paginate. q must not be ordered, and must select the key and
+// the order columns.
+func (*Tag) PaginateQuery(
+	ctx context.Context, q velox.Query[Tag],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	opts []LabelPaginateOption,
+) (*LabelConnection, error) {
+	var o LabelPaginateOption
+	for _, x := range opts {
+		if x.orderBy != nil {
+			o.orderBy = x.orderBy
+		}
+		if x.where != nil {
+			o.where = x.where
+		}
+	}
+	return newLabelConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, o.orderBy, o.where)
+}
+
+// newLabelConnection is PaginateQuery of the nodes from leads to: a query's, or
+// an edge's, whose queries batch.
 func newLabelConnection(
 	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A connection is a query's `Paginate`, as in ent:
+  `db.Query[gen.Post]().Paginate(ctx, after, first, before, last,
+  gen.WithPostOrder(orderBy), gen.WithPostFilter(where))` replaces
+  `gen.NewPostConnection(ctx, q, …)`. Regenerate:
+  `veloxgql.GeneratedCodeIsVersion20` replaces Version19 (decision 0059).
 - A JSON field's handle tests a value inside the document:
   `Attrs.Text("plan", "tier").EQ("pro")`, `Attrs.Number("seats").GT(10)`,
   `Attrs.Bool("trial").EQ(true)` and `Attrs.HasKey("trial")`. A value of another kind is NULL, so the same rows

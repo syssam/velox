@@ -18,13 +18,18 @@ func lowerFirst(name string) string {
 	return strings.ToLower(name[:1]) + name[1:]
 }
 
-// newConnFunc is the exported function that makes the connection to t's
-// nodes of a query, NewPostConnection, and typeVar the unexported variable
-// that describes t to gqlgraph, postType.
-func newConnFunc(t *sdl.Type) string { return "New" + t.Name + "Connection" }
-func typeVar(t *sdl.Type) string     { return lowerFirst(t.Entity.Name) + "Type" }
+// typeVar is the unexported variable that describes t to gqlgraph,
+// postType.
+func typeVar(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "Type" }
 
-// newConnImpl is the unexported function NewXConnection and the edge
+// optType is the type of the options of a query's Paginate to t's nodes,
+// PostPaginateOption, and withOrder and withFilter its constructors,
+// WithPostOrder and WithPostFilter, as ent names them.
+func optType(t *sdl.Type) string    { return t.Name + "PaginateOption" }
+func withOrder(t *sdl.Type) string  { return "With" + t.Name + "Order" }
+func withFilter(t *sdl.Type) string { return "With" + t.Name + "Filter" }
+
+// newConnImpl is the unexported function PaginateQuery and the edge
 // methods to t's nodes call, newPostConnection: it pages a gqlgraph.Source.
 func newConnImpl(t *sdl.Type) string { return "new" + t.Name + "Connection" }
 
@@ -57,11 +62,8 @@ func connParams(f *file, t *sdl.Type) []string {
 	vgql := f.veloxgql()
 	ps := []string{"after *" + vgql + ".Cursor, first *int, before *" + vgql + ".Cursor, last *int"}
 	var rest []string
-	switch {
-	case t.Order != nil && t.MultiOrder:
-		rest = append(rest, "orderBy []*"+t.Name+"Order")
-	case t.Order != nil:
-		rest = append(rest, "orderBy *"+t.Name+"Order")
+	if t.Order != nil {
+		rest = append(rest, "orderBy "+orderType(t))
 	}
 	if t.Where != nil {
 		rest = append(rest, "where *"+t.Name+"WhereInput")
@@ -70,6 +72,15 @@ func connParams(f *file, t *sdl.Type) []string {
 		ps = append(ps, strings.Join(rest, ", "))
 	}
 	return ps
+}
+
+// orderType is the Go type of t's orderBy argument: a slice where the SDL's
+// orderBy is a list.
+func orderType(t *sdl.Type) string {
+	if t.MultiOrder {
+		return "[]*" + t.Name + "Order"
+	}
+	return "*" + t.Name + "Order"
 }
 
 // signature is the line that opens the function name, whose parameters are
@@ -90,19 +101,27 @@ func connArgs(t *sdl.Type) string {
 	return as
 }
 
-// writeConnection writes XConnection and XEdge, NewXConnection, which pages a
-// query of t's nodes, newXConnection, which pages a query or an edge for
-// NewXConnection and the edge methods, and the variable that describes t to
-// gqlgraph.
+// writeConnection writes XConnection and XEdge; XPaginateOption and its
+// constructors; the entity's PaginateQuery, which pages a query of t's nodes
+// for velox.Query's Paginate; newXConnection, which pages a query or an edge
+// for PaginateQuery and the edge methods; and the variable that describes t
+// to gqlgraph.
 func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	e, n := t.Entity, t.Name
 	what := "schema " + e.Name
-	for _, name := range []string{n + "Connection", n + "Edge", newConnFunc(t), newConnImpl(t), typeVar(t)} {
+	names := []string{n + "Connection", n + "Edge", optType(t), e.Name + ".PaginateQuery", newConnImpl(t), typeVar(t)}
+	if t.Order != nil {
+		names = append(names, withOrder(t))
+	}
+	if t.Where != nil {
+		names = append(names, withFilter(t))
+	}
+	for _, name := range names {
 		if err := r.declare(name, what); err != nil {
 			return err
 		}
 	}
-	ctx, vgql, impl, velox := f.use("context", "context"), f.veloxgql(), f.gqlgraph(), f.velox()
+	ctx, vgql, impl := f.use("context", "context"), f.veloxgql(), f.gqlgraph()
 
 	f.doc("", fmt.Sprintf("%sConnection is the GraphQL type %[1]sConnection. Its fields run their queries when gqlgen resolves them.", n))
 	f.p("type %sConnection struct {", n)
@@ -143,26 +162,9 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("}")
 	f.p("")
 
-	var how []string
-	if t.Where != nil {
-		how = append(how, "filtered by where")
-	}
-	if t.Order != nil {
-		how = append(how, "ordered by orderBy and then the key")
-	} else {
-		how = append(how, "ordered by the key")
-	}
-	selects := "the key"
-	if t.Order != nil {
-		selects = "the key and the order columns"
-	}
-	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q must not be ordered, and must select %s.", newConnFunc(t), n, strings.Join(how, ", "), selects))
-	f.p("%s", signature("func "+newConnFunc(t), "ctx "+ctx+".Context, q "+velox+".Query["+e.Name+"]", connParams(f, t), "(*"+n+"Connection, error)"))
-	f.p("\treturn %s(ctx, %s.Query(%s.FromQuery(q)), %s)", newConnImpl(t), impl, f.untyped(), connArgs(t))
-	f.p("}")
-	f.p("")
+	r.writePaginate(f, t)
 
-	f.doc("", fmt.Sprintf("%s is %s of the nodes from leads to: a query's, or an edge's, whose queries batch.", newConnImpl(t), newConnFunc(t)))
+	f.doc("", fmt.Sprintf("%s is PaginateQuery of the nodes from leads to: a query's, or an edge's, whose queries batch.", newConnImpl(t)))
 	f.p("%s", signature("func "+newConnImpl(t), "ctx "+ctx+".Context, from "+impl+".Source", connParams(f, t), "(*"+n+"Connection, error)"))
 	args := "After: after, First: first, Before: before, Last: last"
 	if t.Where != nil {
@@ -503,4 +505,82 @@ func orderField(e *plugin.Entity, v sdl.OrderValue) (fd *plugin.Field, via strin
 		return e.Fields[v.Field], ""
 	}
 	return v.Target.Fields[v.Field], e.Edges[v.Edge-1].GoName
+}
+
+// writePaginate writes XPaginateOption, its constructors and the entity's
+// PaginateQuery, which pages a query of t's nodes for velox.Query's
+// Paginate.
+func (r *renderer) writePaginate(f *file, t *sdl.Type) {
+	e, n := t.Entity, t.Name
+	ctx, impl, velox := f.use("context", "context"), f.gqlgraph(), f.velox()
+	var how []string
+	if t.Where != nil {
+		how = append(how, "filtered by where")
+	}
+	if t.Order != nil {
+		how = append(how, "ordered by orderBy and then the key")
+	} else {
+		how = append(how, "ordered by the key")
+	}
+	selects := "the key"
+	if t.Order != nil {
+		selects = "the key and the order columns"
+	}
+	opt := optType(t)
+	switch {
+	case t.Order == nil && t.Where == nil:
+		f.doc("", fmt.Sprintf("%s is an option of a query's Paginate to %s nodes. It has none: %[2]s has no order or where input.", opt, n))
+		f.p("type %s struct{}", opt)
+		f.p("")
+	default:
+		var withs []string
+		if t.Order != nil {
+			withs = append(withs, withOrder(t))
+		}
+		if t.Where != nil {
+			withs = append(withs, withFilter(t))
+		}
+		f.doc("", fmt.Sprintf("%s is an option of a query's Paginate to %s nodes: %s. Of two options that set the same thing, the later wins.", opt, n, strings.Join(withs, " or ")))
+		f.p("type %s struct {", opt)
+		if t.Order != nil {
+			f.p("\torderBy %s", orderType(t))
+		}
+		if t.Where != nil {
+			f.p("\twhere   *%sWhereInput", n)
+		}
+		f.p("}")
+		f.p("")
+	}
+	if t.Order != nil {
+		f.doc("", fmt.Sprintf("%s orders the connection by orderBy and then the key.", withOrder(t)))
+		f.p("func %s(orderBy %s) %s { return %[3]s{orderBy: orderBy} }", withOrder(t), orderType(t), opt)
+		f.p("")
+	}
+	if t.Where != nil {
+		f.doc("", fmt.Sprintf("%s filters the connection by where.", withFilter(t)))
+		f.p("func %s(where *%sWhereInput) %s { return %[3]s{where: where} }", withFilter(t), n, opt)
+		f.p("")
+	}
+	f.doc("", fmt.Sprintf("PaginateQuery is the connection to the %s nodes q returns, %s, and paged by the other arguments: velox.Query's Paginate. q must not be ordered, and must select %s.", n, strings.Join(how, ", "), selects))
+	f.p("%s", signature("func (*"+e.Name+") PaginateQuery", "ctx "+ctx+".Context, q "+velox+".Query["+e.Name+"]",
+		[]string{connParams(f, t)[0], "opts []" + opt}, "(*"+n+"Connection, error)"))
+	if t.Order != nil || t.Where != nil {
+		f.p("\tvar o %s", opt)
+		f.p("\tfor _, x := range opts {")
+		if t.Order != nil {
+			f.p("\t\tif x.orderBy != nil {")
+			f.p("\t\t\to.orderBy = x.orderBy")
+			f.p("\t\t}")
+		}
+		if t.Where != nil {
+			f.p("\t\tif x.where != nil {")
+			f.p("\t\t\to.where = x.where")
+			f.p("\t\t}")
+		}
+		f.p("\t}")
+	}
+	f.p("\treturn %s(ctx, %s.Query(%s.FromQuery(q)), %s)", newConnImpl(t), impl, f.untyped(),
+		strings.NewReplacer("orderBy", "o.orderBy", "where", "o.where").Replace(connArgs(t)))
+	f.p("}")
+	f.p("")
 }

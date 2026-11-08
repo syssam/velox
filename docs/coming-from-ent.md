@@ -279,14 +279,16 @@ a table rebuild on SQLite.
   As in entgql, a null in an input is a field not given; `clear<Field>:
   true` sets NULL. No delete is generated: a delete is the application's
   `db.Delete[T]()`.
-- **A connection is NewXConnection of a query.** Where entgql's resolver
+- **A connection is a query's Paginate.** Where entgql's resolver
   calls `client.Todo.Query().Paginate(ctx, after, first, before, last,
   ent.WithTodoOrder(orderBy), ent.WithTodoFilter(where.Filter))`, velox's
-  calls `gen.NewTodoConnection(ctx, db.Query[gen.Todo](), after, first,
-  before, last, orderBy, where)`, with `db` from `veloxgql.DB(ctx)`, as
-  entgql's `ent.FromContext(ctx)`. velox has no per-entity query type to
-  hang a `Paginate` method on, and the connection is lazy: it sends
-  nothing until gqlgen resolves its fields. The query may carry the
+  calls `db.Query[gen.Todo]().Paginate(ctx, after, first, before, last,
+  gen.WithTodoOrder(orderBy), gen.WithTodoFilter(where))`, with `db` from
+  `veloxgql.DB(ctx)`, as entgql's `ent.FromContext(ctx)`. The filter
+  option takes the where input itself. `Paginate` is generic and calls
+  the entity's generated `PaginateQuery`, so it does not compile for an
+  entity with no connection. The connection is lazy: it sends nothing
+  until gqlgen resolves its fields. The query may carry the
   application's own filters; it must not be ordered. A where input's
   `Pred(ctx)` is entgql's `P()`: a `velox.Pred[T]` for any query.
 - **JSON lists are GraphQL lists.** A JSON field of `[]string`, `[]int`,

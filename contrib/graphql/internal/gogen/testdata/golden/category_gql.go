@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion19
+const _ = veloxgql.GeneratedCodeIsVersion20
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -80,19 +80,36 @@ type CategoryEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// NewCategoryConnection is the connection to the Category nodes q returns,
-// filtered by where, ordered by the key, and paged by the other arguments. q
-// must not be ordered, and must select the key.
-func NewCategoryConnection(
-	ctx context.Context, q velox.Query[Category],
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-	where *CategoryWhereInput,
-) (*CategoryConnection, error) {
-	return newCategoryConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, where)
+// CategoryPaginateOption is an option of a query's Paginate to Category nodes:
+// WithCategoryFilter. Of two options that set the same thing, the later wins.
+type CategoryPaginateOption struct {
+	where *CategoryWhereInput
 }
 
-// newCategoryConnection is NewCategoryConnection of the nodes from leads to: a
-// query's, or an edge's, whose queries batch.
+// WithCategoryFilter filters the connection by where.
+func WithCategoryFilter(where *CategoryWhereInput) CategoryPaginateOption {
+	return CategoryPaginateOption{where: where}
+}
+
+// PaginateQuery is the connection to the Category nodes q returns, filtered by
+// where, ordered by the key, and paged by the other arguments: velox.Query's
+// Paginate. q must not be ordered, and must select the key.
+func (*Category) PaginateQuery(
+	ctx context.Context, q velox.Query[Category],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	opts []CategoryPaginateOption,
+) (*CategoryConnection, error) {
+	var o CategoryPaginateOption
+	for _, x := range opts {
+		if x.where != nil {
+			o.where = x.where
+		}
+	}
+	return newCategoryConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, o.where)
+}
+
+// newCategoryConnection is PaginateQuery of the nodes from leads to: a query's,
+// or an edge's, whose queries batch.
 func newCategoryConnection(
 	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

@@ -413,6 +413,9 @@ func checkNames(t *testing.T, m *plugin.Model, others ...string) {
 			}
 			continue
 		}
+		if o, ok := strings.CutSuffix(name, "PaginateOption"); ok && sdlTypes[o] != nil {
+			continue // Paginate's options, which only Go reads
+		}
 		if sdlTypes[name] == nil {
 			t.Errorf("the Go type %s binds to no SDL type", name)
 		}
@@ -720,7 +723,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion19\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion20\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -778,19 +781,19 @@ func TestEnumWithoutConsts(t *testing.T) {
 	}
 }
 
-// TestNewConnectionEveryNode: every Node entity's file declares its
-// New<Type>Connection, which takes the query, and no file declares an exported
-// name that ends in GQL but the methods gqlgen binds to.
-func TestNewConnectionEveryNode(t *testing.T) {
-	const decl = "(\n\tctx context.Context, q velox.Query["
+// TestPaginateQueryEveryConnection: every connection's file declares the
+// entity's PaginateQuery, which takes the query, and no file declares an
+// exported name that ends in GQL but the methods gqlgen binds to.
+func TestPaginateQueryEveryConnection(t *testing.T) {
+	const decl = ") PaginateQuery(\n\tctx context.Context, q velox.Query["
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		files := render(t, m)
 		total := 0
 		for name, src := range files {
 			n, of := strings.Count(src, "Connection struct {"), strings.Count(src, decl)
 			total += of
-			if n != of || n != strings.Count(src, "\nfunc New") {
-				t.Errorf("%s: %s has %d connections and %d NewXConnection functions", label, name, n, of)
+			if n != of {
+				t.Errorf("%s: %s has %d connections and %d PaginateQuery methods", label, name, n, of)
 			}
 			for l := range strings.SplitSeq(src, "\n") {
 				if fn, ok := exportedGQL(l); ok && !strings.HasSuffix(fn, "arshalGQL") && !strings.HasSuffix(fn, "GQL()") {
@@ -799,7 +802,7 @@ func TestNewConnectionEveryNode(t *testing.T) {
 			}
 		}
 		if total == 0 {
-			t.Errorf("%s: no Paginate function at all", label)
+			t.Errorf("%s: no PaginateQuery at all", label)
 		}
 	}
 }
@@ -1458,11 +1461,11 @@ func TestConnSelection(t *testing.T) {
 	}
 }
 
-// TestNewConnectionFilters: NewXConnection is newXConnection of q, which
-// hands its source to gqlgraph.Paginate with the where input in Args
-// (gqlgraph.WhereOf), and Paginate checks the query, filters it and pages
-// it.
-func TestNewConnectionFilters(t *testing.T) {
+// TestPaginateQueryFilters: an entity's PaginateQuery is newXConnection of
+// q with its options' order and where, which hands its source to
+// gqlgraph.Paginate with the where input in Args (gqlgraph.WhereOf), and
+// Paginate checks the query, filters it and pages it.
+func TestPaginateQueryFilters(t *testing.T) {
 	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		surf, err := sdl.Build(m)
 		if err != nil {
@@ -1470,9 +1473,11 @@ func TestNewConnectionFilters(t *testing.T) {
 		}
 		files := render(t, m)
 		for _, ty := range surf.Types {
-			src := funcSrc(t, files, newConnFunc(ty))
-			if want := "return " + newConnImpl(ty) + "(ctx, gqlgraph.Query(untyped.FromQuery(q)), " + connArgs(ty) + ")"; !strings.Contains(src, want) {
-				t.Errorf("%s: %s is not %q:\n%s", label, newConnFunc(ty), want, src)
+			pq := ty.Entity.Name + ".PaginateQuery"
+			src := funcSrc(t, files, pq)
+			args := strings.NewReplacer("orderBy", "o.orderBy", "where", "o.where").Replace(connArgs(ty))
+			if want := "return " + newConnImpl(ty) + "(ctx, gqlgraph.Query(untyped.FromQuery(q)), " + args + ")"; !strings.Contains(src, want) {
+				t.Errorf("%s: %s is not %q:\n%s", label, pq, want, src)
 			}
 			src = funcSrc(t, files, newConnImpl(ty))
 			page := strings.Index(src, "gqlgraph.Paginate(ctx, from, &"+typeVar(ty)+",")

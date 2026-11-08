@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion19
+const _ = veloxgql.GeneratedCodeIsVersion20
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -106,19 +106,47 @@ type PostEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// NewPostConnection is the connection to the Post nodes q returns, filtered by
-// where, ordered by orderBy and then the key, and paged by the other arguments.
-// q must not be ordered, and must select the key and the order columns.
-func NewPostConnection(
-	ctx context.Context, q velox.Query[Post],
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-	orderBy []*PostOrder, where *PostWhereInput,
-) (*PostConnection, error) {
-	return newPostConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, orderBy, where)
+// PostPaginateOption is an option of a query's Paginate to Post nodes:
+// WithPostOrder or WithPostFilter. Of two options that set the same thing, the
+// later wins.
+type PostPaginateOption struct {
+	orderBy []*PostOrder
+	where   *PostWhereInput
 }
 
-// newPostConnection is NewPostConnection of the nodes from leads to: a query's,
-// or an edge's, whose queries batch.
+// WithPostOrder orders the connection by orderBy and then the key.
+func WithPostOrder(orderBy []*PostOrder) PostPaginateOption {
+	return PostPaginateOption{orderBy: orderBy}
+}
+
+// WithPostFilter filters the connection by where.
+func WithPostFilter(where *PostWhereInput) PostPaginateOption {
+	return PostPaginateOption{where: where}
+}
+
+// PaginateQuery is the connection to the Post nodes q returns, filtered by
+// where, ordered by orderBy and then the key, and paged by the other arguments:
+// velox.Query's Paginate. q must not be ordered, and must select the key and
+// the order columns.
+func (*Post) PaginateQuery(
+	ctx context.Context, q velox.Query[Post],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	opts []PostPaginateOption,
+) (*PostConnection, error) {
+	var o PostPaginateOption
+	for _, x := range opts {
+		if x.orderBy != nil {
+			o.orderBy = x.orderBy
+		}
+		if x.where != nil {
+			o.where = x.where
+		}
+	}
+	return newPostConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, o.orderBy, o.where)
+}
+
+// newPostConnection is PaginateQuery of the nodes from leads to: a query's, or
+// an edge's, whose queries batch.
 func newPostConnection(
 	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

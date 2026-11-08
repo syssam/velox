@@ -85,10 +85,13 @@ func (E%[1]d) Annotations() []schema.Annotation {
 }
 
 var (
-	// connFunc matches an entity's NewXConnection in the Go the plugin writes:
-	// its parameters after the query, and the connection it returns. A long
-	// signature is wrapped one group a line, with a trailing comma.
-	connFunc = regexp.MustCompile(`(?m)^func New(E\d+)Connection\(\s*ctx context\.Context, q velox\.Query\[E\d+\],\s*([^)]*?),?\s*\) \(\*(E\d+Connection), error\) \{`)
+	// connFunc matches an entity's PaginateQuery in the Go the plugin writes:
+	// its paging parameters, and the connection it returns. A long signature
+	// is wrapped one group a line, with a trailing comma.
+	connFunc = regexp.MustCompile(`(?m)^func \(\*E\d+\) PaginateQuery\(\s*ctx context\.Context, q velox\.Query\[E\d+\],\s*([^)]*?),\s*opts \[\]E\d+PaginateOption,?\s*\) \(\*(E\d+Connection), error\) \{`)
+	// withOpt matches a Paginate option's constructor: its name, what it
+	// sets and that argument's type.
+	withOpt = regexp.MustCompile(`(?m)^func (With\w+)\((orderBy|where) ([^)]+)\)`)
 	// tableOf matches the table a generated entity reads.
 	tableOf = regexp.MustCompile(`Table:\s+"([a-z0-9_]+)"`)
 	// genType is a type of the generated package in a parameter list.
@@ -96,9 +99,9 @@ var (
 )
 
 // scaleResolvers is graph/schema.resolvers.go: Node, Nodes and the root
-// connection of each of the n entities. The parameters of NewXConnection (an
-// orderBy that is a slice or a pointer) are read from the Go the plugin
-// wrote, so the test follows the plugin and does not restate it.
+// connection of each of the n entities. The parameters of PaginateQuery
+// and its options (an orderBy that is a slice or a pointer) are read from
+// the Go the plugin wrote, so the test follows the plugin and does not restate it.
 func scaleResolvers(t *testing.T, dir string, n int) string {
 	t.Helper()
 	var b strings.Builder
@@ -128,15 +131,17 @@ func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Nod
 		}
 		m := connFunc.FindStringSubmatch(string(src))
 		if m == nil {
-			t.Fatalf("no NewE%dConnection in gen/e%d_gql.go", i, i)
+			t.Fatalf("no E%d.PaginateQuery in gen/e%d_gql.go", i, i)
 		}
-		m[2] = strings.Join(strings.Fields(strings.ReplaceAll(m[2], ",\n", ", ")), " ")
-		var args []string
-		for p := range strings.SplitSeq(m[2], ", ") {
-			args = append(args, strings.Fields(p)[0])
+		params := strings.Join(strings.Fields(strings.ReplaceAll(m[1], ",\n", ", ")), " ")
+		var opts []string
+		for _, w := range withOpt.FindAllStringSubmatch(string(src), -1) {
+			params += ", " + w[2] + " " + w[3]
+			opts = append(opts, fmt.Sprintf("gen.%s(%s)", w[1], w[2]))
 		}
-		fmt.Fprintf(&b, "\n// E%[1]ds is the resolver for the e%[1]ds field.\nfunc (r *queryResolver) E%[1]ds(ctx context.Context, %[2]s) (*gen.%[3]s, error) {\n\tdb, err := veloxgql.DBFromContext(ctx)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn gen.NewE%[1]dConnection(ctx, db.Query[gen.E%[1]d](), %[4]s)\n}\n",
-			i, genType.ReplaceAllString(m[2], "${1}gen.${2}"), m[3], strings.Join(args, ", "))
+		call := strings.Join(append([]string{"after, first, before, last"}, opts...), ", ")
+		fmt.Fprintf(&b, "\n// E%[1]ds is the resolver for the e%[1]ds field.\nfunc (r *queryResolver) E%[1]ds(ctx context.Context, %[2]s) (*gen.%[3]s, error) {\n\tdb, err := veloxgql.DBFromContext(ctx)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn db.Query[gen.E%[1]d]().Paginate(ctx, %[4]s)\n}\n",
+			i, genType.ReplaceAllString(params, "${1}gen.${2}"), m[2], call)
 	}
 	b.WriteString(`
 // Query returns QueryResolver implementation.

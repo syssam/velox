@@ -1,7 +1,7 @@
 # 49. velox-graphql's generated names follow Go's
 
 Status: accepted, 2026-11-07. Renames 0046's `Paginate<Plural>` and
-0035's runtime package.
+0035's runtime package. 0059 revises its `NewPostConnection`.
 
 ## Context
 

@@ -225,7 +225,7 @@ func (r *queryResolver) Authors(ctx context.Context, after *veloxgql.Cursor, fir
 	if err != nil {
 		return nil, err
 	}
-	return gen.NewAuthorConnection(ctx, db.Query[gen.Author](), after, first, before, last, orderBy)
+	return db.Query[gen.Author]().Paginate(ctx, after, first, before, last, gen.WithAuthorOrder(orderBy))
 }
 
 // Query returns QueryResolver implementation.

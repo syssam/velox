@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion19
+const _ = veloxgql.GeneratedCodeIsVersion20
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the same edge of every row on l's page.
@@ -68,18 +68,23 @@ type LikeEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// NewLikeConnection is the connection to the Like nodes q returns, ordered by
-// the key, and paged by the other arguments. q must not be ordered, and must
-// select the key.
-func NewLikeConnection(
+// LikePaginateOption is an option of a query's Paginate to Like nodes. It has
+// none: Like has no order or where input.
+type LikePaginateOption struct{}
+
+// PaginateQuery is the connection to the Like nodes q returns, ordered by the
+// key, and paged by the other arguments: velox.Query's Paginate. q must not be
+// ordered, and must select the key.
+func (*Like) PaginateQuery(
 	ctx context.Context, q velox.Query[Like],
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	opts []LikePaginateOption,
 ) (*LikeConnection, error) {
 	return newLikeConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last)
 }
 
-// newLikeConnection is NewLikeConnection of the nodes from leads to: a query's,
-// or an edge's, whose queries batch.
+// newLikeConnection is PaginateQuery of the nodes from leads to: a query's, or
+// an edge's, whose queries batch.
 func newLikeConnection(
 	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

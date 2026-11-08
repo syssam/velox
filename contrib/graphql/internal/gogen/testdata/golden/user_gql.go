@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion19
+const _ = veloxgql.GeneratedCodeIsVersion20
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -132,19 +132,36 @@ type AccountEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// NewAccountConnection is the connection to the Account nodes q returns,
-// filtered by where, ordered by the key, and paged by the other arguments. q
-// must not be ordered, and must select the key.
-func NewAccountConnection(
-	ctx context.Context, q velox.Query[User],
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-	where *AccountWhereInput,
-) (*AccountConnection, error) {
-	return newAccountConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, where)
+// AccountPaginateOption is an option of a query's Paginate to Account nodes:
+// WithAccountFilter. Of two options that set the same thing, the later wins.
+type AccountPaginateOption struct {
+	where *AccountWhereInput
 }
 
-// newAccountConnection is NewAccountConnection of the nodes from leads to: a
-// query's, or an edge's, whose queries batch.
+// WithAccountFilter filters the connection by where.
+func WithAccountFilter(where *AccountWhereInput) AccountPaginateOption {
+	return AccountPaginateOption{where: where}
+}
+
+// PaginateQuery is the connection to the Account nodes q returns, filtered by
+// where, ordered by the key, and paged by the other arguments: velox.Query's
+// Paginate. q must not be ordered, and must select the key.
+func (*User) PaginateQuery(
+	ctx context.Context, q velox.Query[User],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	opts []AccountPaginateOption,
+) (*AccountConnection, error) {
+	var o AccountPaginateOption
+	for _, x := range opts {
+		if x.where != nil {
+			o.where = x.where
+		}
+	}
+	return newAccountConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, o.where)
+}
+
+// newAccountConnection is PaginateQuery of the nodes from leads to: a query's,
+// or an edge's, whose queries batch.
 func newAccountConnection(
 	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

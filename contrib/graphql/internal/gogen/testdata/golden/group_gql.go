@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion19
+const _ = veloxgql.GeneratedCodeIsVersion20
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -96,19 +96,37 @@ type GroupEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// NewGroupConnection is the connection to the Group nodes q returns, ordered by
-// orderBy and then the key, and paged by the other arguments. q must not be
-// ordered, and must select the key and the order columns.
-func NewGroupConnection(
-	ctx context.Context, q velox.Query[Group],
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-	orderBy *GroupOrder,
-) (*GroupConnection, error) {
-	return newGroupConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, orderBy)
+// GroupPaginateOption is an option of a query's Paginate to Group nodes:
+// WithGroupOrder. Of two options that set the same thing, the later wins.
+type GroupPaginateOption struct {
+	orderBy *GroupOrder
 }
 
-// newGroupConnection is NewGroupConnection of the nodes from leads to: a
-// query's, or an edge's, whose queries batch.
+// WithGroupOrder orders the connection by orderBy and then the key.
+func WithGroupOrder(orderBy *GroupOrder) GroupPaginateOption {
+	return GroupPaginateOption{orderBy: orderBy}
+}
+
+// PaginateQuery is the connection to the Group nodes q returns, ordered by
+// orderBy and then the key, and paged by the other arguments: velox.Query's
+// Paginate. q must not be ordered, and must select the key and the order
+// columns.
+func (*Group) PaginateQuery(
+	ctx context.Context, q velox.Query[Group],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	opts []GroupPaginateOption,
+) (*GroupConnection, error) {
+	var o GroupPaginateOption
+	for _, x := range opts {
+		if x.orderBy != nil {
+			o.orderBy = x.orderBy
+		}
+	}
+	return newGroupConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, o.orderBy)
+}
+
+// newGroupConnection is PaginateQuery of the nodes from leads to: a query's, or
+// an edge's, whose queries batch.
 func newGroupConnection(
 	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

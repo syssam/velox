@@ -394,7 +394,7 @@ func setConnArgs(fs []gqlField) {
 }
 
 // queryDesc returns the description of a Query field that is the
-// connection to o's nodes: what NewXConnection's Go doc says of it.
+// connection to o's nodes: what PaginateQuery's Go doc says of it.
 func queryDesc(o *object) string {
 	how := ""
 	if o.hasWhere {

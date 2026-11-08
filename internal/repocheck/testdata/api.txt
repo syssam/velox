@@ -337,6 +337,7 @@ func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E]
 func (q Query[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
 func (q Query[E]) OrderBy[_ Lazy[E]](os ...Order[E]) Query[E]
 func (q Query[E]) Ordered[_ Lazy[E]]() bool
+func (q Query[E]) Paginate[P Paged[E, K, O, C], K, O, C any](ctx context.Context, after *K, first *int, before *K, last *int, opts ...O) (C, error)
 func (q Query[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (q Query[E]) Selects[_ Lazy[E]](cs ...Column[E]) bool
 func (q Query[E]) SkipLocked[_ Lazy[E]]() Query[E]
@@ -525,6 +526,7 @@ type Option = engine.Option
 type OrderTerm = veloxtype.OrderTerm
 type Order[E any] struct { }
 type OrderedCol[E, V any] struct { I int32 }
+type Paged[E, K, O, C any] interface { *E PaginateQuery(ctx context.Context, q Query[E], after *K, first *int, before *K, last *int, opts []O) (C, error) }
 type Policy = engine.Policy
 type PolicyError = veloxtype.PolicyError
 type Pred[E any] = engine.Pred[E]
@@ -1063,7 +1065,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion19
+const GeneratedCodeIsVersion20
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

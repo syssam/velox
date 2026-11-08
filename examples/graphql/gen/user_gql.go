@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion19
+const _ = veloxgql.GeneratedCodeIsVersion20
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -98,19 +98,47 @@ type UserEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// NewUserConnection is the connection to the User nodes q returns, filtered by
-// where, ordered by orderBy and then the key, and paged by the other arguments.
-// q must not be ordered, and must select the key and the order columns.
-func NewUserConnection(
-	ctx context.Context, q velox.Query[User],
-	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
-	orderBy *UserOrder, where *UserWhereInput,
-) (*UserConnection, error) {
-	return newUserConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, orderBy, where)
+// UserPaginateOption is an option of a query's Paginate to User nodes:
+// WithUserOrder or WithUserFilter. Of two options that set the same thing, the
+// later wins.
+type UserPaginateOption struct {
+	orderBy *UserOrder
+	where   *UserWhereInput
 }
 
-// newUserConnection is NewUserConnection of the nodes from leads to: a query's,
-// or an edge's, whose queries batch.
+// WithUserOrder orders the connection by orderBy and then the key.
+func WithUserOrder(orderBy *UserOrder) UserPaginateOption {
+	return UserPaginateOption{orderBy: orderBy}
+}
+
+// WithUserFilter filters the connection by where.
+func WithUserFilter(where *UserWhereInput) UserPaginateOption {
+	return UserPaginateOption{where: where}
+}
+
+// PaginateQuery is the connection to the User nodes q returns, filtered by
+// where, ordered by orderBy and then the key, and paged by the other arguments:
+// velox.Query's Paginate. q must not be ordered, and must select the key and
+// the order columns.
+func (*User) PaginateQuery(
+	ctx context.Context, q velox.Query[User],
+	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
+	opts []UserPaginateOption,
+) (*UserConnection, error) {
+	var o UserPaginateOption
+	for _, x := range opts {
+		if x.orderBy != nil {
+			o.orderBy = x.orderBy
+		}
+		if x.where != nil {
+			o.where = x.where
+		}
+	}
+	return newUserConnection(ctx, gqlgraph.Query(untyped.FromQuery(q)), after, first, before, last, o.orderBy, o.where)
+}
+
+// newUserConnection is PaginateQuery of the nodes from leads to: a query's, or
+// an edge's, whose queries batch.
 func newUserConnection(
 	ctx context.Context, from gqlgraph.Source,
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,

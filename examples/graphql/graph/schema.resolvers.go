@@ -174,22 +174,22 @@ func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Nod
 
 // Posts is the resolver for the posts field.
 func (r *queryResolver) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	return gen.NewPostConnection(ctx, veloxgql.DB(ctx).Query[gen.Post](), after, first, before, last, orderBy, where)
+	return veloxgql.DB(ctx).Query[gen.Post]().Paginate(ctx, after, first, before, last, gen.WithPostOrder(orderBy), gen.WithPostFilter(where))
 }
 
 // Labels is the resolver for the labels field.
 func (r *queryResolver) Labels(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) (*gen.LabelConnection, error) {
-	return gen.NewLabelConnection(ctx, veloxgql.DB(ctx).Query[gen.Tag](), after, first, before, last, orderBy, where)
+	return veloxgql.DB(ctx).Query[gen.Tag]().Paginate(ctx, after, first, before, last, gen.WithLabelOrder(orderBy), gen.WithLabelFilter(where))
 }
 
 // Users is the resolver for the users field.
 func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
-	return gen.NewUserConnection(ctx, veloxgql.DB(ctx).Query[gen.User](), after, first, before, last, orderBy, where)
+	return veloxgql.DB(ctx).Query[gen.User]().Paginate(ctx, after, first, before, last, gen.WithUserOrder(orderBy), gen.WithUserFilter(where))
 }
 
 // PublishedPosts is the resolver for the publishedPosts field.
 func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	return gen.NewPostConnection(ctx, veloxgql.DB(ctx).Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
+	return veloxgql.DB(ctx).Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)).Paginate(ctx, after, first, before, last, gen.WithPostOrder(orderBy), gen.WithPostFilter(where))
 }
 
 // Initials is the resolver for the initials field: the first letter of each

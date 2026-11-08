@@ -2,7 +2,7 @@
 // gqlgen's autobind finds in the generated package, named after the SDL types
 // they bind to, and the methods and functions their fields resolve through.
 // It writes <label>_gql.go for each entity with a GraphQL type (its types,
-// its edge methods, its NewXConnection, and its mutation inputs
+// its edge methods, its PaginateQuery and Paginate options, and its mutation inputs
 // with their method Setters, which input.go writes), and
 // node_gql.go with Node and Nodes.
 //
@@ -231,7 +231,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion19\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion20\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {

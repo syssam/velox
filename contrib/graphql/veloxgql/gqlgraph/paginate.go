@@ -404,8 +404,8 @@ type Connection struct {
 // Paginate is the connection to the nodes of c's type that from leads to,
 // filtered by args.Where, paged by args, in the order args.Order and then
 // c's key, each column ASC. For generated code: the body of a type's
-// newXConnection, which NewXConnection calls with a Query and an edge
-// method with an Edge. It checks the query and the arguments, decodes the cursor,
+// newXConnection, which the entity's PaginateQuery calls with a Query and
+// an edge method with an Edge. It checks the query and the arguments, decodes the cursor,
 // and runs no query. An Edge's connection batches (see Edge's paginate),
 // and it fails as veloxgql.DBFromContext does without a DB in ctx.
 //
@@ -448,9 +448,9 @@ func paginate(ctx context.Context, q untyped.TableQuery, c *Type, args Args, ord
 	return newConnection(ctx, q, c, args, order)
 }
 
-// newConnFunc is the generated function that pages c's nodes, as an
-// application's error names it: "NewPostConnection".
-func newConnFunc(c *Type) string { return "New" + c.Name + "Connection" }
+// newConnFunc is the call that pages c's nodes, as an application's error
+// names it: "Paginate of Post", a query's Paginate.
+func newConnFunc(c *Type) string { return "Paginate of " + c.Name }
 
 // connectionBase checks q, Paginate's query, against c and order, and
 // returns it reading only the columns the selection of the field of ctx

@@ -21,7 +21,7 @@ var personConn = gqlgraph.Type{
 }
 
 // TestPaginateBase: a q without the key, or without the column of an own
-// order field, is refused with an internal error that names NewXConnection; an
+// order field, is refused with an internal error that names the Paginate; an
 // order field the type does not have is refused as the client's.
 func TestPaginateBase(t *testing.T) {
 	db, st := peopleDB(t)
@@ -34,8 +34,8 @@ func TestPaginateBase(t *testing.T) {
 		order []gqlgraph.Order
 		want  string
 	}{
-		{"no key", q.Columns(int(people.Name.I)), nil, "veloxgql: NewPersonConnection: q does not select the key, which the cursors hold"},
-		{"no order column", q.Columns(int(people.ID.I), int(people.Name.I)), age, "veloxgql: NewPersonConnection: q does not select the column of AGE, which orderBy names and the cursors hold"},
+		{"no key", q.Columns(int(people.Name.I)), nil, "veloxgql: Paginate of Person: q does not select the key, which the cursors hold"},
+		{"no order column", q.Columns(int(people.ID.I), int(people.Name.I)), age, "veloxgql: Paginate of Person: q does not select the column of AGE, which orderBy names and the cursors hold"},
 	} {
 		_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(c.q), &personConn, gqlgraph.Args{Order: c.order})
 		var coded interface{ Extensions() map[string]any }
