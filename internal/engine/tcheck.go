@@ -62,7 +62,11 @@ func checkTags(n Node, in *EntityInfo) error {
 	case OpExists:
 		if r, ok := n.V.(linkRef); ok {
 			if owner, err := r.owner(); err == nil && owner != in {
-				return fmt.Errorf("velox: %s: a condition on a relation of %s", in.Name, owner.Name)
+				what := "a relation"
+				if _, col := r.(ColRef); col {
+					what = "a column"
+				}
+				return fmt.Errorf("velox: %s: a condition on %s of %s", in.Name, what, owner.Name)
 			}
 		}
 		l, err := existsLink(n)
