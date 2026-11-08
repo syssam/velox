@@ -1,6 +1,7 @@
 # 32. What ent users write is generated, or refused with the way out
 
-Status: accepted, 2026-11-02.
+Status: accepted, 2026-11-02. Its explicit-null bullet is reversed by
+[0045](0045-graphql-input-setters.md): a null is a field not given, as in entgql.
 
 ## Context
 
@@ -89,7 +90,8 @@ the decisions below keeps that rule and removes the refusals it does not need.
 (SQLite, PostgreSQL through pgx and database/sql, MySQL), `TestPaginateNullable`,
 `TestNullableOrderTerm`, `TestNullableOrderServed`; `TestJSONLists`,
 `TestJSONListsServed`, `TestJSONInputExact`; `TestUint64OverSaysWhy`;
-`TestCreateSetsSkipped`, `TestSkippedFieldSetByResolver`; `TestUpdateNullClears`.
+`TestCreateSetsSkipped`, `TestSkippedFieldSetByResolver`; `TestUpdateNullKeeps`
+(once `TestUpdateNullClears`, before 0045).
 
 ## Review
 

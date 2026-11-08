@@ -147,6 +147,7 @@ delete generated; gen 25.8 s, 1.83 GB, 43.6k lines with none.
 `TestMutationsRun` (every mutation test of before, but the delete ones, on SQLite,
 and on PostgreSQL and MySQL with `scripts/ci-local.sh`), `TestUnknownRowCount`,
 `TestMutationSchemaServes`, `TestLimitsServed`, `TestCreateInputs`,
-`TestUpdateInputs`, `TestCreateSetsSkipped`, `TestInputStringHidesSensitive`,
-`TestCleared`, `TestClearEdge`, `TestNotNull`, `TestErrorOrder`; in
+`TestUpdateInputs`, `TestCreateSetsSkipped`, `TestInputStringHidesSensitive`
+(`TestCleared`, `TestClearEdge`, `TestNotNull` and `TestErrorOrder` went with the
+runtime 0045 removed); in
 `examples/graphql`, `TestCreatePost`, `TestDeletePost` and `TestDeleteOtherOrg`.

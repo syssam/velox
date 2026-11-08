@@ -43,4 +43,6 @@ the type, not a connection, and its variable was `postConnGQL`.
 - gen exports no `GQL`-suffixed name but the methods gqlgen binds to
   (`MarshalGQL`, `UnmarshalGQL`, the `<Field>GQL` getters).
 - Errors about the query name `PaginateXs` (`render_test`'s
-  `TestPaginateFilters`, gqlimpl's `TestPaginateBase`).
+  `TestPaginateFilters`, gqlimpl's `TestPaginateBase`). Since 0059 the call is
+  `db.Query[T]().Paginate` and the errors say "Paginate of Post"
+  (`TestPaginateQueryFilters`; gqlgraph's `TestPaginateBase`).

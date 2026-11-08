@@ -77,9 +77,11 @@ func (InOrg) Hooks[E any]() []velox.Hook[E] {
 
 ## Evidence
 
-- `scope/scope_test.go` (`TestByRefuses`, `TestScopeANDsWithTheEntitysPolicy`),
+- `scope/scope_test.go` (`TestScopeANDsWithTheEntitysPolicy`; `scope.By` and `TestByRefuses` are gone (0039):
+  scopetest's `TestIsolatesRefusesMutableColumn` and `TestIsolatesRefusesNullableColumn`,
+  and `TestScopeKeyOfAnotherTypeFailsClosed` and `TestScopeMissingColumnFailsClosed`, cover its cases),
   `scope/scopetest`, `schema/mixin/softdelete`.
-- `internal/codegen` golden `scoped`, now mixins, and `TestRenderScopedBinding`.
+- `internal/codegen` golden `scoped`, now mixins, and `TestRenderNamesSchema` (once `TestRenderScopedBinding`).
 - `cmd/velox-gen` `TestGenerateTenancyMixin`, `TestSweepRemovesScopeVelox`.
 - `internal/apitest` `TestComposeScopePolicyHooks`.
 - `examples/tenant` `TestInOrgIsolatesProject`; tracker, tour, routing and

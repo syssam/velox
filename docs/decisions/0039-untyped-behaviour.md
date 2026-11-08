@@ -111,7 +111,7 @@ ent's `ent.Policy`, `ent.Hook` and generic `ent.Mutation` do.
 - `internal/codegen`: goldens `blog`, `scoped`, `mixinbehaviour` and
   `mixinplain` with no runtime files; `TestSchemaMethodsRefusesTypedShape`,
   `TestMixinMethodRefusesGeneric`, `TestBehaviourRefusesSchemaImportingGen`,
-  `TestRenderBindsMethodValues`, `TestEdgeLinkedWhenBehaviourNamesIt`,
+  `TestRenderNamesSchema` (once `TestRenderBindsMethodValues`; 0040 names the schema's value), `TestEdgeLinkedWhenBehaviourNamesIt`,
   `TestEdgeNameMustBeConstant`; the column checks' `TestCheckColumns*` in
   `behaviourcheck_test.go`.
 - `cmd/velox-gen`: `TestGenerateWithBehaviourWithoutGen`,

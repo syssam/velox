@@ -4,6 +4,9 @@
   tenant column with an edge, `ErrTenantMismatch`) were removed by
   [0029](0029-scope-replaces-tenant.md): a scope is the target's Read policy now, and
   `scope.ErrNoScope` presents as UNAUTHENTICATED, `scope.ErrMismatch` as FORBIDDEN.
+  Its explicit-null rules (a null clears a field, a null `<edge>ID` is refused) are
+  superseded by [0045](0045-graphql-input-setters.md): a null is a field not given, and
+  only `clear<Field>` or `clear<Edge>` clears.
 
 ## Context
 
@@ -366,8 +369,9 @@ change. Two edges bound to one foreign key are refused (rule 55).
 - `TestLimitsServed` (contrib/graphql/cmd/velox-graphql/limits_e2e_test.go) serves a
   hidden Required edge, a tenant key, an explicit zero value and null, an empty blob and
   `[]`, `or: []` and the names through gqlgen on SQLite, and `TestForeignKeyFilterHidden`,
-  `TestForeignKeyFilterOtherTenant`, `TestListEdgeMaxList`, `TestUpdateNullClears`,
-  `TestUpdateNullEdgeRefused`, `TestNullBytesGoType`, `TestJSONInputExact` and
+  `TestForeignKeyFilterOtherScope` (once `…OtherTenant`), `TestListEdgeMaxList`,
+  `TestUpdateNullKeeps` and `TestUpdateNullEdgeKeeps` (once `TestUpdateNullClears` and
+  `TestUpdateNullEdgeRefused`, before 0045), `TestNullBytesGoType`, `TestJSONInputExact` and
   `TestUint64HighBit`.
 - `TestBuildUniqueOptionalRefused`, `TestBuildTwoEdgesOnOneKeyRefused`,
   `TestBuildNonASCIINamesRefused` (internal/codegen/build_refusals_test.go);
