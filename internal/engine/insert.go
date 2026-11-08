@@ -10,7 +10,21 @@ import (
 )
 
 // MaxParams is each dialect's limit on the parameters of one statement.
-var MaxParams = map[Dialect]int{Postgres: 65535, MySQL: 65535, SQLite: 32766}
+func dialectMaxParams(d Dialect) int {
+	if d == SQLite {
+		return 32766
+	}
+	return 65535
+}
+
+// maxParams is the most parameters a statement on db may have: the
+// dialect's limit, or WithMaxParams'.
+func (db *DB) maxParams() int {
+	if db.Cfg.MaxParams > 0 {
+		return db.Cfg.MaxParams
+	}
+	return dialectMaxParams(db.D)
+}
 
 // CheckConflict refuses an upsert clause of entity in without the columns of
 // a unique key, one that updates an Immutable column, one that updates on
@@ -242,11 +256,11 @@ func setKey(in *EntityInfo, gen int, ptr any, id int64) error {
 // PerStatement is the most rows of n columns of entity in that one statement
 // holds on dialect d: half as many on the join entity of a bidirectional
 // edge, which also writes each row's mirror (MirrorRows).
-func PerStatement(d Dialect, in *EntityInfo, n int) int {
+func PerStatement(db *DB, in *EntityInfo, n int) int {
 	if in.bidi {
 		n *= 2
 	}
-	return max(1, MaxParams[d]/n)
+	return max(1, db.maxParams()/n)
 }
 
 // MirrorRows gives each row of st, an insert on the join entity of a

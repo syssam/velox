@@ -297,21 +297,18 @@ func infoOf[E any]() *velox.EntityInfo {
 	return info
 }
 
-// setRollbackTimeout sets RollbackTimeout to d until restore is called.
-func setRollbackTimeout(d time.Duration) (restore func()) {
-	old := engine.RollbackTimeout
-	engine.RollbackTimeout = d
-	return func() { engine.RollbackTimeout = old }
-}
-
 // cacheSize returns the number of shapes db's render cache holds.
 func cacheSize(db *velox.DB) int { return engineOf(db).Cfg.Cache.Size() }
 
-// setMaxParams lowers a dialect's parameter limit for a test.
-func setMaxParams(d velox.Dialect, n int) (restore func()) {
-	old := engine.MaxParams[d]
-	engine.MaxParams[d] = n
-	return func() { engine.MaxParams[d] = old }
+// params lowers a DB's parameter limit to n, for a test.
+func params(n int) velox.Option { return engine.WithMaxParams(n) }
+
+// setMaxParams lowers db's parameter limit to n until restore is called.
+func setMaxParams(db *velox.DB, n int) (restore func()) {
+	c := engineOf(db).Cfg
+	old := c.MaxParams
+	c.MaxParams = n
+	return func() { c.MaxParams = old }
 }
 
 // targetOf is the target of a relation to T as a use site names it: what Rel

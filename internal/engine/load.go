@@ -168,7 +168,7 @@ func tieBreak(t *EntityInfo, order []OrderTerm) []OrderTerm {
 // ps: 64 parameters are left for conditions that rewrite hooks add, such as a
 // scope's. A statement that still overflows, because a policy's or a hook's
 // conditions take more, is split again (byChunks).
-func keysPer(d Dialect, t *EntityInfo, ps []Predicate) int {
+func keysPer(db *DB, t *EntityInfo, ps []Predicate) int {
 	// The relations in ps resolve with the statement; one that does not
 	// fails it there. Writing needs them resolved.
 	ps, err := resolvePreds(ps)
@@ -177,11 +177,11 @@ func keysPer(d Dialect, t *EntityInfo, ps []Predicate) int {
 	}
 	fixed := 0 // the parameters of the filter
 	for _, p := range ps {
-		w := writer{d: d, in: t, argsOnly: true}
+		w := writer{d: db.D, in: t, argsOnly: true}
 		w.pred(p.n)
 		fixed += len(w.args)
 	}
-	return max(1, MaxParams[d]-fixed-64)
+	return max(1, db.maxParams()-fixed-64)
 }
 
 // ownerRows reads, after the columns its Scan is given, one more: the owner
@@ -719,7 +719,7 @@ func fetchPlan(db *DB, t *EntityInfo, sp LoadSpec) ([]OrderTerm, int) {
 			order = append(order, OrderTerm{Column: k})
 		}
 	}
-	return order, keysPer(db.D, t, sp.Where)
+	return order, keysPer(db, t, sp.Where)
 }
 
 // byChunks runs read on keys[lo:hi] in chunks of at most per keys, in order.

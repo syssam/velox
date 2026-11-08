@@ -355,7 +355,7 @@ func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res
 	}
 	// Before the around hooks, which never see a statement that cannot be
 	// sent; exec checks again, for a hook that changes Args.
-	if err := checkParams(db.D, st); err != nil {
+	if err := checkParams(db, st); err != nil {
 		return err
 	}
 	if db.timed() {
@@ -459,7 +459,7 @@ func (db *DB) DryRun(ctx context.Context, st *Statement) (string, []any, error) 
 	if _, err := db.route(ctx, st); err != nil {
 		return "", nil, err
 	}
-	if err := checkParams(db.D, st); err != nil {
+	if err := checkParams(db, st); err != nil {
 		return "", nil, err
 	}
 	return st.SQL, st.Args, nil
@@ -582,7 +582,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 // returned and only the back-off happens. Neither happens once ctx has ended.
 func (db *DB) send(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
 	st.Result = Result{Affected: -1}
-	if err := checkParams(db.D, st); err != nil {
+	if err := checkParams(db, st); err != nil {
 		return err
 	}
 	if t.Replica >= 0 && st.Route.Fallback {

@@ -158,7 +158,7 @@ func LoadEach(ctx context.Context, q EachQuery, owner *EntityInfo, ownerErr erro
 		key = []int{l.TargetCol}
 	}
 	ec := makeEachClause(l, sp.Each)
-	per := keysPer(db.D, t, st.Where)
+	per := keysPer(db, t, st.Where)
 	var parts, owners []any
 	var at Target
 	err = byChunks(len(p.Keys), per, func(lo, hi int) error {
@@ -234,7 +234,7 @@ func CountEach(ctx context.Context, q EachQuery, owner *EntityInfo, ownerErr err
 		typ = GoType(l.Join.Columns[l.JoinOwner])
 	}
 	ec := makeEachClause(l, 0)
-	per := keysPer(db.D, t, st.Where)
+	per := keysPer(db, t, st.Where)
 	counts := make(map[any]int64, len(p.Keys))
 	read := func(r Rows) error {
 		for r.Next() {

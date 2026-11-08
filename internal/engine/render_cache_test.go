@@ -119,9 +119,7 @@ func TestCacheIsSafeForConcurrentUse(t *testing.T) {
 }
 
 func TestCacheStopsGrowing(t *testing.T) {
-	defer func(n int) { engine.MaxShapes = n }(engine.MaxShapes)
-	engine.MaxShapes = 3
-	var c engine.RenderCache
+	c := engine.RenderCache{MaxShapes: 3}
 	for n := 1; n <= 10; n++ {
 		vs := make([]int64, n)
 		want, _ := render(velox.Postgres, stmt(hID.In(vs...)))
@@ -208,9 +206,7 @@ func TestCacheKeepsWriteColumnsApart(t *testing.T) {
 // grow the cache past its byte bound, and statements past it still render
 // right.
 func TestCacheBoundedInBytes(t *testing.T) {
-	defer func(n int) { engine.MaxCacheBytes = n }(engine.MaxCacheBytes)
-	engine.MaxCacheBytes = 2000
-	var c engine.RenderCache
+	c := engine.RenderCache{MaxBytes: 2000}
 	for n := 1; n <= 200; n++ {
 		vs := make([]any, n)
 		for i := range vs {
@@ -223,8 +219,8 @@ func TestCacheBoundedInBytes(t *testing.T) {
 			t.Fatalf("n=%d: cached render differs", n)
 		}
 	}
-	if c.Bytes > engine.MaxCacheBytes {
-		t.Errorf("cache holds %d bytes, over its bound %d", c.Bytes, engine.MaxCacheBytes)
+	if c.Bytes > c.MaxBytes {
+		t.Errorf("cache holds %d bytes, over its bound %d", c.Bytes, c.MaxBytes)
 	}
 }
 
@@ -263,19 +259,17 @@ func TestCacheBytesCountTheFingerprint(t *testing.T) {
 		t.Errorf("the cache counts %d bytes, its entries sum to %d", c.Bytes, sum)
 	}
 
-	defer func(n int) { engine.MaxCacheBytes = n }(engine.MaxCacheBytes)
-	engine.MaxCacheBytes = sum - 1
-	var tight engine.RenderCache
+	tight := engine.RenderCache{MaxBytes: sum - 1}
 	for n := 1; n <= shapes; n++ {
 		cachedRender(&tight, velox.Postgres, inShape(n))
 	}
 	var buf [256]byte
 	last := engine.ShapeKey(buf[:0], velox.Postgres, inShape(shapes))
 	if _, ok := tight.M[invInfo][string(last)]; ok {
-		t.Errorf("the last shape is held, with a bound of %d bytes, one under the %d they need", engine.MaxCacheBytes, sum)
+		t.Errorf("the last shape is held, with a bound of %d bytes, one under the %d they need", tight.MaxBytes, sum)
 	}
-	if tight.Size() != shapes-1 || tight.Bytes > engine.MaxCacheBytes {
-		t.Errorf("the tight cache holds %d shapes and %d bytes, want %d shapes within %d bytes", tight.Size(), tight.Bytes, shapes-1, engine.MaxCacheBytes)
+	if tight.Size() != shapes-1 || tight.Bytes > tight.MaxBytes {
+		t.Errorf("the tight cache holds %d shapes and %d bytes, want %d shapes within %d bytes", tight.Size(), tight.Bytes, shapes-1, tight.MaxBytes)
 	}
 }
 
@@ -350,9 +344,7 @@ func TestCacheStoresTheFingerprint(t *testing.T) {
 	if miss != hit || miss.Text != text || miss.Fp != engine.Fingerprint(text) {
 		t.Errorf("miss %+v, hit %+v, want text %s", miss, hit, text)
 	}
-	defer func(n int) { engine.MaxShapes = n }(engine.MaxShapes)
-	engine.MaxShapes = 0
-	var full engine.RenderCache
+	full := engine.RenderCache{MaxShapes: -1}
 	over, _, err := full.Get(velox.Postgres, stmt(hOrg.EQ(9)))
 	if err != nil {
 		t.Fatal(err)

@@ -18,6 +18,11 @@ type config struct {
 	Callers   *callers   // WithCallers; nil: off
 	Comment   *commenter // WithSQLComment; nil: off
 	TxArounds []TxAround
+	// MaxParams is WithMaxParams': the most parameters a statement may
+	// have; 0: the dialect's limit.
+	MaxParams int
+	// RollbackTimeout is WithRollbackTimeout's; 0: DefaultRollbackTimeout.
+	RollbackTimeout time.Duration
 	// connHold is the *connHold of the Iter or Tx that holds a pool's one
 	// connection; nil: none (iterconn.go). A Value: an atomic.Pointer would put
 	// connHold in the export data of every package that uses a DB
@@ -54,6 +59,17 @@ func WithMaxLimit(n int) Option {
 		panic(fmt.Sprintf("velox: WithMaxLimit(%d): the maximum must be at least 2, the limit One uses", n))
 	}
 	return Option{func(c *config) { c.MaxLimit = n }}
+}
+
+// WithMaxParams lowers the most parameters a statement may have below the
+// dialect's limit, so that tests split statements at a small size. The root
+// does not offer it.
+func WithMaxParams(n int) Option { return Option{func(c *config) { c.MaxParams = max(n, 0) }} }
+
+// WithRollbackTimeout replaces DefaultRollbackTimeout, so that tests bound a
+// rollback tightly. The root does not offer it.
+func WithRollbackTimeout(d time.Duration) Option {
+	return Option{func(c *config) { c.RollbackTimeout = max(d, 0) }}
 }
 
 // WithMaxRows fails, with ErrTooManyRows, a query that returns more than n
@@ -330,10 +346,10 @@ func readRows(r Rows, read func(Rows) error) (readErr, rowsErr error) {
 }
 
 // checkParams refuses a rendered statement with more parameters than
-// dialect d allows, with a *paramsError.
-func checkParams(d Dialect, st *Statement) error {
-	if lim := MaxParams[d]; len(st.Args) > lim {
-		return &paramsError{entity: st.Entity.Name, d: d, N: len(st.Args), Max: lim}
+// db's dialect allows, with a *paramsError.
+func checkParams(db *DB, st *Statement) error {
+	if lim := db.maxParams(); len(st.Args) > lim {
+		return &paramsError{entity: st.Entity.Name, d: db.D, N: len(st.Args), Max: lim}
 	}
 	return nil
 }

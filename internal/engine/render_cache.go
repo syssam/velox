@@ -7,16 +7,16 @@ import (
 	"sync"
 )
 
-// MaxShapes bounds the cache: the number of shapes it holds, across all
-// entities. Programs have a fixed set of query shapes, except that In lists
-// of every length are shapes of their own. MaxShapes and MaxCacheBytes both
-// apply; past either bound, statements are rendered without the cache.
-var MaxShapes = 4096
+// DefaultMaxShapes bounds a cache whose MaxShapes is 0: the number of
+// shapes it holds, across all entities. Programs have a fixed set of query
+// shapes, except that In lists of every length are shapes of their own. Both
+// bounds apply; past either, statements are rendered without the cache.
+const DefaultMaxShapes = 4096
 
-// MaxCacheBytes bounds the cache's memory: the bytes of keys and texts it
-// holds, across entities: each shape's key, text and fingerprint. In lists of
-// many lengths are the shapes that grow it.
-var MaxCacheBytes = 4 << 20
+// DefaultMaxCacheBytes bounds the memory of a cache whose MaxBytes is 0: the
+// bytes of keys and texts it holds, across entities: each shape's key, text
+// and fingerprint. In lists of many lengths are the shapes that grow it.
+const DefaultMaxCacheBytes = 4 << 20
 
 // MaxCachedRows is the most rows an INSERT may have and be cached: each row
 // count is a shape of its own, and a batch of thousands is rendered once.
@@ -47,6 +47,9 @@ type RenderCache struct {
 	M     map[*EntityInfo]map[string]cached // entity, then shape
 	n     int                               // shapes held, across entities
 	Bytes int                               // key, text and fingerprint bytes held
+	// MaxShapes and MaxBytes bound the cache; 0 is DefaultMaxShapes and
+	// DefaultMaxCacheBytes, and below 0 caches nothing. Set before first use.
+	MaxShapes, MaxBytes int
 }
 
 // Get returns the shape's cached text and fingerprint, and the statement's
@@ -80,7 +83,7 @@ func (c *RenderCache) Get(d Dialect, st *Statement) (cached, []any, error) {
 	}
 	e = cached{text, Fingerprint(text)}
 	c.mu.Lock()
-	if c.n < MaxShapes && c.Bytes+len(key)+len(e.Text)+len(e.Fp) <= MaxCacheBytes {
+	if c.n < c.maxShapes() && c.Bytes+len(key)+len(e.Text)+len(e.Fp) <= c.maxBytes() {
 		if c.M == nil {
 			c.M = make(map[*EntityInfo]map[string]cached)
 		}
@@ -97,6 +100,22 @@ func (c *RenderCache) Get(d Dialect, st *Statement) (cached, []any, error) {
 	}
 	c.mu.Unlock()
 	return e, args, nil
+}
+
+// maxShapes is the most shapes c holds.
+func (c *RenderCache) maxShapes() int {
+	if c.MaxShapes != 0 {
+		return max(c.MaxShapes, 0)
+	}
+	return DefaultMaxShapes
+}
+
+// maxBytes is the most bytes c holds.
+func (c *RenderCache) maxBytes() int {
+	if c.MaxBytes != 0 {
+		return max(c.MaxBytes, 0)
+	}
+	return DefaultMaxCacheBytes
 }
 
 // Size returns the number of shapes held.

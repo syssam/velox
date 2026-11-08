@@ -79,23 +79,28 @@ func ended(err error) bool {
 }
 
 // rollback rolls the transaction ctl controls back on rollbackContext. Its
-// deadline is RollbackTimeout's alone: the transaction's ROLLBACK must run
-// after the transaction's deadline has passed.
-func rollback(ctx context.Context, ctl txControl) error {
-	rctx, cancel := rollbackContext(ctx, time.Time{})
+// deadline is the rollback timeout's alone: the transaction's ROLLBACK must
+// run after the transaction's deadline has passed.
+func (db *DB) rollback(ctx context.Context, ctl txControl) error {
+	rctx, cancel := db.rollbackContext(ctx, time.Time{})
 	defer cancel()
 	return ctl.Rollback(rctx)
 }
 
-// RollbackTimeout bounds every rollback velox sends on a context it detached
-// from the caller's cancellation: the transaction's ROLLBACK and a savepoint's
-// ROLLBACK TO and its RELEASE. A var, so that a test can lower it.
-var RollbackTimeout = 5 * time.Second
+// DefaultRollbackTimeout bounds every rollback velox sends on a context it
+// detached from the caller's cancellation: the transaction's ROLLBACK and a
+// savepoint's ROLLBACK TO and its RELEASE. WithRollbackTimeout replaces it.
+const DefaultRollbackTimeout = 5 * time.Second
 
-// rollbackContext is ctx without its cancellation, with RollbackTimeout from
-// now; for a savepoint also no later than the transaction's deadline (also).
-func rollbackContext(ctx context.Context, also time.Time) (context.Context, context.CancelFunc) {
-	dl := time.Now().Add(RollbackTimeout)
+// rollbackContext is ctx without its cancellation, with db's rollback
+// timeout from now; for a savepoint also no later than the transaction's
+// deadline (also).
+func (db *DB) rollbackContext(ctx context.Context, also time.Time) (context.Context, context.CancelFunc) {
+	d := db.Cfg.RollbackTimeout
+	if d == 0 {
+		d = DefaultRollbackTimeout
+	}
+	dl := time.Now().Add(d)
 	if !also.IsZero() && also.Before(dl) {
 		dl = also
 	}
@@ -445,7 +450,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	defer func() {
 		if !finished {
 			endTx(info, TxRollback)
-			_ = rollback(ctx, ctl)
+			_ = db.rollback(ctx, ctl)
 		}
 	}()
 	if err := fn(&f.ctx, &f.db); err != nil {
@@ -455,7 +460,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		} else {
 			endTx(info, TxRollback)
 		}
-		if rerr := rollback(ctx, ctl); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
+		if rerr := db.rollback(ctx, ctl); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
 			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
 		if cause != nil && past(deadline) && !dberr.Is(err, ErrTimeout) {
@@ -470,7 +475,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		endTx(info, TxError)
 		// past the deadline, or canceled: roll back on every driver rather
 		// than leave it to the driver whether a late commit succeeds.
-		_ = rollback(ctx, ctl)
+		_ = db.rollback(ctx, ctl)
 		// velox's deadline is the cause even when a TxAround hook passed on
 		// a context without it.
 		if timedOut(ctx) || cause != nil && past(deadline) {
@@ -488,7 +493,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		// transaction, which must not commit it.
 		endTx(info, TxError)
 		err := fmt.Errorf("velox: transaction: %w", f.broken)
-		if rerr := rollback(ctx, ctl); rerr != nil && !ended(rerr) {
+		if rerr := db.rollback(ctx, ctl); rerr != nil && !ended(rerr) {
 			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
 		return false, err
@@ -624,7 +629,7 @@ func (db *DB) sqliteRolledBack(ctx context.Context) bool {
 	if db.pastTxDeadline() {
 		return false
 	}
-	pctx, cancel := rollbackContext(ctx, db.txDeadline)
+	pctx, cancel := db.rollbackContext(ctx, db.txDeadline)
 	defer cancel()
 	_, err := db.Ex.Exec(pctx, "BEGIN", nil)
 	return err == nil || !ended(err) && !strings.Contains(err.Error(), "within a transaction")
@@ -634,7 +639,7 @@ func (db *DB) sqliteRolledBack(ctx context.Context) bool {
 // a lock wait timeout rolls the transaction back. No answer counts as yes: a
 // transaction wrongly refused fails, and one wrongly trusted loses its writes.
 func (db *DB) rollsBackOnTimeout(ctx context.Context) bool {
-	qctx, cancel := rollbackContext(ctx, db.txDeadline)
+	qctx, cancel := db.rollbackContext(ctx, db.txDeadline)
 	defer cancel()
 	r, err := db.Ex.Query(qctx, "SELECT @@innodb_rollback_on_timeout", nil)
 	if err != nil {
@@ -651,7 +656,7 @@ func (db *DB) rollsBackOnTimeout(ctx context.Context) bool {
 // undoSavepoint is rollbackSavepoint on rollbackContext, bounded by the
 // transaction's deadline too.
 func (db *DB) undoSavepoint(ctx context.Context, name string) error {
-	rctx, cancel := rollbackContext(ctx, db.txDeadline)
+	rctx, cancel := db.rollbackContext(ctx, db.txDeadline)
 	defer cancel()
 	return db.rollbackSavepoint(rctx, name)
 }

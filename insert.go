@@ -400,7 +400,7 @@ func prepareMany[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs 
 			return nil, 0, err
 		}
 	}
-	return cols, engine.PerStatement(db.D, m.Info, len(cols)), nil
+	return cols, engine.PerStatement(db, m.Info, len(cols)), nil
 }
 
 // batch is the statement that inserts xs, prepared, in one statement.

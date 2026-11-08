@@ -360,7 +360,7 @@ func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows) (cols []i
 			return nil, 0, err
 		}
 	}
-	return cols, PerStatement(db.D, t.info, len(cols)), nil
+	return cols, PerStatement(db, t.info, len(cols)), nil
 }
 
 // batch is the statement that inserts xs's rows from to to, prepared.
