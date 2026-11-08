@@ -200,8 +200,9 @@ them.
 
 - Joins are for to-one relations only (`Join`, `LeftJoin`); a to-many
   relation is loaded with `With` or tested with `Has`. There is no
-  `DISTINCT`, `UNION` or `HAVING`, and no subquery beyond the `EXISTS` of
-  `Has`, `HasWith` and `Of`. `GROUP BY` is one key (`CountBy`, `SumBy` and
+  `DISTINCT`, `UNION` or `HAVING`. Subqueries are the `EXISTS` of `Has`,
+  `HasWith` and `Of`, and a column's `Select` tested with `InSelect`; one
+  with an aggregate, a CTE or a window function is raw SQL. `GROUP BY` is one key (`CountBy`, `SumBy` and
   the like).
 - `Raw` scans only into entities. For a report, run your own SQL on
   `velox.Pool(db)`, the `*sql.DB` under a DB. It is nil on a transaction's DB and
