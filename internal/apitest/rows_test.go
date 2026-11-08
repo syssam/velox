@@ -3,6 +3,7 @@ package apitest
 import (
 	"context"
 	"errors"
+	"iter"
 	"strings"
 	"testing"
 	"time"
@@ -140,4 +141,20 @@ func TestRowsBreakAndHooks(t *testing.T) {
 			t.Errorf("after a break: %v", got)
 		}
 	})
+}
+
+// TestRowsConvertsToSeq2: RawRows converts to iter.Seq2, as ADR 0060 says.
+func TestRowsConvertsToSeq2(t *testing.T) {
+	db := connectInvoices(t, ":memory:")
+	seq := iter.Seq2[velox.RawRow, error](db.Rows(ctx, "r", "SELECT id FROM invoices"))
+	n := 0
+	for _, err := range seq {
+		if err != nil {
+			t.Fatal(err)
+		}
+		n++
+	}
+	if n != 3 {
+		t.Errorf("%d rows, want 3", n)
+	}
 }
