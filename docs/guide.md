@@ -1,0 +1,976 @@
+# A tour of velox
+
+This guide walks through velox one task at a time: describing your data,
+generating code, creating tables, and then reading and writing rows. Each
+section shows the smallest code that works and links to a runnable example
+and to the design decision behind it, for when you want the details.
+
+If you have not run the [quick start](../README.md#quick-start) yet, start
+there: it takes an empty directory to a working query in six steps. If you
+know ent, keep [coming-from-ent.md](coming-from-ent.md) open beside this page;
+it lists every place where velox behaves differently.
+
+The snippets below follow the [tour example](../examples/tour), an invoicing
+app with organizations. You can run it with `cd examples && go run ./tour`.
+
+## Contents
+
+- [How velox fits together](#how-velox-fits-together)
+- [Defining a schema](#defining-a-schema)
+- [Generating code](#generating-code)
+- [Migrations](#migrations)
+- [Connecting](#connecting)
+- [Reading](#reading)
+- [Relations](#relations)
+- [Aggregates and GROUP BY](#aggregates-and-group-by)
+- [Writing](#writing)
+- [Transactions](#transactions)
+- [Hooks, policies and interceptors](#hooks-policies-and-interceptors)
+- [Multi-tenancy with a scope](#multi-tenancy-with-a-scope)
+- [Soft delete](#soft-delete)
+- [Raw SQL](#raw-sql)
+- [Row locks](#row-locks)
+- [Deadlines](#deadlines)
+- [Errors](#errors)
+- [Read replicas and shards](#read-replicas-and-shards)
+- [Observability](#observability)
+- [GraphQL](#graphql)
+- [Where to go next](#where-to-go-next)
+
+## How velox fits together
+
+There are three parts:
+
+1. **A schema package** that you write. Each entity is a Go struct with
+   methods such as `Fields` and `Edges`, in the same style as ent.
+2. **`velox-gen`**, a code generator. It reads the schema and writes a `gen`
+   package: a plain struct per entity (`gen.Invoice`) and a set of typed
+   column handles (`gen.Invoices`).
+3. **The `velox` runtime**, a small generic API. `db.Query[gen.Invoice]()`,
+   `db.Insert(&inv)` and friends work for every entity, so the generated code
+   stays small.
+
+Because the handles are typed, `gen.Invoices.TotalCents.GT("ten")` is a
+compile error rather than a runtime surprise.
+
+## Defining a schema
+
+A schema is a struct that embeds `schema.Schema`. Its methods describe the
+table. Here is the tour's `Invoice`:
+
+```go
+package schema
+
+import (
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/index"
+	"github.com/syssam/velox/schema/mixin"
+	"github.com/syssam/velox/schema/mixin/softdelete"
+)
+
+type Invoice struct{ schema.Schema }
+
+func (Invoice) Mixin() []schema.Mixin {
+	return []schema.Mixin{mixin.Time{}, InOrg{}, softdelete.Mixin{}}
+}
+
+func (Invoice) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("number"),
+		field.String("customer"),
+		field.Enum("status").Values("draft", "sent", "paid"),
+		field.Int64("total_cents"),
+	}
+}
+
+func (Invoice) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("lines", Line.Type)}
+}
+
+func (Invoice) Indexes() []schema.Index {
+	return []schema.Index{
+		index.Fields("org_id", "number").Unique().Where("deleted_at IS NULL"),
+	}
+}
+```
+
+### Fields
+
+Every entity gets an `id` column, an `int64`, unless you declare your own
+`id` field (a UUID or a string works too; see
+[ADR 0056](decisions/0056-scale-round.md)).
+
+The `field` package has a builder per type: `String`, `Text`, `Bool`,
+`Int`, `Int8` to `Int64`, `Uint` to `Uint64`, `Float`, `Float32`, `Time`,
+`Bytes`, `UUID`, `JSON` (plus the shortcuts `Strings`, `Ints` and `Floats`),
+`Enum` and `Other`. Builders take options such as `Unique()`, `Immutable()`,
+`Default(...)`, `Sensitive()` and `Comment(...)`.
+
+Two options work differently from ent, so they are worth learning early
+([ADR 0003](decisions/0003-nullability.md)):
+
+- `Optional()` means "may be left out on insert". The column stays
+  `NOT NULL`, and the field's zero value is stored.
+- `Nillable()` makes the column nullable. The Go field becomes a pointer, and
+  its handle gains `IsNull`, `NotNull` and `SetNull`.
+
+`field.Enum("status").Values(...)` generates a Go type, `gen.InvoiceStatus`,
+with a constant per value, such as `gen.InvoiceStatusPaid`.
+
+### Edges
+
+Relations are declared with `edge.To` on one side and `edge.From(...).Ref(...)`
+on the other, as in ent. The side that holds the foreign key names it with
+`Field`:
+
+```go
+func (Line) Fields() []schema.Field {
+	return []schema.Field{
+		field.Int64("invoice_id"),
+		field.String("description"),
+		field.Int64("amount_cents"),
+	}
+}
+
+func (Line) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.From("invoice", Invoice.Type).Ref("lines").Unique().Required().Field("invoice_id"),
+	}
+}
+```
+
+- `To` with an inverse that is `Unique` is one-to-many.
+- `To` with an inverse that is not `Unique` is many-to-many. velox-gen writes
+  a join entity for it (in the relations example, `gen.PostTag` for the
+  `post_tags` table).
+- `OnDelete(edge.Cascade)` asks the database to delete children with their
+  parent.
+
+The [relations example](../examples/relations) shows all three shapes.
+
+### Indexes
+
+`index.Fields("a", "b")` makes an index, `.Unique()` makes it unique, and
+`.Where("...")` makes it partial on PostgreSQL and SQLite. An entity's primary
+key is always one column; for a natural key, keep `id` and add a unique
+index.
+
+### Mixins
+
+A mixin is a reusable piece of schema: fields, indexes, and behaviour such as
+hooks and policies. velox ships two:
+
+- `mixin.Time{}` adds `created_at` and `updated_at`, kept up to date for you.
+- `softdelete.Mixin{}` adds `deleted_at` and turns deletes into updates (see
+  [Soft delete](#soft-delete)).
+
+You write your own by embedding `mixin.Schema`. The tour's `InOrg` mixin,
+covered under [multi-tenancy](#multi-tenancy-with-a-scope), is a good model.
+
+## Generating code
+
+Add the generator to your module once, then run it after every schema
+change:
+
+```sh
+go get -tool github.com/syssam/velox/cmd/velox-gen
+go tool velox-gen ./schema
+```
+
+This writes the `gen` package next to `schema`. Everything in `gen/` is
+generated, so never edit it. Commit it, and in CI check that it is up to
+date:
+
+```sh
+go tool velox-gen -check ./schema   # writes nothing; exits 3 when gen is stale
+go tool velox-gen verify ./schema   # builds every entity and reports mistakes
+```
+
+Generated code carries a version constant (today
+`velox.GeneratedCodeIsVersion19`). If you update velox and the shape of
+generated code has changed, the old `gen` stops compiling until you run
+velox-gen again. [stability.md](stability.md) explains the rule.
+
+## Migrations
+
+velox plans migrations itself by comparing your schema with the last
+snapshot in the migrations directory ([ADR 0006](decisions/0006-own-migrate-and-atlas.md)).
+
+```sh
+go tool velox-gen migrate diff -dialect postgres   # first diff names the dialect
+go tool velox-gen migrate apply -db "$DATABASE_URL" # or set $VELOX_DB
+go tool velox-gen migrate status -db "$DATABASE_URL"
+go tool velox-gen migrate drift -db "$DATABASE_URL"
+```
+
+`diff` writes the next numbered `.sql` file into `./migrations`. Read it and
+commit it like any other code. `diff` will not plan a destructive change,
+such as dropping a table or a column, until you allow it with `-allow`, for
+example `-allow drop-column=users.nickname`. `apply` also checks the database
+before a change that could lose data the schema does not describe
+([ADR 0026](decisions/0026-migration-safety.md)).
+There are no down migrations: to undo a change, change the schema back and
+diff forward.
+
+You can also apply migrations from your program, which is handy in tests and
+small services. Embed the directory and call `migrate.Up` on the pool:
+
+```go
+//go:embed migrations
+var migrations embed.FS
+
+sub, err := fs.Sub(migrations, "migrations")
+if err != nil {
+	return err
+}
+if _, err := migrate.Up(ctx, velox.Pool(db), sub); err != nil {
+	return err
+}
+```
+
+**Using Atlas instead?** `go tool velox-gen migrate sql -dialect postgres
+./schema` prints the schema's `CREATE` statements for Atlas's
+`external_schema`. A directory is managed by one tool or the other, never
+both. [examples/README.md](../examples/README.md#migrations) has a complete
+`atlas.hcl`, and the steps to adopt an existing database (made by ent or by
+hand) with `migrate baseline`.
+
+When `migrate apply` refuses something,
+[migrations-operations.md](migrations-operations.md) explains what to do.
+
+## Connecting
+
+`velox.Connect` opens a pool from a `database/sql` driver name and a DSN.
+Import the driver yourself:
+
+```go
+import (
+	"github.com/syssam/velox"
+	_ "modernc.org/sqlite"
+)
+
+db, err := velox.Connect("sqlite", "app.db")
+if err != nil {
+	return err
+}
+defer db.Close()
+```
+
+The accepted driver names are `"postgres"`, `"pgx"`, `"mysql"`, `"sqlite"`
+and `"sqlite3"`. A few things to know:
+
+- **MySQL** DSNs must set `parseTime=true` and `clientFoundRows=true`.
+  `Connect` returns an error otherwise.
+- **SQLite** gets a pool of one connection, and `Connect` turns on foreign
+  keys. Inside a `Tx` or an `Iter` loop, use the transaction's DB or finish
+  the loop first: the one connection is busy.
+- **Your own pool:** open a `*sql.DB` yourself and wrap it with
+  `velox.Open(velox.Postgres, sqlDB)`. Closing it stays your job.
+- **PostgreSQL with pgx:** `veloxpgx.Open(pool)` takes a `*pgxpool.Pool` and
+  is faster than going through `database/sql`
+  ([ADR 0019](decisions/0019-veloxpgx.md)).
+
+```go
+pool, err := pgxpool.New(ctx, "postgres://localhost/app")
+if err != nil {
+	return err
+}
+defer pool.Close()
+db := veloxpgx.Open(pool)
+```
+
+`velox.Pool(db)` returns the `*sql.DB` under a DB made by `Connect` or
+`Open`, for pool settings and for `migrate.Up`. It is nil for a pgx DB, a
+transaction's DB and a sharded DB.
+
+Options go at the end of `Connect`, `Open` or `veloxpgx.Open`, such as
+`velox.WithDeadlines(...)`, `velox.WithMaxRows(n)` or
+`velox.WithHooks[gen.Task](...)`.
+
+## Reading
+
+A query is a value. You build it with `Where`, `OrderBy` and `Limit`, then
+run it with a terminal method. The handles live in the plural variable
+(`gen.Invoices`), which is often shortened to one letter:
+
+```go
+I := gen.Invoices
+
+unpaid, err := db.Query[gen.Invoice]().
+	Where(I.Status.NEQ(gen.InvoiceStatusPaid)).
+	OrderBy(I.Number.Asc()).
+	Limit(10).
+	All(ctx)
+```
+
+The terminal methods:
+
+| Method | Returns |
+|---|---|
+| `All(ctx)` | every matching row, as `[]gen.Invoice` |
+| `One(ctx)` | exactly one row; `ErrNotFound` for none, `ErrNotSingular` for several |
+| `First(ctx)` | the first row in the query's order |
+| `Count(ctx)` | the number of matching rows |
+| `Exists(ctx)` | whether any row matches (`SELECT 1 … LIMIT 1`) |
+| `Iter(ctx)` | an `iter.Seq2` that holds one row at a time |
+| `SQL(ctx)` | the statement and arguments it would send, without sending them |
+
+Conditions passed to one `Where` are ANDed. Combine them with `velox.Or`,
+`velox.And` and `velox.Not`. String handles add `HasPrefix`, `Contains`,
+`EqualFold` and `Like`; ordered handles add `GT`, `Between`, `In` and the rest.
+
+### Every read needs a Limit
+
+A query that reads rows must say how many it may read. Without `Limit`,
+`All`, `Iter` and the other row readers fail with `velox.ErrUnbounded`
+before anything is sent. When you really do want every row, say so with
+`Unbounded()`:
+
+```go
+for x, err := range db.Query[gen.Invoice]().OrderBy(I.ID.Asc()).Unbounded().Iter(ctx) {
+	if err != nil {
+		return err
+	}
+	fmt.Println(x.Number)
+}
+```
+
+`Count` and `Exists` need no `Limit`, as they return one value. A DB can also
+cap every read with `velox.WithMaxLimit` and `velox.WithMaxRows`.
+
+### Choosing columns
+
+`Columns(I.ID, I.Number)` reads only the named columns, and `Omit(...)` reads
+all but the named ones. The other fields keep their zero values.
+
+### Pagination
+
+`Offset(n)` works, but keyset pagination is better for large tables.
+`After(&lastRow)` continues after the previous page's last row. The
+`OrderBy` must end in the primary key or a unique column:
+
+```go
+P := gen.Posts
+page := db.Query[gen.Post]().OrderBy(P.Votes.Desc(), P.ID.Asc()).Limit(20)
+for {
+	got, err := page.All(ctx)
+	if err != nil || len(got) == 0 {
+		return err
+	}
+	// ... use got ...
+	page = page.After(&got[len(got)-1])
+}
+```
+
+## Relations
+
+### Eager loading with With
+
+velox never loads a relation behind your back. `With` loads it in one extra
+query for all rows at once (`WHERE invoice_id IN (...)`), and the result is in
+the entity's `Edges` field:
+
+```go
+first, err := db.Query[gen.Invoice]().
+	Where(I.Number.EQ("INV-001")).
+	With(I.Lines.OrderBy(gen.Lines.AmountCents.Desc())).
+	One(ctx)
+if err != nil {
+	return err
+}
+lines, loaded := first.Edges.Lines.Get() // loaded is false when With was not used
+```
+
+A relation handle takes its own `Where`, `OrderBy` and nested `With`:
+
+```go
+A, P := gen.Authors, gen.Posts
+authors, err := db.Query[gen.Author]().
+	With(A.Posts.Where(P.Votes.GTE(10)).OrderBy(P.Votes.Desc()).With(P.Comments)).
+	Limit(10).
+	All(ctx)
+```
+
+`LimitEach(n)` loads at most n related rows per owner, in one statement:
+`With(A.Posts.OrderBy(P.Votes.Desc()).LimitEach(3))` gives each author their
+three best posts.
+
+### Filtering by a relation: Has and HasWith
+
+`Has` and `HasWith` are `EXISTS` subqueries:
+
+```go
+db.Query[gen.Author]().Where(A.Posts.Has())                     // authors with posts
+db.Query[gen.Author]().Where(A.Posts.HasWith(P.Votes.GT(20)))   // ... with a popular post
+db.Query[gen.Author]().Where(velox.Not(A.Posts.Has()))          // authors with none
+```
+
+### Joins
+
+For a to-one relation (a belongs-to, or a one-to-one), `Join` reads the
+related row in the same statement and fills the edge. `rel.Is(...)` filters
+on the joined row's columns, and `rel.By(...)` orders by them:
+
+```go
+posts, err := db.Query[gen.Post]().
+	Join(P.Author).
+	Where(P.Author.Is(A.Name.EQ("Grace"))).
+	OrderBy(P.Author.By(A.Name.Asc()), P.ID.Asc()).
+	Limit(20).
+	All(ctx)
+```
+
+`LeftJoin` keeps rows that have no related row. A to-many relation cannot be
+joined, because it would repeat the owner; use `With` or `HasWith` for those
+([ADR 0031](decisions/0031-to-one-joins.md)).
+
+### Linking rows
+
+A foreign key is an ordinary field, so a belongs-to link is set like any
+other column (`Line{InvoiceID: inv.ID}`). For many-to-many edges and edges
+whose key lives on the other table, relation handles provide setters for
+`Insert` and `Update`:
+
+```go
+db.Update[gen.Post]().Set(gen.Posts.Tags.Add(1, 2)).Where(gen.Posts.ID.EQ(id)).Exec(ctx)
+```
+
+`Add`, `Remove` and `Clear` are written after the row, in one transaction
+([ADR 0044](decisions/0044-edge-setters.md)). `Set(key)` sets an edge whose
+key is a column of the owner's own row. You can also insert
+and delete the join entity's rows directly, as the
+[relations example](../examples/relations) does.
+
+## Aggregates and GROUP BY
+
+`Sum`, `Avg`, `Min` and `Max` take a query and a number column, and ask the
+database for one value:
+
+```go
+paid, err := velox.Sum(ctx,
+	db.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)),
+	I.TotalCents)
+```
+
+`Avg`, `Min` and `Max` also return a `bool` that is false when no row matched.
+Nillable columns use `SumNull`, `AvgNull` and so on.
+
+`CountBy`, `SumBy`, `AvgBy`, `MinBy` and `MaxBy` group by one key column,
+made with the handle's `Key()` method. Groups can be as many as the rows, so
+the query says `Unbounded()`:
+
+```go
+totals, err := velox.SumBy(ctx,
+	db.Query[gen.Invoice]().Unbounded(),
+	I.OrgID.Key(), I.TotalCents)
+for _, g := range totals {
+	fmt.Println(g.Key, g.Value)
+}
+```
+
+Grouping by several keys, `HAVING`, `UNION` and CTEs are not in the builder;
+use [raw SQL](#raw-sql) for those ([ADR 0022](decisions/0022-group-by.md)).
+
+## Writing
+
+### Insert
+
+`Insert` writes one entity and reads the generated key back into it.
+`InsertAll` writes many in one statement and reads nothing back:
+
+```go
+inv := gen.Invoice{Number: "INV-001", Customer: "Initech", Status: gen.InvoiceStatusSent}
+if err := db.Insert(&inv).Exec(ctx); err != nil {
+	return err
+}
+// inv.ID is set now.
+
+lines := []gen.Line{
+	{InvoiceID: inv.ID, Description: "Consulting", AmountCents: 120000},
+	{InvoiceID: inv.ID, Description: "Travel", AmountCents: 30000},
+}
+err := db.InsertAll(lines).Exec(ctx)
+```
+
+Both fill defaults and run hooks and policies first.
+
+### Upsert
+
+`OnConflict` names the conflicting columns, followed by `Update(cols...)` or
+`DoNothing()`:
+
+```go
+err := db.Insert(&inv).
+	OnConflict(I.OrgID, I.Number).
+	Update(I.TotalCents).
+	Exec(ctx)
+```
+
+The update branch writes only the columns you name; `updated_at` and other
+`UpdateDefault` columns do not fire there
+([ADR 0017](decisions/0017-upsert-skips-updatedefault.md)).
+
+### Update and Delete
+
+Updates are set-based: you say which columns change and which rows match.
+`Exec` returns the number of rows affected:
+
+```go
+n, err := db.Update[gen.Invoice]().
+	Set(I.Status.Set(gen.InvoiceStatusPaid)).
+	Where(I.Number.EQ("INV-001")).
+	Exec(ctx)
+
+n, err = db.Delete[gen.Line]().Where(gen.Lines.AmountCents.EQ(0)).Exec(ctx)
+```
+
+Number handles also have `Add` and `Sub` (`Set(I.TotalCents.Add(500))`).
+`UpdateQuery.One(ctx)` updates exactly one row and returns it, read back by
+its key ([ADR 0048](decisions/0048-update-one.md)).
+
+### A write needs a Where
+
+An `Update` or `Delete` without `Where` fails with `velox.ErrNoWhere`. If you
+mean every row, say `.All()`:
+
+```go
+db.Delete[gen.Line]().All().Exec(ctx)
+```
+
+### Save
+
+`Save` writes the named columns of an entity you already hold, by its primary
+key, and fails with `ErrNotFound` when the row is gone. There is no
+"save the whole struct": you list the columns you changed.
+
+```go
+draft.Customer = "Umbrella Corp"
+err := db.Save(draft, I.Customer).Exec(ctx)
+```
+
+Values that hooks set and `updated_at` are written back into the struct.
+
+### Optimistic locking
+
+Mark one integer field as the version:
+
+```go
+field.Int64("version").Version()
+```
+
+From then on, every update adds 1 to it, and `Save` only writes when the row
+still holds the version you read. If another writer got there first, `Save`
+fails with `velox.ErrStale` (which also matches `ErrNotFound`) and changes
+nothing. Writes may not assign the version themselves; that fails with
+`velox.ErrVersionSet` ([ADR 0056](decisions/0056-scale-round.md)).
+
+For a `Doc` entity with that field, `D := gen.Docs`:
+
+```go
+if err := db.Save(&doc, D.Title).Exec(ctx); errors.Is(err, velox.ErrStale) {
+	// someone else saved first: reload and retry, or tell the user
+}
+```
+
+## Transactions
+
+`db.Tx` runs a function in a transaction. Returning nil commits; returning an
+error rolls back and `Tx` returns that error. With the
+[tx example](../examples/tx)'s `Account` entity, `A := gen.Accounts`:
+
+```go
+err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+	if _, err := tx.Update[gen.Account]().Set(A.Balance.Sub(30)).Where(A.Name.EQ("alice")).Exec(ctx); err != nil {
+		return err
+	}
+	_, err := tx.Update[gen.Account]().Set(A.Balance.Add(30)).Where(A.Name.EQ("bob")).Exec(ctx)
+	return err
+})
+```
+
+Inside the function, use `tx` and the `ctx` you were given. A statement on
+the outer `db` under that context fails with `velox.ErrOutsideTx`, which
+catches a common bug.
+
+A nested `tx.Tx(...)` is a savepoint: its error undoes only its own work,
+and the outer transaction goes on. This is how you recover from a failed
+insert on PostgreSQL, where a failed statement otherwise aborts the whole
+transaction.
+
+Options go after the function:
+
+- `velox.TxRetrySerializable(n)` reruns the function after a serialization
+  failure or deadlock, up to n more times. The function must be safe to run
+  again.
+- `velox.TxIsolation(level)`, `velox.TxReadOnly()` and
+  `velox.TxTimeout(d)`.
+
+See the [tx example](../examples/tx).
+
+## Hooks, policies and interceptors
+
+An entity's behaviour is declared in the schema package, next to its fields,
+as in ent. The schema package does not import `gen` (gen imports it), so
+behaviour names columns by their schema names: `velox.FieldEQ("status", s)`,
+`m.Value("title")`. velox-gen checks those names when it generates, and velox
+checks them again when the statement runs
+([ADR 0040](decisions/0040-schema-value-and-ent-names.md)).
+
+### Hooks
+
+A hook wraps an entity's writes. `velox.Before` runs a function before the
+write, for the operations it names:
+
+```go
+func (Task) Hooks() []velox.Hook {
+	return []velox.Hook{
+		velox.Before(deriveSlug, velox.OpInsert),
+		velox.Before(renamed, velox.OpUpdate),
+	}
+}
+
+func deriveSlug(_ context.Context, m *velox.Mutation) error {
+	for r := range m.Rows() {
+		title, _ := r.Value("title").(string)
+		if title == "" {
+			return errors.New("a task needs a title")
+		}
+		if err := r.Set("slug", slug(title)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+```
+
+On an update, `m.Value(name)` tells you whether the update assigns a column
+and `m.Set(name, v)` adds one. On an update or delete, `m.Where(...)` narrows
+the rows. `velox.On(hook, ops...)` wraps the whole write, for work after it.
+
+A hook that needs generated types, such as one that inserts a `gen.Audit`
+row, is added at run time with `velox.WithHooks[gen.Task](...)` when opening
+the DB. Inside it, `m.DB()` is the DB the write runs on, so inside `db.Tx`
+the audit row commits or rolls back with the write. See the
+[hooks example](../examples/hooks).
+
+### Policies
+
+A policy decides what the caller may see and change, from the context. It
+has three parts:
+
+- `Read` returns a condition ANDed into every statement that reads the
+  entity: queries, counts, `With` loads, `Has`, updates and deletes.
+- `Write` returns a condition ANDed into updates, deletes and `Save`.
+- `Insert` checks each new row.
+
+```go
+func (Invoice) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Predicate, error) {
+			switch role.FromContext(ctx) {
+			case role.Accountant:
+				return velox.Allow(), nil
+			case role.Viewer:
+				return velox.FieldNEQ("status", "draft"), nil
+			}
+			return velox.Predicate{}, velox.Deny("no billing role")
+		},
+		Write: func(ctx context.Context) (velox.Predicate, error) {
+			if err := role.RequireAccountant(ctx); err != nil {
+				return velox.Predicate{}, err
+			}
+			return velox.Allow(), nil
+		},
+		Insert: func(ctx context.Context, _ velox.Row) error { return role.RequireAccountant(ctx) },
+	}
+}
+```
+
+Policies fail closed. Returning the zero `velox.Predicate{}` fails the
+statement instead of matching everything, and `velox.Deny(reason)` returns
+an error that matches `velox.ErrDenied`. A mixin's policy is ANDed before the
+entity's own, so an entity cannot widen what its mixin allows.
+
+One behaviour is worth knowing in advance: a `Write` condition filters rather
+than errors. An update aimed only at rows the caller may not change affects 0
+rows, as with SQL row-level security
+([ADR 0008](decisions/0008-write-policies-filter.md)).
+
+`db.WithoutPolicy("monthly revenue report")` returns a DB that skips every
+policy, for admin jobs and reports. It needs a reason, which hooks can see,
+and it only affects code that is handed that DB; a context carries no bypass
+([ADR 0054](decisions/0054-fail-closed-runtime.md)). See the
+[policy example](../examples/policy).
+
+### Interceptors
+
+An interceptor is a filter that applies to every statement on an entity,
+like a `Read` policy, but `WithoutPolicy` does not lift it. It is meant for
+application rules that even admin code should respect, such as hiding
+soft-deleted rows. Declare `Interceptors() []velox.Interceptor` on a schema
+or mixin; each has a `Filter func(ctx) (velox.Predicate, error)`.
+
+## Multi-tenancy with a scope
+
+velox has no built-in tenant. Instead, the `scope` package gives you a
+typed context key, and a mixin you write uses it in a policy and a hook
+([ADR 0029](decisions/0029-scope-replaces-tenant.md),
+[ADR 0038](decisions/0038-tenancy-is-a-mixin.md)). This is the tour's
+`InOrg` mixin in full:
+
+```go
+var OrgKey = scope.NewKey[int64]("org")
+
+type InOrg struct{ mixin.Schema }
+
+func (InOrg) Fields() []schema.Field {
+	return []schema.Field{field.Int64("org_id").Immutable()}
+}
+
+func (InOrg) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(ctx context.Context) (velox.Predicate, error) {
+			org, err := OrgKey.Require(ctx)
+			if err != nil {
+				return velox.Predicate{}, err
+			}
+			return velox.FieldEQ("org_id", org), nil
+		},
+		Insert: func(ctx context.Context, r velox.Row) error {
+			return OrgKey.Match(ctx, r.Value("org_id"))
+		},
+	}
+}
+
+func (InOrg) Hooks() []velox.Hook {
+	return []velox.Hook{
+		velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+			if org, ok := OrgKey.From(ctx); ok {
+				return m.Fill("org_id", org)
+			}
+			return nil
+		}, velox.OpInsert),
+	}
+}
+```
+
+List it in an entity's `Mixin()`, and set the organization once per request,
+usually in middleware:
+
+```go
+ctx = schema.OrgKey.With(ctx, orgID)
+```
+
+From then on, reads, updates and deletes see only that organization's rows,
+and inserts get its `org_id`. A request that forgot to set it fails with
+`scope.ErrNoScope` instead of seeing every tenant's data. An insert naming a
+different organization fails with `scope.ErrMismatch`.
+
+In your tests, `scopetest.Isolates` checks that an entity really is confined
+to its scope. See the [tenant example](../examples/tenant).
+
+## Soft delete
+
+List `softdelete.Mixin{}` in an entity's `Mixin()`. A delete then sets
+`deleted_at` instead of removing the row, and every read and write skips
+deleted rows. `softdelete.Skip(ctx)` turns it off for one context, to see,
+restore or purge deleted rows:
+
+```go
+// restore
+db.Update[gen.Invoice]().
+	Where(I.Number.EQ("INV-002")).
+	Set(I.DeletedAt.SetNull()).
+	Exec(softdelete.Skip(ctx))
+
+// purge for good
+db.Delete[gen.Invoice]().
+	Where(I.DeletedAt.NotNull()).
+	Exec(softdelete.Skip(ctx))
+```
+
+The filter is an interceptor, so `WithoutPolicy` still hides deleted rows.
+A soft delete does not trigger `ON DELETE CASCADE`.
+
+## Raw SQL
+
+Raw SQL is the escape hatch for what the builder cannot express. Both calls
+take a reason, because velox applies no policy or scope to raw SQL; filtering
+by tenant is up to you.
+
+```go
+n, err := db.Exec(ctx, "nightly cleanup",
+	"DELETE FROM sessions WHERE expires_at < $1", now)
+
+totals, err := db.Raw[gen.Invoice]("revenue report",
+	"SELECT org_id, SUM(total_cents) AS total_cents FROM invoices GROUP BY org_id").All(ctx)
+```
+
+`Raw` scans columns into an entity's fields by name, so alias computed
+columns to a column name. For a result that is not an entity, run your own
+SQL on `velox.Pool(db)`.
+
+## Row locks
+
+`ForUpdate()` and `ForShare()` lock the rows a query reads until the
+transaction ends; `SkipLocked()` and `NoWait()` change what happens when
+another transaction holds a row. Locking reads run inside `Tx` only, on
+PostgreSQL and MySQL. A job queue, for a `Job` entity with a `state` enum,
+looks like this:
+
+```go
+err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+	jobs, err := tx.Query[gen.Job]().
+		Where(J.State.EQ(gen.JobStatePending)).
+		OrderBy(J.ID.Asc()).
+		Limit(10).
+		ForUpdate().
+		SkipLocked().
+		All(ctx)
+	// ... work on jobs, then update them ...
+	return err
+})
+```
+
+On MySQL a locking read locks every row it scans, so give its filter an
+index.
+
+## Deadlines
+
+`velox.WithDeadlines` gives every statement and transaction a time limit,
+set once when you open the DB:
+
+```go
+db, err := velox.Connect("sqlite", "app.db", velox.WithDeadlines(velox.Deadlines{
+	Statement:    2 * time.Second,  // when the context has no deadline
+	MaxStatement: 10 * time.Second, // never longer than this
+	Tx:           5 * time.Second,
+	MaxTx:        30 * time.Second,
+}))
+```
+
+`velox.TxTimeout(d)` bounds one transaction, within `MaxTx`. A transaction
+that runs past its deadline is rolled back, never committed, and fails with an
+error matching both `velox.ErrTimeout` and `context.DeadlineExceeded`.
+
+## Errors
+
+velox wraps errors with context (`velox: gen.Invoice: ...`) and gives you
+sentinels and typed errors to test for:
+
+```go
+_, err := db.Query[gen.Invoice]().Where(I.ID.EQ(id)).One(ctx)
+switch {
+case velox.IsNotFound(err):
+	// 404
+case errors.Is(err, velox.ErrDenied):
+	// 403
+}
+
+var ce *velox.ConstraintError
+if errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique {
+	// ce.Constraint names the violated constraint
+}
+```
+
+The ones you will meet most:
+
+| Error | When |
+|---|---|
+| `ErrNotFound` (test with `IsNotFound`) | `One` or `Save` found no row |
+| `ErrNotSingular` | `One` found more than one |
+| `ErrUnbounded` | a read with no `Limit` or `Unbounded()` |
+| `ErrNoWhere` | an update or delete with no `Where` or `All()` |
+| `ErrDenied`, `*PolicyError` | a policy refused |
+| `ErrStale` | `Save` lost an optimistic-locking race |
+| `ErrOutsideTx` | a statement on `db` instead of `tx` inside `Tx` |
+| `ErrTimeout` | a deadline passed |
+| `*ConstraintError` | a unique, foreign-key, not-null or check constraint failed |
+| `*ValidationError` | a value failed a field's validator |
+| `scope.ErrNoScope` | a scoped entity with no scope value in the context |
+
+`velox.DriverCode(err)` gives the database's own code (such as a PostgreSQL
+SQLSTATE) for logs.
+
+## Read replicas and shards
+
+`velox.WithReplicas(...)` sends reads to replicas, and `velox.WithSession(ctx)`
+keeps a request reading its own writes from the primary for a short while.
+`velox.OpenShards` runs each statement on one shard, chosen from the context by
+`velox.WithShardFor`. Both are optional, and a DB without them pays nothing
+for them ([ADR 0055](decisions/0055-lazy-unsafe-scope.md)). See the
+[routing example](../examples/routing).
+
+## Observability
+
+`contrib/veloxotel` is an OpenTelemetry adapter in its own module, so velox
+itself depends on no OpenTelemetry package. Pass its options when opening the
+DB:
+
+```go
+db := velox.Open(velox.SQLite, sqlDB, veloxotel.Options(veloxotel.Config{
+	TracerProvider: tp,
+	MeterProvider:  mp,
+	App:            "billing",         // turns on the SQL comment
+	CommentTags:    []string{"route"}, // velox.WithTags keys it carries
+})...)
+```
+
+You get a span per statement (nested under a `velox.tx` span inside a
+transaction), a fingerprint of each statement's shape, the call site
+in your code, and metrics. See the [otel example](../examples/otel).
+
+For something lighter, `velox.WithAround` runs your function around every
+statement, and `Query.SQL(ctx)` shows what a query would send, policy
+conditions included.
+
+## GraphQL
+
+`contrib/graphql` is a velox-gen plugin that generates a GraphQL schema and
+Go code for [gqlgen](https://gqlgen.com): node lookup by global ID, Relay
+connections with `orderBy` and `where` inputs, edges, and create and update
+inputs. You annotate the schema:
+
+```go
+field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
+```
+
+```go
+func (User) Annotations() []schema.Annotation {
+	return []schema.Annotation{
+		graphql.QueryField("users"),
+		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate),
+	}
+}
+```
+
+Then generate with the plugin and run gqlgen:
+
+```sh
+go get -tool github.com/syssam/velox/contrib/graphql/cmd/velox-graphql
+go get -tool github.com/99designs/gqlgen
+go tool velox-gen -plugin velox-graphql ./schema
+go tool gqlgen generate
+```
+
+Most resolvers are one line. `veloxgql.Setup` wraps the gqlgen server with
+limits on a request's size, depth and cost, and `veloxgql.ErrorPresenter`
+keeps database and velox error text away from clients. GraphQL reads and
+writes run through the same velox runtime, so policies and scopes apply to
+them too. The
+[graphql example](../examples/graphql) is a complete server, and its README
+walks through each step.
+
+## Where to go next
+
+- [examples/](../examples/README.md): one runnable program per topic, plus
+  [tracker](../examples/tracker), a whole service.
+- [coming-from-ent.md](coming-from-ent.md): the differences from ent.
+- [stability.md](stability.md): what may change before and after 1.0.
+- [decisions/](decisions/README.md): why velox works the way it does.
+- The API reference on
+  [pkg.go.dev](https://pkg.go.dev/github.com/syssam/velox), with runnable
+  examples. Until v1.0.0 is tagged, pkg.go.dev shows an older project; read
+  the godoc from a checkout with `go doc github.com/syssam/velox`.
