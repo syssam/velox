@@ -71,9 +71,13 @@ back nil, where ent's create refuses the field unset. Its handle, a
 `velox.JSONCol`, sets it and reads its assigned value in a hook; velox
 neither orders by a JSON column nor compares one.
 
-**IDs are int64.** The implicit `id` is `field.Int64`, where ent's is `int`. A
-foreign-key field must have its target's ID type: declare it `field.Int64`, or
-declare the target's ID with `field.Int("id")`.
+**The implicit ID is int64.** The implicit `id` is `field.Int64`, where
+ent's is `int`. A foreign-key field must have its target's ID type: declare it
+`field.Int64`, or declare the target's ID with `field.Int("id")`. A schema may
+declare its own `id` of any key type, as in ent: `field.UUID("id", uuid.UUID{})`
+with a `Default`, or `field.String("id")` for a key the application chooses.
+Relations, many-to-many links, upserts and `After` work on such keys on all
+three dialects (`TestNonIntegerKeys`).
 
 **Defaults on a NOT NULL column.** A `Default` on a field that is not
 `Nillable` is accepted for a string, an enum, a time (`Default(time.Now)`), a

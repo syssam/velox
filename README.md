@@ -5,7 +5,7 @@ generates typed queries from it, and velox plans and applies its own
 migrations.
 
 Coming from ent? [docs/coming-from-ent.md](docs/coming-from-ent.md) lists what
-differs: `Optional` stays NOT NULL, IDs are int64, bool and number Defaults,
+differs: `Optional` stays NOT NULL, the implicit ID is int64, bool and number Defaults,
 foreign keys, many-to-many links and GraphQL nulls.
 
 ## Not released yet
