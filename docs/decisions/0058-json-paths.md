@@ -28,8 +28,12 @@ each.
 - `HasKey(keys...)` is true where the path is there, whatever its value, a
   JSON null included: `jsonb_extract_path`, `JSON_EXTRACT` and `json_type`
   are SQL NULL only for a missing path.
+- `Bool(keys...)` is the boolean, NULL for a string "true" or a number 1:
+  `jsonb_typeof` 'boolean', `JSON_TYPE` 'BOOLEAN', `json_type` 'true' or
+  'false'.
 - `JSONText` has EQ, NEQ, In, NotIn, IsNull and NotNull; `JSONNumber` has
-  the comparisons, Between, IsNull and NotNull. Strings compare with case on
+  the comparisons, Between, IsNull and NotNull; `JSONBool` has EQ, IsNull
+  and NotNull. Strings compare with case on
   every dialect: MySQL's `JSON_UNQUOTE` returns utf8mb4_bin text.
 - Every key, or MySQL's and SQLite's quoted path `$."a"."b"`, is an
   argument, never SQL text. A key may not be empty or hold `"`, `\` or a
@@ -41,8 +45,8 @@ each.
 
 ## Consequences
 
-- A path is object keys only: an array index, a wildcard, a boolean leaf and
-  containment (`@>`) stay in `Raw`.
+- A path is object keys only: an array index, a wildcard and containment
+  (`@>`) stay in `Raw`.
 - A number beyond 2^53 loses precision as a float64.
 - PostgreSQL's column must be jsonb, as velox-gen writes it.
 - `TestJSONPaths` in `internal/integration` runs every condition on

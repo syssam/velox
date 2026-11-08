@@ -20,6 +20,9 @@ const (
 	// JSONKindNumber reads a number: SQL NULL where the path is missing or
 	// holds no number.
 	JSONKindNumber
+	// JSONKindBool reads a boolean: SQL NULL where the path is missing or
+	// holds no boolean.
+	JSONKindBool
 )
 
 // JSONPath is a path of object keys into a JSON column, and what a
@@ -112,6 +115,12 @@ func (w *writer) jsonValue(i int32, p JSONPath) {
 			w.str(") = 'number' THEN (")
 			call("jsonb_extract_path_text")
 			w.str(")::numeric END")
+		case JSONKindBool:
+			w.str("CASE WHEN jsonb_typeof(")
+			call("jsonb_extract_path")
+			w.str(") = 'boolean' THEN (")
+			call("jsonb_extract_path_text")
+			w.str(")::boolean END")
 		}
 	case MySQL:
 		extract := func() {
@@ -136,6 +145,12 @@ func (w *writer) jsonValue(i int32, p JSONPath) {
 			w.str(") IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE', 'DECIMAL') THEN CAST(")
 			extract()
 			w.str(" AS DOUBLE) END")
+		case JSONKindBool:
+			w.str("CASE WHEN JSON_TYPE(")
+			extract()
+			w.str(") = 'BOOLEAN' THEN ")
+			extract()
+			w.str(" = CAST('true' AS JSON) END")
 		}
 	default: // SQLite
 		call := func(fn string) {
@@ -158,6 +173,12 @@ func (w *writer) jsonValue(i int32, p JSONPath) {
 			w.str("CASE WHEN ")
 			call("json_type")
 			w.str(" IN ('integer', 'real') THEN ")
+			call("json_extract")
+			w.str(" END")
+		case JSONKindBool:
+			w.str("CASE WHEN ")
+			call("json_type")
+			w.str(" IN ('true', 'false') THEN ")
 			call("json_extract")
 			w.str(" END")
 		}

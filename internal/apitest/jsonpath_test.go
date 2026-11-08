@@ -61,9 +61,10 @@ func TestJSONPathRenderCache(t *testing.T) {
 	numA, _ := sqlOf(J.Attrs.Number("a").IsNull())
 	textAB, _ := sqlOf(J.Attrs.Text("a", "b").IsNull())
 	hasA, _ := sqlOf(J.Attrs.HasKey("a"))
+	boolA, _ := sqlOf(J.Attrs.Bool("a").IsNull())
 	textB, argsB := sqlOf(J.Attrs.Text("b").IsNull())
 	seen := map[string]bool{}
-	for _, s := range []string{textA, numA, textAB, hasA} {
+	for _, s := range []string{textA, numA, textAB, hasA, boolA} {
 		if seen[s] {
 			t.Errorf("two shapes render alike: %s", s)
 		}
@@ -111,5 +112,20 @@ func TestJSONPathRefused(t *testing.T) {
 	keys[0] = `"`
 	if _, err := db.Query[fixture.JDoc]().Where(p).Limit(1).All(ctx); err != nil {
 		t.Errorf("the keys were not copied: %v", err)
+	}
+}
+
+// TestJSONBoolSQL: each dialect's form of Bool, which reads a boolean only.
+func TestJSONBoolSQL(t *testing.T) {
+	J := fixture.JDocs
+	for d, want := range map[velox.Dialect]string{
+		velox.Postgres: `CASE WHEN jsonb_typeof(jsonb_extract_path("attrs", $1)) = 'boolean' THEN (jsonb_extract_path_text("attrs", $2))::boolean END = $3`,
+		velox.MySQL:    "CASE WHEN JSON_TYPE(JSON_EXTRACT(`attrs`, ?)) = 'BOOLEAN' THEN JSON_EXTRACT(`attrs`, ?) = CAST('true' AS JSON) END = ?",
+		velox.SQLite:   `CASE WHEN json_type("attrs", ?) IN ('true', 'false') THEN json_extract("attrs", ?) END = ?`,
+	} {
+		text, args, err := openFake(d, &fakeconn.Exec{}).Query[fixture.JDoc]().Where(J.Attrs.Bool("trial").EQ(true)).Limit(1).SQL(ctx)
+		if err != nil || !strings.Contains(text, want) || len(args) != 4 || args[2] != true {
+			t.Errorf("%v:\n got %s %v %v\nwant %s", d, text, args, err, want)
+		}
 	}
 }

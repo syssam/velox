@@ -43,8 +43,8 @@ func TestHandleMethodSets(t *testing.T) {
 		"NullOrderedCol": "Asc Between Desc EQ GT GTE In InSelect IsNull Key LT LTE NEQ NotIn NotInSelect NotNull Select Set SetNull column",
 		"NullNumberCol":  "Add Asc Between Desc EQ GT GTE In InSelect IsNull Key LT LTE NEQ NotIn NotInSelect NotNull Select Set SetNull Sub column",
 		"NullStringCol":  "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect IsNull Key LT LTE Like NEQ NotIn NotInSelect NotNull Select Set SetNull column",
-		"JSONCol":        "HasKey Number Set Text column",
-		"NullJSONCol":    "HasKey IsNull NotNull Number Set SetNull Text column",
+		"JSONCol":        "Bool HasKey Number Set Text column",
+		"NullJSONCol":    "Bool HasKey IsNull NotNull Number Set SetNull Text column",
 	}
 	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(repoRoot(), "handles.go"), nil, parser.SkipObjectResolution)
 	if err != nil {

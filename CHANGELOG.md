@@ -22,8 +22,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 ### Added
 
 - A JSON field's handle tests a value inside the document:
-  `Attrs.Text("plan", "tier").EQ("pro")`, `Attrs.Number("seats").GT(10)` and
-  `Attrs.HasKey("trial")`. A value of another kind is NULL, so the same rows
+  `Attrs.Text("plan", "tier").EQ("pro")`, `Attrs.Number("seats").GT(10)`,
+  `Attrs.Bool("trial").EQ(true)` and `Attrs.HasKey("trial")`. A value of another kind is NULL, so the same rows
   match on PostgreSQL, MySQL and SQLite (ADR 0058).
 - A column handle's `Select(ps...)` makes a `velox.Subquery[V]`, and another
   handle's `InSelect(s)` and `NotInSelect(s)` test a column of the same type

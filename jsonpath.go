@@ -25,6 +25,16 @@ type JSONNumber[E any] struct {
 	path engine.JSONPath
 }
 
+// JSONBool is the boolean at a path of object keys in a JSON column of
+// entity E, made by a JSON handle's Bool. It is NULL where the path is
+// missing or holds a value that is not true or false, so neither the string
+// "true" nor the number 1 is true. Its conditions read alike on PostgreSQL
+// (jsonb), MySQL and SQLite.
+type JSONBool[E any] struct {
+	col  int32
+	path engine.JSONPath
+}
+
 func jsonPath(kind engine.JSONKind, keys []string) engine.JSONPath {
 	return engine.JSONPath{Kind: kind, Keys: slices.Clone(keys)}
 }
@@ -114,4 +124,19 @@ func (n JSONNumber[E]) IsNull[_ Lazy[E]]() Pred[E] {
 // NotNull is true where the path holds a number.
 func (n JSONNumber[E]) NotNull[_ Lazy[E]]() Pred[E] {
 	return jsonPred[E](n.col, n.path, engine.Node{Op: engine.OpNotNull})
+}
+
+// EQ is true where the boolean at the path is v.
+func (b JSONBool[E]) EQ[_ Lazy[E]](v bool) Pred[E] {
+	return jsonPred[E](b.col, b.path, engine.Node{Op: engine.OpEQ, V: v})
+}
+
+// IsNull is true where the path is missing or holds no boolean.
+func (b JSONBool[E]) IsNull[_ Lazy[E]]() Pred[E] {
+	return jsonPred[E](b.col, b.path, engine.Node{Op: engine.OpIsNull})
+}
+
+// NotNull is true where the path holds a boolean.
+func (b JSONBool[E]) NotNull[_ Lazy[E]]() Pred[E] {
+	return jsonPred[E](b.col, b.path, engine.Node{Op: engine.OpNotNull})
 }

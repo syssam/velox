@@ -7,7 +7,7 @@ import (
 	"github.com/syssam/velox"
 )
 
-// TestJSONPaths: Text, Number and HasKey read a value inside a JSON column
+// TestJSONPaths: Text, Number, Bool and HasKey read a value inside a JSON column
 // alike on every dialect: a value of another type is NULL, a string is
 // compared with case, a JSON null is a key that is there, and a key may hold
 // spaces and dots.
@@ -15,10 +15,10 @@ func TestJSONPaths(t *testing.T) {
 	eachJSON(t, func(t *testing.T, tg target) {
 		jsonSetup(t, tg)
 		attrs := []map[string]any{
-			1: {"plan": map[string]any{"tier": "pro", "seats": 5}},
-			2: {"plan": map[string]any{"tier": "Pro", "seats": 2.5}},
-			3: {"plan": map[string]any{"tier": 5, "seats": "5"}},
-			4: {"plan": map[string]any{"tier": nil}},
+			1: {"plan": map[string]any{"tier": "pro", "seats": 5}, "trial": true},
+			2: {"plan": map[string]any{"tier": "Pro", "seats": 2.5}, "trial": false},
+			3: {"plan": map[string]any{"tier": 5, "seats": "5"}, "trial": "true"},
+			4: {"plan": map[string]any{"tier": nil}, "trial": 1},
 			5: {"plan": map[string]any{}},
 			6: {"a b": map[string]any{"c.d": "y"}},
 		}
@@ -58,6 +58,11 @@ func TestJSONPaths(t *testing.T) {
 		wantIDs(t, ids(seats.Between(2, 3)), []int64{2})
 		wantIDs(t, ids(seats.IsNull()), []int64{3, 4, 5, 6})
 		wantIDs(t, ids(seats.NotNull()), []int64{1, 2})
+		trial := JR.Attrs.Bool("trial") // "true" and 1 are not booleans
+		wantIDs(t, ids(trial.EQ(true)), []int64{1})
+		wantIDs(t, ids(trial.EQ(false)), []int64{2})
+		wantIDs(t, ids(trial.IsNull()), []int64{3, 4, 5, 6})
+		wantIDs(t, ids(trial.NotNull()), []int64{1, 2})
 		wantIDs(t, ids(JR.Attrs.HasKey("plan", "tier")), []int64{1, 2, 3, 4})
 		wantIDs(t, ids(velox.Not(JR.Attrs.HasKey("plan", "tier"))), []int64{5, 6})
 		wantIDs(t, ids(JR.Attrs.Text("a b", "c.d").EQ("y")), []int64{6})

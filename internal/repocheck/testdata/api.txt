@@ -109,6 +109,9 @@ const SQLite
 const TxCommit
 const TxError
 const TxRollback
+func (b JSONBool[E]) EQ[_ Lazy[E]](v bool) Pred[E]
+func (b JSONBool[E]) IsNull[_ Lazy[E]]() Pred[E]
+func (b JSONBool[E]) NotNull[_ Lazy[E]]() Pred[E]
 func (c Col[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c Col[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c Col[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
@@ -120,6 +123,7 @@ func (c Col[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c Col[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c Col[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
 func (c JSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E]
 func (c JSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
@@ -138,6 +142,7 @@ func (c NullCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
 func (c NullJSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E]
 func (c NullJSONCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
 func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
@@ -494,6 +499,7 @@ type Hook func(next Mutator) Mutator
 type IndexInfo = veloxtype.IndexInfo
 type InsertQuery[E any] struct { }
 type Interceptor = engine.Interceptor
+type JSONBool[E any] struct { }
 type JSONCol[E, V any] struct { I int32 }
 type JSONNumber[E any] struct { }
 type JSONText[E any] struct { }

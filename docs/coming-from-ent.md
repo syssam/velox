@@ -72,7 +72,7 @@ back nil, where ent's create refuses the field unset. Its handle, a
 neither orders by a whole JSON document nor compares one. Where ent writes
 `sqljson.ValueEQ(user.FieldAttrs, "pro", sqljson.Path("plan", "tier"))`,
 velox writes `gen.Users.Attrs.Text("plan", "tier").EQ("pro")`; `Number`
-reads a number and `HasKey` tests that a key is there
+and `Bool` read a number or a boolean, and `HasKey` tests that a key is there
 ([0058](decisions/0058-json-paths.md)).
 
 **The implicit ID is int64.** The implicit `id` is `field.Int64`, where

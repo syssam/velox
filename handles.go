@@ -704,7 +704,7 @@ func (c NullStringCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
-// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number and HasKey test a value inside it; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it.
+// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it.
 type JSONCol[E, V any] struct{ I int32 }
 
 func (c JSONCol[E, V]) column(*E) int32 { return c.I }
@@ -722,6 +722,11 @@ func (c JSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E] {
 // Number is the number at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no number.
 func (c JSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E] {
 	return JSONNumber[E]{c.I, jsonPath(engine.JSONKindNumber, keys)}
+}
+
+// Bool is the boolean at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no boolean.
+func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E] {
+	return JSONBool[E]{c.I, jsonPath(engine.JSONKindBool, keys)}
 }
 
 // HasKey is true where the path of object keys is in the column's document, whatever its value, a JSON null included.
@@ -745,6 +750,11 @@ func (c NullJSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E] {
 // Number is the number at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no number.
 func (c NullJSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E] {
 	return JSONNumber[E]{c.I, jsonPath(engine.JSONKindNumber, keys)}
+}
+
+// Bool is the boolean at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no boolean.
+func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E] {
+	return JSONBool[E]{c.I, jsonPath(engine.JSONKindBool, keys)}
 }
 
 // HasKey is true where the path of object keys is in the column's document, whatever its value, a JSON null included.
