@@ -16,6 +16,12 @@ type Column[E any] interface{ column(*E) int32 }
 // Add, Remove or Clear.
 type Setter[E any] struct{ a Assignment }
 
+// Input is a value that builds setters of entity E, such as a generated
+// GraphQL input, for UpdateQuery.SetInput and InsertQuery.SetInput.
+type Input[E any] interface {
+	Setters() ([]Setter[E], error)
+}
+
 // Column is the column s assigns, as Assignment.Column numbers it: two setters
 // of one column have the same Column, which an UPDATE refuses to assign
 // twice. A relation handle's Set assigns its foreign key's column; it is -1

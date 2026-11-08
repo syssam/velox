@@ -738,7 +738,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion21\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion22\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1198,7 +1198,7 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 	}
 	src := flat(render(t, m)["group_gql.go"])
 	for _, w := range []string{
-		`func (in *UpdateGroupInput) Setters() ([]velox.Setter[Group], error) {`,
+		`func (in UpdateGroupInput) Setters() ([]velox.Setter[Group], error) {`,
 		`if in.ClearUsers { set = append(set, Groups.Users.Clear()) }`,
 		`removeUserIDs, err := gqlgraph.IDs("UpdateGroupInput.removeUserIDs", in.RemoveUserIDs)`,
 		`set = append(set, Groups.Users.Remove(removeUserIDs...))`,
@@ -1561,7 +1561,7 @@ func TestMutationGodocPoints(t *testing.T) {
 					t.Errorf("%s: %q is the package doc's", who, gone)
 				}
 			}
-			want := "Setters returns the input's fields and edges as setters for db.Insert(x).Set."
+			want := "Setters returns the input's fields and edges as setters for db.Insert(x).SetInput."
 			if kind == "Update" {
 				want = "Setters returns the input's fields and edges as setters for db.Update["
 			}

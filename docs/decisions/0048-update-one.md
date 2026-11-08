@@ -1,7 +1,8 @@
 # 48. UpdateQuery.One writes one row and returns it
 
 Status: accepted, 2026-11-07. Moves 0045's read-back from the application
-into the core.
+into the core. 0062 adds `SetInput`, which keeps the error of `Setters()`
+for `Exec` or `One`.
 
 ## Context
 

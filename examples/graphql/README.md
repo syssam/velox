@@ -84,12 +84,8 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    	if err != nil {
    		return nil, err
    	}
-   	set, err := input.Setters()
-   	if err != nil {
-   		return nil, err
-   	}
    	x := &gen.Post{AuthorID: viewer}
-   	if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
+   	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
    		return nil, err
    	}
    	return x, nil
@@ -100,11 +96,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    	if err := OwnPost(ctx, db, id); err != nil {
    		return nil, err
    	}
-   	set, err := input.Setters()
-   	if err != nil {
-   		return nil, err
-   	}
-   	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).Set(set...).One(ctx)
+   	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
    	if velox.IsNotFound(err) {
    		return nil, NotFound(ctx, "Post")
    	}

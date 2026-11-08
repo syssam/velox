@@ -42,6 +42,22 @@ func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E] {
 	return u
 }
 
+// SetInput adds the setters in.Setters returns, as Set does. When Setters fails,
+// the update keeps its error, and Exec, One and SQL return it unchanged
+// before anything is sent:
+//
+//	db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
+func (u UpdateQuery[E]) SetInput[_ Lazy[E]](in Input[E]) UpdateQuery[E] {
+	ss, err := in.Setters()
+	if err != nil {
+		if u.err == nil {
+			u.err = err
+		}
+		return u
+	}
+	return u.Set(ss...)
+}
+
 // Where adds conditions; all of them must hold.
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E] {
 	u.st.Where = slices.Clip(u.st.Where)

@@ -272,10 +272,11 @@ a table rebuild on SQLite.
   application declares its mutations in its own `.graphql` file and writes
   the resolvers. Where entgql's resolver calls
   `client.Todo.Create().SetInput(input).Save(ctx)`, velox's calls
-  `input.Setters()`, which returns velox setters, and writes them with
-  `db.Insert(x).Set(set...)`, `x` the row the resolver has already set what
-  the client must not choose on, or
-  `db.Update[T]().Where(...).Set(set...).One(ctx)`, ent's `UpdateOne`.
+  `db.Insert(x).SetInput(input).Exec(ctx)`, `x` the row the resolver has
+  already set what the client must not choose on, or
+  `db.Update[T]().Where(...).SetInput(input).One(ctx)`, ent's `UpdateOne`.
+  The input's `Setters()` returns the velox setters, and an error for an
+  input it refuses; `SetInput` keeps that error for `Exec` or `One`.
   As in entgql, a null in an input is a field not given; `clear<Field>:
   true` sets NULL. No delete is generated: a delete is the application's
   `db.Delete[T]()`.

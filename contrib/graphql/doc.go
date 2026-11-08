@@ -172,7 +172,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlgraph for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion21", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion22", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -215,14 +215,17 @@
 // input type Create<T>Input, in the SDL and in Go, and with
 // graphql.MutationUpdate, Update<T>Input; each has one method:
 //
-//	func (in *Create<T>Input) Setters() ([]velox.Setter[<T>], error)
-//	func (in *Update<T>Input) Setters() ([]velox.Setter[<T>], error)
+//	func (in Create<T>Input) Setters() ([]velox.Setter[<T>], error)
+//	func (in Update<T>Input) Setters() ([]velox.Setter[<T>], error)
 //
 // Setters is plain generated Go, as entgql's Mutate is: one column setter
 // for each field given, one relation handle's Add, Remove or Clear for each
 // edge field given, and a last call to gqlgraph.Validate, which runs the
-// columns' validators. It does no I/O. The application names its
-// mutations, their arguments and their result, and writes the resolvers:
+// columns' validators. It does no I/O. An input is a velox.Input, which
+// db.Insert(x).SetInput and db.Update[T]().SetInput take, as ent's
+// SetInput does; a Setters error is kept, and returned unchanged by Exec or
+// One before anything is sent. The application names its mutations, their
+// arguments and their result, and writes the resolvers:
 //
 //	type Mutation {
 //	  createPost(input: CreatePostInput!): Post!
@@ -231,21 +234,15 @@
 //	}
 //
 //	func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
-//		set, err := input.Setters()
-//		if err != nil {
-//			return nil, err
-//		}
 //		x := &gen.Post{AuthorID: viewer(ctx)}
-//		if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
+//		if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 //			return nil, err
 //		}
 //		return x, nil
 //	}
 //
 //	func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error) {
-//		set, err := input.Setters()
-//		...
-//		x, err := veloxgql.DB(ctx).Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).Set(set...).One(ctx)
+//		x, err := veloxgql.DB(ctx).Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
 //		if velox.IsNotFound(err) {
 //			return nil, notFound(ctx, "Post")
 //		}
@@ -406,7 +403,8 @@
 // each described above:
 //   - The inputs' method is Setters(), which returns velox setters, where
 //     entgql's is Mutate(builder) on the builder the resolver made. The
-//     resolver writes them with db.Insert(x).Set or db.Update[T]().Set.
+//     resolver writes them with db.Insert(x).SetInput or
+//     db.Update[T]().SetInput, as entgql's resolver calls SetInput.
 //   - A Required one-to-one or many-to-one edge is T, not T!, in the type.
 //   - A field.Strings and the other JSON lists of scalars are [String!], as in
 //     entgql; any other JSON is the JSON scalar.

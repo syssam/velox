@@ -655,7 +655,7 @@ func create[E any, PE velox.Entity[E]](ctx context.Context, x PE, setters func()
 	if err != nil {
 		return nil, err
 	}
-	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+	if err := db.Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -682,7 +682,7 @@ func update[E any, PE velox.Entity[E]](ctx context.Context, k int64, typ string,
 	}
 	read := db
 	if len(set) > 0 {
-		n, err := db.Update[E, PE]().Where(key.EQ(k)).Set(set...).Exec(ctx)
+		n, err := db.Update[E, PE]().Where(key.EQ(k)).SetInput(input).Exec(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -2459,15 +2459,11 @@ func (r *queryResolver) Folder(ctx context.Context, id int64) (*gen.Folder, erro
 // input's setters to the folder whose key is id, and reads it back as
 // written.
 func (r *mutationResolver) UpdateFolder(ctx context.Context, id int64, input gen.UpdateFolderInput) (*gen.Folder, error) {
-	set, err := input.Setters()
-	if err != nil {
-		return nil, err
-	}
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Update[gen.Folder]().Where(gen.Folders.ID.EQ(id)).Set(set...).Exec(ctx); err != nil {
+	if _, err := db.Update[gen.Folder]().Where(gen.Folders.ID.EQ(id)).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return db.WithoutPolicy("the folder as written").Query[gen.Folder]().Where(gen.Folders.ID.EQ(id)).One(ctx)

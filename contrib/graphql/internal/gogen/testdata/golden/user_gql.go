@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion21
+const _ = veloxgql.GeneratedCodeIsVersion22
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -334,13 +334,14 @@ func (in CreateAccountInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in CreateAccountInput) GoString() string { return in.String() }
 
-// Setters returns the input's fields and edges as setters for db.Insert(x).Set.
-// A field not given sets nothing: x keeps its value, or the field's Default.
+// Setters returns the input's fields and edges as setters for
+// db.Insert(x).SetInput. A field not given sets nothing: x keeps its value, or
+// the field's Default.
 //
 // It does no I/O. A value a validator refuses, or a list of more than
 // gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
-func (in *CreateAccountInput) Setters() ([]velox.Setter[User], error) {
+func (in CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]
 	if v := in.CreatedAt; v != nil {
 		if err := gqlgraph.NotZero("CreateAccountInput.createdAt", *v); err != nil {

@@ -26,12 +26,8 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostI
 	if err != nil {
 		return nil, err
 	}
-	set, err := input.Setters()
-	if err != nil {
-		return nil, err
-	}
 	x := &gen.Post{AuthorID: viewer}
-	if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
+	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -45,11 +41,7 @@ func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.U
 	if err := OwnPost(ctx, db, id); err != nil {
 		return nil, err
 	}
-	set, err := input.Setters()
-	if err != nil {
-		return nil, err
-	}
-	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).Set(set...).One(ctx)
+	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, NotFound(ctx, "Post")
 	}
@@ -88,12 +80,8 @@ func (r *mutationResolver) DeletePost(ctx context.Context, id int64) (int64, err
 
 // CreateLabel is the resolver for the createLabel field.
 func (r *mutationResolver) CreateLabel(ctx context.Context, input gen.CreateLabelInput) (*gen.Tag, error) {
-	set, err := input.Setters()
-	if err != nil {
-		return nil, err
-	}
 	x := new(gen.Tag)
-	if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
+	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -101,11 +89,7 @@ func (r *mutationResolver) CreateLabel(ctx context.Context, input gen.CreateLabe
 
 // UpdateLabel is the resolver for the updateLabel field.
 func (r *mutationResolver) UpdateLabel(ctx context.Context, id int64, input gen.UpdateLabelInput) (*gen.Tag, error) {
-	set, err := input.Setters()
-	if err != nil {
-		return nil, err
-	}
-	x, err := veloxgql.DB(ctx).Update[gen.Tag]().Where(gen.Tags.ID.EQ(id)).Set(set...).One(ctx)
+	x, err := veloxgql.DB(ctx).Update[gen.Tag]().Where(gen.Tags.ID.EQ(id)).SetInput(input).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, NotFound(ctx, "Label")
 	}
@@ -115,16 +99,12 @@ func (r *mutationResolver) UpdateLabel(ctx context.Context, id int64, input gen.
 // CreateUser is the resolver for the createUser field: the user's password
 // hash is the server's hash of password, set on the row it inserts.
 func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserInput, password string) (*gen.User, error) {
-	set, err := input.Setters()
-	if err != nil {
-		return nil, err
-	}
 	hash, err := hashPassword(ctx, password)
 	if err != nil {
 		return nil, err
 	}
 	x := &gen.User{PasswordHash: hash}
-	if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
+	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -134,18 +114,15 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserI
 // replaces the hash, a setter of the resolver's beside the input's, in the
 // same UPDATE.
 func (r *mutationResolver) UpdateUser(ctx context.Context, id int64, input gen.UpdateUserInput, password *string) (*gen.User, error) {
-	set, err := input.Setters()
-	if err != nil {
-		return nil, err
-	}
+	u := veloxgql.DB(ctx).Update[gen.User]().Where(gen.Users.ID.EQ(id)).SetInput(input)
 	if password != nil {
 		hash, err := hashPassword(ctx, *password)
 		if err != nil {
 			return nil, err
 		}
-		set = append(set, gen.Users.PasswordHash.Set(hash))
+		u = u.Set(gen.Users.PasswordHash.Set(hash))
 	}
-	x, err := veloxgql.DB(ctx).Update[gen.User]().Where(gen.Users.ID.EQ(id)).Set(set...).One(ctx)
+	x, err := u.One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, NotFound(ctx, "User")
 	}

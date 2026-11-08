@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion21
+const _ = veloxgql.GeneratedCodeIsVersion22
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -337,13 +337,14 @@ type CreateUserInput struct {
 	JoinedAt time.Time
 }
 
-// Setters returns the input's fields and edges as setters for db.Insert(x).Set.
-// A field not given sets nothing: x keeps its value, or the field's Default.
+// Setters returns the input's fields and edges as setters for
+// db.Insert(x).SetInput. A field not given sets nothing: x keeps its value, or
+// the field's Default.
 //
 // It does no I/O. A value a validator refuses, or a list of more than
 // gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
-func (in *CreateUserInput) Setters() ([]velox.Setter[User], error) {
+func (in CreateUserInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]
 	set = append(set, Users.Name.Set(in.Name))
 	set = append(set, Users.Email.Set(in.Email))
@@ -368,13 +369,13 @@ type UpdateUserInput struct {
 }
 
 // Setters returns the input's fields and edges as setters for
-// db.Update[User]().Set. A field not given sets nothing, and a clear field wins
-// over its field.
+// db.Update[User]().SetInput. A field not given sets nothing, and a clear field
+// wins over its field.
 //
 // It does no I/O. A value a validator refuses, or a list of more than
 // gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
-func (in *UpdateUserInput) Setters() ([]velox.Setter[User], error) {
+func (in UpdateUserInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]
 	if v := in.Name; v != nil {
 		set = append(set, Users.Name.Set(*v))

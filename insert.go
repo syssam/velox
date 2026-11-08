@@ -18,6 +18,7 @@ type InsertQuery[E any] struct {
 	many     []E
 	conflict *ConflictClause
 	set      engine.Setters // Set's setters
+	err      error          // SetInput's error
 }
 
 // Insert starts an INSERT of the entity x points to:
@@ -130,6 +131,22 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 func (q InsertQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E] {
 	q.set = q.set.Add(assignments(ss))
 	return q
+}
+
+// SetInput adds the setters in.Setters returns, as Set does. When Setters fails,
+// the insert keeps its error, and Exec and SQL return it unchanged before
+// anything is sent:
+//
+//	err := db.Insert(&post).SetInput(input).Exec(ctx)
+func (q InsertQuery[E]) SetInput[_ Lazy[E]](in Input[E]) InsertQuery[E] {
+	ss, err := in.Setters()
+	if err != nil {
+		if q.err == nil {
+			q.err = err
+		}
+		return q
+	}
+	return q.Set(ss...)
 }
 
 // Exec runs the insert.
@@ -287,6 +304,9 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 	if q.meta.Err != nil {
 		return q.meta.Err
+	}
+	if q.err != nil {
+		return q.err
 	}
 	if q.single && q.one == nil {
 		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.meta.Info.Name)

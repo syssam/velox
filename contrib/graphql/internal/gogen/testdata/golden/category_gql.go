@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion21
+const _ = veloxgql.GeneratedCodeIsVersion22
 
 // Children is the edge children: a connection to the Category nodes it leads
 // to. Its queries batch with the same edge of every row on c's page.
@@ -197,13 +197,14 @@ type CreateCategoryInput struct {
 	ParentID *int64
 }
 
-// Setters returns the input's fields and edges as setters for db.Insert(x).Set.
-// A field not given sets nothing: x keeps its value, or the field's Default.
+// Setters returns the input's fields and edges as setters for
+// db.Insert(x).SetInput. A field not given sets nothing: x keeps its value, or
+// the field's Default.
 //
 // It does no I/O. A value a validator refuses, or a list of more than
 // gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
-func (in *CreateCategoryInput) Setters() ([]velox.Setter[Category], error) {
+func (in CreateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 	var set []velox.Setter[Category]
 	set = append(set, Categories.Title.Set(in.Title))
 	if len(in.ChildIDs) > 0 {
@@ -239,13 +240,13 @@ type UpdateCategoryInput struct {
 }
 
 // Setters returns the input's fields and edges as setters for
-// db.Update[Category]().Set. A field not given sets nothing, and a clear field
-// wins over its field.
+// db.Update[Category]().SetInput. A field not given sets nothing, and a clear
+// field wins over its field.
 //
 // It does no I/O. A value a validator refuses, or a list of more than
 // gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
-func (in *UpdateCategoryInput) Setters() ([]velox.Setter[Category], error) {
+func (in UpdateCategoryInput) Setters() ([]velox.Setter[Category], error) {
 	var set []velox.Setter[Category]
 	if v := in.Title; v != nil {
 		set = append(set, Categories.Title.Set(*v))

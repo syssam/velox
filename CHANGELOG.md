@@ -21,6 +21,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `UpdateQuery.SetInput(in)` and `InsertQuery.SetInput(in)` take a
+  `velox.Input[E]`, such as a generated GraphQL input, as ent's
+  `SetInput` does: a resolver is
+  `db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).SetInput(input).One(ctx)`.
+  An error from `Setters()` is returned unchanged by `Exec`, `One` or
+  `SQL`, before anything is sent. The generated `Setters` has a value
+  receiver. Regenerate: `veloxgql.GeneratedCodeIsVersion22` replaces
+  Version21 (decision 0062).
 - `veloxgql.MarshalInt64ID` and `UnmarshalInt64ID`, the `ID` model
   `veloxgql.Int64ID` of an int64 key: a JSON string out, a string of digits
   or an integer in, anything else BAD_USER_INPUT (decision 0061).

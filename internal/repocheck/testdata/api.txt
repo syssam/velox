@@ -317,6 +317,7 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E]
 func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
 func (q InsertQuery[E]) OnConflict[_ Lazy[E]](cols ...Column[E]) InsertQuery[E]
 func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
+func (q InsertQuery[E]) SetInput[_ Lazy[E]](in Input[E]) InsertQuery[E]
 func (q InsertQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E]
 func (q InsertQuery[E]) Update[_ Lazy[E]](cols ...Column[E]) InsertQuery[E]
 func (q Query[E]) After[_ Lazy[E]](x *E) Query[E]
@@ -381,6 +382,7 @@ func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E]
 func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (u UpdateQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
+func (u UpdateQuery[E]) SetInput[_ Lazy[E]](in Input[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
 func Allow() Predicate
@@ -500,6 +502,7 @@ type GroupKey[E, K any] struct { }
 type Group[K, V any] struct { Key K Value V }
 type Hook func(next Mutator) Mutator
 type IndexInfo = veloxtype.IndexInfo
+type Input[E any] interface { Setters() ([]Setter[E], error) }
 type InsertQuery[E any] struct { }
 type Interceptor = engine.Interceptor
 type JSONBool[E any] struct { }
@@ -1069,7 +1072,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion21
+const GeneratedCodeIsVersion22
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion21
+const _ = veloxgql.GeneratedCodeIsVersion22
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the same edge of every row on l's page.
@@ -127,13 +127,14 @@ type CreateLikeInput struct {
 	PostID int64
 }
 
-// Setters returns the input's fields and edges as setters for db.Insert(x).Set.
-// A field not given sets nothing: x keeps its value, or the field's Default.
+// Setters returns the input's fields and edges as setters for
+// db.Insert(x).SetInput. A field not given sets nothing: x keeps its value, or
+// the field's Default.
 //
 // It does no I/O. A value a validator refuses, or a list of more than
 // gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
-func (in *CreateLikeInput) Setters() ([]velox.Setter[Like], error) {
+func (in CreateLikeInput) Setters() ([]velox.Setter[Like], error) {
 	var set []velox.Setter[Like]
 	if v := in.Weight; v != nil {
 		set = append(set, Likes.Weight.Set(*v))

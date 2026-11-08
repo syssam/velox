@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion21
+const _ = veloxgql.GeneratedCodeIsVersion22
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -281,13 +281,14 @@ type CreateLabelInput struct {
 	PostIDs []int64
 }
 
-// Setters returns the input's fields and edges as setters for db.Insert(x).Set.
-// A field not given sets nothing: x keeps its value, or the field's Default.
+// Setters returns the input's fields and edges as setters for
+// db.Insert(x).SetInput. A field not given sets nothing: x keeps its value, or
+// the field's Default.
 //
 // It does no I/O. A value a validator refuses, or a list of more than
 // gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
-func (in *CreateLabelInput) Setters() ([]velox.Setter[Tag], error) {
+func (in CreateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 	var set []velox.Setter[Tag]
 	set = append(set, Tags.Name.Set(in.Name))
 	set = append(set, Tags.Rank.Set(in.Rank))
@@ -320,13 +321,13 @@ type UpdateLabelInput struct {
 }
 
 // Setters returns the input's fields and edges as setters for
-// db.Update[Tag]().Set. A field not given sets nothing, and a clear field wins
-// over its field.
+// db.Update[Tag]().SetInput. A field not given sets nothing, and a clear field
+// wins over its field.
 //
 // It does no I/O. A value a validator refuses, or a list of more than
 // gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
 // the documentation of package github.com/syssam/velox/contrib/graphql.
-func (in *UpdateLabelInput) Setters() ([]velox.Setter[Tag], error) {
+func (in UpdateLabelInput) Setters() ([]velox.Setter[Tag], error) {
 	var set []velox.Setter[Tag]
 	if v := in.Name; v != nil {
 		set = append(set, Tags.Name.Set(*v))

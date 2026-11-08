@@ -37,7 +37,7 @@ type Volume struct{ schema.Schema }
 func (Volume) Fields() []schema.Field {
 	return []schema.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New),
-		field.String("title").Annotations(graphql.WhereOps(graphql.OpEQ)),
+		field.String("title").NotEmpty().Annotations(graphql.WhereOps(graphql.OpEQ)),
 		field.UUID("shelf_id", uuid.UUID{}).Optional().Nillable(),
 	}
 }
@@ -75,12 +75,8 @@ import (
 
 // CreateShelf is the resolver for the createShelf field.
 func (r *mutationResolver) CreateShelf(ctx context.Context, input gen.CreateShelfInput) (*gen.Shelf, error) {
-	set, err := input.Setters()
-	if err != nil {
-		return nil, err
-	}
 	x := &gen.Shelf{}
-	if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
+	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -88,12 +84,8 @@ func (r *mutationResolver) CreateShelf(ctx context.Context, input gen.CreateShel
 
 // CreateVolume is the resolver for the createVolume field.
 func (r *mutationResolver) CreateVolume(ctx context.Context, input gen.CreateVolumeInput) (*gen.Volume, error) {
-	set, err := input.Setters()
-	if err != nil {
-		return nil, err
-	}
 	x := &gen.Volume{}
-	if err := veloxgql.DB(ctx).Insert(x).Set(set...).Exec(ctx); err != nil {
+	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -101,11 +93,7 @@ func (r *mutationResolver) CreateVolume(ctx context.Context, input gen.CreateVol
 
 // UpdateVolume is the resolver for the updateVolume field.
 func (r *mutationResolver) UpdateVolume(ctx context.Context, id uuid.UUID, input gen.UpdateVolumeInput) (*gen.Volume, error) {
-	set, err := input.Setters()
-	if err != nil {
-		return nil, err
-	}
-	return veloxgql.DB(ctx).Update[gen.Volume]().Where(gen.Volumes.ID.EQ(id)).Set(set...).One(ctx)
+	return veloxgql.DB(ctx).Update[gen.Volume]().Where(gen.Volumes.ID.EQ(id)).SetInput(input).One(ctx)
 }
 
 // Volumes is the resolver for the volumes field.
@@ -125,7 +113,8 @@ type queryResolver struct{ *Resolver }
 
 // e2eUUIDRun is the app's test, through gqlgen on SQLite: a UUID ID goes out
 // as its string, and comes back in as a key, an edge's key and a where
-// input's ID; a string that is no UUID is BAD_USER_INPUT.
+// input's ID; a string that is no UUID is BAD_USER_INPUT, and so is a title
+// the validator refuses, the error of Setters that SetInput keeps.
 const e2eUUIDRun = `package app_test
 
 import (
@@ -216,6 +205,10 @@ func TestUUIDIDs(t *testing.T) {
 	r := do(` + "`" + `mutation { updateVolume(id: "not-a-uuid", input: {title: "x"}) { id } }` + "`" + `)
 	if len(r.Errors) != 1 || r.Errors[0].Extensions["code"] != "BAD_USER_INPUT" {
 		t.Errorf("an ID that is no UUID: %+v", r.Errors)
+	}
+	r = do(` + "`" + `mutation { updateVolume(id: "` + "`" + ` + id + ` + "`" + `", input: {title: ""}) { id } }` + "`" + `)
+	if len(r.Errors) != 1 || r.Errors[0].Extensions["code"] != "BAD_USER_INPUT" || !strings.Contains(r.Errors[0].Message, "title") {
+		t.Errorf("an empty title, refused by Setters through SetInput: %+v", r.Errors)
 	}
 }
 `

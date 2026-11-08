@@ -193,7 +193,7 @@ func (r *renderer) writeSetters(f *file, t *sdl.Type, in string, fs []sdl.InputF
 	f.p("")
 	if create {
 		var doc strings.Builder
-		doc.WriteString("Setters returns the input's fields and edges as setters for db.Insert(x).Set. A field not given sets nothing: x keeps its value, or the field's Default.")
+		doc.WriteString("Setters returns the input's fields and edges as setters for db.Insert(x).SetInput. A field not given sets nothing: x keeps its value, or the field's Default.")
 		for _, fd := range leftOut(t) {
 			// A key's zero value names no row: the foreign key refuses it.
 			if ed := ownedEdgeOf(e, fd.Name); ed != nil {
@@ -204,11 +204,11 @@ func (r *renderer) writeSetters(f *file, t *sdl.Type, in string, fs []sdl.InputF
 		}
 		f.doc("", doc.String())
 	} else {
-		f.doc("", fmt.Sprintf("Setters returns the input's fields and edges as setters for db.Update[%s]().Set. A field not given sets nothing, and a clear field wins over its field.", e.Name))
+		f.doc("", fmt.Sprintf("Setters returns the input's fields and edges as setters for db.Update[%s]().SetInput. A field not given sets nothing, and a clear field wins over its field.", e.Name))
 	}
 	f.p("//")
 	f.doc("", "It does no I/O. A value a validator refuses, or a list of more than gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql.")
-	f.p("func (in *%s) Setters() ([]%s.Setter[%s], error) {", in, vx, e.Name)
+	f.p("func (in %s) Setters() ([]%s.Setter[%s], error) {", in, vx, e.Name)
 	f.p("\tvar set []%s.Setter[%s]", vx, e.Name)
 	for i, fi := range fs {
 		if s.done[i] {

@@ -41,7 +41,7 @@ does not stop them before 1.0.
 ### Generated code is versioned
 
 Every file velox-gen writes refers to a constant, today
-`velox.GeneratedCodeIsVersion19` (and `veloxgql.GeneratedCodeIsVersion21` for
+`velox.GeneratedCodeIsVersion19` (and `veloxgql.GeneratedCodeIsVersion22` for
 velox-graphql's files). When the shape of generated code must change, the
 constant is replaced by the next number, with a line in the changelog. Code
 generated for the old version then fails to compile against the new runtime,
