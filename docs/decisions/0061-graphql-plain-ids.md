@@ -69,8 +69,8 @@ the model `veloxgql.Int64ID` resolves to `MarshalInt64ID` and
 - A schema whose entities have keys of different Go types puts each other
   type behind `graphql.Skip()`, or moves them to one key type.
 - velox-graphql's e2e apps that had a UUID or a named key in one module now
-  have int64 keys; the UUID and named key types are covered by unit tests of
-  the generated code.
+  have int64 keys. `TestAppUUIDKeys` serves an app of UUID keys of its own;
+  a named key type is covered by unit tests of the generated code.
 
 ## Evidence
 
@@ -89,4 +89,7 @@ the model `veloxgql.Int64ID` resolves to `MarshalInt64ID` and
   prevID: 2})` on SQLite with resolvers that take `id int64`, and an ID of
   `"c"` is BAD_USER_INPUT. `TestAppEnumRenamed` serves string keys through
   `graphql.ID`; `TestCollectRun` decodes `[ID!]!` to `[]int64`.
+- `TestAppUUIDKeys` in `contrib/graphql/cmd/velox-graphql`: with ID bound to
+  `veloxgql.UUID`, a resolver takes a `uuid.UUID`, an input's edge ID and a
+  where input's ID are UUIDs, and a malformed one is BAD_USER_INPUT.
 - `TestByID` and `TestBadIDs` in `examples/graphql`.
