@@ -1,11 +1,21 @@
 # velox
 
-velox is an ORM for Go. A schema is a Go struct in an ent-style DSL. velox-gen
-generates typed queries from it, and velox plans and applies its own
-migrations.
+velox is an ORM for Go. You describe your tables as Go structs, in the same
+schema style as ent. velox-gen turns them into plain entity structs and typed
+column handles, and a small generic runtime runs your queries. velox also
+plans and applies its own migrations, and a plugin generates a GraphQL API.
 
-Coming from ent? [docs/coming-from-ent.md](docs/coming-from-ent.md) lists what
-differs: `Optional` stays NOT NULL, the implicit ID is int64, bool and number Defaults,
+```go
+over30, err := db.Query[gen.User]().
+	Where(gen.Users.Age.GT(30)).
+	OrderBy(gen.Users.Age.Desc()).
+	Limit(10).
+	All(ctx)
+```
+
+Coming from ent? Most schemas port by changing imports.
+[docs/coming-from-ent.md](docs/coming-from-ent.md) lists what differs:
+`Optional` stays NOT NULL, the implicit ID is int64, bool and number Defaults,
 foreign keys, many-to-many links and GraphQL nulls.
 
 ## Not released yet
@@ -18,6 +28,37 @@ older, different project that held this path. To try this code, check out this
 repository, and in the quick start run
 `go mod edit -replace github.com/syssam/velox=/path/to/checkout` straight after
 `go mod init`.
+
+## Why velox
+
+- **Small generated code, fast builds.** The query builders are generic
+  types in the runtime, so generated code is mostly metadata and grows little
+  with each entity ([ADR 0055](docs/decisions/0055-lazy-unsafe-scope.md)).
+  In one comparison run at 300 entities, velox generated 49,550 lines where
+  ent generated 1,141,879, and a cold build used under a third of ent's CPU
+  time ([the 2026-10-29 report](docs/history/reviews/2026-10-29-perf-comparison.md)).
+- **Mistakes caught early.** Column handles are typed, so comparing a number
+  column with a string does not compile. velox-gen also checks the column
+  names that hooks and policies use.
+- **Guard rails on by default.** A read without `Limit` fails with
+  `ErrUnbounded`, unless it says `Unbounded()`. An update or delete without
+  `Where` fails with `ErrNoWhere`, unless it says `All()`. Both are refused
+  before anything reaches the database.
+- **Policies that fail closed.** Read, write and insert policies live in the
+  schema. A policy that returns no condition fails the statement rather than
+  matching every row, a scoped entity read without its tenant fails with
+  `scope.ErrNoScope`, and lifting policies takes a DB made by
+  `db.WithoutPolicy(reason)` ([ADR 0054](docs/decisions/0054-fail-closed-runtime.md)).
+- **Migrations included, or Atlas if you prefer.** velox-gen diffs the schema
+  into SQL files and refuses a destructive change unless you allow it with
+  `-allow`. For Atlas, it prints the schema's `CREATE` statements instead
+  ([ADR 0006](docs/decisions/0006-own-migrate-and-atlas.md)).
+- **GraphQL from the same schema.** The velox-graphql plugin generates
+  gqlgen types, Relay connections, where and order inputs and mutation
+  inputs, with the same policies applied.
+- **Also in the box.** Transactions with savepoints and retries,
+  optimistic locking, row locks, deadlines, read replicas and shards, and
+  OpenTelemetry tracing in `contrib/veloxotel`.
 
 ## Quick start
 
@@ -71,7 +112,8 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    go tool velox-gen migrate apply -db app.db
    ```
 
-5. Use it, in `main.go`. A wrong column or value type does not compile:
+5. Use it, in `main.go`. The handles are typed, so a wrong column name or
+   value type is a compile error:
 
    ```go
    // main.go
@@ -145,15 +187,22 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    updated 1 deleted 1
    ```
 
-A test runs these steps as written (`TestReadmeQuickStart`). To set up the pool
-yourself, or to wrap it, open it and pass it to `velox.Open`, which leaves closing
-it to you. On PostgreSQL, `veloxpgx.Open` takes a pgx pool and is faster.
+A test runs these steps exactly as written (`TestReadmeQuickStart`), so they
+stay correct. To manage the pool yourself, open a `*sql.DB` and pass it to
+`velox.Open`; closing it is then up to you. On PostgreSQL, `veloxpgx.Open`
+takes a pgx pool and is faster. [docs/guide.md](docs/guide.md) picks up from
+here.
 
 ## What velox doesn't do
 
-- No joins API, `DISTINCT`, `UNION` or `HAVING`, and no subqueries beyond the
-  `EXISTS` of `Has`, `HasWith` and `Of`. `GROUP BY` is one key (`CountBy`,
-  `SumBy` and the like).
+Some things are left out on purpose, and raw SQL covers them when you need
+them.
+
+- Joins are for to-one relations only (`Join`, `LeftJoin`); a to-many
+  relation is loaded with `With` or tested with `Has`. There is no
+  `DISTINCT`, `UNION` or `HAVING`, and no subquery beyond the `EXISTS` of
+  `Has`, `HasWith` and `Of`. `GROUP BY` is one key (`CountBy`, `SumBy` and
+  the like).
 - `Raw` scans only into entities. For a report, run your own SQL on
   `velox.Pool(db)`, the `*sql.DB` under a DB. It is nil on a transaction's DB and
   on a DB from `OpenConn`, `OpenShards` or `veloxpgx`, where you hold the pool.
@@ -209,15 +258,23 @@ There are two paths, and a directory is managed by one of them.
 See [examples/README.md](examples/README.md#migrations) for both, and for
 adopting an existing database.
 
-## Documentation
+## Learn more
 
+- [docs/guide.md](docs/guide.md): a tour of velox by task, from schema to
+  GraphQL. Read this after the quick start.
+- [docs/coming-from-ent.md](docs/coming-from-ent.md): what differs from ent.
+- [docs/stability.md](docs/stability.md): what may change before 1.0, and
+  what 1.0 will promise.
+- [examples/](examples/README.md): runnable programs, one topic each, and a
+  whole service.
+- [docs/decisions/](docs/decisions/README.md): the design decisions, and why
+  velox works the way it does.
+- [docs/migrations-operations.md](docs/migrations-operations.md): what to do
+  when `migrate apply` refuses.
 - Each module's API is on pkg.go.dev, with runnable examples:
   [velox](https://pkg.go.dev/github.com/syssam/velox),
   [contrib/graphql](https://pkg.go.dev/github.com/syssam/velox/contrib/graphql),
   [contrib/veloxotel](https://pkg.go.dev/github.com/syssam/velox/contrib/veloxotel).
-- [docs/decisions/](docs/decisions/) records the design decisions.
-- [docs/migrations-operations.md](docs/migrations-operations.md) says what to do when
-  `migrate apply` refuses.
 - [CHANGELOG.md](CHANGELOG.md) lists the changes.
 - [CONTRIBUTING.md](CONTRIBUTING.md) explains how to work on velox.
 - [SECURITY.md](SECURITY.md) explains how to report a vulnerability.
