@@ -32,10 +32,9 @@ type scopeValues []scopeValue
 type scopeValue struct{ name, text string }
 
 // WithScopeValue returns ctx recording that the policies read value under name,
-// so that RowScopeFromContext shows it and a batcher keeps callers with
-// different values apart. A later call with the same name replaces it. The
-// scope package calls it; a policy that reads a context value of its own and
-// is used with a batcher should too.
+// so that RowScopeFromContext shows it, for logs and for a batcher of an
+// application's own. A later call with the same name replaces it. The scope
+// package calls it.
 func WithScopeValue(ctx context.Context, name string, value any) context.Context {
 	old, _ := ctx.Value(scopeKey{}).(scopeValues)
 	text := fmt.Sprintf("%T:%v", value, value)

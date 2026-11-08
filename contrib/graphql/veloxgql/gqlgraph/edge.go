@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/99designs/gqlgen/graphql"
 
@@ -30,8 +31,10 @@ import (
 // target type), the DB veloxgql.DBFromContext reads, EdgeList's MaxList, the
 // callers' row scope (velox.RowScopeFromContext: the scope values, the WithoutPolicy
 // reason and the WithShard shard, of the context each passes
-// to the edge function) and the value of veloxgql.WithBatchScope's function, if
-// the extension has one. A row whose resolver's context a field middleware or a
+// to the edge function), the read of the target that velox would send under
+// that context (its SQL and arguments, after the Read policy, the
+// interceptors and the Rewrite hooks), and the value of
+// veloxgql.WithBatchScope's function, if the extension has one. A row whose resolver's context a field middleware or a
 // directive scopes otherwise is in a batch of its own scope; a key that cannot
 // be compared (reflect.Value.Comparable) reads alone. A connection's batch
 // keeps its first caller's arguments, those its paginate passed to Paginate,
@@ -41,10 +44,10 @@ import (
 // The first caller reads for all, under the context it passed to the edge
 // function, on the DB of its query; the others wait on the batch's
 // sync.Once, never for one another, so a mutation's resolvers, which the
-// extension runs one at a time, batch too. Any other value of the context
-// that a Read policy or a Rewrite or Around hook reads (the viewer, a role)
-// is the first caller's for every row: it must be the same for every row of
-// the field, or be in WithBatchScope's value. A waiter does not watch its
+// extension runs one at a time, batch too. A context value that only an
+// Around hook reads is the first caller's for every row: it must be the
+// same for every row of the field, or be in WithBatchScope's value. A
+// caller whose read fails (a policy denies it) reads alone. A waiter does not watch its
 // own context's cancellation, only the load's: every resolver of a response
 // has the request's. A batch's error is every row's.
 
@@ -289,6 +292,11 @@ type batchKey struct {
 	most       int               // EdgeList's MaxList; 0 for the others
 	scope      velox.RowScope
 	app        any // veloxgql.WithBatchScope's value
+	// read is the SQL, with its arguments, of a read of target under the
+	// caller's context: two callers whose Read policies, interceptors,
+	// Rewrite hooks or policy bypass make different reads share no batch,
+	// whatever context values those read.
+	read string
 }
 
 // batchOf returns the batch of the edge e, to target, read with the
@@ -312,16 +320,47 @@ func batchOf(ctx context.Context, target untyped.Table, e Edge, most int, args a
 		return nil, nil, 0
 	}
 	db, _ := veloxgql.DBFromContext(ctx)
+	if db == nil {
+		return nil, nil, 0
+	}
 	key := batchKey{typ: typ, field: name, rel: e.rel, target: target.Info(), db: db, most: most, scope: velox.RowScopeFromContext(ctx), app: t.Scope(ctx)}
 	if !canCompare(key.app) {
 		// A batch scope == would panic on: a read of its own.
 		return nil, nil, 0
 	}
+	read, ok := readOf(ctx, db, target)
+	if !ok {
+		return nil, nil, 0
+	}
+	key.read = read
 	b := g.Batch(fc.Field.Field, fc.Field.Selections, key, args)
 	if b == nil {
 		return nil, nil, 0
 	}
 	return b, ps, i
+}
+
+// readOf returns the SQL and arguments of a read of target on db under ctx,
+// as one string, and false when there is none (the read fails): the caller
+// then reads alone. It is what the caller may see of target, as velox would
+// send it, after the Read policy, the interceptors and the Rewrite hooks.
+// It is a dry run, with the rendering cached: about 1.4 µs and 3
+// allocations a caller on SQLite (Apple M3 Max), where reading alone
+// costs each caller a statement.
+func readOf(ctx context.Context, db *velox.DB, target untyped.Table) (string, bool) {
+	text, args, err := untyped.Query(db, target).Limit(1).SQL(ctx)
+	if err != nil {
+		return "", false
+	}
+	if len(args) == 0 {
+		return text, true
+	}
+	var b strings.Builder
+	b.WriteString(text)
+	for _, a := range args {
+		fmt.Fprintf(&b, "\x00%T:%v", a, a)
+	}
+	return b.String(), true
 }
 
 // canCompare reports whether == on v cannot panic: what

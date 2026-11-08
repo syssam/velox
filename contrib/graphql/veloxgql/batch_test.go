@@ -372,25 +372,26 @@ func TestBatchScopes(t *testing.T) {
 	}
 }
 
-// TestBatchScopeOption is the final review's I1: keepers whose edge
-// resolvers give their contexts different viewers, which the pets' Read
-// policy reads but velox's row scope does not hold, share one read without
-// WithBatchScope, under whichever context comes first. With WithBatchScope
-// returning the viewer, each viewer's keepers read in a batch of their own,
-// and each keeper sees its viewer's pets.
+// TestBatchScopeOption: keepers whose edge resolvers give their contexts
+// different viewers, which the pets' Read policy reads but velox's row scope
+// does not hold, read in a batch per viewer without WithBatchScope: the
+// batch is keyed by the read each context makes, so the policy's conditions
+// tell them apart (fail closed). WithBatchScope returning the viewer gives
+// the same batches, and each keeper sees its viewer's pets.
 func TestBatchScopeOption(t *testing.T) {
 	db, log := batchDB(t)
 	const query = `{ keepers { name viewerPets { totalCount nodes { name } } } }`
 	ctx := petOrg.With(context.Background(), int64(1))
-	post(t, ctx, batchServer(db), query)
-	// The keepers, then one load and one count for all.
-	if stmts, _ := log.take(); len(stmts) != 3 {
-		t.Errorf("without WithBatchScope: %d statements, want 3: %q", len(stmts), stmts)
+	want := strings.ReplaceAll(petsOf("keepers", "ann:rex", "bob:fifi", "cy:"), `"pets"`, `"viewerPets"`)
+	if got := post(t, ctx, batchServer(db), query); got != want {
+		t.Errorf("without WithBatchScope:\n got %s\nwant %s", got, want)
+	}
+	// The keepers, then a load and a count for each of the two viewers.
+	if stmts, _ := log.take(); len(stmts) != 5 {
+		t.Errorf("without WithBatchScope: %d statements, want 5: %q", len(stmts), stmts)
 	}
 	srv := batchServerWith(db, []veloxgql.Option{veloxgql.WithBatchScope(func(ctx context.Context) any { return ctx.Value(viewerKey{}) })})
-	got := post(t, ctx, srv, query)
-	want := strings.ReplaceAll(petsOf("keepers", "ann:rex", "bob:fifi", "cy:"), `"pets"`, `"viewerPets"`)
-	if got != want {
+	if got := post(t, ctx, srv, query); got != want {
 		t.Errorf("\n got %s\nwant %s", got, want)
 	}
 	// The keepers, then a load and a count for each of the two viewers.

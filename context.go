@@ -8,12 +8,11 @@ import (
 )
 
 // WithScopeValue returns ctx recording that the policies read value under
-// name, so that RowScopeFromContext shows it and a batcher keeps callers with
-// different values apart. A later call with the same name replaces it. The
-// scope package calls it; a policy that reads a context value of its own, and
-// is used with the GraphQL batcher or another that reads for several callers in
-// one statement, should call it too, or those callers would share a read
-// that only one of them may see.
+// name, so that RowScopeFromContext shows it, for logs and for a batcher of
+// an application's own. A later call with the same name replaces it. The
+// scope package calls it. The GraphQL batcher does not need it: it keys a
+// batch by the SQL each caller's context reads, the policies' conditions
+// included.
 func WithScopeValue(ctx context.Context, name string, value any) context.Context {
 	return engine.WithScopeValue(ctx, name, value)
 }

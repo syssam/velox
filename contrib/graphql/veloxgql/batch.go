@@ -23,10 +23,11 @@ import (
 // batch is read under its first caller's context: velox's row scope
 // (velox.RowScopeFromContext: the scope values, the bypass, the shard), the DB and
 // the limits are in its key, so callers that differ in them never share a read.
-// Any other context value a Read policy or a Rewrite or Around hook reads (the
-// viewer, a role) must be the same for every row of a field, or be returned by
-// WithBatchScope: a directive or a field middleware that varies the context per
-// parent row needs it.
+// So is the SQL that each caller's context would read the target with, after
+// the Read policy, the interceptors and the Rewrite hooks: callers whose
+// viewer or role those read differently never share a read, whatever context
+// values they read. Only an Around hook that reads a context value of its own
+// needs WithBatchScope.
 func Batch[E any](ctx context.Context, rows []*E) {
 	xs := make([]any, len(rows))
 	for i, r := range rows {

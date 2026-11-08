@@ -191,13 +191,12 @@ func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool)
 //
 // A batch reads every row's edge under its first caller's context. velox's row
 // scope (velox.RowScopeFromContext: the scope values, the
-// WithoutPolicy bypass, the shard) is always in the key, and so are the DB
-// and a list edge's MaxList. Any other context value that a Read policy or a
-// Rewrite or Around hook reads, such as the viewer or a role, must be the same
-// for every row of a field, or be in f's value: a directive or a field
-// middleware that gives an edge field's resolver another context for some
-// parent rows (acting as the row's owner, raising a role) needs WithBatchScope,
-// or the rows of the field are read under whichever context comes first.
+// WithoutPolicy bypass, the shard) is always in the key, and so are the DB,
+// a list edge's MaxList and the SQL each caller's context reads the target
+// with, after the Read policy, the interceptors and the Rewrite hooks. So
+// callers that a policy shows different rows never share a read. An Around
+// hook runs only when the batch is read: a context value that only an Around
+// hook reads must be the same for every row of a field, or be in f's value.
 func WithBatchScope(f func(context.Context) any) Option {
 	return Option{func(e *Extension) { e.batchScope = f }}
 }
