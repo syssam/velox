@@ -407,6 +407,26 @@ db.Query[gen.Author]().Where(A.Posts.HasWith(P.Votes.GT(20)))   // ... with a po
 db.Query[gen.Author]().Where(velox.Not(A.Posts.Has()))          // authors with none
 ```
 
+### Subqueries on a column: Select and InSelect
+
+When no edge links the two columns, or you want to say which columns are
+compared, a column handle's `Select` makes a subquery of that column. Another
+handle of the same Go type tests against it with `InSelect` or `NotInSelect`:
+
+```go
+popular := P.AuthorID.Select(P.Votes.GT(20))           // SELECT author_id FROM posts WHERE votes > 20
+db.Query[gen.Author]().Where(A.ID.InSelect(popular))     // authors of a popular post
+db.Query[gen.Author]().Where(A.ID.NotInSelect(popular))  // authors of none
+```
+
+The types must match: an `int64` column against an `int64` subquery, an enum
+against the same enum. velox writes it as the same `EXISTS` that `HasWith`
+uses, so the subquery's entity gets its own Read policy and interceptors (a
+soft-deleted post is not counted). `NotInSelect` is `NOT EXISTS`, so a NULL
+in the subquery doesn't empty the result the way SQL's `NOT IN` would.
+Aggregates, CTEs and window functions in a subquery still go through `Raw`.
+See [ADR 0057](decisions/0057-column-subqueries.md).
+
 ### Joins
 
 For a to-one relation (a belongs-to, or a one-to-one), `Join` reads the
