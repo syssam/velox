@@ -158,7 +158,7 @@ func (g *graph) fieldInputs(o *object, fs *inputFields, i int, create bool, skip
 		return nil, fmt.Errorf("schema %s, field %s: graphql.CreateDefault on a field the create input leaves out", e.Name, f.Name)
 	}
 	switch {
-	case o.node && i == e.PrimaryKey[0], f.Implicit != "", o.fks[f.Name], a.Skip&skip != 0, !create && f.Immutable:
+	case o.node && i == e.PrimaryKey[0], f.Implicit != "", o.fks[f.Name], a.Skip&skip != 0, f.Version, !create && f.Immutable:
 		return nil, nil
 	}
 	where := "schema " + e.Name + ", field " + f.Name

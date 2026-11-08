@@ -323,7 +323,7 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	where := fieldAt(f.Name)
 	o := &OutField{
 		GoName: f.GoName, Column: f.Column, Name: f.Name, Comment: f.Comment,
-		Sensitive: f.Sensitive, Immutable: f.Immutable, JSON: f.Type == "json", Implicit: f.Implicit != "",
+		Sensitive: f.Sensitive, Immutable: f.Immutable, Version: f.Version, JSON: f.Type == "json", Implicit: f.Implicit != "",
 	}
 	if reserved[f.GoName] {
 		s.fail(where, "its Go name %s is reserved: it is a method of the entity", f.GoName)

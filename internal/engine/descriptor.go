@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"unsafe"
 )
@@ -61,7 +62,7 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 		return nil, err
 	}
 	cols := make([]ColumnInfo, len(d.Columns))
-	anyImmutable, anyRequired := false, false
+	anyImmutable, anyRequired, version := false, false, -1
 	for i, c := range d.Columns {
 		ci, err := columnInfo(t, base, v.FieldPtr(i), i, c)
 		if err != nil {
@@ -70,6 +71,15 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 		cols[i] = ci
 		anyImmutable = anyImmutable || c.Immutable
 		anyRequired = anyRequired || c.RequiredEdge != ""
+		if c.Version {
+			if version >= 0 {
+				return nil, schemaError(name, c.Field, "column %s is a second Version column", c.Name)
+			}
+			if slices.Contains(d.PrimaryKey, i) {
+				return nil, schemaError(name, c.Field, "column %s is in the primary key and cannot be the Version column", c.Name)
+			}
+			version = i
+		}
 	}
 	if err := checkKeyColumns(name, d, len(cols)); err != nil {
 		return nil, err
@@ -84,7 +94,7 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 		return nil, err
 	}
 	info := &EntityInfo{Name: name, Table: d.Table, Schema: d.TableSchema, Columns: cols, PrimaryKey: d.PrimaryKey,
-		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
+		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, version: version + 1, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
 	if err := validate(info); err != nil {
 		return nil, err
 	}
@@ -113,7 +123,7 @@ func columnInfo(t reflect.Type, base unsafe.Pointer, ptr any, i int, c ColumnDes
 	}
 	ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable,
 		HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
-		Immutable: c.Immutable, Sensitive: c.Sensitive, RequiredEdge: c.RequiredEdge, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
+		Immutable: c.Immutable, Version: c.Version, Sensitive: c.Sensitive, RequiredEdge: c.RequiredEdge, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
 	ci.val, ci.fast = valType(ft), fastOf(ft)
 	if (c.Encode == nil) != (c.Decode == nil) {
 		return fail("column %s has one of Encode and Decode; a codec needs both", c.Name)
@@ -126,6 +136,14 @@ func columnInfo(t reflect.Type, base unsafe.Pointer, ptr any, i int, c ColumnDes
 	}
 	if c.Immutable && c.UpdateDefault != nil {
 		return fail("Immutable column %s has an UpdateDefault; every update would be refused", c.Field)
+	}
+	if c.Version {
+		switch k := ft.Kind(); {
+		case k < reflect.Int || k > reflect.Uint64 || k == reflect.Uintptr:
+			return fail("Version column %s is a %v; it must be an integer", c.Name, ft)
+		case c.Immutable || c.UpdateDefault != nil || c.Encode != nil:
+			return fail("Version column %s cannot be Immutable, have an UpdateDefault or a codec", c.Name)
+		}
 	}
 	if c.Default == nil {
 		return ci, nil

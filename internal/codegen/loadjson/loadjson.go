@@ -103,6 +103,7 @@ type Field struct {
 	Optional      bool            `json:"optional,omitempty"`
 	Nillable      bool            `json:"nillable,omitempty"`
 	Immutable     bool            `json:"immutable,omitempty"`
+	Version       bool            `json:"version,omitempty"`
 	Unique        bool            `json:"unique,omitempty"`
 	Sensitive     bool            `json:"sensitive,omitempty"`
 	Default       json.RawMessage `json:"default,omitempty"`      // a literal Default

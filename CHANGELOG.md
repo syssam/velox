@@ -21,6 +21,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `field.Int64("version").Version()` makes a field an entity's optimistic-locking
+  version. Every update adds 1 to it, an upsert's update branch included. `Save`
+  writes only where the row still holds the version `*x` read, and fails with
+  `velox.ErrStale`, which also matches `ErrNotFound`, when another write moved it.
+  A write that assigns it fails with `velox.ErrVersionSet`. velox-graphql leaves
+  it out of create and update inputs (ADR 0056).
 - `UpdateQuery.One(ctx)` writes the one row its conditions match and returns it
   as written, as ent's `UpdateOne`: `ErrNotFound` for no row the Read and Write
   policies let the caller change, `ErrNotSingular` for more than one, read back

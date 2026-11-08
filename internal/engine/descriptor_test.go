@@ -128,6 +128,9 @@ func TestDescriptorRefusals(t *testing.T) {
 			d.Columns[3].UpdateDefault = func() any { return "x" }
 		}, "dRow.Name: Immutable column Name has an UpdateDefault; every update would be refused"},
 		{"duplicate column name", func(d *velox.Descriptor[dRow]) { d.Columns[3].Name = "flag" }, `column name "flag" is also the name of Flag`},
+		{"Version on a string", func(d *velox.Descriptor[dRow]) { d.Columns[3].Version = true }, "dRow.Name: Version column name is a string; it must be an integer"},
+		{"Version on a pointer", func(d *velox.Descriptor[dRow]) { d.Columns[2].Version = true }, "dRow.Opt: Version column opt is a *bool; it must be an integer"},
+		{"Version in the key", func(d *velox.Descriptor[dRow]) { d.Columns[0].Version = true }, "dRow.ID: column id is in the primary key and cannot be the Version column"},
 		{"panic in FieldPtr", func(d *velox.Descriptor[dRow]) {
 			d.FieldPtr = func(x *dRow, i int) any { panic("addr") }
 		}, "the generated metadata panicked: addr"},

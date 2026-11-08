@@ -12,8 +12,9 @@ import (
 
 // Paper is the entity of schema Paper.
 type Paper struct {
-	ID    bindtype.UUID `json:"id"`
-	Title string        `json:"title"`
+	ID      bindtype.UUID `json:"id"`
+	Title   string        `json:"title"`
+	Version int64         `json:"version"`
 	// Edges holds Paper's relations, filled by With.
 	Edges PaperEdges `json:"edges,omitzero"`
 }
@@ -30,6 +31,7 @@ type PaperEdges struct {
 const (
 	paperColID = iota
 	paperColTitle
+	paperColVersion
 )
 
 // The positions of Paper's edges.
@@ -44,6 +46,8 @@ type PaperHandles struct {
 	ID velox.Col[Paper, bindtype.UUID]
 	// Title is the column title.
 	Title velox.StringCol[Paper, string]
+	// Version is the column version.
+	Version velox.NumberCol[Paper, int64]
 	// Remarks is the edge remarks, to Remark: With loads it, Has and HasWith test it.
 	Remarks velox.Rel[Paper, Remark]
 	// Topics is the edge topics, to Topic: With loads it, Has and HasWith test it.
@@ -54,6 +58,7 @@ type PaperHandles struct {
 var Papers = PaperHandles{
 	ID:      velox.Col[Paper, bindtype.UUID]{I: paperColID},
 	Title:   velox.StringCol[Paper, string]{I: paperColTitle},
+	Version: velox.NumberCol[Paper, int64]{I: paperColVersion},
 	Remarks: velox.Rel[Paper, Remark]{I: paperEdgeRemarks},
 	Topics:  velox.Rel[Paper, Topic]{I: paperEdgeTopics},
 }
@@ -70,6 +75,7 @@ func paperDescriptor() velox.Descriptor[Paper] {
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id", DefaultFunc: func() any { return schema.NewPaperID() }},
 			{Field: "Title", Name: "title"},
+			{Field: "Version", Name: "version", Version: true},
 		},
 		PrimaryKey: []int{paperColID},
 		Edges: []velox.EdgeDescriptor{
@@ -82,6 +88,8 @@ func paperDescriptor() velox.Descriptor[Paper] {
 				return &x.ID
 			case paperColTitle:
 				return &x.Title
+			case paperColVersion:
+				return &x.Version
 			}
 			return nil
 		},
@@ -99,7 +107,7 @@ func paperDescriptor() velox.Descriptor[Paper] {
 
 // String returns the entity's fields.
 func (p Paper) String() string {
-	return fmt.Sprintf("Paper(ID=%v, Title=%v)", p.ID, p.Title)
+	return fmt.Sprintf("Paper(ID=%v, Title=%v, Version=%v)", p.ID, p.Title, p.Version)
 }
 
 // GoString is String, so that %#v prints the same text.

@@ -685,10 +685,29 @@ func (db *DB) send(ctx context.Context, st *Statement, t Target, read func(Rows)
 func ExecWrite(ctx context.Context, db *DB, st *Statement) (execResult, error) {
 	var res execResult
 	var err error
+	if st.Op == OpUpdate {
+		bumpOnce(st)
+	}
 	if db.Hooked() {
 		err = db.Run(ctx, st, nil, &res)
 	} else {
 		err = db.Plain(ctx, st, nil, &res)
 	}
 	return res, err
+}
+
+// bumpOnce adds 1 to the Version column of st, an update, unless st already
+// assigns it: writeCore did, or velox's own update of a bidirectional key,
+// which no hook sees, did not.
+func bumpOnce(st *Statement) {
+	v, ok := st.Entity.VersionColumn()
+	if !ok {
+		return
+	}
+	for _, a := range st.Set {
+		if a.Column == v {
+			return
+		}
+	}
+	st.Set = append(slices.Clip(st.Set), Assignment{Column: v, Op: AssignAdd, Value: int64(1)})
 }

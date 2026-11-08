@@ -341,6 +341,39 @@ func entityHandles(w *writer, e *OutEntity) {
 }
 
 // entityDescriptor writes the function that returns e's Descriptor.
+// columnParts is the fields of f's ColumnDescriptor literal, in order.
+func columnParts(f *OutField) []string {
+	parts := []string{"Field: " + strconv.Quote(f.GoName), "Name: " + strconv.Quote(f.Column)}
+	if f.DefaultCode != "" {
+		parts = append(parts, "Default: "+f.DefaultCode)
+	}
+	if f.DefaultFuncCode != "" {
+		parts = append(parts, "DefaultFunc: "+f.DefaultFuncCode)
+	}
+	if f.UpdateDefaultCode != "" {
+		parts = append(parts, "UpdateDefault: "+f.UpdateDefaultCode)
+	}
+	if f.Immutable {
+		parts = append(parts, "Immutable: true")
+	}
+	if f.Version {
+		parts = append(parts, "Version: true")
+	}
+	if f.Sensitive {
+		parts = append(parts, "Sensitive: true")
+	}
+	if f.NilIsNull {
+		parts = append(parts, "Nullable: true")
+	}
+	if f.RequiredEdge != "" {
+		parts = append(parts, "RequiredEdge: "+strconv.Quote(f.RequiredEdge))
+	}
+	if f.JSON {
+		parts = append(parts, "Encode: json.Marshal", "Decode: json.Unmarshal")
+	}
+	return parts
+}
+
 func entityDescriptor(w *writer, e *OutEntity) {
 	w.p("// %sDescriptor describes %s to velox: its table, columns, edges and hooks.", camel(e.Label), e.Name)
 	w.p("func %sDescriptor() velox.Descriptor[%s] {", camel(e.Label), e.Name)
@@ -354,32 +387,7 @@ func entityDescriptor(w *writer, e *OutEntity) {
 	}
 	w.p("Columns: []velox.ColumnDescriptor{")
 	for _, f := range e.Fields {
-		parts := []string{"Field: " + strconv.Quote(f.GoName), "Name: " + strconv.Quote(f.Column)}
-		if f.DefaultCode != "" {
-			parts = append(parts, "Default: "+f.DefaultCode)
-		}
-		if f.DefaultFuncCode != "" {
-			parts = append(parts, "DefaultFunc: "+f.DefaultFuncCode)
-		}
-		if f.UpdateDefaultCode != "" {
-			parts = append(parts, "UpdateDefault: "+f.UpdateDefaultCode)
-		}
-		if f.Immutable {
-			parts = append(parts, "Immutable: true")
-		}
-		if f.Sensitive {
-			parts = append(parts, "Sensitive: true")
-		}
-		if f.NilIsNull {
-			parts = append(parts, "Nullable: true")
-		}
-		if f.RequiredEdge != "" {
-			parts = append(parts, "RequiredEdge: "+strconv.Quote(f.RequiredEdge))
-		}
-		if f.JSON {
-			parts = append(parts, "Encode: json.Marshal", "Decode: json.Unmarshal")
-		}
-		w.p("%s,", literal(parts))
+		w.p("%s,", literal(columnParts(f)))
 	}
 	w.p("},")
 	w.p("PrimaryKey: %s,", cols(e, e.PrimaryKey))

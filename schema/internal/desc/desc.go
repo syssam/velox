@@ -169,6 +169,7 @@ type Field struct {
 	Optional      bool    // not required on create; the column stays NOT NULL, except a JSON field's
 	Nillable      bool    // the column is NULL-able, and the Go field a pointer
 	Immutable     bool    // refused in updates
+	Version       bool    // the optimistic-locking version: velox bumps it on every update
 	Unique        bool    // a single-column unique index
 	Sensitive     bool    // left out of String(), JSON, logs and spans
 	Default       any     // a value (or, on time and uuid, a func() T); nil when none

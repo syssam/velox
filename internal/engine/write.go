@@ -203,6 +203,12 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 		if err := checkAssignedOnce(in, st.Set); err != nil {
 			return err
 		}
+		if v, ok := in.VersionColumn(); ok {
+			if err := refuseVersion(in, v, st.Set); err != nil {
+				return err
+			}
+			st.Set = append(slices.Clip(st.Set), Assignment{Column: v, Op: AssignAdd, Value: int64(1)})
+		}
 		if err := ValidateSetters(in, st.Set); err != nil {
 			return err
 		}
@@ -240,7 +246,32 @@ func saveCore(ctx context.Context, db *DB, mu *MutationState) error {
 		return err
 	}
 	if !mu.Dry && mu.Affected == 0 {
+		if _, ok := mu.St.Entity.VersionColumn(); ok {
+			return fmt.Errorf("velox: %s: %w (%w)", mu.St.Entity.Name, ErrStale, ErrNotFound)
+		}
 		return fmt.Errorf("velox: %s: %w", mu.St.Entity.Name, ErrNotFound)
 	}
 	return nil
+}
+
+// refuseVersion fails with ErrVersionSet when set assigns column v, in's
+// Version column.
+func refuseVersion(in *EntityInfo, v int, set []Assignment) error {
+	for _, a := range set {
+		if a.Column == v {
+			return fmt.Errorf("velox: %s: %s: %w", in.Name, in.Columns[v].Field, ErrVersionSet)
+		}
+	}
+	return nil
+}
+
+// BumpVersion adds 1 to the integer field p points to: a Version column's,
+// after a Save wrote the row. Like SetElem it is not generic.
+func BumpVersion(p any) {
+	v := reflect.ValueOf(p).Elem()
+	if v.CanInt() {
+		v.SetInt(v.Int() + 1)
+	} else {
+		v.SetUint(v.Uint() + 1)
+	}
 }

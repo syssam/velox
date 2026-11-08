@@ -85,6 +85,7 @@ func fieldFlags(f *Field) []string {
 		{f.Pointer, "pointer"},
 		{f.Unique, "unique"},
 		{f.Immutable, "immutable"},
+		{f.Version, "version"},
 		{f.Sensitive, "sensitive"},
 		{f.Implicit != "", "implicit(" + f.Implicit + ")"},
 	} {

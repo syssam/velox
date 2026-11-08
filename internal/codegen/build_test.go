@@ -764,6 +764,12 @@ type emptyEnum struct{ schema.Schema }
 
 func (emptyEnum) Fields() []schema.Field { return []schema.Field{field.Enum("s")} }
 
+type twoVersions struct{ schema.Schema }
+
+func (twoVersions) Fields() []schema.Field {
+	return []schema.Field{field.Int64("version").Version(), field.Int("rev").Version()}
+}
+
 type dupEnum struct{ schema.Schema }
 
 func (dupEnum) Fields() []schema.Field { return []schema.Field{field.Enum("s").Values("a", "b", "a")} }
@@ -1259,6 +1265,7 @@ func TestBuildRules(t *testing.T) {
 		{"51 symbols disagree", []schema.Interface{symOwner{}, symPet{}}, `schema symPet: edge "owner": Symbols ["a"] differ from edge "pets"'s ["b"] on symOwner`},
 		{"52 shared values differ", []schema.Interface{enumOrder{}, enumTicket{}}, `schema enumTicket: field "state": enum type status is also field "status" of schema enumOrder (`},
 		{"53 required bidirectional one-to-one", []schema.Interface{reqSpouse{}}, `schema reqSpouse: edge "spouse": a bidirectional one-to-one edge cannot be Required: its key is cleared whenever its partner re-points; make it optional, or give it an inverse edge`},
+		{"57 two versions", []schema.Interface{twoVersions{}}, `schema twoVersions: field "rev": is a second Version field: a schema has one version`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := build(t, c.ss...)
@@ -1347,7 +1354,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{enumOrder{}, enumTicket{}}, {jsonFuncField{}}, {jsonChanField{}}, {jsonUnsafeField{}}, {jsonComplexField{}},
 		{jsonComplex64Field{}}, {jsonFuncMarshalerField{}}, {jsonOptionalFuncField{}},
 		{fkNamedType{}}, {fkCustomInt{}},
-		{uniqueOptional{}}, {uniqueOptionalDefault{}}, {uniqueOptionalIndex{}}, {twoEdgesOneKey{}, keyTargetB{}, keyTargetC{}}, {Café{}},
+		{twoVersions{}}, {uniqueOptional{}}, {uniqueOptionalDefault{}}, {uniqueOptionalIndex{}}, {twoEdgesOneKey{}, keyTargetB{}, keyTargetC{}}, {Café{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {

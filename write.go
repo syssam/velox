@@ -254,9 +254,11 @@ func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) 
 // part of the statement the hooks and the policy see. It makes a write
 // conditional on what the caller read:
 //
-//	err := db.Save(&u, U.Email, U.Version).Where(U.Version.EQ(v)).Exec(ctx)
+//	err := db.Save(&u, U.Email).Where(U.Status.EQ("draft")).Exec(ctx)
 //
-// fails with ErrNotFound when another writer moved the version.
+// fails with ErrNotFound when another writer moved the status. An entity with
+// a Version field (field.Int64("version").Version()) needs no such condition:
+// Save adds it, and fails with ErrStale.
 func (s SaveQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) SaveQuery[E] {
 	s.where = append(slices.Clip(s.where), ps...)
 	return s
@@ -283,6 +285,9 @@ func (s SaveQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	for _, k := range in.PrimaryKey {
 		st.Where = append(st.Where, ColumnEQ(k, fieldValue(s.meta, s.x, k)))
 	}
+	if v, ok := in.VersionColumn(); ok {
+		st.Where = append(st.Where, ColumnEQ(v, fieldValue(s.meta, s.x, v)))
+	}
 	for _, p := range s.where {
 		if err := engine.PredErr(engine.PredNode(Predicate(p))); err != nil {
 			return Statement{}, err
@@ -301,7 +306,9 @@ func (s SaveQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 // ErrNotFound, *x is as it was, and so it is when a hook returns nil without
 // calling next, whether or not it called Mutation.SetAffected.
 // Its error wraps ErrNotFound when no row has that key and meets the
-// conditions. On MySQL, open the database with clientFoundRows=true:
+// conditions. On an entity with a Version field the row must also hold the
+// version *x holds: Exec adds 1 to it, stores the new version in *x, and its
+// error wraps ErrStale as well when no row matches. On MySQL, open the database with clientFoundRows=true:
 // otherwise a row whose values did not change counts as not found.
 func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	st, err := s.statement()
@@ -318,6 +325,9 @@ func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 		if a.Op == AssignSet {
 			setField(s.meta, s.x, a.Column, a.Value)
 		}
+	}
+	if v, ok := s.meta.Info.VersionColumn(); ok {
+		engine.BumpVersion(s.meta.Addr(s.x, v))
 	}
 	return nil
 }

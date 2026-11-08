@@ -128,3 +128,19 @@ func TestWaitsForConn(t *testing.T) {
 		t.Errorf("on a pool of two: %v", err)
 	}
 }
+
+// TestBumpOnce: an update of an entity with a Version column gets one
+// increment, and one that already assigns it gets none.
+func TestBumpOnce(t *testing.T) {
+	in := &EntityInfo{Name: "V", Columns: []ColumnInfo{{Name: "id"}, {Name: "version"}}, version: 2}
+	st := &Statement{Op: OpUpdate, Entity: in}
+	bumpOnce(st)
+	bumpOnce(st)
+	if len(st.Set) != 1 || st.Set[0] != (Assignment{Column: 1, Op: AssignAdd, Value: int64(1)}) {
+		t.Errorf("set %+v", st.Set)
+	}
+	plain := &Statement{Op: OpUpdate, Entity: &EntityInfo{Name: "P"}}
+	if bumpOnce(plain); len(plain.Set) != 0 {
+		t.Errorf("an entity without a version: %+v", plain.Set)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -289,6 +290,16 @@ func checkFunc(d *desc.Field, option string, fn any) {
 func contradictions(d *desc.Field) {
 	if d.Immutable && d.UpdateDefault != nil {
 		failOnce(d, "an Immutable field cannot have an UpdateDefault")
+	}
+	if d.Version {
+		switch {
+		case !strings.HasPrefix(d.Type, "int") && !strings.HasPrefix(d.Type, "uint"):
+			failOnce(d, "a Version field must be an integer")
+		case d.Name == "id":
+			failOnce(d, "the ID cannot be a Version field")
+		case d.Nillable || d.Immutable || d.UpdateDefault != nil:
+			failOnce(d, "a Version field cannot be Nillable, Immutable or have an UpdateDefault")
+		}
 	}
 	type bound struct {
 		n       int // how many checks give it

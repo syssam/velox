@@ -123,6 +123,7 @@ type Field struct {
 	Nullable   bool     `json:"nullable,omitempty"`    // Nillable || (Optional && Type == "json" && the Go type is a slice, a map or a pointer): the column is NULL-able; the flag a plugin uses for nullability. Any other Optional field stays NOT NULL, and unset is its zero value
 	Optional   bool     `json:"optional,omitempty"`    // the field need not be given on create; it says nothing of nullability
 	Immutable  bool     `json:"immutable,omitempty"`   // refused in updates: set only on create
+	Version    bool     `json:"version,omitempty"`     // the optimistic-locking version: velox sets it, and every write that assigns it fails
 	Sensitive  bool     `json:"sensitive,omitempty"`   // left out of String(), JSON, logs and spans; a plugin keeps it out of what it exposes
 	Unique     bool     `json:"unique,omitempty"`      // a single-column unique index, which Entity.Indexes does not list
 	AutoID     bool     `json:"auto_id,omitempty"`     // the ID velox added, as the schema declares none

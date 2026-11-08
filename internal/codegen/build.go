@@ -947,6 +947,14 @@ func (b *builder) validateFields(e *Entity) {
 		b.validateField(e, f)
 	}
 	b.validateID(e)
+	versions := 0
+	for _, f := range e.Fields {
+		if f.Version {
+			if versions++; versions == 2 {
+				b.fail(57, e.Name, fieldLoc(f), "is a second Version field: a schema has one version")
+			}
+		}
+	}
 }
 
 // uniqueFields checks that no field is declared twice (rule 1) and that no

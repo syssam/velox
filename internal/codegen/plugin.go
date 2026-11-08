@@ -57,7 +57,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 				Name: of.Name, GoName: of.GoName, Column: of.Column,
 				Type: gf.Type, GoType: of.GoType, ElemType: of.ElemType, PkgPath: pkgPathOf(gf), Imports: importsOf(gf), Kind: goKindOf(gf),
 				Pointer: of.Pointer, Nullable: nullable(gf), Optional: gf.Optional,
-				Immutable: of.Immutable, Sensitive: of.Sensitive, Unique: gf.Unique,
+				Immutable: of.Immutable, Version: of.Version, Sensitive: of.Sensitive, Unique: gf.Unique,
 				AutoID: gf.AutoID, Size: gf.Size, HasDefault: of.DefaultCode != "" || of.DefaultFuncCode != "", Default: literalDefault(gf),
 				UpdateDefault: gf.UpdateDefault, Implicit: gf.Implicit,
 				Enum: enumOf(gf, of, enums), EnumValues: enumValues(gf), Checks: checks(gf), SchemaType: maps.Clone(gf.SchemaType),

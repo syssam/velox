@@ -936,6 +936,7 @@ func (w *writer) conflict(cf *ConflictClause) {
 			w.str(" = new.")
 			w.col(int32(c))
 		}
+		w.bumpVersion()
 		return
 	}
 	w.str(" ON CONFLICT (")
@@ -954,9 +955,27 @@ func (w *writer) conflict(cf *ConflictClause) {
 		w.str(" = EXCLUDED.")
 		w.col(int32(c))
 	}
+	w.bumpVersion()
 	w.qualify = true
 	w.where(cf.Where)
 	w.qualify = false
+}
+
+// bumpVersion adds 1 to the existing row's Version column in an upsert's
+// update branch, naming it by its table: on MySQL a bare name is ambiguous
+// beside the alias new, and on PostgreSQL it may be EXCLUDED's.
+func (w *writer) bumpVersion() {
+	v, ok := w.in.VersionColumn()
+	if !ok {
+		return
+	}
+	w.str(", ")
+	w.col(int32(v))
+	w.str(" = ")
+	w.table()
+	w.str(".")
+	w.col(int32(v))
+	w.str(" + 1")
 }
 
 func (w *writer) updateStmt(st *Statement) {

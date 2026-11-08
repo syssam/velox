@@ -28,6 +28,7 @@ type EntityInfo struct {
 	kit        *Kit                       // set by MetaOnce.Load
 	check      func(col int, v any) error // Descriptor.Check; nil when the entity has no validators
 	immutable  bool                       // some column is Immutable
+	version    int                        // 1 + the index of the Version column; 0: none
 	required   bool                       // some column has a RequiredEdge
 	bidi       bool                       // Descriptor.Bidi: a link is two rows, (a, b) and (b, a)
 	bidiKeys   []bidiKey                  // the keys of the EdgeBidi relations, which both partners' rows hold
@@ -70,6 +71,7 @@ type ColumnInfo struct {
 	// nil when none.
 	UpdateDefault func() any
 	Immutable     bool // an update may not assign the column
+	Version       bool // the optimistic-locking version: every update adds 1
 	Sensitive     bool // the column holds a secret (velox logs no values)
 	// RequiredEdge is ColumnDescriptor.RequiredEdge: the Required edge whose
 	// NULL-able key the column holds, which a write may not leave nil; "" when
@@ -223,3 +225,7 @@ func setInfoBidi(in *EntityInfo, on bool) { in.bidi = on }
 
 // rootPkg is the import path of the root package, which holds One and Many.
 var rootPkg = strings.TrimSuffix(reflect.TypeFor[Holder]().PkgPath(), "/internal/engine")
+
+// VersionColumn is the index into Columns of the entity's Version column,
+// and whether it has one.
+func (in *EntityInfo) VersionColumn() (int, bool) { return in.version - 1, in.version > 0 }

@@ -56,6 +56,15 @@ var (
 	// list assigns an Immutable column, including one a hook adds; the
 	// error names the Go field. An insert may set one.
 	ErrImmutable = errors.New("column is immutable")
+	// ErrStale is returned by a Save of an entity with a Version column when
+	// no row has the key and the version *x holds: another write moved the
+	// version, or deleted the row, since *x was read. The error also matches
+	// ErrNotFound. A write that assigns the Version column fails with
+	// ErrVersionSet.
+	ErrStale = errors.New("stale: the row's version moved since it was read")
+	// ErrVersionSet is returned by a write that assigns an entity's Version
+	// column, a hook's included: velox adds 1 to it on every update.
+	ErrVersionSet = errors.New("the version column is velox's to set")
 	// ErrNoShard is returned, on a DB opened with OpenShards, by a statement or
 	// Tx when its context names no shard (neither WithShard nor WithShardFor
 	// does), names one the DB does not have, or when the

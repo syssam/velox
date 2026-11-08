@@ -9,6 +9,7 @@ type ColumnDescriptor struct {
 	DefaultFunc   func() any // returns a value of the field's type (or of its element type, for a pointer field)
 	UpdateDefault func() any // its result is what every update writes to the column; an insert does not call it
 	Immutable     bool       // an update may not assign the column
+	Version       bool       // the optimistic-locking version: every update adds 1
 	Sensitive     bool       // the column holds a secret (velox logs no values)
 	// Nullable says the column holds NULL though the field is no pointer:
 	// a slice or a map, whose nil velox binds as NULL and reads NULL back

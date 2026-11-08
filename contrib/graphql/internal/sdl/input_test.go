@@ -51,7 +51,8 @@ func blogInputs(t *testing.T) *plugin.Model {
 	bf.Field, bf.FieldOn, bf.OwnsKey = "user_best_friend", "User", true // bidirectional
 	user.Edges = []*plugin.Edge{posts, groups, profile, categories, likes, bf}
 
-	post := entity("Post", field("author_id", "int64"), field("title", "string"))
+	rev := &plugin.Field{Name: "rev", GoName: "Rev", Type: "int64", Version: true} // velox sets it
+	post := entity("Post", field("author_id", "int64"), field("title", "string"), rev)
 	author := edge("author", plugin.M2O, "User")
 	author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
 	creator := edge("creator", plugin.M2O, "User")

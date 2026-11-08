@@ -95,6 +95,7 @@ type OutField struct {
 	Tag                  string // the struct tag, including backquotes
 	Comment              string
 	Sensitive, Immutable bool
+	Version              bool   // the optimistic-locking version: its ColumnDescriptor says Version
 	Implicit             bool   // the foreign key velox added for an edge, which ent keeps unexported: not in JSON, not in String
 	JSON                 bool   // a json field: its ColumnDescriptor's codec is encoding/json's, which the file imports
 	RequiredEdge         string // the Required edge whose NULL-able key the field holds, an edge to its own schema: its ColumnDescriptor says RequiredEdge; "" when none

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"unsafe"
 )
 
@@ -53,6 +54,9 @@ func CheckConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error
 				return fmt.Errorf("velox: %s: %s: %w", in.Name, col.Field, ErrImmutable)
 			}
 		}
+	}
+	if v, ok := in.VersionColumn(); ok && slices.Contains(cf.Update, v) {
+		return fmt.Errorf("velox: %s: %s: %w", in.Name, in.Columns[v].Field, ErrVersionSet)
 	}
 	return nil
 }

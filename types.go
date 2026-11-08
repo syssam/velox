@@ -52,6 +52,7 @@ const (
 // Its methods:
 //
 //	Column (in *EntityInfo) Column(name string) (int, bool)
+//	VersionColumn (in *EntityInfo) VersionColumn() (int, bool) // the Version column's index, and whether there is one
 type EntityInfo = engine.EntityInfo
 
 // ColumnInfo describes one column. It is the runtime view of the generated
@@ -71,6 +72,7 @@ type EntityInfo = engine.EntityInfo
 //	// nil when none.
 //	UpdateDefault func() any
 //	Immutable bool // an update may not assign the column
+//	Version bool // the optimistic-locking version: every update adds 1
 //	Sensitive bool // the column holds a secret (velox logs no values)
 //	// RequiredEdge is ColumnDescriptor.RequiredEdge: the Required edge whose
 //	// NULL-able key the column holds, which a write may not leave nil; "" when

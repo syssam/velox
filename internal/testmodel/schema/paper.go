@@ -18,15 +18,17 @@ func NewPaperID() bindtype.UUID {
 	return u
 }
 
-// Paper has a UUID key, a default for it, Remarks keyed to it and Topics,
-// keyed by string, through a join table.
+// Paper has a UUID key, a default for it, a Version column, Remarks keyed
+// to it and Topics, keyed by string, through a join table.
 type Paper struct{ schema.Schema }
 
-// Fields returns the UUID key and the title.
+// Fields returns the UUID key, the title and the optimistic-locking
+// version.
 func (Paper) Fields() []schema.Field {
 	return []schema.Field{
 		field.UUID("id", bindtype.UUID{}).Default(NewPaperID),
 		field.String("title"),
+		field.Int64("version").Version(),
 	}
 }
 

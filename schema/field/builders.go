@@ -157,6 +157,14 @@ func ofKind[T Numeric](fn func(T) error) any {
 // default without it, for rows written outside velox.
 func (b *NumberBuilder[T]) Default(v T) *NumberBuilder[T] { b.d.Default = base(v); return b }
 
+// Version makes the field the entity's optimistic-locking version. Every
+// update adds 1 to it, an upsert's update branch included, and no write may
+// assign it. Save writes only where it still holds the value *x read, and
+// fails with velox.ErrStale when another write moved it. It applies to an
+// integer field that is not the ID, Nillable, Immutable or given an
+// UpdateDefault, and to one field of a schema.
+func (b *NumberBuilder[T]) Version() *NumberBuilder[T] { b.d.Version = true; return b }
+
 // base returns v as a value of T's kind, such as an int for a slog.Level, so
 // that Default, Min, Max and Range record what Int().GoType(T(0)) records,
 // and a T with its own JSON or text encoding stores its number.

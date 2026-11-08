@@ -73,6 +73,15 @@ var (
 	// list assigns an Immutable column, including one a hook adds; the
 	// error names the Go field. An insert may set one.
 	ErrImmutable = engine.ErrImmutable
+	// ErrStale is returned by a Save of an entity with a Version column when
+	// no row has the key and the version *x holds: another write moved the
+	// version, or deleted the row, since *x was read. The error also matches
+	// ErrNotFound.
+	ErrStale = engine.ErrStale
+	// ErrVersionSet is returned by an update, Save or upsert that assigns an
+	// entity's Version column, a hook's included: velox adds 1 to it on every
+	// update.
+	ErrVersionSet = engine.ErrVersionSet
 	// ErrNoShard is returned, on a DB opened with OpenShards, by a statement or
 	// Tx when its context names no shard (no WithShard, and
 	// WithShardFor names none), names one the DB does not have, or when the
