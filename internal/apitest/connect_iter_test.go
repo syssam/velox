@@ -3,6 +3,7 @@ package apitest
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -127,10 +128,13 @@ func TestIterBreakPanicFreeThePool(t *testing.T) {
 	})
 }
 
-// TestIterConcurrentStatementWaits: a statement on another goroutine is not
-// nested: it waits for the loop and then runs, however long the loop takes.
+// TestIterConcurrentStatementWaits: a statement on another goroutine, under
+// another context, is not nested: it waits for the loop and then runs,
+// however long the loop takes. Under the loop's own context it is refused
+// from any goroutine, as velox tells a nested statement by its context.
 func TestIterConcurrentStatementWaits(t *testing.T) {
 	db := connectInvoices(t, ":memory:")
+	other := context.WithoutCancel(ctx)
 	noHang(t, func() {
 		started := make(chan struct{})
 		var ranAt time.Time
@@ -141,8 +145,11 @@ func TestIterConcurrentStatementWaits(t *testing.T) {
 				t.Fatal(err)
 			}
 			wg.Go(func() {
+				if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), "a statement inside a loop over Iter") {
+					t.Errorf("under the loop's context: %v", err)
+				}
 				close(started)
-				if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+				if _, err := db.Query[testmodel.Invoice]().Limit(1).All(other); err != nil {
 					t.Errorf("the concurrent statement: %v", err)
 				}
 				ranAt = time.Now()
@@ -260,4 +267,24 @@ func TestConnectFileTakesConcurrentWrites(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+// TestIterNestedUnderAnotherContextSaysHeld: a statement in the loop's body
+// under a context that is not the loop's waits, and its deadline ends it with
+// an error that says the pool's one connection was held.
+func TestIterNestedUnderAnotherContextSaysHeld(t *testing.T) {
+	db := connectInvoices(t, ":memory:")
+	noHang(t, func() {
+		for _, err := range db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).Limit(1).Iter(ctx) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			short, cancel := context.WithTimeout(context.WithoutCancel(ctx), 50*time.Millisecond)
+			_, err := db.Query[testmodel.Invoice]().Count(short)
+			cancel()
+			if !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "held by a loop over Iter or by a Tx") {
+				t.Errorf("nested under another context: %v", err)
+			}
+		}
+	})
 }

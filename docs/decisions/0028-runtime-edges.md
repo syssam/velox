@@ -47,19 +47,18 @@ at the call to a silent outcome.
   `busy_timeout` fixes it (0 of 160), but its spelling is the driver's. So a
   statement or Tx on the DB in the body of a loop over Iter, or in a Tx's fn under a
   context without the transaction's mark, on a pool of one, fails rather than hang.
-- **How that holder is recognised.** By goroutine ID, read from `runtime.Stack`.
-  Nothing else tells a nested statement from a concurrent one: the body's context
-  is the caller's, and a timeout would fail a concurrent goroutine behind a long
-  export. Only an Iter or a Tx on a pool of one pays for it, and a statement made
-  while one is open; other statements pay one atomic load. It costs about 3 µs at an
-  empty stack, 12 µs at 20 frames and 29 µs at 60 (`BenchmarkGoid`, Apple M3 Max):
-  `runtime.Stack` walks the whole stack however small its buffer, and nothing short
-  of a link to the runtime's internals gives the ID. A goroutine the body starts, and
-  `iter.Pull`, are not recognised and wait as before: a missed hang, never a false
-  failure. So is another DB over the same pool (a second `Open`, or `OpenConn` with
-  `SQLConn`): the holder is the DB's, as keying it on the pool would cost those
-  DBs a process-wide lookup per statement. On a DB with replicas the check is off, as
-  the loop may hold a replica's connection.
+- **How that holder is recognised.** By its context (amended 2026-11-08; it was the
+  goroutine ID, read from `runtime.Stack`, which Go does not expose on purpose and
+  whose cost grew with the stack: 29 µs at 60 frames). The holder notes the context
+  its Iter or Tx was given. A statement under that context, or under `WithoutTx` of
+  fn's, fails, from any goroutine: a concurrent statement under the loop's own
+  context is refused rather than queued. Any other context waits, as database/sql's
+  does; if the body waits for it, it ends at its deadline, and its error says the
+  connection was held. A statement pays one atomic load, and a comparison of two
+  contexts while a holder exists. Another DB over the same pool (a second `Open`,
+  or `OpenConn` with `SQLConn`) sees no holder, as keying it on the pool would cost
+  those DBs a process-wide lookup per statement. On a DB with replicas the check is
+  off, as the loop may hold a replica's connection.
 - **Mutation.DB outside db.Tx.** The docs change, not the behaviour. velox learns
   that a hook wants the DB only after the hook has started, too late to begin a
   transaction around it, and opening one for every hooked write costs every

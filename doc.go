@@ -215,7 +215,8 @@
 // datetime(9), which on SQLite rebuilds the table.
 //
 // Connect opens one connection, as SQLite has one writer. A loop over Iter holds
-// it, so a statement in the loop's body fails: see Query.Iter.
+// it, so a statement in the loop's body under the loop's context fails: see
+// Query.Iter.
 //
 // # Options
 //

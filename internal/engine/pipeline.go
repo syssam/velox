@@ -271,6 +271,9 @@ func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, r
 	if err := db.outsideTx(ctx, st); err != nil {
 		return err
 	}
+	if err := db.held(ctx, st); err != nil {
+		return err
+	}
 	if err := ResolveStatement(st); err != nil {
 		return err
 	}
@@ -310,6 +313,22 @@ func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, r
 	return endedErr(tctx, st.Entity.Name, db.exec(tctx, st, t, read, res))
 }
 
+// held refuses a statement that would wait for the pool's one connection
+// that its own loop or Tx holds, under the context the caller gave, before
+// velox bounds it; and notes an Iter's context for the hold (iterconn.go).
+func (db *DB) held(ctx context.Context, st *Statement) error {
+	if st.DryRun {
+		return nil
+	}
+	if err := waitsForConn(ctx, db); err != nil {
+		return stmtErr(st, err)
+	}
+	if st.iter {
+		st.iterCtx = ctx
+	}
+	return nil
+}
+
 // Run takes a statement through the pipeline: prepare's stages, the route
 // stage, the parameter limit (checkParams), then the around hooks wrapping
 // execution, which is sending the statement and reading its rows. read reads
@@ -322,6 +341,9 @@ func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res
 		return err
 	}
 	if err := db.prepare(ctx, st); err != nil {
+		return err
+	}
+	if err := db.held(ctx, st); err != nil {
 		return err
 	}
 	t, err := db.route(ctx, st)
@@ -531,10 +553,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 	if db.txRoot != nil && db.txRoot.broken != nil {
 		return stmtErr(st, db.txRoot.broken)
 	}
-	if err := waitsForConn(ctx, db); err != nil {
-		return stmtErr(st, err)
-	}
-	err := db.send(ctx, st, t, read, res)
+	err := heldHint(ctx, db, db.send(ctx, st, t, read, res))
 	if db.txRoot != nil {
 		switch {
 		case err != nil:

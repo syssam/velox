@@ -143,6 +143,9 @@ type Statement struct {
 	// iter says Iter runs the statement: its rows are open while the caller's
 	// loop body runs.
 	iter bool
+	// iterCtx is the context Iter was given: a statement under it while the
+	// loop holds a pool's one connection is refused (iterconn.go).
+	iterCtx context.Context
 	// loaded says a With load runs it, for owners read under this statement's scope:
 	// its join rows need no condition of their own.
 	loaded bool

@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/internal/testmodel"
 )
 
-const txConnErr = "a statement outside a Tx, on the goroutine running it"
+const txConnErr = "a statement outside a Tx, under the context the Tx was given"
 
 // TestTxNestedStatementFails: on Connect's one connection, a statement on db in a
 // Tx's fn cannot get a connection until the Tx returns, which waits for fn. It
@@ -117,18 +117,24 @@ func TestTxEndsFreeThePool(t *testing.T) {
 	})
 }
 
-// TestTxConcurrentStatementWaits: a statement on another goroutine is not nested:
-// it waits for the Tx and then runs.
+// TestTxConcurrentStatementWaits: a statement on another goroutine, under
+// another context, is not nested: it waits for the Tx and then runs. Under
+// the Tx's own context it is refused from any goroutine, as velox tells a
+// nested statement by its context.
 func TestTxConcurrentStatementWaits(t *testing.T) {
 	db := connectInvoices(t, ":memory:")
+	other := context.WithoutCancel(ctx)
 	noHang(t, func() {
 		var wg sync.WaitGroup
 		started := make(chan struct{})
 		var ran bool
 		err := db.Tx(ctx, func(context.Context, *velox.DB) error {
 			wg.Go(func() {
+				if _, err := db.Query[testmodel.Invoice]().Count(ctx); err == nil || !strings.Contains(err.Error(), txConnErr) {
+					t.Errorf("under the Tx's context: %v", err)
+				}
 				close(started)
-				if _, err := db.Query[testmodel.Invoice]().Count(ctx); err != nil {
+				if _, err := db.Query[testmodel.Invoice]().Count(other); err != nil {
 					t.Errorf("the concurrent statement: %v", err)
 				}
 				ran = true
@@ -169,11 +175,14 @@ func TestTxEndedContextIsNotWaitingForever(t *testing.T) {
 		defer cancel()
 		_ = db.Tx(cctx, func(fctx context.Context, tx *velox.DB) error {
 			cancel()
-			for name, c := range map[string]context.Context{"its context": velox.WithoutTx(fctx), "another": ctx} {
-				_, err := db.Query[testmodel.Invoice]().Count(c)
-				if !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "wait forever") {
-					t.Errorf("%s: %v", name, err)
-				}
+			_, err := db.Query[testmodel.Invoice]().Count(velox.WithoutTx(fctx))
+			if !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "wait forever") {
+				t.Errorf("WithoutTx of fn's: %v", err)
+			}
+			// Another context is not the Tx's: it waits for the connection,
+			// which database/sql frees as it rolls the Tx back.
+			if _, err := db.Query[testmodel.Invoice]().Count(ctx); err != nil {
+				t.Errorf("another: %v", err)
 			}
 			return nil
 		})

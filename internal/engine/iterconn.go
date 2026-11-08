@@ -5,27 +5,64 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"runtime"
+	"reflect"
 )
 
-// This file refuses the statement that would wait forever: one made on the DB
-// by the goroutine that holds its pool's one connection, in the body of a loop
-// over Iter or in a Tx's fn. config.connHolder notes that goroutine. A pool of one
-// has one holder at a time. Only a statement on that goroutine is refused, as the
-// wait of any other ends with the loop or the Tx.
+// This file refuses the statement that would wait forever for a pool's one
+// connection: one made on the DB in the body of a loop over Iter, or in a
+// Tx's fn, while the loop or the Tx holds the connection. A pool of one has
+// one holder at a time, noted in config.connHold.
 //
-// The holder is the DB's: another DB on the same *sql.DB (a second Open, or OpenConn
-// with SQLConn) sees none, and waits. Finding the pool would cost those DBs a lookup
-// in a process-wide table, for each statement.
+// The statement is told apart by its context, not by its goroutine, which Go
+// does not name: a statement under the context the loop or the Tx was given,
+// or under WithoutTx of fn's, is the holder's own, and is refused. Any other
+// waits, as database/sql's does: a statement of another goroutine waits for
+// the loop or the Tx to end. A statement of the holder's own goroutine under
+// an unrelated context waits too, until its deadline: then its error says
+// that the connection was held (heldHint).
+//
+// The holder is the DB's: another DB on the same *sql.DB (a second Open, or
+// OpenConn with SQLConn) sees none, and waits. Finding the pool would cost
+// those DBs a lookup in a process-wide table, for each statement.
 
 var (
 	// errIterConn is the error of a statement that waits for its own loop.
 	errIterConn = errors.New("a statement inside a loop over Iter would wait forever for the one connection of the pool, which the loop holds; " +
 		"collect the rows with All first, or run both in a Tx")
 	// errTxConn is the error of a statement that waits for its own Tx.
-	errTxConn = errors.New("a statement outside a Tx, on the goroutine running it, would wait forever for the one connection of the pool, which the Tx holds; " +
+	errTxConn = errors.New("a statement outside a Tx, under the context the Tx was given or WithoutTx of fn's, would wait forever for the one connection of the pool, which the Tx holds; " +
 		"run it on the tx that fn was given, or after the Tx returns")
+	// errHeld is joined to the error of a statement whose context ended while
+	// it waited for a pool's one connection that an Iter or a Tx held.
+	errHeld = errors.New("the pool's one connection was held by a loop over Iter or by a Tx while the statement waited; " +
+		"a statement inside the loop or fn under another context waits until its deadline")
 )
+
+// connHold is the holder of a pool's one connection: the context its Iter or
+// Tx was given and, for a Tx, its frame.
+type connHold struct {
+	caller context.Context
+	tx     *txFrame // nil for an Iter
+}
+
+// owns reports whether ctx is the holder's own: the context it was given, or
+// WithoutTx of its fn's.
+func (h *connHold) owns(ctx context.Context) bool {
+	if sameCtx(ctx, h.caller) {
+		return true
+	}
+	if n, ok := ctx.(noTxCtx); ok && h.tx != nil {
+		return sameCtx(n.Context, &h.tx.ctx)
+	}
+	return false
+}
+
+// sameCtx reports whether a and b are the same context. == on two interfaces
+// panics when their dynamic type cannot be compared, so the type is checked.
+func sameCtx(a, b context.Context) bool {
+	ta := reflect.TypeOf(a)
+	return ta == reflect.TypeOf(b) && ta != nil && ta.Comparable() && a == b
+}
 
 // onePool reports whether db runs its statements on a pool of one connection.
 // With replicas, a read may hold a replica's connection and leave the primary
@@ -35,76 +72,70 @@ func onePool(db *DB) bool {
 	return ok && db.Rt == nil && p.Stats().MaxOpenConnections == 1
 }
 
-// waitsForConn is the error of a statement of this goroutine on db that would wait
-// for the connection the goroutine holds; nil for any other. It is one atomic load
-// unless the connection is held. Once ctx, or the context of the Tx that holds the
-// connection, has ended, nothing would wait forever, as database/sql has rolled the Tx
-// back: the error says the context ended, and matches its error.
+// holder is db's holder of its pool's one connection, or nil.
+func holder(db *DB) *connHold {
+	h, _ := db.Cfg.connHold.Load().(*connHold)
+	return h
+}
+
+// waitsForConn is the error of a statement under ctx on db that would wait
+// for the connection the holder of ctx holds; nil for any other. It is one
+// atomic load unless the connection is held. Once ctx, or the context of the
+// Tx that holds the connection, has ended, nothing would wait forever, as
+// database/sql has rolled the Tx back: the error says the context ended, and
+// matches its error.
 func waitsForConn(ctx context.Context, db *DB) error {
-	h := db.Cfg.connHolder.Load()
-	if h == 0 || db.InTx || !onePool(db) || h>>1 != goid() {
+	h := holder(db)
+	if h == nil || db.InTx || !h.owns(ctx) || !onePool(db) {
 		return nil
 	}
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("the statement's context ended: %w", err)
 	}
-	if h&1 != 0 {
-		if f, _ := db.Cfg.connTx.Load().(*txFrame); f != nil && f.ctx.Err() != nil {
-			return fmt.Errorf("the context of the Tx whose fn this is ended: %w", f.ctx.Err())
+	if h.tx != nil {
+		if err := h.tx.ctx.Err(); err != nil {
+			return fmt.Errorf("the context of the Tx whose fn this is ended: %w", err)
 		}
 		return errTxConn
 	}
 	return errIterConn
 }
 
-// holdConn notes this goroutine as the holder of db's one connection, and returns
-// the note to give to releaseConn; 0 on any other pool. A holder is the goroutine's
-// ID doubled, plus one for a Tx.
-func holdConn(db *DB, tx uint64) uint64 {
-	if !onePool(db) {
-		return 0
+// heldHint joins errHeld to err when err is ctx's end and db's pool's one
+// connection is held: the statement may have waited for its own loop or Tx.
+func heldHint(ctx context.Context, db *DB, err error) error {
+	if err == nil || ctx.Err() == nil || db.InTx || holder(db) == nil || !onePool(db) {
+		return err
 	}
-	h := goid()<<1 | tx
-	db.Cfg.connHolder.Store(h)
+	return errors.Join(err, errHeld)
+}
+
+// holdConn notes the Iter or Tx given caller (and tx, a Tx's frame) as the
+// holder of db's one connection, and returns the note to give to
+// releaseConn; nil, and no allocation, on any other pool.
+func holdConn(caller context.Context, db *DB, tx *txFrame) *connHold {
+	if !onePool(db) {
+		return nil
+	}
+	h := &connHold{caller: caller, tx: tx}
+	db.Cfg.connHold.Store(h)
 	return h
 }
 
-// releaseConn lets go of h, only if it is still the note: by then another goroutine
-// may hold the connection this one released.
-func releaseConn(db *DB, h uint64) {
-	if h != 0 {
-		if h&1 != 0 {
-			db.Cfg.connTx.Store((*txFrame)(nil))
-		}
-		db.Cfg.connHolder.CompareAndSwap(h, 0)
+// releaseConn lets go of h, only if it is still the note: by then another
+// holder may hold the connection this one released.
+func releaseConn(db *DB, h *connHold) {
+	if h != nil {
+		db.Cfg.connHold.CompareAndSwap(h, (*connHold)(nil))
 	}
 }
 
-// readHeld is readRows, with the goroutine of an Iter noted as the holder of the
+// readHeld is readRows, with the Iter's context noted as the holder of the
 // pool's one connection while its loop runs.
 func readHeld(db *DB, st *Statement, r Rows, read func(Rows) error) (readErr, rowsErr error) {
-	if !st.iter || db.InTx {
+	if !st.iter || db.InTx || st.iterCtx == nil {
 		return readRows(r, read)
 	}
-	defer releaseConn(db, holdConn(db, 0))
+	defer releaseConn(db, holdConn(st.iterCtx, db, nil))
 	return readRows(r, read)
-}
-
-// goid is the current goroutine's ID, which the runtime never reuses and writes
-// first in a stack trace: "goroutine 123 [running]:". The buffer does not bound its
-// cost, as runtime.Stack walks the whole stack however little it keeps, and nothing
-// else gives the ID without a link to the runtime's internals: it grows with the
-// depth of the caller (BenchmarkGoid). It is paid by an Iter or a Tx on a pool of
-// one, and by a statement made while one is open.
-func goid() uint64 {
-	var buf [40]byte
-	b := buf[:runtime.Stack(buf[:], false)]
-	var id uint64
-	for _, c := range b[len("goroutine "):] {
-		if c < '0' || c > '9' {
-			break
-		}
-		id = id*10 + uint64(c-'0')
-	}
-	return id
 }

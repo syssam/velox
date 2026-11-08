@@ -494,13 +494,14 @@ func yieldRow[E any](yield func(E, error) bool, e E, timed bool, body *time.Dura
 // or a context whose deadline is within it.
 //
 // On a pool of one connection, as Connect gives on SQLite, the loop holds that
-// connection. A statement or a Tx on the DB in the body of the loop fails rather
-// than wait for the loop that waits for it. Read the rows with All first, or run
-// both in a Tx, whose statements share its connection. A statement on another
-// goroutine waits for the loop to end, and is not refused; so one the body
-// starts on a goroutine and waits for hangs until a deadline ends it, as do a
-// body driven by iter.Pull and a statement on another DB over the same *sql.DB (a
-// second Open, or OpenConn with SQLConn).
+// connection. velox tells a statement in the loop's body by its context: a
+// statement or a Tx on the DB under the context Iter was given fails, from any
+// goroutine, rather than wait for the loop that waits for it. Read the rows
+// with All first, or run both in a Tx, whose statements share its connection.
+// A statement under another context waits for the loop to end, as does one on
+// another DB over the same *sql.DB (a second Open, or OpenConn with SQLConn);
+// if the body waits for it, it ends at its deadline, and its error says that
+// the connection was held.
 func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 	return func(yield func(E, error) bool) {
 		var zero E

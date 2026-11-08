@@ -154,9 +154,11 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 // has ended, committed or rolled back, its mark counts as none.
 //
 // On a pool of one connection, as Connect makes on SQLite, the transaction holds
-// the connection, so a statement on db in fn's goroutine would wait for itself. It
-// fails, whatever its context. One on another goroutine, or on another DB over the
-// same *sql.DB, waits, and cannot be told from one that fn does not wait for.
+// the connection, so a statement on db in fn would wait for itself. velox tells
+// it by its context: one under the context Tx was given, or under WithoutTx of
+// fn's, fails, from any goroutine. One under another context waits for the
+// transaction to end, as does one on another DB over the same *sql.DB; if fn
+// waits for it, it ends at its deadline, saying the connection was held.
 //
 // Under a dry-run context (IsDryRun), such as the one SQL(ctx) gives a hook,
 // Tx fails with ErrDryRun before BEGIN, nested or not: it is a write.
