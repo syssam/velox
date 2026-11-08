@@ -198,8 +198,9 @@
 // # Raw SQL
 //
 // Raw SQL is the escape hatch for CTEs, a GROUP BY of several keys and anything else the
-// builder cannot express: DB.Exec runs a statement, and DB.Raw scans a
-// query's rows into an entity by column name. velox applies no
+// builder cannot express: DB.Exec runs a statement, DB.Raw scans a
+// query's rows into an entity by column name, and DB.Rows yields rows that
+// are no entity's, to scan in column order. velox applies no
 // policy to raw SQL, a scope included, so the caller confines the rows, and
 // both require a reason, which hooks see as Statement.PolicyBypass.
 //

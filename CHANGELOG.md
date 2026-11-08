@@ -21,6 +21,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `db.Rows(ctx, reason, sql, args...)` ranges over raw SQL whose rows are no
+  entity's, scanned in column order, on the DB's connection, a
+  transaction's included (decision 0060). `go.mod` retracts `v0.1.0` to
+  `v0.3.0`, another project's code at this path.
 - A connection is a query's `Paginate`, as in ent:
   `db.Query[gen.Post]().Paginate(ctx, after, first, before, last,
   gen.WithPostOrder(orderBy), gen.WithPostFilter(where))` replaces

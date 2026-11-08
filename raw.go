@@ -26,6 +26,47 @@ func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int6
 	return db.e.RawExec(ctx, reason, query, args)
 }
 
+// RawRow is a row that DB.Rows yields. It is valid only in the loop body
+// that receives it.
+type RawRow struct{ r engine.Rows }
+
+// Scan copies the row's columns, in the order the SQL returns them, into
+// dst, as the driver's Rows.Scan does. No codec decodes them.
+func (r RawRow) Scan(dst ...any) error { return r.r.Scan(dst...) }
+
+// Rows runs query, raw SQL that returns rows, with args, and yields its rows
+// one at a time, for SQL whose rows are no entity's: a report, a CTE, a
+// window function. reason says why it may skip the policies, as Raw's does;
+// if it is empty or only white space, Rows yields that error and runs
+// nothing.
+//
+//	for row, err := range db.Rows(ctx, "revenue report",
+//		"SELECT org_id, SUM(total_cents) FROM invoices GROUP BY org_id") {
+//		if err != nil {
+//			return err
+//		}
+//		var org, total int64
+//		if err := row.Scan(&org, &total); err != nil {
+//			return err
+//		}
+//	}
+//
+// It runs as Raw's Iter does, on the connection the DB's statements use: in
+// a transaction, the transaction's, where velox.Pool is nil; on a DB from
+// OpenConn, OpenShards or veloxpgx, that DB's. It goes through the
+// transaction check, the Around hooks (as OpRawQuery, its statement named
+// "Rows"), routing (as a read), the SQL comment and the row cap. As with
+// Query.Iter, the loop body runs inside the Around hooks, and on a pool of
+// one connection a statement in the body fails.
+func (db *DB) Rows(ctx context.Context, reason, query string, args ...any) iter.Seq2[RawRow, error] {
+	return func(yield func(RawRow, error) bool) {
+		stopped, err := db.e.RawRows(ctx, reason, query, args, func(r engine.Rows) bool { return yield(RawRow{r}, nil) })
+		if err != nil && !stopped {
+			yield(RawRow{}, err)
+		}
+	}
+}
+
 // RawQuery is raw SQL whose rows scan into entity E, made by Raw and run by
 // All, One or Iter. Like a Query it is a value, and running it does not
 // change it.

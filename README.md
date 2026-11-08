@@ -206,11 +206,13 @@ them.
   `HasWith` and `Of`, and a column's `Select` tested with `InSelect`; one
   with an aggregate, a CTE or a window function is raw SQL. `GROUP BY` is one key (`CountBy`, `SumBy` and
   the like).
-- `Raw` scans only into entities. For a report, run your own SQL on
-  `velox.Pool(db)`, the `*sql.DB` under a DB. It is nil on a transaction's DB and
-  on a DB from `OpenConn`, `OpenShards` or `veloxpgx`, where you hold the pool.
-  Inside a `Tx` or a loop over `Iter` on a pool of one connection, as `Connect` makes
-  on SQLite, it hangs: they hold that connection, and velox does not see the pool.
+- `Raw` scans only into entities. For a report, range over
+  `db.Rows(ctx, reason, sql, args...)` and `Scan` each row: it runs on the
+  connection the DB uses, a transaction's included. `velox.Pool(db)`, the
+  `*sql.DB` under a DB, is nil on a transaction's DB and on a DB from
+  `OpenConn`, `OpenShards` or `veloxpgx`. Inside a `Tx` or a loop over `Iter`
+  on a pool of one connection, as `Connect` makes on SQLite, SQL on the pool
+  hangs: they hold that connection, and velox does not see the pool.
 - No down migrations. To undo one, change the schema back and diff forward.
 - No composite primary keys on entities: an entity's key is one column. The one
   composite key velox makes is the join table of a many-to-many edge. For a

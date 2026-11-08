@@ -282,6 +282,7 @@ func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E]
 func (db *DB) PolicyBypass() string
 func (db *DB) Query[E any, PE Entity[E]]() Query[E]
 func (db *DB) Raw[E any, PE Entity[E]](reason, query string, args ...any) RawQuery[E]
+func (db *DB) Rows(ctx context.Context, reason, query string, args ...any) iter.Seq2[RawRow, error]
 func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) SaveQuery[E]
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
@@ -349,6 +350,7 @@ func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
 func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error]
 func (q RawQuery[E]) MaxRows[_ Lazy[E]](n int) RawQuery[E]
 func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
+func (r RawRow) Scan(dst ...any) error
 func (r Rel[E, T]) Add[_ Lazy[T]](keys ...any) Setter[E]
 func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E]
 func (r Rel[E, T]) Clear[_ Lazy[T]]() Setter[E]
@@ -533,6 +535,7 @@ type Pred[E any] = engine.Pred[E]
 type Predicate = Pred[anyEntity]
 type Query[E any] struct { }
 type RawQuery[E any] struct { }
+type RawRow struct { }
 type Rel[E, T any] struct { I int32 }
 type Result = veloxtype.Result
 type Rewrite func(ctx context.Context, st *Statement) error

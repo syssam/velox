@@ -7,11 +7,15 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // execInfo is the EntityInfo of Exec's statements: the name their errors and
 // the Around hooks see. Exec scans nothing, so it has no table or columns.
 var execInfo = EntityInfo{Name: "Exec"}
+
+// rowsInfo is the EntityInfo of Rows's statements, as execInfo is Exec's.
+var rowsInfo = EntityInfo{Name: "Rows"}
 
 // ErrNoReason is the error of raw SQL run without a reason.
 func ErrNoReason(name string) error {
@@ -202,4 +206,35 @@ func (db *DB) RawExec(ctx context.Context, reason, query string, args []any) (in
 		return 0, err
 	}
 	return res.Affected, nil
+}
+
+// RawRows is DB.Rows: it runs query as Raw's Iter does and hands yield each
+// row, inside the Around hooks. It reports whether yield stopped the loop,
+// after which the caller must not call yield again.
+func (db *DB) RawRows(ctx context.Context, reason, query string, args []any, yield func(Rows) bool) (stopped bool, err error) {
+	if NoReason(reason) {
+		return false, ErrNoReason(rowsInfo.Name)
+	}
+	st := &Statement{Op: OpRawQuery, Entity: &rowsInfo, SQL: query, Args: args, PolicyBypass: reason, InTx: db.InTx, iter: true}
+	timed := len(db.Cfg.Arounds) > 0
+	yielded := false
+	err = db.Run(ctx, st, func(r Rows) error {
+		if yielded || stopped {
+			return ErrIterAgain
+		}
+		for r.Next() {
+			yielded, st.handed = true, true
+			start := time.Now()
+			more := yield(r)
+			if timed {
+				st.Result.LoopBody += time.Since(start)
+			}
+			if !more {
+				stopped = true
+				return nil
+			}
+		}
+		return nil
+	}, nil)
+	return stopped, err
 }
