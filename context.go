@@ -17,13 +17,6 @@ func WithScopeValue(ctx context.Context, name string, value any) context.Context
 	return engine.WithScopeValue(ctx, name, value)
 }
 
-// WithoutPolicy returns ctx with every entity's policy switched off. The reason
-// is required and is shown to hooks as Statement.PolicyBypass; with a reason
-// that is empty or only white space WithoutPolicy returns ctx unchanged.
-func WithoutPolicy(ctx context.Context, reason string) context.Context {
-	return engine.WithoutPolicy(ctx, reason)
-}
-
 // RowScope is what a context scopes statements by.
 type RowScope = veloxtype.RowScope
 

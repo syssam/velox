@@ -684,7 +684,7 @@ func update[E any, PE velox.Entity[E]](ctx context.Context, id, typ string, key 
 	if err != nil {
 		return nil, err
 	}
-	read := ctx
+	read := db
 	if len(set) > 0 {
 		n, err := db.Update[E, PE]().Where(key.EQ(k)).Set(set...).Exec(ctx)
 		if err != nil {
@@ -693,9 +693,9 @@ func update[E any, PE velox.Entity[E]](ctx context.Context, id, typ string, key 
 		if n == 0 {
 			return nil, notFound(typ)
 		}
-		read = velox.WithoutPolicy(ctx, "test: the row the update wrote")
+		read = db.WithoutPolicy("test: the row the update wrote")
 	}
-	x, err := db.Query[E, PE]().Where(key.EQ(k)).One(read)
+	x, err := read.Query[E, PE]().Where(key.EQ(k)).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, notFound(typ)
 	}
@@ -1177,10 +1177,10 @@ func TestRepointHiddenChild(t *testing.T) {
 		p1, p2 := &gen.Profile{Handle: "hidden", WriterID: ptr(w.ID)}, &gen.Profile{Handle: "free"}
 		insert(t, e.ctx, e.db, p1)
 		insert(t, e.ctx, e.db, p2)
-		all := velox.WithoutPolicy(e.ctx, "test: every profile")
+		all := e.db.WithoutPolicy("test: every profile")
 		writerOf := func(id int64) *int64 {
 			t.Helper()
-			p, err := e.db.Query[gen.Profile]().Where(gen.Profiles.ID.EQ(id)).One(all)
+			p, err := all.Query[gen.Profile]().Where(gen.Profiles.ID.EQ(id)).One(e.ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1905,10 +1905,10 @@ func TestSelfM2M(t *testing.T) {
 func TestUnlinkScope(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
 		ctx8 := schema.Org.With(e.ctx, int64(8))
-		all := velox.WithoutPolicy(e.ctx, "the test's view")
+		all := e.db.WithoutPolicy("the test's view")
 		linked := func(w, c int64) bool {
 			t.Helper()
-			return count(t, all, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(w), gen.WriterCircles.CircleID.EQ(c))) == 1
+			return count(t, e.ctx, all.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(w), gen.WriterCircles.CircleID.EQ(c))) == 1
 		}
 		// As the org of the writer.
 		linkIn := func(ctx context.Context, w, c int64) { t.Helper(); insert(t, ctx, e.db, &gen.WriterCircle{WriterID: w, CircleID: c}) }
@@ -2495,7 +2495,7 @@ func (r *mutationResolver) UpdateFolder(ctx context.Context, id string, input ge
 	if _, err := db.Update[gen.Folder]().Where(gen.Folders.ID.EQ(key)).Set(set...).Exec(ctx); err != nil {
 		return nil, err
 	}
-	return db.Query[gen.Folder]().Where(gen.Folders.ID.EQ(key)).One(velox.WithoutPolicy(ctx, "the folder as written"))
+	return db.WithoutPolicy("the folder as written").Query[gen.Folder]().Where(gen.Folders.ID.EQ(key)).One(ctx)
 }
 
 // Mutation returns MutationResolver implementation.

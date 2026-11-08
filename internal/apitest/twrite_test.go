@@ -126,7 +126,7 @@ func TestTableWriteParity(t *testing.T) {
 // TestTableWriteRefuses: the untyped writes refuse what the typed ones
 // refuse, and a value of another type.
 func TestTableWriteRefuses(t *testing.T) {
-	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	db := openPolicied(velox.Postgres, &fakeconn.Exec{})
 	ctx := annIn7()
 	for name, f := range map[string]func() error{
 		"Set of another type":  func() error { _, err := untyped.Update(db, tkTable).Set(col(Tk.Title), 1).All().Exec(ctx); return err },
@@ -172,7 +172,7 @@ func TestTableWriteRefuses(t *testing.T) {
 // write to a row the scope hides affects 0 rows, as the typed one does; and
 // the row helpers set fields and validate.
 func TestTableWriteRows(t *testing.T) {
-	db, _ := eachDB(t)
+	db, _ := eachPolicied(t)
 	in7 := testmodel.Org.With(context.Background(), int64(7))
 	in8 := testmodel.Org.With(context.Background(), int64(8))
 	x := testmodel.Invoice{Number: "n7", Data: []byte{}}

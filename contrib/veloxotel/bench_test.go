@@ -42,14 +42,14 @@ func benchOneRow(b *testing.B, db *velox.DB) {
 func BenchmarkAdapter(b *testing.B) {
 	tp, mp := providers(b)
 	f := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
-	benchOneRow(b, velox.Open(velox.Postgres, f.open(), veloxotel.Options(veloxotel.Config{TracerProvider: tp, MeterProvider: mp})...))
+	benchOneRow(b, openLifted(velox.Postgres, f.open(), veloxotel.Options(veloxotel.Config{TracerProvider: tp, MeterProvider: mp})...))
 }
 
 func BenchmarkBareSpan(b *testing.B) {
 	tp, _ := providers(b)
 	tr := tp.Tracer("bench")
 	f := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
-	benchOneRow(b, velox.Open(velox.Postgres, f.open(), velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+	benchOneRow(b, openLifted(velox.Postgres, f.open(), velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
 		ctx, s := tr.Start(ctx, "SELECT invoices")
 		defer s.End()
 		return next(ctx)

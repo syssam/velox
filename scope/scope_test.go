@@ -283,7 +283,7 @@ func TestScopeWithoutPolicy(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if n, err := db.Query[note]().Count(velox.WithoutPolicy(context.Background(), "audit")); err != nil || n != 2 {
+	if n, err := db.WithoutPolicy("audit").Query[note]().Count(context.Background()); err != nil || n != 2 {
 		t.Errorf("WithoutPolicy count = %d, %v; want 2", n, err)
 	}
 }
@@ -379,7 +379,7 @@ func TestScopeKeyOfAnotherTypeFailsClosed(t *testing.T) {
 	if err := db.Insert(&typed{Title: "t"}).Exec(ctx); err == nil || !strings.Contains(err.Error(), `Fill("org_id", a)`) {
 		t.Errorf("insert: %v; want the hook's failure on the type", err)
 	}
-	if err := db.Insert(&typed{Title: "t"}).Exec(velox.WithoutPolicy(ctx, "test")); err == nil {
+	if err := db.WithoutPolicy("test").Insert(&typed{Title: "t"}).Exec(ctx); err == nil {
 		t.Error("insert without the policy: the hook's misuse did not fail it")
 	}
 }

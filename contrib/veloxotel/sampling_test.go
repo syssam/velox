@@ -28,7 +28,7 @@ func TestUnsampledKeepsMetrics(t *testing.T) {
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
 	t.Cleanup(func() { _ = tp.Shutdown(context.Background()); _ = mp.Shutdown(context.Background()) })
 	f := &fakeDB{errs: []error{&pgconn.PgError{Code: "40P01"}}}
-	db := velox.Open(velox.Postgres, f.open(), veloxotel.Options(veloxotel.Config{TracerProvider: tp, MeterProvider: mp})...)
+	db := openLifted(velox.Postgres, f.open(), veloxotel.Options(veloxotel.Config{TracerProvider: tp, MeterProvider: mp})...)
 	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err == nil {
 		t.Fatal("no error")
 	}
@@ -59,7 +59,7 @@ func TestUnsampledKeepsMetrics(t *testing.T) {
 func TestAdapterAllocs(t *testing.T) {
 	const budget = 4
 	read := func(opts ...velox.Option) float64 {
-		db := velox.Open(velox.Postgres, (&fakeDB{rows: [][]driver.Value{invoiceRow(1)}}).open(), opts...)
+		db := openLifted(velox.Postgres, (&fakeDB{rows: [][]driver.Value{invoiceRow(1)}}).open(), opts...)
 		return testing.AllocsPerRun(200, func() {
 			if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
 				t.Fatal(err)

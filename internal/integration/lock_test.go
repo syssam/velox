@@ -147,10 +147,13 @@ func TestLockWithScopeOnRealDatabases(t *testing.T) {
 			return testmodel.WithUser(testmodel.Org.With(context.Background(), int64(1)), "ann")
 		}
 		org1 := func(ctx context.Context) context.Context {
-			return velox.WithoutPolicy(testmodel.Org.With(context.Background(), int64(1)), "velox tests")
+			return testmodel.Org.With(context.Background(), int64(1))
 		}
+		// ann's statements run under the policies, org1's (on tg.db) without.
+		ptg := tg
+		ptg.db = tg.pdb
 		var text string
-		a := hold(t, lctx, tg, func(ctx context.Context, tx *velox.DB) error {
+		a := hold(t, lctx, ptg, func(ctx context.Context, tx *velox.DB) error {
 			q := mine(tx).ForUpdate()
 			var err error
 			if text, _, err = q.SQL(asAnn(ctx)); err != nil {
@@ -187,7 +190,7 @@ func TestLockWithScopeOnRealDatabases(t *testing.T) {
 		// REPEATABLE READ, also keeps the locks of the rows A's read
 		// scanned and did not return (tickets has no index for it to use),
 		// so on MySQL the others are left out too.
-		err = tg.db.Tx(lctx, func(ctx context.Context, tx *velox.DB) error {
+		err = ptg.db.Tx(lctx, func(ctx context.Context, tx *velox.DB) error {
 			got, err := tx.Query[testmodel.Ticket]().OrderBy(Tk.ID.Asc()).Limit(10).ForUpdate().SkipLocked().All(asAnn(ctx))
 			if err == nil && tg.d == velox.Postgres {
 				wantTicketIDs(t, got, 2, 5)
@@ -202,7 +205,7 @@ func TestLockWithScopeOnRealDatabases(t *testing.T) {
 		if err != nil {
 			t.Errorf("SkipLocked: %v", err)
 		}
-		a.waitFor(t, lctx, tg, text, func(ctx context.Context, tx *velox.DB) error {
+		a.waitFor(t, lctx, ptg, text, func(ctx context.Context, tx *velox.DB) error {
 			got, err := mine(tx).ForUpdate().All(asAnn(ctx))
 			if err == nil {
 				wantTicketIDs(t, got, 1)

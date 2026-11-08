@@ -17,7 +17,7 @@ var OrgKey = scope.NewKey[int64]("org")
 
 // InOrg confines an entity's rows to the context's organization: reads,
 // updates and deletes see only its rows, and an insert gets its id.
-// velox.WithoutPolicy lifts the policy, with a reason, as it lifts every
+// velox.DB.WithoutPolicy lifts the policy, with a reason, as it lifts every
 // policy.
 type InOrg struct{ mixin.Schema }
 

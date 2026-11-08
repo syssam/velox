@@ -387,19 +387,20 @@ func (t *tour) transactions() error {
 func (t *tour) withoutPolicy() error {
 	db, say, ctx := t.db, t.say, t.ctx
 	I := gen.Invoices
-	// 8. WithoutPolicy lifts every policy, the organization's scope among
-	// them, for one context, and requires a reason. A report across
-	// organizations needs it, and so does its caller's care.
+	// 8. db.WithoutPolicy returns a DB that lifts every policy, the
+	// organization's scope among them, and requires a reason. A report across
+	// organizations needs it, and so does its caller's care. Only the code
+	// given that DB is unscoped; ctx carries no bypass.
 	say("\n== 8. WithoutPolicy")
-	report := velox.WithoutPolicy(ctx, "monthly revenue report")
-	text, _, err := db.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded().SQL(report)
+	report := db.WithoutPolicy("monthly revenue report")
+	text, _, err := report.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded().SQL(ctx)
 	if err != nil {
 		return err
 	}
 	say("%s", text)
 	// Sum adds up one column in the database, under the same scope as any
 	// query: here all organizations, and no policy.
-	paidTotal, err := velox.Sum(report, db.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)), I.TotalCents)
+	paidTotal, err := velox.Sum(ctx, report.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)), I.TotalCents)
 	if err != nil {
 		return err
 	}
@@ -407,7 +408,7 @@ func (t *tour) withoutPolicy() error {
 	// SumBy does so per value of a key column, here per organization: no drafts.
 	// Unbounded says that the groups may be as many as the rows; the row cap,
 	// if any, still applies.
-	totals, err := velox.SumBy(report, db.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded(), I.OrgID.Key(), I.TotalCents)
+	totals, err := velox.SumBy(ctx, report.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded(), I.OrgID.Key(), I.TotalCents)
 	if err != nil {
 		return err
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/scope"
 	"github.com/syssam/velox/untyped"
 )
 
@@ -27,7 +28,7 @@ func asUser(user string) context.Context {
 
 func TestPolicyReadPredicate(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	q := db.Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Limit(5)
 
 	if _, err := q.All(asUser("ann")); err != nil {
@@ -55,7 +56,7 @@ func TestPolicyReadPredicate(t *testing.T) {
 
 func TestPolicyOnUpdateAndDelete(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	ann := asUser("ann")
 
 	if _, err := db.Update[testmodel.Ticket]().Set(Tk.Title.Set("x")).Where(Tk.ID.EQ(1)).Exec(ann); err != nil {
@@ -89,7 +90,7 @@ func TestPolicyOnUpdateAndDelete(t *testing.T) {
 
 func TestPolicyOnCount(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(3)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	if _, err := db.Query[testmodel.Ticket]().Count(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +99,7 @@ func TestPolicyOnCount(t *testing.T) {
 
 func TestPolicyOnCountOfAnExists(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(3)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Parent.Has()).Count(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +110,7 @@ func TestPolicyOnCountOfAnExists(t *testing.T) {
 // TestPolicyDeleteOrder: the caller's conditions come first, then the policy's.
 func TestPolicyDeleteOrder(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	if _, err := db.Delete[testmodel.Ticket]().Where(Tk.Done.EQ(true), Tk.Title.NEQ("x")).Exec(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +123,7 @@ func TestPolicyDeleteOrder(t *testing.T) {
 func TestPolicyOnBothPaths(t *testing.T) {
 	var where int
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+	db := openPolicied(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		where = len(st.Where)
 		return nil
 	}))
@@ -137,7 +138,7 @@ func TestPolicyOnBothPaths(t *testing.T) {
 
 func TestPolicyInsideHas(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Parent.Has()).Limit(1).All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +151,7 @@ func TestPolicyInsideHas(t *testing.T) {
 func TestPolicyInsideHasOfAnEntityWithout(t *testing.T) {
 	var seen velox.Statement
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	db := openPolicied(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		seen = *st
 		return next(ctx)
 	}))
@@ -178,7 +179,7 @@ func TestPolicyInsideHasOfAnEntityWithout(t *testing.T) {
 		t.Errorf("%d denied statements sent", e.Calls-calls)
 	}
 
-	if _, err := q.All(velox.WithoutPolicy(context.Background(), "support")); err != nil {
+	if _, err := db.WithoutPolicy("support").Query[pbox]().Where(velox.Not(pboxNote.HasWith(fixture.Pn.Locked.EQ(true)))).Limit(1).All(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(e.SQL, "owner") || seen.PolicyBypass != "support" {
@@ -191,7 +192,7 @@ func TestPolicyInsideHasOfAnEntityWithout(t *testing.T) {
 // EXISTS.
 func TestPolicyCalledOncePerStatement(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	bg := context.Background()
 	count := func(name string, reads, writes int64, run func() error) {
 		t.Helper()
@@ -224,7 +225,7 @@ func TestPolicyCalledOncePerStatement(t *testing.T) {
 		return err
 	})
 	count("skipped", 0, 0, func() error {
-		_, err := db.Update[fixture.Pnote]().Set(fixture.Pn.InvoiceID.Set(2)).Where(nested).Exec(velox.WithoutPolicy(bg, "support"))
+		_, err := db.WithoutPolicy("support").Update[fixture.Pnote]().Set(fixture.Pn.InvoiceID.Set(2)).Where(nested).Exec(bg)
 		return err
 	})
 	if strings.Contains(e.SQL, `"owner"`) || strings.Contains(e.SQL, `"locked"`) {
@@ -237,7 +238,7 @@ func TestPolicyCalledOncePerStatement(t *testing.T) {
 // condition holding the zero Predicate is refused.
 func TestPolicyConditionIsScopedAndChecked(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	q := db.Query[fixture.Pnote]().Limit(1)
 	ctx := pnoteReading(velox.HasEdgeWith("invoice", velox.FieldEQ("paid", true)), nil)
 	if _, err := q.All(testmodel.Org.With(ctx, int64(7))); err != nil {
@@ -272,7 +273,7 @@ func TestPolicyOnWithLoad(t *testing.T) {
 		{ticketRow(2, 1, int64(1))},
 		{ticketRow(1, 1, nil)},
 	}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	if _, err := db.Query[testmodel.Ticket]().With(Tk.Parent).Limit(5).All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
@@ -287,12 +288,11 @@ func TestPolicyOnWithLoad(t *testing.T) {
 func TestSkipPolicy(t *testing.T) {
 	var seen []velox.Statement
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	db := openPolicied(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		seen = append(seen, *st)
 		return next(ctx)
 	}))
-	support := velox.WithoutPolicy(asUser(""), "support")
-	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Limit(5).All(support); err != nil {
+	if _, err := db.WithoutPolicy("support").Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Limit(5).All(asUser("")); err != nil {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE "done" = $1 LIMIT $2`, false, 5)
@@ -300,7 +300,7 @@ func TestSkipPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	// An entity with no policy skips none.
-	if _, err := db.Query[testmodel.Item]().Limit(5).All(velox.WithoutPolicy(scoped(1), "support")); err != nil {
+	if _, err := db.WithoutPolicy("support").Query[testmodel.Item]().Limit(5).All(scoped(1)); err != nil {
 		t.Fatal(err)
 	}
 	if len(seen) != 3 {
@@ -315,7 +315,7 @@ func TestSkipPolicy(t *testing.T) {
 
 func TestSaveOfAHiddenRow(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 0}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	tk := testmodel.Ticket{ID: 1, OrgID: 1, Owner: "bob", Title: "T-1"}
 	err := db.Save(&tk, Tk.Title).Exec(asUser("ann"))
 	if !errors.Is(err, velox.ErrNotFound) {
@@ -330,7 +330,7 @@ func TestSaveOfAHiddenRow(t *testing.T) {
 // pass-through Around hook, so the save takes run's path.
 func TestHiddenRowThroughRun(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 0}
-	db := openFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+	db := openPolicied(velox.Postgres, e, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
 		return next(ctx)
 	}))
 	tk := testmodel.Ticket{ID: 1, OrgID: 1, Owner: "bob", Title: "T-1"}
@@ -347,7 +347,7 @@ func TestHiddenRowThroughRun(t *testing.T) {
 // Read policy, so a comment is hidden with its note.
 func TestPolicyIsInherited(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	bg := context.Background()
 	fixture.PnoteReads.Store(0)
 	if _, err := db.Query[pcomment]().Where(pcommentNote.HasWith(fixture.Pn.Locked.EQ(true))).Limit(1).All(bg); err != nil {
@@ -372,7 +372,7 @@ func TestPolicyIsInherited(t *testing.T) {
 // the statement is refused, and it is not a denial.
 func TestPolicyCycleIsRefused(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	self := pnoteReading(velox.HasEdgeWith("parent", velox.FieldEQ("locked", false)), nil)
 	for name, c := range map[string]struct {
 		run  func() error
@@ -398,7 +398,7 @@ func TestPolicyCycleIsRefused(t *testing.T) {
 		t.Errorf("%d statements sent", e.Calls)
 	}
 	// Under WithoutPolicy no policy runs, so there is no cycle.
-	if _, err := db.Query[fixture.Pnote]().Limit(1).All(velox.WithoutPolicy(self, "support")); err != nil {
+	if _, err := db.WithoutPolicy("support").Query[fixture.Pnote]().Limit(1).All(self); err != nil {
 		t.Error(err)
 	}
 }
@@ -407,7 +407,7 @@ func TestPolicyCycleIsRefused(t *testing.T) {
 // through EXISTS are a cycle, from either side.
 func TestPolicyMutualCycleIsRefused(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	bg := context.Background()
 	_, err := db.Query[pcycA]().Limit(1).All(bg)
 	if err == nil || err.Error() != "velox: apitest.pcycA: the Read policy of apitest.pcycA reaches its own Read through an EXISTS; such a policy cannot be applied" || errors.Is(err, velox.ErrDenied) {
@@ -427,7 +427,7 @@ func TestPolicyMutualCycleIsRefused(t *testing.T) {
 // caller through. Allow is the way to say no restriction.
 func TestZeroPredicateFails(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	const msg = "the Read policy returned the zero Predicate; return velox.Allow() for no restriction"
 	const writeMsg = "the Write policy returned the zero Predicate; return velox.Allow() for no restriction"
 	zeroRead := pnoteReading(velox.Predicate{}, nil)
@@ -468,7 +468,7 @@ func TestZeroPredicateFails(t *testing.T) {
 	}
 
 	// A With load reads its target under the target's Read policy.
-	boxes := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{{int64(1), int64(1)}}})
+	boxes := openPolicied(velox.Postgres, &fakeconn.Exec{Rows: [][]any{{int64(1), int64(1)}}})
 	_, err = boxes.Query[pbox]().With(pboxNote).Limit(1).All(zeroRead)
 	if err == nil || !strings.Contains(err.Error(), msg) {
 		t.Errorf("With load: %v", err)
@@ -506,11 +506,11 @@ func TestZeroPredicateFails(t *testing.T) {
 // the statement is the one an entity without a policy sends.
 func TestAllowRendersNothing(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	allow := velox.Allow()
 
 	q := db.Query[fixture.Pnote]().Where(fixture.Pn.ID.GT(0)).Limit(3)
-	if _, err := q.All(velox.WithoutPolicy(context.Background(), "test")); err != nil {
+	if _, err := db.WithoutPolicy("test").Query[fixture.Pnote]().Where(fixture.Pn.ID.GT(0)).Limit(3).All(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	wantSQL, wantArgs := e.SQL, e.Args
@@ -526,7 +526,7 @@ func TestAllowRendersNothing(t *testing.T) {
 
 	// Both of an update's conditions Allow: the statement is the caller's.
 	up := db.Update[fixture.Pnote]().Set(fixture.Pn.Owner.Set("x")).Where(fixture.Pn.ID.EQ(1))
-	if _, err := up.Exec(velox.WithoutPolicy(context.Background(), "test")); err != nil {
+	if _, err := db.WithoutPolicy("test").Update[fixture.Pnote]().Set(fixture.Pn.Owner.Set("x")).Where(fixture.Pn.ID.EQ(1)).Exec(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	wantSQL, wantArgs = e.SQL, e.Args
@@ -540,7 +540,7 @@ func TestAllowRendersNothing(t *testing.T) {
 
 	// And inside an EXISTS: the target's Allow adds nothing.
 	bq := db.Query[pbox]().Where(pboxNote.Has()).Limit(1)
-	if _, err := bq.All(velox.WithoutPolicy(context.Background(), "test")); err != nil {
+	if _, err := db.WithoutPolicy("test").Query[pbox]().Where(pboxNote.Has()).Limit(1).All(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	wantSQL = e.SQL
@@ -559,15 +559,16 @@ func TestAllowRendersNothing(t *testing.T) {
 // run through the untyped surface, as a policy's do.
 func TestAllowComposes(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	pn := untyped.TableOf[fixture.Pnote]()
 	allow := velox.Allow()
 	x := velox.FieldEQ("owner", "ann")
 	y := velox.FieldEQ("locked", true)
-	skip := velox.WithoutPolicy(context.Background(), "test")
+	skip := context.Background()
+	free := db.WithoutPolicy("test")
 
 	query := func(c velox.Predicate) (string, []any, error) {
-		return untyped.Query(db, pn).Where([]velox.Predicate{c}...).Limit(1).SQL(skip)
+		return untyped.Query(free, pn).Where([]velox.Predicate{c}...).Limit(1).SQL(skip)
 	}
 	sql := func(c velox.Predicate) (string, []any) {
 		t.Helper()
@@ -578,7 +579,7 @@ func TestAllowComposes(t *testing.T) {
 		return s, args
 	}
 	del := func(c velox.Predicate) error {
-		_, err := untyped.Delete(db, pn).Where([]velox.Predicate{c}...).Exec(skip)
+		_, err := untyped.Delete(free, pn).Where([]velox.Predicate{c}...).Exec(skip)
 		return err
 	}
 	same := func(name string, got, want velox.Predicate) {
@@ -646,7 +647,7 @@ func TestAllowComposes(t *testing.T) {
 // may change; it is a read still: Write's denial is a select's.
 func TestPolicyWritable(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	q := db.Query[fixture.Pnote]().Where(fixture.Pn.ID.EQ(1))
 	if _, err := q.Writable().Count(context.Background()); err != nil {
 		t.Fatal(err)
@@ -668,7 +669,7 @@ func TestPolicyWritable(t *testing.T) {
 		t.Errorf("%d denied statements sent", e.Calls-calls)
 	}
 	// WithoutPolicy skips Write too.
-	if _, err := q.Writable().Count(velox.WithoutPolicy(context.Background(), "test")); err != nil {
+	if _, err := db.WithoutPolicy("test").Query[fixture.Pnote]().Where(fixture.Pn.ID.EQ(1)).Writable().Count(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `SELECT COUNT(*) FROM "pnotes" WHERE "id" = $1`, int64(1))
@@ -676,7 +677,7 @@ func TestPolicyWritable(t *testing.T) {
 	// A Rewrite hook cannot drop Writable, which the scope reads, nor set it.
 	for name, w := range map[string]bool{"cleared": true, "set": false} {
 		re := &fakeconn.Exec{Rows: [][]any{{int64(1)}}}
-		rdb := openFake(velox.Postgres, re, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		rdb := openPolicied(velox.Postgres, re, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 			st.Writable = !st.Writable
 			return nil
 		}))
@@ -707,9 +708,9 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 		{velox.MySQL, "SELECT `id`, `owner`, `locked`, `parent_id`, `invoice_id` FROM `pnotes` WHERE `id` > ? LIMIT ?"},
 		{velox.SQLite, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE "id" > ? LIMIT ?`},
 	} {
-		db := openFake(c.d, &fakeconn.Exec{})
+		db := openPolicied(c.d, &fakeconn.Exec{})
 		q := db.Query[fixture.Pnote]().Where(fixture.Pn.ID.GT(0)).Limit(3)
-		unscoped, uargs, err := q.SQL(velox.WithoutPolicy(context.Background(), "test"))
+		unscoped, uargs, err := db.WithoutPolicy("test").Query[fixture.Pnote]().Where(fixture.Pn.ID.GT(0)).Limit(3).SQL(context.Background())
 		if err != nil || unscoped != c.want {
 			t.Errorf("%v: unscoped\n got %s, %v\nwant %s", c.d, unscoped, err, c.want)
 		}
@@ -730,7 +731,7 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 // TestExistsErrorNamesThePath: an error from an EXISTS nested in another
 // names both targets, from the outermost in.
 func TestExistsErrorNamesThePath(t *testing.T) {
-	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	db := openPolicied(velox.Postgres, &fakeconn.Exec{})
 	_, err := db.Query[pbox]().Where(pboxNote.HasWith(fixture.Pn.Invoice.Has())).Limit(1).All(context.Background())
 	wantNoScope(t, err, "velox: apitest.pbox: in the EXISTS on fixture.Pnote, then on testmodel.Invoice: ")
 }
@@ -795,13 +796,13 @@ func policyDB(t *testing.T) *velox.DB {
 // statement that matched only such rows affects 0 rows, without an error.
 func TestWriteFiltersAffectZero(t *testing.T) {
 	db := policyDB(t)
-	seed := velox.WithoutPolicy(context.Background(), "seed")
+	seed, sdb := context.Background(), db.WithoutPolicy("seed")
 	inv := testmodel.Invoice{OrgID: 1, Number: "N1", Data: []byte("d")}
-	if err := db.Insert(&inv).Exec(seed); err != nil {
+	if err := sdb.Insert(&inv).Exec(seed); err != nil {
 		t.Fatal(err)
 	}
 	tk := testmodel.Ticket{OrgID: 1, Owner: "bob", Title: "T-1", Done: true, InvoiceID: inv.ID}
-	if err := db.Insert(&tk).Exec(seed); err != nil {
+	if err := sdb.Insert(&tk).Exec(seed); err != nil {
 		t.Fatal(err)
 	}
 	ann := asUser("ann")
@@ -814,7 +815,7 @@ func TestWriteFiltersAffectZero(t *testing.T) {
 	if n != 0 || err != nil {
 		t.Errorf("delete as ann: %d, %v", n, err)
 	}
-	got, err := db.Query[testmodel.Ticket]().Where(Tk.ID.EQ(tk.ID)).One(seed)
+	got, err := sdb.Query[testmodel.Ticket]().Where(Tk.ID.EQ(tk.ID)).One(seed)
 	if err != nil || got.Title != "T-1" {
 		t.Fatalf("under WithoutPolicy: %+v, %v", got, err)
 	}
@@ -831,7 +832,7 @@ func TestWriteFiltersAffectZero(t *testing.T) {
 	// the locked ones, so the zero rows below are Write's alone.
 	locked, open := &fixture.Pnote{Owner: "ann", Locked: true}, &fixture.Pnote{Owner: "ann"}
 	for _, x := range []*fixture.Pnote{locked, open} {
-		if err := db.Insert(x).Exec(seed); err != nil {
+		if err := sdb.Insert(x).Exec(seed); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -859,8 +860,8 @@ func TestWriteFiltersAffectZero(t *testing.T) {
 // TestEqualFoldIsASCIIOnSQLite: SQLite's LOWER folds ASCII letters only, so
 // EqualFold ignores the case of those alone.
 func TestEqualFoldIsASCIIOnSQLite(t *testing.T) {
-	db := policyDB(t)
-	ctx := velox.WithoutPolicy(velox.WithoutPolicy(context.Background(), "test"), "seed")
+	db := policyDB(t).WithoutPolicy("seed")
+	ctx := context.Background()
 	if err := db.Insert(&testmodel.Invoice{OrgID: 1, Number: "ÉCOLE", Data: []byte("d")}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -875,5 +876,60 @@ func TestEqualFoldIsASCIIOnSQLite(t *testing.T) {
 		if err != nil || n != c.want {
 			t.Errorf("EqualFold(%q): %d, %v; want %d", c.s, n, err, c.want)
 		}
+	}
+}
+
+// TestWithoutPolicyIsTheDBs: the bypass is the DB's. The same context on the
+// DB it came from is still scoped, a Tx begun on it and its fn's tx keep
+// it, a write's hooks see it through Mutation.DB, and Close on it leaves the
+// pool open.
+func TestWithoutPolicyIsTheDBs(t *testing.T) {
+	db := policyDB(t)
+	free := db.WithoutPolicy("audit")
+	seed := testmodel.Invoice{OrgID: 1, Number: "N1", Data: []byte("d")}
+	if err := free.Insert(&seed).Exec(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	bg := context.Background()
+	if n, err := free.Query[testmodel.Invoice]().Count(bg); err != nil || n != 1 {
+		t.Errorf("on the bypassing DB: %d, %v", n, err)
+	}
+	// A callee handed the same context, on the DB it came from, is scoped.
+	if _, err := db.Query[testmodel.Invoice]().Count(bg); !errors.Is(err, scope.ErrNoScope) {
+		t.Errorf("on the DB it came from: %v, want ErrNoScope", err)
+	}
+	err := free.Tx(bg, func(ctx context.Context, tx *velox.DB) error {
+		if tx.PolicyBypass() != "audit" {
+			t.Errorf("fn's tx: PolicyBypass %q", tx.PolicyBypass())
+		}
+		n, err := tx.Query[testmodel.Invoice]().Count(ctx)
+		if err != nil || n != 1 {
+			t.Errorf("in the Tx: %d, %v", n, err)
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Tx(bg, func(ctx context.Context, tx *velox.DB) error {
+		_, err := tx.Query[testmodel.Invoice]().Count(ctx)
+		return err
+	}); !errors.Is(err, scope.ErrNoScope) {
+		t.Errorf("a Tx on the DB it came from: %v, want ErrNoScope", err)
+	}
+	// Close on a DB from WithoutPolicy leaves the pool Connect opened open.
+	owner, err := velox.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = owner.Close() })
+	if err := owner.WithoutPolicy("audit").Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := velox.Pool(owner).PingContext(bg); err != nil {
+		t.Errorf("after Close on the bypassing DB: %v", err)
+	}
+	if db.PolicyBypass() != "" || free.WithoutPolicy("").PolicyBypass() != "audit" {
+		t.Errorf("PolicyBypass: %q, %q", db.PolicyBypass(), free.WithoutPolicy("").PolicyBypass())
 	}
 }

@@ -60,7 +60,7 @@ func fakeNotes() (*velox.DB, *fakeconn.Exec) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}, Affected: 1, Answer: func(sql string, _ []any) ([][]any, bool) {
 		return nil, strings.HasPrefix(sql, "SELECT")
 	}}
-	return openFake(velox.Postgres, e), e
+	return openPolicied(velox.Postgres, e), e
 }
 
 // TestMixinByName: a mixin's Policy, Hooks and Interceptors name their

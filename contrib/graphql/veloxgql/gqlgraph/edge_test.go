@@ -569,7 +569,7 @@ func TestEdgeAliases(t *testing.T) {
 }
 
 // TestEdgeScopes: rows of one group whose edge resolvers' contexts have
-// different row scopes (policy bypasses, shards) are batched apart, one
+// different row scopes (shards, scope values) are batched apart, one
 // statement per scope.
 func TestEdgeScopes(t *testing.T) {
 	for _, c := range []struct {
@@ -577,7 +577,6 @@ func TestEdgeScopes(t *testing.T) {
 		scope func(context.Context, string) context.Context
 		loads int
 	}{
-		{"WithoutPolicy", func(ctx context.Context, s string) context.Context { return velox.WithoutPolicy(ctx, s) }, 2},
 		{"WithShard", velox.WithShard, 2},
 		// A scope value: callers of different values batch apart.
 		{"WithScopeValue", func(ctx context.Context, s string) context.Context { return velox.WithScopeValue(ctx, "org", s) }, 2},

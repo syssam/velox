@@ -156,6 +156,13 @@ func (l *eachLog) reset() {
 // The DB logs every statement's SQL.
 func eachDB(t *testing.T, opts ...velox.Option) (*velox.DB, *eachLog) {
 	t.Helper()
+	db, log := eachPolicied(t, opts...)
+	return db.WithoutPolicy("velox tests"), log
+}
+
+// eachPolicied is eachDB under the entities' policies.
+func eachPolicied(t *testing.T, opts ...velox.Option) (*velox.DB, *eachLog) {
+	t.Helper()
 	raw, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -320,7 +327,7 @@ func TestLimitEachCap(t *testing.T) {
 // policy hides takes no rank inside the window, so every owner still gets n
 // rows when it has them.
 func TestLimitEachScoped(t *testing.T) {
-	db, _ := eachDB(t)
+	db, _ := eachPolicied(t)
 	acme := testmodel.Org.With(context.Background(), int64(1))
 	posts := func(n int) map[int64][]string {
 		t.Helper()
@@ -749,7 +756,7 @@ func TestCountEach(t *testing.T) {
 // TestCountEachScoped is Review Focus 1 for counts: a row the scope or
 // the Read policy hides is not counted.
 func TestCountEachScoped(t *testing.T) {
-	db, _ := eachDB(t)
+	db, _ := eachPolicied(t)
 	acme := testmodel.Org.With(context.Background(), int64(1))
 	users := []*eUser{{ID: 1}, {ID: 2}, {ID: 3}}
 	for name, c := range map[string]struct {
@@ -760,7 +767,11 @@ func TestCountEachScoped(t *testing.T) {
 		"acme":           {acme, []int64{3, 2, 0}},
 		"without policy": {ctx, []int64{5, 2, 0}},
 	} {
-		n, err := velox.CountEach(c.ctx, db.Query[ePost](), eUsers.Posts, users)
+		q := db.Query[ePost]()
+		if name == "without policy" {
+			q = db.WithoutPolicy("test").Query[ePost]()
+		}
+		n, err := velox.CountEach(c.ctx, q, eUsers.Posts, users)
 		if err != nil {
 			t.Fatal(err)
 		}

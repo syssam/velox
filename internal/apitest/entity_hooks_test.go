@@ -13,7 +13,7 @@ import (
 
 func TestUpdateHookRefusesAnEmptyTitle(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	const text = "velox: testmodel.Ticket: hook: a ticket needs a title"
 	_, err := db.Update[testmodel.Ticket]().Set(Tk.Title.Set("")).Where(Tk.ID.EQ(1)).Exec(asUser("admin"))
 	if err == nil || err.Error() != text {
@@ -35,7 +35,7 @@ func TestUpdateHookRefusesAnEmptyTitle(t *testing.T) {
 
 func TestDeleteHookAddsItsCondition(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	d := db.Delete[testmodel.Ticket]().Where(Tk.ID.EQ(1))
 	for range 2 { // the hook changes the statement, not the query
 		if _, err := d.Exec(asUser("admin")); err != nil {
@@ -60,7 +60,7 @@ func TestEntityHooksRunBeforeRewriteAndScope(t *testing.T) {
 		seen = append(seen, len(st.Where))
 		return nil
 	})
-	db := openFake(velox.Postgres, e, rw)
+	db := openPolicied(velox.Postgres, e, rw)
 	if _, err := db.Delete[testmodel.Ticket]().Where(Tk.ID.EQ(1)).Exec(asUser("admin")); err != nil {
 		t.Fatal(err)
 	}

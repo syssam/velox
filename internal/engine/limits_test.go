@@ -293,7 +293,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		checkSent(t, e, s, []int{1, 100, 100, 90}) // the owners' LIMIT, then the notes'
 		// Without hooks, exec's check splits the chunk the same way.
 		e = &fakeconn.Exec{Results: [][][]any{ovOwnerRows(50), notes(1, 20), notes(21, 40), notes(41, 50)}}
-		for _, o := range owners(t, openFake(velox.Postgres, e), ovOwners.Notes) {
+		for _, o := range owners(t, openPolicied(velox.Postgres, e), ovOwners.Notes) {
 			if got := ids(t, o, o.Notes); !reflect.DeepEqual(got, []int64{1000 + o.ID}) {
 				t.Errorf("without hooks: owner %d: notes %v", o.ID, got)
 			}

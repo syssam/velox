@@ -164,6 +164,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `velox.WithoutPolicy(ctx, reason)` is `db.WithoutPolicy(reason)`, which
+  returns a DB whose statements, transactions and write hooks skip the
+  policies; a context no longer carries a bypass. `DB.PolicyBypass()` reads
+  it, and `RowScope.PolicyBypass` is gone (ADR 0054).
+- A GraphQL edge batch is keyed by the SQL each caller's context reads, so a
+  policy's own context values never share a read (ADR 0054).
+- On a pool of one connection, a statement is refused when it runs under the
+  context its Iter or Tx was given, from any goroutine, not when it runs on
+  that goroutine (ADR 0054).
+
 - The untyped surface is package `github.com/syssam/velox/untyped`:
   `velox.TableOf` is `untyped.TableOf`, `velox.Untyped` is `untyped.FromQuery`,
   `db.QueryTable(t)` is `untyped.Query(db, t)` (and `InsertTable`,

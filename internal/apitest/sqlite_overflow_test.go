@@ -71,7 +71,7 @@ func TestSQLiteArithmeticRendering(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `UPDATE "items" SET "qty" = "qty" - $1 WHERE "id" = $2`, int64(2), int64(1))
-	if _, err := openFake(velox.SQLite, e).Update[testmodel.Invoice]().Set(I.Total.Add(2)).Where(I.ID.EQ(1)).Exec(velox.WithoutPolicy(ctx, "test")); err != nil {
+	if _, err := openFake(velox.SQLite, e).Update[testmodel.Invoice]().Set(I.Total.Add(2)).Where(I.ID.EQ(1)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(e.SQL, `"total" = "total" + ?`) {

@@ -48,6 +48,15 @@ var seedTickets = []seedTicket{
 type who struct {
 	name string
 	ctx  context.Context
+	free bool // on the target's DB without the policies
+}
+
+// on is the DB w acts on in tg.
+func (w who) on(tg target) *velox.DB {
+	if w.free {
+		return tg.db
+	}
+	return tg.pdb
 }
 
 // asIn1 acts as user in org 1.
@@ -56,10 +65,10 @@ func asIn1(user string) context.Context {
 }
 
 var (
-	ann   = who{"ann", asIn1("ann")}
-	admin = who{"admin", asIn1("admin")}
+	ann   = who{"ann", asIn1("ann"), false}
+	admin = who{"admin", asIn1("admin"), false}
 	// anyone sees both orgs and skips the policy.
-	anyone  = who{"anyone", velox.WithoutPolicy(ctx, "velox tests")}
+	anyone  = who{"anyone", ctx, true}
 	callers = []who{ann, admin, anyone}
 )
 
@@ -133,13 +142,13 @@ var visible = map[string][]int64{"ann": {1, 2, 5}, "admin": {1, 2, 3, 4, 5}, "an
 
 func TestScopeReads(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
-		q := tg.db.Query[testmodel.Ticket]().OrderBy(Tk.ID.Asc()).Unbounded()
+		q := c.on(tg).Query[testmodel.Ticket]().OrderBy(Tk.ID.Asc()).Unbounded()
 		all, err := q.All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
 		wantIDs(t, ticketIDs(all), visible[c.name])
-		if n, err := tg.db.Query[testmodel.Ticket]().Count(c.ctx); err != nil || n != int64(len(visible[c.name])) {
+		if n, err := c.on(tg).Query[testmodel.Ticket]().Count(c.ctx); err != nil || n != int64(len(visible[c.name])) {
 			t.Errorf("Count: %d, %v", n, err)
 		}
 		var iter []int64
@@ -152,7 +161,7 @@ func TestScopeReads(t *testing.T) {
 		wantIDs(t, iter, visible[c.name])
 
 		// A1 is ticket 1 in org 1 and ticket 6 in org 2; B2 is bob's ticket 4.
-		a1, err := tg.db.Query[testmodel.Ticket]().Where(Tk.Title.EQ("A1")).One(c.ctx)
+		a1, err := c.on(tg).Query[testmodel.Ticket]().Where(Tk.Title.EQ("A1")).One(c.ctx)
 		switch c.name {
 		case "anyone":
 			if !errors.Is(err, velox.ErrNotSingular) {
@@ -163,7 +172,7 @@ func TestScopeReads(t *testing.T) {
 				t.Errorf("One A1: %+v, %v", a1, err)
 			}
 		}
-		b2, err := tg.db.Query[testmodel.Ticket]().Where(Tk.Title.EQ("B2")).One(c.ctx)
+		b2, err := c.on(tg).Query[testmodel.Ticket]().Where(Tk.Title.EQ("B2")).One(c.ctx)
 		switch c.name {
 		case "ann":
 			if !errors.Is(err, velox.ErrNotFound) {
@@ -181,11 +190,11 @@ func TestScopeReads(t *testing.T) {
 // is the policy's denial.
 func TestScopeNeedsOrgAndUser(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
-		_, err := tg.db.Query[testmodel.Ticket]().Unbounded().All(testmodel.WithUser(context.Background(), "ann"))
+		_, err := tg.pdb.Query[testmodel.Ticket]().Unbounded().All(testmodel.WithUser(context.Background(), "ann"))
 		if !errors.Is(err, scope.ErrNoScope) {
 			t.Errorf("no org: %v", err)
 		}
-		_, err = tg.db.Query[testmodel.Ticket]().Unbounded().All(testmodel.Org.With(context.Background(), int64(1)))
+		_, err = tg.pdb.Query[testmodel.Ticket]().Unbounded().All(testmodel.Org.With(context.Background(), int64(1)))
 		var pe *velox.PolicyError
 		if !errors.As(err, &pe) || pe.Op != velox.OpSelect {
 			t.Errorf("no user: %v", err)
@@ -206,7 +215,7 @@ func TestScopeRelations(t *testing.T) {
 	hasParent := map[string][]int64{"ann": {2}, "admin": {2, 4, 5}, "anyone": {2, 4, 5, 7, 8}}
 	hasInvoice := map[string][]int64{"ann": {1}, "admin": {1, 3, 4}, "anyone": {1, 3, 4, 5, 6, 7}}
 	eachCaller(t, func(t *testing.T, tg target, c who) {
-		xs, err := tg.db.Query[testmodel.Ticket]().With(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		xs, err := c.on(tg).Query[testmodel.Ticket]().With(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -225,7 +234,7 @@ func TestScopeRelations(t *testing.T) {
 			t.Errorf("With(Parent): %v, want %v", got, parents[c.name])
 		}
 		has := func(p velox.Pred[testmodel.Ticket]) []int64 {
-			xs, err := tg.db.Query[testmodel.Ticket]().Where(p).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+			xs, err := c.on(tg).Query[testmodel.Ticket]().Where(p).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -249,7 +258,7 @@ func TestScopeCrossOrgParent(t *testing.T) {
 	hasParent := map[string][]int64{"ann": {2}, "admin": {2, 4, 5}, "anyone": {1, 2, 4, 5, 7, 8}}
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		tg.exec(t, "UPDATE tickets SET parent_id = 6 WHERE id = 1")
-		xs, err := tg.db.Query[testmodel.Ticket]().With(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		xs, err := c.on(tg).Query[testmodel.Ticket]().With(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -267,7 +276,7 @@ func TestScopeCrossOrgParent(t *testing.T) {
 		if fmt.Sprint(got) != fmt.Sprint(parents[c.name]) {
 			t.Errorf("With(Parent): %v, want %v", got, parents[c.name])
 		}
-		has, err := tg.db.Query[testmodel.Ticket]().Where(Tk.Parent.Has()).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		has, err := c.on(tg).Query[testmodel.Ticket]().Where(Tk.Parent.Has()).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -278,7 +287,7 @@ func TestScopeCrossOrgParent(t *testing.T) {
 func TestScopeUpdate(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		before := rowIDs(ticketRows(t, tg), func(r ticketRow) bool { return r.done })
-		n, err := tg.db.Update[testmodel.Ticket]().Set(Tk.Done.Set(true)).Where(Tk.Done.EQ(false)).Exec(c.ctx)
+		n, err := c.on(tg).Update[testmodel.Ticket]().Set(Tk.Done.Set(true)).Where(Tk.Done.EQ(false)).Exec(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -296,7 +305,7 @@ func TestScopeDelete(t *testing.T) {
 	// Ticket's delete hook deletes only done tickets: 2, 3 and 8.
 	deleted := map[string][]int64{"ann": {2}, "admin": {2, 3}, "anyone": {2, 3, 8}}
 	eachCaller(t, func(t *testing.T, tg target, c who) {
-		n, err := tg.db.Delete[testmodel.Ticket]().Where(Tk.Owner.In("ann", "bob")).Exec(c.ctx)
+		n, err := c.on(tg).Delete[testmodel.Ticket]().Where(Tk.Owner.In("ann", "bob")).Exec(c.ctx)
 		if err != nil || int(n) != len(deleted[c.name]) {
 			t.Errorf("delete: %d, %v", n, err)
 		}
@@ -319,7 +328,7 @@ func TestScopeSave(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		for _, s := range seedTickets {
 			x := testmodel.Ticket{ID: s.id, OrgID: s.org, Owner: s.owner, Title: fmt.Sprintf("S%d", s.id)}
-			err := tg.db.Save(&x, Tk.Title).Exec(c.ctx)
+			err := c.on(tg).Save(&x, Tk.Title).Exec(c.ctx)
 			if slices.Contains(visible[c.name], s.id) {
 				if err != nil {
 					t.Errorf("ticket %d: %v", s.id, err)
@@ -333,7 +342,7 @@ func TestScopeSave(t *testing.T) {
 		// Saving the scope column with another org is refused.
 		if c.name != "anyone" {
 			x := testmodel.Ticket{ID: 1, OrgID: 2, Owner: "ann", Title: "S1"}
-			if err := tg.db.Save(&x, Tk.OrgID).Exec(c.ctx); !errors.Is(err, velox.ErrImmutable) {
+			if err := c.on(tg).Save(&x, Tk.OrgID).Exec(c.ctx); !errors.Is(err, velox.ErrImmutable) {
 				t.Errorf("moving ticket 1 to org 2: %v", err)
 			}
 			if rows := ticketRows(t, tg); rows[0].org != 1 {
@@ -358,13 +367,13 @@ func TestScopeInsert(t *testing.T) {
 				two[i].OrgID = 2
 			}
 		}
-		if err := tg.db.Insert(&one).Exec(c.ctx); err != nil {
+		if err := c.on(tg).Insert(&one).Exec(c.ctx); err != nil {
 			t.Fatal(err)
 		}
 		if one.ID <= 8 || one.OrgID != org || one.CreatedBy != by {
 			t.Errorf("inserted %+v", one)
 		}
-		if err := tg.db.InsertAll(two).Exec(c.ctx); err != nil {
+		if err := c.on(tg).InsertAll(two).Exec(c.ctx); err != nil {
 			t.Fatal(err)
 		}
 		for _, x := range two {
@@ -375,7 +384,7 @@ func TestScopeInsert(t *testing.T) {
 		// Bob's ticket, alone and among others: ann may not create it.
 		bob := testmodel.Ticket{InvoiceID: 1, OrgID: org, Owner: "bob", Title: "N4"}
 		mixed := []testmodel.Ticket{{InvoiceID: 1, OrgID: org, Owner: "ann", Title: "N5"}, {InvoiceID: 1, OrgID: org, Owner: "bob", Title: "N6"}}
-		errOne, errAll := tg.db.Insert(&bob).Exec(c.ctx), tg.db.InsertAll(mixed).Exec(c.ctx)
+		errOne, errAll := c.on(tg).Insert(&bob).Exec(c.ctx), c.on(tg).InsertAll(mixed).Exec(c.ctx)
 		news := []string{"N1", "N2", "N3", "N4", "N5", "N6"}
 		if c.name == "ann" {
 			for _, err := range []error{errOne, errAll} {
@@ -387,7 +396,7 @@ func TestScopeInsert(t *testing.T) {
 			news = news[:3]
 			// Another org's ticket.
 			other := testmodel.Ticket{InvoiceID: 1, OrgID: 2, Owner: "ann", Title: "N7"}
-			if err := tg.db.Insert(&other).Exec(c.ctx); !errors.Is(err, scope.ErrMismatch) {
+			if err := c.on(tg).Insert(&other).Exec(c.ctx); !errors.Is(err, scope.ErrMismatch) {
 				t.Errorf("org 2's ticket: %v", err)
 			}
 		} else if errOne != nil || errAll != nil {
@@ -407,7 +416,7 @@ func TestScopeInsert(t *testing.T) {
 func TestScopeUpsert(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		upsert := func(x *testmodel.Ticket) error {
-			return tg.db.Insert(x).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(c.ctx)
+			return c.on(tg).Insert(x).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(c.ctx)
 		}
 		done := func() []int64 { return rowIDs(ticketRows(t, tg), func(r ticketRow) bool { return r.done }) }
 		// A1 is ticket 1 in org 1 and ticket 6 in org 2, neither done.

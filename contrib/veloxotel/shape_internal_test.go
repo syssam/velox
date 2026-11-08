@@ -18,12 +18,12 @@ import (
 // that it has a fingerprint.
 func captured(t *testing.T) *velox.Statement {
 	t.Helper()
-	ctx := velox.WithoutPolicy(context.Background(), "shape tests")
+	ctx := context.Background()
 	var st *velox.Statement
 	db := velox.Open(velox.Postgres, sql.OpenDB(unreachable{}), velox.WithRewrite(func(_ context.Context, s *velox.Statement) error {
 		st = s
 		return nil
-	}))
+	})).WithoutPolicy("otel tests")
 	if _, _, err := db.Query[testmodel.Invoice]().Limit(1).SQL(ctx); err != nil {
 		t.Fatal(err)
 	}

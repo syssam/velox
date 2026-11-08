@@ -32,7 +32,7 @@ func TestGlobalProviders(t *testing.T) {
 		_ = tp.Shutdown(context.Background())
 		_ = mp.Shutdown(context.Background())
 	})
-	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), veloxotel.Options(veloxotel.Config{})...)
+	db := openLifted(velox.Postgres, (&fakeDB{}).open(), veloxotel.Options(veloxotel.Config{})...)
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
 		return err

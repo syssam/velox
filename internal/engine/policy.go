@@ -8,18 +8,22 @@ import (
 	"strings"
 )
 
-// policyKey is the context key of a WithoutPolicy reason.
-type policyKey struct{}
-
-// WithoutPolicy returns ctx with every entity's policy switched off. The reason
-// is required and is shown to hooks as Statement.PolicyBypass; with a reason
-// that is empty or only white space WithoutPolicy returns ctx unchanged.
-func WithoutPolicy(ctx context.Context, reason string) context.Context {
+// WithoutPolicy returns a DB like db whose statements skip every entity's
+// policy, and the transactions it begins. The reason is required and is shown
+// to hooks as Statement.PolicyBypass; with a reason that is empty or only
+// white space WithoutPolicy returns db. The DB it returns shares db's pool and
+// configuration, and Close on it closes nothing.
+func (db *DB) WithoutPolicy(reason string) *DB {
 	if NoReason(reason) {
-		return ctx
+		return db
 	}
-	return context.WithValue(ctx, policyKey{}, reason)
+	c := *db
+	c.bypass, c.owned = reason, false
+	return &c
 }
+
+// PolicyBypass returns db's WithoutPolicy reason; "" when none.
+func (db *DB) PolicyBypass() string { return db.bypass }
 
 // scopeKey is the context key of the scope values a context carries.
 type scopeKey struct{}
@@ -75,7 +79,7 @@ func ScopeValuesText(ctx context.Context) string {
 // RowScopeFromContext returns ctx's row scope.
 func RowScopeFromContext(ctx context.Context) RowScope {
 	rc, _ := ctx.Value(routeKey{}).(routeCtx)
-	return RowScope{Values: ScopeValuesText(ctx), PolicyBypass: PolicyBypassReason(ctx), Shard: rc.shard, HasShard: rc.onShard}
+	return RowScope{Values: ScopeValuesText(ctx), Shard: rc.shard, HasShard: rc.onShard}
 }
 
 // NoReason reports whether reason, a bypass's (WithoutPolicy, Raw, Exec), says nothing: it is empty or only white space.
@@ -102,12 +106,6 @@ func IsDryRun(ctx context.Context) bool {
 // DryRunContext returns ctx marked for IsDryRun.
 func DryRunContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, dryRunKey{}, true)
-}
-
-// PolicyBypassReason returns the context's WithoutPolicy reason; "" when none.
-func PolicyBypassReason(ctx context.Context) string {
-	r, _ := ctx.Value(policyKey{}).(string)
-	return r
 }
 
 // Deny returns an error for a policy function to deny a statement with: its

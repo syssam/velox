@@ -212,7 +212,7 @@ func TestInterceptorReachesWrites(t *testing.T) {
 func TestInterceptorUpsertRefusedOnMySQL(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.MySQL, e)
-	ctx := velox.WithoutPolicy(context.Background(), "test")
+	ctx := context.Background()
 	err := db.Insert(&fixture.INote{ID: 2, Body: "b"}).OnConflict(fixture.INotes.Body).Update(fixture.INotes.OwnerID).Exec(ctx)
 	if !errors.Is(err, velox.ErrPolicyUpsert) || !strings.Contains(err.Error(), "or an interceptor") {
 		t.Errorf("upsert on MySQL: %v", err)
@@ -227,8 +227,8 @@ func TestInterceptorUpsertRefusedOnMySQL(t *testing.T) {
 func TestWithoutPolicyKeepsInterceptors(t *testing.T) {
 	db := interceptorDB(t)
 	q := db.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).Unbounded()
-	lifted := velox.WithoutPolicy(context.Background(), "test")
-	ns, err := q.All(lifted)
+	lifted := db.WithoutPolicy("test").Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).Unbounded()
+	ns, err := lifted.All(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestWithoutPolicyKeepsInterceptors(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantIDs(t, "the skip", noteIDs(ns), 1, 2, 4)
-	if ns, err = q.All(fixture.WithFilterMode(lifted, fixture.FilterSkip)); err != nil {
+	if ns, err = lifted.All(fixture.WithFilterMode(context.Background(), fixture.FilterSkip)); err != nil {
 		t.Fatal(err)
 	}
 	wantIDs(t, "both", noteIDs(ns), 1, 2, 3, 4)
@@ -247,7 +247,7 @@ func TestWithoutPolicyKeepsInterceptors(t *testing.T) {
 // then the interceptor's, then the Read policy's, then the Write policy's.
 func TestInterceptorRunsBeforePolicy(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	if _, err := db.Update[fixture.INote]().Set(fixture.INotes.OwnerID.Set(1)).Where(fixture.INotes.ID.EQ(7)).Exec(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestInterceptorRenderCacheKeepsContextsApart(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	q := db.Query[fixture.INote]().Where(fixture.INotes.ID.GT(0)).Limit(3)
-	lifted := velox.WithoutPolicy(context.Background(), "test")
+	lifted := context.Background()
 	var got []string
 	for _, ctx := range []context.Context{lifted, fixture.WithFilterMode(lifted, fixture.FilterSkip), lifted} {
 		if _, err := q.All(ctx); err != nil {

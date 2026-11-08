@@ -165,21 +165,21 @@ func TestBidiLinks(t *testing.T) {
 	}
 	t.Run("insert", func(t *testing.T) {
 		e := &fakeconn.Exec{}
-		if err := openFake(velox.Postgres, e).Insert(&bnodeFriend{1, 2}).Exec(ctx); err != nil {
+		if err := openPolicied(velox.Postgres, e).Insert(&bnodeFriend{1, 2}).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		sent(t, e, `INSERT INTO "bnode_friends" ("node_id", "friend_id") VALUES ($1, $2), ($3, $4)`, int64(1), int64(2), int64(2), int64(1))
 	})
 	t.Run("self-link", func(t *testing.T) {
 		e := &fakeconn.Exec{}
-		if err := openFake(velox.Postgres, e).Insert(&bnodeFriend{3, 3}).Exec(ctx); err != nil {
+		if err := openPolicied(velox.Postgres, e).Insert(&bnodeFriend{3, 3}).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		sent(t, e, `INSERT INTO "bnode_friends" ("node_id", "friend_id") VALUES ($1, $2)`, int64(3), int64(3))
 	})
 	t.Run("insert all, do nothing", func(t *testing.T) {
 		e := &fakeconn.Exec{}
-		err := openFake(velox.Postgres, e).InsertAll([]bnodeFriend{{1, 2}, {1, 3}}).OnConflict(F.NodeID, F.FriendID).DoNothing().Exec(ctx)
+		err := openPolicied(velox.Postgres, e).InsertAll([]bnodeFriend{{1, 2}, {1, 3}}).OnConflict(F.NodeID, F.FriendID).DoNothing().Exec(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -188,7 +188,7 @@ func TestBidiLinks(t *testing.T) {
 	})
 	t.Run("delete", func(t *testing.T) {
 		e := &fakeconn.Exec{}
-		if _, err := openFake(velox.Postgres, e).Delete[bnodeFriend]().Where(F.NodeID.EQ(1), F.FriendID.In(2, 3)).Exec(ctx); err != nil {
+		if _, err := openPolicied(velox.Postgres, e).Delete[bnodeFriend]().Where(F.NodeID.EQ(1), F.FriendID.In(2, 3)).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		sent(t, e, `DELETE FROM "bnode_friends" WHERE (("node_id" = $1 AND "friend_id" IN ($2, $3)) OR ("friend_id" = $4 AND "node_id" IN ($5, $6)))`,
@@ -197,7 +197,7 @@ func TestBidiLinks(t *testing.T) {
 	t.Run("delete, nested", func(t *testing.T) {
 		e := &fakeconn.Exec{}
 		w := velox.Or(F.NodeID.EQ(1), velox.Not(F.FriendID.EQ(2)))
-		if _, err := openFake(velox.Postgres, e).Delete[bnodeFriend]().Where(w).Exec(ctx); err != nil {
+		if _, err := openPolicied(velox.Postgres, e).Delete[bnodeFriend]().Where(w).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		sent(t, e, `DELETE FROM "bnode_friends" WHERE (("node_id" = $1 OR NOT ("friend_id" = $2)) OR ("friend_id" = $3 OR NOT ("node_id" = $4)))`,
@@ -205,7 +205,7 @@ func TestBidiLinks(t *testing.T) {
 	})
 	t.Run("delete all", func(t *testing.T) {
 		e := &fakeconn.Exec{}
-		if _, err := openFake(velox.Postgres, e).Delete[bnodeFriend]().All().Exec(ctx); err != nil {
+		if _, err := openPolicied(velox.Postgres, e).Delete[bnodeFriend]().All().Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		sent(t, e, `DELETE FROM "bnode_friends"`)
@@ -213,7 +213,7 @@ func TestBidiLinks(t *testing.T) {
 	t.Run("load", func(t *testing.T) {
 		// Both rows are there, so a load reads the owner's column alone.
 		e := &fakeconn.Exec{Results: [][][]any{{{int64(1)}, {int64(2)}}, {{int64(1), int64(2)}, {int64(2), int64(1)}}, {{int64(1)}, {int64(2)}}}}
-		ns, err := openFake(velox.Postgres, e).Query[bnode]().With(velox.Rel[bnode, bnode]{I: 0}).Limit(2).All(ctx)
+		ns, err := openPolicied(velox.Postgres, e).Query[bnode]().With(velox.Rel[bnode, bnode]{I: 0}).Limit(2).All(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -229,7 +229,7 @@ func TestBidiLinks(t *testing.T) {
 	t.Run("updates refused", func(t *testing.T) {
 		const want = "velox: apitest.bnodeFriend: the join entity of a bidirectional edge cannot be updated; delete the link and insert it again"
 		e := &fakeconn.Exec{}
-		db := openFake(velox.Postgres, e)
+		db := openPolicied(velox.Postgres, e)
 		_, errUpdate := db.Update[bnodeFriend]().Set(F.FriendID.Set(5)).All().Exec(ctx)
 		errSave := db.Save(&bnodeFriend{1, 2}, F.FriendID).Exec(ctx)
 		errUpsert := db.Insert(&bnodeFriend{1, 2}).OnConflict(F.NodeID, F.FriendID).Update(F.FriendID).Exec(ctx)
@@ -244,7 +244,7 @@ func TestBidiLinks(t *testing.T) {
 	})
 	t.Run("named byte-slice keys", func(t *testing.T) {
 		e := &fakeconn.Exec{}
-		db := openFake(velox.Postgres, e)
+		db := openPolicied(velox.Postgres, e)
 		if err := db.InsertAll([]bnodeKeyed{{bkey("x"), bkey("x")}, {bkey("x"), bkey("y")}}).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -254,7 +254,7 @@ func TestBidiLinks(t *testing.T) {
 	t.Run("a refused update runs no hook", func(t *testing.T) {
 		bidiSeen.calls = 0
 		e := &fakeconn.Exec{}
-		db := openFake(velox.Postgres, e)
+		db := openPolicied(velox.Postgres, e)
 		_, errUpdate := db.Update[bnodeFriendP]().Set(velox.NumberCol[bnodeFriendP, int64]{I: 1}.Set(5)).All().Exec(ctx)
 		errSave := db.Save(&bnodeFriendP{1, 2}, velox.NumberCol[bnodeFriendP, int64]{I: 1}).Exec(ctx)
 		if errUpdate == nil || errSave == nil || bidiSeen.calls != 0 || len(e.Log) != 0 {
@@ -264,7 +264,7 @@ func TestBidiLinks(t *testing.T) {
 	t.Run("policy and hooks see the caller's rows", func(t *testing.T) {
 		bidiSeen.inserted, bidiSeen.hookRows, bidiSeen.affected = nil, 0, 0
 		e := &fakeconn.Exec{Affected: 2}
-		if err := openFake(velox.Postgres, e).Insert(&bnodeFriendP{1, 2}).Exec(context.Background()); err != nil {
+		if err := openPolicied(velox.Postgres, e).Insert(&bnodeFriendP{1, 2}).Exec(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 		if want := []bnodeFriendP{{1, 2}}; !reflect.DeepEqual(bidiSeen.inserted, want) {
@@ -861,7 +861,7 @@ func TestBidiOneScope(t *testing.T) {
 		}
 		return 1
 	}}
-	db := openFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	db := openPolicied(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		got = append(got, seen{st.SQL, st.PolicyBypass})
 		return next(ctx)
 	}))

@@ -44,7 +44,7 @@
 // Reads, updates and deletes then see only rows whose column is 7; an insert
 // that leaves the column unset gets 7, and one that names another value is
 // refused with [ErrMismatch]; a statement whose context has no value fails
-// with [ErrNoScope], not with every row. velox.WithoutPolicy lifts the
+// with [ErrNoScope], not with every row. [velox.DB.WithoutPolicy] lifts the
 // scope, with a reason, as it lifts every other policy. The entity's own
 // Policy is ANDed with the mixin's, so it cannot lift the scope.
 //

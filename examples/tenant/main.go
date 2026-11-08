@@ -138,17 +138,18 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
-	// velox.WithoutPolicy lifts the scope, as it lifts every policy, and needs
-	// a reason, which hooks see as Statement.PolicyBypass. An empty reason is
-	// ignored.
-	report := velox.WithoutPolicy(ctx, "weekly status report")
-	for p, err := range db.Query[gen.Project]().OrderBy(P.OrgID.Asc(), P.Name.Asc()).Unbounded().Iter(report) {
+	// db.WithoutPolicy returns a DB that lifts the scope, as it lifts every
+	// policy, and needs a reason, which hooks see as Statement.PolicyBypass.
+	// The bypass is the DB's, not the context's: code handed ctx is still
+	// scoped. An empty reason is ignored.
+	report := db.WithoutPolicy("weekly status report")
+	for p, err := range report.Query[gen.Project]().OrderBy(P.OrgID.Asc(), P.Name.Asc()).Unbounded().Iter(ctx) {
 		if err != nil {
 			return err
 		}
 		say("WithoutPolicy: org %d %s %s", p.OrgID, p.Name, p.Status)
 	}
-	_, err = db.Query[gen.Project]().Count(velox.WithoutPolicy(ctx, ""))
+	_, err = db.WithoutPolicy("").Query[gen.Project]().Count(ctx)
 	say("WithoutPolicy with no reason: ErrNoScope=%t", errors.Is(err, scope.ErrNoScope))
 	return nil
 }

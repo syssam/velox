@@ -836,7 +836,7 @@ func TestEdgeSetterHookSkips(t *testing.T) {
 // ON CONFLICT DO NOTHING, in a transaction.
 func TestEdgeSetterPostgresStatements(t *testing.T) {
 	e := &fakeconn.Exec{Results: [][][]any{{{int64(1)}}, {{int64(7)}}}, Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	n, err := db.Update[sPost]().Set(sPosts.Tags.Add(7)).Where(sPosts.ID.EQ(1)).Exec(user)
 	if err != nil || n != 1 {
 		t.Fatalf("update: %d, %v", n, err)

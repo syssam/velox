@@ -49,13 +49,13 @@ func TestInterceptorOnRealDatabases(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		interceptorTables(t, tg)
 		bg := context.Background()
-		q := tg.db.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).Unbounded()
+		q := tg.pdb.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).Unbounded()
 		ns, err := q.All(bg)
 		if err != nil {
 			t.Fatal(err)
 		}
 		wantIDs(t, inoteIDs(ns), []int64{1, 4})
-		if ns, err = q.All(velox.WithoutPolicy(bg, "test")); err != nil {
+		if ns, err = tg.db.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).Unbounded().All(bg); err != nil {
 			t.Fatal(err)
 		}
 		wantIDs(t, inoteIDs(ns), []int64{1, 3, 4})
@@ -63,7 +63,7 @@ func TestInterceptorOnRealDatabases(t *testing.T) {
 			t.Errorf("Count: %d, %v", n, err)
 		}
 
-		os, err := tg.db.Query[fixture.IOwner]().With(fixture.IOwners.Notes.OrderBy(fixture.INotes.ID.Asc())).With(fixture.IOwners.Tagged).
+		os, err := tg.pdb.Query[fixture.IOwner]().With(fixture.IOwners.Notes.OrderBy(fixture.INotes.ID.Asc())).With(fixture.IOwners.Tagged).
 			OrderBy(fixture.IOwners.ID.Asc()).Unbounded().All(bg)
 		if err != nil {
 			t.Fatal(err)
@@ -72,11 +72,11 @@ func TestInterceptorOnRealDatabases(t *testing.T) {
 		tagged, _ := os[0].Tagged.Get()
 		wantIDs(t, inoteIDs(notes), []int64{1})
 		wantIDs(t, inoteIDs(tagged), []int64{1})
-		has, err := tg.db.Query[fixture.IOwner]().Where(fixture.IOwners.Tagged.Has()).Unbounded().Count(bg)
+		has, err := tg.pdb.Query[fixture.IOwner]().Where(fixture.IOwners.Tagged.Has()).Unbounded().Count(bg)
 		if err != nil || has != 1 {
 			t.Errorf("Tagged.Has: %d, %v", has, err)
 		}
-		joined, err := tg.db.Query[fixture.IOwner]().Join(fixture.IOwners.Pinned).Unbounded().All(bg)
+		joined, err := tg.pdb.Query[fixture.IOwner]().Join(fixture.IOwners.Pinned).Unbounded().All(bg)
 		if err != nil || len(joined) != 1 || joined[0].ID != 2 {
 			t.Errorf("Join(Pinned): %v, %v", joined, err)
 		}
@@ -84,7 +84,7 @@ func TestInterceptorOnRealDatabases(t *testing.T) {
 		up := func(ctx context.Context) error {
 			return tg.db.Insert(&fixture.INote{ID: 9, OwnerID: 7, Body: "b"}).OnConflict(fixture.INotes.Body).Update(fixture.INotes.OwnerID).Exec(ctx)
 		}
-		err = up(velox.WithoutPolicy(bg, "test"))
+		err = up(bg)
 		if tg.d == velox.MySQL {
 			if !errors.Is(err, velox.ErrPolicyUpsert) {
 				t.Errorf("MySQL upsert: %v", err)
@@ -92,15 +92,15 @@ func TestInterceptorOnRealDatabases(t *testing.T) {
 		} else if err == nil {
 			t.Errorf("the upsert of the hidden note succeeded")
 		}
-		skip := fixture.WithFilterMode(velox.WithoutPolicy(bg, "test"), fixture.FilterSkip)
-		if n, err := tg.db.Query[fixture.INote]().Where(fixture.INotes.OwnerID.EQ(7)).Count(skip); err != nil || n != 0 {
+		skip := fixture.WithFilterMode(bg, fixture.FilterSkip)
+		if n, err := tg.pdb.Query[fixture.INote]().Where(fixture.INotes.OwnerID.EQ(7)).Count(skip); err != nil || n != 0 {
 			t.Errorf("the hidden note was updated: %d, %v", n, err)
 		}
 
-		if n, err := tg.db.Update[fixture.INote]().Set(fixture.INotes.OwnerID.Set(5)).All().Exec(bg); err != nil || n != 2 {
+		if n, err := tg.pdb.Update[fixture.INote]().Set(fixture.INotes.OwnerID.Set(5)).All().Exec(bg); err != nil || n != 2 {
 			t.Errorf("Update all: %d, %v; want 2", n, err)
 		}
-		if n, err := tg.db.Delete[fixture.INote]().Where(fixture.INotes.ID.In(1, 2)).Exec(bg); err != nil || n != 1 {
+		if n, err := tg.pdb.Delete[fixture.INote]().Where(fixture.INotes.ID.In(1, 2)).Exec(bg); err != nil || n != 1 {
 			t.Errorf("Delete 1 and 2: %d, %v; want 1", n, err)
 		}
 		if n, err := tg.db.Query[fixture.INote]().Count(skip); err != nil || n != 3 {

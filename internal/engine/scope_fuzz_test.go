@@ -158,7 +158,7 @@ func FuzzScope(f *testing.F) {
 		st, opts := scopeCase(ops, s)
 		want, _ := scopeCase(ops, s) // the same conditions, built again: a copy no run touches
 		in := st.Where
-		db := openFake(velox.Postgres, &fakeconn.Exec{}, opts...)
+		db := openPolicied(velox.Postgres, &fakeconn.Exec{}, opts...)
 		ctx := testmodel.WithUser(testmodel.Org.With(context.Background(), n), "ann")
 		err := prepare(ctx, db, st)
 		if n == 0 {

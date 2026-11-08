@@ -311,7 +311,7 @@ func (t *table) oneStatement(ctx context.Context, db *DB, p unsafe.Pointer, cf *
 	if err := ValidateRow(t.info, p, cols); err != nil {
 		return Statement{}, -1, err
 	}
-	if err := InsertAllowed(ctx, t.info, p); err != nil {
+	if err := InsertAllowed(ctx, db, t.info, p); err != nil {
 		return Statement{}, -1, err
 	}
 	st := Statement{Op: OpInsert, Entity: t.info, Columns: cols, Rows: [][]any{t.rowValues(p, cols)}, Conflict: cf, InTx: db.InTx}
@@ -356,7 +356,7 @@ func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows) (cols []i
 		}
 	}
 	for i := range xs.n {
-		if err := InsertAllowed(ctx, t.info, xs.at(i)); err != nil {
+		if err := InsertAllowed(ctx, db, t.info, xs.at(i)); err != nil {
 			return nil, 0, err
 		}
 	}

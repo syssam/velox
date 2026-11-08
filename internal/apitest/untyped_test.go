@@ -245,7 +245,7 @@ func ubDB(t *testing.T, opts ...velox.Option) *velox.DB {
 // still applies: a test that sets ubFilter does not count with it.
 func ubCount[E any, PE velox.Entity[E]](t *testing.T, db *velox.DB) int64 {
 	t.Helper()
-	n, err := db.Query[E, PE]().Count(velox.WithoutPolicy(context.Background(), "count"))
+	n, err := db.WithoutPolicy("count").Query[E, PE]().Count(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +395,7 @@ func TestUnknownColumnFailsClosed(t *testing.T) {
 			_, err := db.Update[ubDoc]().Set(ubDocs.Title.Set("x")).Where(ubDocs.ID.EQ(1)).Exec(ctx)
 			wantErrContains(t, "update", err, want)
 			ubFilter, ubHook = nil, nil // so that the check reads the rows
-			if got := ubTitles(velox.WithoutPolicy(ctx, "check"), t, db); !slices.Equal(got, []string{"a", "secret"}) {
+			if got := ubTitles(ctx, t, db.WithoutPolicy("check")); !slices.Equal(got, []string{"a", "secret"}) {
 				t.Errorf("after the update: %v", got)
 			}
 		})
@@ -481,7 +481,7 @@ func TestEdgeHasAppliesTargetPolicy(t *testing.T) {
 		t.Errorf("SQL %s, %v", q, err)
 	}
 	// Under WithoutPolicy neither policy runs.
-	if n, err := db.Query[ubComment]().Count(velox.WithoutPolicy(ctx, "test")); n != 2 || err != nil {
+	if n, err := db.WithoutPolicy("test").Query[ubComment]().Count(ctx); n != 2 || err != nil {
 		t.Errorf("WithoutPolicy: %d, %v", n, err)
 	}
 }
@@ -495,7 +495,7 @@ func TestEdgeNotLinkedFails(t *testing.T) {
 	if errors.Is(err, velox.ErrDenied) {
 		t.Errorf("an unlinked relation is not a denial: %v", err)
 	}
-	_, err = db.Query[ubLoose]().Limit(1).All(velox.WithoutPolicy(context.Background(), "test"))
+	_, err = db.WithoutPolicy("test").Query[ubLoose]().Limit(1).All(context.Background())
 	if err != nil {
 		t.Errorf("WithoutPolicy, with no policy to resolve: %v", err)
 	}
@@ -715,8 +715,8 @@ func TestRunTimeHooksInTx(t *testing.T) {
 // writes only, not on another entity's.
 func TestRunTimeHooksOnlyTheirEntity(t *testing.T) {
 	ubSet(t, func() {})
-	db := ubDB(t, velox.WithHooks[ubDoc](ubRunTime("rt")))
-	ctx := velox.WithoutPolicy(context.Background(), "test")
+	db := ubDB(t, velox.WithHooks[ubDoc](ubRunTime("rt"))).WithoutPolicy("test")
+	ctx := context.Background()
 	if err := db.Insert(&ubComment{ID: 3, DocID: 1, Body: "c"}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}

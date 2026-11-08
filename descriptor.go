@@ -157,7 +157,7 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescr
 // pointed here and sets the new partner's; one that sets it to nil clears
 // the partner's. They run in a transaction velox opens, a savepoint when the
 // caller is in one. The clearing of the old partner is not scoped by a
-// policy, a scope included (it runs under WithoutPolicy, with a reason the
+// policy, a scope included (it runs on DB.WithoutPolicy, with a reason the
 // hooks see): it
 // is the edge's integrity, as ent's is. The link of the new partner is
 // scoped as the caller's write, so a partner it may not change cannot be

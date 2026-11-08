@@ -348,7 +348,7 @@ func oneStatement[E any](ctx context.Context, db *engine.DB, m *metaState[E], p 
 	if err := engine.ValidateRow(m.Info, unsafe.Pointer(p), cols); err != nil {
 		return Statement{}, -1, err
 	}
-	if err := engine.InsertAllowed(ctx, m.Info, unsafe.Pointer(p)); err != nil {
+	if err := engine.InsertAllowed(ctx, db, m.Info, unsafe.Pointer(p)); err != nil {
 		return Statement{}, -1, err
 	}
 	st := Statement{Op: OpInsert, Entity: m.Info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.InTx}
@@ -396,7 +396,7 @@ func prepareMany[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs 
 		}
 	}
 	for i := range xs {
-		if err := engine.InsertAllowed(ctx, m.Info, unsafe.Pointer(&xs[i])); err != nil {
+		if err := engine.InsertAllowed(ctx, db, m.Info, unsafe.Pointer(&xs[i])); err != nil {
 			return nil, 0, err
 		}
 	}

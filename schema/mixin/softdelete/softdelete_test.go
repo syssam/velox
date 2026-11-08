@@ -282,15 +282,15 @@ func TestWithoutPolicyKeepsSoftDelete(t *testing.T) {
 	if _, err := db.Delete[fixture.SDoc]().Where(D.ID.EQ(1)).Exec(org(1)); err != nil {
 		t.Fatal(err)
 	}
-	op := velox.WithoutPolicy(context.Background(), "audit")
-	if n, err := db.Query[fixture.SDoc]().Count(op); err != nil || n != 3 {
+	op, free := context.Background(), db.WithoutPolicy("audit")
+	if n, err := free.Query[fixture.SDoc]().Count(op); err != nil || n != 3 {
 		t.Errorf("Count under WithoutPolicy: %d, %v; want every org's 3 live rows", n, err)
 	}
-	if n, err := db.Delete[fixture.SDoc]().Where(D.ID.EQ(4)).Exec(op); err != nil || n != 1 {
+	if n, err := free.Delete[fixture.SDoc]().Where(D.ID.EQ(4)).Exec(op); err != nil || n != 1 {
 		t.Errorf("Delete under WithoutPolicy: %d, %v", n, err)
 	}
 	wantIDs(t, "deleted", deleted(t, raw), 1, 4)
-	if n, err := db.Query[fixture.SDoc]().Count(softdelete.Skip(op)); err != nil || n != 4 {
+	if n, err := free.Query[fixture.SDoc]().Count(softdelete.Skip(op)); err != nil || n != 4 {
 		t.Errorf("Count under both: %d, %v; want 4", n, err)
 	}
 }

@@ -267,8 +267,8 @@ func TestDeletedUser(t *testing.T) {
 	targets(t, func(t *testing.T, c *client) {
 		admin := c.signup("acme")
 		ann, annID := admin.member("acme", "ann")
-		ctx := velox.WithoutPolicy(t.Context(), "test")
-		if _, err := c.db.Delete[gen.User]().Where(gen.Users.ID.EQ(annID)).Exec(ctx); err != nil {
+		ctx := t.Context()
+		if _, err := c.db.WithoutPolicy("test").Delete[gen.User]().Where(gen.Users.ID.EQ(annID)).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		ann.do("GET", "/me", 401, nil, nil)
@@ -403,7 +403,7 @@ func TestPolicy(t *testing.T) {
 		bob.do("POST", path+"/comments", 201, obj{"body": "on it"}, nil)
 		ann.do("DELETE", path, 204, nil, nil)
 		ann.do("GET", path, 404, nil, nil)
-		n, err := c.db.Query[gen.Comment]().Where(gen.Comments.IssueID.EQ(issue)).Count(velox.WithoutPolicy(principal.With(t.Context(), principal.Principal{Admin: true}), "test"))
+		n, err := c.db.WithoutPolicy("test").Query[gen.Comment]().Where(gen.Comments.IssueID.EQ(issue)).Count(principal.With(t.Context(), principal.Principal{Admin: true}))
 		if err != nil || n != 0 {
 			t.Errorf("comments after the delete: %d, %v", n, err)
 		}
@@ -665,8 +665,8 @@ func TestSQLiteDSNWithQuery(t *testing.T) {
 	path := fmt.Sprintf("/issues/%d", issue)
 	admin.do("POST", path+"/comments", 201, obj{"body": "first"}, nil)
 	admin.do("DELETE", path, 204, nil, nil)
-	ctx := velox.WithoutPolicy(principal.With(t.Context(), principal.Principal{Admin: true}), "test")
-	if n, err := db.Query[gen.Comment]().Where(gen.Comments.IssueID.EQ(issue)).Count(ctx); err != nil || n != 0 {
+	ctx := principal.With(t.Context(), principal.Principal{Admin: true})
+	if n, err := db.WithoutPolicy("test").Query[gen.Comment]().Where(gen.Comments.IssueID.EQ(issue)).Count(ctx); err != nil || n != 0 {
 		t.Errorf("comments after the delete: %d, %v; foreign keys are off", n, err)
 	}
 }

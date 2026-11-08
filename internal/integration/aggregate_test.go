@@ -252,7 +252,7 @@ func TestAggregatesOnNullableColumns(t *testing.T) {
 func TestAggregateIsScoped(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		I := testmodel.Invoices
-		q := tg.db.Query[testmodel.Invoice]()
+		q := tg.pdb.Query[testmodel.Invoice]()
 		if v, err := velox.Sum(testmodel.WithUser(testmodel.Org.With(context.Background(), int64(1)), "admin"), q, I.Total); err != nil || v != 100 {
 			t.Errorf("org 1: %v, %v", v, err)
 		}
@@ -373,7 +373,7 @@ func TestGroupedOnRealDatabases(t *testing.T) {
 func TestGroupedIsScopedAndCapped(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		I := testmodel.Invoices
-		q := tg.db.Query[testmodel.Invoice]().Unbounded()
+		q := tg.pdb.Query[testmodel.Invoice]().Unbounded()
 		org := func(id int64) context.Context {
 			return testmodel.WithUser(testmodel.Org.With(context.Background(), id), "admin")
 		}
@@ -390,10 +390,10 @@ func TestGroupedIsScopedAndCapped(t *testing.T) {
 			t.Errorf("no org: %v", err)
 		}
 		// The row cap: five numbers, four allowed by the query.
-		if _, err := velox.CountBy(ctx, q.MaxRows(4), I.Number.Key()); !errors.Is(err, velox.ErrTooManyRows) {
+		if _, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice]().Unbounded().MaxRows(4), I.Number.Key()); !errors.Is(err, velox.ErrTooManyRows) {
 			t.Errorf("past the cap: %v", err)
 		}
-		if got, err := velox.CountBy(ctx, q.MaxRows(5), I.Number.Key()); err != nil || len(got) != 5 {
+		if got, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice]().Unbounded().MaxRows(5), I.Number.Key()); err != nil || len(got) != 5 {
 			t.Errorf("at the cap: %v, %v", got, err)
 		}
 		if _, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice](), I.OrgID.Key()); !errors.Is(err, velox.ErrUnbounded) {
@@ -402,7 +402,7 @@ func TestGroupedIsScopedAndCapped(t *testing.T) {
 
 		// The policy: tickets of ann's only.
 		T := testmodel.Tickets
-		tq := tg.db.Query[testmodel.Ticket]().Unbounded()
+		tq := tg.pdb.Query[testmodel.Ticket]().Unbounded()
 		tg.exec(t, "DELETE FROM tickets")
 		for i, r := range []struct {
 			org, invoice int64

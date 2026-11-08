@@ -51,6 +51,9 @@ type DB struct {
 	// DB, 30% more for an entity's package: see TestGenericTypesCompileSmall.
 	pool  io.Closer
 	owned bool
+	// bypass is WithoutPolicy's reason: a DB whose statements skip every
+	// entity's policy; "" on any other.
+	bypass string
 }
 
 // Open is velox.Open's DB, opts given as a slice.

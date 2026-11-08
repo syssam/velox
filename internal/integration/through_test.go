@@ -41,7 +41,7 @@ func throughSetup(t *testing.T, tg target) {
 // bookTags loads every book's tags through rel, by book id.
 func bookTags(t *testing.T, qctx context.Context, tg target, rel velox.Rel[book, tag]) map[int64][]string {
 	t.Helper()
-	bs, err := tg.db.Query[book]().With(rel).OrderBy(Books.ID.Asc()).Limit(10).All(qctx)
+	bs, err := tg.on(qctx).Query[book]().With(rel).OrderBy(Books.ID.Asc()).Limit(10).All(qctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestThroughHas(t *testing.T) {
 			if len(org) > 0 {
 				qctx = testmodel.Org.With(context.Background(), org[0])
 			}
-			n, err := tg.db.Query[book]().Where(c).Count(qctx)
+			n, err := tg.on(qctx).Query[book]().Where(c).Count(qctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -146,7 +146,7 @@ func TestOfThroughOnRealDatabases(t *testing.T) {
 		throughSetup(t, tg)
 		tagNames := func(qctx context.Context, owners ...*book) []string {
 			t.Helper()
-			got, err := tg.db.Query[tag]().Where(Books.Tags.Of(owners...)).OrderBy(Tags.ID.Asc()).Limit(10).All(qctx)
+			got, err := tg.on(qctx).Query[tag]().Where(Books.Tags.Of(owners...)).OrderBy(Tags.ID.Asc()).Limit(10).All(qctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -213,7 +213,7 @@ func TestLimitEachThroughOnRealDatabases(t *testing.T) {
 		tagIDs := func(qctx context.Context, rel velox.Rel[book, tag], ps ...velox.Pred[book]) map[int64][]int64 {
 			t.Helper()
 			log.take()
-			bs, err := tg.db.Query[book]().Where(ps...).OrderBy(Books.ID.Asc()).With(rel).Limit(10).All(qctx)
+			bs, err := tg.on(qctx).Query[book]().Where(ps...).OrderBy(Books.ID.Asc()).With(rel).Limit(10).All(qctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -283,13 +283,13 @@ func TestEachThroughRepeatedLinksOnRealDatabases(t *testing.T) {
 			{acme, byName, [][]int64{{2, 1}, {2}, {}}},
 			{ctx, byName.LimitEach(3), [][]int64{{2, 1, 3}, {2}, {}}},
 		} {
-			got, err := velox.LoadEach(c.qctx, tg.db.Query[tag](), c.r, owners)
+			got, err := velox.LoadEach(c.qctx, tg.on(c.qctx).Query[tag](), c.r, owners)
 			if err != nil {
 				t.Fatal(err)
 			}
 			wantIDLists(t, tagIDLists(got), c.want)
 			// A With load of the same relation agrees.
-			ss, err := tg.db.Query[shelf]().Where(Shelves.ID.In(1, 2, 3)).OrderBy(Shelves.ID.Asc()).With(c.r).Limit(10).All(c.qctx)
+			ss, err := tg.on(c.qctx).Query[shelf]().Where(Shelves.ID.In(1, 2, 3)).OrderBy(Shelves.ID.Asc()).With(c.r).Limit(10).All(c.qctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -300,7 +300,7 @@ func TestEachThroughRepeatedLinksOnRealDatabases(t *testing.T) {
 			}
 			wantIDLists(t, tagIDLists(with), c.want)
 		}
-		n, err := velox.CountEach(acme, tg.db.Query[tag](), Shelves.Tags, owners)
+		n, err := velox.CountEach(acme, tg.pdb.Query[tag](), Shelves.Tags, owners)
 		if err != nil {
 			t.Fatal(err)
 		}

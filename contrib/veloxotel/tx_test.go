@@ -131,6 +131,9 @@ func TestTxOutcomes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			db, exp, _ := traced(t, c.f, veloxotel.Config{})
+			if c.name == "denied" {
+				db, exp = tracedPolicied(t, c.f, veloxotel.Config{})
+			}
 			err := db.Tx(ctx, c.fn)
 			if err == nil {
 				t.Fatal("no error")
@@ -250,7 +253,7 @@ func TestTxAroundAlone(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
 	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
-	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), velox.WithTxAround(veloxotel.TxAroundOf(veloxotel.Config{TracerProvider: tp})))
+	db := openLifted(velox.Postgres, (&fakeDB{}).open(), velox.WithTxAround(veloxotel.TxAroundOf(veloxotel.Config{TracerProvider: tp})))
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
 		return err
@@ -274,7 +277,7 @@ func TestTxAroundInnerHookWithoutNext(t *testing.T) {
 	t.Cleanup(func() { _ = tp.Shutdown(context.Background()); _ = mp.Shutdown(context.Background()) })
 	refuse := velox.WithTxAround(func(context.Context, *velox.TxInfo, func(context.Context) error) error { return nil })
 	opts := append(veloxotel.Options(veloxotel.Config{TracerProvider: tp, MeterProvider: mp}), refuse)
-	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), opts...)
+	db := openLifted(velox.Postgres, (&fakeDB{}).open(), opts...)
 	if err := db.Tx(ctx, func(context.Context, *velox.DB) error { return nil }); err == nil {
 		t.Fatal("no error")
 	}
@@ -304,7 +307,7 @@ func TestTxSpanRoute(t *testing.T) {
 			calls++
 			return veloxotel.Target{Namespace: "db_" + r.Shard, Address: "h"}
 		}}
-		db := velox.OpenShards(velox.Postgres, map[string]velox.Shard{
+		db := openShardsLifted(velox.Postgres, map[string]velox.Shard{
 			"a": {Primary: velox.SQLConn((&fakeDB{}).open())},
 			"b": {Primary: velox.SQLConn((&fakeDB{}).open())},
 		}, append(veloxotel.Options(cfg), velox.WithShardFor(shardOf))...)
@@ -371,7 +374,7 @@ func TestSavepointStatementsSeeTheTxRoute(t *testing.T) {
 		}
 		return next(ctx)
 	})
-	db := velox.OpenShards(velox.Postgres, map[string]velox.Shard{
+	db := openShardsLifted(velox.Postgres, map[string]velox.Shard{
 		"a": {Primary: velox.SQLConn((&fakeDB{}).open())},
 		"b": {Primary: velox.SQLConn((&fakeDB{}).open())},
 	}, append(veloxotel.Options(veloxotel.Config{}), velox.WithShardFor(shardOf), seen)...)

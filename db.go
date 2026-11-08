@@ -208,3 +208,16 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 		return fn(ctx, (*DB)(unsafe.Pointer(tx)))
 	}, opts...)
 }
+
+// WithoutPolicy returns a DB like db whose statements skip every entity's
+// policy, as do the transactions it begins and a write's hooks through
+// Mutation.DB. Interceptors still apply. The bypass is the DB's, not a
+// context's: it reaches only the code given this DB, never a callee that is
+// handed ctx. The reason is required and is shown to hooks as
+// Statement.PolicyBypass; with a reason that is empty or only white space
+// WithoutPolicy returns db. The DB it returns shares db's pool and options,
+// and Close on it closes nothing.
+func (db *DB) WithoutPolicy(reason string) *DB { return pub(db.e.WithoutPolicy(reason)) }
+
+// PolicyBypass returns db's WithoutPolicy reason; "" when it has none.
+func (db *DB) PolicyBypass() string { return db.e.PolicyBypass() }

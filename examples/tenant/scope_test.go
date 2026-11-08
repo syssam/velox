@@ -92,7 +92,7 @@ func TestScopeWithoutPolicyReadsAll(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	n, err := db.Query[gen.Project]().Count(velox.WithoutPolicy(context.Background(), "test"))
+	n, err := db.WithoutPolicy("test").Query[gen.Project]().Count(context.Background())
 	if err != nil || n != 2 {
 		t.Errorf("WithoutPolicy count = %d, %v; want 2", n, err)
 	}

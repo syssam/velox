@@ -453,7 +453,7 @@ func TestFallbackCounterShard(t *testing.T) {
 	r := sdkmetric.NewManualReader()
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
 	t.Cleanup(func() { _ = mp.Shutdown(context.Background()) })
-	db := velox.OpenShards(velox.Postgres, map[string]velox.Shard{
+	db := openShardsLifted(velox.Postgres, map[string]velox.Shard{
 		"a": {Primary: velox.SQLConn(pa.open()), Replicas: []velox.Conn{velox.SQLConn(rep.open())}},
 		"b": {Primary: velox.SQLConn(pb.open())},
 	}, append(veloxotel.Options(veloxotel.Config{MeterProvider: mp}),

@@ -171,7 +171,7 @@ func TestComposeScopePolicyHooks(t *testing.T) {
 			e := &fakeconn.Exec{Rows: [][]any{{int64(5)}}, Answer: func(sql string, _ []any) ([][]any, bool) {
 				return nil, strings.HasPrefix(sql, "SELECT")
 			}}
-			db := openFake(velox.Postgres, e)
+			db := openPolicied(velox.Postgres, e)
 
 			// The Read condition: the scope's, then the entity's.
 			if err := o.query(db, inOrg); err != nil {

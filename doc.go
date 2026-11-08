@@ -222,7 +222,7 @@
 //
 // Open's options are WithX, as WithMaxRows; a transaction's are TxIsolation,
 // TxReadOnly, TxTimeout and TxRetrySerializable; a context is changed by WithX
-// or WithoutX, as WithShard and WithoutPolicy, and read by XFromContext, as
+// or WithoutX, as WithShard and WithoutTx, and read by XFromContext, as
 // RowScopeFromContext.
 //
 // An Option configures a DB, once, when it is opened (Connect, Open, OpenConn, veloxpgx.Open, OpenShards).
@@ -230,6 +230,11 @@
 //
 //   - WithMaxLimit and WithMaxRows cap a query's Limit and the rows it reads.
 //   - WithDeadlines sets the time limits of statements and transactions.
+//
+// A DB derived from another changes what its own statements do and nothing
+// else: DB.WithoutPolicy lifts the entities' policies, a scope's among them,
+// for the statements and transactions of the DB it returns. It is not a
+// context's, so it reaches only the code that is given that DB.
 //
 // What runs around its statements:
 //
@@ -249,7 +254,6 @@
 //
 //   - WithScopeValue names a value a statement is scoped by, as a scope key's
 //     With does (package scope).
-//   - WithoutPolicy lifts the entities' policies, a scope's among them.
 //   - WithShard, WithPrimaryReads and WithSession route a statement.
 //   - PinUntil restarts a session's pin from a time stored earlier, as
 //     PinnedUntil gives it; it changes the session, not the context.
@@ -257,7 +261,7 @@
 //   - WithoutTx removes a transaction's mark from a context.
 //
 // RowScopeFromContext reads back what a context scopes statements by (the
-// scope values, the reason of WithoutPolicy, the shard) as a RowScope, which
+// scope values and the shard) as a RowScope, which
 // compares with ==: code that reads for several callers in one statement
 // keeps callers of different scopes apart by it.
 //

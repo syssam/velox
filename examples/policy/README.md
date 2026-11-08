@@ -39,7 +39,7 @@ func (Doc) Policy() velox.Policy {
   the `doc` edge in `gen.Comment`'s descriptor (`velox.Linked`), so the name
   resolves.
 - `SQL(ctx)` prints the conditions the policy adds for that context.
-- `velox.WithoutPolicy(ctx, reason)` switches every policy off for one context,
+- `db.WithoutPolicy(reason)` returns a DB with every policy switched off,
   a scope (the `scope` package) among them.
 
 The output is in `testdata/output.golden`.

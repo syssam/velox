@@ -100,7 +100,7 @@ func TestHookSetIsValidated(t *testing.T) {
 }
 
 func TestPolicyMethod(t *testing.T) {
-	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	db := openPolicied(velox.Postgres, &fakeconn.Exec{})
 	err := db.Insert(&fixture.DAuthor{Name: "mallory"}).Exec(testmodel.Org.With(context.Background(), int64(7)))
 	if !errors.Is(err, velox.ErrDenied) {
 		t.Fatalf("got %v", err)
@@ -723,7 +723,7 @@ func TestMutationAffected(t *testing.T) {
 		got = m.Affected()
 		return err
 	}
-	db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 3})
+	db := openPolicied(velox.Postgres, &fakeconn.Exec{Affected: 3})
 	if _, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().Exec(ctx); err != nil || got != 3 {
 		t.Fatalf("%v, Affected %d", err, got)
 	}
@@ -737,14 +737,14 @@ func TestMutationAffected(t *testing.T) {
 	for _, affected := range []int64{0, 1} {
 		hUpAffected = -1
 		e := &fakeconn.Exec{Affected: affected}
-		db := openFake(velox.Postgres, e)
+		db := openPolicied(velox.Postgres, e)
 		err := db.InsertAll([]hUp{{ID: 1, N: 1}, {ID: 2, N: 1}}).OnConflict(hUps.ID).Update(hUps.N).Exec(context.Background())
 		if !errors.Is(err, velox.ErrDenied) || hUpAffected != 0 {
 			t.Errorf("affected %d: %v, Affected %d", affected, err, hUpAffected)
 		}
 	}
 	e := &fakeconn.Exec{Affected: 1}
-	db = openFake(velox.Postgres, e)
+	db = openPolicied(velox.Postgres, e)
 	if err := db.Insert(&hUp{ID: 1, N: 1}).OnConflict(hUps.ID).Update(hUps.N).Exec(context.Background()); err != nil || hUpAffected != 1 {
 		t.Errorf("%v, Affected %d", err, hUpAffected)
 	}
@@ -914,7 +914,7 @@ func (*hSoft) VeloxMeta() *velox.Meta[hSoft] {
 // delete of All gives no Conds, and the update says All.
 func TestSoftDeleteThroughConds(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 4}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	tctx := testmodel.Org.With(context.Background(), int64(7))
 	n, err := db.Delete[hSoft]().Where(hSofts.ID.EQ(1)).Exec(tctx)
 	if err != nil || n != 4 || e.Calls != 1 {
@@ -958,7 +958,7 @@ func TestCondsAfterNext(t *testing.T) {
 		st.Where = append(st.Where, velox.ColumnEQ(2, false))
 		return nil
 	})
-	db := openFake(velox.Postgres, e, rw)
+	db := openPolicied(velox.Postgres, e, rw)
 	softConds = nil
 	if _, err := db.Update[hSoft]().Set(hSofts.Deleted.Set(true)).Where(hSofts.ID.EQ(1), hSofts.ID.LT(9)).Exec(testmodel.Org.With(context.Background(), int64(7))); err != nil {
 		t.Fatal(err)

@@ -20,7 +20,7 @@ func TestJoinReadsTheTargetThroughItsPolicy(t *testing.T) {
 	}
 	hasParent := map[string][]int64{"ann": {2}, "admin": {2, 4, 5}, "anyone": {2, 4, 5, 7, 8}}
 	eachCaller(t, func(t *testing.T, tg target, c who) {
-		xs, err := tg.db.Query[testmodel.Ticket]().LeftJoin(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		xs, err := c.on(tg).Query[testmodel.Ticket]().LeftJoin(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -39,7 +39,7 @@ func TestJoinReadsTheTargetThroughItsPolicy(t *testing.T) {
 			t.Errorf("LeftJoin(Parent): %v, want %v", got, parents[c.name])
 		}
 
-		inner, err := tg.db.Query[testmodel.Ticket]().Join(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		inner, err := c.on(tg).Query[testmodel.Ticket]().Join(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -49,7 +49,7 @@ func TestJoinReadsTheTargetThroughItsPolicy(t *testing.T) {
 				t.Errorf("Join(Parent): ticket %d has parent %v, loaded %v", x.ID, p, loaded)
 			}
 		}
-		n, err := tg.db.Query[testmodel.Ticket]().Join(Tk.Parent).Count(c.ctx)
+		n, err := c.on(tg).Query[testmodel.Ticket]().Join(Tk.Parent).Count(c.ctx)
 		if err != nil || n != int64(len(hasParent[c.name])) {
 			t.Errorf("Count of Join(Parent): %d, %v", n, err)
 		}

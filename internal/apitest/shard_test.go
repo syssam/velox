@@ -257,18 +257,23 @@ func TestNoShard(t *testing.T) {
 		ctx  context.Context
 		want []string // in the error's text, after the prefix
 		is   error    // matched besides ErrNoShard
+		free bool     // on the DB's WithoutPolicy
 	}{
-		{"no scope value and no WithShard", bg, nil, nil},
-		{"WithoutPolicy without WithShard", velox.WithoutPolicy(bg, "report"), nil, nil},
-		{"an unknown shard from WithShardFor", testmodel.Org.With(bg, int64(3)), []string{`"mars"`}, nil},
-		{"an unknown shard from WithShard", velox.WithShard(testmodel.Org.With(bg, int64(1)), "nope"), []string{`"nope"`}, nil},
-		{"WithShard with no name", velox.WithShard(testmodel.Org.With(bg, int64(1)), ""), []string{`""`}, nil},
-		{"WithShardFor's error", testmodel.Org.With(bg, int64(4)), []string{errShardLookup.Error()}, errShardLookup},
+		{"no scope value and no WithShard", bg, nil, nil, false},
+		{"WithoutPolicy without WithShard", bg, nil, nil, true},
+		{"an unknown shard from WithShardFor", testmodel.Org.With(bg, int64(3)), []string{`"mars"`}, nil, false},
+		{"an unknown shard from WithShard", velox.WithShard(testmodel.Org.With(bg, int64(1)), "nope"), []string{`"nope"`}, nil, false},
+		{"WithShard with no name", velox.WithShard(testmodel.Org.With(bg, int64(1)), ""), []string{`""`}, nil, false},
+		{"WithShardFor's error", testmodel.Org.With(bg, int64(4)), []string{errShardLookup.Error()}, errShardLookup, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			bothPaths(t, func(t *testing.T, hooked bool) {
 				s := openShards(hooked)
+				db := s.db
+				if c.free {
+					db = db.WithoutPolicy("report")
+				}
 				for _, e := range []*fakeconn.Exec{s.euP, s.euR, s.usP} {
 					e.Rows = [][]any{itemRow(1, 1, "A", 1)}
 				}
@@ -289,13 +294,13 @@ func TestNoShard(t *testing.T) {
 						}
 					}
 				}
-				_, err := s.db.Query[testmodel.Item]().Limit(1).All(c.ctx)
+				_, err := db.Query[testmodel.Item]().Limit(1).All(c.ctx)
 				checkErr("All", err)
-				_, err = s.db.Query[testmodel.Item]().Where(It.ID.EQ(1)).One(c.ctx)
+				_, err = db.Query[testmodel.Item]().Where(It.ID.EQ(1)).One(c.ctx)
 				checkErr("One", err)
-				_, err = s.db.Update[testmodel.Item]().Set(It.Qty.Set(2)).Where(It.ID.EQ(1)).Exec(c.ctx)
+				_, err = db.Update[testmodel.Item]().Set(It.Qty.Set(2)).Where(It.ID.EQ(1)).Exec(c.ctx)
 				checkErr("Update", err)
-				err = s.db.Insert(&testmodel.Item{ID: 1, InvoiceID: 1, SKU: "A"}).Exec(c.ctx)
+				err = db.Insert(&testmodel.Item{ID: 1, InvoiceID: 1, SKU: "A"}).Exec(c.ctx)
 				checkErr("Insert", err)
 				s.check(t, hooked, [3]int{0, 0, 0})
 			})
@@ -312,10 +317,13 @@ func TestTxPinsItsShard(t *testing.T) {
 		tctx := testmodel.Org.With(bg, int64(1))
 		var mismatch, lookup error
 		err := s.db.Tx(tctx, func(ctx context.Context, tx *velox.DB) error {
-			for _, sctx := range []context.Context{tctx, bg, velox.WithoutPolicy(bg, "report"), velox.WithShard(bg, "eu")} {
+			for _, sctx := range []context.Context{tctx, bg, velox.WithShard(bg, "eu")} {
 				if _, err := tx.Query[testmodel.Item]().Limit(1).All(sctx); err != nil {
 					return err
 				}
+			}
+			if _, err := tx.WithoutPolicy("report").Query[testmodel.Item]().Limit(1).All(bg); err != nil {
+				return err
 			}
 			if _, err := tx.Update[testmodel.Item]().Set(It.Qty.Set(2)).Where(It.ID.EQ(1)).Exec(bg); err != nil {
 				return err
@@ -365,12 +373,13 @@ func TestTxWithNoShard(t *testing.T) {
 		ctx  context.Context
 		want string
 		is   error
+		free bool // on the DB's WithoutPolicy
 	}{
-		"no org":                          {bg, "", nil},
-		"unknown shard":                   {testmodel.Org.With(bg, int64(3)), `"mars"`, nil},
-		"an unknown WithShard":            {velox.WithShard(bg, "nope"), `"nope"`, nil},
-		"WithoutPolicy without WithShard": {velox.WithoutPolicy(bg, "report"), "", nil},
-		"a failed lookup":                 {testmodel.Org.With(bg, int64(4)), "", errShardLookup},
+		"no org":                          {bg, "", nil, false},
+		"unknown shard":                   {testmodel.Org.With(bg, int64(3)), `"mars"`, nil, false},
+		"an unknown WithShard":            {velox.WithShard(bg, "nope"), `"nope"`, nil, false},
+		"WithoutPolicy without WithShard": {bg, "", nil, true},
+		"a failed lookup":                 {testmodel.Org.With(bg, int64(4)), "", errShardLookup, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			hooks := 0
@@ -378,8 +387,12 @@ func TestTxWithNoShard(t *testing.T) {
 				hooks++
 				return next(ctx)
 			}))
+			db := s.db
+			if c.free {
+				db = db.WithoutPolicy("report")
+			}
 			ran := false
-			err := s.db.Tx(c.ctx, func(context.Context, *velox.DB) error { ran = true; return nil })
+			err := db.Tx(c.ctx, func(context.Context, *velox.DB) error { ran = true; return nil })
 			if hooks != 0 {
 				t.Errorf("%d TxAround hooks ran; a refused Tx runs none", hooks)
 			}

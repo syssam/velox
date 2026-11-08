@@ -30,7 +30,7 @@ velox.WithShard(ctx, "us")                             // name a shard without a
 - A statement whose shard cannot be found fails with `ErrNoShard` and is not
   sent. `WithShardFor` returns "" for a context that names none. On a scoped
   entity such as `Note`, a context with no organization would fail with
-  `scope.ErrNoScope`; `velox.WithoutPolicy` lifts that check and shows
+  `scope.ErrNoScope`; `db.WithoutPolicy` lifts that check and shows
   `ErrNoShard`. `WithShard` names the shard for work that has no organization.
 - A write pins its session's reads to the primary for the pin window, so the
   request reads what it wrote. `velox.PinnedUntil(ctx)` gives the time to keep

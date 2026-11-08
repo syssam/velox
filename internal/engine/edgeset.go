@@ -649,7 +649,7 @@ func (w *edgeWrite) replaceChild(ctx context.Context, db *DB, k, v any) error {
 	const reason = "velox: a hidden child of a one-to-one edge setter"
 	held, other := t.Pred(fk, PredEQ, v), t.Pred(w.key, PredNEQ, k)
 	if info := t.Info(); info != nil && info.Columns[fk].RequiredEdge != "" {
-		holds, err := QueryTable(db, t).Where(held, other).Exists(WithoutPolicy(ctx, reason))
+		holds, err := QueryTable(db.WithoutPolicy(reason), t).Where(held, other).Exists(ctx)
 		if err != nil {
 			return err
 		}
@@ -660,7 +660,7 @@ func (w *edgeWrite) replaceChild(ctx context.Context, db *DB, k, v any) error {
 	if _, err := UpdateTable(db, t).SetNull(fk).Where(held, other).Exec(ctx); err != nil {
 		return err
 	}
-	still, err := QueryTable(db, t).Where(held, other).Exists(WithoutPolicy(ctx, reason))
+	still, err := QueryTable(db.WithoutPolicy(reason), t).Where(held, other).Exists(ctx)
 	if err != nil {
 		return err
 	}

@@ -541,7 +541,7 @@ func update[E any, PE velox.Entity[E]](ctx context.Context, id, typ string, key 
 	if err != nil {
 		return nil, err
 	}
-	read := ctx
+	read := db
 	if len(set) > 0 {
 		n, err := db.Update[E, PE]().Where(key.EQ(k)).Set(set...).Exec(ctx)
 		if err != nil {
@@ -550,9 +550,9 @@ func update[E any, PE velox.Entity[E]](ctx context.Context, id, typ string, key 
 		if n == 0 {
 			return nil, notFound(ctx, typ)
 		}
-		read = velox.WithoutPolicy(ctx, "graphql: the row this update wrote")
+		read = db.WithoutPolicy("graphql: the row this update wrote")
 	}
-	x, err := db.Query[E, PE]().Where(key.EQ(k)).One(read)
+	x, err := read.Query[E, PE]().Where(key.EQ(k)).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, notFound(ctx, typ)
 	}

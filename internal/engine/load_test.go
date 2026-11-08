@@ -123,7 +123,7 @@ func (s *ovSent) around(ctx context.Context, st *velox.Statement, next func(cont
 func ovRun(results [][][]any) (*velox.DB, *fakeconn.Exec, *ovSent) {
 	e := &fakeconn.Exec{Results: results}
 	s := &ovSent{}
-	return openFake(velox.Postgres, e, velox.WithAround(s.around)), e, s
+	return openPolicied(velox.Postgres, e, velox.WithAround(s.around)), e, s
 }
 
 // ovOwnerRows are owners 1–n.

@@ -68,7 +68,7 @@ func itemRow(id, invoice int64, sku string, qty int64) []any {
 }
 
 var (
-	ctx = velox.WithoutPolicy(context.Background(), "velox tests")
+	ctx = context.Background()
 	t0  = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	I   = testmodel.Invoices
 	It  = testmodel.Items
@@ -247,8 +247,15 @@ func touch(ctx context.Context, tx *velox.DB) error {
 	return err
 }
 
-// openFake returns a DB of dialect d that runs statements on e.
+// openFake returns a DB of dialect d that runs statements on e, without the
+// entities' policies.
 func openFake(d velox.Dialect, e *fakeconn.Exec, opts ...velox.Option) *velox.DB {
+	return openPolicied(d, e, opts...).WithoutPolicy("velox tests")
+}
+
+// openPolicied returns a DB of dialect d that runs statements on e, under
+// the entities' policies.
+func openPolicied(d velox.Dialect, e *fakeconn.Exec, opts ...velox.Option) *velox.DB {
 	return velox.OpenConn(d, fakeConn(e), opts...)
 }
 

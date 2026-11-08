@@ -139,16 +139,14 @@ type Route struct {
 }
 
 // RowScope is what a context scopes statements by: the values its policies
-// read (velox.WithScopeValue, which the scope package calls), the reason of
-// velox.WithoutPolicy, and velox.WithShard's shard, which holds other rows than
-// another shard. A batcher that reads for several callers in one statement
+// read (velox.WithScopeValue, which the scope package calls) and
+// velox.WithShard's shard, which holds other rows than another shard. A batcher that reads for several callers in one statement
 // compares their scopes, so that callers of different scopes never share a read.
 // Every field is a string or a bool, so RowScopes compare with ==.
 type RowScope struct {
 	// Values are the scope values the context carries, as "name=type:value"
 	// joined with ";" in the order of the names; "" when none.
-	Values       string
-	PolicyBypass string // velox.WithoutPolicy's reason; "" when none
+	Values string
 	// Shard is velox.WithShard's name, and HasShard whether velox.WithShard
 	// was called: a shard named "" is told from none.
 	Shard    string

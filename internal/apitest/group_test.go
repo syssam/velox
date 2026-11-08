@@ -143,7 +143,7 @@ func TestGroupsAreRowCapped(t *testing.T) {
 // A grouped aggregate takes the scope and the Read policy as Count does.
 func TestGroupedIsScoped(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{"ann", int64(3)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	q := db.Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Unbounded()
 	got, err := velox.SumBy(asUser("ann"), q, Tk.Owner.Key(), Tk.InvoiceID)
 	if err != nil || !reflect.DeepEqual(got, []velox.Group[string, int64]{{Key: "ann", Value: 3}}) {

@@ -30,12 +30,12 @@ func (unreachable) Driver() driver.Driver { return nil }
 // Entity, an *EntityInfo only velox builds, and a dry run makes the
 // statement without a database to send it to.
 func TestRecordSkipsDisabledInstruments(t *testing.T) {
-	ctx := velox.WithoutPolicy(context.Background(), "record tests")
+	ctx := context.Background()
 	var st *velox.Statement
 	db := velox.Open(velox.Postgres, sql.OpenDB(unreachable{}), velox.WithRewrite(func(_ context.Context, s *velox.Statement) error {
 		st = s
 		return nil
-	}))
+	})).WithoutPolicy("otel tests")
 	if _, _, err := db.Query[testmodel.Invoice]().Limit(1).SQL(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -63,12 +63,12 @@ func TestRecordSkipsDisabledInstruments(t *testing.T) {
 // record of a write and txRecord still build no attribute set: each checks
 // the instruments it would record to.
 func TestRecordSkipsInstrumentsAMeterDisables(t *testing.T) {
-	ctx := velox.WithoutPolicy(context.Background(), "record tests")
+	ctx := context.Background()
 	var st *velox.Statement
 	db := velox.Open(velox.Postgres, sql.OpenDB(unreachable{}), velox.WithRewrite(func(_ context.Context, s *velox.Statement) error {
 		st = s
 		return nil
-	}))
+	})).WithoutPolicy("otel tests")
 	if _, _, err := db.Delete[testmodel.Invoice]().Where(testmodel.Invoices.ID.EQ(1)).SQL(ctx); err != nil {
 		t.Fatal(err)
 	}

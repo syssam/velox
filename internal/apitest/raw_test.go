@@ -219,7 +219,7 @@ func TestRawShowsReason(t *testing.T) {
 	rec := &rawRecorder{}
 	rewrites := 0
 	var before []velox.Op // the Op each statement had before next ran
-	db := openFake(velox.Postgres, e, velox.WithAround(rec.around),
+	db := openPolicied(velox.Postgres, e, velox.WithAround(rec.around),
 		velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 			before = append(before, st.Op)
 			return next(ctx)
@@ -398,11 +398,11 @@ func TestRawOnShards(t *testing.T) {
 		if e := s.euP.Log[0]; e != "DELETE FROM invoices WHERE paid" {
 			t.Errorf("eu's primary ran %q, want it unscoped", e)
 		}
-		for _, c := range []context.Context{bg, velox.WithoutPolicy(bg, "every org")} {
-			if _, err := raw.All(c); !errors.Is(err, velox.ErrNoShard) {
+		for _, db := range []*velox.DB{s.db, s.db.WithoutPolicy("every org")} {
+			if _, err := db.Raw[testmodel.Invoice]("r", "SELECT id FROM invoices").All(bg); !errors.Is(err, velox.ErrNoShard) {
 				t.Errorf("Raw with no shard: %v", err)
 			}
-			if _, err := s.db.Exec(c, "r", "DELETE FROM invoices"); !errors.Is(err, velox.ErrNoShard) {
+			if _, err := db.Exec(bg, "r", "DELETE FROM invoices"); !errors.Is(err, velox.ErrNoShard) {
 				t.Errorf("Exec with no shard: %v", err)
 			}
 		}

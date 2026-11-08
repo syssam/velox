@@ -35,17 +35,18 @@ func TestScopeValuesAreTheContexts(t *testing.T) {
 }
 
 func TestSkipPolicyNeedsAReason(t *testing.T) {
-	ctx := context.Background()
+	db := velox.OpenConn(velox.Postgres, fakeConn(&fakeconn.Exec{}))
 	for _, reason := range []string{"", " \t\n"} {
-		if velox.WithoutPolicy(ctx, reason) != ctx {
-			t.Errorf("WithoutPolicy with the reason %q changed the context", reason)
+		if db.WithoutPolicy(reason) != db {
+			t.Errorf("WithoutPolicy with the reason %q made another DB", reason)
 		}
 	}
-	if got := engine.PolicyBypassReason(velox.WithoutPolicy(ctx, "support tool")); got != "support tool" {
+	free := db.WithoutPolicy("support tool")
+	if got := free.PolicyBypass(); got != "support tool" {
 		t.Errorf("PolicyBypass = %q", got)
 	}
-	if got := engine.PolicyBypassReason(ctx); got != "" {
-		t.Errorf("PolicyBypass of a plain context = %q", got)
+	if got := db.PolicyBypass(); got != "" {
+		t.Errorf("PolicyBypass of the DB it came from = %q", got)
 	}
 }
 
@@ -99,14 +100,14 @@ func TestWithoutTx(t *testing.T) {
 		t.Error("WithoutTx changed a context without the mark")
 	}
 	db := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}})
-	tagged := velox.WithTags(ctx, "route", "POST /pay")
+	tagged := velox.WithScopeValue(velox.WithTags(ctx, "route", "POST /pay"), "org", int64(1))
 	err := db.Tx(tagged, func(ctx context.Context, tx *velox.DB) error {
 		free := velox.WithoutTx(ctx)
 		if got, want := engine.TagsFrom(free), engine.TagsFrom(ctx); !reflect.DeepEqual(got, want) || len(got) == 0 {
 			t.Errorf("tags %v, want %v", got, want)
 		}
-		if got, want := velox.RowScopeFromContext(free), velox.RowScopeFromContext(ctx); got != want || got.PolicyBypass == "" {
-			t.Errorf("row scope %+v, want %+v: the WithoutPolicy of the caller's ctx is lost", got, want)
+		if got, want := velox.RowScopeFromContext(free), velox.RowScopeFromContext(ctx); got != want || got.Values == "" {
+			t.Errorf("row scope %+v, want %+v: the scope values of the caller's ctx are lost", got, want)
 		}
 		if a, _ := free.Deadline(); !a.Equal(func() time.Time { d, _ := ctx.Deadline(); return d }()) {
 			t.Errorf("deadline %v", a)

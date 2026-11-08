@@ -242,11 +242,13 @@ func (db *DB) Dialect() Dialect
 func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error)
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E]
 func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E]
+func (db *DB) PolicyBypass() string
 func (db *DB) Query[E any, PE Entity[E]]() Query[E]
 func (db *DB) Raw[E any, PE Entity[E]](reason, query string, args ...any) RawQuery[E]
 func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) SaveQuery[E]
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
+func (db *DB) WithoutPolicy(reason string) *DB
 func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
 func (m *Mutation) Affected() int64
@@ -415,7 +417,6 @@ func WithShard(ctx context.Context, name string) context.Context
 func WithShardFor(f func(ctx context.Context) (string, error)) Option
 func WithTags(ctx context.Context, kv ...string) context.Context
 func WithTxAround(h TxAround) Option
-func WithoutPolicy(ctx context.Context, reason string) context.Context
 func WithoutTx(ctx context.Context) context.Context
 type Aggregate = veloxtype.Aggregate
 type Around func(ctx context.Context, st *Statement, next func(context.Context) error) error
@@ -575,7 +576,7 @@ type OrderTerm struct { Column int Desc bool Rel int32 }
 type PolicyError struct { Entity string Op Op Err error }
 type Result struct { Rows int64 Affected int64 LoopBody time.Duration }
 type Route struct { Shard string Replica int Fallback bool }
-type RowScope struct { Values string PolicyBypass string Shard string HasShard bool }
+type RowScope struct { Values string Shard string HasShard bool }
 type SchemaError struct { Entity string Field string Reason string }
 type Tag struct { Key, Value string }
 type TxAround func(ctx context.Context, tx *TxInfo, next func(context.Context) error) error

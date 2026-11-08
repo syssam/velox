@@ -172,8 +172,9 @@ func ExampleDB_Tx() {
 }
 
 // A scope confines an entity's rows to a value the context carries (see the
-// scope package); WithoutPolicy lifts it, with a reason the hooks see.
-func ExampleWithoutPolicy() {
+// scope package); the DB's WithoutPolicy lifts it, with a reason the hooks
+// see. The bypass is the DB's: the same context on db is still scoped.
+func ExampleDB_WithoutPolicy() {
 	db := exampleDB()
 	org1 := testmodel.Org.With(context.Background(), 1)
 	org2 := testmodel.Org.With(context.Background(), 2)
@@ -189,7 +190,7 @@ func ExampleWithoutPolicy() {
 	}
 	n1, _ := db.Query[testmodel.Invoice]().Count(org1)
 	n2, _ := db.Query[testmodel.Invoice]().Count(org2)
-	all, _ := db.Query[testmodel.Invoice]().Count(velox.WithoutPolicy(context.Background(), "the example's report"))
+	all, _ := db.WithoutPolicy("the example's report").Query[testmodel.Invoice]().Count(context.Background())
 	fmt.Println(n1, n2, all)
 	_, err := db.Query[testmodel.Invoice]().Count(context.Background())
 	fmt.Println(errors.Is(err, scope.ErrNoScope))
@@ -213,8 +214,8 @@ func ExampleSumBy() {
 			return
 		}
 	}
-	all := velox.WithoutPolicy(context.Background(), "the example's report")
-	groups, err := velox.SumBy(all, db.Query[testmodel.Invoice]().Unbounded(), testmodel.Invoices.OrgID.Key(), testmodel.Invoices.Total)
+	all := db.WithoutPolicy("the example's report")
+	groups, err := velox.SumBy(context.Background(), all.Query[testmodel.Invoice]().Unbounded(), testmodel.Invoices.OrgID.Key(), testmodel.Invoices.Total)
 	if err != nil {
 		fmt.Println(err)
 		return

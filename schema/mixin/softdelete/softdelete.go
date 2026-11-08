@@ -14,7 +14,7 @@
 // entity: a query, Count, an aggregate, a With load, a Has, a join, an
 // update, a delete, a Save and an upsert's update branch. So an update does
 // not change a deleted row, and deleting a deleted row affects 0 rows. Raw
-// SQL is not filtered. velox.WithoutPolicy does not lift it: an operator who
+// SQL is not filtered. velox.DB.WithoutPolicy does not lift it: an operator who
 // lifts the policies still does not see deleted rows unless they say so.
 //
 // # Delete

@@ -44,7 +44,7 @@ func wantSent(t *testing.T, e *fakeconn.Exec, sql string, args ...any) {
 func TestScopeIsAdded(t *testing.T) {
 	bg := context.Background()
 	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(testmodel.Org.With(bg, int64(7))); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestScopeIsAdded(t *testing.T) {
 func TestScopeOnEveryOperation(t *testing.T) {
 	t7 := testmodel.Org.With(context.Background(), int64(7))
 	e := &fakeconn.Exec{Rows: [][]any{{int64(3)}}, Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 
 	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Count(t7); err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestScopeOnEveryOperation(t *testing.T) {
 func TestScopeOnBothPaths(t *testing.T) {
 	var where int
 	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
-	db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+	db := openPolicied(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		where = len(st.Where)
 		return nil
 	}))
@@ -121,7 +121,7 @@ func TestNoScopeValueFailsEveryOperation(t *testing.T) {
 	})
 	for _, opts := range [][]velox.Option{nil, {around}} {
 		e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}, Affected: 1}
-		db := openFake(velox.Postgres, e, opts...)
+		db := openPolicied(velox.Postgres, e, opts...)
 		inv := testmodel.Invoice{ID: 1, OrgID: 7}
 		var iterErr error
 		for _, err := range db.Query[testmodel.Invoice]().Limit(5).Iter(bg) {
@@ -149,14 +149,13 @@ func TestWithoutPolicyAddsNothing(t *testing.T) {
 	var seen []velox.Statement
 	var mu sync.Mutex
 	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
-	db := openFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	db := openPolicied(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		mu.Lock()
 		seen = append(seen, *st)
 		mu.Unlock()
 		return next(ctx)
 	}))
-	all := velox.WithoutPolicy(context.Background(), "reason")
-	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(all); err != nil {
+	if _, err := db.WithoutPolicy("reason").Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" = $1 LIMIT $2`, true, 5)
@@ -183,13 +182,17 @@ func TestWithoutPolicyAddsNothing(t *testing.T) {
 // without it.
 func TestScopeColumnAssignments(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	t7 := scoped(7)
-	upd := func(s velox.Setter[testmodel.Invoice]) velox.UpdateQuery[testmodel.Invoice] {
-		return db.Update[testmodel.Invoice]().Set(s).Where(I.ID.EQ(1))
-	}
-	lifted := velox.WithoutPolicy(context.Background(), "move an invoice")
-	for _, ctx := range []context.Context{t7, lifted} {
+	lifted := db.WithoutPolicy("move an invoice")
+	for _, c := range []struct {
+		db  *velox.DB
+		ctx context.Context
+	}{{db, t7}, {lifted, context.Background()}} {
+		db, ctx := c.db, c.ctx
+		upd := func(s velox.Setter[testmodel.Invoice]) velox.UpdateQuery[testmodel.Invoice] {
+			return db.Update[testmodel.Invoice]().Set(s).Where(I.ID.EQ(1))
+		}
 		for name, s := range map[string]velox.Setter[testmodel.Invoice]{"Set(7)": I.OrgID.Set(7), "Set(8)": I.OrgID.Set(8), "Add(1)": I.OrgID.Add(1), "Sub(1)": I.OrgID.Sub(1)} {
 			if _, err := upd(s).Exec(ctx); !errors.Is(err, velox.ErrImmutable) {
 				t.Errorf("%s: %v", name, err)
@@ -207,7 +210,7 @@ func TestScopeColumnAssignments(t *testing.T) {
 
 func TestHasOnAScopedTarget(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Invoice.Has()).Limit(1).All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +223,7 @@ func TestHasOnAScopedTarget(t *testing.T) {
 func TestHasOnAScopedTargetFromAnUnscopedEntity(t *testing.T) {
 	var seen velox.Statement
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	db := openPolicied(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		seen = *st
 		return next(ctx)
 	}))
@@ -233,7 +236,7 @@ func TestHasOnAScopedTargetFromAnUnscopedEntity(t *testing.T) {
 
 	_, err := q.All(context.Background())
 	wantNoScope(t, err, "velox: testmodel.Item: in the EXISTS on testmodel.Invoice: ")
-	if _, err := q.All(velox.WithoutPolicy(context.Background(), "reason")); err != nil {
+	if _, err := db.WithoutPolicy("reason").Query[testmodel.Item]().Where(It.Qty.GT(0), velox.Not(It.Invoice.HasWith(I.Paid.EQ(true)))).Limit(1).All(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(e.SQL, "org_id") || seen.PolicyBypass != "reason" {
@@ -251,7 +254,7 @@ func TestHasOnAScopedTargetFromAnUnscopedEntity(t *testing.T) {
 // each target.
 func TestNestedHasIsScopedAtEveryLevel(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	q := db.Query[testmodel.Ticket]().Where(Tk.Parent.HasWith(Tk.Invoice.Has())).Limit(1)
 	if _, err := q.All(scoped(7)); err != nil {
 		t.Fatal(err)
@@ -268,7 +271,7 @@ func TestScopeNeverChangesASharedQuery(t *testing.T) {
 	cond := velox.Or(Tk.Done.EQ(true), velox.And(Tk.Title.NEQ(""), has))
 
 	e0 := &fakeconn.Exec{}
-	db0 := openFake(velox.Postgres, e0)
+	db0 := openPolicied(velox.Postgres, e0)
 	base := db0.Query[testmodel.Ticket]().Where(cond, has).Limit(1)
 	sql0, args0 := sqlOK(t)(base.SQL(scoped(1)))
 	run0 := func() (string, []any) {
@@ -287,7 +290,7 @@ func TestScopeNeverChangesASharedQuery(t *testing.T) {
 	// org three times and no other goroutine's.
 	var hookBad atomic.Pointer[string]
 	eH := &fakeconn.Exec{}
-	dbH := openFake(velox.Postgres, eH, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	dbH := openPolicied(velox.Postgres, eH, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		org, _ := testmodel.Org.From(ctx)
 		n := 0
 		for _, a := range st.Args {
@@ -309,7 +312,7 @@ func TestScopeNeverChangesASharedQuery(t *testing.T) {
 		id := int64(i + 100)
 		wg.Go(func() {
 			e := &fakeconn.Exec{}
-			db := openFake(velox.Postgres, e)
+			db := openPolicied(velox.Postgres, e)
 			if _, err := db.Query[testmodel.Ticket]().Where(cond, has).Limit(1).All(scoped(id)); err != nil {
 				t.Error(err)
 				return
@@ -360,7 +363,7 @@ func TestWithLoadIsScoped(t *testing.T) {
 		{ticketRow(2, 7, int64(1))},
 		{ticketRow(1, 7, nil)},
 	}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	got, err := db.Query[testmodel.Ticket]().With(Tk.Parent).Limit(5).All(scoped(7))
 	if err != nil {
 		t.Fatal(err)
@@ -377,7 +380,7 @@ func TestWithLoadIsScoped(t *testing.T) {
 
 	// An unscoped read loading a scoped relation needs a org for the load.
 	e = &fakeconn.Exec{Results: [][][]any{{{int64(1), int64(1), "SKU", int64(2)}}, {invoiceRow(1)}}}
-	db = openFake(velox.Postgres, e)
+	db = openPolicied(velox.Postgres, e)
 	_, err = db.Query[testmodel.Item]().With(It.Invoice).Limit(5).All(context.Background())
 	wantNoScope(t, err, "velox: testmodel.Item: loading invoice: testmodel.Invoice: ")
 	if len(e.Log) != 1 {
@@ -391,7 +394,7 @@ func TestWithLoadIsScoped(t *testing.T) {
 func TestScopeNeverAppendsIntoAHooksArray(t *testing.T) {
 	shared := make([]velox.Predicate, 0, 4)
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+	db := openPolicied(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		st.Where = shared[:0]
 		return nil
 	}))
@@ -421,7 +424,7 @@ func TestScopeWithSharedDefaults(t *testing.T) {
 		wg.Go(func() {
 			var wrong int
 			var last []any
-			db := openFake(velox.Postgres, &fakeconn.Exec{}, setDefaults,
+			db := openPolicied(velox.Postgres, &fakeconn.Exec{}, setDefaults,
 				velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 					if len(st.Args) != 3 || st.Args[1] != id {
 						wrong, last = wrong+1, st.Args
@@ -451,7 +454,7 @@ func TestScopeWithSharedDefaults(t *testing.T) {
 // statement fails closed, inserts included.
 func TestZeroScopeValueIsRefused(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(5)}}, Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	zero := scoped(0)
 	_, err := db.Query[testmodel.Invoice]().Limit(5).All(zero)
 	wantNoScope(t, err, "velox: testmodel.Invoice: select denied by policy: ")

@@ -34,7 +34,7 @@ func wantPolicyError(t *testing.T, err error, op velox.Op) {
 
 func TestInsertFillsTheScope(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(5)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	tk := testmodel.Ticket{Owner: "ann", Title: "t"}
 	if err := db.Insert(&tk).Exec(as("ann", 7)); err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func TestInsertFillsTheScope(t *testing.T) {
 
 func TestInsertScopeMismatch(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(5)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	tk := testmodel.Ticket{OrgID: 8, Owner: "ann", Title: "t"}
 	err := db.Insert(&tk).Exec(as("ann", 7))
 	if !errors.Is(err, scope.ErrMismatch) || !strings.HasPrefix(err.Error(), "velox: testmodel.Ticket: insert denied by policy: ") {
@@ -69,8 +69,8 @@ func TestInsertScopeMismatch(t *testing.T) {
 // value and without WithoutPolicy an insert is refused.
 func TestInsertWithoutPolicy(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(5)}}}
-	db := openFake(velox.Postgres, e)
-	all := testmodel.WithUser(velox.WithoutPolicy(context.Background(), "import"), "ann")
+	db := openPolicied(velox.Postgres, e)
+	all := testmodel.WithUser(context.Background(), "ann")
 	tk := testmodel.Ticket{Owner: "ann", Title: "t"}
 	if err := db.Insert(&tk).Exec(testmodel.WithUser(context.Background(), "ann")); !errors.Is(err, scope.ErrNoScope) {
 		t.Errorf("no scope value at all: %v", err)
@@ -79,7 +79,7 @@ func TestInsertWithoutPolicy(t *testing.T) {
 		t.Errorf("%d statements sent", e.Calls)
 	}
 	tk.OrgID = 3
-	if err := db.Insert(&tk).Exec(all); err != nil {
+	if err := db.WithoutPolicy("import").Insert(&tk).Exec(all); err != nil {
 		t.Fatal(err)
 	}
 	if tk.ID != 5 || e.Args[1] != int64(3) {
@@ -89,7 +89,7 @@ func TestInsertWithoutPolicy(t *testing.T) {
 
 func TestInsertHookRefusesAnEmptyTitle(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(5)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	tk := testmodel.Ticket{Owner: "ann"}
 	err := db.Insert(&tk).Exec(as("ann", 7))
 	if err == nil || err.Error() != "velox: testmodel.Ticket: hook: a ticket needs a title" {
@@ -102,7 +102,7 @@ func TestInsertHookRefusesAnEmptyTitle(t *testing.T) {
 
 func TestInsertPolicy(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(5)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	tk := testmodel.Ticket{Owner: "ann", Title: "t"}
 	err := db.Insert(&tk).Exec(as("bob", 7))
 	wantPolicyError(t, err, velox.OpInsert)
@@ -114,18 +114,18 @@ func TestInsertPolicy(t *testing.T) {
 	}
 	// WithoutPolicy lets it through, and the hooks see the reason.
 	var bypass string
-	db = openFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	db = openPolicied(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		bypass = st.PolicyBypass
 		return next(ctx)
 	}))
-	if err := db.Insert(&tk).Exec(velox.WithoutPolicy(as("bob", 7), "migration")); err != nil || bypass != "migration" {
+	if err := db.WithoutPolicy("migration").Insert(&tk).Exec(as("bob", 7)); err != nil || bypass != "migration" {
 		t.Errorf("WithoutPolicy: %v, PolicyBypass %q", err, bypass)
 	}
 }
 
 func TestInsertAllPreparesEveryRow(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 3}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	tks := []testmodel.Ticket{{Owner: "ann", Title: "a"}, {Owner: "ann", Title: "b"}, {Owner: "ann", Title: "c"}}
 	if err := db.InsertAll(tks).Exec(as("ann", 7)); err != nil {
 		t.Fatal(err)
@@ -159,7 +159,7 @@ func TestUpsertGetsThePolicy(t *testing.T) {
 		// Twice: the second statement's text comes from the render cache.
 		for range 2 {
 			e := &fakeconn.Exec{Rows: [][]any{{int64(5)}}}
-			db := openFake(c.d, e)
+			db := openPolicied(c.d, e)
 			tk := testmodel.Ticket{Owner: "ann", Title: "t"}
 			if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)); err != nil {
 				t.Fatal(err)
@@ -172,7 +172,7 @@ func TestUpsertGetsThePolicy(t *testing.T) {
 
 func TestUpsertPolicyAndCache(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	q := db.Insert(&testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done)
 	// The admin is confined to the org alone: no owner condition, and the shape
 	// differs.
@@ -196,7 +196,7 @@ func TestUpsertPolicyAndCache(t *testing.T) {
 	err := q.Exec(testmodel.Org.With(context.Background(), int64(7)))
 	wantPolicyError(t, err, velox.OpInsert) // the Insert policy runs first
 	// WithoutPolicy: no condition.
-	if err := q.Exec(velox.WithoutPolicy(as("ann", 7), "sync")); err != nil || strings.Contains(e.SQL, "WHERE") {
+	if err := db.WithoutPolicy("sync").Insert(&testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)); err != nil || strings.Contains(e.SQL, "WHERE") {
 		t.Errorf("WithoutPolicy: %v %s", err, e.SQL)
 	}
 }
@@ -205,7 +205,7 @@ func TestUpsertPolicyAndCache(t *testing.T) {
 // an update's.
 func TestUpsertDeniedRead(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(5)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	// Ticket's Insert policy denies whoever its Read denies, so the fixture
 	// pnote, which has no Insert policy, shows Read's denial.
 	n := fixture.Pnote{Owner: "ann"}
@@ -218,7 +218,7 @@ func TestUpsertDeniedRead(t *testing.T) {
 
 func TestUpsertOnMySQL(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.MySQL, e)
+	db := openPolicied(velox.MySQL, e)
 	tk := testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}
 	q := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done)
 	err := q.Exec(as("ann", 7))
@@ -229,7 +229,7 @@ func TestUpsertOnMySQL(t *testing.T) {
 		t.Errorf("%d statements sent", e.Calls)
 	}
 	tk.OrgID = 7
-	if err := q.Exec(velox.WithoutPolicy(as("ann", 7), "sync")); err != nil {
+	if err := db.WithoutPolicy("sync").Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)); err != nil {
 		t.Errorf("WithoutPolicy: %v", err)
 	}
 	if e.Calls != 1 || strings.Contains(e.SQL, "WHERE") {
@@ -240,7 +240,7 @@ func TestUpsertOnMySQL(t *testing.T) {
 func TestUpsertDoNothingIsAllowed(t *testing.T) {
 	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite, velox.MySQL} {
 		e := &fakeconn.Exec{}
-		db := openFake(d, e)
+		db := openPolicied(d, e)
 		tk := testmodel.Ticket{Owner: "ann", Title: "t"}
 		if err := db.Insert(&tk).OnConflict(Tk.ID).DoNothing().Exec(as("ann", 7)); err != nil {
 			t.Errorf("%s: %v", d, err)
@@ -254,7 +254,7 @@ func TestUpsertDoNothingIsAllowed(t *testing.T) {
 func TestUpsertOfAHiddenRow(t *testing.T) {
 	// One row, no generated key: the affected count tells.
 	e := &fakeconn.Exec{Affected: 0}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	tk := testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}
 	err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7))
 	wantPolicyError(t, err, velox.OpUpdate)
@@ -275,7 +275,7 @@ func TestUpsertOfAHiddenRow(t *testing.T) {
 	wantPolicyError(t, db.InsertAll(two).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)), velox.OpUpdate)
 	// WithoutPolicy adds no condition: fewer rows is not an error.
 	e.Affected = 0
-	if err := db.InsertAll(two).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(velox.WithoutPolicy(as("admin", 7), "sync")); err != nil {
+	if err := db.WithoutPolicy("sync").InsertAll(two).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("admin", 7)); err != nil {
 		t.Errorf("WithoutPolicy: %v", err)
 	}
 	// Nor is a DoNothing that kept the existing rows.
@@ -292,7 +292,7 @@ func TestUpsertNeverChangesTheQuery(t *testing.T) {
 	})
 	for _, opts := range [][]velox.Option{nil, {around}} {
 		e := &fakeconn.Exec{Affected: 1}
-		db := openFake(velox.Postgres, e, opts...)
+		db := openPolicied(velox.Postgres, e, opts...)
 		q := db.Insert(&testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done)
 		for range 2 {
 			if err := q.Exec(as("ann", 7)); err != nil {
@@ -319,15 +319,15 @@ func TestUpsertConditionFromAHook(t *testing.T) {
 			return nil
 		})
 	}
-	ctx := velox.WithoutPolicy(as("ann", 7), "hooks")
+	ctx := as("ann", 7)
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.MySQL, e, cond(velox.ColumnEQ(3, "ann")))
+	db := openPolicied(velox.MySQL, e, cond(velox.ColumnEQ(3, "ann"))).WithoutPolicy("hooks")
 	tk := testmodel.Ticket{ID: 1, OrgID: 7, Owner: "ann", Title: "t"}
-	all := velox.WithoutPolicy(velox.WithoutPolicy(context.Background(), "sync"), "sync")
+	all := context.Background()
 	if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(all); err == nil || !strings.Contains(err.Error(), "takes none") {
 		t.Errorf("MySQL: %v", err)
 	}
-	db = openFake(velox.Postgres, e, cond(velox.ColumnEQ(99, "x")))
+	db = openPolicied(velox.Postgres, e, cond(velox.ColumnEQ(99, "x"))).WithoutPolicy("hooks")
 	if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(ctx); err == nil || !strings.Contains(err.Error(), "column 99") {
 		t.Errorf("a bad column: %v", err)
 	}
@@ -336,7 +336,7 @@ func TestUpsertConditionFromAHook(t *testing.T) {
 	}
 	// On PostgreSQL it is rendered, and a hidden row is no policy's denial.
 	e.Affected = 0
-	db = openFake(velox.Postgres, e, cond(velox.ColumnEQ(3, "ann")))
+	db = openPolicied(velox.Postgres, e, cond(velox.ColumnEQ(3, "ann"))).WithoutPolicy("hooks")
 	if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(ctx); err != nil || !strings.HasSuffix(e.SQL, `WHERE "tickets"."owner" = $9`) {
 		t.Errorf("%v %s", err, e.SQL)
 	}
@@ -346,7 +346,7 @@ func TestUpsertConditionFromAHook(t *testing.T) {
 // update branch's condition gets its target's org, as one in a Where does.
 func TestUpsertConditionFromAHookIsScoped(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+	db := openPolicied(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		if st.Conflict != nil {
 			st.Conflict.Where = append(st.Conflict.Where, velox.Predicate(Tk.Invoice.Has()))
 		}
@@ -365,13 +365,13 @@ func TestUpsertConditionFromAHookIsScoped(t *testing.T) {
 // error rather than silently dropped.
 func TestUpsertConditionThatWouldBeDropped(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
-	db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+	db := openPolicied(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		if st.Conflict != nil {
 			st.Conflict.Where = append(st.Conflict.Where, velox.Predicate(Tk.Owner.EQ("ann")))
 		}
 		return nil
-	}))
-	ctx := velox.WithoutPolicy(as("ann", 7), "hooks")
+	})).WithoutPolicy("hooks")
+	ctx := as("ann", 7)
 	tk := testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}
 	for name, q := range map[string]velox.InsertQuery[testmodel.Ticket]{
 		"DoNothing":    db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).DoNothing(),
@@ -393,7 +393,7 @@ func TestUpsertConditionThatWouldBeDropped(t *testing.T) {
 func TestUpsertAllOfAHiddenRowRollsBack(t *testing.T) {
 	var inTx []bool
 	e := &fakeconn.Exec{Affected: 2}
-	db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+	db := openPolicied(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		inTx = append(inTx, st.InTx)
 		return nil
 	}))
@@ -423,7 +423,7 @@ func TestUpsertAllOfAHiddenRowRollsBack(t *testing.T) {
 		}
 	}
 	e.Log = nil
-	if err := q.Exec(velox.WithoutPolicy(as("ann", 7), "sync")); err != nil || len(e.Log) != 1 || e.Log[0] == "BEGIN" {
+	if err := db.WithoutPolicy("sync").InsertAll(three).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)); err != nil || len(e.Log) != 1 || e.Log[0] == "BEGIN" {
 		t.Errorf("WithoutPolicy: %v, log %q", err, e.Log)
 	}
 	e.Log = nil
@@ -459,7 +459,7 @@ func TestUpsertPolicyFlagIsTheStatements(t *testing.T) {
 		}
 	}
 	e := &fakeconn.Exec{Affected: 0}
-	db := openFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	db := openPolicied(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		c := st.Conflict
 		st.Conflict = &velox.ConflictClause{Columns: slices.Clone(c.Columns), Update: slices.Clone(c.Update), Where: slices.Clone(c.Where)}
 		return next(ctx)
@@ -483,7 +483,7 @@ func TestHookCannotConditionAMultiRowUpsert(t *testing.T) {
 		{true, "velox: testmodel.Ticket: a Rewrite hook changed the statement's InTx"},
 	} {
 		e := &fakeconn.Exec{Affected: 2}
-		db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		db := openPolicied(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 			st.Conflict.DoNothing = false
 			st.Conflict.Update = []int{ticketColumn(t, st, "done")}
 			if c.inTx {
@@ -520,15 +520,15 @@ func TestAroundHookCannotUnguardAnUpsert(t *testing.T) {
 	noReturning := around(func(st *velox.Statement) { st.Returning = nil })
 	noRows := around(func(st *velox.Statement) { st.Rows = nil })
 	// Returning dropped: no row came back.
-	db := openFake(velox.Postgres, &fakeconn.Exec{}, noReturning)
+	db := openPolicied(velox.Postgres, &fakeconn.Exec{}, noReturning)
 	tk := testmodel.Ticket{Owner: "ann", Title: "t"}
 	wantPolicyError(t, db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)), velox.OpUpdate)
 	// Rows dropped: one row sent, none affected.
-	db = openFake(velox.Postgres, &fakeconn.Exec{Affected: 0}, noRows)
+	db = openPolicied(velox.Postgres, &fakeconn.Exec{Affected: 0}, noRows)
 	tk = testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}
 	wantPolicyError(t, db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)), velox.OpUpdate)
 	// And an InsertAll's: two rows sent, one affected.
-	db = openFake(velox.Postgres, &fakeconn.Exec{Affected: 1}, noRows)
+	db = openPolicied(velox.Postgres, &fakeconn.Exec{Affected: 1}, noRows)
 	two := []testmodel.Ticket{{ID: 1, Owner: "ann", Title: "a"}, {ID: 2, Owner: "ann", Title: "b"}}
 	wantPolicyError(t, db.InsertAll(two).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)), velox.OpUpdate)
 }
@@ -538,7 +538,7 @@ func TestAroundHookCannotUnguardAnUpsert(t *testing.T) {
 // the policy hides is found.
 func TestHookCannotDropUpsertReturning(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(5)}}}
-	db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+	db := openPolicied(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		st.Returning = nil
 		return nil
 	}))

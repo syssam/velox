@@ -143,7 +143,7 @@ func TestOfOnRealDatabases(t *testing.T) {
 			ctx  context.Context
 			want []int64
 		}{{ctx, []int64{2}}, {testmodel.Org.With(context.Background(), int64(1)), []int64{2}}, {testmodel.Org.With(context.Background(), int64(2)), nil}} {
-			got, err := tg.db.Query[testmodel.Invoice]().Where(It.Invoice.Of(&item3)).Limit(10).All(c.ctx)
+			got, err := tg.on(c.ctx).Query[testmodel.Invoice]().Where(It.Invoice.Of(&item3)).Limit(10).All(c.ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,7 +154,7 @@ func TestOfOnRealDatabases(t *testing.T) {
 		// ticket 5's parent, ticket 3, is bob's.
 		parents := func(qctx context.Context, x testmodel.Ticket) []int64 {
 			t.Helper()
-			got, err := tg.db.Query[testmodel.Ticket]().Where(Tk.Parent.Of(&x)).Limit(10).All(qctx)
+			got, err := tg.pdb.Query[testmodel.Ticket]().Where(Tk.Parent.Of(&x)).Limit(10).All(qctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -330,7 +330,7 @@ func TestLimitEachOnRealDatabases(t *testing.T) {
 		notes := func(qctx context.Context, rel velox.Rel[shelf, note], ps ...velox.Pred[shelf]) map[int64][]int64 {
 			t.Helper()
 			log.take()
-			ss, err := tg.db.Query[shelf]().Where(ps...).OrderBy(Shelves.ID.Asc()).With(rel).Limit(10).All(qctx)
+			ss, err := tg.on(qctx).Query[shelf]().Where(ps...).OrderBy(Shelves.ID.Asc()).With(rel).Limit(10).All(qctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -462,19 +462,19 @@ func TestLoadEachOnRealDatabases(t *testing.T) {
 			}
 			return noteIDs(got)
 		}
-		byPos := tg.db.Query[note]().OrderBy(Notes.Pos.Asc())
+		byPos := tg.pdb.Query[note]().OrderBy(Notes.Pos.Asc())
 		// Under org 1, note 1 is another org's and note 4 secret; shelf 3
 		// has no notes, and shelf 4 only a secret one.
 		wantIDLists(t, notes(acme, byPos, Shelves.Notes.LimitEach(2), 1, 2, 3, 4), [][]int64{{2, 3}, {6, 7}, {}, {}})
 		wantIDLists(t, notes(acme, byPos, Shelves.Notes.LimitEach(3), 4, 1, 1), [][]int64{{}, {2, 3, 5}, {2, 3, 5}})
-		wantIDLists(t, notes(ctx, byPos, Shelves.Notes.LimitEach(2), 1, 2, 3, 4), [][]int64{{1, 4}, {6, 7}, {}, {8}})
+		wantIDLists(t, notes(ctx, tg.db.Query[note]().OrderBy(Notes.Pos.Asc()), Shelves.Notes.LimitEach(2), 1, 2, 3, 4), [][]int64{{1, 4}, {6, 7}, {}, {8}})
 		wantIDLists(t, notes(acme, byPos, Shelves.Notes, 1, 3), [][]int64{{2, 3, 5}, {}})
 		// After a row, inside the window: shelf 1's page after note 2.
-		x, err := tg.db.Query[note]().Where(Notes.ID.EQ(2)).One(acme)
+		x, err := tg.pdb.Query[note]().Where(Notes.ID.EQ(2)).One(acme)
 		if err != nil {
 			t.Fatal(err)
 		}
-		wantIDLists(t, notes(acme, tg.db.Query[note]().OrderBy(Notes.Pos.Asc(), Notes.ID.Asc()).After(x), Shelves.Notes.LimitEach(2), 1, 2),
+		wantIDLists(t, notes(acme, tg.pdb.Query[note]().OrderBy(Notes.Pos.Asc(), Notes.ID.Asc()).After(x), Shelves.Notes.LimitEach(2), 1, 2),
 			[][]int64{{3, 5}, {6, 7}})
 		// Only the position asked: the owner's key is read too.
 		ns, err := velox.LoadEach(acme, byPos.Columns(Notes.Pos), Shelves.Notes.LimitEach(1), shelves(1, 2))
@@ -487,7 +487,6 @@ func TestLoadEachOnRealDatabases(t *testing.T) {
 
 		// Many-to-many: book 4's tag is org 2's.
 		books := []*book{{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}}
-		byName := tg.db.Query[tag]().OrderBy(Tags.Name.Asc())
 		for _, c := range []struct {
 			qctx context.Context
 			r    velox.Rel[book, tag]
@@ -499,7 +498,7 @@ func TestLoadEachOnRealDatabases(t *testing.T) {
 			{ctx, Books.Tags, [][]int64{{2, 1}, {2}, {}, {3}}},
 		} {
 			log.take()
-			got, err := velox.LoadEach(c.qctx, byName, c.r, books)
+			got, err := velox.LoadEach(c.qctx, tg.on(c.qctx).Query[tag]().OrderBy(Tags.Name.Asc()), c.r, books)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -534,12 +533,12 @@ func TestCountEachOnRealDatabases(t *testing.T) {
 			return got
 		}
 		log.take()
-		q := tg.db.Query[note]()
+		q := tg.pdb.Query[note]()
 		wantIDs(t, count(velox.CountEach(acme, q, Shelves.Notes, shelves(1, 2, 3, 4))), []int64{3, 2, 0, 0})
-		wantIDs(t, count(velox.CountEach(ctx, q, Shelves.Notes, shelves(4, 1, 3, 1))), []int64{1, 5, 0, 5})
+		wantIDs(t, count(velox.CountEach(ctx, tg.db.Query[note](), Shelves.Notes, shelves(4, 1, 3, 1))), []int64{1, 5, 0, 5})
 		wantIDs(t, count(velox.CountEach(acme, q.Where(Notes.Pos.GT(1)), Shelves.Notes, shelves(1, 2))), []int64{1, 2})
 		books := []*book{{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}}
-		wantIDs(t, count(velox.CountEach(acme, tg.db.Query[tag](), Books.Tags, books)), []int64{2, 1, 0, 0})
+		wantIDs(t, count(velox.CountEach(acme, tg.pdb.Query[tag](), Books.Tags, books)), []int64{2, 1, 0, 0})
 		wantIDs(t, count(velox.CountEach(ctx, tg.db.Query[tag](), Books.Tags, books)), []int64{2, 1, 0, 1})
 	}, velox.WithAround(log.around))
 }

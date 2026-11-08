@@ -363,9 +363,13 @@ func TestInterceptors(t *testing.T) {
 	db := open(t)
 	ada, _, _, _, _ := seed(t, db)
 	mustInsert(t, db, &gen.Post{AuthorID: ada.ID, Title: "archived", Status: gen.PostStatusPublished})
-	count := func(ctx context.Context) int64 {
+	count := func(ctx context.Context, dbs ...*velox.DB) int64 {
 		t.Helper()
-		n, err := db.Query[gen.Post]().Count(ctx)
+		on := db
+		if len(dbs) > 0 {
+			on = dbs[0]
+		}
+		n, err := on.Query[gen.Post]().Count(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -374,7 +378,7 @@ func TestInterceptors(t *testing.T) {
 	if n := count(ctx); n != 3 {
 		t.Errorf("Count: %d, want 3", n)
 	}
-	if n := count(velox.WithoutPolicy(ctx, "test")); n != 3 {
+	if n := count(ctx, db.WithoutPolicy("test")); n != 3 {
 		t.Errorf("Count under WithoutPolicy: %d, want 3", n)
 	}
 	if n := count(schema.WithArchived(ctx)); n != 4 {
@@ -542,9 +546,13 @@ func TestScope(t *testing.T) {
 		}
 	}
 	// Reads see only the scope's rows.
-	texts := func(c context.Context) []string {
+	texts := func(c context.Context, dbs ...*velox.DB) []string {
 		t.Helper()
-		ns, err := db.Query[gen.Note]().OrderBy(gen.Notes.ID.Asc()).Limit(10).All(c)
+		on := db
+		if len(dbs) > 0 {
+			on = dbs[0]
+		}
+		ns, err := on.Query[gen.Note]().OrderBy(gen.Notes.ID.Asc()).Limit(10).All(c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -557,7 +565,7 @@ func TestScope(t *testing.T) {
 	wantStrings(t, "org 1", texts(org(1)), []string{"one", "uno"})
 	wantStrings(t, "org 2", texts(org(2)), []string{"two"})
 	wantStrings(t, "org 3", texts(org(3)), nil)
-	wantStrings(t, "without policy", texts(velox.WithoutPolicy(ctx, "e2e test")), []string{"one", "uno", "two"})
+	wantStrings(t, "without policy", texts(ctx, db.WithoutPolicy("e2e test")), []string{"one", "uno", "two"})
 	// No scope value: refused.
 	if err := db.Insert(&gen.Note{Text: "x"}).Exec(ctx); !errors.Is(err, scope.ErrNoScope) {
 		t.Errorf("insert without a scope value: %v", err)

@@ -390,12 +390,12 @@ func bidiUpdate(ctx context.Context, db *DB, mu *MutationState, keys []bidiKey, 
 		case n > 1:
 			return fmt.Errorf("velox: %s: the update that sets the bidirectional key %s wrote %d rows", in.Name, in.Columns[keys[0].Col].Field, n)
 		}
-		free := WithoutPolicy(ctx, bidiReason)
+		free := tx.WithoutPolicy(bidiReason)
 		for _, bk := range keys {
 			unlink := Statement{Op: OpUpdate, Entity: in, InTx: true,
 				Set: []Assignment{{Column: bk.Col, Op: AssignSet}}, Where: []Predicate{ColumnEQ(bk.Col, k)}}
 			// Any number of rows, none included, is right: the count is not read.
-			if _, err := ExecWrite(free, tx, &unlink); err != nil {
+			if _, err := ExecWrite(ctx, free, &unlink); err != nil {
 				return err
 			}
 		}

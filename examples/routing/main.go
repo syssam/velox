@@ -224,12 +224,12 @@ func run(ctx context.Context, w io.Writer) error {
 	// them. Without an organization, a scoped entity would fail with
 	// scope.ErrNoScope; WithoutPolicy lifts that check, and then no shard is
 	// left to pick.
-	all := velox.WithoutPolicy(ctx, "example admin count")
-	_, err = db.Query[gen.Note]().Count(all)
+	all := db.WithoutPolicy("example admin count")
+	_, err = all.Query[gen.Note]().Count(ctx)
 	say("%-18s ErrNoShard=%t", "no shard:", errors.Is(err, velox.ErrNoShard))
 	say("  %v", err)
 	// WithShard names one.
-	n, err := db.Query[gen.Note]().Count(velox.WithShard(all, "us"))
+	n, err := all.Query[gen.Note]().Count(velox.WithShard(ctx, "us"))
 	say("%-18s %d note on us (err=%v)", "WithShard:", n, err)
 	return nil
 }

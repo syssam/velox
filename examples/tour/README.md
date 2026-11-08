@@ -47,7 +47,7 @@ go run ./tour
    with no organization fails with `scope.ErrNoScope`.
 7. A transaction with `db.Tx`, and a nested `Tx` (a savepoint) that recovers
    from a unique-constraint violation.
-8. A report across organizations with `velox.WithoutPolicy` and a reason: the
+8. A report across organizations on `db.WithoutPolicy(reason)`: the
    paid invoices summed by the database with `velox.Sum`, and its per-organization
    totals with `velox.SumBy`, a `GROUP BY`.
 9. Deadlines set at `Open` with `velox.WithDeadlines`, and a transaction that

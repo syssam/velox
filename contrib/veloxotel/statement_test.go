@@ -2,6 +2,7 @@ package veloxotel_test
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"runtime"
@@ -23,9 +24,20 @@ import (
 )
 
 var (
-	ctx = velox.WithoutPolicy(context.Background(), "otel tests")
+	ctx = context.Background()
 	I   = testmodel.Invoices
 )
+
+// openLifted is velox.Open without the entities' policies: these tests are
+// about spans, not policies.
+func openLifted(d velox.Dialect, db *sql.DB, opts ...velox.Option) *velox.DB {
+	return velox.Open(d, db, opts...).WithoutPolicy("otel tests")
+}
+
+// openShardsLifted is velox.OpenShards without the entities' policies.
+func openShardsLifted(d velox.Dialect, shards map[string]velox.Shard, opts ...velox.Option) *velox.DB {
+	return velox.OpenShards(d, shards, opts...).WithoutPolicy("otel tests")
+}
 
 // traced returns a DB on f traced into an in-memory exporter, with opts
 // given before veloxotel's options.
@@ -35,7 +47,17 @@ func traced(t *testing.T, f *fakeDB, cfg veloxotel.Config, opts ...velox.Option)
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
 	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
 	cfg.TracerProvider = tp
-	return velox.Open(velox.Postgres, f.open(), append(opts, veloxotel.Options(cfg)...)...), exp, tp
+	return openLifted(velox.Postgres, f.open(), append(opts, veloxotel.Options(cfg)...)...), exp, tp
+}
+
+// tracedPolicied is traced under the entities' policies.
+func tracedPolicied(t *testing.T, f *fakeDB, cfg veloxotel.Config) (*velox.DB, *tracetest.InMemoryExporter) {
+	t.Helper()
+	exp := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+	cfg.TracerProvider = tp
+	return velox.Open(velox.Postgres, f.open(), veloxotel.Options(cfg)...), exp
 }
 
 func attrs(s tracetest.SpanStub) map[attribute.Key]attribute.Value {
@@ -267,7 +289,7 @@ func TestOmitQueryText(t *testing.T) {
 }
 
 func TestRecordScope(t *testing.T) {
-	db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{RecordScope: true})
+	db, exp := tracedPolicied(t, &fakeDB{}, veloxotel.Config{RecordScope: true})
 	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(testmodel.Org.With(context.Background(), int64(7))); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +317,7 @@ func TestScopeNotRecordedByDefault(t *testing.T) {
 func TestPolicyBypass(t *testing.T) {
 	f := &fakeDB{cols: []string{}}
 	db, exp, _ := traced(t, f, veloxotel.Config{})
-	if _, err := db.Query[testmodel.Ticket]().Limit(1).All(velox.WithoutPolicy(ctx, "support")); err != nil {
+	if _, err := db.WithoutPolicy("support").Query[testmodel.Ticket]().Limit(1).All(ctx); err != nil {
 		t.Fatal(err)
 	}
 	s := only(t, exp)
@@ -426,7 +448,7 @@ func TestParent(t *testing.T) {
 		defer s.End()
 		return next(ctx)
 	})
-	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), txSpan, velox.WithAround(veloxotel.AroundOf(veloxotel.Config{TracerProvider: tp})))
+	db := openLifted(velox.Postgres, (&fakeDB{}).open(), txSpan, velox.WithAround(veloxotel.AroundOf(veloxotel.Config{TracerProvider: tp})))
 
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		if _, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil { // fn's ctx: the tx span
@@ -526,7 +548,7 @@ func shardedTraced(t *testing.T, shards map[string]*fakeDB) (*velox.DB, *tracete
 	}
 	opts := append(veloxotel.Options(veloxotel.Config{TracerProvider: tp, MeterProvider: mp}),
 		velox.WithShardFor(shardOf))
-	return velox.OpenShards(velox.Postgres, m, opts...), exp, r
+	return openShardsLifted(velox.Postgres, m, opts...), exp, r
 }
 
 // badConn is the errors a replica returns to fail every attempt
@@ -602,7 +624,7 @@ func TestRouteAttributes(t *testing.T) {
 		a1, b1 := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
 		db, exp, _ := shardedTraced(t, map[string]*fakeDB{"a": a1, "b": b1})
 		read(inOrg(2), db)
-		read(velox.WithShard(velox.WithoutPolicy(context.Background(), "otel tests"), "a"), db)
+		read(velox.WithShard(context.Background(), "a"), db)
 		var got []string
 		for _, s := range exp.GetSpans() {
 			a := attrs(s)
@@ -644,7 +666,7 @@ func TestRouteShardAtStart(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sp))
 	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
 	a1, b1 := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
-	db := velox.OpenShards(velox.Postgres, map[string]velox.Shard{
+	db := openShardsLifted(velox.Postgres, map[string]velox.Shard{
 		"a": {Primary: velox.SQLConn(a1.open())},
 		"b": {Primary: velox.SQLConn(b1.open())},
 	}, append(veloxotel.Options(veloxotel.Config{TracerProvider: tp}), velox.WithShardFor(shardOf))...)
@@ -764,7 +786,7 @@ func observed(t *testing.T, p *fakeDB, cfg veloxotel.Config, opts ...velox.Optio
 		_ = mp.Shutdown(context.Background())
 	})
 	cfg.TracerProvider, cfg.MeterProvider = tp, mp
-	return velox.Open(velox.Postgres, p.open(), append(opts, veloxotel.Options(cfg)...)...), sp, exp, r
+	return openLifted(velox.Postgres, p.open(), append(opts, veloxotel.Options(cfg)...)...), sp, exp, r
 }
 
 // durationPoint returns the one db.client.operation.duration point r holds.

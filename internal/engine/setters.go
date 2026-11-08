@@ -188,22 +188,22 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 			v, _ := plain(in.kit.Value(row, k))
 			key = append(key, t.Pred(k, PredEQ, v))
 		}
-		read := ctx
+		read := tx
 		if len(st.Set) > 0 {
 			st.InTx = true
 			st.Where = key // the row read, locked, matches st's conditions
 			if _, _, _, err := Write(ctx, tx, st, false, false); err != nil {
 				return err
 			}
-			read = WithoutPolicy(ctx, "velox: the row UpdateQuery.One wrote")
+			read = tx.WithoutPolicy("velox: the row UpdateQuery.One wrote")
 		}
 		if p.Writes() {
 			if err := p.write(ctx, tx, []unsafe.Pointer{row}); err != nil {
 				return err
 			}
-			read = WithoutPolicy(ctx, "velox: the row UpdateQuery.One wrote")
+			read = tx.WithoutPolicy("velox: the row UpdateQuery.One wrote")
 		}
-		out, err = QueryTable(tx, t).Where(key...).one(read)
+		out, err = QueryTable(read, t).Where(key...).one(ctx)
 		return err
 	}
 	var err error

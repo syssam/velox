@@ -6,8 +6,16 @@ import (
 	"github.com/syssam/velox/internal/fakeconn"
 )
 
-// openFake returns a DB of dialect d that runs statements on e.
+// openFake returns a DB of dialect d that runs statements on e, without the
+// entities' policies: most tests are not about them. A test of a policy uses
+// openPolicied.
 func openFake(d velox.Dialect, e *fakeconn.Exec, opts ...velox.Option) *velox.DB {
+	return openPolicied(d, e, opts...).WithoutPolicy("velox tests")
+}
+
+// openPolicied returns a DB of dialect d that runs statements on e, under the
+// entities' policies.
+func openPolicied(d velox.Dialect, e *fakeconn.Exec, opts ...velox.Option) *velox.DB {
 	return velox.OpenConn(d, engine.DriverConn(d, e), opts...)
 }
 

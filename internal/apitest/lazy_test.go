@@ -99,7 +99,7 @@ func within(t *testing.T, d time.Duration, f func()) {
 
 func TestPolicyBodyMayBuildHas(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	within(t, 5*time.Second, func() {
 		text, _, err := db.Query[lzTask]().Limit(1).SQL(context.Background())
 		if err != nil {
@@ -165,7 +165,7 @@ func lzRaceDescriptor() velox.Descriptor[lzRace] {
 // one, so that resolving, which copies on write, is raced on both. Run under
 // go test -race.
 func TestSharedHasWithPreds(t *testing.T) {
-	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	db := openPolicied(velox.Postgres, &fakeconn.Exec{})
 	hasDone := lzRaces.Project.HasWith(lzProjects.Done.EQ(true))
 	q := db.Query[lzRace]().Where(hasDone, lzRaces.ID.EQ(1)).Limit(1)
 	var want string

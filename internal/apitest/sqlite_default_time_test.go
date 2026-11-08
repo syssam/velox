@@ -28,7 +28,7 @@ func sqliteInvoices(t *testing.T, def string) (*velox.DB, *sql.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return velox.Open(velox.SQLite, raw), raw
+	return velox.Open(velox.SQLite, raw).WithoutPolicy("velox tests"), raw
 }
 
 // TestSQLiteDefaultTimePagesWithAfter: a row made by the database's default of

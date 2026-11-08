@@ -15,7 +15,7 @@ import (
 // checks the row again after the insert hooks.
 func TestInsertHookCannotMoveTheScope(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	x := moveOrg{}
 	err := db.Insert(&x).Exec(moveOrgKey.With(context.Background(), int64(7)))
 	if !errors.Is(err, scope.ErrMismatch) {

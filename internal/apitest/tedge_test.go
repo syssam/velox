@@ -433,7 +433,7 @@ func TestTableQueryLoadFails(t *testing.T) {
 // refuses fails with ErrDenied and sends nothing, one row or many.
 func TestTableInsertPolicy(t *testing.T) {
 	exec := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, exec)
+	db := openPolicied(velox.Postgres, exec)
 	in := annIn7() // ann may create only her own tickets
 	bob := testmodel.Ticket{Owner: "bob", Title: "t", InvoiceID: 3}
 	rows := tkTable.NewRows(2)

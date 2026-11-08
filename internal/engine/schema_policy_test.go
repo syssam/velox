@@ -24,7 +24,7 @@ func TestSchemaPolicyHooks(t *testing.T) {
 		t.Fatalf("%d hooks, want 3", len(engine.InfoHooks(info)))
 	}
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}, Affected: 1}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	var x hooked
 	if err := db.Insert(&x).Exec(ctx); !errors.Is(err, velox.ErrDenied) {
 		t.Fatalf("insert of an untitled row: %v", err)
@@ -43,7 +43,7 @@ func TestSchemaPolicyHooks(t *testing.T) {
 	}
 	// The Read policy's condition names title, which the statement resolves.
 	re := &fakeconn.Exec{}
-	if _, err := openFake(velox.Postgres, re).Query[hooked]().Limit(1).All(ctx); err != nil {
+	if _, err := openPolicied(velox.Postgres, re).Query[hooked]().Limit(1).All(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(re.SQL, `WHERE "title" = $1`) || len(re.Args) == 0 || re.Args[0] != "r" {

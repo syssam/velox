@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	ctx = velox.WithoutPolicy(context.Background(), "velox tests")
+	ctx = context.Background()
 	t0  = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	I   = testmodel.Invoices
 	It  = testmodel.Items

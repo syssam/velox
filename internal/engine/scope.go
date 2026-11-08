@@ -54,19 +54,18 @@ func (sc *Scoper) ConditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 // Record shows hooks that a policy was skipped for st: Statement.PolicyBypass.
 func (sc *Scoper) Record(st *Statement) {
 	if sc.skipped {
-		st.PolicyBypass = sc.skip
+		st.PolicyBypass = sc.Skip
 	}
 }
 
-// Scoper is one statement's scope: the context's WithoutPolicy, looked up when
-// an entity first needs it, and the row conditions made so far.
+// Scoper is one statement's scope: the DB's WithoutPolicy reason and the row
+// conditions made so far.
 type Scoper struct {
 	Ctx    context.Context
 	Entity string // the statement's entity, which every error names
+	Skip   string // the DB's WithoutPolicy reason; "" when none
 
-	skipRead bool   // skip is looked up
-	skip     string // the WithoutPolicy reason
-	skipped  bool   // a policy that would have applied was skipped
+	skipped bool // a policy that would have applied was skipped
 
 	reads     []readCond
 	computing []*EntityInfo // the entities whose row condition is being made, outermost first
@@ -81,11 +80,7 @@ type readCond struct {
 // PolicyOn reports whether a policy applies: false under WithoutPolicy, which
 // is then recorded as applied.
 func (sc *Scoper) PolicyOn() bool {
-	if !sc.skipRead {
-		sc.skip = PolicyBypassReason(sc.Ctx)
-		sc.skipRead = true
-	}
-	if sc.skip != "" {
+	if sc.Skip != "" {
 		sc.skipped = true
 		return false
 	}
@@ -395,7 +390,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 		return nil
 	}
 	in := st.Entity
-	sc := Scoper{Ctx: ctx, Entity: in.Name}
+	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass}
 	// The entity's own conditions first, so that a denial is reported as the
 	// statement's, and an EXISTS on the same entity reuses its row condition.
 	var read, write Predicate
@@ -464,7 +459,7 @@ func (sc *Scoper) scopeJoins(st *Statement) error {
 // the existing row (DoNothing) changes nothing, so it is exempt.
 func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	in := st.Entity
-	sc := Scoper{Ctx: ctx, Entity: in.Name}
+	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass}
 	pol := InfoPolicy(in)
 	if pol != nil && pol.Insert != nil {
 		sc.PolicyOn() // records a WithoutPolicy that InsertAllowed obeyed

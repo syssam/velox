@@ -101,7 +101,9 @@ func TestITestDSNNamesADatabase(t *testing.T) {
 }
 
 var (
-	ctx = velox.WithoutPolicy(context.Background(), "velox tests")
+	// ctx marks a statement for the target's DB without the policies, where
+	// a test picks the DB by its context (target.on).
+	ctx = context.WithValue(context.Background(), liftKey{}, true)
 	t0  = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	I   = testmodel.Invoices
 )
@@ -110,7 +112,8 @@ var (
 type target struct {
 	name    string
 	d       velox.Dialect
-	db      *velox.DB
+	db      *velox.DB                                     // pdb without the policies: most tests are not about them
+	pdb     *velox.DB                                     // under the entities' policies
 	exec    func(t testing.TB, query string, args ...any) // setup SQL, written with ? placeholders
 	ddl     string                                        // CREATE TABLE invoices
 	items   string                                        // CREATE TABLE items
@@ -131,6 +134,28 @@ func targets(t testing.TB, opts []velox.Option) []target {
 	}
 	if dsn := os.Getenv("VELOX_TEST_MYSQL"); dsn != "" {
 		ts = append(ts, mysqlTarget(t, dsn, opts))
+	}
+	return lifted(ts)
+}
+
+// liftKey marks the package's ctx.
+type liftKey struct{}
+
+// on is tg's DB without the policies for the package's ctx, and its DB under
+// them for any other context.
+func (tg target) on(c context.Context) *velox.DB {
+	if c.Value(liftKey{}) != nil {
+		return tg.db
+	}
+	return tg.pdb
+}
+
+// lifted sets each target's pdb to its DB, and its db to that DB without
+// the policies.
+func lifted(ts []target) []target {
+	for i := range ts {
+		ts[i].pdb = ts[i].db
+		ts[i].db = ts[i].db.WithoutPolicy("velox tests")
 	}
 	return ts
 }
@@ -435,6 +460,7 @@ func TestLikeIgnoresServerSettings(t *testing.T) {
 	if dsn := os.Getenv("VELOX_TEST_MYSQL"); dsn != "" {
 		ts = append(ts, noBackslashMySQL(t, dsn))
 	}
+	ts = lifted(ts)
 	if len(ts) == 0 {
 		t.Skip("needs VELOX_TEST_POSTGRES or VELOX_TEST_MYSQL")
 	}

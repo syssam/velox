@@ -29,7 +29,7 @@ func connectInvoices(t *testing.T, dsn string) *velox.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db
+	return db.WithoutPolicy("velox tests")
 }
 
 // noHang fails t when f has not returned in time: a nested statement that
@@ -229,7 +229,7 @@ func TestIterNestedWithReplicas(t *testing.T) {
 	if _, err := primary.Exec("CREATE TABLE t (id integer)"); err != nil {
 		t.Fatal(err)
 	}
-	db := velox.Open(velox.SQLite, primary, velox.WithReplicas(velox.SQLConn(velox.Pool(seed))))
+	db := velox.Open(velox.SQLite, primary, velox.WithReplicas(velox.SQLConn(velox.Pool(seed)))).WithoutPolicy("velox tests")
 	noHang(t, func() {
 		rows := 0
 		for _, err := range db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).Limit(3).Iter(ctx) {

@@ -99,7 +99,7 @@ func TestPoliciesANDedInOrder(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}, Answer: func(sql string, _ []any) ([][]any, bool) {
 		return nil, strings.HasPrefix(sql, "SELECT")
 	}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	ctx := context.Background()
 
 	lAndTrace = nil
@@ -156,7 +156,7 @@ func TestPoliciesANDedInOrder(t *testing.T) {
 func TestHookOrderMixinsFirst(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}, Affected: 1}
 	db := openFake(velox.Postgres, e)
-	ctx := velox.WithoutPolicy(context.Background(), "test")
+	ctx := context.Background()
 	for name, write := range map[string]func() error{
 		"insert": func() error { return db.Insert(&lAnd{Name: "x"}).Exec(ctx) },
 		"update": func() error { _, err := db.Update[lAnd]().Set(lAndName.Set("y")).All().Exec(ctx); return err },
@@ -392,9 +392,8 @@ func (*lCycB) VeloxMeta() *velox.Meta[lCycB] {
 // refused, under WithoutPolicy too, with an error that is not a denial.
 func TestInterceptorCycleIsRefused(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
-	for _, ctx := range []context.Context{context.Background(), velox.WithoutPolicy(context.Background(), "test")} {
-		_, err := db.Query[lCycA]().Limit(1).All(ctx)
+	for _, db := range []*velox.DB{openPolicied(velox.Postgres, e), openFake(velox.Postgres, e)} {
+		_, err := db.Query[lCycA]().Limit(1).All(context.Background())
 		const want = "velox: apitest.lCycA: the interceptors and Read policy of apitest.lCycA reach their own condition through an EXISTS; such a condition cannot be applied"
 		if err == nil || err.Error() != want || errors.Is(err, velox.ErrDenied) {
 			t.Errorf("got %v, want %s", err, want)

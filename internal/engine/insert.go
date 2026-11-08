@@ -172,8 +172,8 @@ func InsertColumns(in *EntityInfo, skip int) []int {
 
 // InsertAllowed asks the policy's Insert about the row of in at p, prepared
 // and validated, unless WithoutPolicy.
-func InsertAllowed(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
-	if pol := in.policy; pol != nil && pol.Insert != nil && PolicyBypassReason(ctx) == "" {
+func InsertAllowed(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer) error {
+	if pol := in.policy; pol != nil && pol.Insert != nil && db.bypass == "" {
 		if err := pol.Insert(ctx, p); err != nil {
 			if m, ok := err.(*rowMisuseError); ok {
 				return newStageError(in.Name, "policy", m.err)
@@ -381,5 +381,5 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 // entity with a Read or Write policy, unless WithoutPolicy.
 func ConditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int) bool {
 	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.D != MySQL &&
-		(len(in.filters) > 0 || InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && PolicyBypassReason(ctx) == "")
+		(len(in.filters) > 0 || InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && db.bypass == "")
 }

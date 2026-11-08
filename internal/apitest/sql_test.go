@@ -143,7 +143,7 @@ func TestSQLNeverSends(t *testing.T) {
 // TestSQLReportsTheRefusal: SQL(ctx) returns the error the statement would
 // fail with, and no text.
 func TestSQLReportsTheRefusal(t *testing.T) {
-	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	db := openPolicied(velox.Postgres, &fakeconn.Exec{})
 	text, args, err := db.Query[testmodel.Ticket]().SQL(annIn7())
 	if !errors.Is(err, velox.ErrUnbounded) || text != "" || args != nil {
 		t.Errorf("unbounded: %q %v %v", text, args, err)
@@ -282,7 +282,7 @@ func TestScopedSQLGolden(t *testing.T) {
 	} {
 		t.Run(c.d.String(), func(t *testing.T) {
 			e := &fakeconn.Exec{Rows: [][]any{{int64(3)}}}
-			db := openFake(c.d, e)
+			db := openPolicied(c.d, e)
 			check := func(what string, want golden, text string, args []any, err error) {
 				t.Helper()
 				if err != nil {
@@ -318,7 +318,7 @@ func TestIsDryRun(t *testing.T) {
 	for _, dry := range []bool{true, false} {
 		// The query reads a row, and the insert its generated key.
 		e := &fakeconn.Exec{Results: [][][]any{{{int64(1), "ann"}}}, Rows: [][]any{{int64(1)}}, Affected: 1}
-		db := openFake(velox.Postgres, e, velox.WithRewrite(func(ctx context.Context, _ *velox.Statement) error {
+		db := openPolicied(velox.Postgres, e, velox.WithRewrite(func(ctx context.Context, _ *velox.Statement) error {
 			fixture.NoteDryRun(ctx, "Rewrite")
 			return nil
 		}))

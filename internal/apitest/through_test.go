@@ -182,7 +182,7 @@ func TestThroughHasRenders(t *testing.T) {
 // TestThroughHasScopesTarget is Review Focus 5: the target's org condition
 // lands inside the inner EXISTS, on the target, not on the join or the owner.
 func TestThroughHasScopesTarget(t *testing.T) {
-	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	db := openPolicied(velox.Postgres, &fakeconn.Exec{})
 	got, args, err := db.Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWith(fixture.DTags.Name.EQ("go"))).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(7)))
 	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND "name" = $1 AND "org_id" = $2)) LIMIT $3`
 	if err != nil || got != want {
@@ -232,12 +232,12 @@ func TestOfThroughRenders(t *testing.T) {
 	}
 	// The other way, with the target's org at the top, outside the EXISTS.
 	g := fixture.DTag{ID: 7}
-	got, args, err := openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DTags.Books.Of(&g)).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(3)))
+	got, args, err := openPolicied(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DTags.Books.Of(&g)).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(3)))
 	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND "tag_id" IN ($1)) LIMIT $2`
 	if err != nil || got != want || !reflect.DeepEqual(args, []any{int64(7), 1}) {
 		t.Errorf("tag to books:\n got %s %v, %v\nwant %s", got, args, err, want)
 	}
-	got, args, err = openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DTag]().Where(fixture.DTags.Name.EQ("go"), fixture.DBooks.Tags.Of(&b1)).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(3)))
+	got, args, err = openPolicied(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DTag]().Where(fixture.DTags.Name.EQ("go"), fixture.DBooks.Tags.Of(&b1)).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(3)))
 	want = `SELECT "id", "org_id", "name" FROM "tags" WHERE "name" = $1 AND EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($2)) AND "org_id" = $3 LIMIT $4`
 	if err != nil || got != want || !reflect.DeepEqual(args, []any{"go", int64(1), int64(3), 1}) {
 		t.Errorf("org:\n got %s %v, %v\nwant %s", got, args, err, want)
@@ -253,7 +253,7 @@ func TestOfThroughRenders(t *testing.T) {
 // the join's far column in the correlation and its near column in the owners'
 // IN, on every dialect.
 func TestOfSelfManyToMany(t *testing.T) {
-	skip := velox.WithoutPolicy(ctx, "self many-to-many test")
+	skip := ctx
 	p1, p2 := dPeer{ID: 1}, dPeer{ID: 2}
 	for _, c := range []struct {
 		d    velox.Dialect
@@ -484,20 +484,20 @@ func TestThroughJoinEntityWithInsertPolicy(t *testing.T) {
 		{{int64(1), int64(7)}},
 		{{int64(7), int64(1), "go"}},
 	}}
-	db := openFake(velox.Postgres, e)
-	ls, err := db.Query[dLinker]().With(dLinkers.Tags).Limit(1).All(ctx)
+	db := openPolicied(velox.Postgres, e)
+	ls, err := db.WithoutPolicy("velox tests").Query[dLinker]().With(dLinkers.Tags).Limit(1).All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := tagNames(t, ls[0].Tags); !reflect.DeepEqual(got, []string{"go"}) {
 		t.Errorf("tags %v", got)
 	}
-	got, _, err := db.Query[dLinker]().Where(dLinkers.Tags.Has()).Limit(1).SQL(ctx)
+	got, _, err := db.WithoutPolicy("velox tests").Query[dLinker]().Where(dLinkers.Tags.Has()).Limit(1).SQL(ctx)
 	if want := `SELECT "id" FROM "linkers" WHERE EXISTS (SELECT 1 FROM "links" AS "vx1" WHERE "vx1"."linker_id" = "linkers"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id")) LIMIT $1`; err != nil || got != want {
 		t.Errorf("got  %s, %v\nwant %s", got, err, want)
 	}
 	e2 := &fakeconn.Exec{Affected: 1}
-	db = openFake(velox.Postgres, e2)
+	db = openPolicied(velox.Postgres, e2)
 	if err := db.Insert(&dLink{LinkerID: 1, TagID: 2}).Exec(context.Background()); err != nil || e2.Calls != 1 {
 		t.Fatalf("an allowed link: %v, %d calls", err, e2.Calls)
 	}
@@ -703,7 +703,7 @@ func (*dFriend) VeloxMeta() *velox.Meta[dFriend] {
 // HasWith, lands inside the inner EXISTS; a Read policy that reaches its own
 // Read back through a join is refused as a cycle.
 func TestThroughTargetPolicy(t *testing.T) {
-	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	db := openPolicied(velox.Postgres, &fakeconn.Exec{})
 	live := testmodel.Org.With(context.Background(), int64(7)) // ctx lifts every policy, the scope with it
 	got, _, err := db.Query[dPeer]().Where(dPeers.Friends.Has()).Limit(1).SQL(live)
 	inner := `EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND ` +

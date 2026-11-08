@@ -65,7 +65,7 @@ func BenchmarkOneRow(b *testing.B) {
 // scope's Read condition and the policy call.
 func TestScopedOneRowBudget(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	t1 := testmodel.Org.With(context.Background(), int64(1))
 	run := func() {
 		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(t1); err != nil {

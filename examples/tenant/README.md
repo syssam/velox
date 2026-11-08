@@ -62,7 +62,7 @@ db.Update[gen.Project]()...Exec(ctx)   // changes only this organization's rows
 
 db.Insert(&p).OnConflict(P.OrgID, P.Name).Update(P.Status).Exec(ctx) // update branch is scoped too
 
-report := velox.WithoutPolicy(ctx, "weekly status report") // unscoped, with a reason
+report := db.WithoutPolicy("weekly status report") // a DB that is unscoped, with a reason
 ```
 
 It fails closed:

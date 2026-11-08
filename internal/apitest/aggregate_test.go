@@ -72,7 +72,7 @@ func TestAggregateNull(t *testing.T) {
 
 func TestAggregateRefusals(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{1.0}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	after := db.Query[testmodel.Invoice]().After(&testmodel.Invoice{ID: 3})
 	if _, err := velox.Sum(ctx, after, I.Total); err == nil || !strings.Contains(err.Error(), "After needs an OrderBy") {
 		t.Errorf("Sum: %v", err)
@@ -84,7 +84,7 @@ func TestAggregateRefusals(t *testing.T) {
 		t.Errorf("%d statements sent", e.Calls)
 	}
 	for _, opts := range [][]velox.Option{nil, {velox.WithAround(func(c context.Context, _ *velox.Statement, next func(context.Context) error) error { return next(c) })}} {
-		db := openFake(velox.Postgres, e, opts...)
+		db := openPolicied(velox.Postgres, e, opts...)
 		if _, err := velox.Sum(context.Background(), db.Query[testmodel.Invoice](), I.Total); !errors.Is(err, scope.ErrNoScope) {
 			t.Errorf("no org (hooks %d): %v", len(opts), err)
 		}
@@ -96,7 +96,7 @@ func TestAggregateRefusals(t *testing.T) {
 		t.Errorf("%d statements sent", e.Calls)
 	}
 	// The scope applies.
-	if _, err := velox.Sum(scoped(7), openFake(velox.Postgres, e).Query[testmodel.Invoice](), I.Total); err != nil {
+	if _, err := velox.Sum(scoped(7), openPolicied(velox.Postgres, e).Query[testmodel.Invoice](), I.Total); err != nil {
 		t.Fatal(err)
 	}
 	if want := `SELECT SUM("total") FROM "invoices" WHERE "org_id" = $1`; e.SQL != want || !reflect.DeepEqual(e.Args, []any{int64(7)}) {
@@ -105,7 +105,7 @@ func TestAggregateRefusals(t *testing.T) {
 	// A Rewrite hook may not change the aggregate, and may not leave it
 	// without its one column.
 	clearAgg := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { st.Aggregate = 0; return nil })
-	rdb := openFake(velox.Postgres, e, clearAgg)
+	rdb := openPolicied(velox.Postgres, e, clearAgg)
 	calls := e.Calls
 	_, err := velox.Sum(ctx, rdb.Query[testmodel.Invoice](), I.Total)
 	if err == nil || err.Error() != "velox: testmodel.Invoice: a Rewrite hook changed the statement's Aggregate" || e.Calls != calls {
@@ -185,7 +185,7 @@ func TestAggregateIsNotRowCapped(t *testing.T) {
 // An aggregate takes the scope and the Read policy as Count does.
 func TestAggregateIsPolicyScoped(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(3)}}}
-	db := openFake(velox.Postgres, e)
+	db := openPolicied(velox.Postgres, e)
 	if v, err := velox.Sum(asUser("ann"), db.Query[testmodel.Ticket](), Tk.InvoiceID); err != nil || v != 3 {
 		t.Fatalf("%v, %v", v, err)
 	}
