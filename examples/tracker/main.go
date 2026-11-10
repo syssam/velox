@@ -39,8 +39,8 @@ var dbLimits = velox.WithDeadlines(velox.Deadlines{Statement: 10 * time.Second, 
 
 // The tables come from a directory per dialect, made, in the example module, by
 //
-//	go tool velox-gen migrate diff -dialect sqlite -name <name> -dir ./tracker/migrations/sqlite ./tracker/schema
-//	go tool velox-gen migrate diff -dialect postgres -name <name> -dir ./tracker/migrations/postgres ./tracker/schema
+//	go tool velox-gen migrate diff -dialect sqlite -name <name> -dir ./tracker/migrations/sqlite ./tracker/veloxschema
+//	go tool velox-gen migrate diff -dialect postgres -name <name> -dir ./tracker/migrations/postgres ./tracker/veloxschema
 //
 //go:embed migrations/sqlite migrations/postgres
 var migrations embed.FS

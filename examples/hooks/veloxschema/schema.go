@@ -1,6 +1,6 @@
-// Package schema declares the hooks example's entities: a Task, and the Audit
+// Package veloxschema declares the hooks example's entities: a Task, and the Audit
 // rows that its update writes. Task's hooks, in hooks.go, work by column
-// name; the schema does not import gen.
+// name; the schema does not import veloxgen.
 package veloxschema
 
 import (

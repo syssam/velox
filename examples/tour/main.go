@@ -1,5 +1,5 @@
 // Command tour walks through velox on a SQLite file made by its migrations: it
-// inserts, reads and changes the invoices of package gen as two
+// inserts, reads and changes the invoices of package veloxgen as two
 // organizations, and prints what each step did.
 package main
 
@@ -35,7 +35,7 @@ func main() {
 
 // The tables come from migrations/, made, in the example module, by
 //
-//	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./tour/migrations ./tour/schema
+//	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./tour/migrations ./tour/veloxschema
 //
 // and applied with migrate.Up. The temporary SQLite database is this demo's;
 // a real application opens its own.

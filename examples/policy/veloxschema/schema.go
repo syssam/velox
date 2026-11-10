@@ -1,8 +1,8 @@
-// Package schema declares the policy example's entities: a Doc, which its
+// Package veloxschema declares the policy example's entities: a Doc, which its
 // owner may change and anyone may read once shared, and its Comments, which
 // are visible exactly when their Doc is. The policies, in doc_policy.go and
 // comment_policy.go, name columns and edges by their schema names; the
-// schema does not import gen.
+// schema does not import veloxgen.
 package veloxschema
 
 import (

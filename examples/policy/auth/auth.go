@@ -1,6 +1,6 @@
 // Package auth carries the user of a request, which authentication
 // middleware would put in the context, and which the schema's policies read.
-// It does not import gen, so that anything may import it.
+// It does not import veloxgen, so that anything may import it.
 package auth
 
 import "context"

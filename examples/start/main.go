@@ -28,7 +28,7 @@ func main() {
 
 // The tables come from migrations/, made, in the example module, by
 //
-//	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./start/migrations ./start/schema
+//	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./start/migrations ./start/veloxschema
 //
 // and applied with migrate.Up. The temporary SQLite database is this demo's;
 // a real application opens its own.
@@ -55,7 +55,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
-	// U holds the typed column handles velox-gen wrote in gen/user.go.
+	// U holds the typed column handles velox-gen wrote in veloxgen/user.go.
 	U := veloxgen.Users
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 

@@ -1,5 +1,5 @@
 // Package principal carries who a request acts as, which the schema's
-// policies read. It does not import gen, so that anything may import it.
+// policies read. It does not import veloxgen, so that anything may import it.
 package principal
 
 import "context"

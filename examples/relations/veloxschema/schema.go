@@ -1,7 +1,7 @@
-// Package schema declares the relations example's entities: an Author has many
+// Package veloxschema declares the relations example's entities: an Author has many
 // Posts, a Post belongs to its Author and has many Comments, and Posts and Tags
 // are many-to-many, through the join table post_tags. go tool
-// velox-gen reads it and writes the gen package beside it.
+// velox-gen reads it and writes the veloxgen package beside it.
 package veloxschema
 
 import (

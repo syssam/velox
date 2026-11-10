@@ -1,6 +1,6 @@
 // Package auth holds the hooks example's request user, which authentication
 // middleware would put in the context. The schema's CreatedBy mixin fills
-// created_by from it. It is written by hand and does not import gen.
+// created_by from it. It is written by hand and does not import veloxgen.
 package auth
 
 import "context"

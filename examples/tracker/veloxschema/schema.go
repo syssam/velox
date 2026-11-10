@@ -1,5 +1,5 @@
-// Package schema declares the tracker's entities. go tool velox-gen reads it and
-// writes the gen package beside it. The InOrg mixin (inorg.go) confines the
+// Package veloxschema declares the tracker's entities. go tool velox-gen reads it and
+// writes the veloxgen package beside it. The InOrg mixin (inorg.go) confines the
 // entities that list it to the caller's Org; the policies (policy.go) decide
 // what a member may do within it.
 package veloxschema

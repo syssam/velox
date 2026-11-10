@@ -1,5 +1,5 @@
 // Package role carries the billing role of a request, which the schema's
-// policies read. It does not import gen, so that anything may import it.
+// policies read. It does not import veloxgen, so that anything may import it.
 package role
 
 import (

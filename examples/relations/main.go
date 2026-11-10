@@ -29,7 +29,7 @@ func main() {
 
 // The tables come from migrations/, made, in the example module, by
 //
-//	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./relations/migrations ./relations/schema
+//	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./relations/migrations ./relations/veloxschema
 //
 // and, once Tag was added, again with -name tags.
 // and applied with migrate.Up. The temporary SQLite database is this demo's;

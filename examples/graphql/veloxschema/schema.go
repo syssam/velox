@@ -1,9 +1,9 @@
-// Package schema declares the graphql example's entities: a User writes
+// Package veloxschema declares the graphql example's entities: a User writes
 // Posts, each Post belongs to an organization and carries Tags,
 // the GraphQL type Label.
 // The graphql.* annotations shape the GraphQL schema velox-graphql writes
 // beside the entities. go tool velox-gen -plugin velox-graphql reads it and
-// writes the gen package.
+// writes the veloxgen package.
 package veloxschema
 
 import (
@@ -88,7 +88,7 @@ func (Post) Annotations() []schema.Annotation {
 }
 
 // Tag labels posts. Its GraphQL type is Label: graphql.Type renames it, and
-// gen's Go for the type takes the GraphQL names (Label, LabelConnection,
+// veloxgen's Go for the type takes the GraphQL names (Label, LabelConnection,
 // LabelWhereInput…), with Label an alias of the entity Tag.
 type Tag struct{ schema.Schema }
 

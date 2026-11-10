@@ -1,5 +1,5 @@
-// Package schema declares the start example's one entity. go tool velox-gen
-// reads it and writes the gen package beside it.
+// Package veloxschema declares the start example's one entity. go tool velox-gen
+// reads it and writes the veloxgen package beside it.
 package veloxschema
 
 import (

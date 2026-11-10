@@ -1,6 +1,6 @@
 // Command graphql serves a GraphQL API over velox entities with gqlgen. The
 // schema package declares the entities with graphql.* annotations;
-// velox-gen with the velox-graphql plugin writes gen/, the entities, the
+// velox-gen with the velox-graphql plugin writes veloxgen/, the entities, the
 // GraphQL schema gen/velox.graphql and the Go it binds to; gqlgen writes
 // graph/ from gqlgen.yml. The application declares its mutations in
 // graph/app.graphql, and writes the root query's and the mutations'
@@ -188,7 +188,7 @@ func admin(ctx context.Context, _ any, next gqlgen.Resolver) (any, error) {
 
 // The tables come from migrations/, made, in the example module, by
 //
-//	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./graphql/migrations ./graphql/schema
+//	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./graphql/migrations ./graphql/veloxschema
 //
 // and applied with migrate.Up. The temporary SQLite database is this demo's;
 // a real application opens its own.
