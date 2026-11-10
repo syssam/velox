@@ -41,7 +41,7 @@ repository, and in the quick start run
   column with a string does not compile. velox-gen also checks the column
   names that hooks and policies use.
 - **Guard rails on by default.** A read without `Limit` fails with
-  `ErrUnbounded`, unless it says `Unbounded()`. An update or delete without
+  `ErrUnbounded`, unless it says `AllowUnbounded()`. An update or delete without
   `Where` fails with `ErrNoWhere`, unless it says `All()`. Both are refused
   before anything reaches the database.
 - **Policies that fail closed.** Read, write and insert policies live in the
@@ -113,7 +113,7 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    ```
 
 5. Use it, in `main.go`. The handles are typed, so a wrong column name or
-   value type is a compile error. A read needs `Limit` (or `Unbounded()`),
+   value type is a compile error. A read needs `Limit` (or `AllowUnbounded()`),
    and an update or delete needs `Where` (or `All()`); without one it fails
    before reaching the database:
 

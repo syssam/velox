@@ -20,7 +20,7 @@ func TestJoinReadsTheTargetThroughItsPolicy(t *testing.T) {
 	}
 	hasParent := map[string][]int64{"ann": {2}, "admin": {2, 4, 5}, "anyone": {2, 4, 5, 7, 8}}
 	eachCaller(t, func(t *testing.T, tg target, c who) {
-		xs, err := c.on(tg).Query[testmodel.Ticket]().LeftJoin(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		xs, err := c.on(tg).Query[testmodel.Ticket]().LeftJoin(Tk.Parent).OrderBy(Tk.ID.Asc()).AllowUnbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -39,7 +39,7 @@ func TestJoinReadsTheTargetThroughItsPolicy(t *testing.T) {
 			t.Errorf("LeftJoin(Parent): %v, want %v", got, parents[c.name])
 		}
 
-		inner, err := c.on(tg).Query[testmodel.Ticket]().Join(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		inner, err := c.on(tg).Query[testmodel.Ticket]().Join(Tk.Parent).OrderBy(Tk.ID.Asc()).AllowUnbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,7 +85,7 @@ func TestJoinFiltersAndOrdersByTheJoinedColumns(t *testing.T) {
 		// Both rows' columns are in one scan: the tickets whose parent has the same
 		// owner (2 and 8 are ann's, 4 is bob's).
 		var sameOwner []int64
-		all, err := tg.db.Query[testmodel.Ticket]().LeftJoin(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		all, err := tg.db.Query[testmodel.Ticket]().LeftJoin(Tk.Parent).OrderBy(Tk.ID.Asc()).AllowUnbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -131,11 +131,11 @@ func TestJoinAgreesWithWith(t *testing.T) {
 			}
 			return fmt.Sprint(out)
 		}
-		with, err := tg.db.Query[testmodel.Ticket]().With(Tk.Parent.With(Tk.Invoice)).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		with, err := tg.db.Query[testmodel.Ticket]().With(Tk.Parent.With(Tk.Invoice)).OrderBy(Tk.ID.Asc()).AllowUnbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		joined, err := tg.db.Query[testmodel.Ticket]().LeftJoin(Tk.Parent.With(Tk.Invoice)).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		joined, err := tg.db.Query[testmodel.Ticket]().LeftJoin(Tk.Parent.With(Tk.Invoice)).OrderBy(Tk.ID.Asc()).AllowUnbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -194,7 +194,7 @@ func wantOrder(t *testing.T, got, want []int64) {
 // gives, minus the children With leaves without an invoice.
 func TestJoinInAPerOwnerRead(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
-		xs, err := tg.db.Query[testmodel.Ticket]().Where(Tk.ID.In(3, 6)).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		xs, err := tg.db.Query[testmodel.Ticket]().Where(Tk.ID.In(3, 6)).OrderBy(Tk.ID.Asc()).AllowUnbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -254,7 +254,7 @@ func TestJoinInAPerOwnerRead(t *testing.T) {
 			t.Fatal(err)
 		}
 		// The database's own order of the numbers: its collation is not Go's.
-		sorted, err := tg.db.Query[testmodel.Invoice]().OrderBy(testmodel.Invoices.Number.Desc()).Unbounded().All(c.ctx)
+		sorted, err := tg.db.Query[testmodel.Invoice]().OrderBy(testmodel.Invoices.Number.Desc()).AllowUnbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}

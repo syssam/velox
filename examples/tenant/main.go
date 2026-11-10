@@ -143,7 +143,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// The bypass is the DB's, not the context's: code handed ctx is still
 	// scoped. An empty reason is ignored.
 	report := db.WithoutPolicy("weekly status report")
-	for p, err := range report.Query[veloxgen.Project]().OrderBy(P.OrgID.Asc(), P.Name.Asc()).Unbounded().Iter(ctx) {
+	for p, err := range report.Query[veloxgen.Project]().OrderBy(P.OrgID.Asc(), P.Name.Asc()).AllowUnbounded().Iter(ctx) {
 		if err != nil {
 			return err
 		}

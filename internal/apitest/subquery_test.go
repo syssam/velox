@@ -116,7 +116,7 @@ func TestInSelectRuns(t *testing.T) {
 	O, N := fixture.IOwners, fixture.INotes
 	owners := func(db *velox.DB, p velox.Pred[fixture.IOwner]) []int64 {
 		t.Helper()
-		os, err := db.Query[fixture.IOwner]().Where(p).OrderBy(O.ID.Asc()).Unbounded().All(bg)
+		os, err := db.Query[fixture.IOwner]().Where(p).OrderBy(O.ID.Asc()).AllowUnbounded().All(bg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -137,7 +137,7 @@ func TestInSelectRuns(t *testing.T) {
 	nested := O.ID.InSelect(N.OwnerID.Select(N.OwnerID.InSelect(O.ID.Select(O.Name.EQ("o2")))))
 	wantIDs(t, "nested", owners(db, nested), 2)
 
-	notes, err := db.Query[fixture.INote]().Where(N.OwnerID.InSelect(O.ID.Select(O.Name.EQ("o2")))).Unbounded().All(bg)
+	notes, err := db.Query[fixture.INote]().Where(N.OwnerID.InSelect(O.ID.Select(O.Name.EQ("o2")))).AllowUnbounded().All(bg)
 	if err != nil {
 		t.Fatal(err)
 	}

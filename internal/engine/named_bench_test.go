@@ -142,7 +142,7 @@ func bnDB(tb testing.TB) *velox.DB {
 func TestPolicyByName(t *testing.T) {
 	db := bnDB(t)
 	org := context.WithValue(context.Background(), bnOrg{}, int64(2))
-	rows, err := db.Query[bnName]().Unbounded().All(org)
+	rows, err := db.Query[bnName]().AllowUnbounded().All(org)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestPolicyByName(t *testing.T) {
 		{"interceptor", `velox: engine_test.bnName: interceptor [0]'s condition: no column "titel"`},
 	} {
 		ctx := context.WithValue(org, bnBad{}, tc.bad)
-		if _, err := db.Query[bnName]().Unbounded().All(ctx); err == nil || !strings.Contains(err.Error(), tc.err) {
+		if _, err := db.Query[bnName]().AllowUnbounded().All(ctx); err == nil || !strings.Contains(err.Error(), tc.err) {
 			t.Errorf("%s: %v, want %q", tc.bad, err, tc.err)
 		}
 	}

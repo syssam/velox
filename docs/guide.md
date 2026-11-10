@@ -352,10 +352,10 @@ Conditions passed to one `Where` are ANDed. Combine them with `velox.Or`,
 A query that reads rows must say how many it may read. Without `Limit`,
 `All`, `Iter` and the other row readers fail with `velox.ErrUnbounded`
 before anything is sent. When you really do want every row, say so with
-`Unbounded()`:
+`AllowUnbounded()`:
 
 ```go
-for x, err := range db.Query[veloxgen.Invoice]().OrderBy(I.ID.Asc()).Unbounded().Iter(ctx) {
+for x, err := range db.Query[veloxgen.Invoice]().OrderBy(I.ID.Asc()).AllowUnbounded().Iter(ctx) {
 	if err != nil {
 		return err
 	}
@@ -526,11 +526,11 @@ Nillable columns use `SumNull`, `AvgNull` and so on.
 
 `CountBy`, `SumBy`, `AvgBy`, `MinBy` and `MaxBy` group by one key column,
 made with the handle's `Key()` method. Groups can be as many as the rows, so
-the query says `Unbounded()`:
+the query says `AllowUnbounded()`:
 
 ```go
 totals, err := velox.SumBy(ctx,
-	db.Query[veloxgen.Invoice]().Unbounded(),
+	db.Query[veloxgen.Invoice]().AllowUnbounded(),
 	I.OrgID.Key(), I.TotalCents)
 for _, g := range totals {
 	fmt.Println(g.Key, g.Value)
@@ -1014,7 +1014,7 @@ The ones you will meet most:
 |---|---|
 | `ErrNotFound` (test with `IsNotFound`) | `One` or `Save` found no row |
 | `ErrNotSingular` | `One` found more than one |
-| `ErrUnbounded` | a read with no `Limit` or `Unbounded()` |
+| `ErrUnbounded` | a read with no `Limit` or `AllowUnbounded()` |
 | `ErrNoWhere` | an update or delete with no `Where` or `All()` |
 | `ErrDenied`, `*PolicyError` | a policy refused |
 | `ErrStale` | `Save` lost an optimistic-locking race |

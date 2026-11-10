@@ -65,7 +65,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// trail lists the audit rows, written by the update hook.
 	trail := func() ([]string, error) {
 		var rows []string
-		for a, err := range db.Query[veloxgen.Audit]().OrderBy(veloxgen.Audits.ID.Asc()).Unbounded().Iter(ctx) {
+		for a, err := range db.Query[veloxgen.Audit]().OrderBy(veloxgen.Audits.ID.Asc()).AllowUnbounded().Iter(ctx) {
 			if err != nil {
 				return nil, err
 			}

@@ -52,7 +52,7 @@ One key:
   condition apply; ordering, limit, offset, columns and relations are ignored; a lock is
   refused.
 - **The limit guard applies.** A key may be unique, so the groups can be as many as the
-  rows: q must say `Unbounded`, or the statement fails with `ErrUnbounded`. A `Limit` does
+  rows: q must say `AllowUnbounded()`, or the statement fails with `ErrUnbounded`. A `Limit` does
   not stand in for it, as it is ignored; the error says so.
 - **The row cap applies.** Groups are rows: `WithMaxRows` and q's `MaxRows` send a LIMIT
   and fail with `ErrTooManyRows` past it, unlike `Sum`, which returns one row.

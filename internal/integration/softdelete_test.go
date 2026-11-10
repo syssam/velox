@@ -59,7 +59,7 @@ func TestSoftDeleteOnRealDatabases(t *testing.T) {
 		if n, err := tg.pdb.Query[fixture.SDoc]().Count(in1); err != nil || n != 1 {
 			t.Errorf("Count: %d, %v; want 1", n, err)
 		}
-		os, err := tg.pdb.Query[fixture.SOwner]().With(O.Docs).With(O.Pinned).Where(O.ID.EQ(1)).Unbounded().All(in1)
+		os, err := tg.pdb.Query[fixture.SOwner]().With(O.Docs).With(O.Pinned).Where(O.ID.EQ(1)).AllowUnbounded().All(in1)
 		if err != nil || len(os) != 1 {
 			t.Fatalf("owners: %v, %v", os, err)
 		}
@@ -72,7 +72,7 @@ func TestSoftDeleteOnRealDatabases(t *testing.T) {
 		if n, err := tg.pdb.Query[fixture.SOwner]().Where(O.Pinned.Has()).Count(in1); err != nil || n != 0 {
 			t.Errorf("Pinned.Has: %d, %v; want 0", n, err)
 		}
-		if js, err := tg.pdb.Query[fixture.SOwner]().Join(O.Pinned).Unbounded().All(in1); err != nil || len(js) != 0 {
+		if js, err := tg.pdb.Query[fixture.SOwner]().Join(O.Pinned).AllowUnbounded().All(in1); err != nil || len(js) != 0 {
 			t.Errorf("Join(Pinned): %v, %v; want none", js, err)
 		}
 		if n, err := tg.pdb.Update[fixture.SDoc]().Set(D.Title.Set("z")).Where(D.ID.In(1, 2)).Exec(in1); err != nil || n != 1 {

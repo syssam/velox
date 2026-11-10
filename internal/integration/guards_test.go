@@ -19,7 +19,7 @@ func TestGuardsOnRealDatabases(t *testing.T) {
 		if _, err := tg.db.Delete[testmodel.Invoice]().Exec(ctx); !errors.Is(err, velox.ErrNoWhere) {
 			t.Errorf("no where: %v", err)
 		}
-		if _, err := tg.db.Query[testmodel.Invoice]().Unbounded().All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
+		if _, err := tg.db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
 			t.Errorf("five rows, cap 3: %v", err)
 		}
 		if got, err := tg.db.Query[testmodel.Invoice]().Limit(3).All(ctx); err != nil || len(got) != 3 {

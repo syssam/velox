@@ -376,7 +376,7 @@ func UpdateEdges(ctx context.Context, db *DB, st *Statement, p EdgePlan) (int64,
 		if err := p.check(ctx, tx); err != nil {
 			return err
 		}
-		q := QueryTable(tx, InfoTable(st.Entity)).Where(st.Where...).Columns(p.OwnerCols()...).Unbounded().Writable()
+		q := QueryTable(tx, InfoTable(st.Entity)).Where(st.Where...).Columns(p.OwnerCols()...).AllowUnbounded().Writable()
 		if tx.D != SQLite {
 			q = q.ForUpdate()
 		}

@@ -205,7 +205,7 @@ func grouped[E, K, V any](ctx context.Context, q Query[E], fn Aggregate, key Gro
 // included, and After's condition apply, and the ordering, limit, offset,
 // columns and relations are ignored.
 //
-// The groups can be as many as the rows, so q must say Unbounded, and a Limit
+// The groups can be as many as the rows, so q must say AllowUnbounded, and a Limit
 // does not stand in for it, or CountBy fails with ErrUnbounded. They count
 // against WithMaxRows and q's MaxRows: more fails with ErrTooManyRows.
 //

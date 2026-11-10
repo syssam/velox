@@ -72,7 +72,7 @@ func TestRewriteErrorNamesTheEntityOnce(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := &fakeconn.Exec{}
 			db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { return c.err(st) }))
-			_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+			_, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 			if err == nil || err.Error() != c.want || e.Calls != 0 {
 				t.Errorf("%v, calls %d; want %q", err, e.Calls, c.want)
 			}

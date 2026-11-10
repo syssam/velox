@@ -54,7 +54,7 @@ func TestAfterNullsExact(t *testing.T) {
 				orders[1] = I.ID.Desc()
 			}
 			q := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(7)).OrderBy(orders...)
-			all, err := q.Unbounded().All(ctx)
+			all, err := q.AllowUnbounded().All(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}

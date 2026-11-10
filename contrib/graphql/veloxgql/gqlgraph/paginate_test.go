@@ -398,7 +398,7 @@ func TestPaginateUnderTheRowCap(t *testing.T) {
 		}
 	}
 	db := velox.Open(velox.SQLite, sqlDB, velox.WithMaxRows(100))
-	if _, err := db.Query[person]().Unbounded().All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
+	if _, err := db.Query[person]().AllowUnbounded().All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
 		t.Fatalf("the cap: %v, want ErrTooManyRows", err)
 	}
 	for name, args := range map[string]gqlgraph.Args{"the default page": {}, "first 100": {First: new(100)}, "last 100": {Last: new(100)}} {

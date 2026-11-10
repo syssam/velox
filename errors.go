@@ -37,7 +37,7 @@ var (
 	// owner holds a one-to-one child the caller may not change.
 	ErrLinked = engine.ErrLinked
 	// ErrUnbounded is returned by a query that has no Limit and did not say
-	// Unbounded, when it runs.
+	// AllowUnbounded, when it runs.
 	ErrUnbounded = engine.ErrUnbounded
 	// ErrNoWhere is returned by an update or delete that has no Where and did
 	// not say All, when it runs.

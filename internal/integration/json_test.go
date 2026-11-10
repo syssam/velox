@@ -264,13 +264,13 @@ func TestJSONInsertAndRead(t *testing.T) {
 		if err := tg.db.InsertAll(rows).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		all, err := tg.db.Query[jrec]().OrderBy(JR.ID.Asc()).Unbounded().All(ctx)
+		all, err := tg.db.Query[jrec]().OrderBy(JR.ID.Asc()).AllowUnbounded().All(ctx)
 		if err != nil || len(all) != 3 {
 			t.Fatalf("All: %d rows, %v", len(all), err)
 		}
 		wantRec(t, all[2], rows[1])
 		var n int
-		for x, err := range tg.db.Query[jrec]().OrderBy(JR.ID.Asc()).Unbounded().Iter(ctx) {
+		for x, err := range tg.db.Query[jrec]().OrderBy(JR.ID.Asc()).AllowUnbounded().Iter(ctx) {
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -324,11 +324,11 @@ func TestJSONNullAndNull(t *testing.T) {
 
 		// IsNull and NotNull see SQL NULL only, not the JSON null; they are the
 		// conditions a JSON column accepts.
-		isNull, err := tg.db.Query[jrec]().Where(JR.Nums.IsNull()).OrderBy(JR.ID.Asc()).Unbounded().All(ctx)
+		isNull, err := tg.db.Query[jrec]().Where(JR.Nums.IsNull()).OrderBy(JR.ID.Asc()).AllowUnbounded().All(ctx)
 		if err != nil || len(isNull) != 2 || isNull[0].ID != 1 || isNull[1].ID != 2 {
 			t.Errorf("IsNull: %+v, %v", isNull, err)
 		}
-		notNull, err := tg.db.Query[jrec]().Where(JR.Nums.NotNull()).Unbounded().All(ctx)
+		notNull, err := tg.db.Query[jrec]().Where(JR.Nums.NotNull()).AllowUnbounded().All(ctx)
 		if err != nil || len(notNull) != 1 || notNull[0].ID != 3 {
 			t.Errorf("NotNull: %+v, %v", notNull, err)
 		}
@@ -444,7 +444,7 @@ func TestJSONConditions(t *testing.T) {
 		// JR's JSONCol has no EQ: Col handles, as a hand-written Descriptor might
 		// declare, reach the statement's refusal.
 		tags, shape := velox.Col[jrec, []string]{I: 1}, velox.Col[jrec, jShape]{I: 3}
-		_, err := tg.db.Query[jrec]().Where(tags.EQ([]string{"a"})).Unbounded().All(ctx)
+		_, err := tg.db.Query[jrec]().Where(tags.EQ([]string{"a"})).AllowUnbounded().All(ctx)
 		if err == nil || !strings.Contains(err.Error(), "tags") || !strings.Contains(err.Error(), "an encoded column") {
 			t.Errorf("EQ: got %v, want the column refused", err)
 		}
@@ -452,7 +452,7 @@ func TestJSONConditions(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "shape") {
 			t.Errorf("NEQ in a delete: got %v", err)
 		}
-		_, err = tg.db.Query[jrec]().OrderBy(shape.Asc()).Unbounded().All(ctx)
+		_, err = tg.db.Query[jrec]().OrderBy(shape.Asc()).AllowUnbounded().All(ctx)
 		if err == nil || !strings.Contains(err.Error(), "shape") || !strings.Contains(err.Error(), "order by") {
 			t.Errorf("ORDER BY: got %v, want the column refused", err)
 		}

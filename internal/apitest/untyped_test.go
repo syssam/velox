@@ -255,7 +255,7 @@ func ubCount[E any, PE velox.Entity[E]](t *testing.T, db *velox.DB) int64 {
 // ubTitles returns the titles of the docs the context sees, by id.
 func ubTitles(ctx context.Context, t *testing.T, db *velox.DB) []string {
 	t.Helper()
-	ds, err := db.Query[ubDoc]().OrderBy(ubDocs.ID.Asc()).Unbounded().All(ctx)
+	ds, err := db.Query[ubDoc]().OrderBy(ubDocs.ID.Asc()).AllowUnbounded().All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +469,7 @@ func TestEdgeHasAppliesTargetPolicy(t *testing.T) {
 	})
 	db := ubDB(t)
 	ctx := context.Background()
-	cs, err := db.Query[ubComment]().Unbounded().All(ctx)
+	cs, err := db.Query[ubComment]().AllowUnbounded().All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -218,7 +218,7 @@ func TestTransactions(t *testing.T) {
 
 func numbers(t *testing.T, tg target, org int64) []string {
 	t.Helper()
-	got, err := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(org)).OrderBy(I.Number.Asc()).Unbounded().All(ctx)
+	got, err := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(org)).OrderBy(I.Number.Asc()).AllowUnbounded().All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

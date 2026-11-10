@@ -87,7 +87,7 @@ func where(t *testing.T, db *velox.DB, w *personWhere) []int64 {
 	if err != nil {
 		t.Fatalf("Pred: %v", err)
 	}
-	rows, err := db.Query[person]().Where(p).OrderBy(people.ID.Asc()).Unbounded().All(ctx)
+	rows, err := db.Query[person]().Where(p).OrderBy(people.ID.Asc()).AllowUnbounded().All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

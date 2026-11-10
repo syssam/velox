@@ -322,6 +322,7 @@ func (q InsertQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E]
 func (q InsertQuery[E]) Update[_ Lazy[E]](cols ...Column[E]) InsertQuery[E]
 func (q Query[E]) After[_ Lazy[E]](x *E) Query[E]
 func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
+func (q Query[E]) AllowUnbounded[_ Lazy[E]]() Query[E]
 func (q Query[E]) Columns[_ Lazy[E]](cs ...Column[E]) Query[E]
 func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error)
 func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error)
@@ -343,7 +344,6 @@ func (q Query[E]) Paginate[P Paged[E, K, O, C], K, O, C any](ctx context.Context
 func (q Query[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (q Query[E]) Selects[_ Lazy[E]](cs ...Column[E]) bool
 func (q Query[E]) SkipLocked[_ Lazy[E]]() Query[E]
-func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E]
 func (q Query[E]) Where[_ Lazy[E]](ps ...Pred[E]) Query[E]
 func (q Query[E]) With[T any](r Rel[E, T]) Query[E]
 func (q Query[E]) Writable[_ Lazy[E]]() Query[E]

@@ -71,7 +71,7 @@ func TestOne(t *testing.T) {
 func TestColumnsAndOmit(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(5), "INV-5"}}}
 	db := openFake(velox.Postgres, e)
-	got, err := db.Query[testmodel.Invoice]().Columns(I.ID, I.Number).Unbounded().All(ctx)
+	got, err := db.Query[testmodel.Invoice]().Columns(I.ID, I.Number).AllowUnbounded().All(ctx)
 	if err != nil || len(got) != 1 || got[0].ID != 5 || got[0].Number != "INV-5" || got[0].Total != 0 {
 		t.Fatalf("%+v, %v", got, err)
 	}
@@ -80,7 +80,7 @@ func TestColumnsAndOmit(t *testing.T) {
 	}
 	row := invoiceRow(6)
 	e.Rows = [][]any{append(row[:8:8], row[9])}
-	got, err = db.Query[testmodel.Invoice]().Omit(I.Note).Unbounded().All(ctx)
+	got, err = db.Query[testmodel.Invoice]().Omit(I.Note).AllowUnbounded().All(ctx)
 	if err != nil || got[0].ID != 6 || got[0].Note != "" {
 		t.Fatalf("%+v, %v", got, err)
 	}
@@ -105,7 +105,7 @@ func TestIterStopsEarly(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1), invoiceRow(2), invoiceRow(3)}}
 	db := openFake(velox.Postgres, e)
 	var seen []int64
-	for inv, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+	for inv, err := range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -132,7 +132,7 @@ func TestIterBreakClosesTheRows(t *testing.T) {
 		e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1), invoiceRow(2), invoiceRow(3)}}
 		db := openFake(velox.Postgres, e, opts...)
 		seen := 0
-		for _, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+		for _, err := range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 			if err != nil {
 				t.Fatalf("%s: %v", name, err)
 			}
@@ -183,7 +183,7 @@ func TestQueryCanRunAgain(t *testing.T) {
 // the query extended as it was, so one base query can be extended many ways.
 func TestChainingCopiesTheQuery(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	base := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1)).OrderBy(I.ID.Asc()).Unbounded()
+	base := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1)).OrderBy(I.ID.Asc()).AllowUnbounded()
 	baseSQL, baseArgs := sqlOK(t)(base.SQL(ctx))
 
 	paid := base.Where(I.Paid.EQ(true))
@@ -207,7 +207,7 @@ func TestChainingCopiesTheQuery(t *testing.T) {
 	// Three conditions and three orderings leave the base's slices with room
 	// for a fourth, which the two branches must not both write to.
 	roomy := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1), I.Paid.EQ(true), I.Total.GT(1)).
-		OrderBy(I.ID.Asc(), I.Total.Desc(), I.Number.Asc()).Unbounded()
+		OrderBy(I.ID.Asc(), I.Total.Desc(), I.Number.Asc()).AllowUnbounded()
 	low, high := roomy.Where(I.ID.LT(10)), roomy.Where(I.ID.GT(20))
 	if text, _ := sqlOK(t)(low.SQL(ctx)); !strings.Contains(text, `AND "id" < $4 ORDER`) {
 		t.Errorf("first branch of a base with room: %s", text)
@@ -223,7 +223,7 @@ func TestChainingCopiesTheQuery(t *testing.T) {
 		t.Errorf("second ordering of a base with room: %s", text)
 	}
 
-	base.Limit(5).Offset(2).Unbounded().Columns(I.ID).Omit(I.Note)
+	base.Limit(5).Offset(2).AllowUnbounded().Columns(I.ID).Omit(I.Note)
 	if text, args := sqlOK(t)(base.SQL(ctx)); text != baseSQL || !reflect.DeepEqual(args, baseArgs) {
 		t.Errorf("the base query changed:\n got %s %v\nwant %s %v", text, args, baseSQL, baseArgs)
 	}
@@ -239,7 +239,7 @@ func TestBaseQueryIsSafeToExtendConcurrently(t *testing.T) {
 			for i := range 100 {
 				id := int64(g*1000 + i)
 				q := base.Where(I.ID.EQ(id)).OrderBy(I.ID.Desc())
-				text, args, err := q.Unbounded().SQL(ctx)
+				text, args, err := q.AllowUnbounded().SQL(ctx)
 				if err != nil {
 					t.Error(err)
 					return
@@ -248,7 +248,7 @@ func TestBaseQueryIsSafeToExtendConcurrently(t *testing.T) {
 					t.Errorf("goroutine %d: %s %v", g, text, args)
 					return
 				}
-				if _, err := q.Unbounded().All(ctx); err != nil {
+				if _, err := q.AllowUnbounded().All(ctx); err != nil {
 					t.Error(err)
 					return
 				}
@@ -452,7 +452,7 @@ func TestRewriteCannotChangeExists(t *testing.T) {
 	flip := func(_ context.Context, st *velox.Statement) error { st.Exists = !st.Exists; return nil }
 	for name, run := range map[string]func(db *velox.DB) error{
 		"set on All": func(db *velox.DB) error {
-			_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+			_, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 			return err
 		},
 		"cleared on Exists": func(db *velox.DB) error {
@@ -484,7 +484,7 @@ func TestRewriteCannotChangeCount(t *testing.T) {
 		run func(db *velox.DB) error
 	}{
 		"set on All": {set, func(db *velox.DB) error {
-			_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+			_, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 			return err
 		}},
 		"set on Exists": {set, func(db *velox.DB) error {

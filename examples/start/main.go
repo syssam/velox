@@ -106,9 +106,9 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("Count: %d name starts with B", n)
 
-	// Iter holds one row at a time. Unbounded says there is no Limit on
+	// Iter holds one row at a time. AllowUnbounded says there is no Limit on
 	// purpose.
-	for u, err := range db.Query[veloxgen.User]().OrderBy(U.Name.Asc()).Unbounded().Iter(ctx) {
+	for u, err := range db.Query[veloxgen.User]().OrderBy(U.Name.Asc()).AllowUnbounded().Iter(ctx) {
 		if err != nil {
 			return err
 		}
@@ -155,7 +155,7 @@ func run(ctx context.Context, w io.Writer) error {
 	say("Count: %d users left", n)
 
 	// Guards are always on: a read with no Limit, and an update or delete
-	// with no Where, fail before anything is sent. Unbounded() and All() are
+	// with no Where, fail before anything is sent. AllowUnbounded() and All() are
 	// the per-query escapes.
 	_, err = db.Query[veloxgen.User]().All(ctx)
 	say("no Limit: ErrUnbounded=%t", errors.Is(err, velox.ErrUnbounded))

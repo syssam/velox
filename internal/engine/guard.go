@@ -90,13 +90,13 @@ func (db *DB) guard(st *Statement) error {
 	case OpSelect:
 		if st.GroupBy != 0 && !st.Unbounded {
 			// A key may be unique, so the groups are as many as the rows.
-			return fmt.Errorf("velox: %s: %w: a grouped aggregate ignores Limit; add Unbounded to read every group", st.Entity.Name, ErrUnbounded)
+			return fmt.Errorf("velox: %s: %w: a grouped aggregate ignores Limit; add AllowUnbounded to read every group", st.Entity.Name, ErrUnbounded)
 		}
 		if st.Count || st.Exists || st.Aggregate != 0 {
 			break
 		}
 		if st.Limit <= 0 && !st.Unbounded {
-			return fmt.Errorf("velox: %s: %w: add Limit, or Unbounded to read every row", st.Entity.Name, ErrUnbounded)
+			return fmt.Errorf("velox: %s: %w: add Limit, or AllowUnbounded to read every row", st.Entity.Name, ErrUnbounded)
 		}
 		if m := db.Cfg.MaxLimit; m > 0 && st.Limit > m {
 			return fmt.Errorf("velox: %s: %w: Limit %d, the maximum is %d", st.Entity.Name, ErrLimitTooLarge, st.Limit, m)

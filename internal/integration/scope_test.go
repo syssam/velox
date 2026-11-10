@@ -142,7 +142,7 @@ var visible = map[string][]int64{"ann": {1, 2, 5}, "admin": {1, 2, 3, 4, 5}, "an
 
 func TestScopeReads(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
-		q := c.on(tg).Query[testmodel.Ticket]().OrderBy(Tk.ID.Asc()).Unbounded()
+		q := c.on(tg).Query[testmodel.Ticket]().OrderBy(Tk.ID.Asc()).AllowUnbounded()
 		all, err := q.All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -190,11 +190,11 @@ func TestScopeReads(t *testing.T) {
 // is the policy's denial.
 func TestScopeNeedsOrgAndUser(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
-		_, err := tg.pdb.Query[testmodel.Ticket]().Unbounded().All(testmodel.WithUser(context.Background(), "ann"))
+		_, err := tg.pdb.Query[testmodel.Ticket]().AllowUnbounded().All(testmodel.WithUser(context.Background(), "ann"))
 		if !errors.Is(err, scope.ErrNoScope) {
 			t.Errorf("no org: %v", err)
 		}
-		_, err = tg.pdb.Query[testmodel.Ticket]().Unbounded().All(testmodel.Org.With(context.Background(), int64(1)))
+		_, err = tg.pdb.Query[testmodel.Ticket]().AllowUnbounded().All(testmodel.Org.With(context.Background(), int64(1)))
 		var pe *velox.PolicyError
 		if !errors.As(err, &pe) || pe.Op != velox.OpSelect {
 			t.Errorf("no user: %v", err)
@@ -215,7 +215,7 @@ func TestScopeRelations(t *testing.T) {
 	hasParent := map[string][]int64{"ann": {2}, "admin": {2, 4, 5}, "anyone": {2, 4, 5, 7, 8}}
 	hasInvoice := map[string][]int64{"ann": {1}, "admin": {1, 3, 4}, "anyone": {1, 3, 4, 5, 6, 7}}
 	eachCaller(t, func(t *testing.T, tg target, c who) {
-		xs, err := c.on(tg).Query[testmodel.Ticket]().With(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		xs, err := c.on(tg).Query[testmodel.Ticket]().With(Tk.Parent).OrderBy(Tk.ID.Asc()).AllowUnbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -234,7 +234,7 @@ func TestScopeRelations(t *testing.T) {
 			t.Errorf("With(Parent): %v, want %v", got, parents[c.name])
 		}
 		has := func(p velox.Pred[testmodel.Ticket]) []int64 {
-			xs, err := c.on(tg).Query[testmodel.Ticket]().Where(p).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+			xs, err := c.on(tg).Query[testmodel.Ticket]().Where(p).OrderBy(Tk.ID.Asc()).AllowUnbounded().All(c.ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -258,7 +258,7 @@ func TestScopeCrossOrgParent(t *testing.T) {
 	hasParent := map[string][]int64{"ann": {2}, "admin": {2, 4, 5}, "anyone": {1, 2, 4, 5, 7, 8}}
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		tg.exec(t, "UPDATE tickets SET parent_id = 6 WHERE id = 1")
-		xs, err := c.on(tg).Query[testmodel.Ticket]().With(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		xs, err := c.on(tg).Query[testmodel.Ticket]().With(Tk.Parent).OrderBy(Tk.ID.Asc()).AllowUnbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -276,7 +276,7 @@ func TestScopeCrossOrgParent(t *testing.T) {
 		if fmt.Sprint(got) != fmt.Sprint(parents[c.name]) {
 			t.Errorf("With(Parent): %v, want %v", got, parents[c.name])
 		}
-		has, err := c.on(tg).Query[testmodel.Ticket]().Where(Tk.Parent.Has()).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		has, err := c.on(tg).Query[testmodel.Ticket]().Where(Tk.Parent.Has()).OrderBy(Tk.ID.Asc()).AllowUnbounded().All(c.ctx)
 		if err != nil {
 			t.Fatal(err)
 		}

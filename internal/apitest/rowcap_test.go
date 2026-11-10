@@ -20,14 +20,14 @@ func fiveInvoices() [][]any {
 func TestRowCap(t *testing.T) {
 	e := &fakeconn.Exec{Rows: fiveInvoices()}
 	db := openFake(velox.Postgres, e, velox.WithMaxRows(3))
-	_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+	_, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 	if !errors.Is(err, velox.ErrTooManyRows) || !strings.HasPrefix(err.Error(), "velox: testmodel.Invoice: ") || e.Closed != e.Calls {
 		t.Errorf("%v; closed %d of %d", err, e.Closed, e.Calls)
 	}
-	if got, err := db.Query[testmodel.Invoice]().Unbounded().MaxRows(10).All(ctx); err != nil || len(got) != 5 {
+	if got, err := db.Query[testmodel.Invoice]().AllowUnbounded().MaxRows(10).All(ctx); err != nil || len(got) != 5 {
 		t.Errorf("MaxRows(10): %d rows, %v", len(got), err)
 	}
-	if got, err := db.Query[testmodel.Invoice]().Unbounded().MaxRows(10).MaxRows(0).All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
+	if got, err := db.Query[testmodel.Invoice]().AllowUnbounded().MaxRows(10).MaxRows(0).All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
 		t.Errorf("MaxRows(0) restores the DB's cap: %d rows, %v", len(got), err)
 	}
 	e.Rows = [][]any{{int64(5)}}
@@ -39,7 +39,7 @@ func TestRowCap(t *testing.T) {
 func TestRowCapOfExactlyN(t *testing.T) {
 	e := &fakeconn.Exec{Rows: fiveInvoices()[:3]}
 	db := openFake(velox.Postgres, e, velox.WithMaxRows(3))
-	if got, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); err != nil || len(got) != 3 {
+	if got, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); err != nil || len(got) != 3 {
 		t.Errorf("%d rows, %v", len(got), err)
 	}
 }
@@ -86,10 +86,10 @@ func TestRowCapIsSentAsALimit(t *testing.T) {
 			q    velox.Query[testmodel.Invoice]
 			want int
 		}{
-			{"Unbounded", d.Query[testmodel.Invoice]().Unbounded(), 4},
+			{"Unbounded", d.Query[testmodel.Invoice]().AllowUnbounded(), 4},
 			{"Limit(2)", d.Query[testmodel.Invoice]().Limit(2), 2},
 			{"Limit(10)", d.Query[testmodel.Invoice]().Limit(10), 4},
-			{"MaxRows(10)", d.Query[testmodel.Invoice]().Unbounded().MaxRows(10), 11},
+			{"MaxRows(10)", d.Query[testmodel.Invoice]().AllowUnbounded().MaxRows(10), 11},
 		} {
 			if _, err := c.q.All(ctx); err != nil {
 				t.Fatalf("%s: %v", c.name, err)
@@ -105,7 +105,7 @@ func TestRowCapIsSentAsALimit(t *testing.T) {
 	if want := []int{4, 2, 4, 11}; !slices.Equal(around, want) {
 		t.Errorf("Around hooks saw Limit %v, want %v", around, want)
 	}
-	for range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+	for range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 	}
 	if got := limitArg(e.SQL, e.Args); got != 4 {
 		t.Errorf("Iter: sent %s %v", e.SQL, e.Args)
@@ -129,7 +129,7 @@ func TestRowCapInIter(t *testing.T) {
 	db := openFake(velox.Postgres, e, velox.WithMaxRows(3))
 	var rows int
 	var last error
-	for _, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+	for _, err := range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 		if err != nil {
 			last = err
 			continue
@@ -232,7 +232,7 @@ func TestRowCapFromARewrite(t *testing.T) {
 		st.MaxRows = 2
 		return nil
 	}))
-	_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+	_, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 	const want = "velox: testmodel.Invoice: read more rows than the cap: more than 2; raise it with the query's MaxRows"
 	if !errors.Is(err, velox.ErrTooManyRows) || err.Error() != want {
 		t.Errorf("%v, want %q", err, want)

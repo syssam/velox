@@ -32,7 +32,7 @@ func TestAfterWithColumnsOnWhatIgnoresThem(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := &fakeconn.Exec{Rows: c.rows}
-			base := openFake(velox.Postgres, e).Query[testmodel.Invoice]().Unbounded()
+			base := openFake(velox.Postgres, e).Query[testmodel.Invoice]().AllowUnbounded()
 			if err := c.run(base.OrderBy(I.CreatedAt.Desc(), I.ID.Desc()).Columns(I.Number).After(last)); err != nil {
 				t.Errorf("Columns then After: %v", err)
 			}

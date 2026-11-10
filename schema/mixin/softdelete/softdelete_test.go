@@ -195,7 +195,7 @@ func TestReadsHideDeleted(t *testing.T) {
 	if _, err := db.Delete[fixture.SDoc]().Where(D.ID.EQ(2)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	ds, err := db.Query[fixture.SDoc]().OrderBy(D.ID.Asc()).Unbounded().All(ctx)
+	ds, err := db.Query[fixture.SDoc]().OrderBy(D.ID.Asc()).AllowUnbounded().All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestReadsHideDeleted(t *testing.T) {
 		t.Errorf("One of the deleted row: %v", err)
 	}
 
-	os, err := db.Query[fixture.SOwner]().With(O.Docs.OrderBy(D.ID.Asc())).With(O.Pinned).OrderBy(O.ID.Asc()).Unbounded().All(ctx)
+	os, err := db.Query[fixture.SOwner]().With(O.Docs.OrderBy(D.ID.Asc())).With(O.Pinned).OrderBy(O.ID.Asc()).AllowUnbounded().All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestReadsHideDeleted(t *testing.T) {
 	if n, err := db.Query[fixture.SOwner]().Where(O.Docs.HasWith(D.Title.EQ("b"))).Count(ctx); err != nil || n != 0 {
 		t.Errorf("Docs.HasWith(b): %d, %v; want 0", n, err)
 	}
-	joined, err := db.Query[fixture.SOwner]().Join(O.Pinned).Unbounded().All(ctx)
+	joined, err := db.Query[fixture.SOwner]().Join(O.Pinned).AllowUnbounded().All(ctx)
 	if err != nil || len(joined) != 0 {
 		t.Errorf("Join(Pinned): %v, %v; want none", joined, err)
 	}

@@ -145,7 +145,7 @@ func TestTagIDGT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows, err := velox.Open(velox.SQLite, sdb).Query[gen.Tag]().Where(p).Unbounded().All(ctx)
+	rows, err := velox.Open(velox.SQLite, sdb).Query[gen.Tag]().Where(p).AllowUnbounded().All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

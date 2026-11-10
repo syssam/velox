@@ -51,7 +51,7 @@
 // Query.All returns the rows, One exactly one (ErrNotFound for none,
 // ErrNotSingular for several) and First the first in the query's order,
 // without One's check for a second. A query that reads rows needs a Limit,
-// or fails with ErrUnbounded, unless it says Unbounded. Count and Exists ask
+// or fails with ErrUnbounded, unless it says AllowUnbounded. Count and Exists ask
 // the database instead of loading rows, and need no Limit; Exists is a
 // SELECT 1 … LIMIT 1.
 //
@@ -68,11 +68,11 @@
 // CountBy, SumBy, AvgBy, MinBy and MaxBy do the same per value of a key column,
 // made by the column handle's Key method, in the order of the key:
 //
-//	totals, err := velox.SumBy(ctx, db.Query[veloxgen.Invoice]().Unbounded(), veloxgen.Invoices.OrgID.Key(), veloxgen.Invoices.TotalCents)
+//	totals, err := velox.SumBy(ctx, db.Query[veloxgen.Invoice]().AllowUnbounded(), veloxgen.Invoices.OrgID.Key(), veloxgen.Invoices.TotalCents)
 //
 // Each returns a []Group[K, V]; SumByNull, AvgByNull, MinByNull and MaxByNull
 // take a NullNumberCol. The groups can be as many as the rows, so the
-// query says Unbounded, and WithMaxRows caps them as it caps a read's rows.
+// query says AllowUnbounded, and WithMaxRows caps them as it caps a read's rows.
 //
 // Rel.Of is a condition on the rows related to given owners, which loading
 // the relation for them would load:

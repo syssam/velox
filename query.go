@@ -85,7 +85,7 @@ func (q Query[E]) OrderBy[_ Lazy[E]](os ...Order[E]) Query[E] {
 func (q Query[E]) Ordered[_ Lazy[E]]() bool { return len(q.s.St.OrderBy) > 0 }
 
 // Limit returns the query returning at most n rows. n <= 0 removes the limit;
-// a query with no limit fails with ErrUnbounded unless it says Unbounded.
+// a query with no limit fails with ErrUnbounded unless it says AllowUnbounded.
 func (q Query[E]) Limit[_ Lazy[E]](n int) Query[E] {
 	q.s.St.Limit = max(n, 0)
 	return q
@@ -98,9 +98,11 @@ func (q Query[E]) Offset[_ Lazy[E]](n int) Query[E] {
 	return q
 }
 
-// Unbounded returns the query declared to have no Limit on purpose. A query
-// with neither a Limit nor Unbounded fails with ErrUnbounded.
-func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E] {
+// AllowUnbounded returns the query allowed to run with no Limit: it reads every
+// row it matches, or every group of a grouped aggregate. It only waives the
+// check that fails a query with no Limit, with ErrUnbounded. A Limit the query
+// sets still applies, and so does WithMaxLimit's maximum.
+func (q Query[E]) AllowUnbounded[_ Lazy[E]]() Query[E] {
 	q.s.St.Unbounded = true
 	return q
 }
@@ -292,7 +294,7 @@ func readAll[E any](a *allRun[E], r engine.Rows) error {
 	dst := make([]any, rootN+a.joins.Width())
 	// Limit is mandatory, so it is a bound and not a likely size: at most firstRows
 	// are allocated ahead for it, then rowGrowth times as many as they fill. The
-	// Limit of an Unbounded read is the row cap's (cap+1): nothing is allocated
+	// Limit of an AllowUnbounded read is the row cap's (cap+1): nothing is allocated
 	// ahead for it, and append grows it.
 	n := 0
 	if !a.st.Unbounded {

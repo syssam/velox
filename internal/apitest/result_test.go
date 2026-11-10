@@ -29,14 +29,14 @@ func TestResultOfReads(t *testing.T) {
 	var got velox.Result
 	e := &fakeconn.Exec{Rows: threeInvoices()}
 	db := resultOf(e, &got)
-	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); err != nil {
+	if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if want := (velox.Result{Rows: 3, Affected: -1}); got != want {
 		t.Errorf("All: %+v, want %+v", got, want)
 	}
 	n := 0
-	for _, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+	for _, err := range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -81,7 +81,7 @@ func TestResultOfAFailedStatement(t *testing.T) {
 	var got velox.Result
 	boom := errors.New("boom")
 	db := resultOf(&fakeconn.Exec{Rows: threeInvoices(), Err: boom}, &got)
-	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); !errors.Is(err, boom) {
+	if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); !errors.Is(err, boom) {
 		t.Fatalf("err %v, want boom", err)
 	}
 	if want := (velox.Result{Rows: 0, Affected: -1}); got != want {
@@ -139,7 +139,7 @@ func TestResultIsTheLastAttempts(t *testing.T) {
 		return err
 	})
 	db := openFake(velox.Postgres, &fakeconn.Exec{Rows: threeInvoices(), Errs: []error{boom}}, retry)
-	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); err != nil {
+	if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if want := (velox.Result{Rows: 0, Affected: -1}); first != want {
@@ -153,7 +153,7 @@ func TestResultIsTheLastAttempts(t *testing.T) {
 func TestResultUnderARowCap(t *testing.T) {
 	var got velox.Result
 	db := resultOf(&fakeconn.Exec{Rows: threeInvoices()}, &got, velox.WithMaxRows(2))
-	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
+	if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
 		t.Fatalf("err %v, want ErrTooManyRows", err)
 	}
 	if want := (velox.Result{Rows: 2, Affected: -1}); got != want {
@@ -169,7 +169,7 @@ func TestResultWhenAnInnerHookRefuses(t *testing.T) {
 	refused := errors.New("refused")
 	refuse := velox.WithAround(func(context.Context, *velox.Statement, func(context.Context) error) error { return refused })
 	db := resultOf(&fakeconn.Exec{Rows: threeInvoices()}, &got, refuse)
-	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); !errors.Is(err, refused) {
+	if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); !errors.Is(err, refused) {
 		t.Fatalf("err %v, want refused", err)
 	}
 	if want := (velox.Result{Rows: 0, Affected: -1}); got != want {
@@ -204,7 +204,7 @@ func TestResultLoopBody(t *testing.T) {
 		var got velox.Result
 		db := resultOf(&fakeconn.Exec{Rows: threeInvoices()}, &got)
 		start := time.Now()
-		sleepIter(t, db.Query[testmodel.Invoice]().Unbounded().Iter(ctx), body, -1)
+		sleepIter(t, db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx), body, -1)
 		w := time.Since(start)
 		if got.Rows != 3 || got.LoopBody < 3*body || got.LoopBody > w {
 			t.Errorf("%+v, want 3 rows and %v <= LoopBody <= %v", got, 3*body, w)
@@ -214,7 +214,7 @@ func TestResultLoopBody(t *testing.T) {
 		var got velox.Result
 		db := resultOf(&fakeconn.Exec{Rows: threeInvoices()}, &got)
 		start := time.Now()
-		sleepIter(t, db.Query[testmodel.Invoice]().Unbounded().Iter(ctx), body, 1)
+		sleepIter(t, db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx), body, 1)
 		w := time.Since(start)
 		if got.Rows != 1 || got.LoopBody < body || got.LoopBody > w {
 			t.Errorf("%+v, want 1 row and %v <= LoopBody <= %v", got, body, w)
@@ -234,7 +234,7 @@ func TestResultLoopBody(t *testing.T) {
 					t.Error("the loop body's panic did not reach the caller")
 				}
 			}()
-			for range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+			for range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 				time.Sleep(body)
 				panic("boom")
 			}
@@ -248,7 +248,7 @@ func TestResultLoopBody(t *testing.T) {
 		var got velox.Result
 		e := &fakeconn.Exec{Rows: threeInvoices(), Affected: 1}
 		db := resultOf(e, &got)
-		if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); err != nil || got.LoopBody != 0 {
+		if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); err != nil || got.LoopBody != 0 {
 			t.Errorf("All: %+v, %v; want LoopBody 0", got, err)
 		}
 		e.Cols, e.Rows = []string{"id"}, [][]any{{int64(1)}, {int64(2)}}
@@ -266,8 +266,8 @@ func TestResultLoopBody(t *testing.T) {
 			return next(ctx)
 		})
 		db := openFake(velox.Postgres, &fakeconn.Exec{Rows: threeInvoices()}, count)
-		_ = db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) // never ranged: nothing runs
-		for _, err := range db.Query[testmodel.Invoice]().With(I.Items).Unbounded().Iter(ctx) {
+		_ = db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) // never ranged: nothing runs
+		for _, err := range db.Query[testmodel.Invoice]().With(I.Items).AllowUnbounded().Iter(ctx) {
 			if err == nil {
 				t.Error("Iter with a With load yielded a row")
 			}
@@ -288,7 +288,7 @@ func TestResultLoopBody(t *testing.T) {
 			return err
 		})
 		db := openFake(velox.Postgres, &fakeconn.Exec{Rows: threeInvoices(), Errs: []error{errors.New("boom")}}, retry)
-		sleepIter(t, db.Query[testmodel.Invoice]().Unbounded().Iter(ctx), body, -1)
+		sleepIter(t, db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx), body, -1)
 		if first.LoopBody != 0 || second.Rows != 3 || second.LoopBody < 3*body {
 			t.Errorf("first %+v, retry %+v; want LoopBody 0, then 3 rows and >= %v", first, second, 3*body)
 		}
@@ -308,7 +308,7 @@ func TestResultLoopBody(t *testing.T) {
 		})
 		db := openFake(velox.Postgres, &fakeconn.Exec{Rows: threeInvoices()}, retry)
 		var last error
-		for _, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+		for _, err := range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 			if err != nil {
 				last = err
 				continue

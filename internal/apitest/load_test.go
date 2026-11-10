@@ -267,7 +267,7 @@ func TestLoadEachOwnersOfOneKeyDoNotShareRows(t *testing.T) {
 func TestIterRefusesWith(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	n := 0
-	for _, err := range db.Query[testmodel.Invoice]().With(I.Items).Unbounded().Iter(ctx) {
+	for _, err := range db.Query[testmodel.Invoice]().With(I.Items).AllowUnbounded().Iter(ctx) {
 		n++
 		if err == nil || !strings.Contains(err.Error(), "Iter does not load relations") {
 			t.Errorf("%v", err)

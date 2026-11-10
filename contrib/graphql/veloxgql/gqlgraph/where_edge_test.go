@@ -40,7 +40,7 @@ func filtered[E any](t *testing.T, db *velox.DB, build func(f *gqlgraph.Filter))
 	if err != nil {
 		return nil, err
 	}
-	rows, err := untyped.Query(db, tbl).Where(p).OrderBy(velox.OrderTerm{Column: 0}).Unbounded().All(ctx)
+	rows, err := untyped.Query(db, tbl).Where(p).OrderBy(velox.OrderTerm{Column: 0}).AllowUnbounded().All(ctx)
 	if err != nil {
 		return nil, err
 	}

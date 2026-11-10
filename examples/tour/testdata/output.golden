@@ -32,7 +32,7 @@ soft delete: 1 invoice deleted; org 1 sees 2, and 3 under softdelete.Skip
 restore under softdelete.Skip: 1 invoice
 
 == 5. Guards
-no Limit: ErrUnbounded=true: velox: veloxgen.Invoice: query has no Limit: add Limit, or Unbounded to read every row
+no Limit: ErrUnbounded=true: velox: veloxgen.Invoice: query has no Limit: add Limit, or AllowUnbounded to read every row
 no Where: ErrNoWhere=true: velox: veloxgen.Line: update or delete has no Where: add Where, or All to change every row
 
 == 6. Policy and organizations

@@ -277,7 +277,7 @@ func invoiceNumbers(t *testing.T, d *sql.DB) []string {
 // order.
 func readNumbers(t *testing.T, c context.Context, db *velox.DB) []string {
 	t.Helper()
-	got, err := db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).Unbounded().All(c)
+	got, err := db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).AllowUnbounded().All(c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +426,7 @@ func TestRoutingShardsByOrg(t *testing.T) {
 		free := db.WithoutPolicy("routing test")
 		wantNumbers(t, "WithShard", readNumbers(t, velox.WithShard(ctx, "two"), free), []string{"ORG-2"})
 
-		_, err := free.Query[testmodel.Invoice]().Unbounded().All(ctx)
+		_, err := free.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 		if !errors.Is(err, velox.ErrNoShard) {
 			t.Errorf("a read under WithoutPolicy without WithShard: %v, want ErrNoShard", err)
 		}

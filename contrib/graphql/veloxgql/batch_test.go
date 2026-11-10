@@ -202,7 +202,7 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			if err != nil {
 				return nil, err
 			}
-			rows, err := db.Query[keeper]().OrderBy(keepers.ID.Asc()).Unbounded().All(ctx)
+			rows, err := db.Query[keeper]().OrderBy(keepers.ID.Asc()).AllowUnbounded().All(ctx)
 			if err != nil {
 				return nil, err
 			}

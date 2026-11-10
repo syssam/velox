@@ -22,7 +22,7 @@ var (
 	// owner holds a one-to-one child the caller may not change.
 	ErrLinked = errors.New("already linked to another owner")
 	// ErrUnbounded is returned by a query that has no Limit and did not say
-	// Unbounded, when it runs.
+	// AllowUnbounded, when it runs.
 	ErrUnbounded = errors.New("query has no Limit")
 	// ErrNoWhere is returned by an update or delete that has no Where and did
 	// not say All, when it runs.

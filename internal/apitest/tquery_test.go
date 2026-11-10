@@ -65,11 +65,11 @@ func TestTableQueryParity(t *testing.T) {
 		{"join",
 			func(db *velox.DB) velox.Query[testmodel.Ticket] {
 				return db.Query[testmodel.Ticket]().Join(Tk.Invoice).Where(Tk.Invoice.Is(I.Number.EQ("n"))).
-					OrderBy(Tk.Invoice.By(I.Number.Asc()), Tk.ID.Asc()).Unbounded()
+					OrderBy(Tk.Invoice.By(I.Number.Asc()), Tk.ID.Asc()).AllowUnbounded()
 			},
 			func(db *velox.DB) untyped.TableQuery {
 				return untyped.Query(db, tkTable).Join(int(Tk.Invoice.I), invTable).Where(velox.Predicate(Tk.Invoice.Is(I.Number.EQ("n")))).
-					OrderBy(velox.OrderTerm{Column: col(I.Number), Rel: Tk.Invoice.I + 1}, velox.OrderTerm{Column: col(Tk.ID)}).Unbounded()
+					OrderBy(velox.OrderTerm{Column: col(I.Number), Rel: Tk.Invoice.I + 1}, velox.OrderTerm{Column: col(Tk.ID)}).AllowUnbounded()
 			}},
 		{"lock",
 			func(db *velox.DB) velox.Query[testmodel.Ticket] {
@@ -168,7 +168,7 @@ func TestTableQueryRows(t *testing.T) {
 		}
 	}
 	// Growing past the first rows allocated keeps every row.
-	many, err := untyped.Query(db, itTable).Unbounded().All(ctx)
+	many, err := untyped.Query(db, itTable).AllowUnbounded().All(ctx)
 	if n, _ := db.Query[testmodel.Item]().Count(ctx); err != nil || int64(many.Len()) != n {
 		t.Errorf("Unbounded: %d rows of %d, %v", many.Len(), n, err)
 	}

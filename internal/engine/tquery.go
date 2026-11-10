@@ -92,8 +92,8 @@ func (q TableQuery) Offset(n int) TableQuery {
 	return q
 }
 
-// Unbounded is Query.Unbounded.
-func (q TableQuery) Unbounded() TableQuery {
+// AllowUnbounded is Query.AllowUnbounded.
+func (q TableQuery) AllowUnbounded() TableQuery {
 	q.st.Unbounded = true
 	return q
 }

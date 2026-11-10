@@ -191,10 +191,10 @@ func (t *tour) reading() error {
 	}
 	say("Count: %d invoices for Initech", n)
 
-	// Iter holds one row at a time. Unbounded says on purpose that there is
+	// Iter holds one row at a time. AllowUnbounded says on purpose that there is
 	// no Limit.
 	var numbers []string
-	for x, err := range db.Query[veloxgen.Invoice]().OrderBy(I.ID.Asc()).Unbounded().Iter(acct) {
+	for x, err := range db.Query[veloxgen.Invoice]().OrderBy(I.ID.Asc()).AllowUnbounded().Iter(acct) {
 		if err != nil {
 			return err
 		}
@@ -393,7 +393,7 @@ func (t *tour) withoutPolicy() error {
 	// given that DB is unscoped; ctx carries no bypass.
 	say("\n== 8. WithoutPolicy")
 	report := db.WithoutPolicy("monthly revenue report")
-	text, _, err := report.Query[veloxgen.Invoice]().Where(I.Status.NEQ(veloxgen.InvoiceStatusDraft)).Unbounded().SQL(ctx)
+	text, _, err := report.Query[veloxgen.Invoice]().Where(I.Status.NEQ(veloxgen.InvoiceStatusDraft)).AllowUnbounded().SQL(ctx)
 	if err != nil {
 		return err
 	}
@@ -406,9 +406,9 @@ func (t *tour) withoutPolicy() error {
 	}
 	say("paid in all: %s", money(paidTotal))
 	// SumBy does so per value of a key column, here per organization: no drafts.
-	// Unbounded says that the groups may be as many as the rows; the row cap,
+	// AllowUnbounded says that the groups may be as many as the rows; the row cap,
 	// if any, still applies.
-	totals, err := velox.SumBy(ctx, report.Query[veloxgen.Invoice]().Where(I.Status.NEQ(veloxgen.InvoiceStatusDraft)).Unbounded(), I.OrgID.Key(), I.TotalCents)
+	totals, err := velox.SumBy(ctx, report.Query[veloxgen.Invoice]().Where(I.Status.NEQ(veloxgen.InvoiceStatusDraft)).AllowUnbounded(), I.OrgID.Key(), I.TotalCents)
 	if err != nil {
 		return err
 	}

@@ -128,7 +128,7 @@ func TestSelectedInterfaces(t *testing.T) {
 // keep the query.
 func TestNarrow(t *testing.T) {
 	db, _, log := edgeDB(t)
-	q := untyped.Query(db, untyped.TableOf[owner]()).Unbounded()
+	q := untyped.Query(db, untyped.TableOf[owner]()).AllowUnbounded()
 	idName := []int{int(owners.ID.I), int(owners.Name.I)}
 	for _, c := range []struct {
 		name string

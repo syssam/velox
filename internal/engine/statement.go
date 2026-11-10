@@ -97,7 +97,7 @@ type Statement struct {
 	OrderBy      []OrderTerm
 	Limit        int // 0: no limit; after the Rewrite hooks, velox lowers it to the row cap + 1
 	Offset       int
-	Unbounded    bool            // the query said Unbounded
+	Unbounded    bool            // the query said AllowUnbounded
 	Writable     bool            // SELECT: the query said Writable; the scope adds the Write policy, and a Rewrite hook may not change it
 	MaxRows      int             // SELECT and OpRawQuery: the most rows it may return; 0: the DB's WithMaxRows, or, with Each, its bound by construction (Rel.MaxRows sets it)
 	Set          []Assignment    // UPDATE: the assignments

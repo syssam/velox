@@ -39,7 +39,7 @@ func TestGeneratedEntities(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	text, args := sqlOK(t)(db.Query[testmodel.Sample]().
 		Where(S.Status.HasPrefix("a"), S.Ratio.IsNull(), S.Price.GT(100), S.MaybeWhen.NotNull()).
-		Unbounded().
+		AllowUnbounded().
 		SQL(ctx))
 	want := `SELECT "id", "name", "status", "prev", "price", "ratio", "flag", "maybe_flag", "when", "maybe_when", "blob", "parent_id", "score" ` +
 		`FROM "samples" WHERE "status" LIKE $1 ESCAPE '!' AND "ratio" IS NULL AND "price" > $2 AND "maybe_when" IS NOT NULL`

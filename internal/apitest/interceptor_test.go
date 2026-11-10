@@ -78,7 +78,7 @@ func wantIDs(t *testing.T, what string, got []int64, want ...int64) {
 func TestInterceptorFiltersEveryRead(t *testing.T) {
 	db := interceptorDB(t)
 	ctx := context.Background()
-	q := db.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).Unbounded()
+	q := db.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).AllowUnbounded()
 	all, err := q.All(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestInterceptorReachesRelations(t *testing.T) {
 	db := interceptorDB(t)
 	ctx := context.Background()
 	owners, err := db.Query[fixture.IOwner]().With(fixture.IOwners.Notes.OrderBy(fixture.INotes.ID.Asc())).With(fixture.IOwners.Pinned).With(fixture.IOwners.Tagged).
-		OrderBy(fixture.IOwners.ID.Asc()).Unbounded().All(ctx)
+		OrderBy(fixture.IOwners.ID.Asc()).AllowUnbounded().All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestInterceptorReachesRelations(t *testing.T) {
 
 	where := func(p velox.Pred[fixture.IOwner]) []int64 {
 		t.Helper()
-		os, err := db.Query[fixture.IOwner]().Where(p).OrderBy(fixture.IOwners.ID.Asc()).Unbounded().All(ctx)
+		os, err := db.Query[fixture.IOwner]().Where(p).OrderBy(fixture.IOwners.ID.Asc()).AllowUnbounded().All(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,12 +154,12 @@ func TestInterceptorReachesRelations(t *testing.T) {
 	wantIDs(t, "Notes.HasWith(b)", where(fixture.IOwners.Notes.HasWith(fixture.INotes.Body.EQ("b"))))
 	wantIDs(t, "Tagged.Has", where(fixture.IOwners.Tagged.Has()), 1)
 
-	joined, err := db.Query[fixture.IOwner]().Join(fixture.IOwners.Pinned).OrderBy(fixture.IOwners.ID.Asc()).Unbounded().All(ctx)
+	joined, err := db.Query[fixture.IOwner]().Join(fixture.IOwners.Pinned).OrderBy(fixture.IOwners.ID.Asc()).AllowUnbounded().All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantIDs(t, "Join(Pinned)", ownerIDs(joined), 2)
-	sqlText, _, err := db.Query[fixture.IOwner]().LeftJoin(fixture.IOwners.Pinned).Unbounded().SQL(ctx)
+	sqlText, _, err := db.Query[fixture.IOwner]().LeftJoin(fixture.IOwners.Pinned).AllowUnbounded().SQL(ctx)
 	if err != nil || !strings.Contains(sqlText, `"hidden" = `) {
 		t.Errorf("LeftJoin's ON lacks the interceptor: %s, %v", sqlText, err)
 	}
@@ -226,8 +226,8 @@ func TestInterceptorUpsertRefusedOnMySQL(t *testing.T) {
 // and the interceptor still hides its rows; its own skip shows them.
 func TestWithoutPolicyKeepsInterceptors(t *testing.T) {
 	db := interceptorDB(t)
-	q := db.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).Unbounded()
-	lifted := db.WithoutPolicy("test").Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).Unbounded()
+	q := db.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).AllowUnbounded()
+	lifted := db.WithoutPolicy("test").Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).AllowUnbounded()
 	ns, err := lifted.All(context.Background())
 	if err != nil {
 		t.Fatal(err)

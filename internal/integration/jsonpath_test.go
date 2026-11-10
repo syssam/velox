@@ -31,7 +31,7 @@ func TestJSONPaths(t *testing.T) {
 		}
 		ids := func(p velox.Pred[jrec]) []int64 {
 			t.Helper()
-			rows, err := tg.db.Query[jrec]().Where(p).OrderBy(JR.ID.Asc()).Unbounded().All(ctx)
+			rows, err := tg.db.Query[jrec]().Where(p).OrderBy(JR.ID.Asc()).AllowUnbounded().All(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -75,7 +75,7 @@ func TestJSONPaths(t *testing.T) {
 		if c, err := tg.db.Query[jrec]().Where(seats.NotNull()).Count(ctx); err != nil || c != 2 {
 			t.Errorf("Count: %d, %v", c, err)
 		}
-		_, err = tg.db.Query[jrec]().Where(JR.Attrs.Text(`a"b`).EQ("x")).Unbounded().All(ctx)
+		_, err = tg.db.Query[jrec]().Where(JR.Attrs.Text(`a"b`).EQ("x")).AllowUnbounded().All(ctx)
 		if err == nil || !strings.Contains(err.Error(), "double quote") {
 			t.Errorf("a quote in a key: %v", err)
 		}

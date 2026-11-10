@@ -160,15 +160,15 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | ent | velox |
 | --- | --- |
 | `client.User.Create().SetName("a").Save(ctx)` | `db.Insert(&veloxgen.User{Name: "a"}).Exec(ctx)` |
-| `client.User.Query().All(ctx)` | `db.Query[veloxgen.User]().Unbounded().All(ctx)`, or with a `Limit` |
+| `client.User.Query().All(ctx)` | `db.Query[veloxgen.User]().AllowUnbounded().All(ctx)`, or with a `Limit` |
 | `client.User.Update().Where(...).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(...).Set(U.Age.Set(3)).Exec(ctx)` |
 | `client.User.UpdateOneID(id).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(U.ID.EQ(id)).Set(U.Age.Set(3)).One(ctx)`, the row as written |
 | `client.User.Delete().Exec(ctx)` (every row) | `db.Delete[veloxgen.User]().All().Exec(ctx)` |
 
-A `Query` with neither a `Limit` nor `Unbounded()` fails with `ErrUnbounded`.
+A `Query` with neither a `Limit` nor `AllowUnbounded()` fails with `ErrUnbounded`.
 An `Update` or `Delete` with neither a `Where` nor `All()` fails with
-`ErrNoWhere`. The names differ because they mean different things: `Unbounded`
-lifts a read's row limit, and `All` confirms a write to every row.
+`ErrNoWhere`. The names differ because they mean different things: `AllowUnbounded`
+allows a read with no row limit, and `All` confirms a write to every row.
 
 Policies, hooks and interceptors are schema methods, as in ent, and name
 columns by name, as ent's `ent.Policy`, `ent.Hook` and generic

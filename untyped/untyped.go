@@ -141,7 +141,7 @@ const (
 //	Ordered() bool
 //	Limit(n int) TableQuery
 //	Offset(n int) TableQuery
-//	Unbounded() TableQuery
+//	AllowUnbounded() TableQuery
 //	MaxRows(n int) TableQuery
 //	ForUpdate() TableQuery
 //	ForShare() TableQuery

@@ -32,7 +32,7 @@ func TestReadWithoutLimitIsRefused(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx); err != nil {
 		t.Errorf("One: %v", err)
 	}
-	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); err != nil {
+	if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); err != nil {
 		t.Errorf("Unbounded: %v", err)
 	}
 	e.Rows = [][]any{{int64(1)}} // Count scans one number

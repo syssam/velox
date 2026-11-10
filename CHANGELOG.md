@@ -203,6 +203,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `Query.Unbounded()` is `Query.AllowUnbounded()`. It only waives the check that
+  fails a read with no `Limit`; a `Limit` you set still applies. The error
+  says so. `ErrUnbounded` keeps its name (decision 0067).
+
 - velox-gen's defaults are `./veloxschema` for the schema package and
   `./veloxgen` for the generated package, which was `./schema` and `./gen`:
   `go tool velox-gen` with no flags reads and writes the new folders, the

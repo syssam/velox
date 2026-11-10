@@ -49,13 +49,13 @@ func TestInterceptorOnRealDatabases(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		interceptorTables(t, tg)
 		bg := context.Background()
-		q := tg.pdb.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).Unbounded()
+		q := tg.pdb.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).AllowUnbounded()
 		ns, err := q.All(bg)
 		if err != nil {
 			t.Fatal(err)
 		}
 		wantIDs(t, inoteIDs(ns), []int64{1, 4})
-		if ns, err = tg.db.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).Unbounded().All(bg); err != nil {
+		if ns, err = tg.db.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Asc()).AllowUnbounded().All(bg); err != nil {
 			t.Fatal(err)
 		}
 		wantIDs(t, inoteIDs(ns), []int64{1, 3, 4})
@@ -64,7 +64,7 @@ func TestInterceptorOnRealDatabases(t *testing.T) {
 		}
 
 		os, err := tg.pdb.Query[fixture.IOwner]().With(fixture.IOwners.Notes.OrderBy(fixture.INotes.ID.Asc())).With(fixture.IOwners.Tagged).
-			OrderBy(fixture.IOwners.ID.Asc()).Unbounded().All(bg)
+			OrderBy(fixture.IOwners.ID.Asc()).AllowUnbounded().All(bg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -72,11 +72,11 @@ func TestInterceptorOnRealDatabases(t *testing.T) {
 		tagged, _ := os[0].Tagged.Get()
 		wantIDs(t, inoteIDs(notes), []int64{1})
 		wantIDs(t, inoteIDs(tagged), []int64{1})
-		has, err := tg.pdb.Query[fixture.IOwner]().Where(fixture.IOwners.Tagged.Has()).Unbounded().Count(bg)
+		has, err := tg.pdb.Query[fixture.IOwner]().Where(fixture.IOwners.Tagged.Has()).AllowUnbounded().Count(bg)
 		if err != nil || has != 1 {
 			t.Errorf("Tagged.Has: %d, %v", has, err)
 		}
-		joined, err := tg.pdb.Query[fixture.IOwner]().Join(fixture.IOwners.Pinned).Unbounded().All(bg)
+		joined, err := tg.pdb.Query[fixture.IOwner]().Join(fixture.IOwners.Pinned).AllowUnbounded().All(bg)
 		if err != nil || len(joined) != 1 || joined[0].ID != 2 {
 			t.Errorf("Join(Pinned): %v, %v", joined, err)
 		}

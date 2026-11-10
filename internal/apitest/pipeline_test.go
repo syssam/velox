@@ -18,7 +18,7 @@ func TestRewriteCanRefuse(t *testing.T) {
 	refused := errors.New("refused")
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e, velox.WithRewrite(func(context.Context, *velox.Statement) error { return refused }))
-	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); !errors.Is(err, refused) || e.Calls != 0 {
+	if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); !errors.Is(err, refused) || e.Calls != 0 {
 		t.Fatalf("%v, calls %d", err, e.Calls)
 	}
 }
@@ -37,7 +37,7 @@ func TestAroundsWrapInOrder(t *testing.T) {
 		}
 	}
 	db := openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithAround(around("a")), velox.WithAround(around("b")))
-	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); err != nil {
+	if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"a>", "b>", "<b", "<a"}; !reflect.DeepEqual(trace, want) {
@@ -48,7 +48,7 @@ func TestAroundsWrapInOrder(t *testing.T) {
 func TestAroundMustCallNext(t *testing.T) {
 	lazy := func(context.Context, *velox.Statement, func(context.Context) error) error { return nil }
 	db := openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithAround(lazy))
-	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); err == nil || !strings.Contains(err.Error(), "without calling next") {
+	if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); err == nil || !strings.Contains(err.Error(), "without calling next") {
 		t.Fatalf("%v", err)
 	}
 }
@@ -111,7 +111,7 @@ func TestAroundErrorAfterNextClosesRows(t *testing.T) {
 		}
 		return failed
 	}))
-	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); !errors.Is(err, failed) || e.Calls != 1 || e.Closed != 1 {
+	if _, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx); !errors.Is(err, failed) || e.Calls != 1 || e.Closed != 1 {
 		t.Fatalf("%v, calls %d, closed %d", err, e.Calls, e.Closed)
 	}
 }
@@ -124,7 +124,7 @@ func TestAroundCallingNextTwiceClosesTheFirstRows(t *testing.T) {
 		}
 		return next(ctx)
 	}))
-	got, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+	got, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("%v, %v", got, err)
 	}
@@ -139,7 +139,7 @@ func TestAroundThatDiscardsNextsErrorIsReportedAsSuch(t *testing.T) {
 		_ = next(ctx)
 		return nil
 	}))
-	_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+	_, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 	if err == nil || !strings.Contains(err.Error(), "discarded the error from next") || strings.Contains(err.Error(), "without calling next") {
 		t.Fatalf("%v", err)
 	}
@@ -148,7 +148,7 @@ func TestAroundThatDiscardsNextsErrorIsReportedAsSuch(t *testing.T) {
 func TestRowsAreClosedWhenAnIterConsumerBreaks(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1), invoiceRow(2)}}
 	db := openFake(velox.Postgres, e)
-	for _, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+	for _, err := range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -175,7 +175,7 @@ func TestAroundWrapsReadingTheRows(t *testing.T) {
 	}))
 
 	e.Rows = [][]any{invoiceRow(1), invoiceRow(2)}
-	got, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+	got, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 	if err != nil || len(got) != 2 {
 		t.Fatalf("%v, %v", got, err)
 	}
@@ -193,7 +193,7 @@ func TestAroundWrapsReadingTheRows(t *testing.T) {
 
 	e.Rows = [][]any{invoiceRow(1), invoiceRow(2), invoiceRow(3)}
 	seen := 0
-	for _, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+	for _, err := range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -222,7 +222,7 @@ func TestAroundCallingNextAgainAfterIterYielded(t *testing.T) {
 	}))
 	var ids []int64
 	var errs []error
-	for inv, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+	for inv, err := range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -268,7 +268,7 @@ func TestRewriteColumnsAreChecked(t *testing.T) {
 						t.Fatalf("panicked: %v", p)
 					}
 				}()
-				_, err = db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+				_, err = db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 			}()
 			want := fmt.Sprintf("velox: testmodel.Invoice: a Rewrite hook set column %d, the entity has 10 columns", c.column)
 			if err == nil || err.Error() != want || e.Calls != 0 {

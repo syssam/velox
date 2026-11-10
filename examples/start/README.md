@@ -21,7 +21,7 @@ db.InsertAll(users).Exec(ctx)                    // one statement, no IDs read b
 db.Query[veloxgen.User]().Where(U.Age.GT(30)).OrderBy(U.Age.Desc()).Limit(10).All(ctx)
 db.Query[veloxgen.User]().Where(U.Email.EQ(e)).One(ctx)   // velox.ErrNotFound for no row: velox.IsNotFound(err)
 db.Query[veloxgen.User]().Where(U.Name.HasPrefix("B")).Count(ctx)
-for u, err := range db.Query[veloxgen.User]().Unbounded().Iter(ctx) { … }
+for u, err := range db.Query[veloxgen.User]().AllowUnbounded().Iter(ctx) { … }
 
 db.Update[veloxgen.User]().Set(U.Age.Add(1)).Where(U.Name.In("Ada", "Linus")).Exec(ctx)
 db.Save(grace, U.Email).Exec(ctx)               // the named columns of a loaded struct
@@ -29,7 +29,7 @@ db.Delete[veloxgen.User]().Where(U.Age.LT(30)).Exec(ctx)
 ```
 
 Guards are always on: a query with no `Limit` fails with `velox.ErrUnbounded`
-unless it says `Unbounded()`, and an update or delete with no `Where` fails
+unless it says `AllowUnbounded()`, and an update or delete with no `Where` fails
 with `velox.ErrNoWhere` unless it says `All()`.
 
 The table comes from `migrations/`. `go tool velox-gen migrate diff -dialect

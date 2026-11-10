@@ -228,7 +228,7 @@ func TestAggregatesOnNullableColumns(t *testing.T) {
 		if v, ok, err := velox.MaxNull(ctx, samples, S.ParentID); err != nil || !ok || v != 9 {
 			t.Errorf("Max: %v, %v, %v", v, ok, err)
 		}
-		all, key := samples.Unbounded(), S.Status.Key()
+		all, key := samples.AllowUnbounded(), S.Status.Key()
 		sums, err := velox.SumByNull(ctx, all, key, S.Ratio)
 		if want := []velox.Group[kind.Status, float64]{{Key: "a", Value: 0.5}, {Key: "b", Value: 1.5}}; err != nil || !slices.Equal(sums, want) {
 			t.Errorf("SumBy: %v, %v", sums, err)
@@ -267,7 +267,7 @@ func TestAggregateIsScoped(t *testing.T) {
 func TestGroupedOnRealDatabases(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		I := testmodel.Invoices
-		q := tg.db.Query[testmodel.Invoice]().Unbounded()
+		q := tg.db.Query[testmodel.Invoice]().AllowUnbounded()
 		key := I.OrgID.Key()
 		counts, err := velox.CountBy(ctx, q, key)
 		if want := []velox.Group[int64, int64]{{Key: 1, Value: 4}, {Key: 2, Value: 1}}; err != nil || !slices.Equal(counts, want) {
@@ -334,7 +334,7 @@ func TestGroupedOnRealDatabases(t *testing.T) {
 		add("a", 250, "x", nil)
 		add("b", 1, "x", int64(4))
 		add("b", 1, nil, int64(8))
-		samples := tg.db.Query[testmodel.Sample]().Unbounded()
+		samples := tg.db.Query[testmodel.Sample]().AllowUnbounded()
 		cents, err := velox.SumBy(ctx, samples, S.Status.Key(), S.Price)
 		if want := []velox.Group[kind.Status, kind.Cents]{{Key: "a", Value: 350}, {Key: "b", Value: 2}}; err != nil || !slices.Equal(cents, want) {
 			t.Errorf("Cents: %v, %v", cents, err)
@@ -373,7 +373,7 @@ func TestGroupedOnRealDatabases(t *testing.T) {
 func TestGroupedIsScopedAndCapped(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		I := testmodel.Invoices
-		q := tg.pdb.Query[testmodel.Invoice]().Unbounded()
+		q := tg.pdb.Query[testmodel.Invoice]().AllowUnbounded()
 		org := func(id int64) context.Context {
 			return testmodel.WithUser(testmodel.Org.With(context.Background(), id), "admin")
 		}
@@ -390,10 +390,10 @@ func TestGroupedIsScopedAndCapped(t *testing.T) {
 			t.Errorf("no org: %v", err)
 		}
 		// The row cap: five numbers, four allowed by the query.
-		if _, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice]().Unbounded().MaxRows(4), I.Number.Key()); !errors.Is(err, velox.ErrTooManyRows) {
+		if _, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice]().AllowUnbounded().MaxRows(4), I.Number.Key()); !errors.Is(err, velox.ErrTooManyRows) {
 			t.Errorf("past the cap: %v", err)
 		}
-		if got, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice]().Unbounded().MaxRows(5), I.Number.Key()); err != nil || len(got) != 5 {
+		if got, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice]().AllowUnbounded().MaxRows(5), I.Number.Key()); err != nil || len(got) != 5 {
 			t.Errorf("at the cap: %v, %v", got, err)
 		}
 		if _, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice](), I.OrgID.Key()); !errors.Is(err, velox.ErrUnbounded) {
@@ -402,7 +402,7 @@ func TestGroupedIsScopedAndCapped(t *testing.T) {
 
 		// The policy: tickets of ann's only.
 		T := testmodel.Tickets
-		tq := tg.pdb.Query[testmodel.Ticket]().Unbounded()
+		tq := tg.pdb.Query[testmodel.Ticket]().AllowUnbounded()
 		tg.exec(t, "DELETE FROM tickets")
 		for i, r := range []struct {
 			org, invoice int64

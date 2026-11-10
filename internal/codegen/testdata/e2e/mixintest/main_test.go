@@ -44,7 +44,7 @@ func TestMixinBehaviourRuns(t *testing.T) {
 	if want := []string{"tenant", "stamp", "own"}; !slices.Equal(schema.Trace[:3], want) {
 		t.Errorf("hooks ran %v, want %v first", schema.Trace, want)
 	}
-	got, err := db.Query[gen.Ticket]().Unbounded().All(org1)
+	got, err := db.Query[gen.Ticket]().AllowUnbounded().All(org1)
 	if err != nil {
 		t.Fatal(err)
 	}

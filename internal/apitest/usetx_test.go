@@ -123,7 +123,7 @@ func TestUseTxNestedTxIsASavepoint(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+	rows, err := db.Query[testmodel.Invoice]().AllowUnbounded().All(ctx)
 	if err != nil || len(rows) != 1 || rows[0].Number != "outer" {
 		t.Errorf("rows %v, err %v; want only the outer row", rows, err)
 	}

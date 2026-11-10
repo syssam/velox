@@ -380,7 +380,7 @@ func post(t *testing.T, ctx context.Context, srv http.Handler, query string) str
 // transaction.
 func peopleIDs(t *testing.T, db *velox.DB, l *txLog) []int64 {
 	t.Helper()
-	rows, err := db.Query[person]().OrderBy(people.ID.Asc()).Unbounded().All(context.Background())
+	rows, err := db.Query[person]().OrderBy(people.ID.Asc()).AllowUnbounded().All(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

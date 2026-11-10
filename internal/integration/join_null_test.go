@@ -64,7 +64,7 @@ func TestJoinAfterNullsExact(t *testing.T) {
 			}
 			q := tg.db.Query[testmodel.Item]().Join(It.Invoice).Where(It.ID.GTE(300)).
 				OrderBy(It.Invoice.By(by), key)
-			all, err := q.Unbounded().All(ctx)
+			all, err := q.AllowUnbounded().All(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
