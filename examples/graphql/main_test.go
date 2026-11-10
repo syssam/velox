@@ -856,7 +856,7 @@ func captureLog(t *testing.T) *bytes.Buffer {
 // the author, is a user, as the insert trusts x's own fields; the tags' IDs
 // are checked against what the caller may read after the insert, in its
 // savepoint, before the join rows. status takes its Default, views,
-// Optional, its zero value, and the post is returned as written.
+// Optional with Default(0), takes 0, and the post is returned as written.
 func TestCreatePost(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
