@@ -21,7 +21,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
-- `db.UseTx(ctx, tx, fn)` runs velox calls on a `*sql.Tx` the caller began,
+- `velox.UseTx(ctx, db, tx, fn)` runs velox calls on a `*sql.Tx` the caller began,
   next to raw SQL on the same transaction. The caller commits or rolls back;
   `UseTx` does neither (decision 0066).
 - `UpdateQuery.SetInput(in)` and `InsertQuery.SetInput(in)` take a

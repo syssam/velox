@@ -214,7 +214,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 // velox in one transaction:
 //
 //	tx, _ := sqlDB.BeginTx(ctx, nil)
-//	err := db.UseTx(ctx, tx, func(ctx context.Context, vtx *velox.DB) error {
+//	err := velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
 //		_, err := tx.ExecContext(ctx, "UPDATE accounts SET ...")
 //		if err != nil {
 //			return err
@@ -234,8 +234,11 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 // Tx's, is not safe for concurrent use. UseTx returns an error, and sends
 // nothing, when tx is nil, when db is in a transaction or is sharded, and for a
 // DB whose connection does not run on a *sql.Tx, veloxpgx's.
-func (db *DB) UseTx(ctx context.Context, tx *sql.Tx, fn func(ctx context.Context, tx *DB) error) error {
-	return db.e.UseTx(ctx, tx, func(ctx context.Context, tx *engine.DB) error {
+//
+// It is a function, not a method, for the reason Pool is: a method of DB
+// mentioning *sql.Tx would make every package that uses a DB larger to compile.
+func UseTx(ctx context.Context, db *DB, tx *sql.Tx, fn func(ctx context.Context, tx *DB) error) error {
+	return engine.UseTx(ctx, &db.e, tx, func(ctx context.Context, tx *engine.DB) error {
 		return fn(ctx, (*DB)(unsafe.Pointer(tx)))
 	})
 }

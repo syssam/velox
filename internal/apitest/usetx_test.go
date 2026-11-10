@@ -43,7 +43,7 @@ func TestUseTxRunsOnTheCallersTransaction(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = db.UseTx(ctx, tx, func(ctx context.Context, vtx *velox.DB) error {
+		err = velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO invoices (id, org_id, number, total, paid, note, data) VALUES (10, 1, 'raw', 0, false, '', x'')`); err != nil {
 				return err
 			}
@@ -84,7 +84,7 @@ func TestUseTxReturnsFnsError(t *testing.T) {
 		t.Fatal(err)
 	}
 	boom := errors.New("boom")
-	got := db.UseTx(ctx, tx, func(ctx context.Context, vtx *velox.DB) error {
+	got := velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
 		if err := vtx.Insert(&testmodel.Invoice{OrgID: 1, Number: "x", Data: []byte{}}).Exec(ctx); err != nil {
 			return err
 		}
@@ -113,7 +113,7 @@ func TestUseTxNestedTxIsASavepoint(t *testing.T) {
 		return d.Insert(&testmodel.Invoice{OrgID: 1, Number: num, Data: []byte{}}).Exec(ctx)
 	}
 	boom := errors.New("boom")
-	err = db.UseTx(ctx, tx, func(ctx context.Context, vtx *velox.DB) error {
+	err = velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
 		if err := insert(ctx, vtx, "outer"); err != nil {
 			return err
 		}
@@ -149,7 +149,7 @@ func TestUseTxDBEndsWithFn(t *testing.T) {
 	t.Cleanup(func() { _ = tx.Rollback() })
 	var kept *velox.DB
 	var keptCtx context.Context
-	if err := db.UseTx(ctx, tx, func(ctx context.Context, vtx *velox.DB) error {
+	if err := velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
 		kept, keptCtx = vtx, ctx
 		return nil
 	}); err != nil {
@@ -170,22 +170,22 @@ func TestUseTxRefusals(t *testing.T) {
 	never := new(sql.Tx)
 	noop := func(context.Context, *velox.DB) error { t.Error("fn ran"); return nil }
 
-	if err := db.UseTx(ctx, nil, noop); err == nil || !strings.Contains(err.Error(), "tx is nil") {
+	if err := velox.UseTx(ctx, db, nil, noop); err == nil || !strings.Contains(err.Error(), "tx is nil") {
 		t.Errorf("nil tx: %v", err)
 	}
 	err := db.Tx(ctx, func(ctx context.Context, vtx *velox.DB) error {
-		return vtx.UseTx(ctx, never, noop)
+		return velox.UseTx(ctx, vtx, never, noop)
 	})
 	if err == nil || !strings.Contains(err.Error(), "in a transaction already") {
 		t.Errorf("inside Tx: %v", err)
 	}
 	// A connection that does not run on a *sql.Tx, as veloxpgx's does not.
 	fake := openFake(velox.Postgres, &fakeconn.Exec{})
-	if err := fake.UseTx(ctx, never, noop); err == nil || !strings.Contains(err.Error(), "does not run on a *sql.Tx") {
+	if err := velox.UseTx(ctx, fake, never, noop); err == nil || !strings.Contains(err.Error(), "does not run on a *sql.Tx") {
 		t.Errorf("a connection that is no Adopter: %v", err)
 	}
 	err = db.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
-		return other.UseTx(ctx, never, noop)
+		return velox.UseTx(ctx, other, never, noop)
 	})
 	if !errors.Is(err, velox.ErrOutsideTx) {
 		t.Errorf("under another transaction's context: %v", err)
@@ -208,7 +208,7 @@ func TestUseTxWithReplicasRunsOnThePrimary(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = tx.Rollback() })
 	noHang(t, func() {
-		err = db.UseTx(ctx, tx, func(ctx context.Context, vtx *velox.DB) error {
+		err = velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
 			if err := vtx.Insert(&testmodel.Invoice{OrgID: 1, Number: "p", Data: []byte{}}).Exec(ctx); err != nil {
 				return err
 			}

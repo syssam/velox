@@ -286,7 +286,6 @@ func (db *DB) Rows(ctx context.Context, reason, query string, args ...any) RawRo
 func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) SaveQuery[E]
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
-func (db *DB) UseTx(ctx context.Context, tx *sql.Tx, fn func(ctx context.Context, tx *DB) error) error
 func (db *DB) WithoutPolicy(reason string) *DB
 func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
@@ -454,6 +453,7 @@ func TxReadOnly() TxOption
 func TxRetries(opts ...TxOption) int
 func TxRetrySerializable(n int) TxOption
 func TxTimeout(d time.Duration) TxOption
+func UseTx(ctx context.Context, db *DB, tx *sql.Tx, fn func(ctx context.Context, tx *DB) error) error
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error
 func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error
 func WithAround(a Around) Option

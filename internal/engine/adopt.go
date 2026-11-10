@@ -18,9 +18,12 @@ import (
 // caller commits. A nested Tx in fn is a savepoint of tx, as in any
 // transaction. The DB fn gets is valid only inside fn, as Tx's is.
 //
+// It is a function, not a method, as Pool is: a method of DB mentioning *sql.Tx
+// makes every package that uses a Query larger to compile.
+//
 // It refuses a db that is in a transaction, one that is sharded, and one whose
 // connection does not run on a *sql.Tx, veloxpgx's.
-func (db *DB) UseTx(ctx context.Context, tx *sql.Tx, fn func(ctx context.Context, tx *DB) error) error {
+func UseTx(ctx context.Context, db *DB, tx *sql.Tx, fn func(ctx context.Context, tx *DB) error) error {
 	if tx == nil {
 		return errors.New("velox: UseTx: tx is nil")
 	}

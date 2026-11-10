@@ -677,11 +677,11 @@ Options go after the function:
 ### A transaction you began
 
 Code that already holds a `*sql.Tx`, with raw SQL beside velox calls, runs
-the velox calls on it with `db.UseTx`:
+the velox calls on it with `velox.UseTx`:
 
 ```go
 tx, _ := sqlDB.BeginTx(ctx, nil)
-err := db.UseTx(ctx, tx, func(ctx context.Context, vtx *velox.DB) error {
+err := velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
 	if _, err := tx.ExecContext(ctx, "UPDATE accounts SET ..."); err != nil {
 		return err
 	}

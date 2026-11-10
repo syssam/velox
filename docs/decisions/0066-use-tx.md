@@ -10,7 +10,7 @@ writes and the caller's raw statements ended up in two transactions.
 
 ## Decision
 
-`db.UseTx(ctx, tx *sql.Tx, fn)` calls `fn` with a `*DB` whose statements run
+`velox.UseTx(ctx, db, tx *sql.Tx, fn)` calls `fn` with a `*DB` whose statements run
 on `tx`, and the DB's own connection is not used for them.
 
 - The caller owns `tx`. `UseTx` never begins, commits or rolls back, and
@@ -30,6 +30,11 @@ the SQLite time wrapper do. `veloxpgx` does not, as it runs on pgx's own
 transaction types; `UseTx` refuses it with an error. `UseTx` refuses too a
 nil `tx`, a DB that is in a transaction, a context of another transaction, and
 a sharded DB, whose transaction runs on one shard that velox chooses.
+
+A function, not a method of `DB`: with `*sql.Tx` in a method's signature, every
+package that uses a `Query[E]` compiled 175 KB more (the compile-cost test,
+`TestGenericTypesCompileSmall`, failed at 175,166 bytes for `Query` against 10,240
+recorded), as `Pool` found for `*sql.DB`. The engine's `UseTx` is a function too: the root's `DB` holds an `engine.DB`, whose method set is part of the same cost.
 
 ## Consequences
 
