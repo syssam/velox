@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/examples/graphql/gen"
-	"github.com/syssam/velox/examples/graphql/schema"
+	"github.com/syssam/velox/examples/graphql/veloxgen"
+	"github.com/syssam/velox/examples/graphql/veloxschema"
 )
 
 // nested is the request the benchmark serves: users, each with a page of its
@@ -70,26 +70,26 @@ const pinnedGqlgen = "v0.17.86"
 func seedBench(t testing.TB, db *velox.DB, users, posts, tags int) {
 	t.Helper()
 	ctx := t.Context()
-	us := make([]gen.User, users)
+	us := make([]veloxgen.User, users)
 	for i := range us {
-		us[i] = gen.User{ID: int64(i + 1), Name: fmt.Sprintf("U%d", i+1), Email: "u@example.com", Role: gen.UserRoleMember,
+		us[i] = veloxgen.User{ID: int64(i + 1), Name: fmt.Sprintf("U%d", i+1), Email: "u@example.com", Role: veloxgen.UserRoleMember,
 			JoinedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), PasswordHash: "x"}
 	}
-	ps := make([]gen.Post, 0, users*posts)
+	ps := make([]veloxgen.Post, 0, users*posts)
 	for u := range users {
 		for p := range posts {
-			ps = append(ps, gen.Post{ID: int64(u*posts + p + 1), AuthorID: int64(u + 1), Title: fmt.Sprintf("P%d-%d", u+1, p+1),
-				Status: gen.PostStatusPublished, Views: int64(p)})
+			ps = append(ps, veloxgen.Post{ID: int64(u*posts + p + 1), AuthorID: int64(u + 1), Title: fmt.Sprintf("P%d-%d", u+1, p+1),
+				Status: veloxgen.PostStatusPublished, Views: int64(p)})
 		}
 	}
-	ts := make([]gen.Tag, tags)
+	ts := make([]veloxgen.Tag, tags)
 	for i := range ts {
-		ts[i] = gen.Tag{ID: int64(i + 1), Name: fmt.Sprintf("T%d", i+1), Rank: int8(i + 1)}
+		ts[i] = veloxgen.Tag{ID: int64(i + 1), Name: fmt.Sprintf("T%d", i+1), Rank: int8(i + 1)}
 	}
-	links := make([]gen.PostTag, 0, len(ps)*tags)
+	links := make([]veloxgen.PostTag, 0, len(ps)*tags)
 	for _, p := range ps {
 		for _, tg := range ts {
-			links = append(links, gen.PostTag{PostID: p.ID, TagID: tg.ID})
+			links = append(links, veloxgen.PostTag{PostID: p.ID, TagID: tg.ID})
 		}
 	}
 	for _, step := range []struct {
@@ -97,9 +97,9 @@ func seedBench(t testing.TB, db *velox.DB, users, posts, tags int) {
 		do   func() error
 	}{
 		{"users", func() error { return db.InsertAll(us).Exec(ctx) }},
-		{"posts", func() error { return db.InsertAll(ps).Exec(schema.OrgKey.With(ctx, acme)) }},
+		{"posts", func() error { return db.InsertAll(ps).Exec(veloxschema.OrgKey.With(ctx, acme)) }},
 		{"tags", func() error { return db.InsertAll(ts).Exec(ctx) }},
-		{"links", func() error { return db.InsertAll(links).Exec(schema.OrgKey.With(ctx, acme)) }},
+		{"links", func() error { return db.InsertAll(links).Exec(veloxschema.OrgKey.With(ctx, acme)) }},
 	} {
 		if err := step.do(); err != nil {
 			t.Fatalf("seeding %s: %v", step.name, err)

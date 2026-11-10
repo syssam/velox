@@ -33,9 +33,9 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/examples/graphql/gen"
 	"github.com/syssam/velox/examples/graphql/graph"
-	"github.com/syssam/velox/examples/graphql/schema"
+	"github.com/syssam/velox/examples/graphql/veloxgen"
+	"github.com/syssam/velox/examples/graphql/veloxschema"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -129,7 +129,7 @@ func orgFromHeader(next http.Handler) http.Handler {
 				http.Error(w, "X-Org-ID is not a number", http.StatusBadRequest)
 				return
 			}
-			r = r.WithContext(schema.OrgKey.With(r.Context(), org))
+			r = r.WithContext(veloxschema.OrgKey.With(r.Context(), org))
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -227,36 +227,36 @@ const (
 // three tags.
 func seed(ctx context.Context, db *velox.DB) error {
 	day := func(m time.Month, d int) time.Time { return time.Date(2026, m, d, 9, 0, 0, 0, time.UTC) }
-	users := []gen.User{
-		{ID: 1, Name: "Ada", Email: "ada@example.com", Role: gen.UserRoleAdmin, JoinedAt: day(1, 5), PasswordHash: "x"},
-		{ID: 2, Name: "Brian", Email: "brian@example.com", Role: gen.UserRoleMember, JoinedAt: day(2, 10), PasswordHash: "x"},
-		{ID: 3, Name: "Chen", Email: "chen@example.com", Role: gen.UserRoleMember, JoinedAt: day(3, 15), PasswordHash: "x"},
+	users := []veloxgen.User{
+		{ID: 1, Name: "Ada", Email: "ada@example.com", Role: veloxgen.UserRoleAdmin, JoinedAt: day(1, 5), PasswordHash: "x"},
+		{ID: 2, Name: "Brian", Email: "brian@example.com", Role: veloxgen.UserRoleMember, JoinedAt: day(2, 10), PasswordHash: "x"},
+		{ID: 3, Name: "Chen", Email: "chen@example.com", Role: veloxgen.UserRoleMember, JoinedAt: day(3, 15), PasswordHash: "x"},
 	}
 	if err := db.InsertAll(users).Exec(ctx); err != nil {
 		return err
 	}
 	pub := func(m time.Month, d int) *time.Time { t := day(m, d); return &t }
-	posts := map[int64][]gen.Post{
+	posts := map[int64][]veloxgen.Post{
 		acme: {
-			{ID: 1, AuthorID: 1, Title: "Alpha", Status: gen.PostStatusPublished, Views: 10, PublishedAt: pub(4, 1)},
-			{ID: 2, AuthorID: 1, Title: "Beta", Status: gen.PostStatusDraft, Views: 5},
-			{ID: 3, AuthorID: 2, Title: "Gamma", Status: gen.PostStatusPublished, Views: 10, PublishedAt: pub(5, 1)},
-			{ID: 4, AuthorID: 3, Title: "Delta", Status: gen.PostStatusPublished, Views: 7, PublishedAt: pub(6, 1)},
+			{ID: 1, AuthorID: 1, Title: "Alpha", Status: veloxgen.PostStatusPublished, Views: 10, PublishedAt: pub(4, 1)},
+			{ID: 2, AuthorID: 1, Title: "Beta", Status: veloxgen.PostStatusDraft, Views: 5},
+			{ID: 3, AuthorID: 2, Title: "Gamma", Status: veloxgen.PostStatusPublished, Views: 10, PublishedAt: pub(5, 1)},
+			{ID: 4, AuthorID: 3, Title: "Delta", Status: veloxgen.PostStatusPublished, Views: 7, PublishedAt: pub(6, 1)},
 		},
 		globex: {
-			{ID: 5, AuthorID: 1, Title: "Globex plans", Status: gen.PostStatusPublished, Views: 99, PublishedAt: pub(4, 2)},
+			{ID: 5, AuthorID: 1, Title: "Globex plans", Status: veloxgen.PostStatusPublished, Views: 99, PublishedAt: pub(4, 2)},
 		},
 	}
 	for _, org := range []int64{acme, globex} {
-		if err := db.InsertAll(posts[org]).Exec(schema.OrgKey.With(ctx, org)); err != nil {
+		if err := db.InsertAll(posts[org]).Exec(veloxschema.OrgKey.With(ctx, org)); err != nil {
 			return err
 		}
 	}
-	tags := []gen.Tag{{ID: 1, Name: "go", Rank: 1}, {ID: 2, Name: "sql", Rank: 2}, {ID: 3, Name: "graphql", Rank: 3}}
+	tags := []veloxgen.Tag{{ID: 1, Name: "go", Rank: 1}, {ID: 2, Name: "sql", Rank: 2}, {ID: 3, Name: "graphql", Rank: 3}}
 	if err := db.InsertAll(tags).Exec(ctx); err != nil {
 		return err
 	}
-	links := []gen.PostTag{{PostID: 1, TagID: 1}, {PostID: 1, TagID: 3}, {PostID: 3, TagID: 2}, {PostID: 5, TagID: 1}}
+	links := []veloxgen.PostTag{{PostID: 1, TagID: 1}, {PostID: 1, TagID: 3}, {PostID: 3, TagID: 2}, {PostID: 5, TagID: 1}}
 	// The join table has no scope; these links span the orgs.
 	return db.InsertAll(links).Exec(ctx)
 }

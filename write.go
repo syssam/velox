@@ -46,7 +46,7 @@ func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E] {
 // the update keeps its error, and Exec, One and SQL return it unchanged
 // before anything is sent:
 //
-//	db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
+//	db.Update[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
 func (u UpdateQuery[E]) SetInput[_ Lazy[E]](in Input[E]) UpdateQuery[E] {
 	ss, err := in.Setters()
 	if err != nil {

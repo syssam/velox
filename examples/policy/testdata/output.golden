@@ -9,6 +9,6 @@ bob sees comment "Todo"
   SELECT "body" FROM "comments" WHERE EXISTS (SELECT 1 FROM "docs" AS "vx1" WHERE "vx1"."id" = "comments"."doc_id" AND ("owner" = ? OR "shared" = ?)) LIMIT ? [bob true 10]
 bob unshares Roadmap: rows changed=0
 bob unshares Notes: rows changed=1
-no user: ErrDenied=true, entity gen.Doc, op select, reason "no user"
-bob inserts a doc as alice: velox: gen.Doc: insert denied by policy: a doc must be created by its owner
+no user: ErrDenied=true, entity veloxgen.Doc, op select, reason "no user"
+bob inserts a doc as alice: velox: veloxgen.Doc: insert denied by policy: a doc must be created by its owner
 WithoutPolicy: 3 docs

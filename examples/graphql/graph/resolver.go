@@ -1,8 +1,8 @@
-// Package graph is the GraphQL server gqlgen generates from gen/velox.graphql
+// Package graph is the GraphQL server gqlgen generates from veloxgen/velox.graphql
 // and the application's app.graphql (generated.go, models_gen.go), and its
 // resolvers: Resolver here, and the root query's and the mutations' in
-// schema.resolvers.go, most of them one call into the gen package. Every
-// other field binds to gen's methods, so it needs no resolver.
+// schema.resolvers.go, most of them one call into the veloxgen package. Every
+// other field binds to veloxgen's methods, so it needs no resolver.
 package graph
 
 import (
@@ -13,7 +13,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/examples/graphql/gen"
+	"github.com/syssam/velox/examples/graphql/veloxgen"
 )
 
 // Resolver is the root resolver. It holds nothing: the generated code reads
@@ -46,7 +46,7 @@ func Author(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	ok, err := veloxgql.DB(ctx).Query[gen.User]().Where(gen.Users.ID.EQ(viewer)).Exists(ctx)
+	ok, err := veloxgql.DB(ctx).Query[veloxgen.User]().Where(veloxgen.Users.ID.EQ(viewer)).Exists(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -65,7 +65,7 @@ func OwnPost(ctx context.Context, db *velox.DB, id int64) error {
 	if err != nil {
 		return err
 	}
-	p, err := db.Query[gen.Post]().Where(gen.Posts.ID.EQ(id)).Columns(gen.Posts.AuthorID).One(ctx)
+	p, err := db.Query[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).Columns(veloxgen.Posts.AuthorID).One(ctx)
 	if velox.IsNotFound(err) {
 		return NotFound(ctx, "Post")
 	}

@@ -94,7 +94,7 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // field; Add and Sub fail the insert. An edge setter, a relation handle's
 // Add, Remove or Clear, is written after the insert, with each entity's key:
 //
-//	err := db.Insert(&post).Set(gen.Posts.Tags.Add(1, 2)).Exec(ctx)
+//	err := db.Insert(&post).Set(veloxgen.Posts.Tags.Add(1, 2)).Exec(ctx)
 //
 // Then the insert and its edges run in one transaction, a savepoint inside
 // one, and an edge's error undoes the insert. For each entity, an edge is

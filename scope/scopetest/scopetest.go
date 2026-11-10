@@ -3,8 +3,8 @@
 // Run it in a test for each entity that lists the mixin:
 //
 //	func TestProjectIsolated(t *testing.T) {
-//		scopetest.Isolates[gen.Project](t, ctx, db, schema.OrgKey, "org_id", 1001, 1002,
-//			func() *gen.Project { return &gen.Project{Name: uniqueName()} })
+//		scopetest.Isolates[veloxgen.Project](t, ctx, db, schema.OrgKey, "org_id", 1001, 1002,
+//			func() *veloxgen.Project { return &veloxgen.Project{Name: uniqueName()} })
 //	}
 //
 // It writes rows, so run it on a test database.

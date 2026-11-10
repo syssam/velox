@@ -270,7 +270,7 @@
 // with this atlas.hcl:
 //
 //	data "external_schema" "velox" {
-//	  program = ["go", "tool", "velox-gen", "migrate", "sql", "-dialect", "postgres", "./schema"]
+//	  program = ["go", "tool", "velox-gen", "migrate", "sql", "-dialect", "postgres", "./veloxschema"]
 //	}
 //
 //	env "velox" {

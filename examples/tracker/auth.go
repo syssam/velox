@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/examples/tracker/gen"
 	"github.com/syssam/velox/examples/tracker/principal"
-	"github.com/syssam/velox/examples/tracker/schema"
+	"github.com/syssam/velox/examples/tracker/veloxgen"
+	"github.com/syssam/velox/examples/tracker/veloxschema"
 )
 
 const (
@@ -76,13 +76,13 @@ func passwordMatches(stored, password string) bool {
 // newSession inserts a session for u and returns its token. Only the token's hash
 // is stored. Its expiry is in UTC, as the check in authed is: SQLite compares times
 // as text, so times in different zones would not compare by the instant.
-func newSession(ctx context.Context, db *velox.DB, u *gen.User) (string, error) {
+func newSession(ctx context.Context, db *velox.DB, u *veloxgen.User) (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
 	token := base64.RawURLEncoding.EncodeToString(raw)
-	s := gen.Session{TokenHash: hashToken(token), OrgID: u.OrgID, UserID: u.ID, ExpiresAt: time.Now().UTC().Add(sessionLife)}
+	s := veloxgen.Session{TokenHash: hashToken(token), OrgID: u.OrgID, UserID: u.ID, ExpiresAt: time.Now().UTC().Add(sessionLife)}
 	if err := db.Insert(&s).Exec(ctx); err != nil {
 		return "", err
 	}
@@ -115,12 +115,12 @@ func (s *server) signup(w http.ResponseWriter, r *http.Request) {
 	}
 	var token string
 	err = s.db.Tx(r.Context(), func(ctx context.Context, tx *velox.DB) error {
-		org := gen.Org{Slug: in.Org, Name: in.OrgName}
+		org := veloxgen.Org{Slug: in.Org, Name: in.OrgName}
 		if err := tx.Insert(&org).Exec(ctx); err != nil {
 			return err
 		}
-		ctx = schema.OrgKey.With(ctx, org.ID)
-		u := gen.User{Email: in.Email, Name: in.Name, PasswordHash: hash, Role: gen.UserRoleAdmin}
+		ctx = veloxschema.OrgKey.With(ctx, org.ID)
+		u := veloxgen.User{Email: in.Email, Name: in.Name, PasswordHash: hash, Role: veloxgen.UserRoleAdmin}
 		if err := tx.Insert(&u).Exec(ctx); err != nil {
 			return err
 		}
@@ -153,7 +153,7 @@ func (s *server) invite(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	u := gen.User{Email: in.Email, Name: in.Name, PasswordHash: hash, Role: gen.UserRoleMember}
+	u := veloxgen.User{Email: in.Email, Name: in.Name, PasswordHash: hash, Role: veloxgen.UserRoleMember}
 	if err := s.db.Insert(&u).Exec(r.Context()); err != nil {
 		s.fail(w, r, err)
 		return
@@ -181,7 +181,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, errorBody{errBadLogin.Error()})
 		return
 	}
-	token, err := newSession(schema.OrgKey.With(r.Context(), u.OrgID), s.db, u)
+	token, err := newSession(veloxschema.OrgKey.With(r.Context(), u.OrgID), s.db, u)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -191,17 +191,17 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 
 // findLogin finds a user by organization and email. The Org is found first, which
 // gives the Org the User statement is scoped to.
-func (s *server) findLogin(ctx context.Context, slug, email string) (*gen.User, error) {
-	org, err := s.db.Query[gen.Org]().Where(gen.Orgs.Slug.EQ(slug)).One(ctx)
+func (s *server) findLogin(ctx context.Context, slug, email string) (*veloxgen.User, error) {
+	org, err := s.db.Query[veloxgen.Org]().Where(veloxgen.Orgs.Slug.EQ(slug)).One(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return s.db.Query[gen.User]().Where(gen.Users.Email.EQ(email)).One(schema.OrgKey.With(ctx, org.ID))
+	return s.db.Query[veloxgen.User]().Where(veloxgen.Users.Email.EQ(email)).One(veloxschema.OrgKey.With(ctx, org.ID))
 }
 
 // logout ends the session of the request's token.
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
-	_, err := s.db.Delete[gen.Session]().Where(gen.Sessions.TokenHash.EQ(hashToken(bearer(r)))).Exec(r.Context())
+	_, err := s.db.Delete[veloxgen.Session]().Where(veloxgen.Sessions.TokenHash.EQ(hashToken(bearer(r)))).Exec(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -212,7 +212,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 // me returns the caller.
 func (s *server) me(w http.ResponseWriter, r *http.Request) {
 	p, _ := principal.FromContext(r.Context())
-	u, err := s.db.Query[gen.User]().Where(gen.Users.ID.EQ(p.UserID)).One(r.Context())
+	u, err := s.db.Query[veloxgen.User]().Where(veloxgen.Users.ID.EQ(p.UserID)).One(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -236,8 +236,8 @@ func bearer(r *http.Request) string {
 func (s *server) authed(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		sess, err := s.db.Query[gen.Session]().
-			Where(gen.Sessions.TokenHash.EQ(hashToken(bearer(r))), gen.Sessions.ExpiresAt.GT(time.Now().UTC())).
+		sess, err := s.db.Query[veloxgen.Session]().
+			Where(veloxgen.Sessions.TokenHash.EQ(hashToken(bearer(r))), veloxgen.Sessions.ExpiresAt.GT(time.Now().UTC())).
 			One(ctx)
 		if velox.IsNotFound(err) {
 			writeJSON(w, http.StatusUnauthorized, errorBody{"log in first"})
@@ -247,8 +247,8 @@ func (s *server) authed(next http.HandlerFunc) http.HandlerFunc {
 			s.fail(w, r, err)
 			return
 		}
-		ctx = schema.OrgKey.With(ctx, sess.OrgID)
-		u, err := s.db.Query[gen.User]().Where(gen.Users.ID.EQ(sess.UserID)).One(ctx)
+		ctx = veloxschema.OrgKey.With(ctx, sess.OrgID)
+		u, err := s.db.Query[veloxgen.User]().Where(veloxgen.Users.ID.EQ(sess.UserID)).One(ctx)
 		if velox.IsNotFound(err) {
 			writeJSON(w, http.StatusUnauthorized, errorBody{"log in first"})
 			return
@@ -257,7 +257,7 @@ func (s *server) authed(next http.HandlerFunc) http.HandlerFunc {
 			s.fail(w, r, err)
 			return
 		}
-		ctx = principal.With(ctx, principal.Principal{UserID: u.ID, Admin: u.Role == gen.UserRoleAdmin})
+		ctx = principal.With(ctx, principal.Principal{UserID: u.ID, Admin: u.Role == veloxgen.UserRoleAdmin})
 		next(w, r.WithContext(ctx))
 	}
 }

@@ -5,9 +5,9 @@ together in a real service. The others show one topic each.
 
 | Piece | Where |
 |---|---|
-| Entities, relations, a many-to-many, a cascading foreign key | `schema/schema.go` |
-| Each organization sees only its own rows | the `InOrg` mixin in `schema/inorg.go`, whose Policy confines statements to the context's `OrgKey` and whose hook fills `org_id`, listed in each entity's `Mixin()`; `authed` in `auth.go` names the Org once per request |
-| Who may change what, enforced in the statements themselves for projects, issues and comments | `schema/policy.go`, which names columns by their schema names and does not import `gen`, and `principal/principal.go`; `User` has only the Org scope, as signing up inserts one before anyone is logged in, so `invite` checks the role itself |
+| Entities, relations, a many-to-many, a cascading foreign key | `veloxschema/schema.go` |
+| Each organization sees only its own rows | the `InOrg` mixin in `veloxschema/inorg.go`, whose Policy confines statements to the context's `OrgKey` and whose hook fills `org_id`, listed in each entity's `Mixin()`; `authed` in `auth.go` names the Org once per request |
+| Who may change what, enforced in the statements themselves for projects, issues and comments | `veloxschema/policy.go`, which names columns by their schema names and does not import `veloxgen`, and `principal/principal.go`; `User` has only the Org scope, as signing up inserts one before anyone is logged in, so `invite` checks the role itself |
 | Logins: salted password hashes, tokens stored only as hashes | `auth.go` |
 | Transactions | `signup` in `auth.go`, `createIssue` in `server.go` |
 | A label upsert that is safe under concurrency, its names sorted so that transactions cannot deadlock | `setLabels` in `server.go` |
@@ -76,7 +76,7 @@ until it is null.
   organization's row by guessing its id.
 - **The policy is part of the statement.** `PATCH` by someone who may not change the
   issue changes no row; `missingOrDenied` then tells 404 from 403.
-- **`gen.Issue` is the response.** Its JSON tags come from the schema, and
+- **`veloxgen.Issue` is the response.** Its JSON tags come from the schema, and
   `password_hash` is `Sensitive`, so it cannot be written out. JSON goes one way: an
   entity with loaded relations does not decode, so a client needs its own structs,
   as `main_test.go` has.

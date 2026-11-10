@@ -12,7 +12,7 @@ type anyEntity = engine.AnyEntity
 // Mutation.Where takes, and what the untyped surface (TableQuery,
 // TableUpdate, TableDelete) filters by. It is Pred of no entity, so And, Or
 // and Not combine predicates as they combine a Pred of one entity, though
-// not one of each: velox.Or(velox.FieldEQ("a", 1), gen.Users.ID.EQ(2))
+// not one of each: velox.Or(velox.FieldEQ("a", 1), veloxgen.Users.ID.EQ(2))
 // does not compile. Predicate(p) converts a typed p.
 //
 // FieldEQ and the other Field functions name a column by its name, as the

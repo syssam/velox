@@ -1,6 +1,6 @@
 Usage:
   velox-gen [generate] [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
-        generate the gen package of a schema package (default ./schema)
+        generate the veloxgen package of a veloxschema package (default ./veloxschema)
   velox-gen verify [-out dir] [-package name] [-plugin tool[:key=value,...]]... [package]
         check every generated entity's metadata
   velox-gen describe [-json] [package]

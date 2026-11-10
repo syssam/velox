@@ -169,7 +169,7 @@ func ownerOf[E any]() (*EntityInfo, error) {
 // with it: its target is not an entity or has invalid metadata, or its key is
 // missing or mistyped. CheckEntity cannot do this, because a relation of
 // generated code names its target only where it is used. velox-gen verify
-// calls it for every relation: velox.CheckRelation(gen.Users.Posts).
+// calls it for every relation: velox.CheckRelation(veloxgen.Users.Posts).
 func CheckRelation[E, T any](r Rel[E, T]) error {
 	_, err := engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}.Link()
 	return err
@@ -204,7 +204,7 @@ func (r Rel[E, T]) HasWith[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 // r's Where conditions apply too; its OrderBy and With, which say how to
 // load, do not.
 //
-//	db.Query[gen.Post]().Where(gen.Users.Posts.Of(&ada)).Limit(20).All(ctx)
+//	db.Query[veloxgen.Post]().Where(veloxgen.Users.Posts.Of(&ada)).Limit(20).All(ctx)
 //
 // Of reads the owners' keys when it is called, so later changes to them do
 // not change the condition. It reads E's and T's metadata: inside a Policy
@@ -225,7 +225,7 @@ func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T] {
 // the owner's row (a many-to-one edge, or the side of a one-to-one edge
 // that holds the key):
 //
-//	db.Insert(&post).Set(gen.Posts.Author.Set(id)).Exec(ctx)
+//	db.Insert(&post).Set(veloxgen.Posts.Author.Set(id)).Exec(ctx)
 //
 // The write first checks, in its transaction, that key names a row of T the
 // caller may read, under T's Read policy; one it does not fails with an
@@ -241,7 +241,7 @@ func (r Rel[E, T]) Set[_ Lazy[T]](key any) Setter[E] {
 // Add is the setter that links the owner to the rows of T whose keys are
 // keys, for Insert's and Update's Set:
 //
-//	db.Update[gen.Post]().Set(gen.Posts.Tags.Add(1, 2)).Where(gen.Posts.ID.EQ(id)).Exec(ctx)
+//	db.Update[veloxgen.Post]().Set(veloxgen.Posts.Tags.Add(1, 2)).Where(veloxgen.Posts.ID.EQ(id)).Exec(ctx)
 //
 // A key is a value of the target's key column, converted to its Go type as
 // Table.Convert converts; repeated keys count once. r's Where, OrderBy and

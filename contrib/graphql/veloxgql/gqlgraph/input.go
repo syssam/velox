@@ -128,7 +128,7 @@ func ShowJSON(p *veloxgql.JSON) any {
 }
 
 // writeError is err, a validator's, from the input named input of entity
-// (the name velox reports, as "gen.Post"). A *velox.ValidationError of entity
+// (the name velox reports, as "veloxgen.Post"). A *velox.ValidationError of entity
 // on a field name gives a GraphQL name for becomes BAD_USER_INPUT
 // "<input>.<name>: invalid value: <the validator's text>", wrapping err.
 // Every other error is returned as it is. So is a validation error joined

@@ -9,7 +9,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/hooks/auth"
-	"github.com/syssam/velox/examples/hooks/gen"
+	"github.com/syssam/velox/examples/hooks/veloxgen"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -23,7 +23,7 @@ func TestUserFromContext(t *testing.T) {
 	}
 }
 
-// TestCreatedBy inserts through gen.Task, whose CreatedBy mixin fills
+// TestCreatedBy inserts through veloxgen.Task, whose CreatedBy mixin fills
 // created_by on insert: the context's user fills an empty column, and a
 // column the caller set stays.
 func TestCreatedBy(t *testing.T) {
@@ -44,14 +44,14 @@ func TestCreatedBy(t *testing.T) {
 		{"empty with no user", "", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			x := gen.Task{Title: tc.name, CreatedBy: tc.set}
+			x := veloxgen.Task{Title: tc.name, CreatedBy: tc.set}
 			if err := db.Insert(&x).Exec(auth.WithUser(ctx, tc.user)); err != nil {
 				t.Fatal(err)
 			}
 			if x.CreatedBy != tc.want {
 				t.Errorf("CreatedBy = %q, want %q", x.CreatedBy, tc.want)
 			}
-			got, err := db.Query[gen.Task]().Where(gen.Tasks.ID.EQ(x.ID)).One(ctx)
+			got, err := db.Query[veloxgen.Task]().Where(veloxgen.Tasks.ID.EQ(x.ID)).One(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}

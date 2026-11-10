@@ -4,7 +4,7 @@
 // struct type of the package that implements schema.Interface, directly or
 // through embedding at any depth, by value or through a pointer, as ent's
 // rule has it; what looks like a schema and is not one is refused at its
-// line. It writes the gen package: one file, <entity>.go, for every entity
+// line. It writes the veloxgen package: one file, <entity>.go, for every entity
 // and for every join entity of a many-to-many relation, and velox.go, which
 // holds the enums. An entity whose <entity>.go go build would leave out of
 // some builds, such as ab_test.go or server_linux.go, or that is velox.go,
@@ -13,7 +13,7 @@
 // Install it as a tool of your module and run it from the module root:
 //
 //	go get -tool github.com/syssam/velox/cmd/velox-gen
-//	go tool velox-gen ./schema
+//	go tool velox-gen ./veloxschema
 //
 // Usage:
 //
@@ -47,10 +47,10 @@
 // and migrate baseline) holds SIGINT and SIGTERM until its write is done or
 // undone, and then exits 130 if one arrived.
 //
-// The package is one schema package, ./schema when none is named; a pattern
+// The package is one schema package, ./veloxschema when none is named; a pattern
 // that names no package, or a package that declares no schemas, is an error
 // ("no schemas in ..."), and several packages are a usage error. -out is the
-// directory of the generated package (default ./gen) and -package its name
+// directory of the generated package (default ./veloxgen) and -package its name
 // (default: the base name of -out).
 // velox-gen writes nothing when any entity has a problem. Each problem is
 // printed as file:line: schema User: field "name": reason, with the file
@@ -67,7 +67,7 @@
 // write is an error. The deletion searches -out and its subdirectories, but
 // not those whose name starts with "." or "_", nor those that hold a go.mod or
 // velox-gen's own velox.go: another module, or another run's output, such as
-// -out ./gen/b beside -out ./gen. The files you add to the output directory
+// -out ./veloxgen/b beside -out ./veloxgen. The files you add to the output directory
 // stay, but may not declare a type named like a generated one, nor a Policy
 // or Hooks method on a generated entity: those are declared in the schema
 // package, on the entity's schema, as func (E) Policy() velox.Policy and
@@ -142,7 +142,7 @@
 // now; one in -out itself compiles with the rest of the package.
 //
 // describe prints the entities, columns and relations that the schema package
-// (default ./schema) declares; with -json, the model that a plugin receives as
+// (default ./veloxschema) declares; with -json, the model that a plugin receives as
 // "model", indented. version prints one line, such as
 // "velox-gen v1.2.3 (generated code 10, plugin protocol 2, model 3)".
 //
@@ -152,7 +152,7 @@
 // path it prints is joined to -dir, and each error is printed as
 // "velox-gen: migrate <subcommand>: <text>".
 //
-// migrate diff loads the schema package (default ./schema), builds its
+// migrate diff loads the schema package (default ./veloxschema), builds its
 // tables for the directory's dialect and plans them against schema.json. It
 // writes the new files, schema.json and velox.sum, all or nothing, and prints
 // their paths. A new directory, one that is missing or holds none of
@@ -333,7 +333,7 @@ func runGenCommand(name string, args []string, dir string, env []string, stdout,
 	if !verify {
 		checkOnly = fs.Bool("check", false, "write nothing; exit 3 when a generated file is out of date, missing or left over")
 	}
-	outDir := fs.String("out", "./gen", "the directory of the generated package")
+	outDir := fs.String("out", "./veloxgen", "the directory of the generated package")
 	pkgName := fs.String("package", "", "the generated package's name (default: the base name of -out)")
 	var plugins pluginFlag
 	fs.Var(&plugins, "plugin", "run the generator plugin `tool`, a tool of your module as go tool names it, on the model; options follow a colon (tool:key=value,...); repeat for several")
@@ -436,7 +436,7 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 func printUsage(w io.Writer) {
 	_, _ = fmt.Fprint(w, `Usage:
   velox-gen [generate] [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
-        generate the gen package of a schema package (default ./schema)
+        generate the veloxgen package of a veloxschema package (default ./veloxschema)
   velox-gen verify [-out dir] [-package name] [-plugin tool[:key=value,...]]... [package]
         check every generated entity's metadata
   velox-gen describe [-json] [package]

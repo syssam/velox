@@ -213,18 +213,18 @@ lane_examples() (
   go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
-  go run github.com/mgechev/revive@v1.17.0 -config ../scripts/revive.toml -set_exit_status ./*/gen
+  go run github.com/mgechev/revive@v1.17.0 -config ../scripts/revive.toml -set_exit_status ./*/veloxgen
   go test -race -count=1 -coverprofile="$root/cover-examples.out" $(go list ./... | grep -vE '/examples/(graphql|otel)(/|$)')
 )
 
 # The examples' generated files and migrations, as CI's generated job checks them.
 lane_examples_generated() (
   cd examples
-  for d in */schema; do
-    x=${d%/schema}
+  for d in */veloxschema; do
+    x=${d%/veloxschema}
     [ "$x" = graphql ] && continue # its own lane, with the plugin
-    go tool velox-gen -check -out "./$x/gen" "./$x/schema"
-    go tool velox-gen verify -out "./$x/gen" "./$x/schema"
+    go tool velox-gen -check -out "./$x/veloxgen" "./$x/veloxschema"
+    go tool velox-gen verify -out "./$x/veloxgen" "./$x/veloxschema"
   done
   # Each example's tables come from its committed migrations: fail on drift from the
   # schema package, and on SQL that does not replay to its schema.json (applied to a
@@ -233,13 +233,13 @@ lane_examples_generated() (
   for f in */migrations/schema.json */migrations/sqlite/schema.json; do
     d=${f%/schema.json}
     x=${d%%/*}
-    go tool velox-gen migrate diff -check -dir "./$d" "./$x/schema"
+    go tool velox-gen migrate diff -check -dir "./$d" "./$x/veloxschema"
     go tool velox-gen migrate apply -dir "./$d" -db "$migdb/$x.db"
     go tool velox-gen migrate drift -dir "./$d" -db "$migdb/$x.db"
   done
   rm -rf "$migdb"
   # tracker's PostgreSQL migrations: its tests apply them, under VELOX_TEST_POSTGRES.
-  go tool velox-gen migrate diff -check -dir ./tracker/migrations/postgres ./tracker/schema
+  go tool velox-gen migrate diff -check -dir ./tracker/migrations/postgres ./tracker/veloxschema
 )
 
 # velox's own build cost. It fails over a threshold only where they were
@@ -275,8 +275,8 @@ lane_graphql() (
 lane_examples_graphql() (
   cd examples
   use_db velox_examples_graphql
-  go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
-  go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
+  go tool velox-gen -check -out ./graphql/veloxgen -plugin velox-graphql ./graphql/veloxschema
+  go tool velox-gen verify -out ./graphql/veloxgen -plugin velox-graphql ./graphql/veloxschema
   go test -race -count=1 -timeout 20m -coverprofile="$root/cover-examples-graphql.out" ./graphql/...
   wait_lane examples
   # Regenerate gqlgen's output, and fail on any difference.

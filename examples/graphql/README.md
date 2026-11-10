@@ -19,7 +19,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
 
 ## What the application writes
 
-1. The schema, `schema/schema.go`, with `graphql.*` annotations from
+1. The schema, `veloxschema/schema.go`, with `graphql.*` annotations from
    `github.com/syssam/velox/contrib/graphql`: `QueryField` makes a root
    connection, `OrderField` an `orderBy` value, `WhereOps` and `WhereEdge`
    the predicates of the `where` input, `MultiOrder` a list `orderBy`, and
@@ -49,7 +49,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    `email` has `graphql.Directives(graphql.Directive{Name: "admin"})`: see
    below.
 2. velox-gen with the plugin, which writes `gen/`: the entities, the GraphQL
-   schema `gen/velox.graphql`, and the `*_gql.go` files it binds to
+   schema `veloxgen/velox.graphql`, and the `*_gql.go` files it binds to
    (connections, edges, orders, where inputs, and mutation inputs with their
    `Setters` method):
 
@@ -60,7 +60,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    with `createPost`, `updatePost`, `deletePost`, `createLabel`,
    `updateLabel`, `createUser` and `updateUser`, which velox-graphql leaves to
    it, as entgql does; and its own query and field (below). `gqlgen.yml`:
-   the schema files, `autobind` to `gen`, and `models` binding `ID` and the
+   the schema files, `autobind` to `veloxgen`, and `models` binding `ID` and the
    scalars to `veloxgql`. An ID is the entity's key, an `int64` here, so `ID`
    binds to `veloxgql.Int64ID`: a resolver's `id` argument is an `int64`,
    which the client sends as an integer or a string of one, and reads as a
@@ -75,28 +75,28 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    most of them one call each:
 
    ```go
-   func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
-   	return veloxgql.DB(ctx).Query[gen.User]().Paginate(ctx, after, first, before, last, gen.WithUserOrder(orderBy), gen.WithUserFilter(where))
+   func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *veloxgen.UserOrder, where *veloxgen.UserWhereInput) (*veloxgen.UserConnection, error) {
+   	return veloxgql.DB(ctx).Query[veloxgen.User]().Paginate(ctx, after, first, before, last, veloxgen.WithUserOrder(orderBy), veloxgen.WithUserFilter(where))
    }
 
-   func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
+   func (r *mutationResolver) CreatePost(ctx context.Context, input veloxgen.CreatePostInput) (*veloxgen.Post, error) {
    	viewer, err := Author(ctx)
    	if err != nil {
    		return nil, err
    	}
-   	x := &gen.Post{AuthorID: viewer}
+   	x := &veloxgen.Post{AuthorID: viewer}
    	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
    		return nil, err
    	}
    	return x, nil
    }
 
-   func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error) {
+   func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input veloxgen.UpdatePostInput) (*veloxgen.Post, error) {
    	db := veloxgql.DB(ctx)
    	if err := OwnPost(ctx, db, id); err != nil {
    		return nil, err
    	}
-   	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
+   	x, err := db.Update[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
    	if velox.IsNotFound(err) {
    		return nil, NotFound(ctx, "Post")
    	}
@@ -116,15 +116,15 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    input's. `OwnPost` lets only a post's author change it (`FORBIDDEN`
    otherwise). velox-graphql generates no
    delete: `DeletePost` is the application's, `OwnPost` and a scoped
-   `db.Delete[gen.Post]()`, in a savepoint, `NOT_FOUND` when it deleted no
+   `db.Delete[veloxgen.Post]()`, in a savepoint, `NOT_FOUND` when it deleted no
    row and an internal error when the driver reports no count. The post's
    join rows go with it by `post_tags`' `ON DELETE CASCADE`: `main.go` opens
    SQLite with foreign keys on (`_pragma=foreign_keys(1)`).
 
    A connection is a query's `Paginate`. Its options are named after the
-   GraphQL type, as every name `gen` declares is: `gen.WithLabelOrder` for
+   GraphQL type, as every name `veloxgen` declares is: `veloxgen.WithLabelOrder` for
    the `labels` field of the type `Label` (the entity `Tag`), on
-   `db.Query[gen.Tag]()`. The connection is
+   `db.Query[veloxgen.Tag]()`. The connection is
    lazy: it sends nothing until gqlgen resolves its edges, pageInfo or
    totalCount.
 
@@ -133,7 +133,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    resolver reads, so a page that selects it reads every column:
 
    ```go
-   func (r *userResolver) Initials(ctx context.Context, obj *gen.User) (string, error) {
+   func (r *userResolver) Initials(ctx context.Context, obj *veloxgen.User) (string, error) {
    	var b strings.Builder
    	for _, w := range strings.Fields(obj.Name) {
    		first, _ := utf8.DecodeRuneInString(w)
@@ -143,7 +143,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    }
    ```
 
-   Every other field binds to `gen`'s methods: an edge is the method of its
+   Every other field binds to `veloxgen`'s methods: an edge is the method of its
    name on the entity, `Post.Author(ctx)`, as entgql's is, and `id` is the
    `ID` field, the key; connections are lazy (`totalCount` alone runs one
    `COUNT`, and no page query).
@@ -254,7 +254,7 @@ release, because those filters were unguarded before.
 The server sets `srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))`.
 gqlgen's default presenter shows the client every error's text, and velox's
 and the driver's name entities, tables, constraints and columns: without a
-organization, a client would read `velox: gen.Post: select denied by policy: velox/scope: the context has no scope value: org`.
+organization, a client would read `velox: veloxgen.Post: select denied by policy: velox/scope: the context has no scope value: org`.
 `ErrorPresenter` shows only what is safe, with a code in
 `extensions.code`:
 
@@ -401,8 +401,8 @@ pages a query it writes with `Paginate`, as the `posts` field
 pages every post:
 
 ```go
-func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	return veloxgql.DB(ctx).Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)).Paginate(ctx, after, first, before, last, gen.WithPostOrder(orderBy), gen.WithPostFilter(where))
+func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*veloxgen.PostOrder, where *veloxgen.PostWhereInput) (*veloxgen.PostConnection, error) {
+	return veloxgql.DB(ctx).Query[veloxgen.Post]().Where(veloxgen.Posts.Status.EQ(veloxgen.PostStatusPublished)).Paginate(ctx, after, first, before, last, veloxgen.WithPostOrder(orderBy), veloxgen.WithPostFilter(where))
 }
 ```
 

@@ -13,8 +13,8 @@ import (
 	"strconv"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/examples/tracker/gen"
 	"github.com/syssam/velox/examples/tracker/principal"
+	"github.com/syssam/velox/examples/tracker/veloxgen"
 )
 
 const (
@@ -48,7 +48,7 @@ func newServer(db *velox.DB) http.Handler {
 
 // projectView is a Project with the count of its open Issues.
 type projectView struct {
-	*gen.Project
+	*veloxgen.Project
 	OpenIssues int64 `json:"open_issues"`
 }
 
@@ -60,18 +60,18 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	P, I := gen.Projects, gen.Issues
-	rows, err := s.db.Query[gen.Project]().Where(P.ID.GT(after)).OrderBy(P.ID.Asc()).Limit(limit + 1).All(ctx)
+	P, I := veloxgen.Projects, veloxgen.Issues
+	rows, err := s.db.Query[veloxgen.Project]().Where(P.ID.GT(after)).OrderBy(P.ID.Asc()).Limit(limit + 1).All(ctx)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	rows, next := cut(rows, limit, func(p *gen.Project) int64 { return p.ID })
-	owners := make([]*gen.Project, len(rows))
+	rows, next := cut(rows, limit, func(p *veloxgen.Project) int64 { return p.ID })
+	owners := make([]*veloxgen.Project, len(rows))
 	for i := range rows {
 		owners[i] = &rows[i]
 	}
-	open := s.db.Query[gen.Issue]().Where(I.Status.EQ(gen.IssueStatusOpen))
+	open := s.db.Query[veloxgen.Issue]().Where(I.Status.EQ(veloxgen.IssueStatusOpen))
 	counts, err := velox.CountEach(ctx, open, P.Issues, owners)
 	if err != nil {
 		s.fail(w, r, err)
@@ -89,7 +89,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &in) {
 		return
 	}
-	p := gen.Project{Name: in.Name}
+	p := veloxgen.Project{Name: in.Name}
 	if err := s.db.Insert(&p).Exec(r.Context()); err != nil {
 		s.fail(w, r, err)
 		return
@@ -110,17 +110,17 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	I, L := gen.Issues, gen.Labels
-	if exists, err := s.db.Query[gen.Project]().Where(gen.Projects.ID.EQ(project)).Exists(ctx); err != nil {
+	I, L := veloxgen.Issues, veloxgen.Labels
+	if exists, err := s.db.Query[veloxgen.Project]().Where(veloxgen.Projects.ID.EQ(project)).Exists(ctx); err != nil {
 		s.fail(w, r, err)
 		return
 	} else if !exists {
 		writeJSON(w, http.StatusNotFound, errorBody{"no such project"})
 		return
 	}
-	q := s.db.Query[gen.Issue]().Where(I.ProjectID.EQ(project), I.ID.GT(after))
+	q := s.db.Query[veloxgen.Issue]().Where(I.ProjectID.EQ(project), I.ID.GT(after))
 	if v := r.URL.Query().Get("status"); v != "" {
-		st := gen.IssueStatus(v)
+		st := veloxgen.IssueStatus(v)
 		if !st.IsValid() {
 			writeJSON(w, http.StatusUnprocessableEntity, errorBody{fmt.Sprintf("no status %q", v)})
 			return
@@ -135,7 +135,7 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	rows, next := cut(rows, limit, func(x *gen.Issue) int64 { return x.ID })
+	rows, next := cut(rows, limit, func(x *veloxgen.Issue) int64 { return x.ID })
 	writeJSON(w, http.StatusOK, pageOf(rows, next))
 }
 
@@ -159,9 +159,9 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, _ := principal.FromContext(r.Context())
-	issue := gen.Issue{ProjectID: project, AuthorID: p.UserID, Title: in.Title, Body: in.Body}
+	issue := veloxgen.Issue{ProjectID: project, AuthorID: p.UserID, Title: in.Title, Body: in.Body}
 	err := s.db.Tx(r.Context(), func(ctx context.Context, tx *velox.DB) error {
-		exists, err := tx.Query[gen.Project]().Where(gen.Projects.ID.EQ(project)).Exists(ctx)
+		exists, err := tx.Query[veloxgen.Project]().Where(veloxgen.Projects.ID.EQ(project)).Exists(ctx)
 		if err != nil {
 			return err
 		}
@@ -189,21 +189,21 @@ func setLabels(ctx context.Context, tx *velox.DB, issue int64, names []string) e
 		return nil
 	}
 	names = slices.Compact(slices.Sorted(slices.Values(names)))
-	L := gen.Labels
-	rows := make([]gen.Label, len(names))
+	L := veloxgen.Labels
+	rows := make([]veloxgen.Label, len(names))
 	for i, n := range names {
 		rows[i].Name = n
 	}
 	if err := tx.InsertAll(rows).OnConflict(L.OrgID, L.Name).DoNothing().Exec(ctx); err != nil {
 		return err
 	}
-	labels, err := tx.Query[gen.Label]().Where(L.Name.In(names...)).Limit(len(names)).All(ctx)
+	labels, err := tx.Query[veloxgen.Label]().Where(L.Name.In(names...)).Limit(len(names)).All(ctx)
 	if err != nil {
 		return err
 	}
-	links := make([]gen.IssueLabel, len(labels))
+	links := make([]veloxgen.IssueLabel, len(labels))
 	for i := range labels {
-		links[i] = gen.IssueLabel{IssueID: issue, LabelID: labels[i].ID}
+		links[i] = veloxgen.IssueLabel{IssueID: issue, LabelID: labels[i].ID}
 	}
 	return tx.InsertAll(links).Exec(ctx)
 }
@@ -215,8 +215,8 @@ func (s *server) getIssue(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	I, C, L := gen.Issues, gen.Comments, gen.Labels
-	x, err := s.db.Query[gen.Issue]().
+	I, C, L := veloxgen.Issues, veloxgen.Comments, veloxgen.Labels
+	x, err := s.db.Query[veloxgen.Issue]().
 		Where(I.ID.EQ(id)).
 		With(I.Author).
 		With(I.Assignee).
@@ -246,8 +246,8 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &in) {
 		return
 	}
-	I := gen.Issues
-	var set []velox.Setter[gen.Issue]
+	I := veloxgen.Issues
+	var set []velox.Setter[veloxgen.Issue]
 	if in.Title != nil {
 		set = append(set, I.Title.Set(*in.Title))
 	}
@@ -255,7 +255,7 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		set = append(set, I.Body.Set(*in.Body))
 	}
 	if in.Status != nil {
-		st := gen.IssueStatus(*in.Status)
+		st := veloxgen.IssueStatus(*in.Status)
 		if !st.IsValid() {
 			writeJSON(w, http.StatusUnprocessableEntity, errorBody{fmt.Sprintf("no status %q", *in.Status)})
 			return
@@ -271,7 +271,7 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, errorBody{"assignee_id is a number or null"})
 				return
 			}
-			exists, err := s.db.Query[gen.User]().Where(gen.Users.ID.EQ(who)).Exists(ctx)
+			exists, err := s.db.Query[veloxgen.User]().Where(veloxgen.Users.ID.EQ(who)).Exists(ctx)
 			if err != nil {
 				s.fail(w, r, err)
 				return
@@ -289,7 +289,7 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	// The policy is part of the statement, so no row changed means either no such
 	// issue or one the caller may not change. The second read tells them apart.
-	n, err := s.db.Update[gen.Issue]().Set(set...).Where(I.ID.EQ(id)).Exec(ctx)
+	n, err := s.db.Update[veloxgen.Issue]().Set(set...).Where(I.ID.EQ(id)).Exec(ctx)
 	if err == nil && n == 0 {
 		err = s.missingOrDenied(ctx, id)
 	}
@@ -297,7 +297,7 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	x, err := s.db.Query[gen.Issue]().Where(I.ID.EQ(id)).One(ctx)
+	x, err := s.db.Query[veloxgen.Issue]().Where(I.ID.EQ(id)).One(ctx)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -313,7 +313,7 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	n, err := s.db.Delete[gen.Issue]().Where(gen.Issues.ID.EQ(id)).Exec(ctx)
+	n, err := s.db.Delete[veloxgen.Issue]().Where(veloxgen.Issues.ID.EQ(id)).Exec(ctx)
 	if err == nil && n == 0 {
 		err = s.missingOrDenied(ctx, id)
 	}
@@ -326,7 +326,7 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 
 // missingOrDenied is the error of a write that changed no row of issue id.
 func (s *server) missingOrDenied(ctx context.Context, id int64) error {
-	exists, err := s.db.Query[gen.Issue]().Where(gen.Issues.ID.EQ(id)).Exists(ctx)
+	exists, err := s.db.Query[veloxgen.Issue]().Where(veloxgen.Issues.ID.EQ(id)).Exists(ctx)
 	switch {
 	case err != nil:
 		return err
@@ -348,7 +348,7 @@ func (s *server) addComment(w http.ResponseWriter, r *http.Request) {
 	}
 	// The issue is read in the caller's Org: the foreign key alone would accept
 	// an issue of another organization.
-	exists, err := s.db.Query[gen.Issue]().Where(gen.Issues.ID.EQ(id)).Exists(ctx)
+	exists, err := s.db.Query[veloxgen.Issue]().Where(veloxgen.Issues.ID.EQ(id)).Exists(ctx)
 	if err == nil && !exists {
 		err = velox.ErrNotFound
 	}
@@ -357,7 +357,7 @@ func (s *server) addComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, _ := principal.FromContext(ctx)
-	c := gen.Comment{IssueID: id, AuthorID: p.UserID, Body: in.Body}
+	c := veloxgen.Comment{IssueID: id, AuthorID: p.UserID, Body: in.Body}
 	if err := s.db.Insert(&c).Exec(ctx); err != nil {
 		s.fail(w, r, err)
 		return

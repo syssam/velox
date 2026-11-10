@@ -10,7 +10,7 @@ cd examples
 go run ./relations
 ```
 
-`schema/schema.go` declares each relation as an edge. The side that owns the
+`veloxschema/schema.go` declares each relation as an edge. The side that owns the
 rows has `edge.To`, and the side that holds the key has `edge.From` with the
 name of the `To` it mirrors. `Unique` makes it a belongs-to (a `velox.One`),
 and `Field` names the column that holds the key:
@@ -37,9 +37,9 @@ set it when you insert a row that belongs to another.
 Reading:
 
 ```go
-db.Query[gen.Author]().With(A.Posts).Limit(10).All(ctx)          // one more query: IN (...)
+db.Query[veloxgen.Author]().With(A.Posts).Limit(10).All(ctx)          // one more query: IN (...)
 A.Posts.Where(P.Votes.GTE(10)).OrderBy(P.Votes.Desc()).With(P.Comments) // filtered, ordered, nested
-db.Query[gen.Post]().With(P.Author)                              // belongs-to
+db.Query[veloxgen.Post]().With(P.Author)                              // belongs-to
 posts, loaded := author.Edges.Posts.Get()
 
 A.Posts.Has()                       // EXISTS
@@ -53,18 +53,18 @@ page = page.After(&last)            // keyset pagination; OrderBy includes the k
 
 `Post` has `edge.To("tags", Tag.Type)` and `Tag` has
 `edge.From("posts", Post.Type).Ref("tags")`; neither is `Unique`, so the relation
-is many-to-many. velox-gen writes the join entity `gen.PostTag`, a row of
-`post_tags` with the primary key `(post_id, tag_id)`, and handles `gen.PostTags`.
+is many-to-many. velox-gen writes the join entity `veloxgen.PostTag`, a row of
+`post_tags` with the primary key `(post_id, tag_id)`, and handles `veloxgen.PostTags`.
 Neither entity has a column for it: a link is a join row, which you insert and
 delete like any other.
 
 ```go
-PT := gen.PostTags
-db.InsertAll([]gen.PostTag{{PostID: cobol, TagID: history}, {PostID: cobol, TagID: languages}}).Exec(ctx) // link
-db.Insert(&gen.PostTag{PostID: cobol, TagID: history}).OnConflict(PT.PostID, PT.TagID).DoNothing().Exec(ctx) // link, if not yet
-db.Delete[gen.PostTag]().Where(PT.PostID.EQ(cobol), PT.TagID.EQ(history)).Exec(ctx)               // unlink
+PT := veloxgen.PostTags
+db.InsertAll([]veloxgen.PostTag{{PostID: cobol, TagID: history}, {PostID: cobol, TagID: languages}}).Exec(ctx) // link
+db.Insert(&veloxgen.PostTag{PostID: cobol, TagID: history}).OnConflict(PT.PostID, PT.TagID).DoNothing().Exec(ctx) // link, if not yet
+db.Delete[veloxgen.PostTag]().Where(PT.PostID.EQ(cobol), PT.TagID.EQ(history)).Exec(ctx)               // unlink
 
-db.Query[gen.Post]().Where(P.Tags.Has()).With(P.Tags.OrderBy(T.Name.Asc())) // through post_tags
+db.Query[veloxgen.Post]().Where(P.Tags.Has()).With(P.Tags.OrderBy(T.Name.Asc())) // through post_tags
 P.Tags.HasWith(T.Name.EQ("history"))
 ```
 

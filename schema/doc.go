@@ -44,9 +44,9 @@
 //
 // Generate the entities from the package with
 //
-//	go tool velox-gen ./schema
+//	go tool velox-gen ./veloxschema
 //
-// which writes the package ./gen. Nothing in a schema runs at program start.
+// which writes the package ./veloxgen. Nothing in a schema runs at program start.
 // A schema also declares its entity's behaviour, as ent's do: the methods
 // Policy, Hooks and Interceptors. The schema package does not import gen,
 // which imports it, so they name columns by name, as the fields do:
@@ -65,7 +65,7 @@
 //
 // The method takes nothing and returns velox.Policy, []velox.Hook or
 // []velox.Interceptor; velox-gen refuses another shape, a generic method
-// and the typed shape of an older velox (velox.Policy[gen.User]) among
+// and the typed shape of an older velox (velox.Policy[veloxgen.User]) among
 // them. A many-to-many join entity has no schema: declare an empty struct
 // of its name, type UserFriend struct{}, and the methods on it.
 //

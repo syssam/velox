@@ -24,7 +24,7 @@ func DriverCode(err error) (string, bool) { return dberr.DriverCode(err) }
 
 // Errors velox returns. Each is returned wrapped, in an error whose text starts
 // "velox: <Entity>: ", where <Entity> is the Go type with its package name
-// (velox: gen.Invoice: ), so a sentinel's own text is a bare phrase; test for them
+// (velox: veloxgen.Invoice: ), so a sentinel's own text is a bare phrase; test for them
 // with errors.Is.
 var (
 	// ErrNotFound is returned by One and First when they find no row, and by

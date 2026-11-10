@@ -74,7 +74,7 @@ back nil, where ent's create refuses the field unset. Its handle, a
 `velox.JSONCol`, sets it and reads its assigned value in a hook. velox
 neither orders by a whole JSON document nor compares one. Where ent writes
 `sqljson.ValueEQ(user.FieldAttrs, "pro", sqljson.Path("plan", "tier"))`,
-velox writes `gen.Users.Attrs.Text("plan", "tier").EQ("pro")`; `Number`
+velox writes `veloxgen.Users.Attrs.Text("plan", "tier").EQ("pro")`; `Number`
 and `Bool` read a number or a boolean, and `HasKey` tests that a key is there
 ([0058](decisions/0058-json-paths.md)).
 
@@ -152,18 +152,18 @@ struct is `omitzero`. A field's `StructTag` replaces the tag, as in ent.
 
 **Relations load only when asked.** `With(P.Author)` loads one with one more
 query, and `Get()` reports whether it was loaded. Nothing loads lazily, and
-there is no `QueryPosts()`: read the posts with `db.Query[gen.Post]()` and a
+there is no `QueryPosts()`: read the posts with `db.Query[veloxgen.Post]()` and a
 condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 
 ## Queries and writes
 
 | ent | velox |
 | --- | --- |
-| `client.User.Create().SetName("a").Save(ctx)` | `db.Insert(&gen.User{Name: "a"}).Exec(ctx)` |
-| `client.User.Query().All(ctx)` | `db.Query[gen.User]().Unbounded().All(ctx)`, or with a `Limit` |
-| `client.User.Update().Where(...).SetAge(3).Save(ctx)` | `db.Update[gen.User]().Where(...).Set(U.Age.Set(3)).Exec(ctx)` |
-| `client.User.UpdateOneID(id).SetAge(3).Save(ctx)` | `db.Update[gen.User]().Where(U.ID.EQ(id)).Set(U.Age.Set(3)).One(ctx)`, the row as written |
-| `client.User.Delete().Exec(ctx)` (every row) | `db.Delete[gen.User]().All().Exec(ctx)` |
+| `client.User.Create().SetName("a").Save(ctx)` | `db.Insert(&veloxgen.User{Name: "a"}).Exec(ctx)` |
+| `client.User.Query().All(ctx)` | `db.Query[veloxgen.User]().Unbounded().All(ctx)`, or with a `Limit` |
+| `client.User.Update().Where(...).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(...).Set(U.Age.Set(3)).Exec(ctx)` |
+| `client.User.UpdateOneID(id).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(U.ID.EQ(id)).Set(U.Age.Set(3)).One(ctx)`, the row as written |
+| `client.User.Delete().Exec(ctx)` (every row) | `db.Delete[veloxgen.User]().All().Exec(ctx)` |
 
 A `Query` with neither a `Limit` nor `Unbounded()` fails with `ErrUnbounded`.
 An `Update` or `Delete` with neither a `Where` nor `All()` fails with
@@ -202,8 +202,8 @@ not fit the column; any other name the entity has no column of fails the
 statement. A velox interceptor is a row filter, not ent's query
 middleware: its condition reaches every read and write of the entity, a
 relation's included, before the Read policy, and `WithoutPolicy` does not
-lift it. A hook that must use the typed API of `gen` (another entity, say)
-is a run-time hook, `velox.WithHooks[gen.Task](...)`, a DB option.
+lift it. A hook that must use the typed API of `veloxgen` (another entity, say)
+is a run-time hook, `velox.WithHooks[veloxgen.Task](...)`, a DB option.
 
 A mixin declares behaviour as ent's does, with the same plain methods.
 velox reads them for every entity that lists the mixin, mixins first,
@@ -247,16 +247,16 @@ delete hard. `scopetest.Isolates` checks, in a test, that an entity is
 confined, and that its column is immutable, NOT NULL and of the key's type.
 
 The layout is ent's, with no runtime package (decisions 0037, 0039 and
-0040): `gen` holds every entity, handle and descriptor, and imports the
+0040): `veloxgen` holds every entity, handle and descriptor, and imports the
 schema package by its own name for its defaults, validators and
 behaviour. A descriptor names the schema's value, `Schema: schema.Issue{}`,
 and velox reads the behaviour from it as ent's generated runtime reads
 `schema.Issue{}.Policy()`: each `Mixin()` value's, in order, then the
 schema's own. An entity with no behaviour, its own or a mixin's, names no
-schema. There is no `gen/runtime` and no blank import. The schema package may not
-import `gen`, directly or through another package: velox-gen refuses it,
-with the chain. A schema compiles before `gen` exists, so no
-`schema/snapshot` is needed. Plugins write into `gen`.
+schema. There is no `veloxgen/runtime` and no blank import. The schema package may not
+import `veloxgen`, directly or through another package: velox-gen refuses it,
+with the chain. A schema compiles before `veloxgen` exists, so no
+`schema/snapshot` is needed. Plugins write into `veloxgen`.
 
 On SQLite, `velox.Connect` turns foreign keys on for every connection. A
 `*sql.DB` you pass to `velox.Open` is used as it is, so put
@@ -286,8 +286,8 @@ a table rebuild on SQLite.
 - **A connection is a query's Paginate.** Where entgql's resolver
   calls `client.Todo.Query().Paginate(ctx, after, first, before, last,
   ent.WithTodoOrder(orderBy), ent.WithTodoFilter(where.Filter))`, velox's
-  calls `db.Query[gen.Todo]().Paginate(ctx, after, first, before, last,
-  gen.WithTodoOrder(orderBy), gen.WithTodoFilter(where))`, with `db` from
+  calls `db.Query[veloxgen.Todo]().Paginate(ctx, after, first, before, last,
+  veloxgen.WithTodoOrder(orderBy), veloxgen.WithTodoFilter(where))`, with `db` from
   `veloxgql.DB(ctx)`, as entgql's `ent.FromContext(ctx)`. The filter
   option takes the where input itself. `Paginate` is generic and calls
   the entity's generated `PaginateQuery`, so it does not compile for an

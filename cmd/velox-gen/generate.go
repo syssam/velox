@@ -23,7 +23,7 @@ import (
 )
 
 // defaultSchema is the schema package when no package is named.
-const defaultSchema = "./schema"
+const defaultSchema = "./veloxschema"
 
 // veloxPath is the import path of the velox library.
 const veloxPath = "github.com/syssam/velox"

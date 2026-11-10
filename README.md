@@ -6,9 +6,9 @@ column handles, and a small generic runtime runs your queries. velox also
 plans and applies its own migrations, and a plugin generates a GraphQL API.
 
 ```go
-over30, err := db.Query[gen.User]().
-	Where(gen.Users.Age.GT(30)).
-	OrderBy(gen.Users.Age.Desc()).
+over30, err := db.Query[veloxgen.User]().
+	Where(veloxgen.Users.Age.GT(30)).
+	OrderBy(veloxgen.Users.Age.Desc()).
 	Limit(10).
 	All(ctx)
 ```
@@ -75,12 +75,12 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    go get modernc.org/sqlite
    ```
 
-2. Write the schema, a struct with its fields, in `schema/user.go`:
+2. Write the schema, a struct with its fields, in `veloxschema/user.go`:
 
    ```go
-   // schema/user.go
+   // veloxschema/user.go
 
-   package schema
+   package veloxschema
 
    import (
    	"github.com/syssam/velox/schema"
@@ -98,11 +98,11 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    }
    ```
 
-3. Generate the `gen` package, with the struct `gen.User` and its column handles
-   `gen.Users`:
+3. Generate the `veloxgen` package, with the struct `veloxgen.User` and its column handles
+   `veloxgen.Users`:
 
    ```sh
-   go tool velox-gen ./schema
+   go tool velox-gen ./veloxschema
    ```
 
 4. Write the first migration into `./migrations`, and apply it to `app.db`:
@@ -127,7 +127,7 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    	"fmt"
    	"log"
 
-   	"example.com/hello/gen"
+   	"example.com/hello/veloxgen"
    	"github.com/syssam/velox"
    	_ "modernc.org/sqlite"
    )
@@ -141,14 +141,14 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    	}
    	defer db.Close()
 
-   	U := gen.Users
+   	U := veloxgen.Users
 
-   	ada := gen.User{Name: "Ada", Email: "ada@example.com", Age: 36}
+   	ada := veloxgen.User{Name: "Ada", Email: "ada@example.com", Age: 36}
    	if err := db.Insert(&ada).Exec(ctx); err != nil { // sets ada.ID
    		log.Fatal(err)
    	}
 
-   	over30, err := db.Query[gen.User]().
+   	over30, err := db.Query[veloxgen.User]().
    		Where(U.Age.GT(30)).
    		OrderBy(U.Age.Desc()).
    		Limit(10).
@@ -160,7 +160,7 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    		fmt.Println(u.Name, u.Age)
    	}
 
-   	updated, err := db.Update[gen.User]().
+   	updated, err := db.Update[veloxgen.User]().
    		Set(U.Age.Add(1)).
    		Where(U.Email.EQ("ada@example.com")).
    		Exec(ctx)
@@ -168,7 +168,7 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    		log.Fatal(err)
    	}
 
-   	deleted, err := db.Delete[gen.User]().
+   	deleted, err := db.Delete[veloxgen.User]().
    		Where(U.Email.EQ("ada@example.com")).
    		Exec(ctx)
    	if err != nil {
@@ -256,7 +256,7 @@ There are two paths, and a directory is managed by one of them.
   `postgres`, `mysql` or `sqlite`. `go tool velox-gen migrate apply -db <dsn>`
   applies the pending ones, or reads the DSN from `$VELOX_DB`. On SQLite the DSN
   is a file path or a `file:` URI.
-- Atlas. `go tool velox-gen migrate sql -dialect postgres ./schema` prints the
+- Atlas. `go tool velox-gen migrate sql -dialect postgres ./veloxschema` prints the
   schema package's `CREATE` statements, which Atlas reads through its
   `external_schema`.
 

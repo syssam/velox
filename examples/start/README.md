@@ -1,31 +1,31 @@
 # start
 
-Create, read, update and delete on one entity, `gen.User`. Start here.
+Create, read, update and delete on one entity, `veloxgen.User`. Start here.
 
 ```sh
 cd examples
 go run ./start
 ```
 
-`schema/user.go` is the whole schema: a struct that embeds `schema.Schema` and
+`veloxschema/user.go` is the whole schema: a struct that embeds `schema.Schema` and
 lists the entity's fields. `go tool velox-gen -out ./start/gen ./start/schema`
-writes the `gen` package from it: `gen.User`, the struct a query returns, and
-`gen.Users`, the typed handle of every column.
+writes the `veloxgen` package from it: `veloxgen.User`, the struct a query returns, and
+`veloxgen.Users`, the typed handle of every column.
 
 ```go
-U := gen.Users
+U := veloxgen.Users
 
 db.Insert(&ada).Exec(ctx)                        // reads the new ID into ada
 db.InsertAll(users).Exec(ctx)                    // one statement, no IDs read back
 
-db.Query[gen.User]().Where(U.Age.GT(30)).OrderBy(U.Age.Desc()).Limit(10).All(ctx)
-db.Query[gen.User]().Where(U.Email.EQ(e)).One(ctx)   // velox.ErrNotFound for no row: velox.IsNotFound(err)
-db.Query[gen.User]().Where(U.Name.HasPrefix("B")).Count(ctx)
-for u, err := range db.Query[gen.User]().Unbounded().Iter(ctx) { … }
+db.Query[veloxgen.User]().Where(U.Age.GT(30)).OrderBy(U.Age.Desc()).Limit(10).All(ctx)
+db.Query[veloxgen.User]().Where(U.Email.EQ(e)).One(ctx)   // velox.ErrNotFound for no row: velox.IsNotFound(err)
+db.Query[veloxgen.User]().Where(U.Name.HasPrefix("B")).Count(ctx)
+for u, err := range db.Query[veloxgen.User]().Unbounded().Iter(ctx) { … }
 
-db.Update[gen.User]().Set(U.Age.Add(1)).Where(U.Name.In("Ada", "Linus")).Exec(ctx)
+db.Update[veloxgen.User]().Set(U.Age.Add(1)).Where(U.Name.In("Ada", "Linus")).Exec(ctx)
 db.Save(grace, U.Email).Exec(ctx)               // the named columns of a loaded struct
-db.Delete[gen.User]().Where(U.Age.LT(30)).Exec(ctx)
+db.Delete[veloxgen.User]().Where(U.Age.LT(30)).Exec(ctx)
 ```
 
 Guards are always on: a query with no `Limit` fails with `velox.ErrUnbounded`

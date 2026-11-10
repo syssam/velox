@@ -1,9 +1,9 @@
-velox-gen: warning: schema/behaviour.go:40: velox.FieldNotNull(column()) names its column with a value velox-gen cannot read; velox checks it when the statement runs
-velox-gen: schema/behaviour.go:12: velox.FieldEQ("author_id", 1): Project, which lists InOrg, has no column "author_id" (InOrg.Policy)
-schema/behaviour.go:19: velox.FieldEQ("title", "x"): Project, the target of Issue's relation project, has no column "title" (Issue.Policy)
-schema/behaviour.go:22: velox.FieldEQ("project_id", "7"): column "project_id" of Issue is an int64, not a string (Issue.Policy)
-schema/behaviour.go:27: velox.FieldEQ("authr_id", 1): Issue has no column "authr_id" (Issue.Policy)
-schema/behaviour.go:31: m.Fill("priority", 300): column "priority" of Project is an int8, which cannot hold 300 (Project.Hooks)
-schema/behaviour.go:34: m.Set("name", nil): column "name" of Project is not nullable: it takes no nil (Project.Hooks)
-schema/behaviour.go:40: velox.HasEdge("owner"): Label has no relation "owner" (Label.Interceptors)
-schema/behaviour.go:40: velox.FieldIsNull("text"): column "text" of Label is not nullable (Label.Interceptors)
+velox-gen: warning: veloxschema/behaviour.go:40: velox.FieldNotNull(column()) names its column with a value velox-gen cannot read; velox checks it when the statement runs
+velox-gen: veloxschema/behaviour.go:12: velox.FieldEQ("author_id", 1): Project, which lists InOrg, has no column "author_id" (InOrg.Policy)
+veloxschema/behaviour.go:19: velox.FieldEQ("title", "x"): Project, the target of Issue's relation project, has no column "title" (Issue.Policy)
+veloxschema/behaviour.go:22: velox.FieldEQ("project_id", "7"): column "project_id" of Issue is an int64, not a string (Issue.Policy)
+veloxschema/behaviour.go:27: velox.FieldEQ("authr_id", 1): Issue has no column "authr_id" (Issue.Policy)
+veloxschema/behaviour.go:31: m.Fill("priority", 300): column "priority" of Project is an int8, which cannot hold 300 (Project.Hooks)
+veloxschema/behaviour.go:34: m.Set("name", nil): column "name" of Project is not nullable: it takes no nil (Project.Hooks)
+veloxschema/behaviour.go:40: velox.HasEdge("owner"): Label has no relation "owner" (Label.Interceptors)
+veloxschema/behaviour.go:40: velox.FieldIsNull("text"): column "text" of Label is not nullable (Label.Interceptors)

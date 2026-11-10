@@ -1,6 +1,6 @@
 # routing
 
-Routing on `gen.Note`: two shards chosen by organization, one read replica for the
+Routing on `veloxgen.Note`: two shards chosen by organization, one read replica for the
 `eu` shard, and a request that reads its own write.
 
 ```sh
@@ -18,9 +18,9 @@ db := velox.OpenShards(velox.SQLite, map[string]velox.Shard{
 )
 
 ctx = velox.WithSession(ctx)                           // per request, in middleware
-db.Update[gen.Note]()…Exec(ctx)                        // a write: pins this session
-db.Query[gen.Note]()…One(ctx)                          // in the window: the primary; after: a replica
-db.Query[gen.Note]()…One(velox.WithPrimaryReads(ctx))  // always the primary
+db.Update[veloxgen.Note]()…Exec(ctx)                        // a write: pins this session
+db.Query[veloxgen.Note]()…One(ctx)                          // in the window: the primary; after: a replica
+db.Query[veloxgen.Note]()…One(velox.WithPrimaryReads(ctx))  // always the primary
 velox.WithShard(ctx, "us")                             // name a shard without an organization
 ```
 

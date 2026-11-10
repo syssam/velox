@@ -18,7 +18,7 @@ import (
 // field, a table comment, an index and an edge, as Go source by file.
 func sqlSchema(userIndexes string) map[string]string {
 	return map[string]string{
-		"schema/user.go": `package schema
+		"veloxschema/user.go": `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -42,7 +42,7 @@ func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("posts", Post.T
 
 func (User) Indexes() []schema.Index { return []schema.Index{` + userIndexes + `} }
 `,
-		"schema/post.go": `package schema
+		"veloxschema/post.go": `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -117,7 +117,7 @@ func TestMigrateSQLRefusals(t *testing.T) {
 		"no dialect":   {},
 		"oracle":       {"-dialect", "oracle"},
 		"dir":          {"-dialect", "sqlite", "-dir", "x"},
-		"two packages": {"-dialect", "sqlite", "./schema", "./other"},
+		"two packages": {"-dialect", "sqlite", "./veloxschema", "./other"},
 	} {
 		code, out, errs := runCLI(t, dir, append([]string{"migrate", "sql"}, args...)...)
 		if code != 2 || out != "" {
@@ -129,13 +129,13 @@ func TestMigrateSQLRefusals(t *testing.T) {
 		t.Errorf("no dialect: exit %d\nstderr:\n%s", code, errs)
 	}
 	code, out, errs := runCLI(t, dir, "migrate", "sql", "-dialect", "mysql")
-	if code != 1 || out != "" || !regexp.MustCompile(`^velox-gen: schema/user\.go:[0-9]+: `).MatchString(errs) {
+	if code != 1 || out != "" || !regexp.MustCompile(`^velox-gen: veloxschema/user\.go:[0-9]+: `).MatchString(errs) {
 		t.Errorf("mysql Where: exit %d, want 1\nstdout:\n%s\nstderr:\n%s", code, out, errs)
 	}
 
 	// An empty output would be an empty schema to Atlas, which drops every
 	// table, so a package with no schemas is refused.
-	empty := tempModule(t, map[string]string{"schema/doc.go": "// Package schema has no entities.\npackage schema\n"})
+	empty := tempModule(t, map[string]string{"veloxschema/doc.go": "// Package veloxschema has no entities.\npackage veloxschema\n"})
 	code, out, errs = runCLI(t, empty, "migrate", "sql", "-dialect", "postgres")
 	if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: no schemas in ") {
 		t.Errorf("no schemas: exit %d, want 1\nstdout:\n%s\nstderr:\n%s", code, out, errs)
@@ -148,7 +148,7 @@ func TestMigrateSQLPositionsAreRelative(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	const head = `package schema
+	const head = `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -178,11 +178,11 @@ func (Post) Fields() []schema.Field {
 	}
 }
 `
-		dir := tempModule(t, map[string]string{"schema/post.go": post})
+		dir := tempModule(t, map[string]string{"veloxschema/post.go": post})
 		code, out, errs := runCLI(t, dir, "migrate", "sql", "-dialect", "mysql")
-		want := "velox-gen: schema/post.go: schema Post: MySQL rows hold at most 65535 bytes; these need 80012:\n" +
-			fmt.Sprintf("  schema/post.go:%d: field \"body\": varchar(10000), 40002 bytes\n", lineOf(t, post, `"body"`)) +
-			fmt.Sprintf("  schema/post.go:%d: field \"summary\": varchar(10000), 40002 bytes\n", lineOf(t, post, `"summary"`)) +
+		want := "velox-gen: veloxschema/post.go: schema Post: MySQL rows hold at most 65535 bytes; these need 80012:\n" +
+			fmt.Sprintf("  veloxschema/post.go:%d: field \"body\": varchar(10000), 40002 bytes\n", lineOf(t, post, `"body"`)) +
+			fmt.Sprintf("  veloxschema/post.go:%d: field \"summary\": varchar(10000), 40002 bytes\n", lineOf(t, post, `"summary"`)) +
 			"  the other columns and the NULL bitmap: 8 bytes\n" +
 			"  use Text() or a smaller MaxLen\n"
 		if code != 1 || out != "" || errs != want {
@@ -202,11 +202,11 @@ func (Post) Fields() []schema.Field {
 		}
 		invoice := enum("Invoice", "state", `"paid", "new"`)
 		dir := tempModule(t, map[string]string{
-			"schema/order.go":   enum("Order", "status", `"new", "paid"`),
-			"schema/invoice.go": invoice,
+			"veloxschema/order.go":   enum("Order", "status", `"new", "paid"`),
+			"veloxschema/invoice.go": invoice,
 		})
 		code, out, errs := runCLI(t, dir, "migrate", "sql", "-dialect", "postgres")
-		want := fmt.Sprintf("(schema/invoice.go:%d), with other values", lineOf(t, invoice, `"state"`))
+		want := fmt.Sprintf("(veloxschema/invoice.go:%d), with other values", lineOf(t, invoice, `"state"`))
 		if code != 1 || out != "" || !strings.Contains(errs, want) {
 			t.Errorf("exit %d, want 1\nstdout:\n%s\nstderr:\n%s\nwant it to hold %s", code, out, errs, want)
 		}
@@ -228,24 +228,24 @@ func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {
 		t.Fatal(err)
 	}
 	sep := string(filepath.Separator)
-	in := filepath.Join(dir, "schema", "a.go")
+	in := filepath.Join(dir, "veloxschema", "a.go")
 	outside := filepath.Join(filepath.Dir(dir), "other", "b.go")
 	lookalike := filepath.Join("x", dir, "c.go")
 	for _, c := range []struct{ name, pos, reason, wantPos, wantReason string }{
-		{"inside", in, "see " + in + ":3", "schema" + sep + "a.go", "see schema" + sep + "a.go:3"},
-		{"inside with a line", in + ":2", "see (" + in + ":3)", "schema" + sep + "a.go:2", "see (schema" + sep + "a.go:3)"},
+		{"inside", in, "see " + in + ":3", "veloxschema" + sep + "a.go", "see veloxschema" + sep + "a.go:3"},
+		{"inside with a line", in + ":2", "see (" + in + ":3)", "veloxschema" + sep + "a.go:2", "see (veloxschema" + sep + "a.go:3)"},
 		{"outside", outside, "see " + outside + ":3", outside, "see " + outside + ":3"},
 		{"outside with a line", outside + ":2", "see " + outside + ":3", outside + ":2", "see " + outside + ":3"},
-		{"repeated", in, in + ":1 and (" + in + ":2) and " + in + ":3", "schema" + sep + "a.go", "schema" + sep + "a.go:1 and (schema" + sep + "a.go:2) and schema" + sep + "a.go:3"},
+		{"repeated", in, in + ":1 and (" + in + ":2) and " + in + ":3", "veloxschema" + sep + "a.go", "veloxschema" + sep + "a.go:1 and (veloxschema" + sep + "a.go:2) and veloxschema" + sep + "a.go:3"},
 		{"directory at the end", "", "see " + dir, "", "see " + dir},
 		{"sibling", "", "see " + dir + "2" + sep + "c.go", "", "see " + dir + "2" + sep + "c.go"},
 		{"lookalike", "", "see " + lookalike, "", "see " + lookalike},
 		{"no position", "", "plain", "", "plain"},
-		{"relative", "schema/a.go:2", "plain", "schema/a.go:2", "plain"},
+		{"relative", "veloxschema/a.go:2", "plain", "veloxschema/a.go:2", "plain"},
 	} {
 		var got *codegen.Error
 		if !errors.As(relErrors(dir, &codegen.Error{Pos: c.pos, Reason: c.reason}), &got) {
-			t.Fatalf("%s: not a *gen.Error", c.name)
+			t.Fatalf("%s: not a *veloxgen.Error", c.name)
 		}
 		if got.Pos != c.wantPos || got.Reason != c.wantReason {
 			t.Errorf("%s: got %q %q, want %q %q", c.name, got.Pos, got.Reason, c.wantPos, c.wantReason)

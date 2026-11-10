@@ -114,9 +114,9 @@
 //
 //	go get -tool github.com/syssam/velox/cmd/velox-gen
 //	go get -tool github.com/syssam/velox/contrib/graphql/cmd/velox-graphql
-//	go tool velox-gen -out gen -plugin velox-graphql ./schema
+//	go tool velox-gen -out veloxgen -plugin velox-graphql ./veloxschema
 //
-// That writes the entities, as velox-gen always does, and gen/velox.graphql,
+// That writes the entities, as velox-gen always does, and veloxgen/velox.graphql,
 // the GraphQL schema: a type for each entity, connections, ordering, where
 // inputs and mutation inputs. It has no Node interface and no node or nodes
 // query; see "IDs" below. velox-gen owns the file like
@@ -162,8 +162,8 @@
 //     new<Type>Connection of the edge, the function PaginateQuery calls
 //     with its query;
 //   - the entity's PaginateQuery, which a query's Paginate calls, as ent's
-//     Paginate: db.Query[gen.User]().Paginate(ctx, after, first, before,
-//     last, gen.WithUserOrder(orderBy), gen.WithUserFilter(where)). The
+//     Paginate: db.Query[veloxgen.User]().Paginate(ctx, after, first, before,
+//     last, veloxgen.WithUserOrder(orderBy), veloxgen.WithUserFilter(where)). The
 //     options are named after the GraphQL type (WithAccountOrder for a User
 //     exposed as Account). The connection sends nothing until gqlgen
 //     resolves its fields, and a Query field's resolver returns it;
@@ -197,8 +197,8 @@
 // The application writes the root query's resolvers: for each QueryField a
 // query's Paginate on the request's DB, veloxgql.DB(ctx):
 //
-//	func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
-//		return veloxgql.DB(ctx).Query[gen.User]().Paginate(ctx, after, first, before, last, gen.WithUserOrder(orderBy), gen.WithUserFilter(where))
+//	func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *veloxgen.UserOrder, where *veloxgen.UserWhereInput) (*veloxgen.UserConnection, error) {
+//		return veloxgql.DB(ctx).Query[veloxgen.User]().Paginate(ctx, after, first, before, last, veloxgen.WithUserOrder(orderBy), veloxgen.WithUserFilter(where))
 //	}
 //
 // The query may hold the application's own filters and With loads. It must
@@ -233,16 +233,16 @@
 //	  deletePost(id: ID!): ID!
 //	}
 //
-//	func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
-//		x := &gen.Post{AuthorID: viewer(ctx)}
+//	func (r *mutationResolver) CreatePost(ctx context.Context, input veloxgen.CreatePostInput) (*veloxgen.Post, error) {
+//		x := &veloxgen.Post{AuthorID: viewer(ctx)}
 //		if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 //			return nil, err
 //		}
 //		return x, nil
 //	}
 //
-//	func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error) {
-//		x, err := veloxgql.DB(ctx).Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
+//	func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input veloxgen.UpdatePostInput) (*veloxgen.Post, error) {
+//		x, err := veloxgql.DB(ctx).Update[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
 //		if velox.IsNotFound(err) {
 //			return nil, notFound(ctx, "Post")
 //		}
@@ -264,12 +264,12 @@
 // row to insert or as a setter of its own, as examples/graphql's createUser
 // and updateUser do from a password argument:
 //
-//	set = append(set, gen.Users.PasswordHash.Set(hash))
+//	set = append(set, veloxgen.Users.PasswordHash.Set(hash))
 //
 // No delete is generated: deleting a row is one velox statement, which the
 // application writes with the checks it wants (examples/graphql's deletePost):
 //
-//	n, err := tx.Delete[gen.Post]().Where(gen.Posts.ID.EQ(id)).Exec(ctx)
+//	n, err := tx.Delete[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).Exec(ctx)
 //
 // n 0 is a row the caller may not delete, missing, in another scope or hidden
 // by a policy: NOT_FOUND. n below 0 is a driver that did not report the rows
@@ -302,7 +302,7 @@
 // NOT NULL column, so the resolver, which is where entgql users set it, sets
 // it on x:
 //
-//	x := &gen.Page{Slug: slugify(input.Title)}
+//	x := &veloxgen.Page{Slug: slugify(input.Title)}
 //
 // A velox.Hook, which runs before the insert's validators, may set it instead,
 // as a tenancy mixin's hook sets its column; with neither, the zero value is
@@ -674,7 +674,7 @@
 // input are keys, which gqlgen decodes before any resolver runs. A resolver's
 // id argument is the key, with no decoding of its own:
 //
-//	func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error)
+//	func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input veloxgen.UpdatePostInput) (*veloxgen.Post, error)
 //
 // gqlgen binds every ID argument to one Go type, the first model gqlgen.yml
 // lists for ID, so every schema with a GraphQL type has keys of one Go type,

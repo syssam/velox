@@ -8,5 +8,5 @@ insert:            "us note" for org 2 on us primary
   file eu-replica [v1]
   file us         [us note]
 no shard:          ErrNoShard=true
-  velox: gen.Note: no shard for the statement: the context has no WithShard, and WithShardFor named none
+  velox: veloxgen.Note: no shard for the statement: the context has no WithShard, and WithShardFor named none
 WithShard:         1 note on us (err=<nil>)

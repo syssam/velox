@@ -1,6 +1,6 @@
 # tenant
 
-`gen.Project` belongs to an organization. velox has no tenant concept: the
+`veloxgen.Project` belongs to an organization. velox has no tenant concept: the
 scope is a `Policy` and a hook that the `InOrg` mixin declares, reading a
 `scope.Key` from the context, so that a soft delete or an owner rule is
 written the same way.
@@ -11,7 +11,7 @@ go run ./tenant
 ```
 
 ```go
-// schema/inorg.go
+// veloxschema/inorg.go
 var OrgKey = scope.NewKey[int64]("org")
 
 type InOrg struct{ mixin.Schema }
@@ -42,13 +42,13 @@ func (InOrg) Hooks() []velox.Hook {
 	}
 }
 
-// schema/project.go
+// veloxschema/project.go
 func (Project) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
 ```
 
 The policy and the hook name the column by its schema name, `org_id`, so
-the schema does not import `gen`. velox-gen lists `InOrg`'s policy and hook
-in `gen.Project`'s descriptor, before the `Policy` and `Hooks` a `Project`
+the schema does not import `veloxgen`. velox-gen lists `InOrg`'s policy and hook
+in `veloxgen.Project`'s descriptor, before the `Policy` and `Hooks` a `Project`
 declares itself, if any. The policies are ANDed, so Project's own cannot
 lift the scope. `scope_test.go` checks it with `scopetest.Isolates`, which
 also checks that `org_id` is `Immutable`, NOT NULL and an `int64`.
@@ -57,8 +57,8 @@ also checks that `org_id` is `Immutable`, NOT NULL and an `int64`.
 ctx = schema.OrgKey.With(ctx, acme)          // acme is an int64, the column's type
 
 db.Insert(&p).Exec(ctx)                // fills p.OrgID
-db.Query[gen.Project]().Count(ctx)     // ... WHERE "org_id" = ?
-db.Update[gen.Project]()...Exec(ctx)   // changes only this organization's rows
+db.Query[veloxgen.Project]().Count(ctx)     // ... WHERE "org_id" = ?
+db.Update[veloxgen.Project]()...Exec(ctx)   // changes only this organization's rows
 
 db.Insert(&p).OnConflict(P.OrgID, P.Name).Update(P.Status).Exec(ctx) // update branch is scoped too
 

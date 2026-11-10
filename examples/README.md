@@ -33,12 +33,12 @@ go run ./start
   methods. As in ent, a schema also declares its entity's `Policy()` and
   `Hooks()`, and a mixin its own. They name columns and edges by their
   schema names (`velox.FieldEQ("owner", u)`, `velox.HasEdge("doc")`,
-  `m.Fill("org_id", org)`), so the schema never imports `gen`.
+  `m.Fill("org_id", org)`), so the schema never imports `veloxgen`.
 - `gen/` is written entirely by velox-gen from the schema; never edit it. It
   holds every entity. Each entity's descriptor lists the `Policy` and
   `Hooks` methods of its mixins and of its schema, so `main.go` needs no
-  extra import. A hook that needs a `gen` type, such as the hooks example's
-  audit row, is a run-time hook, added with `velox.WithHooks[gen.Task]`.
+  extra import. A hook that needs a `veloxgen` type, such as the hooks example's
+  audit row, is a run-time hook, added with `velox.WithHooks[veloxgen.Task]`.
   Context helpers the policies read (the request's user, role or
   principal) are small packages of their own, such as `policy/auth`.
 - Each example's tables come from its `migrations/` directory, made by
@@ -65,7 +65,7 @@ velox's own `migrate` and Atlas are alternatives for one directory.
 
   ```hcl
   data "external_schema" "velox" {
-    program = ["go", "tool", "velox-gen", "migrate", "sql", "-dialect", "postgres", "./schema"]
+    program = ["go", "tool", "velox-gen", "migrate", "sql", "-dialect", "postgres", "./veloxschema"]
   }
 
   env "velox" {

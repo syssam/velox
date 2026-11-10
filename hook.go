@@ -113,7 +113,7 @@ func Before(f MutateFunc, ops ...Op) Hook {
 // cannot: one that inserts an audit row, or reads E's rows as *E with
 // Row.Entity. A rule that names columns only is the schema's.
 //
-//	db, err := velox.Connect("sqlite", dsn, velox.WithHooks[gen.Task](velox.On(audit, velox.OpUpdate)))
+//	db, err := velox.Connect("sqlite", dsn, velox.WithHooks[veloxgen.Task](velox.On(audit, velox.OpUpdate)))
 //
 // A nil hook panics, as a nil Rewrite does. WithHooks builds E's metadata;
 // an E whose metadata failed fails its statements, and gets no hooks.

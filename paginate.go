@@ -15,8 +15,8 @@ type Paged[E, K, O, C any] interface {
 // before and last select, shaped by opts: E's PaginateQuery, which
 // velox-graphql generates. q must not be ordered; an order is an option.
 //
-//	db.Query[gen.Post]().Paginate(ctx, after, first, before, last,
-//		gen.WithPostOrder(orderBy), gen.WithPostFilter(where))
+//	db.Query[veloxgen.Post]().Paginate(ctx, after, first, before, last,
+//		veloxgen.WithPostOrder(orderBy), veloxgen.WithPostFilter(where))
 //
 // It does not compile for an entity with no PaginateQuery.
 func (q Query[E]) Paginate[P Paged[E, K, O, C], K, O, C any](ctx context.Context, after *K, first *int, before *K, last *int, opts ...O) (C, error) {

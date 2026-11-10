@@ -14,19 +14,19 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/examples/graphql/gen"
+	"github.com/syssam/velox/examples/graphql/veloxgen"
 )
 
 // CreatePost is the resolver for the createPost field: the post's author is
 // the viewer, a user the request may read, which CreatePostInput leaves out,
 // so a client cannot post as another user. The insert trusts what x holds,
 // the author's key among it, so the resolver checks it.
-func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
+func (r *mutationResolver) CreatePost(ctx context.Context, input veloxgen.CreatePostInput) (*veloxgen.Post, error) {
 	viewer, err := Author(ctx)
 	if err != nil {
 		return nil, err
 	}
-	x := &gen.Post{AuthorID: viewer}
+	x := &veloxgen.Post{AuthorID: viewer}
 	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
@@ -36,12 +36,12 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostI
 // UpdatePost is the resolver for the updatePost field: only the post's
 // author may change it, and UpdatePostInput has no authorID, so a post stays
 // its author's.
-func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error) {
+func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input veloxgen.UpdatePostInput) (*veloxgen.Post, error) {
 	db := veloxgql.DB(ctx)
 	if err := OwnPost(ctx, db, id); err != nil {
 		return nil, err
 	}
-	x, err := db.Update[gen.Post]().Where(gen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
+	x, err := db.Update[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, NotFound(ctx, "Post")
 	}
@@ -61,7 +61,7 @@ func (r *mutationResolver) DeletePost(ctx context.Context, id int64) (int64, err
 		if err := OwnPost(ctx, tx, id); err != nil {
 			return err
 		}
-		n, err := tx.Delete[gen.Post]().Where(gen.Posts.ID.EQ(id)).Exec(ctx)
+		n, err := tx.Delete[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).Exec(ctx)
 		switch {
 		case err != nil:
 			return err
@@ -79,8 +79,8 @@ func (r *mutationResolver) DeletePost(ctx context.Context, id int64) (int64, err
 }
 
 // CreateLabel is the resolver for the createLabel field.
-func (r *mutationResolver) CreateLabel(ctx context.Context, input gen.CreateLabelInput) (*gen.Tag, error) {
-	x := new(gen.Tag)
+func (r *mutationResolver) CreateLabel(ctx context.Context, input veloxgen.CreateLabelInput) (*veloxgen.Tag, error) {
+	x := new(veloxgen.Tag)
 	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
@@ -88,8 +88,8 @@ func (r *mutationResolver) CreateLabel(ctx context.Context, input gen.CreateLabe
 }
 
 // UpdateLabel is the resolver for the updateLabel field.
-func (r *mutationResolver) UpdateLabel(ctx context.Context, id int64, input gen.UpdateLabelInput) (*gen.Tag, error) {
-	x, err := veloxgql.DB(ctx).Update[gen.Tag]().Where(gen.Tags.ID.EQ(id)).SetInput(input).One(ctx)
+func (r *mutationResolver) UpdateLabel(ctx context.Context, id int64, input veloxgen.UpdateLabelInput) (*veloxgen.Tag, error) {
+	x, err := veloxgql.DB(ctx).Update[veloxgen.Tag]().Where(veloxgen.Tags.ID.EQ(id)).SetInput(input).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, NotFound(ctx, "Label")
 	}
@@ -98,12 +98,12 @@ func (r *mutationResolver) UpdateLabel(ctx context.Context, id int64, input gen.
 
 // CreateUser is the resolver for the createUser field: the user's password
 // hash is the server's hash of password, set on the row it inserts.
-func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserInput, password string) (*gen.User, error) {
+func (r *mutationResolver) CreateUser(ctx context.Context, input veloxgen.CreateUserInput, password string) (*veloxgen.User, error) {
 	hash, err := hashPassword(ctx, password)
 	if err != nil {
 		return nil, err
 	}
-	x := &gen.User{PasswordHash: hash}
+	x := &veloxgen.User{PasswordHash: hash}
 	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
@@ -113,14 +113,14 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserI
 // UpdateUser is the resolver for the updateUser field: a password given
 // replaces the hash, a setter of the resolver's beside the input's, in the
 // same UPDATE.
-func (r *mutationResolver) UpdateUser(ctx context.Context, id int64, input gen.UpdateUserInput, password *string) (*gen.User, error) {
-	u := veloxgql.DB(ctx).Update[gen.User]().Where(gen.Users.ID.EQ(id)).SetInput(input)
+func (r *mutationResolver) UpdateUser(ctx context.Context, id int64, input veloxgen.UpdateUserInput, password *string) (*veloxgen.User, error) {
+	u := veloxgql.DB(ctx).Update[veloxgen.User]().Where(veloxgen.Users.ID.EQ(id)).SetInput(input)
 	if password != nil {
 		hash, err := hashPassword(ctx, *password)
 		if err != nil {
 			return nil, err
 		}
-		u = u.Set(gen.Users.PasswordHash.Set(hash))
+		u = u.Set(veloxgen.Users.PasswordHash.Set(hash))
 	}
 	x, err := u.One(ctx)
 	if velox.IsNotFound(err) {
@@ -130,30 +130,30 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, id int64, input gen.U
 }
 
 // Posts is the resolver for the posts field.
-func (r *queryResolver) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	return veloxgql.DB(ctx).Query[gen.Post]().Paginate(ctx, after, first, before, last, gen.WithPostOrder(orderBy), gen.WithPostFilter(where))
+func (r *queryResolver) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*veloxgen.PostOrder, where *veloxgen.PostWhereInput) (*veloxgen.PostConnection, error) {
+	return veloxgql.DB(ctx).Query[veloxgen.Post]().Paginate(ctx, after, first, before, last, veloxgen.WithPostOrder(orderBy), veloxgen.WithPostFilter(where))
 }
 
 // Labels is the resolver for the labels field.
-func (r *queryResolver) Labels(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) (*gen.LabelConnection, error) {
-	return veloxgql.DB(ctx).Query[gen.Tag]().Paginate(ctx, after, first, before, last, gen.WithLabelOrder(orderBy), gen.WithLabelFilter(where))
+func (r *queryResolver) Labels(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *veloxgen.LabelOrder, where *veloxgen.LabelWhereInput) (*veloxgen.LabelConnection, error) {
+	return veloxgql.DB(ctx).Query[veloxgen.Tag]().Paginate(ctx, after, first, before, last, veloxgen.WithLabelOrder(orderBy), veloxgen.WithLabelFilter(where))
 }
 
 // Users is the resolver for the users field.
-func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
-	return veloxgql.DB(ctx).Query[gen.User]().Paginate(ctx, after, first, before, last, gen.WithUserOrder(orderBy), gen.WithUserFilter(where))
+func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *veloxgen.UserOrder, where *veloxgen.UserWhereInput) (*veloxgen.UserConnection, error) {
+	return veloxgql.DB(ctx).Query[veloxgen.User]().Paginate(ctx, after, first, before, last, veloxgen.WithUserOrder(orderBy), veloxgen.WithUserFilter(where))
 }
 
 // PublishedPosts is the resolver for the publishedPosts field.
-func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	return veloxgql.DB(ctx).Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)).Paginate(ctx, after, first, before, last, gen.WithPostOrder(orderBy), gen.WithPostFilter(where))
+func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*veloxgen.PostOrder, where *veloxgen.PostWhereInput) (*veloxgen.PostConnection, error) {
+	return veloxgql.DB(ctx).Query[veloxgen.Post]().Where(veloxgen.Posts.Status.EQ(veloxgen.PostStatusPublished)).Paginate(ctx, after, first, before, last, veloxgen.WithPostOrder(orderBy), veloxgen.WithPostFilter(where))
 }
 
 // Initials is the resolver for the initials field: the first letter of each
 // word of the user's name, upper-cased. It reads obj.Name, which a page that
 // does not select name leaves zero. velox-graphql cannot see what a resolver
 // reads, so a page that selects initials reads every column.
-func (r *userResolver) Initials(ctx context.Context, obj *gen.User) (string, error) {
+func (r *userResolver) Initials(ctx context.Context, obj *veloxgen.User) (string, error) {
 	var b strings.Builder
 	for w := range strings.FieldsSeq(obj.Name) {
 		first, _ := utf8.DecodeRuneInString(w)

@@ -16,7 +16,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/examples/relations/gen"
+	"github.com/syssam/velox/examples/relations/veloxgen"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -56,7 +56,7 @@ func run(ctx context.Context, w io.Writer) error {
 	if _, err := migrate.Up(ctx, velox.Pool(db), sub); err != nil {
 		return err
 	}
-	A, P := gen.Authors, gen.Posts
+	A, P := veloxgen.Authors, veloxgen.Posts
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 
 	if err := seed(ctx, db); err != nil {
@@ -65,7 +65,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// With loads a relation with one more query (WHERE author_id IN (...)).
 	// Nothing is ever loaded lazily: Get reports whether it was loaded.
-	authors, err := db.Query[gen.Author]().
+	authors, err := db.Query[veloxgen.Author]().
 		OrderBy(A.Name.Asc()).
 		With(A.Posts).
 		Limit(10).
@@ -80,7 +80,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// A relation takes its own Where and OrderBy, and With for a nested
 	// relation: posts with 10 votes or more, best first, with their comments.
-	authors, err = db.Query[gen.Author]().
+	authors, err = db.Query[veloxgen.Author]().
 		Where(A.Name.EQ("Grace")).
 		With(A.Posts.Where(P.Votes.GTE(10)).OrderBy(P.Votes.Desc()).With(P.Comments)).
 		Limit(1).
@@ -96,7 +96,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// Belongs-to: each post loads its author. Owners with the same key share
 	// one loaded Author.
-	top, err := db.Query[gen.Post]().OrderBy(P.Votes.Desc()).With(P.Author).Limit(3).All(ctx)
+	top, err := db.Query[veloxgen.Post]().OrderBy(P.Votes.Desc()).With(P.Author).Limit(3).All(ctx)
 	if err != nil {
 		return err
 	}
@@ -109,19 +109,19 @@ func run(ctx context.Context, w io.Writer) error {
 	// with no posts.
 	for _, c := range []struct {
 		name string
-		pred velox.Pred[gen.Author]
+		pred velox.Pred[veloxgen.Author]
 	}{
 		{"Has", A.Posts.Has()},
 		{"HasWith votes > 20", A.Posts.HasWith(P.Votes.GT(20))},
 		{"Not Has", velox.Not(A.Posts.Has())},
 	} {
-		got, err := db.Query[gen.Author]().Where(c.pred).OrderBy(A.Name.Asc()).Limit(10).All(ctx)
+		got, err := db.Query[veloxgen.Author]().Where(c.pred).OrderBy(A.Name.Asc()).Limit(10).All(ctx)
 		if err != nil {
 			return err
 		}
 		say("%s: %s", c.name, names(got))
 	}
-	text, _, err := db.Query[gen.Author]().Where(A.Posts.HasWith(P.Votes.GT(20))).Limit(10).SQL(ctx)
+	text, _, err := db.Query[veloxgen.Author]().Where(A.Posts.HasWith(P.Votes.GT(20))).Limit(10).SQL(ctx)
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// After continues after the previous page's last row: keyset pagination.
 	// The OrderBy must include the primary key or a unique column.
-	page := db.Query[gen.Post]().OrderBy(P.Votes.Desc(), P.ID.Asc()).Limit(2)
+	page := db.Query[veloxgen.Post]().OrderBy(P.Votes.Desc(), P.ID.Asc()).Limit(2)
 	for i := 1; ; i++ {
 		got, err := page.All(ctx)
 		if err != nil {
@@ -145,21 +145,21 @@ func run(ctx context.Context, w io.Writer) error {
 }
 
 // manyToMany links posts and tags. A many-to-many edge has no column on either
-// side: a link is a row of the join entity, gen.PostTag, which you insert and
+// side: a link is a row of the join entity, veloxgen.PostTag, which you insert and
 // delete like any other. Its primary key is (post_id, tag_id), so linking twice
 // fails, unless the insert says OnConflict(...).DoNothing().
 func manyToMany(ctx context.Context, db *velox.DB, say func(string, ...any)) error {
-	P, T, PT := gen.Posts, gen.Tags, gen.PostTags
+	P, T, PT := veloxgen.Posts, veloxgen.Tags, veloxgen.PostTags
 	tags := map[string]int64{}
 	for _, name := range []string{"history", "languages"} {
-		tg := gen.Tag{Name: name}
+		tg := veloxgen.Tag{Name: name}
 		if err := db.Insert(&tg).Exec(ctx); err != nil {
 			return err
 		}
 		tags[name] = tg.ID
 	}
 	posts := map[string]int64{}
-	all, err := db.Query[gen.Post]().Limit(10).All(ctx)
+	all, err := db.Query[veloxgen.Post]().Limit(10).All(ctx)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func manyToMany(ctx context.Context, db *velox.DB, say func(string, ...any)) err
 	}
 
 	// Link: one join row per (post, tag).
-	if err := db.InsertAll([]gen.PostTag{
+	if err := db.InsertAll([]veloxgen.PostTag{
 		{PostID: posts["COBOL"], TagID: tags["history"]},
 		{PostID: posts["COBOL"], TagID: tags["languages"]},
 		{PostID: posts["Compilers"], TagID: tags["languages"]},
@@ -177,13 +177,13 @@ func manyToMany(ctx context.Context, db *velox.DB, say func(string, ...any)) err
 		return err
 	}
 	// Linking again keeps the existing row.
-	again := gen.PostTag{PostID: posts["COBOL"], TagID: tags["history"]}
+	again := veloxgen.PostTag{PostID: posts["COBOL"], TagID: tags["history"]}
 	if err := db.Insert(&again).OnConflict(PT.PostID, PT.TagID).DoNothing().Exec(ctx); err != nil {
 		return err
 	}
 
 	// With and Has work through the join table as on any relation.
-	tagged, err := db.Query[gen.Post]().
+	tagged, err := db.Query[veloxgen.Post]().
 		Where(P.Tags.Has()).
 		OrderBy(P.Title.Asc()).
 		With(P.Tags.OrderBy(T.Name.Asc())).
@@ -196,7 +196,7 @@ func manyToMany(ctx context.Context, db *velox.DB, say func(string, ...any)) err
 		ts, _ := p.Edges.Tags.Get()
 		say("many-to-many: %s tagged %s", p.Title, tagNames(ts))
 	}
-	langs, err := db.Query[gen.Tag]().Where(T.Name.EQ("languages")).With(T.Posts.OrderBy(P.Title.Asc())).One(ctx)
+	langs, err := db.Query[veloxgen.Tag]().Where(T.Name.EQ("languages")).With(T.Posts.OrderBy(P.Title.Asc())).One(ctx)
 	if err != nil {
 		return err
 	}
@@ -204,13 +204,13 @@ func manyToMany(ctx context.Context, db *velox.DB, say func(string, ...any)) err
 	say("many-to-many, the other way: %s tags %s", langs.Name, titles(ps))
 
 	// Unlink: delete the join row.
-	n, err := db.Delete[gen.PostTag]().
+	n, err := db.Delete[veloxgen.PostTag]().
 		Where(PT.PostID.EQ(posts["COBOL"]), PT.TagID.EQ(tags["history"])).
 		Exec(ctx)
 	if err != nil {
 		return err
 	}
-	history, err := db.Query[gen.Post]().Where(P.Tags.HasWith(T.Name.EQ("history"))).OrderBy(P.Title.Asc()).Limit(10).All(ctx)
+	history, err := db.Query[veloxgen.Post]().Where(P.Tags.HasWith(T.Name.EQ("history"))).OrderBy(P.Title.Asc()).Limit(10).All(ctx)
 	if err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func manyToMany(ctx context.Context, db *velox.DB, say func(string, ...any)) err
 	return nil
 }
 
-func tagNames(ts []gen.Tag) string {
+func tagNames(ts []veloxgen.Tag) string {
 	var s []string
 	for _, t := range ts {
 		s = append(s, t.Name)
@@ -231,13 +231,13 @@ func tagNames(ts []gen.Tag) string {
 func seed(ctx context.Context, db *velox.DB) error {
 	ids := map[string]int64{}
 	for _, name := range []string{"Ada", "Grace", "Linus"} {
-		a := gen.Author{Name: name}
+		a := veloxgen.Author{Name: name}
 		if err := db.Insert(&a).Exec(ctx); err != nil {
 			return err
 		}
 		ids[name] = a.ID
 	}
-	posts := []gen.Post{
+	posts := []veloxgen.Post{
 		{AuthorID: ids["Ada"], Title: "Engines", Votes: 12},
 		{AuthorID: ids["Ada"], Title: "Notes", Votes: 3},
 		{AuthorID: ids["Grace"], Title: "Compilers", Votes: 30},
@@ -250,14 +250,14 @@ func seed(ctx context.Context, db *velox.DB) error {
 		}
 	}
 	// InsertAll reads no keys back; these rows need none.
-	return db.InsertAll([]gen.Comment{
+	return db.InsertAll([]veloxgen.Comment{
 		{PostID: posts[2].ID, Body: "Classic."},
 		{PostID: posts[2].ID, Body: "Still true."},
 		{PostID: posts[4].ID, Body: "It runs the banks."},
 	}).Exec(ctx)
 }
 
-func titles(ps []gen.Post) string {
+func titles(ps []veloxgen.Post) string {
 	var s []string
 	for _, p := range ps {
 		s = append(s, p.Title)
@@ -265,7 +265,7 @@ func titles(ps []gen.Post) string {
 	return "[" + strings.Join(s, ", ") + "]"
 }
 
-func names(as []gen.Author) string {
+func names(as []veloxgen.Author) string {
 	var s []string
 	for _, a := range as {
 		s = append(s, a.Name)

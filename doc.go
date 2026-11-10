@@ -7,12 +7,12 @@
 // staying NOT NULL among them.
 //
 // Add velox-gen to your module once, and run it after every change to the
-// schema. It writes ./gen; with -check it writes nothing and fails when ./gen
+// schema. It writes ./veloxgen; with -check it writes nothing and fails when ./veloxgen
 // is out of date:
 //
 //	go get -tool github.com/syssam/velox/cmd/velox-gen
-//	go tool velox-gen ./schema
-//	go tool velox-gen -check ./schema
+//	go tool velox-gen ./veloxschema
+//	go tool velox-gen -check ./veloxschema
 //
 // Connect opens a database, through a database/sql driver the application
 // imports. Queries and writes use the generated entities and handles:
@@ -23,7 +23,7 @@
 //	}
 //	defer db.Close()
 //
-//	users, err := db.Query[gen.User]().Where(gen.Users.Name.EQ("ada")).Limit(10).All(ctx)
+//	users, err := db.Query[veloxgen.User]().Where(veloxgen.Users.Name.EQ("ada")).Limit(10).All(ctx)
 //
 // Policies and hooks are declared in the schema, as ent's are. The schema
 // package does not import gen, which imports it, so they name columns by
@@ -44,7 +44,7 @@
 // use. A condition by name is resolved
 // when its statement runs: a name the entity has no column of fails the
 // statement, as does a value of another kind.
-// Everything in ./gen is generated.
+// Everything in ./veloxgen is generated.
 //
 // # Reads
 //
@@ -57,7 +57,7 @@
 //
 // Sum, Avg, Min and Max take a query and a number column:
 //
-//	paid, err := velox.Sum(ctx, db.Query[gen.Invoice]().Where(gen.Invoices.Status.EQ(gen.InvoiceStatusPaid)), gen.Invoices.TotalCents)
+//	paid, err := velox.Sum(ctx, db.Query[veloxgen.Invoice]().Where(veloxgen.Invoices.Status.EQ(veloxgen.InvoiceStatusPaid)), veloxgen.Invoices.TotalCents)
 //
 // The policy, a scope included, applies to them as to Count. Sum is 0 when
 // no row matches; Avg, Min and Max also return false then, as there is no
@@ -68,7 +68,7 @@
 // CountBy, SumBy, AvgBy, MinBy and MaxBy do the same per value of a key column,
 // made by the column handle's Key method, in the order of the key:
 //
-//	totals, err := velox.SumBy(ctx, db.Query[gen.Invoice]().Unbounded(), gen.Invoices.OrgID.Key(), gen.Invoices.TotalCents)
+//	totals, err := velox.SumBy(ctx, db.Query[veloxgen.Invoice]().Unbounded(), veloxgen.Invoices.OrgID.Key(), veloxgen.Invoices.TotalCents)
 //
 // Each returns a []Group[K, V]; SumByNull, AvgByNull, MinByNull and MaxByNull
 // take a NullNumberCol. The groups can be as many as the rows, so the
@@ -77,15 +77,15 @@
 // Rel.Of is a condition on the rows related to given owners, which loading
 // the relation for them would load:
 //
-//	db.Query[gen.Post]().Where(gen.Users.Posts.Of(&ada)).All(ctx)
+//	db.Query[veloxgen.Post]().Where(veloxgen.Users.Posts.Of(&ada)).All(ctx)
 //
 // A relation handle's Has and HasWith test for related rows. A column
 // handle's Select makes a subquery of that column, which InSelect and
 // NotInSelect test another column of the same type against. The subquery's
 // entity gets its own Read policy and interceptors:
 //
-//	big := gen.Items.InvoiceID.Select(gen.Items.Qty.GTE(100))
-//	db.Query[gen.Invoice]().Where(gen.Invoices.ID.InSelect(big)).Limit(10).All(ctx)
+//	big := veloxgen.Items.InvoiceID.Select(veloxgen.Items.Qty.GTE(100))
+//	db.Query[veloxgen.Invoice]().Where(veloxgen.Invoices.ID.InSelect(big)).Limit(10).All(ctx)
 //
 // Every method of a generic velox type has a type parameter [_ Lazy[T]],
 // which callers never write and Go infers: it makes Go compile a method
@@ -102,7 +102,7 @@
 // Rel.LimitEach loads at most n related entities for each owner, the first in
 // the relation's order, in one statement for all of them:
 //
-//	db.Query[gen.User]().With(gen.Users.Posts.OrderBy(gen.Posts.CreatedAt.Desc()).LimitEach(3)).Limit(20).All(ctx)
+//	db.Query[veloxgen.User]().With(veloxgen.Users.Posts.OrderBy(veloxgen.Posts.CreatedAt.Desc()).LimitEach(3)).Limit(20).All(ctx)
 //
 // The statement ranks each owner's rows with ROW_NUMBER() OVER (PARTITION BY
 // …), on PostgreSQL, MySQL 8 and SQLite 3.25 or later; ties break by the
@@ -116,8 +116,8 @@
 // already in hand, with a Query of the target that gives the conditions,
 // the order, the columns and After:
 //
-//	pages, err := velox.LoadEach(ctx, db.Query[gen.Post]().OrderBy(gen.Posts.CreatedAt.Desc()), gen.Users.Posts.LimitEach(3), users)
-//	counts, err := velox.CountEach(ctx, db.Query[gen.Post](), gen.Users.Posts, users)
+//	pages, err := velox.LoadEach(ctx, db.Query[veloxgen.Post]().OrderBy(veloxgen.Posts.CreatedAt.Desc()), veloxgen.Users.Posts.LimitEach(3), users)
+//	counts, err := velox.CountEach(ctx, db.Query[veloxgen.Post](), veloxgen.Users.Posts, users)
 //
 // A many-to-many page or count joins the join table in the target's
 // statement: no statement is sent for the join entity, and a link held twice
@@ -136,8 +136,8 @@
 // with ErrNotFound when there is none:
 //
 //	err := db.Insert(&inv).Exec(ctx)
-//	n, err := db.Update[gen.Invoice]().Set(gen.Invoices.Status.Set(gen.InvoiceStatusPaid)).Where(gen.Invoices.ID.EQ(id)).Exec(ctx)
-//	err = db.Save(&inv, gen.Invoices.Number, gen.Invoices.TotalCents).Exec(ctx)
+//	n, err := db.Update[veloxgen.Invoice]().Set(veloxgen.Invoices.Status.Set(veloxgen.InvoiceStatusPaid)).Where(veloxgen.Invoices.ID.EQ(id)).Exec(ctx)
+//	err = db.Save(&inv, veloxgen.Invoices.Number, veloxgen.Invoices.TotalCents).Exec(ctx)
 //
 // A self-referencing edge with no inverse is bidirectional, as in ent. A
 // link writes both directions: both join rows of a many-to-many edge, or
@@ -287,7 +287,7 @@
 //
 // Errors are returned wrapped, in an error whose text starts
 // "velox: <Entity>: ", the Go type with its package name, such as
-// "velox: gen.Invoice: " (raw SQL's DB.Exec names its statement "Exec"), or for
+// "velox: veloxgen.Invoice: " (raw SQL's DB.Exec names its statement "Exec"), or for
 // a transaction "velox: transaction: " ("velox: begin: ", "velox: commit: "
 // and "velox: savepoint: " likewise). Test for a row not found with
 // IsNotFound: errors.Is(err, ErrNotFound) that a driver's typed-nil error in

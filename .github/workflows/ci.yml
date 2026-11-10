@@ -72,7 +72,7 @@ jobs:
           go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
           go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
           # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
-          go run github.com/mgechev/revive@v1.17.0 -config ../scripts/revive.toml -set_exit_status ./*/gen
+          go run github.com/mgechev/revive@v1.17.0 -config ../scripts/revive.toml -set_exit_status ./*/veloxgen
   # The tests, on each PostgreSQL version: the ORM's always, and the groups'
   # when they run. A push measures coverage and checks it against the
   # per-package floors at the end (scripts/coverage-floors.txt).
@@ -210,11 +210,11 @@ jobs:
       - name: examples
         working-directory: examples
         run: |
-          for d in */schema; do
-            x=${d%/schema}
+          for d in */veloxschema; do
+            x=${d%/veloxschema}
             [ "$x" = graphql ] && continue # the graphql job's, with the plugin
-            go tool velox-gen -check -out "./$x/gen" "./$x/schema"
-            go tool velox-gen verify -out "./$x/gen" "./$x/schema"
+            go tool velox-gen -check -out "./$x/veloxgen" "./$x/veloxschema"
+            go tool velox-gen verify -out "./$x/veloxgen" "./$x/veloxschema"
           done
           # Each example's tables come from its committed migrations: fail on drift from the
           # schema package, and on SQL that does not replay to its schema.json (applied to a
@@ -223,13 +223,13 @@ jobs:
           for f in */migrations/schema.json */migrations/sqlite/schema.json; do
             d=${f%/schema.json}
             x=${d%%/*}
-            go tool velox-gen migrate diff -check -dir "./$d" "./$x/schema"
+            go tool velox-gen migrate diff -check -dir "./$d" "./$x/veloxschema"
             go tool velox-gen migrate apply -dir "./$d" -db "$migdb/$x.db"
             go tool velox-gen migrate drift -dir "./$d" -db "$migdb/$x.db"
           done
           rm -rf "$migdb"
           # tracker's PostgreSQL migrations: its tests apply them, under VELOX_TEST_POSTGRES.
-          go tool velox-gen migrate diff -check -dir ./tracker/migrations/postgres ./tracker/schema
+          go tool velox-gen migrate diff -check -dir ./tracker/migrations/postgres ./tracker/veloxschema
   # velox's own build cost, report-only here until a Linux run recalibrates
   # thresholds.json, which was measured on darwin/arm64 only. A run that fails
   # still fails the step.
@@ -276,8 +276,8 @@ jobs:
       - name: examples/graphql
         working-directory: examples
         run: |
-          go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
-          go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
+          go tool velox-gen -check -out ./graphql/veloxgen -plugin velox-graphql ./graphql/veloxschema
+          go tool velox-gen verify -out ./graphql/veloxgen -plugin velox-graphql ./graphql/veloxschema
           # gqlgen's output is checked in: regenerate it, and fail on any difference.
           go -C graphql tool gqlgen generate
           git diff --exit-code HEAD -- graphql/graph

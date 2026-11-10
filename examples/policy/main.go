@@ -18,7 +18,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/policy/auth"
-	"github.com/syssam/velox/examples/policy/gen"
+	"github.com/syssam/velox/examples/policy/veloxgen"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -57,13 +57,13 @@ func run(ctx context.Context, w io.Writer) error {
 	if _, err := migrate.Up(ctx, velox.Pool(db), sub); err != nil {
 		return err
 	}
-	D, C := gen.Docs, gen.Comments
+	D, C := veloxgen.Docs, veloxgen.Comments
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 
 	alice, bob, admin := auth.WithUser(ctx, "alice"), auth.WithUser(ctx, "bob"), auth.WithUser(ctx, "admin")
 
 	// Each owner inserts their own docs; the Insert policy checks the row.
-	docs := map[string]*gen.Doc{
+	docs := map[string]*veloxgen.Doc{
 		"Roadmap":  {Owner: "alice", Title: "Roadmap", Shared: true},
 		"Salaries": {Owner: "alice", Title: "Salaries"},
 		"Notes":    {Owner: "bob", Title: "Notes"},
@@ -74,7 +74,7 @@ func run(ctx context.Context, w io.Writer) error {
 			return err
 		}
 	}
-	err = db.InsertAll([]gen.Comment{
+	err = db.InsertAll([]veloxgen.Comment{
 		{DocID: docs["Roadmap"].ID, Body: "Ship it"},
 		{DocID: docs["Salaries"].ID, Body: "Confidential"},
 		{DocID: docs["Notes"].ID, Body: "Todo"},
@@ -85,7 +85,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// The same query reads different rows for different users. SQL(ctx)
 	// shows the condition the policy adds for that context.
-	byTitle := db.Query[gen.Doc]().OrderBy(D.Title.Asc()).Limit(10)
+	byTitle := db.Query[veloxgen.Doc]().OrderBy(D.Title.Asc()).Limit(10)
 	for _, c := range []struct {
 		who string
 		ctx context.Context
@@ -103,14 +103,14 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// A comment is visible when its doc is: Comment's Read is Doc.Has(), and
 	// velox applies Doc's Read inside that EXISTS.
-	comments, err := db.Query[gen.Comment]().OrderBy(C.ID.Asc()).Limit(10).All(bob)
+	comments, err := db.Query[veloxgen.Comment]().OrderBy(C.ID.Asc()).Limit(10).All(bob)
 	if err != nil {
 		return err
 	}
 	for _, c := range comments {
 		say("bob sees comment %q", c.Body)
 	}
-	text, args, err := db.Query[gen.Comment]().Columns(C.Body).Limit(10).SQL(bob)
+	text, args, err := db.Query[veloxgen.Comment]().Columns(C.Body).Limit(10).SQL(bob)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// Write filters: bob's update of alice's doc matches no row. It is not
 	// an error, as an update whose Where matches nothing is not.
 	for _, title := range []string{"Roadmap", "Notes"} {
-		n, err := db.Update[gen.Doc]().Set(D.Shared.Set(false)).Where(D.Title.EQ(title)).Exec(bob)
+		n, err := db.Update[veloxgen.Doc]().Set(D.Shared.Set(false)).Where(D.Title.EQ(title)).Exec(bob)
 		if err != nil {
 			return err
 		}
@@ -128,17 +128,17 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// An error from a policy function denies the statement: a *PolicyError
 	// that matches ErrDenied.
-	_, err = db.Query[gen.Doc]().Count(ctx)
+	_, err = db.Query[veloxgen.Doc]().Count(ctx)
 	if pe, ok := errors.AsType[*velox.PolicyError](err); ok {
 		say("no user: ErrDenied=%t, entity %s, op %s, reason %q", errors.Is(err, velox.ErrDenied), pe.Entity, pe.Op, pe.Err)
 	}
-	err = db.Insert(&gen.Doc{Owner: "alice", Title: "Forged"}).Exec(bob)
+	err = db.Insert(&veloxgen.Doc{Owner: "alice", Title: "Forged"}).Exec(bob)
 	say("bob inserts a doc as alice: %v", err)
 
 	// db.WithoutPolicy returns a DB that switches every policy off, with a
 	// reason that hooks see as Statement.PolicyBypass. It lifts a scope (the
 	// scope package) too, as that is a policy.
-	n, err := db.WithoutPolicy("nightly backup").Query[gen.Doc]().Count(ctx)
+	n, err := db.WithoutPolicy("nightly backup").Query[veloxgen.Doc]().Count(ctx)
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,7 @@ func run(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
-func titles(ds []gen.Doc) string {
+func titles(ds []veloxgen.Doc) string {
 	var s []string
 	for _, d := range ds {
 		s = append(s, d.Title)

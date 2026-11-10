@@ -22,7 +22,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/veloxotel"
-	"github.com/syssam/velox/examples/otel/gen"
+	"github.com/syssam/velox/examples/otel/veloxgen"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -51,13 +51,13 @@ const seedSQL = `INSERT INTO invoices (number, customer, status, total_cents) VA
 // pay marks an invoice paid: the handler of POST /invoices/{number}/pay.
 // Nothing in it knows about tracing.
 func pay(ctx context.Context, db *velox.DB, number string) error {
-	I := gen.Invoices
+	I := veloxgen.Invoices
 	return db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-		inv, err := tx.Query[gen.Invoice]().Where(I.Number.EQ(number)).One(ctx)
+		inv, err := tx.Query[veloxgen.Invoice]().Where(I.Number.EQ(number)).One(ctx)
 		if err != nil {
 			return err
 		}
-		inv.Status = gen.InvoiceStatusPaid
+		inv.Status = veloxgen.InvoiceStatusPaid
 		return tx.Save(inv, I.Status).Exec(ctx)
 	})
 }

@@ -34,7 +34,7 @@ var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": tr
 func Lower(g *Graph, cfg Config) (*Out, error) {
 	l := &lowerer{
 		g: g, cfg: cfg,
-		out: &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc,
+		out: &Out{Package: cmp.Or(cfg.Package, "veloxgen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc,
 			GenPath: cfg.GenPath},
 		joins: map[string]*join{},
 	}

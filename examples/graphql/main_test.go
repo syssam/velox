@@ -565,7 +565,7 @@ func TestOrgIsolation(t *testing.T) {
 	// Without a org, every statement on Post fails before it is sent. A
 	// failed non-null field nulls its parent, up to data. The client is told
 	// unauthenticated, with no entity named (scope.ErrNoScope's text holds
-	// gen.Post).
+	// veloxgen.Post).
 	const noOrg = `"message": "unauthenticated", "path": %s, "extensions": {"code": "UNAUTHENTICATED"}`
 	for _, c := range []struct{ query, want string }{
 		{`{ posts { edges { node { title } } } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["posts", "edges"]`) + `}], "data": null}`},

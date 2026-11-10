@@ -18,7 +18,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/examples/tx/gen"
+	"github.com/syssam/velox/examples/tx/veloxgen"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -44,8 +44,8 @@ var errFunds = errors.New("insufficient funds")
 // transfer moves amount between two accounts. It takes a *velox.DB, so it
 // runs unchanged on db or on a transaction's tx.
 func transfer(ctx context.Context, db *velox.DB, from, to string, amount int64) error {
-	A := gen.Accounts
-	n, err := db.Update[gen.Account]().
+	A := veloxgen.Accounts
+	n, err := db.Update[veloxgen.Account]().
 		Set(A.Balance.Sub(amount)).
 		Where(A.Name.EQ(from), A.Balance.GTE(amount)).
 		Exec(ctx)
@@ -55,7 +55,7 @@ func transfer(ctx context.Context, db *velox.DB, from, to string, amount int64) 
 	if n != 1 { // the name is unique: one row, or none
 		return fmt.Errorf("%s: %w", from, errFunds)
 	}
-	n, err = db.Update[gen.Account]().Set(A.Balance.Add(amount)).Where(A.Name.EQ(to)).Exec(ctx)
+	n, err = db.Update[veloxgen.Account]().Set(A.Balance.Add(amount)).Where(A.Name.EQ(to)).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// none, and none may run longer than the maximum.
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 	balances := func() string {
-		as, err := db.Query[gen.Account]().OrderBy(gen.Accounts.Name.Asc()).Limit(10).All(ctx)
+		as, err := db.Query[veloxgen.Account]().OrderBy(veloxgen.Accounts.Name.Asc()).Limit(10).All(ctx)
 		if err != nil {
 			return err.Error()
 		}
@@ -101,7 +101,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return strings.Join(s, " ")
 	}
 
-	err = db.InsertAll([]gen.Account{{Name: "alice", Balance: 100}, {Name: "bob", Balance: 50}}).Exec(ctx)
+	err = db.InsertAll([]veloxgen.Account{{Name: "alice", Balance: 100}, {Name: "bob", Balance: 50}}).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// the outer transaction goes on. A unique violation is a
 	// *velox.ConstraintError on every dialect.
 	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-		acct := gen.Account{Name: "bob", Balance: 5}
+		acct := veloxgen.Account{Name: "bob", Balance: 5}
 		err := tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return tx.Insert(&acct).Exec(ctx) })
 		var ce *velox.ConstraintError
 		if errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique {

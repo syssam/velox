@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/examples/tracker/gen"
 	"github.com/syssam/velox/examples/tracker/principal"
+	"github.com/syssam/velox/examples/tracker/veloxgen"
 )
 
 func TestMain(m *testing.M) {
@@ -156,7 +156,7 @@ func (c *client) signup(org string) *client {
 // member adds a member to the admin's org and returns a client logged in as them.
 func (c *client) member(org, name string) (*client, int64) {
 	c.t.Helper()
-	var u gen.User
+	var u veloxgen.User
 	c.do("POST", "/users", 201, obj{"email": name + "@" + org, "name": name, "password": "correct horse"}, &u)
 	var tk tokenBody
 	c.as("").do("POST", "/login", 200, obj{"org": org, "email": name + "@" + org, "password": "correct horse"}, &tk)
@@ -165,14 +165,14 @@ func (c *client) member(org, name string) (*client, int64) {
 
 func (c *client) project(name string) int64 {
 	c.t.Helper()
-	var p gen.Project
+	var p veloxgen.Project
 	c.do("POST", "/projects", 201, obj{"name": name}, &p)
 	return p.ID
 }
 
 func (c *client) issue(project int64, title string, labels ...string) int64 {
 	c.t.Helper()
-	var x gen.Issue
+	var x veloxgen.Issue
 	c.do("POST", fmt.Sprintf("/projects/%d/issues", project), 201, obj{"title": title, "labels": labels}, &x)
 	return x.ID
 }
@@ -242,12 +242,12 @@ func TestAuth(t *testing.T) {
 // TestOrgNameCountsCharacters: the limit on an Org's name is in characters, so 100
 // characters of Chinese, 300 bytes, are valid and 101 are not.
 func TestOrgNameCountsCharacters(t *testing.T) {
-	org := gen.Org{Slug: "x", Name: strings.Repeat("陳", 100)}
-	if err := velox.Validate[gen.Org](&org, gen.Orgs.Name); err != nil {
+	org := veloxgen.Org{Slug: "x", Name: strings.Repeat("陳", 100)}
+	if err := velox.Validate[veloxgen.Org](&org, veloxgen.Orgs.Name); err != nil {
 		t.Errorf("100 characters: %v", err)
 	}
 	org.Name += "陳"
-	if err := velox.Validate[gen.Org](&org, gen.Orgs.Name); err == nil {
+	if err := velox.Validate[veloxgen.Org](&org, veloxgen.Orgs.Name); err == nil {
 		t.Error("101 characters are valid")
 	}
 }
@@ -255,7 +255,7 @@ func TestOrgNameCountsCharacters(t *testing.T) {
 // TestSlugCheck: the database holds a slug to lower case whatever code writes it.
 func TestSlugCheck(t *testing.T) {
 	targets(t, func(t *testing.T, c *client) {
-		err := c.db.Insert(&gen.Org{Slug: "Upper", Name: "x"}).Exec(t.Context())
+		err := c.db.Insert(&veloxgen.Org{Slug: "Upper", Name: "x"}).Exec(t.Context())
 		var ce *velox.ConstraintError
 		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintCheck {
 			t.Errorf("Insert = %v, want a check violation", err)
@@ -268,7 +268,7 @@ func TestDeletedUser(t *testing.T) {
 		admin := c.signup("acme")
 		ann, annID := admin.member("acme", "ann")
 		ctx := t.Context()
-		if _, err := c.db.WithoutPolicy("test").Delete[gen.User]().Where(gen.Users.ID.EQ(annID)).Exec(ctx); err != nil {
+		if _, err := c.db.WithoutPolicy("test").Delete[veloxgen.User]().Where(veloxgen.Users.ID.EQ(annID)).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		ann.do("GET", "/me", 401, nil, nil)
@@ -279,8 +279,8 @@ func TestDeletedUser(t *testing.T) {
 func TestExpiredSession(t *testing.T) {
 	targets(t, func(t *testing.T, c *client) {
 		admin := c.signup("acme")
-		S := gen.Sessions
-		n, err := c.db.Update[gen.Session]().
+		S := veloxgen.Sessions
+		n, err := c.db.Update[veloxgen.Session]().
 			Set(S.ExpiresAt.Set(time.Now().UTC().Add(-time.Minute))).
 			Where(S.TokenHash.EQ(hashToken(admin.token))).
 			Exec(t.Context())
@@ -376,17 +376,17 @@ func TestPolicy(t *testing.T) {
 		bob.do("DELETE", path, 403, nil, nil)
 
 		// The admin assigns it to bob, who can then change it.
-		var x gen.Issue
+		var x veloxgen.Issue
 		admin.do("PATCH", path, 200, obj{"assignee_id": bobID}, &x)
 		if x.AssigneeID == nil || *x.AssigneeID != bobID {
 			t.Errorf("assignee: %v", x.AssigneeID)
 		}
 		bob.do("PATCH", path, 200, obj{"status": "closed"}, &x)
-		if x.Status != gen.IssueStatusClosed || x.AuthorID != annID {
+		if x.Status != veloxgen.IssueStatusClosed || x.AuthorID != annID {
 			t.Errorf("after bob's close: %+v", x)
 		}
 		// Unassigned, bob loses it again.
-		var cleared gen.Issue
+		var cleared veloxgen.Issue
 		ann.do("PATCH", path, 200, obj{"assignee_id": nil}, &cleared)
 		if cleared.AssigneeID != nil {
 			t.Errorf("assignee after null: %v", *cleared.AssigneeID)
@@ -403,7 +403,7 @@ func TestPolicy(t *testing.T) {
 		bob.do("POST", path+"/comments", 201, obj{"body": "on it"}, nil)
 		ann.do("DELETE", path, 204, nil, nil)
 		ann.do("GET", path, 404, nil, nil)
-		n, err := c.db.WithoutPolicy("test").Query[gen.Comment]().Where(gen.Comments.IssueID.EQ(issue)).Count(principal.With(t.Context(), principal.Principal{Admin: true}))
+		n, err := c.db.WithoutPolicy("test").Query[veloxgen.Comment]().Where(veloxgen.Comments.IssueID.EQ(issue)).Count(principal.With(t.Context(), principal.Principal{Admin: true}))
 		if err != nil || n != 0 {
 			t.Errorf("comments after the delete: %d, %v", n, err)
 		}
@@ -666,7 +666,7 @@ func TestSQLiteDSNWithQuery(t *testing.T) {
 	admin.do("POST", path+"/comments", 201, obj{"body": "first"}, nil)
 	admin.do("DELETE", path, 204, nil, nil)
 	ctx := principal.With(t.Context(), principal.Principal{Admin: true})
-	if n, err := db.WithoutPolicy("test").Query[gen.Comment]().Where(gen.Comments.IssueID.EQ(issue)).Count(ctx); err != nil || n != 0 {
+	if n, err := db.WithoutPolicy("test").Query[veloxgen.Comment]().Where(veloxgen.Comments.IssueID.EQ(issue)).Count(ctx); err != nil || n != 0 {
 		t.Errorf("comments after the delete: %d, %v; foreign keys are off", n, err)
 	}
 }

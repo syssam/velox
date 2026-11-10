@@ -97,7 +97,7 @@ type RawQuery[E any] struct {
 // columns the SQL does not return keep their zero values, so an aggregate can
 // scan into the entity it sums:
 //
-//	totals, err := db.Raw[gen.Invoice]("revenue report",
+//	totals, err := db.Raw[veloxgen.Invoice]("revenue report",
 //		"SELECT org_id, SUM(total_cents) AS total_cents FROM invoices GROUP BY org_id").All(ctx)
 //
 // Raw SQL is the escape hatch for row locks, CTEs and anything else the

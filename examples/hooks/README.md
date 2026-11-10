@@ -1,6 +1,6 @@
 # hooks
 
-Entity hooks on `gen.Task`. A hook is middleware over an entity's writes: it
+Entity hooks on `veloxgen.Task`. A hook is middleware over an entity's writes: it
 gets the `next` step and returns a `velox.Mutator` that does its work and
 calls `next` (or does not, to refuse). Hooks are for validation, derived
 fields and effects of your own. Any error a hook returns refuses the
@@ -11,12 +11,12 @@ cd examples
 go run ./hooks
 ```
 
-`schema/schema.go` declares the structure: `Task`, the `Audit` rows of the
-trail, and a `CreatedBy` mixin with its own hook. `schema/hooks.go` declares
+`veloxschema/schema.go` declares the structure: `Task`, the `Audit` rows of the
+trail, and a `CreatedBy` mixin with its own hook. `veloxschema/hooks.go` declares
 `Task`'s hooks, as ent's schema does. They name columns by their schema
 names (`r.Value("title")`, `m.Set("slug", …)`), so the schema does not
-import `gen`; velox-gen lists the mixin's and `Task`'s `Hooks` in
-`gen.Task`'s descriptor. The mixin's run first; of `Task`'s, the first
+import `veloxgen`; velox-gen lists the mixin's and `Task`'s `Hooks` in
+`veloxgen.Task`'s descriptor. The mixin's run first; of `Task`'s, the first
 listed is the outermost:
 
 ```go
@@ -44,9 +44,9 @@ runs before the write: it calls `next` when `f` returns nil.
 - **Update hook.** `renamed` reads the new title with `m.Value("title")` and
   adds the slug with `m.Set("slug", …)`. It sees an `Update` and a `Save`,
   and `Save` writes back every value the hook set.
-- **A run-time hook, for the audit row.** The audit row is a `gen.Audit`,
+- **A run-time hook, for the audit row.** The audit row is a `veloxgen.Audit`,
   which the schema cannot name, so `main.go` adds that hook when it opens
-  the database: `velox.WithHooks[gen.Task](velox.On(auditRename,
+  the database: `velox.WithHooks[veloxgen.Task](velox.On(auditRename,
   velox.OpUpdate))`. Run-time hooks run after the schema's. After `next`
   succeeds, `auditRename` inserts an `Audit` row with
   `m.DB().Insert(&a).Exec(ctx)`. `m.DB()` is the `*velox.DB` the write runs

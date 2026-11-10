@@ -2,7 +2,7 @@ package codegen
 
 // Config says where generated code goes and what the user's files declare.
 type Config struct {
-	Package    string           // the generated package's name; "gen" when empty
+	Package    string           // the generated package's name; "veloxgen" when empty
 	SchemaPath string           // the schema package's import path; Graph.Package when empty
 	SchemaName string           // the schema package's name; the last element of SchemaPath when empty
 	Bound      map[string]Bound // per entity name: which methods the schema package declares (see SchemaMethods)

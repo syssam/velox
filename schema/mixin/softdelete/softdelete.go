@@ -40,13 +40,13 @@
 // lifts nothing else: a policy, a tenant's included, still applies. A purge
 // is a delete under Skip:
 //
-//	db.Delete[gen.Invoice]().Where(gen.Invoices.DeletedAt.NotNull()).Exec(softdelete.Skip(ctx))
+//	db.Delete[veloxgen.Invoice]().Where(veloxgen.Invoices.DeletedAt.NotNull()).Exec(softdelete.Skip(ctx))
 //
 // and a restore is an update under Skip, as without it the interceptor hides
 // the row from the update:
 //
-//	db.Update[gen.Invoice]().Where(gen.Invoices.ID.EQ(id)).
-//		Set(gen.Invoices.DeletedAt.SetNull()).Exec(softdelete.Skip(ctx))
+//	db.Update[veloxgen.Invoice]().Where(veloxgen.Invoices.ID.EQ(id)).
+//		Set(veloxgen.Invoices.DeletedAt.SetNull()).Exec(softdelete.Skip(ctx))
 //
 // # Uniqueness
 //

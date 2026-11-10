@@ -1,10 +1,10 @@
 # gqlgen's configuration: go tool gqlgen generate, run in this directory,
 # reads it and writes graph/.
 #
-# The GraphQL schema is velox-graphql's gen/velox.graphql plus the
+# The GraphQL schema is velox-graphql's veloxgen/velox.graphql plus the
 # application's own files in graph/ (app.graphql adds publishedPosts).
 schema:
-  - gen/*.graphql
+  - veloxgen/*.graphql
   - graph/*.graphql
 
 exec:
@@ -26,7 +26,7 @@ resolver:
 # The generated package holds the Go of every entity, connection, edge, order
 # and where type, named as in the schema.
 autobind:
-  - github.com/syssam/velox/examples/graphql/gen
+  - github.com/syssam/velox/examples/graphql/veloxgen
 
 # ID and the scalars bind to veloxgql. An ID is the entity's key, an int64
 # here: gqlgen binds every ID argument to ID's first model, and Int64ID reads

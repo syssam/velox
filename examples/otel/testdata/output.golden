@@ -8,9 +8,9 @@ POST /invoices/{number}/pay
 
 == metrics
 db.client.operation.duration (s)
-  db.collection.name=invoices db.operation.name=SELECT db.query.summary=SELECT invoices db.system.name=sqlite velox.entity=gen.Invoice count=1
-  db.collection.name=invoices db.operation.name=UPDATE db.query.summary=UPDATE invoices db.system.name=sqlite velox.entity=gen.Invoice count=1
+  db.collection.name=invoices db.operation.name=SELECT db.query.summary=SELECT invoices db.system.name=sqlite velox.entity=veloxgen.Invoice count=1
+  db.collection.name=invoices db.operation.name=UPDATE db.query.summary=UPDATE invoices db.system.name=sqlite velox.entity=veloxgen.Invoice count=1
 db.client.response.returned_rows ({row})
-  db.collection.name=invoices db.operation.name=SELECT db.query.summary=SELECT invoices db.system.name=sqlite velox.entity=gen.Invoice count=1 sum=1
+  db.collection.name=invoices db.operation.name=SELECT db.query.summary=SELECT invoices db.system.name=sqlite velox.entity=veloxgen.Invoice count=1 sum=1
 velox.tx.duration (s)
   velox.tx.outcome=commit velox.tx.read_only=false velox.tx.retried=false count=1

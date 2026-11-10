@@ -200,6 +200,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-gen's defaults are `./veloxschema` for the schema package and
+  `./veloxgen` for the generated package, which was `./schema` and `./gen`:
+  `go tool velox-gen` with no flags reads and writes the new folders, the
+  generated package is named `veloxgen`, and the examples use them. `-out`
+  and `-package` still name any other folder and package. The generated
+  code's shape is the same, so `GeneratedCodeIsVersionN` stays. A runtime
+  error that names an entity says `veloxgen.Task`, not `gen.Task`. To keep the
+  old layout, pass `-out ./gen ./schema`. Decision 0065.
 - An `Optional` field that is not `Nillable` has a `Default`, `DefaultFunc` or
   `SchemaDefault`, or velox-gen refuses it (rule 37, now for every type;
   rules 39 and 40 are gone): velox writes no Go zero value for an unset

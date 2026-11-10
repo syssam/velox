@@ -28,7 +28,7 @@ func TestMigrateBaselineSQLite(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/user.go": userSchema(`field.String("name")`)})
+	dir := tempModule(t, map[string]string{"veloxschema/user.go": userSchema(`field.String("name")`)})
 	dsn := filepath.Join(dir, "app.db")
 	if code, _, errs := runCLI(t, dir, "migrate", "diff", "-dialect", "sqlite", "-dir", "made"); code != 0 {
 		t.Fatalf("diff: %d %s", code, errs)
@@ -110,7 +110,7 @@ func baselineEnt(t *testing.T, d velox.Dialect) {
 	original := dsn("original.db")
 	files := map[string]string{}
 	for _, f := range []string{"user.go", "post.go", "audit_entry.go"} {
-		files["schema/"+f] = readFile(t, filepath.Join("testdata", "ent", "schema", f))
+		files["veloxschema/"+f] = readFile(t, filepath.Join("testdata", "ent", "schema", f))
 	}
 	dir := tempModule(t, files)
 	execFile(t, d, original, filepath.Join("testdata", "ent", d.String()+".sql"))
@@ -160,7 +160,7 @@ func baselineEnt(t *testing.T, d velox.Dialect) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := codegen.Load(dir, "./schema", offlineEnv())
+	m, err := codegen.Load(dir, "./veloxschema", offlineEnv())
 	if err != nil {
 		t.Fatal(err)
 	}

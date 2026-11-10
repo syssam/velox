@@ -17,7 +17,7 @@ import (
 // verify's.
 func TestVerifySweepsOldDirs(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
 	old, young := filepath.Join(dir, ".velox-verify-old"), filepath.Join(dir, ".velox-verify-new")
@@ -30,7 +30,7 @@ func TestVerifySweepsOldDirs(t *testing.T) {
 	if err := os.Chtimes(old, then, then); err != nil {
 		t.Fatal(err)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema"); code != 0 {
 		t.Fatalf("verify: %d %q %q", code, out, errs)
 	}
 	if _, err := os.Stat(old); !os.IsNotExist(err) {
@@ -46,10 +46,10 @@ func TestVerifySweepsOldDirs(t *testing.T) {
 // edited.
 func TestVerifyExplainsBuildFailure(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	p := filepath.Join(dir, "gen", "velox.go")
+	p := filepath.Join(dir, "veloxgen", "velox.go")
 	src, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +58,7 @@ func TestVerifyExplainsBuildFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	const why = "velox-gen verify: the check program did not build; the generated package may be stale or edited by hand: run velox-gen, then verify again\n"
-	code, _, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema")
+	code, _, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")
 	if code != 1 || !strings.Contains(errs, "undefinedName") || !strings.HasSuffix(errs, why) {
 		t.Errorf("%d %q", code, errs)
 	}

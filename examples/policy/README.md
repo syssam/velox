@@ -9,11 +9,11 @@ cd examples
 go run ./policy
 ```
 
-`schema/schema.go` declares the entities' structure, and
-`schema/doc_policy.go` and `schema/comment_policy.go` their policies, as ent's
+`veloxschema/schema.go` declares the entities' structure, and
+`veloxschema/doc_policy.go` and `veloxschema/comment_policy.go` their policies, as ent's
 schema does. They name columns and edges by their schema names
 (`velox.FieldEQ("owner", u)`, `velox.HasEdge("doc")`), so the schema does not
-import `gen`. velox-gen lists each `Policy` in its entity's descriptor, and
+import `veloxgen`. velox-gen lists each `Policy` in its entity's descriptor, and
 a name the entity does not have fails the statement. The user a request
 acts as is in the small package `auth`:
 
@@ -36,7 +36,7 @@ func (Doc) Policy() velox.Policy {
   it is not an error.
 - Inheritance through `Has`: `Comment`'s `Read` is `velox.HasEdge("doc")`,
   and velox applies `Doc`'s own `Read` inside that `EXISTS`. velox-gen links
-  the `doc` edge in `gen.Comment`'s descriptor (`velox.Linked`), so the name
+  the `doc` edge in `veloxgen.Comment`'s descriptor (`velox.Linked`), so the name
   resolves.
 - `SQL(ctx)` prints the conditions the policy adds for that context.
 - `db.WithoutPolicy(reason)` returns a DB with every policy switched off,

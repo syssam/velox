@@ -1,6 +1,6 @@
 # tx
 
-Transactions on `gen.Account`, through a `transfer` function that takes a
+Transactions on `veloxgen.Account`, through a `transfer` function that takes a
 `*velox.DB` and so runs unchanged on `db` or on a transaction's `tx`.
 
 ```sh
@@ -28,7 +28,7 @@ velox.Open(velox.SQLite, sqlDB, velox.WithDeadlines(velox.Deadlines{…}))
   fails with `velox.ErrOutsideTx` before anything is sent, until the
   transaction ends. `velox.WithoutTx(ctx)` lifts that for work that must not
   join the transaction, such as an audit row that survives a rollback.
-- A locking read, `tx.Query[gen.Account]().Where(…).ForUpdate().One(ctx)`,
+- A locking read, `tx.Query[veloxgen.Account]().Where(…).ForUpdate().One(ctx)`,
   runs inside a transaction only, on PostgreSQL and MySQL. MySQL's
   InnoDB locks every row the read scans, not only those it returns, so
   `SkipLocked` and `ForUpdate` want an index on the filter; a `One` with

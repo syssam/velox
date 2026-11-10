@@ -18,9 +18,9 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/examples/tour/gen"
 	"github.com/syssam/velox/examples/tour/role"
-	"github.com/syssam/velox/examples/tour/schema"
+	"github.com/syssam/velox/examples/tour/veloxgen"
+	"github.com/syssam/velox/examples/tour/veloxschema"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/schema/mixin/softdelete"
 	"github.com/syssam/velox/scope"
@@ -62,9 +62,9 @@ func run(ctx context.Context, w io.Writer) error {
 	defer func() { _ = db.Close() }()
 	t := &tour{
 		ctx: ctx, db: db, w: w,
-		acct:       role.With(schema.OrgKey.With(ctx, acme), role.Accountant),
-		viewer:     role.With(schema.OrgKey.With(ctx, acme), role.Viewer),
-		globexAcct: role.With(schema.OrgKey.With(ctx, globex), role.Accountant),
+		acct:       role.With(veloxschema.OrgKey.With(ctx, acme), role.Accountant),
+		viewer:     role.With(veloxschema.OrgKey.With(ctx, acme), role.Viewer),
+		globexAcct: role.With(veloxschema.OrgKey.With(ctx, globex), role.Accountant),
 	}
 	for _, step := range []func() error{
 		t.inserts, t.reading, t.sqlOf, t.writing, t.guards,
@@ -122,7 +122,7 @@ func (t *tour) inserts() error {
 	say("\n== 1. Contexts and inserts")
 
 	// Insert fills OrgID from the context and reads the generated ID back.
-	inv := gen.Invoice{Number: "INV-001", Customer: "Initech", Status: gen.InvoiceStatusSent, TotalCents: 150000}
+	inv := veloxgen.Invoice{Number: "INV-001", Customer: "Initech", Status: veloxgen.InvoiceStatusSent, TotalCents: 150000}
 	if err := db.Insert(&inv).Exec(acct); err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (t *tour) inserts() error {
 
 	// InsertAll sends one statement for many rows and fills each row's OrgID.
 	// It reads no IDs back.
-	lines := []gen.Line{
+	lines := []veloxgen.Line{
 		{InvoiceID: inv.ID, Description: "Consulting", AmountCents: 120000},
 		{InvoiceID: inv.ID, Description: "Travel", AmountCents: 30000},
 		{InvoiceID: inv.ID, Description: "Parking", AmountCents: 0},
@@ -140,22 +140,22 @@ func (t *tour) inserts() error {
 	}
 	say("InsertAll: %d lines, each with org_id %d", len(lines), lines[2].OrgID)
 
-	more := []gen.Invoice{
-		{Number: "INV-002", Customer: "Umbrella", Status: gen.InvoiceStatusDraft},
-		{Number: "INV-003", Customer: "Initech", Status: gen.InvoiceStatusPaid, TotalCents: 45000},
+	more := []veloxgen.Invoice{
+		{Number: "INV-002", Customer: "Umbrella", Status: veloxgen.InvoiceStatusDraft},
+		{Number: "INV-003", Customer: "Initech", Status: veloxgen.InvoiceStatusPaid, TotalCents: 45000},
 	}
 	if err := db.InsertAll(more).Exec(acct); err != nil {
 		return err
 	}
 	// The same number in another organization: the unique key includes OrgID.
-	theirs := []gen.Invoice{{Number: "INV-001", Customer: "Hooli", Status: gen.InvoiceStatusSent, TotalCents: 99000}}
+	theirs := []veloxgen.Invoice{{Number: "INV-001", Customer: "Hooli", Status: veloxgen.InvoiceStatusSent, TotalCents: 99000}}
 	if err := db.InsertAll(theirs).Exec(globexAcct); err != nil {
 		return err
 	}
 	say("InsertAll: INV-002 and INV-003 for org 1, INV-001 for org 2")
 
 	// Invoice's insert hook validates the number.
-	err := db.Insert(&gen.Invoice{Number: "2026-17", Customer: "Initech", Status: gen.InvoiceStatusDraft}).Exec(acct)
+	err := db.Insert(&veloxgen.Invoice{Number: "2026-17", Customer: "Initech", Status: veloxgen.InvoiceStatusDraft}).Exec(acct)
 	say("insert hook refused: %v", err)
 	return nil
 }
@@ -163,12 +163,12 @@ func (t *tour) inserts() error {
 // reading reads with All, One, Count, Iter, With and Has.
 func (t *tour) reading() error {
 	db, say, acct := t.db, t.say, t.acct
-	I, L := gen.Invoices, gen.Lines
+	I, L := veloxgen.Invoices, veloxgen.Lines
 	// 2. Reading. A query is a value: build it, then run it with All, One,
 	// Iter or Count.
 	say("\n== 2. Reading")
-	unpaid, err := db.Query[gen.Invoice]().
-		Where(I.Status.NEQ(gen.InvoiceStatusPaid)).
+	unpaid, err := db.Query[veloxgen.Invoice]().
+		Where(I.Status.NEQ(veloxgen.InvoiceStatusPaid)).
 		OrderBy(I.Number.Asc()).
 		Limit(10).
 		All(acct)
@@ -179,13 +179,13 @@ func (t *tour) reading() error {
 		say("All: %s %s %s", x.Number, x.Customer, x.Status)
 	}
 
-	paid, err := db.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)).One(acct)
+	paid, err := db.Query[veloxgen.Invoice]().Where(I.Status.EQ(veloxgen.InvoiceStatusPaid)).One(acct)
 	if err != nil {
 		return err
 	}
 	say("One: %s %s", paid.Number, money(paid.TotalCents))
 
-	n, err := db.Query[gen.Invoice]().Where(I.Customer.EQ("Initech")).Count(acct)
+	n, err := db.Query[veloxgen.Invoice]().Where(I.Customer.EQ("Initech")).Count(acct)
 	if err != nil {
 		return err
 	}
@@ -194,7 +194,7 @@ func (t *tour) reading() error {
 	// Iter holds one row at a time. Unbounded says on purpose that there is
 	// no Limit.
 	var numbers []string
-	for x, err := range db.Query[gen.Invoice]().OrderBy(I.ID.Asc()).Unbounded().Iter(acct) {
+	for x, err := range db.Query[veloxgen.Invoice]().OrderBy(I.ID.Asc()).Unbounded().Iter(acct) {
 		if err != nil {
 			return err
 		}
@@ -203,7 +203,7 @@ func (t *tour) reading() error {
 	say("Iter: %s", strings.Join(numbers, " "))
 
 	// With loads a relation with one more query; nothing is loaded lazily.
-	first, err := db.Query[gen.Invoice]().
+	first, err := db.Query[veloxgen.Invoice]().
 		Where(I.Number.EQ("INV-001")).
 		With(I.Lines.OrderBy(L.AmountCents.Desc())).
 		One(acct)
@@ -216,7 +216,7 @@ func (t *tour) reading() error {
 	}
 
 	// Has is an EXISTS on the relation.
-	withLines, err := db.Query[gen.Invoice]().Where(I.Lines.Has()).Limit(10).All(acct)
+	withLines, err := db.Query[veloxgen.Invoice]().Where(I.Lines.Has()).Limit(10).All(acct)
 	if err != nil {
 		return err
 	}
@@ -227,11 +227,11 @@ func (t *tour) reading() error {
 // sqlOf prints the SQL a query would send for two roles.
 func (t *tour) sqlOf() error {
 	db, say, acct, viewer := t.db, t.say, t.acct, t.viewer
-	I := gen.Invoices
+	I := veloxgen.Invoices
 	// 3. SQL(ctx) prints the statement a query would send for that context,
 	// with the organization and policy conditions, without sending it.
 	say("\n== 3. SQL(ctx)")
-	q := db.Query[gen.Invoice]().Where(I.Customer.EQ("Initech")).Limit(10)
+	q := db.Query[veloxgen.Invoice]().Where(I.Customer.EQ("Initech")).Limit(10)
 	for _, c := range []struct {
 		who string
 		ctx context.Context
@@ -248,12 +248,12 @@ func (t *tour) sqlOf() error {
 // writing updates, saves, deletes, soft-deletes and restores.
 func (t *tour) writing() error {
 	db, say, acct := t.db, t.say, t.acct
-	I, L := gen.Invoices, gen.Lines
+	I, L := veloxgen.Invoices, veloxgen.Lines
 	// 4. Writing. Updates are set-based or name their columns; there is no
 	// write-back of a whole struct.
 	say("\n== 4. Writing")
-	n, err := db.Update[gen.Invoice]().
-		Set(I.Status.Set(gen.InvoiceStatusPaid)).
+	n, err := db.Update[veloxgen.Invoice]().
+		Set(I.Status.Set(veloxgen.InvoiceStatusPaid)).
 		Where(I.Number.EQ("INV-001")).
 		Exec(acct)
 	if err != nil {
@@ -263,7 +263,7 @@ func (t *tour) writing() error {
 
 	// Save writes the named columns of a loaded struct, and UpdatedAt through
 	// the mixin's UpdateDefault.
-	draft, err := db.Query[gen.Invoice]().Where(I.Number.EQ("INV-002")).One(acct)
+	draft, err := db.Query[veloxgen.Invoice]().Where(I.Number.EQ("INV-002")).One(acct)
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func (t *tour) writing() error {
 	}
 	say("Save: %s customer is now %s", draft.Number, draft.Customer)
 
-	n, err = db.Delete[gen.Line]().Where(L.AmountCents.EQ(0)).Exec(acct)
+	n, err = db.Delete[veloxgen.Line]().Where(L.AmountCents.EQ(0)).Exec(acct)
 	if err != nil {
 		return err
 	}
@@ -282,20 +282,20 @@ func (t *tour) writing() error {
 	// softdelete.Mixin makes Invoice's delete an update that sets deleted_at,
 	// and hides the rows it is set on. softdelete.Skip shows them, and a
 	// restore is an update under it.
-	n, err = db.Delete[gen.Invoice]().Where(I.Number.EQ("INV-002")).Exec(acct)
+	n, err = db.Delete[veloxgen.Invoice]().Where(I.Number.EQ("INV-002")).Exec(acct)
 	if err != nil {
 		return err
 	}
-	live, err := db.Query[gen.Invoice]().Count(acct)
+	live, err := db.Query[veloxgen.Invoice]().Count(acct)
 	if err != nil {
 		return err
 	}
-	all, err := db.Query[gen.Invoice]().Count(softdelete.Skip(acct))
+	all, err := db.Query[veloxgen.Invoice]().Count(softdelete.Skip(acct))
 	if err != nil {
 		return err
 	}
 	say("soft delete: %d invoice deleted; org 1 sees %d, and %d under softdelete.Skip", n, live, all)
-	n, err = db.Update[gen.Invoice]().Where(I.Number.EQ("INV-002")).Set(I.DeletedAt.SetNull()).Exec(softdelete.Skip(acct))
+	n, err = db.Update[veloxgen.Invoice]().Where(I.Number.EQ("INV-002")).Set(I.DeletedAt.SetNull()).Exec(softdelete.Skip(acct))
 	if err != nil {
 		return err
 	}
@@ -310,9 +310,9 @@ func (t *tour) guards() error {
 	// 5. Guards are always on: a read without a Limit, and an update or
 	// delete without a Where, are refused before anything is sent.
 	say("\n== 5. Guards")
-	_, err := db.Query[gen.Invoice]().All(acct)
+	_, err := db.Query[veloxgen.Invoice]().All(acct)
 	say("no Limit: ErrUnbounded=%t: %v", errors.Is(err, velox.ErrUnbounded), err)
-	_, err = db.Delete[gen.Line]().Exec(acct)
+	_, err = db.Delete[veloxgen.Line]().Exec(acct)
 	say("no Where: ErrNoWhere=%t: %v", errors.Is(err, velox.ErrNoWhere), err)
 	return nil
 }
@@ -320,29 +320,29 @@ func (t *tour) guards() error {
 // policy shows the policy and the organizations' isolation.
 func (t *tour) policy() error {
 	db, say, viewer, globexAcct, ctx := t.db, t.say, t.viewer, t.globexAcct, t.ctx
-	I := gen.Invoices
+	I := veloxgen.Invoices
 	// 6. Policy and organization isolation.
 	say("\n== 6. Policy and organizations")
-	_, err := db.Update[gen.Invoice]().
-		Set(I.Status.Set(gen.InvoiceStatusSent)).
+	_, err := db.Update[veloxgen.Invoice]().
+		Set(I.Status.Set(veloxgen.InvoiceStatusSent)).
 		Where(I.Number.EQ("INV-002")).
 		Exec(viewer)
 	say("viewer's update: ErrDenied=%t: %v", errors.Is(err, velox.ErrDenied), err)
 
-	seen, err := db.Query[gen.Invoice]().Count(viewer)
+	seen, err := db.Query[veloxgen.Invoice]().Count(viewer)
 	if err != nil {
 		return err
 	}
 	say("viewer sees %d invoices of org 1 (not the draft)", seen)
 
-	seen, err = db.Query[gen.Invoice]().Count(globexAcct)
+	seen, err = db.Query[veloxgen.Invoice]().Count(globexAcct)
 	if err != nil {
 		return err
 	}
 	say("org 2 sees %d invoice", seen)
-	_, err = db.Query[gen.Invoice]().Where(I.Number.EQ("INV-003")).One(globexAcct)
+	_, err = db.Query[veloxgen.Invoice]().Where(I.Number.EQ("INV-003")).One(globexAcct)
 	say("org 2 asks for org 1's INV-003: ErrNotFound=%t", velox.IsNotFound(err))
-	_, err = db.Query[gen.Invoice]().Count(ctx)
+	_, err = db.Query[veloxgen.Invoice]().Count(ctx)
 	say("no organization in the context: ErrNoScope=%t: %v", errors.Is(err, scope.ErrNoScope), err)
 	return nil
 }
@@ -358,7 +358,7 @@ func (t *tour) transactions() error {
 	// transaction).
 	say("\n== 7. Transactions")
 	err := db.Tx(acct, func(ctx context.Context, tx *velox.DB) error {
-		next := gen.Invoice{Number: "INV-003", Customer: "Initech", Status: gen.InvoiceStatusSent, TotalCents: 80000}
+		next := veloxgen.Invoice{Number: "INV-003", Customer: "Initech", Status: veloxgen.InvoiceStatusSent, TotalCents: 80000}
 		err := tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return tx.Insert(&next).Exec(ctx) })
 		if ce := (*velox.ConstraintError)(nil); errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique {
 			say("%s is taken (%s constraint on %s); using INV-004", next.Number, ce.Kind, ce.Constraint)
@@ -368,14 +368,14 @@ func (t *tour) transactions() error {
 		if err != nil {
 			return err
 		}
-		return tx.InsertAll([]gen.Line{
+		return tx.InsertAll([]veloxgen.Line{
 			{InvoiceID: next.ID, Description: "Licences", AmountCents: 80000},
 		}).Exec(ctx)
 	})
 	if err != nil {
 		return err
 	}
-	n, err := db.Query[gen.Invoice]().Count(acct)
+	n, err := db.Query[veloxgen.Invoice]().Count(acct)
 	if err != nil {
 		return err
 	}
@@ -386,21 +386,21 @@ func (t *tour) transactions() error {
 // withoutPolicy reports across organizations under WithoutPolicy.
 func (t *tour) withoutPolicy() error {
 	db, say, ctx := t.db, t.say, t.ctx
-	I := gen.Invoices
+	I := veloxgen.Invoices
 	// 8. db.WithoutPolicy returns a DB that lifts every policy, the
 	// organization's scope among them, and requires a reason. A report across
 	// organizations needs it, and so does its caller's care. Only the code
 	// given that DB is unscoped; ctx carries no bypass.
 	say("\n== 8. WithoutPolicy")
 	report := db.WithoutPolicy("monthly revenue report")
-	text, _, err := report.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded().SQL(ctx)
+	text, _, err := report.Query[veloxgen.Invoice]().Where(I.Status.NEQ(veloxgen.InvoiceStatusDraft)).Unbounded().SQL(ctx)
 	if err != nil {
 		return err
 	}
 	say("%s", text)
 	// Sum adds up one column in the database, under the same scope as any
 	// query: here all organizations, and no policy.
-	paidTotal, err := velox.Sum(ctx, report.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)), I.TotalCents)
+	paidTotal, err := velox.Sum(ctx, report.Query[veloxgen.Invoice]().Where(I.Status.EQ(veloxgen.InvoiceStatusPaid)), I.TotalCents)
 	if err != nil {
 		return err
 	}
@@ -408,7 +408,7 @@ func (t *tour) withoutPolicy() error {
 	// SumBy does so per value of a key column, here per organization: no drafts.
 	// Unbounded says that the groups may be as many as the rows; the row cap,
 	// if any, still applies.
-	totals, err := velox.SumBy(ctx, report.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded(), I.OrgID.Key(), I.TotalCents)
+	totals, err := velox.SumBy(ctx, report.Query[veloxgen.Invoice]().Where(I.Status.NEQ(veloxgen.InvoiceStatusDraft)).Unbounded(), I.OrgID.Key(), I.TotalCents)
 	if err != nil {
 		return err
 	}
@@ -427,7 +427,7 @@ func (t *tour) deadlines() error {
 	say("\n== 9. Deadlines")
 	err := db.Tx(acct, func(ctx context.Context, tx *velox.DB) error {
 		time.Sleep(50 * time.Millisecond) // slow work while the transaction is open
-		_, err := tx.Query[gen.Invoice]().Count(ctx)
+		_, err := tx.Query[veloxgen.Invoice]().Count(ctx)
 		return err
 	}, velox.TxTimeout(10*time.Millisecond))
 	say("transaction past its TxTimeout: ErrTimeout=%t, context.DeadlineExceeded=%t\n  %v",

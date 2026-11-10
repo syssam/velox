@@ -1,10 +1,10 @@
-Insert with no title: velox: gen.Task: hook: a task needs a title
+Insert with no title: velox: veloxgen.Task: hook: a task needs a title
 Insert: id 1, slug "write-the-readme", created by ada
 InsertAll: slugs "fix-ci" and "tag-v1"
 SQL: UPDATE "tasks" SET "title" = ?, "slug" = ? WHERE "slug" = ? [Tag v1.0 tag-v1.0 tag-v1]
 audit rows after SQL(ctx): 0
 audit rows after Exec: ["ada: renamed a task to Tag v1.0"]
-Update to no title: velox: gen.Task: hook: a task needs a title
+Update to no title: velox: veloxgen.Task: hook: a task needs a title
 Save: title "Write the docs", slug "write-the-docs"
 in the transaction: 3 audit rows
 rolled back (changed my mind): title "Write the docs", 2 audit rows

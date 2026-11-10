@@ -43,14 +43,14 @@ There are three parts:
 
 1. **A schema package** that you write. Each entity is a Go struct with
    methods such as `Fields` and `Edges`, in the same style as ent.
-2. **`velox-gen`**, a code generator. It reads the schema and writes a `gen`
-   package: a plain struct per entity (`gen.Invoice`) and a set of typed
-   column handles (`gen.Invoices`).
-3. **The `velox` runtime**, a small generic API. `db.Query[gen.Invoice]()`,
+2. **`velox-gen`**, a code generator. It reads the schema and writes a `veloxgen`
+   package: a plain struct per entity (`veloxgen.Invoice`) and a set of typed
+   column handles (`veloxgen.Invoices`).
+3. **The `velox` runtime**, a small generic API. `db.Query[veloxgen.Invoice]()`,
    `db.Insert(&inv)` and friends work for every entity, so the generated code
    stays small.
 
-Because the handles are typed, `gen.Invoices.TotalCents.GT("ten")` is a
+Because the handles are typed, `veloxgen.Invoices.TotalCents.GT("ten")` is a
 compile error rather than a runtime surprise.
 
 ## Defining a schema
@@ -59,7 +59,7 @@ A schema is a struct that embeds `schema.Schema`. Its methods describe the
 table. Here is the tour's `Invoice`:
 
 ```go
-package schema
+package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -136,8 +136,8 @@ or name the field so that its zero is the default (`disabled`, not
 outside velox. [Coming from ent](coming-from-ent.md) ("Defaults on a NOT NULL column")
 has the whole list.
 
-`field.Enum("status").Values(...)` generates a Go type, `gen.InvoiceStatus`,
-with a constant per value, such as `gen.InvoiceStatusPaid`.
+`field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,
+with a constant per value, such as `veloxgen.InvoiceStatusPaid`.
 
 ### Edges
 
@@ -163,7 +163,7 @@ func (Line) Edges() []schema.Edge {
 
 - `To` with an inverse that is `Unique` is one-to-many.
 - `To` with an inverse that is not `Unique` is many-to-many. velox-gen writes
-  a join entity for it (in the relations example, `gen.PostTag` for the
+  a join entity for it (in the relations example, `veloxgen.PostTag` for the
   `post_tags` table).
 - `OnDelete(edge.Cascade)` asks the database to delete children with their
   parent.
@@ -196,21 +196,27 @@ change:
 
 ```sh
 go get -tool github.com/syssam/velox/cmd/velox-gen
-go tool velox-gen ./schema
+go tool velox-gen ./veloxschema
 ```
 
-This writes the `gen` package next to `schema`. Everything in `gen/` is
+This writes the `veloxgen` package next to `veloxschema`. Everything in `veloxgen/` is
 generated, so never edit it. Commit it, and in CI check that it is up to
 date:
 
 ```sh
-go tool velox-gen -check ./schema   # writes nothing; exits 3 when gen is stale
-go tool velox-gen verify ./schema   # builds every entity and reports mistakes
+go tool velox-gen -check ./veloxschema   # writes nothing; exits 3 when veloxgen is stale
+go tool velox-gen verify ./veloxschema   # builds every entity and reports mistakes
 ```
+
+The folders are `./veloxschema` and `./veloxgen` unless you say otherwise:
+`-out ./path` names the folder of the generated package and `-package name`
+its name, which is the folder's base name when you leave it out. Put the
+command in one `go:generate` line, and have CI call it, so the folder is named
+once.
 
 Generated code carries a version constant (today
 `velox.GeneratedCodeIsVersion19`). If you update velox and the shape of
-generated code has changed, the old `gen` stops compiling until you run
+generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 
 ## Migrations
@@ -251,7 +257,7 @@ if _, err := migrate.Up(ctx, velox.Pool(db), sub); err != nil {
 ```
 
 **Using Atlas instead?** `go tool velox-gen migrate sql -dialect postgres
-./schema` prints the schema's `CREATE` statements for Atlas's
+./veloxschema` prints the schema's `CREATE` statements for Atlas's
 `external_schema`. A directory is managed by one tool or the other, never
 both. [examples/README.md](../examples/README.md#migrations) has a complete
 `atlas.hcl`, and the steps to adopt an existing database (made by ent or by
@@ -307,19 +313,19 @@ transaction's DB and a sharded DB.
 
 Options go at the end of `Connect`, `Open` or `veloxpgx.Open`, such as
 `velox.WithDeadlines(...)`, `velox.WithMaxRows(n)` or
-`velox.WithHooks[gen.Task](...)`.
+`velox.WithHooks[veloxgen.Task](...)`.
 
 ## Reading
 
 A query is a value. You build it with `Where`, `OrderBy` and `Limit`, then
 run it with a terminal method. The handles live in the plural variable
-(`gen.Invoices`), which is often shortened to one letter:
+(`veloxgen.Invoices`), which is often shortened to one letter:
 
 ```go
-I := gen.Invoices
+I := veloxgen.Invoices
 
-unpaid, err := db.Query[gen.Invoice]().
-	Where(I.Status.NEQ(gen.InvoiceStatusPaid)).
+unpaid, err := db.Query[veloxgen.Invoice]().
+	Where(I.Status.NEQ(veloxgen.InvoiceStatusPaid)).
 	OrderBy(I.Number.Asc()).
 	Limit(10).
 	All(ctx)
@@ -329,7 +335,7 @@ The terminal methods:
 
 | Method | Returns |
 |---|---|
-| `All(ctx)` | every matching row, as `[]gen.Invoice` |
+| `All(ctx)` | every matching row, as `[]veloxgen.Invoice` |
 | `One(ctx)` | exactly one row; `ErrNotFound` for none, `ErrNotSingular` for several |
 | `First(ctx)` | the first row in the query's order |
 | `Count(ctx)` | the number of matching rows |
@@ -349,7 +355,7 @@ before anything is sent. When you really do want every row, say so with
 `Unbounded()`:
 
 ```go
-for x, err := range db.Query[gen.Invoice]().OrderBy(I.ID.Asc()).Unbounded().Iter(ctx) {
+for x, err := range db.Query[veloxgen.Invoice]().OrderBy(I.ID.Asc()).Unbounded().Iter(ctx) {
 	if err != nil {
 		return err
 	}
@@ -372,8 +378,8 @@ all but the named ones. The other fields keep their zero values.
 `OrderBy` must end in the primary key or a unique column:
 
 ```go
-P := gen.Posts
-page := db.Query[gen.Post]().OrderBy(P.Votes.Desc(), P.ID.Asc()).Limit(20)
+P := veloxgen.Posts
+page := db.Query[veloxgen.Post]().OrderBy(P.Votes.Desc(), P.ID.Asc()).Limit(20)
 for {
 	got, err := page.All(ctx)
 	if err != nil || len(got) == 0 {
@@ -393,9 +399,9 @@ query for all rows at once (`WHERE invoice_id IN (...)`), and the result is in
 the entity's `Edges` field:
 
 ```go
-first, err := db.Query[gen.Invoice]().
+first, err := db.Query[veloxgen.Invoice]().
 	Where(I.Number.EQ("INV-001")).
-	With(I.Lines.OrderBy(gen.Lines.AmountCents.Desc())).
+	With(I.Lines.OrderBy(veloxgen.Lines.AmountCents.Desc())).
 	One(ctx)
 if err != nil {
 	return err
@@ -406,8 +412,8 @@ lines, loaded := first.Edges.Lines.Get() // loaded is false when With was not us
 A relation handle takes its own `Where`, `OrderBy` and nested `With`:
 
 ```go
-A, P := gen.Authors, gen.Posts
-authors, err := db.Query[gen.Author]().
+A, P := veloxgen.Authors, veloxgen.Posts
+authors, err := db.Query[veloxgen.Author]().
 	With(A.Posts.Where(P.Votes.GTE(10)).OrderBy(P.Votes.Desc()).With(P.Comments)).
 	Limit(10).
 	All(ctx)
@@ -422,9 +428,9 @@ three best posts.
 `Has` and `HasWith` are `EXISTS` subqueries:
 
 ```go
-db.Query[gen.Author]().Where(A.Posts.Has())                     // authors with posts
-db.Query[gen.Author]().Where(A.Posts.HasWith(P.Votes.GT(20)))   // ... with a popular post
-db.Query[gen.Author]().Where(velox.Not(A.Posts.Has()))          // authors with none
+db.Query[veloxgen.Author]().Where(A.Posts.Has())                     // authors with posts
+db.Query[veloxgen.Author]().Where(A.Posts.HasWith(P.Votes.GT(20)))   // ... with a popular post
+db.Query[veloxgen.Author]().Where(velox.Not(A.Posts.Has()))          // authors with none
 ```
 
 ### Inside a JSON column: Text, Number, Bool and HasKey
@@ -434,11 +440,11 @@ object keys. Here `Account` stands for any entity with a
 `field.JSON("attrs", map[string]any{})`:
 
 ```go
-A := gen.Accounts
-db.Query[gen.Account]().Where(A.Attrs.Text("plan", "tier").EQ("pro"))  // a string
-db.Query[gen.Account]().Where(A.Attrs.Number("plan", "seats").GT(10))  // a number
-db.Query[gen.Account]().Where(A.Attrs.Bool("trial").EQ(true))          // a boolean
-db.Query[gen.Account]().Where(A.Attrs.HasKey("trial"))                 // a key is there
+A := veloxgen.Accounts
+db.Query[veloxgen.Account]().Where(A.Attrs.Text("plan", "tier").EQ("pro"))  // a string
+db.Query[veloxgen.Account]().Where(A.Attrs.Number("plan", "seats").GT(10))  // a number
+db.Query[veloxgen.Account]().Where(A.Attrs.Bool("trial").EQ(true))          // a boolean
+db.Query[veloxgen.Account]().Where(A.Attrs.HasKey("trial"))                 // a key is there
 ```
 
 `Text` is NULL where the path is missing or holds something other than a
@@ -456,8 +462,8 @@ handle of the same Go type tests against it with `InSelect` or `NotInSelect`:
 
 ```go
 popular := P.AuthorID.Select(P.Votes.GT(20))           // SELECT author_id FROM posts WHERE votes > 20
-db.Query[gen.Author]().Where(A.ID.InSelect(popular))     // authors of a popular post
-db.Query[gen.Author]().Where(A.ID.NotInSelect(popular))  // authors of none
+db.Query[veloxgen.Author]().Where(A.ID.InSelect(popular))     // authors of a popular post
+db.Query[veloxgen.Author]().Where(A.ID.NotInSelect(popular))  // authors of none
 ```
 
 The types must match: an `int64` column against an `int64` subquery, an enum
@@ -475,7 +481,7 @@ related row in the same statement and fills the edge. `rel.Is(...)` filters
 on the joined row's columns, and `rel.By(...)` orders by them:
 
 ```go
-posts, err := db.Query[gen.Post]().
+posts, err := db.Query[veloxgen.Post]().
 	Join(P.Author).
 	Where(P.Author.Is(A.Name.EQ("Grace"))).
 	OrderBy(P.Author.By(A.Name.Asc()), P.ID.Asc()).
@@ -495,7 +501,7 @@ whose key lives on the other table, relation handles provide setters for
 `Insert` and `Update`:
 
 ```go
-db.Update[gen.Post]().Set(gen.Posts.Tags.Add(1, 2)).Where(gen.Posts.ID.EQ(id)).Exec(ctx)
+db.Update[veloxgen.Post]().Set(veloxgen.Posts.Tags.Add(1, 2)).Where(veloxgen.Posts.ID.EQ(id)).Exec(ctx)
 ```
 
 `Add`, `Remove` and `Clear` are written after the row, in one transaction
@@ -511,7 +517,7 @@ database for one value:
 
 ```go
 paid, err := velox.Sum(ctx,
-	db.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)),
+	db.Query[veloxgen.Invoice]().Where(I.Status.EQ(veloxgen.InvoiceStatusPaid)),
 	I.TotalCents)
 ```
 
@@ -524,7 +530,7 @@ the query says `Unbounded()`:
 
 ```go
 totals, err := velox.SumBy(ctx,
-	db.Query[gen.Invoice]().Unbounded(),
+	db.Query[veloxgen.Invoice]().Unbounded(),
 	I.OrgID.Key(), I.TotalCents)
 for _, g := range totals {
 	fmt.Println(g.Key, g.Value)
@@ -542,13 +548,13 @@ use [raw SQL](#raw-sql) for those ([ADR 0022](decisions/0022-group-by.md)).
 `InsertAll` writes many in one statement and reads nothing back:
 
 ```go
-inv := gen.Invoice{Number: "INV-001", Customer: "Initech", Status: gen.InvoiceStatusSent}
+inv := veloxgen.Invoice{Number: "INV-001", Customer: "Initech", Status: veloxgen.InvoiceStatusSent}
 if err := db.Insert(&inv).Exec(ctx); err != nil {
 	return err
 }
 // inv.ID is set now.
 
-lines := []gen.Line{
+lines := []veloxgen.Line{
 	{InvoiceID: inv.ID, Description: "Consulting", AmountCents: 120000},
 	{InvoiceID: inv.ID, Description: "Travel", AmountCents: 30000},
 }
@@ -579,12 +585,12 @@ Updates are set-based: you say which columns change and which rows match.
 `Exec` returns the number of rows affected:
 
 ```go
-n, err := db.Update[gen.Invoice]().
-	Set(I.Status.Set(gen.InvoiceStatusPaid)).
+n, err := db.Update[veloxgen.Invoice]().
+	Set(I.Status.Set(veloxgen.InvoiceStatusPaid)).
 	Where(I.Number.EQ("INV-001")).
 	Exec(ctx)
 
-n, err = db.Delete[gen.Line]().Where(gen.Lines.AmountCents.EQ(0)).Exec(ctx)
+n, err = db.Delete[veloxgen.Line]().Where(veloxgen.Lines.AmountCents.EQ(0)).Exec(ctx)
 ```
 
 Number handles also have `Add` and `Sub` (`Set(I.TotalCents.Add(500))`).
@@ -597,7 +603,7 @@ An `Update` or `Delete` without `Where` fails with `velox.ErrNoWhere`. If you
 mean every row, say `.All()`:
 
 ```go
-db.Delete[gen.Line]().All().Exec(ctx)
+db.Delete[veloxgen.Line]().All().Exec(ctx)
 ```
 
 ### Save
@@ -627,7 +633,7 @@ fails with `velox.ErrStale` (which also matches `ErrNotFound`) and changes
 nothing. Writes may not assign the version themselves; that fails with
 `velox.ErrVersionSet` ([ADR 0056](decisions/0056-scale-round.md)).
 
-For a `Doc` entity with that field, `D := gen.Docs`:
+For a `Doc` entity with that field, `D := veloxgen.Docs`:
 
 ```go
 if err := db.Save(&doc, D.Title).Exec(ctx); errors.Is(err, velox.ErrStale) {
@@ -639,14 +645,14 @@ if err := db.Save(&doc, D.Title).Exec(ctx); errors.Is(err, velox.ErrStale) {
 
 `db.Tx` runs a function in a transaction. Returning nil commits; returning an
 error rolls back and `Tx` returns that error. With the
-[tx example](../examples/tx)'s `Account` entity, `A := gen.Accounts`:
+[tx example](../examples/tx)'s `Account` entity, `A := veloxgen.Accounts`:
 
 ```go
 err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-	if _, err := tx.Update[gen.Account]().Set(A.Balance.Sub(30)).Where(A.Name.EQ("alice")).Exec(ctx); err != nil {
+	if _, err := tx.Update[veloxgen.Account]().Set(A.Balance.Sub(30)).Where(A.Name.EQ("alice")).Exec(ctx); err != nil {
 		return err
 	}
-	_, err := tx.Update[gen.Account]().Set(A.Balance.Add(30)).Where(A.Name.EQ("bob")).Exec(ctx)
+	_, err := tx.Update[veloxgen.Account]().Set(A.Balance.Add(30)).Where(A.Name.EQ("bob")).Exec(ctx)
 	return err
 })
 ```
@@ -673,7 +679,7 @@ See the [tx example](../examples/tx).
 ## Hooks, policies and interceptors
 
 An entity's behaviour is declared in the schema package, next to its fields,
-as in ent. The schema package does not import `gen` (gen imports it), so
+as in ent. The schema package does not import `veloxgen` (gen imports it), so
 behaviour names columns by their schema names: `velox.FieldEQ("status", s)`,
 `m.Value("title")`. velox-gen checks those names when it generates, and velox
 checks them again when the statement runs
@@ -710,8 +716,8 @@ On an update, `m.Value(name)` tells you whether the update assigns a column
 and `m.Set(name, v)` adds one. On an update or delete, `m.Where(...)` narrows
 the rows. `velox.On(hook, ops...)` wraps the whole write, for work after it.
 
-A hook that needs generated types, such as one that inserts a `gen.Audit`
-row, is added at run time with `velox.WithHooks[gen.Task](...)` when opening
+A hook that needs generated types, such as one that inserts a `veloxgen.Audit`
+row, is added at run time with `velox.WithHooks[veloxgen.Task](...)` when opening
 the DB. Inside it, `m.DB()` is the DB the write runs on, so inside `db.Tx`
 the audit row commits or rolls back with the write. See the
 [hooks example](../examples/hooks).
@@ -763,11 +769,11 @@ policies with the same condition; interceptors such as soft delete still
 apply, so a deleted row stays not found:
 
 ```go
-n, err := db.Update[gen.Invoice]().Set(I.Status.Set(gen.InvoiceStatusPaid)).
+n, err := db.Update[veloxgen.Invoice]().Set(I.Status.Set(veloxgen.InvoiceStatusPaid)).
 	Where(I.ID.EQ(id)).Exec(ctx)
 if err == nil && n == 0 {
 	hidden, err := db.WithoutPolicy("tell forbidden from missing").
-		Query[gen.Invoice]().Where(I.ID.EQ(id)).Exists(ctx)
+		Query[veloxgen.Invoice]().Where(I.ID.EQ(id)).Exists(ctx)
 	switch {
 	case err != nil:
 		return err
@@ -863,13 +869,13 @@ restore or purge deleted rows:
 
 ```go
 // restore
-db.Update[gen.Invoice]().
+db.Update[veloxgen.Invoice]().
 	Where(I.Number.EQ("INV-002")).
 	Set(I.DeletedAt.SetNull()).
 	Exec(softdelete.Skip(ctx))
 
 // purge for good
-db.Delete[gen.Invoice]().
+db.Delete[veloxgen.Invoice]().
 	Where(I.DeletedAt.NotNull()).
 	Exec(softdelete.Skip(ctx))
 ```
@@ -887,7 +893,7 @@ by tenant is up to you.
 n, err := db.Exec(ctx, "nightly cleanup",
 	"DELETE FROM sessions WHERE expires_at < $1", now)
 
-totals, err := db.Raw[gen.Invoice]("revenue report",
+totals, err := db.Raw[veloxgen.Invoice]("revenue report",
 	"SELECT org_id, SUM(total_cents) AS total_cents FROM invoices GROUP BY org_id").All(ctx)
 ```
 
@@ -921,8 +927,8 @@ looks like this:
 
 ```go
 err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-	jobs, err := tx.Query[gen.Job]().
-		Where(J.State.EQ(gen.JobStatePending)).
+	jobs, err := tx.Query[veloxgen.Job]().
+		Where(J.State.EQ(veloxgen.JobStatePending)).
 		OrderBy(J.ID.Asc()).
 		Limit(10).
 		ForUpdate().
@@ -956,11 +962,11 @@ error matching both `velox.ErrTimeout` and `context.DeadlineExceeded`.
 
 ## Errors
 
-velox wraps errors with context (`velox: gen.Invoice: ...`) and gives you
+velox wraps errors with context (`velox: veloxgen.Invoice: ...`) and gives you
 sentinels and typed errors to test for:
 
 ```go
-_, err := db.Query[gen.Invoice]().Where(I.ID.EQ(id)).One(ctx)
+_, err := db.Query[veloxgen.Invoice]().Where(I.ID.EQ(id)).One(ctx)
 switch {
 case velox.IsNotFound(err):
 	// 404
@@ -1051,7 +1057,7 @@ Then generate with the plugin and run gqlgen:
 ```sh
 go get -tool github.com/syssam/velox/contrib/graphql/cmd/velox-graphql
 go get -tool github.com/99designs/gqlgen
-go tool velox-gen -plugin velox-graphql ./schema
+go tool velox-gen -plugin velox-graphql ./veloxschema
 go tool gqlgen generate
 ```
 

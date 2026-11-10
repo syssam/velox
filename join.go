@@ -13,14 +13,14 @@ import (
 // and a row with no related entity, or none that the target's Read policy lets
 // through, is left out. Conditions and orderings on its columns are made by r:
 //
-//	db.Query[gen.PostFeed]().
-//		Join(gen.PostFeeds.Post).
-//		Where(gen.PostFeeds.UserID.EQ(me), gen.PostFeeds.Post.Is(gen.Posts.DeletedAt.IsNull())).
-//		OrderBy(gen.PostFeeds.Rank.Desc(), gen.PostFeeds.Post.By(gen.Posts.CreatedAt.Desc())).
+//	db.Query[veloxgen.PostFeed]().
+//		Join(veloxgen.PostFeeds.Post).
+//		Where(veloxgen.PostFeeds.UserID.EQ(me), veloxgen.PostFeeds.Post.Is(veloxgen.Posts.DeletedAt.IsNull())).
+//		OrderBy(veloxgen.PostFeeds.Rank.Desc(), veloxgen.PostFeeds.Post.By(veloxgen.Posts.CreatedAt.Desc())).
 //		Limit(20).All(ctx)
 //
 // The handle may carry With, which loads relations of the joined entity as With
-// loads them (gen.PostFeeds.Post.With(gen.Posts.Author)); its Where, OrderBy,
+// loads them (veloxgen.PostFeeds.Post.With(veloxgen.Posts.Author)); its Where, OrderBy,
 // LimitEach and MaxRows say how to load and are refused, as a join is one statement.
 //
 // A relation that can hold several rows (Many) is refused: a join would read an
@@ -133,7 +133,7 @@ func (r Rel[E, T]) Is[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 }
 
 // By is the ordering o of the joined relation's entity, as an ordering of the
-// query's: OrderBy(rel.By(gen.Posts.CreatedAt.Desc())). The query must Join or
+// query's: OrderBy(rel.By(veloxgen.Posts.CreatedAt.Desc())). The query must Join or
 // LeftJoin r. After pages over it from the row's joined entity (see Join).
 // NULL sorts after every value ascending, as OrderBy sorts it, on every
 // dialect; a left join's row with no target counts as NULL.

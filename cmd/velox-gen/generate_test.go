@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const genUserSchema = `package schema
+const genUserSchema = `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -30,7 +30,7 @@ func (User) Fields() []schema.Field {
 }
 `
 
-const genTagSchema = `package schema
+const genTagSchema = `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -59,7 +59,7 @@ func genModuleWith(t *testing.T, extra map[string]string, mk func(*testing.T, ma
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	files := map[string]string{"schema/user.go": genUserSchema, "schema/tag.go": genTagSchema}
+	files := map[string]string{"veloxschema/user.go": genUserSchema, "veloxschema/tag.go": genTagSchema}
 	maps.Copy(files, extra)
 	return withSchemaMethods(t, files, mk)
 }
@@ -72,7 +72,7 @@ func withSchemaMethods(t *testing.T, files map[string]string, mk func(*testing.T
 	t.Helper()
 	later := map[string]string{}
 	for name, src := range files {
-		if strings.Contains(src, `"example.com/app/gen`) {
+		if strings.Contains(src, `"example.com/app/veloxgen`) {
 			later[name] = src
 			delete(files, name)
 		}
@@ -103,32 +103,32 @@ func mtimes(t *testing.T, dir string) map[string]time.Time {
 
 func TestGenerateWritesThenNothingChanges(t *testing.T) {
 	dir := genModule(t, nil)
-	code, out, errs := runCLI(t, dir, "./schema")
-	if want := "gen/tag.go\ngen/user.go\ngen/velox.go\n"; code != 0 || out != want {
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	if want := "veloxgen/tag.go\nveloxgen/user.go\nveloxgen/velox.go\n"; code != 0 || out != want {
 		t.Fatalf("first run: %d %q %q", code, out, errs)
 	}
 	for _, f := range []string{"tag.go", "user.go", "velox.go"} {
-		if !isGenerated(filepath.Join(dir, "gen", f)) {
+		if !isGenerated(filepath.Join(dir, "veloxgen", f)) {
 			t.Errorf("%s lacks the header", f)
 		}
 	}
-	before := mtimes(t, filepath.Join(dir, "gen"))
+	before := mtimes(t, filepath.Join(dir, "veloxgen"))
 	time.Sleep(20 * time.Millisecond)
-	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 || out != "" || errs != "" {
+	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 || out != "" || errs != "" {
 		t.Errorf("second run: %d %q %q", code, out, errs)
 	}
-	after := mtimes(t, filepath.Join(dir, "gen"))
+	after := mtimes(t, filepath.Join(dir, "veloxgen"))
 	for name, mt := range before {
 		if !after[name].Equal(mt) {
 			t.Errorf("%s was rewritten", name)
 		}
 	}
-	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
+	if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 || out != "" || errs != "" {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
 }
 
-// The sweep of -out ./gen leaves alone a nested -out ./gen/b, another run's
+// The sweep of -out ./veloxgen leaves alone a nested -out ./veloxgen/b, another run's
 // output, and a directory that holds a go.mod, another module's: each run
 // keeps the other's files, and -check passes for both.
 func TestStaleSweepSkipsNestedGenPackage(t *testing.T) {
@@ -145,50 +145,50 @@ func (Item) Fields() []schema.Field { return []schema.Field{field.String("sku")}
 `
 	other := header + "\n\npackage other\n"
 	dir := genModule(t, map[string]string{
-		"schemab/item.go":    itemSchema,
-		"gen/mod/go.mod":     "module example.com/other\n",
-		"gen/mod/other.go":   other,
-		"gen/mod/x/other.go": other,
+		"schemab/item.go":         itemSchema,
+		"veloxgen/mod/go.mod":     "module example.com/other\n",
+		"veloxgen/mod/other.go":   other,
+		"veloxgen/mod/x/other.go": other,
 	})
-	b := []string{"-out", "./gen/b", "-package", "b", "./schemab"}
-	if code, out, errs := runCLI(t, dir, b...); code != 0 || out != "gen/b/item.go\ngen/b/velox.go\n" {
-		t.Fatalf("gen/b: %d %q %q", code, out, errs)
+	b := []string{"-out", "./veloxgen/b", "-package", "b", "./schemab"}
+	if code, out, errs := runCLI(t, dir, b...); code != 0 || out != "veloxgen/b/item.go\nveloxgen/b/velox.go\n" {
+		t.Fatalf("veloxgen/b: %d %q %q", code, out, errs)
 	}
-	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 || out != "gen/tag.go\ngen/user.go\ngen/velox.go\n" {
+	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 || out != "veloxgen/tag.go\nveloxgen/user.go\nveloxgen/velox.go\n" {
 		t.Fatalf("gen: %d %q %q", code, out, errs)
 	}
 	for _, f := range []string{"b/item.go", "b/velox.go", "mod/other.go", "mod/x/other.go"} {
-		if _, err := os.Stat(filepath.Join(dir, "gen", f)); err != nil {
-			t.Errorf("gen/%s: %v", f, err)
+		if _, err := os.Stat(filepath.Join(dir, "veloxgen", f)); err != nil {
+			t.Errorf("veloxgen/%s: %v", f, err)
 		}
 	}
 	if code, out, errs := runCLI(t, dir, append([]string{"-check"}, b...)...); code != 0 {
-		t.Errorf("-check gen/b: %d %q %q", code, out, errs)
+		t.Errorf("-check veloxgen/b: %d %q %q", code, out, errs)
 	}
-	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 {
 		t.Errorf("-check gen: %d %q %q", code, out, errs)
 	}
 }
 
 func TestGenerateDefaults(t *testing.T) {
 	dir := genModule(t, nil)
-	// No arguments: the package is ./schema and the output ./gen.
+	// No arguments: the package is ./veloxschema and the output ./veloxgen.
 	if code, _, errs := runCLI(t, dir); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	src, err := os.ReadFile(filepath.Join(dir, "gen", "user.go"))
-	if err != nil || !strings.Contains(string(src), "package gen\n") {
+	src, err := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go"))
+	if err != nil || !strings.Contains(string(src), "package veloxgen\n") {
 		t.Fatalf("%v\n%s", err, src)
 	}
 	// -out and -package: the package name defaults to the base of -out.
-	if code, out, errs := runCLI(t, dir, "-out", "model/store", "./schema"); code != 0 || !strings.Contains(out, "model/store/user.go") {
+	if code, out, errs := runCLI(t, dir, "-out", "model/store", "./veloxschema"); code != 0 || !strings.Contains(out, "model/store/user.go") {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
 	src, _ = os.ReadFile(filepath.Join(dir, "model", "store", "user.go"))
 	if !strings.Contains(string(src), "package store\n") {
 		t.Errorf("package is not the base of -out:\n%.200s", src)
 	}
-	if code, _, errs := runCLI(t, dir, "-out", "model/store", "-package", "persist", "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "-out", "model/store", "-package", "persist", "./veloxschema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
 	src, _ = os.ReadFile(filepath.Join(dir, "model", "store", "user.go"))
@@ -199,71 +199,71 @@ func TestGenerateDefaults(t *testing.T) {
 
 func TestCheckAndRewrite(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	userFile := filepath.Join(dir, "gen", "keep.go")
-	writeFile(t, userFile, "package gen\n\nconst Keep = 1\n")
+	userFile := filepath.Join(dir, "veloxgen", "keep.go")
+	writeFile(t, userFile, "package veloxgen\n\nconst Keep = 1\n")
 
-	writeFile(t, filepath.Join(dir, "schema", "user.go"), strings.Replace(genUserSchema, `field.String("name"),`, `field.String("name"), field.Int("age"),`, 1))
-	before, _ := os.ReadFile(filepath.Join(dir, "gen", "user.go"))
-	code, out, errs := runCLI(t, dir, "-check", "./schema")
-	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/user.go is out of date\n") ||
-		!strings.Contains(errs, "velox-gen: run go tool velox-gen ./schema\n") || strings.Contains(errs, "tag.go") {
+	writeFile(t, filepath.Join(dir, "veloxschema", "user.go"), strings.Replace(genUserSchema, `field.String("name"),`, `field.String("name"), field.Int("age"),`, 1))
+	before, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go"))
+	code, out, errs := runCLI(t, dir, "-check", "./veloxschema")
+	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: veloxgen/user.go is out of date\n") ||
+		!strings.Contains(errs, "velox-gen: run go tool velox-gen ./veloxschema\n") || strings.Contains(errs, "tag.go") {
 		t.Fatalf("-check: %d %q %q", code, out, errs)
 	}
-	if after, _ := os.ReadFile(filepath.Join(dir, "gen", "user.go")); string(after) != string(before) {
+	if after, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go")); string(after) != string(before) {
 		t.Fatal("-check changed the file")
 	}
 
-	code, out, errs = runCLI(t, dir, "./schema")
-	if code != 0 || !strings.Contains(out, "gen/user.go\n") || strings.Contains(out, "tag.go") {
+	code, out, errs = runCLI(t, dir, "./veloxschema")
+	if code != 0 || !strings.Contains(out, "veloxgen/user.go\n") || strings.Contains(out, "tag.go") {
 		t.Fatalf("rewrite: %d %q %q", code, out, errs)
 	}
-	if after, _ := os.ReadFile(filepath.Join(dir, "gen", "user.go")); !strings.Contains(string(after), "Age") {
+	if after, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go")); !strings.Contains(string(after), "Age") {
 		t.Errorf("not rewritten:\n%s", after)
 	}
-	if code, _, errs := runCLI(t, dir, "-check", "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 {
 		t.Fatalf("-check after rewrite: %d %q", code, errs)
 	}
 
 	// A removed entity: -check names its file, the next run deletes it.
-	if err := os.Remove(filepath.Join(dir, "schema", "tag.go")); err != nil {
+	if err := os.Remove(filepath.Join(dir, "veloxschema", "tag.go")); err != nil {
 		t.Fatal(err)
 	}
-	code, _, errs = runCLI(t, dir, "-check", "./schema")
-	if code != 3 || !strings.Contains(errs, "velox-gen: gen/tag.go is out of date") {
+	code, _, errs = runCLI(t, dir, "-check", "./veloxschema")
+	if code != 3 || !strings.Contains(errs, "velox-gen: veloxgen/tag.go is out of date") {
 		t.Fatalf("-check after removal: %d %q", code, errs)
 	}
-	code, out, errs = runCLI(t, dir, "./schema")
-	if code != 0 || !strings.Contains(out, "gen/tag.go\n") {
+	code, out, errs = runCLI(t, dir, "./veloxschema")
+	if code != 0 || !strings.Contains(out, "veloxgen/tag.go\n") {
 		t.Fatalf("delete: %d %q %q", code, out, errs)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen", "tag.go")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen", "tag.go")); !os.IsNotExist(err) {
 		t.Errorf("the file of the removed entity is still there: %v", err)
 	}
-	if b, err := os.ReadFile(userFile); err != nil || string(b) != "package gen\n\nconst Keep = 1\n" {
+	if b, err := os.ReadFile(userFile); err != nil || string(b) != "package veloxgen\n\nconst Keep = 1\n" {
 		t.Errorf("the user's file did not survive: %v %q", err, b)
 	}
 }
 
 // schemaUserPolicy is a Policy for User, declared in the schema package,
 // which does not import gen.
-const schemaUserPolicy = "package schema\n\nimport \"github.com/syssam/velox\"\n\n" +
+const schemaUserPolicy = "package veloxschema\n\nimport \"github.com/syssam/velox\"\n\n" +
 	"func (User) Policy() velox.Policy { return velox.Policy{} }\n"
 
 // The schema package's Policy, which names no type of gen, is read from the
 // entity's descriptor: gen imports the schema, by its name, and names the
-// schema's value. No gen/runtime is written. Removing the Policy rewrites the
+// schema's value. No veloxgen/runtime is written. Removing the Policy rewrites the
 // entity's file alone.
 func TestGenerateWithBehaviourWithoutGen(t *testing.T) {
-	dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
-	code, out, errs := runCLI(t, dir, "./schema")
-	if want := "gen/tag.go\ngen/user.go\ngen/velox.go\n"; code != 0 || out != want || errs != "" {
+	dir := genModule(t, map[string]string{"veloxschema/user_policy.go": schemaUserPolicy})
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	if want := "veloxgen/tag.go\nveloxgen/user.go\nveloxgen/velox.go\n"; code != 0 || out != want || errs != "" {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
-	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user.go"))
-	for _, want := range []string{`"example.com/app/schema"`, "Schema: schema.User{},"} {
+	user, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go"))
+	for _, want := range []string{`"example.com/app/veloxschema"`, "Schema: veloxschema.User{},"} {
 		if !strings.Contains(squeeze(string(user)), want) {
 			t.Errorf("user.go lacks %q:\n%s", want, user)
 		}
@@ -271,63 +271,63 @@ func TestGenerateWithBehaviourWithoutGen(t *testing.T) {
 	if strings.Contains(string(user), "Hooks:") {
 		t.Errorf("user.go binds hooks the user did not declare")
 	}
-	tag, _ := os.ReadFile(filepath.Join(dir, "gen", "tag.go"))
-	if strings.Contains(string(tag), "example.com/app/schema") || strings.Contains(string(tag), "Policy:") {
+	tag, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "tag.go"))
+	if strings.Contains(string(tag), "example.com/app/veloxschema") || strings.Contains(string(tag), "Policy:") {
 		t.Errorf("tag.go imports the schema, or binds a policy:\n%s", tag)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen", "runtime")); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("gen/runtime was written: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen", "runtime")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("veloxgen/runtime was written: %v", err)
 	}
-	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
+	if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 || out != "" || errs != "" {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 	noVerifyDirs(t, dir)
-	if err := os.Remove(filepath.Join(dir, "schema", "user_policy.go")); err != nil {
+	if err := os.Remove(filepath.Join(dir, "veloxschema", "user_policy.go")); err != nil {
 		t.Fatal(err)
 	}
-	code, out, errs = runCLI(t, dir, "./schema")
-	if want := "gen/user.go\n"; code != 0 || out != want || errs != "" {
+	code, out, errs = runCLI(t, dir, "./veloxschema")
+	if want := "veloxgen/user.go\n"; code != 0 || out != want || errs != "" {
 		t.Fatalf("without the policy: %d %q %q, want %q", code, out, errs, want)
 	}
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "tag.go user.go velox.go"; got != want {
 		t.Errorf("generated %s, want %s", got, want)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify without the policy: %d %q %q", code, out, errs)
 	}
 }
 
-// The gen/runtime package and runtime_velox.go an older velox-gen wrote
+// The veloxgen/runtime package and runtime_velox.go an older velox-gen wrote
 // are velox-gen's files, so a run removes them; a file of the user's in
-// gen/runtime stays, and velox-gen names it.
+// veloxgen/runtime stays, and velox-gen names it.
 func TestSweepRemovesGenRuntime(t *testing.T) {
-	dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
+	dir := genModule(t, map[string]string{"veloxschema/user_policy.go": schemaUserPolicy})
 	const h = "// Code generated by velox-gen. DO NOT EDIT.\n\n"
-	writeFile(t, filepath.Join(dir, "gen", "runtime", "runtime.go"), h+"// Package runtime binds the schema.\npackage runtime\n")
-	writeFile(t, filepath.Join(dir, "gen", "runtime_velox.go"), h+"package gen\n\n// VeloxRuntime is what package runtime sets.\ntype VeloxRuntime struct{}\n")
-	if code, _, errs := runCLI(t, dir, "-check", "./schema"); code != 3 || !strings.Contains(errs, "velox-gen: gen/runtime/runtime.go is out of date\n") ||
-		!strings.Contains(errs, "velox-gen: gen/runtime_velox.go is out of date\n") {
+	writeFile(t, filepath.Join(dir, "veloxgen", "runtime", "runtime.go"), h+"// Package runtime binds the schema.\npackage runtime\n")
+	writeFile(t, filepath.Join(dir, "veloxgen", "runtime_velox.go"), h+"package veloxgen\n\n// VeloxRuntime is what package runtime sets.\ntype VeloxRuntime struct{}\n")
+	if code, _, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 3 || !strings.Contains(errs, "velox-gen: veloxgen/runtime/runtime.go is out of date\n") ||
+		!strings.Contains(errs, "velox-gen: veloxgen/runtime_velox.go is out of date\n") {
 		t.Errorf("-check: %d %q", code, errs)
 	}
-	code, out, errs := runCLI(t, dir, "./schema")
-	if code != 0 || errs != "" || !strings.Contains(out, "gen/runtime/runtime.go\n") || !strings.Contains(out, "gen/runtime_velox.go\n") {
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	if code != 0 || errs != "" || !strings.Contains(out, "veloxgen/runtime/runtime.go\n") || !strings.Contains(out, "veloxgen/runtime_velox.go\n") {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
 	for _, p := range []string{"runtime", "runtime_velox.go"} {
-		if _, err := os.Stat(filepath.Join(dir, "gen", p)); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("gen/%s is still there: %v", p, err)
+		if _, err := os.Stat(filepath.Join(dir, "veloxgen", p)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("veloxgen/%s is still there: %v", p, err)
 		}
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 	noVerifyDirs(t, dir)
-	writeFile(t, filepath.Join(dir, "gen", "runtime", "mine.go"), "package runtime\n\n// Hello greets.\nfunc Hello() string { return \"hi\" }\n")
-	code, _, errs = runCLI(t, dir, "./schema")
-	want := "velox-gen: warning: gen/runtime/mine.go is yours, and stays; velox-gen no longer writes package runtime: the generated package binds the schema itself, and no program imports gen/runtime: delete the file\n"
+	writeFile(t, filepath.Join(dir, "veloxgen", "runtime", "mine.go"), "package runtime\n\n// Hello greets.\nfunc Hello() string { return \"hi\" }\n")
+	code, _, errs = runCLI(t, dir, "./veloxschema")
+	want := "velox-gen: warning: veloxgen/runtime/mine.go is yours, and stays; velox-gen no longer writes package runtime: the generated package binds the schema itself, and no program imports veloxgen/runtime: delete the file\n"
 	if code != 0 || errs != want {
 		t.Errorf("the user's file: %d %q, want %q", code, errs, want)
 	}
@@ -340,90 +340,90 @@ func TestSweepRemovesGenRuntime(t *testing.T) {
 func TestGenerateRefusesSchemaImportingGen(t *testing.T) {
 	user := strings.Replace(strings.Replace(genUserSchema, `field.String("name")`, `field.String("name"), field.Time("created_at").Default(func() time.Time { return time.Now() })`, 1),
 		"import (\n", "import (\n\t\"time\"\n\n", 1)
-	dir := genModule(t, map[string]string{"schema/user.go": user})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
+	dir := genModule(t, map[string]string{"veloxschema/user.go": user})
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 || errs != "" {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	src, _ := os.ReadFile(filepath.Join(dir, "gen", "user.go"))
-	if !strings.Contains(string(src), `veloxschema "github.com/syssam/velox/schema"`) || !strings.Contains(string(src), `veloxschema.FieldDescriptor(&schema.User{}, "created_at")`) {
+	src, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go"))
+	if !strings.Contains(string(src), `"github.com/syssam/velox/schema"`) || !strings.Contains(string(src), `schema.FieldDescriptor(&veloxschema.User{}, "created_at")`) {
 		t.Fatalf("user.go does not read the closure from the schema:\n%s", src)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
+	writeFile(t, filepath.Join(dir, "veloxschema", "user_policy.go"), schemaUserPolicy)
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 || errs != "" {
 		t.Fatalf("with the Policy: %d %q", code, errs)
 	}
-	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user.go")); !strings.Contains(squeeze(string(src)), "Schema: schema.User{},") {
+	if src, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go")); !strings.Contains(squeeze(string(src)), "Schema: veloxschema.User{},") {
 		t.Errorf("user.go does not bind the policy:\n%s", src)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 	noVerifyDirs(t, dir)
 
-	const reason = "the schema declares behaviour by column name and does not use gen, which imports the schema; move the code that needs gen out of the schema package\n"
-	writeFile(t, filepath.Join(dir, "schema", "use.go"), "package schema\n\nimport \"example.com/app/gen\"\n\n// Users is gen.Users.\nvar Users = gen.Users\n")
-	want := "velox-gen: schema/use.go:3: the schema package imports example.com/app/gen: " + reason
-	for _, args := range [][]string{{"./schema"}, {"-check", "./schema"}} {
+	const reason = "the schema declares behaviour by column name and does not use veloxgen, which imports the schema; move the code that needs veloxgen out of the schema package\n"
+	writeFile(t, filepath.Join(dir, "veloxschema", "use.go"), "package veloxschema\n\nimport \"example.com/app/veloxgen\"\n\n// Users is veloxgen.Users.\nvar Users = veloxgen.Users\n")
+	want := "velox-gen: veloxschema/use.go:3: the schema package imports example.com/app/veloxgen: " + reason
+	for _, args := range [][]string{{"./veloxschema"}, {"-check", "./veloxschema"}} {
 		if code, out, errs := runCLI(t, dir, args...); code != 1 || out != "" || errs != want {
 			t.Errorf("%v: %d %q %q, want %q", args, code, out, errs, want)
 		}
 	}
-	if err := os.Remove(filepath.Join(dir, "schema", "use.go")); err != nil {
+	if err := os.Remove(filepath.Join(dir, "veloxschema", "use.go")); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\nimport \"example.com/app/gen\"\n\n// Users is gen.Users.\nvar Users = gen.Users\n")
-	writeFile(t, filepath.Join(dir, "schema", "use.go"), "package schema\n\nimport _ \"example.com/app/helper\"\n")
-	want = "velox-gen: example.com/app/schema imports example.com/app/helper imports example.com/app/gen: " + reason
-	for _, args := range [][]string{{"./schema"}, {"-check", "./schema"}} {
+	writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\nimport \"example.com/app/veloxgen\"\n\n// Users is veloxgen.Users.\nvar Users = veloxgen.Users\n")
+	writeFile(t, filepath.Join(dir, "veloxschema", "use.go"), "package veloxschema\n\nimport _ \"example.com/app/helper\"\n")
+	want = "velox-gen: example.com/app/veloxschema imports example.com/app/helper imports example.com/app/veloxgen: " + reason
+	for _, args := range [][]string{{"./veloxschema"}, {"-check", "./veloxschema"}} {
 		if code, out, errs := runCLI(t, dir, args...); code != 1 || out != "" || errs != want {
 			t.Errorf("helper %v: %d %q %q, want %q", args, code, out, errs, want)
 		}
 	}
 }
 
-// An older velox-gen wrote the entities in gen/entity and re-exported them
-// in gen/velox.go, and a plugin's Go files in gen/<plugin>_velox.go. -check
+// An older velox-gen wrote the entities in veloxgen/entity and re-exported them
+// in veloxgen/velox.go, and a plugin's Go files in gen/<plugin>_velox.go. -check
 // names those files, and the next run removes them; a file of the user's
-// in gen/entity stays, and velox-gen names it.
+// in veloxgen/entity stays, and velox-gen names it.
 func TestGenerateSweepsTheOldEntityPackage(t *testing.T) {
-	dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
+	dir := genModule(t, map[string]string{"veloxschema/user_policy.go": schemaUserPolicy})
 	const h = "// Code generated by velox-gen. DO NOT EDIT.\n\n"
 	for name, src := range map[string]string{
 		"entity/entity.go":        h + "// Package entity holds the entities.\npackage entity\n",
 		"entity/user_velox.go":    h + "package entity\n\n// User is the entity of schema User.\ntype User struct{}\n",
-		"entity/runtime_velox.go": h + "package entity\n\n// VeloxRuntime is what package gen gives package entity.\ntype VeloxRuntime struct{}\n",
-		"velox.go":                h + "// Package gen re-exports package entity.\npackage gen\n\nimport \"example.com/app/gen/entity\"\n\ntype User = entity.User\n",
-		"velox-graphql_velox.go":  h + "package gen\n\nimport \"example.com/app/gen/entity\"\n\nvar Name = entity.Name\n",
+		"entity/runtime_velox.go": h + "package entity\n\n// VeloxRuntime is what package veloxgen gives package entity.\ntype VeloxRuntime struct{}\n",
+		"velox.go":                h + "// Package veloxgen re-exports package entity.\npackage veloxgen\n\nimport \"example.com/app/veloxgen/entity\"\n\ntype User = entity.User\n",
+		"velox-graphql_velox.go":  h + "package veloxgen\n\nimport \"example.com/app/veloxgen/entity\"\n\nvar Name = entity.Name\n",
 		"entity/extra.go":         "package entity\n\n// Hello greets.\nfunc Hello() string { return \"hi\" }\n",
 	} {
-		writeFile(t, filepath.Join(dir, "gen", filepath.FromSlash(name)), src)
+		writeFile(t, filepath.Join(dir, "veloxgen", filepath.FromSlash(name)), src)
 	}
-	code, _, errs := runCLI(t, dir, "-check", "./schema")
-	for _, want := range []string{"gen/entity/entity.go", "gen/entity/user_velox.go", "gen/entity/runtime_velox.go", "gen/velox.go", "gen/velox-graphql_velox.go"} {
+	code, _, errs := runCLI(t, dir, "-check", "./veloxschema")
+	for _, want := range []string{"veloxgen/entity/entity.go", "veloxgen/entity/user_velox.go", "veloxgen/entity/runtime_velox.go", "veloxgen/velox.go", "veloxgen/velox-graphql_velox.go"} {
 		if !strings.Contains(errs, "velox-gen: "+want+" is out of date\n") {
 			t.Errorf("-check does not name %s: %d %q", want, code, errs)
 		}
 	}
-	code, out, errs := runCLI(t, dir, "./schema")
-	warn := "velox-gen: warning: gen/entity/extra.go is yours, and stays; velox-gen writes every entity in gen and does not build gen/entity: move the file to gen, as package gen, or delete it\n"
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	warn := "velox-gen: warning: veloxgen/entity/extra.go is yours, and stays; velox-gen writes every entity in veloxgen and does not build veloxgen/entity: move the file to veloxgen, as package veloxgen, or delete it\n"
 	if code != 0 || errs != warn {
 		t.Fatalf("%d %q, want %q", code, errs, warn)
 	}
-	for _, want := range []string{"gen/entity/entity.go\n", "gen/entity/user_velox.go\n", "gen/entity/runtime_velox.go\n", "gen/velox-graphql_velox.go\n", "gen/velox.go\n", "gen/user.go\n"} {
+	for _, want := range []string{"veloxgen/entity/entity.go\n", "veloxgen/entity/user_velox.go\n", "veloxgen/entity/runtime_velox.go\n", "veloxgen/velox-graphql_velox.go\n", "veloxgen/velox.go\n", "veloxgen/user.go\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the run does not name %s:\n%s", want, out)
 		}
 	}
-	if got := names(t, filepath.Join(dir, "gen", "entity")); !slices.Equal(got, []string{"extra.go"}) {
-		t.Errorf("gen/entity holds %v, want the user's extra.go alone", got)
+	if got := names(t, filepath.Join(dir, "veloxgen", "entity")); !slices.Equal(got, []string{"extra.go"}) {
+		t.Errorf("veloxgen/entity holds %v, want the user's extra.go alone", got)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen", "velox-graphql_velox.go")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen", "velox-graphql_velox.go")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the plugin's re-exports are still there: %v", err)
 	}
-	if err := os.Remove(filepath.Join(dir, "gen", "entity", "extra.go")); err != nil {
+	if err := os.Remove(filepath.Join(dir, "veloxgen", "entity", "extra.go")); err != nil {
 		t.Fatal(err)
 	}
-	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
+	if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 || out != "" || errs != "" {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
 }
@@ -431,27 +431,27 @@ func TestGenerateSweepsTheOldEntityPackage(t *testing.T) {
 // velox.go has the package comment, unless a file of the user's in the output
 // directory already has one; -check agrees either way.
 func TestGeneratePackageDoc(t *testing.T) {
-	const doc = "// Package gen holds the entities of example.com/app/schema, generated by velox-gen.\npackage gen\n"
+	const doc = "// Package veloxgen holds the entities of example.com/app/veloxschema, generated by velox-gen.\npackage veloxgen\n"
 	for _, c := range []struct {
 		name  string
 		extra map[string]string
 		want  bool
 	}{
 		{"generated", nil, true},
-		{"the user's", map[string]string{"gen/doc.go": "// Package gen is mine.\npackage gen\n"}, false},
+		{"the user's", map[string]string{"veloxgen/doc.go": "// Package veloxgen is mine.\npackage veloxgen\n"}, false},
 	} {
 		dir := genModule(t, c.extra)
-		if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 			t.Fatalf("%s: %d %q", c.name, code, errs)
 		}
-		src, _ := os.ReadFile(filepath.Join(dir, "gen", "velox.go"))
+		src, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "velox.go"))
 		if got := strings.Contains(string(src), doc); got != c.want {
 			t.Errorf("%s: velox.go has the package comment: %v, want %v\n%s", c.name, got, c.want, src)
 		}
 		if !c.want && strings.Contains(string(src), "// Package") {
 			t.Errorf("%s: velox.go has a package comment:\n%s", c.name, src)
 		}
-		if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
+		if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 || out != "" || errs != "" {
 			t.Errorf("%s: -check: %d %q %q", c.name, code, out, errs)
 		}
 	}
@@ -461,20 +461,20 @@ func TestGeneratePackageDoc(t *testing.T) {
 // -check says the entity's file is out of date, and no other.
 func TestPolicyAddedAfterGenerationFailsCheck(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy+
+	writeFile(t, filepath.Join(dir, "veloxschema", "user_policy.go"), schemaUserPolicy+
 		"\nfunc (User) Hooks() []velox.Hook { return nil }\n")
-	code, out, errs := runCLI(t, dir, "-check", "./schema")
-	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/user.go is out of date\n") || strings.Contains(errs, "tag.go") {
+	code, out, errs := runCLI(t, dir, "-check", "./veloxschema")
+	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: veloxgen/user.go is out of date\n") || strings.Contains(errs, "tag.go") {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
 	// Regenerating binds both, and the check passes.
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("regenerate: %d %q", code, errs)
 	}
-	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
+	if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 || out != "" || errs != "" {
 		t.Errorf("-check after regenerating: %d %q %q", code, out, errs)
 	}
 }
@@ -482,50 +482,50 @@ func TestPolicyAddedAfterGenerationFailsCheck(t *testing.T) {
 // -check fails for a generated file that is missing, as for one that is stale.
 func TestCheckFindsAMissingFile(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "-check", "./schema"); code != 3 || !strings.Contains(errs, "velox-gen: gen/user.go is out of date\n") {
+	if code, _, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 3 || !strings.Contains(errs, "velox-gen: veloxgen/user.go is out of date\n") {
 		t.Errorf("-check before any generation: %d %q", code, errs)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen")); !os.IsNotExist(err) {
 		t.Error("-check wrote files")
 	}
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	if err := os.Remove(filepath.Join(dir, "gen", "tag.go")); err != nil {
+	if err := os.Remove(filepath.Join(dir, "veloxgen", "tag.go")); err != nil {
 		t.Fatal(err)
 	}
-	code, out, errs := runCLI(t, dir, "-check", "./schema")
-	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/tag.go is out of date\n") || strings.Contains(errs, "user.go") {
+	code, out, errs := runCLI(t, dir, "-check", "./veloxschema")
+	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: veloxgen/tag.go is out of date\n") || strings.Contains(errs, "user.go") {
 		t.Errorf("-check with a missing file: %d %q %q", code, out, errs)
 	}
 }
 
 func TestGenerateRefusesAForeignFile(t *testing.T) {
-	dir := genModule(t, map[string]string{"gen/user.go": "package gen\n\n// mine\n"})
-	code, out, errs := runCLI(t, dir, "./schema")
-	if code != 1 || out != "" || !strings.Contains(errs, "gen/user.go was not written by velox-gen; move it") {
+	dir := genModule(t, map[string]string{"veloxgen/user.go": "package veloxgen\n\n// mine\n"})
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	if code != 1 || out != "" || !strings.Contains(errs, "veloxgen/user.go was not written by velox-gen; move it") {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
-	des, _ := os.ReadDir(filepath.Join(dir, "gen"))
+	des, _ := os.ReadDir(filepath.Join(dir, "veloxgen"))
 	if len(des) != 1 {
 		t.Errorf("files were written: %v", des)
 	}
-	if b, _ := os.ReadFile(filepath.Join(dir, "gen", "user.go")); string(b) != "package gen\n\n// mine\n" {
+	if b, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go")); string(b) != "package veloxgen\n\n// mine\n" {
 		t.Errorf("the foreign file changed: %q", b)
 	}
 	// -check refuses too.
-	if code, _, errs := runCLI(t, dir, "-check", "./schema"); code != 1 || !strings.Contains(errs, "was not written by velox-gen") {
+	if code, _, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 1 || !strings.Contains(errs, "was not written by velox-gen") {
 		t.Errorf("-check: %d %q", code, errs)
 	}
 }
 
 func TestGenerateRefusesARedeclaredType(t *testing.T) {
-	dir := genModule(t, map[string]string{"gen/mine.go": "package gen\n\ntype User struct{}\n"})
-	code, _, errs := runCLI(t, dir, "./schema")
-	if want := "velox-gen: gen/mine.go: declares type User, which velox-gen generates\n"; code != 1 || errs != want {
+	dir := genModule(t, map[string]string{"veloxgen/mine.go": "package veloxgen\n\ntype User struct{}\n"})
+	code, _, errs := runCLI(t, dir, "./veloxschema")
+	if want := "velox-gen: veloxgen/mine.go: declares type User, which velox-gen generates\n"; code != 1 || errs != want {
 		t.Fatalf("%d %q, want %q", code, errs, want)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen", "user.go")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen", "user.go")); !os.IsNotExist(err) {
 		t.Error("a file was written")
 	}
 }
@@ -535,25 +535,25 @@ func TestGenerateRefusesARedeclaredType(t *testing.T) {
 // is written. So is one in the schema package of another shape.
 func TestGenerateRefusesMisplacedMethods(t *testing.T) {
 	for _, c := range []struct{ name, file, src, want string }{
-		{"in gen", "gen/user_policy.go", "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*User) Policy() velox.Policy { return velox.Policy{} }\n",
-			"velox-gen: gen/user_policy.go:5: declares User.Policy in the generated package; declare it in the schema package, on User: func (User) Policy() velox.Policy\n"},
-		{"wrong shape", "schema/user_policy.go", "package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (User) Policy() *velox.Policy { return nil }\n",
-			"velox-gen: schema/user_policy.go:5: User.Policy must take nothing and return velox.Policy: func (User) Policy() velox.Policy\n"},
-		{"typed", "schema/user_policy.go", "package schema\n\nimport \"github.com/syssam/velox\"\n\nfunc (User) Policy() velox.Policy[int] { return velox.Policy[int]{} }\n",
-			"velox-gen: schema/user_policy.go:5: User.Policy must take nothing and return velox.Policy: func (User) Policy() velox.Policy\n"},
+		{"in gen", "veloxgen/user_policy.go", "package veloxgen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*User) Policy() velox.Policy { return velox.Policy{} }\n",
+			"velox-gen: veloxgen/user_policy.go:5: declares User.Policy in the generated package; declare it in the schema package, on User: func (User) Policy() velox.Policy\n"},
+		{"wrong shape", "veloxschema/user_policy.go", "package veloxschema\n\nimport \"github.com/syssam/velox\"\n\nfunc (User) Policy() *velox.Policy { return nil }\n",
+			"velox-gen: veloxschema/user_policy.go:5: User.Policy must take nothing and return velox.Policy: func (User) Policy() velox.Policy\n"},
+		{"typed", "veloxschema/user_policy.go", "package veloxschema\n\nimport \"github.com/syssam/velox\"\n\nfunc (User) Policy() velox.Policy[int] { return velox.Policy[int]{} }\n",
+			"velox-gen: veloxschema/user_policy.go:5: User.Policy must take nothing and return velox.Policy: func (User) Policy() velox.Policy\n"},
 	} {
 		dir := genModule(t, map[string]string{c.file: c.src})
-		code, out, errs := runCLI(t, dir, "./schema")
+		code, out, errs := runCLI(t, dir, "./veloxschema")
 		if code != 1 || out != "" || errs != c.want {
 			t.Fatalf("%s: %d %q %q, want %q", c.name, code, out, errs, c.want)
 		}
-		if _, err := os.Stat(filepath.Join(dir, "gen", "user.go")); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(dir, "veloxgen", "user.go")); !os.IsNotExist(err) {
 			t.Errorf("%s: a file was written", c.name)
 		}
 	}
 }
 
-const genFriendsSchema = `package schema
+const genFriendsSchema = `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -576,24 +576,24 @@ func TestGenerateRefusesABidiJoinPolicy(t *testing.T) {
 		t.Skip("builds a module")
 	}
 	dir := withSchemaMethods(t, map[string]string{
-		"schema/schema.go": genFriendsSchema,
-		"schema/user_friend_policy.go": "package schema\n\nimport (\n\t\"context\"\n\n\t\"github.com/syssam/velox\"\n)\n\n" +
+		"veloxschema/schema.go": genFriendsSchema,
+		"veloxschema/user_friend_policy.go": "package veloxschema\n\nimport (\n\t\"context\"\n\n\t\"github.com/syssam/velox\"\n)\n\n" +
 			"// UserFriend is the join entity of User's friends, which has no schema.\ntype UserFriend struct{}\n\n" +
 			"func (UserFriend) Policy() velox.Policy {\n\treturn velox.Policy{\n\t\t" +
 			"Write: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil },\n\t}\n}\n",
 	}, tempModule)
-	code, out, errs := runCLI(t, dir, "./schema")
-	want := "velox-gen: schema/user_friend_policy.go:14: UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	want := "velox-gen: veloxschema/user_friend_policy.go:14: UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
 	if code != 1 || out != "" || errs != want {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen", "user.go")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen", "user.go")); !os.IsNotExist(err) {
 		t.Error("a file was written")
 	}
 }
 
 func TestGenerateReportsSchemaErrorsAndWritesNothing(t *testing.T) {
-	dir := genModule(t, map[string]string{"schema/bad.go": `package schema
+	dir := genModule(t, map[string]string{"veloxschema/bad.go": `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -604,11 +604,11 @@ type Bad struct{ schema.Schema }
 
 func (Bad) Fields() []schema.Field { return []schema.Field{field.String("velox_meta")} }
 `})
-	code, _, errs := runCLI(t, dir, "./schema")
+	code, _, errs := runCLI(t, dir, "./veloxschema")
 	if code != 1 || !strings.HasPrefix(errs, "velox-gen: ") || !strings.Contains(errs, "schema Bad") {
 		t.Fatalf("%d %q", code, errs)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen")); !os.IsNotExist(err) {
 		t.Error("the output directory was created")
 	}
 }
@@ -628,7 +628,7 @@ func TestNoSchemasIsAnError(t *testing.T) {
 		want string
 	}{
 		{[]string{"./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
-		{[]string{"-out", "gen", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
+		{[]string{"-out", "veloxgen", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
 		{[]string{"-check", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
 		{[]string{"verify", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
 		{[]string{"example.com/app/plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"},
@@ -651,7 +651,7 @@ func TestNoSchemasIsAnError(t *testing.T) {
 			t.Errorf("%s: %d %q %q", flag, code, out, errs)
 		}
 	}
-	for _, d := range []string{"gen", "plain/plain.go"} {
+	for _, d := range []string{"veloxgen", "plain/plain.go"} {
 		if _, err := os.Stat(filepath.Join(dir, d)); !os.IsNotExist(err) {
 			t.Errorf("%s was written", d)
 		}
@@ -660,10 +660,10 @@ func TestNoSchemasIsAnError(t *testing.T) {
 
 func TestVerifyGenerated(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema")
+	code, out, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")
 	if code != 0 || out != "velox-gen verify: 2 entities, 0 with errors\n" {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
@@ -673,11 +673,11 @@ func TestVerifyGenerated(t *testing.T) {
 }
 
 func TestVerifyGeneratedCountsJoinEntities(t *testing.T) {
-	dir := tempModule(t, map[string]string{"schema/user.go": genUserGroupSchema})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	dir := tempModule(t, map[string]string{"veloxschema/user.go": genUserGroupSchema})
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema")
+	code, out, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")
 	if code != 0 || out != "velox-gen verify: 3 entities, 0 with errors\n" {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
@@ -685,8 +685,8 @@ func TestVerifyGeneratedCountsJoinEntities(t *testing.T) {
 
 func TestVerifyGeneratedNeedsTheOutputPackage(t *testing.T) {
 	dir := genModule(t, nil)
-	code, _, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema")
-	if code != 1 || errs != "velox-gen verify: gen is not a directory; run velox-gen to generate it first\n" {
+	code, _, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")
+	if code != 1 || errs != "velox-gen verify: veloxgen is not a directory; run velox-gen to generate it first\n" {
 		t.Errorf("%d %q", code, errs)
 	}
 }
@@ -708,14 +708,14 @@ func TestRelativeDirAsTheBinaryRuns(t *testing.T) {
 		code := run(args, ".", offlineEnv(), &out, &errs)
 		return code, out.String(), errs.String()
 	}
-	code, out, errs := inCwd("-out", "gen", "./schema")
-	if want := "gen/tag.go\ngen/user.go\ngen/velox.go\n"; code != 0 || out != want {
+	code, out, errs := inCwd("-out", "veloxgen", "./veloxschema")
+	if want := "veloxgen/tag.go\nveloxgen/user.go\nveloxgen/velox.go\n"; code != 0 || out != want {
 		t.Fatalf("generate: %d %q %q", code, out, errs)
 	}
-	if code, out, errs := inCwd("-check", "-out", "gen", "./schema"); code != 0 || out != "" || errs != "" {
+	if code, out, errs := inCwd("-check", "-out", "veloxgen", "./veloxschema"); code != 0 || out != "" || errs != "" {
 		t.Fatalf("-check: %d %q %q", code, out, errs)
 	}
-	if code, out, errs := inCwd("verify", "-out", "gen", "./schema"); code != 0 || out != "velox-gen verify: 2 entities, 0 with errors\n" {
+	if code, out, errs := inCwd("verify", "-out", "veloxgen", "./veloxschema"); code != 0 || out != "velox-gen verify: 2 entities, 0 with errors\n" {
 		t.Fatalf("verify: %d %q %q", code, out, errs)
 	}
 	// The defaults too.
@@ -744,7 +744,7 @@ func TestGoListErrorsAreShown(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(dir, "go.mod"), strings.Replace(string(b), "go 1.27.0", "go 1.22", 1))
 	env := append(offlineEnv(), "GOFLAGS=-mod=readonly")
-	for _, args := range [][]string{{"./schema"}, {}, {"-check", "./schema"}} {
+	for _, args := range [][]string{{"./veloxschema"}, {}, {"-check", "./veloxschema"}} {
 		code, out, errs := veloxEnv(t, dir, env, args...)
 		if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: ") || !strings.Contains(errs, "go mod tidy") || strings.Contains(errs, "no packages") {
 			t.Errorf("%v: %d %q %q", args, code, out, errs)
@@ -756,15 +756,15 @@ func TestSchemaDirectoryWithoutSchemas(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/doc.go": "package schema\n"})
-	const want = "velox-gen: no schemas in example.com/app/schema: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"
+	dir := tempModule(t, map[string]string{"veloxschema/doc.go": "package veloxschema\n"})
+	const want = "velox-gen: no schemas in example.com/app/veloxschema: a schema is an exported struct type that implements schema.Interface, as one that embeds schema.Schema does\n"
 	// Named, and by default.
-	for _, args := range [][]string{{"./schema"}, {}, {"-check"}, {"verify"}} {
+	for _, args := range [][]string{{"./veloxschema"}, {}, {"-check"}, {"verify"}} {
 		if code, out, errs := runCLI(t, dir, args...); code != 1 || out != "" || errs != want {
 			t.Errorf("%v: %d %q %q", args, code, out, errs)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen")); !os.IsNotExist(err) {
 		t.Error("files were written")
 	}
 }
@@ -773,19 +773,19 @@ func TestSchemaDirectoryWithoutSchemas(t *testing.T) {
 // gives for it.
 func TestSchemaDirectoryWithAStrayPackage(t *testing.T) {
 	dir := genModule(t, nil)
-	writeFile(t, filepath.Join(dir, "schema", "stray.go"), "package other\n")
-	for _, args := range [][]string{{"./schema"}, {}} {
+	writeFile(t, filepath.Join(dir, "veloxschema", "stray.go"), "package other\n")
+	for _, args := range [][]string{{"./veloxschema"}, {}} {
 		code, out, errs := runCLI(t, dir, args...)
 		if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: ") || !strings.Contains(errs, "found packages ") || !strings.Contains(errs, "other (stray.go)") {
 			t.Errorf("%v: %d %q %q", args, code, out, errs)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen")); !os.IsNotExist(err) {
 		t.Error("files were written")
 	}
 }
 
-const genUserGroupSchema = `package schema
+const genUserGroupSchema = `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -806,7 +806,7 @@ func (Group) Edges() []schema.Edge {
 }
 `
 
-const genPostUserSchema = `package schema
+const genPostUserSchema = `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -838,17 +838,17 @@ func TestVerifyGeneratedChecksRelations(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/schema.go": genPostUserSchema})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	dir := tempModule(t, map[string]string{"veloxschema/schema.go": genPostUserSchema})
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema")
+	code, out, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")
 	if code != 0 || out != "velox-gen verify: 2 entities, 0 with errors\n" {
 		t.Fatalf("a good model: %d %q %q", code, out, errs)
 	}
 	edit := func(file, old, repl string) {
 		t.Helper()
-		p := filepath.Join(dir, "gen", file)
+		p := filepath.Join(dir, "veloxgen", file)
 		b, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatal(err)
@@ -862,7 +862,7 @@ func TestVerifyGeneratedChecksRelations(t *testing.T) {
 	}
 	// A key column that does not exist: both entities build, the relation does not.
 	edit("user.go", `velox.EdgeTo[Post]("posts", userColID, postColAuthorID)`, `velox.EdgeTo[Post]("posts", userColID, 9)`)
-	code, out, errs = runCLI(t, dir, "verify", "-out", "gen", "./schema")
+	code, out, errs = runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")
 	if code != 1 || out != "velox-gen verify: 2 entities, 1 with errors\n" || !strings.Contains(errs, "User.posts: its key names column 9") {
 		t.Errorf("a bad key: %d %q %q", code, out, errs)
 	}
@@ -870,14 +870,14 @@ func TestVerifyGeneratedChecksRelations(t *testing.T) {
 	// A handle that names another entity than the field holds: the target comes
 	// from the handle, so verify must compare it with the field.
 	edit("user.go", "velox.Rel[User, Post]", "velox.Rel[User, User]")
-	code, out, errs = runCLI(t, dir, "verify", "-out", "gen", "./schema")
+	code, out, errs = runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")
 	if code != 1 || !strings.Contains(errs, "User.posts: the field is a velox.Many[") || !strings.Contains(errs, "but the Rel handle names") || !strings.Contains(out, "with errors") {
 		t.Errorf("a mismatched handle: %d %q %q", code, out, errs)
 	}
 	edit("user.go", "velox.Rel[User, User]", "velox.Rel[User, Post]")
 	// A target whose metadata is broken: the relation names it, and says so.
 	edit("post.go", "PrimaryKey: []int{postColID},", "PrimaryKey: []int{9},")
-	code, out, errs = runCLI(t, dir, "verify", "-out", "gen", "./schema")
+	code, out, errs = runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")
 	if code != 1 || !strings.Contains(errs, "User.posts: its target") || !strings.Contains(errs, "the primary key names column 9") || !strings.Contains(out, "with errors") {
 		t.Errorf("a broken target: %d %q %q", code, out, errs)
 	}
@@ -899,10 +899,10 @@ func noVerifyDirs(t *testing.T, dir string) {
 // the entities report errors.
 func TestVerifyLeavesNothingBehindWhenItCannotCompile(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	if err := os.Remove(filepath.Join(dir, "gen", "user.go")); err != nil { // User is gone: the program cannot compile
+	if err := os.Remove(filepath.Join(dir, "veloxgen", "user.go")); err != nil { // User is gone: the program cannot compile
 		t.Fatal(err)
 	}
 	if code, _, errs := runCLI(t, dir, "verify"); code != 1 || !strings.Contains(errs, "User") {
@@ -919,11 +919,11 @@ func TestGeneratedCodeRunsNothingAtStart(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/schema.go": genUserGroupSchema})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	dir := tempModule(t, map[string]string{"veloxschema/schema.go": genUserGroupSchema})
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	files, _ := filepath.Glob(filepath.Join(dir, "gen", "*.go"))
+	files, _ := filepath.Glob(filepath.Join(dir, "veloxgen", "*.go"))
 	if len(files) < 3 {
 		t.Fatalf("generated %d files, want one per entity (User, Group, UserGroup)", len(files))
 	}
@@ -966,14 +966,14 @@ func TestVerifyGeneratedChecksThroughRelations(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/schema.go": genUserGroupSchema})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	dir := tempModule(t, map[string]string{"veloxschema/schema.go": genUserGroupSchema})
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema"); code != 0 || out != "velox-gen verify: 3 entities, 0 with errors\n" {
+	if code, out, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema"); code != 0 || out != "velox-gen verify: 3 entities, 0 with errors\n" {
 		t.Fatalf("a good model: %d %q %q", code, out, errs)
 	}
-	p := filepath.Join(dir, "gen", "user.go")
+	p := filepath.Join(dir, "veloxgen", "user.go")
 	b, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal(err)
@@ -985,14 +985,14 @@ func TestVerifyGeneratedChecksThroughRelations(t *testing.T) {
 	if err := os.WriteFile(p, re.ReplaceAll(b, []byte("${1}9${2}")), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema")
+	code, out, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")
 	if code != 1 || !strings.Contains(errs, "User.groups") || !strings.Contains(out, "with errors") {
 		t.Errorf("a broken through relation: %d %q %q", code, out, errs)
 	}
 	noVerifyDirs(t, dir)
 }
 
-const dupFieldSchema = `package schema
+const dupFieldSchema = `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -1013,23 +1013,23 @@ func (User) Fields() []schema.Field {
 // Errors start with the position of the element, relative to the working
 // directory when the file is inside it.
 func TestRuleErrorHasPos(t *testing.T) {
-	dir := tempModule(t, map[string]string{"schema/user.go": dupFieldSchema})
+	dir := tempModule(t, map[string]string{"veloxschema/user.go": dupFieldSchema})
 	// A builder misuse is reported first, by itself: the rules run on a
 	// model that loaded.
-	code, _, errs := runCLI(t, dir, "./schema")
-	if want := `velox-gen: schema/user.go:14: schema User: field "n": DefaultFunc must be a func() int64`; code != 1 || !strings.Contains(errs, want) {
+	code, _, errs := runCLI(t, dir, "./veloxschema")
+	if want := `velox-gen: veloxschema/user.go:14: schema User: field "n": DefaultFunc must be a func() int64`; code != 1 || !strings.Contains(errs, want) {
 		t.Fatalf("misuse: %d %q, want %q", code, errs, want)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "user.go"), strings.Replace(dupFieldSchema, "\t\tfield.Int64(\"n\").DefaultFunc(1),\n", "", 1))
-	code, _, errs = runCLI(t, dir, "./schema")
-	if want := `schema/user.go:13: schema User: field "name": declared twice`; code != 1 || !strings.Contains(errs, want) {
+	writeFile(t, filepath.Join(dir, "veloxschema", "user.go"), strings.Replace(dupFieldSchema, "\t\tfield.Int64(\"n\").DefaultFunc(1),\n", "", 1))
+	code, _, errs = runCLI(t, dir, "./veloxschema")
+	if want := `veloxschema/user.go:13: schema User: field "name": declared twice`; code != 1 || !strings.Contains(errs, want) {
 		t.Fatalf("rule: %d %q, want %q", code, errs, want)
 	}
 	code, _, errs = runCLI(t, dir, "describe")
-	if want := `schema/user.go:13: schema User: field "name": declared twice`; code != 1 || !strings.Contains(errs, want) {
+	if want := `veloxschema/user.go:13: schema User: field "name": declared twice`; code != 1 || !strings.Contains(errs, want) {
 		t.Fatalf("describe: %d %q, want %q", code, errs, want)
 	}
-	code, _, errs = runCLI(t, filepath.Join(dir, "schema"), "-check", ".")
+	code, _, errs = runCLI(t, filepath.Join(dir, "veloxschema"), "-check", ".")
 	if want := "velox-gen: user.go:13: schema User:"; code != 1 || !strings.Contains(errs, want) {
 		t.Fatalf("in the schema directory: %d %q, want %q", code, errs, want)
 	}
@@ -1038,7 +1038,7 @@ func TestRuleErrorHasPos(t *testing.T) {
 	}
 }
 
-const posSchema = `package schema
+const posSchema = `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -1089,17 +1089,17 @@ func TestOutputIgnoresPositions(t *testing.T) {
 	var gens []map[string]string
 	var described []string
 	for _, dir := range dirs {
-		tempModuleAt(t, dir, map[string]string{"schema/user.go": posSchema})
-		if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+		tempModuleAt(t, dir, map[string]string{"veloxschema/user.go": posSchema})
+		if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 			t.Fatalf("%s: %d %q", dir, code, errs)
 		}
 		files := map[string]string{}
-		des, err := os.ReadDir(filepath.Join(dir, "gen"))
+		des, err := os.ReadDir(filepath.Join(dir, "veloxgen"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, de := range des {
-			b, err := os.ReadFile(filepath.Join(dir, "gen", de.Name()))
+			b, err := os.ReadFile(filepath.Join(dir, "veloxgen", de.Name()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1131,7 +1131,7 @@ func TestOutputIgnoresPositions(t *testing.T) {
 // TestGenerateIsAllOrNothing: a run whose write fails part-way leaves the
 // output as it was, the file it would remove included.
 func TestGenerateIsAllOrNothing(t *testing.T) {
-	const item = `package schema
+	const item = `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -1142,18 +1142,18 @@ type Item struct{ schema.Schema }
 
 func (Item) Fields() []schema.Field { return []schema.Field{field.String("sku")} }
 `
-	dir := genModuleSerial(t, map[string]string{"schema/item.go": item})
-	gen := filepath.Join(dir, "gen")
-	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 {
+	dir := genModuleSerial(t, map[string]string{"veloxschema/item.go": item})
+	gen := filepath.Join(dir, "veloxgen")
+	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
 	// Without Tag, and with another field of Item and of User:
 	// item.go and user.go change, and tag.go goes.
-	if err := os.Remove(filepath.Join(dir, "schema", "tag.go")); err != nil {
+	if err := os.Remove(filepath.Join(dir, "veloxschema", "tag.go")); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "item.go"), strings.Replace(item, `field.String("sku")`, `field.String("sku"), field.Int("count")`, 1))
-	writeFile(t, filepath.Join(dir, "schema", "user.go"), strings.Replace(genUserSchema, `field.String("name"),`, `field.String("name"), field.Int("age"),`, 1))
+	writeFile(t, filepath.Join(dir, "veloxschema", "item.go"), strings.Replace(item, `field.String("sku")`, `field.String("sku"), field.Int("count")`, 1))
+	writeFile(t, filepath.Join(dir, "veloxschema", "user.go"), strings.Replace(genUserSchema, `field.String("name"),`, `field.String("name"), field.Int("age"),`, 1))
 	before := treeFiles(t, gen)
 	injected := errors.New("injected failure")
 	renameFile = func(from, to string) error {
@@ -1162,7 +1162,7 @@ func (Item) Fields() []schema.Field { return []schema.Field{field.String("sku")}
 		}
 		return os.Rename(from, to)
 	}
-	code, out, errs := runCLI(t, dir, "./schema")
+	code, out, errs := runCLI(t, dir, "./veloxschema")
 	renameFile = os.Rename
 	if code != 1 || out != "" || !strings.Contains(errs, "injected failure") {
 		t.Errorf("%d %q %q", code, out, errs)
@@ -1170,7 +1170,7 @@ func (Item) Fields() []schema.Field { return []schema.Field{field.String("sku")}
 	if after := treeFiles(t, gen); !reflect.DeepEqual(after, before) {
 		t.Errorf("the output changed:\n%v", slices.Sorted(maps.Keys(after)))
 	}
-	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 || out != "gen/item.go\ngen/tag.go\ngen/user.go\n" {
+	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 || out != "veloxgen/item.go\nveloxgen/tag.go\nveloxgen/user.go\n" {
 		t.Errorf("the next run: %d %q %q", code, out, errs)
 	}
 }
@@ -1179,8 +1179,8 @@ func (Item) Fields() []schema.Field { return []schema.Field{field.String("sku")}
 // write left, and says so; -check leaves it.
 func TestGenerateSweepsLeftovers(t *testing.T) {
 	dir := genModule(t, nil)
-	gen := filepath.Join(dir, "gen")
-	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 {
+	gen := filepath.Join(dir, "veloxgen")
+	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
 	writeFile(t, filepath.Join(gen, ".user.go.old-velox-1"), "old")
@@ -1191,18 +1191,18 @@ func TestGenerateSweepsLeftovers(t *testing.T) {
 	writeFile(t, filepath.Join(gen, ".pb.gone-velox-4", "x.go"), header+"\n\npackage pb\n")
 	writeFile(t, filepath.Join(gen, ".notes.old-velox"), "mine")
 	before := treeFiles(t, gen)
-	if code, _, _ := runCLI(t, dir, "-check", "./schema"); code != 3 {
+	if code, _, _ := runCLI(t, dir, "-check", "./veloxschema"); code != 3 {
 		t.Errorf("-check: %d", code)
 	}
 	if after := treeFiles(t, gen); !reflect.DeepEqual(after, before) {
 		t.Errorf("-check changed gen:\n%v", slices.Sorted(maps.Keys(after)))
 	}
-	code, out, errs := runCLI(t, dir, "./schema")
-	wantErrs := "velox-gen: restored gen/pb from gen/.pb.gone-velox-4, which an interrupted run left\n" +
-		"velox-gen: restored gen/tag.go from gen/.tag.go.gone-velox-3, which an interrupted run left\n" +
-		"velox-gen: removed gen/.user.go.old-velox-1, which an interrupted run left\n" +
-		"velox-gen: removed gen/.velox.go.tmp-velox-2, which an interrupted run left\n"
-	if code != 0 || out != "gen/pb/x.go\n" || errs != wantErrs {
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	wantErrs := "velox-gen: restored veloxgen/pb from veloxgen/.pb.gone-velox-4, which an interrupted run left\n" +
+		"velox-gen: restored veloxgen/tag.go from veloxgen/.tag.go.gone-velox-3, which an interrupted run left\n" +
+		"velox-gen: removed veloxgen/.user.go.old-velox-1, which an interrupted run left\n" +
+		"velox-gen: removed veloxgen/.velox.go.tmp-velox-2, which an interrupted run left\n"
+	if code != 0 || out != "veloxgen/pb/x.go\n" || errs != wantErrs {
 		t.Errorf("%d %q %q", code, out, errs)
 	}
 	if got := slices.Sorted(maps.Keys(treeFiles(t, gen))); !slices.Equal(got, []string{".notes.old-velox", "tag.go", "user.go", "velox.go"}) {
@@ -1217,17 +1217,17 @@ func TestGenerateSweepsLeftovers(t *testing.T) {
 // killed write left, though every file is up to date, and exits 3.
 func TestGenerateCheckReportsLeftovers(t *testing.T) {
 	dir := genModule(t, nil)
-	gen := filepath.Join(dir, "gen")
-	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 {
+	gen := filepath.Join(dir, "veloxgen")
+	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
 	writeFile(t, filepath.Join(gen, ".user.go.old-velox-1"), "old")
 	writeFile(t, filepath.Join(gen, ".pb.gone-velox-2", "x.go"), header+"\n\npackage pb\n")
 	writeFile(t, filepath.Join(gen, ".notes.old-velox"), "mine")
-	code, out, errs := runCLI(t, dir, "-check", "./schema")
-	want := "velox-gen: gen/.pb.gone-velox-2 is left over from an interrupted run\n" +
-		"velox-gen: gen/.user.go.old-velox-1 is left over from an interrupted run\n" +
-		"velox-gen: run go tool velox-gen ./schema\n"
+	code, out, errs := runCLI(t, dir, "-check", "./veloxschema")
+	want := "velox-gen: veloxgen/.pb.gone-velox-2 is left over from an interrupted run\n" +
+		"velox-gen: veloxgen/.user.go.old-velox-1 is left over from an interrupted run\n" +
+		"velox-gen: run go tool velox-gen ./veloxschema\n"
 	if code != 3 || out != "" || errs != want {
 		t.Errorf("%d %q %q", code, out, errs)
 	}
@@ -1238,15 +1238,15 @@ func TestGenerateCheckReportsLeftovers(t *testing.T) {
 // the directory, and generate names it.
 func TestGenerateKeepsYoursInALeftover(t *testing.T) {
 	dir := genModule(t, nil)
-	gen := filepath.Join(dir, "gen")
-	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 {
+	gen := filepath.Join(dir, "veloxgen")
+	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
 	writeFile(t, filepath.Join(gen, "pb", "keep.txt"), "mine")
 	writeFile(t, filepath.Join(gen, ".pb.gone-velox-1", "x.go"), header+"\n\npackage pb\n")
 	writeFile(t, filepath.Join(gen, ".pb.gone-velox-1", "mine.txt"), "mine")
-	code, out, errs := runCLI(t, dir, "./schema")
-	want := "velox-gen: kept gen/.pb.gone-velox-1/mine.txt, which is not velox-gen's, in gen/.pb.gone-velox-1, which an interrupted run left; move it\n"
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	want := "velox-gen: kept veloxgen/.pb.gone-velox-1/mine.txt, which is not velox-gen's, in veloxgen/.pb.gone-velox-1, which an interrupted run left; move it\n"
 	if code != 0 || out != "" || errs != want {
 		t.Errorf("%d %q %q", code, out, errs)
 	}
@@ -1262,7 +1262,7 @@ func TestDescribeListsSchemasOfABase(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/s.go": `package schema
+	dir := tempModule(t, map[string]string{"veloxschema/s.go": `package veloxschema
 
 import "github.com/syssam/velox/schema"
 
@@ -1272,7 +1272,7 @@ type Shop struct{ base }
 
 type Order struct{ base }
 `})
-	code, out, errs := runCLI(t, dir, "describe", "./schema")
+	code, out, errs := runCLI(t, dir, "describe", "./veloxschema")
 	if code != 0 || errs != "" {
 		t.Fatalf("describe: %d %q %q", code, out, errs)
 	}
@@ -1286,7 +1286,7 @@ type Order struct{ base }
 	}
 }
 
-const genInOrgUserSchema = `package schema
+const genInOrgUserSchema = `package veloxschema
 
 import (
 	"context"
@@ -1338,15 +1338,15 @@ func (User) Fields() []schema.Field { return []schema.Field{field.String("name")
 // scope; no scope_velox.go is written, and -check and verify, which builds
 // the generated package, agree.
 func TestGenerateTenancyMixin(t *testing.T) {
-	dir := genModule(t, map[string]string{"schema/user.go": genInOrgUserSchema, "schema/user_policy.go": schemaUserPolicy})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	dir := genModule(t, map[string]string{"veloxschema/user.go": genInOrgUserSchema, "veloxschema/user_policy.go": schemaUserPolicy})
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen", "scope_velox.go")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen", "scope_velox.go")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("scope_velox.go is written: %v", err)
 	}
-	user, _ := os.ReadFile(filepath.Join(dir, "gen", "user.go"))
-	for _, want := range []string{"Schema: schema.User{},"} {
+	user, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go"))
+	for _, want := range []string{"Schema: veloxschema.User{},"} {
 		if !strings.Contains(squeeze(string(user)), want) {
 			t.Errorf("user.go lacks %s:\n%s", want, user)
 		}
@@ -1354,10 +1354,10 @@ func TestGenerateTenancyMixin(t *testing.T) {
 	if strings.Contains(string(user), "Scope") {
 		t.Errorf("user.go names a scope:\n%s", user)
 	}
-	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
+	if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 || out != "" || errs != "" {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 }
@@ -1366,15 +1366,15 @@ func TestGenerateTenancyMixin(t *testing.T) {
 // file, so a run removes it, and the package builds without it.
 func TestSweepRemovesScopeVelox(t *testing.T) {
 	dir := genModule(t, nil)
-	writeFile(t, filepath.Join(dir, "gen", "scope_velox.go"), "// Code generated by velox-gen. DO NOT EDIT.\n\npackage gen\n\nvar OrgKey = 1\n")
-	code, out, errs := runCLI(t, dir, "./schema")
-	if code != 0 || !strings.Contains(out, "gen/scope_velox.go") {
+	writeFile(t, filepath.Join(dir, "veloxgen", "scope_velox.go"), "// Code generated by velox-gen. DO NOT EDIT.\n\npackage veloxgen\n\nvar OrgKey = 1\n")
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	if code != 0 || !strings.Contains(out, "veloxgen/scope_velox.go") {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen", "scope_velox.go")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen", "scope_velox.go")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("scope_velox.go is still there: %v", err)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 }
@@ -1383,15 +1383,15 @@ func TestSweepRemovesScopeVelox(t *testing.T) {
 // without a Policy: the entity is gen's own type either way.
 func TestGenerateKeepsAUserMethodOnAnEntity(t *testing.T) {
 	dir := genModule(t, nil)
-	writeFile(t, filepath.Join(dir, "gen", "extra.go"), "package gen\n\n// Hello greets.\nfunc (u User) Hello() string { return \"hi \" + u.Name }\n")
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	writeFile(t, filepath.Join(dir, "veloxgen", "extra.go"), "package veloxgen\n\n// Hello greets.\nfunc (u User) Hello() string { return \"hi \" + u.Name }\n")
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("plain: %d %q", code, errs)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	writeFile(t, filepath.Join(dir, "veloxschema", "user_policy.go"), schemaUserPolicy)
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("with a Policy: %d %q", code, errs)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 }
@@ -1402,21 +1402,21 @@ func TestGenerateKeepsAUserMethodOnAnEntity(t *testing.T) {
 // than go list's bare "import cycle not allowed".
 func TestGenerateNamesTheChainOfACycle(t *testing.T) {
 	for _, c := range []struct{ name, use string }{
-		{"fields", "package schema\n\nimport (\n\t\"github.com/syssam/velox/schema\"\n\t\"github.com/syssam/velox/schema/field\"\n\n\t\"example.com/app/helper\"\n)\n\n" +
+		{"fields", "package veloxschema\n\nimport (\n\t\"github.com/syssam/velox/schema\"\n\t\"github.com/syssam/velox/schema/field\"\n\n\t\"example.com/app/helper\"\n)\n\n" +
 			"// Note is a schema whose field is named by the helper.\ntype Note struct{ schema.Schema }\n\n" +
 			"func (Note) Fields() []schema.Field { return []schema.Field{field.String(helper.Name())} }\n"},
-		{"blank", "package schema\n\nimport _ \"example.com/app/helper\"\n"},
+		{"blank", "package veloxschema\n\nimport _ \"example.com/app/helper\"\n"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			dir := genModule(t, map[string]string{"schema/user_policy.go": schemaUserPolicy})
-			if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+			dir := genModule(t, map[string]string{"veloxschema/user_policy.go": schemaUserPolicy})
+			if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 				t.Fatalf("generate: %d %q", code, errs)
 			}
-			writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\nimport _ \"example.com/app/gen\"\n\n// Name is a field's name.\nfunc Name() string { return \"title\" }\n")
-			writeFile(t, filepath.Join(dir, "schema", "use.go"), c.use)
-			want := "velox-gen: example.com/app/schema imports example.com/app/helper imports example.com/app/gen: " +
-				"the schema declares behaviour by column name and does not use gen, which imports the schema; move the code that needs gen out of the schema package\n"
-			for _, args := range [][]string{{"./schema"}, {"-check", "./schema"}} {
+			writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\nimport _ \"example.com/app/veloxgen\"\n\n// Name is a field's name.\nfunc Name() string { return \"title\" }\n")
+			writeFile(t, filepath.Join(dir, "veloxschema", "use.go"), c.use)
+			want := "velox-gen: example.com/app/veloxschema imports example.com/app/helper imports example.com/app/veloxgen: " +
+				"the schema declares behaviour by column name and does not use veloxgen, which imports the schema; move the code that needs veloxgen out of the schema package\n"
+			for _, args := range [][]string{{"./veloxschema"}, {"-check", "./veloxschema"}} {
 				if code, out, errs := runCLI(t, dir, args...); code != 1 || out != "" || errs != want {
 					t.Errorf("%v: %d %q %q, want %q", args, code, out, errs, want)
 				}
@@ -1429,17 +1429,17 @@ func TestGenerateNamesTheChainOfACycle(t *testing.T) {
 // the user's file and line, not at the loader's temporary program.
 func TestGenerateCompileErrorInASchemaFile(t *testing.T) {
 	dir := genModule(t, nil)
-	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy+"\nfunc init() { _ = undefinedName }\n")
-	code, out, errs := runCLI(t, dir, "./schema")
-	if code != 1 || out != "" || !strings.Contains(errs, "schema/user_policy.go:7:") || !strings.Contains(errs, "undefinedName") || strings.Contains(errs, ".velox-gen") || strings.Contains(errs, "overlay") {
-		t.Errorf("%d %q %q, want the error at schema/user_policy.go:7", code, out, errs)
+	writeFile(t, filepath.Join(dir, "veloxschema", "user_policy.go"), schemaUserPolicy+"\nfunc init() { _ = undefinedName }\n")
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	if code != 1 || out != "" || !strings.Contains(errs, "veloxschema/user_policy.go:7:") || !strings.Contains(errs, "undefinedName") || strings.Contains(errs, ".velox-gen") || strings.Contains(errs, "overlay") {
+		t.Errorf("%d %q %q, want the error at veloxschema/user_policy.go:7", code, out, errs)
 	}
 }
 
 // genInOrg is a mixin, InOrg, whose Policy is policy, and which User lists.
 func genInOrg(policy string) map[string]string {
 	return map[string]string{
-		"schema/inorg.go": `package schema
+		"veloxschema/inorg.go": `package veloxschema
 
 import (
 	"github.com/syssam/velox"
@@ -1453,7 +1453,7 @@ type InOrg struct{ mixin.Schema }
 func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id")} }
 
 ` + policy,
-		"schema/user.go": strings.Replace(genUserSchema, "type User struct{ schema.Schema }\n",
+		"veloxschema/user.go": strings.Replace(genUserSchema, "type User struct{ schema.Schema }\n",
 			"type User struct{ schema.Schema }\n\nfunc (User) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }\n", 1),
 	}
 }
@@ -1464,35 +1464,35 @@ func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id
 func TestGenerateMixinBehaviour(t *testing.T) {
 	const policy = "func (InOrg) Policy() velox.Policy {\n\t_ = velox.FieldEQ(\"org_id\", 1)\n\treturn velox.Policy{}\n}\n"
 	dir := genModule(t, genInOrg(policy))
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 || errs != "" {
 		t.Fatalf("mixin: %d %q", code, errs)
 	}
-	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user.go")); !strings.Contains(squeeze(string(src)), "Schema: schema.User{},") {
+	if src, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go")); !strings.Contains(squeeze(string(src)), "Schema: veloxschema.User{},") {
 		t.Errorf("gen does not bind the mixin:\n%s", src)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 	noVerifyDirs(t, dir)
 
-	writeFile(t, filepath.Join(dir, "schema", "user_policy.go"), schemaUserPolicy)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 || errs != "" {
+	writeFile(t, filepath.Join(dir, "veloxschema", "user_policy.go"), schemaUserPolicy)
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 || errs != "" {
 		t.Fatalf("with the schema's: %d %q", code, errs)
 	}
-	if src, _ := os.ReadFile(filepath.Join(dir, "gen", "user.go")); !strings.Contains(squeeze(string(src)), "Schema: schema.User{},") {
+	if src, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go")); !strings.Contains(squeeze(string(src)), "Schema: veloxschema.User{},") {
 		t.Errorf("gen does not bind the mixin's before the schema's:\n%s", src)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 	noVerifyDirs(t, dir)
 
-	writeFile(t, filepath.Join(dir, "schema", "inorg.go"), genInOrg("func (InOrg) Policy() *velox.Policy { return nil }\n")["schema/inorg.go"])
-	if code, _, errs := runCLI(t, dir, "./schema"); code == 0 || !strings.Contains(errs, "schema/inorg.go:14: InOrg.Policy must take nothing and return velox.Policy;") {
+	writeFile(t, filepath.Join(dir, "veloxschema", "inorg.go"), genInOrg("func (InOrg) Policy() *velox.Policy { return nil }\n")["veloxschema/inorg.go"])
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code == 0 || !strings.Contains(errs, "veloxschema/inorg.go:14: InOrg.Policy must take nothing and return velox.Policy;") {
 		t.Errorf("a wrong shape: %d %q", code, errs)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "inorg.go"), genInOrg("func (InOrg) Policy[E any]() velox.Policy { return velox.Policy{} }\n")["schema/inorg.go"])
-	if code, _, errs := runCLI(t, dir, "./schema"); code == 0 || !strings.Contains(errs, "schema/inorg.go:14: InOrg.Policy: behaviour methods are not generic: func (InOrg) Policy() velox.Policy") {
+	writeFile(t, filepath.Join(dir, "veloxschema", "inorg.go"), genInOrg("func (InOrg) Policy[E any]() velox.Policy { return velox.Policy{} }\n")["veloxschema/inorg.go"])
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code == 0 || !strings.Contains(errs, "veloxschema/inorg.go:14: InOrg.Policy: behaviour methods are not generic: func (InOrg) Policy() velox.Policy") {
 		t.Errorf("generic: %d %q", code, errs)
 	}
 }
@@ -1512,14 +1512,14 @@ func TestGenerateRefusesWrongColumns(t *testing.T) {
 	files := map[string]string{}
 	for _, name := range []string{"schema.go", "behaviour.go"} {
 		_, src, _ := strings.Cut(readFile(t, filepath.Join("testdata", "wrongcolumn", name)), "\n")
-		files["schema/"+name] = strings.TrimPrefix(src, "\n")
+		files["veloxschema/"+name] = strings.TrimPrefix(src, "\n")
 	}
 	dir := tempModule(t, files)
-	code, out, errs := runCLI(t, dir, "./schema")
+	code, out, errs := runCLI(t, dir, "./veloxschema")
 	if code == 0 || out != "" {
 		t.Fatalf("%d %q", code, out)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("gen was written: %v", err)
 	}
 	compareGolden(t, filepath.Join("testdata", "wrongcolumn", "output.golden"), errs)
@@ -1530,21 +1530,21 @@ func TestGenerateRefusesWrongColumns(t *testing.T) {
 // not declare User twice, and it builds (ADR 0042).
 func TestSweepRemovesOldEntityFile(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
-	gen := filepath.Join(dir, "gen")
+	gen := filepath.Join(dir, "veloxgen")
 	if err := os.Rename(filepath.Join(gen, "user.go"), filepath.Join(gen, "user_velox.go")); err != nil {
 		t.Fatal(err)
 	}
-	code, out, errs := runCLI(t, dir, "./schema")
-	if code != 0 || out != "gen/user.go\ngen/user_velox.go\n" {
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	if code != 0 || out != "veloxgen/user.go\nveloxgen/user_velox.go\n" {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
 	if _, err := os.Stat(filepath.Join(gen, "user_velox.go")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("user_velox.go is still there: %v", err)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "-out", "gen", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 }

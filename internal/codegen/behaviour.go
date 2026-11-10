@@ -38,7 +38,7 @@ func behaviourResult(m string) string {
 //
 // The method takes nothing and returns velox.Policy, []velox.Hook or
 // []velox.Interceptor; another shape is a *FileError, the typed shape of an
-// older velox (velox.Policy[gen.E]) among them. The receiver may be a value
+// older velox (velox.Policy[veloxgen.E]) among them. The receiver may be a value
 // or a pointer: the generated code binds the method of a new value, or a
 // new pointer, of the schema package's type. A generic behaviour method on
 // another type is a *FileError too: behaviour methods are not generic. A
@@ -152,7 +152,7 @@ func CheckGenImports(dir, pattern, genPath string, env []string) error {
 
 // genImportReason is why the schema package may not import the generated
 // one.
-const genImportReason = "the schema declares behaviour by column name and does not use gen, which imports the schema; move the code that needs gen out of the schema package"
+const genImportReason = "the schema declares behaviour by column name and does not use veloxgen, which imports the schema; move the code that needs veloxgen out of the schema package"
 
 // checkGenImports is CheckGenImports, which also returns the schema
 // package's directory.

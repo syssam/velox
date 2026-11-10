@@ -13,7 +13,7 @@ import (
 // generatedFiles lists the files of dir/gen, without directories.
 func generatedFiles(t *testing.T, dir string) []string {
 	t.Helper()
-	des, err := os.ReadDir(filepath.Join(dir, "gen"))
+	des, err := os.ReadDir(filepath.Join(dir, "veloxgen"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestDiscoverRefusesASchemaEmbeddingASchema(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/s.go": `package schema
+	dir := tempModule(t, map[string]string{"veloxschema/s.go": `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -46,12 +46,12 @@ type Release struct{ Base }
 
 func (Release) Fields() []schema.Field { return []schema.Field{field.String("tag")} }
 `})
-	code, out, errs := runCLI(t, dir, "./schema")
-	want := "velox-gen: schema/s.go:10: Release embeds Base, which is a schema itself, so both would be entities: make Base a shared base by leaving it unexported (type base struct{ schema.Schema }), or share fields with a mixin\n"
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	want := "velox-gen: veloxschema/s.go:10: Release embeds Base, which is a schema itself, so both would be entities: make Base a shared base by leaving it unexported (type base struct{ schema.Schema }), or share fields with a mixin\n"
 	if code != 1 || out != "" || errs != want {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen")); !os.IsNotExist(err) {
 		t.Error("the output directory was created")
 	}
 }
@@ -63,7 +63,7 @@ func TestDiscoverSharedBase(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/s.go": `package schema
+	dir := tempModule(t, map[string]string{"veloxschema/s.go": `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -95,21 +95,21 @@ func (Own) Indexes() []schema.Index         { return nil }
 func (Own) Mixin() []schema.Mixin           { return nil }
 func (Own) Annotations() []schema.Annotation { return nil }
 `})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "build.go own.go release.go velox.go"; got != want {
 		t.Fatalf("generated %s, want %s", got, want)
 	}
-	release, _ := os.ReadFile(filepath.Join(dir, "gen", "release.go"))
+	release, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "release.go"))
 	if !strings.Contains(string(release), "CreatedAt") || !strings.Contains(string(release), "Tag ") {
 		t.Errorf("Release lacks the base's mixin or its own field:\n%s", release)
 	}
-	build, _ := os.ReadFile(filepath.Join(dir, "gen", "build.go"))
+	build, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "build.go"))
 	if !strings.Contains(string(build), "CreatedAt") || !strings.Contains(string(build), "Number ") {
 		t.Errorf("Build lacks the base's mixin or its own field:\n%s", build)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 }
@@ -120,14 +120,14 @@ func TestDiscoverRefusesALoneUnexportedSchema(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/user.go": genUserSchema, "schema/s.go": `package schema
+	dir := tempModule(t, map[string]string{"veloxschema/user.go": genUserSchema, "veloxschema/s.go": `package veloxschema
 
 import "github.com/syssam/velox/schema"
 
 type group struct{ schema.Schema }
 `})
-	code, out, errs := runCLI(t, dir, "./schema")
-	want := "velox-gen: schema/s.go:5: type group embeds schema.Schema and is unexported: a schema must be exported, and a shared base is embedded by one\n"
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	want := "velox-gen: veloxschema/s.go:5: type group embeds schema.Schema and is unexported: a schema must be exported, and a shared base is embedded by one\n"
 	if code != 1 || out != "" || errs != want {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
@@ -140,7 +140,7 @@ func TestDiscoverPointerReceivers(t *testing.T) {
 		t.Skip("builds a module")
 	}
 	dir := withSchemaMethods(t, map[string]string{
-		"schema/board.go": `package schema
+		"veloxschema/board.go": `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -172,23 +172,23 @@ func (*Card) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("board", Board.Type).Ref("cards").Unique()}
 }
 `,
-		"schema/board_policy.go": "package schema\n\nimport \"github.com/syssam/velox\"\n\n" +
+		"veloxschema/board_policy.go": "package veloxschema\n\nimport \"github.com/syssam/velox\"\n\n" +
 			"func (*Board) Policy() velox.Policy { return velox.Policy{} }\n\n" +
 			"func (*Card) Hooks() []velox.Hook { return nil }\n",
 	}, tempModule)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	board, _ := os.ReadFile(filepath.Join(dir, "gen", "board.go"))
-	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "Schema: &schema.Board{},"} {
+	board, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "board.go"))
+	for _, want := range []string{"Title ", "Slug ", "CreatedAt", "Cards ", "Schema: &veloxschema.Board{},"} {
 		if !strings.Contains(squeeze(string(board)), want) {
 			t.Errorf("board.go lacks %q:\n%s", want, board)
 		}
 	}
-	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
+	if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 || out != "" || errs != "" {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 }
@@ -199,7 +199,7 @@ func TestDiscoverRefusals(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/user.go": genUserSchema, "schema/s.go": `package schema
+	dir := tempModule(t, map[string]string{"veloxschema/user.go": genUserSchema, "veloxschema/s.go": `package veloxschema
 
 import "github.com/syssam/velox/schema"
 
@@ -231,20 +231,20 @@ func (Named) Indexes() []schema.Index          { return nil }
 func (Named) Mixin() []schema.Mixin            { return nil }
 func (Named) Annotations() []schema.Annotation { return nil }
 `})
-	code, out, errs := runCLI(t, dir, "./schema")
+	code, out, errs := runCLI(t, dir, "./veloxschema")
 	want := []string{
-		"velox-gen: schema/s.go:5: Ptr embeds schema.Schema through a pointer: embed it by value, since a nil pointer's methods panic",
-		"schema/s.go:7: Generic is generic: a schema has no type parameters, since velox-gen makes one entity of it",
-		"schema/s.go:9: Alias is an alias of User: a schema is a type of its own, declared type Alias struct{ ... }",
-		"schema/s.go:11: Wrong embeds schema.Schema but does not implement schema.Interface: its method Fields() []string should be Fields() []schema.Field",
-		"schema/s.go:15: Hidden embeds schema.Schema but does not implement schema.Interface: it has no method Edges() []schema.Edge; a field or another method of that name hides schema.Schema's",
-		"schema/s.go:20: Deep embeds schema.Schema through a pointer: embed it by value, since a nil pointer's methods panic",
-		"schema/s.go:24: the type of Named is int: a schema is a struct type",
+		"velox-gen: veloxschema/s.go:5: Ptr embeds schema.Schema through a pointer: embed it by value, since a nil pointer's methods panic",
+		"veloxschema/s.go:7: Generic is generic: a schema has no type parameters, since velox-gen makes one entity of it",
+		"veloxschema/s.go:9: Alias is an alias of User: a schema is a type of its own, declared type Alias struct{ ... }",
+		"veloxschema/s.go:11: Wrong embeds schema.Schema but does not implement schema.Interface: its method Fields() []string should be Fields() []schema.Field",
+		"veloxschema/s.go:15: Hidden embeds schema.Schema but does not implement schema.Interface: it has no method Edges() []schema.Edge; a field or another method of that name hides schema.Schema's",
+		"veloxschema/s.go:20: Deep embeds schema.Schema through a pointer: embed it by value, since a nil pointer's methods panic",
+		"veloxschema/s.go:24: the type of Named is int: a schema is a struct type",
 	}
 	if code != 1 || out != "" || errs != strings.Join(want, "\n")+"\n" {
 		t.Fatalf("%d %q\n%s\nwant\n%s", code, out, errs, strings.Join(want, "\n"))
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen")); !os.IsNotExist(err) {
 		t.Error("the output directory was created")
 	}
 }
@@ -258,8 +258,8 @@ func TestDiscoverAcrossFiles(t *testing.T) {
 		t.Skip("builds a module")
 	}
 	dir := tempModule(t, map[string]string{
-		"schema/a_types.go": "package schema\n\nimport \"github.com/syssam/velox/schema\"\n\ntype Author struct{ schema.Schema }\n",
-		"schema/b_methods.go": `package schema
+		"veloxschema/a_types.go": "package veloxschema\n\nimport \"github.com/syssam/velox/schema\"\n\ntype Author struct{ schema.Schema }\n",
+		"veloxschema/b_methods.go": `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -271,7 +271,7 @@ func (Author) Fields() []schema.Field { return []schema.Field{field.String("name
 
 func (Author) Edges() []schema.Edge { return []schema.Edge{edge.To("books", Book.Type)} }
 `,
-		"schema/c_book.go": `package schema
+		"veloxschema/c_book.go": `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -287,16 +287,16 @@ type Book struct{ schema.Schema }
 
 func (Book) Fields() []schema.Field { return []schema.Field{field.String("title")} }
 `,
-		"schema/d_test.go":   "package schema\n\nimport \"github.com/syssam/velox/schema\"\n\ntype Fixture struct{ schema.Schema }\n",
-		"schema/e_ignore.go": "//go:build ignore\n\npackage schema\n\nimport \"github.com/syssam/velox/schema\"\n\ntype Ignored struct{ schema.Schema }\n",
+		"veloxschema/d_test.go":   "package veloxschema\n\nimport \"github.com/syssam/velox/schema\"\n\ntype Fixture struct{ schema.Schema }\n",
+		"veloxschema/e_ignore.go": "//go:build ignore\n\npackage veloxschema\n\nimport \"github.com/syssam/velox/schema\"\n\ntype Ignored struct{ schema.Schema }\n",
 	})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "author.go book.go velox.go"; got != want {
 		t.Fatalf("generated %s, want %s", got, want)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 }
@@ -308,11 +308,11 @@ func TestDiscoverRefusesABuildConstraint(t *testing.T) {
 		t.Skip("builds a module")
 	}
 	for name, src := range map[string]string{
-		"schema/extra.go":       "//go:build pro\n\npackage schema\n\nimport \"github.com/syssam/velox/schema\"\n\ntype Pro struct{ schema.Schema }\n",
-		"schema/extra_linux.go": "package schema\n",
+		"veloxschema/extra.go":       "//go:build pro\n\npackage veloxschema\n\nimport \"github.com/syssam/velox/schema\"\n\ntype Pro struct{ schema.Schema }\n",
+		"veloxschema/extra_linux.go": "package veloxschema\n",
 	} {
-		dir := tempModule(t, map[string]string{"schema/user.go": genUserSchema, name: src})
-		code, out, errs := runCLI(t, dir, "./schema")
+		dir := tempModule(t, map[string]string{"veloxschema/user.go": genUserSchema, name: src})
+		code, out, errs := runCLI(t, dir, "./veloxschema")
 		want := "velox-gen: " + name + ":1: go builds this file of the schema package only on some systems or with some tags; velox-gen reads the schemas from files that every build includes\n"
 		if code != 1 || out != "" || errs != want {
 			t.Errorf("%s: %d %q %q, want %q", name, code, out, errs, want)
@@ -353,7 +353,7 @@ func (f Full) Fields() []schema.Field {
 
 func (Full) Annotations() []schema.Annotation { return []schema.Annotation{schema.Comment("audited")} }
 `,
-		"schema/doc.go": `package schema
+		"veloxschema/doc.go": `package veloxschema
 
 import (
 	"example.com/app/mixins"
@@ -369,10 +369,10 @@ func (Doc) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}, mixins.F
 func (Doc) Fields() []schema.Field { return []schema.Field{field.String("body")} }
 `,
 	})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("%d %q", code, errs)
 	}
-	doc, _ := os.ReadFile(filepath.Join(dir, "gen", "doc.go"))
+	doc, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "doc.go"))
 	for _, want := range []string{"CreatedAt", "ChangedBy ", "Reason ", "Body "} {
 		if !strings.Contains(string(doc), want) {
 			t.Errorf("doc.go lacks %q:\n%s", want, doc)
@@ -390,15 +390,15 @@ func TestDiscoverJoinEntityName(t *testing.T) {
 		t.Skip("builds a module")
 	}
 	dir := tempModule(t, map[string]string{
-		"schema/schema.go": genFriendsSchema,
-		"schema/join.go":   "package schema\n\nimport \"github.com/syssam/velox/schema\"\n\ntype UserFriend struct{ schema.Schema }\n",
+		"veloxschema/schema.go": genFriendsSchema,
+		"veloxschema/join.go":   "package veloxschema\n\nimport \"github.com/syssam/velox/schema\"\n\ntype UserFriend struct{ schema.Schema }\n",
 	})
-	code, out, errs := runCLI(t, dir, "./schema")
+	code, out, errs := runCLI(t, dir, "./veloxschema")
 	if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: ") || !strings.Contains(errs, "UserFriend") {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "join.go"), "package schema\n\n// UserFriend is the join entity of User's friends, which has no schema.\ntype UserFriend struct{}\n")
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	writeFile(t, filepath.Join(dir, "veloxschema", "join.go"), "package veloxschema\n\n// UserFriend is the join entity of User's friends, which has no schema.\ntype UserFriend struct{}\n")
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("with the empty struct: %d %q", code, errs)
 	}
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "user.go user_friend.go velox.go"; got != want {
@@ -411,15 +411,15 @@ func TestDiscoverJoinEntityName(t *testing.T) {
 // removed, and -check lists it until then.
 func TestDiscoverIncrementalRegeneration(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
 	// Tag becomes Label, User gains an edge to Note, which is new.
-	writeFile(t, filepath.Join(dir, "schema", "tag.go"), strings.ReplaceAll(genTagSchema, "Tag", "Label"))
-	if err := os.Rename(filepath.Join(dir, "schema", "tag.go"), filepath.Join(dir, "schema", "label.go")); err != nil {
+	writeFile(t, filepath.Join(dir, "veloxschema", "tag.go"), strings.ReplaceAll(genTagSchema, "Tag", "Label"))
+	if err := os.Rename(filepath.Join(dir, "veloxschema", "tag.go"), filepath.Join(dir, "veloxschema", "label.go")); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "note.go"), `package schema
+	writeFile(t, filepath.Join(dir, "veloxschema", "note.go"), `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -433,8 +433,8 @@ func (Note) Fields() []schema.Field { return []schema.Field{field.String("text")
 
 func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("notes", Note.Type)} }
 `)
-	code, out, errs := runCLI(t, dir, "-check", "./schema")
-	for _, want := range []string{"gen/tag.go is out of date", "gen/label.go is out of date", "gen/note.go is out of date", "gen/user.go is out of date"} {
+	code, out, errs := runCLI(t, dir, "-check", "./veloxschema")
+	for _, want := range []string{"veloxgen/tag.go is out of date", "veloxgen/label.go is out of date", "veloxgen/note.go is out of date", "veloxgen/user.go is out of date"} {
 		if !strings.Contains(errs, want) {
 			t.Errorf("-check lacks %q: %d %q %q", want, code, out, errs)
 		}
@@ -442,24 +442,24 @@ func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("notes", Note.T
 	if code != 3 {
 		t.Errorf("-check: %d", code)
 	}
-	code, out, errs = runCLI(t, dir, "./schema")
-	if want := "gen/label.go\ngen/note.go\ngen/tag.go\ngen/user.go\n"; code != 0 || out != want {
+	code, out, errs = runCLI(t, dir, "./veloxschema")
+	if want := "veloxgen/label.go\nveloxgen/note.go\nveloxgen/tag.go\nveloxgen/user.go\n"; code != 0 || out != want {
 		t.Fatalf("regenerate: %d %q %q, want %q", code, out, errs, want)
 	}
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "label.go note.go user.go velox.go"; got != want {
 		t.Fatalf("generated %s, want %s", got, want)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 	// Deleting Note removes its file, and User's edge with it.
-	if err := os.Remove(filepath.Join(dir, "schema", "note.go")); err != nil {
+	if err := os.Remove(filepath.Join(dir, "veloxschema", "note.go")); err != nil {
 		t.Fatal(err)
 	}
-	if code, out, errs := runCLI(t, dir, "./schema"); code != 0 || out != "gen/note.go\ngen/user.go\n" {
+	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 || out != "veloxgen/note.go\nveloxgen/user.go\n" {
 		t.Fatalf("after deleting Note: %d %q %q", code, out, errs)
 	}
-	if code, out, errs := runCLI(t, dir, "-check", "./schema"); code != 0 || out != "" || errs != "" {
+	if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 || out != "" || errs != "" {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
 }
@@ -473,7 +473,7 @@ func TestDiscoverHelperThatDoesNotCompile(t *testing.T) {
 	}
 	dir := tempModule(t, map[string]string{
 		"helper/h.go": "package helper\n\n// Name is a field's name.\nconst Name = \"name\"\n",
-		"schema/user.go": `package schema
+		"veloxschema/user.go": `package veloxschema
 
 import (
 	"example.com/app/helper"
@@ -487,8 +487,8 @@ func (User) Fields() []schema.Field { return []schema.Field{field.String(helper.
 `,
 	})
 	writeFile(t, filepath.Join(dir, "helper", "h.go"), "package helper\n\n// Name is a field's name.\nconst Name = 1 + \"name\"\n")
-	code, out, errs := runCLI(t, dir, "./schema")
-	for _, want := range []string{"example.com/app/schema imports example.com/app/helper, which does not compile", "Move what needs the generated package out of what Fields, Edges, Indexes, Mixin and Annotations reach"} {
+	code, out, errs := runCLI(t, dir, "./veloxschema")
+	for _, want := range []string{"example.com/app/veloxschema imports example.com/app/helper, which does not compile", "Move what needs the generated package out of what Fields, Edges, Indexes, Mixin and Annotations reach"} {
 		if code != 1 || out != "" || !strings.Contains(errs, want) {
 			t.Errorf("%d %q %q, want %q", code, out, errs, want)
 		}
@@ -510,7 +510,7 @@ import "github.com/syssam/velox/schema"
 // Base is a struct a schema may be defined as.
 type Base struct{ schema.Schema }
 `,
-		"schema/s.go": `package schema
+		"veloxschema/s.go": `package veloxschema
 
 import (
 	"github.com/syssam/velox/schema"
@@ -527,21 +527,21 @@ type Release Item
 
 type Draft mixins.Base
 `})
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("plain: %d %q", code, errs)
 	}
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft.go item.go release.go velox.go"; got != want {
 		t.Fatalf("plain: generated %s, want %s", got, want)
 	}
-	writeFile(t, filepath.Join(dir, "schema", "item_policy.go"), "package schema\n\nimport \"github.com/syssam/velox\"\n\n"+
+	writeFile(t, filepath.Join(dir, "veloxschema", "item_policy.go"), "package veloxschema\n\nimport \"github.com/syssam/velox\"\n\n"+
 		"func (Item) Policy() velox.Policy { return velox.Policy{} }\n")
-	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
 		t.Fatalf("with a Policy: %d %q", code, errs)
 	}
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "draft.go item.go release.go velox.go"; got != want {
 		t.Errorf("with a Policy: generated %s, want %s", got, want)
 	}
-	if code, out, errs := runCLI(t, dir, "verify", "./schema"); code != 0 {
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 }

@@ -19,8 +19,8 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/examples/routing/gen"
-	"github.com/syssam/velox/examples/routing/schema"
+	"github.com/syssam/velox/examples/routing/veloxgen"
+	"github.com/syssam/velox/examples/routing/veloxschema"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -52,7 +52,7 @@ const (
 // names no shard, which refuses the statement with ErrNoShard; an error refuses
 // it too.
 func shardFor(ctx context.Context) (string, error) {
-	org, ok := schema.OrgKey.From(ctx)
+	org, ok := veloxschema.OrgKey.From(ctx)
 	if !ok {
 		return "", nil
 	}
@@ -168,9 +168,9 @@ func run(ctx context.Context, w io.Writer) error {
 		velox.WithPinWindow(250*time.Millisecond),
 		velox.WithAround(record),
 	)
-	N := gen.Notes
+	N := veloxgen.Notes
 	read := func(ctx context.Context, label string) error {
-		n, err := db.Query[gen.Note]().Where(N.ID.EQ(1)).One(ctx)
+		n, err := db.Query[veloxgen.Note]().Where(N.ID.EQ(1)).One(ctx)
 		if err != nil {
 			return err
 		}
@@ -180,7 +180,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// A request for acme: it writes, then reads.
 	edit := withSession(func(ctx context.Context) error {
-		if _, err := db.Update[gen.Note]().Set(N.Body.Set("v2")).Where(N.ID.EQ(1)).Exec(ctx); err != nil {
+		if _, err := db.Update[veloxgen.Note]().Set(N.Body.Set("v2")).Where(N.ID.EQ(1)).Exec(ctx); err != nil {
 			return err
 		}
 		say("%-18s set v2 on %s", "write:", where(ran))
@@ -202,13 +202,13 @@ func run(ctx context.Context, w io.Writer) error {
 		// current.
 		return read(velox.WithPrimaryReads(ctx), "read, Primary")
 	})
-	if err := edit(schema.OrgKey.With(ctx, acme)); err != nil {
+	if err := edit(veloxschema.OrgKey.With(ctx, acme)); err != nil {
 		return err
 	}
 
 	// A write for globex reaches only the us shard.
-	note := gen.Note{Body: "us note"}
-	if err := db.Insert(&note).Exec(schema.OrgKey.With(ctx, globex)); err != nil {
+	note := veloxgen.Note{Body: "us note"}
+	if err := db.Insert(&note).Exec(veloxschema.OrgKey.With(ctx, globex)); err != nil {
 		return err
 	}
 	say("%-18s %q for org %d on %s", "insert:", note.Body, note.OrgID, where(ran))
@@ -225,11 +225,11 @@ func run(ctx context.Context, w io.Writer) error {
 	// scope.ErrNoScope; WithoutPolicy lifts that check, and then no shard is
 	// left to pick.
 	all := db.WithoutPolicy("example admin count")
-	_, err = all.Query[gen.Note]().Count(ctx)
+	_, err = all.Query[veloxgen.Note]().Count(ctx)
 	say("%-18s ErrNoShard=%t", "no shard:", errors.Is(err, velox.ErrNoShard))
 	say("  %v", err)
 	// WithShard names one.
-	n, err := all.Query[gen.Note]().Count(velox.WithShard(ctx, "us"))
+	n, err := all.Query[veloxgen.Note]().Count(velox.WithShard(ctx, "us"))
 	say("%-18s %d note on us (err=%v)", "WithShard:", n, err)
 	return nil
 }

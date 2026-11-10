@@ -3,7 +3,7 @@
 Insert: INV-001 has id 1 and org_id 1
 InsertAll: 3 lines, each with org_id 1
 InsertAll: INV-002 and INV-003 for org 1, INV-001 for org 2
-insert hook refused: velox: gen.Invoice: hook: invoice number "2026-17" does not start with INV-
+insert hook refused: velox: veloxgen.Invoice: hook: invoice number "2026-17" does not start with INV-
 
 == 2. Reading
 All: INV-001 Initech sent
@@ -32,15 +32,15 @@ soft delete: 1 invoice deleted; org 1 sees 2, and 3 under softdelete.Skip
 restore under softdelete.Skip: 1 invoice
 
 == 5. Guards
-no Limit: ErrUnbounded=true: velox: gen.Invoice: query has no Limit: add Limit, or Unbounded to read every row
-no Where: ErrNoWhere=true: velox: gen.Line: update or delete has no Where: add Where, or All to change every row
+no Limit: ErrUnbounded=true: velox: veloxgen.Invoice: query has no Limit: add Limit, or Unbounded to read every row
+no Where: ErrNoWhere=true: velox: veloxgen.Line: update or delete has no Where: add Where, or All to change every row
 
 == 6. Policy and organizations
-viewer's update: ErrDenied=true: velox: gen.Invoice: update denied by policy: only accountants change billing data
+viewer's update: ErrDenied=true: velox: veloxgen.Invoice: update denied by policy: only accountants change billing data
 viewer sees 2 invoices of org 1 (not the draft)
 org 2 sees 1 invoice
 org 2 asks for org 1's INV-003: ErrNotFound=true
-no organization in the context: ErrNoScope=true: velox: gen.Invoice: select denied by policy: velox/scope: the context has no scope value: org
+no organization in the context: ErrNoScope=true: velox: veloxgen.Invoice: select denied by policy: velox/scope: the context has no scope value: org
 
 == 7. Transactions
 INV-003 is taken (unique constraint on invoices.org_id, invoices.number); using INV-004
@@ -54,5 +54,5 @@ org 2: 990.00
 
 == 9. Deadlines
 transaction past its TxTimeout: ErrTimeout=true, context.DeadlineExceeded=true
-  velox: gen.Invoice: deadline set by velox passed: context deadline exceeded
-velox: gen.Invoice: context deadline exceeded
+  velox: veloxgen.Invoice: deadline set by velox passed: context deadline exceeded
+velox: veloxgen.Invoice: context deadline exceeded

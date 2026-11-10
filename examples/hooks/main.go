@@ -20,7 +20,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/hooks/auth"
-	"github.com/syssam/velox/examples/hooks/gen"
+	"github.com/syssam/velox/examples/hooks/veloxgen"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -48,7 +48,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	db, err := velox.Connect("sqlite", filepath.Join(dir, "hooks.db"),
-		velox.WithHooks[gen.Task](velox.On(auditRename, velox.OpUpdate)))
+		velox.WithHooks[veloxgen.Task](velox.On(auditRename, velox.OpUpdate)))
 	if err != nil {
 		return err
 	}
@@ -60,12 +60,12 @@ func run(ctx context.Context, w io.Writer) error {
 	if _, err := migrate.Up(ctx, velox.Pool(db), sub); err != nil {
 		return err
 	}
-	T := gen.Tasks
+	T := veloxgen.Tasks
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 	// trail lists the audit rows, written by the update hook.
 	trail := func() ([]string, error) {
 		var rows []string
-		for a, err := range db.Query[gen.Audit]().OrderBy(gen.Audits.ID.Asc()).Unbounded().Iter(ctx) {
+		for a, err := range db.Query[veloxgen.Audit]().OrderBy(veloxgen.Audits.ID.Asc()).Unbounded().Iter(ctx) {
 			if err != nil {
 				return nil, err
 			}
@@ -79,14 +79,14 @@ func run(ctx context.Context, w io.Writer) error {
 	// The insert hooks: the CreatedBy mixin's fills created_by from the
 	// context's user; deriveSlug checks the title and derives the slug, in
 	// the caller's struct.
-	err = db.Insert(&gen.Task{}).Exec(ada)
+	err = db.Insert(&veloxgen.Task{}).Exec(ada)
 	say("Insert with no title: %v", err)
-	readme := gen.Task{Title: "Write the README"}
+	readme := veloxgen.Task{Title: "Write the README"}
 	if err := db.Insert(&readme).Exec(ada); err != nil {
 		return err
 	}
 	say("Insert: id %d, slug %q, created by %s", readme.ID, readme.Slug, readme.CreatedBy)
-	more := []gen.Task{{Title: "Fix CI", Done: true}, {Title: "Tag v1", Done: false}}
+	more := []veloxgen.Task{{Title: "Fix CI", Done: true}, {Title: "Tag v1", Done: false}}
 	if err := db.InsertAll(more).Exec(ada); err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// The update hook adds the slug to an update that sets the title. SQL(ctx)
 	// runs the hooks too, so the statement it prints has the slug;
 	// auditRename's write is refused (velox.ErrDryRun), so it records nothing.
-	rename := db.Update[gen.Task]().Set(T.Title.Set("Tag v1.0")).Where(T.Slug.EQ("tag-v1"))
+	rename := db.Update[veloxgen.Task]().Set(T.Title.Set("Tag v1.0")).Where(T.Slug.EQ("tag-v1"))
 	text, args, err := rename.SQL(ada)
 	if err != nil {
 		return err
@@ -114,7 +114,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("audit rows after Exec: %q", rows)
 
-	_, err = db.Update[gen.Task]().Set(T.Title.Set("")).Where(T.ID.EQ(readme.ID)).Exec(ada)
+	_, err = db.Update[veloxgen.Task]().Set(T.Title.Set("")).Where(T.ID.EQ(readme.ID)).Exec(ada)
 	say("Update to no title: %v", err)
 
 	// Save runs the update hook as well, then stores every value it sent
@@ -130,18 +130,18 @@ func run(ctx context.Context, w io.Writer) error {
 	// back.
 	errAbort := errors.New("changed my mind")
 	txErr := db.Tx(ada, func(ctx context.Context, tx *velox.DB) error {
-		_, err := tx.Update[gen.Task]().Set(T.Title.Set("Ship it")).Where(T.ID.EQ(readme.ID)).Exec(ctx)
+		_, err := tx.Update[veloxgen.Task]().Set(T.Title.Set("Ship it")).Where(T.ID.EQ(readme.ID)).Exec(ctx)
 		if err != nil {
 			return err
 		}
-		inside, err := tx.Query[gen.Audit]().Count(ctx)
+		inside, err := tx.Query[veloxgen.Audit]().Count(ctx)
 		if err != nil {
 			return err
 		}
 		say("in the transaction: %d audit rows", inside)
 		return errAbort
 	})
-	again, err := db.Query[gen.Task]().Where(T.ID.EQ(readme.ID)).One(ada)
+	again, err := db.Query[veloxgen.Task]().Where(T.ID.EQ(readme.ID)).One(ada)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// The delete hook narrows even a delete of every row to the finished
 	// tasks.
-	wipe := db.Delete[gen.Task]().All()
+	wipe := db.Delete[veloxgen.Task]().All()
 	text, _, err = wipe.SQL(ada)
 	if err != nil {
 		return err
@@ -162,7 +162,7 @@ func run(ctx context.Context, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	left, err := db.Query[gen.Task]().Count(ada)
+	left, err := db.Query[veloxgen.Task]().Count(ada)
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 // auditRename writes an Audit row when an update renames a task, after the
 // update succeeded, on the write's DB: inside db.Tx it commits or rolls back
-// with the update. It is a run-time hook because it inserts a gen.Audit,
+// with the update. It is a run-time hook because it inserts a veloxgen.Audit,
 // which the schema cannot name. Under SQL(ctx) the insert is refused with
 // velox.ErrDryRun, so printing the statement records nothing.
 func auditRename(next velox.Mutator) velox.Mutator {
@@ -181,7 +181,7 @@ func auditRename(next velox.Mutator) velox.Mutator {
 		if err := next.Mutate(ctx, m); err != nil || !renamed {
 			return err
 		}
-		a := gen.Audit{Actor: auth.UserFromContext(ctx), Message: "renamed a task to " + title.(string)}
+		a := veloxgen.Audit{Actor: auth.UserFromContext(ctx), Message: "renamed a task to " + title.(string)}
 		return m.DB().Insert(&a).Exec(ctx)
 	})
 }

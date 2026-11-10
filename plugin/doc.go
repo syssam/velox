@@ -7,7 +7,7 @@
 // plugins:
 //
 //	go get -tool example.com/velox-foo
-//	go tool velox-gen -out gen -plugin velox-foo:mode=strict,out=pb ./schema
+//	go tool velox-gen -out veloxgen -plugin velox-foo:mode=strict,out=pb ./veloxschema
 //
 // velox-gen writes one [Request] as JSON to the plugin's standard input,
 // closes it, and reads one [Response] as JSON from its standard output. A
@@ -21,7 +21,7 @@
 //	{
 //	  "plugin_protocol": 2,
 //	  "generator": "velox-gen v1.2.3",
-//	  "out_package": "gen",
+//	  "out_package": "veloxgen",
 //	  "out_path": "example.com/app/gen",
 //	  "options": {"mode": "strict", "out": "pb"},
 //	  "model": {"version": 2, "schema_path": "example.com/app/schema", "entities": [...], "enums": [...]}
@@ -99,7 +99,7 @@
 // each directory below the output directory that this leaves empty. The sweep
 // skips directories whose name starts with "." or "_", and those that hold a
 // go.mod or velox-gen's own velox.go with the header: another module, or the
-// output of another velox-gen run, such as -out gen/b beside -out gen. It
+// output of another velox-gen run, such as -out veloxgen/b beside -out veloxgen. It
 // ignores symbolic links: it neither follows nor removes one. A file whose path changes only in
 // case is deleted and written under its new spelling, and so is a directory
 // that holds only such files; velox-gen never renames a directory, so one of
