@@ -205,8 +205,10 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(args) != per*7 {
-		t.Errorf("%d args, want the first statement's %d", len(args), per*7)
+	// parent_id is NULL in every row: the literal, so 6 arguments per row, though
+	// the rows per statement still count 7 (insert.go PerStatement).
+	if len(args) != per*6 {
+		t.Errorf("%d args, want the first statement's %d", len(args), per*6)
 	}
 	if err := db.InsertAll(tks).Exec(ctx); err != nil {
 		t.Fatal(err)
@@ -253,8 +255,8 @@ func TestScopedSQLGolden(t *testing.T) {
 				[]any{"new", int64(1), int64(7), "ann", "ann"}},
 			del: golden{`DELETE FROM "tickets" WHERE "id" = $1 AND "done" = $2 AND "org_id" = $3 AND "owner" = $4 AND "owner" = $5`,
 				[]any{int64(1), true, int64(7), "ann", "ann"}},
-			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = $9 AND "tickets"."owner" = $10 AND "tickets"."owner" = $11`,
-				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), (*int64)(nil), int64(7), "ann", "ann"}},
+			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = $8 AND "tickets"."owner" = $9 AND "tickets"."owner" = $10`,
+				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), int64(7), "ann", "ann"}},
 		},
 		{d: velox.MySQL,
 			selectHas: golden{"SELECT " + mysqlCols + " FROM `tickets` WHERE EXISTS (SELECT 1 FROM `tickets` AS `vx1` WHERE `vx1`.`id` = `tickets`.`parent_id` AND `org_id` = ? AND `owner` = ?) AND `org_id` = ? AND `owner` = ? LIMIT ?",
@@ -276,8 +278,8 @@ func TestScopedSQLGolden(t *testing.T) {
 				[]any{"new", int64(1), int64(7), "ann", "ann"}},
 			del: golden{`DELETE FROM "tickets" WHERE "id" = ? AND "done" = ? AND "org_id" = ? AND "owner" = ? AND "owner" = ?`,
 				[]any{int64(1), true, int64(7), "ann", "ann"}},
-			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = ? AND "tickets"."owner" = ? AND "tickets"."owner" = ?`,
-				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), (*int64)(nil), int64(7), "ann", "ann"}},
+			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES (?, ?, ?, ?, ?, ?, ?, NULL) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = ? AND "tickets"."owner" = ? AND "tickets"."owner" = ?`,
+				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), int64(7), "ann", "ann"}},
 		},
 	} {
 		t.Run(c.d.String(), func(t *testing.T) {

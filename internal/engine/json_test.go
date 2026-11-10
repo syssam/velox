@@ -373,9 +373,17 @@ func TestJSONNullableNoPointer(t *testing.T) {
 	if err := db.Insert(&jOpt{ID: 1}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	fixture.SameArgs(t, "Insert of nil values", e.Args, []any{int64(1), nil, nil, []byte("null"), nil})
-	if e.Args[4] != nil {
-		t.Errorf("the nil blob binds a %T, want an untyped nil", e.Args[4])
+	// The nil blob is NULL in the only row: written as the literal, no argument.
+	fixture.SameArgs(t, "Insert of nil values", e.Args, []any{int64(1), nil, nil, []byte("null")})
+	if !strings.HasSuffix(e.SQL, ", NULL)") {
+		t.Errorf("the nil blob is not the literal NULL: %s", e.SQL)
+	}
+	// With a blob in another row, the nil one is a parameter: an untyped nil.
+	if err := db.InsertAll([]jOpt{{ID: 3}, {ID: 4, Blob: []byte{1}}}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Args) != 10 || e.Args[4] != nil {
+		t.Errorf("a nil blob beside a value binds %#v, want an untyped nil in 10 arguments", e.Args)
 	}
 	if err := db.Insert(&jOpt{ID: 2, Tags: []string{}, Attrs: map[string]any{"k": 1}, Blob: []byte{}}).Exec(ctx); err != nil {
 		t.Fatal(err)

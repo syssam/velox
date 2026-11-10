@@ -166,6 +166,9 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 		k = append(k, byte(a.Op))
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Rows)))
+	if st.Op == OpInsert {
+		k = nullsKey(k, st)
+	}
 	if cf := st.Conflict; cf != nil {
 		k = append(k, 1, bit(cf.DoNothing))
 		k = appendInts(k, cf.Columns)
@@ -179,6 +182,26 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 	}
 	k = appendInts(k, st.Returning)
 	return eachKey(k, st.Each)
+}
+
+// nullsKey encodes which columns of an INSERT are written as the literal NULL
+// (insertNulls): the text differs with them. It is one byte, 0, when none is,
+// and otherwise 1 and a bit per column.
+func nullsKey(k []byte, st *Statement) []byte {
+	var buf [64]bool
+	nulls := insertNulls(st, buf[:])
+	if nulls == nil {
+		return append(k, 0)
+	}
+	k = append(k, 1)
+	for i := 0; i < len(nulls); i += 8 {
+		var b byte
+		for j := 0; j < 8 && i+j < len(nulls); j++ {
+			b |= bit(nulls[i+j]) << j
+		}
+		k = append(k, b)
+	}
+	return k
 }
 
 // eachKey encodes a statement's Each: its presence, its columns, whether it

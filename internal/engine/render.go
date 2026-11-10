@@ -897,12 +897,70 @@ func (w *writer) columns(cs []int) {
 	}
 }
 
+// nullCell reports whether v, the value of column col, binds as NULL: a nil
+// pointer, a nil interface or, as colArg binds it, a nil []byte, in a nullable
+// column without a codec. A codec encodes nil, as JSON null say, so such a
+// column never holds the SQL NULL here.
+func nullCell(in *EntityInfo, col int, v any) bool {
+	c := &in.Columns[col]
+	if !c.Nullable || c.Codec {
+		return false
+	}
+	switch v := v.(type) {
+	case nil:
+		return true
+	case []byte:
+		return v == nil
+	}
+	rv := reflect.ValueOf(v)
+	return rv.Kind() == reflect.Pointer && rv.IsNil()
+}
+
+// insertNulls says, for each entry of st.Columns, whether every row of the
+// INSERT holds NULL there; nil when no column does. Such a column is written
+// as the literal NULL and not as a parameter per row: the column is still
+// written, so a DEFAULT of the column does not apply, as before, and the
+// statement carries fewer arguments. buf is where the result lives when it
+// fits, so that most statements do not allocate for it.
+func insertNulls(st *Statement, buf []bool) []bool {
+	if len(st.Rows) == 0 {
+		return nil
+	}
+	var mask []bool
+	for i, col := range st.Columns {
+		if c := &st.Entity.Columns[col]; !c.Nullable || c.Codec {
+			continue
+		}
+		all := true
+		for _, row := range st.Rows {
+			if i >= len(row) || !nullCell(st.Entity, col, row[i]) {
+				all = false
+				break
+			}
+		}
+		if !all {
+			continue
+		}
+		if mask == nil {
+			if len(st.Columns) <= len(buf) {
+				mask = buf[:len(st.Columns)]
+			} else {
+				mask = make([]bool, len(st.Columns))
+			}
+		}
+		mask[i] = true
+	}
+	return mask
+}
+
 func (w *writer) insertStmt(st *Statement) {
 	w.str("INSERT INTO ")
 	w.table()
 	w.str(" (")
 	w.columns(st.Columns)
 	w.str(") VALUES ")
+	var buf [64]bool
+	nulls := insertNulls(st, buf[:])
 	for r, row := range st.Rows {
 		if r > 0 {
 			w.str(", ")
@@ -911,6 +969,10 @@ func (w *writer) insertStmt(st *Statement) {
 		for i, v := range row {
 			if i > 0 {
 				w.str(", ")
+			}
+			if nulls != nil && nulls[i] {
+				w.str("NULL")
+				continue
 			}
 			w.colArg(st.Columns[i], v)
 		}

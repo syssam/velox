@@ -344,6 +344,8 @@ func TestBidiOne(t *testing.T) {
 		link   = `UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL`
 		probe  = `SELECT 1 FROM "bspouses" WHERE "id" = $1 LIMIT $2`
 		ins    = `INSERT INTO "bspouses" ("id", "spouse_id") VALUES ($1, $2)`
+		// A key left nil in the only row is the literal NULL, with no argument.
+		insNull = `INSERT INTO "bspouses" ("id", "spouse_id") VALUES ($1, NULL)`
 	)
 	type stmt struct {
 		sql  string
@@ -510,7 +512,7 @@ func TestBidiOne(t *testing.T) {
 		if err := db.Insert(&bspouse{ID: 5}).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		sent(t, e, stmt{ins, []any{int64(5), (*int64)(nil)}})
+		sent(t, e, stmt{insNull, []any{int64(5)}})
 	})
 	insGen := `INSERT INTO "bspouses" ("spouse_id") VALUES ($1) RETURNING "id"`
 	t.Run("insert, the key not returned", func(t *testing.T) {

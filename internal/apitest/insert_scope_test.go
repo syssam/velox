@@ -42,8 +42,8 @@ func TestInsertFillsTheScope(t *testing.T) {
 	if tk.OrgID != 7 || tk.CreatedBy != "ann" || tk.ID != 5 {
 		t.Errorf("OrgID %d, CreatedBy %q, ID %d", tk.OrgID, tk.CreatedBy, tk.ID)
 	}
-	wantSent(t, e, `INSERT INTO "tickets" (`+ticketInsertCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING "id"`,
-		"ann", int64(7), "ann", "t", false, int64(0), (*int64)(nil))
+	wantSent(t, e, `INSERT INTO "tickets" (`+ticketInsertCols+`) VALUES ($1, $2, $3, $4, $5, $6, NULL) RETURNING "id"`,
+		"ann", int64(7), "ann", "t", false, int64(0))
 }
 
 func TestInsertScopeMismatch(t *testing.T) {
@@ -153,8 +153,8 @@ func TestUpsertGetsThePolicy(t *testing.T) {
 		d     velox.Dialect
 		where string
 	}{
-		{velox.Postgres, `($1, $2, $3, $4, $5, $6, $7) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = $8 AND "tickets"."owner" = $9 AND "tickets"."owner" = $10 RETURNING "id"`},
-		{velox.SQLite, `(?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = ? AND "tickets"."owner" = ? AND "tickets"."owner" = ? RETURNING "id"`},
+		{velox.Postgres, `($1, $2, $3, $4, $5, $6, NULL) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = $7 AND "tickets"."owner" = $8 AND "tickets"."owner" = $9 RETURNING "id"`},
+		{velox.SQLite, `(?, ?, ?, ?, ?, ?, NULL) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = ? AND "tickets"."owner" = ? AND "tickets"."owner" = ? RETURNING "id"`},
 	} {
 		// Twice: the second statement's text comes from the render cache.
 		for range 2 {
@@ -165,7 +165,7 @@ func TestUpsertGetsThePolicy(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantSent(t, e, `INSERT INTO "tickets" (`+ticketInsertCols+`) VALUES `+c.where,
-				"ann", int64(7), "ann", "t", false, int64(0), (*int64)(nil), int64(7), "ann", "ann")
+				"ann", int64(7), "ann", "t", false, int64(0), int64(7), "ann", "ann")
 		}
 	}
 }
@@ -179,16 +179,16 @@ func TestUpsertPolicyAndCache(t *testing.T) {
 	if err := q.Exec(as("admin", 7)); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasSuffix(e.SQL, `WHERE "tickets"."org_id" = $9`) {
+	if !strings.HasSuffix(e.SQL, `WHERE "tickets"."org_id" = $8`) {
 		t.Errorf("admin: %s", e.SQL)
 	}
 	if err := q.Exec(as("ann", 7)); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(e.SQL, `WHERE "tickets"."org_id" = $9 AND "tickets"."owner" = $10 AND "tickets"."owner" = $11`) {
+	if !strings.Contains(e.SQL, `WHERE "tickets"."org_id" = $8 AND "tickets"."owner" = $9 AND "tickets"."owner" = $10`) {
 		t.Errorf("ann: %s", e.SQL)
 	}
-	if err := q.Exec(as("admin", 7)); err != nil || !strings.HasSuffix(e.SQL, `WHERE "tickets"."org_id" = $9`) {
+	if err := q.Exec(as("admin", 7)); err != nil || !strings.HasSuffix(e.SQL, `WHERE "tickets"."org_id" = $8`) {
 		t.Errorf("admin again: %v %s", err, e.SQL)
 	}
 	// A policy that denies the insert refuses the upsert: the Insert policy runs
@@ -298,11 +298,11 @@ func TestUpsertNeverChangesTheQuery(t *testing.T) {
 			if err := q.Exec(as("ann", 7)); err != nil {
 				t.Fatal(err)
 			}
-			if strings.Count(e.SQL, "WHERE") != 1 || len(e.Args) != 11 {
+			if strings.Count(e.SQL, "WHERE") != 1 || len(e.Args) != 10 {
 				t.Errorf("hooks %d: %s %v", len(opts), e.SQL, e.Args)
 			}
 		}
-		if err := q.Exec(as("admin", 7)); err != nil || !strings.HasSuffix(e.SQL, `WHERE "tickets"."org_id" = $9`) {
+		if err := q.Exec(as("admin", 7)); err != nil || !strings.HasSuffix(e.SQL, `WHERE "tickets"."org_id" = $8`) {
 			t.Errorf("hooks %d: admin after ann: %v %s", len(opts), err, e.SQL)
 		}
 	}
@@ -337,7 +337,7 @@ func TestUpsertConditionFromAHook(t *testing.T) {
 	// On PostgreSQL it is rendered, and a hidden row is no policy's denial.
 	e.Affected = 0
 	db = openPolicied(velox.Postgres, e, cond(velox.ColumnEQ(3, "ann"))).WithoutPolicy("hooks")
-	if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(ctx); err != nil || !strings.HasSuffix(e.SQL, `WHERE "tickets"."owner" = $9`) {
+	if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(ctx); err != nil || !strings.HasSuffix(e.SQL, `WHERE "tickets"."owner" = $8`) {
 		t.Errorf("%v %s", err, e.SQL)
 	}
 }
@@ -356,8 +356,8 @@ func TestUpsertConditionFromAHookIsScoped(t *testing.T) {
 	if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `INSERT INTO "tickets" (`+ticketCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "tickets"."invoice_id" AND "org_id" = $9) AND "tickets"."org_id" = $10 AND "tickets"."owner" = $11 AND "tickets"."owner" = $12`,
-		int64(1), "ann", int64(7), "ann", "t", false, int64(3), (*int64)(nil), int64(7), int64(7), "ann", "ann")
+	wantSent(t, e, `INSERT INTO "tickets" (`+ticketCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "tickets"."invoice_id" AND "org_id" = $8) AND "tickets"."org_id" = $9 AND "tickets"."owner" = $10 AND "tickets"."owner" = $11`,
+		int64(1), "ann", int64(7), "ann", "t", false, int64(3), int64(7), int64(7), "ann", "ann")
 }
 
 // TestUpsertConditionThatWouldBeDropped: a Rewrite hook's condition on an

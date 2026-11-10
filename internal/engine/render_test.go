@@ -604,3 +604,95 @@ func TestUnknownOpIsRefused(t *testing.T) {
 		t.Errorf("got %v, want %q", err, want)
 	}
 }
+
+var nullInfo = &velox.EntityInfo{Name: "velox.memo", Table: "memos", PrimaryKey: []int{0}, Columns: []velox.ColumnInfo{
+	{Name: "id"},
+	{Name: "title"},
+	{Name: "note", Nullable: true},
+	{Name: "n", Nullable: true},
+	{Name: "blob", Nullable: true},
+}}
+
+func nullIns(rows ...[]any) *velox.Statement {
+	return &velox.Statement{Op: velox.OpInsert, Entity: nullInfo, Columns: []int{0, 1, 2, 3, 4}, Rows: rows}
+}
+
+// TestRenderInsertNullLiteral: a nullable column that holds NULL in every row
+// of an INSERT is written as the literal NULL, not as a parameter; a column
+// that holds a value in any row keeps a parameter in every row; a column that
+// is not nullable keeps its parameter whatever it holds.
+func TestRenderInsertNullLiteral(t *testing.T) {
+	seven := int64(7)
+	var none *string
+	var noN *int64
+	var noBlob []byte
+	st := nullIns(
+		[]any{int64(1), "a", none, noN, noBlob},
+		[]any{int64(2), "b", none, &seven, noBlob},
+	)
+	text, args := render(velox.Postgres, st)
+	const want = `INSERT INTO "memos" ("id", "title", "note", "n", "blob") VALUES ($1, $2, NULL, $3, NULL), ($4, $5, NULL, $6, NULL)`
+	if text != want {
+		t.Errorf("text:\n got %s\nwant %s", text, want)
+	}
+	if len(args) != 6 {
+		t.Errorf("%d args, want 6: %v", len(args), args)
+	}
+	for d, w := range map[velox.Dialect]string{
+		velox.MySQL:  "INSERT INTO `memos` (`id`, `title`, `note`, `n`, `blob`) VALUES (?, ?, NULL, ?, NULL), (?, ?, NULL, ?, NULL)",
+		velox.SQLite: `INSERT INTO "memos" ("id", "title", "note", "n", "blob") VALUES (?, ?, NULL, ?, NULL), (?, ?, NULL, ?, NULL)`,
+	} {
+		if got, _ := render(d, st); got != w {
+			t.Errorf("%v:\n got %s\nwant %s", d, got, w)
+		}
+	}
+
+	// A value in one row only: the column is a parameter in every row.
+	x := "x"
+	text, args = render(velox.Postgres, nullIns(
+		[]any{int64(1), "a", none, noN, noBlob},
+		[]any{int64(2), "b", &x, noN, noBlob},
+	))
+	if want := `INSERT INTO "memos" ("id", "title", "note", "n", "blob") VALUES ($1, $2, $3, NULL, NULL), ($4, $5, $6, NULL, NULL)`; text != want {
+		t.Errorf("mixed:\n got %s\nwant %s", text, want)
+	}
+	if len(args) != 6 || args[2] != any(none) {
+		t.Errorf("mixed args: %v", args)
+	}
+
+	// A nil in a column that is not nullable is no NULL to write.
+	text, args = render(velox.Postgres, nullIns([]any{int64(1), nil, none, noN, noBlob}))
+	if want := `INSERT INTO "memos" ("id", "title", "note", "n", "blob") VALUES ($1, $2, NULL, NULL, NULL)`; text != want || len(args) != 2 {
+		t.Errorf("not nullable: %s %v", text, args)
+	}
+}
+
+// TestRenderCacheInsertNullShape: two INSERTs that differ only in which
+// columns are all NULL are different shapes, each cached under its own text,
+// and a cached shape collects as many arguments as its text has parameters.
+func TestRenderCacheInsertNullShape(t *testing.T) {
+	var none *string
+	var noN *int64
+	var noBlob []byte
+	x, seven := "x", int64(7)
+	allNull := func() *velox.Statement { return nullIns([]any{int64(1), "a", none, noN, noBlob}) }
+	withNote := func() *velox.Statement { return nullIns([]any{int64(1), "a", &x, noN, noBlob}) }
+	withN := func() *velox.Statement { return nullIns([]any{int64(1), "a", none, &seven, noBlob}) }
+	c := &engine.RenderCache{}
+	for pass := range 2 { // the second pass reads every shape from the cache
+		for name, c2 := range map[string]struct {
+			st   func() *velox.Statement
+			want string
+			args int
+		}{
+			"all null": {allNull, `INSERT INTO "memos" ("id", "title", "note", "n", "blob") VALUES ($1, $2, NULL, NULL, NULL)`, 2},
+			"note":     {withNote, `INSERT INTO "memos" ("id", "title", "note", "n", "blob") VALUES ($1, $2, $3, NULL, NULL)`, 3},
+			"n":        {withN, `INSERT INTO "memos" ("id", "title", "note", "n", "blob") VALUES ($1, $2, NULL, $3, NULL)`, 3},
+		} {
+			text, args := cachedRender(c, velox.Postgres, c2.st())
+			if text != c2.want || len(args) != c2.args {
+				t.Errorf("pass %d, %s: %s, %d args; want %s, %d", pass, name, text, len(args), c2.want, c2.args)
+			}
+		}
+	}
+}
