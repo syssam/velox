@@ -680,27 +680,27 @@ Code that already holds a `*sql.Tx`, with raw SQL beside velox calls, runs
 the velox calls on it with `velox.UseTx`:
 
 ```go
-tx, _ := sqlDB.BeginTx(ctx, nil)
-err := velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
-	if _, err := tx.ExecContext(ctx, "UPDATE accounts SET ..."); err != nil {
-		return err
-	}
-	return vtx.Insert(&entry).Exec(ctx)
-})
+tx, _ := velox.Pool(db).BeginTx(ctx, nil)
+defer tx.Rollback()
+vtx, err := velox.UseTx(db, tx)
 if err != nil {
-	_ = tx.Rollback()
+	return err
+}
+if _, err := tx.ExecContext(ctx, "UPDATE accounts SET ..."); err != nil {
+	return err
+}
+if err := vtx.Insert(&entry).Exec(ctx); err != nil {
 	return err
 }
 return tx.Commit()
 ```
 
-The transaction stays yours: `UseTx` never commits or rolls back, and it
-returns `fn`'s error as it is. It retries nothing, takes no option, and runs
-no `TxAround` or `AfterCommit` hook, as it cannot know whether you commit. A
-nested `vtx.Tx` is a savepoint. `vtx` works only inside `fn`. `UseTx` refuses
-a sharded DB, a DB that is in a transaction already, and `veloxpgx`, whose
-connection runs on pgx's transactions
-([ADR 0066](decisions/0066-use-tx.md)).
+The transaction stays yours: `vtx` never begins, commits or rolls back, and
+its statements fail with database/sql's error once you end `tx`. A `vtx.Tx`
+is a savepoint. It retries nothing, takes no option, and runs no `TxAround`
+hook, which wraps a `Tx` call that this is not. `UseTx` refuses a sharded DB,
+a DB that is in a transaction already, and `veloxpgx`, whose connection runs
+on pgx's transactions ([ADR 0066](decisions/0066-use-tx.md)).
 
 See the [tx example](../examples/tx).
 

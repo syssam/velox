@@ -453,7 +453,7 @@ func TxReadOnly() TxOption
 func TxRetries(opts ...TxOption) int
 func TxRetrySerializable(n int) TxOption
 func TxTimeout(d time.Duration) TxOption
-func UseTx(ctx context.Context, db *DB, tx *sql.Tx, fn func(ctx context.Context, tx *DB) error) error
+func UseTx(db *DB, tx *sql.Tx) (*DB, error)
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error
 func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error
 func WithAround(a Around) Option

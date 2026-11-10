@@ -21,9 +21,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
-- `velox.UseTx(ctx, db, tx, fn)` runs velox calls on a `*sql.Tx` the caller began,
-  next to raw SQL on the same transaction. The caller commits or rolls back;
-  `UseTx` does neither (decision 0066).
+- `velox.UseTx(db, tx)` returns a DB whose statements run on a `*sql.Tx` the
+  caller began, next to raw SQL on the same transaction. The caller commits or
+  rolls back; the DB does neither (decision 0066).
 - `UpdateQuery.SetInput(in)` and `InsertQuery.SetInput(in)` take a
   `velox.Input[E]`, such as a generated GraphQL input, as ent's
   `SetInput` does: a resolver is

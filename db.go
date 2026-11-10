@@ -209,38 +209,40 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 	}, opts...)
 }
 
-// UseTx runs fn with a DB whose statements run on tx, a transaction your code
-// began on the *sql.DB that db was opened with, for code that mixes raw SQL and
-// velox in one transaction:
+// UseTx returns a DB whose statements run on tx, a transaction your code began
+// on the *sql.DB that db was opened with, for code that mixes raw SQL and velox
+// in one transaction:
 //
-//	tx, _ := sqlDB.BeginTx(ctx, nil)
-//	err := velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
-//		_, err := tx.ExecContext(ctx, "UPDATE accounts SET ...")
-//		if err != nil {
-//			return err
-//		}
-//		return vtx.Insert(&entry).Exec(ctx)
-//	})
+//	tx, _ := velox.Pool(db).BeginTx(ctx, nil)
+//	defer tx.Rollback()
+//	vtx, err := velox.UseTx(db, tx)
 //	if err != nil {
-//		_ = tx.Rollback()
+//		return err
+//	}
+//	if _, err := tx.ExecContext(ctx, "UPDATE accounts SET ..."); err != nil {
+//		return err
+//	}
+//	if err := vtx.Insert(&entry).Exec(ctx); err != nil {
 //		return err
 //	}
 //	return tx.Commit()
 //
-// The transaction is yours: UseTx never commits or rolls back, and returns
-// fn's error as it is. It retries nothing, takes no TxOption, and runs no
-// TxAround hook and no AfterCommit hook, as it cannot know whether you commit.
-// A nested Tx in fn is a savepoint of tx. vtx is valid only inside fn and, as
-// Tx's, is not safe for concurrent use. UseTx returns an error, and sends
-// nothing, when tx is nil, when db is in a transaction or is sharded, and for a
-// DB whose connection does not run on a *sql.Tx, veloxpgx's.
+// The transaction is yours: vtx never begins, commits or rolls back, and works
+// until you end tx, after which its statements fail with database/sql's error.
+// A Tx on vtx is a savepoint of tx. UseTx retries nothing, takes no TxOption
+// and runs no TxAround hook, which wraps a Tx call that this is not. vtx is not
+// safe for concurrent use, as a Tx's DB is not. UseTx returns an error, and
+// sends nothing, when tx is nil, when db is in a transaction or is sharded, and
+// for a DB whose connection does not run on a *sql.Tx, veloxpgx's.
 //
 // It is a function, not a method, for the reason Pool is: a method of DB
 // mentioning *sql.Tx would make every package that uses a DB larger to compile.
-func UseTx(ctx context.Context, db *DB, tx *sql.Tx, fn func(ctx context.Context, tx *DB) error) error {
-	return engine.UseTx(ctx, &db.e, tx, func(ctx context.Context, tx *engine.DB) error {
-		return fn(ctx, (*DB)(unsafe.Pointer(tx)))
-	})
+func UseTx(db *DB, tx *sql.Tx) (*DB, error) {
+	e, err := engine.UseTx(&db.e, tx)
+	if err != nil {
+		return nil, err
+	}
+	return (*DB)(unsafe.Pointer(e)), nil
 }
 
 // WithoutPolicy returns a DB like db whose statements skip every entity's

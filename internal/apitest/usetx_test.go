@@ -13,8 +13,7 @@ import (
 	"github.com/syssam/velox/internal/testmodel"
 )
 
-// useTxDB opens a SQLite database with the invoices table and no rows, and
-// returns it with its *sql.DB's pool.
+// useTxDB opens a SQLite database with the invoices table and no rows.
 func useTxDB(t *testing.T) *velox.DB {
 	t.Helper()
 	db := connectInvoices(t, ":memory:")
@@ -33,30 +32,39 @@ func invoiceCount(t *testing.T, db *velox.DB) int64 {
 	return n
 }
 
+// beginUse begins a transaction on db's pool and returns it with its UseTx DB.
+func beginUse(t *testing.T, db *velox.DB) (*sql.Tx, *velox.DB) {
+	t.Helper()
+	tx, err := velox.Pool(db).BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback() })
+	vtx, err := velox.UseTx(db, tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tx, vtx
+}
+
 // TestUseTxRunsOnTheCallersTransaction: raw SQL and velox statements share
 // one transaction, and the caller's Commit or Rollback decides both.
 func TestUseTxRunsOnTheCallersTransaction(t *testing.T) {
 	for _, commit := range []bool{true, false} {
 		db := useTxDB(t)
-		sqlDB := velox.Pool(db)
-		tx, err := sqlDB.BeginTx(ctx, nil)
-		if err != nil {
+		tx, vtx := beginUse(t, db)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO invoices (id, org_id, number, total, paid, note, data) VALUES (10, 1, 'raw', 0, false, '', x'')`); err != nil {
 			t.Fatal(err)
 		}
-		err = velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO invoices (id, org_id, number, total, paid, note, data) VALUES (10, 1, 'raw', 0, false, '', x'')`); err != nil {
-				return err
-			}
-			return vtx.Insert(&testmodel.Invoice{OrgID: 1, Number: "velox", Data: []byte{}}).Exec(ctx)
-		})
-		if err != nil {
-			t.Fatalf("commit=%v: UseTx: %v", commit, err)
+		if err := vtx.Insert(&testmodel.Invoice{OrgID: 1, Number: "velox", Data: []byte{}}).Exec(ctx); err != nil {
+			t.Fatal(err)
 		}
-		// UseTx neither committed nor rolled back: tx is still open and sees both rows.
+		// vtx neither committed nor rolled back: tx is open and sees both rows.
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM invoices`).Scan(&n); err != nil || n != 2 {
 			t.Fatalf("commit=%v: inside tx: %d rows, err %v; want 2", commit, n, err)
 		}
+		var err error
 		if commit {
 			err = tx.Commit()
 		} else {
@@ -75,29 +83,20 @@ func TestUseTxRunsOnTheCallersTransaction(t *testing.T) {
 	}
 }
 
-// TestUseTxReturnsFnsError: the error comes back as fn returned it, and the
-// transaction is still the caller's to end.
-func TestUseTxReturnsFnsError(t *testing.T) {
+// TestUseTxDBEndsWithTheTx: when the caller ends tx, the DB's statements fail
+// with database/sql's error, and nothing reaches the pool.
+func TestUseTxDBEndsWithTheTx(t *testing.T) {
 	db := useTxDB(t)
-	tx, err := velox.Pool(db).BeginTx(ctx, nil)
-	if err != nil {
+	tx, vtx := beginUse(t, db)
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	boom := errors.New("boom")
-	got := velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
-		if err := vtx.Insert(&testmodel.Invoice{OrgID: 1, Number: "x", Data: []byte{}}).Exec(ctx); err != nil {
-			return err
-		}
-		return boom
-	})
-	if got != boom {
-		t.Fatalf("UseTx = %v, want boom as is", got)
-	}
-	if err := tx.Rollback(); err != nil {
-		t.Fatalf("the caller's Rollback after fn's error: %v", err)
+	err := vtx.Insert(&testmodel.Invoice{OrgID: 1, Number: "late", Data: []byte{}}).Exec(ctx)
+	if !errors.Is(err, sql.ErrTxDone) {
+		t.Errorf("a statement after Commit: %v, want sql.ErrTxDone", err)
 	}
 	if n := invoiceCount(t, db); n != 0 {
-		t.Errorf("%d rows after the caller's rollback", n)
+		t.Errorf("%d rows: a statement after Commit reached the pool", n)
 	}
 }
 
@@ -105,30 +104,21 @@ func TestUseTxReturnsFnsError(t *testing.T) {
 // savepoint and leaves the outer work, and the caller's commit keeps it.
 func TestUseTxNestedTxIsASavepoint(t *testing.T) {
 	db := useTxDB(t)
-	tx, err := velox.Pool(db).BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tx, vtx := beginUse(t, db)
 	insert := func(ctx context.Context, d *velox.DB, num string) error {
 		return d.Insert(&testmodel.Invoice{OrgID: 1, Number: num, Data: []byte{}}).Exec(ctx)
 	}
+	if err := insert(ctx, vtx, "outer"); err != nil {
+		t.Fatal(err)
+	}
 	boom := errors.New("boom")
-	err = velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
-		if err := insert(ctx, vtx, "outer"); err != nil {
+	if err := vtx.Tx(ctx, func(ctx context.Context, in *velox.DB) error {
+		if err := insert(ctx, in, "inner"); err != nil {
 			return err
 		}
-		if err := vtx.Tx(ctx, func(ctx context.Context, in *velox.DB) error {
-			if err := insert(ctx, in, "inner"); err != nil {
-				return err
-			}
-			return boom
-		}); err != boom {
-			t.Errorf("nested Tx = %v, want boom", err)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
+		return boom
+	}); err != boom {
+		t.Errorf("nested Tx = %v, want boom", err)
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
@@ -139,56 +129,36 @@ func TestUseTxNestedTxIsASavepoint(t *testing.T) {
 	}
 }
 
-// TestUseTxDBEndsWithFn: the DB fn gets is the transaction's only inside fn.
-func TestUseTxDBEndsWithFn(t *testing.T) {
-	db := useTxDB(t)
-	tx, err := velox.Pool(db).BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	var kept *velox.DB
-	var keptCtx context.Context
-	if err := velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
-		kept, keptCtx = vtx, ctx
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	err = kept.Insert(&testmodel.Invoice{OrgID: 1, Number: "late", Data: []byte{}}).Exec(keptCtx)
-	if err == nil {
-		t.Error("a statement on the DB after fn returned ran")
-	}
-}
-
 // TestUseTxRefusals: what UseTx will not take is an error that sends nothing.
 // The refusals come before tx is touched, so a *sql.Tx that was never begun
 // stands in where the pool's only connection is the Tx's.
 func TestUseTxRefusals(t *testing.T) {
 	db := useTxDB(t)
-	other := useTxDB(t)
 	never := new(sql.Tx)
-	noop := func(context.Context, *velox.DB) error { t.Error("fn ran"); return nil }
 
-	if err := velox.UseTx(ctx, db, nil, noop); err == nil || !strings.Contains(err.Error(), "tx is nil") {
+	if _, err := velox.UseTx(db, nil); err == nil || !strings.Contains(err.Error(), "tx is nil") {
 		t.Errorf("nil tx: %v", err)
 	}
 	err := db.Tx(ctx, func(ctx context.Context, vtx *velox.DB) error {
-		return velox.UseTx(ctx, vtx, never, noop)
+		_, err := velox.UseTx(vtx, never)
+		return err
 	})
 	if err == nil || !strings.Contains(err.Error(), "in a transaction already") {
 		t.Errorf("inside Tx: %v", err)
 	}
 	// A connection that does not run on a *sql.Tx, as veloxpgx's does not.
-	fake := openFake(velox.Postgres, &fakeconn.Exec{})
-	if err := velox.UseTx(ctx, fake, never, noop); err == nil || !strings.Contains(err.Error(), "does not run on a *sql.Tx") {
+	e := &fakeconn.Exec{}
+	if _, err := velox.UseTx(openFake(velox.Postgres, e), never); err == nil || !strings.Contains(err.Error(), "does not run on a *sql.Tx") {
 		t.Errorf("a connection that is no Adopter: %v", err)
 	}
-	err = db.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
-		return velox.UseTx(ctx, other, never, noop)
-	})
-	if !errors.Is(err, velox.ErrOutsideTx) {
-		t.Errorf("under another transaction's context: %v", err)
+	s := openShards(false)
+	if _, err := velox.UseTx(s.db, never); err == nil || !strings.Contains(err.Error(), "sharded") {
+		t.Errorf("sharded DB: %v", err)
+	}
+	for _, x := range []*fakeconn.Exec{e, s.euP, s.euR, s.usP} {
+		if len(x.Log) != 0 {
+			t.Errorf("a refusal sent %v", x.Log)
+		}
 	}
 }
 
@@ -202,52 +172,15 @@ func TestUseTxWithReplicasRunsOnThePrimary(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, velox.Pool(primary), velox.WithReplicas(velox.SQLConn(velox.Pool(replica)))).WithoutPolicy("velox tests")
-	tx, err := velox.Pool(primary).BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
+	_, vtx := beginUse(t, db)
 	noHang(t, func() {
-		err = velox.UseTx(ctx, db, tx, func(ctx context.Context, vtx *velox.DB) error {
-			if err := vtx.Insert(&testmodel.Invoice{OrgID: 1, Number: "p", Data: []byte{}}).Exec(ctx); err != nil {
-				return err
-			}
-			n, err := vtx.Query[testmodel.Invoice]().Count(ctx)
-			if err == nil && n != 1 {
-				t.Errorf("read %d rows inside UseTx, want the primary tx's 1, not the replica's 3", n)
-			}
-			return err
-		})
-		if err != nil {
+		if err := vtx.Insert(&testmodel.Invoice{OrgID: 1, Number: "p", Data: []byte{}}).Exec(ctx); err != nil {
 			t.Error(err)
+			return
+		}
+		n, err := vtx.Query[testmodel.Invoice]().Count(ctx)
+		if err != nil || n != 1 {
+			t.Errorf("read %d rows (err %v) through UseTx, want the primary tx's 1, not the replica's 3", n, err)
 		}
 	})
-}
-
-// TestUseTxRefusesShardedAndDryRun: a sharded DB chooses a transaction's shard
-// itself, and a dry-run context sends no write; both are refused before tx is
-// touched, with nothing sent.
-func TestUseTxRefusesShardedAndDryRun(t *testing.T) {
-	never := new(sql.Tx)
-	noop := func(context.Context, *velox.DB) error { t.Error("fn ran"); return nil }
-
-	s := openShards(false)
-	if err := velox.UseTx(ctx, s.db, never, noop); err == nil || !strings.Contains(err.Error(), "sharded") {
-		t.Errorf("sharded DB: %v", err)
-	}
-	for _, e := range []*fakeconn.Exec{s.euP, s.euR, s.usP} {
-		if len(e.Log) != 0 {
-			t.Errorf("a sharded refusal sent %v", e.Log)
-		}
-	}
-
-	e := &fakeconn.Exec{}
-	dry, db := dryContext(t, e)
-	before := len(e.Log)
-	if err := velox.UseTx(dry, db, never, noop); !errors.Is(err, velox.ErrDryRun) {
-		t.Errorf("dry-run context: %v", err)
-	}
-	if len(e.Log) != before {
-		t.Errorf("a dry-run refusal sent %v", e.Log[before:])
-	}
 }

@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -20,10 +19,7 @@ func TestUseTxOnRealDatabases(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = tx.Rollback() }()
-			err = velox.UseTx(ctx, tg.db, tx, func(context.Context, *velox.DB) error {
-				t.Error("fn ran")
-				return nil
-			})
+			_, err = velox.UseTx(tg.db, tx)
 			if err == nil || !strings.Contains(err.Error(), "does not run on a *sql.Tx") {
 				t.Errorf("veloxpgx: %v", err)
 			}
@@ -41,13 +37,15 @@ func TestUseTxOnRealDatabases(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = velox.UseTx(ctx, tg.db, tx, func(ctx context.Context, vtx *velox.DB) error {
-				if _, err := vtx.Update[testmodel.Invoice]().Set(I.Total.Set(1)).Where(I.ID.EQ(1)).Exec(ctx); err != nil {
-					return err
-				}
-				_, err := tx.ExecContext(ctx, rebind(tg.d, "UPDATE invoices SET total = ? WHERE id = ?"), 2, 2)
-				return err
-			})
+			vtx, err := velox.UseTx(tg.db, tx)
+			if err != nil {
+				_ = tx.Rollback()
+				t.Fatal(err)
+			}
+			_, err = vtx.Update[testmodel.Invoice]().Set(I.Total.Set(1)).Where(I.ID.EQ(1)).Exec(ctx)
+			if err == nil {
+				_, err = tx.ExecContext(ctx, rebind(tg.d, "UPDATE invoices SET total = ? WHERE id = ?"), 2, 2)
+			}
 			if err != nil {
 				_ = tx.Rollback()
 				t.Fatalf("commit=%v: %v", commit, err)
