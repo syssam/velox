@@ -223,3 +223,31 @@ func TestUseTxWithReplicasRunsOnThePrimary(t *testing.T) {
 		}
 	})
 }
+
+// TestUseTxRefusesShardedAndDryRun: a sharded DB chooses a transaction's shard
+// itself, and a dry-run context sends no write; both are refused before tx is
+// touched, with nothing sent.
+func TestUseTxRefusesShardedAndDryRun(t *testing.T) {
+	never := new(sql.Tx)
+	noop := func(context.Context, *velox.DB) error { t.Error("fn ran"); return nil }
+
+	s := openShards(false)
+	if err := velox.UseTx(ctx, s.db, never, noop); err == nil || !strings.Contains(err.Error(), "sharded") {
+		t.Errorf("sharded DB: %v", err)
+	}
+	for _, e := range []*fakeconn.Exec{s.euP, s.euR, s.usP} {
+		if len(e.Log) != 0 {
+			t.Errorf("a sharded refusal sent %v", e.Log)
+		}
+	}
+
+	e := &fakeconn.Exec{}
+	dry, db := dryContext(t, e)
+	before := len(e.Log)
+	if err := velox.UseTx(dry, db, never, noop); !errors.Is(err, velox.ErrDryRun) {
+		t.Errorf("dry-run context: %v", err)
+	}
+	if len(e.Log) != before {
+		t.Errorf("a dry-run refusal sent %v", e.Log[before:])
+	}
+}
