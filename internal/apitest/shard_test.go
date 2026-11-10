@@ -547,14 +547,16 @@ func TestShardForCallsPerWrite(t *testing.T) {
 	check("Insert", 1, 1)
 
 	reset()
-	rows := make([]testmodel.Invoice, 8000)
+	// 8 parameters a row (paid_at is the literal NULL): 9000 rows are more than
+	// PostgreSQL's 65535 in one statement, 8000 are not.
+	rows := make([]testmodel.Invoice, 9000)
 	for i := range rows {
 		rows[i] = testmodel.Invoice{Number: "N", Data: []byte{}}
 	}
 	if err := s.db.InsertAll(rows).Exec(tctx); err != nil {
 		t.Fatal(err)
 	}
-	check("InsertAll of 8000", 3, 2)
+	check("InsertAll of 9000", 3, 2)
 
 	reset()
 	err := s.db.Tx(tctx, func(ctx context.Context, tx *velox.DB) error {

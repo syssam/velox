@@ -267,6 +267,49 @@ func PerStatement(db *DB, in *EntityInfo, n int) int {
 	return max(1, db.maxParams()/n)
 }
 
+// PerStatementOf is PerStatement for a batch of n rows of cols, counting the
+// parameters its statements send: a nullable column that holds NULL in every
+// row is the literal NULL (insertNulls) and no parameter, so more rows fit. A
+// statement of part of the batch has at least as many such columns, so it
+// stays under the limit. addr(i, col) is the pointer to column col's field in
+// row i. A batch that fits one statement is not looked into.
+func PerStatementOf(db *DB, in *EntityInfo, cols []int, n int, addr func(i, col int) any) int {
+	per := PerStatement(db, in, len(cols))
+	if n <= per {
+		return per
+	}
+	lit := 0
+	for _, col := range cols {
+		if c := &in.Columns[col]; !c.Nullable || c.Codec {
+			continue
+		}
+		all := true
+		for i := range n {
+			if !nilField(addr(i, col)) {
+				all = false
+				break
+			}
+		}
+		if all {
+			lit++
+		}
+	}
+	return PerStatement(db, in, max(1, len(cols)-lit))
+}
+
+// nilField reports whether ptr, a pointer to a field, points to a nil pointer
+// or a nil []byte: what nullCell takes for NULL in a field's value.
+func nilField(ptr any) bool {
+	v := reflect.ValueOf(ptr).Elem()
+	switch v.Kind() {
+	case reflect.Pointer:
+		return v.IsNil()
+	case reflect.Slice:
+		return v.IsNil() && v.Type() == reflect.TypeFor[[]byte]()
+	}
+	return false
+}
+
 // MirrorRows gives each row of st, an insert on the join entity of a
 // bidirectional edge, its mirror after it: (b, a) for (a, b), unless a and b
 // are equal, as a self-link is one row. ent's addM2MEdges writes the mirror

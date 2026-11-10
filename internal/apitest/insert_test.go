@@ -3,6 +3,7 @@ package apitest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -322,5 +323,39 @@ func TestDefaultsAreNotShared(t *testing.T) {
 	}
 	if x3 := insert(); !reflect.DeepEqual(x3, want) {
 		t.Errorf("a third entity: %+v, want %+v", x3, want)
+	}
+}
+
+// TestInsertAllSplitCountsTheParameters: the rows one statement holds count the
+// parameters a row sends, so a column that is NULL in every row, which is no
+// parameter, is not counted; one with a value in any row is, in every row.
+func TestInsertAllSplitCountsTheParameters(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1}
+	db := openFake(velox.SQLite, e)
+	const nonNull = 6 // Ticket's columns but the key and parent_id, which Parent fills below
+	rows := func(n int, withParent bool) []testmodel.Ticket {
+		tks := make([]testmodel.Ticket, n)
+		for i := range tks {
+			tks[i] = testmodel.Ticket{Owner: "ann", Title: fmt.Sprintf("T-%d", i), InvoiceID: 1}
+		}
+		if withParent {
+			p := int64(1)
+			tks[0].ParentID = &p
+		}
+		return tks
+	}
+	for _, c := range []struct {
+		name       string
+		withParent bool
+		params     int // per row
+	}{{"parent_id NULL in every row", false, nonNull}, {"parent_id set in one row", true, nonNull + 1}} {
+		per := 32766 / c.params
+		_, args, err := db.InsertAll(rows(per+1, c.withParent)).SQL(annIn7())
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if len(args) != per*c.params {
+			t.Errorf("%s: the first statement has %d arguments, want %d rows of %d", c.name, len(args), per, c.params)
+		}
 	}
 }

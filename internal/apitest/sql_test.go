@@ -196,7 +196,9 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 	}
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.SQLite, e, velox.WithRewrite(see))
-	const per = 32766 / 7 // SQLite's parameters, over the columns but the generated key
+	// SQLite's parameters, over the columns but the generated key and parent_id,
+	// which is NULL in every row and is no parameter.
+	const per = 32766 / 6
 	tks := make([]testmodel.Ticket, per+1)
 	for i := range tks {
 		tks[i] = testmodel.Ticket{Owner: "ann", Title: fmt.Sprintf("T-%d", i), InvoiceID: 1}
@@ -205,8 +207,6 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// parent_id is NULL in every row: the literal, so 6 arguments per row, though
-	// the rows per statement still count 7 (insert.go PerStatement).
 	if len(args) != per*6 {
 		t.Errorf("%d args, want the first statement's %d", len(args), per*6)
 	}

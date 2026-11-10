@@ -39,10 +39,14 @@ before, with the nil values in them.
 ## Consequences
 
 An insert sends fewer arguments, and a statement's arguments are no longer one
-per cell. `PerStatement` still counts every column, so a batch splits at the
-rows it did before and a split statement is below the dialect's parameter
-limit by the literal columns. Counting them would fit more rows per statement
-in a batch of thousands; it is not done.
+per cell.
+
+`InsertAll` counts them when it splits a batch (`PerStatementOf`): a column
+that is NULL in every row of the batch is not counted, so a batch of 10,000
+rows of the 25-column entity above splits at 5,461 rows on PostgreSQL, 65,535
+parameters over 12, where it split at 2,621, over 25. A statement of part of
+the batch has at least as many such columns, so it stays under the limit. A
+batch that fits one statement is not looked into.
 
 ## Evidence
 
@@ -53,3 +57,6 @@ in a batch of thousands; it is not done.
   literal columns, each rendered and then read from the cache.
 - `TestJSONNullableNoPointer` (internal/engine/json_test.go): a nil `[]byte`
   is the literal alone in a row, and an untyped nil beside a value.
+- `TestInsertAllSplitCountsTheParameters` (internal/apitest/insert_test.go):
+  the first statement holds 5,461 rows of 6 parameters with `parent_id` NULL
+  in every row, and 4,680 rows of 7 with one value in it.
