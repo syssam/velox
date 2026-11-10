@@ -23,7 +23,8 @@ dialects that enforce it.
 
 velox-gen refuses an `Optional` field that is not `Nillable` and has no
 `Default`, `DefaultFunc` or `SchemaDefault` (rule 37, which now covers every
-type; rules 39 and 40 are gone). An `Optional` JSON field is the exception, as
+type and spells the line to write for the field's type; rules 39 and 40 are
+gone). An `Optional` JSON field is the exception, as
 in 0003: its column is NULL-able. Rule 54 stays for a `Unique` `Optional` field
 whose only value is a literal `Default`.
 
@@ -52,6 +53,7 @@ required field.
 - `TestBuildUniqueOptionalRefused` (internal/codegen/build_refusals_test.go):
   rule 37 for a bare `Unique` `Optional`, rule 54 with a `Default`.
 - `TestTablesDefaults` (internal/codegen/tables_test.go): a column `DEFAULT`
-  comes from a `Default`, as before.
+  comes from a `Default`, as before, and an `Optional` field with a
+  `DefaultFunc` (`ofn`) has none on any dialect; it was `''` before.
 - Old velox's `FeatureAutoDefault` (compiler/gen/feature.go): the zero fill, off
   by default.

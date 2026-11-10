@@ -489,6 +489,7 @@ func (tbDefaults) Fields() []schema.Field {
 		field.String("ns").Optional().Nillable(),
 		field.String("req"),
 		field.String("fn").DefaultFunc(func() string { return "" }),
+		field.String("ofn").Optional().DefaultFunc(func() string { return "" }), // Optional writes no zero DEFAULT
 		field.Time("now").Default(func() time.Time { return time.Time{} }),
 		field.UUID("u", UUIDValue{}).Default(func() UUIDValue { return UUIDValue{} }),
 		field.JSON("j", JSONShape{}).Default(JSONShape{W: 1}),
@@ -519,6 +520,7 @@ func TestTablesDefaults(t *testing.T) {
 		"ns":      {"", "", ""},
 		"req":     {"", "", ""},
 		"fn":      {"", "", ""},
+		"ofn":     {"", "", ""},
 		"now":     {"", "", ""},
 		"u":       {"", "", ""},
 		"j":       {"", "", ""},

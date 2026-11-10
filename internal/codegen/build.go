@@ -927,6 +927,35 @@ var (
 	complexKind = map[string]bool{"complex64": true, "complex128": true}
 )
 
+// optionalWayOut is rule 37's message for f, an Optional field with no
+// Default and not Nillable: it spells the line to write, by type.
+func optionalWayOut(f *Field) string {
+	builder := strings.ToUpper(f.Type[:1]) + f.Type[1:]
+	switch f.Type {
+	case "float64":
+		builder = "Float"
+	case "uuid":
+		builder = "UUID"
+	}
+	decl := fmt.Sprintf("field.%s(%q).Optional()", builder, f.Name)
+	var def string
+	switch {
+	case f.Type == "string":
+		def = `Default("")`
+	case f.Type == "bool":
+		def = "Default(false)"
+	case numeric[f.Type]:
+		def = "Default(0)"
+	case f.Type == "enum" && len(f.Enums) > 0:
+		def = fmt.Sprintf("Default(%q)", f.Enums[0].Value)
+	case f.Type == "time":
+		def = "DefaultFunc(time.Now)"
+	default:
+		def = "DefaultFunc(...)"
+	}
+	return fmt.Sprintf("an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place. Write %s.%s, or %s.Nillable() for NULL", decl, def, decl)
+}
+
 // optionalNoValue reports whether f is Optional and gives an unset row no value:
 // it is not Nillable, so its column is NOT NULL, and it has no Default,
 // DefaultFunc or SchemaDefault. An Optional JSON field is the exception: its
@@ -998,7 +1027,7 @@ func (b *builder) validateField(e *Entity, f *Field) {
 	switch {
 	case b.keyEdges[f] != nil: // a bound key is rule 38's
 	case optionalNoValue(f):
-		b.fail(37, e.Name, fieldLoc(f), "an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place")
+		b.fail(37, e.Name, fieldLoc(f), "%s", optionalWayOut(f))
 	case uniqueUnset(e, f):
 		b.fail(54, e.Name, fieldLoc(f), "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide, or give it a DefaultFunc that a value a hook fills can stand in for, as velox-gen cannot see a hook")
 	}

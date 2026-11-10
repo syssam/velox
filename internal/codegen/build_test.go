@@ -1544,10 +1544,17 @@ func (optionalNoValueSchema) Fields() []schema.Field {
 // has a Default, a DefaultFunc or a SchemaDefault, or is refused.
 func TestOptionalNeedsAValue(t *testing.T) {
 	_, err := build(t, optionalNoValueSchema{})
-	const msg = "an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place"
+	const msg = "an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place. Write "
 	var want []string
-	for _, n := range []string{"bio", "age", "on", "mood", "blob", "seen"} {
-		want = append(want, "schema optionalNoValueSchema: field \""+n+"\": "+msg)
+	for _, c := range []struct{ name, decl, fix string }{
+		{"bio", `field.String("bio").Optional()`, `Default("")`},
+		{"age", `field.Int("age").Optional()`, `Default(0)`},
+		{"on", `field.Bool("on").Optional()`, `Default(false)`},
+		{"mood", `field.Enum("mood").Optional()`, `Default("calm")`},
+		{"blob", `field.Bytes("blob").Optional()`, `DefaultFunc(...)`},
+		{"seen", `field.Time("seen").Optional()`, `DefaultFunc(time.Now)`},
+	} {
+		want = append(want, `schema optionalNoValueSchema: field "`+c.name+`": `+msg+c.decl+"."+c.fix+", or "+c.decl+".Nillable() for NULL")
 	}
 	if got := plain(err); got != strings.Join(want, "\n") {
 		t.Fatalf("got\n%s\nwant\n%s", got, strings.Join(want, "\n"))
