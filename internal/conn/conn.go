@@ -30,6 +30,15 @@ type Tx interface {
 	Rollback(ctx context.Context) error
 }
 
+// Adopter is an Executor that can run on a transaction its caller began on a
+// *sql.DB: SQL can, and so can what wraps it. A driver package's own executor,
+// veloxpgx's, cannot: its statements go through a pgx connection, not a *sql.Tx.
+type Adopter interface {
+	// Adopt returns the Executor that runs statements on tx, and false when
+	// the Executor cannot.
+	Adopt(tx *sql.Tx) (Executor, bool)
+}
+
 // Executor runs rendered statements.
 type Executor interface {
 	Query(ctx context.Context, sql string, args []any) (Rows, error)

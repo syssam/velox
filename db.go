@@ -209,6 +209,37 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 	}, opts...)
 }
 
+// UseTx runs fn with a DB whose statements run on tx, a transaction your code
+// began on the *sql.DB that db was opened with, for code that mixes raw SQL and
+// velox in one transaction:
+//
+//	tx, _ := sqlDB.BeginTx(ctx, nil)
+//	err := db.UseTx(ctx, tx, func(ctx context.Context, vtx *velox.DB) error {
+//		_, err := tx.ExecContext(ctx, "UPDATE accounts SET ...")
+//		if err != nil {
+//			return err
+//		}
+//		return vtx.Insert(&entry).Exec(ctx)
+//	})
+//	if err != nil {
+//		_ = tx.Rollback()
+//		return err
+//	}
+//	return tx.Commit()
+//
+// The transaction is yours: UseTx never commits or rolls back, and returns
+// fn's error as it is. It retries nothing, takes no TxOption, and runs no
+// TxAround hook and no AfterCommit hook, as it cannot know whether you commit.
+// A nested Tx in fn is a savepoint of tx. vtx is valid only inside fn and, as
+// Tx's, is not safe for concurrent use. UseTx returns an error, and sends
+// nothing, when tx is nil, when db is in a transaction or is sharded, and for a
+// DB whose connection does not run on a *sql.Tx, veloxpgx's.
+func (db *DB) UseTx(ctx context.Context, tx *sql.Tx, fn func(ctx context.Context, tx *DB) error) error {
+	return db.e.UseTx(ctx, tx, func(ctx context.Context, tx *engine.DB) error {
+		return fn(ctx, (*DB)(unsafe.Pointer(tx)))
+	})
+}
+
 // WithoutPolicy returns a DB like db whose statements skip every entity's
 // policy, as do the transactions it begins and a write's hooks through
 // Mutation.DB. Interceptors still apply. The bypass is the DB's, not a

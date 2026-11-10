@@ -65,6 +65,10 @@ func (e SQL) Exec(ctx context.Context, s string, args []any) (Result, error) {
 	return Result{Affected: n, LastID: id, HasLastID: idErr == nil}, nil
 }
 
+// Adopt returns the Executor that runs statements on tx, a transaction its
+// caller began, as Begin's does on one of its own.
+func (e SQL) Adopt(tx *sql.Tx) (Executor, bool) { return SQL{c: tx, cols: e.cols}, true }
+
 // Begin starts a transaction, whose statements the returned Executor runs.
 func (e SQL) Begin(ctx context.Context, o sql.TxOptions) (Executor, Tx, error) {
 	tx, err := e.db.BeginTx(ctx, &o)

@@ -355,6 +355,21 @@ func (e sqliteTimes) Exec(ctx context.Context, s string, args []any) (Result, er
 	return e.Executor.Exec(ctx, s, sqliteTimeArgs(args))
 }
 
+// Adopt returns the Executor that runs statements on tx, a transaction its
+// caller began, with the times of SQLite's text as Begin's does. The caller's
+// transaction keeps whatever isolation and query_only it was begun with.
+func (e sqliteTimes) Adopt(tx *sql.Tx) (Executor, bool) {
+	a, ok := e.Executor.(Adopter)
+	if !ok {
+		return nil, false
+	}
+	ex, ok := a.Adopt(tx)
+	if !ok {
+		return nil, false
+	}
+	return sqliteTimes{ex}, true
+}
+
 // Begin starts a transaction, whose statements the returned Executor runs.
 //
 // Drivers ignore a transaction's options on SQLite, so velox keeps them. Every

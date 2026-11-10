@@ -674,6 +674,34 @@ Options go after the function:
 - `velox.TxIsolation(level)`, `velox.TxReadOnly()` and
   `velox.TxTimeout(d)`.
 
+### A transaction you began
+
+Code that already holds a `*sql.Tx`, with raw SQL beside velox calls, runs
+the velox calls on it with `db.UseTx`:
+
+```go
+tx, _ := sqlDB.BeginTx(ctx, nil)
+err := db.UseTx(ctx, tx, func(ctx context.Context, vtx *velox.DB) error {
+	if _, err := tx.ExecContext(ctx, "UPDATE accounts SET ..."); err != nil {
+		return err
+	}
+	return vtx.Insert(&entry).Exec(ctx)
+})
+if err != nil {
+	_ = tx.Rollback()
+	return err
+}
+return tx.Commit()
+```
+
+The transaction stays yours: `UseTx` never commits or rolls back, and it
+returns `fn`'s error as it is. It retries nothing, takes no option, and runs
+no `TxAround` or `AfterCommit` hook, as it cannot know whether you commit. A
+nested `vtx.Tx` is a savepoint. `vtx` works only inside `fn`. `UseTx` refuses
+a sharded DB, a DB that is in a transaction already, and `veloxpgx`, whose
+connection runs on pgx's transactions
+([ADR 0066](decisions/0066-use-tx.md)).
+
 See the [tx example](../examples/tx).
 
 ## Hooks, policies and interceptors
