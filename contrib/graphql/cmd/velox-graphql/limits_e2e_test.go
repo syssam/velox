@@ -109,7 +109,7 @@ func (Item) Fields() []schema.Field {
 		field.JSON("j_map", map[string]any{}).Optional(),
 		field.Strings("ss").Optional(),
 		field.JSON("j_struct", shapes.Shape{}).Optional().Nillable(),
-		field.Uint64("big").Optional(),
+		field.Uint64("big").Optional().Default(0),
 		field.Bytes("ip").GoType(net.IP{}).Optional().Nillable(),
 		field.JSON("trio", [3]int{}).Optional().Nillable(),
 	}

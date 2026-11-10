@@ -145,7 +145,7 @@ func (defaults) Fields() []schema.Field {
 		field.String("label").Default("l"),
 		field.Int("count").DefaultFunc(func() int { return 1 }).Nillable(),
 		field.Text("bio").Nillable(),
-		field.Int("opt").Optional(),
+		field.Int("opt").Optional().Default(0),
 	}
 }
 
@@ -790,7 +790,9 @@ func (badEnum) Fields() []schema.Field { return []schema.Field{field.Enum("s").V
 
 type optionalID struct{ schema.Schema }
 
-func (optionalID) Fields() []schema.Field { return []schema.Field{field.Int64("id").Optional()} }
+func (optionalID) Fields() []schema.Field {
+	return []schema.Field{field.Int64("id").Optional().Default(0)}
+}
 
 type floatID struct{ schema.Schema }
 
@@ -940,7 +942,7 @@ func (invItem) Edges() []schema.Edge {
 type fkUnbound struct{ schema.Schema }
 
 func (fkUnbound) Fields() []schema.Field {
-	return []schema.Field{field.Int64("fk_unbound_parent").Optional()}
+	return []schema.Field{field.Int64("fk_unbound_parent").Optional().Nillable()}
 }
 func (fkUnbound) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", fkUnbound.Type).Unique()}
@@ -1237,10 +1239,10 @@ func TestBuildRules(t *testing.T) {
 		{"36 default on a bool", []schema.Interface{defaultBool{}}, `schema defaultBool: field "active": field.Bool("active") with Default(true): velox inserts a Go struct, whose false cannot be told from unset, so the Default would overwrite an explicit false`},
 		{"36 default on an optional number", []schema.Interface{defaultNumber{}}, `schema defaultNumber: field "score": field.Float("score") with Default(1.5): velox inserts a Go struct, whose 0 cannot be told from unset, so the Default would overwrite an explicit 0 (ent fills it only when the builder never set the field). Write field.Float("score").Nillable().Default(1.5), a pointer whose nil stores 1.5 (the column then holds NULL); or drop the Default and set the value in the struct. To keep an ent database's column, NOT NULL DEFAULT 1.5, add .SchemaDefault(map[string]string{field.Postgres: "1.5", field.MySQL: "1.5", field.SQLite: "1.5"}), which only rows written outside velox take. graphql.CreateDefault(1.5) gives a GraphQL create input the default`},
 		{"36 default func on a number", []schema.Interface{defaultFuncNumber{}}, `schema defaultFuncNumber: field "count": field.Int("count") with a DefaultFunc: velox inserts a Go struct, whose 0 cannot be told from unset, so the Default would overwrite an explicit 0 (ent fills it only when the builder never set the field). Write field.Int("count").Nillable() with the DefaultFunc, a pointer whose nil takes it (the column then holds NULL); or drop the DefaultFunc and set the value in the struct`},
-		{"37 optional enum", []schema.Interface{optionalEnum{}}, `schema optionalEnum: field "mood": an Optional enum needs a Default or Nillable`},
+		{"37 optional enum", []schema.Interface{optionalEnum{}}, `schema optionalEnum: field "mood": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},
+		{"37 optional bytes", []schema.Interface{optionalBytes{}}, `schema optionalBytes: field "blob": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},
+		{"37 optional time", []schema.Interface{optionalTime{}}, `schema optionalTime: field "seen": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},
 		{"38 optional edge field", []schema.Interface{optionalFK{}}, `schema optionalFK: edge "parent": field "parent_id" must be Nillable when the edge is not Required: an unset foreign key is NULL`},
-		{"39 optional bytes", []schema.Interface{optionalBytes{}}, `schema optionalBytes: field "blob": an Optional bytes field needs a Default or Nillable`},
-		{"40 optional time", []schema.Interface{optionalTime{}}, `schema optionalTime: field "seen": an Optional time field needs a Default or Nillable`},
 		{"44 shortened primary keys", []schema.Interface{lpA{}, lpB{}}, `schema lpB: name "` + lpPrefix + `_pkey" is also schema lpA's primary key`},
 		{"44 shortened sequences", []schema.Interface{lpA{}, lpB{}}, `schema lpB: field "id": name "` + lpPrefix[:56] + `_id_seq" is also schema lpA's identity sequence`},
 		{"44 indexes of one name", []schema.Interface{dupNamed{}}, `schema dupNamed: index 1: name "dupnamed_name" is also this schema's index 0`},
@@ -1513,45 +1515,42 @@ func TestFieldJSONHasNoPos(t *testing.T) {
 	}
 }
 
-// optionalUnset breaks rules 37, 39 and 40 once each, beside the fields of
-// those types that pass: Nillable, or with a Default, or with a DefaultFunc
-// where the type has one.
-type optionalUnset struct{ schema.Schema }
+// optionalNoValueSchema breaks rule 37 once for each type, beside the fields
+// that pass: Nillable, or with a Default, or with a DefaultFunc, and the
+// JSON field, whose Optional column holds NULL.
+type optionalNoValueSchema struct{ schema.Schema }
 
-func (optionalUnset) Fields() []schema.Field {
+func (optionalNoValueSchema) Fields() []schema.Field {
 	return []schema.Field{
+		field.String("bio").Optional(),
+		field.Int("age").Optional(),
+		field.Bool("on").Optional(),
 		field.Enum("mood").Values("calm", "busy").Optional(),
-		field.Enum("mood_n").Values("calm").Optional().Nillable(),
-		field.Enum("mood_d").Values("calm").Optional().Default("calm"),
 		field.Bytes("blob").Optional(),
-		field.Bytes("blob_n").Optional().Nillable(),
-		field.Bytes("blob_d").Optional().Default([]byte("x")),
-		field.Bytes("blob_f").Optional().DefaultFunc(func() []byte { return nil }),
 		field.Time("seen").Optional(),
-		field.Time("seen_n").Optional().Nillable(),
+		field.String("bio_n").Optional().Nillable(),
+		field.String("bio_d").Optional().Default(""),
+		field.Int("age_d").Optional().Default(0),
+		field.Bool("on_d").Optional().Default(false),
+		field.Enum("mood_d").Values("calm").Optional().Default("calm"),
+		field.Bytes("blob_f").Optional().DefaultFunc(func() []byte { return nil }),
 		field.Time("seen_d").Optional().Default(time.Now),
-		field.Bytes("blob_r"), // required: no rule applies
+		field.Strings("tags").Optional(),
+		field.String("bio_r"), // required: no rule applies
 	}
 }
 
-// Rules 37, 39 and 40 are one table; their messages are as they were.
-func TestOptionalNeedsTable(t *testing.T) {
-	_, err := build(t, optionalUnset{})
-	want := `schema optionalUnset: field "mood": an Optional enum needs a Default or Nillable
-schema optionalUnset: field "blob": an Optional bytes field needs a Default or Nillable
-schema optionalUnset: field "seen": an Optional time field needs a Default or Nillable`
-	if got := plain(err); got != want {
-		t.Fatalf("got\n%s\nwant\n%s", got, want)
+// Rule 37 is one rule for every type: an Optional field that is not Nillable
+// has a Default, a DefaultFunc or a SchemaDefault, or is refused.
+func TestOptionalNeedsAValue(t *testing.T) {
+	_, err := build(t, optionalNoValueSchema{})
+	const msg = "an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place"
+	var want []string
+	for _, n := range []string{"bio", "age", "on", "mood", "blob", "seen"} {
+		want = append(want, "schema optionalNoValueSchema: field \""+n+"\": "+msg)
 	}
-	rules := map[int]bool{}
-	for _, r := range optionalNeeds {
-		rules[r.rule] = true
-	}
-	if len(rules) != len(optionalNeeds) {
-		t.Fatalf("two rows of optionalNeeds share a rule number: %+v", optionalNeeds)
-	}
-	if len(rules) != 3 || !rules[37] || !rules[39] || !rules[40] {
-		t.Fatalf("rules %v, want 37, 39 and 40", rules)
+	if got := plain(err); got != strings.Join(want, "\n") {
+		t.Fatalf("got\n%s\nwant\n%s", got, strings.Join(want, "\n"))
 	}
 }
 

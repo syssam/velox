@@ -226,8 +226,8 @@ func dropEdgePair(m *loadjson.Model, x *loadjson.Schema, e *loadjson.Edge) {
 }
 
 // normalize makes every edit a model the DSL accepts: a Default on a bool or
-// a number needs Nillable (or goes), an Optional enum, bytes or time that is
-// not Nillable needs a Default (or becomes Nillable), bytes are neither Unique
+// a number needs Nillable (or goes), an Optional field that is not Nillable
+// needs a Default (or becomes Nillable), bytes are neither Unique
 // nor indexed (MySQL covers a blob only by a prefix), an index names fields
 // that exist and no two indexes repeat, and the positions count the lists.
 func normalize(m *loadjson.Model) {
@@ -243,7 +243,7 @@ func normalize(m *loadjson.Model) {
 			if f.Unique && f.Optional {
 				f.Nillable = true // unset rows must not all hold the zero value
 			}
-			if f.Optional && !f.Nillable && len(f.Default) == 0 && (f.Type == "enum" || f.Type == "bytes" || f.Type == "time") {
+			if f.Optional && !f.Nillable && f.Type != "json" && len(f.Default) == 0 && !f.DefaultFunc && len(f.SchemaDefault) == 0 {
 				f.Nillable = true
 			}
 		}

@@ -89,10 +89,10 @@ func (tbUser) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("name").Comment("the display name"),
 		field.String("email").MaxLen(120).Unique(),
-		field.Text("bio").Optional(),
+		field.Text("bio").Optional().Default(""),
 		field.Bool("active").Nillable().Default(true),
-		field.Bool("admin").Optional(),
-		field.Int("age").Optional(),
+		field.Bool("admin").Optional().Default(false),
+		field.Int("age").Optional().Default(0),
 		field.Float("score").Nillable().Default(1.5),
 		field.Enum("role").Values("admin", "viewer").Default("viewer"),
 		field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{field.Postgres: "mood"}),
@@ -444,7 +444,7 @@ type tbNull struct{ schema.Schema }
 func (tbNull) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("nillable").Nillable(),
-		field.String("optional").Optional(),
+		field.String("optional").Optional().Default(""),
 		field.Strings("slice").Optional(),
 		field.JSON("shape", JSONShape{}).Optional().Nillable(),
 		field.JSON("req", JSONShape{}),
@@ -481,11 +481,11 @@ func (tbDefaults) Fields() []schema.Field {
 		field.Float("f").Nillable().Default(1.5),
 		field.Int("n").Nillable().Default(-3),
 		field.Uint64("big").Nillable().Default(18446744073709551615),
-		field.String("os").Optional(),
-		field.Text("otxt").Optional(),
-		field.Bool("ob").Optional(),
-		field.Int("oi").Optional(),
-		field.Float32("of").Optional(),
+		field.String("os").Optional().Default(""),
+		field.Text("otxt").Optional().Default(""),
+		field.Bool("ob").Optional().Default(false),
+		field.Int("oi").Optional().Default(0),
+		field.Float32("of").Optional().Default(0),
 		field.String("ns").Optional().Nillable(),
 		field.String("req"),
 		field.String("fn").DefaultFunc(func() string { return "" }),
@@ -495,7 +495,7 @@ func (tbDefaults) Fields() []schema.Field {
 		field.Enum("role").Values("admin", "viewer").Default("viewer"),
 		field.Enum("mode").Values("a", "b").Default("a").SchemaType(map[string]string{field.MySQL: "text"}),
 		field.String("blobby").Default("x").SchemaType(map[string]string{field.MySQL: "blob"}),
-		field.String("doc").Optional().SchemaType(map[string]string{field.MySQL: "json"}),
+		field.String("doc").Optional().Default("").SchemaType(map[string]string{field.MySQL: "json"}),
 	}
 }
 

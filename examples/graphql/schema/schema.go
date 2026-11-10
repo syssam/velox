@@ -61,7 +61,7 @@ func (Post) Fields() []schema.Field {
 		field.Int64("author_id").Annotations(graphql.WhereOps(graphql.OpsEquality)),
 		field.String("title").NotEmpty().Comment("The post's title, never empty.").Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
 		field.Enum("status").Values("draft", "published").Default("draft").Comment("Whether the post is a draft or published.").Annotations(graphql.WhereOps()),
-		field.Int64("views").Optional().Comment("How many times the post was read.").Annotations(graphql.OrderField("VIEWS")),
+		field.Int64("views").Optional().Default(0).Comment("How many times the post was read.").Annotations(graphql.OrderField("VIEWS")),
 		field.Time("published_at").Optional().Nillable().Comment("When the post was published; null for a draft.").Annotations(graphql.WhereOps()),
 	}
 }

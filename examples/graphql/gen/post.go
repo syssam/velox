@@ -105,7 +105,7 @@ func postDescriptor() velox.Descriptor[Post] {
 			{Field: "AuthorID", Name: "author_id"},
 			{Field: "Title", Name: "title"},
 			{Field: "Status", Name: "status", Default: PostStatusDraft},
-			{Field: "Views", Name: "views"},
+			{Field: "Views", Name: "views", Default: int64(0)},
 			{Field: "PublishedAt", Name: "published_at"},
 		},
 		PrimaryKey: []int{postColID},

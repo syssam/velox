@@ -11,8 +11,9 @@ import (
 	"github.com/syssam/velox/schema/index"
 )
 
-// A Unique field that is Optional and not Nillable writes one value for every
-// unset row, so the second create without it fails on the index.
+// A Unique field that is Optional and not Nillable has one Default for every
+// unset row, so the second create without it fails on the index. One with no
+// Default at all is rule 37's.
 type uniqueOptional struct{ schema.Schema }
 
 func (uniqueOptional) Fields() []schema.Field {
@@ -28,7 +29,7 @@ func (uniqueOptionalDefault) Fields() []schema.Field {
 type uniqueOptionalIndex struct{ schema.Schema }
 
 func (uniqueOptionalIndex) Fields() []schema.Field {
-	return []schema.Field{field.String("slug").Optional()}
+	return []schema.Field{field.String("slug").Optional().Default("x")}
 }
 
 func (uniqueOptionalIndex) Indexes() []schema.Index {
@@ -42,7 +43,7 @@ func (uniqueOptionalOK) Fields() []schema.Field {
 		field.String("a").Unique().Optional().Nillable(),
 		field.String("b").Unique().Optional().DefaultFunc(func() string { return "" }),
 		field.String("c").Unique(),
-		field.String("d").Optional(),
+		field.String("d").Optional().Default(""),
 	}
 }
 
@@ -59,7 +60,7 @@ func TestBuildUniqueOptionalRefused(t *testing.T) {
 		s    schema.Interface
 		want string
 	}{
-		{uniqueOptional{}, `schema uniqueOptional: field "slug": ` + why},
+		{uniqueOptional{}, `schema uniqueOptional: field "slug": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},
 		{uniqueOptionalDefault{}, `schema uniqueOptionalDefault: field "slug": ` + why},
 		{uniqueOptionalIndex{}, `schema uniqueOptionalIndex: field "slug": ` + why},
 	} {

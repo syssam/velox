@@ -163,9 +163,9 @@ func TestRenderMySQLOrder(t *testing.T) {
 // its name is dropped and added in one statement, at the add.
 func TestRenderMySQLIndexRedefined(t *testing.T) {
 	t.Parallel()
-	from := mustTables(velox.MySQL, func(m *loadjson.Model) { addField(m, "User", field.String("legacy").Optional()) })
+	from := mustTables(velox.MySQL, func(m *loadjson.Model) { addField(m, "User", field.String("legacy").Optional().Default("")) })
 	to := mustTables(velox.MySQL, func(m *loadjson.Model) {
-		addField(m, "User", field.String("legacy").Optional())
+		addField(m, "User", field.String("legacy").Optional().Default(""))
 		ent(m, "User").Indexes[0].Fields = []string{"name", "legacy"}
 	})
 	cs := diff(t, from, to, migrate.DiffOptions{})
@@ -354,7 +354,7 @@ func TestRenderLiterals(t *testing.T) {
 func TestRenderDirectives(t *testing.T) {
 	t.Parallel()
 	from := func(d velox.Dialect) *migrate.Schema {
-		return mustTables(d, func(m *loadjson.Model) { addField(m, "User", field.String("legacy").Optional()) })
+		return mustTables(d, func(m *loadjson.Model) { addField(m, "User", field.String("legacy").Optional().Default("")) })
 	}
 	for _, d := range rendered {
 		f, to := from(d), mustTables(d, nil)

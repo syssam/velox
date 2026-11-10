@@ -340,7 +340,7 @@ import (
 // Audit records who changed a row.
 type Audit struct{ mixin.Schema }
 
-func (Audit) Fields() []schema.Field { return []schema.Field{field.String("changed_by").Optional()} }
+func (Audit) Fields() []schema.Field { return []schema.Field{field.String("changed_by").Optional().Default("")} }
 
 func (Audit) Indexes() []schema.Index { return []schema.Index{index.Fields("changed_by")} }
 
@@ -348,7 +348,7 @@ func (Audit) Indexes() []schema.Index { return []schema.Index{index.Fields("chan
 type Full struct{ Audit }
 
 func (f Full) Fields() []schema.Field {
-	return append(f.Audit.Fields(), field.String("reason").Optional())
+	return append(f.Audit.Fields(), field.String("reason").Optional().Default(""))
 }
 
 func (Full) Annotations() []schema.Annotation { return []schema.Annotation{schema.Comment("audited")} }

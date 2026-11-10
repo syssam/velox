@@ -927,16 +927,13 @@ var (
 	complexKind = map[string]bool{"complex64": true, "complex128": true}
 )
 
-// optionalNeeds lists the field types whose unset value cannot be stored, so
-// an Optional field of the type that is not Nillable needs a Default.
-var optionalNeeds = []struct {
-	typ, noun string
-	rule      int
-	funcOK    bool // a DefaultFunc counts as a Default
-}{
-	{"enum", "enum", 37, false},        // unset, an enum is "", which is no value
-	{"bytes", "bytes field", 39, true}, // unset, a bytes field is nil, which binds NULL
-	{"time", "time field", 40, true},   // unset, a time is the zero time, which MySQL's strict mode refuses
+// optionalNoValue reports whether f is Optional and gives an unset row no value:
+// it is not Nillable, so its column is NOT NULL, and it has no Default,
+// DefaultFunc or SchemaDefault. An Optional JSON field is the exception: its
+// column holds NULL.
+func optionalNoValue(f *Field) bool {
+	return f.Optional && !f.Nillable && f.Type != "json" &&
+		len(f.Default) == 0 && !f.DefaultFunc && len(f.SchemaDefault) == 0
 }
 
 // validateFields checks the fields of e: their names and columns, the rules
@@ -998,13 +995,12 @@ func (b *builder) validateField(e *Entity, f *Field) {
 	if (len(f.Default) > 0 && !zeroDefault(f) || f.DefaultFunc) && !f.Nillable && (f.Type == "bool" || numeric[f.Type]) {
 		b.fail(36, e.Name, fieldLoc(f), "%s", defaultWayOut(f))
 	}
-	if b.keyEdges[f] == nil && uniqueUnset(e, f) { // a bound key is rule 38's
+	switch {
+	case b.keyEdges[f] != nil: // a bound key is rule 38's
+	case optionalNoValue(f):
+		b.fail(37, e.Name, fieldLoc(f), "an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place")
+	case uniqueUnset(e, f):
 		b.fail(54, e.Name, fieldLoc(f), "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide, or give it a DefaultFunc that a value a hook fills can stand in for, as velox-gen cannot see a hook")
-	}
-	for _, r := range optionalNeeds {
-		if f.Type == r.typ && f.Optional && !f.Nillable && len(f.Default) == 0 && (!r.funcOK || !f.DefaultFunc) {
-			b.fail(r.rule, e.Name, fieldLoc(f), "an Optional %s needs a Default or Nillable", r.noun)
-		}
 	}
 	unwritable := b.unwritableJSON(e, f)
 	// An Optional JSON field's column holds NULL, so its Go field must

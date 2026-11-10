@@ -26,7 +26,7 @@ import (
 type User struct{ schema.Schema }
 
 func (User) Fields() []schema.Field {
-	return []schema.Field{field.String("name"), field.String("email").Optional()}
+	return []schema.Field{field.String("name"), field.String("email").Optional().Default("")}
 }
 `
 

@@ -120,7 +120,7 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 			{Field: "Total", Name: "total"},
 			{Field: "Paid", Name: "paid"},
 			{Field: "PaidAt", Name: "paid_at"},
-			{Field: "Note", Name: "note"},
+			{Field: "Note", Name: "note", Default: ""},
 			{Field: "Data", Name: "data"},
 		},
 		PrimaryKey: []int{invoiceColID},

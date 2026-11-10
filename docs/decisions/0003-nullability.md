@@ -1,6 +1,6 @@
 # 0003. Optional stays NOT NULL; Nillable makes NULL
 
-- Status: accepted, 2026-10-29
+- Status: accepted, 2026-10-29; amended by [0063](0063-optional-needs-a-value.md): an `Optional` field has a `Default` or is `Nillable`, and an unset one no longer writes the zero value
 
 ## Context
 

@@ -567,7 +567,7 @@ func TestDirAddEnumLockTimeout(t *testing.T) {
 	from, _ := models(t, c, d)
 	to := mustTables(d, func(m *loadjson.Model) {
 		setEnum(m, "User", "role", "admin", "viewer", "owner")
-		addField(m, "User", field.String("nickname").Optional())
+		addField(m, "User", field.String("nickname").Optional().Default(""))
 	})
 	fsys := dirOf(t, d, step{to: from})
 	fsys["velox.json"] = &fstest.MapFile{Data: []byte(`{"version": 1, "dialect": "postgres", "lock_timeout": "7s"}` + "\n")}

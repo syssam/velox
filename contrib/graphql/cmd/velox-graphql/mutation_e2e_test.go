@@ -48,7 +48,7 @@ func (Writer) Fields() []schema.Field {
 		field.String("name").NotEmpty(),
 		field.String("bio").Optional().Nillable(),
 		field.String("nick").Optional().Default("anon"),
-		field.Int("score").Optional(),
+		field.Int("score").Optional().Default(0),
 		field.String("password").Sensitive(),
 		field.JSON("meta", map[string]any{}).Optional(),
 		field.Int64("mentor_id").Optional().Nillable(),

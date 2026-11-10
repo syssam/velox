@@ -274,7 +274,7 @@ func editSchema(app string, n int) error {
 }
 
 // noteField is the line of every schema that the edit appends a field after.
-const noteField = `field.String("note").Optional(),`
+const noteField = `field.String("note").Optional().Default(""),`
 
 // generate returns the application's files (path → source): n schemas e0..e<n-1>
 // of the schema package, which velox-gen turns into the gen package, and

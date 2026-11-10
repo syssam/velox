@@ -142,7 +142,7 @@ func TestPluginModelGolden(t *testing.T) {
 		t.Fatalf("views %+v: a required number is no pointer", views)
 	}
 	if nick := pluginField(t, user, "nickname"); nick.Pointer || nick.Nullable || !nick.Optional || nick.GoType != "string" {
-		t.Fatalf("nickname %+v: Optional alone is a value on a NOT NULL column", nick)
+		t.Fatalf("nickname %+v: Optional without Nillable is a value on a NOT NULL column", nick)
 	}
 	if score := pluginField(t, user, "score"); !score.Pointer || !score.Nullable || !score.HasDefault || score.GoType != "*float64" {
 		t.Fatalf("score %+v: Nillable makes a pointer; its Default does not change it", score)
@@ -245,7 +245,7 @@ func TestPluginModel2(t *testing.T) {
 		pluginField(t, post, "status"):     `"draft"`,
 		pluginField(t, group, "token"):     ``,
 		pluginField(t, user, "created_at"): ``,
-		pluginField(t, user, "nickname"):   ``,
+		pluginField(t, user, "nickname"):   `""`,
 	} {
 		if string(f.Default) != want {
 			t.Errorf("%s default %s, want %s", f.Name, f.Default, want)
@@ -469,7 +469,7 @@ func TestPluginModelRoundTrip(t *testing.T) {
 type PlOwner struct{ schema.Schema }
 
 func (PlOwner) Fields() []schema.Field {
-	return []schema.Field{field.String("note").Optional().Comment("A note."), field.Enum("st").GoType(LwStatus("")).Default("off"), field.Strings("labels").Optional()}
+	return []schema.Field{field.String("note").Optional().Default("").Comment("A note."), field.Enum("st").GoType(LwStatus("")).Default("off"), field.Strings("labels").Optional()}
 }
 func (PlOwner) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("keys", PlKey.Type).Comment("The keys."), edge.To("pets", PlPet.Type)}
@@ -525,7 +525,7 @@ func TestPluginModelJoinTypesAndComments(t *testing.T) {
 		t.Errorf("comments: %q %q %q", owner.Comment, pluginEdge(t, owner, "keys").Comment, pluginField(t, owner, "note").Comment)
 	}
 	if n := pluginField(t, owner, "note"); n.Nullable || !n.Optional || n.Pointer || n.GoType != "string" {
-		t.Errorf("note %+v: Optional alone is a value on a NOT NULL column", n)
+		t.Errorf("note %+v: Optional without Nillable is a value on a NOT NULL column", n)
 	}
 	// An Optional JSON field is the exception: a slice has no zero value to
 	// write, so its column is NULL-able, and NULL decodes to nil.

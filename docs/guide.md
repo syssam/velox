@@ -112,7 +112,9 @@ Two options work differently from ent, so they are worth learning early
 ([ADR 0003](decisions/0003-nullability.md)):
 
 - `Optional()` means "may be left out on insert". The column stays
-  `NOT NULL`, and the field's zero value is stored.
+  `NOT NULL`, so an `Optional` field needs a `Default` or `Nillable`:
+  `Optional().Default("")` is an empty string. velox stores no zero value
+  in their place ([ADR 0063](decisions/0063-optional-needs-a-value.md)).
 - `Nillable()` makes the column nullable. The Go field becomes a pointer, and
   its handle gains `IsNull`, `NotNull` and `SetNull`.
 

@@ -200,6 +200,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- An `Optional` field that is not `Nillable` has a `Default`, `DefaultFunc` or
+  `SchemaDefault`, or velox-gen refuses it (rule 37, now for every type;
+  rules 39 and 40 are gone): velox writes no Go zero value for an unset
+  field, and `migrate diff` gives no column a zero `DEFAULT`. Write
+  `Optional().Default("")` for an empty string, `Optional().Nillable()` for
+  NULL (decision 0063). The generated code's shape is unchanged.
 - A GraphQL ID is the entity's key in its own Go type, which gqlgen decodes:
   a resolver takes `id int64`, an input's `<edge>ID` and `<edge>IDs` and a
   where input's ID predicates are keys, and velox-graphql refuses a schema

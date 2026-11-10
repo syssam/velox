@@ -270,7 +270,7 @@ func TestMigrateMySQLCombined(t *testing.T) {
 	// An index dropped and added under one name, in one statement.
 	t.Run("index-redefined", func(t *testing.T) {
 		c := testCase{name: "index-redefined", to: func(m *loadjson.Model) {
-			addField(m, "User", field.String("legacy").Optional())
+			addField(m, "User", field.String("legacy").Optional().Default(""))
 			ent(m, "User").Indexes[0].Fields = []string{"name", "legacy"}
 		}}
 		want := "ALTER TABLE `users` DROP INDEX `users_by_name`, ADD INDEX `users_by_name` (`name`, `legacy`)"

@@ -22,19 +22,19 @@ type common[B any] struct {
 }
 
 // Optional makes the field not required on create. Its column stays NOT NULL
-// and its Go field a value: an unset field is its zero value, and an insert
-// writes its Default, or the zero value. The zero value means unset, so the
-// field's validators let it pass. A JSON field is the exception: Optional
-// makes its column NULL-able, as a slice or a map has no zero value to write,
-// and NULL reads as nil.
+// and its Go field a value: a field left out is its zero value, which means
+// unset, so the field's validators let it pass, and an insert writes its
+// Default or DefaultFunc in its place. An Optional field writes no zero
+// value of its own, so velox-gen refuses one that is not Nillable and has no
+// Default, DefaultFunc or SchemaDefault: write Optional().Nillable() for NULL,
+// or Optional().Default("") for an empty string. A JSON field is the
+// exception: Optional makes its column NULL-able, as a slice or a map has no
+// zero value to write, and NULL reads as nil.
 //
-// velox-gen refuses an Optional enum with neither a Default nor Nillable,
-// whose zero value "" is no value; an Optional bytes field with neither,
-// whose zero value nil binds NULL; an Optional time field with neither, whose
-// zero time MySQL's strict mode refuses; and an Optional edge field that is
-// not Nillable, whose zero value is no row's key. It refuses a Unique Optional
-// field that is not Nillable, unless a DefaultFunc or a SchemaDefault gives each
-// row its own value: every unset row would hold one value, and the second fail.
+// velox-gen also refuses an Optional edge field that is not Nillable, whose
+// zero value is no row's key, and a Unique Optional field that is not
+// Nillable, unless a DefaultFunc or a SchemaDefault gives each row its own
+// value: every unset row would hold one Default, and the second fail.
 func (c common[B]) Optional() B { c.d.Optional = true; return c.self }
 
 // Nillable makes the column NULL-able and the Go field a pointer, nil for

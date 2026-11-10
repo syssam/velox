@@ -45,20 +45,23 @@ name (`type UserFriend struct{}`), which is not a schema.
 
 **`Optional` is NOT NULL.** In ent, `Optional()` makes the column NULL-able. In
 velox it means only that the field need not be given on create: the column
-stays NOT NULL, the Go field is a value, and an unset field writes its `Default`
-or its zero value. For a NULL-able column write `Optional().Nillable()`, which
-makes the Go field a pointer and adds `Null*` handles (`IsNull`, `SetNull`).
-This is deliberate ([0003](decisions/0003-nullability.md)). An `Optional` JSON
-field is the one exception: its column is NULL-able. velox-gen refuses an
-`Optional` field whose zero value cannot be stored or means nothing:
+stays NOT NULL and the Go field is a value. `Nillable()` is what makes a column
+NULL-able, a pointer in Go with `Null*` handles (`IsNull`, `SetNull`), and
+`Default` is what an unset field takes. velox writes no zero value in their
+place ([0003](decisions/0003-nullability.md),
+[0063](decisions/0063-optional-needs-a-value.md)). An `Optional` JSON field is
+the one exception: its column is NULL-able. So velox-gen refuses an `Optional`
+field that has neither:
 
-- an `Optional` time, enum or bytes field needs `Nillable` or a `Default` (for
-  time and bytes, a `DefaultFunc` such as `time.Now` counts);
+- `field.String("bio").Optional()` becomes `Optional().Nillable()` for NULL, or
+  `Optional().Default("")` for an empty string; a number takes `Default(0)` and
+  a bool `Default(false)`. A `DefaultFunc` such as `time.Now` counts as a
+  `Default`;
 - an `Optional` `Unique` field needs `Nillable` or a `DefaultFunc`, or every
   unset row would hold the same value.
 
 When `migrate diff` adds a column to a table that has rows, give the field a
-`Default` or make it `Optional`: a NOT NULL column with no default fails on
+`Default` or make it `Nillable`: a NOT NULL column with no default fails on
 those rows, and `-allow add-required-column=...` only helps on an empty table.
 
 **`field.Strings` is a JSON column, as in ent.** `field.Strings`, `field.Ints`

@@ -33,7 +33,7 @@ type LwUser struct{ schema.Schema }
 func (LwUser) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("name").NotEmpty(),
-		field.String("nick").Optional(),
+		field.String("nick").Optional().Default(""),
 		field.Bool("active").Nillable().Default(true),
 		field.Enum("role").Values("viewer", "admin"),
 		field.Time("seen").Optional().Nillable(),
@@ -291,7 +291,7 @@ type LwChecked struct{ schema.Schema }
 func (LwChecked) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("code").NotEmpty().MaxLen(5).Match(regexp.MustCompile(`^[a-z]+$`)).Validate(func(s string) error { return nil }),
-		field.Int("age").Optional().Min(1).Max(120).Validate(func(int) error { return nil }),
+		field.Int("age").Optional().Default(0).Min(1).Max(120).Validate(func(int) error { return nil }),
 		field.Enum("state").Values("on", "off"),
 		field.Int64("n").Positive(),
 		field.String("plain"),
@@ -374,7 +374,7 @@ func (LwDefaults) Fields() []schema.Field {
 		field.Float("f").Optional().Nillable(), field.Float("f_def").Optional().Nillable().Default(1.5),
 		field.Int("i").Nillable(), field.Int("i_def").Nillable().DefaultFunc(func() int { return 1 }),
 		field.String("s"), field.String("s_def").Default("x"),
-		field.String("o").Optional(), field.String("o_def").Optional().Default("x"),
+		field.String("o").Optional().Default(""), field.String("o_def").Optional().Default("x"),
 		field.Time("t").Nillable(), field.Time("t_def").Nillable().Default(time.Now),
 	}
 }
@@ -1181,7 +1181,7 @@ func (LwNull) Fields() []schema.Field {
 		field.JSON("shape", LwBox{}),
 		field.Bytes("blob").Nillable(),
 		field.Bytes("raw").Optional().Default([]byte("r")),
-		field.String("bio").Optional(),
+		field.String("bio").Optional().Default(""),
 	}
 }
 
@@ -1308,12 +1308,12 @@ type LwOptionalChecks struct{ schema.Schema }
 
 func (LwOptionalChecks) Fields() []schema.Field {
 	return []schema.Field{
-		field.String("only_empty").Optional().NotEmpty(),               // col 1: no check can fail
-		field.String("short").Optional().NotEmpty().MaxLen(5),          // col 2: MaxLen only
-		field.String("min_one").Optional().MinLen(1).MinRuneLen(1),     // col 3: no check can fail
-		field.String("min_two").Optional().MinLen(2),                   // col 4: "a" is shorter, and set
-		field.String("required").NotEmpty(),                            // col 5: not Optional, so NotEmpty can fail
-		field.Bytes("blob").Optional().Default([]byte("x")).NotEmpty(), // col 6: no check can fail
+		field.String("only_empty").Optional().Default("").NotEmpty(),           // col 1: no check can fail
+		field.String("short").Optional().Default("").NotEmpty().MaxLen(5),      // col 2: MaxLen only
+		field.String("min_one").Optional().Default("").MinLen(1).MinRuneLen(1), // col 3: no check can fail
+		field.String("min_two").Optional().Default("").MinLen(2),               // col 4: "a" is shorter, and set
+		field.String("required").NotEmpty(),                                    // col 5: not Optional, so NotEmpty can fail
+		field.Bytes("blob").Optional().Default([]byte("x")).NotEmpty(),         // col 6: no check can fail
 	}
 }
 

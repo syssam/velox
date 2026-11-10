@@ -346,27 +346,15 @@ func (t *tabler) enum(e *Entity, f *Field, name string) {
 
 // columnDefault is the DEFAULT of f's column, of type typ: its SchemaDefault
 // for the dialect, verbatim; else its literal Default of a bool, number,
-// string or enum; else, for an Optional field that is not Nillable of type
-// string, bool or number, its zero value; else "".
+// string or enum; else "". An Optional field has no DEFAULT of its own: it
+// has a Default, or a DefaultFunc, or is Nillable.
 func (t *tabler) columnDefault(f *Field, typ string) string {
 	if s := f.SchemaDefault[t.d.String()]; s != "" {
 		return s
 	}
 	raw := f.Default
 	if len(raw) == 0 {
-		if !f.Optional || f.Nillable {
-			return ""
-		}
-		switch {
-		case f.Type == "string":
-			raw = json.RawMessage(`""`)
-		case f.Type == "bool":
-			raw = json.RawMessage(`false`)
-		case numeric[f.Type]:
-			raw = json.RawMessage(`0`)
-		default:
-			return ""
-		}
+		return ""
 	}
 	switch {
 	case f.Type == "bool":

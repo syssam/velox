@@ -43,7 +43,7 @@ func (User) Fields() []schema.Field {
 		field.String("bio").Optional().Nillable(),
 		field.Enum("role").Values("admin", "viewer").Default("viewer"),
 		field.EnumOf[caseStatus]("status").Default("active"),
-		field.Int32("logins").Optional(),
+		field.Int32("logins").Optional().Default(0),
 		field.Time("created_at"),
 		field.Int64("mentor_id").Optional().Nillable(),
 	}
@@ -428,7 +428,7 @@ var cases = []testCase{
 		dropEdge(m, "User", "posts")
 	}},
 	{name: "rename-table", to: func(m *loadjson.Model) { annotate(m, "User", schema.Table("accounts")) }, opts: renameUsers},
-	{name: "add-column-optional", to: func(m *loadjson.Model) { addField(m, "User", field.String("nickname").Optional()) }},
+	{name: "add-column-optional", to: func(m *loadjson.Model) { addField(m, "User", field.String("nickname").Optional().Default("")) }},
 	{name: "add-column-nillable", to: func(m *loadjson.Model) {
 		addField(m, "User", field.String("nickname").Optional().Nillable())
 	}},

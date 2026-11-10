@@ -20,10 +20,10 @@ func (User) Fields() []schema.Field {
 		field.String("name").NotEmpty().MaxLen(20),
 		field.String("email").Unique().Match(regexp.MustCompile(`^[^@]+@[^@]+$`)),
 		field.Enum("role").Values("admin", "editor", "viewer").Default("viewer"),
-		field.String("nickname").Optional(),
-		field.Int("age").Optional().Range(1, 150),
+		field.String("nickname").Optional().Default(""),
+		field.Int("age").Optional().Default(0).Range(1, 150),
 		// Optional with validators: unset is "", which the validators let pass.
-		field.String("motto").Optional().NotEmpty().MaxLen(10),
+		field.String("motto").Optional().Default("").NotEmpty().MaxLen(10),
 		field.String("password_hash").Sensitive(),
 		field.Float("score").Nillable().Default(1.5),
 	}

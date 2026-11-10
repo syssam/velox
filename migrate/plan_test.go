@@ -15,7 +15,7 @@ import (
 func TestNewPlan(t *testing.T) {
 	t.Parallel()
 	for _, d := range rendered {
-		from := mustTables(d, func(m *loadjson.Model) { addField(m, "User", field.String("legacy").Optional()) })
+		from := mustTables(d, func(m *loadjson.Model) { addField(m, "User", field.String("legacy").Optional().Default("")) })
 		to := mustTables(d, nil)
 		p, err := migrate.NewPlan(from, to, migrate.PlanOptions{LockTimeout: 5 * time.Second})
 		var b *migrate.BlockedError

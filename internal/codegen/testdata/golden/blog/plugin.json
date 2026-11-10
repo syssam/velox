@@ -385,7 +385,9 @@
           "type": "string",
           "go_type": "string",
           "elem_type": "string",
-          "optional": true
+          "optional": true,
+          "has_default": true,
+          "default": ""
         },
         {
           "name": "bio",
@@ -406,6 +408,8 @@
           "go_type": "int",
           "elem_type": "int",
           "optional": true,
+          "has_default": true,
+          "default": 0,
           "checks": [
             {
               "kind": "Range",
