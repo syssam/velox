@@ -50,18 +50,11 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &renderer{m: m, outPath: outPath, outPkg: outPkg, veloxEnums: map[string]*plugin.Enum{}, names: map[string]string{}, types: map[string]*sdl.Type{}, typeOf: map[string]*sdl.Type{}, ents: map[string]*plugin.Entity{}}
-	for _, e := range m.Entities {
-		r.ents[e.Name] = e
-	}
+	r := newRenderer(m, outPath, outPkg)
 	for _, t := range s.Types {
 		r.types[t.Name] = t
 		r.typeOf[t.Entity.Name] = t
 	}
-	for _, en := range m.Enums {
-		r.veloxEnums[en.Type] = en
-	}
-	r.reserve()
 	files := make([]plugin.File, 0, len(s.Types))
 	for _, t := range s.Types {
 		e := t.Entity
@@ -76,6 +69,56 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 	}
 	slices.SortFunc(files, func(a, b plugin.File) int { return cmp.Compare(a.Path, b.Path) })
 	return files, nil
+}
+
+// RenderEnums returns, for an application that writes its own SDL, only
+// the GraphQL marshalers of velox-gen's enum types: <label>_gql.go for each
+// entity that sdl.Enums gives enums. A marshaler writes the value
+// sdl.Enums computes, the stored one upper-cased unless graphql.EnumValues
+// renames it, and reads it back; gqlgen's autobind finds them on the type.
+func RenderEnums(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
+	if outPkg == "" {
+		return nil, fmt.Errorf("velox-graphql: the request names no generated package")
+	}
+	ees, err := sdl.Enums(m)
+	if err != nil {
+		return nil, err
+	}
+	r := newRenderer(m, outPath, outPkg)
+	files := make([]plugin.File, 0, len(ees))
+	for _, ee := range ees {
+		e := ee.Entity
+		if e.Label == "" {
+			return nil, fmt.Errorf("schema %s: the model gives it no label, which velox-gen names its Go after", e.Name)
+		}
+		f := newFile()
+		for _, en := range ee.Enums {
+			if err := r.writeEnum(f, e, en); err != nil {
+				return nil, err
+			}
+		}
+		file, err := f.finish(e.Label+"_gql.go", outPkg)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, file)
+	}
+	slices.SortFunc(files, func(a, b plugin.File) int { return cmp.Compare(a.Path, b.Path) })
+	return files, nil
+}
+
+// newRenderer returns the renderer of m with its entities and velox-gen's
+// enum types indexed and velox-gen's Go names reserved.
+func newRenderer(m *plugin.Model, outPath, outPkg string) *renderer {
+	r := &renderer{m: m, outPath: outPath, outPkg: outPkg, veloxEnums: map[string]*plugin.Enum{}, names: map[string]string{}, types: map[string]*sdl.Type{}, typeOf: map[string]*sdl.Type{}, ents: map[string]*plugin.Entity{}}
+	for _, e := range m.Entities {
+		r.ents[e.Name] = e
+	}
+	for _, en := range m.Enums {
+		r.veloxEnums[en.Type] = en
+	}
+	r.reserve()
+	return r
 }
 
 // pkgNames are the names of the packages the generated code imports whose
@@ -320,7 +363,7 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 		}
 	}
 	for _, en := range t.Enums {
-		if err := r.writeEnum(f, t, en); err != nil {
+		if err := r.writeEnum(f, t.Entity, en); err != nil {
 			return plugin.File{}, err
 		}
 	}
@@ -507,8 +550,8 @@ func (r *renderer) qualify(f *file, e *plugin.Entity, fd *plugin.Field, typ, pkg
 // en: gqlgen binds the GraphQL enum, or the String, to the Go type, and they
 // turn its values into the stored ones and back. An enum of the
 // application's own Go type brings its own.
-func (r *renderer) writeEnum(f *file, t *sdl.Type, en sdl.Enum) error {
-	fd := t.Entity.Fields[en.Field]
+func (r *renderer) writeEnum(f *file, e *plugin.Entity, en sdl.Enum) error {
+	fd := e.Fields[en.Field]
 	typ := fd.Enum
 	ve := r.veloxEnums[typ]
 	if ve == nil {
@@ -517,12 +560,12 @@ func (r *renderer) writeEnum(f *file, t *sdl.Type, en sdl.Enum) error {
 	if len(ve.Consts) == 0 && len(ve.Values) > 0 {
 		// velox-gen writes the constants' names into the model since the
 		// enum marshalers switch on them; an older one leaves them out.
-		return fmt.Errorf("schema %s, field %s: the model has no Go constants of %s: velox-gen is too old for this velox-graphql; update velox-gen to the same velox version and regenerate", t.Entity.Name, fd.Name, typ)
+		return fmt.Errorf("schema %s, field %s: the model has no Go constants of %s: velox-gen is too old for this velox-graphql; update velox-gen to the same velox version and regenerate", e.Name, fd.Name, typ)
 	}
 	if len(ve.Consts) != len(ve.Values) || !slices.Equal(ve.Values, fd.EnumValues) {
-		return fmt.Errorf("schema %s, field %s: the model gives no Go constant of each value of %s; regenerate with velox-gen", t.Entity.Name, fd.Name, typ)
+		return fmt.Errorf("schema %s, field %s: the model gives no Go constant of each value of %s; regenerate with velox-gen", e.Name, fd.Name, typ)
 	}
-	if err := r.declare(typ+".MarshalGQL", "schema "+t.Entity.Name+", field "+fd.Name); err != nil {
+	if err := r.declare(typ+".MarshalGQL", "schema "+e.Name+", field "+fd.Name); err != nil {
 		return err
 	}
 	io := f.use("io", "io")
@@ -530,7 +573,7 @@ func (r *renderer) writeEnum(f *file, t *sdl.Type, en sdl.Enum) error {
 	if en.Name == "" {
 		// A String: graphql.Skip(SkipEnumField) shows the stored values.
 		gql = fd.EnumValues
-		f.doc("", fmt.Sprintf("MarshalGQL writes e as a GraphQL String, its stored value: the field %s of %s is a String, as graphql.Skip(graphql.SkipEnumField) asks.", fd.Name, t.Entity.Name))
+		f.doc("", fmt.Sprintf("MarshalGQL writes e as a GraphQL String, its stored value: the field %s of %s is a String, as graphql.Skip(graphql.SkipEnumField) asks.", fd.Name, e.Name))
 	} else {
 		f.p("// MarshalGQL writes e as its value of the GraphQL enum %s.", en.Name)
 	}

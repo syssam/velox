@@ -21,6 +21,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `velox-gen -plugin velox-graphql:only=enums` writes only the GraphQL
+  marshalers of velox-gen's enum types, for an application that writes its
+  own SDL and binds it with gqlgen's autobind: `open` goes out as `OPEN` and
+  `OPEN` comes back as `open` (decision 0068).
 - `velox.UseTx(db, tx)` returns a DB whose statements run on a `*sql.Tx` the
   caller began, next to raw SQL on the same transaction. The caller commits or
   rolls back; the DB does neither (decision 0066).

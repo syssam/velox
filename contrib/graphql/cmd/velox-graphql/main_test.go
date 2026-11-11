@@ -62,12 +62,27 @@ func TestRun(t *testing.T) {
 		t.Errorf("%+v", resp)
 	}
 
+	// only=enums: the enum marshalers alone, of a model whose User has a
+	// role; no velox.graphql.
+	em := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
+		Name: "User", Label: "user", Handles: "Users", PrimaryKey: []int{0},
+		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "role", GoName: "Role", Type: "enum", Enum: "UserRole", EnumValues: []string{"admin", "viewer"}}},
+	}}, Enums: []*plugin.Enum{{Type: "UserRole", Values: []string{"admin", "viewer"}, Consts: []string{"UserRoleAdmin", "UserRoleViewer"}}}}
+	resp = respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"only": "enums"}, Model: em}))
+	if resp.Error != "" || len(resp.Files) != 1 || resp.Files[0].Path != "user_gql.go" ||
+		!strings.Contains(resp.Files[0].Content, "func (e UserRole) MarshalGQL(") || strings.Contains(resp.Files[0].Content, "UserConnection") {
+		t.Errorf("only=enums: %+v", resp)
+	}
+
 	for name, c := range map[string]struct{ in, want string }{
 		"protocol":  {request(t, plugin.Request{Protocol: 1, Model: m}), "plugin protocol 1"},
 		"version":   {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}), "model is version 1"},
 		"no model":  {request(t, plugin.Request{Protocol: 2}), "no model"},
 		"malformed": {"{", "request"},
-		"options":   {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes no options; it is given a, x"},
+		"options":   {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes one option, only=enums; it is given a, x=y"},
+		"only":      {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "types"}, Model: m}), "it is given only=types"},
+		"only and":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "x": ""}, Model: m}), "it is given only=enums, x"},
+		"enums":     {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums"}, Model: m}), "the request names no generated package"},
 		"render": {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 			Name: "User", PrimaryKey: []int{0},
 			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "other"}},

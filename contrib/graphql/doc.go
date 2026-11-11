@@ -123,6 +123,20 @@
 // its own: -check fails when the schema changed, and dropping -plugin
 // velox-graphql removes the file on the next run.
 //
+// An application that writes its own SDL, and binds it to velox-gen's types
+// with gqlgen's autobind, asks for the enum marshalers alone:
+//
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:only=enums ./veloxschema
+//
+// That writes no velox.graphql and no other Go: a MarshalGQL and an
+// UnmarshalGQL for each enum type velox-gen declares, in
+// veloxgen/<entity>_gql.go. A stored value goes out upper-cased, open as
+// OPEN, or as EnumValues names it, and comes back as the stored value; any
+// other value is refused. The application's SDL declares the enum under
+// velox-gen's type name with those values, so that autobind binds it.
+// Without the marshalers, gqlgen writes the stored value as it is and hands
+// the GraphQL value to the query unchanged.
+//
 // An entity that has a where input, by a WhereOps field or a WhereEdge edge,
 // has the predicates of its key in it, before the fields': the key has id,
 // idNEQ, idIn, idNotIn, and for an ordered key (an integer or a string)
