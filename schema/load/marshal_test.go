@@ -177,6 +177,46 @@ func TestMarshalErrors(t *testing.T) {
 	}
 }
 
+type nestingMixin struct{ mixin.Schema }
+
+func (nestingMixin) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
+
+type ptrNestingMixin struct{ mixin.Schema }
+
+func (*ptrNestingMixin) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
+
+// emptyNestingMixin's Mixin lists nothing, as schema.Schema's does: there is
+// nothing to drop.
+type emptyNestingMixin struct{ mixin.Schema }
+
+func (emptyNestingMixin) Mixin() []schema.Mixin { return nil }
+
+type nests struct{ schema.Schema }
+
+func (nests) Mixin() []schema.Mixin { return []schema.Mixin{nestingMixin{}} }
+
+type ptrNests struct{ schema.Schema }
+
+func (ptrNests) Mixin() []schema.Mixin { return []schema.Mixin{ptrNestingMixin{}} }
+
+type emptyNests struct{ schema.Schema }
+
+func (emptyNests) Mixin() []schema.Mixin { return []schema.Mixin{emptyNestingMixin{}} }
+
+// A mixin's own Mixin method is never followed, so a mixin that lists
+// mixins is refused rather than dropped without a word.
+func TestMarshalRefusesNestedMixins(t *testing.T) {
+	for _, s := range []schema.Interface{nests{}, ptrNests{}} {
+		got := errorText(decode(t, s))
+		if !strings.Contains(got, "Mixin()[0] lists mixins of its own, which velox does not follow: list them in the schema's Mixin") {
+			t.Errorf("%T: %q", s, got)
+		}
+	}
+	if got := errorText(decode(t, emptyNests{})); got != "" {
+		t.Errorf("an empty Mixin: %q", got)
+	}
+}
+
 type merged struct{ N int }
 
 func (merged) Name() string { return "M" }

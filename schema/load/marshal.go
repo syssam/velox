@@ -216,6 +216,11 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 			out.Mixins = append(out.Mixins, loadjson.Mixin{})
 			continue
 		}
+		if nested, err := nestedMixins(m); err != nil {
+			l.fail("", "", "%s%v", prefix, err)
+		} else if nested > 0 {
+			l.fail("", "", "Mixin()[%d] lists mixins of its own, which velox does not follow: list them in the schema's Mixin", i)
+		}
 		out.Mixins = append(out.Mixins, mixinOf(m))
 		add(l.read(prefix, m.Fields, m.Edges, m.Indexes, m.Annotations), prefix, i, true)
 	}
@@ -224,6 +229,28 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 		l.fail("", "", "%v", err)
 	}
 	return out
+}
+
+// nestedMixins returns how many values m's own Mixin method lists, by
+// value or pointer receiver, or 0 when m has none. velox reads a schema's
+// mixins one level deep, as ent does, so a mixin listing mixins would lose
+// their fields and behaviour.
+func nestedMixins(m schema.Mixin) (int, error) {
+	type lister interface{ Mixin() []schema.Mixin }
+	x, ok := m.(lister)
+	if !ok {
+		v := reflect.ValueOf(m)
+		if v.Kind() == reflect.Pointer {
+			return 0, nil
+		}
+		p := reflect.New(v.Type())
+		p.Elem().Set(v)
+		if x, ok = reflect.TypeAssert[lister](p); !ok {
+			return 0, nil
+		}
+	}
+	ms, err := call("Mixin", x.Mixin)
+	return len(ms), err
 }
 
 // mixinOf describes the mixin m, which is not nil: the type velox-gen reads

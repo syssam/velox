@@ -36,7 +36,9 @@ type Index interface{ Descriptor() *desc.Index }
 // Mixin contributes fields, edges, indexes and annotations to the schemas that
 // list it. A mixin may also declare generic Policy, Hooks and Interceptors
 // methods, which velox-gen binds for each entity that lists it (see the
-// package documentation).
+// package documentation). A mixin does not list mixins: velox reads a
+// schema's mixins one level deep, so velox-gen refuses a mixin whose own
+// Mixin method lists any. List them all in the schema's Mixin.
 type Mixin interface {
 	Fields() []Field
 	Edges() []Edge
