@@ -207,6 +207,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-gen refuses an `Optional` field whose only default is a
+  `SchemaDefault`, and no longer lets one excuse a `Unique` `Optional` field
+  (rules 37 and 54). velox's insert writes every column, so the field stored
+  its Go zero, never the column's `DEFAULT`. Add a `Default` or `Nillable`.
+- velox-gen warns of each unique key over every row of an entity with
+  `softdelete.Mixin`: a deleted row keeps its value and blocks a new one.
+
 - `Query.Unbounded()` is `Query.AllowUnbounded()`. It only waives the check that
   fails a read with no `Limit`; a `Limit` you set still applies. The error
   says so. `ErrUnbounded` keeps its name (decision 0067).
@@ -732,6 +739,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- velox-gen refuses a mixin whose own `Mixin()` lists mixins. velox reads
+  mixins one level deep, so their fields and behaviour, soft delete's
+  included, were dropped without a word.
 - `veloxgql.Setup`'s websocket limit no longer drops a client whose first frame the
   server read with the upgrade's request. With gqlgen's default websocket library at
   v0.17.95 and v0.17.98, which answers the upgrade before it hijacks, a client that sent

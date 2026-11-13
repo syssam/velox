@@ -109,8 +109,10 @@ spelled with the field's own name and value:
 `Default(false)` or `Default(0)` is allowed, as it stores what unset stores.
 `SchemaDefault` is the column's default only: velox's inserts write every
 column, so only rows written outside velox take it; the column is an ent
-database's `NOT NULL DEFAULT true`. `CreateDefault` is filled in by gqlgen
-when a client leaves the field out.
+database's `NOT NULL DEFAULT true`. A field left unset stores its Go zero,
+never the column's `DEFAULT`, so `SchemaDefault` is not the value of an
+`Optional` field: velox-gen still asks for a `Default` or `Nillable`.
+`CreateDefault` is filled in by gqlgen when a client leaves the field out.
 
 The same holds for a string: with `Default("x")`, an insert can never store `""`.
 
@@ -165,6 +167,13 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.UpdateOneID(id).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(U.ID.EQ(id)).Set(U.Age.Set(3)).One(ctx)`, the row as written |
 | `client.User.Delete().Exec(ctx)` (every row) | `db.Delete[veloxgen.User]().All().Exec(ctx)` |
 
+`Count` returns an `int64`, where ent's returns an `int`.
+
+Inside `db.Tx`, a statement on the outer `db` fails with `ErrOutsideTx`
+rather than running outside the transaction. To mix raw SQL and velox in one
+transaction, begin it on the `*sql.DB` and run velox on it with
+`velox.UseTx(db, tx)`.
+
 A `Query` with neither a `Limit` nor `AllowUnbounded()` fails with `ErrUnbounded`.
 An `Update` or `Delete` with neither a `Where` nor `All()` fails with
 `ErrNoWhere`. The names differ because they mean different things: `AllowUnbounded`
@@ -208,7 +217,9 @@ is a run-time hook, `velox.WithHooks[veloxgen.Task](...)`, a DB option.
 A mixin declares behaviour as ent's does, with the same plain methods.
 velox reads them for every entity that lists the mixin, mixins first,
 in `Mixin()` order, then the entity's own. The policies are ANDed, so none
-lifts another. Tenancy is such a mixin, over package `scope` (decisions
+lifts another. velox reads mixins one level deep, as ent does, but where
+ent ignores a mixin's own `Mixin()` method, velox-gen refuses a mixin whose
+`Mixin()` lists any: list them all in the schema's `Mixin()`. Tenancy is such a mixin, over package `scope` (decisions
 0038 and 0039), as in ent's privacytenant example:
 
 ```go
@@ -243,7 +254,12 @@ func (InOrg) Hooks() []velox.Hook {
 
 Soft delete is `softdelete.Mixin{}` from `schema/mixin/softdelete`: a delete
 sets `deleted_at`, and `softdelete.Skip(ctx)` shows deleted rows and makes a
-delete hard. `scopetest.Isolates` checks, in a test, that an entity is
+delete hard. A deleted row keeps its unique values, so velox-gen warns of
+each unique key over every row of such an entity: a `Unique` field, a
+one-to-one edge's key, or a unique index with no `Where`. On PostgreSQL and
+SQLite, declare the key as
+`index.Fields("email").Unique().Where("deleted_at IS NULL")`; a one-to-one
+key, or any key on MySQL, is freed by a delete under `softdelete.Skip(ctx)`. `scopetest.Isolates` checks, in a test, that an entity is
 confined, and that its column is immutable, NOT NULL and of the key's type.
 
 The layout is ent's, with no runtime package (decisions 0037, 0039 and

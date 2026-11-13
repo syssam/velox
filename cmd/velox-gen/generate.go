@@ -191,7 +191,8 @@ func loadModel(dir, pattern, out, pkg string, env []string) (*genModel, error) {
 // schema package at pattern: the import path of out, the Hooks and Policy
 // methods the schema package declares (codegen.Behaviour), the behaviour of
 // the entities' mixins (codegen.MixinBehaviour), and the relations that
-// behaviour names (codegen.CheckBehaviour), whose warnings go to stderr.
+// behaviour names (codegen.CheckBehaviour), whose warnings go to stderr
+// with codegen.SoftDeleteWarnings'.
 // UserDoc is left for the caller.
 func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr io.Writer) (codegen.Config, error) {
 	cfg := codegen.Config{Package: pkg, SchemaPath: gm.importPath, SchemaName: gm.name}
@@ -211,6 +212,7 @@ func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr
 	}
 	cfg.Mixins = mixins
 	linked, warnings, err := codegen.CheckBehaviour(dir, pattern, gm.graph, bound, mixins, env)
+	warnings = append(warnings, codegen.SoftDeleteWarnings(gm.graph)...)
 	for _, w := range warnings {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s\n", relWarning(dir, w))
 	}
