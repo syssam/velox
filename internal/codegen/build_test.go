@@ -587,6 +587,12 @@ func (defaultNumber) Fields() []schema.Field {
 	return []schema.Field{field.Float("score").Optional().Default(1.5)}
 }
 
+type optionalDefaultFuncNumber struct{ schema.Schema }
+
+func (optionalDefaultFuncNumber) Fields() []schema.Field {
+	return []schema.Field{field.Int("count").Optional().DefaultFunc(func() int { return 1 })}
+}
+
 type defaultFuncNumber struct{ schema.Schema }
 
 func (defaultFuncNumber) Fields() []schema.Field {
@@ -1237,7 +1243,8 @@ func TestBuildRules(t *testing.T) {
 		{"35 singular is the owner's label", []schema.Interface{Man{}}, `schema Man: edge "men": join table man_men has two columns named man_id; name them with edge.Columns`},
 		{"35 join columns collide on an inverse", []schema.Interface{cycle{}}, `schema cycle: edge "cycles": join table cycle_next has two columns named cycle_id; name them with edge.Columns`},
 		{"36 default on a bool", []schema.Interface{defaultBool{}}, `schema defaultBool: field "active": field.Bool("active") with Default(true): velox inserts a Go struct, whose false cannot be told from unset, so the Default would overwrite an explicit false`},
-		{"36 default on an optional number", []schema.Interface{defaultNumber{}}, `schema defaultNumber: field "score": field.Float("score") with Default(1.5): velox inserts a Go struct, whose 0 cannot be told from unset, so the Default would overwrite an explicit 0 (ent fills it only when the builder never set the field). Write field.Float("score").Nillable().Default(1.5), a pointer whose nil stores 1.5 (the column then holds NULL); or drop the Default and set the value in the struct. To keep an ent database's column, NOT NULL DEFAULT 1.5, add .SchemaDefault(map[string]string{field.Postgres: "1.5", field.MySQL: "1.5", field.SQLite: "1.5"}), which only rows written outside velox take. graphql.CreateDefault(1.5) gives a GraphQL create input the default`},
+		{"36 default on an optional number", []schema.Interface{defaultNumber{}}, `schema defaultNumber: field "score": field.Float("score") with Default(1.5): velox inserts a Go struct, whose 0 cannot be told from unset, so the Default would overwrite an explicit 0 (ent fills it only when the builder never set the field). Write field.Float("score").Nillable().Default(1.5), a pointer whose nil stores 1.5 (the column then holds NULL); or write Default(0) in its place, as an Optional field needs one, and set the value in the struct. To keep an ent database's column, NOT NULL DEFAULT 1.5, add .SchemaDefault(map[string]string{field.Postgres: "1.5", field.MySQL: "1.5", field.SQLite: "1.5"}), which only rows written outside velox take. graphql.CreateDefault(1.5) gives a GraphQL create input the default`},
+		{"36 default func on an optional number", []schema.Interface{optionalDefaultFuncNumber{}}, `schema optionalDefaultFuncNumber: field "count": field.Int("count") with a DefaultFunc: velox inserts a Go struct, whose 0 cannot be told from unset, so the Default would overwrite an explicit 0 (ent fills it only when the builder never set the field). Write field.Int("count").Nillable() with the DefaultFunc, a pointer whose nil takes it (the column then holds NULL); or replace it with Default(0), as an Optional field needs one, and set the value in the struct`},
 		{"36 default func on a number", []schema.Interface{defaultFuncNumber{}}, `schema defaultFuncNumber: field "count": field.Int("count") with a DefaultFunc: velox inserts a Go struct, whose 0 cannot be told from unset, so the Default would overwrite an explicit 0 (ent fills it only when the builder never set the field). Write field.Int("count").Nillable() with the DefaultFunc, a pointer whose nil takes it (the column then holds NULL); or drop the DefaultFunc and set the value in the struct`},
 		{"37 optional enum", []schema.Interface{optionalEnum{}}, `schema optionalEnum: field "mood": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},
 		{"37 optional bytes", []schema.Interface{optionalBytes{}}, `schema optionalBytes: field "blob": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},

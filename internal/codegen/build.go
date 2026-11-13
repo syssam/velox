@@ -1119,10 +1119,18 @@ func defaultWayOut(f *Field) string {
 	var s strings.Builder
 	fmt.Fprintf(&s, "%s with %s: velox inserts a Go struct, whose %s cannot be told from unset, so the Default would overwrite an explicit %s (ent fills it only when the builder never set the field). ", decl, def, zero, zero)
 	if f.DefaultFunc {
-		fmt.Fprintf(&s, "Write %s.Nillable() with the DefaultFunc, a pointer whose nil takes it (the column then holds NULL)%s; or drop the DefaultFunc and set the value in the struct", decl, rename)
+		drop := "drop the DefaultFunc"
+		if f.Optional {
+			drop = "replace it with Default(" + zero + "), as an Optional field needs one,"
+		}
+		fmt.Fprintf(&s, "Write %s.Nillable() with the DefaultFunc, a pointer whose nil takes it (the column then holds NULL)%s; or %s and set the value in the struct", decl, rename, drop)
 		return s.String()
 	}
-	fmt.Fprintf(&s, "Write %s.Nillable().%s, a pointer whose nil stores %s (the column then holds NULL)%s; or drop the Default and set the value in the struct. ", decl, def, lit, rename)
+	drop := "drop the Default"
+	if f.Optional {
+		drop = "write Default(" + zero + ") in its place, as an Optional field needs one,"
+	}
+	fmt.Fprintf(&s, "Write %s.Nillable().%s, a pointer whose nil stores %s (the column then holds NULL)%s; or %s and set the value in the struct. ", decl, def, lit, rename, drop)
 	// The literal as the column's DEFAULT: a bool is true on PostgreSQL and
 	// 1 on MySQL and SQLite, as columnDefault writes it.
 	other := lit

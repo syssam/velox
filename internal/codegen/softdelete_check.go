@@ -19,7 +19,8 @@ const (
 // an entity that lists softdelete.Mixin: a Unique field, a one-to-one edge's
 // key, or a unique index with no Where. Its delete only sets deleted_at, so
 // a deleted row keeps its value and a new row with the same one fails. An
-// index that covers deleted_at is left alone. Each warning is
+// index that covers deleted_at is left alone, as is one over a Unique
+// field's column alone, whose field is warned of. Each warning is
 // "<pos>: schema X: <element>: reason", as an Error prints.
 func SoftDeleteWarnings(g *Graph) []string {
 	var out []string
@@ -35,7 +36,7 @@ func SoftDeleteWarnings(g *Graph) []string {
 			}
 		}
 		for i, ix := range e.Indexes {
-			if ix.Unique && ix.Where == "" && !slices.Contains(ix.Columns, softDeleteColumn) {
+			if ix.Unique && ix.Where == "" && !slices.Contains(ix.Columns, softDeleteColumn) && !uniqueFieldIndex(e, ix) {
 				out = append(out, (&Error{Pos: ix.Pos, Schema: e.Name, Where: indexAt(i),
 					Reason: "a unique index over every row, deleted ones included: softdelete.Mixin's delete keeps the row, so its values block a new row. " +
 						`On PostgreSQL and SQLite, add .Where("deleted_at IS NULL") to cover the live rows alone; on MySQL, which has no partial index, delete under softdelete.Skip(ctx) to remove the row for good, or check uniqueness in a hook`}).Error())
@@ -68,4 +69,12 @@ func softDeleteFieldWarning(e *Entity, f *Field) *Error {
 	w.Reason = "a Unique field is unique over every row, deleted ones included: softdelete.Mixin's delete keeps the row, so its value blocks a new row. " +
 		"On PostgreSQL and SQLite, drop Unique and declare index.Fields(" + strconv.Quote(f.Name) + `).Unique().Where("deleted_at IS NULL"); on MySQL, which has no partial index, delete under softdelete.Skip(ctx) to remove the row for good, or check uniqueness in a hook`
 	return w
+}
+
+// uniqueFieldIndex reports whether ix covers the column of one of e's Unique
+// fields alone.
+func uniqueFieldIndex(e *Entity, ix *Index) bool {
+	return len(ix.Columns) == 1 && slices.ContainsFunc(e.Fields[1:], func(f *Field) bool {
+		return f.Unique && f.Column == ix.Columns[0]
+	})
 }

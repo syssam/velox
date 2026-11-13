@@ -23,6 +23,7 @@ func (sdAccount) Fields() []schema.Field {
 		field.String("handle"),
 		field.String("slug"),
 		field.String("code"),
+		field.String("token").Unique(),
 	}
 }
 func (sdAccount) Edges() []schema.Edge {
@@ -33,6 +34,7 @@ func (sdAccount) Indexes() []schema.Index {
 		index.Fields("handle").Unique(),
 		index.Fields("slug").Unique().Where("deleted_at IS NULL"),
 		index.Fields("code", "deleted_at").Unique(),
+		index.Fields("token").Unique().StorageKey("sd_accounts_token_key"),
 	}
 }
 
@@ -53,12 +55,14 @@ func (plainAccount) Fields() []schema.Field { return []schema.Field{field.String
 // A soft-deleted row keeps its unique values, so velox-gen warns of every
 // unique key over every row of an entity with softdelete.Mixin: a Unique
 // field, a one-to-one edge's key and a full unique index. A partial index,
-// one over deleted_at and an entity without the mixin get none.
+// one over deleted_at and an entity without the mixin get none, and a
+// Unique field's own index, declared by its name, is warned of once.
 func TestSoftDeleteWarnings(t *testing.T) {
 	g := mustBuild(t, sdAccount{}, sdProfile{}, plainAccount{})
 	got := SoftDeleteWarnings(g)
 	want := []string{
 		`schema sdAccount: field "email": `,
+		`schema sdAccount: field "token": `,
 		`schema sdAccount: index 0: `,
 		`schema sdProfile: field "sd_account_profile": `,
 	}
@@ -73,10 +77,10 @@ func TestSoftDeleteWarnings(t *testing.T) {
 	if !strings.Contains(got[0], `index.Fields("email").Unique().Where("deleted_at IS NULL")`) {
 		t.Errorf("a field's warning spells its partial index: %q", got[0])
 	}
-	if !strings.Contains(got[1], `.Where("deleted_at IS NULL")`) {
-		t.Errorf("an index's warning spells its Where: %q", got[1])
+	if !strings.Contains(got[2], `.Where("deleted_at IS NULL")`) {
+		t.Errorf("an index's warning spells its Where: %q", got[2])
 	}
-	if !strings.Contains(got[2], "softdelete.Skip") {
-		t.Errorf("an edge key's warning names softdelete.Skip: %q", got[2])
+	if !strings.Contains(got[3], "softdelete.Skip") {
+		t.Errorf("an edge key's warning names softdelete.Skip: %q", got[3])
 	}
 }
