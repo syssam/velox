@@ -953,16 +953,21 @@ func optionalWayOut(f *Field) string {
 	default:
 		def = "DefaultFunc(...)"
 	}
-	return fmt.Sprintf("an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place. Write %s.%s, or %s.Nillable() for NULL", decl, def, decl)
+	msg := fmt.Sprintf("an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place. Write %s.%s, or %s.Nillable() for NULL", decl, def, decl)
+	if len(f.SchemaDefault) > 0 {
+		msg += ". Its SchemaDefault is not a value for velox: an insert writes every column, so the column's DEFAULT serves only rows written outside velox"
+	}
+	return msg
 }
 
 // optionalNoValue reports whether f is Optional and gives an unset row no value:
-// it is not Nillable, so its column is NOT NULL, and it has no Default,
-// DefaultFunc or SchemaDefault. An Optional JSON field is the exception: its
-// column holds NULL.
+// it is not Nillable, so its column is NOT NULL, and it has no Default or
+// DefaultFunc. A SchemaDefault is no value: velox's insert writes every
+// column, so the column's DEFAULT never applies to it. An Optional JSON field
+// is the exception: its column holds NULL.
 func optionalNoValue(f *Field) bool {
 	return f.Optional && !f.Nillable && f.Type != "json" &&
-		len(f.Default) == 0 && !f.DefaultFunc && len(f.SchemaDefault) == 0
+		len(f.Default) == 0 && !f.DefaultFunc
 }
 
 // validateFields checks the fields of e: their names and columns, the rules
@@ -1150,11 +1155,11 @@ func zeroDefault(f *Field) bool {
 
 // uniqueUnset reports whether every unset row of e holds one value of f, and a
 // unique index of f alone refuses the second: f is Optional, not Nillable, and
-// nothing gives each row its own value (a DefaultFunc, or the database's
-// SchemaDefault, may). A partial index need not cover the unset rows, and a
-// JSON field cannot be Unique (rule 41).
+// nothing gives each row its own value (a DefaultFunc may; a SchemaDefault
+// does not, as velox's insert writes the column). A partial index need not
+// cover the unset rows, and a JSON field cannot be Unique (rule 41).
 func uniqueUnset(e *Entity, f *Field) bool {
-	if !f.Optional || f.Nillable || f.DefaultFunc || len(f.SchemaDefault) > 0 || f.Type == "json" {
+	if !f.Optional || f.Nillable || f.DefaultFunc || f.Type == "json" {
 		return false
 	}
 	return f.Unique || slices.ContainsFunc(e.Indexes, func(ix *Index) bool {

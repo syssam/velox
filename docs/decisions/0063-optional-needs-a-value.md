@@ -57,3 +57,17 @@ required field.
   `DefaultFunc` (`ofn`) has none on any dialect; it was `''` before.
 - Old velox's `FeatureAutoDefault` (compiler/gen/feature.go): the zero fill, off
   by default.
+
+## Amendment, 2026-11-13: a SchemaDefault is not a value
+
+The decision let a `SchemaDefault` stand in for a `Default`, in rule 37 and
+in rule 54's exemption. But velox's insert writes every column, so an unset
+field with only a `SchemaDefault` stored its Go zero, the value this record
+says velox no longer writes, and the column's `DEFAULT` never applied
+(`TestInsertWritesZerosOverDatabaseDefaults`). An application found it as
+new rows stored `false` where the column's `DEFAULT` was `true`. Rule 37 now
+asks a `Default`, a `DefaultFunc` or `Nillable` of every `Optional` field,
+and its message says why the `SchemaDefault` is not enough; rule 54 no
+longer exempts one. A `SchemaDefault` stays the column's `DEFAULT`, for rows
+written outside velox. Evidence: `TestOptionalNeedsAValue` (the `live`
+field) and `TestBuildUniqueOptionalRefused` (`uniqueOptionalSchemaDefault`).

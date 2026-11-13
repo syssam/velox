@@ -1515,7 +1515,8 @@ func TestFieldJSONHasNoPos(t *testing.T) {
 	}
 }
 
-// optionalNoValueSchema breaks rule 37 once for each type, beside the fields
+// optionalNoValueSchema breaks rule 37 once for each type, and once with
+// only a SchemaDefault, which no insert of velox's takes, beside the fields
 // that pass: Nillable, or with a Default, or with a DefaultFunc, and the
 // JSON field, whose Optional column holds NULL.
 type optionalNoValueSchema struct{ schema.Schema }
@@ -1528,6 +1529,7 @@ func (optionalNoValueSchema) Fields() []schema.Field {
 		field.Enum("mood").Values("calm", "busy").Optional(),
 		field.Bytes("blob").Optional(),
 		field.Time("seen").Optional(),
+		field.Bool("live").Optional().SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "1", field.SQLite: "1"}),
 		field.String("bio_n").Optional().Nillable(),
 		field.String("bio_d").Optional().Default(""),
 		field.Int("age_d").Optional().Default(0),
@@ -1541,20 +1543,23 @@ func (optionalNoValueSchema) Fields() []schema.Field {
 }
 
 // Rule 37 is one rule for every type: an Optional field that is not Nillable
-// has a Default, a DefaultFunc or a SchemaDefault, or is refused.
+// has a Default or a DefaultFunc, or is refused. A SchemaDefault is not
+// enough: velox's insert writes every column, so it would store the zero.
 func TestOptionalNeedsAValue(t *testing.T) {
 	_, err := build(t, optionalNoValueSchema{})
+	const sdNote = "Its SchemaDefault is not a value for velox: an insert writes every column, so the column's DEFAULT serves only rows written outside velox"
 	const msg = "an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place. Write "
 	var want []string
-	for _, c := range []struct{ name, decl, fix string }{
-		{"bio", `field.String("bio").Optional()`, `Default("")`},
-		{"age", `field.Int("age").Optional()`, `Default(0)`},
-		{"on", `field.Bool("on").Optional()`, `Default(false)`},
-		{"mood", `field.Enum("mood").Optional()`, `Default("calm")`},
-		{"blob", `field.Bytes("blob").Optional()`, `DefaultFunc(...)`},
-		{"seen", `field.Time("seen").Optional()`, `DefaultFunc(time.Now)`},
+	for _, c := range []struct{ name, decl, fix, more string }{
+		{"bio", `field.String("bio").Optional()`, `Default("")`, ""},
+		{"age", `field.Int("age").Optional()`, `Default(0)`, ""},
+		{"on", `field.Bool("on").Optional()`, `Default(false)`, ""},
+		{"mood", `field.Enum("mood").Optional()`, `Default("calm")`, ""},
+		{"blob", `field.Bytes("blob").Optional()`, `DefaultFunc(...)`, ""},
+		{"seen", `field.Time("seen").Optional()`, `DefaultFunc(time.Now)`, ""},
+		{"live", `field.Bool("live").Optional()`, `Default(false)`, ". " + sdNote},
 	} {
-		want = append(want, `schema optionalNoValueSchema: field "`+c.name+`": `+msg+c.decl+"."+c.fix+", or "+c.decl+".Nillable() for NULL")
+		want = append(want, `schema optionalNoValueSchema: field "`+c.name+`": `+msg+c.decl+"."+c.fix+", or "+c.decl+".Nillable() for NULL"+c.more)
 	}
 	if got := plain(err); got != strings.Join(want, "\n") {
 		t.Fatalf("got\n%s\nwant\n%s", got, strings.Join(want, "\n"))

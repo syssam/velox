@@ -26,6 +26,15 @@ func (uniqueOptionalDefault) Fields() []schema.Field {
 	return []schema.Field{field.String("slug").Unique().Optional().Default("x")}
 }
 
+// uniqueOptionalSchemaDefault's SchemaDefault would give each row its own
+// value only if velox left the column out of the INSERT, which it does not.
+type uniqueOptionalSchemaDefault struct{ schema.Schema }
+
+func (uniqueOptionalSchemaDefault) Fields() []schema.Field {
+	return []schema.Field{field.String("slug").Unique().Optional().Default("x").
+		SchemaDefault(map[string]string{field.Postgres: "gen_random_uuid()::text"})}
+}
+
 type uniqueOptionalIndex struct{ schema.Schema }
 
 func (uniqueOptionalIndex) Fields() []schema.Field {
@@ -63,6 +72,7 @@ func TestBuildUniqueOptionalRefused(t *testing.T) {
 		{uniqueOptional{}, `schema uniqueOptional: field "slug": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},
 		{uniqueOptionalDefault{}, `schema uniqueOptionalDefault: field "slug": ` + why},
 		{uniqueOptionalIndex{}, `schema uniqueOptionalIndex: field "slug": ` + why},
+		{uniqueOptionalSchemaDefault{}, `schema uniqueOptionalSchemaDefault: field "slug": ` + why},
 	} {
 		_, err := build(t, c.s)
 		if err == nil || !strings.Contains(err.Error(), c.want) {

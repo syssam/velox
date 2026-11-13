@@ -26,15 +26,15 @@ type common[B any] struct {
 // unset, so the field's validators let it pass, and an insert writes its
 // Default or DefaultFunc in its place. An Optional field writes no zero
 // value of its own, so velox-gen refuses one that is not Nillable and has no
-// Default, DefaultFunc or SchemaDefault: write Optional().Nillable() for NULL,
+// Default or DefaultFunc: write Optional().Nillable() for NULL,
 // or Optional().Default("") for an empty string. A JSON field is the
 // exception: Optional makes its column NULL-able, as a slice or a map has no
 // zero value to write, and NULL reads as nil.
 //
 // velox-gen also refuses an Optional edge field that is not Nillable, whose
 // zero value is no row's key, and a Unique Optional field that is not
-// Nillable, unless a DefaultFunc or a SchemaDefault gives each row its own
-// value: every unset row would hold one Default, and the second fail.
+// Nillable, unless a DefaultFunc gives each row its own value: every unset
+// row would hold one Default, and the second fail.
 func (c common[B]) Optional() B { c.d.Optional = true; return c.self }
 
 // Nillable makes the column NULL-able and the Go field a pointer, nil for
@@ -91,7 +91,9 @@ func (c common[B]) SchemaType(m map[string]string) B {
 // SchemaDefault sets the column's default in the database per dialect, as
 // SQL written as the database prints it, such as {field.Postgres: "now()"}.
 // velox's inserts write every column, so it serves rows written outside
-// velox and existing rows when the column is added. The keys are Postgres,
+// velox and existing rows when the column is added, never an insert of
+// velox's: a field left unset stores its Default, or its Go zero value. It
+// does not count as the value of an Optional field. The keys are Postgres,
 // MySQL and SQLite; any other, or an empty value, is a misuse. A time's default
 // on SQLite must write velox's form, not CURRENT_TIMESTAMP's: see the velox
 // package's SQLite section.
