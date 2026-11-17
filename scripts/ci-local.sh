@@ -266,7 +266,7 @@ lane_graphql() (
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   go test -race -count=1 -coverprofile="$root/cover-graphql.out" ./...
   export GOMAXPROCS=4 # CI's 4 workers, as the fuzz lane's
-  go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql
+  go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql/internal/cost
 )
 
 # examples/graphql: its generated files, with the plugin, its tests, and

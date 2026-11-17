@@ -98,8 +98,8 @@ func TestFuzzLinesNameRealTargets(t *testing.T) {
 		}
 		targets = names
 	}
-	if listed["FuzzCost"] != "contrib/graphql/veloxgql" {
-		t.Errorf("FuzzCost is fuzzed in %q, want contrib/graphql/veloxgql", listed["FuzzCost"])
+	if listed["FuzzCost"] != "contrib/graphql/veloxgql/internal/cost" {
+		t.Errorf("FuzzCost is fuzzed in %q, want contrib/graphql/veloxgql/internal/cost", listed["FuzzCost"])
 	}
 	err := filepath.WalkDir(repoRoot(), func(p string, d fs.DirEntry, err error) error {
 		switch {

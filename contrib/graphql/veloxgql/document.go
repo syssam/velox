@@ -10,6 +10,7 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 	"github.com/vektah/gqlparser/v2/parser"
 
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/cost"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
@@ -24,25 +25,12 @@ const (
 	// mergeStepsPerField is the fields and spreads the walk may visit, each fragment
 	// once for each place it is spread, for each of Limits.MaxFields.
 	mergeStepsPerField = 40
-	// inputFieldsPerUnit is the fields of an input object that weigh one more:
-	// gqlgen's coercion and its unmarshalInput each do work for every field of the
-	// type, set or not, so an empty object of a rich where input takes 6.6 KB.
-	inputFieldsPerUnit = 16
 	// inputObjectNodes is what an object of an input type weighs among a request's
-	// variables, for each inputWeight: validating one and coercing it take over 4 KB,
+	// variables, for each cost.InputWeight: validating one and coercing it take over 4 KB,
 	// and a plain value a few hundred bytes, so a GeoJSON of plain numbers passes where
 	// as many objects would not.
 	inputObjectNodes = 4
 )
-
-// inputWeight is what an object of the input type d weighs, among a request's
-// variables and in its cost.
-func inputWeight(d *ast.Definition) int64 {
-	if d == nil || d.Kind != ast.InputObject {
-		return 1
-	}
-	return 1 + int64(len(d.Fields))/inputFieldsPerUnit
-}
 
 // bounds is what the one check of a request holds it to: the limits, and what the
 // schema makes of them.
@@ -65,7 +53,7 @@ func newBounds(l Limits, schema *ast.Schema) bounds {
 	name := func(s string) { b.names = max(b.names, len(s)) }
 	for n, d := range schema.Types {
 		name(n)
-		b.widest = max(b.widest, inputWeight(d))
+		b.widest = max(b.widest, cost.InputWeight(d))
 		for _, f := range d.Fields {
 			name(f.Name)
 			for _, a := range f.Arguments {
@@ -524,7 +512,7 @@ func (w *varWalk) value(v any, d *ast.Definition, depth int) bool {
 		case w.unknown:
 			weight = w.widest * inputObjectNodes
 		case d != nil && d.Kind == ast.InputObject:
-			weight = inputWeight(d) * inputObjectNodes
+			weight = cost.InputWeight(d) * inputObjectNodes
 		}
 	}
 	w.nodes += int(weight)

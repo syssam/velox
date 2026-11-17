@@ -1290,6 +1290,30 @@ func TestIntrospectionOff(t *testing.T) {
 	}
 }
 
+// graphiQL is the query GraphiQL sends for the schema, as internal/cost has it.
+const graphiQL = `query IntrospectionQuery {
+	__schema {
+		queryType { name }
+		mutationType { name }
+		subscriptionType { name }
+		types { ...FullType }
+		directives { name description locations args { ...InputValue } }
+	}
+}
+fragment FullType on __Type {
+	kind name description
+	fields(includeDeprecated: true) { name description args { ...InputValue } type { ...TypeRef } isDeprecated deprecationReason }
+	inputFields { ...InputValue }
+	interfaces { ...TypeRef }
+	enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason }
+	possibleTypes { ...TypeRef }
+}
+fragment InputValue on __InputValue { name description type { ...TypeRef } defaultValue }
+fragment TypeRef on __Type {
+	kind name
+	ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } }
+}`
+
 // BenchmarkCheckDocument is what the Extension adds to each request: a parse and
 // a walk of GraphiQL's query, which gqlgen's cache would have spared.
 func BenchmarkCheckDocument(b *testing.B) {

@@ -355,7 +355,13 @@ func TestEdgeErrorPresented(t *testing.T) {
 func TestTooCostlyPresented(t *testing.T) {
 	l := &logged{}
 	ext := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 2}))
-	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costSDL})
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: `
+type PageInfo { hasNextPage: Boolean! }
+type User { id: ID! }
+type UserEdge { node: User! cursor: String! }
+type UserConnection { edges: [UserEdge!]! pageInfo: PageInfo! totalCount: Int! }
+type Query { users(first: Int): UserConnection! }
+`})
 	if err := ext.Validate(&graphql.ExecutableSchemaMock{SchemaFunc: func() *ast.Schema { return schema }}); err != nil {
 		t.Fatal(err)
 	}

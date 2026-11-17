@@ -350,7 +350,7 @@ change. Two edges bound to one foreign key are refused (rule 55).
   `TestIntrospectionOff` (veloxgql/extension_test.go).
 - `TestCostIntrospection`, `TestCostStatements`, `TestCostInputs`, `TestCostInputWeighs`,
   `TestCostNodesByType`, `TestCostDeleteStatements`, `TestCostSkipStillReads`,
-  `TestCostMutationWrites` (veloxgql/cost_test.go), `TestCostScans` (veloxgql/cost_scan_test.go); `TestRequestCost`
+  `TestCostMutationWrites` (veloxgql/internal/cost/cost_test.go), `TestCostScans` (veloxgql/internal/cost/cost_scan_test.go); `TestRequestCost`
   (examples/graphql/main_test.go).
 - `TestFromJSONExact`, `TestFromJSONNumbers`, `TestFromJSONArrayLength`, `TestFKScoped`
   (veloxgql/gqlimpl/exact_test.go).
@@ -359,9 +359,9 @@ change. Two edges bound to one foreign key are refused (rule 55).
   `TestWebsocketMessageBounded` (veloxgql/websocket_test.go); `TestLargeValuesBounded`,
   `TestResponseAtItsLimit`, `TestFieldErrorsBounded`, `TestTimeoutCancelsStatements`
   (examples/graphql/bounded_test.go); `TestGraphiQLWithWhereOps`
-  (veloxgql/cost_meta_test.go); `TestVariablesWeighWhatTheyTake` (veloxgql/limits_test.go);
+  (veloxgql/internal/cost/cost_meta_test.go); `TestVariablesWeighWhatTheyTake` (veloxgql/limits_test.go);
   `TestCostListMaxList`, `TestListCostNamesTheFix`, `TestEdgeMaxList`.
-- `TestGraphiQLOnARichSchema`, `TestIntrospectionBudgetIsItsOwn` (veloxgql/cost_meta_test.go);
+- `TestGraphiQLOnARichSchema`, `TestIntrospectionBudgetIsItsOwn` (veloxgql/internal/cost/cost_meta_test.go);
   `TestIntrospectionLimit`, `TestDocumentRefused`, `TestDocumentMergePairs`, `TestDocumentAndAPQ`,
   `TestSetup` (veloxgql/extension_test.go); `TestJSONEmptyLiteral` (veloxgql/scalar_test.go).
 - `TestValidationAttacks`, `TestLargeQueriesPass`, `TestBodyLimit`, `TestIntrospectionAtItsLimit`,

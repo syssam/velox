@@ -1,4 +1,4 @@
-package veloxgql_test
+package cost_test
 
 import (
 	"context"

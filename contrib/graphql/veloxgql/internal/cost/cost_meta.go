@@ -1,4 +1,4 @@
-package veloxgql
+package cost
 
 import (
 	"strings"
