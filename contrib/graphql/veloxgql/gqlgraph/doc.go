@@ -1,8 +1,7 @@
 // Package gqlgraph is for generated code. As ent's sqlgraph is for ent's, it
 // holds what the Go that velox-graphql writes calls, all of it one runtime
 // for every type, on velox's untyped Table, TableQuery and table writes:
-//   - the where filter and its helpers (Filter), and the conversions between
-//     a where input's Go types and a column's;
+//   - the where filter and its helpers (Filter);
 //   - the description of a GraphQL type (Type, Column), the connection with its
 //     paging (Paginate, Args, Order, WhereOf);
 //   - the edges, which read in batches, the edge of every row of a page in

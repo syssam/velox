@@ -250,7 +250,9 @@ func Skip(modes ...SkipMode) Annotation {
 // Type names the entity's GraphQL type. A cursor holds the type's name, so
 // renaming the type changes every cursor that clients hold, and a
 // connection refuses a cursor of the old name with veloxgql.ErrBadCursor.
-// An ID is the key alone, and does not change.
+// An ID is the key alone, and does not change. The name is also the Go
+// name of the type's alias, connection and edge, so velox-graphql refuses
+// one that does not start with an upper-case letter.
 func Type(name string) Annotation { return Annotation{Type: name} }
 
 // QueryField adds a root Query field, with this name, that returns the
@@ -279,7 +281,9 @@ const (
 // MultiOrder lets the entity's connection order by a list of fields.
 func MultiOrder() Annotation { return Annotation{MultiOrder: true} }
 
-// FieldName names a field or an edge in GraphQL.
+// FieldName names a field or an edge in GraphQL. The mutation and where
+// inputs' Go field is the name with its first letter in upper case, so
+// velox-graphql refuses one that starts with _.
 func FieldName(name string) Annotation { return Annotation{FieldName: name} }
 
 // OrderField makes a field orderable, with this name for its order enum value.

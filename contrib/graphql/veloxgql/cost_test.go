@@ -258,7 +258,7 @@ func TestCostMutationWrites(t *testing.T) {
 input PostInput { title: String clearTitle: Boolean authorID: ID tagIDs: [ID!] addTagIDs: [ID!] removeTagIDs: [ID!] clearTags: Boolean }
 type Post { id: ID! }
 type Query { post: Post }
-type Mutation { create(input: PostInput!): Post! ping(id: ID): Post! }
+type Mutation { create(input: PostInput!): Post! createMany(input: [PostInput!]!): [Post!]! ping(id: ID): Post! }
 `})
 	l := veloxgql.DefaultLimits()
 	base := func(query string, vars map[string]any) int {
@@ -295,6 +295,17 @@ type Mutation { create(input: PostInput!): Post! ping(id: ID): Post! }
 	const byVar = `mutation ($i: PostInput!) { create(input: $i) { id } }`
 	if got, want := base(byVar, map[string]any{"i": map[string]any{"clearTags": true, "addTagIDs": []any{"1"}}}), cost(3, 7); got != want {
 		t.Errorf("by a variable: cost %d, want %d", got, want)
+	}
+	// A list of inputs writes each: two rows, the second clearing an edge. The
+	// field returns a list, of up to MaxList ids.
+	ids := 1 + l.MaxList
+	const many = `mutation { createMany(input: [{ title: "x" }, { clearTags: true }]) { id } }`
+	if got, want := base(many, nil), ids+(2+2)+100*(1+2+5); got != want {
+		t.Errorf("a list of inputs: cost %d, want %d", got, want)
+	}
+	const manyVar = `mutation ($i: [PostInput!]!) { createMany(input: $i) { id } }`
+	if got, want := base(manyVar, map[string]any{"i": []any{map[string]any{}, map[string]any{}, map[string]any{}}}), ids+3+100*(1+3*2); got != want {
+		t.Errorf("a list of inputs by a variable: cost %d, want %d", got, want)
 	}
 	if got, want := base(`mutation { ping(id: "1") { id } }`, nil), 2+100; got != want {
 		t.Errorf("no input object: cost %d, want %d", got, want)

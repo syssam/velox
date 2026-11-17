@@ -3,6 +3,7 @@ package veloxgql
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -28,8 +29,12 @@ type responseKey struct{}
 type operationKey struct{}
 
 // operation is what a query or a mutation holds across its responses: @defer's are
-// resolved on the first one's context, under its limits.
-type operation struct{ first *response }
+// resolved on the first one's context, under its limits. end lets go of that context's
+// Timeout, once the last response is out.
+type operation struct {
+	first *response
+	end   func()
+}
 
 // response is what the limits keep of one response, which the fields' goroutines share:
 // a subscription's event is one, and a query's or a mutation's responses share theirs.
@@ -43,18 +48,36 @@ type response struct {
 	bytes, fieldErrs, presented atomic.Int64
 	// why is what stopped it, or 0.
 	why atomic.Int32
-	// cancel ends what its fields run, and parent is the context Timeout was added to;
-	// nil for a subscription's event.
-	cancel context.CancelFunc
-	parent context.Context
+	// cancel ends what its fields run, timeout is the context Timeout is on, and
+	// parent the one it was added to; nil for a subscription's event.
+	cancel          context.CancelFunc
+	timeout, parent context.Context
 }
 
-// expired stops the response if ctx, which Timeout is on, ran out, and not the request
-// it came from: a deadline of the application's is the application's.
-func (r *response) expired(ctx context.Context) {
-	if r.cancel != nil && r.parent.Err() == nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+// expired stops the response and reports true if its Timeout ran out. A deadline of
+// the application's, the request's or a transaction's (velox.TxTimeout), is the
+// application's: a field's context can end by one of those first.
+func (r *response) expired() bool {
+	if r.timeout != nil && r.parent.Err() == nil && errors.Is(r.timeout.Err(), context.DeadlineExceeded) {
 		r.stop(stopTimeout)
+		return true
 	}
+	return false
+}
+
+// failed counts err, a field's error; ctx is the field's context. A field that failed
+// as the Timeout ended its context is the Timeout's, not an error of its own: at the
+// deadline they all fail, before the Timeout's own callback runs. One that failed as
+// the request went away counts for nothing, as no one reads its response.
+func (r *response) failed(ctx context.Context) {
+	switch {
+	case ctx.Err() == nil:
+	case r.expired():
+		return
+	case r.parent != nil && r.parent.Err() != nil:
+		return
+	}
+	r.fieldError()
 }
 
 // stop stops the response, for the first reason given.
@@ -91,9 +114,11 @@ func (r *response) count(v any) {
 }
 
 // valueBytes is what v, a field's value, writes in a response, if it can hold more than
-// a fixed few bytes: a string as it is escaped, []byte as base64 and JSON as it is. Any
-// other value is 0, so a row or a number costs one type switch. It reads a string once
-// more, which gqlgen does in writing it.
+// a fixed few bytes: a string as it is escaped, []byte as base64, and JSON and
+// json.RawMessage as they are. A pointer to one of those, or a list of them, counts
+// what it points to or holds. Any other value is 0: a number costs one type switch, and
+// a row a type switch and a look at its type. It reads a string once more, which gqlgen
+// does in writing it.
 func valueBytes(v any) int64 {
 	switch x := v.(type) {
 	case string:
@@ -110,6 +135,8 @@ func valueBytes(v any) int64 {
 		}
 	case JSON:
 		return int64(len(x))
+	case json.RawMessage:
+		return int64(len(x))
 	case []byte:
 		return int64(base64.StdEncoding.EncodedLen(len(x)))
 	case []string:
@@ -121,14 +148,65 @@ func valueBytes(v any) int64 {
 	case nil, bool, int, int32, int64, float64:
 		return 0
 	}
-	// A type of the application's whose kind is one of those.
-	switch t := reflect.TypeOf(v); t.Kind() {
-	case reflect.String:
-		return quotedLen(reflect.ValueOf(v).String())
-	case reflect.Slice:
-		if t.Elem().Kind() == reflect.Uint8 {
-			return int64(base64.StdEncoding.EncodedLen(reflect.ValueOf(v).Len()))
+	// A type of the application's whose kind is one of those, a pointer to
+	// one, or a list of them, such as the []*string of a [String] field.
+	if !sized(reflect.TypeOf(v), 0) {
+		return 0
+	}
+	return reflectBytes(reflect.ValueOf(v))
+}
+
+// maxSizedDepth bounds the pointers and lists sized looks through. A GraphQL list
+// nests one level per [ ], so no schema comes near it, and a type that holds itself,
+// such as type L []L, ends at it instead of overflowing the stack.
+const maxSizedDepth = 16
+
+// sized reports whether a value of type t can hold more than a fixed few bytes: t is
+// a string, a []byte, a JSON, or a pointer to or list of one, under maxSizedDepth
+// levels; depth is the levels above t. A list of rows is not, so it costs no walk.
+func sized(t reflect.Type, depth int) bool {
+	for ; t.Kind() == reflect.Pointer; depth++ {
+		if depth >= maxSizedDepth {
+			return false
 		}
+		t = t.Elem()
+	}
+	if depth >= maxSizedDepth {
+		return false
+	}
+	switch t.Kind() {
+	case reflect.String:
+		return true
+	case reflect.Slice:
+		return t.Elem().Kind() == reflect.Uint8 || sized(t.Elem(), depth+1)
+	}
+	return false
+}
+
+// reflectBytes is valueBytes of v, whose type is sized, so it ends within
+// maxSizedDepth levels.
+func reflectBytes(v reflect.Value) int64 {
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return 0
+		}
+		v = v.Elem()
+	}
+	switch v.Kind() {
+	case reflect.String:
+		return quotedLen(v.String())
+	case reflect.Slice:
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			if t := v.Type(); t == reflect.TypeFor[JSON]() || t == reflect.TypeFor[json.RawMessage]() {
+				return int64(v.Len()) // as it is, not as base64
+			}
+			return int64(base64.StdEncoding.EncodedLen(v.Len()))
+		}
+		var n int64
+		for i := range v.Len() {
+			n += reflectBytes(v.Index(i))
+		}
+		return n
 	}
 	return 0
 }
@@ -148,8 +226,10 @@ func quotedLen(s string) int64 {
 }
 
 // operationResponse is the response ctx, a response's context, belongs to, and the context
-// its fields run in. The first of a query or a mutation starts its Timeout. done ends what
-// the first response started, when the last one is out.
+// its fields run in. The first of a query or a mutation starts its Timeout. done, given
+// the response made, ends what the first response started when it is the last one out:
+// @defer's fragments run on the first one's context until then, and each of their
+// responses is one more.
 func (e *Extension) operationResponse(ctx context.Context) (context.Context, *response, func(*graphql.Response)) {
 	op, _ := ctx.Value(operationKey{}).(*operation)
 	if op == nil {
@@ -157,24 +237,27 @@ func (e *Extension) operationResponse(ctx context.Context) (context.Context, *re
 		r := &response{limits: e.limits}
 		return context.WithValue(ctx, responseKey{}, r), r, func(*graphql.Response) {}
 	}
+	done := func(resp *graphql.Response) {
+		if resp == nil || resp.HasNext == nil || !*resp.HasNext {
+			op.end()
+		}
+	}
 	if op.first != nil {
-		return context.WithValue(ctx, responseKey{}, op.first), op.first, func(*graphql.Response) {}
+		return context.WithValue(ctx, responseKey{}, op.first), op.first, done
 	}
 	r := &response{limits: e.limits, parent: ctx}
 	op.first = r
 	ctx, cancel := context.WithTimeout(ctx, e.limits.Timeout)
-	r.cancel = cancel
+	r.cancel, r.timeout = cancel, ctx
 	if m, _ := ctx.Value(mutationKey{}).(*mutation); m != nil && !m.plain {
 		r.mutation = m
 	}
-	stop := context.AfterFunc(ctx, func() { r.expired(ctx) })
-	return context.WithValue(ctx, responseKey{}, r), r, func(resp *graphql.Response) {
-		// @defer's fragments run on this context until the last response is out.
-		if resp == nil || resp.HasNext == nil || !*resp.HasNext {
-			stop()
-			cancel()
-		}
+	stop := context.AfterFunc(ctx, func() { r.expired() })
+	op.end = func() {
+		stop()
+		cancel()
 	}
+	return context.WithValue(ctx, responseKey{}, r), r, done
 }
 
 // finish is resp, the response r made, or what replaces it when r stopped. ctx is the

@@ -271,33 +271,6 @@ func TestWhereKeyOps(t *testing.T) {
 	}
 }
 
-// TestWhereConversions: the conversions from an input's Go type to a
-// column's.
-func TestWhereConversions(t *testing.T) {
-	type (
-		code  string
-		small int16
-		ratio float32
-		flag  bool
-		ref   [16]byte
-	)
-	if got := gqlgraph.AsString[code]("x"); got != code("x") {
-		t.Errorf("AsString: %v", got)
-	}
-	if got := gqlgraph.AsInt[small](int64(7)); got != small(7) {
-		t.Errorf("AsInt: %v", got)
-	}
-	if got := gqlgraph.AsFloat[ratio](float32(1.5)); got != ratio(1.5) {
-		t.Errorf("AsFloat: %v", got)
-	}
-	if got := gqlgraph.AsBool[flag](true); got != flag(true) {
-		t.Errorf("AsBool: %v", got)
-	}
-	if got := gqlgraph.AsUUID[ref]([16]byte{1, 2}); got != (ref{1, 2}) {
-		t.Errorf("AsUUID: %v", got)
-	}
-}
-
 // shared is a where argument that holds leaf 100 times at each of depth
 // levels, the one input everywhere, as gqlgen unmarshals a GraphQL variable
 // used at many places: 100^depth inputs, from a request of a few kilobytes.

@@ -701,6 +701,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Removed
 
+- `gqlgraph.AsString`, `AsInt`, `AsFloat`, `AsBool`, `AsUUID` and the
+  `Integer` constraint. Generated code stopped calling them when its inputs
+  took typed receivers, and nothing else did.
 - velox-graphql's Node: the `Node` interface, the `node` and `nodes` queries,
   `gen.Node`, `gen.Nodes`, `IsNode`, `GlobalID` and `node_gql.go`; and
   `veloxgql.Noder`, `EncodeID`, `DecodeID`, `IDType`, `ErrBadID` and
@@ -739,6 +742,30 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- `veloxgql.Limits.MaxResponseBytes` counts a list of nullable strings
+  (`[]*string`), a pointer to a list, and lists of `Bytes` or `JSON`. Before,
+  each counted 0 bytes.
+  `json.RawMessage` counts as written, not as base64, and a type that holds
+  itself (`type L []L`) counts 0 instead of overflowing the stack.
+- A transaction's own deadline (`velox.TxTimeout`) fails a GraphQL mutation
+  with its fields' errors. Before, it was reported as `Limits.Timeout`'s
+  `TIMEOUT`, naming the Timeout's duration.
+- An operation with `@defer` lets go of its `Limits.Timeout` timer when its
+  last response is out. Before, the timer and its callback stayed until the
+  deadline, on a websocket as long as the connection.
+- `veloxgql.Cost` counts a mutation's list of input objects, as a bulk
+  mutation of the application's takes, as one write for each element. Before,
+  the list added no write.
+- velox-graphql refuses a `graphql.Type` that does not start with an upper-case
+  letter, and a `graphql.FieldName` that starts with `_`. Each names Go types
+  or fields too: `Type("error")` hid Go's `error` in the generated package,
+  and `FieldName("_title")` made an input field gqlgen cannot set.
+- A plugin refuses a model whose references name nothing (a key index past
+  the fields, an edge's missing target), with an error naming it, before
+  generating. Before, velox-graphql panicked on one.
+- The GraphQL description of an `OrderVia` order value says which nodes the
+  order leaves out: those without the edge's target, or whose target the
+  reader may not see, which the inner join drops (0031).
 - velox-gen refuses a mixin whose own `Mixin()` lists mixins. velox reads
   mixins one level deep, so their fields and behaviour, soft delete's
   included, were dropped without a word.

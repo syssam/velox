@@ -261,6 +261,7 @@ input PostOrder {
 enum PostOrderField {
   TITLE
   VIEWS
+  """Orders through writer: leaves out each Post without one, or whose writer the reader may not see."""
   AUTHOR_NAME
 }
 

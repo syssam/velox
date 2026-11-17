@@ -499,27 +499,3 @@ func (f *Filter) scoped(p velox.Predicate, fk fkScope) velox.Predicate {
 	}
 	return untyped.And(p, f.t.Has(fk.edge, fk.target))
 }
-
-// The conversions from the Go type an input holds, the base type its scalar
-// binds to, to the field's Go type of the application's: generated code
-// passes them, instantiated, to the mutation helpers.
-
-// Integer is the Go integer types, and the types defined on them.
-type Integer interface {
-	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
-}
-
-// AsString converts a string to the string type V.
-func AsString[V, W ~string](w W) V { return V(w) }
-
-// AsInt converts an integer to the integer type V.
-func AsInt[V, W Integer](w W) V { return V(w) }
-
-// AsFloat converts a float to the float type V.
-func AsFloat[V, W ~float32 | ~float64](w W) V { return V(w) }
-
-// AsBool converts a bool to the bool type V.
-func AsBool[V, W ~bool](w W) V { return V(w) }
-
-// AsUUID converts a UUID, or the [16]byte of a key, to the UUID type V.
-func AsUUID[V, W ~[16]byte](w W) V { return V(w) }

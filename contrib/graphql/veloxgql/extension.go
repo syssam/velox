@@ -97,8 +97,10 @@ import (
 // response to MaxResponseBytes and MaxErrors and a query or a mutation to Timeout, and
 // stops the request there: what is not yet resolved does not run, and a
 // statement running is cancelled. A subscription has no Timeout, and each of its events
-// has its own counts. Only values of a string, bytes or JSON kind, and a []string, are
-// counted: a custom scalar of a struct's is not.
+// has its own counts. Only values of a string, bytes or JSON kind are counted, with a
+// pointer to one and a list of them, such as the []*string of a [String] field: a custom
+// scalar of a struct's is not. A deadline of the application's, the request's or a
+// transaction's, is not the Timeout, and its errors are the fields' own.
 //
 // The server's Use panics when the DB is nil, when a limit is negative, or
 // when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
@@ -376,7 +378,7 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 	m, _ := ctx.Value(mutationKey{}).(*mutation)
 	if m == nil || m.plain || m.started.Swap(true) {
 		resp := next(ctx)
-		r.expired(ctx)
+		r.expired()
 		done(resp)
 		return e.finish(given, r, resp)
 	}
@@ -389,7 +391,7 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 		}
 		return nil
 	}, e.txOpts...)
-	r.expired(ctx)
+	r.expired()
 	done(resp)
 	if err == nil {
 		return resp
@@ -433,13 +435,7 @@ func (*Extension) InterceptField(ctx context.Context, next graphql.Resolver) (an
 	}
 	v, err := next(ctx)
 	if err != nil {
-		// A field that failed as its context ended is the Timeout's, not an error of
-		// its own: at the deadline they all fail, before the Timeout's own callback runs.
-		if ctx.Err() != nil {
-			r.expired(ctx)
-		} else {
-			r.fieldError()
-		}
+		r.failed(ctx)
 		return v, err
 	}
 	r.count(v)

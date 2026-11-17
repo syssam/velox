@@ -2,6 +2,7 @@ package gogen
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/syssam/velox/contrib/graphql"
@@ -192,4 +193,106 @@ func (r *renderer) whereConv(e *plugin.Entity, fd *plugin.Field, w sdl.WhereFiel
 		return fmt.Errorf("schema %s, field %s: velox-graphql cannot convert a where predicate's %s to its Go type %s", e.Name, fd.Name, w.GoType, fd.ElemType)
 	}
 	return r.converts(e, fd, base)
+}
+
+func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
+	n, e := t.Name, t.Entity
+	in := n + "WhereInput"
+	if err := r.declare(in, "schema "+e.Name); err != nil {
+		return err
+	}
+	f.p("")
+	f.doc("", fmt.Sprintf("%s is the GraphQL input %[1]s, a filter of %s nodes: a node matches when every predicate given holds.", in, n))
+	f.p("type %s struct {", in)
+	seen := map[string]string{} // as gqlgen matches names → the Go name
+	group := ""
+	for _, w := range t.Where {
+		key := strings.ToLower(strings.ReplaceAll(w.GoName, "_", ""))
+		if prev, ok := seen[key]; ok {
+			return fmt.Errorf("schema %s: the fields %s and %s of %s are one Go field to gqlgen, which ignores case and underscores; rename one with graphql.FieldName", e.Name, prev, w.GoName, in)
+		}
+		seen[key] = w.GoName
+		if w.GoName == "Pred" {
+			return fmt.Errorf("schema %s: the field %s of %s is the Go field %s, which is the input's method; rename it with graphql.FieldName", e.Name, w.Name, in, w.GoName)
+		}
+		typ, err := r.whereType(f, t, w)
+		if err != nil {
+			return err
+		}
+		var g string
+		switch w.Kind {
+		case sdl.WhereNot, sdl.WhereAnd, sdl.WhereOr:
+			g = "logic"
+		case sdl.WhereHas, sdl.WhereHasWith:
+			g = "edge " + strconv.Itoa(w.Edge)
+		default:
+			g = "field " + strconv.Itoa(w.Field)
+		}
+		if g != group {
+			if group != "" {
+				f.p("")
+			}
+			group = g
+			switch {
+			case g == "logic":
+				f.doc("\t", "Not, And and Or combine filters: a node matches when it does not match Not, matches each of And, and matches one of Or.")
+			case w.Kind == sdl.WhereHas || w.Kind == sdl.WhereHasWith:
+				f.doc("\t", fmt.Sprintf("The edge %s: whether it has a node, or one that matches.", named(e.Edges[w.Edge].Name, w.On)))
+			case w.Edge >= 0:
+				f.doc("\t", fmt.Sprintf("Predicates on the edge %s, by the ID of its node.", named(e.Edges[w.Edge].Name, w.On)))
+			case w.IDs():
+				f.p("\t// Predicates on the ID.")
+			default:
+				f.doc("\t", fmt.Sprintf("Predicates on the field %s.", named(e.Fields[w.Field].Name, w.On)))
+			}
+		}
+		f.p("\t%s %s", w.GoName, typ)
+	}
+	f.p("}")
+	return r.writePred(f, t)
+}
+
+// whereType is the Go type of the where-input field w: an input for not and
+// has<Edge>With, else w.GoType, a pointer for one value and a slice for a
+// list.
+func (r *renderer) whereType(f *file, t *sdl.Type, w sdl.WhereField) (string, error) {
+	switch w.Kind {
+	case sdl.WhereNot:
+		return "*" + t.Name + "WhereInput", nil
+	case sdl.WhereAnd, sdl.WhereOr:
+		return "[]*" + t.Name + "WhereInput", nil
+	case sdl.WhereHasWith:
+		return "[]*" + w.Target + "WhereInput", nil
+	}
+	var fd *plugin.Field
+	if w.Field >= 0 {
+		fd = t.Entity.Fields[w.Field]
+	} else {
+		fd = &plugin.Field{Name: w.On}
+	}
+	elem, err := r.qualify(f, t.Entity, fd, w.GoType, w.GoPkg)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(w.Type, "[") {
+		return "[]" + elem, nil
+	}
+	return "*" + elem, nil
+}
+
+// quoteList is vs as Go string literals, separated by commas.
+func quoteList(vs []string) string {
+	q := make([]string, len(vs))
+	for i, v := range vs {
+		q[i] = strconv.Quote(v)
+	}
+	return strings.Join(q, ", ")
+}
+
+// orList is vs in English, as "A, B or C".
+func orList(vs []string) string {
+	if len(vs) < 2 {
+		return strings.Join(vs, "")
+	}
+	return strings.Join(vs[:len(vs)-1], ", ") + " or " + vs[len(vs)-1]
 }

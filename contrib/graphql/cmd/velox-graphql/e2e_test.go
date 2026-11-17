@@ -286,7 +286,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"input AccountOrder {\n",
 		"  direction: OrderDirection! = ASC\n  \"\"\"The field to order by.\"\"\"\n  field: AccountOrderField!\n",
 		"enum AccountOrderField {\n  NAME\n}\n",
-		"enum PostOrderField {\n  TITLE\n  AUTHOR_NAME\n}\n",
+		"enum PostOrderField {\n  TITLE\n  \"\"\"Orders through author: leaves out each Post without one, or whose author the reader may not see.\"\"\"\n  AUTHOR_NAME\n}\n",
 		"  displayNameHasSuffix: String\n  hasPosts: Boolean\n  hasPostsWith: [PostWhereInput!]\n  hasGroups: Boolean\n}\n",
 		"  or: [PostWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  authorID: ID\n  authorIDNEQ: ID\n  authorIDIn: [ID!]\n  authorIDNotIn: [ID!]\n  title: String\n",
 		"input CreatePostInput {\n  title: String!\n  \"\"\"The ID of the Account the edge author leads to.\"\"\"\n  authorID: ID!\n}\n",

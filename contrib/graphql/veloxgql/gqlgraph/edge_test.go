@@ -457,8 +457,8 @@ func TestEdgeConnectionBatches(t *testing.T) {
 	}
 }
 
-// TestEdgeConnectionBackwardAndAfter: last, after and before batch too,
-// each owner's page that of its own query.
+// TestEdgeConnectionBackwardAndAfter: last, after, before and a page of
+// none batch too, each owner's page that of its own query.
 func TestEdgeConnectionBackwardAndAfter(t *testing.T) {
 	db, _, log := edgeDB(t)
 	first, _ := ownPage(t, db, &owner{ID: 1}, db.Query[child](), gqlgraph.Args{}, titleOrder())
@@ -470,6 +470,9 @@ func TestEdgeConnectionBackwardAndAfter(t *testing.T) {
 		{"last", gqlgraph.Args{Last: new(2)}},
 		{"after", gqlgraph.Args{First: new(2), After: wire(t, first.Cursors[0])}},
 		{"before", gqlgraph.Args{Last: new(1), Before: wire(t, first.Cursors[2])}},
+		// No rows, and whether any are past them: one row read for each owner.
+		{"first 0", gqlgraph.Args{First: new(0)}},
+		{"last 0", gqlgraph.Args{Last: new(0)}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			ctx := operation(t, db, childrenQuery)

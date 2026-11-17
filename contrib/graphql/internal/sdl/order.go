@@ -86,6 +86,12 @@ func (w *writer) order(o *object) {
 	w.line("enum ", o.name, "OrderField {")
 	for i, v := range o.order.values {
 		w.at = o.order.wheres[i]
+		if k := o.order.edges[i] - 1; k >= 0 {
+			// The connection joins the edge with an inner join (0031), so a client is told
+			// which nodes such an order leaves out, of the page and of totalCount.
+			edge, _ := o.edgeName(k) // checked as the type's fields were made
+			w.line(`  """Orders through `, edge, `: leaves out each `, o.name, ` without one, or whose `, edge, ` the reader may not see."""`)
+		}
 		w.line("  ", v)
 	}
 	w.at = ""

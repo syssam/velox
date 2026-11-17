@@ -3,6 +3,7 @@ package sdl
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -958,6 +959,13 @@ func TestNames(t *testing.T) {
 	node.Annotations = ann(t, graphql.Type("1x"))
 	renderErr(t, model(node), "Thing", `"1x"`)
 
+	// The name is a Go type's too: type error = Thing would hide error, type
+	// type does not parse, and an unexported one gqlgen cannot bind.
+	for _, name := range []string{"error", "type", "thing", "_Thing"} {
+		node.Annotations = ann(t, graphql.Type(name))
+		renderErr(t, model(node), "Thing", fmt.Sprintf("graphql.Type(%q)", name), "upper-case")
+	}
+
 	// UserEdge's connection collides with an entity named UserEdge.
 	renderErr(t, model(entity("User"), entity("UserEdge")), "User", "UserEdge")
 
@@ -967,6 +975,12 @@ func TestNames(t *testing.T) {
 
 	f.Annotations = ann(t, graphql.FieldName("a-b"))
 	renderErr(t, model(entity("Doc", f)), "Doc", "title", `"a-b"`)
+
+	// The inputs' Go field is upper(name): _title is unexported, _ blank.
+	for _, name := range []string{"_title", "_"} {
+		f.Annotations = ann(t, graphql.FieldName(name))
+		renderErr(t, model(entity("Doc", f)), "Doc", "title", fmt.Sprintf("graphql.FieldName(%q)", name), "starts with a letter")
+	}
 
 	// Go identifiers may be any letters; GraphQL names are ASCII.
 	renderErr(t, model(entity("Café")), "schema Café", `"Café"`, "graphql.Type")

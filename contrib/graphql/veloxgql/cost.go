@@ -71,7 +71,8 @@ const stringUnit = 128
 //     non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, five for an
 //     <edge>ID, a one-to-one edge's re-point, and three for a clear<Edge>:
 //     true, a page of its links, the targets and the delete, a page being
-//     velox.EdgePage links. A delete<T>, which the
+//     velox.EdgePage links. A list of input objects, as a bulk mutation of the
+//     application's takes, counts so for each element. A delete<T>, which the
 //     application writes, of a type with connections or lists adds a statement
 //     for a check of its row and one for each, the links it deletes. Any
 //     mutation of the application's that names its fields so counts the same.
@@ -381,7 +382,8 @@ func (c *coster) inputs(f *ast.Field, def *ast.FieldDefinition) int64 {
 }
 
 // writes is what the input objects of f, a mutation's field, make it send beyond
-// its one statement.
+// its one statement: each object's, and in a list each element's, as a bulk
+// mutation of the application's writes a row for each.
 func (c *coster) writes(f *ast.Field, def *ast.FieldDefinition) int64 {
 	var sum int64
 	for _, ad := range def.Arguments {
@@ -395,34 +397,52 @@ func (c *coster) writes(f *ast.Field, def *ast.FieldDefinition) int64 {
 			continue
 		}
 		v, err := a.Value.Value(c.vars)
-		m, ok := v.(map[string]any)
-		if err != nil || !ok {
+		if err != nil {
 			continue
 		}
-		// The row read back, and the read of its key and its lock, an
-		// update's UpdateQuery.One, which an update with edges sends as well.
-		n := int64(2)
-		edges := int64(0)
-		for k, val := range m {
-			switch {
-			case strings.HasPrefix(k, "clear") && len(k) > 5:
-				// clear<Field> of a column is part of the UPDATE.
-				if val == true && d.Fields.ForName(strings.ToLower(k[5:6])+k[6:]) == nil {
-					edges += 3
-				}
-			case strings.HasSuffix(k, "IDs"):
-				if list, ok := val.([]any); ok && len(list) > 0 {
-					edges += 2
-				}
-			case strings.HasSuffix(k, "ID") && val != nil:
-				// A one-to-one edge's re-point: the check of the child, the
-				// release of the one held, its check, the link and its check.
-				edges += 5
-			}
-		}
-		sum = add(sum, mul(n+edges, statementCost))
+		sum = add(sum, writesOf(v, d))
 	}
 	return sum
+}
+
+// writesOf is what v, a value of the input object d or a list of them, sends.
+func writesOf(v any, d *ast.Definition) int64 {
+	switch v := v.(type) {
+	case map[string]any:
+		return mul(objectWrites(v, d), statementCost)
+	case []any:
+		var sum int64
+		for _, e := range v {
+			sum = add(sum, writesOf(e, d))
+		}
+		return sum
+	}
+	return 0
+}
+
+// objectWrites is the statements m, a value of the input object d, sends: the row
+// read back, and the read of its key and its lock, an update's UpdateQuery.One,
+// which an update with edges sends as well; then what its edges send.
+func objectWrites(m map[string]any, d *ast.Definition) int64 {
+	n := int64(2)
+	for k, val := range m {
+		switch {
+		case strings.HasPrefix(k, "clear") && len(k) > 5:
+			// clear<Field> of a column is part of the UPDATE.
+			if val == true && d.Fields.ForName(strings.ToLower(k[5:6])+k[6:]) == nil {
+				n += 3
+			}
+		case strings.HasSuffix(k, "IDs"):
+			if list, ok := val.([]any); ok && len(list) > 0 {
+				n += 2
+			}
+		case strings.HasSuffix(k, "ID") && val != nil:
+			// A one-to-one edge's re-point: the check of the child, the
+			// release of the one held, its check, the link and its check.
+			n += 5
+		}
+	}
+	return n
 }
 
 // size is the size of v, a literal or a variable, of the input type d (nil within a

@@ -16,6 +16,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
@@ -65,8 +66,11 @@ func TestResponseBytesBounded(t *testing.T) {
 		{"bytes", []byte(kb), 7},                   //
 		{"json", veloxgql.JSON(`"` + kb + `"`), 9}, // 1002 a value
 		{"ints", []string{kb}, 10},
-		{"text", strings.Repeat("\x01", 500), 3}, // \u0001 is six bytes: 3000 a value
-		{"text", strings.Repeat(`"`, 500), 10},   // \" is two: 1000 a value
+		{"ints", []*string{&kb}, 10},                 // a [String] list of the application's
+		{"ints", &[]string{kb}, 10},                  //
+		{"json", json.RawMessage(`"` + kb + `"`), 9}, // as it is, as JSON is
+		{"text", strings.Repeat("\x01", 500), 3},     // \u0001 is six bytes: 3000 a value
+		{"text", strings.Repeat(`"`, 500), 10},       // \" is two: 1000 a value
 	} {
 		value := c.value
 		srv := serveSchema(testSchemaOf(budgetSDL, map[string]resolver{c.field: func(context.Context, map[string]any) (any, error) { return value, nil }}),
@@ -218,6 +222,15 @@ func TestTimeout(t *testing.T) {
 	defer cancelShort()
 	if got := post(t, short, h, `{ slow }`); strings.Contains(got, "TIMEOUT") {
 		t.Errorf("the application's deadline: %s", got)
+	}
+	// A transaction's own deadline, velox.TxTimeout, is the mutation's error,
+	// and not the Timeout.
+	tx := handler.New(testSchemaOf(budgetSDL, resolvers))
+	txh := veloxgql.Setup(tx, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: time.Hour}), veloxgql.WithTxOptions(velox.TxTimeout(50*time.Millisecond)))
+	tx.AddTransport(transport.POST{})
+	resolvers["slow"] = slow
+	if got := post(t, context.Background(), txh, `mutation { add(id: 2) }`); strings.Contains(got, "TIMEOUT") || !strings.Contains(got, `"data":null`) {
+		t.Errorf("the transaction's deadline: %s", got)
 	}
 	gone, cancel := context.WithCancel(context.Background())
 	cancel()
