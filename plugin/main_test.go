@@ -206,3 +206,27 @@ func TestRunRecoversPanic(t *testing.T) {
 		t.Errorf("traced: %+v", resp)
 	}
 }
+
+// TestRunWholeModel: a model whose every reference holds, a foreign key on
+// the other entity, a pair, a join entity and an index, reaches gen.
+func TestRunWholeModel(t *testing.T) {
+	user := &plugin.Entity{Name: "User", Fields: []*plugin.Field{{Name: "id"}, {Name: "email"}}, PrimaryKey: []int{0},
+		Indexes: []*plugin.Index{{Name: "user_email", Fields: []string{"email"}}},
+		Edges: []*plugin.Edge{
+			{Name: "posts", Target: "Post", Ref: "author", Kind: plugin.O2M, Field: "author_id", FieldOn: "Post"},
+			{Name: "groups", Target: "Group", Kind: plugin.M2M, Join: "UserGroup"},
+		}}
+	post := &plugin.Entity{Name: "Post", Fields: []*plugin.Field{{Name: "id"}, {Name: "author_id"}}, PrimaryKey: []int{0},
+		Edges: []*plugin.Edge{{Name: "author", Target: "User", Ref: "posts", Kind: plugin.M2O, Field: "author_id", FieldOn: "Post", OwnsKey: true}}}
+	group := &plugin.Entity{Name: "Group", Fields: []*plugin.Field{{Name: "id"}}, PrimaryKey: []int{0}}
+	join := &plugin.Entity{Name: "UserGroup", Join: true, Fields: []*plugin.Field{{Name: "user_id"}, {Name: "group_id"}}, PrimaryKey: []int{0, 1}}
+	in := request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{group, post, user, join}}})
+	called := false
+	resp, _ := run(t, current, in, func(*plugin.Request) ([]plugin.File, []string, error) {
+		called = true
+		return nil, nil, nil
+	})
+	if !called || resp.Error != "" {
+		t.Errorf("gen called %v, error %q", called, resp.Error)
+	}
+}
