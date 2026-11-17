@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 )
 
 // Supports holds the versions a plugin was written for, as literals in its
@@ -72,6 +73,9 @@ func answer(s Supports, in io.Reader, gen GenerateFunc) Response {
 	case req.Model.Version != s.Model:
 		return fail("the model is version %d; this plugin reads %d: use velox-gen and the plugin of one velox release", req.Model.Version, s.Model)
 	}
+	if err := req.Model.check(); err != nil {
+		return fail("the model is malformed: %v; velox-gen never sends one so", err)
+	}
 	files, warnings, err := call(gen, &req)
 	if err != nil {
 		return Response{Warnings: warnings, Error: err.Error()}
@@ -91,4 +95,85 @@ func call(gen GenerateFunc, req *Request) (files []File, warnings []string, err 
 		}
 	}()
 	return gen(req)
+}
+
+// check reports the first reference in m that names nothing: a nil entity,
+// field or edge, a key index out of Fields, or an edge's target, join
+// entity, pair, foreign key, or an index's field, that is not in m. A plugin
+// reads the model by those, so it gets one that holds.
+func (m *Model) check() error {
+	byName := make(map[string]*Entity, len(m.Entities))
+	for i, e := range m.Entities {
+		if e == nil {
+			return fmt.Errorf("entity %d is null", i)
+		}
+		byName[e.Name] = e
+	}
+	for _, e := range m.Entities {
+		if err := e.check(byName); err != nil {
+			return fmt.Errorf("entity %s: %w", e.Name, err)
+		}
+	}
+	return nil
+}
+
+// check is Model.check of e; byName holds the model's entities.
+func (e *Entity) check(byName map[string]*Entity) error {
+	for i, f := range e.Fields {
+		if f == nil {
+			return fmt.Errorf("field %d is null", i)
+		}
+	}
+	for _, k := range e.PrimaryKey {
+		if k < 0 || k >= len(e.Fields) {
+			return fmt.Errorf("primary key %d is not one of its %d fields", k, len(e.Fields))
+		}
+	}
+	for i, ix := range e.Indexes {
+		if ix == nil {
+			return fmt.Errorf("index %d is null", i)
+		}
+		for _, f := range ix.Fields {
+			if e.field(f) == nil {
+				return fmt.Errorf("index %s: no field %s", ix.Name, f)
+			}
+		}
+	}
+	for i, ed := range e.Edges {
+		if ed == nil {
+			return fmt.Errorf("edge %d is null", i)
+		}
+		if err := ed.check(byName); err != nil {
+			return fmt.Errorf("edge %s: %w", ed.Name, err)
+		}
+	}
+	return nil
+}
+
+// check is Model.check of ed; byName holds the model's entities.
+func (ed *Edge) check(byName map[string]*Entity) error {
+	t := byName[ed.Target]
+	switch {
+	case t == nil:
+		return fmt.Errorf("no target entity %s", ed.Target)
+	case ed.Ref != "" && !slices.ContainsFunc(t.Edges, func(r *Edge) bool { return r != nil && r.Name == ed.Ref }):
+		return fmt.Errorf("its pair %s is not an edge of %s", ed.Ref, ed.Target)
+	case ed.Join != "" && byName[ed.Join] == nil:
+		return fmt.Errorf("no join entity %s", ed.Join)
+	case ed.Field != "" && byName[ed.FieldOn] == nil:
+		return fmt.Errorf("no entity %s, which holds its key", ed.FieldOn)
+	case ed.Field != "" && byName[ed.FieldOn].field(ed.Field) == nil:
+		return fmt.Errorf("its key %s is not a field of %s", ed.Field, ed.FieldOn)
+	}
+	return nil
+}
+
+// field is e's field of the given Name, or nil.
+func (e *Entity) field(name string) *Field {
+	for _, f := range e.Fields {
+		if f.Name == name {
+			return f
+		}
+	}
+	return nil
 }

@@ -73,6 +73,38 @@ func TestRunChecksLiterals(t *testing.T) {
 		{"model 1", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}),
 			"the model is version 1; this plugin reads 3"},
 		{"malformed", current, "{", "reading the request"},
+		{"null entity", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{nil}}}),
+			"the model is malformed: entity 0 is null"},
+		{"key out of fields", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Fields: []*plugin.Field{{Name: "id"}}, PrimaryKey: []int{7}}}}}),
+			"the model is malformed: entity User: primary key 7 is not one of its 1 fields"},
+		{"null field", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Fields: []*plugin.Field{nil}}}}}),
+			"entity User: field 0 is null"},
+		{"index of no field", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Indexes: []*plugin.Index{{Name: "u", Fields: []string{"x"}}}}}}}),
+			"entity User: index u: no field x"},
+		{"null index", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Indexes: []*plugin.Index{nil}}}}}),
+			"entity User: index 0 is null"},
+		{"null edge", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{nil}}}}}),
+			"entity User: edge 0 is null"},
+		{"no target", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "pets", Target: "Pet"}}}}}}),
+			"entity User: edge pets: no target entity Pet"},
+		{"no pair", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Ref: "x"}}}}}}),
+			"edge friends: its pair x is not an edge of User"},
+		{"no join", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "J"}}}}}}),
+			"edge friends: no join entity J"},
+		{"no key holder", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "boss", Target: "User", Field: "boss_id", FieldOn: "X"}}}}}}),
+			"edge boss: no entity X, which holds its key"},
+		{"no key", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "boss", Target: "User", Field: "boss_id", FieldOn: "User"}}}}}}),
+			"edge boss: its key boss_id is not a field of User"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
