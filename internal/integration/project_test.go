@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"testing"
 
@@ -28,6 +29,11 @@ func rowsOf[E any](t *testing.T, ctx context.Context, q velox.Query[E], cols int
 		}
 		s := ""
 		for i, v := range vals {
+			if x, ok := v.(driver.Valuer); ok { // pgx's numeric
+				if dv, err := x.Value(); err == nil {
+					v = dv
+				}
+			}
 			switch x := v.(type) {
 			case []byte: // a driver may send a number as text
 				v = string(x)
