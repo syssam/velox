@@ -53,8 +53,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   group keys, `HAVING` and an ordering by an aggregate or an expression
   (`Term.Asc`, `Term.Desc`). It is a read of the entity, so the Read policy,
   scope and interceptors apply, which `Raw` skips. `Expr` also takes a term
-  for a `?`. `OrderTerm` gained `Expr`, and `Statement` gained `Project`
-  (ADR 0074).
+  for a `?`. `OrderTerm` gained `Expr`, and `Statement` gained `Project`.
+  `untyped.TableQuery` has the same methods, with `untyped.Col`, `Calc`,
+  `Expr`, `Sum` and the other term makers (ADR 0074).
 - `Query.Selects` is now `Query.Reads`, so that it does not sit beside
   `Select`. `untyped.TableQuery.Selects` keeps its name.
 

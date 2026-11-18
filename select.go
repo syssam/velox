@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/syssam/velox/internal/engine"
 )
@@ -110,41 +109,6 @@ func errProjectRows(entity string) error {
 	return fmt.Errorf("velox: %s: a projection reads terms, not entities: read it with Rows", entity)
 }
 
-// rowsRun is the state of one Rows.
-type rowsRun struct {
-	st      Statement
-	yield   func(RawRow, error) bool
-	timed   bool // the DB has an Around hook: time the loop body
-	yielded bool // a row was yielded
-	stopped bool // the loop over Rows ended early
-}
-
-// readRows yields each row until the loop over Rows ends.
-func readRows(it *rowsRun, r engine.Rows) error {
-	if it.yielded || it.stopped {
-		return engine.ErrIterAgain
-	}
-	for r.Next() {
-		it.yielded = true
-		engine.SetStmtHanded(&it.st)
-		if !yieldRaw(it.yield, RawRow{r}, it.timed, &it.st.Result.LoopBody) {
-			it.stopped = true
-			return nil
-		}
-	}
-	return nil
-}
-
-// yieldRaw yields row and, when timed, adds the time the loop body took to
-// *body, also when the loop body panics.
-func yieldRaw(yield func(RawRow, error) bool, row RawRow, timed bool, body *time.Duration) bool {
-	if !timed {
-		return yield(row, nil)
-	}
-	defer engine.AddSince(body, time.Now())
-	return yield(row, nil)
-}
-
 // Rows runs the query and yields the rows of its Select one at a time,
 // scanned by position with RawRow.Scan: the terms in the order Select gave
 // them. Only the current row is held. A query with no Select fails with an
@@ -155,27 +119,7 @@ func yieldRaw(yield func(RawRow, error) bool, row RawRow, timed bool, body *time
 // connection a statement in the body fails. Rewrite hooks see the
 // statement's Project and may not change it. SQL shows the statement.
 func (q Query[E]) Rows[_ Lazy[E]](ctx context.Context) RawRows {
-	return func(yield func(RawRow, error) bool) {
-		st, err := q.projectStmt()
-		if err != nil {
-			yield(RawRow{}, err)
-			return
-		}
-		engine.SetStmtIter(&st)
-		var stopped bool
-		if q.s.DB.Hooked() {
-			it := &rowsRun{st: st, yield: yield, timed: len(q.s.DB.Cfg.Arounds) > 0}
-			err = q.s.DB.Run(ctx, &it.st, func(r engine.Rows) error { return readRows(it, r) }, nil)
-			stopped = it.stopped
-		} else {
-			it := rowsRun{st: st, yield: yield}
-			err = q.s.DB.Plain(ctx, &it.st, func(r engine.Rows) error { return readRows(&it, r) }, nil)
-			stopped = it.stopped
-		}
-		if err != nil && !stopped {
-			yield(RawRow{}, err)
-		}
-	}
+	return engine.ProjectRows(ctx, q.s.DB, func() (Statement, error) { return q.projectStmt() })
 }
 
 // projectStmt is the statement Rows sends: the query's, which must be a

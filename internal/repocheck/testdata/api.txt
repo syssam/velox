@@ -42,6 +42,8 @@ Policy.Write func(ctx context.Context) (Predicate, error)
 Projection.GroupBy []Term
 Projection.Having []Predicate
 Projection.Terms []Term
+RawRow.Scan(dst ...any) error
+RawRows is func(yield func(RawRow, error) bool)
 Row.Entity() any
 Row.IsZero(name string) bool
 Row.Set(name string, v any) error
@@ -392,7 +394,6 @@ func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
 func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error]
 func (q RawQuery[E]) MaxRows[_ Lazy[E]](n int) RawQuery[E]
 func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
-func (r RawRow) Scan(dst ...any) error
 func (r Rel[E, T]) Add[_ Lazy[T]](keys ...any) Setter[E]
 func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E]
 func (r Rel[E, T]) Clear[_ Lazy[T]]() Setter[E]
@@ -592,8 +593,8 @@ type Predicate = Pred[anyEntity]
 type Projection = engine.Projection
 type Query[E any] struct { }
 type RawQuery[E any] struct { }
-type RawRow struct { }
-type RawRows func(yield func(RawRow, error) bool)
+type RawRow = engine.RawRow
+type RawRows = engine.RawRows
 type Rel[E, T any] struct { I int32 }
 type Result = veloxtype.Result
 type Rewrite func(ctx context.Context, st *Statement) error

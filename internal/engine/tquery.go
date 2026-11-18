@@ -460,7 +460,7 @@ func (q TableQuery) SQL(ctx context.Context) (string, []any, error) {
 			return "", nil, err
 		}
 	}
-	st, err := q.prepare()
+	st, err := q.prepareAny()
 	if err != nil {
 		return "", nil, err
 	}
@@ -525,6 +525,15 @@ func tableOwners(os *table, owners []any) ([]unsafe.Pointer, error) {
 // prepare is the statement a run of q sends, checked as the untyped entry
 // points check theirs.
 func (q TableQuery) prepare() (Statement, error) {
+	if q.st.Project != nil {
+		return Statement{}, errProjectRows(q.t.info.Name)
+	}
+	return q.prepareAny()
+}
+
+// prepareAny is prepare for a query that may hold a projection: SQL shows
+// it and Rows reads it.
+func (q TableQuery) prepareAny() (Statement, error) {
 	st, err := PrepareStmt(&q.st, q.t.info, q.after)
 	if err != nil {
 		return Statement{}, err
@@ -581,4 +590,73 @@ func ExistsStmt(ctx context.Context, db *DB, st Statement) (bool, error) {
 		return false, err
 	}
 	return found, nil
+}
+
+// projection is a copy of q's Projection to extend, or a new one.
+func (q TableQuery) projection() *Projection {
+	if q.st.Project == nil {
+		return &Projection{}
+	}
+	return cloneProject(q.st.Project)
+}
+
+// Select is Query.Select: the query reads terms, made by the package's
+// ColumnTerm, ExprTerm and AggTerm, in place of the entity's columns, and is
+// read with Rows.
+func (q TableQuery) Select(ts ...Term) TableQuery {
+	p := q.projection()
+	p.Terms = append(p.Terms, ts...)
+	q.st.Project = p
+	return q
+}
+
+// GroupBy is Query.GroupBy. It needs Select.
+func (q TableQuery) GroupBy(ts ...Term) TableQuery {
+	if q.st.Project == nil {
+		return q.fail(fmt.Errorf("velox: %s: GroupBy needs Select: it groups the terms Select reads", q.t.info.Name))
+	}
+	p := q.projection()
+	p.GroupBy = append(p.GroupBy, ts...)
+	q.st.Project = p
+	return q
+}
+
+// Having is Query.Having. It needs Select.
+func (q TableQuery) Having(ps ...Predicate) TableQuery {
+	if q.st.Project == nil {
+		return q.fail(fmt.Errorf("velox: %s: Having needs Select: it filters the groups Select reads", q.t.info.Name))
+	}
+	p := q.projection()
+	for _, h := range ps {
+		p.Having = append(p.Having, h)
+		if err := PredErr(PredNode(h)); err != nil {
+			q = q.fail(err)
+		}
+	}
+	q.st.Project = p
+	return q
+}
+
+// Rows is Query.Rows: the rows of the query's Select, one at a time, scanned
+// by position.
+func (q TableQuery) Rows(ctx context.Context) RawRows {
+	return ProjectRows(ctx, q.e, func() (Statement, error) {
+		name := q.t.info.Name
+		switch {
+		case q.check() != nil:
+			return Statement{}, q.check()
+		case q.st.Project == nil:
+			return Statement{}, fmt.Errorf("velox: %s: Rows reads a projection: add Select", name)
+		case len(q.loads) > 0:
+			return Statement{}, fmt.Errorf("velox: %s: a projection cannot be read with With", name)
+		case q.after != nil:
+			return Statement{}, fmt.Errorf("velox: %s: a projection cannot be read After a row", name)
+		}
+		return q.prepareAny()
+	})
+}
+
+// errProjectRows is the refusal of a reader of entities on a projection.
+func errProjectRows(entity string) error {
+	return fmt.Errorf("velox: %s: a projection reads terms, not entities: read it with Rows", entity)
 }

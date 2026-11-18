@@ -37,6 +37,15 @@ column, a group key and an ordering, and an aggregate to compare in `HAVING`.
   (`TestGenericTypesCompileSmall`); the generic aggregate methods on handles
   cost nothing measurable. `Expr`'s arguments are checked the same way.
 - `Query.Selects` is `Query.Reads`, so that the two do not sit side by side.
+- `untyped.TableQuery` has the same `Select`, `GroupBy`, `Having` and `Rows`,
+  with `untyped.Col(index)`, `Calc`, `Expr`, `CountAll`, `Sum`, `Avg`, `Min`,
+  `Max`, `Count`, `CountDistinct` and `OrderByTerm` making terms: code that
+  handles every entity alike, such as a report service that takes its columns
+  from a request, builds the statement the typed API builds. They share
+  `engine.ProjectRows`, so the hooks, policies and errors are one code, and
+  `RawRow` and `RawRows` are aliases of the engine's types so that both
+  return the same one. A term names a column by index, and an index the
+  entity lacks fails the statement.
 - A projection is a read of E like any other. `Where`, the Read policy, the
   scope and the interceptors apply to it in the same statement, so a grouped
   read counts only the rows the caller may see. `Limit` or `AllowUnbounded`
@@ -78,4 +87,3 @@ the allocation budgets were not.
   and `InSelect` (0057) cover tables with a relation or a handle.
 - Window functions (`COUNT(*) OVER`), `UNION` and CTEs.
 - Scanning rows into a struct: `Rows` returns positions, scanned by the caller.
-- An untyped (`untyped.TableQuery`) form of `Select`.

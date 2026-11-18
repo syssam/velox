@@ -151,6 +151,10 @@ const (
 //	After(row any) TableQuery
 //	Join(edge int, target Table) TableQuery
 //	LeftJoin(edge int, target Table) TableQuery
+//	Select(ts ...Term) TableQuery
+//	GroupBy(ts ...Term) TableQuery
+//	Having(ps ...velox.Predicate) TableQuery
+//	Rows(ctx context.Context) velox.RawRows
 //	All(ctx context.Context) (Rows, error)
 //	One(ctx context.Context) (any, error)
 //	First(ctx context.Context) (any, error)
@@ -160,6 +164,76 @@ const (
 //	LoadEach(ctx context.Context, owner Table, edge, each int, owners []any) ([]Rows, error)
 //	CountEach(ctx context.Context, owner Table, edge int, owners []any) ([]int64, error)
 type TableQuery = engine.TableQuery
+
+// Term is one SQL value of a TableQuery's entity: a column (Col), an
+// expression (Calc) or an aggregate of either (Sum, Avg, Min, Max, Count,
+// CountDistinct and CountAll): velox.Term with the entity's type erased and
+// columns by index. TableQuery.Select reads terms, GroupBy groups by them,
+// Expr compares them in Having, and OrderByTerm orders by one. Like the
+// typed projection, it is a read of the entity: the Read policy, scope and
+// interceptors apply.
+type Term = engine.Term
+
+// Col is column col of the query's entity as a Term. An index the entity
+// lacks fails the statement.
+func Col(col int) Term { return engine.ColumnTerm(int32(col)) }
+
+// Calc is the SQL expression text as a Term, written as velox.Calc's: each ?
+// is filled by the next argument, a Term written as it is and any other
+// value bound; the text is guarded as velox.Expr's is.
+func Calc(text string, args ...any) Term {
+	slots, vals := termSlots(args)
+	return engine.ExprTerm(text, slots, vals)
+}
+
+// Expr is velox.Expr with terms for columns: the SQL text as a condition for
+// Where or Having, each ? filled by the next argument, a Term written as it
+// is and any other value bound.
+func Expr(text string, args ...any) velox.Predicate {
+	slots, vals := termSlots(args)
+	return velox.Predicate(engine.NewPredicate(engine.ExprNode(text, slots, vals)))
+}
+
+// termSlots classifies the arguments of a Calc or an Expr: a Term fills its ?
+// as the term, anything else is bound.
+func termSlots(args []any) ([]engine.ExprSlot, []any) {
+	slots := make([]engine.ExprSlot, len(args))
+	vals := make([]any, 0, len(args))
+	for i, a := range args {
+		if t, ok := a.(Term); ok {
+			slots[i] = engine.ExprSlot{Col: -1, Term: &t}
+			continue
+		}
+		slots[i] = engine.ExprSlot{Col: -1}
+		vals = append(vals, a)
+	}
+	return slots, vals
+}
+
+// CountAll is COUNT(*) as a Term.
+func CountAll() Term { return engine.AggTerm(engine.TermCountAll, Term{}) }
+
+// Sum is SUM of t. NULL when no row has a value.
+func Sum(t Term) Term { return engine.AggTerm(engine.TermSum, t) }
+
+// Avg is AVG of t. NULL when no row has a value.
+func Avg(t Term) Term { return engine.AggTerm(engine.TermAvg, t) }
+
+// Min is MIN of t.
+func Min(t Term) Term { return engine.AggTerm(engine.TermMin, t) }
+
+// Max is MAX of t.
+func Max(t Term) Term { return engine.AggTerm(engine.TermMax, t) }
+
+// Count is COUNT of t: the rows where it is not NULL.
+func Count(t Term) Term { return engine.AggTerm(engine.TermCount, t) }
+
+// CountDistinct is COUNT(DISTINCT t).
+func CountDistinct(t Term) Term { return engine.AggTerm(engine.TermCountDistinct, t) }
+
+// OrderByTerm orders by t, descending when desc: for TableQuery.OrderBy. NULL
+// sorts as an ordering by a column does. After and a cursor cannot follow it.
+func OrderByTerm(t Term, desc bool) velox.OrderTerm { return velox.OrderTerm{Expr: t, Desc: desc} }
 
 // TableInsert is an INSERT of rows of a Table's entity: InsertQuery with the
 // entity's type erased and columns by index.

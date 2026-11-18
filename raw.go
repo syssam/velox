@@ -26,17 +26,19 @@ func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int6
 	return db.e.RawExec(ctx, reason, query, args)
 }
 
-// RawRows is what DB.Rows returns: a sequence of rows to range over, as an
-// iter.Seq2[RawRow, error] is.
-type RawRows func(yield func(RawRow, error) bool)
+// RawRows is what DB.Rows, Query.Rows and untyped.TableQuery.Rows return: a
+// sequence of rows to range over, as an iter.Seq2[RawRow, error] is.
+type RawRows = engine.RawRows
 
-// RawRow is a row that DB.Rows yields. It is valid only in the loop body
+// RawRow is a row that RawRows yields. It is valid only in the loop body
 // that receives it.
-type RawRow struct{ r engine.Rows }
-
-// Scan copies the row's columns, in the order the SQL returns them, into
-// dst, as the driver's Rows.Scan does. No codec decodes them.
-func (r RawRow) Scan(dst ...any) error { return r.r.Scan(dst...) }
+//
+// Its methods:
+//
+//	// Scan copies the row's columns, in the order the SQL returns them, into
+//	// dst, as the driver's Rows.Scan does. No codec decodes them.
+//	Scan(dst ...any) error
+type RawRow = engine.RawRow
 
 // Rows runs query, raw SQL that returns rows, with args, and yields its rows
 // one at a time, for SQL whose rows are no entity's: a report, a CTE, a
@@ -64,7 +66,7 @@ func (r RawRow) Scan(dst ...any) error { return r.r.Scan(dst...) }
 // one connection a statement in the body fails.
 func (db *DB) Rows(ctx context.Context, reason, query string, args ...any) RawRows {
 	return func(yield func(RawRow, error) bool) {
-		stopped, err := db.e.RawRows(ctx, reason, query, args, func(r engine.Rows) bool { return yield(RawRow{r}, nil) })
+		stopped, err := db.e.RawRows(ctx, reason, query, args, func(r engine.Rows) bool { return yield(engine.NewRawRow(r), nil) })
 		if err != nil && !stopped {
 			yield(RawRow{}, err)
 		}
