@@ -89,6 +89,36 @@ func TestUntypedSelectRows(t *testing.T) {
 	}
 }
 
+// TestUntypedSelectAggregates: Avg, Min and CountDistinct read what the
+// typed aggregates do. The average is the sum over the count, the minimum
+// number is the first one, and the invoices have one organization.
+func TestUntypedSelectAggregates(t *testing.T) {
+	db := connectInvoices(t, ":memory:")
+	total := untyped.Col(int(I.Total.I))
+	var avg, sum float64
+	var count, orgs int64
+	var first string
+	n := 0
+	for r, err := range untyped.Query(db, untyped.TableOf[inv]()).
+		Select(untyped.Avg(total), untyped.Sum(total), untyped.CountAll(),
+			untyped.Min(untyped.Col(int(I.Number.I))), untyped.CountDistinct(untyped.Col(int(I.OrgID.I)))).
+		Limit(1).Rows(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := r.Scan(&avg, &sum, &count, &first, &orgs); err != nil {
+			t.Fatal(err)
+		}
+		n++
+	}
+	if n != 1 || count != 3 || orgs != 1 || first != "a" {
+		t.Errorf("%d rows: count %d, orgs %d, min number %q; want 1 row, 3, 1, a", n, count, orgs, first)
+	}
+	if d := avg*float64(count) - sum; d < -1e-9 || d > 1e-9 {
+		t.Errorf("avg %v * count %d is not sum %v", avg, count, sum)
+	}
+}
+
 // TestUntypedSelectKeepsPolicy: an untyped projection reads under the Read
 // policy and the scope, and a refused caller sends nothing.
 func TestUntypedSelectKeepsPolicy(t *testing.T) {
