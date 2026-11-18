@@ -268,6 +268,9 @@ adopting an existing database.
 - [docs/guide.md](docs/guide.md): a tour of velox by task, from schema to
   GraphQL. Read this after the quick start.
 - [docs/coming-from-ent.md](docs/coming-from-ent.md): what differs from ent.
+- [docs/for-agents.md](docs/for-agents.md): the rules a coding agent needs.
+  Copy [skills/velox](skills/velox/SKILL.md) into your project's
+  `.claude/skills/`, and the agent reads this page from the module cache.
 - [docs/stability.md](docs/stability.md): what may change before 1.0, and
   what 1.0 will promise.
 - [examples/](examples/README.md): runnable programs, one topic each, and a
