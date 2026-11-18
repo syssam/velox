@@ -103,12 +103,17 @@ func validOpClass(s string) bool {
 			return false
 		}
 		for _, c := range p {
-			if c != '_' && c != '$' && !('a' <= c && c <= 'z') && !('A' <= c && c <= 'Z') && !('0' <= c && c <= '9') {
+			if !opClassChar(c) {
 				return false
 			}
 		}
 	}
 	return true
+}
+
+// opClassChar reports whether c may be in an operator class name.
+func opClassChar(c rune) bool {
+	return c == '_' || c == '$' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
 }
 
 // validIndexMethod reports whether m is a PostgreSQL index method an Index may
@@ -121,12 +126,22 @@ func validIndexMethod(m string) bool {
 	return false
 }
 
-// validIndexKeys checks the Desc and OpClass of ix, of the table ref that name
-// says is in the schema: they are PostgreSQL's, name columns of the index, and
+// validIndexOptions checks the Method, Desc and OpClass of ix, of the table ref
+// that name says is in the schema: they are PostgreSQL's, a method is one it has
+// and a unique index's is btree, Desc and OpClass name columns of the index, and
 // DESC is a btree index's.
-func validIndexKeys(d velox.Dialect, name string, ref TableRef, ix Index) error {
+func validIndexOptions(d velox.Dialect, name string, ref TableRef, ix Index) error {
 	bad := func(format string, args ...any) error {
 		return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s gives the index %q %s", name, ix.Name, fmt.Sprintf(format, args...))}
+	}
+	switch {
+	case ix.Method == "":
+	case d != velox.Postgres:
+		return bad("the method %q, which only PostgreSQL has", ix.Method)
+	case !validIndexMethod(ix.Method):
+		return bad("the method %q; the methods are hash, gin, gist, spgist and brin, and btree is the default, written as none", ix.Method)
+	case ix.Unique:
+		return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s gives the unique index %q the method %q, and only btree can enforce uniqueness", name, ix.Name, ix.Method)}
 	}
 	if len(ix.Desc)+len(ix.OpClass) > 0 && d != velox.Postgres {
 		return bad("a Desc or an OpClass, which only PostgreSQL has")
@@ -328,16 +343,7 @@ func (s *Schema) validate(name string) error {
 			case !ix.Unique || ix.Where != "":
 				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s marks the index %q a constraint, which a non-unique or partial index cannot be", name, ix.Name)}
 			}
-			switch {
-			case ix.Method == "":
-			case s.Dialect != velox.Postgres:
-				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s gives the index %q the method %q, which only PostgreSQL has", name, ix.Name, ix.Method)}
-			case !validIndexMethod(ix.Method):
-				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s gives the index %q the method %q; the methods are hash, gin, gist, spgist and brin, and btree is the default, written as none", name, ix.Name, ix.Method)}
-			case ix.Unique:
-				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s gives the unique index %q the method %q, and only btree can enforce uniqueness", name, ix.Name, ix.Method)}
-			}
-			if err := validIndexKeys(s.Dialect, name, ref, ix); err != nil {
+			if err := validIndexOptions(s.Dialect, name, ref, ix); err != nil {
 				return err
 			}
 		}

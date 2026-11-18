@@ -648,6 +648,47 @@ func (b *builder) indexKeys(e *Entity, i int, ix *Index, li *loadjson.Index, col
 	return good
 }
 
+// indexColumns adds to ix the columns of the fields and edges the index i of n
+// covers (rules 23, 24 and 42), and returns them by the name the schema gave,
+// and whether they are all sound.
+func (b *builder) indexColumns(n *node, i int, ix *Index, li *loadjson.Index) (map[string]string, bool) {
+	e, good := n.ent, true
+	colOf := map[string]string{}
+	for _, name := range li.Fields {
+		f := e.Field(name)
+		if f == nil {
+			b.fail(23, e.Name, indexLoc(i, ix), "names unknown field %q%s", name, suggest(name, fieldNames(e)))
+			good = false
+			continue
+		}
+		if f.Type == "json" && ix.Method != "gin" {
+			b.fail(42, e.Name, indexLoc(i, ix), "field %q is JSON, which no index can cover but a GIN one; give the index Method(\"gin\")", name)
+			good = false
+		}
+		ix.Columns = append(ix.Columns, f.Column)
+		colOf[name] = f.Column
+	}
+	for _, name := range li.Edges {
+		s := n.edge(name)
+		switch {
+		case s == nil:
+			b.fail(23, e.Name, indexLoc(i, ix), "names unknown edge %q%s", name, suggest(name, n.edgeNames()))
+			good = false
+		case s.ed.Rel.Kind == "":
+			good = false // unresolved: an error is recorded
+		case !ownFK(s.ed):
+			b.fail(24, e.Name, indexLoc(i, ix), "edge %q has no column in table %s", name, e.Table)
+			good = false
+		default:
+			ix.Columns = append(ix.Columns, s.ed.Rel.Columns[0])
+			if _, taken := colOf[name]; !taken {
+				colOf[name] = s.ed.Rel.Columns[0]
+			}
+		}
+	}
+	return colOf, good
+}
+
 // indexes resolves the indexes of every entity (step 5), and records those an
 // index rule refuses: their names are rule 43's or partial, so step 5b does
 // not compare them.
@@ -663,40 +704,8 @@ func (b *builder) indexes() {
 				b.fail(25, e.Name, indexLoc(i, ix), "names no fields or edges")
 			}
 			good = b.indexMethod(e, i, ix, li.Method) && good
-			colOf := map[string]string{} // the names the index covers, by column
-			for _, name := range li.Fields {
-				f := e.Field(name)
-				if f == nil {
-					b.fail(23, e.Name, indexLoc(i, ix), "names unknown field %q%s", name, suggest(name, fieldNames(e)))
-					good = false
-					continue
-				}
-				if f.Type == "json" && ix.Method != "gin" {
-					b.fail(42, e.Name, indexLoc(i, ix), "field %q is JSON, which no index can cover but a GIN one; give the index Method(\"gin\")", name)
-					good = false
-				}
-				ix.Columns = append(ix.Columns, f.Column)
-				colOf[name] = f.Column
-			}
-			for _, name := range li.Edges {
-				s := n.edge(name)
-				switch {
-				case s == nil:
-					b.fail(23, e.Name, indexLoc(i, ix), "names unknown edge %q%s", name, suggest(name, n.edgeNames()))
-					good = false
-				case s.ed.Rel.Kind == "":
-					good = false // unresolved: an error is recorded
-				case !ownFK(s.ed):
-					b.fail(24, e.Name, indexLoc(i, ix), "edge %q has no column in table %s", name, e.Table)
-					good = false
-				default:
-					ix.Columns = append(ix.Columns, s.ed.Rel.Columns[0])
-					if _, taken := colOf[name]; !taken {
-						colOf[name] = s.ed.Rel.Columns[0]
-					}
-				}
-			}
-			good = b.indexKeys(e, i, ix, li, colOf) && good
+			colOf, covered := b.indexColumns(n, i, ix, li)
+			good = b.indexKeys(e, i, ix, li, colOf) && covered && good
 			ix.Name, ix.Derived = cmp.Or(li.StorageKey, indexName(e.Name, ix.Columns)), li.StorageKey == ""
 			e.Indexes = append(e.Indexes, ix)
 			ok = append(ok, good)
