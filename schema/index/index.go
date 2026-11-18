@@ -15,9 +15,9 @@ import (
 type Builder struct{ d *desc.Index }
 
 // Fields starts an index over the named fields. velox-gen refuses a JSON
-// field, which no index can cover, and an index that repeats another of the
-// schema or its mixins: the same columns in order, the same Unique and the
-// same Where.
+// field, which no index can cover but a GIN one, and an index that repeats
+// another of the schema or its mixins: the same columns in order, the same
+// Unique, Where and Method.
 func Fields(fields ...string) *Builder { return newBuilder(desc.Caller()).Fields(fields...) }
 
 // Edges starts an index over the foreign keys of the named edges.
@@ -50,6 +50,37 @@ func (b *Builder) StorageKey(name string) *Builder { b.d.StorageKey = name; retu
 // Where sets the predicate of a partial index, in SQL. PostgreSQL and SQLite
 // have partial indexes; MySQL does not.
 func (b *Builder) Where(sql string) *Builder { b.d.Where = sql; return b }
+
+// Method sets the access method of the index, on PostgreSQL: btree, hash,
+// gin, gist, spgist or brin, in any case. Without one the index is btree,
+// PostgreSQL's default. A GIN index may cover a JSON field, which no other
+// index can: it is the index of a jsonb column's containment and key tests.
+// velox-gen refuses a method on MySQL and SQLite, which have no such choice,
+// and a Unique index of any method but btree, which PostgreSQL refuses.
+func (b *Builder) Method(name string) *Builder { b.d.Method = name; return b }
+
+// Desc makes the named fields or edges of the index sort descending, on
+// PostgreSQL, where it serves an ORDER BY that mixes directions, as
+// ORDER BY a, b DESC. A single column in either direction needs no Desc: a
+// btree index is read backwards. Each name is one the index covers, and the
+// index is btree: no other method has an order. velox-gen refuses a Desc on
+// MySQL and SQLite.
+func (b *Builder) Desc(names ...string) *Builder {
+	b.d.Desc = append(b.d.Desc, names...)
+	return b
+}
+
+// OpClass sets the operator class of one field or edge of the index, on
+// PostgreSQL, as the class is written in CREATE INDEX: "gin_trgm_ops" for a
+// trigram index over text, "jsonb_path_ops" for a smaller GIN index over
+// jsonb. Name only a class that is not its type's default; PostgreSQL reads a
+// default one back as none, and the index would then differ from the schema
+// for ever. A class of an extension needs the extension, which velox does not
+// create. velox-gen refuses an OpClass on MySQL and SQLite.
+func (b *Builder) OpClass(name, class string) *Builder {
+	b.d.OpClass = append(b.d.OpClass, desc.IndexOpClass{Name: name, Class: class})
+	return b
+}
 
 // Annotations attaches annotations to the index.
 func (b *Builder) Annotations(as ...schema.Annotation) *Builder {

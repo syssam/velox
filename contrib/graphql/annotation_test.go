@@ -43,6 +43,8 @@ var annotationCases = []annotationCase{
 	{"WhereOps(mixed)", graphql.WhereOps(graphql.OpEQ, graphql.OpsNullable), `{"where_ops":6145}`},
 	{"WhereOps(all)", graphql.WhereOps(graphql.OpsAll), `{"where_ops":8191}`},
 	{"OrderVia", graphql.OrderVia("name", "AUTHOR_NAME"), `{"order_via":[{"field":"name","value":"AUTHOR_NAME"}]}`},
+	{"Resolvers", graphql.Resolvers(graphql.Map("organization", "PublicOrganization!").WithComment("Owner."), graphql.Map("tags(first: Int)", "[Tag!]!")),
+		`{"resolvers":[{"field":"organization","type":"PublicOrganization!","comment":"Owner."},{"field":"tags(first: Int)","type":"[Tag!]!"}]}`},
 	{"WhereEdge", graphql.WhereEdge(), `{"where_edge":true}`},
 	{"Connection(false)", graphql.Connection(false), `{"connection":false}`},
 	{"Connection(true)", graphql.Connection(true), `{"connection":true}`},
@@ -129,6 +131,26 @@ func TestMergeOrderVia(t *testing.T) {
 	want := []graphql.ViaOrder{{Field: "name", Value: "A"}, {Field: "email", Value: "B"}}
 	if !reflect.DeepEqual(got.OrderVia, want) {
 		t.Errorf("OrderVia: got %+v, want %+v", got.OrderVia, want)
+	}
+}
+
+// Resolvers merge as a list, the earlier first; a field both name, whatever its
+// arguments, is kept once where the earlier had it, as the later one wrote it.
+func TestMergeResolvers(t *testing.T) {
+	got := merge(t,
+		graphql.Resolvers(graphql.Map("organization", "PublicOrganization"), graphql.Map("owner", "PublicEmployee")),
+		graphql.Resolvers(graphql.Map("organization(active: Boolean)", "PublicOrganization!").WithComment("Later."), graphql.Map("tags", "[Tag!]!")),
+	).Resolvers
+	want := []graphql.ResolverMapping{
+		{Field: "organization(active: Boolean)", Type: "PublicOrganization!", Comment: "Later."},
+		{Field: "owner", Type: "PublicEmployee"},
+		{Field: "tags", Type: "[Tag!]!"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+	if n := graphql.Map("priceListItem(priceListId: ID!)", "X").Name(); n != "priceListItem" {
+		t.Errorf("Name() = %q", n)
 	}
 }
 

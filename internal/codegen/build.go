@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -92,6 +94,9 @@ func fieldAt(name string) string { return fmt.Sprintf("field %q", name) }
 func edgeAt(name string) string { return fmt.Sprintf("edge %q", name) }
 
 func indexAt(i int) string { return fmt.Sprintf("index %d", i) }
+
+// indexMethods are the access methods an index may name, PostgreSQL's own.
+var indexMethods = []string{"btree", "hash", "gin", "gist", "spgist", "brin"}
 
 // loc is an element an Error names: its Where and its position.
 type loc struct{ where, pos string }
@@ -572,6 +577,118 @@ func goImports(f *loadjson.Field) []string {
 	return f.GoType.Imports
 }
 
+// indexMethod checks the Method of the index i of e, which the schema wrote as
+// raw (rules 58 and 59), and reports whether it is sound. btree, PostgreSQL's
+// default and what a plan reads back, becomes no method.
+func (b *builder) indexMethod(e *Entity, i int, ix *Index, raw string) bool {
+	good := true
+	switch {
+	case ix.Method != "" && !slices.Contains(indexMethods, ix.Method):
+		b.fail(58, e.Name, indexLoc(i, ix), "has Method %q; PostgreSQL's are %s", raw, strings.Join(indexMethods, ", "))
+		good = false
+	case ix.Unique && ix.Method != "" && ix.Method != "btree":
+		b.fail(59, e.Name, indexLoc(i, ix), "is Unique with Method %q, and only btree can enforce uniqueness", ix.Method)
+		good = false
+	}
+	if ix.Method == "btree" {
+		ix.Method = ""
+	}
+	return good
+}
+
+// opClassName is an operator class as CREATE INDEX writes it: a name, or a
+// schema's and a name.
+var opClassName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_$]*(\.[A-Za-z_][A-Za-z0-9_$]*)?$`)
+
+// indexKeys resolves the Desc and OpClass of the index i of e to columns, by
+// the names of the fields and edges the index covers, which colOf maps to
+// their columns (rules 60 to 62), and reports whether they are sound. Desc
+// ends in the order of the index's columns.
+func (b *builder) indexKeys(e *Entity, i int, ix *Index, li *loadjson.Index, colOf map[string]string) bool {
+	good := true
+	at := indexLoc(i, ix)
+	desc := map[string]bool{}
+	for _, name := range li.Desc {
+		col, ok := colOf[name]
+		if !ok {
+			b.fail(60, e.Name, at, "has Desc on %q, which it does not cover", name)
+			good = false
+			continue
+		}
+		desc[col] = true
+	}
+	if len(desc) > 0 && ix.Method != "" {
+		b.fail(61, e.Name, at, "has Desc with Method %q, and only btree has an order", ix.Method)
+		good = false
+	}
+	for _, c := range ix.Columns {
+		if desc[c] && !slices.Contains(ix.Desc, c) {
+			ix.Desc = append(ix.Desc, c)
+		}
+	}
+	for _, o := range li.OpClass {
+		col, ok := colOf[o.Name]
+		switch {
+		case !ok:
+			b.fail(60, e.Name, at, "has OpClass on %q, which it does not cover", o.Name)
+			good = false
+		case !opClassName.MatchString(o.Class):
+			b.fail(62, e.Name, at, "has OpClass %q for %q, which is not an operator class name, as CREATE INDEX writes one", o.Class, o.Name)
+			good = false
+		case ix.OpClass[col] != "":
+			b.fail(62, e.Name, at, "gives %q two operator classes", o.Name)
+			good = false
+		default:
+			if ix.OpClass == nil {
+				ix.OpClass = map[string]string{}
+			}
+			ix.OpClass[col] = o.Class
+		}
+	}
+	return good
+}
+
+// indexColumns adds to ix the columns of the fields and edges the index i of n
+// covers (rules 23, 24 and 42), and returns them by the name the schema gave,
+// and whether they are all sound.
+func (b *builder) indexColumns(n *node, i int, ix *Index, li *loadjson.Index) (map[string]string, bool) {
+	e, good := n.ent, true
+	colOf := map[string]string{}
+	for _, name := range li.Fields {
+		f := e.Field(name)
+		if f == nil {
+			b.fail(23, e.Name, indexLoc(i, ix), "names unknown field %q%s", name, suggest(name, fieldNames(e)))
+			good = false
+			continue
+		}
+		if f.Type == "json" && ix.Method != "gin" {
+			b.fail(42, e.Name, indexLoc(i, ix), "field %q is JSON, which no index can cover but a GIN one; give the index Method(\"gin\")", name)
+			good = false
+		}
+		ix.Columns = append(ix.Columns, f.Column)
+		colOf[name] = f.Column
+	}
+	for _, name := range li.Edges {
+		s := n.edge(name)
+		switch {
+		case s == nil:
+			b.fail(23, e.Name, indexLoc(i, ix), "names unknown edge %q%s", name, suggest(name, n.edgeNames()))
+			good = false
+		case s.ed.Rel.Kind == "":
+			good = false // unresolved: an error is recorded
+		case !ownFK(s.ed):
+			b.fail(24, e.Name, indexLoc(i, ix), "edge %q has no column in table %s", name, e.Table)
+			good = false
+		default:
+			ix.Columns = append(ix.Columns, s.ed.Rel.Columns[0])
+			if _, taken := colOf[name]; !taken {
+				colOf[name] = s.ed.Rel.Columns[0]
+			}
+		}
+	}
+	return colOf, good
+}
+
 // indexes resolves the indexes of every entity (step 5), and records those an
 // index rule refuses: their names are rule 43's or partial, so step 5b does
 // not compare them.
@@ -581,39 +698,14 @@ func (b *builder) indexes() {
 		e := n.ent
 		var ok []bool // the indexes no earlier rule refuses
 		for i, li := range n.schema.Indexes {
-			ix := &Index{Columns: []string{}, Unique: li.Unique, Where: li.Where, Annotations: li.Annotations, Pos: li.Pos}
+			ix := &Index{Columns: []string{}, Unique: li.Unique, Where: li.Where, Method: strings.ToLower(li.Method), Annotations: li.Annotations, Pos: li.Pos}
 			good := len(li.Fields)+len(li.Edges) > 0
 			if !good {
 				b.fail(25, e.Name, indexLoc(i, ix), "names no fields or edges")
 			}
-			for _, name := range li.Fields {
-				f := e.Field(name)
-				if f == nil {
-					b.fail(23, e.Name, indexLoc(i, ix), "names unknown field %q%s", name, suggest(name, fieldNames(e)))
-					good = false
-					continue
-				}
-				if f.Type == "json" {
-					b.fail(42, e.Name, indexLoc(i, ix), "field %q is JSON, which no index can cover", name)
-					good = false
-				}
-				ix.Columns = append(ix.Columns, f.Column)
-			}
-			for _, name := range li.Edges {
-				s := n.edge(name)
-				switch {
-				case s == nil:
-					b.fail(23, e.Name, indexLoc(i, ix), "names unknown edge %q%s", name, suggest(name, n.edgeNames()))
-					good = false
-				case s.ed.Rel.Kind == "":
-					good = false // unresolved: an error is recorded
-				case !ownFK(s.ed):
-					b.fail(24, e.Name, indexLoc(i, ix), "edge %q has no column in table %s", name, e.Table)
-					good = false
-				default:
-					ix.Columns = append(ix.Columns, s.ed.Rel.Columns[0])
-				}
-			}
+			good = b.indexMethod(e, i, ix, li.Method) && good
+			colOf, covered := b.indexColumns(n, i, ix, li)
+			good = b.indexKeys(e, i, ix, li, colOf) && covered && good
 			ix.Name, ix.Derived = cmp.Or(li.StorageKey, indexName(e.Name, ix.Columns)), li.StorageKey == ""
 			e.Indexes = append(e.Indexes, ix)
 			ok = append(ok, good)
@@ -799,8 +891,8 @@ func (b *builder) namespaces() {
 }
 
 // repeats reports whether the index i of e repeats an earlier one (rule 43),
-// and reports it: the same columns in order, the same Unique and the same
-// Where, among the declared indexes, mixins' included. A field's Unique is not
+// and reports it: the same columns in order, the same Unique, Where, Method,
+// Desc and OpClass, among the declared indexes, mixins' included. A field's Unique is not
 // compared. ok tells the indexes no earlier rule refuses; the others are
 // skipped.
 func (b *builder) repeats(e *Entity, i int, ok []bool) bool {
@@ -809,7 +901,8 @@ func (b *builder) repeats(e *Entity, i int, ok []bool) bool {
 		return false
 	}
 	for j, prev := range e.Indexes[:i] {
-		if ok[j] && ix.Unique == prev.Unique && ix.Where == prev.Where && slices.Equal(ix.Columns, prev.Columns) {
+		if ok[j] && ix.Unique == prev.Unique && ix.Where == prev.Where && ix.Method == prev.Method && slices.Equal(ix.Columns, prev.Columns) &&
+			slices.Equal(ix.Desc, prev.Desc) && maps.Equal(ix.OpClass, prev.OpClass) {
 			b.fail(43, e.Name, indexLoc(i, ix), "repeats index %d", j)
 			return true
 		}

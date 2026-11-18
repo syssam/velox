@@ -103,11 +103,16 @@ spelled with the field's own name and value:
 | --- | --- |
 | unset stores `true` | `field.Bool("active").Nillable().Default(true)`: a `*bool`, and the column holds NULL |
 | ent's column, `NOT NULL DEFAULT true` | `field.Bool("active").SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "1", field.SQLite: "1"})`, and set `Active: true` in Go |
+| ent's column, `NOT NULL DEFAULT 100`, on a number | `field.Int("seats").DBDefault("100")`, and set `Seats: 100` in Go: one SQL text for the three dialects, of a number or a string |
 | a GraphQL create input that defaults | `graphql.CreateDefault(true)` on the field: `active: Boolean! = true` |
 | no default | a name whose zero is the default (`disabled` for `enabled`), or drop the `Default` |
 
 `Default(false)` or `Default(0)` is allowed, as it stores what unset stores.
-`SchemaDefault` is the column's default only: velox's inserts write every
+A constant `Default` is also the column's `DEFAULT`, as in ent: `Default("")`
+gives `DEFAULT ''` and `Default(0)` gives `DEFAULT 0` (a bool, number, string
+or enum; a `DefaultFunc` gives none). `SchemaDefault` is for a column default
+that `Default` cannot say, such as `now()`, or for one without a Go default. It
+is the column's default only: velox's inserts write every
 column, so only rows written outside velox take it; the column is an ent
 database's `NOT NULL DEFAULT true`. A field left unset stores its Go zero,
 never the column's `DEFAULT`, so `SchemaDefault` is not the value of an

@@ -514,8 +514,11 @@ func (l *loader) buildIndex(x schema.Index, prefix string, j int, pos loadjson.P
 		return nil
 	}
 	out := &loadjson.Index{
-		Fields: d.Fields, Edges: d.Edges, Unique: d.Unique, StorageKey: d.StorageKey, Where: d.Where,
-		Position: pos, Pos: l.pos(d.PC),
+		Fields: d.Fields, Edges: d.Edges, Unique: d.Unique, StorageKey: d.StorageKey, Where: d.Where, Method: d.Method,
+		Desc: d.Desc, Position: pos, Pos: l.pos(d.PC),
+	}
+	for _, o := range d.OpClass {
+		out.OpClass = append(out.OpClass, loadjson.OpClass{Name: o.Name, Class: o.Class})
 	}
 	if out.Annotations, err = listAnnotations(d.Annotations); err != nil {
 		l.fail(l.pos(d.PC), "", "%sIndexes()[%d]: %v", prefix, j, err)

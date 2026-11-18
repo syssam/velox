@@ -399,8 +399,11 @@ func (r *pgReader) typeNotes(pt *pgTable, typ string, a pgAttr) {
 const pgIndexesQuery = `SELECT ic.relname, i.indisunique, i.indisvalid, i.indexprs IS NOT NULL, i.indkey::text, i.indnkeyatts,
 	i.indnatts, coalesce(pg_get_expr(i.indpred, i.indrelid), ''), am.amname, i.indoption::text,
 	coalesce((to_jsonb(i) ->> 'indnullsnotdistinct')::boolean, false),
-	EXISTS (SELECT 1 FROM generate_series(0, i.indnkeyatts - 1) k JOIN pg_opclass oc ON oc.oid = i.indclass[k]
-		WHERE NOT oc.opcdefault),
+	coalesce((SELECT json_agg(CASE WHEN oc.opcdefault THEN ''
+			WHEN pg_opclass_is_visible(oc.oid) THEN quote_ident(oc.opcname)
+			ELSE quote_ident(n.nspname) || '.' || quote_ident(oc.opcname) END ORDER BY k)
+		FROM generate_series(0, i.indnkeyatts - 1) k JOIN pg_opclass oc ON oc.oid = i.indclass[k]
+		JOIN pg_namespace n ON n.oid = oc.opcnamespace), '[]')::text,
 	EXISTS (SELECT 1 FROM generate_series(0, i.indnkeyatts - 1) k
 		JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[k]
 		WHERE i.indcollation[k] <> a.attcollation),
@@ -412,22 +415,19 @@ WHERE i.indrelid = $1::bigint::oid
 ORDER BY ic.relname`
 
 // pgUnheld is what an index has that the model cannot hold, in the words
-// of the note: the method but btree, DESC, NULLS FIRST or LAST, an
-// operator class or collation of its own, INCLUDE columns, NULLS NOT
-// DISTINCT. option is pg_index.indoption as text.
-func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, atts int) ([]string, error) {
+// of the note: NULLS FIRST or LAST (where it is not the order's default), a
+// collation of its own, INCLUDE columns, NULLS NOT DISTINCT. option is
+// pg_index.indoption as text. The method, DESC and the operator classes are the
+// model's: Index.Method, Desc and OpClass.
+func pgUnheld(option string, collat, notDistinct bool, keys, atts int) ([]string, error) {
 	var has []string
-	if method != "btree" {
-		has = append(has, "the "+method+" method")
-	}
-	var desc, nullsFirst, nullsLast bool
+	var nullsFirst, nullsLast bool
 	for f := range strings.FieldsSeq(option) {
 		o, err := strconv.Atoi(f)
 		if err != nil {
 			return nil, err
 		}
 		d := o&1 != 0
-		desc = desc || d
 		nullsFirst = nullsFirst || (!d && o&2 != 0)
 		nullsLast = nullsLast || (d && o&2 == 0)
 	}
@@ -435,8 +435,8 @@ func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, at
 		on   bool
 		what string
 	}{
-		{desc, "DESC"}, {nullsFirst, "NULLS FIRST"}, {nullsLast, "NULLS LAST"},
-		{opclass, "an operator class of its own"}, {collat, "a collation of its own"},
+		{nullsFirst, "NULLS FIRST"}, {nullsLast, "NULLS LAST"},
+		{collat, "a collation of its own"},
 		{atts > keys, "INCLUDE columns"}, {notDistinct, "NULLS NOT DISTINCT"},
 	} {
 		if x.on {
@@ -446,12 +446,41 @@ func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, at
 	return has, nil
 }
 
+// pgKeyOptions reads the Desc and OpClass of the index over columns: option is
+// pg_index.indoption as text, whose bit 1 is DESC, and classes the JSON list of
+// the keys' operator classes, "" for a type's default.
+func pgKeyOptions(columns []string, option, classes string) (desc []string, opclass map[string]string, err error) {
+	for i, f := range slices.All(strings.Fields(option)) {
+		o, err := strconv.Atoi(f)
+		if err != nil {
+			return nil, nil, err
+		}
+		if o&1 != 0 && i < len(columns) {
+			desc = append(desc, columns[i])
+		}
+	}
+	var cs []string
+	if err := json.Unmarshal([]byte(classes), &cs); err != nil {
+		return nil, nil, err
+	}
+	for i, c := range cs {
+		if c != "" && i < len(columns) {
+			if opclass == nil {
+				opclass = map[string]string{}
+			}
+			opclass[columns[i]] = c
+		}
+	}
+	return desc, opclass, nil
+}
+
 // indexes reads pt's indexes, columns by names. An invalid index is a note
 // and left out; so is an index over an expression, which the model cannot
-// hold. What else an index has that the model cannot hold (a method but
-// btree, DESC, NULLS FIRST or LAST, an operator class or collation of its
-// own, INCLUDE, NULLS NOT DISTINCT) is a note, and the index is read without
-// it. A predicate is kept as PostgreSQL prints it. A unique constraint's
+// hold. What else an index has that the model cannot hold (NULLS FIRST or
+// LAST, a collation of its own, INCLUDE, NULLS NOT DISTINCT) is a note, and
+// the index is read without it. Its method is Method, "" for btree; the keys
+// that sort descending are Desc, and the operator classes that are not their
+// types' default are OpClass. A predicate is kept as PostgreSQL prints it. A unique constraint's
 // index has Constraint set. The primary key's index is no Index, the
 // primary key being read from its constraint; it is read only for what it
 // has that the model cannot hold, which is one note.
@@ -461,17 +490,17 @@ func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, at
 func (r *pgReader) indexes(pt *pgTable, names map[int]string) error {
 	return r.each(pgIndexesQuery, []any{pt.oid}, func(rows *sql.Rows) error {
 		var (
-			ix                                                 Index
-			valid, expr, notDistinct, opclass, collat, primary bool
-			key, method, option                                string
-			keys, atts                                         int
+			ix                                        Index
+			valid, expr, notDistinct, collat, primary bool
+			key, method, option, classes              string
+			keys, atts                                int
 		)
 		if err := rows.Scan(&ix.Name, &ix.Unique, &valid, &expr, &key, &keys, &atts, &ix.Where,
-			&method, &option, &notDistinct, &opclass, &collat, &primary, &ix.Constraint); err != nil {
+			&method, &option, &notDistinct, &classes, &collat, &primary, &ix.Constraint); err != nil {
 			return err
 		}
 		if primary {
-			has, err := pgUnheld(method, option, opclass, collat, notDistinct, keys, atts)
+			has, err := pgUnheld(option, collat, notDistinct, keys, atts)
 			if err != nil {
 				return err
 			}
@@ -500,12 +529,18 @@ func (r *pgReader) indexes(pt *pgTable, names map[int]string) error {
 			r.note(pt, ix.Name, "the index is over an expression, which the model cannot hold; it is not compared")
 			return nil
 		}
-		has, err := pgUnheld(method, option, opclass, collat, notDistinct, keys, atts)
+		has, err := pgUnheld(option, collat, notDistinct, keys, atts)
 		if err != nil {
 			return err
 		}
 		if len(has) > 0 {
 			r.note(pt, ix.Name, "the index has "+strings.Join(has, ", ")+", which the model cannot hold; it is compared without")
+		}
+		if ix.Desc, ix.OpClass, err = pgKeyOptions(ix.Columns, option, classes); err != nil {
+			return err
+		}
+		if method != "btree" {
+			ix.Method = method
 		}
 		pt.t.Indexes = append(pt.t.Indexes, ix)
 		return nil

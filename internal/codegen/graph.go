@@ -110,6 +110,9 @@ type Index struct {
 	Columns     []string                   `json:"columns"`
 	Unique      bool                       `json:"unique,omitempty"`
 	Where       string                     `json:"where,omitempty"`
+	Method      string                     `json:"method,omitempty"`   // the PostgreSQL access method in lower case; "" for btree
+	Desc        []string                   `json:"desc,omitempty"`     // the columns that sort descending
+	OpClass     map[string]string          `json:"op_class,omitempty"` // a column's operator class
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 	Pos         string                     `json:"-"` // the file:line that declares the index, for errors
 }

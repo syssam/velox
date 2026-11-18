@@ -86,6 +86,17 @@ func (t *tabler) check(e *Entity, tb *migrate.Table, at []place) {
 	for i, f := range e.Fields {
 		t.checkColumn(e, i, f, &tb.Columns[i])
 	}
+	for i, ix := range tb.Indexes {
+		if ix.Method != "" && t.d != velox.Postgres {
+			t.fail(at[i], "Method %q is PostgreSQL's; %s has no choice of index method: drop Method or use a separate %s schema", ix.Method, t.d, t.d)
+		}
+		if len(ix.Desc) > 0 && t.d != velox.Postgres {
+			t.fail(at[i], "Desc is PostgreSQL's for now; %s indexes ascending here: drop Desc or use a separate %s schema", t.d, t.d)
+		}
+		if len(ix.OpClass) > 0 && t.d != velox.Postgres {
+			t.fail(at[i], "OpClass is PostgreSQL's; %s has no operator classes: drop OpClass or use a separate %s schema", t.d, t.d)
+		}
+	}
 	if t.d != velox.MySQL {
 		return
 	}
@@ -222,6 +233,9 @@ func (t *tabler) checkMySQLColumn(e *Entity, f *Field, c *migrate.Column, at pla
 		if st != "" && !ddl.StringType(t.d, st) {
 			t.fail(at, "its MySQL SchemaType %s is not a string type; drop it to get an enum(…) column, or give a string type to get a CHECK constraint", st)
 		}
+	}
+	if d := f.SchemaDefault[velox.MySQL.String()]; d != "" && mysqlExprDefault[c.Type] && !strings.HasPrefix(d, "(") {
+		t.fail(at, "its MySQL SchemaDefault %s is a literal on a %s column, whose default MySQL takes only as an expression: write it in parentheses, as (%s)", d, c.Type, d)
 	}
 	if n := utf8.RuneCountInString(c.Comment); n > mysqlColumnComment {
 		if fk, ok := t.fks[[3]string{e.TableSchema, e.Table, f.Column}]; ok && f.Implicit != "" {

@@ -807,6 +807,7 @@ func Uint64(name string) *NumberBuilder[uint64]
 func Uint8(name string) *NumberBuilder[uint8]
 promoted func (c common[B]) Annotations(as ...schema.Annotation) B
 promoted func (c common[B]) Comment(s string) B
+promoted func (c common[B]) DBDefault(sql string) B
 promoted func (c common[B]) Descriptor() *desc.Field
 promoted func (c common[B]) Immutable() B
 promoted func (c common[B]) Nillable() B
@@ -839,9 +840,12 @@ type UUIDOfBuilder[T driver.Valuer] struct { }
 
 package schema/index
 func (b *Builder) Annotations(as ...schema.Annotation) *Builder
+func (b *Builder) Desc(names ...string) *Builder
 func (b *Builder) Descriptor() *desc.Index
 func (b *Builder) Edges(edges ...string) *Builder
 func (b *Builder) Fields(fields ...string) *Builder
+func (b *Builder) Method(name string) *Builder
+func (b *Builder) OpClass(name, class string) *Builder
 func (b *Builder) StorageKey(name string) *Builder
 func (b *Builder) Unique() *Builder
 func (b *Builder) Where(sql string) *Builder
@@ -949,7 +953,7 @@ type Error struct { Pos string Object string Code string Reason string }
 type File struct { Version uint64 Name string Path string Sum string Directives Directives Statements []string Units []int }
 type Finding struct { Code string Class Class Change int Target string Pos string Message string }
 type ForeignKey struct { Name string Columns []string RefTable TableRef RefColumns []string OnDelete string Pos string }
-type Index struct { Name string Columns []string Unique bool Where string Constraint bool Pos string }
+type Index struct { Name string Columns []string Unique bool Where string Method string Desc []string OpClass map[string]string Constraint bool Pos string }
 type Kind string
 type Option struct { }
 type Plan struct { Changes []Change Findings []Finding Scripts []Script }
@@ -1041,12 +1045,15 @@ const SkipType SkipMode
 const SkipWhereInput
 func (Annotation) Name() string
 func (a Annotation) Merge(other schema.Annotation) schema.Annotation
+func (m ResolverMapping) Name() string
+func (m ResolverMapping) WithComment(comment string) ResolverMapping
 func Connection(on bool) Annotation
 func CreateDefault[T ~bool | ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64](v T) Annotation
 func CreateInput(on bool) Annotation
 func Directives(ds ...Directive) Annotation
 func EnumValues(m map[string]string) Annotation
 func FieldName(name string) Annotation
+func Map(field, typ string) ResolverMapping
 func MaxList(n int) Annotation
 func MultiOrder() Annotation
 func Mutations(kinds ...MutationKind) Annotation
@@ -1054,14 +1061,16 @@ func OrderField(name string) Annotation
 func OrderUnguarded() Annotation
 func OrderVia(field, value string) Annotation
 func QueryField(name string) Annotation
+func Resolvers(mappings ...ResolverMapping) Annotation
 func Skip(modes ...SkipMode) Annotation
 func Type(name string) Annotation
 func UpdateInput(on bool) Annotation
 func WhereEdge() Annotation
 func WhereOps(ops ...WhereOp) Annotation
-type Annotation struct { Skip SkipMode Type string QueryField string Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool OrderVia []ViaOrder WhereOps WhereOp WhereEdge bool Connection *bool MaxList int CreateInput *bool UpdateInput *bool CreateDefault json.RawMessage EnumValues map[string]string Directives []Directive }
+type Annotation struct { Skip SkipMode Type string QueryField string Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool OrderVia []ViaOrder Resolvers []ResolverMapping WhereOps WhereOp WhereEdge bool Connection *bool MaxList int CreateInput *bool UpdateInput *bool CreateDefault json.RawMessage EnumValues map[string]string Directives []Directive }
 type Directive struct { Name string Args map[string]any }
 type MutationKind string
+type ResolverMapping struct { Field string Type string Comment string }
 type SkipMode uint16
 type ViaOrder struct { Field string Value string }
 type WhereOp uint32

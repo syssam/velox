@@ -15,9 +15,17 @@ import (
 
 // modelShape is ix as a plan's statement writes it.
 func modelShape(ix Index) indexShape {
-	s := indexShape{unique: ix.Unique, where: ix.Where}
+	s := indexShape{unique: ix.Unique, where: ix.Where, method: ix.Method}
 	for _, c := range ix.Columns {
-		s.keys = append(s.keys, indexKey{name: c})
+		// The options as indexAt reads a key: its operator class, then DESC.
+		var opts []string
+		if class := ix.OpClass[c]; class != "" {
+			opts = append(opts, strings.ToLower(class))
+		}
+		if slices.Contains(ix.Desc, c) {
+			opts = append(opts, "desc")
+		}
+		s.keys = append(s.keys, indexKey{name: c, options: strings.Join(opts, " ")})
 	}
 	return s
 }
@@ -600,7 +608,7 @@ func (w *recreates) mysqlIndexAdd(l *fileLinter, st *tableState, ref TableRef, i
 
 // modelAttrs are what a plan's next file may well change of an index a file before it
 // dropped on purpose: past the file, the rest alone is a loss.
-var modelAttrs = []string{"unique", "columns", "where"}
+var modelAttrs = []string{"unique", "columns", "where", "method", "key-options"}
 
 // remade checks the statement that makes the index name against the one the walk
 // dropped under that name, when it did; read is false when it cannot be read.
@@ -692,6 +700,14 @@ func shapeValue(s indexShape, attr string) string {
 		return strings.Join(names, ",")
 	case "where":
 		return s.where
+	case "method":
+		return s.method
+	case "key-options":
+		opts := make([]string, len(s.keys))
+		for i, k := range s.keys {
+			opts[i] = k.options
+		}
+		return strings.Join(opts, ",")
 	}
 	return ""
 }

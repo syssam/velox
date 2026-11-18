@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/syssam/velox/schema"
 )
@@ -112,6 +113,9 @@ type Annotation struct {
 	// OrderVia makes columns of a to-one edge's target orderable, on the
 	// connections to the edge's entity.
 	OrderVia []ViaOrder `json:"order_via,omitempty"`
+	// Resolvers are fields the entity's type has besides its own, which the
+	// application's resolvers answer.
+	Resolvers []ResolverMapping `json:"resolvers,omitempty"`
 	// WhereOps is the predicates the field offers.
 	WhereOps WhereOp `json:"where_ops,omitempty"`
 	// WhereEdge allows the has and hasWith filters on an edge.
@@ -146,6 +150,19 @@ type ViaOrder struct {
 	Value string `json:"value"`
 }
 
+// ResolverMapping is a field the application resolves, added to an entity's
+// type: see Map.
+type ResolverMapping struct {
+	// Field is the field's name, with its arguments in SDL when it takes any:
+	// "approver", "priceListItem(priceListId: ID!)".
+	Field string `json:"field"`
+	// Type is the field's GraphQL type, with its nullability: "PublicUser",
+	// "[Post!]!".
+	Type string `json:"type"`
+	// Comment is the field's description.
+	Comment string `json:"comment,omitempty"`
+}
+
 // Name returns "graphql".
 func (Annotation) Name() string { return "graphql" }
 
@@ -153,6 +170,7 @@ func (Annotation) Name() string { return "graphql" }
 // (velox's loader calls later.Merge(earlier)), field by field:
 //   - bitmasks (Skip, WhereOps) are ORed;
 //   - lists (Mutations, Directives, OrderVia) are other's followed by the receiver's,
+//     and Resolvers likewise, except that a field both name is the receiver's;
 //     and a mutation kind listed twice is kept once;
 //   - EnumValues keys are united;
 //   - the receiver's non-zero scalars and non-nil pointers win over other's.
@@ -179,6 +197,7 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		OrderField:     pick(a.OrderField, o.OrderField),
 		OrderUnguarded: o.OrderUnguarded || a.OrderUnguarded,
 		OrderVia:       slices.Concat(o.OrderVia, a.OrderVia),
+		Resolvers:      mergeResolvers(o.Resolvers, a.Resolvers),
 		WhereOps:       o.WhereOps | a.WhereOps,
 		WhereEdge:      o.WhereEdge || a.WhereEdge,
 		Connection:     pickPtr(a.Connection, o.Connection),
@@ -200,6 +219,20 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		out.EnumValues = make(map[string]string, len(o.EnumValues)+len(a.EnumValues))
 		maps.Copy(out.EnumValues, o.EnumValues)
 		maps.Copy(out.EnumValues, a.EnumValues)
+	}
+	return out
+}
+
+// mergeResolvers is earlier's mappings followed by later's: a field both name
+// is kept once, where earlier had it, with later's type and comment.
+func mergeResolvers(earlier, later []ResolverMapping) []ResolverMapping {
+	var out []ResolverMapping
+	for _, m := range slices.Concat(earlier, later) {
+		if i := slices.IndexFunc(out, func(x ResolverMapping) bool { return x.Name() == m.Name() }); i >= 0 {
+			out[i] = m
+		} else {
+			out = append(out, m)
+		}
 	}
 	return out
 }
@@ -312,6 +345,51 @@ func OrderUnguarded() Annotation { return Annotation{OrderUnguarded: true} }
 // for each field.
 func OrderVia(field, value string) Annotation {
 	return Annotation{OrderVia: []ViaOrder{{Field: field, Value: value}}}
+}
+
+// Resolvers adds fields to the entity's type, which the application's resolvers
+// answer: each is Map's, and the plugin writes it into the type with
+// @goField(forceResolver: true), so that gqlgen asks for a resolver method.
+// It is for a field the model cannot give: a type of the application's own
+// that the entity holds a key to, or a value computed per row.
+//
+//	graphql.Resolvers(
+//	    graphql.Map("organization", "PublicOrganization").WithComment("Owning organization."),
+//	    graphql.Map("priceListItem(priceListId: ID!)", "PriceListItem"),
+//	)
+//
+// A selection that holds one of these fields reads every column of the
+// entity, as one of an extend type's fields does: the resolver may read any.
+// Two Resolvers annotations merge, a field both name once, the later one's.
+// The plugin refuses the annotation on a field or an edge, and on a schema
+// whose type graphql.Skip leaves out; it refuses a field named as another
+// field of the type is, and one that is not valid GraphQL.
+func Resolvers(mappings ...ResolverMapping) Annotation {
+	return Annotation{Resolvers: slices.Clone(mappings)}
+}
+
+// Map is a field for Resolvers: its name, with its arguments in SDL when it
+// takes any, and its type with its nullability, as the SDL writes it:
+//
+//	graphql.Map("approver", "PublicEmployee")      // nullable
+//	graphql.Map("glAccount", "PublicGlAccount!")   // non-null
+//	graphql.Map("posts(first: Int)", "[Post!]!")   // with an argument, a list
+//
+// The type may be one the application declares in its own SDL: the plugin
+// does not look for it.
+func Map(field, typ string) ResolverMapping { return ResolverMapping{Field: field, Type: typ} }
+
+// WithComment sets the field's description.
+func (m ResolverMapping) WithComment(comment string) ResolverMapping {
+	m.Comment = comment
+	return m
+}
+
+// Name is the field's name without its arguments: "priceListItem" for
+// "priceListItem(priceListId: ID!)".
+func (m ResolverMapping) Name() string {
+	name, _, _ := strings.Cut(m.Field, "(")
+	return strings.TrimSpace(name)
 }
 
 // WhereOps offers the field these predicates in the entity's where input; with

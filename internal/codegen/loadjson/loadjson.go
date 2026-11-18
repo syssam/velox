@@ -151,6 +151,12 @@ type Edge struct {
 	Pos         string                     `json:"pos,omitempty"`    // file:line of the constructor's call
 }
 
+// OpClass is the operator class of one field or edge an index covers.
+type OpClass struct {
+	Name  string `json:"name"`
+	Class string `json:"class"`
+}
+
 // Index describes one index.
 type Index struct {
 	Fields      []string                   `json:"fields,omitempty"`
@@ -158,6 +164,9 @@ type Index struct {
 	Unique      bool                       `json:"unique,omitempty"`
 	StorageKey  string                     `json:"storage_key,omitempty"`
 	Where       string                     `json:"where,omitempty"`
+	Method      string                     `json:"method,omitempty"`
+	Desc        []string                   `json:"desc,omitempty"`
+	OpClass     []OpClass                  `json:"op_class,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 	Position    Position                   `json:"position"`
 	Pos         string                     `json:"pos,omitempty"` // file:line of the constructor's call

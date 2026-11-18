@@ -133,7 +133,8 @@ thing. That decides what a `Default` can do:
 For a bool that should default to `true`, use `Nillable().Default(true)`,
 or name the field so that its zero is the default (`disabled`, not
 `enabled`). `SchemaDefault` sets only the column's `DEFAULT`, for rows written
-outside velox. [Coming from ent](coming-from-ent.md) ("Defaults on a NOT NULL column")
+outside velox, and `DBDefault("100")` is the same for a number or a string with
+one SQL text for every dialect. [Coming from ent](coming-from-ent.md) ("Defaults on a NOT NULL column")
 has the whole list.
 
 `field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,
@@ -173,9 +174,37 @@ The [relations example](../examples/relations) shows all three shapes.
 ### Indexes
 
 `index.Fields("a", "b")` makes an index, `.Unique()` makes it unique, and
-`.Where("...")` makes it partial on PostgreSQL and SQLite. An entity's primary
-key is always one column; for a natural key, keep `id` and add a unique
-index.
+`.Where("...")` makes it partial on PostgreSQL and SQLite. On PostgreSQL,
+`.Method("gin")` picks the access method (hash, gin, gist, spgist or brin; btree
+is the default), and a GIN index is the one that may cover a JSON field:
+
+```go
+index.Fields("attrs").Method("gin").StorageKey("ix_attrs_gin")
+```
+
+MySQL and SQLite have no choice of method, so velox-gen refuses a `Method` on
+them, and a unique index must be btree
+([ADR 0070](decisions/0070-index-method.md)). A GIN index works on a JSON (jsonb)
+column, an array or a tsvector as it is. On a text or number column it needs an
+extension that gives GIN an operator class for the type, `btree_gin` or
+`pg_trgm`: velox does not create extensions, so add `CREATE EXTENSION` to the
+baseline by hand, and without it the index fails when it is applied, not in
+velox-gen.
+
+Also on PostgreSQL, `.Desc("created_at")` sorts a key descending, which an
+`ORDER BY name, created_at DESC` needs (a single column is read backwards
+as it is), and `.OpClass("title", "gin_trgm_ops")` sets a key's operator class:
+
+```go
+index.Fields("title").Method("gin").OpClass("title", "gin_trgm_ops")
+index.Fields("name", "created_at").Desc("created_at")
+```
+
+Name only an operator class that is not its type's default: PostgreSQL reads a
+default one back as none, and the schema would differ from the database for
+ever ([ADR 0072](decisions/0072-index-desc-opclass.md)). `Desc` is a btree
+index's. An entity's primary key is always
+one column; for a natural key, keep `id` and add a unique index.
 
 ### Mixins
 

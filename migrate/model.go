@@ -3,7 +3,9 @@ package migrate
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/syssam/velox"
@@ -70,12 +72,97 @@ type Column struct {
 // "", which SQLite keeps no name for, and Constraint is never set. MySQL
 // keeps a unique constraint as a unique index, and Constraint is never set.
 type Index struct {
-	Name       string   `json:"name"` // SQLite: "" for a UNIQUE constraint's index, which SQLite keeps no name for
-	Columns    []string `json:"columns,omitempty"`
-	Unique     bool     `json:"unique,omitempty"`
-	Where      string   `json:"where,omitempty"`      // the predicate of a partial index; "" for none; never on MySQL
-	Constraint bool     `json:"constraint,omitempty"` // PostgreSQL: the index is a UNIQUE constraint's, as Inspect and Baseline read it; the desired model never sets it; Diff and Equal do not compare it, Drift warns where it differs, and Render reads it to choose the statement: from's for a drop or rename, to's for a create or add
-	Pos        string   `json:"-"`
+	Name       string            `json:"name"` // SQLite: "" for a UNIQUE constraint's index, which SQLite keeps no name for
+	Columns    []string          `json:"columns,omitempty"`
+	Unique     bool              `json:"unique,omitempty"`
+	Where      string            `json:"where,omitempty"`      // the predicate of a partial index; "" for none; never on MySQL
+	Method     string            `json:"method,omitempty"`     // PostgreSQL's access method in lower case: hash, gin, gist, spgist or brin; "" for btree, which Inspect reads as ""; only on PostgreSQL
+	Desc       []string          `json:"desc,omitempty"`       // the columns, of Columns, that sort descending; only on PostgreSQL, and only of a btree index
+	OpClass    map[string]string `json:"op_class,omitempty"`   // a column's operator class, as PostgreSQL prints it: schema-qualified only when it is not on the search path; only a class that is not its type's default, which Inspect reads as none; only on PostgreSQL
+	Constraint bool              `json:"constraint,omitempty"` // PostgreSQL: the index is a UNIQUE constraint's, as Inspect and Baseline read it; the desired model never sets it; Diff and Equal do not compare it, Drift warns where it differs, and Render reads it to choose the statement: from's for a drop or rename, to's for a create or add
+	Pos        string            `json:"-"`
+}
+
+// sameKeys reports whether a and b index the same columns in the same way:
+// the columns, which of them sort descending, their operator classes and the
+// access method.
+func (a Index) sameKeys(b Index) bool {
+	return a.Method == b.Method && slices.Equal(a.Columns, b.Columns) &&
+		slices.Equal(a.Desc, b.Desc) && maps.Equal(a.OpClass, b.OpClass)
+}
+
+// validOpClass reports whether s is an operator class name Render may write as
+// it is: a name, or a schema's and a name, of letters, digits, _ and $.
+func validOpClass(s string) bool {
+	parts := strings.Split(s, ".")
+	if len(parts) > 2 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" || '0' <= p[0] && p[0] <= '9' {
+			return false
+		}
+		for _, c := range p {
+			if !opClassChar(c) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// opClassChar reports whether c may be in an operator class name.
+func opClassChar(c rune) bool {
+	return c == '_' || c == '$' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
+}
+
+// validIndexMethod reports whether m is a PostgreSQL index method an Index may
+// name: every core method but btree, which is the default and so no Method.
+func validIndexMethod(m string) bool {
+	switch m {
+	case "hash", "gin", "gist", "spgist", "brin":
+		return true
+	}
+	return false
+}
+
+// validIndexOptions checks the Method, Desc and OpClass of ix, of the table ref
+// that name says is in the schema: they are PostgreSQL's, a method is one it has
+// and a unique index's is btree, Desc and OpClass name columns of the index, and
+// DESC is a btree index's.
+func validIndexOptions(d velox.Dialect, name string, ref TableRef, ix Index) error {
+	bad := func(format string, args ...any) error {
+		return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s gives the index %q %s", name, ix.Name, fmt.Sprintf(format, args...))}
+	}
+	switch {
+	case ix.Method == "":
+	case d != velox.Postgres:
+		return bad("the method %q, which only PostgreSQL has", ix.Method)
+	case !validIndexMethod(ix.Method):
+		return bad("the method %q; the methods are hash, gin, gist, spgist and brin, and btree is the default, written as none", ix.Method)
+	case ix.Unique:
+		return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s gives the unique index %q the method %q, and only btree can enforce uniqueness", name, ix.Name, ix.Method)}
+	}
+	if len(ix.Desc)+len(ix.OpClass) > 0 && d != velox.Postgres {
+		return bad("a Desc or an OpClass, which only PostgreSQL has")
+	}
+	for _, c := range ix.Desc {
+		switch {
+		case !slices.Contains(ix.Columns, c):
+			return bad("Desc on the column %q, which it does not cover", c)
+		case ix.Method != "":
+			return bad("Desc with the method %q, and only btree has an order", ix.Method)
+		}
+	}
+	for _, c := range slices.Sorted(maps.Keys(ix.OpClass)) {
+		switch {
+		case !slices.Contains(ix.Columns, c):
+			return bad("an OpClass on the column %q, which it does not cover", c)
+		case !validOpClass(ix.OpClass[c]):
+			return bad("the operator class %q for %q, which is not a name", ix.OpClass[c], c)
+		}
+	}
+	return nil
 }
 
 // A ForeignKey is a foreign key constraint.
@@ -156,7 +243,7 @@ func tableEqual(a, b Table) bool {
 				x.Identity == y.Identity && x.Sequence == y.Sequence && x.Comment == y.Comment
 		}) &&
 		slices.EqualFunc(a.Indexes, b.Indexes, func(x, y Index) bool {
-			return x.Name == y.Name && x.Unique == y.Unique && x.Where == y.Where && slices.Equal(x.Columns, y.Columns)
+			return x.Name == y.Name && x.Unique == y.Unique && x.Where == y.Where && x.sameKeys(y)
 		}) &&
 		slices.EqualFunc(a.ForeignKeys, b.ForeignKeys, func(x, y ForeignKey) bool {
 			return x.Name == y.Name && x.RefTable == y.RefTable && x.OnDelete == y.OnDelete &&
@@ -215,8 +302,9 @@ func (s *Schema) sort() {
 // table's column, index or constraint (a
 // foreign key or check) listed twice ("schema"), where unnamed ones, named
 // "", may repeat; and an index marked a constraint outside PostgreSQL, or
-// one that is not unique or is partial ("schema"). name says which schema
-// it is in the error.
+// one that is not unique or is partial, and an index with a method outside
+// PostgreSQL, of a name PostgreSQL has not, or unique and not btree
+// ("schema"). name says which schema it is in the error.
 func (s *Schema) validate(name string) error {
 	if !knownDialect(s.Dialect) {
 		return &Error{Code: "dialect", Reason: fmt.Sprintf("%s has the unknown dialect %q", name, s.Dialect.String())}
@@ -254,6 +342,9 @@ func (s *Schema) validate(name string) error {
 				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s marks the index %q a constraint, which only PostgreSQL holds", name, ix.Name)}
 			case !ix.Unique || ix.Where != "":
 				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s marks the index %q a constraint, which a non-unique or partial index cannot be", name, ix.Name)}
+			}
+			if err := validIndexOptions(s.Dialect, name, ref, ix); err != nil {
+				return err
 			}
 		}
 		for _, fk := range t.ForeignKeys {
