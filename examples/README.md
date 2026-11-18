@@ -29,7 +29,7 @@ go run ./start
 ## How the examples are built
 
 - Entities are declared in `schema/` with the ent-style DSL: a struct that
-  embeds `schema.Schema`, with `Fields`, `Edges`, `Indexes` and `Mixin`
+  embeds `velox.Schema`, with `Fields`, `Edges`, `Indexes` and `Mixin`
   methods. As in ent, a schema also declares its entity's `Policy()` and
   `Hooks()`, and a mixin its own. They name columns and edges by their
   schema names (`velox.FieldEQ("owner", u)`, `velox.HasEdge("doc")`,

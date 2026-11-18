@@ -6,17 +6,17 @@
 package veloxschema
 
 import (
-	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 )
 
 // Doc is a document with an owner.
-type Doc struct{ schema.Schema }
+type Doc struct{ velox.Schema }
 
 // Fields returns the columns after the ID.
-func (Doc) Fields() []schema.Field {
-	return []schema.Field{
+func (Doc) Fields() []velox.Field {
+	return []velox.Field{
 		field.String("owner"),
 		field.String("title"),
 		field.Bool("shared"),
@@ -24,22 +24,22 @@ func (Doc) Fields() []schema.Field {
 }
 
 // Edges returns Comments, the remarks on a Doc.
-func (Doc) Edges() []schema.Edge { return []schema.Edge{edge.To("comments", Comment.Type)} }
+func (Doc) Edges() []velox.Edge { return []velox.Edge{edge.To("comments", Comment.Type)} }
 
 // Comment is a remark on a Doc.
-type Comment struct{ schema.Schema }
+type Comment struct{ velox.Schema }
 
 // Fields returns the columns after the ID.
-func (Comment) Fields() []schema.Field {
-	return []schema.Field{
+func (Comment) Fields() []velox.Field {
+	return []velox.Field{
 		field.Int64("doc_id"),
 		field.String("body"),
 	}
 }
 
 // Edges returns Doc, the inverse of Doc.Comments, which DocID holds the key of.
-func (Comment) Edges() []schema.Edge {
-	return []schema.Edge{
+func (Comment) Edges() []velox.Edge {
+	return []velox.Edge{
 		edge.From("doc", Doc.Type).Ref("comments").Unique().Required().Field("doc_id"),
 	}
 }

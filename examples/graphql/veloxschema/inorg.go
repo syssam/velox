@@ -5,7 +5,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql"
-	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/mixin"
 	"github.com/syssam/velox/scope"
@@ -25,8 +24,8 @@ type InOrg struct{ mixin.Schema }
 // Fields returns org_id. It is Immutable, so that no update moves a row to
 // another organization, and graphql.Skip leaves it out of every GraphQL type
 // and input: the hook fills it.
-func (InOrg) Fields() []schema.Field {
-	return []schema.Field{field.Int64("org_id").Immutable().Annotations(graphql.Skip())}
+func (InOrg) Fields() []velox.Field {
+	return []velox.Field{field.Int64("org_id").Immutable().Annotations(graphql.Skip())}
 }
 
 // Policy confines reads, updates and deletes to the context's organization,

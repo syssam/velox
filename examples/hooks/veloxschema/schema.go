@@ -8,7 +8,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/hooks/auth"
-	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/mixin"
 )
@@ -18,8 +17,8 @@ import (
 type CreatedBy struct{ mixin.Schema }
 
 // Fields returns created_by.
-func (CreatedBy) Fields() []schema.Field {
-	return []schema.Field{field.String("created_by")}
+func (CreatedBy) Fields() []velox.Field {
+	return []velox.Field{field.String("created_by")}
 }
 
 // Hooks fills created_by on insert.
@@ -33,14 +32,14 @@ func (CreatedBy) Hooks() []velox.Hook {
 }
 
 // Task is a to-do item. The hooks derive Slug from Title.
-type Task struct{ schema.Schema }
+type Task struct{ velox.Schema }
 
 // Mixin adds created_by, before the fields below.
-func (Task) Mixin() []schema.Mixin { return []schema.Mixin{CreatedBy{}} }
+func (Task) Mixin() []velox.Mixin { return []velox.Mixin{CreatedBy{}} }
 
 // Fields returns the columns after the ID and the mixin's.
-func (Task) Fields() []schema.Field {
-	return []schema.Field{
+func (Task) Fields() []velox.Field {
+	return []velox.Field{
 		field.String("title"),
 		field.String("slug"),
 		field.Bool("done"),
@@ -50,11 +49,11 @@ func (Task) Fields() []schema.Field {
 // Audit is a row of the audit trail: who changed what. main.go's run-time
 // hook inserts one when an update renames a task, on the write's DB: inside
 // db.Tx it commits or rolls back with the update.
-type Audit struct{ schema.Schema }
+type Audit struct{ velox.Schema }
 
 // Fields returns the columns after the ID.
-func (Audit) Fields() []schema.Field {
-	return []schema.Field{
+func (Audit) Fields() []velox.Field {
+	return []velox.Field{
 		field.String("actor"),
 		field.String("message"),
 	}

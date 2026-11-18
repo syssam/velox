@@ -3,17 +3,17 @@
 package veloxschema
 
 import (
-	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema/field"
 )
 
 // Invoice is a bill sent to a customer. No two invoices share a number.
-type Invoice struct{ schema.Schema }
+type Invoice struct{ velox.Schema }
 
 // Fields returns the columns after the ID. Status is an enum: velox-gen writes
 // its Go type, veloxgen.InvoiceStatus, and a constant for each value.
-func (Invoice) Fields() []schema.Field {
-	return []schema.Field{
+func (Invoice) Fields() []velox.Field {
+	return []velox.Field{
 		field.String("number").Unique(),
 		field.String("customer"),
 		field.Enum("status").Values("sent", "paid"),

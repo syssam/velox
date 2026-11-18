@@ -3,16 +3,16 @@
 package veloxschema
 
 import (
-	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema/field"
 )
 
 // Account holds a balance in cents. No two accounts share a name.
-type Account struct{ schema.Schema }
+type Account struct{ velox.Schema }
 
 // Fields returns the columns after the ID.
-func (Account) Fields() []schema.Field {
-	return []schema.Field{
+func (Account) Fields() []velox.Field {
+	return []velox.Field{
 		field.String("name").Unique(),
 		field.Int64("balance"),
 	}

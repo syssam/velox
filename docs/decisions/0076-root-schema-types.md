@@ -29,8 +29,12 @@ that embeds `schema.Schema`, and the two spellings mix in one package.
   others already were, which are now these.
 - Nothing is generated from the aliases, and velox-gen's discovery already
   reads through aliases (`types.Unalias`).
-- `schema` stays the home: the guide and examples keep saying `schema.Schema`,
-  and the aliases are for a port and for a reader who knows ent.
+- The root's spelling leads: the guide, README and examples say `velox.Schema`,
+  `velox.Field` and the like, which does not stutter and is what ent and the old
+  velox write. They are the same types as `schema.Schema` and the rest, so both
+  spellings stay valid; `schema` is where `Table`, `Check`, `Collation`,
+  `Interface` and `Merger` live, and the test fixtures and goldens keep their
+  `schema.*`, which keeps both covered.
 
 ## Consequences
 

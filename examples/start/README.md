@@ -7,7 +7,7 @@ cd examples
 go run ./start
 ```
 
-`veloxschema/user.go` is the whole schema: a struct that embeds `schema.Schema` and
+`veloxschema/user.go` is the whole schema: a struct that embeds `velox.Schema` and
 lists the entity's fields. `go tool velox-gen -out ./start/gen ./start/schema`
 writes the `veloxgen` package from it: `veloxgen.User`, the struct a query returns, and
 `veloxgen.Users`, the typed handle of every column.

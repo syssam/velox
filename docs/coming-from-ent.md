@@ -1,6 +1,6 @@
 # Coming from ent
 
-velox's schema DSL follows ent's: `schema.Schema`, `Fields`, `Edges`,
+velox's schema DSL follows ent's: `velox.Schema`, `Fields`, `Edges`,
 `Indexes`, `Mixin`, and `field.*`, `edge.*` and `index.*` builders with ent's
 names. Most ent schemas port by changing imports. A few rules differ, because
 velox inserts and updates Go structs, where a zero field means unset. This page
@@ -14,7 +14,7 @@ velox-gen finds schemas by ent's rule. A schema is an exported, non-generic
 struct type of the schema package that implements `schema.Interface`. It may
 implement it by value or through a pointer, so every method may have a
 pointer receiver. It may declare the methods itself or have them from an
-embedded struct, at any depth: embedding `schema.Schema` is the usual way.
+embedded struct, at any depth: embedding `velox.Schema` is the usual way.
 Only the files of the package's build are read, as by ent: a `_test.go` file
 is not, and nor is a file no build includes (`//go:build ignore`).
 
@@ -24,16 +24,16 @@ one, where ent would skip it or fail later:
 - **A schema that embeds another schema.** ent makes both entities, so
   `type Release struct{ Base }` with an exported `Base` gives a `bases` table
   too. velox-gen refuses it. A shared base is unexported, which is never a
-  schema: `type base struct{ schema.Schema }`, with the methods all its
+  schema: `type base struct{ velox.Schema }`, with the methods all its
   schemas share, such as a `Mixin`. To share fields, a mixin is the usual way.
-- **An unexported struct that embeds `schema.Schema` and that no type
+- **An unexported struct that embeds `velox.Schema` and that no type
   embeds.** It is likely a schema with a lower-case name.
-- **`*schema.Schema` embedded**, at any depth: its methods panic on the nil
+- **`*velox.Schema` embedded**, at any depth: its methods panic on the nil
   pointer.
 - **A generic type, an alias or a non-struct type** that implements
-  `schema.Interface` or embeds `schema.Schema`.
+  `schema.Interface` or embeds `velox.Schema`.
 - **A method of another signature**, such as `Fields() []ent.Field`, or a
-  field named like a method, which hides `schema.Schema`'s.
+  field named like a method, which hides `velox.Schema`'s.
 - **A file of the schema package that only some builds include**, behind a
   tag or named for a system: the model would depend on the build.
 
@@ -235,7 +235,7 @@ var OrgKey = scope.NewKey[int64]("org")
 
 type InOrg struct{ mixin.Schema }
 
-func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
+func (InOrg) Fields() []velox.Field { return []velox.Field{field.Int64("org_id").Immutable()} }
 
 func (InOrg) Policy() velox.Policy {
 	return velox.Policy{

@@ -3,19 +3,19 @@
 package veloxschema
 
 import (
-	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema/field"
 )
 
-// User is a schema: a struct that embeds schema.Schema. Its table is "users",
+// User is a schema: a struct that embeds velox.Schema. Its table is "users",
 // the snake_case plural of its name, and its ID is an int64 primary key that
 // the schema does not need to declare.
-type User struct{ schema.Schema }
+type User struct{ velox.Schema }
 
 // Fields returns the columns after the ID, in order. A field is not null
 // unless it says Optional.
-func (User) Fields() []schema.Field {
-	return []schema.Field{
+func (User) Fields() []velox.Field {
+	return []velox.Field{
 		field.String("name"),
 		field.String("email").Unique(), // no two users share an email
 		field.Int64("age"),

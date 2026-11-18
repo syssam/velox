@@ -55,15 +55,16 @@ compile error rather than a runtime surprise.
 
 ## Defining a schema
 
-A schema is a struct that embeds `schema.Schema` (or `velox.Schema`, the same
-type, as ent and the old velox spell it). Its methods describe the
-table. Here is the tour's `Invoice`:
+A schema is a struct that embeds `velox.Schema` (the same type as
+`schema.Schema`; the guide uses the root's spelling, which ent and the old velox
+share, for `Schema`, `Field`, `Edge`, `Index`, `Mixin` and `Annotation`). Its
+methods describe the table. Here is the tour's `Invoice`:
 
 ```go
 package veloxschema
 
 import (
-	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
@@ -71,14 +72,14 @@ import (
 	"github.com/syssam/velox/schema/mixin/softdelete"
 )
 
-type Invoice struct{ schema.Schema }
+type Invoice struct{ velox.Schema }
 
-func (Invoice) Mixin() []schema.Mixin {
-	return []schema.Mixin{mixin.Time{}, InOrg{}, softdelete.Mixin{}}
+func (Invoice) Mixin() []velox.Mixin {
+	return []velox.Mixin{mixin.Time{}, InOrg{}, softdelete.Mixin{}}
 }
 
-func (Invoice) Fields() []schema.Field {
-	return []schema.Field{
+func (Invoice) Fields() []velox.Field {
+	return []velox.Field{
 		field.String("number"),
 		field.String("customer"),
 		field.Enum("status").Values("draft", "sent", "paid"),
@@ -86,12 +87,12 @@ func (Invoice) Fields() []schema.Field {
 	}
 }
 
-func (Invoice) Edges() []schema.Edge {
-	return []schema.Edge{edge.To("lines", Line.Type)}
+func (Invoice) Edges() []velox.Edge {
+	return []velox.Edge{edge.To("lines", Line.Type)}
 }
 
-func (Invoice) Indexes() []schema.Index {
-	return []schema.Index{
+func (Invoice) Indexes() []velox.Index {
+	return []velox.Index{
 		index.Fields("org_id", "number").Unique().Where("deleted_at IS NULL"),
 	}
 }
@@ -150,16 +151,16 @@ on the other, as in ent. The side that holds the foreign key names it with
 `Field`:
 
 ```go
-func (Line) Fields() []schema.Field {
-	return []schema.Field{
+func (Line) Fields() []velox.Field {
+	return []velox.Field{
 		field.Int64("invoice_id"),
 		field.String("description"),
 		field.Int64("amount_cents"),
 	}
 }
 
-func (Line) Edges() []schema.Edge {
-	return []schema.Edge{
+func (Line) Edges() []velox.Edge {
+	return []velox.Edge{
 		edge.From("invoice", Invoice.Type).Ref("lines").Unique().Required().Field("invoice_id"),
 	}
 }
@@ -951,8 +952,8 @@ var OrgKey = scope.NewKey[int64]("org")
 
 type InOrg struct{ mixin.Schema }
 
-func (InOrg) Fields() []schema.Field {
-	return []schema.Field{field.Int64("org_id").Immutable()}
+func (InOrg) Fields() []velox.Field {
+	return []velox.Field{field.Int64("org_id").Immutable()}
 }
 
 func (InOrg) Policy() velox.Policy {
@@ -1181,8 +1182,8 @@ field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps())
 ```
 
 ```go
-func (User) Annotations() []schema.Annotation {
-	return []schema.Annotation{
+func (User) Annotations() []velox.Annotation {
+	return []velox.Annotation{
 		graphql.QueryField("users"),
 		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate),
 	}

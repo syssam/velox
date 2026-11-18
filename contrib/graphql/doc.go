@@ -11,10 +11,10 @@
 // schema, field or edge lists as many as it likes in Annotations(), and the
 // loader merges them into one (see Annotation.Merge). A short schema:
 //
-//	type User struct{ schema.Schema }
+//	type User struct{ velox.Schema }
 //
-//	func (User) Fields() []schema.Field {
-//		return []schema.Field{
+//	func (User) Fields() []velox.Field {
+//		return []velox.Field{
 //			field.String("name").Annotations(
 //				graphql.OrderField("NAME"),
 //				graphql.WhereOps(graphql.OpsEquality, graphql.OpsString),
@@ -26,14 +26,14 @@
 //		}
 //	}
 //
-//	func (User) Edges() []schema.Edge {
-//		return []schema.Edge{
+//	func (User) Edges() []velox.Edge {
+//		return []velox.Edge{
 //			edge.To("posts", Post.Type).Annotations(graphql.WhereEdge()),
 //		}
 //	}
 //
-//	func (User) Annotations() []schema.Annotation {
-//		return []schema.Annotation{
+//	func (User) Annotations() []velox.Annotation {
+//		return []velox.Annotation{
 //			graphql.QueryField("users"),
 //			graphql.Mutations(
 //				graphql.MutationCreate,
@@ -228,8 +228,8 @@
 // graphql.Map of the field's name, with its arguments when it takes any, and
 // its type:
 //
-//	func (Asset) Annotations() []schema.Annotation {
-//		return []schema.Annotation{
+//	func (Asset) Annotations() []velox.Annotation {
+//		return []velox.Annotation{
 //			graphql.Resolvers(
 //				graphql.Map("organization", "PublicOrganization").WithComment("Owning organization."),
 //				graphql.Map("tags(first: Int)", "[String!]!"),

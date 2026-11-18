@@ -16,7 +16,7 @@ var OrgKey = scope.NewKey[int64]("org")
 
 type InOrg struct{ mixin.Schema }
 
-func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
+func (InOrg) Fields() []velox.Field { return []velox.Field{field.Int64("org_id").Immutable()} }
 func (InOrg) Policy() velox.Policy {
 	return velox.Policy{
 		Read: func(ctx context.Context) (velox.Predicate, error) {
@@ -43,7 +43,7 @@ func (InOrg) Hooks() []velox.Hook {
 }
 
 // veloxschema/project.go
-func (Project) Mixin() []schema.Mixin { return []schema.Mixin{InOrg{}} }
+func (Project) Mixin() []velox.Mixin { return []velox.Mixin{InOrg{}} }
 ```
 
 The policy and the hook name the column by its schema name, `org_id`, so

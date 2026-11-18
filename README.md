@@ -83,14 +83,14 @@ This goes from an empty directory to a query that runs on SQLite. It needs Go
    package veloxschema
 
    import (
-   	"github.com/syssam/velox/schema"
+   	"github.com/syssam/velox"
    	"github.com/syssam/velox/schema/field"
    )
 
-   type User struct{ schema.Schema }
+   type User struct{ velox.Schema }
 
-   func (User) Fields() []schema.Field {
-   	return []schema.Field{
+   func (User) Fields() []velox.Field {
+   	return []velox.Field{
    		field.String("name"),
    		field.String("email").Unique(),
    		field.Int64("age"),
