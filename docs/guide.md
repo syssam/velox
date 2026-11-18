@@ -591,8 +591,45 @@ for _, g := range totals {
 }
 ```
 
-Grouping by several keys, `HAVING`, `UNION` and CTEs are not in the builder;
-use [raw SQL](#raw-sql) for those ([ADR 0022](decisions/0022-group-by.md)).
+### Reports: Project, GroupBy and Having
+
+For several keys, several aggregates, `HAVING`, `COUNT(DISTINCT x)` or an
+ordering by an aggregate or an expression, `Project` reads **terms** in place
+of the entity. A term is a column (`velox.Pick`), SQL text over columns
+(`velox.Calc`, written as `Expr`'s text is) or an aggregate of either. The same
+term is a result column, a group key, an operand in `Expr` and an ordering:
+
+```go
+total := velox.Pick(I.TotalCents)
+org := velox.Pick(I.OrgID)
+
+for r, err := range db.Query[veloxgen.Invoice]().
+	Where(I.Status.EQ(veloxgen.InvoiceStatusPaid)).
+	Project(org, total.Sum(), velox.CountAll[veloxgen.Invoice]()).
+	GroupBy(org).
+	Having(velox.Expr[veloxgen.Invoice]("? > ?", total.Sum(), 100000)).
+	OrderBy(total.Sum().Desc()).
+	Limit(20).
+	Rows(ctx) {
+	if err != nil {
+		return err
+	}
+	var orgID, sum, n int64
+	if err := r.Scan(&orgID, &sum, &n); err != nil {
+		return err
+	}
+}
+```
+
+`Rows` reads by position: the caller scans each row. It is a read of the
+entity, so `Where`, the Read policy, the scope and the interceptors apply and
+the groups count only rows the caller may see, which `Raw` does not give. It
+needs a `Limit` or `AllowUnbounded()`. A projection cannot be read with `All`,
+`Count` and the rest, nor combined with `Columns`, `With`, `Join`, `After` or a
+lock, and an aggregate of an aggregate is refused. An ordering by an expression
+cannot be a keyset cursor. `UNION`, CTEs and window functions are not in the
+builder; use [raw SQL](#raw-sql) for those
+([ADR 0074](decisions/0074-projection.md), [ADR 0022](decisions/0022-group-by.md)).
 
 ## Writing
 

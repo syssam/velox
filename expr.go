@@ -1,16 +1,14 @@
 package velox
 
 import (
-	"fmt"
-	"reflect"
-
 	"github.com/syssam/velox/internal/engine"
 )
 
 // Expr is a condition written as SQL text, for what the column handles'
 // methods do not say: a function, an arithmetic expression, a CASE. Each ?
 // in text is filled by the next argument: a column handle of E, written as
-// the column, or any other value, which is bound. It is one more condition
+// the column, a Term of E, written as the term (so a HAVING is an Expr of
+// aggregate terms), or any other value, which is bound. It is one more condition
 // in Where, ANDed with the Read policy, the scope and the interceptors, so a
 // query with an Expr keeps them all.
 //
@@ -38,31 +36,9 @@ import (
 // defence against hostile text: Expr takes text from the program, never from
 // a user. A function that runs SQL from a string argument still would.
 func Expr[E any](text string, args ...any) Pred[E] {
-	cols := make([]int32, len(args))
-	vals := make([]any, 0, len(args))
-	for i, a := range args {
-		switch h := a.(type) {
-		case Column[E]:
-			cols[i] = h.column(nil)
-		default:
-			if foreignHandle(a) {
-				return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: fmt.Errorf(
-					"velox: Expr %q: argument %d is %T, a column of another entity than the query's", text, i+1, a)}))
-			}
-			cols[i] = -1
-			vals = append(vals, a)
-		}
+	slots, vals, err := slotsOf[E](text, args)
+	if err != nil {
+		return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: err}))
 	}
-	return Pred[E](engine.NewPredicate(engine.ExprNode(text, cols, vals)))
-}
-
-// foreignHandle reports a column handle of some entity, one that Expr's E
-// did not match: a struct of this package that holds a column index I.
-func foreignHandle(a any) bool {
-	t := reflect.TypeOf(a)
-	if t == nil || t.Kind() != reflect.Struct || t.PkgPath() != reflect.TypeFor[DB]().PkgPath() {
-		return false
-	}
-	f, ok := t.FieldByName("I")
-	return ok && f.Type.Kind() == reflect.Int32
+	return Pred[E](engine.NewPredicate(engine.ExprNode(text, slots, vals)))
 }

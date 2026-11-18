@@ -15,6 +15,7 @@ func cloneForHooks(st *Statement) {
 	st.Set = slices.Clone(st.Set)
 	st.Returning = slices.Clone(st.Returning)
 	st.Joins = slices.Clone(st.Joins)
+	st.Project = cloneProject(st.Project)
 	st.Tags = slices.Clone(st.Tags)
 	if st.Rows != nil {
 		rows := make([][]any, len(st.Rows))
@@ -48,6 +49,7 @@ type rewriteSnapshot struct {
 	wait           LockWait
 	cols           []int
 	joins          []JoinClause
+	project        *Projection // velox's, before cloneForHooks
 	each           *EachClause // the hooks' Each: a copy of velox's when there are hooks
 	was            *EachClause // velox's Each, before cloneForHooks
 	returning      bool
@@ -62,7 +64,7 @@ func takeRewriteSnapshot(st *Statement) rewriteSnapshot {
 	return rewriteSnapshot{
 		entity: st.Entity, op: st.Op, writable: st.Writable, inTx: st.InTx,
 		count: st.Count, exists: st.Exists, group: st.GroupBy, agg: st.Aggregate,
-		lock: st.Lock, wait: st.LockWait, cols: st.Columns, joins: st.Joins,
+		lock: st.Lock, wait: st.LockWait, cols: st.Columns, joins: st.Joins, project: st.Project,
 		was: st.Each, returning: len(st.Returning) > 0,
 		bidi: stmtBidi(st), pin: stmtPin(st), iter: st.iter, loaded: st.loaded,
 	}
@@ -119,6 +121,10 @@ func (s *rewriteSnapshot) restoreAndCheck(st *Statement) error {
 	if st.Each != s.each || (s.each != nil && !sameEach(s.each, s.was)) {
 		// The load reads the rows by it: each owner's, in its order.
 		return changed("Each")
+	}
+	if !sameProject(st.Project, s.project) {
+		// The scan reads the terms by position.
+		return changed("Project")
 	}
 	if !sameJoins(st.Joins, s.joins) {
 		// The scan reads the joined columns after the entity's own, by them.

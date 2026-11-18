@@ -247,6 +247,14 @@ func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
 
 // prepare is the statement a run sends: the query's, with After's condition.
 func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
+	if q.s.St.Project != nil {
+		return Statement{}, errProjectRows(q.meta.Info.Name)
+	}
+	return q.prepareAny()
+}
+
+// prepareAny is prepare for a query that may be a projection, as SQL shows it.
+func (q Query[E]) prepareAny[_ Lazy[E]]() (Statement, error) {
 	return engine.PrepareStmt(&q.s.St, q.meta.Info, q.s.After)
 }
 
@@ -600,7 +608,7 @@ func (q Query[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 			return "", nil, err
 		}
 	}
-	st, err := q.prepare()
+	st, err := q.prepareAny()
 	if err != nil {
 		return "", nil, err
 	}

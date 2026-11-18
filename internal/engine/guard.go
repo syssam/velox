@@ -75,6 +75,12 @@ func (db *DB) guard(st *Statement) error {
 			return errZeroPredicate(st.Entity.Name)
 		}
 	}
+	if err := checkProject(st, "a projection names"); err != nil {
+		return err
+	}
+	if err := checkOrderExprs(st, "an ordering names"); err != nil {
+		return err
+	}
 	if err := guardJoins(st); err != nil {
 		return err
 	}

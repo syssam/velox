@@ -138,6 +138,12 @@ func checkColumns(st *Statement, who string) error {
 	if err := checkConds(st, who, st.Where); err != nil {
 		return err
 	}
+	if err := checkProject(st, who); err != nil {
+		return err
+	}
+	if err := checkOrderExprs(st, who); err != nil {
+		return err
+	}
 	if st.Conflict != nil {
 		return checkConds(st, who, st.Conflict.Where)
 	}
@@ -244,7 +250,7 @@ func checkNode(st *Statement, who string, nd Node) error {
 	case OpAllow:
 		return nil // it names no column
 	case OpExpr:
-		return checkExprCols(nd, func(c int) error { return badColumn(st, who, c) })
+		return checkExprCols(nd.V.(*exprData), func(c int) error { return badColumn(st, who, c) })
 	case OpThrough:
 		if err := checkThrough(st, nd); err != nil {
 			return err

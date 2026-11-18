@@ -45,6 +45,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `.OpClass("title", "gin_trgm_ops")` sets its operator class, both on
   PostgreSQL. `migrate.Index` has `Desc` and `OpClass`, and `Inspect` reads
   them instead of noting them (decision 0072).
+
+- `Query.Project`, `GroupBy`, `Having` and `Rows` read terms in place of an
+  entity: columns (`velox.Pick`), SQL expressions (`velox.Calc`) and their
+  `Sum`, `Avg`, `Min`, `Max`, `Count` and `CountDistinct`, with several
+  group keys, `HAVING` and an ordering by an aggregate or an expression
+  (`Term.Asc`, `Term.Desc`). It is a read of the entity, so the Read policy,
+  scope and interceptors apply, which `Raw` skips. `Expr` also takes a term
+  for a `?`. `OrderTerm` gained `Expr`, and `Statement` gained `Project`
+  (ADR 0074).
+
 - `velox-gen -plugin velox-graphql:only=enums` writes only the GraphQL
   marshalers of velox-gen's enum types, for an application that writes its
   own SDL and binds it with gqlgen's autobind: `open` goes out as `OPEN` and

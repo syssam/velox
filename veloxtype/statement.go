@@ -103,6 +103,10 @@ type OrderTerm struct {
 	// then a column of that relation's target, and the statement must join it
 	// (Statement.Joins). 0 orders by the statement's own entity.
 	Rel int32
+	// Expr, when not nil, is an expression to order by, made by velox.Term's
+	// Asc or Desc: an engine.Term. Column is then 0 and Rel 0, and After and
+	// a cursor refuse the ordering, as they read each term's value from a row.
+	Expr any
 }
 
 // Result is what executing a statement did: a velox.Statement's, which an Around

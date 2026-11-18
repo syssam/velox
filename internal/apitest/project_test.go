@@ -1,0 +1,294 @@
+package apitest
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
+)
+
+type inv = testmodel.Invoice
+
+// report is a grouped report on invoices: the org, the sum and the count of
+// the paid ones, over 100 in all, biggest first.
+func report(db *velox.DB) velox.Query[inv] {
+	return db.Query[inv]().Where(I.Paid.EQ(true)).
+		Project(velox.Pick(I.OrgID), velox.Pick(I.Total).Sum(), velox.CountAll[inv]()).
+		GroupBy(velox.Pick(I.OrgID)).
+		Having(velox.Expr[inv]("? > ?", velox.Pick(I.Total).Sum(), 100)).
+		OrderBy(velox.Pick(I.Total).Sum().Desc()).
+		Limit(10)
+}
+
+// TestProjectSQL: the select list, GROUP BY, HAVING and ORDER BY of a
+// projection, in each dialect, with the arguments in the order they are
+// written. An ordering by an expression puts NULL last, ascending, as every
+// ordering does: where the database sorts it first, a term of IS NULL goes
+// before.
+func TestProjectSQL(t *testing.T) {
+	for _, tc := range []struct {
+		d    velox.Dialect
+		sql  string
+		args []any
+	}{
+		{velox.Postgres,
+			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" = $1 GROUP BY "org_id" HAVING (SUM("total") > $2) ORDER BY SUM("total") DESC LIMIT $3`,
+			[]any{true, 100, 10}},
+		{velox.MySQL,
+			"SELECT `org_id`, SUM(`total`), COUNT(*) FROM `invoices` WHERE `paid` = ? GROUP BY `org_id` HAVING (SUM(`total`) > ?) ORDER BY SUM(`total`) IS NULL DESC, SUM(`total`) DESC LIMIT ?",
+			[]any{true, 100, 10}},
+		{velox.SQLite,
+			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" = ? GROUP BY "org_id" HAVING (SUM("total") > ?) ORDER BY SUM("total") IS NULL DESC, SUM("total") DESC LIMIT ?`,
+			[]any{true, 100, 10}},
+	} {
+		db := openFake(tc.d, &fakeconn.Exec{})
+		text, args, err := report(db).SQL(ctx)
+		if err != nil || text != tc.sql {
+			t.Errorf("%v:\n got %s %v\nwant %s", tc.d, text, err, tc.sql)
+		}
+		if len(args) != len(tc.args) {
+			t.Errorf("%v: args %v, want %v", tc.d, args, tc.args)
+			continue
+		}
+		for i := range args {
+			if args[i] != tc.args[i] {
+				t.Errorf("%v: arg %d is %v, want %v", tc.d, i, args[i], tc.args[i])
+			}
+		}
+	}
+}
+
+// TestProjectTerms: each kind of term renders, aggregates over expressions
+// and DISTINCT too, and an Expr takes a term in place of a column.
+func TestProjectTerms(t *testing.T) {
+	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	month := velox.Calc[inv]("EXTRACT(MONTH FROM ?)", I.CreatedAt)
+	net := velox.Calc[inv]("? * ?", I.Total, 0.9)
+	text, args, err := db.Query[inv]().
+		Project(month, net.Sum(), velox.Pick(I.OrgID).CountDistinct(), velox.Pick(I.Note).Count(), net.Avg(), velox.Pick(I.Total).Min(), velox.Pick(I.Total).Max()).
+		GroupBy(month).
+		Limit(5).SQL(ctx)
+	want := `SELECT (EXTRACT(MONTH FROM "created_at")), SUM(("total" * $1)), COUNT(DISTINCT "org_id"), COUNT("note"), AVG(("total" * $2)), MIN("total"), MAX("total") ` +
+		`FROM "invoices" GROUP BY (EXTRACT(MONTH FROM "created_at")) LIMIT $3`
+	if err != nil || text != want {
+		t.Errorf("\n got %s %v\nwant %s", text, err, want)
+	}
+	if len(args) != 3 || args[0] != 0.9 || args[1] != 0.9 || args[2] != 5 {
+		t.Errorf("args %v", args)
+	}
+}
+
+// TestOrderByExpression: an entity query orders by an expression, and the
+// same shape with other values renders alike.
+func TestOrderByExpression(t *testing.T) {
+	for _, tc := range []struct {
+		d   velox.Dialect
+		sql string
+	}{
+		{velox.Postgres, `SELECT "id" FROM "invoices" ORDER BY (LOWER("number")), "id" DESC LIMIT $1`},
+		{velox.MySQL, "SELECT `id` FROM `invoices` ORDER BY (LOWER(`number`)) IS NULL, (LOWER(`number`)), `id` DESC LIMIT ?"},
+		{velox.SQLite, `SELECT "id" FROM "invoices" ORDER BY (LOWER("number")) IS NULL, (LOWER("number")), "id" DESC LIMIT ?`},
+	} {
+		db := openFake(tc.d, &fakeconn.Exec{})
+		text, _, err := db.Query[inv]().Columns(I.ID).
+			OrderBy(velox.Calc[inv]("LOWER(?)", I.Number).Asc(), I.ID.Desc()).Limit(5).SQL(ctx)
+		if err != nil || text != tc.sql {
+			t.Errorf("%v:\n got %s %v\nwant %s", tc.d, text, err, tc.sql)
+		}
+	}
+	// After reads the ordering's columns from the last row: not an expression.
+	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	_, err := db.Query[inv]().Columns(I.ID).After(&inv{ID: 1}).
+		OrderBy(velox.Calc[inv]("LOWER(?)", I.Number).Asc(), I.ID.Asc()).Limit(5).All(ctx)
+	if err == nil || !strings.Contains(err.Error(), "expression") {
+		t.Errorf("After with an expression order: %v", err)
+	}
+}
+
+// TestProjectKeepsPolicy: a projection reads under the Read policy, the
+// scope and the interceptors, as every query does, and a refused caller
+// sends nothing.
+func TestProjectKeepsPolicy(t *testing.T) {
+	e := &fakeconn.Exec{}
+	db := openPolicied(velox.Postgres, e)
+	q := db.Query[testmodel.Ticket]().
+		Project(velox.Pick(Tk.Owner), velox.CountAll[testmodel.Ticket]()).
+		GroupBy(velox.Pick(Tk.Owner)).Limit(10)
+	for row, err := range q.Rows(asUser("ann")) {
+		_, _ = row, err
+	}
+	wantSent(t, e, `SELECT "owner", COUNT(*) FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2 GROUP BY "owner" LIMIT $3`, int64(1), "ann", 10)
+
+	calls := e.Calls
+	var got error
+	for _, err := range q.Rows(asUser("")) {
+		got = err
+	}
+	if !errors.Is(got, velox.ErrDenied) || e.Calls != calls {
+		t.Errorf("no user: %v, %d statements sent", got, e.Calls-calls)
+	}
+}
+
+// TestProjectRows: the rows come back by position, as the database reports
+// them, on a real SQLite database.
+func TestProjectRows(t *testing.T) {
+	db := connectInvoices(t, ":memory:")
+	type row struct {
+		org     int64
+		n       int64
+		longest string
+	}
+	var got []row
+	q := db.Query[inv]().
+		Project(velox.Pick(I.OrgID), velox.CountAll[inv](), velox.Calc[inv]("MAX(?)", I.Number)).
+		GroupBy(velox.Pick(I.OrgID)).Limit(10)
+	for r, err := range q.Rows(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		var x row
+		if err := r.Scan(&x.org, &x.n, &x.longest); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, x)
+	}
+	if len(got) != 1 || got[0] != (row{1, 3, "c"}) {
+		t.Errorf("got %v, want [{1 3 c}]", got)
+	}
+	// A break ends the read and frees the connection.
+	for range q.Rows(ctx) {
+		break
+	}
+	if n, err := db.Query[inv]().Count(ctx); err != nil || n != 3 {
+		t.Errorf("after a break: %d, %v", n, err)
+	}
+}
+
+// TestProjectRefused: a projection does not mix with what reads entities, and
+// a malformed one fails before anything is sent.
+func TestProjectRefused(t *testing.T) {
+	e := &fakeconn.Exec{}
+	db := openFake(velox.Postgres, e)
+	base := func() velox.Query[inv] {
+		return db.Query[inv]().Project(velox.Pick(I.OrgID)).Limit(5)
+	}
+	for _, tc := range []struct {
+		name string
+		run  func() error
+		want string
+	}{
+		{"All", func() error { _, err := base().All(ctx); return err }, "Rows"},
+		{"One", func() error { _, err := base().One(ctx); return err }, "Rows"},
+		{"First", func() error { _, err := base().First(ctx); return err }, "Rows"},
+		{"Iter", func() error {
+			for _, err := range base().Iter(ctx) {
+				return err
+			}
+			return nil
+		}, "Rows"},
+		{"Count", func() error { _, err := base().Count(ctx); return err }, "Rows"},
+		{"Exists", func() error { _, err := base().Exists(ctx); return err }, "Rows"},
+		{"Sum", func() error { _, err := velox.Sum(ctx, base(), I.Total); return err }, "Rows"},
+		{"CountBy", func() error { _, err := velox.CountBy(ctx, base().AllowUnbounded(), I.OrgID.Key()); return err }, "Rows"},
+		{"Columns", func() error { return rowsErr(base().Columns(I.ID)) }, "Columns"},
+		{"Omit", func() error { return rowsErr(base().Omit(I.Note)) }, "Omit"},
+		{"With", func() error { return rowsErr(base().With(I.Items)) }, "With"},
+		{"Join", func() error {
+			return rowsErr(db.Query[testmodel.Ticket]().Project(velox.Pick(Tk.Owner)).Join(Tk.Invoice).Limit(5))
+		}, "Join"},
+		{"After", func() error { return rowsErr(base().After(&inv{ID: 1})) }, "After"},
+		{"ForUpdate", func() error { return rowsErr(base().ForUpdate()) }, "lock"},
+		{"no terms", func() error { return rowsErr(db.Query[inv]().Project().Limit(5)) }, "no terms"},
+		{"GroupBy without Project", func() error { return rowsErr(db.Query[inv]().GroupBy(velox.Pick(I.OrgID)).Limit(5)) }, "Project"},
+		{"Having without Project", func() error {
+			return rowsErr(db.Query[inv]().Having(velox.Expr[inv]("? > 1", I.Total)).Limit(5))
+		}, "Project"},
+		{"no Limit", func() error { return rowsErr(db.Query[inv]().Project(velox.Pick(I.OrgID))) }, "Limit"},
+		{"aggregate of an aggregate", func() error {
+			return rowsErr(db.Query[inv]().Project(velox.Pick(I.Total).Sum().Max()).Limit(5))
+		}, "aggregate"},
+		{"a bad expression", func() error {
+			return rowsErr(db.Query[inv]().Project(velox.Calc[inv]("(SELECT 1)")).Limit(5))
+		}, "SELECT"},
+		{"a column of another entity", func() error {
+			return rowsErr(db.Query[inv]().Project(velox.Calc[inv]("?", testmodel.Tickets.ID)).Limit(5))
+		}, "another entity"},
+		{"a term of another entity", func() error {
+			return rowsErr(db.Query[inv]().Project(velox.Calc[inv]("?", velox.Pick(Tk.ID))).Limit(5))
+		}, "another entity"},
+		{"an encoded column", func() error {
+			return rowsErr(db.Query[fixture.JDoc]().Project(velox.Calc[fixture.JDoc]("?", fixture.JDocs.Attrs)).Limit(5))
+		}, "encoded"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := e.Calls
+			err := tc.run()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want an error naming %q", err, tc.want)
+			}
+			if e.Calls != before {
+				t.Errorf("%d statements sent", e.Calls-before)
+			}
+		})
+	}
+}
+
+// rowsErr runs q's Rows and returns the error it yields.
+func rowsErr[E any](q velox.Query[E]) error {
+	for _, err := range q.Rows(ctx) {
+		return err
+	}
+	return nil
+}
+
+// TestProjectRenderCache: the same shape with other values renders alike, and
+// another aggregate or column renders apart.
+func TestProjectRenderCache(t *testing.T) {
+	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	sqlOf := func(term velox.Term[inv], v any) (string, []any) {
+		t.Helper()
+		text, args, err := db.Query[inv]().Project(term).
+			Having(velox.Expr[inv]("? > ?", term, v)).Limit(1).SQL(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return text, args
+	}
+	a, argsA := sqlOf(velox.Pick(I.Total).Sum(), 1)
+	b, argsB := sqlOf(velox.Pick(I.Total).Sum(), 2)
+	if a != b || argsA[0] != 1 || argsB[0] != 2 {
+		t.Errorf("same shape: %s %v / %s %v", a, argsA, b, argsB)
+	}
+	seen := map[string]bool{a: true}
+	for _, other := range []velox.Term[inv]{velox.Pick(I.Total).Avg(), velox.Pick(I.OrgID).Sum(), velox.Pick(I.Total).Max(), velox.CountAll[inv]()} {
+		o, _ := sqlOf(other, 1)
+		if seen[o] {
+			t.Errorf("two shapes render alike: %s", o)
+		}
+		seen[o] = true
+	}
+}
+
+// TestRewriteHookCannotChangeProject: the scan reads the terms' columns by
+// position, so a Rewrite hook that changes them is refused.
+func TestRewriteHookCannotChangeProject(t *testing.T) {
+	e := &fakeconn.Exec{}
+	db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		if st.Project != nil {
+			st.Project.Terms = st.Project.Terms[:0]
+		}
+		return nil
+	}))
+	var got error
+	for _, err := range report(db).Rows(ctx) {
+		got = err
+	}
+	if got == nil || !strings.Contains(got.Error(), "Project") || e.Calls != 0 {
+		t.Errorf("a hook that empties the terms: %v, %d statements sent", got, e.Calls)
+	}
+}

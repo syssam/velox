@@ -2,6 +2,8 @@
 
 Date: 2026-10-31
 
+Several keys, `HAVING` and an ordering by an aggregate are `Query.Project` (0074); this record stands for the one-key forms.
+
 ## Context
 
 `Sum`, `Avg`, `Min` and `Max` left `GROUP BY` to `Raw`, which skips the policy,

@@ -135,7 +135,10 @@ func bit(b bool) byte {
 // ShapeKey encodes everything about a statement's shape except its entity,
 // which keys the outer map.
 func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
-	k = append(k, byte(d), byte(st.Op), bit(st.Count), bit(st.Exists), byte(st.Aggregate), byte(st.Lock), byte(st.LockWait), bit(st.Columns != nil), bit(st.Limit > 0), bit(st.Offset > 0))
+	// Six flags in one byte: the key is built in a fixed buffer, and one that
+	// outgrows it costs an allocation on every statement.
+	flags := bit(st.Count) | bit(st.Exists)<<1 | bit(st.Columns != nil)<<2 | bit(st.Limit > 0)<<3 | bit(st.Offset > 0)<<4 | bit(st.Project != nil)<<5
+	k = append(k, byte(d), byte(st.Op), flags, byte(st.Aggregate), byte(st.Lock), byte(st.LockWait))
 	k = binary.AppendUvarint(k, uint64(st.GroupBy))
 	k = binary.AppendUvarint(k, uint64(len(st.Columns)))
 	for _, c := range st.Columns {
@@ -149,7 +152,14 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 	for _, o := range st.OrderBy {
 		k = binary.AppendUvarint(k, uint64(o.Column))
 		k = binary.AppendUvarint(k, uint64(o.Rel))
-		k = append(k, bit(o.Desc))
+		t, expr := o.Expr.(Term)
+		k = append(k, bit(o.Desc)|bit(expr)<<1)
+		if expr {
+			k = termKey(k, t)
+		}
+	}
+	if st.Project != nil {
+		k = projectionKey(k, st.Project)
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Joins)))
 	for _, j := range st.Joins {

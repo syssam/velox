@@ -90,6 +90,7 @@ type Statement struct {
 	GroupBy      int          // SELECT with Count or Aggregate: the key column's index plus one, 0 for none: one row per key, the key first; velox orders by the key, and a Rewrite hook may not change it
 	Joins        []JoinClause // SELECT: to-one relations joined in, each by Join or LeftJoin; a Rewrite hook may not change them
 	Each         *EachClause  // SELECT: a relation read or counted per owner; a Rewrite hook may not change it
+	Project      *Projection  // SELECT: terms read in place of the entity's columns, grouped and filtered; read by Query.Rows; a Rewrite hook may not change it
 	Lock         Lock         // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
 	LockWait     LockWait     // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it
 	Columns      []int        // SELECT: the selected columns, nil selects all; INSERT: the columns written

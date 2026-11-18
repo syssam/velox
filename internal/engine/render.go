@@ -130,6 +130,10 @@ func (w *writer) selectStmt(st *Statement) {
 		w.eachSelect(st)
 		return
 	}
+	if st.Project != nil {
+		w.projectStmt(st)
+		return
+	}
 	joined := len(st.Joins) > 0
 	w.joins, w.qualify = st.Joins, joined
 	w.str("SELECT ")
@@ -311,6 +315,10 @@ func (w *writer) orderBy(os []OrderTerm, qualified bool) {
 			w.str(" ORDER BY ")
 		} else {
 			w.str(", ")
+		}
+		if o.Expr != nil {
+			w.orderTerm(o)
+			continue
 		}
 		if o.Rel != 0 {
 			w.joinedOrder(o)

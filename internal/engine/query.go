@@ -26,6 +26,11 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 	if len(st.OrderBy) == 0 {
 		return fmt.Errorf("velox: %s: After needs an OrderBy", in.Name)
 	}
+	for _, o := range st.OrderBy {
+		if o.Expr != nil {
+			return errAfterExpr(in.Name)
+		}
+	}
 	srcs, ordered, err := afterSources(st, in, after)
 	if err != nil {
 		return err

@@ -188,6 +188,19 @@ type ConflictClause = engine.ConflictClause
 //	Limit int
 type EachClause = engine.EachClause
 
+// Projection is what a SELECT reads in place of its entity's columns, set by
+// Query.Project: terms, one result column each, grouped by terms and filtered
+// by conditions of the same entity. The rows are read by position, with
+// Query.Rows, and the Read policy, scope and interceptors filter them as
+// they filter every read. A Rewrite hook may not change it.
+//
+// Its fields:
+//
+//	Terms []Term // the result columns, in order
+//	GroupBy []Term // GROUP BY, when not empty
+//	Having []Predicate // HAVING: all must hold
+type Projection = engine.Projection
+
 // JoinClause is a to-one relation joined into a SELECT, by Query.Join or LeftJoin: the
 // target's columns follow the statement's own in every row, and the relation's
 // conditions and orderings (Rel.Is and Rel.By) are on them. A Rewrite hook may not
@@ -231,6 +244,7 @@ type JoinClause = engine.JoinClause
 //	GroupBy int // SELECT with Count or Aggregate: the key column's index plus one, 0 for none: one row per key, the key first; velox orders by the key, and a Rewrite hook may not change it
 //	Joins []JoinClause // SELECT: to-one relations joined in, each by Join or LeftJoin; a Rewrite hook may not change them
 //	Each *EachClause // SELECT: a relation read or counted per owner; a Rewrite hook may not change it
+//	Project *Projection // SELECT: terms read in place of the entity's columns, grouped and filtered; read by Query.Rows; a Rewrite hook may not change it
 //	Lock Lock // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
 //	LockWait LockWait // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it
 //	Columns []int // SELECT: the selected columns, nil selects all; INSERT: the columns written
