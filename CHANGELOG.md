@@ -61,6 +61,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   and the like) compiles and velox-gen refuses it, as it does an annotation on
   the wrong kind of element (decision 0075).
 
+- `velox.Schema`, `Field`, `Edge`, `Index`, `Mixin` and `Annotation` are aliases of
+  package `schema`'s, as in ent and the old velox, so a schema can import one
+  package for them (decision 0076).
+
 - `Query.Select`, `SelectRaw`, `GroupBy`, `Having` and `Rows` read terms in
   place of an entity: column handles as they are, SQL expressions
   (`velox.Calc`, `SelectRaw`) and aggregates (a handle's `Sum`, `Avg`, `Min`,

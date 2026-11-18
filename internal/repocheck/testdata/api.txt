@@ -530,6 +530,7 @@ func WithTags(ctx context.Context, kv ...string) context.Context
 func WithTxAround(h TxAround) Option
 func WithoutTx(ctx context.Context) context.Context
 type Aggregate = veloxtype.Aggregate
+type Annotation = schema.Annotation
 type Around func(ctx context.Context, st *Statement, next func(context.Context) error) error
 type AssignOp = veloxtype.AssignOp
 type Assignment = veloxtype.Assignment
@@ -548,13 +549,16 @@ type DeleteQuery[E any] struct { }
 type Descriptor[E any] struct { Table string TableSchema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Schema any }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
+type Edge = schema.Edge
 type EdgeDescriptor = engine.EdgeDescriptor
 type EdgeError = veloxtype.EdgeError
 type EntityInfo = engine.EntityInfo
 type Entity[E any] interface { *E VeloxMeta() *Meta[E] }
+type Field = schema.Field
 type GroupKey[E, K any] struct { }
 type Group[K, V any] struct { Key K Value V }
 type Hook func(next Mutator) Mutator
+type Index = schema.Index
 type IndexInfo = veloxtype.IndexInfo
 type Input[E any] interface { Setters() ([]Setter[E], error) }
 type InsertQuery[E any] struct { }
@@ -570,6 +574,7 @@ type LockWait = veloxtype.LockWait
 type Many[T any] struct { }
 type MetaOnce[E any] struct { }
 type Meta[E any] struct { }
+type Mixin = schema.Mixin
 type MutateFunc func(ctx context.Context, m *Mutation) error
 type Mutation struct { }
 type Mutator interface { Mutate(ctx context.Context, m *Mutation) error }
@@ -602,6 +607,7 @@ type Route = veloxtype.Route
 type Row = engine.Row
 type RowScope = veloxtype.RowScope
 type SaveQuery[E any] struct { }
+type Schema = schema.Schema
 type SchemaError = veloxtype.SchemaError
 type Selectable[E any] any
 type Setter[E any] struct { }

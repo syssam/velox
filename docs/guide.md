@@ -55,7 +55,8 @@ compile error rather than a runtime surprise.
 
 ## Defining a schema
 
-A schema is a struct that embeds `schema.Schema`. Its methods describe the
+A schema is a struct that embeds `schema.Schema` (or `velox.Schema`, the same
+type, as ent and the old velox spell it). Its methods describe the
 table. Here is the tour's `Invoice`:
 
 ```go
