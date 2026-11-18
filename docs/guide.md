@@ -591,24 +591,23 @@ for _, g := range totals {
 }
 ```
 
-### Reports: Project, GroupBy and Having
+### Reports: Select, GroupBy and Having
 
 For several keys, several aggregates, `HAVING`, `COUNT(DISTINCT x)` or an
-ordering by an aggregate or an expression, `Project` reads **terms** in place
-of the entity. A term is a column (`velox.Pick`), SQL text over columns
-(`velox.Calc`, written as `Expr`'s text is) or an aggregate of either. The same
-term is a result column, a group key, an operand in `Expr` and an ordering:
+ordering by an aggregate or an expression, `Select` reads **terms** in place
+of the entity. A term is a column handle as it is, SQL text over columns
+(`velox.Calc`, or `SelectRaw` for one expression) or an aggregate: a handle's
+`Sum`, `Avg`, `Min`, `Max`, `Count` and `CountDistinct`, or `velox.CountAll`.
+The same term is a result column, a group key, an operand in `Expr` and an
+ordering:
 
 ```go
-total := velox.Pick(I.TotalCents)
-org := velox.Pick(I.OrgID)
-
 for r, err := range db.Query[veloxgen.Invoice]().
 	Where(I.Status.EQ(veloxgen.InvoiceStatusPaid)).
-	Project(org, total.Sum(), velox.CountAll[veloxgen.Invoice]()).
-	GroupBy(org).
-	Having(velox.Expr[veloxgen.Invoice]("? > ?", total.Sum(), 100000)).
-	OrderBy(total.Sum().Desc()).
+	Select(I.OrgID, I.TotalCents.Sum(), velox.CountAll[veloxgen.Invoice]()).
+	GroupBy(I.OrgID).
+	Having(velox.Expr[veloxgen.Invoice]("? > ?", I.TotalCents.Sum(), 100000)).
+	OrderBy(I.TotalCents.Sum().Desc()).
 	Limit(20).
 	Rows(ctx) {
 	if err != nil {
@@ -619,16 +618,23 @@ for r, err := range db.Query[veloxgen.Invoice]().
 		return err
 	}
 }
+
+// One expression of SQL text:
+db.Query[veloxgen.Invoice]().Limit(10).
+	SelectRaw("EXTRACT(MONTH FROM ?)", I.CreatedAt).Rows(ctx)
 ```
 
 `Rows` reads by position: the caller scans each row. It is a read of the
 entity, so `Where`, the Read policy, the scope and the interceptors apply and
-the groups count only rows the caller may see, which `Raw` does not give. It
-needs a `Limit` or `AllowUnbounded()`. A projection cannot be read with `All`,
-`Count` and the rest, nor combined with `Columns`, `With`, `Join`, `After` or a
-lock, and an aggregate of an aggregate is refused. An ordering by an expression
-cannot be a keyset cursor. `UNION`, CTEs and window functions are not in the
-builder; use [raw SQL](#raw-sql) for those
+the groups count only rows the caller may see, which `Raw` does not give.
+`SelectRaw` and `Calc` take guarded text like `Expr`, so they keep the
+policies too. A projection needs a `Limit` or `AllowUnbounded()`. It cannot be
+read with `All`, `Count` and the rest, nor combined with `Columns`, `With`,
+`Join`, `After` or a lock, and an aggregate of an aggregate is refused. A
+value that is not a column handle or a term of the entity (a string, another
+entity's handle) fails the statement before anything is sent. An ordering by
+an expression cannot be a keyset cursor. `UNION`, CTEs and window functions
+are not in the builder; use [raw SQL](#raw-sql) for those
 ([ADR 0074](decisions/0074-projection.md), [ADR 0022](decisions/0022-group-by.md)).
 
 ## Writing

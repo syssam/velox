@@ -8,17 +8,37 @@ import (
 )
 
 // Term is one SQL value over entity E: a column, an expression, or an
-// aggregate of either. Made by Pick, Calc and CountAll, and by the Sum, Avg,
-// Min, Max, Count and CountDistinct methods, a Term is a result column of
-// Query.Project, a key of GroupBy, an operand of Expr (a HAVING is an Expr
-// of aggregate terms), and, through Asc and Desc, an ordering.
+// aggregate of either. A column handle's Sum, Avg, Min, Max, Count and
+// CountDistinct make one, as do Calc and CountAll, and the same methods on a
+// Term take an aggregate of an expression. A Term is a result column of
+// Query.Select, a key of GroupBy, an operand of Expr (a HAVING is an Expr of
+// aggregate terms), and, through Asc and Desc, an ordering.
 //
 // Every use goes through the query's statement, so the Read policy, scope
 // and interceptors of E apply, and a term can name only E's columns.
 type Term[E any] struct{ t engine.Term }
 
-// Pick is the column c of E as a Term.
-func Pick[E any](c Column[E]) Term[E] { return Term[E]{engine.ColumnTerm(c.column(nil))} }
+// Selectable is what Select and GroupBy take: a column handle of E, read as
+// the column, or a Term of E. It is the empty interface, named for what it
+// holds: a method on every handle type would cost each entity's package
+// about 10 KB per handle type (TestGenericTypesCompileSmall), so a string, a
+// handle of another entity or any other value is refused when the statement
+// runs, before anything is sent, as an Expr's arguments are.
+type Selectable[E any] interface{}
+
+// termOf is s as a term of the statement's entity.
+func termOf[E any](s Selectable[E]) engine.Term {
+	switch h := s.(type) {
+	case Term[E]:
+		return h.t
+	case Column[E]:
+		return engine.ColumnTerm(h.column(nil))
+	}
+	if foreignHandle(s) {
+		return engine.InvalidTerm(fmt.Errorf("velox: %T is a column or term of another entity than the query's", s))
+	}
+	return engine.InvalidTerm(fmt.Errorf("velox: %T is not a column handle or a Term of the query's entity", s))
+}
 
 // Calc is the SQL expression text as a Term, written as Expr's text is: a ?
 // is filled by the next argument, a column handle of E or a Term of E written

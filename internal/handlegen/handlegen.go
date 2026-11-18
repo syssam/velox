@@ -70,6 +70,24 @@ var (
 		{"Key", "is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.", "() GroupKey[E, *V]",
 			"return GroupKey[E, *V]{c.I}"},
 	}
+	count = []method{
+		{"Count", "is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.", "() Term[E]",
+			"return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}"},
+		{"CountDistinct", "is COUNT(DISTINCT column), as a Term.", "() Term[E]",
+			"return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}"},
+	}
+	extremes = []method{
+		{"Min", "is MIN of the column, as a Term. NULL when no row has a value.", "() Term[E]",
+			"return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}"},
+		{"Max", "is MAX of the column, as a Term. NULL when no row has a value.", "() Term[E]",
+			"return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}"},
+	}
+	sums = []method{
+		{"Sum", "is SUM of the column, as a Term. NULL when no row has a value.", "() Term[E]",
+			"return Term[E]{engine.AggTerm(engine.TermSum, engine.ColumnTerm(c.I))}"},
+		{"Avg", "is AVG of the column, as a Term. NULL when no row has a value.", "() Term[E]",
+			"return Term[E]{engine.AggTerm(engine.TermAvg, engine.ColumnTerm(c.I))}"},
+	}
 	arith = []method{
 		{"Add", "adds v to the column: column = column + v.", "(v V) Setter[E]",
 			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignAdd, Value: v}}"},
@@ -100,14 +118,14 @@ type kind struct {
 }
 
 var kinds = []kind{
-	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types.", [][]method{base, key, set}},
-	{"OrderedCol", "[E, V any]", "is the handle of an ordered column: time.Time and types registered as ordered.", [][]method{base, key, ordered, set}},
-	{"NumberCol", "[E, V any]", "is the handle of a numeric column.", [][]method{base, key, ordered, set, arith}},
-	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, text, set}},
-	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, set, null}},
-	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, set, null}},
-	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, set, arith, null}},
-	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, text, set, null}},
+	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types.", [][]method{base, key, count, set}},
+	{"OrderedCol", "[E, V any]", "is the handle of an ordered column: time.Time and types registered as ordered.", [][]method{base, key, ordered, count, extremes, set}},
+	{"NumberCol", "[E, V any]", "is the handle of a numeric column.", [][]method{base, key, ordered, count, extremes, sums, set, arith}},
+	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, count, extremes, text, set}},
+	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, count, set, null}},
+	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, set, null}},
+	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, sums, set, arith, null}},
+	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, text, set, null}},
 	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", [][]method{set, jsonPaths}},
 	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{set, jsonPaths, null}},
 }

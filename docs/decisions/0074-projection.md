@@ -1,4 +1,4 @@
-# 74. Project reads terms, and keeps the policies
+# 74. Select reads terms, and keeps the policies
 
 Status: accepted, 2026-11-18.
 
@@ -16,15 +16,27 @@ column, a group key and an ordering, and an aggregate to compare in `HAVING`.
 
 ## Decision
 
-- One value, `velox.Term[E]`, is a column (`Pick`), an expression (`Calc`,
-  written as `Expr`'s text is) or an aggregate of either (`Sum`, `Avg`,
-  `Min`, `Max`, `Count`, `CountDistinct` as methods, and `CountAll`). It is
-  a result column, a group key, an operand of `Expr` (a `HAVING` is an
-  `Expr` of aggregate terms) and, through `Asc` and `Desc`, an ordering.
-- `Query.Project(terms...)` makes the query read terms in place of the
+- One value, `velox.Term[E]`, is a column, an expression (`Calc`, written as
+  `Expr`'s text is) or an aggregate of either (`CountAll`, and the `Sum`,
+  `Avg`, `Min`, `Max`, `Count` and `CountDistinct` methods of a column handle
+  and of a Term). It is a result column, a group key, an operand of `Expr` (a
+  `HAVING` is an `Expr` of aggregate terms) and, through `Asc` and `Desc`, an
+  ordering.
+- `Query.Select(terms...)` makes the query read terms in place of the
   entity's columns, `GroupBy(terms...)` groups them and `Having(preds...)`
-  filters the groups. `Query.Rows(ctx)` reads the rows by position as
-  `RawRows` (0060): the entity cannot be built from them.
+  filters the groups. `SelectRaw(text, args...)` is `Select(Calc(text,
+  args...))`; it is guarded as `Expr` is and keeps the policies, which its
+  name does not say as `Raw`'s reason does. `Query.Rows(ctx)` reads the rows
+  by position as `RawRows` (0060): the entity cannot be built from them.
+- `Select` and `GroupBy` take a column handle as it is: `Select(I.OrgID,
+  I.Total.Sum())`. Their parameter is `Selectable[E]`, the empty interface,
+  and a string, a handle of another entity or any other value fails the
+  statement before anything is sent. A typed interface needs a method on
+  every handle type, and an ordinary method on a generic type costs each
+  entity's package about 10 KB per handle type used
+  (`TestGenericTypesCompileSmall`); the generic aggregate methods on handles
+  cost nothing measurable. `Expr`'s arguments are checked the same way.
+- `Query.Selects` is `Query.Reads`, so that the two do not sit side by side.
 - A projection is a read of E like any other. `Where`, the Read policy, the
   scope and the interceptors apply to it in the same statement, so a grouped
   read counts only the rows the caller may see. `Limit` or `AllowUnbounded`
@@ -32,7 +44,7 @@ column, a group key and an ordering, and an aggregate to compare in `HAVING`.
 - A projection refuses what reads entities or rows of the entity: `All`,
   `One`, `First`, `Iter`, `Count`, `Exists`, the aggregates, `Columns`, `Omit`,
   `With`, `Join`, `After`, a lock and a per-owner read. `GroupBy` and
-  `Having` without `Project` are errors. An aggregate of an aggregate
+  `Having` without `Select` are errors. An aggregate of an aggregate
   (`SUM(MAX(x))`), the zero `Term` and a term of another entity's column fail
   the statement before anything is sent.
 - `Statement.Project` carries a `*Projection{Terms, GroupBy, Having}`. A
@@ -53,12 +65,12 @@ column, a group key and an ordering, and an aggregate to compare in `HAVING`.
 
 ## Cost
 
-An entity's package carries about 3.4% more bytes (`entityDescUse` from
-781242 to 808034): the four new methods of `Query` and the larger types its
-generic bodies reach. `Term`'s methods are generic with `[_ Lazy[E]]`, as the
-others are, so a package that does not use projections pays only their
-declarations. The bounds in `compilecost_test.go` were raised, and the
-allocation budgets were not.
+An entity's package carries about 4% more bytes (`entityDescUse` from
+781242 to 811916): the new methods of `Query` and the larger types its generic
+bodies reach. The new methods, on `Query`, `Term` and the handles, are all
+generic with `[_ Lazy[...]]`, so a handle variable's row did not change: only
+declarations are paid. The bounds in `compilecost_test.go` were raised, and
+the allocation budgets were not.
 
 ## Not covered
 
@@ -66,4 +78,4 @@ allocation budgets were not.
   and `InSelect` (0057) cover tables with a relation or a handle.
 - Window functions (`COUNT(*) OVER`), `UNION` and CTEs.
 - Scanning rows into a struct: `Rows` returns positions, scanned by the caller.
-- An untyped (`untyped.TableQuery`) form of `Project`.
+- An untyped (`untyped.TableQuery`) form of `Select`.

@@ -187,9 +187,9 @@ func (q Query[E]) Columns[_ Lazy[E]](cs ...Column[E]) Query[E] {
 	return q
 }
 
-// Selects reports whether the query reads every one of cs: true for a query
+// Reads reports whether the query reads every one of cs: true for a query
 // with no Columns or Omit.
-func (q Query[E]) Selects[_ Lazy[E]](cs ...Column[E]) bool {
+func (q Query[E]) Reads[_ Lazy[E]](cs ...Column[E]) bool {
 	if q.s.St.Columns == nil {
 		return true
 	}

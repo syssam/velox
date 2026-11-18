@@ -819,13 +819,13 @@ func TestSelects(t *testing.T) {
 	for name, c := range map[string]struct {
 		got, want bool
 	}{
-		"every column":           {q.Selects(It.SKU, It.ID), true},
-		"no columns asked":       {q.Columns(It.ID).Selects(), true},
-		"a column Columns names": {q.Columns(It.ID, It.SKU).Selects(It.SKU), true},
-		"a column Columns omits": {q.Columns(It.ID).Selects(It.ID, It.SKU), false},
-		"a column Omit names":    {q.Omit(It.SKU).Selects(It.SKU), false},
-		"a column Omit keeps":    {q.Omit(It.SKU).Selects(It.ID), true},
-		"Columns() again":        {q.Columns(It.ID).Columns().Selects(It.SKU), true},
+		"every column":           {q.Reads(It.SKU, It.ID), true},
+		"no columns asked":       {q.Columns(It.ID).Reads(), true},
+		"a column Columns names": {q.Columns(It.ID, It.SKU).Reads(It.SKU), true},
+		"a column Columns omits": {q.Columns(It.ID).Reads(It.ID, It.SKU), false},
+		"a column Omit names":    {q.Omit(It.SKU).Reads(It.SKU), false},
+		"a column Omit keeps":    {q.Omit(It.SKU).Reads(It.ID), true},
+		"Columns() again":        {q.Columns(It.ID).Columns().Reads(It.SKU), true},
 	} {
 		if c.got != c.want {
 			t.Errorf("%s: %v, want %v", name, c.got, c.want)

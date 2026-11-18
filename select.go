@@ -22,26 +22,27 @@ func (q Query[E]) projection[_ Lazy[E]]() *engine.Projection {
 }
 
 // needProject records the error of a GroupBy or Having on a query that has
-// no Project.
+// no Select.
 func (q Query[E]) needProject[_ Lazy[E]](what string) Query[E] {
 	if q.s.St.Project == nil && q.s.Err == nil {
-		q.s.Err = fmt.Errorf("velox: %s: %s needs Project: it groups or filters the terms Project reads", q.meta.Info.Name, what)
+		q.s.Err = fmt.Errorf("velox: %s: %s needs Select: it groups or filters the terms Select reads", q.meta.Info.Name, what)
 	}
 	return q
 }
 
-// Project returns the query reading terms in place of E's columns: a column
-// (Pick), an expression (Calc) or an aggregate of either, one result column
-// each, in the order given. Project again adds more terms. Read the rows with
-// Rows, which scans them by position; All, One, Count and the other
-// readers of entities refuse a projection.
+// Select returns the query reading terms in place of E's columns: a column
+// handle, an expression (Calc, SelectRaw) or an aggregate of either (a
+// handle's Sum, Avg, Min, Max, Count and CountDistinct, and CountAll), one
+// result column each, in the order given. Select again adds more terms. Read
+// the rows with Rows, which scans them by position; All, One, Count and the
+// other readers of entities refuse a projection.
 //
 //	rows := db.Query[veloxgen.Invoice]().
 //		Where(I.Paid.EQ(true)).
-//		Project(velox.Pick(I.OrgID), velox.Pick(I.Total).Sum(), velox.CountAll[veloxgen.Invoice]()).
-//		GroupBy(velox.Pick(I.OrgID)).
-//		Having(velox.Expr[veloxgen.Invoice]("? > ?", velox.Pick(I.Total).Sum(), 100)).
-//		OrderBy(velox.Pick(I.Total).Sum().Desc()).
+//		Select(I.OrgID, I.Total.Sum(), velox.CountAll[veloxgen.Invoice]()).
+//		GroupBy(I.OrgID).
+//		Having(velox.Expr[veloxgen.Invoice]("? > ?", I.Total.Sum(), 100)).
+//		OrderBy(I.Total.Sum().Desc()).
 //		Limit(10).
 //		Rows(ctx)
 //
@@ -49,32 +50,44 @@ func (q Query[E]) needProject[_ Lazy[E]](what string) Query[E] {
 // scope, the interceptors, Limit and the row cap apply to it, and it needs
 // a Limit or AllowUnbounded. It cannot be combined with Columns, Omit, With,
 // Join, After, a lock or a per-owner read.
-func (q Query[E]) Project[_ Lazy[E]](ts ...Term[E]) Query[E] {
+func (q Query[E]) Select[_ Lazy[E]](ts ...Selectable[E]) Query[E] {
 	p := q.projection()
 	for _, t := range ts {
-		p.Terms = append(p.Terms, t.t)
+		p.Terms = append(p.Terms, termOf[E](t))
 	}
 	q.s.St.Project = p
 	return q
 }
 
+// SelectRaw is Select(Calc(text, args...)): one expression of SQL text as a
+// result column, written as Expr's text is, so a ? is a column handle, a Term
+// or a bound value. Unlike Raw, it is guarded and keeps the Read policy, the
+// scope and the interceptors: the text can hold a function, an operator and
+// CASE, and not a subquery or the end of the statement.
+//
+//	db.Query[veloxgen.Invoice]().Limit(10).
+//		SelectRaw("EXTRACT(MONTH FROM ?)", I.CreatedAt).Rows(ctx)
+func (q Query[E]) SelectRaw[_ Lazy[E]](text string, args ...any) Query[E] {
+	return q.Select(Calc[E](text, args...))
+}
+
 // GroupBy returns the query grouped by terms: the rows that agree on all of
-// them are one result row. It needs Project, and each plain term Project
+// them are one result row. It needs Select, and each plain term Select
 // reads must be among them, or the database refuses the statement.
-func (q Query[E]) GroupBy[_ Lazy[E]](ts ...Term[E]) Query[E] {
+func (q Query[E]) GroupBy[_ Lazy[E]](ts ...Selectable[E]) Query[E] {
 	if q = q.needProject("GroupBy"); q.s.St.Project == nil {
 		return q
 	}
 	p := q.projection()
 	for _, t := range ts {
-		p.GroupBy = append(p.GroupBy, t.t)
+		p.GroupBy = append(p.GroupBy, termOf[E](t))
 	}
 	q.s.St.Project = p
 	return q
 }
 
 // Having returns the query keeping the groups where all of ps hold: an Expr
-// of aggregate terms. It needs Project.
+// of aggregate terms. It needs Select.
 func (q Query[E]) Having[_ Lazy[E]](ps ...Pred[E]) Query[E] {
 	if q = q.needProject("Having"); q.s.St.Project == nil {
 		return q
@@ -132,9 +145,9 @@ func yieldRaw(yield func(RawRow, error) bool, row RawRow, timed bool, body *time
 	return yield(row, nil)
 }
 
-// Rows runs the query and yields the rows of its Project one at a time,
-// scanned by position with RawRow.Scan: the terms in the order Project gave
-// them. Only the current row is held. A query with no Project fails with an
+// Rows runs the query and yields the rows of its Select one at a time,
+// scanned by position with RawRow.Scan: the terms in the order Select gave
+// them. Only the current row is held. A query with no Select fails with an
 // error.
 //
 // It runs as Iter does: the loop body runs inside the around hooks, the
@@ -175,7 +188,7 @@ func (q Query[E]) projectStmt[_ Lazy[E]]() (Statement, error) {
 	case q.s.Err != nil:
 		return Statement{}, q.s.Err
 	case q.s.St.Project == nil:
-		return Statement{}, fmt.Errorf("velox: %s: Rows reads a projection: add Project", name)
+		return Statement{}, fmt.Errorf("velox: %s: Rows reads a projection: add Select", name)
 	case len(q.s.Loads) > 0:
 		return Statement{}, fmt.Errorf("velox: %s: a projection cannot be read with With", name)
 	case q.s.After != nil:

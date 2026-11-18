@@ -49,6 +49,16 @@ func (c Col[E, V]) Desc[_ Lazy[V]]() Order[E] {
 // Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.
 func (c Col[E, V]) Key[_ Lazy[V]]() GroupKey[E, V] { return GroupKey[E, V]{c.I} }
 
+// Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
+func (c Col[E, V]) Count[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
+}
+
+// CountDistinct is COUNT(DISTINCT column), as a Term.
+func (c Col[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
+}
+
 // Set sets the column to v.
 func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
@@ -128,6 +138,26 @@ func (c OrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
+// Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
+func (c OrderedCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
+}
+
+// CountDistinct is COUNT(DISTINCT column), as a Term.
+func (c OrderedCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
+}
+
+// Min is MIN of the column, as a Term. NULL when no row has a value.
+func (c OrderedCol[E, V]) Min[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}
+}
+
+// Max is MAX of the column, as a Term. NULL when no row has a value.
+func (c OrderedCol[E, V]) Max[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}
+}
+
 // Set sets the column to v.
 func (c OrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
@@ -203,6 +233,36 @@ func (c NumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
 // Between is column BETWEEN lo AND hi.
 func (c NumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
+}
+
+// Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
+func (c NumberCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
+}
+
+// CountDistinct is COUNT(DISTINCT column), as a Term.
+func (c NumberCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
+}
+
+// Min is MIN of the column, as a Term. NULL when no row has a value.
+func (c NumberCol[E, V]) Min[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}
+}
+
+// Max is MAX of the column, as a Term. NULL when no row has a value.
+func (c NumberCol[E, V]) Max[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}
+}
+
+// Sum is SUM of the column, as a Term. NULL when no row has a value.
+func (c NumberCol[E, V]) Sum[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermSum, engine.ColumnTerm(c.I))}
+}
+
+// Avg is AVG of the column, as a Term. NULL when no row has a value.
+func (c NumberCol[E, V]) Avg[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermAvg, engine.ColumnTerm(c.I))}
 }
 
 // Set sets the column to v.
@@ -292,6 +352,26 @@ func (c StringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
+// Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
+func (c StringCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
+}
+
+// CountDistinct is COUNT(DISTINCT column), as a Term.
+func (c StringCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
+}
+
+// Min is MIN of the column, as a Term. NULL when no row has a value.
+func (c StringCol[E, V]) Min[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}
+}
+
+// Max is MAX of the column, as a Term. NULL when no row has a value.
+func (c StringCol[E, V]) Max[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}
+}
+
 // Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character: a \ in a pattern matches a backslash). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do. It takes a string, not the column's type, because a pattern is not a value of the column.
 func (c StringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLike, Col: c.I, V: pattern}))
@@ -366,6 +446,16 @@ func (c NullCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 
 // Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.
 func (c NullCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V] { return GroupKey[E, *V]{c.I} }
+
+// Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
+func (c NullCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
+}
+
+// CountDistinct is COUNT(DISTINCT column), as a Term.
+func (c NullCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
+}
 
 // Set sets the column to v.
 func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
@@ -461,6 +551,26 @@ func (c NullOrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
+// Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
+func (c NullOrderedCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
+}
+
+// CountDistinct is COUNT(DISTINCT column), as a Term.
+func (c NullOrderedCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
+}
+
+// Min is MIN of the column, as a Term. NULL when no row has a value.
+func (c NullOrderedCol[E, V]) Min[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}
+}
+
+// Max is MAX of the column, as a Term. NULL when no row has a value.
+func (c NullOrderedCol[E, V]) Max[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}
+}
+
 // Set sets the column to v.
 func (c NullOrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
@@ -553,6 +663,36 @@ func (c NullNumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
 // Between is column BETWEEN lo AND hi.
 func (c NullNumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
+}
+
+// Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
+func (c NullNumberCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
+}
+
+// CountDistinct is COUNT(DISTINCT column), as a Term.
+func (c NullNumberCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
+}
+
+// Min is MIN of the column, as a Term. NULL when no row has a value.
+func (c NullNumberCol[E, V]) Min[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}
+}
+
+// Max is MAX of the column, as a Term. NULL when no row has a value.
+func (c NullNumberCol[E, V]) Max[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}
+}
+
+// Sum is SUM of the column, as a Term. NULL when no row has a value.
+func (c NullNumberCol[E, V]) Sum[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermSum, engine.ColumnTerm(c.I))}
+}
+
+// Avg is AVG of the column, as a Term. NULL when no row has a value.
+func (c NullNumberCol[E, V]) Avg[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermAvg, engine.ColumnTerm(c.I))}
 }
 
 // Set sets the column to v.
@@ -657,6 +797,26 @@ func (c NullStringCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
 // Between is column BETWEEN lo AND hi.
 func (c NullStringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
+}
+
+// Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
+func (c NullStringCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
+}
+
+// CountDistinct is COUNT(DISTINCT column), as a Term.
+func (c NullStringCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
+}
+
+// Min is MIN of the column, as a Term. NULL when no row has a value.
+func (c NullStringCol[E, V]) Min[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}
+}
+
+// Max is MAX of the column, as a Term. NULL when no row has a value.
+func (c NullStringCol[E, V]) Max[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}
 }
 
 // Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character: a \ in a pattern matches a backslash). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do. It takes a string, not the column's type, because a pattern is not a value of the column.

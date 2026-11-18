@@ -329,14 +329,17 @@ var genericObjects = []struct {
 	// error] cost each package holding a *DB its instantiation, 3382 bytes
 	// more for one variable of UpdateQuery, DeleteQuery or InsertQuery.
 	//
-	// Projections (Query.Project, GroupBy, Having and Rows, and Term) took
-	// entityDescUse from 781242 to 808034 bytes, entityDescHooks from 858774
-	// to 891520 and entityDescMixin from 903830 to 936586, about 3.4% each.
+	// Projections (Query.Select, SelectRaw, GroupBy, Having and Rows, Term and
+	// the aggregate methods of the handles) took entityDescUse from 781242 to
+	// 811916 bytes, entityDescHooks from 858774 to 895406 and entityDescMixin
+	// from 903830 to 940492, about 4% each. A handle variable's row did not
+	// move: a method on every handle type, as a typed Select would need, cost
+	// about 10 KB in each.
 	// The Query and Statement rows grew by 124 bytes each. About 12 KB of
 	// the growth is in the engine's types and bodies that the entity's
 	// package reaches, and the rest in the new methods of Query.
-	{"entityDescUse", "", entityDescUseSrc, 818176},       // measured 808034
-	{"entityDescHooks", "", entityDescHooksBound, 903168}, // measured 891520
+	{"entityDescUse", "", entityDescUseSrc, 818176},       // measured 811916
+	{"entityDescHooks", "", entityDescHooksBound, 903168}, // measured 895406
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own
@@ -344,7 +347,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 948224}, // measured 936586
+	{"entityDescMixin", "", entityDescMixinSrc, 948224}, // measured 940492
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's

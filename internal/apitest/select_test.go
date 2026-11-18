@@ -18,19 +18,19 @@ type inv = testmodel.Invoice
 // the paid ones, over 100 in all, biggest first.
 func report(db *velox.DB) velox.Query[inv] {
 	return db.Query[inv]().Where(I.Paid.EQ(true)).
-		Project(velox.Pick(I.OrgID), velox.Pick(I.Total).Sum(), velox.CountAll[inv]()).
-		GroupBy(velox.Pick(I.OrgID)).
-		Having(velox.Expr[inv]("? > ?", velox.Pick(I.Total).Sum(), 100)).
-		OrderBy(velox.Pick(I.Total).Sum().Desc()).
+		Select(I.OrgID, I.Total.Sum(), velox.CountAll[inv]()).
+		GroupBy(I.OrgID).
+		Having(velox.Expr[inv]("? > ?", I.Total.Sum(), 100)).
+		OrderBy(I.Total.Sum().Desc()).
 		Limit(10)
 }
 
-// TestProjectSQL: the select list, GROUP BY, HAVING and ORDER BY of a
+// TestSelectSQL: the select list, GROUP BY, HAVING and ORDER BY of a
 // projection, in each dialect, with the arguments in the order they are
 // written. An ordering by an expression puts NULL last, ascending, as every
 // ordering does: where the database sorts it first, a term of IS NULL goes
 // before.
-func TestProjectSQL(t *testing.T) {
+func TestSelectSQL(t *testing.T) {
 	for _, tc := range []struct {
 		d    velox.Dialect
 		sql  string
@@ -63,14 +63,14 @@ func TestProjectSQL(t *testing.T) {
 	}
 }
 
-// TestProjectTerms: each kind of term renders, aggregates over expressions
+// TestSelectTerms: each kind of term renders, aggregates over expressions
 // and DISTINCT too, and an Expr takes a term in place of a column.
-func TestProjectTerms(t *testing.T) {
+func TestSelectTerms(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	month := velox.Calc[inv]("EXTRACT(MONTH FROM ?)", I.CreatedAt)
 	net := velox.Calc[inv]("? * ?", I.Total, 0.9)
 	text, args, err := db.Query[inv]().
-		Project(month, net.Sum(), velox.Pick(I.OrgID).CountDistinct(), velox.Pick(I.Note).Count(), net.Avg(), velox.Pick(I.Total).Min(), velox.Pick(I.Total).Max()).
+		Select(month, net.Sum(), I.OrgID.CountDistinct(), I.Note.Count(), net.Avg(), I.Total.Min(), I.Total.Max()).
 		GroupBy(month).
 		Limit(5).SQL(ctx)
 	want := `SELECT (EXTRACT(MONTH FROM "created_at")), SUM(("total" * $1)), COUNT(DISTINCT "org_id"), COUNT("note"), AVG(("total" * $2)), MIN("total"), MAX("total") ` +
@@ -110,15 +110,15 @@ func TestOrderByExpression(t *testing.T) {
 	}
 }
 
-// TestProjectKeepsPolicy: a projection reads under the Read policy, the
+// TestSelectKeepsPolicy: a projection reads under the Read policy, the
 // scope and the interceptors, as every query does, and a refused caller
 // sends nothing.
-func TestProjectKeepsPolicy(t *testing.T) {
+func TestSelectKeepsPolicy(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openPolicied(velox.Postgres, e)
 	q := db.Query[testmodel.Ticket]().
-		Project(velox.Pick(Tk.Owner), velox.CountAll[testmodel.Ticket]()).
-		GroupBy(velox.Pick(Tk.Owner)).Limit(10)
+		Select(Tk.Owner, velox.CountAll[testmodel.Ticket]()).
+		GroupBy(Tk.Owner).Limit(10)
 	for row, err := range q.Rows(asUser("ann")) {
 		_, _ = row, err
 	}
@@ -134,9 +134,9 @@ func TestProjectKeepsPolicy(t *testing.T) {
 	}
 }
 
-// TestProjectRows: the rows come back by position, as the database reports
+// TestSelectRows: the rows come back by position, as the database reports
 // them, on a real SQLite database.
-func TestProjectRows(t *testing.T) {
+func TestSelectRows(t *testing.T) {
 	db := connectInvoices(t, ":memory:")
 	type row struct {
 		org     int64
@@ -145,8 +145,8 @@ func TestProjectRows(t *testing.T) {
 	}
 	var got []row
 	q := db.Query[inv]().
-		Project(velox.Pick(I.OrgID), velox.CountAll[inv](), velox.Calc[inv]("MAX(?)", I.Number)).
-		GroupBy(velox.Pick(I.OrgID)).Limit(10)
+		Select(I.OrgID, velox.CountAll[inv](), velox.Calc[inv]("MAX(?)", I.Number)).
+		GroupBy(I.OrgID).Limit(10)
 	for r, err := range q.Rows(ctx) {
 		if err != nil {
 			t.Fatal(err)
@@ -169,13 +169,13 @@ func TestProjectRows(t *testing.T) {
 	}
 }
 
-// TestProjectRefused: a projection does not mix with what reads entities, and
+// TestSelectRefused: a projection does not mix with what reads entities, and
 // a malformed one fails before anything is sent.
-func TestProjectRefused(t *testing.T) {
+func TestSelectRefused(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	base := func() velox.Query[inv] {
-		return db.Query[inv]().Project(velox.Pick(I.OrgID)).Limit(5)
+		return db.Query[inv]().Select(I.OrgID).Limit(5)
 	}
 	for _, tc := range []struct {
 		name string
@@ -199,30 +199,30 @@ func TestProjectRefused(t *testing.T) {
 		{"Omit", func() error { return rowsErr(base().Omit(I.Note)) }, "Omit"},
 		{"With", func() error { return rowsErr(base().With(I.Items)) }, "With"},
 		{"Join", func() error {
-			return rowsErr(db.Query[testmodel.Ticket]().Project(velox.Pick(Tk.Owner)).Join(Tk.Invoice).Limit(5))
+			return rowsErr(db.Query[testmodel.Ticket]().Select(Tk.Owner).Join(Tk.Invoice).Limit(5))
 		}, "Join"},
 		{"After", func() error { return rowsErr(base().After(&inv{ID: 1})) }, "After"},
 		{"ForUpdate", func() error { return rowsErr(base().ForUpdate()) }, "lock"},
-		{"no terms", func() error { return rowsErr(db.Query[inv]().Project().Limit(5)) }, "no terms"},
-		{"GroupBy without Project", func() error { return rowsErr(db.Query[inv]().GroupBy(velox.Pick(I.OrgID)).Limit(5)) }, "Project"},
-		{"Having without Project", func() error {
+		{"no terms", func() error { return rowsErr(db.Query[inv]().Select().Limit(5)) }, "no terms"},
+		{"GroupBy without Select", func() error { return rowsErr(db.Query[inv]().GroupBy(I.OrgID).Limit(5)) }, "Select"},
+		{"Having without Select", func() error {
 			return rowsErr(db.Query[inv]().Having(velox.Expr[inv]("? > 1", I.Total)).Limit(5))
-		}, "Project"},
-		{"no Limit", func() error { return rowsErr(db.Query[inv]().Project(velox.Pick(I.OrgID))) }, "Limit"},
+		}, "Select"},
+		{"no Limit", func() error { return rowsErr(db.Query[inv]().Select(I.OrgID)) }, "Limit"},
 		{"aggregate of an aggregate", func() error {
-			return rowsErr(db.Query[inv]().Project(velox.Pick(I.Total).Sum().Max()).Limit(5))
+			return rowsErr(db.Query[inv]().Select(I.Total.Sum().Max()).Limit(5))
 		}, "aggregate"},
 		{"a bad expression", func() error {
-			return rowsErr(db.Query[inv]().Project(velox.Calc[inv]("(SELECT 1)")).Limit(5))
+			return rowsErr(db.Query[inv]().Select(velox.Calc[inv]("(SELECT 1)")).Limit(5))
 		}, "SELECT"},
 		{"a column of another entity", func() error {
-			return rowsErr(db.Query[inv]().Project(velox.Calc[inv]("?", testmodel.Tickets.ID)).Limit(5))
+			return rowsErr(db.Query[inv]().Select(velox.Calc[inv]("?", testmodel.Tickets.ID)).Limit(5))
 		}, "another entity"},
 		{"a term of another entity", func() error {
-			return rowsErr(db.Query[inv]().Project(velox.Calc[inv]("?", velox.Pick(Tk.ID))).Limit(5))
+			return rowsErr(db.Query[inv]().Select(velox.Calc[inv]("?", Tk.ID)).Limit(5))
 		}, "another entity"},
 		{"an encoded column", func() error {
-			return rowsErr(db.Query[fixture.JDoc]().Project(velox.Calc[fixture.JDoc]("?", fixture.JDocs.Attrs)).Limit(5))
+			return rowsErr(db.Query[fixture.JDoc]().Select(velox.Calc[fixture.JDoc]("?", fixture.JDocs.Attrs)).Limit(5))
 		}, "encoded"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -246,26 +246,26 @@ func rowsErr[E any](q velox.Query[E]) error {
 	return nil
 }
 
-// TestProjectRenderCache: the same shape with other values renders alike, and
+// TestSelectRenderCache: the same shape with other values renders alike, and
 // another aggregate or column renders apart.
-func TestProjectRenderCache(t *testing.T) {
+func TestSelectRenderCache(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	sqlOf := func(term velox.Term[inv], v any) (string, []any) {
 		t.Helper()
-		text, args, err := db.Query[inv]().Project(term).
+		text, args, err := db.Query[inv]().Select(term).
 			Having(velox.Expr[inv]("? > ?", term, v)).Limit(1).SQL(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return text, args
 	}
-	a, argsA := sqlOf(velox.Pick(I.Total).Sum(), 1)
-	b, argsB := sqlOf(velox.Pick(I.Total).Sum(), 2)
+	a, argsA := sqlOf(I.Total.Sum(), 1)
+	b, argsB := sqlOf(I.Total.Sum(), 2)
 	if a != b || argsA[0] != 1 || argsB[0] != 2 {
 		t.Errorf("same shape: %s %v / %s %v", a, argsA, b, argsB)
 	}
 	seen := map[string]bool{a: true}
-	for _, other := range []velox.Term[inv]{velox.Pick(I.Total).Avg(), velox.Pick(I.OrgID).Sum(), velox.Pick(I.Total).Max(), velox.CountAll[inv]()} {
+	for _, other := range []velox.Term[inv]{I.Total.Avg(), I.OrgID.Sum(), I.Total.Max(), velox.CountAll[inv]()} {
 		o, _ := sqlOf(other, 1)
 		if seen[o] {
 			t.Errorf("two shapes render alike: %s", o)
@@ -274,9 +274,9 @@ func TestProjectRenderCache(t *testing.T) {
 	}
 }
 
-// TestRewriteHookCannotChangeProject: the scan reads the terms' columns by
+// TestRewriteHookCannotChangeSelect: the scan reads the terms' columns by
 // position, so a Rewrite hook that changes them is refused.
-func TestRewriteHookCannotChangeProject(t *testing.T) {
+func TestRewriteHookCannotChangeSelect(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		if st.Project != nil {
@@ -290,5 +290,65 @@ func TestRewriteHookCannotChangeProject(t *testing.T) {
 	}
 	if got == nil || !strings.Contains(got.Error(), "Project") || e.Calls != 0 {
 		t.Errorf("a hook that empties the terms: %v, %d statements sent", got, e.Calls)
+	}
+}
+
+// TestSelectHandleAggregates: a column handle is a term as it is, and its
+// aggregates are the ones its type allows: Count on every scalar handle, Min
+// and Max on an ordered, number or text one, Sum and Avg on a number one.
+func TestSelectHandleAggregates(t *testing.T) {
+	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	text, _, err := db.Query[inv]().Limit(1).Select(
+		I.ID, I.Total.Sum(), I.Total.Avg(), I.Total.Min(), I.Number.Max(),
+		I.Paid.Count(), I.Number.CountDistinct(), I.PaidAt.Max(), I.PaidAt.Count(),
+	).SQL(ctx)
+	want := `SELECT "id", SUM("total"), AVG("total"), MIN("total"), MAX("number"), COUNT("paid"), COUNT(DISTINCT "number"), MAX("paid_at"), COUNT("paid_at") FROM "invoices" LIMIT $1`
+	if err != nil || text != want {
+		t.Errorf("got %s %v\nwant %s", text, err, want)
+	}
+}
+
+// TestSelectRaw: SelectRaw is Select of one Calc, and keeps the policy
+// like it: the text is guarded, and the statement's conditions are kept.
+func TestSelectRaw(t *testing.T) {
+	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	got, _, err := db.Query[inv]().Where(I.Paid.EQ(true)).Limit(3).
+		SelectRaw("LOWER(?) || ?", I.Number, "!").SQL(ctx)
+	want := `SELECT (LOWER("number") || $1) FROM "invoices" WHERE "paid" = $2 LIMIT $3`
+	if err != nil || got != want {
+		t.Errorf("got %s %v\nwant %s", got, err, want)
+	}
+	// With Select before it, it adds a term.
+	got, _, err = db.Query[inv]().Limit(3).Select(I.ID).SelectRaw("? * 2", I.Total).SQL(ctx)
+	want = `SELECT "id", ("total" * 2) FROM "invoices" LIMIT $1`
+	if err != nil || got != want {
+		t.Errorf("got %s %v\nwant %s", got, err, want)
+	}
+	// A subquery in the text is refused, as Expr refuses it.
+	_, _, err = db.Query[inv]().Limit(3).SelectRaw("(SELECT 1)").SQL(ctx)
+	if err == nil || !strings.Contains(err.Error(), "SELECT") {
+		t.Errorf("a subquery in SelectRaw: %v", err)
+	}
+}
+
+// TestSelectRefusesWhatIsNoTerm: Select and GroupBy take a handle or a Term
+// of the query's entity; anything else fails the statement before it is
+// sent.
+func TestSelectRefusesWhatIsNoTerm(t *testing.T) {
+	e := &fakeconn.Exec{}
+	db := openFake(velox.Postgres, e)
+	for name, q := range map[string]velox.Query[inv]{
+		"a string":          db.Query[inv]().Limit(1).Select("org_id"),
+		"a nil":             db.Query[inv]().Limit(1).Select(nil),
+		"a foreign handle":  db.Query[inv]().Limit(1).Select(Tk.Owner),
+		"a foreign term":    db.Query[inv]().Limit(1).Select(Tk.ID.Sum()),
+		"a foreign GroupBy": db.Query[inv]().Limit(1).Select(I.ID).GroupBy(Tk.Owner),
+	} {
+		if _, _, err := q.SQL(ctx); err == nil {
+			t.Errorf("%s: no error", name)
+		}
+		if err := rowsErr(q); err == nil || e.Calls != 0 {
+			t.Errorf("%s: Rows: %v after %d statements", name, err, e.Calls)
+		}
 	}
 }
