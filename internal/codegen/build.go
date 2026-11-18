@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -594,6 +596,58 @@ func (b *builder) indexMethod(e *Entity, i int, ix *Index, raw string) bool {
 	return good
 }
 
+// opClassName is an operator class as CREATE INDEX writes it: a name, or a
+// schema's and a name.
+var opClassName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_$]*(\.[A-Za-z_][A-Za-z0-9_$]*)?$`)
+
+// indexKeys resolves the Desc and OpClass of the index i of e to columns, by
+// the names of the fields and edges the index covers, which colOf maps to
+// their columns (rules 60 to 62), and reports whether they are sound. Desc
+// ends in the order of the index's columns.
+func (b *builder) indexKeys(e *Entity, i int, ix *Index, li *loadjson.Index, colOf map[string]string) bool {
+	good := true
+	at := indexLoc(i, ix)
+	desc := map[string]bool{}
+	for _, name := range li.Desc {
+		col, ok := colOf[name]
+		if !ok {
+			b.fail(60, e.Name, at, "has Desc on %q, which it does not cover", name)
+			good = false
+			continue
+		}
+		desc[col] = true
+	}
+	if len(desc) > 0 && ix.Method != "" {
+		b.fail(61, e.Name, at, "has Desc with Method %q, and only btree has an order", ix.Method)
+		good = false
+	}
+	for _, c := range ix.Columns {
+		if desc[c] && !slices.Contains(ix.Desc, c) {
+			ix.Desc = append(ix.Desc, c)
+		}
+	}
+	for _, o := range li.OpClass {
+		col, ok := colOf[o.Name]
+		switch {
+		case !ok:
+			b.fail(60, e.Name, at, "has OpClass on %q, which it does not cover", o.Name)
+			good = false
+		case !opClassName.MatchString(o.Class):
+			b.fail(62, e.Name, at, "has OpClass %q for %q, which is not an operator class name, as CREATE INDEX writes one", o.Class, o.Name)
+			good = false
+		case ix.OpClass[col] != "":
+			b.fail(62, e.Name, at, "gives %q two operator classes", o.Name)
+			good = false
+		default:
+			if ix.OpClass == nil {
+				ix.OpClass = map[string]string{}
+			}
+			ix.OpClass[col] = o.Class
+		}
+	}
+	return good
+}
+
 // indexes resolves the indexes of every entity (step 5), and records those an
 // index rule refuses: their names are rule 43's or partial, so step 5b does
 // not compare them.
@@ -609,6 +663,7 @@ func (b *builder) indexes() {
 				b.fail(25, e.Name, indexLoc(i, ix), "names no fields or edges")
 			}
 			good = b.indexMethod(e, i, ix, li.Method) && good
+			colOf := map[string]string{} // the names the index covers, by column
 			for _, name := range li.Fields {
 				f := e.Field(name)
 				if f == nil {
@@ -621,6 +676,7 @@ func (b *builder) indexes() {
 					good = false
 				}
 				ix.Columns = append(ix.Columns, f.Column)
+				colOf[name] = f.Column
 			}
 			for _, name := range li.Edges {
 				s := n.edge(name)
@@ -635,8 +691,12 @@ func (b *builder) indexes() {
 					good = false
 				default:
 					ix.Columns = append(ix.Columns, s.ed.Rel.Columns[0])
+					if _, taken := colOf[name]; !taken {
+						colOf[name] = s.ed.Rel.Columns[0]
+					}
 				}
 			}
+			good = b.indexKeys(e, i, ix, li, colOf) && good
 			ix.Name, ix.Derived = cmp.Or(li.StorageKey, indexName(e.Name, ix.Columns)), li.StorageKey == ""
 			e.Indexes = append(e.Indexes, ix)
 			ok = append(ok, good)
@@ -822,8 +882,8 @@ func (b *builder) namespaces() {
 }
 
 // repeats reports whether the index i of e repeats an earlier one (rule 43),
-// and reports it: the same columns in order, the same Unique, Where and
-// Method, among the declared indexes, mixins' included. A field's Unique is not
+// and reports it: the same columns in order, the same Unique, Where, Method,
+// Desc and OpClass, among the declared indexes, mixins' included. A field's Unique is not
 // compared. ok tells the indexes no earlier rule refuses; the others are
 // skipped.
 func (b *builder) repeats(e *Entity, i int, ok []bool) bool {
@@ -832,7 +892,8 @@ func (b *builder) repeats(e *Entity, i int, ok []bool) bool {
 		return false
 	}
 	for j, prev := range e.Indexes[:i] {
-		if ok[j] && ix.Unique == prev.Unique && ix.Where == prev.Where && ix.Method == prev.Method && slices.Equal(ix.Columns, prev.Columns) {
+		if ok[j] && ix.Unique == prev.Unique && ix.Where == prev.Where && ix.Method == prev.Method && slices.Equal(ix.Columns, prev.Columns) &&
+			slices.Equal(ix.Desc, prev.Desc) && maps.Equal(ix.OpClass, prev.OpClass) {
 			b.fail(43, e.Name, indexLoc(i, ix), "repeats index %d", j)
 			return true
 		}

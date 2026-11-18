@@ -188,7 +188,21 @@ column, an array or a tsvector as it is. On a text or number column it needs an
 extension that gives GIN an operator class for the type, `btree_gin` or
 `pg_trgm`: velox does not create extensions, so add `CREATE EXTENSION` to the
 baseline by hand, and without it the index fails when it is applied, not in
-velox-gen. An entity's primary key is always
+velox-gen.
+
+Also on PostgreSQL, `.Desc("created_at")` sorts a key descending, which an
+`ORDER BY name, created_at DESC` needs (a single column is read backwards
+as it is), and `.OpClass("title", "gin_trgm_ops")` sets a key's operator class:
+
+```go
+index.Fields("title").Method("gin").OpClass("title", "gin_trgm_ops")
+index.Fields("name", "created_at").Desc("created_at")
+```
+
+Name only an operator class that is not its type's default: PostgreSQL reads a
+default one back as none, and the schema would differ from the database for
+ever ([ADR 0071](decisions/0071-index-desc-opclass.md)). `Desc` is a btree
+index's. An entity's primary key is always
 one column; for a natural key, keep `id` and add a unique index.
 
 ### Mixins

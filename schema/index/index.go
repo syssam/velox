@@ -59,6 +59,29 @@ func (b *Builder) Where(sql string) *Builder { b.d.Where = sql; return b }
 // and a Unique index of any method but btree, which PostgreSQL refuses.
 func (b *Builder) Method(name string) *Builder { b.d.Method = name; return b }
 
+// Desc makes the named fields or edges of the index sort descending, on
+// PostgreSQL, where it serves an ORDER BY that mixes directions, as
+// ORDER BY a, b DESC. A single column in either direction needs no Desc: a
+// btree index is read backwards. Each name is one the index covers, and the
+// index is btree: no other method has an order. velox-gen refuses a Desc on
+// MySQL and SQLite.
+func (b *Builder) Desc(names ...string) *Builder {
+	b.d.Desc = append(b.d.Desc, names...)
+	return b
+}
+
+// OpClass sets the operator class of one field or edge of the index, on
+// PostgreSQL, as the class is written in CREATE INDEX: "gin_trgm_ops" for a
+// trigram index over text, "jsonb_path_ops" for a smaller GIN index over
+// jsonb. Name only a class that is not its type's default; PostgreSQL reads a
+// default one back as none, and the index would then differ from the schema
+// for ever. A class of an extension needs the extension, which velox does not
+// create. velox-gen refuses an OpClass on MySQL and SQLite.
+func (b *Builder) OpClass(name, class string) *Builder {
+	b.d.OpClass = append(b.d.OpClass, desc.IndexOpClass{Name: name, Class: class})
+	return b
+}
+
 // Annotations attaches annotations to the index.
 func (b *Builder) Annotations(as ...schema.Annotation) *Builder {
 	b.d.Annotations = append(b.d.Annotations, as...)

@@ -30,6 +30,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   (btree, hash, gin, gist, spgist, brin), and a GIN index may cover a JSON
   field. `migrate.Index` has a `Method`, and `Inspect` reads it instead of noting
   it (decision 0069).
+- `index.Fields(...).Desc("created_at")` sorts an index key descending and
+  `.OpClass("title", "gin_trgm_ops")` sets its operator class, both on
+  PostgreSQL. `migrate.Index` has `Desc` and `OpClass`, and `Inspect` reads
+  them instead of noting them (decision 0071).
 - `velox-gen -plugin velox-graphql:only=enums` writes only the GraphQL
   marshalers of velox-gen's enum types, for an application that writes its
   own SDL and binds it with gqlgen's autobind: `open` goes out as `OPEN` and

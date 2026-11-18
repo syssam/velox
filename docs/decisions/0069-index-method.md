@@ -46,10 +46,11 @@ method, as `Where` is, and not an annotation.
 - A port from ent or the old velox changes
   `Annotations(sqlschema.IndexType("GIN"))` to `.Method("gin")`, one
   mechanical substitution.
-- The operator class, DESC, INCLUDE, a collation and NULLS NOT DISTINCT stay
-  what the model cannot hold: `Inspect` still notes them. A GIN index over a
-  column with no default operator class, such as text with `gin_trgm_ops`,
-  waits for the operator class.
+- INCLUDE, a collation and NULLS NOT DISTINCT stay what the model cannot hold:
+  `Inspect` still notes them. The operator class and DESC were left too, and
+  [0071](0071-index-desc-opclass.md) holds them: a GIN index over a column with
+  no default operator class, such as text with `gin_trgm_ops`, is
+  `.OpClass("column", "gin_trgm_ops")`.
 - The generated code's shape does not change, so `GeneratedCodeIsVersionN`
   stays. `schema.json` and `velox.json` gain an optional `method` field, which
   an older reader never sees.

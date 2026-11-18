@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -139,7 +140,7 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 	var keys [][]string // the leading columns of the non-partial indexes, for fkIndexed
 	var at []place      // the element that makes each index, for the checks
 	for i, ix := range e.Indexes {
-		tb.Indexes = append(tb.Indexes, migrate.Index{Name: t.symbol(ix.Name, ix.Derived), Columns: slices.Clone(ix.Columns), Unique: ix.Unique, Where: ix.Where, Method: ix.Method, Pos: ix.Pos})
+		tb.Indexes = append(tb.Indexes, migrate.Index{Name: t.symbol(ix.Name, ix.Derived), Columns: slices.Clone(ix.Columns), Unique: ix.Unique, Where: ix.Where, Method: ix.Method, Desc: slices.Clone(ix.Desc), OpClass: maps.Clone(ix.OpClass), Pos: ix.Pos})
 		at = append(at, place{e, rankIndex, i, indexLoc(i, ix)})
 		if ix.Where == "" {
 			keys = append(keys, ix.Columns)

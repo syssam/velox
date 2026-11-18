@@ -698,7 +698,7 @@ func (d *differ) fromExpr(ref TableRef, expr string) string {
 }
 
 func sameIndex(a, b Index) bool {
-	return a.Unique == b.Unique && a.Where == b.Where && a.Method == b.Method && slices.Equal(a.Columns, b.Columns)
+	return a.Unique == b.Unique && a.Where == b.Where && a.sameKeys(b)
 }
 
 func sameForeignKey(a, b ForeignKey) bool {

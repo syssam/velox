@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -454,8 +455,7 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string][]string{
-		"p.p_desc":    {"DESC", "NULLS FIRST"},
-		"p.p_ops":     {"operator class"},
+		"p.p_desc":    {"NULLS FIRST"},
 		"p.p_coll":    {"collation"},
 		"p.p_incl":    {"INCLUDE"},
 		"p.p_expr":    {"expression"},
@@ -505,6 +505,12 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		indexes = append(indexes, ix.Name)
 		if want := map[string]string{"p_hash": "hash"}[ix.Name]; ix.Method != want {
 			t.Errorf("index %s: method %q, want %q", ix.Name, ix.Method, want)
+		}
+		// DESC and a class that is not the type's default are the model's.
+		wantDesc := map[string][]string{"p_desc": {"b"}}[ix.Name]
+		wantOps := map[string]map[string]string{"p_ops": {"a": "text_pattern_ops"}}[ix.Name]
+		if !slices.Equal(ix.Desc, wantDesc) || !maps.Equal(ix.OpClass, wantOps) {
+			t.Errorf("index %s: Desc %v, OpClass %v, want %v, %v", ix.Name, ix.Desc, ix.OpClass, wantDesc, wantOps)
 		}
 	}
 	wantIndexes := []string{"p_b_c", "p_coll", "p_desc", "p_hash", "p_incl", "p_ops", "p_plain"}

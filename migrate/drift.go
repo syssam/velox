@@ -185,7 +185,7 @@ func (c *drifter) table(t, u *Table) {
 		c.columnDefault(t, &t.Columns[i], u.column(t.Columns[i].Name))
 	}
 	ti, _ := pair(t.Indexes, u.Indexes, indexName, func(a, b Index) bool {
-		return a.Unique == b.Unique && a.Method == b.Method && slices.Equal(a.Columns, b.Columns) && c.sameText(a.Where, b.Where)
+		return a.Unique == b.Unique && a.sameKeys(b) && c.sameText(a.Where, b.Where)
 	})
 	for i := range t.Indexes {
 		c.index(t, u, &t.Indexes[i], at(u.Indexes, ti[i]))
@@ -286,7 +286,7 @@ func (c *drifter) index(t, u *Table, ti, ui *Index) {
 		c.warn(indexObject(t.Ref(), *ti), "the database has it as %s and %s as %s; a drop renders %s, which fails", inDB, c.other, inSnap, drop)
 	}
 	if ui == nil || ti.Where == ui.Where || ti.Where == "" || ui.Where == "" ||
-		ti.Unique != ui.Unique || ti.Method != ui.Method || !slices.Equal(ti.Columns, ui.Columns) {
+		ti.Unique != ui.Unique || !ti.sameKeys(*ui) {
 		return
 	}
 	same, parsed := c.same(ti.Where, ui.Where)
@@ -358,7 +358,7 @@ func (c *drifter) adoptWhere(ti *Index, u *Table) {
 		return
 	}
 	for _, ui := range u.Indexes {
-		if ui.Unique == ti.Unique && ui.Method == ti.Method && slices.Equal(ui.Columns, ti.Columns) && ui.Where != "" && c.sameText(ti.Where, ui.Where) {
+		if ui.Unique == ti.Unique && ui.sameKeys(*ti) && ui.Where != "" && c.sameText(ti.Where, ui.Where) {
 			ti.Where = ui.Where
 			return
 		}
@@ -379,7 +379,7 @@ func (c *drifter) names(t, u *Table) {
 			continue
 		}
 		for _, ui := range u.Indexes {
-			if ui.Name != "" && t.index(ui.Name) == nil && ti.Unique == ui.Unique && ti.Method == ui.Method && slices.Equal(ti.Columns, ui.Columns) && c.sameText(ti.Where, ui.Where) {
+			if ui.Name != "" && t.index(ui.Name) == nil && ti.Unique == ui.Unique && ti.sameKeys(ui) && c.sameText(ti.Where, ui.Where) {
 				ti.Name = ui.Name
 				break
 			}

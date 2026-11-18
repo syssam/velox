@@ -212,9 +212,14 @@ type Edge struct {
 type Index struct {
 	Fields, Edges []string // the columns and the edges whose foreign keys the index covers
 	Unique        bool
-	StorageKey    string // the index name
-	Where         string // a partial index's predicate, on PostgreSQL and SQLite
-	Method        string // the PostgreSQL access method; "" for btree
+	StorageKey    string         // the index name
+	Where         string         // a partial index's predicate, on PostgreSQL and SQLite
+	Method        string         // the PostgreSQL access method; "" for btree
+	Desc          []string       // the names, of Fields and Edges, that sort descending
+	OpClass       []IndexOpClass // an operator class for each of the names it gives one
 	Annotations   []Annotation
 	PC            uintptr // the constructor's call, for PosOf
 }
+
+// IndexOpClass is the operator class of one name of an index's Fields or Edges.
+type IndexOpClass struct{ Name, Class string }
