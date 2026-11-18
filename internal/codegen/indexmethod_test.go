@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
@@ -20,10 +21,10 @@ func (imGin) Fields() []schema.Field {
 }
 func (imGin) Indexes() []schema.Index {
 	return []schema.Index{
-		index.Fields("attrs").Method("GIN").StorageKey("ix_attrs_gin"),
-		index.Fields("tags").Method("gin").StorageKey("ix_tags_gin"),
-		index.Fields("name").Method("hash").StorageKey("ix_name_hash"),
-		index.Fields("name").Method("btree").StorageKey("ix_name_btree"),
+		index.Fields("attrs").Annotations(sqlschema.IndexType("GIN")).StorageKey("ix_attrs_gin"),
+		index.Fields("tags").Annotations(sqlschema.IndexType("gin")).StorageKey("ix_tags_gin"),
+		index.Fields("name").Annotations(sqlschema.IndexType("hash")).StorageKey("ix_name_hash"),
+		index.Fields("name").Annotations(sqlschema.IndexType("btree")).StorageKey("ix_name_btree"),
 	}
 }
 
@@ -36,18 +37,18 @@ func (imBad) Fields() []schema.Field {
 }
 func (imBad) Indexes() []schema.Index {
 	return []schema.Index{
-		index.Fields("name").Method("rtree"),
-		index.Fields("name").Unique().Method("hash").StorageKey("ix_name_uhash"),
-		index.Fields("name").Unique().Method("btree").StorageKey("ix_name_ubtree"),
-		index.Fields("attrs").Method("btree").StorageKey("ix_attrs_btree"),
+		index.Fields("name").Annotations(sqlschema.IndexType("rtree")),
+		index.Fields("name").Unique().Annotations(sqlschema.IndexType("hash")).StorageKey("ix_name_uhash"),
+		index.Fields("name").Unique().Annotations(sqlschema.IndexType("btree")).StorageKey("ix_name_ubtree"),
+		index.Fields("attrs").Annotations(sqlschema.IndexType("btree")).StorageKey("ix_attrs_btree"),
 	}
 }
 
 func TestIndexMethodRules(t *testing.T) {
 	_, err := build(t, imBad{})
-	want := `schema imBad: index 3: field "attrs" is JSON, which no index can cover but a GIN one; give the index Method("gin")
-schema imBad: index 0: has Method "rtree"; PostgreSQL's are btree, hash, gin, gist, spgist, brin
-schema imBad: index 1: is Unique with Method "hash", and only btree can enforce uniqueness`
+	want := `schema imBad: index 3: field "attrs" is JSON, which no index can cover but a GIN one; give the index sqlschema.IndexType("GIN")
+schema imBad: index 0: has sqlschema.IndexType "rtree"; PostgreSQL's are btree, hash, gin, gist, spgist, brin
+schema imBad: index 1: is Unique with sqlschema.IndexType "hash", and only btree can enforce uniqueness`
 	if got := plain(err); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -81,8 +82,8 @@ func TestIndexMethodRefusedOutsidePostgres(t *testing.T) {
 			continue
 		}
 		for _, w := range []string{
-			`index 0: Method "gin" is PostgreSQL's; ` + d.String() + ` has no choice of index method`,
-			`index 2: Method "hash" is PostgreSQL's`,
+			`index 0: the index type "gin" is PostgreSQL's; ` + d.String() + ` has no choice of index type`,
+			`index 2: the index type "hash" is PostgreSQL's`,
 		} {
 			if got := plain(err); !strings.Contains(got, w) {
 				t.Errorf("%v: %q not in\n%s", d, w, got)
@@ -103,7 +104,7 @@ func (imBoth) Fields() []schema.Field {
 func (imBoth) Indexes() []schema.Index {
 	return []schema.Index{
 		index.Fields("name").StorageKey("ix_both_btree"),
-		index.Fields("name").Method("hash").StorageKey("ix_both_hash"),
+		index.Fields("name").Annotations(sqlschema.IndexType("hash")).StorageKey("ix_both_hash"),
 	}
 }
 

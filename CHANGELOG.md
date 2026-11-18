@@ -33,9 +33,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   Each `?` is a column handle of E or a bound value; text that holds a
   semicolon, a comment, a quote other than a plain string literal, or a
   subquery's `SELECT` is refused (ADR 0069).
-- `field.Int("seats").DBDefault("100")` sets a number's or a string's column
+- `field.Int("seats").Annotations(sqlschema.Default("100"))` sets a column
   `DEFAULT` to one SQL text on every dialect, where `SchemaDefault` takes a
-  map. velox-gen also refuses a MySQL `SchemaDefault` that is a literal on a
+  map; `DefaultExpr` and `DefaultExprs` are the old velox's too. velox-gen also refuses a MySQL `SchemaDefault` that is a literal on a
   text or blob column, which MySQL takes only as an expression
   (decision 0073).
 - `graphql.Resolvers(graphql.Map("organization", "PublicOrganization"), ...)`
@@ -43,14 +43,19 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   answer, written with `@goField(forceResolver: true)`: a type of the
   application's own SDL, or a value computed per row. A selection that holds
   one reads every column, as one of an extend type's does (decision 0071).
-- `index.Fields(...).Method("gin")` sets an index's PostgreSQL access method
+- `index.Fields(...).Annotations(sqlschema.IndexType("GIN"))` sets an index's PostgreSQL access method
   (btree, hash, gin, gist, spgist, brin), and a GIN index may cover a JSON
   field. `migrate.Index` has a `Method`, and `Inspect` reads it instead of noting
   it (decision 0070).
-- `index.Fields(...).Desc("created_at")` sorts an index key descending and
-  `.OpClass("title", "gin_trgm_ops")` sets its operator class, both on
-  PostgreSQL. `migrate.Index` has `Desc` and `OpClass`, and `Inspect` reads
+- `sqlschema.DescColumns("created_at")` sorts an index key descending and
+  `sqlschema.OpClassColumn("title", "gin_trgm_ops")` sets its operator class,
+  both annotations of an index and PostgreSQL's. `migrate.Index` has `Desc` and `OpClass`, and `Inspect` reads
   them instead of noting them (decision 0072).
+- Package `dialect/sqlschema` holds the options only a SQL database reads, with
+  the old velox's names (`IndexType`, `Desc`, `OpClass`, `Default`, ...), so one
+  schema can feed SQL, GraphQL and gRPC without SQL words in `index` and
+  `field`. `StorageParams`, `Prefix`, `PrefixColumn` and `IncludeColumns` compile
+  and velox-gen refuses them (decision 0075).
 
 - `Query.Select`, `SelectRaw`, `GroupBy`, `Having` and `Rows` read terms in
   place of an entity: column handles as they are, SQL expressions

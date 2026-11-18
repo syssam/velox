@@ -584,10 +584,10 @@ func (b *builder) indexMethod(e *Entity, i int, ix *Index, raw string) bool {
 	good := true
 	switch {
 	case ix.Method != "" && !slices.Contains(indexMethods, ix.Method):
-		b.fail(58, e.Name, indexLoc(i, ix), "has Method %q; PostgreSQL's are %s", raw, strings.Join(indexMethods, ", "))
+		b.fail(58, e.Name, indexLoc(i, ix), "has sqlschema.IndexType %q; PostgreSQL's are %s", raw, strings.Join(indexMethods, ", "))
 		good = false
 	case ix.Unique && ix.Method != "" && ix.Method != "btree":
-		b.fail(59, e.Name, indexLoc(i, ix), "is Unique with Method %q, and only btree can enforce uniqueness", ix.Method)
+		b.fail(59, e.Name, indexLoc(i, ix), "is Unique with sqlschema.IndexType %q, and only btree can enforce uniqueness", ix.Method)
 		good = false
 	}
 	if ix.Method == "btree" {
@@ -611,14 +611,14 @@ func (b *builder) indexKeys(e *Entity, i int, ix *Index, li *loadjson.Index, col
 	for _, name := range li.Desc {
 		col, ok := colOf[name]
 		if !ok {
-			b.fail(60, e.Name, at, "has Desc on %q, which it does not cover", name)
+			b.fail(60, e.Name, at, "has sqlschema.Desc on %q, which it does not cover", name)
 			good = false
 			continue
 		}
 		desc[col] = true
 	}
 	if len(desc) > 0 && ix.Method != "" {
-		b.fail(61, e.Name, at, "has Desc with Method %q, and only btree has an order", ix.Method)
+		b.fail(61, e.Name, at, "has sqlschema.Desc with IndexType %q, and only btree has an order", ix.Method)
 		good = false
 	}
 	for _, c := range ix.Columns {
@@ -630,10 +630,10 @@ func (b *builder) indexKeys(e *Entity, i int, ix *Index, li *loadjson.Index, col
 		col, ok := colOf[o.Name]
 		switch {
 		case !ok:
-			b.fail(60, e.Name, at, "has OpClass on %q, which it does not cover", o.Name)
+			b.fail(60, e.Name, at, "has sqlschema.OpClass on %q, which it does not cover", o.Name)
 			good = false
 		case !opClassName.MatchString(o.Class):
-			b.fail(62, e.Name, at, "has OpClass %q for %q, which is not an operator class name, as CREATE INDEX writes one", o.Class, o.Name)
+			b.fail(62, e.Name, at, "has sqlschema.OpClass %q for %q, which is not an operator class name, as CREATE INDEX writes one", o.Class, o.Name)
 			good = false
 		case ix.OpClass[col] != "":
 			b.fail(62, e.Name, at, "gives %q two operator classes", o.Name)
@@ -662,7 +662,7 @@ func (b *builder) indexColumns(n *node, i int, ix *Index, li *loadjson.Index) (m
 			continue
 		}
 		if f.Type == "json" && ix.Method != "gin" {
-			b.fail(42, e.Name, indexLoc(i, ix), "field %q is JSON, which no index can cover but a GIN one; give the index Method(\"gin\")", name)
+			b.fail(42, e.Name, indexLoc(i, ix), "field %q is JSON, which no index can cover but a GIN one; give the index sqlschema.IndexType(\"GIN\")", name)
 			good = false
 		}
 		ix.Columns = append(ix.Columns, f.Column)

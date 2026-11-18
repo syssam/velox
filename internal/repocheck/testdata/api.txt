@@ -862,7 +862,6 @@ func Uint64(name string) *NumberBuilder[uint64]
 func Uint8(name string) *NumberBuilder[uint8]
 promoted func (c common[B]) Annotations(as ...schema.Annotation) B
 promoted func (c common[B]) Comment(s string) B
-promoted func (c common[B]) DBDefault(sql string) B
 promoted func (c common[B]) Descriptor() *desc.Field
 promoted func (c common[B]) Immutable() B
 promoted func (c common[B]) Nillable() B
@@ -895,18 +894,39 @@ type UUIDOfBuilder[T driver.Valuer] struct { }
 
 package schema/index
 func (b *Builder) Annotations(as ...schema.Annotation) *Builder
-func (b *Builder) Desc(names ...string) *Builder
 func (b *Builder) Descriptor() *desc.Index
 func (b *Builder) Edges(edges ...string) *Builder
 func (b *Builder) Fields(fields ...string) *Builder
-func (b *Builder) Method(name string) *Builder
-func (b *Builder) OpClass(name, class string) *Builder
 func (b *Builder) StorageKey(name string) *Builder
 func (b *Builder) Unique() *Builder
 func (b *Builder) Where(sql string) *Builder
 func Edges(edges ...string) *Builder
 func Fields(fields ...string) *Builder
 type Builder struct { }
+
+package dialect/sqlschema
+const AnnotationName
+const IndexAnnotationName
+func (Annotation) Name() string
+func (IndexAnnotation) Name() string
+func (a Annotation) Merge(other schema.Annotation) schema.Annotation
+func (a IndexAnnotation) Merge(other schema.Annotation) schema.Annotation
+func Default(value string) Annotation
+func DefaultExpr(expr string) Annotation
+func DefaultExprs(exprs map[string]string) Annotation
+func Desc() *IndexAnnotation
+func DescColumns(names ...string) *IndexAnnotation
+func IncludeColumns(names ...string) *IndexAnnotation
+func IndexType(typ string) *IndexAnnotation
+func IndexTypes(types map[string]string) *IndexAnnotation
+func IndexWhere(pred string) *IndexAnnotation
+func OpClass(op string) *IndexAnnotation
+func OpClassColumn(name, op string) *IndexAnnotation
+func Prefix(n uint) *IndexAnnotation
+func PrefixColumn(name string, n uint) *IndexAnnotation
+func StorageParams(params string) *IndexAnnotation
+type Annotation struct { Default string DefaultExpr string DefaultExprs map[string]string }
+type IndexAnnotation struct { Type string Types map[string]string Where string StorageParams string Desc bool DescColumns map[string]bool OpClass string OpClassColumns map[string]string Prefix uint PrefixColumns map[string]uint IncludeColumns []string }
 
 package schema/mixin
 func (CreateTime) Fields() []schema.Field

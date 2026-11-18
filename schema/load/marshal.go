@@ -384,8 +384,12 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 		DefaultFunc:   d.DefaultFunc != nil,
 		UpdateDefault: d.UpdateDefault != nil,
 		Validators:    len(d.Validators),
-		StorageKey:    d.StorageKey, SchemaType: d.SchemaType, SchemaDefault: d.SchemaDefault, Comment: d.Comment, StructTag: d.StructTag,
+		StorageKey:    d.StorageKey, SchemaType: d.SchemaType, Comment: d.Comment, StructTag: d.StructTag,
 		Position: pos, Pos: l.pos(d.PC),
+	}
+	if out.SchemaDefault, err = lowerDefault(d); err != nil {
+		l.fail(l.pos(d.PC), where, "%v", err)
+		return nil
 	}
 	if d.GoType != nil {
 		g := loadjson.GoType(*d.GoType)
@@ -514,11 +518,12 @@ func (l *loader) buildIndex(x schema.Index, prefix string, j int, pos loadjson.P
 		return nil
 	}
 	out := &loadjson.Index{
-		Fields: d.Fields, Edges: d.Edges, Unique: d.Unique, StorageKey: d.StorageKey, Where: d.Where, Method: d.Method,
-		Desc: d.Desc, Position: pos, Pos: l.pos(d.PC),
+		Fields: d.Fields, Edges: d.Edges, Unique: d.Unique, StorageKey: d.StorageKey, Where: d.Where,
+		Position: pos, Pos: l.pos(d.PC),
 	}
-	for _, o := range d.OpClass {
-		out.OpClass = append(out.OpClass, loadjson.OpClass{Name: o.Name, Class: o.Class})
+	if err := lowerIndex(d, out); err != nil {
+		l.fail(l.pos(d.PC), "", "%sIndexes()[%d]: %v", prefix, j, err)
+		return nil
 	}
 	if out.Annotations, err = listAnnotations(d.Annotations); err != nil {
 		l.fail(l.pos(d.PC), "", "%sIndexes()[%d]: %v", prefix, j, err)

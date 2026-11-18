@@ -1,6 +1,6 @@
 # 0072. An index key may be DESC and have an operator class
 
-- Status: accepted, 2026-11-18. Completes 0070, which left both unheld.
+- Status: accepted, 2026-11-18. Completes 0070, which left both unheld. The spelling is amended by [0075](0075-sqlschema-annotations.md): `sqlschema.DescColumns("column")` and `sqlschema.OpClassColumn("column", class)`, not `.Desc` and `.OpClass`; the rules below stand.
 
 ## Context
 
@@ -51,9 +51,8 @@ both are PostgreSQL's.
 
 ## Consequences
 
-- A port from the old velox changes `Annotations(sqlschema.Desc())` to
-  `.Desc("column")` and `sqlschema.OpClass("gin_trgm_ops")` to
-  `.OpClass("column", "gin_trgm_ops")`.
+- A port from the old velox keeps `Annotations(sqlschema.Desc())` and
+  `sqlschema.OpClass("gin_trgm_ops")` (0075).
 - A class that an extension supplies (`gin_trgm_ops` is pg_trgm's) needs the
   extension, which velox does not create: it goes into the baseline by hand, as
   0070 says of `btree_gin`. Without it the index fails when applied, not in

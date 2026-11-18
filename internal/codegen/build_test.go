@@ -1594,7 +1594,7 @@ func TestJSONIndexRefused(t *testing.T) {
 		want string
 	}{
 		{uniqueJSON{}, `schema uniqueJSON: field "tags": a JSON field cannot be Unique`},
-		{indexJSON{}, `schema indexJSON: index 0: field "tags" is JSON, which no index can cover but a GIN one; give the index Method("gin")`},
+		{indexJSON{}, `schema indexJSON: index 0: field "tags" is JSON, which no index can cover but a GIN one; give the index sqlschema.IndexType("GIN")`},
 	} {
 		_, err := build(t, c.s)
 		if got := plain(err); got != c.want {
@@ -1646,8 +1646,8 @@ func (mixedDup) Indexes() []schema.Index {
 // another nor share a name.
 func TestDuplicateIndexes(t *testing.T) {
 	_, err := build(t, dupIndexes{})
-	want := `schema dupIndexes: index 10: field "tags" is JSON, which no index can cover but a GIN one; give the index Method("gin")
-schema dupIndexes: index 11: field "tags" is JSON, which no index can cover but a GIN one; give the index Method("gin")
+	want := `schema dupIndexes: index 10: field "tags" is JSON, which no index can cover but a GIN one; give the index sqlschema.IndexType("GIN")
+schema dupIndexes: index 11: field "tags" is JSON, which no index can cover but a GIN one; give the index sqlschema.IndexType("GIN")
 schema dupIndexes: index 2: repeats index 0
 schema dupIndexes: index 3: name "dupindexes_a_b" is also this schema's index 0
 schema dupIndexes: index 8: name "dup" is also this schema's index 7

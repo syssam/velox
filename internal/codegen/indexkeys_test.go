@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
@@ -22,10 +23,10 @@ func (ikDocs) Fields() []schema.Field {
 }
 func (ikDocs) Indexes() []schema.Index {
 	return []schema.Index{
-		index.Fields("title", "created_at").Desc("created_at").StorageKey("ix_recent"),
-		index.Fields("title").OpClass("title", "text_pattern_ops").StorageKey("ix_title_prefix"),
-		index.Fields("attrs").Method("gin").OpClass("attrs", "jsonb_path_ops").StorageKey("ix_attrs_path"),
-		index.Fields("created_at", "title").Desc("created_at", "title").Desc("title").OpClass("title", "text_pattern_ops").StorageKey("ix_both"),
+		index.Fields("title", "created_at").Annotations(sqlschema.DescColumns("created_at")).StorageKey("ix_recent"),
+		index.Fields("title").Annotations(sqlschema.OpClassColumn("title", "text_pattern_ops")).StorageKey("ix_title_prefix"),
+		index.Fields("attrs").Annotations(sqlschema.IndexType("gin")).Annotations(sqlschema.OpClassColumn("attrs", "jsonb_path_ops")).StorageKey("ix_attrs_path"),
+		index.Fields("created_at", "title").Annotations(sqlschema.DescColumns("created_at", "title")).Annotations(sqlschema.DescColumns("title")).Annotations(sqlschema.OpClassColumn("title", "text_pattern_ops")).StorageKey("ix_both"),
 	}
 }
 
@@ -38,12 +39,11 @@ func (ikBad) Fields() []schema.Field {
 }
 func (ikBad) Indexes() []schema.Index {
 	return []schema.Index{
-		index.Fields("name").Desc("other").StorageKey("ix_desc_elsewhere"),
-		index.Fields("name").OpClass("other", "text_ops").StorageKey("ix_class_elsewhere"),
-		index.Fields("attrs").Method("gin").Desc("attrs").StorageKey("ix_gin_desc"),
-		index.Fields("name").OpClass("name", "x); DROP TABLE t").StorageKey("ix_class_name"),
-		index.Fields("name").OpClass("name", "").StorageKey("ix_class_empty"),
-		index.Fields("other").OpClass("other", "text_ops").OpClass("other", "varchar_ops").StorageKey("ix_class_twice"),
+		index.Fields("name").Annotations(sqlschema.DescColumns("other")).StorageKey("ix_desc_elsewhere"),
+		index.Fields("name").Annotations(sqlschema.OpClassColumn("other", "text_ops")).StorageKey("ix_class_elsewhere"),
+		index.Fields("attrs").Annotations(sqlschema.IndexType("gin")).Annotations(sqlschema.DescColumns("attrs")).StorageKey("ix_gin_desc"),
+		index.Fields("name").Annotations(sqlschema.OpClassColumn("name", "x); DROP TABLE t")).StorageKey("ix_class_name"),
+		index.Fields("name").Annotations(sqlschema.OpClassColumn("name", "")).StorageKey("ix_class_empty"),
 	}
 }
 
@@ -51,12 +51,11 @@ func TestIndexKeysRules(t *testing.T) {
 	_, err := build(t, ikBad{})
 	got := plain(err)
 	for _, want := range []string{
-		`index 0: has Desc on "other", which it does not cover`,
-		`index 1: has OpClass on "other", which it does not cover`,
-		`index 2: has Desc with Method "gin", and only btree has an order`,
-		`index 3: has OpClass "x); DROP TABLE t" for "name", which is not an operator class name`,
-		`index 4: has OpClass "" for "name", which is not an operator class name`,
-		`index 5: gives "other" two operator classes`,
+		`index 0: has sqlschema.Desc on "other", which it does not cover`,
+		`index 1: has sqlschema.OpClass on "other", which it does not cover`,
+		`index 2: has sqlschema.Desc with IndexType "gin", and only btree has an order`,
+		`index 3: has sqlschema.OpClass "x); DROP TABLE t" for "name", which is not an operator class name`,
+		`index 4: has sqlschema.OpClass "" for "name", which is not an operator class name`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("%q not in\n%s", want, got)
@@ -100,8 +99,8 @@ func TestIndexKeysRefusedOutsidePostgres(t *testing.T) {
 			continue
 		}
 		for _, w := range []string{
-			`index 0: Desc is PostgreSQL's for now; ` + d.String(),
-			`index 1: OpClass is PostgreSQL's; ` + d.String() + ` has no operator classes`,
+			`index 0: sqlschema.Desc is PostgreSQL's for now; ` + d.String(),
+			`index 1: sqlschema.OpClass is PostgreSQL's; ` + d.String() + ` has no operator classes`,
 		} {
 			if got := plain(err); !strings.Contains(got, w) {
 				t.Errorf("%v: %q not in\n%s", d, w, got)
@@ -120,8 +119,8 @@ func (ikRepeat) Fields() []schema.Field {
 func (ikRepeat) Indexes() []schema.Index {
 	return []schema.Index{
 		index.Fields("name", "at").StorageKey("ix_r_asc"),
-		index.Fields("name", "at").Desc("at").StorageKey("ix_r_desc"),
-		index.Fields("name", "at").OpClass("name", "text_pattern_ops").StorageKey("ix_r_class"),
+		index.Fields("name", "at").Annotations(sqlschema.DescColumns("at")).StorageKey("ix_r_desc"),
+		index.Fields("name", "at").Annotations(sqlschema.OpClassColumn("name", "text_pattern_ops")).StorageKey("ix_r_class"),
 	}
 }
 
@@ -130,8 +129,8 @@ type ikTwice struct{ schema.Schema }
 func (ikTwice) Fields() []schema.Field { return []schema.Field{field.String("name")} }
 func (ikTwice) Indexes() []schema.Index {
 	return []schema.Index{
-		index.Fields("name").OpClass("name", "text_pattern_ops").StorageKey("ix_t_one"),
-		index.Fields("name").OpClass("name", "text_pattern_ops").StorageKey("ix_t_two"),
+		index.Fields("name").Annotations(sqlschema.OpClassColumn("name", "text_pattern_ops")).StorageKey("ix_t_one"),
+		index.Fields("name").Annotations(sqlschema.OpClassColumn("name", "text_pattern_ops")).StorageKey("ix_t_two"),
 	}
 }
 

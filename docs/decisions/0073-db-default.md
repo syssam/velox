@@ -1,6 +1,6 @@
-# 0073. DBDefault is SchemaDefault in one text
+# 0073. A column default in one SQL text
 
-- Status: accepted, 2026-11-18.
+- Status: accepted, 2026-11-18. The spelling is amended by [0075](0075-sqlschema-annotations.md): `Annotations(sqlschema.Default("100"))`, not `DBDefault("100")`, and it is not limited to a number or a string; the MySQL refusal below stands.
 
 ## Context
 
@@ -17,7 +17,7 @@ all a number, `'[]'` or a time.
 
 ## Decision
 
-`DBDefault(sql)` on a field sets `SchemaDefault` to `sql` for the three
+`sqlschema.Default(sql)` on a field sets `SchemaDefault` to `sql` for the three
 dialects. It replaces what `SchemaDefault` set.
 
 - It is for a number and a string only. Every other type has a default that is
@@ -27,7 +27,7 @@ dialects. It replaces what `SchemaDefault` set.
 - A string field can be a text column on MySQL, whose default MySQL takes only
   as an expression: `DEFAULT ('x')`, not `DEFAULT 'x'`. velox-gen refuses a
   MySQL `SchemaDefault` that is a literal on such a column, whether it came
-  from `DBDefault` or the map, and says to write it in parentheses. Without
+  from `sqlschema.Default` or the map, and says to write it in parentheses. Without
   the refusal the migration fails when it is applied.
 
 ## Consequences
@@ -40,5 +40,4 @@ dialects. It replaces what `SchemaDefault` set.
 - The generated code's shape does not change, so `GeneratedCodeIsVersionN`
   stays.
 
-Enforced by `TestDBDefault` (`schema/field`) and
-`internal/codegen/dbdefault_test.go`.
+Enforced by `internal/codegen/sqldefault_test.go`.

@@ -88,13 +88,13 @@ func (t *tabler) check(e *Entity, tb *migrate.Table, at []place) {
 	}
 	for i, ix := range tb.Indexes {
 		if ix.Method != "" && t.d != velox.Postgres {
-			t.fail(at[i], "Method %q is PostgreSQL's; %s has no choice of index method: drop Method or use a separate %s schema", ix.Method, t.d, t.d)
+			t.fail(at[i], "the index type %q is PostgreSQL's; %s has no choice of index type: drop sqlschema.IndexType or use a separate %s schema", ix.Method, t.d, t.d)
 		}
 		if len(ix.Desc) > 0 && t.d != velox.Postgres {
-			t.fail(at[i], "Desc is PostgreSQL's for now; %s indexes ascending here: drop Desc or use a separate %s schema", t.d, t.d)
+			t.fail(at[i], "sqlschema.Desc is PostgreSQL's for now; %s indexes ascending here: drop it or use a separate %s schema", t.d, t.d)
 		}
 		if len(ix.OpClass) > 0 && t.d != velox.Postgres {
-			t.fail(at[i], "OpClass is PostgreSQL's; %s has no operator classes: drop OpClass or use a separate %s schema", t.d, t.d)
+			t.fail(at[i], "sqlschema.OpClass is PostgreSQL's; %s has no operator classes: drop it or use a separate %s schema", t.d, t.d)
 		}
 	}
 	if t.d != velox.MySQL {

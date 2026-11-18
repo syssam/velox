@@ -5,24 +5,25 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 )
 
-// ddOK has the column defaults DBDefault gives: a number and a string, each
+// ddOK has the column defaults sqlschema.Default gives: a number and a string, each
 // the one text on every dialect.
 type ddOK struct{ schema.Schema }
 
 func (ddOK) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("dd_oks")} }
 func (ddOK) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int("seats").DBDefault("100"),
-		field.String("kind").DBDefault("'plain'"),
+		field.Int("seats").Annotations(sqlschema.Default("100")),
+		field.String("kind").Annotations(sqlschema.Default("'plain'")),
 		field.Int("plain"),
 	}
 }
 
-func TestDBDefaultColumns(t *testing.T) {
+func TestSQLDefaultColumns(t *testing.T) {
 	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 		tb := table(t, tables(t, d, ddOK{}), "dd_oks")
 		got := map[string]string{}
@@ -41,12 +42,12 @@ type ddText struct{ schema.Schema }
 
 func (ddText) Fields() []schema.Field {
 	return []schema.Field{
-		field.Text("bad").DBDefault("'x'"),
+		field.Text("bad").Annotations(sqlschema.Default("'x'")),
 		field.Text("good").SchemaDefault(map[string]string{field.Postgres: "'x'", field.MySQL: "('x')", field.SQLite: "'x'"}),
 	}
 }
 
-func TestDBDefaultMySQLText(t *testing.T) {
+func TestSQLDefaultMySQLText(t *testing.T) {
 	g := mustBuild(t, ddText{})
 	if _, err := Tables(g, velox.MySQL); err == nil {
 		t.Fatal("no error")

@@ -8,7 +8,6 @@ import (
 	"go/doc"
 	"go/parser"
 	"go/token"
-	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -309,7 +308,7 @@ func TestBuildersAreDocumented(t *testing.T) {
 			methods[typ.Name] = append(methods[typ.Name], m.Name)
 		}
 	}
-	common := []string{"Optional", "Nillable", "Unique", "Comment", "StorageKey", "SchemaType", "SchemaDefault", "DBDefault", "Annotations", "Default"}
+	common := []string{"Optional", "Nillable", "Unique", "Comment", "StorageKey", "SchemaType", "SchemaDefault", "Annotations", "Default"}
 	for _, b := range []string{
 		"BoolBuilder", "NumberBuilder", "StringBuilder", "BytesBuilder", "TimeBuilder",
 		"UUIDBuilder", "UUIDOfBuilder", "JSONBuilder", "OtherBuilder", "EnumBuilder", "EnumOfBuilder",
@@ -451,45 +450,6 @@ func TestSchemaDefault(t *testing.T) {
 		d := field.String("s").SchemaDefault(c.m).Descriptor()
 		if err := errors.Join(d.Errs...); err == nil || err.Error() != c.want {
 			t.Errorf("got %v, want %s", err, c.want)
-		}
-	}
-}
-
-// DBDefault is one SQL text for the three dialects, of a number or a string
-// field only, and replaces a SchemaDefault.
-func TestDBDefault(t *testing.T) {
-	want := map[string]string{field.Postgres: "100", field.MySQL: "100", field.SQLite: "100"}
-	for name, b := range map[string]interface{ Descriptor() *desc.Field }{
-		"int":     field.Int("n").DBDefault("100"),
-		"int64":   field.Int64("n").DBDefault("100"),
-		"float64": field.Float("n").DBDefault("100"),
-		"uint8":   field.Uint8("n").DBDefault("100"),
-	} {
-		d := b.Descriptor()
-		if len(d.Errs) != 0 || !maps.Equal(d.SchemaDefault, want) {
-			t.Errorf("%s: %v, %v", name, d.SchemaDefault, d.Errs)
-		}
-	}
-	d := field.String("s").DBDefault("'new'").Descriptor()
-	if len(d.Errs) != 0 || d.SchemaDefault[field.MySQL] != "'new'" {
-		t.Errorf("string: %v, %v", d.SchemaDefault, d.Errs)
-	}
-	// It replaces the map.
-	d = field.Int("n").SchemaDefault(map[string]string{field.Postgres: "1"}).DBDefault("2").Descriptor()
-	if !maps.Equal(d.SchemaDefault, map[string]string{field.Postgres: "2", field.MySQL: "2", field.SQLite: "2"}) {
-		t.Errorf("replaced: %v", d.SchemaDefault)
-	}
-	for name, c := range map[string]struct {
-		b    interface{ Descriptor() *desc.Field }
-		want string
-	}{
-		"time":  {field.Time("t").DBDefault("now()"), "DBDefault: the default of a time field is not one SQL text on every dialect; give each with SchemaDefault"},
-		"bool":  {field.Bool("b").DBDefault("true"), "DBDefault: the default of a bool field is not one SQL text on every dialect; give each with SchemaDefault"},
-		"json":  {field.JSON("j", map[string]string{}).DBDefault("'{}'"), "DBDefault: the default of a json field is not one SQL text on every dialect; give each with SchemaDefault"},
-		"empty": {field.Int("n").DBDefault("  "), "DBDefault: the default is empty"},
-	} {
-		if err := errors.Join(c.b.Descriptor().Errs...); err == nil || err.Error() != c.want {
-			t.Errorf("%s: got %v, want %s", name, err, c.want)
 		}
 	}
 }

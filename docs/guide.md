@@ -135,8 +135,8 @@ thing. That decides what a `Default` can do:
 For a bool that should default to `true`, use `Nillable().Default(true)`,
 or name the field so that its zero is the default (`disabled`, not
 `enabled`). `SchemaDefault` sets only the column's `DEFAULT`, for rows written
-outside velox, and `DBDefault("100")` is the same for a number or a string with
-one SQL text for every dialect. [Coming from ent](coming-from-ent.md) ("Defaults on a NOT NULL column")
+outside velox, and `Annotations(sqlschema.Default("100"))` is the same with one SQL text for
+every dialect (`sqlschema.DefaultExprs` takes one for each). [Coming from ent](coming-from-ent.md) ("Defaults on a NOT NULL column")
 has the whole list.
 
 `field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,
@@ -176,16 +176,18 @@ The [relations example](../examples/relations) shows all three shapes.
 ### Indexes
 
 `index.Fields("a", "b")` makes an index, `.Unique()` makes it unique, and
-`.Where("...")` makes it partial on PostgreSQL and SQLite. On PostgreSQL,
-`.Method("gin")` picks the access method (hash, gin, gist, spgist or brin; btree
-is the default), and a GIN index is the one that may cover a JSON field:
+`.Where("...")` makes it partial on PostgreSQL and SQLite. Options only a SQL
+database reads are annotations of package `dialect/sqlschema`, as in the old
+velox, so that the same schema can feed GraphQL and other targets. On PostgreSQL, `sqlschema.IndexType("GIN")` picks the
+access method (hash, gin, gist, spgist or brin; btree is the default), and a GIN
+index is the one that may cover a JSON field:
 
 ```go
-index.Fields("attrs").Method("gin").StorageKey("ix_attrs_gin")
+index.Fields("attrs").Annotations(sqlschema.IndexType("GIN")).StorageKey("ix_attrs_gin")
 ```
 
-MySQL and SQLite have no choice of method, so velox-gen refuses a `Method` on
-them, and a unique index must be btree
+MySQL and SQLite have no choice of method, so velox-gen refuses an `IndexType`
+on them, and a unique index must be btree
 ([ADR 0070](decisions/0070-index-method.md)). A GIN index works on a JSON (jsonb)
 column, an array or a tsvector as it is. On a text or number column it needs an
 extension that gives GIN an operator class for the type, `btree_gin` or
@@ -193,14 +195,19 @@ extension that gives GIN an operator class for the type, `btree_gin` or
 baseline by hand, and without it the index fails when it is applied, not in
 velox-gen.
 
-Also on PostgreSQL, `.Desc("created_at")` sorts a key descending, which an
-`ORDER BY name, created_at DESC` needs (a single column is read backwards
-as it is), and `.OpClass("title", "gin_trgm_ops")` sets a key's operator class:
+Also on PostgreSQL, `sqlschema.DescColumns("created_at")` (or `Desc()` for every
+key) sorts a key descending, which an `ORDER BY name, created_at DESC` needs (a
+single column is read backwards as it is), and `sqlschema.OpClassColumn("title",
+"gin_trgm_ops")` (or `OpClass(...)` for every key) sets a key's operator class:
 
 ```go
-index.Fields("title").Method("gin").OpClass("title", "gin_trgm_ops")
-index.Fields("name", "created_at").Desc("created_at")
+index.Fields("title").Annotations(sqlschema.IndexType("GIN"), sqlschema.OpClass("gin_trgm_ops"))
+index.Fields("name", "created_at").Annotations(sqlschema.DescColumns("created_at"))
 ```
+
+`sqlschema.IndexWhere` is `.Where` as an annotation, for a port; give an index one
+of them. The old velox's `StorageParams`, `Prefix` and `IncludeColumns`
+compile and are refused by velox-gen: velox holds none of them.
 
 Name only an operator class that is not its type's default: PostgreSQL reads a
 default one back as none, and the schema would differ from the database for
