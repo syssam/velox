@@ -212,3 +212,48 @@ func TestBuildZeroDefaultAllowed(t *testing.T) {
 		t.Errorf("%d errors, want 1, as -0 is zero: %v", n, err)
 	}
 }
+
+// A number whose check refuses 0 never stores 0, so reading 0 as unset loses
+// nothing, and a non-zero Default or DefaultFunc on it is allowed.
+type zeroInvalidDefaults struct{ schema.Schema }
+
+func (zeroInvalidDefaults) Fields() []schema.Field {
+	return []schema.Field{
+		field.Int("seats").Positive().Default(100),
+		field.Int("port").Min(1).Default(8080),
+		field.Int("rank").Range(1, 9).Default(5),
+		field.Int("debt").Negative().Default(-1),
+		field.Int("below").Max(-1).Default(-3),
+		field.Int("count").Positive().DefaultFunc(func() int { return 1 }),
+	}
+}
+
+// zeroValid has the same lines with a check that allows 0, or none, and a
+// bool: each is refused, one error a field.
+type zeroValid struct{ schema.Schema }
+
+func (zeroValid) Fields() []schema.Field {
+	return []schema.Field{
+		field.Int("a").NonNegative().Default(1),
+		field.Int("b").Min(0).Default(1),
+		field.Int("c").Min(-1).Default(1),
+		field.Int("d").Max(0).Default(-1),
+		field.Int("e").Range(0, 9).Default(1),
+		field.Int("f").Default(1),
+		field.Bool("g").Default(true),
+	}
+}
+
+func TestBuildZeroInvalidDefault(t *testing.T) {
+	mustBuild(t, zeroInvalidDefaults{})
+	_, err := build(t, zeroValid{})
+	if err == nil {
+		t.Fatal("no error")
+	}
+	if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 7 {
+		t.Errorf("%d errors, want 7: %v", n, err)
+	}
+	if !strings.Contains(err.Error(), "or, if the field is never 0, add Positive() or Min(1)") {
+		t.Errorf("no way out for a number: %v", err)
+	}
+}

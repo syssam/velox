@@ -101,6 +101,50 @@ func (*wgPairV) VeloxMeta() *velox.Meta[wgPairV] {
 	})
 }
 
+// wgPairZ is wgPairV whose descriptor says a check refuses 0, as velox-gen
+// writes it for Positive().Default(250): the Default stands.
+type wgPairZ struct {
+	A, B  int64
+	Price wgCents
+}
+
+var wgPairZMeta velox.MetaOnce[wgPairZ]
+
+func (*wgPairZ) VeloxMeta() *velox.Meta[wgPairZ] {
+	return wgPairZMeta.Load(func() velox.Descriptor[wgPairZ] {
+		return velox.Descriptor[wgPairZ]{
+			Table:      "pairs",
+			Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}, {Field: "Price", Name: "price", Default: wgCents(250), ZeroInvalid: true}},
+			PrimaryKey: []int{0, 1},
+			FieldPtr: func(x *wgPairZ, i int) any {
+				switch i {
+				case 0:
+					return &x.A
+				case 1:
+					return &x.B
+				}
+				return &x.Price
+			},
+		}
+	})
+}
+
+// A number a check refuses 0 for takes its Default when unset, and keeps a
+// value given.
+func TestZeroInvalidInsert(t *testing.T) {
+	for _, c := range []struct{ given, want wgCents }{{0, 250}, {7, 7}} {
+		e := &fakeconn.Exec{}
+		db := openFake(velox.Postgres, e)
+		p := wgPairZ{A: 1, B: 2, Price: c.given}
+		if err := db.Insert(&p).Exec(ctx); err != nil {
+			t.Fatalf("given %d: %v", c.given, err)
+		}
+		if p.Price != c.want {
+			t.Errorf("given %d: Price %d, want %d", c.given, p.Price, c.want)
+		}
+	}
+}
+
 // TestFakeScanErrors: a row value of the wrong kind is an error from the
 // fake, as database/sql's Scan returns one, not a panic.
 func TestFakeScanErrors(t *testing.T) {

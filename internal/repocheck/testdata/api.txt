@@ -98,7 +98,7 @@ const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
 const EdgePage
-const GeneratedCodeIsVersion19
+const GeneratedCodeIsVersion20
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -686,7 +686,7 @@ type Aggregate uint8
 type AssignOp uint8
 type Assignment struct { Column int Op AssignOp Value any }
 type Caller struct { File string Line int Func string }
-type ColumnDescriptor struct { Field string Name string Default any DefaultFunc func() any UpdateDefault func() any Immutable bool Version bool Sensitive bool Nullable bool RequiredEdge string Encode func(v any) ([]byte, error) Decode func(data []byte, v any) error }
+type ColumnDescriptor struct { Field string Name string Default any DefaultFunc func() any UpdateDefault func() any Immutable bool Version bool Sensitive bool ZeroInvalid bool Nullable bool RequiredEdge string Encode func(v any) ([]byte, error) Decode func(data []byte, v any) error }
 type ConstraintError struct { Entity string Kind ConstraintKind Constraint string Err error }
 type ConstraintKind uint8
 type Deadlines struct { Statement time.Duration MaxStatement time.Duration Tx time.Duration MaxTx time.Duration }

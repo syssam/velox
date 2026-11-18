@@ -127,6 +127,8 @@ thing. That decides what a `Default` can do:
 | `field.Bool("active").Default(true)` | refused by velox-gen: `false` could not be stored | — |
 | `field.Bool("active").Nillable().Default(true)` | `true`, when the `*bool` is nil | yes: `new(false)` |
 | `field.Int("seats").Default(0)` | `0` | yes |
+| `field.Int("seats").Default(100)` | refused by velox-gen: `0` could not be stored | — |
+| `field.Int("seats").Positive().Default(100)` | `100` | `0` is refused by `Positive` anyway |
 | `field.String("plan").Default("free")` | `"free"` | no: `""` becomes `"free"` |
 | `field.String("plan").Optional().Nillable()` | `NULL` | yes |
 
@@ -244,7 +246,7 @@ command in one `go:generate` line, and have CI call it, so the folder is named
 once.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion19`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion20`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 

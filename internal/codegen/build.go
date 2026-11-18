@@ -1118,8 +1118,10 @@ func (b *builder) uniqueFields(e *Entity) {
 func (b *builder) validateField(e *Entity, f *Field) {
 	// An insert fills a Default or DefaultFunc into a zero field, so on a
 	// bool or number that is not a pointer it could never store false or
-	// 0. A Default that is the zero value stores what unset does.
-	if (len(f.Default) > 0 && !zeroDefault(f) || f.DefaultFunc) && !f.Nillable && (f.Type == "bool" || numeric[f.Type]) {
+	// 0. A Default that is the zero value stores what unset does, and so
+	// does any on a number that a check refuses 0 for, which could not
+	// store it anyway.
+	if (len(f.Default) > 0 && !zeroDefault(f) || f.DefaultFunc) && !f.Nillable && (f.Type == "bool" || numeric[f.Type] && !zeroInvalid(f)) {
 		b.fail(36, e.Name, fieldLoc(f), "%s", defaultWayOut(f))
 	}
 	switch {
@@ -1205,9 +1207,11 @@ func defaultWayOut(f *Field) string {
 	if !f.DefaultFunc {
 		def = "Default(" + lit + ")"
 	}
-	zero, rename := "0", ""
+	var zero, rename string
 	if f.Type == "bool" {
 		zero, rename = "false", `; or rename it so that false is the default ("disabled" for "enabled")`
+	} else {
+		zero, rename = "0", "; or, if the field is never 0, add Positive() or Min(1), which refuse 0 and so let the Default stand"
 	}
 	var s strings.Builder
 	fmt.Fprintf(&s, "%s with %s: velox inserts a Go struct, whose %s cannot be told from unset, so the Default would overwrite an explicit %s (ent fills it only when the builder never set the field). ", decl, def, zero, zero)
@@ -1233,6 +1237,29 @@ func defaultWayOut(f *Field) string {
 	fmt.Fprintf(&s, "To keep an ent database's column, NOT NULL DEFAULT %s, add .SchemaDefault(map[string]string{field.Postgres: %q, field.MySQL: %q, field.SQLite: %q}), which only rows written outside velox take. ", lit, lit, other, other)
 	fmt.Fprintf(&s, "graphql.CreateDefault(%s) gives a GraphQL create input the default", lit)
 	return s.String()
+}
+
+// zeroInvalid reports whether a built-in check of the number f refuses 0:
+// Positive, Negative, a Min above 0, a Max below 0, or a Range that excludes
+// it. Such a field never stores 0, so reading 0 as unset loses nothing.
+func zeroInvalid(f *Field) bool {
+	arg := func(c loadjson.Check, i int) (float64, bool) {
+		var v float64
+		return v, i < len(c.Args) && json.Unmarshal(c.Args[i], &v) == nil
+	}
+	for _, c := range f.Checks {
+		lo, okLo := arg(c, 0)
+		hi, okHi := arg(c, 1)
+		switch {
+		case c.Kind == "Positive" || c.Kind == "Negative":
+			return true
+		case c.Kind == "Min" && okLo && lo > 0, c.Kind == "Max" && okLo && lo < 0:
+			return true
+		case c.Kind == "Range" && okLo && okHi && (lo > 0 || hi < 0):
+			return true
+		}
+	}
+	return false
 }
 
 // zeroDefault reports whether f's literal Default is the zero value of a

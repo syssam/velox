@@ -101,6 +101,7 @@ type OutField struct {
 	RequiredEdge         string // the Required edge whose NULL-able key the field holds, an edge to its own schema: its ColumnDescriptor says RequiredEdge; "" when none
 	NilIsNull            bool   // a slice or map field whose column holds NULL (an Optional or Nillable json field, a Nillable bytes field), which nil binds: its ColumnDescriptor says Nullable
 	DefaultCode          string // "" or a Go expression for ColumnDescriptor.Default
+	ZeroInvalid          bool   // a number's non-zero Default that a check keeps from ever being 0: its ColumnDescriptor says ZeroInvalid
 	DefaultFuncCode      string // "" or "func() any { … }"
 	UpdateDefaultCode    string // "" or "func() any { … }"
 }
@@ -132,4 +133,4 @@ const veloxPkg = "github.com/syssam/velox"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 19
+const GeneratedCodeVersion = 20

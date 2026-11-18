@@ -89,10 +89,13 @@ three dialects (`TestNonIntegerKeys`).
 **Defaults on a NOT NULL column.** A `Default` on a field that is not
 `Nillable` is accepted for a string, an enum, a time (`Default(time.Now)`), a
 JSON field such as `field.Strings` and a bool or number whose `Default` is its
-zero value. An unset field takes the `Default` on insert, as in ent, and the
+zero value, or a number whose checks refuse 0 (`Positive()`, `Negative()`, a
+`Min` above 0, a `Max` below 0, or a `Range` that excludes 0):
+`field.Int("seats").Positive().Default(100)` is as in ent, as the field could
+not store 0 anyway. An unset field takes the `Default` on insert, as in ent, and the
 literal `Default` of a string, enum, bool or number is the column's `DEFAULT`
 too. One case is refused: a non-zero `Default`, or any `DefaultFunc`, on a
-bool or number that is not `Nillable`. A struct's `false` or `0` cannot be
+bool, or on a number that is not `Nillable` and has no check that refuses 0. A struct's `false` or `0` cannot be
 told from unset, and ent fills
 `Default(true)` only when the builder never set the field, so velox would
 store `true` where your struct said `false`. A refusal is safer than that
