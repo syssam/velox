@@ -22,7 +22,7 @@ func TestCostScans(t *testing.T) {
 	const sdl = costSDL + `
 input UserWhereInput {
 	not: UserWhereInput and: [UserWhereInput!] or: [UserWhereInput!]
-	name: String nameContains: String nameHasPrefix: String nameHasSuffix: String
+	name: String nameContains: String nameHasPrefix: String nameHasSuffix: String nameEqualFold: String nameContainsFold: String
 	hasPosts: Boolean hasPostsWith: [PostWhereInput!]
 }
 input PostWhereInput { title: String titleContains: String }
@@ -53,6 +53,8 @@ extend type Query { filtered(first: Int, where: UserWhereInput): UserConnection!
 		{"contains", `{nameContains: "x"}`, count + 2 + scan},
 		{"a prefix", `{nameHasPrefix: "x"}`, count + 2 + scan},
 		{"a suffix", `{nameHasSuffix: "x"}`, count + 2 + scan},
+		{"equal fold", `{nameEqualFold: "x"}`, count + 2 + scan},
+		{"contains fold", `{nameContainsFold: "x"}`, count + 2 + scan},
 		{"two", `{or: [{nameContains: "x"}, {nameHasSuffix: "y"}]}`, count + 1 + 2*(1+1+scan)},
 		{"a null", `{nameContains: null}`, count + 2},
 		{"has", `{hasPosts: true}`, count + 2},

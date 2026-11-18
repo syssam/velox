@@ -39,8 +39,9 @@ import (
 //     bytes, and an object one and one for each 16 of its type's fields, as gqlgen
 //     does work for each. A variable used twice counts twice;
 //   - in a <T>WhereInput, a predicate no index serves adds 2000, 20 statements,
-//     at each use: each <field>Contains, <field>HasPrefix and <field>HasSuffix
-//     given, as a LIKE reads the whole table, and each non-empty has<Edge>With,
+//     at each use: each <field>Contains, <field>HasPrefix, <field>HasSuffix,
+//     <field>EqualFold and <field>ContainsFold given, as a LIKE or a LOWER
+//     comparison reads the whole table, and each non-empty has<Edge>With,
 //     whose subquery runs for each row it reads. The default MaxCost allows about
 //     70 of them;
 //   - on a mutation, an input object adds two statements, for the row it reads

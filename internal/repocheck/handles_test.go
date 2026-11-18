@@ -38,11 +38,11 @@ func TestHandleMethodSets(t *testing.T) {
 		"Col":            "Asc Count CountDistinct Desc EQ In InSelect Key NEQ NotIn NotInSelect Select Set column",
 		"OrderedCol":     "Asc Between Count CountDistinct Desc EQ GT GTE In InSelect Key LT LTE Max Min NEQ NotIn NotInSelect Select Set column",
 		"NumberCol":      "Add Asc Avg Between Count CountDistinct Desc EQ GT GTE In InSelect Key LT LTE Max Min NEQ NotIn NotInSelect Select Set Sub Sum column",
-		"StringCol":      "Asc Between Contains Count CountDistinct Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect Key LT LTE Like Max Min NEQ NotIn NotInSelect Select Set column",
+		"StringCol":      "Asc Between Contains ContainsFold Count CountDistinct Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect Key LT LTE Like Max Min NEQ NotIn NotInSelect Select Set column",
 		"NullCol":        "Asc Count CountDistinct Desc EQ In InSelect IsNull Key NEQ NotIn NotInSelect NotNull Select Set SetNull column",
 		"NullOrderedCol": "Asc Between Count CountDistinct Desc EQ GT GTE In InSelect IsNull Key LT LTE Max Min NEQ NotIn NotInSelect NotNull Select Set SetNull column",
 		"NullNumberCol":  "Add Asc Avg Between Count CountDistinct Desc EQ GT GTE In InSelect IsNull Key LT LTE Max Min NEQ NotIn NotInSelect NotNull Select Set SetNull Sub Sum column",
-		"NullStringCol":  "Asc Between Contains Count CountDistinct Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect IsNull Key LT LTE Like Max Min NEQ NotIn NotInSelect NotNull Select Set SetNull column",
+		"NullStringCol":  "Asc Between Contains ContainsFold Count CountDistinct Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect IsNull Key LT LTE Like Max Min NEQ NotIn NotInSelect NotNull Select Set SetNull column",
 		"JSONCol":        "Bool HasKey Number Set Text column",
 		"NullJSONCol":    "Bool HasKey IsNull NotNull Number Set SetNull Text column",
 	}

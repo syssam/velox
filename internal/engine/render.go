@@ -668,7 +668,7 @@ func (w *writer) pred(n Node) {
 		w.json(n)
 		return
 	}
-	if n.Op >= OpEQ && n.Op <= OpFold && w.in.Columns[n.Col].Codec && w.path == nil {
+	if n.Op >= OpEQ && n.Op <= OpLikeFold && w.in.Columns[n.Col].Codec && w.path == nil {
 		// Every condition that holds a value; IsNull and NotNull hold none.
 		w.fail(errCodecCondition(w.in, int(n.Col)))
 	}
@@ -729,6 +729,12 @@ func (w *writer) pred(n Node) {
 		w.str(") = LOWER(")
 		w.arg(n.V)
 		w.str(")")
+	case OpLikeFold:
+		w.str("LOWER(")
+		w.predCol(n.Col)
+		w.str(") LIKE LOWER(")
+		w.arg(n.V)
+		w.str(") ESCAPE '!'")
 	case OpIsNull:
 		w.predCol(n.Col)
 		w.str(" IS NULL")

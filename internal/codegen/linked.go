@@ -41,7 +41,7 @@ import (
 //   - velox.FieldEQ(name, v) and the other Field functions name a column.
 //     The value fits the column: FieldEQ, FieldNEQ, FieldGT, FieldGTE,
 //     FieldLT and FieldLTE's, and each of FieldIn and FieldNotIn's.
-//     FieldContains, FieldHasPrefix, FieldHasSuffix and FieldEqualFold need
+//     FieldContains, FieldHasPrefix, FieldHasSuffix, FieldEqualFold and FieldContainsFold need
 //     a text column; FieldIsNull and FieldNotNull a nullable one.
 //   - A *velox.Mutation's Set, Fill and Value, and a velox.Row's Value,
 //     IsZero and Set, name a column of the entity; a Set or Fill value fits
@@ -469,7 +469,7 @@ func recvName(fn *types.Func) string {
 var fieldOps = map[string]bool{
 	"FieldEQ": true, "FieldNEQ": true, "FieldGT": true, "FieldGTE": true, "FieldLT": true, "FieldLTE": true,
 	"FieldIn": true, "FieldNotIn": true, "FieldContains": true, "FieldHasPrefix": true, "FieldHasSuffix": true,
-	"FieldEqualFold": true, "FieldIsNull": true, "FieldNotNull": true,
+	"FieldEqualFold": true, "FieldContainsFold": true, "FieldIsNull": true, "FieldNotNull": true,
 }
 
 // veloxFunc returns the name of velox's function that c calls with at

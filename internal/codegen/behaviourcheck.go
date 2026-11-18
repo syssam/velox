@@ -101,7 +101,7 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 				return
 			}
 		}
-	case "Contains", "HasPrefix", "HasSuffix", "EqualFold":
+	case "Contains", "HasPrefix", "HasSuffix", "EqualFold", "ContainsFold":
 		if k := col.kind(); k != "" && kindClassOf(k) != "string" {
 			refuse(u.call, "%s is %s, not text", what, article(col.typeName()))
 		}

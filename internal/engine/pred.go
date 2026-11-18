@@ -22,6 +22,7 @@ const (
 	OpBetween
 	OpLike
 	OpFold
+	OpLikeFold // LOWER(col) LIKE LOWER(v) ESCAPE '!'
 	OpIsNull
 	OpNotNull
 	OpAnd

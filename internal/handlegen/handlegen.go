@@ -57,6 +57,8 @@ var (
 			`return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLike, Col: c.I, V: "%" + engine.EscapeLike(string(s)) + "%"}))`},
 		{"EqualFold", "is LOWER(column) = LOWER(s). SQLite's LOWER folds ASCII letters only, so on SQLite it ignores the case of those alone.", "(s V) Pred[E]",
 			"return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpFold, Col: c.I, V: string(s)}))"},
+		{"ContainsFold", "is true when the column contains s, taken literally, whatever the case of either: LOWER(column) LIKE LOWER(pattern). SQLite's LOWER folds ASCII letters only, so on SQLite it ignores the case of those alone.", "(s V) Pred[E]",
+			`return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLikeFold, Col: c.I, V: "%" + engine.EscapeLike(string(s)) + "%"}))`},
 	}
 	set = []method{
 		{"Set", "sets the column to v.", "(v V) Setter[E]",

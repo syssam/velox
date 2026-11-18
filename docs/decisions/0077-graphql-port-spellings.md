@@ -44,17 +44,16 @@ the others, so those schema files did not compile.
 - `NewDirective(name, args)` and `Deprecated(reason)` build a `Directive`;
   `Deprecated("")` has no `reason` argument.
 
-The type defaults differ from the old velox's in two places. A string field's
-`WhereOps()` has the equality predicates and contains, has prefix and has
-suffix; the old default had equality and contains only. A nextapp hook widened
-it anyway.
+The old velox's string default was equality and contains only, which a nextapp
+hook widened to `OpsString`; decision 0078 makes that velox2's default.
 
 ## Not done
 
 `OpsJSONArray` (has, hasSome, hasEvery, isEmpty on a JSON array field, 40 uses
-in 33 files) and `OpsCaseFold` (equal fold, contains fold, 1 use) need
-predicates the ORM's handles do not have; a JSON field has no where predicates
-today. The old velox's `WithWhereInputs` filter-everything switch is not a
+in 33 files) needs predicates the ORM's handles do not have; a JSON field has no
+where predicates today. The largest consumer's own hook removes the where input
+of every field not marked filterable, and none of the 40 is, so no such filter
+was ever in its API. The old velox's `WithWhereInputs` filter-everything switch is not a
 spelling: a field is filterable only when it asks.
 
 ## Consequences

@@ -312,6 +312,8 @@ type Ops[V any] struct {
 	In, NotIn                      []V
 	GT, GTE, LT, LTE               *V
 	Contains, HasPrefix, HasSuffix *V
+	// EqualFold and ContainsFold ignore the case of the column and of the value.
+	EqualFold, ContainsFold *V
 	// IsNil and NotNil test the column for NULL: the predicate for true, and
 	// its negation for false.
 	IsNil, NotNil *bool
@@ -336,6 +338,8 @@ func Field[V any](f *Filter, field string, col int, o Ops[V]) {
 	one(f, name{field, "Contains"}, col, untyped.PredContains, o.Contains)
 	one(f, name{field, "HasPrefix"}, col, untyped.PredHasPrefix, o.HasPrefix)
 	one(f, name{field, "HasSuffix"}, col, untyped.PredHasSuffix, o.HasSuffix)
+	one(f, name{field, "EqualFold"}, col, untyped.PredEqualFold, o.EqualFold)
+	one(f, name{field, "ContainsFold"}, col, untyped.PredContainsFold, o.ContainsFold)
 	f.null(name{field, "IsNil"}, col, untyped.PredIsNull, o.IsNil)
 	f.null(name{field, "NotNil"}, col, untyped.PredNotNull, o.NotNil)
 }

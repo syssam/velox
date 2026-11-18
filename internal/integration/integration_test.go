@@ -573,6 +573,10 @@ func TestTextMatchingFollowsTheDatabase(t *testing.T) {
 		}
 		wantIDs(t, query(t, tg, I.Number.HasPrefix("inv")), w)
 		wantIDs(t, query(t, tg, I.Number.EqualFold("inv-1")), []int64{1})
+		// ContainsFold ignores case on every dialect, where Contains follows
+		// the database's, and takes a % literally.
+		wantIDs(t, query(t, tg, I.Number.ContainsFold("nV-")), []int64{1, 2})
+		wantIDs(t, query(t, tg, I.Number.ContainsFold("%_o")), []int64{3}) // unescaped, % and _ match more
 	})
 }
 

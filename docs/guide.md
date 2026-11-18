@@ -387,7 +387,7 @@ The terminal methods:
 
 Conditions passed to one `Where` are ANDed. Combine them with `velox.Or`,
 `velox.And` and `velox.Not`. String handles add `HasPrefix`, `Contains`,
-`EqualFold` and `Like`; ordered handles add `GT`, `Between`, `In` and the rest.
+`EqualFold`, `ContainsFold` and `Like`; ordered handles add `GT`, `Between`, `In` and the rest.
 
 ### Every read needs a Limit
 

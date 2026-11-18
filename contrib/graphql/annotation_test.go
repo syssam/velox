@@ -43,7 +43,7 @@ var annotationCases = []annotationCase{
 	{"WhereOps()", graphql.WhereOps(), `{"where_ops":2147483648}`},
 	{"WhereOps(preset)", graphql.WhereOps(graphql.OpsEquality), `{"where_ops":15}`},
 	{"WhereOps(mixed)", graphql.WhereOps(graphql.OpEQ, graphql.OpsNullable), `{"where_ops":6145}`},
-	{"WhereOps(all)", graphql.WhereOps(graphql.OpsAll), `{"where_ops":8191}`},
+	{"WhereOps(all)", graphql.WhereOps(graphql.OpsAll), `{"where_ops":32767}`},
 	{"OrderVia", graphql.OrderVia("name", "AUTHOR_NAME"), `{"order_via":[{"field":"name","value":"AUTHOR_NAME"}]}`},
 	{"Resolvers", graphql.Resolvers(graphql.Map("organization", "PublicOrganization!").WithComment("Owner."), graphql.Map("tags(first: Int)", "[Tag!]!")),
 		`{"resolvers":[{"field":"organization","type":"PublicOrganization!","comment":"Owner."},{"field":"tags(first: Int)","type":"[Tag!]!"}]}`},

@@ -24,10 +24,6 @@ func nodeName(n Node) string {
 	return unsafe.String((*byte)(n.W.(unsafe.Pointer)), int(n.Col>>8))
 }
 
-// predEqualFold is the operator of FieldEqualFold. It is not a PredOp of
-// Table.Pred.
-const predEqualFold PredOp = 0x80
-
 // FieldEQ is the column of the given name = v. A condition by name is
 // resolved when the statement that holds it runs: a name the entity has no
 // column of fails the statement. v is converted to the column's type: a
@@ -71,7 +67,11 @@ func FieldHasPrefix(name, s string) Predicate { return cond(name, PredHasPrefix,
 func FieldHasSuffix(name, s string) Predicate { return cond(name, PredHasSuffix, s) }
 
 // FieldEqualFold is LOWER(column) = LOWER(s). The column must be text.
-func FieldEqualFold(name, s string) Predicate { return cond(name, predEqualFold, s) }
+func FieldEqualFold(name, s string) Predicate { return cond(name, PredEqualFold, s) }
+
+// FieldContainsFold is LOWER(column) LIKE LOWER(pattern), where the pattern
+// holds s, taken literally. The column must be text.
+func FieldContainsFold(name, s string) Predicate { return cond(name, PredContainsFold, s) }
 
 // FieldIsNull is column IS NULL. The column must be nullable.
 func FieldIsNull(name string) Predicate { return cond(name, PredIsNull, nil) }
@@ -270,11 +270,16 @@ func namedLeaf(in *EntityInfo, n Node) (Node, error) {
 			s = "%" + s
 		}
 		return Node{Op: OpLike, Col: i, V: s, W: in}, nil
-	case predEqualFold:
+	case PredEqualFold:
 		if rtype(c.val).Kind() != reflect.String {
 			return n, fmt.Errorf("%s is not a text column", name)
 		}
 		return Node{Op: OpFold, Col: i, V: n.V, W: in}, nil
+	case PredContainsFold:
+		if rtype(c.val).Kind() != reflect.String {
+			return n, fmt.Errorf("%s is not a text column", name)
+		}
+		return Node{Op: OpLikeFold, Col: i, V: "%" + EscapeLike(n.V.(string)) + "%", W: in}, nil
 	case PredIsNull, PredNotNull:
 		if !c.Nullable {
 			return n, fmt.Errorf("%s is not nullable", name)

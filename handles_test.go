@@ -53,6 +53,7 @@ func TestHandleMethodsBuildNodes(t *testing.T) {
 		{"Contains escapes", engine.PredNode(Predicate(s.Contains("a%!"))), engine.Node{Op: engine.OpLike, Col: 4, V: "%a!%!!%"}},
 		{"Like is raw", engine.PredNode(Predicate(s.Like("a%"))), engine.Node{Op: engine.OpLike, Col: 4, V: "a%"}},
 		{"EqualFold", engine.PredNode(Predicate(s.EqualFold("Ab"))), engine.Node{Op: engine.OpFold, Col: 4, V: "Ab"}},
+		{"ContainsFold escapes", engine.PredNode(Predicate(s.ContainsFold("a%!"))), engine.Node{Op: engine.OpLikeFold, Col: 4, V: "%a!%!!%"}},
 		{"IsNull", engine.PredNode(Predicate(ns.IsNull())), engine.Node{Op: engine.OpIsNull, Col: 5}},
 		{"Not", engine.PredNode(Predicate(Not(n.EQ(1)))), engine.Node{Op: engine.OpNot, Kids: []engine.Node{{Op: engine.OpEQ, Col: 3, V: int64(1)}}}},
 		{"Or", engine.PredNode(Predicate(Or(n.EQ(1), n.EQ(2)))), engine.Node{Op: engine.OpOr, Kids: []engine.Node{{Op: engine.OpEQ, Col: 3, V: int64(1)}, {Op: engine.OpEQ, Col: 3, V: int64(2)}}}},

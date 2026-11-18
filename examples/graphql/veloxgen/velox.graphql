@@ -135,6 +135,8 @@ input PostWhereInput {
   titleContains: String
   titleHasPrefix: String
   titleHasSuffix: String
+  titleEqualFold: String
+  titleContainsFold: String
   status: PostStatus
   statusNEQ: PostStatus
   statusIn: [PostStatus!]
@@ -251,6 +253,8 @@ input LabelWhereInput {
   nameContains: String
   nameHasPrefix: String
   nameHasSuffix: String
+  nameEqualFold: String
+  nameContainsFold: String
   rank: Int
   rankNEQ: Int
   rankIn: [Int!]
@@ -359,6 +363,8 @@ input UserWhereInput {
   nameContains: String
   nameHasPrefix: String
   nameHasSuffix: String
+  nameEqualFold: String
+  nameContainsFold: String
   email: String @admin
   emailNEQ: String @admin
   emailIn: [String!] @admin
@@ -366,6 +372,8 @@ input UserWhereInput {
   emailContains: String @admin
   emailHasPrefix: String @admin
   emailHasSuffix: String @admin
+  emailEqualFold: String @admin
+  emailContainsFold: String @admin
   role: UserRole
   roleNEQ: UserRole
   roleIn: [UserRole!]

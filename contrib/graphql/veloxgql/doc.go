@@ -3,7 +3,7 @@
 // the scalars, and the limits on what a client may ask for.
 //
 // What only generated code calls is in package gqlgraph, whose names are
-// stable by GeneratedCodeIsVersion22 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion23 and not by semantic versioning. Where a
 // name below belongs to gqlgraph it is written gqlgraph.Name.
 //
 // # IDs
@@ -120,10 +120,12 @@
 // The predicates are SQL's, with its three-valued logic, as entgql's are:
 // on a nullable column, NEQ and NotIn leave out the rows whose column is
 // NULL, and so does not, so a not is not the complement of its input (use
-// IsNil to take the NULL rows in). Contains, HasPrefix and HasSuffix take
-// the client's text literally, % and _ included, and whether they ignore
-// case follows the database, as velox's handles do: PostgreSQL's does not
-// ignore it; MySQL's default collations and SQLite, for ASCII, do.
+// IsNil to take the NULL rows in). Contains, HasPrefix, HasSuffix and
+// ContainsFold take the client's text literally, % and _ included. The first
+// three follow the database for case, as velox's handles do: PostgreSQL's
+// does not ignore it; MySQL's default collations and SQLite, for ASCII, do.
+// EqualFold and ContainsFold compare LOWER of both sides, so they ignore case
+// on every dialect (SQLite's LOWER folds ASCII letters only).
 //
 // # Scalars
 //
@@ -183,8 +185,8 @@
 // connection's edges and MaxList for another list of objects. On top of that, with no multiplier, a field that runs a statement
 // adds 100, so first: 0 and aliases count, and an input object adds its size at
 // each use. A where predicate no index serves adds 2000 at each use: a
-// <field>Contains, <field>HasPrefix or <field>HasSuffix, which reads the whole
-// table, and a has<Edge>With, whose subquery runs for each row. Every alias and every branch of a fragment counts, except a
+// <field>Contains, <field>HasPrefix, <field>HasSuffix, <field>EqualFold or
+// <field>ContainsFold, which reads the whole table, and a has<Edge>With, whose subquery runs for each row. Every alias and every branch of a fragment counts, except a
 // selection that @skip(if: true) or @include(if: false) leaves out, which
 // costs nothing, its condition a literal or a variable's value (a missing
 // variable's default, when it has one; a condition that is not a boolean
@@ -212,8 +214,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion22 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion23 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
-// disagree. For generated code. It is replaced by GeneratedCodeIsVersion22 when
-// generated code must change.
-const GeneratedCodeIsVersion22 = true
+// disagree. For generated code. It is replaced by the next number when generated
+// code must change.
+const GeneratedCodeIsVersion23 = true

@@ -21,7 +21,9 @@ const maxCost = 1 << 62
 const statementCost = 100
 
 // scanCost is what a where predicate adds that no index serves, as it reads the
-// table: Contains, HasPrefix or HasSuffix of a <T>WhereInput, and has<Edge>With,
+// table: Contains, HasPrefix, HasSuffix, EqualFold or ContainsFold of a
+// <T>WhereInput (the folds compare LOWER of the column, which no plain index
+// serves), and has<Edge>With,
 // whose subquery runs for each row. It is 20 statements: 700 aliases of a
 // Contains over 90000 rows took 12.5 s, and the default MaxCost allows about 70.
 const scanCost = 20 * statementCost
@@ -488,12 +490,13 @@ func given(v reflect.Value) bool {
 
 // scans is what the field name of the input type d adds as a scan: scanCost for
 // a predicate of a <T>WhereInput that no index serves, the names velox-graphql
-// gives Contains, HasPrefix and HasSuffix, and for has<Edge>With; else 0.
+// gives Contains, HasPrefix, HasSuffix, EqualFold and ContainsFold, and for
+// has<Edge>With; else 0.
 func scans(d *ast.Definition, name string) int64 {
 	if d == nil || d.Kind != ast.InputObject || !strings.HasSuffix(d.Name, "WhereInput") || d.Fields.ForName(name) == nil {
 		return 0
 	}
-	for _, s := range []string{"Contains", "HasPrefix", "HasSuffix"} {
+	for _, s := range []string{"Contains", "HasPrefix", "HasSuffix", "EqualFold", "ContainsFold"} {
 		if len(name) > len(s) && strings.HasSuffix(name, s) {
 			return scanCost
 		}

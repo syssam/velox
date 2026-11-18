@@ -212,6 +212,7 @@ func (c NullOrderedCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullOrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullStringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullStringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c NullStringCol[E, V]) ContainsFold[_ Lazy[V]](s V) Pred[E]
 func (c NullStringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E]
 func (c NullStringCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
 func (c NullStringCol[E, V]) Count[_ Lazy[V]]() Term[E]
@@ -284,6 +285,7 @@ func (c OrderedCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c OrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c StringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c StringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c StringCol[E, V]) ContainsFold[_ Lazy[V]](s V) Pred[E]
 func (c StringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E]
 func (c StringCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
 func (c StringCol[E, V]) Count[_ Lazy[V]]() Term[E]
@@ -457,6 +459,7 @@ func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, jo
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescriptor
 func Expr[E any](text string, args ...any) Pred[E]
 func FieldContains(name, s string) Predicate
+func FieldContainsFold(name, s string) Predicate
 func FieldEQ(name string, v any) Predicate
 func FieldEqualFold(name, s string) Predicate
 func FieldGT(name string, v any) Predicate
@@ -1125,7 +1128,9 @@ package contrib/graphql
 const MutationCreate MutationKind
 const MutationUpdate MutationKind
 const OpContains
+const OpContainsFold
 const OpEQ WhereOp
+const OpEqualFold
 const OpGT
 const OpGTE
 const OpHasPrefix
@@ -1138,12 +1143,14 @@ const OpNEQ
 const OpNotIn
 const OpNotNil
 const OpsAll
+const OpsCaseFold
 const OpsComparison
 const OpsDefault WhereOp
 const OpsEquality
 const OpsNone WhereOp
 const OpsNullable
 const OpsString
+const OpsSubstring
 const SkipAll
 const SkipEnumField
 const SkipMutationCreateInput
@@ -1198,7 +1205,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion22
+const GeneratedCodeIsVersion23
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

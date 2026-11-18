@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion22
+const _ = veloxgql.GeneratedCodeIsVersion23
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -241,22 +241,26 @@ type UserWhereInput struct {
 	IDLTE   *int64
 
 	// Predicates on the field name.
-	Name          *string
-	NameNEQ       *string
-	NameIn        []string
-	NameNotIn     []string
-	NameContains  *string
-	NameHasPrefix *string
-	NameHasSuffix *string
+	Name             *string
+	NameNEQ          *string
+	NameIn           []string
+	NameNotIn        []string
+	NameContains     *string
+	NameHasPrefix    *string
+	NameHasSuffix    *string
+	NameEqualFold    *string
+	NameContainsFold *string
 
 	// Predicates on the field email.
-	Email          *string
-	EmailNEQ       *string
-	EmailIn        []string
-	EmailNotIn     []string
-	EmailContains  *string
-	EmailHasPrefix *string
-	EmailHasSuffix *string
+	Email             *string
+	EmailNEQ          *string
+	EmailIn           []string
+	EmailNotIn        []string
+	EmailContains     *string
+	EmailHasPrefix    *string
+	EmailHasSuffix    *string
+	EmailEqualFold    *string
+	EmailContainsFold *string
 
 	// Predicates on the field role.
 	Role      *UserRole
@@ -296,22 +300,26 @@ func (w *UserWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		LTE:   w.IDLTE,
 	})
 	gqlgraph.Field(f, "name", userColName, gqlgraph.Ops[string]{
-		EQ:        w.Name,
-		NEQ:       w.NameNEQ,
-		In:        w.NameIn,
-		NotIn:     w.NameNotIn,
-		Contains:  w.NameContains,
-		HasPrefix: w.NameHasPrefix,
-		HasSuffix: w.NameHasSuffix,
+		EQ:           w.Name,
+		NEQ:          w.NameNEQ,
+		In:           w.NameIn,
+		NotIn:        w.NameNotIn,
+		Contains:     w.NameContains,
+		HasPrefix:    w.NameHasPrefix,
+		HasSuffix:    w.NameHasSuffix,
+		EqualFold:    w.NameEqualFold,
+		ContainsFold: w.NameContainsFold,
 	})
 	gqlgraph.Field(f, "email", userColEmail, gqlgraph.Ops[string]{
-		EQ:        w.Email,
-		NEQ:       w.EmailNEQ,
-		In:        w.EmailIn,
-		NotIn:     w.EmailNotIn,
-		Contains:  w.EmailContains,
-		HasPrefix: w.EmailHasPrefix,
-		HasSuffix: w.EmailHasSuffix,
+		EQ:           w.Email,
+		NEQ:          w.EmailNEQ,
+		In:           w.EmailIn,
+		NotIn:        w.EmailNotIn,
+		Contains:     w.EmailContains,
+		HasPrefix:    w.EmailHasPrefix,
+		HasSuffix:    w.EmailHasSuffix,
+		EqualFold:    w.EmailEqualFold,
+		ContainsFold: w.EmailContainsFold,
 	})
 	gqlgraph.Field(f, "role", userColRole, gqlgraph.Ops[UserRole]{
 		EQ:    w.Role,

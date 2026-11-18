@@ -289,6 +289,8 @@ input PostWhereInput {
   titleContains: String
   titleHasPrefix: String
   titleHasSuffix: String
+  titleEqualFold: String
+  titleContainsFold: String
   slug: String
   slugNEQ: String
   slugIn: [String!]

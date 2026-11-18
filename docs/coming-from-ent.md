@@ -200,7 +200,7 @@ A condition is a `velox.Predicate`, built by ent's names:
 | `sql.FieldNEQ`, `FieldGT`, `FieldGTE`, `FieldLT`, `FieldLTE` | `velox.FieldNEQ`, `FieldGT`, `FieldGTE`, `FieldLT`, `FieldLTE` |
 | `sql.FieldIn(name, vs...)`, `FieldNotIn` | `velox.FieldIn(name, vs...)`, `FieldNotIn` |
 | `sql.FieldIsNull(name)`, `FieldNotNull` | `velox.FieldIsNull(name)`, `FieldNotNull` |
-| `sql.FieldContains`, `FieldHasPrefix`, `FieldHasSuffix`, `FieldEqualFold` | `velox.FieldContains`, `FieldHasPrefix`, `FieldHasSuffix`, `FieldEqualFold` |
+| `sql.FieldContains`, `FieldHasPrefix`, `FieldHasSuffix`, `FieldEqualFold`, `FieldContainsFold` | `velox.FieldContains`, `FieldHasPrefix`, `FieldHasSuffix`, `FieldEqualFold`, `FieldContainsFold` |
 | `sqlgraph.HasNeighbors` (`user.HasPets()`) | `velox.HasEdge("pets")` |
 | `sqlgraph.HasNeighborsWith` (`user.HasPetsWith(...)`) | `velox.HasEdgeWith("pets", ps...)` |
 | `sql.AndPredicates`, `OrPredicates`, `NotPredicates` | `velox.And`, `velox.Or`, `velox.Not` |

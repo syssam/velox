@@ -264,19 +264,21 @@ type PredOp uint8
 // The operators of Table.Pred, each that of the column handles' method of
 // the same name.
 const (
-	PredEQ        PredOp = iota + 1 // column = v
-	PredNEQ                         // column <> v
-	PredIn                          // column IN (v...), v a []any; false for none
-	PredNotIn                       // column NOT IN (v...), v a []any; true for none
-	PredGT                          // column > v
-	PredGTE                         // column >= v
-	PredLT                          // column < v
-	PredLTE                         // column <= v
-	PredContains                    // column LIKE %v%, v's LIKE characters escaped; a text column
-	PredHasPrefix                   // column LIKE v%; a text column
-	PredHasSuffix                   // column LIKE %v; a text column
-	PredIsNull                      // column IS NULL; v nil; a nullable column
-	PredNotNull                     // column IS NOT NULL; v nil; a nullable column
+	PredEQ           PredOp = iota + 1 // column = v
+	PredNEQ                            // column <> v
+	PredIn                             // column IN (v...), v a []any; false for none
+	PredNotIn                          // column NOT IN (v...), v a []any; true for none
+	PredGT                             // column > v
+	PredGTE                            // column >= v
+	PredLT                             // column < v
+	PredLTE                            // column <= v
+	PredContains                       // column LIKE %v%, v's LIKE characters escaped; a text column
+	PredHasPrefix                      // column LIKE v%; a text column
+	PredHasSuffix                      // column LIKE %v; a text column
+	PredIsNull                         // column IS NULL; v nil; a nullable column
+	PredNotNull                        // column IS NOT NULL; v nil; a nullable column
+	PredEqualFold                      // LOWER(column) = LOWER(v); a text column
+	PredContainsFold                   // LOWER(column) LIKE LOWER(%v%), v's LIKE characters escaped; a text column
 )
 
 // predOps are the engine's operators of the PredOps that compare.
@@ -288,7 +290,7 @@ var predOps = [...]Node{
 
 // Pred is the condition op on column col of the entity, with the value v: the
 // column handles' EQ, NEQ, In, NotIn, GT, GTE, LT, LTE, Contains, HasPrefix,
-// HasSuffix, IsNull and NotNull, untyped.
+// HasSuffix, EqualFold, ContainsFold, IsNull and NotNull, untyped.
 //
 // v must be of the column's Go type, as the handle's method takes it: the
 // field's type, or for a nullable field (a pointer) the type it points to;
@@ -357,6 +359,18 @@ func (t Table) pred(col int, op PredOp, v any) (Node, error) {
 			s = "%" + s
 		}
 		return Node{Op: OpLike, Col: int32(col), V: s, W: t.t.info}, nil
+	case PredEqualFold, PredContainsFold:
+		if want.Kind() != reflect.String {
+			return Node{}, fmt.Errorf("velox: %s: %s is not a text column", s.info.Name, c.Field)
+		}
+		if err := check(v); err != nil {
+			return Node{}, err
+		}
+		s := reflect.ValueOf(v).String()
+		if op == PredEqualFold {
+			return Node{Op: OpFold, Col: int32(col), V: s, W: t.t.info}, nil
+		}
+		return Node{Op: OpLikeFold, Col: int32(col), V: "%" + EscapeLike(s) + "%", W: t.t.info}, nil
 	case PredIsNull, PredNotNull:
 		if !c.Nullable {
 			return Node{}, fmt.Errorf("velox: %s: %s is not nullable", s.info.Name, c.Field)

@@ -67,6 +67,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   package for them, and package `dialect` names `Postgres`, `MySQL` and `SQLite`
   for `SchemaType` (decision 0076).
 
+- Text predicates that ignore case: a string handle's `ContainsFold` (new,
+  `LOWER(column) LIKE LOWER(pattern)`) beside `EqualFold`, `velox.FieldContainsFold`
+  and `untyped.PredEqualFold` and `PredContainsFold`. In velox-graphql,
+  `graphql.OpEqualFold`, `OpContainsFold`, `OpsCaseFold` and `OpsSubstring` are new,
+  and `OpsString` and `OpsComparison` mean what the old velox's did: `OpsString` is
+  equality, contains, has prefix, has suffix and the two fold predicates, and is
+  the default of a string field's `WhereOps()`; `OpsComparison` includes equality.
+  Regenerate: `veloxgql.GeneratedCodeIsVersion23` replaces Version22
+  (decision 0078).
+
 - `graphql.QueryField()` with no name is the old velox's name for the entity
   (`terms`, `graphQlLogs`, `performanceGoals`),
   `graphql.RelayConnection()` is accepted and says nothing (connections are always

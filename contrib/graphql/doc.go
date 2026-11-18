@@ -186,7 +186,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlgraph for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion22", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion23", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -549,8 +549,9 @@
 // allows at most 1500 statements. An input object argument, as a where, adds its
 // size at each use: one for each object and value in it, read from the variables,
 // so one variable reused counts each time. In a where, a predicate no index serves
-// adds 2000, 20 statements, at each use: <field>Contains, <field>HasPrefix and
-// <field>HasSuffix, a LIKE that reads the whole table, and a non-empty
+// adds 2000, 20 statements, at each use: <field>Contains, <field>HasPrefix,
+// <field>HasSuffix, <field>EqualFold and <field>ContainsFold, a LIKE or a LOWER
+// comparison that reads the whole table, and a non-empty
 // has<Edge>With, a subquery for each row read. So 700 aliases of
 // items(first: 1, where: {nameContains: "x"}), which took 12.5 s over 90000 rows,
 // are refused, and the default allows about 70 such filters, while a page that

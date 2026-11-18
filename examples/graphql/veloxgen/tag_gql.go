@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion22
+const _ = veloxgql.GeneratedCodeIsVersion23
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -203,13 +203,15 @@ type LabelWhereInput struct {
 	IDLTE   *int64
 
 	// Predicates on the field name.
-	Name          *string
-	NameNEQ       *string
-	NameIn        []string
-	NameNotIn     []string
-	NameContains  *string
-	NameHasPrefix *string
-	NameHasSuffix *string
+	Name             *string
+	NameNEQ          *string
+	NameIn           []string
+	NameNotIn        []string
+	NameContains     *string
+	NameHasPrefix    *string
+	NameHasSuffix    *string
+	NameEqualFold    *string
+	NameContainsFold *string
 
 	// Predicates on the field rank.
 	Rank      *int8
@@ -249,13 +251,15 @@ func (w *LabelWhereInput) predicate(ctx context.Context) (velox.Predicate, error
 		LTE:   w.IDLTE,
 	})
 	gqlgraph.Field(f, "name", tagColName, gqlgraph.Ops[string]{
-		EQ:        w.Name,
-		NEQ:       w.NameNEQ,
-		In:        w.NameIn,
-		NotIn:     w.NameNotIn,
-		Contains:  w.NameContains,
-		HasPrefix: w.NameHasPrefix,
-		HasSuffix: w.NameHasSuffix,
+		EQ:           w.Name,
+		NEQ:          w.NameNEQ,
+		In:           w.NameIn,
+		NotIn:        w.NameNotIn,
+		Contains:     w.NameContains,
+		HasPrefix:    w.NameHasPrefix,
+		HasSuffix:    w.NameHasSuffix,
+		EqualFold:    w.NameEqualFold,
+		ContainsFold: w.NameContainsFold,
 	})
 	gqlgraph.Field(f, "rank", tagColRank, gqlgraph.Ops[int8]{
 		EQ:    w.Rank,

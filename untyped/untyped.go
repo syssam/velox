@@ -122,6 +122,9 @@ const (
 	PredHasSuffix = engine.PredHasSuffix // column LIKE %v; a text column
 	PredIsNull    = engine.PredIsNull    // column IS NULL; v nil; a nullable column
 	PredNotNull   = engine.PredNotNull   // column IS NOT NULL; v nil; a nullable column
+
+	PredEqualFold    = engine.PredEqualFold    // LOWER(column) = LOWER(v); a text column
+	PredContainsFold = engine.PredContainsFold // LOWER(column) LIKE LOWER(%v%), v's LIKE characters escaped; a text column
 )
 
 // TableQuery is a SELECT on the entity of a Table, velox.Query with the

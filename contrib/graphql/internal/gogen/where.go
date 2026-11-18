@@ -21,19 +21,21 @@ var predOps = map[graphql.WhereOp]struct {
 	field, suffix string
 	isBool        bool
 }{
-	graphql.OpEQ:        {"EQ", "", false},
-	graphql.OpNEQ:       {"NEQ", "NEQ", false},
-	graphql.OpIn:        {"In", "In", false},
-	graphql.OpNotIn:     {"NotIn", "NotIn", false},
-	graphql.OpGT:        {"GT", "GT", false},
-	graphql.OpGTE:       {"GTE", "GTE", false},
-	graphql.OpLT:        {"LT", "LT", false},
-	graphql.OpLTE:       {"LTE", "LTE", false},
-	graphql.OpContains:  {"Contains", "Contains", false},
-	graphql.OpHasPrefix: {"HasPrefix", "HasPrefix", false},
-	graphql.OpHasSuffix: {"HasSuffix", "HasSuffix", false},
-	graphql.OpIsNil:     {"IsNil", "IsNil", true},
-	graphql.OpNotNil:    {"NotNil", "NotNil", true},
+	graphql.OpEQ:           {"EQ", "", false},
+	graphql.OpNEQ:          {"NEQ", "NEQ", false},
+	graphql.OpIn:           {"In", "In", false},
+	graphql.OpNotIn:        {"NotIn", "NotIn", false},
+	graphql.OpGT:           {"GT", "GT", false},
+	graphql.OpGTE:          {"GTE", "GTE", false},
+	graphql.OpLT:           {"LT", "LT", false},
+	graphql.OpLTE:          {"LTE", "LTE", false},
+	graphql.OpContains:     {"Contains", "Contains", false},
+	graphql.OpHasPrefix:    {"HasPrefix", "HasPrefix", false},
+	graphql.OpHasSuffix:    {"HasSuffix", "HasSuffix", false},
+	graphql.OpEqualFold:    {"EqualFold", "EqualFold", false},
+	graphql.OpContainsFold: {"ContainsFold", "ContainsFold", false},
+	graphql.OpIsNil:        {"IsNil", "IsNil", true},
+	graphql.OpNotNil:       {"NotNil", "NotNil", true},
 }
 
 // writePred writes the where input's methods Pred, which turns it into a

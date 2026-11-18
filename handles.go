@@ -397,6 +397,11 @@ func (c StringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpFold, Col: c.I, V: string(s)}))
 }
 
+// ContainsFold is true when the column contains s, taken literally, whatever the case of either: LOWER(column) LIKE LOWER(pattern). SQLite's LOWER folds ASCII letters only, so on SQLite it ignores the case of those alone.
+func (c StringCol[E, V]) ContainsFold[_ Lazy[V]](s V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLikeFold, Col: c.I, V: "%" + engine.EscapeLike(string(s)) + "%"}))
+}
+
 // Set sets the column to v.
 func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
@@ -842,6 +847,11 @@ func (c NullStringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E] {
 // EqualFold is LOWER(column) = LOWER(s). SQLite's LOWER folds ASCII letters only, so on SQLite it ignores the case of those alone.
 func (c NullStringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpFold, Col: c.I, V: string(s)}))
+}
+
+// ContainsFold is true when the column contains s, taken literally, whatever the case of either: LOWER(column) LIKE LOWER(pattern). SQLite's LOWER folds ASCII letters only, so on SQLite it ignores the case of those alone.
+func (c NullStringCol[E, V]) ContainsFold[_ Lazy[V]](s V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLikeFold, Col: c.I, V: "%" + engine.EscapeLike(string(s)) + "%"}))
 }
 
 // Set sets the column to v.

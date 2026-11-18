@@ -602,9 +602,9 @@ func TestSensitiveFieldAbsent(t *testing.T) {
 				{"name": "id"}, {"name": "idNEQ"}, {"name": "idIn"}, {"name": "idNotIn"},
 				{"name": "idGT"}, {"name": "idGTE"}, {"name": "idLT"}, {"name": "idLTE"},
 				{"name": "name"}, {"name": "nameNEQ"}, {"name": "nameIn"}, {"name": "nameNotIn"},
-				{"name": "nameContains"}, {"name": "nameHasPrefix"}, {"name": "nameHasSuffix"},
+				{"name": "nameContains"}, {"name": "nameHasPrefix"}, {"name": "nameHasSuffix"}, {"name": "nameEqualFold"}, {"name": "nameContainsFold"},
 				{"name": "email"}, {"name": "emailNEQ"}, {"name": "emailIn"}, {"name": "emailNotIn"},
-				{"name": "emailContains"}, {"name": "emailHasPrefix"}, {"name": "emailHasSuffix"},
+				{"name": "emailContains"}, {"name": "emailHasPrefix"}, {"name": "emailHasSuffix"}, {"name": "emailEqualFold"}, {"name": "emailContainsFold"},
 				{"name": "role"}, {"name": "roleNEQ"}, {"name": "roleIn"}, {"name": "roleNotIn"},
 				{"name": "hasPosts"}, {"name": "hasPostsWith"}
 			]},
@@ -772,6 +772,14 @@ func TestFieldDirective(t *testing.T) {
 			query: filter,
 			want:  `{"errors": [{` + forbidden + `, "path": ["users", "where", "emailHasPrefix"]}], "data": null}`,
 		})
+		// The predicates that ignore case are guarded as the others are.
+		for _, pred := range []string{"emailEqualFold", "emailContainsFold"} {
+			s.do(t, request{
+				role:  role,
+				query: `{ users(where: {` + pred + `: "a"}) { totalCount } }`,
+				want:  `{"errors": [{` + forbidden + `, "path": ["users", "where", "` + pred + `"]}], "data": null}`,
+			})
+		}
 		// Nested in not or in or, the predicate is guarded alike.
 		s.do(t, request{
 			role:  role,

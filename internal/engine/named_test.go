@@ -149,6 +149,7 @@ func TestResolveByName(t *testing.T) {
 		{"eq nil", engine.FieldEQ("note", nil), "", nil, "a comparison of note with nil: use IsNull or NotNull"},
 		{"is null on not null", engine.FieldIsNull("title"), "", nil, "title is not nullable"},
 		{"text on a number", engine.FieldContains("rank", "1"), "", nil, "rank is not a text column"},
+		{"fold on a number", engine.FieldContainsFold("rank", "1"), "", nil, "rank is not a text column"},
 		{"in a group", velox.And(engine.FieldEQ("rank", 1), velox.Or(engine.FieldEQ("title", "a"), engine.FieldEQ("nope", 1))), "", nil, `no column "nope"`},
 		{"not", velox.Not(engine.FieldEQ("visible", true)), `NOT ("visible" = $1)`, []any{true}, ""},
 	} {
@@ -575,5 +576,12 @@ func TestFieldConditionsRenderAsTyped(t *testing.T) {
 	}
 	if !strings.Contains(s, `LOWER("title") = LOWER(`) || len(args) == 0 || args[0] != "Ab" {
 		t.Errorf("FieldEqualFold renders %s %v", s, args)
+	}
+	s, args, err = nmSQL(t, velox.FieldContainsFold("title", "a%!"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, `LOWER("title") LIKE LOWER(`) || !strings.Contains(s, `ESCAPE '!'`) || len(args) == 0 || args[0] != "%a!%!!%" {
+		t.Errorf("FieldContainsFold renders %s %v", s, args)
 	}
 }

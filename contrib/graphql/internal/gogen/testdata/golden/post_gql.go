@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion22
+const _ = veloxgql.GeneratedCodeIsVersion23
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -303,13 +303,15 @@ type PostWhereInput struct {
 	WriterIDNotIn []int64
 
 	// Predicates on the field title.
-	Title          *string
-	TitleNEQ       *string
-	TitleIn        []string
-	TitleNotIn     []string
-	TitleContains  *string
-	TitleHasPrefix *string
-	TitleHasSuffix *string
+	Title             *string
+	TitleNEQ          *string
+	TitleIn           []string
+	TitleNotIn        []string
+	TitleContains     *string
+	TitleHasPrefix    *string
+	TitleHasSuffix    *string
+	TitleEqualFold    *string
+	TitleContainsFold *string
 
 	// Predicates on the field slug.
 	Slug      *string
@@ -373,13 +375,15 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		NotIn: w.WriterIDNotIn,
 	})
 	gqlgraph.Field(f, "title", postColTitle, gqlgraph.Ops[string]{
-		EQ:        w.Title,
-		NEQ:       w.TitleNEQ,
-		In:        w.TitleIn,
-		NotIn:     w.TitleNotIn,
-		Contains:  w.TitleContains,
-		HasPrefix: w.TitleHasPrefix,
-		HasSuffix: w.TitleHasSuffix,
+		EQ:           w.Title,
+		NEQ:          w.TitleNEQ,
+		In:           w.TitleIn,
+		NotIn:        w.TitleNotIn,
+		Contains:     w.TitleContains,
+		HasPrefix:    w.TitleHasPrefix,
+		HasSuffix:    w.TitleHasSuffix,
+		EqualFold:    w.TitleEqualFold,
+		ContainsFold: w.TitleContainsFold,
 	})
 	gqlgraph.Field(f, "slug", postColSlug, gqlgraph.Ops[string]{
 		EQ:    w.Slug,

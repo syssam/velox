@@ -85,6 +85,11 @@ func FieldHasSuffix(name, s string) Predicate { return engine.FieldHasSuffix(nam
 // given name. SQLite's LOWER folds ASCII letters only.
 func FieldEqualFold(name, s string) Predicate { return engine.FieldEqualFold(name, s) }
 
+// FieldContainsFold is true when the text column of the given name contains
+// s, taken literally, whatever the case of either: LOWER(column) LIKE
+// LOWER(pattern). SQLite's LOWER folds ASCII letters only.
+func FieldContainsFold(name, s string) Predicate { return engine.FieldContainsFold(name, s) }
+
 // FieldIsNull is true when the nullable column of the given name is NULL.
 func FieldIsNull(name string) Predicate { return engine.FieldIsNull(name) }
 

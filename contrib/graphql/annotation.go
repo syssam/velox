@@ -55,13 +55,23 @@ const (
 	OpHasSuffix
 	OpIsNil
 	OpNotNil
+	// OpEqualFold is equal ignoring case, and OpContainsFold contains ignoring
+	// case: LOWER(column) compared with LOWER(value).
+	OpEqualFold
+	OpContainsFold
 
 	// OpsEquality is equal, not equal, in and not in.
 	OpsEquality = OpEQ | OpNEQ | OpIn | OpNotIn
-	// OpsComparison is greater and less, strict or not.
-	OpsComparison = OpGT | OpGTE | OpLT | OpLTE
-	// OpsString is contains, has prefix and has suffix.
-	OpsString = OpContains | OpHasPrefix | OpHasSuffix
+	// OpsComparison is OpsEquality and greater and less, strict or not, as the
+	// old velox's is.
+	OpsComparison = OpsEquality | OpGT | OpGTE | OpLT | OpLTE
+	// OpsSubstring is contains, has prefix and has suffix.
+	OpsSubstring = OpContains | OpHasPrefix | OpHasSuffix
+	// OpsCaseFold is equal and contains, ignoring case.
+	OpsCaseFold = OpEqualFold | OpContainsFold
+	// OpsString is OpsEquality, OpsSubstring and OpsCaseFold, as the old
+	// velox's is: the default of a string field.
+	OpsString = OpsEquality | OpsSubstring | OpsCaseFold
 	// OpsNullable is is-nil and not-nil.
 	OpsNullable = OpIsNil | OpNotNil
 	// OpsAll is every predicate.

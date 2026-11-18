@@ -31,7 +31,7 @@ func TestWhere(t *testing.T) {
 			f    *plugin.Field
 			want []string
 		}{
-			{field("s", "string"), []string{"s: String", "sNEQ: String", "sIn: [String!]", "sNotIn: [String!]", "sContains: String", "sHasPrefix: String", "sHasSuffix: String"}},
+			{field("s", "string"), []string{"s: String", "sNEQ: String", "sIn: [String!]", "sNotIn: [String!]", "sContains: String", "sHasPrefix: String", "sHasSuffix: String", "sEqualFold: String", "sContainsFold: String"}},
 			{field("i", "int"), []string{"i: Int", "iNEQ: Int", "iIn: [Int!]", "iNotIn: [Int!]", "iGT: Int", "iGTE: Int", "iLT: Int", "iLTE: Int"}},
 			{field("u", "uint64"), []string{"u: Uint64", "uNEQ: Uint64", "uIn: [Uint64!]", "uNotIn: [Uint64!]", "uGT: Uint64", "uGTE: Uint64", "uLT: Uint64", "uLTE: Uint64"}},
 			{field("f", "float64"), []string{"f: Float", "fNEQ: Float", "fIn: [Float!]", "fNotIn: [Float!]", "fGT: Float", "fGTE: Float", "fLT: Float", "fLTE: Float"}},
@@ -39,7 +39,7 @@ func TestWhere(t *testing.T) {
 			{field("b", "bool"), []string{"b: Boolean", "bNEQ: Boolean"}},
 			{&plugin.Field{Name: "e", GoName: "E", Type: "enum", EnumValues: []string{"x"}}, []string{"e: UserE", "eNEQ: UserE", "eIn: [UserE!]", "eNotIn: [UserE!]"}},
 			{field("uid", "uuid"), []string{"uid: UUID", "uidNEQ: UUID", "uidIn: [UUID!]", "uidNotIn: [UUID!]"}},
-			{opt(field("o", "string")), []string{"o: String", "oNEQ: String", "oIn: [String!]", "oNotIn: [String!]", "oContains: String", "oHasPrefix: String", "oHasSuffix: String", "oIsNil: Boolean", "oNotNil: Boolean"}},
+			{opt(field("o", "string")), []string{"o: String", "oNEQ: String", "oIn: [String!]", "oNotIn: [String!]", "oContains: String", "oHasPrefix: String", "oHasSuffix: String", "oEqualFold: String", "oContainsFold: String", "oIsNil: Boolean", "oNotNil: Boolean"}},
 			{opt(field("ob", "bool")), []string{"ob: Boolean", "obNEQ: Boolean", "obIsNil: Boolean", "obNotNil: Boolean"}},
 			{val(field("ov", "bool")), []string{"ov: Boolean", "ovNEQ: Boolean"}},
 		}
@@ -129,7 +129,7 @@ func TestWhere(t *testing.T) {
 		i.Annotations = ann(t, graphql.WhereOps(graphql.OpsAll))
 		s, _ := load(t, model(entity("User", n, i)))
 		want := append(append(logic("UserWhereInput"), nodeKey()...),
-			"n: String", "nNEQ: String", "nIn: [String!]", "nNotIn: [String!]", "nGT: String", "nContains: String", "nHasPrefix: String", "nHasSuffix: String",
+			"n: String", "nNEQ: String", "nIn: [String!]", "nNotIn: [String!]", "nGT: String", "nContains: String", "nHasPrefix: String", "nHasSuffix: String", "nEqualFold: String", "nContainsFold: String",
 			"i: Int", "iNEQ: Int", "iIn: [Int!]", "iNotIn: [Int!]", "iGT: Int", "iGTE: Int", "iLT: Int", "iLTE: Int")
 		if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
 			t.Errorf("got %v\nwant %v", got, want)

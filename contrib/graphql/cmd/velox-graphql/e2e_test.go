@@ -287,7 +287,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"  direction: OrderDirection! = ASC\n  \"\"\"The field to order by.\"\"\"\n  field: AccountOrderField!\n",
 		"enum AccountOrderField {\n  NAME\n}\n",
 		"enum PostOrderField {\n  TITLE\n  \"\"\"Orders through author: leaves out each Post without one, or whose author the reader may not see.\"\"\"\n  AUTHOR_NAME\n}\n",
-		"  displayNameHasSuffix: String\n  hasPosts: Boolean\n  hasPostsWith: [PostWhereInput!]\n  hasGroups: Boolean\n}\n",
+		"  displayNameHasSuffix: String\n  displayNameEqualFold: String\n  displayNameContainsFold: String\n  hasPosts: Boolean\n  hasPostsWith: [PostWhereInput!]\n  hasGroups: Boolean\n}\n",
 		"  or: [PostWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  authorID: ID\n  authorIDNEQ: ID\n  authorIDIn: [ID!]\n  authorIDNotIn: [ID!]\n  title: String\n",
 		"input CreatePostInput {\n  title: String!\n  \"\"\"The ID of the Account the edge author leads to.\"\"\"\n  authorID: ID!\n}\n",
 		"input UpdatePostInput {\n  title: String\n  \"\"\"The ID of the Account the edge author leads to.\"\"\"\n  authorID: ID\n}\n",
@@ -1210,6 +1210,8 @@ func TestWhereOps(t *testing.T) {
 		ac("displayNameContains", &gen.AccountWhereInput{DisplayNameContains: ptr("n")}, 1, 4),
 		ac("displayNameHasPrefix", &gen.AccountWhereInput{DisplayNameHasPrefix: ptr("b")}, 2),
 		ac("displayNameHasSuffix", &gen.AccountWhereInput{DisplayNameHasSuffix: ptr("n")}, 1, 4),
+		ac("displayNameEqualFold", &gen.AccountWhereInput{DisplayNameEqualFold: ptr("ANN")}, 1),
+		ac("displayNameContainsFold", &gen.AccountWhereInput{DisplayNameContainsFold: ptr("N")}, 1, 4),
 		// A required foreign key, by the IDs of its edge's node.
 		po("authorID", &gen.PostWhereInput{AuthorID: ptr(int64(1))}, 1, 2),
 		po("authorIDNEQ", &gen.PostWhereInput{AuthorIDNEQ: ptr(int64(1))}, 3), // 4's author is in another org: it reads as null, as a policy's hidden row does

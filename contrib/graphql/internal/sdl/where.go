@@ -35,6 +35,8 @@ var predicates = []struct {
 	{graphql.OpContains, "OpContains", "Contains", takesValue},
 	{graphql.OpHasPrefix, "OpHasPrefix", "HasPrefix", takesValue},
 	{graphql.OpHasSuffix, "OpHasSuffix", "HasSuffix", takesValue},
+	{graphql.OpEqualFold, "OpEqualFold", "EqualFold", takesValue},
+	{graphql.OpContainsFold, "OpContainsFold", "ContainsFold", takesValue},
 	{graphql.OpIsNil, "OpIsNil", "IsNil", takesBool},
 	{graphql.OpNotNil, "OpNotNil", "NotNil", takesBool},
 }
@@ -62,7 +64,7 @@ func opNames(ops graphql.WhereOp) string {
 func predicatesOf(typ string, nullable bool) (has, defaults graphql.WhereOp) {
 	switch typ {
 	case "string":
-		has, defaults = graphql.OpsEquality|graphql.OpsComparison|graphql.OpsString, graphql.OpsEquality|graphql.OpsString
+		has, defaults = graphql.OpsComparison|graphql.OpsString, graphql.OpsString
 	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64",
 		"float32", "float64", "time":
 		has, defaults = graphql.OpsEquality|graphql.OpsComparison, graphql.OpsEquality|graphql.OpsComparison
