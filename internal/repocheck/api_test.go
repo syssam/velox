@@ -22,7 +22,7 @@ var updateAPI = flag.Bool("update-api", false, "rewrite testdata/api.txt from th
 // internal directory are not in it: the first two are for generated code only,
 // and say so.
 var apiPackages = []string{
-	".", "veloxtype", "veloxpgx", "schema", "schema/edge", "schema/field", "schema/index", "dialect/sqlschema", "schema/mixin", "schema/mixin/softdelete",
+	".", "veloxtype", "veloxpgx", "schema", "schema/edge", "schema/field", "schema/index", "dialect", "dialect/sqlschema", "schema/mixin", "schema/mixin/softdelete",
 	"migrate", "plugin", "scope", "scope/scopetest", "contrib/graphql", "contrib/graphql/veloxgql", "contrib/veloxotel",
 }
 

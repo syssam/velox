@@ -910,6 +910,11 @@ func Edges(edges ...string) *Builder
 func Fields(fields ...string) *Builder
 type Builder struct { }
 
+package dialect
+const MySQL
+const Postgres
+const SQLite
+
 package dialect/sqlschema
 const AnnotationName
 const Cascade CascadeAction

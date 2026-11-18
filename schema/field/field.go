@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/internal/desc"
 )
@@ -64,11 +65,11 @@ func (c common[B]) Comment(s string) B { c.d.Comment = s; return c.self }
 // StorageKey sets the column name.
 func (c common[B]) StorageKey(s string) B { c.d.StorageKey = s; return c.self }
 
-// The dialects SchemaType knows, by the names the core gives them.
+// The dialects SchemaType knows, by the names package dialect gives them.
 const (
-	Postgres = "postgres"
-	MySQL    = "mysql"
-	SQLite   = "sqlite"
+	Postgres = dialect.Postgres
+	MySQL    = dialect.MySQL
+	SQLite   = dialect.SQLite
 )
 
 // SchemaType sets the column type per dialect, such as

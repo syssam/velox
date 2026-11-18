@@ -1,4 +1,4 @@
-# 0076. The root package has the schema types
+# 0076. The root package has the schema types, and package dialect the dialect names
 
 - Status: accepted, 2026-11-18.
 
@@ -23,6 +23,10 @@ Package `velox` declares `Schema`, `Field`, `Edge`, `Index`, `Mixin` and
 schema that embeds `velox.Schema` is discovered, loaded and generated as one
 that embeds `schema.Schema`, and the two spellings mix in one package.
 
+- Package `dialect` names the dialects, `dialect.Postgres`, `MySQL` and `SQLite`,
+  as the old velox's does, for the `SchemaType` map a schema writes (32 uses in
+  4 files of the largest consumer). They are the strings `field.Postgres` and the
+  others already were, which are now these.
 - Nothing is generated from the aliases, and velox-gen's discovery already
   reads through aliases (`types.Unalias`).
 - `schema` stays the home: the guide and examples keep saying `schema.Schema`,

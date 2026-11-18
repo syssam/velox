@@ -63,7 +63,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 - `velox.Schema`, `Field`, `Edge`, `Index`, `Mixin` and `Annotation` are aliases of
   package `schema`'s, as in ent and the old velox, so a schema can import one
-  package for them (decision 0076).
+  package for them, and package `dialect` names `Postgres`, `MySQL` and `SQLite`
+  for `SchemaType` (decision 0076).
 
 - `graphql.QueryField()` with no name is the entity's plural in lower camel case,
   `graphql.RelayConnection()` is accepted and says nothing (connections are always
