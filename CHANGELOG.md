@@ -742,6 +742,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- velox reads `github.com/mattn/go-sqlite3`'s errors, as it reads
+  modernc.org/sqlite's: a violated constraint is a `*velox.ConstraintError`,
+  `velox.DriverCode` gives SQLite's extended code, and `SQLITE_BUSY` or
+  `SQLITE_LOCKED` retries a transaction. Before, the `"sqlite3"` driver's
+  errors had no code and were none of these.
 - `veloxgql.Limits.MaxResponseBytes` counts a list of nullable strings
   (`[]*string`), a pointer to a list, and lists of `Bytes` or `JSON`. Before,
   each counted 0 bytes.

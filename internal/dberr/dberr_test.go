@@ -257,3 +257,41 @@ func TestPgErrorOfNilEmbedded(t *testing.T) {
 		t.Errorf("PgErrorOf = %+v, %v", pg, ok)
 	}
 }
+
+// Error has the shape of github.com/mattn/go-sqlite3's Error: a struct used
+// by value, with the codes in fields.
+type Error struct {
+	Code, ExtendedCode int
+	msg                string
+}
+
+func (e Error) Error() string { return e.msg }
+
+// TestCodeFields: a struct error of the named package is read by value and
+// by pointer, its ExtendedCode first and its Code when that is 0; a
+// look-alike in another package is not.
+func TestCodeFields(t *testing.T) {
+	const pkg = "github.com/syssam/velox/internal/dberr"
+	unique := Error{Code: 19, ExtendedCode: 2067, msg: "UNIQUE constraint failed: p.code"}
+	for _, c := range []struct {
+		err  error
+		pkg  string
+		code int
+		ok   bool
+	}{
+		{fmt.Errorf("velox: %w", unique), pkg, 2067, true},
+		{&unique, pkg, 2067, true},
+		{Error{Code: 5, msg: "database is locked"}, pkg, 5, true},
+		{(*Error)(nil), pkg, 0, false},
+		{unique, "github.com/mattn/go-sqlite3", 0, false},
+		{io.EOF, pkg, 0, false},
+	} {
+		code, msg, ok := codeFields(c.err, c.pkg, "Error")
+		if code != c.code || ok != c.ok || (ok && msg == "") {
+			t.Errorf("codeFields(%#v, %s) = %d, %q, %v; want %d, %v", c.err, c.pkg, code, msg, ok, c.code, c.ok)
+		}
+	}
+	if kind, name := sqliteKind(2067, unique.Error()); kind != veloxtype.ConstraintUnique || name != "p.code" {
+		t.Errorf("sqliteKind of mattn's text = %v, %q", kind, name)
+	}
+}

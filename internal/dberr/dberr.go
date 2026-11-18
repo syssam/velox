@@ -1,7 +1,8 @@
 // Package dberr reads the errors of the database drivers velox supports
-// (pgx, github.com/go-sql-driver/mysql and modernc.org/sqlite) without
-// importing them: a violated constraint, a lock that could not be taken, a
-// retryable failure, a lost connection, and the database's own code. A
+// (pgx, github.com/go-sql-driver/mysql, modernc.org/sqlite and
+// github.com/mattn/go-sqlite3) without importing them: a violated
+// constraint, a lock that could not be taken, a retryable failure, a lost
+// connection, and the database's own code. A
 // driver's error is recognized by its methods, its type's name and package,
 // or its text, which tests pin against the drivers.
 package dberr
@@ -231,15 +232,51 @@ func mysqlKind(n int, msg string) (veloxtype.ConstraintKind, string) {
 	return 0, ""
 }
 
-// SQLiteError reads a modernc.org/sqlite error, whose Code is SQLite's
-// extended result code and whose text ends with the constraint's subject:
-// "constraint failed: UNIQUE constraint failed: p.code (2067)".
+// SQLiteError reads a SQLite error of modernc.org/sqlite or
+// github.com/mattn/go-sqlite3 as SQLite's extended result code and the
+// error's text, which ends with the constraint's subject. modernc's
+// *Error has a Code method and the text "constraint failed: UNIQUE
+// constraint failed: p.code (2067)". mattn's Error is a struct, used by
+// value, whose ExtendedCode field holds the code and whose text is "UNIQUE
+// constraint failed: p.code".
 func SQLiteError(err error) (int, string, bool) {
 	e := DriverError(err, "modernc.org/sqlite", "Error")
 	if c, ok := e.(interface{ Code() int }); ok {
 		return c.Code(), e.Error(), true
 	}
-	return 0, "", false
+	return codeFields(err, "github.com/mattn/go-sqlite3", "Error")
+}
+
+// codeFields reads the first error in err's tree whose type is the struct
+// pkg.name, or a pointer to it, with integer fields ExtendedCode and Code:
+// it returns ExtendedCode, or Code when ExtendedCode is 0, and the text.
+func codeFields(err error, pkg, name string) (int, string, bool) {
+	var code int
+	var msg string
+	found := Walk(err, func(e error) bool {
+		v := reflect.ValueOf(e)
+		if v.Kind() == reflect.Pointer {
+			if v.IsNil() {
+				return false
+			}
+			v = v.Elem()
+		}
+		t := v.Type()
+		if t.Kind() != reflect.Struct || t.PkgPath() != pkg || t.Name() != name {
+			return false
+		}
+		ext, base := v.FieldByName("ExtendedCode"), v.FieldByName("Code")
+		if !ext.IsValid() || !base.IsValid() || !ext.CanInt() || !base.CanInt() {
+			return false
+		}
+		code = int(ext.Int())
+		if code == 0 {
+			code = int(base.Int())
+		}
+		msg = e.Error()
+		return true
+	})
+	return code, msg, found
 }
 
 func sqliteKind(code int, msg string) (veloxtype.ConstraintKind, string) {
@@ -295,8 +332,8 @@ func between(s, from, to string) string {
 // error from another, such as a serialization failure ("40001") from a
 // deadlock ("40P01"). It names the database's internals, so it is not for a
 // message an end user sees. velox reads the errors of pgx (natively or
-// through database/sql), github.com/go-sql-driver/mysql and
-// modernc.org/sqlite; another driver's error has no code here.
+// through database/sql), github.com/go-sql-driver/mysql, modernc.org/sqlite
+// and github.com/mattn/go-sqlite3; another driver's error has no code here.
 func DriverCode(err error) (string, bool) {
 	if pg, ok := PgErrorOf(err); ok {
 		return pg.Code, pg.Code != ""

@@ -18,8 +18,8 @@ import (
 // error from another, such as a serialization failure ("40001") from a
 // deadlock ("40P01"). It names the database's internals, so it is not for a
 // message an end user sees. velox reads the errors of pgx (natively or
-// through database/sql), github.com/go-sql-driver/mysql and
-// modernc.org/sqlite; another driver's error has no code here.
+// through database/sql), github.com/go-sql-driver/mysql, modernc.org/sqlite
+// and github.com/mattn/go-sqlite3; another driver's error has no code here.
 func DriverCode(err error) (string, bool) { return dberr.DriverCode(err) }
 
 // Errors velox returns. Each is returned wrapped, in an error whose text starts
