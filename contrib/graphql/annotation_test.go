@@ -484,6 +484,12 @@ func TestOldDirectiveSpellings(t *testing.T) {
 	if d := graphql.Deprecated("use b"); d.Args["reason"] != "use b" {
 		t.Errorf("Deprecated(reason) = %+v", d)
 	}
+	if !reflect.DeepEqual(graphql.EnableWhereInputs(true), graphql.WhereInput()) {
+		t.Error("EnableWhereInputs(true) is not WhereInput()")
+	}
+	if !reflect.DeepEqual(graphql.EnableWhereInputs(false), graphql.Skip(graphql.SkipWhereInput)) {
+		t.Error("EnableWhereInputs(false) is not Skip(SkipWhereInput)")
+	}
 	m := graphql.WhereInputEdges("a", "b").Merge(graphql.WhereInputEdges("b", "c")).(graphql.Annotation)
 	if got := strings.Join(m.WhereInputEdges, ","); got != "b,c,a" {
 		t.Errorf("merged names %q", got)

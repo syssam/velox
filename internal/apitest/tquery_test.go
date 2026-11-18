@@ -41,7 +41,8 @@ func TestTableQueryParity(t *testing.T) {
 			func(db *velox.DB) velox.Query[testmodel.Ticket] {
 				return db.Query[testmodel.Ticket]().Where(Tk.Done.EQ(false), Tk.Title.Contains("a%b"), Tk.ParentID.IsNull(),
 					Tk.ID.In(1, 2), Tk.Owner.HasPrefix("x_"), Tk.Owner.HasSuffix("y"), Tk.InvoiceID.GT(3), Tk.InvoiceID.LTE(9),
-					Tk.ID.NotIn(), Tk.Title.NEQ("n"), Tk.ParentID.NotNull(), Tk.ID.GTE(0), Tk.ID.LT(100)).Limit(5)
+					Tk.ID.NotIn(), Tk.Title.NEQ("n"), Tk.ParentID.NotNull(), Tk.ID.GTE(0), Tk.ID.LT(100),
+					Tk.Title.EqualFold("Ab"), Tk.Title.ContainsFold("a%b")).Limit(5)
 			},
 			func(db *velox.DB) untyped.TableQuery {
 				return untyped.Query(db, tkTable).Where(tkTable.Pred(col(Tk.Done), untyped.PredEQ, false), tkTable.Pred(col(Tk.Title), untyped.PredContains, "a%b"),
@@ -50,7 +51,8 @@ func TestTableQueryParity(t *testing.T) {
 					tkTable.Pred(col(Tk.InvoiceID), untyped.PredGT, int64(3)), tkTable.Pred(col(Tk.InvoiceID), untyped.PredLTE, int64(9)),
 					tkTable.Pred(col(Tk.ID), untyped.PredNotIn, nil), tkTable.Pred(col(Tk.Title), untyped.PredNEQ, "n"),
 					tkTable.Pred(col(Tk.ParentID), untyped.PredNotNull, nil), tkTable.Pred(col(Tk.ID), untyped.PredGTE, int64(0)),
-					tkTable.Pred(col(Tk.ID), untyped.PredLT, int64(100))).Limit(5)
+					tkTable.Pred(col(Tk.ID), untyped.PredLT, int64(100)),
+					tkTable.Pred(col(Tk.Title), untyped.PredEqualFold, "Ab"), tkTable.Pred(col(Tk.Title), untyped.PredContainsFold, "a%b")).Limit(5)
 			}},
 		{"relation, order, columns, after",
 			func(db *velox.DB) velox.Query[testmodel.Ticket] {
@@ -253,17 +255,19 @@ func TestTableQueryRows(t *testing.T) {
 func TestTablePredRefuses(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	for name, p := range map[string]velox.Predicate{
-		"another type":        tkTable.Pred(col(Tk.ID), untyped.PredEQ, 1),
-		"a pointer":           tkTable.Pred(col(Tk.ParentID), untyped.PredEQ, new(int64)),
-		"nil":                 tkTable.Pred(col(Tk.ID), untyped.PredEQ, nil),
-		"In of another type":  tkTable.Pred(col(Tk.ID), untyped.PredIn, []any{int64(1), "2"}),
-		"In of no []any":      tkTable.Pred(col(Tk.ID), untyped.PredIn, []int64{1}),
-		"text on a number":    tkTable.Pred(col(Tk.ID), untyped.PredContains, int64(1)),
-		"IsNull not nullable": tkTable.Pred(col(Tk.ID), untyped.PredIsNull, nil),
-		"IsNull with a value": tkTable.Pred(col(Tk.ParentID), untyped.PredIsNull, int64(1)),
-		"column out of range": tkTable.Pred(99, untyped.PredEQ, int64(1)),
-		"no operator":         tkTable.Pred(col(Tk.ID), 0, int64(1)),
-		"zero Table":          untyped.Table{}.Pred(0, untyped.PredEQ, int64(1)),
+		"another type":         tkTable.Pred(col(Tk.ID), untyped.PredEQ, 1),
+		"a pointer":            tkTable.Pred(col(Tk.ParentID), untyped.PredEQ, new(int64)),
+		"nil":                  tkTable.Pred(col(Tk.ID), untyped.PredEQ, nil),
+		"In of another type":   tkTable.Pred(col(Tk.ID), untyped.PredIn, []any{int64(1), "2"}),
+		"In of no []any":       tkTable.Pred(col(Tk.ID), untyped.PredIn, []int64{1}),
+		"text on a number":     tkTable.Pred(col(Tk.ID), untyped.PredContains, int64(1)),
+		"fold on a number":     tkTable.Pred(col(Tk.ID), untyped.PredContainsFold, int64(1)),
+		"fold of another type": tkTable.Pred(col(Tk.Title), untyped.PredEqualFold, 1),
+		"IsNull not nullable":  tkTable.Pred(col(Tk.ID), untyped.PredIsNull, nil),
+		"IsNull with a value":  tkTable.Pred(col(Tk.ParentID), untyped.PredIsNull, int64(1)),
+		"column out of range":  tkTable.Pred(99, untyped.PredEQ, int64(1)),
+		"no operator":          tkTable.Pred(col(Tk.ID), 0, int64(1)),
+		"zero Table":           untyped.Table{}.Pred(0, untyped.PredEQ, int64(1)),
 	} {
 		if _, _, err := untyped.Query(db, tkTable).Where(p).Limit(1).SQL(ctx); err == nil {
 			t.Errorf("%s: no error", name)

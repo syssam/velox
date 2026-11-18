@@ -554,6 +554,8 @@ func TestFieldConditionsRenderAsTyped(t *testing.T) {
 		{"FieldContains", velox.FieldContains("title", "a%b"), tbl.Pred(nmTitle, untyped.PredContains, "a%b")},
 		{"FieldHasPrefix", velox.FieldHasPrefix("title", "x"), tbl.Pred(nmTitle, untyped.PredHasPrefix, "x")},
 		{"FieldHasSuffix", velox.FieldHasSuffix("title", "x"), tbl.Pred(nmTitle, untyped.PredHasSuffix, "x")},
+		{"FieldEqualFold", velox.FieldEqualFold("title", "Ab"), tbl.Pred(nmTitle, untyped.PredEqualFold, "Ab")},
+		{"FieldContainsFold", velox.FieldContainsFold("title", "a%b"), tbl.Pred(nmTitle, untyped.PredContainsFold, "a%b")},
 		{"FieldIsNull", velox.FieldIsNull("note"), tbl.Pred(nmNote, untyped.PredIsNull, nil)},
 		{"FieldNotNull", velox.FieldNotNull("note"), tbl.Pred(nmNote, untyped.PredNotNull, nil)},
 	}
