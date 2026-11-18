@@ -69,6 +69,8 @@ func swapCols(n Node) Node {
 		return swapExists(n)
 	case OpThrough, OpAllow, OpInvalid:
 		return n
+	case OpExpr:
+		return swapExpr(n)
 	}
 	m := n
 	switch n.Col {

@@ -474,6 +474,31 @@ in the subquery doesn't empty the result the way SQL's `NOT IN` would.
 Aggregates, CTEs and window functions in a subquery still go through `Raw`.
 See [ADR 0057](decisions/0057-column-subqueries.md).
 
+### SQL text in a condition: Expr
+
+For a condition the handles do not say, such as a function or an expression,
+`Expr` takes SQL text. A `?` is filled by the next argument: a column handle,
+which is written as the column, or a value, which is bound:
+
+```go
+db.Query[veloxgen.Invoice]().Where(
+	velox.Expr[veloxgen.Invoice]("LOWER(?) = LOWER(?)", I.Customer, name))
+db.Query[veloxgen.Invoice]().Where(
+	velox.Expr[veloxgen.Invoice]("EXTRACT(YEAR FROM ?) = ?", I.CreatedAt, 2026))
+```
+
+It is one more condition in `Where`, so the Read policy, the scope and the
+interceptors still apply, which `Raw` does not give. To keep that true, text
+with a semicolon, a comment, a backslash, a `$`, an unbalanced parenthesis, a
+quote that is not a plain string literal (`''`, `'_'`, `'[]'` are plain; a
+backslash, a doubled quote or a `?` inside is not), or a word that starts a
+subquery (`SELECT`, `WITH`, `TABLE`, `VALUES`, `UNION`) is refused before
+anything is sent. Pass any other value as an argument. Write a condition on
+another table with `HasWith` or `InSelect`, which apply that table's
+policies. The check guards against a mistake, not
+against hostile text; text comes from your program, not from a user
+([ADR 0069](decisions/0069-expr.md)).
+
 ### Joins
 
 For a to-one relation (a belongs-to, or a one-to-one), `Join` reads the

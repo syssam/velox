@@ -762,6 +762,8 @@ func (w *writer) pred(n Node) {
 		w.through(n)
 	case OpJoined:
 		w.joined(n)
+	case OpExpr:
+		w.expr(n)
 	default:
 		w.fail(fmt.Errorf("velox: %s: a condition of unknown kind %d", w.in.Name, n.Op))
 	}

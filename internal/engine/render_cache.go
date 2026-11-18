@@ -258,6 +258,8 @@ func nodeKey(k []byte, n Node) []byte {
 		p := n.V.(JSONPath)
 		k = append(k, byte(p.Kind))
 		k = binary.AppendUvarint(k, uint64(len(p.Keys)))
+	case OpExpr:
+		k = exprKey(k, n.V.(*exprData))
 	case OpExists:
 		if n.Col < 0 {
 			// A ColRef's EXISTS: the outer entity does not fix its target

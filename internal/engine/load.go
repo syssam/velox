@@ -819,7 +819,7 @@ func loadJoined(ctx context.Context, db *DB, pin Target, target *EntityInfo, r *
 		h := (*Holder)(unsafe.Add(p, r.Off))
 		// V holds a *T, which an interface keeps in its data word.
 		if h.V != nil {
-			joined = append(joined, (*[2]unsafe.Pointer)(unsafe.Pointer(&h.V))[1])
+			joined = append(joined, dataWord(h.V))
 		}
 	}
 	if len(joined) == 0 {

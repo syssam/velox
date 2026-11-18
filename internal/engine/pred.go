@@ -45,6 +45,9 @@ const (
 	// column, v its JSONPath, and its one kid the operator and values, whose
 	// own column is ignored. JSONNode makes it.
 	OpJSON
+	// OpExpr is a condition written as text: v is its *exprData, ExprNode
+	// makes it.
+	OpExpr
 )
 
 // Node is a condition, typed by nothing: the generic API wraps it.

@@ -87,6 +87,8 @@ func checkTags(n Node, in *EntityInfo) error {
 			}
 		}
 		return checkCol(in, int(n.Col))
+	case OpExpr:
+		return checkExprCols(n, func(c int) error { return checkCol(in, c) })
 	case OpJoined:
 		return nil // the joined target's: no untyped entry point makes one
 	case opNamed, opNamedEdge:

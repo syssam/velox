@@ -81,8 +81,13 @@ func (t Table) Info() *EntityInfo { return t.state().info }
 // Err returns what is wrong with the entity's metadata, or nil.
 func (t Table) Err() error { return t.state().err }
 
-// typeWord is the type word of v.
+// typeWord is the type word of v. An interface is two words, its type and
+// its data; TestInterfaceWords checks this against reflect.
 func typeWord(v any) unsafe.Pointer { return (*[2]unsafe.Pointer)(unsafe.Pointer(&v))[0] }
+
+// dataWord is the data word of v: the pointer itself when v holds a pointer,
+// and a pointer to the value otherwise.
+func dataWord(v any) unsafe.Pointer { return (*[2]unsafe.Pointer)(unsafe.Pointer(&v))[1] }
 
 // rowOf is the row row holds: a non-nil *E of t's entity. Another value is an
 // error, as is an invalid Table.
@@ -90,11 +95,11 @@ func (t *table) rowOf(row any) (unsafe.Pointer, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
-	w := (*[2]unsafe.Pointer)(unsafe.Pointer(&row))
-	if w[0] != t.ptrw || w[1] == nil {
+	p := dataWord(row)
+	if typeWord(row) != t.ptrw || p == nil {
 		return nil, fmt.Errorf("velox: %s: a row is a non-nil *%v, not %T", t.info.Name, t.typ, row)
 	}
-	return w[1], nil
+	return p, nil
 }
 
 // rowsOf is rowOf of each of rows.
@@ -245,7 +250,7 @@ func sliceRows(v any, size uintptr, info *EntityInfo) TableRows {
 	h := (*struct {
 		p    unsafe.Pointer
 		n, c int
-	})((*[2]unsafe.Pointer)(unsafe.Pointer(&v))[1])
+	})(dataWord(v))
 	if h == nil {
 		return TableRows{size: size, info: info}
 	}

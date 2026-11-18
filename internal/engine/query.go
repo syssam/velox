@@ -206,7 +206,7 @@ func joinedSource(st *Statement, in *EntityInfo, after unsafe.Pointer, o OrderTe
 		return afterSource{}, fmt.Errorf("velox: %s: After cannot page over a column of %s: the row has none joined; read it with the same Join, and a row with no %s has no value to page from", in.Name, l.Name, l.Name)
 	}
 	// V holds a *T, which an interface keeps in its data word.
-	return afterSource{l.Target, (*[2]unsafe.Pointer)(unsafe.Pointer(&h.V))[1]}, nil
+	return afterSource{l.Target, dataWord(h.V)}, nil
 }
 
 // nullValue reports whether v, a nullable column's value, is stored as NULL:
