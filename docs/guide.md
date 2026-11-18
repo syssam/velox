@@ -133,7 +133,8 @@ thing. That decides what a `Default` can do:
 For a bool that should default to `true`, use `Nillable().Default(true)`,
 or name the field so that its zero is the default (`disabled`, not
 `enabled`). `SchemaDefault` sets only the column's `DEFAULT`, for rows written
-outside velox. [Coming from ent](coming-from-ent.md) ("Defaults on a NOT NULL column")
+outside velox, and `DBDefault("100")` is the same for a number or a string with
+one SQL text for every dialect. [Coming from ent](coming-from-ent.md) ("Defaults on a NOT NULL column")
 has the whole list.
 
 `field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,

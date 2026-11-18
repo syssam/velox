@@ -806,6 +806,7 @@ func Uint64(name string) *NumberBuilder[uint64]
 func Uint8(name string) *NumberBuilder[uint8]
 promoted func (c common[B]) Annotations(as ...schema.Annotation) B
 promoted func (c common[B]) Comment(s string) B
+promoted func (c common[B]) DBDefault(sql string) B
 promoted func (c common[B]) Descriptor() *desc.Field
 promoted func (c common[B]) Immutable() B
 promoted func (c common[B]) Nillable() B

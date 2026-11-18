@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `field.Int("seats").DBDefault("100")` sets a number's or a string's column
+  `DEFAULT` to one SQL text on every dialect, where `SchemaDefault` takes a
+  map. velox-gen also refuses a MySQL `SchemaDefault` that is a literal on a
+  text or blob column, which MySQL takes only as an expression
+  (decision 0072).
 - `graphql.Resolvers(graphql.Map("organization", "PublicOrganization"), ...)`
   on a schema adds fields to its GraphQL type that the application's resolvers
   answer, written with `@goField(forceResolver: true)`: a type of the

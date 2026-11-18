@@ -110,6 +110,34 @@ func (c common[B]) SchemaDefault(m map[string]string) B {
 	return c.self
 }
 
+// dbDefaultTypes are the field types whose default is one SQL text on every
+// dialect: a number's and a string's literal.
+var dbDefaultTypes = []string{
+	"int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "float32", "float64", "string",
+}
+
+// DBDefault sets the column's default in the database to sql, the same on
+// every dialect: DBDefault("100") on an int, DBDefault("'new'") on a string.
+// It is SchemaDefault for the case where its three keys would be one text,
+// and is as much the column's default alone: see SchemaDefault. A number is
+// the way to give a column a default that Default cannot, since velox-gen
+// refuses a Default on a number that is not Nillable unless it is 0. It is
+// for a number or a string only; any other type has a default that differs
+// between the dialects (a bool is true or 1, a time's now() is
+// CURRENT_TIMESTAMP(6) on MySQL, a MySQL text default is an expression), and
+// is given with SchemaDefault. It replaces what SchemaDefault set.
+func (c common[B]) DBDefault(sql string) B {
+	switch {
+	case !slices.Contains(dbDefaultTypes, c.d.Type):
+		fail(c.d, "DBDefault: the default of a %s field is not one SQL text on every dialect; give each with SchemaDefault", c.d.Type)
+	case strings.TrimSpace(sql) == "":
+		fail(c.d, "DBDefault: the default is empty")
+	default:
+		c.d.SchemaDefault = map[string]string{Postgres: sql, MySQL: sql, SQLite: sql}
+	}
+	return c.self
+}
+
 // StructTag sets the struct tag of the generated Go field.
 func (c common[B]) StructTag(s string) B { c.d.StructTag = s; return c.self }
 

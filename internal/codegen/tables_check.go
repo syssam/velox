@@ -234,6 +234,9 @@ func (t *tabler) checkMySQLColumn(e *Entity, f *Field, c *migrate.Column, at pla
 			t.fail(at, "its MySQL SchemaType %s is not a string type; drop it to get an enum(…) column, or give a string type to get a CHECK constraint", st)
 		}
 	}
+	if d := f.SchemaDefault[velox.MySQL.String()]; d != "" && mysqlExprDefault[c.Type] && !strings.HasPrefix(d, "(") {
+		t.fail(at, "its MySQL SchemaDefault %s is a literal on a %s column, whose default MySQL takes only as an expression: write it in parentheses, as (%s)", d, c.Type, d)
+	}
 	if n := utf8.RuneCountInString(c.Comment); n > mysqlColumnComment {
 		if fk, ok := t.fks[[3]string{e.TableSchema, e.Table, f.Column}]; ok && f.Implicit != "" {
 			at = edgePlace(fk.Owner, fk.Edge) // the comment is its edge's
