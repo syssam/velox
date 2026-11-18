@@ -48,24 +48,8 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 		who += ", which lists " + r.typ + ","
 	}
 	if u.kind != useMutation {
-		for _, name := range u.chain {
-			if ent, ok := strings.CutPrefix(name, subStep); ok {
-				owner := e
-				if e = ck.g.Entity(ent); e == nil {
-					return // refused at its own FieldInSelect call
-				}
-				who = fmt.Sprintf("%s, the subquery of %s's FieldInSelect,", e.Name, owner.Name)
-				continue
-			}
-			ed := e.Edge(name)
-			if ed == nil {
-				return // refused at its own Edge call
-			}
-			owner := e
-			if e = ck.g.Entity(ed.Target); e == nil {
-				return
-			}
-			who = fmt.Sprintf("%s, the target of %s's relation %s,", e.Name, owner.Name, name)
+		if e, who = ck.reach(e, who, u.chain); e == nil {
+			return
 		}
 	}
 	refuse := func(at ast.Expr, format string, args ...any) {
@@ -127,6 +111,32 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 			}
 		}
 	}
+}
+
+// reach follows chain from e, which who names for errors: through each
+// relation to its target, and to the entity a FieldInSelect names. It returns
+// the entity the chain ends at and who for it, a nil entity when a step is not
+// there, which is refused at its own call.
+func (ck *behaviourCheck) reach(e *Entity, who string, chain []string) (*Entity, string) {
+	for _, name := range chain {
+		owner := e
+		if ent, ok := strings.CutPrefix(name, subStep); ok {
+			if e = ck.g.Entity(ent); e == nil {
+				return nil, ""
+			}
+			who = fmt.Sprintf("%s, the subquery of %s's FieldInSelect,", e.Name, owner.Name)
+			continue
+		}
+		ed := e.Edge(name)
+		if ed == nil {
+			return nil, ""
+		}
+		if e = ck.g.Entity(ed.Target); e == nil {
+			return nil, ""
+		}
+		who = fmt.Sprintf("%s, the target of %s's relation %s,", e.Name, owner.Name, name)
+	}
+	return e, who
 }
 
 // checkSub checks u, a FieldInSelect that the entity e holds: the entity it
