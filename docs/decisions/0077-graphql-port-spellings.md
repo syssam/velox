@@ -11,10 +11,15 @@ schema files did not compile.
 
 ## Decision
 
-- `QueryField(name ...string)`: with no name the Query field is the entity's
-  plural in lower camel case, as entgql names it (`User` gives `users`,
-  `PerformanceGoal` gives `performanceGoals`), through the same plural velox
-  uses for table and handle names. More than one name panics. The default is
+- `QueryField(name ...string)`: with no name the Query field is the plural of the
+  entity's GraphQL type, split into words and joined in lower camel case with
+  each later word title-cased, as the old velox named it (`User` gives `users`,
+  `PerformanceGoal` gives `performanceGoals`, `GraphQLLog` gives `graphQlLogs`,
+  `UserMFA` gives `userMfAs`). The plural is `plugin.Plural`'s, so `Terms` and
+  `BusinessHours` keep their form (not the Go handle's `termsSlice`), plus the
+  old velox's irregulars (`Person` is `people`). A client's queries therefore do
+  not change on a port; a trial against the 365 Query fields of nextapp's
+  checked-in SDL matched all but four whose plurals that file has stale. More than one name panics. The default is
   resolved in velox-graphql, so it collides with another entity's name as a
   written one does. `Annotation.QueryFieldDefault` carries it, and
   `Annotation.HasQueryField` is the test the rules use.

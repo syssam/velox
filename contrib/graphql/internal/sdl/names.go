@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/syssam/velox/plugin"
 )
 
 // camel is the GraphQL field name of a Go name: its leading capital, or its
@@ -157,4 +159,69 @@ func upper(name string) string {
 		return name
 	}
 	return string(name[0]-'a'+'A') + name[1:]
+}
+
+// queryName is the Query field graphql.QueryField() gives an entity whose
+// GraphQL type is typ: the plural of typ, split into its words and joined in
+// lower camel case with each word after the first title-cased, as the old
+// velox named it. "GraphQLLog" is "graphQlLogs" and "UserMFA" is "userMfAs",
+// not the acronym-keeping camel of a field name, so that a client's queries do
+// not change. The plural is plugin.Plural's, which leaves "Terms" and
+// "BusinessHours" as they are; the Go handle's "Slice" is not part of it.
+func queryName(typ string) string {
+	var out strings.Builder
+	first := true
+	for part := range strings.SplitSeq(queryPlural(typ), "_") {
+		for _, w := range splitPascal(part) {
+			lower := strings.ToLower(w)
+			if first {
+				out.WriteString(lower)
+				first = false
+				continue
+			}
+			out.WriteString(strings.ToUpper(lower[:1]) + lower[1:])
+		}
+	}
+	return out.String()
+}
+
+// queryIrregular are the plurals the old velox added to its inflector, which
+// plugin.Plural, ent's, does not have: Person is Persons there (a table name).
+var queryIrregular = [][2]string{{"Person", "People"}, {"Child", "Children"}, {"Mouse", "Mice"}, {"Goose", "Geese"}}
+
+// queryPlural is typ's plural for a Query field name: the old velox's irregular
+// nouns, as the last word of typ, else plugin.Plural's.
+func queryPlural(typ string) string {
+	for _, ir := range queryIrregular {
+		if stem, ok := strings.CutSuffix(typ, ir[0]); ok {
+			return stem + ir[1]
+		}
+	}
+	return plugin.Plural(typ)
+}
+
+// splitPascal splits a PascalCase name into words, keeping an acronym together
+// until a lower-case letter follows it: "GraphQLLog" is Graph, QL, Log.
+func splitPascal(s string) []string {
+	runes := []rune(s)
+	var words []string
+	var word strings.Builder
+	upper := func(r rune) bool { return r >= 'A' && r <= 'Z' }
+	for i, r := range runes {
+		if i > 0 && upper(r) && word.Len() > 0 {
+			switch {
+			case !upper(runes[i-1]):
+				words = append(words, word.String())
+				word.Reset()
+			case i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z':
+				words = append(words, word.String())
+				word.Reset()
+			}
+		}
+		word.WriteRune(r)
+	}
+	if word.Len() > 0 {
+		words = append(words, word.String())
+	}
+	return words
 }

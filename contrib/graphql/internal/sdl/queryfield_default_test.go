@@ -42,3 +42,26 @@ func TestQueryFieldDefaultCollides(t *testing.T) {
 		t.Errorf("got %v", err)
 	}
 }
+
+// The default Query field is the old velox's: the plural of the GraphQL type,
+// split into words and title-cased, with no Slice for a plural that does not
+// change. These four differed from it when the name came from the Go handle's
+// plural and the acronym-keeping camel.
+func TestQueryName(t *testing.T) {
+	for typ, want := range map[string]string{
+		"User":            "users",
+		"PerformanceGoal": "performanceGoals",
+		"BusinessHours":   "businessHours",
+		"PaymentTerms":    "paymentTerms",
+		"Terms":           "terms",
+		"GraphQLLog":      "graphQlLogs",
+		"UserMFA":         "userMfAs",
+		"AbTesting":       "abTestings",
+		"Category":        "categories",
+		"Person":          "people",
+	} {
+		if got := queryName(typ); got != want {
+			t.Errorf("queryName(%s) = %s, want %s", typ, got, want)
+		}
+	}
+}

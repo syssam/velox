@@ -334,7 +334,7 @@ func edgeAnnotations(e *plugin.Entity, where string) ([]graphql.Annotation, erro
 func (g *graph) addQueryField(o *object, queryBy map[string]string) error {
 	q := o.ann.QueryField
 	if q == "" && o.ann.QueryFieldDefault {
-		q = camel(plugin.GoPlural(o.ent.Name))
+		q = queryName(o.name)
 	}
 	if q == "" {
 		return nil
