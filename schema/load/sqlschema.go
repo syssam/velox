@@ -41,6 +41,9 @@ func mergedIndexAnnotation(list []schema.Annotation) (sqlschema.IndexAnnotation,
 // of index d, from d's sqlschema.IndexAnnotation, as velox-gen's index rules
 // read them, and returns what it cannot hold or what contradicts the builder.
 func lowerIndex(d *desc.Index, out *loadjson.Index) error {
+	if err := misplaced(d.Annotations, true); err != nil {
+		return err
+	}
 	a, ok := mergedIndexAnnotation(d.Annotations)
 	if !ok {
 		return nil
@@ -100,6 +103,9 @@ var fieldDialects = map[string]string{"postgres": "postgres", "mysql": "mysql", 
 // or the one its sqlschema annotation gives, as text for every dialect or for
 // each, and what contradicts.
 func lowerDefault(d *desc.Field) (map[string]string, error) {
+	if err := misplaced(d.Annotations, false); err != nil {
+		return nil, err
+	}
 	var a sqlschema.Annotation
 	found := false
 	for _, x := range d.Annotations {
@@ -138,4 +144,24 @@ func lowerDefault(d *desc.Field) (map[string]string, error) {
 		out[dialect] = a.DefaultExprs[k]
 	}
 	return out, nil
+}
+
+// misplaced returns the first sqlschema annotation of list that is for the
+// other kind of element: an Annotation on an index or an IndexAnnotation on a
+// field. The old velox ignored one without a word, so a port's field that says
+// Desc() did nothing; here it is an error that names where it belongs.
+func misplaced(list []schema.Annotation, onIndex bool) error {
+	for _, a := range list {
+		switch a.(type) {
+		case sqlschema.Annotation, *sqlschema.Annotation:
+			if onIndex {
+				return fmt.Errorf("a sqlschema.Annotation (Default, DefaultExpr or DefaultExprs) is a field's: put it on the field, not the index")
+			}
+		case sqlschema.IndexAnnotation, *sqlschema.IndexAnnotation:
+			if !onIndex {
+				return fmt.Errorf("a sqlschema.IndexAnnotation (IndexType, Desc, OpClass, IndexWhere and the like) is an index's: put it on index.Fields(...).Annotations, not the field")
+			}
+		}
+	}
+	return nil
 }

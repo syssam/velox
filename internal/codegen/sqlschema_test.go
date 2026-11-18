@@ -109,6 +109,7 @@ func (ssRefused) Fields() []schema.Field {
 		field.Int("m").SchemaDefault(map[string]string{field.Postgres: "1"}).Annotations(sqlschema.Default("2")),
 		field.Int("k").Annotations(sqlschema.DefaultExprs(map[string]string{"oracle": "1"})),
 		field.Int("j").Annotations(sqlschema.DefaultExprs(map[string]string{"mysql": " "})),
+		field.String("id").Annotations(sqlschema.Desc()),
 	}
 }
 func (ssRefused) Indexes() []schema.Index {
@@ -119,6 +120,7 @@ func (ssRefused) Indexes() []schema.Index {
 		index.Fields("a").Annotations(sqlschema.IndexTypes(map[string]string{"mysql": "BTREE"})),
 		index.Fields("a").Annotations(sqlschema.IndexType("gin"), sqlschema.IndexTypes(map[string]string{"postgres": "hash"})),
 		index.Fields("a").Where("a <> ''").Annotations(sqlschema.IndexWhere("a <> 'x'")),
+		index.Fields("a").Annotations(sqlschema.Default("1")),
 	}
 }
 
@@ -143,6 +145,8 @@ func TestSQLSchemaRefusals(t *testing.T) {
 		"the field has SchemaDefault and a sqlschema default",
 		`sqlschema.DefaultExprs names the dialect "oracle"`,
 		"sqlschema.DefaultExprs: the mysql default is empty",
+		"a sqlschema.IndexAnnotation (IndexType, Desc, OpClass, IndexWhere and the like) is an index's",
+		"a sqlschema.Annotation (Default, DefaultExpr or DefaultExprs) is a field's",
 	} {
 		if !strings.Contains(got, w) {
 			t.Errorf("%q not in\n%s", w, got)

@@ -42,6 +42,10 @@ removed.
   dialect that has partial indexes. `IndexWhere` is the same predicate for a
   port; setting both is refused.
 - A `SchemaDefault` and a sqlschema default on one field are refused: give one.
+- An `IndexAnnotation` on a field, or an `Annotation` on an index, is refused,
+  naming where it belongs. The old velox ignored one without a word: nextapp's
+  `IDDesc` puts `sqlschema.Desc()` on a field, where it never did anything, and
+  a port deletes that line.
 
 ## Consequences
 
