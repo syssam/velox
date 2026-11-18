@@ -74,11 +74,14 @@ func predicateSchema() *migrate.Schema {
 				{Name: "kind", Type: "character varying(8)", Default: "'a'", Comment: "it's a kind"},
 				{Name: "parent_id", Type: "bigint", Nullable: true},
 				{Name: "active", Type: "boolean", Default: "true"},
+				{Name: "attrs", Type: "jsonb", Nullable: true},
 			},
 			PrimaryKey:     []string{"id"},
 			PrimaryKeyName: "g_pkey",
 			Indexes: []migrate.Index{
+				{Name: "g_attrs_gin", Columns: []string{"attrs"}, Method: "gin"},
 				{Name: "g_created_on", Columns: []string{"created_on"}, Where: "created_on > '2020-01-01'"},
+				{Name: "g_kind_hash", Columns: []string{"kind"}, Method: "hash", Where: "kind <> 'a'"},
 				{Name: "g_kind_role", Columns: []string{"kind", "role"}},
 				{Name: "g_price", Columns: []string{"price"}, Where: "price > 1.5 AND NOT active"},
 				{Name: "g_qty", Columns: []string{"qty"}, Unique: true, Where: "qty >= -1"},
@@ -451,7 +454,6 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string][]string{
-		"p.p_hash":    {"hash"},
 		"p.p_desc":    {"DESC", "NULLS FIRST"},
 		"p.p_ops":     {"operator class"},
 		"p.p_coll":    {"collation"},
@@ -501,6 +503,9 @@ func TestInspectPostgresUnheld(t *testing.T) {
 	var indexes []string
 	for _, ix := range table(s, "p").Indexes {
 		indexes = append(indexes, ix.Name)
+		if want := map[string]string{"p_hash": "hash"}[ix.Name]; ix.Method != want {
+			t.Errorf("index %s: method %q, want %q", ix.Name, ix.Method, want)
+		}
 	}
 	wantIndexes := []string{"p_b_c", "p_coll", "p_desc", "p_hash", "p_incl", "p_ops", "p_plain"}
 	if version >= 150000 {
@@ -548,8 +553,11 @@ func TestDriftPostgresLive(t *testing.T) {
 			changes: []string{"drop-check g.g_qty_check", "add-check g.g_qty_check"}},
 		{name: "enum-label", alter: []string{`ALTER TYPE g_role ADD VALUE 'c'`},
 			changes: []string{"alter-enum g_role (a, b, o'neil, c → a, b, o'neil)"}},
-		{name: "hash", alter: []string{`DROP INDEX g_created_on`, `CREATE INDEX g_created_on ON g USING hash (created_on) WHERE created_on > '2020-01-01'`},
-			warns: []string{"g.g_created_on"}},
+		// A method the model holds: another one is a change, as a predicate is.
+		{name: "method", alter: []string{`DROP INDEX g_created_on`, `CREATE INDEX g_created_on ON g USING hash (created_on) WHERE created_on > '2020-01-01'`},
+			changes: []string{"drop-index g.g_created_on", "add-index g.g_created_on"}},
+		{name: "method-btree", alter: []string{`DROP INDEX g_attrs_gin`, `CREATE INDEX g_attrs_gin ON g (attrs)`},
+			changes: []string{"drop-index g.g_attrs_gin", "add-index g.g_attrs_gin"}},
 		{name: "on-update", alter: []string{`ALTER TABLE g DROP CONSTRAINT g_parent, ADD CONSTRAINT g_parent FOREIGN KEY (parent_id) REFERENCES g (id) ON DELETE SET NULL ON UPDATE CASCADE`},
 			warns: []string{"g.g_parent"}},
 		// An enum column made text, its type still there: the column alone.

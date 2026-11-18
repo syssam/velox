@@ -890,7 +890,11 @@ func (r *renderer) pgIndex(table TableRef, ix Index, online bool) string {
 	if online {
 		s += "CONCURRENTLY "
 	}
-	s += r.ident(ix.Name) + " ON " + r.table(table) + " (" + r.idents(ix.Columns) + ")"
+	s += r.ident(ix.Name) + " ON " + r.table(table)
+	if ix.Method != "" {
+		s += " USING " + ix.Method // validate has checked the name
+	}
+	s += " (" + r.idents(ix.Columns) + ")"
 	if ix.Where != "" {
 		s += " WHERE " + ix.Where
 	}

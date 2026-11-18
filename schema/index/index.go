@@ -15,9 +15,9 @@ import (
 type Builder struct{ d *desc.Index }
 
 // Fields starts an index over the named fields. velox-gen refuses a JSON
-// field, which no index can cover, and an index that repeats another of the
-// schema or its mixins: the same columns in order, the same Unique and the
-// same Where.
+// field, which no index can cover but a GIN one, and an index that repeats
+// another of the schema or its mixins: the same columns in order, the same
+// Unique, Where and Method.
 func Fields(fields ...string) *Builder { return newBuilder(desc.Caller()).Fields(fields...) }
 
 // Edges starts an index over the foreign keys of the named edges.
@@ -50,6 +50,14 @@ func (b *Builder) StorageKey(name string) *Builder { b.d.StorageKey = name; retu
 // Where sets the predicate of a partial index, in SQL. PostgreSQL and SQLite
 // have partial indexes; MySQL does not.
 func (b *Builder) Where(sql string) *Builder { b.d.Where = sql; return b }
+
+// Method sets the access method of the index, on PostgreSQL: btree, hash,
+// gin, gist, spgist or brin, in any case. Without one the index is btree,
+// PostgreSQL's default. A GIN index may cover a JSON field, which no other
+// index can: it is the index of a jsonb column's containment and key tests.
+// velox-gen refuses a method on MySQL and SQLite, which have no such choice,
+// and a Unique index of any method but btree, which PostgreSQL refuses.
+func (b *Builder) Method(name string) *Builder { b.d.Method = name; return b }
 
 // Annotations attaches annotations to the index.
 func (b *Builder) Annotations(as ...schema.Annotation) *Builder {

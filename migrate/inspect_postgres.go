@@ -412,14 +412,11 @@ WHERE i.indrelid = $1::bigint::oid
 ORDER BY ic.relname`
 
 // pgUnheld is what an index has that the model cannot hold, in the words
-// of the note: the method but btree, DESC, NULLS FIRST or LAST, an
-// operator class or collation of its own, INCLUDE columns, NULLS NOT
-// DISTINCT. option is pg_index.indoption as text.
-func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, atts int) ([]string, error) {
+// of the note: DESC, NULLS FIRST or LAST, an operator class or collation of
+// its own, INCLUDE columns, NULLS NOT DISTINCT. option is pg_index.indoption
+// as text. The method is the model's: Index.Method.
+func pgUnheld(option string, opclass, collat, notDistinct bool, keys, atts int) ([]string, error) {
 	var has []string
-	if method != "btree" {
-		has = append(has, "the "+method+" method")
-	}
 	var desc, nullsFirst, nullsLast bool
 	for f := range strings.FieldsSeq(option) {
 		o, err := strconv.Atoi(f)
@@ -448,10 +445,10 @@ func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, at
 
 // indexes reads pt's indexes, columns by names. An invalid index is a note
 // and left out; so is an index over an expression, which the model cannot
-// hold. What else an index has that the model cannot hold (a method but
-// btree, DESC, NULLS FIRST or LAST, an operator class or collation of its
-// own, INCLUDE, NULLS NOT DISTINCT) is a note, and the index is read without
-// it. A predicate is kept as PostgreSQL prints it. A unique constraint's
+// hold. What else an index has that the model cannot hold (DESC, NULLS
+// FIRST or LAST, an operator class or collation of its own, INCLUDE, NULLS
+// NOT DISTINCT) is a note, and the index is read without it. Its method is
+// Method, "" for btree. A predicate is kept as PostgreSQL prints it. A unique constraint's
 // index has Constraint set. The primary key's index is no Index, the
 // primary key being read from its constraint; it is read only for what it
 // has that the model cannot hold, which is one note.
@@ -471,7 +468,7 @@ func (r *pgReader) indexes(pt *pgTable, names map[int]string) error {
 			return err
 		}
 		if primary {
-			has, err := pgUnheld(method, option, opclass, collat, notDistinct, keys, atts)
+			has, err := pgUnheld(option, opclass, collat, notDistinct, keys, atts)
 			if err != nil {
 				return err
 			}
@@ -500,12 +497,15 @@ func (r *pgReader) indexes(pt *pgTable, names map[int]string) error {
 			r.note(pt, ix.Name, "the index is over an expression, which the model cannot hold; it is not compared")
 			return nil
 		}
-		has, err := pgUnheld(method, option, opclass, collat, notDistinct, keys, atts)
+		has, err := pgUnheld(option, opclass, collat, notDistinct, keys, atts)
 		if err != nil {
 			return err
 		}
 		if len(has) > 0 {
 			r.note(pt, ix.Name, "the index has "+strings.Join(has, ", ")+", which the model cannot hold; it is compared without")
+		}
+		if method != "btree" {
+			ix.Method = method
 		}
 		pt.t.Indexes = append(pt.t.Indexes, ix)
 		return nil

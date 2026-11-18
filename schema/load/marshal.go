@@ -514,7 +514,7 @@ func (l *loader) buildIndex(x schema.Index, prefix string, j int, pos loadjson.P
 		return nil
 	}
 	out := &loadjson.Index{
-		Fields: d.Fields, Edges: d.Edges, Unique: d.Unique, StorageKey: d.StorageKey, Where: d.Where,
+		Fields: d.Fields, Edges: d.Edges, Unique: d.Unique, StorageKey: d.StorageKey, Where: d.Where, Method: d.Method,
 		Position: pos, Pos: l.pos(d.PC),
 	}
 	if out.Annotations, err = listAnnotations(d.Annotations); err != nil {

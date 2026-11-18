@@ -21,6 +21,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `index.Fields(...).Method("gin")` sets an index's PostgreSQL access method
+  (btree, hash, gin, gist, spgist, brin), and a GIN index may cover a JSON
+  field. `migrate.Index` has a `Method`, and `Inspect` reads it instead of noting
+  it (decision 0069).
 - `velox-gen -plugin velox-graphql:only=enums` writes only the GraphQL
   marshalers of velox-gen's enum types, for an application that writes its
   own SDL and binds it with gqlgen's autobind: `open` goes out as `OPEN` and

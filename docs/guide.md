@@ -173,9 +173,18 @@ The [relations example](../examples/relations) shows all three shapes.
 ### Indexes
 
 `index.Fields("a", "b")` makes an index, `.Unique()` makes it unique, and
-`.Where("...")` makes it partial on PostgreSQL and SQLite. An entity's primary
-key is always one column; for a natural key, keep `id` and add a unique
-index.
+`.Where("...")` makes it partial on PostgreSQL and SQLite. On PostgreSQL,
+`.Method("gin")` picks the access method (hash, gin, gist, spgist or brin; btree
+is the default), and a GIN index is the one that may cover a JSON field:
+
+```go
+index.Fields("attrs").Method("gin").StorageKey("ix_attrs_gin")
+```
+
+MySQL and SQLite have no choice of method, so velox-gen refuses a `Method` on
+them, and a unique index must be btree
+([ADR 0069](decisions/0069-index-method.md)). An entity's primary key is always
+one column; for a natural key, keep `id` and add a unique index.
 
 ### Mixins
 

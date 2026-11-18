@@ -74,8 +74,19 @@ type Index struct {
 	Columns    []string `json:"columns,omitempty"`
 	Unique     bool     `json:"unique,omitempty"`
 	Where      string   `json:"where,omitempty"`      // the predicate of a partial index; "" for none; never on MySQL
+	Method     string   `json:"method,omitempty"`     // PostgreSQL's access method in lower case: hash, gin, gist, spgist or brin; "" for btree, which Inspect reads as ""; only on PostgreSQL
 	Constraint bool     `json:"constraint,omitempty"` // PostgreSQL: the index is a UNIQUE constraint's, as Inspect and Baseline read it; the desired model never sets it; Diff and Equal do not compare it, Drift warns where it differs, and Render reads it to choose the statement: from's for a drop or rename, to's for a create or add
 	Pos        string   `json:"-"`
+}
+
+// validIndexMethod reports whether m is a PostgreSQL index method an Index may
+// name: every core method but btree, which is the default and so no Method.
+func validIndexMethod(m string) bool {
+	switch m {
+	case "hash", "gin", "gist", "spgist", "brin":
+		return true
+	}
+	return false
 }
 
 // A ForeignKey is a foreign key constraint.
@@ -156,7 +167,7 @@ func tableEqual(a, b Table) bool {
 				x.Identity == y.Identity && x.Sequence == y.Sequence && x.Comment == y.Comment
 		}) &&
 		slices.EqualFunc(a.Indexes, b.Indexes, func(x, y Index) bool {
-			return x.Name == y.Name && x.Unique == y.Unique && x.Where == y.Where && slices.Equal(x.Columns, y.Columns)
+			return x.Name == y.Name && x.Unique == y.Unique && x.Where == y.Where && x.Method == y.Method && slices.Equal(x.Columns, y.Columns)
 		}) &&
 		slices.EqualFunc(a.ForeignKeys, b.ForeignKeys, func(x, y ForeignKey) bool {
 			return x.Name == y.Name && x.RefTable == y.RefTable && x.OnDelete == y.OnDelete &&
@@ -215,8 +226,9 @@ func (s *Schema) sort() {
 // table's column, index or constraint (a
 // foreign key or check) listed twice ("schema"), where unnamed ones, named
 // "", may repeat; and an index marked a constraint outside PostgreSQL, or
-// one that is not unique or is partial ("schema"). name says which schema
-// it is in the error.
+// one that is not unique or is partial, and an index with a method outside
+// PostgreSQL, of a name PostgreSQL has not, or unique and not btree
+// ("schema"). name says which schema it is in the error.
 func (s *Schema) validate(name string) error {
 	if !knownDialect(s.Dialect) {
 		return &Error{Code: "dialect", Reason: fmt.Sprintf("%s has the unknown dialect %q", name, s.Dialect.String())}
@@ -254,6 +266,15 @@ func (s *Schema) validate(name string) error {
 				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s marks the index %q a constraint, which only PostgreSQL holds", name, ix.Name)}
 			case !ix.Unique || ix.Where != "":
 				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s marks the index %q a constraint, which a non-unique or partial index cannot be", name, ix.Name)}
+			}
+			switch {
+			case ix.Method == "":
+			case s.Dialect != velox.Postgres:
+				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s gives the index %q the method %q, which only PostgreSQL has", name, ix.Name, ix.Method)}
+			case !validIndexMethod(ix.Method):
+				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s gives the index %q the method %q; the methods are hash, gin, gist, spgist and brin, and btree is the default, written as none", name, ix.Name, ix.Method)}
+			case ix.Unique:
+				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s gives the unique index %q the method %q, and only btree can enforce uniqueness", name, ix.Name, ix.Method)}
 			}
 		}
 		for _, fk := range t.ForeignKeys {

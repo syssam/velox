@@ -158,6 +158,7 @@ type Index struct {
 	Unique      bool                       `json:"unique,omitempty"`
 	StorageKey  string                     `json:"storage_key,omitempty"`
 	Where       string                     `json:"where,omitempty"`
+	Method      string                     `json:"method,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 	Position    Position                   `json:"position"`
 	Pos         string                     `json:"pos,omitempty"` // file:line of the constructor's call

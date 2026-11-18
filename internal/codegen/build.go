@@ -93,6 +93,9 @@ func edgeAt(name string) string { return fmt.Sprintf("edge %q", name) }
 
 func indexAt(i int) string { return fmt.Sprintf("index %d", i) }
 
+// indexMethods are the access methods an index may name, PostgreSQL's own.
+var indexMethods = []string{"btree", "hash", "gin", "gist", "spgist", "brin"}
+
 // loc is an element an Error names: its Where and its position.
 type loc struct{ where, pos string }
 
@@ -572,6 +575,25 @@ func goImports(f *loadjson.Field) []string {
 	return f.GoType.Imports
 }
 
+// indexMethod checks the Method of the index i of e, which the schema wrote as
+// raw (rules 58 and 59), and reports whether it is sound. btree, PostgreSQL's
+// default and what a plan reads back, becomes no method.
+func (b *builder) indexMethod(e *Entity, i int, ix *Index, raw string) bool {
+	good := true
+	switch {
+	case ix.Method != "" && !slices.Contains(indexMethods, ix.Method):
+		b.fail(58, e.Name, indexLoc(i, ix), "has Method %q; PostgreSQL's are %s", raw, strings.Join(indexMethods, ", "))
+		good = false
+	case ix.Unique && ix.Method != "" && ix.Method != "btree":
+		b.fail(59, e.Name, indexLoc(i, ix), "is Unique with Method %q, and only btree can enforce uniqueness", ix.Method)
+		good = false
+	}
+	if ix.Method == "btree" {
+		ix.Method = ""
+	}
+	return good
+}
+
 // indexes resolves the indexes of every entity (step 5), and records those an
 // index rule refuses: their names are rule 43's or partial, so step 5b does
 // not compare them.
@@ -581,11 +603,12 @@ func (b *builder) indexes() {
 		e := n.ent
 		var ok []bool // the indexes no earlier rule refuses
 		for i, li := range n.schema.Indexes {
-			ix := &Index{Columns: []string{}, Unique: li.Unique, Where: li.Where, Annotations: li.Annotations, Pos: li.Pos}
+			ix := &Index{Columns: []string{}, Unique: li.Unique, Where: li.Where, Method: strings.ToLower(li.Method), Annotations: li.Annotations, Pos: li.Pos}
 			good := len(li.Fields)+len(li.Edges) > 0
 			if !good {
 				b.fail(25, e.Name, indexLoc(i, ix), "names no fields or edges")
 			}
+			good = b.indexMethod(e, i, ix, li.Method) && good
 			for _, name := range li.Fields {
 				f := e.Field(name)
 				if f == nil {
@@ -593,8 +616,8 @@ func (b *builder) indexes() {
 					good = false
 					continue
 				}
-				if f.Type == "json" {
-					b.fail(42, e.Name, indexLoc(i, ix), "field %q is JSON, which no index can cover", name)
+				if f.Type == "json" && ix.Method != "gin" {
+					b.fail(42, e.Name, indexLoc(i, ix), "field %q is JSON, which no index can cover but a GIN one; give the index Method(\"gin\")", name)
 					good = false
 				}
 				ix.Columns = append(ix.Columns, f.Column)
@@ -799,8 +822,8 @@ func (b *builder) namespaces() {
 }
 
 // repeats reports whether the index i of e repeats an earlier one (rule 43),
-// and reports it: the same columns in order, the same Unique and the same
-// Where, among the declared indexes, mixins' included. A field's Unique is not
+// and reports it: the same columns in order, the same Unique, Where and
+// Method, among the declared indexes, mixins' included. A field's Unique is not
 // compared. ok tells the indexes no earlier rule refuses; the others are
 // skipped.
 func (b *builder) repeats(e *Entity, i int, ok []bool) bool {
@@ -809,7 +832,7 @@ func (b *builder) repeats(e *Entity, i int, ok []bool) bool {
 		return false
 	}
 	for j, prev := range e.Indexes[:i] {
-		if ok[j] && ix.Unique == prev.Unique && ix.Where == prev.Where && slices.Equal(ix.Columns, prev.Columns) {
+		if ok[j] && ix.Unique == prev.Unique && ix.Where == prev.Where && ix.Method == prev.Method && slices.Equal(ix.Columns, prev.Columns) {
 			b.fail(43, e.Name, indexLoc(i, ix), "repeats index %d", j)
 			return true
 		}

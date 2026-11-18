@@ -841,6 +841,7 @@ func (b *Builder) Annotations(as ...schema.Annotation) *Builder
 func (b *Builder) Descriptor() *desc.Index
 func (b *Builder) Edges(edges ...string) *Builder
 func (b *Builder) Fields(fields ...string) *Builder
+func (b *Builder) Method(name string) *Builder
 func (b *Builder) StorageKey(name string) *Builder
 func (b *Builder) Unique() *Builder
 func (b *Builder) Where(sql string) *Builder
@@ -948,7 +949,7 @@ type Error struct { Pos string Object string Code string Reason string }
 type File struct { Version uint64 Name string Path string Sum string Directives Directives Statements []string Units []int }
 type Finding struct { Code string Class Class Change int Target string Pos string Message string }
 type ForeignKey struct { Name string Columns []string RefTable TableRef RefColumns []string OnDelete string Pos string }
-type Index struct { Name string Columns []string Unique bool Where string Constraint bool Pos string }
+type Index struct { Name string Columns []string Unique bool Where string Method string Constraint bool Pos string }
 type Kind string
 type Option struct { }
 type Plan struct { Changes []Change Findings []Finding Scripts []Script }

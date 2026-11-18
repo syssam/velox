@@ -214,6 +214,7 @@ type Index struct {
 	Unique        bool
 	StorageKey    string // the index name
 	Where         string // a partial index's predicate, on PostgreSQL and SQLite
+	Method        string // the PostgreSQL access method; "" for btree
 	Annotations   []Annotation
 	PC            uintptr // the constructor's call, for PosOf
 }

@@ -86,6 +86,11 @@ func (t *tabler) check(e *Entity, tb *migrate.Table, at []place) {
 	for i, f := range e.Fields {
 		t.checkColumn(e, i, f, &tb.Columns[i])
 	}
+	for i, ix := range tb.Indexes {
+		if ix.Method != "" && t.d != velox.Postgres {
+			t.fail(at[i], "Method %q is PostgreSQL's; %s has no choice of index method: drop Method or use a separate %s schema", ix.Method, t.d, t.d)
+		}
+	}
 	if t.d != velox.MySQL {
 		return
 	}
