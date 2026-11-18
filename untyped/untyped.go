@@ -191,7 +191,7 @@ func Calc(text string, args ...any) Term {
 // is and any other value bound.
 func Expr(text string, args ...any) velox.Predicate {
 	slots, vals := termSlots(args)
-	return velox.Predicate(engine.NewPredicate(engine.ExprNode(text, slots, vals)))
+	return engine.NewPredicate(engine.ExprNode(text, slots, vals))
 }
 
 // termSlots classifies the arguments of a Calc or an Expr: a Term fills its ?
