@@ -159,7 +159,7 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.CreateInput(true) or UpdateInput(true): the primary key is never an input", where)
 	case isTrue(a.UpdateInput) && f.Immutable:
 		return fmt.Errorf("%s: graphql.UpdateInput(true) on an immutable field, which no update may set", where)
-	case f.HasDefault && !f.Nullable && zeroIsUnset(f.Type) && !zeroLiteral(f.Default) && !(f.Type != "bool" && zeroInvalid(f.Checks)):
+	case f.HasDefault && !f.Nullable && zeroIsUnset(f.Type) && !zeroLiteral(f.Default) && (f.Type == "bool" || !zeroInvalid(f.Checks)):
 		// An insert fills the Default into a zero value, so the field could
 		// never store false or 0, and a create input could not set it. A
 		// zero Default stores what unset does, and so does any on a number a

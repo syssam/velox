@@ -1207,11 +1207,11 @@ func defaultWayOut(f *Field) string {
 	if !f.DefaultFunc {
 		def = "Default(" + lit + ")"
 	}
-	zero, rename := "0", ""
+	var zero, rename string
 	if f.Type == "bool" {
 		zero, rename = "false", `; or rename it so that false is the default ("disabled" for "enabled")`
 	} else {
-		rename = "; or, if the field is never 0, add Positive() or Min(1), which refuse 0 and so let the Default stand"
+		zero, rename = "0", "; or, if the field is never 0, add Positive() or Min(1), which refuse 0 and so let the Default stand"
 	}
 	var s strings.Builder
 	fmt.Fprintf(&s, "%s with %s: velox inserts a Go struct, whose %s cannot be told from unset, so the Default would overwrite an explicit %s (ent fills it only when the builder never set the field). ", decl, def, zero, zero)

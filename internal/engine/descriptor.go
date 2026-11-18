@@ -153,7 +153,7 @@ func columnInfo(t reflect.Type, base unsafe.Pointer, ptr any, i int, c ColumnDes
 		// would panic on the first insert instead of failing here.
 		return fail("Default is a %T, not a %v", c.Default, ft)
 	}
-	if boolOrNumber(ft) && !zeroNumber(reflect.ValueOf(ci.Default)) && !(c.ZeroInvalid && rtype(ft).Kind() != reflect.Bool) {
+	if boolOrNumber(ft) && !zeroNumber(reflect.ValueOf(ci.Default)) && (!c.ZeroInvalid || rtype(ft).Kind() == reflect.Bool) {
 		// A bool or numeric field cannot have a Default: its zero value is also a
 		// real value, and the insert would overwrite an explicit false or 0.
 		// The zero value itself stores what unset does, and so does any when
