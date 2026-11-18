@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/parser"
+
 	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox/plugin"
 )
@@ -63,10 +66,51 @@ func (g *graph) fill(o *object) error {
 		}
 		o.edges = append(o.edges, ef)
 	}
-	if len(o.fields) == 0 {
+	for _, m := range o.ann.Resolvers {
+		f, err := resolverField(o, m)
+		if err != nil {
+			return err
+		}
+		if err := add(f, f.where); err != nil {
+			return err
+		}
+	}
+	if !slices.ContainsFunc(o.fields, func(f gqlField) bool { return !f.resolver }) {
 		return fmt.Errorf("schema %s: its type would have no fields: each field is skipped, sensitive or a foreign key, and each edge is skipped or leads to a skipped schema; skip the schema with graphql.Skip()", e.Name)
 	}
 	return nil
+}
+
+// resolverField is the GraphQL field of o's graphql.Map m: its name, arguments
+// and type as written, bound to a resolver method. The application's own
+// types are not checked here: its SDL declares them. What is checked is that
+// m is one field of one type and nothing more, since the plugin writes it as
+// text.
+func resolverField(o *object, m graphql.ResolverMapping) (gqlField, error) {
+	where := fmt.Sprintf("schema %s, graphql.Map(%q, %q)", o.ent.Name, m.Field, m.Type)
+	name := m.Name()
+	if !validName(name) {
+		return gqlField{}, fmt.Errorf("%s: %q is not a GraphQL field name", where, name)
+	}
+	var args string
+	if _, rest, ok := strings.Cut(m.Field, "("); ok {
+		args = "(" + rest
+	}
+	if strings.TrimSpace(m.Type) == "" {
+		return gqlField{}, fmt.Errorf("%s: no type; give one as the SDL writes it, such as \"PublicUser\" or \"[Post!]!\"", where)
+	}
+	src := "type T { " + name + args + ": " + m.Type + " }"
+	doc, err := parser.ParseSchema(&ast.Source{Name: "graphql.Map", Input: src})
+	if err != nil {
+		return gqlField{}, fmt.Errorf("%s: not a field of an SDL type: %v", where, err)
+	}
+	if len(doc.Definitions) != 1 || len(doc.Definitions[0].Fields) != 1 || doc.Definitions[0].Fields[0].Name != name || len(doc.Definitions[0].Fields[0].Directives) > 0 {
+		return gqlField{}, fmt.Errorf("%s: it must be one field and its type, without directives", where)
+	}
+	return gqlField{
+		name: name, args: args, typ: m.Type, desc: m.Comment, where: where, resolver: true,
+		dirs: []directive{{name: "goField", text: "@goField(forceResolver: true)"}},
+	}, nil
 }
 
 // plainField returns the GraphQL field of o's field i, and false when the

@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `graphql.Resolvers(graphql.Map("organization", "PublicOrganization"), ...)`
+  on a schema adds fields to its GraphQL type that the application's resolvers
+  answer, written with `@goField(forceResolver: true)`: a type of the
+  application's own SDL, or a value computed per row. A selection that holds
+  one reads every column, as one of an extend type's does (decision 0070).
 - `index.Fields(...).Method("gin")` sets an index's PostgreSQL access method
   (btree, hash, gin, gist, spgist, brin), and a GIN index may cover a JSON
   field. `migrate.Index` has a `Method`, and `Inspect` reads it instead of noting

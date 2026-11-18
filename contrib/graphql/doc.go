@@ -220,6 +220,32 @@
 // in examples/graphql in the velox repository is a whole server: a schema,
 // its gqlgen.yml and its resolvers.
 //
+// # Fields the application resolves
+//
+// A type may have fields the model cannot give: one of a type the application
+// declares in its own SDL that the entity holds a key to without an edge, or a
+// value computed per row. graphql.Resolvers on the schema lists them, each a
+// graphql.Map of the field's name, with its arguments when it takes any, and
+// its type:
+//
+//	func (Asset) Annotations() []schema.Annotation {
+//		return []schema.Annotation{
+//			graphql.Resolvers(
+//				graphql.Map("organization", "PublicOrganization").WithComment("Owning organization."),
+//				graphql.Map("tags(first: Int)", "[String!]!"),
+//			),
+//		}
+//	}
+//
+// velox.graphql then has the fields in the type, after its own, each with
+// @goField(forceResolver: true), so gqlgen asks for a resolver method on the
+// type's resolver: Organization(ctx, obj *veloxgen.Asset). The application
+// declares PublicOrganization in its own SDL; velox-graphql does not look for
+// it, and gqlgen refuses the schema when nothing declares it. It is the same
+// as an extend type with those fields, written beside the entity. A
+// selection that holds one of them reads every column of the entity, as one of
+// an extend type's does (see "Loading"): the resolver may read any column.
+//
 // # Mutations
 //
 // velox-graphql writes inputs, as entgql does, not mutations: the application

@@ -65,6 +65,7 @@ type gqlField struct {
 	dirs                  []directive
 	where                 string  // the element, for errors
 	conn                  *object // for a connection, its nodes' type: args are set from it
+	resolver              bool    // a graphql.Map's: its type may be the application's own, which the standalone check cannot see
 }
 
 // directive is a rendered directive.

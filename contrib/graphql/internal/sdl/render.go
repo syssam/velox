@@ -127,6 +127,9 @@ func (w *writer) desc(indent, text string) {
 }
 
 func (w *writer) field(f gqlField) {
+	if f.resolver && !w.app {
+		return // its type may be the application's own: the standalone check cannot see it
+	}
 	at := w.at
 	w.at = f.where
 	w.desc("  ", f.desc)
