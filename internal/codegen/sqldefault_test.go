@@ -62,3 +62,41 @@ func TestSQLDefaultMySQLText(t *testing.T) {
 		}
 	}
 }
+
+// ddTime has a time column whose default is the function without the column's
+// precision, which MySQL refuses at apply, and one that carries it.
+type ddTime struct{ schema.Schema }
+
+func (ddTime) Fields() []schema.Field {
+	return []schema.Field{
+		field.Time("bad").Annotations(sqlschema.Default("CURRENT_TIMESTAMP")),
+		field.Time("bad_fn").Annotations(sqlschema.DefaultExpr("now()")),
+		field.Time("good").Annotations(sqlschema.Default("CURRENT_TIMESTAMP(6)")),
+	}
+}
+
+func TestSQLDefaultMySQLTimePrecision(t *testing.T) {
+	g := mustBuild(t, ddTime{})
+	_, err := Tables(g, velox.MySQL)
+	if err == nil {
+		t.Fatal("no error")
+	}
+	got := plain(err)
+	for _, w := range []string{
+		`field "bad": its MySQL SchemaDefault CURRENT_TIMESTAMP on a datetime(6) column must carry the column's precision`,
+		`field "bad_fn": its MySQL SchemaDefault now() on a datetime(6) column must carry the column's precision`,
+		"write CURRENT_TIMESTAMP(6)",
+	} {
+		if !strings.Contains(got, w) {
+			t.Errorf("%q not in\n%s", w, got)
+		}
+	}
+	if strings.Contains(got, `"good"`) {
+		t.Errorf("good refused:\n%s", got)
+	}
+	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
+		if _, err := Tables(g, d); err != nil {
+			t.Errorf("%v: %v", d, err)
+		}
+	}
+}

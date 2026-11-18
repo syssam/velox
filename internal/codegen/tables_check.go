@@ -237,12 +237,53 @@ func (t *tabler) checkMySQLColumn(e *Entity, f *Field, c *migrate.Column, at pla
 	if d := f.SchemaDefault[velox.MySQL.String()]; d != "" && mysqlExprDefault[c.Type] && !strings.HasPrefix(d, "(") {
 		t.fail(at, "its MySQL SchemaDefault %s is a literal on a %s column, whose default MySQL takes only as an expression: write it in parentheses, as (%s)", d, c.Type, d)
 	}
+	if d := f.SchemaDefault[velox.MySQL.String()]; mysqlNowNeedsPrecision(c.Type, d) {
+		t.fail(at, "its MySQL SchemaDefault %s on a %s column must carry the column's precision: MySQL refuses it at apply; write %s", d, c.Type, mysqlNowWithPrecision(c.Type))
+	}
 	if n := utf8.RuneCountInString(c.Comment); n > mysqlColumnComment {
 		if fk, ok := t.fks[[3]string{e.TableSchema, e.Table, f.Column}]; ok && f.Implicit != "" {
 			at = edgePlace(fk.Owner, fk.Edge) // the comment is its edge's
 		}
 		t.fail(at, "its comment is %d characters on MySQL, over its %d", n, mysqlColumnComment)
 	}
+}
+
+// mysqlNowFuncs are the time functions a MySQL datetime or timestamp default may
+// be, which take the column's fractional digits.
+var mysqlNowFuncs = []string{"CURRENT_TIMESTAMP", "NOW", "LOCALTIME", "LOCALTIMESTAMP"}
+
+// precisionOf returns p of a MySQL column type datetime(p), timestamp(p) or
+// time(p), and 0 when it has none.
+func precisionOf(typ string) int {
+	i := strings.IndexByte(typ, '(')
+	if i < 0 || !strings.HasSuffix(typ, ")") {
+		return 0
+	}
+	p, _ := strconv.Atoi(typ[i+1 : len(typ)-1])
+	return p
+}
+
+// mysqlNowNeedsPrecision reports whether def is a time function without
+// parentheses, or with empty ones, on a column typ with fractional digits:
+// MySQL refuses CURRENT_TIMESTAMP as the default of a datetime(6).
+func mysqlNowNeedsPrecision(typ, def string) bool {
+	p := precisionOf(typ)
+	if p == 0 || !strings.HasPrefix(typ, "datetime") && !strings.HasPrefix(typ, "timestamp") {
+		return false
+	}
+	d := strings.ToUpper(strings.TrimSpace(def))
+	for _, fn := range mysqlNowFuncs {
+		if d == fn || d == fn+"()" {
+			return true
+		}
+	}
+	return false
+}
+
+// mysqlNowWithPrecision is the default of a column typ as MySQL takes it:
+// CURRENT_TIMESTAMP(6) on a datetime(6).
+func mysqlNowWithPrecision(typ string) string {
+	return fmt.Sprintf("CURRENT_TIMESTAMP(%d)", precisionOf(typ))
 }
 
 // checkDecimalDefault records a literal numeric Default of f that its column

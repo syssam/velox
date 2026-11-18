@@ -64,7 +64,11 @@ removed.
   what it already writes, with the import path `.../velox/dialect/sqlschema`.
 - `DBDefault`'s type restriction (a number or a string) is gone: the
   annotation applies to any field. velox-gen's MySQL literal-on-text refusal
-  (0073) still holds for any default that reaches the column.
+  (0073) still holds for any default that reaches the column, and a new one
+  covers what the restriction used to keep out: a MySQL `datetime(6)` or
+  `timestamp(6)` whose default is `CURRENT_TIMESTAMP` or `now()` without the
+  column's precision, which MySQL refuses at apply, is refused in velox-gen with
+  `CURRENT_TIMESTAMP(6)` named.
 - The `OpClass` duplicate check (rule 62, "two operator classes") no longer has
   a spelling that reaches it; it stays for a model another producer builds.
 - `GeneratedCodeIsVersionN` stays: the generated code does not change.
