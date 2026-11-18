@@ -65,6 +65,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   package `schema`'s, as in ent and the old velox, so a schema can import one
   package for them (decision 0076).
 
+- `graphql.QueryField()` with no name is the entity's plural in lower camel case,
+  `graphql.RelayConnection()` is accepted and says nothing (connections are always
+  written), and `graphql.OpsNone` is no predicate (decision 0077).
+
 - `Query.Select`, `SelectRaw`, `GroupBy`, `Having` and `Rows` read terms in
   place of an entity: column handles as they are, SQL expressions
   (`velox.Calc`, `SelectRaw`) and aggregates (a handle's `Sum`, `Avg`, `Min`,

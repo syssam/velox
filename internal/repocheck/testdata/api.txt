@@ -1136,6 +1136,7 @@ const OpsAll
 const OpsComparison
 const OpsDefault WhereOp
 const OpsEquality
+const OpsNone WhereOp
 const OpsNullable
 const OpsString
 const SkipAll
@@ -1146,6 +1147,7 @@ const SkipOrderField
 const SkipType SkipMode
 const SkipWhereInput
 func (Annotation) Name() string
+func (a Annotation) HasQueryField() bool
 func (a Annotation) Merge(other schema.Annotation) schema.Annotation
 func (m ResolverMapping) Name() string
 func (m ResolverMapping) WithComment(comment string) ResolverMapping
@@ -1162,14 +1164,15 @@ func Mutations(kinds ...MutationKind) Annotation
 func OrderField(name string) Annotation
 func OrderUnguarded() Annotation
 func OrderVia(field, value string) Annotation
-func QueryField(name string) Annotation
+func QueryField(name ...string) Annotation
+func RelayConnection() Annotation
 func Resolvers(mappings ...ResolverMapping) Annotation
 func Skip(modes ...SkipMode) Annotation
 func Type(name string) Annotation
 func UpdateInput(on bool) Annotation
 func WhereEdge() Annotation
 func WhereOps(ops ...WhereOp) Annotation
-type Annotation struct { Skip SkipMode Type string QueryField string Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool OrderVia []ViaOrder Resolvers []ResolverMapping WhereOps WhereOp WhereEdge bool Connection *bool MaxList int CreateInput *bool UpdateInput *bool CreateDefault json.RawMessage EnumValues map[string]string Directives []Directive }
+type Annotation struct { Skip SkipMode Type string QueryField string QueryFieldDefault bool Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool OrderVia []ViaOrder Resolvers []ResolverMapping WhereOps WhereOp WhereEdge bool Connection *bool MaxList int CreateInput *bool UpdateInput *bool CreateDefault json.RawMessage EnumValues map[string]string Directives []Directive }
 type Directive struct { Name string Args map[string]any }
 type MutationKind string
 type ResolverMapping struct { Field string Type string Comment string }

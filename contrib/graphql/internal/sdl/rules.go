@@ -27,7 +27,7 @@ func misplaced(a graphql.Annotation, on, where string) error {
 		on   string // the kinds it applies to
 	}{
 		{"graphql.Type", a.Type != "", onSchema},
-		{"graphql.QueryField", a.QueryField != "", onSchema},
+		{"graphql.QueryField", a.HasQueryField(), onSchema},
 		{"graphql.Mutations", len(a.Mutations) > 0, onSchema},
 		{"graphql.MultiOrder", a.MultiOrder, onSchema},
 		{"graphql.Resolvers", len(a.Resolvers) > 0, onSchema},
@@ -79,7 +79,7 @@ func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) error {
 	if !e.Join {
 		switch {
 		case a.Skip&graphql.SkipType == 0:
-		case a.QueryField != "":
+		case a.HasQueryField():
 			return fmt.Errorf("%s: graphql.QueryField on a schema whose type graphql.Skip leaves out", where)
 		case len(a.Mutations) > 0:
 			return fmt.Errorf("%s: graphql.Mutations on a schema whose type graphql.Skip leaves out", where)
@@ -93,7 +93,7 @@ func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) error {
 		set  bool
 	}{
 		{"graphql.Type", a.Type != ""},
-		{"graphql.QueryField", a.QueryField != ""},
+		{"graphql.QueryField", a.HasQueryField()},
 		{"graphql.Mutations", len(a.Mutations) > 0},
 		{"graphql.MultiOrder", a.MultiOrder},
 		{"graphql.Resolvers", len(a.Resolvers) > 0},

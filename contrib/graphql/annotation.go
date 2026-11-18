@@ -72,6 +72,11 @@ const (
 	// explicit ops, it means the field type's default predicates plus those
 	// ops. It is not part of OpsAll.
 	OpsDefault WhereOp = 1 << 31
+
+	// OpsNone is no predicate: the old velox's name for the where input a field
+	// without WhereOps has. WhereOps(OpsNone) is that, and on the node key, which
+	// filters by default, an explicit WhereOps of any other value wins.
+	OpsNone WhereOp = 0
 )
 
 // MutationKind is one of the mutations generated for an entity.
@@ -99,6 +104,9 @@ type Annotation struct {
 	Type string `json:"type,omitempty"`
 	// QueryField is the root Query field that returns the entity's connection.
 	QueryField string `json:"query_field,omitempty"`
+	// QueryFieldDefault asks for the Query field with the default name, the entity's
+	// plural in lower camel case (QueryField() with no name).
+	QueryFieldDefault bool `json:"query_field_default,omitempty"`
 	// Mutations lists the mutations to generate for the entity.
 	Mutations []MutationKind `json:"mutations,omitempty"`
 	// MultiOrder lets a connection order by a list of fields.
@@ -189,22 +197,23 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		panic(fmt.Sprintf("graphql: cannot merge an annotation named \"graphql\" of type %T", other))
 	}
 	out := Annotation{
-		Skip:           o.Skip | a.Skip,
-		Type:           pick(a.Type, o.Type),
-		QueryField:     pick(a.QueryField, o.QueryField),
-		MultiOrder:     o.MultiOrder || a.MultiOrder,
-		FieldName:      pick(a.FieldName, o.FieldName),
-		OrderField:     pick(a.OrderField, o.OrderField),
-		OrderUnguarded: o.OrderUnguarded || a.OrderUnguarded,
-		OrderVia:       slices.Concat(o.OrderVia, a.OrderVia),
-		Resolvers:      mergeResolvers(o.Resolvers, a.Resolvers),
-		WhereOps:       o.WhereOps | a.WhereOps,
-		WhereEdge:      o.WhereEdge || a.WhereEdge,
-		Connection:     pickPtr(a.Connection, o.Connection),
-		MaxList:        cmp.Or(a.MaxList, o.MaxList),
-		CreateInput:    pickPtr(a.CreateInput, o.CreateInput),
-		UpdateInput:    pickPtr(a.UpdateInput, o.UpdateInput),
-		CreateDefault:  pickRaw(a.CreateDefault, o.CreateDefault),
+		Skip:              o.Skip | a.Skip,
+		Type:              pick(a.Type, o.Type),
+		QueryField:        pick(a.QueryField, o.QueryField),
+		QueryFieldDefault: o.QueryFieldDefault || a.QueryFieldDefault,
+		MultiOrder:        o.MultiOrder || a.MultiOrder,
+		FieldName:         pick(a.FieldName, o.FieldName),
+		OrderField:        pick(a.OrderField, o.OrderField),
+		OrderUnguarded:    o.OrderUnguarded || a.OrderUnguarded,
+		OrderVia:          slices.Concat(o.OrderVia, a.OrderVia),
+		Resolvers:         mergeResolvers(o.Resolvers, a.Resolvers),
+		WhereOps:          o.WhereOps | a.WhereOps,
+		WhereEdge:         o.WhereEdge || a.WhereEdge,
+		Connection:        pickPtr(a.Connection, o.Connection),
+		MaxList:           cmp.Or(a.MaxList, o.MaxList),
+		CreateInput:       pickPtr(a.CreateInput, o.CreateInput),
+		UpdateInput:       pickPtr(a.UpdateInput, o.UpdateInput),
+		CreateDefault:     pickRaw(a.CreateDefault, o.CreateDefault),
 	}
 	for _, k := range slices.Concat(o.Mutations, a.Mutations) {
 		if !slices.Contains(out.Mutations, k) {
@@ -289,8 +298,28 @@ func Skip(modes ...SkipMode) Annotation {
 func Type(name string) Annotation { return Annotation{Type: name} }
 
 // QueryField adds a root Query field, with this name, that returns the
-// entity's connection.
-func QueryField(name string) Annotation { return Annotation{QueryField: name} }
+// entity's connection. With no name it is the entity's plural in lower camel
+// case, as entgql names it: User gives users and PerformanceGoal gives
+// performanceGoals. A second name is refused.
+func QueryField(name ...string) Annotation {
+	switch len(name) {
+	case 0:
+		return Annotation{QueryFieldDefault: true}
+	case 1:
+		return Annotation{QueryField: name[0]}
+	}
+	panic("graphql.QueryField takes at most one name")
+}
+
+// HasQueryField reports whether the entity has a root Query field, named or
+// by default.
+func (a Annotation) HasQueryField() bool { return a.QueryField != "" || a.QueryFieldDefault }
+
+// RelayConnection is the old velox's and entgql's switch for Relay-style cursor
+// connections. velox-graphql always writes them (a connection with edges,
+// pageInfo and totalCount, and the cursor pagination of Paginate), so it adds
+// nothing, and exists so that a port compiles.
+func RelayConnection() Annotation { return Annotation{} }
 
 // Mutations generates the listed mutation inputs for the entity, as entgql's
 // Mutations does: MutationCreate the input CreateXInput and its method Create,

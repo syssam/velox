@@ -32,6 +32,7 @@ var annotationCases = []annotationCase{
 	{"Skip(two)", graphql.Skip(graphql.SkipType, graphql.SkipWhereInput), `{"skip":9}`},
 	{"Type", graphql.Type("Account"), `{"type":"Account"}`},
 	{"QueryField", graphql.QueryField("users"), `{"query_field":"users"}`},
+	{"QueryField default", graphql.QueryField(), `{"query_field_default":true}`},
 	{"Mutations()", graphql.Mutations(), `{"mutations":["create","update"]}`},
 	{"Mutations(one)", graphql.Mutations(graphql.MutationUpdate), `{"mutations":["update"]}`},
 	{"MultiOrder", graphql.MultiOrder(), `{"multi_order":true}`},
@@ -432,5 +433,34 @@ func TestDirectivesCopyArgsOneLevel(t *testing.T) {
 	args["x"].(map[string]any)["y"] = 3
 	if got := a.Directives[0].Args["x"].(map[string]any)["y"]; got != 3 {
 		t.Errorf("a nested map is copied: y = %v, want 3 (shared)", got)
+	}
+}
+
+// RelayConnection is accepted and says nothing (connections are always
+// written), QueryField takes at most one name, and OpsNone offers no
+// predicate.
+func TestPortSpellings(t *testing.T) {
+	if got := graphql.RelayConnection(); !reflect.DeepEqual(got, graphql.Annotation{}) {
+		t.Errorf("RelayConnection: %+v", got)
+	}
+	if got := graphql.QueryField(); !got.HasQueryField() || got.QueryField != "" || !got.QueryFieldDefault {
+		t.Errorf("QueryField(): %+v", got)
+	}
+	if got := graphql.QueryField("users"); !got.HasQueryField() || got.QueryFieldDefault {
+		t.Errorf("QueryField(users): %+v", got)
+	}
+	if (graphql.Annotation{}).HasQueryField() {
+		t.Error("an empty annotation has a Query field")
+	}
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("QueryField with two names did not panic")
+			}
+		}()
+		graphql.QueryField("a", "b")
+	}()
+	if got := graphql.WhereOps(graphql.OpsNone); got.WhereOps != 0 {
+		t.Errorf("WhereOps(OpsNone): %v", got.WhereOps)
 	}
 }
