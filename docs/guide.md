@@ -184,7 +184,7 @@ index.Fields("attrs").Method("gin").StorageKey("ix_attrs_gin")
 
 MySQL and SQLite have no choice of method, so velox-gen refuses a `Method` on
 them, and a unique index must be btree
-([ADR 0069](decisions/0069-index-method.md)). A GIN index works on a JSON (jsonb)
+([ADR 0070](decisions/0070-index-method.md)). A GIN index works on a JSON (jsonb)
 column, an array or a tsvector as it is. On a text or number column it needs an
 extension that gives GIN an operator class for the type, `btree_gin` or
 `pg_trgm`: velox does not create extensions, so add `CREATE EXTENSION` to the
@@ -202,7 +202,7 @@ index.Fields("name", "created_at").Desc("created_at")
 
 Name only an operator class that is not its type's default: PostgreSQL reads a
 default one back as none, and the schema would differ from the database for
-ever ([ADR 0071](decisions/0071-index-desc-opclass.md)). `Desc` is a btree
+ever ([ADR 0072](decisions/0072-index-desc-opclass.md)). `Desc` is a btree
 index's. An entity's primary key is always
 one column; for a natural key, keep `id` and add a unique index.
 

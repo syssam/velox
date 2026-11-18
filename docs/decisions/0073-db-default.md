@@ -1,4 +1,4 @@
-# 0072. DBDefault is SchemaDefault in one text
+# 0073. DBDefault is SchemaDefault in one text
 
 - Status: accepted, 2026-11-18.
 

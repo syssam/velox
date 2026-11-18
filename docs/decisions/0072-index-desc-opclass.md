@@ -1,10 +1,10 @@
-# 0071. An index key may be DESC and have an operator class
+# 0072. An index key may be DESC and have an operator class
 
-- Status: accepted, 2026-11-18. Completes 0069, which left both unheld.
+- Status: accepted, 2026-11-18. Completes 0070, which left both unheld.
 
 ## Context
 
-0069 gave an index a `Method` and left what else PostgreSQL puts on an index
+0070 gave an index a `Method` and left what else PostgreSQL puts on an index
 key unheld: `Inspect` noted DESC and an operator class, and compared the index
 without them. That left a gap on each side. A schema could not declare a
 `created_at DESC` key, which an `ORDER BY a, created_at DESC` needs: PostgreSQL
@@ -56,7 +56,7 @@ both are PostgreSQL's.
   `.OpClass("column", "gin_trgm_ops")`.
 - A class that an extension supplies (`gin_trgm_ops` is pg_trgm's) needs the
   extension, which velox does not create: it goes into the baseline by hand, as
-  0069 says of `btree_gin`. Without it the index fails when applied, not in
+  0070 says of `btree_gin`. Without it the index fails when applied, not in
   velox-gen.
 - A schema that names a class that is its column's default (`text_ops` on text)
   differs from the database for ever, as `Inspect` reads it as none.

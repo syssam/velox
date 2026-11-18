@@ -1,4 +1,4 @@
-# 0069. An index has a Method
+# 0070. An index has a Method
 
 - Status: accepted, 2026-11-18.
 
@@ -48,7 +48,7 @@ method, as `Where` is, and not an annotation.
   mechanical substitution.
 - INCLUDE, a collation and NULLS NOT DISTINCT stay what the model cannot hold:
   `Inspect` still notes them. The operator class and DESC were left too, and
-  [0071](0071-index-desc-opclass.md) holds them: a GIN index over a column with
+  [0072](0072-index-desc-opclass.md) holds them: a GIN index over a column with
   no default operator class, such as text with `gin_trgm_ops`, is
   `.OpClass("column", "gin_trgm_ops")`.
 - The generated code's shape does not change, so `GeneratedCodeIsVersionN`

@@ -1,4 +1,4 @@
-# 0070. A schema may add resolver fields to its GraphQL type
+# 0071. A schema may add resolver fields to its GraphQL type
 
 - Status: accepted, 2026-11-18. Amends the 2026-10-19 GraphQL design, which
   dropped old velox's `Resolvers`.

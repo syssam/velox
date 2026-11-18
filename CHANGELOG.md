@@ -25,20 +25,20 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `DEFAULT` to one SQL text on every dialect, where `SchemaDefault` takes a
   map. velox-gen also refuses a MySQL `SchemaDefault` that is a literal on a
   text or blob column, which MySQL takes only as an expression
-  (decision 0072).
+  (decision 0073).
 - `graphql.Resolvers(graphql.Map("organization", "PublicOrganization"), ...)`
   on a schema adds fields to its GraphQL type that the application's resolvers
   answer, written with `@goField(forceResolver: true)`: a type of the
   application's own SDL, or a value computed per row. A selection that holds
-  one reads every column, as one of an extend type's does (decision 0070).
+  one reads every column, as one of an extend type's does (decision 0071).
 - `index.Fields(...).Method("gin")` sets an index's PostgreSQL access method
   (btree, hash, gin, gist, spgist, brin), and a GIN index may cover a JSON
   field. `migrate.Index` has a `Method`, and `Inspect` reads it instead of noting
-  it (decision 0069).
+  it (decision 0070).
 - `index.Fields(...).Desc("created_at")` sorts an index key descending and
   `.OpClass("title", "gin_trgm_ops")` sets its operator class, both on
   PostgreSQL. `migrate.Index` has `Desc` and `OpClass`, and `Inspect` reads
-  them instead of noting them (decision 0071).
+  them instead of noting them (decision 0072).
 - `velox-gen -plugin velox-graphql:only=enums` writes only the GraphQL
   marshalers of velox-gen's enum types, for an application that writes its
   own SDL and binds it with gqlgen's autobind: `open` goes out as `OPEN` and
