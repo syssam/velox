@@ -104,12 +104,12 @@ func AggTerm(fn TermFn, of Term) Term {
 	if fn == TermCountAll {
 		return Term{kind: termAgg, fn: fn}.seal()
 	}
-	switch {
-	case of.kind == termNone:
+	switch of.kind {
+	case termNone:
 		return InvalidTerm(errors.New("velox: an aggregate of no term"))
-	case of.kind == termInvalid:
+	case termInvalid:
 		return of
-	case of.kind == termAgg:
+	case termAgg:
 		return InvalidTerm(errors.New("velox: an aggregate of an aggregate: SUM(MAX(x)) is not allowed in one statement"))
 	}
 	return Term{kind: termAgg, fn: fn, of: &of}.seal()
@@ -155,8 +155,8 @@ func (w *writer) term(t Term) {
 	case termAgg:
 		w.str(termFnSQL[t.fn])
 		w.str("(")
-		switch {
-		case t.fn == TermCountAll:
+		switch t.fn {
+		case TermCountAll:
 			w.str("*")
 		default:
 			if t.fn == TermCountDistinct {
