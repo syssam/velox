@@ -67,9 +67,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   package for them, and package `dialect` names `Postgres`, `MySQL` and `SQLite`
   for `SchemaType` (decision 0076).
 
-- `graphql.QueryField()` with no name is the entity's plural in lower camel case,
+- `graphql.QueryField()` with no name is the old velox's name for the entity
+  (`terms`, `graphQlLogs`, `performanceGoals`),
   `graphql.RelayConnection()` is accepted and says nothing (connections are always
-  written), and `graphql.OpsNone` is no predicate (decision 0077).
+  written), and `graphql.OpsNone` is no predicate. `graphql.WhereInput()`,
+  `EnableWhereInputs(true)` and `WhereInputEdges(...)` make fields and edges
+  filterable as `WhereOps()` and `WhereEdge()` do, and `NewDirective` and
+  `Deprecated` build a `Directive` (decision 0077).
 
 - `Query.Select`, `SelectRaw`, `GroupBy`, `Having` and `Rows` read terms in
   place of an entity: column handles as they are, SQL expressions

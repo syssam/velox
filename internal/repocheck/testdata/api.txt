@@ -1159,13 +1159,16 @@ func (m ResolverMapping) WithComment(comment string) ResolverMapping
 func Connection(on bool) Annotation
 func CreateDefault[T ~bool | ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64](v T) Annotation
 func CreateInput(on bool) Annotation
+func Deprecated(reason string) Directive
 func Directives(ds ...Directive) Annotation
+func EnableWhereInputs(enable bool) Annotation
 func EnumValues(m map[string]string) Annotation
 func FieldName(name string) Annotation
 func Map(field, typ string) ResolverMapping
 func MaxList(n int) Annotation
 func MultiOrder() Annotation
 func Mutations(kinds ...MutationKind) Annotation
+func NewDirective(name string, args map[string]any) Directive
 func OrderField(name string) Annotation
 func OrderUnguarded() Annotation
 func OrderVia(field, value string) Annotation
@@ -1176,8 +1179,10 @@ func Skip(modes ...SkipMode) Annotation
 func Type(name string) Annotation
 func UpdateInput(on bool) Annotation
 func WhereEdge() Annotation
+func WhereInput() Annotation
+func WhereInputEdges(edges ...string) Annotation
 func WhereOps(ops ...WhereOp) Annotation
-type Annotation struct { Skip SkipMode Type string QueryField string QueryFieldDefault bool Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool OrderVia []ViaOrder Resolvers []ResolverMapping WhereOps WhereOp WhereEdge bool Connection *bool MaxList int CreateInput *bool UpdateInput *bool CreateDefault json.RawMessage EnumValues map[string]string Directives []Directive }
+type Annotation struct { Skip SkipMode Type string QueryField string QueryFieldDefault bool Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool OrderVia []ViaOrder Resolvers []ResolverMapping WhereOps WhereOp WhereEdge bool WhereInput bool WhereInputEdges []string Connection *bool MaxList int CreateInput *bool UpdateInput *bool CreateDefault json.RawMessage EnumValues map[string]string Directives []Directive }
 type Directive struct { Name string Args map[string]any }
 type MutationKind string
 type ResolverMapping struct { Field string Type string Comment string }

@@ -128,6 +128,11 @@ type Annotation struct {
 	WhereOps WhereOp `json:"where_ops,omitempty"`
 	// WhereEdge allows the has and hasWith filters on an edge.
 	WhereEdge bool `json:"where_edge,omitempty"`
+	// WhereInput makes the element filterable: WhereOps() on a field,
+	// WhereEdge on an edge.
+	WhereInput bool `json:"where_input,omitempty"`
+	// WhereInputEdges names the edges of a schema that have WhereEdge.
+	WhereInputEdges []string `json:"where_input_edges,omitempty"`
 	// Connection says whether a to-many edge is a connection (the default) or
 	// a plain list. Nil leaves the default.
 	Connection *bool `json:"connection,omitempty"`
@@ -209,6 +214,8 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		Resolvers:         mergeResolvers(o.Resolvers, a.Resolvers),
 		WhereOps:          o.WhereOps | a.WhereOps,
 		WhereEdge:         o.WhereEdge || a.WhereEdge,
+		WhereInput:        o.WhereInput || a.WhereInput,
+		WhereInputEdges:   mergeNames(o.WhereInputEdges, a.WhereInputEdges),
 		Connection:        pickPtr(a.Connection, o.Connection),
 		MaxList:           cmp.Or(a.MaxList, o.MaxList),
 		CreateInput:       pickPtr(a.CreateInput, o.CreateInput),
@@ -442,6 +449,54 @@ func WhereOps(ops ...WhereOp) Annotation {
 
 // WhereEdge allows the has and hasWith filters on an edge.
 func WhereEdge() Annotation { return Annotation{WhereEdge: true} }
+
+// WhereInput makes a field or an edge filterable, in the old velox's spelling:
+// on a field it is WhereOps() with no arguments, the defaults for the field's
+// type; on an edge it is WhereEdge(). It does not apply to a schema.
+func WhereInput() Annotation { return Annotation{WhereInput: true} }
+
+// EnableWhereInputs is the old velox's switch for a field or an edge:
+// EnableWhereInputs(true) is WhereInput(). EnableWhereInputs(false) is
+// Skip(SkipWhereInput), which wins over every filter the element asks for.
+func EnableWhereInputs(enable bool) Annotation {
+	if enable {
+		return WhereInput()
+	}
+	return Skip(SkipWhereInput)
+}
+
+// WhereInputEdges gives the named edges of a schema the has and hasWith
+// filters, as WhereEdge() on each does. A name that is not an edge of the
+// schema is an error when velox-graphql runs.
+func WhereInputEdges(edges ...string) Annotation {
+	return Annotation{WhereInputEdges: slices.Clone(edges)}
+}
+
+// NewDirective is the Directive named name with the arguments args, the old
+// velox's constructor for one.
+func NewDirective(name string, args map[string]any) Directive {
+	return Directive{Name: name, Args: maps.Clone(args)}
+}
+
+// Deprecated is GraphQL's @deprecated with a reason; an empty reason leaves it
+// off, so the directive has no arguments.
+func Deprecated(reason string) Directive {
+	if reason == "" {
+		return Directive{Name: "deprecated"}
+	}
+	return Directive{Name: "deprecated", Args: map[string]any{"reason": reason}}
+}
+
+// mergeNames is earlier's names followed by later's that earlier lacks.
+func mergeNames(earlier, later []string) []string {
+	var out []string
+	for _, n := range slices.Concat(earlier, later) {
+		if !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
 
 // Connection makes a to-many edge a connection (true) or a plain list (false).
 func Connection(on bool) Annotation { return Annotation{Connection: &on} }

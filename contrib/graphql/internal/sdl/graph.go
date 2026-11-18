@@ -256,6 +256,13 @@ func (g *graph) objectOf(e *plugin.Entity, fks map[string]bool) (*object, error)
 	if o.eanns, err = edgeAnnotations(e, where); err != nil {
 		return nil, err
 	}
+	for _, name := range a.WhereInputEdges {
+		i := slices.IndexFunc(e.Edges, func(ed *plugin.Edge) bool { return ed.Name == name })
+		if i < 0 {
+			return nil, fmt.Errorf("%s: graphql.WhereInputEdges(%q): the schema has no such edge", where, name)
+		}
+		o.eanns[i].WhereEdge = true
+	}
 	return o, nil
 }
 
@@ -301,6 +308,9 @@ func fieldAnnotations(o *object, where string) ([]graphql.Annotation, error) {
 		if err != nil {
 			return nil, err
 		}
+		if fa.WhereInput {
+			fa.WhereOps |= graphql.OpsDefault
+		}
 		if err := checkField(o.ent, i, fa, o.fks[f.Name], fw); err != nil {
 			return nil, err
 		}
@@ -318,6 +328,7 @@ func edgeAnnotations(e *plugin.Entity, where string) ([]graphql.Annotation, erro
 		if err != nil {
 			return nil, err
 		}
+		ea.WhereEdge = ea.WhereEdge || ea.WhereInput
 		if err := ownDirective(ea.Directives, ew); err != nil {
 			return nil, err
 		}

@@ -37,6 +37,8 @@ func misplaced(a graphql.Annotation, on, where string) error {
 		{"graphql.OrderVia", len(a.OrderVia) > 0, onEdge},
 		{"graphql.WhereOps", a.WhereOps != 0, onField},
 		{"graphql.WhereEdge", a.WhereEdge, onEdge},
+		{"graphql.WhereInput", a.WhereInput, onField + " " + onEdge},
+		{"graphql.WhereInputEdges", len(a.WhereInputEdges) > 0, onSchema},
 		{"graphql.Connection", a.Connection != nil, onEdge},
 		{"graphql.MaxList", a.MaxList != 0, onEdge},
 		{"graphql.CreateInput", a.CreateInput != nil, onField},

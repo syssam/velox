@@ -1,4 +1,4 @@
-# 0077. graphql: QueryField(), RelayConnection and OpsNone
+# 0077. graphql: the old velox's spellings
 
 - Status: accepted, 2026-11-18.
 
@@ -6,8 +6,10 @@
 
 The largest consumer of the old velox writes `graphql.QueryField()` with no name
 353 times and `graphql.RelayConnection()` 352 times, and `WhereOps(OpsNone)`
-once. velox2's `QueryField` took a name and had no `RelayConnection`, so those
-schema files did not compile.
+once. Its `Filterable()` helper, `graphql.EnableWhereInputs(true)`, is on 2,837
+fields; `WhereInput()` is on 10 edges, `WhereInputEdges` on 5 schemas, and
+`NewDirective` is used once. velox2's `QueryField` took a name and had none of
+the others, so those schema files did not compile.
 
 ## Decision
 
@@ -19,9 +21,9 @@ schema files did not compile.
   `BusinessHours` keep their form (not the Go handle's `termsSlice`), plus the
   old velox's irregulars (`Person` is `people`). A client's queries therefore do
   not change on a port; a trial against the 365 Query fields of nextapp's
-  checked-in SDL matched all but four whose plurals that file has stale. More than one name panics. The default is
-  resolved in velox-graphql, so it collides with another entity's name as a
-  written one does. `Annotation.QueryFieldDefault` carries it, and
+  checked-in SDL matched all but four whose plurals that file has stale. More
+  than one name panics. The default is resolved in velox-graphql, so it collides
+  with another entity's name as a written one does. `Annotation.QueryFieldDefault` carries it, and
   `Annotation.HasQueryField` is the test the rules use.
 - `RelayConnection()` is accepted and says nothing. velox-graphql always
   writes Relay connections (edges, `pageInfo`, `totalCount`, the cursor
@@ -30,18 +32,38 @@ schema files did not compile.
   where input, so `WhereOps(OpsNone)` is that; on the node key, which filters by
   default, only a non-zero `WhereOps` overrides it.
 
+- `WhereInput()` and `EnableWhereInputs(true)` make a field or an edge
+  filterable. On a field they are `WhereOps()`, the defaults for its type; on an
+  edge, `WhereEdge()`; on a schema they are refused. The `Annotation.WhereInput`
+  flag carries them, and velox-graphql resolves it by placement, so the old
+  velox's `Filterable()` helper works unchanged. `EnableWhereInputs(false)` is
+  `Skip(SkipWhereInput)`, which wins over a `WhereOps` on the same element. The
+  old velox let a true win over that Skip; no nextapp schema sets both.
+- `WhereInputEdges(names...)` on a schema is `WhereEdge()` on each named edge; a
+  name that is not an edge of the schema is an error.
+- `NewDirective(name, args)` and `Deprecated(reason)` build a `Directive`;
+  `Deprecated("")` has no `reason` argument.
+
+The type defaults differ from the old velox's in two places. A string field's
+`WhereOps()` has the equality predicates and contains, has prefix and has
+suffix; the old default had equality and contains only. A nextapp hook widened
+it anyway.
+
 ## Not done
 
-`OpsJSONArray` (has, hasSome, hasEvery, isEmpty on a JSON array field, 26 uses)
-needs predicates on JSON array handles that the ORM does not have; a JSON field
-has no where predicates today. `EnableWhereInputs` and `WithWhereInputs`
-(a where input for every field) are the opposite of velox2's opt-in `WhereOps`.
+`OpsJSONArray` (has, hasSome, hasEvery, isEmpty on a JSON array field, 40 uses
+in 33 files) and `OpsCaseFold` (equal fold, contains fold, 1 use) need
+predicates the ORM's handles do not have; a JSON field has no where predicates
+today. The old velox's `WithWhereInputs` filter-everything switch is not a
+spelling: a field is filterable only when it asks.
 
 ## Consequences
 
-- A port compiles `QueryField()`, `RelayConnection()` and `OpsNone` unchanged.
-- The annotation's JSON gains an optional `query_field_default`, which an older
-  plugin never sees.
+- A port compiles `QueryField()`, `RelayConnection()`, `OpsNone`, `WhereInput()`,
+  `EnableWhereInputs`, `WhereInputEdges`, `NewDirective` and `Deprecated`
+  unchanged.
+- The annotation's JSON gains optional `query_field_default`, `where_input` and
+  `where_input_edges`, which an older plugin never sees.
 
 Enforced by `contrib/graphql/internal/sdl/queryfield_default_test.go` and
 `TestPortSpellings`.

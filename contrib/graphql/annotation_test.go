@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox/contrib/graphql"
@@ -47,6 +48,8 @@ var annotationCases = []annotationCase{
 	{"Resolvers", graphql.Resolvers(graphql.Map("organization", "PublicOrganization!").WithComment("Owner."), graphql.Map("tags(first: Int)", "[Tag!]!")),
 		`{"resolvers":[{"field":"organization","type":"PublicOrganization!","comment":"Owner."},{"field":"tags(first: Int)","type":"[Tag!]!"}]}`},
 	{"WhereEdge", graphql.WhereEdge(), `{"where_edge":true}`},
+	{"WhereInput", graphql.WhereInput(), `{"where_input":true}`},
+	{"WhereInputEdges", graphql.WhereInputEdges("posts", "groups"), `{"where_input_edges":["posts","groups"]}`},
 	{"Connection(false)", graphql.Connection(false), `{"connection":false}`},
 	{"Connection(true)", graphql.Connection(true), `{"connection":true}`},
 	{"MaxList", graphql.MaxList(5), `{"max_list":5}`},
@@ -462,5 +465,27 @@ func TestPortSpellings(t *testing.T) {
 	}()
 	if got := graphql.WhereOps(graphql.OpsNone); got.WhereOps != 0 {
 		t.Errorf("WhereOps(OpsNone): %v", got.WhereOps)
+	}
+}
+
+// NewDirective and Deprecated build the directives the old velox's did, and
+// copy what they are given; WhereInputEdges merges by name, the receiver's
+// after the argument's.
+func TestOldDirectiveSpellings(t *testing.T) {
+	args := map[string]any{"maxAge": 300}
+	d := graphql.NewDirective("cacheControl", args)
+	args["maxAge"] = 1
+	if d.Name != "cacheControl" || d.Args["maxAge"] != 300 {
+		t.Errorf("NewDirective = %+v", d)
+	}
+	if d := graphql.Deprecated(""); d.Name != "deprecated" || d.Args != nil {
+		t.Errorf("Deprecated(\"\") = %+v", d)
+	}
+	if d := graphql.Deprecated("use b"); d.Args["reason"] != "use b" {
+		t.Errorf("Deprecated(reason) = %+v", d)
+	}
+	m := graphql.WhereInputEdges("a", "b").Merge(graphql.WhereInputEdges("b", "c")).(graphql.Annotation)
+	if got := strings.Join(m.WhereInputEdges, ","); got != "b,c,a" {
+		t.Errorf("merged names %q", got)
 	}
 }
