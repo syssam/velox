@@ -906,26 +906,47 @@ type Builder struct { }
 
 package dialect/sqlschema
 const AnnotationName
+const Cascade CascadeAction
 const IndexAnnotationName
+const NoAction CascadeAction
+const Restrict CascadeAction
+const SetDefault CascadeAction
+const SetNull CascadeAction
 func (Annotation) Name() string
 func (IndexAnnotation) Name() string
 func (a Annotation) Merge(other schema.Annotation) schema.Annotation
 func (a IndexAnnotation) Merge(other schema.Annotation) schema.Annotation
+func Charset(charset string) Annotation
+func Check(expr string) Annotation
+func Checks(c map[string]string) Annotation
+func Collation(c string) Annotation
+func ColumnType(typ string) Annotation
 func Default(value string) Annotation
 func DefaultExpr(expr string) Annotation
 func DefaultExprs(exprs map[string]string) Annotation
 func Desc() *IndexAnnotation
 func DescColumns(names ...string) *IndexAnnotation
 func IncludeColumns(names ...string) *IndexAnnotation
+func IncrementStart(n int) Annotation
 func IndexType(typ string) *IndexAnnotation
 func IndexTypes(types map[string]string) *IndexAnnotation
 func IndexWhere(pred string) *IndexAnnotation
+func NonUniqueFK() Annotation
+func OnDelete(a CascadeAction) Annotation
+func OnUpdate(a CascadeAction) Annotation
 func OpClass(op string) *IndexAnnotation
 func OpClassColumn(name, op string) *IndexAnnotation
 func Prefix(n uint) *IndexAnnotation
 func PrefixColumn(name string, n uint) *IndexAnnotation
+func Schema(name string) Annotation
+func SchemaTable(schema, table string) Annotation
+func Size(n int64) Annotation
+func Skip() Annotation
 func StorageParams(params string) *IndexAnnotation
-type Annotation struct { Default string DefaultExpr string DefaultExprs map[string]string }
+func Table(name string) Annotation
+func WithComments(on bool) Annotation
+type Annotation struct { Table string Schema string Collation string Check string Checks map[string]string Default string DefaultExpr string DefaultExprs map[string]string Skip bool Size int64 ColumnType string OnDelete CascadeAction OnUpdate CascadeAction NonUniqueFK bool Charset string IncrementStart *int WithComments *bool }
+type CascadeAction string
 type IndexAnnotation struct { Type string Types map[string]string Where string StorageParams string Desc bool DescColumns map[string]bool OpClass string OpClassColumns map[string]string Prefix uint PrefixColumns map[string]uint IncludeColumns []string }
 
 package schema/mixin

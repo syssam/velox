@@ -12,6 +12,7 @@ import (
 	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
 	"github.com/syssam/velox/schema/load"
@@ -110,6 +111,14 @@ func (ssRefused) Fields() []schema.Field {
 		field.Int("k").Annotations(sqlschema.DefaultExprs(map[string]string{"oracle": "1"})),
 		field.Int("j").Annotations(sqlschema.DefaultExprs(map[string]string{"mysql": " "})),
 		field.String("id").Annotations(sqlschema.Desc()),
+		field.String("t").Annotations(sqlschema.Table("x")),
+		field.String("sz").Annotations(sqlschema.Size(10)),
+	}
+}
+func (ssRefused) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.To("peers", ssRefused.Type).Annotations(sqlschema.OnDelete(sqlschema.Cascade)),
+		edge.To("others", ssRefused.Type).Annotations(sqlschema.Default("1")),
 	}
 }
 func (ssRefused) Indexes() []schema.Index {
@@ -145,8 +154,12 @@ func TestSQLSchemaRefusals(t *testing.T) {
 		"the field has SchemaDefault and a sqlschema default",
 		`sqlschema.DefaultExprs names the dialect "oracle"`,
 		"sqlschema.DefaultExprs: the mysql default is empty",
-		"a sqlschema.IndexAnnotation (IndexType, Desc, OpClass, IndexWhere and the like) is an index's",
-		"a sqlschema.Annotation (Default, DefaultExpr or DefaultExprs) is a field's",
+		"a sqlschema.IndexAnnotation (IndexType, Desc, OpClass, IndexWhere and the like) is an index's: put it on index.Fields(...).Annotations, not on a field",
+		"a sqlschema.Annotation is a schema's or a field's: put it there, not on an index",
+		"sqlschema Table, Schema, Collation and Checks are a schema's: put them in the schema's Annotations, not on a field",
+		"sqlschema Default, DefaultExpr and DefaultExprs are a field's: put them on the field, not on an edge",
+		"sqlschema.Size is not held by velox: use field.MaxLen",
+		"sqlschema.OnDelete is not held by velox: use edge.OnDelete",
 	} {
 		if !strings.Contains(got, w) {
 			t.Errorf("%q not in\n%s", w, got)
@@ -166,5 +179,79 @@ func TestSQLSchemaMerge(t *testing.T) {
 	g, _ := f.Merge(sqlschema.DefaultExprs(map[string]string{"mysql": "2"})).(sqlschema.Annotation)
 	if g.Default != "1" || g.DefaultExprs["mysql"] != "2" {
 		t.Errorf("merged %+v", g)
+	}
+}
+
+// ssOwner states its table, collation and checks as the old velox did, with
+// a struct literal, a constructor and Checks.
+type ssOwner struct{ schema.Schema }
+
+func (ssOwner) Annotations() []schema.Annotation {
+	return []schema.Annotation{
+		sqlschema.Annotation{Table: "owners_tbl"},
+		sqlschema.Collation("utf8mb4_bin"),
+		sqlschema.Checks(map[string]string{"owners_a_ok": "a <> ''", "owners_b_ok": "b <> ''"}),
+	}
+}
+func (ssOwner) Fields() []schema.Field {
+	return []schema.Field{field.String("a"), field.String("b")}
+}
+
+func TestSQLSchemaSchemaLevel(t *testing.T) {
+	g := mustBuild(t, ssOwner{})
+	s, err := Tables(g, velox.Postgres)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tb := table(t, s, "owners_tbl")
+	var names []string
+	for _, c := range tb.Checks {
+		names = append(names, c.Name)
+	}
+	if !slices.Equal(names, []string{"owners_a_ok", "owners_b_ok"}) {
+		t.Errorf("checks %v", names)
+	}
+}
+
+// ssBadSchema, ssNoTable and ssUnnamedCheck set what a schema cannot take from
+// the old velox's Annotation; the loader reports the first of a list.
+type ssBadSchema struct{ schema.Schema }
+
+func (ssBadSchema) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Table("t"), sqlschema.Default("1")}
+}
+func (ssBadSchema) Fields() []schema.Field { return []schema.Field{field.String("a")} }
+
+type ssNoTable struct{ schema.Schema }
+
+func (ssNoTable) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Schema("tenant")}
+}
+func (ssNoTable) Fields() []schema.Field { return []schema.Field{field.String("a")} }
+
+type ssUnnamedCheck struct{ schema.Schema }
+
+func (ssUnnamedCheck) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Check("a > 0")}
+}
+func (ssUnnamedCheck) Fields() []schema.Field { return []schema.Field{field.String("a")} }
+
+func TestSQLSchemaSchemaLevelRefusals(t *testing.T) {
+	for s, want := range map[schema.Interface]string{
+		ssBadSchema{}:    "sqlschema Default, DefaultExpr and DefaultExprs are a field's: put them on the field, not on a schema",
+		ssNoTable{}:      "sqlschema.Schema without a Table",
+		ssUnnamedCheck{}: "sqlschema.Check is the old velox's unnamed constraint",
+	} {
+		b, err := load.Marshal("github.com/syssam/velox/internal/codegen", s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m loadjson.Model
+		if err := json.Unmarshal(b, &m); err != nil {
+			t.Fatal(err)
+		}
+		if got := fmt.Sprintf("%+v", m.Errors); !strings.Contains(got, want) {
+			t.Errorf("%T: %q not in\n%s", s, want, got)
+		}
 	}
 }

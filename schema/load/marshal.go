@@ -200,7 +200,11 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 				out.Indexes = append(out.Indexes, li)
 			}
 		}
-		if err := mergeAnnotations(annos, e.annotations); err != nil {
+		lowered, err := lowerSchema(e.annotations)
+		if err == nil {
+			err = mergeAnnotations(annos, lowered)
+		}
+		if err != nil {
 			l.fail("", "", "%s%v", prefix, err)
 		}
 	}
@@ -495,8 +499,11 @@ func (l *loader) edgeOf(d *desc.Edge, pos loadjson.Position) *loadjson.Edge {
 		Field: d.Field, OnDelete: d.OnDelete, Table: d.Table, Columns: d.Columns, Symbols: d.Symbols, Comment: d.Comment,
 		Position: pos, Pos: l.pos(d.PC),
 	}
-	var err error
-	if out.Annotations, err = listAnnotations(d.Annotations); err != nil {
+	err := checkPlacement(d.Annotations, "edge")
+	if err == nil {
+		out.Annotations, err = listAnnotations(d.Annotations)
+	}
+	if err != nil {
 		l.fail(l.pos(d.PC), fmt.Sprintf("edge %q", d.Name), "%v", err)
 	}
 	return out

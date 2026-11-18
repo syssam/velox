@@ -42,6 +42,16 @@ removed.
   dialect that has partial indexes. `IndexWhere` is the same predicate for a
   port; setting both is refused.
 - A `SchemaDefault` and a sqlschema default on one field are refused: give one.
+- `Annotation` is the old velox's one type for schemas and fields, so a port
+  compiles: `sqlschema.Annotation{Table: "users"}` and `sqlschema.Table("users")`
+  (the consumers' commonest call, 450 times in three) lower on a schema to
+  `schema.TableIn`; `Collation` and `Checks` lower to `schema.Collation` and
+  `schema.Check`. `Schema` without a `Table` and the unnamed `Check` are refused:
+  velox names a table with its schema, and every constraint.
+- The rest of the old `Annotation` (`Skip`, `Size`, `ColumnType`, `OnDelete`,
+  `OnUpdate`, `NonUniqueFK`, `Charset`, `IncrementStart`, `WithComments`) is
+  declared and refused, naming velox's spelling where it has one (`field.MaxLen`,
+  `field.SchemaType`, `edge.OnDelete`). `View` and `ViewFor` are not declared.
 - An `IndexAnnotation` on a field, or an `Annotation` on an index, is refused,
   naming where it belongs. The old velox ignored one without a word: nextapp's
   `IDDesc` puts `sqlschema.Desc()` on a field, where it never did anything, and

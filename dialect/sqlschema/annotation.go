@@ -1,6 +1,6 @@
 // Package sqlschema holds the annotations of a schema that only a SQL database
-// reads: an index's access method, its order and operator classes, and a
-// column's DEFAULT as SQL text. A schema also feeds GraphQL and other targets,
+// reads: a table's name, an index's access method, its order and operator
+// classes, and a column's DEFAULT as SQL text. A schema also feeds GraphQL and other targets,
 // and the portable builders of packages field, edge and index say nothing of
 // one backend, so an option of one is an annotation named for it, as GraphQL's
 // are in package graphql. The names and fields are the old velox's, so
@@ -8,8 +8,17 @@
 // the same.
 //
 // velox-gen reads these annotations and refuses what it cannot hold with a
-// message that names the field: StorageParams, Prefix, PrefixColumns and
-// IncludeColumns compile, for a port, and are refused when velox-gen runs.
+// message that names where velox spells it: StorageParams, Prefix, PrefixColumns,
+// IncludeColumns, Size, ColumnType, OnDelete and the like compile, for a port,
+// and are refused when velox-gen runs. So is an annotation on the wrong kind of
+// element (the old velox ignored one without a word): Table on a field, Default
+// on a schema, an IndexAnnotation anywhere but an index.
+//
+// # Schemas
+//
+// Table, SchemaTable, Collation and Checks (or the same fields of an Annotation
+// literal, `sqlschema.Annotation{Table: "users"}`) are a schema's, and are
+// lowered to schema.TableIn, schema.Collation and schema.Check.
 //
 // # Indexes
 //
@@ -187,25 +196,74 @@ func IncludeColumns(names ...string) *IndexAnnotation {
 	return &IndexAnnotation{IncludeColumns: slices.Clone(names)}
 }
 
-// Annotation holds the SQL options of one field. Give it to a field with
-// Annotations; several on one field combine, a later non-zero field winning.
+// CascadeAction is a foreign key's action on delete or update, as the old velox
+// has it. velox holds an edge's as edge.OnDelete, so an Annotation that sets one
+// is refused by velox-gen.
+type CascadeAction string
+
+// The cascade actions.
+const (
+	Cascade    CascadeAction = "CASCADE"
+	SetNull    CascadeAction = "SET NULL"
+	Restrict   CascadeAction = "RESTRICT"
+	SetDefault CascadeAction = "SET DEFAULT"
+	NoAction   CascadeAction = "NO ACTION"
+)
+
+// Annotation holds the SQL options of a schema or a field. Give it to either
+// with Annotations; several on one element combine, a later non-zero field
+// winning, and a struct literal and the constructors are the same thing:
+// `sqlschema.Annotation{Table: "users"}` is `sqlschema.Table("users")`.
+//
+// A schema's options are Table, Schema, Collation, Check and Checks, which
+// velox-gen lowers to schema.TableIn, schema.Collation and schema.Check. A
+// field's are Default, DefaultExpr and DefaultExprs. The other fields are the
+// old velox's and compile, for a port, and velox-gen refuses them naming
+// velox's own spelling; velox-gen also refuses an option on the wrong kind of
+// element.
 type Annotation struct {
-	// Default is the column's DEFAULT as SQL text, written as it is, on every
+	// Table is the table a schema is stored in.
+	Table string
+	// Schema is the database schema that holds the table.
+	Schema string
+	// Collation is a schema's table collation, on MySQL.
+	Collation string
+	// Check is one unnamed CHECK constraint. velox-gen refuses it: velox names
+	// every constraint, so write Checks or schema.Check.
+	Check string
+	// Checks are named CHECK constraints of a schema, name to expression.
+	Checks map[string]string
+
+	// Default is a field's column DEFAULT as SQL text, written as it is, on every
 	// dialect: "100" for a number, "'new'" for a string.
 	Default string
-	// DefaultExpr is the column's DEFAULT as a SQL expression, on every dialect.
+	// DefaultExpr is a field's column DEFAULT as a SQL expression, on every
+	// dialect.
 	DefaultExpr string
-	// DefaultExprs is the column's DEFAULT for each dialect, by name (postgres,
-	// mysql, sqlite; sqlite3 is read as sqlite).
+	// DefaultExprs is a field's column DEFAULT for each dialect, by name
+	// (postgres, mysql, sqlite; sqlite3 is read as sqlite).
 	DefaultExprs map[string]string
+
+	// Held by the old velox and refused by velox-gen, each naming its spelling in
+	// velox: Skip, Size (field.MaxLen), ColumnType (field.SchemaType), OnDelete and
+	// OnUpdate (edge.OnDelete), NonUniqueFK, Charset, IncrementStart and
+	// WithComments.
+	Skip           bool
+	Size           int64
+	ColumnType     string
+	OnDelete       CascadeAction
+	OnUpdate       CascadeAction
+	NonUniqueFK    bool
+	Charset        string
+	IncrementStart *int
+	WithComments   *bool
 }
 
 // Name returns AnnotationName.
 func (Annotation) Name() string { return AnnotationName }
 
 // Merge returns a with the non-zero fields of other, an Annotation or a pointer
-// to one, over it. DefaultExprs are combined. It leaves a and other as they
-// are.
+// to one, over it. Maps are combined. It leaves a and other as they are.
 func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 	var o Annotation
 	switch v := other.(type) {
@@ -220,15 +278,96 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		return a
 	}
 	out := a
+	out.Checks = mergeMaps(a.Checks, o.Checks)
 	out.DefaultExprs = mergeMaps(a.DefaultExprs, o.DefaultExprs)
-	if o.Default != "" {
-		out.Default = o.Default
+	for _, f := range []struct {
+		dst *string
+		src string
+	}{
+		{&out.Table, o.Table}, {&out.Schema, o.Schema}, {&out.Collation, o.Collation},
+		{&out.Check, o.Check}, {&out.Default, o.Default}, {&out.DefaultExpr, o.DefaultExpr},
+		{&out.ColumnType, o.ColumnType}, {&out.Charset, o.Charset},
+	} {
+		if f.src != "" {
+			*f.dst = f.src
+		}
 	}
-	if o.DefaultExpr != "" {
-		out.DefaultExpr = o.DefaultExpr
+	out.Skip = a.Skip || o.Skip
+	out.NonUniqueFK = a.NonUniqueFK || o.NonUniqueFK
+	if o.Size != 0 {
+		out.Size = o.Size
+	}
+	if o.OnDelete != "" {
+		out.OnDelete = o.OnDelete
+	}
+	if o.OnUpdate != "" {
+		out.OnUpdate = o.OnUpdate
+	}
+	if o.IncrementStart != nil {
+		out.IncrementStart = o.IncrementStart
+	}
+	if o.WithComments != nil {
+		out.WithComments = o.WithComments
 	}
 	return out
 }
+
+// Table names the table of a schema, as schema.Table does.
+func Table(name string) Annotation { return Annotation{Table: name} }
+
+// SchemaTable names the table of a schema and the database schema that holds
+// it, as schema.TableIn does.
+func SchemaTable(schema, table string) Annotation {
+	return Annotation{Schema: schema, Table: table}
+}
+
+// Schema names the database schema that holds a schema's table.
+func Schema(name string) Annotation { return Annotation{Schema: name} }
+
+// Collation states the collation of a schema's table on MySQL, as
+// schema.Collation does.
+func Collation(c string) Annotation { return Annotation{Collation: c} }
+
+// Checks adds named CHECK constraints to a schema's table, name to expression,
+// as schema.Check does one at a time.
+func Checks(c map[string]string) Annotation { return Annotation{Checks: maps.Clone(c)} }
+
+// Check is the old velox's one unnamed CHECK constraint. velox-gen refuses it:
+// use Checks or schema.Check, which name the constraint.
+func Check(expr string) Annotation { return Annotation{Check: expr} }
+
+// Size is the old velox's column size. velox-gen refuses it: use field.MaxLen.
+func Size(n int64) Annotation { return Annotation{Size: n} }
+
+// ColumnType is the old velox's column type. velox-gen refuses it: use
+// field.SchemaType, which names the type for each dialect.
+func ColumnType(typ string) Annotation { return Annotation{ColumnType: typ} }
+
+// OnDelete is the old velox's foreign key action. velox-gen refuses it: use
+// edge.OnDelete.
+func OnDelete(a CascadeAction) Annotation { return Annotation{OnDelete: a} }
+
+// OnUpdate is the old velox's foreign key action on update. velox-gen refuses
+// it: velox does not hold one.
+func OnUpdate(a CascadeAction) Annotation { return Annotation{OnUpdate: a} }
+
+// NonUniqueFK is the old velox's switch for a one-to-one edge's key. velox-gen
+// refuses it: velox does not hold it.
+func NonUniqueFK() Annotation { return Annotation{NonUniqueFK: true} }
+
+// Charset is the old velox's column character set. velox-gen refuses it.
+func Charset(charset string) Annotation { return Annotation{Charset: charset} }
+
+// Skip is the old velox's switch that leaves a field or schema out of the SQL.
+// velox-gen refuses it.
+func Skip() Annotation { return Annotation{Skip: true} }
+
+// IncrementStart is the old velox's auto-increment start. velox-gen refuses it.
+func IncrementStart(n int) Annotation { return Annotation{IncrementStart: &n} }
+
+// WithComments is the old velox's switch for column comments. velox-gen refuses
+// it: velox writes a comment where the dialect has them.
+func WithComments(on bool) Annotation { return Annotation{WithComments: &on} }
 
 // Default sets a column's DEFAULT to the SQL text value on every dialect:
 // Default("100"), Default("'new'"). It is the column's default only, for rows

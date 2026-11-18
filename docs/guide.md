@@ -206,8 +206,10 @@ index.Fields("name", "created_at").Annotations(sqlschema.DescColumns("created_at
 ```
 
 `sqlschema.IndexWhere` is `.Where` as an annotation, for a port; give an index one
-of them. The old velox's `StorageParams`, `Prefix` and `IncludeColumns`
-compile and are refused by velox-gen: velox holds none of them.
+of them. A schema may also be named the old velox's way, `sqlschema.Annotation{Table:
+"users"}` or `sqlschema.Table("users")`, which is `schema.Table`. The old velox's
+`StorageParams`, `Prefix`, `IncludeColumns`, `Size`, `ColumnType` and `OnDelete`
+compile and are refused by velox-gen, naming velox's own spelling.
 
 Name only an operator class that is not its type's default: PostgreSQL reads a
 default one back as none, and the schema would differ from the database for

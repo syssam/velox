@@ -54,8 +54,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - Package `dialect/sqlschema` holds the options only a SQL database reads, with
   the old velox's names (`IndexType`, `Desc`, `OpClass`, `Default`, ...), so one
   schema can feed SQL, GraphQL and gRPC without SQL words in `index` and
-  `field`. `StorageParams`, `Prefix`, `PrefixColumn` and `IncludeColumns` compile
-  and velox-gen refuses them (decision 0075).
+  `field`. `sqlschema.Annotation{Table: "users"}`
+  and `sqlschema.Table` name a schema's table as `schema.Table` does, and
+  `Collation` and `Checks` lower likewise. What velox does not hold
+  (`StorageParams`, `Prefix`, `IncludeColumns`, `Size`, `ColumnType`, `OnDelete`
+  and the like) compiles and velox-gen refuses it, as it does an annotation on
+  the wrong kind of element (decision 0075).
 
 - `Query.Select`, `SelectRaw`, `GroupBy`, `Having` and `Rows` read terms in
   place of an entity: column handles as they are, SQL expressions
