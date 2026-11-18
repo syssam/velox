@@ -91,7 +91,7 @@ func checkTags(n Node, in *EntityInfo) error {
 		return checkExprCols(n.V.(*exprData), func(c int) error { return checkCol(in, c) })
 	case OpJoined:
 		return nil // the joined target's: no untyped entry point makes one
-	case opNamed, opNamedEdge:
+	case opNamed, opNamedEdge, opNamedSub:
 		return nil // resolved against the statement's entity when it runs
 	}
 	if tag, ok := n.W.(*EntityInfo); ok && n.Op != OpBetween && tag != in {

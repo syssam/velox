@@ -37,7 +37,7 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 	if e == nil {
 		return
 	}
-	if u.name == "" {
+	if u.name == "" && u.kind != useSub {
 		if u.kind != useEdge {
 			ck.warn(u)
 		}
@@ -49,6 +49,14 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 	}
 	if u.kind != useMutation {
 		for _, name := range u.chain {
+			if ent, ok := strings.CutPrefix(name, subStep); ok {
+				owner := e
+				if e = ck.g.Entity(ent); e == nil {
+					return // refused at its own FieldInSelect call
+				}
+				who = fmt.Sprintf("%s, the subquery of %s's FieldInSelect,", e.Name, owner.Name)
+				continue
+			}
 			ed := e.Edge(name)
 			if ed == nil {
 				return // refused at its own Edge call
@@ -77,6 +85,9 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 			return
 		}
 		ck.link(r.entity, append(slices.Clone(u.chain), u.name))
+		return
+	case useSub:
+		ck.checkSub(e, who, u, refuse)
 		return
 	}
 	f, i := columnOf(e, u.name)
@@ -118,6 +129,44 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 	}
 }
 
+// checkSub checks u, a FieldInSelect that the entity e holds: the entity it
+// names is one of the package's, both columns it names are there and of one
+// type, as the statement requires; and it links the entity to e.
+func (ck *behaviourCheck) checkSub(e *Entity, who string, u use, refuse func(ast.Expr, string, ...any)) {
+	target := ck.g.Entity(u.entity)
+	if target == nil {
+		refuse(u.call, "%s: %q is not a schema of this package", who, u.entity)
+		return
+	}
+	var own, tgt *namedColumn
+	if u.name != "" {
+		f, i := columnOf(e, u.name)
+		if f == nil {
+			refuse(u.call, "%s has no column %q", who, u.name)
+			return
+		}
+		own = &namedColumn{e: e, f: f, id: i == 0}
+	}
+	if u.key != "" {
+		f, i := columnOf(target, u.key)
+		if f == nil {
+			refuse(u.call, "%s has no column %q", target.Name, u.key)
+			return
+		}
+		tgt = &namedColumn{e: target, f: f, id: i == 0}
+	}
+	if own != nil && tgt != nil {
+		if ok, kk := own.kind(), tgt.kind(); ok != "" && kk != "" && own.typeName() != tgt.typeName() {
+			refuse(u.call, "column %q of %s is %s and column %q of %s is %s: a subquery compares columns of one type",
+				u.name, e.Name, article(own.typeName()), u.key, target.Name, article(tgt.typeName()))
+			return
+		}
+	}
+	if link := subStep + target.Name; !slices.Contains(ck.linked[e.Name], link) {
+		ck.linked[e.Name] = append(ck.linked[e.Name], link)
+	}
+}
+
 // warn records the warning of u, a column named by a value velox-gen
 // cannot read.
 func (ck *behaviourCheck) warn(u use) {
@@ -138,6 +187,10 @@ func (ck *behaviourCheck) warn(u use) {
 // before it reaches, are linked.
 func (ck *behaviourCheck) link(entity string, chain []string) {
 	for _, name := range chain {
+		if ent, ok := strings.CutPrefix(name, subStep); ok {
+			entity = ent // a FieldInSelect's entity: its own call links it
+			continue
+		}
 		ed := ck.g.Entity(entity).Edge(name)
 		if !slices.Contains(ck.linked[entity], name) {
 			ck.linked[entity] = append(ck.linked[entity], name)

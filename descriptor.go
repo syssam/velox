@@ -33,9 +33,14 @@ type Descriptor[E any] struct {
 	// extra fields (an edge schema's rows get no such clause); velox's
 	// GraphQL mutations add DoNothing, so they behave as ent's do. For
 	// generated code.
-	Bidi         bool
-	Indexes      []IndexInfo
-	Edges        []EdgeDescriptor      // in the order of the generated relation handles
+	Bidi    bool
+	Indexes []IndexInfo
+	Edges   []EdgeDescriptor // in the order of the generated relation handles
+	// Links are the entities the entity's behaviour correlates with by name,
+	// with FieldInSelect. For generated code: velox-gen writes one for each
+	// entity that a policy, a hook or an interceptor names there, as it
+	// wraps a relation that HasEdge names with Linked.
+	Links        []EntityLink
 	FieldPtr     func(x *E, i int) any // &x.<field of column i>
 	EdgeFieldPtr func(x *E, i int) any // &x.Edges.<field of edge i> in generated code: a *One[T] or *Many[T]
 
@@ -104,7 +109,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 		info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
 			d = descriptor()
 			v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, TableSchema: d.TableSchema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
-				Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check, Schema: d.Schema}}
+				Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Links: d.Links, Check: d.Check, Schema: d.Schema}}
 			if a := d.FieldPtr; a != nil {
 				v.FieldPtr = func(i int) any { return a(x, i) }
 			}
@@ -216,6 +221,18 @@ func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, jo
 		TargetCol: joinTarget,
 	})
 	return r
+}
+
+// LinkEntity links the entity T, named name in the schema, to the entity whose
+// Descriptor lists it in Links. For generated code. FieldInSelect(column,
+// name, key) finds the entity through it:
+//
+//	Links: []velox.EntityLink{velox.LinkEntity[Doc]("Doc")},
+func LinkEntity[T any, PT Entity[T]](name string) EntityLink {
+	return EntityLink{Name: name, Get: func() (*EntityInfo, error) {
+		m := stateOf(PT(nil).VeloxMeta())
+		return m.Info, m.Err
+	}}
 }
 
 // Linked is e with its target T linked: the relation then names T's

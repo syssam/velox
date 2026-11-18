@@ -105,6 +105,11 @@ func ColumnEQ(column int, v any) Predicate { return engine.ColumnEQ(column, v) }
 // no target entity: the use site supplies that (see EdgeTo).
 type EdgeDescriptor = engine.EdgeDescriptor
 
+// EntityLink is an entity that another's behaviour names with FieldInSelect:
+// its Name in the schema, and Get, which returns its metadata. For generated
+// code. LinkEntity makes one.
+type EntityLink = engine.EntityLink
+
 // Op is the kind of a Statement.
 type Op = veloxtype.Op
 

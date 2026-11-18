@@ -166,8 +166,11 @@ type use struct {
 	call  ast.Expr // the call, for errors
 	named ast.Expr // the call that names the column, for the errors of its name
 	name  string   // the name, "" when it is not a constant
-	op    string   // the operator, FieldEQ's EQ, or the method: Set, Value, …
-	args  []ast.Expr
+	// entity and key are a FieldInSelect's target entity and its key column,
+	// key "" when it is not a constant. name is the call's own column.
+	entity, key string
+	op          string // the operator, FieldEQ's EQ, or the method: Set, Value, …
+	args        []ast.Expr
 	// spread says the values are passed as a slice (FieldIn(name, vs...)), which
 	// velox-gen does not read.
 	spread bool
@@ -180,7 +183,13 @@ const (
 	useEdge     useKind = iota // velox.HasEdge(name) or HasEdgeWith(name, ...)
 	useColumn                  // velox.FieldEQ(name, v) and the other Field functions
 	useMutation                // a *velox.Mutation's or a velox.Row's method
+	useSub                     // velox.FieldInSelect(column, entity, key, ...)
 )
+
+// subStep is the chain step that a FieldInSelect's conditions are after: the
+// conditions name the columns of the entity it names, and no relation reaches
+// it. A relation's name never starts with it.
+const subStep = "@"
 
 // prefixed is u after the relations prefix.
 func (u use) prefixed(prefix []string) use {
@@ -404,6 +413,19 @@ func (sc *sources) call(c *ast.CallExpr, prefix []string, w *walked) bool {
 			sc.inspectAll(c.Args[1:], append(slices.Clone(prefix), name), w)
 		}
 		return false
+	case fn == "FieldInSelect" && len(c.Args) >= 3:
+		entity := sc.constString(c.Args[1])
+		if entity == "" {
+			pos := sc.fset.Position(c.Pos())
+			w.errs = append(w.errs, &FileError{Path: pos.Filename, Line: pos.Line, Reason: fmt.Sprintf(
+				"%s names its entity with a value velox-gen cannot read; name it with a constant, so that velox-gen links the entity", exprString(c))})
+			return false
+		}
+		u := use{kind: useSub, chain: prefix, pos: c.Pos(), call: c, entity: entity,
+			name: sc.constString(c.Args[0]), key: sc.constString(c.Args[2])}
+		w.uses = append(w.uses, u)
+		sc.inspectAll(c.Args[3:], append(slices.Clone(prefix), subStep+entity), w)
+		return false
 	case fieldOps[fn]:
 		name := ""
 		if tv := sc.info.Types[c.Args[0]]; tv.Value != nil && tv.Value.Kind() == constant.String {
@@ -494,12 +516,19 @@ func (sc *sources) veloxFunc(c *ast.CallExpr) string {
 // constName returns the relation c's first argument names: "" when it is
 // not a constant, which is recorded in w as a *FileError.
 func (sc *sources) constName(c *ast.CallExpr, w *walked) string {
-	tv := sc.info.Types[c.Args[0]]
-	if tv.Value != nil && tv.Value.Kind() == constant.String {
-		return constant.StringVal(tv.Value)
+	if s := sc.constString(c.Args[0]); s != "" {
+		return s
 	}
 	pos := sc.fset.Position(c.Pos())
 	w.errs = append(w.errs, &FileError{Path: pos.Filename, Line: pos.Line, Reason: fmt.Sprintf(
 		"%s names its relation with a value velox-gen cannot read; name it with a constant, so that velox-gen links the relation's target", exprString(c))})
+	return ""
+}
+
+// constString returns the string x is a constant of, "" when it is not one.
+func (sc *sources) constString(x ast.Expr) string {
+	if tv := sc.info.Types[x]; tv.Value != nil && tv.Value.Kind() == constant.String {
+		return constant.StringVal(tv.Value)
+	}
 	return ""
 }

@@ -21,6 +21,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `velox.FieldInSelect(column, entity, key, ps...)` is a subquery on another
+  entity by name, for a schema's Policy, Hooks and Interceptors: the entity's
+  `column` is among the `key` of the `entity` rows that meet `ps`. The target's
+  Read policy applies inside it; a wrong name or type is an error, not a dropped
+  arm. velox-gen links the entity (`Descriptor.Links`). Regenerate:
+  `velox.GeneratedCodeIsVersion21` replaces Version20 (decision 0079).
 - A number whose checks refuse 0 may have a non-zero `Default` or
   `DefaultFunc`: `field.Int("seats").Positive().Default(100)`. `Positive`,
   `Negative`, a `Min` above 0, a `Max` below 0 and a `Range` that excludes 0

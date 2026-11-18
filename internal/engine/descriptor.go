@@ -18,6 +18,7 @@ type DescriptorFields struct {
 	Bidi        bool
 	Indexes     []IndexInfo
 	Relations   []EdgeDescriptor
+	Links       []EntityLink
 	Check       func(col int, v any) error
 	// Schema is Descriptor.Schema: the value whose methods declare the
 	// entity's behaviour, nil when it has none.
@@ -94,7 +95,7 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 		return nil, err
 	}
 	info := &EntityInfo{Name: name, Table: d.Table, Schema: d.TableSchema, Columns: cols, PrimaryKey: d.PrimaryKey,
-		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, version: version + 1, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
+		Indexes: d.Indexes, rels: rels, links: d.Links, immutable: anyImmutable, version: version + 1, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
 	if err := validate(info); err != nil {
 		return nil, err
 	}

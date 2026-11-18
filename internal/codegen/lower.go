@@ -1130,6 +1130,15 @@ func (l *lowerer) relations() {
 			}
 			s.out.Rels = append(s.out.Rels, r)
 		}
+		for _, link := range slices.Sorted(slices.Values(l.cfg.Linked[e.Name])) {
+			name, ok := strings.CutPrefix(link, subStep)
+			if !ok {
+				continue
+			}
+			if t := l.g.Entity(name); t != nil {
+				s.out.Links = append(s.out.Links, fmt.Sprintf("velox.LinkEntity[%s](%q)", t.Name, name))
+			}
+		}
 	}
 }
 

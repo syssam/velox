@@ -257,7 +257,7 @@ command in one `go:generate` line, and have CI call it, so the folder is named
 once.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion20`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion21`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 
@@ -515,6 +515,25 @@ soft-deleted post is not counted). `NotInSelect` is `NOT EXISTS`, so a NULL
 in the subquery doesn't empty the result the way SQL's `NOT IN` would.
 Aggregates, CTEs and window functions in a subquery still go through `Raw`.
 See [ADR 0057](decisions/0057-column-subqueries.md).
+
+A schema's Policy, Hooks or Interceptors cannot use handles, which live in the
+generated package they are compiled into. They name the other entity instead,
+with `velox.FieldInSelect(column, entity, key, conditions...)`:
+
+```go
+func (Doc) Policy() velox.Policy {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+		// a document is visible when its org_id is that of an organisation the viewer reads
+		return velox.FieldInSelect("org_id", "Org", "id", velox.FieldEQ("active", true)), nil
+	}}
+}
+```
+
+It is the same `EXISTS`, so `Org`'s own Read policy applies inside it, and it
+is resolved when the statement is prepared: an unknown column or entity, or
+two columns of different types, is an error and never a dropped condition.
+`entity` must be a constant, so that velox-gen links it
+([ADR 0079](decisions/0079-field-in-select.md)).
 
 ### SQL text in a condition: Expr
 

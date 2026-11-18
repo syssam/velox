@@ -90,6 +90,29 @@ func FieldEqualFold(name, s string) Predicate { return engine.FieldEqualFold(nam
 // LOWER(pattern). SQLite's LOWER folds ASCII letters only.
 func FieldContainsFold(name, s string) Predicate { return engine.FieldContainsFold(name, s) }
 
+// FieldInSelect is true when the column of the given name is among the values
+// of the key column of the entity named entity, in the rows that meet every
+// condition of ps, which name that entity's columns:
+//
+//	velox.FieldInSelect("conversation_id", "Participant", "conversation_id",
+//		velox.FieldEQ("user_id", uid))
+//
+// It is the condition a column handle's InSelect makes, for a policy, a hook or
+// an interceptor in a package that cannot name the entity's type. The entity's
+// Read policy and interceptors apply inside the subquery, so a row the caller
+// may not read does not widen the condition. A NULL column is in no subquery.
+// Negate it with Not: NOT EXISTS, which is true for a NULL column.
+//
+// entity is the schema's name for it, a constant that velox-gen reads: it links
+// that entity to the one whose behaviour makes the call, and checks both
+// columns and ps. An entity that is not linked, a column that is not there, or
+// two columns of different types fail the statement that holds it. The column
+// must not be an encoded (JSON) column. On MySQL a subquery that reads the table
+// an UPDATE or DELETE changes fails with error 1093.
+func FieldInSelect(column, entity, key string, ps ...Predicate) Predicate {
+	return engine.FieldInSelect(column, entity, key, ps...)
+}
+
 // FieldIsNull is true when the nullable column of the given name is NULL.
 func FieldIsNull(name string) Predicate { return engine.FieldIsNull(name) }
 

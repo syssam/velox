@@ -245,7 +245,7 @@ func checkNode(st *Statement, who string, nd Node) error {
 		return badColumn(st, who, l.OwnerCol)
 	case OpInvalid:
 		return nd.V.(error)
-	case opNamed, opNamedEdge:
+	case opNamed, opNamedEdge, opNamedSub:
 		return nil // resolved against the statement's entity when it runs
 	case OpAllow:
 		return nil // it names no column

@@ -25,6 +25,7 @@ type EntityInfo struct {
 	PrimaryKey []int // indexes into Columns
 	Indexes    []IndexInfo
 	rels       []*relation                // in the order of the generated shape
+	links      []EntityLink               // the entities a condition by name may correlate with (FieldInSelect)
 	kit        *Kit                       // set by MetaOnce.Load
 	check      func(col int, v any) error // Descriptor.Check; nil when the entity has no validators
 	immutable  bool                       // some column is Immutable
@@ -38,6 +39,14 @@ type EntityInfo struct {
 
 	// The entity's policy, bound once from its Policy method.
 	policy *EntityPolicy // nil when none
+}
+
+// EntityLink is an entity linked to another by name: a condition by name,
+// FieldInSelect, may read it. Get returns its metadata, and Name is the name
+// the condition gives it, the schema's name for it.
+type EntityLink struct {
+	Name string
+	Get  func() (*EntityInfo, error)
 }
 
 // EntityPolicy is an entity's Policy, with E erased.

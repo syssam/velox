@@ -42,6 +42,10 @@ const (
 	// resolved: w and col are the name, as opNamed's, kids the conditions on
 	// its target, by name.
 	opNamedEdge
+	// opNamedSub is an EXISTS on another entity, correlated by two columns,
+	// all by name and not yet resolved: v is its *namedSub, kids the
+	// conditions on the target, by name.
+	opNamedSub
 	// OpJSON is a condition on a value inside a JSON column: col is the
 	// column, v its JSONPath, and its one kid the operator and values, whose
 	// own column is ignored. JSONNode makes it.
@@ -88,7 +92,9 @@ func Group(o op, kids []Node) Node {
 
 // named reports whether n is or holds a condition by name, which the
 // statement resolves against its entity.
-func named(n Node) bool { return n.ByName || n.Op == opNamed || n.Op == opNamedEdge }
+func named(n Node) bool {
+	return n.ByName || n.Op == opNamed || n.Op == opNamedEdge || n.Op == opNamedSub
+}
 
 // AnyEntity is the entity of a Predicate: none, since an untyped condition
 // names no entity's type.
@@ -111,7 +117,7 @@ func ColumnEQ(column int, v any) Predicate {
 // no EXISTS: a condition that a rewrite hook may build with the public API.
 func Sound(n Node) bool {
 	switch n.Op {
-	case opZero, OpInvalid, OpExists, OpJoined, opNamed, opNamedEdge:
+	case opZero, OpInvalid, OpExists, OpJoined, opNamed, opNamedEdge, opNamedSub:
 		return false
 	}
 	for _, k := range n.Kids {

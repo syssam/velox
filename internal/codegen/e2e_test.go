@@ -65,6 +65,13 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 			t.Fatal(err)
 		}
 	}
+	if cfg.Linked == nil {
+		// As velox-gen does: the relations and entities the behaviour names are
+		// linked in the descriptors.
+		if cfg.Linked, _, err = CheckBehaviour(dir, "./schema", g, cfg.Bound, cfg.Mixins, offline()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	out, err := Generate(g, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +121,7 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 func TestGeneratedRunsOnSQLite(t *testing.T) {
 	dir := e2eModule(t, Config{Package: "gen", GenPath: "example.com/tmp/gen", Bound: map[string]Bound{
 		"Post": {Policy: true, Interceptors: true},
-		"User": {Hooks: true},
+		"User": {Policy: true, Hooks: true},
 		"Note": {Policy: true, Hooks: true},
 	}}, []string{"behaviour"}, []string{"user"}, "main_test.go")
 	if out, err := tempmod.Go(dir, "vet", "./..."); err != nil {

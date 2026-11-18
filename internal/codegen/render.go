@@ -419,6 +419,13 @@ func entityDescriptor(w *writer, e *OutEntity) {
 		}
 		w.p("},")
 	}
+	if len(e.Links) > 0 {
+		w.p("Links: []velox.EntityLink{")
+		for _, l := range e.Links {
+			w.p("%s,", l)
+		}
+		w.p("},")
+	}
 	// velox reads the behaviour of the schema's mixins, in Mixin order,
 	// then the schema's own.
 	if e.Schema != "" {

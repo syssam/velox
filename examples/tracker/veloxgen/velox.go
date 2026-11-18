@@ -5,7 +5,7 @@ package veloxgen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion20
+const _ = velox.GeneratedCodeIsVersion21
 
 // IssueStatus is the type of Issue's status field.
 type IssueStatus string

@@ -18,7 +18,9 @@ type Config struct {
 
 	// Linked are, per entity name, the names of its relations whose target
 	// velox-gen links (velox.Linked): those its behaviour names with
-	// velox.HasEdge or HasEdgeWith (see CheckBehaviour).
+	// velox.HasEdge or HasEdgeWith (see CheckBehaviour). A name that starts
+	// with "@" is an entity, not a relation: the one its behaviour names with
+	// velox.FieldInSelect, which velox-gen links (velox.LinkEntity).
 	Linked map[string][]string
 	// GenPath is the generated package's import path.
 	GenPath string
@@ -54,6 +56,7 @@ type OutEntity struct {
 	Name, Label, Handles, Table, TableSchema string // Handles = GoPlural(Name), e.g. "Users", "StatusSlice"; a join entity's is GoName(Table)
 	Fields                                   []*OutField
 	Rels                                     []*OutRel
+	Links                                    []string // velox.LinkEntity expressions: the entities its behaviour names with velox.FieldInSelect
 	PrimaryKey                               []int
 	Indexes                                  []OutIndex
 	Join                                     bool   // a many-to-many join entity
@@ -133,4 +136,4 @@ const veloxPkg = "github.com/syssam/velox"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 20
+const GeneratedCodeVersion = 21

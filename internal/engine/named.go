@@ -105,6 +105,24 @@ func HasEdgeWith(name string, ps ...Predicate) Predicate {
 	return Predicate{Node{Op: opNamedEdge, Col: int32(len(name)) << 8, W: nameData(name), Kids: kids}}
 }
 
+// namedSub is what an opNamedSub holds: the owner's column, the target
+// entity's name and the target's key column.
+type namedSub struct{ column, entity, key string }
+
+// FieldInSelect is true when the column of the given name is among the values
+// of the key column of the entity named entity, in the rows that meet every
+// condition of ps, which name the target's columns: column IN (SELECT key FROM
+// entity WHERE ps), written as the EXISTS a column handle's InSelect writes. The
+// target's Read policy applies inside it. The entity must be linked: velox-gen
+// links the entity a policy, a hook or an interceptor names here by a constant.
+func FieldInSelect(column, entity, key string, ps ...Predicate) Predicate {
+	kids := make([]Node, len(ps))
+	for i, p := range ps {
+		kids[i] = p.n
+	}
+	return Predicate{Node{Op: opNamedSub, V: &namedSub{column, entity, key}, Kids: kids}}
+}
+
 // nameIndex is each column's index by its name.
 func nameIndex(cols []ColumnInfo) map[string]int32 {
 	m := make(map[string]int32, len(cols))
@@ -177,6 +195,8 @@ func resolveNamed(in *EntityInfo, n Node) (Node, error) {
 		return namedLeaf(in, n)
 	case opNamedEdge:
 		return namedEdge(in, n)
+	case opNamedSub:
+		return namedSubquery(in, n)
 	}
 	if !n.ByName {
 		return n, nil
@@ -312,6 +332,42 @@ func namedEdge(in *EntityInfo, n Node) (Node, error) {
 		return n, fmt.Errorf("relation %s: %w", name, err)
 	}
 	return Node{Op: OpExists, Col: int32(i), V: l, Kids: kids}, nil
+}
+
+// namedSubquery resolves n, an EXISTS on another entity by name, against in:
+// the owner's column equals the target's key column, and its conditions are
+// resolved against the target, so the target's Read policy and interceptors
+// apply inside it, as they do inside a typed InSelect.
+func namedSubquery(in *EntityInfo, n Node) (Node, error) {
+	s := n.V.(*namedSub)
+	oc, ok := in.names[s.column]
+	if !ok {
+		return n, fmt.Errorf("FieldInSelect: no column %q", s.column)
+	}
+	i := slices.IndexFunc(in.links, func(l EntityLink) bool { return l.Name == s.entity })
+	if i < 0 {
+		return n, fmt.Errorf("FieldInSelect: entity %s is not linked: velox-gen links it when a policy, hook or interceptor of %s names it with a constant", s.entity, in.Name)
+	}
+	target, err := in.links[i].Get()
+	if err != nil {
+		return n, err
+	}
+	tc, ok := target.names[s.key]
+	if !ok {
+		return n, fmt.Errorf("FieldInSelect: %s has no column %q", s.entity, s.key)
+	}
+	if o, t := rtype(in.Columns[oc].val), rtype(target.Columns[tc].val); o != t {
+		return n, fmt.Errorf("FieldInSelect: %s.%s is %s and %s.%s is %s: a subquery compares columns of one type", in.Name, s.column, article(o), s.entity, s.key, article(t))
+	}
+	l, err := ColRef{Owner: func() (*EntityInfo, error) { return in, nil }, Target: func() (*EntityInfo, error) { return target, nil }, OwnerCol: oc, TargetCol: tc}.Link()
+	if err != nil {
+		return n, err
+	}
+	kids, _, err := resolveKids(l.Target, n.Kids)
+	if err != nil {
+		return n, fmt.Errorf("FieldInSelect %s: %w", s.entity, err)
+	}
+	return Node{Op: OpExists, Col: -1, V: l, Kids: kids}, nil
 }
 
 // namedValue returns v as column c's value type, converted as

@@ -93,6 +93,7 @@ func nmDocDescriptor() velox.Descriptor[nmDoc] {
 		},
 		PrimaryKey: []int{0},
 		Edges:      []velox.EdgeDescriptor{org, velox.EdgeTo[nmDoc]("peer", nmPeerID, nmID)},
+		Links:      []velox.EntityLink{velox.LinkEntity[nmOrg]("Org")},
 		FieldPtr: func(x *nmDoc, i int) any {
 			return [...]any{&x.ID, &x.OrgID, &x.Title, &x.Note, &x.Rank, &x.Status, &x.At, &x.Score, &x.PeerID, &x.Visible}[i]
 		},

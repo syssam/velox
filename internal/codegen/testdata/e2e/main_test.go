@@ -356,6 +356,29 @@ func TestPolicy(t *testing.T) {
 	}
 }
 
+// A policy's FieldInSelect is a subquery on another entity by name, which
+// velox-gen linked: the poster reads the users who have a post, and the
+// Post's own Read policy applies inside the subquery, so a user whose only post
+// the viewer may not read is not among them.
+func TestFieldInSelect(t *testing.T) {
+	db := open(t)
+	seed(t, db)
+	dan := newUser("dan")
+	mustInsert(t, db, &dan)
+	mustInsert(t, db, &gen.Post{AuthorID: dan.ID, Title: "d1"}) // a draft
+	users := func(ctx context.Context) []string {
+		t.Helper()
+		us, err := db.Query[gen.User]().OrderBy(gen.Users.ID.Asc()).Limit(10).All(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return names(us)
+	}
+	wantStrings(t, "no poster", users(ctx), []string{"ada", "bob", "carol", "dan"})
+	wantStrings(t, "poster", users(schema.AsPoster(ctx)), []string{"ada", "bob", "dan"})
+	wantStrings(t, "poster and viewer", users(schema.AsPoster(schema.AsViewer(ctx))), []string{"ada", "bob"})
+}
+
 // The schema's Interceptors method, bound by velox-gen, hides the archived
 // post from reads, relations and writes; WithoutPolicy does not lift it,
 // and its own context does.
