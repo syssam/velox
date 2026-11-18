@@ -183,7 +183,12 @@ index.Fields("attrs").Method("gin").StorageKey("ix_attrs_gin")
 
 MySQL and SQLite have no choice of method, so velox-gen refuses a `Method` on
 them, and a unique index must be btree
-([ADR 0069](decisions/0069-index-method.md)). An entity's primary key is always
+([ADR 0069](decisions/0069-index-method.md)). A GIN index works on a JSON (jsonb)
+column, an array or a tsvector as it is. On a text or number column it needs an
+extension that gives GIN an operator class for the type, `btree_gin` or
+`pg_trgm`: velox does not create extensions, so add `CREATE EXTENSION` to the
+baseline by hand, and without it the index fails when it is applied, not in
+velox-gen. An entity's primary key is always
 one column; for a natural key, keep `id` and add a unique index.
 
 ### Mixins
