@@ -383,7 +383,7 @@ func TestDefaultOnNonNillableNumber(t *testing.T) {
 		n := field("n", typ)
 		n.HasDefault = true
 		_, err := Render(model(entity("Thing", n)))
-		want := "schema Thing, field n: a Default on a bool or number that is not Nillable cannot be told from unset, unless it is the zero value; velox-gen refuses it too"
+		want := "schema Thing, field n: a Default on a bool or number that is not Nillable cannot be told from unset, unless it is the zero value or a check refuses 0; velox-gen refuses it too"
 		if err == nil || err.Error() != want {
 			t.Errorf("%s:\n got  %v\nwant %s", typ, err, want)
 		}
@@ -411,6 +411,45 @@ func TestDefaultOnNonNillableNumber(t *testing.T) {
 	s := field("s", "string")
 	s.HasDefault, s.Optional = true, true
 	load(t, model(entity("Thing", s)))
+}
+
+// A number a check refuses 0 for never stores 0, so a non-zero Default on it
+// is allowed, as in velox-gen; a check that allows 0, or a bool, is not.
+func TestDefaultOnNumberThatIsNeverZero(t *testing.T) {
+	for _, c := range []struct {
+		kind string
+		args []string
+		ok   bool
+	}{
+		{"Positive", nil, true},
+		{"Negative", nil, true},
+		{"Min", []string{"1"}, true},
+		{"Max", []string{"-1"}, true},
+		{"Range", []string{"1", "9"}, true},
+		{"Range", []string{"-9", "-1"}, true},
+		{"NonNegative", nil, false},
+		{"Min", []string{"0"}, false},
+		{"Max", []string{"0"}, false},
+		{"Range", []string{"0", "9"}, false},
+	} {
+		n := field("n", "int")
+		n.HasDefault, n.Default = true, json.RawMessage(`5`)
+		ck := plugin.Check{Kind: c.kind}
+		for _, a := range c.args {
+			ck.Args = append(ck.Args, json.RawMessage(a))
+		}
+		n.Checks = []plugin.Check{ck}
+		_, err := Render(model(entity("Thing", n)))
+		if (err == nil) != c.ok {
+			t.Errorf("%s%v: error %v, ok %v", c.kind, c.args, err, c.ok)
+		}
+	}
+	b := field("b", "bool")
+	b.HasDefault, b.Default = true, json.RawMessage(`true`)
+	b.Checks = []plugin.Check{{Kind: "Positive"}}
+	if _, err := Render(model(entity("Thing", b))); err == nil {
+		t.Error("a bool has no check that refuses false")
+	}
 }
 
 // zeroIsUnset's kinds are those of velox-gen's rule 36: bool, and the types

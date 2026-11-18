@@ -116,3 +116,22 @@ ent, and 0032's JSON lists serve it in GraphQL. The binding model now holds
 a required `field.Strings` and `field.Ints` beside the Optional one, so
 `TestBindingRoundTrip` applies the planner's migration of a NOT NULL JSON
 list and round-trips it on SQLite, PostgreSQL and MySQL.
+
+## Amendment, 2026-11-18: a number a check refuses 0 for
+
+The refusal of a non-zero Default exists because reading 0 as unset would
+overwrite an explicit 0. A number whose built-in checks refuse 0 (`Positive`,
+`Negative`, a `Min` above 0, a `Max` below 0, a `Range` that excludes it) never
+stores 0, so nothing is overwritten that could have been stored. velox-gen
+(rule 36) and the plugin's sdl check now allow a non-zero Default or
+DefaultFunc on such a number, and old velox's
+`field.Int("seats").Positive().Default(100)` ports as it is. A bool is still
+refused, whatever its checks: false and true are both values. The engine's
+Descriptor check cannot see checks, so velox-gen writes
+`ColumnDescriptor.ZeroInvalid` for a literal non-zero Default of such a number
+and the engine reads it in place of refusing (not for a DefaultFunc, which the
+engine never checked, and not on a bool). An explicit 0 on such a field takes
+the Default instead of failing the check, as unset does. `GeneratedCodeIsVersion20`.
+Evidence: `TestBuildZeroInvalidDefault`, `TestRenderZeroInvalid`,
+`TestZeroInvalidDefault` (engine), `TestZeroInvalidInsert`,
+`TestDefaultOnNumberThatIsNeverZero` (sdl).

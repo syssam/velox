@@ -168,6 +168,23 @@ func TestDescriptorRefusals(t *testing.T) {
 	}
 }
 
+// ZeroInvalid says a check refuses 0, so a number that is not a pointer may
+// have a Default that is not zero, and FillDefault gives it to a zero field. A
+// bool is false or true, whatever a check says, and is still refused.
+func TestZeroInvalidDefault(t *testing.T) {
+	d := rowDescriptor()
+	d.Columns[0].Default, d.Columns[0].ZeroInvalid = int64(3), true
+	if _, err := loadDescriptor(d, targetOf[fixture.DAuthor]()); err != nil {
+		t.Fatalf("a number with ZeroInvalid: %v", err)
+	}
+	d = rowDescriptor()
+	d.Columns[1].Default, d.Columns[1].ZeroInvalid = true, true
+	_, err := loadDescriptor(d, targetOf[fixture.DAuthor]())
+	if err == nil || !strings.Contains(err.Error(), "Default on bool/numeric field Flag would overwrite") {
+		t.Errorf("a bool with ZeroInvalid: %v", err)
+	}
+}
+
 func TestEdgeToHolderMismatch(t *testing.T) {
 	for _, c := range []struct {
 		name string

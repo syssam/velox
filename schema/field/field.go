@@ -183,7 +183,11 @@ func newTyped[B, V any](c *common[B]) typed[B, V] { return typed[B, V]{c: c} }
 // zero value, so velox-gen refuses a Default on a bool or number that is not
 // Nillable, which could then never store false or 0, unless the Default is the
 // zero value itself, as Default(false) or Default(0): make the field Nillable,
-// or give it a zero Default, or drop it. On a string that is not Nillable, "" is unset and takes
+// or give it a zero Default, or drop it. A number whose built-in checks refuse
+// 0 (Positive, Negative, a Min above 0, a Max below 0, a Range that excludes
+// it) may have any Default: it could not store 0 anyway, so reading 0 as unset
+// loses nothing, as in field.Int("seats").Positive().Default(100). A bool is
+// refused whatever its checks. On a string that is not Nillable, "" is unset and takes
 // the Default: Insert cannot store it, though Update can. A Default that the
 // field's own built-in checks refuse is an error: every row that left the field
 // unset would fail to insert. A custom validator is not called on it.

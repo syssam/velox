@@ -21,6 +21,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A number whose checks refuse 0 may have a non-zero `Default` or
+  `DefaultFunc`: `field.Int("seats").Positive().Default(100)`. `Positive`,
+  `Negative`, a `Min` above 0, a `Max` below 0 and a `Range` that excludes 0
+  count; a bool is still refused. velox-gen writes the new
+  `ColumnDescriptor.ZeroInvalid` for it. Regenerate:
+  `velox.GeneratedCodeIsVersion20` replaces Version19 (decision 0032).
 - `velox.Expr[E](text, args...)` is SQL text as a condition in `Where`: a
   function, an expression or a `CASE` the handles do not offer. It is ANDed
   with the Read policy, the scope and the interceptors, which `Raw` skips.

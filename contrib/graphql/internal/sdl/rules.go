@@ -159,11 +159,12 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.CreateInput(true) or UpdateInput(true): the primary key is never an input", where)
 	case isTrue(a.UpdateInput) && f.Immutable:
 		return fmt.Errorf("%s: graphql.UpdateInput(true) on an immutable field, which no update may set", where)
-	case f.HasDefault && !f.Nullable && zeroIsUnset(f.Type) && !zeroLiteral(f.Default):
+	case f.HasDefault && !f.Nullable && zeroIsUnset(f.Type) && !zeroLiteral(f.Default) && !(f.Type != "bool" && zeroInvalid(f.Checks)):
 		// An insert fills the Default into a zero value, so the field could
 		// never store false or 0, and a create input could not set it. A
-		// zero Default stores what unset does.
-		return fmt.Errorf("%s: a Default on a bool or number that is not Nillable cannot be told from unset, unless it is the zero value; velox-gen refuses it too", where)
+		// zero Default stores what unset does, and so does any on a number a
+		// check refuses 0 for.
+		return fmt.Errorf("%s: a Default on a bool or number that is not Nillable cannot be told from unset, unless it is the zero value or a check refuses 0; velox-gen refuses it too", where)
 	}
 	return nil
 }
@@ -190,6 +191,29 @@ func zeroLiteral(d json.RawMessage) bool {
 		n, err := strconv.ParseFloat(s, 64)
 		return err == nil && n == 0
 	}
+}
+
+// zeroInvalid reports whether a check of a number refuses 0: Positive,
+// Negative, a Min above 0, a Max below 0, or a Range that excludes it. It is
+// velox-gen's rule of the same name, read from the model's checks.
+func zeroInvalid(checks []plugin.Check) bool {
+	arg := func(c plugin.Check, i int) (float64, bool) {
+		var v float64
+		return v, i < len(c.Args) && json.Unmarshal(c.Args[i], &v) == nil
+	}
+	for _, c := range checks {
+		lo, okLo := arg(c, 0)
+		hi, okHi := arg(c, 1)
+		switch {
+		case c.Kind == "Positive" || c.Kind == "Negative":
+			return true
+		case c.Kind == "Min" && okLo && lo > 0, c.Kind == "Max" && okLo && lo < 0:
+			return true
+		case c.Kind == "Range" && okLo && okHi && (lo > 0 || hi < 0):
+			return true
+		}
+	}
+	return false
 }
 
 // appDirective is the name of a's first application directive, one other
