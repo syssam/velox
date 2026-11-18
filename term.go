@@ -24,7 +24,7 @@ type Term[E any] struct{ t engine.Term }
 // about 10 KB per handle type (TestGenericTypesCompileSmall), so a string, a
 // handle of another entity or any other value is refused when the statement
 // runs, before anything is sent, as an Expr's arguments are.
-type Selectable[E any] interface{}
+type Selectable[E any] any
 
 // termOf is s as a term of the statement's entity.
 func termOf[E any](s Selectable[E]) engine.Term {

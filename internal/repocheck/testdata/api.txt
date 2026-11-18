@@ -602,7 +602,7 @@ type Row = engine.Row
 type RowScope = veloxtype.RowScope
 type SaveQuery[E any] struct { }
 type SchemaError = veloxtype.SchemaError
-type Selectable[E any] interface{}
+type Selectable[E any] any
 type Setter[E any] struct { }
 type Shard = engine.Shard
 type Statement = engine.Statement
