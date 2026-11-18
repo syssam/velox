@@ -69,6 +69,12 @@ removed.
   `timestamp(6)` whose default is `CURRENT_TIMESTAMP` or `now()` without the
   column's precision, which MySQL refuses at apply, is refused in velox-gen with
   `CURRENT_TIMESTAMP(6)` named.
+- velox-gen refuses a column default or an index predicate, whichever way it was
+  written (`SchemaDefault`, `sqlschema.Default`, `Where`, `IndexWhere`), that
+  holds `;`, `--` or `/*` outside its string literals, as the old velox refused
+  them. It catches a pasted statement or a trailing comment that swallows the
+  rest of a DDL line; the text is the application's, so it is not an attack
+  surface.
 - The `OpClass` duplicate check (rule 62, "two operator classes") no longer has
   a spelling that reaches it; it stays for a model another producer builds.
 - `GeneratedCodeIsVersionN` stays: the generated code does not change.

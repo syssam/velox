@@ -255,3 +255,71 @@ func TestSQLSchemaSchemaLevelRefusals(t *testing.T) {
 		}
 	}
 }
+
+// ssFragments writes a statement separator and comments into SQL text, which
+// is refused, and the same characters inside string literals, which is not.
+type ssFragments struct{ schema.Schema }
+
+func (ssFragments) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("a"),
+		field.Int("n").Annotations(sqlschema.Default("1; DROP TABLE x")),
+		field.String("s").Annotations(sqlschema.DefaultExpr("lower('A') -- why")),
+		field.String("w").SchemaDefault(map[string]string{field.Postgres: "'x' /* c */"}),
+		field.String("ok1").Annotations(sqlschema.Default("'a;b--c'")),
+		field.String("ok2").Annotations(sqlschema.Default("'it''s; fine /*'")),
+	}
+}
+func (ssFragments) Indexes() []schema.Index {
+	return []schema.Index{
+		index.Fields("a").Where("a <> ''; DELETE FROM t"),
+		index.Fields("a").Annotations(sqlschema.IndexWhere("a <> 'x' -- note")).StorageKey("ix_frag_where"),
+		index.Fields("a").Where("a <> ';--'").StorageKey("ix_frag_ok"),
+	}
+}
+
+func TestSQLFragmentsRefused(t *testing.T) {
+	b, err := load.Marshal("github.com/syssam/velox/internal/codegen", ssFragments{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m loadjson.Model
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	got := fmt.Sprintf("%+v", m.Errors)
+	for _, w := range []string{
+		`the default "1; DROP TABLE x" holds a statement separator ';'`,
+		`the default "lower('A') -- why" holds a comment '--'`,
+		`the postgres default "'x' /* c */" holds a comment '/*'`,
+		`the predicate "a <> ''; DELETE FROM t" holds a statement separator ';'`,
+		`the predicate "a <> 'x' -- note" holds a comment '--'`,
+	} {
+		if !strings.Contains(got, w) {
+			t.Errorf("%q not in\n%s", w, got)
+		}
+	}
+	for _, bad := range []string{`"ok1"`, `"ok2"`, "';--'"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("%s refused:\n%s", bad, got)
+		}
+	}
+}
+
+// ssTableMixin names the table in a mixin, as sqlschema.Table, and its schema
+// takes it.
+type ssTableMixin struct{ schema.Schema }
+
+func (ssTableMixin) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Annotation{Table: "from_mixin"}}
+}
+
+type ssMixed struct{ schema.Schema }
+
+func (ssMixed) Mixin() []schema.Mixin  { return []schema.Mixin{ssTableMixin{}} }
+func (ssMixed) Fields() []schema.Field { return []schema.Field{field.String("a")} }
+
+func TestSQLSchemaTableInMixin(t *testing.T) {
+	s := tables(t, velox.Postgres, ssMixed{})
+	table(t, s, "from_mixin")
+}

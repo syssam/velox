@@ -59,7 +59,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `Collation` and `Checks` lower likewise. What velox does not hold
   (`StorageParams`, `Prefix`, `IncludeColumns`, `Size`, `ColumnType`, `OnDelete`
   and the like) compiles and velox-gen refuses it, as it does an annotation on
-  the wrong kind of element (decision 0075).
+  the wrong kind of element (decision 0075). A column default or index
+  predicate that holds `;`, `--` or `/*` outside a string literal is refused.
 
 - `velox.Schema`, `Field`, `Edge`, `Index`, `Mixin` and `Annotation` are aliases of
   package `schema`'s, as in ent and the old velox, so a schema can import one

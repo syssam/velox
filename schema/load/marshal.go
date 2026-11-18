@@ -395,6 +395,19 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 		l.fail(l.pos(d.PC), where, "%v", err)
 		return nil
 	}
+	seen := map[string]bool{}
+	for _, k := range slices.Sorted(maps.Keys(out.SchemaDefault)) {
+		text := out.SchemaDefault[k]
+		if why := fragmentProblem(text); why != "" && !seen[text] {
+			seen[text] = true
+			which := "default"
+			if len(out.SchemaDefault) < 3 || !allSame(out.SchemaDefault) {
+				which = k + " default"
+			}
+			l.fail(l.pos(d.PC), where, "the %s %q holds %s: write one expression", which, text, why)
+			return nil
+		}
+	}
 	if d.GoType != nil {
 		g := loadjson.GoType(*d.GoType)
 		out.GoType = &g
@@ -528,7 +541,13 @@ func (l *loader) buildIndex(x schema.Index, prefix string, j int, pos loadjson.P
 		Fields: d.Fields, Edges: d.Edges, Unique: d.Unique, StorageKey: d.StorageKey, Where: d.Where,
 		Position: pos, Pos: l.pos(d.PC),
 	}
-	if err := lowerIndex(d, out); err != nil {
+	err = lowerIndex(d, out)
+	if err == nil && out.Where != "" {
+		if why := fragmentProblem(out.Where); why != "" {
+			err = fmt.Errorf("the predicate %q holds %s: write one expression", out.Where, why)
+		}
+	}
+	if err != nil {
 		l.fail(l.pos(d.PC), "", "%sIndexes()[%d]: %v", prefix, j, err)
 		return nil
 	}

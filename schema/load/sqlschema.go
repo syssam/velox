@@ -256,3 +256,55 @@ func lowerSchema(list []schema.Annotation) ([]schema.Annotation, error) {
 	}
 	return out, nil
 }
+
+// fragmentProblem says why text, a column default or an index predicate that
+// velox writes into DDL as it is, is not one expression: it holds a statement
+// separator or a comment outside its string literals. The old velox refused
+// these too. A schema is written by the application, so this catches a mistake
+// (a pasted statement, a trailing comment that swallows the rest of the line)
+// and not an attack.
+func fragmentProblem(text string) string {
+	var out strings.Builder
+	for i := 0; i < len(text); i++ {
+		if text[i] != '\'' {
+			out.WriteByte(text[i])
+			continue
+		}
+		// Skip a string literal; '' inside it is a quote.
+		for i++; i < len(text); i++ {
+			if text[i] == '\'' {
+				if i+1 < len(text) && text[i+1] == '\'' {
+					i++
+					continue
+				}
+				break
+			}
+		}
+		out.WriteString("''")
+	}
+	s := out.String()
+	switch {
+	case strings.Contains(s, ";"):
+		return "a statement separator ';'"
+	case strings.Contains(s, "--"):
+		return "a comment '--'"
+	case strings.Contains(s, "/*"):
+		return "a comment '/*'"
+	}
+	return ""
+}
+
+// allSame reports whether every value of m is the same text.
+func allSame(m map[string]string) bool {
+	var first string
+	i := 0
+	for _, v := range m {
+		if i == 0 {
+			first = v
+		} else if v != first {
+			return false
+		}
+		i++
+	}
+	return true
+}
