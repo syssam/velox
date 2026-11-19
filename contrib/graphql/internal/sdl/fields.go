@@ -135,7 +135,9 @@ func (g *graph) plainField(o *object, i int) (gqlField, bool, error) {
 		// veloxe's: a foreign key is its target's ID, beside its edge.
 		typ = "ID"
 	}
-	if !f.Nullable {
+	// veloxe's type left an Optional field nullable too, though its column is
+	// NOT NULL and its Go value never nil: gqlgen writes a value as non-null.
+	if !f.Nullable && (!o.veloxe || !f.Optional) {
 		typ += "!"
 	}
 	var dirs []directive
@@ -181,6 +183,10 @@ func (g *graph) edgeFieldOf(o *object, i int) (gqlField, edgeField, bool, error)
 		return gqlField{}, edgeField{}, false, fmt.Errorf("%s: graphql.MaxList on an edge that is no list, which first and last bound; add graphql.Connection(false) to a to-many edge", where)
 	}
 	switch {
+	case ed.Unique && o.veloxe && ed.Required:
+		// veloxe's: a Required unique edge is non-null, whatever may leave
+		// the target unread (see below).
+		f.typ, ef.kind = t.name+"!", EdgeUnique
 	case ed.Unique:
 		// Nullable even when Required: a row reads the edge's target in a
 		// statement of its own, which a policy, a hook, a replica's
@@ -188,6 +194,11 @@ func (g *graph) edgeFieldOf(o *object, i int) (gqlField, edgeField, bool, error)
 		// null would null the page around it.
 		f.typ, ef.kind = t.name, EdgeUnique
 	case a.Connection != nil && !*a.Connection:
+		f.typ, ef.kind = "["+t.name+"!]!", EdgeList
+	case !t.conn && a.Connection != nil:
+		return gqlField{}, edgeField{}, false, fmt.Errorf("%s: graphql.Connection(true) on an edge to %s, which has no connection: under compat=veloxe a schema with graphql.QueryField and without graphql.RelayConnection has none", where, ed.Target)
+	case !t.conn:
+		// veloxe's: a to-many edge to a type without a connection is a list.
 		f.typ, ef.kind = "["+t.name+"!]!", EdgeList
 	default:
 		f.typ, f.conn, ef.kind = t.name+"Connection!", t, EdgeConnection
@@ -289,6 +300,7 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 	case "uuid":
 		return "UUID", nil
 	case "bytes":
+		g.bytes = true
 		return "Bytes", nil
 	case "json":
 		if s := jsonList[f.ElemType]; s != "" {

@@ -12,9 +12,10 @@
 // package github.com/syssam/velox/plugin). velox-gen writes them, with the
 // generated-file header, and owns them from then on.
 //
-// It takes two options, one at a time. An application that writes its own
-// SDL and binds it with gqlgen's autobind asks for only the marshalers of
-// velox-gen's enum types, with no velox.graphql and no other Go:
+// It takes these options, separated by commas. An application that writes
+// its own SDL and binds it with gqlgen's autobind asks for only the
+// marshalers of velox-gen's enum types, with no velox.graphql and no other
+// Go:
 //
 //	go tool velox-gen -out veloxgen -plugin velox-graphql:only=enums ./veloxschema
 //
@@ -30,7 +31,17 @@
 // (customer_id is customerId, image_url is imageUrl); a foreign key an edge
 // is bound to is an ID in the type, beside its edge; and its where
 // predicates are named from it (customerId, customerIdNEQ, customerIdIn,
-// customerIdNotIn). Any other option fails the run.
+// customerIdNotIn); and the rest of veloxe's surface follows, as
+// docs/decisions/0087 lists it.
+//
+// An application whose filters were opt-in field by field, as a veloxe
+// codegen hook made them, asks for where=whitelist: a field other than the
+// key then has predicates only with graphql.WhereInput (the old velox's
+// EnableWhereInputs(true)), whatever its WhereOps:
+//
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:compat=veloxe,where=whitelist ./veloxschema
+//
+// only=enums takes neither of the others. Any other option fails the run.
 package main
 
 import (
@@ -51,7 +62,9 @@ func main() {
 // generate answers a request: the schema, velox.graphql, and the Go files
 // gqlgen binds it to; or with only=enums, the enum marshalers alone. With
 // compat=veloxe, the API is the one veloxe's generator made (sdl.Config's
-// Veloxe). It refuses any other option, as the plugin protocol asks.
+// Veloxe); with where=whitelist, only fields with WhereInput filter
+// (sdl.Config's WhereWhitelist). It refuses any other option, as the plugin
+// protocol asks.
 func generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	var cfg sdl.Config
 	for k, v := range req.Options {
@@ -59,13 +72,15 @@ func generate(req *plugin.Request) ([]plugin.File, []string, error) {
 		case k == "only" && v == "enums":
 		case k == "compat" && v == "veloxe":
 			cfg.Veloxe = true
+		case k == "where" && v == "whitelist":
+			cfg.WhereWhitelist = true
 		default:
-			return nil, nil, fmt.Errorf("velox-graphql takes the options only=enums and compat=veloxe; it is given %s", options(req.Options))
+			return nil, nil, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe and where=whitelist; it is given %s", options(req.Options))
 		}
 	}
 	if req.Options["only"] == "enums" {
-		if cfg.Veloxe {
-			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe shapes the SDL velox-graphql writes, and only=enums writes none: give one of them")
+		if cfg.Veloxe || cfg.WhereWhitelist {
+			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe and where=whitelist shape the SDL velox-graphql writes, and only=enums writes none: give one or the other")
 		}
 		files, err := gogen.RenderEnums(req.Model, req.OutPath, req.OutPackage)
 		return files, nil, err

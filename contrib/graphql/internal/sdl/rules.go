@@ -26,6 +26,7 @@ func misplaced(a graphql.Annotation, on, where string) error {
 	}{
 		{"graphql.Type", a.Type != "", onSchema + " " + onField},
 		{"graphql.QueryField", a.HasQueryField(), onSchema},
+		{"graphql.RelayConnection", a.RelayConnection, onSchema},
 		{"graphql.Mutations", len(a.Mutations) > 0, onSchema},
 		{"graphql.MultiOrder", a.MultiOrder, onSchema},
 		{"graphql.Resolvers", len(a.Resolvers) > 0, onSchema},
@@ -61,8 +62,9 @@ func article(kind string) string { return english.Article(kind) + " " + kind }
 // checkSchema checks the annotation of an entity. It refuses an application
 // directive; GraphQL's own are allowed. A join entity has no type, so nothing
 // that needs one applies to it; a schema whose type is skipped has no root
-// field and no mutation, so asking for one is an error.
-func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) error {
+// field and no mutation, so asking for one is an error, except under
+// compat=veloxe (veloxe), whose generator ignored them on such a schema.
+func checkSchema(e *plugin.Entity, a graphql.Annotation, veloxe bool, where string) error {
 	if err := ownDirective(a.Directives, where); err != nil {
 		return err
 	}
@@ -78,7 +80,7 @@ func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) error {
 	}
 	if !e.Join {
 		switch {
-		case a.Skip&graphql.SkipType == 0:
+		case a.Skip&graphql.SkipType == 0, veloxe:
 		case a.HasQueryField():
 			return fmt.Errorf("%s: graphql.QueryField on a schema whose type graphql.Skip leaves out", where)
 		case len(a.Mutations) > 0:
@@ -106,8 +108,10 @@ func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) error {
 }
 
 // checkField checks the annotation of e's field i. fk says whether the field
-// is a foreign key, which an edge stands for.
-func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where string) error {
+// is a foreign key, which an edge stands for. veloxe says whether the API is
+// veloxe's (compat=veloxe), whose generator put a directive on a foreign key
+// that the type shows, and never on the id.
+func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk, veloxe bool, where string) error {
 	if err := ownDirective(a.Directives, where); err != nil {
 		return err
 	}
@@ -141,13 +145,13 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.OrderField on a bytes field: keyset paging cannot continue after a bytes value, since velox's After refuses a slice column, which a nil []byte stores as NULL", where)
 	case a.OrderField != "" && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipOrderField == 0:
 		return fmt.Errorf("%s: graphql.OrderField on a field graphql.Skip leaves out of the type: its values would be in the cursors", where)
-	case a.OrderField != "" && a.Skip&graphql.SkipOrderField == 0 && !a.OrderUnguarded && appDirective(a) != "":
+	case a.OrderField != "" && a.Skip&graphql.SkipOrderField == 0 && !a.OrderUnguarded && !veloxe && appDirective(a) != "":
 		return fmt.Errorf("%s: graphql.OrderField on a field with the directive @%s: its values would be in the cursors and its order would reveal them, which no directive guards; add graphql.OrderUnguarded() to allow it", where, appDirective(a))
 	case a.OrderUnguarded && a.OrderField == "":
 		return fmt.Errorf("%s: graphql.OrderUnguarded without graphql.OrderField says nothing", where)
-	case (fk || f.Implicit != "") && appDirective(a) != "":
+	case (fk && !veloxe || f.Implicit != "") && appDirective(a) != "":
 		return fmt.Errorf("%s: graphql.Directives with the directive @%s on a foreign key, which its edge stands for in GraphQL; put the directive on the edge, which guards the edge's field, its has and hasWith filters and the key's predicates", where, appDirective(a))
-	case pk && keyBase(e) != "" && appDirective(a) != "":
+	case pk && !veloxe && keyBase(e) != "" && appDirective(a) != "":
 		return fmt.Errorf("%s: graphql.Directives with the directive @%s on the primary key: the id is readable through the cursors and every edge to the type, so the directive would guard nothing", where, appDirective(a))
 	case a.WhereOps != 0 && f.Sensitive:
 		return fmt.Errorf("%s: graphql.WhereOps on a sensitive field: a filter would reveal its values", where)

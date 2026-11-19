@@ -17,8 +17,21 @@ type Config struct {
 	//     beside its edge;
 	//   - its where predicates are named from the field, customerId,
 	//     customerIdNEQ, customerIdIn..., where velox names them from the
-	//     edge (customerID, customerIDIn).
+	//     edge (customerID, customerIDIn);
+	//   - the rest of veloxe's surface, which docs/decisions/0087 lists:
+	//     every orderable field in the order enum, Optional fields nullable
+	//     in the type, Required unique edges non-null, a root Query field for
+	//     every type, veloxe's connection nullability and scalars, equality
+	//     alone by default on keys and Other fields, explicit WhereOps over
+	//     WhereInput's defaults, no directives on inputs, a named JSON type
+	//     by its Go name, and silence where veloxe ignored an annotation.
 	Veloxe bool
+	// WhereWhitelist leaves out of the where inputs the predicates of every
+	// field but the key that lacks graphql.WhereInput (the old velox's
+	// EnableWhereInputs(true)), whatever its WhereOps (velox-graphql's option
+	// where=whitelist). It is what an application's codegen hook did under
+	// veloxe, so it is an option of its own, apart from Veloxe.
+	WhereWhitelist bool
 }
 
 // veloxeCamel is veloxe's GraphQL name of a schema name, as its generator's

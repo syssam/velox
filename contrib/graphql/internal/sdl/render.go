@@ -53,12 +53,20 @@ func RenderConfig(m *plugin.Model, cfg Config) (string, error) {
 	}
 	var own writer
 	g.write(&own)
-	for _, t := range slices.Sorted(maps.Keys(g.appSet)) {
-		// The application declares the types graphql.Type names that velox
-		// does not, as it declares its directives: a scalar stands for each.
+	// The application declares the types graphql.Type names that velox does
+	// not, as it declares its directives, and under compat=veloxe the
+	// scalars veloxe left to it: a scalar stands for each.
+	stubs := map[string]bool{}
+	for _, t := range g.veloxeScalars() {
+		stubs[t] = true
+	}
+	for t := range g.appSet {
 		if g.types.declared[t] == "" {
-			own.line("scalar ", t)
+			stubs[t] = true
 		}
+	}
+	for _, t := range slices.Sorted(maps.Keys(stubs)) {
+		own.line("scalar ", t)
 	}
 	if _, err := Check(own.String()); err != nil {
 		return "", own.explain(err)
@@ -198,9 +206,32 @@ enum OrderDirection {
 }
 `
 
+// veloxeScalars are the scalars of the vocabulary veloxe's SDL did not
+// declare, which under compat=veloxe the application declares, as it did:
+// Bytes only when no field is of type bytes, as veloxe declared it then.
+func (g *graph) veloxeScalars() []string {
+	if !g.cfg.Veloxe {
+		return nil
+	}
+	s := []string{"JSON", "UUID", "Uint64"}
+	if !g.bytes {
+		s = append(s, "Bytes")
+	}
+	return s
+}
+
 func (g *graph) write(w *writer) {
-	for l := range strings.SplitSeq(strings.TrimSuffix(vocabulary, "\n"), "\n") {
-		w.line(l)
+	leave := g.veloxeScalars()
+	for block := range strings.SplitSeq(strings.TrimSuffix(vocabulary, "\n"), "\n\n") {
+		if slices.ContainsFunc(leave, func(s string) bool { return strings.HasSuffix(block, "\nscalar "+s) }) {
+			continue
+		}
+		if !strings.HasPrefix(block, "#") {
+			w.line()
+		}
+		for l := range strings.SplitSeq(block, "\n") {
+			w.line(l)
+		}
 	}
 
 	// The root query holds the QueryFields; with none, the application
@@ -267,25 +298,9 @@ func (g *graph) writeObject(w *writer, o *object) {
 		w.line("}")
 	}
 
-	w.line()
-	w.line(`"""A connection to a list of `, o.name, `."""`)
-	w.line("type ", o.name, "Connection {")
-	w.line(`  """The edges of this page."""`)
-	w.line("  edges: [", o.name, "Edge!]!")
-	w.line(`  """Information about this page."""`)
-	w.line("  pageInfo: PageInfo!")
-	w.line(`  """The number of nodes in the whole connection, not only on this page."""`)
-	w.line("  totalCount: Int!")
-	w.line("}")
-	w.line()
-	w.line(`"""An edge in a connection to a list of `, o.name, `."""`)
-	w.line("type ", o.name, "Edge {")
-	w.line(`  """The `, o.name, ` at the end of the edge."""`)
-	w.line("  node: ", o.name, "!")
-	w.line(`  """The cursor of this edge, for paging."""`)
-	w.line("  cursor: Cursor!")
-	w.line("}")
-
+	if o.conn {
+		writeConnection(w, o)
+	}
 	if o.order != nil {
 		w.order(o)
 	}
@@ -303,4 +318,32 @@ func (g *graph) writeObject(w *writer, o *object) {
 		w.input(inputDesc(o, false), "Update"+o.name+"Input", o.update)
 	}
 	w.at = ""
+}
+
+// writeConnection writes XConnection and XEdge of o. Under compat=veloxe the
+// edges list and an edge's node are nullable, as veloxe's were; the Go code
+// never gives a nil.
+func writeConnection(w *writer, o *object) {
+	edges, node := "!]!", "!"
+	if o.veloxe {
+		edges, node = "!]", ""
+	}
+	w.line()
+	w.line(`"""A connection to a list of `, o.name, `."""`)
+	w.line("type ", o.name, "Connection {")
+	w.line(`  """The edges of this page."""`)
+	w.line("  edges: [", o.name, "Edge", edges)
+	w.line(`  """Information about this page."""`)
+	w.line("  pageInfo: PageInfo!")
+	w.line(`  """The number of nodes in the whole connection, not only on this page."""`)
+	w.line("  totalCount: Int!")
+	w.line("}")
+	w.line()
+	w.line(`"""An edge in a connection to a list of `, o.name, `."""`)
+	w.line("type ", o.name, "Edge {")
+	w.line(`  """The `, o.name, ` at the end of the edge."""`)
+	w.line("  node: ", o.name, node)
+	w.line(`  """The cursor of this edge, for paging."""`)
+	w.line("  cursor: Cursor!")
+	w.line("}")
 }

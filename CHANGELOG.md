@@ -30,6 +30,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   the field. `graphql.Type` on a field is the field's GraphQL type, as veloxe
   took it: an enum field's enum name, or a scalar or list the application
   declares (`Map`, `[ID!]`) (ADR 0087).
+- Under `compat=veloxe` the rest of veloxe's surface follows: every orderable
+  field in the order enum, Optional fields nullable in the type, Required
+  unique edges non-null, a root Query field for every type (a list for a
+  `QueryField` without `RelayConnection`, which `graphql.RelayConnection()`
+  now records), nullable connection edges and nodes, only `Cursor`, `Time`
+  and `Bytes` declared, equality-only defaults on keys and Other fields,
+  explicit WhereOps over WhereInput, no directives on inputs, a json field of
+  a named Go type typed by its name, and silence where veloxe ignored an
+  annotation. The option `where=whitelist` filters only fields with
+  `WhereInput` (ADR 0087).
 - Two enum fields whose types get one name (`Asset.depreciation_method`,
   `AssetDepreciation.method`) and hold the same values share one Go type and
   one GraphQL enum, as veloxe did (ADR 0086).

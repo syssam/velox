@@ -18,33 +18,33 @@ type order struct {
 
 // orderOf computes o's order from its fields' OrderField annotations: none
 // when no field has one, or when the entity skips its order.
+//
+// Under compat=veloxe it is veloxe's order (veloxeOrder), and a type without
+// a connection has none, as in veloxe.
 func (g *graph) orderOf(o *object) error {
 	e := o.ent
 	var ord order
 	by := map[string]string{} // value → the field
-	for i, f := range e.Fields {
-		a := o.fanns[i]
-		if a.OrderField == "" || a.Skip&graphql.SkipOrderField != 0 || o.ann.Skip&graphql.SkipOrderField != 0 {
-			continue
-		}
-		where := "schema " + e.Name + ", field " + f.Name
-		if !validEnumValue(a.OrderField) {
-			return fmt.Errorf("%s: graphql.OrderField(%q) is not a GraphQL enum value", where, a.OrderField)
-		}
-		if prev, ok := by[a.OrderField]; ok {
-			return fmt.Errorf("%s and %s both have graphql.OrderField(%q)", prev, where, a.OrderField)
-		}
-		by[a.OrderField] = where
-		ord.values = append(ord.values, a.OrderField)
-		ord.fields = append(ord.fields, i)
-		ord.edges = append(ord.edges, 0)
-		ord.targets = append(ord.targets, nil)
-		ord.wheres = append(ord.wheres, where)
-	}
-	if o.ann.Skip&graphql.SkipOrderField == 0 {
-		if err := g.orderVia(o, &ord, by); err != nil {
+	switch {
+	case o.ann.Skip&graphql.SkipOrderField != 0, o.veloxe && !o.conn:
+		return nil
+	case o.veloxe:
+		if err := veloxeOrder(o, &ord, by); err != nil {
 			return err
 		}
+	default:
+		for i, f := range e.Fields {
+			a := o.fanns[i]
+			if a.OrderField == "" || a.Skip&graphql.SkipOrderField != 0 {
+				continue
+			}
+			if err := ord.add(a.OrderField, i, "schema "+e.Name+", field "+f.Name, by); err != nil {
+				return err
+			}
+		}
+	}
+	if err := g.orderVia(o, &ord, by); err != nil {
+		return err
 	}
 	if len(ord.values) == 0 {
 		return nil
@@ -56,6 +56,25 @@ func (g *graph) orderOf(o *object) error {
 		}
 	}
 	o.order = &ord
+	return nil
+}
+
+// add adds the value v, which orders by the entity's own field i, the
+// element where. by holds the element of each value so far: two elements
+// that give one value are refused, naming both.
+func (ord *order) add(v string, i int, where string, by map[string]string) error {
+	if !validEnumValue(v) {
+		return fmt.Errorf("%s: graphql.OrderField(%q) is not a GraphQL enum value", where, v)
+	}
+	if prev, ok := by[v]; ok {
+		return fmt.Errorf("%s and %s both have graphql.OrderField(%q)", prev, where, v)
+	}
+	by[v] = where
+	ord.values = append(ord.values, v)
+	ord.fields = append(ord.fields, i)
+	ord.edges = append(ord.edges, 0)
+	ord.targets = append(ord.targets, nil)
+	ord.wheres = append(ord.wheres, where)
 	return nil
 }
 

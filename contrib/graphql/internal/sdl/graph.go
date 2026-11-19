@@ -20,6 +20,7 @@ type graph struct {
 	shares  *enumShares        // the GraphQL enum of each of them, once a field claims it
 	enumSet map[string]bool    // the GraphQL enums declared so far, which inputs may take
 	appSet  map[string]bool    // the types graphql.Type names on fields, which the application may declare
+	bytes   bool               // a field is of type bytes, whose scalar Bytes veloxe declared
 	cfg     Config
 	types   typeNames
 	ents    map[string]*plugin.Entity // every entity, by name, join entities too
@@ -43,6 +44,7 @@ type object struct {
 	enums  []gqlEnum
 	fks    map[string]bool // the names of ent's foreign-key fields
 	veloxe bool            // Config.Veloxe: veloxe's names, foreign keys in the type
+	conn   bool            // it has a connection, XConnection and XEdge: always, but under Config.Veloxe only as veloxe had one (objectOf)
 
 	getters  []Getter     // the getters gqlgen binds fields to
 	edges    []edgeField  // the edge fields, in the model's edge order
@@ -181,7 +183,9 @@ func build(m *plugin.Model, cfg Config) (*graph, error) {
 	}
 	setConnArgs(g.query)
 	for i := range g.query {
-		g.query[i].desc = queryDesc(g.query[i].conn)
+		if g.query[i].conn != nil {
+			g.query[i].desc = queryDesc(g.query[i].conn)
+		}
 	}
 	for _, o := range g.objects {
 		setConnArgs(o.fields)
@@ -234,7 +238,7 @@ func (g *graph) objectOf(e *plugin.Entity, fks map[string]bool) (*object, error)
 	if err != nil {
 		return nil, err
 	}
-	if err := checkSchema(e, a, where); err != nil {
+	if err := checkSchema(e, a, g.cfg.Veloxe, where); err != nil {
 		return nil, err
 	}
 	if e.Join || a.Skip&graphql.SkipType != 0 {
@@ -243,7 +247,12 @@ func (g *graph) objectOf(e *plugin.Entity, fks map[string]bool) (*object, error)
 		// every element (ownDirective).
 		return nil, ownDirectives(e, where)
 	}
-	o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks, veloxe: g.cfg.Veloxe}
+	o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks, veloxe: g.cfg.Veloxe, conn: true}
+	if o.veloxe {
+		// veloxe's hasRelayConnection: a schema with a QueryField has a
+		// connection only with RelayConnection; any other, always.
+		o.conn = a.RelayConnection || !a.HasQueryField()
+	}
 	o.hasID = o.key != ""
 	if o.hasID {
 		o.keyTyp, o.keyPkg = keyGo(e)
@@ -257,7 +266,7 @@ func (g *graph) objectOf(e *plugin.Entity, fks map[string]bool) (*object, error)
 	if o.dirs, err = directives(a.Directives, where); err != nil {
 		return nil, err
 	}
-	if o.fanns, err = fieldAnnotations(o, where); err != nil {
+	if o.fanns, err = g.fieldAnnotations(o, where); err != nil {
 		return nil, err
 	}
 	if o.eanns, err = edgeAnnotations(e, where); err != nil {
@@ -306,8 +315,12 @@ func (g *graph) addTypeNames(o *object, where string) error {
 }
 
 // fieldAnnotations returns the checked annotations of o's entity's fields,
-// by index.
-func fieldAnnotations(o *object, where string) ([]graphql.Annotation, error) {
+// by index. WhereInput is WhereOps(), added to the field's own WhereOps;
+// under compat=veloxe an explicit WhereOps wins over it, as in veloxe, and
+// the annotation is read as veloxe read it (veloxeAnnotation). With
+// Config.WhereWhitelist a field other than the key without WhereInput has
+// no predicates.
+func (g *graph) fieldAnnotations(o *object, where string) ([]graphql.Annotation, error) {
 	var anns []graphql.Annotation
 	for i, f := range o.ent.Fields {
 		fw := where + ", field " + f.Name
@@ -315,10 +328,17 @@ func fieldAnnotations(o *object, where string) ([]graphql.Annotation, error) {
 		if err != nil {
 			return nil, err
 		}
-		if fa.WhereInput {
+		pk := o.hasID && i == o.ent.PrimaryKey[0]
+		switch {
+		case g.cfg.WhereWhitelist && !fa.WhereInput && !pk:
+			fa.WhereOps = 0
+		case fa.WhereInput && (!o.veloxe || fa.WhereOps == 0):
 			fa.WhereOps |= graphql.OpsDefault
 		}
-		if err := checkField(o.ent, i, fa, o.fks[f.Name], fw); err != nil {
+		if o.veloxe {
+			fa = veloxeAnnotation(o, i, fa)
+		}
+		if err := checkField(o.ent, i, fa, o.fks[f.Name], o.veloxe, fw); err != nil {
 			return nil, err
 		}
 		anns = append(anns, fa)
@@ -349,9 +369,13 @@ func edgeAnnotations(e *plugin.Entity, where string) ([]graphql.Annotation, erro
 
 // addQueryField adds o's QueryField, if it has one, to the root Query.
 // queryBy holds the element that declares each Query field so far.
+//
+// Under compat=veloxe every type has one, as veloxe gave every type: named
+// as QueryField names it or else by default, and a list of the type's
+// objects, with no arguments, when the type has no connection.
 func (g *graph) addQueryField(o *object, queryBy map[string]string) error {
 	q := o.ann.QueryField
-	if q == "" && o.ann.QueryFieldDefault {
+	if q == "" && (o.ann.QueryFieldDefault || o.veloxe) {
 		q = queryName(o.name)
 	}
 	if q == "" {
@@ -369,6 +393,11 @@ func (g *graph) addQueryField(o *object, queryBy map[string]string) error {
 		return fmt.Errorf("%s and %s both declare the Query field %s", prev, where, q)
 	}
 	queryBy[q] = where
+	if !o.conn {
+		g.query = append(g.query, gqlField{name: q, typ: "[" + o.name + "!]!", where: where,
+			desc: "The " + o.name + " nodes, as the application's resolver returns them."})
+		return nil
+	}
 	g.query = append(g.query, gqlField{name: q, typ: o.name + "Connection!", where: where, conn: o})
 	return nil
 }

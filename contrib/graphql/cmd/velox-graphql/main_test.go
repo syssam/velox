@@ -85,16 +85,17 @@ func TestRun(t *testing.T) {
 	}
 
 	for name, c := range map[string]struct{ in, want string }{
-		"compat and only": {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "compat": "veloxe"}, Model: m}), "give one of them"},
-		"compat":          {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"compat": "ent"}, Model: m}), "it is given compat=ent"},
-		"protocol":        {request(t, plugin.Request{Protocol: 1, Model: m}), "plugin protocol 1"},
-		"version":         {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}), "model is version 1"},
-		"no model":        {request(t, plugin.Request{Protocol: 2}), "no model"},
-		"malformed":       {"{", "request"},
-		"options":         {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums and compat=veloxe; it is given a, x=y"},
-		"only":            {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "types"}, Model: m}), "it is given only=types"},
-		"only and":        {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "x": ""}, Model: m}), "it is given only=enums, x"},
-		"enums":           {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums"}, Model: m}), "the request names no generated package"},
+		"compat and only":    {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "compat": "veloxe"}, Model: m}), "give one or the other"},
+		"whitelist and only": {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "where": "whitelist"}, Model: m}), "give one or the other"},
+		"compat":             {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"compat": "ent"}, Model: m}), "it is given compat=ent"},
+		"protocol":           {request(t, plugin.Request{Protocol: 1, Model: m}), "plugin protocol 1"},
+		"version":            {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}), "model is version 1"},
+		"no model":           {request(t, plugin.Request{Protocol: 2}), "no model"},
+		"malformed":          {"{", "request"},
+		"options":            {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums, compat=veloxe and where=whitelist; it is given a, x=y"},
+		"only":               {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "types"}, Model: m}), "it is given only=types"},
+		"only and":           {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "x": ""}, Model: m}), "it is given only=enums, x"},
+		"enums":              {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums"}, Model: m}), "the request names no generated package"},
 		"render": {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 			Name: "User", PrimaryKey: []int{0},
 			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "other"}},

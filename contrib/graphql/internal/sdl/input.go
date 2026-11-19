@@ -180,6 +180,9 @@ func (g *graph) fieldInputs(o *object, fs *inputFields, i int, create bool, skip
 	if err != nil {
 		return nil, err
 	}
+	if o.veloxe {
+		dirs = nil // veloxe put directives on the type's fields alone
+	}
 	if err := fs.add(gqlField{name: name, typ: t, def: def, desc: f.Comment, dirs: inputDirs(dirs, t), where: where}); err != nil {
 		return nil, err
 	}
@@ -300,6 +303,9 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	dirs, err := edgeInputDirs(o, i, where)
 	if err != nil {
 		return nil, err
+	}
+	if o.veloxe {
+		dirs = nil // veloxe put directives on the type's fields alone
 	}
 	goEdge := goOf(name, ed.GoName)
 	one, many, goOne := edgeInputNames(name, ed)

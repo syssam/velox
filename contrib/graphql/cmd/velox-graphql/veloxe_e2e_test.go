@@ -84,6 +84,7 @@ func (Customer) Fields() []schema.Field {
 	return []schema.Field{
 		field.Int64("id").Annotations(graphql.Type("ID")), field.String("name"),
 		field.Enum("tier").GoType(SalesOrderStatus("")).Default("gold").Annotations(graphql.Type("SalesOrderStatus"), graphql.WhereOps()),
+		field.Bool("vip").Default(false), field.Time("joined_at"),
 	}
 }
 
@@ -99,6 +100,7 @@ func (SalesOrder) Fields() []schema.Field {
 			Annotations(graphql.Type("Amount"), graphql.WhereOps(graphql.OpsComparison)),
 		field.JSON("custom_fields", map[string]any{}).Annotations(graphql.Type("Map")),
 		field.Enum("status").Values("open", "shipped").Annotations(graphql.Type("SalesOrderEntryStatus"), graphql.WhereOps()),
+		field.String("note").Optional().Default(""),
 	}
 }
 
@@ -110,7 +112,33 @@ func (SalesOrder) Edges() []schema.Edge {
 }
 
 func (SalesOrder) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("salesOrders"), graphql.Mutations(graphql.MutationCreate)}
+	return []schema.Annotation{graphql.QueryField("salesOrders"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationCreate)}
+}
+
+// Settings and Assignee are the Go types of json fields, which veloxe named
+// in the SDL by their names and the application declares.
+type Settings struct {
+	Theme string ` + "`json:\"theme\"`" + `
+}
+
+type Assignee struct {
+	Name string ` + "`json:\"name\"`" + `
+}
+
+// Workspace has a QueryField and no RelayConnection: veloxe's root field of
+// it is a list, and it has no connection.
+type Workspace struct{ schema.Schema }
+
+func (Workspace) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("slug"),
+		field.JSON("settings", &Settings{}).Optional(),
+		field.JSON("assignees", []Assignee{}),
+	}
+}
+
+func (Workspace) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField()}
 }
 `
 
@@ -124,13 +152,41 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// SalesOrders is the resolver for the salesOrders field.
-func (r *queryResolver) SalesOrders(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.SalesOrderWhereInput) (*gen.SalesOrderConnection, error) {
+// Customers is the resolver for the customers field, which compat=veloxe
+// gives every type.
+func (r *queryResolver) Customers(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.CustomerOrder, where *gen.CustomerWhereInput) (*gen.CustomerConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return db.Query[gen.SalesOrder]().Paginate(ctx, after, first, before, last, gen.WithSalesOrderFilter(where))
+	return db.Query[gen.Customer]().Paginate(ctx, after, first, before, last, gen.WithCustomerOrder(orderBy), gen.WithCustomerFilter(where))
+}
+
+// SalesOrders is the resolver for the salesOrders field.
+func (r *queryResolver) SalesOrders(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.SalesOrderOrder, where *gen.SalesOrderWhereInput) (*gen.SalesOrderConnection, error) {
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return db.Query[gen.SalesOrder]().Paginate(ctx, after, first, before, last, gen.WithSalesOrderOrder(orderBy), gen.WithSalesOrderFilter(where))
+}
+
+// Workspaces is the resolver for the workspaces field: a list, as veloxe
+// gave a type with a QueryField and no RelayConnection.
+func (r *queryResolver) Workspaces(ctx context.Context) ([]*gen.Workspace, error) {
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query[gen.Workspace]().AllowUnbounded().All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*gen.Workspace, len(rows))
+	for i := range rows {
+		out[i] = &rows[i]
+	}
+	return out, nil
 }
 
 // Query returns QueryResolver implementation.
@@ -145,6 +201,7 @@ const e2eVeloxeRun = `package app_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -166,17 +223,21 @@ func TestVeloxeNames(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	db.SetMaxOpenConns(1)
 	for _, s := range []string{
-		"CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, tier TEXT NOT NULL)",
-		"CREATE TABLE sales_orders (id INTEGER PRIMARY KEY, organization_id INTEGER NOT NULL, customer_id INTEGER NOT NULL, image_url TEXT NOT NULL, referrer_id INTEGER, total INTEGER NOT NULL, custom_fields TEXT NOT NULL, status TEXT NOT NULL)",
-		"INSERT INTO customers (id, name, tier) VALUES (1, 'ada', 'gold'), (2, 'bob', 'silver')",
+		"CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, tier TEXT NOT NULL, vip BOOLEAN NOT NULL, joined_at DATETIME NOT NULL)",
+		"CREATE TABLE sales_orders (id INTEGER PRIMARY KEY, organization_id INTEGER NOT NULL, customer_id INTEGER NOT NULL, image_url TEXT NOT NULL, referrer_id INTEGER, total INTEGER NOT NULL, custom_fields TEXT NOT NULL, status TEXT NOT NULL, note TEXT NOT NULL DEFAULT '')",
+		"CREATE TABLE workspaces (id INTEGER PRIMARY KEY, slug TEXT NOT NULL, settings TEXT NOT NULL, assignees TEXT NOT NULL)",
+		"INSERT INTO customers (id, name, tier, vip, joined_at) VALUES (1, 'ada', 'gold', 1, '2026-01-02T00:00:00Z'), (2, 'bob', 'silver', 0, '2026-01-03T00:00:00Z'), (3, 'cy', 'gold', 0, '2026-01-01T00:00:00Z')",
 		"INSERT INTO sales_orders (id, organization_id, customer_id, image_url, referrer_id, total, custom_fields, status) VALUES (10, 7, 1, 'a.png', 2, 10, '{}', 'open'), (11, 7, 2, 'b.png', NULL, 20, '{}', 'open'), (12, 8, 2, 'c.png', 1, 30, '{\"a\":1}', 'shipped')",
+		"INSERT INTO workspaces (id, slug, settings, assignees) VALUES (1, 'acme', '{\"theme\":\"dark\"}', '[{\"name\":\"ada\"},{\"name\":\"bob\"}]')",
 	} {
 		if _, err := db.Exec(s); err != nil {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
+	// The cost charges a list of objects MaxList rows for each parent: the root
+	// list and the json list of Assignee are lists of objects.
+	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db), veloxgql.WithLimits(veloxgql.Limits{MaxList: 10})))
 	srv.AddTransport(transport.POST{})
 	query := func(q string) string {
 		req := httptest.NewRequest("POST", "/", strings.NewReader(q))
@@ -198,11 +259,54 @@ func TestVeloxeNames(t *testing.T) {
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11","customer":{"tier":"SILVER"}}}]}}}` + "`" + `,
 		` + "`" + `{"query":"{ salesOrders(first: 5, where: {referrerIdIsNil: true}) { edges { node { id } } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11"}}]}}}` + "`" + `,
+		` + "`" + `{"query":"{ customers(first: 5, orderBy: {field: JOINED_AT, direction: DESC}) { edges { node { name } } } }"}` + "`" + `: ` +
+	"`" + `{"data":{"customers":{"edges":[{"node":{"name":"bob"}},{"node":{"name":"ada"}},{"node":{"name":"cy"}}]}}}` + "`" + `,
+		` + "`" + `{"query":"{ customers(first: 5, orderBy: {field: TIER}) { edges { node { name } } } }"}` + "`" + `: ` +
+	"`" + `{"data":{"customers":{"edges":[{"node":{"name":"ada"}},{"node":{"name":"cy"}},{"node":{"name":"bob"}}]}}}` + "`" + `,
+		` + "`" + `{"query":"{ workspaces { slug settings { theme } assignees { name } } }"}` + "`" + `: ` +
+	"`" + `{"data":{"workspaces":[{"slug":"acme","settings":{"theme":"dark"},"assignees":[{"name":"ada"},{"name":"bob"}]}]}}` + "`" + `,
+		` + "`" + `{"query":"{ salesOrders(first: 1) { edges { node { note customer { name } } } } }"}` + "`" + `: ` +
+	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"note":"","customer":{"name":"ada"}}}]}}}` + "`" + `,
 	} {
 		if got := query(q); got != want {
 			t.Errorf("%s:\n got %s\nwant %s", q, got, want)
 		}
 	}
+	// A bool order pages on: the cursor holds the bool.
+	var page struct {
+		Data struct {
+			Customers struct {
+				Edges    []struct{ Node struct{ Name string } }
+				PageInfo struct {
+					EndCursor   string
+					HasNextPage bool
+				}
+			}
+		}
+	}
+	got := query("{\"query\":\"{ customers(first: 2, orderBy: {field: VIP, direction: DESC}) { edges { node { name } } pageInfo { endCursor hasNextPage } } }\"}")
+	if err := json.Unmarshal([]byte(got), &page); err != nil || len(page.Data.Customers.Edges) != 2 || page.Data.Customers.Edges[0].Node.Name != "ada" || !page.Data.Customers.PageInfo.HasNextPage {
+		t.Fatalf("the first page by vip: %v\n%s", err, got)
+	}
+	got = query("{\"query\":\"query($c: Cursor) { customers(first: 2, after: $c, orderBy: {field: VIP, direction: DESC}) { edges { node { name } } } }\",\"variables\":{\"c\":\"" + page.Data.Customers.PageInfo.EndCursor + "\"}}")
+	if want := "{\"data\":{\"customers\":{\"edges\":[{\"node\":{\"name\":\"cy\"}}]}}}"; got != want {
+		t.Errorf("the next page by vip:\n got %s\nwant %s", got, want)
+	}
+}
+`
+
+// e2eVeloxeApp is the application's own SDL, as a veloxe application had it:
+// its scalars, and the types of its json fields, which veloxe's SDL named.
+const e2eVeloxeApp = `scalar Map
+scalar Amount
+scalar JSON
+
+type Settings @goModel(model: "example.com/app/schema.Settings") {
+  theme: String!
+}
+
+type Assignee @goModel(model: "example.com/app/schema.Assignee") {
+  name: String!
 }
 `
 
@@ -218,7 +322,7 @@ func TestVeloxeCompat(t *testing.T) {
 	dir, run := app(t, map[string]string{
 		"schema/schema.go":          e2eVeloxeSchema,
 		"gqlgen.yml":                e2eCollectGqlgen + "  Map:\n    model: github.com/99designs/gqlgen/graphql.Map\n  Amount:\n    model: example.com/app/schema.Amount\n",
-		"graph/app.graphql":         "scalar Map\nscalar Amount\n",
+		"graph/app.graphql":         e2eVeloxeApp,
 		"graph/schema.resolvers.go": e2eVeloxeResolvers,
 		"veloxe_test.go":            e2eVeloxeRun,
 	}, true)
@@ -236,6 +340,27 @@ func TestVeloxeCompat(t *testing.T) {
 	}
 	if strings.Contains(string(sdl), "customerID") {
 		t.Errorf("velox.graphql names an edge's ID customerID:\n%s", sdl)
+	}
+	// The rest of veloxe's surface: every orderable field in the order, a
+	// root field for every type, a list for Workspace, Optional nullable, a
+	// Required edge non-null, veloxe's connections and scalars, and the json
+	// fields' Go types by name.
+	for _, want := range []string{
+		"enum CustomerOrderField {\n  NAME\n  TIER\n  VIP\n  JOINED_AT\n}",
+		"enum SalesOrderOrderField {\n  ORGANIZATION_ID\n  CUSTOMER_ID\n  IMAGE_URL\n  REFERRER_ID\n  STATUS\n  NOTE\n}",
+		"  customers(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: CustomerOrder, where: CustomerWhereInput): CustomerConnection!\n",
+		"  workspaces: [Workspace!]!\n", "  note: String\n", "  customer: Customer!\n",
+		"  edges: [SalesOrderEdge!]\n", "  node: SalesOrder\n",
+		"  settings: Settings\n", "  assignees: [Assignee!]!\n",
+	} {
+		if !strings.Contains(string(sdl), want) {
+			t.Errorf("velox.graphql lacks %q:\n%s", want, sdl)
+		}
+	}
+	for _, not := range []string{"WorkspaceConnection", "WorkspaceOrder", "scalar JSON", "scalar UUID"} {
+		if strings.Contains(string(sdl), not) {
+			t.Errorf("velox.graphql has %q:\n%s", not, sdl)
+		}
 	}
 	in := string(sdl[strings.Index(string(sdl), "input CreateSalesOrderInput"):])
 	if !strings.Contains(in[:strings.Index(in, "}")], "customFields: Map!") {

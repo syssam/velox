@@ -34,6 +34,7 @@ var annotationCases = []annotationCase{
 	{"Type", graphql.Type("Account"), `{"type":"Account"}`},
 	{"QueryField", graphql.QueryField("users"), `{"query_field":"users"}`},
 	{"QueryField default", graphql.QueryField(), `{"query_field_default":true}`},
+	{"RelayConnection", graphql.RelayConnection(), `{"relay_connection":true}`},
 	{"Mutations()", graphql.Mutations(), `{"mutations":["create","update"]}`},
 	{"Mutations(one)", graphql.Mutations(graphql.MutationUpdate), `{"mutations":["update"]}`},
 	{"MultiOrder", graphql.MultiOrder(), `{"multi_order":true}`},
@@ -439,11 +440,11 @@ func TestDirectivesCopyArgsOneLevel(t *testing.T) {
 	}
 }
 
-// RelayConnection is accepted and says nothing (connections are always
-// written), QueryField takes at most one name, and OpsNone offers no
+// RelayConnection is accepted and recorded, for compat=veloxe alone
+// (connections are otherwise always written), QueryField takes at most one name, and OpsNone offers no
 // predicate.
 func TestPortSpellings(t *testing.T) {
-	if got := graphql.RelayConnection(); !reflect.DeepEqual(got, graphql.Annotation{}) {
+	if got := graphql.RelayConnection(); !reflect.DeepEqual(got, graphql.Annotation{RelayConnection: true}) {
 		t.Errorf("RelayConnection: %+v", got)
 	}
 	if got := graphql.QueryField(); !got.HasQueryField() || got.QueryField != "" || !got.QueryFieldDefault {

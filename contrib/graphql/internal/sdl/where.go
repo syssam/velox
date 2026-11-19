@@ -205,6 +205,9 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 	if err != nil {
 		return err
 	}
+	if o.veloxe {
+		s.dirs = nil // veloxe put directives on the type's fields alone
+	}
 	on := s.name
 	if s.edge >= 0 && !o.veloxe {
 		on = strings.TrimSuffix(s.name, "ID")
@@ -216,8 +219,9 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 	if err != nil {
 		return err
 	}
-	if o.veloxe && a.WhereOps&graphql.OpsDefault != 0 && veloxeIDName(f.Name) && veloxeIDKinds[s.kind] {
-		// veloxe's default for a field named as a key (id, *_id): equality.
+	if o.veloxe && a.WhereOps&graphql.OpsDefault != 0 && veloxeEqualityDefault(f.Name, s.kind) {
+		// veloxe's default for the key, a field named as a key (id, *_id)
+		// and an Other field: equality.
 		_, defaults := predicatesOf(s.kind, f.Nullable)
 		ops = ops&^defaults | ops&a.WhereOps | graphql.OpsEquality
 		if f.Nullable {
@@ -353,6 +357,9 @@ func (g *graph) whereEdge(o *object, fs *inputFields, i int) error {
 	dirs, err := directives(a.Directives, where)
 	if err != nil {
 		return err
+	}
+	if o.veloxe {
+		dirs = nil // veloxe put directives on the type's fields alone
 	}
 	has := gqlField{name: "has" + upper(name), typ: "Boolean", dirs: dirs, where: where}
 	if err := fs.add(has); err != nil {

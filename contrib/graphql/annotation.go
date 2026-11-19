@@ -130,6 +130,9 @@ type Annotation struct {
 	// QueryFieldDefault asks for the Query field with the default name, the entity's
 	// plural in lower camel case (QueryField() with no name).
 	QueryFieldDefault bool `json:"query_field_default,omitempty"`
+	// RelayConnection is the old velox's switch for the entity's connection,
+	// which velox-graphql reads only under compat=veloxe (RelayConnection()).
+	RelayConnection bool `json:"relay_connection,omitempty"`
 	// Mutations lists the mutations to generate for the entity.
 	Mutations []MutationKind `json:"mutations,omitempty"`
 	// MultiOrder lets a connection order by a list of fields.
@@ -229,6 +232,7 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		Type:              pick(a.Type, o.Type),
 		QueryField:        pick(a.QueryField, o.QueryField),
 		QueryFieldDefault: o.QueryFieldDefault || a.QueryFieldDefault,
+		RelayConnection:   o.RelayConnection || a.RelayConnection,
 		MultiOrder:        o.MultiOrder || a.MultiOrder,
 		FieldName:         pick(a.FieldName, o.FieldName),
 		OrderField:        pick(a.OrderField, o.OrderField),
@@ -356,9 +360,12 @@ func (a Annotation) HasQueryField() bool { return a.QueryField != "" || a.QueryF
 
 // RelayConnection is the old velox's and entgql's switch for Relay-style cursor
 // connections. velox-graphql always writes them (a connection with edges,
-// pageInfo and totalCount, and the cursor pagination of Paginate), so it adds
-// nothing, and exists so that a port compiles.
-func RelayConnection() Annotation { return Annotation{} }
+// pageInfo and totalCount, and the cursor pagination of Paginate), so by
+// default it adds nothing, and exists so that a port compiles. Under the
+// plugin option compat=veloxe it is read as the old velox read it: a schema
+// with QueryField and without RelayConnection has no connection, and its
+// Query field and to-many edges are lists.
+func RelayConnection() Annotation { return Annotation{RelayConnection: true} }
 
 // Mutations generates the listed mutation inputs for the entity, as entgql's
 // Mutations does: MutationCreate the input CreateXInput and its method Create,
