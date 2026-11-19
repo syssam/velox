@@ -37,6 +37,10 @@ var predicates = []struct {
 	{graphql.OpHasSuffix, "OpHasSuffix", "HasSuffix", takesValue},
 	{graphql.OpEqualFold, "OpEqualFold", "EqualFold", takesValue},
 	{graphql.OpContainsFold, "OpContainsFold", "ContainsFold", takesValue},
+	{graphql.OpHas, "OpHas", "Has", takesValue},
+	{graphql.OpHasSome, "OpHasSome", "HasSome", takesList},
+	{graphql.OpHasEvery, "OpHasEvery", "HasEvery", takesList},
+	{graphql.OpIsEmpty, "OpIsEmpty", "IsEmpty", takesBool},
 	{graphql.OpIsNil, "OpIsNil", "IsNil", takesBool},
 	{graphql.OpNotNil, "OpNotNil", "NotNil", takesBool},
 }
@@ -58,8 +62,9 @@ func opNames(ops graphql.WhereOp) string {
 
 // predicatesOf are the predicates a field of the type typ offers (has) and
 // those WhereOps() gives it (defaults). typ is "ID" for the node key of an
-// enum or uuid type, "orderedID" for that of an integer or string type, else
-// the schema field type. A nullable field, one whose handle tests for NULL, also
+// enum or uuid type, "orderedID" for that of an integer or string type,
+// "jsonArray" for a JSON slice of strings, numbers or booleans, else the
+// schema field type. A nullable field, one whose handle tests for NULL, also
 // has OpsNullable.
 func predicatesOf(typ string, nullable bool) (has, defaults graphql.WhereOp) {
 	switch typ {
@@ -74,7 +79,9 @@ func predicatesOf(typ string, nullable bool) (has, defaults graphql.WhereOp) {
 		has, defaults = graphql.OpsEquality|graphql.OpsComparison, graphql.OpsEquality|graphql.OpsComparison
 	case "ID", "enum", "uuid":
 		has, defaults = graphql.OpsEquality, graphql.OpsEquality
-	default: // bytes, json
+	case "jsonArray":
+		has, defaults = graphql.OpsJSONArray, graphql.OpsJSONArray
+	default: // bytes, any other json
 		return 0, 0
 	}
 	if nullable {
@@ -203,7 +210,7 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 	}
 	// IsNil and NotNil are the handle's IsNull and NotNull, which only a
 	// nullable field's Null* handle has: a Nillable field's. An Optional
-	// JSON field's column holds NULL too, but JSON has no predicates.
+	// JSON field's column holds NULL too, but only a Nillable one is asked.
 	ops, err := resolveOps(a.WhereOps, s.kind, f.Nullable, where)
 	if err != nil {
 		return err
@@ -286,6 +293,12 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 			return s, err
 		}
 		s.name, s.typ, s.kind, s.goBase, s.v = n, t, f.Type, goOf(n, f.GoName), g.goValue(f, a)
+		if elem := jsonList[f.ElemType]; f.Type == "json" && elem != "" {
+			// A slice's predicates are on its elements, each of the scalar the
+			// slice's list is of, and of the Go type it holds.
+			s.typ, s.kind = elem, "jsonArray"
+			s.v = goValue{typ: strings.TrimPrefix(f.ElemType, "[]"), own: true}
+		}
 	}
 	return s, nil
 }

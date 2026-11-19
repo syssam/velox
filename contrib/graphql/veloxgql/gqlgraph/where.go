@@ -412,6 +412,59 @@ func (f *Filter) width(field name, n int) bool {
 	return true
 }
 
+// ArrayOps are the values of the predicates a where input offers on a field that
+// is a JSON array of strings, numbers or booleans, as the generated code gives
+// them to ArrayField: each a field of the input, nil when the client does not
+// set it or the input does not offer it. V is the Go type of the elements. The
+// GraphQL name of each is the field's name with the predicate's suffix.
+type ArrayOps[V any] struct {
+	// Has matches an array that holds the element.
+	Has *V
+	// HasSome and HasEvery match an array that holds one of the elements, and
+	// one that holds all of them. A non-nil empty list is a list of nothing, as
+	// the client sent it: HasSome matches no node, and HasEvery every node. More
+	// than MaxFilterWidth values fail with ErrFilterTooWide.
+	HasSome, HasEvery []V
+	// IsEmpty matches the empty array for true, and any other for false: a
+	// column that is NULL matches neither, as it holds no array.
+	IsEmpty *bool
+	// IsNil and NotNil test the column for NULL, as Ops's do.
+	IsNil, NotNil *bool
+}
+
+// ArrayField adds the predicates o sets on column col, a JSON array column, of
+// the input's field field: each counted against the budget, the elements of
+// HasSome and HasEvery too. The elements need no conversion: GraphQL's scalars
+// of a string, a number and a boolean are what the column's JSON holds. V is
+// the Go type of the input's values: the function is compiled once for each
+// shape of V, not for each entity.
+func ArrayField[V any](f *Filter, field string, col int, o ArrayOps[V]) {
+	if f.err == nil && o.Has != nil {
+		f.add(name{field, "Has"}, 0, f.t.Pred(col, untyped.PredJSONHas, *o.Has))
+	}
+	elements(f, name{field, "HasSome"}, col, o.HasSome, untyped.Or)
+	elements(f, name{field, "HasEvery"}, col, o.HasEvery, untyped.And)
+	if f.err == nil && o.IsEmpty != nil {
+		f.is(name{field, "IsEmpty"}, *o.IsEmpty, f.t.Pred(col, untyped.PredJSONEmpty, nil))
+	}
+	f.null(name{field, "IsNil"}, col, untyped.PredIsNull, o.IsNil)
+	f.null(name{field, "NotNil"}, col, untyped.PredNotNull, o.NotNil)
+}
+
+// elements adds the Has of each of vs on column col, joined by join (Or or And),
+// unless vs is nil. An empty list joins to nothing, which is false for Or and
+// true for And.
+func elements[V any](f *Filter, field name, col int, vs []V, join func(...velox.Predicate) velox.Predicate) {
+	if f.err != nil || vs == nil || !f.width(field, len(vs)) {
+		return
+	}
+	ps := make([]velox.Predicate, len(vs))
+	for i, v := range vs {
+		ps[i] = f.t.Pred(col, untyped.PredJSONHas, v)
+	}
+	f.add(field, len(vs), join(ps...))
+}
+
 // IDField is Field of the filter's own type's key, on column col: the
 // values are keys, in the key's Go type, which gqlgen decodes from the
 // client's IDs. The predicates on IDs are EQ, NEQ, In, NotIn, GT, GTE, LT

@@ -496,6 +496,28 @@ PostgreSQL, MySQL and SQLite: velox writes each dialect's JSON functions and
 passes the keys as arguments. A key can't be empty or contain `"`, `\` or a
 control character. See [ADR 0058](decisions/0058-json-paths.md).
 
+### Inside a JSON array: Has, HasSome, HasEvery and IsEmpty
+
+A column that is itself an array (`field.Strings("tags")`, or any
+`field.JSON` of a slice) tests its elements:
+
+```go
+U := veloxgen.Users
+db.Query[veloxgen.User]().Where(U.Tags.Has("admin"))                  // holds "admin"
+db.Query[veloxgen.User]().Where(U.Tags.HasSome("admin", "staff"))     // holds one of them
+db.Query[veloxgen.User]().Where(U.Tags.HasEvery("admin", "staff"))    // holds both
+db.Query[veloxgen.User]().Where(U.Tags.IsEmpty())                     // is []
+```
+
+An element is a string, a number or a boolean. `true` is not `1` and `"1"` is
+not `1`, and a document that is not an array holds nothing and is not empty;
+a NULL column matches neither the condition nor its `Not`. It is the same on
+PostgreSQL, MySQL and SQLite. On PostgreSQL the column must be jsonb, and a GIN
+index serves `Has` and `HasEvery`. velox-graphql offers them as
+`tagsHas`, `tagsHasSome`, `tagsHasEvery` and `tagsIsEmpty` for `WhereOps()` or
+`WhereOps(OpsJSONArray)` on a slice of strings, numbers or booleans. See
+[ADR 0080](decisions/0080-json-array-elements.md).
+
 ### Subqueries on a column: Select and InSelect
 
 When no edge links the two columns, or you want to say which columns are

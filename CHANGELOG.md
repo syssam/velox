@@ -21,6 +21,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `Has`, `HasSome`, `HasEvery` and `IsEmpty` on a JSON handle test the elements
+  of a column that is an array, alike on PostgreSQL, MySQL and SQLite
+  (`untyped.PredJSONHas` and `PredJSONEmpty` are the untyped forms).
+  velox-graphql ports the old velox's `OpsJSONArray`: a `[]string`, `[]int`,
+  `[]int64`, `[]float64` or `[]bool` field offers `<field>Has`, `HasSome`,
+  `HasEvery` and `IsEmpty`, each charged as a scan. Regenerate:
+  `veloxgql.GeneratedCodeIsVersion24` replaces Version23 (decision 0080).
 - `velox.FieldInSelect(column, entity, key, ps...)` is a subquery on another
   entity by name, for a schema's Policy, Hooks and Interceptors: the entity's
   `column` is among the `key` of the `entity` rows that meet `ps`. The target's

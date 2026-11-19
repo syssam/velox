@@ -45,8 +45,9 @@ each.
 
 ## Consequences
 
-- A path is object keys only: an array index, a wildcard and containment
-  (`@>`) stay in `Raw`.
+- A path is object keys only: an array index and a wildcard stay in `Raw`.
+  Containment of an element in the column's own array is
+  [0080](0080-json-array-elements.md).
 - A number beyond 2^53 loses precision as a float64.
 - PostgreSQL's column must be jsonb, as velox-gen writes it.
 - `TestJSONPaths` in `internal/integration` runs every condition on

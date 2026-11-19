@@ -16,7 +16,7 @@ const predMethod = "predicate"
 
 // predOps are, for each predicate, the field of gqlgraph.Ops that holds its
 // value and the suffix of its name, as sdl names it ("titleNEQ"); whether it
-// takes a Boolean, IsNil or NotNil, rather than a value of the field.
+// takes a Boolean, IsEmpty, IsNil or NotNil, rather than a value of the field.
 var predOps = map[graphql.WhereOp]struct {
 	field, suffix string
 	isBool        bool
@@ -34,6 +34,10 @@ var predOps = map[graphql.WhereOp]struct {
 	graphql.OpHasSuffix:    {"HasSuffix", "HasSuffix", false},
 	graphql.OpEqualFold:    {"EqualFold", "EqualFold", false},
 	graphql.OpContainsFold: {"ContainsFold", "ContainsFold", false},
+	graphql.OpHas:          {"Has", "Has", false},
+	graphql.OpHasSome:      {"HasSome", "HasSome", false},
+	graphql.OpHasEvery:     {"HasEvery", "HasEvery", false},
+	graphql.OpIsEmpty:      {"IsEmpty", "IsEmpty", true},
 	graphql.OpIsNil:        {"IsNil", "IsNil", true},
 	graphql.OpNotNil:       {"NotNil", "NotNil", true},
 }
@@ -148,19 +152,27 @@ func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, 
 	if w.Edge >= 0 {
 		return "", fmt.Errorf("schema %s, field %s: a foreign key's predicate that takes no IDs, which is a bug", e.Name, w.Name)
 	}
-	// The first predicate holds the field's Go type: sdl writes IsNil and
-	// NotNil last, so a run that starts with one has no value.
+	// The first predicate holds the field's Go type, or a JSON array's elements':
+	// sdl writes IsEmpty, IsNil and NotNil last, so a run that starts with one
+	// has no value.
 	typ := "bool"
+	array := fd.Type == "json" // only an array has predicates: on its elements, which need no conversion
 	if !predOps[w.Op].isBool {
-		if err := r.whereConv(e, fd, w); err != nil {
-			return "", err
+		if !array {
+			if err := r.whereConv(e, fd, w); err != nil {
+				return "", err
+			}
 		}
 		var err error
 		if typ, err = r.qualify(f, e, fd, w.GoType, w.GoPkg); err != nil {
 			return "", err
 		}
 	}
-	return items(fmt.Sprintf("%s.Field(f, %q, %s, %s.Ops[%s]{", impl, base, col, impl, typ), ops, "})"), nil
+	helper, opsType := "Field", "Ops"
+	if array {
+		helper, opsType = "ArrayField", "ArrayOps"
+	}
+	return items(fmt.Sprintf("%s.%s(f, %q, %s, %s.%s[%s]{", impl, helper, base, col, impl, opsType, typ), ops, "})"), nil
 }
 
 // whereConv checks that the where-input field w's values convert to the Go

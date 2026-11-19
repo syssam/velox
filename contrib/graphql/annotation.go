@@ -59,6 +59,14 @@ const (
 	// case: LOWER(column) compared with LOWER(value).
 	OpEqualFold
 	OpContainsFold
+	// OpHas, OpHasSome, OpHasEvery and OpIsEmpty are the predicates on the
+	// elements of a JSON array field, a slice of strings, numbers or booleans:
+	// it holds the element, holds one of the elements, holds all of them, and
+	// holds none.
+	OpHas
+	OpHasSome
+	OpHasEvery
+	OpIsEmpty
 
 	// OpsEquality is equal, not equal, in and not in.
 	OpsEquality = OpEQ | OpNEQ | OpIn | OpNotIn
@@ -74,7 +82,12 @@ const (
 	OpsString = OpsEquality | OpsSubstring | OpsCaseFold
 	// OpsNullable is is-nil and not-nil.
 	OpsNullable = OpIsNil | OpNotNil
-	// OpsAll is every predicate.
+	// OpsJSONArray is has, has some, has every and is empty: what a JSON slice
+	// field offers, as the old velox's does. A field of a slice type has no
+	// default predicates, so it filters only when WhereOps names these.
+	OpsJSONArray = OpHas | OpHasSome | OpHasEvery | OpIsEmpty
+	// OpsAll is every predicate of a scalar field: it does not include the
+	// predicates of a JSON array, which no scalar field has.
 	OpsAll = OpsEquality | OpsComparison | OpsString | OpsNullable
 
 	// OpsDefault is what WhereOps() with no arguments records: the plugin

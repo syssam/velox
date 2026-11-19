@@ -134,7 +134,11 @@ func (c Col[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c Col[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
+func (c JSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E]
 func (c JSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E]
+func (c JSONCol[E, V]) HasSome[_ Lazy[V]](vs ...any) Pred[E]
+func (c JSONCol[E, V]) Has[_ Lazy[V]](v any) Pred[E]
+func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E]
 func (c JSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c JSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E]
@@ -155,7 +159,11 @@ func (c NullCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
+func (c NullJSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E]
 func (c NullJSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E]
+func (c NullJSONCol[E, V]) HasSome[_ Lazy[V]](vs ...any) Pred[E]
+func (c NullJSONCol[E, V]) Has[_ Lazy[V]](v any) Pred[E]
+func (c NullJSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E]
 func (c NullJSONCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
 func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullJSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E]
@@ -1138,9 +1146,13 @@ const OpEQ WhereOp
 const OpEqualFold
 const OpGT
 const OpGTE
+const OpHas
+const OpHasEvery
 const OpHasPrefix
+const OpHasSome
 const OpHasSuffix
 const OpIn
+const OpIsEmpty
 const OpIsNil
 const OpLT
 const OpLTE
@@ -1152,6 +1164,7 @@ const OpsCaseFold
 const OpsComparison
 const OpsDefault WhereOp
 const OpsEquality
+const OpsJSONArray
 const OpsNone WhereOp
 const OpsNullable
 const OpsString
@@ -1210,7 +1223,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion23
+const GeneratedCodeIsVersion24
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

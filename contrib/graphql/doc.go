@@ -186,7 +186,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlgraph for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion23", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion24", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -651,7 +651,9 @@
 // that returns a type of the list. A JSON field of []string, []int, []int64,
 // []float64 or []bool is a list of String!, Int!, Float! or Boolean!, as entgql
 // gives field.Strings, in the type and the inputs, and binds the Go slice; its
-// filters stay JSON's, none. With autobind to the generated package:
+// filters, with WhereOps, are OpsJSONArray's: <field>Has, <field>HasSome,
+// <field>HasEvery and <field>IsEmpty on its elements. Any other JSON field has
+// none. With autobind to the generated package:
 //
 //	autobind:
 //	  - <module>/gen

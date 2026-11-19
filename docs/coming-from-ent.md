@@ -76,7 +76,10 @@ neither orders by a whole JSON document nor compares one. Where ent writes
 `sqljson.ValueEQ(user.FieldAttrs, "pro", sqljson.Path("plan", "tier"))`,
 velox writes `veloxgen.Users.Attrs.Text("plan", "tier").EQ("pro")`; `Number`
 and `Bool` read a number or a boolean, and `HasKey` tests that a key is there
-([0058](decisions/0058-json-paths.md)).
+([0058](decisions/0058-json-paths.md)). `Has`, `HasSome`, `HasEvery` and
+`IsEmpty` test the elements of a column that is an array, where ent writes
+`sqljson.ValueContains`: `veloxgen.Users.Tags.Has("admin")`
+([0080](decisions/0080-json-array-elements.md)).
 
 **The implicit ID is int64.** The implicit `id` is `field.Int64`, where
 ent's is `int`. A foreign-key field must have its target's ID type: declare it

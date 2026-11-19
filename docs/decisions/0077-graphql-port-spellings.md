@@ -50,8 +50,8 @@ hook widened to `OpsString`; decision 0078 makes that velox2's default.
 ## Not done
 
 `OpsJSONArray` (has, hasSome, hasEvery, isEmpty on a JSON array field, 40 uses
-in 33 files) needs predicates the ORM's handles do not have; a JSON field has no
-where predicates today. The largest consumer's own hook removes the where input
+in 33 files) was left out here for want of ORM predicates; decision 0080 adds
+them and the annotation. The largest consumer's own hook removes the where input
 of every field not marked filterable, and none of the 40 is, so no such filter
 was ever in its API. The old velox's `WithWhereInputs` filter-everything switch is not a
 spelling: a field is filterable only when it asks.
