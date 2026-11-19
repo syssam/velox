@@ -28,7 +28,9 @@ type EntityTable struct {
 	links   []EntityLink
 }
 
-// Load builds t from build the first time and returns t.
+// Load builds t from build the first time and returns t. build is a
+// generated list of LinkEntity calls, which do not panic; were it to, the
+// table would stay empty and every lookup fail, never widen.
 func (t *EntityTable) Load(build func() []EntityLink) *EntityTable {
 	t.once.Do(func() {
 		t.links = build()
@@ -86,7 +88,7 @@ func (t *EntityTable) target(key string) (*EntityInfo, bool, error) {
 // behaviour, which velox-gen gives no table.
 func (in *EntityInfo) entityTable() (*EntityTable, error) {
 	if in.entities == nil {
-		return nil, fmt.Errorf("%s has no entity table: velox-gen writes one in a package whose schema declares a Policy, Hooks or Interceptors", in.Name)
+		return nil, fmt.Errorf("%s has no entity table: velox-gen writes one in a package whose schema declares a Policy, Hooks or Interceptors; elsewhere use the relation's typed condition (Rel.Has, Rel.HasWith)", in.Name)
 	}
 	return in.entities(), nil
 }

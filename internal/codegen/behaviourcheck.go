@@ -174,7 +174,7 @@ func (ck *behaviourCheck) checkSub(e *Entity, who string, u use, refuse func(ast
 func (ck *behaviourCheck) warn(u use) {
 	pos := ck.sc.fset.Position(u.pos)
 	key := fmt.Sprintf("%s:%d", pos.Filename, pos.Line)
-	at := fmt.Sprintf("%s:%d", key, pos.Column) // a call reached from several roots is warned of once; each call of a line is
+	at := fmt.Sprintf("%s:%d", key, pos.Column) // one warning per call, however many roots reach it
 	if ck.warned[at] {
 		return
 	}

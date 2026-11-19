@@ -26,6 +26,14 @@ which the port must not do.
   type. Every descriptor of the package names it, `Entities:
   veloxEntityTable`. It is built on first use, once for the package, so its
   cost grows with the entities, not their square.
+- Only such a package has the table. A lookup by string links every entry,
+  so the table defeats the linker's dead-code elimination: a service that
+  uses three entities of a 60-entity package would link all 60
+  (`TestServiceLinksOnlyItsEntities` and its GraphQL twin in `bench/scale`
+  fail when it is in every package; tried and reverted 2026-11-19). A
+  condition by name is a behaviour feature; application code names a
+  relation with its typed condition (`Rel.Has`, `Rel.HasWith`), and a by-name
+  condition on an entity without a table fails with that advice.
 - `FieldInSelect` finds its entity in the table by its name in the schema or,
   failing that, by its table. A name that is one entity's name and another's
   table, or the table of two entities (in two database schemas), is
