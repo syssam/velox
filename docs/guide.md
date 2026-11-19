@@ -120,26 +120,33 @@ Two options work differently from ent, so they are worth learning early
 - `Nillable()` makes the column nullable. The Go field becomes a pointer, and
   its handle gains `IsNull`, `NotNull` and `SetNull`.
 
-An insert takes a struct, so a field's zero value and "not set" are the same
-thing. That decides what a `Default` can do:
+An insert takes a struct, so in the struct a field's zero value and "not set"
+are the same thing: an insert fills the `Default` into a zero field. It does
+so first, before the insert's setters and the hooks, as ent fills its
+defaults before its hooks, so a value a setter or a hook writes is stored
+over the default, zero or not ([ADR 0082](decisions/0082-defaults-before-setters.md)):
 
-| Field | Unset (zero) on insert stores | Can store the zero value? |
+```go
+g := veloxgen.Group{Name: "a"}             // field.Bool("open").Default(true)
+db.Insert(&g).Exec(ctx)                    // open = true
+db.Insert(&g).Set(veloxgen.Groups.Open.Set(false)).Exec(ctx) // open = false
+```
+
+| Field | Unset (zero) in the struct stores | To store the zero value |
 | --- | --- | --- |
-| `field.Bool("active")` | `false` | yes |
-| `field.Bool("active").Default(true)` | refused by velox-gen: `false` could not be stored | — |
-| `field.Bool("active").Nillable().Default(true)` | `true`, when the `*bool` is nil | yes: `new(false)` |
-| `field.Int("seats").Default(0)` | `0` | yes |
-| `field.Int("seats").Default(100)` | refused by velox-gen: `0` could not be stored | — |
-| `field.Int("seats").Positive().Default(100)` | `100` | `0` is refused by `Positive` anyway |
-| `field.String("plan").Default("free")` | `"free"` | no: `""` becomes `"free"` |
-| `field.String("plan").Optional().Nillable()` | `NULL` | yes |
+| `field.Bool("active")` | `false` | the struct |
+| `field.Bool("active").Default(true)` | `true` | a setter: `Set(Xs.Active.Set(false))` |
+| `field.Bool("active").Nillable().Default(true)` | `true`, when the `*bool` is nil | the struct: `new(false)`; the column is NULL-able |
+| `field.Int("seats").Default(100)` | `100` | a setter: `Set(Xs.Seats.Set(0))` |
+| `field.String("plan").Default("free")` | `"free"` | a setter: `Set(Xs.Plan.Set(""))` |
+| `field.String("plan").Optional().Nillable()` | `NULL` | the struct |
 
-For a bool that should default to `true`, use `Nillable().Default(true)`,
-or name the field so that its zero is the default (`disabled`, not
-`enabled`). `SchemaDefault` sets only the column's `DEFAULT`, for rows written
-outside velox, and `Annotations(sqlschema.Default("100"))` is the same with one SQL text for
-every dialect (`sqlschema.DefaultExprs` takes one for each). [Coming from ent](coming-from-ent.md) ("Defaults on a NOT NULL column")
-has the whole list.
+A GraphQL create input leaves such a field optional (`active: Boolean`): left
+out it takes the `Default`, and `false` is stored. A constant `Default` is
+also the column's `DEFAULT`. `SchemaDefault` sets only the column's
+`DEFAULT`, for rows written outside velox, and
+`Annotations(sqlschema.Default("100"))` is the same with one SQL text for
+every dialect (`sqlschema.DefaultExprs` takes one for each).
 
 `field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,
 with a constant per value, such as `veloxgen.InvoiceStatusPaid`.
@@ -257,7 +264,7 @@ command in one `go:generate` line, and have CI call it, so the folder is named
 once.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion22`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion23`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 

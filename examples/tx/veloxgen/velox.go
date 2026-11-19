@@ -5,4 +5,4 @@ package veloxgen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion22
+const _ = velox.GeneratedCodeIsVersion23

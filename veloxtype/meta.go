@@ -11,12 +11,6 @@ type ColumnDescriptor struct {
 	Immutable     bool       // an update may not assign the column
 	Version       bool       // the optimistic-locking version: every update adds 1
 	Sensitive     bool       // the column holds a secret (velox logs no values)
-	// ZeroInvalid says a check of the field refuses 0, so the field never
-	// stores it and reading 0 as unset loses nothing: a bool or number that is
-	// not a pointer may then have a Default that is not zero, which is
-	// otherwise refused. velox-gen sets it from Positive, Negative, Min, Max
-	// and Range.
-	ZeroInvalid bool
 	// Nullable says the column holds NULL though the field is no pointer:
 	// a slice or a map, whose nil velox binds as NULL and reads NULL back
 	// into. velox-gen sets it on a json field of an Optional or Nillable

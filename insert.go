@@ -188,6 +188,7 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if q.one == nil && len(q.many) == 0 {
 		return nil
 	}
+	q.fillDefaults()
 	if q.set.Empty() && !q.db.e.HasHooks(q.meta.Info) {
 		var mu engine.MutationState
 		return q.send(ctx, &q.db.e, &mu)
@@ -223,6 +224,7 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	if q.one == nil && len(q.many) == 0 {
 		return "", nil, nil
 	}
+	q.fillDefaults()
 	if !q.set.Empty() {
 		if _, err := engine.PrepareInsert(q.meta.Info, q.set, q.mutation(false).Rows, q.conflict != nil, q.one == nil); err != nil {
 			return "", nil, err
@@ -240,6 +242,25 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 		return "", nil, err
 	}
 	return mu.SQL, mu.Args, nil
+}
+
+// fillDefaults fills the defaults of every row, before Set's setters and the
+// hooks, as ent's builder applies its defaults before its hooks: a value a
+// setter or a hook writes is the caller's, and is stored over the default,
+// zero or not. Only a field the caller left at its zero value, and nothing
+// wrote after, gets the Default or DefaultFunc.
+//
+// A zero field means unset. On a pointer field (velox-gen's Nillable) that is
+// nil, so any value can be stored from the struct. On any other field it is
+// the zero value itself: a struct's false, 0 or "" gets the Default.
+func (q InsertQuery[E]) fillDefaults[_ Lazy[E]]() {
+	if q.one != nil {
+		engine.FillDefaults(q.meta.Info, unsafe.Pointer(q.one))
+		return
+	}
+	for i := range q.many {
+		engine.FillDefaults(q.meta.Info, unsafe.Pointer(&q.many[i]))
+	}
 }
 
 // mutation is the insert as its entity's hooks see it: its rows.
@@ -320,20 +341,6 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 	return nil
 }
 
-// fillDefaults sets, in *p, every zero field whose column has Default or
-// DefaultFunc. An UpdateDefault fills on update only.
-//
-// A zero value means unset. On a pointer field (velox-gen's Nillable) that is
-// nil, so any value can be stored. On any other field, such as an Optional
-// one, it is the zero value itself: a string with a Default can never store
-// "", which is why velox-gen refuses a Default or DefaultFunc on a bool or
-// number that is not Nillable, unless the Default is the zero value.
-func fillDefaults[E any](m *metaState[E], p *E) {
-	for i := range m.Info.Columns {
-		engine.FillDefault(&m.Info.Columns[i], m.Addr(p, i))
-	}
-}
-
 // generatedKey is the index of a single integer primary key column holding
 // zero in *p, which the database assigns; -1 when there is none.
 func generatedKey[E any](m *metaState[E], p *E) int {
@@ -359,7 +366,6 @@ func rowValues[E any](m *metaState[E], p *E, cols []int) []any {
 // the statement that inserts it and its generated key column, -1 for none. On
 // PostgreSQL and SQLite the statement reads that key back with RETURNING.
 func oneStatement[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E, cf *ConflictClause) (Statement, int, error) {
-	fillDefaults(m, p)
 	gen := generatedKey(m, p)
 	cols := engine.InsertColumns(m.Info, gen)
 	if len(cols) == 0 {
@@ -394,9 +400,6 @@ func insertOne[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E,
 // prepareMany prepares every entity in xs, as InsertAll's Exec does, and
 // returns the columns to insert and the most rows one statement holds.
 func prepareMany[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs []E) (cols []int, per int, err error) {
-	for i := range xs {
-		fillDefaults(m, &xs[i])
-	}
 	if err := engine.RefuseBidiRows(m.Info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs)); err != nil {
 		return nil, 0, err
 	}

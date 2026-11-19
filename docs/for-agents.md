@@ -49,8 +49,10 @@ value type is a compile error, so build before you run.
   create. `Nillable()` makes the column NULL and the Go field a pointer. velox-gen
   refuses an `Optional` field with neither `Default` nor `Nillable`, so write
   `Optional().Nillable()` or `Optional().Default("")`.
-- **A non-zero `Default` on a bool or number is refused** unless the field is
-  `Nillable`: a Go `false` or `0` cannot be told from unset.
+- **A struct's zero field takes the `Default`.** `field.Bool("active").Default(true)`
+  stores `true` for a struct's `false`; store `false` with a setter,
+  `db.Insert(&x).Set(Xs.Active.Set(false))`, or a hook's `Mutation.Set`. The
+  insert fills defaults before setters and hooks, as ent does.
 - **IDs are `int64`.** A foreign-key field has its target's ID type.
 - **A Write policy filters.** An update aimed at rows the caller may not change
   affects 0 rows and returns no error, so check the count.

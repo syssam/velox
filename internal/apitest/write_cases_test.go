@@ -1,7 +1,8 @@
 package apitest
 
 import (
-	"errors"
+	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -101,27 +102,28 @@ func (*wgPairV) VeloxMeta() *velox.Meta[wgPairV] {
 	})
 }
 
-// wgPairZ is wgPairV whose descriptor says a check refuses 0, as velox-gen
-// writes it for Positive().Default(250): the Default stands.
-type wgPairZ struct {
-	A, B  int64
-	Price wgCents
+// wgFlag has a bool whose Default is true and a number whose Default is
+// 250, as ent's field.Bool("on").Default(true) and field.Int("price").Default(250).
+type wgFlag struct {
+	ID    int64
+	On    bool
+	Price int64
 }
 
-var wgPairZMeta velox.MetaOnce[wgPairZ]
+var wgFlagMeta velox.MetaOnce[wgFlag]
 
-func (*wgPairZ) VeloxMeta() *velox.Meta[wgPairZ] {
-	return wgPairZMeta.Load(func() velox.Descriptor[wgPairZ] {
-		return velox.Descriptor[wgPairZ]{
-			Table:      "pairs",
-			Columns:    []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}, {Field: "Price", Name: "price", Default: wgCents(250), ZeroInvalid: true}},
-			PrimaryKey: []int{0, 1},
-			FieldPtr: func(x *wgPairZ, i int) any {
+func (*wgFlag) VeloxMeta() *velox.Meta[wgFlag] {
+	return wgFlagMeta.Load(func() velox.Descriptor[wgFlag] {
+		return velox.Descriptor[wgFlag]{
+			Table:      "flags",
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "On", Name: "on", Default: true}, {Field: "Price", Name: "price", Default: int64(250)}},
+			PrimaryKey: []int{0},
+			FieldPtr: func(x *wgFlag, i int) any {
 				switch i {
 				case 0:
-					return &x.A
+					return &x.ID
 				case 1:
-					return &x.B
+					return &x.On
 				}
 				return &x.Price
 			},
@@ -129,20 +131,87 @@ func (*wgPairZ) VeloxMeta() *velox.Meta[wgPairZ] {
 	})
 }
 
-// A number a check refuses 0 for takes its Default when unset, and keeps a
-// value given.
-func TestZeroInvalidInsert(t *testing.T) {
-	for _, c := range []struct{ given, want wgCents }{{0, 250}, {7, 7}} {
-		e := &fakeconn.Exec{}
-		db := openFake(velox.Postgres, e)
-		p := wgPairZ{A: 1, B: 2, Price: c.given}
-		if err := db.Insert(&p).Exec(ctx); err != nil {
-			t.Fatalf("given %d: %v", c.given, err)
-		}
-		if p.Price != c.want {
-			t.Errorf("given %d: Price %d, want %d", c.given, p.Price, c.want)
+var (
+	wgFlagOn    = velox.Col[wgFlag, bool]{I: 1}
+	wgFlagPrice = velox.Col[wgFlag, int64]{I: 2}
+)
+
+// A bool or number with a Default takes it when the struct leaves the field
+// at its zero value and nothing writes it after. The defaults are filled
+// before the setters and the hooks, as ent's builder fills them before its
+// hooks, so a setter's false or 0, a hook's Mutation.Set and a Row's Set are
+// stored over the default (ADR 0082).
+func TestDefaultUnderExplicitZero(t *testing.T) {
+	insert := func(t *testing.T, db *velox.DB, f func(q velox.InsertQuery[wgFlag]) velox.InsertQuery[wgFlag], x *wgFlag) {
+		t.Helper()
+		if err := f(db.Insert(x)).Exec(ctx); err != nil {
+			t.Fatal(err)
 		}
 	}
+	same := func(q velox.InsertQuery[wgFlag]) velox.InsertQuery[wgFlag] { return q }
+	want := func(t *testing.T, x wgFlag, on bool, price int64) {
+		t.Helper()
+		if x.On != on || x.Price != price {
+			t.Errorf("On %v, Price %d; want %v, %d", x.On, x.Price, on, price)
+		}
+	}
+	t.Run("unset takes the default", func(t *testing.T) {
+		x := wgFlag{ID: 1}
+		insert(t, openFake(velox.Postgres, &fakeconn.Exec{}), same, &x)
+		want(t, x, true, 250)
+	})
+	t.Run("a value given is kept", func(t *testing.T) {
+		x := wgFlag{ID: 1, On: true, Price: 7}
+		insert(t, openFake(velox.Postgres, &fakeconn.Exec{}), same, &x)
+		want(t, x, true, 7)
+	})
+	t.Run("a setter stores the zero", func(t *testing.T) {
+		x := wgFlag{ID: 1}
+		insert(t, openFake(velox.Postgres, &fakeconn.Exec{}), func(q velox.InsertQuery[wgFlag]) velox.InsertQuery[wgFlag] {
+			return q.Set(wgFlagOn.Set(false), wgFlagPrice.Set(0))
+		}, &x)
+		want(t, x, false, 0)
+	})
+	t.Run("an InsertAll's setter stores the zero in every row", func(t *testing.T) {
+		xs := []wgFlag{{ID: 1}, {ID: 2}}
+		if err := openFake(velox.Postgres, &fakeconn.Exec{}).InsertAll(xs).Set(wgFlagOn.Set(false)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		for _, x := range xs {
+			want(t, x, false, 250)
+		}
+	})
+	t.Run("a hook's Set stores the zero, and sees the default", func(t *testing.T) {
+		var seen bool
+		hook := velox.Before(func(_ context.Context, m *velox.Mutation) error {
+			for r := range m.Rows() {
+				seen, _ = r.Value("on").(bool)
+			}
+			return m.Set("on", false)
+		}, velox.OpInsert)
+		x := wgFlag{ID: 1}
+		insert(t, openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithHooks[wgFlag](hook)), same, &x)
+		want(t, x, false, 250)
+		if !seen {
+			t.Error("the hook saw on unset; the default is filled before the hooks")
+		}
+	})
+	t.Run("a hook's Fill does not replace a default", func(t *testing.T) {
+		hook := velox.Before(func(_ context.Context, m *velox.Mutation) error { return m.Fill("price", int64(9)) }, velox.OpInsert)
+		x := wgFlag{ID: 1}
+		insert(t, openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithHooks[wgFlag](hook)), same, &x)
+		want(t, x, true, 250)
+	})
+	t.Run("SQL renders the setter's zero", func(t *testing.T) {
+		x := wgFlag{ID: 1}
+		_, args, err := openFake(velox.Postgres, &fakeconn.Exec{}).Insert(&x).Set(wgFlagOn.Set(false)).SQL(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fmt.Sprint(args) != "[1 false 250]" {
+			t.Errorf("args %v, want [1 false 250]", args)
+		}
+	})
 }
 
 // TestFakeScanErrors: a row value of the wrong kind is an error from the
@@ -271,12 +340,12 @@ func TestNamedNumericDefault(t *testing.T) {
 		t.Errorf("Price %v, want 250", p.Price)
 	}
 
-	e = &fakeconn.Exec{}
-	db = openFake(velox.Postgres, e)
+	// The same Default on a field that is no pointer fills its zero.
 	v := wgPairV{A: 1, B: 2}
-	want := "velox: apitest.wgPairV.Price: Default on bool/numeric field Price would overwrite an explicit false or 0 on insert; make the field a pointer (nil uses the default)"
-	if err := db.Insert(&v).Exec(ctx); err == nil || err.Error() != want || e.Calls != 0 {
-		var se *velox.SchemaError
-		t.Errorf("%v (SchemaError %v), calls %d", err, errors.As(err, &se), e.Calls)
+	if err := openFake(velox.Postgres, &fakeconn.Exec{}).Insert(&v).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if v.Price != 250 {
+		t.Errorf("Price %v, want 250", v.Price)
 	}
 }

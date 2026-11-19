@@ -612,9 +612,6 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 		switch {
 		case ok && lit != "":
 			o.DefaultCode = lit
-			// The engine refuses a non-zero Default on a number that is not a
-			// pointer unless the descriptor says a check refuses 0.
-			o.ZeroInvalid = !f.Pointer && numeric[f.Type] && !zeroDefault(f) && zeroInvalid(f)
 		case !ok:
 			// An error is recorded.
 		case f.Type == "json" && sliceLiteral(f.Default, elem) != "":

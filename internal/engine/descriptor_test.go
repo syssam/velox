@@ -118,8 +118,6 @@ func TestDescriptorRefusals(t *testing.T) {
 		{"no primary key", func(d *velox.Descriptor[dRow]) { d.PrimaryKey = nil }, "the primary key names no fields"},
 		{"primary key out of range", func(d *velox.Descriptor[dRow]) { d.PrimaryKey = []int{4} }, "the primary key names column 4, of 4"},
 		{"index out of range", func(d *velox.Descriptor[dRow]) { d.Indexes = []velox.IndexInfo{{Columns: []int{-1}}} }, "an index names column -1, of 4"},
-		{"Default on a bool", func(d *velox.Descriptor[dRow]) { d.Columns[1].Default = true }, "dRow.Flag: Default on bool/numeric field Flag would overwrite an explicit false or 0 on insert"},
-		{"Default on a number", func(d *velox.Descriptor[dRow]) { d.Columns[0].Default = int64(3) }, "dRow.ID: Default on bool/numeric field ID would overwrite an explicit false or 0 on insert"},
 		{"unique index naming no column", func(d *velox.Descriptor[dRow]) { d.Indexes = []velox.IndexInfo{{Unique: true}} }, "a unique index names no fields"},
 		{"index naming a column twice", func(d *velox.Descriptor[dRow]) { d.Indexes = []velox.IndexInfo{{Columns: []int{1, 1}}} }, "dRow.Flag: an index names the field twice"},
 		{"Default of another type", func(d *velox.Descriptor[dRow]) { d.Columns[3].Default = 7 }, "dRow.Name: Default is a int, not a string"},
@@ -168,20 +166,13 @@ func TestDescriptorRefusals(t *testing.T) {
 	}
 }
 
-// ZeroInvalid says a check refuses 0, so a number that is not a pointer may
-// have a Default that is not zero, and FillDefault gives it to a zero field. A
-// bool is false or true, whatever a check says, and is still refused.
-func TestZeroInvalidDefault(t *testing.T) {
+// A bool or number that is not a pointer may have any Default: an insert
+// fills it before its setters and hooks, which store a zero over it.
+func TestBoolNumberDefault(t *testing.T) {
 	d := rowDescriptor()
-	d.Columns[0].Default, d.Columns[0].ZeroInvalid = int64(3), true
+	d.Columns[0].Default, d.Columns[1].Default = int64(3), true
 	if _, err := loadDescriptor(d, targetOf[fixture.DAuthor]()); err != nil {
-		t.Fatalf("a number with ZeroInvalid: %v", err)
-	}
-	d = rowDescriptor()
-	d.Columns[1].Default, d.Columns[1].ZeroInvalid = true, true
-	_, err := loadDescriptor(d, targetOf[fixture.DAuthor]())
-	if err == nil || !strings.Contains(err.Error(), "Default on bool/numeric field Flag would overwrite") {
-		t.Errorf("a bool with ZeroInvalid: %v", err)
+		t.Fatal(err)
 	}
 }
 

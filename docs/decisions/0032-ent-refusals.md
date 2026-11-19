@@ -2,6 +2,10 @@
 
 Status: accepted, 2026-11-02. Its explicit-null bullet is reversed by
 [0045](0045-graphql-input-setters.md): a null is a field not given, as in entgql.
+Its refusal of a non-zero Default on a bool or number, and the 2026-11-18
+amendment's `ZeroInvalid`, are withdrawn by
+[0082](0082-defaults-before-setters.md): defaults are filled before setters
+and hooks, so a setter stores false or 0 over them.
 
 ## Context
 

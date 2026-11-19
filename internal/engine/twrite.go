@@ -176,6 +176,7 @@ func (q TableInsert) Exec(ctx context.Context) error {
 	if q.one == nil && q.many.n == 0 {
 		return nil
 	}
+	q.fillDefaults()
 	if q.e.HasHooks(q.t.info) {
 		return Mutate(ctx, q.e, q.t.info, q.mutation(false), q.send)
 	}
@@ -192,6 +193,7 @@ func (q TableInsert) SQL(ctx context.Context) (string, []any, error) {
 	if q.one == nil && q.many.n == 0 {
 		return "", nil, nil
 	}
+	q.fillDefaults()
 	if q.e.HasHooks(q.t.info) {
 		mu := q.mutation(true)
 		if err := Mutate(ctx, q.e, q.t.info, mu, q.render); err != nil && !DryRefused(mu, err) {
@@ -204,6 +206,18 @@ func (q TableInsert) SQL(ctx context.Context) (string, []any, error) {
 		return "", nil, err
 	}
 	return mu.SQL, mu.Args, nil
+}
+
+// fillDefaults fills the defaults of every row before the hooks run, as
+// InsertQuery's does: a value a hook writes is stored over the default.
+func (q TableInsert) fillDefaults() {
+	if q.one != nil {
+		q.t.fillDefaults(q.one)
+		return
+	}
+	for i := range q.many.n {
+		q.t.fillDefaults(q.many.at(i))
+	}
 }
 
 func (q TableInsert) rows() []unsafe.Pointer {
@@ -302,7 +316,6 @@ func (t *table) rowValues(p unsafe.Pointer, cols []int) []any {
 }
 
 func (t *table) oneStatement(ctx context.Context, db *DB, p unsafe.Pointer, cf *ConflictClause) (Statement, int, error) {
-	t.fillDefaults(p)
 	gen := t.generatedKey(p)
 	cols := InsertColumns(t.info, gen)
 	if len(cols) == 0 {
@@ -334,9 +347,6 @@ func (t *table) insertOne(ctx context.Context, db *DB, p unsafe.Pointer, cf *Con
 }
 
 func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows) (cols []int, per int, err error) {
-	for i := range xs.n {
-		t.fillDefaults(xs.at(i))
-	}
 	if err := RefuseBidiRows(t.info, xs.p, xs.size, xs.n); err != nil {
 		return nil, 0, err
 	}

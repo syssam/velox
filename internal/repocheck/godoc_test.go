@@ -85,7 +85,7 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	t.Parallel()
 	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce", "Show",
 		"LinkEntity", "EntityLink", "EntityTable", "Lazy", "Validate", "ValidateSet",
-		"GeneratedCodeIsVersion22"}
+		"GeneratedCodeIsVersion23"}
 	listed := map[string]bool{}
 	for _, n := range names {
 		listed[n] = true

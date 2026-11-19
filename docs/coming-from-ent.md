@@ -89,31 +89,26 @@ with a `Default`, or `field.String("id")` for a key the application chooses.
 Relations, many-to-many links, upserts and `After` work on such keys on all
 three dialects (`TestNonIntegerKeys`).
 
-**Defaults on a NOT NULL column.** A `Default` on a field that is not
-`Nillable` is accepted for a string, an enum, a time (`Default(time.Now)`), a
-JSON field such as `field.Strings` and a bool or number whose `Default` is its
-zero value, or a number whose checks refuse 0 (`Positive()`, `Negative()`, a
-`Min` above 0, a `Max` below 0, or a `Range` that excludes 0):
-`field.Int("seats").Positive().Default(100)` is as in ent, as the field could
-not store 0 anyway. An unset field takes the `Default` on insert, as in ent, and the
-literal `Default` of a string, enum, bool or number is the column's `DEFAULT`
-too. One case is refused: a non-zero `Default`, or any `DefaultFunc`, on a
-bool, or on a number that is not `Nillable` and has no check that refuses 0. A struct's `false` or `0` cannot be
-told from unset, and ent fills
-`Default(true)` only when the builder never set the field, so velox would
-store `true` where your struct said `false`. A refusal is safer than that
-silent overwrite. For `field.Bool("active").Default(true)` the message offers,
-spelled with the field's own name and value:
+**Defaults on a NOT NULL column.** Every ent `Default` and `DefaultFunc` is
+accepted as it is, `field.Bool("active").Default(true)` and
+`field.Int("seats").Default(100)` included, and the column is ent's, `NOT
+NULL DEFAULT true`. ent fills a default when the builder never set the
+field; velox inserts a struct, so a field left at its zero value takes it.
+The insert fills the defaults before its setters and the hooks, as ent's
+`Save` fills them before its hooks, so ent's `SetActive(false)` is velox's
+setter and stores `false`:
 
-| You want | Write |
-| --- | --- |
-| unset stores `true` | `field.Bool("active").Nillable().Default(true)`: a `*bool`, and the column holds NULL |
-| ent's column, `NOT NULL DEFAULT true` | `field.Bool("active").SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "1", field.SQLite: "1"})`, and set `Active: true` in Go |
-| ent's column, `NOT NULL DEFAULT 100`, on a number | `field.Int("seats").Annotations(sqlschema.Default("100"))`, and set `Seats: 100` in Go: one SQL text for the three dialects (`sqlschema.DefaultExprs` takes one for each) |
-| a GraphQL create input that defaults | `graphql.CreateDefault(true)` on the field: `active: Boolean! = true` |
-| no default | a name whose zero is the default (`disabled` for `enabled`), or drop the `Default` |
+```go
+db.Insert(&u).Set(veloxgen.Users.Active.Set(false)).Exec(ctx)
+```
 
-`Default(false)` or `Default(0)` is allowed, as it stores what unset stores.
+A struct's `Active: false` with no setter stores `true`: in the struct,
+`false` is unset. A GraphQL create input leaves the field optional, so
+`active: false` is stored and a missing `active` takes the default. A hook
+sees the defaults already filled, as in ent, so its `Mutation.Fill` of such a
+column does nothing; its `Mutation.Set` stores the value
+([ADR 0082](decisions/0082-defaults-before-setters.md)).
+
 A constant `Default` is also the column's `DEFAULT`, as in ent: `Default("")`
 gives `DEFAULT ''` and `Default(0)` gives `DEFAULT 0` (a bool, number, string
 or enum; a `DefaultFunc` gives none). `SchemaDefault` is for a column default

@@ -370,9 +370,6 @@ func columnParts(f *OutField) []string {
 	if f.DefaultCode != "" {
 		parts = append(parts, "Default: "+f.DefaultCode)
 	}
-	if f.ZeroInvalid {
-		parts = append(parts, "ZeroInvalid: true")
-	}
 	if f.DefaultFuncCode != "" {
 		parts = append(parts, "DefaultFunc: "+f.DefaultFuncCode)
 	}

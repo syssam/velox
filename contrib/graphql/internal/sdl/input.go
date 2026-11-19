@@ -486,12 +486,12 @@ func (g *graph) keyField(ed *plugin.Edge) *plugin.Field {
 
 // createDefault is the SDL of f's graphql.CreateDefault d, as " = true": a
 // bool, or a number of f's type, a decimal string for a Uint64. It is for a
-// bool or number with no Default that is not nullable, whose Default velox-gen
-// refuses.
+// bool or number with no Default that is not nullable: the create input's
+// default, where the schema's insert has none.
 func createDefault(f *plugin.Field, d json.RawMessage, where string) (string, error) {
 	switch {
 	case !zeroIsUnset(f.Type):
-		return "", fmt.Errorf("%s: graphql.CreateDefault on a field of type %s; it is for a bool or number, whose non-zero Default velox-gen refuses unless it is Nillable: give this field a Default", where, f.Type)
+		return "", fmt.Errorf("%s: graphql.CreateDefault on a field of type %s; it is for a bool or number: give this field a Default", where, f.Type)
 	case f.Nullable:
 		return "", fmt.Errorf("%s: graphql.CreateDefault on a nullable field, which may have a Default of its own", where)
 	case f.HasDefault:

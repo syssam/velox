@@ -28,7 +28,7 @@ CREATE TABLE users (
 CREATE TABLE posts (
 	id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, views INTEGER NOT NULL, rank INTEGER);
 CREATE TABLE notes (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, text TEXT NOT NULL);
-CREATE TABLE groups (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE groups (id INTEGER PRIMARY KEY, name TEXT NOT NULL, open BOOLEAN NOT NULL DEFAULT 1);
 CREATE TABLE user_groups (user_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (user_id, group_id));`
 
 var ctx = context.Background()
@@ -49,6 +49,33 @@ func open(t *testing.T) *velox.DB {
 
 func newUser(name string) gen.User {
 	return gen.User{Name: name, Email: name + "@example.com", CreatedBy: "root", PasswordHash: "s3cret"}
+}
+
+// A bool whose Default is true is stored true when the struct leaves it
+// false, and false when a setter or a hook says so, as ent stores
+// field.Bool("open").Default(true): the defaults are filled before the
+// setters and the hooks.
+func TestBoolDefaultTrue(t *testing.T) {
+	db := open(t)
+	a := gen.Group{Name: "a"}
+	mustInsert(t, db, &a)
+	b := gen.Group{Name: "b"}
+	if err := db.Insert(&b).Set(gen.Groups.Open.Set(false)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cs := []gen.Group{{Name: "c"}, {Name: "d"}}
+	if err := db.InsertAll(cs).Set(gen.Groups.Open.Set(false)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	gs, err := db.Query[gen.Group]().OrderBy(gen.Groups.ID.Asc()).Limit(10).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, g := range gs {
+		got = append(got, fmt.Sprintf("%s=%v", g.Name, g.Open))
+	}
+	wantStrings(t, "groups", got, []string{"a=true", "b=false", "c=false", "d=false"})
 }
 
 func mustInsert[E any, PE velox.Entity[E]](t *testing.T, db *velox.DB, x PE) {

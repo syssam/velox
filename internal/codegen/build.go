@@ -1116,14 +1116,6 @@ func (b *builder) uniqueFields(e *Entity) {
 // validateField checks the rules of one field f of e on its defaults,
 // uniqueness, JSON type, enum values and SchemaType.
 func (b *builder) validateField(e *Entity, f *Field) {
-	// An insert fills a Default or DefaultFunc into a zero field, so on a
-	// bool or number that is not a pointer it could never store false or
-	// 0. A Default that is the zero value stores what unset does, and so
-	// does any on a number that a check refuses 0 for, which could not
-	// store it anyway.
-	if (len(f.Default) > 0 && !zeroDefault(f) || f.DefaultFunc) && !f.Nillable && (f.Type == "bool" || numeric[f.Type] && !zeroInvalid(f)) {
-		b.fail(36, e.Name, fieldLoc(f), "%s", defaultWayOut(f))
-	}
 	switch {
 	case b.keyEdges[f] != nil: // a bound key is rule 38's
 	case optionalNoValue(f):
@@ -1191,75 +1183,6 @@ func (b *builder) validateID(e *Entity) {
 	if !idTypes[id.Type] {
 		b.fail(22, e.Name, fieldLoc(id), "the ID cannot be of type %s", id.Type)
 	}
-}
-
-// defaultWayOut is rule 36's message for f, a bool or number that is not
-// Nillable and has a non-zero Default or a DefaultFunc. ent schemas have such
-// lines, so it spells what to write instead with f's own builder, name and
-// default.
-func defaultWayOut(f *Field) string {
-	builder := "Float"
-	if f.Type != "float64" {
-		builder = strings.ToUpper(f.Type[:1]) + f.Type[1:]
-	}
-	decl := fmt.Sprintf("field.%s(%q)", builder, f.Name)
-	lit, def := strings.TrimSpace(string(f.Default)), "a DefaultFunc"
-	if !f.DefaultFunc {
-		def = "Default(" + lit + ")"
-	}
-	var zero, rename string
-	if f.Type == "bool" {
-		zero, rename = "false", `; or rename it so that false is the default ("disabled" for "enabled")`
-	} else {
-		zero, rename = "0", "; or, if the field is never 0, add Positive() or Min(1), which refuse 0 and so let the Default stand"
-	}
-	var s strings.Builder
-	fmt.Fprintf(&s, "%s with %s: velox inserts a Go struct, whose %s cannot be told from unset, so the Default would overwrite an explicit %s (ent fills it only when the builder never set the field). ", decl, def, zero, zero)
-	if f.DefaultFunc {
-		drop := "drop the DefaultFunc"
-		if f.Optional {
-			drop = "replace it with Default(" + zero + "), as an Optional field needs one,"
-		}
-		fmt.Fprintf(&s, "Write %s.Nillable() with the DefaultFunc, a pointer whose nil takes it (the column then holds NULL)%s; or %s and set the value in the struct", decl, rename, drop)
-		return s.String()
-	}
-	drop := "drop the Default"
-	if f.Optional {
-		drop = "write Default(" + zero + ") in its place, as an Optional field needs one,"
-	}
-	fmt.Fprintf(&s, "Write %s.Nillable().%s, a pointer whose nil stores %s (the column then holds NULL)%s; or %s and set the value in the struct. ", decl, def, lit, rename, drop)
-	// The literal as the column's DEFAULT: a bool is true on PostgreSQL and
-	// 1 on MySQL and SQLite, as columnDefault writes it.
-	other := lit
-	if f.Type == "bool" {
-		other = "1"
-	}
-	fmt.Fprintf(&s, "To keep an ent database's column, NOT NULL DEFAULT %s, add .SchemaDefault(map[string]string{field.Postgres: %q, field.MySQL: %q, field.SQLite: %q}), which only rows written outside velox take. ", lit, lit, other, other)
-	fmt.Fprintf(&s, "graphql.CreateDefault(%s) gives a GraphQL create input the default", lit)
-	return s.String()
-}
-
-// zeroInvalid reports whether a built-in check of the number f refuses 0:
-// Positive, Negative, a Min above 0, a Max below 0, or a Range that excludes
-// it. Such a field never stores 0, so reading 0 as unset loses nothing.
-func zeroInvalid(f *Field) bool {
-	arg := func(c loadjson.Check, i int) (float64, bool) {
-		var v float64
-		return v, i < len(c.Args) && json.Unmarshal(c.Args[i], &v) == nil
-	}
-	for _, c := range f.Checks {
-		lo, okLo := arg(c, 0)
-		hi, okHi := arg(c, 1)
-		switch {
-		case c.Kind == "Positive" || c.Kind == "Negative":
-			return true
-		case c.Kind == "Min" && okLo && lo > 0, c.Kind == "Max" && okLo && lo < 0:
-			return true
-		case c.Kind == "Range" && okLo && okHi && (lo > 0 || hi < 0):
-			return true
-		}
-	}
-	return false
 }
 
 // zeroDefault reports whether f's literal Default is the zero value of a

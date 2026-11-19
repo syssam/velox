@@ -154,13 +154,6 @@ func columnInfo(t reflect.Type, base unsafe.Pointer, ptr any, i int, c ColumnDes
 		// would panic on the first insert instead of failing here.
 		return fail("Default is a %T, not a %v", c.Default, ft)
 	}
-	if boolOrNumber(ft) && !zeroNumber(reflect.ValueOf(ci.Default)) && (!c.ZeroInvalid || rtype(ft).Kind() == reflect.Bool) {
-		// A bool or numeric field cannot have a Default: its zero value is also a
-		// real value, and the insert would overwrite an explicit false or 0.
-		// The zero value itself stores what unset does, and so does any when
-		// ZeroInvalid says the field never stores 0.
-		return fail("Default on bool/numeric field %s would overwrite an explicit false or 0 on insert; make the field a pointer (nil uses the default)", c.Field)
-	}
 	ci.copyDefault = holdsRefs(reflect.TypeOf(ci.Default))
 	return ci, nil
 }
@@ -313,27 +306,6 @@ func fieldOf(p any, base unsafe.Pointer, size uintptr) (uintptr, reflect.Type, b
 		return 0, nil, false
 	}
 	return at - uintptr(base), pv.Type().Elem(), true
-}
-
-// boolOrNumber reports whether t, a reflect.Type, is a bool or numeric type.
-func boolOrNumber(t any) bool {
-	k := rtype(t).Kind()
-	return k == reflect.Bool || k >= reflect.Int && k <= reflect.Float64
-}
-
-// zeroNumber reports whether v, a bool or a number, is false or equal to 0.
-func zeroNumber(v reflect.Value) bool {
-	switch {
-	case v.Kind() == reflect.Bool:
-		return !v.Bool()
-	case v.CanInt():
-		return v.Int() == 0
-	case v.CanUint():
-		return v.Uint() == 0
-	case v.CanFloat():
-		return v.Float() == 0
-	}
-	return false
 }
 
 // defaultOf is a Descriptor's Default d as ColumnInfo holds it for a field of type

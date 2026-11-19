@@ -375,37 +375,25 @@ func TestDirectiveOnEntity(t *testing.T) {
 	}
 }
 
-// A Default on a bool or number that is not nullable could never store its
-// zero value, which unset reads as: velox-gen refuses it, and so does the
-// plugin, for a model written by hand.
-func TestDefaultOnNonNillableNumber(t *testing.T) {
+// Any Default on a bool or number is allowed, as in velox-gen: an insert
+// fills it before its setters, so a create input that gives false or 0
+// stores it, and one that leaves the field out takes the Default (ADR 0082).
+// The field stays non-null in the type.
+func TestDefaultOnBoolOrNumber(t *testing.T) {
 	for _, typ := range []string{"int", "uint64", "float32", "bool"} {
-		n := field("n", typ)
-		n.HasDefault = true
-		_, err := Render(model(entity("Thing", n)))
-		want := "schema Thing, field n: a Default on a bool or number that is not Nillable cannot be told from unset, unless it is the zero value or a check refuses 0; velox-gen refuses it too"
-		if err == nil || err.Error() != want {
-			t.Errorf("%s:\n got  %v\nwant %s", typ, err, want)
+		for _, def := range []string{"", "0", "1"} {
+			n := field("n", typ)
+			n.HasDefault = true
+			switch {
+			case def != "" && typ == "bool":
+				n.Default = json.RawMessage(map[string]string{"0": "false", "1": "true"}[def])
+			case def != "":
+				n.Default = json.RawMessage(def)
+			}
+			if _, out := load(t, model(entity("Thing", n))); !strings.Contains(out, "n: ") {
+				t.Errorf("%s, Default %q: no n in\n%s", typ, def, out)
+			}
 		}
-		n.Default = json.RawMessage(`1`)
-		if typ == "bool" {
-			n.Default = json.RawMessage(`true`)
-		}
-		if _, err := Render(model(entity("Thing", n))); err == nil || err.Error() != want {
-			t.Errorf("%s, non-zero:\n got  %v\nwant %s", typ, err, want)
-		}
-		// The zero value stores what unset does: allowed, and the type stays
-		// non-null.
-		n.Default = json.RawMessage(`0`)
-		if typ == "bool" {
-			n.Default = json.RawMessage(`false`)
-		}
-		if _, out := load(t, model(entity("Thing", n))); !strings.Contains(out, "n: ") {
-			t.Errorf("%s, zero: no n in\n%s", typ, out)
-		}
-		n.Pointer, n.Nullable, n.Optional = true, true, true
-		n.Default = nil
-		load(t, model(entity("Thing", n)))
 	}
 	// A string's empty value is unset, so Insert writes the Default.
 	s := field("s", "string")
@@ -413,47 +401,8 @@ func TestDefaultOnNonNillableNumber(t *testing.T) {
 	load(t, model(entity("Thing", s)))
 }
 
-// A number a check refuses 0 for never stores 0, so a non-zero Default on it
-// is allowed, as in velox-gen; a check that allows 0, or a bool, is not.
-func TestDefaultOnNumberThatIsNeverZero(t *testing.T) {
-	for _, c := range []struct {
-		kind string
-		args []string
-		ok   bool
-	}{
-		{"Positive", nil, true},
-		{"Negative", nil, true},
-		{"Min", []string{"1"}, true},
-		{"Max", []string{"-1"}, true},
-		{"Range", []string{"1", "9"}, true},
-		{"Range", []string{"-9", "-1"}, true},
-		{"NonNegative", nil, false},
-		{"Min", []string{"0"}, false},
-		{"Max", []string{"0"}, false},
-		{"Range", []string{"0", "9"}, false},
-	} {
-		n := field("n", "int")
-		n.HasDefault, n.Default = true, json.RawMessage(`5`)
-		ck := plugin.Check{Kind: c.kind}
-		for _, a := range c.args {
-			ck.Args = append(ck.Args, json.RawMessage(a))
-		}
-		n.Checks = []plugin.Check{ck}
-		_, err := Render(model(entity("Thing", n)))
-		if (err == nil) != c.ok {
-			t.Errorf("%s%v: error %v, ok %v", c.kind, c.args, err, c.ok)
-		}
-	}
-	b := field("b", "bool")
-	b.HasDefault, b.Default = true, json.RawMessage(`true`)
-	b.Checks = []plugin.Check{{Kind: "Positive"}}
-	if _, err := Render(model(entity("Thing", b))); err == nil {
-		t.Error("a bool has no check that refuses false")
-	}
-}
-
-// zeroIsUnset's kinds are those of velox-gen's rule 36: bool, and the types
-// of its numeric set, read from its source so that the two cannot drift.
+// zeroIsUnset's kinds, which graphql.CreateDefault takes, are bool and the
+// types of velox-gen's numeric set, read from its source so that the two cannot drift.
 func TestZeroIsUnsetMatchesVeloxGen(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "..", "internal", "codegen", "build.go")
 	f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)

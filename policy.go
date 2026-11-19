@@ -127,7 +127,9 @@ func (m *Mutation) Set(name string, v any) error { return m.mu.SetByName(name, v
 // Fill sets the column of the given name to v in each row of an insert
 // that leaves it at its Go zero value (nil, for a nullable column), as Set
 // sets it. On an update or a delete it is a misuse. It is how a mixin fills
-// a column the caller may also set, such as a tenant's.
+// a column the caller may also set, such as a tenant's. An insert fills the
+// columns' Defaults before the hooks run, so Fill of a column that has one
+// finds it set; Set replaces it.
 func (m *Mutation) Fill(name string, v any) error { return m.mu.FillByName(name, v) }
 
 // Value returns the value an update assigns to the column of the given

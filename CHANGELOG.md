@@ -21,6 +21,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `field.Bool("active").Default(true)`, and any `Default` or `DefaultFunc` on a
+  bool or number, is accepted as in ent, with ent's `NOT NULL DEFAULT` column.
+  An insert now fills defaults before its setters and hooks, so
+  `Insert(&x).Set(Xs.Active.Set(false))`, a GraphQL create input's
+  `active: false` and a hook's `Mutation.Set` store the zero; a struct's zero
+  field with no setter still takes the default. Hooks see defaults filled, so
+  `Mutation.Fill` of a defaulted column does nothing. `ColumnDescriptor.ZeroInvalid`
+  is removed. Regenerate: `velox.GeneratedCodeIsVersion23` replaces Version22
+  (decision 0082).
 - `HasEdge`, `HasEdgeWith` and `FieldInSelect` find their target in the
   generated package's `velox.EntityTable` when the statement runs, so a rule in
   a shared package can name an entity or a relation by a value from

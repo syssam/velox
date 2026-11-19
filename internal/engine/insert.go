@@ -234,6 +234,18 @@ func ErrNothingToInsert(in *EntityInfo) error {
 
 // fieldAddr is a pointer to the field of column col of the row of in at p,
 // as Meta's addr returns it.
+// FillDefaults fills the Default or DefaultFunc of each column of in that
+// has one into the row at p, where the field holds its zero value, as
+// FillDefault does. It is not generic, so that an entity's insert does not
+// compile a loop of its own.
+func FillDefaults(in *EntityInfo, p unsafe.Pointer) {
+	for i := range in.Columns {
+		if c := &in.Columns[i]; c.HasDefault || c.DefaultFunc != nil {
+			FillDefault(c, fieldAddr(in, p, i))
+		}
+	}
+}
+
 func fieldAddr(in *EntityInfo, p unsafe.Pointer, col int) any {
 	c := &in.Columns[col]
 	return reflect.NewAt(GoType(*c), unsafe.Add(p, c.off)).Interface()

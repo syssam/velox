@@ -147,113 +147,34 @@ func TestBuildNonASCIINamesRefused(t *testing.T) {
 	}
 }
 
-// A Default that is the Go zero value stores what an unset field stores, so
-// it is no loss on a bool or number that is not Nillable.
-type zeroDefaults struct{ schema.Schema }
+// Any Default or DefaultFunc on a bool or number is allowed, as in ent: an
+// insert fills it before its setters and hooks, so a setter stores false or
+// 0 over it (ADR 0082). A constant one is also the column's DEFAULT.
+type boolNumberDefaults struct{ schema.Schema }
 
-func (zeroDefaults) Fields() []schema.Field {
+func (boolNumberDefaults) Fields() []schema.Field {
 	return []schema.Field{
-		field.Bool("active").Default(false),
+		field.Bool("off").Default(false),
+		field.Bool("on").Default(true),
 		field.Int64("views").Default(0),
-		field.Float("score").Optional().Default(0),
-		field.Uint8("rank").Default(0),
+		field.Int("seats").Default(100),
+		field.Int("port").Min(1).Default(8080),
+		field.Float("score").Optional().Default(1.5),
+		field.Uint8("rank").Default(3),
+		field.Int("count").DefaultFunc(func() int { return 1 }),
 		field.String("s").Default(""),
 	}
 }
 
-type nonZeroDefault struct{ schema.Schema }
-
-func (nonZeroDefault) Fields() []schema.Field {
-	return []schema.Field{field.Int64("views").Default(-0).Min(-5), field.Bool("on").Default(true)}
-}
-
-// defaultWaysOut has the lines rule 36's message tells an ent user to write
-// for field.Bool("on").Default(true) and field.Float("score").Default(1.5).
-type defaultWaysOut struct{ schema.Schema }
-
-func (defaultWaysOut) Fields() []schema.Field {
-	return []schema.Field{
-		field.Bool("on").Nillable().Default(true),
-		field.Bool("active").SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "1", field.SQLite: "1"}),
-		field.Float("score").SchemaDefault(map[string]string{field.Postgres: "1.5", field.MySQL: "1.5", field.SQLite: "1.5"}),
-	}
-}
-
-// The ways out build, and give the columns the message says: Nillable a
-// NULL-able column with the default, SchemaDefault a NOT NULL column with
-// it, as an ent database has.
-func TestBuildDefaultWaysOut(t *testing.T) {
+func TestBuildBoolNumberDefaults(t *testing.T) {
 	for _, d := range allDialects {
-		tb := table(t, tables(t, d, defaultWaysOut{}), "default_ways_outs")
+		tb := table(t, tables(t, d, boolNumberDefaults{}), "bool_number_defaults")
 		one := map[velox.Dialect]string{velox.Postgres: "true", velox.MySQL: "1", velox.SQLite: "1"}[d]
-		for _, c := range []struct {
-			name, def string
-			null      bool
-		}{{"on", one, true}, {"active", one, false}, {"score", "1.5", false}} {
-			if col := column(t, tb, c.name); col.Default != c.def || col.Nullable != c.null {
-				t.Errorf("%v: %s: DEFAULT %q, NULL %v; want %q, %v", d, c.name, col.Default, col.Nullable, c.def, c.null)
+		zero := map[velox.Dialect]string{velox.Postgres: "false", velox.MySQL: "0", velox.SQLite: "0"}[d]
+		for _, c := range []struct{ name, def string }{{"on", one}, {"off", zero}, {"seats", "100"}, {"port", "8080"}, {"rank", "3"}, {"count", ""}} {
+			if col := column(t, tb, c.name); col.Default != c.def || col.Nullable {
+				t.Errorf("%v: %s: DEFAULT %q, NULL %v; want %q, NOT NULL", d, c.name, col.Default, col.Nullable, c.def)
 			}
 		}
-	}
-}
-
-func TestBuildZeroDefaultAllowed(t *testing.T) {
-	mustBuild(t, zeroDefaults{})
-	_, err := build(t, nonZeroDefault{})
-	// The message spells the ent user's ways out with the field's own line.
-	want := `schema nonZeroDefault: field "on": field.Bool("on") with Default(true): velox inserts a Go struct, whose false cannot be told from unset, so the Default would overwrite an explicit false (ent fills it only when the builder never set the field). ` +
-		`Write field.Bool("on").Nillable().Default(true), a pointer whose nil stores true (the column then holds NULL); or rename it so that false is the default ("disabled" for "enabled"); or drop the Default and set the value in the struct. ` +
-		`To keep an ent database's column, NOT NULL DEFAULT true, add .SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "1", field.SQLite: "1"}), which only rows written outside velox take. ` +
-		`graphql.CreateDefault(true) gives a GraphQL create input the default`
-	if err == nil || !strings.Contains(err.Error(), want) {
-		t.Fatalf("got %v\nwant %s", err, want)
-	}
-	if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {
-		t.Errorf("%d errors, want 1, as -0 is zero: %v", n, err)
-	}
-}
-
-// A number whose check refuses 0 never stores 0, so reading 0 as unset loses
-// nothing, and a non-zero Default or DefaultFunc on it is allowed.
-type zeroInvalidDefaults struct{ schema.Schema }
-
-func (zeroInvalidDefaults) Fields() []schema.Field {
-	return []schema.Field{
-		field.Int("seats").Positive().Default(100),
-		field.Int("port").Min(1).Default(8080),
-		field.Int("rank").Range(1, 9).Default(5),
-		field.Int("debt").Negative().Default(-1),
-		field.Int("below").Max(-1).Default(-3),
-		field.Int("count").Positive().DefaultFunc(func() int { return 1 }),
-	}
-}
-
-// zeroValid has the same lines with a check that allows 0, or none, and a
-// bool: each is refused, one error a field.
-type zeroValid struct{ schema.Schema }
-
-func (zeroValid) Fields() []schema.Field {
-	return []schema.Field{
-		field.Int("a").NonNegative().Default(1),
-		field.Int("b").Min(0).Default(1),
-		field.Int("c").Min(-1).Default(1),
-		field.Int("d").Max(0).Default(-1),
-		field.Int("e").Range(0, 9).Default(1),
-		field.Int("f").Default(1),
-		field.Bool("g").Default(true),
-	}
-}
-
-func TestBuildZeroInvalidDefault(t *testing.T) {
-	mustBuild(t, zeroInvalidDefaults{})
-	_, err := build(t, zeroValid{})
-	if err == nil {
-		t.Fatal("no error")
-	}
-	if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 7 {
-		t.Errorf("%d errors, want 7: %v", n, err)
-	}
-	if !strings.Contains(err.Error(), "or, if the field is never 0, add Positive() or Min(1)") {
-		t.Errorf("no way out for a number: %v", err)
 	}
 }
