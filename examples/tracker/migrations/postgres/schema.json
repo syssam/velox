@@ -46,20 +46,6 @@
         "id"
       ],
       "primary_key_name": "comments_pkey",
-      "indexes": [
-        {
-          "name": "comments_author_id",
-          "columns": [
-            "author_id"
-          ]
-        },
-        {
-          "name": "comments_issue_id",
-          "columns": [
-            "issue_id"
-          ]
-        }
-      ],
       "foreign_keys": [
         {
           "name": "comments_issues_comments",
@@ -105,14 +91,6 @@
         "label_id"
       ],
       "primary_key_name": "issue_labels_pkey",
-      "indexes": [
-        {
-          "name": "issue_labels_label_id",
-          "columns": [
-            "label_id"
-          ]
-        }
-      ],
       "foreign_keys": [
         {
           "name": "issue_labels_issue_id",
@@ -202,18 +180,6 @@
       ],
       "primary_key_name": "issues_pkey",
       "indexes": [
-        {
-          "name": "issues_assignee_id",
-          "columns": [
-            "assignee_id"
-          ]
-        },
-        {
-          "name": "issues_author_id",
-          "columns": [
-            "author_id"
-          ]
-        },
         {
           "name": "issues_issue_project_id_status_id",
           "columns": [

@@ -44,20 +44,6 @@
       "primary_key": [
         "id"
       ],
-      "indexes": [
-        {
-          "name": "comments_author_id",
-          "columns": [
-            "author_id"
-          ]
-        },
-        {
-          "name": "comments_issue_id",
-          "columns": [
-            "issue_id"
-          ]
-        }
-      ],
       "foreign_keys": [
         {
           "name": "comments_issues_comments",
@@ -101,14 +87,6 @@
       "primary_key": [
         "issue_id",
         "label_id"
-      ],
-      "indexes": [
-        {
-          "name": "issue_labels_label_id",
-          "columns": [
-            "label_id"
-          ]
-        }
       ],
       "foreign_keys": [
         {
@@ -197,18 +175,6 @@
         "id"
       ],
       "indexes": [
-        {
-          "name": "issues_assignee_id",
-          "columns": [
-            "assignee_id"
-          ]
-        },
-        {
-          "name": "issues_author_id",
-          "columns": [
-            "author_id"
-          ]
-        },
         {
           "name": "issues_issue_project_id_status_id",
           "columns": [

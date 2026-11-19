@@ -210,8 +210,6 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 		`ALTER TABLE "velox_new_users" RENAME TO "users"`,
 		`CREATE INDEX "users_by_name" ON "users" ("name")`,
 		`CREATE UNIQUE INDEX "users_email_key" ON "users" ("email")`,
-		`CREATE INDEX "users_mentor_id" ON "users" ("mentor_id")`,
-		`CREATE INDEX "users_org_id" ON "users" ("org_id")`,
 	}
 	if got := sqls(ss); !slices.Equal(got, want) {
 		t.Errorf("got\n%s\nwant\n%s", strings.Join(got, ";\n"), strings.Join(want, ";\n"))
@@ -231,7 +229,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 	// velox-gen makes no enum check to rename, so the case that rebuilds the
 	// table is the one that also drops a column (decision 0090).
 	got := sqls(caseScripts(t, caseNamed("rename-table-drop-column"), velox.SQLite))
-	want = []string{`DROP INDEX "users_email_key"`, `ALTER TABLE "users" RENAME TO "accounts"`, `DROP INDEX "users_by_name"`, `DROP INDEX "users_mentor_id"`, `DROP INDEX "users_org_id"`}
+	want = []string{`DROP INDEX "users_email_key"`, `ALTER TABLE "users" RENAME TO "accounts"`, `DROP INDEX "users_by_name"`}
 	if len(got) < len(want) || !slices.Equal(got[:len(want)], want) || !strings.HasPrefix(got[len(want)], `CREATE TABLE "velox_new_accounts"`) {
 		t.Errorf("rename-table-drop-column:\n%s", strings.Join(got, ";\n"))
 	}

@@ -15,8 +15,10 @@ Tables, columns, indexes, unique and foreign-key constraints, and inflection
 follow ent's. A table is the snake_case of `Plural` of the entity's Go name, as
 ent's `Type.Table()`. A declared index is `<lower(type)>_<cols>`. Constraint
 names are the dialect's for an ent column (PostgreSQL `<table>_<col>_key`), and
-foreign keys are `<table>_<ref table>_<edge>`, capped as ent caps them. The
-foreign-key indexes velox adds keep their own names.
+foreign keys are `<table>_<ref table>_<edge>`, capped as ent caps them.
+velox adds no index of a foreign key, as ent adds none; on MySQL the index
+InnoDB makes for a key has the key's name (amended by
+[0090](0090-veloxe-defaults.md)).
 
 ## Consequences
 

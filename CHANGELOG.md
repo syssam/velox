@@ -396,6 +396,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   with no enum type unless a Postgres `SchemaType` names one and no `CHECK`.
   An `Immutable` key makes its edge `Immutable` (rule 34 refuses only the
   converse). Existing databases need a migration; `loadjson.Version` is 8.
+- velox-gen declares no index of a foreign key, as ent and veloxe declare
+  none (ADR 0090's amendment): on PostgreSQL and SQLite it added
+  `<table>_<column>` for each key no other index led, so an ent or veloxe
+  database's first diff added them. MySQL keeps the index InnoDB makes,
+  named as the key. A database velox created earlier has the old indexes:
+  the next `migrate diff` drops them, and each example has a
+  `drop_fk_indexes` migration.
+- An unset `Optional` JSON field of pointer type is written as its
+  element's zero value's JSON, as veloxe wrote it, not NULL (ADR 0090's
+  amendment).
 - A GraphQL ID is the entity's key in its own Go type, which gqlgen decodes:
   a resolver takes `id int64`, an input's `<edge>ID` and `<edge>IDs` and a
   where input's ID predicates are keys, and velox-graphql refuses a schema

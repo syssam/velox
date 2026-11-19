@@ -112,7 +112,7 @@ type OutField struct {
 	NilIsNull            bool   // a slice or map field whose column holds NULL (an Optional or Nillable json field, a Nillable bytes field), which nil binds: its ColumnDescriptor says Nullable
 	DefaultCode          string // "" or a Go expression for ColumnDescriptor.Default
 	DefaultFuncCode      string // "" or "func() any { … }"
-	ZeroFillCode         string // "" or "func() any { … }": the empty value an unset Optional JSON slice or map is written as, ColumnDescriptor.DefaultFunc when DefaultFuncCode is ""
+	ZeroFillCode         string // "" or "func() any { … }": the value an unset Optional JSON slice, map or pointer is written as, ColumnDescriptor.DefaultFunc when DefaultFuncCode is ""
 	UpdateDefaultCode    string // "" or "func() any { … }"
 }
 

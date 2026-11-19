@@ -15,22 +15,7 @@ DELETE FROM sqlite_sequence WHERE name = 'velox_new_audit_entries_kept_for_every
 INSERT INTO sqlite_sequence (name, seq) SELECT 'velox_new_audit_entries_kept_for_every_change_an_edito_15219a97', seq FROM sqlite_sequence WHERE name = 'audit_entries_kept_for_every_change_an_editor_makes_to_posts';
 DROP TABLE "audit_entries_kept_for_every_change_an_editor_makes_to_posts";
 ALTER TABLE "velox_new_audit_entries_kept_for_every_change_an_edito_15219a97" RENAME TO "audit_entries_kept_for_every_change_an_editor_makes_to_posts";
--- review: sqlite-rebuild: changes the default of column users.name, changes the default of column users.email; SQLite rebuilds table users: it copies every row into a new table
-CREATE TABLE "velox_new_users" (
-  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "name" text NOT NULL DEFAULT '',
-  "email" text NOT NULL DEFAULT '',
-  "role" text NOT NULL
-);
-INSERT INTO "velox_new_users" ("id", "name", "email", "role") SELECT "id", "name", "email", "role" FROM "users";
-DELETE FROM sqlite_sequence WHERE name = 'velox_new_users';
-INSERT INTO sqlite_sequence (name, seq) SELECT 'velox_new_users', seq FROM sqlite_sequence WHERE name = 'users';
-DROP TABLE "users";
-ALTER TABLE "velox_new_users" RENAME TO "users";
-CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
-CREATE UNIQUE INDEX "users_user_email" ON "users" ("email");
-CREATE INDEX "users_user_name" ON "users" ("name");
--- review: sqlite-rebuild: changes the default of column posts.title; SQLite rebuilds table posts: it copies every row into a new table; add-index: adds index posts.posts_user_drafts_written_but_never_published_by_this__c3344a61; building it scans the table; add-index: adds index posts.posts_user_posts; building it scans the table
+-- review: sqlite-rebuild: changes the default of column posts.title; SQLite rebuilds table posts: it copies every row into a new table
 CREATE TABLE "velox_new_posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "title" text NOT NULL DEFAULT '',
@@ -46,8 +31,21 @@ INSERT INTO sqlite_sequence (name, seq) SELECT 'velox_new_posts', seq FROM sqlit
 DROP TABLE "posts";
 ALTER TABLE "velox_new_posts" RENAME TO "posts";
 CREATE INDEX "posts_post_title_reviewed_by_an_f885026323a3d397aea1edab3b845610" ON "posts" ("title", "reviewed_by_an_editor_before_the_post_was_published_on");
-CREATE INDEX "posts_user_drafts_written_but_never_published_by_this__c3344a61" ON "posts" ("user_drafts_written_but_never_published_by_this_user_so_far");
-CREATE INDEX "posts_user_posts" ON "posts" ("user_posts");
+-- review: sqlite-rebuild: changes the default of column users.name, changes the default of column users.email; SQLite rebuilds table users: it copies every row into a new table
+CREATE TABLE "velox_new_users" (
+  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "name" text NOT NULL DEFAULT '',
+  "email" text NOT NULL DEFAULT '',
+  "role" text NOT NULL
+);
+INSERT INTO "velox_new_users" ("id", "name", "email", "role") SELECT "id", "name", "email", "role" FROM "users";
+DELETE FROM sqlite_sequence WHERE name = 'velox_new_users';
+INSERT INTO sqlite_sequence (name, seq) SELECT 'velox_new_users', seq FROM sqlite_sequence WHERE name = 'users';
+DROP TABLE "users";
+ALTER TABLE "velox_new_users" RENAME TO "users";
+CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
+CREATE UNIQUE INDEX "users_user_email" ON "users" ("email");
+CREATE INDEX "users_user_name" ON "users" ("name");
 == migrations/schema.json
 {
   "version": 1,
@@ -109,18 +107,6 @@ CREATE INDEX "posts_user_posts" ON "posts" ("user_posts");
           "columns": [
             "title",
             "reviewed_by_an_editor_before_the_post_was_published_on"
-          ]
-        },
-        {
-          "name": "posts_user_drafts_written_but_never_published_by_this__c3344a61",
-          "columns": [
-            "user_drafts_written_but_never_published_by_this_user_so_far"
-          ]
-        },
-        {
-          "name": "posts_user_posts",
-          "columns": [
-            "user_posts"
           ]
         }
       ],

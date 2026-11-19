@@ -42,14 +42,6 @@
       "primary_key": [
         "id"
       ],
-      "indexes": [
-        {
-          "name": "comments_post_id",
-          "columns": [
-            "post_id"
-          ]
-        }
-      ],
       "foreign_keys": [
         {
           "name": "comments_posts_comments",
@@ -80,14 +72,6 @@
       "primary_key": [
         "post_id",
         "tag_id"
-      ],
-      "indexes": [
-        {
-          "name": "post_tags_tag_id",
-          "columns": [
-            "tag_id"
-          ]
-        }
       ],
       "foreign_keys": [
         {
@@ -144,14 +128,6 @@
       ],
       "primary_key": [
         "id"
-      ],
-      "indexes": [
-        {
-          "name": "posts_author_id",
-          "columns": [
-            "author_id"
-          ]
-        }
       ],
       "foreign_keys": [
         {

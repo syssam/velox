@@ -15,4 +15,3 @@ DELETE FROM sqlite_sequence WHERE name = 'velox_new_posts';
 INSERT INTO sqlite_sequence (name, seq) SELECT 'velox_new_posts', seq FROM sqlite_sequence WHERE name = 'posts';
 DROP TABLE "posts";
 ALTER TABLE "velox_new_posts" RENAME TO "posts";
-CREATE INDEX "posts_author_id" ON "posts" ("author_id");

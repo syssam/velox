@@ -51,10 +51,6 @@ func partialIndexName(entity string, cols []string, where string) string {
 // as ent names it: PostgreSQL's own name for a UNIQUE column's constraint.
 func uniqueName(table, column string) string { return table + "_" + column + "_key" }
 
-// fkIndexName is the name of velox's index of a foreign-key column on
-// PostgreSQL and SQLite, where ent makes none.
-func fkIndexName(table, column string) string { return ddl.Cap(table + "_" + column) }
-
 // fkName is ent's name of the foreign key of an O2O, O2M or M2O relation
 // with no Symbol (entc/gen/graph.go): the table that holds it, the table it
 // references and the assoc edge. It is not capped; each dialect caps it with
@@ -200,45 +196,6 @@ func foreignKeys(g *Graph) []foreignKey {
 	return out
 }
 
-// fkIndexed reports whether column leads the primary key or one of the
-// non-partial indexes of a table (declared, unique-field, or a join table's
-// primary key), so that it needs no foreign-key index.
-func fkIndexed(pk []string, indexes [][]string, column string) bool {
-	if len(pk) > 0 && pk[0] == column {
-		return true
-	}
-	for _, ix := range indexes {
-		if len(ix) > 0 && ix[0] == column {
-			return true
-		}
-	}
-	return false
-}
-
-// fkIndexNames are the names of velox's foreign-key indexes of e's table on
-// PostgreSQL and SQLite, given the foreign keys of the graph: those of the
-// keys in the table that neither its primary key, a non-partial index the
-// index rules do not refuse, nor a Unique field's index leads.
-func fkIndexNames(e *Entity, fks []foreignKey, refused map[*Index]bool) []string {
-	var keys [][]string
-	for _, ix := range e.Indexes {
-		if !refused[ix] && ix.Where == "" {
-			keys = append(keys, ix.Columns)
-		}
-	}
-	ixs, _ := fieldIndexes(e, refused, velox.Postgres)
-	for _, ix := range ixs {
-		keys = append(keys, ix.Columns)
-	}
-	var out []string
-	for _, fk := range fks {
-		if fk.Schema == e.TableSchema && fk.Table == e.Table && !fkIndexed([]string{e.Fields[0].Column}, keys, fk.Column) {
-			out = append(out, fkIndexName(fk.Table, fk.Column))
-		}
-	}
-	return out
-}
-
 // fieldIndexes are the unique indexes of e's Unique fields but the ID on the
 // dialect d, each with its field, one per column, named as ent names them:
 // uniqueName on PostgreSQL, cut at 63 bytes as PostgreSQL cuts it, and on
@@ -340,7 +297,7 @@ func tableLoc(e *Entity) loc {
 }
 
 // objects lists every object of g: tables (relations and types), indexes
-// (declared, unique-field, foreign-key), primary keys and identity sequences
+// (declared, unique-field), primary keys and identity sequences
 // (relations), enum types (types), foreign keys and checks (constraints), and
 // the helpers velox_new_<table> and <index>_velox_new (relations),
 // <type>_velox_old (types) and <table>_<col>_not_null for each NOT NULL column
@@ -348,11 +305,11 @@ func tableLoc(e *Entity) loc {
 // in refused are left out.
 //
 // The tables and their rebuild tables come first, then each table's other
-// objects, then the foreign keys and their indexes. A column two fields share
+// objects, then the foreign keys. A column two fields share
 // (rule 2) and an enum type fields share give their objects once.
 func objects(g *Graph, refused map[*Index]bool) []object {
 	jts := distinctJoinTables(g)
-	ol := &objectLister{tables: map[tableKey]*tableKeys{}, oldEnums: map[[2]string]bool{}}
+	ol := &objectLister{oldEnums: map[[2]string]bool{}}
 	for _, e := range g.Entities {
 		at := tableLoc(e)
 		ol.out = append(ol.out,
@@ -390,19 +347,9 @@ func distinctJoinTables(g *Graph) []joinTable {
 	return jts
 }
 
-// tableKey is a table, by database schema and name.
-type tableKey struct{ schema, table string }
-
-// tableKeys is the leading columns of one table's keys.
-type tableKeys struct {
-	pk      []string
-	indexes [][]string
-}
-
 // objectLister collects the objects that objects returns.
 type objectLister struct {
 	out      []object
-	tables   map[tableKey]*tableKeys // the leading columns of each table's keys, for fkIndexed
 	oldEnums map[[2]string]bool
 }
 
@@ -416,17 +363,14 @@ func (ol *objectLister) addHelper(e *Entity, index, what string, at loc) {
 	ol.out = append(ol.out, object{space: spaceRelations, schema: e.TableSchema, name: ddl.NewIndex(index), owner: e.Name, at: at, what: "new-index helper of " + what, table: e.Table, helper: true})
 }
 
-// entity appends the objects of e's table other than the table itself, and
-// records the leading columns of its keys.
+// entity appends the objects of e's table other than the table itself.
 func (ol *objectLister) entity(e *Entity, refused map[*Index]bool) {
 	id := e.Fields[0]
-	k := &tableKeys{pk: []string{id.Column}}
-	ol.tables[tableKey{e.TableSchema, e.Table}] = k
 	ol.add(e, spaceRelations, pkName(e.Table), "primary key", tableLoc(e))
 	if integer(id.Type) {
 		ol.add(e, spaceRelations, seqName(e.Table, id.Column), "identity sequence", fieldLoc(id))
 	}
-	ol.indexes(e, refused, k)
+	ol.indexes(e, refused)
 	seen := map[string]bool{}
 	for _, f := range e.Fields {
 		if seen[f.Column] {
@@ -445,23 +389,19 @@ func (ol *objectLister) entity(e *Entity, refused map[*Index]bool) {
 }
 
 // indexes appends e's declared and unique-field indexes, but those in
-// refused, with their helpers, and adds their columns to k.
-func (ol *objectLister) indexes(e *Entity, refused map[*Index]bool, k *tableKeys) {
+// refused, with their helpers.
+func (ol *objectLister) indexes(e *Entity, refused map[*Index]bool) {
 	for i, ix := range e.Indexes {
 		if refused[ix] {
 			continue
 		}
 		ol.add(e, spaceRelations, ix.Name, indexAt(i), indexLoc(i, ix))
 		ol.addHelper(e, ix.Name, indexAt(i), indexLoc(i, ix))
-		if ix.Where == "" {
-			k.indexes = append(k.indexes, ix.Columns)
-		}
 	}
 	ixs, fs := fieldIndexes(e, refused, velox.Postgres)
 	for i, ix := range ixs {
 		ol.add(e, spaceRelations, ix.Name, "unique index of "+fieldAt(fs[i].Name), fieldLoc(fs[i]))
 		ol.addHelper(e, ix.Name, "the unique index of "+fieldAt(fs[i].Name), fieldLoc(fs[i]))
-		k.indexes = append(k.indexes, ix.Columns)
 	}
 }
 
@@ -487,10 +427,8 @@ func (ol *objectLister) column(e *Entity, f *Field) {
 	}
 }
 
-// joinTable appends the primary key and not-null checks of jt, and records
-// its key's columns.
+// joinTable appends the primary key and not-null checks of jt.
 func (ol *objectLister) joinTable(jt joinTable) {
-	ol.tables[tableKey{jt.Schema, jt.Table}] = &tableKeys{pk: jt.Columns[:]}
 	at := edgeLoc(jt.Edge)
 	add := func(space nameSpace, name, what string) {
 		ol.out = append(ol.out, object{space: space, schema: jt.Schema, name: name, owner: jt.Owner.Name, at: at, what: what + " of join table " + jt.Table, table: jt.Table})
@@ -503,8 +441,7 @@ func (ol *objectLister) joinTable(jt joinTable) {
 	}
 }
 
-// foreignKeyObjects appends the foreign keys of g, and the index and helper of
-// each one no key of its table leads with.
+// foreignKeyObjects appends the foreign keys of g.
 func (ol *objectLister) foreignKeyObjects(g *Graph) {
 	seen := map[[3]string]bool{}
 	for _, fk := range foreignKeys(g) {
@@ -515,13 +452,6 @@ func (ol *objectLister) foreignKeyObjects(g *Graph) {
 		seen[c] = true
 		at, of := edgeLoc(fk.Edge), edgeAt(fk.Edge.Name)
 		obj := object{schema: fk.Schema, owner: fk.Owner.Name, at: at, table: fk.Table}
-		if k := ol.tables[tableKey{fk.Schema, fk.Table}]; k == nil || !fkIndexed(k.pk, k.indexes, fk.Column) {
-			ix := obj
-			ix.space, ix.name, ix.what = spaceRelations, fkIndexName(fk.Table, fk.Column), "foreign-key index of "+of
-			helper := ix
-			helper.name, helper.what, helper.helper = ddl.NewIndex(ix.name), "new-index helper of the foreign-key index of "+of, true
-			ol.out = append(ol.out, ix, helper)
-		}
 		obj.space, obj.name, obj.what = spaceConstraints, fk.Name, "foreign key of "+of
 		ol.out = append(ol.out, obj)
 	}

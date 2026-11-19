@@ -42,14 +42,11 @@
 == fk-index-replaced
 0 add-index review users.users_user_org_id_created_at [cases_test.go]: adds index users.users_user_org_id_created_at; building it scans the table
 == fk-index-restored
-0 add-index review users.users_org_id [cases_test.go]: adds index users.users_org_id; building it scans the table
-1 drop-index review users.users_user_org_id_created_at: drops index users.users_user_org_id_created_at; queries that used it get slower
+0 drop-index review users.users_user_org_id_created_at: drops index users.users_user_org_id_created_at; queries that used it get slower
 == add-foreign-key
-0 add-index review posts.posts_reviewer_id [cases_test.go]: adds index posts.posts_reviewer_id; building it scans the table
-1 add-foreign-key review posts.posts_users_reviewer [cases_test.go]: adds foreign key posts_users_reviewer; it fails if rows have no match in users
+0 add-foreign-key review posts.posts_users_reviewer [cases_test.go]: adds foreign key posts_users_reviewer; it fails if rows have no match in users
 == drop-foreign-key
 0 drop-foreign-key review posts.posts_users_reviewer: drops foreign key posts_users_reviewer; rows are no longer checked against users
-1 drop-index review posts.posts_reviewer_id: drops index posts.posts_reviewer_id; queries that used it get slower
 == on-delete-change
 1 add-foreign-key review posts.posts_users_posts [cases_test.go]: adds foreign key posts_users_posts; it fails if rows have no match in users
 == enum-append
@@ -76,25 +73,23 @@
 == rename-table-drop-column
 0 drop-index review users.users_email_key: drops index users.users_email_key; queries that used it get slower
 1 rename-table review accounts: renames table users to accounts; code that uses the old name breaks while old and new versions run together
-9 drop-column destructive accounts.email: drops column accounts.email and its data
+7 drop-column destructive accounts.email: drops column accounts.email and its data
 == rename-table-key-type
 1 rename-table review accounts: renames table users to accounts; code that uses the old name breaks while old and new versions run together
-9 widen-type review accounts.org_id [cases_test.go]: widens column accounts.org_id from integer to bigint; the table is rewritten under an exclusive lock
-10 widen-type review orgs.id: widens column orgs.id from integer to bigint; the table is rewritten under an exclusive lock
+7 widen-type review accounts.org_id [cases_test.go]: widens column accounts.org_id from integer to bigint; the table is rewritten under an exclusive lock
+8 widen-type review orgs.id: widens column orgs.id from integer to bigint; the table is rewritten under an exclusive lock
 == reuse-dropped-name
 3 add-index review users.shared_idx [cases_test.go]: adds index users.shared_idx; building it scans the table
 4 drop-table destructive posts: drops table posts and its rows
 == drop-column-in-index
 0 drop-index review users.users_user_org_id_logins: drops index users.users_user_org_id_logins; queries that used it get slower
 1 drop-column destructive users.logins: drops column users.logins and its data
-2 add-index review users.users_org_id [cases_test.go]: adds index users.users_org_id; building it scans the table
 == drop-column-in-unique
 0 drop-index review users.users_user_name_logins: drops index users.users_user_name_logins; queries that used it get slower
 1 drop-column destructive users.logins: drops column users.logins and its data
 == drop-column-in-unique-key
 0 drop-index review users.users_user_org_id_logins: drops index users.users_user_org_id_logins; queries that used it get slower
 1 drop-column destructive users.logins: drops column users.logins and its data
-2 add-index review users.users_org_id [cases_test.go]: adds index users.users_org_id; building it scans the table
 == rename-column-opt-out
 0 rename-column review users.kind: renames column users.role to kind; code that uses the old name breaks while old and new versions run together
 == rename-column-check

@@ -12,7 +12,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/codegen"
-	"github.com/syssam/velox/internal/ddl"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -84,10 +83,9 @@ func TestMigrateBaselineSQLite(t *testing.T) {
 // TestMigrateBaselineEnt: baseline adopts the tables ent makes, on
 // PostgreSQL, MySQL and SQLite, under ent's names, long ones capped as ent
 // caps them. The directory builds a fresh database, apply -baseline records
-// it, and the next diff renames nothing: it holds only what velox spells
-// differently from ent on PostgreSQL and SQLite, and nothing on MySQL: on
-// SQLite, the two indexes of posts' foreign keys and the role enum's CHECK,
-// which SQLite makes by rebuilding the table. PostgreSQL and MySQL need
+// it, and the next diff holds only what velox spells differently from ent
+// (entChange). It adds no index of a foreign key on any dialect: velox
+// declares none, as ent does (decision 0090). PostgreSQL and MySQL need
 // their variables; SQLite needs nothing.
 func TestMigrateBaselineEnt(t *testing.T) {
 	if testing.Short() {
@@ -176,7 +174,7 @@ func baselineEnt(t *testing.T, d velox.Dialect) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := map[velox.Dialect]int{velox.Postgres: 11, velox.MySQL: 9, velox.SQLite: 9}[d]; len(changes) != n {
+	if n := map[velox.Dialect]int{velox.Postgres: 9, velox.MySQL: 9, velox.SQLite: 7}[d]; len(changes) != n {
 		t.Errorf("the next diff has %d changes, want %d: %v", len(changes), n, changes)
 	}
 	for _, ch := range changes {
@@ -191,9 +189,9 @@ func baselineEnt(t *testing.T, d velox.Dialect) {
 // does not give; the rename of a foreign-key constraint whose name is longer
 // than the dialect allows, which velox caps as veloxe did, not as ent did
 // (decision 0090); the default of a string column, which velox sets to its
-// zero (decision 0090); the indexes of posts' two foreign keys, which ent
-// does not make on PostgreSQL and SQLite; and users.id's serial-to-identity
-// on PostgreSQL.
+// zero (decision 0090); and users.id's serial-to-identity on PostgreSQL. No
+// index of a foreign key is added: velox declares none, as ent does
+// (decision 0090).
 func entChange(d velox.Dialect, ch migrate.Change) bool {
 	s := ch.String()
 	switch {
@@ -201,8 +199,6 @@ func entChange(d velox.Dialect, ch migrate.Change) bool {
 		return true
 	case strings.HasPrefix(s, "alter-column ") && strings.HasSuffix(s, " (default)"):
 		return true
-	case s == "add-index posts.posts_user_posts", s == "add-index posts."+ddl.Cap("posts_user_drafts_written_but_never_published_by_this_user_so_far"):
-		return d != velox.MySQL
 	case s == "alter-column users.id (identity)", s == "alter-column users.id (default|identity)":
 		return d == velox.Postgres
 	}

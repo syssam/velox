@@ -63,14 +63,6 @@
 				"id"
 			],
 			"primary_key_name": "posts_pkey",
-			"indexes": [
-				{
-					"name": "posts_author_id",
-					"columns": [
-						"author_id"
-					]
-				}
-			],
 			"foreign_keys": [
 				{
 					"name": "post_author",
@@ -217,14 +209,6 @@
 				"id"
 			],
 			"primary_key_name": "tb_tokens_pkey",
-			"indexes": [
-				{
-					"name": "tb_tokens_tb_user_tokens",
-					"columns": [
-						"tb_user_tokens"
-					]
-				}
-			],
 			"foreign_keys": [
 				{
 					"name": "tb_tokens_tb_users_tokens",
@@ -258,14 +242,6 @@
 				"friend_id"
 			],
 			"primary_key_name": "tb_user_friends_pkey",
-			"indexes": [
-				{
-					"name": "tb_user_friends_friend_id",
-					"columns": [
-						"friend_id"
-					]
-				}
-			],
 			"foreign_keys": [
 				{
 					"name": "tb_user_friends_friend_id",
@@ -312,14 +288,6 @@
 				"tb_group_id"
 			],
 			"primary_key_name": "tb_user_groups_pkey",
-			"indexes": [
-				{
-					"name": "tb_user_groups_tb_group_id",
-					"columns": [
-						"tb_group_id"
-					]
-				}
-			],
 			"foreign_keys": [
 				{
 					"name": "membership_group",
@@ -513,14 +481,6 @@
 				"id"
 			],
 			"primary_key_name": "invoices_pkey",
-			"indexes": [
-				{
-					"name": "invoices_tb_invoice_payer",
-					"columns": [
-						"tb_invoice_payer"
-					]
-				}
-			],
 			"foreign_keys": [
 				{
 					"name": "invoices_tb_users_payer",

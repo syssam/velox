@@ -1,7 +1,9 @@
 # 0090. veloxe's defaults are velox-gen's
 
 - Status: accepted, 2026-11-19. Supersedes [0063](0063-optional-needs-a-value.md).
-  Amends [0003](0003-nullability.md) and [0083](0083-package-index-names.md).
+  Amends [0003](0003-nullability.md), [0083](0083-package-index-names.md)
+  and [0001](0001-ent-names.md). Amended 2026-11-19: foreign-key indexes
+  and JSON pointers.
   The user chose that veloxe's behaviour is
   velox-gen's default for every application, with no option to ask for it.
 
@@ -53,8 +55,9 @@ otherwise before:
   is written empty, `[]` or `{}`, as veloxe zero-filled it: velox-gen gives
   its column descriptor a `DefaultFunc` that returns the empty value. An
   update that sets nil writes NULL, which reads back nil. A struct is written
-  as its zero value's JSON; NULL reads back the zero value. A pointer is
-  written as NULL when nil.
+  as its zero value's JSON; NULL reads back the zero value. Unset, a
+  pointer is written as its element's zero value's JSON, by a `DefaultFunc`
+  that returns `new(T)`; see "Amendment" below.
 - **A NOT NULL column gets its zero as its `DEFAULT`**, as `FeatureAutoDefault`
   gave it: a string, bool or number field that is not `Nillable`, has no
   `Default` or `DefaultFunc`, and is not the ID or an implicit foreign key,
@@ -103,6 +106,43 @@ otherwise before:
   `loadjson.Options` are gone; `loadjson.Version` is 8, for the edge's
   `non_unique_fk`.
 
+## Amendment, 2026-11-19: foreign-key indexes and JSON pointers
+
+The user ruled that foreign-key indexes follow veloxe.
+
+- **velox-gen declares no index of a foreign key.** Before, it added one on
+  PostgreSQL and SQLite, `<table>_<column>`, to each foreign-key column that
+  neither the primary key nor a full index led. ent and veloxe never
+  declared one, so an ent or veloxe database's first diff added an index
+  per such key: hundreds for the consumer's about 1,325 edges. Removed with
+  it: the objects that listed the index and its `_velox_new` helper for name
+  clashes, and the rule that gave a partial index the hash of its `Where`
+  when its name was that of such an index.
+- **MySQL is unchanged.** InnoDB makes an index for a key that no index
+  leads, named as the key, and an inspection of an ent or veloxe database
+  shows it. velox-gen's MySQL tables keep that index, as before: it is what
+  the database holds, and the migrate package wants each MySQL key indexed,
+  so that it never drops a key's last index (error 1553).
+- **An index the schema does not declare is dropped, as before.** The
+  migrate package is unchanged. A database velox created earlier holds the
+  old indexes: the next `migrate diff` from its directory drops them,
+  `migrate drift` against a newer snapshot reports each as a `drop-index`,
+  and each example has a new migration, `drop_fk_indexes`, that drops them.
+  On PostgreSQL it runs online, `DROP INDEX CONCURRENTLY`.
+- **An unset `Optional` JSON pointer is written as its element's zero.**
+  veloxe's generator dropped the pointer of `field.JSON("x", &T{})`: its
+  field held a `T`, and `FeatureAutoDefault` set an unset one to `T{}`
+  (veloxe `compiler/gen/sql/create.go`, genCreateAutoDefaults, and
+  `entity_helpers.go`, jsonFieldZeroValue). velox keeps the field a `*T`
+  and gives its column descriptor a `DefaultFunc` that returns `new(T)`, so
+  the stored JSON is veloxe's. NULL, which an update can set, reads back
+  nil.
+
+Evidence: cmd/velox-gen's `TestMigrateBaselineEnt` holds no `add-index` on
+any dialect; `TestTablesIndexes` and `TestDDLNames` in internal/codegen;
+the "nil JSON pointer" case of internal/integration's
+`TestBindingRoundTrip`.
+
 ## Alternatives
 
 - Keep the rules behind `schema.Package`: rejected by the user; a veloxe
@@ -125,5 +165,5 @@ otherwise before:
 - An application that wants the old refusal of an `Optional` field with no
   value has none; it gives the field `Nillable` to tell unset from zero.
 - Generated code differs only in the `DefaultFunc` of an `Optional` JSON
-  slice or map and in an inline struct type; the runtime is unchanged, so
+  slice, map or pointer and in an inline struct type; the runtime is unchanged, so
   `GeneratedCodeIsVersion` is not bumped.

@@ -176,27 +176,22 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 	}
 	t.declaredChecks(e, &tb)
 
-	var keys [][]string // the leading columns of the non-partial indexes, for fkIndexed
-	var at []place      // the element that makes each index, for the checks
+	var at []place // the element that makes each index, for the checks
 	for i, ix := range e.Indexes {
 		tb.Indexes = append(tb.Indexes, migrate.Index{Name: t.symbol(ix.Name, ix.Derived), Columns: slices.Clone(ix.Columns), Unique: ix.Unique, Where: ix.Where, Method: ix.Method, Desc: slices.Clone(ix.Desc), OpClass: maps.Clone(ix.OpClass), Pos: ix.Pos})
 		at = append(at, place{e, rankIndex, i, indexLoc(i, ix)})
-		if ix.Where == "" {
-			keys = append(keys, ix.Columns)
-		}
 	}
 	ixs, fs := fieldIndexes(e, nil, t.d)
 	for i, ix := range ixs {
 		tb.Indexes = append(tb.Indexes, migrate.Index{Name: ix.Name, Columns: ix.Columns, Unique: true, Pos: fs[i].Pos})
 		at = append(at, place{e, rankField, slices.Index(e.Fields, fs[i]), fieldLoc(fs[i])})
-		keys = append(keys, ix.Columns)
 	}
 	for _, f := range e.Fields {
 		fk, ok := t.fks[[3]string{e.TableSchema, e.Table, f.Column}]
 		if !ok {
 			continue
 		}
-		if t.foreignKey(&tb, fk, keys) {
+		if t.foreignKey(&tb, fk) {
 			at = append(at, edgePlace(fk.Owner, fk.Edge))
 		}
 	}
@@ -264,7 +259,7 @@ func (t *tabler) joinTable(jt joinTable) migrate.Table {
 		}
 		tb.Columns = append(tb.Columns, migrate.Column{Name: c, Type: t.ids[ref], Pos: pos})
 		if fk, ok := t.fks[[3]string{jt.Schema, jt.Table, c}]; ok {
-			t.foreignKey(&tb, fk, nil)
+			t.foreignKey(&tb, fk)
 		}
 	}
 	t.checkJoin(&tb, edgePlace(jt.Owner, jt.Edge))
@@ -280,13 +275,15 @@ func (t *tabler) symbol(name string, derived bool) string {
 	return name
 }
 
-// foreignKey adds fk to tb, with the index of its column unless the
-// primary key or one of keys leads with it; it reports whether it added the
-// index. On MySQL the index has the key's name, as MySQL names the index it
-// makes for a key; elsewhere it is fkIndexName. MySQL cannot name the
+// foreignKey adds fk to tb; it reports whether it added an index. velox
+// declares no index of a foreign key on PostgreSQL and SQLite, as ent and
+// veloxe declare none (decision 0090). On MySQL, which makes an index named
+// as the key for a key that neither the primary key nor a full index of tb
+// leads, tb has that index, as an inspection of the database has it, and
+// the migrate package wants every MySQL key indexed. MySQL cannot name the
 // connection's default database, so a key from a table in another database
 // to one in it is refused.
-func (t *tabler) foreignKey(tb *migrate.Table, fk foreignKey, keys [][]string) bool {
+func (t *tabler) foreignKey(tb *migrate.Table, fk foreignKey) bool {
 	pos := fk.Edge.Pos
 	if t.d == velox.MySQL && tb.Schema != "" && fk.Ref.TableSchema == "" {
 		t.fail(edgePlace(fk.Owner, fk.Edge), "table %s.%s references %s in the connection's default database, which MySQL cannot name from another database; give %s a schema.TableIn",
@@ -297,14 +294,22 @@ func (t *tabler) foreignKey(tb *migrate.Table, fk foreignKey, keys [][]string) b
 		Name: name, Columns: []string{fk.Column}, RefTable: migrate.TableRef{Schema: fk.Ref.TableSchema, Name: fk.Ref.Table},
 		RefColumns: []string{fk.Ref.Fields[0].Column}, OnDelete: fk.OnDelete, Pos: pos,
 	})
-	if fkIndexed(tb.PrimaryKey, keys, fk.Column) {
+	if t.d != velox.MySQL || leads(tb, fk.Column) {
 		return false
-	}
-	if t.d != velox.MySQL {
-		name = fkIndexName(fk.Table, fk.Column)
 	}
 	tb.Indexes = append(tb.Indexes, migrate.Index{Name: name, Columns: []string{fk.Column}, Pos: pos})
 	return true
+}
+
+// leads reports whether column leads tb's primary key or one of its full
+// indexes, which MySQL then takes as a foreign key's.
+func leads(tb *migrate.Table, column string) bool {
+	if len(tb.PrimaryKey) > 0 && tb.PrimaryKey[0] == column {
+		return true
+	}
+	return slices.ContainsFunc(tb.Indexes, func(ix migrate.Index) bool {
+		return ix.Where == "" && len(ix.Columns) > 0 && ix.Columns[0] == column
+	})
 }
 
 // column is the column of e's field f, the i-th.

@@ -51,14 +51,6 @@
         "id"
       ],
       "primary_key_name": "posts_pkey",
-      "indexes": [
-        {
-          "name": "posts_author_id",
-          "columns": [
-            "author_id"
-          ]
-        }
-      ],
       "foreign_keys": [
         {
           "name": "posts_users_posts",
@@ -147,18 +139,6 @@
             "email"
           ],
           "unique": true
-        },
-        {
-          "name": "users_mentor_id",
-          "columns": [
-            "mentor_id"
-          ]
-        },
-        {
-          "name": "users_org_id",
-          "columns": [
-            "org_id"
-          ]
         },
         {
           "name": "users_user_created_at",

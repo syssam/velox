@@ -19,14 +19,6 @@
       "primary_key": [
         "id"
       ],
-      "indexes": [
-        {
-          "name": "alphas_beta_id",
-          "columns": [
-            "beta_id"
-          ]
-        }
-      ],
       "foreign_keys": [
         {
           "name": "alphas_beta_beta",
@@ -59,14 +51,6 @@
       ],
       "primary_key": [
         "id"
-      ],
-      "indexes": [
-        {
-          "name": "beta_alpha_id",
-          "columns": [
-            "alpha_id"
-          ]
-        }
       ],
       "foreign_keys": [
         {
@@ -128,14 +112,6 @@
       ],
       "primary_key": [
         "id"
-      ],
-      "indexes": [
-        {
-          "name": "posts_author_id",
-          "columns": [
-            "author_id"
-          ]
-        }
       ],
       "foreign_keys": [
         {
@@ -222,18 +198,6 @@
             "email"
           ],
           "unique": true
-        },
-        {
-          "name": "users_mentor_id",
-          "columns": [
-            "mentor_id"
-          ]
-        },
-        {
-          "name": "users_org_id",
-          "columns": [
-            "org_id"
-          ]
         }
       ],
       "foreign_keys": [

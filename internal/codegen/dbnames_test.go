@@ -23,8 +23,6 @@ func TestDerivedNames(t *testing.T) {
 		indexName("UserProfile", []string{"a"}):       "userprofile_a",
 		partialIndexName("Names", []string{"a"}, "x"): "names_a_fd0c5087",
 		uniqueName("users", "email"):                  "users_email_key",
-		fkIndexName("pets", "owner_id"):               "pets_owner_id",
-		fkIndexName(long, "owner_id"):                 ddl.Cap(long + "_owner_id"),
 		fkName("posts", "users", "posts"):             "posts_users_posts",
 		joinFKName("user_groups", "user_id"):          "user_groups_user_id",
 	} {
@@ -149,16 +147,6 @@ func TestJoinTablesAndForeignKeys(t *testing.T) {
 	}
 }
 
-func TestFKIndexed(t *testing.T) {
-	pk := []string{"id"}
-	ixs := [][]string{{"a", "b"}}
-	for column, want := range map[string]bool{"id": true, "a": true, "b": false, "c": false} {
-		if got := fkIndexed(pk, ixs, column); got != want {
-			t.Errorf("%s: %v, want %v", column, got, want)
-		}
-	}
-}
-
 // objects lists every name the graph puts in a database, in its space.
 func TestObjects(t *testing.T) {
 	g := mustBuild(t, dnOwner{}, dnPet{}, dnGroup{}, dnToy{}, dnOrder{})
@@ -173,10 +161,12 @@ func TestObjects(t *testing.T) {
 	}{
 		{spaceRelations, []string{
 			"orders", "dn_owners", "dn_owner_groups", "velox_new_orders", "velox_new_dn_owner_groups", "orders_pkey",
-			"orders_id_seq", "dn_owner_groups_pkey", "dn_owner_groups_dn_group_id", "dn_pets_dn_owner_pets",
+			"orders_id_seq", "dn_owner_groups_pkey",
 			"dn_pets_dnpet_dn_owner_pets", "dn_toys_dntoy_dn_owner_toys_name", "dn_toys_dntoy_dn_owner_toys_name_velox_new",
-			"dn_owner_groups_dn_group_id_velox_new",
-		}, []string{"dn_owner_groups_id_seq", "dn_owner_groups_dn_owner_id", "dn_toys_dn_owner_toys", "orders_plain"}},
+		}, []string{
+			"dn_owner_groups_id_seq", "dn_owner_groups_dn_owner_id", "dn_toys_dn_owner_toys", "orders_plain",
+			"dn_owner_groups_dn_group_id", "dn_pets_dn_owner_pets", "dn_owner_groups_dn_group_id_velox_new", // no foreign-key indexes (decision 0090)
+		}},
 		{spaceTypes, []string{"orders", "dn_owner_groups", "mood", "mood_velox_old"},
 			[]string{"orders_text", "orders_pkey", "orders_plain", "dn_order_status"}},
 		{spaceConstraints, []string{"m_owner", "m_group", "pet_owner", "dn_toys_dn_owners_toys"}, []string{"orders_plain_check"}},

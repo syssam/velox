@@ -715,7 +715,6 @@ func (b *builder) indexColumns(n *node, i int, ix *Index, li *loadjson.Index) (m
 // index rule refuses: their names are rule 43's or partial, so step 5b does
 // not compare them.
 func (b *builder) indexes() {
-	fks := foreignKeys(b.g)
 	for _, n := range b.nodes {
 		e := n.ent
 		var ok []bool // the indexes no earlier rule refuses
@@ -735,14 +734,12 @@ func (b *builder) indexes() {
 				b.refused[ix] = true
 			}
 		}
-		// A partial index with no StorageKey whose name another index has,
-		// or velox's foreign-key index of the table on PostgreSQL and SQLite,
+		// A partial index with no StorageKey whose name another index has
 		// takes the hash of its Where; a full index never does, and two of
 		// one name are rule 44's.
-		fkIndexes := fkIndexNames(e, fks, b.refused)
 		var hashed []*Index
 		for _, ix := range e.Indexes {
-			if ix.Derived && ix.Where != "" && (slices.ContainsFunc(e.Indexes, func(o *Index) bool { return o != ix && o.Name == ix.Name }) || slices.Contains(fkIndexes, ix.Name)) {
+			if ix.Derived && ix.Where != "" && slices.ContainsFunc(e.Indexes, func(o *Index) bool { return o != ix && o.Name == ix.Name }) {
 				hashed = append(hashed, ix)
 			}
 		}

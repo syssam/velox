@@ -61,14 +61,6 @@
 			"primary_key": [
 				"id"
 			],
-			"indexes": [
-				{
-					"name": "posts_author_id",
-					"columns": [
-						"author_id"
-					]
-				}
-			],
 			"foreign_keys": [
 				{
 					"name": "post_author",
@@ -209,14 +201,6 @@
 			"primary_key": [
 				"id"
 			],
-			"indexes": [
-				{
-					"name": "tb_tokens_tb_user_tokens",
-					"columns": [
-						"tb_user_tokens"
-					]
-				}
-			],
 			"foreign_keys": [
 				{
 					"name": "tb_tokens_tb_users_tokens",
@@ -248,14 +232,6 @@
 			"primary_key": [
 				"tb_user_id",
 				"friend_id"
-			],
-			"indexes": [
-				{
-					"name": "tb_user_friends_friend_id",
-					"columns": [
-						"friend_id"
-					]
-				}
 			],
 			"foreign_keys": [
 				{
@@ -301,14 +277,6 @@
 			"primary_key": [
 				"tb_user_id",
 				"tb_group_id"
-			],
-			"indexes": [
-				{
-					"name": "tb_user_groups_tb_group_id",
-					"columns": [
-						"tb_group_id"
-					]
-				}
 			],
 			"foreign_keys": [
 				{

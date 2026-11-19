@@ -24,5 +24,3 @@ DROP TABLE "users";
 ALTER TABLE "velox_new_users" RENAME TO "users";
 CREATE INDEX "users_by_name" ON "users" ("name");
 CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
-CREATE INDEX "users_mentor_id" ON "users" ("mentor_id");
-CREATE INDEX "users_org_id" ON "users" ("org_id");

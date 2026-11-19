@@ -2,7 +2,6 @@
 -- velox:foreign-keys off
 -- velox:drops posts.posts_users_reviewer
 
-DROP INDEX "posts_reviewer_id";
 -- review: sqlite-rebuild: drops foreign key posts_users_reviewer; SQLite rebuilds table posts: it copies every row into a new table
 CREATE TABLE "velox_new_posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -17,4 +16,3 @@ DELETE FROM sqlite_sequence WHERE name = 'velox_new_posts';
 INSERT INTO sqlite_sequence (name, seq) SELECT 'velox_new_posts', seq FROM sqlite_sequence WHERE name = 'posts';
 DROP TABLE "posts";
 ALTER TABLE "velox_new_posts" RENAME TO "posts";
-CREATE INDEX "posts_author_id" ON "posts" ("author_id");

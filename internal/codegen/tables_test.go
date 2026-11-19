@@ -244,13 +244,14 @@ func TestTablesPositions(t *testing.T) {
 	if e := s.Enums[slices.IndexFunc(s.Enums, func(e migrate.Enum) bool { return e.Name == "mood" })]; e.Pos != p.Field("mood").Pos {
 		t.Errorf("enum pos %q", e.Pos)
 	}
-	// An implicit foreign key, and its index, are at the edge that declares them.
+	// An implicit foreign key, which has no index, is at the edge that
+	// declares it.
 	tokens, at := table(t, s, "tb_tokens"), u.Edge("tokens").Pos
 	if c := column(t, tokens, "tb_user_tokens"); c.Pos != at || at == "" {
 		t.Errorf("implicit column pos %q, want the edge's %q", c.Pos, at)
 	}
-	if ix := tokens.Indexes[0]; ix.Name != "tb_tokens_tb_user_tokens" || ix.Pos != at {
-		t.Errorf("foreign-key index %+v, want the edge's pos %q", ix, at)
+	if fk := tokens.ForeignKeys[0]; fk.Pos != at || len(tokens.Indexes) != 0 {
+		t.Errorf("foreign key %+v, indexes %+v, want the edge's pos %q and none", fk, tokens.Indexes, at)
 	}
 }
 
@@ -647,7 +648,10 @@ func (tbIxOwner) Edges() []schema.Edge {
 }
 func (tbIxOwner) Indexes() []schema.Index { return []schema.Index{index.Fields("slug").Unique()} }
 
-// tbIxA's key has no index; tbIxB's leads one; tbIxC's has only a partial one.
+// No foreign key has an index of its own on PostgreSQL and SQLite (decision
+// 0090): tbIxA's has none, tbIxB's leads a declared one, tbIxC's has only a
+// partial one. On MySQL, tbIxA's key and the join table's second have the
+// index MySQL makes.
 type tbIxA struct{ schema.Schema }
 
 type tbIxB struct{ schema.Schema }
@@ -685,19 +689,18 @@ func TestTablesIndexes(t *testing.T) {
 	for _, d := range allDialects {
 		s := tables(t, d, tbIxOwner{}, tbIxA{}, tbIxB{}, tbIxC{noWhere: d == velox.MySQL}, tbIxTag{})
 		owners := []string{"tb_ix_owners_code_key", "tb_ix_owners_slug_key", "tb_ix_owners_tbixowner_slug"}
-		ixas := "tb_ix_as_tb_ix_owner_a"
-		ixcs := []string{"tb_ix_cs_tb_ix_owner_c", "tb_ix_cs_tbixc_tb_ix_owner_c"}
+		var ixas, tags []string
 		if d == velox.MySQL {
 			owners = []string{"code", "slug", "tb_ix_owners_tbixowner_slug"}
-			ixas = "tb_ix_as_tb_ix_owners_a" // the foreign key's name
-			ixcs = ixcs[1:]                  // the declared index, which the key needs no other beside
+			ixas = []string{"tb_ix_as_tb_ix_owners_a"}       // the index MySQL makes, named as the key
+			tags = []string{"tb_ix_owner_tags_tb_ix_tag_id"} // the join table's second key's
 		}
 		for tableName, want := range map[string][]string{
 			"tb_ix_owners":     owners,
-			"tb_ix_as":         {ixas},
+			"tb_ix_as":         ixas,
 			"tb_ix_bs":         {"tb_ix_bs_tbixb_tb_ix_owner_b_name"},
-			"tb_ix_cs":         ixcs,
-			"tb_ix_owner_tags": {"tb_ix_owner_tags_tb_ix_tag_id"},
+			"tb_ix_cs":         {"tb_ix_cs_tbixc_tb_ix_owner_c"},
+			"tb_ix_owner_tags": tags,
 		} {
 			tb := table(t, s, tableName)
 			if got := tableIndexNames(tb); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
@@ -714,8 +717,8 @@ func TestTablesIndexes(t *testing.T) {
 				t.Errorf("%v: %+v", d, ix)
 			}
 		}
-		if ix := table(t, s, "tb_ix_as").Indexes[0]; ix.Unique || !slices.Equal(ix.Columns, []string{"tb_ix_owner_a"}) {
-			t.Errorf("%v: foreign-key index %+v", d, ix)
+		if as := table(t, s, "tb_ix_as"); len(as.ForeignKeys) != 1 || len(as.Indexes) != len(ixas) {
+			t.Errorf("%v: tb_ix_as keys %+v, indexes %+v", d, as.ForeignKeys, as.Indexes)
 		}
 	}
 }
@@ -1591,8 +1594,8 @@ func refusals(t *testing.T, err error) []*Error {
 	return out
 }
 
-// Primary keys and foreign-key indexes are keys too; a key refusal on a
-// foreign-key index is its edge's.
+// Primary keys and MySQL's foreign-key indexes are keys too; a key refusal
+// on a foreign-key index is its edge's.
 type tbRfKeyRef struct{ schema.Schema }
 
 func (tbRfKeyRef) Fields() []schema.Field {
@@ -1788,14 +1791,16 @@ func (UserProfile) Indexes() []schema.Index { return []schema.Index{index.Fields
 func TestDDLNames(t *testing.T) {
 	for _, d := range allDialects {
 		s := tables(t, d, Writer{}, Story{}, Topic{}, UserProfile{})
-		unique, fkIndex := "writers_email_key", "stories_writer_stories"
+		unique := "writers_email_key"
+		var stories, topics []string
 		if d == velox.MySQL {
-			unique, fkIndex = "email", "stories_writers_stories"
+			unique = "email"
+			stories, topics = []string{"stories_writers_stories"}, []string{"story_topics_topic_id"} // the keys' names
 		}
 		for name, want := range map[string]struct{ indexes, fks []string }{
 			"writers":       {[]string{unique, "writers_writer_name"}, nil},
-			"stories":       {[]string{fkIndex}, []string{"stories_writers_stories"}},
-			"story_topics":  {[]string{"story_topics_topic_id"}, []string{"story_topics_story_id", "story_topics_topic_id"}},
+			"stories":       {stories, []string{"stories_writers_stories"}},
+			"story_topics":  {topics, []string{"story_topics_story_id", "story_topics_topic_id"}},
 			"user_profiles": {[]string{"user_profiles_userprofile_bio"}, nil},
 		} {
 			tb := table(t, s, name)

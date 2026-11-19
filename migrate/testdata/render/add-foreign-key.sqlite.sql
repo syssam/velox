@@ -1,7 +1,7 @@
 -- script: main
 -- velox:foreign-keys off
 
--- review: add-index: adds index posts.posts_reviewer_id; building it scans the table; add-foreign-key: adds foreign key posts_users_reviewer; it fails if rows have no match in users; sqlite-rebuild: adds foreign key posts_users_reviewer; SQLite rebuilds table posts: it copies every row into a new table
+-- review: add-foreign-key: adds foreign key posts_users_reviewer; it fails if rows have no match in users; sqlite-rebuild: adds foreign key posts_users_reviewer; SQLite rebuilds table posts: it copies every row into a new table
 CREATE TABLE "velox_new_posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "author_id" integer NOT NULL DEFAULT 0,
@@ -16,5 +16,3 @@ DELETE FROM sqlite_sequence WHERE name = 'velox_new_posts';
 INSERT INTO sqlite_sequence (name, seq) SELECT 'velox_new_posts', seq FROM sqlite_sequence WHERE name = 'posts';
 DROP TABLE "posts";
 ALTER TABLE "velox_new_posts" RENAME TO "posts";
-CREATE INDEX "posts_author_id" ON "posts" ("author_id");
-CREATE INDEX "posts_reviewer_id" ON "posts" ("reviewer_id");

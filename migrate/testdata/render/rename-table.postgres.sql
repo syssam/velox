@@ -6,8 +6,6 @@ ALTER TABLE "users" RENAME TO "accounts";
 ALTER SEQUENCE "users_id_seq" RENAME TO "accounts_id_seq";
 ALTER INDEX "users_by_name" RENAME TO "accounts_users_by_name";
 ALTER INDEX "users_email_key" RENAME TO "accounts_email_key";
-ALTER INDEX "users_mentor_id" RENAME TO "accounts_mentor_id";
-ALTER INDEX "users_org_id" RENAME TO "accounts_org_id";
 ALTER TABLE "accounts" RENAME CONSTRAINT "users_orgs_users" TO "accounts_orgs_users";
 ALTER TABLE "accounts" RENAME CONSTRAINT "users_pkey" TO "accounts_pkey";
 ALTER TABLE "posts" RENAME CONSTRAINT "posts_users_posts" TO "posts_accounts_posts";

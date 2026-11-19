@@ -668,12 +668,20 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 	if f.UpdateDefault {
 		o.UpdateDefaultCode = call("UpdateDefault", f.UpdateDefaultRef)
 	}
-	if f.Type == "json" && f.Optional && !f.Nillable && len(f.Default) == 0 && !f.DefaultFunc && f.GoType != nil &&
-		(f.GoType.Kind == "slice" || f.GoType.Kind == "map") {
-		// Unset, an Optional JSON slice or map is written empty, [] or {},
-		// as veloxe zero-filled it (decision 0090), not NULL; it reads back
-		// empty. Set to nil by an update, it is NULL.
-		o.ZeroFillCode = fmt.Sprintf("func() any { return %s{} }", elem)
+	if f.Type == "json" && f.Optional && !f.Nillable && len(f.Default) == 0 && !f.DefaultFunc && f.GoType != nil {
+		switch f.GoType.Kind {
+		case "slice", "map":
+			// Unset, an Optional JSON slice or map is written empty, [] or
+			// {}, as veloxe zero-filled it (decision 0090), not NULL; it
+			// reads back empty. Set to nil by an update, it is NULL.
+			o.ZeroFillCode = fmt.Sprintf("func() any { return %s{} }", elem)
+		case "ptr":
+			// Unset, an Optional JSON pointer is written as its element's
+			// zero, as veloxe, whose field held the element, zero-filled it
+			// (decision 0090); it reads back a pointer to that zero. Set to
+			// nil by an update, it is NULL.
+			o.ZeroFillCode = fmt.Sprintf("func() any { return new(%s) }", strings.TrimPrefix(elem, "*"))
+		}
 	}
 }
 

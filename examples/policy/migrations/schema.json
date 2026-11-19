@@ -24,14 +24,6 @@
       "primary_key": [
         "id"
       ],
-      "indexes": [
-        {
-          "name": "comments_doc_id",
-          "columns": [
-            "doc_id"
-          ]
-        }
-      ],
       "foreign_keys": [
         {
           "name": "comments_docs_comments",

@@ -12,8 +12,8 @@ import (
 // truncates a name at 63 bytes, and MySQL refuses one over 64.
 const MaxName = 63
 
-// Cap caps the names velox makes and neither ent nor PostgreSQL does: checks,
-// enum types and velox's own foreign-key indexes. Index and foreign-key
+// Cap caps the names velox makes and neither ent nor PostgreSQL does: its
+// not-null checks and the helpers of its migrations. Index and foreign-key
 // names are capped with Symbol, and PostgreSQL's key and sequence names are
 // PostgresName's.
 //

@@ -285,7 +285,8 @@ func TestLintReplacementsAreQuiet(t *testing.T) {
 			}
 		}
 	}
-	for _, d := range allDialects {
+	// Only MySQL has an index of a foreign key to replace (decision 0090).
+	for _, d := range mysqlOnly {
 		cs := caseChanges(t, "fk-index-replaced", d)
 		if !slices.ContainsFunc(cs, func(c migrate.Change) bool { _, ok := c.(migrate.DropIndex); return ok }) {
 			t.Fatalf("fk-index-replaced on %v drops no index", d)

@@ -53,7 +53,8 @@ zero time, as veloxe wrote it ([0003](decisions/0003-nullability.md),
 [0090](decisions/0090-veloxe-defaults.md)). An `Optional` enum is the
 exception, whose zero is none of its values: velox-gen asks it for a `Default`
 or `Nillable`. An `Optional` JSON field's column is NULL-able; unset, a slice
-or a map is written empty, `[]` or `{}`, and a struct as its zero value's JSON.
+or a map is written empty, `[]` or `{}`, a struct as its zero value's JSON,
+and a pointer as its element's zero value's JSON.
 An `Optional` `Unique` field needs `Nillable` or a `DefaultFunc`, or every
 unset row would hold the same value.
 

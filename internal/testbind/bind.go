@@ -39,6 +39,7 @@ type Bind struct {
 	Labels    []string       `json:"labels,omitempty"`
 	Counts    []int          `json:"counts,omitempty"`
 	Doc       bindtype.Doc   `json:"doc"`
+	DocPtr    *bindtype.Doc  `json:"doc_ptr,omitempty"`
 	Note      *string        `json:"note,omitempty"`
 }
 
@@ -69,6 +70,7 @@ const (
 	bindColLabels
 	bindColCounts
 	bindColDoc
+	bindColDocPtr
 	bindColNote
 )
 
@@ -124,6 +126,8 @@ type BindHandles struct {
 	Counts velox.JSONCol[Bind, []int]
 	// Doc is the column doc.
 	Doc velox.JSONCol[Bind, bindtype.Doc]
+	// DocPtr is the column doc_ptr.
+	DocPtr velox.JSONCol[Bind, *bindtype.Doc]
 	// Note is the column note.
 	Note velox.NullStringCol[Bind, string]
 }
@@ -155,6 +159,7 @@ var Binds = BindHandles{
 	Labels:    velox.JSONCol[Bind, []string]{I: bindColLabels},
 	Counts:    velox.JSONCol[Bind, []int]{I: bindColCounts},
 	Doc:       velox.JSONCol[Bind, bindtype.Doc]{I: bindColDoc},
+	DocPtr:    velox.JSONCol[Bind, *bindtype.Doc]{I: bindColDocPtr},
 	Note:      velox.NullStringCol[Bind, string]{I: bindColNote},
 }
 
@@ -200,6 +205,13 @@ func bindDescriptor() velox.Descriptor[Bind] {
 			{Field: "Labels", Name: "labels", Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Counts", Name: "counts", Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Doc", Name: "doc", Encode: json.Marshal, Decode: json.Unmarshal},
+			{
+				Field:       "DocPtr",
+				Name:        "doc_ptr",
+				DefaultFunc: func() any { return new(bindtype.Doc) },
+				Encode:      json.Marshal,
+				Decode:      json.Unmarshal,
+			},
 			{Field: "Note", Name: "note"},
 		},
 		PrimaryKey: []int{bindColID},
@@ -255,6 +267,8 @@ func bindDescriptor() velox.Descriptor[Bind] {
 				return &x.Counts
 			case bindColDoc:
 				return &x.Doc
+			case bindColDocPtr:
+				return &x.DocPtr
 			case bindColNote:
 				return &x.Note
 			}
@@ -297,11 +311,11 @@ func (b Bind) String() string {
 		"U32=%v, U64=%v, F32=%v, F64=%v, Str=%v, Short=%v, Body=%v, "+
 		"Kind=%v, Level=%v, Data=<%d bytes>, ShortData=<%d bytes>, "+
 		"At=%v, UID=%v, Tags=%v, Labels=%v, Counts=%v, Doc=%v, "+
-		"Note=%v)",
+		"DocPtr=%v, Note=%v)",
 		b.ID, b.Flag, b.I8, b.I16, b.I32, b.I64, b.U8, b.U16, b.U32,
 		b.U64, b.F32, b.F64, b.Str, b.Short, b.Body, b.Kind, b.Level,
 		len(b.Data), len(b.ShortData), b.At, b.UID, b.Tags, b.Labels,
-		b.Counts, b.Doc, velox.Show(b.Note),
+		b.Counts, b.Doc, b.DocPtr, velox.Show(b.Note),
 	)
 }
 

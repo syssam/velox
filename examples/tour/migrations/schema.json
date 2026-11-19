@@ -97,14 +97,6 @@
       "primary_key": [
         "id"
       ],
-      "indexes": [
-        {
-          "name": "lines_invoice_id",
-          "columns": [
-            "invoice_id"
-          ]
-        }
-      ],
       "foreign_keys": [
         {
           "name": "lines_invoices_lines",

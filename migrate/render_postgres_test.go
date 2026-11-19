@@ -51,9 +51,6 @@ func TestRenderOnlineUnits(t *testing.T) {
 			`CREATE INDEX CONCURRENTLY "users_user_created_at" ON "users" ("created_at")`,
 		}},
 		"add-foreign-key": {{
-			`DROP INDEX CONCURRENTLY IF EXISTS "posts_reviewer_id"`,
-			`CREATE INDEX CONCURRENTLY "posts_reviewer_id" ON "posts" ("reviewer_id")`,
-		}, {
 			`ALTER TABLE "posts" DROP CONSTRAINT IF EXISTS "posts_users_reviewer"`,
 			`ALTER TABLE "posts" ADD CONSTRAINT "posts_users_reviewer" FOREIGN KEY ("reviewer_id") REFERENCES "users" ("id") ON DELETE SET NULL NOT VALID`,
 			`ALTER TABLE "posts" VALIDATE CONSTRAINT "posts_users_reviewer"`,
@@ -329,8 +326,6 @@ func TestRenderTableRename(t *testing.T) {
 		`ALTER SEQUENCE "users_id_seq" RENAME TO "accounts_id_seq"`,
 		`ALTER INDEX "users_by_name" RENAME TO "accounts_users_by_name"`,
 		`ALTER INDEX "users_email_key" RENAME TO "accounts_email_key"`,
-		`ALTER INDEX "users_mentor_id" RENAME TO "accounts_mentor_id"`,
-		`ALTER INDEX "users_org_id" RENAME TO "accounts_org_id"`,
 		`ALTER TABLE "accounts" RENAME CONSTRAINT "users_orgs_users" TO "accounts_orgs_users"`,
 		`ALTER TABLE "accounts" RENAME CONSTRAINT "users_pkey" TO "accounts_pkey"`,
 		`ALTER TABLE "posts" RENAME CONSTRAINT "posts_users_posts" TO "posts_accounts_posts"`,
@@ -356,10 +351,6 @@ func TestRenderTableRename(t *testing.T) {
 		`CREATE INDEX "accounts_users_by_name" ON "accounts" ("name")`,
 		`DROP INDEX "users_email_key"`,
 		`CREATE UNIQUE INDEX "accounts_email_key" ON "accounts" ("email")`,
-		`DROP INDEX "users_mentor_id"`,
-		`CREATE INDEX "accounts_mentor_id" ON "accounts" ("mentor_id")`,
-		`DROP INDEX "users_org_id"`,
-		`CREATE INDEX "accounts_org_id" ON "accounts" ("org_id")`,
 	}; !slices.Equal(got, want) {
 		t.Errorf("SQLite:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}

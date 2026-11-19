@@ -111,7 +111,8 @@ func fullBind() testbind.Bind {
 		Data: []byte{0, 1, 0xfe, 0xff, '\''}, ShortData: []byte("0123456789abcdef"),
 		At:   time.Date(2026, 1, 2, 3, 4, 5, 123456000, time.UTC),
 		UID:  bindtype.UUID{0x12, 0x3e, 0x45, 0x67, 0xe8, 0x9b, 0x12, 0xd3, 0xa4, 0x56, 0x42, 0x66, 0x14, 0x17, 0x40, 0x00},
-		Tags: []string{"x", "y"}, Labels: []string{"a", "é"}, Counts: []int{-1, 0, 7}, Doc: bindtype.Doc{Title: "t", Pages: 3, Tags: []string{"z"}}, Note: &note,
+		Tags: []string{"x", "y"}, Labels: []string{"a", "é"}, Counts: []int{-1, 0, 7}, Doc: bindtype.Doc{Title: "t", Pages: 3, Tags: []string{"z"}},
+		DocPtr: &bindtype.Doc{Title: "p", Pages: 1}, Note: &note,
 	}
 }
 
@@ -272,6 +273,29 @@ func TestBindingRoundTrip(t *testing.T) {
 				}
 				if got := readBind(t, tg, empty.ID); got.Tags == nil || len(got.Tags) != 0 {
 					t.Errorf("empty tags read back as %#v", got.Tags)
+				}
+			})
+
+			t.Run("nil JSON pointer", func(t *testing.T) {
+				row := fullBind()
+				row.DocPtr = nil
+				if err := tg.db.Insert(&row).Exec(ctx); err != nil {
+					t.Fatal(err)
+				}
+				// An Optional JSON pointer left nil is written as a pointer
+				// to its element's zero, as veloxe wrote it (decision 0090);
+				// NULL, which an update can set, reads back nil.
+				if text, null := rawText(t, tg, "doc_ptr", row.ID); null || !strings.Contains(text, `"title"`) {
+					t.Errorf("nil doc_ptr stored %q (NULL %v), want the zero Doc", text, null)
+				}
+				if got := readBind(t, tg, row.ID); got.DocPtr == nil || got.DocPtr.Title != "" || got.DocPtr.Pages != 0 {
+					t.Errorf("nil doc_ptr read back as %#v", got.DocPtr)
+				}
+				if _, err := tg.direct.ExecContext(ctx, rebind(tg.d, "UPDATE binds SET doc_ptr = NULL WHERE id = ?"), row.ID); err != nil {
+					t.Fatal(err)
+				}
+				if got := readBind(t, tg, row.ID); got.DocPtr != nil {
+					t.Errorf("NULL doc_ptr read back as %#v", got.DocPtr)
 				}
 			})
 

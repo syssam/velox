@@ -129,8 +129,8 @@ func TestZeroColumnDefaults(t *testing.T) {
 	}
 }
 
-// ojFields has the Optional JSON fields veloxe zero-filled: a slice, a map
-// and a struct, none Nillable, beside a required one.
+// ojFields has the Optional JSON fields veloxe zero-filled: a slice, a map,
+// a struct and a pointer, none Nillable, beside a required one.
 type ojFields struct{ schema.Schema }
 
 func (ojFields) Fields() []schema.Field {
@@ -138,6 +138,7 @@ func (ojFields) Fields() []schema.Field {
 		field.Strings("tags").Optional(),
 		field.JSON("attrs", map[string]any{}).Optional(),
 		field.JSON("shape", JSONShape{}).Optional(),
+		field.JSON("ptr", &JSONShape{}).Optional(),
 		field.JSON("req", []string{}),
 		field.JSON("given", []string{}).Optional().Default([]string{"x"}),
 		field.JSON("changes", []struct {
@@ -148,9 +149,9 @@ func (ojFields) Fields() []schema.Field {
 }
 
 // An Optional JSON column is NULL-able; unset, a slice or a map is written
-// empty, [] or {}, by a DefaultFunc in its descriptor, as veloxe wrote it. A
-// struct needs none: its zero value is written. An unnamed struct is written
-// inline.
+// empty, [] or {}, and a pointer as a pointer to its element's zero, by a
+// DefaultFunc in its descriptor, as veloxe wrote them. A struct needs none:
+// its zero value is written. An unnamed struct is written inline.
 func TestOptionalJSONZeroFill(t *testing.T) {
 	o := mustLower(t, Config{Package: "gen", SchemaPath: lowerSchemaPath}, ojFields{})
 	e := o.entity("ojFields")
@@ -158,6 +159,7 @@ func TestOptionalJSONZeroFill(t *testing.T) {
 		"tags":    "func() any { return []string{} }",
 		"attrs":   "func() any { return map[string]interface {}{} }",
 		"shape":   "",
+		"ptr":     "func() any { return new(codegen.JSONShape) }",
 		"req":     "",
 		"given":   "",
 		"changes": "func() any { return []struct {",
@@ -172,7 +174,7 @@ func TestOptionalJSONZeroFill(t *testing.T) {
 	}
 	for _, d := range allDialects {
 		tb := table(t, tables(t, d, ojFields{}), "oj_fields")
-		for name, null := range map[string]bool{"tags": true, "attrs": true, "shape": true, "changes": true, "req": false} {
+		for name, null := range map[string]bool{"tags": true, "attrs": true, "shape": true, "ptr": true, "changes": true, "req": false} {
 			if c := column(t, tb, name); c.Nullable != null {
 				t.Errorf("%v: %s nullable %v, want %v", d, name, c.Nullable, null)
 			}

@@ -337,8 +337,6 @@ func TestDiffStepOneUsesFromNames(t *testing.T) {
 	wantLines(t, "rename-table-drop-column", caseChanges(t, "rename-table-drop-column", velox.Postgres), append(append([]string{
 		"drop-index users users_email_key"}, renames...),
 		"rename-index accounts users_by_name accounts_users_by_name",
-		"rename-index accounts users_mentor_id accounts_mentor_id",
-		"rename-index accounts users_org_id accounts_org_id",
 		"rename-constraint accounts users_orgs_users accounts_orgs_users",
 		"rename-constraint accounts users_pkey accounts_pkey",
 		"rename-constraint posts posts_users_posts posts_accounts_posts",
@@ -348,8 +346,6 @@ func TestDiffStepOneUsesFromNames(t *testing.T) {
 		"drop-foreign-key users users_orgs_users"}, renames...),
 		"rename-index accounts users_by_name accounts_users_by_name",
 		"rename-index accounts users_email_key accounts_email_key",
-		"rename-index accounts users_mentor_id accounts_mentor_id",
-		"rename-index accounts users_org_id accounts_org_id",
 		"rename-constraint accounts users_pkey accounts_pkey",
 		"rename-constraint posts posts_users_posts posts_accounts_posts",
 		"alter-column accounts org_id 1",
@@ -389,7 +385,7 @@ func TestDiffReusedName(t *testing.T) {
 func TestDiffDropColumnInIndex(t *testing.T) {
 	t.Parallel()
 	for _, d := range allDialects {
-		want := []string{"drop-index users users_user_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
+		want := []string{"drop-index users users_user_org_id_logins", "drop-column users logins"}
 		if d == velox.MySQL {
 			want = []string{"drop-column users logins", "add-index users users_orgs_users", "drop-index users users_user_org_id_logins"}
 		}
@@ -401,8 +397,9 @@ func TestDiffDropColumnInIndex(t *testing.T) {
 			"drop-index users users_user_name_logins", "drop-column users logins",
 		})
 		// On MySQL a foreign key whose only index goes first goes with it,
-		// and comes back after its new index.
-		want = []string{"drop-index users users_user_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
+		// and comes back after its new index. PostgreSQL and SQLite need
+		// no index for a key (decision 0090).
+		want = []string{"drop-index users users_user_org_id_logins", "drop-column users logins"}
 		if d == velox.MySQL {
 			want = []string{
 				"drop-foreign-key users users_orgs_users",
@@ -456,8 +453,6 @@ func TestDiffRenameTableCarriesDerivedNames(t *testing.T) {
 			"rename-sequence accounts id users_id_seq accounts_id_seq",
 			"rename-index accounts users_by_name accounts_users_by_name",
 			"rename-index accounts users_email_key accounts_email_key",
-			"rename-index accounts users_mentor_id accounts_mentor_id",
-			"rename-index accounts users_org_id accounts_org_id",
 			"rename-constraint accounts users_orgs_users accounts_orgs_users",
 			"rename-constraint accounts users_pkey accounts_pkey",
 			"rename-constraint posts posts_users_posts posts_accounts_posts",
@@ -474,8 +469,6 @@ func TestDiffRenameTableCarriesDerivedNames(t *testing.T) {
 			"rename-table accounts users accounts",
 			"rename-index accounts users_by_name accounts_users_by_name",
 			"rename-index accounts users_email_key accounts_email_key",
-			"rename-index accounts users_mentor_id accounts_mentor_id",
-			"rename-index accounts users_org_id accounts_org_id",
 		},
 	}
 	for _, d := range allDialects {
@@ -578,14 +571,14 @@ func TestDiffSQLiteKeyNameAlone(t *testing.T) {
 func TestDiffFKIndexReplaced(t *testing.T) {
 	t.Parallel()
 	for _, d := range allDialects {
-		fkIndex := "users_org_id"
+		want := []string{"add-index users users_user_org_id_created_at"}
 		if d == velox.MySQL {
-			fkIndex = "users_orgs_users" // the key's name
+			// The index MySQL made for the key, named as the key, goes once
+			// the declared one covers the key; PostgreSQL and SQLite have
+			// none (decision 0090).
+			want = append(want, "drop-index users users_orgs_users")
 		}
-		wantLines(t, d.String(), caseChanges(t, "fk-index-replaced", d), []string{
-			"add-index users users_user_org_id_created_at",
-			"drop-index users " + fkIndex,
-		})
+		wantLines(t, d.String(), caseChanges(t, "fk-index-replaced", d), want)
 	}
 }
 

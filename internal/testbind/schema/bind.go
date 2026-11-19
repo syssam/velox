@@ -39,6 +39,9 @@ func (Bind) Fields() []schema.Field {
 		field.Strings("labels"),
 		field.Ints("counts"),
 		field.JSON("doc", bindtype.Doc{}),
+		// An Optional JSON pointer: unset, it is written as a pointer to
+		// the zero Doc, as veloxe wrote it (decision 0090).
+		field.JSON("doc_ptr", &bindtype.Doc{}).Optional(),
 		field.String("note").Optional().Nillable(),
 	}
 }

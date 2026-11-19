@@ -15,4 +15,3 @@ CREATE TABLE "billing"."invoices" (
   CONSTRAINT "invoices_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "invoices_payers_payer" FOREIGN KEY ("invoice_payer") REFERENCES "billing"."payers" ("id")
 );
-CREATE INDEX "invoices_invoice_payer" ON "billing"."invoices" ("invoice_payer");

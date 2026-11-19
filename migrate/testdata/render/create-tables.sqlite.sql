@@ -20,8 +20,6 @@ CREATE TABLE "users" (
 );
 CREATE INDEX "users_by_name" ON "users" ("name");
 CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
-CREATE INDEX "users_mentor_id" ON "users" ("mentor_id");
-CREATE INDEX "users_org_id" ON "users" ("org_id");
 CREATE TABLE "posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "author_id" integer NOT NULL DEFAULT 0,
@@ -29,16 +27,13 @@ CREATE TABLE "posts" (
   "status" text NOT NULL DEFAULT 'active',
   CONSTRAINT "posts_users_posts" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE CASCADE
 );
-CREATE INDEX "posts_author_id" ON "posts" ("author_id");
 CREATE TABLE "alphas" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "beta_id" integer,
   CONSTRAINT "alphas_beta_beta" FOREIGN KEY ("beta_id") REFERENCES "beta" ("id") ON DELETE SET NULL
 );
-CREATE INDEX "alphas_beta_id" ON "alphas" ("beta_id");
 CREATE TABLE "beta" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "alpha_id" integer,
   CONSTRAINT "beta_alphas_alpha" FOREIGN KEY ("alpha_id") REFERENCES "alphas" ("id") ON DELETE SET NULL
 );
-CREATE INDEX "beta_alpha_id" ON "beta" ("alpha_id");
