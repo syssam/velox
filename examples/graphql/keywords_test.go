@@ -25,7 +25,7 @@ func postTitles(t *testing.T, s *testServer, org, where string) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var out struct {
 		Data struct {
 			Posts struct {
