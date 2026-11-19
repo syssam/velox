@@ -698,7 +698,7 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 	}{
 		{velox.Postgres, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE "id" > $1 LIMIT $2`},
 		{velox.MySQL, "SELECT `id`, `owner`, `locked`, `parent_id`, `invoice_id` FROM `pnotes` WHERE `id` > ? LIMIT ?"},
-		{velox.SQLite, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE "id" > ? LIMIT ?`},
+		{velox.SQLite, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE "id" > ? LIMIT 3`},
 	} {
 		db := openPolicied(c.d, &fakeconn.Exec{})
 		q := db.Query[fixture.Pnote]().Where(fixture.Pn.ID.GT(0)).Limit(3)
@@ -707,7 +707,11 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 			t.Errorf("%v: unscoped\n got %s, %v\nwant %s", c.d, unscoped, err, c.want)
 		}
 		got, args, err := q.SQL(pnoteReading(velox.Allow(), nil))
-		if err != nil || got != c.want || !slices.Equal(args, uargs) || !slices.Equal(args, []any{int64(0), 3}) {
+		wantArgs := []any{int64(0), 3}
+		if c.d == velox.SQLite {
+			wantArgs = wantArgs[:1] // SQLite writes the Limit in the text
+		}
+		if err != nil || got != c.want || !slices.Equal(args, uargs) || !slices.Equal(args, wantArgs) {
 			t.Errorf("%v: Allow\n got %s %v, %v\nwant %s %v", c.d, got, args, err, c.want, uargs)
 		}
 		if _, _, err := q.SQL(pnoteReading(velox.Predicate{}, nil)); err == nil || err.Error() != readMsg {

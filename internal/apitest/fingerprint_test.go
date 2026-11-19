@@ -26,7 +26,7 @@ func TestFingerprintGolden(t *testing.T) {
 	for d, want := range map[velox.Dialect]struct{ sql, fp string }{
 		velox.Postgres: {`SELECT "id" FROM "invoices" WHERE "number" = $1 LIMIT $2`, "da95560fb97b3ada"},
 		velox.MySQL:    {"SELECT `id` FROM `invoices` WHERE `number` = ? LIMIT ?", "9ca18764b9e4f21a"},
-		velox.SQLite:   {`SELECT "id" FROM "invoices" WHERE "number" = ? LIMIT ?`, "df6b3bf7e65701b1"},
+		velox.SQLite:   {`SELECT "id" FROM "invoices" WHERE "number" = ? LIMIT 1`, "5f05192b890f8000"},
 	} {
 		var st velox.Statement
 		db := openFake(d, &fakeconn.Exec{}, lastStatement(&st))

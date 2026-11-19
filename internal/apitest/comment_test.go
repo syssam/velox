@@ -39,7 +39,7 @@ func TestSQLCommentWithoutCallers(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Columns(I.ID).Where(I.Number.EQ("x")).Limit(1).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT "id" FROM "invoices" WHERE "number" = ? LIMIT ? /*app='billing'*/`; e.SQL != want {
+	if want := `SELECT "id" FROM "invoices" WHERE "number" = ? LIMIT 1 /*app='billing'*/`; e.SQL != want {
 		t.Errorf("sent %s", e.SQL)
 	}
 }

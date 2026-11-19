@@ -10,7 +10,7 @@ Iter: Ada
 Iter: Barbara
 Iter: Grace
 Iter: Linus
-SQL: SELECT "id", "name", "email", "age" FROM "users" WHERE "age" BETWEEN ? AND ? LIMIT ? [30 50 5]
+SQL: SELECT "id", "name", "email", "age" FROM "users" WHERE "age" BETWEEN ? AND ? LIMIT 5 [30 50]
 Update: 2 birthdays
 Save: Grace's email is grace.hopper@example.com
 Delete: 1 user under 30

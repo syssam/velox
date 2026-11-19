@@ -270,8 +270,8 @@ func TestScopedSQLGolden(t *testing.T) {
 			// MySQL refuses this upsert (TestUpsertOnMySQL).
 		},
 		{d: velox.SQLite,
-			selectHas: golden{`SELECT ` + pgCols + ` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND "org_id" = ? AND "owner" = ?) AND "org_id" = ? AND "owner" = ? LIMIT ?`,
-				[]any{int64(7), "ann", int64(7), "ann", 10}},
+			selectHas: golden{`SELECT ` + pgCols + ` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND "org_id" = ? AND "owner" = ?) AND "org_id" = ? AND "owner" = ? LIMIT 10`,
+				[]any{int64(7), "ann", int64(7), "ann"}},
 			count: golden{`SELECT COUNT(*) FROM "tickets" WHERE "done" = ? AND "org_id" = ? AND "owner" = ?`,
 				[]any{false, int64(7), "ann"}},
 			update: golden{`UPDATE "tickets" SET "title" = ? WHERE "id" = ? AND "org_id" = ? AND "owner" = ? AND "owner" = ?`,

@@ -56,7 +56,7 @@ func TestKeywordFilters(t *testing.T) {
 		query: `mutation { createPost(input: {title: "Keyed", keywords: ["go", "sql"]}) { keywords } }`,
 		want:  `{"data": {"createPost": {"keywords": ["go", "sql"]}}}`,
 		stmts: []string{
-			viewerCheck + ` [2 1]`,
+			viewerCheck + ` [2]`,
 			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at", "keywords") VALUES (?, ?, ?, ?, ?, NULL, ?) RETURNING "id" [1 2 Keyed draft 0 ["go","sql"]]`,
 		},
 	})

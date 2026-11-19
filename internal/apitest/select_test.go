@@ -43,8 +43,8 @@ func TestSelectSQL(t *testing.T) {
 			"SELECT `org_id`, SUM(`total`), COUNT(*) FROM `invoices` WHERE `paid` = ? GROUP BY `org_id` HAVING (SUM(`total`) > ?) ORDER BY SUM(`total`) IS NULL DESC, SUM(`total`) DESC LIMIT ?",
 			[]any{true, 100, 10}},
 		{velox.SQLite,
-			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" = ? GROUP BY "org_id" HAVING (SUM("total") > ?) ORDER BY SUM("total") IS NULL DESC, SUM("total") DESC LIMIT ?`,
-			[]any{true, 100, 10}},
+			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" = ? GROUP BY "org_id" HAVING (SUM("total") > ?) ORDER BY SUM("total") IS NULL DESC, SUM("total") DESC LIMIT 10`,
+			[]any{true, 100}},
 	} {
 		db := openFake(tc.d, &fakeconn.Exec{})
 		text, args, err := report(db).SQL(ctx)
@@ -92,7 +92,7 @@ func TestOrderByExpression(t *testing.T) {
 	}{
 		{velox.Postgres, `SELECT "id" FROM "invoices" ORDER BY (LOWER("number")), "id" DESC LIMIT $1`},
 		{velox.MySQL, "SELECT `id` FROM `invoices` ORDER BY (LOWER(`number`)) IS NULL, (LOWER(`number`)), `id` DESC LIMIT ?"},
-		{velox.SQLite, `SELECT "id" FROM "invoices" ORDER BY (LOWER("number")) IS NULL, (LOWER("number")), "id" DESC LIMIT ?`},
+		{velox.SQLite, `SELECT "id" FROM "invoices" ORDER BY (LOWER("number")) IS NULL, (LOWER("number")), "id" DESC LIMIT 5`},
 	} {
 		db := openFake(tc.d, &fakeconn.Exec{})
 		text, _, err := db.Query[inv]().Columns(I.ID).

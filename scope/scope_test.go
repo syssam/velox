@@ -239,7 +239,7 @@ func TestScopeSQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT "id", "org_id", "title" FROM "notes" WHERE "title" = ? AND "org_id" = ? LIMIT ?`; q != want || args[1] != int64(7) {
+	if want := `SELECT "id", "org_id", "title" FROM "notes" WHERE "title" = ? AND "org_id" = ? LIMIT 5`; q != want || args[1] != int64(7) {
 		t.Errorf("SQL\n got %s %v\nwant %s", q, args, want)
 	}
 }

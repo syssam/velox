@@ -220,13 +220,17 @@ func TestOfThroughRenders(t *testing.T) {
 	}{
 		{velox.Postgres, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($1, $2)) LIMIT $3`},
 		{velox.MySQL, "SELECT `id`, `org_id`, `name` FROM `tags` WHERE EXISTS (SELECT 1 FROM `book_tags` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND `book_id` IN (?, ?)) LIMIT ?"},
-		{velox.SQLite, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN (?, ?)) LIMIT ?`},
+		{velox.SQLite, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN (?, ?)) LIMIT 5`},
 	} {
 		got, args, err := openFake(c.d, &fakeconn.Exec{}).Query[fixture.DTag]().Where(fixture.DBooks.Tags.Of(&b1, &b2)).Limit(5).SQL(ctx)
 		if err != nil || got != c.want {
 			t.Errorf("%v:\n got %s, %v\nwant %s", c.d, got, err, c.want)
 		}
-		if want := []any{int64(1), int64(2), 5}; !reflect.DeepEqual(args, want) {
+		want := []any{int64(1), int64(2), 5}
+		if c.d == velox.SQLite {
+			want = want[:2] // SQLite writes the Limit in the text
+		}
+		if !reflect.DeepEqual(args, want) {
 			t.Errorf("%v: args %v, want %v", c.d, args, want)
 		}
 	}
@@ -261,11 +265,15 @@ func TestOfSelfManyToMany(t *testing.T) {
 	}{
 		{velox.Postgres, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" IN ($1, $2)) LIMIT $3`},
 		{velox.MySQL, "SELECT `id` FROM `peers` WHERE EXISTS (SELECT 1 FROM `friends` AS `vx1` WHERE `vx1`.`friend_id` = `peers`.`id` AND `peer_id` IN (?, ?)) LIMIT ?"},
-		{velox.SQLite, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" IN (?, ?)) LIMIT ?`},
+		{velox.SQLite, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" IN (?, ?)) LIMIT 5`},
 	} {
 		db := openFake(c.d, &fakeconn.Exec{})
 		got, args, err := db.Query[dPeer]().Where(dPeers.Friends.Of(&p1, &p2)).Limit(5).SQL(skip)
-		if err != nil || got != c.want || !reflect.DeepEqual(args, []any{int64(1), int64(2), 5}) {
+		wantArgs := []any{int64(1), int64(2), 5}
+		if c.d == velox.SQLite {
+			wantArgs = wantArgs[:2] // SQLite writes the Limit in the text
+		}
+		if err != nil || got != c.want || !reflect.DeepEqual(args, wantArgs) {
 			t.Errorf("%v:\n got %s %v, %v\nwant %s", c.d, got, args, err, c.want)
 		}
 		// One owner is another shape from two, through the same cache.

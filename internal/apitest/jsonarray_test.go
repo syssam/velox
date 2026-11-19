@@ -35,8 +35,8 @@ func TestJSONArraySQL(t *testing.T) {
 		{velox.SQLite,
 			`SELECT "id" FROM "j_docs" WHERE (CASE WHEN json_type("tags") = 'array' THEN EXISTS (SELECT 1 FROM json_each("tags") AS je WHERE je.type = 'text' AND je.value = ?) ` +
 				`WHEN "tags" IS NULL THEN NULL ELSE 1 = 0 END AND ` +
-				`CASE WHEN json_type("tags") = 'array' THEN json_array_length("tags") = 0 WHEN "tags" IS NULL THEN NULL ELSE 1 = 0 END) LIMIT ?`,
-			[]any{"a", 1}},
+				`CASE WHEN json_type("tags") = 'array' THEN json_array_length("tags") = 0 WHEN "tags" IS NULL THEN NULL ELSE 1 = 0 END) LIMIT 1`,
+			[]any{"a"}},
 	} {
 		db := openFake(tc.d, &fakeconn.Exec{})
 		text, args, err := db.Query[fixture.JDoc]().Columns(J.ID).Where(where).Limit(1).SQL(ctx)
@@ -59,7 +59,7 @@ func TestJSONArrayElements(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return strings.TrimPrefix(strings.TrimSuffix(text, " LIMIT ?"), `SELECT "id" FROM "j_docs" WHERE `), args[:len(args)-1]
+		return strings.TrimPrefix(strings.TrimSuffix(text, " LIMIT 1"), `SELECT "id" FROM "j_docs" WHERE `), args
 	}
 	for _, tc := range []struct {
 		name string

@@ -91,9 +91,9 @@ func TestUpdateUserPassword(t *testing.T) {
 		query: `mutation { updateUser(id: "` + user2 + `", input: {name: "Bea"}, password: "new secret") { name } }`,
 		want:  `{"data": {"updateUser": {"name": "Bea"}}}`,
 		stmts: []string{
-			`SELECT "id" FROM "users" WHERE "id" = ? LIMIT ? [2 2]`,
+			`SELECT "id" FROM "users" WHERE "id" = ? LIMIT 2 [2]`,
 			`UPDATE "users" SET "name" = ?, "password_hash" = ? WHERE "id" = ? [Bea <hash> 2]`,
-			selUsers + ` WHERE "id" = ? LIMIT ? [2 2]`,
+			selUsers + ` WHERE "id" = ? LIMIT 2 [2]`,
 		},
 	})
 	if h := s.passwordHashOf(t, "Bea"); !checkPassword(t, h, "new secret") {
@@ -105,9 +105,9 @@ func TestUpdateUserPassword(t *testing.T) {
 		query: `mutation { updateUser(id: "` + user2 + `", input: {name: "Bria"}) { name } }`,
 		want:  `{"data": {"updateUser": {"name": "Bria"}}}`,
 		stmts: []string{
-			`SELECT "id" FROM "users" WHERE "id" = ? LIMIT ? [2 2]`,
+			`SELECT "id" FROM "users" WHERE "id" = ? LIMIT 2 [2]`,
 			`UPDATE "users" SET "name" = ? WHERE "id" = ? [Bria 2]`,
-			selUsers + ` WHERE "id" = ? LIMIT ? [2 2]`,
+			selUsers + ` WHERE "id" = ? LIMIT 2 [2]`,
 		},
 	})
 	if h := s.passwordHashOf(t, "Bria"); h != before {

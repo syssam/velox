@@ -189,7 +189,7 @@ func renderCases() []renderCase {
 		}, map[velox.Dialect]string{
 			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = $1 AND "total" > $2 ORDER BY "paid_at" DESC, "id" LIMIT $3`,
 			velox.MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `org_id` = ? AND `total` > ? ORDER BY `paid_at` DESC, `id` LIMIT ?",
-			velox.SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = ? AND "total" > ? ORDER BY "paid_at" DESC, "id" LIMIT ?`,
+			velox.SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = ? AND "total" > ? ORDER BY "paid_at" DESC, "id" LIMIT 50`,
 		}, []any{int64(7), float64(10), 50}},
 		{"in and not in", func() *velox.Statement { return stmt(hID.In(1, 2, 3), hNumber.NotIn("x")) }, map[velox.Dialect]string{
 			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" IN ($1, $2, $3) AND "number" NOT IN ($4)`,
@@ -283,7 +283,7 @@ func renderCases() []renderCase {
 		}, map[velox.Dialect]string{
 			velox.Postgres: `SELECT "number", "id" FROM "invoices" LIMIT $1 OFFSET $2`,
 			velox.MySQL:    "SELECT `number`, `id` FROM `invoices` LIMIT ? OFFSET ?",
-			velox.SQLite:   `SELECT "number", "id" FROM "invoices" LIMIT ? OFFSET ?`,
+			velox.SQLite:   `SELECT "number", "id" FROM "invoices" LIMIT 1 OFFSET ?`,
 		}, []any{1, 5}},
 		{"insert one row", func() *velox.Statement { return ins([]int{1, 2}, [][]any{{int64(7), "A"}}) }, map[velox.Dialect]string{
 			velox.Postgres: `INSERT INTO "invoices" ("org_id", "number") VALUES ($1, $2)`,
@@ -445,6 +445,19 @@ func TestEachRefusesReservedNames(t *testing.T) {
 
 func argsEqual(a, b []any) bool { return len(a) == len(b) && (len(a) == 0 || reflect.DeepEqual(a, b)) }
 
+// argsOf is the arguments args, which hold st's Limit as a parameter, as d
+// renders them: SQLite writes the Limit in the text, so it has no argument.
+func argsOf(d velox.Dialect, st *velox.Statement, args []any) []any {
+	if d != velox.SQLite || st.Limit == 0 {
+		return args
+	}
+	i := len(args) - 1
+	if st.Offset > 0 {
+		i--
+	}
+	return append(append([]any{}, args[:i]...), args[i+1:]...)
+}
+
 func TestRender(t *testing.T) {
 	for _, c := range renderCases() {
 		if len(c.sql) != 3 {
@@ -455,8 +468,8 @@ func TestRender(t *testing.T) {
 			if got != want {
 				t.Errorf("%s, %v:\n got %s\nwant %s", c.name, d, got, want)
 			}
-			if !argsEqual(args, c.args) {
-				t.Errorf("%s, %v: args %#v, want %#v", c.name, d, args, c.args)
+			if wantArgs := argsOf(d, c.st(), c.args); !argsEqual(args, wantArgs) {
+				t.Errorf("%s, %v: args %#v, want %#v", c.name, d, args, wantArgs)
 			}
 		}
 	}
@@ -480,12 +493,12 @@ func TestExistsRenders(t *testing.T) {
 	for d, want := range map[velox.Dialect]string{
 		velox.Postgres: `SELECT 1 FROM "invoices" WHERE "org_id" = $1 LIMIT $2`,
 		velox.MySQL:    "SELECT 1 FROM `invoices` WHERE `org_id` = ? LIMIT ?",
-		velox.SQLite:   `SELECT 1 FROM "invoices" WHERE "org_id" = ? LIMIT ?`,
+		velox.SQLite:   `SELECT 1 FROM "invoices" WHERE "org_id" = ? LIMIT 1`,
 	} {
 		st := stmt(hOrg.EQ(1))
 		st.Exists, st.Limit = true, 1
 		got, args := render(d, st)
-		if got != want || !argsEqual(args, []any{int64(1), 1}) {
+		if got != want || !argsEqual(args, argsOf(d, st, []any{int64(1), 1})) {
 			t.Errorf("%v: %s %v, want %s", d, got, args, want)
 		}
 	}
@@ -543,7 +556,7 @@ func TestNewClausesOnEveryDialect(t *testing.T) {
 		}, map[velox.Dialect]string{
 			velox.Postgres: `SELECT 1 FROM "invoices" WHERE "org_id" = $1 LIMIT $2`,
 			velox.MySQL:    "SELECT 1 FROM `invoices` WHERE `org_id` = ? LIMIT ?",
-			velox.SQLite:   `SELECT 1 FROM "invoices" WHERE "org_id" = ? LIMIT ?`,
+			velox.SQLite:   `SELECT 1 FROM "invoices" WHERE "org_id" = ? LIMIT 1`,
 		}, []any{int64(1), 1}},
 		{"sum", func() *velox.Statement {
 			st := stmt(hOrg.EQ(1))
@@ -563,7 +576,7 @@ func TestNewClausesOnEveryDialect(t *testing.T) {
 		}, map[velox.Dialect]string{
 			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = $1 AND EXISTS (SELECT 1 FROM "joins" AS "vx1" WHERE "vx1"."inv_id" = "invoices"."id" AND "tag_id" IN ($2, $3)) LIMIT $4`,
 			velox.MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `org_id` = ? AND EXISTS (SELECT 1 FROM `joins` AS `vx1` WHERE `vx1`.`inv_id` = `invoices`.`id` AND `tag_id` IN (?, ?)) LIMIT ?",
-			velox.SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = ? AND EXISTS (SELECT 1 FROM "joins" AS "vx1" WHERE "vx1"."inv_id" = "invoices"."id" AND "tag_id" IN (?, ?)) LIMIT ?`,
+			velox.SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = ? AND EXISTS (SELECT 1 FROM "joins" AS "vx1" WHERE "vx1"."inv_id" = "invoices"."id" AND "tag_id" IN (?, ?)) LIMIT 5`,
 		}, []any{int64(1), int64(7), int64(8), 5}},
 		{"for update skip locked", func() *velox.Statement {
 			st := stmt(hID.EQ(1))
@@ -589,8 +602,8 @@ func TestNewClausesOnEveryDialect(t *testing.T) {
 				t.Errorf("%s, %v: the guard refuses it: %v", c.name, d, err)
 			}
 			got, args := render(d, c.st())
-			if got != want || !argsEqual(args, c.args) {
-				t.Errorf("%s, %v:\n got %s %#v\nwant %s %#v", c.name, d, got, args, want, c.args)
+			if wantArgs := argsOf(d, c.st(), c.args); got != want || !argsEqual(args, wantArgs) {
+				t.Errorf("%s, %v:\n got %s %#v\nwant %s %#v", c.name, d, got, args, want, wantArgs)
 			}
 		}
 	}

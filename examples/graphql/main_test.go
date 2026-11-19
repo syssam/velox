@@ -198,8 +198,8 @@ const (
 	selTags  = `SELECT "id", "name", "rank" FROM "tags"`
 	// viewerCheck is the resolvers' check that the viewer is a user, and
 	// authorCheck their read of a post's author (graph.Author, graph.OwnPost).
-	viewerCheck = `SELECT 1 FROM "users" WHERE "id" = ? LIMIT ?`
-	authorCheck = `SELECT "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ?`
+	viewerCheck = `SELECT 1 FROM "users" WHERE "id" = ? LIMIT 1`
+	authorCheck = `SELECT "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT 2`
 	tags        = `SELECT "id", "name" FROM "tags"`
 )
 
@@ -236,8 +236,8 @@ func TestByID(t *testing.T) {
 			"hidden": {"totalCount": 0}
 		}}`,
 		stmts: []string{
-			`SELECT "id", "name" FROM "users" WHERE "id" IN (?, ?, ?) ORDER BY "id" LIMIT ? [1 9 3 101]`,
-			`SELECT "id", "author_id", "title" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
+			`SELECT "id", "name" FROM "users" WHERE "id" IN (?, ?, ?) ORDER BY "id" LIMIT 101 [1 9 3]`,
+			`SELECT "id", "author_id", "title" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT 101 [1 1]`,
 			`SELECT "id", "name" FROM "users" WHERE "id" IN (?) ORDER BY "id" [1]`, // the author
 			`SELECT COUNT(*) FROM "posts" WHERE "id" = ? AND "org_id" = ? [5 1]`,
 		},
@@ -285,7 +285,7 @@ func TestPaging(t *testing.T) {
 			"edges": [{"cursor": %[1]q, "node": {"id": %[3]q, "name": "Ada"}}, {"cursor": %[2]q, "node": {"id": %[4]q, "name": "Brian"}}],
 			"pageInfo": {"hasNextPage": true, "hasPreviousPage": false, "startCursor": %[1]q, "endCursor": %[2]q}
 		}}}`, userCursor(1), userCursor(2), user1, user2),
-		stmts: []string{`SELECT "id", "name" FROM "users" ORDER BY "id" LIMIT ? [3]`},
+		stmts: []string{`SELECT "id", "name" FROM "users" ORDER BY "id" LIMIT 3 []`},
 	})
 	s.do(t, request{
 		query: q,
@@ -294,7 +294,7 @@ func TestPaging(t *testing.T) {
 			"edges": [{"cursor": %[1]q, "node": {"id": %[2]q, "name": "Chen"}}],
 			"pageInfo": {"hasNextPage": false, "hasPreviousPage": false, "startCursor": %[1]q, "endCursor": %[1]q}
 		}}}`, userCursor(3), user3),
-		stmts: []string{`SELECT "id", "name" FROM "users" WHERE ("id" > ?) ORDER BY "id" LIMIT ? [2 3]`},
+		stmts: []string{`SELECT "id", "name" FROM "users" WHERE ("id" > ?) ORDER BY "id" LIMIT 3 [2]`},
 	})
 	// Backward: last reverses the order and the rows read.
 	s.do(t, request{
@@ -304,7 +304,7 @@ func TestPaging(t *testing.T) {
 			"edges": [{"cursor": %[1]q, "node": {"id": %[2]q, "name": "Chen"}}],
 			"pageInfo": {"hasNextPage": false, "hasPreviousPage": true, "startCursor": %[1]q, "endCursor": %[1]q}
 		}}}`, userCursor(3), user3),
-		stmts: []string{`SELECT "id", "name" FROM "users" ORDER BY "id" DESC LIMIT ? [2]`},
+		stmts: []string{`SELECT "id", "name" FROM "users" ORDER BY "id" DESC LIMIT 2 []`},
 	})
 	s.do(t, request{
 		query: q,
@@ -313,7 +313,7 @@ func TestPaging(t *testing.T) {
 			"edges": [{"cursor": %[1]q, "node": {"id": %[3]q, "name": "Ada"}}, {"cursor": %[2]q, "node": {"id": %[4]q, "name": "Brian"}}],
 			"pageInfo": {"hasNextPage": false, "hasPreviousPage": false, "startCursor": %[1]q, "endCursor": %[2]q}
 		}}}`, userCursor(1), userCursor(2), user1, user2),
-		stmts: []string{`SELECT "id", "name" FROM "users" WHERE ("id" < ?) ORDER BY "id" DESC LIMIT ? [3 3]`},
+		stmts: []string{`SELECT "id", "name" FROM "users" WHERE ("id" < ?) ORDER BY "id" DESC LIMIT 3 [3]`},
 	})
 }
 
@@ -330,7 +330,7 @@ func TestOrderAndWhere(t *testing.T) {
 		) { edges { node { title views } } } }`,
 		want: `{"data": {"posts": {"edges": [{"node": {"title": "Alpha", "views": 10}}, {"node": {"title": "Gamma", "views": 10}}]}}}`,
 		stmts: []string{
-			`SELECT "id", "author_id", "views", "title" FROM "posts" WHERE ("title" <> ? AND "status" = ? AND "published_at" >= ?) AND "org_id" = ? ORDER BY "views" DESC, "title", "id" LIMIT ? [Delta published 2026-04-01 00:00:00 +0000 UTC 1 101]`,
+			`SELECT "id", "author_id", "views", "title" FROM "posts" WHERE ("title" <> ? AND "status" = ? AND "published_at" >= ?) AND "org_id" = ? ORDER BY "views" DESC, "title", "id" LIMIT 101 [Delta published 2026-04-01 00:00:00 +0000 UTC 1]`,
 		},
 	})
 	s.do(t, request{
@@ -341,7 +341,7 @@ func TestOrderAndWhere(t *testing.T) {
 		) { edges { node { name } } } }`,
 		want: `{"data": {"users": {"edges": [{"node": {"name": "Brian"}}, {"node": {"name": "Ada"}}]}}}`,
 		stmts: []string{
-			`SELECT "id", "name" FROM "users" WHERE (EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" LIKE ? ESCAPE '!' AND "org_id" = ?) OR "role" = ?) ORDER BY "name" DESC, "id" LIMIT ? [G% 1 admin 101]`,
+			`SELECT "id", "name" FROM "users" WHERE (EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" LIKE ? ESCAPE '!' AND "org_id" = ?) OR "role" = ?) ORDER BY "name" DESC, "id" LIMIT 101 [G% 1 admin]`,
 		},
 	})
 }
@@ -360,7 +360,7 @@ const nestedQuery = `query($n: Int) { users(first: $n, orderBy: {field: NAME}) {
 // the keys of the users and the posts read.
 func nestedStmts(n int, userKeys, postKeys string) []string {
 	return []string{
-		fmt.Sprintf(`SELECT "id", "name" FROM "users" ORDER BY "name", "id" LIMIT ? [%d]`, n+1),
+		fmt.Sprintf(`SELECT "id", "name" FROM "users" ORDER BY "name", "id" LIMIT %d []`, n+1),
 		fmt.Sprintf(`%s [%s 1 2]`, postsOf(`"id", "author_id", "title"`, marks(userKeys), `"title", "id"`), userKeys),
 		fmt.Sprintf(`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (%s) AND "org_id" = ? GROUP BY "author_id" [%s 1]`, marks(userKeys), userKeys),
 		fmt.Sprintf(`%s [%s 101]`, tagsOf(marks(postKeys)), postKeys),
@@ -404,13 +404,15 @@ func TestNoNPlusOne(t *testing.T) {
 		stmts: nestedStmts(1, "1", "1"),
 	})
 	one, three := nestedStmts(1, "1", "1"), nestedStmts(3, "1 2 3", "1 3 4")
-	// The SQL of each statement, with a list of placeholders as one.
+	// The SQL of each statement, with a list of placeholders as one, and
+	// the page's limit, which SQLite's LIMIT writes in the text, as any.
 	list := regexp.MustCompile(`\(\?(, \?)*\)`)
+	limit := regexp.MustCompile(`LIMIT \d+`)
 	sqlOf := func(stmts []string) []string {
 		out := make([]string, len(stmts))
 		for i, st := range stmts {
 			sql, _, _ := strings.Cut(st, " [")
-			out[i] = list.ReplaceAllString(sql, "(?…)")
+			out[i] = limit.ReplaceAllString(list.ReplaceAllString(sql, "(?…)"), "LIMIT n")
 		}
 		slices.Sort(out)
 		return out
@@ -428,7 +430,7 @@ func TestColumnsCollected(t *testing.T) {
 	s.do(t, request{
 		query: `{ users { edges { node { name } } } }`,
 		want:  `{"data": {"users": {"edges": [{"node": {"name": "Ada"}}, {"node": {"name": "Brian"}}, {"node": {"name": "Chen"}}]}}}`,
-		stmts: []string{`SELECT "id", "name" FROM "users" ORDER BY "id" LIMIT ? [101]`},
+		stmts: []string{`SELECT "id", "name" FROM "users" ORDER BY "id" LIMIT 101 []`},
 	})
 }
 
@@ -445,7 +447,7 @@ func TestAliasesBatch(t *testing.T) {
 			{"node": {"name": "Chen", "a": {"edges": [{"node": {"title": "Delta"}}]}, "b": {"edges": []}}}
 		]}}}`,
 		stmts: []string{
-			`SELECT "id", "name" FROM "users" ORDER BY "id" LIMIT ? [101]`,
+			`SELECT "id", "name" FROM "users" ORDER BY "id" LIMIT 101 []`,
 			// a, its first post each; b, the posts titled Beta.
 			postsOf(`"id", "author_id", "title"`, "?, ?, ?", `"id"`) + ` [1 2 3 1 2]`,
 			`SELECT "id", "author_id", "title" FROM (SELECT "id", "author_id", "title", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY "id") AS "vx_rn" FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "title" = ? AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 2 3 Beta 1 101]`,
@@ -461,7 +463,7 @@ func TestAppFieldReadsAllColumns(t *testing.T) {
 	s.do(t, request{
 		query: `{ users(first: 1) { edges { node { initials } } } }`,
 		want:  `{"data": {"users": {"edges": [{"node": {"initials": "A"}}]}}}`,
-		stmts: []string{selUsers + ` ORDER BY "id" LIMIT ? [2]`},
+		stmts: []string{selUsers + ` ORDER BY "id" LIMIT 2 []`},
 	})
 }
 
@@ -484,13 +486,13 @@ func TestBatchInMutation(t *testing.T) {
 			{"node": {"title": "Zeta", "tags": {"totalCount": 1}}}
 		]}}}}}`,
 		stmts: []string{
-			viewerCheck + ` [1 1]`,
+			viewerCheck + ` [1]`,
 			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at", "keywords") VALUES (?, ?, ?, ?, ?, NULL, ?) RETURNING "id" [1 1 Zeta draft 0 []]`,
-			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT ? [1 1]`,
+			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT 1 [1]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1]`,
 			// The author, the returned row's edge, alone; then its posts and
 			// their tags, a batch each.
-			`SELECT "id" FROM "users" WHERE "id" IN (?) LIMIT ? [1 1]`,
+			`SELECT "id" FROM "users" WHERE "id" IN (?) LIMIT 1 [1]`,
 			postsOf(`"id", "author_id", "title"`, "?", `"id"`) + ` [1 1 101]`,
 			`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (?) AND "org_id" = ? GROUP BY "author_id" [1 1]`,
 			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 6]`,
@@ -524,12 +526,12 @@ func TestOrgIsolation(t *testing.T) {
 	}`
 	stmts := func(org int64) []string {
 		return []string{
-			fmt.Sprintf(`SELECT "id", "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 %d 101]`, org),
-			fmt.Sprintf(`SELECT "id", "author_id", "title" FROM "posts" WHERE "org_id" = ? ORDER BY "id" LIMIT ? [%d 101]`, org),
+			fmt.Sprintf(`SELECT "id", "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT 101 [5 %d]`, org),
+			fmt.Sprintf(`SELECT "id", "author_id", "title" FROM "posts" WHERE "org_id" = ? ORDER BY "id" LIMIT 101 [%d]`, org),
 			fmt.Sprintf(`SELECT COUNT(*) FROM "users" WHERE EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" = ? AND "org_id" = ?) [Globex plans %d]`, org),
-			`SELECT "id" FROM "users" WHERE "name" = ? ORDER BY "id" LIMIT ? [Ada 101]`,
+			`SELECT "id" FROM "users" WHERE "name" = ? ORDER BY "id" LIMIT 101 [Ada]`,
 			fmt.Sprintf(postsOf(`"id", "author_id", "title"`, "?", `"id"`)+` [1 %d 101]`, org),
-			`SELECT "id" FROM "tags" WHERE "name" = ? ORDER BY "id" LIMIT ? [go 101]`,
+			`SELECT "id" FROM "tags" WHERE "name" = ? ORDER BY "id" LIMIT 101 [go]`,
 			// The label's posts, through the join table: the org's
 			// condition is inside the window.
 			fmt.Sprintf(`SELECT "id", "author_id", "title", "vx_owner" FROM (SELECT "posts"."id", "posts"."author_id", "posts"."title", "vx_j"."tag_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."tag_id" ORDER BY "posts"."id") AS "vx_rn" FROM "posts" JOIN "post_tags" AS "vx_j" ON "vx_j"."post_id" = "posts"."id" WHERE "vx_j"."tag_id" IN (?) AND "posts"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 %d 101]`, org),
@@ -570,7 +572,7 @@ func TestOrgIsolation(t *testing.T) {
 	} {
 		var stmts []string
 		if strings.HasPrefix(c.query, "{ labels") {
-			stmts = []string{`SELECT "id" FROM "tags" WHERE "name" = ? ORDER BY "id" LIMIT ? [go 101]`}
+			stmts = []string{`SELECT "id" FROM "tags" WHERE "name" = ? ORDER BY "id" LIMIT 101 [go]`}
 		}
 		if body := s.do(t, request{query: c.query, want: c.want, stmts: stmts}); strings.Contains(body, "velox:") {
 			t.Errorf("%s: the client sees velox's text: %s", c.query, body)
@@ -655,7 +657,7 @@ func TestRequestCost(t *testing.T) {
 			{"node": {"posts": {"edges": [{"node": {"tags": {"totalCount": 1}}}]}}},
 			{"node": {"posts": {"edges": [{"node": {"tags": {"totalCount": 0}}}]}}}]}}}`,
 		stmts: []string{
-			`SELECT "id" FROM "users" ORDER BY "id" LIMIT ? [6]`,
+			`SELECT "id" FROM "users" ORDER BY "id" LIMIT 6 []`,
 			postsOf(`"id", "author_id"`, "?, ?, ?", `"id"`) + ` [1 2 3 1 6]`,
 			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 3 4]`,
 		},
@@ -748,7 +750,7 @@ func TestPublishedPosts(t *testing.T) {
 		query: `{ publishedPosts { totalCount edges { node { title } } } }`,
 		want:  `{"data": {"publishedPosts": {"totalCount": 3, "edges": [{"node": {"title": "Alpha"}}, {"node": {"title": "Gamma"}}, {"node": {"title": "Delta"}}]}}}`,
 		stmts: []string{
-			`SELECT "id", "author_id", "title" FROM "posts" WHERE "status" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [published 1 101]`,
+			`SELECT "id", "author_id", "title" FROM "posts" WHERE "status" = ? AND "org_id" = ? ORDER BY "id" LIMIT 101 [published 1]`,
 			`SELECT COUNT(*) FROM "posts" WHERE "status" = ? AND "org_id" = ? [published 1]`,
 		},
 	})
@@ -796,7 +798,7 @@ func TestFieldDirective(t *testing.T) {
 				{` + forbidden + `, "path": ["users", "edges", 1, "node", "email"]},
 				{` + forbidden + `, "path": ["users", "edges", 2, "node", "email"]}
 			], "data": null}`,
-			stmts: []string{`SELECT "id", "email" FROM "users" ORDER BY "id" LIMIT ? [101]`},
+			stmts: []string{`SELECT "id", "email" FROM "users" ORDER BY "id" LIMIT 101 []`},
 		})
 	}
 	s.do(t, request{
@@ -811,7 +813,7 @@ func TestFieldDirective(t *testing.T) {
 		want: `{"data": {"users": {"edges": [
 			{"node": {"email": "ada@example.com"}}, {"node": {"email": "brian@example.com"}}, {"node": {"email": "chen@example.com"}}
 		]}}}`,
-		stmts: []string{`SELECT "id", "email" FROM "users" ORDER BY "id" LIMIT ? [101]`},
+		stmts: []string{`SELECT "id", "email" FROM "users" ORDER BY "id" LIMIT 101 []`},
 	})
 }
 
@@ -872,13 +874,13 @@ func TestCreatePost(t *testing.T) {
 		} }`,
 		want: `{"data": {"createPost": {"title": "Epsilon", "status": "DRAFT", "author": {"name": "Brian"}, "tags": {"totalCount": 2}}}}`,
 		stmts: []string{
-			viewerCheck + ` [2 1]`,
+			viewerCheck + ` [2]`,
 			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at", "keywords") VALUES (?, ?, ?, ?, ?, NULL, ?) RETURNING "id" [1 2 Epsilon draft 0 []]`,
-			`SELECT "id" FROM "tags" WHERE "id" IN (?, ?) LIMIT ? [1 2 2]`,
+			`SELECT "id" FROM "tags" WHERE "id" IN (?, ?) LIMIT 2 [1 2]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?), (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1 6 2]`,
 			// The selection, of the returned row alone: the author, and the
 			// tags' count, through the join table.
-			`SELECT "id", "name" FROM "users" WHERE "id" IN (?) LIMIT ? [2 1]`,
+			`SELECT "id", "name" FROM "users" WHERE "id" IN (?) LIMIT 1 [2]`,
 			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?)) [6]`,
 		},
 	})
@@ -898,7 +900,7 @@ func TestCreatePost(t *testing.T) {
 		query: `mutation { createPost(input: {title: "Zeta"}) { title } }`,
 		want: `{"errors": [{"message": "the X-User header names no user", "path": ["createPost"], "extensions": {"code": "UNAUTHENTICATED"}}],
 			"data": null}`,
-		stmts: []string{viewerCheck + ` [9 1]`},
+		stmts: []string{viewerCheck + ` [9]`},
 	})
 	s.do(t, request{
 		org:   "1",
@@ -921,16 +923,16 @@ func TestUpdatePost(t *testing.T) {
 		query: `mutation { updatePost(id: "` + post1 + `", input: {clearPublishedAt: true, removeTagIDs: ["` + label1 + `"]}) { title publishedAt tags { edges { node { name } } } } }`,
 		want:  `{"data": {"updatePost": {"title": "Alpha", "publishedAt": null, "tags": {"edges": [{"node": {"name": "graphql"}}]}}}}`,
 		stmts: []string{
-			authorCheck + ` [1 1 2]`,
+			authorCheck + ` [1 1]`,
 			// The keys of the rows the update writes the edges of.
-			`SELECT "id" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
+			`SELECT "id" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT 2 [1 1]`,
 			`UPDATE "posts" SET "published_at" = ? WHERE "id" = ? AND "org_id" = ? [<nil> 1 1]`,
 			// The tags to remove the caller may read, then their join rows.
-			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT ? [1 1]`,
+			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT 1 [1]`,
 			`DELETE FROM "post_tags" WHERE "post_id" = ? AND "tag_id" IN (?) [1 1]`,
 			// The row read back, as written, and the selection's tags.
-			selPosts + ` WHERE "id" = ? LIMIT ? [1 2]`,
-			tags + ` WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?)) ORDER BY "id" LIMIT ? [1 101]`,
+			selPosts + ` WHERE "id" = ? LIMIT 2 [1]`,
+			tags + ` WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?)) ORDER BY "id" LIMIT 101 [1]`,
 		},
 	})
 	s.do(t, request{
@@ -939,7 +941,7 @@ func TestUpdatePost(t *testing.T) {
 		query: `mutation { updatePost(id: "` + post1 + `", input: {title: ""}) { title } }`,
 		want: `{"errors": [{"message": "UpdatePostInput.title: invalid value: must not be empty", "path": ["updatePost"], "extensions": {"code": "BAD_USER_INPUT"}}],
 			"data": null}`,
-		stmts: []string{authorCheck + ` [1 1 2]`},
+		stmts: []string{authorCheck + ` [1 1]`},
 	})
 }
 
@@ -958,14 +960,14 @@ func TestOnlyAuthorWrites(t *testing.T) {
 		user:  "2",
 		query: `mutation { updatePost(id: "` + post1 + `", input: {title: "Mine"}) { title } }`,
 		want:  forbidden("updatePost"),
-		stmts: []string{authorCheck + ` [1 1 2]`},
+		stmts: []string{authorCheck + ` [1 1]`},
 	})
 	s.do(t, request{
 		org:   "1",
 		user:  "2",
 		query: `mutation { deletePost(id: "` + post1 + `") }`,
 		want:  forbidden("deletePost"),
-		stmts: []string{authorCheck + ` [1 1 2]`},
+		stmts: []string{authorCheck + ` [1 1]`},
 	})
 	for _, q := range []string{
 		`mutation { updatePost(id: "` + post1 + `", input: {title: "Mine"}) { title } }`,
@@ -989,7 +991,7 @@ func TestOnlyAuthorWrites(t *testing.T) {
 		query: `mutation { updatePost(id: "` + post5 + `", input: {title: "Mine"}) { title } }`,
 		want: `{"errors": [{"message": "no Post has this ID", "path": ["updatePost"], "extensions": {"code": "NOT_FOUND"}}],
 			"data": null}`,
-		stmts: []string{authorCheck + ` [5 1 2]`},
+		stmts: []string{authorCheck + ` [5 1]`},
 	})
 	s.do(t, request{
 		org:   "1",
@@ -1003,7 +1005,7 @@ func TestOnlyAuthorWrites(t *testing.T) {
 		query: `{ posts(where: {id: ` + post1 + `}) { edges { node { title author { name } } } } }`,
 		want:  `{"data": {"posts": {"edges": [{"node": {"title": "Alpha", "author": {"name": "Ada"}}}]}}}`,
 		stmts: []string{
-			`SELECT "id", "author_id", "title" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
+			`SELECT "id", "author_id", "title" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT 101 [1 1]`,
 			`SELECT "id", "name" FROM "users" WHERE "id" IN (?) ORDER BY "id" [1]`,
 		},
 	})
@@ -1020,10 +1022,10 @@ func TestUnlinkOtherOrg(t *testing.T) {
 		query: `mutation { updateLabel(id: "` + label1 + `", input: {removePostIDs: ["` + post5 + `"]}) { name } }`,
 		want:  `{"data": {"updateLabel": {"name": "go"}}}`,
 		stmts: []string{
-			`SELECT "id" FROM "tags" WHERE "id" = ? LIMIT ? [1 2]`,
+			`SELECT "id" FROM "tags" WHERE "id" = ? LIMIT 2 [1]`,
 			// Post 5 is not acme's: no join row is deleted.
-			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT ? [5 1 1]`,
-			selTags + ` WHERE "id" = ? LIMIT ? [1 2]`,
+			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT 1 [5 1]`,
+			selTags + ` WHERE "id" = ? LIMIT 2 [1]`,
 		},
 	})
 	s.do(t, request{
@@ -1031,14 +1033,14 @@ func TestUnlinkOtherOrg(t *testing.T) {
 		query: `mutation { updateLabel(id: "` + label1 + `", input: {clearPosts: true}) { name } }`,
 		want:  `{"data": {"updateLabel": {"name": "go"}}}`,
 		stmts: []string{
-			`SELECT "id" FROM "tags" WHERE "id" = ? LIMIT ? [1 2]`,
+			`SELECT "id" FROM "tags" WHERE "id" = ? LIMIT 2 [1]`,
 			// The label's join rows a page at a time, the posts of them
 			// acme may read (the join table has no scope of its own, so
 			// post 5's row is among them), and only their join rows.
-			`SELECT "post_id", "tag_id" FROM "post_tags" WHERE "tag_id" = ? ORDER BY "tag_id", "post_id" LIMIT ? [1 500]`,
-			`SELECT "id" FROM "posts" WHERE "id" IN (?, ?) AND "org_id" = ? LIMIT ? [1 5 1 2]`,
+			`SELECT "post_id", "tag_id" FROM "post_tags" WHERE "tag_id" = ? ORDER BY "tag_id", "post_id" LIMIT 500 [1]`,
+			`SELECT "id" FROM "posts" WHERE "id" IN (?, ?) AND "org_id" = ? LIMIT 2 [1 5 1]`,
 			`DELETE FROM "post_tags" WHERE "tag_id" = ? AND "post_id" IN (?) [1 1]`,
-			selTags + ` WHERE "id" = ? LIMIT ? [1 2]`,
+			selTags + ` WHERE "id" = ? LIMIT 2 [1]`,
 		},
 	})
 	s.do(t, request{
@@ -1046,7 +1048,7 @@ func TestUnlinkOtherOrg(t *testing.T) {
 		query: `{ posts(where: {id: ` + post5 + `}) { edges { node { tags { edges { node { name } } } } } } }`,
 		want:  `{"data": {"posts": {"edges": [{"node": {"tags": {"edges": [{"node": {"name": "go"}}]}}}]}}}`,
 		stmts: []string{
-			`SELECT "id", "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 2 101]`,
+			`SELECT "id", "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT 101 [5 2]`,
 			tagsOf("?") + ` [5 101]`,
 		},
 	})
@@ -1055,7 +1057,7 @@ func TestUnlinkOtherOrg(t *testing.T) {
 		query: `{ posts(where: {id: ` + post1 + `}) { edges { node { tags { edges { node { name } } } } } } }`,
 		want:  `{"data": {"posts": {"edges": [{"node": {"tags": {"edges": [{"node": {"name": "graphql"}}]}}}]}}}`,
 		stmts: []string{
-			`SELECT "id", "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
+			`SELECT "id", "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT 101 [1 1]`,
 			tagsOf("?") + ` [1 101]`,
 		},
 	})
@@ -1075,7 +1077,7 @@ func TestLinkOtherOrg(t *testing.T) {
 		stmts: []string{
 			`INSERT INTO "tags" ("name", "rank") VALUES (?, ?) RETURNING "id" [rust 4]`,
 			// Post 5 is not acme's: no join row is inserted.
-			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT ? [5 1 1]`,
+			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT 1 [5 1]`,
 		},
 	})
 	s.do(t, request{
@@ -1098,14 +1100,14 @@ func TestDeleteOtherOrg(t *testing.T) {
 		query: `mutation { deletePost(id: "` + post5 + `") }`,
 		want: `{"errors": [{"message": "no Post has this ID", "path": ["deletePost"], "extensions": {"code": "NOT_FOUND"}}],
 			"data": null}`,
-		stmts: []string{authorCheck + ` [5 1 2]`},
+		stmts: []string{authorCheck + ` [5 1]`},
 	})
 	s.do(t, request{
 		org:   "2",
 		query: `{ posts(where: {id: ` + post5 + `}) { edges { node { title tags { edges { node { name } } } } } } }`,
 		want:  `{"data": {"posts": {"edges": [{"node": {"title": "Globex plans", "tags": {"edges": [{"node": {"name": "go"}}]}}}]}}}`,
 		stmts: []string{
-			`SELECT "id", "author_id", "title" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 2 101]`,
+			`SELECT "id", "author_id", "title" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT 101 [5 2]`,
 			tagsOf("?") + ` [5 101]`,
 		},
 	})
@@ -1133,7 +1135,7 @@ func TestDeletePost(t *testing.T) {
 		query: `mutation { deletePost(id: "` + post1 + `") }`,
 		want:  `{"data": {"deletePost": "` + post1 + `"}}`,
 		stmts: []string{
-			authorCheck + ` [1 1 2]`,
+			authorCheck + ` [1 1]`,
 			`DELETE FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`,
 		},
 	})
@@ -1229,7 +1231,7 @@ func TestMutationInputShape(t *testing.T) {
 		vars:  map[string]any{"input": map[string]any{"title": ""}},
 		want: `{"errors": [{"message": "CreatePostInput.title: invalid value: must not be empty", "path": ["createPost"],
 			"extensions": {"code": "BAD_USER_INPUT"}}], "data": null}`,
-		stmts: []string{viewerCheck + ` [1 1]`},
+		stmts: []string{viewerCheck + ` [1]`},
 	})
 }
 

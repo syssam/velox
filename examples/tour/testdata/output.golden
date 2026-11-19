@@ -18,11 +18,11 @@ Has: 1 invoice with lines, INV-001
 
 == 3. SQL(ctx)
 as accountant:
-  SELECT "id", "number" FROM "invoices" WHERE "customer" = ? AND "deleted_at" IS NULL AND "org_id" = ? LIMIT ?
-  [Initech 1 10]
+  SELECT "id", "number" FROM "invoices" WHERE "customer" = ? AND "deleted_at" IS NULL AND "org_id" = ? LIMIT 10
+  [Initech 1]
 as viewer:
-  SELECT "id", "number" FROM "invoices" WHERE "customer" = ? AND "deleted_at" IS NULL AND "org_id" = ? AND "status" <> ? LIMIT ?
-  [Initech 1 draft 10]
+  SELECT "id", "number" FROM "invoices" WHERE "customer" = ? AND "deleted_at" IS NULL AND "org_id" = ? AND "status" <> ? LIMIT 10
+  [Initech 1 draft]
 
 == 4. Writing
 Update: 1 row marked paid

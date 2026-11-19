@@ -390,11 +390,18 @@ func (w *writer) joinedOrder(o OrderTerm) {
 	}
 }
 
-// selectTail writes a SELECT's LIMIT, OFFSET and lock.
+// selectTail writes a SELECT's LIMIT, OFFSET and lock. SQLite's LIMIT is a
+// literal: SQLite runs a statement whose LIMIT is a parameter about eight
+// times slower, preparing it again at each run, while a parameter elsewhere,
+// OFFSET's included, costs nothing (TestSQLiteLimitLiteral).
 func (w *writer) selectTail(st *Statement) {
 	if st.Limit > 0 {
 		w.str(" LIMIT ")
-		w.arg(st.Limit)
+		if w.d == SQLite {
+			w.str(strconv.Itoa(st.Limit))
+		} else {
+			w.arg(st.Limit)
+		}
 	}
 	if st.Offset > 0 {
 		if st.Limit == 0 && w.d != Postgres {

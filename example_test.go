@@ -148,8 +148,8 @@ func ExampleJSONCol_Text() {
 	fmt.Println(text)
 	fmt.Println(args, err)
 	// Output:
-	// SELECT "id" FROM "j_docs" WHERE CASE WHEN json_type("attrs", ?) = 'text' THEN json_extract("attrs", ?) END = ? LIMIT ?
-	// [$."plan"."tier" $."plan"."tier" pro 10] <nil>
+	// SELECT "id" FROM "j_docs" WHERE CASE WHEN json_type("attrs", ?) = 'text' THEN json_extract("attrs", ?) END = ? LIMIT 10
+	// [$."plan"."tier" $."plan"."tier" pro] <nil>
 }
 
 // With loads a relation for every row the query returns, in one more query.

@@ -366,6 +366,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- On SQLite a query's `LIMIT` is a literal in its SQL, not a parameter:
+  SQLite ran a statement with `LIMIT ?` about eight times slower per
+  execution (86 µs against 10 µs for a 90-column read, prepared once). A
+  create-read-update-delete round over nextapp's 496 entities takes 122 ms
+  instead of 151 ms, its reads 31 ms instead of 48 ms. OFFSET
+  and every other value stay parameters. SQLite's fingerprints of limited
+  queries change, and each limit is its own render-cache shape.
+
 - velox-gen writes the empty interface as `any`, as Go has since 1.18: a
   JSON field of `map[string]any` is `map[string]any` in the entity, its
   handle and its default, not `map[string]interface{}`.

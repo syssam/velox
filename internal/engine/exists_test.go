@@ -63,7 +63,8 @@ func TestCacheKeepsRelationsApart(t *testing.T) {
 // TestCachedExistsRendersLikeRender renders a statement with a nested EXISTS,
 // a trailing condition and a Limit through the cache twice (a miss, then a
 // hit on another statement of the same shape), and compares the hit's SQL and
-// arguments with render's.
+// arguments with render's. On SQLite the Limit is in the text, so another
+// Limit is another shape, and the hit renders its own.
 func TestCachedExistsRendersLikeRender(t *testing.T) {
 	em := infoOf[employee]()
 	co := infoOf[company]()
@@ -89,11 +90,15 @@ func TestCachedExistsRendersLikeRender(t *testing.T) {
 		cachedRender(&c, d, mk(7, 3, 5)) // miss
 		hit, hitArgs := cachedRender(&c, d, mk(8, 4, 6))
 		want, wantArgs := render(d, mk(8, 4, 6))
-		if hit != want || !reflect.DeepEqual(hitArgs, wantArgs) || len(wantArgs) != 3 {
+		args, shapes := 3, 1
+		if d == velox.SQLite {
+			args, shapes = 2, 2
+		}
+		if hit != want || !reflect.DeepEqual(hitArgs, wantArgs) || len(wantArgs) != args {
 			t.Errorf("%v:\n got %s %v\nwant %s %v", d, hit, hitArgs, want, wantArgs)
 		}
-		if c.Size() != 1 {
-			t.Errorf("%v: %d shapes", d, c.Size())
+		if c.Size() != shapes {
+			t.Errorf("%v: %d shapes, want %d", d, c.Size(), shapes)
 		}
 	}
 }

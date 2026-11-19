@@ -9,7 +9,7 @@ belongs-to: Engines by Ada
 Has: [Ada, Grace]
 HasWith votes > 20: [Grace]
 Not Has: [Linus]
-SQL: SELECT "id", "name" FROM "authors" WHERE EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "authors"."id" AND "votes" > ?) LIMIT ?
+SQL: SELECT "id", "name" FROM "authors" WHERE EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "authors"."id" AND "votes" > ?) LIMIT 10
 page 1: [Compilers, COBOL]
 page 2: [Engines, Bugs]
 page 3: [Notes]

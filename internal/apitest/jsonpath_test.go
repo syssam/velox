@@ -33,8 +33,8 @@ func TestJSONPathSQL(t *testing.T) {
 		{velox.SQLite,
 			`SELECT "id" FROM "j_docs" WHERE (CASE WHEN json_type("attrs", ?) = 'text' THEN json_extract("attrs", ?) END = ? AND ` +
 				`CASE WHEN json_type("attrs", ?) IN ('integer', 'real') THEN json_extract("attrs", ?) END > ? AND ` +
-				`json_type("attrs", ?) IS NOT NULL) LIMIT ?`,
-			[]any{`$."plan"."tier"`, `$."plan"."tier"`, "pro", `$."seats"`, `$."seats"`, 3.0, `$."x"`, 1}},
+				`json_type("attrs", ?) IS NOT NULL) LIMIT 1`,
+			[]any{`$."plan"."tier"`, `$."plan"."tier"`, "pro", `$."seats"`, `$."seats"`, 3.0, `$."x"`}},
 	} {
 		db := openFake(tc.d, &fakeconn.Exec{})
 		text, args, err := db.Query[fixture.JDoc]().Columns(J.ID).Where(where).Limit(1).SQL(ctx)
@@ -124,7 +124,11 @@ func TestJSONBoolSQL(t *testing.T) {
 		velox.SQLite:   `CASE WHEN json_type("attrs", ?) IN ('true', 'false') THEN json_extract("attrs", ?) END = ?`,
 	} {
 		text, args, err := openFake(d, &fakeconn.Exec{}).Query[fixture.JDoc]().Where(J.Attrs.Bool("trial").EQ(true)).Limit(1).SQL(ctx)
-		if err != nil || !strings.Contains(text, want) || len(args) != 4 || args[2] != true {
+		n := 4 // the path twice, the value and the Limit, which SQLite writes in the text
+		if d == velox.SQLite {
+			n = 3
+		}
+		if err != nil || !strings.Contains(text, want) || len(args) != n || args[2] != true {
 			t.Errorf("%v:\n got %s %v %v\nwant %s", d, text, args, err, want)
 		}
 	}
