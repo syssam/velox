@@ -1185,25 +1185,6 @@ func (b *builder) validateID(e *Entity) {
 	}
 }
 
-// zeroDefault reports whether f's literal Default is the zero value of a
-// bool or number: false, or a number equal to 0.
-func zeroDefault(f *Field) bool {
-	var v any
-	d := json.NewDecoder(strings.NewReader(string(f.Default)))
-	d.UseNumber()
-	if d.Decode(&v) != nil {
-		return false
-	}
-	switch x := v.(type) {
-	case bool:
-		return !x
-	case json.Number:
-		n, err := x.Float64()
-		return err == nil && n == 0
-	}
-	return false
-}
-
 // uniqueUnset reports whether every unset row of e holds one value of f, and a
 // unique index of f alone refuses the second: f is Optional, not Nillable, and
 // nothing gives each row its own value (a DefaultFunc may; a SchemaDefault
