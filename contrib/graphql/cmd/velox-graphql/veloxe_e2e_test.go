@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox/schema"
@@ -59,10 +60,31 @@ func (a *Amount) UnmarshalGQL(v any) error {
 	return nil
 }
 
+// SalesOrderStatus is the application's enum type, of the name velox-gen
+// gives SalesOrder.status's own (which graphql.Type renames), with its own
+// marshalers, as nextapp's schematype.ExchangeRateSource has.
+type SalesOrderStatus string
+
+func (SalesOrderStatus) Values() []string { return []string{"gold", "silver"} }
+
+func (s SalesOrderStatus) MarshalGQL(w io.Writer) { fmt.Fprintf(w, "%q", strings.ToUpper(string(s))) }
+
+func (s *SalesOrderStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("status: %T", v)
+	}
+	*s = SalesOrderStatus(strings.ToLower(str))
+	return nil
+}
+
 type Customer struct{ schema.Schema }
 
 func (Customer) Fields() []schema.Field {
-	return []schema.Field{field.Int64("id").Annotations(graphql.Type("ID")), field.String("name")}
+	return []schema.Field{
+		field.Int64("id").Annotations(graphql.Type("ID")), field.String("name"),
+		field.Enum("tier").GoType(SalesOrderStatus("")).Default("gold").Annotations(graphql.Type("SalesOrderStatus"), graphql.WhereOps()),
+	}
 }
 
 type SalesOrder struct{ schema.Schema }
@@ -144,9 +166,9 @@ func TestVeloxeNames(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	db.SetMaxOpenConns(1)
 	for _, s := range []string{
-		"CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+		"CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, tier TEXT NOT NULL)",
 		"CREATE TABLE sales_orders (id INTEGER PRIMARY KEY, organization_id INTEGER NOT NULL, customer_id INTEGER NOT NULL, image_url TEXT NOT NULL, referrer_id INTEGER, total INTEGER NOT NULL, custom_fields TEXT NOT NULL, status TEXT NOT NULL)",
-		"INSERT INTO customers (id, name) VALUES (1, 'ada'), (2, 'bob')",
+		"INSERT INTO customers (id, name, tier) VALUES (1, 'ada', 'gold'), (2, 'bob', 'silver')",
 		"INSERT INTO sales_orders (id, organization_id, customer_id, image_url, referrer_id, total, custom_fields, status) VALUES (10, 7, 1, 'a.png', 2, 10, '{}', 'open'), (11, 7, 2, 'b.png', NULL, 20, '{}', 'open'), (12, 8, 2, 'c.png', 1, 30, '{\"a\":1}', 'shipped')",
 	} {
 		if _, err := db.Exec(s); err != nil {
@@ -172,6 +194,8 @@ func TestVeloxeNames(t *testing.T) {
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11","total":20}}]}}}` + "`" + `,
 		` + "`" + `{"query":"{ salesOrders(first: 5, where: {referrerIdIn: [\"1\", \"2\"], referrerIdNEQ: \"1\"}) { edges { node { id referrerId } } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"10","referrerId":"2"}}]}}}` + "`" + `,
+		` + "`" + `{"query":"{ salesOrders(first: 5, where: {hasCustomerWith: [{tier: SILVER}], status: OPEN}) { edges { node { id customer { tier } } } } }"}` + "`" + `: ` +
+	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11","customer":{"tier":"SILVER"}}}]}}}` + "`" + `,
 		` + "`" + `{"query":"{ salesOrders(first: 5, where: {referrerIdIsNil: true}) { edges { node { id } } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11"}}]}}}` + "`" + `,
 	} {
@@ -205,7 +229,7 @@ func TestVeloxeCompat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"  customerId: ID!\n", "  organizationId: ID!\n", "  imageUrl: String!\n", "  customerIdNotIn: [ID!]\n", "  hasCustomer: Boolean\n", "  customFields: Map!\n", "  status: SalesOrderEntryStatus!\n", "enum SalesOrderEntryStatus", "  totalGT: Amount\n", "  totalNotIn: [Amount!]\n"} {
+	for _, want := range []string{"  customerId: ID!\n", "  organizationId: ID!\n", "  imageUrl: String!\n", "  customerIdNotIn: [ID!]\n", "  hasCustomer: Boolean\n", "  customFields: Map!\n", "  status: SalesOrderEntryStatus!\n", "enum SalesOrderEntryStatus", "enum SalesOrderStatus @goModel(model: \"example.com/app/schema.SalesOrderStatus\")", "  totalGT: Amount\n", "  totalNotIn: [Amount!]\n"} {
 		if !strings.Contains(string(sdl), want) {
 			t.Errorf("velox.graphql lacks %q:\n%s", want, sdl)
 		}

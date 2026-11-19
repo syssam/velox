@@ -18,7 +18,12 @@ import (
 func (r *renderer) writeEnum(f *file, e *plugin.Entity, en sdl.Enum) error {
 	fd := e.Fields[en.Field]
 	typ := fd.Enum
-	ve := r.veloxEnums[typ]
+	var ve *plugin.Enum
+	if fd.PkgPath == "" {
+		// An application's type names its package, and may share a name with
+		// one of velox-gen's.
+		ve = r.veloxEnums[typ]
+	}
 	if ve == nil || en.Shared {
 		return nil // an application's own type, or another field's marshalers
 	}

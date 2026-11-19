@@ -400,7 +400,7 @@ func (g *graph) goValue(f *plugin.Field, a graphql.Annotation) goValue {
 		}
 	case "enum":
 		switch {
-		case g.goEnums[f.Enum]:
+		case g.veloxEnum(f):
 			v = goValue{typ: f.Enum, own: true}
 		case a.Skip&graphql.SkipEnumField != 0:
 			// A String of the application's enum type, which has no

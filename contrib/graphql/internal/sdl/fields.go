@@ -320,7 +320,7 @@ func (g *graph) enumType(o *object, f *plugin.Field, a graphql.Annotation, where
 	// so that gqlgen binds it whatever graphql.Type names the type. An enum
 	// of the application's own Go type gets the same name; @goModel binds it.
 	name := o.ent.Name + f.GoName
-	if g.goEnums[f.Enum] {
+	if g.veloxEnum(f) {
 		name = f.Enum
 	}
 	if a.Type != "" {
@@ -335,12 +335,14 @@ func (g *graph) enumType(o *object, f *plugin.Field, a graphql.Annotation, where
 		return "", fmt.Errorf("%s: the enum name %q is not a GraphQL name", where, name)
 	}
 	add := g.types.add
-	if g.goEnums[f.Enum] && name == f.Enum {
-		add = g.types.addGo // velox-gen's own Go enum type
+	if g.veloxEnum(f) && name == f.Enum || f.PkgPath != "" {
+		// velox-gen's own Go enum type, or the application's, which @goModel
+		// binds whatever the generated package declares.
+		add = g.types.addGo
 	}
-	if g.goEnums[f.Enum] || a.Type != "" {
+	if g.veloxEnum(f) || a.Type != "" {
 		goType := f.Enum
-		if !g.goEnums[f.Enum] {
+		if !g.veloxEnum(f) {
 			goType = f.PkgPath + "." + f.Enum
 		}
 		ordered, shared, err := g.shares.claimAs(name+" "+goType, f.Enum, where, f.EnumValues, values)
@@ -357,13 +359,13 @@ func (g *graph) enumType(o *object, f *plugin.Field, a graphql.Annotation, where
 	if err := add(name, where); err != nil {
 		return "", err
 	}
-	if g.goEnums[f.Enum] && name != f.Enum {
+	if g.veloxEnum(f) && name != f.Enum {
 		// The Go code declares the name an alias of velox-gen's type, which
 		// gqlgen binds by name.
 		g.types.reserve(name, "the alias of the enum type "+f.Enum)
 	}
 	en := gqlEnum{name: name, values: values, field: f.Name}
-	if !g.goEnums[f.Enum] && f.PkgPath != "" {
+	if !g.veloxEnum(f) && f.PkgPath != "" {
 		en.model = f.PkgPath + "." + f.Enum
 	}
 	o.enums = append(o.enums, en)

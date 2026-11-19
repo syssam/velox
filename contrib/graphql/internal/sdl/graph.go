@@ -413,3 +413,8 @@ func decode(anns map[string]json.RawMessage, where string) (graphql.Annotation, 
 	}
 	return a, nil
 }
+
+// veloxEnum reports whether the enum field f is of a Go enum type velox-gen
+// declares. An application's type names its package, and may share its
+// name with one of velox-gen's.
+func (g *graph) veloxEnum(f *plugin.Field) bool { return g.goEnums[f.Enum] && f.PkgPath == "" }

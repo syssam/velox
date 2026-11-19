@@ -41,7 +41,7 @@ func Enums(m *plugin.Model) ([]EntityEnums, error) {
 		}
 		ee := EntityEnums{Entity: e}
 		for i, f := range e.Fields {
-			if f.Type != "enum" || !goEnums[f.Enum] {
+			if f.Type != "enum" || !goEnums[f.Enum] || f.PkgPath != "" {
 				continue
 			}
 			fw := where + ", field " + f.Name
