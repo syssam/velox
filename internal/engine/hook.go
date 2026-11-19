@@ -94,11 +94,15 @@ func AndPolicies(ps []*EntityPolicy) *EntityPolicy {
 	case 1:
 		return ps[0]
 	}
-	var reads, writes []func(ctx context.Context) (Predicate, error)
+	var reads, queries []func(ctx context.Context) (Predicate, error)
+	var writes []func(ctx context.Context, op Op) (Predicate, error)
 	var inserts []func(ctx context.Context, p unsafe.Pointer) error
 	for _, p := range ps {
 		if p.Read != nil {
 			reads = append(reads, p.Read)
+		}
+		if p.Query != nil {
+			queries = append(queries, p.Query)
 		}
 		if p.Write != nil {
 			writes = append(writes, p.Write)
@@ -107,7 +111,7 @@ func AndPolicies(ps []*EntityPolicy) *EntityPolicy {
 			inserts = append(inserts, p.Insert)
 		}
 	}
-	out := &EntityPolicy{Read: andConds(reads), Write: andConds(writes)}
+	out := &EntityPolicy{Read: andConds(reads), Query: andConds(queries), Write: andWriteConds(writes)}
 	switch len(inserts) {
 	case 0:
 	case 1:
@@ -136,33 +140,53 @@ func andConds(fs []func(ctx context.Context) (Predicate, error)) func(ctx contex
 		return fs[0]
 	}
 	return func(ctx context.Context) (Predicate, error) {
-		var kids []Node
-		for _, f := range fs {
-			p, err := f(ctx)
-			switch {
-			case err != nil:
-				return Predicate{}, err
-			case p.n.Op == opZero:
-				return Predicate{}, nil
-			case p.n.Op == OpAllow:
-				continue
-			}
-			kids = append(kids, p.n)
-		}
-		switch len(kids) {
-		case 0:
-			return Predicate{Node{Op: OpAllow}}, nil
-		case 1:
-			return Predicate{kids[0]}, nil
-		}
-		return Predicate{Group(OpAnd, kids)}, nil
+		return andEach(len(fs), func(i int) (Predicate, error) { return fs[i](ctx) })
 	}
+}
+
+// andWriteConds is andConds of Write conditions, which are given the
+// write's kind. A nil in fs is skipped.
+func andWriteConds(fs []func(ctx context.Context, op Op) (Predicate, error)) func(ctx context.Context, op Op) (Predicate, error) {
+	fs = slices.DeleteFunc(slices.Clone(fs), func(f func(context.Context, Op) (Predicate, error)) bool { return f == nil })
+	switch len(fs) {
+	case 0:
+		return nil
+	case 1:
+		return fs[0]
+	}
+	return func(ctx context.Context, op Op) (Predicate, error) {
+		return andEach(len(fs), func(i int) (Predicate, error) { return fs[i](ctx, op) })
+	}
+}
+
+// andEach ANDs what cond returns for 0 to n-1, as andConds says.
+func andEach(n int, cond func(i int) (Predicate, error)) (Predicate, error) {
+	var kids []Node
+	for i := range n {
+		p, err := cond(i)
+		switch {
+		case err != nil:
+			return Predicate{}, err
+		case p.n.Op == opZero:
+			return Predicate{}, nil
+		case p.n.Op == OpAllow:
+			continue
+		}
+		kids = append(kids, p.n)
+	}
+	switch len(kids) {
+	case 0:
+		return Predicate{Node{Op: OpAllow}}, nil
+	case 1:
+		return Predicate{kids[0]}, nil
+	}
+	return Predicate{Group(OpAnd, kids)}, nil
 }
 
 // ErasePolicy calls f, which composes the Descriptor's Policy with E erased,
 // and keeps its result in info. A panic in f is the entity's *SchemaError,
 // and so is the reason f returns when it refuses them. On the join entity of a bidirectional edge (Descriptor.Bidi)
-// it refuses a Read or Write.
+// it refuses a Read, Query or Write (Mutation sets Write).
 func ErasePolicy(info *EntityInfo, f func() (*EntityPolicy, string)) error {
 	var (
 		p      *EntityPolicy
@@ -175,7 +199,7 @@ func ErasePolicy(info *EntityInfo, f func() (*EntityPolicy, string)) error {
 		return &SchemaError{Entity: info.Name, Reason: reason}
 	}
 	info.policy = p
-	if info.bidi && p != nil && (p.Read != nil || p.Write != nil) {
+	if info.bidi && p != nil && (p.reads() || p.Write != nil) {
 		return &SchemaError{Entity: info.Name, Reason: "the join entity of a bidirectional edge cannot have a Read or Write policy: " +
 			"its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"}
 	}

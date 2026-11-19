@@ -24,9 +24,10 @@ type Config struct {
 // that its Descriptor binds them.
 type Bound struct {
 	Policy, Hooks, Interceptors bool
-	// PolicyConds is "path:line" of the first Read or Write key of a
-	// velox.Policy literal in the Policy method's body, "" when it has none.
-	// The join entity of a bidirectional edge cannot have either.
+	// PolicyConds is "path:line" of the first Read, Write, Query or
+	// Mutation key of a velox.Policy (or privacy.Policy) literal in the
+	// Policy method's body, "" when it has none. The join entity of a
+	// bidirectional edge cannot have any of them.
 	PolicyConds string
 }
 
@@ -129,6 +130,9 @@ type OutEnum struct {
 
 // veloxPkg is velox's import path.
 const veloxPkg = "github.com/syssam/velox"
+
+// privacyPkg is velox's privacy package, whose Policy is velox.Policy.
+const privacyPkg = "github.com/syssam/velox/privacy"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.

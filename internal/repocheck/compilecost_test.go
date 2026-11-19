@@ -355,7 +355,7 @@ var genericObjects = []struct {
 // about 1.2%, rounded up to the next KiB. velox instantiates no generic for
 // them; the cost is the methods' bodies and closures, and the export data of
 // the types they mention.
-const policyGrowthMax = 84992 // measured 83576
+const policyGrowthMax = 87040 // measured 85060; 83576 before Policy.Query and Policy.Mutation
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package

@@ -394,7 +394,38 @@ func TestGenerateRefusesABidiPolicy(t *testing.T) {
 	_, err = Generate(goldenGraph(t, "blog"), Config{Package: "gen", Bound: bound, GenPath: "m/gen"})
 	var fe *FileError
 	if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "friend.go") || fe.Line != 8 ||
-		fe.Reason != "UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link" {
+		fe.Reason != "UserFriend.Policy sets Read, Write, Query or Mutation: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link" {
 		t.Fatalf("err = %v; want a FileError at friend.go:8", err)
+	}
+}
+
+// A Policy may return privacy.Policy, velox.Policy's alias in velox's
+// privacy package, under any name the file imports it as; a privacy.Policy
+// literal's Query and Mutation keys are conditions, as Read and Write are.
+func TestSchemaMethodsPrivacyPolicy(t *testing.T) {
+	dir := methodsDir(t, map[string]string{
+		"doc.go": "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\t\"github.com/syssam/velox/privacy\"\n)\n\n" +
+			"func (Doc) Policy() velox.Policy {\n\treturn privacy.Policy{Query: privacy.QueryPolicy{r}}\n}\n",
+		"note.go": "package schema\n\nimport pv \"github.com/syssam/velox/privacy\"\n\n" +
+			"func (Note) Policy() pv.Policy {\n\treturn pv.Policy{Mutation: pv.MutationPolicy{r}}\n}\n",
+		"tag.go": "package schema\n\nimport \"github.com/syssam/velox/privacy\"\n\n" +
+			"func (Tag) Policy() privacy.Policy {\n\treturn privacy.Policy{Query: nil}\n}\n",
+	})
+	got, err := SchemaMethods(dir, []string{"Doc", "Note", "Tag"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]Bound{
+		"Doc":  {Policy: true, PolicyConds: filepath.Join(dir, "doc.go") + ":9"},
+		"Note": {Policy: true, PolicyConds: filepath.Join(dir, "note.go") + ":6"},
+		"Tag":  {Policy: true},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	// privacy names a Policy only for Policy.
+	dir = methodsDir(t, map[string]string{"mine.go": "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\t\"github.com/syssam/velox/privacy\"\n)\n\nvar _ velox.Op\n\nfunc (Doc) Hooks() []privacy.Hook { return nil }\n"})
+	if _, err := SchemaMethods(dir, []string{"Doc"}); err == nil {
+		t.Error("Hooks of privacy is accepted")
 	}
 }

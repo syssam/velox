@@ -588,7 +588,7 @@ func TestGenerateRefusesABidiJoinPolicy(t *testing.T) {
 			"Write: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil },\n\t}\n}\n",
 	}, tempModule)
 	code, out, errs := runCLI(t, dir, "./veloxschema")
-	want := "velox-gen: veloxschema/user_friend_policy.go:14: UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
+	want := "velox-gen: veloxschema/user_friend_policy.go:14: UserFriend.Policy sets Read, Write, Query or Mutation: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
 	if code != 1 || out != "" || errs != want {
 		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
@@ -1550,6 +1550,54 @@ func TestSweepRemovesOldEntityFile(t *testing.T) {
 		t.Errorf("user_velox.go is still there: %v", err)
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema"); code != 0 {
+		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+}
+
+// schemaPrivacyPolicies are Policies written for veloxe, with package
+// privacy's rule lists: User's returns velox.Policy, as nextapp's do, and
+// Tag's returns privacy.Policy.
+const schemaPrivacyPolicies = `package veloxschema
+
+import (
+	"context"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/privacy"
+)
+
+func (User) Policy() velox.Policy {
+	return privacy.Policy{Query: privacy.QueryPolicy{
+		privacy.FilterFunc(func(_ context.Context, f privacy.Filter) error {
+			f.Where(velox.FieldEQ("name", "ann"))
+			return privacy.Skip
+		}),
+	}}
+}
+
+func (Tag) Policy() privacy.Policy {
+	return privacy.Policy{Mutation: privacy.MutationPolicy{privacy.DenyMutationOperationRule(velox.OpDelete)}}
+}
+`
+
+// A veloxe-shaped Policy is bound as any Policy: velox-gen accepts both
+// result spellings, names the schema's value in each descriptor, and the
+// generated package builds (verify).
+func TestGeneratePrivacyPolicy(t *testing.T) {
+	dir := genModule(t, map[string]string{"veloxschema/policies.go": schemaPrivacyPolicies})
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
+		t.Fatalf("%d %q", code, errs)
+	}
+	for file, want := range map[string]string{"user.go": "Schema: veloxschema.User{},", "tag.go": "Schema: veloxschema.Tag{},"} {
+		src, _ := os.ReadFile(filepath.Join(dir, "veloxgen", file))
+		if !strings.Contains(squeeze(string(src)), want) {
+			t.Errorf("%s lacks %q:\n%s", file, want, src)
+		}
+	}
+	if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 || out != "" || errs != "" {
+		t.Errorf("-check: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 }

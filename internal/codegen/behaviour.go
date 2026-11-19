@@ -66,7 +66,7 @@ func SchemaMethods(dir string, entities []string) (map[string]Bound, error) {
 				}
 				continue // a mixin's, which MixinBehaviour reads
 			}
-			if !behaviourSignature(fd.Type, m, localName(f, veloxPkg)) {
+			if !behaviourSignature(fd.Type, m, localName(f, veloxPkg), localName(f, privacyPkg)) {
 				return &FileError{Path: path, Line: line, Reason: fmt.Sprintf("%s.%s must take nothing and return %s: func (%[1]s) %[2]s() %[3]s", e, m, behaviourResult(m))}
 			}
 			b := out[e]
@@ -100,10 +100,12 @@ func notGeneric(t, m string) string {
 // behaviourSignature reports whether t, the type of a Hooks, Policy or
 // Interceptors method m, takes nothing, has no type parameters and returns
 // []<velox>.Hook, <velox>.Policy or []<velox>.Interceptor, velox being the
-// name the file imports velox under, or any name when it is "". It reads
+// name the file imports velox under, or any name when it is "". A Policy
+// may also return <privacy>.Policy, privacy being the name the file imports
+// velox's privacy package under, whose Policy is velox.Policy. It reads
 // names only; the compiler checks the types when it builds the generated
 // package.
-func behaviourSignature(t *ast.FuncType, m, velox string) bool {
+func behaviourSignature(t *ast.FuncType, m, velox, privacy string) bool {
 	if t.TypeParams != nil || len(t.Params.List) != 0 || t.Results == nil || len(t.Results.List) != 1 || len(t.Results.List[0].Names) > 1 {
 		return false
 	}
@@ -121,7 +123,7 @@ func behaviourSignature(t *ast.FuncType, m, velox string) bool {
 		return false
 	}
 	id, ok := sel.X.(*ast.Ident)
-	return ok && (velox == "" || id.Name == velox)
+	return ok && (velox == "" || id.Name == velox || m == "Policy" && privacy != "" && id.Name == privacy)
 }
 
 // Behaviour reads the schema package that pattern names, from the module

@@ -41,6 +41,20 @@ type Policy struct {
 	// Row.Set in it is a misuse, which fails the insert: a policy decides,
 	// and does not change the row.
 	Insert func(ctx context.Context, r Row) error
+
+	// Query is veloxe's query rules (package privacy). Their conditions are
+	// ANDed into every read of the entity, after Read's: a SELECT, Count,
+	// With load, join and Has/HasWith subquery of a statement that reads.
+	// Unlike Read, they do not apply to an UPDATE, a DELETE, a Save, an
+	// upsert's update branch, or anything inside one, as veloxe's query
+	// policy did not. Any error they return, but a Decision of Allow or
+	// Skip, denies the read.
+	Query QueryPolicy
+	// Mutation is veloxe's mutation rules (package privacy). They judge
+	// every inserted or upserted row, after Insert, and their conditions
+	// are ANDed into every UPDATE, DELETE and Save, and an upsert's update
+	// branch, after Write's.
+	Mutation MutationPolicy
 }
 
 // Interceptor filters an entity's rows for the application. Filter's
@@ -69,9 +83,19 @@ type Interceptor struct {
 
 // PolicyFor is p as entity in keeps it.
 func PolicyFor(in *EntityInfo, p Policy) *EntityPolicy {
-	pol := &EntityPolicy{}
-	pol.Read, pol.Write = p.Read, p.Write
-	if ins := p.Insert; ins != nil {
+	pol := &EntityPolicy{Read: p.Read}
+	if w := p.Write; w != nil {
+		pol.Write = func(ctx context.Context, _ Op) (Predicate, error) { return w(ctx) }
+	}
+	ins := p.Insert
+	if len(p.Query) > 0 {
+		pol.Query = queryCond(in, p.Query)
+	}
+	if len(p.Mutation) > 0 {
+		pol.Write = andWriteConds([]func(context.Context, Op) (Predicate, error){pol.Write, mutationCond(in, p.Mutation)})
+		ins = andInserts(ins, mutationInsert(in, p.Mutation))
+	}
+	if ins != nil {
 		pol.Insert = func(ctx context.Context, x unsafe.Pointer) error {
 			var misuse error
 			err := ins(ctx, NewRow(in, x, &misuse, true))
@@ -82,6 +106,19 @@ func PolicyFor(in *EntityInfo, p Policy) *EntityPolicy {
 		}
 	}
 	return pol
+}
+
+// andInserts is the Insert policy that runs a, then b; either may be nil.
+func andInserts(a, b func(ctx context.Context, r Row) error) func(ctx context.Context, r Row) error {
+	if a == nil {
+		return b
+	}
+	return func(ctx context.Context, r Row) error {
+		if err := a(ctx, r); err != nil {
+			return err
+		}
+		return b(ctx, r)
+	}
 }
 
 // rowMisuseError is the misuse of a Row in an Insert policy: a wrong name, a

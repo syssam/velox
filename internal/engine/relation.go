@@ -154,7 +154,7 @@ func (r *relation) buildThrough(owner *EntityInfo, l Link, fail func(string, ...
 	// could disagree. So a join entity cannot have a Read policy or an
 	// interceptor. Its Insert and Write policies apply only to writes of its
 	// rows, which they may check.
-	if p := j.policy; p != nil && p.Read != nil {
+	if j.policy.reads() {
 		return fail("its join entity %s has a Read policy; a join entity is read through its two sides, whose Read policies apply, and cannot have one of its own", j.Name)
 	}
 	if len(j.filters) > 0 {

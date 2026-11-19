@@ -43,9 +43,17 @@ type EntityInfo struct {
 
 // EntityPolicy is an entity's Policy, with E erased.
 type EntityPolicy struct {
-	Read, Write func(ctx context.Context) (Predicate, error) // nil when not declared
-	Insert      func(ctx context.Context, p unsafe.Pointer) error
+	Read func(ctx context.Context) (Predicate, error) // nil when not declared
+	// Query is Read for the statements that read only: Policy.Query's
+	// conditions.
+	Query func(ctx context.Context) (Predicate, error)
+	// Write is given the write's kind, which Policy.Mutation's rules see.
+	Write  func(ctx context.Context, op Op) (Predicate, error)
+	Insert func(ctx context.Context, p unsafe.Pointer) error
 }
+
+// reads reports whether p conditions a statement that reads only.
+func (p *EntityPolicy) reads() bool { return p != nil && (p.Read != nil || p.Query != nil) }
 
 // Column returns the index of the column with the given name.
 func (in *EntityInfo) Column(name string) (int, bool) {
@@ -213,7 +221,7 @@ func SetInfoFilters(in *EntityInfo, fs []FilterFn) { in.filters = fs }
 // HasRowFilter reports whether in's rows are filtered for reads: by its
 // interceptors, or by a Read policy.
 func HasRowFilter(in *EntityInfo) bool {
-	return len(in.filters) > 0 || (in.policy != nil && in.policy.Read != nil)
+	return len(in.filters) > 0 || in.policy.reads()
 }
 
 // InfoRels is in's relations, in the order of the generated shape.

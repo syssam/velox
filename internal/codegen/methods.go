@@ -128,23 +128,16 @@ func userFiles(dir string, mode parser.Mode, fn func(fset *token.FileSet, path s
 	return nil
 }
 
-// policyConds returns the position of the first Read or Write key, with a
-// value other than nil, of a composite literal of type velox.Policy in the
-// body of d, the Policy method of an entity in file f, and token.NoPos when
-// there is none. velox is the name f imports the module under. A Policy
-// built another way, by a positional literal, by assigning its fields or in
-// another function, is left to the runtime's check when the entity loads.
+// policyConds returns the position of the first Read, Write, Query or
+// Mutation key, with a value other than nil, of a composite literal of type
+// velox.Policy or privacy.Policy (its alias) in the body of d, the Policy
+// method of an entity in file f, and token.NoPos when there is none. A
+// Policy built another way, by a positional literal, by assigning its fields
+// or in another function, is left to the runtime's check when the entity
+// loads.
 func policyConds(f *ast.File, d *ast.FuncDecl) token.Pos {
-	name := ""
-	for _, im := range f.Imports {
-		if p, _ := strconv.Unquote(im.Path.Value); p == "github.com/syssam/velox" {
-			name = "velox"
-			if im.Name != nil {
-				name = im.Name.Name
-			}
-		}
-	}
-	if name == "" || d.Body == nil {
+	names := policyPkgNames(f)
+	if len(names) == 0 || d.Body == nil {
 		return token.NoPos
 	}
 	found := token.NoPos
@@ -153,7 +146,7 @@ func policyConds(f *ast.File, d *ast.FuncDecl) token.Pos {
 		if !ok || found.IsValid() {
 			return !found.IsValid()
 		}
-		if !isPolicyType(lit.Type, name) {
+		if !isPolicyType(lit.Type, names) {
 			return true
 		}
 		for _, el := range lit.Elts {
@@ -161,7 +154,7 @@ func policyConds(f *ast.File, d *ast.FuncDecl) token.Pos {
 				if v, ok := kv.Value.(*ast.Ident); ok && v.Name == "nil" {
 					continue
 				}
-				if k, ok := kv.Key.(*ast.Ident); ok && (k.Name == "Read" || k.Name == "Write") {
+				if k, ok := kv.Key.(*ast.Ident); ok && slices.Contains([]string{"Read", "Write", "Query", "Mutation"}, k.Name) {
 					found = k.Pos()
 					return false
 				}
@@ -172,14 +165,32 @@ func policyConds(f *ast.File, d *ast.FuncDecl) token.Pos {
 	return found
 }
 
-// isPolicyType reports whether t is <velox>.Policy.
-func isPolicyType(t ast.Expr, velox string) bool {
+// policyPkgNames is the names file f imports velox and velox's privacy
+// package under, each of which names a Policy.
+func policyPkgNames(f *ast.File) []string {
+	var names []string
+	for _, im := range f.Imports {
+		p, _ := strconv.Unquote(im.Path.Value)
+		if p != veloxPkg && p != privacyPkg {
+			continue
+		}
+		name := guessName(p)
+		if im.Name != nil {
+			name = im.Name.Name
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+// isPolicyType reports whether t is <name>.Policy, name one of names.
+func isPolicyType(t ast.Expr, names []string) bool {
 	sel, ok := t.(*ast.SelectorExpr)
 	if !ok || sel.Sel.Name != "Policy" {
 		return false
 	}
 	id, ok := sel.X.(*ast.Ident)
-	return ok && id.Name == velox
+	return ok && slices.Contains(names, id.Name)
 }
 
 // receiver is the type name of d's receiver, E for (E) and (*E). It is ""

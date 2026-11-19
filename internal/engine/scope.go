@@ -23,7 +23,7 @@ func (sc *Scoper) ConditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 		}
 	}
 	if policy && in.policy.Write != nil {
-		p, err := in.policy.Write(sc.Ctx)
+		p, err := in.policy.Write(sc.Ctx, OpUpdate)
 		if write, err = sc.PolicyCond(in, OpUpdate, "Write", p, err); err != nil {
 			return err
 		}
@@ -64,6 +64,10 @@ type Scoper struct {
 	Ctx    context.Context
 	Entity string // the statement's entity, which every error names
 	Skip   string // the DB's WithoutPolicy reason; "" when none
+	// Reads is set for a statement that reads only (a SELECT that is not
+	// Writable): the policies' Query conditions apply to it, and to every
+	// EXISTS and join in it.
+	Reads bool
 
 	skipped bool // a policy that would have applied was skipped
 
@@ -75,6 +79,12 @@ type Scoper struct {
 type readCond struct {
 	entity *EntityInfo
 	p      Predicate
+}
+
+// conditions reports whether policy p gives this statement a row condition:
+// a Read, or a Query when the statement reads only.
+func (sc *Scoper) conditions(p *EntityPolicy) bool {
+	return p != nil && (p.Read != nil || sc.Reads && p.Query != nil)
 }
 
 // PolicyOn reports whether a policy applies: false under WithoutPolicy, which
@@ -129,6 +139,16 @@ func (sc *Scoper) rowCond(t *EntityInfo, op Op) (Predicate, error) {
 	if t.policy != nil && t.policy.Read != nil && sc.PolicyOn() {
 		p, err := t.policy.Read(sc.Ctx)
 		c, err := sc.PolicyCond(t, op, "Read", p, err)
+		if err != nil {
+			return Predicate{}, err
+		}
+		for _, k := range conjuncts(c) {
+			kids = append(kids, k.n)
+		}
+	}
+	if sc.Reads && t.policy != nil && t.policy.Query != nil && sc.PolicyOn() {
+		p, err := t.policy.Query(sc.Ctx)
+		c, err := sc.PolicyCond(t, op, "Query", p, err)
 		if err != nil {
 			return Predicate{}, err
 		}
@@ -331,7 +351,7 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 // target returns what an EXISTS on entity t gets: t's row condition (zero for
 // none).
 func (sc *Scoper) target(t *EntityInfo) (Predicate, error) {
-	if len(t.filters) == 0 && (t.policy == nil || t.policy.Read == nil || !sc.PolicyOn()) {
+	if len(t.filters) == 0 && (!sc.conditions(t.policy) || !sc.PolicyOn()) {
 		return Predicate{}, nil
 	}
 	// An EXISTS reads its target, whatever the statement's kind.
@@ -390,20 +410,24 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 		return nil
 	}
 	in := st.Entity
-	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass}
+	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass, Reads: st.Op == OpSelect && !st.Writable}
 	// The entity's own conditions first, so that a denial is reported as the
 	// statement's, and an EXISTS on the same entity reuses its row condition.
 	var read, write Predicate
 	var err error
 	pol := InfoPolicy(in)
-	if len(in.filters) > 0 || (pol != nil && pol.Read != nil && sc.PolicyOn()) {
+	if len(in.filters) > 0 || (sc.conditions(pol) && sc.PolicyOn()) {
 		if read, err = sc.RowCond(in, st.Op); err != nil {
 			return err
 		}
 	}
 	if pol != nil {
 		if (st.Op != OpSelect || st.Writable) && pol.Write != nil && sc.PolicyOn() {
-			p, err := pol.Write(ctx)
+			op := st.Op
+			if op == OpSelect {
+				op = OpUpdate // a Writable SELECT reads the rows an update changes
+			}
+			p, err := pol.Write(ctx, op)
 			if write, err = sc.PolicyCond(in, st.Op, "Write", p, err); err != nil {
 				return err
 			}

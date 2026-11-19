@@ -59,6 +59,11 @@ import (
 // the defaults and the validators, so it sees what they set. It reads the
 // row with Row.Value. A Row.Set in it is a misuse, which fails the insert: a
 // policy decides, and does not change the row.
+//
+// Query and Mutation hold veloxe's privacy rules, for a schema written for
+// veloxe; package privacy has their types and says how they apply. Query's
+// conditions apply to reads only, after Read's; Mutation's rules judge
+// inserted rows, after Insert, and narrow updates and deletes, after Write.
 type Policy = engine.Policy
 
 // Row is a row of an insert, by its columns' names: what a hook ranges over

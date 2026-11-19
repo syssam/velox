@@ -344,7 +344,7 @@ func mixinMethodShape(p *mixinPkg, m *mixinMethodDecl, name string) error {
 	if m.fd.Type.TypeParams != nil {
 		return &FileError{Path: m.path, Line: line, Reason: notGeneric(name, k)}
 	}
-	if !behaviourSignature(m.fd.Type, k, localName(m.file, veloxPkg)) {
+	if !behaviourSignature(m.fd.Type, k, localName(m.file, veloxPkg), localName(m.file, privacyPkg)) {
 		return &FileError{Path: m.path, Line: line, Reason: fmt.Sprintf("%s.%s must take nothing and return %s; a mixin's method serves every entity that lists it: func (%[1]s) %[2]s() %[3]s", name, k, behaviourResult(k))}
 	}
 	return nil

@@ -42,6 +42,8 @@ JoinClause.Link Link
 JoinClause.On []Predicate
 JoinClause.Ref RelRef
 Policy.Insert func(ctx context.Context, r Row) error
+Policy.Mutation MutationPolicy
+Policy.Query QueryPolicy
 Policy.Read func(ctx context.Context) (Predicate, error)
 Policy.Write func(ctx context.Context) (Predicate, error)
 Projection.GroupBy []Term

@@ -133,12 +133,13 @@ func (l *lowerer) schemaValue(ge *Entity) bool {
 }
 
 // bidiPolicyError is the *FileError of the Policy of e, the join entity of a
-// bidirectional edge, that sets Read or Write where Bound.PolicyConds says.
+// bidirectional edge, that sets Read, Write, Query or Mutation where
+// Bound.PolicyConds says.
 func bidiPolicyError(e *OutEntity) error {
 	at := e.Bound.PolicyConds
 	i := strings.LastIndexByte(at, ':')
 	line, _ := strconv.Atoi(at[i+1:])
-	return &FileError{Path: at[:i], Line: line, Reason: e.Name + ".Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, " +
+	return &FileError{Path: at[:i], Line: line, Reason: e.Name + ".Policy sets Read, Write, Query or Mutation: the join entity of a bidirectional edge allows only Insert, " +
 		"as a condition would show or delete one row of a link"}
 }
 
