@@ -386,6 +386,10 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 		h = "Col"
 	case kind == "string":
 		h = "StringCol"
+	case f.Type == "other":
+		// Its own SQL type (a decimal, a range): the database compares and
+		// orders it, as veloxe's predicates did.
+		h = "OrderedCol"
 	default:
 		h = "Col"
 	}

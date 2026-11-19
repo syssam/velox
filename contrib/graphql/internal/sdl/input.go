@@ -231,12 +231,9 @@ func (g *graph) inputType(o *object, i int, create bool, where string) (string, 
 	if err != nil {
 		return "", "", err
 	}
-	if a.Type != "" && f.Type != "enum" && !g.inputable(t) {
-		// An output type, which no input takes: veloxe's JSON, for a json
-		// field.
-		if f.Type != "json" {
-			return "", "", fmt.Errorf("%s: graphql.Type(%q) is not an input type, so the inputs cannot take the field; leave it out of them with graphql.Skip", where, a.Type)
-		}
+	if a.Type != "" && f.Type == "json" && !g.inputable(t) {
+		// A json field's object type, which no input takes: veloxe's JSON.
+		// Any other field's column holds a scalar, which an input takes.
 		t = "JSON"
 	}
 	if !create {

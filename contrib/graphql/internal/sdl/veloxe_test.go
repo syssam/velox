@@ -91,7 +91,6 @@ func TestFieldType(t *testing.T) {
 			f.Annotations = ann(t, graphql.Type("[ItemType!]"))
 			return f
 		}(), `on an enum field names its enum`},
-		"object in input": {typed("price", "other", "decimal.Money", "example.com/decimal", "Money"), `graphql.Type("Money") is not an input type`},
 	} {
 		e := entity("Thing", c.f)
 		e.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate))
@@ -156,5 +155,27 @@ func TestVeloxeIDDefaults(t *testing.T) {
 	}
 	if plain, err := Render(m); err != nil || !strings.Contains(plain, "referenceIDContains") {
 		t.Errorf("velox's defaults changed: %v\n%s", err, plain)
+	}
+}
+
+// An Other field compares in SQL: WhereOps gives it equality and order,
+// typed with its graphql.Type, and IsNil and NotNil when it is nullable.
+func TestOtherPredicates(t *testing.T) {
+	amt := &plugin.Field{Name: "conversion_value", GoName: "ConversionValue", Type: "other", ElemType: "decimal.Decimal", PkgPath: "github.com/shopspring/decimal", Nullable: true,
+		Annotations: ann(t, graphql.Type("Decimal"), graphql.WhereOps(graphql.OpsComparison))}
+	m := model(entity("Participant", amt))
+	s, sdl := load(t, m, "scalar Decimal\n")
+	if typeOf(s, "Participant", "conversionValue") != "Decimal" || strings.Contains(sdl, "IsNil") {
+		t.Errorf("type:\n%s", sdl)
+	}
+	// veloxe's: a nullable field's predicates test for NULL too.
+	sdl, err := RenderConfig(m, Config{Veloxe: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"  conversionValueGT: Decimal\n", "  conversionValueLTE: Decimal\n", "  conversionValueIsNil: Boolean\n"} {
+		if !strings.Contains(sdl, want) {
+			t.Errorf("lacks %q:\n%s", want, sdl)
+		}
 	}
 }

@@ -71,7 +71,8 @@ func predicatesOf(typ string, nullable bool) (has, defaults graphql.WhereOp) {
 	case "string":
 		has, defaults = graphql.OpsComparison|graphql.OpsString, graphql.OpsString
 	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64",
-		"float32", "float64", "time":
+		"float32", "float64", "time", "other":
+		// An Other field's handle is ordered: its SQL type compares.
 		has, defaults = graphql.OpsEquality|graphql.OpsComparison, graphql.OpsEquality|graphql.OpsComparison
 	case "bool":
 		has, defaults = graphql.OpEQ|graphql.OpNEQ, graphql.OpEQ|graphql.OpNEQ
@@ -222,6 +223,10 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 		if f.Nullable {
 			ops |= graphql.OpsNullable
 		}
+	}
+	if o.veloxe && f.Nullable && a.WhereOps&graphql.OpsNullable == 0 && s.kind != "jsonArray" {
+		// veloxe's: a nullable field's predicates test for NULL too.
+		ops |= graphql.OpsNullable
 	}
 	for _, p := range predicates {
 		if ops&p.op == 0 {

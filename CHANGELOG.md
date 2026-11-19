@@ -21,6 +21,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A `field.Other` field's handle is `velox.OrderedCol`: GT, GTE, LT, LTE,
+  Between, Min and Max, compared by its SQL type. velox-graphql's WhereOps
+  gives such a field equality and comparison predicates (ADR 0087).
 - velox-graphql's option `compat=veloxe` makes the API veloxe's generator
   made: names from the schema name (`customerId`, `imageUrl`), foreign keys in
   the type as IDs beside their edges, and their where predicates named from

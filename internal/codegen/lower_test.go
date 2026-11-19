@@ -451,6 +451,10 @@ type LwBox struct{ W, H int }
 func TestLowerMixinPosition(t *testing.T) {
 	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwMixed{})
 	e := o.entity("LwMixed")
+	// An Other field's SQL type compares and orders, as veloxe's did.
+	if f := e.field("pt"); f.Handle != "velox.OrderedCol[LwMixed, codegen.UUIDValue]" {
+		t.Errorf("pt's handle is %s", f.Handle)
+	}
 	for _, want := range []string{
 		`f0 := schema.FieldDescriptor(&codegen.LwMixed{}, "slug")`,
 		`d0 := f0.Validators[0].(func(string) error)`,

@@ -10,15 +10,54 @@ import (
 // e2eVeloxeSchema is a schema as a veloxe application declares it: foreign
 // keys marked graphql.Type("ID"), one bound to an edge (customer_id) and one
 // with none (organization_id), a name with an initialism (image_url), a
-// field of the application's scalar Map, and an enum graphql.Type renames.
+// field of the application's scalar Map, an enum graphql.Type renames, and
+// an Other field of the application's scalar Amount, compared in SQL.
 const e2eVeloxeSchema = `package schema
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+	"io"
+
 	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 )
+
+// Amount is a sum in cents, stored as an integer: an Other field's type, as
+// a decimal is, and the application's GraphQL scalar Amount.
+type Amount struct{ Cents int64 }
+
+func (a Amount) Value() (driver.Value, error) { return a.Cents, nil }
+
+func (a *Amount) Scan(v any) error {
+	n, ok := v.(int64)
+	if !ok {
+		return fmt.Errorf("amount: %T", v)
+	}
+	a.Cents = n
+	return nil
+}
+
+func (a Amount) MarshalGQL(w io.Writer) { fmt.Fprint(w, a.Cents) }
+
+func (a *Amount) UnmarshalGQL(v any) error {
+	switch n := v.(type) {
+	case int64:
+		a.Cents = n
+	case int:
+		a.Cents = int64(n)
+	case json.Number:
+		c, err := n.Int64()
+		a.Cents = c
+		return err
+	default:
+		return fmt.Errorf("amount: %T", v)
+	}
+	return nil
+}
 
 type Customer struct{ schema.Schema }
 
@@ -33,6 +72,8 @@ func (SalesOrder) Fields() []schema.Field {
 		field.Int64("organization_id").Annotations(graphql.Type("ID"), graphql.WhereOps()),
 		field.Int64("customer_id").Annotations(graphql.Type("ID"), graphql.WhereOps()),
 		field.String("image_url"),
+		field.Other("total", Amount{}).SchemaType(map[string]string{field.SQLite: "integer", field.Postgres: "bigint", field.MySQL: "bigint"}).
+			Annotations(graphql.Type("Amount"), graphql.WhereOps(graphql.OpsComparison)),
 		field.JSON("custom_fields", map[string]any{}).Annotations(graphql.Type("Map")),
 		field.Enum("status").Values("open", "shipped").Annotations(graphql.Type("SalesOrderEntryStatus"), graphql.WhereOps()),
 	}
@@ -102,9 +143,9 @@ func TestVeloxeNames(t *testing.T) {
 	db.SetMaxOpenConns(1)
 	for _, s := range []string{
 		"CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
-		"CREATE TABLE sales_orders (id INTEGER PRIMARY KEY, organization_id INTEGER NOT NULL, customer_id INTEGER NOT NULL, image_url TEXT NOT NULL, custom_fields TEXT NOT NULL, status TEXT NOT NULL)",
+		"CREATE TABLE sales_orders (id INTEGER PRIMARY KEY, organization_id INTEGER NOT NULL, customer_id INTEGER NOT NULL, image_url TEXT NOT NULL, total INTEGER NOT NULL, custom_fields TEXT NOT NULL, status TEXT NOT NULL)",
 		"INSERT INTO customers (id, name) VALUES (1, 'ada'), (2, 'bob')",
-		"INSERT INTO sales_orders (id, organization_id, customer_id, image_url, custom_fields, status) VALUES (10, 7, 1, 'a.png', '{}', 'open'), (11, 7, 2, 'b.png', '{}', 'open'), (12, 8, 2, 'c.png', '{\"a\":1}', 'shipped')",
+		"INSERT INTO sales_orders (id, organization_id, customer_id, image_url, total, custom_fields, status) VALUES (10, 7, 1, 'a.png', 10, '{}', 'open'), (11, 7, 2, 'b.png', 20, '{}', 'open'), (12, 8, 2, 'c.png', 30, '{\"a\":1}', 'shipped')",
 	} {
 		if _, err := db.Exec(s); err != nil {
 			t.Fatalf("%s: %v", s, err)
@@ -125,6 +166,8 @@ func TestVeloxeNames(t *testing.T) {
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11","organizationId":"7","customerId":"2","imageUrl":"b.png","customer":{"name":"bob"}}},{"node":{"id":"12","organizationId":"8","customerId":"2","imageUrl":"c.png","customer":{"name":"bob"}}}]}}}` + "`" + `,
 		` + "`" + `{"query":"{ salesOrders(first: 5, where: {organizationIdIn: [\"8\"], customerIdNEQ: \"1\", hasCustomer: true, status: SHIPPED}) { edges { node { id customFields status } } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"12","customFields":{"a":1},"status":"SHIPPED"}}]}}}` + "`" + `,
+		` + "`" + `{"query":"{ salesOrders(first: 5, where: {totalGT: 15, totalLTE: 20}) { edges { node { id total } } } }"}` + "`" + `: ` +
+	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11","total":20}}]}}}` + "`" + `,
 	} {
 		if got := query(q); got != want {
 			t.Errorf("%s:\n got %s\nwant %s", q, got, want)
@@ -144,8 +187,8 @@ func TestVeloxeCompat(t *testing.T) {
 	}
 	dir, run := app(t, map[string]string{
 		"schema/schema.go":          e2eVeloxeSchema,
-		"gqlgen.yml":                e2eCollectGqlgen + "  Map:\n    model: github.com/99designs/gqlgen/graphql.Map\n",
-		"graph/app.graphql":         "scalar Map\n",
+		"gqlgen.yml":                e2eCollectGqlgen + "  Map:\n    model: github.com/99designs/gqlgen/graphql.Map\n  Amount:\n    model: example.com/app/schema.Amount\n",
+		"graph/app.graphql":         "scalar Map\nscalar Amount\n",
 		"graph/schema.resolvers.go": e2eVeloxeResolvers,
 		"veloxe_test.go":            e2eVeloxeRun,
 	}, true)
@@ -156,7 +199,7 @@ func TestVeloxeCompat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"  customerId: ID!\n", "  organizationId: ID!\n", "  imageUrl: String!\n", "  customerIdNotIn: [ID!]\n", "  hasCustomer: Boolean\n", "  customFields: Map!\n", "  status: SalesOrderEntryStatus!\n", "enum SalesOrderEntryStatus"} {
+	for _, want := range []string{"  customerId: ID!\n", "  organizationId: ID!\n", "  imageUrl: String!\n", "  customerIdNotIn: [ID!]\n", "  hasCustomer: Boolean\n", "  customFields: Map!\n", "  status: SalesOrderEntryStatus!\n", "enum SalesOrderEntryStatus", "  totalGT: Amount\n", "  totalNotIn: [Amount!]\n"} {
 		if !strings.Contains(string(sdl), want) {
 			t.Errorf("velox.graphql lacks %q:\n%s", want, sdl)
 		}
