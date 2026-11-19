@@ -741,6 +741,8 @@ func Open(pool *pgxpool.Pool, opts ...velox.Option) *velox.DB
 
 package schema
 Annotation is interface{ Name() string }
+const EntNames Names
+const VeloxeNames
 func (*CheckAnnotation) Name() string
 func (*CollationAnnotation) Name() string
 func (*CommentAnnotation) Name() string
@@ -769,6 +771,8 @@ type Index interface{ Descriptor() *desc.Index }
 type Interface interface { Type() Fields() []Field Edges() []Edge Indexes() []Index Mixin() []Mixin Annotations() []Annotation }
 type Merger interface{ Merge(Annotation) Annotation }
 type Mixin interface { Fields() []Field Edges() []Edge Indexes() []Index Annotations() []Annotation }
+type Names int
+type Package struct { PrefixIndexNames bool Names Names }
 type Schema struct { }
 type TableAnnotation struct { Schema string Table string }
 

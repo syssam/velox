@@ -7,7 +7,7 @@ package loadjson
 import "encoding/json"
 
 // Version is the version of the Model's JSON format.
-const Version = 6
+const Version = 7
 
 // SchemaPath is the import path of the schema DSL package. velox-gen uses it
 // to find the schemas of a package by their embedding of schema.Schema.
@@ -16,9 +16,16 @@ const SchemaPath = "github.com/syssam/velox/schema"
 // Model describes the schemas of one package.
 type Model struct {
 	Version int       `json:"version"`
-	Package string    `json:"package"`          // the schema package's import path
-	Schemas []*Schema `json:"schemas"`          // sorted by Name
-	Errors  []Error   `json:"errors,omitempty"` // every misuse Marshal found, sorted by Schema
+	Package string    `json:"package"`           // the schema package's import path
+	Schemas []*Schema `json:"schemas"`           // sorted by Name
+	Errors  []Error   `json:"errors,omitempty"`  // every misuse Marshal found, sorted by Schema
+	Options *Options  `json:"options,omitempty"` // the package's schema.Package; nil for the zero one
+}
+
+// Options is a schema package's schema.Package.
+type Options struct {
+	PrefixIndexNames bool   `json:"prefix_index_names,omitempty"`
+	Names            string `json:"names,omitempty"` // "veloxe", or "" for ent's
 }
 
 // Error is one misuse of the DSL: a builder's, a schema declared twice, or a

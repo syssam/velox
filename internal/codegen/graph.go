@@ -14,8 +14,9 @@ import (
 
 // Graph is the resolved model of one schema package.
 type Graph struct {
-	Package  string    `json:"package"`  // the schema package's import path
-	Entities []*Entity `json:"entities"` // sorted by Name
+	Package  string    `json:"package"`         // the schema package's import path
+	Entities []*Entity `json:"entities"`        // sorted by Name
+	Names    string    `json:"names,omitempty"` // how a long name is shortened: "veloxe", or "" for ent's (ddl.Symbol)
 }
 
 // Entity is one schema, resolved.
@@ -106,7 +107,7 @@ type Rel struct {
 // Index is an index of an entity's table.
 type Index struct {
 	Name        string                     `json:"name"`
-	Derived     bool                       `json:"derived,omitempty"` // Name is ent's, uncapped: each dialect caps it with ddl.Symbol
+	Derived     bool                       `json:"derived,omitempty"` // Name is ent's, or prefixed with the table, uncapped: each dialect caps it with ddl.Symbol
 	Columns     []string                   `json:"columns"`
 	Unique      bool                       `json:"unique,omitempty"`
 	Where       string                     `json:"where,omitempty"`

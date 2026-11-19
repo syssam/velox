@@ -50,7 +50,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 		}
 		ge := g.Entity(oe.Name)
 		pe.Annotations = ge.Annotations
-		pe.Indexes = indexes(ge)
+		pe.Indexes = indexes(ge, g.Names)
 		for _, of := range oe.Fields {
 			gf := ge.Field(of.Name)
 			pe.Fields = append(pe.Fields, &plugin.Field{
@@ -156,7 +156,7 @@ func checks(gf *Field) []plugin.Check {
 // indexes are the declared indexes of e, by the Names of the fields that hold
 // their columns, with the names Build gave them, a derived one capped as on
 // PostgreSQL.
-func indexes(e *Entity) []*plugin.Index {
+func indexes(e *Entity, names string) []*plugin.Index {
 	byColumn := make(map[string]string, len(e.Fields))
 	for _, f := range e.Fields {
 		if _, ok := byColumn[f.Column]; !ok {
@@ -167,7 +167,7 @@ func indexes(e *Entity) []*plugin.Index {
 	for _, ix := range e.Indexes {
 		name := ix.Name
 		if ix.Derived {
-			name = ddl.Symbol(velox.Postgres, name)
+			name = ddl.SymbolFor(names, velox.Postgres, name)
 		}
 		pi := &plugin.Index{Name: name, Fields: make([]string, 0, len(ix.Columns)), Unique: ix.Unique, Where: ix.Where}
 		for _, c := range ix.Columns {

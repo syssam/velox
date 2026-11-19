@@ -26,14 +26,16 @@ import (
 // reference values.
 func Build(m *loadjson.Model) (*Graph, error) {
 	b := &builder{
-		pkg: m.Package, g: &Graph{Package: m.Package, Entities: []*Entity{}},
+		pkg: m.Package, g: &Graph{Package: m.Package, Entities: []*Entity{}}, opts: cmp.Or(m.Options, &loadjson.Options{}),
 		refused: map[*Index]bool{}, implicits: map[*Field]*edgeState{}, keyEdges: map[*Field]*edgeState{},
 	}
+	b.g.Names = b.opts.Names
 	b.entities(m)
 	b.resolveEdges()
 	b.foreignKeys()
 	b.onDeletes()
 	b.indexes()
+	b.prefixIndexNames()
 	b.names()
 	b.validate()
 	if len(b.errs) > 0 {
@@ -53,7 +55,8 @@ func Build(m *loadjson.Model) (*Graph, error) {
 type builder struct {
 	pkg       string
 	g         *Graph
-	nodes     []*node // in the order of g.Entities
+	opts      *loadjson.Options // the package's schema.Package
+	nodes     []*node           // in the order of g.Entities
 	errs      []ruleError
 	refused   map[*Index]bool       // the indexes an index rule refuses, whose names are not compared
 	implicits map[*Field]*edgeState // the edge each implicit foreign key was added for
@@ -726,6 +729,25 @@ func (b *builder) indexes() {
 		}
 		for _, ix := range hashed {
 			ix.Name = partialIndexName(e.Name, ix.Columns, ix.Where)
+		}
+	}
+}
+
+// prefixIndexNames gives each declared index the name "<table>_<name>" when
+// the package's schema.Package says PrefixIndexNames and the name does not
+// start with "<table>_" already, as veloxe applications' UniqueIndexNamesHook
+// did. Such a name is capped as a derived one is, since the prefix may make
+// it too long; the StorageKey itself is still checked by rule 50.
+func (b *builder) prefixIndexNames() {
+	if !b.opts.PrefixIndexNames {
+		return
+	}
+	for _, n := range b.nodes {
+		e := n.ent
+		for _, ix := range e.Indexes {
+			if !strings.HasPrefix(ix.Name, e.Table+"_") {
+				ix.Name, ix.Derived = e.Table+"_"+ix.Name, true
+			}
 		}
 	}
 }

@@ -21,6 +21,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `schema.Package`, the options of a schema package, read by every velox-gen
+  command from its one exported variable of that type. `PrefixIndexNames`
+  names each index `<table>_<name>` unless it starts with `<table>_`, so a
+  mixin's StorageKey is one name per table; `Names: schema.VeloxeNames` caps a
+  long name with veloxe's FNV-1 128 suffix. A veloxe application keeps its
+  database's index names (ADR 0083).
 - `field.Bool("active").Default(true)`, and any `Default` or `DefaultFunc` on a
   bool or number, is accepted as in ent, with ent's `NOT NULL DEFAULT` column.
   An insert now fills defaults before its setters and hooks, so

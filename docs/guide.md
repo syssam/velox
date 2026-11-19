@@ -204,6 +204,23 @@ extension that gives GIN an operator class for the type, `btree_gin` or
 baseline by hand, and without it the index fails when it is applied, not in
 velox-gen.
 
+An index is named by its `StorageKey`, else `<entity>_<columns>` as in ent, and
+PostgreSQL wants the name unique in the database schema, so a mixin's
+StorageKey, one name on every table that lists the mixin, is refused. A schema
+package can declare its options in one exported variable of type
+`schema.Package`, which every velox-gen command reads:
+
+```go
+// Velox is the package's options for velox-gen.
+var Velox = schema.Package{PrefixIndexNames: true}
+```
+
+`PrefixIndexNames` names each index `<table>_<name>`, unless the name starts
+with `<table>_` already, as veloxe applications' `UniqueIndexNamesHook` did.
+`Names: schema.VeloxeNames` shortens a name over the dialect's limit as veloxe
+did, with an FNV-1 128 suffix where ent uses MD5, so a database veloxe migrated
+keeps its names ([ADR 0083](decisions/0083-package-index-names.md)).
+
 Also on PostgreSQL, `sqlschema.DescColumns("created_at")` (or `Desc()` for every
 key) sorts a key descending, which an `ORDER BY name, created_at DESC` needs (a
 single column is read backwards as it is), and `sqlschema.OpClassColumn("title",

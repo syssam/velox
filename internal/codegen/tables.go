@@ -21,7 +21,7 @@ func Tables(g *Graph, d velox.Dialect) (*migrate.Schema, error) {
 	if d != velox.Postgres && d != velox.MySQL && d != velox.SQLite {
 		return nil, &Error{Reason: "Tables: unknown dialect " + d.String()}
 	}
-	t := &tabler{d: d, ids: map[*Entity]string{}, fks: map[[3]string]foreignKey{}, enums: map[[2]string]bool{}}
+	t := &tabler{d: d, names: g.Names, ids: map[*Entity]string{}, fks: map[[3]string]foreignKey{}, enums: map[[2]string]bool{}}
 	for _, e := range g.Entities {
 		t.ids[e] = t.idType(e.Fields[0])
 	}
@@ -66,6 +66,7 @@ func Tables(g *Graph, d velox.Dialect) (*migrate.Schema, error) {
 // tabler holds the state of one Tables.
 type tabler struct {
 	d        velox.Dialect
+	names    string                   // Graph.Names: how a derived name is capped
 	ids      map[*Entity]string       // each entity's ID column type
 	fks      map[[3]string]foreignKey // by (schema, table, column)
 	enums    map[[2]string]bool       // the PostgreSQL enum types listed, by (schema, name)
@@ -232,11 +233,11 @@ func (t *tabler) joinTable(jt joinTable) migrate.Table {
 	return tb
 }
 
-// symbol is name on the dialect: capped as ent caps it when derived, else
-// as given.
+// symbol is name on the dialect: capped as ent caps it when derived, or as
+// veloxe did when the package says schema.VeloxeNames, else as given.
 func (t *tabler) symbol(name string, derived bool) string {
 	if derived {
-		return ddl.Symbol(t.d, name)
+		return ddl.SymbolFor(t.names, t.d, name)
 	}
 	return name
 }

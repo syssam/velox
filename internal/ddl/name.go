@@ -45,6 +45,32 @@ func Symbol(d velox.Dialect, name string) string {
 	return fmt.Sprintf("%s_%x", Clip(name, limit-33), md5.Sum([]byte(name)))
 }
 
+// VeloxeSymbol is veloxe's cap on an index or foreign-key name
+// (dialect/sql/schema/atlas.go, symbol): Symbol's, with the 32 lower-case hex
+// digits of the 128-bit FNV-1 hash of name in place of its MD5. A database
+// veloxe migrated has these names; schema.VeloxeNames selects it.
+func VeloxeSymbol(d velox.Dialect, name string) string {
+	limit := 64
+	if d == velox.Postgres {
+		limit = 63
+	}
+	if len(name) <= limit {
+		return name
+	}
+	h := fnv.New128()
+	h.Write([]byte(name))
+	return fmt.Sprintf("%s_%x", Clip(name, limit-33), h.Sum(nil))
+}
+
+// SymbolFor is Symbol, or VeloxeSymbol when names is "veloxe": a Graph's
+// Names, from the schema package's schema.Package.
+func SymbolFor(names string, d velox.Dialect, name string) string {
+	if names == "veloxe" {
+		return VeloxeSymbol(d, name)
+	}
+	return Symbol(d, name)
+}
+
 // PostgresName is the name PostgreSQL gives an object it names itself, as its
 // makeObjectName does (src/backend/commands/indexcmds.c): name1, "_" and name2
 // when name2 is not "", "_", label. When that is over 63 bytes, it shortens

@@ -298,9 +298,10 @@ func exports(dir, importPath string, env []string) (map[string]string, error) {
 }
 
 // classify reads the schema package from its export data and returns its
-// schemas, sorted, by the discovery rule above. Every refusal is an *Error at
-// the type's line, joined.
-func classify(importPath string, exp map[string]string) ([]string, error) {
+// schemas, sorted, by the discovery rule above, and the name of its exported
+// variable of type schema.Package, "" when it has none. Every refusal is an
+// *Error at the type's or the variable's line, joined.
+func classify(importPath string, exp map[string]string) ([]string, string, error) {
 	fset := token.NewFileSet()
 	imp := importer.ForCompiler(fset, "gc", func(path string) (io.ReadCloser, error) {
 		f, ok := exp[path]
@@ -314,15 +315,19 @@ func classify(importPath string, exp map[string]string) ([]string, error) {
 		return io.NopCloser(bytes.NewReader(b)), nil
 	})
 	if _, ok := exp[loadjson.SchemaPath]; !ok {
-		return nil, nil // the package does not use velox's schema package
+		return nil, "", nil // the package does not use velox's schema package
 	}
 	sp, err := imp.Import(loadjson.SchemaPath)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", loadjson.SchemaPath, err)
+		return nil, "", fmt.Errorf("reading %s: %w", loadjson.SchemaPath, err)
 	}
 	pkg, err := imp.Import(importPath)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", importPath, err)
+		return nil, "", fmt.Errorf("reading %s: %w", importPath, err)
+	}
+	opts, err := packageOptions(fset, pkg, sp)
+	if err != nil {
+		return nil, "", err
 	}
 	iface := sp.Scope().Lookup("Interface").Type().Underlying().(*types.Interface)
 	base := sp.Scope().Lookup("Schema").Type()
@@ -392,14 +397,39 @@ func classify(importPath string, exp map[string]string) ([]string, error) {
 		for i, r := range refused {
 			errs[i] = &Error{Pos: posString(fset.Position(r.tn.Pos())), Reason: r.err}
 		}
-		return nil, errors.Join(errs...)
+		return nil, "", errors.Join(errs...)
 	}
 	names := make([]string, len(schemas))
 	for i, s := range schemas {
 		names[i] = s.Name()
 	}
 	sort.Strings(names)
-	return names, nil
+	return names, opts, nil
+}
+
+// packageOptions returns the name of pkg's exported variable of type
+// schema.Package (sp's), "" when there is none. Two are refused: velox-gen
+// would not know which applies. An unexported one, which export data does
+// not hold, is refused by hiddenPackageOptions from the source.
+func packageOptions(fset *token.FileSet, pkg, sp *types.Package) (string, error) {
+	want := sp.Scope().Lookup("Package")
+	if want == nil {
+		return "", nil // an older schema package
+	}
+	var found []*types.Var
+	for _, n := range pkg.Scope().Names() {
+		if v, ok := pkg.Scope().Lookup(n).(*types.Var); ok && types.Identical(v.Type(), want.Type()) {
+			found = append(found, v)
+		}
+	}
+	sort.Slice(found, func(i, j int) bool { return found[i].Pos() < found[j].Pos() })
+	switch len(found) {
+	case 0:
+		return "", nil
+	case 1:
+		return found[0].Name(), nil
+	}
+	return "", &Error{Pos: posString(fset.Position(found[1].Pos())), Reason: fmt.Sprintf("%s is a second schema.Package of the package, after %s: velox-gen reads one", found[1].Name(), found[0].Name())}
 }
 
 // embedsBase reports whether t is a struct that embeds base, at any depth,
