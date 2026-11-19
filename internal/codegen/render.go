@@ -199,16 +199,22 @@ func renderEntity(o *Out, e *OutEntity) string {
 }
 
 // entityImports writes the import declaration: the standard packages first,
-// then the others, velox and the schema package among them.
+// then the others, velox and the schema package among them, each once. A
+// path of the schema's own module is never a standard one, though a module
+// path need not have a dot ("app/schema").
 func entityImports(w *writer, o *Out, e *OutEntity) {
+	module, _, _ := strings.Cut(o.SchemaPath, "/")
 	std := []string{"fmt"} // String uses fmt
 	other := []string{"github.com/syssam/velox"}
 	for _, p := range e.Imports {
-		if first, _, _ := strings.Cut(p, "/"); strings.Contains(first, ".") {
+		if first, _, _ := strings.Cut(p, "/"); strings.Contains(first, ".") || first == module {
 			other = append(other, p)
 		} else {
 			std = append(std, p)
 		}
+	}
+	if e.NeedsSch {
+		other = append(other, o.SchemaPath)
 	}
 	slices.Sort(std)
 	slices.Sort(other)
@@ -218,17 +224,13 @@ func entityImports(w *writer, o *Out, e *OutEntity) {
 	}
 	w.p("")
 	for _, p := range slices.Compact(other) {
-		if n := e.ImportAs[p]; n != "" {
+		switch n := e.ImportAs[p]; {
+		case n != "":
 			w.p("%s %s", n, strconv.Quote(p))
-		} else {
+		case p == o.SchemaPath && o.SchemaName != "" && o.SchemaName != guessName(o.SchemaPath):
+			w.p("%s %s", o.SchemaName, strconv.Quote(p))
+		default:
 			w.p("%s", strconv.Quote(p))
-		}
-	}
-	if e.NeedsSch {
-		if o.SchemaName != guessName(o.SchemaPath) {
-			w.p("%s %s", o.SchemaName, strconv.Quote(o.SchemaPath))
-		} else {
-			w.p("%s", strconv.Quote(o.SchemaPath))
 		}
 	}
 	w.p(")")

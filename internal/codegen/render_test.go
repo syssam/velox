@@ -383,3 +383,17 @@ func fileNamed(t *testing.T, files []File, name string) []byte {
 	t.Fatalf("no file %s", name)
 	return nil
 }
+
+// The schema package is imported once though a field's Go type is of it
+// too, and a path of the schema's module is not a standard one though the
+// module path has no dot.
+func TestEntityImportsSchemaOnce(t *testing.T) {
+	o := &Out{Package: "gen", SchemaPath: "app/veloxschema"}
+	e := &OutEntity{Imports: []string{"app/veloxschema", "app/internal/uid", "time", "encoding/json"}, NeedsSch: true}
+	var w writer
+	entityImports(&w, o, e)
+	want := "import (\n\"encoding/json\"\n\"fmt\"\n\"time\"\n\n\"app/internal/uid\"\n\"app/veloxschema\"\n\"github.com/syssam/velox\"\n)\n\n"
+	if got := w.String(); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
