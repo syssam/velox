@@ -184,6 +184,9 @@ func (g *graph) fieldInputs(o *object, fs *inputFields, i int, create bool, skip
 		return nil, err
 	}
 	v := g.goValue(f, a)
+	if a.Type != "" && strings.TrimSuffix(t, "!") == "JSON" && a.Type != "JSON" {
+		v = g.goValue(f, graphql.Annotation{}) // inputType's JSON for an output type
+	}
 	if f.Type == "json" && !v.own {
 		v.typ, v.pkg = v.getter, v.getterPkg
 	}
@@ -227,6 +230,14 @@ func (g *graph) inputType(o *object, i int, create bool, where string) (string, 
 	t, err := g.fieldType(o, f, a, where)
 	if err != nil {
 		return "", "", err
+	}
+	if a.Type != "" && f.Type != "enum" && !g.inputable(t) {
+		// An output type, which no input takes: veloxe's JSON, for a json
+		// field.
+		if f.Type != "json" {
+			return "", "", fmt.Errorf("%s: graphql.Type(%q) is not an input type, so the inputs cannot take the field; leave it out of them with graphql.Skip", where, a.Type)
+		}
+		t = "JSON"
 	}
 	if !create {
 		return t, "", nil
@@ -307,7 +318,12 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 				GoType: goType, GoPkg: goPkg},
 		})
 	}
-	edgeID := func(typ string) { add(name+"ID", typ, goEdge+"ID", InputEdgeID) }
+	idName := name + "ID"
+	if o.veloxe && ed.Field != "" && ed.FieldOn == o.ent.Name {
+		// veloxe's: the input takes the key field the edge is bound to.
+		idName = veloxeCamel(ed.Field)
+	}
+	edgeID := func(typ string) { add(idName, typ, goEdge+"ID", InputEdgeID) }
 	clearEdge := func() { add("clear"+upper(name), "Boolean", "Clear"+goEdge, InputClearEdge) }
 	switch {
 	case ed.Kind == plugin.M2M:
@@ -420,7 +436,7 @@ func edgeInputDirs(o *object, i int, where string) ([]directive, error) {
 func edgeInputNames(name string, ed *plugin.Edge) (one, many, goOne string) {
 	one, many = upper(plugin.Singular(name)), plugin.Singular(name)
 	goOne = one
-	if camel(ed.GoName) == name {
+	if strings.EqualFold(camel(ed.GoName), name) || veloxeCamel(ed.Name) == name {
 		goOne = plugin.GoName(plugin.Singular(ed.Name))
 		many = camel(goOne)
 		one = upper(many)

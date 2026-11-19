@@ -205,7 +205,7 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 		return err
 	}
 	on := s.name
-	if s.edge >= 0 {
+	if s.edge >= 0 && !o.veloxe {
 		on = strings.TrimSuffix(s.name, "ID")
 	}
 	// IsNil and NotNil are the handle's IsNull and NotNull, which only a
@@ -276,6 +276,14 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 		ed := e.Edges[j]
 		t := g.byName[ed.Target]
 		s.name, s.typ, s.kind, s.goBase, s.target, s.edge = en+"ID", "ID", "ID", goOf(en, ed.GoName)+"ID", t.name, j
+		if o.veloxe {
+			// veloxe's: named from the field, as the type shows it.
+			n, err := o.fieldName(i)
+			if err != nil {
+				return s, err
+			}
+			s.name, s.goBase = n, goOf(n, f.GoName)
+		}
 		// The foreign key's IDs are its target's keys, in their Go type.
 		s.v = goValue{typ: t.keyTyp, pkg: t.keyPkg, own: true}
 		eds, err := directives(o.eanns[j].Directives, "schema "+e.Name+", edge "+ed.Name)
@@ -293,10 +301,16 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 			return s, err
 		}
 		s.name, s.typ, s.kind, s.goBase, s.v = n, t, f.Type, goOf(n, f.GoName), g.goValue(f, a)
+		if t == "ID" {
+			s.kind = "ID" // graphql.Type("ID"): an ID has equality alone
+		}
 		if elem := jsonList[f.ElemType]; f.Type == "json" && elem != "" {
 			// A slice's predicates are on its elements, each of the scalar the
 			// slice's list is of, and of the Go type it holds.
 			s.typ, s.kind = elem, "jsonArray"
+			if inner, ok := listOf(a.Type); ok {
+				s.typ = inner // graphql.Type's list names the elements' type
+			}
 			s.v = goValue{typ: strings.TrimPrefix(f.ElemType, "[]"), own: true}
 		}
 	}

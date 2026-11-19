@@ -325,6 +325,15 @@ func Skip(modes ...SkipMode) Annotation {
 // An ID is the key alone, and does not change. The name is also the Go
 // name of the type's alias, connection and edge, so velox-graphql refuses
 // one that does not start with an upper-case letter.
+//
+// On a field it is the field's GraphQL type, as veloxe took it. On an enum
+// field it names the enum, which the fields of one Go type that give the
+// name share; velox-graphql declares it, and aliases velox-gen's Go type to
+// the name. On any other field it is a type the application declares and
+// binds to the field's Go type, a name or a list of one ("Map", "[ID!]"),
+// without the field's non-null mark. "ID" makes the predicates EQ, NEQ, In
+// and NotIn. An input that cannot take the type, an object type by veloxe's
+// judgement, takes a json field as JSON. On the key it takes only "ID".
 func Type(name string) Annotation { return Annotation{Type: name} }
 
 // QueryField adds a root Query field, with this name, that returns the

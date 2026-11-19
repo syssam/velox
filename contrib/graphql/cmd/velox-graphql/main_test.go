@@ -79,7 +79,7 @@ func TestRun(t *testing.T) {
 		"version":   {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}), "model is version 1"},
 		"no model":  {request(t, plugin.Request{Protocol: 2}), "no model"},
 		"malformed": {"{", "request"},
-		"options":   {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes one option, only=enums; it is given a, x=y"},
+		"options":   {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums and compat=veloxe; it is given a, x=y"},
 		"only":      {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "types"}, Model: m}), "it is given only=types"},
 		"only and":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "x": ""}, Model: m}), "it is given only=enums, x"},
 		"enums":     {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums"}, Model: m}), "the request names no generated package"},

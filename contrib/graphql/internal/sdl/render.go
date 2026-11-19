@@ -3,6 +3,8 @@ package sdl
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/vektah/gqlparser/v2/gqlerror"
@@ -31,8 +33,15 @@ import (
 // the SDL is validated without them: it is rendered again with only the
 // directives GraphQL defines and @goField, and that SDL must be valid on its
 // own.
-func Render(m *plugin.Model) (string, error) {
-	g, err := build(m)
+//
+// The application declares the types graphql.Type names on fields too, and
+// velox validates the SDL with a scalar standing for each it does not
+// declare itself.
+func Render(m *plugin.Model) (string, error) { return RenderConfig(m, Config{}) }
+
+// RenderConfig is Render under the options cfg.
+func RenderConfig(m *plugin.Model, cfg Config) (string, error) {
+	g, err := build(m, cfg)
 	if err != nil {
 		return "", err
 	}
@@ -44,6 +53,13 @@ func Render(m *plugin.Model) (string, error) {
 	}
 	var own writer
 	g.write(&own)
+	for _, t := range slices.Sorted(maps.Keys(g.appSet)) {
+		// The application declares the types graphql.Type names that velox
+		// does not, as it declares its directives: a scalar stands for each.
+		if g.types.declared[t] == "" {
+			own.line("scalar ", t)
+		}
+	}
 	if _, err := Check(own.String()); err != nil {
 		return "", own.explain(err)
 	}

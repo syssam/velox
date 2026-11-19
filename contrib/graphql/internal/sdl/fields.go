@@ -119,7 +119,7 @@ func resolverField(o *object, m graphql.ResolverMapping) (gqlField, error) {
 func (g *graph) plainField(o *object, i int) (gqlField, bool, error) {
 	e, f, a := o.ent, o.ent.Fields[i], o.fanns[i]
 	switch {
-	case o.hasID && i == e.PrimaryKey[0], f.Sensitive, f.Implicit != "", o.fks[f.Name], a.Skip&graphql.SkipType != 0:
+	case o.hasID && i == e.PrimaryKey[0], f.Sensitive, f.Implicit != "", o.fks[f.Name] && !o.veloxe, a.Skip&graphql.SkipType != 0:
 		return gqlField{}, false, nil
 	}
 	where := "schema " + e.Name + ", field " + f.Name
@@ -130,6 +130,10 @@ func (g *graph) plainField(o *object, i int) (gqlField, bool, error) {
 	typ, err := g.fieldType(o, f, a, where)
 	if err != nil {
 		return gqlField{}, false, err
+	}
+	if o.fks[f.Name] {
+		// veloxe's: a foreign key is its target's ID, beside its edge.
+		typ = "ID"
 	}
 	if !f.Nullable {
 		typ += "!"
@@ -219,13 +223,22 @@ func edgeBind(name, goName string, maxList int) []directive {
 // fieldName is the GraphQL name of o's field i.
 func (o *object) fieldName(i int) (string, error) {
 	f := o.ent.Fields[i]
-	return fieldName(camel(f.GoName), o.fanns[i].FieldName, "schema "+o.ent.Name+", field "+f.Name)
+	return fieldName(o.camel(f.GoName, f.Name), o.fanns[i].FieldName, "schema "+o.ent.Name+", field "+f.Name)
+}
+
+// camel is the GraphQL name of a field or edge of o by its Go name and its
+// schema name: velox's, or veloxe's under Config.Veloxe.
+func (o *object) camel(goName, name string) string {
+	if o.veloxe {
+		return veloxeCamel(name)
+	}
+	return camel(goName)
 }
 
 // edgeName is the GraphQL name of o's edge i.
 func (o *object) edgeName(i int) (string, error) {
 	ed := o.ent.Edges[i]
-	return fieldName(camel(ed.GoName), o.eanns[i].FieldName, "schema "+o.ent.Name+", edge "+ed.Name)
+	return fieldName(o.camel(ed.GoName, ed.Name), o.eanns[i].FieldName, "schema "+o.ent.Name+", edge "+ed.Name)
 }
 
 // fieldName is the GraphQL name of a field or edge: the FieldName
@@ -250,6 +263,16 @@ func fieldName(camel, annotated, where string) (string, error) {
 // field adds its enum to o, once: the type, a where input and the mutation
 // inputs may each ask.
 func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, where string) (string, error) {
+	if a.Type != "" && (f.Type != "enum" || a.Skip&graphql.SkipEnumField != 0) {
+		// The application's type, as veloxe took it: the application
+		// declares it, and binds it to the field's Go type.
+		name := a.Type
+		if inner, ok := listOf(name); ok {
+			name = inner
+		}
+		g.appSet[name] = true
+		return a.Type, nil
+	}
 	switch f.Type {
 	case "string":
 		return "String", nil
@@ -281,48 +304,70 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 			}
 			return "String", nil
 		}
-		values, err := enumValues(f, a, where)
-		if err != nil {
-			return "", err
-		}
-		// The enum is named after velox-gen's Go enum type, <Schema><Field>,
-		// so that gqlgen binds it whatever graphql.Type names the type. An enum
-		// of the application's own Go type gets the same name; @goModel binds it.
-		name := o.ent.Name + f.GoName
-		if g.goEnums[f.Enum] {
-			name = f.Enum
-		}
-		if slices.ContainsFunc(o.enums, func(en gqlEnum) bool { return en.name == name && en.field == f.Name }) {
-			return name, nil
-		}
-		if !validName(name) {
-			return "", fmt.Errorf("%s: the enum name %q is not a GraphQL name", where, name)
-		}
-		add := g.types.add
-		if g.goEnums[f.Enum] {
-			add = g.types.addGo // velox-gen's own Go enum type
-			ordered, shared, err := g.shares.claim(f.Enum, where, f.EnumValues, values)
-			if err != nil {
-				return "", err
-			}
-			values = ordered
-			if shared {
-				o.enums = append(o.enums, gqlEnum{name: name, values: values, field: f.Name, shared: true})
-				return name, nil
-			}
-		}
-		if err := add(name, where); err != nil {
-			return "", err
-		}
-		en := gqlEnum{name: name, values: values, field: f.Name}
-		if !g.goEnums[f.Enum] && f.PkgPath != "" {
-			en.model = f.PkgPath + "." + f.Enum
-		}
-		o.enums = append(o.enums, en)
-		return name, nil
+		return g.enumType(o, f, a, where)
 	default:
 		return "", fmt.Errorf("%s: a field of type %s has no GraphQL type; leave it out with graphql.Skip()", where, f.Type)
 	}
+}
+
+// enumType is the GraphQL enum of the enum field f, which it declares once.
+func (g *graph) enumType(o *object, f *plugin.Field, a graphql.Annotation, where string) (string, error) {
+	values, err := enumValues(f, a, where)
+	if err != nil {
+		return "", err
+	}
+	// The enum is named after velox-gen's Go enum type, <Schema><Field>,
+	// so that gqlgen binds it whatever graphql.Type names the type. An enum
+	// of the application's own Go type gets the same name; @goModel binds it.
+	name := o.ent.Name + f.GoName
+	if g.goEnums[f.Enum] {
+		name = f.Enum
+	}
+	if a.Type != "" {
+		// veloxe's: the enum's name, shared by the fields of one Go type
+		// that give it. The Go code aliases velox-gen's own type to it.
+		name = a.Type
+	}
+	if slices.ContainsFunc(o.enums, func(en gqlEnum) bool { return en.name == name && en.field == f.Name }) {
+		return name, nil
+	}
+	if !validName(name) {
+		return "", fmt.Errorf("%s: the enum name %q is not a GraphQL name", where, name)
+	}
+	add := g.types.add
+	if g.goEnums[f.Enum] && name == f.Enum {
+		add = g.types.addGo // velox-gen's own Go enum type
+	}
+	if g.goEnums[f.Enum] || a.Type != "" {
+		goType := f.Enum
+		if !g.goEnums[f.Enum] {
+			goType = f.PkgPath + "." + f.Enum
+		}
+		ordered, shared, err := g.shares.claimAs(name+" "+goType, f.Enum, where, f.EnumValues, values)
+		if err != nil {
+			return "", err
+		}
+		values = ordered
+		if shared {
+			o.enums = append(o.enums, gqlEnum{name: name, values: values, field: f.Name, shared: true})
+			return name, nil
+		}
+	}
+	g.enumSet[name] = true
+	if err := add(name, where); err != nil {
+		return "", err
+	}
+	if g.goEnums[f.Enum] && name != f.Enum {
+		// The Go code declares the name an alias of velox-gen's type, which
+		// gqlgen binds by name.
+		g.types.reserve(name, "the alias of the enum type "+f.Enum)
+	}
+	en := gqlEnum{name: name, values: values, field: f.Name}
+	if !g.goEnums[f.Enum] && f.PkgPath != "" {
+		en.model = f.PkgPath + "." + f.Enum
+	}
+	o.enums = append(o.enums, en)
+	return name, nil
 }
 
 // enumValues are the GraphQL values of an enum field: its stored values, upper

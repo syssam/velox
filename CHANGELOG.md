@@ -21,6 +21,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- velox-graphql's option `compat=veloxe` makes the API veloxe's generator
+  made: names from the schema name (`customerId`, `imageUrl`), foreign keys in
+  the type as IDs beside their edges, and their where predicates named from
+  the field. `graphql.Type` on a field is the field's GraphQL type, as veloxe
+  took it: an enum field's enum name, or a scalar or list the application
+  declares (`Map`, `[ID!]`) (ADR 0087).
 - Two enum fields whose types get one name (`Asset.depreciation_method`,
   `AssetDepreciation.method`) and hold the same values share one Go type and
   one GraphQL enum, as veloxe did (ADR 0086).

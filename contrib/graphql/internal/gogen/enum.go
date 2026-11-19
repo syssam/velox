@@ -33,6 +33,15 @@ func (r *renderer) writeEnum(f *file, e *plugin.Entity, en sdl.Enum) error {
 	if err := r.declare(typ+".MarshalGQL", "schema "+e.Name+", field "+fd.Name); err != nil {
 		return err
 	}
+	if en.Name != "" && en.Name != typ {
+		// graphql.Type names the enum: gqlgen binds it by that name.
+		if err := r.declare(en.Name, "schema "+e.Name+", field "+fd.Name+"'s enum"); err != nil {
+			return err
+		}
+		f.p("// %s is %s, under the name graphql.Type gives the GraphQL enum.", en.Name, typ)
+		f.p("type %s = %s", en.Name, typ)
+		f.p("")
+	}
 	io := f.use("io", "io")
 	gql := en.Values
 	if en.Name == "" {

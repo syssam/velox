@@ -24,7 +24,7 @@ func misplaced(a graphql.Annotation, on, where string) error {
 		set  bool
 		on   string // the kinds it applies to
 	}{
-		{"graphql.Type", a.Type != "", onSchema},
+		{"graphql.Type", a.Type != "", onSchema + " " + onField},
 		{"graphql.QueryField", a.HasQueryField(), onSchema},
 		{"graphql.Mutations", len(a.Mutations) > 0, onSchema},
 		{"graphql.MultiOrder", a.MultiOrder, onSchema},
@@ -125,6 +125,12 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 	pk := len(e.PrimaryKey) == 1 && i == e.PrimaryKey[0]
 	isTrue := func(p *bool) bool { return p != nil && *p }
 	switch {
+	case a.Type != "" && !validTypeRef(a.Type):
+		return fmt.Errorf("%s: graphql.Type(%q) on a field is not a GraphQL type: it is a name, or a list of one such as [ID!], and the field's nullability adds its non-null mark", where, a.Type)
+	case a.Type != "" && pk && a.Type != "ID":
+		return fmt.Errorf("%s: graphql.Type(%q) on the key: the key is an ID", where, a.Type)
+	case a.Type != "" && f.Type == "enum" && a.Skip&graphql.SkipEnumField == 0 && !validName(a.Type):
+		return fmt.Errorf("%s: graphql.Type(%q) on an enum field names its enum, so it is a name", where, a.Type)
 	case len(a.EnumValues) > 0 && f.Type != "enum":
 		return fmt.Errorf("%s: graphql.EnumValues on a field of type %s, which is not an enum", where, f.Type)
 	case a.OrderField != "" && f.Sensitive:

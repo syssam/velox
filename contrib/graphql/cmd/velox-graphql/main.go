@@ -12,15 +12,25 @@
 // package github.com/syssam/velox/plugin). velox-gen writes them, with the
 // generated-file header, and owns them from then on.
 //
-// It takes one option. An application that writes its own SDL and binds it
-// with gqlgen's autobind asks for only the marshalers of velox-gen's enum
-// types, with no velox.graphql and no other Go:
+// It takes two options, one at a time. An application that writes its own
+// SDL and binds it with gqlgen's autobind asks for only the marshalers of
+// velox-gen's enum types, with no velox.graphql and no other Go:
 //
 //	go tool velox-gen -out veloxgen -plugin velox-graphql:only=enums ./veloxschema
 //
 // A value is then written to GraphQL as the stored one upper-cased, or as
-// graphql.EnumValues names it, and read back from it: open is OPEN. Any other
-// option fails the run.
+// graphql.EnumValues names it, and read back from it: open is OPEN.
+//
+// An application whose clients are built against the API veloxe's generator
+// made asks for that API:
+//
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:compat=veloxe ./veloxschema
+//
+// A field or edge is then named from its schema name as veloxe named it
+// (customer_id is customerId, image_url is imageUrl); a foreign key an edge
+// is bound to is an ID in the type, beside its edge; and its where
+// predicates are named from it (customerId, customerIdNEQ, customerIdIn,
+// customerIdNotIn). Any other option fails the run.
 package main
 
 import (
@@ -39,22 +49,32 @@ func main() {
 }
 
 // generate answers a request: the schema, velox.graphql, and the Go files
-// gqlgen binds it to; or with only=enums, the enum marshalers alone. It
-// refuses any other option, as the plugin protocol asks.
+// gqlgen binds it to; or with only=enums, the enum marshalers alone. With
+// compat=veloxe, the API is the one veloxe's generator made (sdl.Config's
+// Veloxe). It refuses any other option, as the plugin protocol asks.
 func generate(req *plugin.Request) ([]plugin.File, []string, error) {
-	n := len(req.Options)
-	if n > 1 || n == 1 && req.Options["only"] != "enums" {
-		return nil, nil, fmt.Errorf("velox-graphql takes one option, only=enums; it is given %s", options(req.Options))
+	var cfg sdl.Config
+	for k, v := range req.Options {
+		switch {
+		case k == "only" && v == "enums":
+		case k == "compat" && v == "veloxe":
+			cfg.Veloxe = true
+		default:
+			return nil, nil, fmt.Errorf("velox-graphql takes the options only=enums and compat=veloxe; it is given %s", options(req.Options))
+		}
 	}
-	if n == 1 {
+	if req.Options["only"] == "enums" {
+		if cfg.Veloxe {
+			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe shapes the SDL velox-graphql writes, and only=enums writes none: give one of them")
+		}
 		files, err := gogen.RenderEnums(req.Model, req.OutPath, req.OutPackage)
 		return files, nil, err
 	}
-	s, err := sdl.Render(req.Model)
+	s, err := sdl.RenderConfig(req.Model, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	gofiles, err := gogen.Render(req.Model, req.OutPath, req.OutPackage)
+	gofiles, err := gogen.RenderConfig(req.Model, req.OutPath, req.OutPackage, cfg)
 	if err != nil {
 		return nil, nil, err
 	}

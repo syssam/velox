@@ -37,17 +37,23 @@ func newEnumShares(m *plugin.Model) *enumShares {
 // the enum already. Two fields of one type whose graphql.EnumValues name a
 // value differently are refused: they are one GraphQL enum.
 func (s *enumShares) claim(typ, where string, stored, gql []string) ([]string, bool, error) {
+	return s.claimAs(typ, typ, where, stored, gql)
+}
+
+// claimAs is claim with the enum known by key: a GraphQL name and its Go
+// type, when graphql.Type names the enum.
+func (s *enumShares) claimAs(key, typ, where string, stored, gql []string) ([]string, bool, error) {
 	by := make(map[string]string, len(stored))
 	for i, v := range stored {
 		by[v] = gql[i]
 	}
-	if prev := s.seen[typ]; prev != nil {
+	if prev := s.seen[key]; prev != nil {
 		if !maps.Equal(prev.byStored, by) {
 			return nil, false, fmt.Errorf("%s: its enum type %s is also that of %s, which names its GraphQL values otherwise: they are one GraphQL enum, so give both the same graphql.EnumValues", where, typ, prev.where)
 		}
 		return s.ordered(typ, by, gql), true, nil
 	}
-	s.seen[typ] = &sharedEnum{where: where, byStored: by}
+	s.seen[key] = &sharedEnum{where: where, byStored: by}
 	return s.ordered(typ, by, gql), false, nil
 }
 

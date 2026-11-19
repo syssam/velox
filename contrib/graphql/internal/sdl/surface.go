@@ -225,8 +225,11 @@ func (w WhereField) IDs() bool { return w.Kind == WherePred && w.Target != "" }
 
 // Build computes the GraphQL surface of m. It fails as Render does on a
 // model Render refuses, except for the check of the SDL with gqlparser.
-func Build(m *plugin.Model) (*Surface, error) {
-	g, err := build(m)
+func Build(m *plugin.Model) (*Surface, error) { return BuildConfig(m, Config{}) }
+
+// BuildConfig is Build under the options cfg.
+func BuildConfig(m *plugin.Model, cfg Config) (*Surface, error) {
+	g, err := build(m, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -260,11 +263,14 @@ func Build(m *plugin.Model) (*Surface, error) {
 }
 
 // goOf is the Go name gqlgen binds the GraphQL name to: goName, the Go name
-// the GraphQL name was made from, when it was (camel(goName) is name);
+// the GraphQL name was made from, when it was (camel(goName) is name, but
+// for case);
 // otherwise name with its first letter in upper case, as for a name
 // graphql.FieldName gives.
 func goOf(name, goName string) string {
-	if camel(goName) == name {
+	// Ignoring case, so that veloxe's customerId is CustomerID, as gqlgen
+	// binds it.
+	if strings.EqualFold(camel(goName), name) {
 		return goName
 	}
 	return upper(name)
@@ -402,6 +408,18 @@ func (g *graph) goValue(f *plugin.Field, a graphql.Annotation) goValue {
 			v = goValue{typ: "string", getter: "string"}
 		default:
 			v = goValue{typ: f.ElemType, pkg: f.PkgPath, own: true}
+		}
+	}
+	if a.Type != "" && !v.own && f.ElemType != "" {
+		// graphql.Type: the application's own type, which its models bind
+		// to the field's Go type, as veloxe had it.
+		switch {
+		case f.PkgPath != "":
+			v = goValue{typ: f.ElemType, pkg: f.PkgPath, own: true}
+		case len(f.Imports) == 0:
+			v = goValue{typ: f.ElemType, own: true}
+		case len(f.Imports) == 1:
+			v = goValue{typ: f.ElemType, pkg: f.Imports[0], own: true}
 		}
 	}
 	return v

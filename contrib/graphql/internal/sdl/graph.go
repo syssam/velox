@@ -18,6 +18,9 @@ type graph struct {
 	byName  map[string]*object // by entity name
 	goEnums map[string]bool    // the enum types velox-gen declares
 	shares  *enumShares        // the GraphQL enum of each of them, once a field claims it
+	enumSet map[string]bool    // the GraphQL enums declared so far, which inputs may take
+	appSet  map[string]bool    // the types graphql.Type names on fields, which the application may declare
+	cfg     Config
 	types   typeNames
 	ents    map[string]*plugin.Entity // every entity, by name, join entities too
 	query   []gqlField                // the QueryFields, in entity name order
@@ -39,6 +42,7 @@ type object struct {
 	plain  []Field              // the fields that are not edges, for the Go code
 	enums  []gqlEnum
 	fks    map[string]bool // the names of ent's foreign-key fields
+	veloxe bool            // Config.Veloxe: veloxe's names, foreign keys in the type
 
 	getters  []Getter     // the getters gqlgen binds fields to
 	edges    []edgeField  // the edge fields, in the model's edge order
@@ -120,12 +124,13 @@ func connArgs(t *object) string {
 	return "(after: Cursor, first: Int, before: Cursor, last: Int" + orderArg(t) + whereArg(t) + ")"
 }
 
-// build returns the GraphQL surface of m.
-func build(m *plugin.Model) (*graph, error) {
+// build returns the GraphQL surface of m under cfg.
+func build(m *plugin.Model, cfg Config) (*graph, error) {
 	if m == nil {
 		return nil, errors.New("no model")
 	}
 	g := newGraph(m)
+	g.cfg = cfg
 	ents := slices.SortedStableFunc(slices.Values(m.Entities), func(a, b *plugin.Entity) int { return cmp.Compare(a.Name, b.Name) })
 	fks := foreignKeys(m)
 
@@ -187,7 +192,7 @@ func build(m *plugin.Model) (*graph, error) {
 // newGraph returns the graph of m with no objects yet: its entities and Go
 // enum types indexed, and the Go names velox-gen declares reserved.
 func newGraph(m *plugin.Model) *graph {
-	g := &graph{byName: map[string]*object{}, goEnums: map[string]bool{}, shares: newEnumShares(m), types: newTypeNames(), ents: map[string]*plugin.Entity{}}
+	g := &graph{byName: map[string]*object{}, goEnums: map[string]bool{}, enumSet: map[string]bool{}, appSet: map[string]bool{}, shares: newEnumShares(m), types: newTypeNames(), ents: map[string]*plugin.Entity{}}
 	for _, e := range m.Entities {
 		g.ents[e.Name] = e
 	}
@@ -238,7 +243,7 @@ func (g *graph) objectOf(e *plugin.Entity, fks map[string]bool) (*object, error)
 		// every element (ownDirective).
 		return nil, ownDirectives(e, where)
 	}
-	o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks}
+	o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks, veloxe: g.cfg.Veloxe}
 	o.hasID = o.key != ""
 	if o.hasID {
 		o.keyTyp, o.keyPkg = keyGo(e)

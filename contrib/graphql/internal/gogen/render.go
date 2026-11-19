@@ -29,10 +29,16 @@ const (
 // in the package. Which types have an ID, the Go types of where predicates
 // and which fields bind to getters are sdl.Build's to decide.
 func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
+	return RenderConfig(m, outPath, outPkg, sdl.Config{})
+}
+
+// RenderConfig is Render under the options cfg, which must be those the SDL
+// is rendered under.
+func RenderConfig(m *plugin.Model, outPath, outPkg string, cfg sdl.Config) ([]plugin.File, error) {
 	if outPkg == "" {
 		return nil, fmt.Errorf("velox-graphql: the request names no generated package")
 	}
-	s, err := sdl.Build(m)
+	s, err := sdl.BuildConfig(m, cfg)
 	if err != nil {
 		return nil, err
 	}
