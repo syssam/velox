@@ -79,3 +79,33 @@ func TestCaller(t *testing.T) {
 		t.Fatal("PosOf(0) is not empty")
 	}
 }
+
+// TestGoTypeOfSpellsAny: the empty interface is any in Ident, wherever it
+// sits in the type, and a struct tag that happens to say "interface {}"
+// keeps it.
+func TestGoTypeOfSpellsAny(t *testing.T) {
+	type tagged struct {
+		A any `json:"interface {}"`
+		B []map[string]any
+	}
+	for _, c := range []struct {
+		v    any
+		want string
+	}{
+		{map[string]any{}, "map[string]any"},
+		{[]map[string]any{}, "[]map[string]any"},
+		{map[any][]any{}, "map[any][]any"},
+		{(*any)(nil), "*any"},
+		{struct {
+			A any `json:"interface {}"`
+			B []map[string]any
+		}{}, `struct { A any "json:\"interface {}\""; B []map[string]any }`},
+		{tagged{}, "desc.tagged"},
+		{(*fmt.Stringer)(nil), "*fmt.Stringer"},
+		{struct{ M interface{ M() } }{}, "struct { M interface { M() } }"},
+	} {
+		if got := GoTypeOf(reflect.TypeOf(c.v)).Ident; got != c.want {
+			t.Errorf("%T: Ident %q, want %q", c.v, got, c.want)
+		}
+	}
+}

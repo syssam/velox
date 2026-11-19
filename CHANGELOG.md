@@ -366,6 +366,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-gen writes the empty interface as `any`, as Go has since 1.18: a
+  JSON field of `map[string]any` is `map[string]any` in the entity, its
+  handle and its default, not `map[string]interface{}`.
+
 - velox-graphql: a where input's `Predicate` is one call, to
   `gqlgraph.Predicate`, which reads the input's fields as the type's
   `WhereFields` describe them and adds each set predicate with the same

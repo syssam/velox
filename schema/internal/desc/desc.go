@@ -62,7 +62,8 @@ type GoType struct {
 	Marshaler bool
 }
 
-// GoTypeOf describes t. Ident is t.String() and Kind is t.Kind().String().
+// GoTypeOf describes t. Ident is t.String() with each empty interface
+// spelled any, as Go writes it since 1.18, and Kind is t.Kind().String().
 // Marshaler says whether t or *t implements json.Marshaler or
 // encoding.TextMarshaler.
 // PkgPath is t.PkgPath(), or for a pointer the PkgPath of its element. Imports
@@ -71,7 +72,7 @@ type GoType struct {
 // and channels; it is nil when t mentions none. The walk stops at a named
 // type, whose name alone appears in Ident.
 func GoTypeOf(t reflect.Type) *GoType {
-	g := &GoType{Ident: t.String(), Kind: t.Kind().String(), PkgPath: t.PkgPath()}
+	g := &GoType{Ident: spellAny(t.String()), Kind: t.Kind().String(), PkgPath: t.PkgPath()}
 	if t.Kind() == reflect.Pointer {
 		g.PkgPath = t.Elem().PkgPath()
 	}
@@ -80,6 +81,39 @@ func GoTypeOf(t reflect.Type) *GoType {
 	g.Imports = slices.Compact(g.Imports)
 	g.Marshaler = marshals(t) || t.Kind() != reflect.Pointer && marshals(reflect.PointerTo(t))
 	return g
+}
+
+// spellAny is s, a reflect.Type's String, with "interface {}", which
+// reflect writes for the empty interface, written any. A struct tag in s
+// is a quoted string, and is left as it is.
+func spellAny(s string) string {
+	const empty = "interface {}"
+	if !strings.Contains(s, empty) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		switch {
+		case s[i] == '"':
+			j := i + 1
+			for j < len(s) && s[j] != '"' {
+				if s[j] == '\\' {
+					j++
+				}
+				j++
+			}
+			j = min(j+1, len(s))
+			b.WriteString(s[i:j])
+			i = j
+		case strings.HasPrefix(s[i:], empty):
+			b.WriteString("any")
+			i += len(empty)
+		default:
+			b.WriteByte(s[i])
+			i++
+		}
+	}
+	return b.String()
 }
 
 // marshals reports whether t has its own JSON or text encoding.

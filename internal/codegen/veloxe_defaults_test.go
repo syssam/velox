@@ -157,7 +157,7 @@ func TestOptionalJSONZeroFill(t *testing.T) {
 	e := o.entity("ojFields")
 	for name, want := range map[string]string{
 		"tags":    "func() any { return []string{} }",
-		"attrs":   "func() any { return map[string]interface {}{} }",
+		"attrs":   "func() any { return map[string]any{} }",
 		"shape":   "",
 		"ptr":     "func() any { return new(codegen.JSONShape) }",
 		"req":     "",
