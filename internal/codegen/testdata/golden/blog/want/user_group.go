@@ -48,6 +48,7 @@ func userGroupDescriptor() velox.Descriptor[UserGroup] {
 			{Field: "GroupID", Name: "group_id"},
 		},
 		PrimaryKey: []int{userGroupColUserID, userGroupColGroupID},
+		Entities:   veloxEntityTable,
 		FieldPtr: func(x *UserGroup, i int) any {
 			switch i {
 			case userGroupColUserID:

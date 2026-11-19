@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"reflect"
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
@@ -36,11 +37,12 @@ type Descriptor[E any] struct {
 	Bidi    bool
 	Indexes []IndexInfo
 	Edges   []EdgeDescriptor // in the order of the generated relation handles
-	// Links are the entities the entity's behaviour correlates with by name,
-	// with FieldInSelect. For generated code: velox-gen writes one for each
-	// entity that a policy, a hook or an interceptor names there, as it
-	// wraps a relation that HasEdge names with Linked.
-	Links        []EntityLink
+	// Entities returns the table of the generated package's entities, in
+	// which a condition by name, velox.HasEdge, HasEdgeWith and
+	// FieldInSelect, finds its target when its statement runs. For generated
+	// code: velox-gen gives every descriptor of a package whose schema
+	// declares behaviour the one table. nil when none.
+	Entities     func() *EntityTable
 	FieldPtr     func(x *E, i int) any // &x.<field of column i>
 	EdgeFieldPtr func(x *E, i int) any // &x.Edges.<field of edge i> in generated code: a *One[T] or *Many[T]
 
@@ -109,7 +111,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 		info, err := engine.BuildDescriptor(x, unsafe.Pointer(x), func() engine.DescriptorView {
 			d = descriptor()
 			v := engine.DescriptorView{D: &engine.DescriptorFields{Table: d.Table, TableSchema: d.TableSchema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
-				Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Links: d.Links, Check: d.Check, Schema: d.Schema}}
+				Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Entities: d.Entities, Check: d.Check, Schema: d.Schema}}
 			if a := d.FieldPtr; a != nil {
 				v.FieldPtr = func(i int) any { return a(x, i) }
 			}
@@ -223,31 +225,13 @@ func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, jo
 	return r
 }
 
-// LinkEntity links the entity T, named name in the schema, to the entity whose
-// Descriptor lists it in Links. For generated code. FieldInSelect(column,
-// name, key) finds the entity through it:
+// LinkEntity is the entity T of an EntityTable. For generated code. name is
+// its name in the schema and table its table:
 //
-//	Links: []velox.EntityLink{velox.LinkEntity[Doc]("Doc")},
-func LinkEntity[T any, PT Entity[T]](name string) EntityLink {
-	return EntityLink{Name: name, Get: func() (*EntityInfo, error) {
+//	velox.LinkEntity[Doc]("Doc", "docs")
+func LinkEntity[T any, PT Entity[T]](name, table string) EntityLink {
+	return EntityLink{Name: name, Table: table, Type: engine.TypeKey(reflect.TypeFor[T]()), Get: func() (*EntityInfo, error) {
 		m := stateOf(PT(nil).VeloxMeta())
 		return m.Info, m.Err
 	}}
-}
-
-// Linked is e with its target T linked: the relation then names T's
-// metadata, so a program that links the owner links T. For generated code.
-// velox-gen wraps the relations that an entity's behaviour names with
-// velox.HasEdge or HasEdgeWith, which name no target type of their own:
-//
-//	velox.Linked[Doc](velox.EdgeTo[Doc]("doc", commentColDocID, docColID))
-//
-// A condition by the name of a relation that is not linked fails its
-// statement.
-func Linked[T any, PT Entity[T]](e EdgeDescriptor) EdgeDescriptor {
-	engine.SetEdgeTarget(&e, func() (*EntityInfo, error) {
-		m := stateOf(PT(nil).VeloxMeta())
-		return m.Info, m.Err
-	})
-	return e
 }

@@ -288,8 +288,10 @@ func TestGenerateWithBehaviourWithoutGen(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "veloxschema", "user_policy.go")); err != nil {
 		t.Fatal(err)
 	}
+	// The policy was the schema's only behaviour: the package's entity table
+	// goes with it, from velox.go and from every descriptor.
 	code, out, errs = runCLI(t, dir, "./veloxschema")
-	if want := "veloxgen/user.go\n"; code != 0 || out != want || errs != "" {
+	if want := "veloxgen/tag.go\nveloxgen/user.go\nveloxgen/velox.go\n"; code != 0 || out != want || errs != "" {
 		t.Fatalf("without the policy: %d %q %q, want %q", code, out, errs, want)
 	}
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "tag.go user.go velox.go"; got != want {
@@ -458,7 +460,9 @@ func TestGeneratePackageDoc(t *testing.T) {
 }
 
 // A Policy and Hooks added to the schema after generation are not bound:
-// -check says the entity's file is out of date, and no other.
+// -check says the entity's file is out of date, and, as they are the schema's
+// first behaviour, velox.go, which then declares the package's entity table,
+// and tag.go, whose descriptor names it.
 func TestPolicyAddedAfterGenerationFailsCheck(t *testing.T) {
 	dir := genModule(t, nil)
 	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
@@ -467,7 +471,8 @@ func TestPolicyAddedAfterGenerationFailsCheck(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "veloxschema", "user_policy.go"), schemaUserPolicy+
 		"\nfunc (User) Hooks() []velox.Hook { return nil }\n")
 	code, out, errs := runCLI(t, dir, "-check", "./veloxschema")
-	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: veloxgen/user.go is out of date\n") || strings.Contains(errs, "tag.go") {
+	want := "velox-gen: veloxgen/tag.go is out of date\nvelox-gen: veloxgen/user.go is out of date\nvelox-gen: veloxgen/velox.go is out of date\n"
+	if code != 3 || out != "" || !strings.HasPrefix(errs, want) {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
 	// Regenerating binds both, and the check passes.

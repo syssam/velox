@@ -48,6 +48,7 @@ func postTagDescriptor() velox.Descriptor[PostTag] {
 			{Field: "TagID", Name: "tag_id"},
 		},
 		PrimaryKey: []int{postTagColPostID, postTagColTagID},
+		Entities:   veloxEntityTable,
 		FieldPtr: func(x *PostTag, i int) any {
 			switch i {
 			case postTagColPostID:

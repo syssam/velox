@@ -51,6 +51,7 @@ func paperTopicDescriptor() velox.Descriptor[PaperTopic] {
 			{Field: "TopicID", Name: "topic_id"},
 		},
 		PrimaryKey: []int{paperTopicColPaperID, paperTopicColTopicID},
+		Entities:   veloxEntityTable,
 		FieldPtr: func(x *PaperTopic, i int) any {
 			switch i {
 			case paperTopicColPaperID:

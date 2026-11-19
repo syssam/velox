@@ -27,6 +27,13 @@ func TestFieldInSelect(t *testing.T) {
 	if err != nil || !strings.Contains(s, "NOT (EXISTS (SELECT 1 FROM") {
 		t.Errorf("Not: %s, %v", s, err)
 	}
+	// The entity named by its table, as a name from configuration may: the
+	// same statement.
+	byName, _, _ := nmSQL(t, velox.FieldInSelect("org_id", "Org", "id", velox.FieldEQ("name", "acme")))
+	byTable, _, err := nmSQL(t, velox.FieldInSelect("org_id", "nm_orgs", "id", velox.FieldEQ("name", "acme")))
+	if err != nil || byTable != byName {
+		t.Errorf("by table: %s, %v; by name %s", byTable, err, byName)
+	}
 	// A nullable column (*int64) keys against a not null one (int64), as a typed InSelect's.
 	if s, _, err = nmSQL(t, velox.FieldInSelect("peer_id", "Org", "id")); err != nil || !strings.Contains(s, "EXISTS (SELECT 1 FROM") {
 		t.Errorf("nullable key: %s, %v", s, err)
@@ -47,7 +54,7 @@ func TestFieldInSelectRefusals(t *testing.T) {
 		p    velox.Predicate
 		want string
 	}{
-		{"not linked", velox.FieldInSelect("org_id", "Doc", "id"), "entity Doc is not linked"},
+		{"unknown entity", velox.FieldInSelect("org_id", "Doc", "id"), `no entity or table "Doc"`},
 		{"owner column", velox.FieldInSelect("nope", "Org", "id"), `no column "nope"`},
 		{"key column", velox.FieldInSelect("org_id", "Org", "nope"), `Org has no column "nope"`},
 		{"two types", velox.FieldInSelect("org_id", "Org", "name"), "the key types differ"},

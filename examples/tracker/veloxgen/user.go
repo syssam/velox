@@ -77,7 +77,8 @@ func userDescriptor() velox.Descriptor[User] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{userColOrgID, userColEmail}, Unique: true}, // org_id, email
 		},
-		Schema: veloxschema.User{},
+		Entities: veloxEntityTable,
+		Schema:   veloxschema.User{},
 		FieldPtr: func(x *User, i int) any {
 			switch i {
 			case userColID:

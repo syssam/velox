@@ -356,10 +356,12 @@ func TestPolicy(t *testing.T) {
 	}
 }
 
-// A policy's FieldInSelect is a subquery on another entity by name, which
-// velox-gen linked: the poster reads the users who have a post, and the
-// Post's own Read policy applies inside the subquery, so a user whose only post
-// the viewer may not read is not among them.
+// A policy's FieldInSelect is a subquery on another entity by name, found in
+// the package's entity table: the poster reads the users who have a post, and
+// the Post's own Read policy applies inside the subquery, so a user whose only
+// post the viewer may not read is not among them. A rule whose names come from
+// configuration, the entity by its table and the relation by a value
+// velox-gen cannot read, reads the same users.
 func TestFieldInSelect(t *testing.T) {
 	db := open(t)
 	seed(t, db)
@@ -377,6 +379,8 @@ func TestFieldInSelect(t *testing.T) {
 	wantStrings(t, "no poster", users(ctx), []string{"ada", "bob", "carol", "dan"})
 	wantStrings(t, "poster", users(schema.AsPoster(ctx)), []string{"ada", "bob", "dan"})
 	wantStrings(t, "poster and viewer", users(schema.AsPoster(schema.AsViewer(ctx))), []string{"ada", "bob"})
+	wantStrings(t, "configured poster", users(schema.AsConfiguredPoster(ctx)), []string{"ada", "bob", "dan"})
+	wantStrings(t, "configured poster and viewer", users(schema.AsConfiguredPoster(schema.AsViewer(ctx))), []string{"ada", "bob"})
 }
 
 // The schema's Interceptors method, bound by velox-gen, hides the archived

@@ -65,12 +65,9 @@ func e2eModule(t *testing.T, cfg Config, schemaDirs, userDirs []string, testFile
 			t.Fatal(err)
 		}
 	}
-	if cfg.Linked == nil {
-		// As velox-gen does: the relations and entities the behaviour names are
-		// linked in the descriptors.
-		if cfg.Linked, _, err = CheckBehaviour(dir, "./schema", g, cfg.Bound, cfg.Mixins, offline()); err != nil {
-			t.Fatal(err)
-		}
+	// As velox-gen does: the behaviour's names are checked before generating.
+	if _, err = CheckBehaviour(dir, "./schema", g, cfg.Bound, cfg.Mixins, offline()); err != nil {
+		t.Fatal(err)
 	}
 	out, err := Generate(g, cfg)
 	if err != nil {

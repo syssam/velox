@@ -49,6 +49,7 @@ func homeDescriptor() velox.Descriptor[Home] {
 			{Field: "Region", Name: "region", Immutable: true},
 		},
 		PrimaryKey: []int{homeColID},
+		Entities:   veloxEntityTable,
 		Schema:     schema.Home{},
 		FieldPtr: func(x *Home, i int) any {
 			switch i {

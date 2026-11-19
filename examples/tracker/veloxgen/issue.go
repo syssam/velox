@@ -159,7 +159,8 @@ func issueDescriptor() velox.Descriptor[Issue] {
 			velox.EdgeTo[Comment]("comments", issueColID, commentColIssueID),
 			velox.EdgeThrough[IssueLabel, Label]("labels", issueColID, issueLabelColIssueID, issueLabelColLabelID, labelColID),
 		},
-		Schema: veloxschema.Issue{},
+		Entities: veloxEntityTable,
+		Schema:   veloxschema.Issue{},
 		FieldPtr: func(x *Issue, i int) any {
 			switch i {
 			case issueColID:

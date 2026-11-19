@@ -85,7 +85,8 @@ func categoryDescriptor() velox.Descriptor[Category] {
 			velox.EdgeTo[Category]("children", categoryColID, categoryColCategoryChildren),
 			velox.EdgeTo[Category]("parent", categoryColCategoryChildren, categoryColID),
 		},
-		Schema: schema.Category{},
+		Entities: veloxEntityTable,
+		Schema:   schema.Category{},
 		FieldPtr: func(x *Category, i int) any {
 			switch i {
 			case categoryColID:

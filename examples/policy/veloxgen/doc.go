@@ -80,7 +80,8 @@ func docDescriptor() velox.Descriptor[Doc] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Comment]("comments", docColID, commentColDocID),
 		},
-		Schema: veloxschema.Doc{},
+		Entities: veloxEntityTable,
+		Schema:   veloxschema.Doc{},
 		FieldPtr: func(x *Doc, i int) any {
 			switch i {
 			case docColID:

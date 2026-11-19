@@ -113,6 +113,9 @@ func renderPackage(o *Out) string {
 	w.p(`import "github.com/syssam/velox"`)
 	w.p("")
 	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
+	if o.EntityTable {
+		entityTable(&w, o)
+	}
 	for _, en := range o.Enums {
 		w.p("")
 		w.p("// %s is the type of %s.", en.Type, en.Of)
@@ -143,6 +146,26 @@ func renderPackage(o *Out) string {
 	return w.String()
 }
 
+// entityTable writes the package's velox.EntityTable: every entity, by its
+// name in the schema and its table, built on first use. A condition by name,
+// velox.HasEdge, HasEdgeWith and FieldInSelect, finds its target in it when
+// its statement runs.
+func entityTable(w *writer, o *Out) {
+	w.p("")
+	w.p("var veloxEntities velox.EntityTable")
+	w.p("")
+	w.p("// veloxEntityTable is called by velox, not by applications.")
+	w.p("func veloxEntityTable() *velox.EntityTable {")
+	w.p("\treturn veloxEntities.Load(func() []velox.EntityLink {")
+	w.p("\t\treturn []velox.EntityLink{")
+	for _, e := range o.Entities {
+		w.p("\t\t\tvelox.LinkEntity[%s](%s, %s),", e.Name, strconv.Quote(e.Name), strconv.Quote(e.Table))
+	}
+	w.p("\t\t}")
+	w.p("\t})")
+	w.p("}")
+}
+
 func quoteAll(ss []string) string {
 	q := make([]string, len(ss))
 	for i, s := range ss {
@@ -169,7 +192,7 @@ func renderEntity(o *Out, e *OutEntity) string {
 	w.p("// VeloxMeta is called by velox, not by applications.")
 	w.p("func (*%s) VeloxMeta() *velox.Meta[%[1]s] { return %sMeta.Load(%[2]sDescriptor) }", e.Name, id)
 	w.p("")
-	entityDescriptor(&w, e)
+	entityDescriptor(&w, o, e)
 	w.p("")
 	entityString(&w, e)
 	return w.String()
@@ -377,7 +400,7 @@ func columnParts(f *OutField) []string {
 	return parts
 }
 
-func entityDescriptor(w *writer, e *OutEntity) {
+func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 	w.p("// %sDescriptor describes %s to velox: its table, columns, edges and hooks.", camel(e.Label), e.Name)
 	w.p("func %sDescriptor() velox.Descriptor[%s] {", camel(e.Label), e.Name)
 	if e.CheckSetup != "" {
@@ -419,12 +442,8 @@ func entityDescriptor(w *writer, e *OutEntity) {
 		}
 		w.p("},")
 	}
-	if len(e.Links) > 0 {
-		w.p("Links: []velox.EntityLink{")
-		for _, l := range e.Links {
-			w.p("%s,", l)
-		}
-		w.p("},")
+	if o.EntityTable {
+		w.p("Entities: veloxEntityTable,")
 	}
 	// velox reads the behaviour of the schema's mixins, in Mixin order,
 	// then the schema's own.

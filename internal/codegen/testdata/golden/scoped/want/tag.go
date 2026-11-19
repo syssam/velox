@@ -49,6 +49,7 @@ func tagDescriptor() velox.Descriptor[Tag] {
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 		},
 		PrimaryKey: []int{tagColID},
+		Entities:   veloxEntityTable,
 		Schema:     schema.Tag{},
 		FieldPtr: func(x *Tag, i int) any {
 			switch i {

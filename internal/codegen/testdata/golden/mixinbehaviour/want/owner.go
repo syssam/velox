@@ -71,6 +71,7 @@ func ownerDescriptor() velox.Descriptor[Owner] {
 			{Field: "Name", Name: "name"},
 		},
 		PrimaryKey: []int{ownerColID},
+		Entities:   veloxEntityTable,
 		FieldPtr: func(x *Owner, i int) any {
 			switch i {
 			case ownerColID:

@@ -211,7 +211,7 @@ func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr
 		return cfg, relErrors(dir, err)
 	}
 	cfg.Mixins = mixins
-	linked, warnings, err := codegen.CheckBehaviour(dir, pattern, gm.graph, bound, mixins, env)
+	warnings, err := codegen.CheckBehaviour(dir, pattern, gm.graph, bound, mixins, env)
 	warnings = append(warnings, codegen.SoftDeleteWarnings(gm.graph)...)
 	for _, w := range warnings {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: warning: %s\n", relWarning(dir, w))
@@ -219,7 +219,6 @@ func genConfig(gm *genModel, dir, pattern, out, pkg string, env []string, stderr
 	if err != nil {
 		return cfg, relErrors(dir, err)
 	}
-	cfg.Linked = linked
 	if cfg.Funcs, err = codegen.FuncPackages(dir, gm.graph, cfg, env); err != nil {
 		return cfg, err
 	}

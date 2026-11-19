@@ -67,6 +67,7 @@ func taskDescriptor() velox.Descriptor[Task] {
 			{Field: "Done", Name: "done"},
 		},
 		PrimaryKey: []int{taskColID},
+		Entities:   veloxEntityTable,
 		Schema:     veloxschema.Task{},
 		FieldPtr: func(x *Task, i int) any {
 			switch i {

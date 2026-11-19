@@ -49,6 +49,7 @@ func memoDescriptor() velox.Descriptor[Memo] {
 			{Field: "OrgID", Name: "org_id", Immutable: true},
 		},
 		PrimaryKey: []int{memoColID},
+		Entities:   veloxEntityTable,
 		Schema:     schema.Memo{},
 		FieldPtr: func(x *Memo, i int) any {
 			switch i {

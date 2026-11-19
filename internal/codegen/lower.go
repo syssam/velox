@@ -49,6 +49,7 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	for _, ge := range l.g.Entities {
 		if l.schemaValue(ge) {
 			l.out.NeedsSch = true
+			l.out.EntityTable = true
 		}
 	}
 	if len(l.errs) > 0 {
@@ -1124,20 +1125,7 @@ func (l *lowerer) relations() {
 					r.Desc = fmt.Sprintf("velox.EdgeBidi[%s](%q, %s, %s)", t.Name, ed.Name, owner, target)
 				}
 			}
-			if slices.Contains(l.cfg.Linked[e.Name], ed.Name) {
-				// The entity's behaviour names the relation with velox.HasEdge.
-				r.Desc = fmt.Sprintf("velox.Linked[%s](%s)", t.Name, r.Desc)
-			}
 			s.out.Rels = append(s.out.Rels, r)
-		}
-		for _, link := range slices.Sorted(slices.Values(l.cfg.Linked[e.Name])) {
-			name, ok := strings.CutPrefix(link, subStep)
-			if !ok {
-				continue
-			}
-			if t := l.g.Entity(name); t != nil {
-				s.out.Links = append(s.out.Links, fmt.Sprintf("velox.LinkEntity[%s](%q)", t.Name, name))
-			}
 		}
 	}
 }

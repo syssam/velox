@@ -79,6 +79,7 @@ func itemDescriptor() velox.Descriptor[Item] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Invoice]("invoice", itemColInvoiceID, invoiceColID),
 		},
+		Entities: veloxEntityTable,
 		FieldPtr: func(x *Item, i int) any {
 			switch i {
 			case itemColID:

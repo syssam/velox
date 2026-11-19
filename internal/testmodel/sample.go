@@ -149,6 +149,7 @@ func sampleDescriptor() velox.Descriptor[Sample] {
 			velox.EdgeTo[Sample]("children", sampleColID, sampleColParentID),
 			velox.EdgeTo[Sample]("parent", sampleColParentID, sampleColID),
 		},
+		Entities: veloxEntityTable,
 		FieldPtr: func(x *Sample, i int) any {
 			switch i {
 			case sampleColID:

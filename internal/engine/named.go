@@ -113,8 +113,8 @@ type namedSub struct{ column, entity, key string }
 // of the key column of the entity named entity, in the rows that meet every
 // condition of ps, which name the target's columns: column IN (SELECT key FROM
 // entity WHERE ps), written as the EXISTS a column handle's InSelect writes. The
-// target's Read policy applies inside it. The entity must be linked: velox-gen
-// links the entity a policy, a hook or an interceptor names here by a constant.
+// target's Read policy applies inside it. entity is the target's name in the
+// schema or its table, which the owner's EntityTable finds (namedSubquery).
 func FieldInSelect(column, entity, key string, ps ...Predicate) Predicate {
 	kids := make([]Node, len(ps))
 	for i, p := range ps {
@@ -320,10 +320,18 @@ func namedEdge(in *EntityInfo, n Node) (Node, error) {
 		return n, fmt.Errorf("no relation %q", name)
 	}
 	r := in.rels[i]
-	if r.target == nil {
-		return n, fmt.Errorf("relation %s's target is not linked: velox-gen links it when the schema names it with velox.HasEdge or velox.HasEdgeWith", name)
+	t, err := in.entityTable()
+	if err != nil {
+		return n, fmt.Errorf("relation %s: %w", name, err)
 	}
-	l, err := r.Resolve(in, RelTarget{Get: r.target, One: r.typ, Many: r.typ})
+	target, ok, err := t.target(targetName(r.typ.(reflect.Type)))
+	if err != nil {
+		return n, err
+	}
+	if !ok {
+		return n, fmt.Errorf("relation %s: its target %s is not in the entity table of %s", name, targetName(r.typ.(reflect.Type)), in.Name)
+	}
+	l, err := r.Resolve(in, RelTarget{Get: func() (*EntityInfo, error) { return target, nil }, One: r.typ, Many: r.typ})
 	if err != nil {
 		return n, err
 	}
@@ -344,13 +352,13 @@ func namedSubquery(in *EntityInfo, n Node) (Node, error) {
 	if !ok {
 		return n, fmt.Errorf("FieldInSelect: no column %q", s.column)
 	}
-	i := slices.IndexFunc(in.links, func(l EntityLink) bool { return l.Name == s.entity })
-	if i < 0 {
-		return n, fmt.Errorf("FieldInSelect: entity %s is not linked: velox-gen links it when a policy, hook or interceptor of %s names it with a constant", s.entity, in.Name)
-	}
-	target, err := in.links[i].Get()
+	t, err := in.entityTable()
 	if err != nil {
-		return n, err
+		return n, fmt.Errorf("FieldInSelect: %w", err)
+	}
+	target, err := t.entity(s.entity)
+	if err != nil {
+		return n, fmt.Errorf("FieldInSelect: %w", err)
 	}
 	tc, ok := target.names[s.key]
 	if !ok {

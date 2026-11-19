@@ -66,7 +66,8 @@ func pcommentDescriptor() velox.Descriptor[pcomment] {
 		Table:      "pcomments",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.Linked[fixture.Pnote](velox.EdgeTo[fixture.Pnote]("note", 1, 0))},
+		Entities:   fixture.Entities(velox.LinkEntity[fixture.Pnote]("Pnote", "")),
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[fixture.Pnote]("note", 1, 0)},
 		FieldPtr: func(x *pcomment, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -116,7 +117,8 @@ func pcycADescriptor() velox.Descriptor[pcycA] {
 		Table:      "pcyc_as",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BID", Name: "b_id"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.Linked[pcycB](velox.EdgeTo[pcycB]("b", 1, 0))},
+		Entities:   fixture.Entities(velox.LinkEntity[pcycB]("pcycB", "")),
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pcycB]("b", 1, 0)},
 		FieldPtr: func(x *pcycA, i int) any {
 			if i == 0 {
 				return &x.ID
@@ -133,7 +135,8 @@ func pcycBDescriptor() velox.Descriptor[pcycB] {
 		Table:      "pcyc_bs",
 		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AID", Name: "a_id"}},
 		PrimaryKey: []int{0},
-		Edges:      []velox.EdgeDescriptor{velox.Linked[pcycA](velox.EdgeTo[pcycA]("a", 1, 0))},
+		Entities:   fixture.Entities(velox.LinkEntity[pcycA]("pcycA", "")),
+		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pcycA]("a", 1, 0)},
 		FieldPtr: func(x *pcycB, i int) any {
 			if i == 0 {
 				return &x.ID

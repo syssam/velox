@@ -78,7 +78,8 @@ func labelDescriptor() velox.Descriptor[Label] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[IssueLabel, Issue]("issues", labelColID, issueLabelColLabelID, issueLabelColIssueID, issueColID),
 		},
-		Schema: veloxschema.Label{},
+		Entities: veloxEntityTable,
+		Schema:   veloxschema.Label{},
 		FieldPtr: func(x *Label, i int) any {
 			switch i {
 			case labelColID:

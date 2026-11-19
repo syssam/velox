@@ -55,6 +55,7 @@ func noteDescriptor() velox.Descriptor[Note] {
 			{Field: "Body", Name: "body"},
 		},
 		PrimaryKey: []int{noteColID},
+		Entities:   veloxEntityTable,
 		Schema:     veloxschema.Note{},
 		FieldPtr: func(x *Note, i int) any {
 			switch i {

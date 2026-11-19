@@ -18,7 +18,7 @@ type DescriptorFields struct {
 	Bidi        bool
 	Indexes     []IndexInfo
 	Relations   []EdgeDescriptor
-	Links       []EntityLink
+	Entities    func() *EntityTable
 	Check       func(col int, v any) error
 	// Schema is Descriptor.Schema: the value whose methods declare the
 	// entity's behaviour, nil when it has none.
@@ -95,7 +95,7 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 		return nil, err
 	}
 	info := &EntityInfo{Name: name, Table: d.Table, Schema: d.TableSchema, Columns: cols, PrimaryKey: d.PrimaryKey,
-		Indexes: d.Indexes, rels: rels, links: d.Links, immutable: anyImmutable, version: version + 1, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
+		Indexes: d.Indexes, rels: rels, entities: d.Entities, immutable: anyImmutable, version: version + 1, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
 	if err := validate(info); err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ func relationFields(t reflect.Type, base unsafe.Pointer, v DescriptorView, cols 
 			}
 			bidiKeys = append(bidiKeys, bk)
 		}
-		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through, target: r.target}
+		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
 	return rels, bidiKeys, nil
 }
@@ -372,11 +372,6 @@ func SetEdgeBidi(e *EdgeDescriptor, t any) { e.bidi = t }
 
 // SetEdgeThrough makes e an edge through the join entity t.
 func SetEdgeThrough(e *EdgeDescriptor, t *Through) { e.through = t }
-
-// SetEdgeTarget links e's target: get returns its metadata. A condition
-// by the relation's name (Edge) resolves only on a linked relation, since
-// it names no target type of its own.
-func SetEdgeTarget(e *EdgeDescriptor, get func() (*EntityInfo, error)) { e.target = get }
 
 // EdgeThroughOf is the join entity of e; nil when e has none.
 func EdgeThroughOf(e EdgeDescriptor) *Through { return e.through }

@@ -21,6 +21,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `HasEdge`, `HasEdgeWith` and `FieldInSelect` find their target in the
+  generated package's `velox.EntityTable` when the statement runs, so a rule in
+  a shared package can name an entity or a relation by a value from
+  configuration, and `FieldInSelect` accepts an entity's table as well as its
+  name. velox-gen checks the names it can read and warns about the others,
+  where it refused them. `velox.Linked` and `Descriptor.Links` are removed and
+  `velox.LinkEntity` takes the table. Regenerate:
+  `velox.GeneratedCodeIsVersion22` replaces Version21 (decision 0081).
 - `Has`, `HasSome`, `HasEvery` and `IsEmpty` on a JSON handle test the elements
   of a column that is an array, alike on PostgreSQL, MySQL and SQLite
   (`untyped.PredJSONHas` and `PredJSONEmpty` are the untyped forms).

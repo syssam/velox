@@ -16,12 +16,6 @@ type Config struct {
 	// from the schema.
 	Funcs map[string]FuncPkg
 
-	// Linked are, per entity name, the names of its relations whose target
-	// velox-gen links (velox.Linked): those its behaviour names with
-	// velox.HasEdge or HasEdgeWith (see CheckBehaviour). A name that starts
-	// with "@" is an entity, not a relation: the one its behaviour names with
-	// velox.FieldInSelect, which velox-gen links (velox.LinkEntity).
-	Linked map[string][]string
 	// GenPath is the generated package's import path.
 	GenPath string
 }
@@ -49,6 +43,10 @@ type Out struct {
 	SchemaName string
 	UserDoc    bool   // Config.UserDoc
 	GenPath    string // Config.GenPath
+	// EntityTable says some entity has behaviour: velox.go then declares the
+	// package's velox.EntityTable, and every Descriptor names it, so that a
+	// condition by name finds its target when its statement runs.
+	EntityTable bool
 }
 
 // OutEntity is one generated entity: a schema's, or a many-to-many join entity.
@@ -56,7 +54,6 @@ type OutEntity struct {
 	Name, Label, Handles, Table, TableSchema string // Handles = GoPlural(Name), e.g. "Users", "StatusSlice"; a join entity's is GoName(Table)
 	Fields                                   []*OutField
 	Rels                                     []*OutRel
-	Links                                    []string // velox.LinkEntity expressions: the entities its behaviour names with velox.FieldInSelect
 	PrimaryKey                               []int
 	Indexes                                  []OutIndex
 	Join                                     bool   // a many-to-many join entity
@@ -136,4 +133,4 @@ const veloxPkg = "github.com/syssam/velox"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 21
+const GeneratedCodeVersion = 22

@@ -3,7 +3,6 @@ package codegen
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -105,7 +104,7 @@ func newCheckEnv(t *testing.T) *checkEnv {
 
 // run writes decls after checkHeader as schema/behaviour.go and returns
 // what CheckBehaviour returns for it.
-func (c *checkEnv) run(t *testing.T, decls string) (map[string][]string, []string, error) {
+func (c *checkEnv) run(t *testing.T, decls string) ([]string, error) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(c.dir, "schema", "behaviour.go"), []byte(checkHeader+decls), 0o644); err != nil {
 		t.Fatal(err)
@@ -157,7 +156,7 @@ func (c *checkEnv) refuses(t *testing.T, cases []checkRefusal) {
 	t.Helper()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := c.run(t, tc.decls)
+			_, err := c.run(t, tc.decls)
 			at := "behaviour.go:" + strconv.Itoa(lineOf(t, tc.decls, tc.marker)) + ": "
 			if err != nil {
 				for l := range strings.SplitSeq(err.Error(), "\n") {
@@ -175,7 +174,7 @@ func (c *checkEnv) accepts(t *testing.T, cases map[string]string) {
 	t.Helper()
 	for name, decls := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, warnings, err := c.run(t, decls); err != nil || len(warnings) != 0 {
+			if warnings, err := c.run(t, decls); err != nil || len(warnings) != 0 {
 				t.Fatalf("refused: %v %q", err, warnings)
 			}
 		})
@@ -199,13 +198,13 @@ func TestCheckColumnsRefusesUnknown(t *testing.T) {
 	})
 	// Every refusal is reported, joined.
 	decls := read("User", `velox.And(velox.FieldEQ("a", 1), velox.FieldEQ("b", 1))`)
-	if _, _, err := c.run(t, decls); err == nil || !strings.Contains(err.Error(), `no column "a"`) || !strings.Contains(err.Error(), `no column "b"`) {
+	if _, err := c.run(t, decls); err == nil || !strings.Contains(err.Error(), `no column "a"`) || !strings.Contains(err.Error(), `no column "b"`) {
 		t.Errorf("got %v", err)
 	}
 }
 
 // What names a real column with a value that fits, or that velox-gen
-// cannot read, is accepted, and the relations it names are linked.
+// cannot read, is accepted, and so is a chain of relations.
 func TestCheckColumnsAccepts(t *testing.T) {
 	c := newCheckEnv(t)
 	c.accepts(t, map[string]string{
@@ -218,10 +217,7 @@ func TestCheckColumnsAccepts(t *testing.T) {
 		"row":       insert("User", "_ = r.Value(\"nick\")\n\t\t_ = r.IsZero(\"rank\")\n\t\treturn nil"),
 		"unreached": "func unused() velox.Predicate { return velox.FieldEQ(\"nope\", 1) }\n",
 	})
-	linked, _, err := c.run(t, read("User", `velox.HasEdgeWith("docs", velox.HasEdgeWith("comments", velox.FieldEQ("doc_id", 1)))`))
-	if want := map[string][]string{"User": {"docs"}, "Doc": {"comments"}}; err != nil || !reflect.DeepEqual(linked, want) {
-		t.Fatalf("got %v, %v, want %v", linked, err, want)
-	}
+	c.accepts(t, map[string]string{"nested": read("User", `velox.HasEdgeWith("docs", velox.HasEdgeWith("comments", velox.FieldEQ("doc_id", 1)))`)})
 }
 
 // A mixin's call is checked against each entity that lists the mixin: one
@@ -229,7 +225,7 @@ func TestCheckColumnsAccepts(t *testing.T) {
 func TestCheckColumnsPerMixinEntity(t *testing.T) {
 	c := newCheckEnv(t)
 	decls := read("InOrg", `velox.FieldEQ("owner_id", 1)`)
-	_, _, err := c.run(t, decls)
+	_, err := c.run(t, decls)
 	want := "behaviour.go:" + strconv.Itoa(lineOf(t, decls, "owner_id")) + `: velox.FieldEQ("owner_id", 1): Comment, which lists InOrg, has no column "owner_id" (InOrg.Policy)`
 	if err == nil || !strings.HasSuffix(err.Error(), want) || strings.Contains(err.Error(), "\n") {
 		t.Fatalf("got %v\nwant %s", err, want)
@@ -332,7 +328,7 @@ func TestCheckColumnsWarnsNonConstant(t *testing.T) {
 	c := newCheckEnv(t)
 	decls := "func col() string { return \"title\" }\n\n" + read("Doc", `velox.FieldEQ(col(), "x")`) +
 		hook("Doc", "name := col()\n\t\treturn m.Set(name, \"x\")")
-	_, warnings, err := c.run(t, decls)
+	warnings, err := c.run(t, decls)
 	if err != nil {
 		t.Fatal(err)
 	}

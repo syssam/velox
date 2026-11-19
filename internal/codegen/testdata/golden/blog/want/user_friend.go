@@ -51,6 +51,7 @@ func userFriendDescriptor() velox.Descriptor[UserFriend] {
 		},
 		PrimaryKey: []int{userFriendColUserID, userFriendColFriendID},
 		Bidi:       true,
+		Entities:   veloxEntityTable,
 		FieldPtr: func(x *UserFriend, i int) any {
 			switch i {
 			case userFriendColUserID:

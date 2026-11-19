@@ -287,7 +287,7 @@ var genericObjects = []struct {
 	// (GeneratedCodeIsVersion17): entityDescriptor took 136078 bytes, down from
 	// 287036 in the same worktree, entityDescUse 763846, down from 774634, and
 	// entityDescHooks 847422, down from 863410.
-	{"entityDescriptor", "", entityDescSrc, 141312}, // measured 139274 (Descriptor.Links, GeneratedCodeIsVersion21; was 136404)
+	{"entityDescriptor", "", entityDescSrc, 141312}, // measured 139274 (Descriptor.Links, GeneratedCodeIsVersion22; was 136404)
 	//
 	// Sum, Avg, Min and Max stay functions: a method of Query whose signature names
 	// NumberCol[E, V] puts that in the export data of every package that uses a

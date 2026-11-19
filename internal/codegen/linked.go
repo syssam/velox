@@ -20,11 +20,9 @@ import (
 
 // CheckBehaviour reads the behaviour each entity's schema declares: its own
 // Policy, Hooks and Interceptors methods (bound, from SchemaMethods) and
-// its mixins' (mixins, from MixinBehaviour). It returns, per entity name,
-// the relations that behaviour names with velox.HasEdge or HasEdgeWith,
-// whose targets the
-// generated code links (velox.Linked), and a warning for each column it
-// names with a value velox-gen cannot read.
+// its mixins' (mixins, from MixinBehaviour). It returns a warning for each
+// column, relation or entity that behaviour names with a value velox-gen
+// cannot read, which velox checks when the statement runs.
 //
 // It type-checks, with go/types, the schema package that pattern names and
 // each package that declares a mixin with behaviour, from source, against
@@ -35,9 +33,11 @@ import (
 // method reaches it:
 //
 //   - velox.HasEdge(name) and HasEdgeWith(name, ...) name a relation of
-//     the entity. The name must be a constant, which velox-gen can read,
-//     since velox-gen links the relation's target. The conditions of
-//     HasEdgeWith name the target's columns.
+//     the entity. The conditions of HasEdgeWith name the target's columns.
+//   - velox.FieldInSelect(column, entity, key, ...) names an entity of the
+//     package, by its name in the schema or by its table, as velox finds it
+//     in the package's EntityTable; its column and key are of one type, and
+//     its conditions name the entity's columns.
 //   - velox.FieldEQ(name, v) and the other Field functions name a column.
 //     The value fits the column: FieldEQ, FieldNEQ, FieldGT, FieldGTE,
 //     FieldLT and FieldLTE's, and each of FieldIn and FieldNotIn's.
@@ -55,10 +55,10 @@ import (
 // *FileError at the call's line that names the entity and the method; all
 // are joined. A column named by a value velox-gen cannot read is a warning,
 // returned with any refusal, by file and line; the statement checks it
-// when it runs. A call in another package is not seen: it is checked at
-// run time, and a relation it names is not linked, so the statement that
-// names it fails.
-func CheckBehaviour(dir, pattern string, g *Graph, bound map[string]Bound, mixins map[string][]MixinBound, env []string) (map[string][]string, []string, error) {
+// when it runs. So is a relation or an entity named by such a value, whose
+// conditions are not checked. A call in another package is not seen: velox
+// checks it when its statement runs, against the package's EntityTable.
+func CheckBehaviour(dir, pattern string, g *Graph, bound map[string]Bound, mixins map[string][]MixinBound, env []string) ([]string, error) {
 	var roots []edgeRoot
 	pkgs := []string{g.Package}
 	for _, e := range g.Entities {
@@ -80,12 +80,12 @@ func CheckBehaviour(dir, pattern string, g *Graph, bound map[string]Bound, mixin
 		}
 	}
 	if len(roots) == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 	pattern = strings.TrimSpace(pattern)
 	sc, err := checkSources(dir, g.Package, pattern, pkgs, env)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	slices.SortFunc(roots, func(a, b edgeRoot) int {
 		return strings.Compare(a.entity+"."+a.typ+"."+a.method, b.entity+"."+b.typ+"."+b.method)
@@ -94,7 +94,7 @@ func CheckBehaviour(dir, pattern string, g *Graph, bound map[string]Bound, mixin
 	for _, r := range roots {
 		key, err := sc.methodKey(r)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if key == "" {
 			continue
@@ -106,15 +106,9 @@ func CheckBehaviour(dir, pattern string, g *Graph, bound map[string]Bound, mixin
 		}
 	}
 	if len(ck.errs) > 0 {
-		return nil, ck.warningList(), errors.Join(byLine(dedupe(ck.errs))...)
+		return ck.warningList(), errors.Join(byLine(dedupe(ck.errs))...)
 	}
-	if len(ck.linked) == 0 {
-		return nil, ck.warningList(), nil
-	}
-	for _, names := range ck.linked {
-		slices.Sort(names)
-	}
-	return ck.linked, ck.warningList(), nil
+	return ck.warningList(), nil
 }
 
 // edgeRoot is a behaviour method, method of the type typ of the package at
@@ -407,24 +401,22 @@ func (sc *sources) inspect(n ast.Node, prefix []string, w *walked) {
 func (sc *sources) call(c *ast.CallExpr, prefix []string, w *walked) bool {
 	switch fn := sc.veloxFunc(c); {
 	case fn == "HasEdge" || fn == "HasEdgeWith":
-		name := sc.constName(c, w)
+		// A relation named by a value velox-gen cannot read is a warning, and
+		// its conditions, whose entity is not known, are not checked.
+		name := sc.constString(c.Args[0])
+		w.uses = append(w.uses, use{kind: useEdge, chain: prefix, pos: c.Pos(), call: c, name: name})
 		if name != "" {
-			w.uses = append(w.uses, use{kind: useEdge, chain: prefix, pos: c.Pos(), call: c, name: name})
 			sc.inspectAll(c.Args[1:], append(slices.Clone(prefix), name), w)
 		}
 		return false
 	case fn == "FieldInSelect" && len(c.Args) >= 3:
 		entity := sc.constString(c.Args[1])
-		if entity == "" {
-			pos := sc.fset.Position(c.Pos())
-			w.errs = append(w.errs, &FileError{Path: pos.Filename, Line: pos.Line, Reason: fmt.Sprintf(
-				"%s names its entity with a value velox-gen cannot read; name it with a constant, so that velox-gen links the entity", exprString(c))})
-			return false
-		}
 		u := use{kind: useSub, chain: prefix, pos: c.Pos(), call: c, entity: entity,
 			name: sc.constString(c.Args[0]), key: sc.constString(c.Args[2])}
 		w.uses = append(w.uses, u)
-		sc.inspectAll(c.Args[3:], append(slices.Clone(prefix), subStep+entity), w)
+		if entity != "" {
+			sc.inspectAll(c.Args[3:], append(slices.Clone(prefix), subStep+entity), w)
+		}
 		return false
 	case fieldOps[fn]:
 		name := ""
@@ -511,18 +503,6 @@ func (sc *sources) veloxFunc(c *ast.CallExpr) string {
 		return ""
 	}
 	return fn.Name()
-}
-
-// constName returns the relation c's first argument names: "" when it is
-// not a constant, which is recorded in w as a *FileError.
-func (sc *sources) constName(c *ast.CallExpr, w *walked) string {
-	if s := sc.constString(c.Args[0]); s != "" {
-		return s
-	}
-	pos := sc.fset.Position(c.Pos())
-	w.errs = append(w.errs, &FileError{Path: pos.Filename, Line: pos.Line, Reason: fmt.Sprintf(
-		"%s names its relation with a value velox-gen cannot read; name it with a constant, so that velox-gen links the relation's target", exprString(c))})
-	return ""
 }
 
 // constString returns the string x is a constant of, "" when it is not one.

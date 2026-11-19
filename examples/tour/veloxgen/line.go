@@ -86,7 +86,8 @@ func lineDescriptor() velox.Descriptor[Line] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Invoice]("invoice", lineColInvoiceID, invoiceColID),
 		},
-		Schema: veloxschema.Line{},
+		Entities: veloxEntityTable,
+		Schema:   veloxschema.Line{},
 		FieldPtr: func(x *Line, i int) any {
 			switch i {
 			case lineColID:

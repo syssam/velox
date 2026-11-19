@@ -80,6 +80,7 @@ func tagDescriptor() velox.Descriptor[Tag] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[PostTag, Post]("posts", tagColID, postTagColTagID, postTagColPostID, postColID),
 		},
+		Entities: veloxEntityTable,
 		FieldPtr: func(x *Tag, i int) any {
 			switch i {
 			case tagColID:

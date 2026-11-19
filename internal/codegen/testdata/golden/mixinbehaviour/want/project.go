@@ -84,6 +84,7 @@ func projectDescriptor() velox.Descriptor[Project] {
 			{Field: "Name", Name: "name"},
 		},
 		PrimaryKey: []int{projectColID},
+		Entities:   veloxEntityTable,
 		Schema:     schema.Project{},
 		FieldPtr: func(x *Project, i int) any {
 			switch i {

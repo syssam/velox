@@ -1,40 +1,22 @@
 package codegen
 
 import (
-	"slices"
+	"strconv"
+	"strings"
 	"testing"
 )
 
-// A FieldInSelect names an entity, linked to the one whose behaviour holds it,
-// and its conditions name that entity's columns, and its relations, which are
-// linked on it.
-func TestCheckFieldInSelectLinks(t *testing.T) {
+// A FieldInSelect names an entity of the package by its name in the schema or
+// by its table, as velox's EntityTable finds it; its conditions name that
+// entity's columns and relations.
+func TestCheckFieldInSelectAccepts(t *testing.T) {
 	c := newCheckEnv(t)
-	linked, warnings, err := c.run(t, read("Comment", `velox.FieldInSelect("doc_id", "Doc", "id", velox.FieldEQ("title", "x"))`))
-	if err != nil || len(warnings) != 0 {
-		t.Fatalf("refused: %v %q", err, warnings)
-	}
-	if got := linked["Comment"]; !slices.Equal(got, []string{"@Doc"}) {
-		t.Errorf("Comment links %v, want [@Doc]", got)
-	}
-
-	// A relation named inside the subquery is the target's, so it is linked on Doc.
-	linked, _, err = c.run(t, read("Comment", `velox.FieldInSelect("doc_id", "Doc", "id", velox.HasEdgeWith("owner", velox.FieldEQ("name", "x")))`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(linked["Comment"], []string{"@Doc"}) || !slices.Equal(linked["Doc"], []string{"owner"}) {
-		t.Errorf("links %v, want Comment [@Doc] and Doc [owner]", linked)
-	}
-
-	// Two subqueries, and the same one twice, link each entity once.
-	linked, _, err = c.run(t, read("Comment", `velox.And(velox.FieldInSelect("doc_id", "Doc", "id"), velox.FieldInSelect("doc_id", "Doc", "id"), velox.FieldInSelect("org_id", "User", "id"))`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(linked["Comment"], []string{"@Doc", "@User"}) && !slices.Equal(linked["Comment"], []string{"@User", "@Doc"}) {
-		t.Errorf("Comment links %v", linked["Comment"])
-	}
+	c.accepts(t, map[string]string{
+		"by name":    read("Comment", `velox.FieldInSelect("doc_id", "Doc", "id", velox.FieldEQ("title", "x"))`),
+		"by table":   read("Comment", `velox.FieldInSelect("doc_id", "docs", "id", velox.FieldEQ("title", "x"))`),
+		"a relation": read("Comment", `velox.FieldInSelect("doc_id", "Doc", "id", velox.HasEdgeWith("owner", velox.FieldEQ("name", "x")))`),
+		"several":    read("Comment", `velox.And(velox.FieldInSelect("doc_id", "Doc", "id"), velox.FieldInSelect("doc_id", "Doc", "id"), velox.FieldInSelect("org_id", "users", "id"))`),
+	})
 }
 
 // A FieldInSelect is refused at its line when the entity or a column is not
@@ -43,25 +25,43 @@ func TestCheckFieldInSelectLinks(t *testing.T) {
 func TestCheckFieldInSelectRefusals(t *testing.T) {
 	c := newCheckEnv(t)
 	c.refuses(t, []checkRefusal{
-		{"entity", read("Comment", `velox.FieldInSelect("doc_id", "Docc", "id")`), `FieldInSelect`, `"Docc" is not a schema of this package (Comment.Policy)`},
+		{"entity", read("Comment", `velox.FieldInSelect("doc_id", "Docc", "id")`), `FieldInSelect`, `"Docc" is neither a schema nor a table of this package (Comment.Policy)`},
+		{"condition by table", read("Comment", `velox.FieldInSelect("doc_id", "docs", "id", velox.FieldEQ("name", "x"))`), `FieldInSelect`, `Doc, the subquery of Comment's FieldInSelect, has no column "name"`},
 		{"own column", read("Comment", `velox.FieldInSelect("docc_id", "Doc", "id")`), `FieldInSelect`, `Comment has no column "docc_id" (Comment.Policy)`},
 		{"key", read("Comment", `velox.FieldInSelect("doc_id", "Doc", "ids")`), `FieldInSelect`, `Doc has no column "ids" (Comment.Policy)`},
 		{"types", read("Comment", `velox.FieldInSelect("doc_id", "User", "name")`), `FieldInSelect`, `a subquery compares columns of one type`},
 		{"condition", read("Comment", `velox.FieldInSelect("doc_id", "Doc", "id", velox.FieldEQ("name", "x"))`), `FieldInSelect`, `Doc, the subquery of Comment's FieldInSelect, has no column "name" (Comment.Policy)`},
 		{"condition value", read("Comment", `velox.FieldInSelect("doc_id", "Doc", "id", velox.FieldEQ("title", 1))`), `FieldInSelect`, `column "title" of Doc, the subquery of Comment's FieldInSelect, is a string, not an int`},
-		{"entity not constant", "var entity = \"Doc\"\n\n" + read("Comment", `velox.FieldInSelect("doc_id", entity, "id")`), `FieldInSelect`, `names its entity with a value velox-gen cannot read`},
 	})
 }
 
-// A column or key that is not a constant is not read, but the entity is still
-// linked, as the statement checks the rest when it runs.
-func TestCheckFieldInSelectUnreadColumns(t *testing.T) {
+// An entity or a relation named by a value velox-gen cannot read, as one
+// from configuration is, is a warning and not a refusal: velox finds it in
+// the package's EntityTable when the statement runs. Its conditions, whose
+// entity is not known, are not checked. A column or key that is not a
+// constant is not read, and the call is accepted.
+func TestCheckWarnsUnreadNames(t *testing.T) {
 	c := newCheckEnv(t)
-	linked, _, err := c.run(t, "var col = \"doc_id\"\n\n"+read("Comment", `velox.FieldInSelect(col, "Doc", "id")`))
+	decls := "var entity, rel = \"Doc\", \"doc\"\n\n" + read("Comment",
+		`velox.And(velox.FieldInSelect("doc_id", entity, "id", velox.FieldEQ("nope", 1)), velox.HasEdgeWith(rel, velox.FieldEQ("nope", 1)))`)
+	warnings, err := c.run(t, decls)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(linked["Comment"], []string{"@Doc"}) {
-		t.Errorf("Comment links %v, want [@Doc]", linked["Comment"])
+	line := "behaviour.go:" + strconv.Itoa(lineOf(t, decls, "velox.And(")) + ": "
+	want := []string{
+		line + `velox.FieldInSelect("doc_id", entity, "id", velox.FieldEQ("nope", 1)) names its entity with a value velox-gen cannot read; velox checks it when the statement runs`,
+		line + `velox.HasEdgeWith(rel, velox.FieldEQ("nope", 1)) names its relation with a value velox-gen cannot read; velox checks it when the statement runs`,
+	}
+	if len(warnings) != len(want) {
+		t.Fatalf("warnings %q", warnings)
+	}
+	for i, w := range want {
+		if !strings.HasSuffix(warnings[i], w) {
+			t.Errorf("warning %q\nwant suffix %q", warnings[i], w)
+		}
+	}
+	if _, err := c.run(t, "var col = \"doc_id\"\n\n"+read("Comment", `velox.FieldInSelect(col, "Doc", "id")`)); err != nil {
+		t.Errorf("a column velox-gen cannot read: %v", err)
 	}
 }

@@ -50,6 +50,7 @@ func issueLabelDescriptor() velox.Descriptor[IssueLabel] {
 			{Field: "LabelID", Name: "label_id"},
 		},
 		PrimaryKey: []int{issueLabelColIssueID, issueLabelColLabelID},
+		Entities:   veloxEntityTable,
 		FieldPtr: func(x *IssueLabel, i int) any {
 			switch i {
 			case issueLabelColIssueID:

@@ -101,7 +101,8 @@ func projectDescriptor() velox.Descriptor[Project] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Issue]("issues", projectColID, issueColProjectID),
 		},
-		Schema: veloxschema.Project{},
+		Entities: veloxEntityTable,
+		Schema:   veloxschema.Project{},
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
 			case projectColID:

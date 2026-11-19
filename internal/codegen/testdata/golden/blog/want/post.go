@@ -116,7 +116,8 @@ func postDescriptor() velox.Descriptor[Post] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[User]("author", postColAuthorID, userColID),
 		},
-		Schema: schema.Post{},
+		Entities: veloxEntityTable,
+		Schema:   schema.Post{},
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postColID:

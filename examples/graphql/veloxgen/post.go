@@ -128,7 +128,8 @@ func postDescriptor() velox.Descriptor[Post] {
 			velox.EdgeTo[User]("author", postColAuthorID, userColID),
 			velox.EdgeThrough[PostTag, Tag]("tags", postColID, postTagColPostID, postTagColTagID, tagColID),
 		},
-		Schema: veloxschema.Post{},
+		Entities: veloxEntityTable,
+		Schema:   veloxschema.Post{},
 		FieldPtr: func(x *Post, i int) any {
 			switch i {
 			case postColID:

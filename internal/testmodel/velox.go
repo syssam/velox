@@ -4,4 +4,24 @@ package testmodel
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion21
+const _ = velox.GeneratedCodeIsVersion22
+
+var veloxEntities velox.EntityTable
+
+// veloxEntityTable is called by velox, not by applications.
+func veloxEntityTable() *velox.EntityTable {
+	return veloxEntities.Load(func() []velox.EntityLink {
+		return []velox.EntityLink{
+			velox.LinkEntity[Event]("Event", "events"),
+			velox.LinkEntity[Invoice]("Invoice", "invoices"),
+			velox.LinkEntity[Item]("Item", "items"),
+			velox.LinkEntity[Line]("Line", "line"),
+			velox.LinkEntity[Paper]("Paper", "papers"),
+			velox.LinkEntity[Remark]("Remark", "remarks"),
+			velox.LinkEntity[Sample]("Sample", "samples"),
+			velox.LinkEntity[Ticket]("Ticket", "tickets"),
+			velox.LinkEntity[Topic]("Topic", "topics"),
+			velox.LinkEntity[PaperTopic]("PaperTopic", "paper_topics"),
+		}
+	})
+}

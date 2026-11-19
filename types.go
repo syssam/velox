@@ -105,10 +105,25 @@ func ColumnEQ(column int, v any) Predicate { return engine.ColumnEQ(column, v) }
 // no target entity: the use site supplies that (see EdgeTo).
 type EdgeDescriptor = engine.EdgeDescriptor
 
-// EntityLink is an entity that another's behaviour names with FieldInSelect:
-// its Name in the schema, and Get, which returns its metadata. For generated
-// code. LinkEntity makes one.
+// EntityLink is one entity of an EntityTable: its Name in the schema, its
+// Table, its Go Type's package path and name, and Get, which returns its
+// metadata. For generated code. LinkEntity makes one.
 type EntityLink = engine.EntityLink
+
+// EntityTable is the entities of one generated package, in which a condition
+// by name, HasEdge, HasEdgeWith and FieldInSelect, finds its target when its
+// statement runs: by the entity's name in the schema or, failing that, by its
+// table. For generated code. Its zero value is ready; Load builds it once,
+// from build, and returns it:
+//
+//	var veloxEntities velox.EntityTable
+//
+//	func veloxEntityTable() *velox.EntityTable {
+//		return veloxEntities.Load(func() []velox.EntityLink {
+//			return []velox.EntityLink{velox.LinkEntity[Doc]("Doc", "docs")}
+//		})
+//	}
+type EntityTable = engine.EntityTable
 
 // Op is the kind of a Statement.
 type Op = veloxtype.Op

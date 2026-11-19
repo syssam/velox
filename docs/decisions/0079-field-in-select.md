@@ -1,6 +1,9 @@
 # 0079. A subquery on another entity, by name: FieldInSelect
 
 - Status: accepted, 2026-11-19.
+- Amended 2026-11-19 by [0081](0081-entity-table.md): the entity is found in the
+  package's entity table, by name or by table, and need not be a constant;
+  `Descriptor.Links` is gone.
 
 ## Context
 

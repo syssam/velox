@@ -363,7 +363,8 @@ func (*lCycA) VeloxMeta() *velox.Meta[lCycA] {
 	return lCycAMeta.Load(func() velox.Descriptor[lCycA] {
 		return velox.Descriptor[lCycA]{
 			Table: "cyc_as", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "BID", Name: "b_id"}}, PrimaryKey: []int{0},
-			Edges: []velox.EdgeDescriptor{velox.Linked[lCycB](velox.EdgeTo[lCycB]("b", 1, 0))},
+			Entities: fixture.Entities(velox.LinkEntity[lCycB]("lCycB", "")),
+			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[lCycB]("b", 1, 0)},
 			Schema: fixture.Fns{Interceptors: []func() []velox.Interceptor{func() []velox.Interceptor {
 				return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("b"), nil }}}
 			}}},
@@ -377,7 +378,8 @@ func (*lCycB) VeloxMeta() *velox.Meta[lCycB] {
 	return lCycBMeta.Load(func() velox.Descriptor[lCycB] {
 		return velox.Descriptor[lCycB]{
 			Table: "cyc_bs", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "AID", Name: "a_id"}}, PrimaryKey: []int{0},
-			Edges: []velox.EdgeDescriptor{velox.Linked[lCycA](velox.EdgeTo[lCycA]("a", 1, 0))},
+			Entities: fixture.Entities(velox.LinkEntity[lCycA]("lCycA", "")),
+			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[lCycA]("a", 1, 0)},
 			Schema: fixture.Fns{Interceptors: []func() []velox.Interceptor{func() []velox.Interceptor {
 				return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("a"), nil }}}
 			}}},

@@ -173,7 +173,8 @@ func (*ubComment) VeloxMeta() *velox.Meta[ubComment] {
 			Table:        "ub_comments",
 			Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "DocID", Name: "doc_id"}, {Field: "Body", Name: "body"}},
 			PrimaryKey:   []int{0},
-			Edges:        []velox.EdgeDescriptor{velox.Linked[ubDoc](velox.EdgeTo[ubDoc]("doc", 1, 0))},
+			Entities:     fixture.Entities(velox.LinkEntity[ubDoc]("ubDoc", "")),
+			Edges:        []velox.EdgeDescriptor{velox.EdgeTo[ubDoc]("doc", 1, 0)},
 			Schema:       (*ubComment)(nil),
 			FieldPtr:     func(x *ubComment, i int) any { return [...]any{&x.ID, &x.DocID, &x.Body}[i] },
 			EdgeFieldPtr: func(x *ubComment, i int) any { return &x.Doc },
@@ -486,12 +487,13 @@ func TestEdgeHasAppliesTargetPolicy(t *testing.T) {
 	}
 }
 
-// TestEdgeNotLinkedFails: a condition by the name of a relation whose
-// target is not linked fails its statement, and is not a denial.
+// TestEdgeNotLinkedFails: a condition by the name of a relation, on an
+// entity whose descriptor has no entity table, fails its statement, and is
+// not a denial.
 func TestEdgeNotLinkedFails(t *testing.T) {
 	db := ubDB(t)
 	_, err := db.Query[ubLoose]().Limit(1).All(context.Background())
-	wantErrContains(t, "query", err, "relation doc's target is not linked")
+	wantErrContains(t, "query", err, "relation doc: apitest.ubLoose has no entity table")
 	if errors.Is(err, velox.ErrDenied) {
 		t.Errorf("an unlinked relation is not a denial: %v", err)
 	}

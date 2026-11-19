@@ -72,9 +72,10 @@ func commentDescriptor() velox.Descriptor[Comment] {
 		},
 		PrimaryKey: []int{commentColID},
 		Edges: []velox.EdgeDescriptor{
-			velox.Linked[Doc](velox.EdgeTo[Doc]("doc", commentColDocID, docColID)),
+			velox.EdgeTo[Doc]("doc", commentColDocID, docColID),
 		},
-		Schema: veloxschema.Comment{},
+		Entities: veloxEntityTable,
+		Schema:   veloxschema.Comment{},
 		FieldPtr: func(x *Comment, i int) any {
 			switch i {
 			case commentColID:

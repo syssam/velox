@@ -64,7 +64,8 @@ func projectDescriptor() velox.Descriptor[Project] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{projectColOrgID, projectColName}, Unique: true}, // org_id, name
 		},
-		Schema: veloxschema.Project{},
+		Entities: veloxEntityTable,
+		Schema:   veloxschema.Project{},
 		FieldPtr: func(x *Project, i int) any {
 			switch i {
 			case projectColID:

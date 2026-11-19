@@ -74,6 +74,7 @@ func remarkDescriptor() velox.Descriptor[Remark] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Paper]("paper", remarkColPaperID, paperColID),
 		},
+		Entities: veloxEntityTable,
 		FieldPtr: func(x *Remark, i int) any {
 			switch i {
 			case remarkColID:

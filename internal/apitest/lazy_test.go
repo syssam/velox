@@ -79,7 +79,8 @@ func lzTaskDescriptor() velox.Descriptor[lzTask] {
 		Table:        "lz_tasks",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey:   []int{0},
-		Edges:        []velox.EdgeDescriptor{velox.Linked[lzProject](velox.EdgeTo[lzProject]("project", 1, 0))},
+		Entities:     fixture.Entities(velox.LinkEntity[lzProject]("lzProject", "")),
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[lzProject]("project", 1, 0)},
 		FieldPtr:     func(x *lzTask, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
 		EdgeFieldPtr: func(x *lzTask, i int) any { return &x.Project },
 	}
@@ -154,7 +155,8 @@ func lzRaceDescriptor() velox.Descriptor[lzRace] {
 		Table:        "lz_races",
 		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey:   []int{0},
-		Edges:        []velox.EdgeDescriptor{velox.Linked[lzProject](velox.EdgeTo[lzProject]("project", 1, 0))},
+		Entities:     fixture.Entities(velox.LinkEntity[lzProject]("lzProject", "")),
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[lzProject]("project", 1, 0)},
 		FieldPtr:     func(x *lzRace, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
 		EdgeFieldPtr: func(x *lzRace, i int) any { return &x.Project },
 	}

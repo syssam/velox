@@ -56,6 +56,7 @@ func eventDescriptor() velox.Descriptor[Event] {
 			{Field: "MaybeAt", Name: "maybe_at", DefaultFunc: func() any { return kind.Moment(time.Now()) }},
 		},
 		PrimaryKey: []int{eventColID},
+		Entities:   veloxEntityTable,
 		FieldPtr: func(x *Event, i int) any {
 			switch i {
 			case eventColID:

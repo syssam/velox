@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -66,12 +65,12 @@ func linkedModule(t *testing.T, behaviour string) (string, *Graph, map[string]Bo
 	return dir, g, bound
 }
 
-// A relation that behaviour names with velox.HasEdge or HasEdgeWith,
-// through a helper of the schema package and a named constant, is linked:
-// its descriptor wraps it in velox.Linked. A HasEdge in HasEdgeWith's
-// conditions names a relation of the edge's target. A relation no
-// behaviour names is not linked.
-func TestEdgeLinkedWhenBehaviourNamesIt(t *testing.T) {
+// A package whose schema declares behaviour gets one velox.EntityTable in
+// velox.go, of every entity by its name and its table, and every descriptor
+// names it, so that a relation or an entity named in a helper of the schema
+// package, or in another package, is found when the statement runs. A package
+// without behaviour has none, and its schema is not read.
+func TestEntityTableWhenBehaviour(t *testing.T) {
 	dir, g, bound := linkedModule(t, `package schema
 
 import (
@@ -88,39 +87,49 @@ func (Comment) Policy() velox.Policy {
 
 func visible() velox.Predicate { return velox.HasEdgeWith(docEdge, velox.HasEdge("owner")) }
 `)
-	linked, _, err := CheckBehaviour(dir, "./schema", g, bound, nil, offline())
+	if _, err := CheckBehaviour(dir, "./schema", g, bound, nil, offline()); err != nil {
+		t.Fatal(err)
+	}
+	files, err := Generate(g, Config{Package: "gen", GenPath: "example.com/tmp/gen", Bound: bound})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := map[string][]string{"Comment": {"doc"}, "Doc": {"owner"}}; !reflect.DeepEqual(linked, want) {
-		t.Fatalf("got %v, want %v", linked, want)
-	}
-	files, err := Generate(g, Config{Package: "gen", GenPath: "example.com/tmp/gen", Bound: bound, Linked: linked})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for file, want := range map[string]string{
-		"comment.go": `velox.Linked[Doc](velox.EdgeTo[Doc]("doc", `,
-		"doc.go":     `velox.Linked[User](velox.EdgeTo[User]("owner", `,
+	table := fileText(t, files, "velox.go")
+	for _, want := range []string{
+		"var veloxEntities velox.EntityTable",
+		"func veloxEntityTable() *velox.EntityTable {",
+		`velox.LinkEntity[Comment]("Comment", "comments"),`,
+		`velox.LinkEntity[Doc]("Doc", "docs"),`,
+		`velox.LinkEntity[User]("User", "users"),`,
 	} {
-		if src := fileText(t, files, file); !strings.Contains(src, want) {
-			t.Errorf("%s lacks %s:\n%s", file, want, src)
+		if !strings.Contains(table, want) {
+			t.Errorf("velox.go lacks %s:\n%s", want, table)
 		}
 	}
-	for _, file := range []string{"user.go", "doc.go"} {
-		if src := fileText(t, files, file); strings.Contains(src, `Linked[Comment]`) || strings.Contains(src, `Linked[Doc]`) {
-			t.Errorf("%s links a relation no behaviour names:\n%s", file, src)
+	for _, file := range []string{"comment.go", "doc.go", "user.go"} {
+		src := fileText(t, files, file)
+		if !strings.Contains(src, "Entities: veloxEntityTable,") || strings.Contains(src, "Linked[") {
+			t.Errorf("%s does not name the entity table, or links a relation:\n%s", file, src)
 		}
 	}
-	// Without behaviour, nothing is linked, and the schema is not read.
-	if linked, _, err := CheckBehaviour(dir, "./schema", g, nil, nil, offline()); err != nil || linked != nil {
-		t.Errorf("no behaviour: %v, %v", linked, err)
+	// Without behaviour, there is no table, and the schema is not read.
+	if warnings, err := CheckBehaviour(dir, "./schema", g, nil, nil, offline()); err != nil || warnings != nil {
+		t.Errorf("no behaviour: %v, %v", warnings, err)
+	}
+	files, err = Generate(g, Config{Package: "gen", GenPath: "example.com/tmp/gen"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{"velox.go", "comment.go"} {
+		if src := fileText(t, files, file); strings.Contains(src, "EntityTable") || strings.Contains(src, "Entities:") {
+			t.Errorf("%s without behaviour names an entity table:\n%s", file, src)
+		}
 	}
 }
 
-// A relation named with a value velox-gen cannot read is refused at its
-// line: velox-gen could not link its target.
-func TestEdgeNameMustBeConstant(t *testing.T) {
+// A relation named with a value velox-gen cannot read is a warning at its
+// line, not a refusal: velox finds its target in the entity table.
+func TestEdgeNameNotConstantWarns(t *testing.T) {
 	dir, g, bound := linkedModule(t, `package schema
 
 import (
@@ -137,11 +146,9 @@ func (Comment) Policy() velox.Policy {
 	}}
 }
 `)
-	_, _, err := CheckBehaviour(dir, "./schema", g, bound, nil, offline())
-	var fe *FileError
-	if !errors.As(err, &fe) || filepath.Base(fe.Path) != "behaviour.go" || fe.Line != 13 ||
-		!strings.Contains(fe.Reason, "velox.HasEdge(edgeName) names its relation with a value velox-gen cannot read") {
-		t.Fatalf("got %v", err)
+	warnings, err := CheckBehaviour(dir, "./schema", g, bound, nil, offline())
+	if err != nil || len(warnings) != 1 || !strings.Contains(warnings[0], "behaviour.go:13: velox.HasEdge(edgeName) names its relation with a value velox-gen cannot read") {
+		t.Fatalf("got %q, %v", warnings, err)
 	}
 }
 

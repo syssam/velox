@@ -59,6 +59,7 @@ func orgDescriptor() velox.Descriptor[Org] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{orgColSlug}, Unique: true}, // slug
 		},
+		Entities: veloxEntityTable,
 		FieldPtr: func(x *Org, i int) any {
 			switch i {
 			case orgColID:

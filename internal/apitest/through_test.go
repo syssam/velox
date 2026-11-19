@@ -643,9 +643,10 @@ func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 			Table:      "peers",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
+			Entities:   fixture.Entities(velox.LinkEntity[dPeer]("dPeer", ""), velox.LinkEntity[fixture.DTag]("DTag", "")),
 			Edges: []velox.EdgeDescriptor{
-				velox.Linked[dPeer](velox.EdgeThrough[dFriend, dPeer]("friends", 0, 0, 1, 0)),
-				velox.Linked[fixture.DTag](velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("tags", 0, 0, 1, 0)),
+				velox.EdgeThrough[dFriend, dPeer]("friends", 0, 0, 1, 0),
+				velox.EdgeThrough[fixture.DBookTag, fixture.DTag]("tags", 0, 0, 1, 0),
 			},
 			FieldPtr: func(x *dPeer, i int) any {
 				if i == 0 {

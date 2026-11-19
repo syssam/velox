@@ -54,6 +54,7 @@ func auditDescriptor() velox.Descriptor[Audit] {
 			{Field: "Message", Name: "message"},
 		},
 		PrimaryKey: []int{auditColID},
+		Entities:   veloxEntityTable,
 		FieldPtr: func(x *Audit, i int) any {
 			switch i {
 			case auditColID:

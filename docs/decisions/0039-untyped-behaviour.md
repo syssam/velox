@@ -7,6 +7,9 @@ Revised by 0040: a descriptor names the schema's value, `Schema:
 schema.Issue{}`, in place of the method lists, gen imports the schema by its
 own name, and `velox.C`, `velox.Edge` and `Cond` are ent's `velox.FieldEQ`,
 `velox.HasEdge` and `velox.Predicate`.
+Amended 2026-11-19 by [0081](0081-entity-table.md): a relation's target is
+found in the package's entity table; `velox.Linked` is gone and a name
+velox-gen cannot read is a warning.
 
 ## Context
 

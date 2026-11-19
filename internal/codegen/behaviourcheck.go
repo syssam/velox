@@ -20,7 +20,6 @@ const enginePkg = veloxPkg + "/internal/engine"
 type behaviourCheck struct {
 	sc       *sources
 	g        *Graph
-	linked   map[string][]string // entity → the relations to link
 	errs     []error
 	warnings []warning
 	seen     map[string]bool // a refusal's call and entity, reported once
@@ -28,7 +27,7 @@ type behaviourCheck struct {
 }
 
 func newBehaviourCheck(sc *sources, g *Graph) *behaviourCheck {
-	return &behaviourCheck{sc: sc, g: g, linked: map[string][]string{}, seen: map[string]bool{}, warned: map[string]bool{}}
+	return &behaviourCheck{sc: sc, g: g, seen: map[string]bool{}, warned: map[string]bool{}}
 }
 
 // check checks u, which root r reaches.
@@ -37,10 +36,8 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 	if e == nil {
 		return
 	}
-	if u.name == "" && u.kind != useSub {
-		if u.kind != useEdge {
-			ck.warn(u)
-		}
+	if u.name == "" && u.kind != useSub || u.kind == useSub && u.entity == "" {
+		ck.warn(u)
 		return
 	}
 	who := e.Name
@@ -66,9 +63,7 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 	case useEdge:
 		if e.Edge(u.name) == nil {
 			refuse(u.call, "%s has no relation %q", who, u.name)
-			return
 		}
-		ck.link(r.entity, append(slices.Clone(u.chain), u.name))
 		return
 	case useSub:
 		ck.checkSub(e, who, u, refuse)
@@ -121,7 +116,7 @@ func (ck *behaviourCheck) reach(e *Entity, who string, chain []string) (*Entity,
 	for _, name := range chain {
 		owner := e
 		if ent, ok := strings.CutPrefix(name, subStep); ok {
-			if e = ck.g.Entity(ent); e == nil {
+			if e, _ = ck.entity(ent); e == nil {
 				return nil, ""
 			}
 			who = fmt.Sprintf("%s, the subquery of %s's FieldInSelect,", e.Name, owner.Name)
@@ -141,11 +136,11 @@ func (ck *behaviourCheck) reach(e *Entity, who string, chain []string) (*Entity,
 
 // checkSub checks u, a FieldInSelect that the entity e holds: the entity it
 // names is one of the package's, both columns it names are there and of one
-// type, as the statement requires; and it links the entity to e.
+// type, as the statement requires.
 func (ck *behaviourCheck) checkSub(e *Entity, who string, u use, refuse func(ast.Expr, string, ...any)) {
-	target := ck.g.Entity(u.entity)
+	target, reason := ck.entity(u.entity)
 	if target == nil {
-		refuse(u.call, "%s: %q is not a schema of this package", who, u.entity)
+		refuse(u.call, "%s: %s", who, reason)
 		return
 	}
 	var own, tgt *namedColumn
@@ -172,41 +167,55 @@ func (ck *behaviourCheck) checkSub(e *Entity, who string, u use, refuse func(ast
 			return
 		}
 	}
-	if link := subStep + target.Name; !slices.Contains(ck.linked[e.Name], link) {
-		ck.linked[e.Name] = append(ck.linked[e.Name], link)
-	}
 }
 
-// warn records the warning of u, a column named by a value velox-gen
-// cannot read.
+// warn records the warning of u, a column, a relation or an entity named by
+// a value velox-gen cannot read.
 func (ck *behaviourCheck) warn(u use) {
 	pos := ck.sc.fset.Position(u.pos)
 	key := fmt.Sprintf("%s:%d", pos.Filename, pos.Line)
-	if ck.warned[key] {
+	at := fmt.Sprintf("%s:%d", key, pos.Column) // a call reached from several roots is warned of once; each call of a line is
+	if ck.warned[at] {
 		return
 	}
-	ck.warned[key] = true
+	ck.warned[at] = true
 	call := u.call
 	if u.named != nil {
 		call = u.named
 	}
-	ck.warnings = append(ck.warnings, warning{pos, fmt.Sprintf("%s: %s names its column with a value velox-gen cannot read; velox checks it when the statement runs", key, exprString(call))})
+	what := "column"
+	switch u.kind {
+	case useEdge:
+		what = "relation"
+	case useSub:
+		what = "entity"
+	}
+	ck.warnings = append(ck.warnings, warning{pos, fmt.Sprintf("%s: %s names its %s with a value velox-gen cannot read; velox checks it when the statement runs", key, exprString(call), what)})
 }
 
-// link records that entity's relations chain, each of the entity the one
-// before it reaches, are linked.
-func (ck *behaviourCheck) link(entity string, chain []string) {
-	for _, name := range chain {
-		if ent, ok := strings.CutPrefix(name, subStep); ok {
-			entity = ent // a FieldInSelect's entity: its own call links it
-			continue
+// entity returns the entity of the package that a FieldInSelect names, as
+// velox's EntityTable finds it: the one of that name or, failing that, the one
+// of that table. When there is none, or the name is ambiguous, it returns nil
+// and the reason.
+func (ck *behaviourCheck) entity(name string) (*Entity, string) {
+	byName := ck.g.Entity(name)
+	var tables []*Entity
+	for _, e := range ck.g.Entities {
+		if e.Table == name {
+			tables = append(tables, e)
 		}
-		ed := ck.g.Entity(entity).Edge(name)
-		if !slices.Contains(ck.linked[entity], name) {
-			ck.linked[entity] = append(ck.linked[entity], name)
-		}
-		entity = ed.Target
 	}
+	switch {
+	case byName != nil && (len(tables) > 1 || len(tables) == 1 && tables[0] != byName):
+		return nil, fmt.Sprintf("%q is the name of entity %s and the table of another; name the entity", name, byName.Name)
+	case byName != nil:
+		return byName, ""
+	case len(tables) == 1:
+		return tables[0], ""
+	case len(tables) > 1:
+		return nil, fmt.Sprintf("%q is the table of %d entities; name the entity", name, len(tables))
+	}
+	return nil, fmt.Sprintf("%q is neither a schema nor a table of this package", name)
 }
 
 // columnOf returns e's field whose column is name, and its index.

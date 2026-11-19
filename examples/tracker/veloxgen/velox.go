@@ -5,7 +5,25 @@ package veloxgen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion21
+const _ = velox.GeneratedCodeIsVersion22
+
+var veloxEntities velox.EntityTable
+
+// veloxEntityTable is called by velox, not by applications.
+func veloxEntityTable() *velox.EntityTable {
+	return veloxEntities.Load(func() []velox.EntityLink {
+		return []velox.EntityLink{
+			velox.LinkEntity[Comment]("Comment", "comments"),
+			velox.LinkEntity[Issue]("Issue", "issues"),
+			velox.LinkEntity[Label]("Label", "labels"),
+			velox.LinkEntity[Org]("Org", "orgs"),
+			velox.LinkEntity[Project]("Project", "projects"),
+			velox.LinkEntity[Session]("Session", "sessions"),
+			velox.LinkEntity[User]("User", "users"),
+			velox.LinkEntity[IssueLabel]("IssueLabel", "issue_labels"),
+		}
+	})
+}
 
 // IssueStatus is the type of Issue's status field.
 type IssueStatus string

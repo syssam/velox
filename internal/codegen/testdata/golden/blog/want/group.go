@@ -77,6 +77,7 @@ func groupDescriptor() velox.Descriptor[Group] {
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeThrough[UserGroup, User]("users", groupColID, userGroupColGroupID, userGroupColUserID, userColID),
 		},
+		Entities: veloxEntityTable,
 		FieldPtr: func(x *Group, i int) any {
 			switch i {
 			case groupColID:

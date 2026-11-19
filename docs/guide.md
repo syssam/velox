@@ -257,7 +257,7 @@ command in one `go:generate` line, and have CI call it, so the folder is named
 once.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion21`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion22`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 
@@ -555,8 +555,13 @@ func (Doc) Policy() velox.Policy {
 It is the same `EXISTS`, so `Org`'s own Read policy applies inside it, and it
 is resolved when the statement is prepared: an unknown column or entity, or
 two columns of different types, is an error and never a dropped condition.
-`entity` must be a constant, so that velox-gen links it
-([ADR 0079](decisions/0079-field-in-select.md)).
+`entity` is the entity's name in the schema or its table. velox finds it, and
+the target of a `HasEdge`, in the generated package's entity table when the
+statement runs, so a rule in a shared package can take its names from
+configuration. velox-gen checks every name it can read as a constant and warns
+about the others. Prefer `HasEdgeWith` where a relation exists: velox-gen then
+checks the whole rule ([ADR 0079](decisions/0079-field-in-select.md),
+[ADR 0081](decisions/0081-entity-table.md)).
 
 ### SQL text in a condition: Expr
 

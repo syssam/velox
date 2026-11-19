@@ -121,7 +121,8 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 			velox.EdgeTo[Ticket]("children", ticketColID, ticketColParentID),
 			velox.EdgeTo[Ticket]("parent", ticketColParentID, ticketColID),
 		},
-		Schema: schema.Ticket{},
+		Entities: veloxEntityTable,
+		Schema:   schema.Ticket{},
 		FieldPtr: func(x *Ticket, i int) any {
 			switch i {
 			case ticketColID:

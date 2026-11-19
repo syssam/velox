@@ -55,6 +55,7 @@ func labelDescriptor() velox.Descriptor[Label] {
 			{Field: "Name", Name: "name"},
 		},
 		PrimaryKey: []int{labelColID},
+		Entities:   veloxEntityTable,
 		Schema:     schema.Label{},
 		FieldPtr: func(x *Label, i int) any {
 			switch i {

@@ -5,7 +5,23 @@ package gen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion21
+const _ = velox.GeneratedCodeIsVersion22
+
+var veloxEntities velox.EntityTable
+
+// veloxEntityTable is called by velox, not by applications.
+func veloxEntityTable() *velox.EntityTable {
+	return veloxEntities.Load(func() []velox.EntityLink {
+		return []velox.EntityLink{
+			velox.LinkEntity[Category]("Category", "categories"),
+			velox.LinkEntity[Group]("Group", "groups"),
+			velox.LinkEntity[Post]("Post", "posts"),
+			velox.LinkEntity[User]("User", "users"),
+			velox.LinkEntity[UserFriend]("UserFriend", "user_friends"),
+			velox.LinkEntity[UserGroup]("UserGroup", "user_groups"),
+		}
+	})
+}
 
 // PostStatus is the type of Post's status field.
 type PostStatus string

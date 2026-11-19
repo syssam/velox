@@ -15,8 +15,16 @@ import (
 )
 
 // The entities of the conditions and mutations by name: nmOrg, and nmDoc,
-// whose relation org is linked (SetEdgeTarget) and whose relation peer is
-// not.
+// whose entity table holds nmOrg, the target of its relation org, and not
+// nmDoc, the target of its relation peer.
+
+var nmEntityTable velox.EntityTable
+
+func nmEntities() *velox.EntityTable {
+	return nmEntityTable.Load(func() []velox.EntityLink {
+		return []velox.EntityLink{velox.LinkEntity[nmOrg]("Org", "nm_orgs")}
+	})
+}
 
 type nmOrg struct {
 	ID   int64
@@ -82,7 +90,6 @@ const (
 
 func nmDocDescriptor() velox.Descriptor[nmDoc] {
 	org := velox.EdgeTo[nmOrg]("org", nmOrgID, 0)
-	engine.SetEdgeTarget(&org, func() (*engine.EntityInfo, error) { return relRef[nmOrg, nmOrg]().Owner() })
 	return velox.Descriptor[nmDoc]{
 		Table: "nm_docs",
 		Columns: []velox.ColumnDescriptor{
@@ -93,7 +100,9 @@ func nmDocDescriptor() velox.Descriptor[nmDoc] {
 		},
 		PrimaryKey: []int{0},
 		Edges:      []velox.EdgeDescriptor{org, velox.EdgeTo[nmDoc]("peer", nmPeerID, nmID)},
-		Links:      []velox.EntityLink{velox.LinkEntity[nmOrg]("Org")},
+		// The table has Org and not nmDoc, so the relation peer, to nmDoc, has
+		// no target a condition by name can find.
+		Entities: nmEntities,
 		FieldPtr: func(x *nmDoc, i int) any {
 			return [...]any{&x.ID, &x.OrgID, &x.Title, &x.Note, &x.Rank, &x.Status, &x.At, &x.Score, &x.PeerID, &x.Visible}[i]
 		},
@@ -227,9 +236,10 @@ func TestResolveRendersAsTyped(t *testing.T) {
 	}
 }
 
-// TestResolveEdgeNeedsLink: an EXISTS by a relation's name resolves on a
-// linked relation, with its conditions on the target, and fails the
-// statement on a relation that is not linked or not there.
+// TestResolveEdgeNeedsLink: an EXISTS by a relation's name resolves when the
+// entity table holds the relation's target, with its conditions on the
+// target, and fails the statement on a relation whose target it lacks, or
+// that is not there.
 func TestResolveEdgeNeedsLink(t *testing.T) {
 	sql, args, err := nmSQL(t, cond(engine.HasEdgeWith("org", engine.FieldEQ("name", "acme"))))
 	if err != nil {
@@ -252,7 +262,7 @@ func TestResolveEdgeNeedsLink(t *testing.T) {
 		c   engine.Predicate
 		err string
 	}{
-		{engine.HasEdge("peer"), "relation peer's target is not linked: velox-gen links it when the schema names it with velox.HasEdge or velox.HasEdgeWith"},
+		{engine.HasEdge("peer"), "relation peer: its target github.com/syssam/velox/internal/engine_test.nmDoc is not in the entity table of"},
 		{engine.HasEdge("nope"), `no relation "nope"`},
 		{engine.HasEdgeWith("org", engine.FieldEQ("title", "x")), `relation org: no column "title"`},
 	} {

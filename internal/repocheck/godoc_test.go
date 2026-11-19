@@ -84,8 +84,8 @@ func TestGodocCitesNoSpec(t *testing.T) {
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	t.Parallel()
 	names := []string{"Descriptor", "ColumnDescriptor", "EdgeDescriptor", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce", "Show",
-		"Linked", "LinkEntity", "EntityLink", "Lazy", "Validate", "ValidateSet",
-		"GeneratedCodeIsVersion21"}
+		"LinkEntity", "EntityLink", "EntityTable", "Lazy", "Validate", "ValidateSet",
+		"GeneratedCodeIsVersion22"}
 	listed := map[string]bool{}
 	for _, n := range names {
 		listed[n] = true

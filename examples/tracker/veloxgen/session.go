@@ -70,6 +70,7 @@ func sessionDescriptor() velox.Descriptor[Session] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{sessionColTokenHash}, Unique: true}, // token_hash
 		},
+		Entities: veloxEntityTable,
 		FieldPtr: func(x *Session, i int) any {
 			switch i {
 			case sessionColID:

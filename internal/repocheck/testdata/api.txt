@@ -33,6 +33,9 @@ EntityInfo.Table string
 EntityInfo.VersionColumn() (int, bool)
 EntityLink.Get func() (*EntityInfo, error)
 EntityLink.Name string
+EntityLink.Table string
+EntityLink.Type string
+EntityTable.Load(build func() []EntityLink) *EntityTable
 Interceptor.Filter func(ctx context.Context) (Predicate, error)
 JoinClause.Left bool
 JoinClause.Link Link
@@ -100,7 +103,7 @@ const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
 const EdgePage
-const GeneratedCodeIsVersion21
+const GeneratedCodeIsVersion22
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -489,8 +492,7 @@ func HasEdge(name string) Predicate
 func HasEdgeWith(name string, ps ...Predicate) Predicate
 func IsDryRun(ctx context.Context) bool
 func IsNotFound(err error) bool
-func LinkEntity[T any, PT Entity[T]](name string) EntityLink
-func Linked[T any, PT Entity[T]](e EdgeDescriptor) EdgeDescriptor
+func LinkEntity[T any, PT Entity[T]](name, table string) EntityLink
 func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([][]T, error)
 func MaxByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func MaxBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
@@ -561,7 +563,7 @@ type ConstraintKind = veloxtype.ConstraintKind
 type DB struct { }
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Descriptor[E any] struct { Table string TableSchema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor Links []EntityLink FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Schema any }
+type Descriptor[E any] struct { Table string TableSchema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor Entities func() *EntityTable FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Schema any }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type Edge = schema.Edge
@@ -569,6 +571,7 @@ type EdgeDescriptor = engine.EdgeDescriptor
 type EdgeError = veloxtype.EdgeError
 type EntityInfo = engine.EntityInfo
 type EntityLink = engine.EntityLink
+type EntityTable = engine.EntityTable
 type Entity[E any] interface { *E VeloxMeta() *Meta[E] }
 type Field = schema.Field
 type GroupKey[E, K any] struct { }

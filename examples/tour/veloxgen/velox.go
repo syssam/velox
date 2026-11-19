@@ -5,7 +5,19 @@ package veloxgen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion21
+const _ = velox.GeneratedCodeIsVersion22
+
+var veloxEntities velox.EntityTable
+
+// veloxEntityTable is called by velox, not by applications.
+func veloxEntityTable() *velox.EntityTable {
+	return veloxEntities.Load(func() []velox.EntityLink {
+		return []velox.EntityLink{
+			velox.LinkEntity[Invoice]("Invoice", "invoices"),
+			velox.LinkEntity[Line]("Line", "lines"),
+		}
+	})
+}
 
 // InvoiceStatus is the type of Invoice's status field.
 type InvoiceStatus string

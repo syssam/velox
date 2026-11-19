@@ -110,10 +110,12 @@ func FieldContainsFold(name, s string) Predicate { return engine.FieldContainsFo
 // may not read does not widen the condition. A NULL column is in no subquery.
 // Negate it with Not: NOT EXISTS, which is true for a NULL column.
 //
-// entity is the schema's name for it, a constant that velox-gen reads: it links
-// that entity to the one whose behaviour makes the call, and checks both
-// columns and ps. An entity that is not linked, a column that is not there, or
-// two columns of different types fail the statement that holds it. The column
+// entity is the schema's name for it or its table. velox finds it in the
+// generated package's EntityTable when the statement runs, so the names may
+// come from a helper package or configuration; velox-gen checks the names it
+// can read as constants. A name that is no entity or table, or that is one
+// entity's name and another's table, a column that is not there, or two
+// columns of different types fail the statement that holds it. The column
 // must not be an encoded (JSON) column. On MySQL a subquery that reads the table
 // an UPDATE or DELETE changes fails with error 1093.
 func FieldInSelect(column, entity, key string, ps ...Predicate) Predicate {
@@ -133,9 +135,11 @@ func FieldNotNull(name string) Predicate { return engine.FieldNotNull(name) }
 //	velox.HasEdge("doc")
 //
 // It is an EXISTS on the relation's target, which applies the target's
-// Read policy and interceptors for the statement's context. velox-gen
-// links the target of a relation an entity's behaviour names with a
-// constant name; a statement that names one it did not link fails.
+// Read policy and interceptors for the statement's context. velox finds
+// the target in the generated package's EntityTable when the statement
+// runs, so the name may come from a helper package or configuration.
+// velox-gen checks a constant name; a name that is not a relation fails
+// the statement.
 func HasEdge(name string) Predicate { return engine.HasEdge(name) }
 
 // HasEdgeWith is true when the relation of the given name holds at least

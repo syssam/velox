@@ -184,6 +184,7 @@ func userDescriptor() velox.Descriptor[User] {
 			velox.EdgeThrough[UserFriend, User]("friends", userColID, userFriendColUserID, userFriendColFriendID, userColID),
 			velox.EdgeBidi[User]("spouse", userColUserSpouse, userColID),
 		},
+		Entities: veloxEntityTable,
 		FieldPtr: func(x *User, i int) any {
 			switch i {
 			case userColID:
