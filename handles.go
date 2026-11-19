@@ -874,7 +874,7 @@ func (c NullStringCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
-// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it.
+// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery and IsEmpty test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it.
 type JSONCol[E, V any] struct{ I int32 }
 
 func (c JSONCol[E, V]) column(*E) int32 { return c.I }
@@ -901,6 +901,18 @@ func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E] {
 
 // HasKey is true where the path of object keys is in the column's document, whatever its value, a JSON null included.
 func (c JSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E] { return hasKey[E](c.I, keys) }
+
+// Has is true where the column's JSON array holds the element v, a string, a number or a bool: false where the column holds no array, NULL where it is NULL. Any other v fails the statement.
+func (c JSONCol[E, V]) Has[_ Lazy[V]](v any) Pred[E] { return jsonHas[E](c.I, v) }
+
+// HasSome is true where the column's JSON array holds at least one of vs. With no values it is false.
+func (c JSONCol[E, V]) HasSome[_ Lazy[V]](vs ...any) Pred[E] { return jsonHasAny[E](c.I, vs) }
+
+// HasEvery is true where the column's JSON array holds every one of vs. With no values it is true.
+func (c JSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E] { return jsonHasAll[E](c.I, vs) }
+
+// IsEmpty is true where the column's JSON array has no element, []: false for an array with one and for a document that is no array, NULL where the column is.
+func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](c.I) }
 
 // NullJSONCol is JSONCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
 type NullJSONCol[E, V any] struct{ I int32 }
@@ -929,6 +941,18 @@ func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E] {
 
 // HasKey is true where the path of object keys is in the column's document, whatever its value, a JSON null included.
 func (c NullJSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E] { return hasKey[E](c.I, keys) }
+
+// Has is true where the column's JSON array holds the element v, a string, a number or a bool: false where the column holds no array, NULL where it is NULL. Any other v fails the statement.
+func (c NullJSONCol[E, V]) Has[_ Lazy[V]](v any) Pred[E] { return jsonHas[E](c.I, v) }
+
+// HasSome is true where the column's JSON array holds at least one of vs. With no values it is false.
+func (c NullJSONCol[E, V]) HasSome[_ Lazy[V]](vs ...any) Pred[E] { return jsonHasAny[E](c.I, vs) }
+
+// HasEvery is true where the column's JSON array holds every one of vs. With no values it is true.
+func (c NullJSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E] { return jsonHasAll[E](c.I, vs) }
+
+// IsEmpty is true where the column's JSON array has no element, []: false for an array with one and for a document that is no array, NULL where the column is.
+func (c NullJSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](c.I) }
 
 // SetNull sets the column to NULL.
 func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {

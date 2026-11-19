@@ -53,6 +53,12 @@ const (
 	// OpExpr is a condition written as text: v is its *exprData, ExprNode
 	// makes it.
 	OpExpr
+	// OpJSONHas is true where the JSON array in column col holds the element
+	// v, a *jsonElem. JSONHasNode makes it.
+	OpJSONHas
+	// OpJSONEmpty is true where the column holds an array with no element.
+	// JSONEmptyNode makes it.
+	OpJSONEmpty
 )
 
 // Node is a condition, typed by nothing: the generic API wraps it.

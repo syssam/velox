@@ -125,6 +125,9 @@ const (
 
 	PredEqualFold    = engine.PredEqualFold    // LOWER(column) = LOWER(v); a text column
 	PredContainsFold = engine.PredContainsFold // LOWER(column) LIKE LOWER(%v%), v's LIKE characters escaped; a text column
+
+	PredJSONHas   = engine.PredJSONHas   // the JSON array in column holds the element v, a string, a number or a bool; a JSON column
+	PredJSONEmpty = engine.PredJSONEmpty // the JSON array in column is []; v nil; a JSON column
 )
 
 // TableQuery is a SELECT on the entity of a Table, velox.Query with the

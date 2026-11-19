@@ -279,6 +279,8 @@ const (
 	PredNotNull                        // column IS NOT NULL; v nil; a nullable column
 	PredEqualFold                      // LOWER(column) = LOWER(v); a text column
 	PredContainsFold                   // LOWER(column) LIKE LOWER(%v%), v's LIKE characters escaped; a text column
+	PredJSONHas                        // the JSON array in column holds the element v, a string, a number or a bool; a JSON column
+	PredJSONEmpty                      // the JSON array in column is []; v nil; a JSON column
 )
 
 // predOps are the engine's operators of the PredOps that compare.
@@ -290,7 +292,8 @@ var predOps = [...]Node{
 
 // Pred is the condition op on column col of the entity, with the value v: the
 // column handles' EQ, NEQ, In, NotIn, GT, GTE, LT, LTE, Contains, HasPrefix,
-// HasSuffix, EqualFold, ContainsFold, IsNull and NotNull, untyped.
+// HasSuffix, EqualFold, ContainsFold, IsNull and NotNull, untyped; and, on a JSON
+// column, the handle's Has (PredJSONHas) and IsEmpty (PredJSONEmpty).
 //
 // v must be of the column's Go type, as the handle's method takes it: the
 // field's type, or for a nullable field (a pointer) the type it points to;
@@ -371,6 +374,21 @@ func (t Table) pred(col int, op PredOp, v any) (Node, error) {
 			return Node{Op: OpFold, Col: int32(col), V: s, W: t.t.info}, nil
 		}
 		return Node{Op: OpLikeFold, Col: int32(col), V: "%" + EscapeLike(s) + "%", W: t.t.info}, nil
+	case PredJSONHas, PredJSONEmpty:
+		if !c.Codec {
+			return Node{}, fmt.Errorf("velox: %s: %s is not a JSON column, which a JSON array condition needs", s.info.Name, c.Field)
+		}
+		n := JSONEmptyNode(int32(col))
+		if op == PredJSONHas {
+			n = JSONHasNode(int32(col), v)
+		} else if v != nil {
+			return Node{}, fmt.Errorf("velox: %s: JSONEmpty on %s takes no value", s.info.Name, c.Field)
+		}
+		if n.Op == OpInvalid {
+			return Node{}, n.V.(error)
+		}
+		n.W = s.info
+		return n, nil
 	case PredIsNull, PredNotNull:
 		if !c.Nullable {
 			return Node{}, fmt.Errorf("velox: %s: %s is not nullable", s.info.Name, c.Field)

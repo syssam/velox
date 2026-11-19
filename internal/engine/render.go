@@ -778,6 +778,10 @@ func (w *writer) pred(n Node) {
 		w.joined(n)
 	case OpExpr:
 		w.expr(n)
+	case OpJSONHas:
+		w.jsonHas(n)
+	case OpJSONEmpty:
+		w.jsonEmpty(n)
 	default:
 		w.fail(fmt.Errorf("velox: %s: a condition of unknown kind %d", w.in.Name, n.Op))
 	}

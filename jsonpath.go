@@ -47,6 +47,37 @@ func hasKey[E any](col int32, keys []string) Pred[E] {
 	return jsonPred[E](col, jsonPath(engine.JSONKindAny, keys), engine.Node{Op: engine.OpNotNull})
 }
 
+func jsonHas[E any](col int32, v any) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.JSONHasNode(col, v)))
+}
+
+// jsonHasAny is true where the array holds one of vs: an Or of Has, false for
+// none, as an In with no values is.
+func jsonHasAny[E any](col int32, vs []any) Pred[E] {
+	return jsonHasEach[E](false, col, vs)
+}
+
+// jsonHasAll is true where the array holds each of vs: an And of Has, true for
+// none, as a NotIn with no values is.
+func jsonHasAll[E any](col int32, vs []any) Pred[E] {
+	return jsonHasEach[E](true, col, vs)
+}
+
+func jsonHasEach[E any](all bool, col int32, vs []any) Pred[E] {
+	kids := make([]engine.Node, len(vs))
+	for i, v := range vs {
+		kids[i] = engine.JSONHasNode(col, v)
+	}
+	if all {
+		return Pred[E](engine.NewPredicate(engine.Group(engine.OpAnd, kids)))
+	}
+	return Pred[E](engine.NewPredicate(engine.Group(engine.OpOr, kids)))
+}
+
+func jsonIsEmpty[E any](col int32) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.JSONEmptyNode(col)))
+}
+
 // EQ is true where the string at the path is v.
 func (t JSONText[E]) EQ[_ Lazy[E]](v string) Pred[E] {
 	return jsonPred[E](t.col, t.path, engine.Node{Op: engine.OpEQ, V: v})
