@@ -132,9 +132,16 @@ type Enum struct {
 	Name string
 	// Field is the index of the field in Entity.Fields.
 	Field int
-	// Values are the GraphQL enum values, one for each of the field's stored
-	// values (plugin.Field.EnumValues), in their order; nil for a String.
+	// Values are the GraphQL enum values, one for each stored value of
+	// velox-gen's Go enum type (plugin.Enum.Values), in its order, or of the
+	// field's (plugin.Field.EnumValues) for an application's own type; nil
+	// for a String.
 	Values []string
+	// Shared is set when an earlier field of the same velox-gen Go enum type
+	// declares the GraphQL enum and its marshalers: velox-gen gives two
+	// fields one type when their enum types get one name and hold the same
+	// values.
+	Shared bool
 }
 
 // Getter is a method that returns a field's value as the Go type its scalar
@@ -234,7 +241,7 @@ func Build(m *plugin.Model) (*Surface, error) {
 			Create: o.createGo, Update: o.updateGo, Fields: o.plain}
 		for _, en := range o.enums {
 			i := slices.IndexFunc(o.ent.Fields, func(f *plugin.Field) bool { return f.Name == en.field })
-			t.Enums = append(t.Enums, Enum{Name: en.name, Field: i, Values: en.values})
+			t.Enums = append(t.Enums, Enum{Name: en.name, Field: i, Values: en.values, Shared: en.shared})
 		}
 		// Enums come as the type, the where input and the mutation inputs
 		// first ask for them: put them in the fields' order.

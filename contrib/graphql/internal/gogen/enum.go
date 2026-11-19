@@ -19,15 +19,15 @@ func (r *renderer) writeEnum(f *file, e *plugin.Entity, en sdl.Enum) error {
 	fd := e.Fields[en.Field]
 	typ := fd.Enum
 	ve := r.veloxEnums[typ]
-	if ve == nil {
-		return nil
+	if ve == nil || en.Shared {
+		return nil // an application's own type, or another field's marshalers
 	}
 	if len(ve.Consts) == 0 && len(ve.Values) > 0 {
 		// velox-gen writes the constants' names into the model since the
 		// enum marshalers switch on them; an older one leaves them out.
 		return fmt.Errorf("schema %s, field %s: the model has no Go constants of %s: velox-gen is too old for this velox-graphql; update velox-gen to the same velox version and regenerate", e.Name, fd.Name, typ)
 	}
-	if len(ve.Consts) != len(ve.Values) || !slices.Equal(ve.Values, fd.EnumValues) {
+	if len(ve.Consts) != len(ve.Values) || !sameValues(ve.Values, fd.EnumValues) {
 		return fmt.Errorf("schema %s, field %s: the model gives no Go constant of each value of %s; regenerate with velox-gen", e.Name, fd.Name, typ)
 	}
 	if err := r.declare(typ+".MarshalGQL", "schema "+e.Name+", field "+fd.Name); err != nil {
@@ -71,6 +71,13 @@ func (r *renderer) writeEnum(f *file, e *plugin.Entity, en sdl.Enum) error {
 	f.p("}")
 	f.p("")
 	return nil
+}
+
+// sameValues reports whether a and b hold the same values, in any order: a
+// field shares its Go enum type with another field, whose order the type
+// has, when their values are the same.
+func sameValues(a, b []string) bool {
+	return len(a) == len(b) && !slices.ContainsFunc(b, func(v string) bool { return !slices.Contains(a, v) })
 }
 
 // jsonLiteral is the Go literal of s as a JSON string: `"DRAFT"`, or a

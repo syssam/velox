@@ -21,6 +21,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- Two enum fields whose types get one name (`Asset.depreciation_method`,
+  `AssetDepreciation.method`) and hold the same values share one Go type and
+  one GraphQL enum, as veloxe did (ADR 0086).
 - A one-to-one pair to its own schema may bind its key field on the assoc
   edge (`edge.To("reversed_by", T.Type).Field("reversed_by_id").Unique()` with
   its `From` inverse), as veloxe schemas do; each edge reads from its own end

@@ -17,6 +17,7 @@ type graph struct {
 	objects []*object          // the entities with a type, in name order
 	byName  map[string]*object // by entity name
 	goEnums map[string]bool    // the enum types velox-gen declares
+	shares  *enumShares        // the GraphQL enum of each of them, once a field claims it
 	types   typeNames
 	ents    map[string]*plugin.Entity // every entity, by name, join entities too
 	query   []gqlField                // the QueryFields, in entity name order
@@ -79,6 +80,7 @@ type gqlEnum struct {
 	values []string // nil for a String
 	field  string   // the field it is the type of
 	model  string   // the Go type @goModel binds the enum to: the application's own enum type; "" for velox-gen's, which gqlgen binds by name
+	shared bool     // another field of the same Go enum type declares the enum
 }
 
 // reserveGoNames records the Go names velox-gen declares in the generated
@@ -185,7 +187,7 @@ func build(m *plugin.Model) (*graph, error) {
 // newGraph returns the graph of m with no objects yet: its entities and Go
 // enum types indexed, and the Go names velox-gen declares reserved.
 func newGraph(m *plugin.Model) *graph {
-	g := &graph{byName: map[string]*object{}, goEnums: map[string]bool{}, types: newTypeNames(), ents: map[string]*plugin.Entity{}}
+	g := &graph{byName: map[string]*object{}, goEnums: map[string]bool{}, shares: newEnumShares(m), types: newTypeNames(), ents: map[string]*plugin.Entity{}}
 	for _, e := range m.Entities {
 		g.ents[e.Name] = e
 	}

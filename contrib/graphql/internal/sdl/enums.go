@@ -28,6 +28,7 @@ func Enums(m *plugin.Model) ([]EntityEnums, error) {
 	for _, en := range m.Enums {
 		goEnums[en.Type] = true
 	}
+	shares := newEnumShares(m)
 	var out []EntityEnums
 	for _, e := range m.Entities {
 		where := "schema " + e.Name
@@ -59,7 +60,11 @@ func Enums(m *plugin.Model) ([]EntityEnums, error) {
 			if err != nil {
 				return nil, err
 			}
-			ee.Enums = append(ee.Enums, Enum{Name: f.Enum, Field: i, Values: values})
+			values, shared, err := shares.claim(f.Enum, fw, f.EnumValues, values)
+			if err != nil {
+				return nil, err
+			}
+			ee.Enums = append(ee.Enums, Enum{Name: f.Enum, Field: i, Values: values, Shared: shared})
 		}
 		if len(ee.Enums) > 0 {
 			out = append(out, ee)

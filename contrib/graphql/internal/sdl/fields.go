@@ -301,6 +301,15 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 		add := g.types.add
 		if g.goEnums[f.Enum] {
 			add = g.types.addGo // velox-gen's own Go enum type
+			ordered, shared, err := g.shares.claim(f.Enum, where, f.EnumValues, values)
+			if err != nil {
+				return "", err
+			}
+			values = ordered
+			if shared {
+				o.enums = append(o.enums, gqlEnum{name: name, values: values, field: f.Name, shared: true})
+				return name, nil
+			}
 		}
 		if err := add(name, where); err != nil {
 			return "", err

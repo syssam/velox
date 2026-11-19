@@ -233,8 +233,8 @@ func (g *graph) writeObject(w *writer, o *object) {
 	w.at = ""
 
 	for _, en := range o.enums {
-		if en.name == "" {
-			continue // a String
+		if en.name == "" || en.shared {
+			continue // a String, or declared with another field of its Go type
 		}
 		w.line()
 		// @goModel is not one of w.dirs's: it is velox-graphql's own, and

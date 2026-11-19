@@ -460,11 +460,37 @@ func (s *entState) elemType(f *Field, where string) (elem, kind string) {
 			en.Consts = append(en.Consts, t+plugin.GoName(v.Name))
 			en.Values = append(en.Values, v.Value)
 		}
+		// Two fields whose enum types get one name and hold the same
+		// values, in any order, share the type the first declares, as
+		// veloxe did; with other values, checkDeclared reports the clash.
+		for _, d := range s.l.enums {
+			if d.enum.Type == t && sameEnum(d.enum, en) {
+				return t, "string"
+			}
+		}
 		s.l.enums = append(s.l.enums, &enumDecl{enum: en, schema: s.name, where: where})
 		return t, "string"
 	}
 	s.fail(where, "a field of type %s needs a Go type", f.Type)
 	return "any", "interface"
+}
+
+// sameEnum reports whether a and b have the same constants with the same
+// values, in any order.
+func sameEnum(a, b *OutEnum) bool {
+	if len(a.Consts) != len(b.Consts) {
+		return false
+	}
+	pairs := make(map[[2]string]bool, len(a.Consts))
+	for i, c := range a.Consts {
+		pairs[[2]string{c, a.Values[i]}] = true
+	}
+	for i, c := range b.Consts {
+		if !pairs[[2]string{c, b.Values[i]}] {
+			return false
+		}
+	}
+	return true
 }
 
 // importNames pairs each import path of g with the name the type's Ident
