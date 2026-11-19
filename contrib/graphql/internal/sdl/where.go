@@ -215,6 +215,14 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 	if err != nil {
 		return err
 	}
+	if o.veloxe && a.WhereOps&graphql.OpsDefault != 0 && veloxeIDName(f.Name) && veloxeIDKinds[s.kind] {
+		// veloxe's default for a field named as a key (id, *_id): equality.
+		_, defaults := predicatesOf(s.kind, f.Nullable)
+		ops = ops&^defaults | ops&a.WhereOps | graphql.OpsEquality
+		if f.Nullable {
+			ops |= graphql.OpsNullable
+		}
+	}
 	for _, p := range predicates {
 		if ops&p.op == 0 {
 			continue

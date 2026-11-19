@@ -113,3 +113,16 @@ func (g *graph) inputable(t string) bool {
 	}
 	return inputScalars[t] || strings.HasSuffix(t, "Input") || g.enumSet[t] || t == strings.ToUpper(t)
 }
+
+// veloxeIDName reports whether veloxe took the field name to be a key's:
+// id, a snake *_id, or a camel *ID. veloxe's default predicates for one are
+// equality alone.
+func veloxeIDName(name string) bool {
+	return strings.EqualFold(name, "id") || strings.HasSuffix(strings.ToLower(name), "_id") || len(name) > 2 && strings.HasSuffix(name, "ID")
+}
+
+// veloxeIDKinds are the field kinds whose equality is EQ, NEQ, In and NotIn.
+var veloxeIDKinds = map[string]bool{
+	"string": true, "int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
+}

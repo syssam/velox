@@ -46,6 +46,9 @@ an enum field the enum's name, shared by every field of that name.
     one). Otherwise a json field is JSON in the inputs, and any other field
     is refused there;
   - on the key it takes only `ID`.
+- In compat mode `WhereOps()` on a string or integer field named as a key
+  (`id`, `*_id`, `*ID`) gives equality alone (EQ, NEQ, In, NotIn, and IsNil
+  and NotNil when nullable), as veloxe's defaults did.
 - In compat mode a create or update input takes an edge's bound key as
   veloxe's create input did, by the key field's name (`customerId`).
 - The Go names stay velox's (`CustomerID`): a GraphQL name that matches a Go

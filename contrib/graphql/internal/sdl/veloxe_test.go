@@ -132,3 +132,29 @@ func TestVeloxeForeignKeys(t *testing.T) {
 		t.Errorf("velox's names changed:\n%s", plain)
 	}
 }
+
+// Under Config.Veloxe, WhereOps() on a field named as a key gives equality
+// alone, as veloxe's defaults did; other strings keep theirs.
+func TestVeloxeIDDefaults(t *testing.T) {
+	ref := &plugin.Field{Name: "reference_id", GoName: "ReferenceID", Type: "string", Annotations: ann(t, graphql.WhereOps())}
+	org := &plugin.Field{Name: "org_id", GoName: "OrgID", Type: "int64", Nullable: true, Annotations: ann(t, graphql.WhereOps())}
+	code := &plugin.Field{Name: "code", GoName: "Code", Type: "string", Annotations: ann(t, graphql.WhereOps())}
+	m := model(entity("Thing", ref, org, code))
+	sdl, err := RenderConfig(m, Config{Veloxe: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"  referenceIdNotIn: [String!]\n", "  orgIdIsNil: Boolean\n", "  codeContains: String\n"} {
+		if !strings.Contains(sdl, want) {
+			t.Errorf("lacks %q:\n%s", want, sdl)
+		}
+	}
+	for _, bad := range []string{"referenceIdContains", "orgIdGT"} {
+		if strings.Contains(sdl, bad) {
+			t.Errorf("has %s:\n%s", bad, sdl)
+		}
+	}
+	if plain, err := Render(m); err != nil || !strings.Contains(plain, "referenceIDContains") {
+		t.Errorf("velox's defaults changed: %v\n%s", err, plain)
+	}
+}
