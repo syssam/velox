@@ -72,25 +72,36 @@ func TestIndexMethodTables(t *testing.T) {
 	}
 }
 
-// MySQL and SQLite have no choice of index method.
-func TestIndexMethodRefusedOutsidePostgres(t *testing.T) {
+// MySQL has no choice of index method, and refuses one. SQLite has none
+// either, and ignores one, as ent's and veloxe's SQLite migration never read
+// an index's type: an application whose indexes are GIN on PostgreSQL gets
+// plain indexes on SQLite (decision 0090).
+func TestIndexMethodOutsidePostgres(t *testing.T) {
 	g := mustBuild(t, imGin{})
-	for _, d := range []velox.Dialect{velox.MySQL, velox.SQLite} {
-		_, err := Tables(g, d)
-		if err == nil {
-			t.Errorf("%v: no error", d)
-			continue
+	_, err := Tables(g, velox.MySQL)
+	if err == nil {
+		t.Fatal("MySQL: no error")
+	}
+	for _, w := range []string{
+		`index 0: the index type "gin" is PostgreSQL's; mysql has no choice of index type`,
+		`index 2: the index type "hash" is PostgreSQL's`,
+	} {
+		if got := plain(err); !strings.Contains(got, w) {
+			t.Errorf("MySQL: %q not in\n%s", w, got)
 		}
-		for _, w := range []string{
-			`index 0: the index type "gin" is PostgreSQL's; ` + d.String() + ` has no choice of index type`,
-			`index 2: the index type "hash" is PostgreSQL's`,
-		} {
-			if got := plain(err); !strings.Contains(got, w) {
-				t.Errorf("%v: %q not in\n%s", d, w, got)
+	}
+	if got := plain(err); strings.Contains(got, `"btree"`) {
+		t.Errorf("MySQL: an explicit btree is no method:\n%s", got)
+	}
+	ts, err := Tables(g, velox.SQLite)
+	if err != nil {
+		t.Fatalf("SQLite: %v", plain(err))
+	}
+	for _, tb := range ts.Tables {
+		for _, ix := range tb.Indexes {
+			if ix.Method != "" {
+				t.Errorf("SQLite: index %s keeps method %q", ix.Name, ix.Method)
 			}
-		}
-		if got := plain(err); strings.Contains(got, `"btree"`) {
-			t.Errorf("%v: an explicit btree is no method:\n%s", d, got)
 		}
 	}
 }

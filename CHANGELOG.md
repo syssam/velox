@@ -366,6 +366,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- An index's type (`sqlschema.IndexType`) is ignored on SQLite, as ent's and
+  veloxe's SQLite migration ignored it, where velox-gen refused it; MySQL
+  still refuses it (ADR 0090).
 - velox-gen refuses an `Optional` field whose only default is a
   `SchemaDefault`, and no longer lets one excuse a `Unique` `Optional` field
   (rules 37 and 54). velox's insert writes every column, so the field stored

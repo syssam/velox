@@ -178,7 +178,14 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 
 	var at []place // the element that makes each index, for the checks
 	for i, ix := range e.Indexes {
-		tb.Indexes = append(tb.Indexes, migrate.Index{Name: t.symbol(ix.Name, ix.Derived), Columns: slices.Clone(ix.Columns), Unique: ix.Unique, Where: ix.Where, Method: ix.Method, Desc: slices.Clone(ix.Desc), OpClass: maps.Clone(ix.OpClass), Pos: ix.Pos})
+		// SQLite has one kind of index, and ent's and veloxe's SQLite
+		// migration never read an index's type: a GIN index of PostgreSQL is
+		// a plain one here (decision 0090). MySQL's check refuses one.
+		method := ix.Method
+		if t.d == velox.SQLite {
+			method = ""
+		}
+		tb.Indexes = append(tb.Indexes, migrate.Index{Name: t.symbol(ix.Name, ix.Derived), Columns: slices.Clone(ix.Columns), Unique: ix.Unique, Where: ix.Where, Method: method, Desc: slices.Clone(ix.Desc), OpClass: maps.Clone(ix.OpClass), Pos: ix.Pos})
 		at = append(at, place{e, rankIndex, i, indexLoc(i, ix)})
 	}
 	ixs, fs := fieldIndexes(e, nil, t.d)

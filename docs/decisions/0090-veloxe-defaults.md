@@ -143,6 +143,14 @@ any dialect; `TestTablesIndexes` and `TestDDLNames` in internal/codegen;
 the "nil JSON pointer" case of internal/integration's
 `TestBindingRoundTrip`.
 
+An index's type (`sqlschema.IndexType`) is ignored on SQLite, which has one
+kind of index: ent's and veloxe's SQLite migration never read it, so an
+application whose JSON indexes are GIN on PostgreSQL gets plain indexes on
+SQLite. velox-gen refused it before. MySQL still refuses it: veloxe wrote
+`USING GIN`, which MySQL rejects when the migration runs. Evidence:
+`TestIndexMethodOutsidePostgres` in internal/codegen; the consumer's 252 GIN
+indexes no longer stop its SQLite DDL.
+
 ## Alternatives
 
 - Keep the rules behind `schema.Package`: rejected by the user; a veloxe
