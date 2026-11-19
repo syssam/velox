@@ -327,7 +327,12 @@ type nameSpace uint8
 const (
 	spaceRelations   nameSpace = iota // PostgreSQL's pg_class: tables, indexes, sequences
 	spaceTypes                        // PostgreSQL's pg_type: tables and types
-	spaceConstraints                  // foreign keys and checks, per MySQL database
+	spaceConstraints                  // foreign keys, per MySQL database
+	// spaceTableConstraints holds checks and not-null checks, which
+	// PostgreSQL keeps per table (pg_constraint is unique by table and name)
+	// and SQLite does not compare. MySQL compares check names per database,
+	// which Tables checks on MySQL; not-null checks are PostgreSQL's alone.
+	spaceTableConstraints
 )
 
 // isTable reports whether o is a table, an entity's or a join table.
@@ -447,7 +452,7 @@ func (ol *objectLister) entity(e *Entity, refused map[*Index]bool) {
 	declared, _ := checksOf(e)
 	for i, c := range declared { // sorted; a repeated name is declaredChecks's error
 		if i == 0 || declared[i-1].Name != c.Name {
-			ol.add(e, spaceConstraints, c.Name, "check of table "+e.Table, tableLoc(e))
+			ol.add(e, spaceTableConstraints, c.Name, "check of table "+e.Table, tableLoc(e))
 		}
 	}
 }
@@ -489,10 +494,10 @@ func (ol *objectLister) column(e *Entity, f *Field) {
 				ol.add(e, spaceTypes, ddl.OldEnum(name), "old enum type of "+of, fieldLoc(f))
 			}
 		}
-		ol.add(e, spaceConstraints, checkName(e.Table, f.Column), "check of "+of, fieldLoc(f))
+		ol.add(e, spaceTableConstraints, checkName(e.Table, f.Column), "check of "+of, fieldLoc(f))
 	}
 	if !nullable(f) {
-		ol.add(e, spaceConstraints, ddl.NotNull(e.Table, f.Column), "not-null check of "+of, fieldLoc(f))
+		ol.add(e, spaceTableConstraints, ddl.NotNull(e.Table, f.Column), "not-null check of "+of, fieldLoc(f))
 	}
 }
 
@@ -507,7 +512,7 @@ func (ol *objectLister) joinTable(jt joinTable) {
 	add(spaceRelations, pkName(jt.Table), "primary key")
 	for i, c := range jt.Columns {
 		if i == 0 || c != jt.Columns[0] { // rule 35
-			add(spaceConstraints, ddl.NotNull(jt.Table, c), "not-null check of column "+c)
+			add(spaceTableConstraints, ddl.NotNull(jt.Table, c), "not-null check of column "+c)
 		}
 	}
 }

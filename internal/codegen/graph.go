@@ -67,7 +67,8 @@ type Edge struct {
 	Required    bool                       `json:"required,omitempty"`
 	Inverse     bool                       `json:"inverse,omitempty"`
 	Bidi        bool                       `json:"bidi,omitempty"`
-	Ref         string                     `json:"ref,omitempty"` // the paired edge on Target
+	KeyOnAssoc  bool                       `json:"key_on_assoc,omitempty"` // a one-to-one pair to its own schema whose assoc edge binds the key field: the assoc's row holds the key
+	Ref         string                     `json:"ref,omitempty"`          // the paired edge on Target
 	Rel         Rel                        `json:"rel"`
 	Field       string                     `json:"field,omitempty"`     // the foreign-key field, on whichever entity's table holds the column; "" for M2M
 	Immutable   bool                       `json:"immutable,omitempty"` // the edge cannot be changed after create

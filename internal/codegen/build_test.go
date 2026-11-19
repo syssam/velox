@@ -2033,6 +2033,20 @@ func (nsCheckUser) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("pets", Pet.Type).StorageKey(edge.Symbol("users_role_check"))}
 }
 
+// nsCheckOwn's edge's foreign key is in its own table, with its enum's
+// check's name.
+type nsCheckOwn struct{ schema.Schema }
+
+func (nsCheckOwn) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("users")}
+}
+func (nsCheckOwn) Fields() []schema.Field {
+	return []schema.Field{field.Enum("role").Values("a", "b")}
+}
+func (nsCheckOwn) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("pet", Pet.Type).Unique().StorageKey(edge.Symbol("users_role_check"))}
+}
+
 type nsVeloxNew struct{ schema.Schema }
 
 func (nsVeloxNew) Annotations() []schema.Annotation {
@@ -2090,7 +2104,8 @@ func TestNamespace(t *testing.T) {
 		{"tables by case", []schema.Interface{nsUser{}, nsUsers{}}, `schema nsUsers: name "Users" is also schema nsUser's table`},
 		{"table and enum type", []schema.Interface{nsOrder{}, nsOrderStatus{}}, `schema nsOrder: field "status": name "orders_status" is also schema nsOrderStatus's table`},
 		{"index and table", []schema.Interface{nsPost{}}, `schema nsPost: index 0: name "posts" is also this schema's table`},
-		{"symbol and check", []schema.Interface{nsCheckUser{}, Pet{}}, `schema nsCheckUser: edge "pets": name "users_role_check" is also this schema's check of field "role"`},
+		{"symbol and check", []schema.Interface{nsCheckUser{}, Pet{}}, ``}, // two tables: TestConstraintNamesPerTable
+		{"symbol and check in one table", []schema.Interface{nsCheckOwn{}, Pet{}}, `schema nsCheckOwn: edge "pet": name "users_role_check" is also this schema's check of field "role"`},
 		{"table and rebuild table", []schema.Interface{nsUser{}, nsVeloxNew{}}, `schema nsVeloxNew: name "velox_new_users" is also schema nsUser's rebuild table`},
 		{"two database schemas", []schema.Interface{nsUser{}, nsOther{}}, ``},
 		{"one shared enum type", []schema.Interface{nsTicket{}, nsIssue{}}, ``},

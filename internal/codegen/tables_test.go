@@ -2038,10 +2038,15 @@ func (sameCheckB) Annotations() []schema.Annotation {
 }
 
 // TestDeclaredCheckNamespace: MySQL's check names are unique per database, so two
-// tables cannot share one there, and can on PostgreSQL.
+// tables cannot share one there, and can on PostgreSQL and SQLite.
 func TestDeclaredCheckNamespace(t *testing.T) {
-	_, err := build(t, sameCheckA{}, sameCheckB{})
-	if err == nil || !strings.Contains(err.Error(), "positive") {
+	g := mustBuild(t, sameCheckA{}, sameCheckB{})
+	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
+		if _, err := Tables(g, d); err != nil {
+			t.Errorf("%s: %v", d, err)
+		}
+	}
+	if _, err := Tables(g, velox.MySQL); err == nil || !strings.Contains(err.Error(), `check name "positive" is also a check's of table`) {
 		t.Errorf("err = %v, want a refusal of the shared name", err)
 	}
 }

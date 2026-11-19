@@ -29,7 +29,8 @@ CREATE TABLE posts (
 	id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, views INTEGER NOT NULL, rank INTEGER);
 CREATE TABLE notes (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, text TEXT NOT NULL);
 CREATE TABLE groups (id INTEGER PRIMARY KEY, name TEXT NOT NULL, open BOOLEAN NOT NULL DEFAULT 1);
-CREATE TABLE user_groups (user_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (user_id, group_id));`
+CREATE TABLE user_groups (user_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (user_id, group_id));
+CREATE TABLE allocations (id INTEGER PRIMARY KEY, label TEXT NOT NULL, reversed_by_id INTEGER UNIQUE REFERENCES allocations (id));`
 
 var ctx = context.Background()
 
@@ -631,4 +632,53 @@ func TestScope(t *testing.T) {
 	if err := db.Insert(&gen.Note{OrgID: 2, Text: "x"}).Exec(org(1)); !errors.Is(err, scope.ErrMismatch) {
 		t.Errorf("insert for another scope: %v", err)
 	}
+}
+
+// An allocation's reversed_by_id holds the ID of the allocation that
+// reverses it: the assoc edge of a one-to-one pair to its own schema binds
+// the key, and each edge reads it from its own end.
+func TestSelfOneToOneKeyOnAssoc(t *testing.T) {
+	db := open(t)
+	rev := gen.Allocation{Label: "reversal"}
+	mustInsert(t, db, &rev)
+	orig := gen.Allocation{Label: "original", ReversedByID: &rev.ID}
+	mustInsert(t, db, &orig)
+	other := gen.Allocation{Label: "other"}
+	mustInsert(t, db, &other)
+
+	as, err := db.Query[gen.Allocation]().With(gen.Allocations.ReversedBy).With(gen.Allocations.ReversalOf).OrderBy(gen.Allocations.ID.Asc()).Limit(10).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, a := range as {
+		by, ok1 := a.Edges.ReversedBy.Get()
+		of, ok2 := a.Edges.ReversalOf.Get()
+		if !ok1 || !ok2 {
+			t.Fatalf("%s: edges not loaded", a.Label)
+		}
+		s := a.Label + ":"
+		if by != nil {
+			s += " reversed by " + by.Label
+		}
+		if of != nil {
+			s += " reverses " + of.Label
+		}
+		got = append(got, s)
+	}
+	wantStrings(t, "allocations", got, []string{"reversal: reverses original", "original: reversed by reversal", "other:"})
+
+	q := func(p velox.Pred[gen.Allocation]) []string {
+		as, err := db.Query[gen.Allocation]().Where(p).OrderBy(gen.Allocations.ID.Asc()).Limit(10).All(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ls []string
+		for _, a := range as {
+			ls = append(ls, a.Label)
+		}
+		return ls
+	}
+	wantStrings(t, "ReversedBy.Has", q(gen.Allocations.ReversedBy.Has()), []string{"original"})
+	wantStrings(t, "ReversalOf.Has", q(gen.Allocations.ReversalOf.Has()), []string{"reversal"})
 }

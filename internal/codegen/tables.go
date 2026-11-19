@@ -38,6 +38,7 @@ func Tables(g *Graph, d velox.Dialect) (*migrate.Schema, error) {
 		s.Tables = append(s.Tables, t.joinTable(jt))
 	}
 	s.Enums = t.enumList
+	t.mysqlChecks(g, s)
 	slices.SortStableFunc(s.Tables, func(a, b migrate.Table) int {
 		return cmp.Or(strings.Compare(a.Schema, b.Schema), strings.Compare(a.Name, b.Name))
 	})
@@ -61,6 +62,44 @@ func Tables(g *Graph, d velox.Dialect) (*migrate.Schema, error) {
 		return nil, errors.Join(errs...)
 	}
 	return s, nil
+}
+
+// mysqlChecks refuses a check name of a table that another table of the
+// same database has as a check or a foreign key: MySQL keeps check and
+// foreign-key names in one space per database, where PostgreSQL keeps a
+// table's constraints per table, as Build compares them. Build compares the
+// foreign keys with each other.
+func (t *tabler) mysqlChecks(g *Graph, s *migrate.Schema) {
+	if t.d != velox.MySQL {
+		return
+	}
+	byTable := map[[2]string]*Entity{}
+	for _, e := range g.Entities {
+		byTable[[2]string{e.TableSchema, e.Table}] = e
+	}
+	type named struct{ table, what string }
+	first := map[[2]string]named{} // by (schema, name) in lower case
+	for _, tb := range s.Tables {
+		for _, fk := range tb.ForeignKeys {
+			k := [2]string{strings.ToLower(tb.Schema), strings.ToLower(fk.Name)}
+			if _, ok := first[k]; !ok {
+				first[k] = named{tb.Name, "foreign key"}
+			}
+		}
+	}
+	for _, tb := range s.Tables {
+		e := byTable[[2]string{tb.Schema, tb.Name}]
+		for _, c := range tb.Checks {
+			k := [2]string{strings.ToLower(tb.Schema), strings.ToLower(c.Name)}
+			p, ok := first[k]
+			switch {
+			case !ok:
+				first[k] = named{tb.Name, "check"}
+			case p.table != tb.Name && e != nil:
+				t.fail(place{e, rankTable, 0, loc{pos: c.Pos}}, "check name %q is also a %s's of table %s, and MySQL keeps check and foreign-key names per database; rename one, or use a separate MySQL schema", c.Name, p.what, p.table)
+			}
+		}
+	}
 }
 
 // tabler holds the state of one Tables.

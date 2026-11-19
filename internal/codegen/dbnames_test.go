@@ -178,10 +178,11 @@ func TestObjects(t *testing.T) {
 		}, []string{"dn_owner_groups_id_seq", "dn_owner_groups_dn_owner_id", "dn_toys_dn_owner_toys", "orders_plain"}},
 		{spaceTypes, []string{"orders", "dn_owner_groups", "orders_plain", "dn_order_status", "mood", "orders_plain_velox_old", "mood_velox_old"},
 			[]string{"orders_text", "orders_pkey"}},
-		{spaceConstraints, []string{
-			"m_owner", "m_group", "pet_owner", "dn_toys_dn_owners_toys", "orders_plain_check", "orders_text_check",
+		{spaceConstraints, []string{"m_owner", "m_group", "pet_owner", "dn_toys_dn_owners_toys"}, []string{"orders_plain_check"}},
+		{spaceTableConstraints, []string{
+			"orders_plain_check", "orders_text_check",
 			"orders_id_not_null", "orders_plain_not_null", "dn_owner_groups_dn_owner_id_not_null", "dn_toys_name_not_null",
-		}, []string{"dn_pets_dn_owner_pets_not_null"}},
+		}, []string{"dn_pets_dn_owner_pets_not_null", "m_owner"}},
 	} {
 		for _, n := range c.has {
 			if !slices.Contains(spaces[c.space], n) {

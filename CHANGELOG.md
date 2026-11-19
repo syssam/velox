@@ -21,6 +21,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A one-to-one pair to its own schema may bind its key field on the assoc
+  edge (`edge.To("reversed_by", T.Type).Field("reversed_by_id").Unique()` with
+  its `From` inverse), as veloxe schemas do; each edge reads from its own end
+  (ADR 0085).
+- Two tables may share a check or not-null constraint name, as PostgreSQL
+  allows; MySQL, which keeps check names per database, refuses it in its
+  `Tables` (ADR 0084).
 - `schema.Package`, the options of a schema package, read by every velox-gen
   command from its one exported variable of that type. `PrefixIndexNames`
   names each index `<table>_<name>` unless it starts with `<table>_`, so a

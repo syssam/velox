@@ -321,6 +321,12 @@ func (b *builder) resolveInverse(n *node, s *edgeState) {
 	switch au, iu := ref.Unique, le.Unique; {
 	case au && iu:
 		ed.Rel.Kind, ref.Rel.Kind = "O2O", "O2O"
+		// On its own schema, both edges are on one table, so the key may be
+		// either row's: the assoc edge's when it binds the field and the
+		// inverse does not, as veloxe and ent take such a schema.
+		if t == n && r.le.Field != "" && le.Field == "" {
+			ed.KeyOnAssoc, ref.KeyOnAssoc = true, true
+		}
 	case !au && iu:
 		ed.Rel.Kind, ref.Rel.Kind = "M2O", "O2M"
 	case au && !iu:
@@ -437,13 +443,14 @@ func (b *builder) applyKey(s *edgeState, kind, table string, cols []string) (str
 }
 
 // ownFK reports whether the foreign key of the edge is in its owner's table,
-// as ent's Edge.OwnFK does.
+// as ent's Edge.OwnFK does: for a one-to-one pair, the inverse edge's, unless
+// KeyOnAssoc says the assoc edge's.
 func ownFK(ed *Edge) bool {
 	switch ed.Rel.Kind {
 	case "M2O":
 		return true
 	case "O2O":
-		return ed.Inverse || ed.Bidi
+		return ed.Bidi || ed.Inverse != ed.KeyOnAssoc
 	}
 	return false
 }
@@ -859,24 +866,43 @@ func (b *builder) joinLengths(s *edgeState) {
 // as relations, and the other objects of tables that share a name are not
 // compared. Enum types of one name are one type when their values are equal
 // and in order; rule 52 reports them otherwise. A join table with an entity's
-// table's name is rule 27's.
+// table's name is rule 27's. A foreign key is compared in two spaces: with
+// the database's foreign keys, as MySQL keeps them, and with its own table's
+// checks, as PostgreSQL keeps every constraint of a table in one space.
 func (b *builder) namespaces() {
 	type key struct {
-		space        nameSpace
-		schema, name string
+		space               nameSpace
+		schema, table, name string // table only in spaceTableConstraints
 	}
 	first := map[key]object{}
 	clashed := map[[2]string]bool{} // the tables that share a name, lower case, by database schema
+	var objs []object
 	for _, o := range objects(b.g, b.refused) {
+		objs = append(objs, o)
+		if o.space == spaceConstraints {
+			o.space = spaceTableConstraints
+			objs = append(objs, o)
+		}
+	}
+	reported := map[string]bool{} // by owner, position and name: an object reports one clash
+	for _, o := range objs {
 		if !o.isTable() && clashed[[2]string{strings.ToLower(o.schema), strings.ToLower(o.table)}] {
 			continue
 		}
-		k := key{o.space, strings.ToLower(o.schema), strings.ToLower(o.name)}
+		k := key{o.space, strings.ToLower(o.schema), "", strings.ToLower(o.name)}
+		if o.space == spaceTableConstraints {
+			k.table = strings.ToLower(o.table)
+		}
 		p, dup := first[k]
 		if !dup {
 			first[k] = o
 			continue
 		}
+		r := o.owner + "\x00" + o.at.pos + "\x00" + o.at.where + "\x00" + o.what + "\x00" + o.name
+		if reported[r] {
+			continue
+		}
+		reported[r] = true
 		switch {
 		case o.space == spaceTypes && o.isTable() && p.isTable():
 			continue
