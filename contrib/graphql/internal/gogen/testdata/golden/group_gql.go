@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion25
+const _ = veloxgql.GeneratedCodeIsVersion26
 
 // MarshalGQL writes e as a GraphQL String, its stored value: the field
 // visibility of Group is a String, as graphql.Skip(graphql.SkipEnumField) asks.

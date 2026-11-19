@@ -217,6 +217,11 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		f.p("\t},")
 	}
 	r.writeSelection(f, t)
+	if t.Where != nil {
+		if err := r.writeWhereFields(f, t); err != nil {
+			return err
+		}
+	}
 	writeInputNames(f, t)
 	if r.veloxe {
 		f.p("\tVeloxe: true,")

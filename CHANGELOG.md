@@ -366,6 +366,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-graphql: a where input's `Predicate` is one call, to
+  `gqlgraph.Predicate`, which reads the input's fields as the type's
+  `WhereFields` describe them and adds each set predicate with the same
+  helpers, errors and limits as before. The where inputs' own code, a third
+  of velox-graphql's output, is gone: at 478 types the generated package
+  builds in 11.3 s instead of 12.9 (the ORM alone takes 6.9), in 4.3 GB
+  instead of 4.8. A where
+  input's untyped condition is the exported method `Predicate`, which
+  `gqlgraph.Predicate` calls on a nested input (`gqlgraph.Input`).
+  `veloxgql.GeneratedCodeIsVersion26` replaces Version25.
+
 - velox-graphql: a connection reads the column of an order field only when
   its orderBy names it. `AlwaysRead` holds the key and the foreign keys, so
   a selection reads its own fields' columns and no more; before, every

@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion25
+const _ = veloxgql.GeneratedCodeIsVersion26
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -159,7 +159,7 @@ func newAccountConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	where *AccountWhereInput,
 ) (*AccountConnection, error) {
-	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*AccountWhereInput).predicate)}
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*AccountWhereInput).Predicate)}
 	c, err := gqlgraph.Paginate(ctx, from, &userType, args)
 	if err != nil {
 		return nil, err
@@ -194,6 +194,15 @@ var userType = gqlgraph.Type{
 		userEdgePosts:  "posts",
 		userEdgeGroups: "memberships",
 		userEdgeLikes:  "likes",
+	},
+	WhereFields: []gqlgraph.WhereField{
+		{Name: "not", Kind: gqlgraph.WhereNot},
+		{Name: "and", Kind: gqlgraph.WhereAnd},
+		{Name: "or", Kind: gqlgraph.WhereOr},
+		{Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpsEquality | gqlgraph.OpsOrder, Col: userColID},
+		{Name: "displayName", Ops: gqlgraph.OpsEquality | gqlgraph.OpContains | gqlgraph.OpHasPrefix | gqlgraph.OpHasSuffix, Col: userColName},
+		{Name: "hasPosts", Kind: gqlgraph.WhereHas, Edge: userEdgePosts, Target: untyped.TableOf[Post]},
+		{Name: "hasPostsWith", Kind: gqlgraph.WhereHasWith, Edge: userEdgePosts, Target: untyped.TableOf[Post]},
 	},
 	Inputs: []string{
 		userColCreatedAt:      "createdAt",
@@ -251,41 +260,13 @@ type AccountWhereInput struct {
 // Pred is the condition w stands for on Account nodes, true for a nil or empty
 // w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
 func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
-	p, err := w.predicate(ctx)
+	p, err := w.Predicate(ctx)
 	return velox.Pred[User](p), err
 }
 
-// predicate is Pred, untyped.
-func (w *AccountWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlgraph.NewFilter(ctx, &userType)
-	if w == nil {
-		return f.Pred()
-	}
-	gqlgraph.Not(f, "not", w.Not, (*AccountWhereInput).predicate)
-	gqlgraph.And(f, "and", w.And, (*AccountWhereInput).predicate)
-	gqlgraph.Or(f, "or", w.Or, (*AccountWhereInput).predicate)
-	gqlgraph.IDField(f, "id", userColID, gqlgraph.Ops[int64]{
-		EQ:    w.ID,
-		NEQ:   w.IDNEQ,
-		In:    w.IDIn,
-		NotIn: w.IDNotIn,
-		GT:    w.IDGT,
-		GTE:   w.IDGTE,
-		LT:    w.IDLT,
-		LTE:   w.IDLTE,
-	})
-	gqlgraph.Field(f, "displayName", userColName, gqlgraph.Ops[string]{
-		EQ:        w.DisplayName,
-		NEQ:       w.DisplayNameNEQ,
-		In:        w.DisplayNameIn,
-		NotIn:     w.DisplayNameNotIn,
-		Contains:  w.DisplayNameContains,
-		HasPrefix: w.DisplayNameHasPrefix,
-		HasSuffix: w.DisplayNameHasSuffix,
-	})
-	gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, untyped.TableOf[Post]())
-	gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, untyped.TableOf[Post]())
-	return f.Pred()
+// Predicate is Pred, untyped.
+func (w *AccountWhereInput) Predicate(ctx context.Context) (velox.Predicate, error) {
+	return gqlgraph.Predicate(ctx, &userType, w)
 }
 
 // CreateAccountInput is the GraphQL input CreateAccountInput. A nil pointer or

@@ -10,46 +10,74 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
-// predMethod is the unexported method of a where input that is its Pred,
-// untyped: the helpers that nest inputs take it as a method expression.
-const predMethod = "predicate"
+// predMethod is the method of a where input that is its Pred, untyped, and
+// that gqlgraph.Predicate calls of a nested input.
+const predMethod = "Predicate"
 
-// predOps are, for each predicate, the field of gqlgraph.Ops that holds its
-// value and the suffix of its name, as sdl names it ("titleNEQ"); whether it
-// takes a Boolean, IsEmpty, IsNil or NotNil, rather than a value of the field.
+// predOps are, for each predicate, its bit in gqlgraph.WhereOp and the
+// suffix of its name, as sdl names it ("titleNEQ"); whether it takes a
+// Boolean, IsEmpty, IsNil or NotNil, rather than a value of the field.
 var predOps = map[graphql.WhereOp]struct {
-	field, suffix string
-	isBool        bool
+	name, suffix string
+	isBool       bool
 }{
-	graphql.OpEQ:           {"EQ", "", false},
-	graphql.OpNEQ:          {"NEQ", "NEQ", false},
-	graphql.OpIn:           {"In", "In", false},
-	graphql.OpNotIn:        {"NotIn", "NotIn", false},
-	graphql.OpGT:           {"GT", "GT", false},
-	graphql.OpGTE:          {"GTE", "GTE", false},
-	graphql.OpLT:           {"LT", "LT", false},
-	graphql.OpLTE:          {"LTE", "LTE", false},
-	graphql.OpContains:     {"Contains", "Contains", false},
-	graphql.OpHasPrefix:    {"HasPrefix", "HasPrefix", false},
-	graphql.OpHasSuffix:    {"HasSuffix", "HasSuffix", false},
-	graphql.OpEqualFold:    {"EqualFold", "EqualFold", false},
-	graphql.OpContainsFold: {"ContainsFold", "ContainsFold", false},
-	graphql.OpHas:          {"Has", "Has", false},
-	graphql.OpHasSome:      {"HasSome", "HasSome", false},
-	graphql.OpHasEvery:     {"HasEvery", "HasEvery", false},
-	graphql.OpIsEmpty:      {"IsEmpty", "IsEmpty", true},
-	graphql.OpIsNil:        {"IsNil", "IsNil", true},
-	graphql.OpNotNil:       {"NotNil", "NotNil", true},
+	graphql.OpEQ:           {"OpEQ", "", false},
+	graphql.OpNEQ:          {"OpNEQ", "NEQ", false},
+	graphql.OpIn:           {"OpIn", "In", false},
+	graphql.OpNotIn:        {"OpNotIn", "NotIn", false},
+	graphql.OpGT:           {"OpGT", "GT", false},
+	graphql.OpGTE:          {"OpGTE", "GTE", false},
+	graphql.OpLT:           {"OpLT", "LT", false},
+	graphql.OpLTE:          {"OpLTE", "LTE", false},
+	graphql.OpContains:     {"OpContains", "Contains", false},
+	graphql.OpHasPrefix:    {"OpHasPrefix", "HasPrefix", false},
+	graphql.OpHasSuffix:    {"OpHasSuffix", "HasSuffix", false},
+	graphql.OpEqualFold:    {"OpEqualFold", "EqualFold", false},
+	graphql.OpContainsFold: {"OpContainsFold", "ContainsFold", false},
+	graphql.OpHas:          {"OpHas", "Has", false},
+	graphql.OpHasSome:      {"OpHasSome", "HasSome", false},
+	graphql.OpHasEvery:     {"OpHasEvery", "HasEvery", false},
+	graphql.OpIsEmpty:      {"OpIsEmpty", "IsEmpty", true},
+	graphql.OpIsNil:        {"OpIsNil", "IsNil", true},
+	graphql.OpNotNil:       {"OpNotNil", "NotNil", true},
+}
+
+// opSets are gqlgraph's names of sets of predicates, which opsExpr uses
+// before the predicates' own.
+var opSets = []struct {
+	name string
+	ops  graphql.WhereOp
+}{
+	{"OpsEquality", graphql.OpEQ | graphql.OpNEQ | graphql.OpIn | graphql.OpNotIn},
+	{"OpsOrder", graphql.OpGT | graphql.OpGTE | graphql.OpLT | graphql.OpLTE},
+	{"OpsText", graphql.OpContains | graphql.OpHasPrefix | graphql.OpHasSuffix | graphql.OpEqualFold | graphql.OpContainsFold},
+	{"OpsNull", graphql.OpIsNil | graphql.OpNotNil},
+}
+
+// opsExpr is ops as a gqlgraph.WhereOp expression: its sets, then its
+// other predicates, by name.
+func opsExpr(impl string, ops graphql.WhereOp) string {
+	var parts []string
+	for _, set := range opSets {
+		if ops&set.ops == set.ops {
+			parts = append(parts, impl+"."+set.name)
+			ops &^= set.ops
+		}
+	}
+	for op := graphql.WhereOp(1); op != 0 && ops != 0; op <<= 1 {
+		if ops&op != 0 {
+			parts = append(parts, impl+"."+predOps[op].name)
+			ops &^= op
+		}
+	}
+	return strings.Join(parts, " | ")
 }
 
 // writePred writes the where input's methods Pred, which turns it into a
-// velox.Pred, and predicate, the same condition untyped: a gqlgraph.Filter
-// on the entity's untyped.Table, and one call of a gqlgraph helper for each
-// not, and, or and edge of the input and for each field's predicates
-// together, which adds each predicate that is set. The helpers take columns
-// and relations by index, and a nested input's predicate as a method
-// expression, so that none is compiled once per entity.
-func (r *renderer) writePred(f *file, t *sdl.Type) error {
+// velox.Pred, and Predicate, the same condition untyped: gqlgraph.Predicate
+// of the input, which reads its fields as the type's WhereFields
+// (writeWhereFields) describe them.
+func (r *renderer) writePred(f *file, t *sdl.Type) {
 	n, e := t.Name, t.Entity
 	in := n + "WhereInput"
 	ctx, velox, impl := f.use("context", "context"), f.velox(), f.gqlgraph()
@@ -62,58 +90,61 @@ func (r *renderer) writePred(f *file, t *sdl.Type) error {
 	f.p("")
 	f.doc("", predMethod+" is Pred, untyped.")
 	f.p("func (w *%s) %s(ctx %s.Context) (%s.Predicate, error) {", in, predMethod, ctx, velox)
-	f.p("	f := %s.NewFilter(ctx, &%s)", impl, typeVar(t))
-	f.p("	if w == nil {")
-	f.p("		return f.Pred()")
-	f.p("	}")
+	f.p("	return %s.Predicate(ctx, &%s, w)", impl, typeVar(t))
+	f.p("}")
+}
+
+// writeWhereFields writes the WhereFields of t's gqlgraph.Type: one entry
+// for each not, and, or and edge field of the where input, and one for the
+// run of fields of each column's predicates, which sdl writes together.
+func (r *renderer) writeWhereFields(f *file, t *sdl.Type) error {
 	ws := t.Where
+	f.p("\tWhereFields: []%s.WhereField{", f.gqlgraph())
 	for i := 0; i < len(ws); {
-		// A field's predicates are one run: sdl writes them together.
 		j := i + 1
 		for ws[i].Kind == sdl.WherePred && j < len(ws) && ws[j].Kind == sdl.WherePred && ws[j].Field == ws[i].Field && ws[j].Edge == ws[i].Edge {
 			j++
 		}
-		call, err := r.predCall(f, t, ws[i:j])
+		d, err := r.whereField(f, t, ws[i:j])
 		if err != nil {
 			return err
 		}
-		f.p("	%s", call)
+		f.p("\t\t{%s},", d)
 		i = j
 	}
-	f.p("	return f.Pred()")
-	f.p("}")
+	f.p("\t},")
 	return nil
 }
 
-// predCall is the helper call that adds the predicates of ws, where-input
-// fields of t: a not, an and, an or or an edge's, alone, or the predicates of
-// one field, together.
-func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, error) {
+// whereField is the gqlgraph.WhereField of ws, where-input fields of t: a
+// not, an and, an or or an edge's, alone, or the predicates of one field,
+// together.
+func (r *renderer) whereField(f *file, t *sdl.Type, ws []sdl.WhereField) (string, error) {
 	w := ws[0]
 	e, impl := t.Entity, f.gqlgraph()
-	field := fmt.Sprintf("%q, w.%s", w.Name, w.GoName) // the GraphQL name, for errors, and the value
-	cond := func(of string) string { return "(*" + of + "WhereInput)." + predMethod }
 	edge := func() string {
 		ed := e.Edges[w.Edge]
-		return fmt.Sprintf("%s, %s.TableOf[%s]()", edgeConst(e, ed), f.untyped(), ed.Target)
+		return fmt.Sprintf("Edge: %s, Target: %s.TableOf[%s]", edgeConst(e, ed), f.untyped(), ed.Target)
 	}
+	kind := func(k string) string { return fmt.Sprintf("Name: %q, Kind: %s.Where%s", w.Name, impl, k) }
 	switch w.Kind {
 	case sdl.WhereNot:
-		return fmt.Sprintf("%s.Not(f, %s, %s)", impl, field, cond(t.Name)), nil
+		return kind("Not"), nil
 	case sdl.WhereAnd:
-		return fmt.Sprintf("%s.And(f, %s, %s)", impl, field, cond(t.Name)), nil
+		return kind("And"), nil
 	case sdl.WhereOr:
-		return fmt.Sprintf("%s.Or(f, %s, %s)", impl, field, cond(t.Name)), nil
+		return kind("Or"), nil
 	case sdl.WhereHas:
-		return fmt.Sprintf("%s.Has(f, %s, %s)", impl, field, edge()), nil
+		return kind("Has") + ", " + edge(), nil
 	case sdl.WhereHasWith:
-		return fmt.Sprintf("%s.HasWith(f, %s, %s, %s)", impl, field, cond(w.Target), edge()), nil
+		return kind("HasWith") + ", " + edge(), nil
 	}
-	// The field's predicates: the value of each in its field of gqlgraph.Ops,
-	// and the field's GraphQL name, which the predicates' names begin with.
+	// The field's predicates: their set, in the order of their bits, which
+	// gqlgraph reads the run's fields in, and the field's GraphQL name,
+	// which the predicates' names begin with.
 	fd := e.Fields[w.Field]
 	var base string
-	ops := make([]string, len(ws))
+	var set graphql.WhereOp
 	for k, x := range ws {
 		pm, ok := predOps[x.Op]
 		if !ok {
@@ -125,13 +156,17 @@ func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, 
 		if x.Name != base+pm.suffix {
 			return "", fmt.Errorf("schema %s: the where field %s is not %s%s, which is a bug", e.Name, x.Name, base, pm.suffix)
 		}
-		ops[k] = pm.field + ": w." + x.GoName
+		if x.Op&^(x.Op-1) != x.Op || set&x.Op != 0 || k > 0 && !fieldBefore(ws[k-1].Op, x.Op) {
+			return "", fmt.Errorf("schema %s: the where fields of %s are not in gqlgraph's order, which is a bug", e.Name, base)
+		}
+		set |= x.Op
 	}
 	col := colConst(e, fd)
+	ops := opsExpr(impl, set)
 	if w.IDs() {
 		// IDs: of t's key, or of the foreign key fd, which holds the keys of
 		// the edge's target. They are keys in the target's key Go type, which
-		// gqlgen decoded; the helper converts them to fd's Go type when that
+		// gqlgen decoded; gqlgraph converts them to fd's Go type when that
 		// differs.
 		tt := r.types[w.Target]
 		k, err := r.idKeyOf(f, e, tt)
@@ -145,34 +180,39 @@ func (r *renderer) predCall(f *file, t *sdl.Type, ws []sdl.WhereField) (string, 
 		}
 		if w.Edge >= 0 {
 			// A foreign key: its target's Read policy holds of it, as of the edge.
-			return items(fmt.Sprintf("%s.EdgeIDField(f, %q, %s, %s, &%s, %s.Ops[%s]{", impl, base, col, edgeConst(e, e.Edges[w.Edge]), typeVar(tt), impl, k.typ), ops, "})"), nil
+			ed := e.Edges[w.Edge]
+			return fmt.Sprintf("Name: %q, Kind: %s.WhereEdgeID, Ops: %s, Col: %s, Edge: %s, Target: %s.TableOf[%s]", base, impl, ops, col, edgeConst(e, ed), f.untyped(), tt.Entity.Name), nil
 		}
-		return items(fmt.Sprintf("%s.IDField(f, %q, %s, %s.Ops[%s]{", impl, base, col, impl, k.typ), ops, "})"), nil
+		return fmt.Sprintf("Name: %q, Kind: %s.WhereID, Ops: %s, Col: %s", base, impl, ops, col), nil
 	}
 	if w.Edge >= 0 {
 		return "", fmt.Errorf("schema %s, field %s: a foreign key's predicate that takes no IDs, which is a bug", e.Name, w.Name)
 	}
-	// The first predicate holds the field's Go type, or a JSON array's elements':
-	// sdl writes IsEmpty, IsNil and NotNil last, so a run that starts with one
-	// has no value.
-	typ := "bool"
-	array := fd.Type == "json" // only an array has predicates: on its elements, which need no conversion
+	if fd.Type == "json" { // only an array has predicates: on its elements, which need no conversion
+		return fmt.Sprintf("Name: %q, Kind: %s.WhereArray, Ops: %s, Col: %s", base, impl, ops, col), nil
+	}
 	if !predOps[w.Op].isBool {
-		if !array {
-			if err := r.whereConv(e, fd, w); err != nil {
-				return "", err
-			}
-		}
-		var err error
-		if typ, err = r.qualify(f, e, fd, w.GoType, w.GoPkg); err != nil {
+		if err := r.whereConv(e, fd, w); err != nil {
 			return "", err
 		}
 	}
-	helper, opsType := "Field", "Ops"
-	if array {
-		helper, opsType = "ArrayField", "ArrayOps"
+	return fmt.Sprintf("Name: %q, Ops: %s, Col: %s", base, ops, col), nil
+}
+
+// fieldBefore reports whether sdl writes the field of predicate a before
+// that of b: the order gqlgraph reads a run's fields in.
+func fieldBefore(a, b graphql.WhereOp) bool { return fieldRank(a) < fieldRank(b) }
+
+// fieldRank is op's place in gqlgraph's order of a run's fields, which puts
+// IsNil and NotNil last.
+func fieldRank(op graphql.WhereOp) int {
+	switch op {
+	case graphql.OpIsNil:
+		return 1 << 20
+	case graphql.OpNotNil:
+		return 1<<20 + 1
 	}
-	return items(fmt.Sprintf("%s.%s(f, %q, %s, %s.%s[%s]{", impl, helper, base, col, impl, opsType, typ), ops, "})"), nil
+	return int(op)
 }
 
 // whereConv checks that the where-input field w's values convert to the Go
@@ -226,7 +266,7 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 			return fmt.Errorf("schema %s: the fields %s and %s of %s are one Go field to gqlgen, which ignores case and underscores; rename one with graphql.FieldName", e.Name, prev, w.GoName, in)
 		}
 		seen[key] = w.GoName
-		if w.GoName == "Pred" {
+		if w.GoName == "Pred" || w.GoName == predMethod {
 			return fmt.Errorf("schema %s: the field %s of %s is the Go field %s, which is the input's method; rename it with graphql.FieldName", e.Name, w.Name, in, w.GoName)
 		}
 		typ, err := r.whereType(f, t, w)
@@ -263,7 +303,8 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 		f.p("\t%s %s", w.GoName, typ)
 	}
 	f.p("}")
-	return r.writePred(f, t)
+	r.writePred(f, t)
+	return nil
 }
 
 // whereType is the Go type of the where-input field w: an input for not and

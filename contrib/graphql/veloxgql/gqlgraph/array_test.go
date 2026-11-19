@@ -104,7 +104,7 @@ func notesDB(t *testing.T) *velox.DB {
 func noteIDs(t *testing.T, db *velox.DB, w *noteWhere) []int64 {
 	t.Helper()
 	ctx := context.Background()
-	p, err := w.predicate(ctx)
+	p, err := twin[note](t, ctx, w.predicate, w.Predicate)
 	if err != nil {
 		t.Fatalf("predicate: %v", err)
 	}
@@ -164,13 +164,13 @@ func TestArrayFieldWidth(t *testing.T) {
 		"HasSome":  {TagsHasSome: vs},
 		"HasEvery": {TagsHasEvery: vs},
 	} {
-		if _, err := w.predicate(ctx); !errors.Is(err, veloxgql.ErrFilterTooWide) {
+		if _, err := twin[note](t, ctx, w.predicate, w.Predicate); !errors.Is(err, veloxgql.ErrFilterTooWide) {
 			t.Errorf("%s of %d values: %v, want ErrFilterTooWide", name, len(vs), err)
 		}
 	}
 	// A first error stops the rest: Has after it is not added.
 	w := &noteWhere{TagsHasSome: vs, TagsHas: new("x"), TagsIsEmpty: new(true)}
-	if _, err := w.predicate(ctx); !errors.Is(err, veloxgql.ErrFilterTooWide) {
+	if _, err := twin[note](t, ctx, w.predicate, w.Predicate); !errors.Is(err, veloxgql.ErrFilterTooWide) {
 		t.Errorf("a refused filter: %v", err)
 	}
 }

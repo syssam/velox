@@ -48,7 +48,7 @@ func (w *vWhere) predicate(ctx context.Context) (velox.Predicate, error) {
 func vPeople(t *testing.T, db *velox.DB, w *vWhere) ([]int64, error) {
 	t.Helper()
 	ctx := context.Background()
-	p, err := w.predicate(ctx)
+	p, err := twin[person](t, ctx, w.predicate, w.Predicate)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func TestVeloxeNullTests(t *testing.T) {
 		{"tagsIsNil: true", vNoteWhere{TagsIsNil: &yes}, []int64{3}},
 		{"tagsNotNil: true", vNoteWhere{TagsNotNil: &yes}, []int64{1, 2, 4, 5}},
 	} {
-		p, err := c.w.predicate(context.Background())
+		p, err := twin[note](t, context.Background(), c.w.predicate, c.w.Predicate)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}

@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion25
+const _ = veloxgql.GeneratedCodeIsVersion26
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -114,7 +114,7 @@ func newLabelConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *LabelOrder, where *LabelWhereInput,
 ) (*LabelConnection, error) {
-	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*LabelWhereInput).predicate)}
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*LabelWhereInput).Predicate)}
 	if o := orderBy; o != nil {
 		args.Order = []gqlgraph.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
@@ -136,7 +136,15 @@ var tagType = gqlgraph.Type{
 	AlwaysRead: []int{tagColID},
 	Fields:     []string{tagColID: "id", tagColName: "name", tagColRank: "rank"},
 	Edges:      []string{tagEdgePosts: "posts"},
-	Inputs:     []string{tagColName: "name", tagColRank: "rank"},
+	WhereFields: []gqlgraph.WhereField{
+		{Name: "not", Kind: gqlgraph.WhereNot},
+		{Name: "and", Kind: gqlgraph.WhereAnd},
+		{Name: "or", Kind: gqlgraph.WhereOr},
+		{Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpsEquality | gqlgraph.OpsOrder, Col: tagColID},
+		{Name: "name", Ops: gqlgraph.OpsEquality | gqlgraph.OpsText, Col: tagColName},
+		{Name: "rank", Ops: gqlgraph.OpsEquality | gqlgraph.OpsOrder, Col: tagColRank},
+	},
+	Inputs: []string{tagColName: "name", tagColRank: "rank"},
 }
 
 // LabelOrder is the GraphQL input LabelOrder, an order of connections to Label.
@@ -215,51 +223,13 @@ type LabelWhereInput struct {
 // Pred is the condition w stands for on Label nodes, true for a nil or empty w.
 // It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
 func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
-	p, err := w.predicate(ctx)
+	p, err := w.Predicate(ctx)
 	return velox.Pred[Tag](p), err
 }
 
-// predicate is Pred, untyped.
-func (w *LabelWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlgraph.NewFilter(ctx, &tagType)
-	if w == nil {
-		return f.Pred()
-	}
-	gqlgraph.Not(f, "not", w.Not, (*LabelWhereInput).predicate)
-	gqlgraph.And(f, "and", w.And, (*LabelWhereInput).predicate)
-	gqlgraph.Or(f, "or", w.Or, (*LabelWhereInput).predicate)
-	gqlgraph.IDField(f, "id", tagColID, gqlgraph.Ops[int64]{
-		EQ:    w.ID,
-		NEQ:   w.IDNEQ,
-		In:    w.IDIn,
-		NotIn: w.IDNotIn,
-		GT:    w.IDGT,
-		GTE:   w.IDGTE,
-		LT:    w.IDLT,
-		LTE:   w.IDLTE,
-	})
-	gqlgraph.Field(f, "name", tagColName, gqlgraph.Ops[string]{
-		EQ:           w.Name,
-		NEQ:          w.NameNEQ,
-		In:           w.NameIn,
-		NotIn:        w.NameNotIn,
-		Contains:     w.NameContains,
-		HasPrefix:    w.NameHasPrefix,
-		HasSuffix:    w.NameHasSuffix,
-		EqualFold:    w.NameEqualFold,
-		ContainsFold: w.NameContainsFold,
-	})
-	gqlgraph.Field(f, "rank", tagColRank, gqlgraph.Ops[int8]{
-		EQ:    w.Rank,
-		NEQ:   w.RankNEQ,
-		In:    w.RankIn,
-		NotIn: w.RankNotIn,
-		GT:    w.RankGT,
-		GTE:   w.RankGTE,
-		LT:    w.RankLT,
-		LTE:   w.RankLTE,
-	})
-	return f.Pred()
+// Predicate is Pred, untyped.
+func (w *LabelWhereInput) Predicate(ctx context.Context) (velox.Predicate, error) {
+	return gqlgraph.Predicate(ctx, &tagType, w)
 }
 
 // CreateLabelInput is the GraphQL input CreateLabelInput. A nil pointer or list

@@ -44,9 +44,9 @@ type Where struct {
 }
 
 // WhereOf is the Where of w, a generated where input, whose condition is
-// pred(w, ctx), its predicate method; a nil w filters nothing:
+// pred(w, ctx), its Predicate method; a nil w filters nothing:
 //
-//	gqlgraph.WhereOf(where, (*PostWhereInput).predicate)
+//	gqlgraph.WhereOf(where, (*PostWhereInput).Predicate)
 func WhereOf[W any](w *W, pred func(*W, context.Context) (velox.Predicate, error)) Where {
 	if w == nil {
 		return Where{}
@@ -96,6 +96,9 @@ type Type struct {
 	// relation, or "": an edge reads no column but AlwaysRead, and its field
 	// alone batches it (Type.Edge).
 	Edges []string
+	// WhereFields describes the fields of the type's where input to Predicate,
+	// in the order of the input's struct.
+	WhereFields []WhereField
 	// Inputs is, by column, the field of the type's create and update inputs
 	// that sets the column, or "": Validate reports a validator's error on
 	// such a column as BAD_USER_INPUT naming the field. CreateInputs and

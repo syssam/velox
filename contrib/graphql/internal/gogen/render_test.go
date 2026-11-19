@@ -497,20 +497,21 @@ func TestGoTypes(t *testing.T) {
 		"{Name: \"LEVEL\", Index: eventColLevel},",
 		// A JSON field binds through a getter.
 		"func (e *Event) TagsGQL() (veloxgql.JSON, error) { b, err := json.Marshal(e.Tags) return veloxgql.JSON(b), err }",
-		// Pred: one helper call for each field's predicates, by column
-		// index, with the input's values in a gqlgraph.Ops of the Go type
-		// they hold; gqlgraph converts them to the column's Go type where
-		// they differ.
-		` f := gqlgraph.NewFilter(ctx, &eventType) `,
-		` gqlgraph.IDField(f, "id", eventColID, gqlgraph.Ops[idspkg.UserID]{ EQ: w.ID, NEQ: w.IDNEQ, In: w.IDIn, NotIn: w.IDNotIn, GT: w.IDGT, GTE: w.IDGTE, LT: w.IDLT, LTE: w.IDLTE, }) `,
-		` gqlgraph.Field(f, "level", eventColLevel, gqlgraph.Ops[levels.Level]{EQ: w.Level}) `,
-		` gqlgraph.Field(f, "size", eventColSize, gqlgraph.Ops[uint64]{GT: w.SizeGT}) `,
-		` gqlgraph.Field(f, "rank", eventColRank, gqlgraph.Ops[int8]{In: w.RankIn}) `,
-		` gqlgraph.Field(f, "at", eventColAt, gqlgraph.Ops[time.Time]{LT: w.AtLT, IsNil: w.AtIsNil}) `,
-		` gqlgraph.Field(f, "ref", eventColRef, gqlgraph.Ops[uuid.UUID]{NEQ: w.RefNEQ}) `,
-		` gqlgraph.EdgeIDField(f, "ownerID", eventColOwnerID, eventEdgeOwner, &ownerType, gqlgraph.Ops[idspkg.UserID]{ EQ: w.OwnerID, NEQ: w.OwnerIDNEQ, In: w.OwnerIDIn, NotIn: w.OwnerIDNotIn, IsNil: w.OwnerIDIsNil, NotNil: w.OwnerIDNotNil, }) `,
-		` gqlgraph.Has(f, "hasOwner", w.HasOwner, eventEdgeOwner, untyped.TableOf[Owner]()) `,
-		` gqlgraph.HasWith(f, "hasOwnerWith", w.HasOwnerWith, (*OwnerWhereInput).predicate, eventEdgeOwner, untyped.TableOf[Owner]()) `,
+		// Predicate is gqlgraph.Predicate of the input, which reads its
+		// fields as the type's WhereFields describe them: each column's
+		// predicates by index, in one run; gqlgraph converts the values to
+		// the column's Go type where they differ.
+		` func (w *EventWhereInput) Predicate(ctx context.Context) (velox.Predicate, error) { return gqlgraph.Predicate(ctx, &eventType, w) } `,
+		` {Name: "not", Kind: gqlgraph.WhereNot}, {Name: "and", Kind: gqlgraph.WhereAnd}, {Name: "or", Kind: gqlgraph.WhereOr}, `,
+		` {Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpsEquality | gqlgraph.OpsOrder, Col: eventColID}, `,
+		` {Name: "level", Ops: gqlgraph.OpEQ, Col: eventColLevel}, `,
+		` {Name: "size", Ops: gqlgraph.OpGT, Col: eventColSize}, `,
+		` {Name: "rank", Ops: gqlgraph.OpIn, Col: eventColRank}, `,
+		` {Name: "at", Ops: gqlgraph.OpLT | gqlgraph.OpIsNil, Col: eventColAt}, `,
+		` {Name: "ref", Ops: gqlgraph.OpNEQ, Col: eventColRef}, `,
+		` {Name: "ownerID", Kind: gqlgraph.WhereEdgeID, Ops: gqlgraph.OpsEquality | gqlgraph.OpsNull, Col: eventColOwnerID, Edge: eventEdgeOwner, Target: untyped.TableOf[Owner]}, `,
+		` {Name: "hasOwner", Kind: gqlgraph.WhereHas, Edge: eventEdgeOwner, Target: untyped.TableOf[Owner]}, `,
+		` {Name: "hasOwnerWith", Kind: gqlgraph.WhereHasWith, Edge: eventEdgeOwner, Target: untyped.TableOf[Owner]}, `,
 	} {
 		if !strings.Contains(ev, want) {
 			t.Errorf("no %q in\n%s", want, ev)
@@ -530,14 +531,14 @@ func TestGoTypes(t *testing.T) {
 		// field of the application's Go types to and from their base types.
 		"Key: []gqlgraph.Column{{Name: \"id\", Index: ownerColID}},",
 		"{Name: \"RANK\", Index: ownerColRank},",
-		// Its where predicates take the scalar's Go type, and Pred converts.
+		// Its where predicates take the scalar's Go type, and gqlgraph converts.
 		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
-		` gqlgraph.IDField(f, "id", ownerColID, gqlgraph.Ops[idspkg.UserID]{EQ: w.ID}) `,
-		` gqlgraph.Field(f, "email", ownerColEmail, gqlgraph.Ops[string]{EQ: w.Email}) `,
-		` gqlgraph.Field(f, "rank", ownerColRank, gqlgraph.Ops[int32]{In: w.RankIn}) `,
-		` gqlgraph.Field(f, "ref", ownerColRef, gqlgraph.Ops[uuid.UUID]{EQ: w.Ref}) `,
-		` gqlgraph.Field(f, "ratio", ownerColRatio, gqlgraph.Ops[float64]{GT: w.RatioGT}) `,
-		` gqlgraph.Field(f, "on", ownerColOn, gqlgraph.Ops[bool]{EQ: w.On}) `,
+		` {Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpEQ, Col: ownerColID}, `,
+		` {Name: "email", Ops: gqlgraph.OpEQ, Col: ownerColEmail}, `,
+		` {Name: "rank", Ops: gqlgraph.OpIn, Col: ownerColRank}, `,
+		` {Name: "ref", Ops: gqlgraph.OpEQ, Col: ownerColRef}, `,
+		` {Name: "ratio", Ops: gqlgraph.OpGT, Col: ownerColRatio}, `,
+		` {Name: "on", Ops: gqlgraph.OpEQ, Col: ownerColOn}, `,
 	} {
 		if !strings.Contains(owner, want) {
 			t.Errorf("no %q in\n%s", want, owner)
@@ -578,7 +579,7 @@ func TestUUIDKeyIDs(t *testing.T) {
 	doc := strings.Join(strings.Fields(render(t, m)["doc_gql.go"]), " ")
 	for _, want := range []string{
 		"ID *uuid.UUID", "IDIn []uuid.UUID",
-		`gqlgraph.IDField(f, "id", docColID, gqlgraph.Ops[uuid.UUID]{`,
+		`{Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpsEquality, Col: docColID}`,
 		"TagIDs []uuid.UUID", "AddTagIDs []uuid.UUID",
 		`tagIDs, err := gqlgraph.IDs("CreateDocInput.tagIDs", in.TagIDs)`,
 	} {
@@ -738,7 +739,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion25\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion26\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1500,7 +1501,7 @@ func TestPaginateQueryFilters(t *testing.T) {
 			if page < 0 {
 				t.Errorf("%s: %s does not call gqlgraph.Paginate:\n%s", label, newConnImpl(ty), src)
 			}
-			if w := strings.Index(src, "Where: gqlgraph.WhereOf(where, (*"+ty.Name+"WhereInput).predicate)"); (w >= 0) != (ty.Where != nil) || w > page {
+			if w := strings.Index(src, "Where: gqlgraph.WhereOf(where, (*"+ty.Name+"WhereInput).Predicate)"); (w >= 0) != (ty.Where != nil) || w > page {
 				t.Errorf("%s: %s: the where input not before Paginate:\n%s", label, newConnImpl(ty), src)
 			}
 		}

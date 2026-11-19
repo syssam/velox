@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion25
+const _ = veloxgql.GeneratedCodeIsVersion26
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -144,7 +144,7 @@ func newPostConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy []*PostOrder, where *PostWhereInput,
 ) (*PostConnection, error) {
-	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*PostWhereInput).predicate)}
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*PostWhereInput).Predicate)}
 	for _, o := range orderBy {
 		args.Order = append(args.Order, gqlgraph.Order{Field: string(o.Field), Direction: o.Direction})
 	}
@@ -174,6 +174,19 @@ var postType = gqlgraph.Type{
 		postColKeywords:    "keywords",
 	},
 	Edges: []string{postEdgeAuthor: "author", postEdgeTags: "tags"},
+	WhereFields: []gqlgraph.WhereField{
+		{Name: "not", Kind: gqlgraph.WhereNot},
+		{Name: "and", Kind: gqlgraph.WhereAnd},
+		{Name: "or", Kind: gqlgraph.WhereOr},
+		{Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpsEquality | gqlgraph.OpsOrder, Col: postColID},
+		{Name: "authorID", Kind: gqlgraph.WhereEdgeID, Ops: gqlgraph.OpsEquality, Col: postColAuthorID, Edge: postEdgeAuthor, Target: untyped.TableOf[User]},
+		{Name: "title", Ops: gqlgraph.OpsEquality | gqlgraph.OpsText, Col: postColTitle},
+		{Name: "status", Ops: gqlgraph.OpsEquality, Col: postColStatus},
+		{Name: "publishedAt", Ops: gqlgraph.OpsEquality | gqlgraph.OpsOrder | gqlgraph.OpsNull, Col: postColPublishedAt},
+		{Name: "keywords", Kind: gqlgraph.WhereArray, Ops: gqlgraph.OpHas | gqlgraph.OpHasSome | gqlgraph.OpHasEvery | gqlgraph.OpIsEmpty, Col: postColKeywords},
+		{Name: "hasTags", Kind: gqlgraph.WhereHas, Edge: postEdgeTags, Target: untyped.TableOf[Tag]},
+		{Name: "hasTagsWith", Kind: gqlgraph.WhereHasWith, Edge: postEdgeTags, Target: untyped.TableOf[Tag]},
+	},
 	Inputs: []string{
 		postColTitle:       "title",
 		postColStatus:      "status",
@@ -285,73 +298,13 @@ type PostWhereInput struct {
 // Pred is the condition w stands for on Post nodes, true for a nil or empty w.
 // It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
 func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
-	p, err := w.predicate(ctx)
+	p, err := w.Predicate(ctx)
 	return velox.Pred[Post](p), err
 }
 
-// predicate is Pred, untyped.
-func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlgraph.NewFilter(ctx, &postType)
-	if w == nil {
-		return f.Pred()
-	}
-	gqlgraph.Not(f, "not", w.Not, (*PostWhereInput).predicate)
-	gqlgraph.And(f, "and", w.And, (*PostWhereInput).predicate)
-	gqlgraph.Or(f, "or", w.Or, (*PostWhereInput).predicate)
-	gqlgraph.IDField(f, "id", postColID, gqlgraph.Ops[int64]{
-		EQ:    w.ID,
-		NEQ:   w.IDNEQ,
-		In:    w.IDIn,
-		NotIn: w.IDNotIn,
-		GT:    w.IDGT,
-		GTE:   w.IDGTE,
-		LT:    w.IDLT,
-		LTE:   w.IDLTE,
-	})
-	gqlgraph.EdgeIDField(f, "authorID", postColAuthorID, postEdgeAuthor, &userType, gqlgraph.Ops[int64]{
-		EQ:    w.AuthorID,
-		NEQ:   w.AuthorIDNEQ,
-		In:    w.AuthorIDIn,
-		NotIn: w.AuthorIDNotIn,
-	})
-	gqlgraph.Field(f, "title", postColTitle, gqlgraph.Ops[string]{
-		EQ:           w.Title,
-		NEQ:          w.TitleNEQ,
-		In:           w.TitleIn,
-		NotIn:        w.TitleNotIn,
-		Contains:     w.TitleContains,
-		HasPrefix:    w.TitleHasPrefix,
-		HasSuffix:    w.TitleHasSuffix,
-		EqualFold:    w.TitleEqualFold,
-		ContainsFold: w.TitleContainsFold,
-	})
-	gqlgraph.Field(f, "status", postColStatus, gqlgraph.Ops[PostStatus]{
-		EQ:    w.Status,
-		NEQ:   w.StatusNEQ,
-		In:    w.StatusIn,
-		NotIn: w.StatusNotIn,
-	})
-	gqlgraph.Field(f, "publishedAt", postColPublishedAt, gqlgraph.Ops[time.Time]{
-		EQ:     w.PublishedAt,
-		NEQ:    w.PublishedAtNEQ,
-		In:     w.PublishedAtIn,
-		NotIn:  w.PublishedAtNotIn,
-		GT:     w.PublishedAtGT,
-		GTE:    w.PublishedAtGTE,
-		LT:     w.PublishedAtLT,
-		LTE:    w.PublishedAtLTE,
-		IsNil:  w.PublishedAtIsNil,
-		NotNil: w.PublishedAtNotNil,
-	})
-	gqlgraph.ArrayField(f, "keywords", postColKeywords, gqlgraph.ArrayOps[string]{
-		Has:      w.KeywordsHas,
-		HasSome:  w.KeywordsHasSome,
-		HasEvery: w.KeywordsHasEvery,
-		IsEmpty:  w.KeywordsIsEmpty,
-	})
-	gqlgraph.Has(f, "hasTags", w.HasTags, postEdgeTags, untyped.TableOf[Tag]())
-	gqlgraph.HasWith(f, "hasTagsWith", w.HasTagsWith, (*LabelWhereInput).predicate, postEdgeTags, untyped.TableOf[Tag]())
-	return f.Pred()
+// Predicate is Pred, untyped.
+func (w *PostWhereInput) Predicate(ctx context.Context) (velox.Predicate, error) {
+	return gqlgraph.Predicate(ctx, &postType, w)
 }
 
 // CreatePostInput is the GraphQL input CreatePostInput. A nil pointer or list

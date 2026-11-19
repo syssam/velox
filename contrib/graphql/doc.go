@@ -186,7 +186,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlgraph for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion25", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion26", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -194,8 +194,8 @@
 // OrderVia of a to-one edge's target, may be on a nullable field: NULL sorts
 // after every value ascending and before them descending, on every dialect,
 // and a cursor holds it as null. A where
-// argument's Pred is one gqlgraph helper call for each predicate the input
-// sets; it refuses a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth
+// argument's Pred is gqlgraph.Predicate of the input, which adds each
+// predicate the input sets as the type's WhereFields describe it; it refuses a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth
 // or larger in all than MaxFilterNodes, before any query runs. A list edge
 // (graphql.Connection(false)) reads at most MaxList rows and fails with
 // velox.ErrTooManyRows beyond them, whatever the DB's cap; graphql.MaxList(n), which an

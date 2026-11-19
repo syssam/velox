@@ -12,10 +12,12 @@ import (
 )
 
 // Filter is a where input being turned into a condition on the entity of a
-// untyped.Table: the conditions the helpers added, or the first error. A where
-// input's generated method predicate makes one, adds the predicates the
-// input sets with one helper call for each field, by column or relation
-// index, and returns Filter.Pred; its method Pred is predicate, typed:
+// untyped.Table: the conditions the helpers added, or the first error. A
+// generated where input's Predicate is the function Predicate, which makes
+// one and adds the predicates the input sets with the helper of each field
+// (WhereField), by column or relation index. A where input written by hand
+// calls the helpers itself, and nests inputs through their method
+// expressions:
 //
 //	func (w *AccountWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
 //		f := gqlgraph.NewFilter(ctx, &userType)
@@ -29,7 +31,7 @@ import (
 //		gqlgraph.Field(f, "displayName", userColName, gqlgraph.Ops[string]{EQ: w.DisplayName, In: w.DisplayNameIn})
 //		gqlgraph.EdgeIDField(f, "teamID", userColTeamID, userEdgeTeam, &teamType, gqlgraph.Ops[int64]{EQ: w.TeamID})
 //		gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, untyped.TableOf[Post]())
-//		gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, untyped.TableOf[Post]())
+//		gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).Predicate, userEdgePosts, untyped.TableOf[Post]())
 //		return f.Pred()
 //	}
 //
@@ -202,10 +204,10 @@ func checkWidth(n, most int) error {
 	return nil
 }
 
-// Cond is the condition of a where input W, untyped: the generated method
-// expression (*XWhereInput).predicate, whose method Pred is it, typed. The
-// helpers that nest inputs take one. W is a pointer, so that they are
-// compiled once for every input.
+// Cond is the condition of a where input W, untyped: a method expression,
+// such as a generated input's (*XWhereInput).Predicate, whose Pred is it,
+// typed. The helpers that nest inputs take one. W is a pointer, or the
+// nested input as an any, so that they are compiled once for every input.
 type Cond[W comparable] func(w W, ctx context.Context) (velox.Predicate, error)
 
 // nested is the condition of w, an input nested in f's at field, one level

@@ -83,7 +83,8 @@ func i64p(n int64) *int64 { return new(n) }
 func where(t *testing.T, db *velox.DB, w *personWhere) []int64 {
 	t.Helper()
 	ctx := context.Background()
-	p, err := w.Pred(ctx)
+	p0, err := twin[person](t, ctx, w.predicate, w.Predicate)
+	p := velox.Pred[person](p0)
 	if err != nil {
 		t.Fatalf("Pred: %v", err)
 	}

@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion25
+const _ = veloxgql.GeneratedCodeIsVersion26
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -136,7 +136,7 @@ func newUserConnection(
 	after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int,
 	orderBy *UserOrder, where *UserWhereInput,
 ) (*UserConnection, error) {
-	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*UserWhereInput).predicate)}
+	args := gqlgraph.Args{After: after, First: first, Before: before, Last: last, Where: gqlgraph.WhereOf(where, (*UserWhereInput).Predicate)}
 	if o := orderBy; o != nil {
 		args.Order = []gqlgraph.Order{{Field: string(o.Field), Direction: o.Direction}}
 	}
@@ -165,6 +165,17 @@ var userType = gqlgraph.Type{
 		userColJoinedAt: "joinedAt",
 	},
 	Edges: []string{userEdgePosts: "posts"},
+	WhereFields: []gqlgraph.WhereField{
+		{Name: "not", Kind: gqlgraph.WhereNot},
+		{Name: "and", Kind: gqlgraph.WhereAnd},
+		{Name: "or", Kind: gqlgraph.WhereOr},
+		{Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpsEquality | gqlgraph.OpsOrder, Col: userColID},
+		{Name: "name", Ops: gqlgraph.OpsEquality | gqlgraph.OpsText, Col: userColName},
+		{Name: "email", Ops: gqlgraph.OpsEquality | gqlgraph.OpsText, Col: userColEmail},
+		{Name: "role", Ops: gqlgraph.OpsEquality, Col: userColRole},
+		{Name: "hasPosts", Kind: gqlgraph.WhereHas, Edge: userEdgePosts, Target: untyped.TableOf[Post]},
+		{Name: "hasPostsWith", Kind: gqlgraph.WhereHasWith, Edge: userEdgePosts, Target: untyped.TableOf[Post]},
+	},
 	Inputs: []string{
 		userColName:     "name",
 		userColEmail:    "email",
@@ -262,60 +273,13 @@ type UserWhereInput struct {
 // Pred is the condition w stands for on User nodes, true for a nil or empty w.
 // It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
 func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
-	p, err := w.predicate(ctx)
+	p, err := w.Predicate(ctx)
 	return velox.Pred[User](p), err
 }
 
-// predicate is Pred, untyped.
-func (w *UserWhereInput) predicate(ctx context.Context) (velox.Predicate, error) {
-	f := gqlgraph.NewFilter(ctx, &userType)
-	if w == nil {
-		return f.Pred()
-	}
-	gqlgraph.Not(f, "not", w.Not, (*UserWhereInput).predicate)
-	gqlgraph.And(f, "and", w.And, (*UserWhereInput).predicate)
-	gqlgraph.Or(f, "or", w.Or, (*UserWhereInput).predicate)
-	gqlgraph.IDField(f, "id", userColID, gqlgraph.Ops[int64]{
-		EQ:    w.ID,
-		NEQ:   w.IDNEQ,
-		In:    w.IDIn,
-		NotIn: w.IDNotIn,
-		GT:    w.IDGT,
-		GTE:   w.IDGTE,
-		LT:    w.IDLT,
-		LTE:   w.IDLTE,
-	})
-	gqlgraph.Field(f, "name", userColName, gqlgraph.Ops[string]{
-		EQ:           w.Name,
-		NEQ:          w.NameNEQ,
-		In:           w.NameIn,
-		NotIn:        w.NameNotIn,
-		Contains:     w.NameContains,
-		HasPrefix:    w.NameHasPrefix,
-		HasSuffix:    w.NameHasSuffix,
-		EqualFold:    w.NameEqualFold,
-		ContainsFold: w.NameContainsFold,
-	})
-	gqlgraph.Field(f, "email", userColEmail, gqlgraph.Ops[string]{
-		EQ:           w.Email,
-		NEQ:          w.EmailNEQ,
-		In:           w.EmailIn,
-		NotIn:        w.EmailNotIn,
-		Contains:     w.EmailContains,
-		HasPrefix:    w.EmailHasPrefix,
-		HasSuffix:    w.EmailHasSuffix,
-		EqualFold:    w.EmailEqualFold,
-		ContainsFold: w.EmailContainsFold,
-	})
-	gqlgraph.Field(f, "role", userColRole, gqlgraph.Ops[UserRole]{
-		EQ:    w.Role,
-		NEQ:   w.RoleNEQ,
-		In:    w.RoleIn,
-		NotIn: w.RoleNotIn,
-	})
-	gqlgraph.Has(f, "hasPosts", w.HasPosts, userEdgePosts, untyped.TableOf[Post]())
-	gqlgraph.HasWith(f, "hasPostsWith", w.HasPostsWith, (*PostWhereInput).predicate, userEdgePosts, untyped.TableOf[Post]())
-	return f.Pred()
+// Predicate is Pred, untyped.
+func (w *UserWhereInput) Predicate(ctx context.Context) (velox.Predicate, error) {
+	return gqlgraph.Predicate(ctx, &userType, w)
 }
 
 // CreateUserInput is the GraphQL input CreateUserInput. A nil pointer or list

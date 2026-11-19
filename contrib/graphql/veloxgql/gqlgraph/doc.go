@@ -1,7 +1,7 @@
 // Package gqlgraph is for generated code. As ent's sqlgraph is for ent's, it
 // holds what the Go that velox-graphql writes calls, all of it one runtime
 // for every type, on velox's untyped Table, TableQuery and table writes:
-//   - the where filter and its helpers (Filter);
+//   - the where filter and its helpers (Filter, Predicate, WhereField);
 //   - the description of a GraphQL type (Type, Column), the connection with its
 //     paging (Paginate, Args, Order, WhereOf);
 //   - the edges, which read in batches, the edge of every row of a page in
@@ -15,7 +15,7 @@
 //
 // An application does not call this package.
 //
-// Compatibility is by veloxgql.GeneratedCodeIsVersion25, which every
+// Compatibility is by veloxgql.GeneratedCodeIsVersion26, which every
 // generated file references, and not by semantic versioning, as protobuf's
 // protoimpl is: a name here may change or go when the generated code
 // changes, and then the version constant is replaced, so that generated code
