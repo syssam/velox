@@ -43,6 +43,7 @@ func RenderConfig(m *plugin.Model, outPath, outPkg string, cfg sdl.Config) ([]pl
 		return nil, err
 	}
 	r := newRenderer(m, outPath, outPkg)
+	r.veloxe = cfg.Veloxe
 	for _, t := range s.Types {
 		r.types[t.Name] = t
 		r.typeOf[t.Entity.Name] = t
@@ -58,6 +59,15 @@ func RenderConfig(m *plugin.Model, outPath, outPkg string, cfg sdl.Config) ([]pl
 			return nil, err
 		}
 		files = append(files, f)
+	}
+	if r.veloxe {
+		f, ok, err := r.nodeFile(s.Types)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			files = append(files, f)
+		}
 	}
 	slices.SortFunc(files, func(a, b plugin.File) int { return cmp.Compare(a.Path, b.Path) })
 	return files, nil
@@ -126,6 +136,7 @@ type renderer struct {
 	types      map[string]*sdl.Type    // the GraphQL types by name
 	typeOf     map[string]*sdl.Type    // the GraphQL types by their entity's name
 	ents       map[string]*plugin.Entity
+	veloxe     bool // sdl.Config.Veloxe: veloxe's where semantics and Node
 }
 
 // reserve records the Go names velox-gen declares in the package that a name

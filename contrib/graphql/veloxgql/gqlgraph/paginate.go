@@ -100,6 +100,16 @@ type Type struct {
 	// such a column as BAD_USER_INPUT naming the field. CreateInputs and
 	// UpdateInputs stand for it in one input when the two inputs differ.
 	Inputs, CreateInputs, UpdateInputs []string
+	// Veloxe gives the type's where input veloxe's semantics, as
+	// velox-graphql's option compat=veloxe generates it, for clients built
+	// against veloxe's API: an empty In or NotIn list, a false IsNil, NotNil
+	// or IsEmpty, and an or of no inputs add nothing, where they otherwise
+	// match no node or the negated test; a null entry of an and, an or or a
+	// has<Edge>With is left out; a nested input that sets no predicate is
+	// an error (BAD_USER_INPUT) in a not, an or or a has<Edge>With, and left
+	// out of an and; and MaxFilterWidth and MaxFilterNodes do not apply,
+	// as veloxe had no such limits. MaxFilterDepth does.
+	Veloxe bool
 
 	fieldsOnce sync.Once
 	fieldCol   map[string]int // Fields and Edges by name: a column, or -1

@@ -1,0 +1,105 @@
+# 0088. Under compat=veloxe, Node and where inputs are veloxe's
+
+Status: accepted, 2026-11-19. Extends 0087. Amends 0061 for compat=veloxe
+only: velox's own API still has no Node.
+
+## Context
+
+veloxe's generator declared Relay's `interface Node { id: ID! }`, made every
+type with a single ID implement it, and put `node(id: ID!): Node` and
+`nodes(ids: [ID!]!): [Node]!` first in the root query. gqlgen bound Node to
+the generated `Noder` interface (`@goModel`), which every entity satisfied
+with `func (*X) IsNode() {}`; gqlgen refuses an implementing type whose Go
+type does not satisfy the bound interface (`codegen/interface.go`).
+`Client.Noder` found an ID's type by asking every registered type, sorted by
+table, one query each, and refused an ID that more than one had
+(`ErrAmbiguousNodeID`); an ID no type had was `ErrNodeNotFound`, and in
+`Client.Noders` a nil entry. The consumer's clients use `nodes(ids:)` with
+`... on SalesOrder` fragments; its resolvers call its own scan over the
+registry, which turns a denying policy into "missing" and gives the
+NOT_FOUND code `ENTITY_NOT_FOUND`. Its IDs are snowflakes, unique across
+tables.
+
+veloxe's where inputs also meant other things than velox's. Its generated
+`P()` appended a predicate only for a non-empty In or NotIn
+(`gqlrelay.AppendSlice`), for a true IsNil, NotNil or IsEmpty
+(`AppendBool`), and for a non-empty or; it skipped null entries; a nested
+input that set nothing was `ErrEmpty<T>WhereInput`, which an and skipped and
+a not, an or or a has<Edge>With returned as an error; only the top level
+swallowed it. Its only limit was depth 5. velox reads an empty In as false,
+an empty NotIn as true, a false IsNil as IS NOT NULL, an empty or as false
+and `not: {}` as matching nothing, and caps lists at MaxFilterWidth (100) and
+a where argument at MaxFilterNodes (1000). The consumer's clients send
+possibly empty and over-100 `idIn` lists, and rely on the old meaning.
+
+## Decision
+
+- Under `compat=veloxe` velox-graphql declares Node as veloxe did, bound by
+  `@goModel` to `<generated package>.Noder` (`sdl.Config.Package`, which the
+  plugin takes from the request), with `implements Node` on every type with
+  an ID and `node` and `nodes` first in `type Query`, which is then written
+  even with no QueryField.
+- It writes `noder_gql.go`: `type Noder interface{ IsNode() }`, `IsNode` on
+  each such entity, and `ResolveNode(ctx, db, id)` and
+  `ResolveNodes(ctx, db, ids)` for the application's resolvers, and
+  `NodeTypes()` for one that scans its own way. The resolvers stay the
+  application's, as they were in the consumer: gqlgen asks for them.
+- `gqlgraph.ResolveNode` probes every type of Node, in GraphQL name order,
+  with `gqlgraph.LoadNode`: an untyped query of the type's table by its key,
+  through `db`, so the Read policy, scope and interceptors apply. A row that
+  is not there, one the policy hides, a policy that denies the read and a
+  key the column cannot hold are all "none". No match is
+  `gqlgraph.ErrNodeNotFound` (veloxe's text, code NOT_FOUND); two are
+  `ErrAmbiguousNodeID`, naming the types; any other error stops it.
+  `ResolveNodes` gives nil for a not-found ID and has no cap, as veloxe.
+- `gqlgraph.Type.Veloxe`, which the generated type literals set under
+  compat, gives a where input veloxe's semantics, in the runtime helpers:
+  empty In, NotIn, HasSome and HasEvery, and false IsNil, NotNil and IsEmpty
+  add nothing; an or of no inputs adds nothing; null entries are skipped; a
+  nested input that sets nothing is BAD_USER_INPUT "empty predicate
+  <T>WhereInput" in a not, an or or a has<Edge>With, and skipped in an and
+  (only when it is itself empty, as veloxe compared with `==`).
+  MaxFilterWidth and MaxFilterNodes do not apply; MaxFilterDepth does.
+
+## Why
+
+- A flag in the `gqlgraph.Type` literal, not a second set of helpers or a
+  per-schema runtime setting: the mode is the generated code's, fixed at
+  generation as the API is, one line per type; the helpers stay compiled
+  once for every input; and two schemas in one process may differ.
+- A denial counts as none, where veloxe's `Client.Noder` aborted on it: the
+  consumer replaced that behaviour because one ungranted type broke `node`
+  for every other, and a polymorphic lookup must not tell a caller that a
+  row it may not read exists. Not-found stays veloxe's error and code.
+- Probing every type keeps veloxe's ambiguity check; an application that
+  wants first-match order or a probe budget, as the consumer has, builds it
+  on `NodeTypes` and `LoadNode`.
+- No width or node cap under compat, rather than a cap with a compat
+  default: veloxe had none, and `Limits` cannot tell an explicit 100 from the
+  default. MaxCost still bounds a request, and depth stays at 5.
+
+## Consequences
+
+- An application under compat=veloxe declares `extend type Query`, not
+  `type Query`, as it did under veloxe.
+- A nodes(ids:) of many IDs costs one query per type per ID; the
+  application caps it in its resolver if it needs to.
+- velox's default SDL and Go are unchanged: no Node, no `noder_gql.go`, no
+  `Veloxe` in a type literal, and velox's filter semantics and caps.
+
+## Evidence
+
+- `TestVeloxeNode` in `contrib/graphql/internal/sdl`: Node, `@goModel`,
+  `implements Node`, node and nodes first; none of them by default.
+- `TestVeloxeNoder` in `contrib/graphql/internal/gogen`: noder_gql.go and
+  `Veloxe: true` under compat, neither by default.
+- `TestVeloxeWhere`, `TestVeloxeDepth`, `TestVeloxeNullTests`,
+  `TestResolveNode` and `TestResolveNodes` in
+  `contrib/graphql/veloxgql/gqlgraph`: each case with velox's own result
+  beside veloxe's; a policy that hides a row and one that denies; an
+  ambiguous ID.
+- `TestVeloxeCompat` in `contrib/graphql/cmd/velox-graphql` serves, through
+  gqlgen, `node` with a fragment, `nodes` with a missing and a hidden ID
+  (null entries), `node` of a missing or hidden ID (NOT_FOUND),
+  `organizationIdIn: []`, `referrerIdIsNil: false`, `or: []`, an
+  `organizationIdIn` of 151 IDs, and `not: {}` and `or: [{}]` refused.

@@ -75,12 +75,14 @@ func TestRun(t *testing.T) {
 	}
 
 	// compat=veloxe: veloxe's names, here the key of a field named from
-	// its schema name.
+	// its schema name, and Node, bound to the request's package, with its
+	// Go in noder_gql.go.
 	resp = respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"compat": "veloxe"}, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 		Name: "User", Label: "user", Handles: "Users", PrimaryKey: []int{0},
 		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", ElemType: "int64"}, {Name: "image_url", GoName: "ImageURL", Type: "string", ElemType: "string"}},
 	}}}}))
-	if resp.Error != "" || len(resp.Files) != 2 || !strings.Contains(resp.Files[0].Content, "  imageUrl: String!\n") {
+	if resp.Error != "" || len(resp.Files) != 3 || resp.Files[1].Path != "noder_gql.go" || !strings.Contains(resp.Files[0].Content, "  imageUrl: String!\n") ||
+		!strings.Contains(resp.Files[0].Content, "interface Node @goModel(model: \"example.com/app/gen.Noder\")") {
 		t.Errorf("compat=veloxe: %+v", resp)
 	}
 

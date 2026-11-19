@@ -34,6 +34,13 @@
 // customerIdNotIn); and the rest of veloxe's surface follows, as
 // docs/decisions/0087 lists it.
 //
+// Every type with an ID implements the interface Node, and the root query
+// has node(id:) and nodes(ids:), which the application's resolvers answer
+// with the generated ResolveNode and ResolveNodes (veloxgen/noder_gql.go). A
+// where input reads as veloxe's did: an empty In, a false IsNil and an empty
+// or add nothing, a not of nothing is an error, and no width or node cap
+// applies (gqlgraph.Type's Veloxe).
+//
 // An application whose filters were opt-in field by field, as a veloxe
 // codegen hook made them, asks for where=whitelist: a field other than the
 // key then has predicates only with graphql.WhereInput (the old velox's
@@ -71,7 +78,7 @@ func generate(req *plugin.Request) ([]plugin.File, []string, error) {
 		switch {
 		case k == "only" && v == "enums":
 		case k == "compat" && v == "veloxe":
-			cfg.Veloxe = true
+			cfg.Veloxe, cfg.Package = true, req.OutPath
 		case k == "where" && v == "whitelist":
 			cfg.WhereWhitelist = true
 		default:

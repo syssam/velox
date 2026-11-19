@@ -233,15 +233,16 @@ func (g *graph) write(w *writer) {
 			w.line(l)
 		}
 	}
+	g.writeNode(w)
 
 	// The root query holds the QueryFields; with none, the application
 	// declares Query itself, as GraphQL has no empty type.
-	if len(g.query) > 0 {
+	if query := g.rootQuery(); len(query) > 0 {
 		w.line()
 		w.line("# The root query.")
 		w.line()
 		w.line("type Query {")
-		for _, f := range g.query {
+		for _, f := range query {
 			w.field(f)
 		}
 		w.line("}")
@@ -272,7 +273,7 @@ func (g *graph) writeObject(w *writer, o *object) {
 	w.line()
 	w.at = "schema " + o.ent.Name
 	w.desc("", o.ent.Comment)
-	w.line("type "+o.name, w.dirs(o.dirs), " {")
+	w.line("type "+o.name+g.implementsNode(o), w.dirs(o.dirs), " {")
 	for _, f := range o.fields {
 		w.field(f)
 	}

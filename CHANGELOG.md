@@ -40,6 +40,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   a named Go type typed by its name, and silence where veloxe ignored an
   annotation. The option `where=whitelist` filters only fields with
   `WhereInput` (ADR 0087).
+- Under velox-graphql's `compat=veloxe`, every type with an ID implements
+  `Node`, the root query has `node(id:)` and `nodes(ids:)`, and the generated
+  `ResolveNode` and `ResolveNodes` answer them through each type's Read
+  policy; a where input means what veloxe's did: an empty `In`, a false
+  `IsNil` and an empty `or` add nothing, `not: {}` is an error, and no width
+  or node cap applies (`gqlgraph.Type.Veloxe`) (ADR 0088).
 - Two enum fields whose types get one name (`Asset.depreciation_method`,
   `AssetDepreciation.method`) and hold the same values share one Go type and
   one GraphQL enum, as veloxe did (ADR 0086).

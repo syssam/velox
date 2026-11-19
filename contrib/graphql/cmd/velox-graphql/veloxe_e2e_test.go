@@ -142,7 +142,8 @@ func (Workspace) Annotations() []schema.Annotation {
 }
 `
 
-// e2eVeloxeResolvers is the root query's resolver.
+// e2eVeloxeResolvers are the root query's resolvers: salesOrders, and node
+// and nodes through the generated ResolveNode and ResolveNodes.
 const e2eVeloxeResolvers = `package graph
 
 import (
@@ -187,6 +188,24 @@ func (r *queryResolver) Workspaces(ctx context.Context) ([]*gen.Workspace, error
 		out[i] = &rows[i]
 	}
 	return out, nil
+}
+
+// Node is the resolver for the node field.
+func (r *queryResolver) Node(ctx context.Context, id int64) (gen.Noder, error) {
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.ResolveNode(ctx, db, id)
+}
+
+// Nodes is the resolver for the nodes field.
+func (r *queryResolver) Nodes(ctx context.Context, ids []int64) ([]gen.Noder, error) {
+	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.ResolveNodes(ctx, db, ids)
 }
 
 // Query returns QueryResolver implementation.
@@ -310,6 +329,125 @@ type Assignee @goModel(model: "example.com/app/schema.Assignee") {
 }
 `
 
+// e2eVeloxeMemo is a schema whose Read policy hides the memos titled
+// hidden, for node and nodes.
+const e2eVeloxeMemo = `package schema
+
+import (
+	"context"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+)
+
+type Memo struct{ schema.Schema }
+
+func (Memo) Fields() []schema.Field { return []schema.Field{field.String("title")} }
+
+// Policy hides the memos titled hidden.
+func (Memo) Policy() velox.Policy {
+	return velox.Policy{
+		Read: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("title", "hidden"), nil },
+	}
+}
+`
+
+// e2eVeloxeNodeRun queries node and nodes, with veloxe's fragments on the
+// types, and the where inputs veloxe read otherwise than velox does: an
+// empty In, a false IsNil, an empty or, an In over velox's width cap, and a
+// not of nothing, which veloxe refused.
+const e2eVeloxeNodeRun = `package app_test
+
+import (
+	"database/sql"
+	"fmt"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
+	_ "modernc.org/sqlite"
+
+	"example.com/app/graph"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+)
+
+func TestVeloxeNodeAndFilters(t *testing.T) {
+	db, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	db.SetMaxOpenConns(1)
+	for _, s := range []string{
+		"CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, tier TEXT NOT NULL, vip BOOLEAN NOT NULL DEFAULT 0, joined_at DATETIME NOT NULL DEFAULT '2020-01-01 00:00:00')",
+		"CREATE TABLE sales_orders (id INTEGER PRIMARY KEY, organization_id INTEGER NOT NULL, customer_id INTEGER NOT NULL, image_url TEXT NOT NULL, referrer_id INTEGER, total INTEGER NOT NULL, custom_fields TEXT NOT NULL, status TEXT NOT NULL, note TEXT NOT NULL DEFAULT '')",
+		"CREATE TABLE workspaces (id INTEGER PRIMARY KEY, slug TEXT NOT NULL, settings TEXT NOT NULL, assignees TEXT NOT NULL)",
+		"CREATE TABLE memos (id INTEGER PRIMARY KEY, title TEXT NOT NULL)",
+		"INSERT INTO customers (id, name, tier) VALUES (1, 'ada', 'gold'), (2, 'bob', 'silver')",
+		"INSERT INTO sales_orders (id, organization_id, customer_id, image_url, referrer_id, total, custom_fields, status) VALUES (10, 7, 1, 'a.png', 2, 10, '{}', 'open'), (11, 7, 2, 'b.png', NULL, 20, '{}', 'open'), (12, 8, 2, 'c.png', 1, 30, '{}', 'shipped')",
+		"INSERT INTO memos (id, title) VALUES (20, 'seen'), (21, 'hidden')",
+	} {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+	}
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
+	srv.AddTransport(transport.POST{})
+	query := func(q string) string {
+		req := httptest.NewRequest("POST", "/", strings.NewReader(q))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		return w.Body.String()
+	}
+	var wide []string // 151 organization IDs, over velox's MaxFilterWidth of 100
+	for i := 100; i < 250; i++ {
+		wide = append(wide, fmt.Sprintf("\\\"%d\\\"", i))
+	}
+	wide = append(wide, "\\\"8\\\"")
+	all := "{\"data\":{\"salesOrders\":{\"edges\":[{\"node\":{\"id\":\"10\"}},{\"node\":{\"id\":\"11\"}},{\"node\":{\"id\":\"12\"}}]}}}"
+	orders := func(where string) string {
+		return "{\"query\":\"{ salesOrders(first: 5, where: " + where + ") { edges { node { id } } } }\"}"
+	}
+	for _, c := range []struct{ q, want string }{
+		{"{\"query\":\"{ node(id: \\\"11\\\") { id ... on SalesOrder { imageUrl } } }\"}",
+			"{\"data\":{\"node\":{\"id\":\"11\",\"imageUrl\":\"b.png\"}}}"},
+		{"{\"query\":\"{ node(id: \\\"20\\\") { id ... on Memo { title } } }\"}",
+			"{\"data\":{\"node\":{\"id\":\"20\",\"title\":\"seen\"}}}"},
+		{"{\"query\":\"{ nodes(ids: [\\\"10\\\", \\\"1\\\", \\\"99\\\", \\\"21\\\", \\\"20\\\"]) { id ... on SalesOrder { imageUrl } ... on Customer { name } } }\"}",
+			"{\"data\":{\"nodes\":[{\"id\":\"10\",\"imageUrl\":\"a.png\"},{\"id\":\"1\",\"name\":\"ada\"},null,null,{\"id\":\"20\"}]}}"},
+		{orders("{organizationIdIn: []}"), all},
+		{orders("{referrerIdIsNil: false}"), all},
+		{orders("{referrerIdNotNil: false, organizationIdNotIn: []}"), all},
+		{orders("{or: []}"), all},
+		{orders("{and: [{}], organizationIdIn: [" + strings.Join(wide, ", ") + "]}"),
+			"{\"data\":{\"salesOrders\":{\"edges\":[{\"node\":{\"id\":\"12\"}}]}}}"},
+	} {
+		if got := query(c.q); got != c.want {
+			t.Errorf("%s:\n got %s\nwant %s", c.q, got, c.want)
+		}
+	}
+	// A missing ID, a hidden one and a not of nothing are errors, as in veloxe.
+	for _, c := range []struct{ q, want string }{
+		{"{\"query\":\"{ node(id: \\\"99\\\") { id } }\"}", "\"code\":\"NOT_FOUND\""},
+		{"{\"query\":\"{ node(id: \\\"21\\\") { id } }\"}", "could not resolve to a node with the global ID"},
+		{orders("{not: {}}"), "empty predicate SalesOrderWhereInput"},
+		{orders("{or: [{}]}"), "\"code\":\"BAD_USER_INPUT\""},
+	} {
+		got := query(c.q)
+		if !strings.Contains(got, c.want) || !strings.Contains(got, "\"errors\"") {
+			t.Errorf("%s:\n got %s\nwant an error with %s", c.q, got, c.want)
+		}
+	}
+}
+`
+
 // TestVeloxeCompat generates with compat=veloxe and serves veloxe's API:
 // customerId and organizationId are IDs in the type, imageUrl is named as
 // veloxe named it, and the where input filters by customerId, customerIdNEQ
@@ -321,6 +459,8 @@ func TestVeloxeCompat(t *testing.T) {
 	}
 	dir, run := app(t, map[string]string{
 		"schema/schema.go":          e2eVeloxeSchema,
+		"schema/memo.go":            e2eVeloxeMemo,
+		"veloxe_node_test.go":       e2eVeloxeNodeRun,
 		"gqlgen.yml":                e2eCollectGqlgen + "  Map:\n    model: github.com/99designs/gqlgen/graphql.Map\n  Amount:\n    model: example.com/app/schema.Amount\n",
 		"graph/app.graphql":         e2eVeloxeApp,
 		"graph/schema.resolvers.go": e2eVeloxeResolvers,
@@ -333,7 +473,8 @@ func TestVeloxeCompat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"  customerId: ID!\n", "  organizationId: ID!\n", "  imageUrl: String!\n", "  customerIdNotIn: [ID!]\n", "  hasCustomer: Boolean\n", "  customFields: Map!\n", "  status: SalesOrderEntryStatus!\n", "enum SalesOrderEntryStatus", "enum SalesOrderStatus @goModel(model: \"example.com/app/schema.SalesOrderStatus\")", "  totalGT: Amount\n", "  totalNotIn: [Amount!]\n"} {
+	for _, want := range []string{"  customerId: ID!\n", "  organizationId: ID!\n", "  imageUrl: String!\n", "  customerIdNotIn: [ID!]\n", "  hasCustomer: Boolean\n", "  customFields: Map!\n", "  status: SalesOrderEntryStatus!\n", "enum SalesOrderEntryStatus", "enum SalesOrderStatus @goModel(model: \"example.com/app/schema.SalesOrderStatus\")", "  totalGT: Amount\n", "  totalNotIn: [Amount!]\n",
+		"interface Node @goModel(model: \"example.com/app/gen.Noder\") {", "type SalesOrder implements Node", "type Memo implements Node", "  nodes(ids: [ID!]!): [Node]!\n"} {
 		if !strings.Contains(string(sdl), want) {
 			t.Errorf("velox.graphql lacks %q:\n%s", want, sdl)
 		}
@@ -379,7 +520,7 @@ func TestVeloxeCompat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "--- PASS: TestVeloxeNames ") {
-		t.Errorf("no PASS of TestVeloxeNames in\n%s", out)
+	if !strings.Contains(out, "--- PASS: TestVeloxeNames ") || !strings.Contains(out, "--- PASS: TestVeloxeNodeAndFilters ") {
+		t.Errorf("no PASS of TestVeloxeNames or TestVeloxeNodeAndFilters in\n%s", out)
 	}
 }

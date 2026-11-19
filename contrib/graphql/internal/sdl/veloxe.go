@@ -25,6 +25,9 @@ type Config struct {
 	//     alone by default on keys and Other fields, explicit WhereOps over
 	//     WhereInput's defaults, no directives on inputs, a named JSON type
 	//     by its Go name, and silence where veloxe ignored an annotation.
+	//   - the interface Node, which every type with an ID implements, and
+	//     node(id:) and nodes(ids:) first in the root query;
+	//   - a where input has veloxe's semantics (gqlgraph.Type's Veloxe).
 	Veloxe bool
 	// WhereWhitelist leaves out of the where inputs the predicates of every
 	// field but the key that lacks graphql.WhereInput (the old velox's
@@ -32,6 +35,11 @@ type Config struct {
 	// where=whitelist). It is what an application's codegen hook did under
 	// veloxe, so it is an option of its own, apart from Veloxe.
 	WhereWhitelist bool
+
+	// Package is the generated package's import path, which binds Node to
+	// its Noder with @goModel under Veloxe; velox-graphql gives the
+	// request's.
+	Package string
 }
 
 // veloxeCamel is veloxe's GraphQL name of a schema name, as its generator's

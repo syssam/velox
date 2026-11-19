@@ -218,6 +218,9 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	}
 	r.writeSelection(f, t)
 	writeInputNames(f, t)
+	if r.veloxe {
+		f.p("\tVeloxe: true,")
+	}
 	f.p("}")
 	return nil
 }

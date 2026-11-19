@@ -45,6 +45,7 @@ type Filter struct {
 	t      untyped.Table
 	depth  int
 	budget *budget // the where argument's
+	veloxe bool    // Type.Veloxe: veloxe's semantics, see Type
 	ps     []velox.Predicate
 	err    error
 }
@@ -88,7 +89,7 @@ func NewFilter(ctx context.Context, c *Type) *Filter {
 		lim := veloxgql.LimitsFromContext(ctx)
 		st = &state{budget: &budget{left: lim.MaxFilterNodes, limits: lim}}
 	}
-	f := &Filter{ctx: ctx, typ: c.Name, t: c.table(), depth: st.depth, budget: st.budget}
+	f := &Filter{ctx: ctx, typ: c.Name, t: c.table(), depth: st.depth, budget: st.budget, veloxe: c.Veloxe}
 	if err := checkDepth(f.depth, f.budget.limits.MaxFilterDepth); err != nil {
 		f.refuse(name{}, err)
 		return f
@@ -105,10 +106,26 @@ func (f *Filter) Pred() (velox.Predicate, error) {
 	switch {
 	case f.err != nil:
 		return velox.Predicate{}, f.err
+	case f.veloxe && f.depth > 0 && len(f.ps) == 0:
+		// veloxe refused a nested input that sets no predicate; its and
+		// skips one (list), its not, or and has<Edge>With fail.
+		return velox.Predicate{}, &gqlcore.Error{Code: gqlcore.CodeBadUserInput, Msg: "empty predicate " + f.typ + "WhereInput", Err: errEmptyPredicate}
 	case len(f.ps) == 1:
 		return f.ps[0], nil
 	}
 	return untyped.And(f.ps...), nil
+}
+
+// errEmptyPredicate is what Pred's error wraps, under Type.Veloxe, for a
+// nested input that sets no predicate.
+var errEmptyPredicate = errors.New("empty predicate")
+
+// emptyPredicate reports whether err is Pred's own error for an input that
+// sets no predicate, not one nested deeper that a helper wrapped: veloxe's
+// and skipped only an entry that was itself empty.
+func emptyPredicate(err error) bool {
+	e, ok := err.(*gqlcore.Error)           //nolint:errorlint // the input's own error, never a wrapped one
+	return ok && e.Err == errEmptyPredicate //nolint:errorlint // likewise
 }
 
 // budget is what is left of a where argument's MaxFilterNodes, and the
@@ -131,6 +148,9 @@ type stateKey struct{}
 // charge counts n against the where argument's budget, for the field of
 // f's input; ok is false when that is over it, and f has the error.
 func (f *Filter) charge(field name, n int) (ok bool) {
+	if f.veloxe {
+		return true // veloxe had no budget
+	}
 	f.budget.left -= n
 	if f.budget.left < 0 {
 		f.refuse(field, InputErrorf("%w: the where argument has more than %d inputs, predicates and list values", veloxgql.ErrFilterTooLarge, f.budget.limits.MaxFilterNodes))
@@ -193,11 +213,7 @@ type Cond[W comparable] func(w W, ctx context.Context) (velox.Predicate, error)
 // nothing, which holds for every row. ok is false when w fails, and f has its
 // error.
 func nested[W comparable](f *Filter, field name, w W, cond Cond[W]) (p velox.Predicate, ok bool) {
-	var none W
-	if w == none {
-		return untyped.And(), true
-	}
-	p, err := cond(w, context.WithValue(f.ctx, stateKey{}, &state{depth: f.depth + 1, budget: f.budget}))
+	p, err := nestedCond(f, w, cond)
 	if err != nil {
 		f.refuse(field, err)
 		return p, false
@@ -205,17 +221,36 @@ func nested[W comparable](f *Filter, field name, w W, cond Cond[W]) (p velox.Pre
 	return p, true
 }
 
+// nestedCond is the condition of w, nested in f's input, without f's error.
+func nestedCond[W comparable](f *Filter, w W, cond Cond[W]) (velox.Predicate, error) {
+	var none W
+	if w == none {
+		return untyped.And(), nil
+	}
+	return cond(w, context.WithValue(f.ctx, stateKey{}, &state{depth: f.depth + 1, budget: f.budget}))
+}
+
 // list is the conditions of ws, the inputs nested in f's at field, after
 // checkWidth; ok is false when one fails, and f has its error, which names
-// the entry, as "or[3]".
-func list[W comparable](f *Filter, field string, ws []W, cond Cond[W]) (ps []velox.Predicate, ok bool) {
+// the entry, as "or[3]". Under Type.Veloxe a null entry is left out, as
+// veloxe left it out, and with skipEmpty (an and's) so is an entry that sets
+// no predicate.
+func list[W comparable](f *Filter, field string, ws []W, cond Cond[W], skipEmpty bool) (ps []velox.Predicate, ok bool) {
 	if !f.width(name{base: field}, len(ws)) {
 		return nil, false
 	}
+	var none W
 	ps = make([]velox.Predicate, 0, len(ws))
 	for i, w := range ws {
-		p, ok := nested(f, name{base: field + "[" + strconv.Itoa(i) + "]"}, w, cond)
-		if !ok {
+		if f.veloxe && w == none {
+			continue
+		}
+		p, err := nestedCond(f, w, cond)
+		if skipEmpty && f.veloxe && emptyPredicate(err) {
+			continue
+		}
+		if err != nil {
+			f.refuse(name{base: field + "[" + strconv.Itoa(i) + "]"}, err)
 			return nil, false
 		}
 		ps = append(ps, p)
@@ -247,21 +282,22 @@ func And[W comparable](f *Filter, field string, ws []W, cond Cond[W]) {
 	if f.err != nil || ws == nil {
 		return
 	}
-	if ps, ok := list(f, field, ws, cond); ok && f.charge(name{base: field}, 1) {
+	if ps, ok := list(f, field, ws, cond, true); ok && f.charge(name{base: field}, 1) {
 		f.ps = append(f.ps, ps...)
 	}
 }
 
 // Or adds ws, the input's or: a node matches when it matches one of ws. An
 // empty ws matches no node, as an empty In does; a nil ws adds nothing. More
-// than MaxFilterWidth fails with ErrFilterTooWide.
+// than MaxFilterWidth fails with ErrFilterTooWide. Under Type.Veloxe an
+// empty ws, or one of only nulls, adds nothing.
 func Or[W comparable](f *Filter, field string, ws []W, cond Cond[W]) {
 	if f.err != nil || ws == nil {
 		return
 	}
-	ps, ok := list(f, field, ws, cond)
+	ps, ok := list(f, field, ws, cond, false)
 	switch {
-	case !ok:
+	case !ok, f.veloxe && len(ps) == 0:
 	case len(ps) == 1:
 		f.add(name{base: field}, 0, ps[0])
 	default:
@@ -276,7 +312,7 @@ func HasWith[W comparable](f *Filter, field string, ws []W, cond Cond[W], edge i
 	if f.err != nil || len(ws) == 0 {
 		return
 	}
-	if ps, ok := list(f, field, ws, cond); ok {
+	if ps, ok := list(f, field, ws, cond, false); ok {
 		f.add(name{base: field}, 0, f.t.Has(edge, target, ps...))
 	}
 }
@@ -354,7 +390,7 @@ func one[V any](f *Filter, field name, col int, op untyped.PredOp, v *V) {
 // many adds op, In or NotIn, on column col with the values of vs, unless vs
 // is nil.
 func many[V any](f *Filter, field name, col int, op untyped.PredOp, vs []V) {
-	if f.err != nil || vs == nil || !f.width(field, len(vs)) {
+	if f.err != nil || vs == nil || f.veloxe && len(vs) == 0 || !f.width(field, len(vs)) {
 		return
 	}
 	xs := make([]any, len(vs))
@@ -367,7 +403,7 @@ func many[V any](f *Filter, field name, col int, op untyped.PredOp, vs []V) {
 // null adds op, IsNull or NotNull, on column col, for a true *b, and its
 // negation for a false one, unless b is nil.
 func (f *Filter) null(field name, col int, op untyped.PredOp, b *bool) {
-	if f.err == nil && b != nil {
+	if f.err == nil && b != nil && (*b || !f.veloxe) {
 		f.is(field, *b, f.t.Pred(col, op, nil))
 	}
 }
@@ -405,6 +441,9 @@ func (f *Filter) convert(field name, col int, v any) (any, error) {
 
 // width is checkWidth of field's list of n, with its error recorded in f.
 func (f *Filter) width(field name, n int) bool {
+	if f.veloxe {
+		return true // veloxe had no cap
+	}
 	if err := checkWidth(n, f.budget.limits.MaxFilterWidth); err != nil {
 		f.refuse(field, err)
 		return false
@@ -444,7 +483,7 @@ func ArrayField[V any](f *Filter, field string, col int, o ArrayOps[V]) {
 	}
 	elements(f, name{field, "HasSome"}, col, o.HasSome, untyped.Or)
 	elements(f, name{field, "HasEvery"}, col, o.HasEvery, untyped.And)
-	if f.err == nil && o.IsEmpty != nil {
+	if f.err == nil && o.IsEmpty != nil && (*o.IsEmpty || !f.veloxe) {
 		f.is(name{field, "IsEmpty"}, *o.IsEmpty, f.t.Pred(col, untyped.PredJSONEmpty, nil))
 	}
 	f.null(name{field, "IsNil"}, col, untyped.PredIsNull, o.IsNil)
@@ -455,7 +494,7 @@ func ArrayField[V any](f *Filter, field string, col int, o ArrayOps[V]) {
 // unless vs is nil. An empty list joins to nothing, which is false for Or and
 // true for And.
 func elements[V any](f *Filter, field name, col int, vs []V, join func(...velox.Predicate) velox.Predicate) {
-	if f.err != nil || vs == nil || !f.width(field, len(vs)) {
+	if f.err != nil || vs == nil || f.veloxe && len(vs) == 0 || !f.width(field, len(vs)) {
 		return
 	}
 	ps := make([]velox.Predicate, len(vs))
@@ -521,7 +560,7 @@ func id[V any](f *Filter, field name, col int, op untyped.PredOp, v *V, fk fkSco
 // idList adds op, In or NotIn, on column col with the keys vs, unless vs is
 // nil. More than MaxFilterWidth keys fail the filter.
 func idList[V any](f *Filter, field name, col int, op untyped.PredOp, vs []V, fk fkScope) {
-	if f.err != nil || vs == nil || !f.width(field, len(vs)) {
+	if f.err != nil || vs == nil || f.veloxe && len(vs) == 0 || !f.width(field, len(vs)) {
 		return
 	}
 	ks := make([]any, len(vs))
@@ -535,7 +574,7 @@ func idList[V any](f *Filter, field name, col int, op untyped.PredOp, vs []V, fk
 // interceptor or a Read policy), IsNil is the edge's Has negated, and NotNil
 // the edge's Has, as a hidden target counts as none.
 func (f *Filter) fkNull(field name, col int, op untyped.PredOp, b *bool, fk fkScope) {
-	if f.err != nil || b == nil {
+	if f.err != nil || b == nil || !*b && f.veloxe {
 		return
 	}
 	p := f.t.Pred(col, op, nil)

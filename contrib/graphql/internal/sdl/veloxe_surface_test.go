@@ -150,7 +150,7 @@ func TestVeloxeQueryAndConnections(t *testing.T) {
 			got = append(got, f.Name+": "+f.Type.String())
 		}
 	}
-	want := []string{"allMembers: MemberConnection!", "people: PersonConnection!", "workspaces: [Workspace!]!"}
+	want := []string{"node: Node", "nodes: [Node]!", "allMembers: MemberConnection!", "people: PersonConnection!", "workspaces: [Workspace!]!"}
 	if !slices.Equal(got, want) {
 		t.Errorf("Query: %v, want %v", got, want)
 	}
