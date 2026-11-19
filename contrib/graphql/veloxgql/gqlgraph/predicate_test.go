@@ -199,3 +199,102 @@ func TestWhereOpBits(t *testing.T) {
 		}
 	}
 }
+
+// ownerIn and childIn are where inputs of owner and child with every kind of
+// WhereField that the other tests' inputs lack: has<Edge>, has<Edge>With, a
+// foreign key's IDs, and the case-folding and null predicates.
+type ownerIn struct {
+	HasChildren     *bool
+	HasChildrenWith []*childIn
+}
+
+type childIn struct {
+	Title             *string
+	TitleEqualFold    *string
+	TitleContainsFold *string
+
+	OwnerID       *int64
+	OwnerIDIn     []int64
+	OwnerIDIsNil  *bool
+	OwnerIDNotNil *bool
+
+	EditorIDIsNil  *bool
+	EditorIDNotNil *bool
+}
+
+var ownerInType = func() *gqlgraph.Type {
+	c := gqlgraph.TableType[owner]("Owner")
+	c.WhereFields = []gqlgraph.WhereField{
+		{Name: "hasChildren", Kind: gqlgraph.WhereHas, Edge: int(owners.Children.I), Target: untyped.TableOf[child]},
+		{Name: "hasChildrenWith", Kind: gqlgraph.WhereHasWith, Edge: int(owners.Children.I), Target: untyped.TableOf[child]},
+	}
+	return c
+}()
+
+var childInType = func() *gqlgraph.Type {
+	c := gqlgraph.TableType[child]("Child")
+	c.WhereFields = []gqlgraph.WhereField{
+		{Name: "title", Ops: gqlgraph.OpEQ | gqlgraph.OpEqualFold | gqlgraph.OpContainsFold, Col: int(children.Title.I)},
+		{Name: "ownerID", Kind: gqlgraph.WhereEdgeID, Ops: gqlgraph.OpEQ | gqlgraph.OpIn | gqlgraph.OpsNull, Col: int(children.OwnerID.I), Edge: int(children.Owner.I), Target: untyped.TableOf[owner]},
+		{Name: "editorID", Ops: gqlgraph.OpsNull, Col: int(children.EditorID.I)},
+	}
+	return c
+}()
+
+func (w *ownerIn) Predicate(ctx context.Context) (velox.Predicate, error) {
+	return gqlgraph.Predicate(ctx, ownerInType, w)
+}
+
+func (w *childIn) Predicate(ctx context.Context) (velox.Predicate, error) {
+	return gqlgraph.Predicate(ctx, childInType, w)
+}
+
+// The same inputs, by hand, with the helpers.
+func (w *ownerIn) predicate(ctx context.Context) (velox.Predicate, error) {
+	f := gqlgraph.NewFilter(ctx, ownerInType)
+	if w == nil {
+		return f.Pred()
+	}
+	gqlgraph.Has(f, "hasChildren", w.HasChildren, int(owners.Children.I), untyped.TableOf[child]())
+	gqlgraph.HasWith(f, "hasChildrenWith", w.HasChildrenWith, (*childIn).predicate, int(owners.Children.I), untyped.TableOf[child]())
+	return f.Pred()
+}
+
+func (w *childIn) predicate(ctx context.Context) (velox.Predicate, error) {
+	f := gqlgraph.NewFilter(ctx, childInType)
+	if w == nil {
+		return f.Pred()
+	}
+	gqlgraph.Field(f, "title", int(children.Title.I), gqlgraph.Ops[string]{EQ: w.Title, EqualFold: w.TitleEqualFold, ContainsFold: w.TitleContainsFold})
+	gqlgraph.EdgeIDField(f, "ownerID", int(children.OwnerID.I), int(children.Owner.I), gqlgraph.TableType[owner]("Owner"), gqlgraph.Ops[int64]{
+		EQ: w.OwnerID, In: w.OwnerIDIn, IsNil: w.OwnerIDIsNil, NotNil: w.OwnerIDNotNil,
+	})
+	gqlgraph.Field(f, "editorID", int(children.EditorID.I), gqlgraph.Ops[int64]{IsNil: w.EditorIDIsNil, NotNil: w.EditorIDNotNil})
+	return f.Pred()
+}
+
+// TestPredicateEdges: has<Edge>, has<Edge>With, a foreign key's IDs and the
+// folding and null predicates give the SQL the helpers give.
+func TestPredicateEdges(t *testing.T) {
+	ctx := context.Background()
+	tru, fls := new(true), new(false)
+	for _, w := range []*ownerIn{
+		nil, {},
+		{HasChildren: tru}, {HasChildren: fls},
+		{HasChildrenWith: []*childIn{}},
+		{HasChildrenWith: []*childIn{{Title: new("a")}, nil}},
+		{HasChildrenWith: []*childIn{{TitleEqualFold: new("A"), TitleContainsFold: new("b")}}},
+		{HasChildrenWith: []*childIn{{OwnerID: new(int64(1)), OwnerIDIn: []int64{1, 2}}}},
+		{HasChildrenWith: []*childIn{{OwnerIDIsNil: tru, EditorIDNotNil: fls}}},
+		{HasChildrenWith: []*childIn{{OwnerIDNotNil: fls, EditorIDIsNil: tru}}},
+		{HasChildren: tru, HasChildrenWith: []*childIn{{Title: new("x")}, {OwnerIDIn: []int64{}}}},
+	} {
+		_, _ = twin[owner](t, ctx, w.predicate, w.Predicate)
+	}
+	for _, w := range []*childIn{
+		{OwnerID: new(int64(1)), OwnerIDIsNil: fls, OwnerIDNotNil: tru, EditorIDIsNil: fls},
+		{TitleEqualFold: new("Q"), OwnerIDIn: []int64{3}},
+	} {
+		_, _ = twin[child](t, ctx, w.predicate, w.Predicate)
+	}
+}
