@@ -1,6 +1,6 @@
 # 0003. Optional stays NOT NULL; Nillable makes NULL
 
-- Status: accepted, 2026-10-29; amended by [0063](0063-optional-needs-a-value.md): an `Optional` field has a `Default` or is `Nillable`, and an unset one no longer writes the zero value
+- Status: accepted, 2026-10-29; amended by [0063](0063-optional-needs-a-value.md): an `Optional` field has a `Default` or is `Nillable`, and an unset one no longer writes the zero value; [0090](0090-veloxe-defaults.md) superseded 0063: an unset `Optional` field is its zero value, as veloxe wrote it, and an `Optional` enum needs a `Default` or `Nillable`
 
 ## Context
 

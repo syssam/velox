@@ -12,8 +12,8 @@ import (
 )
 
 // A Unique field that is Optional and not Nillable has one Default for every
-// unset row, so the second create without it fails on the index. One with no
-// Default at all is rule 37's.
+// unset row, so the second create without it fails on the index; one with no
+// Default at all has its zero on every unset row.
 type uniqueOptional struct{ schema.Schema }
 
 func (uniqueOptional) Fields() []schema.Field {
@@ -69,7 +69,7 @@ func TestBuildUniqueOptionalRefused(t *testing.T) {
 		s    schema.Interface
 		want string
 	}{
-		{uniqueOptional{}, `schema uniqueOptional: field "slug": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},
+		{uniqueOptional{}, `schema uniqueOptional: field "slug": ` + why},
 		{uniqueOptionalDefault{}, `schema uniqueOptionalDefault: field "slug": ` + why},
 		{uniqueOptionalIndex{}, `schema uniqueOptionalIndex: field "slug": ` + why},
 		{uniqueOptionalSchemaDefault{}, `schema uniqueOptionalSchemaDefault: field "slug": ` + why},

@@ -44,25 +44,24 @@ name (`type UserFriend struct{}`), which is not a schema.
 ## Fields
 
 **`Optional` is NOT NULL.** In ent, `Optional()` makes the column NULL-able. In
-velox it means only that the field need not be given on create: the column
-stays NOT NULL and the Go field is a value. `Nillable()` is what makes a column
-NULL-able, a pointer in Go with `Null*` handles (`IsNull`, `SetNull`), and
-`Default` is what an unset field takes. velox writes no zero value in their
-place ([0003](decisions/0003-nullability.md),
-[0063](decisions/0063-optional-needs-a-value.md)). An `Optional` JSON field is
-the one exception: its column is NULL-able. So velox-gen refuses an `Optional`
-field that has neither:
+velox, as in veloxe, it means only that the field need not be given on create:
+the column stays NOT NULL and the Go field is a value. `Nillable()` is what
+makes a column NULL-able, a pointer in Go with `Null*` handles (`IsNull`,
+`SetNull`), and `Default` is what an unset field takes. An unset `Optional`
+field with neither is written as its Go zero value, `""`, `0`, `false` or a
+zero time, as veloxe wrote it ([0003](decisions/0003-nullability.md),
+[0090](decisions/0090-veloxe-defaults.md)). An `Optional` enum is the
+exception, whose zero is none of its values: velox-gen asks it for a `Default`
+or `Nillable`. An `Optional` JSON field's column is NULL-able; unset, a slice
+or a map is written empty, `[]` or `{}`, and a struct as its zero value's JSON.
+An `Optional` `Unique` field needs `Nillable` or a `DefaultFunc`, or every
+unset row would hold the same value.
 
-- `field.String("bio").Optional()` becomes `Optional().Nillable()` for NULL, or
-  `Optional().Default("")` for an empty string; a number takes `Default(0)` and
-  a bool `Default(false)`. A `DefaultFunc` such as `time.Now` counts as a
-  `Default`;
-- an `Optional` `Unique` field needs `Nillable` or a `DefaultFunc`, or every
-  unset row would hold the same value.
-
-When `migrate diff` adds a column to a table that has rows, give the field a
-`Default` or make it `Nillable`: a NOT NULL column with no default fails on
-those rows, and `-allow add-required-column=...` only helps on an empty table.
+A string, bool or number column that is NOT NULL and has no `Default` gets
+its zero as its column `DEFAULT`, as veloxe's `FeatureAutoDefault` gave it, so
+`migrate diff` can add it to a table that has rows. Any other NOT NULL column
+with no default fails on those rows, and `-allow add-required-column=...` only
+helps on an empty table.
 
 **`field.Strings` is a JSON column, as in ent.** `field.Strings`, `field.Ints`
 and `field.Floats` are JSON fields of `[]string`, `[]int` and `[]float64`, and
@@ -117,7 +116,7 @@ is the column's default only: velox's inserts write every
 column, so only rows written outside velox take it; the column is an ent
 database's `NOT NULL DEFAULT true`. A field left unset stores its Go zero,
 never the column's `DEFAULT`, so `SchemaDefault` is not the value of an
-`Optional` field: velox-gen still asks for a `Default` or `Nillable`.
+`Optional` field: an unset one stores its zero.
 `CreateDefault` is filled in by gqlgen when a client leaves the field out.
 
 The same holds for a string: with `Default("x")`, an insert can never store `""`.

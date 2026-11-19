@@ -14,9 +14,8 @@ import (
 
 // Graph is the resolved model of one schema package.
 type Graph struct {
-	Package  string    `json:"package"`         // the schema package's import path
-	Entities []*Entity `json:"entities"`        // sorted by Name
-	Names    string    `json:"names,omitempty"` // how a long name is shortened: "veloxe", or "" for ent's (ddl.Symbol)
+	Package  string    `json:"package"`  // the schema package's import path
+	Entities []*Entity `json:"entities"` // sorted by Name
 }
 
 // Entity is one schema, resolved.

@@ -1,3 +1,8 @@
+-- script: main
+-- velox:lock-timeout 5s
+-- velox:allow set-not-null users.bio
+
+ALTER TABLE "users" ALTER COLUMN "bio" SET DEFAULT '';
 -- script: online
 -- velox:no-transaction
 -- velox:allow set-not-null users.bio

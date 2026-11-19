@@ -15,7 +15,9 @@ import (
 )
 
 // sqlSchema is a schema package of User and Post with an enum, a unique
-// field, a table comment, an index and an edge, as Go source by file.
+// field, a table comment, an index and an edge, as Go source by file. The
+// enum names a PostgreSQL type, which velox-gen makes only then (decision
+// 0090).
 func sqlSchema(userIndexes string) map[string]string {
 	return map[string]string{
 		"veloxschema/user.go": `package veloxschema
@@ -33,7 +35,7 @@ func (User) Annotations() []schema.Annotation { return []schema.Annotation{schem
 
 func (User) Fields() []schema.Field {
 	return []schema.Field{
-		field.Enum("role").Values("admin", "member"),
+		field.Enum("role").Values("admin", "member").SchemaType(map[string]string{field.Postgres: "user_role"}),
 		field.String("email").Unique(),
 	}
 }

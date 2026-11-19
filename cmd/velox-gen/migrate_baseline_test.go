@@ -176,7 +176,7 @@ func baselineEnt(t *testing.T, d velox.Dialect) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := map[velox.Dialect]int{velox.Postgres: 5, velox.MySQL: 0, velox.SQLite: 3}[d]; len(changes) != n {
+	if n := map[velox.Dialect]int{velox.Postgres: 11, velox.MySQL: 9, velox.SQLite: 9}[d]; len(changes) != n {
 		t.Errorf("the next diff has %d changes, want %d: %v", len(changes), n, changes)
 	}
 	for _, ch := range changes {
@@ -187,23 +187,23 @@ func baselineEnt(t *testing.T, d velox.Dialect) {
 }
 
 // entChange reports whether ch is one the next diff of an ent database may
-// hold. On PostgreSQL: the indexes of posts' two foreign keys, which ent does
-// not make there, the role enum and its alter-type, and users.id's
-// serial-to-identity. On MySQL: none. On SQLite: the same two indexes, which
-// ent does not make there either, and users' CHECK on role, which ent writes
-// as no constraint at all (the enum is text) and which SQLite makes by
-// rebuilding the table.
+// hold: the rename of an index to the name with its table's prefix, which ent
+// does not give; the rename of a foreign-key constraint whose name is longer
+// than the dialect allows, which velox caps as veloxe did, not as ent did
+// (decision 0090); the default of a string column, which velox sets to its
+// zero (decision 0090); the indexes of posts' two foreign keys, which ent
+// does not make on PostgreSQL and SQLite; and users.id's serial-to-identity
+// on PostgreSQL.
 func entChange(d velox.Dialect, ch migrate.Change) bool {
-	if d == velox.MySQL {
-		return false
-	}
-	switch ch.String() {
-	case "add-index posts.posts_user_posts", "add-index posts." + ddl.Cap("posts_user_drafts_written_but_never_published_by_this_user_so_far"):
+	s := ch.String()
+	switch {
+	case strings.HasPrefix(s, "rename-index "), strings.HasPrefix(s, "rename-constraint posts.posts_users_drafts_written_but_"):
 		return true
-	case "add-check users.users_role_check":
-		return d == velox.SQLite
-	case "create-enum users_role", "alter-column users.role (type)",
-		"alter-column users.id (identity)", "alter-column users.id (default|identity)":
+	case strings.HasPrefix(s, "alter-column ") && strings.HasSuffix(s, " (default)"):
+		return true
+	case s == "add-index posts.posts_user_posts", s == "add-index posts."+ddl.Cap("posts_user_drafts_written_but_never_published_by_this_user_so_far"):
+		return d != velox.MySQL
+	case s == "alter-column users.id (identity)", s == "alter-column users.id (default|identity)":
 		return d == velox.Postgres
 	}
 	return false

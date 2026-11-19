@@ -244,16 +244,17 @@ type Annotation struct {
 	// (postgres, mysql, sqlite; sqlite3 is read as sqlite).
 	DefaultExprs map[string]string
 
+	// NonUniqueFK is an edge's: its key is not unique (see NonUniqueFK).
+	NonUniqueFK bool
+
 	// Held by the old velox and refused by velox-gen, each naming its spelling in
 	// velox: Skip, Size (field.MaxLen), ColumnType (field.SchemaType), OnDelete and
-	// OnUpdate (edge.OnDelete), NonUniqueFK, Charset, IncrementStart and
-	// WithComments.
+	// OnUpdate (edge.OnDelete), Charset, IncrementStart and WithComments.
 	Skip           bool
 	Size           int64
 	ColumnType     string
 	OnDelete       CascadeAction
 	OnUpdate       CascadeAction
-	NonUniqueFK    bool
 	Charset        string
 	IncrementStart *int
 	WithComments   *bool
@@ -351,8 +352,17 @@ func OnDelete(a CascadeAction) Annotation { return Annotation{OnDelete: a} }
 // it: velox does not hold one.
 func OnUpdate(a CascadeAction) Annotation { return Annotation{OnUpdate: a} }
 
-// NonUniqueFK is the old velox's switch for a one-to-one edge's key. velox-gen
-// refuses it: velox does not hold it.
+// NonUniqueFK declares, on an edge, that a to-one edge is many-to-one in
+// intent, as in veloxe: its foreign key is not unique. A unique edge to its
+// own schema with no inverse is a bidirectional one-to-one edge, whose key is
+// unique and whose partner is re-pointed with it; with NonUniqueFK it is a
+// plain many-to-one edge whose key many rows may hold. On a one-to-one pair
+// it only drops the key's uniqueness.
+//
+//	edge.To("merged_into", Customer.Type).
+//	    Field("merged_into_id").
+//	    Unique().
+//	    Annotations(sqlschema.NonUniqueFK())
 func NonUniqueFK() Annotation { return Annotation{NonUniqueFK: true} }
 
 // Charset is the old velox's column character set. velox-gen refuses it.

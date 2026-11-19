@@ -5,11 +5,10 @@
 -- review: sqlite-rebuild: drops foreign key posts_users_posts, adds foreign key posts_users_posts; SQLite rebuilds table posts: it copies every row into a new table; add-foreign-key: adds foreign key posts_users_posts; it fails if rows have no match in users
 CREATE TABLE "velox_new_posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "author_id" integer NOT NULL,
-  "title" text NOT NULL,
+  "author_id" integer NOT NULL DEFAULT 0,
+  "title" text NOT NULL DEFAULT '',
   "status" text NOT NULL DEFAULT 'active',
-  CONSTRAINT "posts_users_posts" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE RESTRICT,
-  CONSTRAINT "posts_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
+  CONSTRAINT "posts_users_posts" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE RESTRICT
 );
 INSERT INTO "velox_new_posts" ("id", "author_id", "title", "status") SELECT "id", "author_id", "title", "status" FROM "posts";
 DELETE FROM sqlite_sequence WHERE name = 'velox_new_posts';

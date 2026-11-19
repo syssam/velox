@@ -114,9 +114,9 @@ Two options work differently from ent, so they are worth learning early
 ([ADR 0003](decisions/0003-nullability.md)):
 
 - `Optional()` means "may be left out on insert". The column stays
-  `NOT NULL`, so an `Optional` field needs a `Default` or `Nillable`:
-  `Optional().Default("")` is an empty string. velox stores no zero value
-  in their place ([ADR 0063](decisions/0063-optional-needs-a-value.md)).
+  `NOT NULL`, and an unset field stores its zero value, as veloxe stored it;
+  an `Optional` enum, whose zero is none of its values, needs a `Default` or
+  `Nillable` ([ADR 0090](decisions/0090-veloxe-defaults.md)).
 - `Nillable()` makes the column nullable. The Go field becomes a pointer, and
   its handle gains `IsNull`, `NotNull` and `SetNull`.
 
@@ -149,7 +149,11 @@ also the column's `DEFAULT`. `SchemaDefault` sets only the column's
 every dialect (`sqlschema.DefaultExprs` takes one for each).
 
 `field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,
-with a constant per value, such as `veloxgen.InvoiceStatusPaid`.
+with a constant per value, such as `veloxgen.InvoiceStatusPaid`. The column
+is stored as ent and veloxe store it: `character varying` on PostgreSQL,
+`enum(...)` on MySQL and `text` on SQLite, with no CHECK. A Postgres
+`SchemaType` that names a type, `map[string]string{field.Postgres: "mood"}`,
+makes a PostgreSQL enum type of that name instead.
 
 ### Edges
 
@@ -204,22 +208,14 @@ extension that gives GIN an operator class for the type, `btree_gin` or
 baseline by hand, and without it the index fails when it is applied, not in
 velox-gen.
 
-An index is named by its `StorageKey`, else `<entity>_<columns>` as in ent, and
-PostgreSQL wants the name unique in the database schema, so a mixin's
-StorageKey, one name on every table that lists the mixin, is refused. A schema
-package can declare its options in one exported variable of type
-`schema.Package`, which every velox-gen command reads:
-
-```go
-// Velox is the package's options for velox-gen.
-var Velox = schema.Package{PrefixIndexNames: true}
-```
-
-`PrefixIndexNames` names each index `<table>_<name>`, unless the name starts
-with `<table>_` already, as veloxe applications' `UniqueIndexNamesHook` did.
-`Names: schema.VeloxeNames` shortens a name over the dialect's limit as veloxe
-did, with an FNV-1 128 suffix where ent uses MD5, so a database veloxe migrated
-keeps its names ([ADR 0083](decisions/0083-package-index-names.md)).
+An index is named `<table>_<name>`, its name being its `StorageKey`, else
+`<entity>_<columns>` as in ent, unless that name starts with `<table>_`
+already, as veloxe applications' `UniqueIndexNamesHook` named them.
+PostgreSQL wants an index name unique in the database schema, and a mixin's
+StorageKey is one name on every table that lists the mixin. A name over the
+dialect's limit is shortened as veloxe did, with an FNV-1 128 suffix where ent
+uses MD5, so a database veloxe migrated keeps its names
+([ADR 0083](decisions/0083-package-index-names.md)).
 
 Also on PostgreSQL, `sqlschema.DescColumns("created_at")` (or `Desc()` for every
 key) sorts a key descending, which an `ORDER BY name, created_at DESC` needs (a

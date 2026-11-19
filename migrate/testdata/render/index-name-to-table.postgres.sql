@@ -5,7 +5,7 @@
 -- review: drop-index: drops index users.tags; queries that used it get slower
 DROP INDEX "tags";
 CREATE TABLE "tags" (
-  "id" text NOT NULL,
-  "label" text NOT NULL,
+  "id" character varying NOT NULL,
+  "label" character varying NOT NULL DEFAULT '',
   CONSTRAINT "tags_pkey" PRIMARY KEY ("id")
 );

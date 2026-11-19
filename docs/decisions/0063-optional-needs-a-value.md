@@ -1,6 +1,8 @@
 # 0063. An Optional field has a Default or is Nillable
 
-- Status: accepted, 2026-11-10. Amends [0003](0003-nullability.md): `Optional`
+- Status: superseded by [0090](0090-veloxe-defaults.md), 2026-11-19: an unset
+  `Optional` field is its zero value again, and only an enum needs a value.
+  Was accepted, 2026-11-10. Amends [0003](0003-nullability.md): `Optional`
   stays NOT NULL and `Nillable` makes NULL, but an unset field no longer
   writes the Go zero value.
 

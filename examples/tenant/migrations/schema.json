@@ -12,15 +12,18 @@
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "name",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "status",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         }
       ],
       "primary_key": [
@@ -28,7 +31,7 @@
       ],
       "indexes": [
         {
-          "name": "project_org_id_name",
+          "name": "projects_project_org_id_name",
           "columns": [
             "org_id",
             "name"

@@ -192,7 +192,7 @@ func (t *tabler) checkColumn(e *Entity, i int, f *Field, c *migrate.Column) {
 	}
 	switch t.d {
 	case velox.Postgres:
-		t.checkPostgresColumn(e, f, at, st)
+		t.checkPostgresColumn(f, at, st)
 	case velox.MySQL:
 		t.checkMySQLColumn(e, f, c, at, st)
 	}
@@ -200,7 +200,7 @@ func (t *tabler) checkColumn(e *Entity, i int, f *Field, c *migrate.Column) {
 
 // checkPostgresColumn records what f's column, at at with the PostgreSQL
 // SchemaType st, holds that PostgreSQL cannot.
-func (t *tabler) checkPostgresColumn(e *Entity, f *Field, at place, st string) {
+func (t *tabler) checkPostgresColumn(f *Field, at place, st string) {
 	if f.Type == "enum" && st != "" && !ddl.StringType(t.d, st) {
 		switch {
 		case !pgIdent.MatchString(st):
@@ -209,7 +209,7 @@ func (t *tabler) checkPostgresColumn(e *Entity, f *Field, at place, st string) {
 			t.fail(at, "SchemaType %s is a built-in PostgreSQL type, not an enum type name", st)
 		}
 	}
-	if _, native := enumType(e, f); f.Type == "enum" && native {
+	if _, native := enumType(f); f.Type == "enum" && native {
 		for _, v := range f.Enums {
 			if n := len(v.Value); n > pgEnumBytes {
 				t.fail(at, "enum value %s is %d bytes, over PostgreSQL's %d", enumValueName(v), n, pgEnumBytes)

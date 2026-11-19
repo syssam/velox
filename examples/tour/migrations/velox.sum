@@ -1,7 +1,8 @@
-h1:uPxPxPj/Pyzpv5eYB2sgQ1xhFj8VJT21srfrIHs1yng=
+h1:SfrPEut2f6/fHHKjjeWR8kdlsNJoSkB68MKKjD/IQHE=
 0001_init.sql h1:zKUYPbbrTHzrWNeos4HuJ8jT95UY4wH/G9wX8RxFQ/E=
 0002_time_default.sql h1:dE+kKh9j2q36A72K2M3h8Z9QqN5dEXU+qy11nbh1IqA=
 0003_soft_delete.sql h1:wPlBTHgILqgHhP8q/7bKnzP2XdN6+SOzZn4LWq0NCpA=
 0004_sqlite_datetime9.sql h1:XCC852UP+AM2ECQv/1g5jGThDrr4xhsKWqwftWJvr5c=
-schema.json h1:55yinE+qwwTmMsR+w3AFQvPph7ZbCXnBACs/gL1bGCY=
+0005_veloxe_defaults.sql h1:4Ni6C6JwoP5Q4oAUbdqQNznomW+5l0g4tUD2uiaBJIo=
+schema.json h1:5++PCrvUPU+rDBFhvK7Y03RR4frUg5v+0z9N9Yq9NEY=
 velox.json h1:kwGXDUmLy0YS8XIgvaPehFkSYOwxr3lcNqybqvcDGRc=

@@ -1,7 +1,6 @@
 package ddl
 
 import (
-	"crypto/md5" //nolint:gosec // it shortens a name, and protects nothing
 	"fmt"
 	"hash/fnv"
 	"unicode/utf8"
@@ -14,7 +13,7 @@ import (
 const MaxName = 63
 
 // Cap caps the names velox makes and neither ent nor PostgreSQL does: checks,
-// enum types and velox's own foreign-key indexes. ent's index and foreign-key
+// enum types and velox's own foreign-key indexes. Index and foreign-key
 // names are capped with Symbol, and PostgreSQL's key and sequence names are
 // PostgresName's.
 //
@@ -30,26 +29,14 @@ func Cap(name string) string {
 	return fmt.Sprintf("%s_%08x", Clip(name, MaxName-9), h.Sum32())
 }
 
-// Symbol is ent's cap on an index or foreign-key name (dialect/sql/schema/atlas.go:1110):
-// name when it is at most limit bytes, else name[:limit-33], cut back to a UTF-8
-// boundary, then "_", then the 32 lower-case hex digits of md5(name). limit is 63
-// on PostgreSQL and 64 on MySQL and SQLite.
+// Symbol is veloxe's cap on an index or foreign-key name
+// (dialect/sql/schema/atlas.go, symbol): name when it is at most limit
+// bytes, else name[:limit-33], cut back to a UTF-8 boundary, then "_", then
+// the 32 lower-case hex digits of the 128-bit FNV-1 hash of name. limit is
+// 63 on PostgreSQL and 64 on MySQL and SQLite. ent caps the same way with an
+// MD5; velox takes veloxe's, so that a database veloxe migrated keeps its
+// names (decision 0083).
 func Symbol(d velox.Dialect, name string) string {
-	limit := 64
-	if d == velox.Postgres {
-		limit = 63
-	}
-	if len(name) <= limit {
-		return name
-	}
-	return fmt.Sprintf("%s_%x", Clip(name, limit-33), md5.Sum([]byte(name)))
-}
-
-// VeloxeSymbol is veloxe's cap on an index or foreign-key name
-// (dialect/sql/schema/atlas.go, symbol): Symbol's, with the 32 lower-case hex
-// digits of the 128-bit FNV-1 hash of name in place of its MD5. A database
-// veloxe migrated has these names; schema.VeloxeNames selects it.
-func VeloxeSymbol(d velox.Dialect, name string) string {
 	limit := 64
 	if d == velox.Postgres {
 		limit = 63
@@ -60,15 +47,6 @@ func VeloxeSymbol(d velox.Dialect, name string) string {
 	h := fnv.New128()
 	h.Write([]byte(name))
 	return fmt.Sprintf("%s_%x", Clip(name, limit-33), h.Sum(nil))
-}
-
-// SymbolFor is Symbol, or VeloxeSymbol when names is "veloxe": a Graph's
-// Names, from the schema package's schema.Package.
-func SymbolFor(names string, d velox.Dialect, name string) string {
-	if names == "veloxe" {
-		return VeloxeSymbol(d, name)
-	}
-	return Symbol(d, name)
 }
 
 // PostgresName is the name PostgreSQL gives an object it names itself, as its

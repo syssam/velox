@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"cmp"
 	"fmt"
 	"go/format"
 	"slices"
@@ -379,8 +380,8 @@ func columnParts(f *OutField) []string {
 	if f.DefaultCode != "" {
 		parts = append(parts, "Default: "+f.DefaultCode)
 	}
-	if f.DefaultFuncCode != "" {
-		parts = append(parts, "DefaultFunc: "+f.DefaultFuncCode)
+	if code := cmp.Or(f.DefaultFuncCode, f.ZeroFillCode); code != "" {
+		parts = append(parts, "DefaultFunc: "+code)
 	}
 	if f.UpdateDefaultCode != "" {
 		parts = append(parts, "UpdateDefault: "+f.UpdateDefaultCode)

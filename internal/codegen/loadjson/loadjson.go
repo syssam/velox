@@ -7,7 +7,7 @@ package loadjson
 import "encoding/json"
 
 // Version is the version of the Model's JSON format.
-const Version = 7
+const Version = 8
 
 // SchemaPath is the import path of the schema DSL package. velox-gen uses it
 // to find the schemas of a package by their embedding of schema.Schema.
@@ -16,16 +16,9 @@ const SchemaPath = "github.com/syssam/velox/schema"
 // Model describes the schemas of one package.
 type Model struct {
 	Version int       `json:"version"`
-	Package string    `json:"package"`           // the schema package's import path
-	Schemas []*Schema `json:"schemas"`           // sorted by Name
-	Errors  []Error   `json:"errors,omitempty"`  // every misuse Marshal found, sorted by Schema
-	Options *Options  `json:"options,omitempty"` // the package's schema.Package; nil for the zero one
-}
-
-// Options is a schema package's schema.Package.
-type Options struct {
-	PrefixIndexNames bool   `json:"prefix_index_names,omitempty"`
-	Names            string `json:"names,omitempty"` // "veloxe", or "" for ent's
+	Package string    `json:"package"`          // the schema package's import path
+	Schemas []*Schema `json:"schemas"`          // sorted by Name
+	Errors  []Error   `json:"errors,omitempty"` // every misuse Marshal found, sorted by Schema
 }
 
 // Error is one misuse of the DSL: a builder's, a schema declared twice, or a
@@ -154,8 +147,9 @@ type Edge struct {
 	Comment     string                     `json:"comment,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 	Position    Position                   `json:"position"`
-	Inline      bool                       `json:"inline,omitempty"` // an inverse declared with To(...).From(...)
-	Pos         string                     `json:"pos,omitempty"`    // file:line of the constructor's call
+	Inline      bool                       `json:"inline,omitempty"`        // an inverse declared with To(...).From(...)
+	NonUniqueFK bool                       `json:"non_unique_fk,omitempty"` // sqlschema.NonUniqueFK: a to-one edge meant as many-to-one, whose key is not unique
+	Pos         string                     `json:"pos,omitempty"`           // file:line of the constructor's call
 }
 
 // OpClass is the operator class of one field or edge an index covers.

@@ -18,7 +18,6 @@ func TestDerivedNames(t *testing.T) {
 	for got, want := range map[string]string{
 		pkName("users"):                               "users_pkey",
 		seqName("users", "id"):                        "users_id_seq",
-		checkName("users", "role"):                    "users_role_check",
 		pkName(long):                                  ddl.PostgresName(long, "", "pkey"),
 		seqName(long, "id"):                           ddl.PostgresName(long, "id", "seq"),
 		indexName("UserProfile", []string{"a"}):       "userprofile_a",
@@ -53,20 +52,22 @@ func (dnOrder) Fields() []schema.Field {
 	}
 }
 
+// An enum is a string column, as veloxe stored it, unless its PostgreSQL
+// SchemaType names a type that is not a string type (decision 0090).
 func TestEnumType(t *testing.T) {
 	e := mustBuild(t, dnOrder{}).Entity("dnOrder")
 	for _, c := range []struct {
 		field, name string
 		native      bool
 	}{
-		{"plain", "orders_plain", true},
-		{"status", "dn_order_status", true},
-		{"typed", "dn_order_status", true},
+		{"plain", "", false},
+		{"status", "", false},
+		{"typed", "", false},
 		{"named", "mood", true},
 		{"text", "", false},
-		{strings.Repeat("e", 60), ddl.Cap("orders_" + strings.Repeat("e", 60)), true},
+		{strings.Repeat("e", 60), "", false},
 	} {
-		name, native := enumType(e, e.Field(c.field))
+		name, native := enumType(e.Field(c.field))
 		if name != c.name || native != c.native {
 			t.Errorf("%s: %q %v, want %q %v", c.field, name, native, c.name, c.native)
 		}
@@ -173,16 +174,15 @@ func TestObjects(t *testing.T) {
 		{spaceRelations, []string{
 			"orders", "dn_owners", "dn_owner_groups", "velox_new_orders", "velox_new_dn_owner_groups", "orders_pkey",
 			"orders_id_seq", "dn_owner_groups_pkey", "dn_owner_groups_dn_group_id", "dn_pets_dn_owner_pets",
-			"dnpet_dn_owner_pets", "dntoy_dn_owner_toys_name", "dntoy_dn_owner_toys_name_velox_new",
+			"dn_pets_dnpet_dn_owner_pets", "dn_toys_dntoy_dn_owner_toys_name", "dn_toys_dntoy_dn_owner_toys_name_velox_new",
 			"dn_owner_groups_dn_group_id_velox_new",
 		}, []string{"dn_owner_groups_id_seq", "dn_owner_groups_dn_owner_id", "dn_toys_dn_owner_toys", "orders_plain"}},
-		{spaceTypes, []string{"orders", "dn_owner_groups", "orders_plain", "dn_order_status", "mood", "orders_plain_velox_old", "mood_velox_old"},
-			[]string{"orders_text", "orders_pkey"}},
+		{spaceTypes, []string{"orders", "dn_owner_groups", "mood", "mood_velox_old"},
+			[]string{"orders_text", "orders_pkey", "orders_plain", "dn_order_status"}},
 		{spaceConstraints, []string{"m_owner", "m_group", "pet_owner", "dn_toys_dn_owners_toys"}, []string{"orders_plain_check"}},
 		{spaceTableConstraints, []string{
-			"orders_plain_check", "orders_text_check",
 			"orders_id_not_null", "orders_plain_not_null", "dn_owner_groups_dn_owner_id_not_null", "dn_toys_name_not_null",
-		}, []string{"dn_pets_dn_owner_pets_not_null", "m_owner"}},
+		}, []string{"dn_pets_dn_owner_pets_not_null", "m_owner", "orders_plain_check", "orders_text_check"}},
 	} {
 		for _, n := range c.has {
 			if !slices.Contains(spaces[c.space], n) {
@@ -195,9 +195,9 @@ func TestObjects(t *testing.T) {
 			}
 		}
 	}
-	// The shared enum type and its helper are listed once.
-	if n := strings.Count(strings.Join(spaces[spaceTypes], " ")+" ", "dn_order_status_velox_old "); n != 1 {
-		t.Errorf("dn_order_status_velox_old is listed %d times", n)
+	// The enum type and its helper are listed once.
+	if n := strings.Count(strings.Join(spaces[spaceTypes], " ")+" ", "mood_velox_old "); n != 1 {
+		t.Errorf("mood_velox_old is listed %d times", n)
 	}
 	// A refused index is left out.
 	pet := g.Entity("dnPet")

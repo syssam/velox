@@ -1,6 +1,0 @@
-{
-  "version": 1,
-  "dialect": "sqlite",
-  "table": "velox_migrations",
-  "lock_timeout": "5s"
-}

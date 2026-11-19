@@ -4,4 +4,4 @@
 -- velox:drops "users.email:type=character varying(120)"
 
 -- review: alter-type: changes column users.email from character varying(120) to character varying(64), which can fail or change values
-ALTER TABLE "users" ALTER COLUMN "email" TYPE character varying(64) USING CASE WHEN char_length("email") > 64 THEN "email" || '!' ELSE "email" END;
+ALTER TABLE "users" ALTER COLUMN "email" DROP DEFAULT, ALTER COLUMN "email" TYPE character varying(64) USING CASE WHEN char_length("email") > 64 THEN "email" || '!' ELSE "email" END, ALTER COLUMN "email" SET DEFAULT '';

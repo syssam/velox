@@ -13,7 +13,8 @@
         },
         {
           "name": "name",
-          "type": "text"
+          "type": "character varying",
+          "default": "''"
         }
       ],
       "primary_key": [
@@ -32,11 +33,13 @@
         },
         {
           "name": "author_id",
-          "type": "bigint"
+          "type": "bigint",
+          "default": "0"
         },
         {
           "name": "title",
-          "type": "character varying(200)"
+          "type": "character varying(200)",
+          "default": "''"
         },
         {
           "name": "status",
@@ -83,20 +86,23 @@
         },
         {
           "name": "org_id",
-          "type": "bigint"
+          "type": "bigint",
+          "default": "0"
         },
         {
           "name": "name",
-          "type": "text",
+          "type": "character varying",
+          "default": "''",
           "comment": "the display name"
         },
         {
           "name": "email",
-          "type": "character varying(120)"
+          "type": "character varying(120)",
+          "default": "''"
         },
         {
           "name": "bio",
-          "type": "text",
+          "type": "character varying",
           "nullable": true
         },
         {

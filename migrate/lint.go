@@ -426,7 +426,7 @@ func (l *linter) addColumn(i int, c addColumn) {
 	col, target := c.Column, colTarget(c.Table, c.Column.Name)
 	if l.existing(c.Table) {
 		if !col.Nullable && col.Default == "" && !col.Identity {
-			l.add(i, "add-required-column", Destructive, target, col.Pos, "adds column %s as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Optional (NOT NULL, its zero the default), or allow it only on an empty table", target)
+			l.add(i, "add-required-column", Destructive, target, col.Pos, "adds column %s as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Nillable, or allow it only on an empty table", target)
 		}
 		if l.d == velox.Postgres && col.Default != "" && !literalDefault(l.d, col.Default) {
 			l.add(i, "volatile-default", Review, target, col.Pos, "adds column %s with default %s; if the expression is volatile, PostgreSQL rewrites the table under an exclusive lock", target, col.Default)

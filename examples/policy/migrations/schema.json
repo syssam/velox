@@ -12,11 +12,13 @@
         },
         {
           "name": "doc_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "body",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         }
       ],
       "primary_key": [
@@ -55,15 +57,18 @@
         },
         {
           "name": "owner",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "title",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "shared",
-          "type": "boolean"
+          "type": "boolean",
+          "default": "0"
         }
       ],
       "primary_key": [

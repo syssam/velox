@@ -1,6 +1,6 @@
 -- script: main
 -- velox:lock-timeout 5s
--- velox:allow add-required-column users.nickname
+-- velox:allow add-required-column users.joined_at
 
--- review: add-required-column: adds column users.nickname as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Optional (NOT NULL, its zero the default), or allow it only on an empty table
-ALTER TABLE "users" ADD COLUMN "nickname" text NOT NULL;
+-- review: add-required-column: adds column users.joined_at as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Nillable, or allow it only on an empty table
+ALTER TABLE "users" ADD COLUMN "joined_at" timestamp with time zone NOT NULL;

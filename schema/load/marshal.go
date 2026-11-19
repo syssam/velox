@@ -30,27 +30,7 @@ import (
 // and each misuse of a field or edge builder, is in the JSON, which velox-gen
 // reports; the error is only that of encoding the JSON.
 func Marshal(pkgPath string, schemas ...schema.Interface) ([]byte, error) {
-	return MarshalPackage(pkgPath, schema.Package{}, schemas...)
-}
-
-// MarshalPackage is Marshal of a package that declares the options p, its
-// schema.Package. The program velox-gen writes calls it when the package
-// declares one.
-func MarshalPackage(pkgPath string, p schema.Package, schemas ...schema.Interface) ([]byte, error) {
 	m := &loadjson.Model{Version: loadjson.Version, Package: pkgPath, Schemas: make([]*loadjson.Schema, 0, len(schemas))}
-	switch p.Names {
-	case schema.EntNames:
-	case schema.VeloxeNames:
-		m.Options = &loadjson.Options{Names: "veloxe"}
-	default:
-		m.Errors = append(m.Errors, loadjson.Error{Reason: fmt.Sprintf("schema.Package: Names is %d, neither schema.EntNames nor schema.VeloxeNames", p.Names)})
-	}
-	if p.PrefixIndexNames {
-		if m.Options == nil {
-			m.Options = &loadjson.Options{}
-		}
-		m.Options.PrefixIndexNames = true
-	}
 	seen := make(map[string]bool, len(schemas))
 	for _, s := range schemas {
 		if s == nil {
@@ -535,6 +515,9 @@ func (l *loader) edgeOf(d *desc.Edge, pos loadjson.Position) *loadjson.Edge {
 	err := checkPlacement(d.Annotations, "edge")
 	if err == nil {
 		out.Annotations, err = listAnnotations(d.Annotations)
+	}
+	if a, ok := mergedAnnotation(d.Annotations); ok && err == nil {
+		out.NonUniqueFK = a.NonUniqueFK
 	}
 	if err != nil {
 		l.fail(l.pos(d.PC), fmt.Sprintf("edge %q", d.Name), "%v", err)

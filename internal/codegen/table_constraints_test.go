@@ -11,7 +11,8 @@ import (
 )
 
 // Table asset's column depreciation_method and table asset_depreciation's
-// column method give one check name and one not-null name.
+// column method give one not-null name, and each table declares a check of
+// one name.
 type tcAsset struct{ schema.Schema }
 
 func (tcAsset) Fields() []schema.Field {
@@ -19,7 +20,9 @@ func (tcAsset) Fields() []schema.Field {
 		SchemaType(map[string]string{field.MySQL: "varchar(16)"})}
 }
 
-func (tcAsset) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("asset")} }
+func (tcAsset) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("asset"), schema.Check("asset_depreciation_method_check", "depreciation_method <> ''")}
+}
 
 type tcAssetDepreciation struct{ schema.Schema }
 
@@ -29,7 +32,7 @@ func (tcAssetDepreciation) Fields() []schema.Field {
 }
 
 func (tcAssetDepreciation) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("asset_depreciation")}
+	return []schema.Annotation{schema.Table("asset_depreciation"), schema.Check("asset_depreciation_method_check", "method <> ''")}
 }
 
 // PostgreSQL keeps check and not-null constraint names per table, and SQLite

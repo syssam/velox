@@ -12,11 +12,13 @@
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "body",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         }
       ],
       "primary_key": [

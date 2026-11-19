@@ -1,37 +1,19 @@
 package codegen
 
 import (
-	"encoding/json"
+	"encoding/hex"
+	"hash/fnv"
 	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/internal/ddl"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
-	"github.com/syssam/velox/schema/load"
 	"github.com/syssam/velox/schema/mixin"
 )
-
-// buildPackage is build of a package that declares the options p.
-func buildPackage(t *testing.T, p schema.Package, ss ...schema.Interface) (*Graph, error) {
-	t.Helper()
-	b, err := load.MarshalPackage("github.com/syssam/velox/internal/codegen", p, ss...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var m loadjson.Model
-	if err := json.Unmarshal(b, &m); err != nil {
-		t.Fatal(err)
-	}
-	if len(m.Errors) > 0 {
-		t.Fatalf("model errors: %+v", m.Errors)
-	}
-	return Build(&m)
-}
 
 // pnAudit is a mixin whose index has one StorageKey for every table that
 // lists it, as a veloxe application's audit mixin has.
@@ -72,21 +54,14 @@ func (pnMetric) Annotations() []schema.Annotation {
 	return []schema.Annotation{schema.Table("ab_test_metric")}
 }
 
-// Without options, a mixin's StorageKey on two tables is refused (rule 44).
-// With PrefixIndexNames, each index is "<table>_<name>" unless it starts with
-// "<table>_" already, a derived name included, as veloxe applications' hook
-// named them; with VeloxeNames, a name the prefix makes too long is capped as
-// veloxe capped it.
-func TestPackagePrefixIndexNames(t *testing.T) {
-	if _, err := build(t, pnTesting{}, pnMetric{}); err == nil || !strings.Contains(err.Error(), `"ix_workspace_created_at"`) {
-		t.Fatalf("without options: %v", err)
-	}
-	g, err := buildPackage(t, schema.Package{PrefixIndexNames: true, Names: schema.VeloxeNames}, pnTesting{}, pnMetric{})
+// Each index is "<table>_<name>" unless it starts with "<table>_" already,
+// a derived name included, as veloxe applications' hook named them, so a
+// mixin's StorageKey on two tables is two names; a name the prefix makes too
+// long is capped as veloxe capped it (decision 0083).
+func TestPrefixIndexNames(t *testing.T) {
+	g, err := build(t, pnTesting{}, pnMetric{})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if g.Names != "veloxe" {
-		t.Errorf("Names %q", g.Names)
 	}
 	long := "ab_testing_ix_long_enough_to_pass_the_postgres_limit_once_prefixed"
 	want := map[string][]string{
@@ -109,21 +84,16 @@ func TestPackagePrefixIndexNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, capped := indexNamesOf(s, "ab_testing"), ddl.VeloxeSymbol(velox.Postgres, long); !strings.Contains(got, capped) || len(capped) != 63 {
+	if got, capped := indexNamesOf(s, "ab_testing"), ddl.Symbol(velox.Postgres, long); !strings.Contains(got, capped) || len(capped) != 63 || !strings.HasSuffix(capped, "_"+veloxeFNV(long)) {
 		t.Errorf("ab_testing's indexes %s lack %s", got, capped)
 	}
-	// ent's cap, the zero Names.
-	g, err = buildPackage(t, schema.Package{PrefixIndexNames: true}, pnTesting{}, pnMetric{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	s, err = Tables(g, velox.Postgres)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := indexNamesOf(s, "ab_testing"); !strings.Contains(got, ddl.Symbol(velox.Postgres, long)) {
-		t.Errorf("ent's cap: %s", got)
-	}
+}
+
+// veloxeFNV is the hex of the 128-bit FNV-1 hash of s, veloxe's cap suffix.
+func veloxeFNV(s string) string {
+	h := fnv.New128()
+	h.Write([]byte(s))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // indexNamesOf are the names of the indexes of table in s, space-separated.
@@ -137,28 +107,4 @@ func indexNamesOf(s *migrate.Schema, table string) string {
 		}
 	}
 	return strings.Join(names, " ")
-}
-
-// Load reads the package's one exported schema.Package into the model, so
-// every velox-gen command applies it; a second one, or an unexported one,
-// which the export data would not show, is refused at its line.
-func TestLoadPackageOptions(t *testing.T) {
-	opts := "\nvar Velox = schema.Package{PrefixIndexNames: true, Names: schema.VeloxeNames}\n"
-	m, err := Load(module(t, map[string]string{"schema/user.go": userSchema + opts}), "./schema", offline())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if m.Options == nil || !m.Options.PrefixIndexNames || m.Options.Names != "veloxe" {
-		t.Fatalf("options %+v", m.Options)
-	}
-	for name, src := range map[string]string{
-		"two":        opts + "var Other schema.Package\n",
-		"unexported": "\nvar velox = schema.Package{PrefixIndexNames: true}\n",
-	} {
-		_, err := Load(module(t, map[string]string{"schema/user.go": userSchema + src}), "./schema", offline())
-		want := map[string]string{"two": "Other is a second schema.Package", "unexported": "the schema.Package velox is unexported"}[name]
-		if err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), "user.go:") {
-			t.Errorf("%s: %v", name, err)
-		}
-	}
 }

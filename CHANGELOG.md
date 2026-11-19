@@ -66,12 +66,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - Two tables may share a check or not-null constraint name, as PostgreSQL
   allows; MySQL, which keeps check names per database, refuses it in its
   `Tables` (ADR 0084).
-- `schema.Package`, the options of a schema package, read by every velox-gen
-  command from its one exported variable of that type. `PrefixIndexNames`
-  names each index `<table>_<name>` unless it starts with `<table>_`, so a
-  mixin's StorageKey is one name per table; `Names: schema.VeloxeNames` caps a
-  long name with veloxe's FNV-1 128 suffix. A veloxe application keeps its
-  database's index names (ADR 0083).
+- Each index is named `<table>_<name>` unless its name starts with
+  `<table>_`, so a mixin's StorageKey is one name per table, and a long name
+  is capped with veloxe's FNV-1 128 suffix, not ent's MD5. A veloxe
+  application keeps its database's index names (ADR 0083, 0090).
+- `sqlschema.NonUniqueFK` on an edge: its key is not unique, and a to-one
+  edge to its own schema with no inverse is many-to-one (ADR 0090).
+- `field.JSON` of an unnamed struct, written inline (ADR 0090).
 - `field.Bool("active").Default(true)`, and any `Default` or `DefaultFunc` on a
   bool or number, is accepted as in ent, with ent's `NOT NULL DEFAULT` column.
   An insert now fills defaults before its setters and hooks, so
@@ -384,12 +385,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   code's shape is the same, so `GeneratedCodeIsVersionN` stays. A runtime
   error that names an entity says `veloxgen.Task`, not `gen.Task`. To keep the
   old layout, pass `-out ./gen ./schema`. Decision 0065.
-- An `Optional` field that is not `Nillable` has a `Default`, `DefaultFunc` or
-  `SchemaDefault`, or velox-gen refuses it (rule 37, now for every type;
-  rules 39 and 40 are gone): velox writes no Go zero value for an unset
-  field, and `migrate diff` gives no column a zero `DEFAULT`. Write
-  `Optional().Default("")` for an empty string, `Optional().Nillable()` for
-  NULL (decision 0063). The generated code's shape is unchanged.
+- veloxe's defaults are velox-gen's (ADR 0090, superseding 0063): an unset
+  `Optional` field is its Go zero, and only an `Optional` enum needs a
+  `Default` or `Nillable` (rule 37; rules 39, 40 and 48 are gone). An
+  `Optional` JSON field of any type is accepted; unset, a slice or map is
+  written `[]` or `{}`. A NOT NULL string, bool or number column with no
+  `Default` gets its zero as its column `DEFAULT`. An unsized string is
+  `character varying` on PostgreSQL. An enum is stored as ent and veloxe
+  store it: varchar on PostgreSQL, `enum(...)` on MySQL, text on SQLite,
+  with no enum type unless a Postgres `SchemaType` names one and no `CHECK`.
+  An `Immutable` key makes its edge `Immutable` (rule 34 refuses only the
+  converse). Existing databases need a migration; `loadjson.Version` is 8.
 - A GraphQL ID is the entity's key in its own Go type, which gqlgen decodes:
   a resolver takes `id int64`, an input's `<edge>ID` and `<edge>IDs` and a
   where input's ID predicates are keys, and velox-graphql refuses a schema
@@ -858,6 +864,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `Open` and `OpenShards` panic on an unknown dialect. `Connect` returns an error.
 
 ### Removed
+
+- `schema.Package`, `schema.VeloxeNames`, `load.MarshalPackage` and
+  `ddl.VeloxeSymbol`: their index naming is velox-gen's default (ADR 0090).
 
 - `gqlgraph.AsString`, `AsInt`, `AsFloat`, `AsBool`, `AsUUID` and the
   `Integer` constraint. Generated code stopped calling them when its inputs

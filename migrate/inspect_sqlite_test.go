@@ -38,19 +38,16 @@ func TestParseCreateTable(t *testing.T) {
 		}
 	}
 	auto, checks, fks, ok := migrate.ParseCreateTable(users)
-	wantChecks := []migrate.Check{
-		{Name: "users_role_check", Expr: `"role" IN ('admin', 'viewer')`},
-		{Name: "users_status_check", Expr: `"status" IN ('active', 'banned', 'pending')`},
-	}
+	// velox-gen makes no enum check (decision 0090): the table has none.
 	wantKeys := []migrate.ForeignKey{{Name: "user_mentor", Columns: []string{"mentor_id"}, RefTable: migrate.TableRef{Name: "users"}, RefColumns: []string{"id"}}, {Name: "users_orgs_users", Columns: []string{"org_id"}, RefTable: migrate.TableRef{Name: "orgs"}, RefColumns: []string{"id"}}}
-	if !ok || !auto || !reflect.DeepEqual(checks, wantChecks) || !reflect.DeepEqual(fks, wantKeys) {
+	if !ok || !auto || len(checks) != 0 || !reflect.DeepEqual(fks, wantKeys) {
 		t.Errorf("users: %v %+v %v %v", auto, checks, fks, ok)
 	}
 
 	auto, checks, fks, ok = migrate.ParseCreateTable(`CREATE TABLE t (id integer PRIMARY KEY AUTOINCREMENT, ` +
 		`p integer REFERENCES u(id), s text CHECK (s IN ('a')), [x y] text, ` +
 		`CONSTRAINT "k" FOREIGN KEY (p) REFERENCES u (id), CONSTRAINT c2 CHECK (length(s) > 0) /* ; */)`)
-	wantChecks = []migrate.Check{{Expr: "s IN ('a')"}, {Name: "c2", Expr: "length(s) > 0"}}
+	wantChecks := []migrate.Check{{Expr: "s IN ('a')"}, {Name: "c2", Expr: "length(s) > 0"}}
 	if !ok || !auto || !reflect.DeepEqual(checks, wantChecks) || !reflect.DeepEqual(fks, []migrate.ForeignKey{
 		{Name: "", Columns: []string{"p"}, RefTable: migrate.TableRef{Name: "u"}, RefColumns: []string{"id"}}, {Name: "k", Columns: []string{"p"}, RefTable: migrate.TableRef{Name: "u"}, RefColumns: []string{"id"}}}) {
 		t.Errorf("hand-written: %v %+v %v %v", auto, checks, fks, ok)
@@ -204,6 +201,9 @@ func TestInspectSQLiteCases(t *testing.T) {
 		}
 	}
 	for _, name := range goldenCases {
+		if !slices.Contains(caseNamed(name).on(), velox.SQLite) {
+			continue // enum-insert changes nothing on SQLite (decision 0090)
+		}
 		t.Run("golden-"+name, func(t *testing.T) {
 			t.Parallel()
 			fsys := os.DirFS(filepath.Join("testdata", "dir", name+".sqlite"))

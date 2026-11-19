@@ -60,8 +60,8 @@ func TestSQLSchemaForms(t *testing.T) {
 	got := map[string]keys{}
 	where := ""
 	for _, ix := range tb.Indexes {
-		got[ix.Name] = keys{ix.Desc, ix.OpClass}
-		if ix.Name == "ix_where" {
+		got[strings.TrimPrefix(ix.Name, tb.Name+"_")] = keys{ix.Desc, ix.OpClass}
+		if strings.TrimPrefix(ix.Name, tb.Name+"_") == "ix_where" {
 			where = ix.Where
 		}
 	}
@@ -113,6 +113,7 @@ func (ssRefused) Fields() []schema.Field {
 		field.String("id").Annotations(sqlschema.Desc()),
 		field.String("t").Annotations(sqlschema.Table("x")),
 		field.String("sz").Annotations(sqlschema.Size(10)),
+		field.Int64("nu").Annotations(sqlschema.NonUniqueFK()),
 	}
 }
 func (ssRefused) Edges() []schema.Edge {
@@ -160,6 +161,7 @@ func TestSQLSchemaRefusals(t *testing.T) {
 		"sqlschema Default, DefaultExpr and DefaultExprs are a field's: put them on the field, not on an edge",
 		"sqlschema.Size is not held by velox: use field.MaxLen",
 		"sqlschema.OnDelete is not held by velox: use edge.OnDelete",
+		"sqlschema.NonUniqueFK is an edge's: put it on the edge whose foreign key it keeps from being unique, not on a field",
 	} {
 		if !strings.Contains(got, w) {
 			t.Errorf("%q not in\n%s", w, got)

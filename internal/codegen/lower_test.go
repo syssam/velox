@@ -193,9 +193,11 @@ func TestLowerJSONFlag(t *testing.T) {
 		src += string(f.Data)
 	}
 	// tags is Optional and a slice: its column holds NULL, which a nil
-	// slice binds.
-	if want := `{Field: "Tags", Name: "tags", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},`; !strings.Contains(src, want) {
-		t.Errorf("the generated code lacks %s", want)
+	// slice an update sets binds; unset on insert, it is written as [], as
+	// veloxe wrote it (decision 0090).
+	tags := regexp.MustCompile(`(?s)Field:\s+"Tags",\s+Name:\s+"tags",\s+DefaultFunc:\s+func\(\) any \{ return \[\]string\{\} \},\s+Nullable:\s+true,\s+Encode:\s+json.Marshal,\s+Decode:\s+json.Unmarshal,`)
+	if !tags.MatchString(src) {
+		t.Errorf("the generated code lacks tags' descriptor with its DefaultFunc and Nullable")
 	}
 	if f := m.field("labels"); f.NilIsNull {
 		t.Errorf("labels (a required slice) is NilIsNull")
@@ -206,7 +208,7 @@ func TestLowerJSONFlag(t *testing.T) {
 	if f := u.field("tags"); !f.NilIsNull {
 		t.Errorf("tags (an Optional slice) is not NilIsNull")
 	}
-	if n := strings.Count(src, "Encode: json.Marshal"); n != 1 {
+	if n := len(regexp.MustCompile(`Encode:\s+json.Marshal`).FindAllString(src, -1)); n != 1 {
 		t.Errorf("the generated code gives %d columns a codec, want 1", n)
 	}
 	// The codec is the only use of encoding/json in LwUser's file, which

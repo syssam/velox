@@ -3,14 +3,14 @@
 
 CREATE TABLE `orgs` (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `name` varchar(255) NOT NULL,
+  `name` varchar(255) NOT NULL DEFAULT '',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 CREATE TABLE `users` (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `org_id` bigint NOT NULL,
-  `name` varchar(255) NOT NULL COMMENT 'the display name',
-  `email` varchar(120) NOT NULL,
+  `org_id` bigint NOT NULL DEFAULT 0,
+  `name` varchar(255) NOT NULL DEFAULT '' COMMENT 'the display name',
+  `email` varchar(120) NOT NULL DEFAULT '',
   `bio` varchar(255) NULL,
   `role` enum('admin','viewer') NOT NULL DEFAULT 'viewer',
   `status` enum('active','banned','pending') NOT NULL DEFAULT 'active',
@@ -27,8 +27,8 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 CREATE TABLE `posts` (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `author_id` bigint NOT NULL,
-  `title` varchar(200) NOT NULL,
+  `author_id` bigint NOT NULL DEFAULT 0,
+  `title` varchar(200) NOT NULL DEFAULT '',
   `status` enum('active','banned','pending') NOT NULL DEFAULT 'active',
   PRIMARY KEY (`id`),
   INDEX `posts_users_posts` (`author_id`),

@@ -115,7 +115,7 @@ func TestBuildBlog(t *testing.T) {
 		users.Rel.Table != "user_groups" || users.Rel.Columns[0] != "group_id" || users.Rel.Columns[1] != "user_id" {
 		t.Fatalf("groups %+v users %+v", groups, users)
 	}
-	if ix := u.Indexes[0]; ix.Name != "user_org_id_name" || !ix.Derived || !ix.Unique || ix.Columns[1] != "name" {
+	if ix := u.Indexes[0]; ix.Name != "users_user_org_id_name" || !ix.Derived || !ix.Unique || ix.Columns[1] != "name" {
 		t.Fatalf("index %+v", ix)
 	}
 }
@@ -606,15 +606,15 @@ func (optionalTimeOK) Fields() []schema.Field {
 	return []schema.Field{field.Time("a").Optional().Default(time.Now), field.Time("b").Optional().Nillable()}
 }
 
-// optionalJSONStruct has an Optional JSON field of a struct: its column holds
-// NULL, which its Go field cannot (rule 48).
+// optionalJSONStruct has an Optional JSON field of a struct: unset, it is
+// written as its zero value's JSON, and NULL reads back as the zero value.
 type optionalJSONStruct struct{ schema.Schema }
 
 func (optionalJSONStruct) Fields() []schema.Field {
 	return []schema.Field{field.JSON("shape", JSONShape{}).Optional()}
 }
 
-// optionalJSONScalar has an Optional JSON field of a scalar type (rule 48).
+// optionalJSONScalar has an Optional JSON field of a scalar type.
 type optionalJSONScalar struct{ schema.Schema }
 
 func (optionalJSONScalar) Fields() []schema.Field {
@@ -638,18 +638,10 @@ func (optionalJSONOK) Fields() []schema.Field {
 	}
 }
 
-func TestBuildOptionalJSONNeedsNilable(t *testing.T) {
-	mustBuild(t, optionalJSONOK{})
-	for _, s := range []schema.Interface{optionalJSONStruct{}, optionalJSONScalar{}} {
-		_, err := build(t, s)
-		if err == nil || !strings.Contains(err.Error(), `: an Optional JSON field of a non-nil-able type needs Nillable`) {
-			t.Errorf("%T: %v", s, err)
-		}
-	}
-	_, err := build(t, optionalJSONStruct{})
-	if err == nil || !strings.Contains(err.Error(), `schema optionalJSONStruct: field "shape": an Optional JSON field of a non-nil-able type needs Nillable`) {
-		t.Errorf("the message: %v", err)
-	}
+// An Optional JSON field of any Go type passes, as in veloxe: one of a
+// struct or a scalar need not be Nillable (decision 0090).
+func TestBuildOptionalJSONNeedsNoNillable(t *testing.T) {
+	mustBuild(t, optionalJSONOK{}, optionalJSONStruct{}, optionalJSONScalar{})
 }
 
 // JSONCallback is a named func type: velox-gen can write it, and rule 49
@@ -1126,7 +1118,9 @@ func (enumTicket) Fields() []schema.Field {
 type nsOrder struct{ schema.Schema }
 
 func (nsOrder) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("orders")} }
-func (nsOrder) Fields() []schema.Field           { return []schema.Field{field.Enum("status").Values("a")} }
+func (nsOrder) Fields() []schema.Field {
+	return []schema.Field{field.Enum("status").Values("a").SchemaType(map[string]string{field.Postgres: "orders_status"})}
+}
 
 type nsOrderStatus struct{ schema.Schema }
 
@@ -1216,17 +1210,14 @@ func TestBuildRules(t *testing.T) {
 		{"32 two columns on O2M", []schema.Interface{twoColumnsO2M{}, Pet{}}, `schema twoColumnsO2M: edge "pets": edge.Columns is allowed only on many-to-many edges; use edge.Column`},
 		{"33 second inverse", []schema.Interface{invAssoc{}, invItem{}}, `schema invItem: edge "b": invAssoc.items already has the inverse edge "a"`},
 		{"34 immutable edge", []schema.Interface{immutableEdge{}}, `schema immutableEdge: edge "parent": is Immutable but field "parent_id" is not`},
-		{"34 immutable field", []schema.Interface{immutableField{}}, `schema immutableField: edge "parent": field "parent_id" is Immutable but the edge is not`},
 		{"35 join columns collide", []schema.Interface{loop{}}, `schema loop: edge "loops": join table loop_loops has two columns named loop_id; name them with edge.Columns`},
 		{"35 singular is the owner's label", []schema.Interface{Man{}}, `schema Man: edge "men": join table man_men has two columns named man_id; name them with edge.Columns`},
 		{"35 join columns collide on an inverse", []schema.Interface{cycle{}}, `schema cycle: edge "cycles": join table cycle_next has two columns named cycle_id; name them with edge.Columns`},
-		{"37 optional enum", []schema.Interface{optionalEnum{}}, `schema optionalEnum: field "mood": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},
-		{"37 optional bytes", []schema.Interface{optionalBytes{}}, `schema optionalBytes: field "blob": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},
-		{"37 optional time", []schema.Interface{optionalTime{}}, `schema optionalTime: field "seen": an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place`},
+		{"37 optional enum", []schema.Interface{optionalEnum{}}, `schema optionalEnum: field "mood": an Optional enum needs a Default or Nillable: unset, it has no value to store, as "" is none of its values`},
 		{"38 optional edge field", []schema.Interface{optionalFK{}}, `schema optionalFK: edge "parent": field "parent_id" must be Nillable when the edge is not Required: an unset foreign key is NULL`},
 		{"44 shortened primary keys", []schema.Interface{lpA{}, lpB{}}, `schema lpB: name "` + lpPrefix + `_pkey" is also schema lpA's primary key`},
 		{"44 shortened sequences", []schema.Interface{lpA{}, lpB{}}, `schema lpB: field "id": name "` + lpPrefix[:56] + `_id_seq" is also schema lpA's identity sequence`},
-		{"44 indexes of one name", []schema.Interface{dupNamed{}}, `schema dupNamed: index 1: name "dupnamed_name" is also this schema's index 0`},
+		{"44 indexes of one name", []schema.Interface{dupNamed{}}, `schema dupNamed: index 1: name "dup_nameds_dupnamed_name" is also this schema's index 0`},
 		{"44 table and enum type", []schema.Interface{nsOrder{}, nsOrderStatus{}}, `schema nsOrder: field "status": name "orders_status" is also schema nsOrderStatus's table`},
 		{"49 func", []schema.Interface{jsonFuncField{}}, `schema jsonFuncField: field "cb": its Go type codegen.JSONCallback is a func, which a JSON column cannot hold`},
 		{"49 chan", []schema.Interface{jsonChanField{}}, `schema jsonChanField: field "ch": its Go type chan int is a chan, which a JSON column cannot hold`},
@@ -1327,10 +1318,9 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{tableOnO2M{}, Pet{}}, {badFieldName{}}, {emptyFieldName{}}, {badEdgeName{}}, {fieldGoNames{}}, {edgeGoNames{}},
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
-		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {Man{}}, {cycle{}},
+		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {loop{}}, {Man{}}, {cycle{}},
 		{odM2M{}, odM2M2{}}, {odSetNullRequired{}, odSetNullTarget{}}, {odDiffOwner{}, odDiffPet{}},
-		{optionalEnum{}}, {optionalFK{}}, {optionalBytes{}}, {optionalTime{}},
-		{optionalJSONStruct{}},
+		{optionalEnum{}}, {optionalFK{}},
 		{nsOrder{}, nsOrderStatus{}}, {longTable{}}, {longDerivedTableAndSoOnAndSoOnUntilTheNameIsLongerThanTheCapAllowsThing{}},
 		{longColumn{}}, {longDerivedColumn{}}, {longImplicit{}, Pet{}}, {longIndexKey{}}, {longSymbol{}, Pet{}},
 		{longJoinTable{}}, {longEnumType{}}, {twoSymbolsO2M{}, Pet{}}, {oneSymbolM2M{}}, {symOwner{}, symPet{}},
@@ -1496,10 +1486,10 @@ func TestFieldJSONHasNoPos(t *testing.T) {
 	}
 }
 
-// optionalNoValueSchema breaks rule 37 once for each type, and once with
-// only a SchemaDefault, which no insert of velox's takes, beside the fields
-// that pass: Nillable, or with a Default, or with a DefaultFunc, and the
-// JSON field, whose Optional column holds NULL.
+// optionalNoValueSchema has an Optional field of each type with no value,
+// one with only a SchemaDefault, and the fields that have one: Nillable, or
+// with a Default, or with a DefaultFunc, and a JSON field. Only the enum
+// breaks rule 37.
 type optionalNoValueSchema struct{ schema.Schema }
 
 func (optionalNoValueSchema) Fields() []schema.Field {
@@ -1523,27 +1513,24 @@ func (optionalNoValueSchema) Fields() []schema.Field {
 	}
 }
 
-// Rule 37 is one rule for every type: an Optional field that is not Nillable
-// has a Default or a DefaultFunc, or is refused. A SchemaDefault is not
-// enough: velox's insert writes every column, so it would store the zero.
+// Rule 37 is an Optional enum's only: every other Optional field that is not
+// Nillable and has no Default is written as its zero value when unset, as
+// veloxe wrote it (decision 0090). An enum's zero is none of its values.
 func TestOptionalNeedsAValue(t *testing.T) {
 	_, err := build(t, optionalNoValueSchema{})
-	const sdNote = "Its SchemaDefault is not a value for velox: an insert writes every column, so the column's DEFAULT serves only rows written outside velox"
-	const msg = "an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place. Write "
-	var want []string
-	for _, c := range []struct{ name, decl, fix, more string }{
-		{"bio", `field.String("bio").Optional()`, `Default("")`, ""},
-		{"age", `field.Int("age").Optional()`, `Default(0)`, ""},
-		{"on", `field.Bool("on").Optional()`, `Default(false)`, ""},
-		{"mood", `field.Enum("mood").Optional()`, `Default("calm")`, ""},
-		{"blob", `field.Bytes("blob").Optional()`, `DefaultFunc(...)`, ""},
-		{"seen", `field.Time("seen").Optional()`, `DefaultFunc(time.Now)`, ""},
-		{"live", `field.Bool("live").Optional()`, `Default(false)`, ". " + sdNote},
-	} {
-		want = append(want, `schema optionalNoValueSchema: field "`+c.name+`": `+msg+c.decl+"."+c.fix+", or "+c.decl+".Nillable() for NULL"+c.more)
+	want := `schema optionalNoValueSchema: field "mood": an Optional enum needs a Default or Nillable: unset, it has no value to store, as "" is none of its values. Write field.Enum("mood").Optional().Default("calm"), or field.Enum("mood").Optional().Nillable() for NULL`
+	if got := plain(err); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
-	if got := plain(err); got != strings.Join(want, "\n") {
-		t.Fatalf("got\n%s\nwant\n%s", got, strings.Join(want, "\n"))
+	mustBuild(t, optionalBytes{}, optionalTime{})
+}
+
+// An Immutable key bound to an edge that is not makes the edge Immutable, as
+// veloxe took such a schema: the key cannot change, so neither can the edge.
+func TestImmutableKeyMakesEdgeImmutable(t *testing.T) {
+	g := mustBuild(t, immutableField{})
+	if ed := g.Entity("immutableField").Edge("parent"); !ed.Immutable {
+		t.Fatalf("edge %+v is not Immutable", ed)
 	}
 }
 
@@ -1623,9 +1610,9 @@ func TestDuplicateIndexes(t *testing.T) {
 	want := `schema dupIndexes: index 10: field "tags" is JSON, which no index can cover but a GIN one; give the index sqlschema.IndexType("GIN")
 schema dupIndexes: index 11: field "tags" is JSON, which no index can cover but a GIN one; give the index sqlschema.IndexType("GIN")
 schema dupIndexes: index 2: repeats index 0
-schema dupIndexes: index 3: name "dupindexes_a_b" is also this schema's index 0
-schema dupIndexes: index 8: name "dup" is also this schema's index 7
-schema dupIndexes: index 9: name "dupindexes_b" is also this schema's index 6`
+schema dupIndexes: index 3: name "dup_indexes_dupindexes_a_b" is also this schema's index 0
+schema dupIndexes: index 8: name "dup_indexes_dup" is also this schema's index 7
+schema dupIndexes: index 9: name "dup_indexes_dupindexes_b" is also this schema's index 6`
 	if got := plain(err); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -1654,15 +1641,16 @@ func (indexNames) Indexes() []schema.Index {
 	}
 }
 
-// A derived index name is ent's: the entity's name in lower case and the
-// columns. A partial index that shares it takes the hash of its Where; a full
-// one keeps it.
+// A derived index name is ent's, the entity's name in lower case and the
+// columns, after the table's name. A partial index that shares it takes the
+// hash of its Where; a full one keeps it. A name that starts with the
+// table's takes it once.
 func TestIndexNames(t *testing.T) {
 	var got []string
 	for _, ix := range mustBuild(t, indexNames{}).Entity("indexNames").Indexes {
 		got = append(got, ix.Name)
 	}
-	want := []string{"indexnames_a", "indexnames_a_fd0c5087", "indexnames_a_fc0c4ef4", "names_a_key"}
+	want := []string{"names_indexnames_a", "names_indexnames_a_fd0c5087", "names_indexnames_a_fc0c4ef4", "names_a_key"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -1713,18 +1701,23 @@ func TestPartialIndexNamedLikeAForeignKeyIndex(t *testing.T) {
 type keyShareA struct{ schema.Schema }
 
 func (keyShareA) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("share_a")}
+	return []schema.Annotation{schema.Table("share")}
 }
 func (keyShareA) Fields() []schema.Field { return []schema.Field{field.String("a")} }
 func (keyShareA) Indexes() []schema.Index {
-	return []schema.Index{index.Fields("a").StorageKey("shared"), index.Fields("a").Unique()}
+	return []schema.Index{index.Fields("a").StorageKey("b_shared"), index.Fields("a").Unique()}
 }
 
+// keyShareB's table is share_b, so its index shared is share_b_shared, and
+// one named share_keysharea_a keeps the name, starting with share_.
 type keyShareB struct{ schema.Schema }
 
+func (keyShareB) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("share_b")}
+}
 func (keyShareB) Fields() []schema.Field { return []schema.Field{field.String("b")} }
 func (keyShareB) Indexes() []schema.Index {
-	return []schema.Index{index.Fields("b").StorageKey("shared"), index.Fields("b").Unique().StorageKey("keysharea_a")}
+	return []schema.Index{index.Fields("b").StorageKey("shared"), index.Fields("b").Unique().StorageKey("share_b_keysharea_a")}
 }
 
 // keyShareC holds its table in another database schema, whose index names
@@ -1736,7 +1729,7 @@ func (keyShareC) Indexes() []schema.Index {
 	return []schema.Index{index.Fields("c").StorageKey("shared")}
 }
 func (keyShareC) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("other", "key_share_cs")}
+	return []schema.Annotation{schema.TableIn("other", "share_b")}
 }
 
 type keyMix struct{ mixin.Schema }
@@ -1755,13 +1748,12 @@ func (keyMixed) Indexes() []schema.Index {
 // the graph, within one database schema.
 func TestIndexNamesAcrossGraph(t *testing.T) {
 	_, err := build(t, keyShareA{}, keyShareB{}, keyShareC{})
-	want := `schema keyShareB: index 0: name "shared" is also schema keyShareA's index 0
-schema keyShareB: index 1: name "keysharea_a" is also schema keyShareA's index 1`
+	want := `schema keyShareB: index 0: name "share_b_shared" is also schema keyShareA's index 0`
 	if got := plain(err); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 	_, err = build(t, keyMixed{})
-	if got := plain(err); got != `schema keyMixed: index 1: name "k" is also this schema's index 0` {
+	if got := plain(err); got != `schema keyMixed: index 1: name "key_mixeds_k" is also this schema's index 0` {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -1955,7 +1947,7 @@ func (capIndexes) Indexes() []schema.Index {
 	return []schema.Index{index.Fields(capColumn, "p"), index.Fields(capColumn, "q")}
 }
 
-// A derived index name over the cap is capped as ent caps it, on each
+// A derived index name over the cap is capped as veloxe capped it, on each
 // dialect, and stays apart from another that differs only past the cut. The
 // Graph keeps it whole; the plugin model gives PostgreSQL's.
 func TestIndexNamesCapped(t *testing.T) {
@@ -1973,7 +1965,7 @@ func TestIndexNamesCapped(t *testing.T) {
 			}
 		}
 	}
-	wholes := []string{"capindexes_" + capColumn + "_p", "capindexes_" + capColumn + "_q"}
+	wholes := []string{"caps_capindexes_" + capColumn + "_p", "caps_capindexes_" + capColumn + "_q"}
 	for i, whole := range wholes {
 		if got := ixs[i].Name; got != whole || !ixs[i].Derived {
 			t.Errorf("index %d: %q, derived %v; want %q", i, got, ixs[i].Derived, whole)
@@ -2017,31 +2009,38 @@ type nsPost struct{ schema.Schema }
 func (nsPost) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("posts")} }
 func (nsPost) Fields() []schema.Field           { return []schema.Field{field.String("title")} }
 func (nsPost) Indexes() []schema.Index {
-	return []schema.Index{index.Fields("title").StorageKey("posts")}
+	return []schema.Index{index.Fields("title").StorageKey("titles")}
 }
 
-// nsCheckUser's edge's symbol is its enum's check.
+// nsPostTitles's table is nsPost's index's name.
+type nsPostTitles struct{ schema.Schema }
+
+func (nsPostTitles) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("posts_titles")}
+}
+
+// nsCheckUser's edge's symbol is its declared check's name.
 type nsCheckUser struct{ schema.Schema }
 
 func (nsCheckUser) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("users")}
+	return []schema.Annotation{schema.Table("users"), schema.Check("users_role_check", "role <> ''")}
 }
 func (nsCheckUser) Fields() []schema.Field {
-	return []schema.Field{field.Enum("role").Values("a", "b")}
+	return []schema.Field{field.String("role")}
 }
 func (nsCheckUser) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("pets", Pet.Type).StorageKey(edge.Symbol("users_role_check"))}
 }
 
-// nsCheckOwn's edge's foreign key is in its own table, with its enum's
+// nsCheckOwn's edge's foreign key is in its own table, with its declared
 // check's name.
 type nsCheckOwn struct{ schema.Schema }
 
 func (nsCheckOwn) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("users")}
+	return []schema.Annotation{schema.Table("users"), schema.Check("users_role_check", "role <> ''")}
 }
 func (nsCheckOwn) Fields() []schema.Field {
-	return []schema.Field{field.Enum("role").Values("a", "b")}
+	return []schema.Field{field.String("role")}
 }
 func (nsCheckOwn) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("pet", Pet.Type).Unique().StorageKey(edge.Symbol("users_role_check"))}
@@ -2103,9 +2102,9 @@ func TestNamespace(t *testing.T) {
 	}{
 		{"tables by case", []schema.Interface{nsUser{}, nsUsers{}}, `schema nsUsers: name "Users" is also schema nsUser's table`},
 		{"table and enum type", []schema.Interface{nsOrder{}, nsOrderStatus{}}, `schema nsOrder: field "status": name "orders_status" is also schema nsOrderStatus's table`},
-		{"index and table", []schema.Interface{nsPost{}}, `schema nsPost: index 0: name "posts" is also this schema's table`},
+		{"index and table", []schema.Interface{nsPost{}, nsPostTitles{}}, `schema nsPost: index 0: name "posts_titles" is also schema nsPostTitles's table`},
 		{"symbol and check", []schema.Interface{nsCheckUser{}, Pet{}}, ``}, // two tables: TestConstraintNamesPerTable
-		{"symbol and check in one table", []schema.Interface{nsCheckOwn{}, Pet{}}, `schema nsCheckOwn: edge "pet": name "users_role_check" is also this schema's check of field "role"`},
+		{"symbol and check in one table", []schema.Interface{nsCheckOwn{}, Pet{}}, `schema nsCheckOwn: edge "pet": name "users_role_check" is also this schema's check of table users`},
 		{"table and rebuild table", []schema.Interface{nsUser{}, nsVeloxNew{}}, `schema nsVeloxNew: name "velox_new_users" is also schema nsUser's rebuild table`},
 		{"two database schemas", []schema.Interface{nsUser{}, nsOther{}}, ``},
 		{"one shared enum type", []schema.Interface{nsTicket{}, nsIssue{}}, ``},

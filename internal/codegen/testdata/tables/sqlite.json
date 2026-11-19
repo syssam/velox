@@ -17,7 +17,8 @@
 				},
 				{
 					"name": "title",
-					"type": "text"
+					"type": "text",
+					"default": "''"
 				},
 				{
 					"name": "status",
@@ -82,16 +83,6 @@
 					],
 					"on_delete": "SET NULL"
 				}
-			],
-			"checks": [
-				{
-					"name": "posts_mood_check",
-					"expr": "\"mood\" IN ('calm', 'busy')"
-				},
-				{
-					"name": "posts_status_check",
-					"expr": "\"status\" IN ('open', 'paid', 'void')"
-				}
 			]
 		},
 		{
@@ -110,12 +101,6 @@
 			],
 			"primary_key": [
 				"id"
-			],
-			"checks": [
-				{
-					"name": "tb_groups_status_check",
-					"expr": "\"status\" IN ('open', 'paid', 'void')"
-				}
 			]
 		},
 		{
@@ -128,7 +113,8 @@
 				},
 				{
 					"name": "handle",
-					"type": "text"
+					"type": "text",
+					"default": "''"
 				},
 				{
 					"name": "tb_user_profile",
@@ -171,39 +157,48 @@
 				},
 				{
 					"name": "i8",
-					"type": "integer"
+					"type": "integer",
+					"default": "0"
 				},
 				{
 					"name": "i16",
-					"type": "integer"
+					"type": "integer",
+					"default": "0"
 				},
 				{
 					"name": "i32",
-					"type": "integer"
+					"type": "integer",
+					"default": "0"
 				},
 				{
 					"name": "u8",
-					"type": "integer"
+					"type": "integer",
+					"default": "0"
 				},
 				{
 					"name": "u16",
-					"type": "integer"
+					"type": "integer",
+					"default": "0"
 				},
 				{
 					"name": "u32",
-					"type": "integer"
+					"type": "integer",
+					"default": "0"
 				},
 				{
 					"name": "u",
-					"type": "integer"
+					"type": "integer",
+					"default": "0"
 				},
 				{
 					"name": "u64",
-					"type": "integer"
+					"type": "integer",
+					"default": "0"
 				},
 				{
 					"name": "f32",
-					"type": "real"
+					"type": "real",
+					"default": "0"
 				},
 				{
 					"name": "tb_user_tokens",
@@ -364,11 +359,13 @@
 				},
 				{
 					"name": "name",
-					"type": "text"
+					"type": "text",
+					"default": "''"
 				},
 				{
 					"name": "email",
-					"type": "text"
+					"type": "text",
+					"default": "''"
 				},
 				{
 					"name": "bio",
@@ -445,7 +442,7 @@
 					"unique": true
 				},
 				{
-					"name": "tbuser_email",
+					"name": "tb_users_tbuser_email",
 					"columns": [
 						"email"
 					],
@@ -453,7 +450,7 @@
 					"where": "active"
 				},
 				{
-					"name": "users_by_name",
+					"name": "tb_users_users_by_name",
 					"columns": [
 						"name"
 					]
@@ -472,20 +469,6 @@
 						"id"
 					],
 					"on_delete": "SET NULL"
-				}
-			],
-			"checks": [
-				{
-					"name": "tb_users_mood_check",
-					"expr": "\"mood\" IN ('calm', 'busy')"
-				},
-				{
-					"name": "tb_users_role_check",
-					"expr": "\"role\" IN ('admin', 'viewer')"
-				},
-				{
-					"name": "tb_users_tier_check",
-					"expr": "\"tier\" IN ('free', 'pro')"
 				}
 			]
 		}

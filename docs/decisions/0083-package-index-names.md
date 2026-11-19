@@ -1,6 +1,8 @@
 # 0083. A schema package's options: table-prefixed index names, veloxe's cap
 
-- Status: accepted, 2026-11-19.
+- Status: accepted, 2026-11-19; amended by [0090](0090-veloxe-defaults.md): the
+  prefix and veloxe's cap are velox-gen's default, and `schema.Package` is
+  gone.
 
 ## Context
 

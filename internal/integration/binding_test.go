@@ -214,15 +214,19 @@ func TestBindingRoundTrip(t *testing.T) {
 				if got.Kind != testbind.BindKindA || got.Level != "low" {
 					t.Errorf("kind %q, level %q", got.Kind, got.Level)
 				}
-				// Native on PostgreSQL and MySQL, a check on SQLite.
-				for col, want := range map[string]string{"kind": "binds_kind", "level": "level"} {
-					var typ string
+				// An enum is stored as ent and veloxe store it (decision 0090):
+				// varchar on PostgreSQL and text on SQLite, with no check, so
+				// another value is stored; a native enum on MySQL, which
+				// refuses it.
+				for _, col := range []string{"kind", "level"} {
+					var typ, want string
 					switch tg.d {
 					case velox.Postgres:
-						q := "SELECT pg_typeof(" + col + ")::text FROM binds WHERE id = $1"
-						if err := tg.direct.QueryRowContext(ctx, q, row.ID).Scan(&typ); err != nil {
+						q := "SELECT data_type FROM information_schema.columns WHERE table_name = 'binds' AND column_name = $1"
+						if err := tg.direct.QueryRowContext(ctx, q, col).Scan(&typ); err != nil {
 							t.Fatal(err)
 						}
+						want = "character varying"
 					case velox.MySQL:
 						q := "SELECT column_type FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'binds' AND column_name = ?"
 						if err := tg.direct.QueryRowContext(ctx, q, col).Scan(&typ); err != nil {
@@ -230,12 +234,13 @@ func TestBindingRoundTrip(t *testing.T) {
 						}
 						want = map[string]string{"kind": "enum('a','b')", "level": "enum('low','high')"}[col]
 					}
-					if tg.d != velox.SQLite && typ != want {
+					if typ != want {
 						t.Errorf("%s's type is %q, want %q", col, typ, want)
 					}
 					q := rebind(tg.d, "UPDATE binds SET "+col+" = 'c' WHERE id = ?")
-					if _, err := tg.direct.ExecContext(ctx, q, row.ID); err == nil {
-						t.Errorf("%s = 'c' was stored", col)
+					_, err := tg.direct.ExecContext(ctx, q, row.ID)
+					if refused := err != nil; refused != (tg.d == velox.MySQL) {
+						t.Errorf("%s = 'c': %v", col, err)
 					}
 				}
 			})
@@ -250,11 +255,17 @@ func TestBindingRoundTrip(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				if text, null := rawText(t, tg, "tags", nilTags.ID); !null {
-					t.Errorf("nil tags stored %q, not NULL", text)
+				// An Optional slice left nil is written empty, as veloxe wrote
+				// it (decision 0090); NULL, which an update can set, reads
+				// back nil.
+				if text, null := rawText(t, tg, "tags", nilTags.ID); null || text != "[]" {
+					t.Errorf("nil tags stored %q (NULL %v), want []", text, null)
+				}
+				if _, err := tg.direct.ExecContext(ctx, rebind(tg.d, "UPDATE binds SET tags = NULL WHERE id = ?"), nilTags.ID); err != nil {
+					t.Fatal(err)
 				}
 				if got := readBind(t, tg, nilTags.ID); got.Tags != nil {
-					t.Errorf("nil tags read back as %#v", got.Tags)
+					t.Errorf("NULL tags read back as %#v", got.Tags)
 				}
 				if text, null := rawText(t, tg, "tags", empty.ID); null || text != "[]" {
 					t.Errorf("empty tags stored %q (NULL %v), want []", text, null)

@@ -3,8 +3,8 @@
 -- velox:allow drop-column users.logins
 
 ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`;
--- review: drop-index: drops index users.user_org_id_logins; queries that used it get slower
-ALTER TABLE `users` DROP INDEX `user_org_id_logins`, ALGORITHM=INPLACE, LOCK=NONE;
+-- review: drop-index: drops index users.users_user_org_id_logins; queries that used it get slower
+ALTER TABLE `users` DROP INDEX `users_user_org_id_logins`, ALGORITHM=INPLACE, LOCK=NONE;
 -- review: drop-column: drops column users.logins and its data
 ALTER TABLE `users` DROP COLUMN `logins`;
 -- review: add-index: adds index users.users_orgs_users; building it scans the table

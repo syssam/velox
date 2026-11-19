@@ -17,7 +17,8 @@
 				},
 				{
 					"name": "title",
-					"type": "varchar(200)"
+					"type": "varchar(200)",
+					"default": "''"
 				},
 				{
 					"name": "status",
@@ -114,7 +115,8 @@
 				},
 				{
 					"name": "handle",
-					"type": "varchar(255)"
+					"type": "varchar(255)",
+					"default": "''"
 				},
 				{
 					"name": "tb_user_profile",
@@ -159,39 +161,48 @@
 				},
 				{
 					"name": "i8",
-					"type": "tinyint"
+					"type": "tinyint",
+					"default": "0"
 				},
 				{
 					"name": "i16",
-					"type": "smallint"
+					"type": "smallint",
+					"default": "0"
 				},
 				{
 					"name": "i32",
-					"type": "int"
+					"type": "int",
+					"default": "0"
 				},
 				{
 					"name": "u8",
-					"type": "tinyint unsigned"
+					"type": "tinyint unsigned",
+					"default": "0"
 				},
 				{
 					"name": "u16",
-					"type": "smallint unsigned"
+					"type": "smallint unsigned",
+					"default": "0"
 				},
 				{
 					"name": "u32",
-					"type": "int unsigned"
+					"type": "int unsigned",
+					"default": "0"
 				},
 				{
 					"name": "u",
-					"type": "bigint unsigned"
+					"type": "bigint unsigned",
+					"default": "0"
 				},
 				{
 					"name": "u64",
-					"type": "bigint unsigned"
+					"type": "bigint unsigned",
+					"default": "0"
 				},
 				{
 					"name": "f32",
-					"type": "float"
+					"type": "float",
+					"default": "0"
 				},
 				{
 					"name": "tb_user_tokens",
@@ -356,11 +367,13 @@
 				{
 					"name": "name",
 					"type": "varchar(255)",
+					"default": "''",
 					"comment": "the display name"
 				},
 				{
 					"name": "email",
-					"type": "varchar(120)"
+					"type": "varchar(120)",
+					"default": "''"
 				},
 				{
 					"name": "bio",
@@ -438,7 +451,7 @@
 					"unique": true
 				},
 				{
-					"name": "users_by_name",
+					"name": "tb_users_users_by_name",
 					"columns": [
 						"name"
 					]
@@ -457,12 +470,6 @@
 						"id"
 					],
 					"on_delete": "SET NULL"
-				}
-			],
-			"checks": [
-				{
-					"name": "tb_users_tier_check",
-					"expr": "`tier` IN ('free', 'pro')"
 				}
 			],
 			"comment": "a person"

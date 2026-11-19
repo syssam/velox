@@ -22,19 +22,23 @@
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "issue_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "author_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "body",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         }
       ],
       "primary_key": [
@@ -155,15 +159,18 @@
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "project_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "author_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "assignee_id",
@@ -172,11 +179,13 @@
         },
         {
           "name": "title",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "body",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "status",
@@ -189,14 +198,6 @@
       ],
       "indexes": [
         {
-          "name": "issue_project_id_status_id",
-          "columns": [
-            "project_id",
-            "status",
-            "id"
-          ]
-        },
-        {
           "name": "issues_assignee_id",
           "columns": [
             "assignee_id"
@@ -206,6 +207,14 @@
           "name": "issues_author_id",
           "columns": [
             "author_id"
+          ]
+        },
+        {
+          "name": "issues_issue_project_id_status_id",
+          "columns": [
+            "project_id",
+            "status",
+            "id"
           ]
         }
       ],
@@ -247,12 +256,6 @@
             "id"
           ]
         }
-      ],
-      "checks": [
-        {
-          "name": "issues_status_check",
-          "expr": "\"status\" IN ('open', 'closed')"
-        }
       ]
     },
     {
@@ -265,11 +268,13 @@
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "name",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         }
       ],
       "primary_key": [
@@ -277,7 +282,7 @@
       ],
       "indexes": [
         {
-          "name": "label_org_id_name",
+          "name": "labels_label_org_id_name",
           "columns": [
             "org_id",
             "name"
@@ -296,11 +301,13 @@
         },
         {
           "name": "slug",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "name",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         }
       ],
       "primary_key": [
@@ -342,11 +349,13 @@
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "name",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         }
       ],
       "primary_key": [
@@ -354,7 +363,7 @@
       ],
       "indexes": [
         {
-          "name": "project_org_id_name",
+          "name": "projects_project_org_id_name",
           "columns": [
             "org_id",
             "name"
@@ -373,15 +382,18 @@
         },
         {
           "name": "token_hash",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "user_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "expires_at",
@@ -411,19 +423,23 @@
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "email",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "name",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "password_hash",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "role",
@@ -435,18 +451,12 @@
       ],
       "indexes": [
         {
-          "name": "user_org_id_email",
+          "name": "users_user_org_id_email",
           "columns": [
             "org_id",
             "email"
           ],
           "unique": true
-        }
-      ],
-      "checks": [
-        {
-          "name": "users_role_check",
-          "expr": "\"role\" IN ('admin', 'member')"
         }
       ]
     }

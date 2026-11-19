@@ -30,7 +30,7 @@ func TestSQLDefaultColumns(t *testing.T) {
 		for _, c := range tb.Columns {
 			got[c.Name] = c.Default
 		}
-		if got["seats"] != "100" || got["kind"] != "'plain'" || got["plain"] != "" {
+		if got["seats"] != "100" || got["kind"] != "'plain'" || got["plain"] != "0" {
 			t.Errorf("%v: defaults %v", d, got)
 		}
 	}

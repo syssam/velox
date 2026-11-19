@@ -743,8 +743,6 @@ func Open(pool *pgxpool.Pool, opts ...velox.Option) *velox.DB
 
 package schema
 Annotation is interface{ Name() string }
-const EntNames Names
-const VeloxeNames
 func (*CheckAnnotation) Name() string
 func (*CollationAnnotation) Name() string
 func (*CommentAnnotation) Name() string
@@ -773,8 +771,6 @@ type Index interface{ Descriptor() *desc.Index }
 type Interface interface { Type() Fields() []Field Edges() []Edge Indexes() []Index Mixin() []Mixin Annotations() []Annotation }
 type Merger interface{ Merge(Annotation) Annotation }
 type Mixin interface { Fields() []Field Edges() []Edge Indexes() []Index Annotations() []Annotation }
-type Names int
-type Package struct { PrefixIndexNames bool Names Names }
 type Schema struct { }
 type TableAnnotation struct { Schema string Table string }
 
@@ -981,7 +977,7 @@ func Skip() Annotation
 func StorageParams(params string) *IndexAnnotation
 func Table(name string) Annotation
 func WithComments(on bool) Annotation
-type Annotation struct { Table string Schema string Collation string Check string Checks map[string]string Default string DefaultExpr string DefaultExprs map[string]string Skip bool Size int64 ColumnType string OnDelete CascadeAction OnUpdate CascadeAction NonUniqueFK bool Charset string IncrementStart *int WithComments *bool }
+type Annotation struct { Table string Schema string Collation string Check string Checks map[string]string Default string DefaultExpr string DefaultExprs map[string]string NonUniqueFK bool Skip bool Size int64 ColumnType string OnDelete CascadeAction OnUpdate CascadeAction Charset string IncrementStart *int WithComments *bool }
 type CascadeAction string
 type IndexAnnotation struct { Type string Types map[string]string Where string StorageParams string Desc bool DescColumns map[string]bool OpClass string OpClassColumns map[string]string Prefix uint PrefixColumns map[string]uint IncludeColumns []string }
 

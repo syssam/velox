@@ -169,8 +169,6 @@ func heldRefusal(a sqlschema.Annotation) error {
 		return fmt.Errorf("sqlschema.OnDelete is not held by velox: use edge.OnDelete")
 	case a.OnUpdate != "":
 		return fmt.Errorf("sqlschema.OnUpdate is not held by velox: a foreign key's ON UPDATE is not modeled")
-	case a.NonUniqueFK:
-		return fmt.Errorf("sqlschema.NonUniqueFK is not held by velox")
 	case a.Charset != "":
 		return fmt.Errorf("sqlschema.Charset is not held by velox")
 	case a.IncrementStart != nil:
@@ -206,6 +204,9 @@ func checkPlacement(list []schema.Annotation, kind string) error {
 	}
 	if err := heldRefusal(a); err != nil {
 		return err
+	}
+	if kind != "edge" && a.NonUniqueFK {
+		return fmt.Errorf("sqlschema.NonUniqueFK is an edge's: put it on the edge whose foreign key it keeps from being unique, not on %s", article(kind))
 	}
 	if kind != "schema" && (a.Table != "" || a.Schema != "" || a.Collation != "" || len(a.Checks) > 0) {
 		return fmt.Errorf("sqlschema Table, Schema, Collation and Checks are a schema's: put them in the schema's Annotations, not on %s", article(kind))

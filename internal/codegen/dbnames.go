@@ -65,28 +65,15 @@ func fkName(table, refTable, edge string) string { return table + "_" + refTable
 // join table and the column. It is not capped, as fkName is not.
 func joinFKName(table, column string) string { return table + "_" + column }
 
-func checkName(table, column string) string { return ddl.Cap(table + "_" + column + "_check") }
-
-// enumType is the PostgreSQL enum type of the enum field f of e: its
-// Postgres SchemaType when that is not a string type; else, for a field with
-// a Go type (EnumOf, or Enum with GoType), the snake case of the type's name
-// without its package; else <table>_<column>. native is false when the
-// Postgres SchemaType is a string type. Derived names are capped.
-func enumType(e *Entity, f *Field) (name string, native bool) {
-	if st := f.SchemaType[velox.Postgres.String()]; st != "" {
-		if ddl.StringType(velox.Postgres, st) {
-			return "", false
-		}
+// enumType is the PostgreSQL enum type of the enum field f: its
+// Postgres SchemaType when that names a type that is not a string type.
+// native is false otherwise: an enum is a string column, varchar on
+// PostgreSQL, as veloxe and ent stored it (decision 0090).
+func enumType(f *Field) (name string, native bool) {
+	if st := f.SchemaType[velox.Postgres.String()]; st != "" && !ddl.StringType(velox.Postgres, st) {
 		return st, true
 	}
-	if f.GoType != nil {
-		n := f.GoType.Ident
-		if i := strings.LastIndexByte(n, '.'); i >= 0 {
-			n = n[i+1:]
-		}
-		return ddl.Cap(plugin.Snake(n)), true
-	}
-	return ddl.Cap(e.Table + "_" + f.Column), true
+	return "", false
 }
 
 // symbols is the foreign-key names ed's relation is given: ed's Symbols, else
@@ -483,7 +470,7 @@ func (ol *objectLister) indexes(e *Entity, refused map[*Index]bool, k *tableKeys
 func (ol *objectLister) column(e *Entity, f *Field) {
 	of := fieldAt(f.Name)
 	if f.Type == "enum" {
-		if name, native := enumType(e, f); native {
+		if name, native := enumType(f); native {
 			values := make([]string, len(f.Enums))
 			for i, v := range f.Enums {
 				values[i] = v.Value
@@ -494,9 +481,8 @@ func (ol *objectLister) column(e *Entity, f *Field) {
 				ol.add(e, spaceTypes, ddl.OldEnum(name), "old enum type of "+of, fieldLoc(f))
 			}
 		}
-		ol.add(e, spaceTableConstraints, checkName(e.Table, f.Column), "check of "+of, fieldLoc(f))
 	}
-	if !nullable(f) {
+	if !columnNullable(f) {
 		ol.add(e, spaceTableConstraints, ddl.NotNull(e.Table, f.Column), "not-null check of "+of, fieldLoc(f))
 	}
 }

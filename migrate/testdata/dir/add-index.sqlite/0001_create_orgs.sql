@@ -2,13 +2,13 @@
 
 CREATE TABLE "orgs" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "name" text NOT NULL
+  "name" text NOT NULL DEFAULT ''
 );
 CREATE TABLE "users" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "org_id" integer NOT NULL,
-  "name" text NOT NULL,
-  "email" text NOT NULL,
+  "org_id" integer NOT NULL DEFAULT 0,
+  "name" text NOT NULL DEFAULT '',
+  "email" text NOT NULL DEFAULT '',
   "bio" text,
   "role" text NOT NULL DEFAULT 'viewer',
   "status" text NOT NULL DEFAULT 'active',
@@ -16,9 +16,7 @@ CREATE TABLE "users" (
   "created_at" datetime(9) NOT NULL,
   "mentor_id" integer,
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id") ON DELETE SET NULL,
-  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
-  CONSTRAINT "users_role_check" CHECK ("role" IN ('admin', 'viewer')),
-  CONSTRAINT "users_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
+  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id")
 );
 CREATE INDEX "users_by_name" ON "users" ("name");
 CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
@@ -26,10 +24,9 @@ CREATE INDEX "users_mentor_id" ON "users" ("mentor_id");
 CREATE INDEX "users_org_id" ON "users" ("org_id");
 CREATE TABLE "posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "author_id" integer NOT NULL,
-  "title" text NOT NULL,
+  "author_id" integer NOT NULL DEFAULT 0,
+  "title" text NOT NULL DEFAULT '',
   "status" text NOT NULL DEFAULT 'active',
-  CONSTRAINT "posts_users_posts" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE CASCADE,
-  CONSTRAINT "posts_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
+  CONSTRAINT "posts_users_posts" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE CASCADE
 );
 CREATE INDEX "posts_author_id" ON "posts" ("author_id");

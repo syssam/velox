@@ -73,7 +73,7 @@ func TestIndexKeysTables(t *testing.T) {
 	}
 	got := map[string]keys{}
 	for _, ix := range tb.Indexes {
-		got[ix.Name] = keys{ix.Desc, ix.OpClass}
+		got[strings.TrimPrefix(ix.Name, tb.Name+"_")] = keys{ix.Desc, ix.OpClass}
 	}
 	want := map[string]keys{
 		"ix_recent":       {[]string{"created_at"}, nil},

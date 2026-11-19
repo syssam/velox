@@ -12,11 +12,13 @@
         },
         {
           "name": "number",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "customer",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "status",
@@ -24,7 +26,8 @@
         },
         {
           "name": "total_cents",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         }
       ],
       "primary_key": [
@@ -37,12 +40,6 @@
             "number"
           ],
           "unique": true
-        }
-      ],
-      "checks": [
-        {
-          "name": "invoices_status_check",
-          "expr": "\"status\" IN ('sent', 'paid')"
         }
       ]
     }

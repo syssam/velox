@@ -1,13 +1,12 @@
 -- script: main
 -- velox:foreign-keys off
--- velox:drops users.users_role_check
 
--- review: sqlite-rebuild: drops check users_role_check, adds check users_role_check; SQLite rebuilds table users: it copies every row into a new table; add-check: adds check users.users_role_check; it fails if any row breaks it
+-- review: add-check: adds check users.users_logins_positive; it fails if any row breaks it; sqlite-rebuild: adds check users_logins_positive; SQLite rebuilds table users: it copies every row into a new table
 CREATE TABLE "velox_new_users" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "org_id" integer NOT NULL,
-  "name" text NOT NULL,
-  "email" text NOT NULL,
+  "org_id" integer NOT NULL DEFAULT 0,
+  "name" text NOT NULL DEFAULT '',
+  "email" text NOT NULL DEFAULT '',
   "bio" text,
   "role" text NOT NULL DEFAULT 'viewer',
   "status" text NOT NULL DEFAULT 'active',
@@ -16,8 +15,7 @@ CREATE TABLE "velox_new_users" (
   "mentor_id" integer,
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id") ON DELETE SET NULL,
   CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
-  CONSTRAINT "users_role_check" CHECK ("role" IN ('admin', 'viewer', 'owner')),
-  CONSTRAINT "users_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
+  CONSTRAINT "users_logins_positive" CHECK (logins >= 0)
 );
 INSERT INTO "velox_new_users" ("id", "org_id", "name", "email", "bio", "role", "status", "logins", "created_at", "mentor_id") SELECT "id", "org_id", "name", "email", "bio", "role", "status", "logins", "created_at", "mentor_id" FROM "users";
 DELETE FROM sqlite_sequence WHERE name = 'velox_new_users';

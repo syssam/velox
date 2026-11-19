@@ -47,8 +47,8 @@ func TestRenderOnlineUnits(t *testing.T) {
 	t.Parallel()
 	for name, want := range map[string][][]string{
 		"add-index": {{
-			`DROP INDEX CONCURRENTLY IF EXISTS "user_created_at"`,
-			`CREATE INDEX CONCURRENTLY "user_created_at" ON "users" ("created_at")`,
+			`DROP INDEX CONCURRENTLY IF EXISTS "users_user_created_at"`,
+			`CREATE INDEX CONCURRENTLY "users_user_created_at" ON "users" ("created_at")`,
 		}},
 		"add-foreign-key": {{
 			`DROP INDEX CONCURRENTLY IF EXISTS "posts_reviewer_id"`,
@@ -67,6 +67,14 @@ func TestRenderOnlineUnits(t *testing.T) {
 		}},
 	} {
 		ss := caseScripts(t, caseNamed(name), velox.Postgres)
+		// The column's zero default (decision 0090) is set by the main script
+		// before the online unit that makes it NOT NULL.
+		if name == "set-not-null" {
+			if main := scriptOf(ss, migrate.ScriptMain); main == nil || !slices.Equal(stmtSQL(main.Statements), []string{`ALTER TABLE "users" ALTER COLUMN "bio" SET DEFAULT ''`}) {
+				t.Fatalf("%s: want the default in the main script:\n%s", name, scriptsText(ss))
+			}
+			ss = ss[1:]
+		}
 		if len(ss) != 1 || ss[0].Kind != migrate.ScriptOnline {
 			t.Fatalf("%s: want the online script alone:\n%s", name, scriptsText(ss))
 		}
@@ -105,7 +113,7 @@ func TestRenderOnlineUnits(t *testing.T) {
 	if want := []string{
 		`ALTER TABLE "users" DROP CONSTRAINT "users_orgs_users"`,
 		`ALTER TABLE "orgs" ALTER COLUMN "id" TYPE bigint USING "id"::bigint`,
-		`ALTER TABLE "users" ALTER COLUMN "org_id" TYPE bigint USING "org_id"::bigint`,
+		`ALTER TABLE "users" ALTER COLUMN "org_id" DROP DEFAULT, ALTER COLUMN "org_id" TYPE bigint USING "org_id"::bigint, ALTER COLUMN "org_id" SET DEFAULT 0`,
 		`ALTER TABLE "users" ADD CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id") NOT VALID`,
 	}; !slices.Equal(stmtSQL(main.Statements), want) {
 		t.Errorf("key-type-change main:\n%s", scriptsText(ss))
@@ -164,9 +172,9 @@ func TestRenderEnumScript(t *testing.T) {
 	}
 	got := stmtSQL(ss[0].Statements)
 	if len(ss) != 1 || len(got) != 8 || got[2] != `ALTER TABLE "users" DROP CONSTRAINT "users_role_known"` ||
-		got[3] != `DROP INDEX "user_name"` ||
+		got[3] != `DROP INDEX "users_user_name"` ||
 		!strings.HasPrefix(got[4], `ALTER TABLE "users" ALTER COLUMN "role" DROP DEFAULT, ALTER COLUMN "role" TYPE "users_role"`) ||
-		got[5] != `CREATE INDEX "user_name" ON "users" ("name") WHERE role = 'admin'` ||
+		got[5] != `CREATE INDEX "users_user_name" ON "users" ("name") WHERE role = 'admin'` ||
 		got[6] != `ALTER TABLE "users" ADD CONSTRAINT "users_role_known" CHECK ("role" IN ('admin', 'viewer'))` ||
 		got[7] != `DROP TYPE "users_role_velox_old"` || !slices.Equal(got[:2], want) {
 		t.Errorf("enum-swap-dependents:\n%s", scriptsText(ss))
@@ -319,13 +327,13 @@ func TestRenderTableRename(t *testing.T) {
 	if got, want := sqls(caseScripts(t, c, velox.Postgres)), []string{
 		`ALTER TABLE "users" RENAME TO "accounts"`,
 		`ALTER SEQUENCE "users_id_seq" RENAME TO "accounts_id_seq"`,
+		`ALTER INDEX "users_by_name" RENAME TO "accounts_users_by_name"`,
 		`ALTER INDEX "users_email_key" RENAME TO "accounts_email_key"`,
 		`ALTER INDEX "users_mentor_id" RENAME TO "accounts_mentor_id"`,
 		`ALTER INDEX "users_org_id" RENAME TO "accounts_org_id"`,
 		`ALTER TABLE "accounts" RENAME CONSTRAINT "users_orgs_users" TO "accounts_orgs_users"`,
 		`ALTER TABLE "accounts" RENAME CONSTRAINT "users_pkey" TO "accounts_pkey"`,
 		`ALTER TABLE "posts" RENAME CONSTRAINT "posts_users_posts" TO "posts_accounts_posts"`,
-		`ALTER TYPE "users_role" RENAME TO "accounts_role"`,
 	}; !slices.Equal(got, want) {
 		t.Errorf("PostgreSQL:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
@@ -333,22 +341,27 @@ func TestRenderTableRename(t *testing.T) {
 		"ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`",
 		"ALTER TABLE `posts` DROP FOREIGN KEY `posts_users_posts`",
 		"RENAME TABLE `users` TO `accounts`",
-		"ALTER TABLE `accounts` RENAME INDEX `users_orgs_users` TO `accounts_orgs_users`",
+		"ALTER TABLE `accounts` RENAME INDEX `users_by_name` TO `accounts_users_by_name`, RENAME INDEX `users_orgs_users` TO `accounts_orgs_users`",
 		"ALTER TABLE `posts` RENAME INDEX `posts_users_posts` TO `posts_accounts_posts`",
 		"ALTER TABLE `accounts` ADD CONSTRAINT `accounts_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
 		"ALTER TABLE `posts` ADD CONSTRAINT `posts_accounts_posts` FOREIGN KEY (`author_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE",
 	}; !slices.Equal(got, want) {
 		t.Errorf("MySQL:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	got := sqls(caseScripts(t, c, velox.SQLite))
-	if len(got) < 2 || got[0] != `ALTER TABLE "users" RENAME TO "accounts"` ||
-		slices.ContainsFunc(got[1:], func(s string) bool {
-			return strings.HasPrefix(s, "ALTER TABLE") && !strings.HasPrefix(s, `ALTER TABLE "velox_new_`) // a rebuild's
-
-		}) ||
-		!slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, `CREATE TABLE "velox_new_accounts"`) }) ||
-		!slices.Contains(got, `CREATE UNIQUE INDEX "accounts_email_key" ON "accounts" ("email")`) {
-		t.Errorf("SQLite:\n%s", strings.Join(got, "\n"))
+	// SQLite has no constraint to rename, so the table is not rebuilt: its
+	// indexes are dropped and made again under the new names.
+	if got, want := sqls(caseScripts(t, c, velox.SQLite)), []string{
+		`ALTER TABLE "users" RENAME TO "accounts"`,
+		`DROP INDEX "users_by_name"`,
+		`CREATE INDEX "accounts_users_by_name" ON "accounts" ("name")`,
+		`DROP INDEX "users_email_key"`,
+		`CREATE UNIQUE INDEX "accounts_email_key" ON "accounts" ("email")`,
+		`DROP INDEX "users_mentor_id"`,
+		`CREATE INDEX "accounts_mentor_id" ON "accounts" ("mentor_id")`,
+		`DROP INDEX "users_org_id"`,
+		`CREATE INDEX "accounts_org_id" ON "accounts" ("org_id")`,
+	}; !slices.Equal(got, want) {
+		t.Errorf("SQLite:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 
@@ -392,14 +405,11 @@ func TestRenderPostgresDetails(t *testing.T) {
 	for name, want := range map[string][]string{
 		"change-comment": {`COMMENT ON COLUMN "users"."name" IS 'the name shown'`},
 		"table-comment":  {`COMMENT ON TABLE "users" IS 'a person'`},
-		"drop-not-null":  {`ALTER TABLE "users" ALTER COLUMN "name" DROP NOT NULL`},
+		"drop-not-null":  {`ALTER TABLE "users" ALTER COLUMN "name" DROP DEFAULT, ALTER COLUMN "name" DROP NOT NULL`},
 		"change-default": {`ALTER TABLE "users" ALTER COLUMN "role" SET DEFAULT 'admin'`},
 		"enum-opt-out": {
 			`ALTER TABLE "users" ALTER COLUMN "role" DROP DEFAULT, ALTER COLUMN "role" TYPE text USING "role"::text, ALTER COLUMN "role" SET DEFAULT 'viewer'`,
 			`DROP TYPE "users_role"`,
-			`ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "users_role_check"`,
-			`ALTER TABLE "users" ADD CONSTRAINT "users_role_check" CHECK ("role" IN ('admin', 'viewer')) NOT VALID`,
-			`ALTER TABLE "users" VALIDATE CONSTRAINT "users_role_check"`,
 		},
 	} {
 		if got := sqls(caseScripts(t, caseNamed(name), velox.Postgres)); !slices.Equal(got, want) {

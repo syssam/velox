@@ -49,8 +49,10 @@ func TestUnwritable(t *testing.T) {
 		{box[int]{}, "generic"},
 		{[]box[int]{}, "generic"},
 		{map[string]*box[int]{}, "generic"},
-		{struct{ A int }{}, "unnamed struct"},
-		{[]struct{ A int }{}, "unnamed struct"},
+		{struct{ A int }{}, ""},
+		{[]struct{ A int }{}, ""},
+		{[]struct{ a int }{}, "unexported field a"},
+		{[]struct{ A box[int] }{}, "generic"},
 		{func() {}, "unnamed func"},
 		{(*interface{ M() })(nil), "unnamed interface"},
 	} {

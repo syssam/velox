@@ -668,6 +668,13 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 	if f.UpdateDefault {
 		o.UpdateDefaultCode = call("UpdateDefault", f.UpdateDefaultRef)
 	}
+	if f.Type == "json" && f.Optional && !f.Nillable && len(f.Default) == 0 && !f.DefaultFunc && f.GoType != nil &&
+		(f.GoType.Kind == "slice" || f.GoType.Kind == "map") {
+		// Unset, an Optional JSON slice or map is written empty, [] or {},
+		// as veloxe zero-filled it (decision 0090), not NULL; it reads back
+		// empty. Set to nil by an update, it is NULL.
+		o.ZeroFillCode = fmt.Sprintf("func() any { return %s{} }", elem)
+	}
 }
 
 // schemaValue returns the expression of a value of f's descriptor, its

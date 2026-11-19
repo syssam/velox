@@ -56,13 +56,13 @@ type ids []int
 }
 
 func TestDecodeModel(t *testing.T) {
-	m, err := decodeModel([]byte(`{"version":7,"package":"p","schemas":[]}`))
+	m, err := decodeModel([]byte(`{"version":8,"package":"p","schemas":[]}`))
 	if err != nil || m.Package != "p" {
 		t.Fatalf("got %+v %v", m, err)
 	}
 	// A model of another version whose shape differs reports the version.
 	_, err = decodeModel([]byte(`{"version":1,"package":["p"],"schemas":{}}`))
-	if err == nil || !strings.Contains(err.Error(), "the loader wrote model version 1; velox-gen reads version 7: update velox-gen and the velox module together") {
+	if err == nil || !strings.Contains(err.Error(), "the loader wrote model version 1; velox-gen reads version 8: update velox-gen and the velox module together") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -94,7 +94,7 @@ type b struct{ a }
 // classify finds no schemas in a package that does not use velox's schema
 // package, and reports export data it cannot read.
 func TestClassifyErrors(t *testing.T) {
-	if names, _, err := classify("example.com/x", map[string]string{}); names != nil || err != nil {
+	if names, err := classify("example.com/x", map[string]string{}); names != nil || err != nil {
 		t.Fatalf("got %v %v", names, err)
 	}
 	if testing.Short() {
@@ -104,13 +104,13 @@ func TestClassifyErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = classify("example.com/none", exp)
+	_, err = classify("example.com/none", exp)
 	if err == nil || !strings.HasPrefix(err.Error(), "reading example.com/none: ") || !strings.HasSuffix(err.Error(), "no export data for example.com/none") {
 		t.Fatalf("got %v", err)
 	}
 	bad := maps.Clone(exp)
 	bad[loadjson.SchemaPath] = filepath.Join(t.TempDir(), "gone")
-	if _, _, err := classify("example.com/none", bad); err == nil || !strings.HasPrefix(err.Error(), "reading "+loadjson.SchemaPath+": ") {
+	if _, err := classify("example.com/none", bad); err == nil || !strings.HasPrefix(err.Error(), "reading "+loadjson.SchemaPath+": ") {
 		t.Fatalf("got %v", err)
 	}
 }

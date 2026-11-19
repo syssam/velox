@@ -26,10 +26,9 @@ import (
 // reference values.
 func Build(m *loadjson.Model) (*Graph, error) {
 	b := &builder{
-		pkg: m.Package, g: &Graph{Package: m.Package, Entities: []*Entity{}}, opts: cmp.Or(m.Options, &loadjson.Options{}),
+		pkg: m.Package, g: &Graph{Package: m.Package, Entities: []*Entity{}},
 		refused: map[*Index]bool{}, implicits: map[*Field]*edgeState{}, keyEdges: map[*Field]*edgeState{},
 	}
-	b.g.Names = b.opts.Names
 	b.entities(m)
 	b.resolveEdges()
 	b.foreignKeys()
@@ -55,8 +54,7 @@ func Build(m *loadjson.Model) (*Graph, error) {
 type builder struct {
 	pkg       string
 	g         *Graph
-	opts      *loadjson.Options // the package's schema.Package
-	nodes     []*node           // in the order of g.Entities
+	nodes     []*node // in the order of g.Entities
 	errs      []ruleError
 	refused   map[*Index]bool       // the indexes an index rule refuses, whose names are not compared
 	implicits map[*Field]*edgeState // the edge each implicit foreign key was added for
@@ -375,6 +373,12 @@ func (b *builder) resolveAssoc(n *node, s *edgeState) {
 		ed.Rel.Kind, ed.Bidi = "M2M", true
 		ed.Rel.Table = n.ent.Label + "_" + le.Name
 		cols = []string{n.ent.Label + "_id", plugin.Singular(le.Name) + "_id"}
+	case le.Unique && t == n && le.NonUniqueFK:
+		// Many-to-one in intent, as veloxe read sqlschema.NonUniqueFK: a
+		// plain key many rows may hold, and no partner to re-point. veloxe
+		// wrote a key bound to a field as a plain column too.
+		ed.Rel.Kind = "M2O"
+		ed.Rel.Table = n.ent.Table
 	case le.Unique && t == n:
 		ed.Rel.Kind, ed.Bidi = "O2O", true
 		ed.Rel.Table = n.ent.Table
@@ -508,13 +512,15 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 		case le.Immutable && !f.Immutable:
 			b.fail(34, n.ent.Name, edgeLoc(ed), "is Immutable but field %q is not", f.Name)
 		case f.Immutable && !le.Immutable:
-			b.fail(34, n.ent.Name, edgeLoc(ed), "field %q is Immutable but the edge is not", f.Name)
+			// veloxe took an Immutable key on a mutable edge. The key
+			// cannot change, so neither can the edge: it is Immutable.
+			ed.Immutable = true
 		}
 		if c := s.column; c != "" && c != f.Column {
 			b.fail(31, n.ent.Name, edgeLoc(ed), "column %q differs from field %q's column %q", c, f.Name, f.Column)
 		}
-		if ed.Rel.Kind == "O2O" {
-			f.Unique = true // every one-to-one key is unique, as ent's fkColumn
+		if ed.Rel.Kind == "O2O" && !nonUniqueFK(s) {
+			f.Unique = true // every one-to-one key is unique, as ent's fkColumn, unless NonUniqueFK says not
 		}
 		if other := b.keyEdges[f]; other != nil && other != s && other != s.pair {
 			b.fail(55, n.ent.Name, edgeLoc(ed), "binds field %q, which holds edge %q's foreign key: a key holds one row's ID; declare a field for each edge", f.Name, other.ed.Name)
@@ -527,11 +533,17 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 	case own && (s.pair == nil || s.pair.le.Field == ""):
 		// A key to its own table is NULL-able even when the edge is Required,
 		// as in ent: the first row has none to reference.
-		b.implicit(n, s.target, s, le.Required && s.target != n, ed.Rel.Kind == "O2O", le.Immutable)
+		b.implicit(n, s.target, s, le.Required && s.target != n, ed.Rel.Kind == "O2O" && !nonUniqueFK(s), le.Immutable)
 	case ed.Rel.Kind == "O2M" && s.pair == nil:
 		// No edge on the target's side: the foreign key references n's ID.
 		b.implicit(s.target, n, s, false, false, false)
 	}
+}
+
+// nonUniqueFK reports whether sqlschema.NonUniqueFK is on the edge s or on
+// its pair, as veloxe read it on either end.
+func nonUniqueFK(s *edgeState) bool {
+	return s.le.NonUniqueFK || s.pair != nil && s.pair.le.NonUniqueFK
 }
 
 // implicit adds to holder the foreign-key field of the edge s, which references
@@ -741,14 +753,13 @@ func (b *builder) indexes() {
 }
 
 // prefixIndexNames gives each declared index the name "<table>_<name>" when
-// the package's schema.Package says PrefixIndexNames and the name does not
-// start with "<table>_" already, as veloxe applications' UniqueIndexNamesHook
-// did. Such a name is capped as a derived one is, since the prefix may make
-// it too long; the StorageKey itself is still checked by rule 50.
+// the name does not start with "<table>_" already, as veloxe applications'
+// UniqueIndexNamesHook did (decision 0083): PostgreSQL wants index names
+// unique in a database schema, and a mixin's index has one StorageKey for
+// every table that lists it. Such a name is capped as a derived one is,
+// since the prefix may make it too long; the StorageKey itself is still
+// checked by rule 50.
 func (b *builder) prefixIndexNames() {
-	if !b.opts.PrefixIndexNames {
-		return
-	}
 	for _, n := range b.nodes {
 		e := n.ent
 		for _, ix := range e.Indexes {
@@ -1068,47 +1079,25 @@ var (
 	complexKind = map[string]bool{"complex64": true, "complex128": true}
 )
 
-// optionalWayOut is rule 37's message for f, an Optional field with no
-// Default and not Nillable: it spells the line to write, by type.
-func optionalWayOut(f *Field) string {
-	builder := strings.ToUpper(f.Type[:1]) + f.Type[1:]
-	switch f.Type {
-	case "float64":
-		builder = "Float"
-	case "uuid":
-		builder = "UUID"
-	}
-	decl := fmt.Sprintf("field.%s(%q).Optional()", builder, f.Name)
-	var def string
-	switch {
-	case f.Type == "string":
-		def = `Default("")`
-	case f.Type == "bool":
-		def = "Default(false)"
-	case numeric[f.Type]:
-		def = "Default(0)"
-	case f.Type == "enum" && len(f.Enums) > 0:
-		def = fmt.Sprintf("Default(%q)", f.Enums[0].Value)
-	case f.Type == "time":
-		def = "DefaultFunc(time.Now)"
-	default:
-		def = "DefaultFunc(...)"
-	}
-	msg := fmt.Sprintf("an Optional field needs a Default, a DefaultFunc or Nillable: unset, it has no value to store, and velox writes no zero in its place. Write %s.%s, or %s.Nillable() for NULL", decl, def, decl)
-	if len(f.SchemaDefault) > 0 {
-		msg += ". Its SchemaDefault is not a value for velox: an insert writes every column, so the column's DEFAULT serves only rows written outside velox"
-	}
-	return msg
+// optionalEnumNoValue reports whether f is an Optional enum that gives an
+// unset row no value: it is not Nillable and has no Default or DefaultFunc.
+// Every other Optional field is written as its Go zero value when unset, as
+// veloxe wrote it (decision 0090), but an enum's zero, "", is none of its
+// values, and veloxe refused it too: it left the column out of the INSERT,
+// which a NOT NULL column fails.
+func optionalEnumNoValue(f *Field) bool {
+	return f.Type == "enum" && f.Optional && !f.Nillable && len(f.Default) == 0 && !f.DefaultFunc
 }
 
-// optionalNoValue reports whether f is Optional and gives an unset row no value:
-// it is not Nillable, so its column is NOT NULL, and it has no Default or
-// DefaultFunc. A SchemaDefault is no value: velox's insert writes every
-// column, so the column's DEFAULT never applies to it. An Optional JSON field
-// is the exception: its column holds NULL.
-func optionalNoValue(f *Field) bool {
-	return f.Optional && !f.Nillable && f.Type != "json" &&
-		len(f.Default) == 0 && !f.DefaultFunc
+// optionalEnumWayOut is rule 37's message for f, an Optional enum with no
+// Default and not Nillable.
+func optionalEnumWayOut(f *Field) string {
+	decl := fmt.Sprintf("field.Enum(%q).Optional()", f.Name)
+	def := "Default(...)"
+	if len(f.Enums) > 0 {
+		def = fmt.Sprintf("Default(%q)", f.Enums[0].Value)
+	}
+	return fmt.Sprintf("an Optional enum needs a Default or Nillable: unset, it has no value to store, as \"\" is none of its values. Write %s.%s, or %s.Nillable() for NULL", decl, def, decl)
 }
 
 // validateFields checks the fields of e: their names and columns, the rules
@@ -1166,19 +1155,15 @@ func (b *builder) uniqueFields(e *Entity) {
 func (b *builder) validateField(e *Entity, f *Field) {
 	switch {
 	case b.keyEdges[f] != nil: // a bound key is rule 38's
-	case optionalNoValue(f):
-		b.fail(37, e.Name, fieldLoc(f), "%s", optionalWayOut(f))
+	case optionalEnumNoValue(f):
+		b.fail(37, e.Name, fieldLoc(f), "%s", optionalEnumWayOut(f))
 	case uniqueUnset(e, f):
 		b.fail(54, e.Name, fieldLoc(f), "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide, or give it a DefaultFunc that a value a hook fills can stand in for, as velox-gen cannot see a hook")
 	}
-	unwritable := b.unwritableJSON(e, f)
-	// An Optional JSON field's column holds NULL, so its Go field must
-	// hold nil: a slice, a map or a pointer, or a pointer that Nillable
-	// makes. A type no codec can write gets only the error above: adding
-	// Nillable would not help it.
-	if f.Type == "json" && f.Optional && !f.Nillable && f.GoType != nil && !unwritable && !nilKinds[f.GoType.Kind] {
-		b.fail(48, e.Name, fieldLoc(f), "an Optional JSON field of a non-nil-able type needs Nillable")
-	}
+	// An Optional JSON field of a struct type need not be Nillable: veloxe
+	// wrote its zero value's JSON when unset, and its column holds NULL, which
+	// reads back as the zero value (decision 0090).
+	b.unwritableJSON(e, f)
 	// No index covers a JSON column (rule 42 is a declared index's).
 	if f.Type == "json" && f.Unique {
 		b.fail(41, e.Name, fieldLoc(f), "a JSON field cannot be Unique")
@@ -1194,25 +1179,24 @@ func (b *builder) validateField(e *Entity, f *Field) {
 }
 
 // unwritableJSON reports rule 49 for a JSON field f whose Go type
-// encoding/json cannot write, and returns whether it did.
-func (b *builder) unwritableJSON(e *Entity, f *Field) bool {
+// encoding/json cannot write.
+func (b *builder) unwritableJSON(e *Entity, f *Field) {
 	// encoding/json cannot write an interface, func, chan or unsafe
 	// pointer, nor a complex number without its own encoding. A func or
 	// chan with a MarshalJSON stays refused: its nil is no pointer, slice
 	// or map, so the core could not take it as NULL.
 	if f.Type != "json" || f.GoType == nil {
-		return false
+		return
 	}
 	noun, ok := unencodable[f.GoType.Kind]
 	if !ok || f.GoType.Marshaler && complexKind[f.GoType.Kind] {
-		return false
+		return
 	}
 	hint := ""
 	if complexKind[f.GoType.Kind] {
 		hint = "; give the type a MarshalJSON or MarshalText method"
 	}
 	b.fail(49, e.Name, fieldLoc(f), "its Go type %s is %s, which a JSON column cannot hold%s", f.GoType.Ident, noun, hint)
-	return true
 }
 
 // validateID checks the rules of an ID that the schema declares (rules 21

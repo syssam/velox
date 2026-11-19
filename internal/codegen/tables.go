@@ -21,7 +21,7 @@ func Tables(g *Graph, d velox.Dialect) (*migrate.Schema, error) {
 	if d != velox.Postgres && d != velox.MySQL && d != velox.SQLite {
 		return nil, &Error{Reason: "Tables: unknown dialect " + d.String()}
 	}
-	t := &tabler{d: d, names: g.Names, ids: map[*Entity]string{}, fks: map[[3]string]foreignKey{}, enums: map[[2]string]bool{}}
+	t := &tabler{d: d, ids: map[*Entity]string{}, fks: map[[3]string]foreignKey{}, enums: map[[2]string]bool{}}
 	for _, e := range g.Entities {
 		t.ids[e] = t.idType(e.Fields[0])
 	}
@@ -105,7 +105,6 @@ func (t *tabler) mysqlChecks(g *Graph, s *migrate.Schema) {
 // tabler holds the state of one Tables.
 type tabler struct {
 	d        velox.Dialect
-	names    string                   // Graph.Names: how a derived name is capped
 	ids      map[*Entity]string       // each entity's ID column type
 	fks      map[[3]string]foreignKey // by (schema, table, column)
 	enums    map[[2]string]bool       // the PostgreSQL enum types listed, by (schema, name)
@@ -173,7 +172,7 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 		tb.Comment = t.comment(c.Text)
 	}
 	for i, f := range e.Fields {
-		tb.Columns = append(tb.Columns, t.column(e, i, f, &tb))
+		tb.Columns = append(tb.Columns, t.column(e, i, f))
 	}
 	t.declaredChecks(e, &tb)
 
@@ -272,11 +271,11 @@ func (t *tabler) joinTable(jt joinTable) migrate.Table {
 	return tb
 }
 
-// symbol is name on the dialect: capped as ent caps it when derived, or as
-// veloxe did when the package says schema.VeloxeNames, else as given.
+// symbol is name on the dialect: capped as veloxe capped it when derived,
+// else as given.
 func (t *tabler) symbol(name string, derived bool) string {
 	if derived {
-		return ddl.SymbolFor(t.names, t.d, name)
+		return ddl.Symbol(t.d, name)
 	}
 	return name
 }
@@ -308,10 +307,9 @@ func (t *tabler) foreignKey(tb *migrate.Table, fk foreignKey, keys [][]string) b
 	return true
 }
 
-// column is the column of e's field f, the i-th; an enum may add a check to
-// tb.
-func (t *tabler) column(e *Entity, i int, f *Field, tb *migrate.Table) migrate.Column {
-	c := migrate.Column{Name: f.Column, Nullable: nullable(f), Comment: t.comment(f.Comment), Pos: f.Pos}
+// column is the column of e's field f, the i-th.
+func (t *tabler) column(e *Entity, i int, f *Field) migrate.Column {
+	c := migrate.Column{Name: f.Column, Nullable: columnNullable(f), Comment: t.comment(f.Comment), Pos: f.Pos}
 	fk, isFK := t.fks[[3]string{e.TableSchema, e.Table, f.Column}]
 	switch {
 	case i == 0:
@@ -325,15 +323,54 @@ func (t *tabler) column(e *Entity, i int, f *Field, tb *migrate.Table) migrate.C
 	case isFK:
 		c.Type = t.ids[fk.Ref] // the referenced column's, without its identity
 	default:
-		c.Type = t.fieldType(e, f, tb)
+		c.Type = t.fieldType(e, f)
 	}
 	if f.Implicit != "" && isFK {
 		c.Comment, c.Pos = t.comment(fk.Edge.Comment), fk.Edge.Pos
 	}
 	if !c.Identity {
 		c.Default = t.columnDefault(f, c.Type)
+		if c.Default == "" && i != 0 && autoDefault(f) {
+			c.Default = t.zeroDefault(f, c.Type)
+		}
 	}
 	return c
+}
+
+// columnNullable reports whether f's column holds NULL: a Nillable field's,
+// and an Optional JSON field's of any Go type, as veloxe made it. A JSON
+// field of a struct type reads NULL back as its zero value.
+func columnNullable(f *Field) bool {
+	return f.Nillable || f.Optional && f.Type == "json"
+}
+
+// autoDefault reports whether f's NOT NULL column gets its type's zero as
+// its DEFAULT, as veloxe's FeatureAutoDefault gave it, so that a column added
+// to a table with rows needs no default of its own: a string, bool or number
+// field, required or Optional, that is not Nillable and has no Default or
+// DefaultFunc (decision 0090). An enum, a time, bytes, a UUID, JSON and an
+// Other field get none, as in veloxe; nor does a foreign key velox adds.
+func autoDefault(f *Field) bool {
+	if f.Nillable || len(f.Default) > 0 || f.DefaultFunc || f.Implicit != "" {
+		return false
+	}
+	return f.Type == "string" || f.Type == "bool" || numeric[f.Type]
+}
+
+// zeroDefault is the DEFAULT of the zero value of f's type, a string, bool
+// or number, on a column of type typ: as columnDefault writes a Default of
+// "", false or 0.
+func (t *tabler) zeroDefault(f *Field, typ string) string {
+	z := *f
+	switch f.Type {
+	case "string":
+		z.Default = []byte(`""`)
+	case "bool":
+		z.Default = []byte("false")
+	default:
+		z.Default = []byte("0")
+	}
+	return t.columnDefault(&z, typ)
 }
 
 // plainType is the type of a field that is not an enum: its SchemaType for
@@ -345,29 +382,30 @@ func (t *tabler) plainType(f *Field) string {
 	return baseType(t.d, f.Type, f.Size)
 }
 
-// fieldType is the type of e's field f. An enum is PostgreSQL's enum type,
-// which it lists, or MySQL's enum(…); else, on SQLite and when its
-// SchemaType opts the dialect out, its string type and a check, which it
-// adds to tb.
-func (t *tabler) fieldType(e *Entity, f *Field, tb *migrate.Table) string {
+// fieldType is the type of e's field f. An enum is a string column with no
+// check, as veloxe stored it (decision 0090): varchar on PostgreSQL, text on
+// SQLite, or its SchemaType for the dialect; MySQL's enum(…) on MySQL unless
+// its SchemaType is a string type. A PostgreSQL SchemaType that names no
+// string type is that enum type, which it lists.
+func (t *tabler) fieldType(e *Entity, f *Field) string {
 	if f.Type != "enum" {
 		return t.plainType(f)
 	}
 	st := f.SchemaType[t.d.String()]
 	switch t.d {
 	case velox.Postgres:
-		if name, native := enumType(e, f); native {
+		if name, native := enumType(f); native {
 			t.enum(e, f, name)
 			return ddl.EnumType(e.TableSchema, name)
+		}
+		if st == "" {
+			return "character varying"
 		}
 	case velox.MySQL:
 		if st == "" || !ddl.StringType(t.d, st) {
 			return ddl.MySQLEnum(enumValues(f))
 		}
 	}
-	tb.Checks = append(tb.Checks, migrate.Check{
-		Name: checkName(e.Table, f.Column), Expr: ddl.EnumCheck(t.d, f.Column, enumValues(f)), Pos: f.Pos,
-	})
 	if st == "" {
 		return "text"
 	}
@@ -475,6 +513,10 @@ func baseType(d velox.Dialect, typ string, size int) string {
 		switch {
 		case d == velox.Postgres && size > 0 && size <= 10485760:
 			return "character varying(" + strconv.Itoa(size) + ")"
+		case d == velox.Postgres && size == 0:
+			// Unbounded varchar, as veloxe and ent made a string with no
+			// size; a Text field's size is over the limit, and is text.
+			return "character varying"
 		case d == velox.MySQL:
 			switch {
 			case size == 0:

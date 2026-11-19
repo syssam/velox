@@ -97,6 +97,10 @@ func collectImports(t reflect.Type, out []string) []string {
 	case reflect.Map:
 		out = collectImports(t.Key(), out)
 		out = collectImports(t.Elem(), out)
+	case reflect.Struct:
+		for sf := range t.Fields() {
+			out = collectImports(sf.Type, out)
+		}
 	}
 	return out
 }
@@ -113,11 +117,13 @@ func FuncOf(pc uintptr) string {
 }
 
 // Unwritable is why velox-gen cannot write t as Go source, or "": t
-// reaches, through pointers, slices, arrays, maps and channels, an
-// instance of a generic type (reflect prints its type arguments with
-// their full package paths), or an unnamed func, an unnamed interface
-// with methods, or an unnamed struct with fields (their packages would
-// go unimported, and an unexported field would make another type).
+// reaches, through pointers, slices, arrays, maps, channels and the fields
+// of unnamed structs, an instance of a generic type (reflect prints its type
+// arguments with their full package paths), an unnamed func, an unnamed
+// interface with methods, or an unnamed struct with an unexported field,
+// which written in another package would be another type. An unnamed struct
+// of exported fields is written inline, as veloxe wrote it: reflect prints
+// it as Go source, its tags quoted, and GoTypeOf lists its fields' packages.
 // interface{} and struct{} are writable.
 func Unwritable(t reflect.Type) string {
 	if t.Name() != "" {
@@ -141,8 +147,13 @@ func Unwritable(t reflect.Type) string {
 			return "holds an unnamed interface type"
 		}
 	case reflect.Struct:
-		if t.NumField() > 0 {
-			return "holds an unnamed struct type"
+		for sf := range t.Fields() {
+			if !sf.IsExported() {
+				return "holds an unnamed struct type with the unexported field " + sf.Name
+			}
+			if r := Unwritable(sf.Type); r != "" {
+				return r
+			}
 		}
 	}
 	return ""

@@ -22,7 +22,8 @@
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "deleted_at",
@@ -31,11 +32,13 @@
         },
         {
           "name": "number",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "customer",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "status",
@@ -43,7 +46,8 @@
         },
         {
           "name": "total_cents",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         }
       ],
       "primary_key": [
@@ -51,19 +55,13 @@
       ],
       "indexes": [
         {
-          "name": "invoice_org_id_number",
+          "name": "invoices_invoice_org_id_number",
           "columns": [
             "org_id",
             "number"
           ],
           "unique": true,
           "where": "deleted_at IS NULL"
-        }
-      ],
-      "checks": [
-        {
-          "name": "invoices_status_check",
-          "expr": "\"status\" IN ('draft', 'sent', 'paid')"
         }
       ]
     },
@@ -77,19 +75,23 @@
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "invoice_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "description",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "amount_cents",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         }
       ],
       "primary_key": [

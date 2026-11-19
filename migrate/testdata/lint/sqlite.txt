@@ -3,13 +3,11 @@
 0 drop-table destructive posts: drops table posts and its rows
 == rename-table
 0 rename-table review accounts: renames table users to accounts; code that uses the old name breaks while old and new versions run together
-4 sqlite-rebuild review accounts: renames constraint users_role_check to accounts_role_check; SQLite rebuilds table accounts: it copies every row into a new table
-5 sqlite-rebuild review accounts: renames constraint users_status_check to accounts_status_check; SQLite rebuilds table accounts: it copies every row into a new table
 == add-column-optional
 == add-column-nillable
 == add-column-required
-0 add-required-column destructive users.nickname [cases_test.go]: adds column users.nickname as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Optional (NOT NULL, its zero the default), or allow it only on an empty table
-0 sqlite-rebuild review users [cases_test.go]: adds column users.nickname, which SQLite cannot add in place; SQLite rebuilds table users: it copies every row into a new table
+0 add-required-column destructive users.joined_at [cases_test.go]: adds column users.joined_at as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Nillable, or allow it only on an empty table
+0 sqlite-rebuild review users [cases_test.go]: adds column users.joined_at, which SQLite cannot add in place; SQLite rebuilds table users: it copies every row into a new table
 == add-column-default
 == add-column-schema-default
 0 sqlite-rebuild review users [cases_test.go]: adds column users.seen_at, which SQLite cannot add in place; SQLite rebuilds table users: it copies every row into a new table
@@ -20,23 +18,26 @@
 0 rename-column review users.full_name: renames column users.name to full_name; code that uses the old name breaks while old and new versions run together
 == set-not-null
 0 set-not-null destructive users.bio [cases_test.go]: makes column users.bio NOT NULL; it fails if any row holds NULL
-0 sqlite-rebuild review users [cases_test.go]: changes the nullability of column users.bio; SQLite rebuilds table users: it copies every row into a new table
+0 sqlite-rebuild review users [cases_test.go]: changes the nullability, default of column users.bio; SQLite rebuilds table users: it copies every row into a new table
 == drop-not-null
-0 sqlite-rebuild review users [cases_test.go]: changes the nullability of column users.name; SQLite rebuilds table users: it copies every row into a new table
+0 sqlite-rebuild review users [cases_test.go]: changes the nullability, default of column users.name; SQLite rebuilds table users: it copies every row into a new table
 == change-default
 0 sqlite-rebuild review users [cases_test.go]: changes the default of column users.role; SQLite rebuilds table users: it copies every row into a new table
 == add-index
-0 add-index review users.user_created_at [cases_test.go]: adds index users.user_created_at; building it scans the table
+0 add-index review users.users_user_created_at [cases_test.go]: adds index users.users_user_created_at; building it scans the table
 == drop-index
 0 drop-index review users.users_by_name: drops index users.users_by_name; queries that used it get slower
 == rename-index
 == add-unique
 0 add-unique destructive users.users_name_key [cases_test.go]: adds unique index users.users_name_key; it fails if rows hold duplicates
+== add-check
+0 add-check review users.users_logins_positive [cases_test.go]: adds check users.users_logins_positive; it fails if any row breaks it
+0 sqlite-rebuild review users [cases_test.go]: adds check users_logins_positive; SQLite rebuilds table users: it copies every row into a new table
 == fk-index-replaced
-0 add-index review users.user_org_id_created_at [cases_test.go]: adds index users.user_org_id_created_at; building it scans the table
+0 add-index review users.users_user_org_id_created_at [cases_test.go]: adds index users.users_user_org_id_created_at; building it scans the table
 == fk-index-restored
 0 add-index review users.users_org_id [cases_test.go]: adds index users.users_org_id; building it scans the table
-1 drop-index review users.user_org_id_created_at: drops index users.user_org_id_created_at; queries that used it get slower
+1 drop-index review users.users_user_org_id_created_at: drops index users.users_user_org_id_created_at; queries that used it get slower
 == add-foreign-key
 0 add-index review posts.posts_reviewer_id [cases_test.go]: adds index posts.posts_reviewer_id; building it scans the table
 1 add-foreign-key review posts.posts_users_reviewer [cases_test.go]: adds foreign key posts_users_reviewer; it fails if rows have no match in users
@@ -47,45 +48,14 @@
 0 sqlite-rebuild review posts: drops foreign key posts_users_posts; SQLite rebuilds table posts: it copies every row into a new table
 1 add-foreign-key review posts.posts_users_posts [cases_test.go]: adds foreign key posts_users_posts; it fails if rows have no match in users
 1 sqlite-rebuild review posts [cases_test.go]: adds foreign key posts_users_posts; SQLite rebuilds table posts: it copies every row into a new table
-== enum-append
-0 sqlite-rebuild review users: drops check users_role_check; SQLite rebuilds table users: it copies every row into a new table
-1 add-check review users.users_role_check [cases_test.go]: adds check users.users_role_check; it fails if any row breaks it
-1 sqlite-rebuild review users [cases_test.go]: adds check users_role_check; SQLite rebuilds table users: it copies every row into a new table
-== enum-insert
-0 sqlite-rebuild review users: drops check users_role_check; SQLite rebuilds table users: it copies every row into a new table
-1 add-check review users.users_role_check [cases_test.go]: adds check users.users_role_check; it fails if any row breaks it
-1 sqlite-rebuild review users [cases_test.go]: adds check users_role_check; SQLite rebuilds table users: it copies every row into a new table
-== enum-remove
-0 sqlite-rebuild review users: drops check users_role_check; SQLite rebuilds table users: it copies every row into a new table
-1 drop-enum-value destructive users.users_role_check [cases_test.go]: removes 'admin' from check users.users_role_check; rows that hold it fail or change
-1 add-check review users.users_role_check [cases_test.go]: adds check users.users_role_check; it fails if any row breaks it
-1 sqlite-rebuild review users [cases_test.go]: adds check users_role_check; SQLite rebuilds table users: it copies every row into a new table
-== enum-reorder
-0 sqlite-rebuild review users: drops check users_role_check; SQLite rebuilds table users: it copies every row into a new table
-1 add-check review users.users_role_check [cases_test.go]: adds check users.users_role_check; it fails if any row breaks it
-1 sqlite-rebuild review users [cases_test.go]: adds check users_role_check; SQLite rebuilds table users: it copies every row into a new table
-== enum-shared
-0 sqlite-rebuild review posts: drops check posts_status_check; SQLite rebuilds table posts: it copies every row into a new table
-1 sqlite-rebuild review users: drops check users_status_check; SQLite rebuilds table users: it copies every row into a new table
-2 drop-enum-value destructive posts.posts_status_check [cases_test.go]: removes 'banned' from check posts.posts_status_check; rows that hold it fail or change
-2 add-check review posts.posts_status_check [cases_test.go]: adds check posts.posts_status_check; it fails if any row breaks it
-2 sqlite-rebuild review posts [cases_test.go]: adds check posts_status_check; SQLite rebuilds table posts: it copies every row into a new table
-3 drop-enum-value destructive users.users_status_check [cases_test.go]: removes 'banned' from check users.users_status_check; rows that hold it fail or change
-3 add-check review users.users_status_check [cases_test.go]: adds check users.users_status_check; it fails if any row breaks it
-3 sqlite-rebuild review users [cases_test.go]: adds check users_status_check; SQLite rebuilds table users: it copies every row into a new table
 == literals
-0 sqlite-rebuild review users: drops check users_role_check; SQLite rebuilds table users: it copies every row into a new table
-2 add-check review users.users_role_check [cases_test.go]: adds check users.users_role_check; it fails if any row breaks it
-2 sqlite-rebuild review users [cases_test.go]: adds check users_role_check; SQLite rebuilds table users: it copies every row into a new table
 == rebuild-parent
 0 alter-type destructive users.logins [cases_test.go]: changes column users.logins from integer to real, which can fail or change values
 0 sqlite-rebuild review users [cases_test.go]: changes the type of column users.logins; SQLite rebuilds table users: it copies every row into a new table
 == rename-table-drop-column
 1 rename-table review accounts: renames table users to accounts; code that uses the old name breaks while old and new versions run together
-4 sqlite-rebuild review accounts: renames constraint users_role_check to accounts_role_check; SQLite rebuilds table accounts: it copies every row into a new table
-5 sqlite-rebuild review accounts: renames constraint users_status_check to accounts_status_check; SQLite rebuilds table accounts: it copies every row into a new table
-6 drop-column destructive accounts.email: drops column accounts.email and its data
-6 sqlite-rebuild review accounts: drops column accounts.email, which a key, index or constraint uses; SQLite rebuilds table accounts: it copies every row into a new table
+5 drop-column destructive accounts.email: drops column accounts.email and its data
+5 sqlite-rebuild review accounts: drops column accounts.email, which a key, index or constraint uses; SQLite rebuilds table accounts: it copies every row into a new table
 == reuse-dropped-name
 1 add-index review users.shared_idx [cases_test.go]: adds index users.shared_idx; building it scans the table
 2 drop-table destructive posts: drops table posts and its rows

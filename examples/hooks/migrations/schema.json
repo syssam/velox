@@ -12,11 +12,13 @@
         },
         {
           "name": "actor",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "message",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         }
       ],
       "primary_key": [
@@ -33,19 +35,23 @@
         },
         {
           "name": "created_by",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "title",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "slug",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "done",
-          "type": "boolean"
+          "type": "boolean",
+          "default": "0"
         }
       ],
       "primary_key": [

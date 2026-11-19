@@ -98,7 +98,8 @@
         },
         {
           "name": "name",
-          "type": "varchar(255)"
+          "type": "varchar(255)",
+          "default": "''"
         }
       ],
       "primary_key": [
@@ -117,11 +118,13 @@
         },
         {
           "name": "author_id",
-          "type": "bigint"
+          "type": "bigint",
+          "default": "0"
         },
         {
           "name": "title",
-          "type": "varchar(200)"
+          "type": "varchar(200)",
+          "default": "''"
         },
         {
           "name": "status",
@@ -168,16 +171,19 @@
         },
         {
           "name": "org_id",
-          "type": "bigint"
+          "type": "bigint",
+          "default": "0"
         },
         {
           "name": "name",
           "type": "varchar(255)",
+          "default": "''",
           "comment": "the display name"
         },
         {
           "name": "email",
-          "type": "varchar(120)"
+          "type": "varchar(120)",
+          "default": "''"
         },
         {
           "name": "bio",

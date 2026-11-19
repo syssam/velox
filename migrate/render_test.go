@@ -95,8 +95,8 @@ func TestRenderGolden(t *testing.T) {
 func TestRenderMySQLIndexStatement(t *testing.T) {
 	t.Parallel()
 	for name, want := range map[string]string{
-		"fk-index-replaced": "ALTER TABLE `users` ADD INDEX `user_org_id_created_at` (`org_id`, `created_at`), DROP INDEX `users_orgs_users`, ALGORITHM=INPLACE, LOCK=NONE",
-		"fk-index-restored": "ALTER TABLE `users` ADD INDEX `users_orgs_users` (`org_id`), DROP INDEX `user_org_id_created_at`, ALGORITHM=INPLACE, LOCK=NONE",
+		"fk-index-replaced": "ALTER TABLE `users` ADD INDEX `users_user_org_id_created_at` (`org_id`, `created_at`), DROP INDEX `users_orgs_users`, ALGORITHM=INPLACE, LOCK=NONE",
+		"fk-index-restored": "ALTER TABLE `users` ADD INDEX `users_orgs_users` (`org_id`), DROP INDEX `users_user_org_id_created_at`, ALGORITHM=INPLACE, LOCK=NONE",
 	} {
 		got := sqls(caseScripts(t, caseNamed(name), velox.MySQL))
 		if !slices.Equal(got, []string{want}) {
@@ -113,16 +113,16 @@ func TestRenderMySQLOrder(t *testing.T) {
 	t.Parallel()
 	for name, want := range map[string][]string{
 		"drop-column-in-unique": {
-			"ALTER TABLE `users` DROP INDEX `user_name_logins`, ALGORITHM=INPLACE, LOCK=NONE",
+			"ALTER TABLE `users` DROP INDEX `users_user_name_logins`, ALGORITHM=INPLACE, LOCK=NONE",
 			"ALTER TABLE `users` DROP COLUMN `logins`",
 		},
 		"drop-column-in-index": {
 			"ALTER TABLE `users` DROP COLUMN `logins`",
-			"ALTER TABLE `users` ADD INDEX `users_orgs_users` (`org_id`), DROP INDEX `user_org_id_logins`, ALGORITHM=INPLACE, LOCK=NONE",
+			"ALTER TABLE `users` ADD INDEX `users_orgs_users` (`org_id`), DROP INDEX `users_user_org_id_logins`, ALGORITHM=INPLACE, LOCK=NONE",
 		},
 		"drop-column-in-unique-key": {
 			"ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`",
-			"ALTER TABLE `users` DROP INDEX `user_org_id_logins`, ALGORITHM=INPLACE, LOCK=NONE",
+			"ALTER TABLE `users` DROP INDEX `users_user_org_id_logins`, ALGORITHM=INPLACE, LOCK=NONE",
 			"ALTER TABLE `users` DROP COLUMN `logins`",
 			"ALTER TABLE `users` ADD INDEX `users_orgs_users` (`org_id`), ALGORITHM=INPLACE, LOCK=NONE",
 			"ALTER TABLE `users` ADD CONSTRAINT `users_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
@@ -134,7 +134,7 @@ func TestRenderMySQLOrder(t *testing.T) {
 			"ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`",
 			"ALTER TABLE `posts` DROP FOREIGN KEY `posts_users_posts`",
 			"RENAME TABLE `users` TO `accounts`",
-			"ALTER TABLE `accounts` RENAME INDEX `users_orgs_users` TO `accounts_orgs_users`",
+			"ALTER TABLE `accounts` RENAME INDEX `users_by_name` TO `accounts_users_by_name`, RENAME INDEX `users_orgs_users` TO `accounts_orgs_users`",
 			"ALTER TABLE `posts` RENAME INDEX `posts_users_posts` TO `posts_accounts_posts`",
 			"ALTER TABLE `accounts` ADD CONSTRAINT `accounts_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
 			"ALTER TABLE `posts` ADD CONSTRAINT `posts_accounts_posts` FOREIGN KEY (`author_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE",
@@ -191,9 +191,9 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 	want := []string{
 		`CREATE TABLE "velox_new_users" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "org_id" integer NOT NULL,
-  "name" text NOT NULL,
-  "email" text NOT NULL,
+  "org_id" integer NOT NULL DEFAULT 0,
+  "name" text NOT NULL DEFAULT '',
+  "email" text NOT NULL DEFAULT '',
   "bio" text,
   "role" text NOT NULL DEFAULT 'viewer',
   "status" text NOT NULL DEFAULT 'active',
@@ -201,9 +201,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
   "created_at" datetime(9) NOT NULL,
   "mentor_id" integer,
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id") ON DELETE SET NULL,
-  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
-  CONSTRAINT "users_role_check" CHECK ("role" IN ('admin', 'viewer')),
-  CONSTRAINT "users_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
+  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id")
 )`,
 		`INSERT INTO "velox_new_users" ("id", "org_id", "name", "email", "bio", "role", "status", "logins", "created_at", "mentor_id") SELECT "id", "org_id", "name", "email", "bio", "role", "status", "logins", "created_at", "mentor_id" FROM "users"`,
 		`DELETE FROM sqlite_sequence WHERE name = 'velox_new_users'`,
@@ -230,10 +228,12 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 
 	// A rebuilt table's index rename frees the old name at once; the
 	// rebuild makes the new one.
-	got := sqls(caseScripts(t, caseNamed("rename-table"), velox.SQLite))
-	want = []string{`ALTER TABLE "users" RENAME TO "accounts"`, `DROP INDEX "users_email_key"`, `DROP INDEX "users_mentor_id"`, `DROP INDEX "users_org_id"`}
+	// velox-gen makes no enum check to rename, so the case that rebuilds the
+	// table is the one that also drops a column (decision 0090).
+	got := sqls(caseScripts(t, caseNamed("rename-table-drop-column"), velox.SQLite))
+	want = []string{`DROP INDEX "users_email_key"`, `ALTER TABLE "users" RENAME TO "accounts"`, `DROP INDEX "users_by_name"`, `DROP INDEX "users_mentor_id"`, `DROP INDEX "users_org_id"`}
 	if len(got) < len(want) || !slices.Equal(got[:len(want)], want) || !strings.HasPrefix(got[len(want)], `CREATE TABLE "velox_new_accounts"`) {
-		t.Errorf("rename-table:\n%s", strings.Join(got, ";\n"))
+		t.Errorf("rename-table-drop-column:\n%s", strings.Join(got, ";\n"))
 	}
 
 	// A table without AUTOINCREMENT has no counter to keep.
@@ -340,7 +340,8 @@ func TestRenderLiterals(t *testing.T) {
 	for d, want := range map[velox.Dialect][]string{
 		velox.Postgres: {`DEFAULT 'it''s a \ test'`, `COMMENT ON COLUMN "users"."motto" IS 'it''s a \ comment'`, `ADD VALUE IF NOT EXISTS 'o''neil'`},
 		velox.MySQL:    {`DEFAULT 'it''s a \\ test'`, `COMMENT 'it''s a \\ comment'`, `'o''neil'`},
-		velox.SQLite:   {`DEFAULT 'it''s a \ test'`, `'o''neil'`},
+		// SQLite keeps an enum's values in Go alone (decision 0090).
+		velox.SQLite: {`DEFAULT 'it''s a \ test'`},
 	} {
 		got := scriptsText(caseScripts(t, caseNamed("literals"), d))
 		for _, w := range want {

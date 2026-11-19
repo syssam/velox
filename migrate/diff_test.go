@@ -336,22 +336,22 @@ func TestDiffStepOneUsesFromNames(t *testing.T) {
 	}
 	wantLines(t, "rename-table-drop-column", caseChanges(t, "rename-table-drop-column", velox.Postgres), append(append([]string{
 		"drop-index users users_email_key"}, renames...),
+		"rename-index accounts users_by_name accounts_users_by_name",
 		"rename-index accounts users_mentor_id accounts_mentor_id",
 		"rename-index accounts users_org_id accounts_org_id",
 		"rename-constraint accounts users_orgs_users accounts_orgs_users",
 		"rename-constraint accounts users_pkey accounts_pkey",
 		"rename-constraint posts posts_users_posts posts_accounts_posts",
-		"rename-enum accounts_role users_role",
 		"drop-column accounts email",
 	))
 	wantLines(t, "rename-table-key-type", caseChanges(t, "rename-table-key-type", velox.Postgres), append(append([]string{
 		"drop-foreign-key users users_orgs_users"}, renames...),
+		"rename-index accounts users_by_name accounts_users_by_name",
 		"rename-index accounts users_email_key accounts_email_key",
 		"rename-index accounts users_mentor_id accounts_mentor_id",
 		"rename-index accounts users_org_id accounts_org_id",
 		"rename-constraint accounts users_pkey accounts_pkey",
 		"rename-constraint posts posts_users_posts posts_accounts_posts",
-		"rename-enum accounts_role users_role",
 		"alter-column accounts org_id 1",
 		"alter-column orgs id 1",
 		"add-foreign-key accounts accounts_orgs_users",
@@ -389,24 +389,24 @@ func TestDiffReusedName(t *testing.T) {
 func TestDiffDropColumnInIndex(t *testing.T) {
 	t.Parallel()
 	for _, d := range allDialects {
-		want := []string{"drop-index users user_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
+		want := []string{"drop-index users users_user_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
 		if d == velox.MySQL {
-			want = []string{"drop-column users logins", "add-index users users_orgs_users", "drop-index users user_org_id_logins"}
+			want = []string{"drop-column users logins", "add-index users users_orgs_users", "drop-index users users_user_org_id_logins"}
 		}
 		wantLines(t, d.String(), caseChanges(t, "drop-column-in-index", d), want)
 
 		// MySQL would keep a unique index unique over the columns left, so
 		// it goes before the column on every dialect.
 		wantLines(t, d.String()+" unique", caseChanges(t, "drop-column-in-unique", d), []string{
-			"drop-index users user_name_logins", "drop-column users logins",
+			"drop-index users users_user_name_logins", "drop-column users logins",
 		})
 		// On MySQL a foreign key whose only index goes first goes with it,
 		// and comes back after its new index.
-		want = []string{"drop-index users user_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
+		want = []string{"drop-index users users_user_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
 		if d == velox.MySQL {
 			want = []string{
 				"drop-foreign-key users users_orgs_users",
-				"drop-index users user_org_id_logins",
+				"drop-index users users_user_org_id_logins",
 				"drop-column users logins",
 				"add-index users users_orgs_users",
 				"add-foreign-key users users_orgs_users",
@@ -422,15 +422,15 @@ func TestDiffDropColumnInIndex(t *testing.T) {
 func TestDiffRenameColumnRewrites(t *testing.T) {
 	t.Parallel()
 	want := map[velox.Dialect][]string{
-		velox.Postgres: {"rename-column users role kind", "rename-enum users_kind users_role"},
-		velox.MySQL:    {"rename-column users role kind"},
+		velox.Postgres: {"rename-column users role kind", "rename-constraint users users_role_check users_kind_check"},
+		velox.MySQL:    {"drop-check users users_role_check", "rename-column users role kind", "add-check users users_kind_check"},
 		velox.SQLite:   {"rename-column users role kind", "rename-constraint users users_role_check users_kind_check"},
 	}
 	for _, d := range allDialects {
 		wantLines(t, d.String(), caseChanges(t, "rename-column-check", d), want[d])
 	}
 	// MySQL refuses to rename a column a check uses: the check goes first and
-	// comes back after.
+	// comes back after, also when the column is a varchar.
 	wantLines(t, "mysql opt-out", caseChanges(t, "rename-column-opt-out", velox.MySQL), []string{
 		"drop-check users users_role_check",
 		"rename-column users role kind",
@@ -454,16 +454,17 @@ func TestDiffRenameTableCarriesDerivedNames(t *testing.T) {
 		velox.Postgres: {
 			"rename-table accounts users accounts",
 			"rename-sequence accounts id users_id_seq accounts_id_seq",
+			"rename-index accounts users_by_name accounts_users_by_name",
 			"rename-index accounts users_email_key accounts_email_key",
 			"rename-index accounts users_mentor_id accounts_mentor_id",
 			"rename-index accounts users_org_id accounts_org_id",
 			"rename-constraint accounts users_orgs_users accounts_orgs_users",
 			"rename-constraint accounts users_pkey accounts_pkey",
 			"rename-constraint posts posts_users_posts posts_accounts_posts",
-			"rename-enum accounts_role users_role",
 		},
 		velox.MySQL: {
 			"rename-table accounts users accounts",
+			"rename-index accounts users_by_name accounts_users_by_name",
 			"rename-index accounts users_orgs_users accounts_orgs_users",
 			"rename-index posts posts_users_posts posts_accounts_posts",
 			"rename-constraint accounts users_orgs_users accounts_orgs_users",
@@ -471,20 +472,20 @@ func TestDiffRenameTableCarriesDerivedNames(t *testing.T) {
 		},
 		velox.SQLite: {
 			"rename-table accounts users accounts",
+			"rename-index accounts users_by_name accounts_users_by_name",
 			"rename-index accounts users_email_key accounts_email_key",
 			"rename-index accounts users_mentor_id accounts_mentor_id",
 			"rename-index accounts users_org_id accounts_org_id",
-			"rename-constraint accounts users_role_check accounts_role_check",
-			"rename-constraint accounts users_status_check accounts_status_check",
 		},
 	}
 	for _, d := range allDialects {
 		cs := caseChanges(t, "rename-table", d)
 		wantLines(t, d.String(), cs, want[d])
 		for _, l := range lines(cs) {
-			// The StorageKey index, the Symbol key and the EnumOf type keep
-			// their names.
-			for _, name := range []string{"users_by_name", "user_mentor", "case_status"} {
+			// The Symbol key and the shared enum type keep their names. A
+			// StorageKey index is prefixed with its table, as a derived one
+			// is, so it follows a rename (decision 0090).
+			for _, name := range []string{"user_mentor", "case_status"} {
 				if strings.Contains(l, name) {
 					t.Errorf("%v: %s renames %s", d, l, name)
 				}
@@ -582,7 +583,7 @@ func TestDiffFKIndexReplaced(t *testing.T) {
 			fkIndex = "users_orgs_users" // the key's name
 		}
 		wantLines(t, d.String(), caseChanges(t, "fk-index-replaced", d), []string{
-			"add-index users user_org_id_created_at",
+			"add-index users users_user_org_id_created_at",
 			"drop-index users " + fkIndex,
 		})
 	}
@@ -643,10 +644,8 @@ func TestDiffEnumValues(t *testing.T) {
 	} {
 		wantLines(t, name+" on PostgreSQL", caseChanges(t, name, velox.Postgres), []string{want})
 		wantLines(t, name+" on MySQL", caseChanges(t, name, velox.MySQL), []string{"alter-column users role 1"})
-		wantLines(t, name+" on SQLite", caseChanges(t, name, velox.SQLite), []string{
-			"drop-check users users_role_check",
-			"add-check users users_role_check",
-		})
+		// SQLite stores an enum as text with no check (decision 0090).
+		wantLines(t, name+" on SQLite", caseChanges(t, name, velox.SQLite), nil)
 	}
 
 	// Removing or reordering and adding: the new values are added first, and

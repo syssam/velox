@@ -94,7 +94,8 @@
         },
         {
           "name": "name",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         }
       ],
       "primary_key": [
@@ -111,11 +112,13 @@
         },
         {
           "name": "author_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "title",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "status",
@@ -148,12 +151,6 @@
           ],
           "on_delete": "CASCADE"
         }
-      ],
-      "checks": [
-        {
-          "name": "posts_status_check",
-          "expr": "\"status\" IN ('active', 'banned', 'pending')"
-        }
       ]
     },
     {
@@ -166,15 +163,18 @@
         },
         {
           "name": "org_id",
-          "type": "integer"
+          "type": "integer",
+          "default": "0"
         },
         {
           "name": "name",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "email",
-          "type": "text"
+          "type": "text",
+          "default": "''"
         },
         {
           "name": "bio",
@@ -261,16 +261,6 @@
           "ref_columns": [
             "id"
           ]
-        }
-      ],
-      "checks": [
-        {
-          "name": "users_role_check",
-          "expr": "\"role\" IN ('admin', 'viewer')"
-        },
-        {
-          "name": "users_status_check",
-          "expr": "\"status\" IN ('active', 'banned', 'pending')"
         }
       ]
     }

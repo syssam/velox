@@ -60,7 +60,7 @@ func TestIndexMethodTables(t *testing.T) {
 	tb := table(t, tables(t, velox.Postgres, imGin{}), "im_gins")
 	got := map[string]string{}
 	for _, ix := range tb.Indexes {
-		got[ix.Name] = ix.Method
+		got[strings.TrimPrefix(ix.Name, tb.Name+"_")] = ix.Method
 	}
 	want := map[string]string{
 		"ix_attrs_gin": "gin", "ix_tags_gin": "gin", "ix_name_hash": "hash", "ix_name_btree": "",

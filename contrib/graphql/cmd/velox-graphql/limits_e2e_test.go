@@ -1082,12 +1082,13 @@ func TestCreateDefaultServed(t *testing.T) {
 
 // TestJSONListsServed: a JSON field of []string, []int, []float64 or []bool is
 // a list of the scalar, both ways; an empty list stores empty, a clear NULL,
+// one left out of a create empty, as veloxe wrote it (decision 0090),
 // and a null nothing.
 func TestJSONListsServed(t *testing.T) {
 	s := serve(t)
 	s.want("create", 'mutation { createFlag(input: {tags: ["a", "b"], nums: [1, 2], fs: [1.5], bs: [true, false]}) { tags nums fs bs } }',
 		'{"data":{"createFlag":{"tags":["a","b"],"nums":[1,2],"fs":[1.5],"bs":[true,false]}}}')
-	s.want("left out", "mutation { createFlag(input: {nums: []}) { tags nums fs bs } }", '{"data":{"createFlag":{"tags":null,"nums":[],"fs":null,"bs":null}}}')
+	s.want("left out", "mutation { createFlag(input: {nums: []}) { tags nums fs bs } }", '{"data":{"createFlag":{"tags":[],"nums":[],"fs":[],"bs":[]}}}')
 	id := "1"
 	s.want("update to empty", fmt.Sprintf('mutation { updateFlag(id: %q, input: {tags: [], nums: [3]}) { tags nums } }', id), '{"data":{"updateFlag":{"tags":[],"nums":[3]}}}')
 	s.want("clear", fmt.Sprintf('mutation { updateFlag(id: %q, input: {clearTags: true}) { tags } }', id), '{"data":{"updateFlag":{"tags":null}}}')

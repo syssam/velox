@@ -238,10 +238,10 @@ func TestTablesPositions(t *testing.T) {
 	if fk := posts.ForeignKeys[0]; fk.Pos != p.Edge("author").Pos {
 		t.Errorf("foreign key pos %q, want the edge's %q", fk.Pos, p.Edge("author").Pos)
 	}
-	if ix := users.Indexes[slices.IndexFunc(users.Indexes, func(ix migrate.Index) bool { return ix.Name == "users_by_name" })]; ix.Pos != u.Indexes[0].Pos || ix.Pos == "" {
+	if ix := users.Indexes[slices.IndexFunc(users.Indexes, func(ix migrate.Index) bool { return ix.Name == "tb_users_users_by_name" })]; ix.Pos != u.Indexes[0].Pos || ix.Pos == "" {
 		t.Errorf("index pos %q", ix.Pos)
 	}
-	if e := s.Enums[slices.IndexFunc(s.Enums, func(e migrate.Enum) bool { return e.Name == "tb_users_role" })]; e.Pos != u.Field("role").Pos {
+	if e := s.Enums[slices.IndexFunc(s.Enums, func(e migrate.Enum) bool { return e.Name == "mood" })]; e.Pos != p.Field("mood").Pos {
 		t.Errorf("enum pos %q", e.Pos)
 	}
 	// An implicit foreign key, and its index, are at the edge that declares them.
@@ -307,7 +307,7 @@ func TestTablesTypes(t *testing.T) {
 		"u64":        {"numeric(20,0)", "bigint unsigned", "integer"},
 		"f32":        {"real", "float", "real"},
 		"f64":        {"double precision", "double", "real"},
-		"s":          {"text", "varchar(255)", "text"},
+		"s":          {"character varying", "varchar(255)", "text"},
 		"s1":         {"character varying(1)", "varchar(1)", "text"},
 		"txt":        {"text", "longtext", "text"},
 		"s16381":     {"character varying(16381)", "varchar(16381)", "text"},
@@ -504,7 +504,7 @@ func TestTablesDefaults(t *testing.T) {
 	want := map[string][3]string{ // PostgreSQL, MySQL, SQLite
 		"id":      {"", "", ""},
 		"at":      {"now()", "CURRENT_TIMESTAMP(6)", "CURRENT_TIMESTAMP"},
-		"pg_only": {"'x'::text", "", ""},
+		"pg_only": {"'x'::text", "''", "''"},
 		"s":       {`'it''s a \ test'`, `'it''s a \\ test'`, `'it''s a \ test'`},
 		"txt":     {`'it''s a \ test'`, `('it''s a \\ test')`, `'it''s a \ test'`},
 		"flag":    {"true", "1", "1"},
@@ -518,7 +518,7 @@ func TestTablesDefaults(t *testing.T) {
 		"oi":      {"0", "0", "0"},
 		"of":      {"0", "0", "0"},
 		"ns":      {"", "", ""},
-		"req":     {"", "", ""},
+		"req":     {"''", "''", "''"},
 		"fn":      {"", "", ""},
 		"ofn":     {"", "", ""},
 		"now":     {"", "", ""},
@@ -571,16 +571,14 @@ func (OrderStatus) Values() []string { return []string{"open", "paid"} }
 func TestTablesEnums(t *testing.T) {
 	pg := tables(t, velox.Postgres, tbEnumUser{}, tbEnumOrder{})
 	users := table(t, pg, "users")
-	for name, typ := range map[string]string{"kind": `"users_kind"`, "status": `"order_status"`, "mood": `"mood"`, "role": "text"} {
+	// An enum is varchar on PostgreSQL, as veloxe made it, unless its
+	// SchemaType names an enum type (decision 0090).
+	for name, typ := range map[string]string{"kind": "character varying", "status": "character varying", "mood": `"mood"`, "role": "text"} {
 		if c := column(t, users, name); c.Type != typ {
 			t.Errorf("PostgreSQL: %s is %q, want %q", name, c.Type, typ)
 		}
 	}
-	wantEnums := []migrate.Enum{
-		{Name: "mood", Values: []string{"calm"}},
-		{Name: "order_status", Values: []string{"open", "paid"}},
-		{Name: "users_kind", Values: []string{"x", "o'neil"}},
-	}
+	wantEnums := []migrate.Enum{{Name: "mood", Values: []string{"calm"}}}
 	if len(pg.Enums) != len(wantEnums) {
 		t.Fatalf("enums %+v", pg.Enums)
 	}
@@ -589,8 +587,9 @@ func TestTablesEnums(t *testing.T) {
 			t.Errorf("enum %d: %+v, want %+v", i, e, wantEnums[i])
 		}
 	}
-	if want := []migrate.Check{{Name: "users_role_check", Expr: `"role" IN ('a', 'b')`}}; !checksEqual(users.Checks, want) {
-		t.Errorf("PostgreSQL checks %+v, want %+v", users.Checks, want)
+	// No enum is given a CHECK, on any dialect, as veloxe gave none.
+	if len(users.Checks) != 0 {
+		t.Errorf("PostgreSQL checks %+v", users.Checks)
 	}
 
 	my := table(t, tables(t, velox.MySQL, tbEnumUser{}, tbEnumOrder{}), "users")
@@ -606,13 +605,7 @@ func TestTablesEnums(t *testing.T) {
 	if c := column(t, lu, "kind"); c.Type != "text" {
 		t.Errorf("SQLite kind is %q", c.Type)
 	}
-	want := []migrate.Check{
-		{Name: "users_kind_check", Expr: `"kind" IN ('x', 'o''neil')`},
-		{Name: "users_mood_check", Expr: `"mood" IN ('calm')`},
-		{Name: "users_role_check", Expr: `"role" IN ('a', 'b')`},
-		{Name: "users_status_check", Expr: `"status" IN ('open', 'paid')`},
-	}
-	if !checksEqual(lu.Checks, want) || len(lite.Enums) != 0 {
+	if len(lu.Checks) != 0 || len(lite.Enums) != 0 {
 		t.Errorf("SQLite checks %+v, enums %+v", lu.Checks, lite.Enums)
 	}
 }
@@ -628,15 +621,15 @@ func TestTablesEnumsPerSchema(t *testing.T) {
 	for _, e := range s.Enums {
 		got = append(got, migrate.TableRef{Schema: e.Schema, Name: e.Name}.String())
 	}
-	want := []string{"tb_order_status", "tb_users_role", "mood", "billing.mood", "billing.tb_order_status"}
+	want := []string{"mood", "billing.mood"}
 	slices.Sort(want)
 	sorted := slices.Clone(got)
 	slices.Sort(sorted)
 	if !slices.Equal(sorted, want) {
 		t.Errorf("enums %q, want %q", got, want)
 	}
-	if c := column(t, table(t, s, "invoices"), "status"); c.Type != `"billing"."tb_order_status"` {
-		t.Errorf("invoices.status is %q", c.Type)
+	if c := column(t, table(t, s, "invoices"), "mood"); c.Type != `"billing"."mood"` {
+		t.Errorf("invoices.mood is %q", c.Type)
 	}
 }
 
@@ -691,18 +684,18 @@ func (tbIxTag) Edges() []schema.Edge {
 func TestTablesIndexes(t *testing.T) {
 	for _, d := range allDialects {
 		s := tables(t, d, tbIxOwner{}, tbIxA{}, tbIxB{}, tbIxC{noWhere: d == velox.MySQL}, tbIxTag{})
-		owners := []string{"tb_ix_owners_code_key", "tb_ix_owners_slug_key", "tbixowner_slug"}
+		owners := []string{"tb_ix_owners_code_key", "tb_ix_owners_slug_key", "tb_ix_owners_tbixowner_slug"}
 		ixas := "tb_ix_as_tb_ix_owner_a"
-		ixcs := []string{"tb_ix_cs_tb_ix_owner_c", "tbixc_tb_ix_owner_c"}
+		ixcs := []string{"tb_ix_cs_tb_ix_owner_c", "tb_ix_cs_tbixc_tb_ix_owner_c"}
 		if d == velox.MySQL {
-			owners = []string{"code", "slug", "tbixowner_slug"}
+			owners = []string{"code", "slug", "tb_ix_owners_tbixowner_slug"}
 			ixas = "tb_ix_as_tb_ix_owners_a" // the foreign key's name
 			ixcs = ixcs[1:]                  // the declared index, which the key needs no other beside
 		}
 		for tableName, want := range map[string][]string{
 			"tb_ix_owners":     owners,
 			"tb_ix_as":         {ixas},
-			"tb_ix_bs":         {"tbixb_tb_ix_owner_b_name"},
+			"tb_ix_bs":         {"tb_ix_bs_tbixb_tb_ix_owner_b_name"},
 			"tb_ix_cs":         ixcs,
 			"tb_ix_owner_tags": {"tb_ix_owner_tags_tb_ix_tag_id"},
 		} {
@@ -932,7 +925,7 @@ func (tbPartialUniq) Indexes() []schema.Index {
 }
 
 func TestTablesPartialUniqueKeepsFieldIndex(t *testing.T) {
-	partial := indexName("tbPartialUniq", []string{"email"})
+	partial := "accounts_" + indexName("tbPartialUniq", []string{"email"})
 	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} { // MySQL has no partial indexes
 		tb := table(t, tables(t, d, tbPartialUniq{}), "accounts")
 		want := []migrate.Index{
@@ -996,9 +989,10 @@ func (tbRfLongValue) Fields() []schema.Field {
 type tbRfPGLongValue struct{ schema.Schema }
 
 func (tbRfPGLongValue) Fields() []schema.Field {
-	f, l := field.Enum("e").Values(strings.Repeat("b", 64)), here()
+	pg := map[string]string{field.Postgres: "long_e"}
+	f, l := field.Enum("e").Values(strings.Repeat("b", 64)).SchemaType(pg), here()
 	refusalLines["pg long value"] = l
-	return []schema.Field{f, field.Enum("ok").Values(strings.Repeat("é", 31) + "b")} // 63 bytes
+	return []schema.Field{f, field.Enum("ok").Values(strings.Repeat("é", 31) + "b").SchemaType(map[string]string{field.Postgres: "long_ok"})} // 63 bytes
 }
 
 type tbRfEnumType struct{ schema.Schema }
@@ -1145,8 +1139,7 @@ func TestTablesRefusals(t *testing.T) {
 		{"partial", velox.MySQL, tbRfPartial{}, "index 0", "MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema", 0, nil},
 		{"text index", velox.MySQL, tbRfTextIndex{}, "index 0", "column bio is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType", 0, nil},
 		{"json unique", velox.MySQL, tbRfJSONUnique{}, `field "doc"`, "column doc is json on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType", 0, nil},
-		{"long value", velox.MySQL, tbRfLongValue{}, `field "e"`, "enum value Long is 256 characters on MySQL, over its 255", velox.Postgres, nil},
-		{"long value", velox.Postgres, tbRfLongValue{}, `field "e"`, "enum value Long is 256 bytes, over PostgreSQL's 63", velox.MySQL, nil},
+		{"long value", velox.MySQL, tbRfLongValue{}, `field "e"`, "enum value Long is 256 characters on MySQL, over its 255", 0, nil},
 		{"pg long value", velox.Postgres, tbRfPGLongValue{}, `field "e"`, `enum value "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb…" is 64 bytes, over PostgreSQL's 63`, 0, nil},
 		{"mysql enum type", velox.MySQL, tbRfEnumType{}, `field "e"`, "its MySQL SchemaType int is not a string type; drop it to get an enum(…) column, or give a string type to get a CHECK constraint", 0, nil},
 		{"column comment", velox.MySQL, tbRfColumnComment{}, `field "s"`, "its comment is 1025 characters on MySQL, over its 1024", 0, nil},
@@ -1790,7 +1783,8 @@ type UserProfile struct{ schema.Schema }
 func (UserProfile) Fields() []schema.Field  { return []schema.Field{field.String("bio")} }
 func (UserProfile) Indexes() []schema.Index { return []schema.Index{index.Fields("bio")} }
 
-// Tables names indexes and foreign keys as ent does on each dialect.
+// Tables names foreign keys as ent does on each dialect, and indexes as
+// veloxe did, after the table.
 func TestDDLNames(t *testing.T) {
 	for _, d := range allDialects {
 		s := tables(t, d, Writer{}, Story{}, Topic{}, UserProfile{})
@@ -1799,10 +1793,10 @@ func TestDDLNames(t *testing.T) {
 			unique, fkIndex = "email", "stories_writers_stories"
 		}
 		for name, want := range map[string]struct{ indexes, fks []string }{
-			"writers":       {[]string{unique, "writer_name"}, nil},
+			"writers":       {[]string{unique, "writers_writer_name"}, nil},
 			"stories":       {[]string{fkIndex}, []string{"stories_writers_stories"}},
 			"story_topics":  {[]string{"story_topics_topic_id"}, []string{"story_topics_story_id", "story_topics_topic_id"}},
-			"user_profiles": {[]string{"userprofile_bio"}, nil},
+			"user_profiles": {[]string{"user_profiles_userprofile_bio"}, nil},
 		} {
 			tb := table(t, s, name)
 			var fks []string
@@ -1832,15 +1826,16 @@ func (s Subscriber) Indexes() []schema.Index {
 
 // A Unique field beside a declared unique index on its column keeps its own
 // index, as ent's does, unless the declared index has the name the dialect
-// gives the field's.
+// gives the field's. A declared name is the table's then its own, so only
+// one that starts with the table's name can be the field's.
 func TestFieldUniqueBesideIndex(t *testing.T) {
 	for _, c := range []struct {
 		key                   string
 		postgres, mysql, lite []string
 	}{
-		{"", []string{"subscriber_email", "subscribers_email_key"}, []string{"email", "subscriber_email"}, []string{"subscriber_email", "subscribers_email_key"}},
+		{"", []string{"subscribers_email_key", "subscribers_subscriber_email"}, []string{"email", "subscribers_subscriber_email"}, []string{"subscribers_email_key", "subscribers_subscriber_email"}},
 		{"subscribers_email_key", []string{"subscribers_email_key"}, []string{"email", "subscribers_email_key"}, []string{"subscribers_email_key"}},
-		{"email", []string{"email", "subscribers_email_key"}, []string{"email"}, []string{"email"}},
+		{"email", []string{"subscribers_email", "subscribers_email_key"}, []string{"email", "subscribers_email"}, []string{"subscribers_email", "subscribers_email_key"}},
 	} {
 		for d, want := range map[velox.Dialect][]string{velox.Postgres: c.postgres, velox.MySQL: c.mysql, velox.SQLite: c.lite} {
 			tb := table(t, tables(t, d, Subscriber{key: c.key}), "subscribers")
@@ -1861,18 +1856,20 @@ type Member struct{ schema.Schema }
 var memberLine int
 
 func (Member) Fields() []schema.Field {
-	f, l := field.String("member_name").Unique(), here()
+	f, l := field.String("members_name").Unique(), here()
 	memberLine = l
 	return []schema.Field{field.String("name"), f}
 }
-func (Member) Indexes() []schema.Index { return []schema.Index{index.Fields("name")} }
+func (Member) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("name").StorageKey("members_name")}
+}
 
 // MySQL names a Unique field's index after its column, which may be a
-// declared index's name.
+// declared index's name: one that starts with the table's name keeps it.
 func TestTablesMySQLIndexNameClash(t *testing.T) {
 	_, err := Tables(mustBuild(t, Member{}), velox.MySQL)
-	want := `schema Member: field "member_name": index name "member_name" of the unique index of field "member_name" is also that of index 0, in table members on MySQL, ` +
-		`which names the unique index of field "member_name" after its column; give one a StorageKey`
+	want := `schema Member: field "members_name": index name "members_name" of the unique index of field "members_name" is also that of index 0, in table members on MySQL, ` +
+		`which names the unique index of field "members_name" after its column; give one a StorageKey`
 	var ge *Error
 	if got := plain(err); got != want || !errors.As(err, &ge) || !strings.HasSuffix(ge.Pos, "/tables_test.go:"+strconv.Itoa(memberLine)) {
 		t.Fatalf("got %v, want %q", err, want)
@@ -1927,15 +1924,10 @@ func (s Signup) Indexes() []schema.Index {
 }
 
 func TestFieldUniqueNotLostToWiderIndex(t *testing.T) {
-	// On MySQL, email's index is email: a clash, refused.
-	_, err := Tables(mustBuild(t, Signup{key: "email"}), velox.MySQL)
-	if got := plain(err); !strings.Contains(got, `field "email": index name "email" of the unique index of field "email" is also that of index 0`) ||
-		!strings.HasSuffix(got, "; give one a StorageKey") {
-		t.Errorf("mysql: %v", err)
-	}
-	// On PostgreSQL it is signups_email_key, refused by rule 44 on every
-	// dialect.
-	_, err = build(t, Signup{key: "signups_email_key"})
+	// On PostgreSQL email's index is signups_email_key, refused by rule 44
+	// on every dialect. (MySQL's is email, which no declared name can be:
+	// TestTablesMySQLIndexNameClash.)
+	_, err := build(t, Signup{key: "signups_email_key"})
 	if got, want := plain(err), `schema Signup: field "email": name "signups_email_key" is also this schema's index 0; give index 0 another StorageKey`; got != want {
 		t.Errorf("got %v, want %q", err, want)
 	}
@@ -1945,9 +1937,9 @@ func TestFieldUniqueNotLostToWiderIndex(t *testing.T) {
 		key  string
 		want []string
 	}{
-		{velox.Postgres, "email", []string{"email", "signups_email_key"}},
-		{velox.SQLite, "email", []string{"email", "signups_email_key"}},
-		{velox.SQLite, "sqlite_autoindex_signups_1", []string{"signups_email_key", "sqlite_autoindex_signups_1"}},
+		{velox.Postgres, "email", []string{"signups_email", "signups_email_key"}},
+		{velox.SQLite, "email", []string{"signups_email", "signups_email_key"}},
+		{velox.MySQL, "email", []string{"email", "signups_email"}},
 	} {
 		tb := table(t, tables(t, c.d, Signup{key: c.key}), "signups")
 		if got := tableIndexNames(tb); !slices.Equal(got, c.want) || !tb.Indexes[0].Unique || !tb.Indexes[1].Unique {
@@ -1975,9 +1967,10 @@ func TestDeclaredChecks(t *testing.T) {
 	if !checksEqual(got, want) {
 		t.Errorf("checks %+v, want %+v", got, want)
 	}
-	// On SQLite the enum adds its own check, which the declared ones sort among.
+	// An enum adds no check of its own on SQLite, as veloxe added none
+	// (decision 0090).
 	lite := table(t, tables(t, velox.SQLite, checkedSchema{}), "checked_schemas").Checks
-	if len(lite) != 3 {
+	if len(lite) != 2 {
 		t.Errorf("SQLite checks %+v", lite)
 	}
 }
@@ -1996,15 +1989,15 @@ func TestDeclaredCheckNeedsAName(t *testing.T) {
 	}
 }
 
-type enumCheckSchema struct{ schema.Schema }
+type notNullCheckSchema struct{ schema.Schema }
 
-func (enumCheckSchema) Fields() []schema.Field { return []schema.Field{field.Enum("role").Values("a")} }
-func (enumCheckSchema) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Check("enum_check_schemas_role_check", "1 = 1")}
+func (notNullCheckSchema) Fields() []schema.Field { return []schema.Field{field.String("role")} }
+func (notNullCheckSchema) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Check("not_null_check_schemas_role_not_null", "1 = 1")}
 }
 
-func TestDeclaredCheckTakesAnEnumsName(t *testing.T) {
-	if _, err := build(t, enumCheckSchema{}); err == nil || !strings.Contains(err.Error(), "check of field") {
+func TestDeclaredCheckTakesANotNullName(t *testing.T) {
+	if _, err := build(t, notNullCheckSchema{}); err == nil || !strings.Contains(err.Error(), "not-null check of field") {
 		t.Errorf("err = %v", err)
 	}
 }

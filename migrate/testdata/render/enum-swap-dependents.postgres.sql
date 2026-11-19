@@ -6,8 +6,8 @@
 ALTER TYPE "users_role" RENAME TO "users_role_velox_old";
 CREATE TYPE "users_role" AS ENUM ('admin', 'viewer');
 ALTER TABLE "users" DROP CONSTRAINT "users_role_known";
-DROP INDEX "user_name";
+DROP INDEX "users_user_name";
 ALTER TABLE "users" ALTER COLUMN "role" DROP DEFAULT, ALTER COLUMN "role" TYPE "users_role" USING "role"::text::"users_role", ALTER COLUMN "role" SET DEFAULT 'viewer';
-CREATE INDEX "user_name" ON "users" ("name") WHERE role = 'admin';
+CREATE INDEX "users_user_name" ON "users" ("name") WHERE role = 'admin';
 ALTER TABLE "users" ADD CONSTRAINT "users_role_known" CHECK ("role" IN ('admin', 'viewer'));
 DROP TYPE "users_role_velox_old";

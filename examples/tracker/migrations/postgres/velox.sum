@@ -1,5 +1,6 @@
-h1:3b5mlJYuuK23YsLr1tmVr6fMyKq4fOlkG6WvFNFruuI=
+h1:jy8Z7HaqYmK6W/M5nEhmWQG7pHCZo/cuScE/PCCNfTQ=
 0001_init.sql h1:qUhlJ5WdKahmUXaPsScVqM1Tg3eP9hFsCDIdZ6BK6gU=
 0002_add_orgs_online.sql h1:4G8gMi7eti/aXp1bfCh+TMgpzOmPnllLLmzDnipExu4=
-schema.json h1:JQCI1poL2fiMBnhjpjJZQwz+EpJfAhZLF4am7e3rl3U=
+0003_veloxe_defaults.sql h1:1MBU+Vh+mEe75p4UlKtDSJmQkSEY+2/wKTzF4xvtE1g=
+schema.json h1:U091323s6V6Q5gRuNgSIVXtdV40fsN7r3Xc1ODXCvwI=
 velox.json h1:K26+En/pVOuADr9VSQB0yTqIMGTHZsodqXWEuIeOpkI=

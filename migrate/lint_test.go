@@ -116,7 +116,7 @@ func TestLintCases(t *testing.T) {
 		{"drop-not-null", pgM}:             nil,
 		{"drop-not-null", lite}:            {"sqlite-rebuild@users"},
 		{"change-default", pgM}:            nil,
-		{"add-index", pgM}:                 {"add-index@users.user_created_at"},
+		{"add-index", pgM}:                 {"add-index@users.users_user_created_at"},
 		{"add-unique", pgM}:                {"add-unique@users.users_name_key"},
 		{"rename-index", pgM}:              nil,
 		{"enum-append", pgM}:               nil,
@@ -168,12 +168,12 @@ func TestLintAddColumn(t *testing.T) {
 				got = append(got, f)
 			}
 		}
-		if len(got) != 1 || got[0].Class != migrate.Destructive || got[0].Target != "users.nickname" {
+		if len(got) != 1 || got[0].Class != migrate.Destructive || got[0].Target != "users.joined_at" {
 			t.Errorf("on %v: %+v", d, got)
 		}
 		// -allow alone still fails on a table with rows: the message gives the
 		// schema's ways out first.
-		if len(got) == 1 && !strings.Contains(got[0].Message, "give the field a Default or make it Optional") {
+		if len(got) == 1 && !strings.Contains(got[0].Message, "give the field a Default or make it Nillable") {
 			t.Errorf("on %v: the message gives no way out: %s", d, got[0].Message)
 		}
 		// The same change on a table from lacks has no rows to fill.
@@ -358,19 +358,30 @@ func TestLintSQLiteRebuild(t *testing.T) {
 	}
 }
 
-// TestLintEnumChecks: a check-based enum losing a value is destructive, and
-// gaining one is only a new check.
+// TestLintEnumChecks: a declared check of the form "col" IN (...) losing a
+// value is destructive, and gaining one is only a new check. velox-gen makes
+// no enum check (decision 0090), so the checks are declared by hand.
 func TestLintEnumChecks(t *testing.T) {
 	t.Parallel()
-	got := codes(caseFindings(t, "enum-remove", velox.SQLite))
-	if !slices.Contains(got, "drop-enum-value@users.users_role_check") || !slices.Contains(got, "add-check@users.users_role_check") {
-		t.Errorf("enum-remove on SQLite: %v", got)
+	findings := func(from, to string) []string {
+		withRole := func(vs string) *migrate.Schema {
+			s := mustTables(velox.SQLite, nil)
+			tb := table(s, "users")
+			tb.Checks = append(tb.Checks, migrate.Check{Name: "users_role_check", Expr: `"role" IN (` + vs + `)`})
+			return s
+		}
+		f, g := withRole(from), withRole(to)
+		return codes(lint(t, f, diff(t, f, g, migrate.DiffOptions{})))
 	}
-	got = codes(caseFindings(t, "enum-append", velox.SQLite))
+	got := findings(`'admin', 'viewer'`, `'viewer'`)
+	if !slices.Contains(got, "drop-enum-value@users.users_role_check") || !slices.Contains(got, "add-check@users.users_role_check") {
+		t.Errorf("a value removed: %v", got)
+	}
+	got = findings(`'admin', 'viewer'`, `'admin', 'viewer', 'owner'`)
 	if slices.ContainsFunc(got, func(s string) bool {
 		return strings.HasPrefix(s, "drop-enum-value") || strings.HasPrefix(s, "reorder-enum")
 	}) || !slices.Contains(got, "add-check@users.users_role_check") {
-		t.Errorf("enum-append on SQLite: %v", got)
+		t.Errorf("a value added: %v", got)
 	}
 }
 
@@ -401,13 +412,13 @@ func TestLintPos(t *testing.T) {
 		code string
 		pos  func(to *migrate.Schema) string
 	}{
-		{"add-column-required", pgM, "add-required-column", func(to *migrate.Schema) string { return column(table(to, "users"), "nickname").Pos }},
+		{"add-column-required", pgM, "add-required-column", func(to *migrate.Schema) string { return column(table(to, "users"), "joined_at").Pos }},
 		{"add-column-schema-default", pgM, "volatile-default", func(to *migrate.Schema) string { return column(table(to, "users"), "seen_at").Pos }},
 		{"set-not-null", pgM, "set-not-null", func(to *migrate.Schema) string { return column(table(to, "users"), "bio").Pos }},
 		{"widen-int", pgM, "widen-type", func(to *migrate.Schema) string { return column(table(to, "users"), "logins").Pos }},
 		{"add-index", pgM, "add-index", func(to *migrate.Schema) string {
 			for _, ix := range table(to, "users").Indexes {
-				if ix.Name == "user_created_at" {
+				if ix.Name == "users_user_created_at" {
 					return ix.Pos
 				}
 			}
@@ -429,9 +440,9 @@ func TestLintPos(t *testing.T) {
 			}
 			return ""
 		}},
-		{"enum-append", lite, "add-check", func(to *migrate.Schema) string {
+		{"add-check", lite, "add-check", func(to *migrate.Schema) string {
 			for _, ck := range table(to, "users").Checks {
-				if ck.Name == "users_role_check" {
+				if ck.Name == "users_logins_positive" {
 					return ck.Pos
 				}
 			}
@@ -445,7 +456,7 @@ func TestLintPos(t *testing.T) {
 			}
 			return ""
 		}},
-		{"add-column-required", lite, "sqlite-rebuild", func(to *migrate.Schema) string { return column(table(to, "users"), "nickname").Pos }},
+		{"add-column-required", lite, "sqlite-rebuild", func(to *migrate.Schema) string { return column(table(to, "users"), "joined_at").Pos }},
 	} {
 		t.Run(r.name+"/"+r.code, func(t *testing.T) {
 			to, fs := byName(t, r.name, r.d)
@@ -636,7 +647,7 @@ func TestLintRenamedTable(t *testing.T) {
 		from := mustTables(d, nil)
 		to := mustTables(d, func(m *loadjson.Model) {
 			annotate(m, "User", schema.Table("accounts"))
-			addField(m, "User", field.String("nickname"))
+			addField(m, "User", field.Time("joined_at"))
 		})
 		cs := diff(t, from, to, renameUsers)
 		if !slices.ContainsFunc(cs, func(c migrate.Change) bool { _, ok := c.(migrate.RenameTable); return ok }) {
@@ -648,7 +659,7 @@ func TestLintRenamedTable(t *testing.T) {
 				got = append(got, f.Target)
 			}
 		}
-		if !slices.Equal(got, []string{"accounts.nickname"}) {
+		if !slices.Equal(got, []string{"accounts.joined_at"}) {
 			t.Errorf("%v: add-required-column on %v", d, got)
 		}
 	}
