@@ -27,6 +27,10 @@ func TestFieldInSelect(t *testing.T) {
 	if err != nil || !strings.Contains(s, "NOT (EXISTS (SELECT 1 FROM") {
 		t.Errorf("Not: %s, %v", s, err)
 	}
+	// A nullable column (*int64) keys against a not null one (int64), as a typed InSelect's.
+	if s, _, err = nmSQL(t, velox.FieldInSelect("peer_id", "Org", "id")); err != nil || !strings.Contains(s, "EXISTS (SELECT 1 FROM") {
+		t.Errorf("nullable key: %s, %v", s, err)
+	}
 	// In an Or, beside a condition on the owner.
 	s, _, err = nmSQL(t, velox.Or(velox.FieldEQ("rank", int8(1)), velox.FieldInSelect("org_id", "Org", "id", velox.FieldEQ("name", "x"))))
 	if err != nil || !strings.Contains(s, " OR EXISTS (SELECT 1 FROM") {
@@ -46,7 +50,7 @@ func TestFieldInSelectRefusals(t *testing.T) {
 		{"not linked", velox.FieldInSelect("org_id", "Doc", "id"), "entity Doc is not linked"},
 		{"owner column", velox.FieldInSelect("nope", "Org", "id"), `no column "nope"`},
 		{"key column", velox.FieldInSelect("org_id", "Org", "nope"), `Org has no column "nope"`},
-		{"two types", velox.FieldInSelect("org_id", "Org", "name"), "a subquery compares columns of one type"},
+		{"two types", velox.FieldInSelect("org_id", "Org", "name"), "the key types differ"},
 		{"bad condition", velox.FieldInSelect("org_id", "Org", "id", velox.FieldEQ("nope", 1)), "no column"},
 	} {
 		_, _, err := nmSQL(t, c.p)

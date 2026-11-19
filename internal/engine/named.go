@@ -356,8 +356,8 @@ func namedSubquery(in *EntityInfo, n Node) (Node, error) {
 	if !ok {
 		return n, fmt.Errorf("FieldInSelect: %s has no column %q", s.entity, s.key)
 	}
-	if o, t := rtype(in.Columns[oc].val), rtype(target.Columns[tc].val); o != t {
-		return n, fmt.Errorf("FieldInSelect: %s.%s is %s and %s.%s is %s: a subquery compares columns of one type", in.Name, s.column, article(o), s.entity, s.key, article(t))
+	if err := sameKey(in, int(oc), target, int(tc)); err != nil { // as a typed InSelect: a nullable column keys as its type
+		return n, fmt.Errorf("FieldInSelect: %w", err)
 	}
 	l, err := ColRef{Owner: func() (*EntityInfo, error) { return in, nil }, Target: func() (*EntityInfo, error) { return target, nil }, OwnerCol: oc, TargetCol: tc}.Link()
 	if err != nil {
