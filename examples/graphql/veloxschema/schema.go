@@ -64,6 +64,7 @@ func (Post) Fields() []velox.Field {
 		field.Enum("status").Values("draft", "published").Default("draft").Comment("Whether the post is a draft or published.").Annotations(graphql.WhereOps()),
 		field.Int64("views").Optional().Default(0).Comment("How many times the post was read.").Annotations(graphql.OrderField("VIEWS")),
 		field.Time("published_at").Optional().Nillable().Comment("When the post was published; null for a draft.").Annotations(graphql.WhereOps()),
+		field.Strings("keywords").Optional().Default([]string{}).Comment("Words the post is found by.").Annotations(graphql.WhereOps(graphql.OpsJSONArray)),
 	}
 }
 

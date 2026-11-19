@@ -540,7 +540,8 @@ See [ADR 0057](decisions/0057-column-subqueries.md).
 
 A schema's Policy, Hooks or Interceptors cannot use handles, which live in the
 generated package they are compiled into. They name the other entity instead,
-with `velox.FieldInSelect(column, entity, key, conditions...)`:
+with `velox.FieldInSelect(column, entity, key, conditions...)`: this row's
+`column` is among the `key` values of the `entity` rows that meet `conditions`.
 
 ```go
 func (Doc) Policy() velox.Policy {

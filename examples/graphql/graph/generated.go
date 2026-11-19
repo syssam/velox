@@ -89,6 +89,7 @@ type ComplexityRoot struct {
 	Post struct {
 		Author      func(childComplexity int) int
 		ID          func(childComplexity int) int
+		Keywords    func(childComplexity int) int
 		PublishedAt func(childComplexity int) int
 		Status      func(childComplexity int) int
 		Tags        func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *veloxgen.LabelOrder, where *veloxgen.LabelWhereInput) int
@@ -351,6 +352,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Post.ID(childComplexity), true
+	case "Post.keywords":
+		if e.complexity.Post.Keywords == nil {
+			break
+		}
+
+		return e.complexity.Post.Keywords(childComplexity), true
 	case "Post.publishedAt":
 		if e.complexity.Post.PublishedAt == nil {
 			break
@@ -742,6 +749,8 @@ type Post {
   views: Int!
   """When the post was published; null for a draft."""
   publishedAt: Time
+  """Words the post is found by."""
+  keywords: [String!]
   """The user who wrote the post."""
   author: User
   """The labels on the post."""
@@ -825,6 +834,10 @@ input PostWhereInput {
   publishedAtLTE: Time
   publishedAtIsNil: Boolean
   publishedAtNotNil: Boolean
+  keywordsHas: String
+  keywordsHasSome: [String!]
+  keywordsHasEvery: [String!]
+  keywordsIsEmpty: Boolean
   hasTags: Boolean
   hasTagsWith: [LabelWhereInput!]
 }
@@ -839,6 +852,8 @@ input CreatePostInput {
   views: Int
   """When the post was published; null for a draft."""
   publishedAt: Time
+  """Words the post is found by."""
+  keywords: [String!]
   """The IDs of the Label nodes the edge tags leads to."""
   tagIDs: [ID!]
 }
@@ -855,6 +870,10 @@ input UpdatePostInput {
   publishedAt: Time
   """Sets the field published_at to NULL."""
   clearPublishedAt: Boolean
+  """Words the post is found by."""
+  keywords: [String!]
+  """Sets the field keywords to NULL."""
+  clearKeywords: Boolean
   """The IDs of Label nodes to add to the edge tags."""
   addTagIDs: [ID!]
   """The IDs of Label nodes to remove from the edge tags; an ID the edge does not lead to is ignored."""
@@ -1847,6 +1866,8 @@ func (ec *executionContext) fieldContext_Mutation_createPost(ctx context.Context
 				return ec.fieldContext_Post_views(ctx, field)
 			case "publishedAt":
 				return ec.fieldContext_Post_publishedAt(ctx, field)
+			case "keywords":
+				return ec.fieldContext_Post_keywords(ctx, field)
 			case "author":
 				return ec.fieldContext_Post_author(ctx, field)
 			case "tags":
@@ -1904,6 +1925,8 @@ func (ec *executionContext) fieldContext_Mutation_updatePost(ctx context.Context
 				return ec.fieldContext_Post_views(ctx, field)
 			case "publishedAt":
 				return ec.fieldContext_Post_publishedAt(ctx, field)
+			case "keywords":
+				return ec.fieldContext_Post_keywords(ctx, field)
 			case "author":
 				return ec.fieldContext_Post_author(ctx, field)
 			case "tags":
@@ -2444,6 +2467,35 @@ func (ec *executionContext) fieldContext_Post_publishedAt(_ context.Context, fie
 	return fc, nil
 }
 
+func (ec *executionContext) _Post_keywords(ctx context.Context, field graphql.CollectedField, obj *veloxgen.Post) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Post_keywords,
+		func(ctx context.Context) (any, error) {
+			return obj.Keywords, nil
+		},
+		nil,
+		ec.marshalOString2ᚕstringᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Post_keywords(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Post",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Post_author(ctx context.Context, field graphql.CollectedField, obj *veloxgen.Post) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2675,6 +2727,8 @@ func (ec *executionContext) fieldContext_PostEdge_node(_ context.Context, field 
 				return ec.fieldContext_Post_views(ctx, field)
 			case "publishedAt":
 				return ec.fieldContext_Post_publishedAt(ctx, field)
+			case "keywords":
+				return ec.fieldContext_Post_keywords(ctx, field)
 			case "author":
 				return ec.fieldContext_Post_author(ctx, field)
 			case "tags":
@@ -4926,7 +4980,7 @@ func (ec *executionContext) unmarshalInputCreatePostInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"title", "status", "views", "publishedAt", "tagIDs"}
+	fieldsInOrder := [...]string{"title", "status", "views", "publishedAt", "keywords", "tagIDs"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -4961,6 +5015,13 @@ func (ec *executionContext) unmarshalInputCreatePostInput(ctx context.Context, o
 				return it, err
 			}
 			it.PublishedAt = data
+		case "keywords":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keywords"))
+			data, err := ec.unmarshalOString2ᚖᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Keywords = data
 		case "tagIDs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tagIDs"))
 			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
@@ -5336,7 +5397,7 @@ func (ec *executionContext) unmarshalInputPostWhereInput(ctx context.Context, ob
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "authorID", "authorIDNEQ", "authorIDIn", "authorIDNotIn", "title", "titleNEQ", "titleIn", "titleNotIn", "titleContains", "titleHasPrefix", "titleHasSuffix", "titleEqualFold", "titleContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "publishedAt", "publishedAtNEQ", "publishedAtIn", "publishedAtNotIn", "publishedAtGT", "publishedAtGTE", "publishedAtLT", "publishedAtLTE", "publishedAtIsNil", "publishedAtNotNil", "hasTags", "hasTagsWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "authorID", "authorIDNEQ", "authorIDIn", "authorIDNotIn", "title", "titleNEQ", "titleIn", "titleNotIn", "titleContains", "titleHasPrefix", "titleHasSuffix", "titleEqualFold", "titleContainsFold", "status", "statusNEQ", "statusIn", "statusNotIn", "publishedAt", "publishedAtNEQ", "publishedAtIn", "publishedAtNotIn", "publishedAtGT", "publishedAtGTE", "publishedAtLT", "publishedAtLTE", "publishedAtIsNil", "publishedAtNotNil", "keywordsHas", "keywordsHasSome", "keywordsHasEvery", "keywordsIsEmpty", "hasTags", "hasTagsWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -5609,6 +5670,34 @@ func (ec *executionContext) unmarshalInputPostWhereInput(ctx context.Context, ob
 				return it, err
 			}
 			it.PublishedAtNotNil = data
+		case "keywordsHas":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keywordsHas"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.KeywordsHas = data
+		case "keywordsHasSome":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keywordsHasSome"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.KeywordsHasSome = data
+		case "keywordsHasEvery":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keywordsHasEvery"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.KeywordsHasEvery = data
+		case "keywordsIsEmpty":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keywordsIsEmpty"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.KeywordsIsEmpty = data
 		case "hasTags":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasTags"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -5691,7 +5780,7 @@ func (ec *executionContext) unmarshalInputUpdatePostInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"title", "status", "views", "publishedAt", "clearPublishedAt", "addTagIDs", "removeTagIDs", "clearTags"}
+	fieldsInOrder := [...]string{"title", "status", "views", "publishedAt", "clearPublishedAt", "keywords", "clearKeywords", "addTagIDs", "removeTagIDs", "clearTags"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -5733,6 +5822,20 @@ func (ec *executionContext) unmarshalInputUpdatePostInput(ctx context.Context, o
 				return it, err
 			}
 			it.ClearPublishedAt = data
+		case "keywords":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keywords"))
+			data, err := ec.unmarshalOString2ᚖᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Keywords = data
+		case "clearKeywords":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clearKeywords"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClearKeywords = data
 		case "addTagIDs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("addTagIDs"))
 			data, err := ec.unmarshalOID2ᚕint64ᚄ(ctx, v)
@@ -6732,6 +6835,8 @@ func (ec *executionContext) _Post(ctx context.Context, sel ast.SelectionSet, obj
 			}
 		case "publishedAt":
 			out.Values[i] = ec._Post_publishedAt(ctx, field, obj)
+		case "keywords":
+			out.Values[i] = ec._Post_keywords(ctx, field, obj)
 		case "author":
 			field := field
 
@@ -8942,6 +9047,18 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOString2ᚖᚕstringᚄ(ctx context.Context, v any) (*[]string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOString2ᚖᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v *[]string) graphql.Marshaler {
+	return ec.marshalOString2ᚕstringᚄ(ctx, sel, *v)
 }
 
 func (ec *executionContext) unmarshalOTime2ᚕtimeᚐTimeᚄ(ctx context.Context, v any) ([]time.Time, error) {

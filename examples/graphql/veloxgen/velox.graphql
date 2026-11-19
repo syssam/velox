@@ -68,6 +68,8 @@ type Post {
   views: Int!
   """When the post was published; null for a draft."""
   publishedAt: Time
+  """Words the post is found by."""
+  keywords: [String!]
   """The user who wrote the post."""
   author: User
   """The labels on the post."""
@@ -151,6 +153,10 @@ input PostWhereInput {
   publishedAtLTE: Time
   publishedAtIsNil: Boolean
   publishedAtNotNil: Boolean
+  keywordsHas: String
+  keywordsHasSome: [String!]
+  keywordsHasEvery: [String!]
+  keywordsIsEmpty: Boolean
   hasTags: Boolean
   hasTagsWith: [LabelWhereInput!]
 }
@@ -165,6 +171,8 @@ input CreatePostInput {
   views: Int
   """When the post was published; null for a draft."""
   publishedAt: Time
+  """Words the post is found by."""
+  keywords: [String!]
   """The IDs of the Label nodes the edge tags leads to."""
   tagIDs: [ID!]
 }
@@ -181,6 +189,10 @@ input UpdatePostInput {
   publishedAt: Time
   """Sets the field published_at to NULL."""
   clearPublishedAt: Boolean
+  """Words the post is found by."""
+  keywords: [String!]
+  """Sets the field keywords to NULL."""
+  clearKeywords: Boolean
   """The IDs of Label nodes to add to the edge tags."""
   addTagIDs: [ID!]
   """The IDs of Label nodes to remove from the edge tags; an ID the edge does not lead to is ignored."""

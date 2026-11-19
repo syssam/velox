@@ -1,5 +1,6 @@
-h1:mv4MNNnVjgPgIBR8YXAA4KZWr3etMB6122kIOS7SOgE=
+h1:My4wZ15bc9EjbSzlTSxzzq/lWGb61SUXtE22JYXr1PI=
 0001_init.sql h1:KzvHy/592VmWTIeDYXySjCVAeAVn/yv0aNm59i/2Tpk=
 0002_sqlite_datetime9.sql h1:ZSv1M+FNujhm+O/8tCCw0EMLIe8bXSbjLkgJzlGKGLw=
-schema.json h1:/DeMY7fxuINLRZJ71xu1ppeuWVsnu3VBs9fMlvjpqIc=
+0003_post_keywords.sql h1:9rDwbcLgif+wK8Pk4eWzO67RRMdo1k+23CRrr4D/gxg=
+schema.json h1:BF9kDcN2XNUtHrM9LEX8gXEV5CNPEGX7/j9TSKo3KUw=
 velox.json h1:kwGXDUmLy0YS8XIgvaPehFkSYOwxr3lcNqybqvcDGRc=

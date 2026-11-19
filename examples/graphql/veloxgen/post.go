@@ -3,6 +3,7 @@
 package veloxgen
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -26,6 +27,8 @@ type Post struct {
 	Views int64 `json:"views,omitempty"`
 	// When the post was published; null for a draft.
 	PublishedAt *time.Time `json:"published_at,omitempty"`
+	// Words the post is found by.
+	Keywords []string `json:"keywords,omitempty"`
 	// Edges holds Post's relations, filled by With.
 	Edges PostEdges `json:"edges,omitzero"`
 }
@@ -47,6 +50,7 @@ const (
 	postColStatus
 	postColViews
 	postColPublishedAt
+	postColKeywords
 )
 
 // The positions of Post's edges.
@@ -71,6 +75,8 @@ type PostHandles struct {
 	Views velox.NumberCol[Post, int64]
 	// PublishedAt is the column published_at.
 	PublishedAt velox.NullOrderedCol[Post, time.Time]
+	// Keywords is the column keywords.
+	Keywords velox.JSONCol[Post, []string]
 	// Author is the edge author, to User: With loads it, Has and HasWith test it.
 	Author velox.Rel[Post, User]
 	// Tags is the edge tags, to Tag: With loads it, Has and HasWith test it.
@@ -86,6 +92,7 @@ var Posts = PostHandles{
 	Status:      velox.Col[Post, PostStatus]{I: postColStatus},
 	Views:       velox.NumberCol[Post, int64]{I: postColViews},
 	PublishedAt: velox.NullOrderedCol[Post, time.Time]{I: postColPublishedAt},
+	Keywords:    velox.JSONCol[Post, []string]{I: postColKeywords},
 	Author:      velox.Rel[Post, User]{I: postEdgeAuthor},
 	Tags:        velox.Rel[Post, Tag]{I: postEdgeTags},
 }
@@ -107,6 +114,14 @@ func postDescriptor() velox.Descriptor[Post] {
 			{Field: "Status", Name: "status", Default: PostStatusDraft},
 			{Field: "Views", Name: "views", Default: int64(0)},
 			{Field: "PublishedAt", Name: "published_at"},
+			{
+				Field:       "Keywords",
+				Name:        "keywords",
+				DefaultFunc: func() any { return []string{} },
+				Nullable:    true,
+				Encode:      json.Marshal,
+				Decode:      json.Unmarshal,
+			},
 		},
 		PrimaryKey: []int{postColID},
 		Edges: []velox.EdgeDescriptor{
@@ -130,6 +145,8 @@ func postDescriptor() velox.Descriptor[Post] {
 				return &x.Views
 			case postColPublishedAt:
 				return &x.PublishedAt
+			case postColKeywords:
+				return &x.Keywords
 			}
 			return nil
 		},
@@ -164,9 +181,9 @@ func postDescriptor() velox.Descriptor[Post] {
 func (p Post) String() string {
 	return fmt.Sprintf("Post("+
 		"ID=%v, OrgID=%v, AuthorID=%v, Title=%v, Status=%v, Views=%v, "+
-		"PublishedAt=%v)",
+		"PublishedAt=%v, Keywords=%v)",
 		p.ID, p.OrgID, p.AuthorID, p.Title, p.Status, p.Views,
-		velox.Show(p.PublishedAt),
+		velox.Show(p.PublishedAt), p.Keywords,
 	)
 }
 

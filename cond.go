@@ -90,12 +90,19 @@ func FieldEqualFold(name, s string) Predicate { return engine.FieldEqualFold(nam
 // LOWER(pattern). SQLite's LOWER folds ASCII letters only.
 func FieldContainsFold(name, s string) Predicate { return engine.FieldContainsFold(name, s) }
 
-// FieldInSelect is true when the column of the given name is among the values
-// of the key column of the entity named entity, in the rows that meet every
-// condition of ps, which name that entity's columns:
+// FieldInSelect is true when this row's column is among the key values of the
+// rows of entity that meet every condition of ps, which name that entity's
+// columns. Read the arguments in that order: this entity's column, the other
+// entity, its key column, its conditions:
 //
+//	// a post is visible when its conversation_id is the conversation_id of a
+//	// Participant row whose user_id is uid
 //	velox.FieldInSelect("conversation_id", "Participant", "conversation_id",
 //		velox.FieldEQ("user_id", uid))
+//
+// It is SQL's column IN (SELECT key FROM entity WHERE ps), written as an EXISTS
+// that the database plans like a join on key, which is fast when key is indexed
+// (usually the primary key).
 //
 // It is the condition a column handle's InSelect makes, for a policy, a hook or
 // an interceptor in a package that cannot name the entity's type. The entity's

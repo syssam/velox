@@ -195,7 +195,7 @@ func canon(t *testing.T, s string) string {
 // selTags).
 const (
 	selUsers = `SELECT "id", "name", "email", "role", "joined_at", "password_hash" FROM "users"`
-	selPosts = `SELECT "id", "org_id", "author_id", "title", "status", "views", "published_at" FROM "posts"`
+	selPosts = `SELECT "id", "org_id", "author_id", "title", "status", "views", "published_at", "keywords" FROM "posts"`
 	selTags  = `SELECT "id", "name", "rank" FROM "tags"`
 	users    = `SELECT "id", "name", "joined_at" FROM "users"`
 	// viewerCheck is the resolvers' check that the viewer is a user, and
@@ -488,7 +488,7 @@ func TestBatchInMutation(t *testing.T) {
 		]}}}}}`,
 		stmts: []string{
 			viewerCheck + ` [1 1]`,
-			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at") VALUES (?, ?, ?, ?, ?, NULL) RETURNING "id" [1 1 Zeta draft 0]`,
+			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at", "keywords") VALUES (?, ?, ?, ?, ?, NULL, ?) RETURNING "id" [1 1 Zeta draft 0 []]`,
 			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT ? [1 1]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1]`,
 			// The author, the returned row's edge, alone; then its posts and
@@ -609,7 +609,7 @@ func TestSensitiveFieldAbsent(t *testing.T) {
 				{"name": "hasPosts"}, {"name": "hasPostsWith"}
 			]},
 			"order": {"enumValues": [{"name": "NAME"}, {"name": "JOINED_AT"}]},
-			"post": {"fields": [{"name": "id"}, {"name": "title"}, {"name": "status"}, {"name": "views"}, {"name": "publishedAt"}, {"name": "author"}, {"name": "tags"}]},
+			"post": {"fields": [{"name": "id"}, {"name": "title"}, {"name": "status"}, {"name": "views"}, {"name": "publishedAt"}, {"name": "keywords"}, {"name": "author"}, {"name": "tags"}]},
 			"tag": null
 		}}`,
 	})
@@ -876,7 +876,7 @@ func TestCreatePost(t *testing.T) {
 		want: `{"data": {"createPost": {"title": "Epsilon", "status": "DRAFT", "author": {"name": "Brian"}, "tags": {"totalCount": 2}}}}`,
 		stmts: []string{
 			viewerCheck + ` [2 1]`,
-			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at") VALUES (?, ?, ?, ?, ?, NULL) RETURNING "id" [1 2 Epsilon draft 0]`,
+			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at", "keywords") VALUES (?, ?, ?, ?, ?, NULL, ?) RETURNING "id" [1 2 Epsilon draft 0 []]`,
 			`SELECT "id" FROM "tags" WHERE "id" IN (?, ?) LIMIT ? [1 2 2]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?), (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1 6 2]`,
 			// The selection, of the returned row alone: the author, and the

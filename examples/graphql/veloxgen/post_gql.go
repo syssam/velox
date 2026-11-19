@@ -171,6 +171,7 @@ var postType = gqlgraph.Type{
 		postColStatus:      "status",
 		postColViews:       "views",
 		postColPublishedAt: "publishedAt",
+		postColKeywords:    "keywords",
 	},
 	Edges: []string{postEdgeAuthor: "author", postEdgeTags: "tags"},
 	Inputs: []string{
@@ -178,6 +179,7 @@ var postType = gqlgraph.Type{
 		postColStatus:      "status",
 		postColViews:       "views",
 		postColPublishedAt: "publishedAt",
+		postColKeywords:    "keywords",
 	},
 }
 
@@ -283,6 +285,12 @@ type PostWhereInput struct {
 	PublishedAtIsNil  *bool
 	PublishedAtNotNil *bool
 
+	// Predicates on the field keywords.
+	KeywordsHas      *string
+	KeywordsHasSome  []string
+	KeywordsHasEvery []string
+	KeywordsIsEmpty  *bool
+
 	// The edge tags: whether it has a node, or one that matches.
 	HasTags     *bool
 	HasTagsWith []*LabelWhereInput
@@ -349,6 +357,12 @@ func (w *PostWhereInput) predicate(ctx context.Context) (velox.Predicate, error)
 		IsNil:  w.PublishedAtIsNil,
 		NotNil: w.PublishedAtNotNil,
 	})
+	gqlgraph.ArrayField(f, "keywords", postColKeywords, gqlgraph.ArrayOps[string]{
+		Has:      w.KeywordsHas,
+		HasSome:  w.KeywordsHasSome,
+		HasEvery: w.KeywordsHasEvery,
+		IsEmpty:  w.KeywordsIsEmpty,
+	})
 	gqlgraph.Has(f, "hasTags", w.HasTags, postEdgeTags, untyped.TableOf[Tag]())
 	gqlgraph.HasWith(f, "hasTagsWith", w.HasTagsWith, (*LabelWhereInput).predicate, postEdgeTags, untyped.TableOf[Tag]())
 	return f.Pred()
@@ -365,6 +379,8 @@ type CreatePostInput struct {
 	Views *int64
 	// When the post was published; null for a draft.
 	PublishedAt *time.Time
+	// Words the post is found by.
+	Keywords *[]string
 	// TagIDs are the IDs of the Label nodes the edge tags leads to.
 	TagIDs []int64
 }
@@ -390,6 +406,9 @@ func (in CreatePostInput) Setters() ([]velox.Setter[Post], error) {
 	if v := in.PublishedAt; v != nil {
 		set = append(set, Posts.PublishedAt.Set(*v))
 	}
+	if v := in.Keywords; v != nil {
+		set = append(set, Posts.Keywords.Set(*v))
+	}
 	if len(in.TagIDs) > 0 {
 		tagIDs, err := gqlgraph.IDs("CreatePostInput.tagIDs", in.TagIDs)
 		if err != nil {
@@ -414,6 +433,10 @@ type UpdatePostInput struct {
 	PublishedAt *time.Time
 	// ClearPublishedAt sets the field published_at to NULL.
 	ClearPublishedAt bool
+	// Words the post is found by.
+	Keywords *[]string
+	// ClearKeywords sets the field keywords to NULL.
+	ClearKeywords bool
 	// AddTagIDs are the IDs of Label nodes to add to the edge tags.
 	AddTagIDs []int64
 	// RemoveTagIDs are the IDs of Label nodes to remove from the edge tags; an
@@ -446,6 +469,11 @@ func (in UpdatePostInput) Setters() ([]velox.Setter[Post], error) {
 		set = append(set, Posts.PublishedAt.SetNull())
 	} else if v := in.PublishedAt; v != nil {
 		set = append(set, Posts.PublishedAt.Set(*v))
+	}
+	if in.ClearKeywords {
+		set = append(set, Posts.Keywords.Set(nil))
+	} else if v := in.Keywords; v != nil {
+		set = append(set, Posts.Keywords.Set(*v))
 	}
 	if in.ClearTags {
 		set = append(set, Posts.Tags.Clear())

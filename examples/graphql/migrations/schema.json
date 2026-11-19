@@ -89,6 +89,11 @@
           "name": "published_at",
           "type": "datetime(9)",
           "nullable": true
+        },
+        {
+          "name": "keywords",
+          "type": "text",
+          "nullable": true
         }
       ],
       "primary_key": [
