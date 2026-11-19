@@ -186,7 +186,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlgraph for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion24", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion25", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -503,10 +503,11 @@
 // an application's With may hold a page its own query chose, which is not the
 // edge. A With is not needed for batching, and the edge methods ignore it.
 //
-// A page and an edge's rows read only the columns their selection needs: the selected fields', the key, every foreign key on the row and
-// the columns of the order fields. The foreign keys let an
-// edge or an application's With work; the order columns keep every cursor
-// valid. The columns of the other fields are left unread, so a row handed to
+// A page and an edge's rows read only the columns their selection needs:
+// the selected fields', the key, every foreign key on the row and the
+// columns of the page's own order. The foreign keys let an edge or an
+// application's With work; the order's columns keep every cursor valid. A
+// field the page is not ordered by is read only when it is selected. The columns of the other fields are left unread, so a row handed to
 // an application's resolver or directive has them zero: a resolver or a
 // directive that reads such a field must select it. A generated field with
 // @goField(forceResolver: true) is still a generated field: its selection

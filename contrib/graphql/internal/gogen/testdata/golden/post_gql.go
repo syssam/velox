@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion24
+const _ = veloxgql.GeneratedCodeIsVersion25
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -186,7 +186,7 @@ var postType = gqlgraph.Type{
 		{Name: "VIEWS", Index: postColViews},
 		{Name: "AUTHOR_NAME", Index: userColName, Edge: postEdgeAuthor + 1, Target: untyped.TableOf[User]},
 	},
-	AlwaysRead: []int{postColID, postColAuthorID, postColTitle, postColViews},
+	AlwaysRead: []int{postColID, postColAuthorID},
 	Fields: []string{
 		postColID:          "id",
 		postColTitle:       "title",
@@ -248,13 +248,7 @@ const (
 )
 
 // IsValid reports whether o is a value of PostOrderField.
-func (o PostOrderField) IsValid() bool {
-	switch o {
-	case "TITLE", "VIEWS", "AUTHOR_NAME":
-		return true
-	}
-	return false
-}
+func (o PostOrderField) IsValid() bool { return postType.IsOrderField(string(o)) }
 
 // String returns o's value.
 func (o PostOrderField) String() string { return string(o) }
@@ -264,17 +258,7 @@ func (o PostOrderField) MarshalGQL(w io.Writer) { gqlgraph.WriteString(w, string
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum PostOrderField.
 func (o *PostOrderField) UnmarshalGQL(v any) error {
-	switch v {
-	case "TITLE":
-		*o = PostOrderFieldTitle
-	case "VIEWS":
-		*o = PostOrderFieldViews
-	case "AUTHOR_NAME":
-		*o = PostOrderFieldAuthorName
-	default:
-		return gqlgraph.InputErrorf("PostOrderField must be TITLE, VIEWS or AUTHOR_NAME, not %v", v)
-	}
-	return nil
+	return gqlgraph.UnmarshalOrderField(o, v, &postType)
 }
 
 // PostWhereInput is the GraphQL input PostWhereInput, a filter of Post nodes: a

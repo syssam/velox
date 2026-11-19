@@ -195,4 +195,6 @@ var (
 	Narrow   = narrow
 )
 
-func (c *Type) Columns(fields []string) []int { return c.columns(fields) }
+func (c *Type) Columns(fields []string, order ...Order) []int {
+	return c.columns(fields, order)
+}

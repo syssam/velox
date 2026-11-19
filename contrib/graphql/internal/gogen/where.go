@@ -294,15 +294,6 @@ func (r *renderer) whereType(f *file, t *sdl.Type, w sdl.WhereField) (string, er
 	return "*" + elem, nil
 }
 
-// quoteList is vs as Go string literals, separated by commas.
-func quoteList(vs []string) string {
-	q := make([]string, len(vs))
-	for i, v := range vs {
-		q[i] = strconv.Quote(v)
-	}
-	return strings.Join(q, ", ")
-}
-
 // orList is vs in English, as "A, B or C".
 func orList(vs []string) string {
 	if len(vs) < 2 {

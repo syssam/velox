@@ -86,8 +86,9 @@ type Type struct {
 	Key []Column
 	// Order is the order fields: Name is the GraphQL enum value, "TITLE".
 	Order []Column
-	// AlwaysRead is the columns every selection of the type reads: the key,
-	// every foreign key on the row and every order field's column.
+	// AlwaysRead is the columns every selection of the type reads: the key
+	// and every foreign key on the row. A connection reads the columns of
+	// its own order too, which its cursors hold.
 	AlwaysRead []int
 	// Fields is, by column, the type's field that reads the column, or "".
 	Fields []string
@@ -116,9 +117,10 @@ type Type struct {
 }
 
 // columns is the columns a selection of the type's fields reads (see
-// narrow): Read, then the column of each field. It is nil, every column,
-// when a field is none of Fields and Edges, such as an application's own.
-func (c *Type) columns(fields []string) []int {
+// narrow): AlwaysRead, the column of each order term of the node's own, and
+// then the column of each field. It is nil, every column, when a field is
+// none of Fields and Edges, such as an application's own.
+func (c *Type) columns(fields []string, order []Order) []int {
 	c.fieldsOnce.Do(func() {
 		c.fieldCol = make(map[string]int, len(c.Fields)+len(c.Edges))
 		for col, f := range c.Fields {
@@ -133,6 +135,11 @@ func (c *Type) columns(fields []string) []int {
 		}
 	})
 	cols := slices.Clone(c.AlwaysRead)
+	for _, o := range order {
+		if col := c.find(o.Field); col != nil && col.Edge == 0 && !slices.Contains(cols, col.Index) {
+			cols = append(cols, col.Index)
+		}
+	}
 	for _, f := range fields {
 		col, ok := c.fieldCol[f]
 		if !ok {
@@ -427,8 +434,8 @@ type Connection struct {
 // is the connection's. It reads only the columns the selection of the field
 // of ctx needs (selected, narrow, c.columns): a column the selection does
 // not need is left zero in the nodes, except the key, the foreign keys and
-// the order columns, so an application's resolver must not read one it did
-// not ask for.
+// the columns of order, so an application's resolver must not read one it
+// did not ask for.
 //
 // It fails with the where input's error; with an input error for an order
 // field c does not know; with
@@ -479,7 +486,7 @@ func connectionBase(ctx context.Context, q untyped.TableQuery, c *Type, order []
 		}
 	}
 	if fields, ok := selected(ctx, c.Name); ok {
-		q = narrow(q, c.columns(fields))
+		q = narrow(q, c.columns(fields, order))
 	}
 	return q, nil
 }

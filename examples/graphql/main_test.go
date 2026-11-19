@@ -188,29 +188,26 @@ func canon(t *testing.T, s string) string {
 }
 
 // The SELECTs of each entity, up to WHERE. A page or a node reads the columns
-// its selection needs: its key, its foreign keys and its order fields'
-// columns always (users, posts and tags), and each selected field's. A
-// mutation's returned row, and a page whose selection holds a field
-// velox-graphql did not write, read every column (selUsers, selPosts and
-// selTags).
+// its selection needs: its key and its foreign keys always, the columns of
+// the order it was asked for, and each selected field's. A mutation's
+// returned row, and a page whose selection holds a field velox-graphql did
+// not write, read every column (selUsers, selPosts and selTags).
 const (
 	selUsers = `SELECT "id", "name", "email", "role", "joined_at", "password_hash" FROM "users"`
 	selPosts = `SELECT "id", "org_id", "author_id", "title", "status", "views", "published_at", "keywords" FROM "posts"`
 	selTags  = `SELECT "id", "name", "rank" FROM "tags"`
-	users    = `SELECT "id", "name", "joined_at" FROM "users"`
 	// viewerCheck is the resolvers' check that the viewer is a user, and
 	// authorCheck their read of a post's author (graph.Author, graph.OwnPost).
 	viewerCheck = `SELECT 1 FROM "users" WHERE "id" = ? LIMIT ?`
 	authorCheck = `SELECT "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ?`
-	posts       = `SELECT "id", "author_id", "title", "views" FROM "posts"`
 	tags        = `SELECT "id", "name" FROM "tags"`
 )
 
-// postsOf is the windowed load of the posts of users, ordered by order (its
-// SQL), at most n of each; in is the users' placeholders. Its arguments
-// are the users' keys, the org and n.
-func postsOf(in, order string) string {
-	return `SELECT "id", "author_id", "title", "views" FROM (SELECT "id", "author_id", "title", "views", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY ` + order + `) AS "vx_rn" FROM "posts" WHERE "author_id" IN (` + in + `) AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
+// postsOf is the windowed load of the columns cols of the posts of users,
+// ordered by order (its SQL), at most n of each; in is the users'
+// placeholders. Its arguments are the users' keys, the org and n.
+func postsOf(cols, in, order string) string {
+	return `SELECT ` + cols + ` FROM (SELECT ` + cols + `, ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY ` + order + `) AS "vx_rn" FROM "posts" WHERE "author_id" IN (` + in + `) AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
 }
 
 // tagsOf is the windowed load of the name of the tags of posts, through the
@@ -239,9 +236,9 @@ func TestByID(t *testing.T) {
 			"hidden": {"totalCount": 0}
 		}}`,
 		stmts: []string{
-			users + ` WHERE "id" IN (?, ?, ?) ORDER BY "id" LIMIT ? [1 9 3 101]`,
-			posts + ` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
-			users + ` WHERE "id" IN (?) ORDER BY "id" [1]`, // the author
+			`SELECT "id", "name" FROM "users" WHERE "id" IN (?, ?, ?) ORDER BY "id" LIMIT ? [1 9 3 101]`,
+			`SELECT "id", "author_id", "title" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
+			`SELECT "id", "name" FROM "users" WHERE "id" IN (?) ORDER BY "id" [1]`, // the author
 			`SELECT COUNT(*) FROM "posts" WHERE "id" = ? AND "org_id" = ? [5 1]`,
 		},
 	})
@@ -288,7 +285,7 @@ func TestPaging(t *testing.T) {
 			"edges": [{"cursor": %[1]q, "node": {"id": %[3]q, "name": "Ada"}}, {"cursor": %[2]q, "node": {"id": %[4]q, "name": "Brian"}}],
 			"pageInfo": {"hasNextPage": true, "hasPreviousPage": false, "startCursor": %[1]q, "endCursor": %[2]q}
 		}}}`, userCursor(1), userCursor(2), user1, user2),
-		stmts: []string{users + ` ORDER BY "id" LIMIT ? [3]`},
+		stmts: []string{`SELECT "id", "name" FROM "users" ORDER BY "id" LIMIT ? [3]`},
 	})
 	s.do(t, request{
 		query: q,
@@ -297,7 +294,7 @@ func TestPaging(t *testing.T) {
 			"edges": [{"cursor": %[1]q, "node": {"id": %[2]q, "name": "Chen"}}],
 			"pageInfo": {"hasNextPage": false, "hasPreviousPage": false, "startCursor": %[1]q, "endCursor": %[1]q}
 		}}}`, userCursor(3), user3),
-		stmts: []string{users + ` WHERE ("id" > ?) ORDER BY "id" LIMIT ? [2 3]`},
+		stmts: []string{`SELECT "id", "name" FROM "users" WHERE ("id" > ?) ORDER BY "id" LIMIT ? [2 3]`},
 	})
 	// Backward: last reverses the order and the rows read.
 	s.do(t, request{
@@ -307,7 +304,7 @@ func TestPaging(t *testing.T) {
 			"edges": [{"cursor": %[1]q, "node": {"id": %[2]q, "name": "Chen"}}],
 			"pageInfo": {"hasNextPage": false, "hasPreviousPage": true, "startCursor": %[1]q, "endCursor": %[1]q}
 		}}}`, userCursor(3), user3),
-		stmts: []string{users + ` ORDER BY "id" DESC LIMIT ? [2]`},
+		stmts: []string{`SELECT "id", "name" FROM "users" ORDER BY "id" DESC LIMIT ? [2]`},
 	})
 	s.do(t, request{
 		query: q,
@@ -316,7 +313,7 @@ func TestPaging(t *testing.T) {
 			"edges": [{"cursor": %[1]q, "node": {"id": %[3]q, "name": "Ada"}}, {"cursor": %[2]q, "node": {"id": %[4]q, "name": "Brian"}}],
 			"pageInfo": {"hasNextPage": false, "hasPreviousPage": false, "startCursor": %[1]q, "endCursor": %[2]q}
 		}}}`, userCursor(1), userCursor(2), user1, user2),
-		stmts: []string{users + ` WHERE ("id" < ?) ORDER BY "id" DESC LIMIT ? [3 3]`},
+		stmts: []string{`SELECT "id", "name" FROM "users" WHERE ("id" < ?) ORDER BY "id" DESC LIMIT ? [3 3]`},
 	})
 }
 
@@ -333,7 +330,7 @@ func TestOrderAndWhere(t *testing.T) {
 		) { edges { node { title views } } } }`,
 		want: `{"data": {"posts": {"edges": [{"node": {"title": "Alpha", "views": 10}}, {"node": {"title": "Gamma", "views": 10}}]}}}`,
 		stmts: []string{
-			posts + ` WHERE ("title" <> ? AND "status" = ? AND "published_at" >= ?) AND "org_id" = ? ORDER BY "views" DESC, "title", "id" LIMIT ? [Delta published 2026-04-01 00:00:00 +0000 UTC 1 101]`,
+			`SELECT "id", "author_id", "views", "title" FROM "posts" WHERE ("title" <> ? AND "status" = ? AND "published_at" >= ?) AND "org_id" = ? ORDER BY "views" DESC, "title", "id" LIMIT ? [Delta published 2026-04-01 00:00:00 +0000 UTC 1 101]`,
 		},
 	})
 	s.do(t, request{
@@ -344,7 +341,7 @@ func TestOrderAndWhere(t *testing.T) {
 		) { edges { node { name } } } }`,
 		want: `{"data": {"users": {"edges": [{"node": {"name": "Brian"}}, {"node": {"name": "Ada"}}]}}}`,
 		stmts: []string{
-			users + ` WHERE (EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" LIKE ? ESCAPE '!' AND "org_id" = ?) OR "role" = ?) ORDER BY "name" DESC, "id" LIMIT ? [G% 1 admin 101]`,
+			`SELECT "id", "name" FROM "users" WHERE (EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" LIKE ? ESCAPE '!' AND "org_id" = ?) OR "role" = ?) ORDER BY "name" DESC, "id" LIMIT ? [G% 1 admin 101]`,
 		},
 	})
 }
@@ -363,8 +360,8 @@ const nestedQuery = `query($n: Int) { users(first: $n, orderBy: {field: NAME}) {
 // the keys of the users and the posts read.
 func nestedStmts(n int, userKeys, postKeys string) []string {
 	return []string{
-		fmt.Sprintf(`%s ORDER BY "name", "id" LIMIT ? [%d]`, users, n+1),
-		fmt.Sprintf(`%s [%s 1 2]`, postsOf(marks(userKeys), `"title", "id"`), userKeys),
+		fmt.Sprintf(`SELECT "id", "name" FROM "users" ORDER BY "name", "id" LIMIT ? [%d]`, n+1),
+		fmt.Sprintf(`%s [%s 1 2]`, postsOf(`"id", "author_id", "title"`, marks(userKeys), `"title", "id"`), userKeys),
 		fmt.Sprintf(`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (%s) AND "org_id" = ? GROUP BY "author_id" [%s 1]`, marks(userKeys), userKeys),
 		fmt.Sprintf(`%s [%s 101]`, tagsOf(marks(postKeys)), postKeys),
 	}
@@ -431,7 +428,7 @@ func TestColumnsCollected(t *testing.T) {
 	s.do(t, request{
 		query: `{ users { edges { node { name } } } }`,
 		want:  `{"data": {"users": {"edges": [{"node": {"name": "Ada"}}, {"node": {"name": "Brian"}}, {"node": {"name": "Chen"}}]}}}`,
-		stmts: []string{users + ` ORDER BY "id" LIMIT ? [101]`},
+		stmts: []string{`SELECT "id", "name" FROM "users" ORDER BY "id" LIMIT ? [101]`},
 	})
 }
 
@@ -448,10 +445,10 @@ func TestAliasesBatch(t *testing.T) {
 			{"node": {"name": "Chen", "a": {"edges": [{"node": {"title": "Delta"}}]}, "b": {"edges": []}}}
 		]}}}`,
 		stmts: []string{
-			users + ` ORDER BY "id" LIMIT ? [101]`,
+			`SELECT "id", "name" FROM "users" ORDER BY "id" LIMIT ? [101]`,
 			// a, its first post each; b, the posts titled Beta.
-			postsOf("?, ?, ?", `"id"`) + ` [1 2 3 1 2]`,
-			`SELECT "id", "author_id", "title", "views" FROM (SELECT "id", "author_id", "title", "views", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY "id") AS "vx_rn" FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "title" = ? AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 2 3 Beta 1 101]`,
+			postsOf(`"id", "author_id", "title"`, "?, ?, ?", `"id"`) + ` [1 2 3 1 2]`,
+			`SELECT "id", "author_id", "title" FROM (SELECT "id", "author_id", "title", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY "id") AS "vx_rn" FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "title" = ? AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 2 3 Beta 1 101]`,
 		},
 	})
 }
@@ -493,8 +490,8 @@ func TestBatchInMutation(t *testing.T) {
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1]`,
 			// The author, the returned row's edge, alone; then its posts and
 			// their tags, a batch each.
-			users + ` WHERE "id" IN (?) LIMIT ? [1 1]`,
-			postsOf("?", `"id"`) + ` [1 1 101]`,
+			`SELECT "id" FROM "users" WHERE "id" IN (?) LIMIT ? [1 1]`,
+			postsOf(`"id", "author_id", "title"`, "?", `"id"`) + ` [1 1 101]`,
 			`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (?) AND "org_id" = ? GROUP BY "author_id" [1 1]`,
 			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 6]`,
 		},
@@ -527,15 +524,15 @@ func TestOrgIsolation(t *testing.T) {
 	}`
 	stmts := func(org int64) []string {
 		return []string{
-			fmt.Sprintf(posts+` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 %d 101]`, org),
-			fmt.Sprintf(posts+` WHERE "org_id" = ? ORDER BY "id" LIMIT ? [%d 101]`, org),
+			fmt.Sprintf(`SELECT "id", "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 %d 101]`, org),
+			fmt.Sprintf(`SELECT "id", "author_id", "title" FROM "posts" WHERE "org_id" = ? ORDER BY "id" LIMIT ? [%d 101]`, org),
 			fmt.Sprintf(`SELECT COUNT(*) FROM "users" WHERE EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" = ? AND "org_id" = ?) [Globex plans %d]`, org),
-			users + ` WHERE "name" = ? ORDER BY "id" LIMIT ? [Ada 101]`,
-			fmt.Sprintf(postsOf("?", `"id"`)+` [1 %d 101]`, org),
-			tags + ` WHERE "name" = ? ORDER BY "id" LIMIT ? [go 101]`,
+			`SELECT "id" FROM "users" WHERE "name" = ? ORDER BY "id" LIMIT ? [Ada 101]`,
+			fmt.Sprintf(postsOf(`"id", "author_id", "title"`, "?", `"id"`)+` [1 %d 101]`, org),
+			`SELECT "id" FROM "tags" WHERE "name" = ? ORDER BY "id" LIMIT ? [go 101]`,
 			// The label's posts, through the join table: the org's
 			// condition is inside the window.
-			fmt.Sprintf(`SELECT "id", "author_id", "title", "views", "vx_owner" FROM (SELECT "posts"."id", "posts"."author_id", "posts"."title", "posts"."views", "vx_j"."tag_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."tag_id" ORDER BY "posts"."id") AS "vx_rn" FROM "posts" JOIN "post_tags" AS "vx_j" ON "vx_j"."post_id" = "posts"."id" WHERE "vx_j"."tag_id" IN (?) AND "posts"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 %d 101]`, org),
+			fmt.Sprintf(`SELECT "id", "author_id", "title", "vx_owner" FROM (SELECT "posts"."id", "posts"."author_id", "posts"."title", "vx_j"."tag_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."tag_id" ORDER BY "posts"."id") AS "vx_rn" FROM "posts" JOIN "post_tags" AS "vx_j" ON "vx_j"."post_id" = "posts"."id" WHERE "vx_j"."tag_id" IN (?) AND "posts"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 %d 101]`, org),
 		}
 	}
 	s.do(t, request{
@@ -573,7 +570,7 @@ func TestOrgIsolation(t *testing.T) {
 	} {
 		var stmts []string
 		if strings.HasPrefix(c.query, "{ labels") {
-			stmts = []string{tags + ` WHERE "name" = ? ORDER BY "id" LIMIT ? [go 101]`}
+			stmts = []string{`SELECT "id" FROM "tags" WHERE "name" = ? ORDER BY "id" LIMIT ? [go 101]`}
 		}
 		if body := s.do(t, request{query: c.query, want: c.want, stmts: stmts}); strings.Contains(body, "velox:") {
 			t.Errorf("%s: the client sees velox's text: %s", c.query, body)
@@ -658,8 +655,8 @@ func TestRequestCost(t *testing.T) {
 			{"node": {"posts": {"edges": [{"node": {"tags": {"totalCount": 1}}}]}}},
 			{"node": {"posts": {"edges": [{"node": {"tags": {"totalCount": 0}}}]}}}]}}}`,
 		stmts: []string{
-			users + ` ORDER BY "id" LIMIT ? [6]`,
-			postsOf("?, ?, ?", `"id"`) + ` [1 2 3 1 6]`,
+			`SELECT "id" FROM "users" ORDER BY "id" LIMIT ? [6]`,
+			postsOf(`"id", "author_id"`, "?, ?, ?", `"id"`) + ` [1 2 3 1 6]`,
 			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 3 4]`,
 		},
 	})
@@ -751,7 +748,7 @@ func TestPublishedPosts(t *testing.T) {
 		query: `{ publishedPosts { totalCount edges { node { title } } } }`,
 		want:  `{"data": {"publishedPosts": {"totalCount": 3, "edges": [{"node": {"title": "Alpha"}}, {"node": {"title": "Gamma"}}, {"node": {"title": "Delta"}}]}}}`,
 		stmts: []string{
-			posts + ` WHERE "status" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [published 1 101]`,
+			`SELECT "id", "author_id", "title" FROM "posts" WHERE "status" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [published 1 101]`,
 			`SELECT COUNT(*) FROM "posts" WHERE "status" = ? AND "org_id" = ? [published 1]`,
 		},
 	})
@@ -799,7 +796,7 @@ func TestFieldDirective(t *testing.T) {
 				{` + forbidden + `, "path": ["users", "edges", 1, "node", "email"]},
 				{` + forbidden + `, "path": ["users", "edges", 2, "node", "email"]}
 			], "data": null}`,
-			stmts: []string{`SELECT "id", "name", "joined_at", "email" FROM "users" ORDER BY "id" LIMIT ? [101]`},
+			stmts: []string{`SELECT "id", "email" FROM "users" ORDER BY "id" LIMIT ? [101]`},
 		})
 	}
 	s.do(t, request{
@@ -814,7 +811,7 @@ func TestFieldDirective(t *testing.T) {
 		want: `{"data": {"users": {"edges": [
 			{"node": {"email": "ada@example.com"}}, {"node": {"email": "brian@example.com"}}, {"node": {"email": "chen@example.com"}}
 		]}}}`,
-		stmts: []string{`SELECT "id", "name", "joined_at", "email" FROM "users" ORDER BY "id" LIMIT ? [101]`},
+		stmts: []string{`SELECT "id", "email" FROM "users" ORDER BY "id" LIMIT ? [101]`},
 	})
 }
 
@@ -881,7 +878,7 @@ func TestCreatePost(t *testing.T) {
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?), (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1 6 2]`,
 			// The selection, of the returned row alone: the author, and the
 			// tags' count, through the join table.
-			users + ` WHERE "id" IN (?) LIMIT ? [2 1]`,
+			`SELECT "id", "name" FROM "users" WHERE "id" IN (?) LIMIT ? [2 1]`,
 			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?)) [6]`,
 		},
 	})
@@ -1006,8 +1003,8 @@ func TestOnlyAuthorWrites(t *testing.T) {
 		query: `{ posts(where: {id: ` + post1 + `}) { edges { node { title author { name } } } } }`,
 		want:  `{"data": {"posts": {"edges": [{"node": {"title": "Alpha", "author": {"name": "Ada"}}}]}}}`,
 		stmts: []string{
-			posts + ` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
-			users + ` WHERE "id" IN (?) ORDER BY "id" [1]`,
+			`SELECT "id", "author_id", "title" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
+			`SELECT "id", "name" FROM "users" WHERE "id" IN (?) ORDER BY "id" [1]`,
 		},
 	})
 }
@@ -1049,7 +1046,7 @@ func TestUnlinkOtherOrg(t *testing.T) {
 		query: `{ posts(where: {id: ` + post5 + `}) { edges { node { tags { edges { node { name } } } } } } }`,
 		want:  `{"data": {"posts": {"edges": [{"node": {"tags": {"edges": [{"node": {"name": "go"}}]}}}]}}}`,
 		stmts: []string{
-			posts + ` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 2 101]`,
+			`SELECT "id", "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 2 101]`,
 			tagsOf("?") + ` [5 101]`,
 		},
 	})
@@ -1058,7 +1055,7 @@ func TestUnlinkOtherOrg(t *testing.T) {
 		query: `{ posts(where: {id: ` + post1 + `}) { edges { node { tags { edges { node { name } } } } } } }`,
 		want:  `{"data": {"posts": {"edges": [{"node": {"tags": {"edges": [{"node": {"name": "graphql"}}]}}}]}}}`,
 		stmts: []string{
-			posts + ` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
+			`SELECT "id", "author_id" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 101]`,
 			tagsOf("?") + ` [1 101]`,
 		},
 	})
@@ -1108,7 +1105,7 @@ func TestDeleteOtherOrg(t *testing.T) {
 		query: `{ posts(where: {id: ` + post5 + `}) { edges { node { title tags { edges { node { name } } } } } } }`,
 		want:  `{"data": {"posts": {"edges": [{"node": {"title": "Globex plans", "tags": {"edges": [{"node": {"name": "go"}}]}}}]}}}`,
 		stmts: []string{
-			posts + ` WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 2 101]`,
+			`SELECT "id", "author_id", "title" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [5 2 101]`,
 			tagsOf("?") + ` [5 101]`,
 		},
 	})

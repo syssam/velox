@@ -2,7 +2,6 @@ package gogen
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/syssam/velox/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox/plugin"
@@ -15,10 +14,6 @@ func (r *renderer) writeOrder(f *file, t *sdl.Type) error {
 		if err := r.declare(name, what); err != nil {
 			return err
 		}
-	}
-	values := make([]string, 0, len(t.Order))
-	for _, v := range t.Order {
-		values = append(values, v.Value)
 	}
 	f.p("")
 	f.doc("", fmt.Sprintf("%sOrder is the GraphQL input %[1]sOrder, an order of connections to %[1]s.", n))
@@ -50,13 +45,7 @@ func (r *renderer) writeOrder(f *file, t *sdl.Type) error {
 	f.p(")")
 	f.p("")
 	f.p("// IsValid reports whether o is a value of %sOrderField.", n)
-	f.p("func (o %sOrderField) IsValid() bool {", n)
-	f.p("\tswitch o {")
-	f.p("\tcase %s:", quoteList(values))
-	f.p("\t\treturn true")
-	f.p("\t}")
-	f.p("\treturn false")
-	f.p("}")
+	f.p("func (o %sOrderField) IsValid() bool { return %s.IsOrderField(string(o)) }", n, typeVar(t))
 	f.p("")
 	f.p("// String returns o's value.")
 	f.p("func (o %sOrderField) String() string { return string(o) }", n)
@@ -66,16 +55,7 @@ func (r *renderer) writeOrder(f *file, t *sdl.Type) error {
 	f.p("")
 	f.p("// UnmarshalGQL sets o from v, a value of the GraphQL enum %sOrderField.", n)
 	f.p("func (o *%sOrderField) UnmarshalGQL(v any) error {", n)
-	f.p("\tswitch v {")
-	for _, v := range t.Order {
-		fd, via := orderField(e, v)
-		f.p("\tcase %q:", v.Value)
-		f.p("\t\t*o = %sOrderField%s%s", n, via, fd.GoName)
-	}
-	f.p("\tdefault:")
-	f.p("\t\treturn %s.InputErrorf(%q, v)", f.gqlgraph(), strings.ReplaceAll(n+"OrderField must be "+orList(values), "%", "%%")+", not %v")
-	f.p("\t}")
-	f.p("\treturn nil")
+	f.p("\treturn %s.UnmarshalOrderField(o, v, &%s)", f.gqlgraph(), typeVar(t))
 	f.p("}")
 	return nil
 }

@@ -226,8 +226,8 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 }
 
 // writeSelection writes the fields of t's gqlgraph.Type that give the columns a
-// selection reads: Read, the key, every foreign key on the row and every
-// order field's column; Fields, the column of each of t's fields; and
+// selection reads: AlwaysRead, the key and every foreign key on the row (a
+// connection adds its order's columns at run time); Fields, the column of each of t's fields; and
 // Edges, t's edge fields by relation, which read no column of their own and
 // name an edge's field for gqlgraph's batches.
 func (r *renderer) writeSelection(f *file, t *sdl.Type) {
@@ -236,11 +236,6 @@ func (r *renderer) writeSelection(f *file, t *sdl.Type) {
 	for i, fd := range e.Fields {
 		if !slices.Contains(read, i) && r.foreignKey(e, fd) {
 			read = append(read, i)
-		}
-	}
-	for _, v := range t.Order {
-		if v.Edge == 0 && !slices.Contains(read, v.Field) {
-			read = append(read, v.Field)
 		}
 	}
 	cols := make([]string, len(read))

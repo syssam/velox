@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion24
+const _ = veloxgql.GeneratedCodeIsVersion25
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -156,7 +156,7 @@ var userType = gqlgraph.Type{
 		{Name: "NAME", Index: userColName},
 		{Name: "JOINED_AT", Index: userColJoinedAt},
 	},
-	AlwaysRead: []int{userColID, userColName, userColJoinedAt},
+	AlwaysRead: []int{userColID},
 	Fields: []string{
 		userColID:       "id",
 		userColName:     "name",
@@ -194,13 +194,7 @@ const (
 )
 
 // IsValid reports whether o is a value of UserOrderField.
-func (o UserOrderField) IsValid() bool {
-	switch o {
-	case "NAME", "JOINED_AT":
-		return true
-	}
-	return false
-}
+func (o UserOrderField) IsValid() bool { return userType.IsOrderField(string(o)) }
 
 // String returns o's value.
 func (o UserOrderField) String() string { return string(o) }
@@ -210,15 +204,7 @@ func (o UserOrderField) MarshalGQL(w io.Writer) { gqlgraph.WriteString(w, string
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum UserOrderField.
 func (o *UserOrderField) UnmarshalGQL(v any) error {
-	switch v {
-	case "NAME":
-		*o = UserOrderFieldName
-	case "JOINED_AT":
-		*o = UserOrderFieldJoinedAt
-	default:
-		return gqlgraph.InputErrorf("UserOrderField must be NAME or JOINED_AT, not %v", v)
-	}
-	return nil
+	return gqlgraph.UnmarshalOrderField(o, v, &userType)
 }
 
 // UserWhereInput is the GraphQL input UserWhereInput, a filter of User nodes: a

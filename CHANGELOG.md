@@ -366,6 +366,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-graphql: a connection reads the column of an order field only when
+  its orderBy names it. `AlwaysRead` holds the key and the foreign keys, so
+  a selection reads its own fields' columns and no more; before, every
+  orderable column was read, which under `compat=veloxe` (every field
+  orderable) was every column. An `XOrderField`'s `IsValid` and
+  `UnmarshalGQL` are one call each to `gqlgraph.Type.IsOrderField` and
+  `gqlgraph.UnmarshalOrderField`, with the same values and error text.
+  `veloxgql.GeneratedCodeIsVersion25` replaces Version24.
+
 - A policy, Query rule or interceptor whose subquery reaches its own entity
   again, as nextapp's conversation rule reads participants through the
   participants' own policy, is cut there and no longer refused: the inner

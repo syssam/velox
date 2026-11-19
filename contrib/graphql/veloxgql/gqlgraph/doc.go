@@ -15,7 +15,7 @@
 //
 // An application does not call this package.
 //
-// Compatibility is by veloxgql.GeneratedCodeIsVersion24, which every
+// Compatibility is by veloxgql.GeneratedCodeIsVersion25, which every
 // generated file references, and not by semantic versioning, as protobuf's
 // protoimpl is: a name here may change or go when the generated code
 // changes, and then the version constant is replaced, so that generated code

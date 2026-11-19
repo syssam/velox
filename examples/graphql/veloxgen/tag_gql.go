@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion24
+const _ = veloxgql.GeneratedCodeIsVersion25
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -133,7 +133,7 @@ var tagType = gqlgraph.Type{
 	Order: []gqlgraph.Column{
 		{Name: "NAME", Index: tagColName},
 	},
-	AlwaysRead: []int{tagColID, tagColName},
+	AlwaysRead: []int{tagColID},
 	Fields:     []string{tagColID: "id", tagColName: "name", tagColRank: "rank"},
 	Edges:      []string{tagEdgePosts: "posts"},
 	Inputs:     []string{tagColName: "name", tagColRank: "rank"},
@@ -158,13 +158,7 @@ const (
 )
 
 // IsValid reports whether o is a value of LabelOrderField.
-func (o LabelOrderField) IsValid() bool {
-	switch o {
-	case "NAME":
-		return true
-	}
-	return false
-}
+func (o LabelOrderField) IsValid() bool { return tagType.IsOrderField(string(o)) }
 
 // String returns o's value.
 func (o LabelOrderField) String() string { return string(o) }
@@ -174,13 +168,7 @@ func (o LabelOrderField) MarshalGQL(w io.Writer) { gqlgraph.WriteString(w, strin
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum LabelOrderField.
 func (o *LabelOrderField) UnmarshalGQL(v any) error {
-	switch v {
-	case "NAME":
-		*o = LabelOrderFieldName
-	default:
-		return gqlgraph.InputErrorf("LabelOrderField must be NAME, not %v", v)
-	}
-	return nil
+	return gqlgraph.UnmarshalOrderField(o, v, &tagType)
 }
 
 // LabelWhereInput is the GraphQL input LabelWhereInput, a filter of Label

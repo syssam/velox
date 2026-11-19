@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion24
+const _ = veloxgql.GeneratedCodeIsVersion25
 
 // MarshalGQL writes e as a GraphQL String, its stored value: the field
 // visibility of Group is a String, as graphql.Skip(graphql.SkipEnumField) asks.
@@ -143,7 +143,7 @@ var groupType = gqlgraph.Type{
 	Order: []gqlgraph.Column{
 		{Name: "NAME", Index: groupColName},
 	},
-	AlwaysRead: []int{groupColID, groupColName},
+	AlwaysRead: []int{groupColID},
 	Fields: []string{
 		groupColID:         "id",
 		groupColName:       "name",
@@ -171,13 +171,7 @@ const (
 )
 
 // IsValid reports whether o is a value of GroupOrderField.
-func (o GroupOrderField) IsValid() bool {
-	switch o {
-	case "NAME":
-		return true
-	}
-	return false
-}
+func (o GroupOrderField) IsValid() bool { return groupType.IsOrderField(string(o)) }
 
 // String returns o's value.
 func (o GroupOrderField) String() string { return string(o) }
@@ -187,11 +181,5 @@ func (o GroupOrderField) MarshalGQL(w io.Writer) { gqlgraph.WriteString(w, strin
 
 // UnmarshalGQL sets o from v, a value of the GraphQL enum GroupOrderField.
 func (o *GroupOrderField) UnmarshalGQL(v any) error {
-	switch v {
-	case "NAME":
-		*o = GroupOrderFieldName
-	default:
-		return gqlgraph.InputErrorf("GroupOrderField must be NAME, not %v", v)
-	}
-	return nil
+	return gqlgraph.UnmarshalOrderField(o, v, &groupType)
 }

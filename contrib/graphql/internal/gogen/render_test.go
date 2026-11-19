@@ -546,7 +546,7 @@ func TestGoTypes(t *testing.T) {
 	for _, want := range []string{
 		` "github.com/google/uuid" `,
 		" Name: \"Event\", Table: untyped.TableOf[Event], ",
-		" AlwaysRead: []int{eventColID, eventColOwnerID, eventColLevel}, ",
+		" AlwaysRead: []int{eventColID, eventColOwnerID}, ",
 	} {
 		if !strings.Contains(ev, want) {
 			t.Errorf("no %q in\n%s", want, ev)
@@ -738,7 +738,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion24\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion25\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {

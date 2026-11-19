@@ -165,9 +165,9 @@ func TestNamedTypeTerms(t *testing.T) {
 	}
 }
 
-// TestConnColumns: a selection reads Read and its fields' columns, each once,
-// an edge reads Read alone, and a field Conn does not know reads every
-// column.
+// TestConnColumns: a selection reads AlwaysRead, its order's own columns and
+// its fields' columns, each once; an edge reads AlwaysRead alone; and a field
+// Conn does not know reads every column.
 func TestConnColumns(t *testing.T) {
 	c := &gqlgraph.Type{
 		AlwaysRead: []int{0, 1},
@@ -186,6 +186,26 @@ func TestConnColumns(t *testing.T) {
 		if got := c.Columns(x.fields); !slices.Equal(got, x.want) {
 			t.Errorf("Columns(%q) = %v, want %v", x.fields, got, x.want)
 		}
+	}
+	// A connection reads its own order's columns too, and only those: not
+	// another order field's, nor a column of an edge's target.
+	c.Order = []gqlgraph.Column{{Name: "TITLE", Index: 1}, {Name: "RANK", Index: 4}, {Name: "STATUS", Index: 3}, {Name: "AUTHOR_NAME", Index: 0, Edge: 1}}
+	for _, x := range []struct {
+		order []gqlgraph.Order
+		want  []int
+	}{
+		{nil, []int{0, 1}},
+		{[]gqlgraph.Order{{Field: "RANK"}}, []int{0, 1, 4}},
+		{[]gqlgraph.Order{{Field: "TITLE"}, {Field: "RANK"}}, []int{0, 1, 4}},
+		{[]gqlgraph.Order{{Field: "AUTHOR_NAME"}}, []int{0, 1}},
+		{[]gqlgraph.Order{{Field: "NOPE"}}, []int{0, 1}},
+	} {
+		if got := c.Columns([]string{"id"}, x.order...); !slices.Equal(got, x.want) {
+			t.Errorf("Columns(id, %v) = %v, want %v", x.order, got, x.want)
+		}
+	}
+	if got := c.Columns([]string{"status", "postCount"}, gqlgraph.Order{Field: "RANK"}); got != nil {
+		t.Errorf("an unknown field with an order reads %v, want every column", got)
 	}
 	// Columns returns a fresh slice: appending to it leaves Read as it is.
 	_ = append(c.Columns([]string{"status"}), 9)

@@ -160,7 +160,7 @@ func edgeQuery(ctx context.Context, target *Type) (untyped.TableQuery, error) {
 	}
 	q := untyped.Query(db, target.table())
 	if fields, ok := selected(ctx, target.Name); ok {
-		q = narrow(q, target.columns(fields))
+		q = narrow(q, target.columns(fields, nil))
 	}
 	return q, nil
 }
