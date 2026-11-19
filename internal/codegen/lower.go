@@ -64,6 +64,7 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 		if e.Bidi && e.Bound.PolicyConds != "" {
 			return nil, bidiPolicyError(e)
 		}
+		l.out.Privacy = l.out.Privacy || e.Bound.Privacy
 	}
 	return l.out, nil
 }

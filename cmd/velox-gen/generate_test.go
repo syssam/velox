@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -1599,5 +1600,52 @@ func TestGeneratePrivacyPolicy(t *testing.T) {
 	}
 	if code, out, errs := runCLI(t, dir, "verify", "./veloxschema"); code != 0 {
 		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+
+	// veloxe's applications imported the generated package's privacy:
+	// velox-gen writes it, and code that imports it builds.
+	src, err := os.ReadFile(filepath.Join(dir, "veloxgen", "privacy", "privacy.go"))
+	if err != nil || !strings.HasPrefix(string(src), header) || !strings.Contains(string(src), "DecisionContext = privacy.DecisionContext") {
+		t.Fatalf("veloxgen/privacy/privacy.go: %v\n%s", err, src)
+	}
+	writeFile(t, filepath.Join(dir, "service", "service.go"), `package service
+
+import (
+	"context"
+
+	"example.com/app/veloxgen/privacy"
+)
+
+func Allowed(ctx context.Context) context.Context { return privacy.DecisionContext(ctx, privacy.Allow) }
+
+var _ privacy.QueryRule = privacy.FilterFunc(nil)
+`)
+	cmd := exec.Command("go", "vet", "./service")
+	cmd.Dir, cmd.Env = dir, offlineEnv()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Errorf("go vet ./service: %v\n%s", err, out)
+	}
+}
+
+// A schema whose Policy is velox's own gets no privacy package: only an
+// application written for veloxe imported one.
+func TestGenerateNoPrivacyPackage(t *testing.T) {
+	dir := genModule(t, map[string]string{"veloxschema/policies.go": `package veloxschema
+
+import (
+	"context"
+
+	"github.com/syssam/velox"
+)
+
+func (User) Policy() velox.Policy {
+	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("name", "ann"), nil }}
+}
+`})
+	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {
+		t.Fatalf("%d %q", code, errs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "veloxgen", "privacy")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("veloxgen/privacy: %v, want none", err)
 	}
 }

@@ -28,7 +28,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   on, Allow ends a list, any other error denies; Query's conditions apply to
   reads only, Mutation's rules to inserted rows, updates and deletes;
   `privacy.DecisionContext` lifts the lists. velox-gen accepts
-  `Policy() privacy.Policy`.
+  `Policy() privacy.Policy`, and for such a schema writes
+  `<out>/privacy/privacy.go`, veloxe's generated privacy package, as aliases
+  of velox's.
 - A `field.Other` field's handle is `velox.OrderedCol`: GT, GTE, LT, LTE,
   Between, Min and Max, compared by its SQL type. velox-graphql's WhereOps
   gives such a field equality and comparison predicates (ADR 0087).

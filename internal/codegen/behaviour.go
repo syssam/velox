@@ -73,6 +73,7 @@ func SchemaMethods(dir string, entities []string) (map[string]Bound, error) {
 			switch m {
 			case "Policy":
 				b.Policy = true
+				b.Privacy = b.Privacy || localName(f, privacyPkg) != ""
 				if pos := policyConds(f, fd); pos.IsValid() {
 					b.PolicyConds = fmt.Sprintf("%s:%d", path, fset.Position(pos).Line)
 				}

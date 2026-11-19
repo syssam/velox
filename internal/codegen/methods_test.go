@@ -402,6 +402,7 @@ func TestGenerateRefusesABidiPolicy(t *testing.T) {
 // A Policy may return privacy.Policy, velox.Policy's alias in velox's
 // privacy package, under any name the file imports it as; a privacy.Policy
 // literal's Query and Mutation keys are conditions, as Read and Write are.
+// Bound.Privacy says the file imports privacy.
 func TestSchemaMethodsPrivacyPolicy(t *testing.T) {
 	dir := methodsDir(t, map[string]string{
 		"doc.go": "package schema\n\nimport (\n\t\"github.com/syssam/velox\"\n\t\"github.com/syssam/velox/privacy\"\n)\n\n" +
@@ -416,9 +417,9 @@ func TestSchemaMethodsPrivacyPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]Bound{
-		"Doc":  {Policy: true, PolicyConds: filepath.Join(dir, "doc.go") + ":9"},
-		"Note": {Policy: true, PolicyConds: filepath.Join(dir, "note.go") + ":6"},
-		"Tag":  {Policy: true},
+		"Doc":  {Policy: true, Privacy: true, PolicyConds: filepath.Join(dir, "doc.go") + ":9"},
+		"Note": {Policy: true, Privacy: true, PolicyConds: filepath.Join(dir, "note.go") + ":6"},
+		"Tag":  {Policy: true, Privacy: true},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)

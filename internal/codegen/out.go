@@ -24,6 +24,10 @@ type Config struct {
 // that its Descriptor binds them.
 type Bound struct {
 	Policy, Hooks, Interceptors bool
+	// Privacy says the file of the Policy method imports velox's privacy
+	// package: the schema is veloxe's, whose applications imported the
+	// generated package's privacy, so velox-gen writes it (Out.Privacy).
+	Privacy bool
 	// PolicyConds is "path:line" of the first Read, Write, Query or
 	// Mutation key of a velox.Policy (or privacy.Policy) literal in the
 	// Policy method's body, "" when it has none. The join entity of a
@@ -48,6 +52,11 @@ type Out struct {
 	// package's velox.EntityTable, and every Descriptor names it, so that a
 	// condition by name finds its target when its statement runs.
 	EntityTable bool
+	// Privacy says some schema's Policy is written with velox's privacy
+	// package (Bound.Privacy): Render then writes privacy/privacy.go, the
+	// package veloxe generated beside the entities, which gives veloxe's
+	// names of velox's privacy package to code that imports it.
+	Privacy bool
 }
 
 // OutEntity is one generated entity: a schema's, or a many-to-many join entity.

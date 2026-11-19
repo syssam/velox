@@ -72,6 +72,15 @@ veloxe's semantics that the consumer relies on:
 - velox-gen accepts `Policy() privacy.Policy` as well as `Policy()
   velox.Policy`, and counts a `privacy.Policy` literal's Query and Mutation
   keys as conditions, which the join entity of a bidirectional edge refuses.
+- When a schema's Policy method is in a file that imports velox's privacy,
+  velox-gen also writes `<out>/privacy/privacy.go`: package privacy beside
+  the entities, as veloxe generated it, whose names are aliases of velox's
+  privacy package's. A veloxe application's service code imports
+  `<module>/<out>/privacy` for `DecisionContext` and `Allow`, and it builds
+  unchanged. veloxe's per-entity rule funcs (`UserQueryRuleFunc`...) are left
+  out: no application code used them, they cost a type per entity, and
+  velox's `QueryRuleFunc` and `FilterFunc` take any entity's query. A schema
+  written with `velox.Policy` alone gets no such package.
 
 ## Consequences
 

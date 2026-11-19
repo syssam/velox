@@ -30,9 +30,11 @@ func Generate(g *Graph, cfg Config) ([]File, error) {
 }
 
 // Render writes one file per entity, entityFile's (the join entities too),
-// and velox.go: the package comment and the enums.
+// and velox.go: the package comment and the enums; and privacy/privacy.go
+// when o.Privacy.
 //
-// The files are in the order of o.Entities, then velox.go. Render does not
+// The files are in the order of o.Entities, then velox.go, then
+// privacy/privacy.go. Render does not
 // change o, and the same o gives the same bytes.
 func Render(o *Out) ([]File, error) {
 	files := make([]File, 0, len(o.Entities)+1)
@@ -51,6 +53,11 @@ func Render(o *Out) ([]File, error) {
 	}
 	if err := add("velox.go", renderPackage(o)); err != nil {
 		return nil, err
+	}
+	if o.Privacy {
+		if err := add("privacy/privacy.go", renderPrivacy(o)); err != nil {
+			return nil, err
+		}
 	}
 	return files, nil
 }
@@ -596,4 +603,46 @@ func runs(xs []string, sep string) []string {
 		out = append(out, cur)
 	}
 	return out
+}
+
+// privacyNames are the names of velox's privacy package that
+// privacy/privacy.go gives again, those veloxe's generated privacy package
+// had, as types or as variables.
+var privacyNames = struct{ types, vars []string }{
+	types: []string{
+		"Decision", "Policy", "QueryRule", "MutationRule", "QueryMutationRule",
+		"QueryPolicy", "MutationPolicy", "QueryRuleFunc", "MutationRuleFunc",
+		"Query", "Mutation", "Filter", "Filterable", "FilterFunc",
+	},
+	vars: []string{
+		"Allow", "Deny", "Skip", "Allowf", "Denyf", "Skipf", "IsDecision",
+		"AlwaysAllowRule", "AlwaysDenyRule", "ContextQueryMutationRule",
+		"OnMutationOperation", "DenyMutationOperationRule",
+		"DecisionContext", "DecisionFromContext",
+	},
+}
+
+// renderPrivacy writes privacy/privacy.go, package privacy beside the
+// entities, as veloxe generated it: veloxe's names, each an alias of velox's
+// privacy package's, so that an application's import of the generated
+// package's privacy keeps building. veloxe's per-entity rule funcs are left
+// out: velox's FilterFunc and QueryRuleFunc take any entity's query.
+func renderPrivacy(o *Out) string {
+	var w writer
+	w.WriteString(header)
+	w.p("// Package privacy gives the names of %s to the code that imports", privacyPkg)
+	w.p("// %s/privacy, as veloxe's generated privacy package did.", o.GenPath)
+	w.p("package privacy\n")
+	w.p("import \"%s\"\n", privacyPkg)
+	for _, n := range privacyNames.types {
+		w.p("// %s is privacy.%[1]s.", n)
+		w.p("type %s = privacy.%[1]s\n", n)
+	}
+	w.p("var (")
+	for _, n := range privacyNames.vars {
+		w.p("\t// %s is privacy.%[1]s.", n)
+		w.p("\t%s = privacy.%[1]s", n)
+	}
+	w.p(")")
+	return w.String()
 }
