@@ -73,6 +73,10 @@ type Link struct {
 	Join       *EntityInfo // many-to-many: the join entity; nil otherwise
 	JoinOwner  int         // join's column equal to owner.Columns[ownerCol]
 	JoinTarget int         // join's column equal to target.Columns[targetCol]
+	// TextKey compares the owner's integer column with the target's text
+	// column as text, casting the owner's side: a FieldInSelect whose key
+	// column holds ids as text (ADR 0091).
+	TextKey bool
 }
 
 // RelTarget is a relation's target as the use site names it: the getter of

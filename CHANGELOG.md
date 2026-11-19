@@ -366,6 +366,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- A policy, Query rule or interceptor whose subquery reaches its own entity
+  again, as nextapp's conversation rule reads participants through the
+  participants' own policy, is cut there and no longer refused: the inner
+  subquery gets none of that entity's conditions, the outer gets them all,
+  as veloxe's raw subquery applied none. `FieldInSelect` compares an integer
+  column with a text key as text (`CAST(id AS TEXT)`, on MySQL
+  `CONCAT(id)`), at run time and in velox-gen (ADR 0091).
 - An index's type (`sqlschema.IndexType`) is ignored on SQLite, as ent's and
   veloxe's SQLite migration ignored it, where velox-gen refused it; MySQL
   still refuses it (ADR 0090).

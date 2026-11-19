@@ -389,19 +389,17 @@ func (*lCycB) VeloxMeta() *velox.Meta[lCycB] {
 	})
 }
 
-// TestInterceptorCycleIsRefused: an interceptor whose Has reaches its own
-// entity's row condition again cannot be applied, and the statement is
-// refused, under WithoutPolicy too, with an error that is not a denial.
-func TestInterceptorCycleIsRefused(t *testing.T) {
+// TestInterceptorCycleIsCut: an interceptor whose Has reaches its own
+// entity's row condition again is cut there, under WithoutPolicy too
+// (ADR 0091): the inner EXISTS on the entity gets none of its conditions,
+// interceptors included.
+func TestInterceptorCycleIsCut(t *testing.T) {
 	e := &fakeconn.Exec{}
 	for _, db := range []*velox.DB{openPolicied(velox.Postgres, e), openFake(velox.Postgres, e)} {
-		_, err := db.Query[lCycA]().Limit(1).All(context.Background())
-		const want = "velox: apitest.lCycA: the interceptors and Read policy of apitest.lCycA reach their own condition through an EXISTS; such a condition cannot be applied"
-		if err == nil || err.Error() != want || errors.Is(err, velox.ErrDenied) {
-			t.Errorf("got %v, want %s", err, want)
+		got, _, err := db.Query[lCycA]().Limit(1).SQL(context.Background())
+		const want = `SELECT "id", "b_id" FROM "cyc_as" WHERE EXISTS (SELECT 1 FROM "cyc_bs" AS "vx1" WHERE "vx1"."id" = "cyc_as"."b_id" AND EXISTS (SELECT 1 FROM "cyc_as" AS "vx2" WHERE "vx2"."id" = "vx1"."a_id")) LIMIT $1`
+		if err != nil || got != want {
+			t.Errorf("got  %s, %v\nwant %s", got, err, want)
 		}
-	}
-	if e.Calls != 0 {
-		t.Errorf("%d statements sent", e.Calls)
 	}
 }

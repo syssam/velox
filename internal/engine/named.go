@@ -364,18 +364,43 @@ func namedSubquery(in *EntityInfo, n Node) (Node, error) {
 	if !ok {
 		return n, fmt.Errorf("FieldInSelect: %s has no column %q", s.entity, s.key)
 	}
-	if err := sameKey(in, int(oc), target, int(tc)); err != nil { // as a typed InSelect: a nullable column keys as its type
+	text, err := subKey(in, int(oc), target, int(tc))
+	if err != nil {
 		return n, fmt.Errorf("FieldInSelect: %w", err)
 	}
 	l, err := ColRef{Owner: func() (*EntityInfo, error) { return in, nil }, Target: func() (*EntityInfo, error) { return target, nil }, OwnerCol: oc, TargetCol: tc}.Link()
 	if err != nil {
 		return n, err
 	}
+	l.TextKey = text
 	kids, _, err := resolveKids(l.Target, n.Kids)
 	if err != nil {
 		return n, fmt.Errorf("FieldInSelect %s: %w", s.entity, err)
 	}
 	return Node{Op: OpExists, Col: -1, V: l, Kids: kids}, nil
+}
+
+// subKey checks the owner's column oc against the target's key column tc,
+// as a typed InSelect does (sameKey: one type, a nullable column keying as
+// its type), with one exception: an integer column against a text key is
+// compared as text, and subKey reports it. Such a key holds ids of several
+// entities as text, as an approval's entity_id does (ADR 0091).
+func subKey(in *EntityInfo, oc int, target *EntityInfo, tc int) (bool, error) {
+	x, y := in.Columns[oc], target.Columns[tc]
+	if !x.Codec && !y.Codec && isInteger(base(x.Type).Kind()) && base(y.Type).Kind() == reflect.String {
+		return true, nil
+	}
+	return false, sameKey(in, oc, target, tc)
+}
+
+// isInteger reports whether k is a signed or unsigned integer kind.
+func isInteger(k reflect.Kind) bool {
+	switch k {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return true
+	}
+	return false
 }
 
 // namedValue returns v as column c's value type, converted as

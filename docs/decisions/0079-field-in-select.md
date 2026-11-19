@@ -4,6 +4,9 @@
 - Amended 2026-11-19 by [0081](0081-entity-table.md): the entity is found in the
   package's entity table, by name or by table, and need not be a constant;
   `Descriptor.Links` is gone.
+- Amended 2026-11-19 by [0091](0091-policy-cycles-and-text-keys.md): a cycle is
+  cut, not refused, and an integer column against a text key is compared as
+  text.
 
 ## Context
 
@@ -52,7 +55,8 @@ elsewhere, and the runtime checks it.
   the rest are written as a `Predicate`, now including those that read another
   table.
 - A cycle (the target's own policy reaching the entity again through an
-  `EXISTS`) is refused when applying the policy, as it is for relations.
+  `EXISTS`) was refused when applying the policy, as it was for relations;
+  0091 cuts it instead.
 - MySQL cannot select from the table being updated in a single statement
   (error 1093): a policy on an update that names its own entity in
   `FieldInSelect` fails there, as the same `EXISTS` on `HasEdgeWith` does.

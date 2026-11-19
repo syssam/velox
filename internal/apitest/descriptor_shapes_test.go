@@ -81,7 +81,7 @@ func pcommentDescriptor() velox.Descriptor[pcomment] {
 var pcommentNote = velox.Rel[pcomment, fixture.Pnote]{I: 0}
 
 // pcycA's Read is that its B is visible, and pcycB's that its A is: each
-// reaches its own Read through the other's.
+// reaches its own Read through the other's, which is cut (ADR 0091).
 type pcycA struct {
 	ID  int64
 	BID int64

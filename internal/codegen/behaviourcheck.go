@@ -136,7 +136,8 @@ func (ck *behaviourCheck) reach(e *Entity, who string, chain []string) (*Entity,
 
 // checkSub checks u, a FieldInSelect that the entity e holds: the entity it
 // names is one of the package's, both columns it names are there and of one
-// type, as the statement requires.
+// type, or an integer column and a text key, which velox compares as text
+// (ADR 0091), as the statement requires.
 func (ck *behaviourCheck) checkSub(e *Entity, who string, u use, refuse func(ast.Expr, string, ...any)) {
 	target, reason := ck.entity(u.entity)
 	if target == nil {
@@ -161,12 +162,21 @@ func (ck *behaviourCheck) checkSub(e *Entity, who string, u use, refuse func(ast
 		tgt = &namedColumn{e: target, f: f, id: i == 0}
 	}
 	if own != nil && tgt != nil {
-		if ok, kk := own.kind(), tgt.kind(); ok != "" && kk != "" && own.typeName() != tgt.typeName() {
-			refuse(u.call, "column %q of %s is %s and column %q of %s is %s: a subquery compares columns of one type",
+		ok, kk := own.kind(), tgt.kind()
+		textKey := integerKind[ok] && kk == "string"
+		if ok != "" && kk != "" && own.typeName() != tgt.typeName() && !textKey {
+			refuse(u.call, "column %q of %s is %s and column %q of %s is %s: a subquery compares columns of one type, or an integer column with a text key",
 				u.name, e.Name, article(own.typeName()), u.key, target.Name, article(tgt.typeName()))
 			return
 		}
 	}
+}
+
+// integerKind holds the reflect kinds of integers: such a column is compared
+// with a text key as text.
+var integerKind = map[string]bool{
+	"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
 }
 
 // warn records the warning of u, a column, a relation or an entity named by

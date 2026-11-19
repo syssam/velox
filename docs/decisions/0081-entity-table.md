@@ -2,6 +2,8 @@
 
 - Status: accepted, 2026-11-19. Supersedes the linking of 0039 (`velox.Linked`)
   and 0079 (`Descriptor.Links`).
+- Amended 2026-11-19 by [0091](0091-policy-cycles-and-text-keys.md): a rule
+  that reaches back to its own entity is cut there, and `cycleError` is gone.
 
 ## Context
 
@@ -46,7 +48,8 @@ which the port must not do.
 - Nothing is widened. An unknown name fails the statement, the target's Read
   policy and interceptors apply inside the `EXISTS`, and a rule that reaches
   back to its own entity is refused when the statement runs (`cycleError`),
-  as velox-gen cannot see a rule outside the schema package.
+  as velox-gen cannot see a rule outside the schema package. (0091 cuts such
+  a rule where it loops instead.)
 - `velox.Linked`, `Descriptor.Links` and `engine.SetEdgeTarget` are removed;
   `velox.LinkEntity[T](name, table)` makes an entry of the table, and
   `EntityLink.Type` is the type's package path and name as a string: a

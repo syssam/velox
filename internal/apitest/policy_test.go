@@ -367,58 +367,50 @@ func TestPolicyIsInherited(t *testing.T) {
 	}
 }
 
-// TestPolicyCycleIsRefused: a Read policy that reaches its own Read through
-// an EXISTS, directly or from another entity's policy, cannot be applied;
-// the statement is refused, and it is not a denial.
-func TestPolicyCycleIsRefused(t *testing.T) {
+// TestPolicyCycleIsCut: a Read policy that reaches its own Read through an
+// EXISTS, directly or from another entity's policy, is cut there (ADR 0091):
+// the inner EXISTS on the looping entity gets no row condition of its own,
+// and the outer one gets it in full. Nothing is refused.
+func TestPolicyCycleIsCut(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openPolicied(velox.Postgres, e)
 	self := pnoteReading(velox.HasEdgeWith("parent", velox.FieldEQ("locked", false)), nil)
 	for name, c := range map[string]struct {
-		run  func() error
+		run  func() (string, []any, error)
 		want string
 	}{
-		"direct": {func() error { _, err := db.Query[fixture.Pnote]().Limit(1).All(self); return err },
-			"velox: fixture.Pnote: the Read policy of fixture.Pnote reaches its own Read through an EXISTS; such a policy cannot be applied"},
-		"from an EXISTS": {func() error { _, err := db.Query[pbox]().Where(pboxNote.Has()).Limit(1).All(self); return err },
-			"velox: apitest.pbox: the Read policy of fixture.Pnote reaches its own Read through an EXISTS; such a policy cannot be applied"},
-		"from another policy": {func() error { _, err := db.Query[pcomment]().Limit(1).All(self); return err },
-			"velox: apitest.pcomment: the Read policy of fixture.Pnote reaches its own Read through an EXISTS; such a policy cannot be applied"},
-		"on an update": {func() error {
-			_, err := db.Update[fixture.Pnote]().Set(fixture.Pn.InvoiceID.Set(2)).Where(fixture.Pn.ID.EQ(1)).Exec(self)
-			return err
-		}, "velox: fixture.Pnote: the Read policy of fixture.Pnote reaches its own Read through an EXISTS; such a policy cannot be applied"},
+		"direct": {func() (string, []any, error) { return db.Query[fixture.Pnote]().Limit(1).SQL(self) },
+			`SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pnotes"."parent_id" AND "locked" = $1) LIMIT $2`},
+		"from an EXISTS": {func() (string, []any, error) { return db.Query[pbox]().Where(pboxNote.Has()).Limit(1).SQL(self) },
+			`SELECT "id", "note_id" FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND EXISTS (SELECT 1 FROM "pnotes" AS "vx2" WHERE "vx2"."id" = "vx1"."parent_id" AND "locked" = $1)) LIMIT $2`},
+		"from another policy": {func() (string, []any, error) { return db.Query[pcomment]().Limit(1).SQL(self) },
+			`SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND EXISTS (SELECT 1 FROM "pnotes" AS "vx2" WHERE "vx2"."id" = "vx1"."parent_id" AND "locked" = $1)) LIMIT $2`},
+		"on an update": {func() (string, []any, error) {
+			return db.Update[fixture.Pnote]().Set(fixture.Pn.InvoiceID.Set(2)).Where(fixture.Pn.ID.EQ(1)).SQL(self)
+		}, `UPDATE "pnotes" SET "invoice_id" = $1 WHERE "id" = $2 AND EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pnotes"."parent_id" AND "locked" = $3) AND "locked" = $4`},
 	} {
-		err := c.run()
-		if err == nil || err.Error() != c.want || errors.Is(err, velox.ErrDenied) {
-			t.Errorf("%s: %v", name, err)
+		got, _, err := c.run()
+		if err != nil || got != c.want {
+			t.Errorf("%s:\ngot  %s, %v\nwant %s", name, got, err, c.want)
 		}
-	}
-	if e.Calls != 0 {
-		t.Errorf("%d statements sent", e.Calls)
-	}
-	// Under WithoutPolicy no policy runs, so there is no cycle.
-	if _, err := db.WithoutPolicy("support").Query[fixture.Pnote]().Limit(1).All(self); err != nil {
-		t.Error(err)
 	}
 }
 
-// TestPolicyMutualCycleIsRefused: two Read policies that reach each other's
-// through EXISTS are a cycle, from either side.
-func TestPolicyMutualCycleIsRefused(t *testing.T) {
+// TestPolicyMutualCycleIsCut: two Read policies that reach each other's
+// through EXISTS are cut where the statement's entity is reached again, from
+// either side: the other entity's policy applies, the statement's own does
+// not apply a second time inside it.
+func TestPolicyMutualCycleIsCut(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openPolicied(velox.Postgres, e)
 	bg := context.Background()
-	_, err := db.Query[pcycA]().Limit(1).All(bg)
-	if err == nil || err.Error() != "velox: apitest.pcycA: the Read policy of apitest.pcycA reaches its own Read through an EXISTS; such a policy cannot be applied" || errors.Is(err, velox.ErrDenied) {
-		t.Errorf("A: %v", err)
+	got, _, err := db.Query[pcycA]().Limit(1).SQL(bg)
+	if want := `SELECT "id", "b_id" FROM "pcyc_as" WHERE EXISTS (SELECT 1 FROM "pcyc_bs" AS "vx1" WHERE "vx1"."id" = "pcyc_as"."b_id" AND EXISTS (SELECT 1 FROM "pcyc_as" AS "vx2" WHERE "vx2"."id" = "vx1"."a_id")) LIMIT $1`; err != nil || got != want {
+		t.Errorf("A:\ngot  %s, %v\nwant %s", got, err, want)
 	}
-	_, err = db.Query[pcycB]().Limit(1).All(bg)
-	if err == nil || err.Error() != "velox: apitest.pcycB: the Read policy of apitest.pcycB reaches its own Read through an EXISTS; such a policy cannot be applied" {
-		t.Errorf("B: %v", err)
-	}
-	if e.Calls != 0 {
-		t.Errorf("%d statements sent", e.Calls)
+	got, _, err = db.Query[pcycB]().Limit(1).SQL(bg)
+	if want := `SELECT "id", "a_id" FROM "pcyc_bs" WHERE EXISTS (SELECT 1 FROM "pcyc_as" AS "vx1" WHERE "vx1"."id" = "pcyc_bs"."a_id" AND EXISTS (SELECT 1 FROM "pcyc_bs" AS "vx2" WHERE "vx2"."id" = "vx1"."b_id")) LIMIT $1`; err != nil || got != want {
+		t.Errorf("B:\ngot  %s, %v\nwant %s", got, err, want)
 	}
 }
 

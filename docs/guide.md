@@ -575,6 +575,13 @@ func (Doc) Policy() velox.Policy {
 It is the same `EXISTS`, so `Org`'s own Read policy applies inside it, and it
 is resolved when the statement is prepared: an unknown column or entity, or
 two columns of different types, is an error and never a dropped condition.
+One mismatch is allowed: an integer column against a text key, such as an
+approval's `entity_id` that holds the ids of several entities, is compared as
+text (`CAST(id AS TEXT)`, on MySQL `CONCAT(id)`).
+A rule that reaches its own entity again, as a participant's "a conversation
+I take part in" read through the participants' own policy does, is cut where
+it loops: that inner subquery gets none of the entity's own conditions, while
+the outer statement gets them all ([ADR 0091](decisions/0091-policy-cycles-and-text-keys.md)).
 `entity` is the entity's name in the schema or its table. velox finds it, and
 the target of a `HasEdge`, in the generated package's entity table when the
 statement runs, so a rule in a shared package can take its names from

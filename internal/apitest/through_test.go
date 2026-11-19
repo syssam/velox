@@ -619,7 +619,7 @@ func TestThroughNullableKeys(t *testing.T) {
 
 // dPeer's Read policy uses a many-to-many HasWith: through dBookTag to tags
 // (the peer's id standing in for a book's), or, under peerCycle, through
-// dFriend back to dPeer, which is a cycle.
+// dFriend back to dPeer, which loops.
 type dPeer struct {
 	ID      int64
 	Friends velox.Many[dPeer]
@@ -702,7 +702,7 @@ func (*dFriend) VeloxMeta() *velox.Meta[dFriend] {
 
 // TestThroughTargetPolicy: the target's Read policy, itself a many-to-many
 // HasWith, lands inside the inner EXISTS; a Read policy that reaches its own
-// Read back through a join is refused as a cycle.
+// Read back through a join is cut there (ADR 0091).
 func TestThroughTargetPolicy(t *testing.T) {
 	db := openPolicied(velox.Postgres, &fakeconn.Exec{})
 	live := testmodel.Org.With(context.Background(), int64(7)) // ctx lifts every policy, the scope with it
@@ -713,13 +713,19 @@ func TestThroughTargetPolicy(t *testing.T) {
 		t.Errorf("got  %s, %v\nwant it to hold %s", got, err, inner)
 	}
 	cyc := context.WithValue(live, peerCycle{}, true)
-	const want = "velox: apitest.dPeer: the Read policy of apitest.dPeer reaches its own Read through an EXISTS; such a policy cannot be applied"
-	for name, q := range map[string]velox.Query[dPeer]{
-		"direct":         db.Query[dPeer]().Limit(1),
-		"from an EXISTS": db.Query[dPeer]().Where(dPeers.Friends.Has()).Limit(1),
+	for name, c := range map[string]struct {
+		q    velox.Query[dPeer]
+		want string
+	}{
+		"direct": {db.Query[dPeer]().Limit(1),
+			`SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND "id" > $1)) LIMIT $2`},
+		// The Where's EXISTS on dPeer reuses dPeer's whole condition, whose
+		// own inner EXISTS on dPeer is cut.
+		"from an EXISTS": {db.Query[dPeer]().Where(dPeers.Friends.Has()).Limit(1),
+			`SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND EXISTS (SELECT 1 FROM "friends" AS "vx3" WHERE "vx3"."peer_id" = "vx2"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx4" WHERE "vx4"."id" = "vx3"."friend_id" AND "id" > $1)))) AND EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND "id" > $2)) LIMIT $3`},
 	} {
-		if _, _, err := q.SQL(cyc); err == nil || err.Error() != want || errors.Is(err, velox.ErrDenied) {
-			t.Errorf("%s: %v", name, err)
+		if got, _, err := c.q.SQL(cyc); err != nil || got != c.want {
+			t.Errorf("%s:\ngot  %s, %v\nwant %s", name, got, err, c.want)
 		}
 	}
 }

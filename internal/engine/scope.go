@@ -73,6 +73,7 @@ type Scoper struct {
 
 	reads     []readCond
 	computing []*EntityInfo // the entities whose row condition is being made, outermost first
+	cut       int           // the outermost place (from 1) in computing that the condition being made was cut at; 0 for none
 }
 
 // readCond is an entity's row condition, made once per statement.
@@ -101,26 +102,51 @@ func (sc *Scoper) PolicyOn() bool {
 // conditions, in order, then its Read policy's unless WithoutPolicy. It calls
 // them the first time only. A denial of the policy is a *PolicyError for op;
 // an interceptor's error fails the statement and is not a denial. The EXISTS
-// in the condition get their targets' row conditions in turn; a condition
-// that reaches t's own again, directly or through other entities, cannot be
-// made, and the statement is refused.
+// in the condition get their targets' row conditions in turn.
+//
+// A condition that reaches t's own again, directly or through other
+// entities, while t's is being made, is cut there (ADR 0091): that inner
+// EXISTS on t gets no row condition from t, neither its interceptors nor its
+// policy, as the old velox's raw subquery got none. The outer occurrence
+// applies t's in full, and every other entity's applies inside. A condition
+// made below such a cut depends on where it was reached, so it is not kept
+// for reuse: only t's own, whose cut is its own looping occurrence, is.
 func (sc *Scoper) RowCond(t *EntityInfo, op Op) (Predicate, error) {
 	for _, r := range sc.reads {
 		if r.entity == t {
 			return r.p, nil
 		}
 	}
-	if slices.Contains(sc.computing, t) {
-		return Predicate{}, &cycleError{entity: sc.Entity, policy: t.Name, filters: len(t.filters) > 0}
+	if i := slices.Index(sc.computing, t); i >= 0 {
+		sc.markCut(i + 1)
+		return Predicate{}, nil
 	}
+	depth := len(sc.computing) + 1 // t's place on the stack, counted from 1
+	saved := sc.cut
+	sc.cut = 0
 	sc.computing = append(sc.computing, t)
 	p, err := sc.rowCond(t, op)
 	sc.computing = sc.computing[:len(sc.computing)-1]
+	cut := sc.cut
+	sc.cut = saved
+	if cut != 0 && cut < depth {
+		sc.markCut(cut) // the caller's condition is below this cut too
+	}
 	if err != nil {
 		return Predicate{}, err
 	}
-	sc.reads = append(sc.reads, readCond{t, p})
+	if cut == 0 || cut >= depth {
+		sc.reads = append(sc.reads, readCond{t, p})
+	}
 	return p, nil
+}
+
+// markCut records a cut at the entity at place at (from 1) on the stack of
+// conditions being made: the outermost cut counts.
+func (sc *Scoper) markCut(at int) {
+	if sc.cut == 0 || at < sc.cut {
+		sc.cut = at
+	}
 }
 
 // rowCond makes RowCond's condition.
@@ -191,20 +217,6 @@ func (sc *Scoper) filterCond(t *EntityInfo, i int, p Predicate, err error) (Pred
 	}
 	n, _, err := sc.Node(p.n)
 	return Predicate{n}, err
-}
-
-// cycleError is a row condition that reaches its own through an EXISTS:
-// applying it would never end. It is the schema's bug, not a denial.
-type cycleError struct {
-	entity, policy string // the statement's entity; the entity whose condition loops
-	filters        bool   // the looping entity has interceptors
-}
-
-func (e *cycleError) Error() string {
-	if e.filters {
-		return "velox: " + e.entity + ": the interceptors and Read policy of " + e.policy + " reach their own condition through an EXISTS; such a condition cannot be applied"
-	}
-	return "velox: " + e.entity + ": the Read policy of " + e.policy + " reaches its own Read through an EXISTS; such a policy cannot be applied"
 }
 
 // PolicyCond checks what entity t's policy (which, "Read" or "Write")
@@ -360,12 +372,9 @@ func (sc *Scoper) target(t *EntityInfo) (Predicate, error) {
 
 // inExists returns err, an error from inside an EXISTS on t (from the EXISTS
 // in its condition, or from t's Read), with t at the front of its
-// path. A cycle passes unchanged: it names the statement's entity already.
+// path.
 func (sc *Scoper) inExists(t *EntityInfo, err error) error {
-	switch e := err.(type) {
-	case *cycleError:
-		return err
-	case *existsError:
+	if e, ok := err.(*existsError); ok {
 		e.path = slices.Insert(e.path, 0, t.Name)
 		return e
 	}

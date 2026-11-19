@@ -107,7 +107,10 @@ func FieldContainsFold(name, s string) Predicate { return engine.FieldContainsFo
 // It is the condition a column handle's InSelect makes, for a policy, a hook or
 // an interceptor in a package that cannot name the entity's type. The entity's
 // Read policy and interceptors apply inside the subquery, so a row the caller
-// may not read does not widen the condition. A NULL column is in no subquery.
+// may not read does not widen the condition. When the subquery reaches back
+// to an entity whose condition is being made, as a rule on participants that
+// reads participants does, that inner subquery gets none of that entity's
+// conditions. A NULL column is in no subquery.
 // Negate it with Not: NOT EXISTS, which is true for a NULL column.
 //
 // entity is the schema's name for it or its table. velox finds it in the
@@ -115,7 +118,9 @@ func FieldContainsFold(name, s string) Predicate { return engine.FieldContainsFo
 // come from a helper package or configuration; velox-gen checks the names it
 // can read as constants. A name that is no entity or table, or that is one
 // entity's name and another's table, a column that is not there, or two
-// columns of different types fail the statement that holds it. The column
+// columns of different types fail the statement that holds it. An integer
+// column against a text key is the exception: it is compared as text, the
+// integer cast, for a key that holds ids as text. The column
 // must not be an encoded (JSON) column. On MySQL a subquery that reads the table
 // an UPDATE or DELETE changes fails with error 1093.
 func FieldInSelect(column, entity, key string, ps ...Predicate) Predicate {

@@ -287,6 +287,7 @@ func nodeKey(k []byte, n Node) []byte {
 			}
 			k = binary.AppendUvarint(k, uint64(l.OwnerCol))
 			k = binary.AppendUvarint(k, uint64(l.TargetCol))
+			k = append(k, bit(l.TextKey)) // the columns' types fix it; keyed so the text never depends on that
 		}
 	case OpThrough:
 		j := n.V.(*EntityInfo)
