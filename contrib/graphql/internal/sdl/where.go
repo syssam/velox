@@ -275,9 +275,11 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 		}
 		s.name, s.typ, s.goBase, s.target = "id", "ID", "ID", o.name
 		s.v = goValue{typ: o.keyTyp, pkg: o.keyPkg, own: true}
-	case o.fks[f.Name] || f.Implicit != "":
+	case f.Implicit != "" || o.fks[f.Name] && (!o.veloxe || g.keyEdge(o, f) >= 0):
 		// A foreign key is never a raw scalar: its edge names it, and it
-		// takes the IDs of the edge's target.
+		// takes the IDs of the edge's target. Under compat=veloxe a declared
+		// key whose edge GraphQL leaves out is filtered as a field (default),
+		// as veloxe did.
 		j := g.keyEdge(o, f)
 		if j < 0 {
 			return s, fmt.Errorf("%s: graphql.WhereOps on a foreign key whose edge is not in GraphQL: an edge's ID names a foreign key's predicates", where)
@@ -312,6 +314,11 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 		t, err := g.fieldType(o, f, a, where)
 		if err != nil {
 			return s, err
+		}
+		if o.fks[f.Name] {
+			// veloxe's: a key whose edge GraphQL leaves out is its ID still,
+			// filtered by the field's own handle.
+			t = "ID"
 		}
 		s.name, s.typ, s.kind, s.goBase, s.v = n, t, f.Type, goOf(n, f.GoName), g.goValue(f, a)
 		if t == "ID" {

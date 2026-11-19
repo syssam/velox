@@ -179,3 +179,30 @@ func TestOtherPredicates(t *testing.T) {
 		}
 	}
 }
+
+// Under Config.Veloxe, a foreign key whose edge GraphQL leaves out is an ID
+// in the type still, with its predicates named from it, as veloxe had them.
+func TestVeloxeSkippedEdgeKey(t *testing.T) {
+	fk := &plugin.Field{Name: "tax_code_id", GoName: "TaxCodeID", Type: "int64", ElemType: "int64", Nullable: true, Annotations: ann(t, graphql.WhereOps())}
+	asset := entity("Asset", fk)
+	ed := edge("tax_code", plugin.M2O, "TaxCode")
+	ed.Field, ed.FieldOn = "tax_code_id", "Asset"
+	ed.Annotations = ann(t, graphql.Skip(graphql.SkipAll))
+	asset.Edges = []*plugin.Edge{ed}
+	m := model(asset, entity("TaxCode"))
+	sdl, err := RenderConfig(m, Config{Veloxe: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"  taxCodeId: ID\n", "  taxCodeIdNEQ: ID\n", "  taxCodeIdNotIn: [ID!]\n", "  taxCodeIdIsNil: Boolean\n"} {
+		if !strings.Contains(sdl, want) {
+			t.Errorf("lacks %q:\n%s", want, sdl)
+		}
+	}
+	if strings.Contains(sdl, "taxCode:") || strings.Contains(sdl, "taxCodeIdGT") {
+		t.Errorf("the edge or an order predicate is shown:\n%s", sdl)
+	}
+	if _, err := Render(m); err == nil || !strings.Contains(err.Error(), "whose edge is not in GraphQL") {
+		t.Errorf("velox's refusal: %v", err)
+	}
+}

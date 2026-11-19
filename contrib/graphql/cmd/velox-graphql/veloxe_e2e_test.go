@@ -72,6 +72,7 @@ func (SalesOrder) Fields() []schema.Field {
 		field.Int64("organization_id").Annotations(graphql.Type("ID"), graphql.WhereOps()),
 		field.Int64("customer_id").Annotations(graphql.Type("ID"), graphql.WhereOps()),
 		field.String("image_url"),
+		field.Int64("referrer_id").Optional().Nillable().Annotations(graphql.WhereOps()),
 		field.Other("total", Amount{}).SchemaType(map[string]string{field.SQLite: "integer", field.Postgres: "bigint", field.MySQL: "bigint"}).
 			Annotations(graphql.Type("Amount"), graphql.WhereOps(graphql.OpsComparison)),
 		field.JSON("custom_fields", map[string]any{}).Annotations(graphql.Type("Map")),
@@ -82,6 +83,7 @@ func (SalesOrder) Fields() []schema.Field {
 func (SalesOrder) Edges() []schema.Edge {
 	return []schema.Edge{
 		edge.To("customer", Customer.Type).Field("customer_id").Unique().Required().Annotations(graphql.WhereEdge()),
+		edge.To("referrer", Customer.Type).Field("referrer_id").Unique().Annotations(graphql.Skip(graphql.SkipAll)),
 	}
 }
 
@@ -143,9 +145,9 @@ func TestVeloxeNames(t *testing.T) {
 	db.SetMaxOpenConns(1)
 	for _, s := range []string{
 		"CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
-		"CREATE TABLE sales_orders (id INTEGER PRIMARY KEY, organization_id INTEGER NOT NULL, customer_id INTEGER NOT NULL, image_url TEXT NOT NULL, total INTEGER NOT NULL, custom_fields TEXT NOT NULL, status TEXT NOT NULL)",
+		"CREATE TABLE sales_orders (id INTEGER PRIMARY KEY, organization_id INTEGER NOT NULL, customer_id INTEGER NOT NULL, image_url TEXT NOT NULL, referrer_id INTEGER, total INTEGER NOT NULL, custom_fields TEXT NOT NULL, status TEXT NOT NULL)",
 		"INSERT INTO customers (id, name) VALUES (1, 'ada'), (2, 'bob')",
-		"INSERT INTO sales_orders (id, organization_id, customer_id, image_url, total, custom_fields, status) VALUES (10, 7, 1, 'a.png', 10, '{}', 'open'), (11, 7, 2, 'b.png', 20, '{}', 'open'), (12, 8, 2, 'c.png', 30, '{\"a\":1}', 'shipped')",
+		"INSERT INTO sales_orders (id, organization_id, customer_id, image_url, referrer_id, total, custom_fields, status) VALUES (10, 7, 1, 'a.png', 2, 10, '{}', 'open'), (11, 7, 2, 'b.png', NULL, 20, '{}', 'open'), (12, 8, 2, 'c.png', 1, 30, '{\"a\":1}', 'shipped')",
 	} {
 		if _, err := db.Exec(s); err != nil {
 			t.Fatalf("%s: %v", s, err)
@@ -168,6 +170,10 @@ func TestVeloxeNames(t *testing.T) {
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"12","customFields":{"a":1},"status":"SHIPPED"}}]}}}` + "`" + `,
 		` + "`" + `{"query":"{ salesOrders(first: 5, where: {totalGT: 15, totalLTE: 20}) { edges { node { id total } } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11","total":20}}]}}}` + "`" + `,
+		` + "`" + `{"query":"{ salesOrders(first: 5, where: {referrerIdIn: [\"1\", \"2\"], referrerIdNEQ: \"1\"}) { edges { node { id referrerId } } } }"}` + "`" + `: ` +
+	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"10","referrerId":"2"}}]}}}` + "`" + `,
+		` + "`" + `{"query":"{ salesOrders(first: 5, where: {referrerIdIsNil: true}) { edges { node { id } } } }"}` + "`" + `: ` +
+	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11"}}]}}}` + "`" + `,
 	} {
 		if got := query(q); got != want {
 			t.Errorf("%s:\n got %s\nwant %s", q, got, want)

@@ -53,6 +53,9 @@ an enum field the enum's name, shared by every field of that name.
   Min, Max), as veloxe's predicates had them: its SQL type, a decimal most
   often, compares in the database. velox-graphql's WhereOps on it gives
   equality and comparison, typed with its `graphql.Type` scalar.
+- In compat mode a foreign key whose edge GraphQL leaves out stays in the
+  type as an `ID`, and its WhereOps give field-named predicates on the key's
+  own handle, as veloxe had them. Outside compat mode this is still refused.
 - In compat mode explicit WhereOps on a nullable field add IsNil and NotNil,
   as veloxe did.
 - In compat mode a create or update input takes an edge's bound key as
