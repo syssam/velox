@@ -1031,9 +1031,44 @@ func insertNulls(st *Statement, buf []bool) []bool {
 func (w *writer) insertStmt(st *Statement) {
 	w.str("INSERT INTO ")
 	w.table()
-	w.str(" (")
-	w.columns(st.Columns)
-	w.str(") VALUES ")
+	if len(st.Columns) == 0 {
+		w.defaultValues(st)
+	} else {
+		w.str(" (")
+		w.columns(st.Columns)
+		w.str(") VALUES ")
+		w.insertRows(st)
+	}
+	if st.Conflict != nil {
+		w.conflict(st.Conflict)
+	}
+	w.returning(st)
+}
+
+// defaultValues writes the rows of an insert that lists no column, each
+// stored with every column's default (ADR 0093): DEFAULT VALUES, one row,
+// on PostgreSQL and SQLite; () VALUES (), (), … on MySQL.
+func (w *writer) defaultValues(st *Statement) {
+	if w.d == MySQL {
+		w.str(" () VALUES ")
+		for r := range st.Rows {
+			if r > 0 {
+				w.str(", ")
+			}
+			w.str("()")
+		}
+		return
+	}
+	if len(st.Rows) > 1 {
+		w.fail(fmt.Errorf("velox: %s: an INSERT of %d rows lists no column, which only MySQL can send", w.in.Name, len(st.Rows)))
+	}
+	w.str(" DEFAULT VALUES")
+}
+
+// insertRows writes the VALUES rows of an insert: a column NULL in every row
+// as the literal NULL (insertNulls), a cell left to the column's default as
+// DEFAULT (defaultCell), and every other cell as a parameter.
+func (w *writer) insertRows(st *Statement) {
 	var buf [64]bool
 	nulls := insertNulls(st, buf[:])
 	for r, row := range st.Rows {
@@ -1049,14 +1084,14 @@ func (w *writer) insertStmt(st *Statement) {
 				w.str("NULL")
 				continue
 			}
+			if st.dflt && defaultCell(w.d, st, st.Columns[i], v) {
+				w.str("DEFAULT")
+				continue
+			}
 			w.colArg(st.Columns[i], v)
 		}
 		w.str(")")
 	}
-	if st.Conflict != nil {
-		w.conflict(st.Conflict)
-	}
-	w.returning(st)
 }
 
 // conflict writes the upsert clause. On PostgreSQL and SQLite the update

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/internal/fakeconn"
 )
 
@@ -264,5 +265,267 @@ func TestUpsertKeepsTheColumnsItUpdates(t *testing.T) {
 	var note sql.NullString
 	if err := raw.QueryRow("SELECT note FROM ddefs WHERE id = 1").Scan(&note); err != nil || note.Valid {
 		t.Errorf("note %v, %v; want NULL", note, err)
+	}
+}
+
+// dAll has no column that must be written: its key is generated and its
+// status has a declared database default.
+type dAll struct {
+	ID     int64
+	Status string
+}
+
+var dAllMeta velox.MetaOnce[dAll]
+
+func (*dAll) VeloxMeta() *velox.Meta[dAll] {
+	return dAllMeta.Load(func() velox.Descriptor[dAll] {
+		return velox.Descriptor[dAll]{
+			Table:      "dalls",
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Status", Name: "status", DBDefault: allDialects}},
+			PrimaryKey: []int{0},
+			FieldPtr: func(x *dAll, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.Status
+			},
+		}
+	})
+}
+
+// TestInsertAllEmptyUsesDefaults: an insert that leaves every column to the
+// database sends DEFAULT VALUES (PostgreSQL, SQLite) or () VALUES ()
+// (MySQL), so the declared default applies, and reads it back (ADR 0093).
+func TestInsertAllEmptyUsesDefaults(t *testing.T) {
+	db, raw := defDB(t)
+	exec(t, raw, `CREATE TABLE dalls (id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'new')`)
+	a := dAll{}
+	got, _, err := db.Insert(&a).SQL(ctx)
+	if want := `INSERT INTO "dalls" DEFAULT VALUES RETURNING "id", "status"`; err != nil || got != want {
+		t.Fatalf("SQLite SQL:\n got %s, %v\nwant %s", got, err, want)
+	}
+	if err := db.Insert(&a).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	xs := []dAll{{}, {}}
+	if err := db.InsertAll(xs).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var stored []string
+	rows, err := raw.Query("SELECT status FROM dalls ORDER BY id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			t.Fatal(err)
+		}
+		stored = append(stored, s)
+	}
+	_ = rows.Close()
+	if !slices.Equal(stored, []string{"new", "new", "new"}) || a.Status != "new" || a.ID == 0 || xs[0].Status != "new" || xs[1].Status != "new" || xs[1].ID == 0 {
+		t.Errorf("stored %q; entities %+v %+v", stored, a, xs)
+	}
+
+	e := &fakeconn.Exec{Rows: [][]any{{int64(3), "new"}}}
+	if err := openFake(velox.Postgres, e).Insert(&dAll{}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := `INSERT INTO "dalls" DEFAULT VALUES RETURNING "id", "status"`; e.SQL != want {
+		t.Errorf("PostgreSQL SQL:\n got %s\nwant %s", e.SQL, want)
+	}
+	e = &fakeconn.Exec{Rows: [][]any{{int64(3), "new"}, {int64(4), "new"}}}
+	if err := openFake(velox.Postgres, e).InsertAll([]dAll{{}, {}}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{`INSERT INTO "dalls" ("status") VALUES (DEFAULT), (DEFAULT) RETURNING "id", "status"`}; !slices.Equal(e.Log, want) {
+		t.Errorf("PostgreSQL InsertAll:\n got %q\nwant %q", e.Log, want)
+	}
+
+	e = &fakeconn.Exec{Affected: 1, LastID: 9, HasLastID: true, Results: [][][]any{{{"new"}}}}
+	m := dAll{}
+	if err := openFake(velox.MySQL, e).Insert(&m).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"INSERT INTO `dalls` () VALUES ()", "SELECT `status` FROM `dalls` WHERE `id` = ? LIMIT ?"}
+	if !slices.Equal(e.Log, want) || m.ID != 9 || m.Status != "new" {
+		t.Errorf("MySQL: %q, %+v", e.Log, m)
+	}
+	e = &fakeconn.Exec{Affected: 2, LastID: 9, HasLastID: true, Results: [][][]any{{{int64(9), "new"}, {int64(10), "new"}}}}
+	if err := openFake(velox.MySQL, e).InsertAll([]dAll{{}, {}}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := "INSERT INTO `dalls` () VALUES (), ()"; len(e.Log) == 0 || e.Log[0] != want {
+		t.Errorf("MySQL InsertAll: %q, want first %q", e.Log, want)
+	}
+}
+
+// TestInsertAllOneStatementWithDefaultCells: on PostgreSQL and MySQL an
+// InsertAll whose rows leave different columns to the database stays one
+// statement: a cell left to its default is the DEFAULT keyword, which takes
+// no parameter, and every row reads its values back. SQLite, which has no
+// DEFAULT in VALUES, still splits (TestInsertAllDatabaseDefaults).
+func TestInsertAllOneStatementWithDefaultCells(t *testing.T) {
+	alternating := func() []dDef {
+		xs := make([]dDef, 4)
+		for i := range xs {
+			xs[i].Name = "x"
+			if i%2 == 0 {
+				xs[i].Score = int64(i + 1)
+			}
+		}
+		return xs
+	}
+	ret := [][]any{
+		{int64(1), "new", int64(1), "n"}, {int64(2), "new", int64(7), "n"},
+		{int64(3), "new", int64(3), "n"}, {int64(4), "new", int64(7), "n"},
+	}
+	e := &fakeconn.Exec{Rows: ret}
+	xs := alternating()
+	if err := openFake(velox.Postgres, e).InsertAll(xs).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{`INSERT INTO "ddefs" ("name", "score") VALUES ($1, $2), ($3, DEFAULT), ($4, $5), ($6, DEFAULT) RETURNING "id", "status", "score", "note"`}
+	if !slices.Equal(e.Log, want) {
+		t.Errorf("PostgreSQL:\n got %q\nwant %q", e.Log, want)
+	}
+	if len(e.Args) != 6 {
+		t.Errorf("args %v, want 6: DEFAULT takes none", e.Args)
+	}
+	for i, w := range []int64{1, 7, 3, 7} {
+		if xs[i].ID != int64(i+1) || xs[i].Score != w || xs[i].Status != "new" {
+			t.Errorf("row %d: %+v", i, xs[i])
+		}
+	}
+
+	// WithMaxParams still chunks, by the rows' parameters.
+	e = &fakeconn.Exec{Results: [][][]any{ret[:2], ret[2:]}}
+	if err := openFake(velox.Postgres, e, engine.WithMaxParams(6)).InsertAll(alternating()).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	ins := `INSERT INTO "ddefs" ("name", "score") VALUES ($1, $2), ($3, DEFAULT) RETURNING "id", "status", "score", "note"`
+	if want := []string{"BEGIN", ins, ins, "COMMIT"}; !slices.Equal(e.Log, want) {
+		t.Errorf("PostgreSQL chunked:\n got %q\nwant %q", e.Log, want)
+	}
+
+	e = &fakeconn.Exec{Affected: 4, LastID: 1, HasLastID: true, Results: [][][]any{ret}}
+	xs = alternating()
+	if err := openFake(velox.MySQL, e).InsertAll(xs).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	want = []string{
+		"INSERT INTO `ddefs` (`name`, `score`) VALUES (?, ?), (?, DEFAULT), (?, ?), (?, DEFAULT)",
+		"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `id` IN (?, ?, ?, ?)",
+	}
+	if !slices.Equal(e.Log, want) {
+		t.Errorf("MySQL:\n got %q\nwant %q", e.Log, want)
+	}
+	if xs[1].ID != 2 || xs[1].Score != 7 || xs[2].Score != 3 {
+		t.Errorf("MySQL read back %+v", xs)
+	}
+
+	// The conflict and update columns are written as the rows hold them.
+	e = &fakeconn.Exec{Rows: [][]any{{int64(1), "new", "n"}, {int64(2), "new", "n"}}}
+	err := openFake(velox.Postgres, e).InsertAll(alternating()[:2]).OnConflict(dDefs.Name).Update(dDefs.Score).Exec(ctx)
+	if want := `INSERT INTO "ddefs" ("name", "score") VALUES ($1, $2), ($3, $4) ON CONFLICT ("name") DO UPDATE SET "score" = EXCLUDED."score" RETURNING "id", "status", "note"`; err != nil || e.SQL != want {
+		t.Errorf("upsert:\n got %s, %v\nwant %s", e.SQL, err, want)
+	}
+}
+
+// TestUpsertConflictWhereFillsByKey: an upsert whose update branch has a
+// condition (here a Rewrite hook's) returns only the rows it wrote, so the
+// rows are placed by their conflict columns, never by position; a row that
+// matches no entity fails the write, which rolls back.
+func TestUpsertConflictWhereFillsByKey(t *testing.T) {
+	rw := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		if st.Conflict != nil {
+			st.Conflict.Where = append(st.Conflict.Where, velox.Predicate(velox.Expr[dDef]("false")))
+		}
+		return nil
+	})
+	e := &fakeconn.Exec{Rows: [][]any{{int64(42), "new", int64(7), "n", "b"}}}
+	xs := []dDef{{Name: "a"}, {Name: "b"}}
+	if err := openFake(velox.Postgres, e, rw).InsertAll(xs).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"BEGIN",
+		`INSERT INTO "ddefs" ("name") VALUES ($1), ($2) ON CONFLICT ("name") DO UPDATE SET "name" = EXCLUDED."name" WHERE (false) RETURNING "id", "status", "score", "note", "name"`,
+		"COMMIT",
+	}
+	if !slices.Equal(e.Log, want) {
+		t.Errorf("statements:\n%s\nwant:\n%s", strings.Join(e.Log, "\n"), strings.Join(want, "\n"))
+	}
+	if xs[0].ID != 0 || xs[0].Status != "" || xs[1].ID != 42 || xs[1].Status != "new" || xs[1].Name != "b" {
+		t.Errorf("filled %+v", xs)
+	}
+
+	// Every row back: by position, as without a condition.
+	e = &fakeconn.Exec{Rows: [][]any{{int64(41), "new", int64(7), "n", "A"}, {int64(42), "new", int64(7), "n", "b"}}}
+	xs = []dDef{{Name: "a"}, {Name: "b"}}
+	if err := openFake(velox.Postgres, e, rw).InsertAll(xs).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if xs[0].ID != 41 || xs[1].ID != 42 || xs[0].Name != "a" {
+		t.Errorf("every row back: %+v", xs)
+	}
+
+	// A row the database returned in another form (a collation's) is not
+	// guessed at.
+	e = &fakeconn.Exec{Rows: [][]any{{int64(42), "new", int64(7), "n", "B"}}}
+	xs = []dDef{{Name: "a"}, {Name: "b"}}
+	err := openFake(velox.Postgres, e, rw).InsertAll(xs).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx)
+	if err == nil || !strings.Contains(err.Error(), "cannot place upserted row") {
+		t.Fatalf("got %v, want the placement's refusal", err)
+	}
+	if last := e.Log[len(e.Log)-1]; last != "ROLLBACK" || xs[0].ID != 0 || xs[1].ID != 0 {
+		t.Errorf("last statement %q, entities %+v", last, xs)
+	}
+
+	// A recorded upsert, which returns every column, places its rows alike.
+	e = &fakeconn.Exec{Results: [][][]any{{}, {{int64(42), "b", "new", int64(7), "n", nil}}}}
+	xs = []dDef{{Name: "a"}, {Name: "b"}}
+	var rec velox.Recorder
+	if err := openFake(velox.Postgres, e, rw).Record(&rec).InsertAll(xs).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if xs[0].ID != 0 || xs[1].ID != 42 || xs[1].Status != "new" || rec.Len() != 1 {
+		t.Errorf("recorded: %+v, %d Changes", xs, rec.Len())
+	}
+}
+
+// TestMySQLUpsertReadsBackDefaults: MySQL has no RETURNING, so a single-row
+// upsert reads the columns it left to the database by its conflict values,
+// in one transaction with the upsert: the stored row's, whether inserted or
+// updated.
+func TestMySQLUpsertReadsBackDefaults(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 2, Results: [][][]any{{{"done", int64(3), "z"}}}}
+	a := dDef{Name: "a"}
+	if err := openFake(velox.MySQL, e).Insert(&a).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"BEGIN",
+		"INSERT INTO `ddefs` (`name`) VALUES (?) AS new ON DUPLICATE KEY UPDATE `name` = new.`name`",
+		"SELECT `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?",
+		"COMMIT",
+	}
+	if !slices.Equal(e.Log, want) {
+		t.Errorf("statements:\n%s\nwant:\n%s", strings.Join(e.Log, "\n"), strings.Join(want, "\n"))
+	}
+	if a.Status != "done" || a.Score != 3 || a.Note == nil || *a.Note != "z" {
+		t.Errorf("read back %+v", a)
+	}
+
+	// A key the caller set is not where an upsert on another column finds
+	// its row: the read is by the conflict values.
+	e = &fakeconn.Exec{Affected: 2, Results: [][][]any{{{"done", int64(3), "z"}}}}
+	b := dDef{ID: 5, Name: "a"}
+	if err := openFake(velox.MySQL, e).Insert(&b).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Log) != 4 || e.Log[2] != "SELECT `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?" || b.Status != "done" {
+		t.Errorf("caller's key: %q, %+v", e.Log, b)
 	}
 }

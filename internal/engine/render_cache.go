@@ -53,11 +53,14 @@ type RenderCache struct {
 }
 
 // Get returns the shape's cached text and fingerprint, and the statement's
-// arguments, or RenderStmt's error. A shape past the cache's bounds, and an
-// insert of more than MaxCachedRows rows, is rendered each time, and gets its
-// fingerprint each time. A shape whose rendering fails is not cached.
+// arguments, or RenderStmt's error. A shape past the cache's bounds, an
+// insert of more than MaxCachedRows rows, and an insert with DEFAULT cells,
+// is rendered each time, and gets its fingerprint each time. A shape whose
+// rendering fails is not cached.
 func (c *RenderCache) Get(d Dialect, st *Statement) (cached, []any, error) {
-	if st.Op == OpInsert && len(st.Rows) > MaxCachedRows {
+	// An insert with DEFAULT cells (Statement.dflt) is rendered each time:
+	// where they fall is data, and a shape per pattern would fill the cache.
+	if st.Op == OpInsert && (len(st.Rows) > MaxCachedRows || st.dflt) {
 		text, args, err := RenderStmt(d, st)
 		if err != nil {
 			return cached{}, nil, err

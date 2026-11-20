@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
 )
@@ -45,18 +46,13 @@ func TestRecordInsert(t *testing.T) {
 		one:    func() *fakeconn.Exec { return &fakeconn.Exec{Rows: [][]any{{int64(1), "new", int64(7), "n"}}} },
 		oneLog: []string{`INSERT INTO "ddefs" ("name") VALUES ($1) RETURNING "id", "status", "score", "note"`},
 		many: func() *fakeconn.Exec {
-			return &fakeconn.Exec{Results: [][][]any{
-				{{int64(1), "new", int64(7), "n"}},
-				{{int64(2), "new", "n"}, {int64(3), "new", "n"}},
-				{{int64(4), "new", int64(7), "n"}},
+			return &fakeconn.Exec{Rows: [][]any{
+				{int64(1), "new", int64(7), "n"}, {int64(2), "new", int64(5), "n"},
+				{int64(3), "new", int64(6), "n"}, {int64(4), "new", int64(7), "n"},
 			}}
 		},
 		manyLog: []string{
-			"BEGIN",
-			`INSERT INTO "ddefs" ("name") VALUES ($1) RETURNING "id", "status", "score", "note"`,
-			`INSERT INTO "ddefs" ("name", "score") VALUES ($1, $2), ($3, $4) RETURNING "id", "status", "note"`,
-			`INSERT INTO "ddefs" ("name") VALUES ($1) RETURNING "id", "status", "score", "note"`,
-			"COMMIT",
+			`INSERT INTO "ddefs" ("name", "score") VALUES ($1, DEFAULT), ($2, $3), ($4, $5), ($6, DEFAULT) RETURNING "id", "status", "score", "note"`,
 		},
 	}, {
 		d:      velox.SQLite,
@@ -87,21 +83,14 @@ func TestRecordInsert(t *testing.T) {
 		},
 		many: func() *fakeconn.Exec {
 			return &fakeconn.Exec{AffectedBy: func(sql string) int64 { return int64(strings.Count(sql, "(?")) }, LastID: 1, HasLastID: true,
-				Results: [][][]any{
-					{{"new", int64(7), "n"}},
-					{{int64(1), "new", "n"}, {int64(2), "new", "n"}},
-					{{"new", int64(7), "n"}},
-				}}
+				Results: [][][]any{{
+					{int64(1), "new", int64(7), "n"}, {int64(2), "new", int64(5), "n"},
+					{int64(3), "new", int64(6), "n"}, {int64(4), "new", int64(7), "n"},
+				}}}
 		},
 		manyLog: []string{
-			"BEGIN",
-			"INSERT INTO `ddefs` (`name`) VALUES (?)",
-			"SELECT `status`, `score`, `note` FROM `ddefs` WHERE `id` = ? LIMIT ?",
-			"INSERT INTO `ddefs` (`name`, `score`) VALUES (?, ?), (?, ?)",
-			"SELECT `id`, `status`, `note` FROM `ddefs` WHERE `id` IN (?, ?)",
-			"INSERT INTO `ddefs` (`name`) VALUES (?)",
-			"SELECT `status`, `score`, `note` FROM `ddefs` WHERE `id` = ? LIMIT ?",
-			"COMMIT",
+			"INSERT INTO `ddefs` (`name`, `score`) VALUES (?, DEFAULT), (?, ?), (?, ?), (?, DEFAULT)",
+			"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `id` IN (?, ?, ?, ?)",
 		},
 	}} {
 		t.Run(c.d.String(), func(t *testing.T) {
@@ -145,7 +134,11 @@ func TestRecordInsert(t *testing.T) {
 			if err := openFake(c.d, many).Record(&rec).InsertAll(xs).Exec(ctx); err != nil {
 				t.Fatal(err)
 			}
-			wantLog(t, many, c.manyLog)
+			if c.manyLog[0] == "BEGIN" {
+				wantLog(t, many, c.manyLog)
+			} else {
+				wantLog(t, many, append(append([]string{"BEGIN"}, c.manyLog...), "COMMIT"))
+			}
 			cs = slices.Collect(rec.All())
 			if len(cs) != 4 {
 				t.Fatalf("InsertAll: %d Changes, want 4", len(cs))
@@ -171,8 +164,9 @@ func TestRecordInsert(t *testing.T) {
 	}
 }
 
-// recDefs are four rows that InsertAll splits into three statements
-// (ADR 0093): the middle two set score, the others leave it to the database.
+// recDefs are four rows whose middle two set score and the others leave it
+// to the database: one statement with DEFAULT cells on PostgreSQL and
+// MySQL, three on SQLite (ADR 0093).
 func recDefs() []dDef {
 	return []dDef{{Name: "c"}, {Name: "d", Score: 5}, {Name: "e", Score: 6}, {Name: "f"}}
 }
@@ -510,10 +504,10 @@ func TestRecordUpsertDoNothingMySQL(t *testing.T) {
 	}
 }
 
-// TestRecordUpsertInOwnTx: an upsert InsertAll that ADR 0093 splits into two
-// statements runs in velox's own transaction, each statement with its
-// locked read, and the sink runs after the COMMIT, once per Change, in the
-// order of the rows.
+// TestRecordUpsertInOwnTx: an upsert InsertAll that WithMaxParams splits
+// into two statements runs in velox's own transaction, each statement with
+// its locked read, and the sink runs once, before the COMMIT, with every
+// Change in the order of the rows.
 func TestRecordUpsertInOwnTx(t *testing.T) {
 	e := &fakeconn.Exec{Results: [][][]any{
 		{},
@@ -529,7 +523,7 @@ func TestRecordUpsertInOwnTx(t *testing.T) {
 		return nil
 	})
 	xs := []dDef{{ID: 1, Name: "a"}, {ID: 2, Name: "b", Score: 5}}
-	if err := openFake(velox.Postgres, e).Record(sink).InsertAll(xs).OnConflict(dDefs.ID).Update(dDefs.Name, dDefs.Score).Exec(ctx); err != nil {
+	if err := openFake(velox.Postgres, e, engine.WithMaxParams(3)).Record(sink).InsertAll(xs).OnConflict(dDefs.ID).Update(dDefs.Name, dDefs.Score).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	ins := `INSERT INTO "ddefs" ("id", "name", "score") VALUES ($1, $2, $3) ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "score" = EXCLUDED."score" RETURNING ` + dDefCols

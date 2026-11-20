@@ -44,17 +44,34 @@ A NOT NULL column without a declared default is written whatever it holds.
 The conflict target's columns are always written, and so is every column an
 upsert's update branch copies from the inserted row: MySQL's `new.<col>`
 names only a column the INSERT lists, and PostgreSQL's `EXCLUDED.<col>`
-would hold the column's DEFAULT, not the row's NULL. At least one column is
-always written.
+would hold the column's DEFAULT, not the row's NULL.
+
+An insert whose every column is left empty lists none: `INSERT INTO t
+DEFAULT VALUES` on PostgreSQL and SQLite, `INSERT INTO t () VALUES ()` on
+MySQL, so every declared default applies. Writing one column as the row
+held it would store its zero value over the default. `DEFAULT VALUES`
+writes one row, so an InsertAll of several such rows keeps one column on
+PostgreSQL, whose cells are then `DEFAULT`, and sends each row alone on
+SQLite; MySQL writes `() VALUES (), ()`.
 
 The database's values come back into the entity:
 
 - **PostgreSQL and SQLite:** the INSERT gets `RETURNING` with the generated
   key and every column it left to a declared default.
 - **MySQL:** there is no RETURNING. The key comes from `LastInsertId`, and
-  the defaulted columns are read by key after the insert, in the same
-  transaction, without policies. For several rows with a one-column key,
-  this is one `SELECT … WHERE id IN (…)`.
+  the defaulted columns are read by key after the insert, without
+  policies; inside the caller's transaction when there is one. For several
+  rows with a one-column key, this is one `SELECT … WHERE id IN (…)`.
+  - A single-row upsert reads them by its conflict values instead, as
+    `LastInsertId` does not name a row the upsert updated and the entity's
+    key need not be the stored row's. The database compares the values, as
+    it did for the conflict. The upsert and the read run in one
+    transaction, velox's own outside the caller's. A row whose conflict
+    values cannot find it (a NULL, a generated key left zero) keeps its Go
+    values.
+  - A multi-row upsert does not read its defaulted columns back: its rows
+    cannot be told apart by key without a read per row. They keep their Go
+    values.
   - A key column whose value the database fills from a non-integer default
     is refused on MySQL before anything is sent, because it cannot be read
     back.
@@ -63,9 +80,20 @@ The database's values come back into the entity:
 
 InsertAll gives every row what it would get alone:
 
-- It splits its rows into runs that leave the same declared-default columns
-  to the database, and sends one statement per run, in one transaction when
-  there is more than one statement.
+- On PostgreSQL and MySQL it lists every column some row writes, and a
+  cell a row leaves to its declared default is the `DEFAULT` keyword, which
+  takes no parameter. The rows are one statement, or one per
+  `WithMaxParams` chunk, in one transaction when there is more than one.
+  Every column with a `DEFAULT` cell is read back, for every row. A
+  conflict column, and a column the update branch copies, is written as the
+  rows hold it, as above. Where the `DEFAULT` cells fall is data, so such a
+  statement is rendered each time rather than cached (a 4-row InsertAll:
+  about 0.7 µs and 11 allocations more than a cached one, against a
+  statement per run before).
+- On SQLite, which has no `DEFAULT` in `VALUES`, it splits its rows into
+  runs that leave the same declared-default columns to the database, and
+  sends one statement per run, in one transaction when there is more than
+  one statement.
 - Every row gets its generated key back, which before needed a loop of
   `Insert`. RETURNING returns rows in the order of `VALUES` on all three
   databases. MySQL's keys are consecutive from `LastInsertId` for one
@@ -75,6 +103,20 @@ InsertAll gives every row what it would get alone:
 - An InsertAll with `DoNothing` and more than one row reads nothing back.
   RETURNING leaves out the rows kept, so the rows returned do not line up
   with the rows sent.
+- An upsert of several rows whose update branch has a condition (the
+  policy's, an interceptor's, or one a Rewrite hook added) returns only the
+  rows it inserted or updated. Its RETURNING then also names the conflict
+  columns (added after the Rewrite hooks and the scope), and when fewer rows
+  come back than were sent, each is given to the one entity whose conflict
+  columns hold exactly the values the row holds. A row that matches no
+  entity, or more than one, fails the write: the database may store a value
+  in another form (a collation's `alice@x` for `Alice@x`, a padded CHAR),
+  and a guess could give an entity another row's key. So that the failure
+  rolls back, such an InsertAll runs in a transaction when the entity has
+  an interceptor or a Read or Write policy, or the DB has a Rewrite hook,
+  and the rows read anything back. A recorded upsert, which returns every
+  column, places its rows the same way. Without a condition every row comes
+  back, in order, and is placed by position.
 
 Columns are left out in `engine.PlanInsert`, after the hooks and before the
 Rewrite hooks. A Rewrite hook sees the statement as it will be sent. Its
@@ -96,8 +138,9 @@ smaller (`compilecost_test.go`).
   store the zero, make the field Nillable and set a pointer to the zero
   (a non-nil value is always written), or `Update` the row after the insert.
 - `GeneratedCodeIsVersion24`: descriptors carry `DBDefault`.
-- An insert with a declared default sends one statement more on MySQL. The
-  other databases send none more.
+- An insert with a declared default sends one statement more on MySQL, and
+  a single-row upsert that leaves a column to one also opens a transaction
+  for it outside the caller's. The other databases send none more.
 - 0064's literal `NULL` stays in the renderer, for an INSERT whose Rewrite
   hook puts back a column every row holds nil in. velox's own inserts no
   longer have such a column.

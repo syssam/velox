@@ -291,6 +291,7 @@ func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, r
 	if err := db.scope(ctx, st); err != nil {
 		return err
 	}
+	keyReturning(db.D, st)
 	db.capLimit(st)
 	if db.Cfg.Comment != nil {
 		db.observe(ctx, st) // the comment reads the call site and tags
@@ -429,6 +430,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if snap.returning && len(st.Returning) == 0 && stmtUpsertPolicy(st) {
 		return fmt.Errorf("velox: %s: a Rewrite hook dropped the RETURNING of an upsert whose update branch the policy conditions; velox reads the row back to find a row the policy hides", snap.entity.Name)
 	}
+	keyReturning(db.D, st)
 	db.capLimit(st)
 	if st.Entity == snap.entity {
 		e, args, err := db.Cfg.Cache.Get(db.D, st)

@@ -27,7 +27,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `sqlschema.Default`, `DefaultExpr`, `DefaultExprs`). The database fills it,
   and velox reads it back into the entity: `RETURNING` on PostgreSQL and
   SQLite, a SELECT by key on MySQL. InsertAll returns every row's generated
-  key and splits its rows into runs that leave the same columns out.
+  key. On PostgreSQL and MySQL it stays one statement (per WithMaxParams
+  chunk): a cell a row leaves to its default is the `DEFAULT` keyword; on
+  SQLite, which has no `DEFAULT` in `VALUES`, it splits its rows into runs
+  that leave the same columns out. An insert that leaves every column to
+  the database sends `DEFAULT VALUES` (MySQL: `() VALUES ()`). An upsert of
+  several rows whose update branch has a condition (a policy's, an
+  interceptor's or a Rewrite hook's) places the rows `RETURNING` gives back
+  by their conflict columns, never by position, and fails, rolled back, on
+  a row it cannot place; on a DB with a Rewrite hook such an InsertAll runs
+  in a transaction. On MySQL a single-row upsert reads the columns it left
+  to the database by its conflict values, in one transaction with it.
   Regenerate: `velox.GeneratedCodeIsVersion24` replaces Version23, and
   descriptors carry `ColumnDescriptor.DBDefault`. A nil column now lets a
   `DEFAULT` the schema does not declare apply, where NULL was stored.

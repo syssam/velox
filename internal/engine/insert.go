@@ -387,6 +387,20 @@ func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen
 			return err
 		}
 	}
+	if db.D == MySQL && st.Conflict != nil && len(st.fill) > 0 && !db.InTx {
+		// The upsert and the read of what it left to the database
+		// (readUpserted) see one row, in one transaction.
+		cp := *st
+		var res Result
+		err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {
+			cp.InTx = true
+			return sendOne(ctx, tx, p, &cp, gen, &res)
+		})
+		if err == nil {
+			out.Affected = res.Affected
+		}
+		return err
+	}
 	return sendOne(ctx, db, p, st, gen, out)
 }
 
@@ -415,6 +429,15 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 		return err
 	}
 	out.Affected = res.Affected
+	if db.D == MySQL && st.Conflict != nil {
+		if err := CheckUpserted(st, res.Affected); err != nil {
+			return err
+		}
+		if res.Affected == 0 {
+			return nil
+		}
+		return readUpserted(ctx, db, st, p, gen)
+	}
 	if gen < 0 {
 		if err := CheckUpserted(st, res.Affected); err != nil {
 			return err
@@ -436,14 +459,19 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 	return readFilled(ctx, db, st, []unsafe.Pointer{p})
 }
 
-// ConditionedUpsert predicts, before the scope runs, whether it will give
-// the update branch of an InsertAll of n rows of entity in the conditions of
-// its interceptors or of its policy's Read or Write. A row those conditions hide fails the upsert once the
-// statement has written the others, so such an InsertAll of several rows runs
-// in a transaction, which the failure rolls back. The scope conditions an
+// ConditionedUpsert predicts, before the scope runs, whether the update
+// branch of an InsertAll of n rows of entity in may get a condition: its
+// interceptors', its policy's Read or Write, or a Rewrite hook's. A row
+// those conditions hide fails the upsert once the statement has written the
+// others, and a returned row that matches no entity fails it too
+// (placeUpserted), so such an InsertAll of several rows runs in a
+// transaction, which the failure rolls back. The scope conditions an
 // upsert that updates, on any dialect but MySQL (which refuses it), of an
-// entity with a Read or Write policy, unless WithoutPolicy.
-func ConditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int) bool {
+// entity with a Read or Write policy, unless WithoutPolicy; a DB with a
+// Rewrite hook may condition any, which matters when the rows read values
+// back (reads: a generated key, or a column with a declared default).
+func ConditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int, reads bool) bool {
 	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.D != MySQL &&
-		(len(in.filters) > 0 || InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && db.bypass == "")
+		(len(in.filters) > 0 || reads && len(db.Cfg.Rewrites) > 0 ||
+			InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && db.bypass == "")
 }

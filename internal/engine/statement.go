@@ -102,7 +102,7 @@ type Statement struct {
 	Writable     bool            // SELECT: the query said Writable; the scope adds the Write policy, and a Rewrite hook may not change it
 	MaxRows      int             // SELECT and OpRawQuery: the most rows it may return; 0: the DB's WithMaxRows, or, with Each, its bound by construction (Rel.MaxRows sets it)
 	Set          []Assignment    // UPDATE: the assignments
-	Rows         [][]any         // INSERT: the rows, one value per Columns entry
+	Rows         [][]any         // INSERT: the rows, one value per Columns entry; no Columns sends DEFAULT VALUES (MySQL: () VALUES ()), and in an InsertAll on PostgreSQL or MySQL a zero value that the rows leave to a declared default is sent as DEFAULT (ADR 0093)
 	Conflict     *ConflictClause // INSERT: the upsert clause, if any
 	Returning    []int           // INSERT, a recorded UPDATE (DB.Record), and a recorded DELETE (its key; on PostgreSQL 18 its old row): columns read back (PostgreSQL and SQLite); a Rewrite hook may not change it on any recorded write, nor on an UPDATE
 	AllRows      bool            // UPDATE and DELETE: the statement said All
@@ -182,6 +182,15 @@ type Statement struct {
 	// MySQL reads back after it (PlanInsert); ret is the RETURNING list
 	// PlanInsert set, which the rows are scanned by while Returning holds it.
 	fill, ret []int
+	// keyed is the number of columns at the end of ret that placeByKey
+	// added, the conflict columns, by which the returned rows are matched to
+	// the entities; they are not copied into them.
+	keyed int
+	// dflt says an insert's rows leave some cells of the columns it writes
+	// to the database's defaults, written as DEFAULT (LeanInsert,
+	// defaultCell): its text then depends on the rows' values, and it is
+	// rendered without the cache.
+	dflt bool
 }
 
 // Rewrite is a hook that may change a statement before it is rendered, or

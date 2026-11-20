@@ -372,9 +372,7 @@ func (cr *conflictRead) read(ctx context.Context, tx *DB, keys [][]any, lock boo
 // returning sends st, the upsert of rows on PostgreSQL or SQLite, with
 // RETURNING every column instead of what PlanInsert set (st.ret), and
 // returns the rows that come back, as stored. The columns PlanInsert would
-// have read back are copied into the entities as sendReturning scans them,
-// the n-th row into the n-th entity, so that the caller's entities end as a
-// handle that does not record leaves them. It checks the count as
+// have read back are copied into the entities (fillUpserted). It checks the count as
 // sendOne and SendBatch do (CheckUpserted).
 func (cr *conflictRead) returning(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer) ([]unsafe.Pointer, error) {
 	in, base := cr.in, st.ret
@@ -391,14 +389,9 @@ func (cr *conflictRead) returning(ctx context.Context, tx *DB, st *Statement, ro
 			if err := r.Scan(dst...); err != nil {
 				return err
 			}
-			if i := len(news); len(base) > 0 && i < len(rows) {
-				for _, c := range base {
-					SetElem(fieldAddr(in, rows[i], c), Elem(fieldAddr(in, p, c)))
-				}
-			}
 			news = append(news, p)
 		}
-		return nil
+		return fillUpserted(in, st, base, news, rows)
 	}
 	var err error
 	if tx.Hooked() {
@@ -412,6 +405,27 @@ func (cr *conflictRead) returning(ctx context.Context, tx *DB, st *Statement, ro
 	return news, CheckUpserted(st, int64(len(news)))
 }
 
+// fillUpserted copies the columns base, those PlanInsert would have read
+// back, from news, the rows a recorded upsert of rows returned (every
+// column), into the entities they were written from (placeUpserted), so
+// that the caller's entities end as a handle that does not record leaves
+// them.
+func fillUpserted(in *EntityInfo, st *Statement, base []int, news, rows []unsafe.Pointer) error {
+	if len(base) == 0 || len(news) == 0 {
+		return nil
+	}
+	dst, err := placeUpserted(in, st.Conflict.Columns, news, rows)
+	if err != nil {
+		return err
+	}
+	for i, p := range news {
+		for _, c := range base {
+			SetElem(fieldAddr(in, dst[i], c), Elem(fieldAddr(in, p, c)))
+		}
+	}
+	return nil
+}
+
 // returningBoth sends st, the upsert of rows on PostgreSQL 18 or later, with
 // RETURNING old and new of every column instead of what PlanInsert set
 // (st.ret), and returns a ChangeRow per row that comes back, in its order:
@@ -419,8 +433,7 @@ func (cr *conflictRead) returning(ctx context.Context, tx *DB, st *Statement, ro
 // old's primary key is NULL, an insert. A row DoNothing kept, or that the
 // update branch's condition left, is not returned. No read comes first: the
 // values are those the INSERT itself saw. The columns PlanInsert would have
-// read back are copied into the entities, the n-th row into the n-th entity,
-// as conflictRead.returning does. It checks the count as sendOne and
+// read back are copied into the entities (fillUpserted). It checks the count as sendOne and
 // SendBatch do (CheckUpserted).
 func returningBoth(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer) ([]ChangeRow, error) {
 	in, base := st.Entity, st.ret
@@ -447,18 +460,17 @@ func returningBoth(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Poi
 			if err := r.Scan(dst...); err != nil {
 				return err
 			}
-			if i := len(out); len(base) > 0 && i < len(rows) {
-				for _, c := range base {
-					SetElem(fieldAddr(in, rows[i], c), Elem(fieldAddr(in, cur, c)))
-				}
-			}
 			row := ChangeRow{Op: OpUpdate, In: in, Old: old, New: cur}
 			if keyNulls == len(in.PrimaryKey) {
 				row.Op, row.Old = OpInsert, nil
 			}
 			out = append(out, row)
 		}
-		return nil
+		news := make([]unsafe.Pointer, len(out))
+		for i := range out {
+			news[i] = out[i].New
+		}
+		return fillUpserted(in, st, base, news, rows)
 	}
 	var err error
 	if tx.Hooked() {

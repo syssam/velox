@@ -401,7 +401,7 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 	if db.rec != nil {
 		return t.recordMany(ctx, db, xs, cols, per, ends, cf, out)
 	}
-	if len(ends) == 1 && xs.n <= per && !ConditionedUpsert(ctx, db, t.info, cf, xs.n) {
+	if len(ends) == 1 && xs.n <= per && !ConditionedUpsert(ctx, db, t.info, cf, xs.n, t.readsBack(db, xs, cols)) {
 		n, err := t.insertBatches(ctx, db, xs, cols, per, ends, cf, SendBatch)
 		if err == nil {
 			out.Affected = n
@@ -467,7 +467,7 @@ func (t *table) firstBatch(ctx context.Context, db *DB, xs TableRows, cf *Confli
 		return Statement{}, err
 	}
 	ends := t.defaultRuns(db, xs, cols)
-	inTx := db.InTx || len(ends) > 1 || xs.n > per || ConditionedUpsert(ctx, db, t.info, cf, xs.n)
+	inTx := db.InTx || len(ends) > 1 || xs.n > per || ConditionedUpsert(ctx, db, t.info, cf, xs.n, t.readsBack(db, xs, cols))
 	st := t.batch(xs, 0, min(per, ends[0]), cols, cf, inTx)
 	if err := PlanInsert(db.D, &st, t.generatedKey(xs.at(0))); err != nil {
 		return Statement{}, err
@@ -486,6 +486,12 @@ func InsertAllRows(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer
 // SQL(ctx).
 func InsertAllStatement(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, size uintptr, n int, cf *ConflictClause) (Statement, error) {
 	return InfoTable(in).state().firstBatch(ctx, db, TableRows{p: p, size: size, n: n, info: in}, cf)
+}
+
+// readsBack reports whether an insert of xs's columns cols may read values
+// back: a generated key, or a column with a declared database default.
+func (t *table) readsBack(db *DB, xs TableRows, cols []int) bool {
+	return t.generatedKey(xs.at(0)) >= 0 || slices.ContainsFunc(cols, func(c int) bool { return HasDBDefault(&t.info.Columns[c], db.D) })
 }
 
 // defaultRuns is DefaultRuns over xs.
