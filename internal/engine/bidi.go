@@ -340,7 +340,7 @@ func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Con
 	// savepoint of its own (recordedTx).
 	switch {
 	case db.batch != nil:
-		return fn(ctx, db)
+		return inFrame(ctx, db, fn)
 	case db.InTx:
 		return db.Tx(ctx, batched(db, fn))
 	}

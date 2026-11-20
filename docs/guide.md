@@ -1202,7 +1202,9 @@ error is the write's error, and rolls the write back.
 
 - In a transaction, the write and the sink run under a savepoint. An error
   from either rolls back to it, so a recorded write that returns an error
-  took no effect.
+  took no effect. A recorded write inside it that fails, a hook's included,
+  fails the whole write even when the hook swallows the error; to tolerate
+  that failure, run that write in `tx.Tx`.
 - Outside a transaction, velox opens one for the write, and the sink runs
   before its COMMIT.
 - `tx` is a handle on the write's transaction that does not record: what
@@ -1214,7 +1216,9 @@ error is the write's error, and rolls the write back.
 - A hook runs before its write's transaction or savepoint opens: what it
   writes through `m.DB()` is a recorded write of its own, with its own sink
   call, before or after the write's as the hook orders them. Outside `Tx`
-  it is also its own transaction; for one, write in `Tx`.
+  it is also its own transaction; for one, write in `Tx`. A write with
+  edge setters (`Insert(&p).Set(P.Tags.Add(1))`) runs its hooks inside its
+  transaction or savepoint, so there the hook's write joins its sink call.
 - A `RecordFunc` sees each write's changes before the commit, including
   those a later rollback of your transaction undoes. For side effects
   outside the database, use a Recorder and act once `Tx` returns.

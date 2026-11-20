@@ -729,3 +729,42 @@ func TestDecimalZeroLeftToDefault(t *testing.T) {
 		t.Errorf("a zero with a *big.Int: %s, want %s", e.SQL, want)
 	}
 }
+
+// TestMySQLDoNothingReadsNothing: a single-row DoNothing upsert on MySQL
+// reads nothing back, recorded or not: under clientFoundRows its count is 1
+// whether it inserted or kept the row, and a read by the conflict values
+// would give the entity the kept row's key and values, which PostgreSQL's
+// RETURNING, returning no row then, never does.
+func TestMySQLDoNothingReadsNothing(t *testing.T) {
+	ins := "INSERT INTO `ddefs` (`name`) VALUES (?) AS new ON DUPLICATE KEY UPDATE `name` = `ddefs`.`name`"
+	e := &fakeconn.Exec{Affected: 1, Rows: [][]any{{int64(1), "done", int64(3), "z"}}}
+	a := dDef{Name: "a"}
+	if err := openFake(velox.MySQL, e).Insert(&a).OnConflict(dDefs.Name).DoNothing().Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wantLog(t, e, []string{ins})
+	if a.ID != 0 || a.Status != "" || a.Note != nil {
+		t.Errorf("read back %+v", a)
+	}
+
+	// Recorded: the locked read finds the kept row, the read after the
+	// INSERT finds it unchanged, and nothing is reported or read into the
+	// entity.
+	kept := []any{int64(1), "a", "done", int64(3), "z", nil}
+	e = &fakeconn.Exec{Affected: 1, Results: [][][]any{{kept}, {kept}}}
+	var rec velox.Recorder
+	b := dDef{Name: "a"}
+	if err := openFake(velox.MySQL, e).Record(&rec).Insert(&b).OnConflict(dDefs.Name).DoNothing().Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wantLog(t, e, []string{
+		"BEGIN",
+		"SELECT `id`, `name`, `status`, `score`, `note`, `tag` FROM `ddefs` WHERE `name` IN (?) FOR UPDATE",
+		ins,
+		"SELECT `id`, `name`, `status`, `score`, `note`, `tag` FROM `ddefs` WHERE `name` IN (?)",
+		"COMMIT",
+	})
+	if b.ID != 0 || b.Status != "" || rec.Len() != 0 {
+		t.Errorf("recorded: read back %+v, %d Changes", b, rec.Len())
+	}
+}

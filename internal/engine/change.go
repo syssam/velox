@@ -363,14 +363,16 @@ func valuesIn(t Table, cols []int, keys [][]any) Predicate {
 	return NewPredicate(Group(OpOr, ors))
 }
 
-// keyString is a key as a map key.
+// keyString is a key as a map key. A time is written by its instant
+// (placeKey), so that a key held in another zone, or with a monotonic
+// reading, matches the UTC value a database returns.
 func keyString(k []any) string {
 	var b strings.Builder
 	for i, v := range k {
 		if i > 0 {
 			b.WriteByte(0)
 		}
-		fmt.Fprint(&b, v)
+		fmt.Fprint(&b, placeKey(v))
 	}
 	return b.String()
 }

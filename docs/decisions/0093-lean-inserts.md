@@ -76,7 +76,10 @@ The database's values come back into the entity:
     the generated key, as `LastInsertId` does not name a row the upsert
     updated: the entity gets the stored row's key, as RETURNING gives it
     on PostgreSQL and SQLite. A key the caller set is not read, as
-    RETURNING names none then. The database compares the values, as
+    RETURNING names none then. A `DoNothing` upsert reads nothing back:
+    under `clientFoundRows` its count is 1 whether it inserted or kept the
+    row, and the kept row's values are what PostgreSQL's RETURNING, giving
+    no row, never hands the entity. The database compares the values, as
     it did for the conflict. The upsert and the read run in one
     transaction, velox's own outside the caller's. A row whose conflict
     values cannot find it (a NULL, a generated key left zero) keeps its Go

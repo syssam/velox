@@ -555,10 +555,11 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	if _, err := db.Ex.Exec(sctx, "SAVEPOINT "+name, nil); err != nil {
 		return savepointErr(sctx, "savepoint", err)
 	}
-	mark, kmark := db.batch.len(), len(db.txRoot.kept)
+	mark, kmark, poison := db.batch.len(), len(db.txRoot.kept), db.batch.failed()
 	finished := false
 	defer func() {
 		if !finished {
+			db.batch.restore(poison)
 			db.txRoot.unkeep(kmark)
 			db.breakOn(db.undoSavepoint(ctx, name))
 		}
@@ -567,6 +568,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
 		db.batch.truncate(mark)
+		db.batch.restore(poison) // a write that failed in it took no effect
 		db.txRoot.unkeep(kmark)
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.
@@ -583,6 +585,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		// transaction: undo it, or break the transaction when that fails too.
 		err = savepointErr(sctx, "release savepoint", err)
 		db.batch.truncate(mark)
+		db.batch.restore(poison)
 		db.txRoot.unkeep(kmark)
 		rerr := db.undoSavepoint(ctx, name)
 		db.breakOn(rerr)

@@ -120,8 +120,8 @@ func TestUpsert(t *testing.T) {
 		if err != nil || got.ID != 1 || got.Total != 99 {
 			t.Errorf("%+v, %v", got, err)
 		}
-		if tg.d != velox.MySQL && over.ID != 1 {
-			t.Errorf("RETURNING after DO UPDATE: ID %d, want 1", over.ID)
+		if over.ID != 1 {
+			t.Errorf("the key after DO UPDATE: ID %d, want 1", over.ID)
 		}
 		if n, err := tg.db.Query[testmodel.Invoice]().Count(ctx); err != nil || n != 5 {
 			t.Errorf("rows %d, %v, want 5: an upsert inserted", n, err)
@@ -288,13 +288,10 @@ func TestUpsertUpdateBranchReadBack(t *testing.T) {
 		if err := tg.db.Insert(&over).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		// RETURNING reads the existing row's id back; MySQL has none.
-		wantID := int64(1)
-		if tg.d == velox.MySQL {
-			wantID = 0
-		}
-		if over.ID != wantID {
-			t.Errorf("ID %d, want %d", over.ID, wantID)
+		// The existing row's id comes back: RETURNING, or MySQL's read by
+		// the conflict values.
+		if over.ID != 1 {
+			t.Errorf("ID %d, want 1", over.ID)
 		}
 		var (
 			total        float64

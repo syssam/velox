@@ -439,8 +439,8 @@ func TestScopeUpsert(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if tg.d != velox.MySQL && a1.ID != id {
-			t.Errorf("RETURNING: ID %d", a1.ID)
+		if a1.ID != id {
+			t.Errorf("the stored key: ID %d, want %d", a1.ID, id)
 		}
 		wantIDs(t, done(), want)
 

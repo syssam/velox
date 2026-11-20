@@ -387,7 +387,7 @@ func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen
 			return err
 		}
 	}
-	if db.D == MySQL && st.Conflict != nil && (len(st.fill) > 0 || gen >= 0) && !db.InTx {
+	if db.D == MySQL && st.Conflict != nil && !keepsRow(st.Conflict) && (len(st.fill) > 0 || gen >= 0) && !db.InTx {
 		// The upsert and the read of its key and of what it left to the
 		// database (readUpserted) see one row, in one transaction.
 		cp := *st
@@ -433,7 +433,12 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 		if err := CheckUpserted(st, res.Affected); err != nil {
 			return err
 		}
-		if res.Affected == 0 {
+		if res.Affected == 0 || keepsRow(st.Conflict) {
+			// A DoNothing upsert reads nothing back: under clientFoundRows
+			// its count is 1 whether it inserted the row or kept the
+			// existing one, and the read by the conflict values would give
+			// the entity the kept row's key and values, which PostgreSQL's
+			// RETURNING, returning no row then, never does.
 			return nil
 		}
 		return readUpserted(ctx, db, st, p, gen)
@@ -475,3 +480,8 @@ func ConditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *Conflict
 		(len(in.filters) > 0 || reads && len(db.Cfg.Rewrites) > 0 ||
 			InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && db.bypass == "")
 }
+
+// keepsRow reports whether cf keeps a conflicting row as it is: DoNothing,
+// or an update branch that writes no column, which MySQL renders as a no-op
+// assignment.
+func keepsRow(cf *ConflictClause) bool { return cf.DoNothing || len(cf.Update) == 0 }

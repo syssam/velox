@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"time"
@@ -169,11 +170,55 @@ func (r ChangeRow) changed() bool {
 // Insert, a Rel.Add…), collected across its statements and handed to the
 // sink in one call before the write's frame ends (flush): before the RELEASE
 // of its savepoint in the caller's transaction, or the COMMIT of the
-// transaction velox opened for it. The handle of the write's frame, and those derived from it and of the
-// savepoints within it, carry it (DB.batch), so that the write's parts join
-// it; a handle Record returns carries none.
+// transaction velox opened for it. The handle of the write's frame, and
+// those derived from it and of the savepoints within it, carry it
+// (DB.batch), so that the write's parts join it; a handle Record returns
+// carries none.
 type batch struct {
 	rows []ChangeRow
+	// err is the first error of a recorded write that ran inline in the
+	// frame (inFrame): the frame fails with it even when a hook swallowed
+	// it, as the write's statements may have run without their Changes.
+	err error
+}
+
+// fail keeps err, the first, as the error of a recorded write inline in
+// b's frame. A nil b keeps nothing.
+func (b *batch) fail(err error) {
+	if b != nil && b.err == nil {
+		b.err = err
+	}
+}
+
+// failed is the error fail kept; nil for a nil b.
+func (b *batch) failed() error {
+	if b == nil {
+		return nil
+	}
+	return b.err
+}
+
+// restore sets b's kept error back to err, what it was when a savepoint
+// opened, as the savepoint rolls back (DB.savepoint): a write that failed
+// inside it took no effect. A nil b holds none.
+func (b *batch) restore(err error) {
+	if b != nil {
+		b.err = err
+	}
+}
+
+// inFrame runs fn, a recorded write, on db inline in the frame of the
+// recorded write under way (db.batch), with no savepoint of its own. An
+// error of fn fails the frame (batch.fail) whether or not the code around
+// fn returns it: fn may have sent statements whose Changes it never
+// emitted. A hook that means to tolerate the failure runs the write in a
+// savepoint, tx.Tx, whose rollback undoes it and clears the mark.
+func inFrame(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) error) error {
+	if err := fn(ctx, db); err != nil {
+		db.batch.fail(err)
+		return err
+	}
+	return nil
 }
 
 // len is the number of Changes collected; 0 for a nil b.
@@ -305,7 +350,9 @@ func (b *batch) flush(ctx context.Context, tx *DB) error {
 
 // batched is fn as the body of a recorded write's frame, a savepoint in
 // the caller's transaction or velox's own transaction: it gives the
-// frame's handle a batch, runs fn, and flushes the batch. It is fn as it is when db does not record, or when a
+// frame's handle a batch, runs fn, and flushes the batch. A recorded
+// write inline in the frame that failed (batch.fail) fails the frame, so
+// that it rolls back and no sink runs, though fn returned nil. It is fn as it is when db does not record, or when a
 // write of db is under way already (db.batch): fn's writes join its batch.
 func batched(db *DB, fn func(ctx context.Context, tx *DB) error) func(ctx context.Context, tx *DB) error {
 	if db.rec == nil || db.batch != nil {
@@ -316,6 +363,9 @@ func batched(db *DB, fn func(ctx context.Context, tx *DB) error) func(ctx contex
 		tx.batch = b
 		if err := fn(ctx, tx); err != nil {
 			return err
+		}
+		if err := b.failed(); err != nil {
+			return fmt.Errorf("velox: a recorded write within this write failed and its error was not returned: %w", err)
 		}
 		return b.flush(ctx, tx)
 	}
@@ -360,7 +410,7 @@ func ownTxPrimed(ctx context.Context, db *DB, primed bool, fn func(ctx context.C
 func recordedTx(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) error) error {
 	switch {
 	case db.batch != nil:
-		return fn(ctx, db)
+		return inFrame(ctx, db, fn)
 	case db.InTx:
 		return db.Tx(ctx, batched(db, fn))
 	}
@@ -416,7 +466,7 @@ func versionedTx(ctx context.Context, db *DB, old *bool, fn func(ctx context.Con
 func atomically(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) error) error {
 	switch {
 	case db.batch != nil:
-		return fn(ctx, db)
+		return inFrame(ctx, db, fn)
 	case db.InTx:
 		if db.rec != nil {
 			primeVersion(ctx, db)

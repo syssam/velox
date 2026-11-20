@@ -97,7 +97,9 @@ package. As handle methods they cost a few KB per entity package
    its write's frame opens, so a write it makes through `Mutation.DB()`,
    before or after next, is a recorded write of its own: its own sink call
    (and outside the caller's transaction its own transaction), in the
-   order the hook makes the two writes.
+   order the hook makes the two writes. A write with edge setters is the
+   exception: its frame opens first and its hooks run inside it, so a
+   hook's write joins the frame's one sink call, in the order it is made.
 3. **Values.** Plain Go values, as `Mutation.Value` gives them; a JSON
    column's decoded value. An insert's new row is the row as stored:
    PostgreSQL and SQLite return every column with the INSERT, and MySQL
@@ -124,7 +126,10 @@ package. As handle methods they cost a few KB per entity package
      that returns an error took no effect. A write is one savepoint: the
      recorded statements inside it (an edge write's join rows, a
      re-point's steps, `UpdateQuery.One`'s edges) run in it, with none of
-     their own.
+     their own. One of them that fails fails the write, with its error
+     wrapped, even when a hook swallowed it, as it may have stored part of
+     its rows unreported; a hook that tolerates the failure runs the write
+     in `tx.Tx`, whose savepoint undoes it.
    - Outside a transaction velox opens one for every recorded write, a
      single statement's too, and the sink runs before its COMMIT.
    - Code that acts after the commit reads a `Recorder` once `Tx` returns.
