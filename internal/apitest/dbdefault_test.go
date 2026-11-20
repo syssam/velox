@@ -245,3 +245,24 @@ func TestInsertAllDatabaseDefaultsMySQL(t *testing.T) {
 		t.Errorf("read back: %+v %+v", xs[0], xs[1])
 	}
 }
+
+// TestUpsertKeepsTheColumnsItUpdates: an upsert's update branch copies its
+// columns from the inserted row, so they are written even when empty: a nil
+// note overwrites the stored one with NULL, not with the column's DEFAULT.
+func TestUpsertKeepsTheColumnsItUpdates(t *testing.T) {
+	db, raw := defDB(t)
+	exec(t, raw, "INSERT INTO ddefs (id, name, note) VALUES (1, 'a', 'x')")
+	dNote := velox.NullStringCol[dDef, string]{I: 4}
+	q := db.Insert(&dDef{ID: 1, Name: "a"}).OnConflict(dDefs.ID).Update(dNote)
+	got, _, err := q.SQL(ctx)
+	if want := `INSERT INTO "ddefs" ("id", "name", "note") VALUES (?, ?, NULL) ON CONFLICT ("id") DO UPDATE SET "note" = EXCLUDED."note" RETURNING "status", "score"`; err != nil || got != want {
+		t.Fatalf("SQL:\n got %s, %v\nwant %s", got, err, want)
+	}
+	if err := q.Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var note sql.NullString
+	if err := raw.QueryRow("SELECT note FROM ddefs WHERE id = 1").Scan(&note); err != nil || note.Valid {
+		t.Errorf("note %v, %v; want NULL", note, err)
+	}
+}

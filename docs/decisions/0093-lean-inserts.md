@@ -41,8 +41,11 @@ declared database defaults:
   (0090). It equals the zero value, so writing the zero gives the same row.
 
 A NOT NULL column without a declared default is written whatever it holds.
-The conflict target's columns are always written, and so is at least one
-column.
+The conflict target's columns are always written, and so is every column an
+upsert's update branch copies from the inserted row: MySQL's `new.<col>`
+names only a column the INSERT lists, and PostgreSQL's `EXCLUDED.<col>`
+would hold the column's DEFAULT, not the row's NULL. At least one column is
+always written.
 
 The database's values come back into the entity:
 

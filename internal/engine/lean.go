@@ -77,7 +77,11 @@ func LeanInsert(d Dialect, st *Statement) []int {
 	}
 	n := 0
 	for i, col := range st.Columns {
-		if st.Conflict != nil && slices.Contains(st.Conflict.Columns, col) {
+		// The conflict target is written, and so is every column the update
+		// branch copies from the inserted row: MySQL's new.<col> names only
+		// a column the INSERT lists, and PostgreSQL's EXCLUDED.<col> would
+		// hold the column's DEFAULT, not the row's NULL.
+		if st.Conflict != nil && (slices.Contains(st.Conflict.Columns, col) || slices.Contains(st.Conflict.Update, col)) {
 			continue
 		}
 		all := true
