@@ -256,12 +256,7 @@ func sendReturning(ctx context.Context, db *DB, st *Statement, one unsafe.Pointe
 		}
 		return nil
 	}
-	var err error
-	if db.Hooked() {
-		err = db.Run(ctx, st, read, nil)
-	} else {
-		err = db.Plain(ctx, st, read, nil)
-	}
+	err := sendRead(ctx, db, st, read)
 	return back, err
 }
 

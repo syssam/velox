@@ -56,10 +56,8 @@ type rewriteSnapshot struct {
 	bidi           *bidiStep
 	pin            Target
 	iter, loaded   bool
-	unscoped       bool
-	recorded       bool
-	returnOld      bool
-	ret            []int // an update's Returning, which velox reads by position
+	rec            recordState // velox's read-back marks, put back whole
+	ret            []int       // an update's Returning, which velox reads by position
 }
 
 // takeRewriteSnapshot records st before cloneForHooks and the Rewrite hooks.
@@ -71,7 +69,7 @@ func takeRewriteSnapshot(st *Statement) rewriteSnapshot {
 		lock: st.Lock, wait: st.LockWait, cols: st.Columns, joins: st.Joins, project: st.Project,
 		was: st.Each, returning: len(st.Returning) > 0,
 		bidi: stmtBidi(st), pin: stmtPin(st), iter: st.iter, loaded: st.loaded,
-		unscoped: st.unscoped, recorded: st.recorded, returnOld: st.returnOld, ret: st.Returning,
+		rec: st.recordState, ret: st.Returning,
 	}
 }
 
@@ -81,7 +79,7 @@ func takeRewriteSnapshot(st *Statement) rewriteSnapshot {
 func (s *rewriteSnapshot) restoreAndCheck(st *Statement) error {
 	setStmtBidi(st, s.bidi)
 	setStmtPin(st, s.pin)
-	st.iter, st.loaded, st.unscoped, st.recorded, st.returnOld = s.iter, s.loaded, s.unscoped, s.recorded, s.returnOld
+	st.iter, st.loaded, st.recordState = s.iter, s.loaded, s.rec
 	name := s.entity.Name
 	changed := func(what string) error {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's %s", name, what)
@@ -119,7 +117,7 @@ func (s *rewriteSnapshot) restoreAndCheck(st *Statement) error {
 		// The scan depends on them: one value, of the column's type.
 		return changed("Columns")
 	}
-	if s.recorded && !slices.Equal(st.Returning, s.ret) {
+	if s.rec.recorded && !slices.Equal(st.Returning, s.ret) {
 		// A recorded insert's Changes come from the rows RETURNING reads:
 		// without them a row written would go unreported.
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the RETURNING of a recorded write; recording reports the rows it reads back", name)

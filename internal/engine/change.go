@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 )
@@ -49,25 +50,59 @@ func DiffRows(in *EntityInfo, before, after unsafe.Pointer) []FieldChange {
 // EqualValues reports whether a and b, plain column values, are equal by
 // value. Two nils are equal, and nil equals no other value. Values of a type
 // with a method Equal(T) bool, as time.Time and the decimal types have, are
-// compared with it. Byte slices, json.RawMessage among them, are compared
-// with bytes.Equal. Anything else is compared with reflect.DeepEqual.
+// compared with it. A float NaN equals NaN, by value and through a pointer:
+// a column that held NaN and still does has not changed. Byte slices,
+// json.RawMessage among them, are compared with bytes.Equal. Anything else
+// is compared with reflect.DeepEqual.
 func EqualValues(a, b any) bool {
 	if a == nil || b == nil {
 		return a == nil && b == nil
+	}
+	if x, ok := a.(time.Time); ok {
+		y, ok := b.(time.Time)
+		return ok && x.Equal(y)
 	}
 	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
 	t := va.Type()
 	if t != vb.Type() {
 		return false
 	}
-	if m, ok := t.MethodByName("Equal"); ok && m.Type.NumIn() == 2 && m.Type.In(1) == t &&
-		m.Type.NumOut() == 1 && m.Type.Out(0).Kind() == reflect.Bool {
-		return va.Method(m.Index).Call([]reflect.Value{vb})[0].Bool()
+	if m := equalMethod(t); m >= 0 {
+		return va.Method(m).Call([]reflect.Value{vb})[0].Bool()
 	}
-	if t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8 {
+	switch k := t.Kind(); {
+	case k == reflect.Float32 || k == reflect.Float64:
+		return sameFloat(va.Float(), vb.Float())
+	case k == reflect.Pointer && (t.Elem().Kind() == reflect.Float32 || t.Elem().Kind() == reflect.Float64):
+		if va.IsNil() || vb.IsNil() {
+			return va.IsNil() && vb.IsNil()
+		}
+		return sameFloat(va.Elem().Float(), vb.Elem().Float())
+	case k == reflect.Slice && t.Elem().Kind() == reflect.Uint8:
 		return bytes.Equal(va.Bytes(), vb.Bytes())
 	}
 	return reflect.DeepEqual(a, b)
+}
+
+// sameFloat reports whether x and y are equal, or both NaN.
+func sameFloat(x, y float64) bool { return x == y || x != x && y != y }
+
+// equalMethods caches, by type, the index of its method Equal(T) bool, or -1
+// for a type without one (equalMethod).
+var equalMethods sync.Map // reflect.Type → int
+
+// equalMethod is the index of t's method Equal(T) bool, -1 when it has none.
+func equalMethod(t reflect.Type) int {
+	if m, ok := equalMethods.Load(t); ok {
+		return m.(int)
+	}
+	i := -1
+	if m, ok := t.MethodByName("Equal"); ok && m.Type.NumIn() == 2 && m.Type.In(1) == t &&
+		m.Type.NumOut() == 1 && m.Type.Out(0).Kind() == reflect.Bool {
+		i = m.Index
+	}
+	equalMethods.Store(t, i)
+	return i
 }
 
 // trackedWrite sends st, an update or a delete through db, a recording
@@ -280,6 +315,71 @@ func keyString(k []any) string {
 	return b.String()
 }
 
+// sendRead sends st on db and reads its rows with read: through the
+// pipeline's hooks when db has any.
+func sendRead(ctx context.Context, db *DB, st *Statement, read func(Rows) error) error {
+	if db.Hooked() {
+		return db.Run(ctx, st, read, nil)
+	}
+	return db.Plain(ctx, st, read, nil)
+}
+
+// returnedRows sends st on db and scans each row its RETURNING returns into
+// new rows of st's entity: the columns cols into one, or, with pair
+// (PostgreSQL 18's RETURNING old.<cols>, new.<cols>), into a row before the
+// write and again into a row after it. With inserts (an upsert's, which
+// pair), the row before may be none: its NULLs leave zero values, and a row
+// before whose key is NULL in every column, an inserted row's, is nil. done
+// gets the rows in the order they came back (after is nil unless pair); it
+// runs inside the read, so an Around hook that retries runs it anew. Every
+// recorded write reads what it wrote back through it: an update's and a
+// delete's chunk (tracker.returned), PostgreSQL 18's old and new
+// (tracker.both, returningBoth), and an upsert's every column
+// (conflictRead.returning).
+func returnedRows(ctx context.Context, db *DB, st *Statement, cols []int, pair, inserts bool, done func(rows, after []unsafe.Pointer) error) error {
+	in := st.Entity
+	ts := InfoTable(in).state()
+	n := len(cols)
+	width := n
+	if pair {
+		width = 2 * n
+	}
+	return sendRead(ctx, db, st, func(r Rows) error {
+		var rows, after []unsafe.Pointer
+		dst := make([]any, width)
+		for r.Next() {
+			p := ts.newRow()
+			bindTableRow(ts, cols, dst[:n], p)
+			var keyNulls, nulls int // the row before's NULLs: an inserted row's are all
+			if inserts {
+				for i, c := range cols {
+					cnt := &nulls
+					if slices.Contains(in.PrimaryKey, c) {
+						cnt = &keyNulls
+					}
+					dst[i] = &NullProbe{Dst: dst[i], Nulls: cnt}
+				}
+			}
+			var q unsafe.Pointer
+			if pair {
+				q = ts.newRow()
+				bindTableRow(ts, cols, dst[n:], q)
+			}
+			if err := r.Scan(dst...); err != nil {
+				return err
+			}
+			if inserts && keyNulls == len(in.PrimaryKey) {
+				p = nil
+			}
+			rows = append(rows, p)
+			if pair {
+				after = append(after, q)
+			}
+		}
+		return done(rows, after)
+	})
+}
+
 // returned sends st, an update or a delete with RETURNING (an update's of
 // tw.read, a delete's of the key), and keeps each row it returns in news, at
 // the place of the old row whose new key (at, rows lo to hi) it holds. A row
@@ -291,24 +391,16 @@ func (tw *tracker) returned(ctx context.Context, tx *DB, st *Statement, at [][]a
 	if st.Op == OpUpdate {
 		bumpOnce(st)
 	}
-	ts := tw.t.state()
 	place := make(map[string]int, hi-lo)
 	for i := lo; i < hi; i++ {
 		place[keyString(at[i])] = i
 	}
 	var n int64
-	read := func(r Rows) error {
-		n = 0 // anew, should an Around hook retry
+	err := returnedRows(ctx, tx, st, st.Returning, false, false, func(rows, _ []unsafe.Pointer) error {
+		n = int64(len(rows))
 		clear(news[lo:hi])
 		var stray []unsafe.Pointer
-		dst := make([]any, len(st.Returning))
-		for r.Next() {
-			p := ts.newRow()
-			bindTableRow(ts, st.Returning, dst, p)
-			if err := r.Scan(dst...); err != nil {
-				return err
-			}
-			n++
+		for _, p := range rows {
 			if i, ok := place[keyString(rowKey(tw.in, p))]; ok {
 				news[i] = p
 			} else {
@@ -316,13 +408,7 @@ func (tw *tracker) returned(ctx context.Context, tx *DB, st *Statement, at [][]a
 			}
 		}
 		return tw.placeStray(st.Op, stray, news[lo:hi])
-	}
-	var err error
-	if tx.Hooked() {
-		err = tx.Run(ctx, st, read, nil)
-	} else {
-		err = tx.Plain(ctx, st, read, nil)
-	}
+	})
 	return n, err
 }
 
@@ -428,40 +514,21 @@ func (tw *tracker) both(ctx context.Context, tx *DB, mu *MutationState, st *Stat
 	if cp.Op == OpUpdate {
 		bumpOnce(&cp)
 	}
-	ts := tw.t.state()
 	update := cp.Op == OpUpdate
 	var out []ChangeRow
-	read := func(r Rows) error {
-		out = out[:0] // anew, should an Around hook retry
-		n := len(tw.read)
-		width := n
-		if update {
-			width = 2 * n
-		}
-		dst := make([]any, width)
-		for r.Next() {
-			row := ChangeRow{Op: cp.Op, In: tw.in, Old: ts.newRow()}
-			bindTableRow(ts, tw.read, dst[:n], row.Old)
+	err := returnedRows(ctx, tx, &cp, tw.read, update, false, func(olds, news []unsafe.Pointer) error {
+		out = make([]ChangeRow, len(olds))
+		for i, p := range olds {
+			out[i] = ChangeRow{Op: cp.Op, In: tw.in, Old: p}
 			if update {
-				row.New = ts.newRow()
-				bindTableRow(ts, tw.read, dst[n:], row.New)
+				out[i].New = news[i]
+				if st.softDelete {
+					out[i].Op, out[i].Soft = OpDelete, true
+				}
 			}
-			if err := r.Scan(dst...); err != nil {
-				return err
-			}
-			if update && st.softDelete {
-				row.Op, row.Soft = OpDelete, true
-			}
-			out = append(out, row)
 		}
 		return nil
-	}
-	var err error
-	if tx.Hooked() {
-		err = tx.Run(ctx, &cp, read, nil)
-	} else {
-		err = tx.Plain(ctx, &cp, read, nil)
-	}
+	})
 	if err != nil {
 		return nil, err
 	}

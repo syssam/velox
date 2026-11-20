@@ -144,6 +144,34 @@ type Statement struct {
 	// iter says Iter runs the statement: its rows are open while the caller's
 	// loop body runs.
 	iter bool
+	// iterCtx is the context Iter was given: a statement under it while the
+	// loop holds a pool's one connection is refused (iterconn.go).
+	iterCtx context.Context
+	// loaded says a With load runs it, for owners read under this statement's scope:
+	// its join rows need no condition of their own.
+	loaded bool
+	// recordState is how velox reads back what the statement writes: as a
+	// recording, and as a lean insert. It is one value, which the Rewrite
+	// snapshot keeps and puts back whole.
+	recordState
+	// upsertPolicy is set by the scope when it added the policy's conditions to
+	// the upsert's update branch: an upsert that then affected fewer rows than it
+	// sent met a row the policy hides.
+	upsertPolicy bool
+	// upsertRows is the number of rows the statement had when the scope
+	// conditioned it: CheckUpserted compares with it, not with Rows, which
+	// an Around hook may change.
+	upsertRows int
+	// bidi is set on a statement of a bidirectional one-to-one write, whose
+	// Rewrite hooks' changes checkBidiRewrite checks; nil otherwise.
+	bidi *bidiStep
+}
+
+// recordState is the part of a Statement that says how velox reads back
+// what it writes: a recording's marks (DB.Record) and a lean insert's
+// read-back plan (PlanInsert, LeanInsert). Velox sets it; a Rewrite hook
+// cannot, and one that replaces the whole Statement gets it back.
+type recordState struct {
 	// recorded says the statement is a recorded insert or upsert, a recorded
 	// delete, or a recorded update on PostgreSQL 18 (returnOld), whose Changes
 	// come from what its RETURNING reads: a Rewrite hook may not change that.
@@ -157,40 +185,23 @@ type Statement struct {
 	// softDelete says the statement, an update, is a soft delete
 	// (MarkSoftDelete): a recording reports its rows as deletes, Soft.
 	softDelete bool
-	// iterCtx is the context Iter was given: a statement under it while the
-	// loop holds a pool's one connection is refused (iterconn.go).
-	iterCtx context.Context
-	// loaded says a With load runs it, for owners read under this statement's scope:
-	// its join rows need no condition of their own.
-	loaded bool
 	// unscoped says velox reads rows it has just written, by their keys,
 	// inside the write's transaction: the scope adds no row condition, as
 	// the write itself was scoped and may have moved the rows out of view.
 	unscoped bool
-	// upsertPolicy is set by the scope when it added the policy's conditions to
-	// the upsert's update branch: an upsert that then affected fewer rows than it
-	// sent met a row the policy hides.
-	upsertPolicy bool
-	// upsertRows is the number of rows the statement had when the scope
-	// conditioned it: CheckUpserted compares with it, not with Rows, which
-	// an Around hook may change.
-	upsertRows int
-	// bidi is set on a statement of a bidirectional one-to-one write, whose
-	// Rewrite hooks' changes checkBidiRewrite checks; nil otherwise.
-	bidi *bidiStep
-	// fill is an insert's columns that the database's defaults fill, which
-	// MySQL reads back after it (PlanInsert); ret is the RETURNING list
-	// PlanInsert set, which the rows are scanned by while Returning holds it.
-	fill, ret []int
-	// keyed is the number of columns at the end of ret that placeByKey
-	// added, the conflict columns, by which the returned rows are matched to
-	// the entities; they are not copied into them.
-	keyed int
 	// dflt says an insert's rows leave some cells of the columns it writes
 	// to the database's defaults, written as DEFAULT (LeanInsert,
 	// defaultCell): its text then depends on the rows' values, and it is
 	// rendered without the cache.
 	dflt bool
+	// keyed is the number of columns at the end of ret that placeByKey
+	// added, the conflict columns, by which the returned rows are matched to
+	// the entities; they are not copied into them.
+	keyed int
+	// fill is an insert's columns that the database's defaults fill, which
+	// MySQL reads back after it (PlanInsert); ret is the RETURNING list
+	// PlanInsert set, which the rows are scanned by while Returning holds it.
+	fill, ret []int
 }
 
 // Rewrite is a hook that may change a statement before it is rendered, or

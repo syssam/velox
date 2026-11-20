@@ -137,68 +137,30 @@ func RecordKeep[E any](cols ...Column[E]) RecordOption {
 	return RecordOption{owner: ownerOf[E], cols: columnIndexes(cols), keep: true}
 }
 
-// Record returns a DB like db whose writes are reported to s, one Change per
-// row, all of a write's in one call, after the write's statements succeed
-// and before its transaction commits (see Sink). It records the writes made
-// through it, through the transactions and savepoints it begins, through its
-// WithoutPolicy, and through the Mutation.DB of a hook on one of its writes;
-// raw SQL, dry runs and the writes of db itself are not recorded. Record on a
-// recording DB replaces its sink and its options; on a transaction's handle,
-// for that handle, and a rollback still drops a Recorder's Changes.
+// Record returns a DB like db whose writes report each row they change to
+// s: one Change per row, all of a write's in one call, inside the write's
+// transaction before it commits (see Sink). Inside a transaction a recorded
+// write runs under a savepoint, outside one in a transaction of its own; a
+// failed statement or a sink's error rolls it back, so a recorded write
+// that returns an error took no effect. Code that acts after the commit
+// reads a Recorder once Tx returns.
 //
-// Inside a transaction a recorded write runs under a savepoint that holds
-// its statements and the sink's call: a failed statement or a sink's error
-// rolls back to it, so a recorded write that returns an error took no
-// effect. Outside one it runs in a transaction of its own, a single
-// statement's too, and the sink is called before the COMMIT: a sink's error
-// rolls the write back. Code that acts after the commit reads a Recorder
-// once Tx returns.
+// It records the writes made through it, through its transactions and
+// savepoints, its WithoutPolicy and the Mutation.DB of a hook on one of its
+// writes; raw SQL, dry runs and the writes of db itself are not recorded.
+// Record on a recording DB replaces its sink and its options. velox never
+// sees a UseTx transaction end, so a Recorder used through UseTx keeps the
+// Changes of one that rolls back.
 //
-// velox never sees the end of a transaction the caller began on its own
-// *sql.Tx (UseTx): there the Changes go to the sink, a Recorder's too, and
-// none is dropped when that transaction rolls back, so a Recorder used
-// through UseTx holds every Change delivered; what a sink writes through
-// its tx there rolls back with the transaction.
-//
-// Below PostgreSQL 18, and on SQLite and MySQL, a recorded update or delete
-// first reads its rows, locked, then writes them by key. A delete there
-// reports only the rows the database deleted: it returns their keys
-// (RETURNING), and on MySQL a count of rows short of those read fails the
-// write. On PostgreSQL 18
-// and later it is one statement, RETURNING the rows before and after it
-// (old and new), and so is an upsert, which reads nothing first. The
-// recording handle asks the server its version (SHOW server_version_num,
-// which no hook sees) once per pool, at its first recorded write: before
-// the BEGIN of a transaction of its own, or in the caller's transaction
-// inside a savepoint (the write's), so that a failure to read it rolls back
-// to the savepoint and leaves the transaction usable; such a write then takes
-// the locked read, and a later one asks again. A count of rows over
-// WithMaxRows rolls the write back. An update's or a
-// delete's Changes come in key order as Go compares the key values: the
-// database's order for numeric and UUID keys, but a text key under a
-// collation other than C may order otherwise. An upsert's Changes come in
-// the order the database returns its rows.
-//
-// Below PostgreSQL 18 a recorded upsert reads the rows its rows conflict
-// with, locked, before its INSERT, without the scope or the Read policy, as the database finds a
-// conflict whatever they hide: a sink can see values the caller's policy
-// hides. The database names the rows the upsert touched: on PostgreSQL and
-// SQLite the INSERT returns every column of them (a row DoNothing kept is
-// not returned, and not reported); on MySQL a read by the conflict columns
-// follows, and a count of affected rows it does not account for fails the
-// write, as when a row conflicted on another unique key (this needs the
-// clientFoundRows=true that Connect requires). A row with NULL in a conflict
-// column, or a generated key left zero in the conflict columns, cannot be
-// found after the INSERT on MySQL, which returns no keys, so a recorded
-// upsert there refuses it: insert such rows without OnConflict. A Rewrite
-// hook may not change the RETURNING of a recorded write. Below PostgreSQL 18 the
-// first read cannot lock a row that is not there, so a row another session
-// inserts under the same key at once is reported as an insert although the
-// upsert updated it. On MySQL that read takes gap locks: two recorded
-// upserts of new keys in the same gap, at once, can deadlock, and one fails
-// with ER_LOCK_DEADLOCK, which TxRetrySerializable retries. Rows of one
-// InsertAll that share a conflict key give one Change per stored row (on
-// MySQL, the count fails the write).
+// Below PostgreSQL 18, and on SQLite and MySQL, a recorded update, delete
+// or upsert reads the rows it touches, locked, in the same transaction; on
+// PostgreSQL 18 and later each is one statement that returns its rows
+// before and after it. An upsert's conflicting rows are read without the
+// scope or the Read policy, so a sink can see values the caller cannot. A
+// recorded write that cannot account for every row it touched fails. The
+// guide's "Recording changes" (docs/guide.md) says what is recorded and
+// what it costs; ADR 0094 (docs/decisions/0094-change-recording.md) has
+// the rules.
 //
 // The DB it returns shares db's pool and options, and Close on it closes
 // nothing. Record panics when s is nil.

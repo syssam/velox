@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -62,5 +63,55 @@ func TestEqualValues(t *testing.T) {
 		if got := engine.EqualValues(c.a, c.b); got != c.want {
 			t.Errorf("%s: EqualValues(%v, %v) = %v, want %v", c.name, c.a, c.b, got, c.want)
 		}
+	}
+}
+
+// TestEqualValuesNaN: NaN equals NaN, by value and through a pointer, as a
+// column that held NaN and still does has not changed.
+func TestEqualValuesNaN(t *testing.T) {
+	nan64, nan32 := math.NaN(), float32(math.NaN())
+	one := 1.0
+	cases := []struct {
+		name string
+		a, b any
+		want bool
+	}{
+		{"float64 NaNs", nan64, math.NaN(), true},
+		{"float32 NaNs", nan32, float32(math.NaN()), true},
+		{"NaN and a number", nan64, 1.0, false},
+		{"a number and NaN", float32(1), nan32, false},
+		{"zero and negative zero", 0.0, math.Copysign(0, -1), true},
+		{"pointers to NaN", &nan64, new(math.NaN()), true},
+		{"pointers to float32 NaN", &nan32, new(float32(math.NaN())), true},
+		{"pointer to NaN and to a number", &nan64, &one, false},
+		{"nil pointer and a pointer", (*float64)(nil), &nan64, false},
+		{"nil pointers", (*float64)(nil), (*float64)(nil), true},
+	}
+	for _, c := range cases {
+		if got := engine.EqualValues(c.a, c.b); got != c.want {
+			t.Errorf("%s: EqualValues(%v, %v) = %v, want %v", c.name, c.a, c.b, got, c.want)
+		}
+	}
+}
+
+// BenchmarkEqualValues: the per-type lookup of an Equal method is cached,
+// so a comparison does not walk the method set each time.
+func BenchmarkEqualValues(b *testing.B) {
+	utc := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name string
+		a, b any
+	}{
+		{"int64", int64(3), int64(3)},
+		{"string", "abc", "abc"},
+		{"time", utc, utc.Add(time.Second)},
+		{"Equal method", money{150, 2}, money{15, 1}},
+	}
+	for _, c := range cases {
+		b.Run(c.name, func(b *testing.B) {
+			for b.Loop() {
+				engine.EqualValues(c.a, c.b)
+			}
+		})
 	}
 }

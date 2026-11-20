@@ -378,27 +378,11 @@ func (cr *conflictRead) returning(ctx context.Context, tx *DB, st *Statement, ro
 	in, base := cr.in, st.ret
 	cols := everyColumn(in)
 	st.Returning, st.ret = cols, cols
-	ts := cr.t.state()
 	var news []unsafe.Pointer
-	read := func(r Rows) error {
-		news = news[:0] // anew, should an Around hook retry
-		dst := make([]any, len(cols))
-		for r.Next() {
-			p := ts.newRow()
-			bindTableRow(ts, cols, dst, p)
-			if err := r.Scan(dst...); err != nil {
-				return err
-			}
-			news = append(news, p)
-		}
+	err := returnedRows(ctx, tx, st, cols, false, false, func(got, _ []unsafe.Pointer) error {
+		news = got
 		return fillUpserted(in, st, base, news, rows)
-	}
-	var err error
-	if tx.Hooked() {
-		err = tx.Run(ctx, st, read, nil)
-	} else {
-		err = tx.Plain(ctx, st, read, nil)
-	}
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -439,45 +423,17 @@ func returningBoth(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Poi
 	in, base := st.Entity, st.ret
 	cols := everyColumn(in)
 	st.Returning, st.ret = cols, cols
-	ts := InfoTable(in).state()
-	n := len(cols)
 	var out []ChangeRow
-	read := func(r Rows) error {
-		out = out[:0] // anew, should an Around hook retry
-		dst := make([]any, 2*n)
-		for r.Next() {
-			old, cur := ts.newRow(), ts.newRow()
-			bindTableRow(ts, cols, dst[:n], old)
-			var keyNulls, nulls int // old's NULLs: an inserted row's are all
-			for c := range n {
-				cnt := &nulls
-				if slices.Contains(in.PrimaryKey, c) {
-					cnt = &keyNulls
-				}
-				dst[c] = &NullProbe{Dst: dst[c], Nulls: cnt}
+	err := returnedRows(ctx, tx, st, cols, true, true, func(olds, news []unsafe.Pointer) error {
+		out = make([]ChangeRow, len(olds))
+		for i, old := range olds {
+			out[i] = ChangeRow{Op: OpUpdate, In: in, Old: old, New: news[i]}
+			if old == nil {
+				out[i].Op = OpInsert
 			}
-			bindTableRow(ts, cols, dst[n:], cur)
-			if err := r.Scan(dst...); err != nil {
-				return err
-			}
-			row := ChangeRow{Op: OpUpdate, In: in, Old: old, New: cur}
-			if keyNulls == len(in.PrimaryKey) {
-				row.Op, row.Old = OpInsert, nil
-			}
-			out = append(out, row)
-		}
-		news := make([]unsafe.Pointer, len(out))
-		for i := range out {
-			news[i] = out[i].New
 		}
 		return fillUpserted(in, st, base, news, rows)
-	}
-	var err error
-	if tx.Hooked() {
-		err = tx.Run(ctx, st, read, nil)
-	} else {
-		err = tx.Plain(ctx, st, read, nil)
-	}
+	})
 	if err != nil {
 		return nil, err
 	}

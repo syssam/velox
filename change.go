@@ -96,8 +96,8 @@ func (c Change) NewRow() any { return c.row.Row(c.row.New) }
 // ignores: those RecordIgnore names, and those an UpdateDefault fills unless
 // RecordKeep names them.
 // Values compare by their Equal method when their type has one (time.Time,
-// a decimal), as bytes when they are a byte slice, and else with
-// reflect.DeepEqual. It is nil for an insert or a delete.
+// a decimal), as bytes when they are a byte slice, a float NaN as equal to
+// NaN, and else with reflect.DeepEqual. It is nil for an insert or a delete.
 func (c Change) Diff() []FieldChange { return c.row.Diff() }
 
 // RowsOf returns c's rows as entity E: old before the write, nil for an

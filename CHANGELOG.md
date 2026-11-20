@@ -39,8 +39,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   in a transaction. On MySQL a single-row upsert reads the columns it left
   to the database by its conflict values, in one transaction with it.
   Regenerate: `velox.GeneratedCodeIsVersion24` replaces Version23, and
-  descriptors carry `ColumnDescriptor.DBDefault`. A nil column now lets a
-  `DEFAULT` the schema does not declare apply, where NULL was stored.
+  descriptors carry `ColumnDescriptor.DBDefault`. The nil nullable column
+  left out is a change of behaviour, listed under Changed.
 - An insert's zero value left to a declared database default skips the
   field's validators (ADR 0093), so an enum with `SchemaDefault` inserts
   with its zero and stores the default; a column an upsert's conflict
@@ -73,9 +73,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   columns, one call per entity. A `Null*` handle's `OldPtr(c)` and
   `NewPtr(c)` tell NULL (nil) from an empty value. The times in recorded
   rows are in UTC, so an insert's new row and a later read marshal alike;
-  the caller's entity keeps its zone. On MySQL an update that assigns the
-  key fails, rolled back, when its read by the new keys finds fewer rows
-  than it locked.
+  the caller's entity keeps its zone. `Diff` counts a NaN that stays NaN
+  as unchanged. On MySQL an update that assigns the key fails, rolled
+  back, when its read by the new keys finds fewer rows than it locked.
 - veloxe's privacy policies (ADR 0089): `velox.Policy` has `Query` and
   `Mutation` rule lists, and package `privacy` has veloxe's names, with
   `privacy.Policy` an alias of `velox.Policy`, so a veloxe schema's
@@ -421,6 +421,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- An insert that leaves a nullable column nil leaves the column out of the
+  INSERT (ADR 0093), as ent and old velox do, where it wrote NULL. A
+  `DEFAULT` the table has but the schema does not declare now applies to
+  such a row, where NULL was stored. Declare the default with
+  `sqlschema.Default`, or give the field a value.
 - `UpdateQuery.One` whose conditions pin the whole primary key
   (`Where(X.ID.EQ(id))`) sends the UPDATE with those conditions and reads
   the row back, without the `SELECT key ... FOR UPDATE` it sent first: two
