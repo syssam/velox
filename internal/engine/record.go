@@ -178,7 +178,8 @@ type batch struct {
 	rows []ChangeRow
 	// err is the first error of a recorded write that ran inline in the
 	// frame (inFrame): the frame fails with it even when a hook swallowed
-	// it, as the write's statements may have run without their Changes.
+	// it, as the write's statements may have run without their Changes. An
+	// error raised before any statement ran fails it too.
 	err error
 }
 

@@ -128,8 +128,10 @@ package. As handle methods they cost a few KB per entity package
      re-point's steps, `UpdateQuery.One`'s edges) run in it, with none of
      their own. One of them that fails fails the write, with its error
      wrapped, even when a hook swallowed it, as it may have stored part of
-     its rows unreported; a hook that tolerates the failure runs the write
-     in `tx.Tx`, whose savepoint undoes it.
+     its rows unreported. The rule is the same for an error raised before
+     any statement ran (a key read's ErrNotFound, a policy refusal), as
+     velox does not tell the two apart; a hook that tolerates the failure
+     runs the write in `tx.Tx`, whose savepoint undoes it.
    - Outside a transaction velox opens one for every recorded write, a
      single statement's too, and the sink runs before its COMMIT.
    - Code that acts after the commit reads a `Recorder` once `Tx` returns.

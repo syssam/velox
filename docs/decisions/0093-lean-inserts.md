@@ -79,7 +79,9 @@ The database's values come back into the entity:
     RETURNING names none then. A `DoNothing` upsert reads nothing back:
     under `clientFoundRows` its count is 1 whether it inserted or kept the
     row, and the kept row's values are what PostgreSQL's RETURNING, giving
-    no row, never hands the entity. The database compares the values, as
+    no row, never hands the entity. So a MySQL `DoNothing` that does insert
+    gets neither its generated key nor its declared defaults, where
+    PostgreSQL and SQLite return both. The database compares the values, as
     it did for the conflict. The upsert and the read run in one
     transaction, velox's own outside the caller's. A row whose conflict
     values cannot find it (a NULL, a generated key left zero) keeps its Go
