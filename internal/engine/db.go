@@ -37,6 +37,11 @@ type config struct {
 	ShardFor func(ctx context.Context) (string, error)
 	// Hooks are WithEntityHooks's, by entity; nil: none.
 	Hooks map[*EntityInfo][]HookFn
+	// noReturningOld is WithoutReturningOld's.
+	noReturningOld bool
+	// version is the PostgreSQL server_version_num a recording handle read
+	// (serverVersion): 0 unknown, versionLoading while being read.
+	version atomic.Int64
 }
 
 // Option configures a DB's pipeline. The With functions make them; the zero

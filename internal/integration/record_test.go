@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/schema/mixin/softdelete"
 )
@@ -525,4 +527,169 @@ func TestRecordM2M(t *testing.T) {
 			t.Errorf("insert of a join row: %q, want both rows", got)
 		}
 	})
+}
+
+// sameRow fails t when the rows got and want, *E, differ in a column field
+// (EqualValues; a pointer compared by what it points to, relation fields
+// left out).
+func sameRow[E any](t *testing.T, what string, got, want *E) {
+	t.Helper()
+	if got == nil || want == nil {
+		if got != want {
+			t.Errorf("%s: %+v, want %+v", what, got, want)
+		}
+		return
+	}
+	g, w := reflect.ValueOf(got).Elem(), reflect.ValueOf(want).Elem()
+	plain := func(v reflect.Value) any {
+		if v.Kind() == reflect.Pointer {
+			if v.IsNil() {
+				return nil
+			}
+			v = v.Elem()
+		}
+		return v.Interface()
+	}
+	for i := range g.NumField() {
+		f := g.Type().Field(i)
+		if f.Type.Kind() == reflect.Struct && f.Type != reflect.TypeFor[time.Time]() {
+			continue // Edges, velox.One: relations
+		}
+		if a, b := plain(g.Field(i)), plain(w.Field(i)); !engine.EqualValues(a, b) {
+			t.Errorf("%s: %s %v, a read shows %v", what, f.Name, a, b)
+		}
+	}
+}
+
+// TestRecordOnRealDatabases: on each database an update, a delete, an
+// upsert and a soft delete report old and new rows that match what a read
+// of their own shows before and after the write. On PostgreSQL 18 the
+// writes read both in the write itself; the test runs again with
+// WithoutReturningOld, which takes the locked read first, as below 18.
+func TestRecordOnRealDatabases(t *testing.T) {
+	run := func(t *testing.T, tg target) {
+		var rec velox.Recorder
+		rdb := tg.db.Record(&rec)
+		read := func(ps ...velox.Pred[testmodel.Invoice]) []testmodel.Invoice {
+			t.Helper()
+			xs, err := tg.db.Query[testmodel.Invoice]().Where(ps...).OrderBy(I.ID.Asc()).AllowUnbounded().All(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return xs
+		}
+
+		// Update: a bulk one, and one row by key.
+		before := read(I.OrgID.EQ(1), I.ID.LT(3))
+		if n, err := rdb.Update[testmodel.Invoice]().Where(I.OrgID.EQ(1), I.ID.LT(3)).Set(I.Total.Add(1), I.Note.Set("upd")).Exec(ctx); err != nil || n != 2 {
+			t.Fatalf("Update: %d, %v", n, err)
+		}
+		after := read(I.OrgID.EQ(1), I.ID.LT(3))
+		if _, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(3)).Set(I.Paid.Set(false)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		cs := slices.Collect(rec.All())
+		if len(cs) != 3 {
+			t.Fatalf("updates: %d Changes, want 3", len(cs))
+		}
+		for i := range 2 {
+			old, cur, ok := velox.RowsOf[testmodel.Invoice](cs[i])
+			if !ok || cs[i].Op != velox.OpUpdate || cs[i].Key != before[i].ID {
+				t.Fatalf("update %d: %+v", i, cs[i])
+			}
+			sameRow(t, fmt.Sprintf("update %d old", i), old, &before[i])
+			sameRow(t, fmt.Sprintf("update %d new", i), cur, &after[i])
+		}
+		if f, ok := changed(cs[2], "paid"); !ok || f.Old != true || f.New != false || cs[2].Key != int64(3) {
+			t.Errorf("update by key: %+v", cs[2].Diff())
+		}
+
+		// Delete.
+		tg.exec(t, "DELETE FROM tickets")
+		tg.exec(t, "DELETE FROM items")
+		rec.Reset()
+		gone := read(I.ID.In(4, 5))
+		if n, err := rdb.Delete[testmodel.Invoice]().Where(I.ID.In(4, 5)).Exec(ctx); err != nil || n != 2 {
+			t.Fatalf("Delete: %d, %v", n, err)
+		}
+		cs = slices.Collect(rec.All())
+		if len(cs) != 2 {
+			t.Fatalf("delete: %d Changes, want 2", len(cs))
+		}
+		for i, c := range cs {
+			old, cur, _ := velox.RowsOf[testmodel.Invoice](c)
+			if c.Op != velox.OpDelete || cur != nil || c.Key != gone[i].ID {
+				t.Errorf("delete %d: %+v", i, c)
+			}
+			sameRow(t, fmt.Sprintf("delete %d old", i), old, &gone[i])
+		}
+		if len(read(I.ID.In(4, 5))) != 0 {
+			t.Error("the deleted rows are still there")
+		}
+
+		// Upsert: one row conflicts, one is new.
+		rec.Reset()
+		tg.exec(t, "INSERT INTO tickets (created_by, id, org_id, owner, title, done, invoice_id) VALUES (?, ?, ?, ?, ?, ?, ?)", "seed", 1, 1, "ann", "A1", false, 1)
+		readTk := func(title string) *testmodel.Ticket {
+			t.Helper()
+			tk, err := tg.db.Query[testmodel.Ticket]().Where(Tk.OrgID.EQ(1), Tk.Title.EQ(title)).One(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return tk
+		}
+		oldA1 := readTk("A1")
+		zed := testmodel.WithUser(ctx, "zed")
+		xs := []testmodel.Ticket{
+			{OrgID: 1, Owner: "zed", Title: "A1", Done: true, InvoiceID: 9},
+			{OrgID: 1, Owner: "zed", Title: "N1", Done: true, InvoiceID: 2},
+		}
+		if err := rdb.InsertAll(xs).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(zed); err != nil {
+			t.Fatal(err)
+		}
+		newA1, newN1 := readTk("A1"), readTk("N1")
+		cs = slices.Collect(rec.All())
+		if len(cs) != 2 || cs[0].Op != velox.OpUpdate || cs[1].Op != velox.OpInsert {
+			t.Fatalf("upsert: %+v", cs)
+		}
+		old, cur, _ := velox.RowsOf[testmodel.Ticket](cs[0])
+		sameRow(t, "upsert update old", old, oldA1)
+		sameRow(t, "upsert update new", cur, newA1)
+		old, cur, _ = velox.RowsOf[testmodel.Ticket](cs[1])
+		if old != nil {
+			t.Errorf("upsert insert old %+v", old)
+		}
+		sameRow(t, "upsert insert new", cur, newN1)
+
+		// Soft delete.
+		softTables(t, tg)
+		D := fixture.SDocs
+		in1 := testmodel.Org.With(context.Background(), int64(1))
+		readDoc := func() *fixture.SDoc {
+			t.Helper()
+			d, err := tg.db.Query[fixture.SDoc]().Where(D.ID.EQ(2)).One(softdelete.Skip(in1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return d
+		}
+		rec.Reset()
+		doc := readDoc()
+		if n, err := tg.pdb.Record(&rec).Delete[fixture.SDoc]().Where(D.ID.EQ(2)).Exec(in1); err != nil || n != 1 {
+			t.Fatalf("soft delete: %d, %v", n, err)
+		}
+		deleted := readDoc()
+		cs = slices.Collect(rec.All())
+		if len(cs) != 1 || cs[0].Op != velox.OpDelete || !cs[0].Soft {
+			t.Fatalf("soft delete: %+v", cs)
+		}
+		dOld, dCur, _ := velox.RowsOf[fixture.SDoc](cs[0])
+		sameRow(t, "soft delete old", dOld, doc)
+		sameRow(t, "soft delete new", dCur, deleted)
+		if deleted.DeletedAt == nil {
+			t.Error("the soft delete set no deleted_at")
+		}
+	}
+	each(t, run)
+	t.Run("WithoutReturningOld", func(t *testing.T) { each(t, run, engine.WithoutReturningOld()) })
 }

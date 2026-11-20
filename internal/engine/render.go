@@ -1056,10 +1056,7 @@ func (w *writer) insertStmt(st *Statement) {
 	if st.Conflict != nil {
 		w.conflict(st.Conflict)
 	}
-	if len(st.Returning) > 0 && w.d != MySQL {
-		w.str(" RETURNING ")
-		w.columns(st.Returning)
-	}
+	w.returning(st)
 }
 
 // conflict writes the upsert clause. On PostgreSQL and SQLite the update
@@ -1156,10 +1153,7 @@ func (w *writer) updateStmt(st *Statement) {
 		w.colArg(a.Column, a.Value)
 	}
 	w.where(st.Where)
-	if len(st.Returning) > 0 && w.d != MySQL {
-		w.str(" RETURNING ")
-		w.columns(st.Returning)
-	}
+	w.returning(st)
 }
 
 // arith writes the column plus or minus the value. PostgreSQL and MySQL raise on
@@ -1221,4 +1215,36 @@ func (w *writer) deleteStmt(st *Statement) {
 	w.str("DELETE FROM ")
 	w.table()
 	w.where(st.Where)
+	w.returning(st)
+}
+
+// returning writes the RETURNING clause of a write that reads columns back,
+// but on MySQL, which has none. A statement with returnOld (PostgreSQL 18)
+// names each column before the write, old."c", and, but for a delete, after
+// it, new."c".
+func (w *writer) returning(st *Statement) {
+	if len(st.Returning) == 0 || w.d == MySQL {
+		return
+	}
+	w.str(" RETURNING ")
+	if !st.returnOld {
+		w.columns(st.Returning)
+		return
+	}
+	w.prefixed("old.", st.Returning)
+	if st.Op != OpDelete {
+		w.str(", ")
+		w.prefixed("new.", st.Returning)
+	}
+}
+
+// prefixed writes the columns cs, each after prefix: old."c", new."c".
+func (w *writer) prefixed(prefix string, cs []int) {
+	for i, c := range cs {
+		if i > 0 {
+			w.str(", ")
+		}
+		w.str(prefix)
+		w.col(int32(c))
+	}
 }

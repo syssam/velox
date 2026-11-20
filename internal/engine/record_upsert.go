@@ -15,7 +15,8 @@ type insertSend func(ctx context.Context, tx *DB, st *Statement) (int64, error)
 
 // recordedInsert runs fn, which sends a recorded insert's statements and
 // returns its Changes, and emits them. A single INSERT outside a transaction
-// is sent as it is: it commits on its own, so the sink, which runs after it,
+// (an upsert's too, on PostgreSQL 18, which reads no row first) is sent as
+// it is: it commits on its own, so the sink, which runs after it,
 // sees a committed write, and the handle sends what one that does not record
 // sends. Anything else runs under recordedTx: an upsert, whose locked read
 // and INSERT must be one, and an InsertAll of several statements, in a
@@ -51,6 +52,7 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 	// that does not record allocates nothing for this path.
 	cp := *st
 	cp.recorded = true
+	cp.returnOld = cp.Conflict != nil && returnsOld(ctx, db)
 	rows := []unsafe.Pointer{p}
 	var n int64
 	send := func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
@@ -68,7 +70,8 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 		setStmtBidi(&cp, &bidiStep{Keys: keys, Vals: vs, Insert: true})
 		err = bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, send)
 	} else {
-		err = recordedInsert(ctx, db, cp.Conflict == nil, send)
+		// On PostgreSQL 18 an upsert is one statement too.
+		err = recordedInsert(ctx, db, cp.Conflict == nil || cp.returnOld, send)
 	}
 	out.Affected = n
 	return err
@@ -105,10 +108,17 @@ func refuseUnfindable(d Dialect, in *EntityInfo, cf *ConflictClause, gen int, ro
 // and the rows the statement affected. A plain insert is sent with send,
 // and reports each row, in order, as an insert whose new row is a copy of
 // the entity, taken after send read back what the database filled; none
-// when the statement affected no row. An upsert reports as conflictRead
+// when the statement affected no row. An upsert on PostgreSQL 18 or later,
+// st.returnOld, is sent by returningBoth; below, it reports as conflictRead
 // says: on PostgreSQL and SQLite it is sent by conflictRead.returning, on
 // MySQL with send.
 func sendRecorded(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer, gen int, send insertSend) ([]ChangeRow, int64, error) {
+	if st.Conflict != nil && st.returnOld {
+		st.recorded = true
+		cs, err := returningBoth(ctx, tx, st, rows)
+		return cs, int64(len(cs)), err
+	}
+	st.returnOld = false
 	if st.Conflict != nil {
 		st.recorded = true
 		cr, err := lockConflicts(ctx, tx, st, rows, gen)
@@ -186,7 +196,8 @@ func ownCopy(in *EntityInfo, p unsafe.Pointer) unsafe.Pointer {
 	return dst
 }
 
-// conflictRead is a recorded upsert below PostgreSQL 18. Before its INSERT
+// conflictRead is a recorded upsert below PostgreSQL 18, or with
+// WithoutReturningOld. Before its INSERT
 // it reads the rows its rows conflict with, by the conflict columns, every
 // column, locked where the dialect can (not on SQLite, whose transaction
 // holds the database); the database compares the keys, so its collation
@@ -214,8 +225,9 @@ func ownCopy(in *EntityInfo, p unsafe.Pointer) unsafe.Pointer {
 //   - A read cannot lock a row that is not there: a row another session
 //     inserts under a key the first read did not find, before the INSERT,
 //     is reported as an insert although the upsert updated it, with no old
-//     values. PostgreSQL 18's RETURNING old and new (one statement) closes
-//     it there.
+//     values. PostgreSQL 18 and later close it: there the upsert is one
+//     statement, RETURNING old and new (returningBoth), and no read comes
+//     first.
 //   - On MySQL the locked read takes gap (next-key) locks: two recorded
 //     upserts of new keys in the same gap, at once, can deadlock, and one
 //     fails with ER_LOCK_DEADLOCK, which TxRetrySerializable retries.
@@ -387,6 +399,66 @@ func (cr *conflictRead) returning(ctx context.Context, tx *DB, st *Statement, ro
 		return nil, err
 	}
 	return news, CheckUpserted(st, int64(len(news)))
+}
+
+// returningBoth sends st, the upsert of rows on PostgreSQL 18 or later, with
+// RETURNING old and new of every column instead of what PlanInsert set
+// (st.ret), and returns a ChangeRow per row that comes back, in its order:
+// an update, whose old row is the row as the conflict found it, or, when
+// old's primary key is NULL, an insert. A row DoNothing kept, or that the
+// update branch's condition left, is not returned. No read comes first: the
+// values are those the INSERT itself saw. The columns PlanInsert would have
+// read back are copied into the entities, the n-th row into the n-th entity,
+// as conflictRead.returning does. It checks the count as sendOne and
+// SendBatch do (CheckUpserted).
+func returningBoth(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer) ([]ChangeRow, error) {
+	in, base := st.Entity, st.ret
+	cols := everyColumn(in)
+	st.Returning, st.ret = cols, cols
+	ts := InfoTable(in).state()
+	n := len(cols)
+	var out []ChangeRow
+	read := func(r Rows) error {
+		out = out[:0] // anew, should an Around hook retry
+		dst := make([]any, 2*n)
+		for r.Next() {
+			old, cur := ts.newRow(), ts.newRow()
+			bindTableRow(ts, cols, dst[:n], old)
+			var keyNulls, nulls int // old's NULLs: an inserted row's are all
+			for c := range n {
+				cnt := &nulls
+				if slices.Contains(in.PrimaryKey, c) {
+					cnt = &keyNulls
+				}
+				dst[c] = &NullProbe{Dst: dst[c], Nulls: cnt}
+			}
+			bindTableRow(ts, cols, dst[n:], cur)
+			if err := r.Scan(dst...); err != nil {
+				return err
+			}
+			if i := len(out); len(base) > 0 && i < len(rows) {
+				for _, c := range base {
+					SetElem(fieldAddr(in, rows[i], c), Elem(fieldAddr(in, cur, c)))
+				}
+			}
+			row := ChangeRow{Op: OpUpdate, In: in, Old: old, New: cur}
+			if keyNulls == len(in.PrimaryKey) {
+				row.Op, row.Old = OpInsert, nil
+			}
+			out = append(out, row)
+		}
+		return nil
+	}
+	var err error
+	if tx.Hooked() {
+		err = tx.Run(ctx, st, read, nil)
+	} else {
+		err = tx.Plain(ctx, st, read, nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return out, CheckUpserted(st, int64(len(out)))
 }
 
 // counted is the Changes of rows, the upsert on MySQL that affected n rows:

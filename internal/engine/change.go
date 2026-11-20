@@ -2,12 +2,14 @@ package engine
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 	"unsafe"
 )
 
@@ -75,6 +77,13 @@ func EqualValues(a, b any) bool {
 // where the dialect can, in key order; sends st narrowed to those keys, a
 // chunk at a time; and, for an update, reads the new values: RETURNING on
 // PostgreSQL and SQLite, a SELECT by key on MySQL. It sets mu.Affected.
+//
+// On PostgreSQL 18 and later (returnsOld) st is sent as it is, once, and
+// returns its rows before and after it (tracker.both). Outside a
+// transaction, a write that pins one row by its key (pinsOneRow), on a DB
+// with no Rewrite hook (which could widen it), sends no BEGIN; any other
+// runs in a transaction of velox's own, so that a count of rows over
+// WithMaxRows rolls it back.
 func trackedWrite(ctx context.Context, db *DB, mu *MutationState, cols []int, st *Statement) error {
 	in := st.Entity
 	if len(in.PrimaryKey) == 0 {
@@ -85,8 +94,18 @@ func trackedWrite(ctx context.Context, db *DB, mu *MutationState, cols []int, st
 			return fmt.Errorf("velox: %s: recording cannot follow a row whose key %s the update changes by Add or Sub", in.Name, in.Columns[a.Column].Name)
 		}
 	}
-	tw := tracker{in: in, t: InfoTable(in), cols: cols}
+	tw := tracker{in: in, t: InfoTable(in), cols: cols, old: returnsOld(ctx, db)}
 	tw.read = keyAnd(in, tw.cols)
+	if tw.old && !db.InTx && len(db.Cfg.Rewrites) == 0 && pinsOneRow(in, st) {
+		// One statement on one row: it commits on its own, as it would
+		// through a handle that does not record, and the sink runs after.
+		mu.Affected = 0
+		rows, err := tw.run(ctx, db, mu, st)
+		if err != nil {
+			return err
+		}
+		return emit(ctx, db, rows)
+	}
 	return recordedTx(ctx, db, func(ctx context.Context, tx *DB) error {
 		mu.Affected = 0
 		rows, err := tw.run(ctx, tx, mu, st)
@@ -123,10 +142,31 @@ type tracker struct {
 	t    Table
 	cols []int // the columns compared
 	read []int // the columns read: the key, then the compared ones
+	// old says the write reads its rows before and after it in one
+	// statement, RETURNING old and new (PostgreSQL 18: returnsOld).
+	old bool
+}
+
+// pinsOneRow reports whether st, an update or a delete, matches one row at
+// most: not All, and its conditions hold, at their top level,
+// <column> = v for every primary-key column, v not nil.
+func pinsOneRow(in *EntityInfo, st *Statement) bool {
+	if st.AllRows || len(in.PrimaryKey) == 0 {
+		return false
+	}
+	for _, k := range in.PrimaryKey {
+		if _, ok := pinnedValue(int32(k), st.Where); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // run is trackedWrite's work on tx.
 func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, st *Statement) ([]ChangeRow, error) {
+	if tw.old {
+		return tw.both(ctx, tx, mu, st)
+	}
 	order := make([]OrderTerm, len(tw.in.PrimaryKey))
 	for i, k := range tw.in.PrimaryKey {
 		order[i] = OrderTerm{Column: k}
@@ -325,5 +365,119 @@ func (tw *tracker) changes(st *Statement, olds TableRows, news []unsafe.Pointer)
 		}
 		out = append(out, row)
 	}
+	return out
+}
+
+// both sends st, an update or a delete on PostgreSQL 18 or later, on tx as
+// it is, once, with RETURNING old.<read>, new.<read> (a delete: old alone),
+// and returns a ChangeRow per row it returns, in key order: the row before
+// the write and, for an update, after it. The values are those the write
+// itself saw, so no read comes first and no row can change between the
+// two. More rows than WithMaxRows fail the write, which trackedWrite runs
+// in a transaction when it may match more than one row. It sets
+// mu.Affected to the rows returned.
+func (tw *tracker) both(ctx context.Context, tx *DB, mu *MutationState, st *Statement) ([]ChangeRow, error) {
+	cp := *st
+	cp.InTx = st.InTx || tx.InTx
+	cp.Returning, cp.returnOld, cp.recorded = tw.read, true, true
+	if cp.Op == OpUpdate {
+		bumpOnce(&cp)
+	}
+	ts := tw.t.state()
+	update := cp.Op == OpUpdate
+	var out []ChangeRow
+	read := func(r Rows) error {
+		out = out[:0] // anew, should an Around hook retry
+		n := len(tw.read)
+		width := n
+		if update {
+			width = 2 * n
+		}
+		dst := make([]any, width)
+		for r.Next() {
+			row := ChangeRow{Op: cp.Op, In: tw.in, Old: ts.newRow()}
+			bindTableRow(ts, tw.read, dst[:n], row.Old)
+			if update {
+				row.New = ts.newRow()
+				bindTableRow(ts, tw.read, dst[n:], row.New)
+			}
+			if err := r.Scan(dst...); err != nil {
+				return err
+			}
+			if update && st.softDelete {
+				row.Op, row.Soft = OpDelete, true
+			}
+			out = append(out, row)
+		}
+		return nil
+	}
+	var err error
+	if tx.Hooked() {
+		err = tx.Run(ctx, &cp, read, nil)
+	} else {
+		err = tx.Plain(ctx, &cp, read, nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+	mu.Affected += int64(len(out))
+	if m := tx.Cfg.MaxRows; m > 0 && len(out) > m {
+		return nil, fmt.Errorf("velox: %s: a recorded %s wrote %d rows, more than %d, the cap WithMaxRows sets on the rows it records; the write is rolled back: %w", tw.in.Name, st.Op, len(out), m, ErrTooManyRows)
+	}
+	// In key order, as the locked read reports them; the database returns
+	// them in the order it found them.
+	slices.SortStableFunc(out, func(a, b ChangeRow) int {
+		return compareKeys(rowKey(tw.in, a.Old), rowKey(tw.in, b.Old))
+	})
+	return out, nil
+}
+
+// compareKeys orders two primary keys column by column: numbers, strings,
+// times and byte strings (a UUID's array too, as PostgreSQL orders it) by
+// value, anything else by its printed form. Strings compare by byte, which
+// a key's collation may not.
+func compareKeys(a, b []any) int {
+	for i := range min(len(a), len(b)) {
+		if c := compareValue(a[i], b[i]); c != 0 {
+			return c
+		}
+	}
+	return cmp.Compare(len(a), len(b))
+}
+
+// compareValue orders two plain column values for compareKeys.
+func compareValue(a, b any) int {
+	if ta, ok := a.(time.Time); ok {
+		if tb, ok := b.(time.Time); ok {
+			return ta.Compare(tb)
+		}
+	}
+	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
+	if va.IsValid() && vb.IsValid() && va.Kind() == vb.Kind() {
+		switch va.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return cmp.Compare(va.Int(), vb.Int())
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			return cmp.Compare(va.Uint(), vb.Uint())
+		case reflect.Float32, reflect.Float64:
+			return cmp.Compare(va.Float(), vb.Float())
+		case reflect.String:
+			return strings.Compare(va.String(), vb.String())
+		case reflect.Slice, reflect.Array:
+			if va.Type().Elem().Kind() == reflect.Uint8 && va.Type() == vb.Type() {
+				return bytes.Compare(byteString(va), byteString(vb))
+			}
+		}
+	}
+	return strings.Compare(fmt.Sprint(a), fmt.Sprint(b))
+}
+
+// byteString is v, a byte slice or array, as a []byte.
+func byteString(v reflect.Value) []byte {
+	if v.Kind() == reflect.Slice {
+		return v.Bytes()
+	}
+	out := make([]byte, v.Len())
+	reflect.Copy(reflect.ValueOf(out), v)
 	return out
 }

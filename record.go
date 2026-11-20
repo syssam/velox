@@ -129,11 +129,21 @@ func RecordIgnore(columns ...string) RecordOption {
 // effect. Outside one it runs in a transaction of its own, but for an
 // insert of one statement, which commits by itself, and the sink is called
 // after the COMMIT: a sink's error is returned and undoes nothing.
+//
+// Below PostgreSQL 18, and on SQLite and MySQL, a recorded update or delete
+// first reads its rows, locked, then writes them by key. On PostgreSQL 18
+// and later it is one statement, RETURNING the rows before and after it
+// (old and new), and so is an upsert, which reads nothing first; the
+// recording handle asks the server its version (SHOW server_version_num)
+// once per pool, at its first recorded write. There an update or delete
+// that names one row by its key, or an upsert of one statement, outside a
+// transaction, commits by itself; any other runs in a transaction of its
+// own, which a count of rows over WithMaxRows rolls back.
 // The sink's writes are recorded only when made under another context than
 // the one it was given (see Sink).
 //
-// A recorded upsert reads the rows its rows conflict with, locked, before
-// its INSERT, without the scope or the Read policy, as the database finds a
+// Below PostgreSQL 18 a recorded upsert reads the rows its rows conflict
+// with, locked, before its INSERT, without the scope or the Read policy, as the database finds a
 // conflict whatever they hide: a sink can see values the caller's policy
 // hides. The database names the rows the upsert touched: on PostgreSQL and
 // SQLite the INSERT returns every column of them (a row DoNothing kept is
@@ -144,7 +154,7 @@ func RecordIgnore(columns ...string) RecordOption {
 // column, or a generated key left zero in the conflict columns, cannot be
 // found after the INSERT on MySQL, which returns no keys, so a recorded
 // upsert there refuses it: insert such rows without OnConflict. A Rewrite
-// hook may not change the RETURNING of a recorded insert or upsert. Below PostgreSQL 18 the
+// hook may not change the RETURNING of a recorded write. Below PostgreSQL 18 the
 // first read cannot lock a row that is not there, so a row another session
 // inserts under the same key at once is reported as an insert although the
 // upsert updated it. On MySQL that read takes gap locks: two recorded

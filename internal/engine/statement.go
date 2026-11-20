@@ -144,10 +144,15 @@ type Statement struct {
 	// iter says Iter runs the statement: its rows are open while the caller's
 	// loop body runs.
 	iter bool
-	// recorded says the statement is a recorded insert or upsert, whose
-	// Changes come from what its RETURNING reads: a Rewrite hook may not
-	// change that.
+	// recorded says the statement is a recorded insert or upsert, or a
+	// recorded update or delete on PostgreSQL 18 (returnOld), whose Changes
+	// come from what its RETURNING reads: a Rewrite hook may not change that.
 	recorded bool
+	// returnOld says the statement, a recorded write on PostgreSQL 18 or
+	// later, returns its rows' values before and after it: RETURNING
+	// old.<Returning>, new.<Returning> (an update or an upsert), or
+	// old.<Returning> (a delete).
+	returnOld bool
 	// softDelete says the statement, an update, is a soft delete
 	// (MarkSoftDelete): a recording reports its rows as deletes, Soft.
 	softDelete bool

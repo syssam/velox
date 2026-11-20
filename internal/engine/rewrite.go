@@ -58,6 +58,7 @@ type rewriteSnapshot struct {
 	iter, loaded   bool
 	unscoped       bool
 	recorded       bool
+	returnOld      bool
 	ret            []int // an update's Returning, which velox reads by position
 }
 
@@ -70,7 +71,7 @@ func takeRewriteSnapshot(st *Statement) rewriteSnapshot {
 		lock: st.Lock, wait: st.LockWait, cols: st.Columns, joins: st.Joins, project: st.Project,
 		was: st.Each, returning: len(st.Returning) > 0,
 		bidi: stmtBidi(st), pin: stmtPin(st), iter: st.iter, loaded: st.loaded,
-		unscoped: st.unscoped, recorded: st.recorded, ret: st.Returning,
+		unscoped: st.unscoped, recorded: st.recorded, returnOld: st.returnOld, ret: st.Returning,
 	}
 }
 
@@ -80,7 +81,7 @@ func takeRewriteSnapshot(st *Statement) rewriteSnapshot {
 func (s *rewriteSnapshot) restoreAndCheck(st *Statement) error {
 	setStmtBidi(st, s.bidi)
 	setStmtPin(st, s.pin)
-	st.iter, st.loaded, st.unscoped, st.recorded = s.iter, s.loaded, s.unscoped, s.recorded
+	st.iter, st.loaded, st.unscoped, st.recorded, st.returnOld = s.iter, s.loaded, s.unscoped, s.recorded, s.returnOld
 	name := s.entity.Name
 	changed := func(what string) error {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's %s", name, what)

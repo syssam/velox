@@ -350,7 +350,7 @@ func newRepoint(ctx context.Context, db *DB, in *EntityInfo) *repoint {
 	if db.recording(ctx) == nil {
 		return nil
 	}
-	tw := tracker{in: in, t: InfoTable(in), cols: everyColumn(in)}
+	tw := tracker{in: in, t: InfoTable(in), cols: everyColumn(in), old: returnsOld(ctx, db)}
 	tw.read = keyAnd(in, tw.cols)
 	return &repoint{tw: tw, at: map[string]int{}}
 }

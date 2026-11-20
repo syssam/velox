@@ -198,6 +198,7 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 		k = append(k, 0)
 	}
 	k = appendInts(k, st.Returning)
+	k = append(k, bit(st.returnOld))
 	return eachKey(k, st.Each)
 }
 

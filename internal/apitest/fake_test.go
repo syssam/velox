@@ -8,9 +8,11 @@ import (
 
 // openFake returns a DB of dialect d that runs statements on e, without the
 // entities' policies: most tests are not about them. A test of a policy uses
-// openPolicied.
+// openPolicied. A recorded write through it on PostgreSQL takes the path
+// below PostgreSQL 18 (WithoutReturningOld), so that it asks e no server
+// version; openFake18 takes the other.
 func openFake(d velox.Dialect, e *fakeconn.Exec, opts ...velox.Option) *velox.DB {
-	return openPolicied(d, e, opts...).WithoutPolicy("velox tests")
+	return openPolicied(d, e, append(opts, engine.WithoutReturningOld())...).WithoutPolicy("velox tests")
 }
 
 // openPolicied returns a DB of dialect d that runs statements on e, under the
