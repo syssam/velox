@@ -146,5 +146,12 @@ func TestEnumSchemaDefaultZeroDefaultCell(t *testing.T) {
 		if xs[0].ID != 1 || xs[0].Status != "new" || xs[1].Status != "paid" {
 			t.Errorf("%s: read back %+v", c.d, xs)
 		}
+
+		// The other row's value is validated: an invalid one fails the
+		// InsertAll before anything is sent.
+		e := &fakeconn.Exec{}
+		if err := openFake(c.d, e).InsertAll([]dEnum{{Name: "b"}, {Name: "c", Status: "lost"}}).Exec(ctx); !isInvalidStatus(err) || len(e.Log) != 0 {
+			t.Errorf("%s: an invalid second row: %v, sent %q; want a ValidationError and nothing sent", c.d, err, e.Log)
+		}
 	}
 }

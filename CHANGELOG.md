@@ -1028,6 +1028,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- A Rewrite hook that replaces the whole statement (`*st =
+  velox.Statement{…}`) no longer drops what velox reads back: an insert
+  still gets its generated key and declared defaults (RETURNING on
+  PostgreSQL and SQLite, the read by key on MySQL), and an InsertAll still
+  sends `DEFAULT` for a cell left to a default, where the Go zero was
+  stored.
 - `UpdateQuery.One` that moves its row out of an interceptor's view, such as
   softdelete's when it sets `deleted_at`, returns the row it wrote, not
   `ErrNotFound`: its read-back adds no row condition. So does the MySQL

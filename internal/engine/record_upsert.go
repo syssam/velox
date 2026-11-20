@@ -379,7 +379,7 @@ func (cr *conflictRead) returning(ctx context.Context, tx *DB, st *Statement, ro
 	cols := everyColumn(in)
 	st.Returning, st.ret = cols, cols
 	var news []unsafe.Pointer
-	err := returnedRows(ctx, tx, st, cols, false, false, func(got, _ []unsafe.Pointer) error {
+	err := returnedRows(ctx, tx, st, cr.t, cols, false, false, func(got, _ []unsafe.Pointer) error {
 		news = got
 		return fillUpserted(in, st, base, news, rows)
 	})
@@ -424,7 +424,7 @@ func returningBoth(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Poi
 	cols := everyColumn(in)
 	st.Returning, st.ret = cols, cols
 	var out []ChangeRow
-	err := returnedRows(ctx, tx, st, cols, true, true, func(olds, news []unsafe.Pointer) error {
+	err := returnedRows(ctx, tx, st, InfoTable(in), cols, true, true, func(olds, news []unsafe.Pointer) error {
 		out = make([]ChangeRow, len(olds))
 		for i, old := range olds {
 			out[i] = ChangeRow{Op: OpUpdate, In: in, Old: old, New: news[i]}

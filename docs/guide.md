@@ -1182,9 +1182,10 @@ error is the write's error, and rolls the write back.
   handle runs outside the write's transaction (and on a pool of one
   connection waits for it forever), and one through the recording handle
   is recorded again, calling the sink from inside itself.
-- A hook's write through `m.DB()` inside the write joins the write's sink
-  call; a hook that writes before the write's transaction opens gets a
-  call of its own.
+- A hook runs before its write's transaction or savepoint opens: what it
+  writes through `m.DB()` is a recorded write of its own, with its own sink
+  call, before or after the write's as the hook orders them. Outside `Tx`
+  it is also its own transaction; for one, write in `Tx`.
 - A `RecordFunc` sees each write's changes before the commit, including
   those a later rollback of your transaction undoes. For side effects
   outside the database, use a Recorder and act once `Tx` returns.

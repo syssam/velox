@@ -90,10 +90,11 @@ package. As handle methods they cost a few KB per entity package
    `One`, `Insert`, `InsertAll`, a `Save`, the edge writes of `Rel.Add`,
    `Remove`, `Set`, `Clear`, a soft delete's `Exec`) go to the sink in one
    call, across its chunks, re-point steps, mirror rows and default runs
-   (0093); a write that changed nothing calls no sink. A hook's write
-   through `Mutation.DB()` inside the write's frame joins the outer write's
-   sink call; a hook that writes before the frame opens gets a call of its
-   own.
+   (0093); a write that changed nothing calls no sink. A hook runs before
+   its write's frame opens, so a write it makes through `Mutation.DB()`,
+   before or after next, is a recorded write of its own: its own sink call
+   (and outside the caller's transaction its own transaction), in the
+   order the hook makes the two writes.
 3. **Values.** Plain Go values, as `Mutation.Value` gives them; a JSON
    column's decoded value. An insert's new row holds what velox reads back
    (0093): a generated key and the declared database defaults. A value a

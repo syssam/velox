@@ -325,9 +325,9 @@ func sendRead(ctx context.Context, db *DB, st *Statement, read func(Rows) error)
 }
 
 // returnedRows sends st on db and scans each row its RETURNING returns into
-// new rows of st's entity: the columns cols into one, or, with pair
-// (PostgreSQL 18's RETURNING old.<cols>, new.<cols>), into a row before the
-// write and again into a row after it. With inserts (an upsert's, which
+// new rows of t, the table of st's entity: the columns cols into one, or,
+// with pair (PostgreSQL 18's RETURNING old.<cols>, new.<cols>), into a row
+// before the write and again into a row after it. With inserts (an upsert's, which
 // pair), the row before may be none: its NULLs leave zero values, and a row
 // before whose key is NULL in every column, an inserted row's, is nil. done
 // gets the rows in the order they came back (after is nil unless pair); it
@@ -336,9 +336,9 @@ func sendRead(ctx context.Context, db *DB, st *Statement, read func(Rows) error)
 // delete's chunk (tracker.returned), PostgreSQL 18's old and new
 // (tracker.both, returningBoth), and an upsert's every column
 // (conflictRead.returning).
-func returnedRows(ctx context.Context, db *DB, st *Statement, cols []int, pair, inserts bool, done func(rows, after []unsafe.Pointer) error) error {
+func returnedRows(ctx context.Context, db *DB, st *Statement, t Table, cols []int, pair, inserts bool, done func(rows, after []unsafe.Pointer) error) error {
 	in := st.Entity
-	ts := InfoTable(in).state()
+	ts := t.state()
 	n := len(cols)
 	width := n
 	if pair {
@@ -396,7 +396,7 @@ func (tw *tracker) returned(ctx context.Context, tx *DB, st *Statement, at [][]a
 		place[keyString(at[i])] = i
 	}
 	var n int64
-	err := returnedRows(ctx, tx, st, st.Returning, false, false, func(rows, _ []unsafe.Pointer) error {
+	err := returnedRows(ctx, tx, st, tw.t, st.Returning, false, false, func(rows, _ []unsafe.Pointer) error {
 		n = int64(len(rows))
 		clear(news[lo:hi])
 		var stray []unsafe.Pointer
@@ -516,7 +516,7 @@ func (tw *tracker) both(ctx context.Context, tx *DB, mu *MutationState, st *Stat
 	}
 	update := cp.Op == OpUpdate
 	var out []ChangeRow
-	err := returnedRows(ctx, tx, &cp, tw.read, update, false, func(olds, news []unsafe.Pointer) error {
+	err := returnedRows(ctx, tx, &cp, tw.t, tw.read, update, false, func(olds, news []unsafe.Pointer) error {
 		out = make([]ChangeRow, len(olds))
 		for i, p := range olds {
 			out[i] = ChangeRow{Op: cp.Op, In: tw.in, Old: p}

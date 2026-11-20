@@ -204,3 +204,84 @@ func TestRecordHookDBRecords(t *testing.T) {
 		t.Error("m.DB() of a write in a recording transaction does not record")
 	}
 }
+
+// rlog is the entity a hook on rhook writes through Mutation.DB.
+type rlog struct {
+	ID    int64
+	Owner string
+}
+
+var rlogMeta velox.MetaOnce[rlog]
+
+func (*rlog) VeloxMeta() *velox.Meta[rlog] {
+	return rlogMeta.Load(func() velox.Descriptor[rlog] {
+		return velox.Descriptor[rlog]{
+			Table:      "rlogs",
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
+			PrimaryKey: []int{0},
+			FieldPtr: func(x *rlog, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.Owner
+			},
+		}
+	})
+}
+
+// TestRecordHookWriteOwnSinkCall: a hook runs before its write's frame
+// opens, so its write through m.DB() is a recorded write of its own, with
+// its own sink call, in the order the hook makes them, outside a
+// transaction and in one (ADR 0094 rule 2).
+func TestRecordHookWriteOwnSinkCall(t *testing.T) {
+	for _, c := range []struct {
+		after, inTx bool
+	}{{false, false}, {true, false}, {false, true}, {true, true}} {
+		after := c.after
+		logWrite := func(next velox.Mutator) velox.Mutator {
+			return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
+				if after {
+					if err := next.Mutate(ctx, m); err != nil {
+						return err
+					}
+				}
+				if err := m.DB().Insert(&rlog{Owner: "log"}).Exec(ctx); err != nil {
+					return err
+				}
+				if after {
+					return nil
+				}
+				return next.Mutate(ctx, m)
+			})
+		}
+		e := &fakeconn.Exec{Affected: 1, Rows: [][]any{{int64(1)}}}
+		var calls [][]string
+		sink := velox.RecordFunc(func(_ context.Context, _ *velox.DB, cs []velox.Change) error {
+			var names []string
+			for _, c := range cs {
+				names = append(names, c.Entity)
+			}
+			calls = append(calls, names)
+			return nil
+		})
+		rdb := openFake(velox.Postgres, e, velox.WithHooks[rhook](logWrite)).Record(sink)
+		var err error
+		if c.inTx {
+			err = rdb.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+				return tx.Insert(&rhook{Owner: "x"}).Exec(ctx)
+			})
+		} else {
+			err = rdb.Insert(&rhook{Owner: "x"}).Exec(ctx)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := [][]string{{"rlog"}, {"rhook"}}
+		if after {
+			want = [][]string{{"rhook"}, {"rlog"}}
+		}
+		if !slices.EqualFunc(calls, want, slices.Equal) {
+			t.Errorf("%+v: sink calls %v, want %v; sent %q", c, calls, want, e.Log)
+		}
+	}
+}
