@@ -28,11 +28,11 @@ Recording is a property of the `*velox.DB` a write goes through, as
 ```go
 var rec velox.Recorder
 rdb := db.Record(&rec, velox.RecordIgnore("updated_at"))
-rdb.Update[Invoice]().Where(I.Total.LT(100)).Set(I.Total.Add(5)).Exec(ctx)
+rdb.Update[veloxgen.Invoice]().Where(I.TotalCents.LT(10000)).Set(I.TotalCents.Add(500)).Exec(ctx)
 for c := range rec.All() {
 	batch.Add(c.Entity, c.Key, c.Op, c.OldRow(), c.NewRow(), c.Diff())
-	if c.Changed(I.Total) {
-		log.Printf("total %v -> %v", I.Total.Old(c), I.Total.New(c))
+	if c.Changed(I.TotalCents) {
+		log.Printf("total_cents %v -> %v", I.TotalCents.Old(c), I.TotalCents.New(c))
 	}
 }
 ```
@@ -48,7 +48,7 @@ for c := range rec.All() {
   type's name ("Invoice"). `Key` is the primary key after the write for an
   insert or an update, and before it for a delete; a `[]any` for a composite
   key. `Soft` marks a soft delete.
-- Typed reads: `I.Total.Old(c)` and `I.Total.New(c)` on every handle kind,
+- Typed reads: `I.TotalCents.Old(c)` and `I.TotalCents.New(c)` on every handle kind,
   lazy generic methods as `Set` is. A `Null*` handle gives its element, the
   zero when NULL. `c.Changed(cols...)` reports whether an update's values
   differ in any of cols. `velox.RowsOf[E](c)` gives both rows as `*E`.
@@ -61,7 +61,7 @@ for c := range rec.All() {
 
 The getters are on the handles because a method set on `Change` cannot
 satisfy an interface with a generic method. A `Valued` marker interface for
-`c.Old(I.Total)` cost about 9.7 KB per handle kind and 23 KB per entity
+`c.Old(I.TotalCents)` cost about 9.7 KB per handle kind and 23 KB per entity
 package. As handle methods they cost a few KB per entity package
 (`compilecost_test.go`).
 
@@ -79,8 +79,9 @@ package. As handle methods they cost a few KB per entity package
    column outside `RecordIgnore` differs. Values compare by an `Equal`
    method, `bytes.Equal` for bytes, else `reflect.DeepEqual`.
 3. **Values.** Plain Go values, as `Mutation.Value` gives them; a JSON
-   column's decoded value. An insert's new row holds what the database
-   filled (0093).
+   column's decoded value. An insert's new row holds what velox reads back
+   (0093): a generated key and the declared database defaults. A value a
+   trigger or an undeclared database default sets is the Go zero there.
    - `Sensitive` keeps ent's meaning: not printable and not serializable.
      The getters and `RowsOf` give real values. `OldRow` and `NewRow`
      marshal without the column (`json:"-"`), and `Diff` leaves it out.
@@ -96,13 +97,18 @@ package. As handle methods they cost a few KB per entity package
    - In a transaction velox opens for the write, the Changes wait for its
      COMMIT.
    - Outside a transaction the sink runs after COMMIT, and its error undoes
-     nothing.
+     nothing; the write's later Changes are not delivered, though the write
+     stays committed.
 5. **Rollback.** A `Recorder` drops what a transaction, a savepoint or a
    `TxRetrySerializable` attempt recorded when it rolls back. It drops by
    id, so a Recorder shared by concurrent transactions loses only the rows
    of the one that rolled back. Until the others commit or roll back, its
    `All` and `Len` also show their rows. A `RecordFunc` sees each Change as
    it happens, including ones later rolled back.
+   - velox never sees a transaction the caller began on its own `*sql.Tx`
+     (`UseTx`) end. There every Change goes to the sink, a Recorder's too,
+     and none is dropped when that transaction rolls back: a Recorder used
+     through `UseTx` holds every Change delivered.
 6. **No recursion.** A sink's write through the recording handle with the
    ctx it was given is not recorded. A write under another ctx is, and comes
    back to the sink. A sink can also write through a handle that does not
@@ -114,7 +120,14 @@ package. As handle methods they cost a few KB per entity package
    - Below PostgreSQL 18, SQLite and MySQL: a locked read of the rows under
      the write's own scope (no `FOR UPDATE` on SQLite), the write narrowed to
      their keys a chunk at a time, and the new values by RETURNING, or a
-     SELECT by key on MySQL.
+     SELECT by key on MySQL. A delete there returns the keys it deleted
+     (`RETURNING <key>`), and only those rows are reported, so a row a
+     Rewrite hook or a trigger kept is not; on MySQL its count of rows must
+     match the locked read's, or the write fails, rolled back.
+   - An update that assigns the key finds its rows by the key assigned. A
+     row the database returns with the key in another form (a truncated
+     time, a padded `CHAR`) takes the place of the chunk's one row, or fails
+     the write, rolled back.
    - Outside a transaction a recorded write runs in a transaction of its
      own, but for one statement that commits by itself: an insert of one
      statement, and on PostgreSQL 18 an update or delete that names one row
@@ -176,6 +189,10 @@ package. As handle methods they cost a few KB per entity package
 - Below PostgreSQL 18 the first read cannot lock a row that is not there:
   a row another session inserts under the same key at once is reported as an
   insert although the upsert updated it. PostgreSQL 18 closes this.
+- Below PostgreSQL 18 that read finds conflicts by `=`, which NULL never
+  matches: on a unique index with PostgreSQL's `NULLS NOT DISTINCT`, a row
+  with NULL in a conflict column that conflicts is reported as an insert
+  although the upsert updated it.
 - On MySQL that read takes gap locks: two recorded upserts of new keys in
   one gap, at once, can deadlock. `ER_LOCK_DEADLOCK` is retryable.
 - An upsert's old rows, and on MySQL its new rows, are read without the

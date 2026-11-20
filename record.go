@@ -11,6 +11,9 @@ import (
 
 // Sink receives the Changes of the writes made through a recording handle,
 // one call per Change, in order. An error from Record is the write's error.
+// Outside a transaction the write has committed when the sink runs: after an
+// error the write's remaining Changes are not delivered, and the write stays
+// committed.
 //
 // A sink that writes, an audit row say, must write with the ctx it is given,
 // or through a handle that does not record: a write through the recording
@@ -130,10 +133,19 @@ func RecordIgnore(columns ...string) RecordOption {
 // rolls back to it, so a recorded write that returns an error took no
 // effect. Outside one it runs in a transaction of its own, but for an
 // insert of one statement, which commits by itself, and the sink is called
-// after the COMMIT: a sink's error is returned and undoes nothing.
+// after the COMMIT: a sink's error is returned and undoes nothing, and the
+// write's remaining Changes are not delivered.
+//
+// velox never sees the end of a transaction the caller began on its own
+// *sql.Tx (UseTx): there each Change goes to the sink, a Recorder's too, and
+// none is dropped when that transaction rolls back, so a Recorder used
+// through UseTx holds every Change delivered.
 //
 // Below PostgreSQL 18, and on SQLite and MySQL, a recorded update or delete
-// first reads its rows, locked, then writes them by key. On PostgreSQL 18
+// first reads its rows, locked, then writes them by key. A delete there
+// reports only the rows the database deleted: it returns their keys
+// (RETURNING), and on MySQL a count of rows short of those read fails the
+// write. On PostgreSQL 18
 // and later it is one statement, RETURNING the rows before and after it
 // (old and new), and so is an upsert, which reads nothing first. The
 // recording handle asks the server its version (SHOW server_version_num,

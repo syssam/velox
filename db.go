@@ -235,6 +235,10 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 // sends nothing, when tx is nil, when db is in a transaction or is sharded, and
 // for a DB whose connection does not run on a *sql.Tx, veloxpgx's.
 //
+// As vtx never sees tx end, it cannot drop the Changes of a recording handle
+// (DB.Record) when tx rolls back: a Recorder used through vtx holds every
+// Change delivered, those of a transaction that rolled back too.
+//
 // It is a function, not a method, for the reason Pool is: a method of DB
 // mentioning *sql.Tx would make every package that uses a DB larger to compile.
 func UseTx(db *DB, tx *sql.Tx) (*DB, error) {

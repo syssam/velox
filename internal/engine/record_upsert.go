@@ -244,6 +244,10 @@ func ownCopy(in *EntityInfo, p unsafe.Pointer) unsafe.Pointer {
 //     values. PostgreSQL 18 and later close it: there the upsert is one
 //     statement, RETURNING old and new (returningBoth), and no read comes
 //     first.
+//   - The first read matches the conflict columns by =, which NULL never
+//     matches: on a PostgreSQL unique index with NULLS NOT DISTINCT, a row
+//     with NULL in a conflict column that conflicts is reported as an
+//     insert although the upsert updated it.
 //   - On MySQL the locked read takes gap (next-key) locks: two recorded
 //     upserts of new keys in the same gap, at once, can deadlock, and one
 //     fails with ER_LOCK_DEADLOCK, which TxRetrySerializable retries.

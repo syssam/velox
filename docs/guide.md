@@ -1094,7 +1094,10 @@ RELEASE SAVEPOINT velox_1
 COMMIT
 ```
 
-SQLite sends the same without `FOR UPDATE` and the SHOW. MySQL has no
+SQLite sends the same without `FOR UPDATE` and the SHOW, and with its
+guard against integer overflow in the Add: `"total_cents" = CASE WHEN
+typeof("total_cents" + ?) = 'real' THEN abs(-9223372036854775808) ELSE
+"total_cents" + ? END`. MySQL has no
 RETURNING, so after the UPDATE it reads the new rows with
 ``SELECT `id`, … FROM `invoices` WHERE `id` IN (?, ?)``. On PostgreSQL 18
 and later the read and the write are one statement:
@@ -1126,6 +1129,9 @@ an audit batch this way.
 - For any entity, `c.OldRow()` and `c.NewRow()` are the rows as `*E`, and
   `c.Diff()` lists an update's columns that differ, as
   `FieldChange{Name, Old, New}`. An insert's and a delete's Diff is nil.
+- An insert's new row holds what velox reads back: the generated key and
+  the declared database defaults. A value a trigger or an undeclared
+  database default sets is the Go zero there.
 - An update that changes no column is not reported. `RecordIgnore` names
   columns that do not count, such as `updated_at`; Diff leaves them out,
   but the getters and the rows still hold them.
@@ -1145,9 +1151,12 @@ per Change, in order. Its error is the write's error.
   took no effect, and an audit row written on the transaction commits or
   rolls back with the change.
 - Outside a transaction, the write commits first. A sink error undoes
-  nothing.
+  nothing, and the write's later changes are not delivered.
 - A `RecordFunc` sees each change as it happens, including one a later
   rollback undoes. For side effects outside the database, use a Recorder.
+- velox never sees a transaction you began yourself (`velox.UseTx`) end:
+  every change goes to the sink, and a Recorder used through it keeps the
+  changes of a transaction that rolls back.
 - A sink writes with the `ctx` it is given, or through a handle that does
   not record. A write through the recording handle under another context is
   recorded, and comes back to the sink.
@@ -1173,6 +1182,9 @@ writes go to the new sink, and a rollback still drops a Recorder's rows.
   of a bidirectional link.
 - A recorded write that cannot account for every row it touched fails and
   is rolled back. A Rewrite hook may not change its `RETURNING`.
+- A delete reports only the rows the database deleted: below PostgreSQL 18
+  and on SQLite it returns their keys, so a row a hook or a trigger kept is
+  not reported; on MySQL a count short of the rows read fails the write.
 
 ### What it costs
 
