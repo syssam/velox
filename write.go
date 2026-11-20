@@ -119,13 +119,19 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // is written.
 //
 // It runs in one transaction, a savepoint inside one unless it writes no
-// edge. It reads the row's key, locked where the dialect can, then sends
-// the UPDATE with that key as its only condition, through the hooks as
-// Exec does, then writes the edge setters' edges, then reads the whole row
-// back by its key without the Read policy, so a row the update moves out
-// of the caller's view is still returned; an Interceptor still filters it.
-// So it sends one statement more than Exec, the read of the key. An update
-// with no setter sends nothing and returns the row read under the policies.
+// edge. When the conditions pin every primary-key column (X.ID.EQ(id)) and
+// it writes no edge, it sends the UPDATE with them, through the hooks as
+// Exec does: an UPDATE has the Read and Write policies and locks the row.
+// Otherwise it first reads the row's key, locked where the dialect can, and
+// sends the UPDATE with that key as its only condition, then writes the
+// edge setters' edges. Either way it then reads the whole row back by its
+// key, the one the update assigned if it assigns one, without the Read
+// policy, so a row the update moves out of the caller's view is still
+// returned; an Interceptor still filters it. An UPDATE by key that affects
+// no row is followed by a read of the row under the policies: a hook that
+// skips the write still gets the row. An Add or Sub on a key column is
+// refused. An update with no setter sends nothing and returns the row read
+// under the policies.
 func (u UpdateQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 	if u.meta.Err != nil {
 		return nil, u.meta.Err

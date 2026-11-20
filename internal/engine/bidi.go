@@ -99,31 +99,7 @@ func bidiSet(in *EntityInfo, set []Assignment) ([]bidiKey, []any) {
 // pinnedKey returns v when where holds, at its top level, the condition
 // <primary key> = v that Save writes and Where(pk.EQ(v)) adds.
 func pinnedKey(in *EntityInfo, where []Predicate) (any, bool) {
-	pk := int32(in.PrimaryKey[0]) // one column: checkEdgeBidi
-	var pinned func(n Node) (any, bool)
-	pinned = func(n Node) (any, bool) {
-		switch n.Op {
-		case OpEQ:
-			if n.Col == pk {
-				if v, ok := keyOf(n.V); ok && v != nil {
-					return v, true
-				}
-			}
-		case OpAnd:
-			for _, k := range n.Kids {
-				if v, ok := pinned(k); ok {
-					return v, true
-				}
-			}
-		}
-		return nil, false
-	}
-	for _, p := range where {
-		if v, ok := pinned(p.n); ok {
-			return v, true
-		}
-	}
-	return nil, false
+	return pinnedValue(int32(in.PrimaryKey[0]), where) // one column: checkEdgeBidi
 }
 
 // checkBidiUpdate refuses st, an update that assigns the bidirectional keys

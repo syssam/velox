@@ -366,6 +366,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `UpdateQuery.One` whose conditions pin the whole primary key
+  (`Where(X.ID.EQ(id))`) sends the UPDATE with those conditions and reads
+  the row back, without the `SELECT key ... FOR UPDATE` it sent first: two
+  statements in its transaction, not three (ADR 0092). It also reads the
+  row back by the key the update assigned, where an update of a key column
+  read it by the old key and failed with `ErrNotFound`; an `Add` or `Sub`
+  on a key column is refused before anything is sent.
 - On SQLite a query's `LIMIT` is a literal in its SQL, not a parameter:
   SQLite ran a statement with `LIMIT ?` about eight times slower per
   execution (86 µs against 10 µs for a 90-column read, prepared once). A

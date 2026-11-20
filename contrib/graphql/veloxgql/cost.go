@@ -49,7 +49,8 @@ import (
 //     70 of them;
 //   - on a mutation, an input object adds two statements, for the row it reads
 //     back and for the read of the row's key that an update's
-//     UpdateQuery.One, or an update with edges, sends first; two more for a
+//     UpdateQuery.One sends first unless its conditions pin the key, or the
+//     read that tells a skipped write from a missing row; two more for a
 //     non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, five for an
 //     <edge>ID, a one-to-one edge's re-point, and three for a clear<Edge>:
 //     true, a page of its links, the targets and the delete, a page being

@@ -268,10 +268,13 @@ const budgetMutation = `mutation { updateLabel(id: "` + label1 + `", input: {ran
 // itself, so it runs in no savepoint of its own: 2 statements, 0 savepoint
 // statements and 440 allocations. On 2026-11-07 the resolver's update
 // became UpdateQuery.One, which reads the row's key first: 3 statements, 0
-// savepoint statements and 484 allocations.
+// savepoint statements and 484 allocations. On 2026-11-20 One by key sent
+// no key read (ADR 0092): 2 statements, 0 savepoint statements and 446
+// allocations in each of three runs; the budget is 446 plus 10%, 491,
+// rounded up to 500.
 const (
-	mutationStmts        = 3
-	mutationAllocsBudget = 550
+	mutationStmts        = 2
+	mutationAllocsBudget = 500
 )
 
 // TestMutationBudget pins what one mutation costs: the statements it sends,

@@ -139,18 +139,27 @@ func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (st
 // UpdateOne is UpdateQuery.One's work for st with the edge setters edges:
 // it updates the one row st's conditions match and returns it as written.
 // It runs in one transaction on db: a savepoint inside one, unless it
-// writes no edge, as Exec. It reads the row's key under st's conditions
-// and the Read and Write policies, locked where the dialect can, failing
-// with ErrNotFound when no row matches and ErrNotSingular when more than
-// one does. It then sends st with that key as its only condition, writes
-// the edges for the row, and reads the row back by its key without the
-// Read policy, so a row the update moves out of the caller's view is
-// returned too. An st with no assignment sends no UPDATE; with no setter
-// at all, the row is read back under the policies.
+// writes no edge, as Exec.
+//
+// When st's conditions pin every primary-key column to a value, so they
+// match one row at most, and it assigns something and writes no edge, it
+// sends st as it is (updateByKey). Otherwise it first reads the row's key
+// under st's conditions and the Read and Write policies, locked where the
+// dialect can, failing with ErrNotFound when no row matches and
+// ErrNotSingular when more than one does; it then sends st with that key
+// as its only condition and writes the edges for the row.
+//
+// Either way it reads the row back by its key, as the update left it
+// (writtenKey), without the Read policy, so a row the update moves out of
+// the caller's view is returned too. An st with no assignment sends no
+// UPDATE; with no setter at all, the row is read back under the policies.
 func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (unsafe.Pointer, error) {
 	in := st.Entity
 	if len(in.PrimaryKey) == 0 {
 		return nil, fmt.Errorf("velox: %s: One needs a primary key to read the row back", in.Name)
+	}
+	if err := checkKeyAssigned(in, st.Set); err != nil {
+		return nil, err
 	}
 	var p EdgePlan
 	if len(edges) > 0 {
@@ -164,6 +173,9 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 		return nil, err
 	}
 	t := InfoTable(in)
+	if vals, ok := pinnedKeys(in, st); ok && len(edges) == 0 {
+		return updateByKey(ctx, db, t, st, vals)
+	}
 	cols := slices.Clone(in.PrimaryKey)
 	for _, c := range p.OwnerCols() {
 		if !slices.Contains(cols, c) {
@@ -183,17 +195,22 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 		if err != nil {
 			return err
 		}
-		key := make([]Predicate, 0, len(in.PrimaryKey))
-		for _, k := range in.PrimaryKey {
-			v, _ := plain(in.kit.Value(row, k))
-			key = append(key, t.Pred(k, PredEQ, v))
+		vals := make([]any, len(in.PrimaryKey))
+		for i, k := range in.PrimaryKey {
+			vals[i], _ = plain(in.kit.Value(row, k))
 		}
-		read := tx
+		read, key := tx, keyPreds(t, vals)
 		if len(st.Set) > 0 {
 			st.InTx = true
 			st.Where = key // the row read, locked, matches st's conditions
-			if _, _, _, err := Write(ctx, tx, st, false, false); err != nil {
+			n, _, _, err := Write(ctx, tx, st, false, false)
+			if err != nil {
 				return err
+			}
+			if n > 0 {
+				if key, err = writtenKey(t, st, vals); err != nil {
+					return err
+				}
 			}
 			read = tx.WithoutPolicy("velox: the row UpdateQuery.One wrote")
 		}
@@ -217,4 +234,138 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 		return nil, err
 	}
 	return out, nil
+}
+
+// updateByKey is UpdateOne for an st whose conditions pin the row's key to
+// vals (pinnedKeys), that assigns something and writes no edge. It sends st
+// as it is. An UPDATE is scoped by the entity's interceptors and its Read
+// and Write policies, as the Writable read of the key would have been, and
+// it locks the row it changes, so the key read would add nothing.
+//
+// One row affected: it reads the row back by its key as written, without
+// the Read policy. None: a hook skipped the write, or no row matched. It
+// then reads the row under st's conditions and both policies, and returns
+// it, or ErrNotFound. More than one, which only a hook's SetAffected or the
+// driver can report, as the key matches one row: ErrNotSingular, and the
+// transaction rolls back.
+func updateByKey(ctx context.Context, db *DB, t Table, st *Statement, vals []any) (unsafe.Pointer, error) {
+	in := t.Info()
+	where := slices.Clone(st.Where)
+	var out unsafe.Pointer
+	run := func(ctx context.Context, tx *DB) error {
+		st.InTx = true
+		n, _, _, err := Write(ctx, tx, st, false, false)
+		switch {
+		case err != nil:
+			return err
+		case n > 1:
+			return fmt.Errorf("velox: %s: the update affected %d rows: %w", in.Name, n, ErrNotSingular)
+		case n == 0:
+			out, err = QueryTable(tx, t).Where(where...).Writable().one(ctx)
+			return err
+		}
+		key, err := writtenKey(t, st, vals)
+		if err != nil {
+			return err
+		}
+		out, err = QueryTable(tx.WithoutPolicy("velox: the row UpdateQuery.One wrote"), t).Where(key...).one(ctx)
+		return err
+	}
+	var err error
+	if db.InTx {
+		// One UPDATE, in the caller's transaction: no savepoint, as Exec.
+		err = run(ctx, db)
+	} else {
+		err = db.Tx(ctx, run)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// pinnedKeys returns the value of each primary-key column when st assigns
+// something and its conditions hold, at their top level, <column> = v for
+// every key column, v not nil: then they match one row at most.
+func pinnedKeys(in *EntityInfo, st *Statement) ([]any, bool) {
+	if len(st.Set) == 0 {
+		return nil, false
+	}
+	vals := make([]any, len(in.PrimaryKey))
+	for i, k := range in.PrimaryKey {
+		v, ok := pinnedValue(int32(k), st.Where)
+		if !ok {
+			return nil, false
+		}
+		vals[i] = v
+	}
+	return vals, true
+}
+
+// pinnedValue returns v when where holds col = v, a non-nil v, at its top
+// level: in a condition of where or in an And among them.
+func pinnedValue(col int32, where []Predicate) (any, bool) {
+	var pinned func(n Node) (any, bool)
+	pinned = func(n Node) (any, bool) {
+		switch n.Op {
+		case OpEQ:
+			if n.Col == col {
+				if v, ok := keyOf(n.V); ok && v != nil {
+					return v, true
+				}
+			}
+		case OpAnd:
+			for _, k := range n.Kids {
+				if v, ok := pinned(k); ok {
+					return v, true
+				}
+			}
+		}
+		return nil, false
+	}
+	for _, p := range where {
+		if v, ok := pinned(p.n); ok {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+// keyPreds is the condition that each primary-key column equals its value
+// in vals.
+func keyPreds(t Table, vals []any) []Predicate {
+	in := t.Info()
+	key := make([]Predicate, len(in.PrimaryKey))
+	for i, k := range in.PrimaryKey {
+		key[i] = t.Pred(k, PredEQ, vals[i])
+	}
+	return key
+}
+
+// writtenKey is keyPreds of the row's key after st, which held vals before
+// it: a key column st assigns holds the value assigned. st is the statement
+// as the hooks left it, so a key a hook assigns counts too.
+func writtenKey(t Table, st *Statement, vals []any) ([]Predicate, error) {
+	in := t.Info()
+	if err := checkKeyAssigned(in, st.Set); err != nil {
+		return nil, err
+	}
+	vals = slices.Clone(vals)
+	for _, a := range st.Set {
+		if i := slices.Index(in.PrimaryKey, a.Column); i >= 0 {
+			vals[i], _ = keyOf(a.Value)
+		}
+	}
+	return keyPreds(t, vals), nil
+}
+
+// checkKeyAssigned refuses an Add or Sub on a primary-key column: One could
+// not tell the key of the row it wrote to read it back.
+func checkKeyAssigned(in *EntityInfo, set []Assignment) error {
+	for _, a := range set {
+		if a.Op != AssignSet && slices.Contains(in.PrimaryKey, a.Column) {
+			return fmt.Errorf("velox: %s: One cannot read back a row whose key %s it changes by Add or Sub; use Exec", in.Name, in.Columns[a.Column].Name)
+		}
+	}
+	return nil
 }

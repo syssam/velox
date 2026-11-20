@@ -2,7 +2,8 @@
 
 Status: accepted, 2026-11-07. Moves 0045's read-back from the application
 into the core. 0062 adds `SetInput`, which keeps the error of `Setters()`
-for `Exec` or `One`.
+for `Exec` or `One`. [0092](0092-update-one-by-key.md) drops the key read
+when the conditions pin the key.
 
 ## Context
 
