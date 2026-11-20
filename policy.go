@@ -79,8 +79,10 @@ type Row = engine.Row
 // Mutation is the write that an entity's hooks see and may change, by
 // column name. A misuse (a name the entity has no column of, a value of
 // another kind, Set on a delete, Value or Where on an insert, SetAffected
-// on an insert or with next) is recorded and fails the write: before next
-// sends it, or once the hook returns.
+// on an insert or with next, Track on an insert or after next) is recorded
+// and fails the write: before next sends it, or once the hook returns.
+//
+// An audit hook reads what a write changed with Track and Changes.
 //
 // A hook may make the write itself instead of calling next. A soft delete
 // is a delete hook that updates the rows the delete would remove, and

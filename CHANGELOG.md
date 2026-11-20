@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- Change tracking (ADR 0094): a hook calls `Mutation.Track` before next, and
+  `Mutation.Changes` yields each row's key and its tracked columns' old and
+  new values after it, for bulk updates and deletes, read in the write's
+  transaction under a lock; `Change.Changed` lists what differs, and
+  `velox.Diff` compares two rows of an entity.
 - veloxe's privacy policies (ADR 0089): `velox.Policy` has `Query` and
   `Mutation` rule lists, and package `privacy` has veloxe's names, with
   `privacy.Policy` an alias of `velox.Policy`, so a veloxe schema's

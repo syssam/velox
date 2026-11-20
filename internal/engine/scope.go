@@ -418,6 +418,9 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	default:
 		return nil
 	}
+	if stmtUnscoped(st) {
+		return nil
+	}
 	in := st.Entity
 	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass, Reads: st.Op == OpSelect && !st.Writable}
 	// The entity's own conditions first, so that a denial is reported as the

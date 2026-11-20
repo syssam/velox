@@ -1124,6 +1124,10 @@ func (w *writer) updateStmt(st *Statement) {
 		w.colArg(a.Column, a.Value)
 	}
 	w.where(st.Where)
+	if len(st.Returning) > 0 && w.d != MySQL {
+		w.str(" RETURNING ")
+		w.columns(st.Returning)
+	}
 }
 
 // arith writes the column plus or minus the value. PostgreSQL and MySQL raise on

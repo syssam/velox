@@ -345,6 +345,7 @@ func (db *DB) WithoutPolicy(reason string) *DB
 func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
 func (m *Mutation) Affected() int64
+func (m *Mutation) Changes() iter.Seq[Change]
 func (m *Mutation) DB() *DB
 func (m *Mutation) Fill(name string, v any) error
 func (m *Mutation) Op() Op
@@ -352,6 +353,7 @@ func (m *Mutation) Predicates() []Predicate
 func (m *Mutation) Rows() iter.Seq[Row]
 func (m *Mutation) Set(name string, v any) error
 func (m *Mutation) SetAffected(n int64)
+func (m *Mutation) Track(names ...string) error
 func (m *Mutation) Value(name string) (any, bool)
 func (m *Mutation) Where(ps ...Predicate)
 func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool)
@@ -468,6 +470,7 @@ func CountAll[E any]() Term[E]
 func CountBy[E, K any](ctx context.Context, q Query[E], key GroupKey[E, K]) ([]Group[K, int64], error)
 func CountEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([]int64, error)
 func Deny(reason string) error
+func Diff[E any, PE Entity[E]](before, after *E) []FieldChange
 func DriverCode(err error) (string, bool)
 func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescriptor
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDescriptor
@@ -554,6 +557,7 @@ type Around func(ctx context.Context, st *Statement, next func(context.Context) 
 type AssignOp = veloxtype.AssignOp
 type Assignment = veloxtype.Assignment
 type Caller = veloxtype.Caller
+type Change = veloxtype.Change
 type Col[E, V any] struct { I int32 }
 type ColumnDescriptor = veloxtype.ColumnDescriptor
 type ColumnInfo = engine.ColumnInfo
@@ -576,6 +580,7 @@ type EntityLink = engine.EntityLink
 type EntityTable = engine.EntityTable
 type Entity[E any] interface { *E VeloxMeta() *Meta[E] }
 type Field = schema.Field
+type FieldChange = veloxtype.FieldChange
 type GroupKey[E, K any] struct { }
 type Group[K, V any] struct { Key K Value V }
 type Hook func(next Mutator) Mutator
@@ -693,6 +698,7 @@ const SQLite
 const TxCommit TxOutcome
 const TxError
 const TxRollback
+func (c Change) Changed() []FieldChange
 func (d Dialect) String() string
 func (e *ConstraintError) Error() string
 func (e *ConstraintError) Unwrap() error
@@ -713,12 +719,14 @@ type Aggregate uint8
 type AssignOp uint8
 type Assignment struct { Column int Op AssignOp Value any }
 type Caller struct { File string Line int Func string }
+type Change struct { Key []any Fields []FieldChange }
 type ColumnDescriptor struct { Field string Name string Default any DefaultFunc func() any UpdateDefault func() any Immutable bool Version bool Sensitive bool Nullable bool RequiredEdge string Encode func(v any) ([]byte, error) Decode func(data []byte, v any) error }
 type ConstraintError struct { Entity string Kind ConstraintKind Constraint string Err error }
 type ConstraintKind uint8
 type Deadlines struct { Statement time.Duration MaxStatement time.Duration Tx time.Duration MaxTx time.Duration }
 type Dialect uint8
 type EdgeError struct { Entity string Edge string Keys []any Err error }
+type FieldChange struct { Name string Old, New any Changed bool }
 type IndexInfo struct { Columns []int Unique bool }
 type Lock uint8
 type LockWait uint8

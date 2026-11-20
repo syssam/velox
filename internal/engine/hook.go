@@ -28,6 +28,9 @@ type MutationState struct {
 	Dry      bool             // under SQL(ctx): the core renders and does not send
 	SQL      string
 	Args     []any // what the core rendered under SQL(ctx)
+	// Trk is a *trackState once a hook called Track; an any, so that the
+	// export data of every entity package does not describe it.
+	Trk any
 }
 
 // MutateFn is the non-generic form of a mutation hook's next step.

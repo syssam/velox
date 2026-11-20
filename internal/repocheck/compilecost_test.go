@@ -338,8 +338,13 @@ var genericObjects = []struct {
 	// The Query and Statement rows grew by 124 bytes each. About 12 KB of
 	// the growth is in the engine's types and bodies that the entity's
 	// package reaches, and the rest in the new methods of Query.
-	{"entityDescUse", "", entityDescUseSrc, 818176},       // measured 811916
-	{"entityDescHooks", "", entityDescHooksBound, 903168}, // measured 895406
+	{"entityDescUse", "", entityDescUseSrc, 818176}, // measured 811916
+	// Mutation.Track and Mutation.Changes, with velox.Change and FieldChange
+	// in their signatures (ADR 0094), took entityDescHooks from 902208 to
+	// 903202 bytes and entityDescMixin from 947486 to 948460: each package
+	// with a hook describes Mutation's methods. The engine's side is plain
+	// functions and an any field, which add under 100 bytes to the others.
+	{"entityDescHooks", "", entityDescHooksBound, 904192}, // measured 903202
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own
@@ -347,7 +352,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 948224}, // measured 940492
+	{"entityDescMixin", "", entityDescMixinSrc, 949248}, // measured 948460
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
